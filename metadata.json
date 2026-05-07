@@ -1,0 +1,6 @@
+{
+  "name": "DressingRoom",
+  "description": "A mobile-first online dressing room that renders how garments realistically fit on your specific body proportions using personalized avatars.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": []
+}

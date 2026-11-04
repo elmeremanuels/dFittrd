@@ -1,20 +1,29 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Paskamer
 
-# Run and deploy your AI Studio app
+*Your private fitting room.* A mobile-first app that shows how garments really fit **your** body, fed by garment data from paired shops (Shopify, WooCommerce). Raw photos never leave your phone.
 
-This contains everything you need to run your app locally.
+> Status: under active construction (takeover Nov 2026). See `docs/DECISIONS.md` for what is decided and `docs/ARCHITECTURE.md` for the layout.
 
-View your app in AI Studio: https://ai.studio/apps/d2b9d494-8217-4736-be9a-e5220d51ea5c
+## Repository
 
-## Run Locally
+| Path | What |
+|---|---|
+| `apps/web` | Consumer PWA (React 19, Vite, Tailwind 4) |
+| `apps/api` | The one backend (Fastify, Postgres, pg-boss) |
+| `packages/schema` | Garment payload, fit signature and API types (zod) |
+| `packages/fit-engine` | Fit score + size recommendation (pure TS) |
+| `packages/taste-engine` | Swipe → Style DNA, deck ranking (pure TS) |
+| `packages/tryon-providers` | Server-only AI try-on adapters + router |
+| `packages/sdk` | Drop-in script for merchant product pages |
+| `packages/shopify-app` | Shopify app + theme app extension |
+| `packages/woocommerce-plugin` | WordPress/WooCommerce plugin (PHP) |
+| `infra` | Docker Compose, Caddy, deploy scripts for the VPS |
+| `docs` | Handoff, decisions, research |
 
-**Prerequisites:**  Node.js
+## Develop
 
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+```bash
+pnpm install
+pnpm dev            # consumer app on http://localhost:3000
+pnpm check          # typecheck + tests + build + bundle secret scan
+```

@@ -13,3 +13,7 @@ apps/api/data/
 infra/.env
 *.tsbuildinfo
 .pnpm-store/
+
+# Playwright output
+test-results/
+playwright-report/

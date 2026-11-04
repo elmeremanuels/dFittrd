@@ -1,0 +1,88 @@
+import { useState, type ReactNode } from 'react';
+import { Link } from 'react-router';
+import { WARDROBE_STATES, type FitCohortResponse, type WardrobeState } from '@paskamer/schema';
+import { CohortBars } from '@/components/CohortBars';
+import { eur } from '@/lib/format';
+import { api, MOCK_SHOP_ID, useApp } from '@/store';
+
+const STATE_LABEL: Record<WardrobeState, string> = { saved: 'Saved', bought: 'Bought', kept: 'Kept', returned: 'Returned' };
+
+/** Saved items with their size; bought → kept / returned feeds the fit engine's history (handoff §4.2). */
+export function WardrobeRoute(): ReactNode {
+  const wardrobe = useApp((s) => s.wardrobe);
+  const setWardrobeState = useApp((s) => s.setWardrobeState);
+  const [open, setOpen] = useState<string | null>(null);
+  const [cohort, setCohort] = useState<Record<string, FitCohortResponse | null>>({});
+
+  const toggle = (productId: string): void => {
+    const next = open === productId ? null : productId;
+    setOpen(next);
+    if (!next || next in cohort) return;
+    const item = wardrobe.find((w) => w.productId === next);
+    if (!item || item.shopId === MOCK_SHOP_ID) {
+      setCohort((c) => ({ ...c, [next]: null }));
+      return;
+    }
+    api.fitCohort(next).then(
+      (r) => setCohort((c) => ({ ...c, [next]: r })),
+      () => setCohort((c) => ({ ...c, [next]: null })),
+    );
+  };
+
+  return (
+    <div className="h-full space-y-4 overflow-y-auto px-5 py-4">
+      <header>
+        <p className="eyebrow">Wardrobe</p>
+        <h1 className="font-display text-3xl">Saved fits</h1>
+      </header>
+      {wardrobe.length === 0 ? (
+        <div className="card text-center">
+          <p className="text-sm text-ink-soft">Swipe up or tap “Save” on the rail to keep an item here with its recommended size.</p>
+          <Link to="/deck" className="btn-primary mt-3">
+            Open the rail
+          </Link>
+        </div>
+      ) : (
+        <ul className="space-y-3">
+          {wardrobe.map((w) => (
+            <li key={w.productId} className="card space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="h-12 w-12 shrink-0 rounded-2xl border border-ink/10" style={{ backgroundColor: w.garment.primaryColorHex }} aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <p className="eyebrow">{w.garment.brand}</p>
+                  <p className="truncate font-medium" title={w.garment.name}>
+                    {w.garment.name}
+                  </p>
+                  <p className="text-xs text-ink-mute">
+                    Size {w.size} · {eur(w.garment.priceEur)} · {STATE_LABEL[w.state]}
+                  </p>
+                </div>
+                <button type="button" className="btn-ghost min-h-9 px-3 text-xs" aria-expanded={open === w.productId} onClick={() => toggle(w.productId)}>
+                  {open === w.productId ? 'Less' : 'More'}
+                </button>
+              </div>
+              {open === w.productId ? (
+                <div className="space-y-3">
+                  <div role="radiogroup" aria-label={`Status of ${w.garment.name}`} className="grid grid-cols-4 gap-1">
+                    {WARDROBE_STATES.map((s) => (
+                      <button key={s} type="button" role="radio" aria-checked={w.state === s} onClick={() => void setWardrobeState(w.productId, s)} className={`rounded-full border px-2 py-1.5 text-xs font-medium ${w.state === s ? 'border-coral bg-coral text-white' : 'border-ink/10 bg-white/60 text-ink-soft'}`}>
+                        {STATE_LABEL[s]}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-ink-mute">Marking an item kept or returned teaches the fit engine how this brand runs on you.</p>
+                  {w.garment.productUrl ? (
+                    <a href={w.garment.productUrl} target="_blank" rel="noreferrer noopener" className="btn-ghost w-full">
+                      Open in shop
+                    </a>
+                  ) : null}
+                  <CohortBars cohort={cohort[w.productId] ?? null} highlight={w.size} />
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}

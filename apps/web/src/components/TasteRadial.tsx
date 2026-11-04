@@ -1,70 +1,55 @@
-import React from 'react';
-import { TasteProfile } from '../types';
+import { motion, useReducedMotion } from 'motion/react';
+import type { ReactNode } from 'react';
+import { AXES, AXIS_LABELS, type AxisVector } from '@paskamer/taste-engine';
 
-interface TasteRadialProps {
-  profile: TasteProfile;
+/**
+ * Style DNA radar. Fixed axis order (AXES = schema TASTE_AXES), display labels, a viewBox with
+ * room for the labels, role="img" + <title>, and the polygon animated with motion (CSS cannot
+ * transition `points`).
+ */
+const CENTER = 100;
+const RADIUS = 72;
+
+function polar(i: number, value: number): { x: number; y: number } {
+  const angle = (Math.PI * 2 * i) / AXES.length - Math.PI / 2;
+  return { x: CENTER + RADIUS * value * Math.cos(angle), y: CENTER + RADIUS * value * Math.sin(angle) };
 }
 
-export default function TasteRadial({ profile }: TasteRadialProps) {
-  // Simple SVG Radar Chart implementation
-  const categories = Object.keys(profile) as Array<keyof TasteProfile>;
-  const center = 100;
-  const radius = 80;
-  
-  const points = categories.map((key, i) => {
-    const angle = (Math.PI * 2 * i) / categories.length - Math.PI / 2;
-    const value = profile[key];
-    const x = center + radius * value * Math.cos(angle);
-    const y = center + radius * value * Math.sin(angle);
-    return `${x},${y}`;
+export function TasteRadial({ axes, title = 'Your Style DNA' }: { axes: AxisVector; title?: string }): ReactNode {
+  const reduce = useReducedMotion();
+  const points = AXES.map((a, i) => {
+    const p = polar(i, Math.max(0, Math.min(1, axes[a])));
+    return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
   }).join(' ');
-
-  const gridPoints = [0.25, 0.5, 0.75, 1].map(scale => {
-    return categories.map((_, i) => {
-      const angle = (Math.PI * 2 * i) / categories.length - Math.PI / 2;
-      const x = center + radius * scale * Math.cos(angle);
-      const y = center + radius * scale * Math.sin(angle);
-      return `${x},${y}`;
-    }).join(' ');
-  });
+  const rings = [0.25, 0.5, 0.75, 1].map((s) => AXES.map((_, i) => `${polar(i, s).x.toFixed(1)},${polar(i, s).y.toFixed(1)}`).join(' '));
+  const desc = AXES.map((a) => `${AXIS_LABELS[a]} ${Math.round(axes[a] * 100)}%`).join(', ');
 
   return (
-    <div className="w-full aspect-square relative flex items-center justify-center p-8 bg-white rounded-3xl border border-ink/5 shadow-sm">
-      <svg viewBox="0 0 200 200" className="w-full h-full">
-        {/* Grid */}
-        {gridPoints.map((gp, i) => (
-          <polygon key={i} points={gp} fill="none" stroke="rgba(26, 22, 18, 0.05)" strokeWidth="1" />
+    <div className="card aspect-square w-full bg-white/80 p-3">
+      <svg viewBox="-36 -24 272 248" className="h-full w-full" role="img" aria-labelledby="taste-radial-title taste-radial-desc">
+        <title id="taste-radial-title">{title}</title>
+        <desc id="taste-radial-desc">{desc}</desc>
+        {rings.map((r, i) => (
+          <polygon key={`ring-${i}`} points={r} fill="none" stroke="rgba(26,22,18,0.08)" strokeWidth="1" />
         ))}
-        {categories.map((_, i) => {
-           const angle = (Math.PI * 2 * i) / categories.length - Math.PI / 2;
-           const x = center + radius * Math.cos(angle);
-           const y = center + radius * Math.sin(angle);
-           return <line key={i} x1={center} y1={center} x2={x} y2={y} stroke="rgba(26, 22, 18, 0.05)" strokeWidth="1" />;
+        {AXES.map((a, i) => {
+          const p = polar(i, 1);
+          return <line key={`spoke-${a}`} x1={CENTER} y1={CENTER} x2={p.x} y2={p.y} stroke="rgba(26,22,18,0.08)" strokeWidth="1" />;
         })}
-
-        {/* Data Area */}
-        <polygon 
-          points={points} 
-          fill="rgba(255, 90, 60, 0.2)" 
-          stroke="#FF5A3C" 
-          strokeWidth="2" 
-          className="transition-all duration-1000"
+        <motion.polygon
+          initial={reduce ? false : { opacity: 0 }}
+          animate={{ points, opacity: 1 }}
+          transition={{ duration: reduce ? 0 : 0.6, ease: 'easeOut' }}
+          fill="rgba(255,90,60,0.22)"
+          stroke="#FF5A3C"
+          strokeWidth="2"
+          strokeLinejoin="round"
         />
-
-        {/* Labels */}
-        {categories.map((cat, i) => {
-          const angle = (Math.PI * 2 * i) / categories.length - Math.PI / 2;
-          const x = center + (radius + 20) * Math.cos(angle);
-          const y = center + (radius + 20) * Math.sin(angle);
+        {AXES.map((a, i) => {
+          const p = polar(i, 1.28);
           return (
-            <text 
-              key={cat} 
-              x={x} 
-              y={y} 
-              textAnchor="middle" 
-              className="text-[10px] font-bold uppercase tracking-tighter fill-ink/40"
-            >
-              {cat}
+            <text key={`label-${a}`} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" fontSize="12" fontWeight="600" fill="#4a423b">
+              {AXIS_LABELS[a]}
             </text>
           );
         })}
@@ -72,3 +57,5 @@ export default function TasteRadial({ profile }: TasteRadialProps) {
     </div>
   );
 }
+
+export default TasteRadial;

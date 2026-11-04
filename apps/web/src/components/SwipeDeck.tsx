@@ -1,219 +1,171 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence, useMotionValue, useTransform } from 'motion/react';
-import { Heart, X, Bookmark, ThumbsDown, User, ShoppingBag, BarChart2 } from 'lucide-react';
-import { useAppContext } from '../context';
-import { MOCK_GARMENTS } from '../constants';
-import { Garment } from '../types';
-import Avatar from './Avatar';
-import TasteRadial from './TasteRadial';
-import { useFitEngine } from '../hooks/useFitEngine';
+import { BarChart2, Bookmark, Heart, ShoppingBag, ThumbsDown, User, X } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Link } from 'react-router';
+import type { SwipeAction } from '@paskamer/schema';
+import { eur } from '@/lib/format';
+import { colourTarget } from '@/lib/season';
+import { useApp } from '@/store';
+import { fitFor } from '@/store/fit';
+import { useCaptureMedia } from '@/store/media';
+import { Avatar } from './Avatar';
+import { Card } from './Card';
+import { ColourChip } from './ColourChip';
+import { EstimateDisclaimer } from './EstimateBadge';
+import { FitPanel } from './FitPanel';
+import { StyleDnaDialog } from './StyleDnaDialog';
 
-export default function SwipeDeck() {
-  const { user, addToWardrobe, taste, setTaste } = useAppContext();
-  const { calculateFit } = useFitEngine();
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-  const [fitData, setFitData] = useState<any>(null);
-  const [showTaste, setShowTaste] = useState(false);
+const ACTIONS: { action: SwipeAction; label: string; icon: ReactNode; className: string; large?: boolean }[] = [
+  { action: 'pass', label: 'Pass', icon: <X className="h-6 w-6" aria-hidden />, className: 'bg-white text-ink-soft' },
+  { action: 'less', label: 'Less like this', icon: <ThumbsDown className="h-5 w-5" aria-hidden />, className: 'bg-white text-ink-soft' },
+  { action: 'love', label: 'Love', icon: <Heart className="h-8 w-8" aria-hidden />, className: 'bg-coral text-white', large: true },
+  { action: 'save', label: 'Save to wardrobe', icon: <Bookmark className="h-5 w-5" aria-hidden />, className: 'bg-white text-ink-soft' },
+];
 
-  const currentGarment = MOCK_GARMENTS[currentIndex % MOCK_GARMENTS.length];
+/**
+ * The deck: cards come from the taste engine (`dealNext` over the paired or bundled catalogue),
+ * the fit from the on-device fit engine (memoised, no artificial delay), all four actions go
+ * through `applySwipe` with the size and score at swipe time.
+ */
+export function SwipeDeck(): ReactNode {
+  const current = useApp((s) => s.deck.current);
+  const exhausted = useApp((s) => s.deck.exhausted);
+  const notInYourSize = useApp((s) => s.deck.notInYourSize);
+  const fitCtx = useApp((s) => s.fitCtx);
+  const swipe = useApp((s) => s.swipe);
+  const profile = useApp((s) => s.taste.profile);
+  const season = useApp((s) => s.settings.season);
+  const undertone = useApp((s) => s.settings.undertone);
+  const catalogSource = useApp((s) => s.catalogSource);
+  const media = useCaptureMedia();
+  const [showDna, setShowDna] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (user && currentGarment) {
-      setIsLoading(true);
-      const timer = setTimeout(() => {
-        const fit = calculateFit(currentGarment, user);
-        setFitData(fit);
-        setIsLoading(false);
-      }, 800); // Simulate rendering/fit calculation
-      return () => clearTimeout(timer);
-    }
-  }, [currentIndex, user]);
+    // Idempotent: a second run (StrictMode) sees the dealt card and does nothing.
+    const s = useApp.getState();
+    if (!s.deck.current && !s.deck.exhausted) s.dealNext();
+  }, []);
 
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
-  const rotate = useTransform(x, [-200, 200], [-30, 30]);
-  const opacity = useTransform(x, [-200, -150, 0, 150, 200], [0.5, 1, 1, 1, 0.5]);
+  const garment = current?.garment ?? null;
+  const fit = useMemo(() => (garment ? fitFor(fitCtx, garment) : null), [garment, fitCtx]);
+  const hasMeasurements = useApp((s) => s.hasMeasurements)();
+  const target = colourTarget(season, undertone);
+  const rendering = media.loading;
 
-  const handleSwipe = (direction: 'left' | 'right' | 'up' | 'down') => {
-    switch (direction) {
-      case 'right': // Love
-        addToWardrobe(currentGarment.id);
-        break;
-      case 'up': // Save
-        addToWardrobe(currentGarment.id);
-        break;
-      case 'down': // Less like this
-        // Update taste profile negatively (simplified)
-        break;
+  const act = async (action: SwipeAction): Promise<void> => {
+    if (!garment || busy || rendering) return;
+    setBusy(true);
+    try {
+      await swipe(action);
+    } finally {
+      setBusy(false);
     }
-    setCurrentIndex(prev => prev + 1);
   };
 
-  if (!user) return null;
-
   return (
-    <div className="relative h-full flex flex-col pt-12 pb-8 overflow-hidden bg-cream">
-      {/* Header */}
-      <div className="px-8 flex justify-between items-center mb-4">
-        <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 rounded-full bg-coral/20 flex items-center justify-center">
-            <Heart className="w-4 h-4 text-coral" fill="currentColor" />
-          </div>
-          <span className="font-display text-xl font-medium tracking-tight">DressingRoom</span>
+    <div className="flex h-full min-h-0 flex-col">
+      <header className="flex items-center justify-between px-5 pt-2 pb-2">
+        <div className="flex items-center gap-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-coral/15" aria-hidden>
+            <Heart className="h-4 w-4 text-coral" fill="currentColor" />
+          </span>
+          <span className="font-display text-xl font-medium tracking-tight">Paskamer</span>
         </div>
-        <div className="flex items-center space-x-2">
-          <button 
-            onClick={() => setShowTaste(true)}
-            className="p-2 rounded-full bg-white shadow-sm border border-ink/5"
-          >
-            <BarChart2 className="w-5 h-5 text-ink/60" />
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setShowDna(true)} aria-label="Open your Style DNA" className="rounded-full border border-ink/10 bg-white p-2 shadow-sm">
+            <BarChart2 className="h-5 w-5 text-ink-soft" aria-hidden />
           </button>
-          <button className="p-2 rounded-full bg-white shadow-sm border border-ink/5">
-            <User className="w-5 h-5 text-ink/60" />
-          </button>
+          <Link to="/profile" aria-label="Open your profile" className="rounded-full border border-ink/10 bg-white p-2 shadow-sm">
+            <User className="h-5 w-5 text-ink-soft" aria-hidden />
+          </Link>
         </div>
-      </div>
+      </header>
 
-      <AnimatePresence>
-        {showTaste && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[70] bg-ink/40 backdrop-blur-sm flex items-center justify-center p-8"
-            onClick={() => setShowTaste(false)}
-          >
-            <motion.div 
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              className="w-full max-w-sm bg-cream rounded-[3rem] p-8 shadow-2xl relative"
-              onClick={e => e.stopPropagation()}
-            >
-              <button 
-                onClick={() => setShowTaste(false)}
-                className="absolute top-6 right-6 w-10 h-10 rounded-full bg-ink/5 flex items-center justify-center"
-              >
-                <X className="w-5 h-5" />
-              </button>
-              <h2 className="text-3xl font-display font-medium mb-2 pr-12 leading-tight">Your Style DNA</h2>
-              <p className="text-sm text-ink/40 mb-8">Refined by your love/pass signals across 32 data points.</p>
-              
-              <TasteRadial profile={taste} />
+      <StyleDnaDialog open={showDna} profile={profile} onClose={() => setShowDna(false)} />
 
-              <div className="mt-8 space-y-4">
-                <div className="flex justify-between items-center p-4 bg-white rounded-2xl border border-ink/5">
-                   <div className="flex items-center space-x-3">
-                     <div className="w-2 h-10 bg-coral rounded-full" />
-                     <div>
-                       <p className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Primary Archetype</p>
-                       <p className="text-sm font-medium">Modern Minimalist</p>
-                     </div>
-                   </div>
-                   <div className="text-right">
-                     <p className="text-xl font-display">84%</p>
-                   </div>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
+      <div className="relative min-h-0 flex-1 px-4">
+        {garment ? (
+          <Card id={garment.id} disabled={busy || rendering} onSwipe={act}>
+            <Avatar garment={garment} fit={fit} isLoading={rendering} />
+            <div className="absolute right-3 bottom-3 left-3 z-10" key={garment.id}>
+              <FitPanel fit={fit} hasMeasurements={hasMeasurements} />
+            </div>
+          </Card>
+        ) : (
+          <EmptyDeck exhausted={exhausted} notInYourSize={notInYourSize} catalogSource={catalogSource} />
         )}
-      </AnimatePresence>
-
-      {/* Main Mirror Area */}
-      <div className="flex-1 px-4 relative flex items-center justify-center">
-        <AnimatePresence>
-          <motion.div
-            key={currentIndex}
-            style={{ x, y, rotate, opacity }}
-            drag
-            dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-            onDragEnd={(_, info) => {
-              const THRESHOLD = 100;
-              if (info.offset.x > THRESHOLD) handleSwipe('right');
-              else if (info.offset.x < -THRESHOLD) handleSwipe('left');
-              else if (info.offset.y < -THRESHOLD) handleSwipe('up');
-              else if (info.offset.y > THRESHOLD) handleSwipe('down');
-            }}
-            className="w-full max-w-[340px] aspect-[1/1.6] mirror-frame border-[8px] cursor-grab active:cursor-grabbing shadow-2xl relative"
-          >
-            <Avatar user={user} garment={currentGarment} isLoading={isLoading} />
-            
-            {/* Fit Indicator */}
-            {fitData && !isLoading && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="absolute bottom-6 left-6 right-6 p-4 glass-panel rounded-2xl flex items-center justify-between"
-              >
-                <div>
-                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-ink/40 mb-1">Recommended Size</h4>
-                  <p className="text-lg font-display font-medium text-coral">{fitData.recommendedSize}</p>
-                </div>
-                <div className="text-right">
-                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-ink/40 mb-1">Fit Score</h4>
-                  <div className="text-lg font-display font-medium">{Math.round(fitData.score * 100)}%</div>
-                </div>
-              </motion.div>
-            )}
-          </motion.div>
-        </AnimatePresence>
-
-        {/* Swipe Guides */}
-        <div className="absolute inset-0 pointer-events-none flex flex-col justify-between items-center py-20">
-          <div className="flex flex-col items-center text-ink/20 animate-pulse">
-            <Bookmark className="w-6 h-6 mb-1" />
-            <span className="text-[10px] font-bold uppercase tracking-tighter">Save</span>
-          </div>
-          <div className="w-full flex justify-between px-12 items-center text-ink/20 animate-pulse">
-             <div className="flex flex-col items-center">
-              <X className="w-6 h-6 mb-1" />
-              <span className="text-[10px] font-bold uppercase tracking-tighter">Pass</span>
-            </div>
-             <div className="flex flex-col items-center">
-              <Heart className="w-6 h-6 mb-1" />
-              <span className="text-[10px] font-bold uppercase tracking-tighter">Love</span>
-            </div>
-          </div>
-          <div className="flex flex-col items-center text-ink/20 animate-pulse">
-            <ThumbsDown className="w-6 h-6 mb-1" />
-            <span className="text-[10px] font-bold uppercase tracking-tighter">Less Like</span>
-          </div>
-        </div>
       </div>
 
-      {/* Garment Details */}
-      <div className="mt-4 px-8 pb-48 flex justify-between items-end relative z-30">
-        <div className="max-w-[180px]">
-          <span className="text-[10px] uppercase font-bold tracking-[0.2em] text-coral/60">{currentGarment.brand}</span>
-          <h3 className="text-xl font-display font-medium leading-tight mt-1 truncate">{currentGarment.name}</h3>
-          <p className="text-ink/40 text-[10px] font-medium uppercase tracking-wider mt-1">{currentGarment.fabric.primary} · {currentGarment.fabric.weightGsm}gsm</p>
+      {garment ? (
+        <div className="px-5 pt-3">
+          <div className="flex items-end justify-between gap-3">
+            <div className="min-w-0">
+              <p className="eyebrow text-coral-deep">{garment.brand}</p>
+              <h2 className="font-display text-xl leading-tight" title={garment.name}>
+                {garment.name}
+              </h2>
+              <p className="mt-0.5 text-xs text-ink-mute">
+                {garment.fabric.primary}
+                {garment.fabric.weightGsm ? ` · ${garment.fabric.weightGsm} gsm` : ''} · {garment.patternBlock}
+              </p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="font-display text-2xl">{eur(garment.priceEur)}</p>
+              {garment.productUrl ? (
+                <a href={garment.productUrl} target="_blank" rel="noreferrer noopener" className="mt-1 inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-ink-soft hover:text-ink">
+                  <ShoppingBag className="h-3 w-3" aria-hidden /> Shop
+                </a>
+              ) : null}
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <ColourChip hex={garment.primaryColorHex} target={target} />
+            {!target ? <span className="chip">Colour match after your face photo</span> : null}
+          </div>
+          <EstimateDisclaimer className="mt-2" />
         </div>
-        <div className="text-right">
-          <p className="text-2xl font-display font-medium">€{currentGarment.priceEur}</p>
-          <button className="mt-2 flex items-center space-x-1 text-[10px] font-bold uppercase tracking-widest text-ink/40 hover:text-ink transition-colors">
-            <ShoppingBag className="w-3 h-3" />
-            <span>Shop</span>
-          </button>
-        </div>
-      </div>
+      ) : null}
 
-      {/* Action Ring (Floating Buttons) */}
-      <div className="absolute bottom-24 left-1/2 -translate-x-1/2 flex items-center space-x-6 z-40">
-        {[
-          { icon: X, color: 'bg-white text-ink/40', action: () => handleSwipe('left') },
-          { icon: Heart, color: 'bg-coral text-white', action: () => handleSwipe('right'), large: true },
-          { icon: Bookmark, color: 'bg-white text-ink/40', action: () => handleSwipe('up') }
-        ].map((btn, i) => (
+      <div className="action-ring px-5 pt-3 pb-2" role="group" aria-label="Swipe actions">
+        {ACTIONS.map((a) => (
           <button
-            key={i}
-            onClick={btn.action}
-            className={`rounded-full shadow-2xl flex items-center justify-center transition-all active:scale-95 border border-ink/5 ${btn.large ? 'w-20 h-20' : 'w-14 h-14'} ${btn.color} hover:shadow-coral/20`}
+            key={a.action}
+            type="button"
+            aria-label={a.label}
+            title={a.label}
+            disabled={!garment || busy || rendering}
+            onClick={() => void act(a.action)}
+            className={`flex items-center justify-center rounded-full border border-ink/10 shadow-xl transition-transform motion-safe:active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 ${a.large ? 'h-18 w-18' : 'h-13 w-13'} ${a.className}`}
           >
-            <btn.icon className={btn.large ? 'w-10 h-10' : 'w-6 h-6'} />
+            {a.icon}
           </button>
         ))}
       </div>
     </div>
   );
 }
+
+function EmptyDeck({ exhausted, notInYourSize, catalogSource }: { exhausted: boolean; notInYourSize: number; catalogSource: 'mock' | 'paired' }): ReactNode {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-4 text-center" data-testid="deck-empty">
+      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-coral/15">
+        <Bookmark className="h-8 w-8 text-coral" aria-hidden />
+      </div>
+      <h2 className="font-display text-2xl">{exhausted ? 'You have seen the whole rail' : 'Setting up your rail…'}</h2>
+      <p className="max-w-xs text-sm text-ink-soft">
+        {notInYourSize > 0 ? `${notInYourSize} item${notInYourSize === 1 ? '' : 's'} were left out because no size fits. ` : ''}
+        {catalogSource === 'mock' ? 'Pair a shop to see its real catalogue here.' : 'Passed items come back later; loved and saved ones are in your wardrobe.'}
+      </p>
+      <div className="flex gap-2">
+        <Link to="/pair" className="btn-primary">
+          Pair a shop
+        </Link>
+        <Link to="/wardrobe" className="btn-ghost">
+          Wardrobe
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export default SwipeDeck;

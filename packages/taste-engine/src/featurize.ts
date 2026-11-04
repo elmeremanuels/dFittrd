@@ -43,24 +43,53 @@ export const FABRIC_AXES: Readonly<Record<string, AxisWeights>> = Object.freeze(
 });
 
 /**
- * Category default ease for bust/waist/hip (fit-engine-spec.md §Step 2 `CATEGORY_EASE`),
- * used when the garment's `ease` omits a point. Shoes/accessories have no girth ease.
+ * Category default ease for bust/waist/hip (fit-engine-spec.md §Step 2 `CATEGORY_EASE`).
+ * Shoes/accessories have no girth ease.
  */
-export const CATEGORY_EASE: Readonly<Record<GarmentCategory, Readonly<{ bust?: number; waist?: number; hip?: number }>>> =
-  Object.freeze({
-    top: { bust: 8, waist: 8, hip: 6 },
-    dress: { bust: 6, waist: 4, hip: 6 },
-    bottom: { waist: 2, hip: 5 },
-    outerwear: { bust: 12, waist: 12, hip: 10 },
-    shoes: {},
-    accessory: {},
-  });
+export const CATEGORY_EASE: Readonly<Record<GarmentCategory, Readonly<Partial<Record<GirthPoint, number>>>>> = Object.freeze({
+  top: { bust: 8, waist: 8, hip: 6 },
+  dress: { bust: 6, waist: 4, hip: 6 },
+  bottom: { waist: 2, hip: 5 },
+  outerwear: { bust: 12, waist: 12, hip: 10 },
+  shoes: {},
+  accessory: {},
+});
 
-/** Σ of bust/waist/hip ease (garment value, else category default, else 0). */
-export function easeTotal(g: Pick<FeaturizableGarment, 'category' | 'ease'>): number {
-  const defaults = CATEGORY_EASE[g.category] ?? {};
+/**
+ * Pattern-block ease overrides for bust/waist/hip (fit-engine-spec.md §Step 2 `BLOCKS[block].ease`).
+ * The fit engine resolves `garment.ease[p] ?? BLOCKS.ease[p] ?? CATEGORY_EASE[category][p]`; the
+ * silhouette feature follows the same order so both engines see the same designed ease.
+ * Blocks absent here (and unknown blocks) fall straight through to the category default.
+ */
+export const BLOCK_EASE: Readonly<Record<string, Readonly<Partial<Record<GirthPoint, number>>>>> = Object.freeze({
+  wrap: { bust: 6, waist: 4, hip: 8 },
+  'a-line': { waist: 3 },
+  'fit-and-flare': { waist: 3 },
+  skater: { waist: 3 },
+  sheath: { bust: 4, waist: 3, hip: 4 },
+  bodycon: { bust: 2, waist: 2, hip: 2 },
+  column: { bust: 5, waist: 4, hip: 5 },
+  tent: { bust: 10 },
+  trapeze: { bust: 10 },
+  oversized: { bust: 14 },
+  boxy: { bust: 12 },
+  bias: { bust: 4, hip: 4 },
+  shirt: { bust: 10 },
+  't-shirt': { bust: 6 },
+  'wide-leg': { hip: 6 },
+  skinny: { hip: 2 },
+  slim: { hip: 3 },
+});
+
+export type GirthPoint = 'bust' | 'waist' | 'hip';
+export const GIRTH_POINTS = ['bust', 'waist', 'hip'] as const satisfies readonly GirthPoint[];
+
+/** Σ of bust/waist/hip ease: garment value → block default → category default → 0. */
+export function easeTotal(g: Pick<FeaturizableGarment, 'category' | 'ease' | 'patternBlock'>): number {
+  const block = BLOCK_EASE[g.patternBlock] ?? {};
+  const category = CATEGORY_EASE[g.category] ?? {};
   let total = 0;
-  for (const p of ['bust', 'waist', 'hip'] as const) total += g.ease?.[p] ?? defaults[p] ?? 0;
+  for (const p of GIRTH_POINTS) total += g.ease?.[p] ?? block[p] ?? category[p] ?? 0;
   return total;
 }
 

@@ -310,7 +310,7 @@ export function MerchantProducts(): ReactNode {
                   ) : (
                     <ul className="flex flex-wrap gap-1">
                       {p.missingFields.map((f) => (
-                        <li key={f} className="chip px-2 py-0.5 text-[11px]">
+                        <li key={f} className="chip px-2 py-0.5 text-xs">
                           {f}
                         </li>
                       ))}

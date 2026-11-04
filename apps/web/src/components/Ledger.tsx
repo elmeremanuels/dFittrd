@@ -41,7 +41,7 @@ export function Ledger({ lines, emptyText = 'Nothing has left this device yet.',
               {l.fields.length > 0 ? (
                 <p className="mt-1 flex flex-wrap gap-1" aria-label="Fields sent">
                   {l.fields.map((f) => (
-                    <span key={f} className="chip px-2 py-0.5 text-[11px]">
+                    <span key={f} className="chip px-2 py-0.5 text-xs">
                       {f}
                     </span>
                   ))}

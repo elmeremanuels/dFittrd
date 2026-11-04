@@ -6,6 +6,9 @@ import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
+import type * as PgliteModule from '@electric-sql/pglite';
+import type * as DrizzlePglite from 'drizzle-orm/pglite';
+import type * as DrizzlePgliteMigrator from 'drizzle-orm/pglite/migrator';
 import { drizzle as drizzlePostgres } from 'drizzle-orm/postgres-js';
 import { migrate as migratePostgres } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
@@ -53,9 +56,9 @@ export function connectPostgres(databaseUrl: string, opts: { max?: number } = {}
 /** PGlite handle for tests (dev dependency; resolved lazily so production never loads it). */
 export async function connectPglite(): Promise<DbHandle> {
   const require = createRequire(import.meta.url);
-  const pgliteModule = (await import(require.resolve('@electric-sql/pglite'))) as typeof import('@electric-sql/pglite');
-  const drizzleModule = (await import('drizzle-orm/pglite')) as typeof import('drizzle-orm/pglite');
-  const migratorModule = (await import('drizzle-orm/pglite/migrator')) as typeof import('drizzle-orm/pglite/migrator');
+  const pgliteModule = (await import(require.resolve('@electric-sql/pglite'))) as typeof PgliteModule;
+  const drizzleModule = (await import('drizzle-orm/pglite')) as typeof DrizzlePglite;
+  const migratorModule = (await import('drizzle-orm/pglite/migrator')) as typeof DrizzlePgliteMigrator;
   const client = new pgliteModule.PGlite();
   const db = drizzleModule.drizzle(client, { schema });
   return {

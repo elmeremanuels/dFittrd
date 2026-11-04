@@ -136,7 +136,7 @@ export function TryRoute(): ReactNode {
               {fit.perSize.map((s) => (
                 <button key={s.size} type="button" role="radio" aria-checked={renderSize === s.size} onClick={() => setSize(s.size)} className={`chip ${renderSize === s.size ? 'border-coral bg-coral text-white' : ''}`}>
                   {s.size}
-                  {s.score !== null ? <span className="text-[11px] opacity-80">{Math.round(s.score * 100)}%</span> : null}
+                  {s.score !== null ? <span className="text-xs opacity-80">{Math.round(s.score * 100)}%</span> : null}
                 </button>
               ))}
             </div>

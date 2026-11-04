@@ -29,6 +29,16 @@ describe('ops', () => {
     }
   });
 
+  it('serves the merchant SDK bundle from our origin with CORS *', async () => {
+    const res = await t.app.inject({ method: 'GET', url: '/sdk/v1.js', headers: { origin: 'https://merchant.example' } });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('javascript');
+    expect(res.headers['access-control-allow-origin']).toBe('*');
+    expect(res.headers['cache-control']).toContain('max-age=3600');
+    expect(res.body).toContain('paskamer');
+    expect(res.body).not.toMatch(/sk_(live|test)_[A-Za-z0-9]{8,}/);
+  });
+
   it('unknown routes return the ApiError shape', async () => {
     const res = await t.app.inject({ method: 'GET', url: '/nope' });
     expect(res.statusCode).toBe(404);

@@ -168,8 +168,8 @@ export function Avatar({ garment, fit, size, isLoading = false, bare = false }: 
       {!bare ? (
         <div className="pointer-events-none absolute top-4 left-4 flex flex-col items-start gap-1">
           <EstimateBadge />
-          {garment && !media.baseFrame ? <span className="chip bg-white/70 text-[11px]">Body from your measurements</span> : null}
-          {media.baseFrame ? <span className="chip bg-white/70 text-[11px]">Your capture · garment overlay</span> : null}
+          {garment && !media.baseFrame ? <span className="chip bg-white/70 text-xs">Body from your measurements</span> : null}
+          {media.baseFrame ? <span className="chip bg-white/70 text-xs">Your capture · garment overlay</span> : null}
         </div>
       ) : null}
       {isLoading ? (

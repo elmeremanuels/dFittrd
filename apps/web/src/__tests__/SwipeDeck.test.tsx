@@ -7,10 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import { MOCK_GARMENTS, MOCK_GARMENTS_BY_ID } from '@paskamer/schema';
 import * as taste from '@paskamer/taste-engine';
+type TasteEngine = typeof taste;
 import { computeFit } from '@paskamer/fit-engine';
 
 vi.mock('@paskamer/taste-engine', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@paskamer/taste-engine')>();
+  const actual = await importOriginal<TasteEngine>();
   return { ...actual, applySwipe: vi.fn(actual.applySwipe) };
 });
 

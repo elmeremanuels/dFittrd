@@ -59,8 +59,9 @@ export async function build(opts: BuildOptions): Promise<App> {
       ...(env.NODE_ENV === 'development' ? { transport: { target: 'pino-pretty', options: { colorize: true } } } : {}),
     },
     trustProxy: true,
+    // try tokens are JWTs in the path (/v1/try/:token)
+    routerOptions: { maxParamLength: 4096 },
     bodyLimit: 1_048_576,
-    disableRequestLogging: env.NODE_ENV === 'test',
   }).withTypeProvider<ZodTypeProvider>();
 
   app.setValidatorCompiler(validatorCompiler);
@@ -104,9 +105,7 @@ export async function build(opts: BuildOptions): Promise<App> {
     global: false,
     max: 300,
     timeWindow: '1 minute',
-    errorResponseBuilder: (_req, context) => ({
-      error: { code: 'rate_limited', message: `rate limit exceeded, retry in ${Math.ceil(context.ttl / 1000)}s` },
-    }),
+    errorResponseBuilder: (_req, context) => new HttpError(context.statusCode, context.ban ? 'banned' : 'rate_limited', `rate limit exceeded, retry in ${Math.ceil(context.ttl / 1000)}s`),
   });
   await app.register(swagger, {
     openapi: {

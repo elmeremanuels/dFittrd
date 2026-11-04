@@ -91,9 +91,9 @@ describe('ApiClient', () => {
   });
 
   it('only accepts avatarRender person inputs for hero renders (compile-time guard)', () => {
-    const { client } = harness(vi.fn() as unknown as typeof fetch);
+    type Person = Parameters<ApiClient['requestHeroRender']>[0]['person'];
     // @ts-expect-error — 'userPhoto' is not a PersonInput kind (D3)
-    const bad: Parameters<typeof client.requestHeroRender>[0]['person'] = { kind: 'userPhoto', mimeType: 'image/png', imageBase64: 'x', width: 256, height: 256 };
+    const bad: Person = { kind: 'userPhoto', mimeType: 'image/png', imageBase64: 'x', width: 256, height: 256 };
     expect(bad.kind).toBe('userPhoto');
   });
 });

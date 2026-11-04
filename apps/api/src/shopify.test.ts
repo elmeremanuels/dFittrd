@@ -130,7 +130,8 @@ describe('Shopify: webhooks (HMAC + GDPR), token exchange, sync job', () => {
     expect(synced.status).toBe('active');
     expect(synced.category).toBe('dress');
     expect(synced.priceEur).toBe(189);
-    expect(synced.payload).toMatchObject({ sizeChartType: 'body', patternBlock: 'wrap', fabric: { primary: 'linen' }, flatLayPhoto: 'https://cdn.shopify.com/wrap-flat.png', handle: undefined });
+    expect(synced.payload).toMatchObject({ sizeChartType: 'body', patternBlock: 'wrap', fabric: { primary: 'linen' }, flatLayPhoto: 'https://cdn.shopify.com/wrap-flat.png' });
+    expect((synced.payload as Record<string, unknown>).handle).toBeUndefined();
     expect(synced.handle).toBe('linen-wrap');
   });
 

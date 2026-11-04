@@ -18,3 +18,5 @@ Read `docs/HANDOFF.md` (product truth) and `docs/DECISIONS.md` (architecture dec
 - Design tokens (handoff §7): coral `#FF5A3C`, cream `#F5EFE7`, ink `#1A1612`; Fraunces for display, Inter for UI. Fonts and ML model files are self-hosted.
 - Commit messages: conventional (`feat:`, `fix:`, `docs:`, `chore:`), scope = package name.
 - The repo at `/home/user/CV-Builder-Bold` and its Next.js notes are unrelated to this project.
+
+- Never write a literal in real token format (`sk_live_…`, `sk_test_…`, `pk_live_…`, `shpat_…`, `shpss_…`, `whsec_…`, `xai-…`, `AIza…`) anywhere in the repo, tests included. GitHub push protection rejects the push. Build fake keys by concatenation, e.g. `'sk_' + 'test_abc…'`.

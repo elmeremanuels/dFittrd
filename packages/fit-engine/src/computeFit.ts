@@ -198,9 +198,13 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
 
   // Steps 2–5 — per size.
   const perSize: SizeFit[] = rows.map((row, i) => scoreSize(row ?? { size: sizes[i] ?? '' }, sizes[i] ?? '', contexts, bodyChart));
-  const sumAbsGap = perSize.map((s) =>
-    s.points.reduce((acc, p) => (isPointFit(p) ? acc + Math.abs(p.gapCm) : acc), 0),
-  );
+  // Closeness = mean |gap| over the size's used points. The spec writes Σ|gap|; the mean orders
+  // identically when every size uses the same points and stops a row that lists fewer points from
+  // looking "closer" merely because it has fewer gaps to add up (README §Spec deviations).
+  const meanAbsGap = perSize.map((s) => {
+    const used = s.points.filter(isPointFit);
+    return used.length === 0 ? Infinity : used.reduce((acc, p) => acc + Math.abs(p.gapCm), 0) / used.length;
+  });
 
   // Step 6 — recommendation.
   const scored = perSize.map((s, i) => ({ s, i })).filter(({ s }) => s.score !== null);
@@ -226,7 +230,7 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
 
   const closestByEase = (cands: { i: number }[]): number => {
     let bestI = cands[0]!.i;
-    for (const { i } of cands) if (sumAbsGap[i]! < sumAbsGap[bestI]!) bestI = i;
+    for (const { i } of cands) if (meanAbsGap[i]! < meanAbsGap[bestI]!) bestI = i;
     return bestI;
   };
 
@@ -236,7 +240,12 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
   } else {
     recommended = true;
     const delta = 0.05 + 0.15 * (1 - tts);
-    const candidates = scored.filter(({ s }) => (s.score as number) >= best - delta - 1e-9);
+    const inBand = scored.filter(({ s }) => (s.score as number) >= best - delta - 1e-9);
+    // A tight point is a bad fit (handoff §4.1). When the tie band holds both wearable and
+    // unwearable sizes, only the wearable ones compete: no tie-break (closest-ease, sizing notes
+    // or history) may hand the user a size with a tight point while a wearable one is as good.
+    const wearable = inBand.filter(({ s }) => s.wearable);
+    const candidates = wearable.length > 0 ? wearable : inBand;
     if (candidates.length === 1) {
       chosenIndex = candidates[0]!.i;
     } else {

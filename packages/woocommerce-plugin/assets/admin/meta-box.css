@@ -1,0 +1,38 @@
+/* Paskamer meta box — design tokens from the handoff: coral #FF5A3C, cream #F5EFE7, ink #1A1612 */
+.paskamer-box h4 { margin: 1.4em 0 .5em; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #1A1612; }
+.paskamer-box .description { color: #646970; }
+.paskamer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 16px; }
+.paskamer-grid label, .paskamer-grid fieldset { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.paskamer-grid label > span, .paskamer-grid legend { font-weight: 600; font-size: 12px; }
+.paskamer-grid input[type=text], .paskamer-grid input[type=number], .paskamer-grid select, .paskamer-grid textarea { width: 100%; max-width: 100%; }
+.paskamer-span2 { grid-column: span 2; }
+.paskamer-inline { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.paskamer-inline label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.paskamer-narrow { width: 6.5em !important; }
+.paskamer-check { display: inline-block; margin-right: 10px; font-weight: 400; }
+.paskamer-table { border-collapse: collapse; margin: 6px 0; }
+.paskamer-table th { text-align: left; font-size: 12px; padding: 2px 6px 2px 0; }
+.paskamer-table td { padding: 2px 6px 2px 0; vertical-align: middle; }
+.paskamer-table tfoot td { padding-top: 6px; }
+.paskamer-row-remove { color: #b32d2e; font-size: 16px; text-decoration: none; }
+.paskamer-radios label { margin-right: 16px; }
+.paskamer-colour { display: inline-flex; align-items: center; gap: 4px; }
+.paskamer-swatch { width: 32px; height: 28px; padding: 0; border: 1px solid #8c8f94; border-radius: 3px; background: none; }
+.paskamer-flatlay { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.paskamer-flatlay-preview:empty { display: none; }
+.paskamer-flatlay-preview img { max-height: 120px; max-width: 160px; border: 1px solid #dcdcde; background: #fff; }
+.paskamer-flatlay .description { flex-basis: 100%; margin: 0; }
+.paskamer-status { padding: 8px 12px; margin: 6px 0 10px; border-left: 4px solid #8c8f94; background: #F5EFE7; }
+.paskamer-status--active { border-color: #1a7f37; }
+.paskamer-status--incomplete, .paskamer-status--pending, .paskamer-status--retrying { border-color: #FF5A3C; }
+.paskamer-status--error { border-color: #b32d2e; }
+.paskamer-status p { margin: 4px 0; }
+.paskamer-error { color: #b32d2e; }
+.paskamer-issues { margin: 4px 0 0 1em; list-style: disc; font-size: 12px; }
+.paskamer-badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; background: #dcdcde; color: #1A1612; }
+.paskamer-badge--active { background: #d1f0da; color: #1a7f37; }
+.paskamer-badge--incomplete { background: #ffe0d8; color: #9a2f17; }
+.paskamer-badge--error { background: #f8d7da; color: #b32d2e; }
+.paskamer-badge--pending, .paskamer-badge--retrying { background: #fff3cd; color: #7a5a00; }
+.paskamer-missing { margin-right: 4px; }
+.paskamer-missing--heavy { background: #ffe0d8; }

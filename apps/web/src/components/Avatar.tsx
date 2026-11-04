@@ -49,7 +49,8 @@ export function Avatar({ garment, fit, size, isLoading = false, bare = false }: 
     strain: `${uid}-strain`,
   };
   const bodyD = bodyPath(body);
-  const headCy = HEAD_TOP_Y + body.headR + 4;
+  const headCy = HEAD_TOP_Y + body.headRy;
+  const hasBody = !!fitCtx && Object.keys(fitCtx.userBody.measurements).length > 0;
 
   return (
     <div className="relative flex h-full w-full items-center justify-center p-3" data-testid="mirror">
@@ -87,7 +88,7 @@ export function Avatar({ garment, fit, size, isLoading = false, bare = false }: 
             <path d={bodyD} />
           </clipPath>
           <clipPath id={ids.headClip}>
-            <circle cx={VIEW_W / 2} cy={headCy} r={body.headR + 2} />
+            <ellipse cx={VIEW_W / 2} cy={headCy} rx={body.headR + 2} ry={body.headRy + 2} />
           </clipPath>
           <linearGradient id={ids.shade} x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="rgba(0,0,0,0.14)" />
@@ -157,10 +158,10 @@ export function Avatar({ garment, fit, size, isLoading = false, bare = false }: 
         {/* Face tile at the head */}
         {media.faceUrl && !media.baseFrame ? (
           <g clipPath={`url(#${ids.headClip})`}>
-            <image href={media.faceUrl} x={VIEW_W / 2 - body.headR - 2} y={headCy - body.headR - 2} width={(body.headR + 2) * 2} height={(body.headR + 2) * 2} preserveAspectRatio="xMidYMid slice" />
+            <image href={media.faceUrl} x={VIEW_W / 2 - body.headR - 2} y={headCy - body.headRy - 2} width={(body.headR + 2) * 2} height={(body.headRy + 2) * 2} preserveAspectRatio="xMidYMid slice" />
           </g>
         ) : null}
-        {media.faceUrl && !media.baseFrame ? <circle cx={VIEW_W / 2} cy={headCy} r={body.headR + 2} fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="1.5" /> : null}
+        {media.faceUrl && !media.baseFrame ? <ellipse cx={VIEW_W / 2} cy={headCy} rx={body.headR + 2} ry={body.headRy + 2} fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="1.5" /> : null}
         {/* floor shadow */}
         <ellipse cx={VIEW_W / 2} cy={levelY('sole') + 6} rx={body.hipHalf + 18} ry={5} fill="rgba(26,22,18,0.12)" />
       </svg>
@@ -168,7 +169,7 @@ export function Avatar({ garment, fit, size, isLoading = false, bare = false }: 
       {!bare ? (
         <div className="pointer-events-none absolute top-4 left-4 flex flex-col items-start gap-1">
           <EstimateBadge />
-          {garment && !media.baseFrame ? <span className="chip bg-white/70 text-xs">Body from your measurements</span> : null}
+          {garment && !media.baseFrame ? <span className="chip bg-white/70 text-xs">{hasBody ? 'Body from your measurements' : 'Reference body · add your measurements'}</span> : null}
           {media.baseFrame ? <span className="chip bg-white/70 text-xs">Your capture · garment overlay</span> : null}
         </div>
       ) : null}

@@ -19,8 +19,10 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
+      # service_started, not service_healthy: the static PWA must stay up while the api restarts or
+      # fails its readiness check (Caddy returns 502 for api.<domain> only).
       api:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:2019/metrics']
       interval: 30s
@@ -33,7 +35,7 @@ services:
         max-file: '7' # ~7 days of logs on a quiet VPS; the api never logs client IPs (LOG_IPS=0)
 
   api:
-    image: ${API_IMAGE:-ghcr.io/paskamer/api:latest}
+    image: ${API_IMAGE:?set API_IMAGE in infra/.env (ghcr.io/<github owner>/paskamer-api:<tag>)}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -61,7 +63,7 @@ services:
 
   # Optional second replica that only runs pg-boss jobs (hero renders, sync, rollups): `docker compose --profile jobs up -d`.
   jobs:
-    image: ${API_IMAGE:-ghcr.io/paskamer/api:latest}
+    image: ${API_IMAGE:?set API_IMAGE in infra/.env (ghcr.io/<github owner>/paskamer-api:<tag>)}
     restart: unless-stopped
     profiles: ['jobs']
     env_file: .env

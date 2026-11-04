@@ -35,14 +35,16 @@ export function effectiveRate(action: SwipeAction, swipeCount: number): number {
 
 /**
  * Pass reasons, evaluated in order; several may apply; `['unknown']` when none does.
- * - fit: a fit result exists and nothing fits (recommendedSize null) or score < 0.5
+ * - fit: a fit result exists and nothing fits (recommendedSize null) or score < 0.5. A null score
+ *   with a size ("No fit points for this item": accessories, one-size charts) means the fit was
+ *   never evaluated, so the pass is NOT attributed to fit.
  * - price: p80 known and price > 1.25·p80
  * - colour: swipeCount ≥ 10 and colour[hue] ≤ −0.2
  * - style: swipeCount ≥ 10 and styleMatch < 0.35
  */
 export function inferPassReasons(profile: TasteProfile, f: ItemFeatures, fit: FitResultLike | null): PassReason[] {
   const reasons: PassReason[] = [];
-  if (fit && (fit.recommendedSize === null || (fit.score ?? 0) < 0.5)) reasons.push('fit');
+  if (fit && (fit.recommendedSize === null || (fit.score !== null && fit.score < 0.5))) reasons.push('fit');
   if (profile.price.p80 !== null && f.priceEur > 1.25 * profile.price.p80) reasons.push('price');
   if (profile.swipeCount >= 10 && (profile.colour[f.hue] ?? 0) <= -0.2) reasons.push('colour');
   if (profile.swipeCount >= 10 && styleMatch(profile.axes, f.axes) < 0.35) reasons.push('style');

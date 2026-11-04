@@ -1,0 +1,178 @@
+# Copyright (C) 2026 Paskamer
+# This file is distributed under the GPL-2.0-or-later.
+msgid ""
+msgstr ""
+"Project-Id-Version: Paskamer for WooCommerce 0.1.0\n"
+"Report-Msgid-Bugs-To: https://paskamer.app/woocommerce\n"
+"POT-Creation-Date: 2026-11-04 12:00+0000\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"X-Domain: paskamer-woocommerce\n"
+
+#: paskamer.php
+msgid "Paskamer for WooCommerce"
+msgstr ""
+
+#: includes/class-plugin.php
+msgid "Settings"
+msgstr ""
+
+#: includes/class-plugin.php
+msgid "Paskamer for WooCommerce is installed but not connected. Nothing is sent to Paskamer until you connect your shop."
+msgstr ""
+
+#: includes/class-plugin.php
+msgid "Connect now"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Try in Paskamer"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Paskamer"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Connection"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Status"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Connected"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Not connected — nothing is sent to Paskamer."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Connect to Paskamer"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Finish connection"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Check status"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Sync all products"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Disconnect"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Or paste an API key"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Use key"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Storefront button"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Show button"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Save settings"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Settings saved."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Connected to Paskamer. Your published products are being synced in the background."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "What is sent to Paskamer"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Paskamer — fit data"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Choose flat-lay photo"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Use this image"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Active"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Incomplete"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Syncing…"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Archived"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Sync error"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Category *"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Flat-lay photo *"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Fabric *"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Size chart *"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "The numbers below are *"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "garment measurements (measured flat)"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "body measurements (the body each size is cut for)"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Add size"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Required before the product can be active:"
+msgstr ""
+
+#: includes/class-frontend.php
+msgid "Opens Paskamer, your private fitting room. Fit results are estimates."
+msgstr ""

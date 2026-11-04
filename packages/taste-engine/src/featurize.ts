@@ -84,9 +84,17 @@ export const BLOCK_EASE: Readonly<Record<string, Readonly<Partial<Record<GirthPo
 export type GirthPoint = 'bust' | 'waist' | 'hip';
 export const GIRTH_POINTS = ['bust', 'waist', 'hip'] as const satisfies readonly GirthPoint[];
 
+/**
+ * Canonical key for table lookups and affinity / penalty keys: trimmed, lower-cased. The fit engine
+ * resolves `patternBlock` the same way (`blockRule`), so 'Wrap ' and 'wrap' are one cut here too.
+ */
+export function normaliseKey(s: string | undefined | null): string {
+  return typeof s === 'string' ? s.trim().toLowerCase() : '';
+}
+
 /** Σ of bust/waist/hip ease: garment value → block default → category default → 0. */
 export function easeTotal(g: Pick<FeaturizableGarment, 'category' | 'ease' | 'patternBlock'>): number {
-  const block = BLOCK_EASE[g.patternBlock] ?? {};
+  const block = BLOCK_EASE[normaliseKey(g.patternBlock)] ?? {};
   const category = CATEGORY_EASE[g.category] ?? {};
   let total = 0;
   for (const p of GIRTH_POINTS) total += g.ease?.[p] ?? block[p] ?? category[p] ?? 0;
@@ -112,8 +120,8 @@ export function axesOf(g: Pick<FeaturizableGarment, 'patternBlock' | 'fabric' | 
     for (const a of AXES) out[a] = clamp(g.styleTags[a] ?? 0, 0, 1);
     return out;
   }
-  const block = PATTERN_BLOCK_AXES[g.patternBlock] ?? {};
-  const fabric = FABRIC_AXES[g.fabric.primary] ?? {};
+  const block = PATTERN_BLOCK_AXES[normaliseKey(g.patternBlock)] ?? {};
+  const fabric = FABRIC_AXES[normaliseKey(g.fabric.primary)] ?? {};
   for (const a of AXES) out[a] = clamp(round((block[a] ?? 0) + (fabric[a] ?? 0)), 0, 1);
   return out;
 }
@@ -127,8 +135,8 @@ export function featurize(g: FeaturizableGarment): ItemFeatures {
     axes: axesOf(g),
     silhouette: silhouetteFromEase(easeTotal(g)),
     hue: hueBin(g.primaryColorHex),
-    fabric: g.fabric.primary,
-    cut: g.patternBlock,
+    fabric: normaliseKey(g.fabric.primary),
+    cut: normaliseKey(g.patternBlock),
     priceEur: g.priceEur,
   };
 }

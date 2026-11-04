@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Paskamer</title>
+  <!-- App Bridge (the only third-party script; required for embedded apps). The api key is public. -->
+  <meta name="shopify-api-key" content="__PASKAMER_SHOPIFY_API_KEY__" />
+  <script src="__PASKAMER_APP_BRIDGE_URL__"></script>
+  <script id="paskamer-config" type="application/json">__PASKAMER_CONFIG_JSON__</script>
+  <style>
+    /* Polaris-like, CSS only. No fonts loaded (system stack), no images. */
+    :root {
+      --p-bg: #f1f2f4; --p-surface: #ffffff; --p-text: #303030; --p-text-subdued: #616161;
+      --p-border: #e3e3e3; --p-primary: #303030; --p-success-bg: #cdfee1; --p-success-fg: #0c5132;
+      --p-warning-bg: #ffeb78; --p-warning-fg: #4f4700; --p-critical-bg: #fed3d1; --p-critical-fg: #8e1f0b;
+      --p-info-bg: #e0f0ff; --p-info-fg: #00527c; --p-radius: 12px; --coral: #ff5a3c; --cream: #f5efe7; --ink: #1a1612;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--p-bg); color: var(--p-text); font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    .page { max-width: 1040px; margin: 0 auto; padding: 20px 16px 48px; }
+    .page-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    h1 { font-size: 20px; margin: 0; font-weight: 650; }
+    h2 { font-size: 14px; margin: 0 0 12px; font-weight: 650; }
+    .brand { display: inline-flex; align-items: center; gap: 8px; }
+    .brand i { width: 14px; height: 14px; border-radius: 50%; background: var(--coral); display: inline-block; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    @media (min-width: 820px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
+    .card { background: var(--p-surface); border-radius: var(--p-radius); box-shadow: 0 1px 0 rgba(0,0,0,.07), 0 0 0 1px rgba(0,0,0,.05); padding: 16px; }
+    .card + .card { margin-top: 16px; }
+    .subdued { color: var(--p-text-subdued); }
+    .badge { display: inline-block; border-radius: 8px; padding: 1px 8px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+    .badge-success { background: var(--p-success-bg); color: var(--p-success-fg); }
+    .badge-warning { background: var(--p-warning-bg); color: var(--p-warning-fg); }
+    .badge-critical { background: var(--p-critical-bg); color: var(--p-critical-fg); }
+    .badge-info { background: var(--p-info-bg); color: var(--p-info-fg); }
+    .btn { display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; border: 1px solid #8a8a8a; background: #fff; color: var(--p-text); padding: 6px 12px; font: inherit; font-weight: 550; cursor: pointer; text-decoration: none; }
+    .btn:hover { background: #f7f7f7; }
+    .btn-primary { background: var(--p-primary); border-color: var(--p-primary); color: #fff; }
+    .btn-primary:hover { background: #1a1a1a; }
+    .btn[disabled] { opacity: .5; cursor: default; }
+    ul.checklist { list-style: none; margin: 0; padding: 0; }
+    ul.checklist li { display: grid; grid-template-columns: 24px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--p-border); }
+    ul.checklist li:first-child { border-top: 0; padding-top: 0; }
+    .check { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #8a8a8a; display: inline-grid; place-items: center; font-size: 12px; }
+    .check.done { background: var(--p-success-fg); border-color: var(--p-success-fg); color: #fff; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px 6px; border-top: 1px solid var(--p-border); vertical-align: top; }
+    th { font-weight: 550; color: var(--p-text-subdued); border-top: 0; font-size: 12px; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .meter { height: 8px; border-radius: 4px; background: #e3e3e3; overflow: hidden; }
+    .meter > i { display: block; height: 100%; background: var(--coral); }
+    .stat { display: flex; flex-direction: column; gap: 2px; }
+    .stat b { font-size: 20px; font-weight: 650; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 12px; }
+    .bars { display: flex; align-items: flex-end; gap: 2px; height: 48px; margin-top: 8px; }
+    .bars i { flex: 1; background: var(--coral); min-height: 1px; opacity: .85; border-radius: 2px 2px 0 0; }
+    .banner { border-radius: var(--p-radius); padding: 12px 14px; margin-bottom: 16px; display: none; }
+    .banner.show { display: block; }
+    .banner-critical { background: var(--p-critical-bg); color: var(--p-critical-fg); }
+    .banner-warning { background: var(--p-warning-bg); color: var(--p-warning-fg); }
+    .banner-info { background: var(--p-info-bg); color: var(--p-info-fg); }
+    .empty { padding: 12px 0; color: var(--p-text-subdued); }
+    .filters { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+    .filters .btn { padding: 3px 10px; font-weight: 500; }
+    .filters .btn.active { background: var(--p-text); color: #fff; border-color: var(--p-text); }
+    .privacy { background: var(--cream); color: var(--ink); border-radius: 8px; padding: 10px 12px; margin-top: 12px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .skeleton { height: 12px; border-radius: 6px; background: linear-gradient(90deg, #eee, #f7f7f7, #eee); background-size: 200% 100%; animation: sk 1.2s infinite; }
+    @keyframes sk { to { background-position: -200% 0; } }
+    @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="page-header">
+      <h1 class="brand"><i aria-hidden="true"></i> Paskamer</h1>
+      <span id="shop-domain" class="subdued mono"></span>
+    </header>
+
+    <div id="banner" class="banner" role="status" aria-live="polite"></div>
+
+    <div class="grid grid-2">
+      <section class="card" aria-labelledby="h-onboarding">
+        <h2 id="h-onboarding">Get set up</h2>
+        <ul class="checklist" id="checklist">
+          <li><span class="check" id="chk-install"></span><div><b>Connect this store</b><div class="subdued" id="txt-install">Checking…</div></div><span></span></li>
+          <li><span class="check" id="chk-plan"></span><div><b>Choose a plan</b><div class="subdued" id="txt-plan">14-day trial. Below plan, the button keeps rendering; shoppers see a pause screen.</div></div><button class="btn btn-primary" id="btn-plan" type="button" disabled>Choose Starter</button></li>
+          <li><span class="check" id="chk-theme"></span><div><b>Add the “Try in Paskamer” block</b><div class="subdued">Opens the theme editor on your product template with the block pre-added.</div></div><a class="btn" id="lnk-theme" target="_top" rel="noopener">Add to theme</a></li>
+          <li><span class="check" id="chk-data"></span><div><b>Complete garment data</b><div class="subdued" id="txt-data">Size chart, fabric and a flat-lay photo make a product try-able.</div></div><a class="btn" href="#products">Review</a></li>
+        </ul>
+        <div class="privacy">
+          <b>Privacy by construction.</b> Shoppers' photos and measurements never leave their phone. You receive aggregates only (k-anonymity floor), never a device id, a measurement or a photo.
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="h-usage">
+        <h2 id="h-usage">Plan &amp; usage</h2>
+        <div class="stats">
+          <div class="stat"><span class="subdued">Plan</span><b id="usage-plan">–</b></div>
+          <div class="stat"><span class="subdued">Try-on sessions this period</span><b id="usage-sessions">–</b></div>
+          <div class="stat"><span class="subdued">Hero renders (30 d)</span><b id="usage-renders">–</b></div>
+        </div>
+        <div class="meter" aria-hidden="true"><i id="usage-meter" style="width:0%"></i></div>
+        <div class="subdued" id="usage-period" style="margin-top:6px"></div>
+        <div class="bars" id="usage-bars" aria-label="Try-on sessions per day, last 30 days" role="img"></div>
+        <div class="subdued" style="margin-top:8px">One try-on session = one product resolved by one shopper with a fit result, counted once per intent (never double-billed on retries).</div>
+      </section>
+    </div>
+
+    <section class="card" id="products" aria-labelledby="h-products" style="margin-top:16px">
+      <h2 id="h-products">Products <span class="subdued" id="products-counts"></span></h2>
+      <div class="filters" role="group" aria-label="Filter by status">
+        <button class="btn active" type="button" data-filter="all">All</button>
+        <button class="btn" type="button" data-filter="incomplete">Needs data</button>
+        <button class="btn" type="button" data-filter="active">Try-able</button>
+      </div>
+      <div style="overflow:auto">
+        <table>
+          <thead><tr><th>Product</th><th>Category</th><th>Status</th><th class="num">Completeness</th><th>Missing</th><th></th></tr></thead>
+          <tbody id="products-body"><tr><td colspan="6"><div class="skeleton"></div></td></tr></tbody>
+        </table>
+      </div>
+      <p class="subdued" id="products-note" style="margin:8px 0 0"></p>
+    </section>
+
+    <section class="card" aria-labelledby="h-ledger" style="margin-top:16px">
+      <h2 id="h-ledger">Privacy ledger</h2>
+      <p class="subdued" style="margin:0 0 8px">Everything Paskamer sent to an AI provider on behalf of your shoppers' opt-in hero renders. Inputs are never a shopper photo: an anonymised avatar render and your flat-lay only. Results are deleted within 24 hours.</p>
+      <div style="overflow:auto">
+        <table>
+          <thead><tr><th>When</th><th>Product</th><th>Provider</th><th>Model</th><th>Inputs</th><th class="num">Retention</th></tr></thead>
+          <tbody id="ledger-body"><tr><td colspan="6"><div class="skeleton"></div></td></tr></tbody>
+        </table>
+      </div>
+      <p class="subdued" id="disclaimer" style="margin:10px 0 0"></p>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      'use strict';
+      var cfg = JSON.parse(document.getElementById('paskamer-config').textContent);
+      var params = new URLSearchParams(location.search);
+      var shop = (params.get('shop') || (window.shopify && shopify.config && shopify.config.shop) || '').toLowerCase();
+      var state = { installed: null, products: null, usage: null, ledger: null, filter: 'all' };
+
+      function $(id) { return document.getElementById(id); }
+      function text(id, value) { $(id).textContent = value; }
+      function el(tag, attrs, children) {
+        var node = document.createElement(tag);
+        if (attrs) Object.keys(attrs).forEach(function (k) {
+          if (k === 'text') node.textContent = attrs[k];
+          else if (k === 'class') node.className = attrs[k];
+          else node.setAttribute(k, attrs[k]);
+        });
+        (children || []).forEach(function (c) { node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+        return node;
+      }
+      function banner(kind, message) {
+        var b = $('banner');
+        b.className = 'banner show banner-' + kind;
+        b.textContent = message;
+      }
+      function check(id, done) { var c = $(id); c.classList.toggle('done', !!done); c.textContent = done ? '✓' : ''; }
+      function day(d) { return d.toISOString().slice(0, 10); }
+      function fmtDate(iso) { var d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); }
+
+      async function idToken() {
+        if (!window.shopify || typeof shopify.idToken !== 'function') throw new Error('App Bridge did not load. Open this page from your Shopify admin.');
+        return shopify.idToken();
+      }
+      async function api(method, path, body, auth) {
+        var headers = { accept: 'application/json' };
+        if (body) headers['content-type'] = 'application/json';
+        if (auth !== false) headers.authorization = 'Bearer ' + (await idToken());
+        var res = await fetch(cfg.apiUrl + path, { method: method, headers: headers, body: body ? JSON.stringify(body) : undefined, credentials: 'omit', cache: 'no-store' });
+        var data = null;
+        try { data = await res.json(); } catch (_) { data = null; }
+        if (!res.ok) {
+          var err = new Error((data && data.error && data.error.message) || ('HTTP ' + res.status));
+          err.status = res.status;
+          err.code = data && data.error && data.error.code;
+          throw err;
+        }
+        return data;
+      }
+
+      // 1. Managed installation: exchange the session token for an offline token (idempotent server-side).
+      async function ensureInstalled() {
+        if (!shop) throw new Error('Missing ?shop= parameter. Open the app from the Shopify admin.');
+        text('shop-domain', shop);
+        var r = await api('POST', '/shopify/token-exchange', { shop: shop, sessionToken: await idToken() }, false);
+        state.installed = r;
+        check('chk-install', true);
+        text('txt-install', 'Connected. Public key ' + r.publicKeyPrefix + (r.backfillQueued ? ' · importing your catalogue…' : ''));
+        return r;
+      }
+
+      function themeLink() {
+        var p = new URLSearchParams({ template: 'product', addAppBlockId: cfg.apiKey + '/' + cfg.blockHandle, target: 'mainSection' });
+        return 'https://' + shop + '/admin/themes/current/editor?' + p.toString();
+      }
+
+      async function loadUsage() {
+        var to = new Date(); var from = new Date(to.getTime() - 29 * 86400000);
+        var u = await api('GET', '/v1/merchant/usage?from=' + day(from) + '&to=' + day(to));
+        state.usage = u;
+        var plan = u.plan;
+        text('usage-plan', plan.name.charAt(0).toUpperCase() + plan.name.slice(1) + (plan.paused ? ' · paused' : ''));
+        text('usage-sessions', plan.sessionsUsedThisPeriod + ' / ' + plan.includedSessions);
+        text('usage-renders', String(u.totals.heroRenders));
+        var pct = plan.includedSessions ? Math.min(100, Math.round(100 * plan.sessionsUsedThisPeriod / plan.includedSessions)) : 0;
+        $('usage-meter').style.width = pct + '%';
+        text('usage-period', 'Period ' + plan.periodStart + ' → ' + plan.periodEnd + ' · overage €' + plan.overageEurPerSession.toFixed(2) + ' per session');
+        var bars = $('usage-bars'); bars.textContent = '';
+        var max = Math.max(1, Math.max.apply(null, u.days.map(function (d) { return d.fitSessions; }).concat([0])));
+        u.days.forEach(function (d) { var i = el('i', { title: d.day + ': ' + d.fitSessions }); i.style.height = Math.max(2, Math.round(100 * d.fitSessions / max)) + '%'; bars.appendChild(i); });
+        var onPlan = plan.name !== 'free' && !plan.paused;
+        check('chk-plan', onPlan);
+        $('btn-plan').disabled = false;
+        $('btn-plan').textContent = plan.name === 'free' ? 'Choose Starter' : 'Change plan';
+        if (plan.paused) banner('warning', 'Your shop is paused: shoppers see a “taking a short break” screen. Choose a plan or raise the usage cap to resume.');
+      }
+
+      async function loadProducts() {
+        var r = await api('GET', '/v1/merchant/products?limit=200');
+        state.products = r;
+        text('products-counts', '· ' + r.counts.active + ' try-able, ' + r.counts.incomplete + ' need data');
+        text('txt-data', r.counts.incomplete === 0 ? 'All synced products are try-able.' : r.counts.incomplete + ' product(s) are missing size chart, fabric or flat-lay data.');
+        check('chk-data', r.counts.active > 0 && r.counts.incomplete === 0);
+        text('products-note', r.nextCursor ? 'Showing the first 200 products.' : '');
+        renderProducts();
+      }
+
+      function renderProducts() {
+        var body = $('products-body'); body.textContent = '';
+        var items = (state.products ? state.products.items : []).filter(function (p) { return state.filter === 'all' ? p.status !== 'archived' : p.status === state.filter; });
+        if (!items.length) { body.appendChild(el('tr', null, [el('td', { colspan: '6', class: 'empty', text: state.products && state.products.items.length ? 'Nothing here.' : 'No products synced yet. Publish a product and give it Paskamer fields in the product admin (Metafields → Paskamer).' })])); return; }
+        items.forEach(function (p) {
+          var badge = p.status === 'active' ? ['badge-success', 'Try-able'] : p.status === 'incomplete' ? ['badge-warning', 'Needs data'] : ['badge-critical', 'Archived'];
+          var missing = p.missingFields.slice(0, 4).join(', ') + (p.missingFields.length > 4 ? ' +' + (p.missingFields.length - 4) : '');
+          body.appendChild(el('tr', null, [
+            el('td', null, [el('b', { text: p.name }), el('div', { class: 'subdued mono', text: p.externalId })]),
+            el('td', { text: p.category || '–' }),
+            el('td', null, [el('span', { class: 'badge ' + badge[0], text: badge[1] })]),
+            el('td', { class: 'num', text: Math.round(p.score * 100) + '%' }),
+            el('td', { class: 'subdued', text: missing || '–' }),
+            el('td', null, [el('a', { class: 'btn', href: 'https://' + shop + '/admin/products/' + encodeURIComponent(p.externalId), target: '_top', rel: 'noopener', text: 'Edit' })])
+          ]));
+        });
+      }
+
+      async function loadLedger() {
+        var r = await api('GET', '/v1/merchant/ledger?limit=20');
+        state.ledger = r;
+        var body = $('ledger-body'); body.textContent = '';
+        if (!r.entries.length) { body.appendChild(el('tr', null, [el('td', { colspan: '6', class: 'empty', text: 'No AI renders yet. Nothing has been sent to any provider on behalf of your shop.' })])); return; }
+        r.entries.forEach(function (e) {
+          body.appendChild(el('tr', null, [
+            el('td', { text: fmtDate(e.at) }),
+            el('td', { class: 'mono', text: e.productExternalId || '–' }),
+            el('td', { text: e.provider }),
+            el('td', { text: e.model }),
+            el('td', { text: e.inputs.join(', ') }),
+            el('td', { class: 'num', text: e.retentionHours + ' h' })
+          ]));
+        });
+      }
+
+      async function subscribe() {
+        var btn = $('btn-plan'); btn.disabled = true;
+        try {
+          var r = await api('POST', '/shopify/billing/subscribe', { plan: 'starter', returnUrl: 'https://admin.shopify.com/store/' + shop.replace(/\.myshopify\.com$/, '') + '/apps/' + cfg.appHandle });
+          if (r.confirmationUrl) open(r.confirmationUrl, '_top');
+          else banner('info', 'Subscription created. Refresh to see its status.');
+        } catch (err) {
+          banner('critical', 'Could not start billing: ' + err.message);
+          btn.disabled = false;
+        }
+      }
+
+      document.querySelectorAll('[data-filter]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          document.querySelectorAll('[data-filter]').forEach(function (x) { x.classList.toggle('active', x === b); });
+          state.filter = b.getAttribute('data-filter');
+          renderProducts();
+        });
+      });
+      $('btn-plan').addEventListener('click', subscribe);
+      text('disclaimer', cfg.disclaimer);
+
+      (async function main() {
+        try {
+          if (shop) { $('lnk-theme').href = themeLink(); check('chk-theme', false); }
+          await ensureInstalled();
+          var results = await Promise.allSettled([loadUsage(), loadProducts(), loadLedger()]);
+          var failed = results.filter(function (r) { return r.status === 'rejected'; });
+          if (failed.length) banner('warning', 'Some panels could not load: ' + failed.map(function (f) { return f.reason && f.reason.message; }).join(' · '));
+        } catch (err) {
+          var msg = err && err.code === 'shopify_not_configured' ? 'The Paskamer API is not configured for Shopify yet (SHOPIFY_API_KEY/SECRET).' : (err && err.message) || String(err);
+          banner('critical', msg);
+          text('txt-install', 'Not connected.');
+          $('products-body').textContent = ''; $('ledger-body').textContent = '';
+        }
+      })();
+    })();
+  </script>
+</body>
+</html>

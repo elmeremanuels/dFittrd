@@ -3,7 +3,7 @@
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-const roots = ['apps/web/dist', 'packages/sdk/dist', 'packages/shopify-app/extensions'];
+const roots = ['apps/web/dist', 'packages/sdk/dist', 'packages/shopify-app/extensions', 'packages/woocommerce-plugin/assets'];
 const patterns = [
   /sk_(live|test)_[A-Za-z0-9]{8,}/, // Stripe secret keys
   /whsec_[A-Za-z0-9]{8,}/, // Stripe webhook secrets

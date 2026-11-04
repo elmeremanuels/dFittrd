@@ -31,7 +31,7 @@ import {
 import { requireDevice } from '../auth/device.js';
 import { devices, fitSignatures, ledgerEntries, pairings, renderJobs, swipeEvents, trySessions, wardrobeItems } from '../db/schema.js';
 import { forbidden, notFound, unprocessable } from '../lib/errors.js';
-import { utcDay } from '../lib/time.js';
+import { HOUR, utcDay } from '../lib/time.js';
 import { fitCohort } from '../services/analytics.js';
 import { byteLength, fieldNames, listLedger, toDto, writeLedger } from '../services/ledger.js';
 import { asGarment, findProduct, findProductById, listActiveGarments } from '../services/products.js';
@@ -39,6 +39,16 @@ import { findShopById } from '../services/shops.js';
 import { recordUsage } from '../services/usage.js';
 
 const uuid = z.uuid();
+
+/**
+ * Billing day for a deck swipe (D7 idempotency `deck:<device>:<shop>:<item>:<day>`). The client
+ * timestamp is honoured for offline outboxes synced a little later, but clamped to ±36 h of
+ * server time so a device cannot mint one billable session per fabricated day.
+ */
+export function deckBillingDay(clientAt: number, now: Date): string {
+  const delta = Math.abs(clientAt - now.getTime());
+  return utcDay(delta <= 36 * HOUR ? new Date(clientAt) : now);
+}
 
 export const appRoutes: FastifyPluginAsyncZod = async (app) => {
   const { ctx } = app;
@@ -163,6 +173,7 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
   // ---- swipes (batch ≤ 100, no body data) ---------------------------------------------------
   app.post('/v1/swipes', { schema: { body: SwipeBatchRequestSchema, response: { 200: SwipeBatchResponseSchema } }, preHandler: requireDevice }, async (req) => {
     const deviceId = req.device!.id;
+    const now = ctx.now();
     let accepted = 0;
     let duplicates = 0;
     let usageEventsCreated = 0;
@@ -210,8 +221,11 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
           continue;
         }
       }
-      key = `deck:${deviceId}:${ev.shopId}:${ev.itemId}:${utcDay(new Date(ev.at))}`;
-      const created = await recordUsage(db, { shopId: ev.shopId, deviceId, productId: product?.id ?? null, kind: 'fit_session', idempotencyKey: key });
+      // Deck accounting bills the merchant only for a product that exists in their catalogue —
+      // a fit result for an unknown or archived item is not a try-on session (billing integrity).
+      if (!product || product.status === 'archived') continue;
+      key = `deck:${deviceId}:${ev.shopId}:${ev.itemId}:${deckBillingDay(ev.at, now)}`;
+      const created = await recordUsage(db, { shopId: ev.shopId, deviceId, productId: product.id, kind: 'fit_session', idempotencyKey: key });
       if (created) usageEventsCreated++;
     }
     const shopIds = new Set(req.body.events.map((e) => e.shopId));

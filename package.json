@@ -7,10 +7,12 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "dev": "pnpm --filter @paskamer/web dev",
-    "build": "pnpm -r --filter './packages/**' build && pnpm -r --filter './apps/**' build",
+    "build": "pnpm build:packages && pnpm build:apps",
+    "build:packages": "pnpm -r --filter './packages/**' build",
+    "build:apps": "pnpm -r --filter './apps/**' build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "check": "pnpm typecheck && pnpm test && pnpm build && node scripts/check-bundle-secrets.mjs"
+    "check": "pnpm build:packages && pnpm typecheck && pnpm lint && pnpm test && pnpm build:apps && node scripts/check-bundle-secrets.mjs"
   }
 }

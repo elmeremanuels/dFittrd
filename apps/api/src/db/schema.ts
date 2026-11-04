@@ -64,8 +64,14 @@ export const shops = pgTable(
     apiKeyHash: text('api_key_hash'),
     /** AES-GCM copy of the secret (needed to verify HMAC signatures). */
     apiKeyEnc: text('api_key_enc'),
+    /**
+     * HMAC(pepper, secret) — an indexed, deterministic lookup so `Bearer sk_…` auth is one row
+     * fetch + one scrypt instead of scrypt over every shop (unauthenticated CPU DoS otherwise).
+     */
+    apiKeyLookup: text('api_key_lookup'),
     previousKeyHash: text('previous_key_hash'),
     previousKeyEnc: text('previous_key_enc'),
+    previousKeyLookup: text('previous_key_lookup'),
     previousKeyValidUntil: ts('previous_key_valid_until'),
     plan: text('plan').$type<Plan>().notNull().default('free'),
     paused: boolean('paused').notNull().default(false),
@@ -83,7 +89,12 @@ export const shops = pgTable(
     createdAt: ts('created_at').notNull().defaultNow(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
-  (t) => [uniqueIndex('shops_domain_uq').on(t.domain), uniqueIndex('shops_api_key_prefix_uq').on(t.apiKeyPrefix)],
+  (t) => [
+    uniqueIndex('shops_domain_uq').on(t.domain),
+    uniqueIndex('shops_api_key_prefix_uq').on(t.apiKeyPrefix),
+    index('shops_api_key_lookup_idx').on(t.apiKeyLookup),
+    index('shops_previous_key_lookup_idx').on(t.previousKeyLookup),
+  ],
 );
 
 export const shopifySessions = pgTable('shopify_sessions', {

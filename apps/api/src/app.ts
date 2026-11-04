@@ -18,6 +18,7 @@ import type { Env } from './env.js';
 import { registerJobs } from './jobs/index.js';
 import type { JobQueue } from './jobs/queue.js';
 import { HttpError } from './lib/errors.js';
+import { systemLookup, type LookupLike } from './lib/safeFetch.js';
 import { appRoutes } from './routes/app.js';
 import { merchantRoutes } from './routes/merchant.js';
 import { opsRoutes } from './routes/ops.js';
@@ -34,6 +35,8 @@ export interface BuildOptions {
   db: Db;
   queue: JobQueue;
   fetch?: FetchLike;
+  /** DNS lookup used by the SSRF guard (tests inject a stub that never touches the network). */
+  lookup?: LookupLike;
   /** Override the try-on router (tests inject MockProvider). */
   tryon?: TryOnRouter;
   now?: () => Date;
@@ -92,6 +95,7 @@ export async function build(opts: BuildOptions): Promise<App> {
     tokens,
     log: app.log,
     fetch: fetchImpl,
+    lookup: opts.lookup ?? systemLookup,
     now,
     shopify: new ShopifyClient(env, opts.db, fetchImpl),
     stripe: new StripeClient(env, fetchImpl),
@@ -105,6 +109,9 @@ export async function build(opts: BuildOptions): Promise<App> {
     global: false,
     max: 300,
     timeWindow: '1 minute',
+    // preValidation runs after the body is parsed, so per-route keyGenerators may key on the
+    // body (the SDK route limits per shop key). The default (onRequest) sees `req.body` as undefined.
+    hook: 'preValidation',
     errorResponseBuilder: (_req, context) => new HttpError(context.statusCode, context.ban ? 'banned' : 'rate_limited', `rate limit exceeded, retry in ${Math.ceil(context.ttl / 1000)}s`),
   });
   await app.register(swagger, {

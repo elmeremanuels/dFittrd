@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { isTryOnError, motionPromptFromMetadata, promptFromMetadata, type GarmentInput, type PersonInput, type VideoOptions } from '@paskamer/tryon-providers';
 import type { App } from '../app.js';
 import { renderJobs } from '../db/schema.js';
+import { fetchPublicBytes, UnsafeUrlError, type LookupLike } from '../lib/safeFetch.js';
 import { writeLedger } from '../services/ledger.js';
 import { asGarment, findProductById } from '../services/products.js';
 import { recordUsage } from '../services/usage.js';
@@ -16,13 +17,16 @@ export interface RenderHeroJob {
 
 const FLAT_LAY_MAX_BYTES = 10 * 1024 * 1024;
 
-export async function fetchImage(fetchImpl: typeof fetch, url: string, timeoutMs = 10_000): Promise<Uint8Array | null> {
+/**
+ * Fetches the merchant's flat-lay through the SSRF guard (public http(s) hosts only, redirects
+ * re-checked, 10 MB cap). A forbidden or unavailable URL yields `null`: the render proceeds from
+ * metadata alone rather than failing the job.
+ */
+export async function fetchImage(fetchImpl: typeof fetch, url: string, opts: { lookup?: LookupLike; timeoutMs?: number; onUnsafe?: (err: UnsafeUrlError) => void } = {}): Promise<Uint8Array | null> {
   try {
-    const res = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
-    if (!res.ok) return null;
-    const buf = new Uint8Array(await res.arrayBuffer());
-    return buf.length > 0 && buf.length <= FLAT_LAY_MAX_BYTES ? buf : null;
-  } catch {
+    return await fetchPublicBytes(fetchImpl, url, { lookup: opts.lookup, maxBytes: FLAT_LAY_MAX_BYTES, timeoutMs: opts.timeoutMs ?? 10_000, contentTypePrefix: 'image/' });
+  } catch (err) {
+    if (err instanceof UnsafeUrlError) opts.onUnsafe?.(err);
     return null;
   }
 }
@@ -33,7 +37,7 @@ export function videoDuration(seconds: number): VideoOptions['durationSec'] {
 }
 
 export function makeRenderHeroHandler(app: App) {
-  const { db, fetch: fetchImpl, now } = app.ctx;
+  const { db, fetch: fetchImpl, lookup, now } = app.ctx;
   return async ({ jobId }: RenderHeroJob): Promise<void> => {
     const job = await db.query.renderJobs.findFirst({ where: eq(renderJobs.id, jobId) });
     if (!job || job.status === 'done' || job.status === 'expired') return;
@@ -50,7 +54,12 @@ export function makeRenderHeroHandler(app: App) {
       if (!product || !garment) return fail('product_unavailable');
       if (!personBytes) return fail('person_image_missing');
 
-      const flatLay = garment.flatLayPhoto ? await fetchImage(fetchImpl, garment.flatLayPhoto) : null;
+      const flatLay = garment.flatLayPhoto
+        ? await fetchImage(fetchImpl, garment.flatLayPhoto, {
+            lookup,
+            onUnsafe: (err) => app.log.warn({ jobId, shopId: job.shopId, reason: err.reason }, 'flat-lay URL rejected by the SSRF guard; rendering from metadata'),
+          })
+        : null;
       const garmentInput: GarmentInput = {
         id: product.externalId,
         category: garment.category,

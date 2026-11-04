@@ -1,0 +1,10 @@
+{
+  "paskamer": {
+    "try_button": {
+      "label": "Try in Paskamer",
+      "hint": "See how it fits on you, privately. Opens the Paskamer app on your phone. Every render is an estimate.",
+      "not_connected": "Paskamer is not connected to this store yet. Open the Paskamer app in your admin to finish setup.",
+      "needs_product": "Add this block to a product template: it needs a product to try on."
+    }
+  }
+}

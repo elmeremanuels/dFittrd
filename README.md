@@ -25,5 +25,5 @@
 ```bash
 pnpm install
 pnpm dev            # consumer app on http://localhost:3000
-pnpm check          # typecheck + tests + build + bundle secret scan
+pnpm check          # build packages → typecheck → lint → tests → build apps → bundle secret scan
 ```

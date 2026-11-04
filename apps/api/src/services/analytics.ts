@@ -15,9 +15,17 @@ interface Group {
   counts: Counts;
   devices: Set<string>;
   sizes: Record<string, number>;
+  /** Distinct users per size bucket: a bucket is only reported when it clears the floor on its own. */
+  sizeDevices: Record<string, Set<string>>;
   reasons: Record<string, number>;
 }
-const newGroup = (): Group => ({ counts: zero(), devices: new Set(), sizes: {}, reasons: {} });
+const newGroup = (): Group => ({ counts: zero(), devices: new Set(), sizes: {}, sizeDevices: {}, reasons: {} });
+
+function flooredSizes(g: Group, k: number): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [size, n] of Object.entries(g.sizes)) if ((g.sizeDevices[size]?.size ?? 0) >= k) out[size] = n;
+  return out;
+}
 
 export function hueBucket(hex: string | null | undefined): string {
   if (!hex) return 'unknown';
@@ -71,7 +79,10 @@ export async function swipeAnalytics(db: Db, shopId: string, from: string, to: s
     const g = map.get(key) ?? newGroup();
     g.counts[r.action] += 1;
     g.devices.add(r.deviceId);
-    if (r.size) g.sizes[r.size] = (g.sizes[r.size] ?? 0) + 1;
+    if (r.size) {
+      g.sizes[r.size] = (g.sizes[r.size] ?? 0) + 1;
+      (g.sizeDevices[r.size] ??= new Set()).add(r.deviceId);
+    }
     if (r.action === 'pass') for (const reason of r.reasons ?? []) g.reasons[reason] = (g.reasons[reason] ?? 0) + 1;
     map.set(key, g);
   };
@@ -94,7 +105,7 @@ export async function swipeAnalytics(db: Db, shopId: string, from: string, to: s
     from,
     to,
     kAnonymityFloor: k,
-    byProduct: keep(byProduct, (externalId, g) => ({ externalId, ...g.counts, sizeHistogram: g.sizes, passReasons: g.reasons })),
+    byProduct: keep(byProduct, (externalId, g) => ({ externalId, ...g.counts, sizeHistogram: flooredSizes(g, k), passReasons: g.reasons })),
     byColour: keep(byColour, (hue, g) => ({ hue, ...g.counts })),
     byFabric: keep(byFabric, (fabric, g) => ({ fabric, ...g.counts })),
     bySize: keep(bySize, (size, g) => ({ size, ...g.counts })),

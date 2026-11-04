@@ -106,12 +106,15 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
     const topic = header(req.headers['x-shopify-topic']) ?? '';
     const shopDomain = (header(req.headers['x-shopify-shop-domain']) ?? '').toLowerCase();
     const eventId = header(req.headers['x-shopify-webhook-id']) ?? null;
+    // Shopify always sends the delivery id; without it the dedupe index cannot stop a replay of a
+    // captured (validly signed) delivery, so refuse rather than process it.
+    if (!eventId) throw badRequest('missing_webhook_id', 'X-Shopify-Webhook-Id header is required');
     const payload = (req.body ?? {}) as Record<string, unknown>;
     const shop = shopDomain ? await findShopByDomain(db, shopDomain) : undefined;
 
     const logged = await db
       .insert(webhookLog)
-      .values({ platform: 'shopify', shopId: shop?.id ?? null, shopDomain, topic, eventId, externalId: externalIdOf(payload), payload, status: 'received' })
+      .values({ platform: 'shopify', shopId: shop?.id ?? null, shopDomain, topic, eventId, externalId: externalIdOf(payload), payload: loggablePayload(topic, payload), status: 'received' })
       .onConflictDoNothing({ target: [webhookLog.platform, webhookLog.eventId] })
       .returning({ id: webhookLog.id });
     if (logged.length === 0) return reply.code(200).send({ ok: true, duplicate: true });
@@ -174,6 +177,22 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
 
 function header(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
+}
+
+/**
+ * `customers/data_request` and `customers/redact` carry the customer's id, e-mail, phone and
+ * order ids (D3: we hold no customer PII, and the replay log must not become the place where it
+ * first lands). Only the shop identifiers are kept; every other topic is stored verbatim.
+ */
+export function loggablePayload(topic: string, payload: Record<string, unknown>): unknown {
+  if (!topic.startsWith('customers/')) return payload;
+  return {
+    redacted: true,
+    reason: 'customer PII is never stored (D3)',
+    ...(payload.shop_id !== undefined ? { shop_id: payload.shop_id } : {}),
+    ...(typeof payload.shop_domain === 'string' ? { shop_domain: payload.shop_domain } : {}),
+    ...(typeof payload.data_request === 'object' && payload.data_request ? { data_request: { id: (payload.data_request as { id?: unknown }).id } } : {}),
+  };
 }
 
 function externalIdOf(payload: Record<string, unknown>): string | null {

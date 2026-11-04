@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { computeFit, fitGapsForRender } from '@paskamer/fit-engine';
 import { MOCK_GARMENTS, MOCK_GARMENTS_BY_ID, type UserBody } from '@paskamer/schema';
-import { adjustColor, bodyGeometry, fabricLook, garmentGeometry } from '@/render/body';
+import { adjustColor, bodyGeometry, fabricLook, garmentGeometry, VIEW_W } from '@/render/body';
 import { resolveSwipe } from '@/components/Card';
 import { extractToken } from '@/routes/PairRoute';
 import { seasonKey } from '@/lib/season';
@@ -40,6 +40,35 @@ describe('render path B v0', () => {
     expect(long.hemY).toBeGreaterThan(short.hemY);
     const tall = bodyGeometry(REF.measurements, 190);
     expect(garmentGeometry({ garment: { ...dress, lengthCm: { shoulder_to_hem: 120 } }, gaps: null, body: tall }).hemY).toBeLessThan(long.hemY);
+  });
+
+  it('draws a human-proportioned body whose widths scale with stature (handoff §9 recognition test)', () => {
+    const body = bodyGeometry(REF.measurements, 168);
+    // 88 cm bust ≈ 33 cm across; shoulders only a little wider; the head ≈ 15 cm across; neck narrower than the torso
+    expect(body.bustHalf).toBeGreaterThan(body.neckHalf * 2);
+    expect(body.bustHalf / body.shoulderHalf).toBeGreaterThan(0.7);
+    expect(body.bustHalf / body.shoulderHalf).toBeLessThan(1.05);
+    expect(body.headR * 2).toBeLessThan(body.shoulderHalf * 2 * 0.6);
+    expect(body.hipHalf).toBeGreaterThan(body.waistHalf);
+    expect(body.waistHalf).toBeLessThan(body.bustHalf);
+    expect(body.thighHalf * 2).toBeLessThan(body.hipHalf * 1.2);
+    // same girths on a taller frame are narrower in px (fewer px per cm), never a fixed px count
+    const tall = bodyGeometry(REF.measurements, 190);
+    expect(tall.bustHalf).toBeLessThan(body.bustHalf);
+    expect(tall.bustHalf).toBeGreaterThan(body.bustHalf * 0.8);
+  });
+
+  it('each size step is visibly wider than the previous one at the bust (handoff §9 size test)', () => {
+    const g = MOCK_GARMENTS_BY_ID['aalter-studio-1']!;
+    const fit = computeFit(g, REF);
+    const body = bodyGeometry(REF.measurements, 168);
+    const bust = fit.perSize.map((s) => garmentGeometry({ garment: g, gaps: fitGapsForRender(fit, s.size), body }).widths.bustHalf);
+    for (let i = 1; i < bust.length; i++) expect(bust[i]! - bust[i - 1]!, `${fit.perSize[i]!.size} vs ${fit.perSize[i - 1]!.size}`).toBeGreaterThanOrEqual(0.0075 * VIEW_W);
+    const xs = bust[0]!;
+    const l = bust[bust.length - 1]!;
+    expect((l - xs) / xs).toBeGreaterThanOrEqual(0.05);
+    // a tight size never draws narrower than the body it is on (fabric clings; it cannot shrink the body)
+    expect(xs).toBeGreaterThanOrEqual(body.bustHalf);
   });
 
   it('fabric look differs between linen, wool and silk', () => {

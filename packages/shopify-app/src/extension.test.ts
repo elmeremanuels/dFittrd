@@ -1,0 +1,85 @@
+/**
+ * Static checks on the theme app extension: the Liquid block, snippet, locales and the schema
+ * contract with the SDK (data attributes, no secrets, disclaimer wording).
+ */
+import { readdirSync, readFileSync } from 'node:fs';
+import { parse } from 'smol-toml';
+import { describe, expect, it } from 'vitest';
+import { BLOCK_HANDLE, EXTENSION_HANDLE } from './deepLinks';
+
+const root = new URL('../extensions/try-button/', import.meta.url);
+const read = (p: string) => readFileSync(new URL(p, root), 'utf8');
+const block = read(`blocks/${BLOCK_HANDLE}.liquid`);
+const snippet = read('snippets/paskamer-try-button.liquid');
+
+function flattenKeys(o: unknown, prefix = ''): string[] {
+  if (typeof o !== 'object' || o === null) return [prefix];
+  return Object.entries(o).flatMap(([k, v]) => flattenKeys(v, prefix ? `${prefix}.${k}` : k));
+}
+
+describe('theme app extension', () => {
+  it('shopify.extension.toml is a theme extension with the documented handle', () => {
+    const toml = parse(read('shopify.extension.toml')) as Record<string, unknown>;
+    expect(toml.type).toBe('theme');
+    expect(toml.handle).toBe(EXTENSION_HANDLE);
+    expect(typeof toml.name).toBe('string');
+  });
+
+  it('block schema: app block (target content), product template only, documented settings', () => {
+    const schema = JSON.parse(/{% schema %}([\s\S]*?){% endschema %}/.exec(block)![1]!) as { target: string; enabled_on: { templates: string[] }; settings: Array<{ id?: string; type: string; default?: unknown }>; stylesheet: string; javascript?: string };
+    expect(schema.target).toBe('content');
+    expect(schema.enabled_on).toEqual({ templates: ['product'] });
+    expect(schema.stylesheet).toBe('paskamer-try.css');
+    expect(schema.javascript).toBeUndefined(); // we load the SDK ourselves so data-shop/data-api are set
+    const ids = schema.settings.map((s) => s.id).filter(Boolean);
+    expect(ids).toEqual(['label', 'alignment', 'mode', 'show_hint', 'unstyled', 'shop_key', 'api_url']);
+    const mode = schema.settings.find((s) => s.id === 'mode') as unknown as { options: Array<{ value: string }>; default: string };
+    expect(mode.options.map((o) => o.value)).toEqual(['auto', 'redirect', 'modal']);
+    expect(mode.default).toBe('auto');
+  });
+
+  it('renders the SDK contract: data-paskamer-product={{ product.id }}, asset_url sdk.v1.js, data-shop + data-api, single load guard', () => {
+    expect(snippet).toContain('data-paskamer-product="{{ product.id }}"');
+    expect(snippet).toContain('type="button"');
+    expect(block).toMatch(/\{%-? render 'paskamer-try-button'/);
+    expect(block).toContain("{{ 'sdk.v1.js' | asset_url | json }}");
+    expect(block).toContain("setAttribute('data-shop'");
+    expect(block).toContain("setAttribute('data-api'");
+    expect(block).toContain("setAttribute('data-locale'");
+    expect(block).toContain("document.querySelector('script[data-shop][data-paskamer-sdk]')");
+    expect(block).toContain('app.metafields.paskamer.public_key');
+    expect(block).toContain('app.metafields.paskamer.api_url');
+    expect(block).toContain('{{ block.shopify_attributes }}');
+    expect(block).toContain('request.design_mode');
+  });
+
+  it('never references a secret key, an external origin or storage', () => {
+    for (const f of [block, snippet, read('assets/paskamer-try.css')]) {
+      expect(f).not.toMatch(/sk_(live|test)_/);
+      expect(f).not.toMatch(/https?:\/\//);
+      expect(f).not.toMatch(/localStorage|sessionStorage|document\.cookie/);
+    }
+  });
+
+  it('locales: en.default + nl, same keys, estimate wording, D1 button copy', () => {
+    const files = readdirSync(new URL('locales/', root)).sort();
+    expect(files).toEqual(['en.default.json', 'en.default.schema.json', 'nl.json', 'nl.schema.json']);
+    const en = JSON.parse(read('locales/en.default.json')) as { paskamer: { try_button: Record<string, string> } };
+    const nl = JSON.parse(read('locales/nl.json')) as { paskamer: { try_button: Record<string, string> } };
+    expect(flattenKeys(nl)).toEqual(flattenKeys(en));
+    expect(en.paskamer.try_button.label).toBe('Try in Paskamer');
+    expect(nl.paskamer.try_button.label).toBe('Pas in Paskamer');
+    expect(en.paskamer.try_button.hint).toMatch(/estimate/i);
+    expect(nl.paskamer.try_button.hint).toMatch(/schatting/i);
+
+    const enS = JSON.parse(read('locales/en.default.schema.json'));
+    const nlS = JSON.parse(read('locales/nl.schema.json'));
+    expect(flattenKeys(nlS)).toEqual(flattenKeys(enS));
+    // every t: key used by the schema exists in the schema locale
+    const keys = flattenKeys(enS);
+    for (const m of block.matchAll(/"t:([a-z0-9_.]+)"/g)) expect(keys).toContain(m[1]!);
+    // every | t key used by Liquid exists in the storefront locale
+    const sf = flattenKeys(en);
+    for (const m of [...block.matchAll(/'([a-z0-9_.]+)' \| t/g), ...snippet.matchAll(/'([a-z0-9_.]+)' \| t/g)]) expect(sf).toContain(m[1]!);
+  });
+});

@@ -45,10 +45,20 @@ export function pxPerCm(heightCm: number): number {
   return (FEET_Y - HEAD_TOP_Y) / Math.max(120, Math.min(230, heightCm));
 }
 
-/** Girth (cm) → silhouette half-width (px) from the front. Calibrated so 88/70/96 looks balanced in a 200-wide view. */
-export function halfWidthFromGirth(girthCm: number, k = 0.38): number {
-  return (girthCm / 2) * k * 0.5;
+/**
+ * Girth (cm) → front-view half-width (px). The cross-section is an ellipse with depth/width
+ * ratio `r` (ribcage ≈ 0.7, waist ≈ 0.75, thigh ≈ 0.95); its perimeter ≈ π(a + b) = π·a·(1 + r),
+ * so the half-width a = girth / (π(1 + r)). Scaled by px-per-cm of the stature so widths and
+ * lengths share one scale (an 88 cm bust ≈ 33 cm across ≈ 45 px on a 168 cm body).
+ */
+export function halfWidthFromGirth(girthCm: number, ppc: number, r = 0.7): number {
+  return (Math.max(0, girthCm) / (Math.PI * (1 + r))) * ppc;
 }
+
+/** Real-world proportions (cm) the silhouette uses where no measurement exists. */
+const HEAD_HALF_WIDTH_CM = 7.4;
+const NECK_HALF_WIDTH_CM = 5.8;
+const ARM_HALF_WIDTH_CM = 4.6;
 
 export interface BodyGeometry {
   heightCm: number;
@@ -61,7 +71,10 @@ export interface BodyGeometry {
   kneeHalf: number;
   ankleHalf: number;
   neckHalf: number;
+  armHalf: number;
+  /** Head half-width (rx) and half-height (ry), px. */
   headR: number;
+  headRy: number;
   footLength: number;
 }
 
@@ -83,19 +96,22 @@ export function bodyGeometry(measurements: UserBody['measurements'] | null | und
   const thigh = m.thigh ?? Math.max(44, hip * 0.58);
   const height = heightCm ?? REFERENCE_BODY.height;
   const ppc = pxPerCm(height);
-  const bustHalf = halfWidthFromGirth(bust);
+  const bustHalf = halfWidthFromGirth(bust, ppc, 0.7);
   return {
     heightCm: height,
     pxPerCm: ppc,
-    shoulderHalf: Math.max(bustHalf + 4, (shoulder / 2) * ppc * 0.95),
+    // `shoulder` is the seam-to-seam shoulder width; shoulders sit a little outside the bust line
+    shoulderHalf: Math.max(bustHalf * 1.05, (shoulder / 2) * ppc),
     bustHalf,
-    waistHalf: halfWidthFromGirth(waist, 0.4),
-    hipHalf: halfWidthFromGirth(hip, 0.4),
-    thighHalf: halfWidthFromGirth(thigh, 0.4),
-    kneeHalf: halfWidthFromGirth(thigh * 0.72, 0.4),
-    ankleHalf: halfWidthFromGirth(thigh * 0.45, 0.4),
-    neckHalf: 9,
-    headR: 30,
+    waistHalf: halfWidthFromGirth(waist, ppc, 0.75),
+    hipHalf: halfWidthFromGirth(hip, ppc, 0.7),
+    thighHalf: halfWidthFromGirth(thigh, ppc, 0.95),
+    kneeHalf: halfWidthFromGirth(thigh * 0.72, ppc, 0.95),
+    ankleHalf: halfWidthFromGirth(thigh * 0.45, ppc, 0.95),
+    neckHalf: NECK_HALF_WIDTH_CM * ppc,
+    armHalf: ARM_HALF_WIDTH_CM * ppc,
+    headR: HEAD_HALF_WIDTH_CM * ppc,
+    headRy: (levelY('chin') - HEAD_TOP_Y) / 2,
     footLength: (m.footLengthCm ?? 25) * ppc * 0.6,
   };
 }
@@ -155,11 +171,11 @@ export function bodyPath(g: BodyGeometry): string {
     const sx = CENTER_X + side * (g.shoulderHalf - 2);
     const top = levelY('shoulder') + 2;
     const wrist = levelY('hip') + 12;
-    const w = 7;
+    const w = g.armHalf;
     const drift = side * (g.bustHalf * 0.22 + 6);
     return `M ${sx - side * w},${top} L ${sx + side * w},${top + 4} L ${sx + drift + side * (w - 1)},${wrist} L ${sx + drift - side * (w - 1)},${wrist} Z`;
   };
-  const head = `M ${CENTER_X},${HEAD_TOP_Y} a ${g.headR},${g.headR + 4} 0 1,0 0.01,0 Z`;
+  const head = `M ${CENTER_X},${HEAD_TOP_Y} a ${g.headR.toFixed(1)},${g.headRy.toFixed(1)} 0 1,0 0.01,0 Z`;
   return [head, torso, leg(1), leg(-1), arm(1), arm(-1)].join(' ');
 }
 
@@ -178,13 +194,19 @@ export interface GarmentGeometry {
   /** Max negative slack (cm) across used points — drives the pull highlight. */
   tightestCm: number;
   loosestCm: number;
+  /** Garment half-widths (px) at the body levels — what makes S / M / L read differently. */
+  widths: { shoulderHalf: number; bustHalf: number; waistHalf: number; hipHalf: number; thighHalf: number };
 }
 
-/** Slack (garment − body) in cm → extra half-width in px. Negative slack cannot shrink the body: it clamps at a cling. */
-function widthFromSlack(bodyHalf: number, slackCm: number | undefined, defaultEase = 4): number {
+/**
+ * Slack (garment − body, cm of girth) → garment half-width in px at that level. Positive slack
+ * widens the outline by the same ellipse rule as the body; negative slack cannot shrink the body,
+ * so the garment clings to the body outline and the strain creases show the pull.
+ */
+function widthFromSlack(bodyHalf: number, slackCm: number | undefined, ppc: number, defaultEase = 4): number {
   const slack = slackCm ?? defaultEase;
-  if (slack >= 0) return bodyHalf + halfWidthFromGirth(slack, 0.6);
-  return bodyHalf + Math.max(-1.5, slack * 0.12);
+  if (slack <= 0) return bodyHalf;
+  return bodyHalf + halfWidthFromGirth(slack, ppc, 0.7);
 }
 
 function slackAt(gaps: RenderGaps | null, point: FitPoint): number | undefined {
@@ -217,11 +239,13 @@ export function garmentGeometry({ garment, gaps, body: g }: GarmentRenderInput):
   const thighSlack = slackAt(gaps, 'thigh');
   const shoulderSlack = slackAt(gaps, 'shoulder');
 
-  const bustHalf = widthFromSlack(g.bustHalf + 2, bustSlack);
-  const waistHalf = widthFromSlack(g.waistHalf, waistSlack, 3);
-  const hipHalf = widthFromSlack(g.hipHalf, hipSlack, 5);
-  const thighHalf = widthFromSlack(g.thighHalf, thighSlack, 3);
-  const shoulderHalf = g.shoulderHalf + (shoulderSlack ?? 1) * 0.5;
+  const ppc = g.pxPerCm;
+  const bustHalf = widthFromSlack(g.bustHalf + 2, bustSlack, ppc);
+  const waistHalf = widthFromSlack(g.waistHalf, waistSlack, ppc, 3);
+  const hipHalf = widthFromSlack(g.hipHalf, hipSlack, ppc, 5);
+  const thighHalf = widthFromSlack(g.thighHalf, thighSlack, ppc, 3);
+  // shoulder slack is a width, not a girth: half of it per side
+  const shoulderHalf = g.shoulderHalf + Math.max(0, shoulderSlack ?? 1) * 0.5 * ppc;
 
   const addStrain = (point: FitPoint, slack: number | undefined, x: number, y: number): void => {
     if (slack !== undefined && slack < 0) strain.push({ x, y, intensity: Math.min(1, -slack / 6) });
@@ -273,7 +297,7 @@ export function garmentGeometry({ garment, gaps, body: g }: GarmentRenderInput):
         { x: 0, y: hemY },
       ]);
       const sl = garment.lengthCm?.sleeve_length;
-      if (sl && sl > 0) extra.push(sleeve(1, sl * g.pxPerCm, 8), sleeve(-1, sl * g.pxPerCm, 8));
+      if (sl && sl > 0) extra.push(sleeve(1, sl * g.pxPerCm, g.armHalf + 2), sleeve(-1, sl * g.pxPerCm, g.armHalf + 2));
       addFolds(hipSlack, levelY('hip') + 10, hemY - 8, hemHalf * 0.8);
       break;
     }
@@ -295,7 +319,7 @@ export function garmentGeometry({ garment, gaps, body: g }: GarmentRenderInput):
         extra.push(`M ${CENTER_X + g.bustHalf - 4},${shoulderY + 12} L ${CENTER_X + g.neckHalf + 2},${shoulderY - 4} L ${CENTER_X + g.neckHalf},${shoulderY - 4} L ${CENTER_X + g.bustHalf - 7},${shoulderY + 12} Z`);
       } else {
         const sl = garment.lengthCm?.sleeve_length ?? (/t-shirt|shirt/.test(garment.patternBlock) ? 20 : 12);
-        extra.push(sleeve(1, sl * g.pxPerCm, 8), sleeve(-1, sl * g.pxPerCm, 8));
+        extra.push(sleeve(1, sl * g.pxPerCm, g.armHalf + 2), sleeve(-1, sl * g.pxPerCm, g.armHalf + 2));
       }
       addFolds(waistSlack, levelY('bust') + 10, hemY - 6, waistHalf);
       break;
@@ -356,7 +380,7 @@ export function garmentGeometry({ garment, gaps, body: g }: GarmentRenderInput):
       path = panel(1);
       extra.push(panel(-1));
       const sl = garment.lengthCm?.sleeve_length ?? 58;
-      extra.push(sleeve(1, sl * g.pxPerCm, 10), sleeve(-1, sl * g.pxPerCm, 10));
+      extra.push(sleeve(1, sl * g.pxPerCm, g.armHalf + 4), sleeve(-1, sl * g.pxPerCm, g.armHalf + 4));
       // collar
       extra.push(`M ${CENTER_X - g.neckHalf - 6},${shoulderY - 6} L ${CENTER_X},${shoulderY + 14} L ${CENTER_X + g.neckHalf + 6},${shoulderY - 6} L ${CENTER_X + g.neckHalf + 2},${shoulderY - 10} L ${CENTER_X - g.neckHalf - 2},${shoulderY - 10} Z`);
       addFolds(hipSlack, levelY('waist'), hemY - 6, jacketHip * 0.7);
@@ -391,7 +415,7 @@ export function garmentGeometry({ garment, gaps, body: g }: GarmentRenderInput):
     }
   }
 
-  return { path, extra, strain, folds, hemY, tightestCm, loosestCm };
+  return { path, extra, strain, folds, hemY, tightestCm, loosestCm, widths: { shoulderHalf, bustHalf, waistHalf, hipHalf, thighHalf } };
 }
 
 // ---------------------------------------------------------------------------

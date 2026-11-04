@@ -97,7 +97,7 @@ implements the validate dry-run. `API_ROUTES` lists the method + path per DTO.
   `toWooMeta(payload)`.
 - Both mappings are lenient: invalid JSON or values are dropped per field and reported through the
   `warnings` sink; the result is a draft for `completenessScore` / `GarmentPayloadSchema`.
-- `mappings/common.ts` exports the coercers (`coerceSizeChart`, `coerceFabric`, `inferCategory`, …).
+- `mappings/common.ts` exports the coercers (`coerceSizeChart`, `coerceFabric`, `inferCategory`, …). `coerceUnit` (0..1 fields such as `trueToSizeScore`) accepts a fraction, an explicit percentage (`"92%"`) or a whole number 2..100 read as a percentage; a fraction above 1 such as `1.5` is rejected, not read as 1.5 %.
 
 ### `fixtures/`
 

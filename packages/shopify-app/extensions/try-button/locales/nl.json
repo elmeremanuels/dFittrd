@@ -1,0 +1,10 @@
+{
+  "paskamer": {
+    "try_button": {
+      "label": "Pas in Paskamer",
+      "hint": "Bekijk privé hoe het jou past. Opent de Paskamer-app op je telefoon. Elke weergave is een schatting.",
+      "not_connected": "Paskamer is nog niet gekoppeld aan deze winkel. Open de Paskamer-app in je beheer om de installatie af te ronden.",
+      "needs_product": "Voeg dit blok toe aan een productsjabloon: het heeft een product nodig om te passen."
+    }
+  }
+}

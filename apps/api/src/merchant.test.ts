@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MOCK_GARMENTS_BY_ID } from '@paskamer/schema';
 import { signMerchantRequest } from './lib/crypto.js';
+import { findShopById } from './services/shops.js';
 import { makeApp, seedShop, type TestApp } from './test/helpers.js';
 
 function hmacHeaders(prefix: string, secret: string, method: string, path: string, body: string, ts = Math.floor(Date.now() / 1000)) {
@@ -116,10 +117,18 @@ describe('merchant auth + products', () => {
     s.apiKey = apiKey;
   });
 
-  it('PUT /v1/merchant/shops/self updates branding', async () => {
-    const res = await signed('PUT', '/v1/merchant/shops/self', { name: 'Aalter Studio BV', brandColor: '#1A1612', pluginVersion: '0.1.0', siteUrl: 'https://aalter.example' });
+  it('PUT /v1/merchant/shops/self updates branding and persists the ads toggle', async () => {
+    const res = await signed('PUT', '/v1/merchant/shops/self', { name: 'Aalter Studio BV', brandColor: '#1A1612', pluginVersion: '0.1.0', siteUrl: 'https://aalter.example', adsEnabled: true });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ name: 'Aalter Studio BV', platform: 'woocommerce', publicKeyPrefix: s.publicKeyPrefix });
+    const stored = await findShopById(t.handle.db, s.shop.id);
+    expect(stored?.settings).toMatchObject({ brandColor: '#1A1612', pluginVersion: '0.1.0', siteUrl: 'https://aalter.example', adsEnabled: true });
+
+    // A later hello without the field leaves the stored value untouched; an explicit false turns it off.
+    expect((await signed('PUT', '/v1/merchant/shops/self', { pluginVersion: '0.1.1' })).statusCode).toBe(200);
+    expect((await findShopById(t.handle.db, s.shop.id))?.settings.adsEnabled).toBe(true);
+    expect((await signed('PUT', '/v1/merchant/shops/self', { adsEnabled: false })).statusCode).toBe(200);
+    expect((await findShopById(t.handle.db, s.shop.id))?.settings.adsEnabled).toBe(false);
   });
 
   it('WooCommerce Connect without Stripe → manual key path', async () => {

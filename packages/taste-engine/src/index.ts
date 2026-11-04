@@ -48,6 +48,7 @@ export {
   easeTotal,
   featurize,
   silhouetteFromEase,
+  normaliseKey,
   styleMatch,
 } from './featurize';
 export type { GirthPoint } from './featurize';

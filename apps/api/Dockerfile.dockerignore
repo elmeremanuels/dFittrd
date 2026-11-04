@@ -1,0 +1,22 @@
+# BuildKit reads <Dockerfile>.dockerignore next to the Dockerfile. The build context is the repo root
+# (`docker build -f apps/api/Dockerfile .`), so apps/api/.dockerignore is NOT consulted — without this
+# file the host's node_modules, dist and data directories are shipped into the context and COPYed over
+# the image's pnpm-installed workspace.
+.git
+**/node_modules
+**/dist
+**/data
+**/coverage
+**/.turbo
+**/*.log
+**/.env
+**/.env.*
+!**/.env.example
+apps/web/*
+!apps/web/package.json
+docs
+infra
+scripts
+.github
+**/test-results
+**/playwright-report

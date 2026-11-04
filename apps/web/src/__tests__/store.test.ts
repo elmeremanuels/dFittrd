@@ -116,3 +116,65 @@ describe('app store persistence', () => {
     expect(await db.bodyProfile.count()).toBe(0);
   });
 });
+
+describe('shop-scoped garment ids (schema: `id` is the merchant external id, not globally unique)', () => {
+  const base = MOCK_GARMENTS_BY_ID['aalter-studio-1']!;
+  const SHOP_A = '11111111-1111-4111-8111-111111111111';
+  const SHOP_B = '22222222-2222-4222-8222-222222222222';
+  // same id in two shops, very different charts → different fits
+  const inA = { ...base, brand: 'Shop A' };
+  const inB = { ...base, brand: 'Shop B', sizeChart: base.sizeChart.map((r) => ({ ...r, bust: (r.bust ?? 0) + 30, waist: (r.waist ?? 0) + 30, hip: (r.hip ?? 0) + 30 })) };
+
+  it('computes the fit per garment object, not per id', async () => {
+    const store = createAppStore({ db, catalog: [{ garment: inA, shopId: SHOP_A }, { garment: inB, shopId: SHOP_B }] });
+    await store.getState().hydrate();
+    await store.getState().setProfile(PROFILE);
+    const a = store.getState().fit(inA)!;
+    const b = store.getState().fit(inB)!;
+    expect(a.recommendedSize).toBe('M');
+    expect(b.recommendedSize).not.toBe(a.recommendedSize);
+  });
+
+  it('attributes a swipe to the shop the dealt card came from', async () => {
+    const store = createAppStore({ db, catalog: [{ garment: inA, shopId: SHOP_A }, { garment: inB, shopId: SHOP_B }] });
+    await store.getState().hydrate();
+    await store.getState().setProfile(PROFILE);
+    expect(store.getState().shopIdFor(inB)).toBe(SHOP_B);
+    expect(store.getState().shopIdFor(inA)).toBe(SHOP_A);
+    // deal until the shop-B card comes up, swipe it, and check the outbox row
+    for (let i = 0; i < 4; i++) {
+      store.getState().dealNext();
+      const card = store.getState().deck.current;
+      if (!card) break;
+      if (card.garment === inB) {
+        await store.getState().swipe('love');
+        const rows = await db.outbox.where('kind').equals('swipe').toArray();
+        expect(rows.at(-1)?.shopId).toBe(SHOP_B);
+        return;
+      }
+      await store.getState().swipe('pass');
+    }
+    throw new Error('shop-B card was never dealt');
+  });
+});
+
+describe('delete everything keeps the record of the erase itself', () => {
+  it('the ledger still shows the DELETE /v1/me entry after the local wipe', async () => {
+    const store = createAppStore({ db });
+    const fakeClient = {
+      deleteMe: async () => {
+        await store.getState().appendLedger({ id: 'erase-1', at: new Date().toISOString(), kind: 'erase', method: 'DELETE', path: '/v1/me', bytes: 0, fields: [], status: 200 });
+        return { erased: true, at: new Date().toISOString() };
+      },
+    };
+    store.attachClient(fakeClient as unknown as Parameters<typeof store.attachClient>[0]);
+    await store.getState().hydrate();
+    await store.getState().setProfile(PROFILE);
+    await store.getState().appendLedger({ id: 'old-1', at: new Date(1).toISOString(), kind: 'signature_sync', method: 'PUT', path: '/v1/me/signature', bytes: 10, fields: ['vector'], status: 200 });
+    await store.getState().deleteEverything();
+    expect(store.getState().ledger.map((l) => l.id)).toEqual(['erase-1']);
+    expect((await db.ledger.toArray()).map((l) => l.id)).toEqual(['erase-1']);
+    expect(store.getState().profile).toBeNull();
+    expect(store.getState().settings.onboarded).toBe(false);
+  });
+});

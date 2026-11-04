@@ -1,0 +1,140 @@
+# Dutch (Netherlands) translation of Paskamer for WooCommerce.
+# Copyright (C) 2026 Paskamer
+# This file is distributed under the GPL-2.0-or-later.
+msgid ""
+msgstr ""
+"Project-Id-Version: Paskamer for WooCommerce 0.1.0\n"
+"Report-Msgid-Bugs-To: https://paskamer.app/woocommerce\n"
+"POT-Creation-Date: 2026-11-04 12:00+0000\n"
+"PO-Revision-Date: 2026-11-04 12:00+0000\n"
+"Last-Translator: Paskamer <hello@paskamer.app>\n"
+"Language-Team: Dutch\n"
+"Language: nl_NL\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Domain: paskamer-woocommerce\n"
+
+msgid "Paskamer for WooCommerce"
+msgstr "Paskamer voor WooCommerce"
+
+msgid "Settings"
+msgstr "Instellingen"
+
+msgid "Paskamer for WooCommerce is installed but not connected. Nothing is sent to Paskamer until you connect your shop."
+msgstr "Paskamer voor WooCommerce is geïnstalleerd maar nog niet gekoppeld. Er wordt niets naar Paskamer gestuurd tot je je winkel koppelt."
+
+msgid "Connect now"
+msgstr "Nu koppelen"
+
+msgid "Try in Paskamer"
+msgstr "Pas in Paskamer"
+
+msgid "Paskamer"
+msgstr "Paskamer"
+
+msgid "Connection"
+msgstr "Koppeling"
+
+msgid "Status"
+msgstr "Status"
+
+msgid "Connected"
+msgstr "Gekoppeld"
+
+msgid "Not connected — nothing is sent to Paskamer."
+msgstr "Niet gekoppeld — er wordt niets naar Paskamer gestuurd."
+
+msgid "Connect to Paskamer"
+msgstr "Koppelen met Paskamer"
+
+msgid "Finish connection"
+msgstr "Koppeling afronden"
+
+msgid "Check status"
+msgstr "Status controleren"
+
+msgid "Sync all products"
+msgstr "Alle producten synchroniseren"
+
+msgid "Disconnect"
+msgstr "Ontkoppelen"
+
+msgid "Or paste an API key"
+msgstr "Of plak een API-sleutel"
+
+msgid "Use key"
+msgstr "Sleutel gebruiken"
+
+msgid "Storefront button"
+msgstr "Knop in de winkel"
+
+msgid "Show button"
+msgstr "Knop tonen"
+
+msgid "Save settings"
+msgstr "Instellingen opslaan"
+
+msgid "Settings saved."
+msgstr "Instellingen opgeslagen."
+
+msgid "Connected to Paskamer. Your published products are being synced in the background."
+msgstr "Gekoppeld met Paskamer. Je gepubliceerde producten worden op de achtergrond gesynchroniseerd."
+
+msgid "What is sent to Paskamer"
+msgstr "Wat er naar Paskamer wordt gestuurd"
+
+msgid "Paskamer — fit data"
+msgstr "Paskamer — pasvormgegevens"
+
+msgid "Choose flat-lay photo"
+msgstr "Kies een flat-lay-foto"
+
+msgid "Use this image"
+msgstr "Deze afbeelding gebruiken"
+
+msgid "Active"
+msgstr "Actief"
+
+msgid "Incomplete"
+msgstr "Onvolledig"
+
+msgid "Syncing…"
+msgstr "Synchroniseren…"
+
+msgid "Archived"
+msgstr "Gearchiveerd"
+
+msgid "Sync error"
+msgstr "Synchronisatiefout"
+
+msgid "Category *"
+msgstr "Categorie *"
+
+msgid "Flat-lay photo *"
+msgstr "Flat-lay-foto *"
+
+msgid "Fabric *"
+msgstr "Stof *"
+
+msgid "Size chart *"
+msgstr "Maattabel *"
+
+msgid "The numbers below are *"
+msgstr "De cijfers hieronder zijn *"
+
+msgid "garment measurements (measured flat)"
+msgstr "kledingmaten (plat gemeten)"
+
+msgid "body measurements (the body each size is cut for)"
+msgstr "lichaamsmaten (het lichaam waarvoor elke maat is gesneden)"
+
+msgid "Add size"
+msgstr "Maat toevoegen"
+
+msgid "Required before the product can be active:"
+msgstr "Vereist voordat het product actief kan zijn:"
+
+msgid "Opens Paskamer, your private fitting room. Fit results are estimates."
+msgstr "Opent Paskamer, jouw privé-paskamer. Pasvormresultaten zijn schattingen."

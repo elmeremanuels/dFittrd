@@ -5,6 +5,7 @@ import { connectPglite, type DbHandle } from '../db/client.js';
 import { testEnv, type Env } from '../env.js';
 import { MemoryQueue } from '../jobs/queue.js';
 import type { FetchLike } from '../context.js';
+import type { LookupLike } from '../lib/safeFetch.js';
 import { createShop, issueMerchantKeys, type ShopRow } from '../services/shops.js';
 import { upsertProduct } from '../services/products.js';
 import { MOCK_GARMENTS_BY_ID } from '@paskamer/schema';
@@ -43,6 +44,13 @@ export class FetchMock {
 
 export const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
+/** Offline DNS for the SSRF guard: `*.internal.test` resolves privately, everything else to a public address. */
+export const testLookup: LookupLike = async (hostname) => {
+  if (hostname.endsWith('.internal.test')) return [{ address: '10.0.0.5', family: 4 }];
+  if (hostname === 'nxdomain.test') throw new Error('ENOTFOUND');
+  return [{ address: '93.184.216.34', family: 4 }];
+};
+
 export async function makeApp(envOverrides: Record<string, string> = {}, opts: { providers?: TryOnProvider[]; now?: () => Date } = {}): Promise<TestApp> {
   const env = testEnv(envOverrides);
   const handle = await connectPglite();
@@ -51,7 +59,7 @@ export async function makeApp(envOverrides: Record<string, string> = {}, opts: {
   const fetchMock = new FetchMock();
   const providers = opts.providers ?? [new MockProvider({ video: true, latencyMs: 1 })];
   const tryon = new TryOnRouter({ providers, policy: { order: providers.map((p) => p.name), maxCostUsd: 1 } });
-  const app = await build({ env, db: handle.db, queue, fetch: fetchMock.fetch, tryon, ...(opts.now ? { now: opts.now } : {}) });
+  const app = await build({ env, db: handle.db, queue, fetch: fetchMock.fetch, lookup: testLookup, tryon, ...(opts.now ? { now: opts.now } : {}) });
   await app.ready();
   await queue.start({ work: false });
   return {

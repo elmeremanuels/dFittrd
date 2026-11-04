@@ -7,6 +7,7 @@ import { connectPostgres } from './db/client.js';
 import { loadEnv } from './env.js';
 import { scheduleCrons } from './jobs/index.js';
 import { PgBossQueue } from './jobs/queue.js';
+import { backfillKeyLookups } from './services/shops.js';
 
 const env = loadEnv();
 const handle = connectPostgres(env.DATABASE_URL);
@@ -15,6 +16,8 @@ const app = await build({ env, db: handle.db, queue });
 
 if (env.devSecrets) app.log.warn('running with generated dev secrets — set JWT_SECRET, SHOP_KEY_PEPPER and ENCRYPTION_KEY');
 await app.renders.init();
+const backfilled = await backfillKeyLookups(handle.db, env);
+if (backfilled) app.log.info({ shops: backfilled }, 'merchant key lookups backfilled (migration 0001)');
 
 if (env.JOBS !== '0') {
   await queue.start({ work: true });

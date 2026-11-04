@@ -84,7 +84,7 @@ fitGapsForRender(result);           // { size: 'M', gaps: { bust: 4.3, … }, �
 3. **Stretch**: `E = round1(E0 × max(0, 1 − stretch/40))`, `T = max(−12, −(2 + 0.25·stretch))`, `snugOk = block.snugOk || stretch ≥ 15`; stretch zones shift `T −4` and both upper edges `+4`. Slack `{good 2, loose 4}` (shoes `{0.5, 1.0}`).
 4. **Band**: `gap = round1(chartVal − (userVal + E))` → tight 0 / snug 0.7 (1.0 if snugOk) / good 1 / roomy 0.6 / loose 0.2 (0 beyond `E + loose + 4`).
 5. **Score**: weights `(critical ? 2 : 1) × confidence`, weighted mean, then ×0.5 (critical) or ×0.75 per tight/loose point. Wearable = no tight point and score ≥ 0.4.
-6. **Recommendation**: best < 0.3 → nothing fits (closest = smallest Σ|gap|). Otherwise candidates within `δ = 0.05 + 0.15·(1 − tts)` of the best; tie-break by `sizingNotes` bias → kept history for the same brand → smallest Σ|gap| (lower index). `confidence = meanConf × (0.6 + 0.4·tts) × used/applicableAfterSkips`.
+6. **Recommendation**: best < 0.3 → nothing fits (closest = smallest mean |gap|). Otherwise candidates within `δ = 0.05 + 0.15·(1 − tts)` of the best, restricted to wearable sizes when any candidate is wearable; tie-break by `sizingNotes` bias → kept history for the same brand → smallest mean |gap| (lower index). `confidence = meanConf × (0.6 + 0.4·tts) × used/applicableAfterSkips`.
 
 ## Sigma-aware extension (decision D5)
 
@@ -96,6 +96,11 @@ Two test vectors in `fit-engine-spec.md` contain arithmetic that contradicts the
 
 - **T9** — "same as T8 but M bust 93 (score 0.9)". With a body chart and `ease.bust 6`, M bust 93 gives `gap = (93 + 6) − (86 + 6) = 7 ≤ E + 2 = 8` → still *good*, score 1, so the tie band is never exercised. The test instead uses **M waist 75** (`gap 7 > E + 2 = 6` → roomy), giving M score **0.92**: at tts 0.92 (δ 0.062) only S is a candidate (tieBreak `null`), at tts 0.5 (δ 0.125) both are and 'runs small' picks M.
 - **T17** — "use waist 76, gap −7.8: tight without zone, snug with zone". The zone tight limit is `T = −2.5 − 4 = −6.5` (the spec says so itself), and −7.8 < −6.5 is still tight. The test uses **waist 74 (gap −5.8)**: tight without the zone, snug with it; it also asserts that waist 76 and 78 stay tight in both cases.
+
+Two further deviations were introduced by the 2026-11-04 review (regressions in `review.test.ts`):
+
+- **Wearable sizes win the tie band.** The spec's tie-break (sizing notes → kept history → closest ease) runs over every size within `δ` of the best score. That could hand the user a size with a *tight* point (handoff §4.1: bad fit) because its Σ|gap| was smaller than a wearable, slightly roomier size inside the same band. Now, when the band holds both wearable and unwearable sizes, only the wearable ones compete; when none is wearable the tie-break runs as the spec says. All seventeen spec vectors are unaffected (their candidates are always wearable).
+- **Closeness is mean |gap|, not Σ|gap|.** Identical ordering whenever every size uses the same points (the spec's case); it only differs when a chart row lists fewer points, which under Σ|gap| looked "closer" merely for having fewer gaps to add up.
 
 Other interpretations worth knowing (spec silent):
 

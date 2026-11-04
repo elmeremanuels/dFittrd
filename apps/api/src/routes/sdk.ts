@@ -26,8 +26,10 @@ export const sdkRoutes: FastifyPluginAsyncZod = async (app) => {
         rateLimit: {
           max: env.SDK_RATE_LIMIT_PER_MIN,
           timeWindow: '1 minute',
+          // Runs at preValidation (app.ts): the JSON body is parsed but not validated yet.
           keyGenerator: (req) => {
-            const prefix = (req.body as { shopKeyPrefix?: string } | undefined)?.shopKeyPrefix;
+            const body = req.body as { shopKeyPrefix?: unknown } | undefined;
+            const prefix = typeof body?.shopKeyPrefix === 'string' && /^pk_(live|test)_[A-Za-z0-9]{1,32}$/.test(body.shopKeyPrefix) ? body.shopKeyPrefix : null;
             return prefix ? `sdk:${prefix}` : `sdk-ip:${req.ip}`;
           },
         },

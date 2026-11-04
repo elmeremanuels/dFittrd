@@ -1,0 +1,21 @@
+{
+  "name": "@paskamer/woocommerce-plugin",
+  "version": "0.1.0",
+  "description": "Paskamer for WooCommerce — PHP 8.3 WordPress plugin: garment fit-data meta box, push-on-save sync with PK-HMAC, bundled try-on SDK button, Connect round-trip. Built to dist/paskamer-woocommerce.zip.",
+  "license": "GPL-2.0-or-later",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/export-fixtures.mjs && php tests/run.php",
+    "typecheck": "node scripts/lint.mjs",
+    "lint": "node scripts/lint.mjs"
+  },
+  "devDependencies": {
+    "@paskamer/schema": "workspace:*",
+    "@paskamer/sdk": "workspace:*"
+  }
+}

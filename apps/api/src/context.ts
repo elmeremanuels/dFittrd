@@ -5,6 +5,7 @@ import type { TokenService } from './auth/tokens.js';
 import type { Db } from './db/client.js';
 import type { Env } from './env.js';
 import type { JobQueue } from './jobs/queue.js';
+import type { LookupLike } from './lib/safeFetch.js';
 import type { ShopifyClient } from './shopify/client.js';
 import type { StripeClient } from './billing/stripe.js';
 
@@ -22,5 +23,7 @@ export interface AppContext {
   stripe: StripeClient;
   /** Outbound HTTP (Shopify, Stripe, flat-lay fetch). Tests inject a stub. */
   fetch: FetchLike;
+  /** DNS resolution for the SSRF guard on merchant-supplied URLs. Tests inject a stub. */
+  lookup: LookupLike;
   now: () => Date;
 }

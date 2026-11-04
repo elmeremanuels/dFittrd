@@ -43,6 +43,8 @@ export const ShopSelfRequestSchema = z.object({
   logoUrl: httpUrl.optional(),
   pluginVersion: z.string().max(32).optional(),
   platformVersion: z.string().max(32).optional(),
+  /** Merchant opt-in for the "shop ads" surface (WooCommerce settings toggle); persisted in shops.settings.adsEnabled. */
+  adsEnabled: z.boolean().optional(),
 });
 export const ShopSelfResponseSchema = z.object({
   shopId: z.uuid(),
@@ -196,7 +198,7 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
     const shop = await updateSettings(
       db,
       req.shop!.id,
-      { siteUrl: b.siteUrl, brandColor: b.brandColor, logoUrl: b.logoUrl, pluginVersion: b.pluginVersion, platformVersion: b.platformVersion },
+      { siteUrl: b.siteUrl, brandColor: b.brandColor, logoUrl: b.logoUrl, pluginVersion: b.pluginVersion, platformVersion: b.platformVersion, adsEnabled: b.adsEnabled },
       b.name ? { name: b.name } : {},
     );
     return { shopId: shop.id, name: shop.name, platform: shop.platform, plan: shop.plan, paused: isPaused(shop), publicKeyPrefix: shop.apiKeyPrefix };
@@ -211,7 +213,11 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
     { schema: { body: WooConnectRequestSchema, response: { 200: WooConnectResponseSchema } }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (req) => {
       const domain = new URL(req.body.siteUrl).host.toLowerCase();
+      if (req.body.returnUrl && new URL(req.body.returnUrl).host.toLowerCase() !== domain) throw badRequest('bad_return_url', 'returnUrl must be on the connected site');
       let shop = await findShopByDomain(db, domain);
+      // A domain already installed through another platform (e.g. a Shopify store) can never be
+      // re-claimed through the unauthenticated WooCommerce path: that row owns products, usage and ledger.
+      if (shop && shop.platform !== 'woocommerce') throw conflict('platform_mismatch', 'this domain is registered through another platform');
       if (shop && shop.connectState === 'complete' && !shop.uninstalledAt) throw conflict('already_connected', 'this site is already connected — rotate the key from the console instead');
       if (!shop) shop = await createShop(db, { platform: 'woocommerce', domain, name: req.body.name, plan: 'free', settings: { siteUrl: req.body.siteUrl } });
       const connectToken = `ct_${randomAlnum(40)}`;

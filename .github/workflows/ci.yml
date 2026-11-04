@@ -15,7 +15,7 @@ env:
 
 jobs:
   check:
-    name: typecheck · test · build · bundle-secret-scan
+    name: typecheck · lint · test · build · bundle-secret-scan
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -31,6 +31,7 @@ jobs:
       - name: build packages (apps import their dist)
         run: pnpm -r --filter './packages/**' build
       - run: pnpm -r typecheck
+      - run: pnpm -r lint
       - run: pnpm -r test
       - run: pnpm -r --filter './apps/**' build
       - name: bundle secret scan (D3)

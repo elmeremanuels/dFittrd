@@ -60,20 +60,24 @@ export class StripeClient {
   verifyWebhook(rawBody: string | Uint8Array, header: string | undefined, now = Date.now()): StripeEvent | null {
     const secret = this.env.STRIPE_WEBHOOK_SECRET;
     if (!secret || !header) return null;
-    const parts = Object.fromEntries(
-      header.split(',').map((kv) => {
-        const i = kv.indexOf('=');
-        return [kv.slice(0, i).trim(), kv.slice(i + 1).trim()];
-      }),
-    ) as Record<string, string>;
-    const t = parts.t;
-    const v1 = parts.v1;
-    if (!t || !v1) return null;
+    // `t=<ts>,v1=<sig>[,v1=<sig>…]` — during secret rotation Stripe signs with both secrets, so
+    // every v1 is tried (never only the last one parsed).
+    let t: string | undefined;
+    const v1s: string[] = [];
+    for (const kv of header.split(',')) {
+      const i = kv.indexOf('=');
+      if (i <= 0) continue;
+      const k = kv.slice(0, i).trim();
+      const v = kv.slice(i + 1).trim();
+      if (k === 't') t = v;
+      else if (k === 'v1' && v) v1s.push(v);
+    }
+    if (!t || v1s.length === 0) return null;
     const ts = Number(t);
     if (!Number.isFinite(ts) || Math.abs(now / 1000 - ts) > 300) return null;
     const bodyStr = typeof rawBody === 'string' ? rawBody : Buffer.from(rawBody).toString('utf8');
     const expected = hmacHex(secret, `${t}.${bodyStr}`);
-    if (!safeEqual(expected, v1)) return null;
+    if (!v1s.some((v1) => safeEqual(expected, v1))) return null;
     try {
       const ev = JSON.parse(bodyStr) as StripeEvent;
       return ev && typeof ev.id === 'string' && typeof ev.type === 'string' ? ev : null;

@@ -65,8 +65,15 @@ sig = HMAC-SHA256( sk_live_<secret>,  METHOD + "\n" + request-target + "\n" + ts
 ```
 `request-target` is the path including the query string as sent. The window is ±5 minutes. A rotated
 key keeps working for 24 h; the public prefix never changes (the SDK snippet on the merchant page
-stays valid). The secret is stored twice: scrypt-hashed (Bearer checks) and AES-256-GCM encrypted
-with `ENCRYPTION_KEY` (HMAC verification needs the plaintext).
+stays valid). The secret is stored three ways: scrypt-hashed (Bearer verification), AES-256-GCM
+encrypted with `ENCRYPTION_KEY` (HMAC verification needs the plaintext) and as an indexed
+`HMAC(SHOP_KEY_PEPPER, key)` lookup (migration `0001_shop_key_lookup`; rows issued before it are
+backfilled at server start) so a `Bearer sk_…` request costs one row fetch + one scrypt.
+
+**Replay:** the signing string has no nonce, so a signature on a non-idempotent request (`POST`,
+`DELETE`) is accepted once per process (10-minute memory); the second use answers
+`401 replayed_signature`. Idempotent `PUT`/`GET` may repeat a signature (WooCommerce `save_post`
+fires twice per save). Clients must sign every attempt freshly (`ts = now`).
 
 ### Billing unit (D7)
 
@@ -109,7 +116,38 @@ in the same write; the nightly `usage-rollup` pushes sessions above the plan's q
 delete cascade, try token + pseudonym + pagination, SDK sessions + per-shop rate limit, merchant
 HMAC/Bearer/session-token auth + upsert/completeness/validate/rotate, swipes billing idempotency,
 hero render rejections + full job + expiry, Shopify webhook HMAC + GDPR + token exchange + sync,
-Stripe Connect round-trip, k-anonymity floor, usage rollup, env/crypto/token units.
+Stripe Connect round-trip, k-anonymity floor, usage rollup, env/crypto/token units, and the
+security-review regressions (`src/security-review.test.ts`: HMAC replay, key lookup, billing
+integrity, per-shop rate limit, GDPR payload hygiene, webhook replay, Woo takeover, SSRF guard).
+The DNS lookup used by the SSRF guard is stubbed (`testLookup`), so the suite never touches the network.
+
+## Security review (Nov 2026)
+
+Findings from the skeptical review of `apps/api`, `infra` and `.github`; every fix is pinned by
+`src/security-review.test.ts`.
+
+| Sev | Finding | Fix |
+|---|---|---|
+| high | `customers/data_request` / `customers/redact` payloads (customer e-mail, phone, order ids) were stored verbatim in `webhook_log` although the architecture promises no customer PII | `loggablePayload()` keeps only `shop_id`/`shop_domain`/`data_request.id` for `customers/*` topics |
+| high | Deck swipes created billable `fit_session` usage for item ids the shop does not sell, and the idempotency day came from the client `at` → unbounded fabricated usage per device | only existing, non-archived products bill; `deckBillingDay()` clamps the client day to ±36 h of server time |
+| high | `Bearer sk_…` auth ran scrypt (N=16384) over **every** shop per request → unauthenticated CPU DoS | indexed `api_key_lookup` / `previous_key_lookup` columns, O(1) lookup then one scrypt (`findShopBySecret`); startup backfill |
+| medium | Hero render job fetched the merchant-supplied `flatLayPhoto` URL unguarded (SSRF to `169.254.169.254`, `postgres:5432`, `localhost:3000`, redirects) | `lib/safeFetch.ts`: http(s) only, no userinfo, blocked hostnames, every A/AAAA record public, ≤ 3 manual redirects re-checked, 10 MB cap, `image/*` only; DNS lookup injectable |
+| medium | SDK session rate limit was per IP, not per shop: `@fastify/rate-limit` runs at `onRequest` where `req.body` is undefined | plugin registered with `hook: 'preValidation'`; key generator validates the prefix shape |
+| medium | `POST /v1/merchant/woo/connect` could claim a domain already installed through Shopify (same `shops` row: products, usage, ledger) and accepted any `returnUrl` for Stripe Checkout | `409 platform_mismatch` for non-Woo rows; `returnUrl` must be on the site's host |
+| medium | PK-HMAC signatures replayable for ±5 min (`POST /keys/rotate` returns the new secret to the replayer) | per-process replay cache for non-idempotent methods |
+| medium | Shopify webhook without `X-Shopify-Webhook-Id` skipped the dedupe index → a captured signed delivery (`app/uninstalled`, `shop/redact`, old `app_subscriptions/update`) could be replayed | header required (`400 missing_webhook_id`) |
+| low | Stripe-Signature parser kept only the last `v1` (rotation sends two) | any matching `v1` accepted |
+| low | Swipe analytics `sizeHistogram` buckets were not floored per bucket (cohort already was) | a size bucket needs ≥ K distinct users |
+| low | `apps/api/.dockerignore` is never read (build context is the repo root): host `node_modules`/`dist`/`data` shipped and COPYed over the image | `apps/api/Dockerfile.dockerignore` (BuildKit reads it next to the Dockerfile) |
+| low | compose: `caddy` waited for a *healthy* api, taking the static PWA down with any api failure; `API_IMAGE` default did not match the CI image name | `service_started`; `API_IMAGE` required, documented as `ghcr.io/<owner>/paskamer-api` |
+
+Still open (needs another package or a product decision): WooCommerce manual-key Connect has no domain
+ownership proof (anyone can claim an unclaimed domain while Stripe is unconfigured) — add a
+challenge the plugin answers on `/wp-json/paskamer/v1/…` or require the Stripe path for live keys;
+deck billing is still bot-inflatable by creating devices and swiping a shop's real catalogue
+(bound by `POST /v1/devices` 30/min/IP) — consider pairing-only deck billing; `abandoned`
+analytics floor counts sessions (a merchant can pad with their own SDK sessions), not users;
+DNS rebinding between the guard's lookup and undici's connect is not pinned.
 
 ## Manual verification still needed
 

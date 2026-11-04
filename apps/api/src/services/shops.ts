@@ -1,4 +1,4 @@
-import { and, eq, gt, or } from 'drizzle-orm';
+import { and, eq, gt, isNotNull, isNull, or } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { shops, type Plan, type ShopSettings } from '../db/schema.js';
 import type { Env } from '../env.js';
@@ -6,6 +6,7 @@ import {
   decryptString,
   encryptString,
   hashSecret,
+  hmacHex,
   newMerchantKeyPair,
   sha256Hex,
   verifySecret,
@@ -54,6 +55,15 @@ export async function createShop(db: Db, input: CreateShopInput): Promise<ShopRo
   return row!;
 }
 
+/**
+ * Deterministic, indexed lookup value for a secret key: HMAC-SHA256(pepper, key). The key itself
+ * has ~285 bits of entropy, so this is safe to store; it only exists so `Bearer sk_…` auth costs
+ * one indexed row fetch + one scrypt instead of scrypt over every shop.
+ */
+export function merchantKeyLookup(secret: string, pepper: string): string {
+  return hmacHex(pepper, `merchant-key:${secret}`);
+}
+
 /** Issues (or rotates) the merchant key pair. The public prefix stays stable across rotations. */
 export async function issueMerchantKeys(db: Db, env: Env, shop: ShopRow): Promise<{ keys: MerchantKeyPair; previousKeyValidUntil: Date }> {
   const keys = newMerchantKeyPair(keyMode(env), shop.apiKeyPrefix ?? undefined);
@@ -64,13 +74,36 @@ export async function issueMerchantKeys(db: Db, env: Env, shop: ShopRow): Promis
       apiKeyPrefix: keys.publicKeyPrefix,
       apiKeyHash: hashSecret(keys.apiKey, env.SHOP_KEY_PEPPER),
       apiKeyEnc: encryptString(keys.apiKey, env.ENCRYPTION_KEY),
+      apiKeyLookup: merchantKeyLookup(keys.apiKey, env.SHOP_KEY_PEPPER),
       previousKeyHash: shop.apiKeyHash,
       previousKeyEnc: shop.apiKeyEnc,
+      previousKeyLookup: shop.apiKeyHash ? shop.apiKeyLookup : null,
       previousKeyValidUntil: shop.apiKeyHash ? previousKeyValidUntil : null,
       updatedAt: new Date(),
     })
     .where(eq(shops.id, shop.id));
   return { keys, previousKeyValidUntil };
+}
+
+/**
+ * Fills `api_key_lookup` / `previous_key_lookup` for rows issued before migration 0001 (the
+ * plaintext is recoverable from the AES-GCM copy). Runs at server start; a no-op afterwards.
+ */
+export async function backfillKeyLookups(db: Db, env: Env): Promise<number> {
+  const rows = await db
+    .select()
+    .from(shops)
+    .where(or(and(isNotNull(shops.apiKeyEnc), isNull(shops.apiKeyLookup)), and(isNotNull(shops.previousKeyEnc), isNull(shops.previousKeyLookup))));
+  let n = 0;
+  for (const shop of rows) {
+    const patch: Partial<typeof shops.$inferInsert> = {};
+    if (shop.apiKeyEnc && !shop.apiKeyLookup) patch.apiKeyLookup = merchantKeyLookup(decryptString(shop.apiKeyEnc, env.ENCRYPTION_KEY), env.SHOP_KEY_PEPPER);
+    if (shop.previousKeyEnc && !shop.previousKeyLookup) patch.previousKeyLookup = merchantKeyLookup(decryptString(shop.previousKeyEnc, env.ENCRYPTION_KEY), env.SHOP_KEY_PEPPER);
+    if (Object.keys(patch).length === 0) continue;
+    await db.update(shops).set(patch).where(eq(shops.id, shop.id));
+    n++;
+  }
+  return n;
 }
 
 /** Secrets usable for HMAC verification right now: current + previous within its grace window. */
@@ -89,13 +122,16 @@ export function verifyMerchantBearer(shop: ShopRow, secret: string, env: Env, no
   return false;
 }
 
-export async function findShopBySecret(db: Db, env: Env, secret: string): Promise<ShopRow | undefined> {
-  // Bearer sk_ keys do not carry the prefix; scan candidates with a key set (small table, indexed by prefix).
+export async function findShopBySecret(db: Db, env: Env, secret: string, now = new Date()): Promise<ShopRow | undefined> {
+  // Bearer sk_ keys do not carry the prefix: resolve the row through the indexed HMAC lookup, then
+  // confirm with the scrypt hash. Never scan the table — scrypt per shop per request is a CPU DoS.
+  const lookup = merchantKeyLookup(secret, env.SHOP_KEY_PEPPER);
   const candidates = await db
     .select()
     .from(shops)
-    .where(or(gt(shops.apiKeyHash, ''), gt(shops.previousKeyHash, '')));
-  return candidates.find((s) => verifyMerchantBearer(s, secret, env));
+    .where(or(eq(shops.apiKeyLookup, lookup), eq(shops.previousKeyLookup, lookup)))
+    .limit(2);
+  return candidates.find((s) => verifyMerchantBearer(s, secret, env, now));
 }
 
 export function shopBranding(shop: ShopRow) {

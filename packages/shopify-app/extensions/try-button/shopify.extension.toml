@@ -1,0 +1,6 @@
+# "Try in Paskamer" theme app extension (D6). One app block the merchant adds to the product
+# template in the theme editor; it bundles sdk.v1.js (copied from packages/sdk/dist at build time)
+# so the storefront makes zero third-party requests (D3).
+name = "Try in Paskamer"
+type = "theme"
+handle = "try-button"

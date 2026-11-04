@@ -285,10 +285,17 @@ export function coerceFitPoints(value: unknown): FitPoint[] | undefined {
 }
 
 export function coerceUnit(value: unknown): number | undefined {
+  // Accept percentages for 0..1 fields: an explicit "92%" or a whole number 2..100 ("92").
+  // A fraction above 1 such as 1.5 is a typo, not 1.5 %, and is rejected rather than silently
+  // becoming 0.015.
+  const text = typeof value === 'string' ? value.trim() : undefined;
+  if (text !== undefined && text.endsWith('%')) {
+    const pct = coerceNumber(text.slice(0, -1));
+    return pct !== undefined && pct >= 0 && pct <= 100 ? pct / 100 : undefined;
+  }
   const n = coerceNumber(value);
   if (n === undefined) return undefined;
-  // Accept percentages ("92" or "92%") for 0..1 fields.
-  const scaled = n > 1 && n <= 100 ? n / 100 : n;
+  const scaled = Number.isInteger(n) && n > 1 && n <= 100 ? n / 100 : n;
   return scaled >= 0 && scaled <= 1 ? scaled : undefined;
 }
 

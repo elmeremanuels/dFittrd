@@ -42,18 +42,23 @@ export const VIBE_AXIS: Readonly<Record<string, Axis>> = Object.freeze({
 export const ECLECTIC_VIBE = 'Eclectic';
 export const ONBOARDING_VIBES = Object.freeze([...Object.keys(VIBE_AXIS), ECLECTIC_VIBE]);
 
+const VIBE_AXIS_LOWER: Readonly<Record<string, Axis>> = Object.freeze(
+  Object.fromEntries(Object.entries(VIBE_AXIS).map(([label, axis]) => [label.toLowerCase(), axis])),
+);
+
 /**
  * Each selected vibe axis = 0.75 (others untouched, i.e. 0.5 on a fresh profile).
  * 'Eclectic' → every axis = max(axis, 0.6) and explorationBonus = 0.2. No centring. Idempotent.
- * Unknown vibe strings are ignored.
+ * Chip labels are matched case-insensitively after trimming; unknown vibe strings are ignored.
  */
 export function applyOnboardingVibes(state: TasteState, vibes: readonly string[]): TasteState {
   const axes = { ...state.profile.axes };
   let explorationBonus = state.profile.explorationBonus;
-  for (const vibe of vibes) {
-    const axis = VIBE_AXIS[vibe];
+  for (const raw of vibes) {
+    const vibe = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    const axis = VIBE_AXIS_LOWER[vibe];
     if (axis) axes[axis] = 0.75;
-    else if (vibe === ECLECTIC_VIBE) {
+    else if (vibe === ECLECTIC_VIBE.toLowerCase()) {
       for (const a of AXES) axes[a] = Math.max(axes[a], 0.6);
       explorationBonus = Math.max(explorationBonus, 0.2);
     }

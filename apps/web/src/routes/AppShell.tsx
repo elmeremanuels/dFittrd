@@ -14,7 +14,7 @@ export function AppShell(): ReactNode {
   const hideNav = location.pathname.startsWith('/onboarding');
   return (
     <div className="flex min-h-dvh w-full justify-center bg-cream-deep">
-      {import.meta.env.DEV ? <DevSwitcher /> : null}
+      {import.meta.env.DEV && !hideNav ? <DevSwitcher /> : null}
       <main className="relative flex h-dvh w-full max-w-md flex-col bg-cream shadow-2xl shadow-ink/10">
         <div className="safe-top min-h-0 flex-1 overflow-hidden">
           <Outlet />
@@ -49,7 +49,7 @@ function DevSwitcher(): ReactNode {
   const location = useLocation();
   const merchant = location.pathname.startsWith('/merchant');
   return (
-    <div className="fixed right-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-50 flex rounded-full border border-ink/10 bg-white/80 p-1 text-xs font-semibold uppercase tracking-wider shadow backdrop-blur" aria-label="Development view switcher">
+    <div className="fixed right-3 bottom-3 z-50 hidden rounded-full md:flex border border-ink/10 bg-white/80 p-1 text-xs font-semibold uppercase tracking-wider shadow backdrop-blur" aria-label="Development view switcher">
       <Link to="/deck" className={`rounded-full px-3 py-1 ${!merchant ? 'bg-ink text-white' : 'text-ink-soft'}`}>
         Customer
       </Link>

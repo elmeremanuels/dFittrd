@@ -179,10 +179,10 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
       </svg>
 
       {!bare ? (
-        <div className="pointer-events-none absolute top-4 left-4 flex flex-col items-start gap-1">
-          <EstimateBadge />
-          {garment && !media.baseFrame ? <span className="chip bg-white/70 text-xs">{bodyLabel ?? (hasBody ? 'Body from your measurements' : 'Reference body · add your measurements')}</span> : null}
-          {media.baseFrame ? <span className="chip bg-white/70 text-xs">Your capture · garment overlay</span> : null}
+        <div className="pointer-events-none absolute top-3 left-3 flex max-w-[calc(100%-1.5rem)] flex-col items-start gap-1">
+          <EstimateBadge className="px-2 py-0.5 text-[10px] whitespace-nowrap" />
+          {garment && !media.baseFrame ? <span className="chip bg-white/70 px-2 py-0.5 text-[10px] leading-tight">{bodyLabel ?? (hasBody ? 'Body from your measurements' : 'Reference body · add your measurements')}</span> : null}
+          {media.baseFrame ? <span className="chip bg-white/70 px-2 py-0.5 text-[10px] leading-tight">Your capture · garment overlay</span> : null}
         </div>
       ) : null}
       {isLoading ? (

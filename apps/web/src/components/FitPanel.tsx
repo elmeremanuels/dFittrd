@@ -10,7 +10,7 @@ import { pct } from '@/lib/format';
  */
 export function FitPanel({ fit, hasMeasurements, compact = false }: { fit: FitResult | null; hasMeasurements: boolean; compact?: boolean }): ReactNode {
   return (
-    <div className="glass-panel rounded-2xl p-3 text-ink" aria-live="polite" aria-atomic="true" data-testid="fit-panel">
+    <div className={`glass-panel rounded-2xl text-ink ${compact ? 'px-3 py-2' : 'p-3'}`} aria-live="polite" aria-atomic="true" data-testid="fit-panel">
       {!hasMeasurements ? (
         <p className="text-sm">
           <Link to="/onboarding" className="font-medium text-coral-ink underline-offset-2 hover:underline">
@@ -27,6 +27,27 @@ export function FitPanel({ fit, hasMeasurements, compact = false }: { fit: FitRe
             Closest is <span className="font-display text-lg">{fit.closestSize ?? '—'}</span> at {pct(fit.score)} — we would not recommend it.
           </p>
           {!compact ? <Notes notes={fit.notes} /> : null}
+        </div>
+      ) : compact ? (
+        <div>
+          <p className="flex items-baseline gap-1.5">
+            <span className="eyebrow">Size</span>
+            <span className="font-display text-xl leading-none text-coral-ink" data-testid="recommended-size">
+              {fit.recommendedSize}
+            </span>
+          </p>
+          <p className="text-[11px] leading-tight text-ink-mute">
+            fit <span className="font-semibold text-ink" data-testid="fit-score">{pct(fit.score)}</span> · {pct(fit.confidence)} sure
+          </p>
+          {fit.notes.length > 0 ? (
+            <ul className="mt-0.5 text-[11px] leading-tight text-ink-soft" aria-label="Fit notes" data-testid="fit-notes">
+              {fit.notes.slice(0, 4).map((n, i) => (
+                <li key={n} className={i > 0 ? 'sr-only' : 'truncate'}>
+                  • {n}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : (
         <div className="space-y-1">

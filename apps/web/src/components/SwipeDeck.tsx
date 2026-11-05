@@ -95,7 +95,7 @@ export function SwipeDeck(): ReactNode {
             <Avatar garment={garment} fit={fit} isLoading={rendering} />
             {/* bounded so the panel never hides most of the mirror on a short phone (≈ 270 px card at 667 px) */}
             <div className="absolute right-3 bottom-3 left-3 z-10 max-h-[48%] overflow-hidden rounded-2xl" key={garment.id}>
-              <FitPanel fit={fit} hasMeasurements={hasMeasurements} />
+              <FitPanel fit={fit} hasMeasurements={hasMeasurements} compact />
             </div>
           </Card>
         ) : (

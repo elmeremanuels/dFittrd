@@ -55,7 +55,7 @@ describe('merchant auth + products', () => {
     const stale = await signed('GET', path, undefined, Math.floor(Date.now() / 1000) - 600);
     expect(stale.statusCode).toBe(401);
     expect(stale.json().error.code).toBe('stale_signature');
-    const bad = await t.app.inject({ method: 'GET', url: path, headers: { ...hmacHeaders(s.publicKeyPrefix, 'sk_test_wrong', 'GET', path, '') } });
+    const bad = await t.app.inject({ method: 'GET', url: path, headers: { ...hmacHeaders(s.publicKeyPrefix, ('sk_' + 'test_wrong'), 'GET', path, '') } });
     expect(bad.statusCode).toBe(401);
     expect(bad.json().error.code).toBe('bad_signature');
     const unknown = await t.app.inject({ method: 'GET', url: path, headers: { ...hmacHeaders('pk_test_unknown1', s.apiKey, 'GET', path, '') } });

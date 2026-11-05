@@ -15,8 +15,11 @@ leave the device** — see “Privacy guarantees” below.
     │                                   │   classifyView   0° (front) / 90° (side) from shoulder/torso ratio + ears/nose
     │                                   │   frameRetainer  keep best±1 front/side + 2 latest, close the rest
     │   finish(height, weight, sex) ───▶│ segmenter on chosen frames (+2 neighbours, majority mask)
-    │                                   │   crossSections.ts  12 levels from landmark proportions
-    │                                   │   maskGeometry.ts   width (front) / depth (side) per level, clothing coverage
+    │                                   │   crossSections.ts  12 levels from landmark proportions; neck = narrowest run
+    │                                   │                     nose→shoulders; front-view contact limits (legs split at
+    │                                   │                     the midline, torso/arm levels rejected where a limb touches)
+    │                                   │   maskGeometry.ts   width (front) / depth (side) per level, clothing coverage,
+    │                                   │                     shoulder slope from the mask's top contour
     │                                   │   measure.ts        scale = height / (head-top→heel px); Ramanujan ellipse girths;
     │                                   │                     mean blended with prior.ts; σ from the v1 table; quality gate
     │   ◀── landmarks, 2 masks, girths, lengths, posture, quality, ONE cream-background base frame, ONE face tile
@@ -49,12 +52,15 @@ Wire and body types (`BodyProfile`, `Measurement`, `UserBody`, `FitSignature*`) 
   What leaves the worker: 33 landmarks per chosen frame, two category masks, per-level widths/depths, lengths,
   posture descriptors, a quality score, **one** front base frame with the background replaced by cream `#F5EFE7`
   (for render path B) and **one** 320 px face tile.
-- Persistence (`storage.ts`, Dexie db `paskamer`): `bodyProfile`, `baseFrame` (AES-GCM, 256-bit **non-extractable**
-  WebCrypto key held in the `keys` store), `faceTile`, `silhouette`, `keys`. `deleteScan()` clears all five stores in
+- Persistence (`storage.ts`, Dexie db `paskamer`): `bodyProfile`, `baseFrame` and the `faceTile` image (both AES-GCM,
+  256-bit **non-extractable** WebCrypto key held in the `keys` store), `silhouette`, `keys`. `deleteScan()` clears all five stores in
   one transaction. No video frame is ever written.
 - The fit signature (`signature.ts`) carries no face/skin/hair/colour value; `assertNoColourData` guards it and the
   test suite asserts it. Skin tone, undertone and season stay in the `faceTile` row on the device.
-- Model files load from the same origin (`/models/…`). Onboarding makes zero third-party requests.
+- Model files load from the same origin (`/models/…`). Onboarding makes zero third-party requests:
+  `resolveModelBase` (models.ts) rejects any `modelBase` on another origin before the worker fetches anything.
+- The worker is a module worker, so it loads MediaPipe's ES-module WASM loader
+  (`FilesetResolver.forVisionTasks(base, VISION_WASM_ES_MODULE)`); the classic loader cannot run there.
 - The capture step does no network I/O at all. Syncing the signature is the app's job, via the privacy ledger.
 
 ## Expected accuracy (v1, analytic)
@@ -62,6 +68,8 @@ Wire and body types (`BodyProfile`, `Measurement`, `UserBody`, `FitSignature*`) 
 - Scan-only girths: **3–4 cm** MAE in cooperative conditions (σ table in `measure.ts`: bust/waist 3.0, hip 2.5,
   thigh 3.5, arm 2.0, wrist/ankle 1.0 cm) → ≈ 60 % confidence.
 - Scan ⊕ agreeing tape measurement: **≈ 1.5–2 cm** → ≈ 95 % confidence (98 % with `tape` σ = 1.5).
+- Upper-arm and wrist never take a side-view depth (the arm hangs over the torso there): population aspect, σ ×1.35.
+  A torso level where an arm touches the body is not measured (warning) rather than measured with the arm in it.
 - Height comes from the user (image height alone is 1–7 cm off). Clothing is the largest error source: the segmenter's
   clothes/skin ratio lowers quality and inflates σ. The σ reported for the scan is the published-style table, not the
   formal inverse-variance blend of ellipse and prior (their errors are not independent of clothing/pose error).

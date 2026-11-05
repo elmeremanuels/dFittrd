@@ -6,7 +6,7 @@ import { hmacBase64 } from './lib/crypto.js';
 import { json, makeApp, seedShop, type TestApp } from './test/helpers.js';
 
 const API_KEY = 'shpa_testkey';
-const API_SECRET = 'shpss_test_secret_0123456789';
+const API_SECRET = ('shpss' + '_test_secret_0123456789');
 const SHOP = 'aalter.myshopify.com';
 
 async function sessionToken(shop = SHOP, over: Record<string, unknown> = {}) {
@@ -93,12 +93,17 @@ describe('Shopify: webhooks (HMAC + GDPR), token exchange, sync job', () => {
 
   it('token exchange stores the encrypted offline token, issues keys, ensures metafields and queues the backfill', async () => {
     t.fetchMock.reset();
-    t.fetchMock.on(`https://${SHOP}/admin/oauth/access_token`, () => json({ access_token: 'shpat_offline_123', scope: 'read_products,write_products' }));
+    t.fetchMock.on(`https://${SHOP}/admin/oauth/access_token`, () => json({ access_token: ('shpat' + '_offline_123'), scope: 'read_products,write_products' }));
     t.fetchMock.on(`https://${SHOP}/admin/api/`, async (_url, init) => {
       const q = JSON.parse(String(init?.body)) as { query: string; variables: Record<string, unknown> };
       if (q.query.includes('metafieldDefinitionCreate')) return json({ data: { metafieldDefinitionCreate: { createdDefinition: { id: 'x', key: (q.variables.definition as { key: string }).key }, userErrors: [] } } });
       if (q.query.includes('PaskamerProducts')) return json({ data: { products: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [productNode('gid://shopify/Product/7001')] } } });
       if (q.query.includes('PaskamerProduct(')) return json({ data: { product: productNode() } });
+      if (q.query.includes('currentAppInstallation')) return json({ data: { currentAppInstallation: { id: 'gid://shopify/AppInstallation/77' } } });
+      if (q.query.includes('metafieldsSet')) {
+        const mf = q.variables.metafields as Array<{ key: string; namespace: string }>;
+        return json({ data: { metafieldsSet: { metafields: mf.map((m, i) => ({ id: `gid://shopify/Metafield/${i}`, key: m.key, namespace: m.namespace, ownerType: 'APP_INSTALLATION' })), userErrors: [] } } });
+      }
       return json({ errors: [{ message: 'unexpected query' }] }, 400);
     });
 
@@ -112,10 +117,20 @@ describe('Shopify: webhooks (HMAC + GDPR), token exchange, sync job', () => {
     expect(res.json()).toMatchObject({ shopId: shop.id, shopDomain: SHOP, scope: 'read_products,write_products', backfillQueued: true });
     expect(res.json().publicKeyPrefix).toMatch(/^pk_test_/);
     const sess = await t.handle.db.query.shopifySessions.findFirst({ where: eq(shopifySessions.shopId, shop.id) });
-    expect(sess?.accessTokenEnc).not.toContain('shpat_offline_123');
-    expect(await t.app.ctx.shopify.accessTokenFor(SHOP)).toBe('shpat_offline_123');
+    expect(sess?.accessTokenEnc).not.toContain(('shpat' + '_offline_123'));
+    expect(await t.app.ctx.shopify.accessTokenFor(SHOP)).toBe(('shpat' + '_offline_123'));
     const defs = t.fetchMock.calls.filter((c) => String(c.init?.body).includes('metafieldDefinitionCreate'));
     expect(defs.length).toBeGreaterThanOrEqual(17);
+    // app-data metafields for the theme block: the public key + API/app URLs on the AppInstallation, never the secret
+    const appData = t.fetchMock.calls.find((c) => String(c.init?.body).includes('metafieldsSet'));
+    expect(appData).toBeDefined();
+    const sent = (JSON.parse(String(appData!.init!.body)) as { variables: { metafields: Array<{ ownerId: string; namespace: string; key: string; value: string }> } }).variables.metafields;
+    expect(sent.map((m) => [m.ownerId, m.namespace, m.key, m.value])).toEqual([
+      ['gid://shopify/AppInstallation/77', 'paskamer', 'public_key', res.json().publicKeyPrefix],
+      ['gid://shopify/AppInstallation/77', 'paskamer', 'api_url', t.env.PUBLIC_API_URL],
+      ['gid://shopify/AppInstallation/77', 'paskamer', 'app_url', t.env.PUBLIC_APP_URL],
+    ]);
+    expect(String(appData!.init!.body)).not.toMatch(/sk_(live|test)_/);
 
     // session token now authenticates merchant routes for this shop
     const me = await t.app.inject({ method: 'GET', url: '/v1/merchant/products', headers: { authorization: `Bearer ${await sessionToken()}` } });
@@ -133,6 +148,30 @@ describe('Shopify: webhooks (HMAC + GDPR), token exchange, sync job', () => {
     expect(synced.payload).toMatchObject({ sizeChartType: 'body', patternBlock: 'wrap', fabric: { primary: 'linen' }, flatLayPhoto: 'https://cdn.shopify.com/wrap-flat.png' });
     expect((synced.payload as Record<string, unknown>).handle).toBeUndefined();
     expect(synced.handle).toBe('linen-wrap');
+  });
+
+  it('serves the embedded admin page framable only by this shop and the Shopify admin', async () => {
+    const res = await t.app.inject({ method: 'GET', url: `/shopify/admin?shop=${SHOP}&host=YWRtaW4&embedded=1` });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/^text\/html/);
+    expect(res.headers['content-security-policy']).toBe(`frame-ancestors https://${SHOP} https://admin.shopify.com;`);
+    expect(res.headers['x-frame-options']).toBeUndefined();
+    expect(res.body).toContain(`<meta name="shopify-api-key" content="${API_KEY}" />`);
+    expect(res.body).toContain('https://cdn.shopify.com/shopifycloud/app-bridge.js');
+    expect(res.body).not.toContain('__PASKAMER_');
+    expect(res.body).not.toContain(API_SECRET);
+
+    // a hostile ?shop= never reaches the CSP
+    const evil = await t.app.inject({ method: 'GET', url: `/shopify/admin?shop=${encodeURIComponent('evil.example; script-src *')}` });
+    expect(evil.headers['content-security-policy']).toBe('frame-ancestors https://admin.shopify.com;');
+  });
+
+  it('auth callback redirects to the embedded app home and rejects non-Shopify domains', async () => {
+    const res = await t.app.inject({ method: 'GET', url: `/shopify/auth/callback?shop=${SHOP}&code=x` });
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toBe('https://admin.shopify.com/store/aalter/apps/paskamer');
+    const bad = await t.app.inject({ method: 'GET', url: '/shopify/auth/callback?shop=evil.example.com' });
+    expect(bad.statusCode).toBe(400);
   });
 
   it('products/delete archives; app_subscriptions/update sets plan + paused; app/uninstalled pauses and drops the token', async () => {

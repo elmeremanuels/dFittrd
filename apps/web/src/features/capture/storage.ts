@@ -3,7 +3,8 @@
  *   - `bodyProfile`  — the fused BodyProfile (never synced)
  *   - `baseFrame`    — ONE front frame with the background replaced, AES-GCM encrypted with a
  *                      non-extractable WebCrypto key held in the `keys` store
- *   - `faceTile`     — the identity tile (face crop, background removed) + the skin estimate
+ *   - `faceTile`     — the identity tile (face crop, background removed; AES-GCM encrypted with the
+ *                      same key — it is a face image) + the skin estimate
  *   - `silhouette`   — the front/side category masks (compact Uint8Array) for render path B
  *   - `keys`         — CryptoKey objects (structured-cloned, non-extractable)
  * `deleteScan()` clears every store in ONE transaction. No video frame is ever written.
@@ -36,7 +37,12 @@ interface BaseFrameRow {
 
 interface FaceTileRow {
   id: string;
-  blob: Blob;
+  /** Encrypted tile (current format). */
+  iv?: Uint8Array | undefined;
+  data?: ArrayBuffer | undefined;
+  alg?: 'AES-GCM' | undefined;
+  /** Plaintext tile written by the first build; still readable, re-encrypted on the next save. */
+  blob?: Blob | undefined;
   mimeType: string;
   skin: SkinEstimate | null;
   updatedAt: number;
@@ -155,13 +161,27 @@ export async function loadBaseFrame(db: PaskamerDb = getDb()): Promise<{ blob: B
   }
 }
 
+/** Encrypt and store the face tile (a face image, so encrypted like the base frame). */
 export async function saveFaceTile(blob: Blob, skin: SkinEstimate | null, db: PaskamerDb = getDb()): Promise<void> {
-  await db.faceTile.put({ id: SINGLETON, blob, mimeType: blob.type, skin, updatedAt: Date.now() });
+  const key = await getOrCreateFrameKey(db);
+  const enc = await encryptBlob(key, blob);
+  await db.faceTile.put({ id: SINGLETON, iv: enc.iv, data: enc.data, alg: enc.alg, mimeType: enc.mimeType || 'image/webp', skin, updatedAt: Date.now() });
 }
 
 export async function loadFaceTile(db: PaskamerDb = getDb()): Promise<{ blob: Blob; skin: SkinEstimate | null } | null> {
   const row = await db.faceTile.get(SINGLETON);
-  return row ? { blob: row.blob, skin: row.skin } : null;
+  if (!row) return null;
+  if (row.iv && row.data) {
+    const keyRow = await db.keys.get(FRAME_KEY_ID);
+    if (!keyRow) return null;
+    try {
+      const blob = await decryptToBlob(keyRow.key, { iv: row.iv, data: row.data, alg: 'AES-GCM' }, row.mimeType);
+      return { blob, skin: row.skin };
+    } catch {
+      return null;
+    }
+  }
+  return row.blob ? { blob: row.blob, skin: row.skin } : null;
 }
 
 export async function saveSilhouette(front: SilhouetteMask | null, side: SilhouetteMask | null, db: PaskamerDb = getDb()): Promise<void> {

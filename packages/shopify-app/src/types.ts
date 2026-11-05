@@ -31,6 +31,9 @@ export function normaliseShopDomain(input: string | null | undefined): string | 
   if (!input) return null;
   let s = input.trim().toLowerCase();
   if (!s) return null;
+  // Unified admin (`https://admin.shopify.com/store/<handle>/…`): the store handle is the shop.
+  const unified = /^(?:https?:\/\/)?admin\.shopify\.com(?::\d+)?(?:\/store\/([a-z0-9][a-z0-9-]*))?(?:[/?#]|$)/.exec(s);
+  if (unified) return unified[1] ? `${unified[1]}.myshopify.com` : null;
   if (s.includes('://')) {
     try {
       s = new URL(s).host;

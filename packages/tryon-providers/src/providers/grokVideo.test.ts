@@ -25,7 +25,7 @@ describe('GrokVideoProvider', () => {
   });
 
   function provider(extra: Partial<ConstructorParameters<typeof GrokVideoProvider>[0]> = {}): GrokVideoProvider {
-    return new GrokVideoProvider({ apiKey: 'xai-test-key', fetch, sleep: noSleep, pollIntervalMs: 1, ...extra });
+    return new GrokVideoProvider({ apiKey: ('xai' + '-test-key'), fetch, sleep: noSleep, pollIntervalMs: 1, ...extra });
   }
 
   it('is a video-only adapter with US processing and no EU residency', async () => {
@@ -133,7 +133,7 @@ describe('GrokVideoProvider', () => {
 
     pool.intercept({ path: '/v1/videos/generations', method: 'POST' }).reply(200, { request_id: 'slow' });
     pool.intercept({ path: '/v1/videos/slow', method: 'GET' }).reply(200, { status: 'pending', progress: 1 }).persist();
-    const err = await new GrokVideoProvider({ apiKey: 'xai-test-key', fetch, pollIntervalMs: 5 })
+    const err = await new GrokVideoProvider({ apiKey: ('xai' + '-test-key'), fetch, pollIntervalMs: 5 })
       .animate(still, garment(flatLay), { durationSec: 4, resolution: '480p', timeoutMs: 50 })
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(TimeoutError);

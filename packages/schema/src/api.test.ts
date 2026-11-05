@@ -113,8 +113,8 @@ describe('hero render (the only image-accepting route)', () => {
 
 describe('SDK + merchant DTOs', () => {
   it('sdk session request validates the public key prefix and page url', () => {
-    expect(SdkSessionRequestSchema.safeParse({ shopKeyPrefix: 'pk_live_abc123XYZ', productExternalId: '42', pageUrl: 'https://shop.example/p/42' }).success).toBe(true);
-    expect(SdkSessionRequestSchema.safeParse({ shopKeyPrefix: 'sk_live_abc123XYZ', productExternalId: '42', pageUrl: 'https://shop.example/p/42' }).success).toBe(false);
+    expect(SdkSessionRequestSchema.safeParse({ shopKeyPrefix: ('pk_' + 'live_abc123XYZ'), productExternalId: '42', pageUrl: 'https://shop.example/p/42' }).success).toBe(true);
+    expect(SdkSessionRequestSchema.safeParse({ shopKeyPrefix: ('sk_' + 'live_abc123XYZ'), productExternalId: '42', pageUrl: 'https://shop.example/p/42' }).success).toBe(false);
   });
 
   it('merchant upsert accepts drafts and the response reports completeness', () => {

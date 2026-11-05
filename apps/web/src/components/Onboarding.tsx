@@ -34,9 +34,11 @@ export function Onboarding({ initialStep = 'welcome', onFinished }: { initialSte
   const setProfile = useApp((s) => s.setProfile);
   const completeOnboarding = useApp((s) => s.completeOnboarding);
   const pendingIntent = useApp((s) => s.pendingIntent);
+  const savedVibes = useApp((s) => (s.settings.onboarded ? s.settings.vibes : null));
   const [step, setStep] = useState<OnboardingStep>(initialStep);
   const [form, setForm] = useState<ManualForm>(() => ({ ...EMPTY_MANUAL_FORM, ...prefill(existing) }));
-  const [vibes, setVibes] = useState<string[]>([]);
+  // Re-entering (remeasure) starts from the saved vibes: finishing must not wipe them.
+  const [vibes, setVibes] = useState<string[]>(() => [...(savedVibes ?? [])]);
   const [captured, setCaptured] = useState<'none' | 'done' | 'skipped'>('none');
   const [submitted, setSubmitted] = useState(false);
   const errors = useMemo(() => validateManual(form), [form]);
@@ -78,7 +80,8 @@ export function Onboarding({ initialStep = 'welcome', onFinished }: { initialSte
   };
 
   return (
-    <div className="safe-top safe-bottom flex min-h-dvh flex-col bg-cream px-5 pb-4" data-testid="onboarding" data-step={step}>
+    // The app shell already pads the top safe area and fills 100dvh; min-h-full keeps the CTA on screen.
+    <div className="safe-bottom flex min-h-full flex-col bg-cream px-5 pb-4" data-testid="onboarding" data-step={step}>
       <div className="mt-6 text-center">
         <motion.div key={step} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="min-h-10 font-display text-3xl font-medium tracking-tight text-balance">{titles[step].title}</h1>
@@ -154,7 +157,7 @@ export function Onboarding({ initialStep = 'welcome', onFinished }: { initialSte
                       type="button"
                       aria-pressed={on}
                       onClick={() => setVibes((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))}
-                      className={`rounded-2xl border p-4 text-sm font-medium transition-colors ${on ? 'border-coral bg-coral text-white' : 'border-ink/10 bg-white/60 text-ink hover:bg-coral/10'}`}
+                      className={`rounded-2xl border p-4 text-sm font-medium transition-colors ${on ? 'border-coral bg-coral text-ink' : 'border-ink/10 bg-white/60 text-ink hover:bg-coral/10'}`}
                     >
                       {v}
                     </button>

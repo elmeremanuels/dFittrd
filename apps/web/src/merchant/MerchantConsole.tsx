@@ -58,7 +58,7 @@ export function MerchantLogin(): ReactNode {
         </label>
         <input id="merchant-key" type="password" autoComplete="off" className="field-input font-sans text-base" value={key} onChange={(e) => setKey(e.target.value)} aria-invalid={!!error} aria-describedby={error ? 'merchant-key-error' : undefined} placeholder="sk_test_…" />
         {error ? (
-          <p id="merchant-key-error" role="alert" className="text-xs text-coral-deep">
+          <p id="merchant-key-error" role="alert" className="text-xs text-coral-ink">
             {error}
           </p>
         ) : null}

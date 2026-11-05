@@ -80,6 +80,9 @@ export class NetworkError extends Error {
   }
 }
 
+/** Rotate the device token once less than this is left (tokens live 30 days). */
+export const ROTATE_WITHIN_MS = 7 * 86_400_000;
+
 const WRITE_KIND: Record<string, ClientLedgerEntry['kind']> = {
   '/v1/devices': 'device',
   '/v1/devices/rotate': 'device',
@@ -194,10 +197,17 @@ export class ApiClient {
     await this.opts.onLedger(entry);
   }
 
-  /** Device JWT: memory/IndexedDB first, `POST /v1/devices` on first run or after expiry. */
+  /**
+   * Device JWT: memory/IndexedDB first. A token in its last week is ROTATED (`POST /v1/devices/rotate`,
+   * same device id) — registering a fresh device instead would orphan this device's server rows (its
+   * signature, swipes, pairings), and a later `DELETE /v1/me` would erase the wrong device.
+   * `POST /v1/devices` only on first run, or when the old token is already unusable.
+   */
   async ensureDevice(): Promise<string> {
     const d = this.opts.getDevice();
-    if (d.token && d.expiresAt && new Date(d.expiresAt).getTime() - Date.now() > 60_000) return d.token;
+    const left = d.token && d.expiresAt ? new Date(d.expiresAt).getTime() - this.opts.now().getTime() : -1;
+    if (d.token && left > ROTATE_WITHIN_MS) return d.token;
+    if (d.token && left > 60_000) return this.rotateDevice(d.token);
     if (!this.devicePromise) {
       const req: DeviceCreateRequest = { platform: 'web', appVersion: this.opts.appVersion };
       this.devicePromise = this.request<DeviceTokenResponse>('POST', '/v1/devices', req, { auth: 'none' })
@@ -207,6 +217,24 @@ export class ApiClient {
         })
         .catch((e: unknown) => {
           this.devicePromise = null;
+          throw e;
+        });
+    }
+    return this.devicePromise;
+  }
+
+  private rotateDevice(current: string): Promise<string> {
+    if (!this.devicePromise) {
+      this.devicePromise = this.request<DeviceTokenResponse>('POST', '/v1/devices/rotate', { appVersion: this.opts.appVersion }, { auth: { bearer: current }, retryOn401: false })
+        .then(async (res) => {
+          await this.opts.setDevice(res);
+          this.devicePromise = null;
+          return res.token;
+        })
+        .catch((e: unknown) => {
+          this.devicePromise = null;
+          // Offline / server hiccup: the current token is still valid for a while — keep using it.
+          if (!(e instanceof ApiError && e.status === 401)) return current;
           throw e;
         });
     }

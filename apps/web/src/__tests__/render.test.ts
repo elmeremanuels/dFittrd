@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { computeFit, fitGapsForRender } from '@paskamer/fit-engine';
 import { MOCK_GARMENTS, MOCK_GARMENTS_BY_ID, type UserBody } from '@paskamer/schema';
-import { adjustColor, bodyGeometry, fabricLook, garmentGeometry, VIEW_W } from '@/render/body';
+import { adjustColor, bodyGeometry, fabricLook, garmentGeometry, levelY, VIEW_W } from '@/render/body';
 import { resolveSwipe } from '@/components/Card';
 import { extractToken } from '@/routes/PairRoute';
 import { seasonKey } from '@/lib/season';
@@ -71,6 +71,34 @@ describe('render path B v0', () => {
     expect(xs).toBeGreaterThanOrEqual(body.bustHalf);
   });
 
+  it('draws an accessory as what it is: belt at the waist, hat on the head, socks at the ankles, scarf at the neck', () => {
+    const body = bodyGeometry(REF.measurements, 168);
+    const ys = (d: string): number[] => [...d.matchAll(/(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/g)].map((m) => Number(m[2]));
+    const span = (id: string) => {
+      const g = MOCK_GARMENTS_BY_ID[id]!;
+      const geom = garmentGeometry({ garment: g, gaps: fitGapsForRender(computeFit(g, REF)), body });
+      const all = [geom.path, ...geom.extra].flatMap(ys);
+      return { min: Math.min(...all), max: Math.max(...all), geom };
+    };
+    const belt = span('haven-01');
+    expect(belt.min).toBeGreaterThan(levelY('bust'));
+    expect(belt.max).toBeLessThan(levelY('hip'));
+    const hat = span('haven-03');
+    expect(hat.max).toBeLessThan(levelY('shoulder'));
+    const socks = span('haven-05');
+    expect(socks.min).toBeGreaterThan(levelY('calf'));
+    const scarf = span('haven-02');
+    expect(scarf.min).toBeLessThan(levelY('shoulder'));
+    expect(scarf.max).toBeLessThan(levelY('hip'));
+    const bag = span('haven-04');
+    expect(bag.geom.path).not.toBe(belt.geom.path);
+    // belt sizes are waist sizes: a bigger belt is a longer (looser) band
+    const g = MOCK_GARMENTS_BY_ID['haven-01']!;
+    const fit = computeFit(g, REF);
+    const paths = new Set(fit.perSize.map((s) => garmentGeometry({ garment: g, gaps: fitGapsForRender(fit, s.size), body }).path));
+    expect(paths.size).toBe(fit.perSize.length);
+  });
+
   it('fabric look differs between linen, wool and silk', () => {
     const linen = fabricLook({ primary: 'linen', weightGsm: 240, stretchPct: 2, drape: 0.78 });
     const wool = fabricLook({ primary: 'wool', weightGsm: 420, stretchPct: 5, drape: 0.4 });
@@ -79,6 +107,19 @@ describe('render path B v0', () => {
     expect(wool.surfaceScale).toBeGreaterThan(silk.surfaceScale);
     expect(silk.baseFrequency).toBeGreaterThan(wool.baseFrequency);
     expect(silk.blur).toBeGreaterThan(wool.blur);
+  });
+
+  it('fibre alone changes the look: linen, wool and silk differ at the same weight and drape (handoff §9 fabric test)', () => {
+    const at = (primary: string) => fabricLook({ primary, weightGsm: 200, stretchPct: 0, drape: 0.6 } as Parameters<typeof fabricLook>[0]);
+    const looks = ['linen', 'wool', 'silk', 'denim'].map((p) => {
+      const { label: _label, ...rest } = at(p);
+      return JSON.stringify(rest);
+    });
+    expect(new Set(looks).size).toBe(looks.length);
+    // linen reads slubby (anisotropic grain), wool fuzzier (more relief) and silk smoother than both
+    expect(at('linen').grain).toBeLessThan(at('wool').grain);
+    expect(at('wool').surfaceScale).toBeGreaterThan(at('linen').surfaceScale);
+    expect(at('silk').surfaceScale).toBeLessThan(at('linen').surfaceScale);
   });
 
   it('adjustColor handles #RGB, invalid input and clamps', () => {

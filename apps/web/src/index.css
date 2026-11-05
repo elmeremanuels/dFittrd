@@ -14,6 +14,9 @@
   --color-cream-deep: #ebe2d4;
   --color-coral: #ff5a3c;
   --color-coral-deep: #d9452b;
+  /* Coral as TEXT: plain coral is 2.7:1 on cream and coral-deep 3.8:1 (both fail AA). coral-ink is
+     5.1:1 on cream and 5.8:1 on white. Text on a filled coral surface uses ink (5.8:1), not white (3.1:1). */
+  --color-coral-ink: #b8381f;
   --color-ink: #1a1612;
   /* Text tones that keep ≥ 4.5:1 on cream (#F5EFE7). ink-soft ≈ 7.9:1, ink-mute ≈ 4.9:1. */
   --color-ink-soft: #4a423b;
@@ -71,7 +74,7 @@
     @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-ink px-6 text-base font-medium text-white shadow-lg shadow-ink/20 transition-colors hover:bg-ink/90 disabled:cursor-not-allowed disabled:opacity-40 motion-safe:active:scale-[0.98];
   }
   .btn-coral {
-    @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-coral px-6 text-base font-medium text-white shadow-lg shadow-coral/20 transition-colors hover:bg-coral-deep disabled:cursor-not-allowed disabled:opacity-40;
+    @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-coral px-6 text-base font-medium text-ink shadow-lg shadow-coral/20 transition-colors hover:bg-coral/85 disabled:cursor-not-allowed disabled:opacity-40;
   }
   .btn-ghost {
     @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-ink/15 bg-white/50 px-5 text-sm font-medium text-ink-soft transition-colors hover:bg-white/80 disabled:cursor-not-allowed disabled:opacity-40;

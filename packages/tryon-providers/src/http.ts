@@ -42,13 +42,21 @@ export class Deadline {
   readonly controller = new AbortController();
   private timedOut = false;
   private readonly timer: NodeJS.Timeout | undefined;
+  private readonly parent: AbortSignal | undefined;
+  private readonly onParentAbort: (() => void) | undefined;
 
   constructor(
     readonly timeoutMs: number,
     parent?: AbortSignal,
   ) {
     if (parent?.aborted) this.controller.abort(parent.reason);
-    parent?.addEventListener('abort', () => this.controller.abort(parent.reason), { once: true });
+    else if (parent) {
+      // Removed again in dispose(): a long-lived parent (e.g. a job-level signal) must not
+      // accumulate one listener per try-on.
+      this.parent = parent;
+      this.onParentAbort = () => this.controller.abort(parent.reason);
+      parent.addEventListener('abort', this.onParentAbort, { once: true });
+    }
     if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
       this.timer = setTimeout(() => {
         this.timedOut = true;
@@ -76,6 +84,7 @@ export class Deadline {
 
   dispose(): void {
     if (this.timer) clearTimeout(this.timer);
+    if (this.parent && this.onParentAbort) this.parent.removeEventListener('abort', this.onParentAbort);
   }
 }
 

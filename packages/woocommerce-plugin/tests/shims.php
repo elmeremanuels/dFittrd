@@ -59,6 +59,7 @@ function esc_attr( $text ): string { return htmlspecialchars( (string) $text, EN
 function esc_textarea( $text ): string { return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' ); }
 function esc_url( $url ): string { return (string) $url; }
 function esc_url_raw( $url ): string { return (string) $url; }
+function wp_parse_url( string $url, int $component = -1 ) { return parse_url( $url, $component ); }
 function esc_js( $text ): string { return addslashes( (string) $text ); }
 function wp_kses_post( $text ): string { return (string) $text; }
 
@@ -74,7 +75,9 @@ function sanitize_textarea_field( $str ): string {
 }
 function sanitize_key( $key ): string { return (string) preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $key ) ); }
 function absint( $n ): int { return abs( (int) $n ); }
-function wp_unslash( $v ) { return is_array( $v ) ? array_map( 'wp_unslash', $v ) : stripslashes( (string) $v ); }
+// Like WordPress (stripslashes_deep / addslashes via map_deep): only strings are touched.
+function wp_unslash( $v ) { return is_array( $v ) ? array_map( 'wp_unslash', $v ) : ( is_string( $v ) ? stripslashes( $v ) : $v ); }
+function wp_slash( $v ) { return is_array( $v ) ? array_map( 'wp_slash', $v ) : ( is_string( $v ) ? addslashes( $v ) : $v ); }
 function wp_json_encode( $data, int $flags = 0, int $depth = 512 ) { return json_encode( $data, $flags, $depth ); }
 function wp_parse_args( $args, $defaults = array() ) { return array_merge( (array) $defaults, (array) $args ); }
 function maybe_unserialize( $data ) {
@@ -104,7 +107,9 @@ function get_post_meta( int $post_id, string $key = '', bool $single = false ) {
 	if ( ! array_key_exists( $key, $all ) ) { return $single ? '' : array(); }
 	return $single ? $all[ $key ] : array( $all[ $key ] );
 }
-function update_post_meta( int $post_id, string $key, $value ) { Paskamer_Test_State::$meta[ $post_id ][ $key ] = $value; return true; }
+// WordPress' update_metadata() runs wp_unslash() on the value: callers must wp_slash() anything
+// that may contain a backslash (JSON!). The shim does the same so the tests catch it.
+function update_post_meta( int $post_id, string $key, $value ) { Paskamer_Test_State::$meta[ $post_id ][ $key ] = wp_unslash( $value ); return true; }
 function delete_post_meta( int $post_id, string $key ): bool { unset( Paskamer_Test_State::$meta[ $post_id ][ $key ] ); return true; }
 
 // ---- posts ----------------------------------------------------------------------------------
@@ -127,6 +132,9 @@ function get_locale(): string { return 'nl_NL'; }
 function get_woocommerce_currency(): string { return Paskamer_Test_State::$options['_currency'] ?? 'EUR'; }
 function wc_attribute_label( string $name, $product = null ): string { return $name; }
 function current_user_can( string $cap, ...$args ): bool { return true; }
+function wp_verify_nonce( $nonce, $action = -1 ) { return 'valid-' . $action === $nonce ? 1 : false; }
+function wp_is_post_revision( $post ) { return false; }
+function add_submenu_page( string $parent, string $page_title, string $menu_title, string $cap, string $slug, $cb = null ) { Paskamer_Test_State::$actions[ 'submenu:' . $slug ][] = $cb; return $parent . '_page_' . $slug; }
 function get_current_user_id(): int { return 1; }
 function wp_date( string $format, int $ts ): string { return gmdate( $format, $ts ); }
 

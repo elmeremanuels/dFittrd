@@ -127,7 +127,7 @@ final class Settings {
 	}
 
 	public static function menu(): void {
-		add_submenu_page(
+		$hook = add_submenu_page(
 			'woocommerce',
 			__( 'Paskamer', 'paskamer-woocommerce' ),
 			__( 'Paskamer', 'paskamer-woocommerce' ),
@@ -135,6 +135,42 @@ final class Settings {
 			self::PAGE,
 			array( self::class, 'render' )
 		);
+		if ( is_string( $hook ) && '' !== $hook ) {
+			// Runs before the admin header is printed, so finish_connect() can still redirect.
+			add_action( 'load-' . $hook, array( self::class, 'maybe_finish_connect' ) );
+		}
+	}
+
+	/** Back from Stripe Checkout (`?paskamer=connected`): finish automatically when a Connect token is pending. */
+	public static function maybe_finish_connect(): void {
+		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			return;
+		}
+		if ( isset( $_GET['paskamer'] ) && 'connected' === $_GET['paskamer'] && '' !== (string) self::get( 'connect_token' ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- idempotent token exchange with a server-stored token.
+			self::finish_connect();
+		}
+	}
+
+	/**
+	 * API base URL from the settings form: https only (the Connect/complete responses and the manual
+	 * key check carry the secret key), plain http only for local development hosts. '' = invalid.
+	 */
+	public static function sanitize_api_base( string $raw ): string {
+		$url = esc_url_raw( trim( $raw ) );
+		if ( '' === $url ) {
+			return '';
+		}
+		$parts  = wp_parse_url( $url );
+		$scheme = is_array( $parts ) ? strtolower( (string) ( $parts['scheme'] ?? '' ) ) : '';
+		$host   = is_array( $parts ) ? strtolower( (string) ( $parts['host'] ?? '' ) ) : '';
+		if ( '' === $host ) {
+			return '';
+		}
+		$local = in_array( $host, array( 'localhost', '127.0.0.1', '[::1]', '::1' ), true ) || str_ends_with( $host, '.localhost' );
+		if ( 'https' !== $scheme && ! ( 'http' === $scheme && $local ) ) {
+			return '';
+		}
+		return rtrim( $url, '/' );
 	}
 
 	private static function guard( string $action ): void {
@@ -171,10 +207,7 @@ final class Settings {
 		self::guard( 'paskamer_save' );
 		$in = isset( $_POST['paskamer'] ) && is_array( $_POST['paskamer'] ) ? wp_unslash( $_POST['paskamer'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised field by field below.
 
-		$api_base = esc_url_raw( trim( (string) ( $in['api_base'] ?? '' ) ) );
-		if ( '' !== $api_base && ! preg_match( '#^https?://#', $api_base ) ) {
-			$api_base = '';
-		}
+		$api_base = self::sanitize_api_base( (string) ( $in['api_base'] ?? '' ) );
 		$priority = absint( $in['button_priority'] ?? 35 );
 		$label    = sanitize_text_field( (string) ( $in['button_label'] ?? '' ) );
 		$locale   = in_array( $in['locale'] ?? 'auto', array( 'auto', 'en', 'nl' ), true ) ? (string) $in['locale'] : 'auto';
@@ -183,7 +216,7 @@ final class Settings {
 
 		self::update(
 			array(
-				'api_base'            => '' === $api_base ? PASKAMER_DEFAULT_API_BASE : rtrim( $api_base, '/' ),
+				'api_base'            => '' === $api_base ? PASKAMER_DEFAULT_API_BASE : $api_base,
 				'button_enabled'      => ! empty( $in['button_enabled'] ),
 				'button_priority'     => $priority > 0 ? $priority : 35,
 				'button_label'        => mb_substr( $label, 0, 60 ),
@@ -377,10 +410,7 @@ final class Settings {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			return;
 		}
-		// Back from Stripe Checkout: finish automatically when a Connect token is pending.
-		if ( isset( $_GET['paskamer'] ) && 'connected' === $_GET['paskamer'] && '' !== (string) self::get( 'connect_token' ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- idempotent token exchange with a server-stored token.
-			self::finish_connect();
-		}
+		// Back from Stripe Checkout is handled by maybe_finish_connect() on load-<page> (before output).
 		$s         = self::all();
 		$connected = self::is_connected();
 		$pending   = '' !== (string) $s['connect_token'];

@@ -69,8 +69,9 @@ export function renderAdminPage(cfg: AdminPageConfig): string {
     disclaimer: ESTIMATE_DISCLAIMER,
   };
   const html = cfg.template ?? adminPageTemplate();
+  // Function replacers: a string replacement would interpret `$&`, `$'`, `` $` `` inside the values.
   return html
-    .replace('__PASKAMER_SHOPIFY_API_KEY__', attr(config.apiKey))
-    .replace('__PASKAMER_APP_BRIDGE_URL__', APP_BRIDGE_SCRIPT_URL)
-    .replace('__PASKAMER_CONFIG_JSON__', jsonForScript(config));
+    .replace('__PASKAMER_SHOPIFY_API_KEY__', () => attr(config.apiKey))
+    .replace('__PASKAMER_APP_BRIDGE_URL__', () => APP_BRIDGE_SCRIPT_URL)
+    .replace('__PASKAMER_CONFIG_JSON__', () => jsonForScript(config));
 }

@@ -266,6 +266,9 @@ final class Sanitizer {
 			return null;
 		}
 		$f = (float) $s;
+		if ( ! is_finite( $f ) ) {
+			return null; // "1e999" is INF: json_encode() would fail and drop the whole field.
+		}
 		return ( floor( $f ) === $f && abs( $f ) < PHP_INT_MAX ) ? (int) $f : $f;
 	}
 

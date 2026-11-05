@@ -29,6 +29,9 @@ export interface SyncerOptions {
 export class OutboxSyncer {
   private running = false;
   private queued = false;
+  /** Between start() and stop(); a stopped syncer never re-arms its timer (an in-flight flush may finish). */
+  private active = false;
+  private inflight: Promise<void> | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private stopOnline: (() => void) | null = null;
   private readonly now: () => number;
@@ -38,22 +41,29 @@ export class OutboxSyncer {
   }
 
   start(): void {
-    this.stopOnline = onOnline(() => void this.flush());
+    this.stopOnline?.(); // idempotent: never two online listeners
+    this.active = true;
+    this.stopOnline = onOnline(() => void this.flush().catch(() => undefined));
     this.schedule(0);
   }
 
-  stop(): void {
+  /** Stops the timer and the online listener; resolves once a flush already in flight has finished. */
+  stop(): Promise<void> {
+    this.active = false;
     this.stopOnline?.();
     this.stopOnline = null;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    return (this.inflight ?? Promise.resolve()).catch(() => undefined);
   }
 
   schedule(delayMs = 250): void {
+    if (!this.active) return;
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => {
       this.timer = null;
-      void this.flush();
+      // a background drain must never surface as an unhandled rejection (e.g. the db closed meanwhile)
+      void this.flush().catch(() => undefined);
     }, delayMs);
   }
 
@@ -68,8 +78,19 @@ export class OutboxSyncer {
       return;
     }
     this.running = true;
+    const run = this.drain();
+    this.inflight = run;
     try {
-      if (isOnline()) {
+      await run;
+    } finally {
+      if (this.inflight === run) this.inflight = null;
+    }
+  }
+
+  private async drain(): Promise<void> {
+    const online = isOnline();
+    try {
+      if (online) {
         await this.flushOnce();
       }
     } finally {
@@ -79,7 +100,8 @@ export class OutboxSyncer {
       if (this.queued) {
         this.queued = false;
         this.schedule(50);
-      } else if (pending > 0) {
+      } else if (pending > 0 && online) {
+        // Offline: no polling (battery); the `online` listener from start() resumes the drain.
         const next = await this.opts.db.outbox.orderBy('nextAt').first();
         if (next) this.schedule(Math.max(500, next.nextAt - this.now()));
       }
@@ -91,8 +113,16 @@ export class OutboxSyncer {
     const due = await db.outbox.where('nextAt').belowOrEqual(this.now()).sortBy('seq');
     if (due.length === 0) return;
 
+    // One batch per shop: the API rejects a whole batch (422 unknown_shop) when one shop is unknown
+    // (e.g. erased by shop/redact), and a permanent error drops the batch — it must not take other
+    // shops' swipes (and their billable intent tokens) with it.
     const swipes = due.filter((r) => r.kind === 'swipe').slice(0, MAX_BATCH);
-    if (swipes.length > 0) await this.sendSwipes(swipes);
+    const byShop = new Map<string, OutboxRow[]>();
+    for (const row of swipes) {
+      const key = row.shopId ?? '';
+      byShop.set(key, [...(byShop.get(key) ?? []), row]);
+    }
+    for (const rows of byShop.values()) await this.sendSwipes(rows);
 
     for (const row of due.filter((r) => r.kind === 'signature')) await this.sendSignature(row);
     for (const row of due.filter((r) => r.kind === 'wardrobe' || r.kind === 'save')) await this.sendWardrobe(row);

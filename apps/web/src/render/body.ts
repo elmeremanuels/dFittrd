@@ -220,7 +220,7 @@ function hemFromLength(lengthCm: GarmentPayload['lengthCm'], key: string, fromY:
 }
 
 export interface GarmentRenderInput {
-  garment: Pick<GarmentPayload, 'category' | 'patternBlock' | 'lengthCm' | 'fabric'>;
+  garment: Pick<GarmentPayload, 'category' | 'patternBlock' | 'lengthCm' | 'fabric'> & Partial<Pick<GarmentPayload, 'subcategory'>>;
   gaps: RenderGaps | null;
   body: BodyGeometry;
 }
@@ -403,6 +403,51 @@ export function garmentGeometry({ garment, gaps, body: g }: GarmentRenderInput):
       break;
     }
     case 'accessory': {
+      const kind = accessoryKind(`${garment.subcategory ?? ''} ${garment.patternBlock}`);
+      const pt = (x: number, y: number): string => `${x.toFixed(1)},${y.toFixed(1)}`;
+      if (kind === 'belt') {
+        // A band at the waist. Belt sizes are waist sizes, so the band follows the waist slack.
+        const y = levelY('waist') + 2;
+        const half = waistHalf + 1;
+        path = `M ${pt(CENTER_X - half, y - 4)} L ${pt(CENTER_X + half, y - 4)} L ${pt(CENTER_X + half, y + 4)} L ${pt(CENTER_X - half, y + 4)} Z`;
+        extra.push(`M ${pt(CENTER_X - 6, y - 6)} L ${pt(CENTER_X + 6, y - 6)} L ${pt(CENTER_X + 6, y + 6)} L ${pt(CENTER_X - 6, y + 6)} Z`);
+        const tail = Math.max(0, (waistSlack ?? 0) - 2) * g.pxPerCm * 0.5; // a loose belt shows a longer free end
+        if (tail > 0) extra.push(`M ${pt(CENTER_X + 6, y - 3)} L ${pt(CENTER_X + 6 + tail, y - 2)} L ${pt(CENTER_X + 6 + tail, y + 2)} L ${pt(CENTER_X + 6, y + 3)} Z`);
+        hemY = y + 4;
+        break;
+      }
+      if (kind === 'hat') {
+        // A beanie/cap over the crown of the head.
+        const top = HEAD_TOP_Y - 4;
+        const brim = HEAD_TOP_Y + g.headRy * 0.75;
+        const half = g.headR + 3;
+        path = `M ${pt(CENTER_X - half, brim)} C ${pt(CENTER_X - half, top)} ${pt(CENTER_X + half, top)} ${pt(CENTER_X + half, brim)} L ${pt(CENTER_X + half, brim + 5)} L ${pt(CENTER_X - half, brim + 5)} Z`;
+        hemY = brim + 5;
+        break;
+      }
+      if (kind === 'scarf') {
+        // Wrapped at the neck with two tails over the chest; longer scarves hang lower.
+        const neckY = levelY('shoulder') - 6;
+        const tailLen = Math.min(levelY('waist') + 10 - neckY, Math.max(30, (garment.lengthCm?.total_length ?? 90) * g.pxPerCm * 0.3));
+        const half = g.neckHalf + 5;
+        path = `M ${pt(CENTER_X - half, neckY - 4)} L ${pt(CENTER_X + half, neckY - 4)} L ${pt(CENTER_X + half + 2, neckY + 6)} L ${pt(CENTER_X - half - 2, neckY + 6)} Z`;
+        extra.push(`M ${pt(CENTER_X - 10, neckY + 4)} L ${pt(CENTER_X - 1, neckY + 4)} L ${pt(CENTER_X - 3, neckY + tailLen)} L ${pt(CENTER_X - 12, neckY + tailLen - 2)} Z`);
+        extra.push(`M ${pt(CENTER_X + 1, neckY + 4)} L ${pt(CENTER_X + 9, neckY + 4)} L ${pt(CENTER_X + 12, neckY + tailLen * 0.85)} L ${pt(CENTER_X + 3, neckY + tailLen * 0.85 + 2)} Z`);
+        hemY = neckY + tailLen;
+        break;
+      }
+      if (kind === 'socks') {
+        const top = levelY('calf') + 8;
+        const sock = (side: 1 | -1): string => {
+          const cx = CENTER_X + side * (g.hipHalf * 0.5);
+          const w = g.ankleHalf + 2;
+          return `M ${pt(cx - w, top)} L ${pt(cx + w, top)} L ${pt(cx + w, FEET_Y)} L ${pt(cx - w, FEET_Y)} Z`;
+        };
+        path = sock(1);
+        extra.push(sock(-1));
+        hemY = FEET_Y;
+        break;
+      }
       // A bag at the hip — size from the garment's own length when given.
       const w = Math.max(14, (garment.lengthCm?.chest_width ?? 30) * g.pxPerCm * 0.5);
       const h = w * 0.8;
@@ -423,8 +468,10 @@ export function garmentGeometry({ garment, gaps, body: g }: GarmentRenderInput):
 // ---------------------------------------------------------------------------
 
 export interface FabricLook {
-  /** feTurbulence baseFrequency: light fabrics are finer. */
+  /** feTurbulence baseFrequency along x: light and fine fibres are finer. */
   baseFrequency: number;
+  /** y/x frequency ratio of the weave texture: < 1 horizontal slubs (linen), > 1 vertical wales (knit). */
+  grain: number;
   numOctaves: number;
   /** Specular highlight strength 0..1 (sheen). */
   specular: number;
@@ -437,20 +484,58 @@ export interface FabricLook {
   label: string;
 }
 
+/**
+ * Per-fibre surface character, so the fibre alone changes the look even when a merchant sends the
+ * same weight and drape for linen and wool (handoff §9 fabric test). `freq` scales the texture
+ * frequency, `grain` is its y/x ratio, `relief` adds to the lighting surface scale.
+ */
+const FIBRE: Record<string, { freq: number; grain: number; relief: number }> = {
+  linen: { freq: 1, grain: 0.3, relief: 0.5 }, // slubby, crisp, creases
+  wool: { freq: 0.75, grain: 1, relief: 0.9 }, // fuzzy, matte
+  cashmere: { freq: 0.85, grain: 1, relief: 0.5 },
+  silk: { freq: 1.25, grain: 1, relief: -0.35 }, // smooth, fine
+  viscose: { freq: 1.15, grain: 1, relief: -0.2 },
+  modal: { freq: 1.15, grain: 1.1, relief: -0.2 },
+  tencel: { freq: 1.15, grain: 1, relief: -0.25 },
+  denim: { freq: 0.9, grain: 0.55, relief: 0.6 }, // twill ridges
+  cotton: { freq: 1, grain: 0.8, relief: 0.2 },
+  leather: { freq: 0.55, grain: 1, relief: 0.3 },
+  knit: { freq: 0.9, grain: 2.2, relief: 0.7 }, // vertical wales
+  jersey: { freq: 1.1, grain: 1.8, relief: 0.1 },
+  technical: { freq: 1.2, grain: 1, relief: -0.25 },
+  nylon: { freq: 1.2, grain: 1, relief: -0.3 },
+  polyester: { freq: 1.15, grain: 1, relief: -0.2 },
+};
+const ANY_FIBRE = { freq: 1, grain: 1, relief: 0 };
+
 export function fabricLook(fabric: GarmentPayload['fabric']): FabricLook {
   const weight = fabric.weightGsm ?? 200;
   const w = Math.max(0, Math.min(1, (weight - 80) / 420)); // 0 = featherlight, 1 = heavy
   const sheen = fabric.sheen ?? defaultSheen(fabric.primary);
   const opacity = fabric.opacity ?? (weight < 110 ? 0.82 : 1);
+  const fibre = FIBRE[fabric.primary] ?? ANY_FIBRE;
   return {
-    baseFrequency: Math.round((0.95 - w * 0.55) * 100) / 100,
+    baseFrequency: Math.round((0.95 - w * 0.55) * fibre.freq * 100) / 100,
+    grain: fibre.grain,
     numOctaves: w > 0.6 ? 3 : 4,
     specular: sheen,
     opacity: Math.max(0.55, Math.min(1, opacity)),
-    surfaceScale: 0.6 + w * 2.2,
+    surfaceScale: Math.max(0.25, 0.6 + w * 2.2 + fibre.relief),
     blur: fabric.drape * 0.35,
     label: `${fabric.primary} · ${weight} gsm${fabric.stretchPct ? ` · ${fabric.stretchPct}% stretch` : ''}`,
   };
+}
+
+export type AccessoryKind = 'bag' | 'belt' | 'hat' | 'scarf' | 'socks';
+
+/** Which accessory outline to draw, from the subcategory / pattern block words. Unknown → bag. */
+export function accessoryKind(words: string): AccessoryKind {
+  const w = words.toLowerCase();
+  if (/\bbelt/.test(w)) return 'belt';
+  if (/\b(hat|beanie|cap|beret|bucket|fedora)/.test(w)) return 'hat';
+  if (/\b(scarf|shawl|stole|snood)/.test(w)) return 'scarf';
+  if (/\bsocks?\b|\btights\b/.test(w)) return 'socks';
+  return 'bag';
 }
 
 function defaultSheen(primary: string): number {

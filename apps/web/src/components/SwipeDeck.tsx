@@ -28,6 +28,8 @@ const ACTIONS: { action: SwipeAction; label: string; icon: ReactNode; className:
  */
 export function SwipeDeck(): ReactNode {
   const current = useApp((s) => s.deck.current);
+  /** Increments on every deal, so a re-dealt (previously passed) garment still gets a fresh card. */
+  const dealIndex = useApp((s) => s.taste.dealIndex);
   const exhausted = useApp((s) => s.deck.exhausted);
   const notInYourSize = useApp((s) => s.deck.notInYourSize);
   const fitCtx = useApp((s) => s.fitCtx);
@@ -41,10 +43,12 @@ export function SwipeDeck(): ReactNode {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    // Idempotent: a second run (StrictMode) sees the dealt card and does nothing.
+    // Deal whenever the deck is empty but not exhausted: on mount, and after the store resets it
+    // (paired catalogue arrived in hydrate, re-measure, a new shop paired). Idempotent under StrictMode.
+    if (current || exhausted) return;
     const s = useApp.getState();
     if (!s.deck.current && !s.deck.exhausted) s.dealNext();
-  }, []);
+  }, [current, exhausted]);
 
   const garment = current?.garment ?? null;
   const fit = useMemo(() => (garment ? fitFor(fitCtx, garment) : null), [garment, fitCtx]);
@@ -85,9 +89,12 @@ export function SwipeDeck(): ReactNode {
 
       <div className="relative min-h-0 flex-1 px-4">
         {garment ? (
-          <Card id={garment.id} disabled={busy || rendering} onSwipe={act}>
+          // keyed by the dealt card: each card gets fresh motion values and commit state (a swiped
+          // card's fly-off offset and `committed` flag must not carry over to the next one)
+          <Card key={`${dealIndex}:${garment.id}`} id={garment.id} disabled={busy || rendering} onSwipe={act}>
             <Avatar garment={garment} fit={fit} isLoading={rendering} />
-            <div className="absolute right-3 bottom-3 left-3 z-10" key={garment.id}>
+            {/* bounded so the panel never hides most of the mirror on a short phone (≈ 270 px card at 667 px) */}
+            <div className="absolute right-3 bottom-3 left-3 z-10 max-h-[48%] overflow-hidden rounded-2xl" key={garment.id}>
               <FitPanel fit={fit} hasMeasurements={hasMeasurements} />
             </div>
           </Card>
@@ -100,7 +107,7 @@ export function SwipeDeck(): ReactNode {
         <div className="px-5 pt-3">
           <div className="flex items-end justify-between gap-3">
             <div className="min-w-0">
-              <p className="eyebrow text-coral-deep">{garment.brand}</p>
+              <p className="eyebrow text-coral-ink">{garment.brand}</p>
               <h2 className="font-display text-xl leading-tight" title={garment.name}>
                 {garment.name}
               </h2>

@@ -1,13 +1,18 @@
 /**
  * Shopify app backend (D6, managed installation):
+ *  - GET  /shopify/admin           the embedded admin page (shopify.app.toml `application_url`), rendered
+ *    by @paskamer/shopify-app with a frame-ancestors CSP for the shop + admin.shopify.com.
+ *  - GET  /shopify/auth/callback   the toml's required redirect URL; managed installation never needs
+ *    it, so it redirects to the embedded app home in the admin.
  *  - POST /shopify/token-exchange  session token → offline access token (stored encrypted), shop row,
- *    metafield definitions, backfill job.
+ *    metafield definitions, app-data metafields for the theme block (public key + api url), backfill job.
  *  - POST /shopify/webhooks        HMAC-verified; products/*, app/uninstalled, app_subscriptions/update,
  *    the three GDPR topics. Every delivery is logged with its payload for replay (webhook_log).
  *  - POST /shopify/billing/subscribe  appSubscriptionCreate (Starter + usage line with cappedAmount).
  */
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
+import { adminAppUrl, adminContentSecurityPolicy, createAdminClient, renderAdminPage, setAppDataMetafields, type FetchLike as ShopifyFetchLike } from '@paskamer/shopify-app';
 import { z } from 'zod';
 import { requireMerchant } from '../auth/merchant.js';
 import { isShopifyDomain, verifyShopifySessionToken } from '../auth/shopifySessionToken.js';
@@ -31,7 +36,36 @@ export const SHOPIFY_TOPICS = [
 ] as const;
 
 export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
-  const { db, env, queue, shopify, now } = app.ctx;
+  const { db, env, queue, shopify, now, fetch: fetchImpl } = app.ctx;
+
+  /** `?shop=` as Shopify sends it, or null when it is not a *.myshopify.com domain. */
+  const shopParam = (v: string | undefined): string | null => {
+    const d = (v ?? '').trim().toLowerCase();
+    return isShopifyDomain(d) ? d : null;
+  };
+
+  app.get(
+    '/shopify/admin',
+    { schema: { querystring: z.object({ shop: z.string().max(255).optional() }).passthrough() }, config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      if (!env.SHOPIFY_API_KEY) throw serviceUnavailable('shopify_not_configured', 'SHOPIFY_API_KEY/SECRET are not set');
+      const html = renderAdminPage({ apiKey: env.SHOPIFY_API_KEY, apiUrl: env.PUBLIC_API_URL, appUrl: env.PUBLIC_APP_URL, appHandle: env.SHOPIFY_APP_HANDLE });
+      // The page is framed by the Shopify admin: helmet's X-Frame-Options would block it, and the
+      // CSP limits framing to this shop and admin.shopify.com (Shopify's embedded-app requirement).
+      reply.removeHeader('x-frame-options');
+      return reply
+        .header('content-security-policy', adminContentSecurityPolicy(shopParam(req.query.shop)))
+        .header('cache-control', 'no-store')
+        .type('text/html; charset=utf-8')
+        .send(html);
+    },
+  );
+
+  app.get('/shopify/auth/callback', { schema: { querystring: z.object({ shop: z.string().max(255).optional() }).passthrough() } }, async (req, reply) => {
+    const shop = shopParam(req.query.shop);
+    if (!shop) throw badRequest('bad_shop', 'shop must be a *.myshopify.com domain');
+    return reply.redirect(adminAppUrl(shop, env.SHOPIFY_APP_HANDLE), 302);
+  });
 
   app.post(
     '/shopify/token-exchange',
@@ -64,8 +98,23 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
       } catch (err) {
         req.log.warn({ err, shopDomain }, 'metafield definitions could not be created (continuing)');
       }
-      const jobId = await queue.send(JOB.backfillShopify, { shopId: shop.id }, { singletonKey: `backfill:${shop.id}` });
       const fresh = (await findShopByDomain(db, shopDomain))!;
+      // The theme block reads app.metafields.paskamer.{public_key,api_url,app_url}; without them the
+      // button renders but cannot load the SDK. The public prefix is stable across key rotations, so
+      // writing it on every token exchange (each admin open) keeps it correct without a rotation hook.
+      try {
+        const client = createAdminClient({
+          shopDomain,
+          accessToken,
+          apiVersion: env.SHOPIFY_API_VERSION,
+          adminUrlTemplate: env.SHOPIFY_ADMIN_URL_TEMPLATE,
+          fetch: fetchImpl as ShopifyFetchLike,
+        });
+        await setAppDataMetafields(client, { publicKeyPrefix: fresh.apiKeyPrefix!, apiUrl: env.PUBLIC_API_URL, appUrl: env.PUBLIC_APP_URL });
+      } catch (err) {
+        req.log.warn({ err, shopDomain }, 'app-data metafields could not be written; the theme block needs its advanced key/API URL settings (continuing)');
+      }
+      const jobId = await queue.send(JOB.backfillShopify, { shopId: shop.id }, { singletonKey: `backfill:${shop.id}` });
       return { shopId: fresh.id, shopDomain, publicKeyPrefix: fresh.apiKeyPrefix!, scope, backfillQueued: jobId !== null };
     },
   );

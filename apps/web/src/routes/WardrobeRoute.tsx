@@ -65,7 +65,7 @@ export function WardrobeRoute(): ReactNode {
                 <div className="space-y-3">
                   <div role="radiogroup" aria-label={`Status of ${w.garment.name}`} className="grid grid-cols-4 gap-1">
                     {WARDROBE_STATES.map((s) => (
-                      <button key={s} type="button" role="radio" aria-checked={w.state === s} onClick={() => void setWardrobeState(w.productId, s)} className={`rounded-full border px-2 py-1.5 text-xs font-medium ${w.state === s ? 'border-coral bg-coral text-white' : 'border-ink/10 bg-white/60 text-ink-soft'}`}>
+                      <button key={s} type="button" role="radio" aria-checked={w.state === s} onClick={() => void setWardrobeState(w.productId, s)} className={`rounded-full border px-2 py-1.5 text-xs font-medium ${w.state === s ? 'border-coral bg-coral text-ink' : 'border-ink/10 bg-white/60 text-ink-soft'}`}>
                         {STATE_LABEL[s]}
                       </button>
                     ))}

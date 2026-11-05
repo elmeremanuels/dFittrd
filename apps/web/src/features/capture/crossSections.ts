@@ -58,12 +58,46 @@ function axisDeg(a: Landmark, b: Landmark, aspect: number): number {
   return Math.abs((Math.atan2((b.x - a.x) * aspect, b.y - a.y) * 180) / Math.PI);
 }
 
+/** x of the polyline a→b→c… at height y (normalised), or null when y is outside its vertical extent. */
+function polylineXAt(points: readonly Landmark[], y: number): number | null {
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1] as Landmark;
+    const b = points[i] as Landmark;
+    const lo = Math.min(a.y, b.y);
+    const hi = Math.max(a.y, b.y);
+    if (y < lo || y > hi) continue;
+    if (hi === lo) return (a.x + b.x) / 2;
+    return lerp(a.x, b.x, (y - a.y) / (b.y - a.y));
+  }
+  return null;
+}
+
+export interface PlaceOptions {
+  /**
+   * Which view the landmarks come from. With `'front'` every level gets contact limits (see
+   * `LevelPlacement.limits`): torso levels are rejected when an arm touches the torso, arm levels
+   * when the arm run swallows the body midline, and leg levels are split at the midline between the
+   * legs (feet-together A-pose: thighs, knees and calves usually touch). Side views get none: there
+   * the limbs overlap the torso by construction.
+   */
+  view?: 'front' | 'side' | undefined;
+}
+
 /**
  * Place all 12 levels. `aspect` = frame width / frame height (for limb angles). Limb levels use
  * the side nearer the camera for side views; for the front view the left limbs (image right) are
  * used and the measurement is symmetric by assumption.
+ *
+ * The neck is searched (narrowest run between nose and shoulder line) rather than read at a fixed
+ * fraction: the frontal neck band between chin and trapezius is only a few cm tall, and a fixed
+ * fraction that lands on the shoulder slope measures the shoulders (≈ 3× the neck width).
  */
-export function placeLevels(lm: readonly Landmark[], aspect = 9 / 16, preferSide: 'left' | 'right' = 'left'): LevelPlacement[] {
+export function placeLevels(
+  lm: readonly Landmark[],
+  aspect = 9 / 16,
+  preferSide: 'left' | 'right' = 'left',
+  opts: PlaceOptions = {},
+): LevelPlacement[] {
   if (lm.length < 33) throw new RangeError('need 33 pose landmarks');
   const ls = pt(lm, POSE.LEFT_SHOULDER);
   const rs = pt(lm, POSE.RIGHT_SHOULDER);
@@ -129,7 +163,63 @@ export function placeLevels(lm: readonly Landmark[], aspect = 9 / 16, preferSide
       axisDeg: axisDeg(elbow, wrist, aspect),
     },
   ];
+  // Neck: narrowest run between the nose and the shoulder line (both views).
+  const neck = out[0] as LevelPlacement;
+  neck.search = { y0: Math.min(nose.y, sm.y), y1: Math.max(nose.y, sm.y) };
+  if (opts.view === 'front') addFrontLimits(lm, out, sm, hm, L);
   return out;
+}
+
+const TORSO_CONTACT_LEVELS: ReadonlySet<Level> = new Set<Level>(['bust', 'underbust', 'waist', 'hip']);
+const LEG_LEVELS: ReadonlySet<Level> = new Set<Level>(['thigh', 'knee', 'calf', 'ankle']);
+const ARM_LEVELS: ReadonlySet<Level> = new Set<Level>(['upperArm', 'wrist']);
+
+function addFrontLimits(
+  lm: readonly Landmark[],
+  out: LevelPlacement[],
+  sm: { x: number; y: number },
+  hm: { x: number; y: number },
+  left: boolean,
+): void {
+  const arms = [
+    [pt(lm, POSE.LEFT_SHOULDER), pt(lm, POSE.LEFT_ELBOW), pt(lm, POSE.LEFT_WRIST), pt(lm, POSE.LEFT_INDEX)],
+    [pt(lm, POSE.RIGHT_SHOULDER), pt(lm, POSE.RIGHT_ELBOW), pt(lm, POSE.RIGHT_WRIST), pt(lm, POSE.RIGHT_INDEX)],
+  ] as const;
+  // The other leg's point at each leg level (same fractions as the preferred leg).
+  const oHip = left ? pt(lm, POSE.RIGHT_HIP) : pt(lm, POSE.LEFT_HIP);
+  const oKnee = left ? pt(lm, POSE.RIGHT_KNEE) : pt(lm, POSE.LEFT_KNEE);
+  const oAnkle = left ? pt(lm, POSE.RIGHT_ANKLE) : pt(lm, POSE.LEFT_ANKLE);
+  const otherLegX: Partial<Record<Level, number>> = {
+    thigh: lerp(oHip.x, oKnee.x, LIMB_FRACTIONS.thigh),
+    knee: oKnee.x,
+    calf: lerp(oKnee.x, oAnkle.x, LIMB_FRACTIONS.calf),
+    ankle: lerp(oKnee.x, oAnkle.x, 1 + LIMB_FRACTIONS.ankle),
+  };
+  const bodyMidX = (sm.x + hm.x) / 2;
+
+  for (const p of out) {
+    if (TORSO_CONTACT_LEVELS.has(p.level)) {
+      // The torso edge can never lie beyond an arm's axis; a run that does has merged with the arm.
+      let min = 0;
+      let max = 1;
+      for (const arm of arms) {
+        const ax = polylineXAt(arm, p.y);
+        if (ax === null) continue;
+        if (ax > p.x) max = Math.min(max, ax);
+        else min = Math.max(min, ax);
+      }
+      if (min > 0 || max < 1) p.limits = { min, max, mode: 'reject' };
+    } else if (LEG_LEVELS.has(p.level)) {
+      const ox = otherLegX[p.level];
+      if (ox === undefined || ox === p.x) continue;
+      const mid = (p.x + ox) / 2;
+      p.limits = p.x > mid ? { min: mid, max: 1, mode: 'clip' } : { min: 0, max: mid, mode: 'clip' };
+    } else if (ARM_LEVELS.has(p.level)) {
+      // An arm run that crosses the body midline has swallowed the torso.
+      if (p.x === bodyMidX) continue;
+      p.limits = p.x > bodyMidX ? { min: bodyMidX, max: 1, mode: 'reject' } : { min: 0, max: bodyMidX, mode: 'reject' };
+    }
+  }
 }
 
 /** Key landmark-derived lengths in normalised units (multiply by the per-axis scale later). */

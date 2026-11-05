@@ -2,6 +2,7 @@ import { BudgetExceededError, NoProviderAvailableError, PolicyError, Unsupported
 import type { RouterAttempt, TryOnError } from './errors.js';
 import { realClock } from './http.js';
 import type { Clock } from './http.js';
+import { assertAvatarRender } from './providers/fashn.js';
 import { ProviderRegistry } from './registry.js';
 import type {
   GarmentInput,
@@ -159,6 +160,9 @@ export class TryOnRouter {
   }
 
   async render(person: PersonInput, garment: GarmentInput, opts: TryOnOptions, signal?: AbortSignal): Promise<RoutedTryOn> {
+    // Hard rule 1 / D3, enforced once at the router boundary as well as in each adapter: the
+    // request arrived as JSON, so the type alone does not stop a raw photo or a missing consent.
+    assertAvatarRender(person, 'router');
     const attempts: RouterAttempt[] = [];
     for (const name of this.policy.order) {
       const provider = this.registry.get(name);
@@ -174,13 +178,18 @@ export class TryOnRouter {
       const gate = await this.gate(provider, cost, attempts);
       if (!gate) continue;
       const started = this.clock();
+      let result: TryOnResult;
       try {
-        const result = await provider.tryOn(person, garment, opts, signal);
-        return { result, ledger: await this.settle(provider, result.model, result.costUsd, result.latencyMs, 'image'), attempts };
+        result = await provider.tryOn(person, garment, opts, signal);
       } catch (e) {
         const err = toTryOnError(e, name);
         if (!this.handleFailure(name, err, attempts, this.clock() - started)) throw err;
+        continue;
       }
+      // Settle OUTSIDE the try: the render succeeded and was paid for. A spend-store or ledger
+      // failure must surface to the caller, not be mistaken for a vendor fault (which would trip
+      // the breaker and buy a second render from the next provider).
+      return { result, ledger: await this.settle(provider, result.model, result.costUsd, result.latencyMs, 'image'), attempts };
     }
     throw new NoProviderAvailableError(
       `no try-on provider available for category "${garment.category}" (${attempts.map((a) => `${a.provider}: ${a.reason}`).join('; ')})`,
@@ -205,17 +214,19 @@ export class TryOnRouter {
       const gate = await this.gate(provider, cost, attempts);
       if (!gate) continue;
       const started = this.clock();
+      let result: VideoResult;
       try {
-        const result = await provider.animate(still, garment, opts, signal);
-        return {
-          result,
-          ledger: await this.settle(provider, result.model, result.costUsd, this.clock() - started, 'video'),
-          attempts,
-        };
+        result = await provider.animate(still, garment, opts, signal);
       } catch (e) {
         const err = toTryOnError(e, name);
         if (!this.handleFailure(name, err, attempts, this.clock() - started)) throw err;
+        continue;
       }
+      return {
+        result,
+        ledger: await this.settle(provider, result.model, result.costUsd, this.clock() - started, 'video'),
+        attempts,
+      };
     }
     throw new NoProviderAvailableError(
       `no video provider available (${attempts.map((a) => `${a.provider}: ${a.reason}`).join('; ')})`,

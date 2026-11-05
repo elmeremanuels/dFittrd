@@ -135,7 +135,9 @@ final class Product_Meta {
 			if ( null === $value ) {
 				delete_post_meta( $post_id, $key );
 			} else {
-				update_post_meta( $post_id, $key, $value );
+				// update_post_meta() unslashes its value: without wp_slash() a backslash inside the
+				// JSON (a size called 32" is stored as 32\") is stripped and the stored JSON is corrupt.
+				update_post_meta( $post_id, $key, wp_slash( $value ) );
 			}
 		}
 
@@ -177,11 +179,13 @@ final class Product_Meta {
 		update_post_meta(
 			$post_id,
 			Vocab::META_LOCAL_ISSUES,
-			wp_json_encode(
-				array(
-					'issues'       => $issues,
-					'missingHeavy' => Payload_Builder::missing_heavy_fields( $payload ),
-					'checkedAt'    => gmdate( 'c' ),
+			wp_slash(
+				(string) wp_json_encode(
+					array(
+						'issues'       => $issues,
+						'missingHeavy' => Payload_Builder::missing_heavy_fields( $payload ),
+						'checkedAt'    => gmdate( 'c' ),
+					)
 				)
 			)
 		);
@@ -191,7 +195,7 @@ final class Product_Meta {
 		}
 		$res = Api_Client::from_settings()->validate_product( $payload );
 		if ( $res['ok'] && is_array( $res['data'] ) ) {
-			update_post_meta( $post_id, Vocab::META_VALIDATION, wp_json_encode( $res['data'] ) );
+			update_post_meta( $post_id, Vocab::META_VALIDATION, wp_slash( (string) wp_json_encode( $res['data'] ) ) );
 		}
 		if ( 'publish' === $product->get_status() ) {
 			Sync::enqueue_push( $post_id );

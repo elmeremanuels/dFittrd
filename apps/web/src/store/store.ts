@@ -68,7 +68,8 @@ export interface AppState {
   hydrate: () => Promise<void>;
   fit: (garment: GarmentPayload) => FitResult | null;
   hasMeasurements: () => boolean;
-  shopIdFor: (garmentId: string) => string;
+  /** Shop of a catalogue garment (by object first: ids are only unique within one shop). */
+  shopIdFor: (garment: GarmentPayload) => string;
 
   setProfile: (profile: BodyProfile, extras?: { skin?: SkinEstimate | null; signature?: FitSignatureWire | null }) => Promise<void>;
   completeOnboarding: (vibes: string[]) => Promise<void>;
@@ -166,7 +167,8 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
               /* offline: keep what we have */
             }
           }
-          if (items.length > 0) set({ catalog: items, catalogSource: 'paired' });
+          // The deck may already hold a card dealt from the bundled demo rail: re-deal from the shops.
+          if (items.length > 0) set({ catalog: items, catalogSource: 'paired', deck: { current: null, notInYourSize: 0, exhausted: false } });
         }
         syncer?.start();
       },
@@ -179,8 +181,9 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
         return hasMeasurements(get().fitCtx);
       },
 
-      shopIdFor(garmentId) {
-        return get().catalog.find((c) => c.garment.id === garmentId)?.shopId ?? MOCK_SHOP_ID;
+      shopIdFor(garment) {
+        const { catalog } = get();
+        return (catalog.find((c) => c.garment === garment) ?? catalog.find((c) => c.garment.id === garment.id))?.shopId ?? MOCK_SHOP_ID;
       },
 
       async setProfile(profile, extras) {
@@ -202,7 +205,10 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
       },
 
       async completeOnboarding(vibes) {
-        const taste = applyOnboardingVibes(get().taste, vibes);
+        // Re-entering onboarding (remeasure) must not reset axes the swipes have since moved:
+        // only vibes that were not chosen before are applied.
+        const before = new Set(get().settings.onboarded ? get().settings.vibes : []);
+        const taste = applyOnboardingVibes(get().taste, vibes.filter((v) => !before.has(v)));
         await saveTaste(db, taste);
         set({ taste });
         await get().updateSettings({ onboarded: true, vibes: [...vibes] });
@@ -233,7 +239,7 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
         const { deck, taste } = get();
         const garment = ctx.garment ?? deck.current?.garment;
         if (!garment) return null;
-        const shopId = ctx.shopId ?? get().shopIdFor(garment.id);
+        const shopId = ctx.shopId ?? get().shopIdFor(garment);
         const fit = get().fit(garment);
         const applied = applySwipe(taste, garment, fit, action, now());
         const { state, entries } = drainOutbox(applied.state);
@@ -245,14 +251,18 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
           if (isSaveOutboxEntry(entry)) continue; // mirrored via saveToWardrobe below
           const clientId = newId();
           await db.swipes.add({ event: entry, shopId, clientId, ...(ctx.intentToken ? { intentToken: ctx.intentToken } : {}) });
-          rows.push({ kind: 'swipe', clientId, shopId, payload: entry, ...(ctx.intentToken ? { intentToken: ctx.intentToken } : {}) });
+          // The bundled demo rail is not a shop on the server: keep its swipes on the device.
+          if (shopId !== MOCK_SHOP_ID) rows.push({ kind: 'swipe', clientId, shopId, payload: entry, ...(ctx.intentToken ? { intentToken: ctx.intentToken } : {}) });
         }
         await enqueue(rows);
 
         if (action === 'save') {
           await get().saveToWardrobe(garment, shopId, fit?.recommendedSize ?? fit?.closestSize ?? null, ctx.intentToken);
         }
-        if (deck.current && deck.current.garment.id === garment.id) get().dealNext();
+        // Advance only if the swiped card is still the one on the deck: the awaits above can outlive a
+        // deck reset (paired catalogue arrived, re-measure) and must not skip the freshly dealt card.
+        const dealt = deck.current;
+        if (dealt && dealt.garment.id === garment.id && get().deck.current === dealt) get().dealNext();
         return applied.event;
       },
 
@@ -275,6 +285,7 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
         };
         await db.wardrobe.put(row);
         set({ wardrobe: [row, ...get().wardrobe.filter((w) => w.productId !== row.productId)] });
+        if (shopId === MOCK_SHOP_ID) return; // demo rail: on-device only
         await enqueue([
           {
             kind: 'wardrobe',
@@ -292,7 +303,7 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
         const row: WardrobeRow = { ...existing, state, updatedAt: now() };
         await db.wardrobe.put(row);
         set({ wardrobe: get().wardrobe.map((w) => (w.productId === productId ? row : w)) });
-        await enqueue([{ kind: 'wardrobe', clientId: `wardrobe:${productId}`, shopId: row.shopId, payload: { productId, shopId: row.shopId, size: row.size, state } }]);
+        if (row.shopId !== MOCK_SHOP_ID) await enqueue([{ kind: 'wardrobe', clientId: `wardrobe:${productId}`, shopId: row.shopId, payload: { productId, shopId: row.shopId, size: row.size, state } }]);
 
         // kept / returned feed the fit engine's history tie-break (handoff §4.2)
         const profile = get().profile;
@@ -337,22 +348,27 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
       },
 
       async deleteEverything() {
-        if (client) {
+        const startedAt = new Date(now()).toISOString();
+        // A device that never registered has nothing on the server: do not create one just to erase it.
+        if (client && get().settings.deviceId) {
           try {
             await client.deleteMe();
           } catch {
             /* the local erase still happens; the ledger has the failed attempt */
           }
         }
+        // The record of the erase request itself survives the wipe (it is the proof it was sent).
+        const eraseEntries = get().ledger.filter((l) => l.kind === 'erase' && l.at >= startedAt);
         await deleteScan(db);
         await clearAppTables(db);
+        if (eraseEntries.length > 0) await db.ledger.bulkPut(eraseEntries);
         set({
           settings: defaultSettings(),
           profile: null,
           fitCtx: null,
           taste: normaliseTaste(null),
           wardrobe: [],
-          ledger: [],
+          ledger: eraseEntries,
           pendingIntent: null,
           catalog: mockCatalog(),
           catalogSource: 'mock',
@@ -364,7 +380,7 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
       async exportLocal() {
         const s = get();
         let server: unknown = null;
-        if (client) {
+        if (client && s.settings.deviceId) {
           try {
             server = await client.exportMe();
           } catch (e) {

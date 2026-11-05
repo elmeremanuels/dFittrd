@@ -78,6 +78,8 @@ export const EnvSchema = z.object({
   SHOPIFY_API_SECRET: optionalSecret,
   SHOPIFY_API_VERSION: z.string().regex(/^\d{4}-\d{2}$/).default('2025-10'),
   SHOPIFY_SCOPES: z.string().default('read_products,write_products'),
+  /** The app's handle (shopify.app.toml `handle`): /shopify/auth/callback redirects to admin.shopify.com/store/<s>/apps/<handle>. */
+  SHOPIFY_APP_HANDLE: z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/).default('paskamer'),
   /** GraphQL endpoint template for tests/mocks; `{shop}` is replaced by the shop domain. */
   SHOPIFY_ADMIN_URL_TEMPLATE: z.string().default('https://{shop}/admin/api/{version}/graphql.json'),
 

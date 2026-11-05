@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useReducedMotion } from 'motion/react';
 import { AlertTriangle, SkipForward, Video } from 'lucide-react';
 import { MANUAL_RANGES, SCAN_PROTOCOL, parseNumber, protocolPhase } from '../captureMachine';
 import { gateHint } from '../poseGate';
-import { openCamera, startFramePump, type CameraHandle } from '../platform/camera';
+import { attachStream, openCamera, startFramePump, type CameraHandle } from '../platform/camera';
 import type { ScanSession } from '../scanSession';
 import type { GateReason, Sex } from '../types';
 import type { ScanResultMessage } from '../workerProtocol';
@@ -28,6 +28,12 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const camRef = useRef<CameraHandle | null>(null);
   const stopPumpRef = useRef<(() => void) | null>(null);
+  const timersRef = useRef<Set<ReturnType<typeof setInterval>>>(new Set());
+  const mountedRef = useRef(true);
+  const setVideo = useCallback((el: HTMLVideoElement | null) => {
+    videoRef.current = el;
+    attachStream(el, camRef.current?.stream);
+  }, []);
   const [phase, setPhase] = useState<Phase>('setup');
   const [height, setHeight] = useState(initialHeight);
   const [weight, setWeight] = useState(initialWeight);
@@ -49,6 +55,8 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
   // Camera lifecycle
   useEffect(() => {
     let cancelled = false;
+    mountedRef.current = true;
+    const timers = timersRef.current;
     openCamera('user')
       .then((cam) => {
         if (cancelled) {
@@ -56,15 +64,16 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
           return;
         }
         camRef.current = cam;
-        if (videoRef.current) {
-          videoRef.current.srcObject = cam.stream;
-          void videoRef.current.play().catch(() => undefined);
-        }
+        attachStream(videoRef.current, cam.stream);
       })
       .catch((e: unknown) => setCameraError(e instanceof DOMException && e.name === 'NotAllowedError' ? 'Camera access was declined.' : 'Could not open the camera.'));
     return () => {
       cancelled = true;
+      mountedRef.current = false;
+      for (const t of timers) clearInterval(t);
+      timers.clear();
       stopPumpRef.current?.();
+      stopPumpRef.current = null;
       camRef.current?.stop();
       camRef.current = null;
     };
@@ -85,18 +94,27 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
     };
   }, [session]);
 
-  // Hint text: throttled so the aria-live region is not spammed every frame
+  // Hint text: throttled so the aria-live region is not spammed every frame. The latest reasons and
+  // elapsed time are read from refs: with them as effect dependencies the interval was re-created
+  // every 100 ms during recording and never fired, so the spoken "turn 90°" cue never came.
+  const reasonsRef = useRef(reasons);
+  const elapsedRef = useRef(elapsed);
+  useEffect(() => {
+    reasonsRef.current = reasons;
+    elapsedRef.current = elapsed;
+  }, [reasons, elapsed]);
   useEffect(() => {
     const id = setInterval(() => {
-      const ph = protocolPhase(elapsed);
+      const rs = reasonsRef.current;
+      const ph = protocolPhase(elapsedRef.current);
       if (phase === 'recording' && ph === 'side') {
-        setHint(reasons.includes('tilted') || reasons.includes('not_full_body') ? gateHint(reasons.filter((r) => r !== 'arms_not_in_a_pose')) : 'Now turn 90° to your left and hold still');
+        setHint(rs.includes('tilted') || rs.includes('not_full_body') ? gateHint(rs.filter((r) => r !== 'arms_not_in_a_pose')) : 'Now turn 90° to your left and hold still');
       } else {
-        setHint(gateHint(reasons));
+        setHint(gateHint(rs));
       }
     }, 600);
     return () => clearInterval(id);
-  }, [reasons, phase, elapsed]);
+  }, [phase]);
 
   const start = (): void => {
     if (!session || !heightValid || !videoRef.current) return;
@@ -110,9 +128,11 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
       setCountdown(c);
       if (c <= 0) {
         clearInterval(id);
+        timersRef.current.delete(id);
         record();
       }
     }, 1000);
+    timersRef.current.add(id);
   };
 
   const record = (): void => {
@@ -131,24 +151,27 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
       setElapsed(e);
       if (e >= SCAN_PROTOCOL.totalMs) {
         clearInterval(tick);
+        timersRef.current.delete(tick);
         stopPumpRef.current?.();
         stopPumpRef.current = null;
         finish();
       }
     }, 100);
+    timersRef.current.add(tick);
   };
 
   const finish = (): void => {
-    if (!session || h === null) return;
+    if (!session || h === null || !mountedRef.current) return;
     setPhase('processing');
     setProgress(0);
     session
       .finish({ heightCm: h, weightKg: w ?? undefined, sex })
       .then((res) => {
         camRef.current?.stop();
-        onDone(res);
+        if (mountedRef.current) onDone(res);
       })
       .catch((e: unknown) => {
+        if (!mountedRef.current) return;
         setError(e instanceof Error ? e.message : 'The scan could not be measured.');
         setPhase('error');
       });
@@ -160,6 +183,44 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
   return (
     <Panel className="space-y-5">
       <StepHeader eyebrow="Step 2 of 3" title="Body scan" subtitle="8 seconds. Stand 2–3 m away in fitted clothing, phone upright." />
+
+      {/* The preview is mounted in every phase: start() needs the <video> (it used to exist only after
+          setup, so the scan could never start), and the user frames themselves before starting. */}
+      <div className="mirror-frame mx-auto aspect-[9/16] w-full max-w-xs bg-ink/5">
+        <video ref={setVideo} autoPlay playsInline muted className="h-full w-full -scale-x-100 object-cover" aria-label="Camera preview" />
+        <div aria-hidden className="pointer-events-none absolute inset-0">
+          <div className={`absolute inset-3 rounded-[2rem] border-2 transition-colors ${gateOk ? 'border-emerald-400' : 'border-white/60'}`} />
+          {phase === 'countdown' ? (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="font-display text-7xl text-white drop-shadow">{countdown}</span>
+            </div>
+          ) : null}
+          {phase === 'recording' ? (
+            <svg className="absolute right-4 top-4 h-14 w-14" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="6" />
+              <circle
+                cx="50"
+                cy="50"
+                r="46"
+                fill="none"
+                stroke="#FF5A3C"
+                strokeWidth="6"
+                strokeLinecap="round"
+                strokeDasharray={ring}
+                strokeDashoffset={ring * (1 - pct / 100)}
+                transform="rotate(-90 50 50)"
+                style={{ transition: reduce ? 'none' : 'stroke-dashoffset 120ms linear' }}
+              />
+            </svg>
+          ) : null}
+          {phase === 'processing' ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink/40 text-white">
+              <span className="text-sm">Measuring on device…</span>
+              <span className="font-display text-3xl">{progress}%</span>
+            </div>
+          ) : null}
+        </div>
+      </div>
 
       {phase === 'setup' ? (
         <div className="space-y-4">
@@ -219,41 +280,6 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
 
       {phase !== 'setup' ? (
         <div className="space-y-4">
-          <div className="mirror-frame mx-auto aspect-[9/16] w-full max-w-xs bg-ink/5">
-            <video ref={videoRef} autoPlay playsInline muted className="h-full w-full -scale-x-100 object-cover" aria-label="Camera preview" />
-            <div aria-hidden className="pointer-events-none absolute inset-0">
-              <div className={`absolute inset-3 rounded-[2rem] border-2 transition-colors ${gateOk ? 'border-emerald-400' : 'border-white/60'}`} />
-              {phase === 'countdown' ? (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="font-display text-7xl text-white drop-shadow">{countdown}</span>
-                </div>
-              ) : null}
-              {phase === 'recording' ? (
-                <svg className="absolute right-4 top-4 h-14 w-14" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="6" />
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="46"
-                    fill="none"
-                    stroke="#FF5A3C"
-                    strokeWidth="6"
-                    strokeLinecap="round"
-                    strokeDasharray={ring}
-                    strokeDashoffset={ring * (1 - pct / 100)}
-                    transform="rotate(-90 50 50)"
-                    style={{ transition: reduce ? 'none' : 'stroke-dashoffset 120ms linear' }}
-                  />
-                </svg>
-              ) : null}
-              {phase === 'processing' ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink/40 text-white">
-                  <span className="text-sm">Measuring on device…</span>
-                  <span className="font-display text-3xl">{progress}%</span>
-                </div>
-              ) : null}
-            </div>
-          </div>
           <p role="status" aria-live="polite" aria-atomic className="min-h-6 text-center text-sm font-medium text-ink/80">
             {phase === 'countdown' ? `Get ready… ${countdown}` : phase === 'processing' ? 'Measuring on device' : phase === 'error' ? (error ?? 'Scan failed') : hint}
           </p>

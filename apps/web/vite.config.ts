@@ -2,18 +2,19 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv, type UserConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { assertNoClientSecrets } from './config/envGuard';
 
 // No `define` of server secrets here, ever (decision D3): the backend is the only place that reads keys.
-// Any VITE_* variable whose name contains KEY or SECRET fails the build (AGENTS.md rule 2).
-for (const name of Object.keys(process.env)) {
-  if (name.startsWith('VITE_') && /KEY|SECRET/i.test(name)) {
-    throw new Error(`Refusing to build: ${name} looks like a secret and would ship to the browser.`);
-  }
-}
+// Any VITE_* variable whose name contains KEY or SECRET fails the build (AGENTS.md rule 2) — from the
+// shell AND from the .env files Vite loads itself (those are not in process.env).
+export default defineConfig(({ mode }) => {
+  assertNoClientSecrets({ ...process.env, ...loadEnv(mode, __dirname, 'VITE_') });
+  return config;
+});
 
-export default defineConfig({
+const config = {
   plugins: [
     react(),
     tailwindcss(),
@@ -77,4 +78,4 @@ export default defineConfig({
     include: ['src/**/*.test.{ts,tsx}'],
     exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
   },
-});
+} satisfies UserConfig;

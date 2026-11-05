@@ -36,7 +36,7 @@ export function PairRoute(): ReactNode {
         </label>
         <input id="pair-code" className="field-input font-sans text-base" value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://app.paskamer.app/try/…" inputMode="url" autoComplete="off" aria-describedby={error ? 'pair-error' : undefined} aria-invalid={!!error} />
         {error ? (
-          <p id="pair-error" role="alert" className="text-xs text-coral-deep">
+          <p id="pair-error" role="alert" className="text-xs text-coral-ink">
             {error}
           </p>
         ) : null}

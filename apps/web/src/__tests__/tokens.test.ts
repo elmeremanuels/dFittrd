@@ -47,3 +47,31 @@ describe('design tokens (handoff §7) meet WCAG AA where they are used as text',
     expect(contrast(t.coral!, t.cream!)).toBeLessThan(4.5); // 2.8:1 — fills and decorative icons only
   });
 });
+
+describe('coral is never used as a text colour where it fails AA', () => {
+  it('source uses coral-ink for coral text and ink (not white) on filled coral', async () => {
+    const { readdirSync, statSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const root = new URL('..', import.meta.url).pathname;
+    const files: string[] = [];
+    const walk = (d: string): void => {
+      for (const n of readdirSync(d)) {
+        const p = join(d, n);
+        if (statSync(p).isDirectory()) {
+          if (n !== '__tests__' && n !== 'features') walk(p);
+        } else if (/\.(tsx|css)$/.test(n)) files.push(p);
+      }
+    };
+    walk(root);
+    const offenders: string[] = [];
+    for (const f of files) {
+      const src = readFileSync(f, 'utf8');
+      if (/text-coral-deep/.test(src)) offenders.push(`${f}: text-coral-deep (3.8:1)`);
+      for (const m of src.matchAll(/bg-coral\b(?!\/)[^'"`;\n]*?text-white|text-white[^'"`;\n]*?bg-coral\b(?!\/)/g)) {
+        // the Love button carries only an icon (non-text contrast 3:1 applies, white on coral is 3.1:1)
+        if (!/h-8 w-8|icon/.test(src.slice(Math.max(0, (m.index ?? 0) - 120), (m.index ?? 0)))) offenders.push(`${f}: white text on coral`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});

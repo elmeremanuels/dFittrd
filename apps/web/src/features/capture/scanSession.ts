@@ -58,6 +58,10 @@ export class ScanSession {
         },
         reject: (e) => {
           clearTimeout(timer);
+          // A session whose models never loaded is dead: stop the worker (it may still be pulling
+          // ~30 MB of models) so later calls reject instead of waiting on it forever.
+          this.pendingReady = null;
+          this.dispose(e);
           reject(e);
         },
       };
@@ -85,6 +89,7 @@ export class ScanSession {
   }
 
   finish(params: { heightCm: number; weightKg?: number | undefined; sex?: Sex | undefined }): Promise<ScanResultMessage> {
+    if (!this.worker || this.disposed) return Promise.reject(new Error('scan session is not running'));
     if (this.pendingResult) return Promise.reject(new Error('finish already pending'));
     return new Promise((resolve, reject) => {
       this.pendingResult = { resolve, reject };
@@ -93,6 +98,10 @@ export class ScanSession {
   }
 
   analyseFace(bitmap: ImageBitmap): Promise<FaceResultMessage> {
+    if (!this.worker || this.disposed) {
+      bitmap.close();
+      return Promise.reject(new Error('scan session is not running'));
+    }
     if (this.pendingFace) {
       bitmap.close();
       return Promise.reject(new Error('face analysis already pending'));
@@ -107,7 +116,7 @@ export class ScanSession {
     this.send({ type: 'reset' });
   }
 
-  dispose(): void {
+  dispose(reason: Error = new Error('scan session disposed')): void {
     if (this.disposed) return;
     this.disposed = true;
     try {
@@ -117,7 +126,7 @@ export class ScanSession {
     }
     this.worker?.terminate();
     this.worker = null;
-    this.fail(new Error('scan session disposed'));
+    this.fail(reason);
   }
 
   private send(msg: WorkerInbound, transfer: Transferable[] = []): void {

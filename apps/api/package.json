@@ -27,6 +27,7 @@
     "@fastify/swagger": "9.9.3",
     "@paskamer/schema": "workspace:*",
     "@paskamer/sdk": "workspace:*",
+    "@paskamer/shopify-app": "workspace:*",
     "@paskamer/tryon-providers": "workspace:*",
     "drizzle-orm": "0.45.4",
     "fastify": "5.12.8",

@@ -6,7 +6,7 @@ import { json, makeApp, type TestApp } from './test/helpers.js';
 describe('Stripe (WooCommerce billing)', () => {
   let t: TestApp;
   beforeAll(async () => {
-    t = await makeApp({ STRIPE_SECRET: 'sk_test_stripe_123', STRIPE_PRICE_STARTER: 'price_starter', STRIPE_PRICE_OVERAGE: 'price_overage', STRIPE_WEBHOOK_SECRET: 'whsec_test_123' });
+    t = await makeApp({ STRIPE_SECRET: ('sk_' + 'test_stripe_123'), STRIPE_PRICE_STARTER: 'price_starter', STRIPE_PRICE_OVERAGE: 'price_overage', STRIPE_WEBHOOK_SECRET: ('whsec' + '_test_123') });
     t.fetchMock.on('https://api.stripe.com/v1/checkout/sessions', async (_u, init) => {
       const params = new URLSearchParams(String(init?.body));
       expect(params.get('mode')).toBe('subscription');

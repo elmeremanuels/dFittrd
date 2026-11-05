@@ -14,13 +14,19 @@ click → POST {api}/v1/sdk/sessions { shopKeyPrefix, productExternalId, pageUrl
 Vanilla TypeScript, **zero runtime dependencies**, es2019, **< 8 KB gzipped** (asserted in
 `src/size.test.ts` and at build time by `scripts/check-size.mjs`). The merchant page only ever
 learns "opened": no cookies, no storage, no tracking, no third-party requests, and nothing but the
-three documented fields on the wire (`credentials: 'omit'`).
+documented fields on the wire (`credentials: 'omit'`). `pageUrl` is sent as origin + path only (query
+string and fragment are stripped: they can carry e-mail addresses, UTM ids or tokens).
+
+Hardening: a `tryUrl` that is not an absolute `http(s)` URL is refused (no `javascript:`/`data:`
+navigation or link on the merchant page; the shopper sees the polite error instead). When the
+SDK is loaded twice on one page, the second copy finds `window.Paskamer` already installed and
+stays inactive, so buttons are never bound twice.
 
 ## Merchant snippet
 
 ```html
 <script
-  src="https://api.paskamer.app/sdk.v1.js"
+  src="https://api.paskamer.app/sdk/v1.js"
   data-shop="pk_live_xxxxxxxxxxxx"
   defer
 ></script>

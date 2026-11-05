@@ -33,7 +33,7 @@ export function AppShell(): ReactNode {
 
 function NavItem({ to, label, icon, badge }: { to: string; label: string; icon: ReactNode; badge?: string }): ReactNode {
   return (
-    <NavLink to={to} aria-label={label} className={({ isActive }) => `flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-2xl px-4 py-1 text-xs font-medium ${isActive ? 'text-coral' : 'text-ink-soft hover:text-ink'}`}>
+    <NavLink to={to} aria-label={label} className={({ isActive }) => `flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-2xl px-4 py-1 text-xs font-medium ${isActive ? 'text-coral-ink' : 'text-ink-soft hover:text-ink'}`}>
       {({ isActive }) => (
         <>
           <span className={`rounded-full p-1.5 ${isActive ? 'bg-coral/10' : ''}`}>{icon}</span>
@@ -49,7 +49,7 @@ function DevSwitcher(): ReactNode {
   const location = useLocation();
   const merchant = location.pathname.startsWith('/merchant');
   return (
-    <div className="fixed right-3 bottom-3 z-50 flex rounded-full border border-ink/10 bg-white/80 p-1 text-xs font-semibold uppercase tracking-wider shadow backdrop-blur" aria-label="Development view switcher">
+    <div className="fixed right-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-50 flex rounded-full border border-ink/10 bg-white/80 p-1 text-xs font-semibold uppercase tracking-wider shadow backdrop-blur" aria-label="Development view switcher">
       <Link to="/deck" className={`rounded-full px-3 py-1 ${!merchant ? 'bg-ink text-white' : 'text-ink-soft'}`}>
         Customer
       </Link>

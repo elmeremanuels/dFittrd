@@ -64,7 +64,15 @@ final class Frontend {
 				$extra .= ' ' . $name . '="' . esc_attr( $value ) . '"';
 			}
 		}
-		return (string) preg_replace( '/<script\b/', '<script' . $extra, $tag, 1 );
+		// Callback, not a replacement string: `$1` or a backslash-digit in a merchant label stays literal.
+		return (string) preg_replace_callback(
+			'/<script\b/',
+			static function () use ( $extra ): string {
+				return '<script' . $extra;
+			},
+			$tag,
+			1
+		);
 	}
 
 	/** Whether the button should show for this product under the configured scope. */

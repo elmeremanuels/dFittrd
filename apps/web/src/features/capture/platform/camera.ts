@@ -46,6 +46,18 @@ export async function openCamera(facing: Facing = 'user'): Promise<CameraHandle>
   };
 }
 
+/**
+ * Show `stream` in a preview <video>. Idempotent, so it can run every time the element (re)mounts:
+ * a <video> that React unmounts and mounts again (retake, try again) comes back with no source.
+ */
+export function attachStream(video: HTMLVideoElement | null, stream: MediaStream | null | undefined): void {
+  if (!video || !stream || video.srcObject === stream) return;
+  video.srcObject = stream;
+  // play() returns undefined in old engines / jsdom; autoplay rejections are harmless (muted preview)
+  const p = video.play() as Promise<void> | undefined;
+  if (p && typeof p.catch === 'function') p.catch(() => undefined);
+}
+
 export interface FramePumpOptions {
   /** Target analysis fps; the worker is the bottleneck, so 12–15 is plenty for gating. */
   fps?: number;

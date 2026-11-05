@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Camera, Check, ImagePlus, RefreshCw, SkipForward } from 'lucide-react';
 import { MONK_SWATCHES } from '../faceSkin';
-import { bitmapFromFile, captureStill, openCamera, type CameraHandle } from '../platform/camera';
+import { attachStream, bitmapFromFile, captureStill, openCamera, type CameraHandle } from '../platform/camera';
 import type { ScanSession } from '../scanSession';
 import type { SkinEstimate } from '../types';
 import { EstimateBadge, GhostButton, Panel, PrimaryButton, PrivacyNote, StepHeader } from './ui';
@@ -29,6 +29,12 @@ export function FaceStep({ session, cameraAllowed, onDone, onSkip }: Props): Rea
   const [tileUrl, setTileUrl] = useState<string | null>(null);
   const [monk, setMonk] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Callback ref: the <video> unmounts during review and a new one mounts on "Retake"; it must get
+  // the live stream again (it used to stay black and "Take photo" silently did nothing).
+  const setVideo = useCallback((el: HTMLVideoElement | null) => {
+    videoRef.current = el;
+    attachStream(el, camRef.current?.stream);
+  }, []);
 
   useEffect(() => {
     if (!cameraAllowed) return;
@@ -40,10 +46,7 @@ export function FaceStep({ session, cameraAllowed, onDone, onSkip }: Props): Rea
           return;
         }
         camRef.current = cam;
-        if (videoRef.current) {
-          videoRef.current.srcObject = cam.stream;
-          void videoRef.current.play().catch(() => undefined);
-        }
+        attachStream(videoRef.current, cam.stream);
       })
       .catch((e: unknown) => setCameraError(e instanceof DOMException && e.name === 'NotAllowedError' ? 'Camera access was declined.' : 'Could not open the camera.'));
     return () => {
@@ -114,7 +117,7 @@ export function FaceStep({ session, cameraAllowed, onDone, onSkip }: Props): Rea
         <div className="space-y-4">
           <div className="mirror-frame mx-auto aspect-[3/4] w-full max-w-xs bg-ink/5">
             {cameraAllowed && !cameraError ? (
-              <video ref={videoRef} autoPlay playsInline muted className="h-full w-full -scale-x-100 object-cover" aria-label="Camera preview" />
+              <video ref={setVideo} autoPlay playsInline muted className="h-full w-full -scale-x-100 object-cover" aria-label="Camera preview" />
             ) : (
               <div className="flex h-full items-center justify-center p-6 text-center text-sm text-ink/50">{cameraError ?? 'No camera on this device. Choose a photo instead.'}</div>
             )}

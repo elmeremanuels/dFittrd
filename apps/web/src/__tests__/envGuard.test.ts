@@ -12,7 +12,7 @@ import { assertNoClientSecrets, findClientSecrets } from '../../config/envGuard'
  */
 describe('client secret guard', () => {
   it('flags VITE_* names containing KEY or SECRET, ignores public config and server-only names', () => {
-    expect(findClientSecrets({ VITE_API_URL: 'http://localhost:3000', VITE_FASHN_API_KEY: 'x', VITE_SHOPIFY_SECRET: 'y', FASHN_API_KEY: 'server-only', VITE_KEYBOARD_HINTS: '1' }).sort()).toEqual(['VITE_FASHN_API_KEY', 'VITE_KEYBOARD_HINTS', 'VITE_SHOPIFY_SECRET']);
+    expect(findClientSecrets({ VITE_API_URL: 'http://localhost:3000', VITE_TRYON_API_KEY: 'x', VITE_SHOPIFY_SECRET: 'y', FASHN_API_KEY: 'server-only', VITE_KEYBOARD_HINTS: '1' }).sort()).toEqual(['VITE_KEYBOARD_HINTS', 'VITE_SHOPIFY_SECRET', 'VITE_TRYON_API_KEY']);
     expect(() => assertNoClientSecrets({ VITE_API_URL: 'x' })).not.toThrow();
     expect(() => assertNoClientSecrets({ VITE_XAI_KEY: 'x' })).toThrow(/VITE_XAI_KEY/);
   });

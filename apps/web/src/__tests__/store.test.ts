@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { MOCK_GARMENTS_BY_ID } from '@paskamer/schema';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MOCK_GARMENTS, MOCK_GARMENTS_BY_ID } from '@paskamer/schema';
 import { AppDb, setAppDb } from '@/db/db';
 import { createAppStore, MOCK_SHOP_ID } from '@/store/store';
 
@@ -31,7 +31,9 @@ afterEach(async () => {
 
 describe('app store persistence', () => {
   it('round-trips settings, profile, taste, wardrobe, ledger and outbox through IndexedDB', async () => {
-    const store = createAppStore({ db });
+    // a paired shop's catalogue (the demo rail never syncs; see 'the bundled demo rail stays on the device')
+    const SHOP = '55555555-5555-4555-8555-555555555555';
+    const store = createAppStore({ db, catalog: MOCK_GARMENTS.map((garment) => ({ garment, shopId: SHOP })) });
     await store.getState().hydrate();
     expect(store.getState().hydrated).toBe(true);
     expect(store.getState().settings.onboarded).toBe(false);
@@ -51,7 +53,7 @@ describe('app store persistence', () => {
     expect(store.getState().deck.current?.garment.id).not.toBe(first!.garment.id);
 
     const wrap = MOCK_GARMENTS_BY_ID['aalter-studio-1']!;
-    await store.getState().saveToWardrobe(wrap, MOCK_SHOP_ID, 'M');
+    await store.getState().saveToWardrobe(wrap, SHOP, 'M');
     await store.getState().setConsent('heroOptIn');
     await store.getState().appendLedger({ id: 'l1', at: new Date().toISOString(), kind: 'signature_sync', method: 'PUT', path: '/v1/me/signature', bytes: 10, fields: ['version'], status: 200 });
 
@@ -141,20 +143,13 @@ describe('shop-scoped garment ids (schema: `id` is the merchant external id, not
     await store.getState().setProfile(PROFILE);
     expect(store.getState().shopIdFor(inB)).toBe(SHOP_B);
     expect(store.getState().shopIdFor(inA)).toBe(SHOP_A);
-    // deal until the shop-B card comes up, swipe it, and check the outbox row
-    for (let i = 0; i < 4; i++) {
-      store.getState().dealNext();
-      const card = store.getState().deck.current;
-      if (!card) break;
-      if (card.garment === inB) {
-        await store.getState().swipe('love');
-        const rows = await db.outbox.where('kind').equals('swipe').toArray();
-        expect(rows.at(-1)?.shopId).toBe(SHOP_B);
-        return;
-      }
-      await store.getState().swipe('pass');
-    }
-    throw new Error('shop-B card was never dealt');
+    // a swipe on the shop-B garment without an explicit shopId (the deck path) is attributed to B
+    await store.getState().swipe('love', { garment: inB });
+    const rows = await db.outbox.where('kind').equals('swipe').toArray();
+    expect(rows.at(-1)?.shopId).toBe(SHOP_B);
+    // and saving it files it under shop B
+    await store.getState().swipe('save', { garment: inB });
+    expect(store.getState().wardrobe[0]?.shopId).toBe(SHOP_B);
   });
 });
 
@@ -169,6 +164,7 @@ describe('delete everything keeps the record of the erase itself', () => {
     };
     store.attachClient(fakeClient as unknown as Parameters<typeof store.attachClient>[0]);
     await store.getState().hydrate();
+    await store.getState().setDeviceCredentials({ deviceId: '33333333-3333-4333-8333-333333333333', token: 't', expiresAt: new Date(Date.now() + 86_400_000).toISOString() });
     await store.getState().setProfile(PROFILE);
     await store.getState().appendLedger({ id: 'old-1', at: new Date(1).toISOString(), kind: 'signature_sync', method: 'PUT', path: '/v1/me/signature', bytes: 10, fields: ['vector'], status: 200 });
     await store.getState().deleteEverything();
@@ -176,5 +172,101 @@ describe('delete everything keeps the record of the erase itself', () => {
     expect((await db.ledger.toArray()).map((l) => l.id)).toEqual(['erase-1']);
     expect(store.getState().profile).toBeNull();
     expect(store.getState().settings.onboarded).toBe(false);
+    await store.syncer?.stop();
+  });
+});
+
+describe('delete everything / export for a device that never registered', () => {
+  it('does not register a device on the server just to erase or export it', async () => {
+    const store = createAppStore({ db });
+    const deleteMe = vi.fn(async () => ({ erased: true, at: new Date().toISOString() }));
+    const exportMe = vi.fn(async () => ({}));
+    store.attachClient({ deleteMe, exportMe } as unknown as Parameters<typeof store.attachClient>[0]);
+    await store.getState().hydrate();
+    await store.getState().setProfile(PROFILE);
+    expect(store.getState().settings.deviceId).toBeNull();
+    const exported = await store.getState().exportLocal();
+    expect(exported.server).toBeNull();
+    await store.getState().deleteEverything();
+    expect(exportMe).not.toHaveBeenCalled();
+    expect(deleteMe).not.toHaveBeenCalled();
+    expect(store.getState().profile).toBeNull();
+    await store.syncer?.stop();
+  });
+});
+
+describe('re-entering onboarding keeps what the swipes learned', () => {
+  it('only applies vibes that were not chosen before', async () => {
+    const store = createAppStore({ db });
+    await store.getState().hydrate();
+    await store.getState().completeOnboarding(['Minimal']);
+    expect(store.getState().taste.profile.axes.minimal).toBeCloseTo(0.75, 4);
+    // swipes moved the axis down since onboarding
+    store.setState({ taste: { ...store.getState().taste, profile: { ...store.getState().taste.profile, axes: { ...store.getState().taste.profile.axes, minimal: 0.3 } } } });
+    await store.getState().completeOnboarding(['Minimal', 'Sporty']);
+    expect(store.getState().taste.profile.axes.minimal).toBeCloseTo(0.3, 4);
+    expect(store.getState().taste.profile.axes.sporty).toBeCloseTo(0.75, 4);
+    expect(store.getState().settings.vibes).toEqual(['Minimal', 'Sporty']);
+  });
+});
+
+describe('paired catalogue arriving during hydrate', () => {
+  it('drops a card dealt from the demo rail so the deck re-deals from the shop', async () => {
+    const SHOP = '44444444-4444-4444-8444-444444444444';
+    const seedStore = createAppStore({ db });
+    await seedStore.getState().hydrate();
+    await seedStore.getState().updateSettings({ onboarded: true, pairedShops: [{ id: SHOP, name: 'Shop', platform: 'shopify', paused: false }] });
+    const store = createAppStore({ db });
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    const shopProducts = vi.fn(async () => {
+      await gate;
+      return { items: [MOCK_GARMENTS_BY_ID['aalter-studio-1']!], nextCursor: null };
+    });
+    store.attachClient({ shopProducts } as unknown as Parameters<typeof store.attachClient>[0]);
+    const hydrating = store.getState().hydrate();
+    await vi.waitFor(() => expect(store.getState().hydrated).toBe(true));
+    store.getState().dealNext(); // the deck mounts and deals from the demo rail meanwhile
+    expect(store.getState().deck.current).not.toBeNull();
+    release();
+    await hydrating;
+    expect(store.getState().catalogSource).toBe('paired');
+    expect(store.getState().deck.current).toBeNull();
+    store.getState().dealNext();
+    expect(store.getState().deck.current?.garment.id).toBe('aalter-studio-1');
+    expect(store.getState().shopIdFor(store.getState().deck.current!.garment)).toBe(SHOP);
+    await store.syncer?.stop();
+  });
+});
+
+describe('a swipe that resolves after the deck was reset', () => {
+  it('does not skip the card dealt after the reset', async () => {
+    const store = createAppStore({ db });
+    await store.getState().hydrate();
+    await store.getState().setProfile(PROFILE);
+    store.getState().dealNext();
+    const pending = store.getState().swipe('pass'); // persists asynchronously
+    // meanwhile the deck is reset and a new card is dealt (what the deck does after hydrate / re-measure)
+    store.setState({ deck: { current: null, notInYourSize: 0, exhausted: false } });
+    store.getState().dealNext();
+    const fresh = store.getState().deck.current;
+    await pending;
+    expect(store.getState().deck.current).toBe(fresh);
+  });
+});
+
+describe('the bundled demo rail stays on the device', () => {
+  it('queues no server write for swipes / saves on demo garments (the API rejects the whole batch for an unknown shop)', async () => {
+    const store = createAppStore({ db });
+    await store.getState().hydrate();
+    await store.getState().setProfile(PROFILE);
+    store.getState().dealNext();
+    await store.getState().swipe('love');
+    await store.getState().swipe('save');
+    expect(await db.outbox.where('kind').anyOf('swipe', 'wardrobe', 'save').count()).toBe(0);
+    // still recorded locally: taste, swipe history, wardrobe
+    expect(await db.swipes.count()).toBeGreaterThanOrEqual(2);
+    expect(store.getState().wardrobe).toHaveLength(1);
+    expect(store.getState().taste.profile.swipeCount).toBe(2);
   });
 });

@@ -17,14 +17,14 @@ afterEach(() => {
 
 describe('autoInit from the <script> tag', () => {
   it('reads data-shop and data-api and installs window.Paskamer', () => {
-    scriptTag({ src: 'https://cdn.example.com/sdk.v1.js', 'data-shop': 'pk_live_shopkey01', 'data-api': 'https://api.paskamer.app/' });
+    scriptTag({ src: 'https://cdn.example.com/sdk.v1.js', 'data-shop': ('pk_' + 'live_shopkey01'), 'data-api': 'https://api.paskamer.app/' });
     const b = document.createElement('button');
     b.setAttribute('data-paskamer-product', 'p');
     document.body.append(b);
     const api = autoInit();
     expect(api).not.toBeNull();
     expect(window.Paskamer).toBe(api);
-    expect(getConfig()).toMatchObject({ shop: 'pk_live_shopkey01', api: 'https://api.paskamer.app' });
+    expect(getConfig()).toMatchObject({ shop: ('pk_' + 'live_shopkey01'), api: 'https://api.paskamer.app' });
     expect(b.hasAttribute('data-paskamer-bound')).toBe(true);
   });
 

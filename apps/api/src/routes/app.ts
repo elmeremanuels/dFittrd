@@ -177,64 +177,69 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
     let accepted = 0;
     let duplicates = 0;
     let usageEventsCreated = 0;
-    const shopCache = new Map<string, boolean>();
-    for (const ev of req.body.events) {
-      if (!shopCache.has(ev.shopId)) shopCache.set(ev.shopId, Boolean(await findShopById(db, ev.shopId)));
-      if (!shopCache.get(ev.shopId)) throw unprocessable('unknown_shop', `unknown shop ${ev.shopId}`);
-      const product = await findProduct(db, ev.shopId, ev.itemId);
-      const inserted = await db
-        .insert(swipeEvents)
-        .values({
-          deviceId,
-          shopId: ev.shopId,
-          productId: product?.id ?? null,
-          itemId: ev.itemId,
-          clientId: ev.clientId,
-          action: ev.action,
-          sizeRecommended: ev.sizeAtSwipe,
-          fitScore: ev.fitScore,
-          reasons: ev.reasons ?? null,
-          dealIndex: ev.dealIndex,
-          at: new Date(ev.at),
-        })
-        .onConflictDoNothing({ target: [swipeEvents.deviceId, swipeEvents.clientId] })
-        .returning({ id: swipeEvents.id });
-      if (inserted.length === 0) {
-        duplicates++;
-        continue;
-      }
-      accepted++;
-      // D7: the session is billable once a fit result exists; idempotent by intent token.
-      const hasFit = ev.fitScore !== null || ev.sizeAtSwipe !== null;
-      if (!hasFit) continue;
-      let key: string | null = null;
-      if (ev.intentToken) {
-        const session = await db.query.trySessions.findFirst({ where: eq(trySessions.intentToken, ev.intentToken) });
-        if (session && session.deviceId === deviceId && session.shopId === ev.shopId) {
-          if (session.billedAt) continue; // already billed
-          key = `intent:${ev.intentToken}`;
-          const created = await recordUsage(db, { shopId: ev.shopId, deviceId, productId: session.productId, kind: 'fit_session', idempotencyKey: key });
-          if (created) {
-            usageEventsCreated++;
-            await db.update(trySessions).set({ billedAt: new Date() }).where(eq(trySessions.id, session.id));
-          }
+    // All-or-nothing: every shop is checked before anything is written, and the inserts, usage
+    // events and ledger entry share one transaction. A 422 therefore never leaves half a batch
+    // behind (the client drops a batch on a permanent error and batches per shop for that reason).
+    const shopIds = new Set(req.body.events.map((e) => e.shopId));
+    for (const shopId of shopIds) {
+      if (!(await findShopById(db, shopId))) throw unprocessable('unknown_shop', `unknown shop ${shopId}`);
+    }
+    return db.transaction(async (tx) => {
+      for (const ev of req.body.events) {
+        const product = await findProduct(tx, ev.shopId, ev.itemId);
+        const inserted = await tx
+          .insert(swipeEvents)
+          .values({
+            deviceId,
+            shopId: ev.shopId,
+            productId: product?.id ?? null,
+            itemId: ev.itemId,
+            clientId: ev.clientId,
+            action: ev.action,
+            sizeRecommended: ev.sizeAtSwipe,
+            fitScore: ev.fitScore,
+            reasons: ev.reasons ?? null,
+            dealIndex: ev.dealIndex,
+            at: new Date(ev.at),
+          })
+          .onConflictDoNothing({ target: [swipeEvents.deviceId, swipeEvents.clientId] })
+          .returning({ id: swipeEvents.id });
+        if (inserted.length === 0) {
+          duplicates++;
           continue;
         }
+        accepted++;
+        // D7: the session is billable once a fit result exists; idempotent by intent token.
+        const hasFit = ev.fitScore !== null || ev.sizeAtSwipe !== null;
+        if (!hasFit) continue;
+        let key: string | null = null;
+        if (ev.intentToken) {
+          const session = await tx.query.trySessions.findFirst({ where: eq(trySessions.intentToken, ev.intentToken) });
+          if (session && session.deviceId === deviceId && session.shopId === ev.shopId) {
+            if (session.billedAt) continue; // already billed
+            key = `intent:${ev.intentToken}`;
+            const created = await recordUsage(tx, { shopId: ev.shopId, deviceId, productId: session.productId, kind: 'fit_session', idempotencyKey: key });
+            if (created) {
+              usageEventsCreated++;
+              await tx.update(trySessions).set({ billedAt: new Date() }).where(eq(trySessions.id, session.id));
+            }
+            continue;
+          }
+        }
+        // Deck accounting bills the merchant only for a product that exists in their catalogue —
+        // a fit result for an unknown or archived item is not a try-on session (billing integrity).
+        if (!product || product.status === 'archived') continue;
+        key = `deck:${deviceId}:${ev.shopId}:${ev.itemId}:${deckBillingDay(ev.at, now)}`;
+        const created = await recordUsage(tx, { shopId: ev.shopId, deviceId, productId: product.id, kind: 'fit_session', idempotencyKey: key });
+        if (created) usageEventsCreated++;
       }
-      // Deck accounting bills the merchant only for a product that exists in their catalogue —
-      // a fit result for an unknown or archived item is not a try-on session (billing integrity).
-      if (!product || product.status === 'archived') continue;
-      key = `deck:${deviceId}:${ev.shopId}:${ev.itemId}:${deckBillingDay(ev.at, now)}`;
-      const created = await recordUsage(db, { shopId: ev.shopId, deviceId, productId: product.id, kind: 'fit_session', idempotencyKey: key });
-      if (created) usageEventsCreated++;
-    }
-    const shopIds = new Set(req.body.events.map((e) => e.shopId));
-    const entry = await writeLedger(db, {
-      deviceId,
-      kind: 'swipe_batch',
-      payloadSummary: { bytes: byteLength(req.body), fields: ['events'], ...(shopIds.size === 1 ? { shopId: [...shopIds][0]! } : {}) },
+      const entry = await writeLedger(tx, {
+        deviceId,
+        kind: 'swipe_batch',
+        payloadSummary: { bytes: byteLength(req.body), fields: ['events'], ...(shopIds.size === 1 ? { shopId: [...shopIds][0]! } : {}) },
+      });
+      return { accepted, duplicates, usageEventsCreated, ledgerEntryId: entry.id };
     });
-    return { accepted, duplicates, usageEventsCreated, ledgerEntryId: entry.id };
   });
 
   // ---- wardrobe -----------------------------------------------------------------------------

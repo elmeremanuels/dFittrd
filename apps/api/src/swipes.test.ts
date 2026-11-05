@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { usageDaily, usageEvents } from './db/schema.js';
+import { swipeEvents, usageDaily, usageEvents } from './db/schema.js';
 import { createDevice, makeApp, seedShop, type TestApp } from './test/helpers.js';
 
 describe('POST /v1/swipes — batch, idempotent, billable by intent token (D7)', () => {
@@ -81,6 +81,16 @@ describe('POST /v1/swipes — batch, idempotent, billable by intent token (D7)',
     const d = await createDevice(t);
     const unknown = await t.app.inject({ method: 'POST', url: '/v1/swipes', headers: d.auth, payload: { events: [ev({ shopId: '00000000-0000-4000-8000-000000000000' })] } });
     expect(unknown.statusCode).toBe(422);
+    // a mixed batch is rejected before anything is written: no half batch, no usage event
+    const knownFirst = ev({ clientId: 'mixed-known-1', itemId: 'raw-denim-01', sizeAtSwipe: '28' });
+    const mixed = await t.app.inject({ method: 'POST', url: '/v1/swipes', headers: d.auth, payload: { events: [knownFirst, ev({ shopId: '00000000-0000-4000-8000-000000000000' })] } });
+    expect(mixed.statusCode).toBe(422);
+    expect(mixed.json()).toMatchObject({ error: { code: 'unknown_shop' } });
+    expect(await t.handle.db.select().from(swipeEvents).where(and(eq(swipeEvents.deviceId, d.deviceId), eq(swipeEvents.clientId, 'mixed-known-1')))).toHaveLength(0);
+    expect(await t.handle.db.select().from(usageEvents).where(eq(usageEvents.deviceId, d.deviceId))).toHaveLength(0);
+    // the same known event alone is then accepted (not a duplicate)
+    const retry = await t.app.inject({ method: 'POST', url: '/v1/swipes', headers: d.auth, payload: { events: [knownFirst] } });
+    expect(retry.json()).toMatchObject({ accepted: 1, duplicates: 0, usageEventsCreated: 1 });
     const big = await t.app.inject({ method: 'POST', url: '/v1/swipes', headers: d.auth, payload: { events: Array.from({ length: 101 }, () => ev()) } });
     expect(big.statusCode).toBe(400);
     const extra = await t.app.inject({ method: 'POST', url: '/v1/swipes', headers: d.auth, payload: { events: [ev({ bust: 92, photo: 'x' })] } });

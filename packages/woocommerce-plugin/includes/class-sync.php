@@ -137,7 +137,7 @@ final class Sync {
 			$data = $res['data'] ?? array();
 			update_post_meta( $product_id, Vocab::META_SYNC_STATUS, (string) ( $data['status'] ?? 'incomplete' ) );
 			update_post_meta( $product_id, Vocab::META_SCORE, (string) ( $data['score'] ?? '0' ) );
-			update_post_meta( $product_id, Vocab::META_MISSING, wp_json_encode( array_values( (array) ( $data['missingFields'] ?? array() ) ) ) );
+			update_post_meta( $product_id, Vocab::META_MISSING, wp_slash( (string) wp_json_encode( array_values( (array) ( $data['missingFields'] ?? array() ) ) ) ) );
 			update_post_meta( $product_id, Vocab::META_CONTENT_HASH, (string) ( $data['contentHash'] ?? '' ) );
 			update_post_meta( $product_id, Vocab::META_SYNCED_AT, (string) ( $data['updatedAt'] ?? gmdate( 'c' ) ) );
 			delete_post_meta( $product_id, Vocab::META_SYNC_ERROR );
@@ -148,12 +148,12 @@ final class Sync {
 		$message = sprintf( '%s (%s)', (string) $res['error_message'], (string) $res['error_code'] );
 		if ( 'retry' === $class && $attempt < self::MAX_ATTEMPTS ) {
 			update_post_meta( $product_id, Vocab::META_SYNC_STATUS, 'retrying' );
-			update_post_meta( $product_id, Vocab::META_SYNC_ERROR, $message );
+			update_post_meta( $product_id, Vocab::META_SYNC_ERROR, wp_slash( $message ) );
 			Queue::enqueue( Queue::HOOK_PUSH, array( $product_id, $attempt + 1 ), self::backoff( $attempt ) );
 			return self::outcome( false, 'retry', $message );
 		}
 		update_post_meta( $product_id, Vocab::META_SYNC_STATUS, 'error' );
-		update_post_meta( $product_id, Vocab::META_SYNC_ERROR, $message );
+		update_post_meta( $product_id, Vocab::META_SYNC_ERROR, wp_slash( $message ) );
 		Settings::update( array( 'last_error' => $message ) );
 		return self::outcome( false, 'failed', $message );
 	}
@@ -164,6 +164,15 @@ final class Sync {
 		$attempt     = max( 1, (int) $attempt );
 		if ( ! Settings::is_connected() ) {
 			return self::outcome( false, 'skipped', 'not connected' );
+		}
+		$pid_check = (int) $external_id;
+		if ( $pid_check > 0 && 'publish' === get_post_status( $pid_check ) ) {
+			// Re-published after this delete was queued (or while it was backing off): a push has
+			// marked the product pending/synced since, so archiving now would hide a live product.
+			$state = (string) get_post_meta( $pid_check, Vocab::META_SYNC_STATUS, true );
+			if ( '' !== $state && 'archiving' !== $state && 'archived' !== $state ) {
+				return self::outcome( false, 'skipped', 'product was re-published' );
+			}
 		}
 		$res   = Api_Client::from_settings()->delete_product( $external_id );
 		$class = self::classify( $res['status'], $res['error_code'], $res['transport_error'] );
@@ -182,7 +191,7 @@ final class Sync {
 		}
 		if ( $pid > 0 && get_post( $pid ) ) {
 			update_post_meta( $pid, Vocab::META_SYNC_STATUS, 'error' );
-			update_post_meta( $pid, Vocab::META_SYNC_ERROR, $message );
+			update_post_meta( $pid, Vocab::META_SYNC_ERROR, wp_slash( $message ) );
 		}
 		return self::outcome( false, 'failed', $message );
 	}

@@ -97,3 +97,59 @@ describe('ApiClient', () => {
     expect(bad.kind).toBe('userPhoto');
   });
 });
+
+describe('device token lifetime', () => {
+  const OLD = { deviceId: '11111111-1111-4111-8111-111111111111', token: 'old.jwt', expiresAt: '2026-11-07T10:00:00.000Z' }; // 3 days left
+  function withDevice(fetchImpl: typeof fetch, device: DeviceCredentials) {
+    let d = device;
+    const ledger: ClientLedgerEntry[] = [];
+    const client = new ApiClient({
+      baseUrl: 'https://api.example.test',
+      fetchImpl,
+      getDevice: () => d,
+      setDevice: (n) => {
+        d = { deviceId: n.deviceId || d.deviceId, token: n.token || null, expiresAt: n.expiresAt };
+      },
+      onLedger: (e) => {
+        ledger.push(e);
+      },
+      now: () => new Date('2026-11-04T10:00:00Z'),
+    });
+    return { client, ledger, device: () => d };
+  }
+
+  it('rotates a token in its last week instead of registering a new device (keeps the device id)', async () => {
+    const calls: string[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method} ${new URL(String(url)).pathname} ${(init?.headers as Record<string, string>).Authorization ?? ''}`);
+      if (String(url).endsWith('/v1/devices/rotate')) return json({ ...OLD, token: 'new.jwt', expiresAt: '2026-12-04T10:00:00.000Z', tokenVersion: 2 });
+      if (String(url).endsWith('/v1/devices')) return json({ ...TOKEN, deviceId: '99999999-9999-4999-8999-999999999999' }, 201);
+      return json({ erased: true, at: '2026-11-04T10:00:00Z' });
+    }) as unknown as typeof fetch;
+    const { client, device, ledger } = withDevice(fetchImpl, OLD);
+    await client.deleteMe();
+    expect(calls).toEqual(['POST /v1/devices/rotate Bearer old.jwt', 'DELETE /v1/me Bearer new.jwt']);
+    expect(device()).toMatchObject({ deviceId: OLD.deviceId, token: 'new.jwt' });
+    expect(ledger.map((l) => l.kind)).toEqual(['device', 'erase']);
+  });
+
+  it('keeps using a still-valid token when the rotation fails offline', async () => {
+    const calls: string[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method} ${new URL(String(url)).pathname}`);
+      if (String(url).endsWith('/v1/devices/rotate')) throw new TypeError('offline');
+      return json({ updatedAt: '2026-11-04T10:00:01Z', ledgerEntryId: '22222222-2222-4222-8222-222222222222' });
+    }) as unknown as typeof fetch;
+    const { client, device } = withDevice(fetchImpl, OLD);
+    await client.putSignature({ version: 1, vector: new Array(80).fill(0), quality: 0.5 });
+    expect(calls).toEqual(['POST /v1/devices/rotate', 'PUT /v1/me/signature']);
+    expect(device().token).toBe('old.jwt');
+  });
+
+  it('does not rotate a token with more than a week left', async () => {
+    const fetchImpl = vi.fn(async () => json({ items: [] })) as unknown as typeof fetch;
+    const { client } = withDevice(fetchImpl, { ...OLD, expiresAt: '2026-11-30T10:00:00.000Z' });
+    await client.getWardrobe();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});

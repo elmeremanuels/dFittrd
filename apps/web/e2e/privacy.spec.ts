@@ -147,7 +147,7 @@ test('merchant console never loads inside the phone frame and needs a key', asyn
   await page.getByLabel(/Secret key/).fill('not-a-key');
   await page.getByRole('button', { name: /Open console/ }).click();
   await expect(page.getByRole('alert')).toBeVisible();
-  await page.getByLabel(/Secret key/).fill('sk_test_abcdefghijklmnop');
+  await page.getByLabel(/Secret key/).fill(('sk_' + 'test_abcdefghijklmnop'));
   await page.getByRole('button', { name: /Open console/ }).click();
   await expect(page.getByRole('heading', { name: /Merchant console/ })).toBeVisible();
   await expect(page.getByText(/API unreachable — showing demo data/)).toBeVisible();

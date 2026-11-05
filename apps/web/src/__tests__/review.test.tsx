@@ -114,6 +114,8 @@ describe('deck card gestures', () => {
     await waitFor(() => expect(vi.mocked(taste.applySwipe)).toHaveBeenCalledTimes(2));
     expect(vi.mocked(taste.applySwipe).mock.calls[1]![1].id).toBe(second.garment.id);
     expect(vi.mocked(taste.applySwipe).mock.calls[1]![3]).toBe('pass');
+    // let the swipe finish persisting before the next test reseeds the shared store
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Love' })).toBeEnabled());
   });
 });
 
@@ -143,6 +145,11 @@ describe('estimate labelling without measurements', () => {
     expect(within(mirror).queryByText(/Body from your measurements/)).toBeNull();
     expect(within(mirror).getByText(/Reference body/)).toBeInTheDocument();
     expect(within(mirror).getByText(/Estimate · not measured/)).toBeInTheDocument();
+    // the accessible name says the same thing as the visible chips
+    const img = within(mirror).getByRole('img');
+    expect(img).toHaveAccessibleName(/reference body/);
+    expect(img).toHaveAccessibleName(/not measured/);
+    expect(img.getAttribute('aria-label')).not.toMatch(/your body/);
   });
 });
 

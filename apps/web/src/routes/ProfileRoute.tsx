@@ -84,7 +84,7 @@ export function ProfileRoute(): ReactNode {
         {rows.length === 0 ? (
           <p className="text-sm text-ink-soft">
             No measurements yet.{' '}
-            <Link to="/onboarding?step=measurements" className="text-coral underline-offset-2 hover:underline">
+            <Link to="/onboarding?step=measurements" className="text-coral-ink underline-offset-2 hover:underline">
               Add them
             </Link>{' '}
             to see fit.
@@ -108,7 +108,7 @@ export function ProfileRoute(): ReactNode {
                       {Math.round(m.mean * 2) / 2} {UNIT[key]}
                     </p>
                     {conflict ? (
-                      <Link to="/onboarding?step=capture" className="text-xs text-coral-deep underline-offset-2 hover:underline">
+                      <Link to="/onboarding?step=capture" className="text-xs text-coral-ink underline-offset-2 hover:underline">
                         Remeasure
                       </Link>
                     ) : null}

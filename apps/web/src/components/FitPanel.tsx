@@ -13,7 +13,7 @@ export function FitPanel({ fit, hasMeasurements, compact = false }: { fit: FitRe
     <div className="glass-panel rounded-2xl p-3 text-ink" aria-live="polite" aria-atomic="true" data-testid="fit-panel">
       {!hasMeasurements ? (
         <p className="text-sm">
-          <Link to="/onboarding" className="font-medium text-coral underline-offset-2 hover:underline">
+          <Link to="/onboarding" className="font-medium text-coral-ink underline-offset-2 hover:underline">
             Add your measurements
           </Link>{' '}
           to see how this fits.
@@ -33,7 +33,7 @@ export function FitPanel({ fit, hasMeasurements, compact = false }: { fit: FitRe
           <div className="flex items-end justify-between gap-3">
             <div>
               <p className="eyebrow">Recommended size</p>
-              <p className="font-display text-2xl leading-none text-coral" data-testid="recommended-size">
+              <p className="font-display text-2xl leading-none text-coral-ink" data-testid="recommended-size">
                 {fit.recommendedSize}
               </p>
             </div>
@@ -58,8 +58,11 @@ function Notes({ notes }: { notes: string[] }): ReactNode {
   if (notes.length === 0) return null;
   return (
     <ul className="mt-1 space-y-0.5 text-xs text-ink-soft" aria-label="Fit notes" data-testid="fit-notes">
-      {notes.slice(0, 4).map((n) => (
-        <li key={n}>• {n}</li>
+      {notes.slice(0, 4).map((n, i) => (
+        // short viewports: only the first note is drawn over the mirror; the rest stay for screen readers
+        <li key={n} className={i > 0 ? '[@media(max-height:740px)]:sr-only' : undefined}>
+          • {n}
+        </li>
       ))}
     </ul>
   );

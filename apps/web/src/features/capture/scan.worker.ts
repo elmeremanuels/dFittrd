@@ -11,9 +11,9 @@ import { placeLevels } from './crossSections';
 import { estimateSkin, sampleClassLab, sampleSkinLab, SKIN_SAMPLE_INDICES } from './faceSkin';
 import { neighbourhood, retainedIndices } from './frameRetainer';
 import { SEG } from './landmarks';
-import { headTopRow, medianMask, sampleLevels, type CategoryMask } from './maskGeometry';
+import { headTopRow, medianMask, sampleLevels, samplesToFramePx, shoulderSlopeFromMask, type CategoryMask } from './maskGeometry';
 import { measureScan } from './measure';
-import { MODEL_BASE, MODEL_FILES, type PoseVariant } from './models';
+import { MODEL_BASE, MODEL_FILES, VISION_WASM_ES_MODULE, resolveModelBase, type PoseVariant } from './models';
 import { gateFrame, selectFrames } from './poseGate';
 import type { FrameFeatures, GateResult, Landmark, Sex, ViewMeasurement } from './types';
 import type { WorkerInbound, WorkerOutbound } from './workerProtocol';
@@ -56,7 +56,8 @@ function resetRecording(): void {
 
 async function init(variant: PoseVariant, needPose: boolean, needFace: boolean): Promise<void> {
   const t0 = performance.now();
-  const fileset = await FilesetResolver.forVisionTasks(`${modelBase}/wasm`);
+  // module worker: the ES-module WASM loader is the only one that works here (see models.ts)
+  const fileset = await FilesetResolver.forVisionTasks(`${modelBase}/wasm`, VISION_WASM_ES_MODULE);
   let delegate: 'GPU' | 'CPU' = 'GPU';
   const poseModel = variant === 'full' ? MODEL_FILES.poseFull : MODEL_FILES.poseLite;
   const rebase = (p: string): string => p.replace(MODEL_BASE, modelBase);
@@ -160,8 +161,9 @@ function segment(bitmap: ImageBitmap): CategoryMask {
 function viewMeasurement(view: 'front' | 'side', f: StoredFrame, mask: CategoryMask): ViewMeasurement {
   const aspect = f.bitmap.width / f.bitmap.height;
   const preferSide = f.gate.features.view === 'right' ? 'right' : 'left';
-  const placements = placeLevels(f.landmarks, aspect, preferSide);
-  const samples = sampleLevels(mask, placements);
+  const placements = placeLevels(f.landmarks, aspect, preferSide, { view });
+  // widths are measured in mask pixels; the scale (head-top → heel) is in frame pixels
+  const samples = samplesToFramePx(sampleLevels(mask, placements), mask.width, f.bitmap.width);
   const nose = f.landmarks[0] as Landmark;
   const headTopMask = headTopRow(mask, nose.x);
   const headTopPx = headTopMask >= 0 ? (headTopMask / mask.height) * f.bitmap.height : Math.max(0, (nose.y - 0.08) * f.bitmap.height);
@@ -175,6 +177,7 @@ function viewMeasurement(view: 'front' | 'side', f: StoredFrame, mask: CategoryM
     headTopPx,
     heelPx,
     tiltDeg: f.gate.features.tiltDeg,
+    shoulderSlopeDeg: view === 'front' ? shoulderSlopeFromMask(mask, f.landmarks, { width: f.bitmap.width, height: f.bitmap.height }) : undefined,
   };
 }
 
@@ -333,8 +336,13 @@ ctx.onmessage = (ev: MessageEvent<WorkerInbound>): void => {
   const msg = ev.data;
   switch (msg.type) {
     case 'init':
-      modelBase = msg.modelBase ?? MODEL_BASE;
-      init(msg.variant, msg.needPose, msg.needFace).catch((e: unknown) => post({ type: 'error', stage: 'init', message: errMsg(e) }));
+      Promise.resolve()
+        .then(() => {
+          // same-origin only (D3: zero third-party requests); throws for any other origin
+          modelBase = resolveModelBase(msg.modelBase, ctx.location.href);
+          return init(msg.variant, msg.needPose, msg.needFace);
+        })
+        .catch((e: unknown) => post({ type: 'error', stage: 'init', message: errMsg(e) }));
       break;
     case 'frame':
       try {

@@ -62,6 +62,18 @@ export interface LevelPlacement {
   x: number;
   /** Angle of the limb axis vs. vertical (deg); widths across a slanted limb are corrected by cos. */
   axisDeg: number;
+  /**
+   * Front-view contact guard (normalised x). `clip`: the run is cut at the limits (legs touching each
+   * other are split at the midline between them). `reject`: a run reaching past the limits is merged
+   * with a neighbouring blob (an arm pressed against the torso, an arm run that swallowed the torso)
+   * and the level is reported as not measurable instead of silently measuring both blobs.
+   */
+  limits?: { min: number; max: number; mode: 'clip' | 'reject' } | undefined;
+  /**
+   * Take the narrowest run over the rows y0..y1 (normalised) instead of the single row at `y` — used
+   * for the neck, whose band between chin and shoulders is too thin to hit with a fixed fraction.
+   */
+  search?: { y0: number; y1: number } | undefined;
 }
 
 export interface LevelSample {
@@ -70,6 +82,8 @@ export interface LevelSample {
   px: number;
   /** clothes / (clothes + skin) on the run, 0..1. */
   coverage: number;
+  /** True when the level was rejected because a limb touches the body there (see `LevelPlacement.limits`). */
+  contact?: boolean | undefined;
 }
 
 export interface SideSelection {
@@ -97,6 +111,8 @@ export interface ViewMeasurement {
   /** Lowest heel landmark row (pixels). */
   heelPx: number;
   tiltDeg: number;
+  /** Shoulder slope from the mask's top contour (deg below horizontal), when it could be traced. */
+  shoulderSlopeDeg?: number | undefined;
 }
 
 export type Sex = 'female' | 'male' | 'unspecified';

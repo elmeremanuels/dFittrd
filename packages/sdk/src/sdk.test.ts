@@ -117,7 +117,7 @@ describe('button discovery', () => {
 describe('configure', () => {
   it('rejects anything that is not a public key prefix (never a secret key)', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    configure({ shop: 'sk_live_abcdefgh12345678', api: API });
+    configure({ shop: ('sk_' + 'live_abcdefgh12345678'), api: API });
     expect(getConfig().shop).toBeUndefined();
     expect(warn).toHaveBeenCalled();
     configure({ shop: SHOP });

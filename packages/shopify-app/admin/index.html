@@ -143,7 +143,10 @@
       'use strict';
       var cfg = JSON.parse(document.getElementById('paskamer-config').textContent);
       var params = new URLSearchParams(location.search);
-      var shop = (params.get('shop') || (window.shopify && shopify.config && shopify.config.shop) || '').toLowerCase();
+      // The shop App Bridge reports wins over the query string, and only a *.myshopify.com domain is
+      // accepted: `shop` is used to build admin links before the server has verified anything.
+      function validShop(v) { v = String(v || '').trim().toLowerCase(); return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(v) ? v : ''; }
+      var shop = validShop(window.shopify && shopify.config && shopify.config.shop) || validShop(params.get('shop'));
       var state = { installed: null, products: null, usage: null, ledger: null, filter: 'all' };
 
       function $(id) { return document.getElementById(id); }

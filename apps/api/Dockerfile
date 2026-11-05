@@ -13,6 +13,7 @@ COPY apps/api/package.json apps/api/package.json
 COPY packages/schema/package.json packages/schema/package.json
 COPY packages/sdk/package.json packages/sdk/package.json
 COPY packages/tryon-providers/package.json packages/tryon-providers/package.json
+COPY packages/shopify-app/package.json packages/shopify-app/package.json
 COPY packages/fit-engine/package.json packages/fit-engine/package.json
 COPY packages/taste-engine/package.json packages/taste-engine/package.json
 COPY apps/web/package.json apps/web/package.json
@@ -23,12 +24,14 @@ FROM deps AS build
 COPY packages/schema packages/schema
 COPY packages/sdk packages/sdk
 COPY packages/tryon-providers packages/tryon-providers
+COPY packages/shopify-app packages/shopify-app
 COPY packages/fit-engine packages/fit-engine
 COPY packages/taste-engine packages/taste-engine
 COPY apps/api apps/api
 RUN pnpm --filter @paskamer/schema build \
  && pnpm --filter @paskamer/sdk build \
  && pnpm --filter @paskamer/tryon-providers build \
+ && pnpm --filter @paskamer/shopify-app build \
  && pnpm --filter @paskamer/api build \
  && pnpm --filter @paskamer/api --prod deploy --legacy /out
 

@@ -82,7 +82,31 @@ async function requestSession(
 }
 
 function isSession(v: unknown): v is SdkSessionResponse {
-  return !!v && typeof v === 'object' && typeof (v as { tryUrl?: unknown }).tryUrl === 'string';
+  return !!v && typeof v === 'object' && isHttpUrl((v as { tryUrl?: unknown }).tryUrl);
+}
+
+/**
+ * Only absolute http(s) URLs may become `location.href` or the modal link: a `javascript:` or
+ * `data:` tryUrl (compromised/misconfigured API, proxy) would otherwise run on the merchant page.
+ */
+function isHttpUrl(v: unknown): v is string {
+  if (typeof v !== 'string') return false;
+  try {
+    const u = new URL(v);
+    return u.protocol === 'https:' || u.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+/** The product page without query string or fragment: those can carry e-mail addresses, UTM ids or tokens. */
+function pageUrlOf(href: string): string {
+  try {
+    const u = new URL(href, location.href);
+    return u.origin + u.pathname;
+  } catch {
+    return href;
+  }
 }
 
 function setState(elm: Element | null | undefined, loading: boolean): void {
@@ -117,7 +141,7 @@ export async function open(productId: string, opts: OpenOptions = {}): Promise<O
 
     let outcome: SessionOutcome;
     try {
-      outcome = await requestSession(productId, opts.pageUrl ?? location.href, opts.surface ?? 'api');
+      outcome = await requestSession(productId, pageUrlOf(opts.pageUrl ?? location.href), opts.surface ?? 'api');
     } catch (error) {
       showMessage(strings.error, trigger);
       return { kind: 'error', error };
@@ -336,6 +360,13 @@ export function configFromScript(script: HTMLScriptElement): PaskamerConfig {
 export function autoInit(): PaskamerApi | null {
   try {
     if (typeof window === 'undefined' || typeof document === 'undefined') return null;
+    // Loaded twice (theme block + a manual tag, two plugins…): a second copy would bind every
+    // button again and open two sessions per click. The first instance wins.
+    const existing = window.Paskamer;
+    if (existing && existing !== api) {
+      warn('SDK already loaded on this page; this copy stays inactive');
+      return existing;
+    }
     const script = findScriptTag();
     if (!script) return null;
     const config = configFromScript(script);

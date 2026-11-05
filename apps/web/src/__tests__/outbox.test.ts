@@ -26,7 +26,8 @@ describe('OutboxSyncer offline behaviour', () => {
     const listeners: (() => void)[] = [];
     vi.stubGlobal('navigator', { onLine: false });
     vi.stubGlobal('window', { addEventListener: (_: string, cb: () => void) => listeners.push(cb), removeEventListener: () => {} });
-    vi.useFakeTimers();
+    // only the syncer's timers: fake-indexeddb needs the real setImmediate
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     await db.outbox.add({ kind: 'swipe', clientId: 'c1', shopId: '00000000-0000-4000-8000-000000000001', payload: EVENT, attempts: 0, nextAt: 0, createdAt: 0 });
     const postSwipes = vi.fn(async () => ({ accepted: 1, duplicates: 0, usageEventsCreated: 0, ledgerEntryId: 'l' }));
     const syncer = new OutboxSyncer({ db, client: { postSwipes } as unknown as ApiClient, now: () => Date.now() });
@@ -42,9 +43,8 @@ describe('OutboxSyncer offline behaviour', () => {
     // back online → the listener flushes
     (navigator as { onLine: boolean }).onLine = true;
     for (const l of listeners) l();
-    await vi.advanceTimersByTimeAsync(10);
-    expect(postSwipes).toHaveBeenCalledTimes(1);
-    expect(await db.outbox.count()).toBe(0);
+    await vi.waitFor(() => expect(postSwipes).toHaveBeenCalledTimes(1));
+    await vi.waitFor(async () => expect(await db.outbox.count()).toBe(0));
     syncer.stop();
   });
 
@@ -63,5 +63,31 @@ describe('OutboxSyncer offline behaviour', () => {
     await syncer.flush();
     expect(await db.outbox.count()).toBe(0);
     syncer.stop();
+  });
+});
+
+describe('OutboxSyncer batching', () => {
+  it('sends one batch per shop, so one unknown shop (422) cannot drop the other shops’ swipes', async () => {
+    vi.stubGlobal('navigator', { onLine: true });
+    const A = '11111111-1111-4111-8111-111111111111';
+    const B = '22222222-2222-4222-8222-222222222222';
+    await db.outbox.bulkAdd([
+      { kind: 'swipe', clientId: 'a1', shopId: A, payload: EVENT, attempts: 0, nextAt: 0, createdAt: 0 },
+      { kind: 'swipe', clientId: 'b1', shopId: B, payload: { ...EVENT, itemId: 'y' }, attempts: 0, nextAt: 0, createdAt: 0 },
+      { kind: 'swipe', clientId: 'a2', shopId: A, payload: { ...EVENT, itemId: 'z' }, attempts: 0, nextAt: 0, createdAt: 0 },
+    ]);
+    const { ApiError } = await import('@/api/client');
+    const sent: string[][] = [];
+    const postSwipes = vi.fn(async (batch: { events: { shopId: string; clientId: string }[] }) => {
+      sent.push(batch.events.map((e) => e.clientId));
+      if (batch.events.some((e) => e.shopId === A)) throw new ApiError(422, 'unknown_shop', `unknown shop ${A}`);
+      return { accepted: batch.events.length, duplicates: 0, usageEventsCreated: 0, ledgerEntryId: 'l' };
+    });
+    const syncer = new OutboxSyncer({ db, client: { postSwipes } as unknown as ApiClient, now: () => 1 });
+    await syncer.flush();
+    expect(sent).toContainEqual(['b1']);
+    expect(sent).toContainEqual(['a1', 'a2']);
+    expect(await db.outbox.count()).toBe(0); // B delivered, A permanently rejected
+    await syncer.stop();
   });
 });

@@ -28,6 +28,9 @@ importers:
       '@paskamer/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
+      '@paskamer/shopify-app':
+        specifier: workspace:*
+        version: link:../../packages/shopify-app
       '@paskamer/tryon-providers':
         specifier: workspace:*
         version: link:../../packages/tryon-providers
@@ -320,6 +323,9 @@ importers:
       eslint:
         specifier: ^9.39.5
         version: 9.39.5(jiti@2.7.0)
+      jsdom:
+        specifier: 27.4.0
+        version: 27.4.0
       smol-toml:
         specifier: ^1.9.1
         version: 1.9.1

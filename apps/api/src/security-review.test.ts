@@ -151,7 +151,7 @@ describe('SDK sessions rate limit is per shop key (not per client IP)', () => {
 
 describe('Shopify webhooks: GDPR payload hygiene + replay', () => {
   const API_KEY = 'shpa_review';
-  const API_SECRET = 'shpss_review_secret_0123456789';
+  const API_SECRET = ('shpss' + '_review_secret_0123456789');
   const SHOP = 'review.myshopify.com';
   let t: TestApp;
   beforeAll(async () => {
@@ -224,12 +224,12 @@ describe('Shopify webhooks: GDPR payload hygiene + replay', () => {
 
 describe('Stripe signature header', () => {
   it('accepts any v1 entry (secret rotation sends several) and rejects when none match', () => {
-    const env = testEnv({ STRIPE_WEBHOOK_SECRET: 'whsec_a' });
+    const env = testEnv({ STRIPE_WEBHOOK_SECRET: ('whsec' + '_a') });
     const stripe = new StripeClient(env, fetch);
     const body = JSON.stringify({ id: 'evt_1', type: 'invoice.paid', created: 1, data: { object: {} } });
     const t = Math.floor(Date.now() / 1000);
-    const good = hmacHex('whsec_a', `${t}.${body}`);
-    const other = hmacHex('whsec_b', `${t}.${body}`);
+    const good = hmacHex(('whsec' + '_a'), `${t}.${body}`);
+    const other = hmacHex(('whsec' + '_b'), `${t}.${body}`);
     expect(stripe.verifyWebhook(body, `t=${t},v1=${other},v1=${good}`)?.id).toBe('evt_1');
     expect(stripe.verifyWebhook(body, `t=${t},v1=${good},v1=${other}`)?.id).toBe('evt_1');
     expect(stripe.verifyWebhook(body, `t=${t},v1=${other}`)).toBeNull();

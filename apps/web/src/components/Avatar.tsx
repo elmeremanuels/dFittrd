@@ -51,6 +51,7 @@ export function Avatar({ garment, fit, size, isLoading = false, bare = false }: 
   const bodyD = bodyPath(body);
   const headCy = HEAD_TOP_Y + body.headRy;
   const hasBody = !!fitCtx && Object.keys(fitCtx.userBody.measurements).length > 0;
+  const onWhom = media.baseFrame ? 'over your capture' : hasBody ? 'on a body drawn from your measurements' : 'on a reference body';
 
   return (
     <div className="relative flex h-full w-full items-center justify-center p-3" data-testid="mirror">
@@ -60,7 +61,7 @@ export function Avatar({ garment, fit, size, isLoading = false, bare = false }: 
         preserveAspectRatio="xMidYMid meet"
         className="relative h-full w-auto max-w-full drop-shadow-[0_20px_40px_rgba(26,22,18,0.18)]"
         role="img"
-        aria-label={garment ? `Estimated look of ${garment.name}${size ? ` in size ${size}` : ''} on your body` : 'Your body outline'}
+        aria-label={garment ? `Estimated look of ${garment.name}${size ? ` in size ${size}` : ''} ${onWhom} — not measured` : hasBody ? 'Your body outline (estimate)' : 'Reference body outline'}
       >
         <defs>
           <filter id={ids.skinTex} x="0" y="0" width="100%" height="100%">
@@ -69,7 +70,7 @@ export function Avatar({ garment, fit, size, isLoading = false, bare = false }: 
           </filter>
           {look ? (
             <filter id={ids.fabric} x="-6%" y="-6%" width="112%" height="112%" colorInterpolationFilters="sRGB">
-              <feTurbulence type="fractalNoise" baseFrequency={look.baseFrequency} numOctaves={look.numOctaves} seed="3" result="noise" />
+              <feTurbulence type="fractalNoise" baseFrequency={`${look.baseFrequency} ${Math.round(look.baseFrequency * look.grain * 1000) / 1000}`} numOctaves={look.numOctaves} seed="3" result="noise" />
               <feDiffuseLighting in="noise" lightingColor="#ffffff" surfaceScale={look.surfaceScale} diffuseConstant="1" result="light">
                 <feDistantLight azimuth="45" elevation="62" />
               </feDiffuseLighting>
@@ -116,6 +117,14 @@ export function Avatar({ garment, fit, size, isLoading = false, bare = false }: 
           </g>
         )}
 
+        {/* Face tile at the head — under the garment layer, so a hat or scarf sits on top of it */}
+        {media.faceUrl && !media.baseFrame ? (
+          <g clipPath={`url(#${ids.headClip})`}>
+            <image href={media.faceUrl} x={VIEW_W / 2 - body.headR - 2} y={headCy - body.headRy - 2} width={(body.headR + 2) * 2} height={(body.headRy + 2) * 2} preserveAspectRatio="xMidYMid slice" />
+          </g>
+        ) : null}
+        {media.faceUrl && !media.baseFrame ? <ellipse cx={VIEW_W / 2} cy={headCy} rx={body.headR + 2} ry={body.headRy + 2} fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="1.5" /> : null}
+
         {/* Garment overlay */}
         {garment && geom && look ? (
           <motion.g
@@ -155,13 +164,6 @@ export function Avatar({ garment, fit, size, isLoading = false, bare = false }: 
           </motion.g>
         ) : null}
 
-        {/* Face tile at the head */}
-        {media.faceUrl && !media.baseFrame ? (
-          <g clipPath={`url(#${ids.headClip})`}>
-            <image href={media.faceUrl} x={VIEW_W / 2 - body.headR - 2} y={headCy - body.headRy - 2} width={(body.headR + 2) * 2} height={(body.headRy + 2) * 2} preserveAspectRatio="xMidYMid slice" />
-          </g>
-        ) : null}
-        {media.faceUrl && !media.baseFrame ? <ellipse cx={VIEW_W / 2} cy={headCy} rx={body.headR + 2} ry={body.headRy + 2} fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="1.5" /> : null}
         {/* floor shadow */}
         <ellipse cx={VIEW_W / 2} cy={levelY('sole') + 6} rx={body.hipHalf + 18} ry={5} fill="rgba(26,22,18,0.12)" />
       </svg>

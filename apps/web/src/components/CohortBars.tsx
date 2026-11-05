@@ -21,7 +21,7 @@ export function CohortBars({ cohort, highlight }: { cohort: FitCohortResponse | 
         <ul className="space-y-1.5">
           {sizes.map(([size, n]) => (
             <li key={size} className="flex items-center gap-2 text-sm">
-              <span className={`w-10 font-medium ${size === highlight ? 'text-coral' : 'text-ink'}`}>{size}</span>
+              <span className={`w-10 font-medium ${size === highlight ? 'text-coral-ink' : 'text-ink'}`}>{size}</span>
               <div className="h-2 flex-1 overflow-hidden rounded-full bg-ink/10" role="meter" aria-valuemin={0} aria-valuemax={max} aria-valuenow={n} aria-label={`Size ${size}: ${n}`}>
                 <div className={`h-full rounded-full ${size === highlight ? 'bg-coral' : 'bg-ink'}`} style={{ width: `${(n / max) * 100}%` }} />
               </div>

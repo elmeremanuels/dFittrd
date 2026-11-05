@@ -131,7 +131,7 @@ export function FusionStep({ result, busy, error, onRemeasure, onRescan, onConfi
       ) : null}
       <p className="flex items-start gap-2 text-xs text-ink/50">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-        Stored encrypted on this device. Only an 80-number fit signature (no photo, no face or skin data) can sync, and you can delete everything in one tap.
+        Stored only on this device, your photos encrypted. Only an 80-number fit signature (no photo, no face or skin data) can sync, and you can delete everything in one tap.
       </p>
     </Panel>
   );

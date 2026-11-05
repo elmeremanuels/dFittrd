@@ -64,7 +64,7 @@ export function NumberField({
         <span className="w-8 text-xs text-ink-mute">{unit}</span>
       </div>
       {error ? (
-        <p id={`${id}-err`} role="alert" className="text-xs text-coral-deep">
+        <p id={`${id}-err`} role="alert" className="text-xs text-coral-ink">
           {error}
         </p>
       ) : hint ? (

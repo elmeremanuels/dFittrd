@@ -61,6 +61,13 @@ export const DEFAULT_ASPECT: Record<Level, number> = {
 /** Levels whose width is measured on a limb blob (both limbs exist; girth of one). */
 const LIMB_LEVELS: ReadonlySet<Level> = new Set<Level>(['thigh', 'knee', 'calf', 'ankle', 'upperArm', 'wrist']);
 
+/**
+ * Levels whose side-view "depth" cannot be measured: in a side view the arms hang over the torso
+ * and hips, so the run at the upper-arm or wrist level is the torso/hip depth (≈ 25 cm), which
+ * would double the arm girth. These always use the population aspect (σ inflated).
+ */
+export const SIDE_DEPTH_UNRELIABLE: ReadonlySet<Level> = new Set<Level>(['upperArm', 'wrist']);
+
 /** Sigma inflation when depth is a population guess rather than a measured side view. */
 const NO_SIDE_SIGMA_FACTOR = 1.35;
 /** Fitted clothing adds roughly this much to a girth; scaled by coverage. */
@@ -122,12 +129,12 @@ export function measureScan(input: MeasureInput): ScanMeasurements {
   const covs: number[] = [];
   for (const s of front.samples) {
     if (!Number.isFinite(s.px) || s.px <= 0) {
-      warnings.push(`${s.level}: no silhouette at level`);
+      warnings.push(s.contact ? `${s.level}: a limb touches the body at this level (not measured)` : `${s.level}: no silhouette at level`);
       continue;
     }
     const widthCm = s.px * scaleF;
     let depthCm: number | undefined;
-    if (sideOk) {
+    if (sideOk && !SIDE_DEPTH_UNRELIABLE.has(s.level)) {
       const ss = side?.samples.find((q) => q.level === s.level);
       if (ss && Number.isFinite(ss.px) && ss.px > 0) depthCm = ss.px * scaleS;
     }
@@ -188,8 +195,11 @@ export function measureScan(input: MeasureInput): ScanMeasurements {
 
   // Posture / shape descriptors.
   const posture: Partial<Record<string, number>> = {};
-  const slope = (Math.atan2(vcm(sp.shoulderSlope.dy), hcm(sp.shoulderSlope.dx)) * 180) / Math.PI;
-  posture.shoulderSlopeDeg = round1(Math.max(0, Math.min(45, slope)));
+  // Shoulder slope comes from the mask contour (ViewMeasurement.shoulderSlopeDeg). The ear→shoulder
+  // landmark angle is ≈ 50–80° for every body (it is the neck, not the shoulder line) and is not used.
+  if (front.shoulderSlopeDeg !== undefined && Number.isFinite(front.shoulderSlopeDeg)) {
+    posture.shoulderSlopeDeg = round1(Math.max(0, Math.min(45, front.shoulderSlopeDeg)));
+  }
   if (sideOk && side) posture.forwardLeanDeg = round1(side.tiltDeg);
   const b = girths.bust?.mean;
   const w = girths.waist?.mean;

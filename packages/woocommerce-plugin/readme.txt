@@ -41,6 +41,10 @@ No customer data, order data or personal data of your shoppers is ever sent by t
 Paskamer terms of service: https://paskamer.app/terms
 Paskamer privacy policy: https://paskamer.app/privacy
 
+== Source code ==
+
+`assets/sdk.v1.js` is the minified build of the Paskamer storefront SDK (vanilla TypeScript, no dependencies). Its human-readable source and build script (`tsup`, see `packages/sdk` — `src/` and `tsup.config.ts`) are published at https://github.com/paskamer/paskamer/tree/main/packages/sdk. Every other script in this plugin (`assets/admin/meta-box.js`) ships unminified.
+
 == Installation ==
 
 1. Upload the plugin zip under *Plugins → Add New → Upload Plugin* and activate it (WooCommerce 9.0 or newer and PHP 8.2 or newer are required).

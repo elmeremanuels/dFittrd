@@ -51,7 +51,7 @@ typecheck · test · build · bundle-secret-scan and builds/pushes the image to 
 | SDK | `POST /v1/sdk/sessions` (CORS `*`, per-shop rate limit, 402 + tryUrl when paused), `GET /sdk/v1.js` | public |
 | Renders | `POST /v1/renders/hero` → 202, `GET /v1/renders/:jobId`, `GET /v1/renders/:jobId/image\|video?exp&sig` | device JWT / signed URL |
 | Merchant | `PUT /v1/merchant/products/:externalId`, `POST …/products/validate`, `DELETE …/products/:externalId`, `GET …/products`, `GET …/usage`, `GET …/ledger`, `GET …/analytics/swipes`, `GET …/analytics/abandoned`, `POST …/keys/rotate`, `PUT /v1/merchant/shops/self`, `POST /v1/merchant/woo/connect`, `POST /v1/merchant/woo/complete` | PK-HMAC, Bearer `sk_…`, or Shopify session token |
-| Shopify | `POST /shopify/token-exchange`, `POST /shopify/webhooks`, `POST /shopify/billing/subscribe` | session token / webhook HMAC |
+| Shopify | `GET /shopify/admin` (embedded admin page from `@paskamer/shopify-app`, `frame-ancestors` CSP), `GET /shopify/auth/callback` (302 to the embedded app home), `POST /shopify/token-exchange` (also writes the theme block's app-data metafields: public key, API/app URL), `POST /shopify/webhooks`, `POST /shopify/billing/subscribe` | none (page/redirect) / session token / webhook HMAC |
 | Billing | `POST /v1/billing/stripe/webhook` | Stripe signature |
 | Ops | `GET /healthz`, `GET /readyz` (db + jobs), `GET /v1/openapi.json` | public |
 
@@ -80,7 +80,9 @@ fires twice per save). Clients must sign every attempt freshly (`ts = now`).
 A try-on session is billable once a swipe with a fit result (`fitScore`/`sizeAtSwipe` non-null)
 arrives: deep-link sessions by `intentToken` (`usage_events.idempotency_key = intent:<token>`,
 `try_sessions.billed_at`), deck swipes once per device × product × UTC day. `usage_daily` is bumped
-in the same write; the nightly `usage-rollup` pushes sessions above the plan's quota to Shopify
+in the same write. A `POST /v1/swipes` batch is all-or-nothing: every `shopId` is checked first
+(422 `unknown_shop` before any write) and inserts, usage events and the ledger entry share one
+transaction. The nightly `usage-rollup` pushes sessions above the plan's quota to Shopify
 `appUsageRecordCreate` or a Stripe meter event (`paskamer_fit_sessions`), idempotent per shop-day.
 
 ### Privacy (D3), enforced by construction

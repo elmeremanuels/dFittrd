@@ -2,8 +2,8 @@
  * Scan-line geometry on a segmentation category mask (Uint8Array, row-major, one class id per
  * pixel; see `SEG` in landmarks.ts). Pure, so it is unit-tested with synthetic masks.
  */
-import { SEG } from './landmarks';
-import type { LevelPlacement, LevelSample } from './types';
+import { POSE, SEG } from './landmarks';
+import type { Landmark, LevelPlacement, LevelSample } from './types';
 
 export interface CategoryMask {
   width: number;
@@ -58,28 +58,124 @@ export function coverageOnRun(mask: CategoryMask, y: number, start: number, end:
   return n === 0 ? 0 : clothes / n;
 }
 
+/** One row's run at a placement after its contact limits; `reject` = merged with a neighbouring blob. */
+function limitedRun(mask: CategoryMask, p: LevelPlacement, x: number, y: number): { start: number; end: number } | 'reject' | null {
+  const run = runAt(mask, x, y);
+  if (!run || !p.limits) return run;
+  const lo = p.limits.min * mask.width;
+  const hi = p.limits.max * mask.width;
+  if (p.limits.mode === 'reject') {
+    // one pixel of slack for rounding of the landmark-derived limit
+    return run.start < lo - 1 || run.end > hi + 1 ? 'reject' : run;
+  }
+  const start = Math.max(run.start, Math.ceil(lo));
+  const end = Math.min(run.end, Math.floor(hi));
+  return end >= start ? { start, end } : null;
+}
+
 /**
  * Width (pixels) of the blob at each placement. Slanted limbs are corrected by cos(axis angle) so a
  * horizontal scan across a 30° thigh does not inflate the width. Uses the median of 3 rows
- * (y−1, y, y+1) for robustness against mask noise.
+ * (y−1, y, y+1) for robustness against mask noise. Placements with `limits` are split (legs) or
+ * rejected (`contact: true`, arm against torso); placements with `search` take the narrowest run of
+ * their row band (neck: in a front or side view nothing between nose and shoulders is narrower).
  */
 export function sampleLevels(mask: CategoryMask, placements: readonly LevelPlacement[]): LevelSample[] {
   return placements.map((p) => {
-    const yc = Math.round(p.y * mask.height);
     const xc = p.x * mask.width;
     const widths: number[] = [];
     const covs: number[] = [];
-    for (const dy of [-1, 0, 1]) {
-      const y = yc + dy;
-      const run = runAt(mask, xc, y);
-      if (!run) continue;
-      widths.push(run.end - run.start + 1);
-      covs.push(coverageOnRun(mask, y, run.start, run.end));
+    let rejected = 0;
+    if (p.search) {
+      const y0 = Math.max(0, Math.round(p.search.y0 * mask.height));
+      const y1 = Math.min(mask.height - 1, Math.round(p.search.y1 * mask.height));
+      const rows: { w: number; cov: number }[] = [];
+      for (let y = y0; y <= y1; y++) {
+        const run = limitedRun(mask, p, xc, y);
+        if (run === 'reject') {
+          rejected++;
+          continue;
+        }
+        if (run) rows.push({ w: run.end - run.start + 1, cov: coverageOnRun(mask, y, run.start, run.end) });
+      }
+      // the 3 narrowest rows (median of them) — robust to a single noisy row
+      rows.sort((a, b) => a.w - b.w);
+      for (const r of rows.slice(0, 3)) {
+        widths.push(r.w);
+        covs.push(r.cov);
+      }
+    } else {
+      const yc = Math.round(p.y * mask.height);
+      for (const dy of [-1, 0, 1]) {
+        const y = yc + dy;
+        const run = limitedRun(mask, p, xc, y);
+        if (run === 'reject') {
+          rejected++;
+          continue;
+        }
+        if (!run) continue;
+        widths.push(run.end - run.start + 1);
+        covs.push(coverageOnRun(mask, y, run.start, run.end));
+      }
     }
-    if (widths.length === 0) return { level: p.level, px: Number.NaN, coverage: 0 };
+    if (widths.length === 0) return rejected > 0 ? { level: p.level, px: Number.NaN, coverage: 0, contact: true } : { level: p.level, px: Number.NaN, coverage: 0 };
     const cos = Math.cos((p.axisDeg * Math.PI) / 180);
     return { level: p.level, px: median(widths) * Math.max(0.5, cos), coverage: median(covs) };
   });
+}
+
+/**
+ * Convert level widths measured on a mask to pixels of the frame it was computed from. MediaPipe
+ * returns category masks at the input size, but when it does not (other model/delegate), widths in
+ * mask pixels would otherwise be multiplied by a frame-pixel scale.
+ */
+export function samplesToFramePx(samples: readonly LevelSample[], maskWidth: number, frameWidth: number): LevelSample[] {
+  if (!(maskWidth > 0) || !(frameWidth > 0) || maskWidth === frameWidth) return samples.map((s) => ({ ...s }));
+  const k = frameWidth / maskWidth;
+  return samples.map((s) => ({ ...s, px: s.px * k }));
+}
+
+const notBackgroundOrHair = (c: number): boolean => c !== SEG.BACKGROUND && c !== SEG.HAIR;
+
+/**
+ * Shoulder slope (degrees below horizontal) from the top contour of the person mask, front view:
+ * for each shoulder, the first non-hair foreground row (scanning down from below the jaw to the
+ * shoulder line) is found at 45 % and 85 % of the way from the
+ * shoulder midline to the shoulder landmark (on the trapezius, inside the deltoid) and the angle of
+ * the line through both points is taken in frame pixels. Mean of both sides, clamped to 0..45.
+ * NaN when no contour could be traced.
+ */
+export function shoulderSlopeFromMask(mask: CategoryMask, lm: readonly Landmark[], frame: { width: number; height: number }): number {
+  const ls = lm[POSE.LEFT_SHOULDER];
+  const rs = lm[POSE.RIGHT_SHOULDER];
+  const nose = lm[POSE.NOSE];
+  if (!ls || !rs || !nose) return Number.NaN;
+  const smx = (ls.x + rs.x) / 2;
+  const smy = (ls.y + rs.y) / 2;
+  // start below the ears/jaw (≈ 45 % of nose → shoulder line) so the head is never taken for a shoulder
+  const yStart = Math.max(0, Math.floor((nose.y + 0.45 * (smy - nose.y)) * mask.height));
+  const yEnd = Math.min(mask.height - 1, Math.ceil(smy * mask.height));
+  const topAt = (xNorm: number): number => {
+    const x = Math.round(xNorm * mask.width);
+    if (x < 0 || x >= mask.width) return -1;
+    for (let y = yStart; y <= yEnd; y++) if (notBackgroundOrHair(mask.data[y * mask.width + x] ?? 0)) return y;
+    return -1;
+  };
+  const angles: number[] = [];
+  for (const s of [ls, rs]) {
+    const xi = smx + 0.45 * (s.x - smx);
+    const xo = smx + 0.85 * (s.x - smx);
+    const yi = topAt(xi);
+    const yo = topAt(xo);
+    if (yi < 0 || yo < 0) continue;
+    const dx = Math.abs(xo - xi) * frame.width;
+    const dy = ((yo - yi) / mask.height) * frame.height;
+    if (!(dx > 0)) continue;
+    angles.push((Math.atan2(dy, dx) * 180) / Math.PI);
+  }
+  if (angles.length === 0) return Number.NaN;
+  const mean = angles.reduce((a, b) => a + b, 0) / angles.length;
+  return Math.max(0, Math.min(45, mean));
 }
 
 /** First foreground row scanning down the columns around `xNorm` (head top). -1 when none. */

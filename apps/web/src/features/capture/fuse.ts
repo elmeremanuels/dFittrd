@@ -23,7 +23,7 @@ import {
   type BodyProfile,
   type ManualMethod,
   type Measurement,
-} from '@paskamer/schema';
+} from '@curtain/schema';
 import { populationPrior, type PriorLevel } from './prior';
 import type { ScanMeasurements, Sex } from './types';
 

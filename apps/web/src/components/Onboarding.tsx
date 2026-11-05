@@ -2,11 +2,11 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { Camera, ChevronRight, Sparkles } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import type { BodyProfile } from '@paskamer/schema';
-import { ONBOARDING_VIBES } from '@paskamer/taste-engine';
+import type { BodyProfile } from '@curtain/schema';
+import { ONBOARDING_VIBES } from '@curtain/taste-engine';
 import { CaptureStep, MANUAL_RANGES, MEASUREMENT_LABELS, validateManual, type CaptureExtras, type ManualForm, EMPTY_MANUAL_FORM } from '@/features/capture';
 import { METHOD_LABELS } from '@/features/capture/captureMachine';
-import type { ManualMethod } from '@paskamer/schema';
+import type { ManualMethod } from '@curtain/schema';
 import { useApp } from '@/store';
 import { NumberField } from './NumberField';
 
@@ -72,7 +72,7 @@ export function Onboarding({ initialStep = 'welcome', onFinished }: { initialSte
   };
 
   const titles: Record<OnboardingStep, { title: string; subtitle: string }> = {
-    welcome: { title: 'Welcome to Paskamer', subtitle: 'Your private fitting room. Realistic fit, your taste, nothing leaves your phone.' },
+    welcome: { title: 'Welcome to Curtain', subtitle: 'Your private fitting room. Realistic fit, your taste, nothing leaves your phone.' },
     measurements: { title: 'Your measurements', subtitle: 'They drive the fit directly, and keep the scan honest.' },
     vibes: { title: 'Your style vibe', subtitle: 'Pick what resonates. The deck learns the rest from your swipes.' },
     capture: { title: 'Capture', subtitle: 'A face photo and an 8-second video, measured on this device.' },

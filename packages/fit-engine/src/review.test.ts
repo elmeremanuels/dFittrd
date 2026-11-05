@@ -2,7 +2,7 @@
  * Review regressions (2026-11-04 skeptical pass). Each case is a behaviour the spec vectors did
  * not pin down and where the first implementation gave a wrong answer; see README §Spec deviations.
  */
-import type { UserBody } from '@paskamer/schema';
+import type { UserBody } from '@curtain/schema';
 import { describe, expect, it } from 'vitest';
 import { computeFit } from './computeFit';
 import { fitGapsForRender, fitSummary } from './summary';

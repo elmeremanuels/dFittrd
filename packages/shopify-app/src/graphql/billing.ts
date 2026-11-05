@@ -6,7 +6,7 @@
 import { assertNoUserErrors, type AdminGraphqlClient, type UserError } from './client';
 
 export const APP_SUBSCRIPTION_CREATE = /* GraphQL */ `
-  mutation PaskamerSubscribe($name: String!, $returnUrl: URL!, $test: Boolean, $trialDays: Int, $lineItems: [AppSubscriptionLineItemInput!]!) {
+  mutation CurtainSubscribe($name: String!, $returnUrl: URL!, $test: Boolean, $trialDays: Int, $lineItems: [AppSubscriptionLineItemInput!]!) {
     appSubscriptionCreate(name: $name, returnUrl: $returnUrl, test: $test, trialDays: $trialDays, lineItems: $lineItems) {
       userErrors { field message }
       confirmationUrl
@@ -20,7 +20,7 @@ export const APP_SUBSCRIPTION_CREATE = /* GraphQL */ `
 `;
 
 export const APP_USAGE_RECORD_CREATE = /* GraphQL */ `
-  mutation PaskamerUsage($subscriptionLineItemId: ID!, $description: String!, $price: MoneyInput!, $idempotencyKey: String!) {
+  mutation CurtainUsage($subscriptionLineItemId: ID!, $description: String!, $price: MoneyInput!, $idempotencyKey: String!) {
     appUsageRecordCreate(subscriptionLineItemId: $subscriptionLineItemId, description: $description, price: $price, idempotencyKey: $idempotencyKey) {
       userErrors { field message }
       appUsageRecord { id }
@@ -29,7 +29,7 @@ export const APP_USAGE_RECORD_CREATE = /* GraphQL */ `
 `;
 
 export const APP_SUBSCRIPTION_CANCEL = /* GraphQL */ `
-  mutation PaskamerCancel($id: ID!, $prorate: Boolean) {
+  mutation CurtainCancel($id: ID!, $prorate: Boolean) {
     appSubscriptionCancel(id: $id, prorate: $prorate) {
       userErrors { field message }
       appSubscription { id status }
@@ -38,7 +38,7 @@ export const APP_SUBSCRIPTION_CANCEL = /* GraphQL */ `
 `;
 
 export const ACTIVE_SUBSCRIPTIONS_QUERY = /* GraphQL */ `
-  query PaskamerSubscriptions {
+  query CurtainSubscriptions {
     currentAppInstallation {
       activeSubscriptions {
         id
@@ -63,7 +63,7 @@ export const ACTIVE_SUBSCRIPTIONS_QUERY = /* GraphQL */ `
 `;
 
 export interface SubscriptionPlanInput {
-  /** e.g. "Paskamer Starter". Also parsed by the api's app_subscriptions/update handler (/pro/i → pro). */
+  /** e.g. "Curtain Starter". Also parsed by the api's app_subscriptions/update handler (/pro/i → pro). */
   name: string;
   returnUrl: string;
   priceEurPerMonth: number;
@@ -173,7 +173,7 @@ export async function createUsageRecord(client: AdminGraphqlClient, input: Usage
 
 /** D7: billing unit = try-on session, idempotent by intent token; deck sessions key on device×shop×product×day. */
 export function usageIdempotencyKey(shopId: string, sessionKey: string): string {
-  return `paskamer:${shopId}:${sessionKey}`.slice(0, 255);
+  return `curtain:${shopId}:${sessionKey}`.slice(0, 255);
 }
 
 export interface ActiveSubscription {

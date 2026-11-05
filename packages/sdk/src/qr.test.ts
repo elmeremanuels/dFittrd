@@ -31,12 +31,12 @@ function roundtrip(text: string): QrMatrix {
 }
 
 const jwtish = (n: number): string =>
-  'https://app.paskamer.app/try/' +
+  'https://app.curtain.fit/try/' +
   Array.from({ length: n }, (_, i) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'[i % 64]).join('');
 
 describe('encodeQr', () => {
   it('encodes a short URL in version 1–3 and decodes back', () => {
-    const m = roundtrip('https://paskamer.app');
+    const m = roundtrip('https://curtain.fit');
     expect(m.version).toBeLessThanOrEqual(3);
     expect(m.size).toBe(m.version * 4 + 17);
   });
@@ -47,7 +47,7 @@ describe('encodeQr', () => {
   });
 
   it('decodes UTF-8 text in byte mode', () => {
-    roundtrip('Pas het in Paskamer — jurk “Aalter” €149 ✓');
+    roundtrip('Try it on in Curtain — dress “Aalter” €149 ✓');
   });
 
   it('decodes across many lengths (hits all block-structure code paths)', () => {
@@ -88,8 +88,8 @@ describe('encodeQr', () => {
 
 describe('qrToSvg', () => {
   it('produces a self-contained SVG with a quiet zone and the ink colour', () => {
-    const svg = qrToSvg('https://paskamer.app');
-    const m = encodeQr('https://paskamer.app');
+    const svg = qrToSvg('https://curtain.fit');
+    const m = encodeQr('https://curtain.fit');
     expect(svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(true);
     expect(svg).toContain(`viewBox="0 0 ${m.size + 8} ${m.size + 8}"`);
     expect(svg).toContain('fill="#1A1612"');

@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MOCK_GARMENTS, MOCK_GARMENTS_BY_ID } from '@paskamer/schema';
+import { MOCK_GARMENTS, MOCK_GARMENTS_BY_ID } from '@curtain/schema';
 import { AppDb, setAppDb } from '@/db/db';
 import { createAppStore, MOCK_SHOP_ID } from '@/store/store';
 
@@ -18,7 +18,7 @@ let dbName = '';
 let db: AppDb;
 
 beforeEach(() => {
-  dbName = `paskamer-test-${Math.random().toString(36).slice(2)}`;
+  dbName = `curtain-test-${Math.random().toString(36).slice(2)}`;
   db = new AppDb(dbName);
   setAppDb(db);
 });

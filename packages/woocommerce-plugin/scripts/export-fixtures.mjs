@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Export parity fixtures for the PHP tests from @paskamer/schema:
+ * Export parity fixtures for the PHP tests from @curtain/schema:
  * for every MOCK_GARMENT, the Woo meta rows `toWooMeta` would store, a minimal WC product snapshot,
  * and what the TypeScript normaliser `fromWooMeta` produces from them. The PHP Payload_Builder must
  * reproduce `expected` byte-for-byte (canonical JSON) — it is the PHP twin of fromWooMeta.
@@ -8,7 +8,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MOCK_GARMENTS, fromWooMeta, toWooMeta, ESTIMATE_DISCLAIMER } from '@paskamer/schema';
+import { MOCK_GARMENTS, fromWooMeta, toWooMeta, ESTIMATE_DISCLAIMER } from '@curtain/schema';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 

@@ -12,7 +12,7 @@ export type AppConfigVar = (typeof APP_CONFIG_VARS)[number];
 export const APP_CONFIG_DEFAULTS: Partial<Record<AppConfigVar, string>> = {
   SHOPIFY_API_VERSION: '2025-10',
   SHOPIFY_DEV_STORE: '',
-  SHOPIFY_APP_HANDLE: 'paskamer',
+  SHOPIFY_APP_HANDLE: 'curtain',
 };
 
 export const REQUIRED_SCOPES = ['read_products', 'write_products'] as const;

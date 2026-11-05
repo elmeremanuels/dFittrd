@@ -1,7 +1,7 @@
 /**
  * Shopify app backend (D6, managed installation):
  *  - GET  /shopify/admin           the embedded admin page (shopify.app.toml `application_url`), rendered
- *    by @paskamer/shopify-app with a frame-ancestors CSP for the shop + admin.shopify.com.
+ *    by @curtain/shopify-app with a frame-ancestors CSP for the shop + admin.shopify.com.
  *  - GET  /shopify/auth/callback   the toml's required redirect URL; managed installation never needs
  *    it, so it redirects to the embedded app home in the admin.
  *  - POST /shopify/token-exchange  session token → offline access token (stored encrypted), shop row,
@@ -12,7 +12,7 @@
  */
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { adminAppUrl, adminContentSecurityPolicy, createAdminClient, renderAdminPage, setAppDataMetafields, type FetchLike as ShopifyFetchLike } from '@paskamer/shopify-app';
+import { adminAppUrl, adminContentSecurityPolicy, createAdminClient, renderAdminPage, setAppDataMetafields, type FetchLike as ShopifyFetchLike } from '@curtain/shopify-app';
 import { z } from 'zod';
 import { requireMerchant } from '../auth/merchant.js';
 import { isShopifyDomain, verifyShopifySessionToken } from '../auth/shopifySessionToken.js';
@@ -99,7 +99,7 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
         req.log.warn({ err, shopDomain }, 'metafield definitions could not be created (continuing)');
       }
       const fresh = (await findShopByDomain(db, shopDomain))!;
-      // The theme block reads app.metafields.paskamer.{public_key,api_url,app_url}; without them the
+      // The theme block reads app.metafields.curtain.{public_key,api_url,app_url}; without them the
       // button renders but cannot load the SDK. The public prefix is stable across key rotations, so
       // writing it on every token exchange (each admin open) keeps it correct without a rotation hook.
       try {
@@ -135,7 +135,7 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
       if (!token) throw unauthorized('shop has no offline token — run token exchange', 'shop_not_installed');
       const spec = PLAN_SPECS[req.body.plan];
       const r = await shopify.appSubscriptionCreate(shop.domain, token, {
-        name: `Paskamer ${spec.name[0]!.toUpperCase()}${spec.name.slice(1)}`,
+        name: `Curtain ${spec.name[0]!.toUpperCase()}${spec.name.slice(1)}`,
         returnUrl: req.body.returnUrl ?? `${env.PUBLIC_APP_URL}/merchant?billing=done`,
         priceEurPerMonth: spec.priceEurPerMonth,
         cappedAmountEur: 100,

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { WARDROBE_STATES, type FitCohortResponse, type WardrobeState } from '@paskamer/schema';
+import { WARDROBE_STATES, type FitCohortResponse, type WardrobeState } from '@curtain/schema';
 import { CohortBars } from '@/components/CohortBars';
 import { eur } from '@/lib/format';
 import { api, MOCK_SHOP_ID, useApp } from '@/store';

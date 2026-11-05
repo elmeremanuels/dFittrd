@@ -5,7 +5,7 @@ import { AppConfigError, renderAppConfig, validateAppConfig } from './appConfig'
 import { ALL_WEBHOOK_TOPICS, SHOPIFY_COMPLIANCE_TOPICS, SHOPIFY_WEBHOOK_TOPICS } from './webhookHmac';
 
 const template = readFileSync(new URL('../shopify.app.toml', import.meta.url), 'utf8');
-const vars = { SHOPIFY_API_KEY: '0123456789abcdef0123456789abcdef', PUBLIC_API_URL: 'https://api.paskamer.app', PUBLIC_APP_URL: 'https://app.paskamer.app' };
+const vars = { SHOPIFY_API_KEY: '0123456789abcdef0123456789abcdef', PUBLIC_API_URL: 'https://api.curtain.fit', PUBLIC_APP_URL: 'https://app.curtain.fit' };
 
 describe('shopify.app.toml template', () => {
   it('renders to valid TOML that passes validation against the api contracts', () => {
@@ -17,9 +17,9 @@ describe('shopify.app.toml template', () => {
     expect(v.issues).toEqual([]);
     expect(v.ok).toBe(true);
     expect(parsed.client_id).toBe(vars.SHOPIFY_API_KEY);
-    expect(parsed.application_url).toBe('https://api.paskamer.app/shopify/admin');
+    expect(parsed.application_url).toBe('https://api.curtain.fit/shopify/admin');
     expect(parsed.embedded).toBe(true);
-    expect(parsed.handle).toBe('paskamer');
+    expect(parsed.handle).toBe('curtain');
     expect((parsed.access_scopes as { scopes: string; use_legacy_install_flow: boolean }).use_legacy_install_flow).toBe(false);
     expect(v.scopes).toEqual(['read_products', 'write_products']);
     expect(v.topics.sort()).toEqual([...SHOPIFY_WEBHOOK_TOPICS].sort());
@@ -30,8 +30,8 @@ describe('shopify.app.toml template', () => {
   });
 
   it('keeps dev store and a custom api version when given', () => {
-    const parsed = parse(renderAppConfig(template, { ...vars, SHOPIFY_DEV_STORE: 'paskamer-dev.myshopify.com', SHOPIFY_API_VERSION: '2026-01' })) as Record<string, unknown>;
-    expect((parsed.build as Record<string, unknown>).dev_store_url).toBe('paskamer-dev.myshopify.com');
+    const parsed = parse(renderAppConfig(template, { ...vars, SHOPIFY_DEV_STORE: 'curtain-dev.myshopify.com', SHOPIFY_API_VERSION: '2026-01' })) as Record<string, unknown>;
+    expect((parsed.build as Record<string, unknown>).dev_store_url).toBe('curtain-dev.myshopify.com');
     expect((parsed.webhooks as { api_version: string }).api_version).toBe('2026-01');
   });
 

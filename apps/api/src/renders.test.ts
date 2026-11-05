@@ -19,7 +19,7 @@ describe('POST /v1/renders/hero — the only image route', () => {
   let s: Awaited<ReturnType<typeof seedShop>>;
   let body: Record<string, unknown>;
   beforeAll(async () => {
-    t = await makeApp({ RENDERS_DIR: `/tmp/claude-0/paskamer-renders-${process.pid}` });
+    t = await makeApp({ RENDERS_DIR: `/tmp/claude-0/curtain-renders-${process.pid}` });
     s = await seedShop(t);
     body = {
       productId: 'aalter-studio-1',
@@ -98,7 +98,7 @@ describe('POST /v1/renders/hero — the only image route', () => {
     const img = await t.app.inject({ method: 'GET', url: url.pathname + url.search });
     expect(img.statusCode).toBe(200);
     expect(img.headers['content-type']).toBe('image/png');
-    expect(img.headers['x-paskamer-disclaimer']).toBe('generated-estimate');
+    expect(img.headers['x-curtain-disclaimer']).toBe('generated-estimate');
     const tampered = await t.app.inject({ method: 'GET', url: url.pathname + url.search.replace(/sig=.{4}/, 'sig=zzzz') });
     expect(tampered.statusCode).toBe(403);
 

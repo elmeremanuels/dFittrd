@@ -6,7 +6,7 @@ import { CSS } from './styles';
 const strings = STRINGS.en;
 const content = {
   qrSvg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1"/></svg>',
-  tryUrl: 'https://app.paskamer.app/try/abc',
+  tryUrl: 'https://app.curtain.fit/try/abc',
   expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
 };
 
@@ -29,7 +29,7 @@ describe('openModal — accessibility', () => {
     const title = document.getElementById(dialog.getAttribute('aria-labelledby')!);
     const desc = document.getElementById(dialog.getAttribute('aria-describedby')!);
     expect(title?.textContent).toBe(strings.title);
-    expect(desc?.textContent).toBe('Scan with your phone to try it on in Paskamer');
+    expect(desc?.textContent).toBe('Scan with your phone to try it on in Curtain');
     expect(dialog.querySelector('.pk-disclaimer')?.textContent).toBe(strings.disclaimer);
     expect(dialog.querySelector('.pk-close')?.getAttribute('aria-label')).toBe('Close');
   });
@@ -75,7 +75,7 @@ describe('openModal — accessibility', () => {
     openModal({ strings, content, trigger, onClose: () => closed++ });
     expect(document.body.style.overflow).toBe('hidden');
     key(document, 'Escape');
-    expect(document.querySelector('[data-paskamer-modal]')).toBeNull();
+    expect(document.querySelector('[data-curtain-modal]')).toBeNull();
     expect(document.activeElement).toBe(trigger);
     expect(document.body.style.overflow).toBe('');
     expect(closed).toBe(1);
@@ -106,7 +106,7 @@ describe('openModal — accessibility', () => {
 
   it('speaks Dutch when given the nl table', () => {
     const { dialog } = openModal({ strings: STRINGS.nl, content });
-    expect(dialog.querySelector('.pk-title')?.textContent).toBe('Pas het in Paskamer');
+    expect(dialog.querySelector('.pk-title')?.textContent).toBe('Pas het in Curtain');
     expect(dialog.querySelector('.pk-close')?.getAttribute('aria-label')).toBe('Sluiten');
   });
 });

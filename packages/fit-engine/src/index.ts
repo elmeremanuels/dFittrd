@@ -1,8 +1,8 @@
 /**
- * @paskamer/fit-engine — pure, on-device fit scoring and size recommendation
+ * @curtain/fit-engine — pure, on-device fit scoring and size recommendation
  * (handoff §4.1–4.2, docs/research/fit-engine-spec.md, decisions D5 and D8).
  *
- * Zero runtime dependencies: only types are imported from @paskamer/schema.
+ * Zero runtime dependencies: only types are imported from @curtain/schema.
  */
 export { computeFit, recommendSize, easeTargetFor, footLengthFromEu } from './computeFit';
 export { bandFor, bandForWithSigma, type ProbabilisticBand } from './bands';

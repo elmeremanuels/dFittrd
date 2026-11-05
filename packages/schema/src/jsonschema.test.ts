@@ -8,9 +8,9 @@ describe('garmentJsonSchema', () => {
 
   it('is draft 2020-12 with a flat object root and an $id', () => {
     expect(schema.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
-    expect(schema.$id).toBe('https://paskamer.app/schema/v1/garment.schema.json');
+    expect(schema.$id).toBe('https://curtain.fit/schema/v1/garment.schema.json');
     expect(schema.type).toBe('object');
-    expect(schema.title).toBe('Paskamer GarmentPayload v1');
+    expect(schema.title).toBe('Curtain GarmentPayload v1');
   });
 
   it('requires the heavy fields and schemaVersion = 1', () => {

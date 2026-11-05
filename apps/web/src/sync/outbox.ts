@@ -5,8 +5,8 @@
  * back off exponentially (1 s · 2^n, max 10 min); permanent 4xx rows are dropped with the error
  * recorded. No body data is ever in this queue (taste-engine contract 2).
  */
-import type { SwipeBatchRequest, SwipeWireEvent, WardrobePutRequest, FitSignatureWire } from '@paskamer/schema';
-import { isSaveOutboxEntry, type OutboxEntry } from '@paskamer/taste-engine';
+import type { SwipeBatchRequest, SwipeWireEvent, WardrobePutRequest, FitSignatureWire } from '@curtain/schema';
+import { isSaveOutboxEntry, type OutboxEntry } from '@curtain/taste-engine';
 import { ApiError, type ApiClient } from '@/api/client';
 import type { AppDb, OutboxRow } from '@/db/db';
 import { isOnline, onOnline } from '@/platform/download';

@@ -1,5 +1,5 @@
 /** Test harness: PGlite + MemoryQueue + MockProvider; every suite gets a fresh database. */
-import { MockProvider, TryOnRouter, type TryOnProvider } from '@paskamer/tryon-providers';
+import { MockProvider, TryOnRouter, type TryOnProvider } from '@curtain/tryon-providers';
 import { build, type App } from '../app.js';
 import { connectPglite, type DbHandle } from '../db/client.js';
 import { testEnv, type Env } from '../env.js';
@@ -8,7 +8,7 @@ import type { FetchLike } from '../context.js';
 import type { LookupLike } from '../lib/safeFetch.js';
 import { createShop, issueMerchantKeys, type ShopRow } from '../services/shops.js';
 import { upsertProduct } from '../services/products.js';
-import { MOCK_GARMENTS_BY_ID } from '@paskamer/schema';
+import { MOCK_GARMENTS_BY_ID } from '@curtain/schema';
 
 export interface TestApp {
   app: App;

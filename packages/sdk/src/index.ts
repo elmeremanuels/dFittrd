@@ -1,5 +1,5 @@
 /**
- * @paskamer/sdk — the merchant drop-in.
+ * @curtain/sdk — the merchant drop-in.
  *
  * IIFE build (dist/sdk.v1.js): auto-initialises from the <script> tag's data-* attributes.
  * ESM build (dist/sdk.v1.esm.js): import { init } and call it yourself (auto-init is a no-op
@@ -16,6 +16,6 @@ export { pickStrings, STRINGS, ESTIMATE_DISCLAIMER } from './i18n';
 export type { Strings } from './i18n';
 export { CSS, STYLE_ID, injectStyles } from './styles';
 export { VERSION } from './version';
-export type { PaskamerApi, PaskamerConfig, OpenMode, OpenOptions, OpenResult, SdkSessionRequest, SdkSessionResponse } from './types';
+export type { CurtainApi, CurtainConfig, OpenMode, OpenOptions, OpenResult, SdkSessionRequest, SdkSessionResponse } from './types';
 
 autoInit();

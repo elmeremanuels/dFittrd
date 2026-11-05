@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { Camera, Ruler, ShieldCheck, Sparkles } from 'lucide-react';
-import type { BodyMeasurementKey, BodyProfile } from '@paskamer/schema';
+import type { BodyMeasurementKey, BodyProfile } from '@curtain/schema';
 import { EMPTY_MANUAL_FORM, manualEntries, nextStage, type FlowCaps, type ManualForm, type Stage } from '../captureMachine';
 import { fuseProfile, type FuseResult } from '../fuse';
 import { hasCamera } from '../platform/camera';
@@ -36,7 +36,7 @@ export interface CaptureExtras {
 export interface CaptureStepProps {
   onComplete: (profile: BodyProfile, extras: CaptureExtras) => void;
   onSkip: () => void;
-  /** Persist to IndexedDB (Dexie db `paskamer`) before calling onComplete. Default true. */
+  /** Persist to IndexedDB (Dexie db `curtain`) before calling onComplete. Default true. */
   persist?: boolean;
   /** Same-origin base path of the MediaPipe assets. Default `/models`. */
   modelBase?: string;

@@ -1,17 +1,17 @@
-# @paskamer/taste-engine
+# @curtain/taste-engine
 
-Pure TypeScript swipe learning and colour harmony for the Paskamer deck (handoff §5,
+Pure TypeScript swipe learning and colour harmony for the Curtain deck (handoff §5,
 `docs/research/taste-engine-spec.md`). Zero runtime dependencies; the only import is **types**
-from `@paskamer/schema` (`GarmentPayload`, `SwipeEvent`, `SwipeAction`, `PassReason`, `TasteAxis`).
+from `@curtain/schema` (`GarmentPayload`, `SwipeEvent`, `SwipeAction`, `PassReason`, `TasteAxis`).
 Every function is pure: it returns new objects (structural sharing allowed) and never mutates its
 inputs. The UI keeps `TasteState` in context + IndexedDB (`taste`, `outbox`); it is plain JSON
 (no Sets/Maps) and round-trips through `JSON.stringify`.
 
 ```sh
-pnpm --filter @paskamer/taste-engine typecheck   # tsc --noEmit
-pnpm --filter @paskamer/taste-engine test        # vitest: spec vectors 1–16, colour, colour harmony
-pnpm --filter @paskamer/taste-engine build       # tsup → dist/index.{js,cjs,d.ts}
-pnpm --filter @paskamer/taste-engine lint        # eslint flat config
+pnpm --filter @curtain/taste-engine typecheck   # tsc --noEmit
+pnpm --filter @curtain/taste-engine test        # vitest: spec vectors 1–16, colour, colour harmony
+pnpm --filter @curtain/taste-engine build       # tsup → dist/index.{js,cjs,d.ts}
+pnpm --filter @curtain/taste-engine lint        # eslint flat config
 ```
 
 ## Public API
@@ -24,7 +24,7 @@ import {
   rankDeck, dealNext, scoreItem,
   styleDna,
   colourMatch, colourMatchScore, colourChipLabel, deltaE2000, hexToLab, SEASON_TABLE,
-} from '@paskamer/taste-engine';
+} from '@curtain/taste-engine';
 ```
 
 ### State and types (`types.ts`)
@@ -36,7 +36,7 @@ import {
 | `ItemFeatures` | `axes`, `silhouette`, `hue: HueBin`, `fabric`, `cut`, `priceEur` |
 | `PenaltyEntry` | `{ hue, fabric, cut, remainingCards, strength }` |
 | `OutboxEntry` | `SwipeEvent` (wire type from schema) or `SaveOutboxEntry { type:'save', itemId, size }`; `isSaveOutboxEntry()` discriminates |
-| `FitResultLike` | `{ recommendedSize: string \| null; score: number \| null }` — `@paskamer/fit-engine`'s `FitResult` is structurally assignable; the taste engine does not depend on that package |
+| `FitResultLike` | `{ recommendedSize: string \| null; score: number \| null }` — `@curtain/fit-engine`'s `FitResult` is structurally assignable; the taste engine does not depend on that package |
 | `DeckGarment` | the garment fields the engine reads (`id`, `category`, `priceEur`, `primaryColorHex`, `patternBlock`, `fabric.primary`, optional `ease`, `styleTags`); a full `GarmentPayload` is assignable |
 | constants | `AXES` (fixed radar order, identical to schema `TASTE_AXES`), `HUE_BINS`, `SILHOUETTES`, `EVENTS_RING_SIZE` 500, `LOVED_PRICES_KEEP` 50, `PENALTY_CARDS` 50, `PENALTY_MAX_STRENGTH` 2, `RESURFACE_AFTER` 200, `WARM_UP_SWIPES` 20, `WARM_UP_MULTIPLIER` 1.5, `EXPLORATION_EVERY` 5 |
 
@@ -69,7 +69,7 @@ import {
 
 ```ts
 let state = applyOnboardingVibes(emptyState(), chips);            // onboarding
-const fitFor = (g) => computeFit(g, userBody);                      // @paskamer/fit-engine, on-device
+const fitFor = (g) => computeFit(g, userBody);                      // @curtain/fit-engine, on-device
 const dealt = dealNext(catalog, state, fitFor);                     // one card shown
 state = dealt.state;
 const { state: next, event } = applySwipe(state, dealt.card.garment, dealt.card.fit, 'love', Date.now());

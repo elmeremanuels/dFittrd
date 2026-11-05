@@ -1,7 +1,7 @@
 {
-  "name": "@paskamer/sdk",
+  "name": "@curtain/sdk",
   "version": "0.1.0",
-  "description": "Paskamer merchant SDK: a tiny vanilla-JS drop-in that turns <button data-paskamer-product> into a try-on handshake (POST /v1/sdk/sessions → deep link on mobile, accessible QR modal on desktop).",
+  "description": "Curtain merchant SDK: a tiny vanilla-JS drop-in that turns <button data-curtain-product> into a try-on handshake (POST /v1/sdk/sessions → deep link on mobile, accessible QR modal on desktop).",
   "license": "UNLICENSED",
   "private": true,
   "type": "module",
@@ -32,7 +32,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
-    "@paskamer/schema": "workspace:*",
+    "@curtain/schema": "workspace:*",
     "@types/node": "^22.20.5",
     "esbuild": "^0.25.12",
     "eslint": "^9.39.5",

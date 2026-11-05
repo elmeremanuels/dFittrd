@@ -1,18 +1,18 @@
 # Architecture
 
-Paskamer is a two-sided product: a free consumer PWA (the fitting room) and paid merchant plugins (Shopify, WooCommerce) that feed it garment data. One backend serves both. Decisions and their rationale are in `docs/DECISIONS.md`.
+Curtain is a two-sided product: a free consumer PWA (the fitting room) and paid merchant plugins (Shopify, WooCommerce) that feed it garment data. One backend serves both. Decisions and their rationale are in `docs/DECISIONS.md`.
 
 ```
-paskamer/
+curtain/
 ├─ apps/
 │  ├─ web/                 consumer PWA (React 19, Vite, Tailwind 4, motion) — also hosts the merchant console under /merchant
 │  └─ api/                 the one backend (Fastify 5, Drizzle + Postgres, pg-boss in-process, Shopify webhooks, billing)
 ├─ packages/
-│  ├─ schema/              @paskamer/schema — zod: GarmentPayload v1, FitSignature v1, SwipeEvent, API DTOs, completenessScore, platform mappings
-│  ├─ fit-engine/          @paskamer/fit-engine — pure TS: computeFit / recommendSize (handoff §4.1–4.2)
-│  ├─ taste-engine/        @paskamer/taste-engine — pure TS: applySwipe, penalty memory, rankDeck, Style DNA (handoff §5)
-│  ├─ tryon-providers/     @paskamer/tryon-providers — server-only AI adapters (FASHN, Vertex stub, Grok video stub, Mock) + TryOnRouter
-│  ├─ sdk/                 @paskamer/sdk — <6 KB vanilla IIFE for merchant pages: button scan, handshake, QR modal
+│  ├─ schema/              @curtain/schema — zod: GarmentPayload v1, FitSignature v1, SwipeEvent, API DTOs, completenessScore, platform mappings
+│  ├─ fit-engine/          @curtain/fit-engine — pure TS: computeFit / recommendSize (handoff §4.1–4.2)
+│  ├─ taste-engine/        @curtain/taste-engine — pure TS: applySwipe, penalty memory, rankDeck, Style DNA (handoff §5)
+│  ├─ tryon-providers/     @curtain/tryon-providers — server-only AI adapters (FASHN, Vertex stub, Grok video stub, Mock) + TryOnRouter
+│  ├─ sdk/                 @curtain/sdk — <6 KB vanilla IIFE for merchant pages: button scan, handshake, QR modal
 │  ├─ shopify-app/         Shopify app: shopify.app.toml, theme app extension (bundles sdk.js), Fastify plugin (token exchange, webhooks, metafields, billing)
 │  └─ woocommerce-plugin/  PHP 8.3 WordPress/WooCommerce plugin (meta box, push-on-save, SDK injection, Connect)
 ├─ infra/                  docker-compose.yml, Caddyfile, deploy/backup scripts

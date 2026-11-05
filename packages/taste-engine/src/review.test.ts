@@ -2,7 +2,7 @@
  * Review regressions (2026-11-04 skeptical pass). Behaviours the sixteen spec vectors do not pin
  * down and where the first implementation gave a wrong answer; see README §Spec deviations.
  */
-import { mockGarment } from '@paskamer/schema';
+import { mockGarment } from '@curtain/schema';
 import { describe, expect, it } from 'vitest';
 import {
   applyOnboardingVibes,

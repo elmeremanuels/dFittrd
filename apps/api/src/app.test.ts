@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { FS_LENGTH } from '@paskamer/schema';
+import { FS_LENGTH } from '@curtain/schema';
 import { fitSignatures, ledgerEntries, wardrobeItems } from './db/schema.js';
 import { createDevice, makeApp, seedShop, type TestApp } from './test/helpers.js';
 

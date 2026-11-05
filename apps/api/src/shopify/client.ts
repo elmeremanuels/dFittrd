@@ -4,7 +4,7 @@
  * is stored AES-GCM encrypted in shopify_sessions (server key from env.ts).
  */
 import { eq } from 'drizzle-orm';
-import { SHOPIFY_METAFIELD_DEFINITIONS, SHOPIFY_METAFIELD_NAMESPACE, type ShopifyProductNode } from '@paskamer/schema';
+import { SHOPIFY_METAFIELD_DEFINITIONS, SHOPIFY_METAFIELD_NAMESPACE, type ShopifyProductNode } from '@curtain/schema';
 import type { Db } from '../db/client.js';
 import { shopifySessions } from '../db/schema.js';
 import type { Env } from '../env.js';
@@ -29,7 +29,7 @@ export interface GraphqlResult<T> {
 }
 
 export const PRODUCT_QUERY = /* GraphQL */ `
-  query PaskamerProduct($id: ID!, $namespace: String!) {
+  query CurtainProduct($id: ID!, $namespace: String!) {
     product(id: $id) {
       id
       handle
@@ -49,7 +49,7 @@ export const PRODUCT_QUERY = /* GraphQL */ `
 `;
 
 export const PRODUCTS_PAGE_QUERY = /* GraphQL */ `
-  query PaskamerProducts($cursor: String, $namespace: String!) {
+  query CurtainProducts($cursor: String, $namespace: String!) {
     products(first: 50, after: $cursor, query: "status:active") {
       pageInfo { hasNextPage endCursor }
       nodes {
@@ -72,7 +72,7 @@ export const PRODUCTS_PAGE_QUERY = /* GraphQL */ `
 `;
 
 export const APP_SUBSCRIPTION_CREATE = /* GraphQL */ `
-  mutation PaskamerSubscribe($name: String!, $returnUrl: URL!, $test: Boolean, $trialDays: Int, $lineItems: [AppSubscriptionLineItemInput!]!) {
+  mutation CurtainSubscribe($name: String!, $returnUrl: URL!, $test: Boolean, $trialDays: Int, $lineItems: [AppSubscriptionLineItemInput!]!) {
     appSubscriptionCreate(name: $name, returnUrl: $returnUrl, test: $test, trialDays: $trialDays, lineItems: $lineItems) {
       userErrors { field message }
       confirmationUrl
@@ -82,7 +82,7 @@ export const APP_SUBSCRIPTION_CREATE = /* GraphQL */ `
 `;
 
 export const APP_USAGE_RECORD_CREATE = /* GraphQL */ `
-  mutation PaskamerUsage($subscriptionLineItemId: ID!, $description: String!, $price: MoneyInput!, $idempotencyKey: String!) {
+  mutation CurtainUsage($subscriptionLineItemId: ID!, $description: String!, $price: MoneyInput!, $idempotencyKey: String!) {
     appUsageRecordCreate(subscriptionLineItemId: $subscriptionLineItemId, description: $description, price: $price, idempotencyKey: $idempotencyKey) {
       userErrors { field message }
       appUsageRecord { id }
@@ -91,7 +91,7 @@ export const APP_USAGE_RECORD_CREATE = /* GraphQL */ `
 `;
 
 export const METAFIELD_DEFINITION_CREATE = /* GraphQL */ `
-  mutation PaskamerDefinition($definition: MetafieldDefinitionInput!) {
+  mutation CurtainDefinition($definition: MetafieldDefinitionInput!) {
     metafieldDefinitionCreate(definition: $definition) {
       createdDefinition { id key }
       userErrors { field message code }
@@ -260,7 +260,7 @@ export class ShopifyClient {
     return r.appUsageRecord?.id ?? null;
   }
 
-  /** Creates the $app:paskamer metafield definitions (idempotent: TAKEN errors are ignored). */
+  /** Creates the $app:curtain metafield definitions (idempotent: TAKEN errors are ignored). */
   async ensureMetafieldDefinitions(shopDomain: string, accessToken: string): Promise<{ created: string[]; existing: string[] }> {
     const created: string[] = [];
     const existing: string[] = [];

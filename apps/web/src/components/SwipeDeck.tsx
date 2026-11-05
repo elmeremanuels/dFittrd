@@ -1,7 +1,7 @@
 import { BarChart2, Bookmark, Heart, ShoppingBag, ThumbsDown, User, X } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import type { SwipeAction } from '@paskamer/schema';
+import type { SwipeAction } from '@curtain/schema';
 import { eur } from '@/lib/format';
 import { colourTarget } from '@/lib/season';
 import { useApp } from '@/store';
@@ -73,7 +73,7 @@ export function SwipeDeck(): ReactNode {
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-coral/15" aria-hidden>
             <Heart className="h-4 w-4 text-coral" fill="currentColor" />
           </span>
-          <span className="font-display text-xl font-medium tracking-tight">Paskamer</span>
+          <span className="font-display text-xl font-medium tracking-tight">Curtain</span>
         </div>
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => setShowDna(true)} aria-label="Open your Style DNA" className="rounded-full border border-ink/10 bg-white p-2 shadow-sm">

@@ -2,7 +2,7 @@
 /**
  * Copy the built merchant SDK into the theme app extension's assets so the storefront loads it
  * from Shopify's CDN (zero third-party requests on the merchant page, D3). Runs as part of
- * `pnpm build`; `@paskamer/sdk` must be built first (root `pnpm build` orders packages/** before
+ * `pnpm build`; `@curtain/sdk` must be built first (root `pnpm build` orders packages/** before
  * apps/**, and sdk is a devDependency of this package so pnpm builds it first with -r).
  */
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
@@ -15,12 +15,12 @@ const require = createRequire(import.meta.url);
 
 let src;
 try {
-  src = require.resolve('@paskamer/sdk/sdk.v1.js');
+  src = require.resolve('@curtain/sdk/sdk.v1.js');
 } catch {
   src = join(here, '..', '..', 'sdk', 'dist', 'sdk.v1.js');
 }
 if (!existsSync(src)) {
-  console.error(`copy-sdk: ${src} not found — run \`pnpm --filter @paskamer/sdk build\` first`);
+  console.error(`copy-sdk: ${src} not found — run \`pnpm --filter @curtain/sdk build\` first`);
   process.exit(1);
 }
 

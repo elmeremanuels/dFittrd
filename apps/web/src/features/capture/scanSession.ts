@@ -44,7 +44,7 @@ export class ScanSession {
     if (this.worker) return Promise.reject(new Error('already initialised'));
     const worker = this.opts.createWorker
       ? this.opts.createWorker()
-      : new Worker(new URL('./scan.worker.ts', import.meta.url), { type: 'module', name: 'paskamer-scan' });
+      : new Worker(new URL('./scan.worker.ts', import.meta.url), { type: 'module', name: 'curtain-scan' });
     this.worker = worker;
     worker.onmessage = (ev: MessageEvent<WorkerOutbound>) => this.handle(ev.data);
     worker.onerror = (ev) => this.fail(new Error(ev.message || 'scan worker crashed'));

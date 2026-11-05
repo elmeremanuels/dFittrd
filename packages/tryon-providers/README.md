@@ -1,4 +1,4 @@
-# @paskamer/tryon-providers
+# @curtain/tryon-providers
 
 Server-only adapters for the **opt-in hero render** (decision D4) plus the `TryOnRouter` that
 picks one. Nothing in here may run in a browser: `package.json` has `"browser": false`, the entry
@@ -27,7 +27,7 @@ import {
   TryOnRouter, FashnProvider, VertexTryOnProvider, GrokVideoProvider, MockProvider,
   promptFromMetadata, motionPromptFromMetadata, parseOrder,
   type PersonInput, type GarmentInput, type TryOnOptions, type TryOnResult, type LedgerRecord,
-} from '@paskamer/tryon-providers';
+} from '@curtain/tryon-providers';
 
 const router = new TryOnRouter({
   providers: [
@@ -114,10 +114,10 @@ The Vertex access token comes from `apps/api` (ADC / service account, scope
 ## Run
 
 ```bash
-pnpm --filter @paskamer/tryon-providers typecheck
-pnpm --filter @paskamer/tryon-providers test        # vitest, HTTP mocked with undici MockAgent
-pnpm --filter @paskamer/tryon-providers lint        # eslint + banned-model scan
-pnpm --filter @paskamer/tryon-providers build       # tsc → dist/
+pnpm --filter @curtain/tryon-providers typecheck
+pnpm --filter @curtain/tryon-providers test        # vitest, HTTP mocked with undici MockAgent
+pnpm --filter @curtain/tryon-providers lint        # eslint + banned-model scan
+pnpm --filter @curtain/tryon-providers build       # tsc → dist/
 ```
 
 ## Manual verification before go-live

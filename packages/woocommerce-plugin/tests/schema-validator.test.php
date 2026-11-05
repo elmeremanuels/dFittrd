@@ -1,15 +1,15 @@
 <?php
 /**
- * The bundled JSON Schema (from @paskamer/schema) + our draft-2020-12 subset validator.
+ * The bundled JSON Schema (from @curtain/schema) + our draft-2020-12 subset validator.
  *
- * @package Paskamer\Tests
+ * @package Curtain\Tests
  */
 
 declare(strict_types=1);
 
-use Paskamer\Schema_Validator;
+use Curtain\Schema_Validator;
 
-function paskamer_full_garment(): array {
+function curtain_full_garment(): array {
 	return array(
 		'schemaVersion'   => 1,
 		'id'              => 'aalter-studio-1',
@@ -43,23 +43,23 @@ function paskamer_full_garment(): array {
 test(
 	'full GarmentPayload passes garment.schema.json',
 	static function (): void {
-		$v = Schema_Validator::from_file( paskamer_schema_path( 'garment.schema.json' ) );
-		assert_same( array(), $v->validate( paskamer_full_garment() ) );
+		$v = Schema_Validator::from_file( curtain_schema_path( 'garment.schema.json' ) );
+		assert_same( array(), $v->validate( curtain_full_garment() ) );
 	}
 );
 
 test(
 	'required fields and value constraints are enforced',
 	static function (): void {
-		$v = Schema_Validator::from_file( paskamer_schema_path( 'garment.schema.json' ) );
+		$v = Schema_Validator::from_file( curtain_schema_path( 'garment.schema.json' ) );
 
-		$g = paskamer_full_garment();
+		$g = curtain_full_garment();
 		unset( $g['sizeChartType'], $g['fabric'] );
 		$paths = array_column( $v->validate( $g ), 'path' );
 		assert_true( in_array( 'sizeChartType', $paths, true ), 'sizeChartType required: ' . implode( ',', $paths ) );
 		assert_true( in_array( 'fabric', $paths, true ), 'fabric required' );
 
-		$g = paskamer_full_garment();
+		$g = curtain_full_garment();
 		$g['primaryColorHex'] = 'C97A4F';
 		$g['schemaVersion']   = 2;
 		$g['category']        = 'hat';
@@ -80,7 +80,7 @@ test(
 test(
 	'draft schema accepts a partial payload but still validates present fields',
 	static function (): void {
-		$v = Schema_Validator::from_file( paskamer_schema_path( 'garment-draft.schema.json' ) );
+		$v = Schema_Validator::from_file( curtain_schema_path( 'garment-draft.schema.json' ) );
 		assert_same( array(), $v->validate( array( 'schemaVersion' => 1, 'id' => '42', 'name' => 'Tee', 'brand' => 'Shop' ) ) );
 		$issues = $v->validate( array( 'schemaVersion' => 1, 'id' => '42', 'name' => 'Tee' ) );
 		assert_same( array( array( 'path' => 'brand', 'message' => 'required' ) ), $issues );
@@ -127,7 +127,7 @@ test(
 		$file = __DIR__ . '/fixtures/garments.json';
 		assert_true( is_readable( $file ), 'run `node scripts/export-fixtures.mjs` first' );
 		$fixtures = json_decode( (string) file_get_contents( $file ), true );
-		$v        = Schema_Validator::from_file( paskamer_schema_path( 'garment.schema.json' ) );
+		$v        = Schema_Validator::from_file( curtain_schema_path( 'garment.schema.json' ) );
 		$count    = 0;
 		foreach ( $fixtures['cases'] as $case ) {
 			$issues = $v->validate( $case['expected'] );

@@ -1,30 +1,30 @@
 <?php
 /**
- * Storefront: enqueues the bundled SDK (assets/sdk.v1.js, copied from @paskamer/sdk at build
- * time — never a remote script) on single product pages and renders the "Try in Paskamer"
+ * Storefront: enqueues the bundled SDK (assets/sdk.v1.js, copied from @curtain/sdk at build
+ * time — never a remote script) on single product pages and renders the "Try it on"
  * button at the configured `woocommerce_single_product_summary` priority, plus a shortcode.
  *
  * D7: the button always renders once the shop is connected, even when the plan is paused —
- * the Paskamer app shows the "shop paused" screen; the merchant's page is never broken.
+ * the Curtain app shows the "shop paused" screen; the merchant's page is never broken.
  *
- * @package Paskamer
+ * @package Curtain
  */
 
 declare(strict_types=1);
 
-namespace Paskamer;
+namespace Curtain;
 
-defined('ABSPATH') || defined('PASKAMER_TESTING') || exit;
+defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
 
 final class Frontend {
 
-	public const HANDLE = 'paskamer-sdk';
+	public const HANDLE = 'curtain-sdk';
 
 	public static function register(): void {
 		add_action( 'wp_enqueue_scripts', array( self::class, 'enqueue' ) );
 		add_filter( 'script_loader_tag', array( self::class, 'script_tag' ), 10, 2 );
 		add_action( 'init', array( self::class, 'hook_button' ) );
-		add_shortcode( 'paskamer_button', array( self::class, 'shortcode' ) );
+		add_shortcode( 'curtain_button', array( self::class, 'shortcode' ) );
 	}
 
 	public static function hook_button(): void {
@@ -38,11 +38,11 @@ final class Frontend {
 		if ( ! function_exists( 'is_product' ) || ! is_product() || ! Settings::is_connected() ) {
 			return;
 		}
-		$file = PASKAMER_PLUGIN_DIR . 'assets/sdk.v1.js';
+		$file = CURTAIN_PLUGIN_DIR . 'assets/sdk.v1.js';
 		if ( ! file_exists( $file ) ) {
 			return; // Development checkout without a build; the zip always carries it.
 		}
-		wp_enqueue_script( self::HANDLE, PASKAMER_PLUGIN_URL . 'assets/sdk.v1.js', array(), PASKAMER_VERSION . '.' . (string) filemtime( $file ), true );
+		wp_enqueue_script( self::HANDLE, CURTAIN_PLUGIN_URL . 'assets/sdk.v1.js', array(), CURTAIN_VERSION . '.' . (string) filemtime( $file ), true );
 	}
 
 	/**
@@ -103,7 +103,7 @@ final class Frontend {
 				'class'      => 'button alt',
 			),
 			is_array( $atts ) ? $atts : array(),
-			'paskamer_button'
+			'curtain_button'
 		);
 		if ( ! Settings::is_connected() ) {
 			return '';
@@ -114,9 +114,9 @@ final class Frontend {
 			return '';
 		}
 		if ( ! wp_script_is( self::HANDLE, 'enqueued' ) ) {
-			$file = PASKAMER_PLUGIN_DIR . 'assets/sdk.v1.js';
+			$file = CURTAIN_PLUGIN_DIR . 'assets/sdk.v1.js';
 			if ( file_exists( $file ) ) {
-				wp_enqueue_script( self::HANDLE, PASKAMER_PLUGIN_URL . 'assets/sdk.v1.js', array(), PASKAMER_VERSION . '.' . (string) filemtime( $file ), true );
+				wp_enqueue_script( self::HANDLE, CURTAIN_PLUGIN_URL . 'assets/sdk.v1.js', array(), CURTAIN_VERSION . '.' . (string) filemtime( $file ), true );
 			}
 		}
 		$label = '' !== trim( (string) $atts['label'] ) ? (string) $atts['label'] : Settings::button_label();
@@ -125,11 +125,11 @@ final class Frontend {
 
 	public static function button_html( \WC_Product $product, string $label, string $class ): string {
 		return sprintf(
-			'<p class="paskamer-try"><button type="button" class="%s paskamer-try-button" data-paskamer-product="%s">%s</button><span class="paskamer-try-note screen-reader-text">%s</span></p>',
+			'<p class="curtain-try"><button type="button" class="%s curtain-try-button" data-curtain-product="%s">%s</button><span class="curtain-try-note screen-reader-text">%s</span></p>',
 			esc_attr( trim( $class ) ),
 			esc_attr( (string) $product->get_id() ),
 			esc_html( $label ),
-			esc_html__( 'Opens Paskamer, your private fitting room. Fit results are estimates.', 'paskamer-woocommerce' )
+			esc_html__( 'Opens Curtain, your private fitting room. Fit results are estimates.', 'curtain-woocommerce' )
 		);
 	}
 }

@@ -10,5 +10,5 @@ export default defineConfig({
   platform: 'node',
   shims: true,
   treeshake: true,
-  external: ['@paskamer/schema', 'zod'],
+  external: ['@curtain/schema', 'zod'],
 });

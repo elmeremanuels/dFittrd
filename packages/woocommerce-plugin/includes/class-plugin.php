@@ -3,14 +3,14 @@
  * Plugin bootstrap: wires the settings page, product meta box, sync hooks, storefront button and
  * the signed REST endpoint. Activation seeds defaults; deactivation clears the job queue.
  *
- * @package Paskamer
+ * @package Curtain
  */
 
 declare(strict_types=1);
 
-namespace Paskamer;
+namespace Curtain;
 
-defined('ABSPATH') || defined('PASKAMER_TESTING') || exit;
+defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
 
 final class Plugin {
 
@@ -24,7 +24,7 @@ final class Plugin {
 	}
 
 	public function boot(): void {
-		load_plugin_textdomain( 'paskamer-woocommerce', false, dirname( plugin_basename( PASKAMER_PLUGIN_FILE ) ) . '/languages' );
+		load_plugin_textdomain( 'curtain-woocommerce', false, dirname( plugin_basename( CURTAIN_PLUGIN_FILE ) ) . '/languages' );
 
 		Settings::register();
 		Product_Meta::register();
@@ -32,13 +32,13 @@ final class Plugin {
 		Frontend::register();
 		Rest::register();
 
-		add_filter( 'plugin_action_links_' . plugin_basename( PASKAMER_PLUGIN_FILE ), array( $this, 'action_links' ) );
+		add_filter( 'plugin_action_links_' . plugin_basename( CURTAIN_PLUGIN_FILE ), array( $this, 'action_links' ) );
 		add_action( 'admin_notices', array( $this, 'connect_nudge' ) );
 	}
 
 	/** @param string[] $links @return string[] */
 	public function action_links( array $links ): array {
-		array_unshift( $links, '<a href="' . esc_url( Settings::page_url() ) . '">' . esc_html__( 'Settings', 'paskamer-woocommerce' ) . '</a>' );
+		array_unshift( $links, '<a href="' . esc_url( Settings::page_url() ) . '">' . esc_html__( 'Settings', 'curtain-woocommerce' ) . '</a>' );
 		return $links;
 	}
 
@@ -53,9 +53,9 @@ final class Plugin {
 		}
 		printf(
 			'<div class="notice notice-info"><p>%s <a href="%s">%s</a></p></div>',
-			esc_html__( 'Paskamer for WooCommerce is installed but not connected. Nothing is sent to Paskamer until you connect your shop.', 'paskamer-woocommerce' ),
+			esc_html__( 'Curtain for WooCommerce is installed but not connected. Nothing is sent to Curtain until you connect your shop.', 'curtain-woocommerce' ),
 			esc_url( Settings::page_url() ),
-			esc_html__( 'Connect now', 'paskamer-woocommerce' )
+			esc_html__( 'Connect now', 'curtain-woocommerce' )
 		);
 	}
 

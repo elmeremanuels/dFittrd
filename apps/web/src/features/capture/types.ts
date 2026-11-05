@@ -2,11 +2,11 @@
  * Internal types of the on-device capture pipeline (apps/web/src/features/capture).
  *
  * Wire/body types (BodyProfile, Measurement, UserBody, FitSignature…) come ONLY from
- * `@paskamer/schema`; nothing here is ever sent over the network. Raw frames never appear in
+ * `@curtain/schema`; nothing here is ever sent over the network. Raw frames never appear in
  * these types on purpose: the worker posts landmarks, masks, widths/depths, quality features,
  * ONE background-replaced base frame and one face tile — never a video frame.
  */
-import type { FS_GIRTH_LEVELS } from '@paskamer/schema';
+import type { FS_GIRTH_LEVELS } from '@curtain/schema';
 
 /** Minimal landmark shape (matches MediaPipe `NormalizedLandmark`; x/y normalised 0..1). */
 export interface Landmark {

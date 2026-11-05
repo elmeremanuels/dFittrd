@@ -64,7 +64,7 @@ export function openModal(opts: ModalOptions): ModalHandle {
   const id = `pk-${++seq}`;
 
   const root = el(doc, 'div', 'pk-root');
-  root.setAttribute('data-paskamer-modal', '');
+  root.setAttribute('data-curtain-modal', '');
   const overlay = el(doc, 'div', 'pk-overlay');
   const dialog = el(doc, 'div', 'pk-dialog');
   dialog.setAttribute('role', 'dialog');

@@ -4,7 +4,7 @@
  */
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { MOCK_GARMENTS_BY_ID } from '@paskamer/schema';
+import { MOCK_GARMENTS_BY_ID } from '@curtain/schema';
 import { resetReplayCache } from './auth/merchant.js';
 import { StripeClient } from './billing/stripe.js';
 import { renderJobs, shops, usageEvents, webhookLog } from './db/schema.js';
@@ -17,7 +17,7 @@ import { archiveProduct, upsertProduct } from './services/products.js';
 import { backfillKeyLookups, findShopBySecret } from './services/shops.js';
 import { createDevice, makeApp, seedShop, testLookup, type TestApp } from './test/helpers.js';
 
-const SCRATCH = `/tmp/claude-0/paskamer-review-${process.pid}`;
+const SCRATCH = `/tmp/claude-0/curtain-review-${process.pid}`;
 
 function hmacHeaders(prefix: string, secret: string, method: string, path: string, body: string, ts = Math.floor(Date.now() / 1000)) {
   const sig = signMerchantRequest(secret, method, path, String(ts), body);

@@ -10,7 +10,7 @@ import { BLOCK_HANDLE, EXTENSION_HANDLE } from './deepLinks';
 const root = new URL('../extensions/try-button/', import.meta.url);
 const read = (p: string) => readFileSync(new URL(p, root), 'utf8');
 const block = read(`blocks/${BLOCK_HANDLE}.liquid`);
-const snippet = read('snippets/paskamer-try-button.liquid');
+const snippet = read('snippets/curtain-try-button.liquid');
 
 function flattenKeys(o: unknown, prefix = ''): string[] {
   if (typeof o !== 'object' || o === null) return [prefix];
@@ -29,7 +29,7 @@ describe('theme app extension', () => {
     const schema = JSON.parse(/{% schema %}([\s\S]*?){% endschema %}/.exec(block)![1]!) as { target: string; enabled_on: { templates: string[] }; settings: Array<{ id?: string; type: string; default?: unknown }>; stylesheet: string; javascript?: string };
     expect(schema.target).toBe('content');
     expect(schema.enabled_on).toEqual({ templates: ['product'] });
-    expect(schema.stylesheet).toBe('paskamer-try.css');
+    expect(schema.stylesheet).toBe('curtain-try.css');
     expect(schema.javascript).toBeUndefined(); // we load the SDK ourselves so data-shop/data-api are set
     const ids = schema.settings.map((s) => s.id).filter(Boolean);
     expect(ids).toEqual(['label', 'alignment', 'mode', 'show_hint', 'unstyled', 'shop_key', 'api_url']);
@@ -38,23 +38,23 @@ describe('theme app extension', () => {
     expect(mode.default).toBe('auto');
   });
 
-  it('renders the SDK contract: data-paskamer-product={{ product.id }}, asset_url sdk.v1.js, data-shop + data-api, single load guard', () => {
-    expect(snippet).toContain('data-paskamer-product="{{ product.id }}"');
+  it('renders the SDK contract: data-curtain-product={{ product.id }}, asset_url sdk.v1.js, data-shop + data-api, single load guard', () => {
+    expect(snippet).toContain('data-curtain-product="{{ product.id }}"');
     expect(snippet).toContain('type="button"');
-    expect(block).toMatch(/\{%-? render 'paskamer-try-button'/);
+    expect(block).toMatch(/\{%-? render 'curtain-try-button'/);
     expect(block).toContain("{{ 'sdk.v1.js' | asset_url | json }}");
     expect(block).toContain("setAttribute('data-shop'");
     expect(block).toContain("setAttribute('data-api'");
     expect(block).toContain("setAttribute('data-locale'");
-    expect(block).toContain("document.querySelector('script[data-shop][data-paskamer-sdk]')");
-    expect(block).toContain('app.metafields.paskamer.public_key');
-    expect(block).toContain('app.metafields.paskamer.api_url');
+    expect(block).toContain("document.querySelector('script[data-shop][data-curtain-sdk]')");
+    expect(block).toContain('app.metafields.curtain.public_key');
+    expect(block).toContain('app.metafields.curtain.api_url');
     expect(block).toContain('{{ block.shopify_attributes }}');
     expect(block).toContain('request.design_mode');
   });
 
   it('never references a secret key, an external origin or storage', () => {
-    for (const f of [block, snippet, read('assets/paskamer-try.css')]) {
+    for (const f of [block, snippet, read('assets/curtain-try.css')]) {
       expect(f).not.toMatch(/sk_(live|test)_/);
       expect(f).not.toMatch(/https?:\/\//);
       expect(f).not.toMatch(/localStorage|sessionStorage|document\.cookie/);
@@ -64,13 +64,13 @@ describe('theme app extension', () => {
   it('locales: en.default + nl, same keys, estimate wording, D1 button copy', () => {
     const files = readdirSync(new URL('locales/', root)).sort();
     expect(files).toEqual(['en.default.json', 'en.default.schema.json', 'nl.json', 'nl.schema.json']);
-    const en = JSON.parse(read('locales/en.default.json')) as { paskamer: { try_button: Record<string, string> } };
-    const nl = JSON.parse(read('locales/nl.json')) as { paskamer: { try_button: Record<string, string> } };
+    const en = JSON.parse(read('locales/en.default.json')) as { curtain: { try_button: Record<string, string> } };
+    const nl = JSON.parse(read('locales/nl.json')) as { curtain: { try_button: Record<string, string> } };
     expect(flattenKeys(nl)).toEqual(flattenKeys(en));
-    expect(en.paskamer.try_button.label).toBe('Try in Paskamer');
-    expect(nl.paskamer.try_button.label).toBe('Pas in Paskamer');
-    expect(en.paskamer.try_button.hint).toMatch(/estimate/i);
-    expect(nl.paskamer.try_button.hint).toMatch(/schatting/i);
+    expect(en.curtain.try_button.label).toBe('Try it on');
+    expect(nl.curtain.try_button.label).toBe('Try it on');
+    expect(en.curtain.try_button.hint).toMatch(/estimate/i);
+    expect(nl.curtain.try_button.hint).toMatch(/schatting/i);
 
     const enS = JSON.parse(read('locales/en.default.schema.json'));
     const nlS = JSON.parse(read('locales/nl.schema.json'));

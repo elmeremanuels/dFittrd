@@ -1,5 +1,5 @@
 /**
- * APP routes (bearer device JWT except POST /v1/devices). Typed from @paskamer/schema DTOs.
+ * APP routes (bearer device JWT except POST /v1/devices). Typed from @curtain/schema DTOs.
  * Privacy: the only body data accepted here is the 80-float fit signature; swipes carry no body data.
  */
 import { and, eq } from 'drizzle-orm';
@@ -27,7 +27,7 @@ import {
   WardrobePutRequestSchema,
   FS_LENGTH,
   type SwipeWireEvent,
-} from '@paskamer/schema';
+} from '@curtain/schema';
 import { requireDevice } from '../auth/device.js';
 import { devices, fitSignatures, ledgerEntries, pairings, renderJobs, swipeEvents, trySessions, wardrobeItems } from '../db/schema.js';
 import { forbidden, notFound, unprocessable } from '../lib/errors.js';

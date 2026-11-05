@@ -1,7 +1,7 @@
 {
-  "name": "@paskamer/schema",
+  "name": "@curtain/schema",
   "version": "0.1.0",
-  "description": "Paskamer wire types: GarmentPayload v1, FitSignature v1, body profile, SwipeEvent, API DTOs, completenessScore, Shopify/WooCommerce mappings, JSON Schema export.",
+  "description": "Curtain wire types: GarmentPayload v1, FitSignature v1, body profile, SwipeEvent, API DTOs, completenessScore, Shopify/WooCommerce mappings, JSON Schema export.",
   "license": "UNLICENSED",
   "private": true,
   "type": "module",

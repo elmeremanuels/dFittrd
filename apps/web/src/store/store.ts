@@ -4,8 +4,8 @@
  * (`src/sync/outbox.ts`) and the API client, both of which write the privacy ledger.
  */
 import { create, type StoreApi, type UseBoundStore } from 'zustand';
-import type { FitResult } from '@paskamer/fit-engine';
-import { MOCK_GARMENTS, type BodyProfile, type FitSignatureWire, type GarmentPayload, type ShopBranding, type SwipeAction, type SwipeEvent, type WardrobeState } from '@paskamer/schema';
+import type { FitResult } from '@curtain/fit-engine';
+import { MOCK_GARMENTS, type BodyProfile, type FitSignatureWire, type GarmentPayload, type ShopBranding, type SwipeAction, type SwipeEvent, type WardrobeState } from '@curtain/schema';
 import {
   applyOnboardingVibes,
   applySwipe,
@@ -15,7 +15,7 @@ import {
   type FitResultLike,
   type ScoredItem,
   type TasteState,
-} from '@paskamer/taste-engine';
+} from '@curtain/taste-engine';
 import { deleteScan, saveBodyProfile } from '@/features/capture/storage';
 import type { SkinEstimate } from '@/features/capture/types';
 import { clearAppTables, type AppDb, type ClientLedgerEntry, type ConsentTier, type OutboxRow, type PendingIntentRow, type SettingsRow, SINGLETON_ID, type WardrobeRow } from '@/db/db';
@@ -28,7 +28,7 @@ import { OutboxSyncer } from '@/sync/outbox';
 
 /** Shop id used for the bundled fixtures until a real shop is paired (valid uuid, never a real shop). */
 export const MOCK_SHOP_ID = '00000000-0000-4000-8000-000000000001';
-export const MOCK_SHOP: ShopBranding = { id: MOCK_SHOP_ID, name: 'Paskamer demo rail', platform: 'shopify', paused: false };
+export const MOCK_SHOP: ShopBranding = { id: MOCK_SHOP_ID, name: 'Curtain demo rail', platform: 'shopify', paused: false };
 
 /** Without measurements the deck still deals (fit unknown, score weight 0); events then carry null size/score. */
 const NO_FIT: FitResultLike = { recommendedSize: 'unknown', score: null };

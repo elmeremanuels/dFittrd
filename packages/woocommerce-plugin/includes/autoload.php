@@ -2,19 +2,19 @@
 /**
  * Tiny class map autoloader (no Composer: WP.org reviewers prefer vendored, dependency-free plugins).
  *
- * @package Paskamer
+ * @package Curtain
  */
 
 declare(strict_types=1);
 
-defined( 'ABSPATH' ) || defined( 'PASKAMER_TESTING' ) || exit;
+defined( 'ABSPATH' ) || defined( 'CURTAIN_TESTING' ) || exit;
 
 spl_autoload_register(
 	static function ( string $class ): void {
-		if ( ! str_starts_with( $class, 'Paskamer\\' ) ) {
+		if ( ! str_starts_with( $class, 'Curtain\\' ) ) {
 			return;
 		}
-		$short = substr( $class, strlen( 'Paskamer\\' ) );
+		$short = substr( $class, strlen( 'Curtain\\' ) );
 		$file  = __DIR__ . '/class-' . str_replace( '_', '-', strtolower( $short ) ) . '.php';
 		if ( is_readable( $file ) ) {
 			require_once $file;

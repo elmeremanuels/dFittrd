@@ -103,7 +103,7 @@ describe('hero render (the only image-accepting route)', () => {
   });
 
   it('every status response carries an estimate disclaimer and ≤ 24 h retention', () => {
-    const s = HeroRenderStatusSchema.parse({ jobId: UUID, status: 'done', imageUrl: 'https://api.paskamer.app/r/x', createdAt: NOW });
+    const s = HeroRenderStatusSchema.parse({ jobId: UUID, status: 'done', imageUrl: 'https://api.curtain.fit/r/x', createdAt: NOW });
     expect(s.disclaimer).toBe(ESTIMATE_DISCLAIMER);
     expect(s.retentionHours).toBe(24);
     expect(HeroRenderStatusSchema.safeParse({ jobId: UUID, status: 'done', createdAt: NOW, retentionHours: 72 }).success).toBe(false);

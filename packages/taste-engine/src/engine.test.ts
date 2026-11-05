@@ -1,7 +1,7 @@
 /**
  * Test vectors 1–16 from docs/research/taste-engine-spec.md, plus purity / persistence checks.
  */
-import { mockGarment } from '@paskamer/schema';
+import { mockGarment } from '@curtain/schema';
 import { describe, expect, it } from 'vitest';
 import {
   ARCHETYPE_COPY,

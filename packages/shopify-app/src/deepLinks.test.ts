@@ -8,7 +8,7 @@ describe('deep links', () => {
     expect(url).toBe(`https://${SHOP}/admin/themes/current/editor?template=product&addAppBlockId=${API_KEY}%2F${BLOCK_HANDLE}&target=mainSection`);
     expect(themeEditorAddBlockUrl({ shopDomain: SHOP, apiKey: API_KEY, template: 'index', target: 'newAppsSection' })).toContain('template=index&');
     expect(themeEditorAddBlockUrl({ shopDomain: SHOP, apiKey: API_KEY, target: 'sectionGroup:footer' })).toContain('target=sectionGroup%3Afooter');
-    expect(BLOCK_HANDLE).toBe('try-in-paskamer');
+    expect(BLOCK_HANDLE).toBe('try-it-on');
     expect(EXTENSION_HANDLE).toBe('try-button');
   });
 
@@ -16,12 +16,12 @@ describe('deep links', () => {
     expect(adminProductUrl(SHOP, PRODUCT_ID)).toBe(`https://${SHOP}/admin/products/${PRODUCT_ID}`);
     expect(adminProductUrl(SHOP, PRODUCT_GID)).toBe(`https://${SHOP}/admin/products/${PRODUCT_ID}`);
     expect(() => adminProductUrl(SHOP, '../x')).toThrow(/not a Shopify product id/);
-    expect(adminAppUrl(SHOP, 'paskamer')).toBe('https://admin.shopify.com/store/aalter-studio/apps/paskamer');
-    expect(customInstallUrl(SHOP, 'paskamer')).toContain('https://admin.shopify.com/store/aalter-studio/oauth/install_custom_app?');
+    expect(adminAppUrl(SHOP, 'curtain')).toBe('https://admin.shopify.com/store/aalter-studio/apps/curtain');
+    expect(customInstallUrl(SHOP, 'curtain')).toContain('https://admin.shopify.com/store/aalter-studio/oauth/install_custom_app?');
   });
 
   it('refuses non-Shopify hosts (no open redirects into the admin)', () => {
     expect(() => themeEditorAddBlockUrl({ shopDomain: 'evil.example', apiKey: API_KEY })).toThrow(/not a Shopify domain/);
-    expect(() => adminAppUrl('evil.example/x', 'paskamer')).toThrow(/not a Shopify domain/);
+    expect(() => adminAppUrl('evil.example/x', 'curtain')).toThrow(/not a Shopify domain/);
   });
 });

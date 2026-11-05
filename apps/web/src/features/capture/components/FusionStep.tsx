@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { AlertTriangle, Check, RefreshCw, ShieldCheck } from 'lucide-react';
-import type { BodyMeasurementKey } from '@paskamer/schema';
+import type { BodyMeasurementKey } from '@curtain/schema';
 import { MEASUREMENT_LABELS, MEASUREMENT_UNITS, TAPE_INSTRUCTIONS, confidencePercent, parseNumber } from '../captureMachine';
 import type { FuseResult } from '../fuse';
 import { ConfidenceBar, EstimateBadge, GhostButton, Panel, PrimaryButton, StepHeader } from './ui';

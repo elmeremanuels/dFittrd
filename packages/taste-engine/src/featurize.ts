@@ -1,7 +1,7 @@
 /**
  * featurize(garment) — taste-engine-spec.md §featurize.
  */
-import type { GarmentCategory } from '@paskamer/schema';
+import type { GarmentCategory } from '@curtain/schema';
 import { hueBin } from './colour';
 import { AXES, type Axis, type AxisVector, type FeaturizableGarment, type ItemFeatures, type Silhouette } from './types';
 import { clamp, zeroAxes } from './util';

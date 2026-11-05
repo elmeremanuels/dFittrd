@@ -1,7 +1,7 @@
 {
-  "name": "@paskamer/shopify-app",
+  "name": "@curtain/shopify-app",
   "version": "0.1.0",
-  "description": "Paskamer Shopify app: shopify.app.toml (managed installation + declarative webhooks), the 'Try in Paskamer' theme app extension bundling the SDK, the embedded admin page, and the server-side helpers apps/api uses (Admin GraphQL, token exchange, metafield definitions, bulk backfill, billing, webhook HMAC, product sync).",
+  "description": "Curtain Shopify app: shopify.app.toml (managed installation + declarative webhooks), the 'Try it on' theme app extension bundling the SDK, the embedded admin page, and the server-side helpers apps/api uses (Admin GraphQL, token exchange, metafield definitions, bulk backfill, billing, webhook HMAC, product sync).",
   "license": "UNLICENSED",
   "private": true,
   "type": "module",
@@ -35,12 +35,12 @@
     "shopify": "shopify"
   },
   "dependencies": {
-    "@paskamer/schema": "workspace:*",
+    "@curtain/schema": "workspace:*",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
-    "@paskamer/sdk": "workspace:*",
+    "@curtain/sdk": "workspace:*",
     "@types/node": "^22.20.5",
     "eslint": "^9.39.5",
     "jsdom": "27.4.0",

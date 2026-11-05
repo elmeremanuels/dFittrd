@@ -1,5 +1,5 @@
 /**
- * Public types of @paskamer/tryon-providers.
+ * Public types of @curtain/tryon-providers.
  *
  * Adapted from docs/research/tryon-engines.md ("ADAPTER INTERFACE") with the changes
  * required by docs/DECISIONS.md D3/D4:
@@ -50,7 +50,7 @@ export interface GarmentInput {
   fabric?: FabricMeta;
   /** wrap | a-line | sheath | column | … */
   patternBlock?: string;
-  /** Size chosen by @paskamer/fit-engine on the device. */
+  /** Size chosen by @curtain/fit-engine on the device. */
   size?: string;
   /** Garment minus body per fit point, in cm, from the on-device fit result (handoff §4.1). */
   fitGapCm?: Partial<Record<FitPoint, number>>;

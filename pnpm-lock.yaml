@@ -22,16 +22,16 @@ importers:
       '@fastify/swagger':
         specifier: 9.9.3
         version: 9.9.3
-      '@paskamer/schema':
+      '@curtain/schema':
         specifier: workspace:*
         version: link:../../packages/schema
-      '@paskamer/sdk':
+      '@curtain/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
-      '@paskamer/shopify-app':
+      '@curtain/shopify-app':
         specifier: workspace:*
         version: link:../../packages/shopify-app
-      '@paskamer/tryon-providers':
+      '@curtain/tryon-providers':
         specifier: workspace:*
         version: link:../../packages/tryon-providers
       drizzle-orm:
@@ -107,13 +107,13 @@ importers:
       '@mediapipe/tasks-vision':
         specifier: 1.2.2
         version: 1.2.2
-      '@paskamer/fit-engine':
+      '@curtain/fit-engine':
         specifier: workspace:*
         version: link:../../packages/fit-engine
-      '@paskamer/schema':
+      '@curtain/schema':
         specifier: workspace:*
         version: link:../../packages/schema
-      '@paskamer/taste-engine':
+      '@curtain/taste-engine':
         specifier: workspace:*
         version: link:../../packages/taste-engine
       dexie:
@@ -216,7 +216,7 @@ importers:
       '@eslint/js':
         specifier: ^9.39.5
         version: 9.39.5
-      '@paskamer/schema':
+      '@curtain/schema':
         specifier: workspace:*
         version: link:../schema
       '@types/node':
@@ -271,7 +271,7 @@ importers:
       '@eslint/js':
         specifier: ^9.39.5
         version: 9.39.5
-      '@paskamer/schema':
+      '@curtain/schema':
         specifier: workspace:*
         version: link:../schema
       '@types/node':
@@ -304,7 +304,7 @@ importers:
 
   packages/shopify-app:
     dependencies:
-      '@paskamer/schema':
+      '@curtain/schema':
         specifier: workspace:*
         version: link:../schema
       zod:
@@ -314,7 +314,7 @@ importers:
       '@eslint/js':
         specifier: ^9.39.5
         version: 9.39.5
-      '@paskamer/sdk':
+      '@curtain/sdk':
         specifier: workspace:*
         version: link:../sdk
       '@types/node':
@@ -347,7 +347,7 @@ importers:
       '@eslint/js':
         specifier: ^9.39.5
         version: 9.39.5
-      '@paskamer/schema':
+      '@curtain/schema':
         specifier: workspace:*
         version: link:../schema
       '@types/node':
@@ -399,10 +399,10 @@ importers:
 
   packages/woocommerce-plugin:
     devDependencies:
-      '@paskamer/schema':
+      '@curtain/schema':
         specifier: workspace:*
         version: link:../schema
-      '@paskamer/sdk':
+      '@curtain/sdk':
         specifier: workspace:*
         version: link:../sdk
 

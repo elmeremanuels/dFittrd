@@ -8,7 +8,7 @@ let db: AppDb;
 let dbName = '';
 
 beforeEach(() => {
-  dbName = `paskamer-outbox-${Math.random().toString(36).slice(2)}`;
+  dbName = `curtain-outbox-${Math.random().toString(36).slice(2)}`;
   db = new AppDb(dbName);
 });
 

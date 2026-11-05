@@ -2,7 +2,7 @@
  * Pure state logic of the capture step (flow, manual-form validation, conversion to fusion input)
  * so it can be unit-tested without a DOM. The React components only render this state.
  */
-import type { BodyMeasurementKey, ManualMethod } from '@paskamer/schema';
+import type { BodyMeasurementKey, ManualMethod } from '@curtain/schema';
 import type { ManualEntries } from './fuse';
 import type { Sex } from './types';
 

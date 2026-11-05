@@ -2,7 +2,7 @@
  * Test fixtures: a Shopify product node that normalises to MOCK_GARMENTS 'aalter-studio-1'
  * (fit-engine WRAP), a matching bulk JSONL export, and a tiny fetch mock.
  */
-import type { ShopifyProductNode } from '@paskamer/schema';
+import type { ShopifyProductNode } from '@curtain/schema';
 import type { FetchLike } from '../types';
 
 export const SHOP = 'aalter-studio.myshopify.com';
@@ -13,11 +13,11 @@ export const PRODUCT_ID = '8213455001';
 export const PRODUCT_GID = `gid://shopify/Product/${PRODUCT_ID}`;
 
 export const WRAP_METAFIELDS: Array<{ namespace: string; key: string; type: string; value: string }> = [
-  { namespace: '$app:paskamer', key: 'category', type: 'single_line_text_field', value: 'dress' },
-  { namespace: '$app:paskamer', key: 'subcategory', type: 'single_line_text_field', value: 'wrap-midi' },
-  { namespace: '$app:paskamer', key: 'size_chart_type', type: 'single_line_text_field', value: 'body' },
+  { namespace: '$app:curtain', key: 'category', type: 'single_line_text_field', value: 'dress' },
+  { namespace: '$app:curtain', key: 'subcategory', type: 'single_line_text_field', value: 'wrap-midi' },
+  { namespace: '$app:curtain', key: 'size_chart_type', type: 'single_line_text_field', value: 'body' },
   {
-    namespace: '$app:paskamer',
+    namespace: '$app:curtain',
     key: 'size_chart',
     type: 'json',
     value: JSON.stringify([
@@ -28,23 +28,23 @@ export const WRAP_METAFIELDS: Array<{ namespace: string; key: string; type: stri
     ]),
   },
   {
-    namespace: '$app:paskamer',
+    namespace: '$app:curtain',
     key: 'fabric',
     type: 'json',
     value: JSON.stringify({ primary: 'linen', blend: [['linen', 100]], weightGsm: 240, stretchPct: 2, drape: 0.78, opacity: 0.92, sheen: 0.15 }),
   },
-  { namespace: '$app:paskamer', key: 'flat_lay_photo', type: 'url', value: 'https://cdn.shopify.com/s/files/1/aalter/flat-lay-wrap.jpg' },
-  { namespace: '$app:paskamer', key: 'pattern_block', type: 'single_line_text_field', value: 'wrap' },
-  { namespace: '$app:paskamer', key: 'ease', type: 'json', value: JSON.stringify({ bust: 6, waist: 4, hip: 8 }) },
-  { namespace: '$app:paskamer', key: 'length_cm', type: 'json', value: JSON.stringify({ shoulder_to_hem: 118, shoulder_to_waist: 41, sleeve_length: 0 }) },
-  { namespace: '$app:paskamer', key: 'sizing_notes', type: 'multi_line_text_field', value: 'runs small' },
-  { namespace: '$app:paskamer', key: 'true_to_size_score', type: 'number_decimal', value: '0.92' },
-  { namespace: '$app:paskamer', key: 'critical_fit_points', type: 'list.single_line_text_field', value: JSON.stringify(['bust', 'shoulder']) },
-  { namespace: '$app:paskamer', key: 'stretch_zones', type: 'list.single_line_text_field', value: JSON.stringify(['waist-tie']) },
-  { namespace: '$app:paskamer', key: 'style_tags', type: 'json', value: JSON.stringify({ bohemian: 0.9, classic: 0.3 }) },
-  { namespace: '$app:paskamer', key: 'primary_color_hex', type: 'color', value: '#C97A4F' },
+  { namespace: '$app:curtain', key: 'flat_lay_photo', type: 'url', value: 'https://cdn.shopify.com/s/files/1/aalter/flat-lay-wrap.jpg' },
+  { namespace: '$app:curtain', key: 'pattern_block', type: 'single_line_text_field', value: 'wrap' },
+  { namespace: '$app:curtain', key: 'ease', type: 'json', value: JSON.stringify({ bust: 6, waist: 4, hip: 8 }) },
+  { namespace: '$app:curtain', key: 'length_cm', type: 'json', value: JSON.stringify({ shoulder_to_hem: 118, shoulder_to_waist: 41, sleeve_length: 0 }) },
+  { namespace: '$app:curtain', key: 'sizing_notes', type: 'multi_line_text_field', value: 'runs small' },
+  { namespace: '$app:curtain', key: 'true_to_size_score', type: 'number_decimal', value: '0.92' },
+  { namespace: '$app:curtain', key: 'critical_fit_points', type: 'list.single_line_text_field', value: JSON.stringify(['bust', 'shoulder']) },
+  { namespace: '$app:curtain', key: 'stretch_zones', type: 'list.single_line_text_field', value: JSON.stringify(['waist-tie']) },
+  { namespace: '$app:curtain', key: 'style_tags', type: 'json', value: JSON.stringify({ bohemian: 0.9, classic: 0.3 }) },
+  { namespace: '$app:curtain', key: 'primary_color_hex', type: 'color', value: '#C97A4F' },
   {
-    namespace: '$app:paskamer',
+    namespace: '$app:curtain',
     key: 'colorways',
     type: 'json',
     value: JSON.stringify([

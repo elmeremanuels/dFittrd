@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { computeFit, fitGapsForRender } from '@paskamer/fit-engine';
-import { MOCK_GARMENTS, MOCK_GARMENTS_BY_ID, type UserBody } from '@paskamer/schema';
+import { computeFit, fitGapsForRender } from '@curtain/fit-engine';
+import { MOCK_GARMENTS, MOCK_GARMENTS_BY_ID, type UserBody } from '@curtain/schema';
 import { adjustColor, bodyGeometry, fabricLook, garmentGeometry, levelY, VIEW_W } from '@/render/body';
 import { resolveSwipe } from '@/components/Card';
 import { extractToken } from '@/routes/PairRoute';
@@ -139,7 +139,7 @@ describe('helpers', () => {
     expect(resolveSwipe({ x: 40, y: 30 })).toBeNull();
   });
   it('extracts try tokens from links and codes', () => {
-    expect(extractToken('https://app.paskamer.app/try/abc.def-ghi')).toBe('abc.def-ghi');
+    expect(extractToken('https://app.curtain.fit/try/abc.def-ghi')).toBe('abc.def-ghi');
     expect(extractToken('mock:aalter-studio-1')).toBe('mock:aalter-studio-1');
     expect(extractToken('hello world')).toBeNull();
   });

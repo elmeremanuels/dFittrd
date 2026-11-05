@@ -3,7 +3,7 @@
  * PNG on the local volume (≤ 24 h) + ledger entry + usage event. Optional video of the still.
  */
 import { eq } from 'drizzle-orm';
-import { isTryOnError, motionPromptFromMetadata, promptFromMetadata, type GarmentInput, type PersonInput, type VideoOptions } from '@paskamer/tryon-providers';
+import { isTryOnError, motionPromptFromMetadata, promptFromMetadata, type GarmentInput, type PersonInput, type VideoOptions } from '@curtain/tryon-providers';
 import type { App } from '../app.js';
 import { renderJobs } from '../db/schema.js';
 import { fetchPublicBytes, UnsafeUrlError, type LookupLike } from '../lib/safeFetch.js';

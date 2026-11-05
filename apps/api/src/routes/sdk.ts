@@ -2,12 +2,12 @@
  * SDK routes (public, CORS *, rate-limited per shop):
  *  - POST /v1/sdk/sessions → 10-minute try token, deep link, QR SVG. 402 + the same body when the
  *    shop is paused (D7: the button still works, the app shows the paused screen).
- *  - GET /sdk/v1.js → the built @paskamer/sdk IIFE (served from our origin: zero third-party requests).
+ *  - GET /sdk/v1.js → the built @curtain/sdk IIFE (served from our origin: zero third-party requests).
  */
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { SdkSessionRequestSchema, SdkSessionResponseSchema } from '@paskamer/schema';
+import { SdkSessionRequestSchema, SdkSessionResponseSchema } from '@curtain/schema';
 import { trySessions } from '../db/schema.js';
 import { randomAlnum } from '../lib/crypto.js';
 import { notFound } from '../lib/errors.js';
@@ -58,7 +58,7 @@ export const sdkRoutes: FastifyPluginAsyncZod = async (app) => {
 
   const sdkFile = await resolveSdkFile(env.SDK_FILE);
   app.get('/sdk/v1.js', { config: { rateLimit: false } }, async (_req, reply) => {
-    if (!sdkFile) throw notFound('sdk bundle (build @paskamer/sdk first)');
+    if (!sdkFile) throw notFound('sdk bundle (build @curtain/sdk first)');
     const js = await readFile(sdkFile, 'utf8');
     return reply
       .header('content-type', 'application/javascript; charset=utf-8')
@@ -72,7 +72,7 @@ export async function resolveSdkFile(override?: string): Promise<string | null> 
   const candidates = override ? [override] : [];
   try {
     const require = createRequire(import.meta.url);
-    candidates.push(require.resolve('@paskamer/sdk/sdk.v1.js'));
+    candidates.push(require.resolve('@curtain/sdk/sdk.v1.js'));
   } catch {
     /* not built */
   }

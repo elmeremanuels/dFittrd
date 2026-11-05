@@ -1,7 +1,7 @@
 {
-  "name": "@paskamer/taste-engine",
+  "name": "@curtain/taste-engine",
   "version": "0.1.0",
-  "description": "Paskamer taste engine: pure TypeScript swipe learning (applySwipe, penalty memory, rankDeck/dealNext, Style DNA) and colour harmony (CIELAB, dE2000, 12-season palettes).",
+  "description": "Curtain taste engine: pure TypeScript swipe learning (applySwipe, penalty memory, rankDeck/dealNext, Style DNA) and colour harmony (CIELAB, dE2000, 12-season palettes).",
   "license": "UNLICENSED",
   "private": true,
   "type": "module",
@@ -28,11 +28,11 @@
     "lint": "eslint ."
   },
   "peerDependencies": {
-    "@paskamer/schema": "workspace:*"
+    "@curtain/schema": "workspace:*"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
-    "@paskamer/schema": "workspace:*",
+    "@curtain/schema": "workspace:*",
     "@types/node": "^22.20.5",
     "eslint": "^9.39.5",
     "tsup": "^8.5.1",

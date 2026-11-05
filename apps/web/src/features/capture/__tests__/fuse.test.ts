@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { confidenceFromSigma, fuseMeasurements, toUserBody } from '@paskamer/schema';
+import { confidenceFromSigma, fuseMeasurements, toUserBody } from '@curtain/schema';
 import { fuseProfile, inflateByDisagreement } from '../fuse';
 import type { ScanMeasurements } from '../types';
 

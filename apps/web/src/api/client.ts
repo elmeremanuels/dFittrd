@@ -1,5 +1,5 @@
 /**
- * Typed HTTP client for the one backend. Every DTO comes from @paskamer/schema (API_ROUTES).
+ * Typed HTTP client for the one backend. Every DTO comes from @curtain/schema (API_ROUTES).
  *
  * Privacy (D3): the client can only send what these DTOs describe — there is no method that
  * takes a Blob/File, and `PersonInput.kind` is the closed literal 'avatarRender'. Every network
@@ -32,7 +32,7 @@ import type {
   WardrobeItem,
   WardrobeListResponse,
   WardrobePutRequest,
-} from '@paskamer/schema';
+} from '@curtain/schema';
 import type { ClientLedgerEntry } from '@/db/db';
 import { newId } from '@/lib/ids';
 

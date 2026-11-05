@@ -6,8 +6,8 @@ import { createAdminClient } from './client';
 const client = (m: ReturnType<typeof fetchMock>) => createAdminClient({ shopDomain: SHOP, accessToken: ACCESS_TOKEN, fetch: m.fetch });
 
 const starter: SubscriptionPlanInput = {
-  name: 'Paskamer Starter',
-  returnUrl: 'https://admin.shopify.com/store/aalter-studio/apps/paskamer',
+  name: 'Curtain Starter',
+  returnUrl: 'https://admin.shopify.com/store/aalter-studio/apps/curtain',
   priceEurPerMonth: 29,
   cappedAmountEur: 100,
   overageTerms: '€0.05 per try-on session above 500 per month',
@@ -40,7 +40,7 @@ describe('appSubscriptionCreate', () => {
       recurringLineItemId: 'gid://shopify/AppSubscriptionLineItem/1?v=1',
     });
     const v = m.variables<{ name: string; test: boolean; trialDays: number; returnUrl: string; lineItems: unknown[] }>();
-    expect(v).toMatchObject({ name: 'Paskamer Starter', test: true, trialDays: 14, returnUrl: starter.returnUrl });
+    expect(v).toMatchObject({ name: 'Curtain Starter', test: true, trialDays: 14, returnUrl: starter.returnUrl });
     expect(v.lineItems).toEqual(subscriptionLineItems(starter));
     expect(subscriptionLineItems(starter)[1]).toEqual({ plan: { appUsagePricingDetails: { cappedAmount: { amount: 100, currencyCode: 'EUR' }, terms: starter.overageTerms } } });
     expect(subscriptionLineItems(starter)[0]).toEqual({ plan: { appRecurringPricingDetails: { price: { amount: 29, currencyCode: 'EUR' }, interval: 'EVERY_30_DAYS' } } });
@@ -63,7 +63,7 @@ describe('appUsageRecordCreate', () => {
       subscriptionLineItemId: 'gid://shopify/AppSubscriptionLineItem/2',
       description: '1 try-on session',
       price: { amount: 0.05, currencyCode: 'EUR' },
-      idempotencyKey: 'paskamer:shop-uuid:intent-token-abc',
+      idempotencyKey: 'curtain:shop-uuid:intent-token-abc',
     });
   });
 
@@ -87,7 +87,7 @@ describe('subscription status', () => {
         activeSubscriptions: [
           {
             id: 'gid://shopify/AppSubscription/1',
-            name: 'Paskamer Starter',
+            name: 'Curtain Starter',
             status: 'ACTIVE',
             test: true,
             trialDays: 14,
@@ -102,7 +102,7 @@ describe('subscription status', () => {
     });
     const subs = await getActiveSubscriptions(client(m));
     expect(subs).toEqual([
-      { id: 'gid://shopify/AppSubscription/1', name: 'Paskamer Starter', status: 'ACTIVE', test: true, trialDays: 14, currentPeriodEnd: '2026-12-04T00:00:00Z', usageLineItemId: 'li2', cappedAmountEur: 100, balanceUsedEur: 12.5 },
+      { id: 'gid://shopify/AppSubscription/1', name: 'Curtain Starter', status: 'ACTIVE', test: true, trialDays: 14, currentPeriodEnd: '2026-12-04T00:00:00Z', usageLineItemId: 'li2', cappedAmountEur: 100, balanceUsedEur: 12.5 },
     ]);
   });
 

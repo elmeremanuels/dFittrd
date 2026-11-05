@@ -33,7 +33,7 @@ docker compose up -d caddy
 if [ -n "$WEB_DIST" ]; then
   [ -f "$WEB_DIST/index.html" ] || { echo "no index.html in $WEB_DIST"; exit 1; }
   echo "→ rsyncing web bundle into the caddy volume"
-  VOL="$(docker volume inspect -f '{{.Mountpoint}}' paskamer_web)"
+  VOL="$(docker volume inspect -f '{{.Mountpoint}}' curtain_web)"
   rsync -a --delete --exclude '.DS_Store' "$WEB_DIST/" "$VOL/"
   # index.html and sw.js are served no-cache; hashed assets are immutable.
 fi

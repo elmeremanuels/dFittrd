@@ -1,4 +1,4 @@
-import { SHOPIFY_METAFIELD_NAMESPACE } from '@paskamer/schema';
+import { SHOPIFY_METAFIELD_NAMESPACE } from '@curtain/schema';
 import { describe, expect, it } from 'vitest';
 import { ACCESS_TOKEN, PRODUCT_GID, PRODUCT_ID, SHOP, fetchMock, wrapDressNode } from '../test/fixtures';
 import { createAdminClient } from './client';

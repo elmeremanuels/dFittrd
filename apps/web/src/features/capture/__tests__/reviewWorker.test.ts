@@ -9,7 +9,7 @@ import { ScanSession } from '../scanSession';
 import type { WorkerInbound, WorkerOutbound } from '../workerProtocol';
 import { FRAME, FRONT_WIDTHS_CM, SIDE_DEPTHS_CM, figure, paintMask } from './fixtures';
 
-const APP = 'https://app.paskamer.test';
+const APP = 'https://app.curtain.test';
 
 // ---------------------------------------------------------------------------------------------
 // MediaPipe mock

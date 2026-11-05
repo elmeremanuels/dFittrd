@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { MOCK_GARMENTS_BY_ID } from '@paskamer/schema';
+import { MOCK_GARMENTS_BY_ID } from '@curtain/schema';
 import { signMerchantRequest } from './lib/crypto.js';
 import { findShopById } from './services/shops.js';
 import { makeApp, seedShop, type TestApp } from './test/helpers.js';

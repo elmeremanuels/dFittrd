@@ -1,6 +1,6 @@
 /**
  * Body types shared by the capture pipeline (apps/web/src/features/capture) and
- * `@paskamer/fit-engine`.
+ * `@curtain/fit-engine`.
  *
  * - `BodyProfile` is the rich on-device record (mean + sigma + source per measurement). It is
  *   stored in IndexedDB and NEVER synced (docs/DECISIONS.md D3). Only the fit signature leaves

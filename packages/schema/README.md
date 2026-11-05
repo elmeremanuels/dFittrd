@@ -1,17 +1,17 @@
-# @paskamer/schema
+# @curtain/schema
 
-Single source of truth for every Paskamer wire type (docs/DECISIONS.md D8). Isomorphic
+Single source of truth for every Curtain wire type (docs/DECISIONS.md D8). Isomorphic
 (browser + Node), one runtime dependency (`zod` 4). Everything else in the monorepo imports its
 types from here; nothing here does I/O.
 
 ```sh
-pnpm --filter @paskamer/schema typecheck   # tsc --noEmit
-pnpm --filter @paskamer/schema test        # vitest (104 tests)
-pnpm --filter @paskamer/schema build       # tsup (esm + cjs + d.ts) + dist/*.schema.json
-pnpm --filter @paskamer/schema lint        # eslint
+pnpm --filter @curtain/schema typecheck   # tsc --noEmit
+pnpm --filter @curtain/schema test        # vitest (104 tests)
+pnpm --filter @curtain/schema build       # tsup (esm + cjs + d.ts) + dist/*.schema.json
+pnpm --filter @curtain/schema lint        # eslint
 ```
 
-## Public API (`import … from '@paskamer/schema'`)
+## Public API (`import … from '@curtain/schema'`)
 
 ### `garment.ts` — GarmentPayload v1 (handoff §3.1, extended)
 
@@ -90,10 +90,10 @@ implements the validate dry-run. `API_ROUTES` lists the method + path per DTO.
 
 ### `mappings/shopify.ts`, `mappings/woo.ts`
 
-- `SHOPIFY_METAFIELD_NAMESPACE = '$app:paskamer'`, `SHOPIFY_METAFIELD_DEFINITIONS` (key, type,
+- `SHOPIFY_METAFIELD_NAMESPACE = '$app:curtain'`, `SHOPIFY_METAFIELD_DEFINITIONS` (key, type,
   payload path, heavy, pin) → create on install. `fromShopifyProduct(productNode, metafields?, { warnings })
   → Partial<GarmentPayload>`, `toShopifyMetafields(payload, ownerId)`, `shopifyExternalId(gid)`.
-- `WOO_META_PREFIX = '_paskamer_'`, `WOO_META_KEYS` (meta box fields), `fromWooMeta(product, meta?, { warnings, currency })`,
+- `WOO_META_PREFIX = '_curtain_'`, `WOO_META_KEYS` (meta box fields), `fromWooMeta(product, meta?, { warnings, currency })`,
   `toWooMeta(payload)`.
 - Both mappings are lenient: invalid JSON or values are dropped per field and reported through the
   `warnings` sink; the result is a draft for `completenessScore` / `GarmentPayloadSchema`.
@@ -112,4 +112,4 @@ implements the validate dry-run. `API_ROUTES` lists the method + path per DTO.
 `swipeEventJsonSchema()`, `allJsonSchemas()` — JSON Schema draft 2020-12 via `z.toJSONSchema`.
 The build writes `dist/garment.schema.json`, `dist/garment-draft.schema.json`,
 `dist/fit-signature.schema.json`, `dist/swipe-event.schema.json`; the PHP plugin ships the garment
-schemas. Also exported as `@paskamer/schema/garment.schema.json`.
+schemas. Also exported as `@curtain/schema/garment.schema.json`.

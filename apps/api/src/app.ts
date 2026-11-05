@@ -8,7 +8,7 @@ import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { hasZodFastifySchemaValidationErrors, isResponseSerializationError, jsonSchemaTransform, serializerCompiler, validatorCompiler, type ZodTypeProvider } from 'fastify-type-provider-zod';
-import type { TryOnRouter } from '@paskamer/tryon-providers';
+import type { TryOnRouter } from '@curtain/tryon-providers';
 import { TokenService } from './auth/tokens.js';
 import { StripeClient } from './billing/stripe.js';
 import { stripeRoutes } from './billing/routes.js';
@@ -117,7 +117,7 @@ export async function build(opts: BuildOptions): Promise<App> {
   await app.register(swagger, {
     openapi: {
       openapi: '3.1.0',
-      info: { title: 'Paskamer API', version: '0.1.0', description: 'The one backend: app API, merchant API, SDK host, Shopify app backend, billing.' },
+      info: { title: 'Curtain API', version: '0.1.0', description: 'The one backend: app API, merchant API, SDK host, Shopify app backend, billing.' },
       servers: [{ url: env.PUBLIC_API_URL }],
       components: {
         securitySchemes: {

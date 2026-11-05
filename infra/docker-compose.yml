@@ -1,6 +1,6 @@
-# Paskamer on one VPS (D2/D9): caddy (TLS + static PWA + reverse proxy), api (one image: API + jobs), postgres.
+# Curtain on one VPS (D2/D9): caddy (TLS + static PWA + reverse proxy), api (one image: API + jobs), postgres.
 # Usage: cp .env.example .env && edit, then `docker compose up -d`. Web bundle is rsynced into the caddy volume by scripts/deploy.sh.
-name: paskamer
+name: curtain
 
 services:
   caddy:
@@ -35,13 +35,13 @@ services:
         max-file: '7' # ~7 days of logs on a quiet VPS; the api never logs client IPs (LOG_IPS=0)
 
   api:
-    image: ${API_IMAGE:?set API_IMAGE in infra/.env (ghcr.io/<github owner>/paskamer-api:<tag>)}
+    image: ${API_IMAGE:?set API_IMAGE in infra/.env (ghcr.io/<github owner>/curtain-api:<tag>)}
     restart: unless-stopped
     env_file: .env
     environment:
       NODE_ENV: production
       PORT: '3000'
-      DATABASE_URL: postgres://${POSTGRES_USER:-paskamer}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-paskamer}
+      DATABASE_URL: postgres://${POSTGRES_USER:-curtain}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-curtain}
       RENDERS_DIR: /data/renders
       PUBLIC_APP_URL: https://app.${DOMAIN}
       PUBLIC_API_URL: https://api.${DOMAIN}
@@ -63,14 +63,14 @@ services:
 
   # Optional second replica that only runs pg-boss jobs (hero renders, sync, rollups): `docker compose --profile jobs up -d`.
   jobs:
-    image: ${API_IMAGE:?set API_IMAGE in infra/.env (ghcr.io/<github owner>/paskamer-api:<tag>)}
+    image: ${API_IMAGE:?set API_IMAGE in infra/.env (ghcr.io/<github owner>/curtain-api:<tag>)}
     restart: unless-stopped
     profiles: ['jobs']
     env_file: .env
     environment:
       NODE_ENV: production
       JOBS: '1'
-      DATABASE_URL: postgres://${POSTGRES_USER:-paskamer}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-paskamer}
+      DATABASE_URL: postgres://${POSTGRES_USER:-curtain}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-curtain}
       RENDERS_DIR: /data/renders
       PUBLIC_APP_URL: https://app.${DOMAIN}
       PUBLIC_API_URL: https://api.${DOMAIN}
@@ -86,15 +86,15 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-paskamer}
+      POSTGRES_USER: ${POSTGRES_USER:-curtain}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-paskamer}
+      POSTGRES_DB: ${POSTGRES_DB:-curtain}
     volumes:
       - pg:/var/lib/postgresql/data
     expose:
       - '5432'
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-paskamer} -d ${POSTGRES_DB:-paskamer}']
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-curtain} -d ${POSTGRES_DB:-curtain}']
       interval: 10s
       timeout: 5s
       retries: 10

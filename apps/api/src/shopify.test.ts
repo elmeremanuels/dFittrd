@@ -33,13 +33,13 @@ const productNode = (id = 'gid://shopify/Product/9001') => ({
   variants: { nodes: [{ price: '189.00', selectedOptions: [{ name: 'Size', value: 'M' }] }] },
   metafields: {
     nodes: [
-      { namespace: '$app:paskamer', key: 'category', type: 'single_line_text_field', value: 'dress' },
-      { namespace: '$app:paskamer', key: 'size_chart_type', type: 'single_line_text_field', value: 'body' },
-      { namespace: '$app:paskamer', key: 'size_chart', type: 'json', value: JSON.stringify([{ size: 'S', bust: 86, waist: 68, hip: 94, shoulder: 37 }, { size: 'M', bust: 90, waist: 72, hip: 98, shoulder: 38 }]) },
-      { namespace: '$app:paskamer', key: 'fabric', type: 'json', value: JSON.stringify({ primary: 'linen', stretchPct: 0, drape: 0.5 }) },
-      { namespace: '$app:paskamer', key: 'flat_lay_photo', type: 'url', value: 'https://cdn.shopify.com/wrap-flat.png' },
-      { namespace: '$app:paskamer', key: 'pattern_block', type: 'single_line_text_field', value: 'wrap' },
-      { namespace: '$app:paskamer', key: 'primary_color_hex', type: 'color', value: '#C97A4F' },
+      { namespace: '$app:curtain', key: 'category', type: 'single_line_text_field', value: 'dress' },
+      { namespace: '$app:curtain', key: 'size_chart_type', type: 'single_line_text_field', value: 'body' },
+      { namespace: '$app:curtain', key: 'size_chart', type: 'json', value: JSON.stringify([{ size: 'S', bust: 86, waist: 68, hip: 94, shoulder: 37 }, { size: 'M', bust: 90, waist: 72, hip: 98, shoulder: 38 }]) },
+      { namespace: '$app:curtain', key: 'fabric', type: 'json', value: JSON.stringify({ primary: 'linen', stretchPct: 0, drape: 0.5 }) },
+      { namespace: '$app:curtain', key: 'flat_lay_photo', type: 'url', value: 'https://cdn.shopify.com/wrap-flat.png' },
+      { namespace: '$app:curtain', key: 'pattern_block', type: 'single_line_text_field', value: 'wrap' },
+      { namespace: '$app:curtain', key: 'primary_color_hex', type: 'color', value: '#C97A4F' },
     ],
   },
 });
@@ -97,8 +97,8 @@ describe('Shopify: webhooks (HMAC + GDPR), token exchange, sync job', () => {
     t.fetchMock.on(`https://${SHOP}/admin/api/`, async (_url, init) => {
       const q = JSON.parse(String(init?.body)) as { query: string; variables: Record<string, unknown> };
       if (q.query.includes('metafieldDefinitionCreate')) return json({ data: { metafieldDefinitionCreate: { createdDefinition: { id: 'x', key: (q.variables.definition as { key: string }).key }, userErrors: [] } } });
-      if (q.query.includes('PaskamerProducts')) return json({ data: { products: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [productNode('gid://shopify/Product/7001')] } } });
-      if (q.query.includes('PaskamerProduct(')) return json({ data: { product: productNode() } });
+      if (q.query.includes('CurtainProducts')) return json({ data: { products: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [productNode('gid://shopify/Product/7001')] } } });
+      if (q.query.includes('CurtainProduct(')) return json({ data: { product: productNode() } });
       if (q.query.includes('currentAppInstallation')) return json({ data: { currentAppInstallation: { id: 'gid://shopify/AppInstallation/77' } } });
       if (q.query.includes('metafieldsSet')) {
         const mf = q.variables.metafields as Array<{ key: string; namespace: string }>;
@@ -126,9 +126,9 @@ describe('Shopify: webhooks (HMAC + GDPR), token exchange, sync job', () => {
     expect(appData).toBeDefined();
     const sent = (JSON.parse(String(appData!.init!.body)) as { variables: { metafields: Array<{ ownerId: string; namespace: string; key: string; value: string }> } }).variables.metafields;
     expect(sent.map((m) => [m.ownerId, m.namespace, m.key, m.value])).toEqual([
-      ['gid://shopify/AppInstallation/77', 'paskamer', 'public_key', res.json().publicKeyPrefix],
-      ['gid://shopify/AppInstallation/77', 'paskamer', 'api_url', t.env.PUBLIC_API_URL],
-      ['gid://shopify/AppInstallation/77', 'paskamer', 'app_url', t.env.PUBLIC_APP_URL],
+      ['gid://shopify/AppInstallation/77', 'curtain', 'public_key', res.json().publicKeyPrefix],
+      ['gid://shopify/AppInstallation/77', 'curtain', 'api_url', t.env.PUBLIC_API_URL],
+      ['gid://shopify/AppInstallation/77', 'curtain', 'app_url', t.env.PUBLIC_APP_URL],
     ]);
     expect(String(appData!.init!.body)).not.toMatch(/sk_(live|test)_/);
 
@@ -158,7 +158,7 @@ describe('Shopify: webhooks (HMAC + GDPR), token exchange, sync job', () => {
     expect(res.headers['x-frame-options']).toBeUndefined();
     expect(res.body).toContain(`<meta name="shopify-api-key" content="${API_KEY}" />`);
     expect(res.body).toContain('https://cdn.shopify.com/shopifycloud/app-bridge.js');
-    expect(res.body).not.toContain('__PASKAMER_');
+    expect(res.body).not.toContain('__CURTAIN_');
     expect(res.body).not.toContain(API_SECRET);
 
     // a hostile ?shop= never reaches the CSP
@@ -169,7 +169,7 @@ describe('Shopify: webhooks (HMAC + GDPR), token exchange, sync job', () => {
   it('auth callback redirects to the embedded app home and rejects non-Shopify domains', async () => {
     const res = await t.app.inject({ method: 'GET', url: `/shopify/auth/callback?shop=${SHOP}&code=x` });
     expect(res.statusCode).toBe(302);
-    expect(res.headers.location).toBe('https://admin.shopify.com/store/aalter/apps/paskamer');
+    expect(res.headers.location).toBe('https://admin.shopify.com/store/aalter/apps/curtain');
     const bad = await t.app.inject({ method: 'GET', url: '/shopify/auth/callback?shop=evil.example.com' });
     expect(bad.statusCode).toBe(400);
   });
@@ -179,10 +179,10 @@ describe('Shopify: webhooks (HMAC + GDPR), token exchange, sync job', () => {
     const archived = await t.handle.db.query.products.findFirst({ where: eq(products.externalId, '7001') });
     expect(archived?.status).toBe('archived');
 
-    await webhook('app_subscriptions/update', { app_subscription: { admin_graphql_api_id: 'gid://shopify/AppSubscription/1', name: 'Paskamer Starter', status: 'ACTIVE' } });
+    await webhook('app_subscriptions/update', { app_subscription: { admin_graphql_api_id: 'gid://shopify/AppSubscription/1', name: 'Curtain Starter', status: 'ACTIVE' } });
     let s = await t.handle.db.query.shops.findFirst({ where: eq(shops.id, shop.id) });
     expect(s).toMatchObject({ plan: 'starter', paused: false, billingRef: 'gid://shopify/AppSubscription/1' });
-    await webhook('app_subscriptions/update', { app_subscription: { admin_graphql_api_id: 'gid://shopify/AppSubscription/1', name: 'Paskamer Starter', status: 'FROZEN' } });
+    await webhook('app_subscriptions/update', { app_subscription: { admin_graphql_api_id: 'gid://shopify/AppSubscription/1', name: 'Curtain Starter', status: 'FROZEN' } });
     s = await t.handle.db.query.shops.findFirst({ where: eq(shops.id, shop.id) });
     expect(s).toMatchObject({ plan: 'free', paused: true });
 

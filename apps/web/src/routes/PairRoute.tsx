@@ -17,7 +17,7 @@ export function PairRoute(): ReactNode {
     e.preventDefault();
     const token = extractToken(value.trim());
     if (!token) {
-      setError('Paste the “Try in Paskamer” link or the code shown under the QR.');
+      setError('Paste the “Try it on” link or the code shown under the QR.');
       return;
     }
     navigate(`/try/${encodeURIComponent(token)}`);
@@ -28,13 +28,13 @@ export function PairRoute(): ReactNode {
       <header>
         <p className="eyebrow">Pair a shop</p>
         <h1 className="font-display text-3xl">Bring a shop into your fitting room</h1>
-        <p className="mt-1 text-sm text-ink-soft">Tap “Try in Paskamer” on a product page, or scan the QR with your camera. On this phone you can also paste the link.</p>
+        <p className="mt-1 text-sm text-ink-soft">Tap “Try it on” on a product page, or scan the QR with your camera. On this phone you can also paste the link.</p>
       </header>
       <form onSubmit={submit} className="card space-y-3">
         <label htmlFor="pair-code" className="eyebrow">
           Try link or code
         </label>
-        <input id="pair-code" className="field-input font-sans text-base" value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://app.paskamer.app/try/…" inputMode="url" autoComplete="off" aria-describedby={error ? 'pair-error' : undefined} aria-invalid={!!error} />
+        <input id="pair-code" className="field-input font-sans text-base" value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://app.curtain.fit/try/…" inputMode="url" autoComplete="off" aria-describedby={error ? 'pair-error' : undefined} aria-invalid={!!error} />
         {error ? (
           <p id="pair-error" role="alert" className="text-xs text-coral-ink">
             {error}

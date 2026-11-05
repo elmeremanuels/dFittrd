@@ -1,6 +1,6 @@
 node_modules/
 dist/
-# Copied from @paskamer/sdk and @paskamer/schema at build time
+# Copied from @curtain/sdk and @curtain/schema at build time
 assets/sdk.v1.js
 assets/garment.schema.json
 assets/garment-draft.schema.json

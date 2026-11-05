@@ -13,7 +13,7 @@ import {
   type LedgerRecord,
   type SpendStore,
   type TryOnProvider,
-} from '@paskamer/tryon-providers';
+} from '@curtain/tryon-providers';
 import type { Env } from '../env.js';
 
 export interface BuildRouterOptions {

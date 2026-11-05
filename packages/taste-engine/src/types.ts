@@ -2,15 +2,15 @@
  * Taste engine v1 types — docs/research/taste-engine-spec.md §Types.
  *
  * Wire types (SwipeEvent, SwipeAction, PassReason, TasteAxis, GarmentPayload) come from
- * `@paskamer/schema` and are only re-exported here; nothing is redeclared (AGENTS.md: wire
- * types come from @paskamer/schema only). Everything below is on-device state that never
+ * `@curtain/schema` and are only re-exported here; nothing is redeclared (AGENTS.md: wire
+ * types come from @curtain/schema only). Everything below is on-device state that never
  * leaves the phone except through `outbox` (swipe events + save markers, no body data).
  */
-import type { GarmentPayload, PassReason, SwipeAction, SwipeEvent, TASTE_AXES, TasteAxis } from '@paskamer/schema';
+import type { GarmentPayload, PassReason, SwipeAction, SwipeEvent, TASTE_AXES, TasteAxis } from '@curtain/schema';
 
 export type { SwipeEvent, SwipeAction, PassReason, GarmentPayload };
 
-/** TasteRadial axes in fixed display order. Identical to `TASTE_AXES` from @paskamer/schema. */
+/** TasteRadial axes in fixed display order. Identical to `TASTE_AXES` from @curtain/schema. */
 export type Axis = TasteAxis;
 export const AXES = ['bohemian', 'minimal', 'classic', 'avantGarde', 'sporty'] as const satisfies readonly Axis[];
 // Compile-time guard: the local tuple must be exactly the schema's TASTE_AXES (same order).
@@ -128,7 +128,7 @@ export interface ItemFeatures {
 }
 
 /**
- * The subset of the fit engine's FitResult the taste engine reads. `@paskamer/fit-engine`'s
+ * The subset of the fit engine's FitResult the taste engine reads. `@curtain/fit-engine`'s
  * `FitResult` is structurally assignable to it; the taste engine deliberately does not depend
  * on that package.
  */

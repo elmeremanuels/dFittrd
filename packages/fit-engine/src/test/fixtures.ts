@@ -1,5 +1,5 @@
 /** Test fixtures named in fit-engine-spec.md §Test vectors. */
-import type { UserBody } from '@paskamer/schema';
+import type { UserBody } from '@curtain/schema';
 import type { FitGarment } from '../types';
 
 /** Handoff §3.1 wrap dress (= MOCK_GARMENTS 'aalter-studio-1'). */

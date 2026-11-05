@@ -1,12 +1,12 @@
 {
-  "name": "paskamer",
+  "name": "curtain",
   "private": true,
   "version": "0.1.0",
-  "description": "Paskamer — your private fitting room. Consumer PWA + merchant plugins + one backend.",
+  "description": "Curtain — your private fitting room. Consumer PWA + merchant plugins + one backend.",
   "packageManager": "pnpm@10.28.0",
   "engines": { "node": ">=22" },
   "scripts": {
-    "dev": "pnpm --filter @paskamer/web dev",
+    "dev": "pnpm --filter @curtain/web dev",
     "build": "pnpm build:packages && pnpm build:apps",
     "build:packages": "pnpm -r --filter './packages/**' build",
     "build:apps": "pnpm -r --filter './apps/**' build",

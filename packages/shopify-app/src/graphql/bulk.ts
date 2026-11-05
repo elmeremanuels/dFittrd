@@ -1,12 +1,12 @@
 /**
  * Catalogue backfill with `bulkOperationRunQuery` (D6): one operation exports every product with
- * its images, variants and `$app:paskamer` metafields as JSONL; `parseBulkJsonl` folds the flat
+ * its images, variants and `$app:curtain` metafields as JSONL; `parseBulkJsonl` folds the flat
  * lines back into `ShopifyProductNode`s (children carry `__parentId`).
  *
  * Polling uses `node(id:)` rather than the deprecated `currentBulkOperation`, so it works on
  * 2025-xx and 2026-01+ alike.
  */
-import { SHOPIFY_METAFIELD_NAMESPACE, type ShopifyProductNode } from '@paskamer/schema';
+import { SHOPIFY_METAFIELD_NAMESPACE, type ShopifyProductNode } from '@curtain/schema';
 import { defaultSleep, type FetchLike, type SleepFn } from '../types';
 import { assertNoUserErrors, ShopifyGraphqlError, type AdminGraphqlClient, type UserError } from './client';
 
@@ -56,7 +56,7 @@ export function bulkProductsQuery(namespace: string = SHOPIFY_METAFIELD_NAMESPAC
 }
 
 export const BULK_OPERATION_RUN_QUERY = /* GraphQL */ `
-  mutation PaskamerBulkExport($query: String!) {
+  mutation CurtainBulkExport($query: String!) {
     bulkOperationRunQuery(query: $query) {
       bulkOperation { id status errorCode createdAt completedAt objectCount fileSize url partialDataUrl }
       userErrors { field message }
@@ -65,7 +65,7 @@ export const BULK_OPERATION_RUN_QUERY = /* GraphQL */ `
 `;
 
 export const BULK_OPERATION_STATUS_QUERY = /* GraphQL */ `
-  query PaskamerBulkStatus($id: ID!) {
+  query CurtainBulkStatus($id: ID!) {
     node(id: $id) {
       ... on BulkOperation { id status errorCode createdAt completedAt objectCount fileSize url partialDataUrl }
     }
@@ -73,7 +73,7 @@ export const BULK_OPERATION_STATUS_QUERY = /* GraphQL */ `
 `;
 
 export const BULK_OPERATION_CANCEL = /* GraphQL */ `
-  mutation PaskamerBulkCancel($id: ID!) {
+  mutation CurtainBulkCancel($id: ID!) {
     bulkOperationCancel(id: $id) {
       bulkOperation { id status }
       userErrors { field message }

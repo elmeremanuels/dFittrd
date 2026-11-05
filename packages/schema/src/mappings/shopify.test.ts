@@ -34,27 +34,27 @@ const PRODUCT: ShopifyProductNode = {
 const WRAP = mockGarment('aalter-studio-1');
 
 const METAFIELDS: ShopifyMetafield[] = [
-  { namespace: '$app:paskamer', key: 'size_chart_type', type: 'single_line_text_field', value: 'body' },
-  { namespace: '$app:paskamer', key: 'size_chart', type: 'json', value: JSON.stringify(WRAP.sizeChart) },
-  { namespace: '$app:paskamer', key: 'fabric', type: 'json', value: JSON.stringify(WRAP.fabric) },
-  { namespace: '$app:paskamer', key: 'flat_lay_photo', type: 'url', value: 'https://cdn.shopify.com/s/files/1/aalter/wrap-flat.png' },
-  { namespace: '$app:paskamer', key: 'pattern_block', type: 'single_line_text_field', value: 'Wrap' },
-  { namespace: '$app:paskamer', key: 'ease', type: 'json', value: '{"bust":6,"waist":4,"hip":8}' },
-  { namespace: '$app:paskamer', key: 'length_cm', type: 'json', value: '{"shoulder_to_hem":118,"shoulder_to_waist":41,"sleeve_length":0}' },
-  { namespace: '$app:paskamer', key: 'sizing_notes', type: 'multi_line_text_field', value: 'runs small' },
-  { namespace: '$app:paskamer', key: 'true_to_size_score', type: 'number_decimal', value: '0.92' },
-  { namespace: '$app:paskamer', key: 'critical_fit_points', type: 'list.single_line_text_field', value: '["bust","shoulder"]' },
-  { namespace: '$app:paskamer', key: 'stretch_zones', type: 'list.single_line_text_field', value: '["waist-tie"]' },
-  { namespace: '$app:paskamer', key: 'style_tags', type: 'json', value: '{"bohemian":0.9,"classic":0.3}' },
-  { namespace: '$app:paskamer', key: 'primary_color_hex', type: 'color', value: '#c97a4f' },
-  { namespace: '$app:paskamer', key: 'colorways', type: 'json', value: '[{"name":"Terracotta","hex":"#C97A4F","sku":"AS-LWD-TER"},{"name":"Sage","hex":"#8A9A7B"}]' },
-  { namespace: '$app:paskamer', key: 'subcategory', type: 'single_line_text_field', value: 'wrap-midi' },
+  { namespace: '$app:curtain', key: 'size_chart_type', type: 'single_line_text_field', value: 'body' },
+  { namespace: '$app:curtain', key: 'size_chart', type: 'json', value: JSON.stringify(WRAP.sizeChart) },
+  { namespace: '$app:curtain', key: 'fabric', type: 'json', value: JSON.stringify(WRAP.fabric) },
+  { namespace: '$app:curtain', key: 'flat_lay_photo', type: 'url', value: 'https://cdn.shopify.com/s/files/1/aalter/wrap-flat.png' },
+  { namespace: '$app:curtain', key: 'pattern_block', type: 'single_line_text_field', value: 'Wrap' },
+  { namespace: '$app:curtain', key: 'ease', type: 'json', value: '{"bust":6,"waist":4,"hip":8}' },
+  { namespace: '$app:curtain', key: 'length_cm', type: 'json', value: '{"shoulder_to_hem":118,"shoulder_to_waist":41,"sleeve_length":0}' },
+  { namespace: '$app:curtain', key: 'sizing_notes', type: 'multi_line_text_field', value: 'runs small' },
+  { namespace: '$app:curtain', key: 'true_to_size_score', type: 'number_decimal', value: '0.92' },
+  { namespace: '$app:curtain', key: 'critical_fit_points', type: 'list.single_line_text_field', value: '["bust","shoulder"]' },
+  { namespace: '$app:curtain', key: 'stretch_zones', type: 'list.single_line_text_field', value: '["waist-tie"]' },
+  { namespace: '$app:curtain', key: 'style_tags', type: 'json', value: '{"bohemian":0.9,"classic":0.3}' },
+  { namespace: '$app:curtain', key: 'primary_color_hex', type: 'color', value: '#c97a4f' },
+  { namespace: '$app:curtain', key: 'colorways', type: 'json', value: '[{"name":"Terracotta","hex":"#C97A4F","sku":"AS-LWD-TER"},{"name":"Sage","hex":"#8A9A7B"}]' },
+  { namespace: '$app:curtain', key: 'subcategory', type: 'single_line_text_field', value: 'wrap-midi' },
   { namespace: 'other_app', key: 'size_chart', type: 'json', value: '[{"size":"IGNORED"}]' },
 ];
 
 describe('SHOPIFY_METAFIELD_DEFINITIONS', () => {
   it('live in the app-reserved namespace and cover every non-identity payload field', () => {
-    expect(SHOPIFY_METAFIELD_NAMESPACE).toBe('$app:paskamer');
+    expect(SHOPIFY_METAFIELD_NAMESPACE).toBe('$app:curtain');
     const paths = SHOPIFY_METAFIELD_DEFINITIONS.map((d) => d.path);
     for (const p of ['sizeChartType', 'sizeChart', 'fabric', 'flatLayPhoto', 'patternBlock', 'ease', 'lengthCm', 'sizingNotes', 'trueToSizeScore', 'criticalFitPoints', 'stretchZones', 'styleTags', 'colorways', 'primaryColorHex']) {
       expect(paths).toContain(p);
@@ -106,7 +106,7 @@ describe('fromShopifyProduct', () => {
     const a = fromShopifyProduct(withMeta);
     expect(a.sizeChartType).toBe('body');
     expect(a.sizeChart).toHaveLength(4);
-    const b = fromShopifyProduct(PRODUCT, { size_chart_type: 'garment', 'paskamer.ease': { bust: 2 } });
+    const b = fromShopifyProduct(PRODUCT, { size_chart_type: 'garment', 'curtain.ease': { bust: 2 } });
     expect(b.sizeChartType).toBe('garment');
     expect(b.ease).toEqual({ bust: 2 });
   });
@@ -195,10 +195,10 @@ describe('helpers', () => {
 
   it('toShopifyMetafields serialises every mapped field and round-trips through fromShopifyProduct', () => {
     const inputs = toShopifyMetafields(WRAP, PRODUCT.id);
-    expect(inputs.every((i) => i.namespace === '$app:paskamer' && i.ownerId === PRODUCT.id)).toBe(true);
+    expect(inputs.every((i) => i.namespace === '$app:curtain' && i.ownerId === PRODUCT.id)).toBe(true);
     expect(inputs.find((i) => i.key === 'size_chart')?.type).toBe('json');
     expect(inputs.find((i) => i.key === 'critical_fit_points')?.value).toBe('["bust","shoulder"]');
-    const back = fromShopifyProduct(PRODUCT, inputs.map(({ key, type, value }) => ({ namespace: '$app:paskamer', key, type, value })));
+    const back = fromShopifyProduct(PRODUCT, inputs.map(({ key, type, value }) => ({ namespace: '$app:curtain', key, type, value })));
     expect(back.sizeChart).toEqual(WRAP.sizeChart);
     expect(back.fabric).toEqual(WRAP.fabric);
     expect(back.ease).toEqual(WRAP.ease);

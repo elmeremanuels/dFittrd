@@ -1,5 +1,5 @@
 /** The engine mirrors a few schema constants at runtime (zero runtime deps); keep them in sync. */
-import { CATEGORY_POINTS as SCHEMA_CATEGORY_POINTS, FIT_POINTS, PATTERN_BLOCKS, STRETCH_ZONES } from '@paskamer/schema';
+import { CATEGORY_POINTS as SCHEMA_CATEGORY_POINTS, FIT_POINTS, PATTERN_BLOCKS, STRETCH_ZONES } from '@curtain/schema';
 import { describe, expect, it } from 'vitest';
 import { BLOCKS, CATEGORY_EASE, CATEGORY_POINTS, POINTS, ZONE_POINTS, blockRule } from './constants';
 import { parseSizingNotes } from './sizingNotes';

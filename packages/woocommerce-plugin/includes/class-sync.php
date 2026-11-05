@@ -6,14 +6,14 @@
  *
  * Per-product state is kept in private meta (Vocab::META_SYNC_* …) for the meta box status panel.
  *
- * @package Paskamer
+ * @package Curtain
  */
 
 declare(strict_types=1);
 
-namespace Paskamer;
+namespace Curtain;
 
-defined('ABSPATH') || defined('PASKAMER_TESTING') || exit;
+defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
 
 final class Sync {
 

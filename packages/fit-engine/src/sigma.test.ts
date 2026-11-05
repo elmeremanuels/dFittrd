@@ -1,5 +1,5 @@
 /** Sigma-aware extension (decision D5): band probabilities under N(gap, σ²). */
-import type { BodyProfile } from '@paskamer/schema';
+import type { BodyProfile } from '@curtain/schema';
 import { describe, expect, it } from 'vitest';
 import { bandFor, bandForWithSigma } from './bands';
 import { computeFit } from './computeFit';

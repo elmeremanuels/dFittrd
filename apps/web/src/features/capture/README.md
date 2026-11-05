@@ -1,6 +1,6 @@
 # `apps/web/src/features/capture` — on-device body & face capture
 
-The onboarding capture step of Paskamer (handoff §2.1, DECISIONS.md D3/D5). Everything in this
+The onboarding capture step of Curtain (handoff §2.1, DECISIONS.md D3/D5). Everything in this
 directory runs in the browser; the heavy lifting runs in a Web Worker. **Raw photos and video never
 leave the device** — see “Privacy guarantees” below.
 
@@ -39,12 +39,12 @@ Modules are pure wherever possible and tested in node (`__tests__/`); only `scan
   Face → body → manual → fusion; works without a camera (straight to manual) and when MediaPipe fails to load.
 - `fuseProfile(input) → { profile, points, conflicts }` — the fusion, reusable by the profile screen (“remeasure”).
 - `buildFitSignature(profile, scan?, { sex, ageYears, prefs }) → { profile, vector[80], wire }` — the body of `PUT /v1/me/signature`.
-- Storage: `saveCapture`, `loadBodyProfile`, `loadBaseFrame`, `loadFaceTile`, `loadSilhouette`, `deleteScan` (one transaction), `PaskamerDb`.
+- Storage: `saveCapture`, `loadBodyProfile`, `loadBaseFrame`, `loadFaceTile`, `loadSilhouette`, `deleteScan` (one transaction), `CurtainDb`.
 - Measurement primitives: `measureScan`, `ellipsePerimeter`, `scaleCmPerPx`, `populationPrior`, `placeLevels`, `gateFrame`, `selectFrames`.
 - Colour: `estimateSkin`, `srgbToLab`, `ita`, `monkFromIta`, `undertoneFromLab`, `seasonEstimate`, `MONK_SWATCHES`.
 - `ScanSession` — main-thread handle on the worker (`init`, `pushFrame`, `finish`, `analyseFace`, `onGate`, `dispose`).
 
-Wire and body types (`BodyProfile`, `Measurement`, `UserBody`, `FitSignature*`) come only from `@paskamer/schema`.
+Wire and body types (`BodyProfile`, `Measurement`, `UserBody`, `FitSignature*`) come only from `@curtain/schema`.
 
 ## Privacy guarantees (AGENTS.md rule 1, D3)
 
@@ -52,7 +52,7 @@ Wire and body types (`BodyProfile`, `Measurement`, `UserBody`, `FitSignature*`) 
   What leaves the worker: 33 landmarks per chosen frame, two category masks, per-level widths/depths, lengths,
   posture descriptors, a quality score, **one** front base frame with the background replaced by cream `#F5EFE7`
   (for render path B) and **one** 320 px face tile.
-- Persistence (`storage.ts`, Dexie db `paskamer`): `bodyProfile`, `baseFrame` and the `faceTile` image (both AES-GCM,
+- Persistence (`storage.ts`, Dexie db `curtain`): `bodyProfile`, `baseFrame` and the `faceTile` image (both AES-GCM,
   256-bit **non-extractable** WebCrypto key held in the `keys` store), `silhouette`, `keys`. `deleteScan()` clears all five stores in
   one transaction. No video frame is ever written.
 - The fit signature (`signature.ts`) carries no face/skin/hair/colour value; `assertNoColourData` guards it and the
@@ -91,9 +91,9 @@ The worker picks the lite pose model on ≤ 4 cores / ≤ 4 GB devices and falls
 ## Running
 
 ```
-pnpm --filter @paskamer/web test        # vitest, node environment, __tests__/*.test.ts
-pnpm --filter @paskamer/web typecheck
-pnpm --filter @paskamer/web build
+pnpm --filter @curtain/web test        # vitest, node environment, __tests__/*.test.ts
+pnpm --filter @curtain/web typecheck
+pnpm --filter @curtain/web build
 ```
 
 Tests cover level placement, ellipse perimeter, scale, prior, fusion (handoff targets: scan-only ≈ 60 %, scan +

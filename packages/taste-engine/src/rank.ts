@@ -27,7 +27,7 @@ import { dominantAxis, topAxis } from './util';
 /** Weights of the base score (spec §rankDeck step 2). They sum to 1. */
 export const BASE_WEIGHTS = Object.freeze({ style: 0.4, colour: 0.2, fabric: 0.1, cut: 0.1, fit: 0.15, price: 0.05 });
 
-/** The caller's on-device fit function (`computeFit` from @paskamer/fit-engine, or a cache in front of it). */
+/** The caller's on-device fit function (`computeFit` from @curtain/fit-engine, or a cache in front of it). */
 export type FitFor<G extends DeckGarment> = (garment: G) => FitResultLike | null;
 
 export interface ScoredItem<G extends DeckGarment = DeckGarment> {

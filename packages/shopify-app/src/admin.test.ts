@@ -1,18 +1,18 @@
-import { ESTIMATE_DISCLAIMER } from '@paskamer/schema';
+import { ESTIMATE_DISCLAIMER } from '@curtain/schema';
 import { describe, expect, it } from 'vitest';
 import { ADMIN_PAGE_PATH, adminContentSecurityPolicy, adminPageTemplate, APP_BRIDGE_SCRIPT_URL, jsonForScript, renderAdminPage } from './admin';
 import { API_KEY, SHOP } from './test/fixtures';
 
-const cfg = { apiKey: API_KEY, apiUrl: 'https://api.paskamer.app/', appUrl: 'https://app.paskamer.app' };
+const cfg = { apiKey: API_KEY, apiUrl: 'https://api.curtain.fit/', appUrl: 'https://app.curtain.fit' };
 
 describe('admin page', () => {
   it('injects the api key meta, App Bridge from Shopify CDN and the config JSON', () => {
     const html = renderAdminPage(cfg);
     expect(html).toContain(`<meta name="shopify-api-key" content="${API_KEY}" />`);
     expect(html).toContain(`<script src="${APP_BRIDGE_SCRIPT_URL}"></script>`);
-    expect(html).not.toContain('__PASKAMER_');
-    const json = /<script id="paskamer-config" type="application\/json">(.*?)<\/script>/s.exec(html)![1]!;
-    expect(JSON.parse(json)).toEqual({ apiKey: API_KEY, apiUrl: 'https://api.paskamer.app', appUrl: 'https://app.paskamer.app', appHandle: 'paskamer', blockHandle: 'try-in-paskamer', disclaimer: ESTIMATE_DISCLAIMER });
+    expect(html).not.toContain('__CURTAIN_');
+    const json = /<script id="curtain-config" type="application\/json">(.*?)<\/script>/s.exec(html)![1]!;
+    expect(JSON.parse(json)).toEqual({ apiKey: API_KEY, apiUrl: 'https://api.curtain.fit', appUrl: 'https://app.curtain.fit', appHandle: 'curtain', blockHandle: 'try-it-on', disclaimer: ESTIMATE_DISCLAIMER });
   });
 
   it('cannot be broken out of with </script> in config values', () => {
@@ -30,7 +30,7 @@ describe('admin page', () => {
     const html = renderAdminPage(cfg);
     const urls = html.match(/https?:\/\/[a-z0-9.-]+/gi) ?? [];
     const hosts = new Set(urls.map((u) => new URL(u).host));
-    expect([...hosts].sort()).toEqual(['admin.shopify.com', 'api.paskamer.app', 'app.paskamer.app', 'cdn.shopify.com']);
+    expect([...hosts].sort()).toEqual(['admin.shopify.com', 'api.curtain.fit', 'app.curtain.fit', 'cdn.shopify.com']);
     expect(html).not.toMatch(/localStorage|sessionStorage|indexedDB|document\.cookie/);
     expect(html).not.toMatch(/sk_(live|test)_/);
     expect(html).toMatch(/shopify\.idToken\(\)/);

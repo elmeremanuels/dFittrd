@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { colourMatch, type Season, type Undertone } from '@paskamer/taste-engine';
+import { colourMatch, type Season, type Undertone } from '@curtain/taste-engine';
 
 /** Colour-match chip (founder note: colour matching with skin). Copy is fixed by the taste engine. */
 export function ColourChip({ hex, target }: { hex: string; target: Season | Undertone | null }): ReactNode {

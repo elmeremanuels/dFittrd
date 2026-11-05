@@ -1,8 +1,8 @@
-import type { TasteState } from '@paskamer/taste-engine';
-import { emptyState } from '@paskamer/taste-engine';
+import type { TasteState } from '@curtain/taste-engine';
+import { emptyState } from '@curtain/taste-engine';
 import { loadBodyProfile } from '@/features/capture/storage';
 import { type AppDb, type ClientLedgerEntry, type PendingIntentRow, type SettingsRow, SINGLETON_ID, type WardrobeRow } from '@/db/db';
-import type { BodyProfile } from '@paskamer/schema';
+import type { BodyProfile } from '@curtain/schema';
 
 export const LEDGER_KEEP = 500;
 

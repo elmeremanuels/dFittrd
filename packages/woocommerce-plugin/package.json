@@ -1,7 +1,7 @@
 {
-  "name": "@paskamer/woocommerce-plugin",
+  "name": "@curtain/woocommerce-plugin",
   "version": "0.1.0",
-  "description": "Paskamer for WooCommerce — PHP 8.3 WordPress plugin: garment fit-data meta box, push-on-save sync with PK-HMAC, bundled try-on SDK button, Connect round-trip. Built to dist/paskamer-woocommerce.zip.",
+  "description": "Curtain for WooCommerce — PHP 8.3 WordPress plugin: garment fit-data meta box, push-on-save sync with PK-HMAC, bundled try-on SDK button, Connect round-trip. Built to dist/curtain-woocommerce.zip.",
   "license": "GPL-2.0-or-later",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
     "lint": "node scripts/lint.mjs"
   },
   "devDependencies": {
-    "@paskamer/schema": "workspace:*",
-    "@paskamer/sdk": "workspace:*"
+    "@curtain/schema": "workspace:*",
+    "@curtain/sdk": "workspace:*"
   }
 }

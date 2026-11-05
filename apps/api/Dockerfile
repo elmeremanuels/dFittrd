@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# Build from the repository root:  docker build -f apps/api/Dockerfile -t paskamer-api .
+# Build from the repository root:  docker build -f apps/api/Dockerfile -t curtain-api .
 # One image = API + merchant API + SDK host + Shopify backend + pg-boss jobs (JOBS=1 → jobs-only replica).
 
 FROM node:22-alpine AS base
@@ -28,12 +28,12 @@ COPY packages/shopify-app packages/shopify-app
 COPY packages/fit-engine packages/fit-engine
 COPY packages/taste-engine packages/taste-engine
 COPY apps/api apps/api
-RUN pnpm --filter @paskamer/schema build \
- && pnpm --filter @paskamer/sdk build \
- && pnpm --filter @paskamer/tryon-providers build \
- && pnpm --filter @paskamer/shopify-app build \
- && pnpm --filter @paskamer/api build \
- && pnpm --filter @paskamer/api --prod deploy --legacy /out
+RUN pnpm --filter @curtain/schema build \
+ && pnpm --filter @curtain/sdk build \
+ && pnpm --filter @curtain/tryon-providers build \
+ && pnpm --filter @curtain/shopify-app build \
+ && pnpm --filter @curtain/api build \
+ && pnpm --filter @curtain/api --prod deploy --legacy /out
 
 # ---- runtime ------------------------------------------------------------------------------
 FROM node:22-alpine AS runtime

@@ -3,7 +3,7 @@
  * K distinct pseudonymous users contributed to it. Never a signature, never a device id.
  */
 import { and, eq, gte, lt, sql } from 'drizzle-orm';
-import type { AnalyticsSwipesResponse, FitCohortResponse } from '@paskamer/schema';
+import type { AnalyticsSwipesResponse, FitCohortResponse } from '@curtain/schema';
 import type { Db } from '../db/client.js';
 import { products, swipeEvents, trySessions, wardrobeItems } from '../db/schema.js';
 import { dayEnd, dayStart } from '../lib/time.js';

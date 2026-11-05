@@ -2,16 +2,16 @@
 /**
  * Reads a WC_Product into the plain-array snapshot the Payload_Builder (and the signed REST
  * endpoint) use. The shape intentionally matches the WooCommerce REST v3 product subset that
- * @paskamer/schema's `WooProductSchema` accepts, so the backend can normalise either source.
+ * @curtain/schema's `WooProductSchema` accepts, so the backend can normalise either source.
  *
- * @package Paskamer
+ * @package Curtain
  */
 
 declare(strict_types=1);
 
-namespace Paskamer;
+namespace Curtain;
 
-defined('ABSPATH') || defined('PASKAMER_TESTING') || exit;
+defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
 
 final class Product_Snapshot {
 
@@ -101,7 +101,7 @@ final class Product_Snapshot {
 	}
 
 	/**
-	 * All `_paskamer_*` meta of a product as key → raw stored value.
+	 * All `_curtain_*` meta of a product as key → raw stored value.
 	 *
 	 * @return array<string,mixed>
 	 */

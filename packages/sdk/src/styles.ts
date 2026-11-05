@@ -1,14 +1,14 @@
 /**
- * Minimal styling with the Paskamer tokens (handoff §7): coral #FF5A3C, cream #F5EFE7, ink #1A1612.
+ * Minimal styling with the Curtain tokens (handoff §7): coral #FF5A3C, cream #F5EFE7, ink #1A1612.
  * The button inherits the merchant's font; the modal uses the system UI stack. No font requests.
  */
-export const STYLE_ID = 'paskamer-sdk-style';
+export const STYLE_ID = 'curtain-sdk-style';
 
 export const CSS = `
 .pk-btn{appearance:none;-webkit-appearance:none;display:inline-flex;align-items:center;justify-content:center;gap:.5em;padding:.75em 1.4em;border:0;border-radius:999px;background:#FF5A3C;color:#F5EFE7;font:inherit;font-weight:600;line-height:1.2;cursor:pointer;text-decoration:none;transition:transform .15s ease,box-shadow .15s ease}
 .pk-btn:hover{box-shadow:0 4px 14px rgba(255,90,60,.35);transform:translateY(-1px)}
 .pk-btn:focus-visible{outline:3px solid #1A1612;outline-offset:2px}
-.pk-btn[data-paskamer-state=loading]{opacity:.7;cursor:progress}
+.pk-btn[data-curtain-state=loading]{opacity:.7;cursor:progress}
 .pk-root{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#1A1612;line-height:1.4}
 .pk-overlay{position:absolute;inset:0;background:rgba(26,22,18,.55);animation:pk-fade .2s ease}
 .pk-dialog{position:relative;background:#F5EFE7;border-radius:20px;padding:28px 28px 20px;max-width:360px;width:100%;box-sizing:border-box;box-shadow:0 20px 60px rgba(26,22,18,.3);animation:pk-pop .25s cubic-bezier(.2,.8,.2,1);text-align:center;outline:0}

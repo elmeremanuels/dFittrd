@@ -24,7 +24,7 @@ import {
 } from './types';
 import { clamp, dominantAxis, round4 } from './util';
 
-/** Learning rate η per action (also exported by @paskamer/schema as SWIPE_LEARNING_RATE). */
+/** Learning rate η per action (also exported by @curtain/schema as SWIPE_LEARNING_RATE). */
 export const LEARNING_RATE: Readonly<Record<SwipeAction, number>> = Object.freeze({ love: 0.12, save: 0.18, pass: 0.06, less: 0.2 });
 export const SIGN: Readonly<Record<SwipeAction, 1 | -1>> = Object.freeze({ love: 1, save: 1, pass: -1, less: -1 });
 

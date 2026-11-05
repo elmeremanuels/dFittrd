@@ -1,21 +1,21 @@
 <?php
 /**
- * Builds a GarmentPayload v1 draft from a WooCommerce product snapshot plus the `_paskamer_*`
- * post meta. This is the PHP twin of `fromWooMeta` in @paskamer/schema (mappings/woo.ts): the
+ * Builds a GarmentPayload v1 draft from a WooCommerce product snapshot plus the `_curtain_*`
+ * post meta. This is the PHP twin of `fromWooMeta` in @curtain/schema (mappings/woo.ts): the
  * same key list, the same lenient coercions and the same fallbacks (brand from attribute /
  * brand taxonomy / shop name, category inferred from WooCommerce categories, EUR-only price).
  *
  * Pure PHP: the product snapshot is a plain array (see Product_Snapshot for the WooCommerce
  * side), so the builder is unit-tested without WordPress.
  *
- * @package Paskamer
+ * @package Curtain
  */
 
 declare(strict_types=1);
 
-namespace Paskamer;
+namespace Curtain;
 
-defined('ABSPATH') || defined('PASKAMER_TESTING') || exit;
+defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
 
 final class Payload_Builder {
 
@@ -26,7 +26,7 @@ final class Payload_Builder {
 	 * @param array<string,mixed> $product Snapshot: id, name, permalink, price, regular_price, currency,
 	 *                                     images[{src,alt}], categories[{name,slug}], brands[{name}],
 	 *                                     attributes[{name,slug,options[]}].
-	 * @param array<string,mixed> $meta    `_paskamer_*` meta (keys with or without the prefix; values as
+	 * @param array<string,mixed> $meta    `_curtain_*` meta (keys with or without the prefix; values as
 	 *                                     stored: JSON strings, scalars, or decoded arrays).
 	 * @param array<string,mixed> $opts    currency (fallback for the snapshot), default_brand.
 	 * @return array{payload: array<string,mixed>, warnings: array<int, array{source:string,path:string,message:string}>}
@@ -103,7 +103,7 @@ final class Payload_Builder {
 				break;
 			}
 		}
-		$brand = self::coerce_string( $get( '_paskamer_brand' ) )
+		$brand = self::coerce_string( $get( '_curtain_brand' ) )
 			?? self::coerce_string( $product['brands'][0]['name'] ?? null )
 			?? self::coerce_string( $brand_attr )
 			?? self::coerce_string( $opts['default_brand'] ?? null );
@@ -111,7 +111,7 @@ final class Payload_Builder {
 			$out['brand'] = $brand;
 		}
 
-		$explicit = self::coerce_string( $get( '_paskamer_category' ) );
+		$explicit = self::coerce_string( $get( '_curtain_category' ) );
 		$hints    = array( $explicit );
 		foreach ( (array) ( $product['categories'] ?? array() ) as $cat ) {
 			$hints[] = (string) ( $cat['name'] ?? '' );
@@ -121,10 +121,10 @@ final class Payload_Builder {
 		if ( null !== $category ) {
 			$out['category'] = $category;
 		} elseif ( null !== $explicit ) {
-			$this->warn( '_paskamer_category', 'category', "unknown category '" . $explicit . "'" );
+			$this->warn( '_curtain_category', 'category', "unknown category '" . $explicit . "'" );
 		}
 
-		$sub = self::coerce_string( $get( '_paskamer_subcategory' ) );
+		$sub = self::coerce_string( $get( '_curtain_subcategory' ) );
 		if ( null !== $sub ) {
 			$out['subcategory'] = $sub;
 		}
@@ -155,7 +155,7 @@ final class Payload_Builder {
 			$out['productPhotos'] = array_slice( $photos, 0, 20 );
 		}
 
-		$flat_raw  = $get( '_paskamer_flat_lay_photo' );
+		$flat_raw  = $get( '_curtain_flat_lay_photo' );
 		$flat_cand = $flat_raw;
 		if ( is_array( $flat_raw ) ) {
 			$flat_cand = $flat_raw['url'] ?? $flat_raw['src'] ?? null;
@@ -164,73 +164,73 @@ final class Payload_Builder {
 		if ( null !== $flat ) {
 			$out['flatLayPhoto'] = $flat;
 		} elseif ( null !== $flat_raw && '' !== $flat_raw ) {
-			$this->warn( '_paskamer_flat_lay_photo', 'flatLayPhoto', 'not an absolute http(s) URL' );
+			$this->warn( '_curtain_flat_lay_photo', 'flatLayPhoto', 'not an absolute http(s) URL' );
 		}
 
-		$sct = self::coerce_string( $get( '_paskamer_size_chart_type' ) );
+		$sct = self::coerce_string( $get( '_curtain_size_chart_type' ) );
 		$sct = null === $sct ? null : strtolower( $sct );
 		if ( 'garment' === $sct || 'body' === $sct ) {
 			$out['sizeChartType'] = $sct;
 		} elseif ( null !== $sct ) {
-			$this->warn( '_paskamer_size_chart_type', 'sizeChartType', "expected 'garment' or 'body'" );
+			$this->warn( '_curtain_size_chart_type', 'sizeChartType', "expected 'garment' or 'body'" );
 		}
 
-		$chart = $this->coerce_size_chart( $get( '_paskamer_size_chart' ) );
+		$chart = $this->coerce_size_chart( $get( '_curtain_size_chart' ) );
 		if ( null !== $chart ) {
 			$out['sizeChart'] = $chart;
 		}
 
-		$fabric = $this->coerce_fabric( $get( '_paskamer_fabric' ) );
+		$fabric = $this->coerce_fabric( $get( '_curtain_fabric' ) );
 		if ( null !== $fabric ) {
 			$out['fabric'] = $fabric;
 		}
 
-		$block = self::coerce_string( $get( '_paskamer_pattern_block' ) );
+		$block = self::coerce_string( $get( '_curtain_pattern_block' ) );
 		if ( null !== $block ) {
 			$out['patternBlock'] = strtolower( $block );
 		}
 
-		$ease = $this->coerce_keyed_numbers( $get( '_paskamer_ease' ), 'ease', Vocab::FIT_POINTS, array( 'hips' => 'hip', 'chest' => 'bust' ) );
+		$ease = $this->coerce_keyed_numbers( $get( '_curtain_ease' ), 'ease', Vocab::FIT_POINTS, array( 'hips' => 'hip', 'chest' => 'bust' ) );
 		if ( null !== $ease ) {
 			$out['ease'] = $ease;
 		}
 
-		$lengths = $this->coerce_length_cm( $get( '_paskamer_length_cm' ) );
+		$lengths = $this->coerce_length_cm( $get( '_curtain_length_cm' ) );
 		if ( null !== $lengths ) {
 			$out['lengthCm'] = $lengths;
 		}
 
-		$notes = self::coerce_string( $get( '_paskamer_sizing_notes' ) );
+		$notes = self::coerce_string( $get( '_curtain_sizing_notes' ) );
 		if ( null !== $notes ) {
 			$out['sizingNotes'] = function_exists( 'mb_substr' ) ? mb_substr( $notes, 0, 500 ) : substr( $notes, 0, 500 );
 		}
 
-		$tts_raw = $get( '_paskamer_true_to_size_score' );
+		$tts_raw = $get( '_curtain_true_to_size_score' );
 		$tts     = self::coerce_unit( self::parse_jsonish( $tts_raw ) );
 		if ( null !== $tts ) {
 			$out['trueToSizeScore'] = $tts;
 		} elseif ( null !== $tts_raw && '' !== $tts_raw ) {
-			$this->warn( '_paskamer_true_to_size_score', 'trueToSizeScore', 'expected 0..1' );
+			$this->warn( '_curtain_true_to_size_score', 'trueToSizeScore', 'expected 0..1' );
 		}
 
-		$critical = self::coerce_fit_points( $get( '_paskamer_critical_fit_points' ) );
+		$critical = self::coerce_fit_points( $get( '_curtain_critical_fit_points' ) );
 		if ( null !== $critical ) {
 			$out['criticalFitPoints'] = $critical;
 		}
-		$zones = self::coerce_string_list( $get( '_paskamer_stretch_zones' ) );
+		$zones = self::coerce_string_list( $get( '_curtain_stretch_zones' ) );
 		if ( null !== $zones ) {
 			$out['stretchZones'] = array_values( array_map( 'strtolower', $zones ) );
 		}
-		$tags = $this->coerce_style_tags( $get( '_paskamer_style_tags' ) );
+		$tags = $this->coerce_style_tags( $get( '_curtain_style_tags' ) );
 		if ( null !== $tags ) {
 			$out['styleTags'] = $tags;
 		}
 
-		$colorways = $this->coerce_colorways( $get( '_paskamer_colorways' ) );
+		$colorways = $this->coerce_colorways( $get( '_curtain_colorways' ) );
 		if ( null !== $colorways ) {
 			$out['colorways'] = $colorways;
 		}
-		$hex = self::coerce_hex( $get( '_paskamer_primary_color_hex' ) ) ?? ( $colorways[0]['hex'] ?? null );
+		$hex = self::coerce_hex( $get( '_curtain_primary_color_hex' ) ) ?? ( $colorways[0]['hex'] ?? null );
 		if ( null !== $hex ) {
 			$out['primaryColorHex'] = $hex;
 		}
@@ -247,7 +247,7 @@ final class Payload_Builder {
 	}
 
 	/**
-	 * Normalise meta input to `_paskamer_*` → value, unwrapping get_post_meta's single-element arrays.
+	 * Normalise meta input to `_curtain_*` → value, unwrapping get_post_meta's single-element arrays.
 	 *
 	 * @param array<string,mixed> $meta
 	 * @return array<string,mixed>
@@ -419,7 +419,7 @@ final class Payload_Builder {
 		}
 		if ( ! is_array( $v ) ) {
 			if ( null !== $v ) {
-				$this->warn( '_paskamer_size_chart', 'sizeChart', 'expected a JSON array of size rows' );
+				$this->warn( '_curtain_size_chart', 'sizeChart', 'expected a JSON array of size rows' );
 			}
 			return null;
 		}
@@ -457,7 +457,7 @@ final class Payload_Builder {
 			$out[] = $r;
 		}
 		if ( ! $out ) {
-			$this->warn( '_paskamer_size_chart', 'sizeChart', 'no usable rows' );
+			$this->warn( '_curtain_size_chart', 'sizeChart', 'no usable rows' );
 			return null;
 		}
 		return $out;
@@ -468,7 +468,7 @@ final class Payload_Builder {
 		$v = self::parse_jsonish( $value );
 		if ( ! is_array( $v ) || array_is_list( $v ) ) {
 			if ( null !== $v ) {
-				$this->warn( '_paskamer_fabric', 'fabric', 'expected a JSON object' );
+				$this->warn( '_curtain_fabric', 'fabric', 'expected a JSON object' );
 			}
 			return null;
 		}
@@ -485,7 +485,7 @@ final class Payload_Builder {
 			if ( null !== $n ) {
 				$out[ $k ] = self::num( $n );
 			} else {
-				$this->warn( '_paskamer_fabric', 'fabric.' . $k, 'expected a number' );
+				$this->warn( '_curtain_fabric', 'fabric.' . $k, 'expected a number' );
 			}
 		}
 		$gsm = self::coerce_number( $v['gsm'] ?? $v['weight_gsm'] ?? null );
@@ -552,7 +552,7 @@ final class Payload_Builder {
 		$v = self::parse_jsonish( $value );
 		if ( ! is_array( $v ) || ( array_is_list( $v ) && array() !== $v ) ) {
 			if ( null !== $v ) {
-				$this->warn( '_paskamer_length_cm', 'lengthCm', 'expected a JSON object keyed by length name' );
+				$this->warn( '_curtain_length_cm', 'lengthCm', 'expected a JSON object keyed by length name' );
 			}
 			return null;
 		}
@@ -576,7 +576,7 @@ final class Payload_Builder {
 		$v = self::parse_jsonish( $value );
 		if ( ! is_array( $v ) || ( array_is_list( $v ) && array() !== $v ) ) {
 			if ( null !== $v ) {
-				$this->warn( '_paskamer_style_tags', 'styleTags', 'expected a JSON object keyed by taste axis' );
+				$this->warn( '_curtain_style_tags', 'styleTags', 'expected a JSON object keyed by taste axis' );
 			}
 			return null;
 		}
@@ -599,7 +599,7 @@ final class Payload_Builder {
 		$v = self::parse_jsonish( $value );
 		if ( ! is_array( $v ) || ! array_is_list( $v ) ) {
 			if ( null !== $v ) {
-				$this->warn( '_paskamer_colorways', 'colorways', 'expected a JSON array of colorways' );
+				$this->warn( '_curtain_colorways', 'colorways', 'expected a JSON array of colorways' );
 			}
 			return null;
 		}
@@ -611,7 +611,7 @@ final class Payload_Builder {
 			$name = self::coerce_string( $c['name'] ?? $c['label'] ?? null );
 			$hex  = self::coerce_hex( $c['hex'] ?? $c['color'] ?? $c['colour'] ?? null );
 			if ( null === $name || null === $hex ) {
-				$this->warn( '_paskamer_colorways', 'colorways', 'each colorway needs a name and a hex colour' );
+				$this->warn( '_curtain_colorways', 'colorways', 'each colorway needs a name and a hex colour' );
 				continue;
 			}
 			$row = array(

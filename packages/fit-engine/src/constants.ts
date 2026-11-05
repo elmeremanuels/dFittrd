@@ -1,10 +1,10 @@
 /**
- * Tables of fit-engine-spec.md §Step 1–3. Typed against @paskamer/schema's closed vocabularies
+ * Tables of fit-engine-spec.md §Step 1–3. Typed against @curtain/schema's closed vocabularies
  * (compile-time only — the engine has zero runtime imports, AGENTS.md rule 5 / D8).
  */
 import type { Band, Category, Point } from './types';
 
-/** FIT_POINTS order of @paskamer/schema (checked by constants.test.ts). */
+/** FIT_POINTS order of @curtain/schema (checked by constants.test.ts). */
 export const POINTS: readonly Point[] = ['bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'foot'];
 
 /** Order in which notes mention points (spec §Notes). */
@@ -21,7 +21,7 @@ export const POINT_LABELS: Readonly<Record<Point, string>> = {
   foot: 'foot',
 };
 
-/** Mirror of @paskamer/schema CATEGORY_POINTS (spec §Step 1; parity test in constants.test.ts). */
+/** Mirror of @curtain/schema CATEGORY_POINTS (spec §Step 1; parity test in constants.test.ts). */
 export const CATEGORY_POINTS: Readonly<Record<Category, readonly Point[]>> = {
   top: ['bust', 'waist', 'hip', 'shoulder'],
   dress: ['bust', 'waist', 'hip', 'shoulder'],

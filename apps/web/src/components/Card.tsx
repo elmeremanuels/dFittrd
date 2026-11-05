@@ -1,7 +1,7 @@
 import { animate, motion, useMotionValue, useReducedMotion, useTransform, type PanInfo } from 'motion/react';
 import { Bookmark, Heart, ThumbsDown, X } from 'lucide-react';
 import { useRef, useState, type ReactNode } from 'react';
-import type { SwipeAction } from '@paskamer/schema';
+import type { SwipeAction } from '@curtain/schema';
 
 export const SWIPE_THRESHOLD_PX = 90;
 

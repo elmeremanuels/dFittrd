@@ -4,7 +4,7 @@
  * Pure and deterministic: no I/O, no Date, never mutates its inputs (they may be deep-frozen).
  * Gaps are rounded to 0.1 cm, scores and confidence to 3 dp.
  */
-import type { SizeRow, UserBody } from '@paskamer/schema';
+import type { SizeRow, UserBody } from '@curtain/schema';
 import { bandFor, bandForWithSigma } from './bands';
 import {
   BLOCKS,

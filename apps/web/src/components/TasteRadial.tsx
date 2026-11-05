@@ -1,6 +1,6 @@
 import { motion, useReducedMotion } from 'motion/react';
 import type { ReactNode } from 'react';
-import { AXES, AXIS_LABELS, type AxisVector } from '@paskamer/taste-engine';
+import { AXES, AXIS_LABELS, type AxisVector } from '@curtain/taste-engine';
 
 /**
  * Style DNA radar. Fixed axis order (AXES = schema TASTE_AXES), display labels, a viewBox with

@@ -1,14 +1,14 @@
 /**
- * The ONE on-device database (IndexedDB via Dexie, name `paskamer`), shared with the capture
+ * The ONE on-device database (IndexedDB via Dexie, name `curtain`), shared with the capture
  * feature. Version 1 (capture, `features/capture/storage.ts`) holds bodyProfile / baseFrame /
  * faceTile / silhouette / keys; version 2 (this file) adds the app tables listed in
  * docs/ARCHITECTURE.md: taste, wardrobe, swipes, outbox, ledger, settings, pendingIntent, renders.
  * Nothing in here is ever synced as-is; the sync layer reads `outbox` only.
  */
 import type { EntityTable } from 'dexie';
-import type { GarmentPayload, ShopBranding, SwipeEvent, WardrobeState } from '@paskamer/schema';
-import type { OutboxEntry, TasteState } from '@paskamer/taste-engine';
-import { PaskamerDb, setDb } from '@/features/capture/storage';
+import type { GarmentPayload, ShopBranding, SwipeEvent, WardrobeState } from '@curtain/schema';
+import type { OutboxEntry, TasteState } from '@curtain/taste-engine';
+import { CurtainDb, setDb } from '@/features/capture/storage';
 
 export const SINGLETON_ID = 'current';
 export const RENDERS_LRU = 50;
@@ -100,7 +100,7 @@ export interface RenderRow {
   garmentId: string;
 }
 
-export class AppDb extends PaskamerDb {
+export class AppDb extends CurtainDb {
   taste!: EntityTable<TasteRow, 'id'>;
   wardrobe!: EntityTable<WardrobeRow, 'productId'>;
   swipes!: EntityTable<SwipeRow, 'seq'>;

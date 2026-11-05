@@ -71,7 +71,7 @@ export function RequireOnboarded({ children }: { children: ReactNode }): ReactNo
 export function Splash(): ReactNode {
   return (
     <div className="flex h-full min-h-[50dvh] items-center justify-center" role="status" aria-live="polite">
-      <p className="font-display text-xl text-ink-soft">Paskamer</p>
+      <p className="font-display text-xl text-ink-soft">Curtain</p>
     </div>
   );
 }

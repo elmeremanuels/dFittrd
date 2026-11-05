@@ -2,7 +2,7 @@
  * The capture pipeline names seasons with spaces ('warm autumn'); the taste engine's colour
  * harmony table uses camelCase keys ('trueAutumn'). This is the only place that maps them.
  */
-import { isSeason, isUndertone, type Season, type Undertone } from '@paskamer/taste-engine';
+import { isSeason, isUndertone, type Season, type Undertone } from '@curtain/taste-engine';
 import type { Season as CaptureSeason } from '@/features/capture/types';
 
 const CAPTURE_TO_TASTE: Record<CaptureSeason, Season> = {

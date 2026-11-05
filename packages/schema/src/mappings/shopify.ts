@@ -1,7 +1,7 @@
 /**
  * Shopify ↔ GarmentPayload mapping (docs/DECISIONS.md D6).
  *
- * Metafields live in the app-reserved namespace `$app:paskamer` so the shop stays the source
+ * Metafields live in the app-reserved namespace `$app:curtain` so the shop stays the source
  * of truth. `SHOPIFY_METAFIELD_DEFINITIONS` is what the app creates on install
  * (`metafieldDefinitionCreate`), `fromShopifyProduct` normalises a GraphQL `Product` node plus
  * its metafields into a (partial) payload, and `toShopifyMetafields` builds the
@@ -30,7 +30,7 @@ import {
   type WarningSink,
 } from './common';
 
-export const SHOPIFY_METAFIELD_NAMESPACE = '$app:paskamer' as const;
+export const SHOPIFY_METAFIELD_NAMESPACE = '$app:curtain' as const;
 
 export const SHOPIFY_METAFIELD_TYPES = [
   'single_line_text_field',
@@ -118,7 +118,7 @@ export const SHOPIFY_METAFIELD_DEFINITIONS: readonly ShopifyMetafieldDefinition[
   },
   {
     key: 'category',
-    name: 'Paskamer category',
+    name: 'Curtain category',
     type: 'single_line_text_field',
     path: 'category',
     description: 'top | bottom | dress | outerwear | shoes | accessory. Inferred from product type when empty.',
@@ -312,7 +312,7 @@ export function indexShopifyMetafields(input: ShopifyMetafieldsInput | undefined
       const mf = ShopifyMetafieldSchema.safeParse(raw);
       if (!mf.success) continue;
       const { namespace, key, value, jsonValue } = mf.data;
-      if (namespace && namespace !== SHOPIFY_METAFIELD_NAMESPACE && namespace !== 'paskamer') continue;
+      if (namespace && namespace !== SHOPIFY_METAFIELD_NAMESPACE && namespace !== 'curtain') continue;
       const k = key.includes('.') ? key.slice(key.lastIndexOf('.') + 1) : key;
       out.set(k, jsonValue !== undefined ? jsonValue : value);
     }
@@ -334,7 +334,7 @@ export interface FromShopifyOptions {
 
 /**
  * Normalise a Shopify product + metafields into a partial GarmentPayload. Identity fields
- * (id, name, brand) come from the product node; everything else from `$app:paskamer` metafields.
+ * (id, name, brand) come from the product node; everything else from `$app:curtain` metafields.
  * The result is a draft: pass it to `completenessScore` / `GarmentPayloadSchema.safeParse`.
  */
 export function fromShopifyProduct(

@@ -9,5 +9,5 @@ export default defineConfig({
   target: 'es2022',
   platform: 'neutral',
   treeshake: true,
-  external: ['@paskamer/schema'],
+  external: ['@curtain/schema'],
 });

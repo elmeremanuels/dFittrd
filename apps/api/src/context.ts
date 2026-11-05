@@ -1,6 +1,6 @@
 /** Everything a route or job needs, built once in app.ts. */
 import type { FastifyBaseLogger } from 'fastify';
-import type { TryOnRouter } from '@paskamer/tryon-providers';
+import type { TryOnRouter } from '@curtain/tryon-providers';
 import type { TokenService } from './auth/tokens.js';
 import type { Db } from './db/client.js';
 import type { Env } from './env.js';

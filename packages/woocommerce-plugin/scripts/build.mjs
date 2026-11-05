@@ -4,9 +4,9 @@
  *   1. copy ../sdk/dist/sdk.v1.js            → assets/sdk.v1.js         (bundled, never remote: WP.org rule)
  *   2. copy ../schema/dist/garment*.schema.json → assets/                (local JSON Schema validation)
  *   3. php -l every PHP file
- *   4. zip dist/paskamer-woocommerce.zip with a top-level `paskamer-woocommerce/` folder
+ *   4. zip dist/curtain-woocommerce.zip with a top-level `curtain-woocommerce/` folder
  *
- * Requires `pnpm --filter @paskamer/sdk build` and `pnpm --filter @paskamer/schema build` to have run
+ * Requires `pnpm --filter @curtain/sdk build` and `pnpm --filter @curtain/schema build` to have run
  * (the root `pnpm build` orders packages/* before apps/*; sdk/schema are plain devDependencies here).
  */
 import { execFileSync } from 'node:child_process';
@@ -28,14 +28,14 @@ function resolvePkgFile(pkg, file, fallback) {
 }
 
 const sources = [
-  [resolvePkgFile('@paskamer/sdk', 'dist/sdk.v1.js', '../sdk/dist/sdk.v1.js'), 'assets/sdk.v1.js'],
-  [resolvePkgFile('@paskamer/schema', 'dist/garment.schema.json', '../schema/dist/garment.schema.json'), 'assets/garment.schema.json'],
-  [resolvePkgFile('@paskamer/schema', 'dist/garment-draft.schema.json', '../schema/dist/garment-draft.schema.json'), 'assets/garment-draft.schema.json'],
+  [resolvePkgFile('@curtain/sdk', 'dist/sdk.v1.js', '../sdk/dist/sdk.v1.js'), 'assets/sdk.v1.js'],
+  [resolvePkgFile('@curtain/schema', 'dist/garment.schema.json', '../schema/dist/garment.schema.json'), 'assets/garment.schema.json'],
+  [resolvePkgFile('@curtain/schema', 'dist/garment-draft.schema.json', '../schema/dist/garment-draft.schema.json'), 'assets/garment-draft.schema.json'],
 ];
 
 for (const [from, to] of sources) {
   if (!existsSync(from)) {
-    console.error(`missing ${from} — build @paskamer/sdk and @paskamer/schema first`);
+    console.error(`missing ${from} — build @curtain/sdk and @curtain/schema first`);
     process.exit(1);
   }
   mkdirSync(dirname(join(root, to)), { recursive: true });
@@ -54,29 +54,29 @@ if (!lintAll()) process.exit(1);
 
 // Version consistency: plugin header, readme.txt stable tag, package.json.
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
-const header = readFileSync(join(root, 'paskamer.php'), 'utf8');
+const header = readFileSync(join(root, 'curtain.php'), 'utf8');
 const headerVersion = /^\s*\*\s*Version:\s*([0-9.]+)/m.exec(header)?.[1];
-const define = /define\(\s*'PASKAMER_VERSION',\s*'([0-9.]+)'/.exec(header)?.[1];
+const define = /define\(\s*'CURTAIN_VERSION',\s*'([0-9.]+)'/.exec(header)?.[1];
 const readme = readFileSync(join(root, 'readme.txt'), 'utf8');
 const stableTag = /^Stable tag:\s*([0-9.]+)/m.exec(readme)?.[1];
 if (new Set([pkg.version, headerVersion, define, stableTag]).size !== 1) {
-  console.error(`version mismatch: package.json ${pkg.version}, header ${headerVersion}, PASKAMER_VERSION ${define}, readme Stable tag ${stableTag}`);
+  console.error(`version mismatch: package.json ${pkg.version}, header ${headerVersion}, CURTAIN_VERSION ${define}, readme Stable tag ${stableTag}`);
   process.exit(1);
 }
 
 const dist = join(root, 'dist');
-const stage = join(dist, 'paskamer-woocommerce');
+const stage = join(dist, 'curtain-woocommerce');
 rmSync(dist, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
 
-const include = ['paskamer.php', 'uninstall.php', 'readme.txt', 'includes', 'assets', 'languages'];
+const include = ['curtain.php', 'uninstall.php', 'readme.txt', 'includes', 'assets', 'languages'];
 for (const entry of include) {
   execFileSync('cp', ['-R', join(root, entry), join(stage, entry)]);
 }
 // Dev-only files never ship.
 rmSync(join(stage, 'assets/.gitkeep'), { force: true });
 
-const zipName = 'paskamer-woocommerce.zip';
-execFileSync('zip', ['-rq', '-X', zipName, 'paskamer-woocommerce'], { cwd: dist });
+const zipName = 'curtain-woocommerce.zip';
+execFileSync('zip', ['-rq', '-X', zipName, 'curtain-woocommerce'], { cwd: dist });
 rmSync(stage, { recursive: true, force: true });
 console.log(`built dist/${zipName} (${statSync(join(dist, zipName)).size} B)`);

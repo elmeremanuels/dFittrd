@@ -1,4 +1,4 @@
-import { ESTIMATE_DISCLAIMER } from '@paskamer/schema';
+import { ESTIMATE_DISCLAIMER } from '@curtain/schema';
 import type { ReactNode } from 'react';
 
 /**

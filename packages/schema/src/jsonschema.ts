@@ -8,7 +8,7 @@ import { GarmentPayloadDraftSchema, GarmentPayloadSchema } from './garment';
 import { FitSignatureWireSchema } from './fitSignature';
 import { SwipeEventSchema } from './swipe';
 
-export const JSON_SCHEMA_BASE_ID = 'https://paskamer.app/schema/v1' as const;
+export const JSON_SCHEMA_BASE_ID = 'https://curtain.fit/schema/v1' as const;
 
 export type JsonSchema = Record<string, unknown> & { $schema?: string; $id?: string };
 

@@ -1,11 +1,11 @@
 /**
- * On-device fit (AGENTS.md rule 4): `computeFit` from @paskamer/fit-engine, memoised per
+ * On-device fit (AGENTS.md rule 4): `computeFit` from @curtain/fit-engine, memoised per
  * (user body, garment object). Not per garment id: `GarmentPayload.id` is the shop-scoped external
  * id, so two paired shops can share one, and a refreshed catalogue replaces the object. The result never leaves the device; only `sizeAtSwipe`/`fitScore`
  * travel inside a SwipeEvent (D7 allows that) and an intent token when a fit was written.
  */
-import { computeFit, sigmaFromBodyProfile, type FitResult, type PointSigma } from '@paskamer/fit-engine';
-import { toUserBody, type BodyProfile, type GarmentPayload, type UserBody } from '@paskamer/schema';
+import { computeFit, sigmaFromBodyProfile, type FitResult, type PointSigma } from '@curtain/fit-engine';
+import { toUserBody, type BodyProfile, type GarmentPayload, type UserBody } from '@curtain/schema';
 
 export interface FitContext {
   userBody: UserBody;

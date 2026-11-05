@@ -1,5 +1,5 @@
 /**
- * @paskamer/shopify-app — server-side helpers for the Shopify app (consumed by apps/api).
+ * @curtain/shopify-app — server-side helpers for the Shopify app (consumed by apps/api).
  *
  * Nothing here reads process.env: credentials come in as arguments (AGENTS.md rule 2). Nothing here
  * touches a database: the api owns persistence. The static parts of the app (shopify.app.toml, the

@@ -3,8 +3,8 @@
  * numbers; the two places where the spec's arithmetic is off (T9, T17) are documented in
  * README.md §Spec deviations and asserted with the recomputed fixture.
  */
-import { MOCK_GARMENTS_BY_ID } from '@paskamer/schema';
-import type { UserBody } from '@paskamer/schema';
+import { MOCK_GARMENTS_BY_ID } from '@curtain/schema';
+import type { UserBody } from '@curtain/schema';
 import { describe, expect, it } from 'vitest';
 import { computeFit, recommendSize } from './computeFit';
 import { JEANS, REF, SLIP, WRAP, deepFreeze } from './test/fixtures';

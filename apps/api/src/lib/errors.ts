@@ -1,4 +1,4 @@
-/** Typed HTTP errors rendered as the `ApiError` DTO from @paskamer/schema. */
+/** Typed HTTP errors rendered as the `ApiError` DTO from @curtain/schema. */
 export class HttpError extends Error {
   constructor(
     public readonly status: number,

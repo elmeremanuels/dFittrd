@@ -1,28 +1,28 @@
 {%- comment -%}
-  Try in Paskamer — app block for the product template.
+  Try it on — app block for the product template.
 
-  Renders <button data-paskamer-product="{{ product.id }}"> and loads the bundled SDK
-  (assets/sdk.v1.js, copied from @paskamer/sdk at build). The SDK turns the click into
+  Renders <button data-curtain-product="{{ product.id }}"> and loads the bundled SDK
+  (assets/sdk.v1.js, copied from @curtain/sdk at build). The SDK turns the click into
   POST {api}/v1/sdk/sessions → deep link (mobile) or QR modal (desktop). Nothing about the shopper
   reaches the merchant page; the SDK sets no cookies and uses no storage.
 
   The public shop key (pk_live_…) and the API origin come from app-data metafields the api writes
-  on install (app.metafields.paskamer.public_key / api_url). The block settings can override them
+  on install (app.metafields.curtain.public_key / api_url). The block settings can override them
   for dev stores. The secret key (sk_…) must never appear here.
 {%- endcomment -%}
 
 {%- liquid
   assign pk_shop_key = block.settings.shop_key | strip
   if pk_shop_key == blank
-    assign pk_shop_key = app.metafields.paskamer.public_key
+    assign pk_shop_key = app.metafields.curtain.public_key
   endif
   assign pk_api_url = block.settings.api_url | strip
   if pk_api_url == blank
-    assign pk_api_url = app.metafields.paskamer.api_url
+    assign pk_api_url = app.metafields.curtain.api_url
   endif
   assign pk_label = block.settings.label | strip
   if pk_label == blank
-    assign pk_label = 'paskamer.try_button.label' | t
+    assign pk_label = 'curtain.try_button.label' | t
   endif
   assign pk_locale = request.locale.iso_code | slice: 0, 2 | downcase
   if pk_locale != 'nl'
@@ -31,8 +31,8 @@
 -%}
 
 {%- if product -%}
-  <div class="paskamer-try paskamer-try--{{ block.settings.alignment }}" {{ block.shopify_attributes }}>
-    {%- render 'paskamer-try-button', product: product, label: pk_label, show_hint: block.settings.show_hint -%}
+  <div class="curtain-try curtain-try--{{ block.settings.alignment }}" {{ block.shopify_attributes }}>
+    {%- render 'curtain-try-button', product: product, label: pk_label, show_hint: block.settings.show_hint -%}
   </div>
 
   {%- if pk_shop_key != blank and pk_api_url != blank -%}
@@ -43,32 +43,32 @@
     {%- endcomment -%}
     <script>
       (function () {
-        if (window.Paskamer || document.querySelector('script[data-shop][data-paskamer-sdk]')) return;
+        if (window.Curtain || document.querySelector('script[data-shop][data-curtain-sdk]')) return;
         var s = document.createElement('script');
         s.src = {{ 'sdk.v1.js' | asset_url | json }};
         s.defer = true;
-        s.setAttribute('data-paskamer-sdk', '');
+        s.setAttribute('data-curtain-sdk', '');
         s.setAttribute('data-shop', {{ pk_shop_key | json }});
         s.setAttribute('data-api', {{ pk_api_url | json }});
         s.setAttribute('data-mode', {{ block.settings.mode | json }});
         s.setAttribute('data-locale', {{ pk_locale | json }});
         s.setAttribute('data-label', {{ pk_label | json }});
-        {%- if block.settings.unstyled %}s.setAttribute('data-paskamer-unstyled', '');{% endif %}
+        {%- if block.settings.unstyled %}s.setAttribute('data-curtain-unstyled', '');{% endif %}
         document.head.appendChild(s);
       })();
     </script>
   {%- elsif request.design_mode -%}
-    <p class="paskamer-try__setup">{{ 'paskamer.try_button.not_connected' | t }}</p>
+    <p class="curtain-try__setup">{{ 'curtain.try_button.not_connected' | t }}</p>
   {%- endif -%}
 {%- elsif request.design_mode -%}
-  <p class="paskamer-try__setup">{{ 'paskamer.try_button.needs_product' | t }}</p>
+  <p class="curtain-try__setup">{{ 'curtain.try_button.needs_product' | t }}</p>
 {%- endif -%}
 
 {% schema %}
 {
-  "name": "t:paskamer.block.name",
+  "name": "t:curtain.block.name",
   "target": "content",
-  "stylesheet": "paskamer-try.css",
+  "stylesheet": "curtain-try.css",
   "enabled_on": {
     "templates": ["product"]
   },
@@ -76,60 +76,60 @@
     {
       "type": "text",
       "id": "label",
-      "label": "t:paskamer.settings.label.label",
-      "info": "t:paskamer.settings.label.info"
+      "label": "t:curtain.settings.label.label",
+      "info": "t:curtain.settings.label.info"
     },
     {
       "type": "select",
       "id": "alignment",
-      "label": "t:paskamer.settings.alignment.label",
+      "label": "t:curtain.settings.alignment.label",
       "default": "full",
       "options": [
-        { "value": "left", "label": "t:paskamer.settings.alignment.left" },
-        { "value": "center", "label": "t:paskamer.settings.alignment.center" },
-        { "value": "full", "label": "t:paskamer.settings.alignment.full" }
+        { "value": "left", "label": "t:curtain.settings.alignment.left" },
+        { "value": "center", "label": "t:curtain.settings.alignment.center" },
+        { "value": "full", "label": "t:curtain.settings.alignment.full" }
       ]
     },
     {
       "type": "select",
       "id": "mode",
-      "label": "t:paskamer.settings.mode.label",
-      "info": "t:paskamer.settings.mode.info",
+      "label": "t:curtain.settings.mode.label",
+      "info": "t:curtain.settings.mode.info",
       "default": "auto",
       "options": [
-        { "value": "auto", "label": "t:paskamer.settings.mode.auto" },
-        { "value": "redirect", "label": "t:paskamer.settings.mode.redirect" },
-        { "value": "modal", "label": "t:paskamer.settings.mode.modal" }
+        { "value": "auto", "label": "t:curtain.settings.mode.auto" },
+        { "value": "redirect", "label": "t:curtain.settings.mode.redirect" },
+        { "value": "modal", "label": "t:curtain.settings.mode.modal" }
       ]
     },
     {
       "type": "checkbox",
       "id": "show_hint",
-      "label": "t:paskamer.settings.show_hint.label",
+      "label": "t:curtain.settings.show_hint.label",
       "default": true
     },
     {
       "type": "checkbox",
       "id": "unstyled",
-      "label": "t:paskamer.settings.unstyled.label",
-      "info": "t:paskamer.settings.unstyled.info",
+      "label": "t:curtain.settings.unstyled.label",
+      "info": "t:curtain.settings.unstyled.info",
       "default": false
     },
     {
       "type": "header",
-      "content": "t:paskamer.settings.advanced.header"
+      "content": "t:curtain.settings.advanced.header"
     },
     {
       "type": "text",
       "id": "shop_key",
-      "label": "t:paskamer.settings.shop_key.label",
-      "info": "t:paskamer.settings.shop_key.info"
+      "label": "t:curtain.settings.shop_key.label",
+      "info": "t:curtain.settings.shop_key.info"
     },
     {
       "type": "url",
       "id": "api_url",
-      "label": "t:paskamer.settings.api_url.label",
-      "info": "t:paskamer.settings.api_url.info"
+      "label": "t:curtain.settings.api_url.label",
+      "info": "t:curtain.settings.api_url.info"
     }
   ]
 }

@@ -1,29 +1,29 @@
 <?php
 /**
- * Settings storage + the WooCommerce → Paskamer settings page (Connect round-trip, manual key,
+ * Settings storage + the WooCommerce → Curtain settings page (Connect round-trip, manual key,
  * status, storefront button options, ads toggle, uninstall cleanup). D6: no telemetry before the
  * merchant clicks Connect; the secret key is stored encrypted (Secret_Store).
  *
- * @package Paskamer
+ * @package Curtain
  */
 
 declare(strict_types=1);
 
-namespace Paskamer;
+namespace Curtain;
 
-defined('ABSPATH') || defined('PASKAMER_TESTING') || exit;
+defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
 
 final class Settings {
 
-	public const OPTION = 'paskamer_settings';
-	public const PAGE   = 'paskamer';
+	public const OPTION = 'curtain_settings';
+	public const PAGE   = 'curtain';
 
 	private const ENCRYPTED = array( 'api_key', 'connect_token' );
 
 	/** @return array<string,mixed> */
 	public static function defaults(): array {
 		return array(
-			'api_base'            => PASKAMER_DEFAULT_API_BASE,
+			'api_base'            => CURTAIN_DEFAULT_API_BASE,
 			'api_key'             => '',
 			'public_key_prefix'   => '',
 			'shop_id'             => '',
@@ -100,7 +100,7 @@ final class Settings {
 		if ( '' !== $label ) {
 			return $label;
 		}
-		return 'nl' === self::effective_locale() ? 'Pas in Paskamer' : __( 'Try in Paskamer', 'paskamer-woocommerce' );
+		return 'nl' === self::effective_locale() ? 'Try it on' : __( 'Try it on', 'curtain-woocommerce' );
 	}
 
 	/** 'en' | 'nl' for the SDK's data-locale. */
@@ -116,21 +116,21 @@ final class Settings {
 
 	public static function register(): void {
 		add_action( 'admin_menu', array( self::class, 'menu' ) );
-		add_action( 'admin_post_paskamer_save', array( self::class, 'handle_save' ) );
-		add_action( 'admin_post_paskamer_connect', array( self::class, 'handle_connect' ) );
-		add_action( 'admin_post_paskamer_complete', array( self::class, 'handle_complete' ) );
-		add_action( 'admin_post_paskamer_manual_key', array( self::class, 'handle_manual_key' ) );
-		add_action( 'admin_post_paskamer_disconnect', array( self::class, 'handle_disconnect' ) );
-		add_action( 'admin_post_paskamer_status', array( self::class, 'handle_status' ) );
-		add_action( 'admin_post_paskamer_sync_all', array( self::class, 'handle_sync_all' ) );
+		add_action( 'admin_post_curtain_save', array( self::class, 'handle_save' ) );
+		add_action( 'admin_post_curtain_connect', array( self::class, 'handle_connect' ) );
+		add_action( 'admin_post_curtain_complete', array( self::class, 'handle_complete' ) );
+		add_action( 'admin_post_curtain_manual_key', array( self::class, 'handle_manual_key' ) );
+		add_action( 'admin_post_curtain_disconnect', array( self::class, 'handle_disconnect' ) );
+		add_action( 'admin_post_curtain_status', array( self::class, 'handle_status' ) );
+		add_action( 'admin_post_curtain_sync_all', array( self::class, 'handle_sync_all' ) );
 		add_action( 'admin_notices', array( self::class, 'notices' ) );
 	}
 
 	public static function menu(): void {
 		$hook = add_submenu_page(
 			'woocommerce',
-			__( 'Paskamer', 'paskamer-woocommerce' ),
-			__( 'Paskamer', 'paskamer-woocommerce' ),
+			__( 'Curtain', 'curtain-woocommerce' ),
+			__( 'Curtain', 'curtain-woocommerce' ),
 			'manage_woocommerce',
 			self::PAGE,
 			array( self::class, 'render' )
@@ -141,12 +141,12 @@ final class Settings {
 		}
 	}
 
-	/** Back from Stripe Checkout (`?paskamer=connected`): finish automatically when a Connect token is pending. */
+	/** Back from Stripe Checkout (`?curtain=connected`): finish automatically when a Connect token is pending. */
 	public static function maybe_finish_connect(): void {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			return;
 		}
-		if ( isset( $_GET['paskamer'] ) && 'connected' === $_GET['paskamer'] && '' !== (string) self::get( 'connect_token' ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- idempotent token exchange with a server-stored token.
+		if ( isset( $_GET['curtain'] ) && 'connected' === $_GET['curtain'] && '' !== (string) self::get( 'connect_token' ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- idempotent token exchange with a server-stored token.
 			self::finish_connect();
 		}
 	}
@@ -175,13 +175,13 @@ final class Settings {
 
 	private static function guard( string $action ): void {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
-			wp_die( esc_html__( 'You are not allowed to manage Paskamer settings.', 'paskamer-woocommerce' ), 403 );
+			wp_die( esc_html__( 'You are not allowed to manage Curtain settings.', 'curtain-woocommerce' ), 403 );
 		}
 		check_admin_referer( $action );
 	}
 
 	private static function redirect( string $notice, string $type = 'success' ): void {
-		set_transient( 'paskamer_notice_' . get_current_user_id(), array( 'type' => $type, 'text' => $notice ), 60 );
+		set_transient( 'curtain_notice_' . get_current_user_id(), array( 'type' => $type, 'text' => $notice ), 60 );
 		wp_safe_redirect( self::page_url() );
 		exit;
 	}
@@ -191,21 +191,21 @@ final class Settings {
 		if ( ! $screen || 'woocommerce_page_' . self::PAGE !== $screen->id ) {
 			return;
 		}
-		$notice = get_transient( 'paskamer_notice_' . get_current_user_id() );
+		$notice = get_transient( 'curtain_notice_' . get_current_user_id() );
 		if ( is_array( $notice ) ) {
-			delete_transient( 'paskamer_notice_' . get_current_user_id() );
+			delete_transient( 'curtain_notice_' . get_current_user_id() );
 			printf( '<div class="notice notice-%s is-dismissible"><p>%s</p></div>', esc_attr( (string) $notice['type'] ), esc_html( (string) $notice['text'] ) );
 		}
 		if ( 'plain' === Secret_Store::scheme() ) {
-			echo '<div class="notice notice-warning"><p>' . esc_html__( 'Neither libsodium nor OpenSSL is available on this server, so the Paskamer API key is stored unencrypted in the database. Ask your host to enable the sodium extension.', 'paskamer-woocommerce' ) . '</p></div>';
+			echo '<div class="notice notice-warning"><p>' . esc_html__( 'Neither libsodium nor OpenSSL is available on this server, so the Curtain API key is stored unencrypted in the database. Ask your host to enable the sodium extension.', 'curtain-woocommerce' ) . '</p></div>';
 		}
 	}
 
 	// ---- handlers --------------------------------------------------------------------------
 
 	public static function handle_save(): void {
-		self::guard( 'paskamer_save' );
-		$in = isset( $_POST['paskamer'] ) && is_array( $_POST['paskamer'] ) ? wp_unslash( $_POST['paskamer'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised field by field below.
+		self::guard( 'curtain_save' );
+		$in = isset( $_POST['curtain'] ) && is_array( $_POST['curtain'] ) ? wp_unslash( $_POST['curtain'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised field by field below.
 
 		$api_base = self::sanitize_api_base( (string) ( $in['api_base'] ?? '' ) );
 		$priority = absint( $in['button_priority'] ?? 35 );
@@ -216,7 +216,7 @@ final class Settings {
 
 		self::update(
 			array(
-				'api_base'            => '' === $api_base ? PASKAMER_DEFAULT_API_BASE : $api_base,
+				'api_base'            => '' === $api_base ? CURTAIN_DEFAULT_API_BASE : $api_base,
 				'button_enabled'      => ! empty( $in['button_enabled'] ),
 				'button_priority'     => $priority > 0 ? $priority : 35,
 				'button_label'        => mb_substr( $label, 0, 60 ),
@@ -233,21 +233,21 @@ final class Settings {
 		if ( self::is_connected() ) {
 			self::hello();
 		}
-		self::redirect( __( 'Settings saved.', 'paskamer-woocommerce' ) );
+		self::redirect( __( 'Settings saved.', 'curtain-woocommerce' ) );
 	}
 
 	/** Step 1: create the shop on our backend, then go to Stripe Checkout (or finish immediately). */
 	public static function handle_connect(): void {
-		self::guard( 'paskamer_connect' );
+		self::guard( 'curtain_connect' );
 		$s      = self::all();
 		$client = new Api_Client( $s );
 		$email  = ! empty( $s['share_admin_email'] ) ? (string) get_option( 'admin_email' ) : null;
 		$res    = $client->connect( home_url( '/' ), (string) get_bloginfo( 'name' ), $email, self::page_url() );
 		if ( ! $res['ok'] ) {
 			if ( 'already_connected' === $res['error_code'] ) {
-				self::redirect( __( 'This site is already connected to Paskamer. Paste the API key from your Paskamer console below, or rotate it there first.', 'paskamer-woocommerce' ), 'warning' );
+				self::redirect( __( 'This site is already connected to Curtain. Paste the API key from your Curtain console below, or rotate it there first.', 'curtain-woocommerce' ), 'warning' );
 			}
-			self::redirect( sprintf( /* translators: %s: error message */ __( 'Could not connect: %s', 'paskamer-woocommerce' ), (string) $res['error_message'] ), 'error' );
+			self::redirect( sprintf( /* translators: %s: error message */ __( 'Could not connect: %s', 'curtain-woocommerce' ), (string) $res['error_message'] ), 'error' );
 		}
 		$data = $res['data'] ?? array();
 		self::update(
@@ -266,7 +266,7 @@ final class Settings {
 
 	/** Step 2 (manual retry button after Checkout). */
 	public static function handle_complete(): void {
-		self::guard( 'paskamer_complete' );
+		self::guard( 'curtain_complete' );
 		self::finish_connect();
 	}
 
@@ -275,14 +275,14 @@ final class Settings {
 		$s     = self::all();
 		$token = (string) $s['connect_token'];
 		if ( '' === $token ) {
-			self::redirect( __( 'No pending connection. Click Connect to start.', 'paskamer-woocommerce' ), 'warning' );
+			self::redirect( __( 'No pending connection. Click Connect to start.', 'curtain-woocommerce' ), 'warning' );
 		}
 		$res = ( new Api_Client( $s ) )->complete( $token );
 		if ( ! $res['ok'] ) {
 			if ( 'payment_pending' === $res['error_code'] ) {
-				self::redirect( __( 'Checkout has not completed yet. Finish the payment, then click "Finish connection".', 'paskamer-woocommerce' ), 'warning' );
+				self::redirect( __( 'Checkout has not completed yet. Finish the payment, then click "Finish connection".', 'curtain-woocommerce' ), 'warning' );
 			}
-			self::redirect( sprintf( /* translators: %s: error message */ __( 'Could not finish the connection: %s', 'paskamer-woocommerce' ), (string) $res['error_message'] ), 'error' );
+			self::redirect( sprintf( /* translators: %s: error message */ __( 'Could not finish the connection: %s', 'curtain-woocommerce' ), (string) $res['error_message'] ), 'error' );
 		}
 		$data = $res['data'] ?? array();
 		self::update(
@@ -300,19 +300,19 @@ final class Settings {
 		);
 		self::hello();
 		Sync::enqueue_sync_all();
-		self::redirect( __( 'Connected to Paskamer. Your published products are being synced in the background.', 'paskamer-woocommerce' ) );
+		self::redirect( __( 'Connected to Curtain. Your published products are being synced in the background.', 'curtain-woocommerce' ) );
 	}
 
-	/** Paste a key issued by the Paskamer console (sk_live_…): the hello returns its pk_ prefix. */
+	/** Paste a key issued by the Curtain console (sk_live_…): the hello returns its pk_ prefix. */
 	public static function handle_manual_key(): void {
-		self::guard( 'paskamer_manual_key' );
-		$key = isset( $_POST['paskamer_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['paskamer_api_key'] ) ) : '';
+		self::guard( 'curtain_manual_key' );
+		$key = isset( $_POST['curtain_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['curtain_api_key'] ) ) : '';
 		if ( ! Hmac::is_secret_key( $key ) ) {
-			self::redirect( __( 'That does not look like a Paskamer secret key (sk_live_… or sk_test_…).', 'paskamer-woocommerce' ), 'error' );
+			self::redirect( __( 'That does not look like a Curtain secret key (sk_live_… or sk_test_…).', 'curtain-woocommerce' ), 'error' );
 		}
 		$res = ( new Api_Client( self::all() ) )->hello( self::hello_body(), 'bearer', $key );
 		if ( ! $res['ok'] ) {
-			self::redirect( sprintf( /* translators: %s: error message */ __( 'The key was rejected: %s', 'paskamer-woocommerce' ), (string) $res['error_message'] ), 'error' );
+			self::redirect( sprintf( /* translators: %s: error message */ __( 'The key was rejected: %s', 'curtain-woocommerce' ), (string) $res['error_message'] ), 'error' );
 		}
 		$data = $res['data'] ?? array();
 		self::update(
@@ -329,11 +329,11 @@ final class Settings {
 			)
 		);
 		Sync::enqueue_sync_all();
-		self::redirect( __( 'Key accepted. Your published products are being synced in the background.', 'paskamer-woocommerce' ) );
+		self::redirect( __( 'Key accepted. Your published products are being synced in the background.', 'curtain-woocommerce' ) );
 	}
 
 	public static function handle_disconnect(): void {
-		self::guard( 'paskamer_disconnect' );
+		self::guard( 'curtain_disconnect' );
 		Queue::cancel_all();
 		self::update(
 			array(
@@ -349,25 +349,25 @@ final class Settings {
 				'connect_mode'      => '',
 			)
 		);
-		self::redirect( __( 'Disconnected. The button is no longer shown and nothing is sent to Paskamer. Your garment data stays in WooCommerce.', 'paskamer-woocommerce' ) );
+		self::redirect( __( 'Disconnected. The button is no longer shown and nothing is sent to Curtain. Your garment data stays in WooCommerce.', 'curtain-woocommerce' ) );
 	}
 
 	public static function handle_status(): void {
-		self::guard( 'paskamer_status' );
+		self::guard( 'curtain_status' );
 		$res = self::hello();
 		if ( $res['ok'] ) {
-			self::redirect( __( 'Status refreshed.', 'paskamer-woocommerce' ) );
+			self::redirect( __( 'Status refreshed.', 'curtain-woocommerce' ) );
 		}
-		self::redirect( sprintf( /* translators: %s: error message */ __( 'Status check failed: %s', 'paskamer-woocommerce' ), (string) $res['error_message'] ), 'error' );
+		self::redirect( sprintf( /* translators: %s: error message */ __( 'Status check failed: %s', 'curtain-woocommerce' ), (string) $res['error_message'] ), 'error' );
 	}
 
 	public static function handle_sync_all(): void {
-		self::guard( 'paskamer_sync_all' );
+		self::guard( 'curtain_sync_all' );
 		if ( ! self::is_connected() ) {
-			self::redirect( __( 'Connect the shop first.', 'paskamer-woocommerce' ), 'warning' );
+			self::redirect( __( 'Connect the shop first.', 'curtain-woocommerce' ), 'warning' );
 		}
 		Sync::enqueue_sync_all();
-		self::redirect( __( 'Full sync queued. Products are pushed in the background.', 'paskamer-woocommerce' ) );
+		self::redirect( __( 'Full sync queued. Products are pushed in the background.', 'curtain-woocommerce' ) );
 	}
 
 	/** PUT /v1/merchant/shops/self with HMAC; stores plan/paused/name. @return array<string,mixed> */
@@ -398,7 +398,7 @@ final class Settings {
 		return array(
 			'name'            => (string) get_bloginfo( 'name' ),
 			'siteUrl'         => home_url( '/' ),
-			'pluginVersion'   => PASKAMER_VERSION,
+			'pluginVersion'   => CURTAIN_VERSION,
 			'platformVersion' => mb_substr( 'wp' . get_bloginfo( 'version' ) . '-wc' . $wc, 0, 32 ),
 			'adsEnabled'      => (bool) self::get( 'ads_enabled' ),
 		);
@@ -415,59 +415,59 @@ final class Settings {
 		$connected = self::is_connected();
 		$pending   = '' !== (string) $s['connect_token'];
 		?>
-		<div class="wrap paskamer-settings">
-			<h1><?php esc_html_e( 'Paskamer for WooCommerce', 'paskamer-woocommerce' ); ?></h1>
-			<p class="description"><?php esc_html_e( 'Paskamer is a private fitting room: shoppers measure themselves on their own phone and see how your garments fit. Only garment data (size charts, fabric, photos) leaves this site — never customer data.', 'paskamer-woocommerce' ); ?></p>
+		<div class="wrap curtain-settings">
+			<h1><?php esc_html_e( 'Curtain for WooCommerce', 'curtain-woocommerce' ); ?></h1>
+			<p class="description"><?php esc_html_e( 'Curtain is a private fitting room: shoppers measure themselves on their own phone and see how your garments fit. Only garment data (size charts, fabric, photos) leaves this site — never customer data.', 'curtain-woocommerce' ); ?></p>
 
-			<h2><?php esc_html_e( 'Connection', 'paskamer-woocommerce' ); ?></h2>
+			<h2><?php esc_html_e( 'Connection', 'curtain-woocommerce' ); ?></h2>
 			<table class="form-table" role="presentation">
 				<tr>
-					<th scope="row"><?php esc_html_e( 'Status', 'paskamer-woocommerce' ); ?></th>
+					<th scope="row"><?php esc_html_e( 'Status', 'curtain-woocommerce' ); ?></th>
 					<td>
 						<?php if ( $connected ) : ?>
-							<strong style="color:#1a7f37">●</strong> <?php esc_html_e( 'Connected', 'paskamer-woocommerce' ); ?>
+							<strong style="color:#1a7f37">●</strong> <?php esc_html_e( 'Connected', 'curtain-woocommerce' ); ?>
 							<?php if ( '' !== (string) $s['shop_name'] ) : ?> — <?php echo esc_html( (string) $s['shop_name'] ); ?><?php endif; ?>
 							<br><code><?php echo esc_html( (string) $s['public_key_prefix'] ); ?></code>
-							<?php if ( '' !== (string) $s['plan'] ) : ?> · <?php echo esc_html( sprintf( /* translators: %s: plan name */ __( 'plan: %s', 'paskamer-woocommerce' ), (string) $s['plan'] ) ); ?><?php endif; ?>
-							<?php if ( ! empty( $s['paused'] ) ) : ?> · <strong style="color:#b32d2e"><?php esc_html_e( 'paused (below plan — the button still renders, the app shows a "shop paused" screen)', 'paskamer-woocommerce' ); ?></strong><?php endif; ?>
+							<?php if ( '' !== (string) $s['plan'] ) : ?> · <?php echo esc_html( sprintf( /* translators: %s: plan name */ __( 'plan: %s', 'curtain-woocommerce' ), (string) $s['plan'] ) ); ?><?php endif; ?>
+							<?php if ( ! empty( $s['paused'] ) ) : ?> · <strong style="color:#b32d2e"><?php esc_html_e( 'paused (below plan — the button still renders, the app shows a "shop paused" screen)', 'curtain-woocommerce' ); ?></strong><?php endif; ?>
 							<br><span class="description">
-								<?php echo esc_html( sprintf( /* translators: 1: key storage scheme, 2: queue backend */ __( 'Key stored with %1$s · job queue: %2$s', 'paskamer-woocommerce' ), Secret_Store::scheme(), Queue::backend() ) ); ?>
+								<?php echo esc_html( sprintf( /* translators: 1: key storage scheme, 2: queue backend */ __( 'Key stored with %1$s · job queue: %2$s', 'curtain-woocommerce' ), Secret_Store::scheme(), Queue::backend() ) ); ?>
 								<?php $pending_jobs = Queue::pending_count(); ?>
-								<?php if ( null !== $pending_jobs ) : ?> · <?php echo esc_html( sprintf( /* translators: %d: number of jobs */ _n( '%d pending job', '%d pending jobs', $pending_jobs, 'paskamer-woocommerce' ), $pending_jobs ) ); ?><?php endif; ?>
-								<?php if ( ! empty( $s['last_sync_at'] ) ) : ?> · <?php echo esc_html( sprintf( /* translators: %s: date */ __( 'last sync %s', 'paskamer-woocommerce' ), wp_date( 'Y-m-d H:i', (int) $s['last_sync_at'] ) ) ); ?><?php endif; ?>
+								<?php if ( null !== $pending_jobs ) : ?> · <?php echo esc_html( sprintf( /* translators: %d: number of jobs */ _n( '%d pending job', '%d pending jobs', $pending_jobs, 'curtain-woocommerce' ), $pending_jobs ) ); ?><?php endif; ?>
+								<?php if ( ! empty( $s['last_sync_at'] ) ) : ?> · <?php echo esc_html( sprintf( /* translators: %s: date */ __( 'last sync %s', 'curtain-woocommerce' ), wp_date( 'Y-m-d H:i', (int) $s['last_sync_at'] ) ) ); ?><?php endif; ?>
 							</span>
-							<?php if ( '' !== (string) $s['last_error'] ) : ?><br><span style="color:#b32d2e"><?php echo esc_html( sprintf( /* translators: %s: error message */ __( 'Last error: %s', 'paskamer-woocommerce' ), (string) $s['last_error'] ) ); ?></span><?php endif; ?>
+							<?php if ( '' !== (string) $s['last_error'] ) : ?><br><span style="color:#b32d2e"><?php echo esc_html( sprintf( /* translators: %s: error message */ __( 'Last error: %s', 'curtain-woocommerce' ), (string) $s['last_error'] ) ); ?></span><?php endif; ?>
 						<?php elseif ( $pending ) : ?>
-							<strong style="color:#b26b00">●</strong> <?php esc_html_e( 'Waiting for checkout to complete.', 'paskamer-woocommerce' ); ?>
+							<strong style="color:#b26b00">●</strong> <?php esc_html_e( 'Waiting for checkout to complete.', 'curtain-woocommerce' ); ?>
 						<?php else : ?>
-							<strong style="color:#8c8f94">●</strong> <?php esc_html_e( 'Not connected — nothing is sent to Paskamer.', 'paskamer-woocommerce' ); ?>
+							<strong style="color:#8c8f94">●</strong> <?php esc_html_e( 'Not connected — nothing is sent to Curtain.', 'curtain-woocommerce' ); ?>
 						<?php endif; ?>
 					</td>
 				</tr>
 				<tr>
-					<th scope="row"><?php esc_html_e( 'Actions', 'paskamer-woocommerce' ); ?></th>
+					<th scope="row"><?php esc_html_e( 'Actions', 'curtain-woocommerce' ); ?></th>
 					<td>
 						<?php if ( $connected ) : ?>
-							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline"><?php wp_nonce_field( 'paskamer_status' ); ?><input type="hidden" name="action" value="paskamer_status"><button class="button"><?php esc_html_e( 'Check status', 'paskamer-woocommerce' ); ?></button></form>
-							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline"><?php wp_nonce_field( 'paskamer_sync_all' ); ?><input type="hidden" name="action" value="paskamer_sync_all"><button class="button"><?php esc_html_e( 'Sync all products', 'paskamer-woocommerce' ); ?></button></form>
-							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline" onsubmit="return confirm('<?php echo esc_js( __( 'Disconnect this shop from Paskamer?', 'paskamer-woocommerce' ) ); ?>')"><?php wp_nonce_field( 'paskamer_disconnect' ); ?><input type="hidden" name="action" value="paskamer_disconnect"><button class="button button-link-delete"><?php esc_html_e( 'Disconnect', 'paskamer-woocommerce' ); ?></button></form>
+							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline"><?php wp_nonce_field( 'curtain_status' ); ?><input type="hidden" name="action" value="curtain_status"><button class="button"><?php esc_html_e( 'Check status', 'curtain-woocommerce' ); ?></button></form>
+							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline"><?php wp_nonce_field( 'curtain_sync_all' ); ?><input type="hidden" name="action" value="curtain_sync_all"><button class="button"><?php esc_html_e( 'Sync all products', 'curtain-woocommerce' ); ?></button></form>
+							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline" onsubmit="return confirm('<?php echo esc_js( __( 'Disconnect this shop from Curtain?', 'curtain-woocommerce' ) ); ?>')"><?php wp_nonce_field( 'curtain_disconnect' ); ?><input type="hidden" name="action" value="curtain_disconnect"><button class="button button-link-delete"><?php esc_html_e( 'Disconnect', 'curtain-woocommerce' ); ?></button></form>
 						<?php else : ?>
-							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline"><?php wp_nonce_field( 'paskamer_connect' ); ?><input type="hidden" name="action" value="paskamer_connect"><button class="button button-primary"><?php esc_html_e( 'Connect to Paskamer', 'paskamer-woocommerce' ); ?></button></form>
+							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline"><?php wp_nonce_field( 'curtain_connect' ); ?><input type="hidden" name="action" value="curtain_connect"><button class="button button-primary"><?php esc_html_e( 'Connect to Curtain', 'curtain-woocommerce' ); ?></button></form>
 							<?php if ( $pending ) : ?>
-								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline"><?php wp_nonce_field( 'paskamer_complete' ); ?><input type="hidden" name="action" value="paskamer_complete"><button class="button"><?php esc_html_e( 'Finish connection', 'paskamer-woocommerce' ); ?></button></form>
+								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline"><?php wp_nonce_field( 'curtain_complete' ); ?><input type="hidden" name="action" value="curtain_complete"><button class="button"><?php esc_html_e( 'Finish connection', 'curtain-woocommerce' ); ?></button></form>
 							<?php endif; ?>
-							<p class="description"><?php esc_html_e( 'Connect sends your site URL and shop name to Paskamer, creates your merchant account and (when billing is enabled) takes you to Stripe Checkout. You will be sent back here afterwards.', 'paskamer-woocommerce' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Connect sends your site URL and shop name to Curtain, creates your merchant account and (when billing is enabled) takes you to Stripe Checkout. You will be sent back here afterwards.', 'curtain-woocommerce' ); ?></p>
 						<?php endif; ?>
 					</td>
 				</tr>
 				<?php if ( ! $connected ) : ?>
 				<tr>
-					<th scope="row"><label for="paskamer_api_key"><?php esc_html_e( 'Or paste an API key', 'paskamer-woocommerce' ); ?></label></th>
+					<th scope="row"><label for="curtain_api_key"><?php esc_html_e( 'Or paste an API key', 'curtain-woocommerce' ); ?></label></th>
 					<td>
-						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><?php wp_nonce_field( 'paskamer_manual_key' ); ?><input type="hidden" name="action" value="paskamer_manual_key">
-							<input type="password" id="paskamer_api_key" name="paskamer_api_key" class="regular-text" autocomplete="off" placeholder="sk_live_…">
-							<button class="button"><?php esc_html_e( 'Use key', 'paskamer-woocommerce' ); ?></button>
-							<p class="description"><?php esc_html_e( 'Secret key from your Paskamer merchant console. It is stored encrypted and never shown again.', 'paskamer-woocommerce' ); ?></p>
+						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><?php wp_nonce_field( 'curtain_manual_key' ); ?><input type="hidden" name="action" value="curtain_manual_key">
+							<input type="password" id="curtain_api_key" name="curtain_api_key" class="regular-text" autocomplete="off" placeholder="sk_live_…">
+							<button class="button"><?php esc_html_e( 'Use key', 'curtain-woocommerce' ); ?></button>
+							<p class="description"><?php esc_html_e( 'Secret key from your Curtain merchant console. It is stored encrypted and never shown again.', 'curtain-woocommerce' ); ?></p>
 						</form>
 					</td>
 				</tr>
@@ -475,76 +475,76 @@ final class Settings {
 			</table>
 
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<?php wp_nonce_field( 'paskamer_save' ); ?>
-				<input type="hidden" name="action" value="paskamer_save">
-				<h2><?php esc_html_e( 'Storefront button', 'paskamer-woocommerce' ); ?></h2>
+				<?php wp_nonce_field( 'curtain_save' ); ?>
+				<input type="hidden" name="action" value="curtain_save">
+				<h2><?php esc_html_e( 'Storefront button', 'curtain-woocommerce' ); ?></h2>
 				<table class="form-table" role="presentation">
 					<tr>
-						<th scope="row"><?php esc_html_e( 'Show button', 'paskamer-woocommerce' ); ?></th>
-						<td><label><input type="checkbox" name="paskamer[button_enabled]" value="1" <?php checked( ! empty( $s['button_enabled'] ) ); ?>> <?php esc_html_e( 'Add a "Try in Paskamer" button to single product pages (bundled script, no third-party requests).', 'paskamer-woocommerce' ); ?></label>
-						<p class="description"><?php esc_html_e( 'You can also place it yourself with the [paskamer_button] shortcode.', 'paskamer-woocommerce' ); ?></p></td>
+						<th scope="row"><?php esc_html_e( 'Show button', 'curtain-woocommerce' ); ?></th>
+						<td><label><input type="checkbox" name="curtain[button_enabled]" value="1" <?php checked( ! empty( $s['button_enabled'] ) ); ?>> <?php esc_html_e( 'Add a "Try it on" button to single product pages (bundled script, no third-party requests).', 'curtain-woocommerce' ); ?></label>
+						<p class="description"><?php esc_html_e( 'You can also place it yourself with the [curtain_button] shortcode.', 'curtain-woocommerce' ); ?></p></td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="paskamer_button_scope"><?php esc_html_e( 'Show for', 'paskamer-woocommerce' ); ?></label></th>
-						<td><select id="paskamer_button_scope" name="paskamer[button_scope]">
-							<option value="active" <?php selected( $s['button_scope'], 'active' ); ?>><?php esc_html_e( 'Products synced as complete ("active") only', 'paskamer-woocommerce' ); ?></option>
-							<option value="all" <?php selected( $s['button_scope'], 'all' ); ?>><?php esc_html_e( 'All published products', 'paskamer-woocommerce' ); ?></option>
+						<th scope="row"><label for="curtain_button_scope"><?php esc_html_e( 'Show for', 'curtain-woocommerce' ); ?></label></th>
+						<td><select id="curtain_button_scope" name="curtain[button_scope]">
+							<option value="active" <?php selected( $s['button_scope'], 'active' ); ?>><?php esc_html_e( 'Products synced as complete ("active") only', 'curtain-woocommerce' ); ?></option>
+							<option value="all" <?php selected( $s['button_scope'], 'all' ); ?>><?php esc_html_e( 'All published products', 'curtain-woocommerce' ); ?></option>
 						</select></td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="paskamer_button_priority"><?php esc_html_e( 'Position', 'paskamer-woocommerce' ); ?></label></th>
-						<td><input type="number" id="paskamer_button_priority" name="paskamer[button_priority]" min="1" max="100" value="<?php echo esc_attr( (string) $s['button_priority'] ); ?>" class="small-text">
-						<p class="description"><?php esc_html_e( 'woocommerce_single_product_summary priority: 35 = after the add-to-cart form, 25 = before it, 15 = after the price.', 'paskamer-woocommerce' ); ?></p></td>
+						<th scope="row"><label for="curtain_button_priority"><?php esc_html_e( 'Position', 'curtain-woocommerce' ); ?></label></th>
+						<td><input type="number" id="curtain_button_priority" name="curtain[button_priority]" min="1" max="100" value="<?php echo esc_attr( (string) $s['button_priority'] ); ?>" class="small-text">
+						<p class="description"><?php esc_html_e( 'woocommerce_single_product_summary priority: 35 = after the add-to-cart form, 25 = before it, 15 = after the price.', 'curtain-woocommerce' ); ?></p></td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="paskamer_button_label"><?php esc_html_e( 'Label', 'paskamer-woocommerce' ); ?></label></th>
-						<td><input type="text" id="paskamer_button_label" name="paskamer[button_label]" value="<?php echo esc_attr( (string) $s['button_label'] ); ?>" class="regular-text" placeholder="<?php echo esc_attr( self::button_label() ); ?>"></td>
+						<th scope="row"><label for="curtain_button_label"><?php esc_html_e( 'Label', 'curtain-woocommerce' ); ?></label></th>
+						<td><input type="text" id="curtain_button_label" name="curtain[button_label]" value="<?php echo esc_attr( (string) $s['button_label'] ); ?>" class="regular-text" placeholder="<?php echo esc_attr( self::button_label() ); ?>"></td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="paskamer_locale"><?php esc_html_e( 'Language', 'paskamer-woocommerce' ); ?></label></th>
-						<td><select id="paskamer_locale" name="paskamer[locale]">
-							<option value="auto" <?php selected( $s['locale'], 'auto' ); ?>><?php esc_html_e( 'Follow the site language', 'paskamer-woocommerce' ); ?></option>
+						<th scope="row"><label for="curtain_locale"><?php esc_html_e( 'Language', 'curtain-woocommerce' ); ?></label></th>
+						<td><select id="curtain_locale" name="curtain[locale]">
+							<option value="auto" <?php selected( $s['locale'], 'auto' ); ?>><?php esc_html_e( 'Follow the site language', 'curtain-woocommerce' ); ?></option>
 							<option value="en" <?php selected( $s['locale'], 'en' ); ?>>English</option>
 							<option value="nl" <?php selected( $s['locale'], 'nl' ); ?>>Nederlands</option>
 						</select></td>
 					</tr>
 				</table>
 
-				<h2><?php esc_html_e( 'Catalogue', 'paskamer-woocommerce' ); ?></h2>
+				<h2><?php esc_html_e( 'Catalogue', 'curtain-woocommerce' ); ?></h2>
 				<table class="form-table" role="presentation">
 					<tr>
-						<th scope="row"><label for="paskamer_default_brand"><?php esc_html_e( 'Default brand', 'paskamer-woocommerce' ); ?></label></th>
-						<td><input type="text" id="paskamer_default_brand" name="paskamer[default_brand]" value="<?php echo esc_attr( (string) $s['default_brand'] ); ?>" class="regular-text" placeholder="<?php echo esc_attr( (string) get_bloginfo( 'name' ) ); ?>">
-						<p class="description"><?php esc_html_e( 'Used when a product has no brand (Paskamer field, Brands taxonomy or a "Brand" attribute).', 'paskamer-woocommerce' ); ?></p></td>
+						<th scope="row"><label for="curtain_default_brand"><?php esc_html_e( 'Default brand', 'curtain-woocommerce' ); ?></label></th>
+						<td><input type="text" id="curtain_default_brand" name="curtain[default_brand]" value="<?php echo esc_attr( (string) $s['default_brand'] ); ?>" class="regular-text" placeholder="<?php echo esc_attr( (string) get_bloginfo( 'name' ) ); ?>">
+						<p class="description"><?php esc_html_e( 'Used when a product has no brand (Curtain field, Brands taxonomy or a "Brand" attribute).', 'curtain-woocommerce' ); ?></p></td>
 					</tr>
 					<tr>
-						<th scope="row"><?php esc_html_e( 'Sponsored placement', 'paskamer-woocommerce' ); ?></th>
-						<td><label><input type="checkbox" name="paskamer[ads_enabled]" value="1" <?php checked( ! empty( $s['ads_enabled'] ) ); ?>> <?php esc_html_e( 'Allow my products to appear as sponsored cards in the Paskamer swipe deck (billed per plan).', 'paskamer-woocommerce' ); ?></label></td>
+						<th scope="row"><?php esc_html_e( 'Sponsored placement', 'curtain-woocommerce' ); ?></th>
+						<td><label><input type="checkbox" name="curtain[ads_enabled]" value="1" <?php checked( ! empty( $s['ads_enabled'] ) ); ?>> <?php esc_html_e( 'Allow my products to appear as sponsored cards in the Curtain swipe deck (billed per plan).', 'curtain-woocommerce' ); ?></label></td>
 					</tr>
 				</table>
 
-				<h2><?php esc_html_e( 'Advanced', 'paskamer-woocommerce' ); ?></h2>
+				<h2><?php esc_html_e( 'Advanced', 'curtain-woocommerce' ); ?></h2>
 				<table class="form-table" role="presentation">
 					<tr>
-						<th scope="row"><label for="paskamer_api_base"><?php esc_html_e( 'API base URL', 'paskamer-woocommerce' ); ?></label></th>
-						<td><input type="url" id="paskamer_api_base" name="paskamer[api_base]" value="<?php echo esc_attr( (string) $s['api_base'] ); ?>" class="regular-text" placeholder="<?php echo esc_attr( PASKAMER_DEFAULT_API_BASE ); ?>">
-						<p class="description"><?php esc_html_e( 'Only change this for a staging environment.', 'paskamer-woocommerce' ); ?></p></td>
+						<th scope="row"><label for="curtain_api_base"><?php esc_html_e( 'API base URL', 'curtain-woocommerce' ); ?></label></th>
+						<td><input type="url" id="curtain_api_base" name="curtain[api_base]" value="<?php echo esc_attr( (string) $s['api_base'] ); ?>" class="regular-text" placeholder="<?php echo esc_attr( CURTAIN_DEFAULT_API_BASE ); ?>">
+						<p class="description"><?php esc_html_e( 'Only change this for a staging environment.', 'curtain-woocommerce' ); ?></p></td>
 					</tr>
 					<tr>
-						<th scope="row"><?php esc_html_e( 'Admin e-mail', 'paskamer-woocommerce' ); ?></th>
-						<td><label><input type="checkbox" name="paskamer[share_admin_email]" value="1" <?php checked( ! empty( $s['share_admin_email'] ) ); ?>> <?php esc_html_e( 'Send the site admin e-mail with Connect so Paskamer can reach you about billing (optional).', 'paskamer-woocommerce' ); ?></label></td>
+						<th scope="row"><?php esc_html_e( 'Admin e-mail', 'curtain-woocommerce' ); ?></th>
+						<td><label><input type="checkbox" name="curtain[share_admin_email]" value="1" <?php checked( ! empty( $s['share_admin_email'] ) ); ?>> <?php esc_html_e( 'Send the site admin e-mail with Connect so Curtain can reach you about billing (optional).', 'curtain-woocommerce' ); ?></label></td>
 					</tr>
 					<tr>
-						<th scope="row"><?php esc_html_e( 'Uninstall', 'paskamer-woocommerce' ); ?></th>
-						<td><label><input type="checkbox" name="paskamer[delete_on_uninstall]" value="1" <?php checked( ! empty( $s['delete_on_uninstall'] ) ); ?>> <?php esc_html_e( 'Delete all Paskamer settings and product fit data when the plugin is uninstalled.', 'paskamer-woocommerce' ); ?></label></td>
+						<th scope="row"><?php esc_html_e( 'Uninstall', 'curtain-woocommerce' ); ?></th>
+						<td><label><input type="checkbox" name="curtain[delete_on_uninstall]" value="1" <?php checked( ! empty( $s['delete_on_uninstall'] ) ); ?>> <?php esc_html_e( 'Delete all Curtain settings and product fit data when the plugin is uninstalled.', 'curtain-woocommerce' ); ?></label></td>
 					</tr>
 				</table>
-				<?php submit_button( __( 'Save settings', 'paskamer-woocommerce' ) ); ?>
+				<?php submit_button( __( 'Save settings', 'curtain-woocommerce' ) ); ?>
 			</form>
 
-			<h2><?php esc_html_e( 'What is sent to Paskamer', 'paskamer-woocommerce' ); ?></h2>
-			<p><?php echo esc_html( sprintf( /* translators: %s: API host */ __( 'After you connect, published products (name, price in EUR, product photos, categories, attributes) and the fit data from the Paskamer box on the product page are sent to %s. Nothing about your customers or orders is ever sent. Disconnect at any time.', 'paskamer-woocommerce' ), (string) wp_parse_url( ( new Api_Client( $s ) )->base(), PHP_URL_HOST ) ) ); ?>
-			<a href="https://paskamer.app/privacy" target="_blank" rel="noopener"><?php esc_html_e( 'Privacy policy', 'paskamer-woocommerce' ); ?></a> · <a href="https://paskamer.app/terms" target="_blank" rel="noopener"><?php esc_html_e( 'Terms', 'paskamer-woocommerce' ); ?></a></p>
+			<h2><?php esc_html_e( 'What is sent to Curtain', 'curtain-woocommerce' ); ?></h2>
+			<p><?php echo esc_html( sprintf( /* translators: %s: API host */ __( 'After you connect, published products (name, price in EUR, product photos, categories, attributes) and the fit data from the Curtain box on the product page are sent to %s. Nothing about your customers or orders is ever sent. Disconnect at any time.', 'curtain-woocommerce' ), (string) wp_parse_url( ( new Api_Client( $s ) )->base(), PHP_URL_HOST ) ) ); ?>
+			<a href="https://curtain.fit/privacy" target="_blank" rel="noopener"><?php esc_html_e( 'Privacy policy', 'curtain-woocommerce' ); ?></a> · <a href="https://curtain.fit/terms" target="_blank" rel="noopener"><?php esc_html_e( 'Terms', 'curtain-woocommerce' ); ?></a></p>
 		</div>
 		<?php
 	}

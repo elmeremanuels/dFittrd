@@ -1,8 +1,8 @@
 /**
  * Per-point sigma from the on-device BodyProfile (decision D5) for `computeFit(..., { sigma })`.
- * Type-only dependency on @paskamer/schema; the profile never leaves the device.
+ * Type-only dependency on @curtain/schema; the profile never leaves the device.
  */
-import type { BodyProfile } from '@paskamer/schema';
+import type { BodyProfile } from '@curtain/schema';
 import { POINTS } from './constants';
 import { positive, round3 } from './math';
 import type { PointSigma } from './types';

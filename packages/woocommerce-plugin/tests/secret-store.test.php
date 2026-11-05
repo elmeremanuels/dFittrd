@@ -1,11 +1,11 @@
 <?php
 /**
- * @package Paskamer\Tests
+ * @package Curtain\Tests
  */
 
 declare(strict_types=1);
 
-use Paskamer\Secret_Store;
+use Curtain\Secret_Store;
 
 test(
 	'encrypt/decrypt round-trips with the host scheme and never stores plaintext',

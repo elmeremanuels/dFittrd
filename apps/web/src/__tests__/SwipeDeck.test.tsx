@@ -5,12 +5,12 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
-import { MOCK_GARMENTS, MOCK_GARMENTS_BY_ID } from '@paskamer/schema';
-import * as taste from '@paskamer/taste-engine';
+import { MOCK_GARMENTS, MOCK_GARMENTS_BY_ID } from '@curtain/schema';
+import * as taste from '@curtain/taste-engine';
 type TasteEngine = typeof taste;
-import { computeFit } from '@paskamer/fit-engine';
+import { computeFit } from '@curtain/fit-engine';
 
-vi.mock('@paskamer/taste-engine', async (importOriginal) => {
+vi.mock('@curtain/taste-engine', async (importOriginal) => {
   const actual = await importOriginal<TasteEngine>();
   return { ...actual, applySwipe: vi.fn(actual.applySwipe) };
 });

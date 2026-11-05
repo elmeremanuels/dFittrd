@@ -1,28 +1,28 @@
 <?php
 /**
- * Signed read endpoint for backfill / pull-resync by the Paskamer backend:
+ * Signed read endpoint for backfill / pull-resync by the Curtain backend:
  *
- *   GET /wp-json/paskamer/v1/products/{id}
- *   GET /wp-json/paskamer/v1/products?page&per_page&status
+ *   GET /wp-json/curtain/v1/products/{id}
+ *   GET /wp-json/curtain/v1/products?page&per_page&status
  *
  * Auth: the same PK-HMAC scheme the plugin uses outbound, with the roles swapped — the backend
  * signs with the shop's secret and presents the public prefix; the plugin verifies with its stored
  * key. Only available once the shop is connected. The response is the WooCommerce REST v3 product
- * subset `fromWooMeta` consumes (+ `meta_data` with the `_paskamer_*` keys) and the plugin's own
+ * subset `fromWooMeta` consumes (+ `meta_data` with the `_curtain_*` keys) and the plugin's own
  * `payload` draft.
  *
- * @package Paskamer
+ * @package Curtain
  */
 
 declare(strict_types=1);
 
-namespace Paskamer;
+namespace Curtain;
 
-defined('ABSPATH') || defined('PASKAMER_TESTING') || exit;
+defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
 
 final class Rest {
 
-	public const NAMESPACE = 'paskamer/v1';
+	public const NAMESPACE = 'curtain/v1';
 
 	public static function register(): void {
 		add_action( 'rest_api_init', array( self::class, 'routes' ) );
@@ -77,7 +77,7 @@ final class Rest {
 	 */
 	public static function authorize( \WP_REST_Request $request ) {
 		if ( ! Settings::is_connected() ) {
-			return new \WP_Error( 'paskamer_not_connected', 'shop is not connected', array( 'status' => 403 ) );
+			return new \WP_Error( 'curtain_not_connected', 'shop is not connected', array( 'status' => 403 ) );
 		}
 		$header = (string) $request->get_header( 'authorization' );
 		if ( '' === $header && isset( $_SERVER['HTTP_AUTHORIZATION'] ) ) {
@@ -88,7 +88,7 @@ final class Rest {
 		$s      = Settings::all();
 		$result = Hmac::verify( $header, (string) $s['public_key_prefix'], array( (string) $s['api_key'] ), $request->get_method(), $target, $body );
 		if ( ! $result['ok'] ) {
-			return new \WP_Error( 'paskamer_' . $result['code'], 'invalid PK-HMAC signature (' . $result['code'] . ')', array( 'status' => 401 ) );
+			return new \WP_Error( 'curtain_' . $result['code'], 'invalid PK-HMAC signature (' . $result['code'] . ')', array( 'status' => 401 ) );
 		}
 		return true;
 	}

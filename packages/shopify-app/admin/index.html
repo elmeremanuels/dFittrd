@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Paskamer</title>
+  <title>Curtain</title>
   <!-- App Bridge (the only third-party script; required for embedded apps). The api key is public. -->
-  <meta name="shopify-api-key" content="__PASKAMER_SHOPIFY_API_KEY__" />
-  <script src="__PASKAMER_APP_BRIDGE_URL__"></script>
-  <script id="paskamer-config" type="application/json">__PASKAMER_CONFIG_JSON__</script>
+  <meta name="shopify-api-key" content="__CURTAIN_SHOPIFY_API_KEY__" />
+  <script src="__CURTAIN_APP_BRIDGE_URL__"></script>
+  <script id="curtain-config" type="application/json">__CURTAIN_CONFIG_JSON__</script>
   <style>
     /* Polaris-like, CSS only. No fonts loaded (system stack), no images. */
     :root {
@@ -75,7 +75,7 @@
 <body>
   <main class="page">
     <header class="page-header">
-      <h1 class="brand"><i aria-hidden="true"></i> Paskamer</h1>
+      <h1 class="brand"><i aria-hidden="true"></i> Curtain</h1>
       <span id="shop-domain" class="subdued mono"></span>
     </header>
 
@@ -87,7 +87,7 @@
         <ul class="checklist" id="checklist">
           <li><span class="check" id="chk-install"></span><div><b>Connect this store</b><div class="subdued" id="txt-install">Checking…</div></div><span></span></li>
           <li><span class="check" id="chk-plan"></span><div><b>Choose a plan</b><div class="subdued" id="txt-plan">14-day trial. Below plan, the button keeps rendering; shoppers see a pause screen.</div></div><button class="btn btn-primary" id="btn-plan" type="button" disabled>Choose Starter</button></li>
-          <li><span class="check" id="chk-theme"></span><div><b>Add the “Try in Paskamer” block</b><div class="subdued">Opens the theme editor on your product template with the block pre-added.</div></div><a class="btn" id="lnk-theme" target="_top" rel="noopener">Add to theme</a></li>
+          <li><span class="check" id="chk-theme"></span><div><b>Add the “Try it on” block</b><div class="subdued">Opens the theme editor on your product template with the block pre-added.</div></div><a class="btn" id="lnk-theme" target="_top" rel="noopener">Add to theme</a></li>
           <li><span class="check" id="chk-data"></span><div><b>Complete garment data</b><div class="subdued" id="txt-data">Size chart, fabric and a flat-lay photo make a product try-able.</div></div><a class="btn" href="#products">Review</a></li>
         </ul>
         <div class="privacy">
@@ -127,7 +127,7 @@
 
     <section class="card" aria-labelledby="h-ledger" style="margin-top:16px">
       <h2 id="h-ledger">Privacy ledger</h2>
-      <p class="subdued" style="margin:0 0 8px">Everything Paskamer sent to an AI provider on behalf of your shoppers' opt-in hero renders. Inputs are never a shopper photo: an anonymised avatar render and your flat-lay only. Results are deleted within 24 hours.</p>
+      <p class="subdued" style="margin:0 0 8px">Everything Curtain sent to an AI provider on behalf of your shoppers' opt-in hero renders. Inputs are never a shopper photo: an anonymised avatar render and your flat-lay only. Results are deleted within 24 hours.</p>
       <div style="overflow:auto">
         <table>
           <thead><tr><th>When</th><th>Product</th><th>Provider</th><th>Model</th><th>Inputs</th><th class="num">Retention</th></tr></thead>
@@ -141,7 +141,7 @@
   <script>
     (function () {
       'use strict';
-      var cfg = JSON.parse(document.getElementById('paskamer-config').textContent);
+      var cfg = JSON.parse(document.getElementById('curtain-config').textContent);
       var params = new URLSearchParams(location.search);
       // The shop App Bridge reports wins over the query string, and only a *.myshopify.com domain is
       // accepted: `shop` is used to build admin links before the server has verified anything.
@@ -240,7 +240,7 @@
       function renderProducts() {
         var body = $('products-body'); body.textContent = '';
         var items = (state.products ? state.products.items : []).filter(function (p) { return state.filter === 'all' ? p.status !== 'archived' : p.status === state.filter; });
-        if (!items.length) { body.appendChild(el('tr', null, [el('td', { colspan: '6', class: 'empty', text: state.products && state.products.items.length ? 'Nothing here.' : 'No products synced yet. Publish a product and give it Paskamer fields in the product admin (Metafields → Paskamer).' })])); return; }
+        if (!items.length) { body.appendChild(el('tr', null, [el('td', { colspan: '6', class: 'empty', text: state.products && state.products.items.length ? 'Nothing here.' : 'No products synced yet. Publish a product and give it Curtain fields in the product admin (Metafields → Curtain).' })])); return; }
         items.forEach(function (p) {
           var badge = p.status === 'active' ? ['badge-success', 'Try-able'] : p.status === 'incomplete' ? ['badge-warning', 'Needs data'] : ['badge-critical', 'Archived'];
           var missing = p.missingFields.slice(0, 4).join(', ') + (p.missingFields.length > 4 ? ' +' + (p.missingFields.length - 4) : '');
@@ -302,7 +302,7 @@
           var failed = results.filter(function (r) { return r.status === 'rejected'; });
           if (failed.length) banner('warning', 'Some panels could not load: ' + failed.map(function (f) { return f.reason && f.reason.message; }).join(' · '));
         } catch (err) {
-          var msg = err && err.code === 'shopify_not_configured' ? 'The Paskamer API is not configured for Shopify yet (SHOPIFY_API_KEY/SECRET).' : (err && err.message) || String(err);
+          var msg = err && err.code === 'shopify_not_configured' ? 'The Curtain API is not configured for Shopify yet (SHOPIFY_API_KEY/SECRET).' : (err && err.message) || String(err);
           banner('critical', msg);
           text('txt-install', 'Not connected.');
           $('products-body').textContent = ''; $('ledger-body').textContent = '';

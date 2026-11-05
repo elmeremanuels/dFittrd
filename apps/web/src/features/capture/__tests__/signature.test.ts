@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FS_INDEX, FS_LENGTH, FitSignatureWireSchema, decodeFitSignature, type BodyProfile } from '@paskamer/schema';
+import { FS_INDEX, FS_LENGTH, FitSignatureWireSchema, decodeFitSignature, type BodyProfile } from '@curtain/schema';
 import { ageBucket, assertNoColourData, buildFitSignature } from '../signature';
 import { fuseProfile } from '../fuse';
 import type { ScanMeasurements } from '../types';

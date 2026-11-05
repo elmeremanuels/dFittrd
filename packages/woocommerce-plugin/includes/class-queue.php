@@ -3,22 +3,22 @@
  * Background job abstraction: Action Scheduler (bundled with WooCommerce) when available, WP-Cron
  * otherwise. Jobs are keyed by (hook, args) so a product saved three times in a row is pushed once.
  *
- * @package Paskamer
+ * @package Curtain
  */
 
 declare(strict_types=1);
 
-namespace Paskamer;
+namespace Curtain;
 
-defined('ABSPATH') || defined('PASKAMER_TESTING') || exit;
+defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
 
 final class Queue {
 
-	public const GROUP = 'paskamer';
+	public const GROUP = 'curtain';
 
-	public const HOOK_PUSH     = 'paskamer_push_product';
-	public const HOOK_DELETE   = 'paskamer_delete_product';
-	public const HOOK_SYNC_ALL = 'paskamer_sync_all';
+	public const HOOK_PUSH     = 'curtain_push_product';
+	public const HOOK_DELETE   = 'curtain_delete_product';
+	public const HOOK_SYNC_ALL = 'curtain_sync_all';
 
 	public const HOOKS = array( self::HOOK_PUSH, self::HOOK_DELETE, self::HOOK_SYNC_ALL );
 
@@ -57,7 +57,7 @@ final class Queue {
 		return false !== wp_next_scheduled( $hook, $args );
 	}
 
-	/** Remove every pending Paskamer job (deactivation / uninstall / disconnect). */
+	/** Remove every pending Curtain job (deactivation / uninstall / disconnect). */
 	public static function cancel_all(): void {
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {
 			foreach ( self::HOOKS as $hook ) {

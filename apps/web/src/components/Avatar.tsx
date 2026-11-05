@@ -1,8 +1,8 @@
 import { motion, useReducedMotion } from 'motion/react';
 import { useId, useMemo, type ReactNode } from 'react';
-import type { FitResult } from '@paskamer/fit-engine';
-import { fitGapsForRender } from '@paskamer/fit-engine';
-import type { GarmentPayload } from '@paskamer/schema';
+import type { FitResult } from '@curtain/fit-engine';
+import { fitGapsForRender } from '@curtain/fit-engine';
+import type { GarmentPayload } from '@curtain/schema';
 import { adjustColor, bodyGeometry, bodyPath, fabricLook, garmentGeometry, isHex, levelY, VIEW_H, VIEW_W, HEAD_TOP_Y } from '@/render/body';
 import { useApp } from '@/store';
 import { useCaptureMedia } from '@/store/media';

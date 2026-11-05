@@ -1,28 +1,28 @@
 <?php
 /**
- * Turns the product meta box POST (`$_POST['paskamer']`, already wp_unslash'ed) into the
- * `_paskamer_*` meta rows, in exactly the formats @paskamer/schema's `fromWooMeta` reads:
+ * Turns the product meta box POST (`$_POST['curtain']`, already wp_unslash'ed) into the
+ * `_curtain_*` meta rows, in exactly the formats @curtain/schema's `fromWooMeta` reads:
  * JSON strings for json/list kinds, plain strings for scalars, an absolute URL for the flat-lay
  * (+ the attachment id in a private key). A `null` value means "delete the meta".
  *
  * Only `sanitize_text_field`/`sanitize_textarea_field`/`absint`/`wp_json_encode` are used, so the
  * class runs under the test shims.
  *
- * @package Paskamer
+ * @package Curtain
  */
 
 declare(strict_types=1);
 
-namespace Paskamer;
+namespace Curtain;
 
-defined('ABSPATH') || defined('PASKAMER_TESTING') || exit;
+defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
 
 final class Sanitizer {
 
 	public const CUSTOM_PATTERN_BLOCK = '__custom';
 
 	/**
-	 * @param array<string,mixed> $in  The `paskamer` POST array.
+	 * @param array<string,mixed> $in  The `curtain` POST array.
 	 * @return array{meta: array<string, string|null>, errors: string[]}
 	 */
 	public static function from_post( array $in ): array {
@@ -35,16 +35,16 @@ final class Sanitizer {
 			$errors[] = 'category';
 			$category = '';
 		}
-		$meta['_paskamer_category']    = self::or_null( $category );
-		$meta['_paskamer_subcategory'] = self::or_null( self::text( $in['subcategory'] ?? '', 64 ) );
-		$meta['_paskamer_brand']       = self::or_null( self::text( $in['brand'] ?? '', 120 ) );
+		$meta['_curtain_category']    = self::or_null( $category );
+		$meta['_curtain_subcategory'] = self::or_null( self::text( $in['subcategory'] ?? '', 64 ) );
+		$meta['_curtain_brand']       = self::or_null( self::text( $in['brand'] ?? '', 120 ) );
 
 		// -- pattern block --------------------------------------------------------------------
 		$block = self::text( $in['pattern_block'] ?? '' );
 		if ( self::CUSTOM_PATTERN_BLOCK === $block ) {
 			$block = self::text( $in['pattern_block_custom'] ?? '', 64 );
 		}
-		$meta['_paskamer_pattern_block'] = self::or_null( strtolower( $block ) );
+		$meta['_curtain_pattern_block'] = self::or_null( strtolower( $block ) );
 
 		// -- fabric --------------------------------------------------------------------------
 		$fabric  = array();
@@ -82,7 +82,7 @@ final class Sanitizer {
 				$fabric[ $unit ] = max( 0, min( 1, $fabric[ $unit ] ) );
 			}
 		}
-		$meta['_paskamer_fabric'] = $fabric ? self::json( $fabric ) : null;
+		$meta['_curtain_fabric'] = $fabric ? self::json( $fabric ) : null;
 
 		// -- ease -----------------------------------------------------------------------------
 		$ease = array();
@@ -92,7 +92,7 @@ final class Sanitizer {
 				$ease[ $point ] = $n;
 			}
 		}
-		$meta['_paskamer_ease'] = $ease ? self::json( $ease ) : null;
+		$meta['_curtain_ease'] = $ease ? self::json( $ease ) : null;
 
 		// -- lengths --------------------------------------------------------------------------
 		$lengths = array();
@@ -113,7 +113,7 @@ final class Sanitizer {
 				$lengths[ $key ] = $n;
 			}
 		}
-		$meta['_paskamer_length_cm'] = $lengths ? self::json( $lengths ) : null;
+		$meta['_curtain_length_cm'] = $lengths ? self::json( $lengths ) : null;
 
 		// -- size chart -----------------------------------------------------------------------
 		$rows = array();
@@ -137,7 +137,7 @@ final class Sanitizer {
 			}
 			$rows[] = $r;
 		}
-		$meta['_paskamer_size_chart'] = $rows ? self::json( array_slice( $rows, 0, 30 ) ) : null;
+		$meta['_curtain_size_chart'] = $rows ? self::json( array_slice( $rows, 0, 30 ) ) : null;
 
 		$sct = self::text( $in['size_chart_type'] ?? '' );
 		if ( '' !== $sct && ! in_array( $sct, array( 'garment', 'body' ), true ) ) {
@@ -147,16 +147,16 @@ final class Sanitizer {
 		if ( $rows && '' === $sct ) {
 			$errors[] = 'sizeChartType'; // Required whenever a chart is present (T14).
 		}
-		$meta['_paskamer_size_chart_type'] = self::or_null( $sct );
+		$meta['_curtain_size_chart_type'] = self::or_null( $sct );
 
 		// -- notes / score --------------------------------------------------------------------
-		$meta['_paskamer_sizing_notes'] = self::or_null( self::textarea( $in['sizing_notes'] ?? '', 500 ) );
+		$meta['_curtain_sizing_notes'] = self::or_null( self::textarea( $in['sizing_notes'] ?? '', 500 ) );
 		$tts                            = self::number( $in['true_to_size_score'] ?? '' );
 		if ( null !== $tts && ( $tts < 0 || $tts > 1 ) ) {
 			$errors[] = 'trueToSizeScore';
 			$tts      = null;
 		}
-		$meta['_paskamer_true_to_size_score'] = null === $tts ? null : self::num_string( $tts );
+		$meta['_curtain_true_to_size_score'] = null === $tts ? null : self::num_string( $tts );
 
 		// -- fit points / stretch zones -------------------------------------------------------
 		$critical = array();
@@ -166,7 +166,7 @@ final class Sanitizer {
 				$critical[] = $p;
 			}
 		}
-		$meta['_paskamer_critical_fit_points'] = $critical ? self::json( $critical ) : null;
+		$meta['_curtain_critical_fit_points'] = $critical ? self::json( $critical ) : null;
 
 		$zones = array();
 		foreach ( (array) ( $in['stretch_zones'] ?? array() ) as $z ) {
@@ -181,7 +181,7 @@ final class Sanitizer {
 				$zones[] = $z;
 			}
 		}
-		$meta['_paskamer_stretch_zones'] = $zones ? self::json( array_slice( $zones, 0, 10 ) ) : null;
+		$meta['_curtain_stretch_zones'] = $zones ? self::json( array_slice( $zones, 0, 10 ) ) : null;
 
 		// -- style tags -----------------------------------------------------------------------
 		$tags = array();
@@ -191,14 +191,14 @@ final class Sanitizer {
 				$tags[ $axis ] = max( 0, min( 1, $n ) );
 			}
 		}
-		$meta['_paskamer_style_tags'] = $tags ? self::json( $tags ) : null;
+		$meta['_curtain_style_tags'] = $tags ? self::json( $tags ) : null;
 
 		// -- colours --------------------------------------------------------------------------
 		$hex = Payload_Builder::coerce_hex( self::text( $in['primary_color_hex'] ?? '', 7 ) );
 		if ( null === $hex && '' !== self::text( $in['primary_color_hex'] ?? '' ) ) {
 			$errors[] = 'primaryColorHex';
 		}
-		$meta['_paskamer_primary_color_hex'] = $hex;
+		$meta['_curtain_primary_color_hex'] = $hex;
 
 		$colorways = array();
 		foreach ( (array) ( $in['colorways'] ?? array() ) as $row ) {
@@ -224,13 +224,13 @@ final class Sanitizer {
 			}
 			$colorways[] = $cw;
 		}
-		$meta['_paskamer_colorways'] = $colorways ? self::json( array_slice( $colorways, 0, 40 ) ) : null;
+		$meta['_curtain_colorways'] = $colorways ? self::json( array_slice( $colorways, 0, 40 ) ) : null;
 
 		// -- flat-lay -------------------------------------------------------------------------
 		$flat_id  = absint( $in['flat_lay_id'] ?? 0 );
 		$flat_url = Payload_Builder::coerce_url( self::text( $in['flat_lay_url'] ?? '', 2048 ) );
 		$meta[ Vocab::META_FLAT_LAY_ID ]   = $flat_id > 0 ? (string) $flat_id : null;
-		$meta['_paskamer_flat_lay_photo']  = $flat_url;
+		$meta['_curtain_flat_lay_photo']  = $flat_url;
 
 		return array(
 			'meta'   => $meta,

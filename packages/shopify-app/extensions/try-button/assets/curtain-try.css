@@ -1,35 +1,35 @@
 /* Layout only. The SDK injects the button styling (pk-btn: coral #FF5A3C on cream #F5EFE7, ink text) unless the block is set to unstyled. */
-.paskamer-try {
+.curtain-try {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
   margin: 1rem 0;
 }
-.paskamer-try--left { align-items: flex-start; }
-.paskamer-try--center { align-items: center; text-align: center; }
-.paskamer-try--full { align-items: stretch; }
-.paskamer-try--full .paskamer-try__button { width: 100%; justify-content: center; }
-.paskamer-try__button {
+.curtain-try--left { align-items: flex-start; }
+.curtain-try--center { align-items: center; text-align: center; }
+.curtain-try--full { align-items: stretch; }
+.curtain-try--full .curtain-try__button { width: 100%; justify-content: center; }
+.curtain-try__button {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   cursor: pointer;
 }
-.paskamer-try__icon { flex: none; }
-.paskamer-try__hint {
+.curtain-try__icon { flex: none; }
+.curtain-try__hint {
   margin: 0;
   font-size: 0.8125rem;
   line-height: 1.4;
   opacity: 0.75;
 }
-.paskamer-try__setup {
+.curtain-try__setup {
   margin: 0.5rem 0;
   padding: 0.6rem 0.8rem;
   border: 1px dashed #c97a4f;
   border-radius: 0.5rem;
   font-size: 0.875rem;
 }
-.paskamer-try__sr {
+.curtain-try__sr {
   position: absolute;
   width: 1px;
   height: 1px;

@@ -32,7 +32,7 @@ export const EnvSchema = z.object({
   /** `1` turns this replica into a jobs-only worker (no HTTP listener). `0` disables jobs in this process. */
   JOBS: z.enum(['0', '1', 'both']).default('both'),
 
-  DATABASE_URL: z.string().default('postgres://paskamer:paskamer@localhost:5432/paskamer'),
+  DATABASE_URL: z.string().default('postgres://curtain:curtain@localhost:5432/curtain'),
 
   /** Public origins — used for deep links, signed render URLs and CORS. */
   PUBLIC_APP_URL: z.url().default('http://localhost:3000'),
@@ -53,7 +53,7 @@ export const EnvSchema = z.object({
   DEVICE_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
   TRY_TOKEN_TTL_SEC: z.coerce.number().int().min(60).max(3600).default(600),
   SDK_RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).default(120),
-  /** Optional absolute path to sdk.v1.js; default resolves @paskamer/sdk from node_modules. */
+  /** Optional absolute path to sdk.v1.js; default resolves @curtain/sdk from node_modules. */
   SDK_FILE: z.string().optional(),
 
   // ---- renders ------------------------------------------------------------------------
@@ -79,7 +79,7 @@ export const EnvSchema = z.object({
   SHOPIFY_API_VERSION: z.string().regex(/^\d{4}-\d{2}$/).default('2025-10'),
   SHOPIFY_SCOPES: z.string().default('read_products,write_products'),
   /** The app's handle (shopify.app.toml `handle`): /shopify/auth/callback redirects to admin.shopify.com/store/<s>/apps/<handle>. */
-  SHOPIFY_APP_HANDLE: z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/).default('paskamer'),
+  SHOPIFY_APP_HANDLE: z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/).default('curtain'),
   /** GraphQL endpoint template for tests/mocks; `{shop}` is replaced by the shop domain. */
   SHOPIFY_ADMIN_URL_TEMPLATE: z.string().default('https://{shop}/admin/api/{version}/graphql.json'),
 
@@ -148,8 +148,8 @@ export function testEnv(overrides: Partial<Record<keyof z.input<typeof EnvSchema
     JWT_SECRET: randomBytes(32).toString('hex'),
     SHOP_KEY_PEPPER: randomBytes(16).toString('hex'),
     ENCRYPTION_KEY: randomBytes(32).toString('hex'),
-    PUBLIC_APP_URL: 'https://app.paskamer.test',
-    PUBLIC_API_URL: 'https://api.paskamer.test',
+    PUBLIC_APP_URL: 'https://app.curtain.test',
+    PUBLIC_API_URL: 'https://api.curtain.test',
     ...overrides,
   });
 }

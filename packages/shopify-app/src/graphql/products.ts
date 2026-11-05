@@ -1,8 +1,8 @@
 /**
- * Product + `$app:paskamer` metafields queries. The selection matches `ShopifyProductNodeSchema`
- * in @paskamer/schema so the result goes straight into `fromShopifyProduct`.
+ * Product + `$app:curtain` metafields queries. The selection matches `ShopifyProductNodeSchema`
+ * in @curtain/schema so the result goes straight into `fromShopifyProduct`.
  */
-import { SHOPIFY_METAFIELD_NAMESPACE, shopifyExternalId, type ShopifyProductNode } from '@paskamer/schema';
+import { SHOPIFY_METAFIELD_NAMESPACE, shopifyExternalId, type ShopifyProductNode } from '@curtain/schema';
 import type { AdminGraphqlClient } from './client';
 
 export const PRODUCT_NODE_FIELDS = /* GraphQL */ `
@@ -22,13 +22,13 @@ export const PRODUCT_NODE_FIELDS = /* GraphQL */ `
 `;
 
 export const PRODUCT_QUERY = /* GraphQL */ `
-  query PaskamerProduct($id: ID!, $namespace: String!) {
+  query CurtainProduct($id: ID!, $namespace: String!) {
     product(id: $id) { ${PRODUCT_NODE_FIELDS} }
   }
 `;
 
 export const PRODUCTS_PAGE_QUERY = /* GraphQL */ `
-  query PaskamerProducts($cursor: String, $namespace: String!, $query: String) {
+  query CurtainProducts($cursor: String, $namespace: String!, $query: String) {
     products(first: 50, after: $cursor, query: $query) {
       pageInfo { hasNextPage endCursor }
       nodes { ${PRODUCT_NODE_FIELDS} }

@@ -23,7 +23,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { GarmentPayloadDraft, LedgerEntry } from '@paskamer/schema';
+import type { GarmentPayloadDraft, LedgerEntry } from '@curtain/schema';
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 const id = () => uuid('id').primaryKey().default(sql`gen_random_uuid()`);

@@ -1,16 +1,16 @@
 <?php
 /**
- * Meta box POST → `_paskamer_*` meta, and the round trip through the Payload_Builder.
+ * Meta box POST → `_curtain_*` meta, and the round trip through the Payload_Builder.
  *
- * @package Paskamer\Tests
+ * @package Curtain\Tests
  */
 
 declare(strict_types=1);
 
-use Paskamer\Payload_Builder;
-use Paskamer\Sanitizer;
+use Curtain\Payload_Builder;
+use Curtain\Sanitizer;
 
-function paskamer_sample_post(): array {
+function curtain_sample_post(): array {
 	return array(
 		'category'             => 'dress',
 		'subcategory'          => ' wrap-midi ',
@@ -49,31 +49,31 @@ function paskamer_sample_post(): array {
 test(
 	'from_post stores JSON strings / scalars in the formats fromWooMeta reads',
 	static function (): void {
-		$r = Sanitizer::from_post( paskamer_sample_post() );
+		$r = Sanitizer::from_post( curtain_sample_post() );
 		$m = $r['meta'];
 		assert_same( array(), $r['errors'] );
-		assert_same( 'dress', $m['_paskamer_category'] );
-		assert_same( 'wrap-midi', $m['_paskamer_subcategory'] );
-		assert_same( 'Aalter Studio', $m['_paskamer_brand'], 'tags stripped' );
-		assert_same( 'wrap', $m['_paskamer_pattern_block'] );
-		assert_json_equal( array( 'primary' => 'linen', 'blend' => array( array( 'linen', 98 ), array( 'elastane', 2 ) ), 'weightGsm' => 240, 'stretchPct' => 2, 'drape' => 0.78, 'sheen' => 0.15 ), json_decode( $m['_paskamer_fabric'], true ) );
-		assert_json_equal( array( 'bust' => 6, 'waist' => 4, 'hip' => 8 ), json_decode( $m['_paskamer_ease'], true ) );
-		assert_json_equal( array( 'shoulder_to_hem' => 118, 'sleeve_length' => 0, 'hem_circumference' => 150 ), json_decode( $m['_paskamer_length_cm'], true ) );
+		assert_same( 'dress', $m['_curtain_category'] );
+		assert_same( 'wrap-midi', $m['_curtain_subcategory'] );
+		assert_same( 'Aalter Studio', $m['_curtain_brand'], 'tags stripped' );
+		assert_same( 'wrap', $m['_curtain_pattern_block'] );
+		assert_json_equal( array( 'primary' => 'linen', 'blend' => array( array( 'linen', 98 ), array( 'elastane', 2 ) ), 'weightGsm' => 240, 'stretchPct' => 2, 'drape' => 0.78, 'sheen' => 0.15 ), json_decode( $m['_curtain_fabric'], true ) );
+		assert_json_equal( array( 'bust' => 6, 'waist' => 4, 'hip' => 8 ), json_decode( $m['_curtain_ease'], true ) );
+		assert_json_equal( array( 'shoulder_to_hem' => 118, 'sleeve_length' => 0, 'hem_circumference' => 150 ), json_decode( $m['_curtain_length_cm'], true ) );
 		assert_json_equal(
 			array( array( 'size' => 'XS', 'bust' => 84, 'waist' => 64, 'hip' => 92, 'shoulder' => 36 ), array( 'size' => 'S', 'bust' => 88, 'waist' => 68, 'hip' => 96, 'shoulder' => 37 ) ),
-			json_decode( $m['_paskamer_size_chart'], true ),
+			json_decode( $m['_curtain_size_chart'], true ),
 			'0 / empty cells omitted, rows without a size dropped'
 		);
-		assert_same( 'body', $m['_paskamer_size_chart_type'] );
-		assert_same( "runs small\nx", $m['_paskamer_sizing_notes'], 'tags stripped, newlines kept (textarea)' );
-		assert_same( '0.92', $m['_paskamer_true_to_size_score'] );
-		assert_same( '["bust","shoulder"]', $m['_paskamer_critical_fit_points'] );
-		assert_same( '["waist-tie","side seam","rib-hem"]', $m['_paskamer_stretch_zones'] );
-		assert_json_equal( array( 'bohemian' => 0.7, 'sporty' => 1 ), json_decode( $m['_paskamer_style_tags'], true ), 'clamped to 0..1' );
-		assert_same( '#C97A4F', $m['_paskamer_primary_color_hex'] );
-		assert_json_equal( array( array( 'name' => 'Terracotta', 'hex' => '#C97A4F', 'sku' => 'AS1-TC' ) ), json_decode( $m['_paskamer_colorways'], true ) );
-		assert_same( 'https://shop.example/wp-content/uploads/flat.png', $m['_paskamer_flat_lay_photo'] );
-		assert_same( '991', $m['_paskamer_flat_lay_photo_id'] );
+		assert_same( 'body', $m['_curtain_size_chart_type'] );
+		assert_same( "runs small\nx", $m['_curtain_sizing_notes'], 'tags stripped, newlines kept (textarea)' );
+		assert_same( '0.92', $m['_curtain_true_to_size_score'] );
+		assert_same( '["bust","shoulder"]', $m['_curtain_critical_fit_points'] );
+		assert_same( '["waist-tie","side seam","rib-hem"]', $m['_curtain_stretch_zones'] );
+		assert_json_equal( array( 'bohemian' => 0.7, 'sporty' => 1 ), json_decode( $m['_curtain_style_tags'], true ), 'clamped to 0..1' );
+		assert_same( '#C97A4F', $m['_curtain_primary_color_hex'] );
+		assert_json_equal( array( array( 'name' => 'Terracotta', 'hex' => '#C97A4F', 'sku' => 'AS1-TC' ) ), json_decode( $m['_curtain_colorways'], true ) );
+		assert_same( 'https://shop.example/wp-content/uploads/flat.png', $m['_curtain_flat_lay_photo'] );
+		assert_same( '991', $m['_curtain_flat_lay_photo_id'] );
 	}
 );
 
@@ -86,8 +86,8 @@ test(
 		}
 		$r = Sanitizer::from_post( array( 'size_chart' => array( array( 'size' => 'M', 'bust' => '90' ) ) ) );
 		assert_same( array( 'sizeChartType' ), $r['errors'] );
-		assert_same( null, $r['meta']['_paskamer_size_chart_type'] );
-		assert_same( '[{"size":"M","bust":90}]', $r['meta']['_paskamer_size_chart'] );
+		assert_same( null, $r['meta']['_curtain_size_chart_type'] );
+		assert_same( '[{"size":"M","bust":90}]', $r['meta']['_curtain_size_chart'] );
 	}
 );
 
@@ -109,18 +109,18 @@ test(
 		);
 		sort( $r['errors'] );
 		assert_same( array( 'category', 'colorways', 'fabric.blend', 'fabric.drape', 'primaryColorHex', 'sizeChartType', 'trueToSizeScore' ), $r['errors'] );
-		assert_same( null, $r['meta']['_paskamer_category'] );
-		assert_same( null, $r['meta']['_paskamer_primary_color_hex'] );
-		assert_same( null, $r['meta']['_paskamer_colorways'] );
-		assert_same( '{"drape":1}', $r['meta']['_paskamer_fabric'], 'drape clamped' );
-		assert_same( 'cocoon', $r['meta']['_paskamer_pattern_block'], 'custom block lower-cased' );
+		assert_same( null, $r['meta']['_curtain_category'] );
+		assert_same( null, $r['meta']['_curtain_primary_color_hex'] );
+		assert_same( null, $r['meta']['_curtain_colorways'] );
+		assert_same( '{"drape":1}', $r['meta']['_curtain_fabric'], 'drape clamped' );
+		assert_same( 'cocoon', $r['meta']['_curtain_pattern_block'], 'custom block lower-cased' );
 	}
 );
 
 test(
 	'round trip: sanitised meta → Payload_Builder yields a full, schema-valid GarmentPayload',
 	static function (): void {
-		$meta = Sanitizer::from_post( paskamer_sample_post() )['meta'];
+		$meta = Sanitizer::from_post( curtain_sample_post() )['meta'];
 		$meta = array_filter( $meta, static fn( $v ) => null !== $v );
 		$product = array(
 			'id'        => 42,
@@ -132,7 +132,7 @@ test(
 		);
 		$b = Payload_Builder::build( $product, $meta, array( 'default_brand' => 'Shop' ) );
 		assert_same( array(), $b['warnings'] );
-		$v = \Paskamer\Schema_Validator::from_file( paskamer_schema_path( 'garment.schema.json' ) );
+		$v = \Curtain\Schema_Validator::from_file( curtain_schema_path( 'garment.schema.json' ) );
 		assert_same( array(), $v->validate( $b['payload'] ), json_encode( $b['payload'] ) );
 		assert_same( 'Aalter Studio', $b['payload']['brand'] );
 		assert_same( array(), Payload_Builder::missing_heavy_fields( $b['payload'] ) );

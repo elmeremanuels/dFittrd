@@ -1,14 +1,14 @@
-# @paskamer/sdk
+# @curtain/sdk
 
-The merchant drop-in for **Paskamer** (your private fitting room). One `<script>` tag turns any
-`<button data-paskamer-product="…">` on a product page into the try-on handshake described in
+The merchant drop-in for **Curtain** (your private fitting room). One `<script>` tag turns any
+`<button data-curtain-product="…">` on a product page into the try-on handshake described in
 `docs/ARCHITECTURE.md` ("Try-on from a shop") and decision D6:
 
 ```
 click → POST {api}/v1/sdk/sessions { shopKeyPrefix, productExternalId, pageUrl }
       → { tryUrl, qrSvg, expiresAt, shopPaused }
       → phone/tablet: location.href = tryUrl (universal link into the PWA)
-      → desktop:     accessible QR modal ("Scan with your phone to try it on in Paskamer")
+      → desktop:     accessible QR modal ("Scan with your phone to try it on in Curtain")
 ```
 
 Vanilla TypeScript, **zero runtime dependencies**, es2019, **< 8 KB gzipped** (asserted in
@@ -19,19 +19,19 @@ string and fragment are stripped: they can carry e-mail addresses, UTM ids or to
 
 Hardening: a `tryUrl` that is not an absolute `http(s)` URL is refused (no `javascript:`/`data:`
 navigation or link on the merchant page; the shopper sees the polite error instead). When the
-SDK is loaded twice on one page, the second copy finds `window.Paskamer` already installed and
+SDK is loaded twice on one page, the second copy finds `window.Curtain` already installed and
 stays inactive, so buttons are never bound twice.
 
 ## Merchant snippet
 
 ```html
 <script
-  src="https://api.paskamer.app/sdk/v1.js"
+  src="https://api.curtain.fit/sdk/v1.js"
   data-shop="pk_live_xxxxxxxxxxxx"
   defer
 ></script>
 
-<button data-paskamer-product="aalter-studio-1">Try in Paskamer</button>
+<button data-curtain-product="aalter-studio-1">Try it on</button>
 ```
 
 That is all a merchant needs. The Shopify theme app extension and the WooCommerce plugin inject
@@ -43,34 +43,34 @@ must then set `data-api`).
 | Attribute                | Required | Meaning                                                                                   |
 | ------------------------ | -------- | ----------------------------------------------------------------------------------------- |
 | `data-shop`              | yes      | Public shop key prefix `pk_live_…` / `pk_test_…`. Secret keys (`sk_…`) are rejected.       |
-| `data-api`               | no       | API origin, e.g. `https://api.paskamer.app`. Defaults to the origin the script was loaded from. |
+| `data-api`               | no       | API origin, e.g. `https://api.curtain.fit`. Defaults to the origin the script was loaded from. |
 | `data-mode`              | no       | `auto` (default: mobile UA → redirect, desktop → QR modal), `redirect`, or `modal`.        |
 | `data-locale`            | no       | `en` or `nl`. Defaults to `<html lang>`, then the browser language.                       |
-| `data-label`             | no       | Text for buttons that are empty. Default "Try in Paskamer" / "Pas in Paskamer".          |
-| `data-paskamer-unstyled` | no       | Do not inject the stylesheet or the `pk-btn` class (you style the buttons yourself).      |
+| `data-label`             | no       | Text for buttons that are empty. Default "Try it on".                 |
+| `data-curtain-unstyled` | no       | Do not inject the stylesheet or the `pk-btn` class (you style the buttons yourself).      |
 
 ### Button attributes (on `<button>`, `<a>` or any element)
 
 | Attribute                | Meaning                                                                                          |
 | ------------------------ | ------------------------------------------------------------------------------------------------ |
-| `data-paskamer-product`  | The product's external id (Shopify: numeric part of the Product GID; Woo: post id or SKU as synced). |
-| `data-paskamer-unstyled` | Skip the built-in coral/cream styling for this element only.                                     |
+| `data-curtain-product`  | The product's external id (Shopify: numeric part of the Product GID; Woo: post id or SKU as synced). |
+| `data-curtain-unstyled` | Skip the built-in coral/cream styling for this element only.                                     |
 
 Behaviour per element: an empty element gets the default label; a `<button>` without `type` gets
 `type="button"`; non-button elements get `role="button"`, `tabindex="0"` and Enter/Space handling;
-while a handshake runs the element carries `data-paskamer-state="loading"` and `aria-busy="true"`.
+while a handshake runs the element carries `data-curtain-state="loading"` and `aria-busy="true"`.
 A `MutationObserver` binds buttons that appear later (SPA / headless storefronts), so the attribute
 just works with React, Hydrogen, etc.
 
-### `window.Paskamer`
+### `window.Curtain`
 
 ```ts
-window.Paskamer.open(productId, { mode?: 'auto' | 'redirect' | 'modal', pageUrl?, trigger? })
+window.Curtain.open(productId, { mode?: 'auto' | 'redirect' | 'modal', pageUrl?, trigger? })
   // → Promise<OpenResult>; never rejects
-window.Paskamer.configure({ shop?, api?, mode?, unstyled?, label?, locale?, timeoutMs? })
-window.Paskamer.scan()      // bind new buttons now (the observer does this automatically)
-window.Paskamer.destroy()   // remove listeners, observer, styles and any open modal
-window.Paskamer.version     // '0.1.0'
+window.Curtain.configure({ shop?, api?, mode?, unstyled?, label?, locale?, timeoutMs? })
+window.Curtain.scan()      // bind new buttons now (the observer does this automatically)
+window.Curtain.destroy()   // remove listeners, observer, styles and any open modal
+window.Curtain.version     // '0.1.0'
 ```
 
 `OpenResult.kind` is `'redirect' | 'modal' | 'paused' | 'error' | 'ignored'`.
@@ -83,7 +83,7 @@ close, body scroll locked, animations disabled under `prefers-reduced-motion`. I
 API's `qrSvg`, rendered through an inert `<img src="data:image/svg+xml,…">` so SVG can never run
 script), the scan hint, an "open the link on this device" fallback, the expiry, the shop-paused note
 when applicable, and the estimate disclaimer (identical to `ESTIMATE_DISCLAIMER` in
-`@paskamer/schema`, asserted in tests). Design tokens: coral `#FF5A3C`, cream `#F5EFE7`, ink
+`@curtain/schema`, asserted in tests). Design tokens: coral `#FF5A3C`, cream `#F5EFE7`, ink
 `#1A1612`; no fonts are loaded.
 
 If the response carries no `qrSvg`, a built-in encoder (`encodeQr` / `qrToSvg`, byte mode, EC level
@@ -99,23 +99,23 @@ never throws into merchant code and never leaves a button in a stuck state.
 ## ESM use (bundlers)
 
 ```ts
-import { init } from '@paskamer/sdk';
-init({ shop: 'pk_live_…', api: 'https://api.paskamer.app' });
+import { init } from '@curtain/sdk';
+init({ shop: 'pk_live_…', api: 'https://api.curtain.fit' });
 ```
 
 Everything the IIFE does is exported: `init`, `open`, `configure`, `scan`, `destroy`, `isMobile`,
 `openModal`, `encodeQr`, `qrToSvg`, `pickStrings`, `STRINGS`, `CSS`, `VERSION`, and the types
-`PaskamerConfig`, `OpenOptions`, `OpenResult`, `PaskamerApi`. Wire types are re-exported from
-`@paskamer/schema` (`SdkSessionRequest`, `SdkSessionResponse`) as types only — nothing from schema
+`CurtainConfig`, `OpenOptions`, `OpenResult`, `CurtainApi`. Wire types are re-exported from
+`@curtain/schema` (`SdkSessionRequest`, `SdkSessionResponse`) as types only — nothing from schema
 is bundled.
 
 ## Build / test
 
 ```
-pnpm --filter @paskamer/sdk typecheck   # tsc --noEmit
-pnpm --filter @paskamer/sdk test        # vitest + jsdom (+ jsqr for the QR round-trip, esbuild for the size budget)
-pnpm --filter @paskamer/sdk build       # tsup → dist/sdk.v1.js (IIFE) + dist/sdk.v1.esm.js (ESM) + sdk.v1.d.ts; then the size check
-pnpm --filter @paskamer/sdk lint
+pnpm --filter @curtain/sdk typecheck   # tsc --noEmit
+pnpm --filter @curtain/sdk test        # vitest + jsdom (+ jsqr for the QR round-trip, esbuild for the size budget)
+pnpm --filter @curtain/sdk build       # tsup → dist/sdk.v1.js (IIFE) + dist/sdk.v1.esm.js (ESM) + sdk.v1.d.ts; then the size check
+pnpm --filter @curtain/sdk lint
 ```
 
 Serve `dist/sdk.v1.js` from the API origin (Caddy static route), so `data-api` can be omitted and

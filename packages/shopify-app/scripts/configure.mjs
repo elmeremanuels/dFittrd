@@ -3,11 +3,11 @@
  * Render shopify.app.toml (template with {{VAR}} placeholders) into shopify.app.<env>.toml from
  * the environment, then validate the result against the api's contracts.
  *
- *   SHOPIFY_API_KEY=… PUBLIC_API_URL=https://api.paskamer.app PUBLIC_APP_URL=https://app.paskamer.app \
- *     pnpm --filter @paskamer/shopify-app configure [env]      # default env: "dev"
+ *   SHOPIFY_API_KEY=… PUBLIC_API_URL=https://api.curtain.fit PUBLIC_APP_URL=https://app.curtain.fit \
+ *     pnpm --filter @curtain/shopify-app configure [env]      # default env: "dev"
  *
  * Optional: SHOPIFY_API_VERSION (2025-10), SHOPIFY_DEV_STORE (my-store.myshopify.com),
- * SHOPIFY_APP_HANDLE (paskamer). Requires `pnpm build` first (imports ../dist).
+ * SHOPIFY_APP_HANDLE (curtain). Requires `pnpm build` first (imports ../dist).
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -18,7 +18,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
 const distEntry = join(root, 'dist', 'index.js');
 if (!existsSync(distEntry)) {
-  console.error('configure: dist/index.js missing — run `pnpm --filter @paskamer/shopify-app build` first');
+  console.error('configure: dist/index.js missing — run `pnpm --filter @curtain/shopify-app build` first');
   process.exit(1);
 }
 const { renderAppConfig, validateAppConfig, APP_CONFIG_VARS } = await import(distEntry);

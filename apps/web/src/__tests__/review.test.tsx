@@ -8,11 +8,11 @@ import '@testing-library/jest-dom/vitest';
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { MOCK_GARMENTS, MOCK_GARMENTS_BY_ID } from '@paskamer/schema';
-import * as taste from '@paskamer/taste-engine';
+import { MOCK_GARMENTS, MOCK_GARMENTS_BY_ID } from '@curtain/schema';
+import * as taste from '@curtain/taste-engine';
 type TasteEngine = typeof taste;
 
-vi.mock('@paskamer/taste-engine', async (importOriginal) => {
+vi.mock('@curtain/taste-engine', async (importOriginal) => {
   const actual = await importOriginal<TasteEngine>();
   return { ...actual, applySwipe: vi.fn(actual.applySwipe) };
 });

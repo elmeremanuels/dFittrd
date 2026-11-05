@@ -9,18 +9,18 @@
  *
  * Stored format: `<scheme>:<base64(nonce|ciphertext|tag)>`.
  *
- * @package Paskamer
+ * @package Curtain
  */
 
 declare(strict_types=1);
 
-namespace Paskamer;
+namespace Curtain;
 
-defined('ABSPATH') || defined('PASKAMER_TESTING') || exit;
+defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
 
 final class Secret_Store {
 
-	private const CONTEXT = 'paskamer-woocommerce-secret-v1';
+	private const CONTEXT = 'curtain-woocommerce-secret-v1';
 
 	/**
 	 * Which scheme this host can use.

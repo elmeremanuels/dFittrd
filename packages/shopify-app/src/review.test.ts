@@ -31,18 +31,18 @@ interface Dom {
 }
 const { document, history, window } = globalThis as unknown as Dom;
 
-const cfg = { apiKey: API_KEY, apiUrl: 'https://api.paskamer.app', appUrl: 'https://app.paskamer.app', template };
+const cfg = { apiKey: API_KEY, apiUrl: 'https://api.curtain.fit', appUrl: 'https://app.curtain.fit', template };
 
 /** Mount the rendered admin page into the jsdom document and run its inline script. */
 function runAdminPage(search: string, shopifyGlobal?: unknown): void {
   history.replaceState(null, '', `/shopify/admin${search}`);
   const html = renderAdminPage(cfg);
-  const config = /<script id="paskamer-config" type="application\/json">([\s\S]*?)<\/script>/.exec(html)![1]!;
+  const config = /<script id="curtain-config" type="application\/json">([\s\S]*?)<\/script>/.exec(html)![1]!;
   const body = /<body>([\s\S]*?)<script>/.exec(html)![1]!;
   const script = /<script>\s*([\s\S]*?)<\/script>\s*<\/body>/.exec(html)![1]!;
   document.head.innerHTML = '';
   const cfgEl = document.createElement('script');
-  cfgEl.id = 'paskamer-config';
+  cfgEl.id = 'curtain-config';
   cfgEl.type = 'application/json';
   cfgEl.textContent = config;
   document.head.append(cfgEl);
@@ -92,9 +92,9 @@ describe('normaliseShopDomain', () => {
 
 describe('renderAdminPage', () => {
   it('inserts config values literally even when they contain $ replacement patterns', () => {
-    const html = renderAdminPage({ ...cfg, appHandle: "pas$'kamer$&" });
-    const json = /<script id="paskamer-config" type="application\/json">([\s\S]*?)<\/script>/.exec(html)![1]!;
-    expect(JSON.parse(json).appHandle).toBe("pas$'kamer$&");
+    const html = renderAdminPage({ ...cfg, appHandle: "cur$'tain$&" });
+    const json = /<script id="curtain-config" type="application\/json">([\s\S]*?)<\/script>/.exec(html)![1]!;
+    expect(JSON.parse(json).appHandle).toBe("cur$'tain$&");
     expect(html.split('<script').length).toBe(template.split('<script').length);
   });
 });

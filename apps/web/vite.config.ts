@@ -22,8 +22,8 @@ const config = {
       registerType: 'autoUpdate',
       includeAssets: ['icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png'],
       manifest: {
-        name: 'Paskamer — your private fitting room',
-        short_name: 'Paskamer',
+        name: 'Curtain — your private fitting room',
+        short_name: 'Curtain',
         description: 'See how clothes really fit you before you buy. Photos never leave your phone.',
         theme_color: '#F5EFE7',
         background_color: '#F5EFE7',
@@ -50,7 +50,7 @@ const config = {
             urlPattern: ({ url }) => url.pathname.startsWith('/models/'),
             handler: 'CacheFirst',
             options: {
-              cacheName: 'paskamer-models',
+              cacheName: 'curtain-models',
               expiration: { maxEntries: 16, maxAgeSeconds: 60 * 60 * 24 * 180 },
               cacheableResponse: { statuses: [0, 200] },
             },
@@ -67,7 +67,7 @@ const config = {
     rollupOptions: {
       output: {
         manualChunks: {
-          engines: ['@paskamer/schema', '@paskamer/fit-engine', '@paskamer/taste-engine'],
+          engines: ['@curtain/schema', '@curtain/fit-engine', '@curtain/taste-engine'],
           vendor: ['react', 'react-dom', 'react-router', 'motion/react', 'zustand', 'dexie'],
         },
       },

@@ -1,5 +1,5 @@
 import { and, desc, eq, lt, or } from 'drizzle-orm';
-import type { LedgerEntry } from '@paskamer/schema';
+import type { LedgerEntry } from '@curtain/schema';
 import type { Db } from '../db/client.js';
 import { ledgerEntries } from '../db/schema.js';
 

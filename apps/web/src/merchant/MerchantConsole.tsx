@@ -1,14 +1,14 @@
 import { AlertCircle, BarChart3, LogOut, ShieldCheck, ShoppingCart, TrendingUp } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router';
-import type { AnalyticsSwipesResponse, MerchantLedgerResponse, MerchantProductsResponse, UsageResponse } from '@paskamer/schema';
+import type { AnalyticsSwipesResponse, MerchantLedgerResponse, MerchantProductsResponse, UsageResponse } from '@curtain/schema';
 import { MERCHANT_KEY_PATTERN, NetworkError, type MerchantApi } from '@/api/client';
 import { Ledger, type LedgerLine } from '@/components/Ledger';
 import { dayIso, pct, titleCase } from '@/lib/format';
 import { api } from '@/store';
 import { mockAbandoned, mockAnalytics, mockLedger, mockProducts, mockUsage } from './mock';
 
-const SESSION_KEY = 'paskamer.merchantKey';
+const SESSION_KEY = 'curtain.merchantKey';
 
 export function readMerchantKey(): string | null {
   try {
@@ -50,7 +50,7 @@ export function MerchantLogin(): ReactNode {
     <main className="flex min-h-dvh items-center justify-center bg-cream px-6 py-10">
       <form onSubmit={submit} className="card w-full max-w-sm space-y-4 bg-white/80">
         <header>
-          <p className="eyebrow">Paskamer for shops</p>
+          <p className="eyebrow">Curtain for shops</p>
           <h1 className="font-display text-3xl">Merchant console</h1>
         </header>
         <label htmlFor="merchant-key" className="eyebrow block">
@@ -122,7 +122,7 @@ export function MerchantLayout(): ReactNode {
       <header className="border-b border-ink/10 bg-white/70 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-4">
           <div>
-            <p className="eyebrow">Paskamer for shops</p>
+            <p className="eyebrow">Curtain for shops</p>
             <h1 className="font-display text-2xl">Merchant console</h1>
           </div>
           <nav className="flex flex-wrap items-center gap-1" aria-label="Console sections">
@@ -217,7 +217,7 @@ export function MerchantOverview(): ReactNode {
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <SizeHeatmap analytics={d.analytics} />
         <section className="card space-y-2 bg-white/80">
-          <h2 className="font-display text-xl">What Paskamer never sends you</h2>
+          <h2 className="font-display text-xl">What Curtain never sends you</h2>
           <ul className="list-disc space-y-1 pl-5 text-sm text-ink-soft">
             <li>No measurement, photo, fit signature or device id — ever.</li>
             <li>Swipe aggregates only above the k-anonymity floor ({d.analytics.kAnonymityFloor} people); {d.analytics.suppressedGroups} small groups were suppressed in this range.</li>
@@ -354,7 +354,7 @@ export function MerchantUsage(): ReactNode {
         <div className="h-2 overflow-hidden rounded-full bg-ink/10" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(share * 100)} aria-label="Plan usage">
           <div className={`h-full ${share > 0.9 ? 'bg-warn' : 'bg-coral'}`} style={{ width: `${share * 100}%` }} />
         </div>
-        {u.plan.paused ? <p className="text-sm text-bad">Below plan: the “Try in Paskamer” button still renders; shoppers see a “shop paused” screen until the plan is topped up.</p> : null}
+        {u.plan.paused ? <p className="text-sm text-bad">Below plan: the “Try it on” button still renders; shoppers see a “shop paused” screen until the plan is topped up.</p> : null}
       </section>
     </div>
   );
@@ -435,7 +435,7 @@ export function MerchantLedgerRoute(): ReactNode {
   }));
   return (
     <div className="space-y-3">
-      <p className="text-sm text-ink-soft">Everything Paskamer sent to an AI provider on behalf of your shoppers. Inputs are the anonymised avatar render and your product imagery — never a shopper photo.</p>
+      <p className="text-sm text-ink-soft">Everything Curtain sent to an AI provider on behalf of your shoppers. Inputs are the anonymised avatar render and your product imagery — never a shopper photo.</p>
       <Ledger lines={lines} title="Provider ledger" emptyText="No hero renders yet." />
     </div>
   );

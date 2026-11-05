@@ -1,7 +1,7 @@
 <?php
 /**
  * Minimal JSON Schema (draft 2020-12) validator covering the keyword set that
- * @paskamer/schema emits for garment.schema.json / garment-draft.schema.json:
+ * @curtain/schema emits for garment.schema.json / garment-draft.schema.json:
  *
  *   type, const, enum, minimum, maximum, exclusiveMinimum, exclusiveMaximum, multipleOf,
  *   minLength, maxLength, pattern, format (uri, email, date-time), required, properties,
@@ -11,14 +11,14 @@
  * Data is the PHP-array form of JSON (`json_decode(..., true)`): a list is an array, an
  * associative array is an object, an empty array satisfies either. No WordPress dependency.
  *
- * @package Paskamer
+ * @package Curtain
  */
 
 declare(strict_types=1);
 
-namespace Paskamer;
+namespace Curtain;
 
-defined('ABSPATH') || defined('PASKAMER_TESTING') || exit;
+defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
 
 final class Schema_Validator {
 

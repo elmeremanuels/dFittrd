@@ -1,16 +1,16 @@
-# `@paskamer/web` — the consumer PWA (and the merchant console)
+# `@curtain/web` — the consumer PWA (and the merchant console)
 
 React 19 + Vite 6 + Tailwind 4 + motion, react-router 7 (data router), zustand + Dexie, vite-plugin-pwa.
 Product truth: `docs/HANDOFF.md`; decisions: `docs/DECISIONS.md`; the audit this rewrite closes: `docs/research/prototype-audit.md`.
 
 ```
-pnpm --filter @paskamer/web dev        # http://localhost:3000 (VITE_API_URL in .env, defaults to same origin)
-pnpm --filter @paskamer/web typecheck  # tsc --noEmit (strict)
-pnpm --filter @paskamer/web test       # vitest (node + jsdom per file, fake-indexeddb)
-pnpm --filter @paskamer/web lint       # eslint flat config: typescript-eslint, react-hooks, jsx-a11y
-pnpm --filter @paskamer/web build      # icons → vite build → dist/ (+ sw.js, manifest)
-pnpm --filter @paskamer/web e2e        # build + Playwright privacy spec (fake camera, Chromium)
-pnpm --filter @paskamer/web models     # fetch the MediaPipe models into public/models (~50 MB, not committed)
+pnpm --filter @curtain/web dev        # http://localhost:3000 (VITE_API_URL in .env, defaults to same origin)
+pnpm --filter @curtain/web typecheck  # tsc --noEmit (strict)
+pnpm --filter @curtain/web test       # vitest (node + jsdom per file, fake-indexeddb)
+pnpm --filter @curtain/web lint       # eslint flat config: typescript-eslint, react-hooks, jsx-a11y
+pnpm --filter @curtain/web build      # icons → vite build → dist/ (+ sw.js, manifest)
+pnpm --filter @curtain/web e2e        # build + Playwright privacy spec (fake camera, Chromium)
+pnpm --filter @curtain/web models     # fetch the MediaPipe models into public/models (~50 MB, not committed)
 node scripts/check-bundle-secrets.mjs  # from the repo root, after a build
 ```
 
@@ -30,8 +30,8 @@ A dev-only Customer/Merchant switcher is rendered under `import.meta.env.DEV`.
 
 ## Module map (`src/`)
 
-- `api/client.ts` — `ApiClient` typed from `@paskamer/schema` DTOs. `fetch`, base `VITE_API_URL`, device JWT in memory + IndexedDB (`POST /v1/devices` on first run; a token in its last 7 days is rotated with `POST /v1/devices/rotate` so the device id — and its server rows — survive; re-registers on 401 or after full expiry). **Every network write appends a client-side ledger entry `{ id, at, kind, method, path, bytes, fields, status }`** (field names, never values). `MerchantApi` for the console. No method accepts a Blob; `PersonInput.kind` is `'avatarRender'` by type.
-- `db/db.ts` — `AppDb extends PaskamerDb` (capture's class), Dexie db **`paskamer` version 2**: capture's five v1 stores untouched + `taste, wardrobe, swipes, outbox, ledger, settings, pendingIntent, renders` (LRU 50 via `putRenderLru`). `getAppDb()` registers the instance with capture through `setDb()` so both share one connection/version.
+- `api/client.ts` — `ApiClient` typed from `@curtain/schema` DTOs. `fetch`, base `VITE_API_URL`, device JWT in memory + IndexedDB (`POST /v1/devices` on first run; a token in its last 7 days is rotated with `POST /v1/devices/rotate` so the device id — and its server rows — survive; re-registers on 401 or after full expiry). **Every network write appends a client-side ledger entry `{ id, at, kind, method, path, bytes, fields, status }`** (field names, never values). `MerchantApi` for the console. No method accepts a Blob; `PersonInput.kind` is `'avatarRender'` by type.
+- `db/db.ts` — `AppDb extends CurtainDb` (capture's class), Dexie db **`curtain` version 2**: capture's five v1 stores untouched + `taste, wardrobe, swipes, outbox, ledger, settings, pendingIntent, renders` (LRU 50 via `putRenderLru`). `getAppDb()` registers the instance with capture through `setDb()` so both share one connection/version.
 - `store/store.ts` — `createAppStore({ db, client? })` (zustand). State: settings, profile (`BodyProfile`), `fitCtx` (`toUserBody` + `sigmaFromBodyProfile`), taste (`TasteState`), wardrobe, ledger, pendingIntent, catalog, deck. Actions: `hydrate`, `setProfile` (enqueues the fit signature), `completeOnboarding`, `dealNext`, `swipe(action, {garment, shopId, intentToken})` (applySwipe → outbox; swipes/saves on the bundled demo rail (`MOCK_SHOP_ID`) stay on the device and are never queued), `saveToWardrobe`, `setWardrobeState` (kept/returned → `profile.history`), `setPendingIntent`, `addPairedShop`, `setConsent`, `deleteScanLocal`, `deleteEverything`, `exportLocal`, `flushOutbox`. `store/index.ts` wires the singletons (`useApp`, `api`).
 - `store/fit.ts` — memoised on-device `computeFit` per (user body, garment object) — not per id: `GarmentPayload.id` is shop-scoped. `store/media.ts` — face tile + decrypted base frame object URLs (external store).
 - `sync/outbox.ts` — `OutboxSyncer`: durable `outbox` table → `POST /v1/swipes` (≤100/batch, one batch per shop so a 422 `unknown_shop` cannot drop other shops' swipes, `SwipeWireEvent` = event + shopId + clientId + intentToken), `PUT /v1/wardrobe/:id`, `PUT /v1/me/signature`; exponential backoff (1 s·2ⁿ, max 10 min, 12 attempts), permanent 4xx dropped; offline it does not poll — the `online` event resumes the drain; `stop()` resolves after an in-flight flush.
@@ -56,7 +56,7 @@ A dev-only Customer/Merchant switcher is rendered under `import.meta.env.DEV`.
 - Path B v0 draws the garment as a parametric SVG overlay (not a warp of the flat-lay photo) over the captured base frame; the mesh warp onto the silhouette atlas is the next renderer step (D4). The base frame is placed full-height, so a frame where the person is small will not line up perfectly with the overlay.
 - Hero renders: consent tier + API method exist; the UI flow (compose avatar render → `POST /v1/renders/hero` → poll → re-composite face → `renders` LRU) is not built yet.
 - "Abandoned opens" in the merchant console need a try-session open count that the usage DTO does not expose yet; live mode shows "—".
-- Models are not committed; run `pnpm --filter @paskamer/web models` before using the camera path.
+- Models are not committed; run `pnpm --filter @curtain/web models` before using the camera path.
 
 ## Accessibility notes
 

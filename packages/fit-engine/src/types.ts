@@ -1,11 +1,11 @@
 /**
- * Public types of @paskamer/fit-engine (docs/research/fit-engine-spec.md §Types).
+ * Public types of @curtain/fit-engine (docs/research/fit-engine-spec.md §Types).
  *
- * Wire types (GarmentPayload, SizeRow, UserBody, FitPoint, …) come from @paskamer/schema and are
+ * Wire types (GarmentPayload, SizeRow, UserBody, FitPoint, …) come from @curtain/schema and are
  * never redeclared here. `FitResult` and its parts are NOT wire types: they are computed on-device
  * and never leave the device (AGENTS.md rule 4), so they are defined in this package.
  */
-import type { BodyProfile, Fabric, FitPoint, GarmentCategory, GarmentPayload, UserBody } from '@paskamer/schema';
+import type { BodyProfile, Fabric, FitPoint, GarmentCategory, GarmentPayload, UserBody } from '@curtain/schema';
 
 /** The fit-engine spec calls the fit point `Point`. */
 export type Point = FitPoint;

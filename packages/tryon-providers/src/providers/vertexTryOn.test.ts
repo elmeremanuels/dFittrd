@@ -6,7 +6,7 @@ import { garment, makePng, mockHttp, person } from '../test-utils.js';
 import { VERTEX_EU_LOCATIONS, VertexTryOnProvider } from './vertexTryOn.js';
 
 const ORIGIN = 'https://europe-west4-aiplatform.googleapis.com';
-const PATH = '/v1/projects/paskamer-prod/locations/europe-west4/publishers/google/models/virtual-try-on-001:predict';
+const PATH = '/v1/projects/curtain-prod/locations/europe-west4/publishers/google/models/virtual-try-on-001:predict';
 
 describe('VertexTryOnProvider', () => {
   let agent: MockAgent;
@@ -31,7 +31,7 @@ describe('VertexTryOnProvider', () => {
   function provider(extra: Partial<ConstructorParameters<typeof VertexTryOnProvider>[0]> = {}): VertexTryOnProvider {
     return new VertexTryOnProvider({
       enabled: true,
-      projectId: 'paskamer-prod',
+      projectId: 'curtain-prod',
       location: 'europe-west4',
       getAccessToken: async () => `ya29.token-${++tokens}`,
       fetch,

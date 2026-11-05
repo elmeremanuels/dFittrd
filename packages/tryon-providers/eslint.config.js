@@ -22,7 +22,7 @@ export default tseslint.config(
         'error',
         ...BROWSER_GLOBALS.map((name) => ({
           name,
-          message: `@paskamer/tryon-providers is server-only (decision D3); do not reference ${name}.`,
+          message: `@curtain/tryon-providers is server-only (decision D3); do not reference ${name}.`,
         })),
       ],
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],

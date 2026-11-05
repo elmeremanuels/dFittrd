@@ -1,4 +1,4 @@
-# Paskamer edge: app.<domain> = static PWA (SPA fallback, COOP/COEP for MediaPipe wasm threads),
+# Curtain edge: app.<domain> = static PWA (SPA fallback, COOP/COEP for MediaPipe wasm threads),
 # api.<domain> = reverse proxy to the api container. Automatic Let's Encrypt via Caddy.
 {
 	email {$ACME_EMAIL}

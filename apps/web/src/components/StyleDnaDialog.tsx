@@ -1,6 +1,6 @@
 import { X } from 'lucide-react';
 import { useEffect, useRef, type ReactNode } from 'react';
-import { styleDna, type TasteProfile } from '@paskamer/taste-engine';
+import { styleDna, type TasteProfile } from '@curtain/taste-engine';
 import { TasteRadial } from './TasteRadial';
 
 /**

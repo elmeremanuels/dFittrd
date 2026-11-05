@@ -6,7 +6,7 @@ import {
   type GarmentPayload,
   type GarmentPayloadDraft,
   type MerchantProductSummary,
-} from '@paskamer/schema';
+} from '@curtain/schema';
 import type { Db } from '../db/client.js';
 import { productImages, products, type ProductStatus } from '../db/schema.js';
 import { contentHash } from '../lib/crypto.js';

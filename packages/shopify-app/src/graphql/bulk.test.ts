@@ -33,9 +33,9 @@ describe('bulk query document', () => {
     const connections = (q.match(/edges\s*\{/g) ?? []).length;
     expect(connections).toBeLessThanOrEqual(5);
     expect(q).not.toMatch(/^\s*\{\s*nodes?\(/);
-    expect(q).toContain('metafields(namespace: "$app:paskamer")');
+    expect(q).toContain('metafields(namespace: "$app:curtain")');
     expect(q).toContain('products(query: "status:active")');
-    expect(bulkProductsQuery('$app:paskamer', 'tag:"a b"')).toContain('products(query: "tag:\\"a b\\"")');
+    expect(bulkProductsQuery('$app:curtain', 'tag:"a b"')).toContain('products(query: "tag:\\"a b\\"")');
   });
 });
 

@@ -8,8 +8,8 @@
  * When a captured base frame exists it replaces the SVG body (the garment overlay stays).
  * Full mesh warp of the flat-lay photo onto the silhouette atlas is the next step (D4).
  */
-import type { FitPoint, GarmentPayload, UserBody } from '@paskamer/schema';
-import type { RenderGaps } from '@paskamer/fit-engine';
+import type { FitPoint, GarmentPayload, UserBody } from '@curtain/schema';
+import type { RenderGaps } from '@curtain/fit-engine';
 
 export const VIEW_W = 200;
 export const VIEW_H = 500;

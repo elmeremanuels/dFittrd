@@ -1,7 +1,7 @@
 /**
- * @paskamer/taste-engine — pure TypeScript swipe learning and colour harmony (handoff §5,
+ * @curtain/taste-engine — pure TypeScript swipe learning and colour harmony (handoff §5,
  * docs/research/taste-engine-spec.md). Zero runtime dependencies; wire types come from
- * @paskamer/schema. Every function returns new objects and never mutates its inputs.
+ * @curtain/schema. Every function returns new objects and never mutates its inputs.
  */
 export type {
   Axis,

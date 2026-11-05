@@ -1,19 +1,19 @@
 <?php
 /**
- * HTTP client for the Paskamer merchant API (apps/api, routes/merchant.ts).
+ * HTTP client for the Curtain merchant API (apps/api, routes/merchant.ts).
  *
  * Every call goes through `wp_remote_request`; outbound requests happen only when the merchant
  * has connected (or is clicking Connect). Errors never throw: the result array carries
  * `ok`, `status`, `data`, `error_code`, `error_message`, `transport_error`.
  *
- * @package Paskamer
+ * @package Curtain
  */
 
 declare(strict_types=1);
 
-namespace Paskamer;
+namespace Curtain;
 
-defined('ABSPATH') || defined('PASKAMER_TESTING') || exit;
+defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
 
 final class Api_Client {
 
@@ -116,7 +116,7 @@ final class Api_Client {
 			$public = (string) ( $this->settings['public_key_prefix'] ?? '' );
 			$secret = (string) ( $this->settings['api_key'] ?? '' );
 			if ( '' === $public || '' === $secret ) {
-				return self::failure( 0, 'not_connected', 'the shop is not connected to Paskamer' );
+				return self::failure( 0, 'not_connected', 'the shop is not connected to Curtain' );
 			}
 			$headers['Authorization'] = Hmac::header( $public, $secret, $method, $url, $raw_body );
 		} elseif ( 'bearer' === $auth ) {
@@ -173,7 +173,7 @@ final class Api_Client {
 	public function base(): string {
 		$base = trim( (string) ( $this->settings['api_base'] ?? '' ) );
 		if ( '' === $base ) {
-			$base = PASKAMER_DEFAULT_API_BASE;
+			$base = CURTAIN_DEFAULT_API_BASE;
 		}
 		return rtrim( $base, '/' );
 	}
@@ -181,7 +181,7 @@ final class Api_Client {
 	public static function user_agent(): string {
 		$wp = function_exists( 'get_bloginfo' ) ? (string) get_bloginfo( 'version' ) : '';
 		$wc = defined( 'WC_VERSION' ) ? (string) WC_VERSION : '';
-		return sprintf( 'Paskamer-WooCommerce/%s (WordPress/%s; WooCommerce/%s)', PASKAMER_VERSION, $wp, $wc );
+		return sprintf( 'Curtain-WooCommerce/%s (WordPress/%s; WooCommerce/%s)', CURTAIN_VERSION, $wp, $wc );
 	}
 
 	/** @return array{ok:bool,status:int,data:null,error_code:string,error_message:string,transport_error:bool} */

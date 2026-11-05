@@ -1,5 +1,5 @@
 /**
- * GarmentPayload v1 — the per-item payload a shop sends to Paskamer (handoff §3.1),
+ * GarmentPayload v1 — the per-item payload a shop sends to Curtain (handoff §3.1),
  * extended per docs/DECISIONS.md D6/D8 and docs/research/fit-engine-spec.md.
  *
  * This file is the single source of truth for the garment wire type. The fit engine,
@@ -16,7 +16,7 @@ import { z } from 'zod';
 export const GARMENT_CATEGORIES = ['top', 'bottom', 'dress', 'outerwear', 'shoes', 'accessory'] as const;
 export type GarmentCategory = (typeof GARMENT_CATEGORIES)[number];
 
-/** Fit points read by `@paskamer/fit-engine` (fit-engine-spec.md `Point`). */
+/** Fit points read by `@curtain/fit-engine` (fit-engine-spec.md `Point`). */
 export const FIT_POINTS = ['bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'foot'] as const;
 export type FitPoint = (typeof FIT_POINTS)[number];
 
@@ -258,8 +258,8 @@ export const GarmentPayloadSchema = z
     styleTags: StyleTagsSchema.optional(),
   })
   .meta({
-    title: 'Paskamer GarmentPayload v1',
-    description: 'Per-item garment payload a shop sends to Paskamer (handoff §3.1, extended).',
+    title: 'Curtain GarmentPayload v1',
+    description: 'Per-item garment payload a shop sends to Curtain (handoff §3.1, extended).',
   });
 
 export type GarmentPayload = z.infer<typeof GarmentPayloadSchema>;
@@ -275,7 +275,7 @@ export const GarmentPayloadDraftSchema = GarmentPayloadSchema.partial().required
   name: true,
   brand: true,
 }).meta({
-  title: 'Paskamer GarmentPayload v1 (draft)',
+  title: 'Curtain GarmentPayload v1 (draft)',
   description: 'Partial garment payload accepted by the merchant upsert/validate routes.',
 });
 export type GarmentPayloadDraft = z.infer<typeof GarmentPayloadDraftSchema>;

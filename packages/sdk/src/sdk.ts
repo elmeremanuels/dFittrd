@@ -2,17 +2,17 @@ import { pickStrings } from './i18n';
 import { closeModal, openModal } from './modal';
 import { qrToSvg } from './qr';
 import { injectStyles, STYLE_ID } from './styles';
-import type { OpenOptions, OpenResult, PaskamerApi, PaskamerConfig, SdkSessionRequest, SdkSessionResponse } from './types';
+import type { OpenOptions, OpenResult, CurtainApi, CurtainConfig, SdkSessionRequest, SdkSessionResponse } from './types';
 import { VERSION } from './version';
 
-export const PRODUCT_ATTR = 'data-paskamer-product';
-const BOUND_ATTR = 'data-paskamer-bound';
-const STATE_ATTR = 'data-paskamer-state';
+export const PRODUCT_ATTR = 'data-curtain-product';
+const BOUND_ATTR = 'data-curtain-bound';
+const STATE_ATTR = 'data-curtain-state';
 const SELECTOR = `[${PRODUCT_ATTR}]`;
 const SHOP_KEY_RE = /^pk_(live|test)_[A-Za-z0-9]{6,32}$/;
 const DEFAULT_TIMEOUT = 8000;
 
-let cfg: PaskamerConfig = {};
+let cfg: CurtainConfig = {};
 let observer: MutationObserver | null = null;
 let inFlight = false;
 let scanQueued = false;
@@ -21,7 +21,7 @@ const handlers = new WeakMap<Element, { click: (e: Event) => void; key?: (e: Eve
 
 const warn = (msg: string): void => {
   try {
-    console.warn(`[Paskamer SDK] ${msg}`);
+    console.warn(`[Curtain SDK] ${msg}`);
   } catch {
     /* ignore */
   }
@@ -131,7 +131,7 @@ export async function open(productId: string, opts: OpenOptions = {}): Promise<O
   try {
     if (!productId) return { kind: 'ignored', reason: 'no-product' };
     if (!cfg.shop || !cfg.api) {
-      warn('not configured: set data-shop (pk_live_… / pk_test_…) and data-api on the script tag, or call Paskamer.configure()');
+      warn('not configured: set data-shop (pk_live_… / pk_test_…) and data-api on the script tag, or call Curtain.configure()');
       return { kind: 'ignored', reason: 'unconfigured' };
     }
     if (inFlight) return { kind: 'ignored', reason: 'busy' };
@@ -204,7 +204,7 @@ function bind(elm: Element): void {
   if (!elm.childNodes.length || !(elm.textContent || '').trim()) {
     if (!elm.children.length) elm.textContent = cfg.label || pickStrings(cfg.locale).button;
   }
-  if (!cfg.unstyled && !elm.hasAttribute('data-paskamer-unstyled')) elm.classList.add('pk-btn');
+  if (!cfg.unstyled && !elm.hasAttribute('data-curtain-unstyled')) elm.classList.add('pk-btn');
 
   const click = (e: Event): void => {
     e.preventDefault();
@@ -235,7 +235,7 @@ function unbind(elm: Element): void {
   setState(elm, false);
 }
 
-/** Bind every `[data-paskamer-product]` on the page. Returns the number of bound elements. */
+/** Bind every `[data-curtain-product]` on the page. Returns the number of bound elements. */
 export function scan(root: ParentNode = document): number {
   try {
     if (!cfg.unstyled) injectStyles();
@@ -277,8 +277,8 @@ function observe(): void {
 }
 
 /** Merge config (validating the shop key shape) and re-scan. */
-export function configure(next: Partial<PaskamerConfig>): Readonly<PaskamerConfig> {
-  const merged: PaskamerConfig = { ...cfg, ...next };
+export function configure(next: Partial<CurtainConfig>): Readonly<CurtainConfig> {
+  const merged: CurtainConfig = { ...cfg, ...next };
   if (merged.shop && !SHOP_KEY_RE.test(merged.shop)) {
     warn(`ignoring shop key "${merged.shop}": expected pk_live_… or pk_test_… (never use your secret key)`);
     delete merged.shop;
@@ -289,7 +289,7 @@ export function configure(next: Partial<PaskamerConfig>): Readonly<PaskamerConfi
   return Object.freeze({ ...cfg });
 }
 
-export function getConfig(): Readonly<PaskamerConfig> {
+export function getConfig(): Readonly<CurtainConfig> {
   return Object.freeze({ ...cfg });
 }
 
@@ -300,12 +300,12 @@ export function destroy(): void {
   closeModal();
   for (const elm of Array.from(bound)) unbind(elm);
   document.getElementById(STYLE_ID)?.remove();
-  if (window.Paskamer === api) delete window.Paskamer;
+  if (window.Curtain === api) delete window.Curtain;
   cfg = {};
   inFlight = false;
 }
 
-export const api: PaskamerApi = Object.freeze({
+export const api: CurtainApi = Object.freeze({
   open,
   configure,
   scan: () => scan(),
@@ -313,10 +313,10 @@ export const api: PaskamerApi = Object.freeze({
   version: VERSION,
 });
 
-/** Programmatic init (ESM consumers). Installs `window.Paskamer`, scans now and keeps scanning (MutationObserver). */
-export function init(config: Partial<PaskamerConfig> = {}): PaskamerApi {
+/** Programmatic init (ESM consumers). Installs `window.Curtain`, scans now and keeps scanning (MutationObserver). */
+export function init(config: Partial<CurtainConfig> = {}): CurtainApi {
   configure(config);
-  window.Paskamer = api;
+  window.Curtain = api;
   const start = (): void => {
     scan();
     observe();
@@ -337,9 +337,9 @@ export function findScriptTag(doc: Document = document): HTMLScriptElement | nul
 }
 
 /** Read `data-*` config from a script tag. `api` defaults to the script's origin. */
-export function configFromScript(script: HTMLScriptElement): PaskamerConfig {
+export function configFromScript(script: HTMLScriptElement): CurtainConfig {
   const d = script.dataset;
-  const out: PaskamerConfig = {};
+  const out: CurtainConfig = {};
   if (d.shop) out.shop = d.shop;
   if (d.api) out.api = d.api;
   else if (script.src) {
@@ -350,19 +350,19 @@ export function configFromScript(script: HTMLScriptElement): PaskamerConfig {
     }
   }
   if (d.mode === 'redirect' || d.mode === 'modal' || d.mode === 'auto') out.mode = d.mode;
-  if (d.paskamerUnstyled !== undefined || d.unstyled !== undefined) out.unstyled = true;
+  if (d.curtainUnstyled !== undefined || d.unstyled !== undefined) out.unstyled = true;
   if (d.label) out.label = d.label;
   if (d.locale) out.locale = d.locale;
   return out;
 }
 
-/** IIFE entry: `<script src=".../sdk.v1.js" data-shop="pk_live_…" data-api="https://api.paskamer.app">`. */
-export function autoInit(): PaskamerApi | null {
+/** IIFE entry: `<script src=".../sdk.v1.js" data-shop="pk_live_…" data-api="https://api.curtain.fit">`. */
+export function autoInit(): CurtainApi | null {
   try {
     if (typeof window === 'undefined' || typeof document === 'undefined') return null;
     // Loaded twice (theme block + a manual tag, two plugins…): a second copy would bind every
     // button again and open two sessions per click. The first instance wins.
-    const existing = window.Paskamer;
+    const existing = window.Curtain;
     if (existing && existing !== api) {
       warn('SDK already loaded on this page; this copy stays inactive');
       return existing;
@@ -370,7 +370,7 @@ export function autoInit(): PaskamerApi | null {
     const script = findScriptTag();
     if (!script) return null;
     const config = configFromScript(script);
-    if (!config.shop) warn('data-shop missing on the script tag; buttons will not open until Paskamer.configure({ shop }) is called');
+    if (!config.shop) warn('data-shop missing on the script tag; buttons will not open until Curtain.configure({ shop }) is called');
     return init(config);
   } catch (error) {
     warn(`init failed: ${String(error)}`);

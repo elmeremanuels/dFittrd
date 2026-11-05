@@ -35,7 +35,7 @@ describe('ops', () => {
     expect(res.headers['content-type']).toContain('javascript');
     expect(res.headers['access-control-allow-origin']).toBe('*');
     expect(res.headers['cache-control']).toContain('max-age=3600');
-    expect(res.body).toContain('paskamer');
+    expect(res.body).toContain('curtain');
     expect(res.body).not.toMatch(/sk_(live|test)_[A-Za-z0-9]{8,}/);
   });
 

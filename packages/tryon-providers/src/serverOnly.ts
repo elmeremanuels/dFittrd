@@ -6,7 +6,7 @@
 export class ServerOnlyViolation extends Error {
   constructor() {
     super(
-      '@paskamer/tryon-providers is server-only: it was loaded in an environment with a `window` ' +
+      '@curtain/tryon-providers is server-only: it was loaded in an environment with a `window` ' +
         'global. Provider adapters and keys must stay in apps/api (decision D3).',
     );
     this.name = 'ServerOnlyViolation';

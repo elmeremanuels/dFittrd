@@ -2,12 +2,14 @@
 
 Decisions taken when the project was handed over to the AI builder (Nov 2026). Each entry says what was decided, why, and what it rules out. Supporting research lives in `docs/research/`.
 
-## D1 — Name: **Paskamer**
+## D1 — Name: **Curtain** (renamed from Paskamer, Nov 2026)
 
-Dutch for "fitting room". Fun, low-key, literally the product; reads as an arbitrary brand word abroad (`pas-KAH-mer`). No fashion-tech conflicts found. "DressingRoom" is generic and crowded (Gap, Samsung, Looklet, Perfect Corp); "dFittrd" is unpronounceable and sits next to Fittr/Fittd/Fits. Tagline in English: *your private fitting room*. See `docs/research/naming.md`.
+The founder asked for every Dutch term to be English. "Paskamer" is Dutch for "fitting room", so the brand needed an English name. The literal translations are taken in this exact market: "Fitting Room" (a Shopify app and several iOS apps), "FitRoom" (fitroom.app, 1M+ users), "Tryroom" (a Shopify try-on app) and "Twirl" (a web dress try-on). "Curtain" has no try-on or sizing product in web searches. It keeps the fitting-room idea and carries the privacy promise in one word: what happens behind the curtain stays there (D3). Tagline: *your private fitting room*. Merchant button: "Try it on".
 
-- Package scope: `@paskamer/*`. SDK attribute: `data-paskamer-product`. Merchant button: "Try in Paskamer" / "Pas in Paskamer".
-- Still to do by the founder: BOIP/EUIPO clearance (classes 9, 35, 42), domains (`paskamer.app`, `paskamer.nl`), app-store and Shopify App Store names. Not legal advice.
+- Package scope: `@curtain/*`. SDK attribute: `data-curtain-product`. Shopify namespace `$app:curtain`, Woo meta `_curtain_*`. Placeholder domain `curtain.fit` (api., app., media.).
+- Known weakness: "curtain" is also a home-furnishing product, so generic search results and some Shopify stores sell curtains. Use the brand with the tagline or a wordmark, never the bare word in ads.
+- Dutch stays available as a translation (SDK `nl` strings, Shopify `nl.json`, Woo `nl_NL.po`) for Dutch shoppers and merchants. English is the default everywhere.
+- Still to do by the founder: trademark clearance (BOIP/EUIPO/USPTO, classes 9, 35, 42), domains (`curtain.fit`, `getcurtain.com`, `curtain.app`), and app-store and Shopify App Store names. Not legal advice. The earlier naming research stays in `docs/research/naming.md` as history.
 
 ## D2 — Monorepo, one backend, one PWA, two plugins
 
@@ -49,7 +51,7 @@ Skin tone: multi-point CIELAB sampling → ITA → Monk Skin Tone class, underto
 
 ## D6 — Merchant side: Shopify app + WooCommerce plugin, SDK bundled
 
-- Shopify: managed installation / token exchange via `@shopify/shopify-api` (no hand-rolled OAuth), declarative webhooks in `shopify.app.toml` (incl. the three GDPR topics), metafields in namespace `$app:paskamer` so the shop stays source of truth, `bulkOperationRunQuery` for backfill, Billing API usage line with `cappedAmount`. One theme app extension ("Try in Paskamer" block) that bundles `sdk.js`.
+- Shopify: managed installation / token exchange via `@shopify/shopify-api` (no hand-rolled OAuth), declarative webhooks in `shopify.app.toml` (incl. the three GDPR topics), metafields in namespace `$app:curtain` so the shop stays source of truth, `bulkOperationRunQuery` for backfill, Billing API usage line with `cappedAmount`. One theme app extension ("Try it on" block) that bundles `sdk.js`.
 - WooCommerce: PHP 8.3 plugin; meta box for the §3.1 fields; push on save with HMAC; SDK bundled in the zip (WP.org no-remote-code rule); no telemetry before Connect; HPOS-compatible; `uninstall.php`.
 - Merchant identity for Woo: Connect round-trip → Stripe Checkout (the Stripe customer is the identity; no separate login system).
 - The app reads garments from **our** backend (synced, normalised), not from the shop's API. One schema, one auth, caching, and it is what makes the merchant console possible.

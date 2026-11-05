@@ -185,7 +185,7 @@ export function emptyFitSignatureProfile(): FitSignatureProfile {
 export const FitSignatureVectorSchema = z
   .array(z.number().finite())
   .length(FS_LENGTH)
-  .describe('80 floats, index map in @paskamer/schema FS_INDEX');
+  .describe('80 floats, index map in @curtain/schema FS_INDEX');
 export type FitSignatureVector = z.infer<typeof FitSignatureVectorSchema>;
 
 /** Body of `PUT /v1/me/signature`. */
@@ -212,7 +212,7 @@ export const FitSignatureWireSchema = z
       });
     }
   })
-  .meta({ title: 'Paskamer FitSignature v1' });
+  .meta({ title: 'Curtain FitSignature v1' });
 export type FitSignatureWire = z.infer<typeof FitSignatureWireSchema>;
 
 // ---------------------------------------------------------------------------

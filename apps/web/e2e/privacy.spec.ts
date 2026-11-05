@@ -52,7 +52,7 @@ test('onboarding with a camera never lets a photo, a frame or a third-party requ
   const seen = await instrument(page, origin);
 
   await page.goto('/onboarding');
-  await expect(page.getByRole('heading', { name: /Welcome to Paskamer/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Welcome to Curtain/ })).toBeVisible();
   await page.getByRole('button', { name: /Next/ }).click();
 
   // measurements: number inputs with labels, required height, foot size, measuring method

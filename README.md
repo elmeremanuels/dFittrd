@@ -1,4 +1,4 @@
-# Paskamer
+# Curtain
 
 *Your private fitting room.* A mobile-first app that shows how garments really fit **your** body, fed by garment data from paired shops (Shopify, WooCommerce). Raw photos never leave your phone.
 

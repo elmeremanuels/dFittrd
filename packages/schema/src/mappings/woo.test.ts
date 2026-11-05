@@ -24,28 +24,28 @@ const PRODUCT: WooProduct = {
     { name: 'Brand', slug: 'pa_brand', options: ['Indigo'] },
   ],
   meta_data: [
-    { key: '_paskamer_size_chart_type', value: 'body' },
-    { key: '_paskamer_size_chart', value: JSON.stringify(JEANS.sizeChart) },
-    { key: '_paskamer_fabric', value: JSON.stringify(JEANS.fabric) },
-    { key: '_paskamer_flat_lay_photo', value: { id: 991, url: 'https://indigo.example/wp-content/uploads/jeans-flat.png' } },
-    { key: '_paskamer_pattern_block', value: 'straight' },
-    { key: '_paskamer_ease', value: '{"waist":2,"hip":5}' },
-    { key: '_paskamer_length_cm', value: '{"inseam":76,"rise":29,"outseam":105}' },
-    { key: '_paskamer_sizing_notes', value: 'raw denim relaxes ~1 cm at the waist with wear' },
-    { key: '_paskamer_true_to_size_score', value: '0.85' },
-    { key: '_paskamer_critical_fit_points', value: 'waist' },
-    { key: '_paskamer_style_tags', value: '{"classic":0.6,"minimal":0.3,"sporty":0.3}' },
-    { key: '_paskamer_primary_color_hex', value: '1E2B4D' },
-    { key: '_paskamer_colorways', value: JSON.stringify(JEANS.colorways) },
-    { key: '_paskamer_subcategory', value: 'straight' },
+    { key: '_curtain_size_chart_type', value: 'body' },
+    { key: '_curtain_size_chart', value: JSON.stringify(JEANS.sizeChart) },
+    { key: '_curtain_fabric', value: JSON.stringify(JEANS.fabric) },
+    { key: '_curtain_flat_lay_photo', value: { id: 991, url: 'https://indigo.example/wp-content/uploads/jeans-flat.png' } },
+    { key: '_curtain_pattern_block', value: 'straight' },
+    { key: '_curtain_ease', value: '{"waist":2,"hip":5}' },
+    { key: '_curtain_length_cm', value: '{"inseam":76,"rise":29,"outseam":105}' },
+    { key: '_curtain_sizing_notes', value: 'raw denim relaxes ~1 cm at the waist with wear' },
+    { key: '_curtain_true_to_size_score', value: '0.85' },
+    { key: '_curtain_critical_fit_points', value: 'waist' },
+    { key: '_curtain_style_tags', value: '{"classic":0.6,"minimal":0.3,"sporty":0.3}' },
+    { key: '_curtain_primary_color_hex', value: '1E2B4D' },
+    { key: '_curtain_colorways', value: JSON.stringify(JEANS.colorways) },
+    { key: '_curtain_subcategory', value: 'straight' },
     { key: '_yoast_wpseo_title', value: 'ignored' },
   ],
 };
 
 describe('WOO_META_KEYS', () => {
   it('are prefixed, unique, and cover the heavy fields', () => {
-    expect(WOO_META_PREFIX).toBe('_paskamer_');
-    expect(WOO_META_KEYS.every((k) => k.key.startsWith('_paskamer_'))).toBe(true);
+    expect(WOO_META_PREFIX).toBe('_curtain_');
+    expect(WOO_META_KEYS.every((k) => k.key.startsWith('_curtain_'))).toBe(true);
     expect(new Set(WOO_META_KEYS.map((k) => k.key)).size).toBe(WOO_META_KEYS.length);
     expect(WOO_META_KEYS.filter((k) => k.heavy).map((k) => k.path).sort()).toEqual(['category', 'fabric', 'flatLayPhoto', 'sizeChart', 'sizeChartType']);
     expect(WOO_META_KEYS.find((k) => k.path === 'sizeChartType')?.options).toEqual(['garment', 'body']);
@@ -87,10 +87,10 @@ describe('fromWooMeta', () => {
   it('accepts a separate meta record (get_post_meta shape, single-value arrays) and un-prefixed keys', () => {
     const { meta_data: _m, ...bare } = PRODUCT;
     const draft = fromWooMeta(bare, {
-      _paskamer_size_chart_type: ['garment'],
+      _curtain_size_chart_type: ['garment'],
       size_chart: ['[{"size":"28","waist":74,"hip":99}]'],
-      _paskamer_critical_fit_points: 'waist, hips',
-      _paskamer_stretch_zones: ['waistband|rib-hem'],
+      _curtain_critical_fit_points: 'waist, hips',
+      _curtain_stretch_zones: ['waistband|rib-hem'],
     });
     expect(draft.sizeChartType).toBe('garment');
     expect(draft.sizeChart).toEqual([{ size: '28', waist: 74, hip: 99 }]);
@@ -102,14 +102,14 @@ describe('fromWooMeta', () => {
     const { meta_data: _m, ...bare } = PRODUCT;
     expect(fromWooMeta({ ...bare, categories: [{ name: 'Jurken' }] }).category).toBe('dress');
     expect(fromWooMeta({ ...bare, categories: [], name: 'Wool Overcoat' }).category).toBe('outerwear');
-    expect(fromWooMeta({ ...bare, categories: [{ name: 'Clothing > Shoes' }] }, { _paskamer_category: 'accessory' }).category).toBe('accessory');
+    expect(fromWooMeta({ ...bare, categories: [{ name: 'Clothing > Shoes' }] }, { _curtain_category: 'accessory' }).category).toBe('accessory');
   });
 
   it('brand: meta > brands taxonomy > Brand attribute > defaultBrand', () => {
     const { meta_data: _m, ...bare } = PRODUCT;
     expect(fromWooMeta(bare).brand).toBe('Indigo');
     expect(fromWooMeta({ ...bare, brands: [{ name: 'Indigo Denim Co' }] }).brand).toBe('Indigo Denim Co');
-    expect(fromWooMeta(bare, { _paskamer_brand: 'Override' }).brand).toBe('Override');
+    expect(fromWooMeta(bare, { _curtain_brand: 'Override' }).brand).toBe('Override');
     expect(fromWooMeta({ ...bare, attributes: [] }, {}, { defaultBrand: 'My Shop' }).brand).toBe('My Shop');
   });
 
@@ -127,11 +127,11 @@ describe('fromWooMeta', () => {
     const draft = fromWooMeta(
       bare,
       {
-        _paskamer_size_chart: 'not json',
-        _paskamer_fabric: '{"primary":"denim","stretchPct":-5,"drape":0.2}',
-        _paskamer_flat_lay_photo: 'wp-content/uploads/not-absolute.png',
-        _paskamer_true_to_size_score: 'high',
-        _paskamer_sizing_notes: 'true to size',
+        _curtain_size_chart: 'not json',
+        _curtain_fabric: '{"primary":"denim","stretchPct":-5,"drape":0.2}',
+        _curtain_flat_lay_photo: 'wp-content/uploads/not-absolute.png',
+        _curtain_true_to_size_score: 'high',
+        _curtain_sizing_notes: 'true to size',
       },
       { warnings },
     );
@@ -150,8 +150,8 @@ describe('fromWooMeta', () => {
 describe('toWooMeta / indexWooMeta', () => {
   it('round-trips a payload through meta rows', () => {
     const rows = toWooMeta(JEANS);
-    expect(rows.find((r) => r.key === '_paskamer_size_chart')?.value).toBe(JSON.stringify(JEANS.sizeChart));
-    expect(rows.find((r) => r.key === '_paskamer_critical_fit_points')?.value).toBe('["waist"]');
+    expect(rows.find((r) => r.key === '_curtain_size_chart')?.value).toBe(JSON.stringify(JEANS.sizeChart));
+    expect(rows.find((r) => r.key === '_curtain_critical_fit_points')?.value).toBe('["waist"]');
     const { meta_data: _m, ...bare } = PRODUCT;
     const back = fromWooMeta(bare, rows);
     expect(back.sizeChart).toEqual(JEANS.sizeChart);
@@ -165,10 +165,10 @@ describe('toWooMeta / indexWooMeta', () => {
   });
 
   it('indexWooMeta unwraps get_post_meta one-element string arrays and keeps real arrays', () => {
-    const m = indexWooMeta({ _paskamer_pattern_block: ['wrap'], _paskamer_critical_fit_points: ['bust'], _paskamer_stretch_zones: ['cuff', 'rib-hem'], _paskamer_ease: [{ bust: 1 }] });
-    expect(m.get('_paskamer_pattern_block')).toBe('wrap');
-    expect(m.get('_paskamer_critical_fit_points')).toBe('bust');
-    expect(m.get('_paskamer_stretch_zones')).toEqual(['cuff', 'rib-hem']);
-    expect(m.get('_paskamer_ease')).toEqual([{ bust: 1 }]);
+    const m = indexWooMeta({ _curtain_pattern_block: ['wrap'], _curtain_critical_fit_points: ['bust'], _curtain_stretch_zones: ['cuff', 'rib-hem'], _curtain_ease: [{ bust: 1 }] });
+    expect(m.get('_curtain_pattern_block')).toBe('wrap');
+    expect(m.get('_curtain_critical_fit_points')).toBe('bust');
+    expect(m.get('_curtain_stretch_zones')).toEqual(['cuff', 'rib-hem']);
+    expect(m.get('_curtain_ease')).toEqual([{ bust: 1 }]);
   });
 });

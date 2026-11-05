@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { ChevronRight, Ruler } from 'lucide-react';
-import type { ManualMethod } from '@paskamer/schema';
+import type { ManualMethod } from '@curtain/schema';
 import { MANUAL_FIELDS, MANUAL_RANGES, MEASUREMENT_LABELS, MEASUREMENT_UNITS, METHOD_LABELS, TAPE_INSTRUCTIONS, validateManual, type ManualField, type ManualForm } from '../captureMachine';
 import type { Sex } from '../types';
 import { Panel, PrimaryButton, StepHeader } from './ui';

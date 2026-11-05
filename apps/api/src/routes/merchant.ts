@@ -21,7 +21,7 @@ import {
   MerchantProductsResponseSchema,
   UsageResponseSchema,
   validateGarmentDraft,
-} from '@paskamer/schema';
+} from '@curtain/schema';
 import { requireMerchant } from '../auth/merchant.js';
 import { ledgerEntries, shops } from '../db/schema.js';
 import { randomAlnum } from '../lib/crypto.js';
@@ -35,7 +35,7 @@ import { fitSessionsBetween, usageDays } from '../services/usage.js';
 
 const httpUrl = z.url({ protocol: /^https?$/ });
 
-/** Local DTOs for routes @paskamer/schema does not define yet (see README "Open issues"). */
+/** Local DTOs for routes @curtain/schema does not define yet (see README "Open issues"). */
 export const ShopSelfRequestSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   siteUrl: httpUrl.optional(),
@@ -238,8 +238,8 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
       const session = await stripe.createCheckoutSession({
         shopId: shop.id,
         shopDomain: domain,
-        successUrl: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}paskamer=connected`,
-        cancelUrl: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}paskamer=cancelled`,
+        successUrl: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}curtain=connected`,
+        cancelUrl: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}curtain=cancelled`,
         ...(req.body.email ? { email: req.body.email } : {}),
       });
       return { shopId: shop.id, connectToken, mode, checkoutUrl: session.url };

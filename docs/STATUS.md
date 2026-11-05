@@ -7,44 +7,44 @@ This is the integration snapshot after the parallel build and review passes. Rea
 
 | Command | Result |
 |---|---|
-| `flock /tmp/paskamer-pnpm.lock pnpm install` (and `--frozen-lockfile`) | pass, lockfile up to date |
+| `flock /tmp/curtain-pnpm.lock pnpm install` (and `--frozen-lockfile`) | pass, lockfile up to date |
 | `pnpm build` (packages, then apps) | pass (web: 27 precache entries; zod's "annotation Rollup cannot interpret" warnings only) |
 | `pnpm -r typecheck` | pass, 10/10 projects (woocommerce-plugin: 27/27 PHP files pass `php -l`) |
 | `pnpm -r lint` | pass, including the banned-model check in tryon-providers |
 | `pnpm -r test` | pass, **769 tests** (see the per-package table) |
 | `node scripts/check-bundle-secrets.mjs` | pass: no secret-looking strings in client bundles |
-| `pnpm --filter @paskamer/woocommerce-plugin build` | pass: `dist/paskamer-woocommerce.zip` (72,737 B, 31 entries, bundles `assets/sdk.v1.js` and both JSON Schemas) |
+| `pnpm --filter @curtain/woocommerce-plugin build` | pass: `dist/curtain-woocommerce.zip` (72,737 B, 31 entries, bundles `assets/sdk.v1.js` and both JSON Schemas) |
 
-Not run here: the Playwright privacy e2e (`pnpm --filter @paskamer/web e2e`, no Chromium in this
+Not run here: the Playwright privacy e2e (`pnpm --filter @curtain/web e2e`, no Chromium in this
 sandbox, and CI does not run it yet), and the api Docker image build (no Docker daemon in this
 sandbox; CI's `api-image` job builds it).
 
 | Package | Tests |
 |---|---|
-| `@paskamer/schema` | 115 |
-| `@paskamer/fit-engine` | 102 (spec vectors T1–T16, 1,000-body purity fuzz) |
-| `@paskamer/taste-engine` | 84 (spec vectors 1–16, colour harmony) |
-| `@paskamer/sdk` | 54 |
-| `@paskamer/tryon-providers` | 65 |
-| `@paskamer/shopify-app` | 86 |
-| `@paskamer/woocommerce-plugin` | 41 (PHP runner with WP shims) |
-| `@paskamer/api` | 76 (PGlite + in-memory queue + mock provider) |
-| `@paskamer/web` | 146 (node + jsdom, fake-indexeddb) |
+| `@curtain/schema` | 115 |
+| `@curtain/fit-engine` | 102 (spec vectors T1–T16, 1,000-body purity fuzz) |
+| `@curtain/taste-engine` | 84 (spec vectors 1–16, colour harmony) |
+| `@curtain/sdk` | 54 |
+| `@curtain/tryon-providers` | 65 |
+| `@curtain/shopify-app` | 86 |
+| `@curtain/woocommerce-plugin` | 41 (PHP runner with WP shims) |
+| `@curtain/api` | 76 (PGlite + in-memory queue + mock provider) |
+| `@curtain/web` | 146 (node + jsdom, fake-indexeddb) |
 
 ## Fixed in this integration pass
 
 1. **The Shopify app could not open in the admin** (high). `shopify.app.toml` points
    `application_url` at `/shopify/admin` and `redirect_urls` at `/shopify/auth/callback`, but the api
-   served neither. `apps/api` now depends on `@paskamer/shopify-app` and serves:
+   served neither. `apps/api` now depends on `@curtain/shopify-app` and serves:
    - `GET /shopify/admin`: `renderAdminPage()` with `Content-Security-Policy:
      frame-ancestors https://<shop> https://admin.shopify.com;` (the shop comes only from a validated
      `?shop=`), helmet's `X-Frame-Options` removed, and `no-store`.
    - `GET /shopify/auth/callback`: 302 to `adminAppUrl(shop, SHOPIFY_APP_HANDLE)`, or 400 for a
      domain that is not `*.myshopify.com`.
-   - New non-secret env `SHOPIFY_APP_HANDLE` (default `paskamer`) in `apps/api/src/env.ts` and
+   - New non-secret env `SHOPIFY_APP_HANDLE` (default `curtain`) in `apps/api/src/env.ts` and
      `infra/.env.example`. It must equal `handle` in the rendered toml.
 2. **The theme block did nothing on a fresh install** (high). `POST /shopify/token-exchange` now
-   writes the app-data metafields (`paskamer.public_key`, `api_url`, `app_url` on the
+   writes the app-data metafields (`curtain.public_key`, `api_url`, `app_url` on the
    `AppInstallation`) through `setAppDataMetafields()`. It does this on every exchange, because the
    public prefix stays the same across key rotations. A failure is logged and does not stop the
    install. The test checks the exact metafields and that no `sk_` value goes out.
@@ -83,7 +83,7 @@ It never breaks the merchant page. Verified by tests: jsdom, auto-init, a11y, fa
 secret scan.
 
 **`packages/shopify-app`**: the `shopify.app.toml` template and `configure` script, the "Try in
-Paskamer" theme app extension (bundles `sdk.v1.js`), the embedded admin page, and helpers for the
+Curtain" theme app extension (bundles `sdk.v1.js`), the embedded admin page, and helpers for the
 Admin GraphQL client, token exchange, session token, metafield definitions, app-data metafields,
 bulk backfill, billing, webhook HMAC and product sync. Verified by tests: mocked fetch and
 fixtures. `apps/api` uses only the admin page, the deep links and the app-data metafields; its own
@@ -116,8 +116,8 @@ the review components.
   - install, then App Bridge `idToken()`, then `/shopify/token-exchange`
   - the admin page loads inside the admin iframe (the new route and CSP)
   - `/shopify/auth/callback` lands on the app home
-  - metafield definitions are created on `$app:paskamer`
-  - `app.metafields.paskamer.public_key` resolves in the theme block's Liquid
+  - metafield definitions are created on `$app:curtain`
+  - `app.metafields.curtain.public_key` resolves in the theme block's Liquid
   - webhooks fire, including the GDPR topics
   - `appSubscriptionCreate` works with `test: true` and the confirmation URL
   - the usage records work
@@ -142,11 +142,11 @@ the review components.
   - pg-boss jobs, and a `JOBS=1` replica
   - the nightly encrypted `pg_dump` and a restore drill
   - an rsync deploy of `apps/web/dist`
-- **Stripe**: Checkout, the webhook endpoint, and the `paskamer_fit_sessions` meter with the overage
+- **Stripe**: Checkout, the webhook endpoint, and the `curtain_fit_sessions` meter with the overage
   price.
 - **Devices**:
   - the capture pipeline on real iOS Safari and Android Chrome (fetch the models first with
-    `pnpm --filter @paskamer/web models`)
+    `pnpm --filter @curtain/web models`)
   - universal links from the SDK
   - the Playwright privacy e2e in a browser-capable CI job
 - **Accuracy**: calibrate the scan against a tape-measured pilot set (D5 target: 3–4 cm with the
@@ -156,7 +156,7 @@ the review components.
 
 **Medium**
 - WooCommerce manual-key Connect has no proof of domain ownership. Add a challenge that the plugin
-  answers on `/wp-json/paskamer/v1/…`, or allow live keys only through the Stripe path.
+  answers on `/wp-json/curtain/v1/…`, or allow live keys only through the Stripe path.
   (`apps/api/src/routes/merchant.ts`, plugin)
 - Deck billing can be inflated by bots: free devices swiping a real catalogue. Options are
   pairing-only deck billing, per-device daily caps, or billing only intent-token sessions.
@@ -174,7 +174,7 @@ the review components.
   `infra/.env.example`) after you re-validate the queries in GraphiQL.
 - Shopify billing always charges in EUR. Merchants billed in another currency get a userError.
   Query `shopBillingPreferences { currency }`, or use USD.
-- `@paskamer/sdk` is `UNLICENSED`, but it ships inside a WP.org plugin, which must be
+- `@curtain/sdk` is `UNLICENSED`, but it ships inside a WP.org plugin, which must be
   GPL-compatible. This is a founder/legal call, needed before WP.org submission. The source URL in
   `readme.txt` is a placeholder.
 - Capture: `headTopRow` includes hair, which biases girths low by about 1–3 %. `FaceStep` shows
@@ -218,7 +218,7 @@ the review components.
    wardrobe, cohort).
 3. **Close the billing-integrity items before charging anyone.** Woo domain-ownership proof,
    deck-billing policy (pairing-only or caps), the Shopify billing currency, and replacing the
-   duplicated api Shopify client with the `@paskamer/shopify-app` helpers.
+   duplicated api Shopify client with the `@curtain/shopify-app` helpers.
 4. **Run the WooCommerce smoke test** on current WordPress and WooCommerce. Bump the tested-up-to
    headers, make the licensing decision for the SDK, and decide on the backfill endpoint. Then
    submit to WP.org.

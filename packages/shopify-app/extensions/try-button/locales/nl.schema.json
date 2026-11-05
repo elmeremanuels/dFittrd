@@ -1,21 +1,21 @@
 {
-  "paskamer": {
-    "block": { "name": "Pas in Paskamer" },
+  "curtain": {
+    "block": { "name": "Try it on" },
     "settings": {
-      "label": { "label": "Knoptekst", "info": "Laat leeg voor de vertaalde standaardtekst (\"Try in Paskamer\" / \"Pas in Paskamer\")." },
+      "label": { "label": "Knoptekst", "info": "Laat leeg voor de vertaalde standaardtekst (\"Try it on\")." },
       "alignment": { "label": "Positie van de knop", "left": "Links", "center": "Gecentreerd", "full": "Volledige breedte" },
       "mode": {
         "label": "Bij klikken",
-        "info": "Automatisch: telefoons openen de Paskamer-app, desktops tonen een QR-code.",
+        "info": "Automatisch: telefoons openen de Curtain-app, desktops tonen een QR-code.",
         "auto": "Automatisch",
         "redirect": "Altijd de app-link openen",
         "modal": "Altijd de QR-code tonen"
       },
       "show_hint": { "label": "Toon de privacyhint onder de knop" },
-      "unstyled": { "label": "Gebruik de knopstijl van mijn thema", "info": "Slaat de koraalkleurige Paskamer-stijl over zodat de stijl van het thema geldt." },
+      "unstyled": { "label": "Gebruik de knopstijl van mijn thema", "info": "Slaat de koraalkleurige Curtain-stijl over zodat de stijl van het thema geldt." },
       "advanced": { "header": "Geavanceerd (alleen ontwikkelwinkels)" },
       "shop_key": { "label": "Publieke winkelsleutel (override)", "info": "pk_live_… of pk_test_…. Wordt automatisch ingevuld bij installatie; alleen instellen voor een ontwikkelwinkel." },
-      "api_url": { "label": "API-origin (override)", "info": "Standaard https://api.paskamer.app. Alleen voor testomgevingen." }
+      "api_url": { "label": "API-origin (override)", "info": "Standaard https://api.curtain.fit. Alleen voor testomgevingen." }
     }
   }
 }

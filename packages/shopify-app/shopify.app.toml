@@ -1,6 +1,6 @@
-# Paskamer — Shopify app configuration (TEMPLATE)
+# Curtain — Shopify app configuration (TEMPLATE)
 #
-# This file is a template: `{{VAR}}` placeholders are filled by `pnpm --filter @paskamer/shopify-app configure`
+# This file is a template: `{{VAR}}` placeholders are filled by `pnpm --filter @curtain/shopify-app configure`
 # from the environment (SHOPIFY_API_KEY, PUBLIC_API_URL, PUBLIC_APP_URL, optional SHOPIFY_API_VERSION,
 # SHOPIFY_DEV_STORE, SHOPIFY_APP_HANDLE) into `shopify.app.<env>.toml`, which is git-ignored. Then run
 # `shopify app dev --config <env>` / `shopify app deploy --config <env>`.
@@ -11,7 +11,7 @@
 #  - the admin page is embedded (App Bridge) and served by the api at /shopify/admin
 #  - scopes are the Protected Customer Data minimum: products only (D7: order attribution off)
 
-name = "Paskamer"
+name = "Curtain"
 client_id = "{{SHOPIFY_API_KEY}}"
 application_url = "{{PUBLIC_API_URL}}/shopify/admin"
 embedded = true

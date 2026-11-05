@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Nightly encrypted Postgres backup: pg_dump | age | rclone  (D9). Put in the host crontab, e.g.
-#   17 3 * * * /opt/paskamer/infra/scripts/backup.sh >> /var/log/paskamer-backup.log 2>&1
+#   17 3 * * * /opt/curtain/infra/scripts/backup.sh >> /var/log/curtain-backup.log 2>&1
 # Restore: rclone copy <remote>/<file> . && age -d -i key.txt <file> | gunzip | psql "$DATABASE_URL"
 set -euo pipefail
 
@@ -15,12 +15,12 @@ command -v age >/dev/null || { echo "age not installed (apt install age)"; exit 
 command -v rclone >/dev/null || { echo "rclone not installed"; exit 1; }
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-FILE="paskamer-${STAMP}.sql.gz.age"
+FILE="curtain-${STAMP}.sql.gz.age"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-echo "→ dumping ${POSTGRES_DB:-paskamer}"
-docker compose exec -T postgres pg_dump -U "${POSTGRES_USER:-paskamer}" --no-owner --no-privileges "${POSTGRES_DB:-paskamer}" \
+echo "→ dumping ${POSTGRES_DB:-curtain}"
+docker compose exec -T postgres pg_dump -U "${POSTGRES_USER:-curtain}" --no-owner --no-privileges "${POSTGRES_DB:-curtain}" \
   | gzip -9 \
   | age -r "$BACKUP_AGE_RECIPIENT" -o "$TMP/$FILE"
 

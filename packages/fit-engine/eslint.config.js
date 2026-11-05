@@ -16,7 +16,7 @@ export default tseslint.config(
     },
   },
   {
-    // The engine must stay pure: no runtime import of @paskamer/schema (zod) or anything else.
+    // The engine must stay pure: no runtime import of @curtain/schema (zod) or anything else.
     files: ['src/**/*.ts'],
     ignores: ['src/**/*.test.ts'],
     rules: {
@@ -25,8 +25,8 @@ export default tseslint.config(
         {
           paths: [
             {
-              name: '@paskamer/schema',
-              message: 'Only `import type { … } from "@paskamer/schema"` is allowed in the engine (D8: zero runtime deps).',
+              name: '@curtain/schema',
+              message: 'Only `import type { … } from "@curtain/schema"` is allowed in the engine (D8: zero runtime deps).',
               allowTypeImports: true,
             },
           ],

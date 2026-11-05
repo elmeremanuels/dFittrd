@@ -12,7 +12,7 @@ const CORAL = [0xff, 0x5a, 0x3c];
 const CREAM = [0xf5, 0xef, 0xe7];
 const INK = [0x1a, 0x16, 0x12];
 
-const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Paskamer">
+const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Curtain">
   <rect width="512" height="512" rx="112" fill="#F5EFE7"/>
   <circle cx="256" cy="256" r="176" fill="#FF5A3C"/>
   <path d="M176 352V236a80 80 0 0 1 160 0v116z" fill="#F5EFE7"/>

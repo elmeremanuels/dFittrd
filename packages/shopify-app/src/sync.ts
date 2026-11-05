@@ -1,6 +1,6 @@
 /**
  * Product node → GarmentPayload (ARCHITECTURE "Merchant sync"): normalise with
- * @paskamer/schema's `fromShopifyProduct`, score with `completenessScore`, validate with
+ * @curtain/schema's `fromShopifyProduct`, score with `completenessScore`, validate with
  * `GarmentPayloadSchema`. The api upserts the draft; status/missing fields come from here.
  */
 import {
@@ -13,7 +13,7 @@ import {
   type GarmentPayloadDraft,
   type MappingWarning,
   type ShopifyProductNode,
-} from '@paskamer/schema';
+} from '@curtain/schema';
 
 export interface SyncOptions {
   /** Brand fallback when the product has no vendor and no brand metafield (usually the shop name). */

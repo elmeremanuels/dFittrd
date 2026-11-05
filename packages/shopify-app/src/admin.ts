@@ -5,7 +5,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { ESTIMATE_DISCLAIMER } from '@paskamer/schema';
+import { ESTIMATE_DISCLAIMER } from '@curtain/schema';
 import { BLOCK_HANDLE } from './deepLinks';
 
 export const ADMIN_PAGE_PATH = '/shopify/admin' as const;
@@ -16,7 +16,7 @@ export interface AdminPageConfig {
   apiKey: string;
   /** Our API origin (PUBLIC_API_URL); the page fetches /shopify/* and /v1/merchant/* from it. */
   apiUrl: string;
-  /** Consumer app origin (PUBLIC_APP_URL) for the "open Paskamer" link. */
+  /** Consumer app origin (PUBLIC_APP_URL) for the "open Curtain" link. */
   appUrl: string;
   appHandle?: string;
   blockHandle?: string;
@@ -63,7 +63,7 @@ export function renderAdminPage(cfg: AdminPageConfig): string {
     apiKey: cfg.apiKey,
     apiUrl: cfg.apiUrl.replace(/\/$/, ''),
     appUrl: cfg.appUrl.replace(/\/$/, ''),
-    appHandle: cfg.appHandle ?? 'paskamer',
+    appHandle: cfg.appHandle ?? 'curtain',
     blockHandle: cfg.blockHandle ?? BLOCK_HANDLE,
     /** Hard rule 3: every render is labelled an estimate — the page shows this next to the ledger. */
     disclaimer: ESTIMATE_DISCLAIMER,
@@ -71,7 +71,7 @@ export function renderAdminPage(cfg: AdminPageConfig): string {
   const html = cfg.template ?? adminPageTemplate();
   // Function replacers: a string replacement would interpret `$&`, `$'`, `` $` `` inside the values.
   return html
-    .replace('__PASKAMER_SHOPIFY_API_KEY__', () => attr(config.apiKey))
-    .replace('__PASKAMER_APP_BRIDGE_URL__', () => APP_BRIDGE_SCRIPT_URL)
-    .replace('__PASKAMER_CONFIG_JSON__', () => jsonForScript(config));
+    .replace('__CURTAIN_SHOPIFY_API_KEY__', () => attr(config.apiKey))
+    .replace('__CURTAIN_APP_BRIDGE_URL__', () => APP_BRIDGE_SCRIPT_URL)
+    .replace('__CURTAIN_CONFIG_JSON__', () => jsonForScript(config));
 }

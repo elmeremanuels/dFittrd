@@ -95,7 +95,7 @@ export function makeUsageRollupHandler(app: App) {
           }
           await shopify.appUsageRecordCreate(shop.domain, token, {
             lineItemId,
-            description: `Paskamer: ${billable} try-on sessions above plan on ${day}`,
+            description: `Curtain: ${billable} try-on sessions above plan on ${day}`,
             amountEur,
             idempotencyKey: `${shop.id}:${day}`,
           });
@@ -106,7 +106,7 @@ export function makeUsageRollupHandler(app: App) {
             continue;
           }
           const params = new URLSearchParams({
-            event_name: 'paskamer_fit_sessions',
+            event_name: 'curtain_fit_sessions',
             'payload[stripe_customer_id]': customer,
             'payload[value]': String(billable),
             identifier: `${shop.id}:${day}`,

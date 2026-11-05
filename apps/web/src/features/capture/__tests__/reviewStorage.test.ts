@@ -5,14 +5,14 @@
  */
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it } from 'vitest';
-import { PaskamerDb, deleteScan, loadFaceTile, saveFaceTile } from '../storage';
+import { CurtainDb, deleteScan, loadFaceTile, saveFaceTile } from '../storage';
 import type { SkinEstimate } from '../types';
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 let n = 0;
-const dbs: PaskamerDb[] = [];
-const freshDb = (): PaskamerDb => {
-  const db = new PaskamerDb(`paskamer-review-${++n}`);
+const dbs: CurtainDb[] = [];
+const freshDb = (): CurtainDb => {
+  const db = new CurtainDb(`curtain-review-${++n}`);
   dbs.push(db);
   return db;
 };

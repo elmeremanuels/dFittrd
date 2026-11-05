@@ -12,14 +12,14 @@
  * The window is ±300 s. This class is pure PHP (no WordPress functions) so it is unit-tested
  * without a WordPress runtime and reused by the signed REST endpoint for verification.
  *
- * @package Paskamer
+ * @package Curtain
  */
 
 declare(strict_types=1);
 
-namespace Paskamer;
+namespace Curtain;
 
-defined('ABSPATH') || defined('PASKAMER_TESTING') || exit;
+defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
 
 final class Hmac {
 

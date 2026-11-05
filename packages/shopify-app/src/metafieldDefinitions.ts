@@ -1,5 +1,5 @@
 /**
- * `$app:paskamer` metafield definitions (D6). The key list is owned by @paskamer/schema
+ * `$app:curtain` metafield definitions (D6). The key list is owned by @curtain/schema
  * (`SHOPIFY_METAFIELD_DEFINITIONS`, mirrored by `fromShopifyProduct`); this module turns it into
  * `MetafieldDefinitionInput`s and creates them idempotently on install.
  */
@@ -8,7 +8,7 @@ import {
   SHOPIFY_METAFIELD_DEFINITIONS,
   SHOPIFY_METAFIELD_NAMESPACE,
   type ShopifyMetafieldDefinition,
-} from '@paskamer/schema';
+} from '@curtain/schema';
 import { ShopifyGraphqlError, type AdminGraphqlClient, type UserError } from './graphql/client';
 import { METAFIELD_DEFINITIONS_QUERY, METAFIELD_DEFINITION_CREATE } from './graphql/metafields';
 

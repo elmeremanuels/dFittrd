@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Privacy e2e (DECISIONS.md D3). Runs against the production build served by `vite preview`;
  * Chromium gets a fake camera so the capture step exercises its camera path.
- * `pnpm --filter @paskamer/web e2e` builds first. Browsers come from PLAYWRIGHT_BROWSERS_PATH.
+ * `pnpm --filter @curtain/web e2e` builds first. Browsers come from PLAYWRIGHT_BROWSERS_PATH.
  */
 const PORT = 4173;
 

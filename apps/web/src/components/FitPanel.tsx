@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
-import type { FitResult } from '@paskamer/fit-engine';
+import type { FitResult } from '@curtain/fit-engine';
 import { pct } from '@/lib/format';
 
 /**

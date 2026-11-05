@@ -1,7 +1,7 @@
 /**
  * Build the FitSignature v1 (the only body data that syncs, DECISIONS.md D3) from the fused
  * BodyProfile and the scan's per-level girths/aspects/lengths/posture. Encoding, quantisation and
- * the wire shape come from `@paskamer/schema`; this module only maps our data into it.
+ * the wire shape come from `@curtain/schema`; this module only maps our data into it.
  *
  * Invariant (asserted here and in tests): no face, skin, hair or colour value is ever encoded.
  */
@@ -16,7 +16,7 @@ import {
   type BodyProfile,
   type FitSignatureProfile,
   type FitSignatureWire,
-} from '@paskamer/schema';
+} from '@curtain/schema';
 import { bmi } from './prior';
 import type { ScanMeasurements, Sex } from './types';
 

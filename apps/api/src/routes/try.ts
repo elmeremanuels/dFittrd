@@ -5,7 +5,7 @@
  */
 import { and, eq } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { TryResolveParamsSchema, TryResolveResponseSchema } from '@paskamer/schema';
+import { TryResolveParamsSchema, TryResolveResponseSchema } from '@curtain/schema';
 import { requireDevice } from '../auth/device.js';
 import { pairings, trySessions } from '../db/schema.js';
 import { pseudonymFor } from '../lib/crypto.js';

@@ -14,7 +14,7 @@ export async function makeTaggedJpeg(width = 400, height = 300): Promise<Uint8Ar
   const buf = await sharp({ create: { width, height, channels: 3, background: { r: 30, g: 60, b: 90 } } })
     .jpeg()
     .withIccProfile('srgb')
-    .withMetadata({ orientation: 6, exif: { IFD0: { Copyright: 'paskamer-test', ImageDescription: 'tagged' } } })
+    .withMetadata({ orientation: 6, exif: { IFD0: { Copyright: 'curtain-test', ImageDescription: 'tagged' } } })
     .toBuffer();
   return new Uint8Array(buf);
 }

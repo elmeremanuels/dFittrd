@@ -18,7 +18,7 @@ describe('client secret guard', () => {
   });
 
   it('catches a key placed in a .env file next to the app, the way Vite would load it', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'paskamer-env-'));
+    const dir = mkdtempSync(join(tmpdir(), 'curtain-env-'));
     writeFileSync(join(dir, '.env'), 'VITE_API_URL=http://localhost:3000\nVITE_PROVIDER_KEY=sk-should-never-ship\n');
     writeFileSync(join(dir, '.env.production'), 'VITE_GROK_SECRET=also-bad\n');
     const env = loadEnv('production', dir, 'VITE_');

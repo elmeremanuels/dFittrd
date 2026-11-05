@@ -1,5 +1,5 @@
-/** products/update → GraphQL product + metafields → @paskamer/schema fromShopifyProduct → upsert (content_hash no-op). */
-import { fromShopifyProduct, shopifyExternalId, type MappingWarning } from '@paskamer/schema';
+/** products/update → GraphQL product + metafields → @curtain/schema fromShopifyProduct → upsert (content_hash no-op). */
+import { fromShopifyProduct, shopifyExternalId, type MappingWarning } from '@curtain/schema';
 import type { App } from '../app.js';
 import { JOB } from './queue.js';
 import { archiveProduct, upsertProduct } from '../services/products.js';

@@ -1,7 +1,7 @@
 {
-  "name": "@paskamer/tryon-providers",
+  "name": "@curtain/tryon-providers",
   "version": "0.1.0",
-  "description": "Server-only AI try-on provider adapters (FASHN, Vertex Virtual Try-On, Grok video, Mock) and the TryOnRouter for Paskamer's opt-in hero render.",
+  "description": "Server-only AI try-on provider adapters (FASHN, Vertex Virtual Try-On, Grok video, Mock) and the TryOnRouter for Curtain's opt-in hero render.",
   "private": true,
   "type": "module",
   "browser": false,

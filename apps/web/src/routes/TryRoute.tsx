@@ -1,7 +1,7 @@
 import { Bookmark, ExternalLink, Heart, PauseCircle } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { MOCK_GARMENTS_BY_ID, type FitCohortResponse, type TryResolveResponse } from '@paskamer/schema';
+import { MOCK_GARMENTS_BY_ID, type FitCohortResponse, type TryResolveResponse } from '@curtain/schema';
 import { Avatar } from '@/components/Avatar';
 import { CohortBars } from '@/components/CohortBars';
 import { ColourChip } from '@/components/ColourChip';
@@ -104,7 +104,7 @@ export function TryRoute(): ReactNode {
       </header>
       {shop.paused ? (
         <div className="mx-5 mb-3 flex items-center gap-2 rounded-2xl border border-warn/30 bg-warn/10 p-3 text-sm text-warn">
-          <PauseCircle className="h-5 w-5 shrink-0" aria-hidden /> This shop has paused Paskamer try-ons. You can still see the estimate; swipes are not counted for the shop.
+          <PauseCircle className="h-5 w-5 shrink-0" aria-hidden /> This shop has paused Curtain try-ons. You can still see the estimate; swipes are not counted for the shop.
         </div>
       ) : null}
       <div className="px-4">

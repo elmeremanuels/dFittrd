@@ -1,22 +1,22 @@
 <?php
 /**
- * Closed/open vocabularies of GarmentPayload v1, mirrored from @paskamer/schema (garment.ts and
+ * Closed/open vocabularies of GarmentPayload v1, mirrored from @curtain/schema (garment.ts and
  * mappings/woo.ts). The JSON Schema copied into assets/ at build time is the authority for
  * validation; these lists only drive the meta box UI and the category inference.
  *
- * @package Paskamer
+ * @package Curtain
  */
 
 declare(strict_types=1);
 
-namespace Paskamer;
+namespace Curtain;
 
-defined('ABSPATH') || defined('PASKAMER_TESTING') || exit;
+defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
 
 final class Vocab {
 
 	public const SCHEMA_VERSION = 1;
-	public const META_PREFIX    = '_paskamer_';
+	public const META_PREFIX    = '_curtain_';
 
 	public const CATEGORIES = array( 'top', 'bottom', 'dress', 'outerwear', 'shoes', 'accessory' );
 	public const FIT_POINTS = array( 'bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'foot' );
@@ -50,35 +50,35 @@ final class Vocab {
 	 * Meta keys in display order: key → [path, kind, heavy]. Mirrors WOO_META_KEYS.
 	 */
 	public const META_KEYS = array(
-		'_paskamer_category'            => array( 'category', 'enum', true ),
-		'_paskamer_size_chart_type'     => array( 'sizeChartType', 'enum', true ),
-		'_paskamer_size_chart'          => array( 'sizeChart', 'json', true ),
-		'_paskamer_fabric'              => array( 'fabric', 'json', true ),
-		'_paskamer_flat_lay_photo'      => array( 'flatLayPhoto', 'url', true ),
-		'_paskamer_pattern_block'       => array( 'patternBlock', 'string', false ),
-		'_paskamer_ease'                => array( 'ease', 'json', false ),
-		'_paskamer_length_cm'           => array( 'lengthCm', 'json', false ),
-		'_paskamer_sizing_notes'        => array( 'sizingNotes', 'text', false ),
-		'_paskamer_true_to_size_score'  => array( 'trueToSizeScore', 'number', false ),
-		'_paskamer_critical_fit_points' => array( 'criticalFitPoints', 'list', false ),
-		'_paskamer_stretch_zones'       => array( 'stretchZones', 'list', false ),
-		'_paskamer_style_tags'          => array( 'styleTags', 'json', false ),
-		'_paskamer_primary_color_hex'   => array( 'primaryColorHex', 'color', false ),
-		'_paskamer_colorways'           => array( 'colorways', 'json', false ),
-		'_paskamer_subcategory'         => array( 'subcategory', 'string', false ),
-		'_paskamer_brand'               => array( 'brand', 'string', false ),
+		'_curtain_category'            => array( 'category', 'enum', true ),
+		'_curtain_size_chart_type'     => array( 'sizeChartType', 'enum', true ),
+		'_curtain_size_chart'          => array( 'sizeChart', 'json', true ),
+		'_curtain_fabric'              => array( 'fabric', 'json', true ),
+		'_curtain_flat_lay_photo'      => array( 'flatLayPhoto', 'url', true ),
+		'_curtain_pattern_block'       => array( 'patternBlock', 'string', false ),
+		'_curtain_ease'                => array( 'ease', 'json', false ),
+		'_curtain_length_cm'           => array( 'lengthCm', 'json', false ),
+		'_curtain_sizing_notes'        => array( 'sizingNotes', 'text', false ),
+		'_curtain_true_to_size_score'  => array( 'trueToSizeScore', 'number', false ),
+		'_curtain_critical_fit_points' => array( 'criticalFitPoints', 'list', false ),
+		'_curtain_stretch_zones'       => array( 'stretchZones', 'list', false ),
+		'_curtain_style_tags'          => array( 'styleTags', 'json', false ),
+		'_curtain_primary_color_hex'   => array( 'primaryColorHex', 'color', false ),
+		'_curtain_colorways'           => array( 'colorways', 'json', false ),
+		'_curtain_subcategory'         => array( 'subcategory', 'string', false ),
+		'_curtain_brand'               => array( 'brand', 'string', false ),
 	);
 
 	/** Plugin-private meta keys (not part of the wire mapping). */
-	public const META_FLAT_LAY_ID    = '_paskamer_flat_lay_photo_id';
-	public const META_SYNC_STATUS    = '_paskamer_sync_status';
-	public const META_SYNC_ERROR     = '_paskamer_sync_error';
-	public const META_SYNCED_AT      = '_paskamer_synced_at';
-	public const META_CONTENT_HASH   = '_paskamer_content_hash';
-	public const META_SCORE          = '_paskamer_score';
-	public const META_MISSING        = '_paskamer_missing_fields';
-	public const META_VALIDATION     = '_paskamer_validation';
-	public const META_LOCAL_ISSUES   = '_paskamer_local_issues';
+	public const META_FLAT_LAY_ID    = '_curtain_flat_lay_photo_id';
+	public const META_SYNC_STATUS    = '_curtain_sync_status';
+	public const META_SYNC_ERROR     = '_curtain_sync_error';
+	public const META_SYNCED_AT      = '_curtain_synced_at';
+	public const META_CONTENT_HASH   = '_curtain_content_hash';
+	public const META_SCORE          = '_curtain_score';
+	public const META_MISSING        = '_curtain_missing_fields';
+	public const META_VALIDATION     = '_curtain_validation';
+	public const META_LOCAL_ISSUES   = '_curtain_local_issues';
 
 	/**
 	 * Keyword table for inferring a category from WooCommerce category names (mappings/common.ts).

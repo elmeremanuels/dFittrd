@@ -1,8 +1,8 @@
-# @paskamer/api
+# @curtain/api
 
 The one backend (decision D2): **app API + merchant API + SDK host + Shopify app backend + Stripe
 billing + pg-boss jobs**, in a single Fastify 5 process on one Postgres. Routes are typed from the
-zod DTOs in `@paskamer/schema`; OpenAPI is served at `GET /v1/openapi.json`.
+zod DTOs in `@curtain/schema`; OpenAPI is served at `GET /v1/openapi.json`.
 
 ```
 src/
@@ -18,18 +18,18 @@ src/
   jobs/             queue abstraction (pg-boss | memory), render-hero, sync-shopify-product, backfill,
                     prune-renders + purge-shop (hourly), usage-rollup (nightly)
   services/         products (completeness + content_hash), usage, ledger, shops/keys, analytics (k floor), renders
-  tryon/            TryOnRouter from env (TRYON_ORDER, keys) over @paskamer/tryon-providers
+  tryon/            TryOnRouter from env (TRYON_ORDER, keys) over @curtain/tryon-providers
 ```
 
 ## Run
 
 ```bash
-# dev (needs a Postgres; defaults to postgres://paskamer:paskamer@localhost:5432/paskamer)
-pnpm --filter @paskamer/api dev                 # tsx watch, pino-pretty, generated dev secrets (warned)
-pnpm --filter @paskamer/api db:generate         # drizzle-kit → ./drizzle after changing src/db/schema.ts
+# dev (needs a Postgres; defaults to postgres://curtain:curtain@localhost:5432/curtain)
+pnpm --filter @curtain/api dev                 # tsx watch, pino-pretty, generated dev secrets (warned)
+pnpm --filter @curtain/api db:generate         # drizzle-kit → ./drizzle after changing src/db/schema.ts
 
 # checks (no Docker needed: tests run on PGlite + an in-memory queue + the mock try-on provider)
-pnpm --filter @paskamer/api typecheck && pnpm --filter @paskamer/api test && pnpm --filter @paskamer/api build
+pnpm --filter @curtain/api typecheck && pnpm --filter @curtain/api test && pnpm --filter @curtain/api build
 
 # production (VPS, D9)
 cp infra/.env.example infra/.env && $EDITOR infra/.env     # DOMAIN, POSTGRES_PASSWORD, JWT_SECRET, SHOP_KEY_PEPPER, ENCRYPTION_KEY, …
@@ -51,7 +51,7 @@ typecheck · test · build · bundle-secret-scan and builds/pushes the image to 
 | SDK | `POST /v1/sdk/sessions` (CORS `*`, per-shop rate limit, 402 + tryUrl when paused), `GET /sdk/v1.js` | public |
 | Renders | `POST /v1/renders/hero` → 202, `GET /v1/renders/:jobId`, `GET /v1/renders/:jobId/image\|video?exp&sig` | device JWT / signed URL |
 | Merchant | `PUT /v1/merchant/products/:externalId`, `POST …/products/validate`, `DELETE …/products/:externalId`, `GET …/products`, `GET …/usage`, `GET …/ledger`, `GET …/analytics/swipes`, `GET …/analytics/abandoned`, `POST …/keys/rotate`, `PUT /v1/merchant/shops/self`, `POST /v1/merchant/woo/connect`, `POST /v1/merchant/woo/complete` | PK-HMAC, Bearer `sk_…`, or Shopify session token |
-| Shopify | `GET /shopify/admin` (embedded admin page from `@paskamer/shopify-app`, `frame-ancestors` CSP), `GET /shopify/auth/callback` (302 to the embedded app home), `POST /shopify/token-exchange` (also writes the theme block's app-data metafields: public key, API/app URL), `POST /shopify/webhooks`, `POST /shopify/billing/subscribe` | none (page/redirect) / session token / webhook HMAC |
+| Shopify | `GET /shopify/admin` (embedded admin page from `@curtain/shopify-app`, `frame-ancestors` CSP), `GET /shopify/auth/callback` (302 to the embedded app home), `POST /shopify/token-exchange` (also writes the theme block's app-data metafields: public key, API/app URL), `POST /shopify/webhooks`, `POST /shopify/billing/subscribe` | none (page/redirect) / session token / webhook HMAC |
 | Billing | `POST /v1/billing/stripe/webhook` | Stripe signature |
 | Ops | `GET /healthz`, `GET /readyz` (db + jobs), `GET /v1/openapi.json` | public |
 
@@ -83,7 +83,7 @@ arrives: deep-link sessions by `intentToken` (`usage_events.idempotency_key = in
 in the same write. A `POST /v1/swipes` batch is all-or-nothing: every `shopId` is checked first
 (422 `unknown_shop` before any write) and inserts, usage events and the ledger entry share one
 transaction. The nightly `usage-rollup` pushes sessions above the plan's quota to Shopify
-`appUsageRecordCreate` or a Stripe meter event (`paskamer_fit_sessions`), idempotent per shop-day.
+`appUsageRecordCreate` or a Stripe meter event (`curtain_fit_sessions`), idempotent per shop-day.
 
 ### Privacy (D3), enforced by construction
 
@@ -106,7 +106,7 @@ transaction. The nightly `usage-rollup` pushes sessions above the plan's quota t
 | Job | Trigger | What |
 |---|---|---|
 | `render-hero` | `POST /v1/renders/hero` | TryOnRouter (env `TRYON_ORDER`, default `mock`) → PNG (+ mp4) on `RENDERS_DIR`, ledger + usage |
-| `sync-shopify-product` | `products/create\|update` webhook | GraphQL product + `$app:paskamer` metafields → `fromShopifyProduct` → upsert |
+| `sync-shopify-product` | `products/create\|update` webhook | GraphQL product + `$app:curtain` metafields → `fromShopifyProduct` → upsert |
 | `backfill-shopify` | token exchange | pages the catalogue 50 at a time |
 | `prune-renders` | cron `7 * * * *` | expires renders past `RENDER_RETENTION_HOURS`, purges shops past `purge_after` |
 | `purge-shop` | `shop/redact` (+48 h) | deletes the shop row (cascade) and files |
@@ -141,11 +141,11 @@ Findings from the skeptical review of `apps/api`, `infra` and `.github`; every f
 | low | Stripe-Signature parser kept only the last `v1` (rotation sends two) | any matching `v1` accepted |
 | low | Swipe analytics `sizeHistogram` buckets were not floored per bucket (cohort already was) | a size bucket needs ≥ K distinct users |
 | low | `apps/api/.dockerignore` is never read (build context is the repo root): host `node_modules`/`dist`/`data` shipped and COPYed over the image | `apps/api/Dockerfile.dockerignore` (BuildKit reads it next to the Dockerfile) |
-| low | compose: `caddy` waited for a *healthy* api, taking the static PWA down with any api failure; `API_IMAGE` default did not match the CI image name | `service_started`; `API_IMAGE` required, documented as `ghcr.io/<owner>/paskamer-api` |
+| low | compose: `caddy` waited for a *healthy* api, taking the static PWA down with any api failure; `API_IMAGE` default did not match the CI image name | `service_started`; `API_IMAGE` required, documented as `ghcr.io/<owner>/curtain-api` |
 
 Still open (needs another package or a product decision): WooCommerce manual-key Connect has no domain
 ownership proof (anyone can claim an unclaimed domain while Stripe is unconfigured) — add a
-challenge the plugin answers on `/wp-json/paskamer/v1/…` or require the Stripe path for live keys;
+challenge the plugin answers on `/wp-json/curtain/v1/…` or require the Stripe path for live keys;
 deck billing is still bot-inflatable by creating devices and swiping a shop's real catalogue
 (bound by `POST /v1/devices` 30/min/IP) — consider pairing-only deck billing; `abandoned`
 analytics floor counts sessions (a merchant can pad with their own SDK sessions), not users;
@@ -154,7 +154,7 @@ DNS rebinding between the guard's lookup and undici's connect is not pinned.
 ## Manual verification still needed
 
 * Live Shopify dev store: token exchange with a real App Bridge session token, metafield definition
-  creation (`$app:paskamer`), webhook deliveries as declared in `shopify.app.toml`, `appSubscriptionCreate`
+  creation (`$app:curtain`), webhook deliveries as declared in `shopify.app.toml`, `appSubscriptionCreate`
   confirmation flow, API version `2025-10`.
-* Live Stripe: Checkout + webhook endpoint, a `paskamer_fit_sessions` meter with the overage price.
+* Live Stripe: Checkout + webhook endpoint, a `curtain_fit_sessions` meter with the overage price.
 * Hero render against FASHN/Vertex/xAI with real keys (only `mock` was exercised here).

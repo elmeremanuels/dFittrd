@@ -2,27 +2,27 @@
 /**
  * Settings storage, API client transport, push job end-to-end (mocked HTTP) and retry policy.
  *
- * @package Paskamer\Tests
+ * @package Curtain\Tests
  */
 
 declare(strict_types=1);
 
-use Paskamer\Api_Client;
-use Paskamer\Hmac;
-use Paskamer\Queue;
-use Paskamer\Settings;
-use Paskamer\Sync;
-use Paskamer\Vocab;
+use Curtain\Api_Client;
+use Curtain\Hmac;
+use Curtain\Queue;
+use Curtain\Settings;
+use Curtain\Sync;
+use Curtain\Vocab;
 
-const PASKAMER_T_PK = 'pk_' . 'test_shop123';
-const PASKAMER_T_SK = 'sk_' . 'test_abcdefghijklmnopqrstuvwxyz0123';
+const CURTAIN_T_PK = 'pk_' . 'test_shop123';
+const CURTAIN_T_SK = 'sk_' . 'test_abcdefghijklmnopqrstuvwxyz0123';
 
-function paskamer_connect_test_shop(): void {
-	Settings::update( array( 'api_key' => PASKAMER_T_SK, 'public_key_prefix' => PASKAMER_T_PK, 'api_base' => 'https://api.test.paskamer.app/' ) );
+function curtain_connect_test_shop(): void {
+	Settings::update( array( 'api_key' => CURTAIN_T_SK, 'public_key_prefix' => CURTAIN_T_PK, 'api_base' => 'https://api.test.curtain.fit/' ) );
 }
 
-function paskamer_seed_product( int $id, array $extra = array() ): void {
-	Paskamer_Test_State::$posts[ $id ] = array(
+function curtain_seed_product( int $id, array $extra = array() ): void {
+	Curtain_Test_State::$posts[ $id ] = array(
 		'status'  => 'publish',
 		'type'    => 'product',
 		'parent'  => 0,
@@ -34,60 +34,60 @@ test(
 	'Settings: secrets are encrypted at rest, defaults merge, is_connected needs both keys',
 	static function (): void {
 		assert_false( Settings::is_connected() );
-		Settings::update( array( 'api_key' => PASKAMER_T_SK, 'button_priority' => 25 ) );
+		Settings::update( array( 'api_key' => CURTAIN_T_SK, 'button_priority' => 25 ) );
 		$raw = get_option( Settings::OPTION );
 		assert_false( isset( $raw['api_key'] ) );
-		assert_true( isset( $raw['api_key_enc'] ) && ! str_contains( $raw['api_key_enc'], PASKAMER_T_SK ) );
-		assert_same( PASKAMER_T_SK, Settings::get( 'api_key' ) );
+		assert_true( isset( $raw['api_key_enc'] ) && ! str_contains( $raw['api_key_enc'], CURTAIN_T_SK ) );
+		assert_same( CURTAIN_T_SK, Settings::get( 'api_key' ) );
 		assert_same( 25, Settings::get( 'button_priority' ) );
 		assert_same( 'active', Settings::get( 'button_scope' ), 'default kept' );
 		assert_false( Settings::is_connected(), 'needs the pk_ prefix too' );
-		Settings::update( array( 'public_key_prefix' => PASKAMER_T_PK ) );
+		Settings::update( array( 'public_key_prefix' => CURTAIN_T_PK ) );
 		assert_true( Settings::is_connected() );
 		assert_same( 'nl', Settings::effective_locale(), 'auto follows nl_NL' );
-		assert_same( 'Pas in Paskamer', Settings::button_label() );
+		assert_same( 'Try it on', Settings::button_label() );
 	}
 );
 
 test(
 	'Api_Client: HMAC header verifies against the api signing string; JSON body; error envelope',
 	static function (): void {
-		paskamer_connect_test_shop();
-		Paskamer_Test_State::$http_handler = static function ( string $url, array $args ) {
+		curtain_connect_test_shop();
+		Curtain_Test_State::$http_handler = static function ( string $url, array $args ) {
 			$target = Hmac::target_from_url( $url );
-			$ok     = Hmac::verify( $args['headers']['Authorization'], PASKAMER_T_PK, array( PASKAMER_T_SK ), $args['method'], $target, (string) $args['body'] );
+			$ok     = Hmac::verify( $args['headers']['Authorization'], CURTAIN_T_PK, array( CURTAIN_T_SK ), $args['method'], $target, (string) $args['body'] );
 			if ( ! $ok['ok'] ) {
-				return paskamer_http_response( 401, array( 'error' => array( 'code' => $ok['code'], 'message' => 'bad' ) ) );
+				return curtain_http_response( 401, array( 'error' => array( 'code' => $ok['code'], 'message' => 'bad' ) ) );
 			}
-			return paskamer_http_response( 200, array( 'externalId' => '42', 'status' => 'active', 'score' => 0.9, 'missingFields' => array(), 'contentHash' => str_repeat( 'a', 64 ), 'changed' => true, 'updatedAt' => '2026-11-04T10:00:00.000Z' ) );
+			return curtain_http_response( 200, array( 'externalId' => '42', 'status' => 'active', 'score' => 0.9, 'missingFields' => array(), 'contentHash' => str_repeat( 'a', 64 ), 'changed' => true, 'updatedAt' => '2026-11-04T10:00:00.000Z' ) );
 		};
 		$c   = Api_Client::from_settings();
 		$res = $c->upsert_product( '42', array( 'schemaVersion' => 1, 'id' => '42', 'name' => 'X', 'brand' => 'Y' ) );
 		assert_true( $res['ok'], json_encode( $res ) );
-		$req = Paskamer_Test_State::$requests[0];
-		assert_same( 'https://api.test.paskamer.app/v1/merchant/products/42', $req['url'], 'trailing slash on base trimmed' );
+		$req = Curtain_Test_State::$requests[0];
+		assert_same( 'https://api.test.curtain.fit/v1/merchant/products/42', $req['url'], 'trailing slash on base trimmed' );
 		assert_same( 'PUT', $req['args']['method'] );
 		assert_same( 'application/json', $req['args']['headers']['Content-Type'] );
 		assert_same( '{"schemaVersion":1,"id":"42","name":"X","brand":"Y"}', $req['args']['body'] );
-		assert_contains( 'Paskamer-WooCommerce/0.1.0', $req['args']['headers']['User-Agent'] );
+		assert_contains( 'Curtain-WooCommerce/0.1.0', $req['args']['headers']['User-Agent'] );
 		assert_same( 15, $req['args']['timeout'] );
 
 		// DELETE has no body: signed over sha256('').
 		$res = $c->delete_product( '42' );
 		assert_true( $res['ok'] );
-		assert_same( null, Paskamer_Test_State::$requests[1]['args']['body'] );
+		assert_same( null, Curtain_Test_State::$requests[1]['args']['body'] );
 
 		// Error envelope → error_code/error_message.
-		Paskamer_Test_State::$http_handler = static fn() => paskamer_http_response( 422, array( 'error' => array( 'code' => 'product_incomplete', 'message' => 'missing size chart' ) ) );
+		Curtain_Test_State::$http_handler = static fn() => curtain_http_response( 422, array( 'error' => array( 'code' => 'product_incomplete', 'message' => 'missing size chart' ) ) );
 		$res = $c->validate_product( array( 'id' => '42' ) );
 		assert_false( $res['ok'] );
 		assert_same( 422, $res['status'] );
 		assert_same( 'product_incomplete', $res['error_code'] );
 		assert_same( 'missing size chart', $res['error_message'] );
-		assert_same( '{"payload":{"id":"42"}}', Paskamer_Test_State::$requests[2]['args']['body'], 'validate wraps the draft in {payload}' );
+		assert_same( '{"payload":{"id":"42"}}', Curtain_Test_State::$requests[2]['args']['body'], 'validate wraps the draft in {payload}' );
 
 		// Transport error.
-		Paskamer_Test_State::$http_handler = static fn() => new WP_Error( 'http_request_failed', 'cURL error 28' );
+		Curtain_Test_State::$http_handler = static fn() => new WP_Error( 'http_request_failed', 'cURL error 28' );
 		$res = $c->hello( array( 'name' => 'x' ) );
 		assert_true( $res['transport_error'] );
 		assert_same( 'network_error', $res['error_code'] );
@@ -100,13 +100,13 @@ test(
 		$res = Api_Client::from_settings()->upsert_product( '1', array( 'id' => '1' ) );
 		assert_false( $res['ok'] );
 		assert_same( 'not_connected', $res['error_code'] );
-		assert_same( array(), Paskamer_Test_State::$requests );
+		assert_same( array(), Curtain_Test_State::$requests );
 		// Connect/complete are the only unauthenticated calls, and only run from the merchant's click.
-		Paskamer_Test_State::$http_handler = static fn() => paskamer_http_response( 200, array( 'shopId' => 'u', 'connectToken' => 'ct_x', 'mode' => 'manual-key' ) );
-		$res = Api_Client::from_settings()->connect( 'https://shop.example/', 'Shop', 'owner@shop.example', 'https://shop.example/wp-admin/admin.php?page=paskamer' );
+		Curtain_Test_State::$http_handler = static fn() => curtain_http_response( 200, array( 'shopId' => 'u', 'connectToken' => 'ct_x', 'mode' => 'manual-key' ) );
+		$res = Api_Client::from_settings()->connect( 'https://shop.example/', 'Shop', 'owner@shop.example', 'https://shop.example/wp-admin/admin.php?page=curtain' );
 		assert_true( $res['ok'] );
-		assert_false( isset( Paskamer_Test_State::$requests[0]['args']['headers']['Authorization'] ) );
-		assert_same( '{"siteUrl":"https://shop.example/","name":"Shop","returnUrl":"https://shop.example/wp-admin/admin.php?page=paskamer","email":"owner@shop.example"}', Paskamer_Test_State::$requests[0]['args']['body'] );
+		assert_false( isset( Curtain_Test_State::$requests[0]['args']['headers']['Authorization'] ) );
+		assert_same( '{"siteUrl":"https://shop.example/","name":"Shop","returnUrl":"https://shop.example/wp-admin/admin.php?page=curtain","email":"owner@shop.example"}', Curtain_Test_State::$requests[0]['args']['body'] );
 	}
 );
 
@@ -130,112 +130,112 @@ test(
 test(
 	'job_push: builds the draft from WC data + meta, PUTs it, stores the backend verdict',
 	static function (): void {
-		paskamer_connect_test_shop();
-		paskamer_seed_product( 42 );
-		update_post_meta( 42, '_paskamer_category', 'dress' );
-		update_post_meta( 42, '_paskamer_size_chart_type', 'body' );
-		update_post_meta( 42, '_paskamer_size_chart', '[{"size":"S","bust":88}]' );
-		update_post_meta( 42, '_paskamer_fabric', '{"primary":"linen","stretchPct":2,"drape":0.78}' );
-		update_post_meta( 42, '_paskamer_flat_lay_photo', 'https://shop.example/flat.png' );
-		update_post_meta( 42, '_paskamer_primary_color_hex', '#C97A4F' );
-		update_post_meta( 42, '_paskamer_pattern_block', 'wrap' );
+		curtain_connect_test_shop();
+		curtain_seed_product( 42 );
+		update_post_meta( 42, '_curtain_category', 'dress' );
+		update_post_meta( 42, '_curtain_size_chart_type', 'body' );
+		update_post_meta( 42, '_curtain_size_chart', '[{"size":"S","bust":88}]' );
+		update_post_meta( 42, '_curtain_fabric', '{"primary":"linen","stretchPct":2,"drape":0.78}' );
+		update_post_meta( 42, '_curtain_flat_lay_photo', 'https://shop.example/flat.png' );
+		update_post_meta( 42, '_curtain_primary_color_hex', '#C97A4F' );
+		update_post_meta( 42, '_curtain_pattern_block', 'wrap' );
 
 		$captured = null;
-		Paskamer_Test_State::$http_handler = static function ( string $url, array $args ) use ( &$captured ) {
+		Curtain_Test_State::$http_handler = static function ( string $url, array $args ) use ( &$captured ) {
 			$captured = json_decode( (string) $args['body'], true );
-			return paskamer_http_response( 200, array( 'externalId' => '42', 'status' => 'active', 'score' => 1, 'missingFields' => array(), 'contentHash' => str_repeat( 'b', 64 ), 'changed' => true, 'updatedAt' => '2026-11-04T10:00:00.000Z' ) );
+			return curtain_http_response( 200, array( 'externalId' => '42', 'status' => 'active', 'score' => 1, 'missingFields' => array(), 'contentHash' => str_repeat( 'b', 64 ), 'changed' => true, 'updatedAt' => '2026-11-04T10:00:00.000Z' ) );
 		};
 		$out = Sync::job_push( 42, 1 );
 		assert_true( $out['ok'], $out['message'] );
-		assert_same( '/v1/merchant/products/42', Hmac::target_from_url( Paskamer_Test_State::$requests[0]['url'] ) );
+		assert_same( '/v1/merchant/products/42', Hmac::target_from_url( Curtain_Test_State::$requests[0]['url'] ) );
 		assert_same( '42', $captured['id'], 'body.id must equal :externalId (api contract 7)' );
 		assert_same( 'Fixture Shop', $captured['brand'], 'shop name is the brand fallback' );
 		assert_same( 149, $captured['priceEur'] );
 		assert_same( array( 'https://shop.example/wp-content/uploads/att-5.jpg' ), $captured['productPhotos'] );
 		assert_same( 'https://shop.example/product/p42/', $captured['productUrl'] );
 		assert_same( 'body', $captured['sizeChartType'] );
-		$v = \Paskamer\Schema_Validator::from_file( paskamer_schema_path( 'garment.schema.json' ) );
+		$v = \Curtain\Schema_Validator::from_file( curtain_schema_path( 'garment.schema.json' ) );
 		assert_same( array(), $v->validate( $captured ), 'the pushed payload is a full GarmentPayload' );
 
 		assert_same( 'active', get_post_meta( 42, Vocab::META_SYNC_STATUS, true ) );
 		assert_same( '1', get_post_meta( 42, Vocab::META_SCORE, true ) );
 		assert_same( str_repeat( 'b', 64 ), get_post_meta( 42, Vocab::META_CONTENT_HASH, true ) );
 		assert_same( '2026-11-04T10:00:00.000Z', get_post_meta( 42, Vocab::META_SYNCED_AT, true ) );
-		assert_same( array(), Paskamer_Test_State::$cron, 'no retry scheduled on success' );
+		assert_same( array(), Curtain_Test_State::$cron, 'no retry scheduled on success' );
 	}
 );
 
 test(
 	'job_push: 503 schedules a retry with backoff; 4xx records the error and stops',
 	static function (): void {
-		paskamer_connect_test_shop();
-		paskamer_seed_product( 7 );
-		Paskamer_Test_State::$http_handler = static fn() => paskamer_http_response( 503, '' );
+		curtain_connect_test_shop();
+		curtain_seed_product( 7 );
+		Curtain_Test_State::$http_handler = static fn() => curtain_http_response( 503, '' );
 		$out = Sync::job_push( 7, 2 );
 		assert_same( 'retry', $out['outcome'] );
 		assert_same( 'retrying', get_post_meta( 7, Vocab::META_SYNC_STATUS, true ) );
-		assert_same( 1, count( Paskamer_Test_State::$cron ) );
-		assert_same( Queue::HOOK_PUSH, Paskamer_Test_State::$cron[0]['hook'] );
-		assert_same( array( 7, 3 ), Paskamer_Test_State::$cron[0]['args'] );
-		assert_true( Paskamer_Test_State::$cron[0]['ts'] >= time() + 120 - 1, 'attempt 2 → 120 s backoff' );
+		assert_same( 1, count( Curtain_Test_State::$cron ) );
+		assert_same( Queue::HOOK_PUSH, Curtain_Test_State::$cron[0]['hook'] );
+		assert_same( array( 7, 3 ), Curtain_Test_State::$cron[0]['args'] );
+		assert_true( Curtain_Test_State::$cron[0]['ts'] >= time() + 120 - 1, 'attempt 2 → 120 s backoff' );
 
 		// Same job already pending → not enqueued twice.
 		Queue::enqueue( Queue::HOOK_PUSH, array( 7, 3 ), 0 );
-		assert_same( 1, count( Paskamer_Test_State::$cron ) );
+		assert_same( 1, count( Curtain_Test_State::$cron ) );
 
 		// Final attempt gives up.
-		Paskamer_Test_State::$cron = array();
+		Curtain_Test_State::$cron = array();
 		$out = Sync::job_push( 7, Sync::MAX_ATTEMPTS );
 		assert_same( 'failed', $out['outcome'] );
 		assert_same( 'error', get_post_meta( 7, Vocab::META_SYNC_STATUS, true ) );
-		assert_same( array(), Paskamer_Test_State::$cron );
+		assert_same( array(), Curtain_Test_State::$cron );
 
 		// 400 id_mismatch: no retry.
-		Paskamer_Test_State::$http_handler = static fn() => paskamer_http_response( 400, array( 'error' => array( 'code' => 'id_mismatch', 'message' => 'payload.id must equal :externalId' ) ) );
+		Curtain_Test_State::$http_handler = static fn() => curtain_http_response( 400, array( 'error' => array( 'code' => 'id_mismatch', 'message' => 'payload.id must equal :externalId' ) ) );
 		$out = Sync::job_push( 7, 1 );
 		assert_same( 'failed', $out['outcome'] );
 		assert_contains( 'id_mismatch', get_post_meta( 7, Vocab::META_SYNC_ERROR, true ) );
 		assert_contains( 'id_mismatch', (string) Settings::get( 'last_error' ) );
-		assert_same( array(), Paskamer_Test_State::$cron );
+		assert_same( array(), Curtain_Test_State::$cron );
 	}
 );
 
 test(
 	'job_push skips unpublished products and disconnected shops without any request',
 	static function (): void {
-		paskamer_seed_product( 9, array( 'status' => 'draft' ) );
+		curtain_seed_product( 9, array( 'status' => 'draft' ) );
 		assert_same( 'skipped', Sync::job_push( 9 )['outcome'] );
-		paskamer_connect_test_shop();
+		curtain_connect_test_shop();
 		assert_same( 'skipped', Sync::job_push( 9 )['outcome'] );
 		assert_same( 'skipped', Sync::job_push( 404 )['outcome'] );
-		assert_same( array(), Paskamer_Test_State::$requests );
+		assert_same( array(), Curtain_Test_State::$requests );
 	}
 );
 
 test(
 	'job_delete archives on 200 and treats 404 as already gone',
 	static function (): void {
-		paskamer_connect_test_shop();
-		paskamer_seed_product( 11 );
-		Paskamer_Test_State::$http_handler = static fn() => paskamer_http_response( 200, array( 'externalId' => '11', 'status' => 'archived' ) );
+		curtain_connect_test_shop();
+		curtain_seed_product( 11 );
+		Curtain_Test_State::$http_handler = static fn() => curtain_http_response( 200, array( 'externalId' => '11', 'status' => 'archived' ) );
 		assert_same( 'archived', Sync::job_delete( '11' )['outcome'] );
-		assert_same( 'DELETE', Paskamer_Test_State::$requests[0]['args']['method'] );
+		assert_same( 'DELETE', Curtain_Test_State::$requests[0]['args']['method'] );
 		assert_same( 'archived', get_post_meta( 11, Vocab::META_SYNC_STATUS, true ) );
-		Paskamer_Test_State::$http_handler = static fn() => paskamer_http_response( 404, array( 'error' => array( 'code' => 'not_found', 'message' => 'product' ) ) );
+		Curtain_Test_State::$http_handler = static fn() => curtain_http_response( 404, array( 'error' => array( 'code' => 'not_found', 'message' => 'product' ) ) );
 		assert_true( Sync::job_delete( '11' )['ok'] );
-		Paskamer_Test_State::$http_handler = static fn() => paskamer_http_response( 502, '' );
+		Curtain_Test_State::$http_handler = static fn() => curtain_http_response( 502, '' );
 		assert_same( 'retry', Sync::job_delete( '11', 1 )['outcome'] );
-		assert_same( array( '11', 2 ), Paskamer_Test_State::$cron[0]['args'] );
+		assert_same( array( '11', 2 ), Curtain_Test_State::$cron[0]['args'] );
 	}
 );
 
 test(
 	'enqueue_push dedupes within a request and marks the product pending; sync_all pages',
 	static function (): void {
-		paskamer_connect_test_shop();
-		Paskamer_Test_State::$options['_product_ids'] = range( 1, Sync::SYNC_ALL_PAGE );
+		curtain_connect_test_shop();
+		Curtain_Test_State::$options['_product_ids'] = range( 1, Sync::SYNC_ALL_PAGE );
 		Sync::job_sync_all( 1 );
-		$hooks = array_count_values( array_column( Paskamer_Test_State::$cron, 'hook' ) );
+		$hooks = array_count_values( array_column( Curtain_Test_State::$cron, 'hook' ) );
 		assert_same( Sync::SYNC_ALL_PAGE, $hooks[ Queue::HOOK_PUSH ] );
 		assert_same( 1, $hooks[ Queue::HOOK_SYNC_ALL ], 'a full page schedules the next page' );
 		assert_same( 'pending', get_post_meta( 3, Vocab::META_SYNC_STATUS, true ) );

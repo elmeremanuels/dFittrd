@@ -6,8 +6,8 @@ import { isShopifyDomain } from './types';
 
 /** Directory name under extensions/ and the `handle` in its shopify.extension.toml. */
 export const EXTENSION_HANDLE = 'try-button' as const;
-/** `blocks/try-in-paskamer.liquid` → the block handle used in `addAppBlockId`. */
-export const BLOCK_HANDLE = 'try-in-paskamer' as const;
+/** `blocks/try-it-on.liquid` → the block handle used in `addAppBlockId`. */
+export const BLOCK_HANDLE = 'try-it-on' as const;
 
 export type ThemeEditorTarget = 'mainSection' | 'newAppsSection' | `sectionId:${string}` | `sectionGroup:${'header' | 'footer' | 'aside'}`;
 
@@ -27,7 +27,7 @@ function assertShop(shopDomain: string): string {
   return s;
 }
 
-/** Opens the theme editor with the "Try in Paskamer" block pre-added to the product template. */
+/** Opens the theme editor with the "Try it on" block pre-added to the product template. */
 export function themeEditorAddBlockUrl(opts: ThemeEditorLinkOptions): string {
   const shop = assertShop(opts.shopDomain);
   const params = new URLSearchParams({

@@ -1,18 +1,18 @@
-# @paskamer/fit-engine
+# @curtain/fit-engine
 
 Pure, deterministic fit scoring and size recommendation (handoff §4.1–4.2, `docs/research/fit-engine-spec.md`, decisions D5 and D8). Runs **on-device**; the result never leaves the device (AGENTS.md rule 4).
 
-- Zero runtime dependencies. Only **types** are imported from `@paskamer/schema` (`GarmentPayload`, `SizeRow`, `UserBody`, `FitPoint`, `BodyProfile`); the build guard `scripts/check-no-runtime-imports.mjs` and an ESLint rule enforce it.
+- Zero runtime dependencies. Only **types** are imported from `@curtain/schema` (`GarmentPayload`, `SizeRow`, `UserBody`, `FitPoint`, `BodyProfile`); the build guard `scripts/check-no-runtime-imports.mjs` and an ESLint rule enforce it.
 - Pure: no I/O, no `Date`, inputs are never mutated (tests deep-freeze them).
 - Numbers: gaps rounded to 0.1 cm, scores and confidence to 3 dp.
 
 ## Run
 
 ```sh
-pnpm --filter @paskamer/fit-engine typecheck
-pnpm --filter @paskamer/fit-engine test      # T1–T17 spec vectors, property/purity tests, sigma extension
-pnpm --filter @paskamer/fit-engine build     # tsup → dist/index.{js,cjs,d.ts} + no-runtime-import guard
-pnpm --filter @paskamer/fit-engine lint
+pnpm --filter @curtain/fit-engine typecheck
+pnpm --filter @curtain/fit-engine test      # T1–T17 spec vectors, property/purity tests, sigma extension
+pnpm --filter @curtain/fit-engine build     # tsup → dist/index.{js,cjs,d.ts} + no-runtime-import guard
+pnpm --filter @curtain/fit-engine lint
 ```
 
 ## Public API
@@ -27,13 +27,13 @@ import {
   type FitResult, type SizeFit, type PointFit, type OmittedPoint, type SkippedPoint,
   type FitGarment, type ComputeFitOptions, type PointSigma, type Band, type TieBreak,
   type RenderGaps, type SizeRecommendation, type BandEdges, type BandProbabilities,
-} from '@paskamer/fit-engine';
+} from '@curtain/fit-engine';
 ```
 
 ### `computeFit(garment, user, opts?) → FitResult`
 
 - `garment: FitGarment` — any `GarmentPayload` (or a draft that has `category`, `patternBlock`, `fabric.stretchPct` and `sizeChart`). Read fields: `id, brand, category, patternBlock, fabric.stretchPct, ease, sizeChart, sizeChartType, sizingNotes, trueToSizeScore, criticalFitPoints, stretchZones`. `sizeChartType` defaults to `'garment'` when absent; `trueToSizeScore` to 0.8.
-- `user: UserBody` from `@paskamer/schema` (`toUserBody(bodyProfile)` in the capture pipeline). Confidence defaults to 0.8 per point.
+- `user: UserBody` from `@curtain/schema` (`toUserBody(bodyProfile)` in the capture pipeline). Confidence defaults to 0.8 per point.
 - `opts.sigma?: Partial<Record<Point, number>>` — see *Sigma-aware extension*. `opts.now` is accepted (spec signature) and ignored.
 
 `FitResult` (defined in this package — it is not a wire type):
@@ -63,13 +63,13 @@ interface FitResult {
 - `bandFor(gap, edges)` / `bandForWithSigma(gap, sigma, edges)` → `{ band, score }` (+ `probabilities`).
 - `parseSizingNotes(text)` → `-1 | 0 | 1` (contradictory notes → 0).
 - `easeTargetFor(garment, point, user?)` → designed ease `E0` after the resolution order `garment.ease → BLOCKS → CATEGORY_EASE`.
-- `easeTable` (= `CATEGORY_EASE`), `BLOCKS`, `CATEGORY_POINTS`, `POINTS`, `ZONE_POINTS` — the spec tables. `CATEGORY_POINTS`/`POINTS` mirror `@paskamer/schema` and a test keeps them in sync.
+- `easeTable` (= `CATEGORY_EASE`), `BLOCKS`, `CATEGORY_POINTS`, `POINTS`, `ZONE_POINTS` — the spec tables. `CATEGORY_POINTS`/`POINTS` mirror `@curtain/schema` and a test keeps them in sync.
 
 ### Typical use (capture pipeline → engine → render)
 
 ```ts
-import { toUserBody } from '@paskamer/schema';
-import { computeFit, fitSummary, fitGapsForRender, sigmaFromBodyProfile } from '@paskamer/fit-engine';
+import { toUserBody } from '@curtain/schema';
+import { computeFit, fitSummary, fitGapsForRender, sigmaFromBodyProfile } from '@curtain/fit-engine';
 
 const user = toUserBody(bodyProfile);
 const result = computeFit(garment, user, { sigma: sigmaFromBodyProfile(bodyProfile) });

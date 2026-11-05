@@ -2,7 +2,7 @@
  * Mock console data, used only when the API is unreachable (no secret, no real shop). Shapes are
  * the real DTOs so the console renders exactly what the backend will send.
  */
-import { completenessScore, MOCK_GARMENTS, type AnalyticsSwipesResponse, type MerchantLedgerResponse, type MerchantProductsResponse, type UsageResponse } from '@paskamer/schema';
+import { completenessScore, MOCK_GARMENTS, type AnalyticsSwipesResponse, type MerchantLedgerResponse, type MerchantProductsResponse, type UsageResponse } from '@curtain/schema';
 import { dayIso } from '@/lib/format';
 
 export function mockProducts(): MerchantProductsResponse {

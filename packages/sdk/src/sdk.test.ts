@@ -1,4 +1,4 @@
-import { ESTIMATE_DISCLAIMER as SCHEMA_DISCLAIMER } from '@paskamer/schema';
+import { ESTIMATE_DISCLAIMER as SCHEMA_DISCLAIMER } from '@curtain/schema';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ESTIMATE_DISCLAIMER, STRINGS } from './i18n';
 import { closeModal } from './modal';
@@ -8,9 +8,9 @@ import { VERSION } from './version';
 const UA_DESKTOP = navigator.userAgent;
 
 const SHOP = 'pk_test_abcdef123456';
-const API = 'https://api.paskamer.test';
+const API = 'https://api.curtain.test';
 const session = {
-  tryUrl: 'https://app.paskamer.test/try/eyJ.token',
+  tryUrl: 'https://app.curtain.test/try/eyJ.token',
   qrSvg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1"/></svg>',
   expiresAt: new Date(Date.now() + 600_000).toISOString(),
   shopPaused: false,
@@ -30,7 +30,7 @@ function mockFetch(status: number, body: unknown = session): ReturnType<typeof v
 
 function button(id = 'aalter-studio-1', html = ''): HTMLButtonElement {
   const b = document.createElement('button');
-  b.setAttribute('data-paskamer-product', id);
+  b.setAttribute('data-curtain-product', id);
   b.innerHTML = html;
   document.body.append(b);
   return b;
@@ -54,45 +54,45 @@ afterEach(() => {
 });
 
 describe('button discovery', () => {
-  it('binds <button data-paskamer-product>, fills an empty label, sets type=button and styles it', () => {
+  it('binds <button data-curtain-product>, fills an empty label, sets type=button and styles it', () => {
     const b = button();
     init({ shop: SHOP, api: API });
-    expect(b.hasAttribute('data-paskamer-bound')).toBe(true);
+    expect(b.hasAttribute('data-curtain-bound')).toBe(true);
     expect(b.type).toBe('button');
-    expect(b.textContent).toBe('Try in Paskamer');
+    expect(b.textContent).toBe('Try it on');
     expect(b.classList.contains('pk-btn')).toBe(true);
-    expect(document.getElementById('paskamer-sdk-style')).not.toBeNull();
+    expect(document.getElementById('curtain-sdk-style')).not.toBeNull();
   });
 
-  it('keeps the merchant label, respects data-paskamer-unstyled, and binds non-button elements accessibly', () => {
-    const b = button('x', 'Pas dit');
-    b.setAttribute('data-paskamer-unstyled', '');
+  it('keeps the merchant label, respects data-curtain-unstyled, and binds non-button elements accessibly', () => {
+    const b = button('x', 'Try this');
+    b.setAttribute('data-curtain-unstyled', '');
     const div = document.createElement('div');
-    div.setAttribute('data-paskamer-product', 'y');
+    div.setAttribute('data-curtain-product', 'y');
     document.body.append(div);
     init({ shop: SHOP, api: API });
-    expect(b.textContent).toBe('Pas dit');
+    expect(b.textContent).toBe('Try this');
     expect(b.classList.contains('pk-btn')).toBe(false);
     expect(div.getAttribute('role')).toBe('button');
     expect(div.getAttribute('tabindex')).toBe('0');
-    expect(div.textContent).toBe('Try in Paskamer');
+    expect(div.textContent).toBe('Try it on');
   });
 
   it('uses Dutch labels from <html lang="nl"> and a custom label from config', () => {
     document.documentElement.lang = 'nl-BE';
     const b = button();
     init({ shop: SHOP, api: API });
-    expect(b.textContent).toBe('Pas in Paskamer');
+    expect(b.textContent).toBe('Try it on');
     destroy();
     const c = button();
-    init({ shop: SHOP, api: API, label: 'Probeer het' });
-    expect(c.textContent).toBe('Probeer het');
+    init({ shop: SHOP, api: API, label: 'Give it a go' });
+    expect(c.textContent).toBe('Give it a go');
   });
 
   it('skips the stylesheet entirely when configured unstyled', () => {
     button();
     init({ shop: SHOP, api: API, unstyled: true });
-    expect(document.getElementById('paskamer-sdk-style')).toBeNull();
+    expect(document.getElementById('curtain-sdk-style')).toBeNull();
   });
 
   it('picks up buttons added later (SPA storefronts) via MutationObserver', async () => {
@@ -100,17 +100,17 @@ describe('button discovery', () => {
     const b = button('late');
     await flush();
     await new Promise((r) => requestAnimationFrame(() => r(null)));
-    expect(b.hasAttribute('data-paskamer-bound')).toBe(true);
+    expect(b.hasAttribute('data-curtain-bound')).toBe(true);
     expect(scan()).toBe(1);
   });
 
-  it('exposes window.Paskamer = { open, configure, version } and destroy() removes it', () => {
+  it('exposes window.Curtain = { open, configure, version } and destroy() removes it', () => {
     init({ shop: SHOP, api: API });
-    expect(typeof window.Paskamer?.open).toBe('function');
-    expect(typeof window.Paskamer?.configure).toBe('function');
-    expect(window.Paskamer?.version).toBe(VERSION);
+    expect(typeof window.Curtain?.open).toBe('function');
+    expect(typeof window.Curtain?.configure).toBe('function');
+    expect(window.Curtain?.version).toBe(VERSION);
     destroy();
-    expect(window.Paskamer).toBeUndefined();
+    expect(window.Curtain).toBeUndefined();
   });
 });
 
@@ -125,8 +125,8 @@ describe('configure', () => {
   });
 
   it('strips trailing slashes from the api origin', () => {
-    configure({ shop: SHOP, api: 'https://api.paskamer.test///' });
-    expect(getConfig().api).toBe('https://api.paskamer.test');
+    configure({ shop: SHOP, api: 'https://api.curtain.test///' });
+    expect(getConfig().api).toBe('https://api.curtain.test');
   });
 });
 
@@ -155,7 +155,7 @@ describe('click → handshake', () => {
     expect(dialog.querySelector('img')!.src).toContain('data:image/svg+xml');
     expect(dialog.querySelector('.pk-meta a')!.getAttribute('href')).toBe(session.tryUrl);
     expect(b.getAttribute('aria-busy')).toBeNull();
-    expect(dialog.textContent).toContain('Scan with your phone to try it on in Paskamer');
+    expect(dialog.textContent).toContain('Scan with your phone to try it on in Curtain');
   });
 
   it('falls back to the built-in QR encoder when qrSvg is absent; programmatic calls report surface=api', async () => {
@@ -253,7 +253,7 @@ describe('click → handshake', () => {
   it('a keyboard activation on a non-button element also opens', async () => {
     const fetchMock = mockFetch(200);
     const div = document.createElement('div');
-    div.setAttribute('data-paskamer-product', 'kb');
+    div.setAttribute('data-curtain-product', 'kb');
     document.body.append(div);
     init({ shop: SHOP, api: API });
     div.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -265,14 +265,14 @@ describe('click → handshake', () => {
 });
 
 describe('contracts', () => {
-  it('shows the same estimate disclaimer as @paskamer/schema', () => {
+  it('shows the same estimate disclaimer as @curtain/schema', () => {
     expect(ESTIMATE_DISCLAIMER).toBe(SCHEMA_DISCLAIMER);
     expect(STRINGS.en.disclaimer).toBe(SCHEMA_DISCLAIMER);
   });
 
-  it('window.Paskamer.version is the package version', () => {
+  it('window.Curtain.version is the package version', () => {
     init({ shop: SHOP, api: API });
-    expect(window.Paskamer?.version).toBe(VERSION);
+    expect(window.Curtain?.version).toBe(VERSION);
     expect(VERSION).toMatch(/^\d+\.\d+\.\d+$/);
   });
 });

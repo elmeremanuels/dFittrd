@@ -1,8 +1,8 @@
 import { Download, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { BODY_MEASUREMENT_KEYS, confidenceFromSigma, type BodyMeasurementKey } from '@paskamer/schema';
-import { SEASON_TABLE, isSeason } from '@paskamer/taste-engine';
+import { BODY_MEASUREMENT_KEYS, confidenceFromSigma, type BodyMeasurementKey } from '@curtain/schema';
+import { SEASON_TABLE, isSeason } from '@curtain/taste-engine';
 import { MEASUREMENT_LABELS } from '@/features/capture';
 import { EstimateBadge } from '@/components/EstimateBadge';
 import { Ledger, type LedgerLine } from '@/components/Ledger';
@@ -190,7 +190,7 @@ export function ProfileRoute(): ReactNode {
         <h2 id="data-title" className="font-display text-xl">
           Your data
         </h2>
-        <button type="button" className="btn-ghost w-full" disabled={busy} onClick={() => void run(async () => downloadJson(`paskamer-export-${Date.now()}.json`, await exportLocal()))}>
+        <button type="button" className="btn-ghost w-full" disabled={busy} onClick={() => void run(async () => downloadJson(`curtain-export-${Date.now()}.json`, await exportLocal()))}>
           <Download className="h-4 w-4" aria-hidden /> Export everything (JSON)
         </button>
         <button type="button" className="btn-ghost w-full" disabled={busy || !profile} onClick={() => setConfirm('scan')}>

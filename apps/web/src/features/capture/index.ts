@@ -30,7 +30,7 @@ export {
 export {
   getDb,
   setDb,
-  PaskamerDb,
+  CurtainDb,
   DB_NAME,
   storageAvailable,
   saveCapture,

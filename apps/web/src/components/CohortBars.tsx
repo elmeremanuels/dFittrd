@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { FitCohortResponse } from '@paskamer/schema';
+import type { FitCohortResponse } from '@curtain/schema';
 
 /**
  * Cohort bars (handoff §7): aggregated wardrobe outcomes per size for one product. The API applies

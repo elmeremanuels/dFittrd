@@ -102,20 +102,20 @@ describe('GrokVideoProvider', () => {
       .reply(200, { request_id: 'req-2' });
     pool.intercept({ path: '/v1/videos/req-2', method: 'GET' }).reply(200, { status: 'done', video: { url: null, duration: 8, respect_moderation: true } });
     agent
-      .get('https://media.paskamer.app')
+      .get('https://media.curtain.fit')
       .intercept({ path: '/renders/abc.mp4', method: 'GET', headers: { 'x-internal': 'yes' } })
       .reply(200, MP4);
 
     const res = await provider({
       zdr: true,
       getUploadTarget: async () => ({
-        uploadUrl: 'https://media.paskamer.app/renders/abc.mp4?signed=1',
-        downloadUrl: 'https://media.paskamer.app/renders/abc.mp4',
+        uploadUrl: 'https://media.curtain.fit/renders/abc.mp4?signed=1',
+        downloadUrl: 'https://media.curtain.fit/renders/abc.mp4',
         downloadHeaders: { 'x-internal': 'yes' },
       }),
     }).animate(still, garment(flatLay), { durationSec: 8, resolution: '480p', promptHint: 'slow turn' });
 
-    expect(body.output).toEqual({ upload_url: 'https://media.paskamer.app/renders/abc.mp4?signed=1' });
+    expect(body.output).toEqual({ upload_url: 'https://media.curtain.fit/renders/abc.mp4?signed=1' });
     expect(body.prompt).toBe('slow turn');
     expect(res.costUsd).toBe(0.64);
     expect(res.retention.vendorDeletesAfterHours).toBe(0);

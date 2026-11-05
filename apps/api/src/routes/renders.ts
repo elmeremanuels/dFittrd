@@ -9,8 +9,8 @@ import { and, eq } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import sharp, { type Metadata } from 'sharp';
 import { z } from 'zod';
-import { ESTIMATE_DISCLAIMER, HeroRenderAcceptedSchema, HeroRenderRequestSchema, HeroRenderStatusSchema, RENDER_CONSENT_TIER } from '@paskamer/schema';
-import { MAX_HEIGHT, MAX_WIDTH } from '@paskamer/tryon-providers';
+import { ESTIMATE_DISCLAIMER, HeroRenderAcceptedSchema, HeroRenderRequestSchema, HeroRenderStatusSchema, RENDER_CONSENT_TIER } from '@curtain/schema';
+import { MAX_HEIGHT, MAX_WIDTH } from '@curtain/tryon-providers';
 import { requireDevice } from '../auth/device.js';
 import { renderJobs } from '../db/schema.js';
 import { JOB } from '../jobs/queue.js';
@@ -121,7 +121,7 @@ export const renderRoutes: FastifyPluginAsyncZod = async (app) => {
       return reply
         .header('content-type', kind === 'image' ? 'image/png' : 'video/mp4')
         .header('cache-control', 'private, max-age=600')
-        .header('x-paskamer-disclaimer', 'generated-estimate')
+        .header('x-curtain-disclaimer', 'generated-estimate')
         .send(Buffer.from(bytes));
     },
   );

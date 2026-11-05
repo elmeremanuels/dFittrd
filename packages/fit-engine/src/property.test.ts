@@ -1,6 +1,6 @@
 /** T16 purity + property tests: 1000 random bodies never throw, score ∈ [0,1] | null, inputs untouched. */
-import { MOCK_GARMENTS, FIT_POINTS } from '@paskamer/schema';
-import type { UserBody } from '@paskamer/schema';
+import { MOCK_GARMENTS, FIT_POINTS } from '@curtain/schema';
+import type { UserBody } from '@curtain/schema';
 import { describe, expect, it } from 'vitest';
 import { computeFit } from './computeFit';
 import { JEANS, REF, SLIP, WRAP, deepFreeze, rng } from './test/fixtures';

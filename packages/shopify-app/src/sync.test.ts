@@ -1,4 +1,4 @@
-import { GarmentPayloadDraftSchema, mockGarment } from '@paskamer/schema';
+import { GarmentPayloadDraftSchema, mockGarment } from '@curtain/schema';
 import { describe, expect, it } from 'vitest';
 import { parseBulkJsonl } from './graphql/bulk';
 import { isPublished, shouldArchive, syncProductNode, syncProductNodes, toMerchantUpsertBody } from './sync';

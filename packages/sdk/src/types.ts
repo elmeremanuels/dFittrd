@@ -1,20 +1,20 @@
-import type { SdkSessionRequest, SdkSessionResponse } from '@paskamer/schema';
+import type { SdkSessionRequest, SdkSessionResponse } from '@curtain/schema';
 
-// Wire types come from @paskamer/schema only (type-only import: nothing is bundled).
+// Wire types come from @curtain/schema only (type-only import: nothing is bundled).
 export type { SdkSessionRequest, SdkSessionResponse };
 
 /** How a click resolves: `auto` = mobile UA → redirect, desktop → QR modal. */
 export type OpenMode = 'auto' | 'redirect' | 'modal';
 
-export interface PaskamerConfig {
+export interface CurtainConfig {
   /** Public shop key prefix, `pk_live_…` or `pk_test_…` (never the `sk_` secret). */
   shop?: string;
-  /** API origin, e.g. `https://api.paskamer.app`. Defaults to the origin the SDK script was loaded from. */
+  /** API origin, e.g. `https://api.curtain.fit`. Defaults to the origin the SDK script was loaded from. */
   api?: string;
   mode?: OpenMode;
-  /** Skip the built-in button styling (same as `data-paskamer-unstyled`). */
+  /** Skip the built-in button styling (same as `data-curtain-unstyled`). */
   unstyled?: boolean;
-  /** Text used for empty buttons. Defaults to "Try in Paskamer" / "Pas in Paskamer". */
+  /** Text used for empty buttons. Defaults to "Try it on". */
   label?: string;
   /** `en` | `nl`; defaults to `<html lang>`. */
   locale?: string;
@@ -42,12 +42,12 @@ export type OpenResult =
   | { kind: 'error'; status?: number; error?: unknown }
   | { kind: 'ignored'; reason: 'busy' | 'unconfigured' | 'no-product' };
 
-export interface PaskamerApi {
+export interface CurtainApi {
   /** Start a try-on handshake for a product (the same thing a button click does). Never rejects. */
   open(productId: string, opts?: OpenOptions): Promise<OpenResult>;
   /** Merge config; returns the effective config. Re-scans buttons. */
-  configure(cfg: Partial<PaskamerConfig>): Readonly<PaskamerConfig>;
-  /** Bind any new `[data-paskamer-product]` elements; returns how many are bound in total. */
+  configure(cfg: Partial<CurtainConfig>): Readonly<CurtainConfig>;
+  /** Bind any new `[data-curtain-product]` elements; returns how many are bound in total. */
   scan(): number;
   /** Remove listeners, observer, styles and any open modal. */
   destroy(): void;
@@ -56,6 +56,6 @@ export interface PaskamerApi {
 
 declare global {
   interface Window {
-    Paskamer?: PaskamerApi;
+    Curtain?: CurtainApi;
   }
 }

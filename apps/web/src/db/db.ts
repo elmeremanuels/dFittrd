@@ -57,7 +57,7 @@ export interface ClientLedgerEntry {
   id: string;
   /** ISO timestamp. */
   at: string;
-  kind: 'signature_sync' | 'swipe_batch' | 'wardrobe_sync' | 'hero_render' | 'pairing' | 'erase' | 'device' | 'export';
+  kind: 'signature_sync' | 'swipe_batch' | 'wardrobe_sync' | 'hero_render' | 'pairing' | 'erase' | 'device' | 'export' | 'fit';
   method: 'POST' | 'PUT' | 'DELETE' | 'GET';
   path: string;
   bytes: number;

@@ -24,9 +24,24 @@ node scripts/check-bundle-secrets.mjs  # from the repo root, after a build
 | `/wardrobe` | saved items with size; saved → bought → kept / returned (feeds the fit engine history), cohort bars |
 | `/profile` | measurements + confidence + remeasure, colour season (labelled estimate), Style DNA, render consent tier (`avatar` default / `heroOptIn` explained), privacy `<Ledger/>`, export, delete scan, delete everything (`DELETE /v1/me`) |
 | `/pair` | pairing stub: paste a try link / code (QR is the phone camera), list of paired shops |
+| `/embed/:token` | **standalone embed** (docs/STANDALONE.md, D11): the fitting room inside the SDK overlay on a merchant page. Its own entry (`src/embed/mount.tsx`) and shell — no phone frame, nav, onboarding, app store, app database or service worker. See "Standalone embed" below |
 | `/merchant/*` | separate route tree (not in the phone frame) behind a `sk_…` key in `sessionStorage`: overview, products (completeness + missing fields), usage & plan, swipe aggregates, provider ledger. Falls back to typed demo data when the API is unreachable |
 
 A dev-only Customer/Merchant switcher is rendered under `import.meta.env.DEV`.
+
+## Standalone embed (`src/embed/`)
+
+`main.tsx` picks the entry by path: `/embed/*` loads only `embed/mount.tsx`; everything else loads `appMain.tsx` (store hydration + service worker).
+
+- Flow (`flow.ts`, a pure reducer): loading → About you → (optional scan with `CaptureStep persist={false}`) → Result; a remembered profile goes straight to Result ("Edit my measurements"); blocked screens for paused (also on a `fit-shown` 402), expired (410 / invalid / already resolved), product incomplete (422 / 404), offline and error (retryable).
+- About you (`aboutYou.ts`): height, weight (required, metric, numeric validation), fit preference, optional age range and sizing chart, and "I know my measurements" (bust / waist / hip, inseam for bottoms, EU shoe size for shoes) with a tape toggle. Missing girths come from the capture prior via `fuseProfile` (source `prior`, lower confidence). The snug / relaxed preference moves one size only when that size is wearable and within 0.12 of the engine's score.
+- Result (`ResultScreen.tsx`): `FitPanel`, neighbouring sizes, per-point fit for the size on screen, `AvatarView` (the store-free mirror; `Avatar` wraps it for the app), confidence, disclaimer, sticky **Choose size X**.
+- postMessage (`protocol.ts`): posts only to the parent origin reported by the browser (`location.ancestorOrigins[0]`, else `document.referrer`) when it is in `embed.allowedOrigins`; never `*`. Otherwise "Choose size X on the shop page". `curtain:ready` after the first paint, `curtain:close` on Escape, `curtain:context` accepted only from `window.parent` and that origin.
+- Billing: one `POST /v1/try/:token/fit-shown { intentToken, recommendedSize, confidence }` per intent token when the first result shows. No measurement leaves the iframe.
+- Storage (`storage.ts`): Dexie db **`curtain-embed`** (never `curtain`), partitioned by the browser per shop site and keyed by shop id too. Remember me (default on) mirrors device token + profile there; off wipes it and keeps memory only; Forget me calls `DELETE /v1/me` and wipes both. Falls back to memory when IndexedDB is blocked.
+- See it on me (`HeroRender.tsx`): the opt-in hero render of the rasterised avatar (never a photo), shown only when the shop sends `heroRenders: true` (not in `ShopBranding` yet, so hidden for now).
+- `mock:<garment id>` (and `mock:paused:<id>`, `mock:expired`, `mock:incomplete`, `mock:offline`) resolve without network for dev and screenshots.
+- Framing: `vite.config.ts` serves `/embed/*` with `frame-ancestors https: http://localhost:* http://127.0.0.1:*` and `Cross-Origin-Resource-Policy: cross-origin` (dev and preview), other HTML with `frame-ancestors 'none'`; no COOP/COEP. The PWA never serves `/embed` from its cache.
 
 ## Module map (`src/`)
 

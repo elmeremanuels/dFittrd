@@ -82,7 +82,7 @@ to the `product` template. It renders
 ```
 
 and injects `sdk.v1.js` from the extension's `assets/` (served by Shopify's CDN) with
-`data-shop`, `data-api`, `data-mode`, `data-locale`, `data-label` — the SDK's documented script-tag
+`data-shop`, `data-api`, `data-mode`, `data-size-option`, `data-locale`, `data-label` — the SDK's documented script-tag
 contract. Because the asset origin is `cdn.shopify.com`, `data-api` is always set explicitly.
 A small inline guard loads the script once even if the block is placed twice.
 
@@ -93,8 +93,18 @@ Where the values come from: on install the api writes **app-data metafields** on
 stores. The secret `sk_…` key never appears anywhere in the extension (tested).
 
 Settings (merchant-facing, translated via `locales/*.schema.json`): button label, position
-(left / centered / full width), on-click mode (auto / app link / QR), privacy hint toggle, "use my
-theme's button styling", and the two advanced overrides. Storefront strings (`locales/en.default.json`,
+(left / centered / full width), **Experience** (`data-mode`), **Size option name**
+(`data-size-option`, default `Size`), privacy hint toggle, "use my theme's button styling", and the
+two advanced overrides.
+
+**Standalone is the default** (decision D11, `docs/STANDALONE.md`). With Experience set to *On the
+product page (no app needed)* (`embed`), a click opens a full-screen overlay on the product page with
+the Curtain fit experience in an iframe: about you, optional camera scan, the recommended size. The
+shopper's measurements stay in their browser. When they choose a size, the SDK selects the matching
+variant in the theme's product form (the option named by *Size option name*; `Maat`, `Taille` and
+`Größe` also match) and the shopper adds to cart with the theme's own button. The shopper never
+needs the Curtain app. *Curtain app* (`app`) is the opt-in alternative: phones open the app, desktops
+show a QR code. Storefront strings (`locales/en.default.json`,
 `nl.json`): label "Try it on", the hint (which says *estimate* /
 *schatting*), theme-editor-only setup notices.
 

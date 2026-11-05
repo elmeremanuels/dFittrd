@@ -1,8 +1,8 @@
-import { pickStrings } from './i18n';
+import { openEmbed } from './embed';
+import { localeTag, pickStrings } from './i18n';
 import { closeModal, openModal } from './modal';
-import { qrToSvg } from './qr';
 import { injectStyles, STYLE_ID } from './styles';
-import type { OpenOptions, OpenResult, CurtainApi, CurtainConfig, SdkSessionRequest, SdkSessionResponse } from './types';
+import type { OpenMode, OpenOptions, OpenResult, CurtainApi, CurtainConfig, SdkSessionRequest, SdkSessionResponse } from './types';
 import { VERSION } from './version';
 
 export const PRODUCT_ATTR = 'data-curtain-product';
@@ -125,7 +125,11 @@ function showMessage(message: string, trigger?: Element | null): void {
   openModal({ strings: pickStrings(cfg.locale), content: { message }, trigger });
 }
 
-/** Resolve one product: handshake, then redirect (mobile) or QR modal (desktop). Never throws. */
+/**
+ * Resolve one product. Standalone (`embed` / `auto`, the default): handshake with `surface: 'embed'`,
+ * then the full-screen overlay on this page, on desktop and mobile. App mode: handshake, then the
+ * deep link (mobile) or the QR modal (desktop). Never throws.
+ */
 export async function open(productId: string, opts: OpenOptions = {}): Promise<OpenResult> {
   const trigger = opts.trigger ?? null;
   try {
@@ -138,10 +142,12 @@ export async function open(productId: string, opts: OpenOptions = {}): Promise<O
     inFlight = true;
     setState(trigger, true);
     const strings = pickStrings(cfg.locale);
+    const mode = opts.mode ?? cfg.mode;
+    const app = mode === 'app' || mode === 'redirect' || mode === 'modal';
 
     let outcome: SessionOutcome;
     try {
-      outcome = await requestSession(productId, pageUrlOf(opts.pageUrl ?? location.href), opts.surface ?? 'api');
+      outcome = await requestSession(productId, pageUrlOf(opts.pageUrl ?? location.href), app ? opts.surface ?? 'api' : 'embed');
     } catch (error) {
       showMessage(strings.error, trigger);
       return { kind: 'error', error };
@@ -160,25 +166,31 @@ export async function open(productId: string, opts: OpenOptions = {}): Promise<O
       showMessage(strings.error, trigger);
       return { kind: 'error', status };
     }
+    if (!app && isHttpUrl(session.embedUrl)) {
+      injectStyles();
+      openEmbed({
+        embedUrl: session.embedUrl,
+        appUrl: mode === 'auto' ? session.tryUrl : undefined,
+        productExternalId: productId,
+        trigger,
+        strings,
+        locale: localeTag(cfg.locale),
+        sizeOption: cfg.sizeOption,
+      });
+      return { kind: 'embed', session };
+    }
+    // App mode, or an older API without embedUrl: deep link on mobile, QR modal on desktop.
     const paused = session.shopPaused || pausedStatus;
-    const mode = opts.mode ?? cfg.mode ?? 'auto';
-    if (mode === 'redirect' || (mode === 'auto' && isMobile())) {
+    if (mode === 'redirect' || (mode !== 'modal' && isMobile())) {
       navigate(session.tryUrl);
       return { kind: 'redirect', session };
     }
     injectStyles();
-    let qrSvg = session.qrSvg;
-    if (!qrSvg) {
-      try {
-        qrSvg = qrToSvg(session.tryUrl);
-      } catch {
-        qrSvg = '';
-      }
-    }
+    // The API renders qrSvg for app-mode surfaces. Without it the dialog still offers the link.
     openModal({
       strings,
       trigger,
-      content: { qrSvg, tryUrl: session.tryUrl, expiresAt: session.expiresAt, paused },
+      content: { qrSvg: session.qrSvg, tryUrl: session.tryUrl, expiresAt: session.expiresAt, paused },
     });
     return { kind: 'modal', session };
   } catch (error) {
@@ -293,13 +305,14 @@ export function getConfig(): Readonly<CurtainConfig> {
   return Object.freeze({ ...cfg });
 }
 
-/** Tear everything down (listeners, observer, styles, modal). Mostly for tests and SPA unmounts. */
+/** Tear everything down (listeners, observer, styles, modal / overlay, toast). Mostly for tests and SPA unmounts. */
 export function destroy(): void {
   observer?.disconnect();
   observer = null;
   closeModal();
   for (const elm of Array.from(bound)) unbind(elm);
   document.getElementById(STYLE_ID)?.remove();
+  document.querySelector('.pk-toast')?.remove();
   if (window.Curtain === api) delete window.Curtain;
   cfg = {};
   inFlight = false;
@@ -349,7 +362,9 @@ export function configFromScript(script: HTMLScriptElement): CurtainConfig {
       /* relative/invalid src: leave api unset */
     }
   }
-  if (d.mode === 'redirect' || d.mode === 'modal' || d.mode === 'auto') out.mode = d.mode;
+  // Unknown values are dropped: the default is embed (standalone).
+  if (d.mode && /^(embed|app|auto|redirect|modal)$/.test(d.mode)) out.mode = d.mode as OpenMode;
+  if (d.sizeOption) out.sizeOption = d.sizeOption;
   if (d.curtainUnstyled !== undefined || d.unstyled !== undefined) out.unstyled = true;
   if (d.label) out.label = d.label;
   if (d.locale) out.locale = d.locale;

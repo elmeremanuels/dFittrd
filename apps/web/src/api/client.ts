@@ -10,6 +10,8 @@ import type {
   DeviceCreateRequest,
   DeviceTokenResponse,
   FitCohortResponse,
+  FitShownRequest,
+  FitShownResponse,
   HeroRenderAccepted,
   HeroRenderRequest,
   HeroRenderStatus,
@@ -96,6 +98,7 @@ function ledgerKind(path: string): ClientLedgerEntry['kind'] {
   const clean = path.split('?')[0] ?? path;
   if (WRITE_KIND[clean]) return WRITE_KIND[clean];
   if (clean.startsWith('/v1/wardrobe/')) return 'wardrobe_sync';
+  if (clean.startsWith('/v1/try/') && clean.endsWith('/fit-shown')) return 'fit';
   if (clean.startsWith('/v1/try/')) return 'pairing';
   return 'pairing';
 }
@@ -268,6 +271,10 @@ export class ApiClient {
   }
   resolveTry(token: string): Promise<TryResolveResponse> {
     return this.request('GET', `/v1/try/${encodeURIComponent(token)}`);
+  }
+  /** Standalone embed billing event: the size label and confidence only — never a measurement (D3, D11). */
+  fitShown(token: string, req: FitShownRequest): Promise<FitShownResponse> {
+    return this.request('POST', `/v1/try/${encodeURIComponent(token)}/fit-shown`, req);
   }
   shopProducts(shopId: string, query: Partial<ShopProductsQuery> = {}): Promise<ShopProductsResponse> {
     const q = new URLSearchParams();

@@ -1,19 +1,11 @@
 import '@fontsource-variable/fraunces';
 import '@fontsource-variable/inter';
 import './index.css';
-import { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
-import { RouterProvider } from 'react-router';
-import { registerSW } from 'virtual:pwa-register';
-import { router } from './router';
-import { useApp } from './store';
+import { isEmbedPath } from './embed/path';
 
-void useApp.getState().hydrate();
+const root = document.getElementById('root')!;
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <RouterProvider router={router} />
-  </StrictMode>,
-);
-
-registerSW({ immediate: true });
+// Two entries: the standalone embed inside a merchant page (docs/STANDALONE.md) loads only its
+// own code; the app (store hydration, service worker) loads only outside /embed.
+if (isEmbedPath(location.pathname)) void import('./embed/mount').then((m) => m.mountEmbed(root));
+else void import('./appMain').then((m) => m.mountApp(root));

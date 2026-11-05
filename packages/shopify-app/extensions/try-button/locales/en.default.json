@@ -2,7 +2,8 @@
   "curtain": {
     "try_button": {
       "label": "Try it on",
-      "hint": "See how it fits on you, privately. Opens the Curtain app on your phone. Every render is an estimate.",
+      "hint": "See how it fits on you, privately, right on this page. Your measurements stay on this device. Every render is an estimate.",
+      "hint_app": "See how it fits on you, privately. Opens the Curtain app on your phone. Every render is an estimate.",
       "not_connected": "Curtain is not connected to this store yet. Open the Curtain app in your admin to finish setup.",
       "needs_product": "Add this block to a product template: it needs a product to try on."
     }

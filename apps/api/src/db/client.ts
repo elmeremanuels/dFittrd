@@ -53,13 +53,16 @@ export function connectPostgres(databaseUrl: string, opts: { max?: number } = {}
   };
 }
 
-/** PGlite handle for tests (dev dependency; resolved lazily so production never loads it). */
-export async function connectPglite(): Promise<DbHandle> {
+/**
+ * PGlite handle for tests and the local demo (dev dependency; resolved lazily so production never
+ * loads it). In memory by default; `dataDir` persists to a directory (the demo uses ./.demo-db).
+ */
+export async function connectPglite(dataDir?: string): Promise<DbHandle> {
   const require = createRequire(import.meta.url);
   const pgliteModule = (await import(require.resolve('@electric-sql/pglite'))) as typeof PgliteModule;
   const drizzleModule = (await import('drizzle-orm/pglite')) as typeof DrizzlePglite;
   const migratorModule = (await import('drizzle-orm/pglite/migrator')) as typeof DrizzlePgliteMigrator;
-  const client = new pgliteModule.PGlite();
+  const client = dataDir ? new pgliteModule.PGlite(dataDir) : new pgliteModule.PGlite();
   const db = drizzleModule.drizzle(client, { schema });
   return {
     db,

@@ -2,7 +2,8 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
-import { defineConfig, loadEnv, type UserConfig } from 'vite';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { defineConfig, loadEnv, type Plugin, type UserConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { assertNoClientSecrets } from './config/envGuard';
 
@@ -14,8 +15,47 @@ export default defineConfig(({ mode }) => {
   return config;
 });
 
+/**
+ * Framing headers for the dev and preview servers, mirroring infra/Caddyfile (docs/STANDALONE.md §2):
+ * `/embed/*` is the only framable route (any https shop, plus localhost for the local demo
+ * storefront); every other HTML page keeps `frame-ancestors 'none'`. No COOP/COEP is set here,
+ * so nothing blocks a cross-origin parent from framing the embed.
+ */
+export const EMBED_FRAME_ANCESTORS = "frame-ancestors https: http://localhost:* http://127.0.0.1:*";
+
+export function framingHeaders(req: Pick<IncomingMessage, 'url' | 'headers'>, res: Pick<ServerResponse, 'setHeader' | 'removeHeader'>): void {
+  const path = (req.url ?? '/').split('?')[0] ?? '/';
+  if (path === '/embed' || path.startsWith('/embed/')) {
+    res.setHeader('Content-Security-Policy', EMBED_FRAME_ANCESTORS);
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.removeHeader('X-Frame-Options');
+    res.removeHeader('Cross-Origin-Opener-Policy');
+    res.removeHeader('Cross-Origin-Embedder-Policy');
+    return;
+  }
+  const accept = String(req.headers.accept ?? '');
+  if (accept.includes('text/html')) res.setHeader('Content-Security-Policy', "frame-ancestors 'none'");
+}
+
+function embedFraming(): Plugin {
+  const mw = (req: IncomingMessage, res: ServerResponse, next: () => void): void => {
+    framingHeaders(req, res);
+    next();
+  };
+  return {
+    name: 'curtain-embed-framing',
+    configureServer(server) {
+      server.middlewares.use(mw);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(mw);
+    },
+  };
+}
+
 const config = {
   plugins: [
+    embedFraming(),
     react(),
     tailwindcss(),
     VitePWA({
@@ -43,7 +83,8 @@ const config = {
         // Offline shell: the app bundle, fonts and icons. Models are cached on first use, not precached.
         globPatterns: ['**/*.{js,css,html,svg,png,woff2,webmanifest}'],
         globIgnores: ['**/models/**'],
-        navigateFallbackDenylist: [/^\/v1\//, /^\/merchant/],
+        // /embed is framed inside merchant pages: never served from the app's SW cache.
+        navigateFallbackDenylist: [/^\/v1\//, /^\/merchant/, /^\/embed/],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         runtimeCaching: [
           {

@@ -3,8 +3,11 @@
 
   Renders <button data-curtain-product="{{ product.id }}"> and loads the bundled SDK
   (assets/sdk.v1.js, copied from @curtain/sdk at build). The SDK turns the click into
-  POST {api}/v1/sdk/sessions → deep link (mobile) or QR modal (desktop). Nothing about the shopper
-  reaches the merchant page; the SDK sets no cookies and uses no storage.
+  POST {api}/v1/sdk/sessions → a full-screen overlay on this product page with the Curtain fit
+  experience in an iframe (data-mode="embed", the default: no app needed, docs/STANDALONE.md).
+  The "Curtain app" experience (data-mode="app") keeps the old deep link / QR flow. Nothing about the
+  shopper reaches the merchant page; the SDK sets no cookies and uses no storage. After the shopper
+  chooses a size, the SDK selects the variant whose option is named data-size-option (default "Size").
 
   The public shop key (pk_live_…) and the API origin come from app-data metafields the api writes
   on install (app.metafields.curtain.public_key / api_url). The block settings can override them
@@ -24,6 +27,14 @@
   if pk_label == blank
     assign pk_label = 'curtain.try_button.label' | t
   endif
+  assign pk_mode = block.settings.mode
+  if pk_mode != 'app'
+    assign pk_mode = 'embed'
+  endif
+  assign pk_size_option = block.settings.size_option | strip
+  if pk_size_option == blank
+    assign pk_size_option = 'Size'
+  endif
   assign pk_locale = request.locale.iso_code | slice: 0, 2 | downcase
   if pk_locale != 'nl'
     assign pk_locale = 'en'
@@ -32,7 +43,7 @@
 
 {%- if product -%}
   <div class="curtain-try curtain-try--{{ block.settings.alignment }}" {{ block.shopify_attributes }}>
-    {%- render 'curtain-try-button', product: product, label: pk_label, show_hint: block.settings.show_hint -%}
+    {%- render 'curtain-try-button', product: product, label: pk_label, show_hint: block.settings.show_hint, mode: pk_mode -%}
   </div>
 
   {%- if pk_shop_key != blank and pk_api_url != blank -%}
@@ -50,7 +61,8 @@
         s.setAttribute('data-curtain-sdk', '');
         s.setAttribute('data-shop', {{ pk_shop_key | json }});
         s.setAttribute('data-api', {{ pk_api_url | json }});
-        s.setAttribute('data-mode', {{ block.settings.mode | json }});
+        s.setAttribute('data-mode', {{ pk_mode | json }});
+        s.setAttribute('data-size-option', {{ pk_size_option | json }});
         s.setAttribute('data-locale', {{ pk_locale | json }});
         s.setAttribute('data-label', {{ pk_label | json }});
         {%- if block.settings.unstyled %}s.setAttribute('data-curtain-unstyled', '');{% endif %}
@@ -95,12 +107,18 @@
       "id": "mode",
       "label": "t:curtain.settings.mode.label",
       "info": "t:curtain.settings.mode.info",
-      "default": "auto",
+      "default": "embed",
       "options": [
-        { "value": "auto", "label": "t:curtain.settings.mode.auto" },
-        { "value": "redirect", "label": "t:curtain.settings.mode.redirect" },
-        { "value": "modal", "label": "t:curtain.settings.mode.modal" }
+        { "value": "embed", "label": "t:curtain.settings.mode.embed" },
+        { "value": "app", "label": "t:curtain.settings.mode.app" }
       ]
+    },
+    {
+      "type": "text",
+      "id": "size_option",
+      "label": "t:curtain.settings.size_option.label",
+      "info": "t:curtain.settings.size_option.info",
+      "default": "Size"
     },
     {
       "type": "checkbox",

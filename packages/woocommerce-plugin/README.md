@@ -32,7 +32,7 @@ includes/
   class-product-meta.php     the meta box (render, save, validate, list column)
   class-sync.php             hooks, jobs, retry policy
   class-queue.php            Action Scheduler / WP-Cron abstraction
-  class-frontend.php         SDK enqueue (data-shop/data-api/data-locale/data-label), button, shortcode
+  class-frontend.php         SDK enqueue (data-shop/data-api/data-mode/data-size-option/data-locale/data-label), button, shortcode
   class-rest.php             signed backfill endpoint
 assets/admin/                meta-box.js (repeaters, media picker), meta-box.css
 assets/                      sdk.v1.js, garment.schema.json, garment-draft.schema.json (build output, git-ignored)
@@ -51,7 +51,9 @@ This package is an application (a plugin zip); no other package imports it. Its 
 
 **Post meta** — the 17 `_curtain_*` keys from `WOO_META_KEYS` (JSON strings for json/list kinds, plain strings otherwise, the flat-lay as an absolute URL) plus plugin-private keys `_curtain_flat_lay_photo_id`, `_curtain_sync_status` (`pending|retrying|active|incomplete|archived|error`), `_curtain_sync_error`, `_curtain_synced_at`, `_curtain_content_hash`, `_curtain_score`, `_curtain_missing_fields`, `_curtain_validation`, `_curtain_local_issues`.
 
-**Storefront** — `<script src="…/assets/sdk.v1.js" data-shop="pk_…" data-api="https://api.…" data-locale="en|nl" data-label="…">` and `<button type="button" class="button alt curtain-try-button" data-curtain-product="<postId>">`; shortcode `[curtain_button product_id="" label="" class=""]`.
+**Storefront** — `<script src="…/assets/sdk.v1.js" data-shop="pk_…" data-api="https://api.…" data-mode="embed|app" data-size-option="pa_size" data-locale="en|nl" data-label="…">` and `<button type="button" class="button alt curtain-try-button" data-curtain-product="<postId>" data-curtain-mode="embed" data-curtain-size-option="pa_size">`; shortcode `[curtain_button product_id="" label="" class=""]`.
+
+**Standalone is the default** (decision D11, `docs/STANDALONE.md`). With *Experience* = *On the product page (no app needed)* (`mode = embed`), a click opens a full-screen overlay on the product page with the Curtain fitting room in an iframe. The shopper's measurements stay in their browser. When they choose a size, the SDK selects it in `form.variations_form select[name="attribute_<size_attribute>"]` (jQuery `change`, so `wc-add-to-cart-variation` updates price and stock) and the shopper adds to cart with the theme's own button. *Curtain app* (`mode = app`) is the opt-in alternative: deep link on phones, QR code on desktops. Both settings are sanitised (`Settings::sanitize_mode`, `Settings::sanitize_size_attribute`); unknown values fall back to `embed` / `pa_size`.
 
 **WordPress hooks** — jobs `curtain_push_product( $productId, $attempt )`, `curtain_delete_product( $externalId, $attempt )`, `curtain_sync_all( $page )` (Action Scheduler group `curtain`). Option `curtain_settings`.
 
@@ -100,8 +102,9 @@ php tests/run.php hmac                                 # run a subset
 4. **Push on save**: update a product → Action Scheduler (*WooCommerce → Status → Scheduled Actions*, group `curtain`) shows `curtain_push_product`; the api `products` row is upserted; the meta box shows the score/missing fields; the product list column shows the status badge. Trash → `curtain_delete_product` → api status `archived`. Untrash/publish → pushed again.
 5. **Retry**: stop the api → save a product → the action re-schedules with 1/2/4/8/16 min backoff and the panel shows *Syncing…*; after 6 attempts the status is *Sync error* with the message.
 6. **Clock skew**: set the WP server clock 6 min off → `stale_signature` → retried; back in sync → succeeds.
-7. **Storefront**: product page loads `assets/sdk.v1.js` with `data-shop`, `data-api`, `data-locale`, `data-label`; the button triggers `POST /v1/sdk/sessions`; on desktop the QR modal appears with the estimate disclaimer; on a phone the deep link opens the PWA. Paused plan → button still renders, app shows "shop paused". `[curtain_button]` in a block renders the same button.
-8. **Backfill endpoint**: from the api host, `GET https://shop/wp-json/curtain/v1/products/42` signed with `PK-HMAC` (secret = the shop's `sk_`, key = `pk_` prefix, target = `/wp-json/curtain/v1/products/42`) → 200 with `meta_data` + `payload`; unsigned → 401; before Connect → 403. On sites without pretty permalinks the target is `/?rest_route=/curtain/v1/products/42`.
-9. **Media picker**: pick a flat-lay from the media library → preview + attachment id saved; remove → meta deleted.
-10. **Uninstall**: with the deletion option off, delete the plugin → settings + `_curtain_*` meta remain, queue cleared; with it on → everything removed.
-11. **Translations**: set the site to Dutch → button label "Try it on" and the admin strings from `languages/curtain-woocommerce-nl_NL.po` (compile to `.mo` with `wp i18n make-mo languages/` before shipping — `.mo` files are not generated offline here).
+7. **Storefront (standalone, default)**: product page loads `assets/sdk.v1.js` with `data-shop`, `data-api`, `data-mode="embed"`, `data-size-option="pa_size"`, `data-locale`, `data-label`; the button triggers `POST /v1/sdk/sessions` with `surface: 'embed'` and opens the overlay on desktop and on a phone; after *Choose size M* the size dropdown shows M and the price/stock of that variation. Paused plan → button still renders, the overlay shows "shop paused". `[curtain_button]` in a block renders the same button. The local `pnpm demo` storefront (`apps/demo-shop`, WooCommerce-style page) reproduces this without WordPress.
+8. **Storefront (Curtain app)**: with *Experience* = *Curtain app*, desktop shows the QR modal with the estimate disclaimer and a phone opens the deep link.
+9. **Backfill endpoint**: from the api host, `GET https://shop/wp-json/curtain/v1/products/42` signed with `PK-HMAC` (secret = the shop's `sk_`, key = `pk_` prefix, target = `/wp-json/curtain/v1/products/42`) → 200 with `meta_data` + `payload`; unsigned → 401; before Connect → 403. On sites without pretty permalinks the target is `/?rest_route=/curtain/v1/products/42`.
+10. **Media picker**: pick a flat-lay from the media library → preview + attachment id saved; remove → meta deleted.
+11. **Uninstall**: with the deletion option off, delete the plugin → settings + `_curtain_*` meta remain, queue cleared; with it on → everything removed.
+12. **Translations**: set the site to Dutch → button label "Try it on" and the admin strings from `languages/curtain-woocommerce-nl_NL.po` (compile to `.mo` with `wp i18n make-mo languages/` before shipping — `.mo` files are not generated offline here).

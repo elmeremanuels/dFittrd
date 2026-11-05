@@ -1,7 +1,7 @@
 {
   "name": "@curtain/sdk",
   "version": "0.1.0",
-  "description": "Curtain merchant SDK: a tiny vanilla-JS drop-in that turns <button data-curtain-product> into a try-on handshake (POST /v1/sdk/sessions → deep link on mobile, accessible QR modal on desktop).",
+  "description": "Curtain merchant SDK: a tiny vanilla-JS drop-in that turns <button data-curtain-product> into the standalone try-on overlay on the shop page (or, in app mode, the deep link / QR handshake).",
   "license": "UNLICENSED",
   "private": true,
   "type": "module",

@@ -98,6 +98,13 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
       } catch (err) {
         req.log.warn({ err, shopDomain }, 'metafield definitions could not be created (continuing)');
       }
+      // Standalone embed (docs/STANDALONE.md §2): the primary domain is a postMessage target.
+      try {
+        const primaryDomain = await shopify.fetchPrimaryDomainHost(shopDomain, accessToken);
+        if (primaryDomain && primaryDomain !== shopDomain) await updateSettings(db, shop.id, { primaryDomain });
+      } catch (err) {
+        req.log.warn({ err, shopDomain }, 'primary domain could not be read; the embed posts to the myshopify.com origin only (continuing)');
+      }
       const fresh = (await findShopByDomain(db, shopDomain))!;
       // The theme block reads app.metafields.curtain.{public_key,api_url,app_url}; without them the
       // button renders but cannot load the SDK. The public prefix is stable across key rotations, so

@@ -23,7 +23,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { GarmentPayloadDraft, LedgerEntry } from '@curtain/schema';
+import type { GarmentPayloadDraft, LedgerEntry, PairingSource, SdkSurface } from '@curtain/schema';
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 const id = () => uuid('id').primaryKey().default(sql`gen_random_uuid()`);
@@ -38,6 +38,13 @@ export interface ShopSettings {
   logoUrl?: string;
   adsEnabled?: boolean;
   siteUrl?: string;
+  /** Shopify: the storefront's primary domain host (e.g. `shop.example`), read at token exchange. */
+  primaryDomain?: string;
+  /**
+   * Extra storefront origins the standalone embed may `postMessage` to (docs/STANDALONE.md §2),
+   * e.g. a headless storefront. Exact origins (`https://shop.example`), set by the merchant.
+   */
+  embedOrigins?: string[];
   pluginVersion?: string;
   platformVersion?: string;
   /** Shopify: `gid://shopify/AppSubscription/…` usage line item for appUsageRecordCreate. */
@@ -192,7 +199,7 @@ export const pairings = pgTable(
       .references(() => shops.id, { onDelete: 'cascade' }),
     /** HMAC(pepper, device + shop): what the merchant side sees instead of a device id. */
     pseudonym: text('pseudonym').notNull(),
-    source: text('source').$type<'link' | 'qr'>().notNull().default('link'),
+    source: text('source').$type<PairingSource>().notNull().default('link'),
     pairedAt: ts('paired_at').notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.deviceId, t.shopId] }), index('pairings_shop_pseudonym_idx').on(t.shopId, t.pseudonym)],
@@ -212,12 +219,21 @@ export const trySessions = pgTable(
       .notNull()
       .references(() => products.id, { onDelete: 'cascade' }),
     deviceId: uuid('device_id').references(() => devices.id, { onDelete: 'set null' }),
-    surface: text('surface').$type<'button' | 'api'>().notNull().default('button'),
+    surface: text('surface').$type<SdkSurface>().notNull().default('button'),
+    /**
+     * Origin (scheme + host + port, never path or query) of the merchant page that opened the
+     * session. Only used to extend the embed's postMessage targets when it belongs to the shop.
+     */
+    pageOrigin: text('page_origin'),
     createdAt: ts('created_at').notNull().defaultNow(),
     expiresAt: ts('expires_at').notNull(),
     resolvedAt: ts('resolved_at'),
     /** Set when the first swipe with a fit result arrived — the session became billable. */
     billedAt: ts('billed_at'),
+    /** Standalone embed (POST /v1/try/:token/fit-shown): size label + confidence only, never measurements. */
+    fitShownAt: ts('fit_shown_at'),
+    recommendedSize: text('recommended_size'),
+    fitConfidence: real('fit_confidence'),
   },
   (t) => [
     uniqueIndex('try_sessions_jti_uq').on(t.tokenJti),

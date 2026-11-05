@@ -12,6 +12,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "demo": "tsx src/demo.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/migrate.js && node dist/server.js",
     "migrate": "node dist/migrate.js",

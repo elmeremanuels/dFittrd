@@ -100,7 +100,8 @@ export const SignaturePutResponseSchema = z.object({
 });
 export type SignaturePutResponse = z.infer<typeof SignaturePutResponseSchema>;
 
-export const LEDGER_KINDS = ['signature_sync', 'swipe_batch', 'wardrobe_sync', 'hero_render', 'pairing', 'erase'] as const;
+/** `fit`: a size recommendation shown in the standalone embed (size label + confidence only, never measurements). */
+export const LEDGER_KINDS = ['signature_sync', 'swipe_batch', 'wardrobe_sync', 'hero_render', 'pairing', 'erase', 'fit'] as const;
 export type LedgerKind = (typeof LEDGER_KINDS)[number];
 
 /** One line of the privacy ledger (client and server keep mirrored copies). */
@@ -126,6 +127,10 @@ export type LedgerListQuery = z.infer<typeof LedgerListQuerySchema>;
 export const LedgerListResponseSchema = z.object({ entries: z.array(LedgerEntrySchema), nextCursor: cursor.nullable() });
 export type LedgerListResponse = z.infer<typeof LedgerListResponseSchema>;
 
+/** How a device got paired with a shop: app deep link, desktop QR, or the standalone embed (D11). */
+export const PAIRING_SOURCES = ['link', 'qr', 'embed'] as const;
+export type PairingSource = (typeof PAIRING_SOURCES)[number];
+
 /** DELETE /v1/me — GDPR erase in one call. */
 export const MeDeleteResponseSchema = z.object({
   deleted: z.literal(true),
@@ -141,7 +146,7 @@ export const MeExportResponseSchema = z.object({
   signature: FitSignatureWireSchema.nullable(),
   swipes: z.array(SwipeEventSchema.extend({ shopId: uuid })),
   wardrobe: z.array(z.lazy(() => WardrobeItemSchema)),
-  pairings: z.array(z.object({ shopId: uuid, pairedAt: isoDate, source: z.enum(['link', 'qr']) })),
+  pairings: z.array(z.object({ shopId: uuid, pairedAt: isoDate, source: z.enum(PAIRING_SOURCES) })),
   ledger: z.array(LedgerEntrySchema),
 });
 export type MeExportResponse = z.infer<typeof MeExportResponseSchema>;
@@ -175,8 +180,31 @@ export const TryResolveResponseSchema = z.object({
     intentToken: z.string().min(16).max(128),
   }),
   pairing: z.object({ created: z.boolean(), pairedAt: isoDate }),
+  /**
+   * Standalone embed (docs/STANDALONE.md §2): the shop storefront origins the iframe may use as the
+   * `postMessage` targetOrigin. It never posts to `*`.
+   */
+  embed: z.object({ allowedOrigins: z.array(z.string().min(1).max(256)).max(32) }),
 });
 export type TryResolveResponse = z.infer<typeof TryResolveResponseSchema>;
+
+/**
+ * POST /v1/try/:token/fit-shown (device JWT) — the billing event of the standalone embed (D7, D11).
+ * Only the chosen size label and the confidence go up; the body is strict, so a client that tries
+ * to send measurements is rejected instead of silently stripped (D3).
+ */
+export const FitShownRequestSchema = z
+  .object({
+    intentToken: z.string().min(16).max(128),
+    recommendedSize: z.string().min(1).max(16),
+    confidence: z.number().min(0).max(1),
+  })
+  .strict();
+export type FitShownRequest = z.infer<typeof FitShownRequestSchema>;
+
+/** `billed: false` on a replay of the same intent token (one billable session per intent token). */
+export const FitShownResponseSchema = z.object({ billed: z.boolean() });
+export type FitShownResponse = z.infer<typeof FitShownResponseSchema>;
 
 /** GET /v1/shops/:shopId/products?cursor&category&limit */
 export const ShopProductsQuerySchema = z.object({
@@ -332,21 +360,29 @@ export type FitCohortResponse = z.infer<typeof FitCohortResponseSchema>;
 // SDK — handshake from the merchant page
 // ---------------------------------------------------------------------------
 
+export const SDK_SURFACES = ['button', 'api', 'embed'] as const;
+export type SdkSurface = (typeof SDK_SURFACES)[number];
+
 /** POST /v1/sdk/sessions (public, CORS *, rate-limited per shop) */
 export const SdkSessionRequestSchema = z.object({
   shopKeyPrefix: z.string().regex(/^pk_(live|test)_[A-Za-z0-9]{6,32}$/),
   productExternalId: z.string().min(1).max(128),
   pageUrl: httpUrl,
-  /** Where the click came from; lets the merchant see "opened" only. */
-  surface: z.enum(['button', 'api']).default('button'),
+  /**
+   * Where the click came from; lets the merchant see "opened" only. `embed` is the standalone
+   * overlay on the merchant page (docs/STANDALONE.md): no QR is generated for it.
+   */
+  surface: z.enum(SDK_SURFACES).default('button'),
 });
 export type SdkSessionRequest = z.infer<typeof SdkSessionRequestSchema>;
 
 export const SdkSessionResponseSchema = z.object({
   /** https://app.<domain>/try/<jwt 10 min> */
   tryUrl: httpUrl,
-  /** Inline SVG for the desktop QR modal. */
-  qrSvg: z.string().min(1),
+  /** `${PUBLIC_APP_URL}/embed/<token>`: the iframe of the standalone overlay. On every response. */
+  embedUrl: httpUrl,
+  /** Inline SVG for the desktop QR modal (app mode). Omitted for `surface: 'embed'`. */
+  qrSvg: z.string().min(1).optional(),
   expiresAt: isoDate,
   /** Below plan: the button still renders, the deep link shows "shop paused" (D7). */
   shopPaused: z.boolean(),
@@ -537,6 +573,7 @@ export const API_ROUTES = {
   meExport: 'GET /v1/me/export',
   meLedger: 'GET /v1/me/ledger',
   tryResolve: 'GET /v1/try/:token',
+  tryFitShown: 'POST /v1/try/:token/fit-shown',
   shopProducts: 'GET /v1/shops/:shopId/products',
   productGet: 'GET /v1/products/:id',
   swipesBatch: 'POST /v1/swipes',

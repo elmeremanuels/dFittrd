@@ -10,18 +10,6 @@ importers:
 
   apps/api:
     dependencies:
-      '@fastify/cors':
-        specifier: 11.4.0
-        version: 11.4.0
-      '@fastify/helmet':
-        specifier: 13.2.0
-        version: 13.2.0
-      '@fastify/rate-limit':
-        specifier: 11.2.2
-        version: 11.2.2
-      '@fastify/swagger':
-        specifier: 9.9.3
-        version: 9.9.3
       '@curtain/schema':
         specifier: workspace:*
         version: link:../../packages/schema
@@ -34,6 +22,18 @@ importers:
       '@curtain/tryon-providers':
         specifier: workspace:*
         version: link:../../packages/tryon-providers
+      '@fastify/cors':
+        specifier: 11.4.0
+        version: 11.4.0
+      '@fastify/helmet':
+        specifier: 13.2.0
+        version: 13.2.0
+      '@fastify/rate-limit':
+        specifier: 11.2.2
+        version: 11.2.2
+      '@fastify/swagger':
+        specifier: 9.9.3
+        version: 9.9.3
       drizzle-orm:
         specifier: 0.45.4
         version: 0.45.4(@electric-sql/pglite@0.5.15)(@opentelemetry/api@1.10.0)(pg@8.23.1)(postgres@3.4.9)
@@ -96,17 +96,14 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/node@22.20.5)(jiti@2.7.0)(jsdom@27.4.0)(lightningcss@1.33.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)
 
+  apps/demo-shop:
+    dependencies:
+      '@curtain/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
+
   apps/web:
     dependencies:
-      '@fontsource-variable/fraunces':
-        specifier: 5.3.0
-        version: 5.3.0
-      '@fontsource-variable/inter':
-        specifier: 5.3.0
-        version: 5.3.0
-      '@mediapipe/tasks-vision':
-        specifier: 1.2.2
-        version: 1.2.2
       '@curtain/fit-engine':
         specifier: workspace:*
         version: link:../../packages/fit-engine
@@ -116,6 +113,15 @@ importers:
       '@curtain/taste-engine':
         specifier: workspace:*
         version: link:../../packages/taste-engine
+      '@fontsource-variable/fraunces':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource-variable/inter':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@mediapipe/tasks-vision':
+        specifier: 1.2.2
+        version: 1.2.2
       dexie:
         specifier: 4.4.7
         version: 4.4.7
@@ -213,12 +219,12 @@ importers:
 
   packages/fit-engine:
     devDependencies:
-      '@eslint/js':
-        specifier: ^9.39.5
-        version: 9.39.5
       '@curtain/schema':
         specifier: workspace:*
         version: link:../schema
+      '@eslint/js':
+        specifier: ^9.39.5
+        version: 9.39.5
       '@types/node':
         specifier: ^22.20.5
         version: 22.20.5
@@ -268,12 +274,12 @@ importers:
 
   packages/sdk:
     devDependencies:
-      '@eslint/js':
-        specifier: ^9.39.5
-        version: 9.39.5
       '@curtain/schema':
         specifier: workspace:*
         version: link:../schema
+      '@eslint/js':
+        specifier: ^9.39.5
+        version: 9.39.5
       '@types/node':
         specifier: ^22.20.5
         version: 22.20.5
@@ -311,12 +317,12 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
-      '@eslint/js':
-        specifier: ^9.39.5
-        version: 9.39.5
       '@curtain/sdk':
         specifier: workspace:*
         version: link:../sdk
+      '@eslint/js':
+        specifier: ^9.39.5
+        version: 9.39.5
       '@types/node':
         specifier: ^22.20.5
         version: 22.20.5
@@ -344,12 +350,12 @@ importers:
 
   packages/taste-engine:
     devDependencies:
-      '@eslint/js':
-        specifier: ^9.39.5
-        version: 9.39.5
       '@curtain/schema':
         specifier: workspace:*
         version: link:../schema
+      '@eslint/js':
+        specifier: ^9.39.5
+        version: 9.39.5
       '@types/node':
         specifier: ^22.20.5
         version: 22.20.5

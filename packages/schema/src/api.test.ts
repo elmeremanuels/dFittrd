@@ -5,6 +5,10 @@ import {
   DateRangeQuerySchema,
   DeviceCreateRequestSchema,
   DeviceTokenResponseSchema,
+  FitShownRequestSchema,
+  FitShownResponseSchema,
+  LEDGER_KINDS,
+  MeExportResponseSchema,
   ESTIMATE_DISCLAIMER,
   HeroRenderRequestSchema,
   HeroRenderStatusSchema,
@@ -14,6 +18,7 @@ import {
   MerchantProductValidateResponseSchema,
   PersonInputSchema,
   SdkSessionRequestSchema,
+  SdkSessionResponseSchema,
   ShopProductsQuerySchema,
   SignaturePutRequestSchema,
   SwipeBatchRequestSchema,
@@ -56,9 +61,48 @@ describe('try / shop / swipes / wardrobe DTOs', () => {
       garment: mockGarment('aalter-studio-1'),
       trySession: { id: UUID, expiresAt: NOW, intentToken: 'it_0123456789abcdef' },
       pairing: { created: true, pairedAt: NOW },
+      embed: { allowedOrigins: ['https://aalter-studio.myshopify.com'] },
     });
     expect(r.success).toBe(true);
     if (r.success) expect(r.data.shop.paused).toBe(false);
+  });
+
+  it('try resolve carries the embed allowed origins (standalone postMessage targets)', () => {
+    const base = {
+      shop: { id: UUID, name: 'Aalter Studio', platform: 'woocommerce' },
+      garment: mockGarment('aalter-studio-1'),
+      trySession: { id: UUID, expiresAt: NOW, intentToken: 'it_0123456789abcdef' },
+      pairing: { created: true, pairedAt: NOW },
+    };
+    expect(TryResolveResponseSchema.safeParse(base).success).toBe(false);
+    expect(TryResolveResponseSchema.safeParse({ ...base, embed: { allowedOrigins: [] } }).success).toBe(true);
+    expect(TryResolveResponseSchema.safeParse({ ...base, embed: { allowedOrigins: ['https://shop.example', 'https://www.shop.example'] } }).success).toBe(true);
+  });
+
+  it('fit-shown takes only the size label and the confidence, never measurements', () => {
+    const ok = { intentToken: 'it_0123456789abcdef', recommendedSize: 'M', confidence: 0.72 };
+    expect(FitShownRequestSchema.safeParse(ok).success).toBe(true);
+    expect(FitShownRequestSchema.safeParse({ ...ok, measurements: { bust: 88 } }).success).toBe(false);
+    expect(FitShownRequestSchema.safeParse({ ...ok, heightCm: 170 }).success).toBe(false);
+    expect(FitShownRequestSchema.safeParse({ ...ok, confidence: 1.2 }).success).toBe(false);
+    expect(FitShownRequestSchema.safeParse({ ...ok, recommendedSize: '' }).success).toBe(false);
+    expect(FitShownRequestSchema.safeParse({ ...ok, intentToken: 'short' }).success).toBe(false);
+    expect(FitShownResponseSchema.parse({ billed: false })).toEqual({ billed: false });
+  });
+
+  it('ledger kind fit and pairing source embed exist', () => {
+    expect(LEDGER_KINDS).toContain('fit');
+    expect(LedgerEntrySchema.safeParse({ id: UUID, kind: 'fit', at: NOW, payloadSummary: { bytes: 80, fields: ['intentToken', 'recommendedSize', 'confidence'] } }).success).toBe(true);
+    const exp = MeExportResponseSchema.safeParse({
+      deviceId: UUID,
+      exportedAt: NOW,
+      signature: null,
+      swipes: [],
+      wardrobe: [],
+      pairings: [{ shopId: UUID, pairedAt: NOW, source: 'embed' }],
+      ledger: [],
+    });
+    expect(exp.success).toBe(true);
   });
 
   it('shop products query coerces limit and validates category', () => {
@@ -117,6 +161,19 @@ describe('SDK + merchant DTOs', () => {
     expect(SdkSessionRequestSchema.safeParse({ shopKeyPrefix: ('sk_' + 'live_abc123XYZ'), productExternalId: '42', pageUrl: 'https://shop.example/p/42' }).success).toBe(false);
   });
 
+  it('sdk session accepts surface embed; the response has embedUrl and an optional qrSvg', () => {
+    const req = { shopKeyPrefix: 'pk_' + 'test_abc123XYZ', productExternalId: '42', pageUrl: 'https://shop.example/p/42' };
+    expect(SdkSessionRequestSchema.parse(req).surface).toBe('button');
+    expect(SdkSessionRequestSchema.parse({ ...req, surface: 'embed' }).surface).toBe('embed');
+    expect(SdkSessionRequestSchema.safeParse({ ...req, surface: 'iframe' }).success).toBe(false);
+    const res = { tryUrl: 'https://app.curtain.fit/try/t', embedUrl: 'https://app.curtain.fit/embed/t', expiresAt: NOW, shopPaused: false };
+    expect(SdkSessionResponseSchema.safeParse(res).success).toBe(true);
+    expect(SdkSessionResponseSchema.safeParse({ ...res, qrSvg: '<svg/>' }).success).toBe(true);
+    const { embedUrl: _e, ...noEmbed } = res;
+    void _e;
+    expect(SdkSessionResponseSchema.safeParse(noEmbed).success).toBe(false);
+  });
+
   it('merchant upsert accepts drafts and the response reports completeness', () => {
     expect(MerchantProductUpsertRequestSchema.safeParse({ id: '42', name: 'Thing', brand: 'B' }).success).toBe(true);
     expect(MerchantProductUpsertRequestSchema.safeParse(mockGarment('sole-01')).success).toBe(true);
@@ -165,6 +222,7 @@ describe('SDK + merchant DTOs', () => {
     expect(API_ROUTES.signaturePut).toBe('PUT /v1/me/signature');
     expect(API_ROUTES.renderHero).toBe('POST /v1/renders/hero');
     expect(API_ROUTES.merchantProductValidate).toBe('POST /v1/merchant/products/validate');
+    expect(API_ROUTES.tryFitShown).toBe('POST /v1/try/:token/fit-shown');
     expect(Object.values(API_ROUTES).every((r) => /^(GET|POST|PUT|DELETE) \/v1\//.test(r))).toBe(true);
   });
 });

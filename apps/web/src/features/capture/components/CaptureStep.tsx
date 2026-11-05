@@ -21,7 +21,7 @@ import { BodyStep } from './BodyStep';
 import { FaceStep, type FaceStepResult } from './FaceStep';
 import { FusionStep } from './FusionStep';
 import { ManualStep } from './ManualStep';
-import { GhostButton, Panel, PrimaryButton, PrivacyNote, StepHeader } from './ui';
+import { CaptureVariantContext, GhostButton, Panel, PrimaryButton, PrivacyNote, StepHeader, type CaptureVariant } from './ui';
 
 export interface CaptureExtras {
   faceTileBlob: Blob | null;
@@ -44,9 +44,15 @@ export interface CaptureStepProps {
   initialProfile?: BodyProfile | null;
   /** Prefill for the manual form (e.g. from the previous profile). */
   initialForm?: Partial<ManualForm>;
+  /**
+   * `embed` (COPY-1): the standalone fitting room on a shop's page. Skips the face photo (the
+   * identity tile is an app feature), and its copy says "this device" and never mentions syncing.
+   */
+  variant?: CaptureVariant;
 }
 
-export function CaptureStep({ onComplete, onSkip, persist = true, modelBase, initialProfile = null, initialForm }: CaptureStepProps): ReactNode {
+export function CaptureStep({ onComplete, onSkip, persist = true, modelBase, initialProfile = null, initialForm, variant = 'app' }: CaptureStepProps): ReactNode {
+  const embed = variant === 'embed';
   const [stage, setStage] = useState<Stage>('intro');
   const [caps, setCaps] = useState<FlowCaps>({ camera: null, models: 'idle' });
   const sessionRef = useRef<ScanSession | null>(null);
@@ -84,7 +90,15 @@ export function CaptureStep({ onComplete, onSkip, persist = true, modelBase, ini
     };
   }, [modelBase]);
 
-  const advance = useCallback(() => setStage((s) => nextStage(s, caps)), [caps]);
+  const advance = useCallback(
+    () =>
+      setStage((s) => {
+        const next = nextStage(s, caps);
+        // The embed has no identity tile: go straight from the intro to the body scan.
+        return embed && next === 'face' ? nextStage('face', caps) : next;
+      }),
+    [caps, embed],
+  );
 
   const fused: FuseResult | null = useMemo(() => {
     if (stage !== 'fusion') return null;
@@ -132,33 +146,56 @@ export function CaptureStep({ onComplete, onSkip, persist = true, modelBase, ini
   const cameraStagesPossible = caps.camera === true && caps.models !== 'failed';
 
   return (
+    <CaptureVariantContext.Provider value={variant}>
     <div className="mx-auto w-full max-w-md space-y-4 px-4 py-6" aria-live="off">
       <AnimatePresence mode="wait">
         {stage === 'intro' ? (
           <Panel key="intro" className="space-y-6">
-            <StepHeader eyebrow="Your private fitting room" title="Let’s measure you" subtitle="About two minutes. Nothing leaves your phone." />
-            <ul className="space-y-3 text-sm text-ink/70">
-              <li className="flex items-start gap-3">
-                <Camera className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
-                One face photo for your skin tone and identity tile.
-              </li>
-              <li className="flex items-start gap-3">
-                <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
-                An 8-second body video, measured by a model running on this device.
-              </li>
-              <li className="flex items-start gap-3">
-                <Ruler className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
-                A few tape measurements to keep the scan honest.
-              </li>
-              <li className="flex items-start gap-3">
-                <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
-                Every result is an estimate and says how sure it is.
-              </li>
-            </ul>
+            {embed ? (
+              <>
+                <StepHeader eyebrow="More accurate fit" title="Quick body scan" subtitle="About 30 seconds. Nothing leaves this device." />
+                <ul className="space-y-3 text-sm text-ink/70">
+                  <li className="flex items-start gap-3">
+                    <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
+                    An 8-second body video, measured in this browser.
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <Ruler className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
+                    Check or add a few measurements.
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
+                    Every result is an estimate and says how sure it is.
+                  </li>
+                </ul>
+              </>
+            ) : (
+              <>
+                <StepHeader eyebrow="Your private fitting room" title="Let’s measure you" subtitle="About two minutes. Nothing leaves your phone." />
+                <ul className="space-y-3 text-sm text-ink/70">
+                  <li className="flex items-start gap-3">
+                    <Camera className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
+                    One face photo for your skin tone and identity tile.
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
+                    An 8-second body video, measured by a model running on this device.
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <Ruler className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
+                    A few tape measurements to keep the scan honest.
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
+                    Every result is an estimate and says how sure it is.
+                  </li>
+                </ul>
+              </>
+            )}
             {caps.camera === false ? <p className="text-xs text-ink/50">No camera detected — we will go straight to manual measurements.</p> : null}
             {caps.models === 'failed' ? <p className="text-xs text-ink/50">The scan models could not be loaded; manual measurements still work.</p> : null}
             <PrimaryButton onClick={advance} disabled={caps.camera === null}>
-              {caps.camera === null ? 'Checking your device…' : cameraStagesPossible ? 'Start with a photo' : 'Enter measurements'}
+              {caps.camera === null ? 'Checking your device…' : cameraStagesPossible ? (embed ? 'Start the scan' : 'Start with a photo') : 'Enter measurements'}
             </PrimaryButton>
             <GhostButton onClick={onSkip}>Skip for now</GhostButton>
             <PrivacyNote />
@@ -219,6 +256,7 @@ export function CaptureStep({ onComplete, onSkip, persist = true, modelBase, ini
         ) : null}
       </AnimatePresence>
     </div>
+    </CaptureVariantContext.Provider>
   );
 }
 

@@ -23,6 +23,7 @@ const KIND_TITLE: Record<ClientLedgerEntry['kind'], string> = {
   erase: 'Erase request',
   device: 'Anonymous device registered',
   export: 'Export requested',
+  fit: 'Size shown on a shop page',
 };
 
 export function ledgerLines(entries: ClientLedgerEntry[]): LedgerLine[] {

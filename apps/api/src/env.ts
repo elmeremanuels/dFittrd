@@ -53,6 +53,13 @@ export const EnvSchema = z.object({
   DEVICE_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
   TRY_TOKEN_TTL_SEC: z.coerce.number().int().min(60).max(3600).default(600),
   SDK_RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).default(120),
+  /** GET /v1/try/:token and POST /v1/try/:token/fit-shown, per client IP per minute (SEC-1). */
+  TRY_RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).default(60),
+  /**
+   * Anomaly cap: at most this many standalone (fit-shown) sessions are billed per shop per UTC day.
+   * Above it fit-shown still answers 200 with `billed: false` and logs a warning (SEC-1).
+   */
+  EMBED_BILLED_SESSIONS_PER_DAY: z.coerce.number().int().min(1).default(5000),
   /** Optional absolute path to sdk.v1.js; default resolves @curtain/sdk from node_modules. */
   SDK_FILE: z.string().optional(),
 

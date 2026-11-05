@@ -55,8 +55,13 @@ export class TokenService {
     return { token, jti, expiresAt };
   }
 
-  async verifyTry(token: string): Promise<TryClaims | null> {
-    const p = await this.verify(token);
+  /**
+   * `graceSec` accepts a token up to that long after `exp` (signature still checked). Used by
+   * fit-shown: a shopper may spend longer than the 10-minute link TTL in the embed, and the
+   * session is already bound to their device at that point.
+   */
+  async verifyTry(token: string, opts: { graceSec?: number } = {}): Promise<TryClaims | null> {
+    const p = await this.verify(token, opts.graceSec ?? 0);
     if (!p || p.typ !== 'try' || typeof p.jti !== 'string' || typeof p.sid !== 'string' || typeof p.pid !== 'string' || !p.exp) return null;
     return { jti: p.jti, shopId: p.sid, productId: p.pid, expiresAt: new Date(p.exp * 1000) };
   }
@@ -71,9 +76,9 @@ export class TokenService {
     return safeEqual(this.signRender(jobId, kind, exp), sig);
   }
 
-  private async verify(token: string): Promise<JWTPayload | null> {
+  private async verify(token: string, clockToleranceSec = 0): Promise<JWTPayload | null> {
     try {
-      const { payload } = await jwtVerify(token, this.key, { algorithms: ['HS256'] });
+      const { payload } = await jwtVerify(token, this.key, { algorithms: ['HS256'], clockTolerance: clockToleranceSec });
       return payload;
     } catch {
       return null;

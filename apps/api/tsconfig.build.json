@@ -5,5 +5,5 @@
     "declaration": false,
     "sourceMap": true
   },
-  "exclude": ["src/**/*.test.ts", "src/test/**"]
+  "exclude": ["src/**/*.test.ts", "src/test/**", "src/demo.ts", "src/demoSeed.ts"]
 }

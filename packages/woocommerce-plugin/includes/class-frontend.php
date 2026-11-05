@@ -4,8 +4,13 @@
  * time — never a remote script) on single product pages and renders the "Try it on"
  * button at the configured `woocommerce_single_product_summary` priority, plus a shortcode.
  *
+ * Standalone by default (docs/STANDALONE.md, D11): data-mode="embed" opens the fit experience in an
+ * overlay on the product page and selects the recommended size in the `data-size-option` attribute's
+ * dropdown (`form.variations_form select[name=attribute_pa_size]`). The Curtain app is opt-in
+ * (data-mode="app").
+ *
  * D7: the button always renders once the shop is connected, even when the plan is paused —
- * the Curtain app shows the "shop paused" screen; the merchant's page is never broken.
+ * the overlay shows the "shop paused" screen; the merchant's page is never broken.
  *
  * @package Curtain
  */
@@ -53,10 +58,12 @@ final class Frontend {
 			return $tag;
 		}
 		$attrs = array(
-			'data-shop'   => (string) Settings::get( 'public_key_prefix' ),
-			'data-api'    => Api_Client::from_settings()->base(),
-			'data-locale' => Settings::effective_locale(),
-			'data-label'  => Settings::button_label(),
+			'data-shop'        => (string) Settings::get( 'public_key_prefix' ),
+			'data-api'         => Api_Client::from_settings()->base(),
+			'data-mode'        => Settings::mode(),
+			'data-size-option' => Settings::size_attribute(),
+			'data-locale'      => Settings::effective_locale(),
+			'data-label'       => Settings::button_label(),
 		);
 		$extra = '';
 		foreach ( $attrs as $name => $value ) {
@@ -123,13 +130,24 @@ final class Frontend {
 		return self::button_html( $product, $label, (string) $atts['class'] );
 	}
 
+	/**
+	 * The button. It carries the experience and size attribute as data-curtain-mode /
+	 * data-curtain-size-option so themes and the shortcode can see them; the SDK reads its config
+	 * from the script tag (script_tag()), which renders the same values.
+	 */
 	public static function button_html( \WC_Product $product, string $label, string $class ): string {
+		$mode = Settings::mode();
+		$note = Settings::MODE_APP === $mode
+			? esc_html__( 'Opens the Curtain app, your private fitting room. Fit results are estimates.', 'curtain-woocommerce' )
+			: esc_html__( 'Find your size on this page. Your measurements stay on this device. Fit results are estimates.', 'curtain-woocommerce' );
 		return sprintf(
-			'<p class="curtain-try"><button type="button" class="%s curtain-try-button" data-curtain-product="%s">%s</button><span class="curtain-try-note screen-reader-text">%s</span></p>',
+			'<p class="curtain-try"><button type="button" class="%s curtain-try-button" data-curtain-product="%s" data-curtain-mode="%s" data-curtain-size-option="%s">%s</button><span class="curtain-try-note screen-reader-text">%s</span></p>',
 			esc_attr( trim( $class ) ),
 			esc_attr( (string) $product->get_id() ),
+			esc_attr( $mode ),
+			esc_attr( Settings::size_attribute() ),
 			esc_html( $label ),
-			esc_html__( 'Opens Curtain, your private fitting room. Fit results are estimates.', 'curtain-woocommerce' )
+			$note
 		);
 	}
 }

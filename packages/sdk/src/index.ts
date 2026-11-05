@@ -10,12 +10,26 @@ import { autoInit } from './sdk';
 export { init, open, configure, getConfig, scan, destroy, autoInit, isMobile, findScriptTag, configFromScript, api, PRODUCT_ATTR } from './sdk';
 export { openModal, closeModal, currentModal, minutesLeft, svgToDataUrl } from './modal';
 export type { ModalContent, ModalHandle, ModalOptions } from './modal';
-export { encodeQr, qrToSvg } from './qr';
-export type { QrMatrix, QrSvgOptions } from './qr';
-export { pickStrings, STRINGS, ESTIMATE_DISCLAIMER } from './i18n';
+export { openEmbed, toast } from './embed';
+export type { EmbedOptions } from './embed';
+export { selectSize, currentSize, SIZE_OPTION_NAMES } from './variant';
+export { pickStrings, localeTag, STRINGS, ESTIMATE_DISCLAIMER } from './i18n';
 export type { Strings } from './i18n';
 export { CSS, STYLE_ID, injectStyles } from './styles';
 export { VERSION } from './version';
-export type { CurtainApi, CurtainConfig, OpenMode, OpenOptions, OpenResult, SdkSessionRequest, SdkSessionResponse } from './types';
+export type {
+  CurtainApi,
+  CurtainConfig,
+  CurtainHooks,
+  EmbedContextMessage,
+  EmbedMessage,
+  OpenMode,
+  OpenOptions,
+  OpenResult,
+  SdkSessionRequest,
+  SdkSessionResponse,
+  SizeSelectedDetail,
+  SizeSelectedVia,
+} from './types';
 
 autoInit();

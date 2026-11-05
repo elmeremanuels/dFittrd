@@ -31,6 +31,100 @@ sandbox; CI's `api-image` job builds it).
 | `@curtain/api` | 76 (PGlite + in-memory queue + mock provider) |
 | `@curtain/web` | 146 (node + jsdom, fake-indexeddb) |
 
+## Standalone mode (D11)
+
+Founder decision D11: the merchant plugin works **without** the Curtain consumer app. The contract is
+`docs/STANDALONE.md`; this section is its build status.
+
+### What is implemented
+
+- **SDK (`@curtain/sdk`)**: `data-mode="embed"` (default), `app` and `auto`. Clicking "Try it on" opens a
+  full-screen overlay on the merchant page holding an iframe to `/embed/<token>`. There is no QR code
+  and no deep link. The overlay has a focus trap (with a sentinel after the iframe, so Tab out of the
+  iframe wraps to the close button), Escape, `aria-modal`, scroll lock, a loading state and reduced
+  motion. The postMessage protocol checks the exact origin and source. Variant selection runs in this
+  order: merchant hook, Shopify cart form, WooCommerce `variations_form`, then a toast. It is scoped
+  to the product section of the button that was clicked, and it understands Dawn 15 dropdowns (numeric
+  id values, "XS - Unavailable" labels). Bundle: 7.8 KB gzip (budget 8 KB).
+- **Fitting room (`apps/web`, `/embed/:token`)**: product header, About you (height, weight, fit
+  preference, optional age range and body type, "I know my measurements"; shoes always ask for the EU
+  shoe size), an optional camera scan, and the result. The result shows the fit-engine size, the
+  per-point fit, the avatar with the garment overlay, the confidence and the estimate disclaimer,
+  plus size comparison and "Choose size X". The footer has "Remember me" (IndexedDB partitioned per
+  shop; turning it off is remembered as a non-personal flag), "Forget me" (local wipe plus
+  `DELETE /v1/me`) and "Get the Curtain app". Measurements and photos never leave the iframe (D3).
+- **api**: `surface: 'embed'` sessions with `embedUrl`, `embed.allowedOrigins` on `GET /v1/try/:token`,
+  and `POST /v1/try/:token/fit-shown` as the billing event (one per intent token, paused shop → 402).
+- **Plugins**: the Shopify theme block and WooCommerce settings for "Experience" (`data-mode`) and
+  "Size option name" (`data-size-option`), in en and nl.
+- **Framing**: `/embed/*` is the only framable route (`frame-ancestors https:` in Caddy, and in Vite
+  dev for the demo).
+
+### Fixed in the standalone review pass
+
+| Finding | Fix |
+|---|---|
+| SEC-1 fit-shown billable by script | fit-shown bills only when all of these hold: `surface === 'embed'`; the session's `pageOrigin` belongs to the shop (in `embedAllowedOrigins`); there is one billed fit per device, product and UTC day; and the shop is under the per-shop daily anomaly cap `EMBED_BILLED_SESSIONS_PER_DAY` (default 5000, logs a warning). If any check fails, the request is still recorded on the try session and returns `billed: false`. `GET /v1/try/:token` and fit-shown are rate-limited per IP (`TRY_RATE_LIMIT_PER_MIN`, default 60). |
+| SEC-2 archived products billed | fit-shown reloads the product; a missing or archived product is not billed. |
+| UX-1 / F2 / SEC-3 "Remember me" off not remembered | `pref:remember=false` is stored (no personal data) and read by `init()` before the device or profile. "Forget me" keeps the opt-out, and turning the switch back on removes it. |
+| UX-2 "No size fits well" with a coral "Choose size L" | Primary action is now "Edit my measurements"; "Select size L anyway" is secondary. No fit-shown call (nothing was recommended). |
+| A11Y-1 focus lost on step changes | Each step change scrolls to the top and focuses the new screen's heading (not on first load). |
+| COPY-1 app copy in the scan | `CaptureStep variant="embed"`: no face photo or identity tile, no "syncs", "this device", "About 30 seconds". |
+| COPY-2 developer jargon in the result | The embed builds its own notes for the shown size. There is no "tie broken by …", and hints appear only for measurements the form can collect ("Add your bust … under Edit my measurements"). |
+| A11Y-2 brand colour as text | The shop name uses the brand colour only when it reaches 4.5:1; otherwise it uses ink-mute. The colour stays on the top border. |
+| A11Y-3 Tab leaks to the merchant page | A focus sentinel after the iframe wraps to the close button. |
+| SEC-5 `mock:` tokens in production | They resolve only in a dev build or with `VITE_DEMO=1`; otherwise the "expired" screen shows. |
+| UX-3 placeholder product photo | The demo seed points photos at the demo storefront's own `/img/<id>.svg`. |
+| F1 shoes / no fit point → "We recommend 38" | When no size can be scored, the result says "We can't recommend a size yet" and asks for the missing measurement, with no fit-shown call. Shoes require the EU shoe size. |
+| F3 notes and confidence of the wrong size after a preference change | The shown confidence, notes and "fits" come from the advised size, and fit-shown sends that confidence. |
+| F4 variant selection on the wrong form / Dawn 15 | Scoped to the button's product section; matches labels with a " - Unavailable" suffix and numeric id values. |
+| F5 scan drops the typed inseam | About-you entries the scan's form does not cover are merged into the scan profile. |
+
+Tests were added for each fix: api `embed.test.ts` (+5), web `storage`, `aboutYou`, `EmbedApp` and
+`lib/contrast` tests, sdk `embed.test.ts` (+3), demo-shop server test (+1), and the demo seed test.
+
+### How to run the demo
+
+```bash
+pnpm demo        # no Docker, no keys; Ctrl-C stops everything it started
+pnpm demo:e2e    # Playwright: storefront → overlay → About you → result → size selected on the page
+```
+
+| URL | What |
+|---|---|
+| `http://localhost:5180/` | Demo storefront "Aalter Studio" (WooCommerce look; `?theme=dawn` for the Shopify shop) |
+| `http://localhost:5180/product/aalter-studio-1` | WooCommerce-style product page with the "Try it on" button |
+| `http://localhost:5180/products/aalter-studio-1` | Shopify Dawn-style product page |
+| `http://localhost:3000/embed/<token>` | The fitting room (opened by the button in the overlay) |
+| `http://localhost:8787` | Demo api (PGlite in `.demo-db`, seeded shops, mock try-on), serves `/sdk/v1.js` |
+
+`pnpm demo` reuses a service that is already answering on its port. After pulling these changes,
+stop any old demo first, or the api will still serve the old seed and billing rules.
+
+### What is verified
+
+- `pnpm check` passes: build, typecheck, lint, the tests (api 97, web 215, sdk 90, schema 119,
+  fit-engine 102, taste-engine 84, tryon-providers 65, shopify-app 89, demo-shop 8, woocommerce
+  plugin 48) and the bundle secret scan.
+- `pnpm demo:e2e` passes for both page styles (WooCommerce and Dawn). Each flow runs: overlay, About
+  you, result, "Choose size L", the size selected on the page, and a returning shopper going straight
+  to the result. Caveat for this run: an older demo api and storefront were already running and were
+  reused, so the e2e exercised the new web app and SDK against the older api seed and billing code.
+  The api and storefront changes are covered by their own tests.
+
+### What remains
+
+- Fit-shown rate limiting is per IP only. Per device, the defence is the one-bill-per-device,
+  product and day rule, plus the daily anomaly cap. A rotating IP pool can still mint new devices
+  (30/min per IP) and bill up to the cap; a lower cap per plan, or anomaly alerts to the merchant,
+  are the next step.
+- Real devices: the camera scan inside a cross-origin iframe (`allow="camera"`) on iOS Safari and
+  Android Chrome, and IndexedDB partitioning (Safari ITP, Firefox) for "Remember me".
+- Live Shopify (Dawn 15) and WooCommerce themes: variant selection beyond the demo markup and the
+  scoped selection with real quick-add sections.
+- The "See it on me" hero render UI inside the embed is wired to the existing API but not
+  exercised end to end without provider keys.
+
 ## Fixed in this integration pass
 
 1. **The Shopify app could not open in the admin** (high). `shopify.app.toml` points

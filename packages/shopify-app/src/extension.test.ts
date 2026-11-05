@@ -32,10 +32,45 @@ describe('theme app extension', () => {
     expect(schema.stylesheet).toBe('curtain-try.css');
     expect(schema.javascript).toBeUndefined(); // we load the SDK ourselves so data-shop/data-api are set
     const ids = schema.settings.map((s) => s.id).filter(Boolean);
-    expect(ids).toEqual(['label', 'alignment', 'mode', 'show_hint', 'unstyled', 'shop_key', 'api_url']);
-    const mode = schema.settings.find((s) => s.id === 'mode') as unknown as { options: Array<{ value: string }>; default: string };
-    expect(mode.options.map((o) => o.value)).toEqual(['auto', 'redirect', 'modal']);
-    expect(mode.default).toBe('auto');
+    expect(ids).toEqual(['label', 'alignment', 'mode', 'size_option', 'show_hint', 'unstyled', 'shop_key', 'api_url']);
+    const mode = schema.settings.find((s) => s.id === 'mode') as unknown as { options: Array<{ value: string; label: string }>; default: string };
+    // STANDALONE.md §3: standalone (embed) is the default, the Curtain app is opt-in.
+    expect(mode.options.map((o) => o.value)).toEqual(['embed', 'app']);
+    expect(mode.default).toBe('embed');
+    const sizeOption = schema.settings.find((s) => s.id === 'size_option') as unknown as { type: string; default: string };
+    expect(sizeOption.type).toBe('text');
+    expect(sizeOption.default).toBe('Size');
+  });
+
+  it('renders data-mode (embed unless the merchant chose app) and data-size-option (default Size)', () => {
+    expect(block).toContain("setAttribute('data-mode', {{ pk_mode | json }})");
+    expect(block).toContain("setAttribute('data-size-option', {{ pk_size_option | json }})");
+    expect(block).toMatch(/if pk_mode != 'app'\s+assign pk_mode = 'embed'/);
+    expect(block).toMatch(/if pk_size_option == blank\s+assign pk_size_option = 'Size'/);
+    // the old app-only values are gone from the block
+    expect(block).not.toMatch(/"value": "(auto|redirect|modal)"/);
+  });
+
+  it('locales: Experience + Size option name settings in en and nl', () => {
+    type S = { curtain: { settings: { mode: Record<string, string>; size_option: Record<string, string> } } };
+    const enS = JSON.parse(read('locales/en.default.schema.json')) as S;
+    const nlS = JSON.parse(read('locales/nl.schema.json')) as S;
+    expect(enS.curtain.settings.mode.label).toBe('Experience');
+    expect(enS.curtain.settings.mode.embed).toBe('On the product page (no app needed)');
+    expect(enS.curtain.settings.mode.app).toBe('Curtain app');
+    expect(enS.curtain.settings.size_option.label).toBe('Size option name');
+    expect(nlS.curtain.settings.mode.embed).toMatch(/geen app/i);
+    expect(nlS.curtain.settings.size_option.label).toMatch(/maat/i);
+  });
+
+  it('hint: standalone wording by default, app wording only in app mode', () => {
+    const en = JSON.parse(read('locales/en.default.json')) as { curtain: { try_button: Record<string, string> } };
+    expect(en.curtain.try_button.hint).toMatch(/this device/i);
+    expect(en.curtain.try_button.hint).not.toMatch(/app/i);
+    expect(en.curtain.try_button.hint_app).toMatch(/Curtain app/);
+    expect(snippet).toContain("assign pk_hint_key = 'curtain.try_button.hint'");
+    expect(snippet).toContain("assign pk_hint_key = 'curtain.try_button.hint_app'");
+    expect(snippet).toContain('{{ pk_hint_key | t }}');
   });
 
   it('renders the SDK contract: data-curtain-product={{ product.id }}, asset_url sdk.v1.js, data-shop + data-api, single load guard', () => {

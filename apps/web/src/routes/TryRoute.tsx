@@ -181,6 +181,7 @@ async function resolve(token: string): Promise<TryResolveResponse> {
       garment,
       trySession: { id: '00000000-0000-4000-8000-0000000000aa', expiresAt: new Date(now.getTime() + 10 * 60_000).toISOString(), intentToken: `mock-intent-${id}-${now.getTime()}` },
       pairing: { created: false, pairedAt: now.toISOString() },
+      embed: { allowedOrigins: [] },
     };
   }
   return api.resolveTry(token);

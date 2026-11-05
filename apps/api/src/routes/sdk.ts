@@ -1,7 +1,8 @@
 /**
  * SDK routes (public, CORS *, rate-limited per shop):
- *  - POST /v1/sdk/sessions → 10-minute try token, deep link, QR SVG. 402 + the same body when the
- *    shop is paused (D7: the button still works, the app shows the paused screen).
+ *  - POST /v1/sdk/sessions → 10-minute try token, embed URL (standalone overlay, D11), deep link and
+ *    QR SVG (app mode; no QR for `surface: 'embed'`). 402 + the same body when the shop is paused
+ *    (D7: the button still works, the embed/app shows the paused screen).
  *  - GET /sdk/v1.js → the built @curtain/sdk IIFE (served from our origin: zero third-party requests).
  */
 import { readFile } from 'node:fs/promises';
@@ -12,6 +13,7 @@ import { trySessions } from '../db/schema.js';
 import { randomAlnum } from '../lib/crypto.js';
 import { notFound } from '../lib/errors.js';
 import { qrSvg } from '../lib/qr.js';
+import { originOf } from '../services/embed.js';
 import { findProduct } from '../services/products.js';
 import { findShopByPrefix, isPaused } from '../services/shops.js';
 
@@ -47,11 +49,20 @@ export const sdkRoutes: FastifyPluginAsyncZod = async (app) => {
         shopId: shop.id,
         productId: product.id,
         surface: req.body.surface,
+        pageOrigin: originOf(req.body.pageUrl),
         createdAt: now(),
         expiresAt,
       });
       const tryUrl = `${env.PUBLIC_APP_URL}/try/${token}`;
-      const body = { tryUrl, qrSvg: await qrSvg(tryUrl), expiresAt: expiresAt.toISOString(), shopPaused: isPaused(shop) };
+      const embedUrl = `${env.PUBLIC_APP_URL}/embed/${token}`;
+      const body = {
+        tryUrl,
+        embedUrl,
+        // Standalone mode never shows a QR code: skip the work.
+        ...(req.body.surface === 'embed' ? {} : { qrSvg: await qrSvg(tryUrl) }),
+        expiresAt: expiresAt.toISOString(),
+        shopPaused: isPaused(shop),
+      };
       return reply.code(body.shopPaused ? 402 : 200).send(body);
     },
   );

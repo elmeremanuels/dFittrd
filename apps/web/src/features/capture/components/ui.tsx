@@ -1,5 +1,14 @@
-import type { ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
+
+/**
+ * Which product the capture runs in (COPY-1). `app`: the Curtain app (face tile, signature sync).
+ * `embed`: the standalone fitting room on a shop's page (docs/STANDALONE.md): no identity tile,
+ * nothing ever syncs, and the shopper may be on a laptop rather than a phone.
+ */
+export type CaptureVariant = 'app' | 'embed';
+export const CaptureVariantContext = createContext<CaptureVariant>('app');
+export const useCaptureVariant = (): CaptureVariant => useContext(CaptureVariantContext);
 
 export function StepHeader({ eyebrow, title, subtitle }: { eyebrow: string; title: string; subtitle?: string }): ReactNode {
   return (
@@ -98,6 +107,13 @@ export function ConfidenceBar({ value, label }: { value: number; label: string }
 }
 
 export function PrivacyNote(): ReactNode {
+  const variant = useCaptureVariant();
+  if (variant === 'embed')
+    return (
+      <p className="text-xs leading-relaxed text-ink/50" data-testid="privacy-note">
+        Video stays on this device. It is processed in this browser and never uploaded, and no measurement is sent to Curtain or the shop.
+      </p>
+    );
   return (
     <p className="text-xs leading-relaxed text-ink/50">
       Photos and video stay on this device. They are processed in a background worker, never uploaded, and only an

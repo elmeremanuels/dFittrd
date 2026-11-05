@@ -6,7 +6,7 @@ msgstr ""
 "Project-Id-Version: Curtain for WooCommerce 0.1.0\n"
 "Report-Msgid-Bugs-To: https://curtain.fit/woocommerce\n"
 "POT-Creation-Date: 2026-11-04 12:00+0000\n"
-"PO-Revision-Date: 2026-11-04 12:00+0000\n"
+"PO-Revision-Date: 2026-11-05 12:00+0000\n"
 "Last-Translator: Curtain <hello@curtain.fit>\n"
 "Language-Team: Dutch\n"
 "Language: nl_NL\n"
@@ -136,5 +136,35 @@ msgstr "Maat toevoegen"
 msgid "Required before the product can be active:"
 msgstr "Vereist voordat het product actief kan zijn:"
 
-msgid "Opens Curtain, your private fitting room. Fit results are estimates."
-msgstr "Opent Curtain, jouw privé-curtain. Pasvormresultaten zijn schattingen."
+msgid "Experience"
+msgstr "Ervaring"
+
+msgid "On the product page (no app needed)"
+msgstr "Op de productpagina (geen app nodig)"
+
+msgid "Curtain app"
+msgstr "Curtain-app"
+
+msgid "On the product page: shoppers get their recommended size in an overlay on your product page and Curtain selects it in the size dropdown. Curtain app: phones open the Curtain app, desktops show a QR code."
+msgstr "Op de productpagina: shoppers krijgen hun aanbevolen maat in een venster op je productpagina en Curtain selecteert die in de maatkeuzelijst. Curtain-app: telefoons openen de Curtain-app, desktops tonen een QR-code."
+
+msgid "Size attribute"
+msgstr "Maatattribuut"
+
+msgid "Size"
+msgstr "Maat"
+
+msgid "The product attribute that holds the size in your variation dropdowns. Curtain selects the recommended size in it."
+msgstr "Het productattribuut met de maat in je variatiekeuzelijsten. Curtain selecteert daarin de aanbevolen maat."
+
+msgid "Curtain is a private fitting room: shoppers find their size right on your product page, no app needed. Their measurements stay in their own browser. Only garment data (size charts, fabric, photos) leaves this site, never customer data."
+msgstr "Curtain is een privé-paskamer: shoppers vinden hun maat direct op je productpagina, zonder app. Hun maten blijven in hun eigen browser. Alleen kledingdata (maattabellen, stof, foto's) verlaat deze site, nooit klantgegevens."
+
+msgid "paused (below plan: the button still renders, shoppers see a \"shop paused\" screen)"
+msgstr "gepauzeerd (onder het plan: de knop blijft zichtbaar, shoppers zien een scherm \"winkel gepauzeerd\")"
+
+msgid "Opens the Curtain app, your private fitting room. Fit results are estimates."
+msgstr "Opent de Curtain-app, jouw privé-paskamer. Pasvormresultaten zijn schattingen."
+
+msgid "Find your size on this page. Your measurements stay on this device. Fit results are estimates."
+msgstr "Vind je maat op deze pagina. Je maten blijven op dit apparaat. Pasvormresultaten zijn schattingen."

@@ -45,6 +45,14 @@ export const ShopSelfRequestSchema = z.object({
   platformVersion: z.string().max(32).optional(),
   /** Merchant opt-in for the "shop ads" surface (WooCommerce settings toggle); persisted in shops.settings.adsEnabled. */
   adsEnabled: z.boolean().optional(),
+  /**
+   * Extra storefront origins the standalone embed may postMessage to (docs/STANDALONE.md §2), e.g.
+   * a headless storefront. Exact https origins; replaces the stored list.
+   */
+  embedOrigins: z
+    .array(z.url({ protocol: /^https$/ }).refine((u) => new URL(u).origin === u.replace(/\/$/, ''), 'must be an origin (no path)'))
+    .max(10)
+    .optional(),
 });
 export const ShopSelfResponseSchema = z.object({
   shopId: z.uuid(),
@@ -198,7 +206,7 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
     const shop = await updateSettings(
       db,
       req.shop!.id,
-      { siteUrl: b.siteUrl, brandColor: b.brandColor, logoUrl: b.logoUrl, pluginVersion: b.pluginVersion, platformVersion: b.platformVersion, adsEnabled: b.adsEnabled },
+      { siteUrl: b.siteUrl, brandColor: b.brandColor, logoUrl: b.logoUrl, pluginVersion: b.pluginVersion, platformVersion: b.platformVersion, adsEnabled: b.adsEnabled, embedOrigins: b.embedOrigins?.map((u) => new URL(u).origin) },
       b.name ? { name: b.name } : {},
     );
     return { shopId: shop.id, name: shop.name, platform: shop.platform, plan: shop.plan, paused: isPaused(shop), publicKeyPrefix: shop.apiKeyPrefix };

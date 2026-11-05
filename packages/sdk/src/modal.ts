@@ -9,11 +9,19 @@ export interface ModalContent {
   paused?: boolean;
   /** Message-only mode (polite error / paused without a link). */
   message?: string;
+  /** Standalone mode: a full-screen overlay holding an iframe to this URL instead of the QR. */
+  embedUrl?: string;
+  /** With `embedUrl`: an optional "Open in the Curtain app" link (`data-mode="auto"`). */
+  appUrl?: string;
 }
 
 export interface ModalHandle {
   root: HTMLElement;
   dialog: HTMLElement;
+  /** The embed iframe (standalone overlay only). */
+  frame?: HTMLIFrameElement;
+  /** Clear the loading state (standalone overlay only; also runs on the iframe's `load`). */
+  ready(): void;
   close(): void;
 }
 
@@ -26,7 +34,7 @@ export interface ModalOptions {
   doc?: Document;
 }
 
-const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+const FOCUSABLE = 'iframe,a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 let current: ModalHandle | null = null;
 let seq = 0;
@@ -56,7 +64,10 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-/** Open the accessible dialog (role=dialog, aria-modal, focus trap, Esc, backdrop click). One at a time. */
+/**
+ * Open the accessible dialog (role=dialog, aria-modal, focus trap, Esc, backdrop click, scroll lock).
+ * One at a time. With `content.embedUrl` it is the full-screen standalone overlay with the iframe.
+ */
 export function openModal(opts: ModalOptions): ModalHandle {
   const doc = opts.doc ?? document;
   const { strings: s, content } = opts;
@@ -79,21 +90,56 @@ export function openModal(opts: ModalOptions): ModalHandle {
   const title = el(doc, 'h2', 'pk-title', s.title);
   title.id = `${id}-title`;
   dialog.append(closeBtn, title);
+  let frame: HTMLIFrameElement | undefined;
+  let ready = (): void => {};
 
-  if (content.message) {
+  if (content.embedUrl) {
+    root.className += ' pk-fs';
+    dialog.className += ' pk-full';
+    dialog.removeAttribute('aria-describedby');
+    dialog.setAttribute('aria-busy', 'true');
+    if (content.appUrl) {
+      const a = el(doc, 'a', 'pk-app', s.openApp);
+      a.href = content.appUrl;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      dialog.append(a);
+    }
+    const load = el(doc, 'p', 'pk-load', s.loading);
+    load.setAttribute('role', 'status');
+    frame = el(doc, 'iframe', 'pk-frame');
+    frame.title = s.title;
+    frame.setAttribute('allow', 'camera; fullscreen');
+    ready = () => {
+      load.remove();
+      dialog.removeAttribute('aria-busy');
+    };
+    frame.addEventListener('load', ready);
+    frame.src = content.embedUrl;
+    // Tabbing out of the iframe's last element lands on this sentinel (the page's own focusin never
+    // fires for it otherwise), which wraps focus back to the close button (A11Y-3).
+    const end = el(doc, 'span', 'pk-sentinel');
+    end.tabIndex = 0;
+    end.setAttribute('data-pk-sentinel', '');
+    end.addEventListener('focus', () => closeBtn.focus());
+    dialog.append(load, frame, end);
+  } else if (content.message) {
     const desc = el(doc, 'p', 'pk-desc', content.message);
     desc.id = `${id}-desc`;
     dialog.append(desc);
   } else {
-    const qr = el(doc, 'div', 'pk-qr');
-    const img = doc.createElement('img');
-    img.alt = s.qrAlt;
-    img.decoding = 'async';
-    if (content.qrSvg) img.src = svgToDataUrl(content.qrSvg);
-    qr.append(img);
+    if (content.qrSvg) {
+      const qr = el(doc, 'div', 'pk-qr');
+      const img = doc.createElement('img');
+      img.alt = s.qrAlt;
+      img.decoding = 'async';
+      img.src = svgToDataUrl(content.qrSvg);
+      qr.append(img);
+      dialog.append(qr);
+    }
     const desc = el(doc, 'p', 'pk-desc', s.scan);
     desc.id = `${id}-desc`;
-    dialog.append(qr, desc);
+    dialog.append(desc);
     if (content.paused) dialog.append(el(doc, 'p', 'pk-note', s.pausedShort));
     const meta = el(doc, 'p', 'pk-meta');
     if (content.tryUrl) {
@@ -108,7 +154,7 @@ export function openModal(opts: ModalOptions): ModalHandle {
     if (mins !== null) meta.append(doc.createTextNode(`${content.tryUrl ? ' · ' : ''}${s.expires(mins)}`));
     if (meta.childNodes.length) dialog.append(meta);
   }
-  dialog.append(el(doc, 'p', 'pk-disclaimer', s.disclaimer));
+  if (!frame) dialog.append(el(doc, 'p', 'pk-disclaimer', s.disclaimer));
   root.append(overlay, dialog);
 
   const previouslyFocused = doc.activeElement;
@@ -119,6 +165,7 @@ export function openModal(opts: ModalOptions): ModalHandle {
     if (!open) return;
     open = false;
     doc.removeEventListener('keydown', onKey, true);
+    doc.removeEventListener('focusin', onFocus, true);
     root.remove();
     doc.body.style.overflow = prevOverflow;
     if (current === handle) current = null;
@@ -128,6 +175,14 @@ export function openModal(opts: ModalOptions): ModalHandle {
     opts.onClose?.();
   };
 
+  const focusables = (): HTMLElement[] =>
+    Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((n) => !n.hasAttribute('hidden') && !n.hasAttribute('data-pk-sentinel'));
+
+  // Tab out of the iframe (whose key events never reach this document) lands back in the dialog.
+  const onFocus = (e: FocusEvent): void => {
+    if (!root.contains(e.target as Node)) (focusables()[0] || dialog).focus();
+  };
+
   const onKey = (e: KeyboardEvent): void => {
     if (e.key === 'Escape' || e.key === 'Esc') {
       e.preventDefault();
@@ -135,9 +190,7 @@ export function openModal(opts: ModalOptions): ModalHandle {
       return;
     }
     if (e.key !== 'Tab') return;
-    const items = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
-      (n) => !n.hasAttribute('hidden'),
-    );
+    const items = focusables();
     if (!items.length) {
       e.preventDefault();
       dialog.focus();
@@ -159,8 +212,9 @@ export function openModal(opts: ModalOptions): ModalHandle {
   closeBtn.addEventListener('click', close);
   overlay.addEventListener('click', close);
   doc.addEventListener('keydown', onKey, true);
+  doc.addEventListener('focusin', onFocus, true);
 
-  const handle: ModalHandle = { root, dialog, close };
+  const handle: ModalHandle = { root, dialog, frame, ready, close };
   current = handle;
   doc.body.append(root);
   doc.body.style.overflow = 'hidden';

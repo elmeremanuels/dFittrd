@@ -28,6 +28,9 @@ src/
 pnpm --filter @curtain/api dev                 # tsx watch, pino-pretty, generated dev secrets (warned)
 pnpm --filter @curtain/api db:generate         # drizzle-kit → ./drizzle after changing src/db/schema.ts
 
+# local demo (no Docker, no keys): PGlite in <repo>/.demo-db, seeded demo shops, mock provider → see "Local demo"
+pnpm --filter @curtain/api demo
+
 # checks (no Docker needed: tests run on PGlite + an in-memory queue + the mock try-on provider)
 pnpm --filter @curtain/api typecheck && pnpm --filter @curtain/api test && pnpm --filter @curtain/api build
 
@@ -47,8 +50,8 @@ typecheck · test · build · bundle-secret-scan and builds/pushes the image to 
 | Area | Routes | Auth |
 |---|---|---|
 | App | `POST /v1/devices`, `POST /v1/devices/rotate`, `PUT /v1/me/signature`, `GET /v1/me/ledger`, `GET /v1/me/export`, `DELETE /v1/me`, `GET /v1/shops/:shopId/products`, `GET /v1/products/:id` (uuid, or external id + `?shopId`), `POST /v1/swipes`, `PUT/GET /v1/wardrobe[/:productId]`, `GET /v1/fit/cohort/:productId[?shopId]` | Bearer device JWT (30 d, `token_version` rotation) |
-| Try-on | `GET /v1/try/:token` → `{ shop, garment, trySession.intentToken, pairing }` | device JWT |
-| SDK | `POST /v1/sdk/sessions` (CORS `*`, per-shop rate limit, 402 + tryUrl when paused), `GET /sdk/v1.js` | public |
+| Try-on | `GET /v1/try/:token` → `{ shop, garment, trySession.intentToken, pairing, embed.allowedOrigins }`, `POST /v1/try/:token/fit-shown` → `{ billed }` | device JWT |
+| SDK | `POST /v1/sdk/sessions` (CORS `*`, per-shop rate limit, `embedUrl` always, `qrSvg` except for `surface: 'embed'`, 402 + the same body when paused), `GET /sdk/v1.js` | public |
 | Renders | `POST /v1/renders/hero` → 202, `GET /v1/renders/:jobId`, `GET /v1/renders/:jobId/image\|video?exp&sig` | device JWT / signed URL |
 | Merchant | `PUT /v1/merchant/products/:externalId`, `POST …/products/validate`, `DELETE …/products/:externalId`, `GET …/products`, `GET …/usage`, `GET …/ledger`, `GET …/analytics/swipes`, `GET …/analytics/abandoned`, `POST …/keys/rotate`, `PUT /v1/merchant/shops/self`, `POST /v1/merchant/woo/connect`, `POST /v1/merchant/woo/complete` | PK-HMAC, Bearer `sk_…`, or Shopify session token |
 | Shopify | `GET /shopify/admin` (embedded admin page from `@curtain/shopify-app`, `frame-ancestors` CSP), `GET /shopify/auth/callback` (302 to the embedded app home), `POST /shopify/token-exchange` (also writes the theme block's app-data metafields: public key, API/app URL), `POST /shopify/webhooks`, `POST /shopify/billing/subscribe` | none (page/redirect) / session token / webhook HMAC |
@@ -85,6 +88,28 @@ in the same write. A `POST /v1/swipes` batch is all-or-nothing: every `shopId` i
 transaction. The nightly `usage-rollup` pushes sessions above the plan's quota to Shopify
 `appUsageRecordCreate` or a Stripe meter event (`curtain_fit_sessions`), idempotent per shop-day.
 
+### Standalone embed (D11, `docs/STANDALONE.md` §2)
+
+The shop works without the consumer app: the SDK opens `embedUrl` (`${PUBLIC_APP_URL}/embed/<token>`)
+in an overlay on the merchant page.
+
+* `POST /v1/sdk/sessions` with `surface: 'embed'` skips the QR. The session stores only the page
+  **origin** (`try_sessions.page_origin`, migration `0002_standalone_embed`), never the path or query.
+* `GET /v1/try/:token` adds `embed.allowedOrigins`, the only `postMessage` targets the iframe may use
+  (`services/embed.ts`): Shopify `https://<shop>.myshopify.com` + the primary domain (read with
+  `shop { primaryDomain { host } }` at token exchange, stored in `settings.primaryDomain`);
+  WooCommerce the site URL origin; extra exact https origins a merchant sets with
+  `PUT /v1/merchant/shops/self { embedOrigins }` (headless storefronts); plus the session's page
+  origin when it is https and on one of those hosts (or their `www.` twin). The pairing source is `embed`.
+* `POST /v1/try/:token/fit-shown { intentToken, recommendedSize, confidence }` is the billing event.
+  The body is strict: extra keys such as measurements are a 400. Only the device that resolved the
+  link may call it (403 `other_device`, 409 `not_resolved`, 403 `intent_mismatch`); the try token is
+  accepted up to 2 h past its 10-minute TTL. One billable `fit_session` per intent token
+  (`intent:<token>`, the same key as the app's swipe path, so the two never double-bill); a replay
+  answers `200 { billed: false }`. A paused shop gets `402 shop_paused` and nothing is billed. The
+  first call writes one `fit` ledger line for the shopper (field names only) and keeps the size label
+  and confidence on `try_sessions` for aggregate merchant analytics.
+
 ### Privacy (D3), enforced by construction
 
 * No route accepts a photo except `POST /v1/renders/hero`; `PersonInput.kind` is the literal
@@ -100,6 +125,29 @@ transaction. The nightly `usage-rollup` pushes sessions above the plan's quota t
 * Shopify `customers/data_request` and `customers/redact` are acknowledged no-ops (no customer PII
   held); `shop/redact` purges the shop via a job 48 h later; `app/uninstalled` drops the token and
   pauses the shop.
+
+## Local demo
+
+`pnpm --filter @curtain/api demo` (`src/demo.ts`, run with tsx; not part of the production build)
+starts the api on **http://localhost:8787** with no Docker and no keys:
+
+* PGlite persisted to `<repo>/.demo-db/pgdata` (the directory writes its own `.gitignore`; delete it
+  to start over), migrated on every start;
+* seeded idempotently (`src/demoSeed.ts`): **Aalter Studio** (WooCommerce, site URL
+  `http://localhost:5180`) with 12 active products and **Aalter Studio (Shopify)** with 9, all from
+  `MOCK_GARMENTS` (dresses, tops, bottoms, one blazer). The `pk_test_…` public keys are minted at
+  runtime on the first run and stay the same afterwards;
+* embed allowed origins and CORS for `http://localhost:5180` (demo storefront) and
+  `http://localhost:3000` (`PUBLIC_APP_URL`, the web app serving `/embed/*`);
+* the mock try-on provider and the in-memory job queue (hero renders complete in about a second);
+* `/sdk/v1.js` from `@curtain/sdk` (run `pnpm --filter @curtain/sdk build` first).
+
+It prints the public keys and product ids and writes them to `<repo>/.demo-db/demo.json`
+(`{ apiUrl, appUrl, sdkUrl, storefrontOrigin, publicKey, productExternalIds, shops: [{ key, name,
+platform, publicKey, allowedOrigins, products: [{ externalId, name, brand, category, priceEur,
+sizes, photo, status }] }] }`), which the demo storefront reads. Overrides: `PORT`,
+`PUBLIC_APP_URL`, `PUBLIC_API_URL`, `CORS_ORIGINS`, `DEMO_DB_DIR`, `DEMO_STOREFRONT_ORIGIN`. It
+refuses to start when the port is taken, so two processes never open the same PGlite directory.
 
 ## Jobs
 
@@ -117,7 +165,8 @@ transaction. The nightly `usage-rollup` pushes sessions above the plan's quota t
 `vitest` boots the full app on PGlite per file (`src/test/helpers.ts`): devices→signature→export→
 delete cascade, try token + pseudonym + pagination, SDK sessions + per-shop rate limit, merchant
 HMAC/Bearer/session-token auth + upsert/completeness/validate/rotate, swipes billing idempotency,
-hero render rejections + full job + expiry, Shopify webhook HMAC + GDPR + token exchange + sync,
+hero render rejections + full job + expiry, standalone embed sessions / allowed origins / fit-shown
+billing (replay, paused, measurements rejected, grace window) in `src/embed.test.ts`, the demo seed, Shopify webhook HMAC + GDPR + token exchange + sync,
 Stripe Connect round-trip, k-anonymity floor, usage rollup, env/crypto/token units, and the
 security-review regressions (`src/security-review.test.ts`: HMAC replay, key lookup, billing
 integrity, per-shop rate limit, GDPR payload hygiene, webhook replay, Woo takeover, SSRF guard).

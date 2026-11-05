@@ -1,6 +1,7 @@
 {%- comment -%}
   The button itself. Also usable from a theme that lacks app-block support:
     {% render 'curtain-try-button', product: product, label: 'Try it on', show_hint: true %}
+  Pass mode: 'app' when the SDK runs with data-mode="app" so the hint mentions the Curtain app.
   `data-curtain-product` carries the numeric product id = the external id the api stores
   (shopifyExternalId of the Product GID).
 {%- endcomment -%}
@@ -16,8 +17,14 @@
   </svg>
   <span>{{ label }}</span>
 </button>
+{%- liquid
+  assign pk_hint_key = 'curtain.try_button.hint'
+  if mode == 'app'
+    assign pk_hint_key = 'curtain.try_button.hint_app'
+  endif
+-%}
 {%- if show_hint -%}
-  <p id="curtain-try-hint-{{ product.id }}" class="curtain-try__hint">{{ 'curtain.try_button.hint' | t }}</p>
+  <p id="curtain-try-hint-{{ product.id }}" class="curtain-try__hint">{{ pk_hint_key | t }}</p>
 {%- else -%}
-  <span id="curtain-try-hint-{{ product.id }}" class="curtain-try__sr">{{ 'curtain.try_button.hint' | t }}</span>
+  <span id="curtain-try-hint-{{ product.id }}" class="curtain-try__sr">{{ pk_hint_key | t }}</span>
 {%- endif -%}

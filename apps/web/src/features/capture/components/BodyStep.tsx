@@ -7,7 +7,7 @@ import { attachStream, openCamera, startFramePump, type CameraHandle } from '../
 import type { ScanSession } from '../scanSession';
 import type { GateReason, Sex } from '../types';
 import type { ScanResultMessage } from '../workerProtocol';
-import { GhostButton, Panel, PrimaryButton, PrivacyNote, StepHeader } from './ui';
+import { GhostButton, Panel, PrimaryButton, PrivacyNote, StepHeader, useCaptureVariant } from './ui';
 
 interface Props {
   session: ScanSession | null;
@@ -25,6 +25,7 @@ type Phase = 'setup' | 'countdown' | 'recording' | 'processing' | 'error';
 
 export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, initialWeight, sex, onHeightChange, onDone, onSkip }: Props): ReactNode {
   const reduce = useReducedMotion();
+  const embed = useCaptureVariant() === 'embed';
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const camRef = useRef<CameraHandle | null>(null);
   const stopPumpRef = useRef<(() => void) | null>(null);
@@ -182,7 +183,11 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
 
   return (
     <Panel className="space-y-5">
-      <StepHeader eyebrow="Step 2 of 3" title="Body scan" subtitle="8 seconds. Stand 2–3 m away in fitted clothing, phone upright." />
+      <StepHeader
+        eyebrow={embed ? 'Step 1 of 2' : 'Step 2 of 3'}
+        title="Body scan"
+        subtitle={`8 seconds. Stand 2–3 m away in fitted clothing, ${embed ? 'camera' : 'phone'} upright.`}
+      />
 
       {/* The preview is mounted in every phase: start() needs the <video> (it used to exist only after
           setup, so the scan could never start), and the user frames themselves before starting. */}
@@ -258,7 +263,7 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
             Your height sets the scale of the scan; weight improves the estimate. Neither is ever uploaded.
           </p>
           <ol className="list-decimal space-y-1 pl-5 text-sm text-ink/70">
-            <li>Prop the phone upright at hip height, 2–3 m away.</li>
+            <li>{embed ? 'Place your phone or laptop so the camera is at hip height, 2–3 m away.' : 'Prop the phone upright at hip height, 2–3 m away.'}</li>
             <li>Face the camera, arms slightly away from your body (A-pose), feet together.</li>
             <li>Halfway through, turn 90° to your left and hold still.</li>
           </ol>

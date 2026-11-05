@@ -149,6 +149,17 @@ export class ShopifyClient {
     return body.data;
   }
 
+  /** The storefront's primary domain host (e.g. `shop.example`), for the embed's allowed origins. */
+  async fetchPrimaryDomainHost(shopDomain: string, accessToken: string): Promise<string | null> {
+    const data = await this.graphql<{ shop?: { primaryDomain?: { host?: string | null } | null } | null }>(
+      shopDomain,
+      accessToken,
+      'query CurtainPrimaryDomain { shop { primaryDomain { host } } }',
+    );
+    const host = data.shop?.primaryDomain?.host?.toLowerCase() ?? null;
+    return host && /^[a-z0-9.-]{1,253}(:\d{1,5})?$/.test(host) ? host : null;
+  }
+
   /**
    * Token exchange (managed installation, D6): session token → offline access token.
    * https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/token-exchange

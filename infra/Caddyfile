@@ -19,7 +19,12 @@ app.{$DOMAIN} {
 	root * /srv/web
 	encode zstd gzip
 
-	header {
+	# /embed/<token> is the ONLY framable route (docs/STANDALONE.md §2, D11): the standalone overlay
+	# that merchant pages load in an <iframe>. The try token, not the frame, is the access control.
+	@embed path /embed /embed/*
+	@app not path /embed /embed/*
+
+	header @app {
 		# Cross-origin isolation: SIMD + threads for the MediaPipe wasm (D5). Assets carry CORP so they stay loadable.
 		Cross-Origin-Opener-Policy "same-origin"
 		Cross-Origin-Embedder-Policy "require-corp"
@@ -28,13 +33,30 @@ app.{$DOMAIN} {
 		Content-Security-Policy "default-src 'self'; connect-src 'self' https://api.{$DOMAIN}; img-src 'self' data: blob: https:; media-src 'self' blob: https://api.{$DOMAIN}; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 	}
 
+	header @embed {
+		# Framable by any https shop. No X-Frame-Options (it would override frame-ancestors in old browsers).
+		-X-Frame-Options
+		# No COOP: it only applies to top-level documents and would cut the opener link if opened in a tab.
+		-Cross-Origin-Opener-Policy
+		# A shop that runs COEP itself can still frame us; the document is meant to be embedded cross-origin.
+		Cross-Origin-Resource-Policy "cross-origin"
+		# credentialless instead of require-corp: the merchant's product photo comes from the shop CDN,
+		# which rarely sends CORP. Inside a non-isolated merchant page the iframe is never cross-origin
+		# isolated anyway, so MediaPipe falls back to its non-threaded wasm here.
+		Cross-Origin-Embedder-Policy "credentialless"
+		Content-Security-Policy "default-src 'self'; connect-src 'self' https://api.{$DOMAIN}; img-src 'self' data: blob: https:; media-src 'self' blob: https://api.{$DOMAIN}; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self' blob:; frame-ancestors https:; base-uri 'self'; form-action 'self'"
+		# The embed shows a product page and a size; keep it out of shared caches and search engines.
+		Cache-Control "no-store"
+		X-Robots-Tag "noindex"
+	}
+
 	@immutable path /assets/* /models/* /fonts/*
 	header @immutable Cache-Control "public, max-age=31536000, immutable"
 
 	@nocache path /index.html /sw.js /manifest.webmanifest
 	header @nocache Cache-Control "no-cache"
 
-	# SPA fallback: /try/<token>, /merchant, … all resolve to index.html
+	# SPA fallback: /try/<token>, /embed/<token>, /merchant, … all resolve to index.html
 	try_files {path} /index.html
 	file_server
 }

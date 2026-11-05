@@ -1,12 +1,19 @@
 # @curtain/sdk
 
-The merchant drop-in for **Curtain** (your private fitting room). One `<script>` tag turns any
-`<button data-curtain-product="…">` on a product page into the try-on handshake described in
-`docs/ARCHITECTURE.md` ("Try-on from a shop") and decision D6:
+The merchant drop-in for **Curtain**. One `<script>` tag turns any `<button data-curtain-product="…">`
+on a product page into the Curtain try-on. Since decision D11 the default is **standalone**: the
+shopper gets the whole fit experience in an overlay on the shop's own page and never needs the
+Curtain app. The contract is `docs/STANDALONE.md` §2.
 
 ```
-click → POST {api}/v1/sdk/sessions { shopKeyPrefix, productExternalId, pageUrl }
-      → { tryUrl, qrSvg, expiresAt, shopPaused }
+standalone (data-mode="embed", the default; also "auto"), desktop and mobile:
+click → POST {api}/v1/sdk/sessions { shopKeyPrefix, productExternalId, pageUrl, surface: 'embed' }
+      → { embedUrl, tryUrl, expiresAt, shopPaused }
+      → full-screen overlay with <iframe src="{embedUrl}" allow="camera; fullscreen">
+      → iframe posts curtain:size-selected { size } → the SDK selects the variant on the page
+
+app mode (data-mode="app", the pre-standalone flow, unchanged):
+click → POST {api}/v1/sdk/sessions { …, surface: 'button' } → { tryUrl, qrSvg, expiresAt, shopPaused }
       → phone/tablet: location.href = tryUrl (universal link into the PWA)
       → desktop:     accessible QR modal ("Scan with your phone to try it on in Curtain")
 ```
@@ -20,7 +27,11 @@ string and fragment are stripped: they can carry e-mail addresses, UTM ids or to
 Hardening: a `tryUrl` that is not an absolute `http(s)` URL is refused (no `javascript:`/`data:`
 navigation or link on the merchant page; the shopper sees the polite error instead). When the
 SDK is loaded twice on one page, the second copy finds `window.Curtain` already installed and
-stays inactive, so buttons are never bound twice.
+stays inactive, so buttons are never bound twice. In standalone mode the SDK only accepts messages
+whose `event.origin` is the origin of `embedUrl` **and** whose `event.source` is the overlay's own
+iframe, and it posts back to that origin only (never `*`). An `embedUrl` that is not `http(s)` is
+refused (the SDK falls back to app mode). Measurements and photos never touch the merchant page:
+the fit runs inside the iframe, and only the chosen size label comes back (D3).
 
 ## Merchant snippet
 
@@ -44,8 +55,9 @@ must then set `data-api`).
 | ------------------------ | -------- | ----------------------------------------------------------------------------------------- |
 | `data-shop`              | yes      | Public shop key prefix `pk_live_…` / `pk_test_…`. Secret keys (`sk_…`) are rejected.       |
 | `data-api`               | no       | API origin, e.g. `https://api.curtain.fit`. Defaults to the origin the script was loaded from. |
-| `data-mode`              | no       | `auto` (default: mobile UA → redirect, desktop → QR modal), `redirect`, or `modal`.        |
-| `data-locale`            | no       | `en` or `nl`. Defaults to `<html lang>`, then the browser language.                       |
+| `data-mode`              | no       | `embed` (default): the standalone overlay on this page. `auto`: the same, plus an "Open in the Curtain app" link. `app`: the old QR / deep-link flow (mobile UA → redirect, desktop → QR modal). The legacy values `redirect` and `modal` still force app mode's deep link or QR modal. Anything else falls back to `embed`. |
+| `data-size-option`       | no       | The product option that holds the size. Default `Size`; `Maat`, `Taille` and `Größe` always match too (case-insensitive). |
+| `data-locale`            | no       | `en` or `nl`. Defaults to `<html lang>`, then `en`. The browser language never changes the button or overlay copy. |
 | `data-label`             | no       | Text for buttons that are empty. Default "Try it on".                 |
 | `data-curtain-unstyled` | no       | Do not inject the stylesheet or the `pk-btn` class (you style the buttons yourself).      |
 
@@ -65,17 +77,72 @@ just works with React, Hydrogen, etc.
 ### `window.Curtain`
 
 ```ts
-window.Curtain.open(productId, { mode?: 'auto' | 'redirect' | 'modal', pageUrl?, trigger? })
+window.Curtain.open(productId, { mode?: 'embed' | 'auto' | 'app' | 'redirect' | 'modal', pageUrl?, trigger? })
   // → Promise<OpenResult>; never rejects
-window.Curtain.configure({ shop?, api?, mode?, unstyled?, label?, locale?, timeoutMs? })
+window.Curtain.configure({ shop?, api?, mode?, sizeOption?, unstyled?, label?, locale?, timeoutMs? })
 window.Curtain.scan()      // bind new buttons now (the observer does this automatically)
 window.Curtain.destroy()   // remove listeners, observer, styles and any open modal
 window.Curtain.version     // '0.1.0'
 ```
 
-`OpenResult.kind` is `'redirect' | 'modal' | 'paused' | 'error' | 'ignored'`.
+`OpenResult.kind` is `'embed' | 'redirect' | 'modal' | 'paused' | 'error' | 'ignored'`.
 
-## Desktop modal (a11y)
+## Standalone overlay
+
+The overlay is the same dialog component as the app-mode modal, in a full-screen variant: a large
+centred panel on desktop and edge to edge below 768 px. It has `role="dialog"`, `aria-modal="true"`,
+`aria-labelledby` (the "Try it on in Curtain" heading), a close button, `aria-busy` plus a
+`role="status"` "Loading…" line until the iframe loads or says `curtain:ready`, and an iframe with
+`title` and `allow="camera; fullscreen"`. Focus moves into the dialog and returns to the button on
+close; Tab / Shift+Tab are trapped, and focus that leaves the iframe towards the page is pulled back
+into the dialog. Escape (while focus is on the page side) and the backdrop close it; the iframe
+handles Escape inside itself by posting `curtain:close`. The body is scroll-locked while it is open,
+and every animation is off under `prefers-reduced-motion`.
+
+### postMessage protocol
+
+Every message is `{ source: 'curtain', v: 1, type, … }`; anything else is ignored.
+
+| Direction | `type` | Payload | What the SDK does |
+| --- | --- | --- | --- |
+| iframe → page | `curtain:ready` | `{}` | Clears the loading state and answers with `curtain:context`. |
+| page → iframe | `curtain:context` | `{ locale, currentVariantSize? }` | `locale` is `data-locale`, else `<html lang>`, else the browser language. `currentVariantSize` is the size selected on the page when a size control is found. |
+| iframe → page | `curtain:size-selected` | `{ productExternalId, size }` | Ignored unless `productExternalId` is the opened product and `size` is 1–64 characters. Closes the overlay, then selects the variant (below). |
+| iframe → page | `curtain:close` | `{}` | Closes the overlay. |
+| iframe → page | `curtain:resize` | `{ height }` | Ignored: the overlay is full-screen. |
+
+### Variant selection
+
+After `curtain:size-selected` the SDK tries, in order:
+
+1. `window.CurtainHooks.onSizeSelected({ size, productExternalId })`. If it returns `true`, the SDK
+   does nothing else. A hook that throws is ignored.
+2. **Shopify**: a radio or `<select>` owned by a `form[action*="/cart/add"]` (Dawn and other Online
+   Store 2.0 themes point at it with the `form` attribute) or inside `<variant-radios>` /
+   `<variant-selects>`, whose `name`, fieldset `legend` or `<label>` names the size option. It
+   checks the radio or sets the option whose value or text matches the size, then dispatches
+   bubbling `input` and `change`. Disabled radios are skipped.
+3. **WooCommerce**: `form.variations_form select[name^="attribute_"]` whose name (for example
+   `attribute_pa_size`) or label names the size option. It picks the option whose text or slug
+   matches (`M` ↔ `m`, `One size` ↔ `one-size`) and triggers `change` through `window.jQuery` when
+   present (so `wc-add-to-cart-variation` reacts), else a native bubbling `change`.
+4. Otherwise a polite toast on the page: "Your size: M" (`role="status"`, gone after 6 s). Never an
+   error.
+
+In every case the button then receives a bubbling DOM event:
+
+```js
+document.addEventListener('curtain:size-selected', (e) => {
+  // e.target: the button; e.detail: { size: 'M', productExternalId: '…', via: 'hook' | 'shopify' | 'woo' | 'toast' }
+});
+```
+
+(For a programmatic `Curtain.open()` without a `trigger`, the event fires on `document`.)
+
+When the API has no `embedUrl` (an older backend), the SDK falls back to the app-mode flow. A shop
+that is paused (402 with a session) still opens the overlay; the embed shows the paused screen.
+
+## App-mode desktop modal (a11y)
 
 `role="dialog"`, `aria-modal="true"`, `aria-labelledby` / `aria-describedby`, focus moved into the
 dialog on open and back to the button on close, Tab / Shift+Tab trapped, Esc and backdrop click
@@ -86,13 +153,15 @@ when applicable, and the estimate disclaimer (identical to `ESTIMATE_DISCLAIMER`
 `@curtain/schema`, asserted in tests). Design tokens: coral `#FF5A3C`, cream `#F5EFE7`, ink
 `#1A1612`; no fonts are loaded.
 
-If the response carries no `qrSvg`, a built-in encoder (`encodeQr` / `qrToSvg`, byte mode, EC level
-L, versions 1–40, ≤ 2 KB gzipped, round-trip tested with a real decoder) renders `tryUrl`.
+The API renders `qrSvg` for app-mode surfaces. If a response carries none, the modal still shows the
+"open the link" fallback. The built-in QR encoder (`src/qr.ts`, byte mode, EC level L, versions 1–40,
+round-trip tested with a real decoder) is kept in the source but no longer bundled: the standalone
+overlay needed its 2 KB of the 8 KB budget.
 
 ## Never breaking the merchant page (D7)
 
-Every error is caught. If the backend answers 402/423 ("shop paused") **with** a `tryUrl`, or 200
-with `shopPaused: true`, the SDK proceeds as normal — the app shows the paused screen. Without a
+Every error is caught. If the backend answers 402/423 ("shop paused") **with** a session, or 200
+with `shopPaused: true`, the SDK proceeds as normal: the embed or the app shows the paused screen. Without a
 `tryUrl` it shows a polite message. Network errors and 5xx also show a polite message. The SDK
 never throws into merchant code and never leaves a button in a stuck state.
 
@@ -104,16 +173,17 @@ init({ shop: 'pk_live_…', api: 'https://api.curtain.fit' });
 ```
 
 Everything the IIFE does is exported: `init`, `open`, `configure`, `scan`, `destroy`, `isMobile`,
-`openModal`, `encodeQr`, `qrToSvg`, `pickStrings`, `STRINGS`, `CSS`, `VERSION`, and the types
-`CurtainConfig`, `OpenOptions`, `OpenResult`, `CurtainApi`. Wire types are re-exported from
-`@curtain/schema` (`SdkSessionRequest`, `SdkSessionResponse`) as types only — nothing from schema
-is bundled.
+`openModal`, `openEmbed`, `selectSize`, `currentSize`, `toast`, `pickStrings`, `STRINGS`, `CSS`,
+`VERSION`, and the types `CurtainConfig`, `OpenOptions`, `OpenResult`, `CurtainApi`,
+`CurtainHooks`, `SizeSelectedDetail`. The wire types (`SdkSessionRequest`, `SdkSessionResponse`,
+`EmbedMessage`, `EmbedContextMessage`) are copies of the `@curtain/schema` DTOs in `src/types.ts`,
+so the SDK has no dependency at all; keep them in sync with the schema.
 
 ## Build / test
 
 ```
 pnpm --filter @curtain/sdk typecheck   # tsc --noEmit
-pnpm --filter @curtain/sdk test        # vitest + jsdom (+ jsqr for the QR round-trip, esbuild for the size budget)
+pnpm --filter @curtain/sdk test        # vitest + jsdom (embed protocol, variant selection, a11y; jsqr for the QR round-trip; esbuild for the size budget)
 pnpm --filter @curtain/sdk build       # tsup → dist/sdk.v1.js (IIFE) + dist/sdk.v1.esm.js (ESM) + sdk.v1.d.ts; then the size check
 pnpm --filter @curtain/sdk lint
 ```

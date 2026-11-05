@@ -1,6 +1,6 @@
 import { ESTIMATE_DISCLAIMER as SCHEMA_DISCLAIMER } from '@curtain/schema';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ESTIMATE_DISCLAIMER, STRINGS } from './i18n';
+import { ESTIMATE_DISCLAIMER, pickStrings, STRINGS } from './i18n';
 import { closeModal } from './modal';
 import { configure, destroy, getConfig, init, isMobile, open, scan } from './sdk';
 import { VERSION } from './version';
@@ -89,6 +89,26 @@ describe('button discovery', () => {
     expect(c.textContent).toBe('Give it a go');
   });
 
+  it('follows the shop page language, never the browser language, and never says "paskamer"', () => {
+    const lang = Object.getOwnPropertyDescriptor(navigator, 'language');
+    Object.defineProperty(navigator, 'language', { value: 'nl-NL', configurable: true });
+    try {
+      document.documentElement.lang = '';
+      expect(pickStrings().close).toBe('Close');
+      document.documentElement.lang = 'en';
+      expect(pickStrings().yourSize('M')).toBe('Your size: M');
+      document.documentElement.lang = 'nl';
+      expect(pickStrings().close).toBe('Sluiten');
+      expect(pickStrings('en-GB').close).toBe('Close');
+    } finally {
+      if (lang) Object.defineProperty(navigator, 'language', lang);
+      else delete (navigator as unknown as Record<string, unknown>).language;
+    }
+    for (const table of Object.values(STRINGS)) {
+      expect(JSON.stringify({ ...table, expires: table.expires(1), yourSize: table.yourSize('M') })).not.toMatch(/paskamer/i);
+    }
+  });
+
   it('skips the stylesheet entirely when configured unstyled', () => {
     button();
     init({ shop: SHOP, api: API, unstyled: true });
@@ -131,10 +151,10 @@ describe('configure', () => {
 });
 
 describe('click → handshake', () => {
-  it('POSTs exactly {shopKeyPrefix, productExternalId, pageUrl, surface} without credentials, then opens the QR modal on desktop', async () => {
+  it('app mode: POSTs exactly {shopKeyPrefix, productExternalId, pageUrl, surface} without credentials, then opens the QR modal on desktop', async () => {
     const fetchMock = mockFetch(200);
     const b = button('aalter-studio-1');
-    init({ shop: SHOP, api: API });
+    init({ shop: SHOP, api: API, mode: 'app' });
     b.click();
     expect(b.getAttribute('aria-busy')).toBe('true');
     await flush();
@@ -158,16 +178,14 @@ describe('click → handshake', () => {
     expect(dialog.textContent).toContain('Scan with your phone to try it on in Curtain');
   });
 
-  it('falls back to the built-in QR encoder when qrSvg is absent; programmatic calls report surface=api', async () => {
+  it('app mode without qrSvg still offers the link (the encoder is not bundled); programmatic calls report surface=api', async () => {
     const fetchMock = mockFetch(200, { ...session, qrSvg: undefined });
     init({ shop: SHOP, api: API });
     const r = await open('p1', { mode: 'modal' });
     expect(r.kind).toBe('modal');
     expect(JSON.parse((fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string).surface).toBe('api');
-    const img = document.querySelector<HTMLImageElement>('[role="dialog"] img')!;
-    const svg = decodeURIComponent(img.src.replace('data:image/svg+xml;charset=utf-8,', ''));
-    expect(svg).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 \d+ \d+"/);
-    expect(svg).toContain('h1v1h-1z');
+    expect(document.querySelector('[role="dialog"] img')).toBeNull();
+    expect(document.querySelector('[role="dialog"] .pk-meta a')?.getAttribute('href')).toBe(session.tryUrl);
   });
 
   it('redirects to tryUrl on a mobile user agent (universal link)', async () => {

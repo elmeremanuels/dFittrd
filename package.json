@@ -13,6 +13,8 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
+    "demo": "node scripts/demo.mjs",
+    "demo:e2e": "node scripts/demo-e2e.mjs",
     "check": "pnpm build:packages && pnpm typecheck && pnpm lint && pnpm test && pnpm build:apps && node scripts/check-bundle-secrets.mjs"
   }
 }

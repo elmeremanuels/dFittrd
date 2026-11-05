@@ -4,7 +4,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Curtain for WooCommerce 0.1.0\n"
 "Report-Msgid-Bugs-To: https://curtain.fit/woocommerce\n"
-"POT-Creation-Date: 2026-11-04 12:00+0000\n"
+"POT-Creation-Date: 2026-11-05 12:00+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -173,6 +173,46 @@ msgstr ""
 msgid "Required before the product can be active:"
 msgstr ""
 
+#: includes/class-settings.php
+msgid "Experience"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "On the product page (no app needed)"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Curtain app"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "On the product page: shoppers get their recommended size in an overlay on your product page and Curtain selects it in the size dropdown. Curtain app: phones open the Curtain app, desktops show a QR code."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Size attribute"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Size"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "The product attribute that holds the size in your variation dropdowns. Curtain selects the recommended size in it."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Curtain is a private fitting room: shoppers find their size right on your product page, no app needed. Their measurements stay in their own browser. Only garment data (size charts, fabric, photos) leaves this site, never customer data."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "paused (below plan: the button still renders, shoppers see a \"shop paused\" screen)"
+msgstr ""
+
 #: includes/class-frontend.php
-msgid "Opens Curtain, your private fitting room. Fit results are estimates."
+msgid "Opens the Curtain app, your private fitting room. Fit results are estimates."
+msgstr ""
+
+#: includes/class-frontend.php
+msgid "Find your size on this page. Your measurements stay on this device. Fit results are estimates."
 msgstr ""

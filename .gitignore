@@ -17,3 +17,6 @@ infra/.env
 # Playwright output
 test-results/
 playwright-report/
+
+# Local demo database (pnpm demo)
+.demo-db/

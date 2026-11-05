@@ -100,6 +100,7 @@ describe('Shopify: webhooks (HMAC + GDPR), token exchange, sync job', () => {
       if (q.query.includes('CurtainProducts')) return json({ data: { products: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [productNode('gid://shopify/Product/7001')] } } });
       if (q.query.includes('CurtainProduct(')) return json({ data: { product: productNode() } });
       if (q.query.includes('currentAppInstallation')) return json({ data: { currentAppInstallation: { id: 'gid://shopify/AppInstallation/77' } } });
+      if (q.query.includes('CurtainPrimaryDomain')) return json({ data: { shop: { primaryDomain: { host: 'Aalter.Example' } } } });
       if (q.query.includes('metafieldsSet')) {
         const mf = q.variables.metafields as Array<{ key: string; namespace: string }>;
         return json({ data: { metafieldsSet: { metafields: mf.map((m, i) => ({ id: `gid://shopify/Metafield/${i}`, key: m.key, namespace: m.namespace, ownerType: 'APP_INSTALLATION' })), userErrors: [] } } });
@@ -131,6 +132,9 @@ describe('Shopify: webhooks (HMAC + GDPR), token exchange, sync job', () => {
       ['gid://shopify/AppInstallation/77', 'curtain', 'app_url', t.env.PUBLIC_APP_URL],
     ]);
     expect(String(appData!.init!.body)).not.toMatch(/sk_(live|test)_/);
+    // standalone embed: the primary domain is stored as a postMessage target (docs/STANDALONE.md §2)
+    const stored = await t.handle.db.query.shops.findFirst({ where: eq(shops.id, shop.id) });
+    expect(stored?.settings.primaryDomain).toBe('aalter.example');
 
     // session token now authenticates merchant routes for this shop
     const me = await t.app.inject({ method: 'GET', url: '/v1/merchant/products', headers: { authorization: `Bearer ${await sessionToken()}` } });

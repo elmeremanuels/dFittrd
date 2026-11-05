@@ -1,7 +1,8 @@
 <?php
 /**
  * Settings storage + the WooCommerce → Curtain settings page (Connect round-trip, manual key,
- * status, storefront button options, ads toggle, uninstall cleanup). D6: no telemetry before the
+ * status, storefront button options incl. the shopper experience (standalone by default), ads toggle,
+ * uninstall cleanup). D6: no telemetry before the
  * merchant clicks Connect; the secret key is stored encrypted (Secret_Store).
  *
  * @package Curtain
@@ -19,6 +20,14 @@ final class Settings {
 	public const PAGE   = 'curtain';
 
 	private const ENCRYPTED = array( 'api_key', 'connect_token' );
+
+	/** Standalone (docs/STANDALONE.md, D11): the fit experience opens on the product page, no app needed. */
+	public const MODE_EMBED = 'embed';
+	/** Opt-in: the old flow that opens the Curtain app (deep link on phones, QR code on desktops). */
+	public const MODE_APP = 'app';
+	public const MODES    = array( self::MODE_EMBED, self::MODE_APP );
+
+	public const DEFAULT_SIZE_ATTRIBUTE = 'pa_size';
 
 	/** @return array<string,mixed> */
 	public static function defaults(): array {
@@ -39,6 +48,8 @@ final class Settings {
 			'button_priority'     => 35,
 			'button_label'        => '',
 			'button_scope'        => 'active',
+			'mode'                => self::MODE_EMBED,
+			'size_attribute'      => self::DEFAULT_SIZE_ATTRIBUTE,
 			'locale'              => 'auto',
 			'default_brand'       => '',
 			'share_admin_email'   => true,
@@ -101,6 +112,62 @@ final class Settings {
 			return $label;
 		}
 		return 'nl' === self::effective_locale() ? 'Try it on' : __( 'Try it on', 'curtain-woocommerce' );
+	}
+
+	/** Shopper experience for the SDK's data-mode: 'embed' (default, standalone) or 'app'. Unknown values fall back to 'embed'. */
+	public static function sanitize_mode( $raw ): string {
+		$raw = is_string( $raw ) ? strtolower( trim( $raw ) ) : '';
+		return in_array( $raw, self::MODES, true ) ? $raw : self::MODE_EMBED;
+	}
+
+	/**
+	 * Product attribute that holds the size: a global attribute taxonomy (`pa_size`, `pa_maat`) or a
+	 * custom attribute slug (`size`). Lower-case letters, digits, `_` and `-`, at most 32 characters
+	 * (WooCommerce's own limit for `pa_` taxonomies). Anything else falls back to `pa_size`.
+	 */
+	public static function sanitize_size_attribute( $raw ): string {
+		$raw = is_string( $raw ) ? strtolower( trim( $raw ) ) : '';
+		if ( '' === $raw || 1 !== preg_match( '/^[a-z0-9][a-z0-9_-]{0,31}$/', $raw ) ) {
+			return self::DEFAULT_SIZE_ATTRIBUTE;
+		}
+		return $raw;
+	}
+
+	public static function mode(): string {
+		return self::sanitize_mode( self::get( 'mode' ) );
+	}
+
+	public static function size_attribute(): string {
+		return self::sanitize_size_attribute( self::get( 'size_attribute' ) );
+	}
+
+	/**
+	 * Choices for the size attribute dropdown: every global product attribute (`pa_<name>` => label),
+	 * plus `pa_size` and the stored value so the current setting is always selectable.
+	 *
+	 * @return array<string,string>
+	 */
+	public static function size_attribute_choices(): array {
+		$out = array();
+		if ( function_exists( 'wc_get_attribute_taxonomies' ) ) {
+			foreach ( (array) wc_get_attribute_taxonomies() as $tax ) {
+				$name = is_object( $tax ) ? (string) ( $tax->attribute_name ?? '' ) : ( is_array( $tax ) ? (string) ( $tax['attribute_name'] ?? '' ) : '' );
+				if ( '' === $name ) {
+					continue;
+				}
+				$label = is_object( $tax ) ? (string) ( $tax->attribute_label ?? '' ) : (string) ( $tax['attribute_label'] ?? '' );
+				$slug  = self::sanitize_size_attribute( 'pa_' . $name );
+				$out[ $slug ] = ( '' !== $label ? $label : $name ) . ' (' . $slug . ')';
+			}
+		}
+		if ( ! isset( $out[ self::DEFAULT_SIZE_ATTRIBUTE ] ) ) {
+			$out = array( self::DEFAULT_SIZE_ATTRIBUTE => __( 'Size', 'curtain-woocommerce' ) . ' (' . self::DEFAULT_SIZE_ATTRIBUTE . ')' ) + $out;
+		}
+		$current = self::size_attribute();
+		if ( ! isset( $out[ $current ] ) ) {
+			$out[ $current ] = $current;
+		}
+		return $out;
 	}
 
 	/** 'en' | 'nl' for the SDK's data-locale. */
@@ -213,6 +280,8 @@ final class Settings {
 		$locale   = in_array( $in['locale'] ?? 'auto', array( 'auto', 'en', 'nl' ), true ) ? (string) $in['locale'] : 'auto';
 		$scope    = in_array( $in['button_scope'] ?? 'active', array( 'active', 'all' ), true ) ? (string) $in['button_scope'] : 'active';
 		$ads      = ! empty( $in['ads_enabled'] );
+		$mode     = self::sanitize_mode( $in['mode'] ?? self::MODE_EMBED );
+		$size_att = self::sanitize_size_attribute( $in['size_attribute'] ?? self::DEFAULT_SIZE_ATTRIBUTE );
 
 		self::update(
 			array(
@@ -221,6 +290,8 @@ final class Settings {
 				'button_priority'     => $priority > 0 ? $priority : 35,
 				'button_label'        => mb_substr( $label, 0, 60 ),
 				'button_scope'        => $scope,
+				'mode'                => $mode,
+				'size_attribute'      => $size_att,
 				'locale'              => $locale,
 				'default_brand'       => mb_substr( sanitize_text_field( (string) ( $in['default_brand'] ?? '' ) ), 0, 120 ),
 				'share_admin_email'   => ! empty( $in['share_admin_email'] ),
@@ -417,7 +488,7 @@ final class Settings {
 		?>
 		<div class="wrap curtain-settings">
 			<h1><?php esc_html_e( 'Curtain for WooCommerce', 'curtain-woocommerce' ); ?></h1>
-			<p class="description"><?php esc_html_e( 'Curtain is a private fitting room: shoppers measure themselves on their own phone and see how your garments fit. Only garment data (size charts, fabric, photos) leaves this site — never customer data.', 'curtain-woocommerce' ); ?></p>
+			<p class="description"><?php esc_html_e( 'Curtain is a private fitting room: shoppers find their size right on your product page, no app needed. Their measurements stay in their own browser. Only garment data (size charts, fabric, photos) leaves this site, never customer data.', 'curtain-woocommerce' ); ?></p>
 
 			<h2><?php esc_html_e( 'Connection', 'curtain-woocommerce' ); ?></h2>
 			<table class="form-table" role="presentation">
@@ -429,7 +500,7 @@ final class Settings {
 							<?php if ( '' !== (string) $s['shop_name'] ) : ?> — <?php echo esc_html( (string) $s['shop_name'] ); ?><?php endif; ?>
 							<br><code><?php echo esc_html( (string) $s['public_key_prefix'] ); ?></code>
 							<?php if ( '' !== (string) $s['plan'] ) : ?> · <?php echo esc_html( sprintf( /* translators: %s: plan name */ __( 'plan: %s', 'curtain-woocommerce' ), (string) $s['plan'] ) ); ?><?php endif; ?>
-							<?php if ( ! empty( $s['paused'] ) ) : ?> · <strong style="color:#b32d2e"><?php esc_html_e( 'paused (below plan — the button still renders, the app shows a "shop paused" screen)', 'curtain-woocommerce' ); ?></strong><?php endif; ?>
+							<?php if ( ! empty( $s['paused'] ) ) : ?> · <strong style="color:#b32d2e"><?php esc_html_e( 'paused (below plan: the button still renders, shoppers see a "shop paused" screen)', 'curtain-woocommerce' ); ?></strong><?php endif; ?>
 							<br><span class="description">
 								<?php echo esc_html( sprintf( /* translators: 1: key storage scheme, 2: queue backend */ __( 'Key stored with %1$s · job queue: %2$s', 'curtain-woocommerce' ), Secret_Store::scheme(), Queue::backend() ) ); ?>
 								<?php $pending_jobs = Queue::pending_count(); ?>
@@ -483,6 +554,23 @@ final class Settings {
 						<th scope="row"><?php esc_html_e( 'Show button', 'curtain-woocommerce' ); ?></th>
 						<td><label><input type="checkbox" name="curtain[button_enabled]" value="1" <?php checked( ! empty( $s['button_enabled'] ) ); ?>> <?php esc_html_e( 'Add a "Try it on" button to single product pages (bundled script, no third-party requests).', 'curtain-woocommerce' ); ?></label>
 						<p class="description"><?php esc_html_e( 'You can also place it yourself with the [curtain_button] shortcode.', 'curtain-woocommerce' ); ?></p></td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="curtain_mode"><?php esc_html_e( 'Experience', 'curtain-woocommerce' ); ?></label></th>
+						<td><select id="curtain_mode" name="curtain[mode]">
+							<option value="embed" <?php selected( self::mode(), self::MODE_EMBED ); ?>><?php esc_html_e( 'On the product page (no app needed)', 'curtain-woocommerce' ); ?></option>
+							<option value="app" <?php selected( self::mode(), self::MODE_APP ); ?>><?php esc_html_e( 'Curtain app', 'curtain-woocommerce' ); ?></option>
+						</select>
+						<p class="description"><?php esc_html_e( 'On the product page: shoppers get their recommended size in an overlay on your product page and Curtain selects it in the size dropdown. Curtain app: phones open the Curtain app, desktops show a QR code.', 'curtain-woocommerce' ); ?></p></td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="curtain_size_attribute"><?php esc_html_e( 'Size attribute', 'curtain-woocommerce' ); ?></label></th>
+						<td><select id="curtain_size_attribute" name="curtain[size_attribute]">
+							<?php foreach ( self::size_attribute_choices() as $slug => $label ) : ?>
+								<option value="<?php echo esc_attr( $slug ); ?>" <?php selected( self::size_attribute(), $slug ); ?>><?php echo esc_html( $label ); ?></option>
+							<?php endforeach; ?>
+						</select>
+						<p class="description"><?php esc_html_e( 'The product attribute that holds the size in your variation dropdowns. Curtain selects the recommended size in it.', 'curtain-woocommerce' ); ?></p></td>
 					</tr>
 					<tr>
 						<th scope="row"><label for="curtain_button_scope"><?php esc_html_e( 'Show for', 'curtain-woocommerce' ); ?></label></th>

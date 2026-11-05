@@ -108,9 +108,8 @@ stop any old demo first, or the api will still serve the old seed and billing ru
   plugin 48) and the bundle secret scan.
 - `pnpm demo:e2e` passes for both page styles (WooCommerce and Dawn). Each flow runs: overlay, About
   you, result, "Choose size L", the size selected on the page, and a returning shopper going straight
-  to the result. Caveat for this run: an older demo api and storefront were already running and were
-  reused, so the e2e exercised the new web app and SDK against the older api seed and billing code.
-  The api and storefront changes are covered by their own tests.
+  to the result. Rerun on 5 Nov 2026 against a freshly started demo (api, web and storefront all
+  new): both flows pass.
 
 ### What remains
 

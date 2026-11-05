@@ -103,7 +103,7 @@ stop any old demo first, or the api will still serve the old seed and billing ru
 
 ### What is verified
 
-- `pnpm check` passes: build, typecheck, lint, the tests (api 97, web 215, sdk 90, schema 119,
+- `pnpm check` passes: build, typecheck, lint, the tests (api 97, web 219, sdk 90, schema 119,
   fit-engine 102, taste-engine 84, tryon-providers 65, shopify-app 89, demo-shop 8, woocommerce
   plugin 48) and the bundle secret scan.
 - `pnpm demo:e2e` passes for both page styles (WooCommerce and Dawn). Each flow runs: overlay, About

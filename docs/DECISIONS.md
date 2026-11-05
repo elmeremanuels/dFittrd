@@ -74,3 +74,14 @@ Order attribution (hidden cart attribute → `order_outcomes`) is schema-ready b
 ## D10 — Honest schedule
 
 The handoff's eight weeks is realistically 12–16 weeks of solo work; the risk is the on-device capture pipeline, not the backend. Sequence: engines → backend + persistence → capture → Path B → first platform end-to-end → second platform → billing → hero render + bake-off.
+
+## D11 — Standalone first: the shop works without the consumer app
+
+The founder wants to start with the plugin alone. The "Try it on" button now opens the full fit
+experience in an overlay on the merchant's own page (an iframe on our origin). The overlay has
+quick measurements or an optional camera scan, a size recommendation and the per-point fit, and it
+selects the chosen size on the product page. Shoppers install nothing. The consumer app (deck,
+wardrobe, Style DNA, cross-shop profile) becomes an optional extra and the old QR/deep-link flow
+stays behind `data-mode="app"`. The billing unit stays the try-on session: in standalone mode it is
+billed when the first fit result is shown (`POST /v1/try/:token/fit-shown`). Measurements never
+leave the shopper's browser in this mode. Full contract: `docs/STANDALONE.md`.

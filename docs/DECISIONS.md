@@ -85,3 +85,23 @@ wardrobe, Style DNA, cross-shop profile) becomes an optional extra and the old Q
 stays behind `data-mode="app"`. The billing unit stays the try-on session: in standalone mode it is
 billed when the first fit result is shown (`POST /v1/try/:token/fit-shown`). Measurements never
 leave the shopper's browser in this mode. Full contract: `docs/STANDALONE.md`.
+
+## D12 — Own garment engine (revises D4)
+
+We build an image → video → 3D pipeline per product and an on-device fitting renderer. Hosted AI try-on (FASHN and others) stays available as an optional photo finish. Why: hosted try-on ignores size and fabric, and showing size is the product. Per-product processing keeps the cost per shopper near zero. Full plan: `docs/ENGINE-HANDOFF.md`.
+
+## D13 — The merchant owns the views
+
+Front and back photos are required for an asset; detail photos are recommended. The merchant approves every asset before shoppers see it. Why: generated back views and details are where models invent things; one extra photo removes the largest source of error and draws a clear line of responsibility.
+
+## D14 — Video is the separation and measurement engine
+
+The pipeline renders the garment on our own canonical mannequin with a known camera path and a known motion. Garment versus mannequin and the measurement points are both derived from that video. Why: we own the mannequin geometry, so every pixel that is not mannequin is garment, every mannequin ring is a known measurement point, and cloth that moves differently from the body during motion is garment.
+
+## D15 — One anchor vocabulary
+
+Body scan, fit engine, garment asset and renderer all use the same named anchors: the 12 rings (neck, shoulder, chest, underbust, waist, hip, thigh, knee, calf, ankle, upper_arm, wrist) and the lengths (shoulder_to_waist, shoulder_to_hem, waist_to_hem, sleeve, inseam, rise). Why: the size advice and the picture come from the same numbers, so they can never contradict each other.
+
+## D16 — Assets in file storage behind Caddy; GPU work on a hosted GPU service
+
+The VPS orchestrates and serves; it never runs models. Asset bundles (a few MB per product) live on a disk volume served by Caddy under immutable, versioned paths and are included in the nightly backup. GPU work runs per job on a hosted service that scales to zero, in an EU region. This keeps the spirit of D9 (no object store, small VPS). D3 is unchanged: garment assets are public product data; the shopper's body and photos stay on the device.

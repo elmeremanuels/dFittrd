@@ -1,0 +1,34 @@
+{
+  "name": "@curtain/garment-spike",
+  "version": "0.0.0",
+  "description": "Phase 0 spike of the garment engine (docs/ENGINE-HANDOFF.md): synthetic garments on the canonical mannequin, stage 3 separation on synthetic renders, stage 5 anchoring and calibration, stage 6 grading, and the asset bundle files. Not shipped; promote only what passes the gate.",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:bundle": "tsx scripts/build-bundle.ts",
+    "viewer": "vite --config viewer/vite.config.ts",
+    "viewer:smoke": "node viewer/smoke.mjs",
+    "test": "vitest run && vitest run --config viewer/vitest.config.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p viewer/tsconfig.json",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@curtain/anchors": "workspace:*",
+    "@curtain/fit-engine": "workspace:*",
+    "@curtain/mannequin": "workspace:*",
+    "@curtain/schema": "workspace:*"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@types/node": "22.20.5",
+    "@types/three": "0.186.0",
+    "eslint": "9.39.5",
+    "three": "0.186.1",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1",
+    "vite": "6.4.5",
+    "vitest": "3.2.7"
+  }
+}

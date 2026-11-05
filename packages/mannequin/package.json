@@ -1,0 +1,44 @@
+{
+  "name": "@curtain/mannequin",
+  "version": "0.1.0",
+  "description": "Curtain canonical mannequin v0 (docs/ENGINE-HANDOFF.md §The canonical mannequin): a procedural A-pose body lofted through the D15 anchor rings in three shapes, its anchor rings and length lines, fixed turntable camera paths, one motion clip on a simple rig, and a minimal glTF 2.0 binary writer. Pure TypeScript; the only runtime dependency is @curtain/anchors.",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "build:assets": "tsx scripts/build-assets.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@curtain/anchors": "workspace:*"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@types/node": "22.20.5",
+    "eslint": "9.39.5",
+    "tsup": "8.5.1",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "3.2.7"
+  }
+}

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Blind fit test</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <aside>
+      <h1>Blind fit test</h1>
+      <p class="muted">Phase 0 size and fabric tests. Two renders of the same garment, no labels. <a href="./index.html">Viewer</a></p>
+
+      <section id="setup">
+        <h2>Participant</h2>
+        <input id="participant" placeholder="Initials or code" autocomplete="off" data-testid="participant" />
+        <h2>Test</h2>
+        <label class="row"><input type="radio" name="mode" value="size" checked data-testid="mode-size" /> Size: which one is the smaller size?</label>
+        <label class="row"><input type="radio" name="mode" value="fabric" data-testid="mode-fabric" /> Fabric: which one is silk?</label>
+        <h2>Products</h2>
+        <div id="products"></div>
+        <p class="muted">Seed <span id="seed"></span> (order and sides follow from it).</p>
+        <button id="start" class="primary" data-testid="start">Start</button>
+      </section>
+
+      <section id="trial" hidden>
+        <h2 id="progress"></h2>
+        <p id="question" style="font-size: 16px; font-weight: 600"></p>
+        <p class="muted">Drag to turn both. Answer with the buttons or the arrow keys.</p>
+        <div class="seg" style="margin-top: 8px">
+          <button id="pick-left" class="primary" data-testid="pick-left">Left</button>
+          <button id="pick-right" class="primary" data-testid="pick-right">Right</button>
+        </div>
+      </section>
+
+      <section id="done" hidden>
+        <h2>Done</h2>
+        <p id="done-text"></p>
+        <button id="next" class="primary" data-testid="next">Next participant</button>
+      </section>
+
+      <h2>Results on this device</h2>
+      <p id="count" class="muted"></p>
+      <table class="kv" id="summary"></table>
+      <div class="seg" style="margin-top: 8px">
+        <button id="export" class="ghost" data-testid="export">Export CSV</button>
+        <button id="clear" class="ghost" data-testid="clear">Clear</button>
+      </div>
+      <p class="muted">Answers are kept in this browser only (localStorage) until you export them.</p>
+    </aside>
+    <main>
+      <canvas id="stage" data-testid="stage"></canvas>
+      <div class="status" id="status" data-testid="status"></div>
+    </main>
+    <script type="module" src="./src/blindMain.ts"></script>
+  </body>
+</html>

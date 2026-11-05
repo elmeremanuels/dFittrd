@@ -1,15 +1,16 @@
 import { ConfigError } from './errors.js';
+import { BANNED_MODELS } from './bannedModels.js';
+import type { BannedModel } from './bannedModels.js';
 import type { TryOnProvider } from './types.js';
 
 /**
- * AGENTS.md hard rule 6 / decision D4: non-commercial models may never be registered. The list is
- * matched case-insensitively and ignoring separators, so "IDM_VTON", "idm-vton" and "IdmVton"
- * are all caught. `scripts/check-banned-models.mjs` applies the same list to the source tree at
- * lint time.
+ * AGENTS.md hard rule 6 / decision D4: non-commercial models may never be registered. The list lives
+ * in bannedModels.ts and is matched case-insensitively and ignoring separators, so "IDM_VTON",
+ * "idm-vton" and "IdmVton" are all caught. `scripts/check-banned-models.mjs` applies the same list
+ * to the source tree at lint time.
  */
-export const BANNED_MODELS = ['idm-vton', 'ootdiffusion', 'catvton', 'fitdit', 'smpl-x'] as const;
-
-export type BannedModel = (typeof BANNED_MODELS)[number];
+export { BANNED_MODELS };
+export type { BannedModel };
 
 const normalise = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 

@@ -58,6 +58,7 @@ describe('POST /v1/swipes — batch, idempotent, billable by intent token (D7)',
 
   it('a swipe without a fit result is not billable; deck swipes bill once per product and day', async () => {
     const d = await createDevice(t);
+    await resolveTry(d); // pairs the device with the shop (deck billing needs a pairing, carry-over #8)
     const noFit = await t.app.inject({ method: 'POST', url: '/v1/swipes', headers: d.auth, payload: { events: [ev({ sizeAtSwipe: null, fitScore: null, action: 'pass', reasons: ['price'] })] } });
     expect(noFit.json()).toMatchObject({ accepted: 1, usageEventsCreated: 0 });
 
@@ -79,6 +80,7 @@ describe('POST /v1/swipes — batch, idempotent, billable by intent token (D7)',
 
   it('validates the batch: unknown shop 422, > 100 events 400, unknown keys stripped', async () => {
     const d = await createDevice(t);
+    await resolveTry(d);
     const unknown = await t.app.inject({ method: 'POST', url: '/v1/swipes', headers: d.auth, payload: { events: [ev({ shopId: '00000000-0000-4000-8000-000000000000' })] } });
     expect(unknown.statusCode).toBe(422);
     // a mixed batch is rejected before anything is written: no half batch, no usage event

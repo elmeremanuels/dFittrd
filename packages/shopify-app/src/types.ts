@@ -6,8 +6,14 @@
 /** `fetch`-compatible function so tests and the api can inject their own. */
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
-/** Admin API version this package was written against (matches apps/api SHOPIFY_API_VERSION default). */
-export const DEFAULT_API_VERSION = '2025-10' as const;
+/**
+ * The ONE place the Shopify Admin API version is pinned. Everything else re-uses it: the api's
+ * `SHOPIFY_API_VERSION` default (apps/api/src/env.ts), `APP_CONFIG_DEFAULTS` (shopify.app.toml
+ * `[webhooks].api_version`), `signWebhook`. `infra/.env.example` repeats the value (a test keeps it
+ * in sync). 2026-10 is the latest stable version as of Nov 2026, supported until Oct 2027
+ * (https://shopify.dev/docs/api/usage/versioning). Bump each quarter after reading the release notes.
+ */
+export const DEFAULT_API_VERSION = '2026-10' as const;
 
 /** The app's credentials from the Partner Dashboard (client_id / client_secret). */
 export interface ShopifyAppCredentials {

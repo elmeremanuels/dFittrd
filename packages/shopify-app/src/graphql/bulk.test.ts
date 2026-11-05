@@ -67,6 +67,20 @@ describe('parseBulkJsonl', () => {
     expect(r.skipped.map((s) => s.reason)).toEqual(['invalid JSON', 'orphan child of gid://shopify/Product/404', 'unknown child type gid://shopify/Collection/5']);
   });
 
+  it('accepts ungrouped output (2026-01+ default): children before their product, products interleaved', () => {
+    const grouped = parseBulkJsonl(wrapDressJsonl());
+    const lines = wrapDressJsonl().split('\n').filter(Boolean);
+    const [productLine, ...childLines] = lines;
+    const other = JSON.stringify({ id: 'gid://shopify/Product/2', title: 'B' });
+    const otherChild = JSON.stringify({ id: 'gid://shopify/ProductVariant/77', price: '10.00', selectedOptions: [{ name: 'Size', value: 'M' }], __parentId: 'gid://shopify/Product/2' });
+    const shuffled = [otherChild, ...childLines.slice(0, 3), other, productLine!, ...childLines.slice(3)].join('\n');
+    const r = parseBulkJsonl(shuffled);
+    expect(r.skipped).toEqual([]);
+    expect(r.products.map((p) => p.id)).toEqual(['gid://shopify/Product/2', PRODUCT_GID]);
+    expect(r.products[1]).toEqual(grouped.products[0]);
+    expect(r.products[0]!.variants?.nodes).toEqual([{ price: '10.00', selectedOptions: [{ name: 'Size', value: 'M' }] }]);
+  });
+
   it('handles an empty export', () => {
     expect(parseBulkJsonl('')).toEqual({ products: [], skipped: [] });
   });

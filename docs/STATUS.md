@@ -3,7 +3,111 @@
 This is the integration snapshot after the parallel build and review passes. Read it with
 `docs/DECISIONS.md` (why), `docs/ARCHITECTURE.md` (layout) and `docs/HANDOFF.md` (product truth).
 
-## Verification run (repo root, Node 22, pnpm 10.28.0)
+## Garment engine — Phase 0 preparation (Nov 2026)
+
+Branch `claude/garment-engine`, against `docs/ENGINE-HANDOFF.md`. This is the work that can be
+done **without** a GPU service, video models or pilot photos: the carry-over findings, the shared
+vocabulary and fabric library, the canonical mannequin, the model-free pipeline stages and a spike
+viewer. **Phase 0 itself has not started.** None of its six acceptance items (size test, fabric
+test, chart agreement on real products, view agreement, measured cost, write-up) is met yet.
+
+### Verification run (5 Nov 2026, repo root, fresh `.demo-db`)
+
+| Command | Result |
+|---|---|
+| `flock /tmp/curtain-pnpm.lock pnpm install` | pass, lockfile up to date |
+| `pnpm check` (build packages, typecheck, lint, test, build apps, bundle secret scan) | pass |
+| `pnpm demo:e2e` | pass, both flows (WooCommerce and Shopify Dawn): overlay, About you, result, "Choose size L", returning shopper |
+| `pnpm --filter @curtain/garment-spike build:bundle` | pass, 2 products (numbers below) |
+| `pnpm --filter @curtain/garment-spike viewer:smoke` | pass, 11 screenshots in `spikes/garment-engine/out/screens/` |
+
+Tests: schema 298, fit-engine 111, anchors 53, mannequin 38, taste-engine 84, sdk 90,
+tryon-providers 70, shopify-app 104, woocommerce-plugin 53 (PHP), api 135, web 241, demo-shop 8,
+garment spike 70 + viewer 28. SDK bundle 7,802 B gzip (budget 8,192). Web: 31 precache entries.
+Not run here: the Playwright privacy e2e, the api Docker image build, real phones.
+
+### Review findings fixed in this pass
+
+| Id | Fix | Test |
+|---|---|---|
+| SEC-1 (high) | Woo `/woo/complete` now checks the domain proof on **every** path, not only manual-key. `/woo/connect` returns `verification.nonce` in Stripe mode too (the plugin already publishes whatever nonce it gets). A paid Stripe trial is no longer proof of a domain. | api `stripe.test.ts`: Stripe flow without the proof → 403 `domain_unverified`, no key issued |
+| SEC-2 (medium) | The proof is fetched only from the root of the claimed host (`https://<host>/wp-json/curtain/v1/verify`, then `/?rest_route=`); the path of `siteUrl` is ignored. The HTML meta-tag fallback is gone (api and plugin), so a string reflected on a page cannot pass. Consequence: WordPress must answer at the host root. | api `media-proof.test.ts`: `/~attacker/` path refused, reflected meta tag refused; plugin `connect-proof.test.php` |
+| AVAIL-1 (medium) | `DEVICE_CREATE_RATE_LIMIT_PER_HOUR` default 30 → 300 per IP (shoppers share carrier NAT / shop Wi-Fi; the embed without storage mints a device per open). A 429 from `/v1/devices` or `/v1/try` now shows a retryable "Busy right now" screen in the embed instead of "Something went wrong". Documented in `docs/STANDALONE.md` and `infra/.env.example`. | web `flow.test.ts` |
+| PRIV-1 (medium) | "Delete my scan" drops the pending signature PUT first, then queues a durable `signature_delete` outbox row. The syncer sends signature rows one at a time in queue order, so an in-flight PUT lands before the DELETE; the DELETE retries past `MAX_ATTEMPTS` until a 2xx (only a permanent 4xx ends it). `signatureSyncedAt` is cleared only when the server confirms. | web `outbox.test.ts` (+2), `store.test.ts` (+1) |
+| AUTH-1 (medium) | Device rotation and registration run under one Web Lock across tabs and re-read the stored credentials first. A `token_rotated` 401 (from rotate or from any request) reloads the stored token and retries with it instead of clearing it and registering. `updateSettings` no longer writes a stale tab's device token over a newer one. A new device is registered only on `invalid_token`, on first run, or when a rotated token was kept by no context at all (see open gaps). | web `client.test.ts` (+4), `store.test.ts` (+1) |
+| R1 (medium) | New D15 breadth anchor `shoulder_width` (`ANCHOR_BREADTHS`, `BREADTH_RING`). The fit point `shoulder` (a width) maps to it in `@curtain/anchors` and in the fit engine's `FIT_POINT_ANCHORS`/`FitAnchorId`, so `anchorGaps` never keys a width under the `shoulder` ring (a girth). D15 amended in `docs/DECISIONS.md`. | anchors `vocabulary.test.ts`, fit-engine `anchors.test.ts` |
+| R2 (medium) | The spike viewer no longer decides "does not close" from the display preset's stretch. A loop is `open` only when the fit engine bands that anchor `tight` (its stretch-adjusted limit, from the product's own fabric); `placeGarment` no longer takes a stretch. | viewer `fitting.test.ts` (both repros) |
+| R3 (medium) | `resolveFabric` keeps a construction named in the composition as the construction, also when it has a base fibre ("100% cashmere" → wool + cashmere, like `parseFabricText`). The spike's `materialJson` passes a construction `primary` ("denim" with a cotton/elastane blend → denim, twill). | schema `fabrics.test.ts`, spike `garment.test.ts` |
+
+### Carry-over findings (ENGINE-HANDOFF §Carry-over)
+
+Closed (code and tests in this branch):
+
+1. SSRF guard pins DNS: `lib/safeFetch.ts` resolves once, validates, and connects to that address; the media proxy, the hero render and the Woo proof use it. Stage 1 ingest does not exist yet and must go through it.
+2. Duplicate size labels are rejected in schema `garment.ts` (`duplicateSizeLabels`); `fitSummary` never summarises an ambiguous row; grading throws on them.
+3. "Boot cut jeans" is a bottom: bottoms phrases with "boot" come first in `mappings/common.ts`; "Chelsea boot" stays a shoe.
+4. Shopify API version `2026-10`, one constant in `@curtain/shopify-app` (`DEFAULT_API_VERSION`), mirrored in api env and `infra/.env.example`. Not re-validated in GraphiQL on a real store.
+5. The api's Shopify client is a thin wrapper over `@curtain/shopify-app`.
+6. Shopify billing uses the shop's billing currency (`shopBillingPreferences`), stored per shop and reused for usage records.
+7. Standalone billing: per-plan daily cap (`BILLED_DAILY_CAP_*`) next to the global anomaly cap, and billing anomalies recorded and shown to the merchant.
+8. Deck swipes bill only for a paired device under the per-plan daily cap (`billFitSession`, shared with fit-shown).
+9. `DELETE /v1/me/signature` exists, and "Delete my scan" now reaches it durably (PRIV-1).
+10. Expired tokens rotate within `DEVICE_TOKEN_ROTATE_GRACE_DAYS` (180), and the cross-tab race no longer re-registers (AUTH-1). One residual case, below.
+11. Shop logo and overlay product photo load through `GET /v1/sdk/media` on our origin (allowlisted per shop, sniffed type, size cap, cache).
+12. Woo domain proof on every Connect path, from the host root (SEC-1, SEC-2).
+13. The Woo signed backfill endpoint was removed from the plugin.
+15. Plugin "Tested up to" headers updated; the Connect redirect is restricted to `https://checkout.stripe.com/`.
+18. The console shows the size distribution of standalone sessions (`analytics/fit-sizes`, k-floored).
+19. The abandoned-opens k floor counts distinct devices, not sessions.
+
+Still open:
+
+14. SDK is `UNLICENSED` but ships in a GPL plugin: founder decision, before WordPress.org.
+16. Scan head-top row includes hair (girths about 1–3 % low); the face step says "models not available" while loading. Not touched.
+17. About 58 % population prior in the girth means: needs the tape-measured volunteers.
+20. Items without fit points never earn the fit term in deck ranking.
+22. Item ids namespaced by shop: server side done; `taste-engine` and `apps/web/src/store` still key by `itemId`.
+23. `/v1/swipes` still rejects a whole batch for one bad event.
+24. Wardrobe size null vs `"ONE"` mismatch between `taste-engine` and `WardrobePutRequest`.
+21. Superseded by the Phase 5 photo finish.
+
+### What was built for the engine, and what each proves
+
+| Part | Where | What it proves | What it does not |
+|---|---|---|---|
+| Anchor vocabulary (D12–D16 recorded, D15 amended) | `packages/anchors` | One set of ids for scan, fit engine, asset and renderer: 12 rings, 6 lengths, 1 breadth; mappings from fit points, scan levels and `lengthCm` keys, tested against `@curtain/schema`; ring geometry (Ramanujan II, exact inverse) and the grading morph (monotone cubic, never overshoots). Zero runtime dependencies. | Nothing about real garments. |
+| Fit engine re-keyed by anchor | `packages/fit-engine` `anchorGaps` | The viewer can read per-anchor gaps with no maths of its own (rule 4); a test compares every gap with `fitGapsForRender` over 200+ cases. | — |
+| Scan → anchors | `apps/web/src/features/capture/anchors.ts` | The scan's 12 levels map to the 12 rings. | The hair bias (#16) is still in the rings. |
+| Fabric library v1 | `packages/schema` `fabrics.ts`, `mappings/fabricText.ts`, `docs/research/fabrics.md` | 12 fibres and the constructions of the handoff with sources; blend → parameters, construction overrides, elastane share, Dutch/English text parsing. | The numbers are trade ranges and estimates (listed per entry); not calibrated against real drape. |
+| Canonical mannequin v0 | `packages/mannequin` | Deterministic procedural body in 3 shapes (XS/M/XXL), 14.8–15.2k triangles each, girth on the mesh equal to the table at every ring, length lines, turntable camera paths (72 frames at three heights), a 6 s motion clip with a 10-joint rig, a glTF writer. | Not anthropometric; limbs overlap the torso; Phase 1 replaces the shape table. |
+| Spike stage 3 (separation) | `spikes/garment-engine/src/separation.ts` | Difference mask vs the bare mannequin works on our own synthetic renders: IoU 0.9955 / 0.9912 over 72 frames. | Untested on generated video; fails for a garment the colour of the mannequin (IoU < 0.5); no SAM 2 / motion signal yet. |
+| Spike stage 5 (anchoring, calibration) | `src/anchoring.ts` | Plane slicing measures any mesh in mannequin space; least-squares global scale then per-ring correction removes a simulated reconstruction error (6.3–6.6 cm max before, 1.65 / 0.00 cm residual after the global scale, 0.00 cm after calibration). | Chart agreement is ~0 by construction on synthetic data; the real tolerance needs Phase 0 data. |
+| Spike stage 6 (grading) and bundle | `src/grading.ts`, `src/bundle.ts` | Per-size targets from the chart, standard increments where it has no column (logged), and the bundle format (base.glb, anchors.json, grading.json, material.json, qa.json) with an input hash, deterministic. | No Draco, no KTX2, no textures or UVs; `shoulder_width` not yet in grading.json. |
+| Spike viewer | `spikes/garment-engine/viewer` | The device half end to end on synthetic data: avatar from typed measurements, per-anchor placement from fit-engine slack, PBD drape with collision, S/M/L side by side, fit map, linen/silk presets, and `blind.html` for the size and fabric tests with CSV export. | Not the product viewer (`packages/garment-viewer`, Phase 2); no WebGPU, no fallback, no textures; drape far above the 2 s budget in software rendering. |
+| Research | `docs/research/garment-engine.md`, `fabrics.md`; banned-model lint extended (`tryon-providers` `bannedModels.ts`) | Shortlist with licences: Wan2.2-Fun Control (Apache-2.0) vs Kling 3.0 Pro (hosted); gsplat 2DGS vs NeuS-style SDF; Anny body model (Apache-2.0); Modal EU / Koyeb. Two plan risks found: no hosted video API with verified camera-trajectory control, and none with an EU region. | Cost per product is an **estimate** ($1.3–5.6 per attempt, $250 Phase 0 budget), not a measurement. |
+
+### What Phase 0 still needs
+
+- **Accounts:** a GPU service account (Modal EU and/or Koyeb) and API access to the candidate video models. Founder call on US/Asia processing of merchant product photos for a hosted video model (no EU region found).
+- **Stages 2 and 4 on a GPU:** image → video (two models, ~3 seeds each) and reconstruction (two methods), plugged in where `generateGarment` + `distortGarment` sit in `buildBundle`. Stage 3 also needs the segmentation refinement and the motion signal.
+- **Pilot data:** 5 real products from the pilot shop (dresses and tops) with merchant front and back photos, size chart and base size.
+- **The tests:** five people who did not build it, on `blind.html`: size test (≥ 4 of 5 products), fabric test (linen vs silk), plus merchant view agreement.
+- **Measurements:** GPU seconds, wall time and cost per product; drape settle and frame rate on a mid-range phone; the Phase 0 write-up with chosen models and tolerances.
+
+### Measured numbers (synthetic data, this sandbox)
+
+| What | Value |
+|---|---|
+| Spike bundle `aalter-studio-2` (shirt dress) | 14,720 triangles, 295 KB (base.glb 269 KB), built in 4.7 s |
+| Spike bundle `monochrome-03` (tee) | 7,808 triangles (below the 8–15k guidance), 165 KB (base.glb 145 KB), built in 4.1 s |
+| Chart agreement after calibration | 0.00 cm on both (by construction); residual after global scale 1.65 / 0.00 cm |
+| Separation IoU, 72 frames | 0.9955 (lowest frame 0.988) / 0.9912 (lowest 0.982) |
+| Mannequin v0 | 14.8–15.2k triangles per shape |
+| Spike viewer production build | largest chunk 758 KB raw, 199 KB gzip (three.js included); handoff budget 400 KB gzip |
+| Drape settle, 1.5 s of cloth | about 1.2 s CPU per size in node; headless SwiftShader smoke 7.6–10.2 s per size, 24 s for three sizes (rendering on the CPU too). Phone budget ≤ 2 s per size: not measured |
+| Asset budget ≤ 3 MB per product | 165–295 KB without textures |
+
+## Verification run before the engine branch (repo root, Node 22, pnpm 10.28.0)
 
 | Command | Result |
 |---|---|
@@ -114,9 +218,9 @@ stop any old demo first, or the api will still serve the old seed and billing ru
 ### What remains
 
 - Fit-shown rate limiting is per IP only. Per device, the defence is the one-bill-per-device,
-  product and day rule, plus the daily anomaly cap. A rotating IP pool can still mint new devices
-  (30/min per IP) and bill up to the cap; a lower cap per plan, or anomaly alerts to the merchant,
-  are the next step.
+  product and day rule, plus the per-plan and global daily caps and the merchant's anomaly view
+  (carry-over #7). A rotating IP pool can still mint new devices (300 per IP per hour since AVAIL-1)
+  and bill up to the cap.
 - Real devices: the camera scan inside a cross-origin iframe (`allow="camera"`) on iOS Safari and
   Android Chrome, and IndexedDB partitioning (Safari ITP, Firefox) for "Remember me".
 - Live Shopify (Dawn 15) and WooCommerce themes: variant selection beyond the demo markup and the
@@ -247,50 +351,44 @@ the review components.
 
 ## Known gaps (open findings, by severity)
 
-**Medium**
-- WooCommerce manual-key Connect has no proof of domain ownership. Add a challenge that the plugin
-  answers on `/wp-json/curtain/v1/…`, or allow live keys only through the Stripe path.
-  (`apps/api/src/routes/merchant.ts`, plugin)
-- Deck billing can be inflated by bots: free devices swiping a real catalogue. Options are
-  pairing-only deck billing, per-device daily caps, or billing only intent-token sessions.
-  (`routes/app.ts`)
-- An expired device token (more than 30 days) cannot rotate. The client then re-registers, which
-  orphans the old device's server data out of reach of `DELETE /v1/me`. Fix with a grace window
-  for an expired token whose signature is valid, or with a refresh credential.
-- There is no `DELETE /v1/me/signature`. "Delete my scan" leaves the 80-float signature on the
-  server until "Delete everything".
-- `TasteState.seen` and the penalty memory are keyed by `itemId` without the shop, so the same id
-  in two paired shops collides. The cohort and wardrobe routes, and the local wardrobe key, have
-  the same ambiguity. Key everything by `shopId:itemId`.
-- `SHOPIFY_API_VERSION` / `DEFAULT_API_VERSION` are set to `2025-10`, which is at or past the end
-  of Shopify support in Nov 2026. Bump them together (api env, shopify-app types and appConfig,
-  `infra/.env.example`) after you re-validate the queries in GraphiQL.
-- Shopify billing always charges in EUR. Merchants billed in another currency get a userError.
-  Query `shopBillingPreferences { currency }`, or use USD.
+Updated for the engine branch (5 Nov 2026). Closed since the November handoff: Woo domain proof
+(#12, SEC-1, SEC-2), deck billing (#8), expired-token rotation (#10, AUTH-1), `DELETE
+/v1/me/signature` (#9, PRIV-1), the Shopify API version (#4) and currency (#6), duplicate size
+labels (#2), "Boot cut jeans" (#3), the abandoned-opens k floor (#19), DNS pinning (#1), the shop
+logo proxy (#11), the Woo backfill endpoint (#13) and the readme headers and Connect redirect (#15).
+
+**High**
 - `@curtain/sdk` is `UNLICENSED`, but it ships inside a WP.org plugin, which must be
-  GPL-compatible. This is a founder/legal call, needed before WP.org submission. The source URL in
-  `readme.txt` is a placeholder.
-- Capture: `headTopRow` includes hair, which biases girths low by about 1–3 %. `FaceStep` shows
-  "models not available" while the models are still loading.
+  GPL-compatible. This is a founder/legal call, needed before WP.org submission (#14).
+
+**Medium**
+- Capture: `headTopRow` includes hair, which biases girths low by about 1–3 %; the avatar and the
+  anchors inherit it. `FaceStep` shows "models not available" while the models are still loading (#16).
+- The scan prior blend puts about 58 % of the population prior into the girth means (#17);
+  revisit with the tape-measured volunteers.
+- `TasteState.seen`, the penalty memory and the local wardrobe key are keyed by `itemId` without
+  the shop (#22; the server side is fixed).
+- Items without fit points (accessories) never earn the 0.15 fit term in `rankDeck` (#20).
+- Woo Connect needs WordPress to answer at the root of the host (SEC-2). A shop installed in a
+  subdirectory (`example.com/shop/`) cannot connect; binding the shop to host plus path would be
+  the fix if a pilot merchant needs it.
+- Device minting: 300 per IP per hour, no per-shop or global mint budget (AVAIL-1). A global budget
+  was left out on purpose because it would let a flood lock every shopper out; billing has its own
+  per-device, per-plan and global caps.
+- A device whose rotated token was lost by every context (the rotate response never stored, e.g.
+  the tab closed mid-request) still registers a new device, which orphans the old device's server
+  rows out of reach of `DELETE /v1/me` (AUTH-1 residual). A refresh credential would close it.
+- Browsers without the Web Locks API fall back to the `token_rotated` reload path (AUTH-1); two
+  tabs can then still both send a rotation, but the loser picks up the winner's token.
 
 **Low**
-- `/v1/swipes` is now atomic but still all-or-nothing per batch. The client batches per shop, so a
+- `/v1/swipes` is atomic but all-or-nothing per batch (#23). The client batches per shop, so a
   redacted shop drops only its own swipes.
-- `SaveOutboxEntry.size` can be null, but `WardrobePutRequestSchema.size` cannot. Skip or queue the
-  PUT until a size exists.
-- Accessories (score null) never earn the 0.15 fit term in `rankDeck`.
-- `fitSummary` looks rows up by size label, and duplicate labels are not rejected.
-- `inferCategory` maps "Boot cut jeans" to shoes when nothing else labels the product.
-- The `abandoned` analytics k floor counts sessions, not users.
-- The SSRF guard does not pin DNS between its lookup and the connection (rebinding).
-- The shop logo on `/try` loads from the merchant's host, which reveals the user's IP. It needs a
-  proxy through our origin.
-- The Woo signed backfill endpoint has no server-side signer (the api stores only a hash of
-  `sk_`). Either implement a signer or drop the endpoint before WP.org.
-- `readme.txt` "Tested up to" headers are stale, and `handle_connect` does not restrict
-  `checkoutUrl` to `checkout.stripe.com`.
-- The scan prior blend means about 58 % of the population prior goes into the girth means
-  (documented design choice, revisit with pilot data).
+- `SaveOutboxEntry.size` can be null, but `WardrobePutRequestSchema.size` cannot (#24).
+- `grading.json` does not carry `shoulder_width` yet, and the spike viewer does not place the yoke
+  from it (R1 follow-up).
+- Spike viewer: largest chunk 199 KB gzip (under the 400 KB budget, but three.js is not split);
+  drape settle not measured on a phone; no textures, no WebGPU, no drawn-overlay fallback.
 
 **Product scope not built yet** (handoff §8):
 - the hero-render UI flow (the API and consent exist)
@@ -303,20 +401,16 @@ the review components.
 
 ## Recommended next steps, in order
 
-1. **Get Shopify end to end on a dev store.** Bump the API version first. Then run install, the
-   admin page, the theme block, a product sync and a try-on from the storefront on a phone. This is
-   the first platform, per D10.
-2. **Fix the privacy and deletion gaps before any pilot user.** Add `DELETE /v1/me/signature`, add
-   expired-token rotation or a refresh credential, and namespace item ids by shop (taste engine,
-   wardrobe, cohort).
-3. **Close the billing-integrity items before charging anyone.** Woo domain-ownership proof,
-   deck-billing policy (pairing-only or caps), the Shopify billing currency, and replacing the
-   duplicated api Shopify client with the `@curtain/shopify-app` helpers.
-4. **Run the WooCommerce smoke test** on current WordPress and WooCommerce. Bump the tested-up-to
-   headers, make the licensing decision for the SDK, and decide on the backfill endpoint. Then
-   submit to WP.org.
-5. **Calibrate capture on a tape-measured pilot set** (hair offset, prior weight), and add the
-   Playwright privacy e2e to CI.
-6. **Run the hero-render bake-off** (D4) with real FASHN/Vertex keys on about 50 SKUs, then build
-   the hero UI flow.
-7. **VPS go-live**: compose, TLS, backups with a restore drill, and the CI image push.
+1. **Start Phase 0 proper.** Open the GPU service account and the video-model access, get the 5
+   pilot products with front and back photos, run stages 2 and 4 into `buildBundle`, then the
+   five-person size and fabric tests on `blind.html`. Stop if the size test fails.
+2. **Get Shopify end to end on a dev store.** Re-validate the `2026-10` queries in GraphiQL, then
+   install, admin page, theme block, product sync and a try-on from a phone (D10).
+3. **Finish the app-side privacy items before any pilot user:** item ids by shop in the taste engine
+   and the web store (#22), and decide on a refresh credential for the AUTH-1 residual.
+4. **Run the WooCommerce smoke test** on current WordPress and WooCommerce, including Connect with
+   the host-root domain proof, and make the SDK licence decision before WP.org.
+5. **Calibrate capture on a tape-measured pilot set** (hair offset #16, prior weight #17), and add
+   the Playwright privacy e2e to CI.
+6. **VPS go-live**: compose, TLS, backups with a restore drill (now including the asset volume),
+   and the CI image push.

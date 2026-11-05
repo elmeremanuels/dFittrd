@@ -8,11 +8,13 @@
  *    metafield definitions, app-data metafields for the theme block (public key + api url), backfill job.
  *  - POST /shopify/webhooks        HMAC-verified; products/*, app/uninstalled, app_subscriptions/update,
  *    the three GDPR topics. Every delivery is logged with its payload for replay (webhook_log).
- *  - POST /shopify/billing/subscribe  appSubscriptionCreate (Starter + usage line with cappedAmount).
+ *  - POST /shopify/billing/subscribe  appSubscriptionCreate (Starter + usage line with cappedAmount), priced
+ *    in the shop's billing currency (shopBillingPreferences; EUR-based rate table, #6). The currency and
+ *    rate are stored on the shop so every usage record uses the subscription's currency.
  */
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { adminAppUrl, adminContentSecurityPolicy, createAdminClient, renderAdminPage, setAppDataMetafields, type FetchLike as ShopifyFetchLike } from '@curtain/shopify-app';
+import { adminAppUrl, adminContentSecurityPolicy, renderAdminPage, setAppDataMetafields, usageTerms } from '@curtain/shopify-app';
 import { z } from 'zod';
 import { requireMerchant } from '../auth/merchant.js';
 import { isShopifyDomain, verifyShopifySessionToken } from '../auth/shopifySessionToken.js';
@@ -23,6 +25,7 @@ import { badRequest, forbidden, serviceUnavailable, unauthorized } from '../lib/
 import { HOUR } from '../lib/time.js';
 import { archiveProduct } from '../services/products.js';
 import { createShop, findShopByDomain, issueMerchantKeys, updateSettings } from '../services/shops.js';
+import { billingSettingsPatch } from './client.js';
 
 export const SHOPIFY_TOPICS = [
   'products/create',
@@ -36,7 +39,7 @@ export const SHOPIFY_TOPICS = [
 ] as const;
 
 export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
-  const { db, env, queue, shopify, now, fetch: fetchImpl } = app.ctx;
+  const { db, env, queue, shopify, now } = app.ctx;
 
   /** `?shop=` as Shopify sends it, or null when it is not a *.myshopify.com domain. */
   const shopParam = (v: string | undefined): string | null => {
@@ -110,14 +113,7 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
       // button renders but cannot load the SDK. The public prefix is stable across key rotations, so
       // writing it on every token exchange (each admin open) keeps it correct without a rotation hook.
       try {
-        const client = createAdminClient({
-          shopDomain,
-          accessToken,
-          apiVersion: env.SHOPIFY_API_VERSION,
-          adminUrlTemplate: env.SHOPIFY_ADMIN_URL_TEMPLATE,
-          fetch: fetchImpl as ShopifyFetchLike,
-        });
-        await setAppDataMetafields(client, { publicKeyPrefix: fresh.apiKeyPrefix!, apiUrl: env.PUBLIC_API_URL, appUrl: env.PUBLIC_APP_URL });
+        await setAppDataMetafields(shopify.admin(shopDomain, accessToken), { publicKeyPrefix: fresh.apiKeyPrefix!, apiUrl: env.PUBLIC_API_URL, appUrl: env.PUBLIC_APP_URL });
       } catch (err) {
         req.log.warn({ err, shopDomain }, 'app-data metafields could not be written; the theme block needs its advanced key/API URL settings (continuing)');
       }
@@ -131,7 +127,7 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
     {
       schema: {
         body: z.object({ plan: z.enum(['starter', 'pro']).default('starter'), returnUrl: z.url().optional(), test: z.boolean().optional() }),
-        response: { 200: z.object({ confirmationUrl: z.string().nullable(), subscriptionId: z.string().nullable() }) },
+        response: { 200: z.object({ confirmationUrl: z.string().nullable(), subscriptionId: z.string().nullable(), currency: z.string() }) },
       },
       preHandler: requireMerchant,
     },
@@ -141,17 +137,27 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
       const token = await shopify.accessTokenFor(shop.domain);
       if (!token) throw unauthorized('shop has no offline token — run token exchange', 'shop_not_installed');
       const spec = PLAN_SPECS[req.body.plan];
+      // #6: price in the currency Shopify bills this merchant in (USD when our table lacks it).
+      const currency = await shopify.chargeCurrency(shop.domain, token);
+      if (currency.fallback) req.log.warn({ shopDomain: shop.domain, billingCurrency: currency.billingCurrency }, 'no rate for the shop billing currency; charging in USD');
+      const money = { currencyCode: currency.currencyCode, eurRate: currency.eurRate };
       const r = await shopify.appSubscriptionCreate(shop.domain, token, {
         name: `Curtain ${spec.name[0]!.toUpperCase()}${spec.name.slice(1)}`,
         returnUrl: req.body.returnUrl ?? `${env.PUBLIC_APP_URL}/merchant?billing=done`,
         priceEurPerMonth: spec.priceEurPerMonth,
         cappedAmountEur: 100,
-        overageTerms: `€${spec.overageEurPerSession.toFixed(2)} per try-on session above ${spec.includedSessions} per month`,
+        overageTerms: usageTerms(spec.overageEurPerSession, spec.includedSessions, money),
         trialDays: spec.trialDays,
         test: req.body.test ?? env.NODE_ENV !== 'production',
+        ...money,
       });
-      await updateSettings(db, shop.id, { usageLineItemId: r.usageLineItemId ?? undefined, subscriptionStatus: 'PENDING' }, { billingRef: r.subscriptionId, plan: req.body.plan });
-      return { confirmationUrl: r.confirmationUrl, subscriptionId: r.subscriptionId };
+      await updateSettings(
+        db,
+        shop.id,
+        { usageLineItemId: r.usageLineItemId ?? undefined, subscriptionStatus: 'PENDING', ...billingSettingsPatch({ currencyCode: r.currencyCode, eurRate: r.eurRate }) },
+        { billingRef: r.subscriptionId, plan: req.body.plan },
+      );
+      return { confirmationUrl: r.confirmationUrl, subscriptionId: r.subscriptionId, currency: r.currencyCode };
     },
   );
 

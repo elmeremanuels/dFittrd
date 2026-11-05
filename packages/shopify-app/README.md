@@ -25,13 +25,15 @@ in `apps/api/src/env.ts`) and nothing touches a database.
 
 | Module | Exports |
 | --- | --- |
-| `types` | `FetchLike`, `DEFAULT_API_VERSION` (`2025-10`), `isShopifyDomain`, `normaliseShopDomain`, `SleepFn` |
+| `types` | `FetchLike`, `DEFAULT_API_VERSION` (`2026-10`, the one pinned Admin API version; api env, toml and tests re-use it), `isShopifyDomain`, `normaliseShopDomain`, `SleepFn` |
 | `graphql/client` | `createAdminClient({ shopDomain, accessToken, apiVersion?, fetch?, maxRetries?, sleep?, adminUrlTemplate? })` → `{ request<T>(query, variables) }` with cost-aware retry on `THROTTLED`/429/5xx; `ShopifyGraphqlError` (`code`: http, graphql, non_json, empty, user_errors, unauthorized, invalid_domain); `assertNoUserErrors`; `adminGraphqlUrl`; `throttleDelaySeconds` |
 | `graphql/products` | `PRODUCT_QUERY`, `PRODUCTS_PAGE_QUERY`, `fetchProduct(client, gidOrId)`, `fetchProductsPage(client, cursor, query?)`, `iterateProducts(client)`, `productGid`, `productExternalId` — selections match `ShopifyProductNodeSchema` in `@curtain/schema` |
 | `graphql/metafields` | `METAFIELD_DEFINITION_CREATE`, `METAFIELD_DEFINITIONS_QUERY`, `METAFIELDS_SET`, `metafieldsSet` (auto-batches 25), `setProductMetafields(client, gid, payload)` (write-back via `toShopifyMetafields`), `getCurrentAppInstallationId`, `setAppDataMetafields(client, { publicKeyPrefix, apiUrl, appUrl? })` + `APP_DATA_NAMESPACE`/`APP_DATA_KEYS` (what the theme block reads) |
 | `metafieldDefinitions` | re-exports `SHOPIFY_METAFIELD_DEFINITIONS`/`SHOPIFY_METAFIELD_NAMESPACE`; `METAFIELD_KEYS`, `HEAVY_METAFIELD_KEYS`, `metafieldDefinitionInput(def)`, `METAFIELD_DEFINITION_INPUTS`, `ensureMetafieldDefinitions(client)` (TAKEN = existing), `listMetafieldDefinitions`, `missingDefinitionKeys` |
-| `graphql/bulk` | `bulkProductsQuery()`, `startBulkProductExport`, `getBulkOperation` (via `node(id:)`), `waitForBulkOperation`, `cancelBulkOperation`, `downloadBulkResult`, `parseBulkJsonl(text)` (folds `__parentId` children back into product nodes), `runProductBackfill(client)`, `BulkOperationError` |
-| `graphql/billing` | `createAppSubscription(client, plan)` (recurring EUR line + usage line with `cappedAmount`), `createUsageRecord(client, { lineItemId, description, amountEur, idempotencyKey })` → `{ id, capReached }`, `usageIdempotencyKey(shopId, sessionKey)`, `getActiveSubscriptions`, `cancelAppSubscription`, `subscriptionLineItems` |
+| `graphql/bulk` | `bulkProductsQuery()`, `startBulkProductExport`, `getBulkOperation` (via `node(id:)`), `waitForBulkOperation`, `cancelBulkOperation`, `downloadBulkResult`, `parseBulkJsonl(text)` (folds `__parentId` children back into product nodes, in any line order: 2026-01+ exports are ungrouped by default), `runProductBackfill(client)`, `BulkOperationError` |
+| `graphql/shop` | `fetchPrimaryDomainHost(client)`, `fetchBillingCurrency(client)` → `{ billingCurrency, shopCurrency }` (`shopBillingPreferences { currency }`) |
+| `currency` | `DEFAULT_EUR_RATES` (EUR-based rate table: 1 EUR = n units, every currency Shopify bills merchants in + USD), `resolveChargeCurrency(code, rates?)` (unknown → USD), `convertEur`, `convertEurListPrice`, `formatMoney`, `parseEurRates(json)` |
+| `graphql/billing` | `createAppSubscription(client, plan)` (recurring line + usage line with `cappedAmount`, in `plan.currencyCode`/`eurRate`, default EUR) → `{ …, currencyCode, eurRate }`, `createUsageRecord(client, { lineItemId, description, amountEur, idempotencyKey, currencyCode?, eurRate? })` → `{ id, capReached }`, `planAmounts`, `usageTerms`, `usageIdempotencyKey(shopId, sessionKey)`, `getActiveSubscriptions`, `cancelAppSubscription`, `subscriptionLineItems` |
 | `tokenExchange` | `requestTokenExchange({ shopDomain, sessionToken, apiKey, apiSecret, fetch?, tokenType?: 'offline' \| 'online', expiring? })` → `{ accessToken, scope, … }`; `TokenExchangeError` (status 400 = stale ID token: fetch a fresh one and retry); `tokenExchangeBody`, `tokenExchangeUrl` |
 | `sessionToken` | `verifySessionToken(token, { apiKey, apiSecret, now?, clockToleranceSec? })` → claims or `null`; `verifySessionTokenOrThrow` (`SessionTokenError.reason`); `decodeSessionToken` (unverified); `signSessionToken` (tests/dev) |
 | `webhookHmac` | `verifyWebhookHmac(rawBody, header, secret)` (timing-safe, raw bytes), `computeWebhookHmac`, `parseWebhookHeaders(headers)`, `signWebhook` (tests), `SHOPIFY_WEBHOOK_TOPICS`, `SHOPIFY_COMPLIANCE_TOPICS`, `ALL_WEBHOOK_TOPICS`, `WEBHOOK_PATH` (`/shopify/webhooks`), `isComplianceTopic`, `isKnownTopic` |
@@ -203,7 +205,7 @@ app per shop; switch to public distribution before the App Store listing (irreve
 1. **Token exchange** end-to-end: App Bridge `idToken()` → `POST /shopify/token-exchange` → `shpat_…`;
    stale-token 400 retry path.
 2. **Metafield definitions**: `metafieldDefinitionCreate` with `validations` (`choices`, `min`/`max`)
-   and `access` on the `$app:curtain` namespace for API version 2025-10; the exact `code` on
+   and `access` on the `$app:curtain` namespace for API version 2026-10; the exact `code` on
    duplicate creation is `TAKEN` (handled; any other error aborts loudly).
 3. **App-data metafields in Liquid**: `app.metafields.curtain.public_key` resolves inside the theme
    app extension for metafields set on `currentAppInstallation` with namespace `curtain`. If the
@@ -211,7 +213,7 @@ app per shop; switch to public distribution before the App Store listing (irreve
    `shop_key`/`api_url` settings are the fallback either way).
 4. **Bulk operation**: the JSONL shape for nested `images`/`variants`/`metafields` (`__parentId`
    ordering, `MediaImage` vs `ProductImage` ids) and the five-connection / two-level limits.
-5. **Billing**: `appSubscriptionCreate` with EUR on a dev store (`test: true`), `confirmationUrl`
+5. **Billing**: `appSubscriptionCreate` in the dev store's billing currency (and an AUD store for the pilot) (`test: true`), `confirmationUrl`
    flow, `app_subscriptions/update` payload, `appUsageRecordCreate` cap error wording (we match
    `/capped amount|cap/i` → `capReached`).
 6. **Webhooks**: declared subscriptions fire to `PUBLIC_API_URL/shopify/webhooks` after
@@ -224,8 +226,18 @@ app per shop; switch to public distribution before the App Store listing (irreve
 
 ## Assumptions stated
 
-- Admin API version `2025-10` (matches `apps/api` env default). Bumping to `2026-01+` allows up to
-  five concurrent bulk operations and `bulkOperation(id:)`; polling via `node(id:)` works on both.
+- Admin API version `2026-10` (`DEFAULT_API_VERSION`, latest stable as of Nov 2026, supported until
+  Oct 2027: https://shopify.dev/docs/api/usage/versioning). Release notes 2026-01 … 2026-10
+  (https://shopify.dev/changelog/release-notes/2026-01, -04, -07, -10) were checked for the fields
+  used here: the only change affecting this package is that `bulkOperationRunQuery` no longer
+  groups child objects by default (2026-01), which `parseBulkJsonl` handles. Products, metafields,
+  metafield definitions, billing, `shop.primaryDomain` and the webhook topics we subscribe to are
+  unchanged. Bump the constant each year before the pinned version leaves support.
+- Billing currency (#6): plan prices are authored in EUR; a subscription is created in the shop's
+  `shopBillingPreferences.currency` when `DEFAULT_EUR_RATES` has a rate for it (USD otherwise),
+  monthly price and cap rounded to whole units, usage to the minor unit. The api stores the
+  currency and rate on the shop and reuses them for every usage record. Rates are approximate list
+  rates, reviewed with pricing, not live FX; `parseEurRates` reads an override table from JSON.
 - `shopify.app.toml` keys follow the current reference (`[access_scopes].use_legacy_install_flow`,
   `[webhooks].api_version`, `[[webhooks.subscriptions]].compliance_topics`, `[build].include_config_on_deploy`).
   Webhook `uri`s are absolute (`{{PUBLIC_API_URL}}/shopify/webhooks`) because `application_url`

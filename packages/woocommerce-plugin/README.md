@@ -6,7 +6,7 @@
 - push-on-save sync to `PUT /v1/merchant/products/{id}` with **PK-HMAC** auth (retries via Action Scheduler, WP-Cron fallback), `DELETE` on trash/unpublish, "Sync all" backfill;
 - bundled `assets/sdk.v1.js` (copied from `@curtain/sdk` at build time — never loaded remotely) + "Try it on" button on single product pages;
 - Connect round-trip (`POST /v1/merchant/woo/connect` → Stripe Checkout → `/complete` → `PUT /v1/merchant/shops/self`), manual key paste, status, ads toggle;
-- signed read endpoint `GET /wp-json/curtain/v1/products/{id}` for backfill;
+- domain proof for every Connect (manual key and Stripe): `GET /wp-json/curtain/v1/verify` at the host root, only while a Connect is pending (the former signed backfill endpoint was removed, see below);
 - local validation against `assets/garment-draft.schema.json` (from `@curtain/schema`) and the backend dry-run `POST /v1/merchant/products/validate` for inline completeness feedback;
 - HPOS compatibility declaration, `uninstall.php`, `readme.txt` with the WP.org *External services* section, `languages/` with an nl_NL `.po`.
 
@@ -33,7 +33,7 @@ includes/
   class-sync.php             hooks, jobs, retry policy
   class-queue.php            Action Scheduler / WP-Cron abstraction
   class-frontend.php         SDK enqueue (data-shop/data-api/data-mode/data-size-option/data-locale/data-label), button, shortcode
-  class-rest.php             signed backfill endpoint
+  class-rest.php             Connect domain proof (verify route + meta tag)
 assets/admin/                meta-box.js (repeaters, media picker), meta-box.css
 assets/                      sdk.v1.js, garment.schema.json, garment-draft.schema.json (build output, git-ignored)
 languages/                   curtain-woocommerce.pot, curtain-woocommerce-nl_NL.po
@@ -47,7 +47,9 @@ This package is an application (a plugin zip); no other package imports it. Its 
 
 **Wire (to apps/api)** — `Authorization: PK-HMAC key=<pk_…>, ts=<unix s>, sig=<hex HMAC-SHA256(sk, "METHOD\n<path+query>\n<ts>\n<sha256hex(body)>")>` on `PUT /v1/merchant/products/{postId}` (body = GarmentPayload draft, `id` = WooCommerce post id as a string), `DELETE /v1/merchant/products/{postId}`, `POST /v1/merchant/products/validate` (`{ payload }`), `PUT /v1/merchant/shops/self` (`{ name, siteUrl, pluginVersion, platformVersion, adsEnabled }`), `GET /v1/merchant/products`. Unauthenticated, merchant-click only: `POST /v1/merchant/woo/connect` (`{ siteUrl, name, email?, returnUrl }`), `POST /v1/merchant/woo/complete` (`{ connectToken }`).
 
-**Inbound (for apps/api backfill)** — `GET /wp-json/curtain/v1/products/{id}` and `GET /wp-json/curtain/v1/products?page&per_page&status`, signed with the same PK-HMAC scheme (backend signs with the shop's `sk_`, presents the `pk_` prefix; target = path + query as sent, e.g. `/wp-json/curtain/v1/products/42`). The single-product response is the WC REST v3 product subset `WooProductSchema` accepts plus `meta_data: [{key, value}]` (the `_curtain_*` keys), `payload` (the plugin's own draft), `warnings`, `syncState`.
+**Inbound: Connect domain proof (carry-over #12)** — on both paths (manual key and Stripe Checkout, whose free trial is no proof of a domain) the api issues keys only after it has read the nonce from `POST /v1/merchant/woo/connect` (`verification.nonce`) back from the root of the claimed host: `GET https://<host>/wp-json/curtain/v1/verify` → `{"nonce": "cv_…"}`, then `https://<host>/?rest_route=/curtain/v1/verify`. The path of the site URL is ignored (the shop is keyed by host, so a subdirectory proves nothing about the host), and there is no meta-tag fallback (a reflected string on a page must not count). The api fetches through its SSRF guard (DNS pinned, private addresses refused) and the final URL after redirects must be the same site (`www.` allowed). The nonce is HMAC-derived from the Connect token with a server key, so serving it publicly does not leak the token. A site on a private address cannot pass; set `WOO_DOMAIN_PROOF=0` on a local api for development.
+
+**Removed: signed backfill endpoint (carry-over #13)** — `GET /wp-json/curtain/v1/products…` existed for an api-side pull that was never built: the api has no signer for it (Bearer auth stores only a hash of the key). The plugin pushes every product on save and "Sync all" re-pushes the catalogue, so the endpoint was removed rather than kept as an unused, publicly reachable surface. If a pull is ever needed, build the signer in the api first (it can decrypt `apiKeyEnc`), then reintroduce the route.
 
 **Post meta** — the 17 `_curtain_*` keys from `WOO_META_KEYS` (JSON strings for json/list kinds, plain strings otherwise, the flat-lay as an absolute URL) plus plugin-private keys `_curtain_flat_lay_photo_id`, `_curtain_sync_status` (`pending|retrying|active|incomplete|archived|error`), `_curtain_sync_error`, `_curtain_synced_at`, `_curtain_content_hash`, `_curtain_score`, `_curtain_missing_fields`, `_curtain_validation`, `_curtain_local_issues`.
 
@@ -104,7 +106,7 @@ php tests/run.php hmac                                 # run a subset
 6. **Clock skew**: set the WP server clock 6 min off → `stale_signature` → retried; back in sync → succeeds.
 7. **Storefront (standalone, default)**: product page loads `assets/sdk.v1.js` with `data-shop`, `data-api`, `data-mode="embed"`, `data-size-option="pa_size"`, `data-locale`, `data-label`; the button triggers `POST /v1/sdk/sessions` with `surface: 'embed'` and opens the overlay on desktop and on a phone; after *Choose size M* the size dropdown shows M and the price/stock of that variation. Paused plan → button still renders, the overlay shows "shop paused". `[curtain_button]` in a block renders the same button. The local `pnpm demo` storefront (`apps/demo-shop`, WooCommerce-style page) reproduces this without WordPress.
 8. **Storefront (Curtain app)**: with *Experience* = *Curtain app*, desktop shows the QR modal with the estimate disclaimer and a phone opens the deep link.
-9. **Backfill endpoint**: from the api host, `GET https://shop/wp-json/curtain/v1/products/42` signed with `PK-HMAC` (secret = the shop's `sk_`, key = `pk_` prefix, target = `/wp-json/curtain/v1/products/42`) → 200 with `meta_data` + `payload`; unsigned → 401; before Connect → 403. On sites without pretty permalinks the target is `/?rest_route=/curtain/v1/products/42`.
+9. **Domain proof**: with the api's Stripe settings empty, click Connect on a site reachable from the internet → while the request runs, `GET https://shop/wp-json/curtain/v1/verify` answers `{"nonce":"cv_…"}` and the front page carries the meta tag; after "Connected" both are gone (404, no tag). A site on localhost gets the "could not confirm" notice.
 10. **Media picker**: pick a flat-lay from the media library → preview + attachment id saved; remove → meta deleted.
 11. **Uninstall**: with the deletion option off, delete the plugin → settings + `_curtain_*` meta remain, queue cleared; with it on → everything removed.
 12. **Translations**: set the site to Dutch → button label "Try it on" and the admin strings from `languages/curtain-woocommerce-nl_NL.po` (compile to `.mo` with `wp i18n make-mo languages/` before shipping — `.mo` files are not generated offline here).

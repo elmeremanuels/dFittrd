@@ -1,6 +1,10 @@
 /**
  * APP routes (bearer device JWT except POST /v1/devices). Typed from @curtain/schema DTOs.
  * Privacy: the only body data accepted here is the 80-float fit signature; swipes carry no body data.
+ *
+ * Billing integrity (carry-over #8): a swipe bills a fit session only when the device is paired
+ * with the shop and the shop is under its per-plan daily cap; both rules live in
+ * `billFitSession` (services/usage.ts), shared with the standalone fit-shown route.
  */
 import { and, eq } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
@@ -17,6 +21,7 @@ import {
   ProductGetResponseSchema,
   ShopProductsQuerySchema,
   ShopProductsResponseSchema,
+  SignatureDeleteResponseSchema,
   SignaturePutRequestSchema,
   SignaturePutResponseSchema,
   SwipeBatchRequestSchema,
@@ -28,15 +33,15 @@ import {
   FS_LENGTH,
   type SwipeWireEvent,
 } from '@curtain/schema';
-import { requireDevice } from '../auth/device.js';
+import { requireDevice, requireDeviceForRotation } from '../auth/device.js';
 import { devices, fitSignatures, ledgerEntries, pairings, renderJobs, swipeEvents, trySessions, wardrobeItems } from '../db/schema.js';
-import { forbidden, notFound, unprocessable } from '../lib/errors.js';
+import { forbidden, notFound, unauthorized, unprocessable } from '../lib/errors.js';
 import { HOUR, utcDay } from '../lib/time.js';
 import { fitCohort } from '../services/analytics.js';
 import { byteLength, fieldNames, listLedger, toDto, writeLedger } from '../services/ledger.js';
 import { asGarment, findProduct, findProductById, listActiveGarments } from '../services/products.js';
-import { findShopById } from '../services/shops.js';
-import { recordUsage } from '../services/usage.js';
+import { findShopById, type ShopRow } from '../services/shops.js';
+import { billFitSession } from '../services/usage.js';
 
 const uuid = z.uuid();
 
@@ -59,7 +64,10 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
     '/v1/devices',
     {
       schema: { body: DeviceCreateRequestSchema, response: { 201: DeviceTokenResponseSchema } },
-      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+      // Device minting is anonymous, so it is limited per client IP per hour (carry-over #7). Expired
+      // tokens rotate (below) instead of re-registering, so honest app clients mint once per browser;
+      // the embed without storage mints per open, hence the high default (AVAIL-1, env.ts).
+      config: { rateLimit: { max: env.DEVICE_CREATE_RATE_LIMIT_PER_HOUR, timeWindow: '1 hour', keyGenerator: (req: { ip: string }) => `device-mint:${req.ip}` } },
     },
     async (req, reply) => {
       const [row] = await db.insert(devices).values({ platform: req.body.platform, appVersion: req.body.appVersion }).returning();
@@ -68,15 +76,30 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
     },
   );
 
-  app.post('/v1/devices/rotate', { schema: { body: DeviceRotateRequestSchema.optional(), response: { 200: DeviceTokenResponseSchema } }, preHandler: requireDevice }, async (req) => {
-    const version = req.device!.tokenVersion + 1;
-    await db
-      .update(devices)
-      .set({ tokenVersion: version, lastSeenAt: new Date(), ...(req.body?.appVersion ? { appVersion: req.body.appVersion } : {}) })
-      .where(eq(devices.id, req.device!.id));
-    const { token, expiresAt } = await tokens.signDevice(req.device!.id, version, env.DEVICE_TOKEN_TTL_DAYS);
-    return { deviceId: req.device!.id, token, expiresAt: expiresAt.toISOString(), tokenVersion: version };
-  });
+  /**
+   * Rotation (carry-over #10): accepts a token up to DEVICE_TOKEN_ROTATE_GRACE_DAYS past expiry. The
+   * version bump is conditional on the presented version, so a token rotates at most once, even
+   * when two rotations race; the loser gets 401 `token_rotated`.
+   */
+  app.post(
+    '/v1/devices/rotate',
+    {
+      schema: { body: DeviceRotateRequestSchema.optional(), response: { 200: DeviceTokenResponseSchema } },
+      preHandler: requireDeviceForRotation,
+      config: { rateLimit: { max: 30, timeWindow: '1 minute', keyGenerator: (req: { ip: string }) => `device-rotate:${req.ip}` } },
+    },
+    async (req) => {
+      const version = req.device!.tokenVersion + 1;
+      const bumped = await db
+        .update(devices)
+        .set({ tokenVersion: version, lastSeenAt: new Date(), ...(req.body?.appVersion ? { appVersion: req.body.appVersion } : {}) })
+        .where(and(eq(devices.id, req.device!.id), eq(devices.tokenVersion, req.device!.tokenVersion)))
+        .returning({ id: devices.id });
+      if (bumped.length === 0) throw unauthorized('token was rotated', 'token_rotated');
+      const { token, expiresAt } = await tokens.signDevice(req.device!.id, version, env.DEVICE_TOKEN_TTL_DAYS);
+      return { deviceId: req.device!.id, token, expiresAt: expiresAt.toISOString(), tokenVersion: version };
+    },
+  );
 
   // ---- me --------------------------------------------------------------------------------
   app.put('/v1/me/signature', { schema: { body: SignaturePutRequestSchema, response: { 200: SignaturePutResponseSchema } }, preHandler: requireDevice }, async (req) => {
@@ -93,6 +116,19 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
       payloadSummary: { bytes: byteLength(req.body), fields: fieldNames(req.body) },
     });
     return { updatedAt: updatedAt.toISOString(), ledgerEntryId: entry.id };
+  });
+
+  /**
+   * "Delete my scan" (carry-over #9): removes only the fit signature row. Pairings, swipes, wardrobe
+   * and the ledger stay (those go with DELETE /v1/me). Idempotent; the ledger records the request.
+   */
+  app.delete('/v1/me/signature', { schema: { response: { 200: SignatureDeleteResponseSchema } }, preHandler: requireDevice }, async (req) => {
+    const deviceId = req.device!.id;
+    return db.transaction(async (tx) => {
+      const removed = await tx.delete(fitSignatures).where(eq(fitSignatures.deviceId, deviceId)).returning({ deviceId: fitSignatures.deviceId });
+      const entry = await writeLedger(tx, { deviceId, kind: 'erase', payloadSummary: { bytes: 0, fields: ['signature'] } });
+      return { deleted: removed.length > 0, ledgerEntryId: entry.id, at: entry.at };
+    });
   });
 
   app.get('/v1/me/ledger', { schema: { querystring: LedgerListQuerySchema, response: { 200: LedgerListResponseSchema } }, preHandler: requireDevice }, async (req) => {
@@ -181,9 +217,13 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
     // events and ledger entry share one transaction. A 422 therefore never leaves half a batch
     // behind (the client drops a batch on a permanent error and batches per shop for that reason).
     const shopIds = new Set(req.body.events.map((e) => e.shopId));
+    const shopsById = new Map<string, ShopRow>();
     for (const shopId of shopIds) {
-      if (!(await findShopById(db, shopId))) throw unprocessable('unknown_shop', `unknown shop ${shopId}`);
+      const shop = await findShopById(db, shopId);
+      if (!shop) throw unprocessable('unknown_shop', `unknown shop ${shopId}`);
+      shopsById.set(shopId, shop);
     }
+    const log = req.log;
     return db.transaction(async (tx) => {
       for (const ev of req.body.events) {
         const product = await findProduct(tx, ev.shopId, ev.itemId);
@@ -212,16 +252,15 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
         // D7: the session is billable once a fit result exists; idempotent by intent token.
         const hasFit = ev.fitScore !== null || ev.sizeAtSwipe !== null;
         if (!hasFit) continue;
-        let key: string | null = null;
+        const shop = shopsById.get(ev.shopId)!;
         if (ev.intentToken) {
           const session = await tx.query.trySessions.findFirst({ where: eq(trySessions.intentToken, ev.intentToken) });
           if (session && session.deviceId === deviceId && session.shopId === ev.shopId) {
             if (session.billedAt) continue; // already billed
-            key = `intent:${ev.intentToken}`;
-            const created = await recordUsage(tx, { shopId: ev.shopId, deviceId, productId: session.productId, kind: 'fit_session', idempotencyKey: key });
-            if (created) {
+            const outcome = await billFitSession(tx, env, shop, { deviceId, productId: session.productId, idempotencyKey: `intent:${ev.intentToken}`, at: now }, log);
+            if (outcome === 'billed') {
               usageEventsCreated++;
-              await tx.update(trySessions).set({ billedAt: new Date() }).where(eq(trySessions.id, session.id));
+              await tx.update(trySessions).set({ billedAt: now }).where(eq(trySessions.id, session.id));
             }
             continue;
           }
@@ -229,9 +268,9 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
         // Deck accounting bills the merchant only for a product that exists in their catalogue —
         // a fit result for an unknown or archived item is not a try-on session (billing integrity).
         if (!product || product.status === 'archived') continue;
-        key = `deck:${deviceId}:${ev.shopId}:${ev.itemId}:${deckBillingDay(ev.at, now)}`;
-        const created = await recordUsage(tx, { shopId: ev.shopId, deviceId, productId: product.id, kind: 'fit_session', idempotencyKey: key });
-        if (created) usageEventsCreated++;
+        const key = `deck:${deviceId}:${ev.shopId}:${ev.itemId}:${deckBillingDay(ev.at, now)}`;
+        const outcome = await billFitSession(tx, env, shop, { deviceId, productId: product.id, idempotencyKey: key, at: now }, log);
+        if (outcome === 'billed') usageEventsCreated++;
       }
       const entry = await writeLedger(tx, {
         deviceId,

@@ -216,3 +216,11 @@ msgstr ""
 #: includes/class-frontend.php
 msgid "Find your size on this page. Your measurements stay on this device. Fit results are estimates."
 msgstr ""
+
+#: includes/class-settings.php
+msgid "Could not connect: the payment page address was not a Stripe Checkout page."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Curtain could not confirm that this site asked for the connection. Make sure the site is reachable from the internet (not a local or private address) and that no security plugin blocks /wp-json/curtain/v1/verify, then click \"Finish connection\"."
+msgstr ""

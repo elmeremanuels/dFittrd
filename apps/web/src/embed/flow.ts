@@ -5,13 +5,13 @@
  *      │         │           └──submit+scan──▶ scan ──done/skip──▶ result
  *      │         ├─(remembered profile)──────────────────────────▶ result (returning)
  *      │         └─(shop paused)──▶ blocked:paused
- *      └──failed──▶ blocked:{expired | paused | incomplete | offline | error}
+ *      └──failed──▶ blocked:{expired | paused | incomplete | offline | busy | error}
  *   result ──edit──▶ about ;  any ──paused (fit-shown 402)──▶ blocked:paused
- *   blocked:{offline | error} ──retry──▶ loading ;  forgotten ──▶ about
+ *   blocked:{offline | busy | error} ──retry──▶ loading ;  forgotten ──▶ about
  */
 import { ApiError, NetworkError } from '@/api/client';
 
-export type BlockedKind = 'expired' | 'paused' | 'incomplete' | 'offline' | 'error';
+export type BlockedKind = 'expired' | 'paused' | 'incomplete' | 'offline' | 'busy' | 'error';
 export type Step = 'loading' | 'about' | 'scan' | 'result' | 'blocked';
 
 export interface FlowState {
@@ -36,7 +36,7 @@ export type FlowEvent =
 
 export const INITIAL_FLOW: FlowState = { step: 'loading', blocked: null, returning: false, editing: false };
 
-const RETRYABLE: readonly BlockedKind[] = ['offline', 'error'];
+const RETRYABLE: readonly BlockedKind[] = ['offline', 'busy', 'error'];
 
 export function flowReducer(state: FlowState, event: FlowEvent): FlowState {
   switch (event.type) {
@@ -75,6 +75,8 @@ export function classifyError(e: unknown): BlockedKind {
   if (e instanceof NetworkError) return 'offline';
   if (e instanceof ApiError) {
     if (e.status === 402 || e.code === 'shop_paused') return 'paused';
+    // Rate limit (device minting or try lookups per IP, AVAIL-1): many shoppers behind one NAT IP.
+    if (e.status === 429) return 'busy';
     if (e.status === 410 || e.code === 'invalid_try_token' || e.code === 'already_resolved' || e.status === 401) return 'expired';
     if (e.status === 422 || e.code === 'product_incomplete' || e.status === 404) return 'incomplete';
     return 'error';

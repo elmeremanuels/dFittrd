@@ -91,3 +91,60 @@ describe('OutboxSyncer batching', () => {
     await syncer.stop();
   });
 });
+
+describe('OutboxSyncer signature delete (PRIV-1)', () => {
+  const SIG = { version: 1 as const, vector: new Array(80).fill(0), quality: 0.5 };
+
+  it('a DELETE queued while a PUT is in flight goes out after the PUT, and the stale PUT reports no sync', async () => {
+    vi.stubGlobal('navigator', { onLine: true });
+    const order: string[] = [];
+    let releasePut: () => void = () => {};
+    const putSignature = vi.fn(() => new Promise((resolve) => {
+      order.push('put:start');
+      releasePut = () => {
+        order.push('put:end');
+        resolve({ updatedAt: 'x', ledgerEntryId: 'l' });
+      };
+    }));
+    const deleteSignature = vi.fn(async () => {
+      order.push('delete');
+      return { deleted: true, ledgerEntryId: 'l', at: 'x' };
+    });
+    const synced: string[] = [];
+    const syncer = new OutboxSyncer({ db, client: { putSignature, deleteSignature } as unknown as ApiClient, now: () => 1, onSynced: (k) => synced.push(k) });
+    await db.outbox.add({ kind: 'signature', clientId: 'signature', shopId: null, payload: SIG, attempts: 0, nextAt: 0, createdAt: 0 });
+    const first = syncer.flush();
+    await vi.waitFor(() => expect(putSignature).toHaveBeenCalledTimes(1));
+    // "Delete my scan" while the PUT is in flight: drop the PUT row, queue the DELETE.
+    await db.outbox.where('clientId').equals('signature').delete();
+    await db.outbox.add({ kind: 'signature_delete', clientId: 'signature:delete', shopId: null, payload: null, attempts: 0, nextAt: 0, createdAt: 0 });
+    await syncer.flush(); // queued behind the running drain
+    releasePut();
+    await first;
+    await syncer.flush();
+    expect(order).toEqual(['put:start', 'put:end', 'delete']);
+    expect(synced).toEqual(['signature_delete']);
+    expect(await db.outbox.count()).toBe(0);
+    await syncer.stop();
+  });
+
+  it('keeps retrying the DELETE past MAX_ATTEMPTS on network errors; a permanent 4xx ends it', async () => {
+    vi.stubGlobal('navigator', { onLine: true });
+    const { NetworkError, ApiError } = await import('@/api/client');
+    const { MAX_ATTEMPTS } = await import('@/sync/outbox');
+    const deleteSignature = vi.fn<() => Promise<unknown>>().mockRejectedValue(new NetworkError('offline'));
+    let now = 0;
+    const syncer = new OutboxSyncer({ db, client: { deleteSignature } as unknown as ApiClient, now: () => now });
+    await db.outbox.add({ kind: 'signature_delete', clientId: 'signature:delete', shopId: null, payload: null, attempts: MAX_ATTEMPTS - 1, nextAt: 0, createdAt: 0 });
+    await syncer.flush();
+    expect((await db.outbox.toArray())[0]?.attempts).toBe(MAX_ATTEMPTS);
+    now += 60 * 60_000;
+    await syncer.flush();
+    expect((await db.outbox.toArray())[0]?.attempts).toBe(MAX_ATTEMPTS + 1);
+    deleteSignature.mockRejectedValueOnce(new ApiError(404, 'not_found', 'gone'));
+    now += 60 * 60_000;
+    await syncer.flush();
+    expect(await db.outbox.count()).toBe(0);
+    await syncer.stop();
+  });
+});

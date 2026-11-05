@@ -8,7 +8,7 @@ export { computeFit, recommendSize, easeTargetFor, footLengthFromEu } from './co
 export { bandFor, bandForWithSigma, type ProbabilisticBand } from './bands';
 export { parseSizingNotes, SIZE_UP_PATTERN, SIZE_DOWN_PATTERN, type SizingBias } from './sizingNotes';
 export { sigmaFromBodyProfile } from './sigma';
-export { fitSummary, fitGapsForRender } from './summary';
+export { fitSummary, fitGapsForRender, anchorGaps, FIT_POINT_ANCHORS } from './summary';
 export {
   BLOCKS,
   UNKNOWN_BLOCK,
@@ -35,12 +35,14 @@ export { round1, round3, normalCdf, erf } from './math';
 export {
   BANDS,
   isPointFit,
+  type AnchorGaps,
   type Band,
   type BandEdges,
   type BandProbabilities,
   type BandResult,
   type Category,
   type ComputeFitOptions,
+  type FitAnchorId,
   type FitGarment,
   type FitResult,
   type OmittedPoint,

@@ -7,10 +7,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MOCK_GARMENTS_BY_ID } from '@curtain/schema';
 import { resetReplayCache } from './auth/merchant.js';
 import { StripeClient } from './billing/stripe.js';
-import { renderJobs, shops, usageEvents, webhookLog } from './db/schema.js';
+import { pairings, renderJobs, shops, usageEvents, webhookLog } from './db/schema.js';
 import { testEnv } from './env.js';
 import { hmacBase64, hmacHex, signMerchantRequest } from './lib/crypto.js';
-import { assertPublicUrl, fetchPublicBytes, isBlockedHostname, isPrivateAddress, UnsafeUrlError } from './lib/safeFetch.js';
+import { assertPublicUrl, fetchPublicBytes, fetchTransport, isBlockedHostname, isPrivateAddress, UnsafeUrlError } from './lib/safeFetch.js';
 import { deckBillingDay } from './routes/app.js';
 import { loggablePayload } from './shopify/routes.js';
 import { archiveProduct, upsertProduct } from './services/products.js';
@@ -109,6 +109,8 @@ describe('billing integrity: deck swipes', () => {
 
   it('the client timestamp cannot mint one session per fabricated day', async () => {
     const d = await createDevice(t);
+    // deck swipes bill only for a device paired with the shop (carry-over #8)
+    await t.handle.db.insert(pairings).values({ deviceId: d.deviceId, shopId: s.shop.id, pseudonym: `p-${d.deviceId}`, source: 'link' });
     const now = Date.now();
     const events = [0, 1, 2, 3, 4].map((years) => ev({ at: now - years * 365 * 24 * 3600 * 1000 }));
     const res = await t.app.inject({ method: 'POST', url: '/v1/swipes', headers: d.auth, payload: { events } });
@@ -304,12 +306,12 @@ describe('SSRF guard for merchant-supplied image URLs', () => {
       if (url === 'https://cdn.public.example/html') return new Response('<html>', { status: 200, headers: { 'content-type': 'text/html' } });
       return new Response('nope', { status: 404 });
     }) as typeof fetch;
-    await expect(fetchPublicBytes(fetchImpl, 'https://cdn.public.example/a.png', { lookup: testLookup })).rejects.toBeInstanceOf(UnsafeUrlError);
+    await expect(fetchPublicBytes(fetchTransport(fetchImpl), 'https://cdn.public.example/a.png', { lookup: testLookup })).rejects.toBeInstanceOf(UnsafeUrlError);
     expect(calls.some((c) => c.includes('169.254.169.254'))).toBe(false);
-    await expect(fetchPublicBytes(fetchImpl, 'https://cdn.public.example/loop', { lookup: testLookup })).rejects.toMatchObject({ reason: 'redirects' });
-    expect(await fetchPublicBytes(fetchImpl, 'https://cdn.public.example/ok', { lookup: testLookup })).toEqual(new Uint8Array([1, 2, 3]));
-    expect(await fetchPublicBytes(fetchImpl, 'https://cdn.public.example/html', { lookup: testLookup, contentTypePrefix: 'image/' })).toBeNull();
-    expect(await fetchPublicBytes(fetchImpl, 'https://cdn.public.example/ok', { lookup: testLookup, maxBytes: 2 })).toBeNull();
+    await expect(fetchPublicBytes(fetchTransport(fetchImpl), 'https://cdn.public.example/loop', { lookup: testLookup })).rejects.toMatchObject({ reason: 'redirects' });
+    expect(await fetchPublicBytes(fetchTransport(fetchImpl), 'https://cdn.public.example/ok', { lookup: testLookup })).toEqual(new Uint8Array([1, 2, 3]));
+    expect(await fetchPublicBytes(fetchTransport(fetchImpl), 'https://cdn.public.example/html', { lookup: testLookup, contentTypePrefix: 'image/' })).toBeNull();
+    expect(await fetchPublicBytes(fetchTransport(fetchImpl), 'https://cdn.public.example/ok', { lookup: testLookup, maxBytes: 2 })).toBeNull();
   });
 
   it('the hero render job never fetches a flat-lay that points inside the network, and still renders', async () => {

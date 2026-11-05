@@ -21,6 +21,7 @@ pnpm --filter @curtain/fit-engine lint
 import {
   computeFit, recommendSize,             // the engine
   fitSummary, fitGapsForRender,          // UI / Path B renderer helpers
+  anchorGaps, FIT_POINT_ANCHORS,         // the same gaps keyed by D15 anchor id (3D viewer)
   sigmaFromBodyProfile,                  // D5: per-point sigma from the on-device BodyProfile
   bandFor, bandForWithSigma, parseSizingNotes, easeTargetFor, footLengthFromEu,
   easeTable, CATEGORY_EASE, BLOCKS, CATEGORY_POINTS, POINTS, ZONE_POINTS, blockRule,
@@ -59,6 +60,8 @@ interface FitResult {
 - `recommendSize(garment, user, opts?)` → `{ recommendedSize, closestSize, score, confidence, fits, tieBreak }`.
 - `fitSummary(result)` → one sentence for the UI, always marked *estimate* with the confidence, e.g. `Size M fits you well (estimate, 84% confidence).`, `Size L should fit — roomy at the bust (estimate, 65% confidence).`, `No size fits well — the closest is L, tight at the bust (estimate).`
 - `fitGapsForRender(result, size?)` → `{ size, gaps, bands, easeTargets, slackCm } | null` for the Path B renderer (D4: per-point ease from the fit result). `slackCm = gapCm + easeTarget` = garment − body in cm. Defaults to the recommended size, else the closest.
+- `anchorGaps(result, size?)` → the same numbers as `fitGapsForRender`, keyed by D15 anchor id (`bust` → `chest`, `shoulder` → `shoulder_width`; `foot` dropped). The shoulder gap is a width across the back, so it is keyed by the breadth `shoulder_width`, never the `shoulder` ring, which is a girth (R1), for the 3D viewer. It has no maths of its own (ENGINE-HANDOFF rule 4); `FIT_POINT_ANCHORS` mirrors `FIT_POINT_TO_ANCHOR` in `@curtain/anchors` (a test keeps them equal, the engine keeps zero dependencies).
+- `FitResult.closestIndex` is the row of `closestSize` in `perSize`. The helpers read that row through the index, and any other label only when it is unique, so duplicate size labels in an unvalidated chart can never pick the wrong row (finding #2; the schema rejects duplicates).
 - `sigmaFromBodyProfile(profile)` → per-point sigma (cm) from a `BodyProfile` (foot: `footLengthCm` sigma, else `footEu` sigma × 2/3).
 - `bandFor(gap, edges)` / `bandForWithSigma(gap, sigma, edges)` → `{ band, score }` (+ `probabilities`).
 - `parseSizingNotes(text)` → `-1 | 0 | 1` (contradictory notes → 0).

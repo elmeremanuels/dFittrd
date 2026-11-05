@@ -2,10 +2,10 @@
 Contributors: curtain
 Tags: woocommerce, virtual try-on, size guide, fit, fashion
 Requires at least: 6.6
-Tested up to: 6.7
+Tested up to: 7.1
 Requires PHP: 8.2
 WC requires at least: 9.0
-WC tested up to: 9.9
+WC tested up to: 11.2
 Stable tag: 0.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -39,7 +39,7 @@ This plugin connects to the **Curtain API** (`https://api.curtain.fit`, operated
 * **When a published product is saved, trashed or unpublished, and during "Sync all":** the product id, name, price (EUR only), product photo URLs, categories, attributes and the fit data you entered in the Curtain box are sent (`PUT`/`DELETE /v1/merchant/products/{id}`). The dry-run validation on save sends the same payload to `POST /v1/merchant/products/validate` and stores nothing on the server.
 * **When you save settings or check the status:** the shop name, site URL, plugin and WooCommerce versions and your sponsored-placement preference are sent (`PUT /v1/merchant/shops/self`).
 * **On shoppers' product pages:** the bundled button script contacts the Curtain API only when a shopper clicks the button (it creates a short-lived try-on link) and then opens the Curtain fitting room (`https://app.curtain.fit/embed/…`) in an overlay frame on your page. The script itself sets no cookies and uses no local storage. Inside the frame, the shopper's measurements stay in their browser; only the chosen size label and a confidence score are sent to Curtain, for your analytics and billing. With "Remember me" on, the frame keeps the shopper's fit profile in its own browser storage, which the browser keeps separate per shop.
-* **Backfill endpoint:** the plugin exposes `/wp-json/curtain/v1/products/{id}`, readable only with a request signed by your own secret key, so Curtain can re-read a product you ask it to.
+* **Connection check (only while connecting):** the plugin publishes a one-time verification code at `/wp-json/curtain/v1/verify` on your site, and the Curtain API reads it back from the root of your domain before it issues your keys. WordPress must answer at the root of the domain (not in a subdirectory). This proves the connection was requested from your own site. The code is removed as soon as the connection is finished or cancelled; it contains no personal data.
 
 No customer data, order data or personal data of your shoppers is ever sent by this plugin. Requests are authenticated with an HMAC signature using a secret key that is stored encrypted in your database.
 
@@ -48,7 +48,7 @@ Curtain privacy policy: https://curtain.fit/privacy
 
 == Source code ==
 
-`assets/sdk.v1.js` is the minified build of the Curtain storefront SDK (vanilla TypeScript, no dependencies). Its human-readable source and build script (`tsup`, see `packages/sdk` — `src/` and `tsup.config.ts`) are published at https://github.com/curtain/curtain/tree/main/packages/sdk. Every other script in this plugin (`assets/admin/meta-box.js`) ships unminified.
+`assets/sdk.v1.js` is the minified build of the Curtain storefront SDK (vanilla TypeScript, no dependencies, built with `tsup`). Its human-readable source and build script are not yet in a public repository; they are available on request from Curtain (https://curtain.fit), and this section will link the public repository once it is published. Every other script in this plugin (`assets/admin/meta-box.js`) ships unminified.
 
 == Installation ==
 
@@ -97,6 +97,10 @@ The job queue and temporary notices are always removed. Settings (including the 
 
 = 0.2.0 (unreleased) =
 * Standalone by default: the fit experience opens on the product page, no app needed. New settings *Experience* and *Size attribute*; the recommended size is selected in the variation dropdown.
+* Connecting without checkout now verifies that the request comes from your own site (`/wp-json/curtain/v1/verify` or a meta tag, only while connecting).
+* Removed the signed backfill read endpoint: products are pushed on save and with "Sync all".
+* The Connect button only ever sends you to Stripe Checkout (`https://checkout.stripe.com/`).
+* Tested with WordPress 7.1 and WooCommerce 11.2.
 
 = 0.1.0 =
 * Initial release: fit-data meta box, push-on-save sync with HMAC authentication, bundled try-on button, Connect round-trip, signed backfill endpoint, HPOS compatibility, uninstall cleanup.

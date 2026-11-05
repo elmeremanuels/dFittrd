@@ -5,7 +5,7 @@ import type { TokenService } from './auth/tokens.js';
 import type { Db } from './db/client.js';
 import type { Env } from './env.js';
 import type { JobQueue } from './jobs/queue.js';
-import type { LookupLike } from './lib/safeFetch.js';
+import type { LookupLike, PinnedTransport } from './lib/safeFetch.js';
 import type { ShopifyClient } from './shopify/client.js';
 import type { StripeClient } from './billing/stripe.js';
 
@@ -25,5 +25,10 @@ export interface AppContext {
   fetch: FetchLike;
   /** DNS resolution for the SSRF guard on merchant-supplied URLs. Tests inject a stub. */
   lookup: LookupLike;
+  /**
+   * Transport for `safeFetch` (merchant-supplied URLs only): DNS-pinned node:http(s) in production;
+   * tests get an adapter over their injected `fetch`. Never call `fetch` on a merchant URL directly.
+   */
+  publicTransport: PinnedTransport;
   now: () => Date;
 }

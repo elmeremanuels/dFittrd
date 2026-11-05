@@ -5,6 +5,11 @@
  *
  * Polling uses `node(id:)` rather than the deprecated `currentBulkOperation`, so it works on
  * 2025-xx and 2026-01+ alike.
+ *
+ * Since 2026-01 `bulkOperationRunQuery` no longer groups children under their parent by default
+ * (`groupObjects: false`, https://shopify.dev/changelog/release-notes/2026-01): a variant line may
+ * come before its product. `parseBulkJsonl` therefore reads every product first and attaches
+ * children in a second pass, so it needs neither the (slower) grouped mode nor any line order.
  */
 import { SHOPIFY_METAFIELD_NAMESPACE, type ShopifyProductNode } from '@curtain/schema';
 import { defaultSleep, type FetchLike, type SleepFn } from '../types';
@@ -169,13 +174,14 @@ function kindOf(id: string | undefined): 'product' | 'image' | 'variant' | 'meta
   return 'unknown';
 }
 
-/** Fold the flat JSONL export into product nodes shaped like `PRODUCT_QUERY` results. */
+/** Fold the flat JSONL export into product nodes shaped like `PRODUCT_QUERY` results (any line order). */
 export function parseBulkJsonl(text: string): BulkParseResult {
   const byId = new Map<string, Assembled>();
   const order: string[] = [];
   const skipped: BulkParseResult['skipped'] = [];
-  const lines = text.split(/\r?\n/);
-  lines.forEach((raw, i) => {
+  const children: Array<{ line: number; obj: JsonlLine }> = [];
+  // Pass 1: parse every line and collect the products (roots).
+  text.split(/\r?\n/).forEach((raw, i) => {
     const line = raw.trim();
     if (!line) return;
     let obj: JsonlLine;
@@ -185,18 +191,23 @@ export function parseBulkJsonl(text: string): BulkParseResult {
       skipped.push({ line: i + 1, reason: 'invalid JSON' });
       return;
     }
-    const kind = kindOf(obj.id);
-    if (kind === 'product' && !obj.__parentId) {
+    if (kindOf(obj.id) === 'product' && !obj.__parentId) {
       const { id, ...rest } = obj;
+      if (byId.has(id!)) return;
       const node = { ...rest, id: id!, images: { nodes: [] }, variants: { nodes: [] }, metafields: { nodes: [] } } as unknown as Assembled['node'];
       byId.set(id!, { node });
       order.push(id!);
       return;
     }
+    children.push({ line: i + 1, obj });
+  });
+  // Pass 2: attach children in file order (keeps image/variant order stable for grouped output too).
+  for (const { line, obj } of children) {
+    const kind = kindOf(obj.id);
     const parent = obj.__parentId ? byId.get(obj.__parentId) : undefined;
     if (!parent) {
-      skipped.push({ line: i + 1, reason: obj.__parentId ? `orphan child of ${obj.__parentId}` : `unexpected root ${obj.id ?? '(no id)'}` });
-      return;
+      skipped.push({ line, reason: obj.__parentId ? `orphan child of ${obj.__parentId}` : `unexpected root ${obj.id ?? '(no id)'}` });
+      continue;
     }
     switch (kind) {
       case 'image':
@@ -217,9 +228,10 @@ export function parseBulkJsonl(text: string): BulkParseResult {
         });
         break;
       default:
-        skipped.push({ line: i + 1, reason: `unknown child type ${obj.id ?? '(no id)'}` });
+        skipped.push({ line, reason: `unknown child type ${obj.id ?? '(no id)'}` });
     }
-  });
+  }
+  skipped.sort((a, b) => a.line - b.line);
   return { products: order.map((id) => byId.get(id)!.node), skipped };
 }
 

@@ -43,6 +43,7 @@ final class Settings {
 			'connect_token'       => '',
 			'connect_shop_id'     => '',
 			'connect_mode'        => '',
+			'connect_verify_nonce' => '',
 			'ads_enabled'         => false,
 			'button_enabled'      => true,
 			'button_priority'     => 35,
@@ -94,6 +95,24 @@ final class Settings {
 			$raw[ $key ] = $value;
 		}
 		update_option( self::OPTION, $raw, true );
+	}
+
+	/**
+	 * The Connect redirect may only go to Stripe Checkout (carry-over #15): https, host exactly
+	 * `checkout.stripe.com`, default port, no credentials. Anything else is refused.
+	 */
+	public static function is_stripe_checkout_url( string $url ): bool {
+		if ( '' === $url || strlen( $url ) > 2048 || 1 === preg_match( '/[\x00-\x20\\\\]/', $url ) ) {
+			return false;
+		}
+		$p = wp_parse_url( $url );
+		if ( ! is_array( $p ) ) {
+			return false;
+		}
+		return 'https' === strtolower( (string) ( $p['scheme'] ?? '' ) )
+			&& 'checkout.stripe.com' === strtolower( (string) ( $p['host'] ?? '' ) )
+			&& ! isset( $p['port'] ) && ! isset( $p['user'] ) && ! isset( $p['pass'] )
+			&& str_starts_with( (string) ( $p['path'] ?? '' ), '/' );
 	}
 
 	public static function is_connected(): bool {
@@ -326,10 +345,18 @@ final class Settings {
 				'connect_token'   => (string) ( $data['connectToken'] ?? '' ),
 				'connect_shop_id' => (string) ( $data['shopId'] ?? '' ),
 				'connect_mode'    => (string) ( $data['mode'] ?? '' ),
+				// Every Connect path (manual key and Stripe): published at /wp-json/curtain/v1/verify
+				// until Connect finishes, so the API can check that this site asked for the keys (Rest).
+				'connect_verify_nonce' => (string) ( $data['verification']['nonce'] ?? '' ),
 			)
 		);
-		if ( 'stripe' === ( $data['mode'] ?? '' ) && ! empty( $data['checkoutUrl'] ) ) {
-			wp_redirect( esc_url_raw( (string) $data['checkoutUrl'] ) ); // phpcs:ignore WordPress.Security.SafeRedirect -- external Stripe Checkout URL returned by our API.
+		if ( 'stripe' === ( $data['mode'] ?? '' ) ) {
+			$checkout = (string) ( $data['checkoutUrl'] ?? '' );
+			// Only ever leave the admin for Stripe Checkout itself, whatever the API answered.
+			if ( ! self::is_stripe_checkout_url( $checkout ) ) {
+				self::redirect( __( 'Could not connect: the payment page address was not a Stripe Checkout page.', 'curtain-woocommerce' ), 'error' );
+			}
+			wp_redirect( esc_url_raw( $checkout ) ); // phpcs:ignore WordPress.Security.SafeRedirect -- external URL, restricted to https://checkout.stripe.com/ above.
 			exit;
 		}
 		self::finish_connect();
@@ -353,6 +380,9 @@ final class Settings {
 			if ( 'payment_pending' === $res['error_code'] ) {
 				self::redirect( __( 'Checkout has not completed yet. Finish the payment, then click "Finish connection".', 'curtain-woocommerce' ), 'warning' );
 			}
+			if ( 'domain_unverified' === $res['error_code'] ) {
+				self::redirect( __( 'Curtain could not confirm that this site asked for the connection. Make sure the site is reachable from the internet (not a local or private address) and that no security plugin blocks /wp-json/curtain/v1/verify, then click "Finish connection".', 'curtain-woocommerce' ), 'warning' );
+			}
 			self::redirect( sprintf( /* translators: %s: error message */ __( 'Could not finish the connection: %s', 'curtain-woocommerce' ), (string) $res['error_message'] ), 'error' );
 		}
 		$data = $res['data'] ?? array();
@@ -366,6 +396,7 @@ final class Settings {
 				'connect_token'     => '',
 				'connect_shop_id'   => '',
 				'connect_mode'      => '',
+				'connect_verify_nonce' => '',
 				'last_error'        => '',
 			)
 		);
@@ -418,6 +449,7 @@ final class Settings {
 				'connect_token'     => '',
 				'connect_shop_id'   => '',
 				'connect_mode'      => '',
+				'connect_verify_nonce' => '',
 			)
 		);
 		self::redirect( __( 'Disconnected. The button is no longer shown and nothing is sent to Curtain. Your garment data stays in WooCommerce.', 'curtain-woocommerce' ) );

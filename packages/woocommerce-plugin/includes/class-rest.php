@@ -1,15 +1,23 @@
 <?php
 /**
- * Signed read endpoint for backfill / pull-resync by the Curtain backend:
+ * Domain proof for Connect (carry-over #12):
  *
- *   GET /wp-json/curtain/v1/products/{id}
- *   GET /wp-json/curtain/v1/products?page&per_page&status
+ *   GET /wp-json/curtain/v1/verify   (or /?rest_route=/curtain/v1/verify), at the root of the host
  *
- * Auth: the same PK-HMAC scheme the plugin uses outbound, with the roles swapped — the backend
- * signs with the shop's secret and presents the public prefix; the plugin verifies with its stored
- * key. Only available once the shop is connected. The response is the WooCommerce REST v3 product
- * subset `fromWooMeta` consumes (+ `meta_data` with the `_curtain_*` keys) and the plugin's own
- * `payload` draft.
+ * On every Connect path (manual key and Stripe Checkout alike) the Curtain API issues keys only
+ * after it has read the nonce it handed out at Connect back from the root of this host, which
+ * proves that whoever clicked Connect controls the site they claimed. The API reads only the REST
+ * route (no meta tag: a string reflected on a page must not count as proof), so WordPress must
+ * answer at the host root, not in a subdirectory. The answer exists only while a Connect is pending
+ * and the nonce is cleared when the connection finishes or is cancelled. The nonce is not a
+ * secret (the API derives it from the Connect token with its own key; it cannot be turned back
+ * into the token), so serving it publicly is safe.
+ *
+ * The signed backfill endpoints (`/curtain/v1/products…`) that used to live here were removed
+ * (carry-over #13): the Curtain API never had a signer for them (it stores only a hash of the
+ * key for Bearer auth), and nothing needs them, because the plugin pushes every product on save
+ * and "Sync all" on the settings page re-pushes the whole catalogue. Removing an unauthenticated
+ * surface beats keeping an unused signed one.
  *
  * @package Curtain
  */
@@ -22,7 +30,8 @@ defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
 
 final class Rest {
 
-	public const NAMESPACE = 'curtain/v1';
+	public const NAMESPACE   = 'curtain/v1';
+	public const VERIFY_PATH = '/verify';
 
 	public static function register(): void {
 		add_action( 'rest_api_init', array( self::class, 'routes' ) );
@@ -31,130 +40,49 @@ final class Rest {
 	public static function routes(): void {
 		register_rest_route(
 			self::NAMESPACE,
-			'/products/(?P<id>\d+)',
+			self::VERIFY_PATH,
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
-				'callback'            => array( self::class, 'get_product' ),
-				'permission_callback' => array( self::class, 'authorize' ),
-				'args'                => array(
-					'id' => array(
-						'type'     => 'integer',
-						'required' => true,
+				'callback'            => array( self::class, 'verify' ),
+				// Public on purpose: the Curtain API reads it without credentials (see the file header).
+				'permission_callback' => '__return_true',
+			)
+		);
+	}
+
+	/** The nonce to publish, or '' when no Connect is pending (or the shop is already connected). */
+	public static function pending_nonce(): string {
+		$s     = Settings::all();
+		$nonce = (string) ( $s['connect_verify_nonce'] ?? '' );
+		if ( '' === $nonce || '' === (string) $s['connect_token'] || Settings::is_connected() ) {
+			return '';
+		}
+		return 1 === preg_match( '/^cv_[a-f0-9]{16,64}$/', $nonce ) ? $nonce : '';
+	}
+
+	/** @return array{status:int,body:array<string,mixed>} */
+	public static function verify_payload(): array {
+		$nonce = self::pending_nonce();
+		if ( '' === $nonce ) {
+			return array(
+				'status' => 404,
+				'body'   => array(
+					'error' => array(
+						'code'    => 'not_found',
+						'message' => 'no pending Curtain connection',
 					),
 				),
-			)
-		);
-		register_rest_route(
-			self::NAMESPACE,
-			'/products',
-			array(
-				'methods'             => \WP_REST_Server::READABLE,
-				'callback'            => array( self::class, 'list_products' ),
-				'permission_callback' => array( self::class, 'authorize' ),
-				'args'                => array(
-					'page'     => array(
-						'type'    => 'integer',
-						'default' => 1,
-						'minimum' => 1,
-					),
-					'per_page' => array(
-						'type'    => 'integer',
-						'default' => 50,
-						'minimum' => 1,
-						'maximum' => 200,
-					),
-					'status'   => array(
-						'type'    => 'string',
-						'default' => 'publish',
-					),
-				),
-			)
-		);
-	}
-
-	/**
-	 * @return true|\WP_Error
-	 */
-	public static function authorize( \WP_REST_Request $request ) {
-		if ( ! Settings::is_connected() ) {
-			return new \WP_Error( 'curtain_not_connected', 'shop is not connected', array( 'status' => 403 ) );
-		}
-		$header = (string) $request->get_header( 'authorization' );
-		if ( '' === $header && isset( $_SERVER['HTTP_AUTHORIZATION'] ) ) {
-			$header = sanitize_text_field( wp_unslash( (string) $_SERVER['HTTP_AUTHORIZATION'] ) );
-		}
-		$target = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : $request->get_route(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared against an HMAC, never output.
-		$body   = (string) $request->get_body();
-		$s      = Settings::all();
-		$result = Hmac::verify( $header, (string) $s['public_key_prefix'], array( (string) $s['api_key'] ), $request->get_method(), $target, $body );
-		if ( ! $result['ok'] ) {
-			return new \WP_Error( 'curtain_' . $result['code'], 'invalid PK-HMAC signature (' . $result['code'] . ')', array( 'status' => 401 ) );
-		}
-		return true;
-	}
-
-	public static function get_product( \WP_REST_Request $request ): \WP_REST_Response {
-		$product = wc_get_product( (int) $request['id'] );
-		if ( ! $product instanceof \WC_Product ) {
-			return self::response( array( 'error' => array( 'code' => 'not_found', 'message' => 'product not found' ) ), 404 );
-		}
-		return self::response( self::serialize( $product ) );
-	}
-
-	public static function list_products( \WP_REST_Request $request ): \WP_REST_Response {
-		$page     = max( 1, (int) $request['page'] );
-		$per_page = max( 1, min( 200, (int) $request['per_page'] ) );
-		$status   = in_array( (string) $request['status'], array( 'publish', 'draft', 'private', 'pending', 'any' ), true ) ? (string) $request['status'] : 'publish';
-		$ids      = wc_get_products(
-			array(
-				'status'  => $status,
-				'limit'   => $per_page,
-				'page'    => $page,
-				'orderby' => 'ID',
-				'order'   => 'ASC',
-				'return'  => 'ids',
-			)
-		);
-		$items = array();
-		foreach ( (array) $ids as $id ) {
-			$items[] = array(
-				'id'         => (int) $id,
-				'externalId' => (string) $id,
-				'syncStatus' => (string) get_post_meta( (int) $id, Vocab::META_SYNC_STATUS, true ),
-				'syncedAt'   => (string) get_post_meta( (int) $id, Vocab::META_SYNCED_AT, true ),
 			);
 		}
-		return self::response(
-			array(
-				'items'    => $items,
-				'page'     => $page,
-				'per_page' => $per_page,
-				'hasMore'  => count( (array) $ids ) === $per_page,
-				'currency' => get_woocommerce_currency(),
-			)
+		return array(
+			'status' => 200,
+			'body'   => array( 'nonce' => $nonce ),
 		);
 	}
 
-	/** @return array<string,mixed> */
-	public static function serialize( \WC_Product $product ): array {
-		$snapshot          = Product_Snapshot::from_product( $product );
-		$built             = Sync::build( $product );
-		$out               = $snapshot;
-		$out['meta_data']  = Product_Snapshot::wire_meta( $product->get_id() );
-		$out['payload']    = $built['payload'];
-		$out['warnings']   = $built['warnings'];
-		$out['syncState']  = array(
-			'status'      => (string) get_post_meta( $product->get_id(), Vocab::META_SYNC_STATUS, true ),
-			'error'       => (string) get_post_meta( $product->get_id(), Vocab::META_SYNC_ERROR, true ),
-			'syncedAt'    => (string) get_post_meta( $product->get_id(), Vocab::META_SYNCED_AT, true ),
-			'contentHash' => (string) get_post_meta( $product->get_id(), Vocab::META_CONTENT_HASH, true ),
-		);
-		return $out;
-	}
-
-	/** @param array<string,mixed> $data */
-	private static function response( array $data, int $status = 200 ): \WP_REST_Response {
-		$r = new \WP_REST_Response( $data, $status );
+	public static function verify(): \WP_REST_Response {
+		$p = self::verify_payload();
+		$r = new \WP_REST_Response( $p['body'], $p['status'] );
 		$r->header( 'Cache-Control', 'no-store' );
 		return $r;
 	}

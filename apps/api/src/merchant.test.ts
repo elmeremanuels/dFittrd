@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MOCK_GARMENTS_BY_ID } from '@curtain/schema';
 import { signMerchantRequest } from './lib/crypto.js';
 import { findShopById } from './services/shops.js';
-import { makeApp, seedShop, type TestApp } from './test/helpers.js';
+import { json, makeApp, seedShop, type TestApp } from './test/helpers.js';
 
 function hmacHeaders(prefix: string, secret: string, method: string, path: string, body: string, ts = Math.floor(Date.now() / 1000)) {
   const sig = signMerchantRequest(secret, method, path, String(ts), body);
@@ -135,6 +135,11 @@ describe('merchant auth + products', () => {
     const connect = await t.app.inject({ method: 'POST', url: '/v1/merchant/woo/connect', payload: { siteUrl: 'https://new-woo.example/shop', name: 'New Woo' } });
     expect(connect.statusCode).toBe(200);
     expect(connect.json().mode).toBe('manual-key');
+    // Domain proof (carry-over #12): no keys until the site publishes the nonce.
+    const unproven = await t.app.inject({ method: 'POST', url: '/v1/merchant/woo/complete', payload: { connectToken: connect.json().connectToken } });
+    expect(unproven.statusCode).toBe(403);
+    expect(unproven.json().error.code).toBe('domain_unverified');
+    t.fetchMock.on('https://new-woo.example/wp-json/curtain/v1/verify', () => json({ nonce: connect.json().verification.nonce }));
     const complete = await t.app.inject({ method: 'POST', url: '/v1/merchant/woo/complete', payload: { connectToken: connect.json().connectToken } });
     expect(complete.statusCode).toBe(200);
     const { apiKey, publicKeyPrefix, plan } = complete.json<{ apiKey: string; publicKeyPrefix: string; plan: string }>();

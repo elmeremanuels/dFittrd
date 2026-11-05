@@ -11,6 +11,7 @@ export { buildFitSignature, assertNoColourData, ageBucket, type BuiltSignature, 
 export { measureScan, ellipsePerimeter, scaleCmPerPx, girthFromWidthDepth, coverageQuality, SCAN_SIGMA_CM, DEFAULT_ASPECT } from './measure';
 export { populationPrior, bmi, PRIOR_COEFFICIENTS, type PriorInput, type PriorEstimate, type PriorLevel } from './prior';
 export { placeLevels, LEVELS, TORSO_FRACTIONS, LIMB_FRACTIONS } from './crossSections';
+export { LEVEL_ANCHORS, levelAnchor, byAnchor } from './anchors';
 export { gateFrame, gateFeatures, classifyView, selectFrames, gateHint, heightSpanStable, GATE_THRESHOLDS } from './poseGate';
 export {
   estimateSkin,

@@ -34,6 +34,7 @@ export function makeEmbedApi(store: EmbedStore): EmbedApi {
     appVersion: '0.1.0',
     getDevice: () => store.getDevice(),
     setDevice: (d) => store.setDevice(d),
+    reloadDevice: () => store.reloadDevice(),
     onLedger: (entry) => {
       embedLedger.push(entry);
       if (embedLedger.length > 50) embedLedger.shift();

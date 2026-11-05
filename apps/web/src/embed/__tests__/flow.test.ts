@@ -69,5 +69,8 @@ describe('embed flow state machine', () => {
     expect(classifyError(new ApiError(422, 'product_incomplete', 'todo'))).toBe('incomplete');
     expect(classifyError(new ApiError(404, 'not_found', 'gone'))).toBe('incomplete');
     expect(classifyError(new ApiError(500, 'internal', 'boom'))).toBe('error');
+    // AVAIL-1: a per-IP rate limit (device minting behind a shared NAT) is a retryable "busy".
+    expect(classifyError(new ApiError(429, 'rate_limited', 'slow down'))).toBe('busy');
+    expect(flowReducer(flowReducer(INITIAL_FLOW, { type: 'failed', kind: 'busy' }), { type: 'retry' })).toEqual(INITIAL_FLOW);
   });
 });

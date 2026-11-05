@@ -10,6 +10,7 @@ export const api = new ApiClient({
   appVersion: '0.1.0',
   getDevice: () => useApp.getState().deviceCredentials(),
   setDevice: (d) => useApp.getState().setDeviceCredentials(d),
+  reloadDevice: () => useApp.getState().reloadDeviceCredentials(),
   onLedger: (entry) => useApp.getState().appendLedger(entry),
 });
 

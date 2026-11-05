@@ -10,7 +10,7 @@ describe('createAdminClient', () => {
     const c = createAdminClient({ shopDomain: SHOP, accessToken: ACCESS_TOKEN, fetch: m.fetch });
     const data = await c.request<{ shop: { name: string } }>(Q, { a: 1 });
     expect(data.shop.name).toBe('Aalter');
-    expect(c.url).toBe(`https://${SHOP}/admin/api/2025-10/graphql.json`);
+    expect(c.url).toBe(`https://${SHOP}/admin/api/2026-10/graphql.json`);
     expect(m.last().url).toBe(c.url);
     expect(m.last().headers['x-shopify-access-token']).toBe(ACCESS_TOKEN);
     expect(m.last().headers['content-type']).toBe('application/json');

@@ -27,7 +27,7 @@ describe('webhook HMAC', () => {
     const headers = signWebhook(API_SECRET, body, { topic: 'products/update', shopDomain: SHOP, webhookId: 'wh-1', eventId: 'ev-1' });
     expect(verifyWebhookHmac(body, headers['x-shopify-hmac-sha256'], API_SECRET)).toBe(true);
     const parsed = parseWebhookHeaders(headers);
-    expect(parsed).toMatchObject({ topic: 'products/update', shopDomain: SHOP, webhookId: 'wh-1', eventId: 'ev-1', apiVersion: '2025-10' });
+    expect(parsed).toMatchObject({ topic: 'products/update', shopDomain: SHOP, webhookId: 'wh-1', eventId: 'ev-1', apiVersion: '2026-10' });
     expect(parsed.hmac).toBe(headers['x-shopify-hmac-sha256']);
     expect(parsed.triggeredAt).toMatch(/^\d{4}-/);
   });

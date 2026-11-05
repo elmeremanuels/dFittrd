@@ -18,7 +18,7 @@ import type { Env } from './env.js';
 import { registerJobs } from './jobs/index.js';
 import type { JobQueue } from './jobs/queue.js';
 import { HttpError } from './lib/errors.js';
-import { systemLookup, type LookupLike } from './lib/safeFetch.js';
+import { fetchTransport, nodeTransport, systemLookup, type LookupLike, type PinnedTransport } from './lib/safeFetch.js';
 import { appRoutes } from './routes/app.js';
 import { merchantRoutes } from './routes/merchant.js';
 import { opsRoutes } from './routes/ops.js';
@@ -37,6 +37,11 @@ export interface BuildOptions {
   fetch?: FetchLike;
   /** DNS lookup used by the SSRF guard (tests inject a stub that never touches the network). */
   lookup?: LookupLike;
+  /**
+   * Transport for merchant-URL downloads (safeFetch). Default: the DNS-pinned `nodeTransport`, or,
+   * when a test injects `fetch`, an adapter over that stub so nothing touches the network.
+   */
+  publicTransport?: PinnedTransport;
   /** Override the try-on router (tests inject MockProvider). */
   tryon?: TryOnRouter;
   now?: () => Date;
@@ -96,6 +101,7 @@ export async function build(opts: BuildOptions): Promise<App> {
     log: app.log,
     fetch: fetchImpl,
     lookup: opts.lookup ?? systemLookup,
+    publicTransport: opts.publicTransport ?? (opts.fetch ? fetchTransport(opts.fetch) : nodeTransport),
     now,
     shopify: new ShopifyClient(env, opts.db, fetchImpl),
     stripe: new StripeClient(env, fetchImpl),

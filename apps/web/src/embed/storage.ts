@@ -55,6 +55,8 @@ export interface EmbedStore {
   init(): Promise<void>;
   getDevice(): DeviceCredentials;
   setDevice(d: Pick<DeviceTokenResponse, 'deviceId' | 'token' | 'expiresAt'>): Promise<void>;
+  /** Re-reads the remembered device (another embed tab of this shop may have rotated it, AUTH-1). */
+  reloadDevice(): Promise<DeviceCredentials>;
   loadProfile(shopId: string): Promise<RememberedProfile | null>;
   saveProfile(p: RememberedProfile): Promise<void>;
   /** Off → wipe IndexedDB (memory keeps working); on → write what is in memory. */
@@ -146,6 +148,13 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
       return loading;
     },
     getDevice() {
+      return device;
+    },
+    async reloadDevice() {
+      if (!remember) return device;
+      const row = await safe((d) => d.kv.get(DEVICE_KEY));
+      const v = row?.value as DeviceCredentials | undefined;
+      if (v && typeof v.token === 'string' && v.token.length > 0) device = { deviceId: v.deviceId ?? null, token: v.token, expiresAt: v.expiresAt ?? null };
       return device;
     },
     async setDevice(d) {

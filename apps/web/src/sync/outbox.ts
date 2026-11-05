@@ -1,9 +1,12 @@
 /**
  * Durable outbox → API, offline-safe with retry. Rows live in the `outbox` table; this module
  * drains them in order: swipes are batched (≤ 100) to POST /v1/swipes, save/wardrobe rows go to
- * PUT /v1/wardrobe/:productId, the fit signature to PUT /v1/me/signature. Network errors and 5xx
- * back off exponentially (1 s · 2^n, max 10 min); permanent 4xx rows are dropped with the error
- * recorded. No body data is ever in this queue (taste-engine contract 2).
+ * PUT /v1/wardrobe/:productId, the fit signature to PUT /v1/me/signature and "Delete my scan" to
+ * DELETE /v1/me/signature. The signature PUT and DELETE rows go out in queue order, one at a time,
+ * so a PUT queued before a delete can never land after it (PRIV-1). Network errors and 5xx back
+ * off exponentially (1 s · 2^n, max 10 min); permanent 4xx rows are dropped with the error
+ * recorded, and so are rows after MAX_ATTEMPTS, except the signature delete, which retries until
+ * the server confirms. No body data is ever in this queue (taste-engine contract 2).
  */
 import type { SwipeBatchRequest, SwipeWireEvent, WardrobePutRequest, FitSignatureWire } from '@curtain/schema';
 import { isSaveOutboxEntry, type OutboxEntry } from '@curtain/taste-engine';
@@ -124,7 +127,10 @@ export class OutboxSyncer {
     }
     for (const rows of byShop.values()) await this.sendSwipes(rows);
 
-    for (const row of due.filter((r) => r.kind === 'signature')) await this.sendSignature(row);
+    for (const row of due.filter((r) => r.kind === 'signature' || r.kind === 'signature_delete')) {
+      if (row.kind === 'signature') await this.sendSignature(row);
+      else await this.sendSignatureDelete(row);
+    }
     for (const row of due.filter((r) => r.kind === 'wardrobe' || r.kind === 'save')) await this.sendWardrobe(row);
   }
 
@@ -157,8 +163,22 @@ export class OutboxSyncer {
   private async sendSignature(row: OutboxRow): Promise<void> {
     try {
       await this.opts.client.putSignature(row.payload as FitSignatureWire);
+      // "Delete my scan" may have removed this row while the PUT was in flight; its DELETE row
+      // then goes out after this PUT (same drain, queue order), and this PUT must not report a sync.
+      const current = await this.opts.db.outbox.get(row.seq!);
+      if (!current) return;
       await this.opts.db.outbox.delete(row.seq!);
       this.opts.onSynced?.('signature', 1);
+    } catch (e) {
+      await this.fail([row], e);
+    }
+  }
+
+  private async sendSignatureDelete(row: OutboxRow): Promise<void> {
+    try {
+      await this.opts.client.deleteSignature();
+      await this.opts.db.outbox.delete(row.seq!);
+      this.opts.onSynced?.('signature_delete', 1);
     } catch (e) {
       await this.fail([row], e);
     }
@@ -180,7 +200,8 @@ export class OutboxSyncer {
     const message = e instanceof Error ? e.message : String(e);
     for (const row of rows) {
       const attempts = row.attempts + 1;
-      if (permanent || attempts >= MAX_ATTEMPTS) {
+      // An erase is never given up on for being slow: only a permanent 4xx (nothing to delete) ends it.
+      if (permanent || (attempts >= MAX_ATTEMPTS && row.kind !== 'signature_delete')) {
         await this.opts.db.outbox.delete(row.seq!);
         continue;
       }

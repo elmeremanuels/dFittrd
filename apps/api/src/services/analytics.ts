@@ -2,8 +2,8 @@
  * Merchant aggregates with the k-anonymity floor (D3): a group is only reported when at least
  * K distinct pseudonymous users contributed to it. Never a signature, never a device id.
  */
-import { and, eq, gte, lt, sql } from 'drizzle-orm';
-import type { AnalyticsSwipesResponse, FitCohortResponse } from '@curtain/schema';
+import { and, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
+import type { AnalyticsFitSizesResponse, AnalyticsSwipesResponse, FitCohortResponse } from '@curtain/schema';
 import type { Db } from '../db/client.js';
 import { products, swipeEvents, trySessions, wardrobeItems } from '../db/schema.js';
 import { dayEnd, dayStart } from '../lib/time.js';
@@ -143,30 +143,38 @@ export interface AbandonedRow {
   abandonedRate: number;
 }
 
-/** Sessions started from the merchant page that never resolved in the app, or resolved without a fit. */
+/**
+ * Sessions started from the merchant page that never resolved, or resolved without a fit
+ * (carry-over #19). The k floor counts distinct shoppers (devices that resolved a session for the
+ * product), not sessions: one person opening the button twenty times is still one person. Totals
+ * add up the reported products only, so a suppressed product cannot be recovered by subtracting
+ * the reported rows from the totals.
+ */
 export async function abandonedAnalytics(db: Db, shopId: string, from: string, to: string, k: number) {
   const rows = await db
     .select({
       externalId: products.externalId,
       sessions: sql<number>`count(*)::int`,
       resolved: sql<number>`count(${trySessions.resolvedAt})::int`,
-      withFit: sql<number>`count(${trySessions.billedAt})::int`,
+      withFit: sql<number>`count(coalesce(${trySessions.billedAt}, ${trySessions.fitShownAt}))::int`,
       devices: sql<number>`count(distinct ${trySessions.deviceId})::int`,
     })
     .from(trySessions)
     .innerJoin(products, eq(products.id, trySessions.productId))
     .where(and(eq(trySessions.shopId, shopId), gte(trySessions.createdAt, dayStart(from)), lt(trySessions.createdAt, dayEnd(to))))
-    .groupBy(products.externalId);
+    .groupBy(products.externalId)
+    .orderBy(products.externalId);
   let suppressed = 0;
   const byProduct: AbandonedRow[] = [];
-  let totals = { sessions: 0, resolved: 0, withFit: 0 };
+  const totals = { sessions: 0, resolved: 0, withFit: 0 };
   for (const r of rows) {
-    totals = { sessions: totals.sessions + r.sessions, resolved: totals.resolved + r.resolved, withFit: totals.withFit + r.withFit };
-    // Unresolved sessions have no device; the floor applies to the number of sessions per product.
-    if (r.sessions < k) {
+    if (r.devices < k) {
       suppressed++;
       continue;
     }
+    totals.sessions += r.sessions;
+    totals.resolved += r.resolved;
+    totals.withFit += r.withFit;
     byProduct.push({
       externalId: r.externalId,
       sessions: r.sessions,
@@ -176,4 +184,43 @@ export async function abandonedAnalytics(db: Db, shopId: string, from: string, t
     });
   }
   return { from, to, kAnonymityFloor: k, suppressedGroups: suppressed, totals, byProduct };
+}
+
+/**
+ * Sizes recommended in standalone (on-page) fit sessions (carry-over #18): the size label the
+ * embed reported with fit-shown (`try_sessions.recommended_size`), counted per session. A size is
+ * reported only when at least K distinct shoppers got it; sessions whose device was erased
+ * (`device_id` null) count as sessions but never towards the floor, so erasure only suppresses more.
+ */
+export async function fitSizeAnalytics(db: Db, shopId: string, from: string, to: string, k: number): Promise<AnalyticsFitSizesResponse> {
+  const rows = await db
+    .select({
+      size: trySessions.recommendedSize,
+      sessions: sql<number>`count(*)::int`,
+      devices: sql<number>`count(distinct ${trySessions.deviceId})::int`,
+    })
+    .from(trySessions)
+    .where(
+      and(
+        eq(trySessions.shopId, shopId),
+        isNotNull(trySessions.fitShownAt),
+        isNotNull(trySessions.recommendedSize),
+        gte(trySessions.fitShownAt, dayStart(from)),
+        lt(trySessions.fitShownAt, dayEnd(to)),
+      ),
+    )
+    .groupBy(trySessions.recommendedSize)
+    .orderBy(trySessions.recommendedSize);
+  let suppressed = 0;
+  let total = 0;
+  const bySize: AnalyticsFitSizesResponse['bySize'] = [];
+  for (const r of rows) {
+    if (!r.size || r.devices < k) {
+      suppressed++;
+      continue;
+    }
+    total += r.sessions;
+    bySize.push({ size: r.size, sessions: r.sessions });
+  }
+  return { from, to, kAnonymityFloor: k, suppressedGroups: suppressed, bySize, totals: { sessions: total } };
 }

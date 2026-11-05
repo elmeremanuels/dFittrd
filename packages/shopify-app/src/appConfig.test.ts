@@ -24,7 +24,7 @@ describe('shopify.app.toml template', () => {
     expect(v.scopes).toEqual(['read_products', 'write_products']);
     expect(v.topics.sort()).toEqual([...SHOPIFY_WEBHOOK_TOPICS].sort());
     expect(v.complianceTopics.sort()).toEqual([...SHOPIFY_COMPLIANCE_TOPICS].sort());
-    expect((parsed.webhooks as { api_version: string }).api_version).toBe('2025-10');
+    expect((parsed.webhooks as { api_version: string }).api_version).toBe('2026-10');
     // the optional dev_store_url line is dropped when SHOPIFY_DEV_STORE is empty
     expect((parsed.build as Record<string, unknown>).dev_store_url).toBeUndefined();
   });

@@ -591,5 +591,92 @@ export const API_ROUTES = {
   merchantLedger: 'GET /v1/merchant/ledger',
   merchantAnalyticsSwipes: 'GET /v1/merchant/analytics/swipes',
   merchantKeysRotate: 'POST /v1/merchant/keys/rotate',
+  meSignatureDelete: 'DELETE /v1/me/signature',
+  merchantUsageAnomalies: 'GET /v1/merchant/usage/anomalies',
+  merchantAnalyticsFitSizes: 'GET /v1/merchant/analytics/fit-sizes',
+  merchantAnalyticsAbandoned: 'GET /v1/merchant/analytics/abandoned',
+  sdkMedia: 'GET /v1/sdk/media',
 } as const;
 export type ApiRouteKey = keyof typeof API_ROUTES;
+
+// ---------------------------------------------------------------------------
+// Billing integrity, scan delete, standalone analytics (carry-over #7, #9, #18, #19)
+// ---------------------------------------------------------------------------
+
+/** DELETE /v1/me/signature (device JWT) — "Delete my scan": removes only the fit signature row. */
+export const SignatureDeleteResponseSchema = z.object({
+  /** False when there was no signature on the server (the call is idempotent). */
+  deleted: z.boolean(),
+  ledgerEntryId: uuid,
+  at: isoDate,
+});
+export type SignatureDeleteResponse = z.infer<typeof SignatureDeleteResponseSchema>;
+
+/**
+ * GET /v1/merchant/usage/anomalies?from&to — the merchant-visible billing anomaly signal.
+ * `cap_reached`: fit sessions refused (not billed) because the shop's daily cap was full.
+ * `spike`: a day's billed sessions above the anomaly threshold (factor × trailing daily average).
+ */
+export const BILLING_ANOMALY_KIND_NAMES = ['cap_reached', 'spike'] as const;
+export const BillingAnomalySchema = z.object({
+  day: dateOnly,
+  kind: z.enum(BILLING_ANOMALY_KIND_NAMES),
+  billedSessions: z.number().int().nonnegative(),
+  deniedSessions: z.number().int().nonnegative(),
+  threshold: z.number().int().nonnegative(),
+  trailingAverage: z.number().nonnegative(),
+  firstAt: isoDate,
+  lastAt: isoDate,
+});
+export type BillingAnomaly = z.infer<typeof BillingAnomalySchema>;
+
+export const BillingAnomaliesResponseSchema = z.object({
+  from: dateOnly,
+  to: dateOnly,
+  /** Billed fit sessions per UTC day above which nothing more is billed (derived from the plan). */
+  dailyCap: z.number().int().positive(),
+  today: z.object({
+    day: dateOnly,
+    billedSessions: z.number().int().nonnegative(),
+    trailingAverage: z.number().nonnegative(),
+    spikeThreshold: z.number().int().nonnegative(),
+    capReached: z.boolean(),
+    spike: z.boolean(),
+  }),
+  anomalies: z.array(BillingAnomalySchema),
+});
+export type BillingAnomaliesResponse = z.infer<typeof BillingAnomaliesResponseSchema>;
+
+/**
+ * GET /v1/merchant/analytics/fit-sizes?from&to — sizes recommended in standalone (on-page) fit
+ * sessions. A size is reported only when at least `kAnonymityFloor` distinct shoppers got it;
+ * `totals` cover the reported sizes only, so suppressed sizes cannot be derived by subtraction.
+ */
+export const AnalyticsFitSizesResponseSchema = z.object({
+  from: dateOnly,
+  to: dateOnly,
+  kAnonymityFloor: z.number().int().min(1),
+  suppressedGroups: z.number().int().nonnegative(),
+  bySize: z.array(z.object({ size: z.string(), sessions: z.number().int().nonnegative() })),
+  totals: z.object({ sessions: z.number().int().nonnegative() }),
+});
+export type AnalyticsFitSizesResponse = z.infer<typeof AnalyticsFitSizesResponseSchema>;
+
+/** GET /v1/merchant/analytics/abandoned?from&to — opens that never got a fit, k floor on distinct shoppers. */
+export const AnalyticsAbandonedResponseSchema = z.object({
+  from: dateOnly,
+  to: dateOnly,
+  kAnonymityFloor: z.number().int().min(1),
+  suppressedGroups: z.number().int().nonnegative(),
+  totals: z.object({ sessions: z.number().int().nonnegative(), resolved: z.number().int().nonnegative(), withFit: z.number().int().nonnegative() }),
+  byProduct: z.array(
+    z.object({
+      externalId: z.string(),
+      sessions: z.number().int().nonnegative(),
+      resolved: z.number().int().nonnegative(),
+      withFit: z.number().int().nonnegative(),
+      abandonedRate: z.number(),
+    }),
+  ),
+});
+export type AnalyticsAbandonedResponse = z.infer<typeof AnalyticsAbandonedResponseSchema>;

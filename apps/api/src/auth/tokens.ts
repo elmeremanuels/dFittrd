@@ -1,6 +1,7 @@
 /**
  * JWTs (jose, HS256 with JWT_SECRET):
- *  - device tokens: 30 days, `sub` = device id, `ver` = token_version (rotation invalidates old ones);
+ *  - device tokens: 30 days, `sub` = device id, `ver` = token_version (rotation invalidates old ones;
+ *    an expired token can still rotate within DEVICE_TOKEN_ROTATE_GRACE_DAYS);
  *  - try tokens: 10 minutes, `jti` stored in try_sessions, carries shop + product;
  *  - signed render URLs: HMAC, not JWT (short and cacheable).
  */
@@ -37,8 +38,13 @@ export class TokenService {
     return { token, expiresAt };
   }
 
-  async verifyDevice(token: string): Promise<DeviceClaims | null> {
-    const p = await this.verify(token);
+  /**
+   * `graceSec` accepts a device token up to that long after `exp` (signature still checked). Only
+   * POST /v1/devices/rotate passes it (carry-over #10): an expired token may be exchanged for a
+   * fresh one, once, but never authenticates anything else.
+   */
+  async verifyDevice(token: string, opts: { graceSec?: number } = {}): Promise<DeviceClaims | null> {
+    const p = await this.verify(token, opts.graceSec ?? 0);
     if (!p || p.typ !== 'device' || typeof p.sub !== 'string' || typeof p.ver !== 'number' || !p.exp) return null;
     return { deviceId: p.sub, tokenVersion: p.ver, expiresAt: new Date(p.exp * 1000) };
   }

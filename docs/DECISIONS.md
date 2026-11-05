@@ -102,6 +102,8 @@ The pipeline renders the garment on our own canonical mannequin with a known cam
 
 Body scan, fit engine, garment asset and renderer all use the same named anchors: the 12 rings (neck, shoulder, chest, underbust, waist, hip, thigh, knee, calf, ankle, upper_arm, wrist) and the lengths (shoulder_to_waist, shoulder_to_hem, waist_to_hem, sleeve, inseam, rise). Why: the size advice and the picture come from the same numbers, so they can never contradict each other.
 
+Amended Nov 2026 (review finding R1): one breadth, `shoulder_width`, joins the vocabulary. The fit point `shoulder` and every size chart's shoulder column are a width across the back (~40 cm), while the ring `shoulder` is the torso girth at the shoulder line (~100 cm). The fit point now maps to `shoulder_width`, so a width gap is never keyed under the girth ring.
+
 ## D16 — Assets in file storage behind Caddy; GPU work on a hosted GPU service
 
 The VPS orchestrates and serves; it never runs models. Asset bundles (a few MB per product) live on a disk volume served by Caddy under immutable, versioned paths and are included in the nightly backup. GPU work runs per job on a hosted service that scales to zero, in an EU region. This keeps the spirit of D9 (no object store, small VPS). D3 is unchanged: garment assets are public product data; the shopper's body and photos stay on the device.

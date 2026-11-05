@@ -12,7 +12,7 @@ import {
   GARMENT_CATEGORIES,
   HexColorSchema,
   LengthCmSchema,
-  SizeRowSchema,
+  SizeChartSchema,
   StyleTagsSchema,
   type Colorway,
   type Ease,
@@ -168,8 +168,7 @@ export function coerceSizeChart(value: unknown, sink: WarningSink, source: strin
     }
     return out;
   });
-  const parsed = validated(z.array(SizeRowSchema).min(1), rows, sink, source, 'sizeChart');
-  return parsed;
+  return validated(SizeChartSchema, rows, sink, source, 'sizeChart');
 }
 
 export function coerceFabric(value: unknown, sink: WarningSink, source: string): Partial<Fabric> | undefined {
@@ -299,16 +298,29 @@ export function coerceUnit(value: unknown): number | undefined {
   return scaled >= 0 && scaled <= 1 ? scaled : undefined;
 }
 
-/** Keyword table for inferring the category from a product type / taxonomy path / category name. */
+/**
+ * Keyword table for inferring the category from a product type / taxonomy path / category name /
+ * title. Within one hint the first matching row wins, so the order is the precedence. Dutch
+ * compounds put the head noun last (`spijkerbroek`, `winterjas`, `maxijurk`), so the Dutch nouns
+ * also match at the end of a word.
+ *
+ * Bottoms phrases that contain the word "boot" (`boot cut`, `bootcut`, `boot-leg`, `bootleg`) come
+ * first, and the bare word boot (`boot`, `boots`, `laars`, `laarzen`) is a weak shoe signal checked
+ * only after every other row: "Boot cut jeans", "Boot socks" and "Wollen laarzensokken" are not
+ * shoes, "Chelsea boot" still is (finding #3).
+ */
+const BOOT_CUT = /\bboot[\s-]?(cut|leg)\b|\bbootleg\b/i;
+const WEAK_SHOE = /\b(boots?|[a-z]*laars(jes)?|[a-z]*laarzen)\b/i;
 const CATEGORY_KEYWORDS: ReadonlyArray<[GarmentCategory, RegExp]> = [
-  ['shoes', /\b(shoes?|sneakers?|boots?|heels?|sandals?|loafers?|footwear|trainers?|pumps?|mules?|schoenen|laarzen)\b/i],
-  ['outerwear', /\b(coats?|jackets?|blazers?|outerwear|parkas?|trench|puffer|anoraks?|gilets?|overcoat|jas|jassen|mantel)\b/i],
-  ['dress', /\b(dress(es)?|gowns?|jumpsuits?|rompers?|playsuits?|jurk(en)?)\b/i],
-  ['bottom', /\b(pants|trousers?|jeans|skirts?|shorts|leggings?|chinos?|culottes?|joggers?|bottoms?|broek(en)?|rok(ken)?)\b/i],
-  ['top', /\b(tops?|shirts?|t-shirts?|tees?|blouses?|sweaters?|knitwear|cardigans?|hoodies?|sweatshirts?|tanks?|camis?|bodysuits?|polos?|jumpers?|pullovers?|vests?|trui(en)?|bloes)\b/i],
-  ['accessory', /\b(accessor(y|ies)|belts?|bags?|hats?|caps?|scarves|scarf|gloves?|jewell?ery|sunglasses|socks|tights|wallets?|riem(en)?|tas(sen)?|sjaal)\b/i],
+  ['bottom', BOOT_CUT],
+  ['shoes', /\b(shoes?|sneakers?|heels?|sandals?|sandalen|loafers?|footwear|trainers?|pumps?|mules?|espadrilles?|slippers?|clogs?|flip-flops?|[a-z]*schoen(en|tjes)?)\b/i],
+  ['outerwear', /\b(coats?|jackets?|blazers?|outerwear|parkas?|trench|puffer|anoraks?|gilets?|overcoat|[a-z]*jas|[a-z]*jassen|[a-z]+jacks?|[a-z]*mantels?)\b/i],
+  ['dress', /\b(dress(es)?|gowns?|jumpsuits?|rompers?|playsuits?|[a-z]*jurk(en|je)?)\b/i],
+  ['bottom', /\b(pants|trousers?|jeans|skirts?|shorts|leggings?|chinos?|culottes?|joggers?|bottoms?|flares|[a-z]*broek(en|je)?|pantalons?|[a-z]*rok(ken|je)?)\b/i],
+  ['top', /\b(tops?|shirts?|t-shirts?|tees?|blouses?|sweaters?|knitwear|cardigans?|hoodies?|sweatshirts?|tanks?|camis?|bodysuits?|polos?|jumpers?|pullovers?|vests?|[a-z]*trui(en|tje)?|bloes|bloesjes?|[a-z]*hemd(en|je)?|topjes?)\b/i],
+  ['accessory', /\b(accessor(y|ies)|belts?|bags?|hats?|caps?|scarves|scarf|gloves?|jewell?ery|sunglasses|socks|tights|wallets?|[a-z]*sokken|riem(en)?|tas(sen)?|sjaal)\b/i],
+  ['shoes', WEAK_SHOE],
 ];
-
 export function inferCategory(...hints: Array<string | undefined | null>): GarmentCategory | undefined {
   for (const hint of hints) {
     if (!hint) continue;

@@ -166,6 +166,53 @@ export const SizeRowSchema = z
   );
 export type SizeRow = z.infer<typeof SizeRowSchema>;
 
+/**
+ * Comparison key of a size label: trimmed and upper-cased, so `M`, `m` and ` M ` are one size.
+ * The fit engine and the grading step read the chart per label, so two rows may never share one.
+ */
+export function sizeLabelKey(label: string): string {
+  return label.trim().toUpperCase();
+}
+
+/** Labels that occur more than once in a chart (as first written, in chart order, each once). */
+export function duplicateSizeLabels(rows: readonly { size: string }[]): string[] {
+  const seen = new Set<string>();
+  const reported = new Set<string>();
+  const out: string[] = [];
+  for (const row of rows) {
+    const key = sizeLabelKey(row.size);
+    if (seen.has(key) && !reported.has(key)) {
+      reported.add(key);
+      out.push(row.size);
+    }
+    seen.add(key);
+  }
+  return out;
+}
+
+/** A size chart: 1–30 rows in ascending size order, each with its own label. */
+export const SizeChartSchema = z
+  .array(SizeRowSchema)
+  .min(1)
+  .max(30)
+  .superRefine((rows, ctx) => {
+    const first = new Map<string, number>();
+    rows.forEach((row, i) => {
+      const key = sizeLabelKey(row.size);
+      const j = first.get(key);
+      if (j === undefined) {
+        first.set(key, i);
+        return;
+      }
+      ctx.addIssue({
+        code: 'custom',
+        path: [i, 'size'],
+        message: `Duplicate size label "${row.size}" (rows ${j + 1} and ${i + 1}): every row of the size chart needs its own label`,
+      });
+    });
+  })
+  .describe('Ascending size order; every label unique (compared trimmed and case-insensitively)');
+
 export const FabricSchema = z
   .object({
     primary: FabricPrimarySchema,
@@ -246,7 +293,7 @@ export const GarmentPayloadSchema = z
       .describe(
         "REQUIRED: 'garment' = the rows are the finished garment measured flat; 'body' = the rows are the body each size is cut for. Fit-engine test T14 shows the same chart yields a different size depending on this.",
       ),
-    sizeChart: z.array(SizeRowSchema).min(1).max(30).describe('Ascending size order'),
+    sizeChart: SizeChartSchema,
     sizingNotes: z.string().max(500).optional().describe("Freeform, e.g. 'runs small'; parsed for a size bias"),
     trueToSizeScore: unit.optional().describe('From past return / fit data; default 0.8 in the fit engine'),
 

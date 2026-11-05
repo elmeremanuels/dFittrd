@@ -6,6 +6,7 @@
  * theme app extension, admin/index.html) live next to this package's src/.
  */
 export * from './types';
+export * from './currency';
 export * from './graphql';
 export * from './metafieldDefinitions';
 export * from './tokenExchange';

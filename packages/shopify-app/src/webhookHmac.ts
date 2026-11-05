@@ -5,6 +5,7 @@
  * (the api logs every delivery into webhook_log and queues the work).
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { DEFAULT_API_VERSION } from './types';
 
 /** Topics the api handles (apps/api/src/shopify/routes.ts SHOPIFY_TOPICS) — keep in sync with shopify.app.toml. */
 export const SHOPIFY_WEBHOOK_TOPICS = ['products/create', 'products/update', 'products/delete', 'app/uninstalled', 'app_subscriptions/update'] as const;
@@ -93,7 +94,7 @@ export function signWebhook(secret: string, rawBody: string, meta: { topic: stri
     'x-shopify-shop-domain': meta.shopDomain,
     'x-shopify-webhook-id': meta.webhookId ?? `wh-${Date.now()}`,
     'x-shopify-event-id': meta.eventId ?? `ev-${Date.now()}`,
-    'x-shopify-api-version': meta.apiVersion ?? '2025-10',
+    'x-shopify-api-version': meta.apiVersion ?? DEFAULT_API_VERSION,
     'x-shopify-triggered-at': new Date().toISOString(),
   };
 }

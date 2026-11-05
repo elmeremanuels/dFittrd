@@ -1,15 +1,33 @@
 /**
- * SSRF guard for server-side fetches of merchant-supplied URLs (flat-lay photos). The render job
- * runs inside the VPS network, next to Postgres and (on cloud hosts) a metadata server, so a
- * merchant must not be able to point `flatLayPhoto` at `http://169.254.169.254/…`,
- * `http://postgres:5432`, `http://localhost:3000/v1/…` or a public name that resolves privately.
+ * SSRF guard for server-side fetches of merchant-supplied URLs (flat-lay and product photos, shop
+ * logos, the WooCommerce domain proof). The api runs inside the VPS network, next to Postgres and
+ * (on cloud hosts) a metadata server, so a merchant must not be able to point a URL at
+ * `http://169.254.169.254/…`, `http://postgres:5432`, `http://localhost:3000/v1/…` or a public name
+ * that resolves privately.
  *
  * Rules: http(s) only, no credentials in the URL, no blocked hostnames, every A/AAAA record must
- * be a public unicast address, redirects are followed manually (≤ 3) and re-checked, the body is
- * capped. The DNS lookup is injectable (tests stub it; production uses `dns.promises.lookup`).
+ * be a public unicast address, redirects are followed manually (≤ 3) and every hop is re-checked,
+ * the body is capped.
+ *
+ * DNS is PINNED (carry-over #1): each hop resolves the name once, validates every address, and the
+ * transport then connects to that validated address. The production transport (`nodeTransport`)
+ * hands node:http(s) a `lookup` that only returns the pinned address, so a rebinding DNS server
+ * that answers a public address to our check and a private one to the connect has nothing to
+ * rebind: there is no second lookup. TLS keeps the real hostname for SNI and certificate checks,
+ * and the Host header carries the hostname.
+ *
+ * `safeFetch` is the ONLY way the api downloads a merchant-supplied URL. The garment-worker ingest
+ * (docs/ENGINE-HANDOFF.md stage 1) must use the same rules: either call an api endpoint that goes
+ * through `safeFetch`, or port this module (pinned resolve → validate → connect to the IP) to the
+ * worker. A plain `fetch(url)` of a merchant URL anywhere server-side is a bug.
+ *
+ * The DNS lookup and the transport are injectable (tests stub both; nothing in the test suite
+ * touches the network).
  */
 import { lookup as dnsLookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import http from 'node:http';
+import https from 'node:https';
+import { isIP, type LookupFunction } from 'node:net';
 
 export interface ResolvedAddress {
   address: string;
@@ -59,18 +77,35 @@ function isPrivateV4(ip: string): boolean {
 
 function isPrivateV6(ip: string): boolean {
   const lower = ip.toLowerCase().split('%')[0]!;
-  // v4-mapped / v4-compatible / NAT64 well-known prefix → judge the embedded IPv4.
-  const mapped = /^(?:::ffff:|::|64:ff9b::)(\d+\.\d+\.\d+\.\d+)$/.exec(lower);
-  if (mapped) return isPrivateV4(mapped[1]!);
-  if (lower === '::' || lower === '::1') return true;
-  const hextets = expandV6(lower);
-  if (!hextets) return true;
-  const first = hextets[0]!;
+  // Dotted tail (`::ffff:10.0.0.1`, `64:ff9b::10.0.0.1`) → rewrite it as two hextets first.
+  const dotted = /^(.*:)(\d+\.\d+\.\d+\.\d+)$/.exec(lower);
+  let normalized = lower;
+  if (dotted) {
+    if (isIP(dotted[2]!) !== 4) return true;
+    const [a, b, c, d] = dotted[2]!.split('.').map(Number) as [number, number, number, number];
+    normalized = `${dotted[1]}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  const h = expandV6(normalized);
+  if (!h) return true;
+  const embeddedV4 = (hi: number, lo: number) => `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`;
+  const zeros = (from: number, to: number) => h.slice(from, to).every((x) => x === 0);
+  if (zeros(0, 8) || (zeros(0, 7) && h[7] === 1)) return true; // :: and ::1
+  // Forms that carry an IPv4 address (WHATWG URL parsing turns `[::ffff:127.0.0.1]` into
+  // `[::ffff:7f00:1]`): judge the embedded IPv4. v4-mapped ::ffff:0:0/96, SIIT ::ffff:0:0:0/96,
+  // v4-compatible ::/96 (deprecated) and NAT64 64:ff9b::/96 + 64:ff9b:1::/48.
+  if (zeros(0, 5) && h[5] === 0xffff) return isPrivateV4(embeddedV4(h[6]!, h[7]!));
+  if (zeros(0, 4) && h[4] === 0xffff && h[5] === 0) return isPrivateV4(embeddedV4(h[6]!, h[7]!));
+  if (zeros(0, 6)) return isPrivateV4(embeddedV4(h[6]!, h[7]!));
+  if (h[0] === 0x0064 && h[1] === 0xff9b) return zeros(2, 6) ? isPrivateV4(embeddedV4(h[6]!, h[7]!)) : true;
+  const first = h[0]!;
+  if (first === 0x2002) return isPrivateV4(embeddedV4(h[1]!, h[2]!)); // 6to4 2002::/16
+  if (first === 0x2001 && h[1] === 0x0000) return true; // Teredo 2001::/32 (tunnels to an arbitrary IPv4)
+  if (first === 0x2001 && h[1] === 0x0db8) return true; // documentation
+  if (first === 0x0100 && zeros(1, 4)) return true; // discard-only 100::/64
   if ((first & 0xfe00) === 0xfc00) return true; // fc00::/7 unique local
   if ((first & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
+  if ((first & 0xffc0) === 0xfec0) return true; // fec0::/10 site-local (deprecated)
   if ((first & 0xff00) === 0xff00) return true; // ff00::/8 multicast
-  if (first === 0x2001 && hextets[1] === 0x0db8) return true; // documentation
-  if (first === 0x0064 && hextets[1] === 0xff9b) return true; // NAT64 (non-literal form)
   return false;
 }
 
@@ -123,29 +158,136 @@ export async function assertPublicUrl(input: string, lookup: LookupLike = system
   return { url, addresses: resolved.map((r) => r.address) };
 }
 
-export interface FetchPublicOptions {
+/** One pinned HTTP GET: connect to `address` (already validated), speak HTTP to `url`'s host. */
+export interface PinnedRequest {
+  url: URL;
+  address: string;
+  family: 4 | 6;
+  headers: Record<string, string>;
+  timeoutMs: number;
+  maxBytes: number;
+}
+export interface PinnedResponse {
+  status: number;
+  headers: Headers;
+  /** `null` when the body exceeded `maxBytes` (the transport stops reading). Empty for redirects. */
+  body: Uint8Array | null;
+}
+export type PinnedTransport = (req: PinnedRequest) => Promise<PinnedResponse>;
+
+/**
+ * Production transport: node:http(s) with a `lookup` that answers only the pinned address (so no
+ * second DNS query happens), `agent: false` (no pooled socket to some earlier address), the
+ * hostname as TLS servername (SNI + certificate verification against the name, not the IP).
+ */
+export const nodeTransport: PinnedTransport = (req) =>
+  new Promise<PinnedResponse>((resolve, reject) => {
+    const isHttps = req.url.protocol === 'https:';
+    const host = req.url.hostname.replace(/^\[|\]$/g, '');
+    const pinned: LookupFunction = (_hostname, options, callback) => {
+      if ((options as { all?: boolean }).all) (callback as unknown as (err: null, addrs: Array<{ address: string; family: number }>) => void)(null, [{ address: req.address, family: req.family }]);
+      else callback(null, req.address, req.family);
+    };
+    const options: https.RequestOptions = {
+      protocol: req.url.protocol,
+      hostname: host,
+      port: req.url.port ? Number(req.url.port) : isHttps ? 443 : 80,
+      path: `${req.url.pathname}${req.url.search}`,
+      method: 'GET',
+      headers: { ...req.headers, host: req.url.host },
+      lookup: pinned,
+      agent: false,
+      ...(isHttps && !isIP(host) ? { servername: host } : {}),
+    };
+    let settled = false;
+    const done = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn();
+    };
+    const request = (isHttps ? https : http).request(options, (res) => {
+      const headers = new Headers();
+      for (let i = 0; i + 1 < res.rawHeaders.length; i += 2) headers.append(res.rawHeaders[i]!, res.rawHeaders[i + 1]!);
+      const status = res.statusCode ?? 0;
+      if (status >= 300 && status < 400) {
+        res.destroy();
+        return done(() => resolve({ status, headers, body: new Uint8Array(0) }));
+      }
+      const chunks: Buffer[] = [];
+      let size = 0;
+      res.on('data', (chunk: Buffer) => {
+        size += chunk.length;
+        if (size > req.maxBytes) {
+          res.destroy();
+          done(() => resolve({ status, headers, body: null }));
+          return;
+        }
+        chunks.push(chunk);
+      });
+      res.on('end', () => done(() => resolve({ status, headers, body: new Uint8Array(Buffer.concat(chunks)) })));
+      res.on('error', (err) => done(() => reject(err)));
+    });
+    const timer = setTimeout(() => request.destroy(new Error('timeout')), req.timeoutMs);
+    request.on('error', (err) => done(() => reject(err)));
+    request.end();
+  });
+
+/**
+ * Adapter over a fetch-like, for TESTS ONLY (the harness injects a FetchMock). It cannot pin: a
+ * real `fetch` would resolve the name again. `app.ts` uses it only when a test passes `fetch`.
+ */
+export function fetchTransport(fetchImpl: typeof fetch): PinnedTransport {
+  return async (req) => {
+    const res = await fetchImpl(req.url.href, { redirect: 'manual', signal: AbortSignal.timeout(req.timeoutMs), headers: req.headers });
+    if (res.status >= 300 && res.status < 400) return { status: res.status, headers: res.headers, body: new Uint8Array(0) };
+    const declared = Number(res.headers.get('content-length') ?? 0);
+    if (declared > req.maxBytes) return { status: res.status, headers: res.headers, body: null };
+    const buf = new Uint8Array(await res.arrayBuffer());
+    return { status: res.status, headers: res.headers, body: buf.length <= req.maxBytes ? buf : null };
+  };
+}
+
+export interface SafeFetchOptions {
   lookup?: LookupLike;
+  /** Defaults to `nodeTransport` (pinned). */
+  transport?: PinnedTransport;
   maxBytes?: number;
   timeoutMs?: number;
   maxRedirects?: number;
-  /** Accept only these content-type prefixes (e.g. `image/`); omitted → any. */
-  contentTypePrefix?: string;
+  /** `accept` request header; default: any type. */
+  accept?: string;
+  /** Accept only these content-type prefixes (e.g. `image/`); omitted → any. A missing content type fails when set. */
+  contentTypes?: readonly string[];
+}
+
+export interface SafeFetchResult {
+  /** The final URL after redirects. */
+  url: string;
+  status: number;
+  /** Lower-cased media type without parameters (`image/png`), or '' when absent. */
+  contentType: string;
+  headers: Headers;
+  body: Uint8Array;
 }
 
 /**
- * Fetches a merchant-supplied URL with the guard applied to the URL and to every redirect hop.
- * Returns `null` when the resource is unavailable; throws `UnsafeUrlError` when it is forbidden.
+ * GET a merchant-supplied URL with the guard applied to the URL and to every redirect hop, DNS
+ * pinned per hop. Returns `null` when the resource is unavailable (network error, non-2xx, wrong
+ * content type, over the size cap, empty); throws `UnsafeUrlError` when it is forbidden.
  */
-export async function fetchPublicBytes(fetchImpl: typeof fetch, input: string, opts: FetchPublicOptions = {}): Promise<Uint8Array | null> {
+export async function safeFetch(input: string, opts: SafeFetchOptions = {}): Promise<SafeFetchResult | null> {
   const lookup = opts.lookup ?? systemLookup;
+  const transport = opts.transport ?? nodeTransport;
   const maxBytes = opts.maxBytes ?? 10 * 1024 * 1024;
   const maxRedirects = opts.maxRedirects ?? 3;
   let current = input;
   for (let hop = 0; hop <= maxRedirects; hop++) {
-    const { url } = await assertPublicUrl(current, lookup);
-    let res: Response;
+    const { url, addresses } = await assertPublicUrl(current, lookup);
+    const address = addresses[0]!;
+    let res: PinnedResponse;
     try {
-      res = await fetchImpl(url.href, { redirect: 'manual', signal: AbortSignal.timeout(opts.timeoutMs ?? 10_000), headers: { accept: 'image/*' } });
+      res = await transport({ url, address, family: isIP(address) === 6 ? 6 : 4, headers: { accept: opts.accept ?? '*/*', 'user-agent': 'CurtainFetch/1 (+https://curtain.fit)' }, timeoutMs: opts.timeoutMs ?? 10_000, maxBytes });
     } catch {
       return null;
     }
@@ -161,13 +303,33 @@ export async function fetchPublicBytes(fetchImpl: typeof fetch, input: string, o
       current = next.href;
       continue;
     }
-    if (!res.ok) return null;
-    const type = res.headers.get('content-type') ?? '';
-    if (opts.contentTypePrefix && type && !type.toLowerCase().startsWith(opts.contentTypePrefix)) return null;
-    const declared = Number(res.headers.get('content-length') ?? 0);
-    if (declared > maxBytes) return null;
-    const buf = new Uint8Array(await res.arrayBuffer());
-    return buf.length > 0 && buf.length <= maxBytes ? buf : null;
+    if (res.status < 200 || res.status >= 300) return null;
+    const contentType = (res.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase();
+    if (opts.contentTypes && !opts.contentTypes.some((p) => contentType.startsWith(p))) return null;
+    if (!res.body || res.body.length === 0 || res.body.length > maxBytes) return null;
+    return { url: url.href, status: res.status, contentType, headers: res.headers, body: res.body };
   }
   throw new UnsafeUrlError('too many redirects', 'redirects');
+}
+
+export interface FetchPublicOptions {
+  lookup?: LookupLike;
+  maxBytes?: number;
+  timeoutMs?: number;
+  maxRedirects?: number;
+  /** Accept only these content-type prefixes (e.g. `image/`); omitted → any. */
+  contentTypePrefix?: string;
+}
+
+/** Bytes of a merchant-supplied URL through `safeFetch` (kept for the render job's call shape). */
+export async function fetchPublicBytes(transport: PinnedTransport, input: string, opts: FetchPublicOptions = {}): Promise<Uint8Array | null> {
+  const res = await safeFetch(input, {
+    transport,
+    ...(opts.lookup ? { lookup: opts.lookup } : {}),
+    ...(opts.maxBytes !== undefined ? { maxBytes: opts.maxBytes } : {}),
+    ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+    ...(opts.maxRedirects !== undefined ? { maxRedirects: opts.maxRedirects } : {}),
+    ...(opts.contentTypePrefix ? { contentTypes: [opts.contentTypePrefix], accept: `${opts.contentTypePrefix}*` } : {}),
+  });
+  return res?.body ?? null;
 }

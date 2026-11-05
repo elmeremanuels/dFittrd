@@ -146,10 +146,213 @@ describe('device token lifetime', () => {
     expect(device().token).toBe('old.jwt');
   });
 
+  it('rotates an expired token within the grace instead of registering (carry-over #10)', async () => {
+    const calls: string[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method} ${new URL(String(url)).pathname} ${(init?.headers as Record<string, string>).Authorization ?? ''}`);
+      if (String(url).endsWith('/v1/devices/rotate')) return json({ ...OLD, token: 'new.jwt', expiresAt: '2026-12-04T10:00:00.000Z', tokenVersion: 2 });
+      if (String(url).endsWith('/v1/devices')) return json({ ...TOKEN, deviceId: '99999999-9999-4999-8999-999999999999' }, 201);
+      return json({ items: [] });
+    }) as unknown as typeof fetch;
+    const { client, device } = withDevice(fetchImpl, { ...OLD, expiresAt: '2026-08-01T10:00:00.000Z' }); // expired 95 days ago
+    await client.getWardrobe();
+    expect(calls).toEqual(['POST /v1/devices/rotate Bearer old.jwt', 'GET /v1/wardrobe Bearer new.jwt']);
+    expect(device()).toMatchObject({ deviceId: OLD.deviceId, token: 'new.jwt' });
+  });
+
+  it('on 401 token_expired it rotates the same token and retries once', async () => {
+    const calls: string[] = [];
+    let served = 0;
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method} ${new URL(String(url)).pathname} ${(init?.headers as Record<string, string>).Authorization ?? ''}`);
+      if (String(url).endsWith('/v1/devices/rotate')) return json({ ...OLD, token: 'new.jwt', expiresAt: '2026-12-04T10:00:00.000Z', tokenVersion: 2 });
+      if (String(url).endsWith('/v1/devices')) return json({ ...TOKEN, deviceId: '99999999-9999-4999-8999-999999999999' }, 201);
+      if (served++ === 0) return json({ error: { code: 'token_expired', message: 'device token expired; rotate it' } }, 401);
+      return json({ items: [] });
+    }) as unknown as typeof fetch;
+    // the stored expiry says valid (clock skew), the server says expired
+    const { client, device } = withDevice(fetchImpl, { ...OLD, expiresAt: '2026-11-30T10:00:00.000Z' });
+    await client.getWardrobe();
+    expect(calls).toEqual(['GET /v1/wardrobe Bearer old.jwt', 'POST /v1/devices/rotate Bearer old.jwt', 'GET /v1/wardrobe Bearer new.jwt']);
+    expect(device().deviceId).toBe(OLD.deviceId);
+  });
+
+  it('registers a new device when the server refuses the rotation (past the grace)', async () => {
+    const calls: string[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method} ${new URL(String(url)).pathname}`);
+      if (String(url).endsWith('/v1/devices/rotate')) return json({ error: { code: 'invalid_token', message: 'invalid or expired device token' } }, 401);
+      if (String(url).endsWith('/v1/devices')) return json({ ...TOKEN, deviceId: '99999999-9999-4999-8999-999999999999' }, 201);
+      return json({ items: [] });
+    }) as unknown as typeof fetch;
+    const { client, device } = withDevice(fetchImpl, { ...OLD, expiresAt: '2026-10-01T10:00:00.000Z' });
+    await client.getWardrobe();
+    expect(calls).toEqual(['POST /v1/devices/rotate', 'POST /v1/devices', 'GET /v1/wardrobe']);
+    expect(device().deviceId).toBe('99999999-9999-4999-8999-999999999999');
+  });
+
+  it('a token expired longer than the grace is not sent for rotation', async () => {
+    const calls: string[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method} ${new URL(String(url)).pathname}`);
+      if (String(url).endsWith('/v1/devices')) return json({ ...TOKEN, deviceId: '99999999-9999-4999-8999-999999999999' }, 201);
+      return json({ items: [] });
+    }) as unknown as typeof fetch;
+    const { client } = withDevice(fetchImpl, { ...OLD, expiresAt: '2026-01-01T10:00:00.000Z' });
+    await client.getWardrobe();
+    expect(calls).toEqual(['POST /v1/devices', 'GET /v1/wardrobe']);
+  });
+
+  it('deleteSignature calls DELETE /v1/me/signature and logs an erase (carry-over #9)', async () => {
+    const calls: string[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method} ${new URL(String(url)).pathname}`);
+      return json({ deleted: true, ledgerEntryId: '22222222-2222-4222-8222-222222222222', at: '2026-11-04T10:00:00.000Z' });
+    }) as unknown as typeof fetch;
+    const { client, ledger } = withDevice(fetchImpl, { ...OLD, expiresAt: '2026-11-30T10:00:00.000Z' });
+    const res = await client.deleteSignature();
+    expect(res.deleted).toBe(true);
+    expect(calls).toEqual(['DELETE /v1/me/signature']);
+    expect(ledger).toEqual([expect.objectContaining({ kind: 'erase', method: 'DELETE', path: '/v1/me/signature', bytes: 0 })]);
+  });
+
   it('does not rotate a token with more than a week left', async () => {
     const fetchImpl = vi.fn(async () => json({ items: [] })) as unknown as typeof fetch;
     const { client } = withDevice(fetchImpl, { ...OLD, expiresAt: '2026-11-30T10:00:00.000Z' });
     await client.getWardrobe();
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('device rotation across tabs (AUTH-1)', () => {
+  const NOW = new Date('2026-11-04T10:00:00Z');
+  const OLD = { deviceId: '11111111-1111-4111-8111-111111111111', token: 'old.jwt', expiresAt: '2026-11-07T10:00:00.000Z' }; // 3 days left
+  const NEW = { deviceId: OLD.deviceId, token: 'new.jwt', expiresAt: '2026-12-04T10:00:00.000Z' };
+
+  /** Two tabs: each has its own memory copy; `stored` is the shared IndexedDB row. */
+  function tabs(fetchImpl: typeof fetch) {
+    const shared = { stored: { ...OLD } as DeviceCredentials };
+    const tab = () => {
+      let mem: DeviceCredentials = { ...shared.stored };
+      const client = new ApiClient({
+        baseUrl: 'https://api.example.test',
+        fetchImpl,
+        getDevice: () => mem,
+        setDevice: (n) => {
+          mem = { deviceId: n.deviceId || mem.deviceId, token: n.token || null, expiresAt: n.expiresAt };
+          shared.stored = { ...mem };
+        },
+        reloadDevice: async () => {
+          mem = { ...shared.stored };
+          return mem;
+        },
+        onLedger: () => {},
+        now: () => NOW,
+        rotatedWaitMs: 0,
+      });
+      return { client, mem: () => mem };
+    };
+    return { shared, tab };
+  }
+
+  /** The server's conditional bump: only the first rotation of `old.jwt` wins. */
+  function server(calls: string[]) {
+    let rotated = false;
+    return vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const auth = (init?.headers as Record<string, string>).Authorization ?? '';
+      calls.push(`${init?.method} ${new URL(String(url)).pathname} ${auth}`);
+      if (String(url).endsWith('/v1/devices/rotate')) {
+        if (rotated) return json({ error: { code: 'token_rotated', message: 'token was rotated' } }, 401);
+        rotated = true;
+        return json({ ...NEW, tokenVersion: 2 });
+      }
+      if (String(url).endsWith('/v1/devices')) return json({ ...TOKEN, deviceId: '99999999-9999-4999-8999-999999999999' }, 201);
+      if (auth === 'Bearer old.jwt' && rotated) return json({ error: { code: 'token_rotated', message: 'token was rotated' } }, 401);
+      return json({ items: [] });
+    }) as unknown as typeof fetch;
+  }
+
+  it('the tab that loses the rotation race picks up the winner’s token instead of registering a new device', async () => {
+    const calls: string[] = [];
+    const { shared, tab } = tabs(server(calls));
+    const a = tab();
+    const b = tab();
+    await a.client.getWardrobe(); // A rotates old → new and stores it
+    // B still holds old.jwt in memory and rotates it too: 401 token_rotated → reload → new.jwt.
+    await b.client.getWardrobe();
+    expect(calls.filter((c) => c.startsWith('POST /v1/devices '))).toEqual([]);
+    expect(b.mem()).toMatchObject({ deviceId: OLD.deviceId, token: 'new.jwt' });
+    expect(shared.stored).toMatchObject({ deviceId: OLD.deviceId, token: 'new.jwt' });
+    expect(calls.at(-1)).toBe('GET /v1/wardrobe Bearer new.jwt');
+  });
+
+  it('a request refused with token_rotated reloads the stored token and retries; it does not clear it', async () => {
+    const calls: string[] = [];
+    // This tab's memory still holds old.jwt with weeks left; another tab already rotated it to new.jwt.
+    let mem: DeviceCredentials = { ...OLD, expiresAt: '2026-11-30T10:00:00.000Z' };
+    const stored: DeviceCredentials = { ...NEW };
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const auth = (init?.headers as Record<string, string>).Authorization ?? '';
+      calls.push(`${init?.method} ${new URL(String(url)).pathname} ${auth}`);
+      if (auth === 'Bearer old.jwt') return json({ error: { code: 'token_rotated', message: 'token was rotated' } }, 401);
+      return json({ items: [] });
+    }) as unknown as typeof fetch;
+    const setDevice = vi.fn();
+    const client = new ApiClient({
+      baseUrl: 'https://api.example.test',
+      fetchImpl,
+      getDevice: () => mem,
+      setDevice,
+      reloadDevice: async () => {
+        mem = { ...stored };
+        return mem;
+      },
+      onLedger: () => {},
+      now: () => NOW,
+      rotatedWaitMs: 0,
+    });
+    await client.getWardrobe();
+    expect(calls).toEqual(['GET /v1/wardrobe Bearer old.jwt', 'GET /v1/wardrobe Bearer new.jwt']);
+    expect(setDevice).not.toHaveBeenCalled();
+    expect(mem).toMatchObject({ deviceId: OLD.deviceId, token: 'new.jwt' });
+  });
+
+  it('registers only when no context kept the rotated token (lost for good) or on invalid_token', async () => {
+    const calls: string[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method} ${new URL(String(url)).pathname}`);
+      if (String(url).endsWith('/v1/devices/rotate')) return json({ error: { code: 'token_rotated', message: 'token was rotated' } }, 401);
+      if (String(url).endsWith('/v1/devices')) return json({ ...TOKEN, deviceId: '99999999-9999-4999-8999-999999999999' }, 201);
+      return json({ items: [] });
+    }) as unknown as typeof fetch;
+    const { tab } = tabs(fetchImpl);
+    const a = tab();
+    await a.client.getWardrobe();
+    expect(calls).toEqual(['POST /v1/devices/rotate', 'POST /v1/devices', 'GET /v1/wardrobe']);
+  });
+
+  it('with Web Locks, two tabs rotating at once send one rotation; the second tab reuses the stored token', async () => {
+    const calls: string[] = [];
+    let tail: Promise<unknown> = Promise.resolve();
+    const locks = {
+      request: (_name: string, fn: () => Promise<unknown>) => {
+        const run = tail.then(fn);
+        tail = run.catch(() => undefined);
+        return run;
+      },
+    };
+    vi.stubGlobal('navigator', { ...globalThis.navigator, locks });
+    try {
+      const { tab } = tabs(server(calls));
+      const a = tab();
+      const b = tab();
+      await Promise.all([a.client.getWardrobe(), b.client.getWardrobe()]);
+      expect(calls.filter((c) => c.startsWith('POST /v1/devices/rotate'))).toHaveLength(1);
+      expect(calls.filter((c) => c.startsWith('POST /v1/devices '))).toHaveLength(0);
+      expect(a.mem().token).toBe('new.jwt');
+      expect(b.mem().token).toBe('new.jwt');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

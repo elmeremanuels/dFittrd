@@ -6,6 +6,7 @@
  * deterministic dev values so `pnpm dev` and the test-suite run without a .env file.
  */
 import { randomBytes } from 'node:crypto';
+import { DEFAULT_API_VERSION as SHOPIFY_DEFAULT_API_VERSION } from '@curtain/shopify-app';
 import { z } from 'zod';
 
 const bool = z
@@ -83,7 +84,8 @@ export const EnvSchema = z.object({
   // ---- Shopify -------------------------------------------------------------------------
   SHOPIFY_API_KEY: optionalSecret,
   SHOPIFY_API_SECRET: optionalSecret,
-  SHOPIFY_API_VERSION: z.string().regex(/^\d{4}-\d{2}$/).default('2025-10'),
+  /** Admin API version; the default is the one pinned constant in @curtain/shopify-app (2026-10, #4). */
+  SHOPIFY_API_VERSION: z.string().regex(/^\d{4}-\d{2}$/).default(SHOPIFY_DEFAULT_API_VERSION),
   SHOPIFY_SCOPES: z.string().default('read_products,write_products'),
   /** The app's handle (shopify.app.toml `handle`): /shopify/auth/callback redirects to admin.shopify.com/store/<s>/apps/<handle>. */
   SHOPIFY_APP_HANDLE: z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/).default('curtain'),
@@ -96,6 +98,45 @@ export const EnvSchema = z.object({
   STRIPE_PRICE_STARTER: z.string().optional(),
   STRIPE_PRICE_OVERAGE: z.string().optional(),
   STRIPE_API_URL: z.url().default('https://api.stripe.com'),
+
+  // ---- billing integrity (carry-over #7, #8, #10) -------------------------------------
+  /**
+   * Per-plan daily cap on billed fit sessions per shop (fit-shown and the app's swipe path share
+   * it): max(BILLED_DAILY_CAP_MIN, ceil(includedSessions / 30 × BILLED_DAILY_CAP_FACTOR)), never
+   * above EMBED_BILLED_SESSIONS_PER_DAY. Above the cap a session answers `billed: false`.
+   */
+  BILLED_DAILY_CAP_FACTOR: z.coerce.number().positive().default(10),
+  BILLED_DAILY_CAP_MIN: z.coerce.number().int().min(1).default(100),
+  /** Anomaly signal: a day's billed sessions above FACTOR × the trailing daily average (and at least MIN). */
+  BILLING_ANOMALY_FACTOR: z.coerce.number().min(1).default(3),
+  BILLING_ANOMALY_MIN_SESSIONS: z.coerce.number().int().min(1).default(20),
+  BILLING_ANOMALY_TRAILING_DAYS: z.coerce.number().int().min(1).max(90).default(14),
+  /**
+   * POST /v1/devices per client IP per hour (anonymous device minting). High on purpose (AVAIL-1):
+   * the standalone embed mints a device on every open when it may not keep one (Remember me off,
+   * private mode, blocked third-party storage), and many shoppers share one IP behind carrier NAT
+   * or shop Wi-Fi. Billing does not depend on this limit: fit-shown bills once per device, product
+   * and day, under the per-shop daily cap. A 429 shows the embed's "busy" screen with a retry.
+   */
+  DEVICE_CREATE_RATE_LIMIT_PER_HOUR: z.coerce.number().int().min(1).default(300),
+  /** An expired but validly signed device token may still rotate (only rotate) for this many days past expiry. */
+  DEVICE_TOKEN_ROTATE_GRACE_DAYS: z.coerce.number().int().min(0).max(365).default(180),
+
+  // ---- media proxy + domain proof (carry-over #11, #12) --------------------------------
+  /** GET /v1/sdk/media: largest merchant image we proxy (bytes). */
+  MEDIA_PROXY_MAX_BYTES: z.coerce.number().int().min(1024).default(5 * 1024 * 1024),
+  /** In-memory cache for proxied images, in MB (per api process). */
+  MEDIA_PROXY_CACHE_MB: z.coerce.number().int().min(1).default(64),
+  /** How long a proxied image is served from that cache (and the browser's max-age), in seconds. */
+  MEDIA_PROXY_CACHE_TTL_SEC: z.coerce.number().int().min(60).default(3600),
+  /** GET /v1/sdk/media per client IP per minute. */
+  MEDIA_PROXY_RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).default(240),
+  /**
+   * WooCommerce manual-key Connect: require the domain proof (the plugin serves the nonce at
+   * /wp-json/curtain/v1/verify or in a meta tag) before keys are issued. Turn off only for local
+   * development against a WordPress on a private address.
+   */
+  WOO_DOMAIN_PROOF: bool.default(true),
 });
 
 export type Env = z.infer<typeof EnvSchema> & {

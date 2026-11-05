@@ -3,11 +3,12 @@
  * beyond local UI toggles; EmbedApp owns the flow.
  */
 import { AlertTriangle, Camera, Clock, PackageX, PauseCircle, Ruler, ShieldCheck, WifiOff } from 'lucide-react';
-import { useId, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import type { GarmentPayload, ShopBranding } from '@curtain/schema';
 import { readableTextColor } from '@/lib/contrast';
 import { ABOUT_LABELS, ABOUT_RANGES, ABOUT_UNITS, AGE_RANGES, FIT_PREFERENCES, measurementFieldsFor, requiredFieldsFor, type AboutField, type AboutForm, type FitPreference } from './aboutYou';
 import type { BlockedKind } from './flow';
+import { mediaProxyUrl } from './media';
 
 // ---------------------------------------------------------------------------
 // Shell
@@ -25,14 +26,16 @@ export function EmbedFrame({ children }: { children: ReactNode }): ReactNode {
 const HEADER_BG = '#FBF9F5';
 
 export function ProductHeader({ shop, garment }: { shop: ShopBranding | null; garment: GarmentPayload | null }): ReactNode {
-  const photo = garment?.productPhotos?.[0] ?? garment?.flatLayPhoto;
+  // Carry-over #11: the photo loads through our api, never from the merchant's server.
+  const photo = mediaProxyUrl(shop?.id, garment?.productPhotos?.[0] ?? garment?.flatLayPhoto);
+  const [photoFailed, setPhotoFailed] = useState<string | null>(null);
   // A11Y-2: the brand colour is decoration (top border); as text only when it reaches 4.5:1.
   const nameColor = readableTextColor(shop?.brandColor, HEADER_BG);
   return (
     <header className="border-b border-ink/10 bg-white/60 px-4 pt-4 pb-3" style={shop?.brandColor ? { borderTop: `4px solid ${shop.brandColor}` } : undefined} data-testid="embed-header">
       <div className="flex items-center gap-3">
-        {photo ? (
-          <img src={photo} alt="" referrerPolicy="no-referrer" className="h-16 w-14 shrink-0 rounded-xl bg-cream-deep object-cover" />
+        {photo && photoFailed !== photo ? (
+          <img src={photo} alt="" referrerPolicy="no-referrer" onError={() => setPhotoFailed(photo)} className="h-16 w-14 shrink-0 rounded-xl bg-cream-deep object-cover" data-testid="embed-product-photo" />
         ) : (
           <span className="flex h-16 w-14 shrink-0 items-center justify-center rounded-xl text-lg font-semibold text-white" style={{ background: garment?.primaryColorHex ?? shop?.brandColor ?? '#1A1612' }} aria-hidden>
             {(garment?.name ?? shop?.name ?? 'C').slice(0, 1)}
@@ -287,6 +290,11 @@ const BLOCKED: Record<BlockedKind, { icon: ReactNode; title: string; text: strin
     icon: <WifiOff className="h-8 w-8" aria-hidden />,
     title: 'You seem to be offline',
     text: 'We couldn’t reach Curtain. Check your connection and try again.',
+  },
+  busy: {
+    icon: <Clock className="h-8 w-8" aria-hidden />,
+    title: 'Busy right now',
+    text: 'A lot of people on your network are using fitting rooms at the moment. Wait a minute and try again.',
   },
   error: {
     icon: <AlertTriangle className="h-8 w-8" aria-hidden />,

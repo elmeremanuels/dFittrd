@@ -4,13 +4,14 @@
  * custom-distribution app). `pnpm configure` renders `shopify.app.<env>.toml`; `validateAppConfig`
  * checks the parsed TOML against what the api expects (webhook topics, path, managed install).
  */
+import { DEFAULT_API_VERSION } from './types';
 import { ALL_WEBHOOK_TOPICS, SHOPIFY_COMPLIANCE_TOPICS, SHOPIFY_WEBHOOK_TOPICS, WEBHOOK_PATH } from './webhookHmac';
 
 export const APP_CONFIG_VARS = ['SHOPIFY_API_KEY', 'PUBLIC_API_URL', 'PUBLIC_APP_URL', 'SHOPIFY_API_VERSION', 'SHOPIFY_DEV_STORE', 'SHOPIFY_APP_HANDLE'] as const;
 export type AppConfigVar = (typeof APP_CONFIG_VARS)[number];
 
 export const APP_CONFIG_DEFAULTS: Partial<Record<AppConfigVar, string>> = {
-  SHOPIFY_API_VERSION: '2025-10',
+  SHOPIFY_API_VERSION: DEFAULT_API_VERSION,
   SHOPIFY_DEV_STORE: '',
   SHOPIFY_APP_HANDLE: 'curtain',
 };
@@ -101,7 +102,7 @@ export function validateAppConfig(parsed: unknown, opts: { apiUrl?: string } = {
   if (redirects.length === 0) issues.push('auth.redirect_urls must list at least one https URL');
   for (const r of redirects) if (!/^https:\/\//.test(r)) issues.push(`auth.redirect_urls entry is not https: ${r}`);
 
-  if (typeof c.webhooks?.api_version !== 'string' || !/^\d{4}-\d{2}$/.test(c.webhooks.api_version)) issues.push('webhooks.api_version must look like 2025-10');
+  if (typeof c.webhooks?.api_version !== 'string' || !/^\d{4}-\d{2}$/.test(c.webhooks.api_version)) issues.push(`webhooks.api_version must look like YYYY-MM (e.g. ${DEFAULT_API_VERSION})`);
   const subs = Array.isArray(c.webhooks?.subscriptions) ? c.webhooks!.subscriptions! : [];
   const topics: string[] = [];
   const complianceTopics: string[] = [];

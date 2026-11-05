@@ -30,6 +30,8 @@ import { OutboxSyncer } from '@/sync/outbox';
 export const MOCK_SHOP_ID = '00000000-0000-4000-8000-000000000001';
 export const MOCK_SHOP: ShopBranding = { id: MOCK_SHOP_ID, name: 'Curtain demo rail', platform: 'shopify', paused: false };
 
+/** Outbox idempotency key of the pending "Delete my scan" on the server (PRIV-1). */
+const SIGNATURE_DELETE_ID = 'signature:delete';
 /** Without measurements the deck still deals (fit unknown, score weight 0); events then carry null size/score. */
 const NO_FIT: FitResultLike = { recommendedSize: 'unknown', score: null };
 
@@ -91,6 +93,8 @@ export interface AppState {
   flushOutbox: () => Promise<void>;
   deviceCredentials: () => DeviceCredentials;
   setDeviceCredentials: (d: { deviceId: string; token: string; expiresAt: string }) => Promise<void>;
+  /** Re-reads the device credentials another tab may have rotated (AUTH-1) into memory and returns them. */
+  reloadDeviceCredentials: () => Promise<DeviceCredentials>;
 }
 
 export interface StoreDeps {
@@ -215,8 +219,15 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
       },
 
       async updateSettings(patch) {
-        const settings = { ...get().settings, ...patch, id: SINGLETON_ID };
-        await saveSettings(db, settings);
+        // The device credentials are shared with other tabs (AUTH-1): unless this write sets them,
+        // keep what is stored, so a tab with a stale in-memory copy never reverts another tab's rotation.
+        const settings = await db.transaction('rw', db.settings, async () => {
+          const stored = 'deviceToken' in patch || 'deviceId' in patch ? undefined : await db.settings.get(SINGLETON_ID);
+          const device = stored ? { deviceId: stored.deviceId, deviceToken: stored.deviceToken, deviceTokenExpiresAt: stored.deviceTokenExpiresAt } : {};
+          const next = { ...get().settings, ...device, ...patch, id: SINGLETON_ID };
+          await saveSettings(db, next);
+          return next;
+        });
         set({ settings });
       },
 
@@ -341,10 +352,24 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
       },
 
       async deleteScanLocal() {
-        await deleteScan(db);
+        // The synced fit signature is the only scan-derived value on the server; erase it too (pairing and taste stay).
+        // PRIV-1: drop a pending signature PUT first, then queue the DELETE durably. The syncer sends
+        // signature rows one at a time in queue order, so a PUT already in flight lands before the
+        // DELETE, and the DELETE retries until the server confirms. `signatureSyncedAt` is cleared
+        // only then (onSynced 'signature_delete'), so the app never claims the server copy is gone early.
         await db.outbox.where('clientId').equals('signature').delete();
-        set({ profile: null, fitCtx: null, deck: { current: null, notInYourSize: 0, exhausted: false }, outboxPending: await db.outbox.count() });
-        await get().updateSettings({ season: null, undertone: null, skinHex: null, signatureSyncedAt: null });
+        await deleteScan(db);
+        set({ profile: null, fitCtx: null, deck: { current: null, notInYourSize: 0, exhausted: false } });
+        await get().updateSettings({ season: null, undertone: null, skinHex: null });
+        if (client && get().settings.deviceId) {
+          await db.outbox.where('clientId').equals(SIGNATURE_DELETE_ID).delete();
+          await enqueue([{ kind: 'signature_delete', clientId: SIGNATURE_DELETE_ID, shopId: null, payload: null }]);
+          await syncer?.flush().catch(() => undefined);
+        } else {
+          // Nothing ever reached the server for a device that never registered.
+          await get().updateSettings({ signatureSyncedAt: null });
+        }
+        set({ outboxPending: await db.outbox.count() });
       },
 
       async deleteEverything() {
@@ -408,6 +433,12 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
         return { deviceId: s.deviceId, token: s.deviceToken, expiresAt: s.deviceTokenExpiresAt };
       },
 
+      async reloadDeviceCredentials() {
+        const stored = await db.settings.get(SINGLETON_ID);
+        if (stored) set({ settings: { ...get().settings, deviceId: stored.deviceId, deviceToken: stored.deviceToken, deviceTokenExpiresAt: stored.deviceTokenExpiresAt } });
+        return get().deviceCredentials();
+      },
+
       async setDeviceCredentials(d) {
         await get().updateSettings({ deviceId: d.deviceId || get().settings.deviceId, deviceToken: d.token || null, deviceTokenExpiresAt: d.expiresAt });
       },
@@ -425,6 +456,7 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
         const patch: Partial<AppState> = { lastSync: { kind, count, at: now() } };
         store.setState(patch);
         if (kind === 'signature') void store.getState().updateSettings({ signatureSyncedAt: new Date(now()).toISOString() });
+        if (kind === 'signature_delete') void store.getState().updateSettings({ signatureSyncedAt: null });
       },
     });
     if (store.getState().hydrated) syncer.start();

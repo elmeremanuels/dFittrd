@@ -53,7 +53,12 @@ requirement. This document is the contract every package builds against. Decisio
 
 - Still needs a device token. The embed registers its own anonymous device with `POST /v1/devices`
   on first load and stores it in its partitioned IndexedDB. With "Remember me" off, it uses memory
-  only.
+  only, so it mints a new device on every open (also in private mode or with blocked third-party
+  storage).
+- `POST /v1/devices` is limited per client IP per hour (`DEVICE_CREATE_RATE_LIMIT_PER_HOUR`,
+  default 300; shoppers behind one carrier NAT or shop Wi-Fi share an IP). A 429 from it, or from
+  the per-IP limit on `/v1/try`, shows the embed's retryable "Busy right now" screen. Billing does
+  not rely on this limit (one bill per device, product and day, under the per-shop daily cap).
 - The response gains `embed: { allowedOrigins: string[] }`. These are the https origins of the
   shop's storefront (Shopify: `https://<shop>.myshopify.com` plus the shop's primary domain if
   known; Woo: the site URL origin), plus the origin of the session's `pageUrl` when it belongs to

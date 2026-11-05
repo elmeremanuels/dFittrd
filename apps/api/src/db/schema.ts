@@ -56,6 +56,10 @@ export interface ShopSettings {
   stripeSubscriptionId?: string;
   includedSessions?: number;
   overageEurPerSession?: number;
+  /** Shopify: ISO 4217 currency the subscription is charged in (shopBillingPreferences at subscribe time). */
+  billingCurrency?: string;
+  /** Shopify: units of billingCurrency per 1 EUR, fixed for the running subscription. */
+  billingEurRate?: number;
 }
 
 export const shops = pgTable(

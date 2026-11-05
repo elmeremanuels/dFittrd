@@ -37,15 +37,16 @@ export interface SwipeRow {
   intentToken?: string;
 }
 
-export type OutboxKind = 'swipe' | 'save' | 'signature' | 'wardrobe';
+/** `signature_delete`: "Delete my scan" on the server (PRIV-1); retried until a 2xx, never dropped after N attempts. */
+export type OutboxKind = 'swipe' | 'save' | 'signature' | 'signature_delete' | 'wardrobe';
 
 export interface OutboxRow {
   seq?: number;
   kind: OutboxKind;
-  /** Idempotency key (SwipeWireEvent.clientId / wardrobe productId / 'signature'). */
+  /** Idempotency key (SwipeWireEvent.clientId / wardrobe productId / 'signature' / 'signature:delete'). */
   clientId: string;
   shopId: string | null;
-  payload: OutboxEntry | { productId: string; shopId: string; size: string; state: WardrobeState } | { version: 1; vector: number[]; quality: number };
+  payload: OutboxEntry | { productId: string; shopId: string; size: string; state: WardrobeState } | { version: 1; vector: number[]; quality: number } | null;
   intentToken?: string;
   attempts: number;
   nextAt: number;

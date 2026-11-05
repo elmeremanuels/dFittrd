@@ -106,6 +106,83 @@ describe('app store persistence', () => {
     expect(store.getState().settings.onboarded).toBe(true);
   });
 
+  it('delete my scan also erases the server signature for a registered device', async () => {
+    const store = createAppStore({ db });
+    const deleteSignature = vi.fn(async () => ({ deleted: true, ledgerEntryId: 'l', at: new Date().toISOString() }));
+    store.attachClient({ deleteSignature } as unknown as Parameters<typeof store.attachClient>[0]);
+    await store.getState().hydrate();
+    await store.getState().setDeviceCredentials({ deviceId: '44444444-4444-4444-8444-444444444444', token: 't', expiresAt: new Date(Date.now() + 86_400_000).toISOString() });
+    await store.getState().updateSettings({ signatureSyncedAt: new Date().toISOString() });
+    await store.getState().setProfile(PROFILE);
+    await store.getState().deleteScanLocal();
+    expect(deleteSignature).toHaveBeenCalledTimes(1);
+    expect(store.getState().profile).toBeNull();
+    expect(await db.bodyProfile.count()).toBe(0);
+    await vi.waitFor(() => expect(store.getState().settings.signatureSyncedAt).toBeNull());
+    expect(await db.outbox.count()).toBe(0);
+    await store.syncer?.stop();
+  });
+
+  it('PRIV-1: offline, delete my scan drops the pending signature PUT and keeps a durable DELETE until the server confirms', async () => {
+    const store = createAppStore({ db });
+    const { NetworkError } = await import('@/api/client');
+    const putSignature = vi.fn(async () => ({ updatedAt: new Date().toISOString(), ledgerEntryId: 'l' }));
+    const deleteSignature = vi.fn<() => Promise<unknown>>().mockRejectedValue(new NetworkError('offline'));
+    store.attachClient({ deleteSignature, putSignature } as unknown as Parameters<typeof store.attachClient>[0]);
+    await store.getState().hydrate();
+    await store.syncer?.stop(); // no background drain: this test drives the flushes
+    await store.getState().setDeviceCredentials({ deviceId: '44444444-4444-4444-8444-444444444444', token: 't', expiresAt: new Date(Date.now() + 86_400_000).toISOString() });
+    const synced = new Date().toISOString();
+    await store.getState().updateSettings({ signatureSyncedAt: synced });
+    await store.getState().setProfile(PROFILE, { signature: { version: 1, vector: new Array(80).fill(0), quality: 0.5 } });
+    await store.getState().deleteScanLocal();
+    // The local delete happened, the PUT never went out, and the DELETE waits in the outbox.
+    expect(store.getState().profile).toBeNull();
+    expect(putSignature).not.toHaveBeenCalled();
+    expect(deleteSignature).toHaveBeenCalledTimes(1);
+    const rows = await db.outbox.toArray();
+    expect(rows.map((r) => r.kind)).toEqual(['signature_delete']);
+    expect(rows[0]!.attempts).toBe(1);
+    // Not confirmed: the app does not pretend the server copy is gone.
+    expect(store.getState().settings.signatureSyncedAt).toBe(synced);
+    // Back online: the retry succeeds and only then is the sync mark cleared.
+    deleteSignature.mockResolvedValue({ deleted: true, ledgerEntryId: 'l2', at: new Date().toISOString() });
+    await db.outbox.toCollection().modify({ nextAt: 0 });
+    await store.getState().flushOutbox();
+    expect(deleteSignature).toHaveBeenCalledTimes(2);
+    expect(await db.outbox.count()).toBe(0);
+    await vi.waitFor(() => expect(store.getState().settings.signatureSyncedAt).toBeNull());
+  });
+
+  it('AUTH-1: a tab with a stale in-memory token never reverts the token another tab rotated', async () => {
+    const tabA = createAppStore({ db });
+    const tabB = createAppStore({ db });
+    await tabA.getState().hydrate();
+    await tabB.getState().hydrate();
+    const id = '44444444-4444-4444-8444-444444444444';
+    await tabA.getState().setDeviceCredentials({ deviceId: id, token: 'old', expiresAt: '2026-11-07T10:00:00.000Z' });
+    await tabB.getState().reloadDeviceCredentials();
+    await tabA.getState().setDeviceCredentials({ deviceId: id, token: 'new', expiresAt: '2026-12-04T10:00:00.000Z' });
+    // Tab B still has 'old' in memory and writes an unrelated setting.
+    expect(tabB.getState().deviceCredentials().token).toBe('old');
+    await tabB.getState().updateSettings({ season: 'autumn' });
+    expect((await db.settings.toArray())[0]).toMatchObject({ deviceToken: 'new', season: 'autumn' });
+    expect(tabB.getState().deviceCredentials().token).toBe('new');
+    expect((await tabB.getState().reloadDeviceCredentials()).token).toBe('new');
+  });
+
+  it('delete my scan does not call the server for a device that never registered', async () => {
+    const store = createAppStore({ db });
+    const deleteSignature = vi.fn(async () => ({}));
+    store.attachClient({ deleteSignature } as unknown as Parameters<typeof store.attachClient>[0]);
+    await store.getState().hydrate();
+    await store.getState().setProfile(PROFILE);
+    await store.getState().deleteScanLocal();
+    expect(deleteSignature).not.toHaveBeenCalled();
+    expect(store.getState().profile).toBeNull();
+    await store.syncer?.stop();
+  });
+
   it('delete everything wipes every table and resets onboarding', async () => {
     const store = createAppStore({ db });
     await store.getState().hydrate();

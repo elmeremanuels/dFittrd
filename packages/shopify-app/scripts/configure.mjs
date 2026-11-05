@@ -6,7 +6,7 @@
  *   SHOPIFY_API_KEY=… PUBLIC_API_URL=https://api.curtain.fit PUBLIC_APP_URL=https://app.curtain.fit \
  *     pnpm --filter @curtain/shopify-app configure [env]      # default env: "dev"
  *
- * Optional: SHOPIFY_API_VERSION (2025-10), SHOPIFY_DEV_STORE (my-store.myshopify.com),
+ * Optional: SHOPIFY_API_VERSION (DEFAULT_API_VERSION from src/types.ts), SHOPIFY_DEV_STORE (my-store.myshopify.com),
  * SHOPIFY_APP_HANDLE (curtain). Requires `pnpm build` first (imports ../dist).
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';

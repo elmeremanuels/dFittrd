@@ -22,9 +22,11 @@ describe('Stripe (WooCommerce billing)', () => {
   it('connect → checkout → webhook completes → keys issued; subscription lifecycle gates the plan', async () => {
     const connect = await t.app.inject({ method: 'POST', url: '/v1/merchant/woo/connect', payload: { siteUrl: 'https://woo.example', name: 'Woo Shop', email: 'owner@woo.example' } });
     expect(connect.statusCode).toBe(200);
-    const { shopId, connectToken, mode, checkoutUrl } = connect.json<{ shopId: string; connectToken: string; mode: string; checkoutUrl: string }>();
+    const { shopId, connectToken, mode, checkoutUrl, verification } = connect.json<{ shopId: string; connectToken: string; mode: string; checkoutUrl: string; verification: { nonce: string } }>();
     expect(mode).toBe('stripe');
     expect(checkoutUrl).toContain('checkout.stripe.com');
+    // SEC-1: the Stripe path proves the domain too; the plugin publishes this nonce like in manual mode.
+    t.fetchMock.on('https://woo.example/wp-json/curtain/v1/verify', () => json({ nonce: verification.nonce }));
 
     const early = await t.app.inject({ method: 'POST', url: '/v1/merchant/woo/complete', payload: { connectToken } });
     expect(early.statusCode).toBe(503);
@@ -63,6 +65,25 @@ describe('Stripe (WooCommerce billing)', () => {
     shop = await t.handle.db.query.shops.findFirst({ where: eq(shops.id, shopId) });
     expect(shop).toMatchObject({ plan: 'free', paused: true });
     expect((await post(event('invoice.paid', { metadata: { shopId } }))).statusCode).toBe(200);
+  });
+
+  it('SEC-1: a paid (trial) Checkout without the domain proof gets no keys: 403 domain_unverified', async () => {
+    const connect = await t.app.inject({ method: 'POST', url: '/v1/merchant/woo/connect', payload: { siteUrl: 'https://victim-shop.example/', name: 'Not mine' } });
+    expect(connect.statusCode).toBe(200);
+    const { shopId, connectToken, mode } = connect.json<{ shopId: string; connectToken: string; mode: string }>();
+    expect(mode).toBe('stripe');
+    const body = JSON.stringify({ id: 'evt_sec1', type: 'checkout.session.completed', created: Math.floor(Date.now() / 1000), data: { object: { id: 'cs_test_2', customer: 'cus_2', subscription: 'sub_2', metadata: { shopId } } } });
+    const paid = await t.app.inject({ method: 'POST', url: '/v1/billing/stripe/webhook', headers: { 'content-type': 'application/json', 'stripe-signature': t.app.ctx.stripe.sign(body) }, payload: body });
+    expect(paid.statusCode).toBe(200);
+    expect((await t.handle.db.query.shops.findFirst({ where: eq(shops.id, shopId) }))?.connectState).toBe('paid');
+    // The real site does not publish the attacker's nonce.
+    t.fetchMock.on('https://victim-shop.example/wp-json/curtain/v1/verify', () => json({ error: { code: 'not_found' } }, 404));
+    const complete = await t.app.inject({ method: 'POST', url: '/v1/merchant/woo/complete', payload: { connectToken } });
+    expect(complete.statusCode).toBe(403);
+    expect(complete.json().error.code).toBe('domain_unverified');
+    const shop = await t.handle.db.query.shops.findFirst({ where: eq(shops.id, shopId) });
+    expect(shop?.connectState).toBe('paid');
+    expect(shop?.apiKeyPrefix ?? null).toBeNull();
   });
 
   it('is skipped gracefully when Stripe is not configured', async () => {

@@ -6,6 +6,7 @@ import { Avatar } from '@/components/Avatar';
 import { CohortBars } from '@/components/CohortBars';
 import { ColourChip } from '@/components/ColourChip';
 import { EstimateDisclaimer } from '@/components/EstimateBadge';
+import { mediaProxyUrl } from '@/embed/media';
 import { FitPanel } from '@/components/FitPanel';
 import { eur } from '@/lib/format';
 import { colourTarget } from '@/lib/season';
@@ -87,6 +88,8 @@ export function TryRoute(): ReactNode {
     );
 
   const { shop, trySession } = state.data;
+  // Carry-over #11: the logo comes through our api (GET /v1/sdk/media), never from the merchant's host.
+  const logoUrl = shop.id === MOCK_SHOP.id ? null : mediaProxyUrl(shop.id, shop.logoUrl);
   const g = state.data.garment;
   const act = async (action: 'love' | 'save'): Promise<void> => {
     await swipe(action, { garment: g, shopId: shop.id, intentToken: trySession.intentToken });
@@ -96,7 +99,7 @@ export function TryRoute(): ReactNode {
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       <header className="flex items-center gap-3 px-5 py-3" style={shop.brandColor ? { borderBottom: `3px solid ${shop.brandColor}` } : undefined}>
-        {shop.logoUrl ? <img src={shop.logoUrl} alt="" referrerPolicy="no-referrer" className="h-8 w-8 rounded-full object-cover" /> : <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-xs font-bold text-cream">{shop.name.slice(0, 1)}</span>}
+        {logoUrl ? <img src={logoUrl} alt="" referrerPolicy="no-referrer" className="h-8 w-8 rounded-full object-cover" data-testid="try-shop-logo" /> : <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-xs font-bold text-cream">{shop.name.slice(0, 1)}</span>}
         <div className="min-w-0">
           <p className="eyebrow">Trying on from</p>
           <p className="truncate font-medium">{shop.name}</p>

@@ -1,112 +1,76 @@
 /**
- * Shopify Admin API client (GraphQL, API version from env — 2025-10), token exchange, webhook
- * HMAC verification and the two Billing mutations. Pure fetch; no SDK. The offline access token
- * is stored AES-GCM encrypted in shopify_sessions (server key from env.ts).
+ * The api's Shopify facade: a thin, db-aware wrapper over @curtain/shopify-app (finding #5). The
+ * GraphQL client (cost-aware retries), token exchange, webhook HMAC, product queries, metafield
+ * definitions and the Billing mutations all live in that package; this class only adds what needs
+ * the api's env and database: the API version and URL template from env.ts, the offline access
+ * token stored AES-GCM encrypted in shopify_sessions, and the shop's billing currency (#6).
  */
 import { eq } from 'drizzle-orm';
-import { SHOPIFY_METAFIELD_DEFINITIONS, SHOPIFY_METAFIELD_NAMESPACE, type ShopifyProductNode } from '@curtain/schema';
+import {
+  adminGraphqlUrl,
+  createAdminClient,
+  createAppSubscription,
+  createUsageRecord,
+  ensureMetafieldDefinitions,
+  fetchBillingCurrency,
+  fetchPrimaryDomainHost,
+  fetchProduct,
+  fetchProductsPage,
+  requestTokenExchange,
+  resolveChargeCurrency,
+  ShopifyGraphqlError,
+  verifyWebhookHmac,
+  type AdminGraphqlClient,
+  type ChargeCurrency,
+  type EurRates,
+  type FetchLike as ShopifyFetchLike,
+  type ProductsPage,
+  type SubscriptionCreated,
+  type SubscriptionPlanInput,
+} from '@curtain/shopify-app';
+import type { ShopifyProductNode } from '@curtain/schema';
 import type { Db } from '../db/client.js';
-import { shopifySessions } from '../db/schema.js';
+import { shopifySessions, type ShopSettings } from '../db/schema.js';
 import type { Env } from '../env.js';
-import { decryptString, encryptString, hmacBase64, safeEqual } from '../lib/crypto.js';
-import { isShopifyDomain } from '../auth/shopifySessionToken.js';
+import { decryptString, encryptString } from '../lib/crypto.js';
+import { findShopByDomain } from '../services/shops.js';
 import type { FetchLike } from '../context.js';
 
-export class ShopifyApiError extends Error {
-  constructor(
-    message: string,
-    public readonly status?: number,
-    public readonly errors?: unknown,
-  ) {
-    super(message);
-    this.name = 'ShopifyApiError';
-  }
+export type { SubscriptionPlanInput } from '@curtain/shopify-app';
+
+/**
+ * What the api stores on the shop about its Shopify subscription currency (in `shops.settings`).
+ * Usage records reuse exactly this currency and rate, so they always match the subscription.
+ */
+export interface ShopifyBillingSettings {
+  /** ISO 4217 code of the subscription's line items (e.g. `AUD`). Missing = EUR (pre-#6 shops). */
+  billingCurrency?: string;
+  /** 1 EUR = n units of `billingCurrency`, fixed at subscription time. */
+  billingEurRate?: number;
 }
 
-export interface GraphqlResult<T> {
-  data: T;
-  extensions?: unknown;
+/** Read the billing currency fields from a shop's settings (absent → EUR at rate 1). */
+export function shopBillingCurrency(settings: ShopSettings | null | undefined): { currencyCode: string; eurRate: number } {
+  const s = (settings ?? {}) as ShopSettings & ShopifyBillingSettings;
+  const code = typeof s.billingCurrency === 'string' && /^[A-Z]{3}$/.test(s.billingCurrency) ? s.billingCurrency : 'EUR';
+  const rate = typeof s.billingEurRate === 'number' && s.billingEurRate > 0 ? s.billingEurRate : code === 'EUR' ? 1 : undefined;
+  if (rate === undefined) throw new ShopifyGraphqlError(`shop bills in ${code} but has no stored EUR rate`, 'user_errors');
+  return { currencyCode: code, eurRate: rate };
 }
 
-export const PRODUCT_QUERY = /* GraphQL */ `
-  query CurtainProduct($id: ID!, $namespace: String!) {
-    product(id: $id) {
-      id
-      handle
-      title
-      vendor
-      productType
-      status
-      onlineStoreUrl
-      category { name fullName }
-      featuredImage { url }
-      images(first: 20) { nodes { url } }
-      priceRangeV2 { minVariantPrice { amount currencyCode } }
-      variants(first: 50) { nodes { price selectedOptions { name value } } }
-      metafields(namespace: $namespace, first: 50) { nodes { namespace key type value } }
-    }
-  }
-`;
+/** Settings patch for `updateSettings` after a subscription was created. */
+export function billingSettingsPatch(currency: { currencyCode: string; eurRate: number }): Partial<ShopSettings> {
+  return { billingCurrency: currency.currencyCode, billingEurRate: currency.eurRate };
+}
 
-export const PRODUCTS_PAGE_QUERY = /* GraphQL */ `
-  query CurtainProducts($cursor: String, $namespace: String!) {
-    products(first: 50, after: $cursor, query: "status:active") {
-      pageInfo { hasNextPage endCursor }
-      nodes {
-        id
-        handle
-        title
-        vendor
-        productType
-        status
-        onlineStoreUrl
-        category { name fullName }
-        featuredImage { url }
-        images(first: 20) { nodes { url } }
-        priceRangeV2 { minVariantPrice { amount currencyCode } }
-        variants(first: 50) { nodes { price selectedOptions { name value } } }
-        metafields(namespace: $namespace, first: 50) { nodes { namespace key type value } }
-      }
-    }
-  }
-`;
-
-export const APP_SUBSCRIPTION_CREATE = /* GraphQL */ `
-  mutation CurtainSubscribe($name: String!, $returnUrl: URL!, $test: Boolean, $trialDays: Int, $lineItems: [AppSubscriptionLineItemInput!]!) {
-    appSubscriptionCreate(name: $name, returnUrl: $returnUrl, test: $test, trialDays: $trialDays, lineItems: $lineItems) {
-      userErrors { field message }
-      confirmationUrl
-      appSubscription { id status lineItems { id plan { pricingDetails { __typename } } } }
-    }
-  }
-`;
-
-export const APP_USAGE_RECORD_CREATE = /* GraphQL */ `
-  mutation CurtainUsage($subscriptionLineItemId: ID!, $description: String!, $price: MoneyInput!, $idempotencyKey: String!) {
-    appUsageRecordCreate(subscriptionLineItemId: $subscriptionLineItemId, description: $description, price: $price, idempotencyKey: $idempotencyKey) {
-      userErrors { field message }
-      appUsageRecord { id }
-    }
-  }
-`;
-
-export const METAFIELD_DEFINITION_CREATE = /* GraphQL */ `
-  mutation CurtainDefinition($definition: MetafieldDefinitionInput!) {
-    metafieldDefinitionCreate(definition: $definition) {
-      createdDefinition { id key }
-      userErrors { field message code }
-    }
-  }
-`;
-
-export interface SubscriptionPlanInput {
-  name: string;
-  returnUrl: string;
-  priceEurPerMonth: number;
-  cappedAmountEur: number;
-  overageTerms: string;
-  trialDays: number;
-  test: boolean;
+export interface UsageRecordRequest {
+  lineItemId: string;
+  description: string;
+  amountEur: number;
+  idempotencyKey: string;
+  /** The subscription's currency; read from the shop's settings when omitted. */
+  currencyCode?: string;
+  eurRate?: number;
 }
 
 export class ShopifyClient {
@@ -114,6 +78,8 @@ export class ShopifyClient {
     private readonly env: Env,
     private readonly db: Db,
     private readonly fetchImpl: FetchLike,
+    /** EUR-based rate table for new subscriptions (default: the package's DEFAULT_EUR_RATES). */
+    private readonly eurRates?: EurRates,
   ) {}
 
   configured(): boolean {
@@ -121,43 +87,32 @@ export class ShopifyClient {
   }
 
   adminUrl(shopDomain: string): string {
-    return this.env.SHOPIFY_ADMIN_URL_TEMPLATE.replace('{shop}', shopDomain).replace('{version}', this.env.SHOPIFY_API_VERSION);
+    return adminGraphqlUrl(shopDomain, this.env.SHOPIFY_API_VERSION, this.env.SHOPIFY_ADMIN_URL_TEMPLATE);
+  }
+
+  /** A package Admin GraphQL client bound to this shop, the env's API version and our fetch. */
+  admin(shopDomain: string, accessToken: string): AdminGraphqlClient {
+    return createAdminClient({
+      shopDomain,
+      accessToken,
+      apiVersion: this.env.SHOPIFY_API_VERSION,
+      adminUrlTemplate: this.env.SHOPIFY_ADMIN_URL_TEMPLATE,
+      fetch: this.fetchImpl as ShopifyFetchLike,
+    });
   }
 
   /** HMAC-SHA256 (base64) of the raw body with the API secret — `X-Shopify-Hmac-Sha256`. */
   verifyWebhookHmac(rawBody: Uint8Array | string, header: string | undefined): boolean {
-    if (!header || !this.env.SHOPIFY_API_SECRET) return false;
-    return safeEqual(hmacBase64(this.env.SHOPIFY_API_SECRET, rawBody), header);
+    return verifyWebhookHmac(rawBody, header, this.env.SHOPIFY_API_SECRET);
   }
 
   async graphql<T>(shopDomain: string, accessToken: string, query: string, variables: Record<string, unknown> = {}): Promise<T> {
-    const res = await this.fetchImpl(this.adminUrl(shopDomain), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-shopify-access-token': accessToken, accept: 'application/json' },
-      body: JSON.stringify({ query, variables }),
-    });
-    const text = await res.text();
-    let body: { data?: T; errors?: unknown } = {};
-    try {
-      body = text ? (JSON.parse(text) as typeof body) : {};
-    } catch {
-      throw new ShopifyApiError(`Shopify returned non-JSON (${res.status})`, res.status);
-    }
-    if (!res.ok) throw new ShopifyApiError(`Shopify GraphQL HTTP ${res.status}`, res.status, body.errors ?? text);
-    if (body.errors) throw new ShopifyApiError('Shopify GraphQL errors', res.status, body.errors);
-    if (!body.data) throw new ShopifyApiError('Shopify GraphQL: empty data', res.status);
-    return body.data;
+    return this.admin(shopDomain, accessToken).request<T>(query, variables);
   }
 
   /** The storefront's primary domain host (e.g. `shop.example`), for the embed's allowed origins. */
   async fetchPrimaryDomainHost(shopDomain: string, accessToken: string): Promise<string | null> {
-    const data = await this.graphql<{ shop?: { primaryDomain?: { host?: string | null } | null } | null }>(
-      shopDomain,
-      accessToken,
-      'query CurtainPrimaryDomain { shop { primaryDomain { host } } }',
-    );
-    const host = data.shop?.primaryDomain?.host?.toLowerCase() ?? null;
-    return host && /^[a-z0-9.-]{1,253}(:\d{1,5})?$/.test(host) ? host : null;
+    return fetchPrimaryDomainHost(this.admin(shopDomain, accessToken));
   }
 
   /**
@@ -165,25 +120,14 @@ export class ShopifyClient {
    * https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/token-exchange
    */
   async tokenExchange(shopDomain: string, sessionToken: string): Promise<{ accessToken: string; scope: string }> {
-    if (!this.configured()) throw new ShopifyApiError('Shopify is not configured');
-    if (!isShopifyDomain(shopDomain)) throw new ShopifyApiError('invalid shop domain');
-    const res = await this.fetchImpl(`https://${shopDomain}/admin/oauth/access_token`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify({
-        client_id: this.env.SHOPIFY_API_KEY,
-        client_secret: this.env.SHOPIFY_API_SECRET,
-        grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
-        subject_token: sessionToken,
-        subject_token_type: 'urn:ietf:params:oauth:token-type:id_token',
-        requested_token_type: 'urn:shopify:params:oauth:token-type:offline-access-token',
-      }),
+    const r = await requestTokenExchange({
+      apiKey: this.env.SHOPIFY_API_KEY ?? '',
+      apiSecret: this.env.SHOPIFY_API_SECRET ?? '',
+      shopDomain,
+      sessionToken,
+      fetch: this.fetchImpl as ShopifyFetchLike,
     });
-    const body = (await res.json().catch(() => ({}))) as { access_token?: string; scope?: string; error?: string; error_description?: string };
-    if (!res.ok || !body.access_token) {
-      throw new ShopifyApiError(body.error_description ?? body.error ?? `token exchange failed (${res.status})`, res.status, body);
-    }
-    return { accessToken: body.access_token, scope: body.scope ?? '' };
+    return { accessToken: r.accessToken, scope: r.scope };
   }
 
   sessionId(shopDomain: string): string {
@@ -213,91 +157,48 @@ export class ShopifyClient {
   }
 
   async fetchProduct(shopDomain: string, accessToken: string, gid: string): Promise<ShopifyProductNode | null> {
-    const data = await this.graphql<{ product: ShopifyProductNode | null }>(shopDomain, accessToken, PRODUCT_QUERY, {
-      id: gid,
-      namespace: SHOPIFY_METAFIELD_NAMESPACE,
+    return fetchProduct(this.admin(shopDomain, accessToken), gid);
+  }
+
+  async fetchProductsPage(shopDomain: string, accessToken: string, cursor: string | null): Promise<ProductsPage> {
+    return fetchProductsPage(this.admin(shopDomain, accessToken), cursor);
+  }
+
+  /**
+   * The currency to bill this shop in (#6): `shopBillingPreferences.currency` when our rate table
+   * covers it, else USD. Errors propagate: never guess EUR for a shop that may not be billed in it.
+   */
+  async chargeCurrency(shopDomain: string, accessToken: string): Promise<ChargeCurrency & { billingCurrency: string | null }> {
+    const info = await fetchBillingCurrency(this.admin(shopDomain, accessToken));
+    return { ...resolveChargeCurrency(info.billingCurrency, this.eurRates), billingCurrency: info.billingCurrency };
+  }
+
+  /** Recurring line + usage line with cappedAmount (D6), in `plan.currencyCode` (default EUR). */
+  async appSubscriptionCreate(shopDomain: string, accessToken: string, plan: SubscriptionPlanInput): Promise<SubscriptionCreated> {
+    return createAppSubscription(this.admin(shopDomain, accessToken), plan);
+  }
+
+  /**
+   * One usage record, in the subscription's currency (the shop's stored `billingCurrency` and rate
+   * unless given). A reached cap throws, so the caller keeps the day unpushed and retries.
+   */
+  async appUsageRecordCreate(shopDomain: string, accessToken: string, input: UsageRecordRequest): Promise<string | null> {
+    let money = input.currencyCode ? { currencyCode: input.currencyCode, eurRate: input.eurRate } : undefined;
+    if (!money) money = shopBillingCurrency((await findShopByDomain(this.db, shopDomain))?.settings);
+    const r = await createUsageRecord(this.admin(shopDomain, accessToken), {
+      lineItemId: input.lineItemId,
+      description: input.description,
+      amountEur: input.amountEur,
+      idempotencyKey: input.idempotencyKey,
+      currencyCode: money.currencyCode,
+      ...(money.eurRate !== undefined ? { eurRate: money.eurRate } : {}),
     });
-    return data.product;
-  }
-
-  async fetchProductsPage(shopDomain: string, accessToken: string, cursor: string | null) {
-    const data = await this.graphql<{ products: { pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: ShopifyProductNode[] } }>(
-      shopDomain,
-      accessToken,
-      PRODUCTS_PAGE_QUERY,
-      { cursor, namespace: SHOPIFY_METAFIELD_NAMESPACE },
-    );
-    return data.products;
-  }
-
-  /** Starter plan: recurring line + usage line with cappedAmount (D6). Returns the confirmation URL. */
-  async appSubscriptionCreate(shopDomain: string, accessToken: string, plan: SubscriptionPlanInput) {
-    const data = await this.graphql<{
-      appSubscriptionCreate: {
-        userErrors: Array<{ field: string[] | null; message: string }>;
-        confirmationUrl: string | null;
-        appSubscription: { id: string; status: string; lineItems: Array<{ id: string; plan: { pricingDetails: { __typename: string } } }> } | null;
-      };
-    }>(shopDomain, accessToken, APP_SUBSCRIPTION_CREATE, {
-      name: plan.name,
-      returnUrl: plan.returnUrl,
-      test: plan.test,
-      trialDays: plan.trialDays,
-      lineItems: [
-        { plan: { appRecurringPricingDetails: { price: { amount: plan.priceEurPerMonth, currencyCode: 'EUR' }, interval: 'EVERY_30_DAYS' } } },
-        { plan: { appUsagePricingDetails: { cappedAmount: { amount: plan.cappedAmountEur, currencyCode: 'EUR' }, terms: plan.overageTerms } } },
-      ],
-    });
-    const r = data.appSubscriptionCreate;
-    if (r.userErrors.length) throw new ShopifyApiError(r.userErrors.map((e) => e.message).join('; '), undefined, r.userErrors);
-    const usageLine = r.appSubscription?.lineItems.find((l) => l.plan.pricingDetails.__typename === 'AppUsagePricing');
-    return { confirmationUrl: r.confirmationUrl, subscriptionId: r.appSubscription?.id ?? null, usageLineItemId: usageLine?.id ?? null };
-  }
-
-  async appUsageRecordCreate(shopDomain: string, accessToken: string, input: { lineItemId: string; description: string; amountEur: number; idempotencyKey: string }) {
-    const data = await this.graphql<{ appUsageRecordCreate: { userErrors: Array<{ message: string }>; appUsageRecord: { id: string } | null } }>(
-      shopDomain,
-      accessToken,
-      APP_USAGE_RECORD_CREATE,
-      {
-        subscriptionLineItemId: input.lineItemId,
-        description: input.description,
-        price: { amount: input.amountEur, currencyCode: 'EUR' },
-        idempotencyKey: input.idempotencyKey,
-      },
-    );
-    const r = data.appUsageRecordCreate;
-    if (r.userErrors.length) throw new ShopifyApiError(r.userErrors.map((e) => e.message).join('; '), undefined, r.userErrors);
-    return r.appUsageRecord?.id ?? null;
+    if (r.capReached) throw new ShopifyGraphqlError('appUsageRecordCreate: capped amount reached (merchant must raise the cap)', 'user_errors');
+    return r.id;
   }
 
   /** Creates the $app:curtain metafield definitions (idempotent: TAKEN errors are ignored). */
   async ensureMetafieldDefinitions(shopDomain: string, accessToken: string): Promise<{ created: string[]; existing: string[] }> {
-    const created: string[] = [];
-    const existing: string[] = [];
-    for (const def of SHOPIFY_METAFIELD_DEFINITIONS) {
-      const data = await this.graphql<{ metafieldDefinitionCreate: { createdDefinition: { key: string } | null; userErrors: Array<{ code?: string; message: string }> } }>(
-        shopDomain,
-        accessToken,
-        METAFIELD_DEFINITION_CREATE,
-        {
-          definition: {
-            name: def.name,
-            namespace: SHOPIFY_METAFIELD_NAMESPACE,
-            key: def.key,
-            type: def.type,
-            description: def.description,
-            ownerType: 'PRODUCT',
-            pin: def.pin,
-            access: { admin: 'MERCHANT_READ_WRITE', storefront: 'NONE' },
-          },
-        },
-      );
-      const r = data.metafieldDefinitionCreate;
-      if (r.createdDefinition) created.push(def.key);
-      else if (r.userErrors.some((e) => e.code === 'TAKEN')) existing.push(def.key);
-      else throw new ShopifyApiError(`metafield definition ${def.key}: ${r.userErrors.map((e) => e.message).join('; ')}`);
-    }
-    return { created, existing };
+    return ensureMetafieldDefinitions(this.admin(shopDomain, accessToken));
   }
 }

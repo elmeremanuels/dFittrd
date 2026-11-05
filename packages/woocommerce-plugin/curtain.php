@@ -8,7 +8,7 @@
  * Requires PHP:      8.2
  * Requires Plugins:  woocommerce
  * WC requires at least: 9.0
- * WC tested up to:   9.9
+ * WC tested up to:   11.2
  * Author:            Curtain
  * Author URI:        https://curtain.fit
  * License:           GPL-2.0-or-later

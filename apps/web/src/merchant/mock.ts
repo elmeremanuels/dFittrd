@@ -2,7 +2,17 @@
  * Mock console data, used only when the API is unreachable (no secret, no real shop). Shapes are
  * the real DTOs so the console renders exactly what the backend will send.
  */
-import { completenessScore, MOCK_GARMENTS, type AnalyticsSwipesResponse, type MerchantLedgerResponse, type MerchantProductsResponse, type UsageResponse } from '@curtain/schema';
+import {
+  completenessScore,
+  MOCK_GARMENTS,
+  type AnalyticsAbandonedResponse,
+  type AnalyticsFitSizesResponse,
+  type AnalyticsSwipesResponse,
+  type BillingAnomaliesResponse,
+  type MerchantLedgerResponse,
+  type MerchantProductsResponse,
+  type UsageResponse,
+} from '@curtain/schema';
 import { dayIso } from '@/lib/format';
 
 export function mockProducts(): MerchantProductsResponse {
@@ -93,8 +103,39 @@ export function mockLedger(): MerchantLedgerResponse {
   };
 }
 
-/** Abandoned opens are not in the usage DTO yet; derived from the mock only (see README open issues). */
+/** Mock opens/abandoned counts derived from the mock usage (the live console reads GET /v1/merchant/analytics/abandoned). */
 export function mockAbandoned(usage: UsageResponse): { opens: number; abandoned: number } {
   const opens = Math.round(usage.totals.fitSessions * 1.6);
   return { opens, abandoned: opens - usage.totals.fitSessions };
+}
+
+/** Standalone (on-page) fit sizes, same shape as GET /v1/merchant/analytics/fit-sizes. */
+export function mockFitSizes(from: string, to: string): AnalyticsFitSizesResponse {
+  const bySize = [
+    { size: 'S', sessions: 64 },
+    { size: 'M', sessions: 131 },
+    { size: 'L', sessions: 88 },
+    { size: 'XL', sessions: 21 },
+  ];
+  return { from, to, kAnonymityFloor: 5, suppressedGroups: 1, bySize, totals: { sessions: bySize.reduce((n, s) => n + s.sessions, 0) } };
+}
+
+/** Same shape as GET /v1/merchant/analytics/abandoned. */
+export function mockAbandonedAnalytics(from: string, to: string, usage: UsageResponse): AnalyticsAbandonedResponse {
+  const { opens, abandoned } = mockAbandoned(usage);
+  return { from, to, kAnonymityFloor: 5, suppressedGroups: 2, totals: { sessions: opens, resolved: opens - Math.round(abandoned / 2), withFit: opens - abandoned }, byProduct: [] };
+}
+
+/** Same shape as GET /v1/merchant/usage/anomalies: one capped day in the range. */
+export function mockAnomalies(from: string, to: string): BillingAnomaliesResponse {
+  const day = dayIso(new Date(new Date(to).getTime() - 3 * 86_400_000));
+  return {
+    from,
+    to,
+    dailyCap: 334,
+    today: { day: to, billedSessions: 27, trailingAverage: 28.4, spikeThreshold: 86, capReached: false, spike: false },
+    anomalies: [
+      { day, kind: 'spike', billedSessions: 212, deniedSessions: 0, threshold: 86, trailingAverage: 28.1, firstAt: `${day}T09:12:00.000Z`, lastAt: `${day}T21:40:00.000Z` },
+    ],
+  };
 }

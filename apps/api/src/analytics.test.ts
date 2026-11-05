@@ -58,17 +58,50 @@ describe('k-anonymity floor (K_ANON=5)', () => {
     for (const d of devices) expect(text).not.toContain(d.deviceId);
   });
 
-  it('abandoned sessions are aggregated per product with the floor', async () => {
-    for (let i = 0; i < 5; i++) {
-      await t.app.inject({ method: 'POST', url: '/v1/sdk/sessions', payload: { shopKeyPrefix: s.publicKeyPrefix, productExternalId: 'monochrome-02', pageUrl: 'https://m.example/p' } });
+  it('abandoned opens: the floor counts distinct shoppers, not sessions, and totals leak no suppressed rows (#19)', async () => {
+    const open = async (productExternalId: string) => {
+      const res = await t.app.inject({ method: 'POST', url: '/v1/sdk/sessions', payload: { shopKeyPrefix: s.publicKeyPrefix, productExternalId, pageUrl: 'https://m.example/p' } });
+      return res.json<{ tryUrl: string }>().tryUrl.split('/try/')[1]!;
+    };
+    // monochrome-02: five different shoppers resolve, plus three opens that never resolve
+    for (const d of devices.slice(0, 5)) {
+      const token = await open('monochrome-02');
+      expect((await t.app.inject({ method: 'GET', url: `/v1/try/${token}`, headers: d.auth })).statusCode).toBe(200);
     }
-    await t.app.inject({ method: 'POST', url: '/v1/sdk/sessions', payload: { shopKeyPrefix: s.publicKeyPrefix, productExternalId: 'raw-denim-01', pageUrl: 'https://m.example/p' } });
+    for (let i = 0; i < 3; i++) await open('monochrome-02');
+    // raw-denim-01: six sessions, all one shopper → below the floor although sessions >= K
+    for (let i = 0; i < 6; i++) {
+      const token = await open('raw-denim-01');
+      await t.app.inject({ method: 'GET', url: `/v1/try/${token}`, headers: devices[5]!.auth });
+    }
     const day = new Date().toISOString().slice(0, 10);
     const res = await t.app.inject({ method: 'GET', url: `/v1/merchant/analytics/abandoned?from=${day}&to=${day}`, headers: { authorization: `Bearer ${s.apiKey}` } });
     expect(res.statusCode).toBe(200);
-    expect(res.json().byProduct).toEqual([{ externalId: 'monochrome-02', sessions: 5, resolved: 0, withFit: 0, abandonedRate: 1 }]);
+    expect(res.json().byProduct).toEqual([{ externalId: 'monochrome-02', sessions: 8, resolved: 5, withFit: 0, abandonedRate: 1 }]);
     expect(res.json().suppressedGroups).toBe(1);
-    expect(res.json().totals.sessions).toBe(6);
+    expect(res.json().totals).toEqual({ sessions: 8, resolved: 5, withFit: 0 });
+  });
+
+  it('standalone fit-shown sizes: k floor on distinct shoppers, totals over reported sizes only (#18)', async () => {
+    const shown = async (d: (typeof devices)[number], size: string) => {
+      const sdk = await t.app.inject({ method: 'POST', url: '/v1/sdk/sessions', payload: { shopKeyPrefix: s.publicKeyPrefix, productExternalId: 'aalter-studio-1', pageUrl: 'https://m.example/p', surface: 'embed' } });
+      const token = sdk.json<{ embedUrl: string }>().embedUrl.split('/embed/')[1]!;
+      const r = await t.app.inject({ method: 'GET', url: `/v1/try/${token}`, headers: d.auth });
+      const intentToken = r.json<{ trySession: { intentToken: string } }>().trySession.intentToken;
+      const f = await t.app.inject({ method: 'POST', url: `/v1/try/${token}/fit-shown`, headers: d.auth, payload: { intentToken, recommendedSize: size, confidence: 0.6 } });
+      expect(f.statusCode).toBe(200);
+    };
+    for (const d of devices.slice(0, 5)) await shown(d, 'M');
+    await shown(devices[0]!, 'M'); // a second session by the same shopper counts as a session, not a person
+    await shown(devices[5]!, 'XL');
+    await shown(devices[5]!, 'XL');
+    const day = new Date().toISOString().slice(0, 10);
+    const auth = { authorization: `Bearer ${s.apiKey}` };
+    const res = await t.app.inject({ method: 'GET', url: `/v1/merchant/analytics/fit-sizes?from=${day}&to=${day}`, headers: auth });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ from: day, to: day, kAnonymityFloor: 5, suppressedGroups: 1, bySize: [{ size: 'M', sessions: 6 }], totals: { sessions: 6 } });
+    for (const d of devices) expect(res.body).not.toContain(d.deviceId);
+    expect((await t.app.inject({ method: 'GET', url: `/v1/merchant/analytics/fit-sizes?from=${day}&to=${day}` })).statusCode).toBe(401);
   });
 
   it('hue buckets', () => {

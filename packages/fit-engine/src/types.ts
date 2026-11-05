@@ -106,6 +106,11 @@ export interface FitResult {
   recommendedSize: string | null;
   /** Always set when the chart is non-empty. Equals `recommendedSize` when one exists. */
   closestSize: string | null;
+  /**
+   * Index of `closestSize` in `perSize` (chart order); absent when the chart is empty. The UI helpers
+   * read the row through this index, never by searching for the label (finding #2).
+   */
+  closestIndex?: number;
   /** Score of `closestSize` (0..1), `null` when no fit points. */
   score: number | null;
   /** 0..1, 3 dp. */
@@ -155,6 +160,27 @@ export interface RenderGaps {
   easeTargets: Partial<Record<Point, number>>;
   /** Per used point: absolute slack `gapCm + easeTarget` = garment − body, cm. */
   slackCm: Partial<Record<Point, number>>;
+}
+
+/**
+ * D15 anchor ids of the fit points, as in `@curtain/anchors` (`FIT_POINT_TO_ANCHOR`). Declared here
+ * so the engine keeps zero dependencies; a test keeps both tables equal. `foot` has no anchor.
+ */
+export type FitAnchorId = 'chest' | 'waist' | 'hip' | 'shoulder_width' | 'thigh' | 'inseam';
+
+/**
+ * `RenderGaps` keyed by D15 anchor id instead of fit point (`anchorGaps`). Same numbers, same rounding:
+ * the 3D viewer reads these and never computes fit a second time (ENGINE-HANDOFF rule 4).
+ */
+export interface AnchorGaps {
+  size: string;
+  /** Per used anchor: `gapCm` (positive = garment larger than body + target ease). */
+  gaps: Partial<Record<FitAnchorId, number>>;
+  bands: Partial<Record<FitAnchorId, Band>>;
+  /** Per used anchor: stretch-adjusted ease target the gap is relative to. */
+  easeTargets: Partial<Record<FitAnchorId, number>>;
+  /** Per used anchor: absolute slack `gapCm + easeTarget` = garment − body, cm. */
+  slackCm: Partial<Record<FitAnchorId, number>>;
 }
 
 export type { BodyProfile, UserBody, GarmentPayload };

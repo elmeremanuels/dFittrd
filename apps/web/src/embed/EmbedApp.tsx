@@ -239,7 +239,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
       <BlockedScreen
         kind={flow.blocked}
         onRetry={
-          flow.blocked === 'offline' || flow.blocked === 'error'
+          flow.blocked === 'offline' || flow.blocked === 'busy' || flow.blocked === 'error'
             ? () => {
                 dispatch({ type: 'retry' });
                 setAttempt((a) => a + 1);

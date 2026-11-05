@@ -7,6 +7,9 @@
  * values) through `onLedger`, mirroring the server's ledger.
  */
 import type {
+  AnalyticsAbandonedResponse,
+  AnalyticsFitSizesResponse,
+  BillingAnomaliesResponse,
   DeviceCreateRequest,
   DeviceTokenResponse,
   FitCohortResponse,
@@ -24,6 +27,7 @@ import type {
   ProductGetResponse,
   ShopProductsQuery,
   ShopProductsResponse,
+  SignatureDeleteResponse,
   SignaturePutRequest,
   SignaturePutResponse,
   SwipeBatchRequest,
@@ -52,6 +56,14 @@ export interface ApiClientOptions {
   fetchImpl?: typeof fetch;
   getDevice: () => DeviceCredentials;
   setDevice: (d: DeviceTokenResponse) => void | Promise<void>;
+  /**
+   * Re-reads the persisted credentials (IndexedDB), updates memory and returns them. Another tab or
+   * window shares that storage and may have rotated the token meanwhile (AUTH-1). Without it the
+   * client falls back to `getDevice`.
+   */
+  reloadDevice?: () => Promise<DeviceCredentials>;
+  /** How long to wait for another tab's rotated token after a `token_rotated` 401 (tests: 0). */
+  rotatedWaitMs?: number;
   onLedger: (entry: ClientLedgerEntry) => void | Promise<void>;
   appVersion?: string;
   now?: () => Date;
@@ -85,6 +97,13 @@ export class NetworkError extends Error {
 /** Rotate the device token once less than this is left (tokens live 30 days). */
 export const ROTATE_WITHIN_MS = 7 * 86_400_000;
 
+/**
+ * An expired token can still be rotated (never used for anything else) for this long past its
+ * expiry; it mirrors the api's DEVICE_TOKEN_ROTATE_GRACE_DAYS default (carry-over #10). Rotating
+ * keeps the device id, so the server rows stay reachable by `DELETE /v1/me`.
+ */
+export const ROTATE_GRACE_MS = 180 * 86_400_000;
+
 const WRITE_KIND: Record<string, ClientLedgerEntry['kind']> = {
   '/v1/devices': 'device',
   '/v1/devices/rotate': 'device',
@@ -94,8 +113,9 @@ const WRITE_KIND: Record<string, ClientLedgerEntry['kind']> = {
   '/v1/renders/hero': 'hero_render',
 };
 
-function ledgerKind(path: string): ClientLedgerEntry['kind'] {
+function ledgerKind(path: string, method?: HttpMethod): ClientLedgerEntry['kind'] {
   const clean = path.split('?')[0] ?? path;
+  if (method === 'DELETE' && clean === '/v1/me/signature') return 'erase';
   if (WRITE_KIND[clean]) return WRITE_KIND[clean];
   if (clean.startsWith('/v1/wardrobe/')) return 'wardrobe_sync';
   if (clean.startsWith('/v1/try/') && clean.endsWith('/fit-shown')) return 'fit';
@@ -162,7 +182,25 @@ export class ApiClient {
 
     if (res.status === 401 && auth === 'device' && init.retryOn401 !== false) {
       this.devicePromise = null;
-      await this.opts.setDevice({ deviceId: this.opts.getDevice().deviceId ?? '', token: '', expiresAt: new Date(0).toISOString(), tokenVersion: 0 });
+      const current = this.opts.getDevice();
+      const code = await res
+        .clone()
+        .json()
+        .then((b: { error?: { code?: string } }) => b?.error?.code)
+        .catch(() => undefined);
+      if (code === 'token_expired' && current.token) {
+        // Expired but genuine: keep the token and mark it expired now, so ensureDevice rotates it
+        // (same device id) instead of registering a new device (carry-over #10).
+        await this.opts.setDevice({ deviceId: current.deviceId ?? '', token: current.token, expiresAt: this.opts.now().toISOString(), tokenVersion: 0 });
+      } else if (code === 'token_rotated' && current.token) {
+        // Another tab rotated this device (AUTH-1): pick up its new token (same device id). Only
+        // when no context kept the new token is the old one dropped, which registers a new device.
+        const stale = current.token;
+        const next = await this.withDeviceLock(() => this.awaitNewerToken(stale));
+        if (!next) await this.opts.setDevice({ deviceId: current.deviceId ?? '', token: '', expiresAt: new Date(0).toISOString(), tokenVersion: 0 });
+      } else {
+        await this.opts.setDevice({ deviceId: current.deviceId ?? '', token: '', expiresAt: new Date(0).toISOString(), tokenVersion: 0 });
+      }
       return this.request<T>(method, path, body, { ...init, retryOn401: false });
     }
     if (!res.ok) {
@@ -190,7 +228,7 @@ export class ApiClient {
     const entry: ClientLedgerEntry = {
       id: newId(),
       at: this.opts.now().toISOString(),
-      kind: ledgerKind(path),
+      kind: ledgerKind(path, method),
       method,
       path: path.split('?')[0] ?? path,
       bytes: json ? byteLength(json) : 0,
@@ -203,45 +241,98 @@ export class ApiClient {
   /**
    * Device JWT: memory/IndexedDB first. A token in its last week is ROTATED (`POST /v1/devices/rotate`,
    * same device id) — registering a fresh device instead would orphan this device's server rows (its
-   * signature, swipes, pairings), and a later `DELETE /v1/me` would erase the wrong device.
-   * `POST /v1/devices` only on first run, or when the old token is already unusable.
+   * signature, swipes, pairings), and a later `DELETE /v1/me` would erase the wrong device. An
+   * already expired token is rotated too, within ROTATE_GRACE_MS past its expiry (carry-over #10).
+   *
+   * Tabs and windows share the stored token (AUTH-1). Rotation and registration run under one Web
+   * Lock across tabs, and re-read the stored credentials first, so a tab that waited for the lock
+   * finds the token the other tab just rotated instead of rotating it again. A `token_rotated` 401
+   * (the race was lost anyway, e.g. without Web Locks) waits for the other tab's token.
+   * `POST /v1/devices` only on first run, on `invalid_token` (erased, unknown, past the grace), or
+   * when a rotation's new token was kept by no context at all (it is then lost for good).
    */
   async ensureDevice(): Promise<string> {
     const d = this.opts.getDevice();
-    const left = d.token && d.expiresAt ? new Date(d.expiresAt).getTime() - this.opts.now().getTime() : -1;
-    if (d.token && left > ROTATE_WITHIN_MS) return d.token;
-    if (d.token && left > 60_000) return this.rotateDevice(d.token);
+    if (d.token && this.msLeft(d) > ROTATE_WITHIN_MS) return d.token;
     if (!this.devicePromise) {
-      const req: DeviceCreateRequest = { platform: 'web', appVersion: this.opts.appVersion };
-      this.devicePromise = this.request<DeviceTokenResponse>('POST', '/v1/devices', req, { auth: 'none' })
-        .then(async (res) => {
-          await this.opts.setDevice(res);
-          return res.token;
-        })
-        .catch((e: unknown) => {
-          this.devicePromise = null;
-          throw e;
-        });
+      const run = this.withDeviceLock(() => this.refreshDevice());
+      this.devicePromise = run;
+      void run.then(
+        () => this.clearDevicePromise(run),
+        () => this.clearDevicePromise(run),
+      );
     }
     return this.devicePromise;
   }
 
-  private rotateDevice(current: string): Promise<string> {
-    if (!this.devicePromise) {
-      this.devicePromise = this.request<DeviceTokenResponse>('POST', '/v1/devices/rotate', { appVersion: this.opts.appVersion }, { auth: { bearer: current }, retryOn401: false })
-        .then(async (res) => {
-          await this.opts.setDevice(res);
-          this.devicePromise = null;
-          return res.token;
-        })
-        .catch((e: unknown) => {
-          this.devicePromise = null;
-          // Offline / server hiccup: the current token is still valid for a while — keep using it.
-          if (!(e instanceof ApiError && e.status === 401)) return current;
-          throw e;
-        });
+  private clearDevicePromise(run: Promise<string>): void {
+    if (this.devicePromise === run) this.devicePromise = null;
+  }
+
+  private msLeft(d: DeviceCredentials): number {
+    return d.token && d.expiresAt ? new Date(d.expiresAt).getTime() - this.opts.now().getTime() : -Infinity;
+  }
+
+  private async loadDevice(): Promise<DeviceCredentials> {
+    return this.opts.reloadDevice ? await this.opts.reloadDevice() : this.opts.getDevice();
+  }
+
+  /** Runs `fn` under a lock shared by every tab of this origin (Web Locks API), when the browser has one. */
+  private withDeviceLock<T>(fn: () => Promise<T>): Promise<T> {
+    const locks = typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
+    if (!locks || typeof locks.request !== 'function') return fn();
+    return locks.request(`curtain-device:${this.opts.baseUrl}`, () => fn()) as Promise<T>;
+  }
+
+  /** The stored token once it differs from `stale` (another tab rotated), or null after a short wait. */
+  private async awaitNewerToken(stale: string): Promise<string | null> {
+    const waitMs = this.opts.rotatedWaitMs ?? 1500;
+    const deadline = Date.now() + waitMs;
+    for (let pause = 100; ; pause *= 2) {
+      const d = await this.loadDevice();
+      if (d.token && d.token !== stale && this.msLeft(d) > -ROTATE_GRACE_MS) return d.token;
+      if (Date.now() + pause > deadline) return null;
+      await new Promise((r) => setTimeout(r, pause));
     }
-    return this.devicePromise;
+  }
+
+  private async refreshDevice(): Promise<string> {
+    // Another tab may have rotated or registered while this one waited for the lock.
+    const d = await this.loadDevice();
+    const left = this.msLeft(d);
+    if (d.token && left > ROTATE_WITHIN_MS) return d.token;
+    if (d.token && left > -ROTATE_GRACE_MS) {
+      try {
+        return await this.rotateDevice(d.token, left > 60_000);
+      } catch (e) {
+        if (!(e instanceof ApiError && e.status === 401)) throw e;
+        if (e.code === 'token_rotated') {
+          const next = await this.awaitNewerToken(d.token);
+          if (next) return next;
+        }
+        // invalid_token (erased, unknown, past the grace) or a rotated token nobody kept: register.
+      }
+    }
+    return this.registerDevice();
+  }
+
+  private async registerDevice(): Promise<string> {
+    const req: DeviceCreateRequest = { platform: 'web', appVersion: this.opts.appVersion };
+    const res = await this.request<DeviceTokenResponse>('POST', '/v1/devices', req, { auth: 'none' });
+    await this.opts.setDevice(res);
+    return res.token;
+  }
+
+  private async rotateDevice(current: string, stillValid: boolean): Promise<string> {
+    try {
+      const res = await this.request<DeviceTokenResponse>('POST', '/v1/devices/rotate', { appVersion: this.opts.appVersion }, { auth: { bearer: current }, retryOn401: false });
+      await this.opts.setDevice(res);
+      return res.token;
+    } catch (e) {
+      // Offline / server hiccup: a token that is still valid for a while keeps working.
+      if (stillValid && !(e instanceof ApiError && e.status === 401)) return current;
+      throw e;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -259,6 +350,10 @@ export class ApiClient {
   }
   getWardrobe(): Promise<WardrobeListResponse> {
     return this.request('GET', '/v1/wardrobe');
+  }
+  /** "Delete my scan": removes the fit signature on the server (carry-over #9); everything else stays. */
+  deleteSignature(): Promise<SignatureDeleteResponse> {
+    return this.request('DELETE', '/v1/me/signature');
   }
   deleteMe(): Promise<MeDeleteResponse> {
     return this.request('DELETE', '/v1/me');
@@ -328,6 +423,18 @@ export class MerchantApi {
   }
   analyticsSwipes(from: string, to: string): Promise<AnalyticsSwipesResponse> {
     return this.client.request('GET', `/v1/merchant/analytics/swipes?from=${from}&to=${to}`, undefined, { auth: this.auth });
+  }
+  /** Billing anomaly signal: today's cap/spike flags and recorded anomalies (carry-over #7). */
+  usageAnomalies(from: string, to: string): Promise<BillingAnomaliesResponse> {
+    return this.client.request('GET', `/v1/merchant/usage/anomalies?from=${from}&to=${to}`, undefined, { auth: this.auth });
+  }
+  /** Sizes recommended in standalone (on-page) fit sessions, k floor applied (carry-over #18). */
+  analyticsFitSizes(from: string, to: string): Promise<AnalyticsFitSizesResponse> {
+    return this.client.request('GET', `/v1/merchant/analytics/fit-sizes?from=${from}&to=${to}`, undefined, { auth: this.auth });
+  }
+  /** Opens that never got a fit, k floor on distinct shoppers (carry-over #19). */
+  analyticsAbandoned(from: string, to: string): Promise<AnalyticsAbandonedResponse> {
+    return this.client.request('GET', `/v1/merchant/analytics/abandoned?from=${from}&to=${to}`, undefined, { auth: this.auth });
   }
   ledger(cursor?: string): Promise<MerchantLedgerResponse> {
     return this.client.request('GET', `/v1/merchant/ledger${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, undefined, { auth: this.auth });

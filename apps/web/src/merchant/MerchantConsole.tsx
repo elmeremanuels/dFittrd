@@ -1,12 +1,12 @@
 import { AlertCircle, BarChart3, LogOut, ShieldCheck, ShoppingCart, TrendingUp } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router';
-import type { AnalyticsSwipesResponse, MerchantLedgerResponse, MerchantProductsResponse, UsageResponse } from '@curtain/schema';
+import type { AnalyticsAbandonedResponse, AnalyticsFitSizesResponse, AnalyticsSwipesResponse, BillingAnomaliesResponse, MerchantLedgerResponse, MerchantProductsResponse, UsageResponse } from '@curtain/schema';
 import { MERCHANT_KEY_PATTERN, NetworkError, type MerchantApi } from '@/api/client';
 import { Ledger, type LedgerLine } from '@/components/Ledger';
 import { dayIso, pct, titleCase } from '@/lib/format';
 import { api } from '@/store';
-import { mockAbandoned, mockAnalytics, mockLedger, mockProducts, mockUsage } from './mock';
+import { mockAbandonedAnalytics, mockAnalytics, mockAnomalies, mockFitSizes, mockLedger, mockProducts, mockUsage } from './mock';
 
 const SESSION_KEY = 'curtain.merchantKey';
 
@@ -81,8 +81,17 @@ export interface MerchantData {
   usage: UsageResponse;
   analytics: AnalyticsSwipesResponse;
   ledger: MerchantLedgerResponse;
+  /** Standalone fit-shown sizes (carry-over #18); null when this api version does not serve it. */
+  fitSizes: AnalyticsFitSizesResponse | null;
+  /** Abandoned opens, k floor on distinct shoppers (carry-over #19). */
+  abandoned: AnalyticsAbandonedResponse | null;
+  /** Billing anomaly signal: daily cap and spikes (carry-over #7). */
+  anomalies: BillingAnomaliesResponse | null;
   range: { from: string; to: string };
 }
+
+/** Optional sections: an older api without the route must not take the whole console down. */
+const optional = <T,>(p: Promise<T>): Promise<T | null> => p.catch(() => null);
 
 export function MerchantLayout(): ReactNode {
   const navigate = useNavigate();
@@ -99,12 +108,31 @@ export function MerchantLayout(): ReactNode {
     const m: MerchantApi = api.merchant(key);
     (async () => {
       try {
-        const [products, usage, analytics, ledger] = await Promise.all([m.products(), m.usage(range.from, range.to), m.analyticsSwipes(range.from, range.to), m.ledger()]);
-        if (!cancelled) setData({ mode: 'live', products, usage, analytics, ledger, range });
+        const [products, usage, analytics, ledger, fitSizes, abandoned, anomalies] = await Promise.all([
+          m.products(),
+          m.usage(range.from, range.to),
+          m.analyticsSwipes(range.from, range.to),
+          m.ledger(),
+          optional(m.analyticsFitSizes(range.from, range.to)),
+          optional(m.analyticsAbandoned(range.from, range.to)),
+          optional(m.usageAnomalies(range.from, range.to)),
+        ]);
+        if (!cancelled) setData({ mode: 'live', products, usage, analytics, ledger, fitSizes, abandoned, anomalies, range });
       } catch (e) {
         if (cancelled) return;
         if (e instanceof NetworkError || (e instanceof Error && e.name === 'ApiError' && (e as { status?: number }).status === 404)) {
-          setData({ mode: 'mock', products: mockProducts(), usage: mockUsage(range.from, range.to), analytics: mockAnalytics(range.from, range.to), ledger: mockLedger(), range });
+          const usage = mockUsage(range.from, range.to);
+          setData({
+            mode: 'mock',
+            products: mockProducts(),
+            usage,
+            analytics: mockAnalytics(range.from, range.to),
+            ledger: mockLedger(),
+            fitSizes: mockFitSizes(range.from, range.to),
+            abandoned: mockAbandonedAnalytics(range.from, range.to, usage),
+            anomalies: mockAnomalies(range.from, range.to),
+            range,
+          });
         } else {
           setError(e instanceof Error ? e.message : 'Could not load your shop.');
         }
@@ -197,7 +225,7 @@ function StatCard({ label, value, hint, icon, tone = 'ink' }: { label: string; v
 
 export function MerchantOverview(): ReactNode {
   const d = useMerchantData();
-  const abandoned = d.mode === 'mock' ? mockAbandoned(d.usage) : null;
+  const abandoned = d.abandoned && d.abandoned.totals.sessions > 0 ? { opens: d.abandoned.totals.sessions, abandoned: d.abandoned.totals.sessions - d.abandoned.totals.withFit } : null;
   const totalSwipes = d.analytics.byProduct.reduce((n, p) => n + p.love + p.pass + p.save + p.less, 0);
   const saves = d.analytics.byProduct.reduce((n, p) => n + p.save, 0);
   return (
@@ -209,13 +237,13 @@ export function MerchantOverview(): ReactNode {
           label="Abandoned opens"
           value={abandoned ? abandoned.abandoned.toLocaleString() : '—'}
           icon={<BarChart3 className="h-5 w-5" aria-hidden />}
-          hint={abandoned ? `${pct(abandoned.abandoned / abandoned.opens)} of ${abandoned.opens} opens` : 'needs try-session opens in the usage API'}
+          hint={abandoned ? `${pct(abandoned.abandoned / abandoned.opens)} of ${abandoned.opens} opens` : `shown once ${d.abandoned?.kAnonymityFloor ?? d.analytics.kAnonymityFloor} shoppers opened a product`}
           tone={abandoned ? 'warn' : 'ink'}
         />
         <StatCard label="Incomplete products" value={String(d.products.counts.incomplete)} icon={<AlertCircle className="h-5 w-5" aria-hidden />} hint={d.products.counts.incomplete > 0 ? 'fix to go live' : 'all good'} tone={d.products.counts.incomplete > 0 ? 'bad' : 'ok'} />
       </div>
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <SizeHeatmap analytics={d.analytics} />
+        <SizeDistribution analytics={d.analytics} fitSizes={d.fitSizes} />
         <section className="card space-y-2 bg-white/80">
           <h2 className="font-display text-xl">What Curtain never sends you</h2>
           <ul className="list-disc space-y-1 pl-5 text-sm text-ink-soft">
@@ -232,34 +260,58 @@ export function MerchantOverview(): ReactNode {
   );
 }
 
-function SizeHeatmap({ analytics }: { analytics: AnalyticsSwipesResponse }): ReactNode {
-  const max = Math.max(1, ...analytics.bySize.map((s) => s.love + s.pass + s.save + s.less));
+/**
+ * Sizes recommended to shoppers, from both sources side by side (carry-over #18): the on-page fit
+ * (standalone sessions, counted per session) and the app's swipe deck (counted per swipe). Each
+ * source applies the k floor on its own, so a size can appear in one source only.
+ */
+function SizeDistribution({ analytics, fitSizes }: { analytics: AnalyticsSwipesResponse; fitSizes: AnalyticsFitSizesResponse | null }): ReactNode {
+  const onPage = new Map((fitSizes?.bySize ?? []).map((s) => [s.size, s.sessions]));
+  const swipes = new Map(analytics.bySize.map((s) => [s.size, s.love + s.pass + s.save + s.less]));
+  const sizes = [...new Set([...onPage.keys(), ...swipes.keys()])];
+  const onPageTotal = Math.max(1, [...onPage.values()].reduce((n, v) => n + v, 0));
+  const swipeTotal = Math.max(1, [...swipes.values()].reduce((n, v) => n + v, 0));
+  const bar = (label: string, share: number, tone: string) => (
+    <div className="h-2 overflow-hidden rounded-full bg-ink/10" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(share * 100)} aria-label={label}>
+      <div className={`h-full rounded-full ${tone}`} style={{ width: `${share * 100}%` }} />
+    </div>
+  );
   return (
-    <section className="card space-y-3 bg-white/80" aria-labelledby="size-heatmap">
-      <h2 id="size-heatmap" className="font-display text-xl">
-        Sizes recommended at swipe time
+    <section className="card space-y-3 bg-white/80" aria-labelledby="size-distribution">
+      <h2 id="size-distribution" className="font-display text-xl">
+        Sizes recommended
       </h2>
-      {analytics.bySize.length === 0 ? (
-        <p className="text-sm text-ink-mute">Shown once enough shoppers have swiped.</p>
+      <p className="flex flex-wrap gap-4 text-xs text-ink-soft">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-2 w-4 rounded-full bg-coral" aria-hidden /> On your product page (standalone fit, per session)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-2 w-4 rounded-full bg-ink" aria-hidden /> In the Curtain app (at swipe time, per swipe)
+        </span>
+      </p>
+      {sizes.length === 0 ? (
+        <p className="text-sm text-ink-mute">Shown once enough shoppers have seen a size.</p>
       ) : (
-        <ul className="space-y-2">
-          {analytics.bySize.map((s) => {
-            const total = s.love + s.pass + s.save + s.less;
-            const positive = (s.love + s.save) / Math.max(1, total);
+        <ul className="space-y-3">
+          {sizes.map((size) => {
+            const page = onPage.get(size);
+            const swipe = swipes.get(size);
             return (
-              <li key={s.size} className="space-y-1">
+              <li key={size} className="space-y-1">
                 <div className="flex justify-between text-xs font-semibold">
-                  <span>Size {s.size}</span>
-                  <span className={positive < 0.4 ? 'text-bad' : 'text-ok'}>{pct(positive)} positive</span>
+                  <span>Size {size}</span>
+                  <span className="tabular-nums text-ink-soft">
+                    {page !== undefined ? `${page} on page` : 'on page: —'} · {swipe !== undefined ? `${swipe} swipes` : 'swipes: —'}
+                  </span>
                 </div>
-                <div className="h-2.5 overflow-hidden rounded-full bg-ink/10" role="meter" aria-valuemin={0} aria-valuemax={max} aria-valuenow={total} aria-label={`Size ${s.size}: ${total} swipes`}>
-                  <div className={`h-full rounded-full ${positive < 0.4 ? 'bg-bad' : 'bg-ink'}`} style={{ width: `${(total / max) * 100}%` }} />
-                </div>
+                {bar(`Size ${size} on your product page: ${page ?? 0} sessions`, (page ?? 0) / onPageTotal, 'bg-coral')}
+                {bar(`Size ${size} at swipe time: ${swipe ?? 0} swipes`, (swipe ?? 0) / swipeTotal, 'bg-ink')}
               </li>
             );
           })}
         </ul>
       )}
+      <p className="text-xs text-ink-mute">Bars show each size’s share within its source. Sizes seen by fewer than {fitSizes?.kAnonymityFloor ?? analytics.kAnonymityFloor} shoppers are hidden.</p>
     </section>
   );
 }
@@ -339,6 +391,7 @@ export function MerchantUsage(): ReactNode {
         <StatCard label="Sessions this period" value={`${used.toLocaleString()} / ${u.plan.includedSessions.toLocaleString()}`} icon={<TrendingUp className="h-5 w-5" aria-hidden />} hint={`overage €${u.plan.overageEurPerSession.toFixed(2)} each`} tone={share > 0.9 ? 'warn' : 'ink'} />
         <StatCard label="Hero renders (30 d)" value={u.totals.heroRenders.toLocaleString()} icon={<BarChart3 className="h-5 w-5" aria-hidden />} hint={`$${u.totals.costUsd.toFixed(2)} provider cost`} />
       </div>
+      {d.anomalies ? <BillingAlerts report={d.anomalies} /> : null}
       <section className="card space-y-3 bg-white/80">
         <h2 className="font-display text-xl">Fit sessions per day</h2>
         <p className="text-xs text-ink-mute">
@@ -357,6 +410,42 @@ export function MerchantUsage(): ReactNode {
         {u.plan.paused ? <p className="text-sm text-bad">Below plan: the “Try it on” button still renders; shoppers see a “shop paused” screen until the plan is topped up.</p> : null}
       </section>
     </div>
+  );
+}
+
+/** Billing anomaly signal (carry-over #7): the daily cap and days far above the usual volume. */
+function BillingAlerts({ report }: { report: BillingAnomaliesResponse }): ReactNode {
+  const t = report.today;
+  return (
+    <section className="card space-y-3 bg-white/80" aria-labelledby="billing-alerts">
+      <h2 id="billing-alerts" className="font-display text-xl">
+        Unusual billing
+      </h2>
+      <p className="text-xs text-ink-mute">
+        Today {t.billedSessions.toLocaleString()} billed sessions (usual day: {t.trailingAverage.toFixed(1)}). We flag a day above {t.spikeThreshold.toLocaleString()} and stop billing at {report.dailyCap.toLocaleString()} a day.
+      </p>
+      {t.capReached || t.spike ? (
+        <p role="alert" className={`text-sm ${t.capReached ? 'text-bad' : 'text-warn'}`}>
+          {t.capReached ? 'Today’s cap is reached: further sessions today are not billed. Contact us if this is a real rush.' : 'Today is far above your usual volume. If you did not run a campaign, tell us: it can be automated traffic.'}
+        </p>
+      ) : null}
+      {report.anomalies.length === 0 ? (
+        <p className="text-sm text-ink-soft">Nothing unusual in this range.</p>
+      ) : (
+        <ul className="divide-y divide-ink/10 text-sm">
+          {report.anomalies.map((a) => (
+            <li key={`${a.day}-${a.kind}`} className="flex flex-wrap justify-between gap-2 py-2">
+              <span className="font-medium">
+                {a.day} · {a.kind === 'cap_reached' ? 'Daily cap reached' : 'Spike'}
+              </span>
+              <span className="tabular-nums text-ink-soft">
+                {a.kind === 'cap_reached' ? `${a.deniedSessions.toLocaleString()} sessions not billed (cap ${a.threshold.toLocaleString()})` : `${a.billedSessions.toLocaleString()} billed vs usual ${a.trailingAverage.toFixed(1)}`}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

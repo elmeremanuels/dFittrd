@@ -11,22 +11,39 @@
  * bills a session that (a) was minted for the standalone overlay (`surface: 'embed'`), (b) came from
  * a page on the shop's own storefront (its `pageOrigin` is in the embed's allowed origins), (c) is
  * for a product that still exists and is not archived, (d) is the device's first billed fit for
- * that product that UTC day (same rule as the deck path), and (e) stays under the per-shop daily
- * anomaly cap. Anything else is recorded on the try session but answers `billed: false`. Both routes
- * are rate-limited per client IP.
+ * that product that UTC day (same rule as the deck path), and (e) passes `billFitSession`: the
+ * device is paired with the shop, the intent token has not billed yet (D7) and the shop is under
+ * its per-plan daily cap (carry-over #7; the swipe path shares the helper). Anything else is
+ * recorded on the try session but answers `billed: false`. Both routes are rate-limited per client IP.
+ *
+ * Merchant views of the same data (carry-over #7, #18), merchant-authenticated:
+ *  - GET /v1/merchant/usage/anomalies: today's cap/spike flags and the recorded billing anomalies;
+ *  - GET /v1/merchant/analytics/fit-sizes: sizes recommended in standalone sessions, k floor on
+ *    distinct shoppers.
  */
 import { and, eq, gte } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { FitShownRequestSchema, FitShownResponseSchema, TryResolveParamsSchema, TryResolveResponseSchema, type PairingSource } from '@curtain/schema';
+import {
+  AnalyticsFitSizesResponseSchema,
+  BillingAnomaliesResponseSchema,
+  DateRangeQuerySchema,
+  FitShownRequestSchema,
+  FitShownResponseSchema,
+  TryResolveParamsSchema,
+  TryResolveResponseSchema,
+  type PairingSource,
+} from '@curtain/schema';
 import { requireDevice } from '../auth/device.js';
-import { pairings, trySessions, usageDaily, usageEvents } from '../db/schema.js';
+import { requireMerchant } from '../auth/merchant.js';
+import { pairings, trySessions, usageEvents } from '../db/schema.js';
 import { pseudonymFor } from '../lib/crypto.js';
 import { conflict, forbidden, gone, HttpError, notFound, unauthorized, unprocessable } from '../lib/errors.js';
 import { embedAllowedOrigins } from '../services/embed.js';
 import { byteLength, fieldNames, writeLedger } from '../services/ledger.js';
 import { asGarment, findProductById } from '../services/products.js';
 import { findShopById, isPaused, shopBranding } from '../services/shops.js';
-import { recordUsage } from '../services/usage.js';
+import { fitSizeAnalytics } from '../services/analytics.js';
+import { billFitSession, billingAnomalyReport } from '../services/usage.js';
 import { dayStart, utcDay } from '../lib/time.js';
 
 /** How long after the try link's 10-minute TTL the embed may still report the fit it showed. */
@@ -114,40 +131,29 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
           .from(usageEvents)
           .where(and(eq(usageEvents.deviceId, deviceId), eq(usageEvents.productId, product.id), eq(usageEvents.kind, 'fit_session'), gte(usageEvents.at, dayStart(day))))
           .limit(1);
-        if (sameDay.length > 0) return false;
-        const today = await db.query.usageDaily.findFirst({ where: and(eq(usageDaily.shopId, shop.id), eq(usageDaily.day, day)) });
-        if ((today?.fitSessions ?? 0) >= env.EMBED_BILLED_SESSIONS_PER_DAY) {
-          app.log.warn({ shopId: shop.id, day, cap: env.EMBED_BILLED_SESSIONS_PER_DAY }, 'embed billing anomaly cap reached; fit-shown not billed');
-          return false;
-        }
-        return true;
+        return sameDay.length === 0;
       };
 
       const t = now();
+      // Checked before the transaction: isBillable reads through `db`, and PGlite (tests, demo) has one connection.
       const billable = await isBillable(t);
-      if (!billable) {
-        // Recorded on the try session (first report wins), never billed.
-        if (!session.fitShownAt) {
-          await db
-            .update(trySessions)
-            .set({ fitShownAt: t, recommendedSize: req.body.recommendedSize, fitConfidence: req.body.confidence })
-            .where(eq(trySessions.id, session.id));
-        }
-        return { billed: false };
-      }
-
       return db.transaction(async (tx) => {
         // One billable session per intent token. The key is shared with the app's swipe path,
-        // so a session billed there (or by an earlier call) is never billed twice.
-        const billed = await recordUsage(tx, {
-          shopId: shop.id,
-          deviceId,
-          productId: session.productId,
-          kind: 'fit_session',
-          idempotencyKey: `intent:${session.intentToken}`,
-          at: t,
-        });
-        if (!billed) return { billed: false };
+        // so a session billed there (or by an earlier call) is never billed twice. The pairing
+        // rule and the per-plan daily cap live in billFitSession, shared with the swipe path.
+        const outcome = billable
+          ? await billFitSession(tx, env, shop, { deviceId, productId: session.productId, idempotencyKey: `intent:${session.intentToken}`, at: t }, req.log)
+          : 'not_billable';
+        if (outcome !== 'billed') {
+          // Recorded on the try session (first report wins), never billed.
+          if (!session.fitShownAt) {
+            await tx
+              .update(trySessions)
+              .set({ fitShownAt: t, recommendedSize: req.body.recommendedSize, fitConfidence: req.body.confidence })
+              .where(eq(trySessions.id, session.id));
+          }
+          return { billed: false };
+        }
         await tx
           .update(trySessions)
           .set({ billedAt: session.billedAt ?? t, fitShownAt: t, recommendedSize: req.body.recommendedSize, fitConfidence: req.body.confidence })
@@ -162,5 +168,18 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
         return { billed: true };
       });
     },
+  );
+
+  // ---- merchant views (merchant auth) -----------------------------------------------------------
+  app.get(
+    '/v1/merchant/usage/anomalies',
+    { schema: { querystring: DateRangeQuerySchema, response: { 200: BillingAnomaliesResponseSchema } }, preHandler: requireMerchant },
+    async (req) => billingAnomalyReport(db, env, req.shop!, req.query.from, req.query.to, now()),
+  );
+
+  app.get(
+    '/v1/merchant/analytics/fit-sizes',
+    { schema: { querystring: DateRangeQuerySchema, response: { 200: AnalyticsFitSizesResponseSchema } }, preHandler: requireMerchant },
+    async (req) => fitSizeAnalytics(db, req.shop!.id, req.query.from, req.query.to, env.K_ANON),
   );
 };

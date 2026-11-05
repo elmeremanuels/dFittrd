@@ -213,6 +213,7 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
     return {
       recommendedSize: first,
       closestSize: first,
+      ...(rows.length > 0 ? { closestIndex: 0 } : {}),
       score: null,
       confidence: 0,
       fits: false,
@@ -280,6 +281,7 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
   return {
     recommendedSize: recommended ? chosen.size : null,
     closestSize: chosen.size,
+    closestIndex: chosenIndex,
     score: chosen.score,
     confidence,
     fits: recommended && chosen.wearable,

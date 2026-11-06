@@ -149,6 +149,9 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   const collide = makeCollider(field, CLEARANCE_CM, chains, noCollide);
   // Settle the yoke onto the avatar before pinning it: a small size sits a few mm inside the neck
   // and shoulders, and a stretched edge between two pins never relaxes (the neckline tears).
+  // Known gap: on a body much wider at the shoulders than the garment, the particles exempt from
+  // collision stay inside and the loop's stretch concentrates next to them (33–53 % on the
+  // 104/90/112 body in S–L, from 124–287 % before). Letting them collide here was measured worse.
   settlePins(cloth, collide);
   return {
     size: placement.size,

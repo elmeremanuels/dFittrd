@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { clothParams, createCloth, meshEdges, stepCloth, strainQuantile, tethers } from './cloth';
+import { clothParams, createCloth, isSettled, meshEdges, settlePins, stepCloth, strainQuantile, tethers } from './cloth';
+import { pushOutOfEllipse } from './collide';
 
 /** An n×n grid in the XY plane (cm), top row at y = top. */
 function grid(n: number, spacing: number, top = 100): { positions: Float32Array; indices: Uint32Array } {
@@ -82,5 +83,49 @@ describe('cloth', () => {
     expect(silk.damping).toBeLessThan(linen.damping);
     expect(silk.clingAccel).toBeGreaterThan(linen.clingAccel);
     expect(clothParams({ ...COTTON, stretchPct: 30 }).stretchStiffness).toBeLessThan(1);
+  });
+});
+
+describe('early exit and pins', () => {
+  it('stops a sheet that has come to rest before the duration cap, and never before the minimum', () => {
+    const { positions, indices } = grid(6, 2);
+    const cloth = createCloth(positions, positions, indices, (i) => i < 6, () => false);
+    const p = clothParams(COTTON, 3);
+    let frames = 0;
+    while (!isSettled(cloth, p)) {
+      stepCloth(cloth, p, null, 1);
+      frames++;
+    }
+    expect(cloth.time).toBeGreaterThanOrEqual(p.minDurationS - 1e-9);
+    expect(cloth.time).toBeLessThan(3);
+    expect(cloth.calmFrames).toBeGreaterThanOrEqual(p.calmFrames);
+    expect(frames).toBe(Math.round(cloth.time / p.dt));
+  });
+
+  it('settles a stretched pair of pins back to its rest length before they are fixed', () => {
+    const { positions, indices } = grid(4, 2);
+    const start = Float32Array.from(positions);
+    start[3] = 4; // pin 1 pulled 2 cm away from pin 0 (rest 2 cm)
+    const cloth = createCloth(start, positions, indices, (i) => i < 2, () => false);
+    expect(settlePins(cloth, null, 60)).toBeLessThan(0.02);
+    expect(Array.from(cloth.prev)).toEqual(Array.from(cloth.pos));
+  });
+});
+
+describe('collision', () => {
+  it('pushes out exactly like the polar-radius formula, without trigonometry', () => {
+    const polar = (a: number, b: number, t: number) => (a * b) / Math.hypot(b * Math.cos(t), a * Math.sin(t));
+    for (let k = 0; k < 200; k++) {
+      const t = (k / 200) * 2 * Math.PI;
+      const r = 3 + (k % 7);
+      const [dx, dz] = [r * Math.cos(t), r * Math.sin(t)];
+      const got = pushOutOfEllipse(dx, dz, 10, 6, 0.5);
+      const re = polar(10.5, 6.5, t);
+      if (r >= re) expect(got).toBeNull();
+      else {
+        expect(Math.hypot(got![0], got![1])).toBeCloseTo(re, 9);
+        expect(Math.atan2(got![1], got![0])).toBeCloseTo(Math.atan2(dz, dx), 9);
+      }
+    }
   });
 });

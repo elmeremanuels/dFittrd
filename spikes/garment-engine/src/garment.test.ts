@@ -73,12 +73,16 @@ describe('product adapter', () => {
     const m = chartRow(chart, 'M');
     expect(m.rings).toEqual({ chest: 90 + 10, waist: 72 + 12, hip: 98 + 6 });
     expect(m.defaultEase).toEqual(['hip']);
+    // The chart's shoulder is a width (R1): the breadth shoulder_width with the product's shoulder ease.
+    expect(m.breadths).toEqual({ shoulder_width: 38 + 1.5 });
+    expect(m.defaultEaseBreadths).toEqual([]);
   });
 
   it('keeps a garment chart as is and maps bust → chest', () => {
     const chart = garmentChart(spikeProduct('monochrome-03'));
     expect(chart.type).toBe('garment');
     expect(chartRow(chart, 'm').rings).toEqual({ chest: 112 });
+    expect(chartRow(chart, 'm').breadths).toEqual({ shoulder_width: 50 });
   });
 
   it('rejects duplicate size labels', () => {

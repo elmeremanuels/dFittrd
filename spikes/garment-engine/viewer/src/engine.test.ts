@@ -6,8 +6,9 @@ import { measureRing } from '../../src/anchoring';
 import { bodyField, buildAvatar, makeCollider, mannequinMeasurements } from './body';
 import { meshFromGlb, type SpikeBundle } from './bundle';
 import { strainQuantile } from './cloth';
-import { defaultTrio, heatFor, openSession, prepareFit, relax, viewerMaterial } from './engine';
-import { fitForBody } from './fitting';
+import { advance, jobCollider, type DrapeJob } from './drapeJob';
+import { defaultTrio, drapeJobOf, heatFor, necklineStrain, openSession, prepareFit, relax, viewerMaterial } from './engine';
+import { anchorLabels, fitForBody, frontOutline } from './fitting';
 
 const m = buildMannequin(bodyShape(BASE_SHAPE_ID));
 const canonical = buildMannequinMesh(m);
@@ -85,7 +86,9 @@ describe('fitting on the device', () => {
       const pos = relax(f);
       const ms = performance.now() - t0;
       expect(ms).toBeLessThan(10_000);
-      expect(f.cloth.time).toBeCloseTo(1.5, 6);
+      // Up to the 1.5 s cap, or earlier once calm (early exit), never less than the minimum.
+      expect(f.cloth.time).toBeLessThanOrEqual(1.5 + 1e-6);
+      expect(f.cloth.time).toBeGreaterThanOrEqual(f.params.minDurationS - 1e-6);
       expect(pos.every(Number.isFinite)).toBe(true);
       // PBD with 6 iterations stretches a little under gravity; the worst edges sit at the armpit,
       // where the v0 mannequin's arm overlaps the torso.
@@ -136,6 +139,76 @@ describe('fitting on the device', () => {
     expect(red('S')).toBeGreaterThan(red('M'));
     expect(red('M')).toBeGreaterThan(red('L'));
   });
+});
+
+describe('neckline on small sizes (regression: 21–33 % edge strain before the yoke was settled)', () => {
+  const tee = spikeBundle('monochrome-03');
+  const teeSession = openSession(m, tee);
+  const teeFit = fitForBody(teeSession.payload, meas);
+  it.each([
+    ['aalter-studio-2', 'XS'],
+    ['aalter-studio-2', 'S'],
+    ['monochrome-03', 'XS'],
+    ['monochrome-03', 'S'],
+    ['monochrome-03', 'M'],
+  ] as const)('%s %s keeps every neckline edge within 12 % of its rest length, before and after the drape', (id, size) => {
+    const [sess, bundle, result] = id === 'aalter-studio-2' ? [session, dress, fit] : [teeSession, tee, teeFit];
+    const f = prepareFit(sess, avatar, field, result, size, viewerMaterial('product', bundle.material));
+    expect(necklineStrain(f, m)).toBeLessThan(0.12);
+    relax(f);
+    expect(necklineStrain(f, m)).toBeLessThan(0.12);
+  }, 30_000);
+});
+
+describe('drape off the main thread', () => {
+  it('a worker job (structured clone, time slices) gives exactly the drape of relax()', () => {
+    const a = prepareFit(session, avatar, field, fit, 'S', viewerMaterial('silk', dress.material));
+    const b = prepareFit(session, avatar, field, fit, 'S', viewerMaterial('silk', dress.material));
+    const job = structuredClone({ ...drapeJobOf(b), id: 1 }) as DrapeJob;
+    const collide = jobCollider(job);
+    let slices = 0;
+    while (!advance(job, collide, 5)) slices++;
+    expect(slices).toBeGreaterThan(1);
+    expect(Array.from(job.cloth.pos)).toEqual(Array.from(relax(a)));
+    expect(job.cloth.time).toBeCloseTo(a.cloth.time, 9);
+  }, 30_000);
+});
+
+describe('size readability without the fit map', () => {
+  it('labels each anchor with the graded value and the fit engine gap, an estimate marked', () => {
+    const gaps = anchorGaps(fit, 'S');
+    const labels = anchorLabels(dress.grading, 'S', gaps, m.morphHeights);
+    expect(labels.map((l) => l.anchor)).toEqual(['shoulder_width', 'chest', 'waist', 'hip']);
+    const entry = dress.grading.sizes.find((x) => x.size === 'S')!;
+    for (const l of labels) {
+      expect(l.valueCm).toBe(entry.targets[l.anchor]);
+      expect(l.gapCm).toBe(gaps?.gaps[l.anchor as keyof NonNullable<typeof gaps>['gaps']]);
+    }
+    const chest = labels.find((l) => l.anchor === 'chest')!;
+    expect(chest.estimate).toBe(false);
+    expect(chest.text).toMatch(/^chest 96(\.0)? · [+−±]\d/);
+    expect(labels.find((l) => l.anchor === 'shoulder_width')!.height).toBe(m.morphHeights.shoulder);
+    // The tee's chart has no waist: its waist value is an estimate.
+    const tee = spikeBundle('monochrome-03');
+    expect(anchorLabels(tee.grading, 'M', null, m.morphHeights).find((l) => l.anchor === 'waist')!.text).toMatch(/^waist ≈\d/);
+  });
+
+  it('outlines S inside L at the chest without exaggeration: the width ratio follows the girths', () => {
+    const outline = (size: string) => {
+      const f = prepareFit(session, avatar, field, fit, size, viewerMaterial('product', dress.material));
+      return { pts: frontOutline(relax(f), session.chains), girth: girth(f.cloth.pos, f.indices) };
+    };
+    const widthAt = (pts: [number, number][], y: number) => {
+      const near = pts.filter((p) => Math.abs(p[1] - y) < 0.6);
+      return Math.max(...near.map((p) => p[0])) - Math.min(...near.map((p) => p[0]));
+    };
+    const S = outline('S');
+    const L = outline('L');
+    expect(S.pts[0]).toEqual(S.pts[S.pts.length - 1]); // closed
+    const y = m.morphHeights.chest;
+    expect(widthAt(S.pts, y)).toBeLessThan(widthAt(L.pts, y));
+    expect(widthAt(L.pts, y) / widthAt(S.pts, y)).toBeLessThan((L.girth / S.girth) * 1.05);
+  }, 30_000);
 });
 
 describe('avatar', () => {

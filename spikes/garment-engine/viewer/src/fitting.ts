@@ -265,10 +265,10 @@ export function frontAt(positions: ArrayLike<number>, chains: Uint8Array, y: num
 
 /**
  * Front silhouette of the garment body (sleeves left out): per `binCm` of height the outermost x
- * on each side, as a closed polyline in the frontal plane (x, y): down the right side, across the
+ * on each side (bins wider than the mesh's row spacing, so every bin holds a whole row), as a closed polyline in the frontal plane (x, y): down the right side, across the
  * hem, up the left side. Outlines of several sizes overlaid show the size difference as it is.
  */
-export function frontOutline(positions: ArrayLike<number>, chains: Uint8Array, binCm = 1): [number, number][] {
+export function frontOutline(positions: ArrayLike<number>, chains: Uint8Array, binCm = 2.5): [number, number][] {
   let lo = Infinity;
   let hi = -Infinity;
   for (let i = 0; i < chains.length; i++) {

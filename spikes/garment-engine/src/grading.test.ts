@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { isAnchorBreadth } from '@curtain/anchors';
 import { measureGarment, ringGirths } from './anchoring';
 import { buildBundle } from './bundle';
-import { assignChains } from './garment';
+import { assignChains, shoulderSeams } from './garment';
 import { STANDARD_INCREMENTS_CM, applyGrading, gradeGarment } from './grading';
 import { SPIKE_PRODUCT_IDS, garmentChart, spikeProduct } from './product';
 
@@ -33,11 +34,44 @@ describe.each(SPIKE_PRODUCT_IDS)('stage 6 — grading of %s', (id) => {
 
   it('uses standard increments (logged as estimates) where the chart has no column', () => {
     for (const [anchor, source] of Object.entries(grading.estimates)) {
-      expect(['increment', 'hip-delta']).toContain(source);
+      expect(['increment', 'hip-delta', 'breadth']).toContain(source);
       const L = grading.sizes.find((s) => s.step === 1)!;
       const key = anchor as keyof typeof L.targets;
       if (source === 'increment') expect(L.targets[key]! - grading.base[key]!).toBeCloseTo(STANDARD_INCREMENTS_CM[key], 6);
     }
+  });
+
+  it('carries the chart shoulder width as the breadth shoulder_width, never as the shoulder ring (R1)', () => {
+    const W = baseRow.breadths.shoulder_width!;
+    expect(W).toBe(id === 'aalter-studio-2' ? 36 + 2 + 1.5 : 50); // body chart M + product ease; garment chart as is
+    expect(grading.base.shoulder_width).toBe(W);
+    expect(grading.base.shoulder).not.toBe(W); // the ring stays the measured girth (~105 cm)
+    expect(grading.morph.breadths).toEqual({ shoulder_width: { ring: 'shoulder', height: grading.morph.heights.shoulder } });
+    for (const size of grading.sizes) {
+      const row = chart.rows.find((r) => r.size === size.size)!;
+      expect(size.sources.shoulder_width).toBe('chart');
+      expect(size.targets.shoulder_width! - W).toBeCloseTo(row.breadths.shoulder_width! - W, 6);
+      // No shoulder girth column: the ring grades with the width (an estimate, logged).
+      expect(size.sources.shoulder).toBe('breadth');
+      expect(size.targets.shoulder! / grading.base.shoulder!).toBeCloseTo(size.targets.shoulder_width! / W, 3);
+    }
+    expect(grading.estimates.shoulder).toBe('breadth');
+  });
+
+  it('places the shoulder seams of every size at ±shoulder_width/2: the shoulder line scales with the width', () => {
+    const shoulderRing = m.rings.find((r) => r.id === 'shoulder')!;
+    const halfWidth = (positions: ArrayLike<number>): number => {
+      let w = 0;
+      for (let i = 0; i < chains.length; i++) if (chains[i] === 0 && Math.abs(positions[3 * i + 1]! - shoulderRing.centre[1]) < 0.01) w = Math.max(w, Math.abs(positions[3 * i]!));
+      return w;
+    };
+    const base = halfWidth(baseMesh.positions);
+    expect(base).toBeGreaterThan(0);
+    for (const s of grading.sizes) {
+      const graded = halfWidth(applyGrading(m, baseMesh, chains, grading, s.size).positions);
+      expect(graded / base, s.size).toBeCloseTo(s.targets.shoulder_width! / grading.base.shoulder_width!, 3);
+    }
+    expect(shoulderSeams(m, 40)).toEqual([[20, shoulderRing.centre[1], 0], [-20, shoulderRing.centre[1], 0]]);
   });
 
   it('stores only per-anchor targets per size (a few dozen numbers)', () => {
@@ -50,6 +84,7 @@ describe.each(SPIKE_PRODUCT_IDS)('stage 6 — grading of %s', (id) => {
       const meas = measureGarment(m, applyGrading(m, baseMesh, chains, grading, s.size), category, chains);
       const girths = ringGirths(meas);
       for (const [anchor, target] of Object.entries(s.targets)) {
+        if (isAnchorBreadth(anchor)) continue; // no seams on a mesh: checked through the shoulder line above
         const key = anchor as keyof typeof girths;
         const got = girths[key] ?? meas.lengths[anchor as keyof typeof meas.lengths]?.lengthCm;
         expect(got, `${s.size} ${anchor}`).toBeDefined();

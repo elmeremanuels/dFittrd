@@ -16,6 +16,8 @@ export interface Strings {
   openApp: string;
   /** Toast fallback when the size could not be selected on the page. */
   yourSize: (size: string) => string;
+  /** Title of the size peek iframe. */
+  peek: string;
   /** Must stay identical to ESTIMATE_DISCLAIMER in @curtain/schema (asserted in tests). */
   disclaimer: string;
 }
@@ -38,6 +40,7 @@ const en: Strings = {
   loading: 'Loading…',
   openApp: 'Open in the Curtain app',
   yourSize: (z) => `Your size: ${z}`,
+  peek: 'Your size',
   disclaimer: ESTIMATE_DISCLAIMER,
 };
 
@@ -55,6 +58,7 @@ const nl: Strings = {
   loading: 'Laden…',
   openApp: 'Open in de Curtain-app',
   yourSize: (z) => `Jouw maat: ${z}`,
+  peek: 'Jouw maat',
   disclaimer: 'Schatting — berekend uit je maten en de kledinggegevens van de winkel, niet uit een foto van jou.',
 };
 

@@ -64,6 +64,12 @@ export interface EmbedStore {
   /** Re-reads the remembered device (another embed tab of this shop may have rotated it, AUTH-1). */
   reloadDevice(): Promise<DeviceCredentials>;
   loadProfile(shopId: string): Promise<RememberedProfile | null>;
+  /**
+   * Is any profile remembered in this browser partition? A local read only, no network: the size
+   * peek (`/embed/peek`) asks this before it contacts the api at all, so a shopper who never
+   * entered measurements on this shop causes no request beyond the peek page itself.
+   */
+  hasProfiles(): Promise<boolean>;
   saveProfile(p: RememberedProfile): Promise<void>;
   /** The units the shopper chose on this shop (null: never chose, follow the locale). */
   loadUnits(): Promise<Units | null>;
@@ -183,6 +189,12 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
       if (!v || v.shopId !== shopId || !v.profile || !v.about) return null;
       profiles.set(shopId, v);
       return v;
+    },
+    async hasProfiles() {
+      if (profiles.size > 0) return true;
+      if (!remember) return false;
+      const n = await safe((d) => d.kv.where('key').startsWith('profile:').count());
+      return (n ?? 0) > 0;
     },
     async saveProfile(p) {
       profiles.set(p.shopId, p);

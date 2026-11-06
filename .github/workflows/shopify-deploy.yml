@@ -1,0 +1,197 @@
+name: shopify-deploy
+
+# Deploys the Shopify app with the Shopify CLI, non-interactively (docs/DEPLOY.md, "Shopify app deploy"):
+# renders packages/shopify-app/shopify.app.toml for https://api.<DOMAIN>, builds the "Try it on"
+# theme app extension with the bundled SDK, and creates a new app version. Releasing the version to
+# merchants is optional.
+#
+# Triggers (workflow_dispatch only appears once this file is on the default branch):
+#   - push to `release` that changes the app, the SDK, the schema, this file or deploy.txt: deploy and release;
+#   - push to `claude/**` that adds or changes .github/shopify/deploy.txt: deploy, release only with
+#     `release = true` in that file (same pattern as .github/modal/run.txt);
+#   - Actions → shopify-deploy → Run workflow, with a `release` checkbox.
+# packages/shopify-app/scripts/deploy-plan.mjs makes that decision (unit-tested); a claude/** push
+# that did not touch deploy.txt ends green at the plan job.
+#
+# Needs repository secrets SHOPIFY_CLI_PARTNERS_TOKEN (Partner Dashboard → Settings → CLI token)
+# and SHOPIFY_API_KEY (the app's client id), and repository variable DOMAIN. The deploy job runs
+# in the `shopify` environment, so the token can be moved to an environment secret behind a
+# required reviewer without changing this file.
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Release the new version to merchants (off creates the version only; release it later in the Partner Dashboard)
+        type: boolean
+        default: false
+      message:
+        description: Optional note for the version (Partner Dashboard only, one line)
+        type: string
+        default: ''
+  push:
+    branches: [release, 'claude/**']
+    paths:
+      - .github/shopify/deploy.txt
+      - .github/workflows/shopify-deploy.yml
+      - packages/shopify-app/**
+      - packages/sdk/**
+      - packages/schema/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shopify-deploy
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '10.28.0'
+  # Exact pin. 4.9.5 is the last 4.x (27 Oct 2026); 5.0 is a new major, adopt it deliberately.
+  SHOPIFY_CLI_VERSION: '4.9.5'
+
+jobs:
+  plan:
+    name: plan · deploy or not
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      deploy: ${{ steps.plan.outputs.deploy }}
+      release: ${{ steps.plan.outputs.release }}
+      message: ${{ steps.plan.outputs.message }}
+      version: ${{ steps.plan.outputs.version }}
+      reason: ${{ steps.plan.outputs.reason }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          sparse-checkout: |
+            .github/shopify
+            packages/shopify-app/scripts
+          sparse-checkout-cone-mode: true
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - id: plan
+        env:
+          INPUT_RELEASE: ${{ inputs.release }}
+          INPUT_MESSAGE: ${{ inputs.message }}
+        run: node packages/shopify-app/scripts/deploy-plan.mjs
+      - name: summary
+        if: always()
+        env:
+          DEPLOY: ${{ steps.plan.outputs.deploy }}
+          RELEASE: ${{ steps.plan.outputs.release }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          REASON: ${{ steps.plan.outputs.reason }}
+        run: |
+          {
+            if [ "$DEPLOY" = true ]; then
+              echo "### Shopify deploy planned: version \`$VERSION\`, release: $RELEASE"
+            else
+              echo "### No Shopify deploy"
+            fi
+            echo "- $REASON"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: deploy · shopify app version
+    needs: plan
+    if: needs.plan.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: shopify
+    env:
+      DOMAIN: ${{ vars.DOMAIN }}
+      SHOPIFY_APP_HANDLE: ${{ vars.SHOPIFY_APP_HANDLE || 'curtain' }}
+      RELEASE: ${{ needs.plan.outputs.release }}
+      VERSION: ${{ needs.plan.outputs.version }}
+      MESSAGE: ${{ needs.plan.outputs.message }}
+    steps:
+      - name: guard · secrets and variables
+        env:
+          HAS_PARTNERS_TOKEN: ${{ secrets.SHOPIFY_CLI_PARTNERS_TOKEN != '' }}
+          HAS_API_KEY: ${{ secrets.SHOPIFY_API_KEY != '' }}
+        run: |
+          missing=()
+          [ "$HAS_PARTNERS_TOKEN" = true ] || missing+=("secret SHOPIFY_CLI_PARTNERS_TOKEN (Partner Dashboard → Settings → CLI token)")
+          [ "$HAS_API_KEY" = true ] || missing+=("secret SHOPIFY_API_KEY (the app's client id: Partner Dashboard → Apps → the app → Client credentials)")
+          [ -n "$DOMAIN" ] || missing+=("variable DOMAIN (e.g. curtain.fit; the api must answer on https://api.<DOMAIN>)")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "Missing (Settings → Secrets and variables → Actions, or the shopify environment):"
+            printf '  - %s\n' "${missing[@]}"
+            {
+              echo "### Shopify deploy blocked: missing configuration"
+              printf -- '- %s\n' "${missing[@]}"
+              echo
+              echo "See docs/DEPLOY.md, \"Shopify app deploy\"."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if ! [[ "$DOMAIN" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]]; then
+            echo "DOMAIN must be a bare lowercase domain like curtain.fit (no scheme, no subdomain prefix)"; exit 1
+          fi
+          echo "secrets and variables are set"
+
+      - uses: actions/checkout@v4.2.2
+      - uses: pnpm/action-setup@v4.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: build the app package, the SDK it bundles, and copy sdk.v1.js into the extension
+        run: pnpm --filter '@curtain/shopify-app...' build
+      - name: test the app package (config rendering dry run included)
+        run: pnpm --filter @curtain/shopify-app test
+      - name: check the extension assets and scan them for secrets (D3)
+        run: |
+          sdk=packages/shopify-app/extensions/try-button/assets/sdk.v1.js
+          [ -s "$sdk" ] || { echo "$sdk is missing or empty"; exit 1; }
+          echo "sdk.v1.js: $(wc -c < "$sdk") bytes, $(gzip -9c "$sdk" | wc -c) bytes gzip"
+          node scripts/check-bundle-secrets.mjs
+
+      - name: render shopify.app.prod.toml for https://api.${{ vars.DOMAIN }}
+        working-directory: packages/shopify-app
+        env:
+          SHOPIFY_API_KEY: ${{ secrets.SHOPIFY_API_KEY }}
+        run: |
+          pnpm configure prod --dry-run > /dev/null
+          pnpm configure prod
+
+      - name: install the Shopify CLI
+        run: |
+          npm install --global --no-audit --no-fund "@shopify/cli@${SHOPIFY_CLI_VERSION}"
+          shopify version
+
+      - name: shopify app deploy
+        id: deploy
+        working-directory: packages/shopify-app
+        env:
+          SHOPIFY_CLI_PARTNERS_TOKEN: ${{ secrets.SHOPIFY_CLI_PARTNERS_TOKEN }}
+          SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+          CI: 'true'
+        run: |
+          if [ "$RELEASE" = true ]; then mode=--allow-updates; else mode=--no-release; fi
+          # --allow-updates releases and accepts added or changed extensions and config; removals still
+          # need a person (--allow-deletes is deliberately not passed).
+          shopify app deploy --config prod --no-color "$mode" \
+            --version "$VERSION" --message "$MESSAGE" --source-control-url "$SOURCE_URL"
+
+      - name: summary
+        if: always()
+        run: |
+          {
+            echo "### Shopify deploy: ${{ job.status }}"
+            echo "- version: \`$VERSION\` ($( [ "$RELEASE" = true ] && echo released || echo 'not released: Partner Dashboard → the app → Versions → Release' ))"
+            echo "- application_url: https://api.$DOMAIN/shopify/admin"
+            echo "- webhooks: https://api.$DOMAIN/shopify/webhooks"
+            echo "- Shopify CLI $SHOPIFY_CLI_VERSION"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: remove the rendered config
+        if: always()
+        run: rm -f packages/shopify-app/shopify.app.prod.toml

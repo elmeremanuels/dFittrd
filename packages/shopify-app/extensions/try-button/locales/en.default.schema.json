@@ -27,6 +27,10 @@
       "show_hint": {
         "label": "Show the privacy hint under the button"
       },
+      "show_size": {
+        "label": "Show the shopper's size on product pages",
+        "info": "A shopper who found their size here before sees it next to the button, with a small drawing of their figure in that size, without clicking. Only the shopper sees it: your store cannot read it."
+      },
       "unstyled": {
         "label": "Use my theme's button styling",
         "info": "Skips Curtain's coral button style so the theme's own styles apply."

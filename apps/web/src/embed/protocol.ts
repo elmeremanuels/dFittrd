@@ -24,7 +24,12 @@ export type OutboundMessage =
   | { type: 'curtain:ready' }
   | { type: 'curtain:resize'; height: number }
   | { type: 'curtain:size-selected'; productExternalId: string; size: string }
-  | { type: 'curtain:close' };
+  | { type: 'curtain:close' }
+  // The size peek (`/embed/peek`, a small iframe next to the button). Neither message carries a
+  // size, a measurement or anything else about the shopper: only the frame height, and a request
+  // to open the full overlay after the shopper pressed the peek's own button (D3).
+  | { type: 'curtain:peek-size'; height: number }
+  | { type: 'curtain:peek-open' };
 
 export interface ParentContext {
   locale: string | null;

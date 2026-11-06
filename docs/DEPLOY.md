@@ -219,10 +219,10 @@ docker compose -p curtain start api
 
 With `https://api.<domain>/healthz` green:
 
-1. Render the app config for production and push it with the Shopify CLI, using
-   `PUBLIC_API_URL=https://api.<domain>` and `PUBLIC_APP_URL=https://app.<domain>`
-   (`packages/shopify-app/README.md`, "Dev store install flow", with `pnpm configure` for a `prod`
-   config). `shopify app deploy` publishes the theme block and the webhooks.
+1. Deploy the Shopify app with the `shopify-deploy` workflow ("Shopify app deploy" below). It
+   renders the app config for `https://api.<domain>` and runs `shopify app deploy`, which publishes
+   the theme block, the webhooks and the GDPR topics. By hand: `packages/shopify-app/README.md`,
+   "Dev store install flow", with `DOMAIN=<domain> pnpm configure prod`.
 2. Partner Dashboard → the app → Distribution → **Custom distribution** → the pilot shop's
    `*.myshopify.com` domain → send the install link (README, "Pilot: custom distribution").
 3. After install: the theme editor deep link adds the "Try it on" block; check one product page.
@@ -239,3 +239,143 @@ workflow, shellcheck passes every script.
 
 Not yet run: the workflow on GitHub itself, the ssh/rsync leg against a real VPS, Let's Encrypt
 issuance, the bootstrap script on a fresh Ubuntu/Debian, and the rclone offsite copy.
+
+## Shopify app deploy
+
+`.github/workflows/shopify-deploy.yml` runs `shopify app deploy` without a person at the keyboard. It
+renders `packages/shopify-app/shopify.app.toml` into `shopify.app.prod.toml` for your domain, builds
+the "Try it on" theme app extension with the bundled SDK, and creates a new **app version**. A version
+is the app's config (URLs, scopes, webhooks) plus the extension. Merchants only get it once it is
+**released**.
+
+Run the VPS deploy first: the app's admin page and webhooks live on `https://api.<domain>`, so that
+address must answer before Shopify sends anything to it.
+
+### Set once: Partner Dashboard
+
+1. **Partner account.** Sign up at partners.shopify.com and create the organisation that will own
+   the app.
+2. **Create the app manually.** Partner Dashboard → **Apps** → **Create app** → **Create app
+   manually**. Name it `Curtain: Fit & Size Finder` (it must match `name` in `shopify.app.toml`; see
+   checklist E1 for the trademark question). Do not use `shopify app init`: the repository already
+   has the config.
+3. **Client credentials.** The app → **Client credentials** (in newer dashboards: the app →
+   Settings).
+   - **Client ID** (32 hex characters). Goes into the GitHub secret `SHOPIFY_API_KEY` and into
+     `SHOPIFY_API_KEY` in `/etc/curtain/curtain.env` on the server. It is not a secret, but it stays
+     out of the repository (the toml is a template for that reason).
+   - **Client secret**. Goes **only** into `SHOPIFY_API_SECRET` in `/etc/curtain/curtain.env`. It
+     never goes into GitHub: the api uses it for webhook HMACs, session tokens and token exchange,
+     and the CLI does not need it.
+4. **CLI token.** Partner Dashboard → **Settings** → **CLI token** → **Manage tokens** → generate
+   one, with the shortest expiry you are willing to renew. Store it as the GitHub secret
+   `SHOPIFY_CLI_PARTNERS_TOKEN`. The token can deploy **every** app in the Partner organisation, so
+   treat it like the deploy key (see "Harden" below). Renew it before it expires; a deploy with an
+   expired token fails at the deploy step with an authentication error.
+5. **Development store.** Partner Dashboard → **Stores** → **Add store** → **Create development
+   store** (for testing apps). Use it for the dry run before the pilot. Charges on development stores
+   are always test charges (D17, `shop.plan.partnerDevelopment`).
+6. **Distribution for the pilot (bohohippychic.com.au).** The app → **Distribution** → **Custom
+   distribution**.
+   - Enter the shop's **`*.myshopify.com` domain**, not `bohohippychic.com.au`. The merchant finds it
+     in their Shopify admin under Settings → Domains, or in the admin address
+     (`admin.shopify.com/store/<handle>` means `<handle>.myshopify.com`).
+   - **Generate link** and send the install link to the merchant. The merchant opens it while logged
+     in to their store admin and approves the scopes (products only, D7).
+   - The distribution method cannot be changed once chosen. This custom app serves the pilot shop
+     (and other stores in the same Plus organisation, if any). The public App Store listing will be
+     a separate app with its own client id; point `SHOPIFY_API_KEY` at that app when the time comes.
+   - Custom apps are not reviewed by Shopify and the expiring-token deadline does not apply to them
+     (checklist, Summary). They can still bill through `appSubscriptionCreate` (D17).
+
+### Set once: GitHub
+
+| Kind | Name | Value |
+|---|---|---|
+| repository secret | `SHOPIFY_CLI_PARTNERS_TOKEN` | the CLI token (step 4) |
+| repository secret | `SHOPIFY_API_KEY` | the client id (step 3) |
+| repository variable | `DOMAIN` | the same bare domain the VPS deploy uses, e.g. `curtain.fit` |
+| repository variable | `SHOPIFY_APP_HANDLE` | optional, default `curtain`; the app's handle (its admin URL) |
+
+The deploy job runs in a GitHub environment called `shopify`. GitHub creates it on the first run,
+with no rules, so the repository secrets above work as they are.
+
+**Harden (recommended before the pilot goes live).** A repository secret can be read by a workflow on
+any branch. To put the CLI token behind your approval, as §5 above does for the VPS key:
+
+1. Settings → Environments → `shopify` → **Required reviewers**: add yourself.
+2. Add `SHOPIFY_CLI_PARTNERS_TOKEN` (and `SHOPIFY_API_KEY`) as **environment secrets** there, then
+   delete the repository secrets.
+3. Optional: **Deployment branches** → `release` and `main` only. This also turns off the
+   `claude/**` trigger below (those runs would stop at the environment), so leave it open while
+   agents still deploy from work branches.
+
+### Run it
+
+The workflow only appears under Actions → **Run workflow** once it is on the default branch. Until
+then, and for work branches, there are two triggers:
+
+- **Push to `release`.** Deploys and **releases** when the push changes `packages/shopify-app`,
+  `packages/sdk`, `packages/schema`, the workflow or `.github/shopify/deploy.txt`. A push that
+  changes none of these does not create a version.
+- **Change `.github/shopify/deploy.txt` on a `claude/**` branch** (the same pattern as
+  `.github/modal/run.txt`). Creates a version and does **not** release it, unless the file says
+  `release = true`. Any change to the file triggers a run, a comment line included. Other pushes to
+  `claude/**` branches end green at the plan job.
+- **Run workflow** (once on the default branch): pick the branch, tick **release** to release.
+
+`deploy.txt` holds optional `key = value` lines; `#` starts a comment:
+
+```
+# pilot block, second try
+release = false
+message = pilot: peek on product pages
+version = pilot-2
+```
+
+`release` (true or false) overrides the branch default; `message` is a note shown only in the Partner
+Dashboard; `version` names the version (default `git-<sha12>-r<run>-<attempt>`, unique per run). An
+unknown key or a bad value stops the run at the plan job. The dispatch inputs override the file.
+
+What the run does:
+
+1. **plan** (`packages/shopify-app/scripts/deploy-plan.mjs`, unit-tested) decides whether to deploy
+   and whether to release, and writes it to the run summary.
+2. **guard** (first step of the deploy job) lists every missing secret and variable at once and
+   checks that `DOMAIN` is a bare domain. It sees only whether a secret is set, not its value.
+3. Installs, builds `@curtain/shopify-app` and what it imports (the SDK included), copies
+   `sdk.v1.js` into the extension, runs the package tests (which include a dry run of the config
+   rendering), checks the SDK file is there and runs the bundle secret scan (D3).
+4. `pnpm configure prod` with `DOMAIN` and the client id renders `shopify.app.prod.toml`:
+   `application_url` = `https://api.<DOMAIN>/shopify/admin`, redirect URL
+   `https://api.<DOMAIN>/shopify/auth/callback`, every webhook and GDPR topic to
+   `https://api.<DOMAIN>/shopify/webhooks`. It validates the result against the api's topic list,
+   scopes and managed install before anything is sent.
+5. Installs the Shopify CLI at the pinned version (`SHOPIFY_CLI_VERSION`, `4.9.5`, the last 4.x;
+   5.0 is a new major and should be adopted on purpose) and runs
+   `shopify app deploy --config prod` with `--allow-updates` (release) or `--no-release` (version
+   only). `--allow-deletes` is never passed: removing an extension or a webhook needs a person.
+6. Deletes the rendered config.
+
+To release a version that was not released: Partner Dashboard → the app → **Versions** → the version
+→ **Release**. To go back, release the previous version the same way.
+
+To check the rendering locally, without writing anything:
+
+```sh
+pnpm --filter @curtain/shopify-app build
+SHOPIFY_API_KEY=<client id> DOMAIN=<domain> pnpm --filter @curtain/shopify-app configure prod --dry-run
+```
+
+### After the first released version
+
+1. In the Partner Dashboard, check the app's URLs: the app URL is `https://api.<domain>/shopify/admin`
+   (`include_config_on_deploy = true` pushes it from the toml).
+2. Install on the development store (Distribution → the install link, or Test your app), open the app
+   in the admin once (this runs the token exchange), add the "Try it on" block on a product page
+   with the onboarding deep link, and check one product.
+3. Then send the custom distribution link to the pilot shop.
+
+Not yet run: the workflow on GitHub, and the CLI against a real Partner organisation. The config
+rendering, the plan logic and the workflow's references are covered by
+`packages/shopify-app/src/deployConfig.test.ts`.

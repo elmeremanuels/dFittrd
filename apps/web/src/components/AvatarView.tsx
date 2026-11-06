@@ -2,7 +2,7 @@ import { motion, useReducedMotion } from 'motion/react';
 import { useId, useMemo, type ReactNode } from 'react';
 import type { FitResult } from '@curtain/fit-engine';
 import { fitGapsForRender } from '@curtain/fit-engine';
-import type { GarmentPayload, UserBody } from '@curtain/schema';
+import { ESTIMATE_DISCLAIMER, type GarmentPayload, type UserBody } from '@curtain/schema';
 import { adjustColor, bodyGeometry, bodyPath, fabricLook, garmentGeometry, isHex, levelY, VIEW_H, VIEW_W, HEAD_TOP_Y } from '@/render/body';
 import { EstimateBadge } from './EstimateBadge';
 
@@ -26,6 +26,12 @@ export interface AvatarViewProps {
   media?: AvatarMedia;
   /** Label of the body chip (defaults to the app's wording). */
   bodyLabel?: string;
+  /**
+   * Thumbnail size (the size peek next to the shop's button): no padding, mirror backdrop or drop
+   * shadow, and the estimate badge alone, shortened to "Estimate" (its title keeps the full
+   * disclaimer). The badge stays: every render is labelled an estimate (AGENTS.md rule 3).
+   */
+  compact?: boolean;
 }
 
 const NO_MEDIA: AvatarMedia = { faceUrl: null, baseFrame: null };
@@ -38,7 +44,7 @@ const NO_MEDIA: AvatarMedia = { faceUrl: null, baseFrame: null };
  * engine's per-point slack, hem from lengthCm, look from fabric) → face tile at the head. Always
  * carries the estimate badge.
  */
-export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel }: AvatarViewProps): ReactNode {
+export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false }: AvatarViewProps): ReactNode {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const reduce = useReducedMotion();
 
@@ -64,12 +70,12 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
   const onWhom = media.baseFrame ? 'over your capture' : hasBody ? 'on a body drawn from your measurements' : 'on a reference body';
 
   return (
-    <div className="relative flex h-full w-full items-center justify-center p-3" data-testid="mirror">
-      <div className="absolute inset-3 rounded-[2.2rem] border border-white/40 bg-gradient-to-br from-white/35 to-white/5 shadow-inner" aria-hidden />
+    <div className={`relative flex h-full w-full items-center justify-center ${compact ? 'p-0' : 'p-3'}`} data-testid="mirror">
+      {compact ? null : <div className="absolute inset-3 rounded-[2.2rem] border border-white/40 bg-gradient-to-br from-white/35 to-white/5 shadow-inner" aria-hidden />}
       <svg
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         preserveAspectRatio="xMidYMid meet"
-        className="relative h-full w-auto max-w-full drop-shadow-[0_20px_40px_rgba(26,22,18,0.18)]"
+        className={`relative h-full w-auto max-w-full ${compact ? '' : 'drop-shadow-[0_20px_40px_rgba(26,22,18,0.18)]'}`}
         role="img"
         aria-label={garment ? `Estimated look of ${garment.name}${size ? ` in size ${size}` : ''} ${onWhom} — not measured` : hasBody ? 'Your body outline (estimate)' : 'Reference body outline'}
       >
@@ -178,7 +184,12 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
         <ellipse cx={VIEW_W / 2} cy={levelY('sole') + 6} rx={body.hipHalf + 18} ry={5} fill="rgba(26,22,18,0.12)" />
       </svg>
 
-      {!bare ? (
+      {!bare && compact ? (
+        <span className="chip pointer-events-none absolute bottom-0.5 left-1/2 -translate-x-1/2 bg-ink/85 px-1.5 py-0 text-[9px] whitespace-nowrap text-cream shadow" title={ESTIMATE_DISCLAIMER} data-testid="estimate-badge">
+          Estimate
+        </span>
+      ) : null}
+      {!bare && !compact ? (
         <div className="pointer-events-none absolute top-3 left-3 flex max-w-[calc(100%-1.5rem)] flex-col items-start gap-1">
           <EstimateBadge className="px-2 py-0.5 text-[10px] whitespace-nowrap" />
           {garment && !media.baseFrame ? <span className="chip bg-white/70 px-2 py-0.5 text-[10px] leading-tight">{bodyLabel ?? (hasBody ? 'Body from your measurements' : 'Reference body · add your measurements')}</span> : null}

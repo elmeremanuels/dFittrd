@@ -26,6 +26,7 @@ This plugin:
 * Validates the data as you save and shows a completeness score with the fields still missing.
 * Pushes published products to Curtain when they are saved (retried in the background through Action Scheduler) and archives them when they are trashed or unpublished.
 * Shows a **Try it on** button on single product pages (position, label and language are configurable; there is also a `[curtain_button]` shortcode). The button script is bundled with the plugin; no code is loaded from third-party servers.
+* Shows a returning shopper their size next to the button ("Your size: M" with a small drawing of their figure), without a click. Only the shopper sees it; your store cannot read it. Setting: *Show the shopper's size on product pages* (on by default), or `[curtain_button peek="off"]` for one button.
 * Lets you choose the **Experience**: *On the product page (no app needed)*, the default, or *Curtain app*. The **Size attribute** setting (a dropdown of your product attributes, default `pa_size`) tells Curtain which variation dropdown holds the size.
 * Is compatible with WooCommerce High-Performance Order Storage (the plugin never touches orders).
 
@@ -38,7 +39,8 @@ This plugin connects to the **Curtain API** (`https://api.curtain.fit`, operated
 * **When you connect:** your site URL, shop name and — if you leave the option ticked — the site admin e-mail are sent to create your merchant account. Billing, when enabled, goes through Stripe Checkout in your browser; the plugin never sees card details.
 * **When a published product is saved, trashed or unpublished, and during "Sync all":** the product id, name, price (EUR only), product photo URLs, categories, attributes and the fit data you entered in the Curtain box are sent (`PUT`/`DELETE /v1/merchant/products/{id}`). The dry-run validation on save sends the same payload to `POST /v1/merchant/products/validate` and stores nothing on the server.
 * **When you save settings or check the status:** the shop name, site URL, plugin and WooCommerce versions and your sponsored-placement preference are sent (`PUT /v1/merchant/shops/self`).
-* **On shoppers' product pages:** the bundled button script contacts the Curtain API only when a shopper clicks the button (it creates a short-lived try-on link) and then opens the Curtain fitting room (`https://app.curtain.fit/embed/…`) in an overlay frame on your page. The script itself sets no cookies and uses no local storage. Inside the frame, the shopper's measurements stay in their browser; only the chosen size label and a confidence score are sent to Curtain, for your analytics and billing. With "Remember me" on, the frame keeps the shopper's fit profile in its own browser storage, which the browser keeps separate per shop.
+* **On shoppers' product pages:** the bundled button script itself contacts the Curtain API only when a shopper clicks the button (it creates a short-lived try-on link) and then opens the Curtain fitting room (`https://app.curtain.fit/embed/…`) in an overlay frame on your page. The script itself sets no cookies and uses no local storage. Inside the frame, the shopper's measurements stay in their browser; only the chosen size label and a confidence score are sent to Curtain, for your analytics (sessions are counted, never billed one by one). With "Remember me" on, the frame keeps the shopper's fit profile in its own browser storage, which the browser keeps separate per shop.
+* **Size peek (on by default, setting *Show the shopper's size on product pages*):** when the button scrolls into view, the script adds a small frame next to it that loads `https://app.curtain.fit/embed/peek` with your public shop key and the product id. Inside the frame, the shopper's browser checks its own Curtain storage for this shop. For a shopper who never used the fitting room here, nothing more happens: no request to the Curtain API. For a returning shopper, the frame creates a short-lived link for this product (`POST /v1/sdk/sessions`, the same public request a click makes; it is not billed) and computes the size in the browser. Your page cannot read the frame and receives no size or measurement from it.
 * **Connection check (only while connecting):** the plugin publishes a one-time verification code at `/wp-json/curtain/v1/verify` on your site, and the Curtain API reads it back from the root of your domain before it issues your keys. WordPress must answer at the root of the domain (not in a subdirectory). This proves the connection was requested from your own site. The code is removed as soon as the connection is finished or cancelled; it contains no personal data.
 
 No customer data, order data or personal data of your shoppers is ever sent by this plugin. Requests are authenticated with an HMAC signature using a secret key that is stored encrypted in your database.
@@ -75,9 +77,13 @@ No. By default the whole fit experience runs on your product page in an overlay.
 
 The size option of the product's variation form, named by the *Size attribute* setting (default `pa_size`; `Maat`, `Taille` and `Größe` are also recognised). If no matching dropdown exists, the shopper sees a small "Your size: M" note instead. Themes can hook into the `curtain:size-selected` event or `window.CurtainHooks.onSizeSelected`.
 
+= What does Curtain cost? =
+
+One plan, Curtain: USD 8.99 per month per shop, flat, paid through Stripe Checkout, with a free trial. Every try-on session is included; there is no per-session or usage charge. Sessions are counted for your analytics, and a daily fair-use cap stops automated traffic from inflating your numbers.
+
 = What happens when my plan is paused? =
 
-The button keeps rendering (your page never breaks); shoppers see a "shop paused" screen until the plan is active again.
+The button keeps rendering (your page never breaks); shoppers see a "shop paused" screen until the subscription is active again.
 
 = Does it work with the new product editor (block-based)? =
 

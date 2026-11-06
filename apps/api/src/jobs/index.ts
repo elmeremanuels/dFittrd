@@ -10,6 +10,8 @@ export const CRON = {
   prune: '7 * * * *',
   /** 02:13 UTC: push yesterday's overage to Shopify / Stripe. */
   usageRollup: '13 2 * * *',
+  /** 03:41 UTC: refresh dormant shops' expiring Shopify tokens, migrate non-expiring ones (A3). */
+  shopifyTokens: '41 3 * * *',
 } as const;
 
 export function registerJobs(app: App): void {
@@ -27,10 +29,15 @@ export function registerJobs(app: App): void {
   });
   queue.register<SyncShopifyProductJob>(JOB.syncShopifyProduct, makeSyncShopifyProductHandler(app));
   queue.register<BackfillJob>(JOB.backfillShopify, makeBackfillHandler(app));
+  queue.register(JOB.shopifyTokens, async () => {
+    const r = await app.ctx.shopify.refreshDueTokens();
+    if (r.refreshed || r.migrated || r.failed) app.log.info(r, 'shopify offline tokens refreshed');
+  });
 }
 
 export async function scheduleCrons(app: App): Promise<void> {
   const { queue } = app.ctx;
   await queue.schedule(JOB.pruneRenders, CRON.prune);
   await queue.schedule(JOB.usageRollup, CRON.usageRollup);
+  await queue.schedule(JOB.shopifyTokens, CRON.shopifyTokens);
 }

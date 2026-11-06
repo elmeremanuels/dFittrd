@@ -1,4 +1,8 @@
-/** POST /v1/billing/stripe/webhook — plan state for WooCommerce merchants. Skipped gracefully without STRIPE_*. */
+/**
+ * POST /v1/billing/stripe/webhook — plan state for WooCommerce merchants (D17: one plan, `curtain`).
+ * Skipped gracefully without STRIPE_*. Events for a subscription other than the shop's current one
+ * (an old subscription ending after the merchant subscribed again) never pause the shop.
+ */
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { shops, webhookLog } from '../db/schema.js';
@@ -37,7 +41,7 @@ export const stripeRoutes: FastifyPluginAsyncZod = async (app) => {
             db,
             shopId,
             { stripeCustomerId: str(obj.customer), stripeSubscriptionId: str(obj.subscription) },
-            { plan: 'starter', paused: false, connectState: 'paid', billingRef: str(obj.subscription) ?? null, periodStart: now().toISOString().slice(0, 10) },
+            { plan: 'curtain', paused: false, connectState: 'paid', billingRef: str(obj.subscription) ?? null, periodStart: now().toISOString().slice(0, 10) },
           );
           status = 'processed';
           break;
@@ -45,11 +49,26 @@ export const stripeRoutes: FastifyPluginAsyncZod = async (app) => {
         case 'customer.subscription.updated': {
           const s = str(obj.status) ?? '';
           const active = s === 'active' || s === 'trialing';
-          await updateSettings(db, shopId, { subscriptionStatus: s, stripeSubscriptionId: str(obj.id) }, { paused: !active, plan: active ? 'starter' : 'free' });
+          const shop = (await findShopById(db, shopId))!;
+          if (!active && isOtherSubscription(shop.billingRef, str(obj.id))) {
+            status = 'ignored';
+            break;
+          }
+          await updateSettings(
+            db,
+            shopId,
+            { subscriptionStatus: s, stripeSubscriptionId: str(obj.id) },
+            { paused: !active, plan: active ? 'curtain' : 'free', ...(active && str(obj.id) ? { billingRef: str(obj.id)! } : {}) },
+          );
           status = 'processed';
           break;
         }
         case 'customer.subscription.deleted': {
+          const shop = (await findShopById(db, shopId))!;
+          if (isOtherSubscription(shop.billingRef, str(obj.id))) {
+            status = 'ignored';
+            break;
+          }
           await updateSettings(db, shopId, { subscriptionStatus: 'canceled' }, { paused: true, plan: 'free' });
           status = 'processed';
           break;
@@ -63,6 +82,11 @@ export const stripeRoutes: FastifyPluginAsyncZod = async (app) => {
     return reply.code(200).send({ ok: true });
   });
 };
+
+/** True when the event is about a subscription that is not the shop's current one. */
+function isOtherSubscription(current: string | null, eventSubscription: string | undefined): boolean {
+  return Boolean(current && eventSubscription && current !== eventSubscription);
+}
 
 function str(v: unknown): string | undefined {
   return typeof v === 'string' ? v : undefined;

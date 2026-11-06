@@ -183,5 +183,6 @@ export const JOB = {
   purgeShop: 'purge-shop',
   usageRollup: 'usage-rollup',
   backfillShopify: 'backfill-shopify',
+  shopifyTokens: 'shopify-tokens',
 } as const;
 export type JobName = (typeof JOB)[keyof typeof JOB];

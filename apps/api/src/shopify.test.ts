@@ -183,12 +183,12 @@ describe('Shopify: webhooks (HMAC + GDPR), token exchange, sync job', () => {
     const archived = await t.handle.db.query.products.findFirst({ where: eq(products.externalId, '7001') });
     expect(archived?.status).toBe('archived');
 
-    await webhook('app_subscriptions/update', { app_subscription: { admin_graphql_api_id: 'gid://shopify/AppSubscription/1', name: 'Curtain Starter', status: 'ACTIVE' } });
+    await webhook('app_subscriptions/update', { app_subscription: { admin_graphql_api_id: 'gid://shopify/AppSubscription/1', name: 'Curtain', status: 'ACTIVE' } });
     let s = await t.handle.db.query.shops.findFirst({ where: eq(shops.id, shop.id) });
-    expect(s).toMatchObject({ plan: 'starter', paused: false, billingRef: 'gid://shopify/AppSubscription/1' });
-    await webhook('app_subscriptions/update', { app_subscription: { admin_graphql_api_id: 'gid://shopify/AppSubscription/1', name: 'Curtain Starter', status: 'FROZEN' } });
+    expect(s).toMatchObject({ plan: 'curtain', paused: false, billingRef: 'gid://shopify/AppSubscription/1' });
+    await webhook('app_subscriptions/update', { app_subscription: { admin_graphql_api_id: 'gid://shopify/AppSubscription/1', name: 'Curtain', status: 'FROZEN' } });
     s = await t.handle.db.query.shops.findFirst({ where: eq(shops.id, shop.id) });
-    expect(s).toMatchObject({ plan: 'free', paused: true });
+    expect(s).toMatchObject({ plan: 'curtain', paused: true });
 
     await webhook('app/uninstalled', { id: 1, domain: SHOP });
     s = await t.handle.db.query.shops.findFirst({ where: eq(shops.id, shop.id) });

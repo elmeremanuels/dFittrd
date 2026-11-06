@@ -32,7 +32,7 @@ describe('theme app extension', () => {
     expect(schema.stylesheet).toBe('curtain-try.css');
     expect(schema.javascript).toBeUndefined(); // we load the SDK ourselves so data-shop/data-api are set
     const ids = schema.settings.map((s) => s.id).filter(Boolean);
-    expect(ids).toEqual(['label', 'alignment', 'mode', 'size_option', 'show_hint', 'unstyled', 'shop_key', 'api_url']);
+    expect(ids).toEqual(['label', 'alignment', 'mode', 'size_option', 'show_hint', 'show_size', 'unstyled', 'shop_key', 'api_url']);
     const mode = schema.settings.find((s) => s.id === 'mode') as unknown as { options: Array<{ value: string; label: string }>; default: string };
     // STANDALONE.md §3: standalone (embed) is the default, the Curtain app is opt-in.
     expect(mode.options.map((o) => o.value)).toEqual(['embed', 'app']);
@@ -49,6 +49,26 @@ describe('theme app extension', () => {
     expect(block).toMatch(/if pk_size_option == blank\s+assign pk_size_option = 'Size'/);
     // the old app-only values are gone from the block
     expect(block).not.toMatch(/"value": "(auto|redirect|modal)"/);
+  });
+
+  it('size peek: "Show the shopper\'s size" setting (default on) renders data-peek, data-app and the per-button opt-out', () => {
+    const schema = JSON.parse(/{% schema %}([\s\S]*?){% endschema %}/.exec(block)![1]!) as { settings: Array<{ id?: string; type: string; default?: unknown }> };
+    const showSize = schema.settings.find((s) => s.id === 'show_size')!;
+    expect(showSize.type).toBe('checkbox');
+    expect(showSize.default).toBe(true);
+    expect(block).toMatch(/assign pk_peek = 'on'\s+if block\.settings\.show_size == false or pk_mode == 'app'\s+assign pk_peek = 'off'/);
+    expect(block).toContain("setAttribute('data-peek', {{ pk_peek | json }})");
+    expect(block).toContain("setAttribute('data-app', {{ pk_app_url | json }})");
+    expect(block).toContain('app.metafields.curtain.app_url');
+    expect(block).toContain("replace_first: '//api.', '//app.'");
+    expect(block).toContain('peek: pk_peek');
+    expect(snippet).toContain(`{%- if peek == 'off' %} data-curtain-peek="off"{% endif %}`);
+    type S = { curtain: { settings: { show_size: Record<string, string> } } };
+    const enS = JSON.parse(read('locales/en.default.schema.json')) as S;
+    const nlS = JSON.parse(read('locales/nl.schema.json')) as S;
+    expect(enS.curtain.settings.show_size.label).toBe("Show the shopper's size on product pages");
+    expect(enS.curtain.settings.show_size.info).toMatch(/cannot read/);
+    expect(nlS.curtain.settings.show_size.label).toMatch(/maat van de shopper/);
   });
 
   it('locales: Experience + Size option name settings in en and nl', () => {

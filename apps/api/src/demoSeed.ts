@@ -104,11 +104,11 @@ export async function seedDemo(db: Db, env: Env, opts: { storefrontOrigin?: stri
       ...(spec.platform === 'woocommerce' ? { siteUrl: storefront } : {}),
     };
     let shop = await findShopByDomain(db, spec.domain);
-    if (!shop) shop = await createShop(db, { platform: spec.platform, domain: spec.domain, name: spec.name, plan: 'starter', settings });
+    if (!shop) shop = await createShop(db, { platform: spec.platform, domain: spec.domain, name: spec.name, plan: 'curtain', settings });
     // Keep the demo usable even if someone paused it in an earlier run.
     await db
       .update(shops)
-      .set({ name: spec.name, plan: 'starter', paused: false, uninstalledAt: null, settings: { ...shop.settings, ...settings }, updatedAt: new Date() })
+      .set({ name: spec.name, plan: 'curtain', paused: false, uninstalledAt: null, settings: { ...shop.settings, ...settings }, updatedAt: new Date() })
       .where(eq(shops.id, shop.id));
     // pk_test_… built at runtime by the key service (never a literal); stable across runs.
     if (!shop.apiKeyPrefix) await issueMerchantKeys(db, env, shop);

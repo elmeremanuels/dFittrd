@@ -55,7 +55,9 @@ describe('billing_anomalies in db/schema.ts and the drizzle snapshots', () => {
     expect(Object.values(snap!.compositePrimaryKeys)[0]!.columns).toEqual(['shop_id', 'day', 'kind']);
     expect(Object.values(snap!.foreignKeys)).toEqual([expect.objectContaining({ tableTo: 'shops', onDelete: 'cascade' })]);
     // The snapshot before 0003 does not have it: 0003 is the migration that creates it.
-    expect(snapshots[snapshots.length - 2]!.tables['public.billing_anomalies']).toBeUndefined();
+    const i0003 = journal.entries.findIndex((e) => e.tag === '0003_billing_anomalies');
+    expect(snapshots[i0003]!.tables['public.billing_anomalies']).toBeDefined();
+    expect(snapshots[i0003 - 1]!.tables['public.billing_anomalies']).toBeUndefined();
   });
 
   it('migration 0003 creates every column of the table', () => {

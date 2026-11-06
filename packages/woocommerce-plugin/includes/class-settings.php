@@ -51,6 +51,7 @@ final class Settings {
 			'button_scope'        => 'active',
 			'mode'                => self::MODE_EMBED,
 			'size_attribute'      => self::DEFAULT_SIZE_ATTRIBUTE,
+			'show_size'           => true,
 			'locale'              => 'auto',
 			'default_brand'       => '',
 			'share_admin_email'   => true,
@@ -154,6 +155,31 @@ final class Settings {
 
 	public static function mode(): string {
 		return self::sanitize_mode( self::get( 'mode' ) );
+	}
+
+	/**
+	 * The size peek (packages/sdk/README.md "Size peek"): a returning shopper sees their size and figure
+	 * in a small iframe next to the button. On by default; never in app mode (no overlay there).
+	 */
+	public static function show_size(): bool {
+		return (bool) self::get( 'show_size' ) && self::MODE_EMBED === self::mode();
+	}
+
+	/**
+	 * The fitting room's origin for the SDK's data-app: the API origin with `api.` replaced by
+	 * `app.` (docs/DEPLOY.md fixes both names). Empty when the API host does not start with `api.`;
+	 * the SDK then shows no size peek.
+	 */
+	public static function app_origin(): string {
+		$p = wp_parse_url( Api_Client::from_settings()->base() );
+		if ( ! is_array( $p ) || ! in_array( $p['scheme'] ?? '', array( 'https', 'http' ), true ) ) {
+			return '';
+		}
+		$host = strtolower( (string) ( $p['host'] ?? '' ) );
+		if ( ! str_starts_with( $host, 'api.' ) ) {
+			return '';
+		}
+		return $p['scheme'] . '://app.' . substr( $host, 4 ) . ( isset( $p['port'] ) ? ':' . (int) $p['port'] : '' );
 	}
 
 	public static function size_attribute(): string {
@@ -311,6 +337,7 @@ final class Settings {
 				'button_scope'        => $scope,
 				'mode'                => $mode,
 				'size_attribute'      => $size_att,
+				'show_size'           => ! empty( $in['show_size'] ),
 				'locale'              => $locale,
 				'default_brand'       => mb_substr( sanitize_text_field( (string) ( $in['default_brand'] ?? '' ) ), 0, 120 ),
 				'share_admin_email'   => ! empty( $in['share_admin_email'] ),
@@ -532,7 +559,7 @@ final class Settings {
 							<?php if ( '' !== (string) $s['shop_name'] ) : ?> — <?php echo esc_html( (string) $s['shop_name'] ); ?><?php endif; ?>
 							<br><code><?php echo esc_html( (string) $s['public_key_prefix'] ); ?></code>
 							<?php if ( '' !== (string) $s['plan'] ) : ?> · <?php echo esc_html( sprintf( /* translators: %s: plan name */ __( 'plan: %s', 'curtain-woocommerce' ), (string) $s['plan'] ) ); ?><?php endif; ?>
-							<?php if ( ! empty( $s['paused'] ) ) : ?> · <strong style="color:#b32d2e"><?php esc_html_e( 'paused (below plan: the button still renders, shoppers see a "shop paused" screen)', 'curtain-woocommerce' ); ?></strong><?php endif; ?>
+							<?php if ( ! empty( $s['paused'] ) ) : ?> · <strong style="color:#b32d2e"><?php esc_html_e( 'paused (no active subscription: the button still renders, shoppers see a "shop paused" screen)', 'curtain-woocommerce' ); ?></strong><?php endif; ?>
 							<br><span class="description">
 								<?php echo esc_html( sprintf( /* translators: 1: key storage scheme, 2: queue backend */ __( 'Key stored with %1$s · job queue: %2$s', 'curtain-woocommerce' ), Secret_Store::scheme(), Queue::backend() ) ); ?>
 								<?php $pending_jobs = Queue::pending_count(); ?>
@@ -603,6 +630,11 @@ final class Settings {
 							<?php endforeach; ?>
 						</select>
 						<p class="description"><?php esc_html_e( 'The product attribute that holds the size in your variation dropdowns. Curtain selects the recommended size in it.', 'curtain-woocommerce' ); ?></p></td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Shopper\'s size', 'curtain-woocommerce' ); ?></th>
+						<td><label><input type="checkbox" name="curtain[show_size]" value="1" <?php checked( ! empty( $s['show_size'] ) ); ?>> <?php esc_html_e( 'Show the shopper\'s size on product pages', 'curtain-woocommerce' ); ?></label>
+						<p class="description"><?php esc_html_e( 'A shopper who found their size here before sees it next to the button, with a small drawing of their figure in that size, without clicking. Only the shopper sees it: your store cannot read it. Not shown with the Curtain app experience.', 'curtain-woocommerce' ); ?></p></td>
 					</tr>
 					<tr>
 						<th scope="row"><label for="curtain_button_scope"><?php esc_html_e( 'Show for', 'curtain-woocommerce' ); ?></label></th>

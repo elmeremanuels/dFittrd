@@ -1,6 +1,7 @@
 import { openEmbed } from './embed';
 import { localeTag, pickStrings } from './i18n';
 import { closeModal, openModal } from './modal';
+import { destroyPeeks, watchPeek } from './peek';
 import { injectStyles, STYLE_ID } from './styles';
 import type { OpenMode, OpenOptions, OpenResult, CurtainApi, CurtainConfig, SdkSessionRequest, SdkSessionResponse } from './types';
 import { VERSION } from './version';
@@ -135,7 +136,7 @@ export async function open(productId: string, opts: OpenOptions = {}): Promise<O
   try {
     if (!productId) return { kind: 'ignored', reason: 'no-product' };
     if (!cfg.shop || !cfg.api) {
-      warn('not configured: set data-shop (pk_live_… / pk_test_…) and data-api on the script tag, or call Curtain.configure()');
+      warn('not configured: set data-shop and data-api');
       return { kind: 'ignored', reason: 'unconfigured' };
     }
     if (inFlight) return { kind: 'ignored', reason: 'busy' };
@@ -217,6 +218,10 @@ function bind(elm: Element): void {
     if (!elm.children.length) elm.textContent = cfg.label || pickStrings(cfg.locale).button;
   }
   if (!cfg.unstyled && !elm.hasAttribute('data-curtain-unstyled')) elm.classList.add('pk-btn');
+  // The size peek: needs data-app; data-peek="off" on the script tag or data-curtain-peek="off" on the button turns it off.
+  const product = elm.getAttribute(PRODUCT_ATTR);
+  if (cfg.app && product && cfg.shop && cfg.peek !== false && elm.getAttribute('data-curtain-peek') !== 'off')
+    watchPeek(elm as HTMLElement, cfg.app, cfg.shop, product, pickStrings(cfg.locale).peek);
 
   const click = (e: Event): void => {
     e.preventDefault();
@@ -292,10 +297,12 @@ function observe(): void {
 export function configure(next: Partial<CurtainConfig>): Readonly<CurtainConfig> {
   const merged: CurtainConfig = { ...cfg, ...next };
   if (merged.shop && !SHOP_KEY_RE.test(merged.shop)) {
-    warn(`ignoring shop key "${merged.shop}": expected pk_live_… or pk_test_… (never use your secret key)`);
+    // The value is not echoed: a pasted secret key must not end up in the console.
+    warn('ignoring data-shop: expected pk_live_… or pk_test_…, never the secret key');
     delete merged.shop;
   }
   if (merged.api) merged.api = merged.api.replace(/\/+$/, '');
+  if (merged.app) merged.app = merged.app.replace(/\/+$/, '');
   cfg = merged;
   if (typeof document !== 'undefined' && document.body) scan();
   return Object.freeze({ ...cfg });
@@ -310,6 +317,7 @@ export function destroy(): void {
   observer?.disconnect();
   observer = null;
   closeModal();
+  destroyPeeks();
   for (const elm of Array.from(bound)) unbind(elm);
   document.getElementById(STYLE_ID)?.remove();
   document.querySelector('.pk-toast')?.remove();
@@ -365,6 +373,8 @@ export function configFromScript(script: HTMLScriptElement): CurtainConfig {
   // Unknown values are dropped: the default is embed (standalone).
   if (d.mode && /^(embed|app|auto|redirect|modal)$/.test(d.mode)) out.mode = d.mode as OpenMode;
   if (d.sizeOption) out.sizeOption = d.sizeOption;
+  if (d.peek === 'off') out.peek = false;
+  if (d.app) out.app = d.app;
   if (d.curtainUnstyled !== undefined || d.unstyled !== undefined) out.unstyled = true;
   if (d.label) out.label = d.label;
   if (d.locale) out.locale = d.locale;
@@ -379,13 +389,13 @@ export function autoInit(): CurtainApi | null {
     // button again and open two sessions per click. The first instance wins.
     const existing = window.Curtain;
     if (existing && existing !== api) {
-      warn('SDK already loaded on this page; this copy stays inactive');
+      warn('already loaded on this page; this copy stays inactive');
       return existing;
     }
     const script = findScriptTag();
     if (!script) return null;
     const config = configFromScript(script);
-    if (!config.shop) warn('data-shop missing on the script tag; buttons will not open until Curtain.configure({ shop }) is called');
+    if (!config.shop) warn('data-shop missing: buttons stay inactive until Curtain.configure({ shop })');
     return init(config);
   } catch (error) {
     warn(`init failed: ${String(error)}`);

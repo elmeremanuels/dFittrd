@@ -35,6 +35,8 @@ export type EmbedMessage = Envelope &
     | { type: 'curtain:resize'; height: number }
     | { type: 'curtain:size-selected'; productExternalId: string; size: string }
     | { type: 'curtain:close' }
+    | { type: 'curtain:peek-size'; height: number }
+    | { type: 'curtain:peek-open' }
   );
 
 /** parent → iframe, sent after `curtain:ready`. */
@@ -60,6 +62,14 @@ export interface CurtainConfig {
   mode?: OpenMode;
   /** Name of the product option that holds the size (default `Size`; `Maat`, `Taille`, `Größe` also match). */
   sizeOption?: string;
+  /**
+   * The size peek next to each button (`data-peek`, default on; `false` = `data-peek="off"`): a
+   * returning shopper sees their size and figure in a small iframe without a click (D3: the page
+   * never reads it). Standalone modes only.
+   */
+  peek?: boolean;
+  /** Fitting-room origin for the peek (`data-app`, e.g. `https://app.curtain.fit`). Without it there is no peek. */
+  app?: string;
   /** Skip the built-in button styling (same as `data-curtain-unstyled`). */
   unstyled?: boolean;
   /** Text used for empty buttons. Defaults to "Try it on". */

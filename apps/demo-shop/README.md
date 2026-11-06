@@ -19,8 +19,15 @@ pnpm demo:e2e      # Playwright smoke test of the whole flow (not part of pnpm c
 | `/img/<id>.svg` | The product's flat-lay illustration as an SVG file. The demo seed points `productPhotos` and `flatLayPhoto` here, so the fitting room's header shows the same garment as the storefront and no third-party image host is contacted. |
 
 Both product pages load `http://localhost:8787/sdk/v1.js` with `data-shop`, `data-api`,
-`data-mode="embed"` and `data-size-option`, as the plugins render them. Add `?mode=app` to a
-product URL to compare with the Curtain app flow. Choosing a size in the overlay selects it on the
+`data-mode="embed"`, `data-size-option`, `data-peek="on"` and `data-app` (the fitting room,
+`http://localhost:3000`), as the plugins render them. Add `?mode=app` to a product URL to compare
+with the Curtain app flow.
+
+**Size peek.** After a shopper found their size once in the overlay ("Remember me" on, the
+default), every product page shows "Your size: M", one fit note and a small drawing of their figure
+in that size right under the button, without a click. It lives in an iframe on
+`http://localhost:3000/embed/peek`, so this page cannot read it; "See how size M fits you" opens the
+overlay. A first visit shows nothing there. `?peek=off` turns it off for comparison. Choosing a size in the overlay selects it on the
 page; a small theme-level listener for the `curtain:size-selected` DOM event shows a note under
 the button. "Add to basket" / "Add to cart" only updates a pretend bag.
 

@@ -98,7 +98,7 @@ describe('merchant auth + products', () => {
 
     const usage = await signed('GET', '/v1/merchant/usage?from=2026-11-01&to=2026-11-04');
     expect(usage.statusCode).toBe(200);
-    expect(usage.json().plan).toMatchObject({ name: 'starter', includedSessions: 500, overageEurPerSession: 0.05, paused: false });
+    expect(usage.json().plan).toMatchObject({ name: 'curtain', includedSessions: 5000, overageEurPerSession: 0, priceUsdPerMonth: 8.99, paused: false });
     expect((await signed('GET', '/v1/merchant/usage?from=2026-11-05&to=2026-11-04')).statusCode).toBe(400);
     const ledger = await signed('GET', '/v1/merchant/ledger');
     expect(ledger.json()).toEqual({ entries: [], nextCursor: null });

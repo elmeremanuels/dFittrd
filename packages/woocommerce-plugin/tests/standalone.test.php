@@ -149,3 +149,64 @@ test(
 		assert_contains( 'Opens the Curtain app', $short );
 	}
 );
+
+test(
+	'size peek: on by default, data-peek="on" + data-app (api. → app.) on the script tag, data-curtain-peek on the button',
+	static function (): void {
+		curtain_standalone_shop();
+		assert_same( true, Settings::defaults()['show_size'] );
+		assert_true( Settings::show_size() );
+		assert_same( 'https://app.test.curtain.fit', Settings::app_origin() );
+		$tag = curtain_standalone_tag();
+		assert_contains( 'data-peek="on"', $tag );
+		assert_contains( 'data-app="https://app.test.curtain.fit"', $tag );
+
+		Curtain_Test_State::$posts[32] = array(
+			'status'  => 'publish',
+			'type'    => 'product',
+			'parent'  => 0,
+			'product' => new WC_Product( array( 'id' => 32, 'name' => 'Linen Shirt' ) ),
+		);
+		Settings::update( array( 'button_scope' => 'all' ) );
+		assert_contains( 'data-curtain-peek="on"', Frontend::button_html( Curtain_Test_State::$posts[32]['product'], 'Try it on', 'button alt' ) );
+		assert_contains( 'data-curtain-peek="on"', Frontend::shortcode( array( 'product_id' => '32' ) ) );
+		// The shortcode can keep the peek away from one button.
+		assert_contains( 'data-curtain-peek="off"', Frontend::shortcode( array( 'product_id' => '32', 'peek' => 'off' ) ) );
+		assert_contains( 'data-curtain-peek="off"', Frontend::shortcode( array( 'product_id' => '32', 'peek' => ' OFF ' ) ) );
+	}
+);
+
+test(
+	'size peek: the merchant can turn it off, and app mode never shows it',
+	static function (): void {
+		curtain_standalone_shop();
+		Settings::update( array( 'show_size' => false ) );
+		assert_false( Settings::show_size() );
+		$tag = curtain_standalone_tag();
+		assert_contains( 'data-peek="off"', $tag );
+		assert_false( str_contains( $tag, 'data-app=' ) );
+
+		Settings::update( array( 'show_size' => true, 'mode' => 'app' ) );
+		assert_false( Settings::show_size() );
+		assert_contains( 'data-peek="off"', curtain_standalone_tag() );
+		Curtain_Test_State::$posts[33] = array(
+			'status'  => 'publish',
+			'type'    => 'product',
+			'parent'  => 0,
+			'product' => new WC_Product( array( 'id' => 33, 'name' => 'Linen Skirt' ) ),
+		);
+		assert_contains( 'data-curtain-peek="off"', Frontend::button_html( Curtain_Test_State::$posts[33]['product'], 'Try it on', 'button alt' ) );
+	}
+);
+
+test(
+	'app_origin: only for an api.<domain> origin over http(s); the port is kept',
+	static function (): void {
+		Settings::update( array( 'api_base' => 'https://api.curtain.fit/' ) );
+		assert_same( 'https://app.curtain.fit', Settings::app_origin() );
+		Settings::update( array( 'api_base' => 'http://api.localhost:8787' ) );
+		assert_same( 'http://app.localhost:8787', Settings::app_origin() );
+		Settings::update( array( 'api_base' => 'https://curtain.example' ) );
+		assert_same( '', Settings::app_origin() );
+	}
+);

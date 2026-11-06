@@ -10,6 +10,7 @@
 import { sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
   date,
   doublePrecision,
   index,
@@ -30,7 +31,13 @@ const id = () => uuid('id').primaryKey().default(sql`gen_random_uuid()`);
 
 export const PLATFORMS = ['shopify', 'woocommerce'] as const;
 export type Platform = (typeof PLATFORMS)[number];
-export const PLANS = ['free', 'starter', 'pro'] as const;
+/**
+ * D17: one paid plan, `curtain` (USD 8.99 per month, flat). `free` is the state of a shop without
+ * an active subscription (new install, cancelled, declined). Migration 0004 moved the retired
+ * `starter` and `pro` values to `curtain` (the old value is kept in `settings.legacyPlan`) and adds
+ * a CHECK constraint, so no other value can be stored.
+ */
+export const PLANS = ['free', 'curtain'] as const;
 export type Plan = (typeof PLANS)[number];
 
 export interface ShopSettings {
@@ -47,19 +54,37 @@ export interface ShopSettings {
   embedOrigins?: string[];
   pluginVersion?: string;
   platformVersion?: string;
-  /** Shopify: `gid://shopify/AppSubscription/…` usage line item for appUsageRecordCreate. */
+  /**
+   * Shopify, pre-D17 subscriptions only: their usage line item. D17 subscriptions have no usage
+   * line; migration 0004 removes this key, so the nightly rollup has nothing to push to.
+   */
   usageLineItemId?: string;
+  /** Shopify: the subscription created by /shopify/billing/subscribe, until it becomes ACTIVE. */
+  pendingSubscriptionId?: string;
+  /** First time a trial was offered (ISO date-time); later subscriptions get only the remainder. */
+  trialStartedAt?: string;
+  /** Set by migration 0004 on shops that were on the retired `starter` / `pro` plans. */
+  legacyPlan?: string;
   /** Shopify: subscription status from app_subscriptions/update. */
   subscriptionStatus?: string;
   /** Stripe: customer id (the merchant identity for WooCommerce, D6). */
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
+  /**
+   * Fair-use override of the plan's monthly session reference (the daily cap derives from it, D7).
+   * Not a billing quota: nothing is billed per session under D17.
+   */
   includedSessions?: number;
+  /** Retired with D17 (no per-session charge); ignored by planSpec, removed by migration 0004. */
   overageEurPerSession?: number;
   /** Shopify: ISO 4217 currency the subscription is charged in (shopBillingPreferences at subscribe time). */
   billingCurrency?: string;
-  /** Shopify: units of billingCurrency per 1 EUR, fixed for the running subscription. */
+  /** Shopify, pre-D17 subscriptions: units of billingCurrency per 1 EUR. */
   billingEurRate?: number;
+  /** Shopify (D17): units of billingCurrency per 1 USD used for the price, fixed for the subscription. */
+  billingUsdRate?: number;
+  /** Shopify (D17): the monthly price in billingCurrency as sent to Shopify. */
+  billingPrice?: number;
 }
 
 export const shops = pgTable(
@@ -105,6 +130,7 @@ export const shops = pgTable(
     uniqueIndex('shops_api_key_prefix_uq').on(t.apiKeyPrefix),
     index('shops_api_key_lookup_idx').on(t.apiKeyLookup),
     index('shops_previous_key_lookup_idx').on(t.previousKeyLookup),
+    check('shops_plan_check', sql`${t.plan} in ('free', 'curtain')`),
   ],
 );
 
@@ -118,7 +144,14 @@ export const shopifySessions = pgTable('shopify_sessions', {
   accessTokenEnc: text('access_token_enc').notNull(),
   scope: text('scope'),
   isOnline: boolean('is_online').notNull().default(false),
+  /** Expiring offline tokens (A3): when the access token stops working. Null = non-expiring (legacy). */
   expiresAt: ts('expires_at'),
+  /** AES-GCM encrypted refresh token of an expiring offline token (rotated on every refresh). */
+  refreshTokenEnc: text('refresh_token_enc'),
+  /** When the refresh token stops working (90 days when issued; refreshing can shorten it). */
+  refreshTokenExpiresAt: ts('refresh_token_expires_at'),
+  /** Last successful refresh, for the dormant-shop job and logs. */
+  refreshedAt: ts('refreshed_at'),
   createdAt: ts('created_at').notNull().defaultNow(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 });

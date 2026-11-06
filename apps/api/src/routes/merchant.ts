@@ -23,6 +23,7 @@ import {
   MerchantProductValidateResponseSchema,
   MerchantProductsQuerySchema,
   MerchantProductsResponseSchema,
+  PLAN_NAMES,
   UsageResponseSchema,
   chartTemplatesDto,
   validateGarmentDraft,
@@ -64,7 +65,7 @@ export const ShopSelfResponseSchema = z.object({
   shopId: z.uuid(),
   name: z.string(),
   platform: z.enum(['shopify', 'woocommerce']),
-  plan: z.enum(['free', 'starter', 'pro']),
+  plan: z.enum(PLAN_NAMES),
   paused: z.boolean(),
   publicKeyPrefix: z.string().nullable(),
 });
@@ -93,7 +94,7 @@ export const WooCompleteResponseSchema = z.object({
   shopId: z.uuid(),
   apiKey: z.string(),
   publicKeyPrefix: z.string(),
-  plan: z.enum(['free', 'starter', 'pro']),
+  plan: z.enum(PLAN_NAMES),
 });
 export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
   const { db, env, now, stripe, lookup, publicTransport } = app.ctx;
@@ -162,6 +163,10 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
         name: shop.plan,
         includedSessions: spec.includedSessions,
         overageEurPerSession: spec.overageEurPerSession,
+        priceUsdPerMonth: spec.priceUsdPerMonth,
+        ...(shop.plan === 'curtain' && typeof shop.settings.billingPrice === 'number' && shop.settings.billingCurrency
+          ? { chargePrice: shop.settings.billingPrice, chargeCurrency: shop.settings.billingCurrency }
+          : {}),
         periodStart: period.start,
         periodEnd: period.end,
         sessionsUsedThisPeriod: used,

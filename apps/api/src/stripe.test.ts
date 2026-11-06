@@ -1,17 +1,23 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { StripeClient } from './billing/stripe.js';
 import { shops } from './db/schema.js';
+import { testEnv } from './env.js';
 import { json, makeApp, type TestApp } from './test/helpers.js';
 
 describe('Stripe (WooCommerce billing)', () => {
   let t: TestApp;
   beforeAll(async () => {
-    t = await makeApp({ STRIPE_SECRET: ('sk_' + 'test_stripe_123'), STRIPE_PRICE_STARTER: 'price_starter', STRIPE_PRICE_OVERAGE: 'price_overage', STRIPE_WEBHOOK_SECRET: ('whsec' + '_test_123') });
+    // A leftover metered price in the env must not reach Checkout (D17: no meter).
+    t = await makeApp({ STRIPE_SECRET: ('sk_' + 'test_stripe_123'), STRIPE_PRICE_CURTAIN: 'price_curtain', STRIPE_PRICE_OVERAGE: 'price_overage', STRIPE_WEBHOOK_SECRET: ('whsec' + '_test_123') });
     t.fetchMock.on('https://api.stripe.com/v1/checkout/sessions', async (_u, init) => {
       const params = new URLSearchParams(String(init?.body));
       expect(params.get('mode')).toBe('subscription');
-      expect(params.get('line_items[0][price]')).toBe('price_starter');
-      expect(params.get('line_items[1][price]')).toBe('price_overage');
+      expect(params.get('line_items[0][price]')).toBe('price_curtain');
+      expect(params.get('line_items[0][quantity]')).toBe('1');
+      expect([...params.keys()].filter((k) => k.startsWith('line_items[1]'))).toEqual([]);
+      expect(params.get('subscription_data[trial_period_days]')).toBe('7');
+      expect(params.get('subscription_data[metadata][plan]')).toBe('curtain');
       return json({ id: 'cs_test_1', url: `https://checkout.stripe.com/c/pay/cs_test_1?shop=${params.get('metadata[shopId]')}` });
     });
   });
@@ -45,22 +51,27 @@ describe('Stripe (WooCommerce billing)', () => {
     expect((await post(completed)).statusCode).toBe(200);
     expect((await post(completed)).json()).toEqual({ ok: true, duplicate: true });
     let shop = await t.handle.db.query.shops.findFirst({ where: eq(shops.id, shopId) });
-    expect(shop).toMatchObject({ plan: 'starter', paused: false, connectState: 'paid', billingRef: 'sub_1' });
+    expect(shop).toMatchObject({ plan: 'curtain', paused: false, connectState: 'paid', billingRef: 'sub_1' });
     expect(shop?.settings.stripeCustomerId).toBe('cus_1');
 
     const complete = await t.app.inject({ method: 'POST', url: '/v1/merchant/woo/complete', payload: { connectToken } });
     expect(complete.statusCode).toBe(200);
-    expect(complete.json().plan).toBe('starter');
+    expect(complete.json().plan).toBe('curtain');
     const key = complete.json<{ apiKey: string }>().apiKey;
     const usage = await t.app.inject({ method: 'GET', url: '/v1/merchant/usage?from=2026-11-01&to=2026-11-04', headers: { authorization: `Bearer ${key}` } });
-    expect(usage.json().plan.name).toBe('starter');
+    expect(usage.json().plan).toMatchObject({ name: 'curtain', priceUsdPerMonth: 8.99, overageEurPerSession: 0 });
 
     expect((await post(event('customer.subscription.updated', { id: 'sub_1', status: 'past_due', metadata: { shopId } }))).statusCode).toBe(200);
     shop = await t.handle.db.query.shops.findFirst({ where: eq(shops.id, shopId) });
     expect(shop).toMatchObject({ plan: 'free', paused: true });
     await post(event('customer.subscription.updated', { id: 'sub_1', status: 'active', metadata: { shopId } }));
     shop = await t.handle.db.query.shops.findFirst({ where: eq(shops.id, shopId) });
-    expect(shop).toMatchObject({ plan: 'starter', paused: false });
+    expect(shop).toMatchObject({ plan: 'curtain', paused: false });
+    // an older subscription ending never pauses the shop's current one
+    await post(event('customer.subscription.deleted', { id: 'sub_old', status: 'canceled', metadata: { shopId } }));
+    await post(event('customer.subscription.updated', { id: 'sub_old', status: 'past_due', metadata: { shopId } }));
+    shop = await t.handle.db.query.shops.findFirst({ where: eq(shops.id, shopId) });
+    expect(shop).toMatchObject({ plan: 'curtain', paused: false, billingRef: 'sub_1' });
     await post(event('customer.subscription.deleted', { id: 'sub_1', status: 'canceled', metadata: { shopId } }));
     shop = await t.handle.db.query.shops.findFirst({ where: eq(shops.id, shopId) });
     expect(shop).toMatchObject({ plan: 'free', paused: true });
@@ -97,3 +108,38 @@ describe('Stripe (WooCommerce billing)', () => {
     }
   });
 });
+
+describe('Stripe Checkout parameters for the one Curtain plan (D17)', () => {
+  const base = { shopId: 'shop-1', shopDomain: 'woo.example', successUrl: 'https://woo.example/ok', cancelUrl: 'https://woo.example/no' };
+
+  it('one licensed price, quantity 1, configurable trial, no metered line', () => {
+    const c = new StripeClient(testEnv({ STRIPE_SECRET: 'sk_' + 'test_1', STRIPE_PRICE_CURTAIN: 'price_curtain', STRIPE_PRICE_OVERAGE: 'price_meter', BILLING_TRIAL_DAYS: '14' }), fetch);
+    const p = Object.fromEntries(c.checkoutParams({ ...base, email: 'o@woo.example' }));
+    expect(p).toEqual({
+      mode: 'subscription',
+      success_url: base.successUrl,
+      cancel_url: base.cancelUrl,
+      'line_items[0][price]': 'price_curtain',
+      'line_items[0][quantity]': '1',
+      'metadata[shopId]': 'shop-1',
+      'metadata[shopDomain]': 'woo.example',
+      'metadata[plan]': 'curtain',
+      'subscription_data[metadata][shopId]': 'shop-1',
+      'subscription_data[metadata][plan]': 'curtain',
+      'subscription_data[trial_period_days]': '14',
+      client_reference_id: 'shop-1',
+      customer_email: 'o@woo.example',
+    });
+  });
+
+  it('a zero trial sends no trial parameter; the legacy STRIPE_PRICE_STARTER name still works; no price → not configured', () => {
+    const legacy = new StripeClient(testEnv({ STRIPE_SECRET: 'sk_' + 'test_1', STRIPE_PRICE_STARTER: 'price_old_name', BILLING_TRIAL_DAYS: '0' }), fetch);
+    expect(legacy.configured()).toBe(true);
+    const p = legacy.checkoutParams(base);
+    expect(p.get('line_items[0][price]')).toBe('price_old_name');
+    expect(p.has('subscription_data[trial_period_days]')).toBe(false);
+    expect(new StripeClient(testEnv({ STRIPE_SECRET: 'sk_' + 'test_1' }), fetch).configured()).toBe(false);
+    expect(testEnv().BILLING_TRIAL_DAYS).toBe(7);
+  });
+});
+

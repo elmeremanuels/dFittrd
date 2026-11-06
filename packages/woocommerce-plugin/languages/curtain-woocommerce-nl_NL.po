@@ -435,8 +435,8 @@ msgid "plan: %s"
 msgstr "plan: %s"
 
 #: includes/class-settings.php
-msgid "paused (below plan: the button still renders, shoppers see a \"shop paused\" screen)"
-msgstr "gepauzeerd (onder het plan: de knop blijft zichtbaar, shoppers zien een scherm \"winkel gepauzeerd\")"
+msgid "paused (no active subscription: the button still renders, shoppers see a \"shop paused\" screen)"
+msgstr "gepauzeerd (geen actief abonnement: de knop blijft zichtbaar, shoppers zien een scherm \"winkel gepauzeerd\")"
 
 #. translators: 1: key storage scheme, 2: queue backend
 #: includes/class-settings.php
@@ -551,6 +551,18 @@ msgstr "Maatattribuut"
 #: includes/class-settings.php
 msgid "The product attribute that holds the size in your variation dropdowns. Curtain selects the recommended size in it."
 msgstr "Het productattribuut met de maat in je variatiekeuzelijsten. Curtain selecteert daarin de aanbevolen maat."
+
+#: includes/class-settings.php
+msgid "Shopper's size"
+msgstr "Maat van de shopper"
+
+#: includes/class-settings.php
+msgid "Show the shopper's size on product pages"
+msgstr "Toon de maat van de shopper op productpagina's"
+
+#: includes/class-settings.php
+msgid "A shopper who found their size here before sees it next to the button, with a small drawing of their figure in that size, without clicking. Only the shopper sees it: your store cannot read it. Not shown with the Curtain app experience."
+msgstr "Een shopper die hier eerder zijn maat vond, ziet die naast de knop, met een kleine tekening van zijn figuur in die maat, zonder te klikken. Alleen de shopper ziet het: je winkel kan het niet lezen. Niet getoond bij de ervaring Curtain-app."
 
 #: includes/class-settings.php
 msgid "Show for"

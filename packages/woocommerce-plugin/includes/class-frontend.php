@@ -64,6 +64,9 @@ final class Frontend {
 			'data-size-option' => Settings::size_attribute(),
 			'data-locale'      => Settings::effective_locale(),
 			'data-label'       => Settings::button_label(),
+			// The size peek (a returning shopper's size next to the button, unreadable by this page).
+			'data-peek'        => Settings::show_size() ? 'on' : 'off',
+			'data-app'         => Settings::show_size() ? Settings::app_origin() : '',
 		);
 		$extra = '';
 		foreach ( $attrs as $name => $value ) {
@@ -108,6 +111,8 @@ final class Frontend {
 				'product_id' => 0,
 				'label'      => '',
 				'class'      => 'button alt',
+				// 'off' hides the size peek next to this button; anything else follows the setting.
+				'peek'       => '',
 			),
 			is_array( $atts ) ? $atts : array(),
 			'curtain_button'
@@ -127,25 +132,29 @@ final class Frontend {
 			}
 		}
 		$label = '' !== trim( (string) $atts['label'] ) ? (string) $atts['label'] : Settings::button_label();
-		return self::button_html( $product, $label, (string) $atts['class'] );
+		$peek  = 'off' !== strtolower( trim( (string) $atts['peek'] ) );
+		return self::button_html( $product, $label, (string) $atts['class'], $peek );
 	}
 
 	/**
 	 * The button. It carries the experience and size attribute as data-curtain-mode /
 	 * data-curtain-size-option so themes and the shortcode can see them; the SDK reads its config
-	 * from the script tag (script_tag()), which renders the same values.
+	 * from the script tag (script_tag()), which renders the same values. data-curtain-peek is read
+	 * by the SDK per button: "off" (the setting, app mode, or [curtain_button peek="off"]) keeps
+	 * the size peek away from this button.
 	 */
-	public static function button_html( \WC_Product $product, string $label, string $class ): string {
+	public static function button_html( \WC_Product $product, string $label, string $class, bool $peek = true ): string {
 		$mode = Settings::mode();
 		$note = Settings::MODE_APP === $mode
 			? esc_html__( 'Opens the Curtain app, your private fitting room. Fit results are estimates.', 'curtain-woocommerce' )
 			: esc_html__( 'Find your size on this page. Your measurements stay on this device. Fit results are estimates.', 'curtain-woocommerce' );
 		return sprintf(
-			'<p class="curtain-try"><button type="button" class="%s curtain-try-button" data-curtain-product="%s" data-curtain-mode="%s" data-curtain-size-option="%s">%s</button><span class="curtain-try-note screen-reader-text">%s</span></p>',
+			'<p class="curtain-try"><button type="button" class="%s curtain-try-button" data-curtain-product="%s" data-curtain-mode="%s" data-curtain-size-option="%s" data-curtain-peek="%s">%s</button><span class="curtain-try-note screen-reader-text">%s</span></p>',
 			esc_attr( trim( $class ) ),
 			esc_attr( (string) $product->get_id() ),
 			esc_attr( $mode ),
 			esc_attr( Settings::size_attribute() ),
+			$peek && Settings::show_size() ? 'on' : 'off',
 			esc_html( $label ),
 			$note
 		);

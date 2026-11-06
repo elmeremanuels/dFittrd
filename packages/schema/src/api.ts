@@ -526,7 +526,8 @@ export const DateRangeQuerySchema = z
   .refine((r) => r.from <= r.to, { message: 'from must be <= to', path: ['to'] });
 export type DateRangeQuery = z.infer<typeof DateRangeQuerySchema>;
 
-export const PLAN_NAMES = ['free', 'starter', 'pro'] as const;
+/** D17: one paid plan, `curtain` (USD 8.99 per month, flat). `free` = no active subscription. */
+export const PLAN_NAMES = ['free', 'curtain'] as const;
 
 /** GET /v1/merchant/usage?from&to */
 export const UsageDaySchema = z.object({
@@ -546,8 +547,15 @@ export const UsageResponseSchema = z.object({
   }),
   plan: z.object({
     name: z.enum(PLAN_NAMES),
+    /** Monthly fair-use reference behind the daily cap (D7); not a billing quota under D17. */
     includedSessions: z.number().int().nonnegative(),
+    /** Always 0 since D17 (no per-session charge); kept for older clients. */
     overageEurPerSession: z.number().nonnegative(),
+    /** D17 list price in USD per month (0 without a subscription). */
+    priceUsdPerMonth: z.number().nonnegative().optional(),
+    /** The price the shop is charged and its currency, when a Shopify subscription recorded them. */
+    chargePrice: z.number().nonnegative().optional(),
+    chargeCurrency: z.string().regex(/^[A-Z]{3}$/).optional(),
     periodStart: dateOnly,
     periodEnd: dateOnly,
     sessionsUsedThisPeriod: z.number().int().nonnegative(),

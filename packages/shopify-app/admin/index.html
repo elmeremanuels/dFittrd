@@ -131,8 +131,8 @@
         <div class="meter" aria-hidden="true"><i id="usage-meter" style="width:0%"></i></div>
         <div class="subdued" id="usage-period" style="margin-top:6px"></div>
         <div class="bars" id="usage-bars" aria-label="Try-on sessions per day, last 30 days" role="img"></div>
-        <div class="subdued" style="margin-top:8px">One try-on session = one product resolved by one shopper with a fit result, counted once per intent (never double-billed on retries).</div>
-        <div class="row" style="margin-top:12px"><span class="check" id="chk-plan" aria-hidden="true"></span><span class="subdued" id="txt-plan">14-day trial. Below plan, the button keeps rendering; shoppers see a pause screen.</span><button class="btn btn-primary" id="btn-plan" type="button" disabled>Choose Starter</button></div>
+        <div class="subdued" style="margin-top:8px">One try-on session = one product resolved by one shopper with a fit result, counted once per intent (retries are never counted twice).</div>
+        <div class="row" style="margin-top:12px"><span class="check" id="chk-plan" aria-hidden="true"></span><span class="subdued" id="txt-plan">Curtain: US$8.99 per month, flat, with a free trial. Every try-on session is included; sessions are counted, never billed. Without a plan the button keeps rendering; shoppers see a pause screen.</span><button class="btn btn-primary" id="btn-plan" type="button" disabled>Subscribe</button></div>
       </section>
     </div>
 
@@ -311,20 +311,20 @@
         var u = await api('GET', '/v1/merchant/usage?from=' + day(from) + '&to=' + day(to));
         state.usage = u;
         var plan = u.plan;
-        text('usage-plan', plan.name.charAt(0).toUpperCase() + plan.name.slice(1) + (plan.paused ? ' · paused' : ''));
-        text('usage-sessions', plan.sessionsUsedThisPeriod + ' / ' + plan.includedSessions);
+        var price = plan.chargeCurrency && plan.chargeCurrency !== 'USD' && typeof plan.chargePrice === 'number' ? plan.chargePrice.toFixed(2) + ' ' + plan.chargeCurrency + ' per month' : 'US$' + (plan.priceUsdPerMonth || 8.99).toFixed(2) + ' per month';
+        text('usage-plan', (plan.name === 'free' ? 'No plan' : 'Curtain · ' + price) + (plan.paused ? ' · paused' : ''));
+        text('usage-sessions', String(plan.sessionsUsedThisPeriod));
         text('usage-renders', String(u.totals.heroRenders));
-        var pct = plan.includedSessions ? Math.min(100, Math.round(100 * plan.sessionsUsedThisPeriod / plan.includedSessions)) : 0;
-        $('usage-meter').style.width = pct + '%';
-        text('usage-period', 'Period ' + plan.periodStart + ' → ' + plan.periodEnd + ' · overage €' + plan.overageEurPerSession.toFixed(2) + ' per session');
+        $('usage-meter').style.width = '0%';
+        text('usage-period', 'Period ' + plan.periodStart + ' → ' + plan.periodEnd + ' · sessions are counted for your analytics, not billed');
         var bars = $('usage-bars'); bars.textContent = '';
         var max = Math.max(1, Math.max.apply(null, u.days.map(function (d) { return d.fitSessions; }).concat([0])));
         u.days.forEach(function (d) { var i = el('i', { title: d.day + ': ' + d.fitSessions }); i.style.height = Math.max(2, Math.round(100 * d.fitSessions / max)) + '%'; bars.appendChild(i); });
         var onPlan = plan.name !== 'free' && !plan.paused;
         check('chk-plan', onPlan);
-        $('btn-plan').disabled = false;
-        $('btn-plan').textContent = plan.name === 'free' ? 'Choose Starter' : 'Change plan';
-        if (plan.paused) banner('warning', 'Your shop is paused: shoppers see a “taking a short break” screen. Choose a plan or raise the usage cap to resume.');
+        $('btn-plan').disabled = onPlan;
+        $('btn-plan').textContent = onPlan ? 'Subscribed' : 'Subscribe';
+        if (plan.paused) banner('warning', 'Your shop is paused: shoppers see a “taking a short break” screen. Approve the Curtain plan to resume.');
       }
 
       async function loadProducts() {
@@ -377,7 +377,7 @@
       async function subscribe() {
         var btn = $('btn-plan'); btn.disabled = true;
         try {
-          var r = await api('POST', '/shopify/billing/subscribe', { plan: 'starter', returnUrl: 'https://admin.shopify.com/store/' + shop.replace(/\.myshopify\.com$/, '') + '/apps/' + cfg.appHandle });
+          var r = await api('POST', '/shopify/billing/subscribe', { plan: 'curtain', returnUrl: 'https://admin.shopify.com/store/' + shop.replace(/\.myshopify\.com$/, '') + '/apps/' + cfg.appHandle });
           if (r.confirmationUrl) open(r.confirmationUrl, '_top');
           else banner('info', 'Subscription created. Refresh to see its status.');
         } catch (err) {

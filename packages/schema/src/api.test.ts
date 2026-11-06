@@ -235,7 +235,7 @@ describe('SDK + merchant DTOs', () => {
       to: '2026-11-04',
       days: [{ day: '2026-11-01', fitSessions: 12, heroRenders: 1, costUsd: 0.08 }],
       totals: { fitSessions: 12, heroRenders: 1, costUsd: 0.08 },
-      plan: { name: 'starter', includedSessions: 500, overageEurPerSession: 0.05, periodStart: '2026-11-01', periodEnd: '2026-11-30', sessionsUsedThisPeriod: 12, paused: false },
+      plan: { name: 'curtain', includedSessions: 5000, overageEurPerSession: 0, priceUsdPerMonth: 8.99, periodStart: '2026-11-01', periodEnd: '2026-11-30', sessionsUsedThisPeriod: 12, paused: false },
     });
     expect(usage.success).toBe(true);
     const analytics = AnalyticsSwipesResponseSchema.safeParse({

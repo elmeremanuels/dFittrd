@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Curtain for WooCommerce 0.1.0\n"
 "Report-Msgid-Bugs-To: https://curtain.fit/woocommerce\n"
-"POT-Creation-Date: 2026-11-06 12:00+0000\n"
+"POT-Creation-Date: 2026-11-06 04:35+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -433,7 +433,7 @@ msgid "plan: %s"
 msgstr ""
 
 #: includes/class-settings.php
-msgid "paused (below plan: the button still renders, shoppers see a \"shop paused\" screen)"
+msgid "paused (no active subscription: the button still renders, shoppers see a \"shop paused\" screen)"
 msgstr ""
 
 #. translators: 1: key storage scheme, 2: queue backend
@@ -548,6 +548,18 @@ msgstr ""
 
 #: includes/class-settings.php
 msgid "The product attribute that holds the size in your variation dropdowns. Curtain selects the recommended size in it."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Shopper's size"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Show the shopper's size on product pages"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "A shopper who found their size here before sees it next to the button, with a small drawing of their figure in that size, without clicking. Only the shopper sees it: your store cannot read it. Not shown with the Curtain app experience."
 msgstr ""
 
 #: includes/class-settings.php

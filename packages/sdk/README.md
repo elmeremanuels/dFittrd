@@ -59,6 +59,8 @@ must then set `data-api`).
 | `data-size-option`       | no       | The product option that holds the size. Default `Size`; `Maat`, `Taille` and `Größe` always match too (case-insensitive). |
 | `data-locale`            | no       | `en` or `nl`. Defaults to `<html lang>`, then `en`. The browser language never changes the button or overlay copy. |
 | `data-label`             | no       | Text for buttons that are empty. Default "Try it on".                 |
+| `data-app`               | no       | The fitting room's origin, e.g. `https://app.curtain.fit`. Needed for the size peek (below); without it there is no peek. The Shopify block and the Woo plugin set it. |
+| `data-peek`              | no       | `on` (default) or `off`: the size peek next to each button. |
 | `data-curtain-unstyled` | no       | Do not inject the stylesheet or the `pk-btn` class (you style the buttons yourself).      |
 
 ### Button attributes (on `<button>`, `<a>` or any element)
@@ -67,6 +69,7 @@ must then set `data-api`).
 | ------------------------ | ------------------------------------------------------------------------------------------------ |
 | `data-curtain-product`  | The product's external id (Shopify: numeric part of the Product GID; Woo: post id or SKU as synced). |
 | `data-curtain-unstyled` | Skip the built-in coral/cream styling for this element only.                                     |
+| `data-curtain-peek`     | `off` keeps the size peek away from this button only.                                            |
 
 Behaviour per element: an empty element gets the default label; a `<button>` without `type` gets
 `type="button"`; non-button elements get `role="button"`, `tabindex="0"` and Enter/Space handling;
@@ -110,6 +113,8 @@ Every message is `{ source: 'curtain', v: 1, type, … }`; anything else is igno
 | iframe → page | `curtain:size-selected` | `{ productExternalId, size }` | Ignored unless `productExternalId` is the opened product and `size` is 1–64 characters. Closes the overlay, then selects the variant (below). |
 | iframe → page | `curtain:close` | `{}` | Closes the overlay. |
 | iframe → page | `curtain:resize` | `{ height }` | Ignored: the overlay is full-screen. |
+| peek → page | `curtain:peek-size` | `{ height }` | Size peek only (below): sets the peek iframe's height (0–200 px). |
+| peek → page | `curtain:peek-open` | `{}` | Size peek only: clicks the shop's button, which opens the overlay. |
 
 ### Variant selection
 
@@ -141,6 +146,45 @@ document.addEventListener('curtain:size-selected', (e) => {
 
 When the API has no `embedUrl` (an older backend), the SDK falls back to the app-mode flow. A shop
 that is paused (402 with a session) still opens the overlay; the embed shows the paused screen.
+
+## Size peek
+
+A returning shopper (one who found their size in the overlay on this shop, with "Remember me" on)
+sees "Your size: M", one short fit note and a small drawing of their own figure in that size, next
+to the button on every product page, without clicking. The founder's request; privacy D3 and D7
+decide how it is built:
+
+- **A cross-origin iframe.** After each bound button the SDK inserts
+  `<iframe src="{data-app}/embed/peek?shop={data-shop}&product={id}" title="Your size"
+  referrerpolicy="origin">`, lazily: an `IntersectionObserver` inserts it when the button comes
+  within 300 px of the viewport. It starts at `height: 0; visibility: hidden` (no space, out of the
+  tab order) and grows only when the peek reports a height, at most 200 px. So a first-time
+  visitor never causes a layout shift, and a returning shopper causes one, once.
+- **The page never learns the size.** The iframe is on our origin: the page cannot read it. The
+  SDK accepts two messages from it, only from that iframe's window and the `data-app` origin:
+  `curtain:peek-size { height }` and `curtain:peek-open {}`. Neither carries a size, a measurement
+  or an id. The size reaches the page only when the shopper presses "Choose size" in the overlay
+  (`curtain:size-selected`, as before).
+- **One bit is visible.** The page can see whether the peek grew, so it can tell that this browser
+  has a remembered profile on this shop. That is the cost of reserving space only for shoppers who
+  have one; it says nothing about the size or the body.
+- **Tokenless, and not billed.** The SDK sends nothing to the api for the peek. Inside the iframe
+  (`apps/web/src/embed/peek.ts`) the peek first reads its own partitioned storage: no profile, no
+  remembered device, or "Remember me" off → it collapses (`height: 0`) without any api request.
+  Only with a remembered profile does it mint a session (`POST /v1/sdk/sessions` with
+  `surface: 'api'`, which `fit-shown` never bills), resolve it with the remembered device, and
+  compute the fit on the device with `@curtain/fit-engine`. It never calls `fit-shown` and never
+  registers a device. The billable session starts when the shopper opens the overlay.
+- **Opening the overlay.** The peek's "See how size M fits you" button posts `curtain:peek-open`;
+  the SDK then clicks the shop's own button, so the normal overlay flow (and the merchant's own
+  click listeners) run. A returning shopper lands straight on the result.
+- The drawing is labelled "Estimate" (AGENTS.md rule 3) and the peek says "Only you can see this.
+  The shop can't."
+
+Turn it off with `data-peek="off"` (Shopify: untick "Show the shopper's size on product pages";
+WooCommerce: the same setting, or `[curtain_button peek="off"]`). The plugins also turn it off in
+app mode. Bundle cost: about 0.4 KB gzip; `sdk.v1.js` is now 8,188 of 8,192 bytes, so there is no
+budget left for anything else.
 
 ## App-mode desktop modal (a11y)
 

@@ -84,13 +84,13 @@ export async function createDevice(t: TestApp): Promise<{ deviceId: string; toke
 
 export async function seedShop(
   t: TestApp,
-  input: { platform?: 'shopify' | 'woocommerce'; domain?: string; name?: string; products?: string[]; plan?: 'free' | 'starter' | 'pro' } = {},
+  input: { platform?: 'shopify' | 'woocommerce'; domain?: string; name?: string; products?: string[]; plan?: 'free' | 'curtain' } = {},
 ): Promise<{ shop: ShopRow; apiKey: string; publicKeyPrefix: string; productIds: Record<string, string> }> {
   const shop = await createShop(t.handle.db, {
     platform: input.platform ?? 'woocommerce',
     domain: input.domain ?? `shop-${Math.random().toString(36).slice(2, 8)}.example`,
     name: input.name ?? 'Aalter Studio',
-    plan: input.plan ?? 'starter',
+    plan: input.plan ?? 'curtain',
     settings: { brandColor: '#FF5A3C' },
   });
   const { keys } = await issueMerchantKeys(t.handle.db, t.env, shop);

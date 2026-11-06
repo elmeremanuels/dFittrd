@@ -1,23 +1,34 @@
 import { describe, expect, it } from 'vitest';
 import { ACCESS_TOKEN, SHOP, fetchMock } from '../test/fixtures';
 import { DEFAULT_EUR_RATES } from '../currency';
-import { cancelAppSubscription, createAppSubscription, createUsageRecord, getActiveSubscriptions, planAmounts, subscriptionLineItems, usageIdempotencyKey, usageTerms, type SubscriptionPlanInput } from './billing';
+import {
+  cancelAppSubscription,
+  createAppSubscription,
+  createUsageRecord,
+  CURTAIN_PLAN,
+  getActiveSubscriptions,
+  isDevelopmentStore,
+  planPrice,
+  planPriceLabel,
+  resolveUsdChargeCurrency,
+  usageIdempotencyKey,
+  usdCrossRate,
+  type SubscriptionPlanInput,
+} from './billing';
 import { createAdminClient } from './client';
 
 const client = (m: ReturnType<typeof fetchMock>) => createAdminClient({ shopDomain: SHOP, accessToken: ACCESS_TOKEN, fetch: m.fetch });
 
-const starter: SubscriptionPlanInput = {
-  name: 'Curtain Starter',
+const curtain: SubscriptionPlanInput = {
+  name: CURTAIN_PLAN.name,
   returnUrl: 'https://admin.shopify.com/store/aalter-studio/apps/curtain',
-  priceEurPerMonth: 29,
-  cappedAmountEur: 100,
-  overageTerms: '€0.05 per try-on session above 500 per month',
-  trialDays: 14,
+  priceUsdPerMonth: CURTAIN_PLAN.priceUsdPerMonth,
+  trialDays: 7,
   test: true,
 };
 
-describe('appSubscriptionCreate', () => {
-  it('sends a recurring EUR line plus a usage line with cappedAmount (D6)', async () => {
+describe('appSubscriptionCreate (D17: one flat plan)', () => {
+  it('sends exactly one recurring USD line, no usage line and no cappedAmount', async () => {
     const m = fetchMock().data({
       appSubscriptionCreate: {
         userErrors: [],
@@ -25,65 +36,73 @@ describe('appSubscriptionCreate', () => {
         appSubscription: {
           id: 'gid://shopify/AppSubscription/1',
           status: 'PENDING',
-          lineItems: [
-            { id: 'gid://shopify/AppSubscriptionLineItem/1?v=1', plan: { pricingDetails: { __typename: 'AppRecurringPricing' } } },
-            { id: 'gid://shopify/AppSubscriptionLineItem/2?v=1', plan: { pricingDetails: { __typename: 'AppUsagePricing' } } },
-          ],
+          lineItems: [{ id: 'gid://shopify/AppSubscriptionLineItem/1?v=1', plan: { pricingDetails: { __typename: 'AppRecurringPricing' } } }],
         },
       },
     });
-    const r = await createAppSubscription(client(m), starter);
+    const r = await createAppSubscription(client(m), curtain);
     expect(r).toEqual({
       confirmationUrl: 'https://aalter-studio.myshopify.com/admin/charges/1/confirm',
       subscriptionId: 'gid://shopify/AppSubscription/1',
       status: 'PENDING',
-      usageLineItemId: 'gid://shopify/AppSubscriptionLineItem/2?v=1',
       recurringLineItemId: 'gid://shopify/AppSubscriptionLineItem/1?v=1',
-      currencyCode: 'EUR',
-      eurRate: 1,
+      currencyCode: 'USD',
+      usdRate: 1,
+      price: 8.99,
     });
     const v = m.variables<{ name: string; test: boolean; trialDays: number; returnUrl: string; lineItems: unknown[] }>();
-    expect(v).toMatchObject({ name: 'Curtain Starter', test: true, trialDays: 14, returnUrl: starter.returnUrl });
-    expect(v.lineItems).toEqual(subscriptionLineItems(starter));
-    expect(subscriptionLineItems(starter)[1]).toEqual({ plan: { appUsagePricingDetails: { cappedAmount: { amount: 100, currencyCode: 'EUR' }, terms: starter.overageTerms } } });
-    expect(subscriptionLineItems(starter)[0]).toEqual({ plan: { appRecurringPricingDetails: { price: { amount: 29, currencyCode: 'EUR' }, interval: 'EVERY_30_DAYS' } } });
+    expect(v).toMatchObject({ name: 'Curtain', test: true, trialDays: 7, returnUrl: curtain.returnUrl });
+    expect(v.lineItems).toEqual([{ plan: { appRecurringPricingDetails: { price: { amount: 8.99, currencyCode: 'USD' }, interval: 'EVERY_30_DAYS' } } }]);
+    expect(JSON.stringify(v)).not.toMatch(/appUsagePricingDetails|cappedAmount/);
   });
 
-  it('charges an AUD shop in AUD: whole-unit price and cap from the EUR plan, terms in A$ (#6)', async () => {
+  it('charges an AUD shop the converted price through the rate table, with the rate returned (D17)', async () => {
     const m = fetchMock().data({
       appSubscriptionCreate: {
         userErrors: [],
         confirmationUrl: 'https://aalter-studio.myshopify.com/admin/charges/2/confirm',
-        appSubscription: { id: 'gid://shopify/AppSubscription/2', status: 'PENDING', lineItems: [{ id: 'li-usage', plan: { pricingDetails: { __typename: 'AppUsagePricing' } } }] },
+        appSubscription: { id: 'gid://shopify/AppSubscription/2', status: 'PENDING', lineItems: [{ id: 'li-1', plan: { pricingDetails: { __typename: 'AppRecurringPricing' } } }] },
       },
     });
-    const aud = { ...starter, currencyCode: 'AUD', eurRate: 1.78, overageTerms: usageTerms(0.05, 500, { currencyCode: 'AUD', eurRate: 1.78 }) };
-    expect(aud.overageTerms).toBe('A$0.09 per try-on session above 500 per month');
-    const r = await createAppSubscription(client(m), aud);
-    expect(r).toMatchObject({ subscriptionId: 'gid://shopify/AppSubscription/2', usageLineItemId: 'li-usage', currencyCode: 'AUD', eurRate: 1.78 });
-    const v = m.variables<{ lineItems: unknown[] }>();
-    expect(v.lineItems).toEqual([
-      { plan: { appRecurringPricingDetails: { price: { amount: 52, currencyCode: 'AUD' }, interval: 'EVERY_30_DAYS' } } },
-      { plan: { appUsagePricingDetails: { cappedAmount: { amount: 178, currencyCode: 'AUD' }, terms: 'A$0.09 per try-on session above 500 per month' } } },
-    ]);
-    expect(JSON.stringify(v)).not.toContain('EUR');
+    const aud = resolveUsdChargeCurrency('AUD');
+    expect(aud).toEqual({ currencyCode: 'AUD', usdRate: 1.534483, fallback: false });
+    const r = await createAppSubscription(client(m), { ...curtain, currencyCode: aud.currencyCode, usdRate: aud.usdRate });
+    expect(r).toMatchObject({ subscriptionId: 'gid://shopify/AppSubscription/2', currencyCode: 'AUD', usdRate: 1.534483, price: 13.8 });
+    expect(m.variables<{ lineItems: unknown[] }>().lineItems).toEqual([{ plan: { appRecurringPricingDetails: { price: { amount: 13.8, currencyCode: 'AUD' }, interval: 'EVERY_30_DAYS' } } }]);
+    expect(planPriceLabel({ priceUsdPerMonth: 8.99, currencyCode: 'AUD', usdRate: aud.usdRate })).toBe('A$13.80 per month');
+    expect(planPriceLabel({ priceUsdPerMonth: 8.99 })).toBe('$8.99 per month');
   });
 
-  it('uses the default rate table when only the currency is given, and refuses a currency without a rate', () => {
-    expect(planAmounts({ priceEurPerMonth: 29, cappedAmountEur: 100, currencyCode: 'AUD' })).toEqual({ currencyCode: 'AUD', eurRate: DEFAULT_EUR_RATES.AUD, price: Math.round(29 * DEFAULT_EUR_RATES.AUD!), cappedAmount: Math.round(100 * DEFAULT_EUR_RATES.AUD!) });
-    expect(planAmounts({ priceEurPerMonth: 29.5, cappedAmountEur: 100 })).toMatchObject({ currencyCode: 'EUR', price: 29.5, cappedAmount: 100 });
-    expect(() => planAmounts({ priceEurPerMonth: 29, cappedAmountEur: 100, currencyCode: 'XYZ' })).toThrow(/no EUR rate/);
-    expect(usageTerms(0.05, 500)).toBe('€0.05 per try-on session above 500 per month');
+  it('resolves the charge currency: USD itself, table currencies converted, unknown ones fall back to USD', () => {
+    expect(resolveUsdChargeCurrency('USD')).toEqual({ currencyCode: 'USD', usdRate: 1, fallback: false });
+    expect(resolveUsdChargeCurrency('XYZ')).toEqual({ currencyCode: 'USD', usdRate: 1, fallback: true });
+    expect(resolveUsdChargeCurrency(null)).toEqual({ currencyCode: 'USD', usdRate: 1, fallback: true });
+    expect(resolveUsdChargeCurrency('EUR')).toEqual({ currencyCode: 'EUR', usdRate: Math.round((1 / DEFAULT_EUR_RATES.USD!) * 1e6) / 1e6, fallback: false });
+    // JPY has no minor unit
+    const jpy = resolveUsdChargeCurrency('JPY');
+    expect(planPrice({ priceUsdPerMonth: 8.99, ...jpy })).toEqual({ currencyCode: 'JPY', usdRate: jpy.usdRate, price: 1356 });
+    expect(usdCrossRate('AUD', { ...DEFAULT_EUR_RATES, USD: 1, AUD: 1.5 })).toBe(1.5);
+    expect(() => planPrice({ priceUsdPerMonth: 8.99, currencyCode: 'XYZ' })).toThrow(/no USD rate/);
+    expect(() => planPrice({ priceUsdPerMonth: 8.99, currencyCode: 'USD', usdRate: 2 })).toThrow(/rate 1/);
   });
 
-  it('rejects bad amounts locally and userErrors remotely', async () => {
-    await expect(createAppSubscription(client(fetchMock()), { ...starter, cappedAmountEur: 0 })).rejects.toThrow(/cappedAmount/);
-    const m = fetchMock().data({ appSubscriptionCreate: { userErrors: [{ field: ['lineItems'], message: 'Usage line requires terms' }], confirmationUrl: null, appSubscription: null } });
-    await expect(createAppSubscription(client(m), starter)).rejects.toThrow(/appSubscriptionCreate: lineItems: Usage line requires terms/);
+  it('rejects bad inputs locally and userErrors remotely', async () => {
+    await expect(createAppSubscription(client(fetchMock()), { ...curtain, priceUsdPerMonth: 0 })).rejects.toThrow(/priceUsdPerMonth/);
+    await expect(createAppSubscription(client(fetchMock()), { ...curtain, trialDays: -1 })).rejects.toThrow(/trialDays/);
+    await expect(createAppSubscription(client(fetchMock()), { ...curtain, trialDays: 2.5 })).rejects.toThrow(/trialDays/);
+    const m = fetchMock().data({ appSubscriptionCreate: { userErrors: [{ field: ['returnUrl'], message: 'Return url is invalid' }], confirmationUrl: null, appSubscription: null } });
+    await expect(createAppSubscription(client(m), curtain)).rejects.toThrow(/appSubscriptionCreate: returnUrl: Return url is invalid/);
+  });
+
+  it('detects partner development stores (test charges only)', async () => {
+    const dev = fetchMock().data({ shop: { plan: { partnerDevelopment: true } } });
+    expect(await isDevelopmentStore(client(dev))).toBe(true);
+    expect(dev.query()).toContain('partnerDevelopment');
+    expect(await isDevelopmentStore(client(fetchMock().data({ shop: { plan: { partnerDevelopment: false } } })))).toBe(false);
   });
 });
 
-describe('appUsageRecordCreate', () => {
+describe('appUsageRecordCreate (legacy pre-D17 subscriptions only)', () => {
   it('posts one record with the idempotency key and rounded EUR amount', async () => {
     const m = fetchMock().data({ appUsageRecordCreate: { userErrors: [], appUsageRecord: { id: 'gid://shopify/AppUsageRecord/9' } } });
     const key = usageIdempotencyKey('shop-uuid', 'intent-token-abc');
@@ -120,7 +139,7 @@ describe('appUsageRecordCreate', () => {
 });
 
 describe('subscription status', () => {
-  it('maps active subscriptions with usage line, cap and balance', async () => {
+  it('maps active subscriptions: recurring price and currency, legacy usage line id', async () => {
     const m = fetchMock().data({
       currentAppInstallation: {
         activeSubscriptions: [
@@ -141,7 +160,7 @@ describe('subscription status', () => {
     });
     const subs = await getActiveSubscriptions(client(m));
     expect(subs).toEqual([
-      { id: 'gid://shopify/AppSubscription/1', name: 'Curtain Starter', status: 'ACTIVE', test: true, trialDays: 14, currentPeriodEnd: '2026-12-04T00:00:00Z', usageLineItemId: 'li2', cappedAmountEur: 100, balanceUsedEur: 12.5, currencyCode: 'EUR' },
+      { id: 'gid://shopify/AppSubscription/1', name: 'Curtain Starter', status: 'ACTIVE', test: true, trialDays: 14, currentPeriodEnd: '2026-12-04T00:00:00Z', price: 29, currencyCode: 'EUR', usageLineItemId: 'li2' },
     ]);
   });
 

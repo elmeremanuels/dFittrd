@@ -1,13 +1,32 @@
 /**
- * Shopify Billing API (D6/D7): a recurring Starter/Pro line plus a usage line with
- * `cappedAmount`; every billable try-on session becomes one `appUsageRecordCreate`, idempotent by
- * intent token. Managed Pricing is not used because it cannot meter usage.
+ * Shopify Billing API, D17: one plan, "Curtain", USD 8.99 per 30 days per shop, flat. The
+ * subscription has exactly one line item, an `appRecurringPricingDetails` line; there is no usage
+ * line and no `cappedAmount`. The try-on session stays the unit we count (D7) for analytics and the
+ * fair-use daily caps, but nothing is billed per session.
  *
- * Amounts are authored in EUR; `currencyCode` + `eurRate` (see ../currency.ts) turn them into the
- * shop's billing currency. Without `currencyCode` everything is charged in EUR, as before.
+ * Currency (D17 "USD as the base"): the price is authored in USD. Shopify recommends charging in
+ * the merchant's local billing currency (https://shopify.dev/docs/apps/launch/billing, best
+ * practices: "Create charges in the merchant's local billing currency"), read with
+ * `shopBillingPreferences`. When our EUR-based rate table (../currency.ts) has that currency, the
+ * USD price is converted through it (cross rate `rate[X] / rate[USD]`) and rounded to the
+ * currency's minor unit; the rate used is returned so the api can record it. Any other currency is
+ * charged in USD, which Shopify converts itself when it issues the charge.
+ *
+ * `createUsageRecord` is kept only for subscriptions created before D17 (they carried a usage
+ * line); the api's nightly rollup bills nothing on the Curtain plan, so it is never called for it.
+ *
+ * Mutation reference: https://shopify.dev/docs/api/admin-graphql/latest/mutations/appSubscriptionCreate
+ * Time-based (recurring-only) plans: https://shopify.dev/docs/apps/launch/billing/subscription-billing/create-time-based-subscriptions
  */
-import { convertEur, convertEurListPrice, DEFAULT_EUR_RATES, formatMoney } from '../currency';
+import { convertEur, currencyFractionDigits, DEFAULT_EUR_RATES, formatMoney, resolveChargeCurrency, type EurRates } from '../currency';
 import { assertNoUserErrors, type AdminGraphqlClient, type UserError } from './client';
+
+/** The one plan (D17). Prices are USD; the trial length is chosen by the caller (api env). */
+export const CURTAIN_PLAN = Object.freeze({
+  name: 'Curtain',
+  priceUsdPerMonth: 8.99,
+  interval: 'EVERY_30_DAYS',
+} as const);
 
 export const APP_SUBSCRIPTION_CREATE = /* GraphQL */ `
   mutation CurtainSubscribe($name: String!, $returnUrl: URL!, $test: Boolean, $trialDays: Int, $lineItems: [AppSubscriptionLineItemInput!]!) {
@@ -66,82 +85,99 @@ export const ACTIVE_SUBSCRIPTIONS_QUERY = /* GraphQL */ `
   }
 `;
 
+/** `shop.plan.partnerDevelopment`: development stores can only accept test charges. */
+export const DEVELOPMENT_STORE_QUERY = /* GraphQL */ `
+  query CurtainDevStore { shop { plan { partnerDevelopment } } }
+`;
+
 export interface SubscriptionPlanInput {
-  /** e.g. "Curtain Starter". Also parsed by the api's app_subscriptions/update handler (/pro/i → pro). */
+  /** Shown to the merchant on the approval screen; "Curtain" for the D17 plan. */
   name: string;
   returnUrl: string;
-  priceEurPerMonth: number;
-  /** Max overage Shopify lets us bill per 30 days before the merchant must raise the cap. */
-  cappedAmountEur: number;
-  /** Shown to the merchant on the approval screen, e.g. "€0.05 per try-on session above 500 per month". */
-  overageTerms: string;
+  /** The list price in USD (D17: 8.99). */
+  priceUsdPerMonth: number;
   trialDays: number;
-  /** Test charges on dev stores (never on production shops). */
+  /** Test charge: development stores, and every non-production environment. */
   test: boolean;
-  /** Charge currency (the shop's billing currency, `resolveChargeCurrency`). Default EUR. */
+  /** Charge currency (`resolveUsdChargeCurrency`). Default USD. */
   currencyCode?: string;
-  /** 1 EUR = `eurRate` units of `currencyCode`. Default: `DEFAULT_EUR_RATES[currencyCode]`. */
-  eurRate?: number;
+  /** 1 USD = `usdRate` units of `currencyCode`. Default: the cross rate from DEFAULT_EUR_RATES. */
+  usdRate?: number;
 }
 
-export interface ChargeMoney {
+export interface UsdChargeCurrency {
+  /** ISO 4217 code sent on the recurring line's MoneyInput. */
   currencyCode: string;
-  eurRate: number;
+  /** 1 USD = `usdRate` units of `currencyCode` (1 for USD). Record it with the subscription. */
+  usdRate: number;
+  /** True when the shop's billing currency had no rate and USD is charged instead. */
+  fallback: boolean;
 }
 
-/** Currency + rate for a plan or usage input; throws when a non-EUR currency has no rate. */
-export function chargeMoney(input: { currencyCode?: string; eurRate?: number }): ChargeMoney {
-  const currencyCode = (input.currencyCode ?? 'EUR').toUpperCase();
-  const eurRate = input.eurRate ?? (currencyCode === 'EUR' ? 1 : DEFAULT_EUR_RATES[currencyCode]);
-  if (!/^[A-Z]{3}$/.test(currencyCode) || typeof eurRate !== 'number' || !(eurRate > 0)) throw new Error(`no EUR rate for billing currency '${currencyCode}'`);
-  return { currencyCode, eurRate };
+/** USD → X cross rate from the EUR-based table, rounded to 6 significant decimals. */
+export function usdCrossRate(currencyCode: string, rates: EurRates = DEFAULT_EUR_RATES): number | undefined {
+  const code = currencyCode.toUpperCase();
+  if (code === 'USD') return 1;
+  const x = rates[code];
+  const usd = rates.USD ?? DEFAULT_EUR_RATES.USD;
+  if (typeof x !== 'number' || !(x > 0) || typeof usd !== 'number' || !(usd > 0)) return undefined;
+  return Math.round((x / usd) * 1e6) / 1e6;
 }
 
-/** Monthly price and cap in the charge currency: EUR unchanged, other currencies whole units. */
-export function planAmounts(plan: Pick<SubscriptionPlanInput, 'priceEurPerMonth' | 'cappedAmountEur' | 'currencyCode' | 'eurRate'>): { currencyCode: string; eurRate: number; price: number; cappedAmount: number } {
-  const m = chargeMoney(plan);
-  if (m.currencyCode === 'EUR' && m.eurRate === 1) return { ...m, price: plan.priceEurPerMonth, cappedAmount: plan.cappedAmountEur };
-  return { ...m, price: convertEurListPrice(plan.priceEurPerMonth, m.eurRate), cappedAmount: convertEurListPrice(plan.cappedAmountEur, m.eurRate) };
+/** The shop's billing currency when the rate table covers it, else USD (Shopify converts USD). */
+export function resolveUsdChargeCurrency(billingCurrency: string | null | undefined, rates: EurRates = DEFAULT_EUR_RATES): UsdChargeCurrency {
+  const picked = resolveChargeCurrency(billingCurrency, rates);
+  const usdRate = usdCrossRate(picked.currencyCode, rates);
+  if (picked.fallback || usdRate === undefined) return { currencyCode: 'USD', usdRate: 1, fallback: picked.fallback || picked.currencyCode !== 'USD' };
+  return { currencyCode: picked.currencyCode, usdRate, fallback: false };
 }
 
-/** The usage terms the merchant approves, in the charge currency: "A$0.09 per try-on session above 500 per month". */
-export function usageTerms(overageEurPerSession: number, includedSessions: number, money: { currencyCode?: string; eurRate?: number } = {}): string {
-  const m = chargeMoney(money);
-  return `${formatMoney(convertEur(overageEurPerSession, m.currencyCode, m.eurRate), m.currencyCode)} per try-on session above ${includedSessions} per month`;
+/** USD → currency, rounded to the currency's minor unit (A$13.80, ¥1,507). */
+export function convertUsd(amountUsd: number, currencyCode: string, usdRate: number): number {
+  const digits = currencyFractionDigits(currencyCode);
+  const f = 10 ** digits;
+  return Math.round(amountUsd * usdRate * f) / f;
+}
+
+/** The monthly price in the charge currency, and the rate used. */
+export function planPrice(plan: Pick<SubscriptionPlanInput, 'priceUsdPerMonth' | 'currencyCode' | 'usdRate'>): { currencyCode: string; usdRate: number; price: number } {
+  const currencyCode = (plan.currencyCode ?? 'USD').toUpperCase();
+  const usdRate = plan.usdRate ?? usdCrossRate(currencyCode);
+  if (!/^[A-Z]{3}$/.test(currencyCode) || typeof usdRate !== 'number' || !(usdRate > 0)) throw new Error(`no USD rate for billing currency '${currencyCode}'`);
+  if (currencyCode === 'USD' && usdRate !== 1) throw new Error('a USD charge must use rate 1');
+  return { currencyCode, usdRate, price: currencyCode === 'USD' ? plan.priceUsdPerMonth : convertUsd(plan.priceUsdPerMonth, currencyCode, usdRate) };
+}
+
+/** "US$8.99 per month" / "A$13.80 per month" — for the merchant console and admin text. */
+export function planPriceLabel(plan: Pick<SubscriptionPlanInput, 'priceUsdPerMonth' | 'currencyCode' | 'usdRate'>): string {
+  const p = planPrice(plan);
+  return `${formatMoney(p.price, p.currencyCode)} per month`;
+}
+
+/** D17: one recurring line, no usage line. */
+export function subscriptionLineItems(plan: SubscriptionPlanInput) {
+  const p = planPrice(plan);
+  return [
+    {
+      plan: {
+        appRecurringPricingDetails: {
+          price: { amount: p.price, currencyCode: p.currencyCode },
+          interval: CURTAIN_PLAN.interval,
+        },
+      },
+    },
+  ];
 }
 
 export interface SubscriptionCreated {
   confirmationUrl: string | null;
   subscriptionId: string | null;
   status: string | null;
-  /** The usage line's id — store it; `createUsageRecord` needs it. */
-  usageLineItemId: string | null;
   recurringLineItemId: string | null;
-  /** The subscription's currency; every usage record for it must use the same one. */
+  /** The subscription's currency, price and the USD rate used (store them). */
   currencyCode: string;
-  eurRate: number;
-}
-
-export function subscriptionLineItems(plan: SubscriptionPlanInput) {
-  const a = planAmounts(plan);
-  return [
-    {
-      plan: {
-        appRecurringPricingDetails: {
-          price: { amount: a.price, currencyCode: a.currencyCode },
-          interval: 'EVERY_30_DAYS',
-        },
-      },
-    },
-    {
-      plan: {
-        appUsagePricingDetails: {
-          cappedAmount: { amount: a.cappedAmount, currencyCode: a.currencyCode },
-          terms: plan.overageTerms,
-        },
-      },
-    },
-  ];
+  usdRate: number;
+  price: number;
 }
 
 interface SubscriptionCreatePayload {
@@ -154,8 +190,9 @@ interface SubscriptionCreatePayload {
 
 /** Creates the subscription; the merchant must approve at `confirmationUrl` (open it with `_top`). */
 export async function createAppSubscription(client: AdminGraphqlClient, plan: SubscriptionPlanInput): Promise<SubscriptionCreated> {
-  if (plan.priceEurPerMonth < 0 || plan.cappedAmountEur <= 0) throw new Error('createAppSubscription: price must be >= 0 and cappedAmount > 0');
-  const money = chargeMoney(plan);
+  if (!(plan.priceUsdPerMonth > 0)) throw new Error('createAppSubscription: priceUsdPerMonth must be > 0');
+  if (!Number.isInteger(plan.trialDays) || plan.trialDays < 0) throw new Error('createAppSubscription: trialDays must be a whole number >= 0');
+  const p = planPrice(plan);
   const data = await client.request<SubscriptionCreatePayload>(APP_SUBSCRIPTION_CREATE, {
     name: plan.name,
     returnUrl: plan.returnUrl,
@@ -165,33 +202,52 @@ export async function createAppSubscription(client: AdminGraphqlClient, plan: Su
   });
   const r = data.appSubscriptionCreate;
   assertNoUserErrors(r.userErrors, 'appSubscriptionCreate');
-  const usage = r.appSubscription?.lineItems.find((l) => l.plan.pricingDetails.__typename === 'AppUsagePricing');
   const recurring = r.appSubscription?.lineItems.find((l) => l.plan.pricingDetails.__typename === 'AppRecurringPricing');
   return {
     confirmationUrl: r.confirmationUrl,
     subscriptionId: r.appSubscription?.id ?? null,
     status: r.appSubscription?.status ?? null,
-    usageLineItemId: usage?.id ?? null,
     recurringLineItemId: recurring?.id ?? null,
-    currencyCode: money.currencyCode,
-    eurRate: money.eurRate,
+    currencyCode: p.currencyCode,
+    usdRate: p.usdRate,
+    price: p.price,
   };
+}
+
+/** True for partner development stores (they can only accept test charges). */
+export async function isDevelopmentStore(client: AdminGraphqlClient): Promise<boolean> {
+  const data = await client.request<{ shop: { plan: { partnerDevelopment?: boolean | null } | null } | null }>(DEVELOPMENT_STORE_QUERY);
+  return data.shop?.plan?.partnerDevelopment === true;
+}
+
+// ---- legacy (pre-D17 subscriptions with a usage line) -------------------------------------------
+
+export interface ChargeMoney {
+  currencyCode: string;
+  eurRate: number;
+}
+
+/** Currency + EUR rate for a legacy usage record; throws when a non-EUR currency has no rate. */
+export function chargeMoney(input: { currencyCode?: string; eurRate?: number }): ChargeMoney {
+  const currencyCode = (input.currencyCode ?? 'EUR').toUpperCase();
+  const eurRate = input.eurRate ?? (currencyCode === 'EUR' ? 1 : DEFAULT_EUR_RATES[currencyCode]);
+  if (!/^[A-Z]{3}$/.test(currencyCode) || typeof eurRate !== 'number' || !(eurRate > 0)) throw new Error(`no EUR rate for billing currency '${currencyCode}'`);
+  return { currencyCode, eurRate };
 }
 
 export interface UsageRecordInput {
   lineItemId: string;
   description: string;
   amountEur: number;
-  /** Stable per billable session (see `usageIdempotencyKey`); Shopify dedupes on it. */
+  /** Stable per billed unit; Shopify dedupes on it. */
   idempotencyKey: string;
-  /** The subscription's currency and rate (`SubscriptionCreated`). Default EUR. */
   currencyCode?: string;
   eurRate?: number;
 }
 
 export interface UsageRecordResult {
   id: string | null;
-  /** True when Shopify refused because the capped amount is reached (merchant must raise the cap). */
+  /** True when Shopify refused because the capped amount is reached. */
   capReached: boolean;
 }
 
@@ -199,7 +255,7 @@ interface UsageRecordPayload {
   appUsageRecordCreate: { userErrors: UserError[]; appUsageRecord: { id: string } | null };
 }
 
-/** One usage record per billable session. Cap-reached is reported, not thrown, so the api can pause the shop. */
+/** Legacy only: one usage record on a pre-D17 subscription's usage line. D17 subscriptions have none. */
 export async function createUsageRecord(client: AdminGraphqlClient, input: UsageRecordInput): Promise<UsageRecordResult> {
   const m = chargeMoney(input);
   const data = await client.request<UsageRecordPayload>(APP_USAGE_RECORD_CREATE, {
@@ -216,10 +272,12 @@ export async function createUsageRecord(client: AdminGraphqlClient, input: Usage
   return { id: r.appUsageRecord?.id ?? null, capReached: false };
 }
 
-/** D7: billing unit = try-on session, idempotent by intent token; deck sessions key on device×shop×product×day. */
+/** Bounded idempotency key for a usage record. */
 export function usageIdempotencyKey(shopId: string, sessionKey: string): string {
   return `curtain:${shopId}:${sessionKey}`.slice(0, 255);
 }
+
+// ---- status ---------------------------------------------------------------------------------------
 
 export interface ActiveSubscription {
   id: string;
@@ -228,12 +286,11 @@ export interface ActiveSubscription {
   test: boolean;
   trialDays: number;
   currentPeriodEnd: string | null;
-  usageLineItemId: string | null;
-  /** In `currencyCode` (named Eur for compatibility; EUR for subscriptions created before #6). */
-  cappedAmountEur: number | null;
-  balanceUsedEur: number | null;
-  /** The usage line's currency (cappedAmount.currencyCode). */
+  /** The recurring line's price and currency. */
+  price: number | null;
   currencyCode: string | null;
+  /** Only on legacy (pre-D17) subscriptions. */
+  usageLineItemId: string | null;
 }
 
 export async function getActiveSubscriptions(client: AdminGraphqlClient): Promise<ActiveSubscription[]> {
@@ -246,16 +303,14 @@ export async function getActiveSubscriptions(client: AdminGraphqlClient): Promis
         test: boolean;
         trialDays: number;
         currentPeriodEnd: string | null;
-        lineItems: Array<{
-          id: string;
-          plan: { pricingDetails: { __typename: string; cappedAmount?: { amount: string; currencyCode?: string }; balanceUsed?: { amount: string } } };
-        }>;
+        lineItems: Array<{ id: string; plan: { pricingDetails: { __typename: string; price?: { amount: string; currencyCode?: string } } } }>;
       }>;
     };
   }>(ACTIVE_SUBSCRIPTIONS_QUERY);
   return data.currentAppInstallation.activeSubscriptions.map((s) => {
+    const recurring = s.lineItems.find((l) => l.plan.pricingDetails.__typename === 'AppRecurringPricing');
     const usage = s.lineItems.find((l) => l.plan.pricingDetails.__typename === 'AppUsagePricing');
-    const pd = usage?.plan.pricingDetails;
+    const price = recurring?.plan.pricingDetails.price;
     return {
       id: s.id,
       name: s.name,
@@ -263,10 +318,9 @@ export async function getActiveSubscriptions(client: AdminGraphqlClient): Promis
       test: s.test,
       trialDays: s.trialDays,
       currentPeriodEnd: s.currentPeriodEnd,
+      price: price ? Number(price.amount) : null,
+      currencyCode: price?.currencyCode ?? null,
       usageLineItemId: usage?.id ?? null,
-      cappedAmountEur: pd?.cappedAmount ? Number(pd.cappedAmount.amount) : null,
-      balanceUsedEur: pd?.balanceUsed ? Number(pd.balanceUsed.amount) : null,
-      currencyCode: pd?.cappedAmount?.currencyCode ?? null,
     };
   });
 }

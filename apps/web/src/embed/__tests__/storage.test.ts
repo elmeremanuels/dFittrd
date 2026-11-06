@@ -195,4 +195,23 @@ describe('embed storage (remember / forget)', () => {
     await s.init();
     expect(await s.loadUnits()).toBeNull();
   });
+
+  it('hasProfiles (the local check of the size peek): false when empty, after Forget me or with Remember me off; true for any remembered shop', async () => {
+    const name = freshDbName();
+    const s = createEmbedStore({ openDb: () => new EmbedDb(name) });
+    await s.init();
+    expect(await s.hasProfiles()).toBe(false);
+    await s.setDevice(device);
+    await s.saveUnits('imperial');
+    expect(await s.hasProfiles()).toBe(false);
+    await s.saveProfile(remembered(SHOP_A));
+    const reload = createEmbedStore({ openDb: () => new EmbedDb(name) });
+    await reload.init();
+    expect(await reload.hasProfiles()).toBe(true);
+    await reload.forget();
+    expect(await reload.hasProfiles()).toBe(false);
+    const off = createEmbedStore({ openDb: () => new EmbedDb(freshDbName()), remember: false });
+    await off.init();
+    expect(await off.hasProfiles()).toBe(false);
+  });
 });

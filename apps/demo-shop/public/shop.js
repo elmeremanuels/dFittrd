@@ -1,7 +1,7 @@
 /**
  * Shared chrome for the Aalter Studio demo storefront: catalogue loading, header, footer, money,
  * and loading the Curtain SDK from the demo api exactly like the plugins do (a script tag with
- * data-shop / data-api / data-mode / data-size-option).
+ * data-shop / data-api / data-mode / data-size-option / data-peek / data-app).
  */
 import { escapeHtml } from './garments.js';
 
@@ -114,6 +114,10 @@ export function loadSdk(catalog, shop, sizeOption) {
   s.setAttribute('data-size-option', sizeOption);
   s.setAttribute('data-locale', 'en');
   s.setAttribute('data-label', 'Try it on');
+  // The size peek: a returning shopper sees "Your size: M" and their figure next to the button,
+  // in an iframe on the fitting room's origin that this page cannot read. ?peek=off to compare.
+  s.setAttribute('data-peek', new URLSearchParams(location.search).get('peek') === 'off' ? 'off' : 'on');
+  if (catalog.appUrl) s.setAttribute('data-app', catalog.appUrl);
   s.onerror = () => toast('Could not load the Curtain SDK from the demo api. Is `pnpm demo` running?');
   document.head.append(s);
 }

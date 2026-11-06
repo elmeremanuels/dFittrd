@@ -46,14 +46,14 @@ const swipe = (shopId: string, itemId: string, over: Record<string, unknown> = {
   ...over,
 });
 
-describe('dailyBilledCap derives from the plan allowance', () => {
+describe('dailyBilledCap derives from the plan fair-use reference (D7 unit, D17: nothing billed per session)', () => {
   const env = testEnv();
   const shop = (plan: ShopRow['plan'], includedSessions?: number) => ({ plan, settings: includedSessions ? { includedSessions } : {} }) as ShopRow;
   it('ten average days of the allowance, at least the floor, at most the global ceiling', () => {
     expect(dailyBilledCap(env, shop('free'))).toBe(100); // 50/30*10 = 17 → floor 100
-    expect(dailyBilledCap(env, shop('starter'))).toBe(167); // 500/30*10
-    expect(dailyBilledCap(env, shop('pro'))).toBe(1667);
-    expect(dailyBilledCap(env, shop('pro', 30_000))).toBe(5000); // EMBED_BILLED_SESSIONS_PER_DAY ceiling
+    expect(dailyBilledCap(env, shop('curtain'))).toBe(1667); // 5000/30*10
+    expect(dailyBilledCap(env, shop('curtain', 500))).toBe(167); // a hand-set fair-use override
+    expect(dailyBilledCap(env, shop('curtain', 30_000))).toBe(5000); // EMBED_BILLED_SESSIONS_PER_DAY ceiling
     expect(dailyBilledCap(testEnv({ BILLED_DAILY_CAP_MIN: '3' }), shop('free'))).toBe(17);
   });
 });

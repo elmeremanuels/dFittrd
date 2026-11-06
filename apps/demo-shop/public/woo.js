@@ -54,7 +54,7 @@ try {
           </div>
         </div>
       </form>
-      <p class="curtain-try"><button type="button" class="button alt curtain-try-button" data-curtain-product="${escapeHtml(p.externalId)}" data-curtain-mode="embed" data-curtain-size-option="pa_size">Try it on</button><span class="curtain-try-note screen-reader-text">Find your size on this page. Your measurements stay on this device. Fit results are estimates.</span></p>
+      <p class="curtain-try"><button type="button" class="button alt curtain-try-button" data-curtain-product="${escapeHtml(p.externalId)}" data-curtain-mode="embed" data-curtain-size-option="pa_size" data-curtain-peek="on">Try it on</button><span class="curtain-try-note screen-reader-text">Find your size on this page. Your measurements stay on this device. Fit results are estimates.</span></p>
       <p class="curtain-picked" data-curtain-note hidden></p>
       <div class="product_meta">
         <span class="sku_wrapper">SKU: <span class="sku">${escapeHtml(cw[0].sku ?? p.externalId.toUpperCase())}</span></span>

@@ -22,6 +22,51 @@ export const OPTIONAL_SCOPES = ['read_orders'] as const;
 
 const PLACEHOLDER_RE = /\{\{\s*([A-Z0-9_]+)\s*\}\}/g;
 
+/** A bare lowercase domain such as `curtain.fit` (no scheme, no path). Same rule as `.github/workflows/deploy.yml`. */
+export const BARE_DOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+/** The app's client id from the Partner Dashboard (also called the API key; not secret, but kept out of the repo). */
+export const CLIENT_ID_RE = /^[a-f0-9]{32}$/i;
+
+/**
+ * The public URLs for a production domain. `infra/Caddyfile` serves only `api.<domain>` and
+ * `app.<domain>`, so the subdomains are fixed (as in the deploy workflow's guard).
+ */
+export function appUrlsForDomain(domain: string): { PUBLIC_API_URL: string; PUBLIC_APP_URL: string } {
+  if (!BARE_DOMAIN_RE.test(domain)) {
+    throw new AppConfigError('DOMAIN must be a bare lowercase domain like curtain.fit (no scheme, no subdomain prefix)', ['invalid DOMAIN']);
+  }
+  return { PUBLIC_API_URL: `https://api.${domain}`, PUBLIC_APP_URL: `https://app.${domain}` };
+}
+
+/**
+ * Collect the template variables from an environment. `DOMAIN` (the deploy workflow's repository
+ * variable) stands in for `PUBLIC_API_URL` and `PUBLIC_APP_URL`; when both are given they must
+ * agree. Values are trimmed, because secrets pasted into GitHub often carry a trailing newline.
+ * Error messages never repeat a value.
+ */
+export function resolveAppConfigVars(env: Record<string, string | undefined>): Partial<Record<AppConfigVar, string>> {
+  const vars: Partial<Record<AppConfigVar, string>> = {};
+  for (const name of APP_CONFIG_VARS) {
+    const v = env[name];
+    if (v !== undefined) vars[name] = v.trim();
+  }
+  const domain = env.DOMAIN?.trim();
+  if (domain) {
+    const urls = appUrlsForDomain(domain);
+    const issues: string[] = [];
+    for (const key of ['PUBLIC_API_URL', 'PUBLIC_APP_URL'] as const) {
+      const given = vars[key]?.replace(/\/$/, '');
+      if (given && given !== urls[key]) issues.push(`${key} does not match DOMAIN (expected ${urls[key]})`);
+      vars[key] = urls[key];
+    }
+    if (issues.length) throw new AppConfigError(issues.join('; '), issues);
+  }
+  if (vars.SHOPIFY_API_KEY && !CLIENT_ID_RE.test(vars.SHOPIFY_API_KEY)) {
+    throw new AppConfigError(`SHOPIFY_API_KEY must be the 32-character hex client id (got ${vars.SHOPIFY_API_KEY.length} characters)`, ['invalid SHOPIFY_API_KEY']);
+  }
+  return vars;
+}
+
 export class AppConfigError extends Error {
   constructor(
     message: string,
@@ -86,7 +131,7 @@ export function validateAppConfig(parsed: unknown, opts: { apiUrl?: string } = {
   const issues: string[] = [];
   const c = (parsed ?? {}) as ParsedAppConfig;
 
-  if (typeof c.client_id !== 'string' || !/^[a-f0-9]{32}$/i.test(c.client_id)) issues.push('client_id must be the 32-hex client id from the Partner Dashboard');
+  if (typeof c.client_id !== 'string' || !CLIENT_ID_RE.test(c.client_id)) issues.push('client_id must be the 32-hex client id from the Partner Dashboard');
   if (typeof c.application_url !== 'string' || !/^https:\/\//.test(c.application_url)) issues.push('application_url must be an https URL');
   if (c.embedded !== true) issues.push('embedded must be true (App Bridge admin page)');
   if (typeof c.name !== 'string' || !c.name) issues.push('name is required');

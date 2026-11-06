@@ -6,6 +6,7 @@ import { MERCHANT_KEY_PATTERN, NetworkError, type MerchantApi } from '@/api/clie
 import { Ledger, type LedgerLine } from '@/components/Ledger';
 import { dayIso, pct, titleCase } from '@/lib/format';
 import { api } from '@/store';
+import { planPriceText } from './plan';
 import { mockAbandonedAnalytics, mockAnalytics, mockAnomalies, mockFitSizes, mockLedger, mockProducts, mockUsage } from './mock';
 
 const SESSION_KEY = 'curtain.merchantKey';
@@ -378,19 +379,40 @@ export function MerchantProducts(): ReactNode {
   );
 }
 
+/** The one Curtain plan (D17): flat price, every try-on session included, sessions counted for analytics only. */
+function PlanCard({ plan }: { plan: UsageResponse['plan'] }): ReactNode {
+  const subscribed = plan.name !== 'free';
+  return (
+    <section className="card space-y-2 bg-white/80" aria-labelledby="plan-heading">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="plan-heading" className="font-display text-xl">
+          Curtain
+        </h2>
+        <p className="font-medium tabular-nums">{planPriceText(plan)}</p>
+      </div>
+      <p className="text-sm text-ink-soft">
+        One plan, one flat price. Every try-on session is included: we count sessions for your analytics, nothing is charged per session. A daily fair-use cap stops automated traffic.
+      </p>
+      <p className={`text-sm ${plan.paused ? 'text-bad' : subscribed ? 'text-ok' : 'text-ink-mute'}`}>
+        {plan.paused ? 'Paused: no active subscription.' : subscribed ? 'Active.' : 'Not subscribed yet.'}
+      </p>
+    </section>
+  );
+}
+
 export function MerchantUsage(): ReactNode {
   const d = useMerchantData();
   const u = d.usage;
   const used = u.plan.sessionsUsedThisPeriod;
-  const share = Math.min(1, used / Math.max(1, u.plan.includedSessions));
   const max = Math.max(1, ...u.days.map((x) => x.fitSessions));
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <StatCard label="Plan" value={titleCase(u.plan.name)} icon={<ShoppingCart className="h-5 w-5" aria-hidden />} hint={u.plan.paused ? 'paused' : 'active'} tone={u.plan.paused ? 'bad' : 'ok'} />
-        <StatCard label="Sessions this period" value={`${used.toLocaleString()} / ${u.plan.includedSessions.toLocaleString()}`} icon={<TrendingUp className="h-5 w-5" aria-hidden />} hint={`overage €${u.plan.overageEurPerSession.toFixed(2)} each`} tone={share > 0.9 ? 'warn' : 'ink'} />
+        <StatCard label="Plan" value={u.plan.name === 'free' ? 'No plan' : 'Curtain'} icon={<ShoppingCart className="h-5 w-5" aria-hidden />} hint={u.plan.paused ? 'paused' : u.plan.name === 'free' ? 'not subscribed' : planPriceText(u.plan)} tone={u.plan.paused ? 'bad' : 'ok'} />
+        <StatCard label="Sessions this period" value={used.toLocaleString()} icon={<TrendingUp className="h-5 w-5" aria-hidden />} hint="counted for analytics, not billed" />
         <StatCard label="Hero renders (30 d)" value={u.totals.heroRenders.toLocaleString()} icon={<BarChart3 className="h-5 w-5" aria-hidden />} hint={`$${u.totals.costUsd.toFixed(2)} provider cost`} />
       </div>
+      <PlanCard plan={u.plan} />
       {d.anomalies ? <BillingAlerts report={d.anomalies} /> : null}
       <section className="card space-y-3 bg-white/80">
         <h2 className="font-display text-xl">Fit sessions per day</h2>
@@ -404,10 +426,7 @@ export function MerchantUsage(): ReactNode {
             </li>
           ))}
         </ol>
-        <div className="h-2 overflow-hidden rounded-full bg-ink/10" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(share * 100)} aria-label="Plan usage">
-          <div className={`h-full ${share > 0.9 ? 'bg-warn' : 'bg-coral'}`} style={{ width: `${share * 100}%` }} />
-        </div>
-        {u.plan.paused ? <p className="text-sm text-bad">Below plan: the “Try it on” button still renders; shoppers see a “shop paused” screen until the plan is topped up.</p> : null}
+        {u.plan.paused ? <p className="text-sm text-bad">No active subscription: the “Try it on” button still renders; shoppers see a “shop paused” screen until the Curtain plan is active again.</p> : null}
       </section>
     </div>
   );
@@ -419,14 +438,14 @@ function BillingAlerts({ report }: { report: BillingAnomaliesResponse }): ReactN
   return (
     <section className="card space-y-3 bg-white/80" aria-labelledby="billing-alerts">
       <h2 id="billing-alerts" className="font-display text-xl">
-        Unusual billing
+        Unusual traffic
       </h2>
       <p className="text-xs text-ink-mute">
-        Today {t.billedSessions.toLocaleString()} billed sessions (usual day: {t.trailingAverage.toFixed(1)}). We flag a day above {t.spikeThreshold.toLocaleString()} and stop billing at {report.dailyCap.toLocaleString()} a day.
+        Today {t.billedSessions.toLocaleString()} counted sessions (usual day: {t.trailingAverage.toFixed(1)}). We flag a day above {t.spikeThreshold.toLocaleString()} and stop counting at the fair-use cap of {report.dailyCap.toLocaleString()} a day. Your price stays the same either way.
       </p>
       {t.capReached || t.spike ? (
         <p role="alert" className={`text-sm ${t.capReached ? 'text-bad' : 'text-warn'}`}>
-          {t.capReached ? 'Today’s cap is reached: further sessions today are not billed. Contact us if this is a real rush.' : 'Today is far above your usual volume. If you did not run a campaign, tell us: it can be automated traffic.'}
+          {t.capReached ? 'Today’s fair-use cap is reached: further sessions today are not counted. Shoppers still get their size. Contact us if this is a real rush.' : 'Today is far above your usual volume. If you did not run a campaign, tell us: it can be automated traffic.'}
         </p>
       ) : null}
       {report.anomalies.length === 0 ? (
@@ -439,7 +458,7 @@ function BillingAlerts({ report }: { report: BillingAnomaliesResponse }): ReactN
                 {a.day} · {a.kind === 'cap_reached' ? 'Daily cap reached' : 'Spike'}
               </span>
               <span className="tabular-nums text-ink-soft">
-                {a.kind === 'cap_reached' ? `${a.deniedSessions.toLocaleString()} sessions not billed (cap ${a.threshold.toLocaleString()})` : `${a.billedSessions.toLocaleString()} billed vs usual ${a.trailingAverage.toFixed(1)}`}
+                {a.kind === 'cap_reached' ? `${a.deniedSessions.toLocaleString()} sessions not counted (cap ${a.threshold.toLocaleString()})` : `${a.billedSessions.toLocaleString()} counted vs usual ${a.trailingAverage.toFixed(1)}`}
               </span>
             </li>
           ))}

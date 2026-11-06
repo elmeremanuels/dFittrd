@@ -55,7 +55,7 @@ export function mockUsage(from: string, to: string): UsageResponse {
     to,
     days,
     totals: { fitSessions: fit, heroRenders: hero, costUsd: Math.round(hero * 0.075 * 100) / 100 },
-    plan: { name: 'starter', includedSessions: 1000, overageEurPerSession: 0.04, periodStart: from, periodEnd: to, sessionsUsedThisPeriod: fit, paused: false },
+    plan: { name: 'curtain', includedSessions: 5000, overageEurPerSession: 0, priceUsdPerMonth: 8.99, periodStart: from, periodEnd: to, sessionsUsedThisPeriod: fit, paused: false },
   };
 }
 

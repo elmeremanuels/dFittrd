@@ -2,16 +2,16 @@ import { eq } from 'drizzle-orm';
 import { SignJWT } from 'jose';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DEFAULT_API_VERSION, DEFAULT_EUR_RATES } from '@curtain/shopify-app';
-import { shops, usageDaily } from '../db/schema.js';
+import { shops, webhookLog } from '../db/schema.js';
 import { testEnv } from '../env.js';
-import { makeUsageRollupHandler } from '../jobs/maintenance.js';
-import { recordUsage } from '../services/usage.js';
+import { hmacBase64 } from '../lib/crypto.js';
 import { updateSettings } from '../services/shops.js';
 import { json, makeApp, seedShop, type TestApp } from '../test/helpers.js';
 import { billingSettingsPatch, shopBillingCurrency, type ShopifyBillingSettings } from './client.js';
 
 const API_KEY = 'shpa_billingkey';
 const API_SECRET = 'shpss' + '_test_billing_0123456789';
+const TOKEN = 'shp' + 'at_billing_x';
 
 async function sessionToken(shop: string) {
   return new SignJWT({ iss: `https://${shop}/admin`, dest: `https://${shop}`, sub: '42', sid: 'sid-1' })
@@ -26,13 +26,14 @@ async function sessionToken(shop: string) {
 
 type Gql = { query: string; variables: Record<string, unknown> };
 
-/** Mock Admin API for one shop: billing currency + appSubscriptionCreate + appUsageRecordCreate. */
-function mockAdmin(t: TestApp, shop: string, billingCurrency: string | null, seen: Gql[]) {
+/** Mock Admin API for one shop: billing currency, development-store flag, appSubscriptionCreate. */
+function mockAdmin(t: TestApp, shop: string, billingCurrency: string | null, seen: Gql[], opts: { devStore?: boolean; subscriptionId?: string } = {}) {
   t.fetchMock.on(`https://${shop}/admin/api/`, async (url, init) => {
     expect(url).toBe(`https://${shop}/admin/api/${DEFAULT_API_VERSION}/graphql.json`);
     const q = JSON.parse(String(init?.body)) as Gql;
     seen.push(q);
     if (q.query.includes('shopBillingPreferences')) return json({ data: { shopBillingPreferences: billingCurrency ? { currency: billingCurrency } : null, shop: { currencyCode: 'EUR' } } });
+    if (q.query.includes('partnerDevelopment')) return json({ data: { shop: { plan: { partnerDevelopment: opts.devStore ?? false } } } });
     if (q.query.includes('appSubscriptionCreate')) {
       return json({
         data: {
@@ -40,23 +41,21 @@ function mockAdmin(t: TestApp, shop: string, billingCurrency: string | null, see
             userErrors: [],
             confirmationUrl: `https://${shop}/admin/charges/1/confirm`,
             appSubscription: {
-              id: 'gid://shopify/AppSubscription/1',
+              id: opts.subscriptionId ?? 'gid://shopify/AppSubscription/1',
               status: 'PENDING',
-              lineItems: [
-                { id: 'gid://shopify/AppSubscriptionLineItem/1', plan: { pricingDetails: { __typename: 'AppRecurringPricing' } } },
-                { id: 'gid://shopify/AppSubscriptionLineItem/2', plan: { pricingDetails: { __typename: 'AppUsagePricing' } } },
-              ],
+              lineItems: [{ id: 'gid://shopify/AppSubscriptionLineItem/1', plan: { pricingDetails: { __typename: 'AppRecurringPricing' } } }],
             },
           },
         },
       });
     }
-    if (q.query.includes('appUsageRecordCreate')) return json({ data: { appUsageRecordCreate: { userErrors: [], appUsageRecord: { id: 'gid://shopify/AppUsageRecord/1' } } } });
     return json({ errors: [{ message: 'unexpected query' }] }, 400);
   });
 }
 
-describe('Shopify billing in the shop billing currency (#6)', () => {
+const subscribeVars = (seen: Gql[]) => seen.find((q) => q.query.includes('appSubscriptionCreate'))!.variables as { name: string; test: boolean; trialDays: number; lineItems: unknown[] };
+
+describe('Shopify billing: the one Curtain plan (D17)', () => {
   let t: TestApp;
   beforeAll(async () => {
     t = await makeApp({ SHOPIFY_API_KEY: API_KEY, SHOPIFY_API_SECRET: API_SECRET });
@@ -65,69 +64,56 @@ describe('Shopify billing in the shop billing currency (#6)', () => {
     await t.close();
   });
 
-  async function installed(domain: string) {
-    const { shop } = await seedShop(t, { platform: 'shopify', domain, plan: 'free', products: ['aalter-studio-1'] });
-    await t.app.ctx.shopify.saveOfflineSession(shop.id, domain, 'shpat' + '_billing_x', 'read_products,write_products');
+  async function installed(domain: string, plan: 'free' | 'curtain' = 'free') {
+    const { shop } = await seedShop(t, { platform: 'shopify', domain, plan, products: ['aalter-studio-1'] });
+    await t.app.ctx.shopify.saveOfflineSession(shop.id, domain, TOKEN, 'read_products,write_products');
     return shop;
   }
 
-  async function subscribe(domain: string) {
-    return t.app.inject({ method: 'POST', url: '/shopify/billing/subscribe', headers: { authorization: `Bearer ${await sessionToken(domain)}` }, payload: { plan: 'starter', test: true } });
+  async function subscribe(domain: string, payload: Record<string, unknown> = {}) {
+    return t.app.inject({ method: 'POST', url: '/shopify/billing/subscribe', headers: { authorization: `Bearer ${await sessionToken(domain)}` }, payload });
   }
 
-  it('AUD pilot shop: subscription, terms and cap in AUD; currency + rate stored; usage records in AUD', async () => {
+  it('USD shop: one recurring line of USD 8.99 every 30 days, 7-day trial, test charge outside production, no usage line', async () => {
+    const domain = 'usd-shop.myshopify.com';
+    const shop = await installed(domain);
+    const seen: Gql[] = [];
+    mockAdmin(t, domain, 'USD', seen);
+
+    const res = await subscribe(domain);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ confirmationUrl: `https://${domain}/admin/charges/1/confirm`, subscriptionId: 'gid://shopify/AppSubscription/1', currency: 'USD', price: 8.99, trialDays: 7, test: true });
+    const v = subscribeVars(seen);
+    expect(v).toMatchObject({ name: 'Curtain', test: true, trialDays: 7 });
+    expect(v.lineItems).toEqual([{ plan: { appRecurringPricingDetails: { price: { amount: 8.99, currencyCode: 'USD' }, interval: 'EVERY_30_DAYS' } } }]);
+    expect(JSON.stringify(v)).not.toMatch(/appUsagePricingDetails|cappedAmount/);
+
+    const stored = (await t.handle.db.query.shops.findFirst({ where: eq(shops.id, shop.id) }))!;
+    expect(stored.settings as ShopifyBillingSettings).toMatchObject({ billingCurrency: 'USD', billingUsdRate: 1, billingPrice: 8.99 });
+    expect(stored.settings).toMatchObject({ subscriptionStatus: 'PENDING', pendingSubscriptionId: 'gid://shopify/AppSubscription/1' });
+    expect(stored.settings.trialStartedAt).toBeTypeOf('string');
+    // nothing changes until Shopify reports the subscription ACTIVE
+    expect(stored).toMatchObject({ plan: 'free', billingRef: null });
+  });
+
+  it('AUD pilot shop: the USD price converted through the rate table, the rate recorded', async () => {
     const domain = 'aud-pilot.myshopify.com';
     const shop = await installed(domain);
     const seen: Gql[] = [];
     mockAdmin(t, domain, 'AUD', seen);
-
     const res = await subscribe(domain);
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ confirmationUrl: `https://${domain}/admin/charges/1/confirm`, subscriptionId: 'gid://shopify/AppSubscription/1', currency: 'AUD' });
-
-    const sub = seen.find((q) => q.query.includes('appSubscriptionCreate'))!;
-    const rate = DEFAULT_EUR_RATES.AUD!;
-    expect(sub.variables.lineItems).toEqual([
-      { plan: { appRecurringPricingDetails: { price: { amount: Math.round(29 * rate), currencyCode: 'AUD' }, interval: 'EVERY_30_DAYS' } } },
-      { plan: { appUsagePricingDetails: { cappedAmount: { amount: Math.round(100 * rate), currencyCode: 'AUD' }, terms: `A$${(Math.round(0.05 * rate * 100) / 100).toFixed(2)} per try-on session above 500 per month` } } },
-    ]);
-    expect(JSON.stringify(sub.variables)).not.toContain('EUR');
-
+    const usdRate = Math.round((DEFAULT_EUR_RATES.AUD! / DEFAULT_EUR_RATES.USD!) * 1e6) / 1e6;
+    const price = Math.round(8.99 * usdRate * 100) / 100;
+    expect(price).toBe(13.8);
+    expect(res.json()).toMatchObject({ currency: 'AUD', price });
+    expect(subscribeVars(seen).lineItems).toEqual([{ plan: { appRecurringPricingDetails: { price: { amount: price, currencyCode: 'AUD' }, interval: 'EVERY_30_DAYS' } } }]);
     const stored = (await t.handle.db.query.shops.findFirst({ where: eq(shops.id, shop.id) }))!;
-    expect(stored.settings as ShopifyBillingSettings).toMatchObject({ billingCurrency: 'AUD', billingEurRate: rate });
-    expect(stored.settings.usageLineItemId).toBe('gid://shopify/AppSubscriptionLineItem/2');
-    expect(stored).toMatchObject({ plan: 'starter', billingRef: 'gid://shopify/AppSubscription/1' });
+    expect(stored.settings as ShopifyBillingSettings).toMatchObject({ billingCurrency: 'AUD', billingUsdRate: usdRate, billingPrice: price });
 
-    // nightly rollup: 2 sessions above the quota → €0.10 → AUD at the stored rate
-    await updateSettings(t.handle.db, shop.id, { includedSessions: 3 }, { periodStart: '2026-11-01' });
-    const day = '2026-11-03';
-    for (let i = 0; i < 5; i++) await recordUsage(t.handle.db, { shopId: shop.id, kind: 'fit_session', idempotencyKey: `aud:${i}`, at: new Date(`${day}T1${i}:00:00Z`) });
-    // a later change of the rate table must not change a running subscription
-    await updateSettings(t.handle.db, shop.id, billingSettingsPatch({ currencyCode: 'AUD', eurRate: 1.5 }));
-    expect(await makeUsageRollupHandler(t.app)({ day })).toEqual({ pushed: 1, skipped: 0, errors: 0 });
-    const usage = seen.find((q) => q.query.includes('appUsageRecordCreate'))!;
-    expect(usage.variables.price).toEqual({ amount: 0.15, currencyCode: 'AUD' });
-    expect(await t.handle.db.query.usageDaily.findFirst({ where: eq(usageDaily.shopId, shop.id) })).toMatchObject({ pushedSessions: 2 });
-  });
-
-  it('EUR shop: unchanged EUR prices, EUR stored, usage in EUR', async () => {
-    const domain = 'eur-shop.myshopify.com';
-    const shop = await installed(domain);
-    const seen: Gql[] = [];
-    mockAdmin(t, domain, 'EUR', seen);
-    const res = await subscribe(domain);
-    expect(res.json()).toMatchObject({ currency: 'EUR' });
-    const sub = seen.find((q) => q.query.includes('appSubscriptionCreate'))!;
-    expect(sub.variables.lineItems).toEqual([
-      { plan: { appRecurringPricingDetails: { price: { amount: 29, currencyCode: 'EUR' }, interval: 'EVERY_30_DAYS' } } },
-      { plan: { appUsagePricingDetails: { cappedAmount: { amount: 100, currencyCode: 'EUR' }, terms: '€0.05 per try-on session above 500 per month' } } },
-    ]);
-    const stored = (await t.handle.db.query.shops.findFirst({ where: eq(shops.id, shop.id) }))!;
-    expect(stored.settings as ShopifyBillingSettings).toMatchObject({ billingCurrency: 'EUR', billingEurRate: 1 });
-
-    const id = await t.app.ctx.shopify.appUsageRecordCreate(domain, 'shpat' + '_billing_x', { lineItemId: 'li', description: 'd', amountEur: 1.234, idempotencyKey: 'k1' });
-    expect(id).toBe('gid://shopify/AppUsageRecord/1');
-    expect(seen.at(-1)!.variables.price).toEqual({ amount: 1.23, currencyCode: 'EUR' });
+    // the merchant console shows the charged price once the subscription is active
+    await updateSettings(t.handle.db, shop.id, {}, { plan: 'curtain' });
+    const usage = await t.app.inject({ method: 'GET', url: '/v1/merchant/usage?from=2026-11-01&to=2026-11-04', headers: { authorization: `Bearer ${await sessionToken(domain)}` } });
+    expect(usage.json().plan).toMatchObject({ name: 'curtain', priceUsdPerMonth: 8.99, chargePrice: price, chargeCurrency: 'AUD', overageEurPerSession: 0 });
   });
 
   it('a billing currency without a rate is charged in USD (Shopify converts USD charges)', async () => {
@@ -136,26 +122,159 @@ describe('Shopify billing in the shop billing currency (#6)', () => {
     const seen: Gql[] = [];
     mockAdmin(t, domain, 'XYZ', seen);
     const res = await subscribe(domain);
-    expect(res.json()).toMatchObject({ currency: 'USD' });
-    const sub = seen.find((q) => q.query.includes('appSubscriptionCreate'))!;
-    expect(JSON.stringify(sub.variables.lineItems)).toContain('"currencyCode":"USD"');
+    expect(res.json()).toMatchObject({ currency: 'USD', price: 8.99 });
   });
 
-  it('a reached cap throws so the rollup keeps the day unpushed', async () => {
-    const domain = 'cap-shop.myshopify.com';
-    await installed(domain);
-    t.fetchMock.on(`https://${domain}/admin/api/`, async () =>
-      json({ data: { appUsageRecordCreate: { userErrors: [{ message: 'Total price exceeds balance remaining before capped amount' }], appUsageRecord: null } } }),
-    );
-    await expect(t.app.ctx.shopify.appUsageRecordCreate(domain, 'tok', { lineItemId: 'li', description: 'd', amountEur: 1, idempotencyKey: 'k' })).rejects.toThrow(/capped amount/);
+  it('subscribing again never restarts the trial; the retired plan names are accepted and mean Curtain', async () => {
+    const domain = 'again.myshopify.com';
+    const shop = await installed(domain);
+    const seen: Gql[] = [];
+    mockAdmin(t, domain, 'USD', seen);
+    await updateSettings(t.handle.db, shop.id, { trialStartedAt: new Date(Date.now() - 5 * 86_400_000 - 60_000).toISOString() });
+    const res = await subscribe(domain, { plan: 'starter' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().trialDays).toBe(2);
+    expect(subscribeVars(seen)).toMatchObject({ name: 'Curtain', trialDays: 2 });
+    expect((await subscribe(domain, { plan: 'enterprise' })).statusCode).toBe(400);
+  });
+
+  it('refuses WooCommerce shops and shops without an offline token', async () => {
+    const { shop } = await seedShop(t, { platform: 'shopify', domain: 'no-token.myshopify.com', products: [] });
+    expect(shop.plan).toBe('curtain');
+    const res = await subscribe('no-token.myshopify.com');
+    expect(res.statusCode).toBe(401);
+    expect(res.json().error.code).toBe('shop_not_installed');
+  });
+});
+
+describe('Shopify billing test flag in production', () => {
+  let t: TestApp;
+  beforeAll(async () => {
+    t = await makeApp({ NODE_ENV: 'production', SHOPIFY_API_KEY: API_KEY, SHOPIFY_API_SECRET: API_SECRET });
+  });
+  afterAll(async () => {
+    await t.close();
+  });
+
+  async function run(domain: string, devStore: boolean, payload: Record<string, unknown>) {
+    const { shop } = await seedShop(t, { platform: 'shopify', domain, plan: 'free', products: [] });
+    await t.app.ctx.shopify.saveOfflineSession(shop.id, domain, TOKEN, 'read_products');
+    const seen: Gql[] = [];
+    mockAdmin(t, domain, 'USD', seen, { devStore });
+    const res = await t.app.inject({ method: 'POST', url: '/shopify/billing/subscribe', headers: { authorization: `Bearer ${await sessionToken(domain)}` }, payload });
+    expect(res.statusCode).toBe(200);
+    return subscribeVars(seen).test;
+  }
+
+  it('a merchant cannot ask for a free test charge on a live store; development stores get test charges', async () => {
+    expect(await run('live-shop.myshopify.com', false, { test: true })).toBe(false);
+    expect(await run('dev-shop.myshopify.com', true, {})).toBe(true);
+  });
+
+  it('SHOPIFY_BILLING_TEST forces the flag (staging)', async () => {
+    const env = testEnv({ SHOPIFY_BILLING_TEST: '1' });
+    expect(env.SHOPIFY_BILLING_TEST).toBe(true);
+    expect(testEnv().SHOPIFY_BILLING_TEST).toBeUndefined();
+  });
+});
+
+describe('APP_SUBSCRIPTIONS_UPDATE webhook (D17)', () => {
+  let t: TestApp;
+  beforeAll(async () => {
+    t = await makeApp({ SHOPIFY_API_KEY: API_KEY, SHOPIFY_API_SECRET: API_SECRET });
+  });
+  afterAll(async () => {
+    await t.close();
+  });
+
+  const SUB = (n: number) => `gid://shopify/AppSubscription/${n}`;
+  const webhook = (shop: string, status: string, id: string, webhookId = `wh-${Math.random().toString(36).slice(2)}`) => {
+    const body = JSON.stringify({ app_subscription: { admin_graphql_api_id: id, name: 'Curtain', status, admin_graphql_api_shop_id: 'gid://shopify/Shop/1', created_at: '2026-11-06T00:00:00Z', updated_at: '2026-11-06T00:00:00Z', currency: 'USD' } });
+    return t.app.inject({
+      method: 'POST',
+      url: '/shopify/webhooks',
+      headers: { 'content-type': 'application/json', 'x-shopify-topic': 'app_subscriptions/update', 'x-shopify-shop-domain': shop, 'x-shopify-webhook-id': webhookId, 'x-shopify-hmac-sha256': hmacBase64(API_SECRET, body) },
+      payload: body,
+    });
+  };
+  const row = async (id: string) => (await t.handle.db.query.shops.findFirst({ where: eq(shops.id, id) }))!;
+
+  it('ACTIVE → curtain, unpaused, billingRef; FROZEN pauses and keeps the plan; ACTIVE again resumes', async () => {
+    const domain = 'hook-a.myshopify.com';
+    const { shop } = await seedShop(t, { platform: 'shopify', domain, plan: 'free', products: [] });
+    await updateSettings(t.handle.db, shop.id, { pendingSubscriptionId: SUB(1), subscriptionStatus: 'PENDING' });
+    expect((await webhook(domain, 'ACTIVE', SUB(1))).statusCode).toBe(200);
+    let s = await row(shop.id);
+    expect(s).toMatchObject({ plan: 'curtain', paused: false, billingRef: SUB(1) });
+    expect(s.settings.subscriptionStatus).toBe('ACTIVE');
+    expect(s.settings.pendingSubscriptionId).toBeUndefined();
+    expect(s.periodStart).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+    await webhook(domain, 'FROZEN', SUB(1));
+    expect(await row(shop.id)).toMatchObject({ plan: 'curtain', paused: true });
+    await webhook(domain, 'ACTIVE', SUB(1));
+    s = await row(shop.id);
+    expect(s).toMatchObject({ plan: 'curtain', paused: false });
+  });
+
+  it('an old subscription cancelled after a new one is approved never pauses the shop', async () => {
+    const domain = 'hook-b.myshopify.com';
+    const { shop } = await seedShop(t, { platform: 'shopify', domain, plan: 'free', products: [] });
+    await webhook(domain, 'ACTIVE', SUB(1));
+    await webhook(domain, 'ACTIVE', SUB(2)); // the replacement
+    await webhook(domain, 'CANCELLED', SUB(1)); // Shopify cancels the replaced one
+    expect(await row(shop.id)).toMatchObject({ plan: 'curtain', paused: false, billingRef: SUB(2) });
+    await webhook(domain, 'DECLINED', SUB(3)); // a second attempt the merchant declined
+    expect(await row(shop.id)).toMatchObject({ plan: 'curtain', paused: false, billingRef: SUB(2) });
+  });
+
+  it('CANCELLED / EXPIRED of the current subscription → free and paused; a declined first attempt only records the status', async () => {
+    const domain = 'hook-c.myshopify.com';
+    const { shop } = await seedShop(t, { platform: 'shopify', domain, plan: 'free', products: [] });
+    await updateSettings(t.handle.db, shop.id, { pendingSubscriptionId: SUB(5) });
+    await webhook(domain, 'DECLINED', SUB(5));
+    let s = await row(shop.id);
+    expect(s).toMatchObject({ plan: 'free', paused: false, billingRef: null });
+    expect(s.settings).toMatchObject({ subscriptionStatus: 'DECLINED' });
+    expect(s.settings.pendingSubscriptionId).toBeUndefined();
+
+    await webhook(domain, 'ACTIVE', SUB(6));
+    await webhook(domain, 'EXPIRED', SUB(6));
+    s = await row(shop.id);
+    expect(s).toMatchObject({ plan: 'free', paused: true, billingRef: SUB(6) });
+    await webhook(domain, 'ACTIVE', SUB(7));
+    await webhook(domain, 'CANCELLED', SUB(7));
+    expect(await row(shop.id)).toMatchObject({ plan: 'free', paused: true });
+  });
+
+  it('a replayed delivery is acknowledged once and processed once', async () => {
+    const domain = 'hook-d.myshopify.com';
+    const { shop } = await seedShop(t, { platform: 'shopify', domain, plan: 'free', products: [] });
+    expect((await webhook(domain, 'ACTIVE', SUB(9), 'wh-fixed-9')).json()).toEqual({ ok: true });
+    expect((await webhook(domain, 'CANCELLED', SUB(9), 'wh-fixed-9')).json()).toEqual({ ok: true, duplicate: true });
+    expect(await row(shop.id)).toMatchObject({ plan: 'curtain', paused: false });
+    const logs = await t.handle.db.select().from(webhookLog).where(eq(webhookLog.eventId, 'wh-fixed-9'));
+    expect(logs).toHaveLength(1);
+    expect(logs[0]!.status).toBe('processed');
+  });
+
+  it('a bad HMAC is refused', async () => {
+    const res = await t.app.inject({
+      method: 'POST',
+      url: '/shopify/webhooks',
+      headers: { 'content-type': 'application/json', 'x-shopify-topic': 'app_subscriptions/update', 'x-shopify-shop-domain': 'hook-a.myshopify.com', 'x-shopify-webhook-id': 'wh-bad', 'x-shopify-hmac-sha256': hmacBase64('wrong', '{}') },
+      payload: '{}',
+    });
+    expect(res.statusCode).toBe(401);
   });
 });
 
 describe('shop billing settings helpers', () => {
-  it('reads EUR for shops subscribed before #6 and refuses a non-EUR currency without a rate', () => {
+  it('legacy usage records read EUR for pre-#6 shops and refuse a non-EUR currency without a rate', () => {
     expect(shopBillingCurrency({})).toEqual({ currencyCode: 'EUR', eurRate: 1 });
-    expect(shopBillingCurrency(billingSettingsPatch({ currencyCode: 'AUD', eurRate: 1.78 }))).toEqual({ currencyCode: 'AUD', eurRate: 1.78 });
+    expect(shopBillingCurrency({ billingCurrency: 'AUD', billingEurRate: 1.78 } as never)).toEqual({ currencyCode: 'AUD', eurRate: 1.78 });
     expect(() => shopBillingCurrency({ billingCurrency: 'AUD' } as never)).toThrow(/no stored EUR rate/);
+    expect(billingSettingsPatch({ currencyCode: 'AUD', usdRate: 1.53, price: 13.8 })).toEqual({ billingCurrency: 'AUD', billingUsdRate: 1.53, billingPrice: 13.8 });
   });
 
   it('the api env defaults to the one pinned Admin API version (#4)', () => {

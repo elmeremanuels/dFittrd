@@ -33,8 +33,8 @@ in `apps/api/src/env.ts`) and nothing touches a database.
 | `graphql/bulk` | `bulkProductsQuery()`, `startBulkProductExport`, `getBulkOperation` (via `node(id:)`), `waitForBulkOperation`, `cancelBulkOperation`, `downloadBulkResult`, `parseBulkJsonl(text)` (folds `__parentId` children back into product nodes, in any line order: 2026-01+ exports are ungrouped by default), `runProductBackfill(client)`, `BulkOperationError` |
 | `graphql/shop` | `fetchPrimaryDomainHost(client)`, `fetchBillingCurrency(client)` → `{ billingCurrency, shopCurrency }` (`shopBillingPreferences { currency }`) |
 | `currency` | `DEFAULT_EUR_RATES` (EUR-based rate table: 1 EUR = n units, every currency Shopify bills merchants in + USD), `resolveChargeCurrency(code, rates?)` (unknown → USD), `convertEur`, `convertEurListPrice`, `formatMoney`, `parseEurRates(json)` |
-| `graphql/billing` | `createAppSubscription(client, plan)` (recurring line + usage line with `cappedAmount`, in `plan.currencyCode`/`eurRate`, default EUR) → `{ …, currencyCode, eurRate }`, `createUsageRecord(client, { lineItemId, description, amountEur, idempotencyKey, currencyCode?, eurRate? })` → `{ id, capReached }`, `planAmounts`, `usageTerms`, `usageIdempotencyKey(shopId, sessionKey)`, `getActiveSubscriptions`, `cancelAppSubscription`, `subscriptionLineItems` |
-| `tokenExchange` | `requestTokenExchange({ shopDomain, sessionToken, apiKey, apiSecret, fetch?, tokenType?: 'offline' \| 'online', expiring? })` → `{ accessToken, scope, … }`; `TokenExchangeError` (status 400 = stale ID token: fetch a fresh one and retry); `tokenExchangeBody`, `tokenExchangeUrl` |
+| `graphql/billing` | D17: `CURTAIN_PLAN` (`Curtain`, USD 8.99, `EVERY_30_DAYS`); `createAppSubscription(client, { name, returnUrl, priceUsdPerMonth, trialDays, test, currencyCode?, usdRate? })` (one recurring line, no usage line) → `{ confirmationUrl, subscriptionId, status, recurringLineItemId, currencyCode, usdRate, price }`; `resolveUsdChargeCurrency(billingCurrency, rates?)`, `usdCrossRate`, `convertUsd`, `planPrice`, `planPriceLabel`, `subscriptionLineItems`, `isDevelopmentStore(client)` (`shop.plan.partnerDevelopment`), `getActiveSubscriptions`, `cancelAppSubscription`; legacy (pre-D17 usage lines only): `createUsageRecord`, `usageIdempotencyKey`, `chargeMoney` |
+| `tokenExchange` | `requestTokenExchange({ shopDomain, sessionToken, apiKey, apiSecret, fetch?, tokenType?: 'offline' \| 'online', expiring? })` → `{ accessToken, scope, expiresIn?, refreshToken?, refreshTokenExpiresIn?, … }`; A3 expiring offline tokens: `refreshAccessToken({ shopDomain, refreshToken, apiKey, apiSecret, fetch? })` (form-encoded `grant_type=refresh_token`, returns the rotated pair), `migrateToExpiringToken({ shopDomain, accessToken, … })` (non-expiring → expiring), `tokenExpiries(result, now)`; `TokenExchangeError` (`status`; 400 on exchange = stale ID token: fetch a fresh one and retry; `terminal` = 401/400/403 on refresh: run token exchange again; `retryable` = 429/5xx/network); `tokenExchangeBody`, `refreshTokenBody`, `migrateTokenBody`, `tokenExchangeUrl` |
 | `sessionToken` | `verifySessionToken(token, { apiKey, apiSecret, now?, clockToleranceSec? })` → claims or `null`; `verifySessionTokenOrThrow` (`SessionTokenError.reason`); `decodeSessionToken` (unverified); `signSessionToken` (tests/dev) |
 | `webhookHmac` | `verifyWebhookHmac(rawBody, header, secret)` (timing-safe, raw bytes), `computeWebhookHmac`, `parseWebhookHeaders(headers)`, `signWebhook` (tests), `SHOPIFY_WEBHOOK_TOPICS`, `SHOPIFY_COMPLIANCE_TOPICS`, `ALL_WEBHOOK_TOPICS`, `WEBHOOK_PATH` (`/shopify/webhooks`), `isComplianceTopic`, `isKnownTopic` |
 | `sync` | `syncProductNode(node, { defaultBrand })` → `{ externalId, handle, draft, payload \| null, completeness, warnings, archived, usable }` (uses `fromShopifyProduct` + `completenessScore` + `GarmentPayloadSchema` from `@curtain/schema`), `syncProductNodes`, `shouldArchive`, `isPublished`, `toMerchantUpsertBody` |
@@ -51,12 +51,13 @@ in `apps/api/src/env.ts`) and nothing touches a database.
 import {
   createAdminClient, requestTokenExchange, verifySessionToken, ensureMetafieldDefinitions,
   setAppDataMetafields, runProductBackfill, syncProductNode, verifyWebhookHmac, parseWebhookHeaders,
-  createAppSubscription, createUsageRecord, usageIdempotencyKey, renderAdminPage, adminContentSecurityPolicy,
+  createAppSubscription, CURTAIN_PLAN, refreshAccessToken, renderAdminPage, adminContentSecurityPolicy,
 } from '@curtain/shopify-app';
 
 // POST /shopify/token-exchange { shop, sessionToken }
 const claims = verifySessionToken(sessionToken, { apiKey: env.SHOPIFY_API_KEY, apiSecret: env.SHOPIFY_API_SECRET });
-const { accessToken, scope } = await requestTokenExchange({ shopDomain: claims.shopDomain, sessionToken, apiKey, apiSecret, fetch });
+const { accessToken, scope, refreshToken, expiresIn } = await requestTokenExchange({ shopDomain: claims.shopDomain, sessionToken, apiKey, apiSecret, fetch, expiring: true });
+// store refreshToken encrypted; before expiresIn runs out (and on a 401): refreshAccessToken({ shopDomain, refreshToken, apiKey, apiSecret }) → store the new pair
 const client = createAdminClient({ shopDomain, accessToken, apiVersion: env.SHOPIFY_API_VERSION, fetch });
 await ensureMetafieldDefinitions(client);                                   // idempotent
 await setAppDataMetafields(client, { publicKeyPrefix: shop.apiKeyPrefix, apiUrl: env.PUBLIC_API_URL, appUrl: env.PUBLIC_APP_URL });
@@ -70,8 +71,8 @@ const { topic, shopDomain, webhookId } = parseWebhookHeaders(req.headers);
 // GET /shopify/admin?shop=…  (embedded)
 reply.header('content-security-policy', adminContentSecurityPolicy(req.query.shop)).type('text/html').send(renderAdminPage({ apiKey, apiUrl, appUrl }));
 
-// billing: once per billable try-on session (D7)
-await createUsageRecord(client, { lineItemId: shop.settings.usageLineItemId, description: 'Curtain try-on session', amountEur: 0.05, idempotencyKey: usageIdempotencyKey(shop.id, intentToken) });
+// billing (D17): one flat plan, approved once by the merchant; nothing per try-on session
+const sub = await createAppSubscription(client, { name: CURTAIN_PLAN.name, returnUrl, priceUsdPerMonth: CURTAIN_PLAN.priceUsdPerMonth, trialDays: 7, test: isDevStore, currencyCode, usdRate });
 ```
 
 `apps/api/src/shopify/client.ts` currently contains its own copy of the GraphQL documents and token
@@ -242,9 +243,10 @@ app per shop; switch to public distribution before the App Store listing (irreve
       the api answers 200 and logs them (no customer PII held); `shop/redact` purges after 48 h.
 - [ ] Protected Customer Data: request **no** customer data access (scopes are products only).
       If order attribution is ever enabled (D7), file the Level 1 request first and update the privacy policy.
-- [ ] Billing: one plan with trial + usage line with `cappedAmount`; the merchant sees the overage
-      terms on the approval screen; the app handles `app_subscriptions/update` (pause below plan,
-      never break the merchant page).
+- [ ] Billing (D17): one plan "Curtain", USD 8.99 per 30 days (converted for a billing currency in
+      the rate table), trial, one recurring line and no usage line; the app handles
+      `app_subscriptions/update` (ACTIVE → curtain; the current subscription ending → paused; an old
+      replaced subscription never pauses; never break the merchant page).
 - [ ] Embedded app loads with App Bridge, works in the new admin (`admin.shopify.com`), no
       third-party cookies, CSP `frame-ancestors` set, session tokens verified server-side.
 - [ ] Theme app extension: passes `shopify app build` (Theme Check), Liquid < 100 KB, JS < 10 KB
@@ -295,11 +297,12 @@ app per shop; switch to public distribution before the App Store listing (irreve
   groups child objects by default (2026-01), which `parseBulkJsonl` handles. Products, metafields,
   metafield definitions, billing, `shop.primaryDomain` and the webhook topics we subscribe to are
   unchanged. Bump the constant each year before the pinned version leaves support.
-- Billing currency (#6): plan prices are authored in EUR; a subscription is created in the shop's
-  `shopBillingPreferences.currency` when `DEFAULT_EUR_RATES` has a rate for it (USD otherwise),
-  monthly price and cap rounded to whole units, usage to the minor unit. The api stores the
-  currency and rate on the shop and reuses them for every usage record. Rates are approximate list
-  rates, reviewed with pricing, not live FX; `parseEurRates` reads an override table from JSON.
+- Billing currency (D17, #6): the price is authored in USD; a subscription is created in the shop's
+  `shopBillingPreferences.currency` when `DEFAULT_EUR_RATES` has a rate for it (cross rate
+  `rate[X] / rate[USD]`, price rounded to the currency's minor unit), USD otherwise (Shopify converts
+  USD charges itself). The api stores the currency, the USD rate and the price on the shop. Rates
+  are approximate list rates, reviewed with pricing, not live FX; `parseEurRates` reads an override
+  table from JSON.
 - `shopify.app.toml` keys follow the current reference (`[access_scopes].use_legacy_install_flow`,
   `[webhooks].api_version`, `[[webhooks.subscriptions]].compliance_topics`, `[build].include_config_on_deploy`).
   Webhook `uri`s are absolute (`{{PUBLIC_API_URL}}/shopify/webhooks`) because `application_url`

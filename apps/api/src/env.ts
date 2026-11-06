@@ -137,6 +137,31 @@ export const EnvSchema = z.object({
    * development against a WordPress on a private address.
    */
   WOO_DOMAIN_PROOF: bool.default(true),
+
+  // ---- D17 flat plan + expiring Shopify offline tokens (A3) ---------------------------------
+  /**
+   * Free trial of the one Curtain plan (USD 8.99 per month, D17), Shopify and Stripe alike. The
+   * pre-D17 plans had 14 days; the default is 7 until the founder confirms the length. A shop that
+   * subscribes again gets only what is left of its first trial.
+   */
+  BILLING_TRIAL_DAYS: z.coerce.number().int().min(0).max(30).default(7),
+  /**
+   * Force Shopify test charges (staging). Unset: test charges on partner development stores and
+   * whenever NODE_ENV is not production; a merchant's request can never ask for one in production.
+   */
+  SHOPIFY_BILLING_TEST: bool.optional(),
+  /** Stripe price id of the Curtain plan: recurring, USD 8.99 per month, licensed (no meter). */
+  STRIPE_PRICE_CURTAIN: z.string().optional(),
+  /** Request expiring offline tokens with refresh tokens at token exchange (App Store 3.1.2). */
+  SHOPIFY_EXPIRING_OFFLINE_TOKENS: bool.default(true),
+  /** Refresh an expiring offline access token this many seconds before it expires. */
+  SHOPIFY_TOKEN_REFRESH_MARGIN_SEC: z.coerce.number().int().min(0).max(1800).default(300),
+  /**
+   * Dormant shops: the daily token job refreshes every session whose refresh token expires within
+   * this many days (the refresh token lives 90 days; it must be used before then), and migrates
+   * stored non-expiring tokens.
+   */
+  SHOPIFY_REFRESH_TOKEN_RENEW_DAYS: z.coerce.number().int().min(1).max(80).default(30),
 });
 
 export type Env = z.infer<typeof EnvSchema> & {

@@ -29,6 +29,13 @@
       "when": 1793900000000,
       "tag": "0003_billing_anomalies",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793939296231,
+      "tag": "0004_flat_plan_expiring_tokens",
+      "breakpoints": true
     }
   ]
 }

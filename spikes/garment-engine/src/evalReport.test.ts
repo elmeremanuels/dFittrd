@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { chooseMesh, evaluateProduct, readJob, type JobFiles, type ProductEval } from './evalJob';
 import { reconstructedDress, shopPayloads, syntheticDress, writeFakeJob } from './evalFixtures';
 import { SHOP_UNCOVERED_CATEGORIES } from './shopSelection';
-import { costTotal, plannedPhotos, renderReport, stageStatuses, usedInputs, verdicts, type ProductSection, type ReportInput, type ShopImage, type ShopProduct } from './evalReport';
+import { costTotal, parsePrintedTable, plannedPhotos, renderReport, stageStatuses, usedInputs, verdicts, type ProductSection, type ReportInput, type ShopImage, type ShopProduct } from './evalReport';
 
 const images = (JSON.parse(readFileSync(new URL('../data/bohohippychic/images.json', import.meta.url), 'utf8')) as { products: Record<string, ShopImage[]> }).products;
 const dirs: string[] = [];
@@ -89,7 +89,7 @@ describe('report with a GPU run', () => {
     expect(usedInputs(job, images[p.handle]!).inventedBack).toBe(true);
     expect(md).toMatch(/invented back: \*\*YES\*\*/);
     expect(md).toMatch(/\| INVENTED \|/);
-    expect(md).toMatch(/\| back \| stage1b `stage1b\/garment_mask_back\.png` \| [0-9.]+ \| (pass|FAIL) \| YES \|/);
+    expect(md).toMatch(/\| back \| stage1b `stage1b\/garment_mask_back\.png` \| [0-9.]+ \| [0-9.]+ \| (pass|FAIL) \| YES \|/);
   });
 
   it('lists every stage with its state', () => {
@@ -103,5 +103,59 @@ describe('report with a GPU run', () => {
   it('calls chart agreement met only with at least 4 of 5 products evaluated and passing', () => {
     expect(verdicts(input([sec, ...shopPayloads().slice(1).map((x) => missing(x.handle))])).find((v) => v.item === 'Chart agreement')!.state).toBe('not yet measurable');
     expect(verdicts(input([sec, sec, sec, sec, sec])).find((v) => v.item === 'Chart agreement')!.state).toBe('met');
+  });
+
+  it('agrees with a hand-written hold: final chart residual, partly measured cost, no panel yet', () => {
+    const v = verdicts({ ...input([sec, ...shopPayloads().slice(1).map((x) => missing(x.handle))]), panelHold: 'the renders are not ready.' });
+    const chart = v.find((x) => x.item === 'Chart agreement')!.text;
+    expect(chart).toMatch(/after calibration/);
+    expect(chart).toMatch(/before calibration/);
+    expect(v.find((x) => x.item === 'Cost')!.state).toBe('measured, partly');
+    expect(v.find((x) => x.item === 'Cost')!.text).toMatch(/ s wall/);
+    for (const item of ['Size test', 'Fabric test']) expect(v.find((x) => x.item === item)!.text).toMatch(/Do not run the panel on these assets yet:\*\* the renders are not ready\./);
+    expect(verdicts(input([sec, ...shopPayloads().slice(1).map((x) => missing(x.handle))])).find((x) => x.item === 'Size test')!.text).not.toMatch(/Do not run/);
+  });
+});
+
+describe('report with stage 2 garment masks, a printed table and a written section', () => {
+  const dir = writeFakeJob({ recon: reconstructedDress(), pinned: syntheticDress(), withStage2Masks: true });
+  dirs.push(dir);
+  const job = readJob(dir);
+  const p = shopPayloads()[0]!;
+  const written = new Map<string, Uint8Array>();
+  const ev = evaluateProduct({ productId: p.handle, payload: p.payload, baseSize: p.baseSize, job, choice: chooseMesh(job, { allowSynthetic: false })!, writeImage: (n, png) => written.set(n, png) });
+  const printed = parsePrintedTable('size-per-row: "Size Bust Length 8 94cm 90cm 10 98cm 90cm 12 102cm 91cm 14 106cm 92cm 16 112cm 93cm"');
+  const sec = { ...section(p.handle, job, ev), shop: { ...section(p.handle, job, ev).shop, printed } };
+  const md = renderReport({ ...input([sec]), written: '## Runs 10–14 timeline\n\nHand-written text.', writtenSource: 'spikes/garment-engine/data/bohohippychic/phase0-written.md' });
+
+  it('compares the mesh with the generated turntable at 0°, 90° and 180°, both meshes, and writes the pictures', () => {
+    expect([...new Set(ev.view.turntable.map((t) => t.angleDeg))]).toEqual([0, 90, 180]);
+    expect(ev.view.turntable.map((t) => t.frame)).toEqual([0, 0, 2, 2, 4, 4]); // 8 frames
+    for (const t of ev.view.turntable) {
+      expect(t.iouSilhouette).toBeGreaterThan(0.5);
+      expect(t.iouSilhouette).toBeGreaterThanOrEqual(t.iouVisible - 0.02);
+    }
+    expect([...written.keys()]).toEqual(expect.arrayContaining(['view/turntable_0.png', 'view/turntable_90.png', 'view/turntable_180.png']));
+    expect(md).toMatch(/\| 90° \| 2 \| [0-9.]+ \| [0-9.]+ \| [0-9.]+ \| [0-9.]+ \| \[turntable_90\.png\]/);
+    expect(ev.view.views.every((v) => v.silhouetteIou !== undefined)).toBe(true);
+  });
+
+  it('counts the stage 2 garment masks as the separation stage', () => {
+    expect(stageStatuses(sec, job).find((s) => s.stage === '3 separation')!.state).toBe('done');
+  });
+
+  it('parses the printed garment table and grades against it', () => {
+    expect(printed).toHaveLength(5);
+    expect(printed[0]).toEqual({ size: '8', values: { chest: 94, shoulder_to_hem: 90 } });
+    expect(md).toMatch(/Grading against the shop's printed garment table/);
+    expect(md).toMatch(/\| 8 \| [0-9.]+ \| 94\.00 \| [-+0-9.]+ \| [0-9.]+ \| 90\.00 \|/);
+    expect(parsePrintedTable('as-text: "Bust 94cm"')).toEqual([]);
+    expect(parsePrintedTable('size-per-row: "Size Bust 8 94cm 10"')).toEqual([{ size: '8', values: { chest: 94 } }]);
+  });
+
+  it('copies the written section in after the acceptance table, and names its source', () => {
+    expect(md.indexOf('## Runs 10–14 timeline')).toBeGreaterThan(md.indexOf('## Phase 0 acceptance'));
+    expect(md.indexOf('## Runs 10–14 timeline')).toBeLessThan(md.indexOf('## What this set can and cannot show'));
+    expect(md).toMatch(/written by hand in `spikes\/garment-engine\/data\/bohohippychic\/phase0-written\.md`/);
   });
 });

@@ -20,9 +20,10 @@ import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh, turntable
 import type { GarmentPayload } from '@curtain/schema';
 import { evaluateGarment, SIMULATED_ERROR, type EvalResult, type MeshSourceKind } from './eval';
 import { evalBundle, type ViewAgreement } from './evalBundle';
-import { readGarmentGlb, weldVertices } from './evalMesh';
+import { readGarmentGlb, weldVerticesWithColors } from './evalMesh';
 import { decodeAnyPng, maskFromPng, maskPng, type Mask } from './evalPng';
-import { garmentSilhouette, overlayPng, scoreView, shopPhotoScore, type ViewName, type ViewReference } from './evalView';
+import { colourRender, garmentSilhouette, overlayPng, overlayRgb, scoreView, shopPhotoScore, sideBySidePng, type TurntableScore, type ViewName, type ViewReference } from './evalView';
+import { maskIou } from './evalPng';
 
 export type Json = Record<string, unknown>;
 
@@ -72,6 +73,8 @@ export interface JobFiles {
   stage1b: Json | null;
   stage2: Json | null;
   stage3Masks: number;
+  /** Garment masks of the generated frames (`stage2/garment_mask/`, the stage 2 segmentation stage 4 trains on) and their record. */
+  stage2Masks: { count: number; record: Json | null };
   stage4: Partial<Record<'stage2' | 'synthetic', { glb: string | null; metrics: Json | null }>>;
   costSummary: Json | null;
   /** Every cost record found: cost_summary.json when present, else the stages' own records. */
@@ -96,6 +99,7 @@ export function readJob(dir: string): JobFiles {
     stage1b: readJson(at('stage1b/record.json')),
     stage2: readJson(at('stage2/record.json')),
     stage3Masks,
+    stage2Masks: { count: existsSync(at('stage2/garment_mask')) ? readdirSync(at('stage2/garment_mask')).filter((f) => f.endsWith('.png')).length : 0, record: readJson(at('stage2/garment_mask/record.json')) },
     stage4,
     costSummary: readJson(at('cost_summary.json')),
     costs: [],
@@ -150,13 +154,27 @@ export function viewReferences(job: JobFiles): { refs: ViewReference[]; notes: s
   return { refs, notes };
 }
 
-export function viewAgreement(job: JobFiles, m: Mannequin, garment: Mesh, writeImage?: (name: string, png: Uint8Array) => void): ViewAgreement {
+/** Turntable angles compared with the stage 2 frames (0° front, 180° back; 90° a side, which stage 1b never pinned). */
+export const TURNTABLE_ANGLES = [0, 90, 180] as const;
+
+export interface ViewMeshes {
+  /** The calibrated base-size mesh (the asset). */
+  calibrated: Mesh;
+  /** The mesh as reconstructed, before calibration. */
+  reconstructed?: Mesh;
+  /** Per-vertex RGB of both meshes (same vertex order), for the colour renders. */
+  colors?: ArrayLike<number> | null;
+}
+
+export function viewAgreement(job: JobFiles, m: Mannequin, meshes: Mesh | ViewMeshes, writeImage?: (name: string, png: Uint8Array) => void): ViewAgreement {
+  const vm: ViewMeshes = 'positions' in meshes ? { calibrated: meshes } : meshes;
+  const garment = vm.calibrated;
   const { refs, notes } = viewReferences(job);
   const cam = obj(job.manifest?.camera);
   const frames = num(cam?.frames);
   const width = num(cam?.width);
   const height = num(cam?.height);
-  if (!frames || !width || !height) return { views: [], shopPhotos: [], notes };
+  if (!frames || !width || !height) return { views: [], shopPhotos: [], turntable: [], notes };
   const path = turntablePath(m, 'turntable_mid', { frames });
   const body = buildMannequinMesh(m);
   const views = [];
@@ -177,7 +195,8 @@ export function viewAgreement(job: JobFiles, m: Mannequin, garment: Mesh, writeI
       continue;
     }
     const r = renderView(ref.view, ref.frame);
-    views.push(scoreView(r, ref));
+    const sil = garmentSilhouette(null, garment, path.frames[ref.frame]!, width, height);
+    views.push(scoreView(r, ref, undefined, sil));
     writeImage?.(`view/${ref.view}_overlay.png`, overlayPng(r, ref.mask));
   }
   // Shop photo masks (stage 1b segmentation of the shop photo): indicative only.
@@ -190,7 +209,45 @@ export function viewAgreement(job: JobFiles, m: Mannequin, garment: Mesh, writeI
     if (s) shopPhotos.push(s);
   }
   if (job.manifest && obj(job.manifest.stage1b) && shopPhotos.length === 0) notes.push('no shop photo masks (stage1b/source/<view>_mask.png): stage 1b not run');
-  return { views, shopPhotos, notes };
+
+  // Turntable: the mesh against the generated frames' garment masks (stage 2 segmentation) at 0°, 90° and 180°.
+  const turntable: TurntableScore[] = [];
+  const r4 = (x: number): number => Math.round(x * 10000) / 10000;
+  for (const angleDeg of TURNTABLE_ANGLES) {
+    const frame = Math.round((angleDeg / 360) * frames);
+    const name = String(frame).padStart(4, '0');
+    const refRel = `stage2/garment_mask/${name}.png`;
+    const ref = readMask(job.dir, refRel);
+    if (!ref || ref.width !== width || ref.height !== height) continue;
+    const cf = path.frames[frame]!;
+    let calibratedVisible: Mask | null = null;
+    for (const [kind, mesh] of [['calibrated', garment], ['reconstructed', vm.reconstructed]] as const) {
+      if (!mesh) continue;
+      const vis = garmentSilhouette(body, mesh, cf, width, height);
+      const sil = garmentSilhouette(null, mesh, cf, width, height);
+      turntable.push({ angleDeg, frame, referencePath: refRel, mesh: kind, iouVisible: r4(maskIou(vis, ref).iou), iouSilhouette: r4(maskIou(sil, ref).iou) });
+      if (kind === 'calibrated') calibratedVisible = vis;
+    }
+    if (writeImage && calibratedVisible) {
+      const framePath = safeJoin(job.dir, `stage2/frames/${name}.png`);
+      let frameRgb: Uint8Array | null = null;
+      if (framePath && existsSync(framePath)) {
+        try {
+          const img = decodeAnyPng(new Uint8Array(readFileSync(framePath)));
+          if (img.width === width && img.height === height) {
+            frameRgb = new Uint8Array(width * height * 3);
+            for (let i = 0; i < width * height; i++) for (let c = 0; c < 3; c++) frameRgb[3 * i + c] = img.data[i * img.channels + (img.channels >= 3 ? c : 0)]!;
+          }
+        } catch {
+          frameRgb = null;
+        }
+      }
+      const panels = [...(frameRgb ? [frameRgb] : []), colourRender(body, garment, vm.colors ?? null, cf, width, height), overlayRgb(calibratedVisible, ref)];
+      writeImage(`view/turntable_${angleDeg}.png`, sideBySidePng(width, height, panels));
+    }
+  }
+  if (job.manifest && turntable.length === 0) notes.push('no stage 2 garment masks (stage2/garment_mask/): no turntable comparison');
+  return { views, shopPhotos, turntable, notes };
 }
 
 export interface MeshChoice {
@@ -247,11 +304,14 @@ export function evaluateProduct(o: {
   const t0 = performance.now();
   let mesh: Mesh;
   let meanColorHex: string | null = null;
+  let colors: Float32Array | null = null;
   if (o.choice.mesh) mesh = o.choice.mesh;
   else {
     if (!o.choice.bytes) throw new Error(`${o.choice.path}: missing`);
     const g = readGarmentGlb(o.choice.bytes);
-    mesh = weldVertices(g.mesh);
+    const w = weldVerticesWithColors(g.mesh, g.colors);
+    mesh = w.mesh;
+    colors = w.colors;
     meanColorHex = o.choice.kind === 'stage4' ? g.meanColorHex : null;
   }
   const m = buildMannequin(bodyShape(BASE_SHAPE_ID));
@@ -265,7 +325,8 @@ export function evaluateProduct(o: {
     source: { kind: o.choice.kind, path: o.choice.path, simulatedError: o.choice.kind === 'synthetic-truth' ? SIMULATED_ERROR : null },
   });
   const t2 = performance.now();
-  const view = viewAgreement(o.job, m, result.baseMesh, o.writeImage);
+  // The simulated error of a synthetic truth changes positions, not the vertex order: the colours still apply.
+  const view = viewAgreement(o.job, m, { calibrated: result.baseMesh, reconstructed: result.reconstructed, colors }, o.writeImage);
   const t3 = performance.now();
   const bundle = result.grading ? evalBundle(result, o.payload, { meanColorHex, view, inputs: { jobDir: o.job.dir, manifestInputHash: str(o.job.manifest?.input_hash) } }) : null;
   return { result, view, bundle, meanColorHex, readMs: Math.round(t1 - t0), evalMs: Math.round(t2 - t1), viewMs: Math.round(t3 - t2) };

@@ -13,6 +13,10 @@ export interface DrawItem {
   color: Vec3;
   /** Object id written to the id buffer (0 is the background). */
   id: number;
+  /** Per-vertex RGB 0…1 (e.g. the colours stage 4 projected from the frames), interpolated over each triangle instead of `color`. */
+  vertexColors?: ArrayLike<number>;
+  /** No shading: the colours already carry the frames' light (vertex colours from stage 4). */
+  unlit?: boolean;
 }
 
 export interface Render {
@@ -66,7 +70,8 @@ export function render(items: readonly DrawItem[], camera: CameraFrame, width: n
       const n = normalize(cross(sub(P(b), pa), sub(P(c), pa)));
       const centroid: Vec3 = [(pa[0] + P(b)[0] + P(c)[0]) / 3, (pa[1] + P(b)[1] + P(c)[1]) / 3, (pa[2] + P(b)[2] + P(c)[2]) / 3];
       const light = normalize(sub(camera.position, centroid));
-      const shade = AMBIENT + (1 - AMBIENT) * Math.abs(dot(n, light)); // two-sided: cloth is seen from inside too
+      const shade = item.unlit ? 1 : AMBIENT + (1 - AMBIENT) * Math.abs(dot(n, light)); // two-sided: cloth is seen from inside too
+      const vc = item.vertexColors;
       const r = Math.round(item.color[0] * shade * 255), g = Math.round(item.color[1] * shade * 255), bl = Math.round(item.color[2] * shade * 255);
       const x0 = sx[a]!, y0 = sy[a]!, x1 = sx[b]!, y1 = sy[b]!, x2 = sx[c]!, y2 = sy[c]!;
       const area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
@@ -88,9 +93,13 @@ export function render(items: readonly DrawItem[], camera: CameraFrame, width: n
           if (z >= depth[k]!) continue;
           depth[k] = z;
           ids[k] = item.id;
-          rgb[3 * k] = r;
-          rgb[3 * k + 1] = g;
-          rgb[3 * k + 2] = bl;
+          if (vc) {
+            for (let ch = 0; ch < 3; ch++) rgb[3 * k + ch] = Math.round((w0 * vc[3 * a + ch]! + w1 * vc[3 * b + ch]! + w2 * vc[3 * c + ch]!) * shade * 255);
+          } else {
+            rgb[3 * k] = r;
+            rgb[3 * k + 1] = g;
+            rgb[3 * k + 2] = bl;
+          }
         }
       }
     }

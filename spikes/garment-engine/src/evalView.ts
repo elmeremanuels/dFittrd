@@ -23,11 +23,16 @@ export const VIEW_IOU_PASS = 0.85;
 
 export type ViewName = 'front' | 'back';
 
-export function garmentSilhouette(body: Mesh, garment: Mesh, frame: CameraFrame, width: number, height: number): Mask {
+/**
+ * The garment's pixels at a camera. With `body`, the mannequin is drawn as an occluder (what a
+ * viewer shows: garment that lies inside the mannequin is hidden); with `null`, the garment's own
+ * silhouette (what the garment masks of stage 2 and stage 4 describe where the body is covered).
+ */
+export function garmentSilhouette(body: Mesh | null, garment: Mesh, frame: CameraFrame, width: number, height: number): Mask {
   const r = render(
     [
-      { positions: body.positions, indices: body.indices, color: MANNEQUIN_GREY, id: MANNEQUIN_ID },
-      { positions: garment.positions, indices: garment.indices, color: [0.8, 0.3, 0.2], id: GARMENT_ID },
+      ...(body ? [{ positions: body.positions, indices: body.indices, color: MANNEQUIN_GREY, id: MANNEQUIN_ID }] : []),
+      { positions: garment.positions, indices: garment.indices, color: [0.8, 0.3, 0.2] as [number, number, number], id: GARMENT_ID },
     ],
     frame,
     width,
@@ -53,6 +58,8 @@ export interface ViewReference {
 }
 
 export interface ViewScore extends MaskIou {
+  /** IoU of the garment's own silhouette (no mannequin occluder) with the reference: holes and cloth inside the mannequin do not count against it. */
+  silhouetteIou?: number;
   view: ViewName;
   frame: number;
   reference: ReferenceKind;
@@ -61,9 +68,9 @@ export interface ViewScore extends MaskIou {
   pass: boolean;
 }
 
-export function scoreView(rendered: Mask, ref: ViewReference, passIou = VIEW_IOU_PASS): ViewScore {
+export function scoreView(rendered: Mask, ref: ViewReference, passIou = VIEW_IOU_PASS, silhouette?: Mask): ViewScore {
   const s = maskIou(rendered, ref.mask);
-  return { ...s, iou: Math.round(s.iou * 10000) / 10000, view: ref.view, frame: ref.frame, reference: ref.kind, referencePath: ref.path, invented: ref.invented, pass: s.iou >= passIou };
+  return { ...s, iou: Math.round(s.iou * 10000) / 10000, ...(silhouette ? { silhouetteIou: Math.round(maskIou(silhouette, ref.mask).iou * 10000) / 10000 } : {}), view: ref.view, frame: ref.frame, reference: ref.kind, referencePath: ref.path, invented: ref.invented, pass: s.iou >= passIou };
 }
 
 export interface ShopPhotoScore {
@@ -109,10 +116,10 @@ export function shopPhotoScore(view: ViewName, rendered: Mask, photo: Mask, phot
   };
 }
 
-/** RGB overlay for a person to look at: grey = both, red = reference only, blue = render only. */
-export function overlayPng(rendered: Mask, reference: Mask): Uint8Array {
+/** RGB samples of the overlay: grey = both, red = reference only, blue = render only. */
+export function overlayRgb(rendered: Mask, reference: Mask): Uint8Array {
   const { width, height } = rendered;
-  const data = new Uint16Array(width * height * 3);
+  const data = new Uint8Array(width * height * 3);
   for (let i = 0; i < width * height; i++) {
     const a = rendered.data[i]!, b = reference.data[i]!;
     const [r, g, bl] = a && b ? [120, 120, 120] : b ? [220, 40, 30] : a ? [30, 80, 220] : [245, 245, 245];
@@ -120,5 +127,59 @@ export function overlayPng(rendered: Mask, reference: Mask): Uint8Array {
     data[3 * i + 1] = g;
     data[3 * i + 2] = bl;
   }
-  return encodePng({ width, height, channels: 3, bitDepth: 8, data });
+  return data;
+}
+
+/** RGB overlay for a person to look at: grey = both, red = reference only, blue = render only. */
+export function overlayPng(rendered: Mask, reference: Mask): Uint8Array {
+  return encodePng({ width: rendered.width, height: rendered.height, channels: 3, bitDepth: 8, data: overlayRgb(rendered, reference) });
+}
+
+/** Studio grey behind the colour renders (the stage 2 frames' background is a light grey too). */
+export const RENDER_BACKGROUND = [236, 236, 236] as const;
+
+/**
+ * Colour render of the garment on the mannequin at a camera: the garment in its stage 4 vertex
+ * colours, unlit (they carry the frames' light), else flat; the mannequin shaded grey. RGB samples.
+ */
+export function colourRender(body: Mesh, garment: Mesh, colors: ArrayLike<number> | null, frame: CameraFrame, width: number, height: number): Uint8Array {
+  const r = render(
+    [
+      { positions: body.positions, indices: body.indices, color: MANNEQUIN_GREY, id: MANNEQUIN_ID },
+      { positions: garment.positions, indices: garment.indices, color: [0.72, 0.68, 0.62], id: GARMENT_ID, ...(colors ? { vertexColors: colors, unlit: true } : {}) },
+    ],
+    frame,
+    width,
+    height,
+  );
+  const out = new Uint8Array(width * height * 3);
+  for (let i = 0; i < width * height; i++) {
+    for (let c = 0; c < 3; c++) out[3 * i + c] = r.ids[i] ? r.rgb[3 * i + c]! : RENDER_BACKGROUND[c]!;
+  }
+  return out;
+}
+
+/** Panels of the same size (RGB samples) side by side, 8 px apart, as one PNG. */
+export function sideBySidePng(width: number, height: number, panels: readonly Uint8Array[]): Uint8Array {
+  const gap = 8;
+  const W = panels.length * width + (panels.length - 1) * gap;
+  const data = new Uint8Array(W * height * 3).fill(255);
+  panels.forEach((p, k) => {
+    const x0 = k * (width + gap);
+    for (let y = 0; y < height; y++) data.set(p.subarray(y * width * 3, (y + 1) * width * 3), (y * W + x0) * 3);
+  });
+  return encodePng({ width: W, height, channels: 3, bitDepth: 8, data });
+}
+
+/** One turntable angle: the stage 4 mesh rendered at the stage 2 camera against that frame's garment mask. */
+export interface TurntableScore {
+  angleDeg: number;
+  frame: number;
+  /** Path of the stage 2 garment mask, relative to the job dir. */
+  referencePath: string;
+  mesh: 'reconstructed' | 'calibrated';
+  /** Mannequin drawn as an occluder (what a viewer shows). */
+  iouVisible: number;
+  /** The garment's own silhouette. */
+  iouSilhouette: number;
 }

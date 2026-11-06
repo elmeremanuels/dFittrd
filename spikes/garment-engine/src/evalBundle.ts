@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import { round, roundVec, vertexNormals, writeGlb } from '@curtain/mannequin';
 import type { GarmentPayload } from '@curtain/schema';
 import { EVAL_MANNEQUIN, EVAL_VERSION, SOURCE_LABEL, type EvalResult } from './eval';
-import type { ShopPhotoScore, ViewScore } from './evalView';
+import type { ShopPhotoScore, TurntableScore, ViewScore } from './evalView';
 import { materialJson, type MaterialJson } from './product';
 import { hexToRgb } from './raster';
 
@@ -33,6 +33,8 @@ export interface ViewAgreement {
   views: ViewScore[];
   /** Against the shop photo masks: indicative only. */
   shopPhotos: ShopPhotoScore[];
+  /** The mesh against the stage 2 frames' garment masks at 0°, 90° and 180° (empty without stage 2 masks). */
+  turntable: TurntableScore[];
   /** Why a part is missing (no stage 1b masks, no job dir, …). */
   notes: string[];
 }
@@ -115,6 +117,7 @@ export function evalBundle(result: EvalResult, payload: GarmentPayload, opts: { 
       residualAfterGlobalCm: { rms: round(result.calibration.residualAfterGlobal.rmsCm, 3), maxAbs: round(result.calibration.residualAfterGlobal.maxAbsCm, 3) },
     },
     meshHealth: { ...result.health },
+    insideBody: result.insideBody,
     viewAgreement: opts.view ?? null,
     gradingEstimates: result.grading?.estimates ?? null,
     warnings: result.warnings,
@@ -146,6 +149,7 @@ export function evalBundle(result: EvalResult, payload: GarmentPayload, opts: { 
     ringCorrections: anchors.calibration.ringCorrections,
     warnings: result.warnings,
     meshHealth: result.health,
+    insideBody: result.insideBody,
     grading: result.grading ? { sizes: result.grading.sizes.map((s) => s.size), estimates: result.grading.estimates } : null,
     gradingError: result.gradingError,
     viewAgreement: opts.view ?? null,

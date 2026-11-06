@@ -9,7 +9,7 @@
  * Per product with a stage 4 mesh: anchoring + calibration against the AU chart (+ ease), grading to
  * the chart's sizes, view agreement against the stage 1b stills and the shop photo masks, and a
  * bundle in `out/eval/<handle>/` the spike viewer loads as `eval/<handle>`. `--renders` then runs
- * `viewer/render-eval.mjs` (sizes 8/12/16 on the M mannequin and the XS and XXL shapes, with and
+ * `viewer/render-eval.mjs` (sizes 8/12/16 on the M mannequin at front, three-quarter and side view and the XS and XXL shapes, with and
  * without the fit map, and the blind page with these products pre-selected). The synthetic spike
  * product goes through the same tooling as a dry run (its stage 4 output when present, else its
  * ground-truth garment with the spike's simulated reconstruction error). Finally it writes
@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { BASE_SHAPE_ID, bodyShape, buildMannequin } from '@curtain/mannequin';
 import { mockGarment, type GarmentPayload } from '@curtain/schema';
 import { arr, chooseMesh, evaluateProduct, num, obj, readJob, str, type Json, type ProductEval } from '../src/evalJob';
-import { renderReport, type ProductRenders, type ProductSection, type RenderShot, type ShopImage, type ShopProduct, type SyntheticSection } from '../src/evalReport';
+import { parsePrintedTable, renderReport, type ProductRenders, type ProductSection, type RenderShot, type ShopImage, type ShopProduct, type SyntheticSection } from '../src/evalReport';
 import { generateGarment } from '../src/garment';
 import { garmentSpec } from '../src/product';
 import { SHOP_UNCOVERED_CATEGORIES } from '../src/shopSelection';
@@ -72,6 +72,7 @@ function shopProducts(): { shop: { domain: string; brand: string; currency: stri
       warnings: arr(p.warnings).map(String),
       threeD: { ready: three?.ready === true, reasons: arr(three?.reasons).map(String) },
       completeness: comp ? { score: num(comp.score) ?? 0, status: str(comp.status) ?? '?' } : null,
+      printed: parsePrintedTable(str(obj(p.evidence)?.printedTable)),
     };
   });
   const images: Record<string, ShopImage[]> = {};
@@ -124,7 +125,7 @@ function run(id: string, payload: GarmentPayload, baseSize: string, jobDir: stri
     const bundleRel = writeBundle(id, ev, images);
     const r = ev.result;
     console.log(
-      `[report] ${id}: ${r.source.kind}, chart agreement ${r.agreement.pass ? 'pass' : 'FAIL'} (before ${r.before.maxAbsCm ?? '—'} cm, after global ${r.afterGlobal.maxAbsCm ?? '—'} cm), ` +
+      `[report] ${id}: ${r.source.kind}, chart agreement ${r.agreement.pass ? 'pass' : 'FAIL'} (before ${r.before.maxAbsCm ?? '—'} cm, after global ${r.afterGlobal.maxAbsCm ?? '—'} cm, after calibration ${Number.isFinite(r.agreement.maxAbsCm) ? r.agreement.maxAbsCm.toFixed(2) : '—'} cm), ` +
         `view ${ev.view.views.map((v) => `${v.view} ${v.iou.toFixed(3)}`).join(', ') || '—'}, ${r.health.triangles} triangles, bundle ${ev.bundle ? `${(ev.bundle.bytes / 1024).toFixed(0)} KB` : 'not written'}`,
     );
     for (const w of r.warnings) console.log(`[report] ${id}: warning: ${w}`);
@@ -157,7 +158,7 @@ function readRenders(): RendersFile | null {
       inputHash: str(o.inputHash),
       shots: arr(o.shots).map((s) => {
         const so = obj(s)!;
-        return { file: str(so.file) ?? '', shape: (str(so.shape) ?? 'M') as RenderShot['shape'], fitMap: so.fitMap === true, sizes: arr(so.sizes).map(String), settleMs: arr(so.settleMs).map((x) => num(x) ?? 0) };
+        return { file: str(so.file) ?? '', shape: (str(so.shape) ?? 'M') as RenderShot['shape'], view: (str(so.view) ?? 'front') as NonNullable<RenderShot['view']>, fitMap: so.fitMap === true, sizes: arr(so.sizes).map(String), settleMs: arr(so.settleMs).map((x) => num(x) ?? 0) };
       }),
       problems: arr(o.problems).map(String),
     };
@@ -208,6 +209,11 @@ if (flag('renders')) {
   }
 }
 
+const writtenPath = join(dataDir, 'phase0-written.md');
+const written = existsSync(writtenPath) ? readFileSync(writtenPath, 'utf8') : null;
+// One hand-written sentence when the current assets are not fit for the five-person panel; delete the file once they are.
+const panelHoldPath = join(dataDir, 'panel-hold.txt');
+const panelHold = existsSync(panelHoldPath) ? readFileSync(panelHoldPath, 'utf8').trim() || null : null;
 const renders = readRenders();
 const shopIds = sections.filter((s) => s.eval?.bundle).map((s) => `eval/${s.id}`);
 const blindIds = shopIds.length ? shopIds : sections.map((s) => `eval/${s.id}`);
@@ -220,6 +226,9 @@ const markdown = renderReport({
   blindShot: renders && shopIds.length && renders.blindShots.length ? renders.blindShots[renders.blindShots.length - 1]! : null,
   toRoot: relative(dirname(reportPath), repoRoot).split('\\').join('/') || '.',
   uncoveredCategories: SHOP_UNCOVERED_CATEGORIES,
+  written,
+  writtenSource: written ? rel(writtenPath) : null,
+  panelHold: panelHold ? `${panelHold} (\`${rel(panelHoldPath)}\`)` : null,
 });
 mkdirSync(dirname(reportPath), { recursive: true });
 writeFileSync(reportPath, markdown);

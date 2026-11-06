@@ -16,16 +16,16 @@
  */
 import { createHash } from 'node:crypto';
 import { type AnchorLength, type AnchorRing } from '@curtain/anchors';
-import { BASE_SHAPE_ID, MANNEQUIN_VERSION, bodyShape, buildMannequin, type Mannequin, type Mesh } from '@curtain/mannequin';
+import { BASE_SHAPE_ID, MANNEQUIN_VERSION, bodyShape, buildMannequin, buildMannequinMesh, type Mannequin, type Mesh } from '@curtain/mannequin';
 import type { GarmentPayload } from '@curtain/schema';
-import { applyCalibration, calibrate, chartAgreement, measureGarment, ringGirths, type AnchorMeasurements, type Calibration, type ChartAgreement } from './anchoring';
+import { applyCalibration, calibrate, chartAgreement, measureGarment, ringGirths, type AnchorMeasurements, type Calibration, type ChartAgreement, type MeasureOptions } from './anchoring';
 import { DEFAULT_DISTORTION } from './bundle';
 import { asGradingChart, criticalRings, evalChart, evalChartRow, type EvalCategory, type EvalChart } from './evalChart';
 import { meshHealth, type MeshHealth } from './evalMesh';
 import { assignChains, distortGarment, type ChainAssignment, type Distortion, type SpikeCategory } from './garment';
 import { gradeGarment, type GradingJson } from './grading';
 
-export const EVAL_VERSION = 'phase0-eval-0.1.0';
+export const EVAL_VERSION = 'phase0-eval-0.2.0';
 /** Phase 0 acceptance: calibrated circumference within ±2 cm of the chart at the critical anchors. */
 export const CHART_TOLERANCE_CM = 2;
 /** A global scale further than this from 1 means the reconstruction's size (or its unit) is off, not just its shape. */
@@ -58,8 +58,14 @@ export interface AnchorRow {
   chartCm: number | null;
   /** Ease added to a body chart value, and whether it is the category default. */
   ease: { cm: number; isDefault: boolean } | null;
-  /** Girth of the mesh as reconstructed, cm; null = no closed loop around the ring. */
+  /** Girth of the mesh as reconstructed (tape measure, `src/tape.ts`), cm; null = the garment does not go round the ring. */
   measuredCm: number | null;
+  /** Length of the closed slice polyline around the ring (the spike's first method), cm; null = no closed loop. Diagnostic only. */
+  polylineCm: number | null;
+  /** Share of angles round the ring where the tape found cloth (the rest is bridged). */
+  tapeCoverage: number | null;
+  /** The pattern block does not fit this ring: reported, not critical, not calibrated against. */
+  notFitted: boolean;
   /** measured − chart before any calibration. */
   beforeCm: number | null;
   /** measured × global scale − chart. */
@@ -97,6 +103,8 @@ export interface EvalResult {
   afterGlobal: { maxAbsCm: number | null; pass: boolean };
   warnings: string[];
   health: MeshHealth;
+  /** Cloth inside the mannequin: as reconstructed, and on the calibrated base mesh (the asset). */
+  insideBody: { reconstructed: InsideBody; calibrated: InsideBody };
   grading: GradingJson | null;
   gradingError: string | null;
   mannequin: Mannequin;
@@ -114,6 +122,51 @@ const maxAbs = (xs: readonly (number | null)[]): number | null => {
   const v = xs.filter((x): x is number => x !== null);
   return v.length ? Math.max(...v.map(Math.abs)) : null;
 };
+
+export interface InsideBody {
+  /** Vertices more than `toleranceCm` inside the mannequin's analytic torso, leg or arm section. */
+  vertices: number;
+  share: number;
+  toleranceCm: number;
+}
+
+/**
+ * How much of the garment lies inside the mannequin: such cloth is hidden by the body in every
+ * render (the grey patches through a reconstructed bodice), and a drape pushes it out unpredictably.
+ * Uses the mannequin's analytic sections (`torsoAt`, `legAt`, `armAt`), not its mesh.
+ */
+export function clothInsideBody(m: Mannequin, mesh: Mesh, toleranceCm = 0.3): InsideBody {
+  const inside = (dx: number, dz: number, a: number, b: number): boolean => {
+    const r = Math.hypot(dx, dz);
+    if (r < 1e-9) return true;
+    const t = Math.atan2(dz, dx);
+    const re = (a * b) / Math.hypot(b * Math.cos(t), a * Math.sin(t));
+    return r < re - toleranceCm;
+  };
+  const n = mesh.positions.length / 3;
+  let count = 0;
+  for (let i = 0; i < n; i++) {
+    const x = mesh.positions[3 * i]!, y = mesh.positions[3 * i + 1]!, z = mesh.positions[3 * i + 2]!;
+    let hit = false;
+    const t = m.torsoAt(y);
+    if (t && inside(x - t.cx, z - t.cz, t.a, t.b)) hit = true;
+    for (const side of [1, -1] as const) {
+      if (hit) break;
+      const l = m.legAt(y, side);
+      if (l && inside(x - l.cx, z - l.cz, l.a, l.b)) hit = true;
+      const f = side === 1 ? m.arms.left : m.arms.right;
+      const d: [number, number, number] = [x - f.joint[0], y - f.joint[1], z - f.joint[2]];
+      const sAlong = d[0] * f.axis[0] + d[1] * f.axis[1] + d[2] * f.axis[2];
+      const a = m.armAt(sAlong, side);
+      if (!hit && a) {
+        const q: [number, number, number] = [x - a.centre[0], y - a.centre[1], z - a.centre[2]];
+        if (inside(q[0] * f.u[0] + q[1] * f.u[1] + q[2] * f.u[2], q[0] * f.v[0] + q[1] * f.v[1] + q[2] * f.v[2], a.a, a.b)) hit = true;
+      }
+    }
+    if (hit) count++;
+  }
+  return { vertices: count, share: n ? Math.round((count / n) * 10000) / 10000 : 0, toleranceCm };
+}
 
 export function meshSha256(mesh: Mesh): string {
   return createHash('sha256').update(new Uint8Array(mesh.positions.buffer, mesh.positions.byteOffset, mesh.positions.byteLength)).update(new Uint8Array(mesh.indices.buffer, mesh.indices.byteOffset, mesh.indices.byteLength)).digest('hex');
@@ -180,15 +233,21 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
 
   const t0 = performance.now();
   const chains = garmentChains(m, mesh, category);
-  const raw = measureGarment(m, mesh, cat, chains);
+  // A tape measure round the outside, own body part only: real reconstructions are noisy, have holes
+  // and fuse the sleeves to the bodice (run 14); on smooth meshes it equals the loop length.
+  const measureOpts: MeasureOptions = { girth: 'tape', body: buildMannequinMesh(m) };
+  const raw = measureGarment(m, mesh, cat, chains, measureOpts);
   const measured = ringGirths(raw);
   const t1 = performance.now();
 
   // Calibrate only against rings the mesh has a loop at; a missing critical ring is reported, not invented.
-  const chartBase = baseRow.rings;
+  // Rings the pattern block does not fit keep their chart value for the table and for grading, but do not calibrate.
+  const notFitted = new Set<AnchorRing>(chart.notFitted?.rings ?? []);
+  const chartFull = baseRow.rings;
+  const chartBase = Object.fromEntries(Object.entries(chartFull).filter(([k]) => !notFitted.has(k as AnchorRing))) as Partial<Record<AnchorRing, number>>;
   const calibration = calibrate({ measured, chart: chartBase });
   const baseMesh = applyCalibration(m, mesh, measured, calibration, chains);
-  const measurements = measureGarment(m, baseMesh, cat, chains);
+  const measurements = measureGarment(m, baseMesh, cat, chains, measureOpts);
   const after = ringGirths(measurements);
   const t2 = performance.now();
 
@@ -198,10 +257,11 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
     const body = key === 'waist' || key === 'hip' || key === 'bust' || key === 'thigh' ? bodyRow?.[key] : undefined;
     return body === undefined ? null : { cm: r2(chartCm - body), isDefault: baseRow.defaultEase.includes(anchor) };
   };
-  const rings = new Set<AnchorRing>([...(Object.keys(chartBase) as AnchorRing[]), ...(Object.keys(measured) as AnchorRing[])]);
+  const rings = new Set<AnchorRing>([...(Object.keys(chartFull) as AnchorRing[]), ...(Object.keys(measured) as AnchorRing[])]);
   const order = m.rings.map((r) => r.id).filter((id, i, a) => a.indexOf(id) === i);
   const rows: AnchorRow[] = order.filter((id) => rings.has(id)).map((anchor) => {
-    const chartCm = chartBase[anchor] ?? null;
+    const chartCm = chartFull[anchor] ?? null;
+    const isNotFitted = notFitted.has(anchor);
     const mv = measured[anchor] ?? null;
     const av = after[anchor] ?? null;
     const isCritical = critical.includes(anchor);
@@ -211,10 +271,12 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
     const afterCm = av !== null && chartCm !== null ? av - chartCm : null;
     const pass = isCritical ? afterCm !== null && Math.abs(afterCm) <= tol : null;
     let note: string | null = null;
-    if (mv === null) note = raw.rings[anchor] === undefined && chartCm !== null ? 'no closed garment loop around this ring (open front, garment does not reach it, or a hole)' : null;
+    if (mv === null) note = raw.rings[anchor] === undefined && chartCm !== null ? 'the garment does not go round this ring (open front, garment does not reach it, or a hole wider than the tape bridges)' : null;
+    else if (isNotFitted) note = `not a fit point of the ${chart.notFitted!.block} block (${chart.notFitted!.label}): reported, not calibrated`;
     else if (chartCm === null) note = 'no chart value: scaled with the global scale';
     else if (raw.rings[anchor]?.spansBothLegs) note = 'loop encloses both legs (skirt)';
-    return { anchor, critical: isCritical, chartCm, ease, measuredCm: mv === null ? null : r2(mv), beforeCm: before === null ? null : r2(before), afterGlobalCm: afterGlobal === null ? null : r2(afterGlobal), afterCm: afterCm === null ? null : r2(afterCm), pass, note };
+    const t = raw.rings[anchor]?.tape;
+    return { anchor, critical: isCritical, chartCm, ease, measuredCm: mv === null ? null : r2(mv), polylineCm: t && t.loopLengthCm !== null ? r2(t.loopLengthCm) : null, tapeCoverage: t ? r2(t.coverage) : null, notFitted: isNotFitted, beforeCm: before === null ? null : r2(before), afterGlobalCm: afterGlobal === null ? null : r2(afterGlobal), afterCm: afterCm === null ? null : r2(afterCm), pass, note };
   });
 
   const missing = critical.filter((a) => measured[a] === undefined);
@@ -284,6 +346,7 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
     afterGlobal: { maxAbsCm: globalMax === null ? null : r2(globalMax), pass: globalMax !== null && globalMax <= tol && missing.length === 0 },
     warnings,
     health: meshHealth(mesh),
+    insideBody: { reconstructed: clothInsideBody(m, mesh), calibrated: clothInsideBody(m, baseMesh) },
     grading,
     gradingError,
     mannequin: m,

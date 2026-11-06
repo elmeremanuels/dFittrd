@@ -6,8 +6,9 @@
  * scale plus per-ring corrections. The residual after the global scale is the QA metric.
  */
 import { gradingMorph, type AnchorLength, type AnchorRing, type AnchorValues } from '@curtain/anchors';
-import { dot, loopAround, loopLength, planeCoords, resampleLoop, slice, sub, type Mannequin, type Mesh, type RingFrame, type Vec3 } from '@curtain/mannequin';
+import { dot, loopAround, loopContains, loopLength, planeCoords, resampleLoop, slice, sub, type Loop, type Mannequin, type Mesh, type RingFrame, type Vec3 } from '@curtain/mannequin';
 import { assignChains, categoryRings, radialMorph, type ChainAssignment, type SpikeCategory } from './garment';
+import { densifyLoop, pointsOfPart, tapeGirth, type TapeGirth } from './tape';
 
 export interface RingMeasurement {
   id: AnchorRing;
@@ -18,6 +19,19 @@ export interface RingMeasurement {
   offsetCm: { mean: number; min: number; max: number } | null;
   /** The loop encloses both legs (a skirt at thigh or knee height). */
   spansBothLegs: boolean;
+  /** `girth: 'tape'` only: how the tape went round (coverage, bridged gap, points used). */
+  tape?: Omit<TapeGirth, 'loop' | 'girthCm'> & { loopLengthCm: number | null };
+}
+
+/**
+ * How a ring's girth is taken. `loop` (default): the length of the closed slice loop around the
+ * ring centre, exact on smooth meshes (the synthetic garments). `tape`: a tape measure round the
+ * outside of the slice (`src/tape.ts`), for noisy reconstructions with holes and sleeves fused to
+ * the bodice; with `body` (the mannequin mesh) only the ring's own body part is measured.
+ */
+export interface MeasureOptions {
+  girth?: 'loop' | 'tape';
+  body?: Mesh;
 }
 
 export interface LengthMeasurement {
@@ -44,11 +58,32 @@ function mirror(p: Vec3): Vec3 {
   return [-p[0], p[1], p[2]];
 }
 
-export function measureRing(mesh: Mesh, ring: RingFrame): RingMeasurement | null {
+export function measureRing(mesh: Mesh, ring: RingFrame, opts: MeasureOptions = {}): RingMeasurement | null {
   const loops = slice(mesh.positions, mesh.indices, { origin: ring.centre, normal: ring.normal });
-  const loop = loopAround(loops, ring.centre, ring.u, ring.v);
+  const closedLoop = loopAround(loops, ring.centre, ring.u, ring.v);
+  const spansBothLegs = closedLoop !== null && ring.side === 'left' && ring.part.startsWith('leg') && closedLoop === loopAround(loops, mirror(ring.centre), ring.u, ring.v);
+  let loop: Loop | null = closedLoop;
+  let tape: RingMeasurement['tape'];
+  if (opts.girth === 'tape') {
+    // A skirt round both legs is measured round its own middle; otherwise only the ring's body part.
+    const centre: Vec3 = spansBothLegs ? [0, ring.centre[1], ring.centre[2]] : ring.centre;
+    const dense = (closedLoop ? [closedLoop] : loops).map((l) => densifyLoop(l));
+    const all: Vec3[] = dense.flatMap((l) => l.points);
+    let pts = all;
+    if (opts.body && !spansBothLegs) {
+      const bodyLoops = slice(opts.body.positions, opts.body.indices, { origin: ring.centre, normal: ring.normal });
+      const own = loopAround(bodyLoops, ring.centre, ring.u, ring.v);
+      // A closed loop that holds another body part (a sleeve fused to the bodice) or no closed loop: keep the own part's points.
+      const centroid = (l: Loop): Vec3 => l.points.reduce<Vec3>((a, p) => [a[0] + p[0] / l.points.length, a[1] + p[1] / l.points.length, a[2] + p[2] / l.points.length], [0, 0, 0]);
+      const fused = closedLoop !== null && bodyLoops.some((b) => b !== own && b.points.length > 2 && loopContains(closedLoop, centroid(b), ring.u, ring.v));
+      if (own && (closedLoop === null || fused)) pts = pointsOfPart(dense, bodyLoops, own);
+    }
+    const t = tapeGirth(pts, centre, ring.u, ring.v, {}, all);
+    if (!t) return null;
+    loop = t.loop;
+    tape = { coverage: t.coverage, maxGapDeg: t.maxGapDeg, maxGapCm: t.maxGapCm, points: t.points, loopLengthCm: closedLoop ? loopLength(closedLoop) : null };
+  }
   if (!loop) return null;
-  const spansBothLegs = ring.side === 'left' && ring.part.startsWith('leg') && loop === loopAround(loops, mirror(ring.centre), ring.u, ring.v);
   let offsetCm: RingMeasurement['offsetCm'] = null;
   if (!spansBothLegs) {
     const offsets = loop.points.map((p) => {
@@ -57,7 +92,7 @@ export function measureRing(mesh: Mesh, ring: RingFrame): RingMeasurement | null
     });
     offsetCm = { mean: offsets.reduce((s, o) => s + o, 0) / offsets.length, min: Math.min(...offsets), max: Math.max(...offsets) };
   }
-  return { id: ring.id, circumferenceCm: loopLength(loop), loop: resampleLoop(loop, LOOP_POINTS, ring.centre, ring.v), offsetCm, spansBothLegs };
+  return { id: ring.id, circumferenceCm: loopLength(loop), loop: resampleLoop(loop, LOOP_POINTS, ring.centre, ring.v), offsetCm, spansBothLegs, ...(tape ? { tape } : {}) };
 }
 
 /** Lowest point of the garment's front (z > 0) in the sagittal plane through `x`. */
@@ -75,12 +110,12 @@ function hemBelow(mesh: Mesh, x: number): { y: number; maxY: number; point: Vec3
   return best ? { y: best[1], maxY, point: best } : null;
 }
 
-export function measureGarment(m: Mannequin, mesh: Mesh, category: SpikeCategory, chains: ChainAssignment = assignChains(m, mesh)): AnchorMeasurements {
+export function measureGarment(m: Mannequin, mesh: Mesh, category: SpikeCategory, chains: ChainAssignment = assignChains(m, mesh), opts: MeasureOptions = {}): AnchorMeasurements {
   const rings: AnchorMeasurements['rings'] = {};
   const subset = new Set(categoryRings(category));
   for (const ring of m.rings) {
     if (!subset.has(ring.id)) continue;
-    const r = measureRing(mesh, ring);
+    const r = measureRing(mesh, ring, opts);
     if (r) rings[ring.id] = r;
   }
   const lengths: AnchorMeasurements['lengths'] = {};

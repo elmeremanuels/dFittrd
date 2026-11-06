@@ -157,13 +157,43 @@ garment spike 219 + 47 (the spike is another workflow's; it passed in this run).
 10. **Public listing later**: Lighthouse (D5), the legal review and the listing assets, then a
     (new) app with public distribution and submit (`docs/app-store/checklist.md`).
 
+## Garment engine — first real asset (run 14)
+
+Bohohippychic `azure-palm-baby-doll-dress`, job `azure-palm-baby-doll-dress-6d2f2611a144`:
+stage 1b FASHN on the proxy-dressed mannequin (QA overridden), stage 2 Wan2.2-Fun-A14B-Control
+with the proxy control, stage 4 gsplat 2DGS on the stage 2 garment masks. Full write-up, every
+render and the runs 10–14 timeline: [`docs/research/phase0-bohohippychic.md`](research/phase0-bohohippychic.md)
+(renders under `spikes/garment-engine/out/eval/`, gitignored: the links resolve only in a checkout
+where run 14's outputs are in `out/phase0/` and `report:bohohippychic -- --renders` has run).
+
+| What | Number |
+| --- | --- |
+| Stage 4 | mask IoU 0.925 train / 0.917 holdout, 11,999 triangles |
+| Stage 2 consistency (0.3.0) | 31 of 243 frames flagged (side views, end of the motion clip), 0 artefact frames |
+| Chart agreement (chest, the only critical anchor of an empire babydoll) | 99.0 cm reconstructed vs 102 cm printed: −2.98 cm before calibration, global scale 1.030, −0.71 cm after; passes, by construction |
+| Length | shoulder to hem 83.3 cm vs 91 cm printed (−7.7 cm) |
+| View agreement vs the pinned stills | silhouette IoU 0.93 front / 0.95 back; with the mannequin in front 0.71 / 0.75 |
+| Turntable 0° / 90° / 180° vs the stage 2 frames | silhouette IoU 0.93 / 0.85 / 0.95 |
+| Cloth inside the mannequin | 21.9 % of the vertices (2.3 % on the synthetic dress) |
+| Cost (estimate, list price × GPU s) | 1,493 GPU s, 2,311 s wall, $1.57–1.63; runs 10–14 together 6,648 GPU s, $6.89–7.52 |
+
+The evaluation tooling broke on this first real mesh (polyline girths on a rippled surface, no
+chest loop with fused sleeves, waist and hip critical for an empire dress) and was fixed: a tape
+measure girth (`spikes/garment-engine/src/tape.ts`) and the fit engine's pattern-block rule for
+critical anchors. Verdict: the silhouette is right, the appearance is not yet. In the viewer the
+mannequin shows through the bodice and the print is lost (the bundle carries one mean colour),
+so the five-person size and fabric tests should not run on this asset yet. Chart agreement is
+measured on 1 of 5 products (4 needed); cost is measured; the Modal invoice is not read.
+
 ## Garment engine — Phase 0 preparation (Nov 2026)
 
 Branch `claude/garment-engine`, against `docs/ENGINE-HANDOFF.md`. This is the work that can be
 done **without** a GPU service, video models or pilot photos: the carry-over findings, the shared
 vocabulary and fabric library, the canonical mannequin, the model-free pipeline stages and a spike
-viewer. **Phase 0 itself has not started.** None of its six acceptance items (size test, fabric
-test, chart agreement on real products, view agreement, measured cost, write-up) is met yet.
+viewer. *This section predates run 14 and is superseded by the run 14 section above for the
+Phase 0 state:* Phase 0 has now started on one shop product; cost is measured there and chart
+agreement exists for 1 of 5 products. None of its six acceptance items (size test, fabric test,
+chart agreement on real products, view agreement, measured cost, write-up) is met yet.
 
 ### Round of 6 Nov 2026: carry-over leftovers, Modal pipeline, viewer speed
 

@@ -113,6 +113,8 @@ export interface GarmentGlb {
   mesh: Mesh;
   /** Mean vertex colour as `#RRGGBB` when the file carries COLOR_0 (stage 4 projects the frames' colours), else null. */
   meanColorHex: string | null;
+  /** Per-vertex RGB 0…1 as stored (display values), aligned with `mesh` (before welding); null without COLOR_0 on every primitive. */
+  colors: Float32Array | null;
   /** The unit the file was read in (`asset.extras.unit`, default metres as glTF says). */
   unit: 'm' | 'cm';
   /** Primitives merged, triangles only. */
@@ -145,6 +147,8 @@ export function readGarmentGlb(bytes: Uint8Array): GarmentGlb {
   const idx: number[] = [];
   let colourSum = [0, 0, 0];
   let coloured = 0;
+  const cols: number[] = [];
+  let allColoured = true;
   let primitives = 0;
   for (const inst of instances) {
     for (const prim of json.meshes?.[inst.mesh]?.primitives ?? []) {
@@ -167,8 +171,9 @@ export function readGarmentGlb(bytes: Uint8Array): GarmentGlb {
         for (let v = 0; v < c.values.length; v += c.size) {
           colourSum = [colourSum[0]! + c.values[v]! * scale, colourSum[1]! + c.values[v + 1]! * scale, colourSum[2]! + c.values[v + 2]! * scale];
           coloured++;
+          cols.push((c.values[v]! * scale) / 255, (c.values[v + 1]! * scale) / 255, (c.values[v + 2]! * scale) / 255);
         }
-      }
+      } else allColoured = false;
       const n = p.values.length / 3;
       if (prim.indices !== undefined) {
         const ind = readAccessor(json, glb.bin, prim.indices).values;
@@ -184,11 +189,25 @@ export function readGarmentGlb(bytes: Uint8Array): GarmentGlb {
   const positions = Float64Array.from(pos);
   const mesh: Mesh = { positions, indices: Uint32Array.from(idx), vertexPart: new Uint8Array(positions.length / 3), partNames: ['garment'] };
   const meanColorHex = coloured ? `#${hex2(colourSum[0]! / coloured)}${hex2(colourSum[1]! / coloured)}${hex2(colourSum[2]! / coloured)}`.toUpperCase() : null;
-  return { mesh, meanColorHex, unit, primitives, generator: json.asset?.generator ?? null };
+  const colors = allColoured && cols.length === positions.length ? Float32Array.from(cols) : null;
+  return { mesh, meanColorHex, colors, unit, primitives, generator: json.asset?.generator ?? null };
 }
 
 /** Merge vertices that share a position (to 1e-4 cm): trimesh writes per-face copies unless it processed the mesh. */
 export function weldVertices(mesh: Mesh, epsCm = 1e-4): Mesh {
+  return weld(mesh, epsCm).mesh;
+}
+
+/** `weldVertices` that carries per-vertex RGB along (the first copy's colour wins). */
+export function weldVerticesWithColors(mesh: Mesh, colors: ArrayLike<number> | null, epsCm = 1e-4): { mesh: Mesh; colors: Float32Array | null } {
+  const { mesh: out, remap } = weld(mesh, epsCm);
+  if (!colors) return { mesh: out, colors: null };
+  const c = new Float32Array(out.positions.length);
+  for (let i = remap.length - 1; i >= 0; i--) for (let ch = 0; ch < 3; ch++) c[3 * remap[i]! + ch] = colors[3 * i + ch]!;
+  return { mesh: out, colors: c };
+}
+
+function weld(mesh: Mesh, epsCm: number): { mesh: Mesh; remap: Uint32Array } {
   const map = new Map<string, number>();
   const remap = new Uint32Array(mesh.positions.length / 3);
   const pos: number[] = [];
@@ -209,7 +228,7 @@ export function weldVertices(mesh: Mesh, epsCm = 1e-4): Mesh {
     if (a !== b && b !== c && a !== c) idx.push(a, b, c);
   }
   const positions = Float64Array.from(pos);
-  return { positions, indices: Uint32Array.from(idx), vertexPart: new Uint8Array(positions.length / 3), partNames: mesh.partNames };
+  return { mesh: { positions, indices: Uint32Array.from(idx), vertexPart: new Uint8Array(positions.length / 3), partNames: mesh.partNames }, remap };
 }
 
 export interface MeshHealth extends TopologyReport {

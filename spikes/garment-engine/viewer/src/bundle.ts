@@ -28,8 +28,9 @@ export interface QaJson {
   format: 'curtain.garment.qa';
   productId: string;
   synthetic: boolean;
-  chartAgreement: { maxAbsCm: number; pass: boolean };
-  calibration: { residualAfterGlobalCm: { maxAbs: number } };
+  /** maxAbsCm is null in an evaluation bundle when a critical ring has no girth; `critical` only in evaluation bundles. */
+  chartAgreement: { maxAbsCm: number | null; pass: boolean; critical?: string[] };
+  calibration: { residualBeforeCm: { maxAbs: number }; residualAfterGlobalCm: { maxAbs: number } };
   meshHealth: { triangles: number };
 }
 

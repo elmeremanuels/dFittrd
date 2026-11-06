@@ -38,6 +38,17 @@ const $ = <T extends HTMLElement>(id: string): T => {
   if (!el) throw new Error(`#${id} missing`);
   return el as T;
 };
+/**
+ * The chart line under the viewer. After the global scale the residual is 0 by construction when one
+ * critical anchor sets the scale, so show the error before calibration and the final residual too.
+ */
+const chartCaption = (qa: { chartAgreement: { maxAbsCm: number | null; pass: boolean; critical?: string[] }; calibration: { residualBeforeCm: { maxAbs: number }; residualAfterGlobalCm: { maxAbs: number } } }): string => {
+  const c = qa.chartAgreement;
+  const at = c.critical?.length ? ` at ${c.critical.join(', ')}` : '';
+  const one = c.critical?.length === 1 ? ', 0 by construction with one anchor' : '';
+  const after = c.maxAbsCm === null ? 'no girth at a critical anchor' : `${c.maxAbsCm.toFixed(2)} cm`;
+  return `Chart agreement ${c.pass ? 'pass' : 'FAIL'}${at}: max error ${qa.calibration.residualBeforeCm.maxAbs.toFixed(2)} cm before calibration, ${after} after (${qa.calibration.residualAfterGlobalCm.maxAbs.toFixed(2)} cm after the global scale alone${one}).`;
+};
 const setViewerState = (s: 'loading' | 'draping' | 'settled' | 'error'): void => {
   document.documentElement.dataset.viewerState = s;
 };
@@ -52,6 +63,9 @@ const SHAPE: BodyShapeId = (BODY_SHAPE_IDS as readonly string[]).includes(shapeP
 /** The canonical body: the M mannequin, or its avatar morphed to another canonical shape's chest, waist and hip girths. */
 const MANNEQUIN = SHAPE === BASE_SHAPE_ID ? mannequinMeasurements(m) : mannequinMeasurements({ ...m, shape: bodyShape(SHAPE) });
 const fixedSizes = (params.get('sizes') ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+/** `view=front|three-quarter|side`: each figure turns about its own axis (0°, 45°, 90°), so sizes side by side stay apart. */
+const VIEW_YAW_DEG: Readonly<Record<string, number>> = { front: 0, 'three-quarter': 45, side: 90 };
+const viewYawDeg = VIEW_YAW_DEG[params.get('view') ?? 'front'] ?? 0;
 const state = {
   productId: params.get('product') ?? '',
   body: 'mannequin' as BodyMode,
@@ -190,6 +204,7 @@ async function refresh(): Promise<void> {
       figures = sizes.map(() => new Figure(av.geometry, s.bundle.baseMesh.indices, n));
       figures.forEach((f, k) => {
         f.group.position.x = (k - (sizes.length - 1) / 2) * SPACING_CM;
+        f.group.rotation.y = (viewYawDeg * Math.PI) / 180;
         stage.scene.add(f.group);
       });
       figureProduct = state.productId;
@@ -218,7 +233,7 @@ async function refresh(): Promise<void> {
       : `Fit engine: nothing fits well; closest is ${fit.closestSize ?? 'none'}.`;
     $('fabric-info').textContent = `${vm.label}: drape ${vm.drape}, bend ${vm.bendStiffness}, sheen ${vm.sheen}, stretch ${vm.stretchPct} %, ${vm.weightGsm} g/m².`;
     const qa = s.bundle.qa;
-    $('qa').textContent = `${s.bundle.anchors.category}, base ${s.bundle.grading.baseSize}, ${qa.meshHealth.triangles.toLocaleString('en')} triangles. Chart agreement ${qa.chartAgreement.pass ? 'pass' : 'FAIL'}; residual after global scale ${qa.calibration.residualAfterGlobalCm.maxAbs} cm.${qa.synthetic ? ' Synthetic.' : ''}`;
+    $('qa').textContent = `${s.bundle.anchors.category}, base ${s.bundle.grading.baseSize}, ${qa.meshHealth.triangles.toLocaleString('en')} triangles. ${chartCaption(qa)}${qa.synthetic ? ' Synthetic.' : ''}`;
     renderLines();
     setViewerState('draping');
   } catch (err) {
@@ -340,7 +355,8 @@ function updateLabels(): void {
   const toCamera = new THREE.Vector3();
   for (const { key, figure } of shown) {
     const f = fits.get(key);
-    if (!f || !s) continue;
+    // The labels sit on the unturned front; a turned figure (`view=`) shows none.
+    if (!f || !s || viewYawDeg !== 0) continue;
     if (!f.labels) {
       f.labels = [];
       for (const label of anchorLabels(s.bundle.grading, f.size, f.gaps, m.morphHeights)) {

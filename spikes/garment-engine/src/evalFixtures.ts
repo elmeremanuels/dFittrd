@@ -12,7 +12,8 @@ import { mockGarment, type GarmentPayload } from '@curtain/schema';
 import { DEFAULT_DISTORTION } from './bundle';
 import { measureGarment, ringGirths } from './anchoring';
 import { maskPng } from './evalPng';
-import { garmentSilhouette } from './evalView';
+import { colourRender, garmentSilhouette } from './evalView';
+import { encodePng } from './exportPng';
 import { distortGarment, generateGarment } from './garment';
 import { garmentSpec } from './product';
 
@@ -88,6 +89,8 @@ export interface FakeJobOptions {
   height?: number;
   inventedBack?: boolean;
   withCostSummary?: boolean;
+  /** Also write stage 2 frames and their garment masks (`stage2/garment_mask/`), rendered from `pinned`. */
+  withStage2Masks?: boolean;
 }
 
 /**
@@ -141,6 +144,15 @@ export function writeFakeJob(o: FakeJobOptions): string {
   put('stage2/record.json', JSON.stringify({ model: { id: 'fixture-video' }, steps: 4, turntable_frames_assembled: frames, seams: [{ mean_abs_diff_8bit: 3.5 }], cost: cost('stage2_video', 200) }));
   put('stage4/stage2/garment.glb', writeGlb([{ name: 'garment', positions: o.recon.positions, indices: o.recon.indices }], { scale: 0.01 }));
   put('stage4/stage2/metrics.json', JSON.stringify({ mesh: { triangles: o.recon.indices.length / 3 }, mask_iou: { train: 0.9, holdout: 0.89 }, cost: cost('stage4_recon[stage2]', 50) }));
+  if (o.withStage2Masks) {
+    for (let f = 0; f < frames; f++) {
+      const name = String(f).padStart(4, '0');
+      put(`stage2/garment_mask/${name}.png`, maskPng(garmentSilhouette(null, o.pinned, path.frames[f]!, width, height)));
+      const rgb = colourRender(body, o.pinned, null, path.frames[f]!, width, height);
+      put(`stage2/frames/${name}.png`, encodePng({ width, height, channels: 3, bitDepth: 8, data: rgb }));
+    }
+    put('stage2/garment_mask/record.json', JSON.stringify({ segmentation: 'fixture-segment', frames, ambiguous_frames: [] }));
+  }
   if (o.withCostSummary) put('cost_summary.json', JSON.stringify({ costs: [cost('stage1b_dress', 100), cost('stage2_video', 200), cost('stage4_recon[stage2]', 50)], cost_total: { estimate: true, gpu_seconds: 350, usd_estimate_low: 0.03, usd_estimate_high: 0.06 }, wall_seconds: 400 }));
   return dir;
 }

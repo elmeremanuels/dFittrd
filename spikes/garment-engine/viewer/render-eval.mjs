@@ -6,7 +6,8 @@
  *
  * Per product and per body (the M mannequin, and the avatar at the XS and XXL shapes' girths): sizes
  * 8, 12 and 16 side by side (the chart's sizes when it does not have those three), one screenshot
- * without and one with the fit map. Then the blind test page with these products pre-selected, at
+ * without and one with the fit map. On the M mannequin also at three-quarter and side view (each
+ * figure turned 45° and 90° about its own axis, `view=` on the viewer page). Then the blind test page with these products pre-selected, at
  * setup and at its first size pair. Writes `out/eval/<id>/renders/*.png`, `out/eval/blind-*.png` and
  * `out/eval/renders.json` (files, drape time per size, problems). Called by the report script with
  * `--renders`; also runs alone:
@@ -33,6 +34,8 @@ const repoRoot = resolve(here, '..', '..', '..');
 const TIMEOUT = 240_000;
 const SHAPES = ['M', 'XS', 'XXL'];
 const WANT_SIZES = ['8', '12', '16'];
+/** Views per body: front everywhere, three-quarter and side on the M mannequin. */
+const VIEWS = { M: ['front', 'three-quarter', 'side'], XS: ['front'], XXL: ['front'] };
 
 const argv = process.argv.slice(2);
 const blindAt = argv.indexOf('--blind');
@@ -87,27 +90,29 @@ try {
     const entry = { inputHash: qa.inputHash ?? null, sizes, shots: [], problems: [] };
     result.products[id] = entry;
     for (const shape of SHAPES) {
-      pageProblems = [];
-      try {
-        const url = `${base}index.html?product=${encodeURIComponent(id)}&layout=side&sizes=${sizes.map(encodeURIComponent).join(',')}&size=${encodeURIComponent(sizes[Math.floor(sizes.length / 2)])}&shape=${shape}`;
-        const t0 = Date.now();
-        await page.goto(url);
-        await settle();
-        const per = JSON.parse(await page.evaluate(() => document.documentElement.dataset.settle ?? '[]'));
-        const settleMs = sizes.map((s) => per.find((p) => p.size === s)?.ms ?? null);
-        for (const fitMap of [false, true]) {
-          if (fitMap) await page.check('[data-testid="heat"]');
-          else await page.uncheck('[data-testid="heat"]');
-          await page.waitForTimeout(250);
-          const file = join(shotsDir, `${shape}-${fitMap ? 'fitmap' : 'plain'}.png`);
-          await page.screenshot({ path: file });
-          entry.shots.push({ file: relative(repoRoot, file), shape, fitMap, sizes, settleMs });
+      for (const view of VIEWS[shape]) {
+        pageProblems = [];
+        try {
+          const url = `${base}index.html?product=${encodeURIComponent(id)}&layout=side&sizes=${sizes.map(encodeURIComponent).join(',')}&size=${encodeURIComponent(sizes[Math.floor(sizes.length / 2)])}&shape=${shape}&view=${view}`;
+          const t0 = Date.now();
+          await page.goto(url);
+          await settle();
+          const per = JSON.parse(await page.evaluate(() => document.documentElement.dataset.settle ?? '[]'));
+          const settleMs = sizes.map((s) => per.find((p) => p.size === s)?.ms ?? null);
+          for (const fitMap of [false, true]) {
+            if (fitMap) await page.check('[data-testid="heat"]');
+            else await page.uncheck('[data-testid="heat"]');
+            await page.waitForTimeout(250);
+            const file = join(shotsDir, `${shape}-${view === 'front' ? '' : `${view}-`}${fitMap ? 'fitmap' : 'plain'}.png`);
+            await page.screenshot({ path: file });
+            entry.shots.push({ file: relative(repoRoot, file), shape, view, fitMap, sizes, settleMs });
+          }
+          console.log(`[render-eval] ${id} ${shape} ${view}: ${sizes.join(', ')} settled in ${((Date.now() - t0) / 1000).toFixed(1)} s (${settleMs.map((ms) => (ms === null ? '—' : `${(ms / 1000).toFixed(2)} s`)).join(', ')})`);
+        } catch (err) {
+          entry.problems.push(`${shape} ${view}: ${err instanceof Error ? err.message : String(err)}`);
         }
-        console.log(`[render-eval] ${id} ${shape}: ${sizes.join(', ')} settled in ${((Date.now() - t0) / 1000).toFixed(1)} s (${settleMs.map((ms) => (ms === null ? '—' : `${(ms / 1000).toFixed(2)} s`)).join(', ')})`);
-      } catch (err) {
-        entry.problems.push(`${shape}: ${err instanceof Error ? err.message : String(err)}`);
+        entry.problems.push(...pageProblems.map((p) => `${shape} ${view}: ${p}`));
       }
-      entry.problems.push(...pageProblems.map((p) => `${shape}: ${p}`));
     }
   }
 

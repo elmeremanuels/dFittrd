@@ -18,7 +18,7 @@ describe('evaluateGarment: synthetic dress', () => {
     expect(chest.chartCm).toBe(100);
     expect(chest.beforeCm!).toBeGreaterThan(CHART_TOLERANCE_CM); // 3.5 % too big + 1.8 cm bias
     expect(Math.abs(chest.afterGlobalCm!)).toBeLessThan(Math.abs(chest.beforeCm!));
-    expect(Math.abs(chest.afterCm!)).toBeLessThan(0.05);
+    expect(Math.abs(chest.afterCm!)).toBeLessThan(0.2); // the tape re-measures the morphed mesh: not exactly 0
     expect(chest.pass).toBe(true);
     expect(r.agreement.pass).toBe(true);
     expect(r.before.pass).toBe(false);
@@ -63,7 +63,7 @@ describe('evaluateGarment: what fails', () => {
     const chest = r.rows.find((x) => x.anchor === 'chest')!;
     expect(chest.measuredCm).toBeNull();
     expect(chest.pass).toBe(false);
-    expect(chest.note).toMatch(/no closed garment loop/);
+    expect(chest.note).toMatch(/does not go round this ring/);
     expect(r.agreement.pass).toBe(false);
     expect(r.agreement.missing).toEqual(['chest']);
   });
@@ -73,7 +73,9 @@ describe('evaluateGarment: what fails', () => {
     const open = cropMesh(reconstructedDress(), (x, y, z) => !(z > 0 && Math.abs(x) < 3) && y > m.morphHeights.hip - 5);
     const r = evaluateGarment({ productId: shop.handle, payload: shop.payload, baseSize: 'S-M', mesh: open, mannequin: m, source: src });
     expect(r.category).toBe('outerwear');
-    expect(r.agreement.missing).toEqual(expect.arrayContaining(['chest', 'waist']));
+    // The tape bridges holes up to 4 cm, never a 6 cm front opening. Waist and hip are not critical (oversized block) but get no girth either.
+    expect(r.agreement.missing).toEqual(['chest']);
+    expect(r.rows.find((x) => x.anchor === 'waist')!.measuredCm).toBeNull();
     expect(r.agreement.pass).toBe(false);
   });
 });
@@ -82,10 +84,14 @@ describe('evaluateGarment: a bottom (skirt cut from the synthetic dress)', () =>
   const shop = shopPayload('crimson-wildflower-maxi-skirt');
   const r = evaluateGarment({ productId: shop.handle, payload: shop.payload, baseSize: '12', mesh: syntheticSkirt(), mannequin: m, source: src });
 
-  it('calibrates waist and hip against the AU chart plus the bottom default ease', () => {
-    expect(r.critical).toEqual(['waist', 'hip']);
+  it('calibrates the waist against the AU chart plus the bottom default ease; the a-line hip is reported, not calibrated', () => {
+    expect(r.critical).toEqual(['waist']);
     expect(r.rows.find((x) => x.anchor === 'waist')!.chartCm).toBe(79.5);
-    expect(r.rows.find((x) => x.anchor === 'hip')!.chartCm).toBe(109);
+    const hip = r.rows.find((x) => x.anchor === 'hip')!;
+    expect(hip.chartCm).toBe(109);
+    expect(hip.notFitted).toBe(true);
+    expect(hip.note).toMatch(/a-line/);
+    expect(Object.keys(r.calibration.ringCorrections)).not.toContain('hip');
     expect(r.agreement.pass).toBe(true);
     expect(r.rows.find((x) => x.anchor === 'thigh')?.note).toMatch(/both legs|no chart value/);
   });
@@ -120,7 +126,7 @@ describe('evalBundle', () => {
     expect(JSON.parse(evalBundle(r, shop.payload, { meanColorHex: '#336699' }).files['material.json']).baseColorHex).toBe('#336699');
     const qa = JSON.parse(b.files['qa.json']) as { synthetic: boolean; chartAgreement: { pass: boolean; critical: string[] } };
     expect(qa.synthetic).toBe(false);
-    expect(qa.chartAgreement.critical).toEqual(['chest', 'waist', 'hip']);
+    expect(qa.chartAgreement.critical).toEqual(['chest']); // empire block: waist and hip hang free
     const grading = JSON.parse(b.files['grading.json']) as { sizes: { size: string }[] };
     expect(grading.sizes.map((s) => s.size)).toEqual(['8', '10', '12', '14', '16']);
   });

@@ -31,14 +31,19 @@ describe('evalChart', () => {
     expect(cardi.rings).toEqual({ chest: 102, waist: 84.5, hip: 109 }); // outerwear defaults +12 / +12 / +10
   });
 
-  it('picks the critical rings from the fit engine category points (no criticalFitPoints in the shop data)', () => {
+  it('picks the critical rings from the fit engine category points minus what the pattern block skips (no criticalFitPoints in the shop data)', () => {
     const crit = (h: string) => {
       const s = shopPayload(h);
       return criticalRings(s.payload, evalChart(s.payload), s.baseSize);
     };
-    expect(crit('azure-palm-baby-doll-dress')).toEqual(['chest', 'waist', 'hip']);
-    expect(crit('rosewater-palazzo-pants')).toEqual(['waist', 'hip']);
-    expect(crit('woodstock-wanderer-knit-cardi')).toEqual(['chest', 'waist', 'hip']);
+    expect(crit('azure-palm-baby-doll-dress')).toEqual(['chest']); // empire: hangs from the bust
+    expect(evalChart(shopPayload('azure-palm-baby-doll-dress').payload).notFitted).toEqual({ rings: ['waist', 'hip'], block: 'empire', label: 'empire line hangs from the bust' });
+    expect(crit('rosewater-palazzo-pants')).toEqual(['waist', 'hip']); // wide-leg skips only the thigh
+    expect(crit('crimson-wildflower-maxi-skirt')).toEqual(['waist']); // a-line: the hem flares freely
+    expect(crit('woodstock-wanderer-knit-cardi')).toEqual(['chest']); // oversized
+    // A point the product names as critical is checked even when its block skips it (as computeFit does).
+    const named = { ...shopPayload('azure-palm-baby-doll-dress').payload, criticalFitPoints: ['bust', 'waist'] as const };
+    expect(criticalRings(named as never, evalChart(named as never), '12')).toEqual(['chest', 'waist']);
     const fixture = mockGarment('aalter-studio-2');
     expect(criticalRings(fixture, evalChart(fixture), 'M')).toEqual(['chest']); // its own criticalFitPoints
   });

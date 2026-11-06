@@ -8,7 +8,7 @@
  * for trousers too. A test checks that both give the same chart for the spike products.
  */
 import { CATEGORY_ANCHORS, FIT_POINT_TO_ANCHOR, isAnchorRing, type AnchorBreadth, type AnchorCategory, type AnchorRing } from '@curtain/anchors';
-import { CATEGORY_EASE, CATEGORY_POINTS } from '@curtain/fit-engine';
+import { CATEGORY_EASE, CATEGORY_POINTS, blockRule } from '@curtain/fit-engine';
 import { duplicateSizeLabels, sizeLabelKey, type GarmentPayload } from '@curtain/schema';
 import type { SpikeCategory } from './garment';
 import type { ChartRow, GarmentChart } from './product';
@@ -29,6 +29,12 @@ export interface EvalChart extends Omit<GarmentChart, 'category'> {
   category: EvalCategory;
   /** Where every value came from, for the report. */
   provenance: string;
+  /**
+   * Rings the product's pattern block does not fit (the fit engine's `BLOCKS[block].skip`, e.g. an
+   * empire line hangs from the bust: no waist, no hip). Their chart value stays for grading, but they
+   * are neither critical nor calibrated against: the garment is not meant to sit there.
+   */
+  notFitted: { rings: AnchorRing[]; block: string; label: string } | null;
 }
 
 /** The chart's ease for one point: the product's, else the category default, else none. */
@@ -78,7 +84,12 @@ export function evalChart(p: GarmentPayload): EvalChart {
     return { size: row.size, rings, defaultEase, breadths, defaultEaseBreadths };
   });
   const provenance = type === 'garment' ? 'garment chart, as printed' : `body chart + ${p.ease && Object.keys(p.ease).length ? `product ease (${Object.entries(p.ease).map(([k, v]) => `${k} +${v} cm`).join(', ')}) and ` : ''}fit-engine category default ease where the product gives none`;
-  return { productId: p.id, category, type, rows, provenance };
+  const rule = blockRule(p.patternBlock);
+  const named = new Set<string>(p.criticalFitPoints ?? []);
+  // As `computeFit`: a point the product names as critical is checked even when its block skips it.
+  const skipRings = rule.skip.filter((pt) => !named.has(pt)).map((pt) => (FIT_POINT_TO_ANCHOR as Partial<Record<string, string>>)[pt]).filter((a): a is AnchorRing => !!a && isAnchorRing(a) && ringSubset.has(a));
+  const notFitted = skipRings.length && p.patternBlock ? { rings: skipRings, block: p.patternBlock, label: rule.label } : null;
+  return { productId: p.id, category, type, rows, provenance, notFitted };
 }
 
 export function evalChartRow(chart: EvalChart, size: string): ChartRow {
@@ -97,7 +108,8 @@ export function asGradingChart(chart: EvalChart): GarmentChart {
 
 /**
  * Critical anchors for chart agreement: the product's `criticalFitPoints` when it names any, else
- * the fit engine's points for the category; only rings, and only rings the chart has a value for.
+ * the fit engine's points for the category minus the points its pattern block skips (as
+ * `computeFit` does); only rings, and only rings the chart has a value for.
  */
 export function criticalRings(p: GarmentPayload, chart: EvalChart, baseSize: string): AnchorRing[] {
   const points: readonly string[] = p.criticalFitPoints && p.criticalFitPoints.length ? p.criticalFitPoints : (CATEGORY_POINTS[chart.category as AnchorCategory & keyof typeof CATEGORY_POINTS] ?? []);
@@ -105,7 +117,7 @@ export function criticalRings(p: GarmentPayload, chart: EvalChart, baseSize: str
   const out: AnchorRing[] = [];
   for (const point of points) {
     const a = (FIT_POINT_TO_ANCHOR as Partial<Record<string, string>>)[point];
-    if (a && isAnchorRing(a) && base[a] !== undefined && !out.includes(a)) out.push(a);
+    if (a && isAnchorRing(a) && base[a] !== undefined && !out.includes(a) && !chart.notFitted?.rings.includes(a)) out.push(a);
   }
   return out;
 }

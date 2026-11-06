@@ -31,12 +31,27 @@ jobs:
       PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@v4
-      - name: Check Modal secrets
+      - name: Check and normalise Modal secrets
         run: |
-          if [ -z "$MODAL_TOKEN_ID" ] || [ -z "$MODAL_TOKEN_SECRET" ]; then
+          clean() { printf '%s' "$1" | tr -d '[:space:]"'"'"; }
+          id=$(clean "$MODAL_TOKEN_ID"); sec=$(clean "$MODAL_TOKEN_SECRET")
+          echo "::add-mask::$id"; echo "::add-mask::$sec"
+          if [ -z "$id" ] || [ -z "$sec" ]; then
             echo "::error::Add repository secrets MODAL_TOKEN_ID and MODAL_TOKEN_SECRET (Settings > Secrets and variables > Actions)."
             exit 1
           fi
+          case "$id" in
+            ak-*) ;;
+            as-*) echo "::error::MODAL_TOKEN_ID holds the token secret (starts with as-). Swap the two secrets."; exit 1 ;;
+            *) echo "::error::MODAL_TOKEN_ID should start with ak- (length now ${#id}). Paste only the Token ID value, without --token-id."; exit 1 ;;
+          esac
+          case "$sec" in
+            as-*) ;;
+            *) echo "::error::MODAL_TOKEN_SECRET should start with as- (length now ${#sec}). Paste only the Token Secret value."; exit 1 ;;
+          esac
+          [ "$id" != "$MODAL_TOKEN_ID" ] && echo "::notice::MODAL_TOKEN_ID contained spaces, newlines or quotes; they were removed."
+          [ "$sec" != "$MODAL_TOKEN_SECRET" ] && echo "::notice::MODAL_TOKEN_SECRET contained spaces, newlines or quotes; they were removed."
+          { echo "MODAL_TOKEN_ID=$id"; echo "MODAL_TOKEN_SECRET=$sec"; } >> "$GITHUB_ENV"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'

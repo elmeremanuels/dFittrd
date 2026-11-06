@@ -8,6 +8,7 @@
  *    metafield definitions, app-data metafields for the theme block (public key + api url), backfill job.
  *  - POST /shopify/webhooks        HMAC-verified; products/*, app/uninstalled, app_subscriptions/update,
  *    the three GDPR topics. Every delivery is logged with its payload for replay (webhook_log).
+ *  - /shopify/charts/*, /shopify/products/:id/*  the size chart builder (charts.ts).
  *  - POST /shopify/billing/subscribe  appSubscriptionCreate (Starter + usage line with cappedAmount), priced
  *    in the shop's billing currency (shopBillingPreferences; EUR-based rate table, #6). The currency and
  *    rate are stored on the shop so every usage record uses the subscription's currency.
@@ -25,6 +26,7 @@ import { badRequest, forbidden, serviceUnavailable, unauthorized } from '../lib/
 import { HOUR } from '../lib/time.js';
 import { archiveProduct } from '../services/products.js';
 import { createShop, findShopByDomain, issueMerchantKeys, updateSettings } from '../services/shops.js';
+import { shopifyChartRoutes } from './charts.js';
 import { billingSettingsPatch } from './client.js';
 
 export const SHOPIFY_TOPICS = [
@@ -40,6 +42,8 @@ export const SHOPIFY_TOPICS = [
 
 export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
   const { db, env, queue, shopify, now } = app.ctx;
+  // Size chart builder of the embedded admin (charts.ts): templates, bulk assign, description import, checklist, onboarding.
+  await app.register(shopifyChartRoutes);
 
   /** `?shop=` as Shopify sends it, or null when it is not a *.myshopify.com domain. */
   const shopParam = (v: string | undefined): string | null => {

@@ -69,6 +69,30 @@
     .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
     .skeleton { height: 12px; border-radius: 6px; background: linear-gradient(90deg, #eee, #f7f7f7, #eee); background-size: 200% 100%; animation: sk 1.2s infinite; }
     @keyframes sk { to { background-position: -200% 0; } }
+    fieldset { border: 0; margin: 0 0 12px; padding: 0; min-width: 0; }
+    legend { font-weight: 600; padding: 0; margin-bottom: 6px; }
+    label { cursor: pointer; }
+    .stack { display: flex; flex-direction: column; gap: 6px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .tpl { display: grid; grid-template-columns: 20px 1fr; gap: 8px; padding: 8px 10px; border: 1px solid var(--p-border); border-radius: 8px; }
+    .tpl:has(input:checked) { border-color: var(--p-text); background: #fafafa; }
+    .tpl small { display: block; color: var(--p-text-subdued); }
+    .input { font: inherit; border: 1px solid #8a8a8a; border-radius: 8px; padding: 5px 8px; background: #fff; color: var(--p-text); }
+    .input:focus-visible, .btn:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid #005bd3; outline-offset: 1px; }
+    .chart-table input { width: 72px; font: inherit; border: 1px solid #b5b5b5; border-radius: 6px; padding: 3px 6px; text-align: right; }
+    .chart-table td, .chart-table th { padding: 4px 6px; }
+    .steps { counter-reset: s; }
+    .step-h { display: flex; align-items: center; gap: 8px; margin: 16px 0 8px; font-size: 13px; font-weight: 650; }
+    .step-h::before { counter-increment: s; content: counter(s); display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--p-text); color: #fff; font-size: 11px; }
+    .note { padding: 8px 10px; border-radius: 8px; margin-top: 8px; }
+    .note-info { background: var(--p-info-bg); color: var(--p-info-fg); }
+    .note-warning { background: var(--p-warning-bg); color: var(--p-warning-fg); }
+    .note-critical { background: var(--p-critical-bg); color: var(--p-critical-fg); }
+    .note-success { background: var(--p-success-bg); color: var(--p-success-fg); }
+    .hidden { display: none !important; }
+    details summary { cursor: pointer; color: var(--p-text-subdued); }
+    ul.plain { margin: 4px 0 0; padding-left: 18px; }
+    .pill { display: inline-block; border-radius: 6px; padding: 0 6px; font-size: 11px; font-weight: 600; background: #ebebeb; }
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
   </style>
 </head>
@@ -85,11 +109,13 @@
       <section class="card" aria-labelledby="h-onboarding">
         <h2 id="h-onboarding">Get set up</h2>
         <ul class="checklist" id="checklist">
-          <li><span class="check" id="chk-install"></span><div><b>Connect this store</b><div class="subdued" id="txt-install">Checking…</div></div><span></span></li>
-          <li><span class="check" id="chk-plan"></span><div><b>Choose a plan</b><div class="subdued" id="txt-plan">14-day trial. Below plan, the button keeps rendering; shoppers see a pause screen.</div></div><button class="btn btn-primary" id="btn-plan" type="button" disabled>Choose Starter</button></li>
-          <li><span class="check" id="chk-theme"></span><div><b>Add the “Try it on” block</b><div class="subdued">Opens the theme editor on your product template with the block pre-added. Shoppers get their size right on the product page, no app needed.</div></div><a class="btn" id="lnk-theme" target="_top" rel="noopener">Add to theme</a></li>
-          <li><span class="check" id="chk-data"></span><div><b>Complete garment data</b><div class="subdued" id="txt-data">Size chart, fabric and a flat-lay photo make a product try-able.</div></div><a class="btn" href="#products">Review</a></li>
+          <li data-step="connect"><span class="check" id="chk-install"></span><div><b>Connect this store</b><div class="subdued" id="txt-install">Checking…</div></div><span></span></li>
+          <li data-step="template"><span class="check" id="chk-template"></span><div><b>Pick a size chart template</b><div class="subdued" id="txt-template">Your region’s body chart (AU, UK, EU, US), or garment measurements you fill in.</div></div><a class="btn" href="#charts">Choose</a></li>
+          <li data-step="assign"><span class="check" id="chk-assign"></span><div><b>Assign it to products</b><div class="subdued" id="txt-assign">By collection, tag, product type, or pick products.</div></div><a class="btn" href="#assign">Assign</a></li>
+          <li data-step="themeBlock"><span class="check" id="chk-theme"></span><div><b>Add the “Try it on” block</b><div class="subdued">Opens the theme editor on your product template with the block pre-added. Save the theme, then mark it done.</div></div><span class="row"><a class="btn" id="lnk-theme" target="_top" rel="noopener">Add to theme</a><button class="btn" type="button" id="btn-theme-done">Done</button></span></li>
+          <li data-step="test"><span class="check" id="chk-test"></span><div><b>Test it on a product</b><div class="subdued" id="txt-test">Open a product with a chart, click “Try it on” and get a size.</div></div><span class="row"><a class="btn" href="#products">Pick a product</a><button class="btn" type="button" id="btn-test-done">Done</button></span></li>
         </ul>
+        <p class="subdued" id="txt-data" style="margin:10px 0 0"></p>
         <div class="privacy">
           <b>Privacy by construction.</b> Shoppers' photos and measurements never leave their device. You receive aggregates only (k-anonymity floor), never a device id, a measurement or a photo.
         </div>
@@ -106,8 +132,81 @@
         <div class="subdued" id="usage-period" style="margin-top:6px"></div>
         <div class="bars" id="usage-bars" aria-label="Try-on sessions per day, last 30 days" role="img"></div>
         <div class="subdued" style="margin-top:8px">One try-on session = one product resolved by one shopper with a fit result, counted once per intent (never double-billed on retries).</div>
+        <div class="row" style="margin-top:12px"><span class="check" id="chk-plan" aria-hidden="true"></span><span class="subdued" id="txt-plan">14-day trial. Below plan, the button keeps rendering; shoppers see a pause screen.</span><button class="btn btn-primary" id="btn-plan" type="button" disabled>Choose Starter</button></div>
       </section>
     </div>
+
+    <section class="card steps" id="charts" aria-labelledby="h-charts" style="margin-top:16px">
+      <h2 id="h-charts">Size charts</h2>
+      <p class="subdued" style="margin:0">Shoppers get their size from your chart. Pick a standard body chart for your region, or enter the measurements of the finished garment per size. Products keep the chart in their own metafields (Metafields → Curtain).</p>
+
+      <h3 class="step-h" id="h-tpl">Choose a template</h3>
+      <fieldset aria-labelledby="h-tpl">
+        <legend class="sr">Template</legend>
+        <div class="grid grid-2" id="tpl-list"><div class="skeleton"></div></div>
+      </fieldset>
+      <div id="tpl-sources" class="subdued"></div>
+
+      <h3 class="step-h" id="h-edit">Check the numbers</h3>
+      <fieldset class="row" aria-labelledby="h-type">
+        <legend id="h-type">These numbers are</legend>
+        <label><input type="radio" name="chart-type" value="body" /> the <b>body</b> each size fits</label>
+        <label><input type="radio" name="chart-type" value="garment" /> the finished <b>garment</b> (measured all round)</label>
+      </fieldset>
+      <div class="row" style="margin-bottom:8px">
+        <fieldset class="row" style="margin:0"><legend class="sr">Unit</legend>
+          <label><input type="radio" name="chart-unit" value="cm" checked /> cm</label>
+          <label><input type="radio" name="chart-unit" value="in" /> inches</label>
+        </fieldset>
+        <span class="subdued" id="sizes-label">Sizes:</span>
+        <span class="row" id="size-boxes" role="group" aria-labelledby="sizes-label"></span>
+        <span class="row"><label for="custom-size" class="sr">Add a size</label><input class="input" id="custom-size" maxlength="16" size="6" placeholder="Add size" /><button class="btn" type="button" id="btn-add-size">Add</button></span>
+      </div>
+      <div style="overflow:auto">
+        <table class="chart-table" aria-describedby="chart-help">
+          <thead id="chart-head"></thead>
+          <tbody id="chart-body"></tbody>
+        </table>
+      </div>
+      <p class="subdued" id="chart-help" style="margin:6px 0 0">Bust, waist and hip all round. If you measured a garment laid flat, double the width. Values are stored in cm.</p>
+      <div id="chart-check" role="status" aria-live="polite"></div>
+
+      <h3 class="step-h" id="assign">Assign to products</h3>
+      <fieldset aria-labelledby="h-sel">
+        <legend id="h-sel">Which products</legend>
+        <div class="stack">
+          <div class="row"><input type="radio" name="sel-kind" value="collection" id="sk-collection" checked /><label for="sk-collection">A collection</label> <button class="btn" type="button" id="btn-pick-collection">Choose collection</button> <span class="subdued" id="sel-collection"></span></div>
+          <div class="row"><input type="radio" name="sel-kind" value="tag" id="sk-tag" /><label for="sk-tag">Products tagged</label> <input class="input" id="sel-tag" maxlength="255" aria-label="Tag" data-kind="tag" /></div>
+          <div class="row"><input type="radio" name="sel-kind" value="productType" id="sk-type" /><label for="sk-type">Product type</label> <input class="input" id="sel-type" maxlength="255" aria-label="Product type" data-kind="productType" /></div>
+          <div class="row"><input type="radio" name="sel-kind" value="products" id="sk-products" /><label for="sk-products">Products I pick</label> <button class="btn" type="button" id="btn-pick-products">Choose products</button> <span class="subdued" id="sel-products"></span></div>
+        </div>
+      </fieldset>
+      <label><input type="checkbox" id="sel-overwrite" /> Replace charts products already have</label>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" type="button" id="btn-preview">Preview</button>
+        <button class="btn btn-primary" type="button" id="btn-assign">Assign chart</button>
+      </div>
+      <div id="assign-status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="card hidden" id="product-panel" aria-labelledby="h-product" style="margin-top:16px">
+      <div class="page-header" style="margin-bottom:8px">
+        <h2 id="h-product" tabindex="-1" style="margin:0">Product</h2>
+        <span class="row"><a class="btn" id="lnk-preview" target="_blank" rel="noopener">Try it on (preview) ↗</a><a class="btn" id="lnk-admin" target="_top" rel="noopener">Edit in Shopify</a><button class="btn" type="button" id="btn-close-product">Close</button></span>
+      </div>
+      <div class="grid grid-2">
+        <div>
+          <h3 style="font-size:13px;margin:0 0 6px">Checklist</h3>
+          <ul class="checklist" id="product-checklist"></ul>
+        </div>
+        <div>
+          <h3 style="font-size:13px;margin:0 0 6px">Import from description</h3>
+          <p class="subdued" style="margin:0 0 8px">For one-size pieces: reads the measurements and fabric printed in the product description. Nothing is saved until you confirm.</p>
+          <button class="btn" type="button" id="btn-import">Read the description</button>
+          <div id="import-result" role="status" aria-live="polite"></div>
+        </div>
+      </div>
+    </section>
 
     <section class="card" id="products" aria-labelledby="h-products" style="margin-top:16px">
       <h2 id="h-products">Products <span class="subdued" id="products-counts"></span></h2>
@@ -118,7 +217,7 @@
       </div>
       <div style="overflow:auto">
         <table>
-          <thead><tr><th>Product</th><th>Category</th><th>Status</th><th class="num">Completeness</th><th>Missing</th><th></th></tr></thead>
+          <thead><tr><th>Product</th><th>Category</th><th>Status</th><th class="num">Completeness</th><th>Missing</th><th><span class="sr">Actions</span></th></tr></thead>
           <tbody id="products-body"><tr><td colspan="6"><div class="skeleton"></div></td></tr></tbody>
         </table>
       </div>
@@ -185,6 +284,7 @@
           var err = new Error((data && data.error && data.error.message) || ('HTTP ' + res.status));
           err.status = res.status;
           err.code = data && data.error && data.error.code;
+          err.details = data && data.error && data.error.details;
           throw err;
         }
         return data;
@@ -232,7 +332,6 @@
         state.products = r;
         text('products-counts', '· ' + r.counts.active + ' try-able, ' + r.counts.incomplete + ' need data');
         text('txt-data', r.counts.incomplete === 0 ? 'All synced products are try-able.' : r.counts.incomplete + ' product(s) are missing size chart, fabric or flat-lay data.');
-        check('chk-data', r.counts.active > 0 && r.counts.incomplete === 0);
         text('products-note', r.nextCursor ? 'Showing the first 200 products.' : '');
         renderProducts();
       }
@@ -250,7 +349,10 @@
             el('td', null, [el('span', { class: 'badge ' + badge[0], text: badge[1] })]),
             el('td', { class: 'num', text: Math.round(p.score * 100) + '%' }),
             el('td', { class: 'subdued', text: missing || '–' }),
-            el('td', null, [el('a', { class: 'btn', href: 'https://' + shop + '/admin/products/' + encodeURIComponent(p.externalId), target: '_top', rel: 'noopener', text: 'Edit' })])
+            el('td', null, [el('span', { class: 'row' }, [
+              el('button', { class: 'btn', type: 'button', 'data-product': p.externalId, 'data-name': p.name, text: 'Size chart' }),
+              el('a', { class: 'btn', href: 'https://' + shop + '/admin/products/' + encodeURIComponent(p.externalId), target: '_top', rel: 'noopener', text: 'Edit' })
+            ])])
           ]));
         });
       }
@@ -284,6 +386,293 @@
         }
       }
 
+
+      // ---- size chart builder ---------------------------------------------------------------------
+      var CM_PER_IN = 2.54;
+      var POINT_LABELS = { bust: 'Bust', waist: 'Waist', hip: 'Hip', shoulder: 'Shoulder', thigh: 'Thigh', inseam: 'Inseam' };
+      var charts = { templates: [], tpl: null, type: 'body', unit: 'cm', allSizes: [], sizes: [], values: {}, points: ['bust', 'waist', 'hip'], edited: false };
+      var sel = { collection: null, products: [] };
+      var STEP_CHECK = { connect: 'chk-install', template: 'chk-template', assign: 'chk-assign', themeBlock: 'chk-theme', test: 'chk-test' };
+      var STEP_TEXT = { template: 'txt-template', assign: 'txt-assign', test: 'txt-test' };
+
+      function note(id, kind, lines) {
+        var box = $(id); box.textContent = '';
+        if (!lines || !lines.length) return;
+        var n = el('div', { class: 'note note-' + kind });
+        if (lines.length === 1) n.textContent = lines[0];
+        else n.appendChild(el('ul', { class: 'plain' }, lines.map(function (l) { return el('li', { text: l }); })));
+        box.appendChild(n);
+      }
+      function radioValue(name) { var r = document.querySelector('input[name="' + name + '"]:checked'); return r ? r.value : null; }
+      function setRadio(name, value) { document.querySelectorAll('input[name="' + name + '"]').forEach(function (r) { r.checked = r.value === value; }); }
+      function toUnit(cm) { if (typeof cm !== 'number') return ''; return charts.unit === 'in' ? String(Math.round(cm / CM_PER_IN * 4) / 4) : String(cm); }
+      function toCm(v) { var n = Number(String(v).replace(',', '.')); if (!isFinite(n) || n <= 0) return null; return Math.round((charts.unit === 'in' ? n * CM_PER_IN : n) * 2) / 2; }
+
+      async function loadOnboarding() {
+        var r = await api('GET', '/shopify/charts/onboarding');
+        r.steps.forEach(function (st) {
+          if (STEP_CHECK[st.key]) check(STEP_CHECK[st.key], st.done);
+          if (STEP_TEXT[st.key]) text(STEP_TEXT[st.key], st.detail);
+          var li = document.querySelector('[data-step="' + st.key + '"]');
+          if (li) { if (st.key === r.next) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current'); }
+        });
+        $('btn-theme-done').disabled = r.steps.some(function (st) { return st.key === 'themeBlock' && st.done; });
+        $('btn-test-done').disabled = r.steps.some(function (st) { return st.key === 'test' && st.done; });
+        if (r.state.templateId && !charts.tpl) selectTemplate(r.state.templateId, false);
+        return r;
+      }
+      async function saveOnboarding(patch) {
+        try { await api('PUT', '/shopify/charts/onboarding', patch); await loadOnboarding(); }
+        catch (err) { banner('warning', 'Could not save the setup step: ' + err.message); }
+      }
+
+      async function loadTemplates() {
+        var r = await api('GET', '/v1/merchant/charts/templates');
+        charts.templates = r.templates;
+        var list = $('tpl-list'); list.textContent = '';
+        r.templates.forEach(function (t) {
+          var input = el('input', { type: 'radio', name: 'tpl', value: t.id, id: 'tpl-' + t.id });
+          input.addEventListener('change', function () { selectTemplate(t.id, true); });
+          var kind = el('span', { class: 'pill', text: t.kind === 'body' ? 'Body measurements' : 'Garment measurements' });
+          list.appendChild(el('label', { class: 'tpl', for: 'tpl-' + t.id }, [input, el('span', null, [el('b', { text: t.label }), ' ', kind, el('small', { text: t.description })])]));
+        });
+        if (!charts.tpl) selectTemplate((r.templates.find(function (t) { return t.id === 'au-womens-body'; }) || r.templates[0]).id, false);
+      }
+
+      function selectTemplate(id, save) {
+        var t = charts.templates.find(function (x) { return x.id === id; });
+        if (!t) return;
+        charts.tpl = t; charts.type = t.kind; charts.edited = false;
+        charts.points = t.kind === 'body' ? ['bust', 'waist', 'hip'] : t.points.slice();
+        charts.allSizes = t.sizes.slice(); charts.sizes = t.defaultSizes.slice(); charts.values = {};
+        (t.rows || []).forEach(function (r) { charts.values[r.size] = { bust: r.bust, waist: r.waist, hip: r.hip }; });
+        setRadio('tpl', id); setRadio('chart-type', charts.type);
+        var src = $('tpl-sources'); src.textContent = '';
+        if (t.sources && t.sources.length) {
+          var used = t.sources.filter(function (x) { return x.inMedian; });
+          src.appendChild(el('details', null, [
+            el('summary', { text: 'Sources: median of ' + used.length + ' published charts, read ' + used[0].accessed + (t.weakSizes && t.weakSizes.length ? ' · sizes ' + t.weakSizes.join(', ') + ' rest on fewer than three' : '') }),
+            el('ul', { class: 'plain' }, t.sources.map(function (x) { return el('li', null, [el('a', { href: x.url, target: '_blank', rel: 'noopener noreferrer', text: x.publisher }), x.inMedian ? '' : ' (comparison only)', x.note ? ' — ' + x.note : '']); }))
+          ]));
+        }
+        renderSizes(); renderChart(); note('chart-check', 'info', []);
+        if (save) saveOnboarding({ templateId: id });
+      }
+
+      function renderSizes() {
+        var box = $('size-boxes'); box.textContent = '';
+        charts.allSizes.forEach(function (size) {
+          var cb = el('input', { type: 'checkbox', value: size });
+          cb.checked = charts.sizes.indexOf(size) >= 0;
+          cb.addEventListener('change', function () {
+            charts.sizes = charts.allSizes.filter(function (s) { return s === size ? cb.checked : charts.sizes.indexOf(s) >= 0; });
+            renderChart();
+          });
+          box.appendChild(el('label', null, [cb, ' ' + size]));
+        });
+      }
+
+      function renderChart() {
+        var u = charts.unit === 'in' ? 'in' : 'cm';
+        var head = $('chart-head'); head.textContent = '';
+        head.appendChild(el('tr', null, [el('th', { scope: 'col', text: 'Size' })].concat(charts.points.map(function (p) { return el('th', { scope: 'col', class: 'num', text: POINT_LABELS[p] + ' (' + u + ')' }); }))));
+        var body = $('chart-body'); body.textContent = '';
+        if (!charts.sizes.length) { body.appendChild(el('tr', null, [el('td', { colspan: String(charts.points.length + 1), class: 'empty', text: 'Tick at least one size.' })])); return; }
+        charts.sizes.forEach(function (size) {
+          var weak = charts.tpl && charts.tpl.weakSizes && charts.tpl.weakSizes.indexOf(size) >= 0 && charts.type === 'body' && !charts.edited;
+          var cells = [el('th', { scope: 'row' }, [size, weak ? el('span', { class: 'pill', title: 'Fewer than three sources', text: ' estimate' }) : ''])];
+          charts.points.forEach(function (p) {
+            var v = charts.values[size] && charts.values[size][p];
+            var input = el('input', { inputmode: 'decimal', 'aria-label': 'Size ' + size + ' ' + POINT_LABELS[p] + ' in ' + u, value: toUnit(v) });
+            input.addEventListener('change', function () {
+              charts.values[size] = charts.values[size] || {};
+              charts.values[size][p] = toCm(input.value);
+              charts.edited = true;
+            });
+            cells.push(el('td', { class: 'num' }, [input]));
+          });
+          body.appendChild(el('tr', null, cells));
+        });
+      }
+
+      function chartSpec() {
+        var t = charts.tpl;
+        if (t && t.kind === 'body' && charts.type === 'body' && !charts.edited) return { templateId: t.id, sizes: charts.sizes.slice() };
+        return {
+          sizeChartType: charts.type,
+          unit: 'cm',
+          sizeChart: charts.sizes.map(function (size) {
+            var row = { size: size }; var v = charts.values[size] || {};
+            charts.points.forEach(function (p) { if (typeof v[p] === 'number') row[p] = v[p]; });
+            return row;
+          })
+        };
+      }
+      function localCheck() {
+        var errs = [];
+        if (!charts.sizes.length) errs.push('Tick at least one size.');
+        if (charts.type !== 'body' && charts.type !== 'garment') errs.push('Say whether the numbers are body or garment measurements.');
+        var spec = chartSpec();
+        if (spec.sizeChart) spec.sizeChart.forEach(function (r) { if (Object.keys(r).length < 2) errs.push('Size ' + r.size + ' has no measurements.'); });
+        return errs;
+      }
+
+      function selector() {
+        var kind = radioValue('sel-kind');
+        if (kind === 'collection') { if (!sel.collection) throw new Error('Choose a collection first.'); return { kind: 'collection', collectionId: sel.collection.id }; }
+        if (kind === 'tag') { var tag = $('sel-tag').value.trim(); if (!tag) throw new Error('Enter a tag.'); return { kind: 'tag', tag: tag }; }
+        if (kind === 'productType') { var pt = $('sel-type').value.trim(); if (!pt) throw new Error('Enter a product type.'); return { kind: 'productType', productType: pt }; }
+        if (!sel.products.length) throw new Error('Choose products first.');
+        return { kind: 'products', productIds: sel.products.map(function (p) { return p.id; }) };
+      }
+
+      async function pick(type, multiple) {
+        if (!window.shopify || typeof shopify.resourcePicker !== 'function') throw new Error('The Shopify picker is not available here. Open the app from your Shopify admin.');
+        var opts = { type: type, multiple: multiple, action: 'select' };
+        if (type === 'product') { opts.filter = { variants: false, archived: false }; if (sel.products.length) opts.selectionIds = sel.products.map(function (p) { return { id: p.id }; }); }
+        return (await shopify.resourcePicker(opts)) || [];
+      }
+
+      async function previewSelection() {
+        try {
+          var r = await api('POST', '/shopify/charts/preview', { selector: selector() });
+          var charted = r.sample.filter(function (x) { return x.hasChart; }).length;
+          note('assign-status', 'info', [(r.precision === 'AT_LEAST' ? 'At least ' : '') + r.count + ' product(s) match' + (r.sample.length ? ', e.g. ' + r.sample.map(function (x) { return x.title; }).join(', ') : '') + '.' + (charted ? ' Some already have a chart (kept unless you tick “Replace”).' : '')]);
+          return r;
+        } catch (err) { note('assign-status', 'critical', [err.message]); return null; }
+      }
+
+      async function assignChart() {
+        var errs = localCheck();
+        if (errs.length) { note('chart-check', 'critical', errs); var h = $('h-edit'); if (h.scrollIntoView) h.scrollIntoView({ block: 'start' }); return; }
+        var selection;
+        try { selection = selector(); } catch (err) { note('assign-status', 'critical', [err.message]); return; }
+        var btn = $('btn-assign'); btn.disabled = true;
+        var total = { written: 0, skipped: 0, failed: [] }; var cursor = null; var warnings = [];
+        try {
+          for (var guard = 0; guard < 200; guard++) {
+            var r = await api('POST', '/shopify/charts/assign', { selector: selection, chart: chartSpec(), overwrite: $('sel-overwrite').checked, cursor: cursor });
+            total.written += r.written.length; total.skipped += r.skipped.length; total.failed = total.failed.concat(r.failed); warnings = r.warnings;
+            note('assign-status', 'info', ['Assigning… ' + total.written + ' product(s) done.']);
+            cursor = r.nextCursor;
+            if (!cursor) break;
+          }
+          var lines = ['Chart assigned to ' + total.written + ' product(s).' + (total.skipped ? ' ' + total.skipped + ' already had a chart and were kept.' : '') + ' Curtain is re-reading them now.'];
+          if (total.failed.length) lines.push(total.failed.length + ' could not be written: ' + total.failed.slice(0, 3).map(function (f) { return f.message; }).join(' · '));
+          note('assign-status', total.failed.length ? 'warning' : 'success', lines);
+          note('chart-check', 'warning', warnings);
+          setTimeout(function () { loadProducts().catch(function () {}); loadOnboarding().catch(function () {}); }, 2500);
+        } catch (err) {
+          var details = err.details && err.details.errors ? err.details.errors : [err.message];
+          note('assign-status', 'critical', ['Nothing more was written. ' + (total.written ? total.written + ' product(s) were done before the error.' : '')].concat(details));
+        } finally { btn.disabled = false; }
+      }
+
+      // ---- one product: checklist, preview, import from description -------------------------------
+      var current = null;
+      async function openProduct(id, name) {
+        current = { id: id, name: name };
+        $('product-panel').classList.remove('hidden');
+        text('h-product', name);
+        $('product-checklist').textContent = ''; $('import-result').textContent = '';
+        $('product-checklist').appendChild(el('li', null, [el('span'), el('div', { class: 'skeleton' }), el('span')]));
+        $('h-product').focus();
+        try {
+          var c = await api('GET', '/shopify/products/' + encodeURIComponent(id) + '/checklist');
+          var list = $('product-checklist'); list.textContent = '';
+          c.items.forEach(function (it) {
+            list.appendChild(el('li', null, [
+              el('span', { class: 'check' + (it.done ? ' done' : ''), 'aria-hidden': 'true', text: it.done ? '✓' : '' }),
+              el('div', null, [el('b', { text: it.label }), it.required && !it.done ? el('span', { class: 'pill', text: ' required' }) : '', el('span', { class: 'sr', text: it.done ? ' (done)' : ' (to do)' }), el('div', { class: 'subdued', text: it.hint })]),
+              el('span')
+            ]));
+          });
+          var prev = $('lnk-preview');
+          if (c.previewUrl) { prev.href = c.previewUrl; prev.classList.remove('hidden'); } else prev.classList.add('hidden');
+          $('lnk-admin').href = c.adminUrl;
+        } catch (err) { $('product-checklist').textContent = ''; note('import-result', 'critical', ['Could not load the product: ' + err.message]); }
+      }
+
+      async function importDescription() {
+        if (!current) return;
+        var box = $('import-result'); box.textContent = '';
+        var r;
+        try { r = await api('GET', '/shopify/products/' + encodeURIComponent(current.id) + '/chart-import'); }
+        catch (err) { note('import-result', 'critical', [err.message]); return; }
+        if (r.warnings.length) box.appendChild(el('div', { class: 'note note-warning' }, [el('ul', { class: 'plain' }, r.warnings.map(function (w) { return el('li', { text: w }); }))]));
+        if (!r.proposal && !r.fabric) { box.appendChild(el('p', { class: 'subdued', text: 'Nothing to import.' })); return; }
+        var form = el('form', { class: 'stack', style: 'margin-top:8px' });
+        var row = r.proposal ? r.proposal.sizeChart[0] : null;
+        var inputs = {};
+        if (row) {
+          form.appendChild(el('div', { class: 'row' }, [el('b', { text: 'Size ' + row.size }), el('span', { class: 'pill', text: r.proposal.sizeChartType === 'body' ? 'Body measurements' : 'Garment measurements' })]));
+          ['bust', 'waist', 'hip'].forEach(function (p) {
+            var id = 'imp-' + p;
+            inputs[p] = el('input', { class: 'input', id: id, inputmode: 'decimal', size: '6', value: row[p] != null ? String(row[p]) : '' });
+            form.appendChild(el('label', { for: id, class: 'row' }, [POINT_LABELS[p] + ' (cm, all round)', inputs[p]]));
+          });
+        }
+        if (r.lengthCm && r.lengthCm.shoulder_to_hem) {
+          inputs.length = el('input', { class: 'input', id: 'imp-length', inputmode: 'decimal', size: '6', value: String(r.lengthCm.shoulder_to_hem) });
+          form.appendChild(el('label', { for: 'imp-length', class: 'row' }, ['Length, shoulder to hem (cm)', inputs.length]));
+        }
+        var useFabric = null;
+        if (r.fabric) {
+          useFabric = el('input', { type: 'checkbox', id: 'imp-fabric' }); useFabric.checked = true;
+          form.appendChild(el('label', { for: 'imp-fabric' }, [useFabric, ' Fabric: ' + r.fabric.primary + (r.fabric.blend ? ' (' + r.fabric.blend.map(function (b) { return b[1] + '% ' + b[0]; }).join(', ') + ')' : '') + ', stretch ' + r.fabric.stretchPct + '%']));
+        }
+        form.appendChild(el('details', null, [el('summary', { text: 'Where this came from' }), el('ul', { class: 'plain' }, r.evidence.map(function (e) { return el('li', { text: e }); }))]));
+        if (r.hasChart && row) form.appendChild(el('p', { class: 'note note-warning', text: 'This product already has a size chart; confirming replaces it.' }));
+        var submit = el('button', { class: 'btn btn-primary', type: 'submit', text: row ? 'Save this chart' : 'Save the fabric' });
+        form.appendChild(el('div', null, [submit]));
+        form.addEventListener('submit', async function (ev) {
+          ev.preventDefault(); submit.disabled = true;
+          var body = {};
+          if (row) {
+            var out = { size: row.size };
+            ['bust', 'waist', 'hip'].forEach(function (p) { var n = Number(inputs[p].value.replace(',', '.')); if (inputs[p].value && isFinite(n) && n > 0) out[p] = n; });
+            body.sizeChartType = r.proposal.sizeChartType; body.sizeChart = [out];
+          }
+          if (inputs.length && Number(inputs.length.value) > 0) body.lengthCm = { shoulder_to_hem: Number(inputs.length.value) };
+          if (useFabric && useFabric.checked) body.fabric = r.fabric;
+          if (!body.sizeChart) { note('import-result', 'warning', ['Saving fabric alone: use “Edit in Shopify” → Metafields → Curtain, or enter a chart above.']); submit.disabled = false; return; }
+          try {
+            var w = await api('PUT', '/shopify/products/' + encodeURIComponent(current.id) + '/chart', body);
+            note('import-result', 'success', ['Saved (' + w.written.join(', ') + '). Curtain is re-reading the product.'].concat(w.warnings));
+            setTimeout(function () { if (current) openProduct(current.id, current.name); loadProducts().catch(function () {}); loadOnboarding().catch(function () {}); }, 2500);
+          } catch (err) { submit.disabled = false; note('import-result', 'critical', (err.details && err.details.errors) || [err.message]); }
+        });
+        box.appendChild(form);
+      }
+
+      document.querySelectorAll('input[name="chart-type"]').forEach(function (r) { r.addEventListener('change', function () { charts.type = r.value; charts.edited = true; renderChart(); }); });
+      document.querySelectorAll('input[name="chart-unit"]').forEach(function (r) { r.addEventListener('change', function () { charts.unit = r.value; renderChart(); }); });
+      $('btn-add-size').addEventListener('click', function () {
+        var v = $('custom-size').value.trim().slice(0, 16);
+        if (!v || charts.allSizes.some(function (s) { return s.toUpperCase() === v.toUpperCase(); })) return;
+        charts.allSizes.push(v); charts.sizes.push(v); charts.edited = true; $('custom-size').value = '';
+        renderSizes(); renderChart();
+      });
+      $('btn-pick-collection').addEventListener('click', async function () {
+        try { var r = await pick('collection', false); if (r[0]) { sel.collection = { id: r[0].id, title: r[0].title }; text('sel-collection', r[0].title); setRadio('sel-kind', 'collection'); } }
+        catch (err) { note('assign-status', 'critical', [err.message]); }
+      });
+      $('btn-pick-products').addEventListener('click', async function () {
+        try { var r = await pick('product', true); sel.products = r.map(function (p) { return { id: p.id, title: p.title }; }).slice(0, 250); text('sel-products', sel.products.length + ' selected'); setRadio('sel-kind', 'products'); }
+        catch (err) { note('assign-status', 'critical', [err.message]); }
+      });
+      ['sel-tag', 'sel-type'].forEach(function (id) { $(id).addEventListener('focus', function () { setRadio('sel-kind', $(id).getAttribute('data-kind')); }); });
+      $('btn-preview').addEventListener('click', previewSelection);
+      $('btn-assign').addEventListener('click', assignChart);
+      $('btn-theme-done').addEventListener('click', function () { saveOnboarding({ themeBlockConfirmed: true }); });
+      $('btn-test-done').addEventListener('click', function () { saveOnboarding({ tested: true }); });
+      $('btn-import').addEventListener('click', importDescription);
+      $('btn-close-product').addEventListener('click', function () { $('product-panel').classList.add('hidden'); var b = current && document.querySelector('[data-product="' + String(current.id).replace(/[^0-9A-Za-z_-]/g, '') + '"]'); current = null; if (b) b.focus(); });
+      $('products-body').addEventListener('click', function (ev) {
+        var b = ev.target.closest && ev.target.closest('[data-product]');
+        if (b) openProduct(b.getAttribute('data-product'), b.getAttribute('data-name'));
+      });
+
       document.querySelectorAll('[data-filter]').forEach(function (b) {
         b.addEventListener('click', function () {
           document.querySelectorAll('[data-filter]').forEach(function (x) { x.classList.toggle('active', x === b); });
@@ -298,7 +687,7 @@
         try {
           if (shop) { $('lnk-theme').href = themeLink(); check('chk-theme', false); }
           await ensureInstalled();
-          var results = await Promise.allSettled([loadUsage(), loadProducts(), loadLedger()]);
+          var results = await Promise.allSettled([loadUsage(), loadProducts(), loadLedger(), loadTemplates().then(loadOnboarding)]);
           var failed = results.filter(function (r) { return r.status === 'rejected'; });
           if (failed.length) banner('warning', 'Some panels could not load: ' + failed.map(function (f) { return f.reason && f.reason.message; }).join(' · '));
         } catch (err) {

@@ -35,6 +35,7 @@ Blind test page with these products pre-selected: `http://127.0.0.1:5178/blind.h
 - An open-front garment (the cardigan) has no closed loop at the chest, waist or hip unless the reconstruction closes it; the evaluation reports that as a failure at those anchors rather than guessing a girth.
 - The XS and XXL renders use the viewer's avatar: the M mannequin morphed to the XS or XXL ring girths at chest, waist and hip (stature and arms stay M).
 - Trousers and skirts hang from their waistband in the viewer; that is checked only on a skirt cut from the synthetic dress (a unit test and one headless render), never on a reconstructed bottom.
+- **Not covered: Jumpsuits & Sets.** The request was one product from each clothing category; this one has none. No validation product: jumpsuits, overalls and pant suits span the torso and the legs, and the engine has no combined dress + bottom anchor subset for them yet (anchoring, calibration and grading would have to be added first). It was left out for this technical reason, not on scope grounds; the founder decides whether to accept the gap or to add one product from this category.
 
 ## Products
 
@@ -61,6 +62,7 @@ Job not exported yet. Planned: front = photo 1, back = photo 4 (a real back phot
 
 Data warnings from the selection:
 
+- fabric composition not stated (only "viscose" named): blend left out; weight/stretch/drape use the single-fibre library default
 - the AU body chart has no shoulder width; the shoulder fit point is skipped
 - price is 79 AUD; priceEur is left out (no exchange rate is assumed)
 
@@ -216,6 +218,7 @@ Job not exported yet. Planned: front = photo 2, back = photo 3 (a real back phot
 
 Data warnings from the selection:
 
+- fabric composition not stated (only "viscose" named): blend left out; weight/stretch/drape use the single-fibre library default
 - price is 69 AUD; priceEur is left out (no exchange rate is assumed)
 
 **Pipeline status**
@@ -332,7 +335,7 @@ Overlays: [front](../../spikes/garment-engine/out/eval/aalter-studio-2/view/fron
 
 **Mesh health** (mesh as evaluated): 14720 triangles (budget 8000–15000: within), 7488 vertices, 3 components, 256 boundary edges, 0 non-manifold edges, 0 flipped edges, 0 degenerate triangles. Not checked: self-intersection; watertight where expected (openings at neckline, hem and cuffs are allowed but not located).
 
-Evaluation time on the build machine: read 25 ms, measure 22 ms, calibrate 12 ms, grade 1 ms, view renders 203 ms.
+Evaluation time on the build machine: read 29 ms, measure 16 ms, calibrate 12 ms, grade 1 ms, view renders 186 ms.
 
 Bundle: 307 KB in `spikes/garment-engine/out/eval/aalter-studio-2/`.
 

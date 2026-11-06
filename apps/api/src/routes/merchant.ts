@@ -10,6 +10,7 @@ import {
   AnalyticsFitSizesResponseSchema,
   AnalyticsSwipesResponseSchema,
   BillingAnomaliesResponseSchema,
+  ChartTemplatesResponseSchema,
   DateRangeQuerySchema,
   HexColorSchema,
   MerchantKeyRotateResponseSchema,
@@ -23,6 +24,7 @@ import {
   MerchantProductsQuerySchema,
   MerchantProductsResponseSchema,
   UsageResponseSchema,
+  chartTemplatesDto,
   validateGarmentDraft,
 } from '@curtain/schema';
 import { requireMerchant } from '../auth/merchant.js';
@@ -134,6 +136,11 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
   app.get('/v1/merchant/products', { schema: { querystring: MerchantProductsQuerySchema, response: { 200: MerchantProductsResponseSchema } }, preHandler: requireMerchant }, async (req) => {
     return listMerchantProducts(db, req.shop!.id, req.query);
   });
+
+  // ---- size charts ------------------------------------------------------------------------------
+  // Standard body charts (AU/UK/EU/US, cited sources) and garment templates for the chart builder.
+  // Static and platform-neutral; the Shopify writes live in apps/api/src/shopify/charts.ts.
+  app.get('/v1/merchant/charts/templates', { schema: { response: { 200: ChartTemplatesResponseSchema } }, preHandler: requireMerchant }, async () => chartTemplatesDto());
 
   // ---- usage / ledger / analytics ---------------------------------------------------------------
   app.get('/v1/merchant/usage', { schema: { querystring: DateRangeQuerySchema, response: { 200: UsageResponseSchema } }, preHandler: requireMerchant }, async (req) => {

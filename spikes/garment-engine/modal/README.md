@@ -168,14 +168,14 @@ The job timeout is 120 minutes. Stage 2 with 40 steps, plus the first 69 GB weig
 
 ```sh
 cd spikes/garment-engine/modal
-python -m pytest -q tests                                    # 54 pass; the mesh tests skip without numpy/Open3D
+python -m pytest -q tests                                    # 57 pass with requirements-local.txt; the mesh tests skip without numpy/Open3D
 pip install -r requirements-mesh-test.txt && python -m pytest -q tests   # Python 3.10–3.12: 59 expected (33 before stage 1b; not re-run with Open3D since)
 pnpm --filter @curtain/garment-spike test                    # includes the exporter tests (vitest)
 ```
 
 ## Stage 1b: dress our mannequin from shop photos
 
-> **Validation tool, nothing measured yet.** `stage1_dress.py` has not run on Modal or a GPU. Every still it makes is generated (an estimate, AGENTS.md rule 3). When no back photo exists it **invents** the back; D13 says the merchant owns the back, so an invented back is for validation runs only and is flagged in the manifest, the stage 1b record, `cost_summary.json` and every log line. Shop photos and everything derived from them stay in `spikes/garment-engine/out/` (gitignored) and in the Modal jobs Volume; never commit them.
+> **Validation tool, nothing measured yet.** `stage1_dress.py` has not run on Modal or a GPU. Every still it makes is generated (an estimate, AGENTS.md rule 3). When no back photo exists it **invents** the back; D13 says the merchant owns the back, so an invented back is for validation runs only and is flagged in the manifest, the stage 1b record, the stage 2 record (`stills`), `cost_summary.json` (`invented_back`, `invented_roles`, `stills`, read from the manifest, so also when stage 1b ran as its own step before `run_phase0.py`) and every log line. Shop photos and everything derived from them stay in `spikes/garment-engine/out/` (gitignored) and in the Modal jobs Volume; never commit them.
 
 ### Export a job from shop photos
 

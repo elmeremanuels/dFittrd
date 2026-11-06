@@ -96,7 +96,7 @@ export const SHOP_UNCOVERED_CATEGORIES: readonly { productType: string; reason: 
   {
     productType: 'Jumpsuits & Sets',
     reason:
-      'No validation product: jumpsuits, overalls and pant suits span the torso and the legs, and the engine has no combined dress + bottom anchor subset for them yet (anchoring, calibration and grading would have to be added first). Not chosen by us on scope grounds; the founder decides whether to accept the gap or to add one product from this category.',
+      'No validation product: jumpsuits, overalls and pant suits span the torso and the legs, and the engine has no combined dress + bottom anchor subset for them yet (anchoring, calibration and grading would have to be added first). It was left out for this technical reason, not on scope grounds; the founder decides whether to accept the gap or to add one product from this category.',
   },
 ];
 

@@ -61,8 +61,9 @@ export interface GarmentSession {
   graded: Map<string, Mesh>;
 }
 
-export function openSession(m: Mannequin, bundle: SpikeBundle, payload: GarmentPayload = mockGarment(bundle.productId)): GarmentSession {
-  const chains = assignChains(m, bundle.baseMesh);
+export function openSession(m: Mannequin, bundle: SpikeBundle, payload: GarmentPayload = bundle.payload ?? mockGarment(bundle.productId)): GarmentSession {
+  // A bottom has no sleeves: all of it follows the body (the A-pose elbows hang at waist height).
+  const chains = bundle.anchors.category === 'bottom' ? new Uint8Array(bundle.baseMesh.positions.length / 3) : assignChains(m, bundle.baseMesh);
   return { m, bundle, payload, chains, noCollide: insideCanonical(m, bundle.baseMesh.positions, chains), graded: new Map() };
 }
 
@@ -121,6 +122,21 @@ export function yokeHeight(m: Mannequin): number {
   return Math.min(m.morphHeights.shoulder - 3, arm.joint[1] + arm.axis[1] * armpitDistance(m));
 }
 
+/** A bottom (trousers, skirt) hangs from its waistband: the top this many cm of the garment is pinned. */
+export const WAISTBAND_CM = 4;
+
+/**
+ * Height from which body-chain particles are pinned: the shoulder yoke (`yokeHeight`) for garments
+ * that reach the shoulders, the waistband for a bottom (it has nothing above the waist, so a
+ * shoulder yoke would pin nothing and the cloth would fall).
+ */
+export function pinHeight(m: Mannequin, category: string, positions: ArrayLike<number>, chains: ChainAssignment): number {
+  if (category !== 'bottom') return yokeHeight(m);
+  let top = -Infinity;
+  for (let i = 0; i < chains.length; i++) if (chains[i] === 0 && positions[3 * i + 1]! > top) top = positions[3 * i + 1]!;
+  return top - WAISTBAND_CM;
+}
+
 /** Collision clearance between cloth and avatar, cm. */
 export const CLEARANCE_CM = 0.35;
 
@@ -137,8 +153,8 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   const noCollide = Uint8Array.from(session.noCollide);
   const inside = insideCanonical(m, graded.positions, chains);
   for (let i = 0; i < noCollide.length; i++) if (inside[i] === 1 && graded.positions[3 * i + 1]! > m.morphHeights.chest) noCollide[i] = 1;
-  const yoke = yokeHeight(m);
   const start = Float32Array.from(placed.positions);
+  const yoke = pinHeight(m, session.bundle.anchors.category, start, chains);
   // The yoke is where grading put it: the shoulder ring grades by the `shoulder_width` ratio between
   // sizes (D15 breadth); its base width is the mesh's (on the synthetic garment, the mannequin torso's). Pinning only out to the seams or the body's shoulder
   // points was measured and rejected: on the v0 mannequin the freed cloth lands in the arm junction

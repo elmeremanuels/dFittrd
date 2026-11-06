@@ -9,12 +9,18 @@
  * shapes are cached per product, size, body and fabric, and the neighbouring sizes are draped in the
  * background once the shown ones have settled, so a size switch is usually instant.
  *
+ * URL parameters (all optional): `product`, `size`, `layout=side`, `fabric`, `heat=1`, `outlines=1`;
+ * `shape=XS|M|XXL` puts the canonical mannequin's girths of that body shape on the avatar (a
+ * canonical shape, not a person's measurements); `sizes=8,12,16` fixes the sizes shown side by side
+ * (when the chart has all of them) instead of the selected size and its neighbours. The headless
+ * renders of `report:bohohippychic` (`viewer/render-eval.mjs`) use them.
+ *
  * `document.documentElement.dataset` for the smoke script: `viewerState` is `loading`, `draping`,
  * `settled` or `error`; `settle` is a JSON list of `{ key, size, ms, computeMs, clothS }` of the shown
  * sizes; `neckStrain` is the largest neckline edge strain among them; `drapeWorkers` the pool size.
  */
 import * as THREE from 'three';
-import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh } from '@curtain/mannequin';
+import { BASE_SHAPE_ID, BODY_SHAPE_IDS, bodyShape, buildMannequin, buildMannequinMesh, type BodyShapeId } from '@curtain/mannequin';
 import type { FitResult } from '@curtain/fit-engine';
 import { bodyField, buildAvatar, mannequinMeasurements, sanitiseMeasurements, type Avatar, type BodyField, type BodyMeasurements } from './body';
 import { listBundles, loadBundle } from './bundle';
@@ -38,10 +44,14 @@ const setViewerState = (s: 'loading' | 'draping' | 'settled' | 'error'): void =>
 
 const m = buildMannequin(bodyShape(BASE_SHAPE_ID));
 const canonical = buildMannequinMesh(m);
-const MANNEQUIN = mannequinMeasurements(m);
 const SPACING_CM = 78;
 
 const params = new URLSearchParams(location.search);
+const shapeParam = params.get('shape') ?? BASE_SHAPE_ID;
+const SHAPE: BodyShapeId = (BODY_SHAPE_IDS as readonly string[]).includes(shapeParam) ? (shapeParam as BodyShapeId) : BASE_SHAPE_ID;
+/** The canonical body: the M mannequin, or its avatar morphed to another canonical shape's chest, waist and hip girths. */
+const MANNEQUIN = SHAPE === BASE_SHAPE_ID ? mannequinMeasurements(m) : mannequinMeasurements({ ...m, shape: bodyShape(SHAPE) });
+const fixedSizes = (params.get('sizes') ?? '').split(',').map((x) => x.trim()).filter(Boolean);
 const state = {
   productId: params.get('product') ?? '',
   body: 'mannequin' as BodyMode,
@@ -110,6 +120,11 @@ function fitFor(session: GarmentSession, b: BodyMeasurements): FitResult {
   return r;
 }
 
+/** The sizes shown side by side: `?sizes=` when the chart has all of them, else the selected size and its neighbours. */
+function shownSizes(labels: readonly string[], size: string): string[] {
+  return fixedSizes.length > 1 && fixedSizes.every((x) => labels.includes(x)) ? [...fixedSizes] : trioAround(labels, size);
+}
+
 /** The selected size and its neighbours (three when the chart has them). */
 function trioAround(labels: readonly string[], size: string): string[] {
   if (labels.length <= 3) return [...labels];
@@ -164,7 +179,7 @@ async function refresh(): Promise<void> {
     const av = avatarFor(b);
     const fit = fitFor(s, b);
     const vm = viewerMaterial(state.fabric, s.bundle.material);
-    const sizes = state.layout === 'side' ? trioAround(labels, state.size) : [state.size];
+    const sizes = state.layout === 'side' ? shownSizes(labels, state.size) : [state.size];
 
     if (figureProduct !== state.productId || figures.length !== sizes.length) {
       for (const f of figures) {
@@ -264,7 +279,7 @@ const settled = (f: LiveFit): boolean => f.jobId === null && isSettled(f.cloth, 
 function prefetch(): void {
   const s = sessions.get(state.productId);
   if (!s || !pool || pool.pending > 0) return;
-  for (const size of trioAround(sizeLabels(s), state.size)) ensureFit(s, size);
+  for (const size of shownSizes(sizeLabels(s), state.size)) ensureFit(s, size);
 }
 
 function renderLines(): void {
@@ -511,6 +526,7 @@ function wire(): void {
 
 async function start(): Promise<void> {
   setViewerState('loading');
+  if (SHAPE !== BASE_SHAPE_ID) $('mannequin-label').textContent = `Canonical shape ${SHAPE} (M mannequin at ${MANNEQUIN.bust}/${MANNEQUIN.waist}/${MANNEQUIN.hip})`;
   wire();
   try {
     const { products, hint } = await listBundles(fetch);

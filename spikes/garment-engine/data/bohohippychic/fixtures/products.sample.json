@@ -1,0 +1,265 @@
+{
+  "note": "Trimmed copy of 3 public products from https://bohohippychic.com.au/products.json (text and image URLs only, no image bytes), used by src/shop.test.ts. Fetched 2026-11-06 with the shop owner's consent.",
+  "products": [
+    {
+      "id": 10894368407857,
+      "title": "Azure Palm Baby Doll Dress",
+      "handle": "azure-palm-baby-doll-dress",
+      "body_html": "<p data-start=\"87\" data-end=\"125\">🌴 <strong data-start=\"90\" data-end=\"120\">Azure Palm Baby Doll Dress</strong> 🌴</p><p data-start=\"127\" data-end=\"258\">Float through sunlit days in our <em data-start=\"160\" data-end=\"188\">Azure Palm Baby Doll Dress</em>, a carefree piece that blends tropical charm with relaxed elegance.</p><p data-start=\"260\" data-end=\"621\">This lightweight rayon mini dress features a dreamy palm and villa-inspired print in soft pastel hues, evoking the spirit of island adventures. The button-down front adds a touch of structure, while the loose, tiered silhouette creates an airy, flattering flow. Drawstring details on the sleeves bring a playful boho twist, letting you adjust for comfort and style.</p><p data-start=\"623\" data-end=\"871\"> The Azure Palm Baby Doll Dress is your go-to for effortless chic.  Pair it with sandals and bangles for daytime wanderings or elevate with wedges for a breezy night out.</p><p data-start=\"873\" data-end=\"955\">✨ <strong data-start=\"875\" data-end=\"889\">Style tip:</strong> Add a woven tote and sun hat for the ultimate boho-travel look.</p><table class=\"t1\" style=\"height: 346px;\" width=\"298\" cellspacing=\"0\" cellpadding=\"0\"><tbody>\n<tr>\n<td class=\"td1\" valign=\"top\"><p class=\"p1\"><strong><span class=\"s1\">Size</span></strong></p></td>\n<td class=\"td1\" valign=\"top\"><p class=\"p1\"><strong><span class=\"s1\">Bust</span></strong></p></td>\n<td class=\"td1\" valign=\"top\"><p class=\"p1\"><strong><span class=\"s1\">Length</span></strong></p></td>\n</tr>\n<tr>\n<td class=\"td1\" valign=\"top\"><p class=\"p1\"><strong><span class=\"s1\">8</span></strong></p></td>\n<td class=\"td1\" valign=\"top\"><p class=\"p1\"><strong><span class=\"s1\">94cm</span></strong></p></td>\n<td class=\"td1\" valign=\"top\"><p class=\"p1\"><strong><span class=\"s1\">90cm</span></strong></p></td>\n</tr>\n<tr>\n<td class=\"td1\" valign=\"top\"><p class=\"p1\"><strong><span class=\"s1\">10</span></strong></p></td>\n<td class=\"td1\" valign=\"top\"><p class=\"p1\"><strong><span class=\"s1\">98cm</span></strong></p></td>\n<td class=\"td1\" valign=\"top\"><p class=\"p1\"><strong><span class=\"s1\">90cm</span></strong></p></td>\n</tr>\n<tr>\n<td class=\"td1\" valign=\"top\"><p class=\"p1\"><strong><span class=\"s1\">12</span></strong></p></td>\n<td class=\"td1\" valign=\"top\"><p class=\"p1\"><strong><span class=\"s1\">102cm</span></strong></p></td>\n<td class=\"td1\" valign=\"top\"><p class=\"p1\"><strong><span class=\"s1\">91cm</span></strong></p></td>\n</tr>\n<tr>\n<td class=\"td1\" valign=\"top\"><p class=\"p1\"><strong><span class=\"s1\">14</span></strong></p></td>\n<td class=\"td1\" valign=\"top\"><p class=\"p1\"><strong><span class=\"s1\">106cm</span></strong></p></td>\n<td class=\"td1\" valign=\"top\"><p class=\"p1\"><strong><span class=\"s1\">92cm</span></strong></p></td>\n</tr>\n<tr>\n<td class=\"td1\" valign=\"top\"><p class=\"p1\"><strong><span class=\"s1\">16</span></strong></p></td>\n<td class=\"td1\" valign=\"top\"><p class=\"p1\"><strong><span class=\"s1\">112cm</span></strong></p></td>\n<td class=\"td1\" valign=\"top\"><p class=\"p1\"><strong><span class=\"s1\">93cm</span></strong></p></td>\n</tr>\n</tbody></table>",
+      "vendor": "Boho Hippy Chic",
+      "product_type": "Dresses",
+      "tags": [
+        "Azure",
+        "baby doll dress",
+        "Clothing",
+        "Dresses"
+      ],
+      "options": [
+        {
+          "name": "Size",
+          "position": 1,
+          "values": [
+            "8",
+            "10",
+            "12",
+            "14",
+            "16"
+          ]
+        }
+      ],
+      "variants": [
+        {
+          "id": 57021631365425,
+          "title": "8",
+          "option1": "8",
+          "price": "79.00",
+          "available": true
+        },
+        {
+          "id": 57021631398193,
+          "title": "10",
+          "option1": "10",
+          "price": "79.00",
+          "available": true
+        },
+        {
+          "id": 57021631430961,
+          "title": "12",
+          "option1": "12",
+          "price": "79.00",
+          "available": false
+        },
+        {
+          "id": 57021631463729,
+          "title": "14",
+          "option1": "14",
+          "price": "79.00",
+          "available": true
+        },
+        {
+          "id": 57021631496497,
+          "title": "16",
+          "option1": "16",
+          "price": "79.00",
+          "available": false
+        }
+      ],
+      "images": [
+        {
+          "id": 60746969973041,
+          "position": 1,
+          "src": "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-80.jpg?v=1792557415",
+          "width": 800,
+          "height": 1200
+        },
+        {
+          "id": 60746970005809,
+          "position": 2,
+          "src": "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-81.jpg?v=1792557415",
+          "width": 800,
+          "height": 1200
+        },
+        {
+          "id": 60746969940273,
+          "position": 3,
+          "src": "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-82.jpg?v=1792557415",
+          "width": 800,
+          "height": 1200
+        },
+        {
+          "id": 60746969907505,
+          "position": 4,
+          "src": "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-79.jpg?v=1792557415",
+          "width": 800,
+          "height": 1200
+        }
+      ]
+    },
+    {
+      "id": 10894374568241,
+      "title": "Rosewater Palazzo Pants",
+      "handle": "rosewater-palazzo-pants",
+      "body_html": "<p data-start=\"144\" data-end=\"352\">Effortlessly elegant and beautifully relaxed, the <strong data-start=\"194\" data-end=\"227\">Rosewater Bloom Palazzo Pants</strong> feature the same dreamy floral print as the matching maxi dress — soft rose, peach, and cream tones on a powder-blue base.</p><p data-start=\"354\" data-end=\"623\">Crafted from <strong data-start=\"367\" data-end=\"393\">100% lightweight rayon</strong>, these wide-leg pants offer a breezy, free-flowing silhouette with a comfortable <strong data-start=\"475\" data-end=\"503\">elastic drawstring waist</strong> and practical side pockets. Perfect for pairing with the matching blouse or the Luna Cami for an easy boho-luxe look.</p><p data-start=\"625\" data-end=\"666\"><strong data-start=\"625\" data-end=\"664\">Available in Australian sizes 8–16.</strong></p><h2 data-start=\"74\" data-end=\"105\"><strong data-start=\"77\" data-end=\"105\">Palazzo Pants Size Chart</strong></h2><div class=\"TyagGW_tableContainer\"><div class=\"group TyagGW_tableWrapper flex flex-col-reverse w-fit\" tabindex=\"-1\"><table class=\"w-fit min-w-(--thread-content-width)\" data-start=\"107\" data-end=\"406\">\n<thead data-start=\"107\" data-end=\"166\"><tr data-start=\"107\" data-end=\"166\">\n<th class=\"\" data-start=\"107\" data-end=\"126\" data-col-size=\"sm\">Measurement (cm)</th>\n<th class=\"\" data-start=\"126\" data-end=\"133\" data-col-size=\"sm\">AU 8</th>\n<th class=\"\" data-start=\"133\" data-end=\"141\" data-col-size=\"sm\">AU 10</th>\n<th class=\"\" data-start=\"141\" data-end=\"149\" data-col-size=\"sm\">AU 12</th>\n<th class=\"\" data-start=\"149\" data-end=\"157\" data-col-size=\"sm\">AU 14</th>\n<th class=\"\" data-start=\"157\" data-end=\"166\" data-col-size=\"sm\">AU 16</th>\n</tr></thead>\n<tbody data-start=\"227\" data-end=\"406\">\n<tr data-start=\"227\" data-end=\"286\">\n<td data-start=\"227\" data-end=\"246\" data-col-size=\"sm\"><strong data-start=\"229\" data-end=\"238\">Waist</strong></td>\n<td data-start=\"246\" data-end=\"253\" data-col-size=\"sm\">94</td>\n<td data-start=\"253\" data-end=\"261\" data-col-size=\"sm\">110</td>\n<td data-start=\"261\" data-end=\"269\" data-col-size=\"sm\">112</td>\n<td data-start=\"269\" data-end=\"277\" data-col-size=\"sm\">118</td>\n<td data-start=\"277\" data-end=\"286\" data-col-size=\"sm\">124</td>\n</tr>\n<tr data-start=\"287\" data-end=\"346\">\n<td data-start=\"287\" data-end=\"306\" data-col-size=\"sm\"><strong data-start=\"289\" data-end=\"297\">Hips</strong></td>\n<td data-start=\"306\" data-end=\"313\" data-col-size=\"sm\">110</td>\n<td data-start=\"313\" data-end=\"321\" data-col-size=\"sm\">112</td>\n<td data-start=\"321\" data-end=\"329\" data-col-size=\"sm\">118</td>\n<td data-start=\"329\" data-end=\"337\" data-col-size=\"sm\">122</td>\n<td data-start=\"337\" data-end=\"346\" data-col-size=\"sm\">130</td>\n</tr>\n<tr data-start=\"347\" data-end=\"406\">\n<td data-start=\"347\" data-end=\"366\" data-col-size=\"sm\"><strong data-start=\"349\" data-end=\"359\">Length</strong></td>\n<td data-start=\"366\" data-end=\"373\" data-col-size=\"sm\">97</td>\n<td data-start=\"373\" data-end=\"381\" data-col-size=\"sm\">98</td>\n<td data-start=\"381\" data-end=\"389\" data-col-size=\"sm\">99</td>\n<td data-start=\"389\" data-end=\"397\" data-col-size=\"sm\">100</td>\n<td data-start=\"397\" data-end=\"406\" data-col-size=\"sm\">101</td>\n</tr>\n</tbody>\n</table></div></div>",
+      "vendor": "Boho Hippy Chic",
+      "product_type": "Pants",
+      "tags": [
+        "Clothing",
+        "Pants",
+        "Rosewater Palazzo Pants"
+      ],
+      "options": [
+        {
+          "name": "Size",
+          "position": 1,
+          "values": [
+            "8",
+            "10",
+            "12",
+            "14",
+            "16"
+          ]
+        }
+      ],
+      "variants": [
+        {
+          "id": 57021776822577,
+          "title": "8",
+          "option1": "8",
+          "price": "69.00",
+          "available": true
+        },
+        {
+          "id": 57021776855345,
+          "title": "10",
+          "option1": "10",
+          "price": "69.00",
+          "available": false
+        },
+        {
+          "id": 57021776888113,
+          "title": "12",
+          "option1": "12",
+          "price": "69.00",
+          "available": true
+        },
+        {
+          "id": 57021776920881,
+          "title": "14",
+          "option1": "14",
+          "price": "69.00",
+          "available": false
+        },
+        {
+          "id": 57021776953649,
+          "title": "16",
+          "option1": "16",
+          "price": "69.00",
+          "available": false
+        }
+      ],
+      "images": [
+        {
+          "id": 60746983538993,
+          "position": 1,
+          "src": "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Rose-Water-Mila.jpg?v=1792557673",
+          "width": 800,
+          "height": 1200
+        },
+        {
+          "id": 60746983571761,
+          "position": 2,
+          "src": "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-2025-11-15T072201.709.jpg?v=1792557673",
+          "width": 800,
+          "height": 1200
+        },
+        {
+          "id": 60746983506225,
+          "position": 3,
+          "src": "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-2025-11-15T072254.881.jpg?v=1792557673",
+          "width": 800,
+          "height": 1200
+        },
+        {
+          "id": 60746983637297,
+          "position": 4,
+          "src": "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-2025-11-15T072229.454.jpg?v=1792557673",
+          "width": 800,
+          "height": 1200
+        },
+        {
+          "id": 60746983604529,
+          "position": 5,
+          "src": "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-2025-11-15T072138.591.jpg?v=1792557673",
+          "width": 800,
+          "height": 1200
+        }
+      ]
+    },
+    {
+      "id": 10894407860529,
+      "title": "Woodstock Wanderer Knit Cardi",
+      "handle": "woodstock-wanderer-knit-cardi",
+      "body_html": "<p data-start=\"103\" data-end=\"380\">Channel effortless vintage boho style in our Woodstock Wanderer Knit Cardi — a dreamy nod to the free-spirited fashion of the 70s. With its earthy retro-inspired tones and statement patchwork-look knit, this gorgeous cardi brings instant festival-chic energy to any outfit.</p><p data-start=\"382\" data-end=\"623\">Designed with a flattering deep V neckline, oversized button front, and a relaxed easy-to-layer fit, this knit looks beautiful thrown over a lace cami, your favourite denim, or paired with flowing boho layers for that carefree wanderer vibe.</p><p data-start=\"625\" data-end=\"851\">Earthy vintage-inspired boho tones<br data-start=\"659\" data-end=\"662\">Statement retro patchwork-look knit<br data-start=\"697\" data-end=\"700\">Deep V neckline with button front<br data-start=\"733\" data-end=\"736\">Relaxed comfortable fit<br data-start=\"759\" data-end=\"762\" data-is-only-node=\"\">Soft cozy knit feel<br data-start=\"781\" data-end=\"784\">Perfect layered with denim, lace, and your favourite boho staples</p><h5 data-start=\"625\" data-end=\"851\">35%WOOL 65%ACRYLIC</h5>Sizes: S-M Fits Australian Size 8 to 12M-L Fits Australian Size 14-16",
+      "vendor": "Boho Hippy Chic",
+      "product_type": "Jackets & Knits",
+      "tags": [
+        "CA0473",
+        "Clothing",
+        "Collections",
+        "Cosy Knits",
+        "Jackets & Knits",
+        "SALE",
+        "Woodstock Wanderer Knit Cardi"
+      ],
+      "options": [
+        {
+          "name": "Size",
+          "position": 1,
+          "values": [
+            "M-L",
+            "S-M"
+          ]
+        }
+      ],
+      "variants": [
+        {
+          "id": 57022790762801,
+          "title": "M-L",
+          "option1": "M-L",
+          "price": "49.00",
+          "available": true
+        },
+        {
+          "id": 57022790795569,
+          "title": "S-M",
+          "option1": "S-M",
+          "price": "49.00",
+          "available": true
+        }
+      ],
+      "images": [
+        {
+          "id": 60746516136241,
+          "position": 1,
+          "src": "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/CA0473-1.jpg?v=1792553846",
+          "width": 800,
+          "height": 1200
+        },
+        {
+          "id": 60746516103473,
+          "position": 2,
+          "src": "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/CA0473-1-1.jpg?v=1792553845",
+          "width": 800,
+          "height": 1200
+        },
+        {
+          "id": 60746516169009,
+          "position": 3,
+          "src": "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/CA0473.jpg?v=1792553845",
+          "width": 800,
+          "height": 1200
+        }
+      ]
+    }
+  ]
+}

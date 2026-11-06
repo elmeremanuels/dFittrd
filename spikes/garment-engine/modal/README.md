@@ -1,6 +1,8 @@
-# Phase 0 on Modal: stage 2 (video) and stage 4 (reconstruction)
+# Phase 0 on Modal: stage 1b (dressing stills), stage 2 (video) and stage 4 (reconstruction)
 
 GPU half of the Phase 0 spike (`docs/ENGINE-HANDOFF.md`), following shortlist A of `docs/research/garment-engine.md`:
+
+- **Stage 1b** (optional, for shop photos): dresses our bare mannequin, rendered at the front and back camera of the turntable, from a shop photo of the garment on a person or flat-lay. Garment segmentation with Grounding DINO + SAM 2.1, try-on with FASHN VTON v1.5 or Qwen-Image-Edit-2511 (all Apache-2.0), alignment QA against our silhouette. Its output is the front and back still stage 2 pins. See [Stage 1b](#stage-1b-dress-our-mannequin-from-shop-photos).
 
 - **Stage 2**: Wan2.2-Fun-A14B-Control (Apache-2.0), driven by the depth video of our own bare mannequin along the fixed turntable path, with the front and back stills pinned at the first and last frame of each half turn. Because the control video is our own render, the camera pose of every generated frame is known.
 - **Stage 4**: 2D Gaussian splatting with gsplat's `rasterization_2dgs` (Apache-2.0) plus a mask loss, then Open3D TSDF fusion (MIT), cleanup and decimation to 8–15k triangles, written as `.glb`.
@@ -13,13 +15,14 @@ GPU half of the Phase 0 spike (`docs/ENGINE-HANDOFF.md`), following shortlist A 
 | --- | --- | --- |
 | `smoke.py` | Modal hello world: CPU function, GPU cold start, torch matmul | Modal |
 | `smoke_cpu.py` | The same without a GPU (login, image, remote call) | Modal |
+| `stage1_dress.py` | Stage 1b app: weights download (once), `dress` (segment the shop photo, try-on onto our render, garment mask, alignment QA, composite, record) | Modal, GPU |
 | `stage2_video.py` | Stage 2 app: weights download (once), `generate` (3 clips, assembled turntable, drift check, cost record) | Modal, GPU |
 | `stage4_recon.py` | Stage 4 app: `reconstruct` (2DGS → TSDF → mesh → `.glb` + metrics + cost record) | Modal, GPU |
-| `run_phase0.py` | Runs both stages for one product and prints the cost summary | Modal, GPU |
-| `phase0_lib.py` | Pure Python: manifest checks and `input_hash`, pinned versions, pose conversions, clip assembly, cost estimate, settings | nothing |
+| `run_phase0.py` | Runs stage 2 and stage 4 for one product (stage 1b first with `--dress`) and prints the cost summary | Modal, GPU |
+| `phase0_lib.py` | Pure Python: manifest checks and `input_hash`, pinned versions, pose conversions, clip assembly, cost estimate, settings; stage 1b pins, settings, manifest wiring, mask operations and alignment QA | nothing |
 | `phase0_mesh.py` | GPU-free half of stage 4: TSDF fusion, mannequin removal, cleanup, decimation, truth comparison, `.glb` | numpy, scipy, Open3D, trimesh |
 | `phase0_modal.py` | The two Volumes; job upload and download | Modal |
-| `requirements-stage{2,4}.in` / `.txt` | Direct pins / full lock of each GPU image | — |
+| `requirements-stage{1,2,4}.in` / `.txt` | Direct pins / full lock of each GPU image (stage1 = stage 1b) | — |
 | `requirements-local.txt` | `modal`, `pytest` for your computer | — |
 | `requirements-mesh-test.txt` | Optional: runs `tests/test_phase0_mesh.py` | — |
 | `tests/` | pytest suite, plus a small exported job as a fixture | — |
@@ -95,7 +98,7 @@ The exporter prints one line per product, for example `[export:phase0] aalter-st
 | `photos/` | `front`, `back` and `detail_N` |
 | `synthetic/` | The synthetic garment dressed along the same path (`rgb/`, `garment_mask/`, `transforms.json`, `garment_truth.glb`), so stage 4 can be measured against a known mesh |
 
-The front and back images must already show the garment **on the mannequin**, since they are the first and last frames of the video. Turning a flat-lay or ghost-mannequin photo into a "dressed on our mannequin" still (FASHN VTON 1.5 or Qwen-Image-Edit, research doc §1) is not built yet. Until it is, use `--synthetic-photos`, or stills that someone has dressed by hand.
+The front and back images must already show the garment **on the mannequin**, since they are the first and last frames of the video. For shop photos (garment on a person, or flat-lay) export with `--on-model` or `--flat-lay` instead and run stage 1b first ([Stage 1b](#stage-1b-dress-our-mannequin-from-shop-photos)). Otherwise use `--synthetic-photos`, or stills that someone has dressed by hand.
 
 ### 5. Cheapest real GPU test first: stage 4 on the synthetic frames
 
@@ -165,10 +168,98 @@ The job timeout is 120 minutes. Stage 2 with 40 steps, plus the first 69 GB weig
 
 ```sh
 cd spikes/garment-engine/modal
-python -m pytest -q tests                                    # 28 pass; the mesh tests skip without Open3D
-pip install -r requirements-mesh-test.txt && python -m pytest -q tests   # Python 3.10–3.12: 33 pass
+python -m pytest -q tests                                    # 54 pass; the mesh tests skip without numpy/Open3D
+pip install -r requirements-mesh-test.txt && python -m pytest -q tests   # Python 3.10–3.12: 59 expected (33 before stage 1b; not re-run with Open3D since)
 pnpm --filter @curtain/garment-spike test                    # includes the exporter tests (vitest)
 ```
+
+## Stage 1b: dress our mannequin from shop photos
+
+> **Validation tool, nothing measured yet.** `stage1_dress.py` has not run on Modal or a GPU. Every still it makes is generated (an estimate, AGENTS.md rule 3). When no back photo exists it **invents** the back; D13 says the merchant owns the back, so an invented back is for validation runs only and is flagged in the manifest, the stage 1b record, `cost_summary.json` and every log line. Shop photos and everything derived from them stay in `spikes/garment-engine/out/` (gitignored) and in the Modal jobs Volume; never commit them.
+
+### Export a job from shop photos
+
+```sh
+pnpm --filter @curtain/garment-spike export:phase0 -- --product <id> --on-model \
+  --front ~/shop/<product>/front.jpg [--back ~/shop/<product>/back.jpg] [--detail …]
+```
+
+`--on-model` means the photos show the garment on a person, `--flat-lay` a flat-lay or ghost mannequin. The exporter then writes:
+
+| Path | Content |
+| --- | --- |
+| `dress/source_front.<ext>`, `dress/source_back.<ext>` | The shop photos, byte for byte (their sha256 is part of `input_hash`) |
+| `dress/bare_front.png`, `dress/bare_back.png` | Our bare mannequin rendered at turntable frame 0 and N/2: same camera (`cameras_opencv.json`), same light, studio background `[235, 235, 235]`. The silhouettes are `control/mask/0000.png` and `control/mask/<N/2>.png` |
+| `manifest.json` | `photos` front/back point at `stage1b/front.png` / `stage1b/back.png` with `produced_by: "stage1b"`, `sha256: null` and `invented` (true for a back without a photo); a `stage1b` section lists the sources, the two views and `invented_back` |
+
+The product's category picks the try-on category (`dress` → one-pieces, `top`/`outerwear` → tops, `bottom` → bottoms). The spike exporter knows only its own product ids; a product from a shop must be added to `src/product.ts` first.
+
+### Run stage 1b
+
+```sh
+modal run spikes/garment-engine/modal/stage1_dress.py --job-dir spikes/garment-engine/out/phase0/<id> [--engine fashn|qwen]
+```
+
+or as the first step of the full run (stage 2 only starts when both stills passed QA and, for an invented back, with `--allow-invented-back`):
+
+```sh
+modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/<id> --dress --dress-engine fashn --allow-invented-back
+modal run spikes/garment-engine/modal/run_phase0.py --job-dir … --dress --dress-only   # stage 1b only, no video
+```
+
+Per view (front first, then back) the app:
+
+1. finds the garment in the shop photo: Grounding DINO box for the category prompt, SAM 2.1 mask from that box; writes `stage1b/source/<view>_mask.png` and a cut-out on studio grey;
+2. dresses our render of that view: `fashn` = FASHN VTON v1.5 (person = our render, garment = shop photo, maskless, 30 steps), `qwen` = Qwen-Image-Edit-2511 (picture 1 = our render, picture 2 = the cut-out, 40 steps). Without a back photo the back is generated from the front photo (fashn) or from the dressed front still (qwen) and marked invented;
+3. resizes the output to the frame (`stage1b/raw/<view>.png`), finds the garment by difference to our render, refines it with SAM 2 using that box (`mask_source` says which mask won), and runs the alignment QA;
+4. pastes only the garment pixels into our bare render (`--no-composite` keeps the raw model output), so the mannequin, the light and the background of the pinned still are exactly those of the control video.
+
+Alignment QA (`phase0_lib.alignment_qa`, thresholds in `STAGE1B_QA_THRESHOLDS`, **initial values, not tuned on any real output**):
+
+| Metric | Meaning | Pass |
+| --- | --- | --- |
+| `inside_fraction` | Garment pixels inside our silhouette dilated by a margin (8 % of the frame height for one-pieces, 4 % tops, 6 % bottoms; about 16 cm for a dress) | ≥ 0.97 |
+| `silhouette_iou` | Where no cloth covers the mannequin, the generated mannequin against ours: did the model keep pose and camera? | ≥ 0.90 |
+| `cover_fraction` | Share of our silhouette the garment covers | ≥ 0.05 |
+| `mannequin_mae_8bit` | Uncovered mannequin pixels, generated vs ours, before compositing | ≤ 25 |
+| `touches_border` | Garment reaches the frame edge | false |
+
+A still that passes goes to `stage1b/<view>.png`, where stage 2 reads it. A still that fails goes to `stage1b/rejected/<view>.png`, and stage 2 will not start (`--accept-failed` on the app or `--accept-failed-dress` on `run_phase0.py` overrides; the record then says `qa_overridden: true`). `stage1b/record.json` holds the pins, the engine, steps and seed, per view the method, the shop-photo segmentation, the DWPose keypoints found on our mannequin (fashn), the mask source, the QA numbers and the still's sha256, the summary and the cost estimate.
+
+### Licences and what we do not use
+
+FASHN VTON v1.5's weights and code are Apache-2.0, but its pipeline imports the **FASHN Human Parser**, a SegFormer fine-tune under the NVIDIA Source Code License for SegFormer (research or evaluation only), and the `fashn-human-parser` pip package inherits that licence. The image installs `fashn-vton` from its pinned commit with `--no-deps`, fails the build if `fashn_human_parser` is importable, provides the label constants itself, and feeds the pipeline our SAM 2 mask as its label map. `fashn-human-parser` is on the banned-model list. Details and the other candidates: research doc, section "Stage 1b".
+
+### Pins (stage 1b)
+
+| What | Pin |
+| --- | --- |
+| Garment box | `IDEA-Research/grounding-dino-base` @ `12bdfa3120f3e7ec7b434d90674b3396eccf88eb` (Apache-2.0, 0.9 GB) |
+| Garment mask | `facebook/sam2.1-hiera-large` @ `665f8e2ad61cf5f53d65644ff27c8ee525124610` (Apache-2.0, 0.9 GB, transformers format) |
+| Try-on | `fashn-ai/fashn-vton-1.5` @ `7720683168567eb5a2a4c67f15116c6e29c83ded` (Apache-2.0, 1.9 GB), code `fashn-AI/fashn-vton-1.5` @ `7c0f10af3f91ad4048fe9729c470a13ef905d25a`, DWPose ONNX `fashn-ai/DWPose` @ `548b5df25b84d9f4aac0611dfa1c2a7a12f15571` (Apache-2.0, 0.35 GB) |
+| Image edit | `Qwen/Qwen-Image-Edit-2511` @ `6f3ccc0b56e431dc6a0c2b2039706d7d26f22cb9` (Apache-2.0, 57.7 GB) |
+| Python packages | `requirements-stage1.txt` (uv lock, Python 3.11, linux x86_64); diffusers 0.37.1 because Qwen-Image-Edit-2511's transformer config sets `zero_cond_t`, which 0.36.0 does not know |
+
+These pins live in `phase0_lib.STAGE1B_MODELS` and are written to `stage1b/record.json`. They are not part of `PINNED_MODELS` or `input_hash`, so adding stage 1b changed no existing job id.
+
+### Settings
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `CURTAIN_MODAL_GPU_DRESS` | `H100` | GPU for `dress`. Qwen-Image-Edit-2511 needs about 58 GB in bf16; for `--engine fashn` alone an `L4` or `L40S` is enough (about 8 GB) |
+| `CURTAIN_QWEN_CPU_OFFLOAD` | `0` | `1` = `enable_model_cpu_offload()` for a GPU with less memory (slower) |
+| `CURTAIN_MODAL_TIMEOUT_DRESS` | 3600 s | Function timeout |
+| `CURTAIN_MODAL_MEMORY_DRESS_MB` | 65536 | Container RAM |
+
+The GitHub workflow passes only `CURTAIN_MODAL_GPU` and `CURTAIN_MODAL_REGION`, so on GitHub Actions the defaults apply.
+
+### Cost (estimate, not measured)
+
+No stage 1b run has happened, so there is no measured time. Planning figures: FASHN's model card gives about 5 s per image on an H100 at 30 steps; Qwen-Image-Edit-2511 at 40 steps on 1 MP has no published H100 time in the sources read, assume minutes per image. With model loading, one product (two views) is in the order of 2–5 GPU minutes on an H100 at Modal `eu`: about **$0.15–0.40** (3.95 $/h × 1.15). The first run also downloads about 4 GB (fashn) or 60 GB (qwen) of weights on a CPU container. The research doc's earlier "about $0.04 per product on an L40S" assumed one minute and is likely low for the Qwen engine. The record's `cost` block is list price × GPU seconds, marked `estimate: true`; the Modal invoice is the measurement.
+
+### Not tested (stage 1b)
+
+Everything that needs Modal or a GPU: the image build (the lock resolves; `pip install --no-deps` of fashn-vton and the parser check are untested), the weight downloads, the transformers calls for Grounding DINO and SAM 2 (written against transformers 4.57.3's documented API, not executed), FASHN's pipeline with our label maps in place of its parser, **whether DWPose finds a body on our grey mannequin** (the record counts the keypoints it found; if it finds none, FASHN's output will be poor and the qwen engine is the fallback), whether either model keeps our mannequin's pose and camera (that is what the QA measures), the QA thresholds, the back views, timings and costs. Tested without a GPU: the manifest wiring end to end through the TypeScript exporter, the mask operations, the alignment QA on synthetic scenes, the stage 2 gate in `run_phase0.py`, the requirement pins, and that the apps register without function-name clashes.
 
 ## Settings (environment variables)
 
@@ -203,9 +294,9 @@ Every run writes its own cost record (`stage2/record.json` → `cost`, `stage4/<
 Tested here:
 
 - The exporter: vitest for pose conventions, PNG encoding, depth range, manifest hash stability and photo rules.
-- `phase0_lib`: pytest.
+- `phase0_lib`: pytest, including the stage 1b helpers (`tests/test_stage1_dress.py`; its exporter round trip needs Node and `pnpm build:packages`, and skips otherwise).
 - `phase0_mesh`: pytest with Open3D. This includes fusing depth rendered with the exporter's cameras and getting the surface back. Separately, fusing all 160 exported bare-mannequin depth frames reproduced `mannequin.glb` to 0.31 cm mean (voxel 0.4 cm) and the mannequin-removal step dropped 99.9% of its vertices. That was a one-off check, not a committed test.
-- The three Modal apps import under modal 1.6.3, and their functions and `App.include` register.
+- The four Modal apps import under modal 1.6.3, and their functions and `App.include` register without name clashes.
 
 Not tested, because each of these needs Modal or a GPU:
 
@@ -219,7 +310,7 @@ Not tested, because each of these needs Modal or a GPU:
 - The `foreground` mask mode on generated frames, followed by removing the mannequin in 3D. Garment within `--remove-cm` (0.6 cm) of the body is removed with it. Stage 3's garment masks (`stage3/garment_mask/`, used automatically when present) are the real answer.
 - Timings, GPU seconds and costs.
 
-Not built: the dressing stills (flat-lay → on our mannequin), stage 3 on generated frames, the 4-step LightWan path, the hosted Kling path (shortlist B), NeuS reconstruction (method B), texture projection, and the Koyeb comparison.
+Built but not run: the dressing stills (stage 1b, see its section). Not built: stage 3 on generated frames, the 4-step LightWan path, the hosted Kling path (shortlist B), NeuS reconstruction (method B), texture projection, and the Koyeb comparison.
 
 ## Privacy
 

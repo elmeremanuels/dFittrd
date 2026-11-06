@@ -1,0 +1,127 @@
+import { describe, expect, it } from 'vitest';
+import { mockGarment } from '@curtain/schema';
+import { CHART_TOLERANCE_CM, evaluateGarment, SIMULATED_ERROR } from './eval';
+import { evalBundle, PLACEHOLDER_COLOR_HEX } from './evalBundle';
+import { cropMesh, fixtureMannequin as m, reconstructedDress, shopPayload, syntheticDress, syntheticSkirt } from './evalFixtures';
+import { readGarmentGlb } from './evalMesh';
+import { radialMorph } from './garment';
+
+const fixture = mockGarment('aalter-studio-2');
+const src = { kind: 'stage4' as const, path: 'stage4/stage2/garment.glb', simulatedError: null };
+
+describe('evaluateGarment: synthetic dress', () => {
+  const r = evaluateGarment({ productId: 'aalter-studio-2', payload: fixture, baseSize: 'M', mesh: reconstructedDress(), mannequin: m, source: src });
+
+  it('reports the error per anchor before calibration, after the global scale and after calibration', () => {
+    const chest = r.rows.find((x) => x.anchor === 'chest')!;
+    expect(chest.critical).toBe(true);
+    expect(chest.chartCm).toBe(100);
+    expect(chest.beforeCm!).toBeGreaterThan(CHART_TOLERANCE_CM); // 3.5 % too big + 1.8 cm bias
+    expect(Math.abs(chest.afterGlobalCm!)).toBeLessThan(Math.abs(chest.beforeCm!));
+    expect(Math.abs(chest.afterCm!)).toBeLessThan(0.05);
+    expect(chest.pass).toBe(true);
+    expect(r.agreement.pass).toBe(true);
+    expect(r.before.pass).toBe(false);
+    expect(r.calibration.globalScale).toBeCloseTo(1 / 1.035, 1);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it('measures every ring of the category and compares lengths with the payload', () => {
+    expect(r.rows.map((x) => x.anchor)).toEqual(expect.arrayContaining(['chest', 'waist', 'hip', 'upper_arm']));
+    const hem = r.lengths.find((l) => l.id === 'shoulder_to_hem')!;
+    expect(hem.printedCm).toBe(fixture.lengthCm!.shoulder_to_hem);
+    expect(Math.abs(hem.diffCm!)).toBeLessThan(1);
+    expect(r.lengths.find((l) => l.id === 'sleeve_length')!.measuredCm).not.toBeNull();
+  });
+
+  it('grades to every size in the chart', () => {
+    expect(r.grading!.sizes.map((s) => s.size)).toEqual(['XS', 'S', 'M', 'L', 'XL']);
+    expect(r.grading!.sizes[0]!.targets.chest).toBeLessThan(r.grading!.sizes[4]!.targets.chest!);
+  });
+
+  it('applies the simulated error to a ground truth, and a truth needs no correction', () => {
+    const truth = evaluateGarment({ productId: 'aalter-studio-2', payload: fixture, baseSize: 'M', mesh: syntheticDress(), mannequin: m, source: { kind: 'synthetic-truth', path: 'synthetic/garment_truth.glb', simulatedError: null } });
+    expect(Math.abs(truth.rows.find((x) => x.anchor === 'chest')!.beforeCm!)).toBeLessThan(0.5);
+    const sim = evaluateGarment({ productId: 'aalter-studio-2', payload: fixture, baseSize: 'M', mesh: syntheticDress(), mannequin: m, source: { kind: 'synthetic-truth', path: 'synthetic/garment_truth.glb', simulatedError: SIMULATED_ERROR } });
+    expect(sim.before.maxAbsCm).toBeCloseTo(r.before.maxAbsCm!, 1);
+    expect(sim.source.sha256).toBe(truth.source.sha256); // the hash is of the file as read
+  });
+});
+
+describe('evaluateGarment: what fails', () => {
+  it('flags a reconstruction whose size is far off', () => {
+    const big = radialMorph(m, syntheticDress(), new Uint8Array(syntheticDress().positions.length / 3), { girthScaleAt: () => 1.25 });
+    const r = evaluateGarment({ productId: 'x', payload: fixture, baseSize: 'M', mesh: big, mannequin: m, source: src });
+    expect(r.warnings.some((w) => /global scale/.test(w))).toBe(true);
+    expect(r.before.maxAbsCm!).toBeGreaterThan(20);
+  });
+
+  it('fails chart agreement at a critical ring the garment has no loop at, without inventing a girth', () => {
+    const shop = shopPayload('azure-palm-baby-doll-dress');
+    const skirtOnly = syntheticSkirt();
+    const r = evaluateGarment({ productId: shop.handle, payload: shop.payload, baseSize: '12', mesh: skirtOnly, mannequin: m, source: src });
+    const chest = r.rows.find((x) => x.anchor === 'chest')!;
+    expect(chest.measuredCm).toBeNull();
+    expect(chest.pass).toBe(false);
+    expect(chest.note).toMatch(/no closed garment loop/);
+    expect(r.agreement.pass).toBe(false);
+    expect(r.agreement.missing).toEqual(['chest']);
+  });
+
+  it('cannot close an open front: a cardigan cut open at the centre front has no chest loop', () => {
+    const shop = shopPayload('woodstock-wanderer-knit-cardi');
+    const open = cropMesh(reconstructedDress(), (x, y, z) => !(z > 0 && Math.abs(x) < 3) && y > m.morphHeights.hip - 5);
+    const r = evaluateGarment({ productId: shop.handle, payload: shop.payload, baseSize: 'S-M', mesh: open, mannequin: m, source: src });
+    expect(r.category).toBe('outerwear');
+    expect(r.agreement.missing).toEqual(expect.arrayContaining(['chest', 'waist']));
+    expect(r.agreement.pass).toBe(false);
+  });
+});
+
+describe('evaluateGarment: a bottom (skirt cut from the synthetic dress)', () => {
+  const shop = shopPayload('crimson-wildflower-maxi-skirt');
+  const r = evaluateGarment({ productId: shop.handle, payload: shop.payload, baseSize: '12', mesh: syntheticSkirt(), mannequin: m, source: src });
+
+  it('calibrates waist and hip against the AU chart plus the bottom default ease', () => {
+    expect(r.critical).toEqual(['waist', 'hip']);
+    expect(r.rows.find((x) => x.anchor === 'waist')!.chartCm).toBe(79.5);
+    expect(r.rows.find((x) => x.anchor === 'hip')!.chartCm).toBe(109);
+    expect(r.agreement.pass).toBe(true);
+    expect(r.rows.find((x) => x.anchor === 'thigh')?.note).toMatch(/both legs|no chart value/);
+  });
+
+  it('reports the outseam and grades to AU 8–16', () => {
+    expect(r.lengths.find((l) => l.id === 'outseam')!.measuredCm!).toBeGreaterThan(50);
+    expect(r.grading!.sizes.map((s) => s.size)).toEqual(['8', '10', '12', '14', '16']);
+  });
+});
+
+describe('evalBundle', () => {
+  const shop = shopPayload('azure-palm-baby-doll-dress');
+  const r = evaluateGarment({ productId: shop.handle, payload: shop.payload, baseSize: '12', mesh: reconstructedDress(), mannequin: m, source: src });
+  const b = evalBundle(r, shop.payload);
+
+  it('writes the spike bundle files plus payload.json and eval.json, deterministically', () => {
+    expect(Object.keys(b.files).sort()).toEqual(['anchors.json', 'base.glb', 'eval.json', 'grading.json', 'material.json', 'payload.json', 'qa.json']);
+    const again = evalBundle(r, shop.payload);
+    expect(again.inputHash).toBe(b.inputHash);
+    expect(again.files['qa.json']).toBe(b.files['qa.json']);
+    expect(Buffer.from(again.files['base.glb']).equals(Buffer.from(b.files['base.glb']))).toBe(true);
+    expect(b.bytes).toBeLessThan(3 * 1024 * 1024);
+  });
+
+  it('carries the calibrated mesh, the payload and a colour whose source is stated', () => {
+    const mesh = readGarmentGlb(b.files['base.glb']).mesh;
+    expect(mesh.indices.length).toBe(r.baseMesh.indices.length);
+    expect(JSON.parse(b.files['payload.json'])).toEqual(shop.payload);
+    const mat = JSON.parse(b.files['material.json']) as { baseColorHex: string; provenance: Record<string, string> };
+    expect(mat.baseColorHex).toBe(PLACEHOLDER_COLOR_HEX);
+    expect(mat.provenance.baseColorHex).toMatch(/placeholder/);
+    expect(JSON.parse(evalBundle(r, shop.payload, { meanColorHex: '#336699' }).files['material.json']).baseColorHex).toBe('#336699');
+    const qa = JSON.parse(b.files['qa.json']) as { synthetic: boolean; chartAgreement: { pass: boolean; critical: string[] } };
+    expect(qa.synthetic).toBe(false);
+    expect(qa.chartAgreement.critical).toEqual(['chest', 'waist', 'hip']);
+    const grading = JSON.parse(b.files['grading.json']) as { sizes: { size: string }[] };
+    expect(grading.sizes.map((s) => s.size)).toEqual(['8', '10', '12', '14', '16']);
+  });
+});

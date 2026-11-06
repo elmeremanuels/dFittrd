@@ -206,3 +206,45 @@ The banned list is a substring match with separators ignored (`registry.ts`). Tw
 - Read Vertex AI's Veo price list directly (page did not render) if Veo becomes the hosted candidate.
 - Get the Max Planck Innovation SMPL-X quote only if Anny and MHR both fail the size range.
 - Founder call: hosted video models process merchant product photos outside the EU (section "Decision summary", point 2).
+
+## Stage 1b — dressing our mannequin from shop photos (researched 2026-11-06)
+
+**Problem.** Stage 2 pins a front and a back still of the garment *on our canonical mannequin* at frame 0 and frame N/2 of the turntable (same camera as the control video). A shop's public product photos show the garment on a person, or flat-lay. Stage 1b turns those photos into the two pinned stills: segment the garment, put it on our bare-mannequin render without moving the mannequin or the camera, and check the result. It is needed for the first validation on real shop data (public product photos used with the shop owner's consent, before anything is installed on their site); for a published asset the merchant still supplies front and back (D13). Code: `spikes/garment-engine/modal/stage1_dress.py`, helpers in `phase0_lib.py`, usage in `modal/README.md`. Nothing here has run on a GPU yet.
+
+### Choice
+
+| Role | Model (pinned revision) | Licence, as read | Weights | Decision |
+| --- | --- | --- | --- | --- |
+| Garment box from text | Grounding DINO base, `IDEA-Research/grounding-dino-base` @ `12bdfa31…` | Apache-2.0 ([licence file](https://github.com/IDEA-Research/GroundingDINO/blob/main/LICENSE), HF tag) | Downloadable, not gated, 0.9 GB (safetensors) | **Use** (prompt per category, e.g. `dress. jumpsuit.`) |
+| Garment mask from the box | SAM 2.1 Hiera-L, `facebook/sam2.1-hiera-large` @ `665f8e2a…` | Apache-2.0 ([licence file](https://github.com/facebookresearch/sam2/blob/main/LICENSE), HF tag) | Downloadable, not gated, 0.9 GB, transformers format | **Use** (box prompt; also refines the garment mask on the dressed still) |
+| Try-on, engine A (default) | FASHN VTON v1.5, `fashn-ai/fashn-vton-1.5` @ `77206831…`, code `fashn-AI/fashn-vton-1.5` @ `7c0f10af…` | Apache-2.0 for weights ([model card](https://huggingface.co/fashn-ai/fashn-vton-1.5)) and code ([licence file](https://github.com/fashn-AI/fashn-vton-1.5/blob/main/LICENSE)); DWPose and YOLOX Apache-2.0 | Downloadable, not gated, 1.9 GB + DWPose ONNX 0.35 GB (`fashn-ai/DWPose` @ `548b5df2…`, Apache-2.0) | **Use, without its human parser** (below). 972M MMDiT in pixel space, output 576×864, about 8 GB VRAM, about 5 s per image on an H100 (model card). Takes on-model or flat-lay garment photos, categories tops / bottoms / one-pieces |
+| Image edit, engine B | Qwen-Image-Edit-2511, `Qwen/Qwen-Image-Edit-2511` @ `6f3ccc0b…` | Apache-2.0 (HF model card tag; the [Qwen-Image licence file](https://github.com/QwenLM/Qwen-Image/blob/main/LICENSE) is Apache-2.0; the HF repo itself has no licence file) | Downloadable, not gated, 57.7 GB | **Use** as the second engine and for the invented back: multi-image edit (picture 1 = our render, picture 2 = the garment). Needs diffusers ≥ 0.37.1 (`zero_cond_t` in its transformer config); 2509 is the fallback on diffusers 0.36.0 |
+| Human parsing | FASHN Human Parser, `fashn-ai/fashn-human-parser` (SegFormer-B4 fine-tune) | **NVIDIA Source Code License for SegFormer**: "may be used … non-commercially", i.e. research or evaluation only ([licence](https://github.com/NVlabs/SegFormer/blob/master/LICENSE)); the `fashn-human-parser` pip package's licence file says it inherits it | Downloadable | **Banned** (`fashn-human-parser`). FASHN VTON's pipeline imports and loads it by default: we install `fashn-vton` with `--no-deps`, fail the image build if the parser is importable, and pass our SAM 2 mask as the label map |
+| Human parsing | Sapiens (`facebook/sapiens-*`) | CC BY-NC 4.0 (HF licence tag) | Downloadable | **Banned** (`facebook/sapiens`) |
+| Human parsing | SegFormer clothes fine-tunes (ATR/LIP-style) | Base weights `nvidia/mit-b*` carry the SegFormer licence (HF tag `other`); fine-tunes inherit it | — | Avoid; not banned by name (no single id to match) |
+| Text-prompted segmentation | SAM 3, `facebook/sam3` | SAM License (19 Nov 2025): commercial use allowed, with trade-control, attribution-in-publications, no-reverse-engineering and indemnity terms; California law | Gated, manual approval on Hugging Face | Not for Phase 0 (a CI run would need an approved token); a later option if counsel accepts the terms |
+| Background removal | BiRefNet | MIT | Downloadable | Not needed: SAM 2 with a box covers flat-lay as well |
+| Image edit | FLUX.1 Kontext [dev] | Non-commercial | — | Banned (section 7) |
+| Try-on | IDM-VTON, CatVTON, OOTDiffusion, FitDiT | CC BY-NC-SA 4.0 | — | Banned (section 7) |
+
+Not reviewed: the training-data terms behind DWPose (COCO-WholeBody, UBody) and FASHN VTON's 18M training pairs. The weights' licences are Apache-2.0; counsel should confirm that is enough before Phase 1.
+
+### How a still is made
+
+1. **Shop photo → garment.** Grounding DINO finds the garment box for the category prompt, SAM 2.1 cuts the mask. The person in the photo is never sent to the edit model: the qwen engine gets only the cut-out on studio grey. In the fashn engine the try-on model sees the photo with every non-garment pixel greyed by its own preprocessing (our mask as label map), but its DWPose step runs on the full photo to read the garment's pose. Everything runs in our Modal container; no third-party API sees the photos.
+2. **Try-on onto our render.** The bare mannequin at frame 0 / N/2 is rendered by the exporter (`dress/bare_front.png`, `dress/bare_back.png`) with the turntable camera and light. FASHN runs in its maskless mode (it may draw the garment wider than any original outfit); Qwen gets a prompt that fixes mannequin, pose, camera, framing, light and background.
+3. **Back.** From the back photo when there is one. Without one the back is generated (FASHN: the front photo onto the back render; Qwen: the dressed front still as reference) and flagged `invented` in the manifest, the record, the summary and the logs. The stage 2 runner refuses an invented back unless `--allow-invented-back` is given.
+4. **Garment mask on the output.** Difference to our bare render (the stage 3 idea), refined by SAM 2 with that box; SAM 2 wins when the two agree (IoU ≥ 0.5) or when the difference finds nothing (a garment the colour of the mannequin).
+5. **Alignment QA**, against our silhouette at that frame: share of garment pixels inside the silhouette dilated by a category margin (8 % of the frame height for one-pieces), silhouette IoU of the uncovered mannequin (did the model keep pose and camera?), covered share, uncovered-mannequin colour difference, border contact. Thresholds are first guesses and must be set from the first real runs.
+6. **Composite.** The pinned still is our bare render with only the garment pixels pasted in, so mannequin, light and background match the control video exactly. Garment shadows on the mannequin are lost; that is the price of exact alignment.
+
+### Risks
+
+- **DWPose on a grey mannequin.** FASHN conditions on DWPose keypoints of the person image. Whether DWPose finds a body on our untextured mannequin is unknown; the record counts the keypoints it found. If it fails, rendering the keypoints from our own rig (we know every joint) is the fix; the qwen engine needs no pose.
+- **Pose and camera drift.** Both models are trained on photos of people; neither promises to leave a mannequin's pose untouched. The silhouette IoU catches drift, the composite hides small drift of the uncovered body but not of the garment.
+- **Invented backs** are where models make things up (D13). They are allowed only to exercise the pipeline on shops without back photos; their numbers must be reported separately.
+- **Hosted alternative.** The provider registry's hosted FASHN API would avoid the GPU work but sends the shop photos to FASHN's service (processing location not checked for this section); not used here, a founder call like the hosted video question.
+
+### Cost (estimate)
+
+One product (two views) ≈ 2–5 H100 minutes including model loading ≈ $0.15–0.40 at Modal `eu`; first run also downloads about 4 GB (fashn) or 60 GB (qwen) of weights. FASHN's 5 s per image is from its model card; no Qwen-Image-Edit-2511 timing was found in the sources read. Not measured.

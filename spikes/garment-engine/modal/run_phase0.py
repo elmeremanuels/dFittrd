@@ -3,6 +3,10 @@
   modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/aalter-studio-2
 
 Steps:
+  0. optional, --dress: stage 1b dresses our mannequin from the shop photos of a job exported with
+     --on-model/--flat-lay (stage1_dress.py) and writes the front/back stills stage 2 pins. Stage 2 does
+     not start when a still failed QA (unless --accept-failed-dress) or when the back was invented and
+     --allow-invented-back is missing. A job whose stills come from stage 1b cannot run stage 2 before them.
   1. check the job manifest (input_hash, pinned versions, front + back photos) and upload the job once
   2. download the pinned Wan2.2-Fun-A14B-Control weights into the weights Volume (once)
   3. stage 2: generate turntable_a, turntable_b and motion; assemble the 160 turntable frames
@@ -12,6 +16,7 @@ Steps:
 
 Options: --steps 40 --iterations 10000 --triangles 12000 --skip-video (reuse stage2/ already in the Volume)
          --no-synthetic-recon --control-encoding linear|inverse --no-pin-frames --force-upload
+         --dress --dress-engine fashn|qwen --dress-steps N --accept-failed-dress --allow-invented-back --dress-only
 Every number this prints about cost is an ESTIMATE (list price x GPU seconds); the Modal invoice is
 the measurement. NOT TESTED on a GPU: the build container cannot reach Modal.
 """
@@ -28,12 +33,27 @@ import modal  # noqa: E402
 
 import phase0_lib as lib  # noqa: E402
 import phase0_modal as pm  # noqa: E402
+import stage1_dress  # noqa: E402
 import stage2_video  # noqa: E402
 import stage4_recon  # noqa: E402
 
 app = modal.App("curtain-phase0")
+app.include(stage1_dress.app)
 app.include(stage2_video.app)
 app.include(stage4_recon.app)
+
+
+def _dress_gate(m: dict, job_dir: str, dress_record: dict | None, *, accept_failed: bool, allow_invented: bool) -> list[str]:
+    """Reasons not to start stage 2 on this job's pinned stills (empty = go)."""
+    reasons = []
+    pending = lib.stills_pending(m, lambda rel: os.path.exists(os.path.join(job_dir, rel)))
+    if pending:
+        reasons.append(f"stage 1b stills missing for {', '.join(pending)}: run with --dress (or stage1_dress.py) first")
+    if dress_record is not None and not dress_record["summary"]["usable_for_stage2"] and not accept_failed:
+        reasons.append(f"stage 1b QA failed for {', '.join(dress_record['summary']['failed_views'])} (see stage1b/record.json); --accept-failed-dress overrides")
+    if lib.invented_roles(m) and not allow_invented:
+        reasons.append("the back still is INVENTED (no back photo, D13); pass --allow-invented-back for a validation run")
+    return reasons
 
 
 def _with_wall(cost: dict, gpu: str, wall: float) -> dict:
@@ -51,6 +71,12 @@ def main(
     control_encoding: str = "linear",
     no_pin_frames: bool = False,
     force_upload: bool = False,
+    dress: bool = False,
+    dress_engine: str = "fashn",
+    dress_steps: int = 0,
+    accept_failed_dress: bool = False,
+    allow_invented_back: bool = False,
+    dress_only: bool = False,
 ):
     cfg = stage2_video.CFG
     m = pm.load_local_job(job_dir)
@@ -63,6 +89,32 @@ def main(
     pm.upload_job(job_dir, job_id, force=force_upload)
     costs: list[dict] = []
     summary: dict = {"job_id": job_id, "input_hash": m["input_hash"], "synthetic_photos": synthetic_photos, "settings": cfg}
+
+    dress_record = None
+    if dress or dress_only:
+        dcfg = stage1_dress.CFG
+        t = time.time()
+        dress_record = stage1_dress.run_local(job_dir, engine=dress_engine, steps=dress_steps, seed=None, composite=True, accept_failed=accept_failed_dress, category="", force_upload=force_upload)
+        costs.append(lib.cost_record("stage1b_dress", gpu=dcfg["gpu_dress"], region=dcfg["region"], gpu_seconds=dress_record["cost"]["gpu_seconds"], wall_seconds=time.time() - t))
+        summary["stage1b"] = {"engine": dress_engine, "summary": dress_record["summary"], "views": [{k: v.get(k) for k in ("view", "invented", "method", "mask_source", "qa", "still")} for v in dress_record["views"]]}
+        summary["invented_back"] = dress_record["invented_back"]
+    if lib.invented_roles(m):
+        print("[phase0] WARNING: " + lib.INVENTED_BACK_LABEL)
+    stop = [] if (skip_video or dress_only) else _dress_gate(m, job_dir, dress_record, accept_failed=accept_failed_dress, allow_invented=allow_invented_back)
+    if stop or dress_only:
+        for r in stop:
+            print(f"[phase0] not starting stage 2: {r}")
+        summary["costs"] = costs
+        summary["cost_total"] = lib.summarize_costs(costs)
+        summary["stopped_before_stage2"] = stop or ["--dress-only"]
+        summary["wall_seconds"] = round(time.time() - t_all, 1)
+        with open(os.path.join(job_dir, "cost_summary.json"), "w") as f:
+            json.dump(summary, f, indent=2)
+        if costs:
+            print(lib.format_cost_table(costs))
+        if stop:
+            raise SystemExit(1)
+        return
 
     if not skip_video:
         print("[phase0] weights:", stage2_video.download_weights.remote())

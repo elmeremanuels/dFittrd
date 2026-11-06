@@ -15,6 +15,9 @@
  *   motion/…                 the same three sequences for the motion clip from the fixed motion camera,
  *                            plus motion/cameras_opencv.json
  *   photos/                  merchant photos by role (front, back, detail_N), or synthetic dressed stills
+ *   dress/                   only with `onModel`: the shop's source photos (garment on a person or
+ *                            flat-lay) and the bare mannequin rendered at frame 0 and N/2, the inputs of
+ *                            stage 1b (modal/stage1_dress.py), which writes the pinned stills to stage1b/
  *   synthetic/               optional: the spike's synthetic garment rendered dressed along the same
  *                            path (rgb/, garment_mask/, transforms.json, garment_truth.glb), so stage 4
  *                            can be measured against a known mesh without any video model
@@ -94,6 +97,18 @@ export interface PhotoInput {
   source: string;
 }
 
+/** What a stage 1b source photo shows: the garment worn by a person, or laid flat / on a ghost mannequin. */
+export const SOURCE_KINDS = ['on_model', 'flat_lay'] as const;
+export type SourceKind = (typeof SOURCE_KINDS)[number];
+
+/** Where stage 1b (modal/stage1_dress.py) writes the dressed stills that stage 2 pins at frame 0 and N/2. */
+export const STAGE1B_DIR = 'stage1b';
+
+export interface OnModelOptions {
+  /** Default `on_model`. */
+  kind?: SourceKind;
+}
+
 export interface ExportOptions {
   productId: (typeof SPIKE_PRODUCT_IDS)[number];
   baseSize?: string;
@@ -112,6 +127,15 @@ export interface ExportOptions {
   photos?: PhotoInput[];
   /** Render the spike's synthetic garment, dressed, at frame 0 and N/2 as front and back stills (marked synthetic). */
   syntheticPhotos?: boolean;
+  /**
+   * The front (required) and back (optional) photos are shop photos of the garment on a person or
+   * flat-lay, not stills on our mannequin. They go to dress/ as stage 1b inputs, with the bare mannequin
+   * rendered at frame 0 and N/2, and the manifest's front and back point at stage1b/front.png and
+   * stage1b/back.png, which stage 1b must produce before stage 2 runs. Without a back photo, stage 1b
+   * generates the back and the manifest marks it `invented: true` (validation runs only: D13 says the
+   * merchant owns the back).
+   */
+  onModel?: OnModelOptions | boolean;
   /** Write the synthetic dressed turntable (default true). */
   synthetic?: boolean;
 }
@@ -121,9 +145,40 @@ export const DEFAULT_SEEDS = { video: 43, recon: 7 } as const;
 export interface ManifestPhoto {
   role: PhotoRole;
   path: string;
-  sha256: string;
+  /** null for a still that stage 1b has not produced yet (`produced_by: 'stage1b'`). */
+  sha256: string | null;
   synthetic: boolean;
   source: string;
+  /** Set when the still is produced by a later stage, not supplied: stage 1b dresses our mannequin from a shop photo. */
+  produced_by?: typeof STAGE1B_DIR;
+  /** Stage 1b only: no back photo was given, so the back still is generated (D13: never for a published asset). */
+  invented?: boolean;
+}
+
+export interface Stage1bView {
+  view: 'front' | 'back';
+  /** Turntable frame the still is pinned at (0 or N/2), so its camera is cameras_opencv.json frame `frame`. */
+  frame: number;
+  /** Shop photo for this view, or null (back only: the back is then invented from the front). */
+  source: string | null;
+  /** Bare mannequin at this frame: studio RGB and the silhouette (255 = mannequin). */
+  bare_rgb: string;
+  bare_mask: string;
+  /** Outputs stage 1b writes. */
+  still: string;
+  garment_mask: string;
+  invented: boolean;
+}
+
+export interface Stage1bSpec {
+  dir: typeof STAGE1B_DIR;
+  source_kind: SourceKind;
+  sources: { role: 'front' | 'back'; path: string; sha256: string; source: string }[];
+  views: Stage1bView[];
+  invented_back: boolean;
+  background_rgb: number[];
+  record: string;
+  note: string;
 }
 
 export interface ManifestClip {
@@ -172,6 +227,8 @@ export interface Phase0Manifest {
   motion: { clip_id: string; radius_cm: number; camera: string; depth_mm_dir: string; depth_vis_dir: string; mask_dir: string; near_cm: number; far_cm: number };
   clips: ManifestClip[];
   synthetic: { dir: string; transforms: string; rgb_dir: string; garment_mask_dir: string; truth_glb: string; background_rgb: number[] } | null;
+  /** Stage 1b inputs and outputs when the front/back are shop photos (`onModel`), else null. */
+  stage1b: Stage1bSpec | null;
   seeds: { video: number; recon: number };
   models: typeof PINNED_MODELS;
   exporter: string;
@@ -279,19 +336,56 @@ export interface ExportResult {
   bytes: number;
 }
 
-function photoSet(options: ExportOptions, frontStill: () => Uint8Array, backStill: () => Uint8Array): { photo: ManifestPhoto; bytes: Uint8Array }[] {
+const photoExt = (ext: string): string => ext.toLowerCase().replace('jpeg', 'jpg');
+
+/** The on-model (stage 1b) source photos: front required, back optional; detail photos are handled by photoSet. */
+function stage1bSources(options: ExportOptions): { role: 'front' | 'back'; path: string; sha256: string; source: string; bytes: Uint8Array }[] {
+  const given = options.photos ?? [];
+  if (options.syntheticPhotos) throw new Error('onModel and syntheticPhotos exclude each other: stage 1b dresses shop photos, the synthetic stills are already dressed');
+  const out: { role: 'front' | 'back'; path: string; sha256: string; source: string; bytes: Uint8Array }[] = [];
+  for (const role of ['front', 'back'] as const) {
+    const mine = given.filter((p) => p.role === role);
+    if (mine.length > 1) throw new Error(`more than one ${role} photo`);
+    if (!mine[0]) {
+      if (role === 'front') throw new Error('onModel needs a front photo (the shop photo stage 1b dresses our mannequin from)');
+      continue;
+    }
+    out.push({ role, path: `dress/source_${role}.${photoExt(mine[0].ext)}`, sha256: sha256(mine[0].bytes), source: mine[0].source, bytes: mine[0].bytes });
+  }
+  return out;
+}
+
+function photoSet(options: ExportOptions, frontStill: () => Uint8Array, backStill: () => Uint8Array): { photo: ManifestPhoto; bytes: Uint8Array | null }[] {
   const given = options.photos ?? [];
   for (const p of given) {
     if (!PHOTO_ROLES.includes(p.role)) throw new Error(`unknown photo role ${String(p.role)}`);
     if (!/^(png|jpe?g|webp)$/i.test(p.ext)) throw new Error(`photo ${p.source}: use png, jpg or webp, not ${p.ext}`);
   }
-  const out: { photo: ManifestPhoto; bytes: Uint8Array }[] = [];
-  for (const role of ['front', 'back'] as const) {
+  const out: { photo: ManifestPhoto; bytes: Uint8Array | null }[] = [];
+  if (options.onModel) {
+    const sources = stage1bSources(options);
+    for (const role of ['front', 'back'] as const) {
+      const src = sources.find((s) => s.role === role);
+      out.push({
+        photo: {
+          role,
+          path: `${STAGE1B_DIR}/${role}.png`,
+          sha256: null,
+          synthetic: false,
+          source: src ? `stage 1b: dressed on our mannequin from ${src.source}` : 'stage 1b: INVENTED from the front photo (no back photo given; validation only, D13)',
+          produced_by: STAGE1B_DIR,
+          invented: !src,
+        },
+        bytes: null,
+      });
+    }
+  }
+  for (const role of options.onModel ? ([] as const) : (['front', 'back'] as const)) {
     const mine = given.filter((p) => p.role === role);
     if (mine.length > 1) throw new Error(`more than one ${role} photo`);
     if (mine[0] && options.syntheticPhotos) throw new Error(`a ${role} photo was given together with syntheticPhotos; pick one`);
     if (mine[0]) {
-      const ext = mine[0].ext.toLowerCase().replace('jpeg', 'jpg');
+      const ext = photoExt(mine[0].ext);
       out.push({ photo: { role, path: `photos/${role}.${ext}`, sha256: sha256(mine[0].bytes), synthetic: false, source: mine[0].source }, bytes: mine[0].bytes });
     } else if (options.syntheticPhotos) {
       const bytes = role === 'front' ? frontStill() : backStill();
@@ -301,7 +395,7 @@ function photoSet(options: ExportOptions, frontStill: () => Uint8Array, backStil
   const details = given.filter((p) => p.role === 'detail');
   if (details.length > MAX_DETAIL_PHOTOS) throw new Error(`at most ${MAX_DETAIL_PHOTOS} detail photos, got ${details.length}`);
   details.forEach((p, i) => {
-    const ext = p.ext.toLowerCase().replace('jpeg', 'jpg');
+    const ext = photoExt(p.ext);
     out.push({ photo: { role: 'detail', path: `photos/detail_${i}.${ext}`, sha256: sha256(p.bytes), synthetic: false, source: p.source }, bytes: p.bytes });
   });
   return out;
@@ -337,6 +431,9 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
   };
   const still = (frame: CameraFrame): Uint8Array => rgbPng(width, height, studioRgb(render([bareItem, garmentItem()], frame, width, height)));
   const photos = photoSet(options, () => still(path.frames[0]!), () => still(path.frames[framesPerTurn / 2]!));
+  const onModel = options.onModel ? { kind: (typeof options.onModel === 'object' ? options.onModel.kind : undefined) ?? 'on_model' } : null;
+  if (onModel && !SOURCE_KINDS.includes(onModel.kind)) throw new Error(`unknown source kind ${String(onModel.kind)}; use ${SOURCE_KINDS.join(' or ')}`);
+  const sources = onModel ? stage1bSources(options) : [];
 
   let files = 0, bytes = 0;
   const put: Emit = (p, data) => {
@@ -351,7 +448,43 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
     extras: { mannequinVersion: MANNEQUIN_VERSION, shape: BASE_SHAPE_ID, unit: 'm' },
   });
   put('mannequin.glb', mannequinGlb);
-  for (const p of photos) put(p.photo.path, p.bytes);
+  for (const p of photos) if (p.bytes) put(p.photo.path, p.bytes);
+
+  // Stage 1b inputs: the shop photos and the bare mannequin at the two pinned frames (same camera, same light as the turntable).
+  let stage1b: Stage1bSpec | null = null;
+  if (onModel) {
+    for (const s of sources) put(s.path, s.bytes);
+    const views: Stage1bView[] = (['front', 'back'] as const).map((view) => {
+      const frame = view === 'front' ? 0 : framesPerTurn / 2;
+      const bare = `dress/bare_${view}.png`;
+      put(bare, rgbPng(width, height, studioRgb(render([bareItem], path.frames[frame]!, width, height))));
+      const src = sources.find((s) => s.role === view);
+      return {
+        view,
+        frame,
+        source: src ? src.path : null,
+        bare_rgb: bare,
+        bare_mask: `control/mask/${pad4(frame)}.png`,
+        still: `${STAGE1B_DIR}/${view}.png`,
+        garment_mask: `${STAGE1B_DIR}/garment_mask_${view}.png`,
+        invented: !src,
+      };
+    });
+    const inventedBack = !sources.some((s) => s.role === 'back');
+    stage1b = {
+      dir: STAGE1B_DIR,
+      source_kind: onModel.kind,
+      sources: sources.map(({ role, path: p, sha256: h, source }) => ({ role, path: p, sha256: h, source })),
+      views,
+      invented_back: inventedBack,
+      background_rgb: [...STUDIO_RGB],
+      record: `${STAGE1B_DIR}/record.json`,
+      note:
+        'Validation input: shop photos dressed onto our mannequin by stage 1b (generated, an estimate). ' +
+        (inventedBack ? 'The back still is INVENTED (no back photo); D13 forbids this for a published asset. ' : '') +
+        'Shop photos and outputs stay out of git.',
+    };
+  }
 
   // Turntable control frames.
   const range = depthRange(body.positions, path.frames);
@@ -412,7 +545,11 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
     mannequin: { version: MANNEQUIN_VERSION, shape: BASE_SHAPE_ID },
     camera: { path_id: path.id, frames: framesPerTurn, width, height, fov_y_deg: path.frames[0]!.fovYDeg, radius_cm: path.radiusCm },
     motion: { clip_id: MOTION_CLIP.id, frames: motionFrames, fps, radius_cm: motionRadiusCm },
-    photos: photos.map((p) => ({ role: p.photo.role, sha256: p.photo.sha256, synthetic: p.photo.synthetic })),
+    photos: onModel
+      ? [...sources.map((s) => ({ role: s.role, sha256: s.sha256, synthetic: false })), ...photos.filter((p) => p.photo.role === 'detail').map((p) => ({ role: p.photo.role, sha256: p.photo.sha256, synthetic: false }))]
+      : photos.map((p) => ({ role: p.photo.role, sha256: p.photo.sha256, synthetic: p.photo.synthetic })),
+    // Absent (undefined, so not hashed) unless onModel: older jobs keep their hash.
+    stage1b: onModel ? { source_kind: onModel.kind, invented_back: stage1b!.invented_back } : undefined,
     seeds,
     models: PINNED_MODELS,
     synthetic: withSynthetic,
@@ -461,6 +598,7 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
     synthetic: withSynthetic
       ? { dir: 'synthetic', transforms: 'synthetic/transforms.json', rgb_dir: 'synthetic/rgb', garment_mask_dir: 'synthetic/garment_mask', truth_glb: 'synthetic/garment_truth.glb', background_rgb: [...STUDIO_RGB] }
       : null,
+    stage1b,
     seeds,
     models: PINNED_MODELS,
     exporter: `@curtain/garment-spike ${EXPORT_VERSION}`,

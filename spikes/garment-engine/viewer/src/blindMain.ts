@@ -168,11 +168,13 @@ async function start(): Promise<void> {
   try {
     const { products, hint } = await listBundles(fetch);
     if (products.length === 0) throw new Error(hint ?? 'No bundles in out/.');
+    // `?products=a,b` pre-selects those products (e.g. the Phase 0 shop set from report:bohohippychic); default all.
+    const wanted = (new URLSearchParams(location.search).get('products') ?? '').split(',').map((x) => x.trim()).filter((x) => products.includes(x));
     $('products').replaceChildren(
       ...products.map((p) => {
         const label = document.createElement('label');
         label.className = 'row';
-        const box = Object.assign(document.createElement('input'), { type: 'checkbox', value: p, checked: true });
+        const box = Object.assign(document.createElement('input'), { type: 'checkbox', value: p, checked: wanted.length === 0 || wanted.includes(p) });
         label.append(box, document.createTextNode(` ${p}`));
         return label;
       }),

@@ -52,6 +52,9 @@ export const BANNED_MODELS = [
   'garverselod',
   'gaussian-garments',
   'garment-crafter',
+  // Human parsing (stage 1b research, docs/research/garment-engine.md "Stage 1b")
+  'fashn-human-parser',
+  'facebook/sapiens',
 ] as const;
 
 export type BannedModel = (typeof BANNED_MODELS)[number];
@@ -100,4 +103,6 @@ export const BANNED_MODEL_NOTES: Readonly<Record<BannedModel, BanNote>> = {
   garverselod: { reason: 'no-licence', licence: 'no licence file in the repository', source: 'https://github.com/zhongjinluo/GarVerseLOD' },
   'gaussian-garments': { reason: 'no-licence', licence: 'no licence file in the repository', source: 'https://github.com/eth-ait/Gaussian-Garments' },
   'garment-crafter': { reason: 'no-licence', licence: 'no licence file in the repository', source: 'https://github.com/humansensinglab/garment-crafter' },
+  'fashn-human-parser': { reason: 'non-commercial', licence: 'NVIDIA Source Code License for SegFormer (research or evaluation only); the pip package wrapper inherits it', source: 'https://huggingface.co/fashn-ai/fashn-human-parser' },
+  'facebook/sapiens': { reason: 'non-commercial', licence: 'CC BY-NC 4.0 (Hugging Face licence tag of the Sapiens checkpoints)', source: 'https://huggingface.co/facebook/sapiens-seg-1b' },
 };

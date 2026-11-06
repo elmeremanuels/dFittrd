@@ -1,0 +1,21 @@
+# Stage 1b (stage1_dress.py) direct pins. The full lock is requirements-stage1.txt, compiled with
+#   uv pip compile requirements-stage1.in --python-version 3.11 --python-platform x86_64-manylinux_2_31 --no-header --no-annotate -o requirements-stage1.txt
+# diffusers 0.37.1 is the first release whose QwenImageTransformer2DModel reads `zero_cond_t`, which
+# Qwen-Image-Edit-2511's transformer config sets. fashn-vton itself is installed from its pinned git
+# commit with --no-deps (stage1_dress.py), so its fashn-human-parser dependency (non-commercial licence)
+# is never installed; its other dependencies are listed here.
+torch==2.7.1
+torchvision==0.22.1
+diffusers==0.37.1
+transformers==4.57.3
+accelerate==1.12.0
+huggingface-hub==0.36.0
+hf-transfer==0.1.9
+safetensors==0.6.2
+pillow==11.3.0
+numpy==2.2.6
+opencv-python-headless==4.12.0.88
+onnxruntime-gpu==1.23.2
+einops==0.8.1
+tqdm==4.67.1
+matplotlib==3.10.7

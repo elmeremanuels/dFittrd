@@ -20,3 +20,6 @@ playwright-report/
 
 # Local demo database (pnpm demo)
 .demo-db/
+
+# Shop validation downloads (shop images and raw JSON are never committed)
+spikes/garment-engine/data/bohohippychic/raw/

@@ -42,3 +42,16 @@ Of all this, only `typecheck` and the pure-logic unit tests (`viewer/src/*.test.
 - **Shoulders on a larger body.** On a body wider at the shoulders than the garment (104/90/112 in S–L of the dress), the yoke's particles that skip collision stay inside and the neckline's stretch concentrates next to them: 33–53 % on the worst edge (median about 1 %), down from 124–287 % before the yoke was settled. The smoke run prints it for that step instead of failing on it.
 - **Size differences are small.** Between neighbouring sizes the difference is subtle (4 cm of girth is about 6 mm of radius). The fit map makes it obvious, but the blind test renders without the map, as the Phase 0 size test requires.
 - **Not built yet:** no textures (the bundle has no UVs), no WebGPU, no drawn-overlay fallback and no chunk budget. Those belong to `packages/garment-viewer`.
+
+## Evaluated Phase 0 bundles (`report:bohohippychic`)
+
+`pnpm --filter @curtain/garment-spike report:bohohippychic` evaluates each stage 4 mesh of the bohohippychic.com.au validation set (`src/eval*.ts`) and writes a bundle per product to `out/eval/<handle>/`. The dev server lists those as products `eval/<handle>`, next to the spike fixtures. Such a bundle carries `payload.json` (named in anchors.json as `payloadFile`), which the page gives the fit engine instead of looking up a schema fixture by id.
+
+| What | How |
+| --- | --- |
+| URL parameters of `index.html` | `shape=XS\|M\|XXL` puts the canonical shape's chest, waist and hip girths on the avatar (the M mannequin morphed, stature and arms stay M; a canonical shape, not a person's measurements). `sizes=8,12,16` fixes the sizes shown side by side when the chart has all of them. With `layout=side` and `heat=1` as before. |
+| URL parameter of `blind.html` | `products=eval/a,eval/b` pre-selects those products (default: all). |
+| Bottoms | Trousers and skirts hang from their waistband: the top 4 cm (`WAISTBAND_CM`) is pinned instead of the shoulder yoke, and every vertex follows the body chain (the A-pose elbows hang at waist height, so `assignChains` would put waist vertices on the arms). Checked on a skirt cut from the synthetic dress (`src/shopBundle.test.ts` and one headless render); no real bottom mesh has been draped yet. |
+| Headless renders | `node viewer/render-eval.mjs [eval/<id> …] [--blind eval/<id>,… \| --no-blind]` (the report runs it with `--renders`): per product and body (M, XS, XXL) sizes 8, 12 and 16 side by side (the chart's sizes when it lacks those), with and without the fit map, into `out/eval/<id>/renders/`; then the blind page with the products pre-selected (`out/eval/blind-*.png`) and `out/eval/renders.json` with the drape time per size. |
+
+On the synthetic dress (6 Nov 2026, this container, SwiftShader), the drape took 1.5–5.4 s per size on the M mannequin and 5.1–5.6 s on the XS and XXL shapes over two render runs, against 1.2–1.4 s in `viewer:smoke`. The difference was not investigated; it is not a phone measurement either way.

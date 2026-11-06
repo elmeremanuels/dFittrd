@@ -407,3 +407,449 @@ def job_input_files(job_dir: str) -> list[str]:
         for name in files:
             out.append(os.path.normpath(os.path.join(rel_root, name)).replace(os.sep, "/"))
     return sorted(out)
+
+
+# ---------------------------------------------------------------------------
+# Stage 1b: dress our mannequin from a shop photo (stage1_dress.py)
+# ---------------------------------------------------------------------------
+#
+# Stage 2 pins a front and a back still of the garment ON OUR mannequin at frames 0 and N/2. When a job
+# was exported with --on-model / --flat-lay, those stills do not exist yet: the manifest's front/back
+# photos point at stage1b/front.png and stage1b/back.png (`produced_by: "stage1b"`), and its `stage1b`
+# section lists the shop photos and the bare-mannequin renders. Everything below is pure Python on flat
+# sequences (bytes, bytearray or lists): a mask is w*h values (non-zero = in), an RGB image 3*w*h bytes,
+# row-major. The Modal app converts its numpy arrays with .tobytes(); the tests build small ones by hand.
+
+# Pinned revisions read from the Hugging Face API and `git ls-remote` on 2026-11-06. Licences were read
+# from each repository's licence file or model card on that date (docs/research/garment-engine.md,
+# section "Stage 1b"). Not part of PINNED_MODELS: stage 1b is a validation step, and adding it there
+# would change every job's input_hash. stage1_dress.py writes these pins into stage1b/record.json.
+STAGE1B_MODELS: dict[str, dict[str, Any]] = {
+    "detector": {
+        "id": "IDEA-Research/grounding-dino-base",
+        "revision": "12bdfa3120f3e7ec7b434d90674b3396eccf88eb",
+        "licence": "Apache-2.0",
+        "use": "text-prompted box around the garment in the shop photo and in the dressed still",
+    },
+    "segmenter": {
+        "id": "facebook/sam2.1-hiera-large",
+        "revision": "665f8e2ad61cf5f53d65644ff27c8ee525124610",
+        "licence": "Apache-2.0",
+        "use": "garment mask from the detector's box",
+    },
+    "fashn": {
+        "id": "fashn-ai/fashn-vton-1.5",
+        "revision": "7720683168567eb5a2a4c67f15116c6e29c83ded",
+        "code_url": "https://github.com/fashn-AI/fashn-vton-1.5",
+        "code_revision": "7c0f10af3f91ad4048fe9729c470a13ef905d25a",
+        "pose_id": "fashn-ai/DWPose",
+        "pose_revision": "548b5df25b84d9f4aac0611dfa1c2a7a12f15571",
+        "licence": "Apache-2.0 (weights and code); DWPose and YOLOX Apache-2.0",
+        "not_used": "fashn-human-parser: NVIDIA Source Code License for SegFormer (non-commercial). "
+        "stage1_dress.py installs without it and feeds the pipeline our SAM 2 garment mask instead",
+    },
+    "qwen": {
+        "id": "Qwen/Qwen-Image-Edit-2511",
+        "revision": "6f3ccc0b56e431dc6a0c2b2039706d7d26f22cb9",
+        "licence": "Apache-2.0",
+        "use": "multi-image edit: our bare mannequin + the garment cut-out, and the invented back",
+    },
+}
+STAGE1B_ENGINES = ("fashn", "qwen")
+STAGE1B_DIR = "stage1b"
+
+STAGE1B_DEFAULTS = {
+    # Qwen-Image-Edit (20B transformer + 7B text encoder, about 58 GB in bf16) fits an H100 without
+    # offload. FASHN VTON needs about 8 GB; set CURTAIN_MODAL_GPU_DRESS=L4 or L40S for a fashn-only run.
+    "CURTAIN_MODAL_GPU_DRESS": "H100",
+    "CURTAIN_MODAL_TIMEOUT_DRESS": "3600",
+    "CURTAIN_MODAL_TIMEOUT_DOWNLOAD": "7200",
+    "CURTAIN_MODAL_MEMORY_DRESS_MB": "65536",
+    "CURTAIN_QWEN_CPU_OFFLOAD": "0",
+}
+
+
+def stage1b_settings(environ: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """Stage 1b run settings from the environment, validated. Read at import time by stage1_dress.py."""
+    env = os.environ if environ is None else environ
+    get = lambda k: (env.get(k) or STAGE1B_DEFAULTS.get(k, "")).strip()  # noqa: E731
+
+    def seconds(k: str) -> int:
+        v = int(get(k))
+        if not 60 <= v <= MODAL_MAX_TIMEOUT_S:
+            raise ValueError(f"{k}={v}: use 60..{MODAL_MAX_TIMEOUT_S} seconds")
+        return v
+
+    offload = get("CURTAIN_QWEN_CPU_OFFLOAD").lower()
+    if offload not in ("0", "1", "true", "false"):
+        raise ValueError(f"CURTAIN_QWEN_CPU_OFFLOAD={offload!r}: use 0 or 1")
+    return {
+        "region": get("CURTAIN_MODAL_REGION") or None,
+        "gpu_dress": get("CURTAIN_MODAL_GPU_DRESS"),
+        "timeout_dress": seconds("CURTAIN_MODAL_TIMEOUT_DRESS"),
+        "timeout_download": seconds("CURTAIN_MODAL_TIMEOUT_DOWNLOAD"),
+        "memory_dress_mb": int(get("CURTAIN_MODAL_MEMORY_DRESS_MB")),
+        "qwen_cpu_offload": offload in ("1", "true"),
+    }
+
+
+# Product category (@curtain/schema GARMENT_CATEGORIES) -> FASHN VTON category.
+TRYON_CATEGORY = {"dress": "one-pieces", "top": "tops", "outerwear": "tops", "bottom": "bottoms"}
+# Grounding DINO text prompts (lower case, each phrase ends with a dot, as the model expects).
+GARMENT_PROMPT = {"one-pieces": "dress. jumpsuit.", "tops": "top. shirt. blouse. jacket.", "bottoms": "skirt. pants. shorts."}
+# The FASHN human-parser label table as published on its model card (huggingface.co/fashn-ai/
+# fashn-human-parser, "Label Definitions"). We never load that model or its package (non-commercial
+# licence); fashn_vton imports these constants from it, so stage1_dress.py provides them itself, and
+# writes our SAM 2 garment mask as a label map: the pipeline keeps the garment-image pixels whose label
+# belongs to the category, so the garment pixels get FASHN_GARMENT_LABEL[category].
+FASHN_LABELS = ("background", "face", "hair", "top", "dress", "skirt", "pants", "belt", "bag", "hat", "scarf", "glasses", "arms", "hands", "legs", "feet", "torso", "jewelry")
+FASHN_LABEL_IDS = {name: i for i, name in enumerate(FASHN_LABELS)}
+FASHN_CATEGORY_TO_BODY_COVERAGE = {"tops": "upper", "bottoms": "lower", "one-pieces": "full"}
+FASHN_BODY_COVERAGE_TO_LABELS = {
+    "upper": ["top", "dress", "scarf"],
+    "lower": ["skirt", "pants", "belt"],
+    "full": ["top", "dress", "scarf", "skirt", "pants", "belt"],
+}
+FASHN_IDENTITY_LABELS = ["face", "hair", "jewelry", "bag", "glasses", "hat"]
+FASHN_GARMENT_LABEL = {"one-pieces": "dress", "tops": "top", "bottoms": "skirt"}
+
+
+def fashn_label_map(garment: Sequence[int], tryon_cat: str) -> bytearray:
+    """Our garment mask as a FASHN label map (0 = background, garment = the category's label id)."""
+    label = FASHN_LABEL_IDS[FASHN_GARMENT_LABEL[tryon_cat]]
+    return bytearray(label if v else 0 for v in garment)
+# Garment pixels may extend past the bare silhouette (ease, flare, sleeves): margin as a fraction of
+# the frame height. 0.08 of 832 px is about 16 cm at the turntable distance. Initial values, not tuned.
+ALIGN_MARGIN_FRAC = {"one-pieces": 0.08, "tops": 0.04, "bottoms": 0.06}
+# QA thresholds per still. Initial values, not tuned on real output (no GPU run yet).
+STAGE1B_QA_THRESHOLDS = {
+    "min_inside_fraction": 0.97,  # garment pixels inside the dilated mannequin silhouette
+    "min_silhouette_iou": 0.90,  # uncovered mannequin vs our render: pose and camera held
+    "min_cover_fraction": 0.05,  # the garment covers at least this much of the mannequin
+    "max_mannequin_mae_8bit": 25.0,  # uncovered mannequin pixels vs our render, before compositing
+}
+STAGE1B_LABEL = "generated still: our mannequin dressed from a shop photo by a model, an estimate (AGENTS.md rule 3)"
+INVENTED_BACK_LABEL = "INVENTED BACK: no back photo was given, the model made it up; validation only, never for a published asset (D13)"
+
+
+def tryon_category(category: str) -> str:
+    try:
+        return TRYON_CATEGORY[category]
+    except KeyError:
+        raise ManifestError(f"stage 1b has no try-on category for product category {category!r}; known: {', '.join(TRYON_CATEGORY)}") from None
+
+
+def align_margin_px(tryon_cat: str, height: int) -> int:
+    return max(1, int(round(ALIGN_MARGIN_FRAC[tryon_cat] * height)))
+
+
+def stage1b_plan(m: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """The two views stage 1b must produce, checked against the manifest. Raises ManifestError."""
+    spec = m.get("stage1b")
+    if not spec:
+        raise ManifestError("this job has no stage1b section: export it with --on-model or --flat-lay (src/exportCli.ts)")
+    problems: list[str] = []
+    views = {v.get("view"): v for v in spec.get("views", [])}
+    if set(views) != {"front", "back"}:
+        problems.append(f"stage1b views are {sorted(views)}, expected back and front")
+        raise ManifestError("; ".join(problems))
+    frames = int(m["camera"]["frames"])
+    if views["front"]["frame"] != 0 or views["back"]["frame"] != frames // 2:
+        problems.append(f"stage1b views must sit at frames 0 and {frames // 2} (the pinned frames)")
+    if not views["front"].get("source"):
+        problems.append("stage1b needs a front source photo")
+    if spec.get("source_kind") not in ("on_model", "flat_lay"):
+        problems.append(f"unknown source_kind {spec.get('source_kind')!r}")
+    sources = {s["role"]: s for s in spec.get("sources", [])}
+    for name, v in views.items():
+        if bool(v.get("invented")) != (v.get("source") is None):
+            problems.append(f"{name}: invented must be true exactly when there is no source photo")
+        if v.get("source") is not None and sources.get(name, {}).get("path") != v["source"]:
+            problems.append(f"{name}: source {v['source']!r} is not in stage1b.sources")
+        photo = next((p for p in m["photos"] if p.get("role") == name), None)
+        if photo is None or photo.get("path") != v.get("still") or photo.get("produced_by") != STAGE1B_DIR:
+            problems.append(f"{name}: the manifest's {name} photo must point at {v.get('still')!r} with produced_by stage1b")
+        elif bool(photo.get("invented")) != bool(v.get("invented")):
+            problems.append(f"{name}: the photo's invented flag differs from the stage1b view")
+    if bool(spec.get("invented_back")) != bool(views["back"].get("invented")):
+        problems.append("invented_back differs from the back view")
+    if problems:
+        raise ManifestError("; ".join(problems))
+    return [dict(views["front"]), dict(views["back"])]
+
+
+def stills_pending(m: Mapping[str, Any], exists) -> list[str]:
+    """Roles (front/back) whose pinned still is produced by stage 1b and is not there yet. `exists(rel_path)`."""
+    return [p["role"] for p in m["photos"] if p.get("role") in ("front", "back") and p.get("produced_by") == STAGE1B_DIR and not exists(p["path"])]
+
+
+def invented_roles(m: Mapping[str, Any]) -> list[str]:
+    return [p["role"] for p in m["photos"] if p.get("invented")]
+
+
+# --- masks and images (flat, row-major) ------------------------------------------------------------
+
+
+def _check(mask: Sequence[int], w: int, h: int) -> None:
+    if len(mask) != w * h:
+        raise ValueError(f"mask has {len(mask)} values, expected {w}x{h}={w * h}")
+
+
+def mask_count(a: Sequence[int]) -> int:
+    return sum(1 for v in a if v)
+
+
+def mask_and(a: Sequence[int], b: Sequence[int]) -> bytearray:
+    return bytearray(1 if x and y else 0 for x, y in zip(a, b, strict=True))
+
+
+def mask_or(a: Sequence[int], b: Sequence[int]) -> bytearray:
+    return bytearray(1 if x or y else 0 for x, y in zip(a, b, strict=True))
+
+
+def mask_andnot(a: Sequence[int], b: Sequence[int]) -> bytearray:
+    return bytearray(1 if x and not y else 0 for x, y in zip(a, b, strict=True))
+
+
+def mask_not(a: Sequence[int]) -> bytearray:
+    return bytearray(0 if v else 1 for v in a)
+
+
+def mask_iou(a: Sequence[int], b: Sequence[int]) -> float:
+    inter = union = 0
+    for x, y in zip(a, b, strict=True):
+        if x or y:
+            union += 1
+            if x and y:
+                inter += 1
+    return 1.0 if union == 0 else inter / union
+
+
+def dilate(mask: Sequence[int], w: int, h: int, r: int) -> bytearray:
+    """Dilation by a (2r+1)^2 square (Chebyshev distance <= r), outside the frame counts as empty. O(w*h)."""
+    _check(mask, w, h)
+    if r <= 0:
+        return bytearray(1 if v else 0 for v in mask)
+    tmp = bytearray(w * h)
+    for y in range(h):
+        row = y * w
+        pref = [0] * (w + 1)
+        for x in range(w):
+            pref[x + 1] = pref[x] + (1 if mask[row + x] else 0)
+        for x in range(w):
+            if pref[min(w, x + r + 1)] - pref[max(0, x - r)]:
+                tmp[row + x] = 1
+    out = bytearray(w * h)
+    for x in range(w):
+        pref = [0] * (h + 1)
+        for y in range(h):
+            pref[y + 1] = pref[y] + tmp[y * w + x]
+        for y in range(h):
+            if pref[min(h, y + r + 1)] - pref[max(0, y - r)]:
+                out[y * w + x] = 1
+    return out
+
+
+def erode(mask: Sequence[int], w: int, h: int, r: int) -> bytearray:
+    """Erosion by the same square; outside the frame counts as inside (a mask touching the border keeps it)."""
+    return mask_not(dilate(mask_not(mask), w, h, r))
+
+
+def components(mask: Sequence[int], w: int, h: int) -> list[list[int]]:
+    """4-connected components as lists of pixel indices, largest first."""
+    _check(mask, w, h)
+    seen = bytearray(w * h)
+    comps: list[list[int]] = []
+    for start in range(w * h):
+        if not mask[start] or seen[start]:
+            continue
+        seen[start] = 1
+        stack, comp = [start], []
+        while stack:
+            k = stack.pop()
+            comp.append(k)
+            x, y = k % w, k // w
+            for n, ok in ((k - 1, x > 0), (k + 1, x < w - 1), (k - w, y > 0), (k + w, y < h - 1)):
+                if ok and mask[n] and not seen[n]:
+                    seen[n] = 1
+                    stack.append(n)
+        comps.append(comp)
+    comps.sort(key=len, reverse=True)
+    return comps
+
+
+def keep_large_components(mask: Sequence[int], w: int, h: int, min_frac: float = 0.1) -> bytearray:
+    """Keeps the largest component and every other one at least `min_frac` of its size (a skirt split by an arm stays)."""
+    comps = components(mask, w, h)
+    out = bytearray(w * h)
+    if not comps:
+        return out
+    floor = len(comps[0]) * min_frac
+    for comp in comps:
+        if len(comp) < floor:
+            break
+        for k in comp:
+            out[k] = 1
+    return out
+
+
+def bbox(mask: Sequence[int], w: int, h: int) -> tuple[int, int, int, int] | None:
+    """(x0, y0, x1, y1) with x1, y1 exclusive, or None for an empty mask."""
+    _check(mask, w, h)
+    rows = [y for y in range(h) if any(mask[y * w:(y + 1) * w])]
+    if not rows:
+        return None
+    cols = [x for x in range(w) if any(mask[y * w + x] for y in range(rows[0], rows[-1] + 1))]
+    return cols[0], rows[0], cols[-1] + 1, rows[-1] + 1
+
+
+def touches_border(mask: Sequence[int], w: int, h: int) -> bool:
+    b = bbox(mask, w, h)
+    return b is not None and (b[0] == 0 or b[1] == 0 or b[2] == w or b[3] == h)
+
+
+def rgb_diff_mask(a: Sequence[int], b: Sequence[int], w: int, h: int, threshold: int) -> bytearray:
+    """1 where the largest per-channel absolute difference exceeds `threshold` (8-bit)."""
+    if len(a) != 3 * w * h or len(b) != 3 * w * h:
+        raise ValueError("RGB images must be 3*w*h bytes")
+    return bytearray(
+        1 if max(abs(a[i] - b[i]), abs(a[i + 1] - b[i + 1]), abs(a[i + 2] - b[i + 2])) > threshold else 0
+        for i in range(0, 3 * w * h, 3)
+    )
+
+
+def background_mask(rgb: Sequence[int], w: int, h: int, bg: Sequence[int], tol: int) -> bytearray:
+    """1 where every channel is within `tol` of the studio background colour."""
+    if len(rgb) != 3 * w * h:
+        raise ValueError("RGB image must be 3*w*h bytes")
+    r0, g0, b0 = bg
+    return bytearray(
+        1 if abs(rgb[i] - r0) <= tol and abs(rgb[i + 1] - g0) <= tol and abs(rgb[i + 2] - b0) <= tol else 0
+        for i in range(0, 3 * w * h, 3)
+    )
+
+
+def mean_abs_diff(a: Sequence[int], b: Sequence[int], mask: Sequence[int]) -> float | None:
+    """Mean absolute 8-bit difference over the masked pixels (all three channels), None when the mask is empty."""
+    total = n = 0
+    for k, v in enumerate(mask):
+        if v:
+            i = 3 * k
+            total += abs(a[i] - b[i]) + abs(a[i + 1] - b[i + 1]) + abs(a[i + 2] - b[i + 2])
+            n += 3
+    return None if n == 0 else total / n
+
+
+def composite(bare: Sequence[int], generated: Sequence[int], mask: Sequence[int]) -> bytearray:
+    """Our bare render with the generated pixels pasted inside the garment mask: mannequin, light and
+    background stay exactly ours, so the still matches the control video at the pinned frame."""
+    out = bytearray(bare)
+    for k, v in enumerate(mask):
+        if v:
+            out[3 * k:3 * k + 3] = bytes(generated[3 * k:3 * k + 3])
+    return out
+
+
+def garment_prior(generated: Sequence[int], bare: Sequence[int], w: int, h: int, bg: Sequence[int], *, diff_threshold: int = 24, bg_tol: int = 10, open_r: int = 1) -> bytearray:
+    """Garment from the dressed still alone: pixels that differ from our bare render and are not studio
+    background, opened by `open_r` and reduced to the large components. The stage 3 difference idea;
+    it misses a garment the colour of the mannequin, which is why SAM 2 refines it."""
+    diff = rgb_diff_mask(generated, bare, w, h, diff_threshold)
+    fg = mask_not(background_mask(generated, w, h, bg, bg_tol))
+    m = mask_and(diff, fg)
+    if open_r > 0:
+        m = dilate(erode(m, w, h, open_r), w, h, open_r)
+    return keep_large_components(m, w, h)
+
+
+def choose_garment_mask(prior: Sequence[int], refined: Sequence[int] | None, min_agreement: float = 0.5) -> tuple[bytearray, str, float | None]:
+    """SAM 2's mask when it agrees with the difference prior (IoU >= min_agreement), else the prior.
+    Returns (mask, source, iou)."""
+    if refined is None or mask_count(refined) == 0:
+        return bytearray(prior), "difference", None
+    iou = mask_iou(prior, refined)
+    if mask_count(prior) == 0 or iou >= min_agreement:
+        return bytearray(1 if v else 0 for v in refined), "sam2", iou
+    return bytearray(prior), "difference (sam2 disagreed)", iou
+
+
+def alignment_qa(
+    garment: Sequence[int],
+    foreground: Sequence[int],
+    bare_mask: Sequence[int],
+    w: int,
+    h: int,
+    margin_px: int,
+    *,
+    mannequin_mae: float | None = None,
+    thresholds: Mapping[str, float] | None = None,
+) -> dict[str, Any]:
+    """Checks that a dressed still is pixel-aligned with our mannequin at the pinned camera.
+
+    garment     the garment mask in the still
+    foreground  everything that is not studio background in the generated still (mannequin + garment)
+    bare_mask   our bare-mannequin silhouette at the same frame (control/mask)
+
+    inside_fraction   share of garment pixels within the silhouette dilated by `margin_px`
+    silhouette_iou    IoU of (foreground - garment) and (bare - garment): where no cloth covers the
+                      mannequin, the generated mannequin must sit exactly where ours is (pose, camera)
+    cover_fraction    share of the silhouette the garment covers (0 = nothing was dressed)
+    mannequin_mae     mean 8-bit difference of the uncovered mannequin, generated vs ours (given by the caller)
+    """
+    t = {**STAGE1B_QA_THRESHOLDS, **(thresholds or {})}
+    _check(garment, w, h)
+    _check(foreground, w, h)
+    _check(bare_mask, w, h)
+    g = mask_count(garment)
+    b = mask_count(bare_mask)
+    inside = mask_count(mask_and(garment, dilate(bare_mask, w, h, margin_px)))
+    inside_fraction = 1.0 if g == 0 else inside / g
+    sil_iou = mask_iou(mask_andnot(foreground, garment), mask_andnot(bare_mask, garment))
+    cover = 0.0 if b == 0 else mask_count(mask_and(garment, bare_mask)) / b
+    border = touches_border(garment, w, h)
+    failures: list[str] = []
+    if g == 0:
+        failures.append("empty garment mask")
+    if inside_fraction < t["min_inside_fraction"]:
+        failures.append(f"garment outside the dilated silhouette: inside {inside_fraction:.3f} < {t['min_inside_fraction']}")
+    if sil_iou < t["min_silhouette_iou"]:
+        failures.append(f"mannequin moved or changed: silhouette IoU {sil_iou:.3f} < {t['min_silhouette_iou']}")
+    if cover < t["min_cover_fraction"]:
+        failures.append(f"garment covers {cover:.3f} of the mannequin < {t['min_cover_fraction']}")
+    if border:
+        failures.append("garment touches the frame border")
+    if mannequin_mae is not None and mannequin_mae > t["max_mannequin_mae_8bit"]:
+        failures.append(f"uncovered mannequin differs from our render: MAE {mannequin_mae:.1f} > {t['max_mannequin_mae_8bit']}")
+    return {
+        "garment_px": g,
+        "silhouette_px": b,
+        "margin_px": margin_px,
+        "inside_fraction": round(inside_fraction, 4),
+        "silhouette_iou": round(sil_iou, 4),
+        "cover_fraction": round(cover, 4),
+        "touches_border": border,
+        "mannequin_mae_8bit": None if mannequin_mae is None else round(mannequin_mae, 2),
+        "thresholds": t,
+        "pass": not failures,
+        "failures": failures,
+    }
+
+
+def fit_size(w: int, h: int, area: int, multiple: int = 16) -> tuple[int, int]:
+    """(W, H) with the aspect of w x h, about `area` pixels, both multiples of `multiple` (the edit model's canvas)."""
+    s = math.sqrt(area / (w * h))
+    return max(multiple, int(round(w * s / multiple)) * multiple), max(multiple, int(round(h * s / multiple)) * multiple)
+
+
+def stage1b_summary(views: Sequence[Mapping[str, Any]], *, invented_back: bool) -> dict[str, Any]:
+    """Overall verdict over the per-view QA records; an invented back is a warning on every summary."""
+    failed = [v["view"] for v in views if not v.get("qa", {}).get("pass")]
+    warnings = [INVENTED_BACK_LABEL] if invented_back else []
+    return {
+        "pass": not failed,
+        "failed_views": failed,
+        "invented_back": invented_back,
+        "warnings": warnings,
+        "label": STAGE1B_LABEL,
+        "usable_for_stage2": not failed,
+    }

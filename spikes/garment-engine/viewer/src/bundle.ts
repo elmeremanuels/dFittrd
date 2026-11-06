@@ -2,8 +2,12 @@
  * The spike asset bundle as the device sees it (docs/ENGINE-HANDOFF.md §Stage 8): base.glb,
  * anchors.json, grading.json, material.json and qa.json from `spikes/garment-engine/out/<id>/`.
  * Types come from the spike itself, so the viewer reads exactly what `build:bundle` writes.
+ * An evaluated Phase 0 bundle (`out/eval/<id>/`, product id `eval/<id>`) also carries payload.json,
+ * the product's garment payload for the fit engine, and says so in anchors.json (`payloadFile`); the
+ * spike fixtures have none and are looked up by id instead.
  */
 import { glbFloatAccessor, glbIndexAccessor, readGlb, type Mesh } from '@curtain/mannequin';
+import type { GarmentPayload } from '@curtain/schema';
 import type { GradingJson } from '../../src/grading';
 import type { MaterialJson } from '../../src/product';
 
@@ -15,6 +19,8 @@ export interface GarmentAnchorsJson {
   unit: 'cm';
   mannequin: { version: string; shape: string };
   synthetic: boolean;
+  /** Set by evaluated bundles: the file holding the product payload. */
+  payloadFile?: string;
   rings: Record<string, { circumferenceCm: number; chartCm: number | null; spansBothLegs: boolean }>;
 }
 
@@ -35,6 +41,8 @@ export interface SpikeBundle {
   qa: QaJson;
   /** The calibrated base-size garment in mannequin space, cm. */
   baseMesh: Mesh;
+  /** payload.json when the bundle has one (evaluated shop products). */
+  payload?: GarmentPayload;
 }
 
 /** The garment mesh of a spike base.glb (written in metres by `writeGlb(…, { scale: 0.01 })`), back in cm. */
@@ -75,12 +83,15 @@ export async function loadBundle(fetchFn: FetchLike, productId: string, base = '
   ]);
   const g = grading as GradingJson;
   if (g.format !== 'curtain.garment.grading') throw new Error(`${productId}: grading.json has format ${String(g.format)}`);
+  const a = anchors as GarmentAnchorsJson;
+  const payload = a.payloadFile === 'payload.json' ? ((await (await get(fetchFn, `${dir}/payload.json`)).json()) as GarmentPayload) : undefined;
   return {
     productId,
-    anchors: anchors as GarmentAnchorsJson,
+    anchors: a,
     grading: g,
     material: material as MaterialJson,
     qa: qa as QaJson,
     baseMesh: meshFromGlb(new Uint8Array(glb)),
+    ...(payload ? { payload } : {}),
   };
 }

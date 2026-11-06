@@ -1,0 +1,1424 @@
+{
+  "shop": {
+    "domain": "bohohippychic.com.au",
+    "brand": "Boho Hippy Chic",
+    "currency": "AUD"
+  },
+  "source": "https://bohohippychic.com.au/products.json?limit=250&page=N (public storefront endpoint), pages products-page1.json, products-page2.json, products-page3.json",
+  "catalogue": {
+    "products": 667,
+    "byProductType": {
+      "Gift Ideas": 3,
+      "Tops": 170,
+      "Bags": 8,
+      "Skirts": 15,
+      "Dresses": 133,
+      "Pants": 90,
+      "Jewellery": 78,
+      "Clothing": 11,
+      "Gift Card": 1,
+      "Jackets & Knits": 106,
+      "": 2,
+      "Body Care": 38,
+      "Jumpsuits & Sets": 12
+    }
+  },
+  "rejectedProductTypes": [
+    {
+      "type": "Gift Ideas",
+      "count": 3,
+      "reason": "Sarongs and beach towels: not fitted garments, accessory flow (ENGINE-HANDOFF Phase 4)."
+    },
+    {
+      "type": "Bags",
+      "count": 8,
+      "reason": "Accessory: no 3D asset (ENGINE-HANDOFF Phase 4)."
+    },
+    {
+      "type": "Jewellery",
+      "count": 78,
+      "reason": "Accessory: no 3D asset; accessories stay on today's flow (ENGINE-HANDOFF Phase 4)."
+    },
+    {
+      "type": "Clothing",
+      "count": 11,
+      "reason": "Catch-all type for tees, tops and dresses that belong to Tops or Dresses (e.g. starlight-cotton-*-tee, coastal-breeze-maxi-dress); not a separate category."
+    },
+    {
+      "type": "Gift Card",
+      "count": 1,
+      "reason": "Not a garment."
+    },
+    {
+      "type": "",
+      "count": 2,
+      "reason": "Untyped products (a cami top and a lounge set) that duplicate Tops and sets."
+    },
+    {
+      "type": "Body Care",
+      "count": 38,
+      "reason": "Not a garment."
+    },
+    {
+      "type": "Jumpsuits & Sets",
+      "count": 12,
+      "reason": "Not one of the five collections in the brief; overalls and pant suits need the dress + bottom anchor subsets together (later)."
+    }
+  ],
+  "method": {
+    "sizeChart": "AU size options use AU_WOMENS_BODY_CHART (@curtain/schema, docs/research/au-size-chart.md) restricted to the sizes offered, sizeChartType 'body'; S-M style options use the mean of the AU rows the stated range covers; one-size items use flat measurements from the text as a 'garment' chart.",
+    "baseSize": "AU 12 (or the range that holds it) for every size-ranged item: our default, not stated by the shop. GarmentPayload v1 has no baseSize field, so it sits beside the payload.",
+    "ease": "Only where the shop prints garment measurements: printed value at the base size minus the AU body chart at the base size.",
+    "fabric": "The fabric sentence of the description (labels, percentages, \"crafted from\", never styling advice) through resolveFabricText/fabricFromText; the fabric library fills weight, stretch, drape, opacity and sheen.",
+    "images": "images.json: every image looked at and classified by hand; sha256 of the file as downloaded."
+  },
+  "products": [
+    {
+      "handle": "azure-palm-baby-doll-dress",
+      "productType": "Dresses",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "10894368407857",
+        "brand": "Boho Hippy Chic",
+        "name": "Azure Palm Baby Doll Dress",
+        "productUrl": "https://bohohippychic.com.au/products/azure-palm-baby-doll-dress",
+        "productPhotos": [
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-80.jpg?v=1792557415",
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-81.jpg?v=1792557415",
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-82.jpg?v=1792557415",
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-79.jpg?v=1792557415"
+        ],
+        "category": "dress",
+        "subcategory": "babydoll",
+        "patternBlock": "empire",
+        "fabric": {
+          "primary": "viscose",
+          "weightGsm": 165,
+          "stretchPct": 1.5,
+          "drape": 0.85,
+          "opacity": 0.8,
+          "sheen": 0.3,
+          "blend": [
+            [
+              "viscose",
+              100
+            ]
+          ]
+        },
+        "sizeChartType": "body",
+        "sizeChart": [
+          {
+            "size": "8",
+            "bust": 85,
+            "waist": 67.5,
+            "hip": 94
+          },
+          {
+            "size": "10",
+            "bust": 90,
+            "waist": 72.5,
+            "hip": 99
+          },
+          {
+            "size": "12",
+            "bust": 95,
+            "waist": 77.5,
+            "hip": 104
+          },
+          {
+            "size": "14",
+            "bust": 100,
+            "waist": 82.5,
+            "hip": 109
+          },
+          {
+            "size": "16",
+            "bust": 105,
+            "waist": 87.5,
+            "hip": 114
+          }
+        ],
+        "ease": {
+          "bust": 7
+        },
+        "lengthCm": {
+          "shoulder_to_hem": 91
+        }
+      },
+      "priceAud": 79,
+      "completeness": {
+        "score": 0.697,
+        "missing": [
+          {
+            "field": "flatLayPhoto",
+            "reason": "flatLayPhoto (garment laid flat on white, https URL) is the input of the on-device render; without it the item cannot be shown on the user.",
+            "weight": 3,
+            "severity": "heavy"
+          },
+          {
+            "field": "criticalFitPoints",
+            "reason": "criticalFitPoints tells the fit engine where this garment cares most (double weight); all category points weigh equally when absent.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "sizeChart.shoulder",
+            "reason": "shoulder is a default fit point for this category; rows without it skip the shoulder check.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "primaryColorHex",
+            "reason": "primaryColorHex feeds the colour affinity of the taste engine and the render tint.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "trueToSizeScore",
+            "reason": "trueToSizeScore (from past return data) narrows or widens the size tie band; 0.8 is assumed.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "colorways",
+            "reason": "colorways let the user try every colour the shop sells; only the primary colour is shown when absent.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "styleTags",
+            "reason": "styleTags (0..1 per taste axis) override the inferred style of the item in the swipe deck.",
+            "weight": 1,
+            "severity": "light"
+          }
+        ],
+        "status": "incomplete",
+        "checked": [
+          "category",
+          "sizeChartType",
+          "sizeChart",
+          "fabric.primary",
+          "flatLayPhoto",
+          "fabric.stretchPct",
+          "fabric.drape",
+          "ease",
+          "lengthCm",
+          "criticalFitPoints",
+          "sizeChart.shoulder",
+          "primaryColorHex",
+          "productPhotos",
+          "trueToSizeScore",
+          "fabric.opacity",
+          "fabric.sheen",
+          "colorways",
+          "styleTags"
+        ]
+      },
+      "fullSchemaIssues": [
+        "priceEur: Invalid input: expected number, received undefined",
+        "primaryColorHex: Invalid input: expected string, received undefined"
+      ],
+      "evidence": {
+        "category": "inferCategory(\"Dresses\") → dress",
+        "patternBlock": "title/tags keyword → empire",
+        "fabric": "\"This lightweight rayon mini dress features a dreamy palm and villa-inspired print in soft pastel hues, evoking the spirit of island adventures.\" → viscose; weight/stretch/drape/opacity/sheen from the fabric library v1.0.0 (blend)",
+        "sizeChart": "Size option [\"8\",\"10\",\"12\",\"14\",\"16\"] → AU_WOMENS_BODY_CHART rows",
+        "baseSize": "AU 12, the default base size for size-ranged items (not stated by the shop)",
+        "printedTable": "size-per-row: \"Size Bust Length 8 94cm 90cm 10 98cm 90cm 12 102cm 91cm 14 106cm 92cm 16 112cm 93cm\" → garment (mean |Δ| vs AU body chart 7.4 cm)",
+        "ease": "printed garment measurement at AU 12 minus AU_WOMENS_BODY_CHART AU 12",
+        "lengthCm": "printed Length at AU 12: 91 cm"
+      },
+      "warnings": [
+        "the AU body chart has no shoulder width; the shoulder fit point is skipped",
+        "price is 79 AUD; priceEur is left out (no exchange rate is assumed)"
+      ],
+      "baseSize": "12",
+      "selection": {
+        "why": "Only dress that meets all four criteria with 4 images: AU 8–16, front/back/3-4 views, \"lightweight rayon\", and a printed garment table (bust and length per size, ~7 cm over the AU body bust, so garment measurements).",
+        "runnersUp": [
+          {
+            "handle": "rosabelle-babydoll-dress",
+            "whyNot": "Same garment table and fabric line, but 3 images."
+          },
+          {
+            "handle": "coastal-gypsy-block-print-midi-dress",
+            "whyNot": "Cotton, 3 images; its only measurement is the chest of the size 8 sample (44 cm flat), not a table per size."
+          },
+          {
+            "handle": "seraphina-embroidered-mirror-work-maxi-dress",
+            "whyNot": "Prints the AU body chart, not garment measurements. Its third image is a ghost-mannequin shot on white, the only dress photo that meets the D13 front rule (no model, plain background); swap it in if that matters more than measurements."
+          },
+          {
+            "handle": "capri-midi-dress",
+            "whyNot": "No measurements; \"cut oversize to allow for shrinkage\" makes a body chart misleading."
+          }
+        ],
+        "topByTextCriteria": [
+          {
+            "handle": "azure-palm-baby-doll-dress",
+            "productType": "Dresses",
+            "sizes": true,
+            "images": 4,
+            "fabric": true,
+            "garmentMeasurements": true,
+            "rank": [
+              1,
+              1,
+              1,
+              1,
+              4
+            ]
+          },
+          {
+            "handle": "coastal-gypsy-block-print-midi-dress",
+            "productType": "Dresses",
+            "sizes": true,
+            "images": 3,
+            "fabric": true,
+            "garmentMeasurements": true,
+            "rank": [
+              1,
+              1,
+              1,
+              1,
+              3
+            ]
+          },
+          {
+            "handle": "rosabelle-babydoll-dress",
+            "productType": "Dresses",
+            "sizes": true,
+            "images": 3,
+            "fabric": true,
+            "garmentMeasurements": true,
+            "rank": [
+              1,
+              1,
+              1,
+              1,
+              3
+            ]
+          },
+          {
+            "handle": "wild-gypsy-maxi-dress",
+            "productType": "Dresses",
+            "sizes": true,
+            "images": 7,
+            "fabric": true,
+            "garmentMeasurements": false,
+            "rank": [
+              1,
+              1,
+              1,
+              0,
+              7
+            ]
+          },
+          {
+            "handle": "luna-meadow-maxi-dress",
+            "productType": "Dresses",
+            "sizes": true,
+            "images": 6,
+            "fabric": true,
+            "garmentMeasurements": false,
+            "rank": [
+              1,
+              1,
+              1,
+              0,
+              6
+            ]
+          }
+        ]
+      },
+      "threeD": {
+        "ready": false,
+        "reasons": [
+          "front photo does not meet the contract (worn by a model, busy background, long edge 1200 px < 1600); add one on a hanger, flat-lay or ghost mannequin",
+          "back photo does not meet the contract (worn by a model, busy background, long edge 1200 px < 1600); add one on a hanger, flat-lay or ghost mannequin",
+          "base size 12 is our default, not confirmed by the shop"
+        ]
+      }
+    },
+    {
+      "handle": "rosewater-blouse",
+      "productType": "Tops",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "10894374666545",
+        "brand": "Boho Hippy Chic",
+        "name": "Rosewater Blouse",
+        "productUrl": "https://bohohippychic.com.au/products/rosewater-blouse",
+        "productPhotos": [
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-2025-11-15T073909.516.jpg?v=1792557677",
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-2025-11-15T073937.773.jpg?v=1792557678",
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-2025-11-15T073958.645.jpg?v=1792557678",
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-2025-11-15T074018.098.jpg?v=1792557678",
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-2025-11-15T072138.591_1c9c4ad1-16b9-45cd-a83b-ee2f7f13b2ed.jpg?v=1792557677"
+        ],
+        "category": "top",
+        "subcategory": "blouse",
+        "patternBlock": "shirt",
+        "fabric": {
+          "primary": "viscose",
+          "weightGsm": 165,
+          "stretchPct": 1.5,
+          "drape": 0.85,
+          "opacity": 0.8,
+          "sheen": 0.3,
+          "blend": [
+            [
+              "viscose",
+              100
+            ]
+          ]
+        },
+        "sizeChartType": "body",
+        "sizeChart": [
+          {
+            "size": "8",
+            "bust": 85,
+            "waist": 67.5,
+            "hip": 94
+          },
+          {
+            "size": "10",
+            "bust": 90,
+            "waist": 72.5,
+            "hip": 99
+          },
+          {
+            "size": "12",
+            "bust": 95,
+            "waist": 77.5,
+            "hip": 104
+          },
+          {
+            "size": "14",
+            "bust": 100,
+            "waist": 82.5,
+            "hip": 109
+          },
+          {
+            "size": "16",
+            "bust": 105,
+            "waist": 87.5,
+            "hip": 114
+          }
+        ]
+      },
+      "priceAud": 69,
+      "completeness": {
+        "score": 0.576,
+        "missing": [
+          {
+            "field": "flatLayPhoto",
+            "reason": "flatLayPhoto (garment laid flat on white, https URL) is the input of the on-device render; without it the item cannot be shown on the user.",
+            "weight": 3,
+            "severity": "heavy"
+          },
+          {
+            "field": "ease",
+            "reason": "ease (garment minus body per fit point, cm) makes the size recommendation precise; category defaults are used when absent.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "lengthCm",
+            "reason": "lengthCm (e.g. shoulder_to_hem) places the hem and sleeves on the user; without it the render uses category averages.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "criticalFitPoints",
+            "reason": "criticalFitPoints tells the fit engine where this garment cares most (double weight); all category points weigh equally when absent.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "sizeChart.shoulder",
+            "reason": "shoulder is a default fit point for this category; rows without it skip the shoulder check.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "primaryColorHex",
+            "reason": "primaryColorHex feeds the colour affinity of the taste engine and the render tint.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "trueToSizeScore",
+            "reason": "trueToSizeScore (from past return data) narrows or widens the size tie band; 0.8 is assumed.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "colorways",
+            "reason": "colorways let the user try every colour the shop sells; only the primary colour is shown when absent.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "styleTags",
+            "reason": "styleTags (0..1 per taste axis) override the inferred style of the item in the swipe deck.",
+            "weight": 1,
+            "severity": "light"
+          }
+        ],
+        "status": "incomplete",
+        "checked": [
+          "category",
+          "sizeChartType",
+          "sizeChart",
+          "fabric.primary",
+          "flatLayPhoto",
+          "fabric.stretchPct",
+          "fabric.drape",
+          "ease",
+          "lengthCm",
+          "criticalFitPoints",
+          "sizeChart.shoulder",
+          "primaryColorHex",
+          "productPhotos",
+          "trueToSizeScore",
+          "fabric.opacity",
+          "fabric.sheen",
+          "colorways",
+          "styleTags"
+        ]
+      },
+      "fullSchemaIssues": [
+        "priceEur: Invalid input: expected number, received undefined",
+        "primaryColorHex: Invalid input: expected string, received undefined"
+      ],
+      "evidence": {
+        "category": "inferCategory(\"Tops\") → top",
+        "patternBlock": "title/tags keyword → shirt",
+        "fabric": "\"Crafted from 100% lightweight rayon , it drapes beautifully and feels soft against the skin.\" → viscose [[\"viscose\",100]]; weight/stretch/drape/opacity/sheen from the fabric library v1.0.0 (blend)",
+        "sizeChart": "Size option [\"8\",\"10\",\"12\",\"14\",\"16\"] → AU_WOMENS_BODY_CHART rows",
+        "baseSize": "AU 12, the default base size for size-ranged items (not stated by the shop)"
+      },
+      "warnings": [
+        "the AU body chart has no shoulder width; the shoulder fit point is skipped",
+        "price is 69 AUD; priceEur is left out (no exchange rate is assumed)"
+      ],
+      "baseSize": "12",
+      "selection": {
+        "why": "AU 8–16, 5 images (4 of the blouse) with a clean straight back view, \"100% lightweight rayon\". It prints no measurements; the one top that does (meadowlight-blouse) shows the blouse in 2 photos only.",
+        "runnersUp": [
+          {
+            "handle": "meadowlight-blouse",
+            "whyNot": "Ranks first on text (AU 8–16, rayon, printed garment bust 96–112 cm), but its third image is a different garment (a matching long dress), so only front and back of the blouse: fails \"at least 3 images\"."
+          },
+          {
+            "handle": "amelie-button-back-blouse",
+            "whyNot": "4 images, 70% viscose / 30% nylon, but the back view is a 3/4 turn and the scene is busier."
+          },
+          {
+            "handle": "marella-coast-blouse",
+            "whyNot": "Prints the AU body chart (not garment measurements); fabric \"rayon\" without a percentage."
+          },
+          {
+            "handle": "sandy-cove-poncho-top",
+            "whyNot": "S–XL with a \"Bust/Waist/Hip\" table that is the same boilerplate the shop prints on jeans (drift-tide-denim-jeans), so not product measurements."
+          }
+        ],
+        "topByTextCriteria": [
+          {
+            "handle": "meadowlight-blouse",
+            "productType": "Tops",
+            "sizes": true,
+            "images": 3,
+            "fabric": true,
+            "garmentMeasurements": true,
+            "rank": [
+              1,
+              1,
+              1,
+              1,
+              3
+            ]
+          },
+          {
+            "handle": "wildflower-whisper-blouse",
+            "productType": "Tops",
+            "sizes": true,
+            "images": 7,
+            "fabric": true,
+            "garmentMeasurements": false,
+            "rank": [
+              1,
+              1,
+              1,
+              0,
+              7
+            ]
+          },
+          {
+            "handle": "riviera-shirt",
+            "productType": "Tops",
+            "sizes": true,
+            "images": 6,
+            "fabric": true,
+            "garmentMeasurements": false,
+            "rank": [
+              1,
+              1,
+              1,
+              0,
+              6
+            ]
+          },
+          {
+            "handle": "celeste-blouse-white",
+            "productType": "Tops",
+            "sizes": true,
+            "images": 5,
+            "fabric": true,
+            "garmentMeasurements": false,
+            "rank": [
+              1,
+              1,
+              1,
+              0,
+              5
+            ]
+          },
+          {
+            "handle": "rosewater-blouse",
+            "productType": "Tops",
+            "sizes": true,
+            "images": 5,
+            "fabric": true,
+            "garmentMeasurements": false,
+            "rank": [
+              1,
+              1,
+              1,
+              0,
+              5
+            ]
+          }
+        ]
+      },
+      "threeD": {
+        "ready": false,
+        "reasons": [
+          "front photo does not meet the contract (worn by a model, busy background, long edge 1200 px < 1600, garment partly hidden); add one on a hanger, flat-lay or ghost mannequin",
+          "back photo does not meet the contract (worn by a model, busy background, long edge 1200 px < 1600); add one on a hanger, flat-lay or ghost mannequin",
+          "base size 12 is our default, not confirmed by the shop"
+        ]
+      }
+    },
+    {
+      "handle": "rosewater-palazzo-pants",
+      "productType": "Pants",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "10894374568241",
+        "brand": "Boho Hippy Chic",
+        "name": "Rosewater Palazzo Pants",
+        "productUrl": "https://bohohippychic.com.au/products/rosewater-palazzo-pants",
+        "productPhotos": [
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Rose-Water-Mila.jpg?v=1792557673",
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-2025-11-15T072201.709.jpg?v=1792557673",
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-2025-11-15T072254.881.jpg?v=1792557673",
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-2025-11-15T072229.454.jpg?v=1792557673",
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Untitled-design-2025-11-15T072138.591.jpg?v=1792557673"
+        ],
+        "category": "bottom",
+        "subcategory": "palazzo",
+        "patternBlock": "wide-leg",
+        "fabric": {
+          "primary": "viscose",
+          "weightGsm": 165,
+          "stretchPct": 1.5,
+          "drape": 0.85,
+          "opacity": 0.8,
+          "sheen": 0.3,
+          "blend": [
+            [
+              "viscose",
+              100
+            ]
+          ]
+        },
+        "sizeChartType": "body",
+        "sizeChart": [
+          {
+            "size": "8",
+            "bust": 85,
+            "waist": 67.5,
+            "hip": 94
+          },
+          {
+            "size": "10",
+            "bust": 90,
+            "waist": 72.5,
+            "hip": 99
+          },
+          {
+            "size": "12",
+            "bust": 95,
+            "waist": 77.5,
+            "hip": 104
+          },
+          {
+            "size": "14",
+            "bust": 100,
+            "waist": 82.5,
+            "hip": 109
+          },
+          {
+            "size": "16",
+            "bust": 105,
+            "waist": 87.5,
+            "hip": 114
+          }
+        ],
+        "ease": {
+          "hip": 14
+        },
+        "lengthCm": {
+          "outseam": 99
+        },
+        "stretchZones": [
+          "waistband"
+        ]
+      },
+      "priceAud": 69,
+      "completeness": {
+        "score": 0.676,
+        "missing": [
+          {
+            "field": "flatLayPhoto",
+            "reason": "flatLayPhoto (garment laid flat on white, https URL) is the input of the on-device render; without it the item cannot be shown on the user.",
+            "weight": 3,
+            "severity": "heavy"
+          },
+          {
+            "field": "criticalFitPoints",
+            "reason": "criticalFitPoints tells the fit engine where this garment cares most (double weight); all category points weigh equally when absent.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "sizeChart.thigh",
+            "reason": "thigh is a default fit point for bottoms; rows without it skip the thigh check.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "sizeChart.inseam",
+            "reason": "inseam lets the fit engine check leg length; rows without it skip it.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "primaryColorHex",
+            "reason": "primaryColorHex feeds the colour affinity of the taste engine and the render tint.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "trueToSizeScore",
+            "reason": "trueToSizeScore (from past return data) narrows or widens the size tie band; 0.8 is assumed.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "colorways",
+            "reason": "colorways let the user try every colour the shop sells; only the primary colour is shown when absent.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "styleTags",
+            "reason": "styleTags (0..1 per taste axis) override the inferred style of the item in the swipe deck.",
+            "weight": 1,
+            "severity": "light"
+          }
+        ],
+        "status": "incomplete",
+        "checked": [
+          "category",
+          "sizeChartType",
+          "sizeChart",
+          "fabric.primary",
+          "flatLayPhoto",
+          "fabric.stretchPct",
+          "fabric.drape",
+          "ease",
+          "lengthCm",
+          "criticalFitPoints",
+          "sizeChart.thigh",
+          "sizeChart.inseam",
+          "primaryColorHex",
+          "productPhotos",
+          "trueToSizeScore",
+          "fabric.opacity",
+          "fabric.sheen",
+          "colorways",
+          "styleTags"
+        ]
+      },
+      "fullSchemaIssues": [
+        "priceEur: Invalid input: expected number, received undefined",
+        "primaryColorHex: Invalid input: expected string, received undefined"
+      ],
+      "evidence": {
+        "category": "inferCategory(\"Pants\") → bottom",
+        "patternBlock": "title/tags keyword → wide-leg",
+        "fabric": "\"Crafted from 100% lightweight rayon , these wide-leg pants offer a breezy, free-flowing silhouette with a comfortable elastic drawstring waist and practical side pockets.\" → viscose [[\"viscose\",100]]; weight/stretch/drape/opacity/sheen from the fabric library v1.0.0 (blend)",
+        "sizeChart": "Size option [\"8\",\"10\",\"12\",\"14\",\"16\"] → AU_WOMENS_BODY_CHART rows",
+        "baseSize": "AU 12, the default base size for size-ranged items (not stated by the shop)",
+        "printedTable": "size-per-column: \"AU 8 AU 10 AU 12 AU 14 AU 16 Waist 94 110 112 118 124 Hips 110 112 118 122 130 Length 97 98 99 100 101\" → garment (mean |Δ| vs AU body chart 24.3 cm)",
+        "ease": "printed garment measurement at AU 12 minus AU_WOMENS_BODY_CHART AU 12",
+        "lengthCm": "printed Length at AU 12: 99 cm",
+        "stretchZones": "\"elastic drawstring waist\" in the text"
+      },
+      "warnings": [
+        "printed table has steps no grading produces: waist 8→10: 94 → 110 cm",
+        "printed waist 112 cm at AU 12 not used as ease: the waist is elastic and the text does not say relaxed or stretched",
+        "price is 69 AUD; priceEur is left out (no exchange rate is assumed)"
+      ],
+      "baseSize": "12",
+      "selection": {
+        "why": "AU 8–16, 5 images with a back view, \"100% lightweight rayon\", and a printed garment table (waist, hips, length per AU size).",
+        "runnersUp": [
+          {
+            "handle": "byron-barrel-denim-jeans",
+            "whyNot": "No measurements. Its fifth image is a flat-lay on white (meets the D13 front rule); 100% cotton denim; the best pants candidate for the photo contract."
+          },
+          {
+            "handle": "drift-tide-denim-jeans",
+            "whyNot": "AU 8–14 only, boilerplate top chart (bust for jeans)."
+          }
+        ],
+        "topByTextCriteria": [
+          {
+            "handle": "rosewater-palazzo-pants",
+            "productType": "Pants",
+            "sizes": true,
+            "images": 5,
+            "fabric": true,
+            "garmentMeasurements": true,
+            "rank": [
+              1,
+              1,
+              1,
+              1,
+              5
+            ]
+          },
+          {
+            "handle": "mystic-palazzo-pants",
+            "productType": "Pants",
+            "sizes": true,
+            "images": 4,
+            "fabric": true,
+            "garmentMeasurements": true,
+            "rank": [
+              1,
+              1,
+              1,
+              1,
+              4
+            ]
+          },
+          {
+            "handle": "juliette-palazzo-pants",
+            "productType": "Pants",
+            "sizes": true,
+            "images": 3,
+            "fabric": true,
+            "garmentMeasurements": true,
+            "rank": [
+              1,
+              1,
+              1,
+              1,
+              3
+            ]
+          },
+          {
+            "handle": "meadowlight-palazzo-pants",
+            "productType": "Pants",
+            "sizes": true,
+            "images": 3,
+            "fabric": true,
+            "garmentMeasurements": true,
+            "rank": [
+              1,
+              1,
+              1,
+              1,
+              3
+            ]
+          },
+          {
+            "handle": "byron-barrel-denim-jeans",
+            "productType": "Pants",
+            "sizes": true,
+            "images": 5,
+            "fabric": true,
+            "garmentMeasurements": false,
+            "rank": [
+              1,
+              1,
+              1,
+              0,
+              5
+            ]
+          }
+        ]
+      },
+      "threeD": {
+        "ready": false,
+        "reasons": [
+          "front photo does not meet the contract (worn by a model, busy background, garment partly hidden, long edge 1200 px < 1600); add one on a hanger, flat-lay or ghost mannequin",
+          "back photo does not meet the contract (worn by a model, busy background, long edge 1200 px < 1600); add one on a hanger, flat-lay or ghost mannequin",
+          "base size 12 is our default, not confirmed by the shop"
+        ]
+      }
+    },
+    {
+      "handle": "crimson-wildflower-maxi-skirt",
+      "productType": "Skirts",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "10894387020081",
+        "brand": "Boho Hippy Chic",
+        "name": "Crimson Wildflower Maxi Skirt",
+        "productUrl": "https://bohohippychic.com.au/products/crimson-wildflower-maxi-skirt",
+        "productPhotos": [
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Crimson-Side-Jpeg-e1773898973925.jpg?v=1792558251",
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Crimson-Maxi-e1773898781604.jpg?v=1792558252",
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/Crimson-Back-e1773899002325.jpg?v=1792558252"
+        ],
+        "category": "bottom",
+        "subcategory": "maxi-skirt",
+        "patternBlock": "a-line",
+        "fabric": {
+          "primary": "viscose",
+          "weightGsm": 165,
+          "stretchPct": 1.5,
+          "drape": 0.85,
+          "opacity": 0.8,
+          "sheen": 0.3,
+          "blend": [
+            [
+              "viscose",
+              100
+            ]
+          ]
+        },
+        "sizeChartType": "body",
+        "sizeChart": [
+          {
+            "size": "8",
+            "bust": 85,
+            "waist": 67.5,
+            "hip": 94
+          },
+          {
+            "size": "10",
+            "bust": 90,
+            "waist": 72.5,
+            "hip": 99
+          },
+          {
+            "size": "12",
+            "bust": 95,
+            "waist": 77.5,
+            "hip": 104
+          },
+          {
+            "size": "14",
+            "bust": 100,
+            "waist": 82.5,
+            "hip": 109
+          },
+          {
+            "size": "16",
+            "bust": 105,
+            "waist": 87.5,
+            "hip": 114
+          }
+        ],
+        "stretchZones": [
+          "waistband"
+        ],
+        "sizingNotes": "Available in Australian sizes 8 to 16 True to size with comfortable stretch at the waist."
+      },
+      "priceAud": 69,
+      "completeness": {
+        "score": 0.559,
+        "missing": [
+          {
+            "field": "flatLayPhoto",
+            "reason": "flatLayPhoto (garment laid flat on white, https URL) is the input of the on-device render; without it the item cannot be shown on the user.",
+            "weight": 3,
+            "severity": "heavy"
+          },
+          {
+            "field": "ease",
+            "reason": "ease (garment minus body per fit point, cm) makes the size recommendation precise; category defaults are used when absent.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "lengthCm",
+            "reason": "lengthCm (e.g. shoulder_to_hem) places the hem and sleeves on the user; without it the render uses category averages.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "criticalFitPoints",
+            "reason": "criticalFitPoints tells the fit engine where this garment cares most (double weight); all category points weigh equally when absent.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "sizeChart.thigh",
+            "reason": "thigh is a default fit point for bottoms; rows without it skip the thigh check.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "sizeChart.inseam",
+            "reason": "inseam lets the fit engine check leg length; rows without it skip it.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "primaryColorHex",
+            "reason": "primaryColorHex feeds the colour affinity of the taste engine and the render tint.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "trueToSizeScore",
+            "reason": "trueToSizeScore (from past return data) narrows or widens the size tie band; 0.8 is assumed.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "colorways",
+            "reason": "colorways let the user try every colour the shop sells; only the primary colour is shown when absent.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "styleTags",
+            "reason": "styleTags (0..1 per taste axis) override the inferred style of the item in the swipe deck.",
+            "weight": 1,
+            "severity": "light"
+          }
+        ],
+        "status": "incomplete",
+        "checked": [
+          "category",
+          "sizeChartType",
+          "sizeChart",
+          "fabric.primary",
+          "flatLayPhoto",
+          "fabric.stretchPct",
+          "fabric.drape",
+          "ease",
+          "lengthCm",
+          "criticalFitPoints",
+          "sizeChart.thigh",
+          "sizeChart.inseam",
+          "primaryColorHex",
+          "productPhotos",
+          "trueToSizeScore",
+          "fabric.opacity",
+          "fabric.sheen",
+          "colorways",
+          "styleTags"
+        ]
+      },
+      "fullSchemaIssues": [
+        "priceEur: Invalid input: expected number, received undefined",
+        "primaryColorHex: Invalid input: expected string, received undefined"
+      ],
+      "evidence": {
+        "category": "inferCategory(\"Skirts\") → bottom",
+        "patternBlock": "title/tags keyword → a-line",
+        "fabric": "\"Crafted from lightweight, breathable rayon , this flowing maxi skirt features a rich crimson base adorned with soft floral detailing and a contrasting border hem.\" → viscose; weight/stretch/drape/opacity/sheen from the fabric library v1.0.0 (blend)",
+        "sizeChart": "Size option [\"8\",\"10\",\"12\",\"14\",\"16\"] → AU_WOMENS_BODY_CHART rows",
+        "baseSize": "AU 12, the default base size for size-ranged items (not stated by the shop)",
+        "stretchZones": "\"elasticated waistband\" in the text"
+      },
+      "warnings": [
+        "price is 69 AUD; priceEur is left out (no exchange rate is assumed)"
+      ],
+      "baseSize": "12",
+      "selection": {
+        "why": "AU 8–16, 3 images (side with slit, front, back), \"lightweight, breathable rayon\", elastic drawstring waist visible in every photo. No skirt prints measurements.",
+        "runnersUp": [
+          {
+            "handle": "santorini-bloom-maxi-skirt",
+            "whyNot": "Ranks equal on text (states \"100% rayon\"), but a crochet top covers the waistband in all 4 photos and 2 of them crop the hem: the waist is never visible."
+          },
+          {
+            "handle": "pink-paradise-maxi-skirt",
+            "whyNot": "Ties with Crimson on the text, but its third image is a different outfit, so front and back share one styling only, and a loose cami hangs over the waistband."
+          }
+        ],
+        "topByTextCriteria": [
+          {
+            "handle": "santorini-bloom-maxi-skirt",
+            "productType": "Skirts",
+            "sizes": true,
+            "images": 4,
+            "fabric": true,
+            "garmentMeasurements": false,
+            "rank": [
+              1,
+              1,
+              1,
+              0,
+              4
+            ]
+          },
+          {
+            "handle": "crimson-wildflower-maxi-skirt",
+            "productType": "Skirts",
+            "sizes": true,
+            "images": 3,
+            "fabric": true,
+            "garmentMeasurements": false,
+            "rank": [
+              1,
+              1,
+              1,
+              0,
+              3
+            ]
+          },
+          {
+            "handle": "pink-paradise-maxi-skirt",
+            "productType": "Skirts",
+            "sizes": true,
+            "images": 3,
+            "fabric": true,
+            "garmentMeasurements": false,
+            "rank": [
+              1,
+              1,
+              1,
+              0,
+              3
+            ]
+          },
+          {
+            "handle": "ivory-moonlight-lace-maxi-skirt",
+            "productType": "Skirts",
+            "sizes": true,
+            "images": 3,
+            "fabric": false,
+            "garmentMeasurements": false,
+            "rank": [
+              1,
+              1,
+              0,
+              0,
+              3
+            ]
+          },
+          {
+            "handle": "ivory-moonlight-lace-maxi-skirt-copy",
+            "productType": "Skirts",
+            "sizes": true,
+            "images": 3,
+            "fabric": false,
+            "garmentMeasurements": false,
+            "rank": [
+              1,
+              1,
+              0,
+              0,
+              3
+            ]
+          }
+        ]
+      },
+      "threeD": {
+        "ready": false,
+        "reasons": [
+          "front photo does not meet the contract (worn by a model, busy background, long edge 1200 px < 1600); add one on a hanger, flat-lay or ghost mannequin",
+          "back photo does not meet the contract (worn by a model, busy background, long edge 1200 px < 1600); add one on a hanger, flat-lay or ghost mannequin",
+          "base size 12 is our default, not confirmed by the shop"
+        ]
+      }
+    },
+    {
+      "handle": "woodstock-wanderer-knit-cardi",
+      "productType": "Jackets & Knits",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "10894407860529",
+        "brand": "Boho Hippy Chic",
+        "name": "Woodstock Wanderer Knit Cardi",
+        "productUrl": "https://bohohippychic.com.au/products/woodstock-wanderer-knit-cardi",
+        "productPhotos": [
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/CA0473-1.jpg?v=1792553846",
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/CA0473-1-1.jpg?v=1792553845",
+          "https://cdn.shopify.com/s/files/1/0982/2620/9073/files/CA0473.jpg?v=1792553845"
+        ],
+        "category": "outerwear",
+        "subcategory": "cardigan",
+        "patternBlock": "oversized",
+        "fabric": {
+          "primary": "acrylic",
+          "weightGsm": 284,
+          "stretchPct": 2.5,
+          "drape": 0.5,
+          "opacity": 0.957,
+          "sheen": 0.083,
+          "blend": [
+            [
+              "acrylic",
+              65
+            ],
+            [
+              "wool",
+              35
+            ]
+          ]
+        },
+        "sizeChartType": "body",
+        "sizeChart": [
+          {
+            "size": "S-M",
+            "bust": 90,
+            "waist": 72.5,
+            "hip": 99
+          },
+          {
+            "size": "M-L",
+            "bust": 102.5,
+            "waist": 85,
+            "hip": 111.5
+          }
+        ],
+        "sizingNotes": "Sizes: S-M Fits Australian Size 8 to 12M-L Fits Australian Size 14-16"
+      },
+      "priceAud": 49,
+      "completeness": {
+        "score": 0.576,
+        "missing": [
+          {
+            "field": "flatLayPhoto",
+            "reason": "flatLayPhoto (garment laid flat on white, https URL) is the input of the on-device render; without it the item cannot be shown on the user.",
+            "weight": 3,
+            "severity": "heavy"
+          },
+          {
+            "field": "ease",
+            "reason": "ease (garment minus body per fit point, cm) makes the size recommendation precise; category defaults are used when absent.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "lengthCm",
+            "reason": "lengthCm (e.g. shoulder_to_hem) places the hem and sleeves on the user; without it the render uses category averages.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "criticalFitPoints",
+            "reason": "criticalFitPoints tells the fit engine where this garment cares most (double weight); all category points weigh equally when absent.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "sizeChart.shoulder",
+            "reason": "shoulder is a default fit point for this category; rows without it skip the shoulder check.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "primaryColorHex",
+            "reason": "primaryColorHex feeds the colour affinity of the taste engine and the render tint.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "trueToSizeScore",
+            "reason": "trueToSizeScore (from past return data) narrows or widens the size tie band; 0.8 is assumed.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "colorways",
+            "reason": "colorways let the user try every colour the shop sells; only the primary colour is shown when absent.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "styleTags",
+            "reason": "styleTags (0..1 per taste axis) override the inferred style of the item in the swipe deck.",
+            "weight": 1,
+            "severity": "light"
+          }
+        ],
+        "status": "incomplete",
+        "checked": [
+          "category",
+          "sizeChartType",
+          "sizeChart",
+          "fabric.primary",
+          "flatLayPhoto",
+          "fabric.stretchPct",
+          "fabric.drape",
+          "ease",
+          "lengthCm",
+          "criticalFitPoints",
+          "sizeChart.shoulder",
+          "primaryColorHex",
+          "productPhotos",
+          "trueToSizeScore",
+          "fabric.opacity",
+          "fabric.sheen",
+          "colorways",
+          "styleTags"
+        ]
+      },
+      "fullSchemaIssues": [
+        "priceEur: Invalid input: expected number, received undefined",
+        "primaryColorHex: Invalid input: expected string, received undefined"
+      ],
+      "evidence": {
+        "category": "inferCategory(\"Jackets & Knits\") → outerwear",
+        "patternBlock": "title/tags keyword → oversized",
+        "fabric": "\"35%WOOL 65%ACRYLIC\" → acrylic [[\"wool\",35],[\"acrylic\",65]]; weight/stretch/drape/opacity/sheen from the fabric library v1.0.0 (blend)",
+        "sizeChart": "Size option S-M = AU 8–12, M-L = AU 14–16 (from the description) → mean of the AU_WOMENS_BODY_CHART rows each range covers",
+        "baseSize": "S-M, the range that holds AU 12 (not stated by the shop)"
+      },
+      "warnings": [
+        "the product is a knit but the fabric library has no generic sweater-knit construction; stretch and drape come from the fibres alone and understate a knit",
+        "the AU body chart has no shoulder width; the shoulder fit point is skipped",
+        "price is 49 AUD; priceEur is left out (no exchange rate is assumed)"
+      ],
+      "baseSize": "S-M",
+      "selection": {
+        "why": "No jacket or knit is sold in AU 8–16. Several knits tie on the text criteria (S-M/M-L mapped to AU 8–12 and 14–16 in the text, 3 images, wool/acrylic). This cardigan has front, 3/4 back and a straight back, a stated composition (35% wool 65% acrylic), and an open button front, the closest to a jacket in the collection.",
+        "runnersUp": [
+          {
+            "handle": "ocean-mist-knit",
+            "whyNot": "Equal on text and photos (front, side, back; \"Fabric 65% Acrylic 35% Wool\"), but a pullover jumper, which the Tops pick already covers in shape."
+          },
+          {
+            "handle": "cocoa-coast-longline-knit-coat",
+            "whyNot": "Ties on text, but no back view (front, side, front)."
+          },
+          {
+            "handle": "sunset-stripe-knit-jacket",
+            "whyNot": "Front, side, back, but the fabric is only \"Wool Blend\" (no composition)."
+          },
+          {
+            "handle": "sandbar-cardigan",
+            "whyNot": "S/M = AU 8–14 and M/L = AU 14–18 overlap at 14."
+          },
+          {
+            "handle": "nomad-cotton-jacket-chocolate",
+            "whyNot": "Free size with only a length (68 cm) in the text, no chest: no usable chart."
+          },
+          {
+            "handle": "saltwater-coast-knit",
+            "whyNot": "Free size with chest 124 cm and length 60 cm (a garment chart is possible), but only 2 images."
+          }
+        ],
+        "topByTextCriteria": [
+          {
+            "handle": "coastal-cloud-knit-beige",
+            "productType": "Jackets & Knits",
+            "sizes": true,
+            "images": 3,
+            "fabric": true,
+            "garmentMeasurements": false,
+            "rank": [
+              1,
+              1,
+              1,
+              0,
+              3
+            ]
+          },
+          {
+            "handle": "cocoa-coast-longline-knit-coat",
+            "productType": "Jackets & Knits",
+            "sizes": true,
+            "images": 3,
+            "fabric": true,
+            "garmentMeasurements": false,
+            "rank": [
+              1,
+              1,
+              1,
+              0,
+              3
+            ]
+          },
+          {
+            "handle": "ocean-mist-knit",
+            "productType": "Jackets & Knits",
+            "sizes": true,
+            "images": 3,
+            "fabric": true,
+            "garmentMeasurements": false,
+            "rank": [
+              1,
+              1,
+              1,
+              0,
+              3
+            ]
+          },
+          {
+            "handle": "sunset-nomad-knit-cardigan",
+            "productType": "Jackets & Knits",
+            "sizes": true,
+            "images": 3,
+            "fabric": true,
+            "garmentMeasurements": false,
+            "rank": [
+              1,
+              1,
+              1,
+              0,
+              3
+            ]
+          },
+          {
+            "handle": "sunset-stripe-knit-jacket",
+            "productType": "Jackets & Knits",
+            "sizes": true,
+            "images": 3,
+            "fabric": true,
+            "garmentMeasurements": false,
+            "rank": [
+              1,
+              1,
+              1,
+              0,
+              3
+            ]
+          }
+        ]
+      },
+      "threeD": {
+        "ready": false,
+        "reasons": [
+          "front photo does not meet the contract (worn by a model, busy background, long edge 1200 px < 1600); add one on a hanger, flat-lay or ghost mannequin",
+          "back photo does not meet the contract (worn by a model, busy background, long edge 1200 px < 1600); add one on a hanger, flat-lay or ghost mannequin",
+          "base size S-M is our default, not confirmed by the shop"
+        ]
+      }
+    }
+  ]
+}

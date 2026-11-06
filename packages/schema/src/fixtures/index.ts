@@ -13,6 +13,7 @@ import { TOPS } from './tops';
 
 export { DRESSES, TOPS, BOTTOMS, OUTERWEAR, SHOES, ACCESSORIES };
 export { grade, garment, productPhoto, flatLay } from './helpers';
+export * from './charts';
 export type { GarmentSeed } from './helpers';
 
 export const MOCK_GARMENTS: readonly GarmentPayload[] = Object.freeze([

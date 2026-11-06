@@ -190,7 +190,22 @@ class WC_Product {
 	public function get_regular_price(): string { return (string) ( $this->d['regular_price'] ?? '' ); }
 	public function get_image_id(): int { return (int) ( $this->d['image_id'] ?? 0 ); }
 	public function get_gallery_image_ids(): array { return $this->d['gallery'] ?? array(); }
-	public function get_attributes(): array { return array(); }
+	/** `attributes` in the stub data: [ slug => [ 'name' => …, 'options' => [ … ] ] ] (custom, non-taxonomy attributes). */
+	public function get_attributes(): array {
+		$out = array();
+		foreach ( (array) ( $this->d['attributes'] ?? array() ) as $slug => $a ) {
+			$out[ $slug ] = new WC_Product_Attribute( (string) $a['name'], (array) $a['options'] );
+		}
+		return $out;
+	}
+}
+class WC_Product_Attribute {
+	/** @param array<int,string> $options */
+	public function __construct( private string $name, private array $options ) {}
+	public function get_name(): string { return $this->name; }
+	public function is_taxonomy(): bool { return false; }
+	public function get_options(): array { return $this->options; }
+	public function get_terms(): array { return array(); }
 }
 function wc_get_product( $id ) {
 	$id = (int) $id;

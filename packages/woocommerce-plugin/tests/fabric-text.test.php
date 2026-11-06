@@ -80,3 +80,43 @@ test(
 		}
 	}
 );
+
+test(
+	'meta box: the fabric prefill comes from the product\'s own material attribute (Dutch and English)',
+	static function (): void {
+		Curtain_Test_State::$posts[ 4182 ] = array(
+			'product' => new WC_Product(
+				array(
+					'id'         => 4182,
+					'name'       => 'Wikkeljurk Lotte',
+					'attributes' => array(
+						'maat'      => array( 'name' => 'Maat', 'options' => array( 'S', 'M', 'L' ) ),
+						'materiaal' => array( 'name' => 'Materiaal', 'options' => array( '95% viscose, 5% elastaan' ) ),
+					),
+				)
+			),
+		);
+		$prefill = \Curtain\Product_Meta::fabric_prefill( 4182 );
+		assert_json_equal( array( 'primary' => 'viscose', 'blend' => array( array( 'viscose', 95 ), array( 'elastane', 5 ) ) ), $prefill );
+		assert_same( 'viscose 95 %, elastane 5 %', \Curtain\Product_Meta::fabric_summary( $prefill ) );
+
+		Curtain_Test_State::$posts[ 4183 ] = array(
+			'product' => new WC_Product(
+				array(
+					'id'         => 4183,
+					'name'       => 'Stretch Denim Jacket',
+					'attributes' => array( 'material' => array( 'name' => 'Material', 'options' => array( 'Stretch denim (98% cotton, 2% elastane)' ) ) ),
+				)
+			),
+		);
+		$prefill = \Curtain\Product_Meta::fabric_prefill( 4183 );
+		assert_json_equal( array( 'primary' => 'denim', 'blend' => array( array( 'cotton', 98 ), array( 'elastane', 2 ) ) ), $prefill );
+		assert_same( 'denim: cotton 98 %, elastane 2 %', \Curtain\Product_Meta::fabric_summary( $prefill ) );
+		assert_same( 'cotton', \Curtain\Product_Meta::fabric_summary( array( 'primary' => 'cotton' ) ) );
+
+		// No material attribute, or no product: nothing to offer.
+		Curtain_Test_State::$posts[ 4184 ] = array( 'product' => new WC_Product( array( 'id' => 4184, 'name' => 'Cadeaubon' ) ) );
+		assert_same( null, \Curtain\Product_Meta::fabric_prefill( 4184 ) );
+		assert_same( null, \Curtain\Product_Meta::fabric_prefill( 999999 ) );
+	}
+);

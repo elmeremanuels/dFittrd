@@ -77,11 +77,11 @@ STAGE2_PACKAGES = [
 ]
 
 PROMPT = (
-    "A {colour} {name} ({category}) dressed on a plain mid-grey studio mannequin, rotating slowly on a turntable, "
+    "The garment \"{name}\" ({category}) dressed on a plain mid-grey studio mannequin, rotating slowly on a turntable, "
     "neutral soft studio light, plain light-grey seamless background, locked camera, sharp fabric detail."
 )
 MOTION_PROMPT = (
-    "A {colour} {name} ({category}) dressed on a plain mid-grey studio mannequin that raises and lowers its arms, "
+    "The garment \"{name}\" ({category}) dressed on a plain mid-grey studio mannequin that raises and lowers its arms, "
     "turns around and takes a step; the fabric moves naturally; neutral studio light, plain light-grey background, locked camera."
 )
 NEGATIVE = "blurry, distorted, deformed, extra limbs, text, captions, watermark, people, face, hands of a person, busy background, flicker, static frame"
@@ -121,7 +121,7 @@ def download_weights() -> dict:
 
 
 def _control_video(job: str, m: dict, clip: dict, encoding: str, out_path: str) -> None:
-    """Writes the clip's control frames as an mp4 at the clip's fps (lossless enough: crf 0, gray -> rgb)."""
+    """Writes the clip's control frames as an mp4 at the clip's fps (x264 crf 0; grey frames, so chroma subsampling loses nothing)."""
     import imageio.v2 as imageio
     import numpy as np
 
@@ -136,7 +136,7 @@ def _control_video(job: str, m: dict, clip: dict, encoding: str, out_path: str) 
             v = 1 + 254 * (1 / d - 1 / far) / (1 / near - 1 / far)  # same formula as lib.control_value
             img = np.where(mm > 0, np.clip(np.floor(v + 0.5), 1, 255), 0).astype(np.uint8)
         frames.append(np.repeat(img[..., None], 3, axis=2))
-    imageio.mimsave(out_path, frames, fps=clip["fps"], codec="libx264", quality=None, ffmpeg_params=["-crf", "0", "-pix_fmt", "yuv444p"])
+    imageio.mimsave(out_path, frames, fps=clip["fps"], codec="libx264", quality=None, ffmpeg_params=["-crf", "0"])
 
 
 @app.function(
@@ -212,7 +212,7 @@ def generate(job_id: str, steps: int = 40, clip_ids: list[str] | None = None, co
     width, height = m["camera"]["width"], m["camera"]["height"]
     sample_size = [height, width]
     photo = lambda role: os.path.join(job, lib.photo_path(m, role))  # noqa: E731
-    words = {"colour": m["fabric"].get("baseColorHex", ""), "name": m["product_name"], "category": m["category"]}
+    words = {"name": m["product_name"], "category": m["category"]}
     wanted = clip_ids or [c["id"] for c in m["clips"]]
     clips_out = []
     for ci, clip in enumerate(c for c in m["clips"] if c["id"] in wanted):

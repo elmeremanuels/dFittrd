@@ -39,7 +39,7 @@ import { billingAnomalyReport, fitSessionsBetween, usageDays } from '../services
 
 const httpUrl = z.url({ protocol: /^https?$/ });
 
-/** Local DTOs for routes @curtain/schema does not define yet (see README "Open issues"). */
+/** Local DTOs for routes @curtain/schema does not define yet (ShopSelf*, Woo*; see README "Routes"). */
 export const ShopSelfRequestSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   siteUrl: httpUrl.optional(),

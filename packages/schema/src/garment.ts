@@ -134,7 +134,7 @@ function openVocabulary<T extends readonly string[]>(known: T, description: stri
 
 export const FabricPrimarySchema: z.ZodType<FabricPrimary, string> = openVocabulary(
   FABRIC_PRIMARIES,
-  'Primary fibre. Known values drive drape/texture defaults; unknown values are accepted.',
+  'Primary fibre or construction: a fabric library id (cotton, lyocell as "tencel", satin, …) or another v1 value. Known values drive drape/texture defaults; unknown values are accepted.',
 );
 export const PatternBlockSchema: z.ZodType<PatternBlock, string> = openVocabulary(
   PATTERN_BLOCKS,

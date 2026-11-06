@@ -10,10 +10,10 @@ src/
   app.ts            build({ env, db, queue, fetch?, tryon? }) → Fastify instance (tests use this)
   server.ts         process entry: postgres-js + pg-boss; JOBS=1 → jobs-only replica, JOBS=0 → no workers
   migrate.ts        applies ./drizzle migrations (the container runs it before the server)
-  db/schema.ts      every table from docs/ARCHITECTURE.md (Drizzle)   db/client.ts  postgres-js | PGlite
+  db/schema.ts      every table from docs/ARCHITECTURE.md (Drizzle), billing_anomalies included   db/client.ts  postgres-js | PGlite
   auth/             device JWT (jose), merchant PK-HMAC / Bearer sk_ / Shopify session token, try tokens
   routes/           app.ts try.ts sdk.ts merchant.ts renders.ts ops.ts
-  shopify/          Admin GraphQL client (2025-10), token exchange, webhooks, billing mutations
+  shopify/          Admin GraphQL client (API version 2026-10), token exchange, webhooks, billing mutations
   billing/          plans, Stripe client (fetch, manual signature check), webhook route
   jobs/             queue abstraction (pg-boss | memory), render-hero, sync-shopify-product, backfill,
                     prune-renders + purge-shop (hourly), usage-rollup (nightly)
@@ -26,7 +26,7 @@ src/
 ```bash
 # dev (needs a Postgres; defaults to postgres://curtain:curtain@localhost:5432/curtain)
 pnpm --filter @curtain/api dev                 # tsx watch, pino-pretty, generated dev secrets (warned)
-pnpm --filter @curtain/api db:generate         # drizzle-kit → ./drizzle after changing src/db/schema.ts
+pnpm --filter @curtain/api db:generate         # drizzle-kit → ./drizzle after changing src/db/schema.ts ("No schema changes" when in sync)
 
 # local demo (no Docker, no keys): PGlite in <repo>/.demo-db, seeded demo shops, mock provider → see "Local demo"
 pnpm --filter @curtain/api demo
@@ -49,16 +49,32 @@ typecheck · test · build · bundle-secret-scan and builds/pushes the image to 
 
 | Area | Routes | Auth |
 |---|---|---|
-| App | `POST /v1/devices`, `POST /v1/devices/rotate`, `PUT /v1/me/signature`, `GET /v1/me/ledger`, `GET /v1/me/export`, `DELETE /v1/me`, `GET /v1/shops/:shopId/products`, `GET /v1/products/:id` (uuid, or external id + `?shopId`), `POST /v1/swipes`, `PUT/GET /v1/wardrobe[/:productId]`, `GET /v1/fit/cohort/:productId[?shopId]` | Bearer device JWT (30 d, `token_version` rotation) |
+| App | `POST /v1/devices`, `POST /v1/devices/rotate`, `PUT /v1/me/signature`, `DELETE /v1/me/signature` ("Delete my scan"), `GET /v1/me/ledger`, `GET /v1/me/export`, `DELETE /v1/me`, `GET /v1/shops/:shopId/products`, `GET /v1/products/:id` (uuid, or external id + `?shopId`), `POST /v1/swipes`, `PUT/GET /v1/wardrobe[/:productId]`, `GET /v1/fit/cohort/:productId[?shopId]` | Bearer device JWT (30 d, `token_version` rotation) |
 | Try-on | `GET /v1/try/:token` → `{ shop, garment, trySession.intentToken, pairing, embed.allowedOrigins }`, `POST /v1/try/:token/fit-shown` → `{ billed }` | device JWT |
-| SDK | `POST /v1/sdk/sessions` (CORS `*`, per-shop rate limit, `embedUrl` always, `qrSvg` except for `surface: 'embed'`, 402 + the same body when paused), `GET /sdk/v1.js` | public |
+| SDK | `POST /v1/sdk/sessions` (CORS `*`, per-shop rate limit, `embedUrl` always, `qrSvg` except for `surface: 'embed'`, 402 + the same body when paused), `GET /sdk/v1.js`, `GET /v1/sdk/media?shop=<id>&u=<url>` (the shop's logo or a product photo through `safeFetch`: allowlisted per shop, raster only, `MEDIA_PROXY_*` size cap, cache and rate limit) | public |
 | Renders | `POST /v1/renders/hero` → 202, `GET /v1/renders/:jobId`, `GET /v1/renders/:jobId/image\|video?exp&sig` | device JWT / signed URL |
-| Merchant | `PUT /v1/merchant/products/:externalId`, `POST …/products/validate`, `DELETE …/products/:externalId`, `GET …/products`, `GET …/usage`, `GET …/ledger`, `GET …/analytics/swipes`, `GET …/analytics/abandoned`, `POST …/keys/rotate`, `PUT /v1/merchant/shops/self`, `POST /v1/merchant/woo/connect`, `POST /v1/merchant/woo/complete` | PK-HMAC, Bearer `sk_…`, or Shopify session token |
+| Merchant | `PUT /v1/merchant/products/:externalId`, `POST …/products/validate`, `DELETE …/products/:externalId`, `GET …/products`, `GET …/usage`, `GET …/ledger`, `GET …/usage/anomalies`, `GET …/analytics/swipes`, `GET …/analytics/abandoned`, `GET …/analytics/fit-sizes`, `POST …/keys/rotate`, `PUT /v1/merchant/shops/self`, `POST /v1/merchant/woo/connect`, `POST /v1/merchant/woo/complete` | PK-HMAC, Bearer `sk_…`, or Shopify session token |
 | Shopify | `GET /shopify/admin` (embedded admin page from `@curtain/shopify-app`, `frame-ancestors` CSP), `GET /shopify/auth/callback` (302 to the embedded app home), `POST /shopify/token-exchange` (also writes the theme block's app-data metafields: public key, API/app URL), `POST /shopify/webhooks`, `POST /shopify/billing/subscribe` | none (page/redirect) / session token / webhook HMAC |
 | Billing | `POST /v1/billing/stripe/webhook` | Stripe signature |
 | Ops | `GET /healthz`, `GET /readyz` (db + jobs), `GET /v1/openapi.json` | public |
 
 Errors are always `{ error: { code, message, details? } }` (`ApiErrorSchema`); zod failures are `400 validation`.
+
+Every merchant route lives in `routes/merchant.ts` and answers with the `@curtain/schema` DTOs
+(`BillingAnomaliesResponseSchema`, `AnalyticsFitSizesResponseSchema`,
+`AnalyticsAbandonedResponseSchema`, …); `ShopSelf*` and `Woo*` request/response schemas are still
+local to that file. The merchant views, all with `?from&to` (UTC dates):
+
+* `GET /v1/merchant/usage/anomalies`: today's billed sessions, the plan's daily cap
+  (`dailyCap`), the trailing average and spike threshold, and the recorded `billing_anomalies`
+  rows (`cap_reached` with the refused sessions, `spike`), newest first. Shop-level counters only.
+* `GET /v1/merchant/analytics/fit-sizes`: sizes recommended in standalone sessions, a size reported
+  only when at least `K_ANON` distinct shoppers got it; totals cover the reported sizes only.
+* `GET /v1/merchant/analytics/abandoned`: try-link opens that never got a fit, per product, with
+  the same floor on distinct shoppers.
+
+Shopify Admin API version: `2026-10`, one constant (`DEFAULT_API_VERSION` in
+`@curtain/shopify-app`), overridable with `SHOPIFY_API_VERSION` (mirrored in `infra/.env.example`).
 
 ### Merchant HMAC (WooCommerce plugin)
 
@@ -87,6 +103,15 @@ in the same write. A `POST /v1/swipes` batch is all-or-nothing: every `shopId` i
 (422 `unknown_shop` before any write) and inserts, usage events and the ledger entry share one
 transaction. The nightly `usage-rollup` pushes sessions above the plan's quota to Shopify
 `appUsageRecordCreate` or a Stripe meter event (`curtain_fit_sessions`), idempotent per shop-day.
+
+Billing integrity (`services/usage.ts` `billFitSession`, shared by fit-shown and the swipe path):
+only a device paired with the shop bills; the intent token bills once; a per-plan daily cap
+(`max(BILLED_DAILY_CAP_MIN, ceil(includedSessions / 30 × BILLED_DAILY_CAP_FACTOR))`, never above
+`EMBED_BILLED_SESSIONS_PER_DAY`) refuses further billing that UTC day and records a `cap_reached`
+anomaly; a day above `BILLING_ANOMALY_FACTOR` × the trailing `BILLING_ANOMALY_TRAILING_DAYS`
+average (and at least `BILLING_ANOMALY_MIN_SESSIONS`) records a `spike`. Both land in
+`billing_anomalies` (migration `0003_billing_anomalies`, table defined in `db/schema.ts`) and in
+`GET /v1/merchant/usage/anomalies`.
 
 ### Standalone embed (D11, `docs/STANDALONE.md` §2)
 
@@ -169,7 +194,10 @@ hero render rejections + full job + expiry, standalone embed sessions / allowed 
 billing (replay, paused, measurements rejected, grace window) in `src/embed.test.ts`, the demo seed, Shopify webhook HMAC + GDPR + token exchange + sync,
 Stripe Connect round-trip, k-anonymity floor, usage rollup, env/crypto/token units, and the
 security-review regressions (`src/security-review.test.ts`: HMAC replay, key lookup, billing
-integrity, per-shop rate limit, GDPR payload hygiene, webhook replay, Woo takeover, SSRF guard).
+integrity, per-shop rate limit, GDPR payload hygiene, webhook replay, Woo takeover, SSRF guard),
+billing caps and anomalies (`src/billing-integrity.test.ts`), the merchant route layout, the shared
+DTOs and the drizzle snapshot of `billing_anomalies` (`src/merchant-routes.test.ts`), and the web
+CSP in `infra/Caddyfile` (`src/caddy-csp.test.ts`).
 The DNS lookup used by the SSRF guard is stubbed (`testLookup`), so the suite never touches the network.
 
 ## Security review (Nov 2026)
@@ -192,18 +220,15 @@ Findings from the skeptical review of `apps/api`, `infra` and `.github`; every f
 | low | `apps/api/.dockerignore` is never read (build context is the repo root): host `node_modules`/`dist`/`data` shipped and COPYed over the image | `apps/api/Dockerfile.dockerignore` (BuildKit reads it next to the Dockerfile) |
 | low | compose: `caddy` waited for a *healthy* api, taking the static PWA down with any api failure; `API_IMAGE` default did not match the CI image name | `service_started`; `API_IMAGE` required, documented as `ghcr.io/<owner>/curtain-api` |
 
-Still open (needs another package or a product decision): WooCommerce manual-key Connect has no domain
-ownership proof (anyone can claim an unclaimed domain while Stripe is unconfigured) — add a
-challenge the plugin answers on `/wp-json/curtain/v1/…` or require the Stripe path for live keys;
-deck billing is still bot-inflatable by creating devices and swiping a shop's real catalogue
-(bound by `POST /v1/devices` 30/min/IP) — consider pairing-only deck billing; `abandoned`
-analytics floor counts sessions (a merchant can pad with their own SDK sessions), not users;
-DNS rebinding between the guard's lookup and undici's connect is not pinned.
+Closed since (engine branch, Nov 2026; see `docs/STATUS.md`): the WooCommerce domain proof on
+every Connect path, fetched from the host root (SEC-1, SEC-2); deck billing only for paired
+devices under the per-plan daily cap; the `abandoned` floor counts distinct devices; DNS pinned
+in `safeFetch`. Device minting stays per IP (`DEVICE_CREATE_RATE_LIMIT_PER_HOUR`, AVAIL-1).
 
 ## Manual verification still needed
 
 * Live Shopify dev store: token exchange with a real App Bridge session token, metafield definition
   creation (`$app:curtain`), webhook deliveries as declared in `shopify.app.toml`, `appSubscriptionCreate`
-  confirmation flow, API version `2025-10`.
+  confirmation flow, API version `2026-10` (the queries are not re-validated in GraphiQL yet).
 * Live Stripe: Checkout + webhook endpoint, a `curtain_fit_sessions` meter with the overage price.
 * Hero render against FASHN/Vertex/xAI with real keys (only `mock` was exercised here).

@@ -15,7 +15,7 @@ import time
 
 import modal
 
-GPU = os.environ.get("CURTAIN_MODAL_GPU", "L4")
+GPU = os.environ.get("CURTAIN_MODAL_GPU") or "L4"
 REGION = os.environ.get("CURTAIN_MODAL_REGION") or None
 
 app = modal.App("curtain-phase0-smoke")

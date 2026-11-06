@@ -30,7 +30,10 @@ app.{$DOMAIN} {
 		Cross-Origin-Embedder-Policy "require-corp"
 		Cross-Origin-Resource-Policy "same-origin"
 		# Zero third-party requests: fonts, models and the SDK come from our origins; connect only to the api.
-		Content-Security-Policy "default-src 'self'; connect-src 'self' https://api.{$DOMAIN}; img-src 'self' data: blob: https:; media-src 'self' blob: https://api.{$DOMAIN}; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		# img-src: merchant logos and product photos load through the api media proxy (GET /v1/sdk/media,
+		# carry-over #11) and hero renders from signed api URLs; data:/blob: are the avatar, the face tile
+		# and the rasterised avatar. No other https host is needed.
+		Content-Security-Policy "default-src 'self'; connect-src 'self' https://api.{$DOMAIN}; img-src 'self' data: blob: https://api.{$DOMAIN}; media-src 'self' blob: https://api.{$DOMAIN}; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 	}
 
 	header @embed {
@@ -40,11 +43,12 @@ app.{$DOMAIN} {
 		-Cross-Origin-Opener-Policy
 		# A shop that runs COEP itself can still frame us; the document is meant to be embedded cross-origin.
 		Cross-Origin-Resource-Policy "cross-origin"
-		# credentialless instead of require-corp: the merchant's product photo comes from the shop CDN,
-		# which rarely sends CORP. Inside a non-isolated merchant page the iframe is never cross-origin
+		# credentialless instead of require-corp. The product photo now comes through the api media
+		# proxy (which sends CORP cross-origin), so require-corp would also work; credentialless is kept
+		# as the safer default. Inside a non-isolated merchant page the iframe is never cross-origin
 		# isolated anyway, so MediaPipe falls back to its non-threaded wasm here.
 		Cross-Origin-Embedder-Policy "credentialless"
-		Content-Security-Policy "default-src 'self'; connect-src 'self' https://api.{$DOMAIN}; img-src 'self' data: blob: https:; media-src 'self' blob: https://api.{$DOMAIN}; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self' blob:; frame-ancestors https:; base-uri 'self'; form-action 'self'"
+		Content-Security-Policy "default-src 'self'; connect-src 'self' https://api.{$DOMAIN}; img-src 'self' data: blob: https://api.{$DOMAIN}; media-src 'self' blob: https://api.{$DOMAIN}; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self' blob:; frame-ancestors https:; base-uri 'self'; form-action 'self'"
 		# The embed shows a product page and a size; keep it out of shared caches and search engines.
 		Cache-Control "no-store"
 		X-Robots-Tag "noindex"

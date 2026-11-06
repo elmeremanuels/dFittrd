@@ -8,6 +8,9 @@
  *   additionalProperties, propertyNames, items (schema | false), prefixItems, minItems,
  *   maxItems, uniqueItems, allOf, anyOf, oneOf, not, $ref (local JSON pointers only).
  *
+ * Plus one rule JSON Schema cannot express: size labels in `sizeChart` must be unique (trimmed,
+ * case-insensitive), as the zod `SizeChartSchema` refinement requires.
+ *
  * Data is the PHP-array form of JSON (`json_decode(..., true)`): a list is an array, an
  * associative array is an object, an empty array satisfies either. No WordPress dependency.
  *
@@ -55,7 +58,71 @@ final class Schema_Validator {
 	public function validate( $data ): array {
 		$issues = array();
 		$this->check( $this->root, $data, '', $issues );
+		$this->check_size_labels( $data, $issues );
 		return $issues;
+	}
+
+	/**
+	 * Comparison key of a size label, as `sizeLabelKey` in @curtain/schema: trimmed (Unicode
+	 * whitespace too, like JavaScript's trim) and upper-cased, so `M`, `m` and ` M ` are one size.
+	 */
+	public static function size_label_key( string $label ): string {
+		$trimmed = (string) preg_replace( '/^[\s\p{Z}\x{FEFF}]+|[\s\p{Z}\x{FEFF}]+$/u', '', $label );
+		return function_exists( 'mb_strtoupper' ) ? mb_strtoupper( $trimmed, 'UTF-8' ) : strtoupper( $trimmed );
+	}
+
+	/**
+	 * Labels that occur more than once in a chart (as first written, in chart order, each once):
+	 * the PHP twin of `duplicateSizeLabels` in @curtain/schema.
+	 *
+	 * @param array<int, mixed> $rows
+	 * @return array<int, string>
+	 */
+	public static function duplicate_size_labels( array $rows ): array {
+		$seen     = array();
+		$reported = array();
+		$out      = array();
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) || ! isset( $row['size'] ) || ! is_string( $row['size'] ) ) {
+				continue;
+			}
+			$key = self::size_label_key( $row['size'] );
+			if ( isset( $seen[ $key ] ) && ! isset( $reported[ $key ] ) ) {
+				$reported[ $key ] = true;
+				$out[]            = $row['size'];
+			}
+			$seen[ $key ] = true;
+		}
+		return $out;
+	}
+
+	/**
+	 * Every row of a size chart needs its own label (carry-over #2). JSON Schema cannot say
+	 * "unique by a normalised field", so the zod refinement of `SizeChartSchema` is mirrored here
+	 * for the garment and draft schemas (both have a top-level `sizeChart`), with the same message.
+	 *
+	 * @param mixed $data
+	 * @param array<int, array{path:string,message:string}> $issues
+	 */
+	private function check_size_labels( $data, array &$issues ): void {
+		if ( ! isset( $this->root['properties']['sizeChart'] ) || ! is_array( $data ) || ! isset( $data['sizeChart'] ) || ! is_array( $data['sizeChart'] ) || ! array_is_list( $data['sizeChart'] ) ) {
+			return;
+		}
+		$first = array();
+		foreach ( $data['sizeChart'] as $i => $row ) {
+			if ( ! is_array( $row ) || ! isset( $row['size'] ) || ! is_string( $row['size'] ) ) {
+				continue;
+			}
+			$key = self::size_label_key( $row['size'] );
+			if ( ! array_key_exists( $key, $first ) ) {
+				$first[ $key ] = $i;
+				continue;
+			}
+			$issues[] = self::issue(
+				'sizeChart.' . $i . '.size',
+				sprintf( 'Duplicate size label "%s" (rows %d and %d): every row of the size chart needs its own label', $row['size'], $first[ $key ] + 1, $i + 1 )
+			);
+		}
 	}
 
 	/** @param mixed $data */

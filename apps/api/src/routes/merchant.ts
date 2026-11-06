@@ -6,7 +6,10 @@ import { and, desc, eq, lt, or } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
+  AnalyticsAbandonedResponseSchema,
+  AnalyticsFitSizesResponseSchema,
   AnalyticsSwipesResponseSchema,
+  BillingAnomaliesResponseSchema,
   DateRangeQuerySchema,
   HexColorSchema,
   MerchantKeyRotateResponseSchema,
@@ -28,11 +31,11 @@ import { hmacHex, randomAlnum, safeEqual } from '../lib/crypto.js';
 import { badRequest, conflict, forbidden, notFound, serviceUnavailable } from '../lib/errors.js';
 import { safeFetch, type LookupLike, type PinnedTransport } from '../lib/safeFetch.js';
 import { periodFor, utcDay } from '../lib/time.js';
-import { abandonedAnalytics, swipeAnalytics } from '../services/analytics.js';
+import { abandonedAnalytics, fitSizeAnalytics, swipeAnalytics } from '../services/analytics.js';
 import { decodeCursor, encodeCursor } from '../services/ledger.js';
 import { archiveProduct, listMerchantProducts, upsertProduct } from '../services/products.js';
 import { connectTokenHash, createShop, findShopByConnectToken, findShopByDomain, isPaused, issueMerchantKeys, planInfo, updateSettings } from '../services/shops.js';
-import { fitSessionsBetween, usageDays } from '../services/usage.js';
+import { billingAnomalyReport, fitSessionsBetween, usageDays } from '../services/usage.js';
 
 const httpUrl = z.url({ protocol: /^https?$/ });
 
@@ -90,15 +93,6 @@ export const WooCompleteResponseSchema = z.object({
   publicKeyPrefix: z.string(),
   plan: z.enum(['free', 'starter', 'pro']),
 });
-export const AbandonedResponseSchema = z.object({
-  from: z.iso.date(),
-  to: z.iso.date(),
-  kAnonymityFloor: z.number().int(),
-  suppressedGroups: z.number().int(),
-  totals: z.object({ sessions: z.number().int(), resolved: z.number().int(), withFit: z.number().int() }),
-  byProduct: z.array(z.object({ externalId: z.string(), sessions: z.number().int(), resolved: z.number().int(), withFit: z.number().int(), abandonedRate: z.number() })),
-});
-
 export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
   const { db, env, now, stripe, lookup, publicTransport } = app.ctx;
 
@@ -199,9 +193,23 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
     return swipeAnalytics(db, req.shop!.id, req.query.from, req.query.to, env.K_ANON);
   });
 
-  app.get('/v1/merchant/analytics/abandoned', { schema: { querystring: DateRangeQuerySchema, response: { 200: AbandonedResponseSchema } }, preHandler: requireMerchant }, async (req) => {
+  app.get('/v1/merchant/analytics/abandoned', { schema: { querystring: DateRangeQuerySchema, response: { 200: AnalyticsAbandonedResponseSchema } }, preHandler: requireMerchant }, async (req) => {
     return abandonedAnalytics(db, req.shop!.id, req.query.from, req.query.to, env.K_ANON);
   });
+
+  // Billing integrity (carry-over #7): today's cap/spike flags and the recorded billing anomalies.
+  app.get(
+    '/v1/merchant/usage/anomalies',
+    { schema: { querystring: DateRangeQuerySchema, response: { 200: BillingAnomaliesResponseSchema } }, preHandler: requireMerchant },
+    async (req) => billingAnomalyReport(db, env, req.shop!, req.query.from, req.query.to, now()),
+  );
+
+  // Sizes recommended in standalone sessions (carry-over #18), k floor on distinct shoppers.
+  app.get(
+    '/v1/merchant/analytics/fit-sizes',
+    { schema: { querystring: DateRangeQuerySchema, response: { 200: AnalyticsFitSizesResponseSchema } }, preHandler: requireMerchant },
+    async (req) => fitSizeAnalytics(db, req.shop!.id, req.query.from, req.query.to, env.K_ANON),
+  );
 
   // ---- keys ------------------------------------------------------------------------------------
   app.post('/v1/merchant/keys/rotate', { schema: { response: { 200: MerchantKeyRotateResponseSchema } }, preHandler: requireMerchant }, async (req) => {

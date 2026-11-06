@@ -16,17 +16,12 @@
  * its per-plan daily cap (carry-over #7; the swipe path shares the helper). Anything else is
  * recorded on the try session but answers `billed: false`. Both routes are rate-limited per client IP.
  *
- * Merchant views of the same data (carry-over #7, #18), merchant-authenticated:
- *  - GET /v1/merchant/usage/anomalies: today's cap/spike flags and the recorded billing anomalies;
- *  - GET /v1/merchant/analytics/fit-sizes: sizes recommended in standalone sessions, k floor on
- *    distinct shoppers.
+ * The merchant views of the same data (GET /v1/merchant/usage/anomalies, GET
+ * /v1/merchant/analytics/fit-sizes) live in routes/merchant.ts with the other merchant routes.
  */
 import { and, eq, gte } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import {
-  AnalyticsFitSizesResponseSchema,
-  BillingAnomaliesResponseSchema,
-  DateRangeQuerySchema,
   FitShownRequestSchema,
   FitShownResponseSchema,
   TryResolveParamsSchema,
@@ -34,7 +29,6 @@ import {
   type PairingSource,
 } from '@curtain/schema';
 import { requireDevice } from '../auth/device.js';
-import { requireMerchant } from '../auth/merchant.js';
 import { pairings, trySessions, usageEvents } from '../db/schema.js';
 import { pseudonymFor } from '../lib/crypto.js';
 import { conflict, forbidden, gone, HttpError, notFound, unauthorized, unprocessable } from '../lib/errors.js';
@@ -42,8 +36,7 @@ import { embedAllowedOrigins } from '../services/embed.js';
 import { byteLength, fieldNames, writeLedger } from '../services/ledger.js';
 import { asGarment, findProductById } from '../services/products.js';
 import { findShopById, isPaused, shopBranding } from '../services/shops.js';
-import { fitSizeAnalytics } from '../services/analytics.js';
-import { billFitSession, billingAnomalyReport } from '../services/usage.js';
+import { billFitSession } from '../services/usage.js';
 import { dayStart, utcDay } from '../lib/time.js';
 
 /** How long after the try link's 10-minute TTL the embed may still report the fit it showed. */
@@ -168,18 +161,5 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
         return { billed: true };
       });
     },
-  );
-
-  // ---- merchant views (merchant auth) -----------------------------------------------------------
-  app.get(
-    '/v1/merchant/usage/anomalies',
-    { schema: { querystring: DateRangeQuerySchema, response: { 200: BillingAnomaliesResponseSchema } }, preHandler: requireMerchant },
-    async (req) => billingAnomalyReport(db, env, req.shop!, req.query.from, req.query.to, now()),
-  );
-
-  app.get(
-    '/v1/merchant/analytics/fit-sizes',
-    { schema: { querystring: DateRangeQuerySchema, response: { 200: AnalyticsFitSizesResponseSchema } }, preHandler: requireMerchant },
-    async (req) => fitSizeAnalytics(db, req.shop!.id, req.query.from, req.query.to, env.K_ANON),
   );
 };

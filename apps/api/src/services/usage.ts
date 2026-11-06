@@ -1,7 +1,6 @@
 import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
-import { date, integer, pgTable, primaryKey, real, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import type { Db } from '../db/client.js';
-import { pairings, shops, usageDaily, usageEvents, type UsageKind } from '../db/schema.js';
+import { billingAnomalies, pairings, usageDaily, usageEvents, type BillingAnomalyKind, type UsageKind } from '../db/schema.js';
 import type { Env } from '../env.js';
 import { DAY, dayEnd, dayStart, utcDay } from '../lib/time.js';
 import { planInfo, type ShopRow } from './shops.js';
@@ -73,34 +72,7 @@ export async function fitSessionsBetween(db: Db, shopId: string, fromDay: string
 // standalone fit-shown path (routes/try.ts) and the app's swipe path (routes/app.ts).
 // ---------------------------------------------------------------------------------------------
 
-export const BILLING_ANOMALY_KINDS = ['cap_reached', 'spike'] as const;
-export type BillingAnomalyKind = (typeof BILLING_ANOMALY_KINDS)[number];
-
-/**
- * One row per shop, UTC day and kind (migration 0003). Shop-level counters only: no device id,
- * no product, no size (D3). `cap_reached`: sessions refused because the day's cap was full
- * (`denied_sessions`). `spike`: the day's billed sessions went above the anomaly threshold.
- * Defined here rather than in db/schema.ts so the billing-integrity work stays in one file; the
- * migration is hand-written in drizzle/0003_billing_anomalies.sql.
- */
-export const billingAnomalies = pgTable(
-  'billing_anomalies',
-  {
-    shopId: uuid('shop_id')
-      .notNull()
-      .references(() => shops.id, { onDelete: 'cascade' }),
-    day: date('day', { mode: 'string' }).notNull(),
-    kind: text('kind').$type<BillingAnomalyKind>().notNull(),
-    billedSessions: integer('billed_sessions').notNull().default(0),
-    deniedSessions: integer('denied_sessions').notNull().default(0),
-    threshold: integer('threshold').notNull().default(0),
-    trailingAverage: real('trailing_average').notNull().default(0),
-    firstAt: timestamp('first_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
-    lastAt: timestamp('last_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
-  },
-  (t) => [primaryKey({ columns: [t.shopId, t.day, t.kind] })],
-);
-export type BillingAnomalyRow = typeof billingAnomalies.$inferSelect;
+export { BILLING_ANOMALY_KINDS, billingAnomalies, type BillingAnomalyKind, type BillingAnomalyRow } from '../db/schema.js';
 
 type BillingEnv = Pick<Env, 'EMBED_BILLED_SESSIONS_PER_DAY' | 'BILLED_DAILY_CAP_FACTOR' | 'BILLED_DAILY_CAP_MIN' | 'BILLING_ANOMALY_FACTOR' | 'BILLING_ANOMALY_MIN_SESSIONS' | 'BILLING_ANOMALY_TRAILING_DAYS'>;
 

@@ -330,6 +330,35 @@ export const usageDaily = pgTable(
   (t) => [primaryKey({ columns: [t.shopId, t.day] })],
 );
 
+/** Kinds of billing anomaly (carry-over #7); mirrored by `BILLING_ANOMALY_KIND_NAMES` in @curtain/schema. */
+export const BILLING_ANOMALY_KINDS = ['cap_reached', 'spike'] as const;
+export type BillingAnomalyKind = (typeof BILLING_ANOMALY_KINDS)[number];
+
+/**
+ * One row per shop, UTC day and kind (migration 0003). Shop-level counters only: no device id,
+ * no product, no size (D3). `cap_reached`: sessions refused because the day's cap was full
+ * (`denied_sessions`). `spike`: the day's billed sessions went above the anomaly threshold.
+ * Written by services/usage.ts (`checkDailyCap`, `noteBilled`).
+ */
+export const billingAnomalies = pgTable(
+  'billing_anomalies',
+  {
+    shopId: uuid('shop_id')
+      .notNull()
+      .references(() => shops.id, { onDelete: 'cascade' }),
+    day: date('day', { mode: 'string' }).notNull(),
+    kind: text('kind').$type<BillingAnomalyKind>().notNull(),
+    billedSessions: integer('billed_sessions').notNull().default(0),
+    deniedSessions: integer('denied_sessions').notNull().default(0),
+    threshold: integer('threshold').notNull().default(0),
+    trailingAverage: real('trailing_average').notNull().default(0),
+    firstAt: ts('first_at').notNull().defaultNow(),
+    lastAt: ts('last_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.shopId, t.day, t.kind] })],
+);
+export type BillingAnomalyRow = typeof billingAnomalies.$inferSelect;
+
 export const RENDER_STATUS = ['queued', 'running', 'done', 'failed', 'expired'] as const;
 export type RenderStatus = (typeof RENDER_STATUS)[number];
 
@@ -441,6 +470,7 @@ export const schema = {
   wardrobeItems,
   usageEvents,
   usageDaily,
+  billingAnomalies,
   renderJobs,
   ledgerEntries,
   webhookLog,

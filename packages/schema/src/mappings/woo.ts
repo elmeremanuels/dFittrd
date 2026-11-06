@@ -196,6 +196,7 @@ export function fromWooMeta(product: WooProduct, meta?: WooMetaInput, options: F
   const sizeChart = coerceSizeChart(get('_curtain_size_chart'), sink, '_curtain_size_chart');
   if (sizeChart) out.sizeChart = sizeChart;
 
+  // Names resolve to fabric library ids ("Katoen" → cotton); the numbers stay the merchant's.
   const fabric = coerceFabric(get('_curtain_fabric'), sink, '_curtain_fabric');
   if (fabric) out.fabric = fabric as GarmentPayload['fabric'];
 

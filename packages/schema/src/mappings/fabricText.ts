@@ -5,6 +5,7 @@
  */
 import {
   FABRIC_BY_ID,
+  fabricPayloadName,
   fabricTerms,
   isFabricConstructionId,
   isFabricFibreId,
@@ -163,4 +164,34 @@ export function fabricFromText(text: string, product: Omit<ResolveFabricInput, '
   const input: ResolveFabricInput = { ...product, composition: parsed.composition as FabricCompositionPart[] };
   if (parsed.construction) input.construction = parsed.construction;
   return resolveFabric(input);
+}
+
+/** Product fabric text resolved to the GarmentPayload `fabric` names (see `resolveFabricText`). */
+export interface FabricTextPayload {
+  /** `fabric.primary`: the construction named, else the fibre with the largest share (payload names: library ids, `tencel` for lyocell). */
+  primary: string;
+  /** `fabric.blend`, only when the text states the composition (percentages, or a fibre beside a construction). */
+  blend?: Array<[string, number]>;
+}
+
+/**
+ * Resolve product fabric text ("95% katoen, 5% elastaan", "Cotton jersey", "100% Linnen",
+ * "Tencel™") to the `primary` and `blend` of a GarmentPayload `fabric` block, in library ids
+ * (`fabricPayloadName`). Shares the text does not state are never invented: a blend whose shares
+ * `parseFabricText` had to assume ("katoen met elastaan") is left out. Undefined when the text names
+ * nothing in the library. The PHP plugin mirrors this (`Curtain\Fabric_Text`).
+ */
+export function resolveFabricText(text: string): FabricTextPayload | undefined {
+  const parsed = parseFabricText(text);
+  if (!parsed) return undefined;
+  let top: { fibre: FabricFibreId; pct: number } | undefined;
+  for (const part of parsed.composition) if (!top || part.pct > top.pct) top = part;
+  const primaryId: FabricId = parsed.construction ?? top?.fibre ?? parsed.ids[0]!;
+  const out: FabricTextPayload = { primary: fabricPayloadName(primaryId) };
+  if (!parsed.sharesAssumed && parsed.composition.length) {
+    const stated = /\d\s*%/.test(normaliseFabricText(text));
+    const onlyThePrimary = parsed.composition.length === 1 && parsed.composition[0]!.fibre === primaryId;
+    if (stated || !onlyThePrimary) out.blend = parsed.composition.map((c) => [fabricPayloadName(c.fibre), c.pct]);
+  }
+  return out;
 }

@@ -17,7 +17,7 @@
  *
  * Pure data and pure functions, no runtime dependencies.
  */
-import type { Fabric } from './garment';
+import type { FABRIC_PRIMARIES, Fabric } from './garment';
 
 /** Bump the minor version when values change, the major version when ids or fields change. */
 export const FABRIC_LIBRARY_VERSION = '1.0.0';
@@ -249,6 +249,49 @@ export function fabricTerms(): ReadonlyMap<string, FabricId> {
 /** Resolve a single name, alias or brand (English or Dutch) to a library id. */
 export function lookupFabricId(name: string): FabricId | undefined {
   return fabricTerms().get(normaliseFabricText(name));
+}
+
+// ── GarmentPayload `fabric.primary` and `blend` names (schema v1) ↔ library ids ────────────────
+
+/**
+ * Library id of each v1 `FABRIC_PRIMARIES` value. Thirteen are library ids already; `tencel` is the
+ * v1 name of lyocell, and `technical` names no fibre or construction (it stays valid in payloads and
+ * resolves to the blend or the default fabric). Library ids that v1 does not list (acrylic, hemp,
+ * satin, …) are valid primaries too: the field is an open vocabulary.
+ */
+export const FABRIC_PRIMARY_LIBRARY_IDS: Readonly<Record<(typeof FABRIC_PRIMARIES)[number], FabricId | null>> = {
+  linen: 'linen',
+  cotton: 'cotton',
+  wool: 'wool',
+  silk: 'silk',
+  cashmere: 'cashmere',
+  tencel: 'lyocell',
+  modal: 'modal',
+  denim: 'denim',
+  jersey: 'jersey',
+  technical: null,
+  leather: 'leather',
+  viscose: 'viscose',
+  polyester: 'polyester',
+  nylon: 'nylon',
+  elastane: 'elastane',
+};
+
+/**
+ * The name a payload uses for a library id in `fabric.primary` and `fabric.blend`: the v1 name
+ * where v1 has one (lyocell → `tencel`, so v1 consumers such as the taste engine's fabric axes keep
+ * matching), the library id otherwise.
+ */
+export function fabricPayloadName(id: FabricId): string {
+  for (const [v1, libraryId] of Object.entries(FABRIC_PRIMARY_LIBRARY_IDS)) if (libraryId === id) return v1;
+  return id;
+}
+
+/** Library id of a payload `fabric.primary` or blend name (v1 value, library id, name or alias); undefined for `technical` or unknown text. */
+export function fabricLibraryId(name: string): FabricId | undefined {
+  const key = normaliseFabricText(name);
+  if (Object.prototype.hasOwnProperty.call(FABRIC_PRIMARY_LIBRARY_IDS, key)) return FABRIC_PRIMARY_LIBRARY_IDS[key as (typeof FABRIC_PRIMARIES)[number]] ?? undefined;
+  return lookupFabricId(name);
 }
 
 // ── Resolution ──────────────────────────────────────────────────────────────────────────────────

@@ -5,8 +5,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Curtain for WooCommerce 0.1.0\n"
 "Report-Msgid-Bugs-To: https://curtain.fit/woocommerce\n"
-"POT-Creation-Date: 2026-11-04 12:00+0000\n"
-"PO-Revision-Date: 2026-11-05 12:00+0000\n"
+"POT-Creation-Date: 2026-11-06 12:00+0000\n"
+"PO-Revision-Date: 2026-11-06 12:00+0000\n"
 "Last-Translator: Curtain <hello@curtain.fit>\n"
 "Language-Team: Dutch\n"
 "Language: nl_NL\n"
@@ -16,155 +16,630 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "X-Domain: curtain-woocommerce\n"
 
+#. Plugin Name of the plugin
+#: curtain.php includes/class-settings.php
 msgid "Curtain for WooCommerce"
 msgstr "Curtain voor WooCommerce"
 
-msgid "Settings"
-msgstr "Instellingen"
+#. Description of the plugin
+#: curtain.php
+msgid "Adds a \"Try it on\" button to your product pages and syncs garment fit data (size chart, fabric, flat-lay) to Curtain, the private fitting room. Nothing is sent until you connect your shop."
+msgstr "Voegt een knop \"Try it on\" toe aan je productpagina's en synchroniseert pasvormgegevens van kleding (maattabel, stof, flat-lay) met Curtain, de privé-paskamer. Er wordt niets verstuurd tot je je winkel koppelt."
 
-msgid "Curtain for WooCommerce is installed but not connected. Nothing is sent to Curtain until you connect your shop."
-msgstr "Curtain voor WooCommerce is geïnstalleerd maar nog niet gekoppeld. Er wordt niets naar Curtain gestuurd tot je je winkel koppelt."
-
-msgid "Connect now"
-msgstr "Nu koppelen"
-
-msgid "Try it on"
-msgstr "Try it on"
-
-msgid "Curtain"
-msgstr "Curtain"
-
-msgid "Connection"
-msgstr "Koppeling"
-
-msgid "Status"
-msgstr "Status"
-
-msgid "Connected"
-msgstr "Gekoppeld"
-
-msgid "Not connected — nothing is sent to Curtain."
-msgstr "Niet gekoppeld — er wordt niets naar Curtain gestuurd."
-
-msgid "Connect to Curtain"
-msgstr "Koppelen met Curtain"
-
-msgid "Finish connection"
-msgstr "Koppeling afronden"
-
-msgid "Check status"
-msgstr "Status controleren"
-
-msgid "Sync all products"
-msgstr "Alle producten synchroniseren"
-
-msgid "Disconnect"
-msgstr "Ontkoppelen"
-
-msgid "Or paste an API key"
-msgstr "Of plak een API-sleutel"
-
-msgid "Use key"
-msgstr "Sleutel gebruiken"
-
-msgid "Storefront button"
-msgstr "Knop in de winkel"
-
-msgid "Show button"
-msgstr "Knop tonen"
-
-msgid "Save settings"
-msgstr "Instellingen opslaan"
-
-msgid "Settings saved."
-msgstr "Instellingen opgeslagen."
-
-msgid "Connected to Curtain. Your published products are being synced in the background."
-msgstr "Gekoppeld met Curtain. Je gepubliceerde producten worden op de achtergrond gesynchroniseerd."
-
-msgid "What is sent to Curtain"
-msgstr "Wat er naar Curtain wordt gestuurd"
-
-msgid "Curtain — fit data"
-msgstr "Curtain — pasvormgegevens"
-
-msgid "Choose flat-lay photo"
-msgstr "Kies een flat-lay-foto"
-
-msgid "Use this image"
-msgstr "Deze afbeelding gebruiken"
-
-msgid "Active"
-msgstr "Actief"
-
-msgid "Incomplete"
-msgstr "Onvolledig"
-
-msgid "Syncing…"
-msgstr "Synchroniseren…"
-
-msgid "Archived"
-msgstr "Gearchiveerd"
-
-msgid "Sync error"
-msgstr "Synchronisatiefout"
-
-msgid "Category *"
-msgstr "Categorie *"
-
-msgid "Flat-lay photo *"
-msgstr "Flat-lay-foto *"
-
-msgid "Fabric *"
-msgstr "Stof *"
-
-msgid "Size chart *"
-msgstr "Maattabel *"
-
-msgid "The numbers below are *"
-msgstr "De cijfers hieronder zijn *"
-
-msgid "garment measurements (measured flat)"
-msgstr "kledingmaten (plat gemeten)"
-
-msgid "body measurements (the body each size is cut for)"
-msgstr "lichaamsmaten (het lichaam waarvoor elke maat is gesneden)"
-
-msgid "Add size"
-msgstr "Maat toevoegen"
-
-msgid "Required before the product can be active:"
-msgstr "Vereist voordat het product actief kan zijn:"
-
-msgid "Experience"
-msgstr "Ervaring"
-
-msgid "On the product page (no app needed)"
-msgstr "Op de productpagina (geen app nodig)"
-
-msgid "Curtain app"
-msgstr "Curtain-app"
-
-msgid "On the product page: shoppers get their recommended size in an overlay on your product page and Curtain selects it in the size dropdown. Curtain app: phones open the Curtain app, desktops show a QR code."
-msgstr "Op de productpagina: shoppers krijgen hun aanbevolen maat in een venster op je productpagina en Curtain selecteert die in de maatkeuzelijst. Curtain-app: telefoons openen de Curtain-app, desktops tonen een QR-code."
-
-msgid "Size attribute"
-msgstr "Maatattribuut"
-
-msgid "Size"
-msgstr "Maat"
-
-msgid "The product attribute that holds the size in your variation dropdowns. Curtain selects the recommended size in it."
-msgstr "Het productattribuut met de maat in je variatiekeuzelijsten. Curtain selecteert daarin de aanbevolen maat."
-
-msgid "Curtain is a private fitting room: shoppers find their size right on your product page, no app needed. Their measurements stay in their own browser. Only garment data (size charts, fabric, photos) leaves this site, never customer data."
-msgstr "Curtain is een privé-paskamer: shoppers vinden hun maat direct op je productpagina, zonder app. Hun maten blijven in hun eigen browser. Alleen kledingdata (maattabellen, stof, foto's) verlaat deze site, nooit klantgegevens."
-
-msgid "paused (below plan: the button still renders, shoppers see a \"shop paused\" screen)"
-msgstr "gepauzeerd (onder het plan: de knop blijft zichtbaar, shoppers zien een scherm \"winkel gepauzeerd\")"
-
+#: includes/class-frontend.php
 msgid "Opens the Curtain app, your private fitting room. Fit results are estimates."
 msgstr "Opent de Curtain-app, jouw privé-paskamer. Pasvormresultaten zijn schattingen."
 
+#: includes/class-frontend.php
 msgid "Find your size on this page. Your measurements stay on this device. Fit results are estimates."
 msgstr "Vind je maat op deze pagina. Je maten blijven op dit apparaat. Pasvormresultaten zijn schattingen."
+
+#: includes/class-plugin.php
+msgid "Settings"
+msgstr "Instellingen"
+
+#: includes/class-plugin.php
+msgid "Curtain for WooCommerce is installed but not connected. Nothing is sent to Curtain until you connect your shop."
+msgstr "Curtain voor WooCommerce is geïnstalleerd maar nog niet gekoppeld. Er wordt niets naar Curtain gestuurd tot je je winkel koppelt."
+
+#: includes/class-plugin.php
+msgid "Connect now"
+msgstr "Nu koppelen"
+
+#: includes/class-product-meta.php
+msgid "Curtain — fit data"
+msgstr "Curtain — pasvormgegevens"
+
+#: includes/class-product-meta.php
+msgid "Choose flat-lay photo"
+msgstr "Kies een flat-lay-foto"
+
+#: includes/class-product-meta.php
+msgid "Use this image"
+msgstr "Deze afbeelding gebruiken"
+
+#: includes/class-product-meta.php includes/class-settings.php
+msgid "Curtain"
+msgstr "Curtain"
+
+#: includes/class-product-meta.php
+msgid "Active"
+msgstr "Actief"
+
+#: includes/class-product-meta.php
+msgid "Incomplete"
+msgstr "Onvolledig"
+
+#: includes/class-product-meta.php
+msgid "Syncing…"
+msgstr "Synchroniseren…"
+
+#: includes/class-product-meta.php
+msgid "Archived"
+msgstr "Gearchiveerd"
+
+#: includes/class-product-meta.php
+msgid "Sync error"
+msgstr "Synchronisatiefout"
+
+#: includes/class-product-meta.php
+msgid "invalid value was ignored"
+msgstr "ongeldige waarde genegeerd"
+
+#: includes/class-product-meta.php
+msgid "Everything here describes the garment, never a customer. Measurements in cm. Fields marked * are needed before the product is \"active\" in Curtain."
+msgstr "Alles hier beschrijft het kledingstuk, nooit een klant. Maten in cm. Velden met * zijn nodig voordat het product \"actief\" is in Curtain."
+
+#: includes/class-product-meta.php
+msgid "Classification"
+msgstr "Indeling"
+
+#: includes/class-product-meta.php
+msgid "Category *"
+msgstr "Categorie *"
+
+#: includes/class-product-meta.php
+msgid "Infer from product categories"
+msgstr "Afleiden uit de productcategorieën"
+
+#: includes/class-product-meta.php
+msgid "Subcategory"
+msgstr "Subcategorie"
+
+#: includes/class-product-meta.php
+msgid "Brand"
+msgstr "Merk"
+
+#: includes/class-product-meta.php
+msgid "Pattern block"
+msgstr "Patroonbasis"
+
+#: includes/class-product-meta.php
+msgid "— none —"
+msgstr "— geen —"
+
+#: includes/class-product-meta.php
+msgid "Other…"
+msgstr "Anders…"
+
+#: includes/class-product-meta.php
+msgid "custom block name"
+msgstr "eigen naam van de patroonbasis"
+
+#: includes/class-product-meta.php
+msgid "Flat-lay photo *"
+msgstr "Flat-lay-foto *"
+
+#: includes/class-product-meta.php
+msgid "Choose from media library"
+msgstr "Kiezen uit de mediabibliotheek"
+
+#: includes/class-product-meta.php
+msgid "Remove"
+msgstr "Verwijderen"
+
+#: includes/class-product-meta.php
+msgid "The garment laid flat on a white background, front view. This is what shoppers see draped on their own silhouette (labelled as an estimate)."
+msgstr "Het kledingstuk plat op een witte achtergrond, vooraanzicht. Dit zien shoppers over hun eigen silhouet gedrapeerd (aangeduid als schatting)."
+
+#: includes/class-product-meta.php
+msgid "Fabric *"
+msgstr "Stof *"
+
+#: includes/class-product-meta.php
+msgid "Primary fibre *"
+msgstr "Hoofdvezel *"
+
+#: includes/class-product-meta.php
+msgid "Weight (g/m²)"
+msgstr "Gewicht (g/m²)"
+
+#: includes/class-product-meta.php
+msgid "Stretch % *"
+msgstr "Rek % *"
+
+#: includes/class-product-meta.php
+msgid "Drape (0 stiff – 1 fluid) *"
+msgstr "Val (0 stug – 1 soepel) *"
+
+#: includes/class-product-meta.php
+msgid "Opacity (0 sheer – 1 opaque)"
+msgstr "Dekking (0 doorschijnend – 1 ondoorzichtig)"
+
+#: includes/class-product-meta.php
+msgid "Sheen (0 matte – 1 shiny)"
+msgstr "Glans (0 mat – 1 glanzend)"
+
+#: includes/class-product-meta.php
+msgid "Blend fibre"
+msgstr "Vezel in de mix"
+
+#: includes/class-product-meta.php
+msgid "Remove row"
+msgstr "Rij verwijderen"
+
+#: includes/class-product-meta.php
+msgid "Add fibre"
+msgstr "Vezel toevoegen"
+
+#: includes/class-product-meta.php
+msgid "Size chart *"
+msgstr "Maattabel *"
+
+#: includes/class-product-meta.php
+msgid "The numbers below are *"
+msgstr "De cijfers hieronder zijn *"
+
+#: includes/class-product-meta.php
+msgid "garment measurements (measured flat)"
+msgstr "kledingmaten (plat gemeten)"
+
+#: includes/class-product-meta.php
+msgid "body measurements (the body each size is cut for)"
+msgstr "lichaamsmaten (het lichaam waarvoor elke maat is gesneden)"
+
+#: includes/class-product-meta.php
+msgid "Add size"
+msgstr "Maat toevoegen"
+
+#: includes/class-product-meta.php
+msgid "Ascending order. Leave a cell empty (or 0) when the shop does not publish that measurement."
+msgstr "Oplopende volgorde. Laat een cel leeg (of 0) als de winkel die maat niet publiceert."
+
+#: includes/class-product-meta.php
+msgid "Designed ease (garment minus body, cm)"
+msgstr "Bewegingsruimte in het ontwerp (kledingstuk min lichaam, cm)"
+
+#: includes/class-product-meta.php
+msgid "Lengths (cm)"
+msgstr "Lengtes (cm)"
+
+#: includes/class-product-meta.php
+msgid "Other length (key)"
+msgstr "Andere lengte (sleutel)"
+
+#: includes/class-product-meta.php
+msgid "Add length"
+msgstr "Lengte toevoegen"
+
+#: includes/class-product-meta.php
+msgid "Fit notes"
+msgstr "Pasvormnotities"
+
+#: includes/class-product-meta.php
+msgid "Sizing notes"
+msgstr "Notities over de maatvoering"
+
+#: includes/class-product-meta.php
+msgid "e.g. 'runs small', 'size up if between sizes'"
+msgstr "bijv. 'valt klein', 'neem een maat groter als je tussen twee maten zit'"
+
+#: includes/class-product-meta.php
+msgid "True-to-size score (0–1)"
+msgstr "Valt-op-maat-score (0–1)"
+
+#: includes/class-product-meta.php
+msgid "Critical fit points"
+msgstr "Kritieke pasvormpunten"
+
+#: includes/class-product-meta.php
+msgid "Stretch zones"
+msgstr "Rekzones"
+
+#: includes/class-product-meta.php
+msgid "other zones, comma separated"
+msgstr "andere zones, gescheiden door komma's"
+
+#: includes/class-product-meta.php
+msgid "Style tags (0–1 per axis, optional)"
+msgstr "Stijllabels (0–1 per as, optioneel)"
+
+#: includes/class-product-meta.php
+msgid "Colours"
+msgstr "Kleuren"
+
+#: includes/class-product-meta.php
+msgid "Primary colour (#RRGGBB)"
+msgstr "Hoofdkleur (#RRGGBB)"
+
+#: includes/class-product-meta.php
+msgid "Colorway name"
+msgstr "Naam van de kleurvariant"
+
+#: includes/class-product-meta.php
+msgid "Add colorway"
+msgstr "Kleurvariant toevoegen"
+
+#: includes/class-product-meta.php
+msgid "Not connected to Curtain."
+msgstr "Niet gekoppeld met Curtain."
+
+#: includes/class-product-meta.php
+msgid "Fit data is saved here and synced once you connect."
+msgstr "Pasvormgegevens worden hier opgeslagen en gesynchroniseerd zodra je koppelt."
+
+#: includes/class-product-meta.php
+msgid "Connect"
+msgstr "Koppelen"
+
+#: includes/class-product-meta.php
+msgid "Curtain status:"
+msgstr "Curtain-status:"
+
+#: includes/class-product-meta.php
+msgid "Not synced yet"
+msgstr "Nog niet gesynchroniseerd"
+
+#. translators: %d: percentage
+#: includes/class-product-meta.php
+msgid "completeness %d%%"
+msgstr "volledigheid %d%%"
+
+#. translators: %s: date
+#: includes/class-product-meta.php
+msgid "synced %s"
+msgstr "gesynchroniseerd %s"
+
+#: includes/class-product-meta.php
+msgid "Missing for a better fit:"
+msgstr "Ontbreekt voor een betere pasvorm:"
+
+#: includes/class-product-meta.php
+msgid "Required before the product can be active:"
+msgstr "Vereist voordat het product actief kan zijn:"
+
+#: includes/class-product-meta.php includes/class-settings.php
+msgid "Size"
+msgstr "Maat"
+
+#: includes/class-product-meta.php
+msgid "Foot EU"
+msgstr "Voet EU"
+
+#: includes/class-product-meta.php
+msgid "Foot cm"
+msgstr "Voet cm"
+
+#: includes/class-settings.php
+msgid "Try it on"
+msgstr "Try it on"
+
+#: includes/class-settings.php
+msgid "You are not allowed to manage Curtain settings."
+msgstr "Je hebt geen toestemming om de Curtain-instellingen te beheren."
+
+#: includes/class-settings.php
+msgid "Neither libsodium nor OpenSSL is available on this server, so the Curtain API key is stored unencrypted in the database. Ask your host to enable the sodium extension."
+msgstr "Op deze server is libsodium noch OpenSSL beschikbaar, dus de Curtain-API-sleutel wordt onversleuteld in de database opgeslagen. Vraag je host om de sodium-extensie in te schakelen."
+
+#: includes/class-settings.php
+msgid "Settings saved."
+msgstr "Instellingen opgeslagen."
+
+#: includes/class-settings.php
+msgid "This site is already connected to Curtain. Paste the API key from your Curtain console below, or rotate it there first."
+msgstr "Deze site is al gekoppeld met Curtain. Plak hieronder de API-sleutel uit je Curtain-console, of vernieuw hem daar eerst."
+
+#. translators: %s: error message
+#: includes/class-settings.php
+msgid "Could not connect: %s"
+msgstr "Koppelen mislukt: %s"
+
+#: includes/class-settings.php
+msgid "Could not connect: the payment page address was not a Stripe Checkout page."
+msgstr "Koppelen mislukt: het adres van de betaalpagina was geen Stripe Checkout-pagina."
+
+#: includes/class-settings.php
+msgid "No pending connection. Click Connect to start."
+msgstr "Er loopt geen koppeling. Klik op Koppelen om te beginnen."
+
+#: includes/class-settings.php
+msgid "Checkout has not completed yet. Finish the payment, then click \"Finish connection\"."
+msgstr "De betaling is nog niet afgerond. Rond de betaling af en klik dan op \"Koppeling afronden\"."
+
+#: includes/class-settings.php
+msgid "Curtain could not confirm that this site asked for the connection. Make sure the site is reachable from the internet (not a local or private address) and that no security plugin blocks /wp-json/curtain/v1/verify, then click \"Finish connection\"."
+msgstr "Curtain kon niet bevestigen dat deze site de koppeling heeft aangevraagd. Zorg dat de site bereikbaar is via internet (geen lokaal of privéadres) en dat geen beveiligingsplugin /wp-json/curtain/v1/verify blokkeert, en klik dan op \"Koppeling afronden\"."
+
+#. translators: %s: error message
+#: includes/class-settings.php
+msgid "Could not finish the connection: %s"
+msgstr "De koppeling kon niet worden afgerond: %s"
+
+#: includes/class-settings.php
+msgid "Connected to Curtain. Your published products are being synced in the background."
+msgstr "Gekoppeld met Curtain. Je gepubliceerde producten worden op de achtergrond gesynchroniseerd."
+
+#: includes/class-settings.php
+msgid "That does not look like a Curtain secret key (sk_live_… or sk_test_…)."
+msgstr "Dat lijkt geen geheime Curtain-sleutel (sk_live_… of sk_test_…)."
+
+#. translators: %s: error message
+#: includes/class-settings.php
+msgid "The key was rejected: %s"
+msgstr "De sleutel is geweigerd: %s"
+
+#: includes/class-settings.php
+msgid "Key accepted. Your published products are being synced in the background."
+msgstr "Sleutel geaccepteerd. Je gepubliceerde producten worden op de achtergrond gesynchroniseerd."
+
+#: includes/class-settings.php
+msgid "Disconnected. The button is no longer shown and nothing is sent to Curtain. Your garment data stays in WooCommerce."
+msgstr "Ontkoppeld. De knop wordt niet meer getoond en er wordt niets naar Curtain gestuurd. Je kledinggegevens blijven in WooCommerce."
+
+#: includes/class-settings.php
+msgid "Status refreshed."
+msgstr "Status vernieuwd."
+
+#. translators: %s: error message
+#: includes/class-settings.php
+msgid "Status check failed: %s"
+msgstr "Statuscontrole mislukt: %s"
+
+#: includes/class-settings.php
+msgid "Connect the shop first."
+msgstr "Koppel eerst de winkel."
+
+#: includes/class-settings.php
+msgid "Full sync queued. Products are pushed in the background."
+msgstr "Volledige synchronisatie ingepland. Producten worden op de achtergrond verstuurd."
+
+#: includes/class-settings.php
+msgid "Curtain is a private fitting room: shoppers find their size right on your product page, no app needed. Their measurements stay in their own browser. Only garment data (size charts, fabric, photos) leaves this site, never customer data."
+msgstr "Curtain is een privé-paskamer: shoppers vinden hun maat direct op je productpagina, zonder app. Hun maten blijven in hun eigen browser. Alleen kledingdata (maattabellen, stof, foto's) verlaat deze site, nooit klantgegevens."
+
+#: includes/class-settings.php
+msgid "Connection"
+msgstr "Koppeling"
+
+#: includes/class-settings.php
+msgid "Status"
+msgstr "Status"
+
+#: includes/class-settings.php
+msgid "Connected"
+msgstr "Gekoppeld"
+
+#. translators: %s: plan name
+#: includes/class-settings.php
+msgid "plan: %s"
+msgstr "plan: %s"
+
+#: includes/class-settings.php
+msgid "paused (below plan: the button still renders, shoppers see a \"shop paused\" screen)"
+msgstr "gepauzeerd (onder het plan: de knop blijft zichtbaar, shoppers zien een scherm \"winkel gepauzeerd\")"
+
+#. translators: 1: key storage scheme, 2: queue backend
+#: includes/class-settings.php
+msgid "Key stored with %1$s · job queue: %2$s"
+msgstr "Sleutel opgeslagen met %1$s · takenwachtrij: %2$s"
+
+#. translators: %d: number of jobs
+#: includes/class-settings.php
+msgid "%d pending job"
+msgid_plural "%d pending jobs"
+msgstr[0] "%d taak in de wachtrij"
+msgstr[1] "%d taken in de wachtrij"
+
+#. translators: %s: date
+#: includes/class-settings.php
+msgid "last sync %s"
+msgstr "laatste synchronisatie %s"
+
+#. translators: %s: error message
+#: includes/class-settings.php
+msgid "Last error: %s"
+msgstr "Laatste fout: %s"
+
+#: includes/class-settings.php
+msgid "Waiting for checkout to complete."
+msgstr "Wachten tot de betaling is afgerond."
+
+#: includes/class-settings.php
+msgid "Not connected — nothing is sent to Curtain."
+msgstr "Niet gekoppeld — er wordt niets naar Curtain gestuurd."
+
+#: includes/class-settings.php
+msgid "Actions"
+msgstr "Acties"
+
+#: includes/class-settings.php
+msgid "Check status"
+msgstr "Status controleren"
+
+#: includes/class-settings.php
+msgid "Sync all products"
+msgstr "Alle producten synchroniseren"
+
+#: includes/class-settings.php
+msgid "Disconnect this shop from Curtain?"
+msgstr "Deze winkel ontkoppelen van Curtain?"
+
+#: includes/class-settings.php
+msgid "Disconnect"
+msgstr "Ontkoppelen"
+
+#: includes/class-settings.php
+msgid "Connect to Curtain"
+msgstr "Koppelen met Curtain"
+
+#: includes/class-settings.php
+msgid "Finish connection"
+msgstr "Koppeling afronden"
+
+#: includes/class-settings.php
+msgid "Connect sends your site URL and shop name to Curtain, creates your merchant account and (when billing is enabled) takes you to Stripe Checkout. You will be sent back here afterwards."
+msgstr "Koppelen stuurt de URL van je site en de naam van je winkel naar Curtain, maakt je verkopersaccount aan en brengt je (als facturering aan staat) naar Stripe Checkout. Daarna kom je hier terug."
+
+#: includes/class-settings.php
+msgid "Or paste an API key"
+msgstr "Of plak een API-sleutel"
+
+#: includes/class-settings.php
+msgid "Use key"
+msgstr "Sleutel gebruiken"
+
+#: includes/class-settings.php
+msgid "Secret key from your Curtain merchant console. It is stored encrypted and never shown again."
+msgstr "Geheime sleutel uit je Curtain-verkopersconsole. Hij wordt versleuteld opgeslagen en nooit meer getoond."
+
+#: includes/class-settings.php
+msgid "Storefront button"
+msgstr "Knop in de winkel"
+
+#: includes/class-settings.php
+msgid "Show button"
+msgstr "Knop tonen"
+
+#: includes/class-settings.php
+msgid "Add a \"Try it on\" button to single product pages (bundled script, no third-party requests)."
+msgstr "Voeg een knop \"Try it on\" toe aan productpagina's (meegeleverd script, geen verzoeken naar derden)."
+
+#: includes/class-settings.php
+msgid "You can also place it yourself with the [curtain_button] shortcode."
+msgstr "Je kunt hem ook zelf plaatsen met de shortcode [curtain_button]."
+
+#: includes/class-settings.php
+msgid "Experience"
+msgstr "Ervaring"
+
+#: includes/class-settings.php
+msgid "On the product page (no app needed)"
+msgstr "Op de productpagina (geen app nodig)"
+
+#: includes/class-settings.php
+msgid "Curtain app"
+msgstr "Curtain-app"
+
+#: includes/class-settings.php
+msgid "On the product page: shoppers get their recommended size in an overlay on your product page and Curtain selects it in the size dropdown. Curtain app: phones open the Curtain app, desktops show a QR code."
+msgstr "Op de productpagina: shoppers krijgen hun aanbevolen maat in een venster op je productpagina en Curtain selecteert die in de maatkeuzelijst. Curtain-app: telefoons openen de Curtain-app, desktops tonen een QR-code."
+
+#: includes/class-settings.php
+msgid "Size attribute"
+msgstr "Maatattribuut"
+
+#: includes/class-settings.php
+msgid "The product attribute that holds the size in your variation dropdowns. Curtain selects the recommended size in it."
+msgstr "Het productattribuut met de maat in je variatiekeuzelijsten. Curtain selecteert daarin de aanbevolen maat."
+
+#: includes/class-settings.php
+msgid "Show for"
+msgstr "Tonen bij"
+
+#: includes/class-settings.php
+msgid "Products synced as complete (\"active\") only"
+msgstr "Alleen producten die als volledig (\"actief\") zijn gesynchroniseerd"
+
+#: includes/class-settings.php
+msgid "All published products"
+msgstr "Alle gepubliceerde producten"
+
+#: includes/class-settings.php
+msgid "Position"
+msgstr "Positie"
+
+#: includes/class-settings.php
+msgid "woocommerce_single_product_summary priority: 35 = after the add-to-cart form, 25 = before it, 15 = after the price."
+msgstr "Prioriteit in woocommerce_single_product_summary: 35 = na het winkelwagenformulier, 25 = ervoor, 15 = na de prijs."
+
+#: includes/class-settings.php
+msgid "Label"
+msgstr "Tekst"
+
+#: includes/class-settings.php
+msgid "Language"
+msgstr "Taal"
+
+#: includes/class-settings.php
+msgid "Follow the site language"
+msgstr "Taal van de site volgen"
+
+#: includes/class-settings.php
+msgid "Catalogue"
+msgstr "Catalogus"
+
+#: includes/class-settings.php
+msgid "Default brand"
+msgstr "Standaardmerk"
+
+#: includes/class-settings.php
+msgid "Used when a product has no brand (Curtain field, Brands taxonomy or a \"Brand\" attribute)."
+msgstr "Gebruikt als een product geen merk heeft (Curtain-veld, taxonomie Merken of een attribuut \"Merk\")."
+
+#: includes/class-settings.php
+msgid "Sponsored placement"
+msgstr "Gesponsorde plaatsing"
+
+#: includes/class-settings.php
+msgid "Allow my products to appear as sponsored cards in the Curtain swipe deck (billed per plan)."
+msgstr "Mijn producten mogen als gesponsorde kaarten in de Curtain-swipestapel verschijnen (gefactureerd volgens plan)."
+
+#: includes/class-settings.php
+msgid "Advanced"
+msgstr "Geavanceerd"
+
+#: includes/class-settings.php
+msgid "API base URL"
+msgstr "Basis-URL van de API"
+
+#: includes/class-settings.php
+msgid "Only change this for a staging environment."
+msgstr "Wijzig dit alleen voor een testomgeving."
+
+#: includes/class-settings.php
+msgid "Admin e-mail"
+msgstr "E-mailadres beheerder"
+
+#: includes/class-settings.php
+msgid "Send the site admin e-mail with Connect so Curtain can reach you about billing (optional)."
+msgstr "Stuur het e-mailadres van de sitebeheerder mee bij het koppelen, zodat Curtain je kan bereiken over facturering (optioneel)."
+
+#: includes/class-settings.php
+msgid "Uninstall"
+msgstr "Verwijderen"
+
+#: includes/class-settings.php
+msgid "Delete all Curtain settings and product fit data when the plugin is uninstalled."
+msgstr "Alle Curtain-instellingen en pasvormgegevens van producten wissen als de plugin wordt verwijderd."
+
+#: includes/class-settings.php
+msgid "Save settings"
+msgstr "Instellingen opslaan"
+
+#: includes/class-settings.php
+msgid "What is sent to Curtain"
+msgstr "Wat er naar Curtain wordt gestuurd"
+
+#. translators: %s: API host
+#: includes/class-settings.php
+msgid "After you connect, published products (name, price in EUR, product photos, categories, attributes) and the fit data from the Curtain box on the product page are sent to %s. Nothing about your customers or orders is ever sent. Disconnect at any time."
+msgstr "Na het koppelen worden gepubliceerde producten (naam, prijs in EUR, productfoto's, categorieën, attributen) en de pasvormgegevens uit het Curtain-vak op de productpagina naar %s gestuurd. Er wordt nooit iets over je klanten of bestellingen verstuurd. Je kunt op elk moment ontkoppelen."
+
+#: includes/class-settings.php
+msgid "Privacy policy"
+msgstr "Privacybeleid"
+
+#: includes/class-settings.php
+msgid "Terms"
+msgstr "Voorwaarden"

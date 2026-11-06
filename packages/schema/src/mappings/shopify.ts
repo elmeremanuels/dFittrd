@@ -410,6 +410,7 @@ export function fromShopifyProduct(
   const sizeChart = coerceSizeChart(get('size_chart'), sink, 'size_chart');
   if (sizeChart) out.sizeChart = sizeChart;
 
+  // Names resolve to fabric library ids ("Katoen" → cotton); the numbers stay the merchant's.
   const fabric = coerceFabric(get('fabric'), sink, 'fabric');
   if (fabric) out.fabric = fabric as GarmentPayload['fabric'];
 

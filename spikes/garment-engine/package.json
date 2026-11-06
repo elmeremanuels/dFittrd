@@ -7,6 +7,7 @@
   "type": "module",
   "scripts": {
     "build:bundle": "tsx scripts/build-bundle.ts",
+    "export:phase0": "tsx src/exportCli.ts",
     "viewer": "vite --config viewer/vite.config.ts",
     "viewer:smoke": "node viewer/smoke.mjs",
     "test": "vitest run && vitest run --config viewer/vitest.config.ts",

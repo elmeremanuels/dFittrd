@@ -137,3 +137,45 @@ test(
 		assert_true( $count >= 41, "expected 41 fixtures, got $count" );
 	}
 );
+
+test(
+	'duplicate size labels are rejected like the zod SizeChartSchema (trimmed, case-insensitive)',
+	static function (): void {
+		foreach ( array( 'garment.schema.json', 'garment-draft.schema.json' ) as $name ) {
+			$v = Schema_Validator::from_file( curtain_schema_path( $name ) );
+			$g = curtain_full_garment();
+			$g['sizeChart'] = array(
+				array( 'size' => 'S', 'bust' => 88 ),
+				array( 'size' => 'M', 'bust' => 92 ),
+				array( 'size' => ' m ', 'bust' => 96 ),
+				array( 'size' => 'L', 'bust' => 100 ),
+				array( 'size' => 's', 'bust' => 104 ),
+				array( 'size' => 'M', 'bust' => 108 ),
+			);
+			$dupes = array_values( array_filter( $v->validate( $g ), static fn ( $i ) => str_starts_with( $i['message'], 'Duplicate size label' ) ) );
+			assert_same( array( 'sizeChart.2.size', 'sizeChart.4.size', 'sizeChart.5.size' ), array_column( $dupes, 'path' ), $name );
+			assert_same( 'Duplicate size label " m " (rows 2 and 3): every row of the size chart needs its own label', $dupes[0]['message'], $name );
+			assert_same( 'Duplicate size label "M" (rows 2 and 6): every row of the size chart needs its own label', $dupes[2]['message'], $name );
+		}
+
+		// Unique labels (also ones that only look alike, e.g. "XL" and "XXL") stay valid.
+		$v = Schema_Validator::from_file( curtain_schema_path( 'garment.schema.json' ) );
+		$g = curtain_full_garment();
+		$g['sizeChart'] = array( array( 'size' => 'XL', 'bust' => 104 ), array( 'size' => 'XXL', 'bust' => 110 ), array( 'size' => '38', 'bust' => 88 ) );
+		assert_same( array(), $v->validate( $g ) );
+
+		// A schema without a top-level sizeChart is not affected.
+		$plain = new Schema_Validator( array( 'type' => 'object' ) );
+		assert_same( array(), $plain->validate( array( 'sizeChart' => array( array( 'size' => 'M' ), array( 'size' => 'M' ) ) ) ) );
+	}
+);
+
+test(
+	'duplicate_size_labels mirrors duplicateSizeLabels in @curtain/schema',
+	static function (): void {
+		assert_same( array(), Schema_Validator::duplicate_size_labels( array() ) );
+		assert_same( array( 'm', 'S' ), Schema_Validator::duplicate_size_labels( array( array( 'size' => 'M' ), array( 'size' => 's' ), array( 'size' => 'm' ), array( 'size' => 'S' ), array( 'size' => 'M ' ) ) ) );
+		assert_same( 'XS', Schema_Validator::size_label_key( "\u{00A0} xs \t" ) );
+		assert_same( 'ÉÉN MAAT', Schema_Validator::size_label_key( 'één maat' ) );
+	}
+);

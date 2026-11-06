@@ -23,6 +23,8 @@ import {
   type SizeRow,
   type StyleTags,
 } from '../garment';
+import { FABRIC_PRIMARY_LIBRARY_IDS, fabricLibraryId, fabricPayloadName } from '../fabrics';
+import { resolveFabricText } from './fabricText';
 
 export interface MappingWarning {
   /** Platform key (metafield key or meta key) that failed. */
@@ -171,16 +173,53 @@ export function coerceSizeChart(value: unknown, sink: WarningSink, source: strin
   return validated(SizeChartSchema, rows, sink, source, 'sizeChart');
 }
 
+/**
+ * A fabric name as the payload stores it: a library id (`fabricPayloadName`, so `tencel` for
+ * lyocell) when the name, alias or brand is in the fabric library ("Katoen" → `cotton`, "Lycra" →
+ * `elastane`, "Spijkerstof" → `denim`), a v1 primary as is (`technical`), anything else lower-cased.
+ */
+export function canonicalFabricName(name: string): string {
+  const lower = name.trim().toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(FABRIC_PRIMARY_LIBRARY_IDS, lower)) return lower;
+  const id = fabricLibraryId(name);
+  return id ? fabricPayloadName(id) : lower;
+}
+
+/**
+ * The merchant's fabric (metafield / meta JSON) with its names resolved to the fabric library: `primary` and the blend fibres become library
+ * ids (v1 values stay valid, see `FABRIC_PRIMARY_LIBRARY_IDS`). A primary written as composition
+ * text also fills `blend` when the merchant gave none. Names the library does not know are kept
+ * (lower-cased) and reported; the numbers are never filled from the library here (prefill is the
+ * merchant's call, `resolveFabric` applies the defaults at render time).
+ */
 export function coerceFabric(value: unknown, sink: WarningSink, source: string): Partial<Fabric> | undefined {
   const v = parseJsonish(value);
   if (!v || typeof v !== 'object' || Array.isArray(v)) {
+    // Plain text ("95% katoen, 5% elastaan") carries no stretch or drape: it is prefill
+    // (`fabricFromProductText`), never a payload fabric the draft schema would then reject.
     if (v !== undefined) warn(sink, { source, path: 'fabric', message: 'expected a JSON object' });
     return undefined;
   }
   const r = v as Record<string, unknown>;
   const out: Record<string, unknown> = {};
   const primary = coerceString(r.primary ?? r.fibre ?? r.fiber ?? r.material);
-  if (primary) out.primary = primary.toLowerCase();
+  let textBlend: Array<[string, number]> | undefined;
+  if (primary) {
+    const lower = primary.toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(FABRIC_PRIMARY_LIBRARY_IDS, lower)) out.primary = lower;
+    else {
+      const id = fabricLibraryId(primary);
+      const text = id ? undefined : resolveFabricText(primary);
+      if (id) out.primary = fabricPayloadName(id);
+      else if (text) {
+        out.primary = text.primary;
+        textBlend = text.blend;
+      } else {
+        out.primary = lower;
+        warn(sink, { source, path: 'fabric.primary', message: `'${primary}' is not in the fabric library; drape and texture use defaults` });
+      }
+    }
+  }
   for (const k of ['weightGsm', 'stretchPct', 'drape', 'opacity', 'sheen'] as const) {
     if (r[k] === undefined || r[k] === null || r[k] === '') continue;
     const n = coerceNumber(r[k]);
@@ -201,11 +240,32 @@ export function coerceFabric(value: unknown, sink: WarningSink, source: string):
         }
         return [undefined, undefined];
       })
-      .filter((t): t is [string, number] => typeof t[0] === 'string' && typeof t[1] === 'number');
+      .filter((t): t is [string, number] => typeof t[0] === 'string' && typeof t[1] === 'number')
+      .map(([fibre, pct]): [string, number] => [fabricLibraryId(fibre) ? canonicalFabricName(fibre) : fibre, pct]);
     if (blend.length) out.blend = blend;
   }
+  if (out.blend === undefined && textBlend) out.blend = textBlend;
   return validated(FabricSchema.partial(), out, sink, source, 'fabric');
 }
+
+/**
+ * Prefill from product text the shop already publishes (a "Material" / "Materiaal" /
+ * "Samenstelling" attribute or metafield) for a product without a Curtain fabric field: `primary`
+ * and, when stated, `blend`, for the merchant to confirm. Not used by `fromWooMeta` /
+ * `fromShopifyProduct`: without stretch and drape it is not a payload fabric (the WooCommerce meta
+ * box prefills its form with the PHP twin, `Curtain\Fabric_Text`).
+ */
+export function fabricFromProductText(texts: ReadonlyArray<string | undefined>): Partial<Fabric> | undefined {
+  const text = texts.filter((t): t is string => typeof t === 'string' && t.trim() !== '').join(', ');
+  if (!text) return undefined;
+  const r = resolveFabricText(text);
+  if (!r) return undefined;
+  const parsed = FabricSchema.partial().safeParse(r);
+  return parsed.success ? (parsed.data as Partial<Fabric>) : undefined;
+}
+
+/** Attribute / metafield names that hold fabric text in English and Dutch shops. */
+export const FABRIC_TEXT_FIELD = /^(?:pa_)?(?:materials?|materiaal|materialen|fabrics?|fabric[-_ ]composition|composition|stof|stoffen|samenstelling|materiaalsamenstelling)$/i;
 
 export function coerceEase(value: unknown, sink: WarningSink, source: string): Ease | undefined {
   const v = parseJsonish(value);

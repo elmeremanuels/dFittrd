@@ -4,7 +4,8 @@
  *   1. copy ../sdk/dist/sdk.v1.js            → assets/sdk.v1.js         (bundled, never remote: WP.org rule)
  *   2. copy ../schema/dist/garment*.schema.json → assets/                (local JSON Schema validation)
  *   3. php -l every PHP file
- *   4. zip dist/curtain-woocommerce.zip with a top-level `curtain-woocommerce/` folder
+ *   4. check the translations and compile languages/*.po to .mo in the staged copy
+ *   5. zip dist/curtain-woocommerce.zip with a top-level `curtain-woocommerce/` folder
  *
  * Requires `pnpm --filter @curtain/sdk build` and `pnpm --filter @curtain/schema build` to have run
  * (the root `pnpm build` orders packages/* before apps/*; sdk/schema are plain devDependencies here).
@@ -75,6 +76,11 @@ for (const entry of include) {
 }
 // Dev-only files never ship.
 rmSync(join(stage, 'assets/.gitkeep'), { force: true });
+
+// Translations: the .pot and every .po must be complete (scripts/i18n.php check), and WordPress
+// loads compiled .mo files, so they are built into the staged languages/ folder (never committed).
+execFileSync('php', [join(root, 'scripts/i18n.php'), 'check'], { stdio: 'inherit' });
+execFileSync('php', [join(root, 'scripts/i18n.php'), 'mo', join(stage, 'languages')], { stdio: 'inherit' });
 
 const zipName = 'curtain-woocommerce.zip';
 execFileSync('zip', ['-rq', '-X', zipName, 'curtain-woocommerce'], { cwd: dist });

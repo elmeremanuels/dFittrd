@@ -1,0 +1,391 @@
+{
+  "format": "curtain.phase0.job",
+  "format_version": 1,
+  "job_id": "monochrome-03-14cbad9983fa",
+  "product_id": "monochrome-03",
+  "product_name": "Heavyweight Boxy Tee",
+  "category": "top",
+  "base_size": "M",
+  "chart": {
+    "type": "garment",
+    "unit": "cm",
+    "rows": [
+      {
+        "size": "XS",
+        "rings": {
+          "chest": 100
+        },
+        "default_ease": []
+      },
+      {
+        "size": "S",
+        "rings": {
+          "chest": 106
+        },
+        "default_ease": []
+      },
+      {
+        "size": "M",
+        "rings": {
+          "chest": 112
+        },
+        "default_ease": []
+      },
+      {
+        "size": "L",
+        "rings": {
+          "chest": 118
+        },
+        "default_ease": []
+      },
+      {
+        "size": "XL",
+        "rings": {
+          "chest": 124
+        },
+        "default_ease": []
+      }
+    ]
+  },
+  "fabric": {
+    "format": "curtain.garment.material",
+    "formatVersion": 1,
+    "productId": "monochrome-03",
+    "fabricLibraryVersion": "1.0.0",
+    "baseColorHex": "#111111",
+    "fibres": [
+      {
+        "id": "cotton",
+        "pct": 100
+      }
+    ],
+    "construction": null,
+    "weightGsm": 230,
+    "stretchPct": 12,
+    "drape": 0.3,
+    "bendStiffness": 0.1102,
+    "sheen": 0,
+    "opacity": 1,
+    "texture": "plain-weave",
+    "simulation": {
+      "stretchStiffness": 5000,
+      "bendStiffness": 0.00001081,
+      "massKgM2": 0.23,
+      "damping": 0.09
+    },
+    "provenance": {
+      "weightGsm": "product",
+      "stretchPct": "product",
+      "drape": "product",
+      "bendStiffness": "blend",
+      "sheen": "product",
+      "opacity": "product",
+      "texture": "blend"
+    },
+    "unknownFibres": []
+  },
+  "mannequin": {
+    "version": "0.1.0",
+    "shape": "M",
+    "glb": "mannequin.glb",
+    "glb_sha256": "06a7f25839b6035dcf67e129830be7091feac6ad5f0de1f2f15ce2218260ec8f",
+    "unit": "m",
+    "stature_cm": 168
+  },
+  "photos": [
+    {
+      "role": "front",
+      "path": "photos/front.png",
+      "sha256": "1aa8008d9d7c013d18dfe430536e86f3a79c54cc359409fd5fa3b9663b982ddf",
+      "synthetic": true,
+      "source": "spike synthetic garment, software rasterizer"
+    },
+    {
+      "role": "back",
+      "path": "photos/back.png",
+      "sha256": "3ef0890bb279bf5c287b9f200dffed918708295e3d91c1fac15ff2c61ad2a288",
+      "synthetic": true,
+      "source": "spike synthetic garment, software rasterizer"
+    }
+  ],
+  "camera": {
+    "path_id": "turntable_mid",
+    "frames": 8,
+    "width": 64,
+    "height": 112,
+    "fov_y_deg": 40,
+    "radius_cm": 320,
+    "height_cm": 100.8,
+    "world": "mannequin space, metres: +Y up, +Z mannequin front, +X mannequin left",
+    "pixel_origin": "corner",
+    "opencv": "cameras_opencv.json",
+    "transforms": "transforms.json",
+    "frames_dir": "frames"
+  },
+  "control": {
+    "depth_mm_dir": "control/depth_mm",
+    "depth_vis_dir": "control/depth_vis",
+    "mask_dir": "control/mask",
+    "near_cm": 259,
+    "far_cm": 382,
+    "encoding": "depth_mm: uint16 mm, 0 = background; depth_vis: uint8, linear in depth, near_cm = 255, far_cm = 1, background 0; mask: 255 = mannequin"
+  },
+  "motion": {
+    "clip_id": "arms-raise-half-turn-step",
+    "radius_cm": 520,
+    "camera": "motion/cameras_opencv.json",
+    "depth_mm_dir": "motion/depth_mm",
+    "depth_vis_dir": "motion/depth_vis",
+    "mask_dir": "motion/mask",
+    "near_cm": 506,
+    "far_cm": 534
+  },
+  "clips": [
+    {
+      "id": "turntable_a",
+      "frame_indices": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "first_photo": "front",
+      "last_photo": "back",
+      "kind": "turntable",
+      "fps": 16,
+      "control_dir": "control/depth_vis",
+      "mask_dir": "control/mask",
+      "depth_mm_dir": "control/depth_mm"
+    },
+    {
+      "id": "turntable_b",
+      "frame_indices": [
+        4,
+        5,
+        6,
+        7,
+        0
+      ],
+      "first_photo": "back",
+      "last_photo": "front",
+      "kind": "turntable",
+      "fps": 16,
+      "control_dir": "control/depth_vis",
+      "mask_dir": "control/mask",
+      "depth_mm_dir": "control/depth_mm"
+    },
+    {
+      "id": "motion",
+      "kind": "motion",
+      "fps": 16,
+      "frame_indices": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "control_dir": "motion/depth_vis",
+      "mask_dir": "motion/mask",
+      "depth_mm_dir": "motion/depth_mm",
+      "first_photo": "front",
+      "last_photo": null,
+      "times_s": [
+        0,
+        0.0625,
+        0.125,
+        0.1875,
+        0.25
+      ]
+    }
+  ],
+  "synthetic": {
+    "dir": "synthetic",
+    "transforms": "synthetic/transforms.json",
+    "rgb_dir": "synthetic/rgb",
+    "garment_mask_dir": "synthetic/garment_mask",
+    "truth_glb": "synthetic/garment_truth.glb",
+    "background_rgb": [
+      235,
+      235,
+      235
+    ]
+  },
+  "seeds": {
+    "video": 43,
+    "recon": 7
+  },
+  "models": {
+    "video": {
+      "id": "alibaba-pai/Wan2.2-Fun-A14B-Control",
+      "revision": "297be6d520f54908e124be0298e2317ee50ffdf4",
+      "code_url": "https://github.com/aigc-apps/VideoX-Fun",
+      "code_revision": "3e8d6867d3bff699bc85cd839f9802a5faa73aa3",
+      "licence": "Apache-2.0"
+    },
+    "recon": {
+      "id": "gsplat",
+      "version": "1.5.3",
+      "code_url": "https://github.com/nerfstudio-project/gsplat",
+      "code_revision": "937e29912570c372bed6747a5c9bf85fed877bae",
+      "method": "2dgs",
+      "mesher": "open3d",
+      "mesher_version": "0.19.0",
+      "licence": "Apache-2.0 (gsplat), MIT (Open3D)"
+    }
+  },
+  "exporter": "@curtain/garment-spike phase0-export-0.1.0",
+  "hash_inputs": {
+    "exporter": "phase0-export-0.1.0",
+    "product": {
+      "schemaVersion": 1,
+      "id": "monochrome-03",
+      "brand": "Monochrome",
+      "name": "Heavyweight Boxy Tee",
+      "category": "top",
+      "subcategory": "t-shirt",
+      "priceEur": 45,
+      "primaryColorHex": "#111111",
+      "colorways": [
+        {
+          "name": "Black",
+          "hex": "#111111"
+        },
+        {
+          "name": "Chalk",
+          "hex": "#F0EDE6"
+        },
+        {
+          "name": "Olive",
+          "hex": "#5B6B3C"
+        }
+      ],
+      "fabric": {
+        "primary": "cotton",
+        "blend": [
+          [
+            "cotton",
+            100
+          ]
+        ],
+        "weightGsm": 230,
+        "stretchPct": 12,
+        "drape": 0.3,
+        "opacity": 1,
+        "sheen": 0
+      },
+      "patternBlock": "t-shirt",
+      "ease": {
+        "bust": 12,
+        "shoulder": 3
+      },
+      "lengthCm": {
+        "shoulder_to_hem": 66,
+        "sleeve_length": 22,
+        "chest_width": 56
+      },
+      "sizeChartType": "garment",
+      "sizeChart": [
+        {
+          "size": "XS",
+          "bust": 100,
+          "shoulder": 46
+        },
+        {
+          "size": "S",
+          "bust": 106,
+          "shoulder": 48
+        },
+        {
+          "size": "M",
+          "bust": 112,
+          "shoulder": 50
+        },
+        {
+          "size": "L",
+          "bust": 118,
+          "shoulder": 52
+        },
+        {
+          "size": "XL",
+          "bust": 124,
+          "shoulder": 54
+        }
+      ],
+      "sizingNotes": "boxy — size down for a regular fit",
+      "trueToSizeScore": 0.82,
+      "criticalFitPoints": [
+        "shoulder"
+      ],
+      "stretchZones": [
+        "rib-hem"
+      ],
+      "styleTags": {
+        "minimal": 0.7,
+        "sporty": 0.4
+      },
+      "productPhotos": [
+        "https://placehold.co/800x1000/F5EFE7/1A1612.png?text=Heavyweight%20Boxy%20Tee%201",
+        "https://placehold.co/800x1000/F5EFE7/1A1612.png?text=Heavyweight%20Boxy%20Tee%202"
+      ],
+      "flatLayPhoto": "https://placehold.co/1000x1000/FFFFFF/1A1612.png?text=flat-lay%20monochrome-03"
+    },
+    "base_size": "M",
+    "mannequin": {
+      "version": "0.1.0",
+      "shape": "M"
+    },
+    "camera": {
+      "path_id": "turntable_mid",
+      "frames": 8,
+      "width": 64,
+      "height": 112,
+      "fov_y_deg": 40,
+      "radius_cm": 320
+    },
+    "motion": {
+      "clip_id": "arms-raise-half-turn-step",
+      "frames": 5,
+      "fps": 16,
+      "radius_cm": 520
+    },
+    "photos": [
+      {
+        "role": "front",
+        "sha256": "1aa8008d9d7c013d18dfe430536e86f3a79c54cc359409fd5fa3b9663b982ddf",
+        "synthetic": true
+      },
+      {
+        "role": "back",
+        "sha256": "3ef0890bb279bf5c287b9f200dffed918708295e3d91c1fac15ff2c61ad2a288",
+        "synthetic": true
+      }
+    ],
+    "seeds": {
+      "video": 43,
+      "recon": 7
+    },
+    "models": {
+      "video": {
+        "id": "alibaba-pai/Wan2.2-Fun-A14B-Control",
+        "revision": "297be6d520f54908e124be0298e2317ee50ffdf4",
+        "code_url": "https://github.com/aigc-apps/VideoX-Fun",
+        "code_revision": "3e8d6867d3bff699bc85cd839f9802a5faa73aa3",
+        "licence": "Apache-2.0"
+      },
+      "recon": {
+        "id": "gsplat",
+        "version": "1.5.3",
+        "code_url": "https://github.com/nerfstudio-project/gsplat",
+        "code_revision": "937e29912570c372bed6747a5c9bf85fed877bae",
+        "method": "2dgs",
+        "mesher": "open3d",
+        "mesher_version": "0.19.0",
+        "licence": "Apache-2.0 (gsplat), MIT (Open3D)"
+      }
+    },
+    "synthetic": true
+  },
+  "input_hash": "14cbad9983fa4e25f906720de6dde74fcecce1f9f01dec9f4bb44465ec42df2e"
+}

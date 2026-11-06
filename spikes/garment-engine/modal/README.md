@@ -12,6 +12,7 @@ GPU half of the Phase 0 spike (`docs/ENGINE-HANDOFF.md`), following shortlist A 
 | File | What it is | Needs |
 | --- | --- | --- |
 | `smoke.py` | Modal hello world: CPU function, GPU cold start, torch matmul | Modal |
+| `smoke_cpu.py` | The same without a GPU (login, image, remote call) | Modal |
 | `stage2_video.py` | Stage 2 app: weights download (once), `generate` (3 clips, assembled turntable, drift check, cost record) | Modal, GPU |
 | `stage4_recon.py` | Stage 4 app: `reconstruct` (2DGS → TSDF → mesh → `.glb` + metrics + cost record) | Modal, GPU |
 | `run_phase0.py` | Runs both stages for one product and prints the cost summary | Modal, GPU |
@@ -146,6 +147,19 @@ Each stage also runs on its own:
 ```sh
 modal run spikes/garment-engine/modal/stage2_video.py --job-dir … [--clips turntable_a] [--steps 40]
 ```
+
+### Alternative: run through GitHub Actions
+
+`.github/workflows/modal.yml` runs every line of `.github/modal/run.txt` on a GitHub runner when that file changes on a `claude/*` branch. GitHub runners can reach Modal. The workflow needs the repository secrets `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET`, and it uploads `spikes/garment-engine/out/` as an artifact.
+
+The workflow does not build the workspace packages. It also passes only `CURTAIN_MODAL_GPU` and `CURTAIN_MODAL_REGION` through, not `CURTAIN_MODAL_GPU_VIDEO` or `CURTAIN_MODAL_GPU_RECON`, so the defaults apply. A first GPU run of this pipeline would therefore be:
+
+```
+pnpm build:packages && pnpm --filter @curtain/garment-spike export:phase0 -- --product aalter-studio-2 --synthetic-photos
+modal run spikes/garment-engine/modal/stage4_recon.py --job-dir spikes/garment-engine/out/phase0/aalter-studio-2 --source synthetic
+```
+
+The job timeout is 120 minutes. Stage 2 with 40 steps, plus the first 69 GB weight download, may not fit in that.
 
 ### 7. Tests (no Modal, no GPU)
 

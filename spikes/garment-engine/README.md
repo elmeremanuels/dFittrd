@@ -54,6 +54,22 @@ The "before" error is the simulated reconstruction error: 3.5 % too large, chest
 - **The synthetic garments are open, manifold surfaces.** The handoff's mesh-health check ("watertight where expected") must allow the neckline, hem and sleeve openings.
 - The tee has 7.8k triangles, below the 8–15k guidance; the budget check only enforces the upper bound.
 
+## Cut families: build once per cut, swap the print
+
+Shops sell one cut in many colours and prints. The full pipeline (stage 1b → 2 → 4) runs once per **cut family**, for its reference member; every other member only gets **stage 4b**, a new texture projected from its own front and back stills onto the reference mesh.
+
+```sh
+pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch       # catalogue pages into raw/ (once)
+pnpm --filter @curtain/garment-spike families:bohohippychic -- --fetch   # + main photos; writes data/bohohippychic/families.json
+modal run spikes/garment-engine/modal/stage4b_retexture.py --ref-job-dir <reference job> --source stage2 \
+  --variant-job-dir <variant job with stage 1b stills> --variant-id <handle> --family-id <id>
+```
+
+- **Grouping** (`src/families.ts`): same product type, same size values, same title stem and same description after removing colour words, print words, variant codes (PWP1) and shop boilerplate ("Singlet is not included", colour disclaimers, "Colour:" lines); measurements stay in. A silhouette check on the main photo (`src/familiesSilhouette.ts`, mask IoU after scale normalisation, threshold 0.6) splits false merges. The reference is the member with the best photos (no model first, then resolution, then image count). A member whose fabric or size chart differs from the reference is flagged `ownAsset` and gets its own full run.
+- **Result on bohohippychic** (2026-11-06, `families.json`): 667 products → 595 families (22 with more than one member); **72 products need only stage 4b** (71 of them in garment types: 537 products → 466 full runs). The largest family is the Earthweave Knit Top (29 colours). 52 more groups share a title stem but not the copy (e.g. 4 Earthweave tops with rewritten text, 7 Nomad Cotton Jackets in 3 families); the rules never merge those, a merchant confirmation could save up to 73 more runs. No member's fabric or chart differs from its reference.
+- **Silhouette check: implemented, splits nothing here.** All 94 main photos it looked at are on a model in a styled set; the border-colour mask refuses every one ("not a plain backdrop"), so no member is split and no member is checked. It works on plain-backdrop photos (tests) and accepts a garment mask from a segmentation model (`raw/<handle>/main-mask.png`).
+- **Stage 4b** (`modal/stage4b_retexture.py`, pure Python, CPU, no video model): projects the variant's front/back stills through the known turntable cameras (frame 0 and N/2), with a z-buffer, the garment mask and a grazing-angle cut; the sides neither still sees are filled by mirroring the nearest seen print across the visibility boundary in a cylinder grid around the turntable axis (no generative fill). It writes `stage4b/<source>/variants/<id>/{texture.png, material.json, preview.glb, record.json}` and the bundle's `variants.json` into the reference job. Stage 4 writes no UVs yet, so stage 4b gives every triangle its own atlas cell (`garment_uv.glb`, shared by the family). On a 12k-triangle cylinder at 480×832 with a 1024 texture the core takes about 4 s locally; it has not run on Modal.
+
 ## What Phase 0 still needs from a GPU service and video models
 
 The candidates, licences and costs are in `docs/research/garment-engine.md`. The stages below plug into the spike by replacing `generateGarment` + `distortGarment` in `buildBundle` (`src/bundle.ts`). Everything after that point stays as it is.

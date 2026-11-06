@@ -401,3 +401,24 @@ export function compact<T extends object>(obj: T): T {
   for (const [k, v] of Object.entries(obj)) if (v !== undefined) out[k] = v;
   return out as T;
 }
+
+/** EUR-based rate table: 1 EUR = `rates[code]` units of that currency (e.g. `{ AUD: 1.78 }`). */
+export type EurRateTable = Readonly<Record<string, number>>;
+
+/**
+ * A shop price as `priceEur`. EUR passes through; another currency is converted with `rates`
+ * (approximate list-price rates, not live FX) and reported as a warning so the merchant sees it.
+ * Without a rate the price is left out (and reported): size advice does not need it.
+ */
+export function priceToEur(amount: number, currencyCode: string, rates: EurRateTable | undefined, sink: WarningSink, source: string): number | undefined {
+  const code = currencyCode.trim().toUpperCase();
+  if (code === 'EUR') return amount;
+  const rate = rates?.[code];
+  if (typeof rate === 'number' && Number.isFinite(rate) && rate > 0) {
+    const eur = Math.round((amount / rate) * 100) / 100;
+    warn(sink, { source, path: 'priceEur', message: `price converted from ${code} at ${rate} per EUR (approximate)` });
+    return eur;
+  }
+  warn(sink, { source, path: 'priceEur', message: `price is in ${code}, not EUR, and no rate is known` });
+  return undefined;
+}

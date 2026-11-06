@@ -27,6 +27,8 @@ import {
   inferCategory,
   parseJsonish,
   warn,
+  priceToEur,
+  type EurRateTable,
   type WarningSink,
 } from './common';
 
@@ -135,6 +137,8 @@ export interface FromWooOptions {
   currency?: string;
   /** Fallback brand (the shop name). */
   defaultBrand?: string;
+  /** EUR-based rates for shops that price in another currency. Without one the price is left out. */
+  eurRates?: EurRateTable;
 }
 
 /**
@@ -172,8 +176,8 @@ export function fromWooMeta(product: WooProduct, meta?: WooMetaInput, options: F
   const currency = (options.currency ?? 'EUR').toUpperCase();
   const amount = coerceNumber(p.price) ?? coerceNumber(p.regular_price);
   if (amount !== undefined) {
-    if (currency === 'EUR') out.priceEur = amount;
-    else warn(sink, { source: 'price', path: 'priceEur', message: `price is in ${currency}, not EUR` });
+    const eur = priceToEur(amount, currency, options.eurRates, sink, 'price');
+    if (eur !== undefined) out.priceEur = eur;
   }
 
   const url = coerceUrl(p.permalink);

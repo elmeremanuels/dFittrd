@@ -9,7 +9,9 @@ What lives here:
 - camera pose conversions between OpenCV world-to-camera and Nerfstudio/OpenGL camera-to-world,
 - turntable clip assembly (two half-turn clips -> one frame per camera pose),
 - the GPU cost estimate (list prices from the research doc; always marked as an estimate),
-- run settings from environment variables (GPU type, region, timeouts).
+- run settings from environment variables (GPU type, region, timeouts),
+- stage 1b helpers (pins, settings, manifest wiring, mask operations, alignment QA),
+- stage 2's control mode, prompt guard and per-frame garment-consistency metric.
 """
 from __future__ import annotations
 
@@ -17,6 +19,7 @@ import hashlib
 import json
 import math
 import os
+import re
 from typing import Any, Iterable, Mapping, Sequence
 
 MANIFEST_FORMAT = "curtain.phase0.job"
@@ -802,7 +805,8 @@ def alignment_qa(
 
     garment     the garment mask in the still
     foreground  everything that is not studio background in the generated still (mannequin + garment)
-    bare_mask   our bare-mannequin silhouette at the same frame (control/mask)
+    bare_mask   our bare-mannequin silhouette at the same frame (dress/bare_mask_<view>.png; NOT
+                control/mask, which includes the proxy garment since phase0-export-0.2.0)
 
     inside_fraction   share of garment pixels within the silhouette dilated by `margin_px`
     silhouette_iou    IoU of (foreground - garment) and (bare - garment): where no cloth covers the
@@ -867,3 +871,289 @@ def stage1b_summary(views: Sequence[Mapping[str, Any]], *, invented_back: bool) 
         "label": STAGE1B_LABEL,
         "usable_for_stage2": not failed,
     }
+
+
+# ---------------------------------------------------------------------------
+# Stage 2: control mode, prompts and the per-frame garment-consistency metric
+# ---------------------------------------------------------------------------
+#
+# The first GPU run (GitHub Actions run 10) drove Wan2.2-Fun-A14B-Control with the depth of the BARE
+# mannequin (two separate legs) and a prompt holding the product title: between the pinned frames the
+# dress turned into trousers (frames 20, 60, 100) and the title appeared as text in frame 20. Exports
+# from phase0-export-0.2.0 on render the control with the mannequin wearing a coarse proxy garment
+# (manifest `control.mode`, `control.proxy`, `control.proxy_mask_dir`) and carry neutral prompts
+# (`prompt`). Stage 2 checks the prompts before it spends GPU time, and scores every generated frame
+# against the proxy silhouette so drift shows up as numbers in stage2/record.json.
+
+CONTROL_MODES = ("proxy", "bare")
+# Always in the negative prompt (the title was rendered as text), matched as whole words.
+PROMPT_REQUIRED_NEGATIVE = ("text", "letters", "words", "watermark", "logo")
+# Per proxy kind: the garment the video must not turn into.
+PROMPT_KIND_NEGATIVE = {"dress": ("trousers",), "skirt": ("trousers",), "trousers": ("dress", "skirt")}
+
+# Per-frame consistency thresholds. INITIAL VALUES, not tuned on any real output: set them from the
+# first run with the proxy control. Computed on masks subsampled by CONSISTENCY_STRIDE.
+CONSISTENCY_THRESHOLDS = {
+    "min_silhouette_iou": 0.85,  # generated foreground vs control silhouette (mannequin + proxy), whole frame
+    "min_zone_iou": 0.80,  # the same within the rows the proxy spans (the garment zone)
+    "min_garment_cover": 0.90,  # share of the visible proxy the generated foreground covers
+}
+CONSISTENCY_STRIDE = 2
+# The generated background is "plain light-grey" but not exactly ours: estimated per frame from the border.
+CONSISTENCY_BG_TOL = 20
+# A garment whose mean colour inside the proxy is within this many 8-bit levels of the background (per
+# channel, max) is "low contrast": the border-colour foreground cannot separate it (white, cream and
+# light-grey garments on the light-grey studio background), so its three numbers are unreliable.
+CONSISTENCY_MIN_CONTRAST = 2 * CONSISTENCY_BG_TOL
+# Rows with two or more runs (a gap between the legs) needed for a frame to count as drift-visible.
+CONSISTENCY_MIN_GAP_ROWS = 2
+CONSISTENCY_LABEL = (
+    "garment consistency: generated frame silhouette vs the control proxy's, per frame (a drift check, "
+    "not a measurement of the garment; the proxy is a coarse control signal). Blind spots: a dress turning "
+    "into trousers is only visible where the legs are apart in the control (front/back views); around 90 and "
+    "270 degrees the legs overlap and such frames read as consistent (`drift_visible` false, listed in "
+    "`blind_frames`). White, cream and light-grey garments merge into the light-grey background, so their "
+    "numbers drop for reasons other than drift (`low_contrast_frames`). garment_cover is measured against the "
+    "proxy's guessed flare (dress default hem_flare 1.35): a correct but narrower garment can fall below it. "
+    "Thresholds are initial values, to be set per proxy kind from the first proxy-control run."
+)
+
+
+def control_mode(m: Mapping[str, Any]) -> str:
+    """'proxy' or 'bare'. Manifests before phase0-export-0.2.0 have no mode: their control was the bare mannequin."""
+    mode = m["control"].get("mode", "bare")
+    if mode not in CONTROL_MODES:
+        raise ManifestError(f"unknown control mode {mode!r}; expected one of {', '.join(CONTROL_MODES)}")
+    return mode
+
+
+def video_prompts(m: Mapping[str, Any]) -> dict[str, Any]:
+    """The stage 2 prompts the exporter wrote (turntable, motion, negative, description, kind)."""
+    p = m.get("prompt")
+    if not isinstance(p, Mapping) or not all(isinstance(p.get(k), str) and p.get(k) for k in ("turntable", "motion", "negative")):
+        raise ManifestError("the manifest has no stage 2 prompt (exported before phase0-export-0.2.0); re-export the job")
+    return dict(p)
+
+
+def _has_word(text: str, phrase: str) -> bool:
+    return re.search(r"(?<![a-z])" + re.escape(phrase.lower()) + r"(?![a-z])", text.lower()) is not None
+
+
+def prompt_problems(m: Mapping[str, Any]) -> list[str]:
+    """Reasons not to send the manifest's prompts to the video model (empty = fine): the product title or
+    brand in a positive prompt, quoted text, or a negative prompt without the text/logo terms and, for a
+    dress, skirt or trousers, without the garment the video must not turn into."""
+    try:
+        p = video_prompts(m)
+    except ManifestError as e:
+        return [str(e)]
+    problems: list[str] = []
+    product = m.get("hash_inputs", {}).get("product", {}) if isinstance(m.get("hash_inputs"), Mapping) else {}
+    names = [("product title", m.get("product_name") or product.get("name")), ("brand", product.get("brand"))]
+    for key in ("turntable", "motion"):
+        text = p[key]
+        for what, value in names:
+            if value and str(value).strip().lower() in text.lower():
+                problems.append(f"{key} prompt contains the {what} {value!r}")
+        if '"' in text or "“" in text or "”" in text:
+            problems.append(f"{key} prompt contains quoted text (models render it as letters)")
+    for term in PROMPT_REQUIRED_NEGATIVE + PROMPT_KIND_NEGATIVE.get(p.get("kind", ""), ()):
+        if not _has_word(p["negative"], term):
+            problems.append(f"negative prompt lacks {term!r}")
+    return problems
+
+
+def subsample(values: Sequence[int], w: int, h: int, stride: int, channels: int = 1) -> tuple[bytearray, int, int]:
+    """Every `stride`-th pixel in x and y (nearest, no filtering): (values, w', h')."""
+    if len(values) != w * h * channels:
+        raise ValueError(f"expected {w}x{h}x{channels} values, got {len(values)}")
+    if stride <= 1:
+        return bytearray(values), w, h
+    w2, h2 = (w + stride - 1) // stride, (h + stride - 1) // stride
+    out = bytearray(w2 * h2 * channels)
+    o = 0
+    for y in range(0, h, stride):
+        row = y * w
+        for x in range(0, w, stride):
+            i = (row + x) * channels
+            out[o:o + channels] = bytes(values[i:i + channels])
+            o += channels
+    return out, w2, h2
+
+
+def border_colour(rgb: Sequence[int], w: int, h: int, band: int = 2) -> tuple[int, int, int]:
+    """Per-channel median of the pixels within `band` of the frame border: the frame's background colour."""
+    if len(rgb) != 3 * w * h:
+        raise ValueError("RGB image must be 3*w*h bytes")
+    chans: list[list[int]] = [[], [], []]
+    for y in range(h):
+        for x in range(w):
+            if band <= x < w - band and band <= y < h - band:
+                continue
+            i = 3 * (y * w + x)
+            for c in range(3):
+                chans[c].append(rgb[i + c])
+    return tuple(sorted(ch)[len(ch) // 2] for ch in chans)  # type: ignore[return-value]
+
+
+def frame_foreground(rgb: Sequence[int], w: int, h: int, *, tol: int = CONSISTENCY_BG_TOL, bg: Sequence[int] | None = None) -> bytearray:
+    """Everything that is not background in a generated frame (mannequin + garment), opened by one pixel
+    and reduced to its large components. The background colour is estimated from the border unless given."""
+    colour = tuple(bg) if bg is not None else border_colour(rgb, w, h)
+    fg = mask_not(background_mask(rgb, w, h, colour, tol))
+    fg = dilate(erode(fg, w, h, 1), w, h, 1)
+    return keep_large_components(fg, w, h, min_frac=0.05)
+
+
+def gap_rows(mask: Sequence[int], w: int, h: int, y0: int, y1: int, x0: int = 0, x1: int | None = None) -> int:
+    """Rows in [y0, y1) where the mask, between columns x0 and x1, has two or more separate runs: a gap
+    between the legs (or between trouser legs)."""
+    _check(mask, w, h)
+    x1 = w if x1 is None else x1
+    n = 0
+    for y in range(max(0, y0), min(h, y1)):
+        row = y * w
+        runs, prev = 0, 0
+        for x in range(max(0, x0), min(w, x1)):
+            v = 1 if mask[row + x] else 0
+            if v and not prev:
+                runs += 1
+            prev = v
+        if runs >= 2:
+            n += 1
+    return n
+
+
+def drift_visible(control: Sequence[int], proxy: Sequence[int], w: int, h: int, min_rows: int = CONSISTENCY_MIN_GAP_ROWS) -> bool:
+    """Whether a dress<->trousers drift can show up in this frame's silhouette: the control (mannequin +
+    proxy) has a gap between the legs below the proxy's hem, or the proxy itself has one (trousers),
+    within the proxy's columns. Around 90/270 degrees the legs overlap, there is no gap, and a drift
+    leaves the silhouette unchanged. A heuristic on our own render, not on the generated frame."""
+    box = bbox(proxy, w, h)
+    if box is None:
+        return False
+    x0, y0, x1, y1 = box
+    return gap_rows(control, w, h, y1, h, x0, x1) >= min_rows or gap_rows(proxy, w, h, y0, y1, x0, x1) >= min_rows
+
+
+def proxy_contrast(rgb: Sequence[int], proxy: Sequence[int], w: int, h: int, bg: Sequence[int] | None = None) -> float | None:
+    """Max over channels of |mean colour inside the proxy - background colour| (8-bit). Low values mean
+    the garment is close to the background colour and the foreground mask cannot see it."""
+    if len(rgb) != 3 * w * h:
+        raise ValueError("RGB image must be 3*w*h bytes")
+    _check(proxy, w, h)
+    colour = tuple(bg) if bg is not None else border_colour(rgb, w, h)
+    sums = [0, 0, 0]
+    n = 0
+    for k, v in enumerate(proxy):
+        if v:
+            n += 1
+            for c in range(3):
+                sums[c] += rgb[3 * k + c]
+    if n == 0:
+        return None
+    return round(max(abs(sums[c] / n - colour[c]) for c in range(3)), 2)
+
+
+def frame_consistency(fg: Sequence[int], control: Sequence[int], proxy: Sequence[int] | None, w: int, h: int, *, rgb: Sequence[int] | None = None) -> dict[str, Any]:
+    """One generated frame against the control: silhouette IoU over the frame and within the rows the
+    proxy spans (the garment zone), and the share of the visible proxy the frame covers. With a proxy it
+    also says whether a leg drift could be seen at all (`drift_visible`) and, given the frame's `rgb`,
+    the garment's contrast against the background (`contrast`). Without a proxy (control mode bare)
+    only the silhouette IoU exists."""
+    _check(fg, w, h)
+    _check(control, w, h)
+    out: dict[str, Any] = {"silhouette_iou": round(mask_iou(fg, control), 4), "zone_iou": None, "garment_cover": None, "zone_rows": None, "drift_visible": None, "contrast": None}
+    if proxy is None:
+        return out
+    _check(proxy, w, h)
+    box = bbox(proxy, w, h)
+    if box is None:
+        return out
+    _, y0, _, y1 = box
+    lo, hi = y0 * w, y1 * w
+    out["zone_iou"] = round(mask_iou(fg[lo:hi], control[lo:hi]), 4)
+    p = mask_count(proxy)
+    out["garment_cover"] = round(mask_count(mask_and(fg, proxy)) / p, 4)
+    out["zone_rows"] = [y0, y1]
+    out["drift_visible"] = drift_visible(control, proxy, w, h)
+    if rgb is not None:
+        out["contrast"] = proxy_contrast(rgb, proxy, w, h)
+    return out
+
+
+def consistency_flags(row: Mapping[str, Any], thresholds: Mapping[str, float] | None = None) -> list[str]:
+    t = {**CONSISTENCY_THRESHOLDS, **(thresholds or {})}
+    reasons: list[str] = []
+    if row["silhouette_iou"] < t["min_silhouette_iou"]:
+        reasons.append(f"silhouette IoU {row['silhouette_iou']:.3f} < {t['min_silhouette_iou']}")
+    if row.get("zone_iou") is not None and row["zone_iou"] < t["min_zone_iou"]:
+        reasons.append(f"garment-zone IoU {row['zone_iou']:.3f} < {t['min_zone_iou']}")
+    if row.get("garment_cover") is not None and row["garment_cover"] < t["min_garment_cover"]:
+        reasons.append(f"proxy covered {row['garment_cover']:.3f} < {t['min_garment_cover']}")
+    return reasons
+
+
+def consistency_summary(rows: Sequence[Mapping[str, Any]], *, mode: str, stride: int = CONSISTENCY_STRIDE, thresholds: Mapping[str, float] | None = None) -> dict[str, Any]:
+    """Stage 2's `consistency` block: every frame with its numbers and flags, the flagged frames, and
+    min/mean per metric (overall and per clip). `rows` carry clip, j (frame in the clip), frame (camera
+    index or motion index) and the frame_consistency numbers."""
+    t = {**CONSISTENCY_THRESHOLDS, **(thresholds or {})}
+    frames = []
+    for r in rows:
+        reasons = consistency_flags(r, t)
+        frames.append({**r, "flagged": bool(reasons), "reasons": reasons})
+
+    def stats(rs: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+        out: dict[str, Any] = {"frames": len(rs), "flagged": sum(1 for r in rs if r["flagged"])}
+        for k in ("silhouette_iou", "zone_iou", "garment_cover"):
+            vals = [r[k] for r in rs if r.get(k) is not None]
+            out[k] = None if not vals else {"min": round(min(vals), 4), "mean": round(sum(vals) / len(vals), 4)}
+        return out
+
+    clips: dict[str, list[Mapping[str, Any]]] = {}
+    for f in frames:
+        clips.setdefault(f["clip"], []).append(f)
+    flagged = [{"clip": f["clip"], "j": f["j"], "frame": f["frame"], "reasons": f["reasons"]} for f in frames if f["flagged"]]
+    ref = lambda f: {"clip": f["clip"], "j": f["j"], "frame": f["frame"]}  # noqa: E731
+    blind = [ref(f) for f in frames if f.get("drift_visible") is False]
+    low = [{**ref(f), "contrast": f["contrast"]} for f in frames if f.get("contrast") is not None and f["contrast"] < CONSISTENCY_MIN_CONTRAST]
+    visible = [f for f in frames if f.get("drift_visible") is True]
+    return {
+        "reference": "control proxy (mannequin wearing the coarse proxy garment)" if mode == "proxy" else "bare mannequin: NOT a garment reference, only the silhouette IoU is reported",
+        "control_mode": mode,
+        "stride": stride,
+        "thresholds": t,
+        "thresholds_note": "initial values, not tuned on real output",
+        **stats(frames),
+        "per_clip": {c: stats(rs) for c, rs in clips.items()},
+        "flagged_frames": flagged,
+        # Frames where a leg drift cannot change the silhouette: their passing numbers prove nothing.
+        "blind_frames": blind,
+        "drift_visible": stats(visible) if visible else None,
+        # Frames whose garment is close to the background colour: their numbers are unreliable either way.
+        "low_contrast_frames": low,
+        "min_contrast": CONSISTENCY_MIN_CONTRAST,
+        "pass": not flagged,
+        "label": CONSISTENCY_LABEL,
+        "frames_detail": frames,
+    }
+
+
+def consistency_plan(m: Mapping[str, Any], clip_ids: Iterable[str] | None = None) -> list[dict[str, Any]]:
+    """What to score: per generated clip frame, the generated PNG (stage2/clips/<clip>/NNNN.png), the
+    control silhouette and the proxy mask (None in bare mode), as job-relative paths."""
+    wanted = set(clip_ids) if clip_ids is not None else None
+    plan = []
+    for clip in m["clips"]:
+        if wanted is not None and clip["id"] not in wanted:
+            continue
+        pdir = clip.get("proxy_mask_dir")
+        for j, idx in enumerate(clip["frame_indices"]):
+            plan.append({
+                "clip": clip["id"], "j": j, "frame": idx,
+                "generated": f"stage2/clips/{clip['id']}/{j:04d}.png",
+                "control_mask": f"{clip['mask_dir']}/{idx:04d}.png",
+                "proxy_mask": f"{pdir}/{idx:04d}.png" if pdir else None,
+            })
+    return plan

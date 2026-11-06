@@ -1,8 +1,17 @@
 /**
  * Shop validation for bohohippychic.com.au: public catalogue → five GarmentPayload v1 drafts.
  *
- *   pnpm --filter @curtain/garment-spike shop:bohohippychic            # offline, from data/bohohippychic/raw/
- *   pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch # (re)download catalogue pages and the images
+ *   pnpm --filter @curtain/garment-spike shop:bohohippychic                     # offline, from data/bohohippychic/raw/
+ *   pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch-images   # images of images.json into raw/, checked against the COMMITTED sha256; writes no JSON
+ *   pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch-catalogue # catalogue pages into raw/ only; writes no JSON
+ *   pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch          # catalogue + images, then rebuild products.json and images.json
+ *
+ * --fetch-images and --fetch-catalogue only fill raw/ (gitignored). Use them on a CI runner: the
+ * hand classification in src/shopSelection.ts is keyed by image position and pinned by the sha256 in
+ * the committed images.json, and they never rewrite it. --fetch rebuilds both JSON files, but refuses
+ * to write when an image's sha256, URL or position differs from the committed images.json (the shop
+ * changed or reordered photos): look at the photos, update SHOP_IMAGE_CLASSIFICATION, then re-run
+ * with --accept-image-changes.
  *
  * Reads  data/bohohippychic/raw/products-page<N>.json (Shopify /products.json?limit=250&page=N) and
  *        data/bohohippychic/raw/<handle>/<NN>.<ext> (the product images, as served).
@@ -19,12 +28,21 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { SHOP, buildShopPayload, rankCandidates, type ShopifyProduct } from './shop';
+import { checkImageBytes, committedImages, imageRecordChanges } from './shopImages';
 import { SHOP_IMAGE_CLASSIFICATION, SHOP_REJECTED_TYPES, SHOP_SELECTION, SHOP_UNCOVERED_CATEGORIES, type ImageClassification } from './shopSelection';
 
 const { values } = parseArgs({
   args: process.argv.slice(2).filter((a) => a !== '--'),
-  options: { fetch: { type: 'boolean', default: false } },
+  options: {
+    fetch: { type: 'boolean', default: false },
+    'fetch-images': { type: 'boolean', default: false },
+    'fetch-catalogue': { type: 'boolean', default: false },
+    'accept-image-changes': { type: 'boolean', default: false },
+  },
 });
+const fetchModes = [values.fetch, values['fetch-images'], values['fetch-catalogue']].filter(Boolean).length;
+if (fetchModes > 1) throw new Error('--fetch, --fetch-images and --fetch-catalogue exclude each other');
+if (values['accept-image-changes'] && (values['fetch-images'] || values['fetch-catalogue'])) throw new Error('--accept-image-changes only applies to a rebuild of the JSON files (--fetch or no fetch option)');
 
 const pkgDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dataDir = join(pkgDir, 'data', 'bohohippychic');
@@ -74,6 +92,36 @@ function imagePath(handle: string, position: number): string | undefined {
   if (!existsSync(dir)) return undefined;
   const name = readdirSync(dir).find((f) => f.startsWith(`${String(position).padStart(2, '0')}.`));
   return name ? join(dir, name) : undefined;
+}
+
+const sha256Hex = (b: Uint8Array): string => createHash('sha256').update(b).digest('hex');
+
+/**
+ * --fetch-images: every image of the committed images.json into raw/<handle>/NN.<ext>. A file that is
+ * already there is checked too. Bytes whose sha256 is not the committed one are refused before they
+ * are written (`checkImageBytes`). products.json and images.json are not touched.
+ */
+async function fetchCommittedImages(): Promise<void> {
+  const imagesFile = join(dataDir, 'images.json');
+  const list = committedImages(JSON.parse(readFileSync(imagesFile, 'utf8')));
+  let downloaded = 0;
+  for (const img of list) {
+    const existing = imagePath(img.handle, img.position);
+    if (existing) {
+      checkImageBytes(img, readFileSync(existing), sha256Hex);
+      continue;
+    }
+    const res = await fetch(img.url, { headers: { 'user-agent': UA } });
+    if (!res.ok) throw new Error(`${img.url}: HTTP ${res.status}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    checkImageBytes(img, buf, sha256Hex);
+    const kind = IMAGE_MAGIC.find(([, test]) => test(buf))?.[0];
+    if (!kind) throw new Error(`${img.url}: not a JPEG, PNG or WebP`);
+    mkdirSync(join(rawDir, img.handle), { recursive: true });
+    writeFileSync(join(rawDir, img.handle, `${String(img.position).padStart(2, '0')}.${kind}`), buf);
+    downloaded++;
+  }
+  console.log(`[shop] ${list.length} images match the committed sha256 in ${relative(pkgDir, imagesFile)} (${downloaded} downloaded); no JSON written`);
 }
 
 async function downloadImages(p: ShopifyProduct): Promise<void> {
@@ -127,6 +175,8 @@ function threeDReadiness(images: readonly ImageRecord[], baseSize: string | unde
 }
 
 async function main(): Promise<void> {
+  if (values['fetch-images']) return fetchCommittedImages();
+  if (values['fetch-catalogue']) return fetchCatalogue();
   if (values.fetch) await fetchCatalogue();
   const { products, pages } = loadCatalogue();
   const byHandle = new Map(products.map((p) => [p.handle, p]));
@@ -153,7 +203,7 @@ async function main(): Promise<void> {
         width: img.width,
         height: img.height,
         file: file ? relative(dataDir, file) : null,
-        sha256: buf ? createHash('sha256').update(buf).digest('hex') : null,
+        sha256: buf ? sha256Hex(buf) : null,
         bytes: buf ? buf.length : null,
       };
     });
@@ -186,18 +236,28 @@ async function main(): Promise<void> {
     },
     products: productsOut,
   };
+  const imagesJson = { shop: SHOP.domain, minLongEdgePx: MIN_LONG_EDGE, note: 'Classification by eye; image bytes stay in raw/ (gitignored).', products: imagesOut };
+  const imagesFile = join(dataDir, 'images.json');
+  if (existsSync(imagesFile)) {
+    const changes = imageRecordChanges(JSON.parse(readFileSync(imagesFile, 'utf8')), JSON.parse(JSON.stringify(imagesJson)));
+    if (changes.length && !values['accept-image-changes']) {
+      for (const c of changes) console.error(`[shop] ${c.handle} #${c.position}: ${c.change} ${c.before ?? '-'} → ${c.after ?? '-'}`);
+      throw new Error(
+        `${changes.length} image(s) differ from the committed images.json; products.json and images.json were NOT written. ` +
+          'The hand classification is keyed by position: look at the photos, update SHOP_IMAGE_CLASSIFICATION in src/shopSelection.ts, then re-run with --accept-image-changes.',
+      );
+    }
+    if (changes.length) console.log(`[shop] ${changes.length} image change(s) accepted (--accept-image-changes): commit images.json together with the reviewed classification`);
+  }
   writeFileSync(join(dataDir, 'products.json'), `${JSON.stringify(report, null, 2)}\n`);
-  writeFileSync(
-    join(dataDir, 'images.json'),
-    `${JSON.stringify({ shop: SHOP.domain, minLongEdgePx: MIN_LONG_EDGE, note: 'Classification by eye; image bytes stay in raw/ (gitignored).', products: imagesOut }, null, 2)}\n`,
-  );
+  writeFileSync(imagesFile, `${JSON.stringify(imagesJson, null, 2)}\n`);
   for (const p of productsOut) {
     console.log(
       `[shop] ${p.productType.padEnd(16)} ${p.handle.padEnd(32)} completeness ${p.completeness.score.toFixed(3)} ${p.completeness.status}; ` +
         `3D ${p.threeD.ready ? 'ready' : 'not ready'}; ${p.warnings.length} warnings`,
     );
   }
-  if (missingFiles) console.log(`[shop] ${missingFiles} images not downloaded yet (sha256 null); run with --fetch`);
+  if (missingFiles) console.log(`[shop] ${missingFiles} images not downloaded yet (sha256 null); run with --fetch-images`);
 }
 
 main().catch((err: unknown) => {

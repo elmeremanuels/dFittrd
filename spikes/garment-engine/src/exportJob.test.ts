@@ -3,8 +3,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh, turntablePath } from '@curtain/mannequin';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { PINNED_MODELS, canonicalJson, controlFrame, depthRange, exportJob, inputHash, sha256, turntableClips, type ExportOptions, type Phase0Manifest } from './exportJob';
+import { mockGarment } from '@curtain/schema';
+import { EXPORT_VERSION, PINNED_MODELS, canonicalJson, controlFrame, depthRange, exportJob, inputHash, sha256, turntableClips, type ExportOptions, type Phase0Manifest } from './exportJob';
 import { decodePng } from './exportPng';
+import { NEGATIVE_BASE, SPIKE_PRODUCT_IDS } from './product';
 import { render } from './raster';
 import { MANNEQUIN_GREY, MANNEQUIN_ID } from './separation';
 
@@ -151,5 +153,63 @@ describe('job manifest', () => {
     expect(f.input_hash).toBe(job.manifest.input_hash);
     expect(f.models).toEqual(PINNED_MODELS);
     expect(inputHash(f.hash_inputs)).toBe(f.input_hash);
+  });
+});
+
+describe('control mode (proxy | bare)', () => {
+  it('defaults to the proxy, records it in the manifest and in input_hash, and writes the proxy files', () => {
+    const m = job.manifest;
+    expect(m.exporter).toBe(`@curtain/garment-spike ${EXPORT_VERSION}`);
+    expect(m.control.mode).toBe('proxy');
+    expect(m.control.proxy?.kind).toBe('top');
+    expect(m.control.proxy?.glb_sha256).toBe(sha256(bytesOf(job.files.get('control/proxy.glb'))));
+    expect(m.control.proxy_mask_dir).toBe('control/proxy_mask');
+    expect(m.motion.proxy_mask_dir).toBe('motion/proxy_mask');
+    expect(m.clips.map((c) => c.proxy_mask_dir)).toEqual(['control/proxy_mask', 'control/proxy_mask', 'motion/proxy_mask']);
+    expect(m.hash_inputs.control).toEqual({ mode: 'proxy', proxy: expect.objectContaining({ kind: 'top', version: 'control-proxy-0.1.0' }) });
+    // The proxy geometry is hashed, not only its spec: a mesh change without a PROXY_VERSION bump
+    // still changes input_hash and the job id (cached stage 2 outputs are keyed by the job id).
+    expect((m.hash_inputs.control as { proxy: { glb_sha256: string } }).proxy.glb_sha256).toBe(m.control.proxy?.glb_sha256);
+    const otherGeometry = { ...m.hash_inputs, control: { mode: 'proxy', proxy: { ...(m.hash_inputs.control as { proxy: object }).proxy, glb_sha256: '0'.repeat(64) } } };
+    expect(inputHash(otherGeometry)).not.toBe(m.input_hash);
+    for (let i = 0; i < 8; i++) expect(job.files.has(`control/proxy_mask/${String(i).padStart(4, '0')}.png`)).toBe(true);
+    for (let i = 0; i < 5; i++) expect(job.files.has(`motion/proxy_mask/${String(i).padStart(4, '0')}.png`)).toBe(true);
+  });
+
+  it('bare renders the bare mannequin: no proxy files, another hash, a smaller silhouette', () => {
+    const bare = run({ ...SMALL_JOB, control: 'bare' });
+    expect(bare.manifest.control.mode).toBe('bare');
+    expect(bare.manifest.control.proxy).toBeNull();
+    expect(bare.manifest.control.proxy_mask_dir).toBeNull();
+    expect([...bare.files.keys()].some((k) => k.includes('proxy'))).toBe(false);
+    expect(bare.manifest.hash_inputs.control).toEqual({ mode: 'bare', proxy: null });
+    expect(bare.manifest.input_hash).not.toBe(job.manifest.input_hash);
+    const count = (f: Uint8Array | string | undefined) => [...decodePng(bytesOf(f)).data].filter((v) => v > 0).length;
+    expect(count(job.files.get('control/mask/0000.png'))).toBeGreaterThan(count(bare.files.get('control/mask/0000.png')));
+    // Synthetic stills and frames do not depend on the control mode.
+    expect(sha256(bytesOf(bare.files.get('photos/front.png')))).toBe(sha256(bytesOf(job.files.get('photos/front.png'))));
+    expect(() => run({ ...SMALL_JOB, control: 'depth' as never })).toThrow(/unknown control mode/);
+  });
+});
+
+describe('stage 2 prompt', () => {
+  it.each(SPIKE_PRODUCT_IDS)('%s: neutral description, no title or brand, negative against text and the wrong garment, hashed', (id) => {
+    const p = mockGarment(id);
+    const { manifest: m } = run({ ...SMALL_JOB, productId: id });
+    const all = `${m.prompt.turntable} ${m.prompt.motion}`.toLowerCase();
+    expect(all).not.toContain(p.name.toLowerCase());
+    expect(all).not.toContain(p.brand.toLowerCase());
+    expect(all).not.toContain('"');
+    for (const w of NEGATIVE_BASE) expect(m.prompt.negative).toContain(w);
+    if (m.prompt.kind === 'dress') expect(m.prompt.negative).toMatch(/\btrousers\b/);
+    expect(m.hash_inputs.prompt).toEqual(m.prompt);
+  });
+
+  it('describes the garment from category, colour, length, sleeves and fabric', () => {
+    expect(run({ ...SMALL_JOB, productId: 'aalter-studio-2' }).manifest.prompt.description).toBe(
+      'a cream midi long-sleeved shirt dress in a lightweight cotton fabric, one closed skirt that falls from the waist to the hem and covers both legs',
+    );
+    expect(job.manifest.prompt.description).toBe('a black short-sleeved t-shirt in a crisp cotton fabric');
+    expect(job.manifest.prompt.colour.source).toMatch(/primaryColorHex #111111/);
   });
 });

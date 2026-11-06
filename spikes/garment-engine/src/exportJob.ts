@@ -9,18 +9,28 @@
  *   cameras_opencv.json      per-frame K and world-to-camera (OpenCV)
  *   transforms.json          the same poses for Nerfstudio (OpenGL camera-to-world); `file_path`
  *                            points at frames/NNNN.png, which stage 2 fills
- *   control/depth_mm/        bare-mannequin depth per turntable frame, 16-bit PNG, mm, 0 = background
+ *   control/depth_mm/        control depth per turntable frame, 16-bit PNG, mm, 0 = background: the
+ *                            mannequin WEARING the coarse proxy garment (`--control proxy`, default,
+ *                            src/proxy.ts) or the bare mannequin (`--control bare`)
  *   control/depth_vis/       the same depth as the control video frames: 8-bit, near bright, 0 = background
- *   control/mask/            bare-mannequin silhouette, 8-bit 0/255
+ *   control/mask/            the control silhouette (mannequin + proxy), 8-bit 0/255
+ *   control/proxy_mask/      proxy only: where the proxy is visible (the garment zone stage 2's
+ *                            consistency metric checks), 8-bit 0/255
+ *   control/proxy.glb        proxy only: the proxy volume, metres (a control signal, never an output)
  *   motion/…                 the same three sequences for the motion clip from the fixed motion camera,
  *                            plus motion/cameras_opencv.json
  *   photos/                  merchant photos by role (front, back, detail_N), or synthetic dressed stills
  *   dress/                   only with `onModel`: the shop's source photos (garment on a person or
- *                            flat-lay) and the bare mannequin rendered at frame 0 and N/2, the inputs of
- *                            stage 1b (modal/stage1_dress.py), which writes the pinned stills to stage1b/
+ *                            flat-lay) and the bare mannequin rendered at frame 0 and N/2 (RGB and
+ *                            silhouette), the inputs of stage 1b (modal/stage1_dress.py), which writes
+ *                            the pinned stills to stage1b/
  *   synthetic/               optional: the spike's synthetic garment rendered dressed along the same
  *                            path (rgb/, garment_mask/, transforms.json, garment_truth.glb), so stage 4
  *                            can be measured against a known mesh without any video model
+ *
+ * The manifest also carries the stage 2 prompts (`prompt`): a neutral garment description from fixed
+ * vocabulary (category, colour, length, sleeves, fabric), never the product title or brand, and a
+ * negative prompt against text, logos and the wrong garment (`videoPrompt` in src/product.ts).
  *
  * Everything is rendered with the spike's software rasterizer (`src/raster.ts`) and is deterministic:
  * the same inputs give byte-identical files and the same input_hash.
@@ -36,6 +46,7 @@ import {
   motionCamera,
   poseMesh,
   sampleClip,
+  type SkinWeights,
   skinWeights,
   turntablePath,
   writeGlb,
@@ -44,14 +55,27 @@ import {
   type Mesh,
 } from '@curtain/mannequin';
 import type { GarmentPayload } from '@curtain/schema';
+import { evalChart } from './evalChart';
 import { generateGarment } from './garment';
 import { encodePng } from './exportPng';
 import { cameraBasis, opencvCamerasJson, transformsJson } from './exportPoses';
-import { garmentChart, garmentSpec, materialJson, spikeProduct, type SPIKE_PRODUCT_IDS } from './product';
+import { garmentSpec, materialJson, promptColour, resolveSpikeProduct, videoPrompt, type ProductSource, type ResolvedProduct, type VideoPrompt } from './product';
+import { CONTROL_MODES, buildProxy, proxyRecord, proxySpec, type ControlMode, type Proxy } from './proxy';
 import { hexToRgb, render, type DrawItem, type Render } from './raster';
 import { GARMENT_ID, MANNEQUIN_GREY, MANNEQUIN_ID } from './separation';
 
-export const EXPORT_VERSION = 'phase0-export-0.1.0';
+/** 0.2.0: control proxy (`control.mode`), neutral prompts (`prompt`), shop products (`product_source`); all three are hashed. */
+export const EXPORT_VERSION = 'phase0-export-0.2.0';
+/** Id of the control proxy in the rasterizer's id buffer. */
+export const PROXY_ID = 3;
+/** Albedo of the proxy where it is rendered for a picture (the control frames only use depth and ids). */
+const PROXY_GREY: [number, number, number] = [0.62, 0.62, 0.62];
+/** Synthetic garment colour when the product has no primaryColorHex (shop drafts): a plain colour from its name, else this. */
+const FALLBACK_GARMENT_HEX = '#7a5c8a';
+const NAMED_HEX: Readonly<Record<string, string>> = {
+  blue: '#3a5fb0', 'light blue': '#96bee6', 'navy blue': '#1e2855', red: '#b8202c', pink: '#e896b0', burgundy: '#6b1f2a', green: '#2f8a4a',
+  'olive green': '#5b6b3c', 'sage green': '#a0b496', cream: '#f2ebdd', white: '#f5f5f5', black: '#151515', beige: '#d7c4a0', brown: '#6e4628', grey: '#808080',
+};
 export const MANIFEST_FORMAT = 'curtain.phase0.job';
 
 /**
@@ -110,8 +134,14 @@ export interface OnModelOptions {
 }
 
 export interface ExportOptions {
-  productId: (typeof SPIKE_PRODUCT_IDS)[number];
+  /** A spike product id (`SPIKE_PRODUCT_IDS`), or the id of `product`. */
+  productId: string;
+  /** The product (a shop draft from `shopProduct`); default: the spike fixture `productId`. */
+  product?: ResolvedProduct;
+  /** Base size; default the product's (spike: M, shop: products.json). */
   baseSize?: string;
+  /** Control video: the mannequin wearing the coarse proxy garment (default) or the bare mannequin. */
+  control?: ControlMode;
   /** Frames per full turn (default 160: two 81-frame half-turn clips, the Wan2.2-Fun training length). */
   frames?: number;
   /** Frame size in pixels (default 480×832, Wan2.2's portrait 480p). */
@@ -136,7 +166,7 @@ export interface ExportOptions {
    * merchant owns the back).
    */
   onModel?: OnModelOptions | boolean;
-  /** Write the synthetic dressed turntable (default true). */
+  /** Write the synthetic dressed turntable (default: true for dresses and tops, the only synthetic garments; an error for other categories). */
   synthetic?: boolean;
 }
 
@@ -155,13 +185,16 @@ export interface ManifestPhoto {
   invented?: boolean;
 }
 
+/** `manifest.control.proxy`: the proxy spec as `proxyRecord` writes it, plus its file. */
+export type ManifestProxy = Record<string, unknown> & { glb: string; glb_sha256: string };
+
 export interface Stage1bView {
   view: 'front' | 'back';
   /** Turntable frame the still is pinned at (0 or N/2), so its camera is cameras_opencv.json frame `frame`. */
   frame: number;
   /** Shop photo for this view, or null (back only: the back is then invented from the front). */
   source: string | null;
-  /** Bare mannequin at this frame: studio RGB and the silhouette (255 = mannequin). */
+  /** Bare mannequin at this frame: studio RGB and the silhouette (255 = mannequin), whatever the control mode. */
   bare_rgb: string;
   bare_mask: string;
   /** Outputs stage 1b writes. */
@@ -190,6 +223,8 @@ export interface ManifestClip {
   control_dir: string;
   mask_dir: string;
   depth_mm_dir: string;
+  /** Where the proxy is visible per frame (control mode proxy), else null. */
+  proxy_mask_dir: string | null;
   /** Photo role pinned at the first and the last frame (turntable clips only). */
   first_photo: PhotoRole | null;
   last_photo: PhotoRole | null;
@@ -204,6 +239,7 @@ export interface Phase0Manifest {
   product_id: string;
   product_name: string;
   category: string;
+  product_source: ProductSource;
   base_size: string;
   chart: { type: 'body' | 'garment'; unit: 'cm'; rows: { size: string; rings: Record<string, number>; default_ease: string[] }[] };
   fabric: ReturnType<typeof materialJson>;
@@ -223,8 +259,21 @@ export interface Phase0Manifest {
     transforms: string;
     frames_dir: string;
   };
-  control: { depth_mm_dir: string; depth_vis_dir: string; mask_dir: string; near_cm: number; far_cm: number; encoding: string };
-  motion: { clip_id: string; radius_cm: number; camera: string; depth_mm_dir: string; depth_vis_dir: string; mask_dir: string; near_cm: number; far_cm: number };
+  control: {
+    /** `proxy`: the mannequin wearing the coarse proxy garment; `bare`: the bare mannequin. */
+    mode: ControlMode;
+    proxy: ManifestProxy | null;
+    depth_mm_dir: string;
+    depth_vis_dir: string;
+    mask_dir: string;
+    proxy_mask_dir: string | null;
+    near_cm: number;
+    far_cm: number;
+    encoding: string;
+  };
+  motion: { clip_id: string; radius_cm: number; camera: string; depth_mm_dir: string; depth_vis_dir: string; mask_dir: string; proxy_mask_dir: string | null; near_cm: number; far_cm: number };
+  /** Stage 2 prompts (hashed): neutral description, never the product title or brand. */
+  prompt: VideoPrompt;
   clips: ManifestClip[];
   synthetic: { dir: string; transforms: string; rgb_dir: string; garment_mask_dir: string; truth_glb: string; background_rgb: number[] } | null;
   /** Stage 1b inputs and outputs when the front/back are shop photos (`onModel`), else null. */
@@ -297,14 +346,17 @@ export function assertInsideFrame(mask: Uint8Array, width: number, height: numbe
   for (let y = 0; y < height; y++) if (mask[y * width] || mask[y * width + width - 1]) throw new Error(`${what}: the mannequin touches the left or right frame border (raise the camera radius or the frame width)`);
 }
 
-/** Bare-mannequin control images of one rendered frame: metric depth (mm), the 8-bit control encoding (near = 255, far = 1, background 0) and the silhouette. */
+/**
+ * Control images of one rendered frame (bare mannequin, or mannequin + proxy): metric depth (mm),
+ * the 8-bit control encoding (near = 255, far = 1, background 0) and the silhouette of everything drawn.
+ */
 export function controlFrame(r: Render, nearCm: number, farCm: number): ControlFrame {
   const n = r.width * r.height;
   const depthMm = new Uint16Array(n);
   const depthVis = new Uint8Array(n);
   const mask = new Uint8Array(n);
   for (let k = 0; k < n; k++) {
-    if (r.ids[k] !== MANNEQUIN_ID) continue;
+    if (r.ids[k] === 0) continue;
     const d = r.depth[k]!;
     depthMm[k] = Math.min(65535, Math.round(d * 10));
     depthVis[k] = Math.max(1, Math.min(255, Math.round(1 + (254 * (farCm - d)) / (farCm - nearCm))));
@@ -322,6 +374,13 @@ function studioRgb(r: Render): Uint8Array {
     out[3 * k + 2] = bg ? STUDIO_RGB[2] : r.rgb[3 * k + 2]!;
   }
   return out;
+}
+
+/** 255 where the render shows object `id`. */
+export function idMask(r: Render, id: number): Uint8Array {
+  const m = new Uint8Array(r.width * r.height);
+  for (let k = 0; k < m.length; k++) m[k] = r.ids[k] === id ? 255 : 0;
+  return m;
 }
 
 const grey = (width: number, height: number, data: ArrayLike<number>, bitDepth: 8 | 16 = 8): Uint8Array => encodePng({ width, height, channels: 1, bitDepth, data });
@@ -403,31 +462,53 @@ function photoSet(options: ExportOptions, frontStill: () => Uint8Array, backStil
 
 /** Writes one Phase 0 job through `emit`. Deterministic. */
 export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
-  const baseSize = options.baseSize ?? 'M';
+  const product = options.product ?? resolveSpikeProduct(options.productId, options.baseSize);
+  if (product.id !== options.productId) throw new Error(`productId ${options.productId} differs from the product's id ${product.id}`);
+  const baseSize = options.baseSize ?? product.baseSize;
+  const control: ControlMode = options.control ?? 'proxy';
+  if (!CONTROL_MODES.includes(control)) throw new Error(`unknown control mode ${String(control)}; use ${CONTROL_MODES.join(' or ')}`);
   const framesPerTurn = options.frames ?? 160;
   const width = options.width ?? 480;
   const height = options.height ?? 832;
   const fps = options.fps ?? 16;
   const motionFrames = options.motionFrames ?? 81;
   const seeds = options.seeds ?? { ...DEFAULT_SEEDS };
-  const withSynthetic = options.synthetic ?? true;
   if (width % 16 !== 0 || height % 16 !== 0) throw new Error(`frame size must be a multiple of 16 (VAE and patch size), got ${width}×${height}`);
   if ((motionFrames - 1) % 4 !== 0) throw new Error(`motion frames must be 4k+1, got ${motionFrames}`);
   if ((motionFrames - 1) / fps > MOTION_CLIP.durationS) throw new Error(`motion frames at ${fps} fps run past the ${MOTION_CLIP.durationS} s clip`);
   const clips = turntableClips(framesPerTurn);
 
-  const payload: GarmentPayload = spikeProduct(options.productId);
-  const chart = garmentChart(payload);
-  const spec = garmentSpec(payload, baseSize);
+  const payload: GarmentPayload = product.payload;
+  const chart = evalChart(payload);
+  // The synthetic garment (stage 4 truth, synthetic stills) exists for dresses and tops only.
+  const syntheticSupported = payload.category === 'dress' || payload.category === 'top';
+  const withSynthetic = options.synthetic ?? syntheticSupported;
+  if ((withSynthetic || options.syntheticPhotos) && !syntheticSupported) {
+    throw new Error(`the spike's synthetic garment exists for dresses and tops, not ${payload.category}: export with synthetic false (--no-synthetic) and without syntheticPhotos`);
+  }
   const mannequin: Mannequin = buildMannequin(bodyShape(BASE_SHAPE_ID));
   const body: Mesh = buildMannequinMesh(mannequin);
   const path = turntablePath(mannequin, 'turntable_mid', { frames: framesPerTurn });
   const bareItem: DrawItem = { positions: body.positions, indices: body.indices, color: MANNEQUIN_GREY, id: MANNEQUIN_ID };
 
+  // Control proxy: the mannequin wears a coarse closed garment volume in the control video (src/proxy.ts).
+  const pSpec = proxySpec(mannequin, payload, baseSize);
+  const proxy: Proxy | null = control === 'proxy' ? buildProxy(mannequin, payload, baseSize) : null;
+  const proxyItem: DrawItem | null = proxy ? { positions: proxy.mesh.positions, indices: proxy.mesh.indices, color: PROXY_GREY, id: PROXY_ID } : null;
+  const controlItems: DrawItem[] = proxyItem ? [bareItem, proxyItem] : [bareItem];
+  const prompt = videoPrompt(mannequin, payload, pSpec);
+
   let garment: Mesh | null = null;
+  let garmentColor: [number, number, number] = [0, 0, 0];
   const garmentItem = (): DrawItem => {
-    garment ??= generateGarment(mannequin, spec);
-    return { positions: garment.positions, indices: garment.indices, color: hexToRgb(spec.colorHex), id: GARMENT_ID };
+    if (!garment) {
+      const spec = garmentSpec(payload, baseSize);
+      const named = promptColour(payload).name;
+      spec.colorHex = (spec.colorHex as string | undefined) ?? (named ? NAMED_HEX[named] : undefined) ?? FALLBACK_GARMENT_HEX;
+      garment = generateGarment(mannequin, spec);
+      garmentColor = hexToRgb(spec.colorHex);
+    }
+    return { positions: garment.positions, indices: garment.indices, color: garmentColor, id: GARMENT_ID };
   };
   const still = (frame: CameraFrame): Uint8Array => rgbPng(width, height, studioRgb(render([bareItem, garmentItem()], frame, width, height)));
   const photos = photoSet(options, () => still(path.frames[0]!), () => still(path.frames[framesPerTurn / 2]!));
@@ -450,21 +531,26 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
   put('mannequin.glb', mannequinGlb);
   for (const p of photos) if (p.bytes) put(p.photo.path, p.bytes);
 
-  // Stage 1b inputs: the shop photos and the bare mannequin at the two pinned frames (same camera, same light as the turntable).
+  // Stage 1b inputs: the shop photos and the bare mannequin at the two pinned frames (same camera, same
+  // light as the turntable). The silhouette is the BARE mannequin's in every control mode: stage 1b's
+  // alignment QA compares the dressed still with our mannequin, not with the proxy.
   let stage1b: Stage1bSpec | null = null;
   if (onModel) {
     for (const s of sources) put(s.path, s.bytes);
     const views: Stage1bView[] = (['front', 'back'] as const).map((view) => {
       const frame = view === 'front' ? 0 : framesPerTurn / 2;
       const bare = `dress/bare_${view}.png`;
-      put(bare, rgbPng(width, height, studioRgb(render([bareItem], path.frames[frame]!, width, height))));
+      const bareMask = `dress/bare_mask_${view}.png`;
+      const r = render([bareItem], path.frames[frame]!, width, height);
+      put(bare, rgbPng(width, height, studioRgb(r)));
+      put(bareMask, grey(width, height, idMask(r, MANNEQUIN_ID)));
       const src = sources.find((s) => s.role === view);
       return {
         view,
         frame,
         source: src ? src.path : null,
         bare_rgb: bare,
-        bare_mask: `control/mask/${pad4(frame)}.png`,
+        bare_mask: bareMask,
         still: `${STAGE1B_DIR}/${view}.png`,
         garment_mask: `${STAGE1B_DIR}/garment_mask_${view}.png`,
         invented: !src,
@@ -486,36 +572,58 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
     };
   }
 
+  // Control proxy file (inspection only; the frames below are what stage 2 reads).
+  let manifestProxy: ManifestProxy | null = null;
+  if (proxy) {
+    const glb = writeGlb([{ name: 'control-proxy', positions: proxy.mesh.positions, indices: proxy.mesh.indices, baseColor: [0.62, 0.62, 0.62, 1], roughness: 0.9 }], {
+      scale: 0.01,
+      generator: `@curtain/garment-spike ${EXPORT_VERSION}`,
+      extras: { productId: product.id, baseSize, unit: 'm', controlProxy: true, note: 'control signal for stage 2 only, never an output' },
+    });
+    put('control/proxy.glb', glb);
+    manifestProxy = { ...proxyRecord(proxy.spec), glb: 'control/proxy.glb', glb_sha256: sha256(glb) };
+  }
+
   // Turntable control frames.
-  const range = depthRange(body.positions, path.frames);
+  const range = depthRange(proxy ? concat(body.positions, proxy.mesh.positions) : body.positions, path.frames);
   for (const f of path.frames) {
-    const c = controlFrame(render([bareItem], f, width, height), range.nearCm, range.farCm);
+    const r = render(controlItems, f, width, height);
+    const c = controlFrame(r, range.nearCm, range.farCm);
     assertInsideFrame(c.mask, width, height, `turntable frame ${f.index}`);
     put(`control/depth_mm/${pad4(f.index)}.png`, grey(width, height, c.depthMm, 16));
     put(`control/depth_vis/${pad4(f.index)}.png`, grey(width, height, c.depthVis));
     put(`control/mask/${pad4(f.index)}.png`, grey(width, height, c.mask));
+    if (proxy) put(`control/proxy_mask/${pad4(f.index)}.png`, grey(width, height, idMask(r, PROXY_ID)));
   }
   put('cameras_opencv.json', json(opencvCamerasJson(path, width, height)));
   put('transforms.json', json(transformsJson(path, width, height, { image: (i) => `frames/${pad4(i)}.png` })));
 
-  // Motion clip control frames from the fixed motion camera.
+  // Motion clip control frames from the fixed motion camera; the proxy is posed with the same rig
+  // (its parts are named body / leg_* / sleeve_*, so `skinWeights` binds them to the torso, legs and arms).
   const motionRadiusCm = options.motionRadiusCm ?? 520;
   const cam = motionCamera(mannequin, { radiusCm: motionRadiusCm });
   const skin = skinWeights(mannequin, body);
+  const proxySkin: SkinWeights | null = proxy ? skinWeights(mannequin, proxy.mesh) : null;
   const times = Array.from({ length: motionFrames }, (_, i) => i / fps);
-  const posed = times.map((t) => poseMesh(mannequin, body, skin, sampleClip(MOTION_CLIP, t)));
+  const posed = times.map((t) => {
+    const pose = sampleClip(MOTION_CLIP, t);
+    return { body: poseMesh(mannequin, body, skin, pose), proxy: proxy && proxySkin ? poseMesh(mannequin, proxy.mesh, proxySkin, pose) : null };
+  });
   let mNear = Infinity, mFar = -Infinity;
   for (const pos of posed) {
-    const r = depthRange(pos, [cam]);
+    const r = depthRange(pos.proxy ? concat(pos.body, pos.proxy) : pos.body, [cam]);
     mNear = Math.min(mNear, r.nearCm);
     mFar = Math.max(mFar, r.farCm);
   }
   posed.forEach((pos, i) => {
-    const c = controlFrame(render([{ ...bareItem, positions: pos }], cam, width, height), mNear, mFar);
+    const items: DrawItem[] = [{ ...bareItem, positions: pos.body }, ...(proxyItem && pos.proxy ? [{ ...proxyItem, positions: pos.proxy }] : [])];
+    const r = render(items, cam, width, height);
+    const c = controlFrame(r, mNear, mFar);
     assertInsideFrame(c.mask, width, height, `motion frame ${i}`);
     put(`motion/depth_mm/${pad4(i)}.png`, grey(width, height, c.depthMm, 16));
     put(`motion/depth_vis/${pad4(i)}.png`, grey(width, height, c.depthVis));
     put(`motion/mask/${pad4(i)}.png`, grey(width, height, c.mask));
+    if (proxy) put(`motion/proxy_mask/${pad4(i)}.png`, grey(width, height, idMask(r, PROXY_ID)));
   });
   put('motion/cameras_opencv.json', json(opencvCamerasJson({ id: 'motion', frames: [cam] }, width, height)));
 
@@ -524,20 +632,22 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
     const g = garmentItem();
     for (const f of path.frames) {
       const r = render([bareItem, g], f, width, height);
-      const m = new Uint8Array(width * height);
-      for (let k = 0; k < m.length; k++) m[k] = r.ids[k] === GARMENT_ID ? 255 : 0;
       put(`synthetic/rgb/${pad4(f.index)}.png`, rgbPng(width, height, studioRgb(r)));
-      put(`synthetic/garment_mask/${pad4(f.index)}.png`, grey(width, height, m));
+      put(`synthetic/garment_mask/${pad4(f.index)}.png`, grey(width, height, idMask(r, GARMENT_ID)));
     }
     put('synthetic/transforms.json', json(transformsJson(path, width, height, { image: (i) => `rgb/${pad4(i)}.png`, mask: (i) => `garment_mask/${pad4(i)}.png` })));
-    const color = hexToRgb(spec.colorHex);
-    put('synthetic/garment_truth.glb', writeGlb([{ name: `${options.productId}-truth`, positions: g.positions, indices: g.indices, baseColor: [color[0], color[1], color[2], 1], roughness: 0.85, doubleSided: true }], {
+    const color = g.color;
+    put('synthetic/garment_truth.glb', writeGlb([{ name: `${product.id}-truth`, positions: g.positions, indices: g.indices, baseColor: [color[0], color[1], color[2], 1], roughness: 0.85, doubleSided: true }], {
       scale: 0.01,
       generator: `@curtain/garment-spike ${EXPORT_VERSION}`,
-      extras: { productId: options.productId, baseSize, unit: 'm', synthetic: true },
+      extras: { productId: product.id, baseSize, unit: 'm', synthetic: true },
     }));
   }
 
+  // The spec AND the geometry: a change to the proxy mesh code (bodyShell, legSection, clearances)
+  // changes the control frames, so it must change input_hash and the job id even without a
+  // PROXY_VERSION bump, or cached stage 2 outputs would be reused against different control frames.
+  const proxyHashed = manifestProxy ? { ...proxyRecord(proxy!.spec), glb_sha256: manifestProxy.glb_sha256 } : null;
   const hashInputs = {
     exporter: EXPORT_VERSION,
     product: payload,
@@ -548,21 +658,25 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
     photos: onModel
       ? [...sources.map((s) => ({ role: s.role, sha256: s.sha256, synthetic: false })), ...photos.filter((p) => p.photo.role === 'detail').map((p) => ({ role: p.photo.role, sha256: p.photo.sha256, synthetic: false }))]
       : photos.map((p) => ({ role: p.photo.role, sha256: p.photo.sha256, synthetic: p.photo.synthetic })),
-    // Absent (undefined, so not hashed) unless onModel: older jobs keep their hash.
+    // Absent (undefined, so not hashed) unless onModel.
     stage1b: onModel ? { source_kind: onModel.kind, invented_back: stage1b!.invented_back } : undefined,
+    control: { mode: control, proxy: proxyHashed },
+    prompt,
     seeds,
     models: PINNED_MODELS,
     synthetic: withSynthetic,
   };
   const hash = inputHash(hashInputs);
 
+  const proxyMaskDir = proxy ? 'control/proxy_mask' : null;
   const manifest: Phase0Manifest = {
     format: MANIFEST_FORMAT,
     format_version: 1,
-    job_id: `${options.productId}-${hash.slice(0, 12)}`,
-    product_id: options.productId,
+    job_id: `${product.id}-${hash.slice(0, 12)}`,
+    product_id: product.id,
     product_name: payload.name,
     category: chart.category,
+    product_source: product.source,
     base_size: baseSize,
     chart: { type: chart.type, unit: 'cm', rows: chart.rows.map((r) => ({ size: r.size, rings: r.rings as Record<string, number>, default_ease: r.defaultEase })) },
     fabric: materialJson(payload),
@@ -583,17 +697,23 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
       frames_dir: 'frames',
     },
     control: {
+      mode: control,
+      proxy: manifestProxy,
       depth_mm_dir: 'control/depth_mm',
       depth_vis_dir: 'control/depth_vis',
       mask_dir: 'control/mask',
+      proxy_mask_dir: proxyMaskDir,
       near_cm: range.nearCm,
       far_cm: range.farCm,
-      encoding: 'depth_mm: uint16 mm, 0 = background; depth_vis: uint8, linear in depth, near_cm = 255, far_cm = 1, background 0; mask: 255 = mannequin',
+      encoding:
+        `${control === 'proxy' ? 'mannequin wearing the coarse proxy garment (control signal only, never an output)' : 'bare mannequin'}; ` +
+        'depth_mm: uint16 mm, 0 = background; depth_vis: uint8, linear in depth, near_cm = 255, far_cm = 1, background 0; mask: 255 = mannequin or proxy; proxy_mask: 255 = proxy visible',
     },
-    motion: { clip_id: MOTION_CLIP.id, radius_cm: motionRadiusCm, camera: 'motion/cameras_opencv.json', depth_mm_dir: 'motion/depth_mm', depth_vis_dir: 'motion/depth_vis', mask_dir: 'motion/mask', near_cm: mNear, far_cm: mFar },
+    motion: { clip_id: MOTION_CLIP.id, radius_cm: motionRadiusCm, camera: 'motion/cameras_opencv.json', depth_mm_dir: 'motion/depth_mm', depth_vis_dir: 'motion/depth_vis', mask_dir: 'motion/mask', proxy_mask_dir: proxy ? 'motion/proxy_mask' : null, near_cm: mNear, far_cm: mFar },
+    prompt,
     clips: [
-      ...clips.map((c) => ({ ...c, kind: 'turntable' as const, fps, control_dir: 'control/depth_vis', mask_dir: 'control/mask', depth_mm_dir: 'control/depth_mm' })),
-      { id: 'motion', kind: 'motion', fps, frame_indices: times.map((_, i) => i), control_dir: 'motion/depth_vis', mask_dir: 'motion/mask', depth_mm_dir: 'motion/depth_mm', first_photo: 'front', last_photo: null, times_s: times.map((t) => Math.round(t * 1e6) / 1e6) },
+      ...clips.map((c) => ({ ...c, kind: 'turntable' as const, fps, control_dir: 'control/depth_vis', mask_dir: 'control/mask', depth_mm_dir: 'control/depth_mm', proxy_mask_dir: proxyMaskDir })),
+      { id: 'motion', kind: 'motion', fps, frame_indices: times.map((_, i) => i), control_dir: 'motion/depth_vis', mask_dir: 'motion/mask', depth_mm_dir: 'motion/depth_mm', proxy_mask_dir: proxy ? 'motion/proxy_mask' : null, first_photo: 'front', last_photo: null, times_s: times.map((t) => Math.round(t * 1e6) / 1e6) },
     ],
     synthetic: withSynthetic
       ? { dir: 'synthetic', transforms: 'synthetic/transforms.json', rgb_dir: 'synthetic/rgb', garment_mask_dir: 'synthetic/garment_mask', truth_glb: 'synthetic/garment_truth.glb', background_rgb: [...STUDIO_RGB] }
@@ -607,4 +727,11 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
   };
   put('manifest.json', json(manifest));
   return { manifest, files, bytes };
+}
+
+function concat(a: ArrayLike<number>, b: ArrayLike<number>): Float64Array {
+  const out = new Float64Array(a.length + b.length);
+  out.set(a as ArrayLike<number>, 0);
+  out.set(b as ArrayLike<number>, a.length);
+  return out;
 }

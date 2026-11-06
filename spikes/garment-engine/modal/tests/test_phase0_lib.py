@@ -243,7 +243,7 @@ def test_phase0_lib_does_not_import_modal_or_third_party_packages():
     tree = ast.parse(open(os.path.join(MODAL_DIR, "phase0_lib.py"), encoding="utf-8").read())
     imported = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
     imported |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
-    assert imported <= {"__future__", "hashlib", "json", "math", "os", "typing"}
+    assert imported <= {"__future__", "hashlib", "json", "math", "os", "re", "typing"}
 
 
 @pytest.mark.parametrize("name", ["stage2_video.py", "stage4_recon.py", "run_phase0.py", "phase0_modal.py", "phase0_mesh.py", "smoke.py"])

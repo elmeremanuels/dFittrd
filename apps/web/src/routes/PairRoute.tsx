@@ -65,7 +65,7 @@ export function PairRoute(): ReactNode {
           </ul>
         )}
       </section>
-      <p className="text-xs text-ink-mute">A shop never sees your measurements, photos or device id — only a per-shop pseudonym and the fact that an item was opened.</p>
+      <p className="text-xs text-ink-mute">A shop never sees your measurements, photos, device id or anything that identifies you — only totals across shoppers.</p>
     </div>
   );
 }

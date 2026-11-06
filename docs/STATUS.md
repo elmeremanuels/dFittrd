@@ -3,6 +3,106 @@
 This is the integration snapshot after the parallel build and review passes. Read it with
 `docs/DECISIONS.md` (why), `docs/ARCHITECTURE.md` (layout) and `docs/HANDOFF.md` (product truth).
 
+## Release v1 (standalone plugin) — 6 Nov 2026
+
+Goal: ship size advice **without** the 3D engine (D11, D17) to Shopify, first as a custom
+(unlisted) app for the pilot shop bohohippychic.com.au (Australia, AUD, AU 8–16), then the public
+App Store. Benchmark: SmartSize (size charts, chart templates, unit conversion, fit quiz, a button
+next to the size selector). The 3D garment engine keeps being built on this branch in the
+background (section below); nothing in the release depends on it.
+
+### Verification run (6 Nov 2026, repo root, demo stopped, `.demo-db` removed first)
+
+| Command | Result |
+|---|---|
+| `flock /tmp/curtain-pnpm.lock pnpm install` | pass, lockfile up to date |
+| `pnpm check` | pass (build, typecheck, lint, tests, app builds, secret scan clean; SDK 7,802 B gzip of 8,192) |
+| `pnpm demo:e2e` | pass, both flows (WooCommerce and Shopify Dawn), returning shopper included |
+
+Tests: schema 351, shopify-app 139, api 159, web 300, sdk 90, fit-engine 111, taste-engine 95,
+tryon-providers 70, anchors 53, mannequin 38, woocommerce-plugin 66 (PHP), demo-shop 8,
+garment spike 219 + 47.
+
+### Fixed in the release review pass (R1–R7)
+
+| # | Finding | Fix | Test |
+|---|---|---|---|
+| R1 (high) | Every product of an AUD shop failed `GET /v1/try` with 422 `product_incomplete`: the Shopify mapper dropped non-EUR prices and `priceEur` is required. The pilot shop prices in AUD. | `priceToEur` (`packages/schema/src/mappings/common.ts`) converts with the EUR rate table and warns; both Shopify sync jobs pass `DEFAULT_EUR_RATES`; Woo takes the same option. Size advice no longer needs a price at all (R2). Listed as pilot blocker G1 in `docs/app-store/checklist.md`. | `packages/schema/src/sizeAdvice.test.ts` (AUD → `fromShopifyProduct` → `GarmentPayloadSchema`), `apps/api/src/pilot-size-advice.test.ts` (AUD → upsert → `/v1/sdk/sessions` → `/v1/try`) |
+| R2 (high) | A chart assigned in the builder did not make a product try-able: fabric, pattern block and colour were also required, and only fabric had a UI. | New `sizeAdviceGarment` (`packages/schema/src/sizeAdvice.ts`): category + chart type + chart are required; price (0), colour (the shop's brand colour), pattern block (`unspecified` → fit-engine category defaults) and fabric (non-stretch woven, drape 0.5) default; present fields must still be valid. `GET /v1/try` uses it (`asTryGarment`, `apps/api/src/services/products.ts`). The app-mode try page hides a defaulted price, fabric and block. | same two files |
+| R3 (medium) | Admin "Try-able / Needs data" and the checklist's "required" marks did not match what the try route accepts; flat-lay photos were demanded. | One predicate: the stored product status, `productChecklist().status` and the "required" marks all come from `sizeAdviceGarment` / `SIZE_ADVICE_FIELDS`. The flat-lay row only appears with `{ render: true }` (3D plan). Admin text now says what is really missing. `score`/`missingFields` stay the full completeness. | `packages/shopify-app/src/chartBuilder.test.ts`, `apps/api/src/pilot-size-advice.test.ts` |
+| R4 (medium) | Production SSH key was a repository secret (readable by any branch's workflow, before approval); any branch could be deployed. | `.github/workflows/deploy.yml`: the guard reads no secret, allows only `release` and `main`, checks variables; the secret check runs first inside the `production` environment jobs. `docs/DEPLOY.md` §5: `VPS_*` are **environment** secrets, required reviewer and deployment branches `release`/`main` are mandatory. | YAML parse; the GitHub-side rules must be set by the founder |
+| R5 (low) | The "Pick a template" step never completed for the default AU template, and a saved template was never restored. | `onboardingSteps` marks the step done once products have a chart; a successful assign saves the template; `loadOnboarding` restores the saved template before the AU default. | `chartBuilder.test.ts`, `adminCharts.test.ts`, `apps/api/src/shopify/charts.test.ts` (updated: it asserted the old behaviour) |
+| R6 (low) | Switching "These numbers are" to garment silently turned a body template into a garment chart (one size too large). | The admin clears the body numbers on a body → garment switch and warns (switching back restores the template); `checkChart` warns when garment rows equal a body template (`bodyTemplateMatching`). | `adminCharts.test.ts`, `sizeAdvice.test.ts` |
+| R7 (low) | Privacy policy said merchants see a per-shop pseudonym. | `docs/legal/privacy.md` (Security and the try-on session paragraph) and the app's pairing screen now say merchants see totals only; the pseudonym is internal (k-floor counting). | `apps/web/src/routes/legal.test.tsx` (renders the policy) |
+
+### What is ready (code and tests, not yet on a live store)
+
+- Shopper side: the "Try it on" theme app block (placed by the merchant, under the size picker on
+  Dawn), the full-screen overlay with About you (metric or imperial), optional on-device scan, the
+  size recommendation with per-point fit, the product's own size table with the size highlighted,
+  "Choose size" selecting the variant on the page, remember me / forget me. No app install.
+- Merchant side: embedded admin with five-step onboarding, AU/UK/EU/US women's body templates and
+  garment templates, cm/in, bulk assign by collection, tag, type or picker, description import for
+  one-size items, per-product checklist and preview link, usage and privacy ledger.
+- A product is try-able as soon as a chart is assigned (R2), also in AUD (R1).
+- Backend: managed install and token exchange, GDPR webhooks, product sync and backfill, billing
+  through `appSubscriptionCreate`, one-click deploy with rollback, backups and a restore drill
+  script (`docs/DEPLOY.md`).
+
+### Still blocking in code
+
+| For | Item | Where |
+|---|---|---|
+| pilot | **B1** billing still has free / starter EUR 29 + usage / pro; D17 says one flat USD 8.99 per month, no usage line. Until it is changed the pilot shop would be asked for the wrong price. Workaround for a pilot: leave the pilot shop on the free plan (50 sessions) or raise its cap by hand. | `apps/api/src/billing/plans.ts`, checklist B1 |
+| pilot | The live-store items in `packages/shopify-app/README.md` "Must be verified against a live store" (GraphQL `2026-10` queries, theme block on Dawn and the pilot theme, sync, billing in AUD, GDPR deliveries). | README |
+| public | **A3** expiring offline tokens (required for new public apps; non-expiring tokens are delisted from 1 Jan 2027). | checklist A3 |
+| public | Lighthouse impact measured (D5), privacy e2e in CI, listing screenshots and screencast. | checklist D5, E5, E6, F |
+| competitive | Versus SmartSize: no men / kids / lingerie / shoe templates, no screenshot import, no automatic button placement on every theme, admin in English only, no reviews or Built for Shopify badge yet. Where we are ahead: an actual size recommendation on every plan, from body or garment charts, without the shopper's measurements leaving the browser. | `packages/shopify-app/README.md` "Versus SmartSize" |
+
+### What the founder must provide
+
+1. **Shopify Partner account** and an app in it (name: "Curtain: Fit & Size Finder" or the cleared
+   trademark), its client id and secret (go into `/etc/curtain/curtain.env` on the VPS, never into
+   the repo), a development store for the dry run, and an emergency contact.
+2. **VPS** (2 vCPU / 4 GB is enough) and the GitHub settings from `docs/DEPLOY.md` §5: the
+   `production` environment with you as required reviewer, deployment branches `release` and `main`,
+   and the four `VPS_*` **environment** secrets; repository variable `DOMAIN`.
+3. **DNS**: `app.<domain>` and `api.<domain>` A/AAAA records to the VPS (`docs/DEPLOY.md` §2).
+4. **Prices**: confirm D17 (USD 8.99 flat, trial length) so B1 can be built, and what the pilot shop
+   pays (free pilot or the real plan).
+5. **Legal review** of `docs/legal/privacy.md` and `docs/legal/terms.md`: legal entity, address,
+   retention period for shopper records (C9), hosting region, subprocessors. Not legal advice.
+6. Support e-mail and a help page for the listing; trademark clearance (D1) before the public listing.
+
+### Install unlisted at the pilot shop, step by step
+
+1. **Server**: run `scripts/deploy-bootstrap.sh` on the VPS, fill `/etc/curtain/curtain.env`
+   (Shopify client id and secret, `PUBLIC_API_URL=https://api.<domain>`,
+   `PUBLIC_APP_URL=https://app.<domain>`), set the GitHub environment as above.
+2. **Deploy**: push to `release` (or Actions → deploy → branch `release` → `deploy`), approve the
+   run, wait for `https://api.<domain>/healthz` to answer.
+3. **App config**: in `packages/shopify-app`, `pnpm configure` for a `prod` config with the public
+   URLs, then `shopify app deploy` (publishes the theme block, the webhooks and the GDPR topics).
+4. **Dry run on a development store** with an AUD billing currency: install, open the admin, pick the
+   AU template, assign it to a collection, add the block in the theme editor, open a product,
+   "Try it on", get a size, choose it. Work through the live-store verification list.
+5. **Custom distribution**: Partner Dashboard → the app → Distribution → *Custom distribution* →
+   the pilot shop's `*.myshopify.com` domain → generate the install link (irreversible for that
+   app; one custom app per shop).
+6. **Merchant install**: the owner of bohohippychic.com.au opens the link while logged in, approves
+   the scopes (`read_products`, `write_products`), and lands in the Curtain admin. The catalogue
+   backfill starts on its own.
+7. **Setup in the admin (about 10 minutes)**: keep the preselected AU template, untick sizes the shop
+   does not sell (keep 8–16), assign it to the Dresses (and Tops) collections, click "Add the block"
+   (theme editor deep link), place it under the size picker, save the theme.
+8. **Test**: open a dress on the live shop, "Try it on", enter height and weight, get a size, choose
+   it, check the size is selected on the page and the admin shows the session. Then mark "Test it
+   on a product" done.
+9. **Watch the first week**: usage and anomalies in the admin, `docker compose logs api` on the VPS,
+   the nightly backup and one restore drill.
+10. **Public listing later**: finish A3, B1, D5, the legal review and the listing assets, then switch
+    a (new) app to public distribution and submit (`docs/app-store/checklist.md`).
+
 ## Garment engine — Phase 0 preparation (Nov 2026)
 
 Branch `claude/garment-engine`, against `docs/ENGINE-HANDOFF.md`. This is the work that can be

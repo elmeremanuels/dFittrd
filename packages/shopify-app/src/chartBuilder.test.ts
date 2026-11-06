@@ -7,7 +7,7 @@ describe('productChecklist', () => {
   it('a complete product is try-able, every item done, with the live product page as preview', () => {
     const c = productChecklist(wrapDressNode(), SHOP);
     expect(c.status).toBe('active');
-    expect(c.items.map((i) => i.key)).toEqual(['sizeChartType', 'sizeChart', 'category', 'fabric', 'lengthCm', 'flatLayPhoto']);
+    expect(c.items.map((i) => i.key)).toEqual(['sizeChartType', 'sizeChart', 'category', 'fabric', 'lengthCm']);
     expect(c.items.every((i) => i.done)).toBe(true);
     expect(c.previewUrl).toBe('https://aalter-studio.myshopify.com/products/linen-wrap-dress');
     expect(c.adminUrl).toBe(`https://${SHOP}/admin/products/8213455001`);
@@ -23,6 +23,17 @@ describe('productChecklist', () => {
     expect(byKey.lengthCm).toMatchObject({ done: false, required: false });
     expect(byKey.fabric!.done).toBe(true);
     expect(c.previewUrl).toMatch(/preview_key=x$/);
+  });
+
+  it('R3: a chart alone makes the product try-able; flat-lay and fabric are never required in the size plan', () => {
+    const keep = WRAP_METAFIELDS.filter((m) => ['size_chart', 'size_chart_type'].includes(m.key));
+    const c = productChecklist(wrapDressNode({ metafields: { nodes: keep } }), SHOP);
+    expect(c.status).toBe('active');
+    expect(c.items.find((i) => i.key === 'flatLayPhoto')).toBeUndefined();
+    expect(c.items.filter((i) => i.required).map((i) => i.key).sort()).toEqual(['category', 'sizeChart', 'sizeChartType']);
+    expect(c.items.find((i) => i.key === 'fabric')).toMatchObject({ done: false, required: false });
+    const withRender = productChecklist(wrapDressNode({ metafields: { nodes: keep } }), SHOP, 'shop', { render: true });
+    expect(withRender.items.find((i) => i.key === 'flatLayPhoto')).toMatchObject({ done: false, required: false });
   });
 
   it('never links a non-https preview', () => {
@@ -49,6 +60,12 @@ describe('onboardingSteps', () => {
     const done = onboardingSteps({ ...base, templateId: 'au-womens-body', productsWithChart: 3, themeBlockConfirmed: true, tested: true });
     expect(done.next).toBeNull();
     expect(done.steps).toHaveLength(5);
+  });
+
+  it('R5: a chart assigned to products completes the template step even if the pick was never saved', () => {
+    const r = onboardingSteps({ ...base, productsWithChart: 2 });
+    expect(r.steps.find((s) => s.key === 'template')!.done).toBe(true);
+    expect(r.next).toBe('themeBlock');
   });
 
   it('a real fit result proves the block and the test', () => {

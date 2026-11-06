@@ -1,10 +1,13 @@
 {
   "format": "curtain.phase0.job",
   "format_version": 1,
-  "job_id": "monochrome-03-14cbad9983fa",
+  "job_id": "monochrome-03-283322eea377",
   "product_id": "monochrome-03",
   "product_name": "Heavyweight Boxy Tee",
   "category": "top",
+  "product_source": {
+    "kind": "spike"
+  },
   "base_size": "M",
   "chart": {
     "type": "garment",
@@ -88,7 +91,7 @@
     "version": "0.1.0",
     "shape": "M",
     "glb": "mannequin.glb",
-    "glb_sha256": "06a7f25839b6035dcf67e129830be7091feac6ad5f0de1f2f15ce2218260ec8f",
+    "glb_sha256": "717b821f27e50fc4d94913fe770699a6f444a20db27bf7891cacecb1ab2c93c4",
     "unit": "m",
     "stature_cm": 168
   },
@@ -123,12 +126,52 @@
     "frames_dir": "frames"
   },
   "control": {
+    "mode": "proxy",
+    "proxy": {
+      "version": "control-proxy-0.1.0",
+      "kind": "top",
+      "category": "top",
+      "base_size": "M",
+      "chart_type": "garment",
+      "girths_cm": {
+        "chest": 112,
+        "underbust": 86,
+        "waist": 82,
+        "hip": 106,
+        "upper_arm": 34
+      },
+      "girth_source": {
+        "chest": "garment chart",
+        "underbust": "mannequin + proxy default ease",
+        "waist": "mannequin + proxy default ease",
+        "hip": "mannequin + proxy default ease",
+        "upper_arm": "mannequin + proxy default ease"
+      },
+      "anchors": [
+        "chest",
+        "underbust",
+        "waist",
+        "hip",
+        "upper_arm"
+      ],
+      "top_y_cm": 136.75,
+      "hem_y_cm": 72.6,
+      "length_cm": 66,
+      "length_source": "shoulder_to_hem 66 cm",
+      "hem_flare": 1.05,
+      "sleeve_cm": 22,
+      "sleeve_source": "sleeve_length 22 cm",
+      "notes": [],
+      "glb": "control/proxy.glb",
+      "glb_sha256": "828e75c55a8596423498a65e2b9bb2b905a37606c43b374742966438ec7a91ee"
+    },
     "depth_mm_dir": "control/depth_mm",
     "depth_vis_dir": "control/depth_vis",
     "mask_dir": "control/mask",
+    "proxy_mask_dir": "control/proxy_mask",
     "near_cm": 259,
     "far_cm": 382,
-    "encoding": "depth_mm: uint16 mm, 0 = background; depth_vis: uint8, linear in depth, near_cm = 255, far_cm = 1, background 0; mask: 255 = mannequin"
+    "encoding": "mannequin wearing the coarse proxy garment (control signal only, never an output); depth_mm: uint16 mm, 0 = background; depth_vis: uint8, linear in depth, near_cm = 255, far_cm = 1, background 0; mask: 255 = mannequin or proxy; proxy_mask: 255 = proxy visible"
   },
   "motion": {
     "clip_id": "arms-raise-half-turn-step",
@@ -137,8 +180,21 @@
     "depth_mm_dir": "motion/depth_mm",
     "depth_vis_dir": "motion/depth_vis",
     "mask_dir": "motion/mask",
-    "near_cm": 506,
-    "far_cm": 534
+    "proxy_mask_dir": "motion/proxy_mask",
+    "near_cm": 504,
+    "far_cm": 536
+  },
+  "prompt": {
+    "version": "neutral-prompt-0.1.0",
+    "kind": "top",
+    "description": "a black short-sleeved t-shirt in a crisp cotton fabric",
+    "colour": {
+      "name": "black",
+      "source": "primaryColorHex #111111 → nearest basic colour"
+    },
+    "turntable": "A black short-sleeved t-shirt in a crisp cotton fabric, dressed on a plain mid-grey studio mannequin, rotating slowly on a turntable, neutral soft studio light, plain light-grey seamless background, locked camera, sharp fabric detail.",
+    "motion": "A black short-sleeved t-shirt in a crisp cotton fabric, dressed on a plain mid-grey studio mannequin that raises and lowers its arms, turns around and takes a step; the fabric moves naturally; neutral studio light, plain light-grey background, locked camera.",
+    "negative": "text, letters, words, captions, typography, watermark, logo, label, brand name, signature, blurry, distorted, deformed, extra limbs, people, face, hands of a person, busy background, flicker, static frame, dress, long skirt"
   },
   "clips": [
     {
@@ -156,7 +212,8 @@
       "fps": 16,
       "control_dir": "control/depth_vis",
       "mask_dir": "control/mask",
-      "depth_mm_dir": "control/depth_mm"
+      "depth_mm_dir": "control/depth_mm",
+      "proxy_mask_dir": "control/proxy_mask"
     },
     {
       "id": "turntable_b",
@@ -173,7 +230,8 @@
       "fps": 16,
       "control_dir": "control/depth_vis",
       "mask_dir": "control/mask",
-      "depth_mm_dir": "control/depth_mm"
+      "depth_mm_dir": "control/depth_mm",
+      "proxy_mask_dir": "control/proxy_mask"
     },
     {
       "id": "motion",
@@ -189,6 +247,7 @@
       "control_dir": "motion/depth_vis",
       "mask_dir": "motion/mask",
       "depth_mm_dir": "motion/depth_mm",
+      "proxy_mask_dir": "motion/proxy_mask",
       "first_photo": "front",
       "last_photo": null,
       "times_s": [
@@ -212,6 +271,7 @@
       235
     ]
   },
+  "stage1b": null,
   "seeds": {
     "video": 43,
     "recon": 7
@@ -235,9 +295,9 @@
       "licence": "Apache-2.0 (gsplat), MIT (Open3D)"
     }
   },
-  "exporter": "@curtain/garment-spike phase0-export-0.1.0",
+  "exporter": "@curtain/garment-spike phase0-export-0.2.0",
   "hash_inputs": {
-    "exporter": "phase0-export-0.1.0",
+    "exporter": "phase0-export-0.2.0",
     "product": {
       "schemaVersion": 1,
       "id": "monochrome-03",
@@ -362,6 +422,58 @@
         "synthetic": true
       }
     ],
+    "control": {
+      "mode": "proxy",
+      "proxy": {
+        "version": "control-proxy-0.1.0",
+        "kind": "top",
+        "category": "top",
+        "base_size": "M",
+        "chart_type": "garment",
+        "girths_cm": {
+          "chest": 112,
+          "underbust": 86,
+          "waist": 82,
+          "hip": 106,
+          "upper_arm": 34
+        },
+        "girth_source": {
+          "chest": "garment chart",
+          "underbust": "mannequin + proxy default ease",
+          "waist": "mannequin + proxy default ease",
+          "hip": "mannequin + proxy default ease",
+          "upper_arm": "mannequin + proxy default ease"
+        },
+        "anchors": [
+          "chest",
+          "underbust",
+          "waist",
+          "hip",
+          "upper_arm"
+        ],
+        "top_y_cm": 136.75,
+        "hem_y_cm": 72.6,
+        "length_cm": 66,
+        "length_source": "shoulder_to_hem 66 cm",
+        "hem_flare": 1.05,
+        "sleeve_cm": 22,
+        "sleeve_source": "sleeve_length 22 cm",
+        "notes": [],
+        "glb_sha256": "828e75c55a8596423498a65e2b9bb2b905a37606c43b374742966438ec7a91ee"
+      }
+    },
+    "prompt": {
+      "version": "neutral-prompt-0.1.0",
+      "kind": "top",
+      "description": "a black short-sleeved t-shirt in a crisp cotton fabric",
+      "colour": {
+        "name": "black",
+        "source": "primaryColorHex #111111 → nearest basic colour"
+      },
+      "turntable": "A black short-sleeved t-shirt in a crisp cotton fabric, dressed on a plain mid-grey studio mannequin, rotating slowly on a turntable, neutral soft studio light, plain light-grey seamless background, locked camera, sharp fabric detail.",
+      "motion": "A black short-sleeved t-shirt in a crisp cotton fabric, dressed on a plain mid-grey studio mannequin that raises and lowers its arms, turns around and takes a step; the fabric moves naturally; neutral studio light, plain light-grey background, locked camera.",
+      "negative": "text, letters, words, captions, typography, watermark, logo, label, brand name, signature, blurry, distorted, deformed, extra limbs, people, face, hands of a person, busy background, flicker, static frame, dress, long skirt"
+    },
     "seeds": {
       "video": 43,
       "recon": 7
@@ -387,5 +499,5 @@
     },
     "synthetic": true
   },
-  "input_hash": "14cbad9983fa4e25f906720de6dde74fcecce1f9f01dec9f4bb44465ec42df2e"
+  "input_hash": "283322eea3775ce26a456fba66260787255e44327df3f67c677ce874adc3b501"
 }

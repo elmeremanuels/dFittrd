@@ -120,6 +120,11 @@ in an overlay on the merchant page.
 
 * `POST /v1/sdk/sessions` with `surface: 'embed'` skips the QR. The session stores only the page
   **origin** (`try_sessions.page_origin`, migration `0002_standalone_embed`), never the path or query.
+* `GET /v1/try/:token` resolves the product with `sizeAdviceGarment` (`@curtain/schema`): category,
+  chart type and chart are required; a missing price, colour (the shop's brand colour), pattern
+  block (`unspecified`) or fabric (non-stretch woven) gets a default. Without the three it answers
+  422 `product_incomplete`. The stored product status (`active` / `incomplete`) uses the same
+  predicate; `score` and `missingFields` stay the full completeness.
 * `GET /v1/try/:token` adds `embed.allowedOrigins`, the only `postMessage` targets the iframe may use
   (`services/embed.ts`): Shopify `https://<shop>.myshopify.com` + the primary domain (read with
   `shop { primaryDomain { host } }` at token exchange, stored in `settings.primaryDomain`);

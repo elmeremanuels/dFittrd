@@ -40,6 +40,9 @@ in `apps/api/src/env.ts`) and nothing touches a database.
 | `sync` | `syncProductNode(node, { defaultBrand })` → `{ externalId, handle, draft, payload \| null, completeness, warnings, archived, usable }` (uses `fromShopifyProduct` + `completenessScore` + `GarmentPayloadSchema` from `@curtain/schema`), `syncProductNodes`, `shouldArchive`, `isPublished`, `toMerchantUpsertBody` |
 | `appConfig` | `renderAppConfig(template, vars)`, `validateAppConfig(parsedToml, { apiUrl? })`, `APP_CONFIG_VARS`, `REQUIRED_SCOPES`, `OPTIONAL_SCOPES`, `AppConfigError` |
 | `deepLinks` | `themeEditorAddBlockUrl({ shopDomain, apiKey, template?, target? })`, `adminProductUrl`, `adminAppUrl`, `customInstallUrl`, `BLOCK_HANDLE` (`try-it-on`), `EXTENSION_HANDLE` (`try-button`) |
+| `graphql/charts` | Size chart builder, Admin side: `selectorSearchQuery(selector)` (collection / tag / product type → Shopify search, never archived), `countSelection` (`productsCount`), `fetchSelectionPage` (search cursor, or picker ids with an offset cursor), `assignChartToTargets(client, targets, chart, { overwrite })` (12 products per `metafieldsSet`, failing batches reported per product), `fetchProductDetail` (+ `descriptionHtml`, `onlineStorePreviewUrl`, `options`), `readOnboardingState` / `updateOnboardingState` (AppInstallation metafield `curtain.onboarding`) |
+| `descriptionImport` | `proposeFromDescription({ title, descriptionHtml, options, variants })` → one-size garment chart + `lengthCm` + fabric (schema `fabricFromText`) with evidence and warnings; `parseDescriptionMeasurements` (circumference, flat width × 2, inches, ranges, "fits up to" = body), `fabricStatement`, `oneSizeLabel`, `descriptionLines` |
+| `chartBuilder` | `productChecklist(node, shopDomain)` (completeness items + "Try it on" preview URL + admin link), `tryItOnPreviewUrl`, `onboardingSteps(facts)` (connect → template → assign → theme block → test), `HEAVY_FIELDS` |
 | `admin` | `renderAdminPage({ apiKey, apiUrl, appUrl, appHandle?, blockHandle? })` → HTML, `adminContentSecurityPolicy(shopDomain)`, `ADMIN_PAGE_PATH` (`/shopify/admin`), `APP_BRIDGE_SCRIPT_URL`, `adminPageTemplate`, `jsonForScript` |
 
 ### How apps/api is expected to wire it
@@ -124,11 +127,64 @@ script; required for embedded apps) with `<meta name="shopify-api-key">`, then:
 2. With `Authorization: Bearer <session token>` (the api's merchant auth accepts Shopify session
    tokens): `GET /v1/merchant/products?limit=200`, `GET /v1/merchant/usage?from&to` (last 30 days),
    `GET /v1/merchant/ledger?limit=20`.
-3. Renders: onboarding checklist (connected · choose plan → `POST /shopify/billing/subscribe` →
-   `open(confirmationUrl, '_top')` · add block → theme editor deep link with `addAppBlockId` ·
-   complete garment data), the products completeness table with filters and "Edit" links into the
-   product admin, plan/usage with the period meter and a 30-day bar strip, and the privacy ledger
-   (hero renders only, with the `ESTIMATE_DISCLAIMER`).
+3. Renders: the **first-run onboarding** (connect · pick a chart template · assign it · add the theme
+   block via the theme editor deep link with `addAppBlockId` · test on a product; state from
+   `GET /shopify/charts/onboarding`, a fit result shown to a shopper ticks the last two), the
+   **size chart builder** (below), the products completeness table with filters, a per-product
+   panel, plan/usage with the period meter, the plan button (`POST /shopify/billing/subscribe` →
+   `open(confirmationUrl, '_top')`) and a 30-day bar strip, and the privacy ledger (hero renders
+   only, with the `ESTIMATE_DISCLAIMER`).
+
+### Size chart builder (standalone size advice, no 3D engine needed)
+
+1. **Templates** (`GET /v1/merchant/charts/templates`, from `@curtain/schema` `CHART_TEMPLATES`):
+   women's **body** charts for AU 6–20 (8–20 preselected), UK 6–20, EU 32–46 (DE labels) and 34–48
+   (FR labels), US 2–16, each the median of retailer charts read on 2026-11-06 with the sources
+   linked in the page (write-up: `docs/research/size-chart-templates.md`); and **garment** templates
+   (AU dresses/tops, letter tops, letter bottoms, one size) the merchant fills per size. The chart
+   type is always explicit: a radio "these numbers are the body each size fits / the finished
+   garment". cm or inches (stored in cm), sizes can be ticked off or added, rows on fewer than three
+   sources are marked "estimate". Picking a template saves it to the onboarding state.
+2. **Assign in bulk** (`POST /shopify/charts/preview`, `POST /shopify/charts/assign`): by collection
+   (App Bridge `resourcePicker({ type: 'collection' })`), tag, product type, or picked products
+   (`resourcePicker({ type: 'product', multiple: true })`, ≤ 250). Preview shows the count
+   (`productsCount`) and a sample. Assign writes `size_chart_type` + `size_chart` through
+   `toShopifyMetafields`, skips products that already have a chart unless "Replace" is ticked, pages
+   100 products per call (the page loops on `nextCursor`), and queues the existing
+   `sync-shopify-product` job for every written product.
+3. **Import from description** (`GET /shopify/products/:id/chart-import`, then
+   `PUT /shopify/products/:id/chart`): for one-size products, the description's bust/waist/hip
+   (flat widths doubled, inches converted, "fits up to" read as a body chart), length and fabric
+   (the schema's fabric text parser) are proposed with their source sentences; the merchant edits
+   and confirms, nothing is written before that.
+4. **Per product** (`GET /shopify/products/:id/checklist`): checklist (chart type, chart, category,
+   fabric, lengths) and a **Try it on (preview)** link to the storefront product page
+   (`onlineStoreUrl`, or `onlineStorePreviewUrl` while unpublished). Required = the three fields of
+   `SIZE_ADVICE_FIELDS` (chart type, chart, category); the status is `sizeAdviceGarment` from
+   `@curtain/schema`, the same predicate `GET /v1/try` uses, so "Try-able" in the admin means a
+   shopper gets a size. Fabric is recommended (a non-stretch woven is assumed without it); the
+   flat-lay row only appears for the 3D render (`{ render: true }`), which is not in the D17 plan.
+
+### Versus SmartSize (the App Store benchmark, read 2026-11-06)
+
+SmartSize (4.9★, 152 reviews, Built for Shopify; Free / $9 / $12 / $19 per month) sells size charts
+with templates for men, women, kids, lingerie and pets, AI chart import from a screenshot, a
+drag-and-drop guide editor with tabs, unit conversion, AI translations, auto-placed button, and an
+AI "Find my size" quiz on its $19 plan. Where we stand after this round:
+
+| | SmartSize | Curtain |
+| --- | --- | --- |
+| Women's body chart templates | yes | AU, UK, EU (DE + FR labels), US, sourced |
+| Men / kids / lingerie / pets / shoes templates | yes | **no** |
+| Garment charts per size | yes | yes, chart type explicit |
+| Unit conversion | yes | cm ↔ in in the builder; metric ↔ imperial for the shopper (inputs, table, fit text) |
+| Bulk assign (collection, tag, type, picker) | yes | yes |
+| Import a chart from a screenshot (AI) | yes | **no**; description text import for one-size items |
+| Size chart *table* shown to shoppers | yes (the core product) | yes, in the overlay, recommended size highlighted, body/garment said in the caption |
+| Fit quiz / size recommendation | AI quiz, Pro plan | fit engine on-device, every plan, body or garment charts; a product is try-able with only a chart assigned (no fabric or photos needed) |
+| Button placement | automatic, any theme | theme app block (merchant adds it once) |
+| Languages | 10+ | admin en; storefront en + nl |
+| Built for Shopify / reviews | yes / 152 | not listed yet |
 
 The api must serve it at `GET /shopify/admin` with
 `Content-Security-Policy: frame-ancestors https://<shop>.myshopify.com https://admin.shopify.com;`
@@ -222,7 +278,13 @@ app per shop; switch to public distribution before the App Store listing (irreve
    on a current Online Store 2.0 theme (Dawn), and the block's `enabled_on.templates: ["product"]`.
 8. **Admin page** inside the Shopify admin iframe: CSP, `shopify.idToken()`, `open(url, '_top')`
    for the billing confirmation.
-9. Universal-link redirect from the storefront button on iOS Safari / Android Chrome (SDK contract).
+9. **Chart builder** against a live store: `productsCount(query:, limit:)` with `collection_id:` /
+   `tag:` / `product_type:` / `-status:archived`; `metafield(namespace: "$app:curtain", key:)` on
+   products returned by `products`/`nodes`; App Bridge `shopify.resourcePicker` for `collection` and
+   `product` (return shape: `[{ id: 'gid://…', title }]`); `onlineStorePreviewUrl` and
+   `options { optionValues }` on API 2026-10; whether a `metafieldsSet` on products also fires
+   `products/update` (the api queues its own sync either way).
+10. Universal-link redirect from the storefront button on iOS Safari / Android Chrome (SDK contract).
 
 ## Assumptions stated
 

@@ -561,7 +561,37 @@ export function checkChart(input: { sizeChartType?: string; sizeChart?: readonly
       prev = { size: r.size, v };
     }
   }
+  if (input.sizeChartType === 'garment' && rows.length) {
+    const body = bodyTemplateMatching(rows);
+    if (body) {
+      warnings.push(
+        `These numbers are the ${body.label} body chart, but the chart is marked as garment measurements. A garment is measured flat on the finished piece and is larger than the body it fits; body numbers read as garment numbers recommend about one size too large. Mark the chart as body measurements, or enter the garment's own numbers.`,
+      );
+    }
+  }
   return { ok: errors.length === 0, errors, warnings };
+}
+
+/** The body template whose bust/waist/hip rows equal `rows` for every size they share (R6). */
+export function bodyTemplateMatching(rows: readonly SizeRow[]): BodyChartTemplate | null {
+  const girths = ['bust', 'waist', 'hip'] as const;
+  for (const t of BODY_CHART_TEMPLATES) {
+    const byLabel = new Map(t.rows.map((r) => [r.size.trim().toUpperCase(), r]));
+    let compared = 0;
+    let same = true;
+    for (const r of rows) {
+      const tr = byLabel.get(r.size.trim().toUpperCase());
+      if (!tr) continue;
+      for (const g of girths) {
+        const v = r[g];
+        if (typeof v !== 'number') continue;
+        compared++;
+        if (typeof tr[g] !== 'number' || Math.abs(v - (tr[g] as number)) > 0.25) same = false;
+      }
+    }
+    if (same && compared >= 3) return t;
+  }
+  return null;
 }
 
 /** The payload fields a chart writes (the `$app:curtain` `size_chart_type` + `size_chart` metafields). */

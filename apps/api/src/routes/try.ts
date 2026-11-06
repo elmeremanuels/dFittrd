@@ -34,7 +34,7 @@ import { pseudonymFor } from '../lib/crypto.js';
 import { conflict, forbidden, gone, HttpError, notFound, unauthorized, unprocessable } from '../lib/errors.js';
 import { embedAllowedOrigins } from '../services/embed.js';
 import { byteLength, fieldNames, writeLedger } from '../services/ledger.js';
-import { asGarment, findProductById } from '../services/products.js';
+import { asTryGarment, findProductById } from '../services/products.js';
 import { findShopById, isPaused, shopBranding } from '../services/shops.js';
 import { billFitSession } from '../services/usage.js';
 import { dayStart, utcDay } from '../lib/time.js';
@@ -65,7 +65,8 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
       const shop = await findShopById(db, session.shopId);
       const product = await findProductById(db, session.productId);
       if (!shop || !product || product.status === 'archived') throw notFound('product');
-      const garment = asGarment(product);
+      // Size advice needs category + chart type + chart; price, colour, block and fabric default.
+      const garment = asTryGarment(product, { colorHex: shop.settings.brandColor ?? undefined });
       if (!garment) throw unprocessable('product_incomplete', 'the shop has not finished this product’s fit data');
 
       const pseudonym = pseudonymFor(deviceId, shop.id, env.SHOP_KEY_PEPPER);

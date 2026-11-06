@@ -3,6 +3,7 @@ import {
   GarmentPayloadDraftSchema,
   GarmentPayloadSchema,
   completenessScore,
+  sizeAdviceGarment,
   type GarmentPayload,
   type GarmentPayloadDraft,
   type MerchantProductSummary,
@@ -29,10 +30,13 @@ export async function upsertProduct(db: Db, shopId: string, externalId: string, 
   const draft = GarmentPayloadDraftSchema.parse({ ...(input as object), id: externalId });
   const completeness = completenessScore(draft);
   const missingFields = completeness.missing.map((m) => m.field);
+  // Stored status = try-able for size advice (the same predicate GET /v1/try uses); the score stays
+  // the full completeness (render and taste fields included).
+  const status: 'active' | 'incomplete' = sizeAdviceGarment(draft).ok ? 'active' : 'incomplete';
   const hash = contentHash(draft);
   const existing = await db.query.products.findFirst({ where: and(eq(products.shopId, shopId), eq(products.externalId, externalId)) });
   if (existing && existing.contentHash === hash && existing.status !== 'archived') {
-    return { product: existing, changed: false, score: completeness.score, missingFields, status: completeness.status };
+    return { product: existing, changed: false, score: completeness.score, missingFields, status };
   }
   const values = {
     shopId,
@@ -43,7 +47,7 @@ export async function upsertProduct(db: Db, shopId: string, externalId: string, 
     category: draft.category ?? null,
     priceEur: typeof draft.priceEur === 'number' ? draft.priceEur : null,
     primaryColorHex: draft.primaryColorHex ?? null,
-    status: completeness.status as ProductStatus,
+    status: status as ProductStatus,
     score: completeness.score,
     missingFields,
     contentHash: hash,
@@ -56,7 +60,7 @@ export async function upsertProduct(db: Db, shopId: string, externalId: string, 
     .onConflictDoUpdate({ target: [products.shopId, products.externalId], set: values })
     .returning();
   await syncImages(db, row!.id, draft);
-  return { product: row!, changed: true, score: completeness.score, missingFields, status: completeness.status };
+  return { product: row!, changed: true, score: completeness.score, missingFields, status };
 }
 
 async function syncImages(db: Db, productId: string, draft: GarmentPayloadDraft): Promise<void> {
@@ -87,7 +91,16 @@ export async function findProductById(db: Db, id: string): Promise<ProductRow | 
   return db.query.products.findFirst({ where: eq(products.id, id) });
 }
 
-/** A stored payload that validates as a full GarmentPayload (active products only). */
+/**
+ * The garment the standalone embed sizes: the stored payload with defaults for the fields size
+ * advice does not read (`sizeAdviceGarment`). Null when category, chart type or chart is missing.
+ */
+export function asTryGarment(row: ProductRow, opts: { colorHex?: string } = {}): GarmentPayload | null {
+  const r = sizeAdviceGarment(row.payload, opts);
+  return r.ok ? r.garment : null;
+}
+
+/** A stored payload that validates as a full GarmentPayload (the app's deck needs every field). */
 export function asGarment(row: ProductRow): GarmentPayload | null {
   const parsed = GarmentPayloadSchema.safeParse(row.payload);
   return parsed.success ? parsed.data : null;

@@ -155,6 +155,43 @@ describe('admin page: size chart builder', () => {
     expect(assigns[0]!.auth).toBe('Bearer session-token');
   });
 
+  it('R5: a successful assign with the preselected AU template completes the template step', async () => {
+    const calls = mountPage({ 'POST /shopify/charts/assign': () => ({ written: ['1'], skipped: [], failed: [], syncQueued: 1, nextCursor: null, chart: { sizeChartType: 'body', sizeChart: [] }, warnings: [] }) });
+    await vi.waitFor(() => expect(document.querySelectorAll('input[name="tpl"]:checked').length).toBe(1));
+    const tag = $('sel-tag');
+    fire(tag, 'focus');
+    tag.value = 'dress';
+    $('btn-assign').click();
+    await vi.waitFor(() => expect(calls.some((c) => c.method === 'PUT' && c.path === '/shopify/charts/onboarding')).toBe(true));
+    expect(calls.find((c) => c.method === 'PUT')!.body).toEqual({ templateId: 'au-womens-body' });
+  });
+
+  it('R5: a saved template is restored instead of the AU default', async () => {
+    mountPage({ 'GET /shopify/charts/onboarding': () => ({ ...steps(['connect', 'template'], 'assign'), state: { templateId: 'uk-womens-body', themeBlockConfirmed: false, tested: false } }) });
+    await vi.waitFor(() => expect((document.querySelector('input[name="tpl"]:checked') as El | null)?.value).toBe('uk-womens-body'));
+  });
+
+  it('R6: switching a body template to garment clears the body numbers and warns', async () => {
+    const calls = mountPage({});
+    await vi.waitFor(() => expect(document.querySelectorAll('input[name="tpl"]:checked').length).toBe(1));
+    expect(($('chart-body').querySelectorAll('input')[0] as El).value).toBe('85');
+    const garment = document.querySelector('input[name="chart-type"][value="garment"]')!;
+    garment.checked = true;
+    fire(garment, 'change');
+    expect(($('chart-body').querySelectorAll('input')[0] as El).value).toBe('');
+    expect($('chart-check').textContent).toMatch(/body numbers were cleared/);
+    const tag = $('sel-tag');
+    fire(tag, 'focus');
+    tag.value = 'dress';
+    $('btn-assign').click();
+    expect($('chart-check').textContent).toMatch(/has no measurements/);
+    expect(calls.some((c) => c.path === '/shopify/charts/assign')).toBe(false);
+    const body = document.querySelector('input[name="chart-type"][value="body"]')!;
+    body.checked = true;
+    fire(body, 'change');
+    expect(($('chart-body').querySelectorAll('input')[0] as El).value).toBe('85');
+  });
+
   it('sends typed garment rows (cm) once the merchant edits, and blocks empty sizes locally', async () => {
     const calls = mountPage({ 'POST /shopify/charts/assign': () => ({ written: ['9'], skipped: [], failed: [], syncQueued: 1, nextCursor: null, chart: { sizeChartType: 'garment', sizeChart: [] }, warnings: [] }) });
     await vi.waitFor(() => expect(document.querySelectorAll('input[name="tpl"]').length).toBeGreaterThan(5));

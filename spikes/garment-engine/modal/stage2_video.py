@@ -1,21 +1,29 @@
 """Phase 0 stage 2 on Modal: image -> video with Wan2.2-Fun-A14B-Control (research doc, shortlist A).
 
-For one exported job it generates three 81-frame clips at 16 fps, each driven by the depth video of our
-own bare mannequin (control/depth_vis or motion/depth_vis), so the camera pose of every generated frame
-is the pose we rendered:
+For one exported job it generates three 81-frame clips at 16 fps, each driven by the depth video the
+exporter rendered (control/depth_vis or motion/depth_vis), so the camera pose of every generated frame
+is the pose we rendered. Since phase0-export-0.2.0 that depth shows our mannequin WEARING a coarse proxy
+garment from the category and chart (manifest `control.mode` = proxy, the default; `bare` = the bare
+mannequin, which turned a dress into trousers in the first GPU run):
 
   turntable_a  front -> back  (start frame = front still, end frame = back still)
   turntable_b  back -> front  (start frame = back still,  end frame = front still)
   motion       the stored motion clip from the fixed motion camera (start frame = front still)
 
-The front still is also the reference image of every clip. The 160 turntable poses are then filled
-from the two half turns (stage2/frames/NNNN.png, matching transforms.json); the frames both clips
-render (the back and the front) are compared as a drift check.
+The front still is also the reference image of every clip. The prompts come from the manifest
+(`prompt`: a neutral description from category, colour, length, sleeves and fabric, never the product
+title or brand; the negative prompt bans text, letters, logos and the wrong garment); the app refuses a
+manifest whose prompts fail `lib.prompt_problems`. The 160 turntable poses are then filled from the two
+half turns (stage2/frames/NNNN.png, matching transforms.json); the frames both clips render (the back
+and the front) are compared as a drift check. Then `score_consistency` (CPU, no GPU) compares every
+generated frame's silhouette with the control's (proxy) silhouette and writes the per-frame numbers and
+the flagged frames into stage2/record.json (`consistency`).
 
 Run (from the repo root, after `pnpm --filter @curtain/garment-spike export:phase0`):
   modal run spikes/garment-engine/modal/stage2_video.py --job-dir spikes/garment-engine/out/phase0/aalter-studio-2
 Options: --steps 40  --clips turntable_a,turntable_b,motion  --control-encoding linear|inverse
          --no-pin-frames (reference image + control only)  --download-only
+         --consistency-only (re-score stage2/ already in the Volume)  --consistency-stride 2
 
 Environment: CURTAIN_MODAL_GPU_VIDEO (default H100), CURTAIN_MODAL_REGION (e.g. eu, 1.15x),
 CURTAIN_MODAL_TIMEOUT_VIDEO (s, default 10800), CURTAIN_MODAL_MEMORY_VIDEO_MB (default 131072),
@@ -49,15 +57,8 @@ WAN_CONFIG = f"{VXF_DIR}/config/wan2.2/wan_civitai_i2v.yaml"
 #   uv pip compile requirements-stage2.in --python-version 3.11 --python-platform x86_64-manylinux_2_31 --no-header --no-annotate -o requirements-stage2.txt
 REQUIREMENTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "requirements-stage2.txt")
 
-PROMPT = (
-    "The garment \"{name}\" ({category}) dressed on a plain mid-grey studio mannequin, rotating slowly on a turntable, "
-    "neutral soft studio light, plain light-grey seamless background, locked camera, sharp fabric detail."
-)
-MOTION_PROMPT = (
-    "The garment \"{name}\" ({category}) dressed on a plain mid-grey studio mannequin that raises and lowers its arms, "
-    "turns around and takes a step; the fabric moves naturally; neutral studio light, plain light-grey background, locked camera."
-)
-NEGATIVE = "blurry, distorted, deformed, extra limbs, text, captions, watermark, people, face, hands of a person, busy background, flicker, static frame"
+# The prompts are in the manifest (`prompt`, written by the exporter from fixed vocabulary). The first GPU
+# run used a prompt with the product title in quotes, and the title appeared as text in a frame.
 
 app = modal.App("curtain-phase0-stage2-video")
 
@@ -139,6 +140,11 @@ def generate(job_id: str, steps: int = 40, clip_ids: list[str] | None = None, co
     pm.jobs.reload()
     job = f"{pm.JOBS_DIR}/{job_id}"
     m = lib.load_manifest(f"{job}/manifest.json")
+    problems = lib.prompt_problems(m)
+    if problems:
+        raise lib.ManifestError("stage 2 prompts refused: " + "; ".join(problems))
+    prompts = lib.video_prompts(m)
+    mode_control = lib.control_mode(m)
     if not os.path.exists(os.path.join(MODEL_DIR, ".complete.json")):
         raise RuntimeError("weights not in the Volume yet: run download_weights first (run_phase0.py and this app's entrypoint do)")
     out = f"{job}/stage2"
@@ -185,7 +191,6 @@ def generate(job_id: str, steps: int = 40, clip_ids: list[str] | None = None, co
     width, height = m["camera"]["width"], m["camera"]["height"]
     sample_size = [height, width]
     photo = lambda role: os.path.join(job, lib.photo_path(m, role))  # noqa: E731
-    words = {"name": m["product_name"], "category": m["category"]}
     wanted = clip_ids or [c["id"] for c in m["clips"]]
     clips_out = []
     for ci, clip in enumerate(c for c in m["clips"] if c["id"] in wanted):
@@ -201,9 +206,9 @@ def generate(job_id: str, steps: int = 40, clip_ids: list[str] | None = None, co
             inpaint_video, inpaint_mask, _clip_image = get_image_to_video_latent(start, end, video_length=n, sample_size=sample_size)
             ref = get_image_latent(photo("front"), sample_size=sample_size)
             control, _, _, _ = get_video_to_video_latent(control_mp4, video_length=n, sample_size=sample_size, fps=clip["fps"], ref_image=None)
-            prompt = (MOTION_PROMPT if clip["kind"] == "motion" else PROMPT).format(**words)
+            prompt = prompts["motion"] if clip["kind"] == "motion" else prompts["turntable"]
             sample = pipeline(
-                prompt, num_frames=n, negative_prompt=NEGATIVE, height=height, width=width, generator=generator,
+                prompt, num_frames=n, negative_prompt=prompts["negative"], height=height, width=width, generator=generator,
                 guidance_scale=guidance_scale, num_inference_steps=steps, video=inpaint_video, mask_video=inpaint_mask,
                 control_video=control, control_camera_video=None, ref_image=ref, boundary=boundary, shift=shift,
             ).videos
@@ -241,6 +246,9 @@ def generate(job_id: str, steps: int = 40, clip_ids: list[str] | None = None, co
         "guidance_scale": guidance_scale,
         "shift": shift,
         "control_encoding": control_encoding,
+        "control_mode": mode_control,
+        "control_proxy": (m["control"].get("proxy") or {}).get("kind"),
+        "prompt": {k: prompts.get(k) for k in ("version", "kind", "description", "turntable", "motion", "negative")},
         "pin_frames": pin_frames,
         "load_seconds": round(load_s, 1),
         "clips": clips_out,
@@ -257,11 +265,68 @@ def generate(job_id: str, steps: int = 40, clip_ids: list[str] | None = None, co
     return record
 
 
+@app.function(image=image, volumes={pm.JOBS_DIR: pm.jobs}, timeout=1800, region=CFG["region"])
+def score_consistency(job_id: str, stride: int = lib.CONSISTENCY_STRIDE) -> dict:
+    """Per-frame garment consistency of the generated clips (CPU only): the silhouette of every frame in
+    stage2/clips/ against the control silhouette and the proxy mask the exporter rendered for that pose.
+    Writes `consistency` into stage2/record.json and returns it."""
+    import imageio.v2 as imageio
+    import numpy as np
+
+    pm.jobs.reload()
+    job = f"{pm.JOBS_DIR}/{job_id}"
+    m = lib.load_manifest(f"{job}/manifest.json")
+    rec_path = f"{job}/stage2/record.json"
+    with open(rec_path) as f:
+        record = json.load(f)
+    done = [c["id"] for c in record.get("clips", [])]
+    t0 = time.time()
+
+    def mask(rel: str) -> np.ndarray:
+        a = np.asarray(imageio.imread(os.path.join(job, rel)))
+        return (a[..., 0] if a.ndim == 3 else a)[::stride, ::stride] > 127
+
+    rows = []
+    for item in lib.consistency_plan(m, done):
+        rgb = np.asarray(imageio.imread(os.path.join(job, item["generated"])))[..., :3][::stride, ::stride]
+        h, w = rgb.shape[:2]
+        rgb_bytes = np.ascontiguousarray(rgb, dtype=np.uint8).tobytes()
+        fg = lib.frame_foreground(rgb_bytes, w, h)
+        ctrl = mask(item["control_mask"]).astype(np.uint8).tobytes()
+        prox = mask(item["proxy_mask"]).astype(np.uint8).tobytes() if item["proxy_mask"] else None
+        rows.append({"clip": item["clip"], "j": item["j"], "frame": item["frame"], **lib.frame_consistency(fg, ctrl, prox, w, h, rgb=rgb_bytes)})
+    summary = lib.consistency_summary(rows, mode=lib.control_mode(m), stride=stride)
+    summary["seconds"] = round(time.time() - t0, 1)
+    record["consistency"] = summary
+    with open(rec_path, "w") as f:
+        json.dump(record, f, indent=2)
+    pm.jobs.commit()
+    return summary
+
+
+def consistency_line(c: dict) -> str:
+    """One log line: flagged frames and the worst numbers."""
+    worst = lambda k: "n/a" if not c.get(k) else f"{c[k]['min']:.3f}"  # noqa: E731
+    flagged = ", ".join(f"{f['clip']}#{f['j']}" for f in c["flagged_frames"][:12]) + (" ..." if len(c["flagged_frames"]) > 12 else "")
+    return (
+        f"[stage2] consistency vs {c['control_mode']} control: {c['flagged']}/{c['frames']} frames flagged"
+        f"{f' ({flagged})' if flagged else ''}; min silhouette IoU {worst('silhouette_iou')}, min zone IoU {worst('zone_iou')}, "
+        f"min proxy cover {worst('garment_cover')} (thresholds {c['thresholds_note']}); "
+        f"{len(c.get('blind_frames', []))} frames blind to leg drift (legs overlap), {len(c.get('low_contrast_frames', []))} low-contrast frames"
+    )
+
+
 @app.local_entrypoint()
-def main(job_dir: str, steps: int = 40, clips: str = "", control_encoding: str = "linear", no_pin_frames: bool = False, download_only: bool = False, force_upload: bool = False):
+def main(job_dir: str, steps: int = 40, clips: str = "", control_encoding: str = "linear", no_pin_frames: bool = False, download_only: bool = False, force_upload: bool = False, consistency_only: bool = False, consistency_stride: int = lib.CONSISTENCY_STRIDE):
     m = pm.load_local_job(job_dir)
     job_id = m["job_id"]
-    if not download_only:
+    problems = lib.prompt_problems(m)
+    if problems and not (download_only or consistency_only):
+        raise SystemExit("[stage2] prompts refused: " + "; ".join(problems))
+    print(f"[stage2] control {lib.control_mode(m)}; prompt: {lib.video_prompts(m)['description'] if not problems else '(invalid)'}")
+    if consistency_only:
+        print(consistency_line(score_consistency.remote(job_id, stride=consistency_stride)))
+    elif not download_only:
         pm.upload_job(job_dir, job_id, force=force_upload)
         print("[stage2] weights:", download_weights.remote())
         t = time.time()
@@ -271,4 +336,5 @@ def main(job_dir: str, steps: int = 40, clips: str = "", control_encoding: str =
             json.dump(record, f, indent=2)
         print(json.dumps({k: record[k] for k in ("clips", "turntable_frames_assembled", "seams", "load_seconds")}, indent=2))
         print(lib.format_cost_table([record["cost"]]))
+        print(consistency_line(score_consistency.remote(job_id, stride=consistency_stride)))
     pm.download_dir(job_dir, job_id, "stage2")

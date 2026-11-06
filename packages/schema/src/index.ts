@@ -12,3 +12,4 @@ export * from './mappings/woo';
 export * from './mappings/fabricText';
 export * from './chartTemplates';
 export * from './fixtures';
+export * from './sizeAdvice';

@@ -248,3 +248,47 @@ Not reviewed: the training-data terms behind DWPose (COCO-WholeBody, UBody) and 
 ### Cost (estimate)
 
 One product (two views) ≈ 2–5 H100 minutes including model loading ≈ $0.15–0.40 at Modal `eu`; first run also downloads about 4 GB (fashn) or 60 GB (qwen) of weights. FASHN's 5 s per image is from its model card; no Qwen-Image-Edit-2511 timing was found in the sources read. Not measured.
+
+## Cut families and stage 4b — build once per cut, swap the print (2026-11-06)
+
+**Problem.** Shops sell one cut in many colours and prints. The first real GPU run (GitHub Actions run 10) cost about $1.59 for stage 2 alone (Wan2.2-Fun-A14B-Control, H100, about 24 min; list price × seconds, an estimate) and it is also where the garment drifts: between the pinned front and back frames the dress turned into trousers and the product title appeared as text. A colour variant should not pay for, or risk, that step again.
+
+**Families** (`spikes/garment-engine/src/families.ts`, CLI `families:bohohippychic`, output `data/bohohippychic/families.json`). Products are one cut when product type, size values, title stem and description match after removing colour words, print words, variant codes (PWP1) and shop boilerplate; measurements stay in the comparison. A silhouette check on the main photo (foreground mask, scale-normalised IoU, threshold 0.6) splits false merges. Per family a reference member (best photos: no model, then resolution, then image count) gets the full run; a member whose fabric or size chart differs from it gets its own.
+
+| bohohippychic.com.au, 667 products (public catalogue, 2026-11-06) | All types | Garment types |
+| --- | --- | --- |
+| Products | 667 | 537 |
+| Families = full runs | 595 | 466 |
+| Products that need only stage 4b | **72** | **71** |
+| Largest family | Earthweave Knit Top, 29 colours | |
+| Same stem, different copy (not merged; merchant can confirm) | | 52 groups, up to 73 more runs |
+
+At run 10's stage 2 cost the 71 saved garment runs are about $110 of video generation (estimate), before stage 1b and stage 4. Two limits: the rules are strict, so a colour whose copy was rewritten (Earthweave Navy and Purple, and the two light-green Earthweave tops) stays out of the main family; and the silhouette check refused all 94 main photos it looked at, because every one is a model in a styled set (busy border), so on this shop it split nothing. It works on plain-backdrop photos in the tests and takes a garment mask from a segmentation model (stage 1b's Grounding DINO + SAM 2) when one is supplied.
+
+**Stage 4b** (`spikes/garment-engine/modal/stage4b_retexture.py`). Inputs: the reference's `stage4/<source>/garment.glb` and the variant's front and back stills on our mannequin from stage 1b, with their garment masks; the cameras are the known turntable cameras at frame 0 and N/2 (checked equal to the reference's). Per texel the mesh point is projected into both stills and takes the real pixel where it is visible (inside the frame and the mask, nearest surface in the mesh's own z-buffer, not at a grazing angle). The sides no still sees are filled by **mirroring the nearest seen print across the visibility boundary**, row by row in a cylinder grid around the turntable axis: simple, deterministic, documented, and no generative model. Output per variant, inside the reference's bundle: `texture.png`, `material.json` (the reference's fabric with the variant's colour and texture), `preview.glb`, `record.json` with coverage, input hashes and cost, plus the bundle index `variants.json`. Stage 4 writes no UVs yet, so stage 4b lays out one atlas cell per triangle (`garment_uv.glb`, shared by the family).
+
+- **Licences:** no model is used; the container installs only `pillow==11.3.0` (HPND/MIT-CMU).
+- **Cost (estimate):** CPU only. The pure-Python core took about 4 s locally for 12k triangles, two 480×832 stills and a 1024 texture; with container start a variant should cost cents. The research doc has no Modal CPU price, so the record leaves the dollar figure empty and keeps the seconds. Not measured on Modal.
+- **Risks:** the variant inherits the reference's geometry, so a variant whose cut differs (a false merge) gets a wrong shape with a right print; the stage 1b stills of reference and variant must agree in pose, or the print lands off the mesh; the mirrored side is an estimate (labelled in every record, AGENTS.md rule 3) and a print with a direction (text, a single motif) will look reflected there.
+
+## Stage 2 control after the first GPU run (2026-11-06)
+
+**What run 10 showed.** The first full `run_phase0.py` (GitHub Actions run 10, aalter-studio-2 with synthetic stills; stage 2 on an H100 for about 24 minutes, cost estimate $1.59; stage 4 on an L40S) held the pinned front and back frames and the camera path. Between the pinned frames the dress became trousers (frames 20, 60 and 100), and frame 20 showed the product name as text. Stage 4 on the generated frames reached a mask IoU of 0.90, against 0.99 on the synthetic truth. Wan2.2-Fun-A14B-Control follows its control video closely, and that video showed the bare mannequin with two separate legs. The positive prompt held the product title in quotes, and video models render quoted text as letters.
+
+**Change (export 0.2.0, not yet run on a GPU).**
+
+1. **Control proxy.** The control depth and silhouette show the mannequin wearing a coarse, closed proxy garment built from the category and the size chart (`spikes/garment-engine/src/proxy.ts`):
+   - dress or skirt: one volume around both legs down to the chart length;
+   - trousers: two legs with a gap between them;
+   - top or outerwear: a torso shell with sleeves.
+
+   The girths are the chart's at the base size, with ease. The proxy is a control signal only and never an output. `--control bare` keeps the old behaviour. The mode and the proxy spec are part of `input_hash`.
+2. **Neutral prompts.** The prompts are built from fixed vocabulary: category, colour, length, sleeves and fabric. They contain no title or brand. The negative prompt lists text, letters, words, watermark and logo, plus the opposite garment (trousers for a dress or skirt, a dress or skirt for trousers). Both prompts are written into the manifest, and stage 2 refuses a manifest that fails the check.
+3. **Garment-consistency metric.** Every generated frame's silhouette is compared with the control proxy's at the same pose: IoU over the whole frame, IoU within the garment rows, and the share of the proxy that the frame covers. The flagged frames go into `stage2/record.json`, so the next run reports drift as numbers. The thresholds are first guesses.
+
+Usage, file layout and what is not tested: `spikes/garment-engine/modal/README.md`, section "Stage 2 after run 10".
+
+**Risks.**
+- The model may copy the proxy's coarse shape (flare, hem line, no waist definition) instead of the pinned stills. A proxy that is too tight or too loose then becomes the garment's silhouette in the video. The proxy only has to be right in topology (one volume or two legs); its girths come from the chart.
+- In the motion clip the dress proxy moves rigidly with the pelvis, so a stepping leg can push through it.
+- If the drift persists with the proxy, the next options are the VACE-Fun or InP variants, a lower control strength, or the hosted path (shortlist B).

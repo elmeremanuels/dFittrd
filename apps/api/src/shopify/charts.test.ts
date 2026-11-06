@@ -222,8 +222,10 @@ describe('Shopify size chart builder routes', () => {
     handler = (q) => (q.query.includes('CurtainOnboarding') ? { currentAppInstallation: { id: 'gid://shopify/AppInstallation/9', metafield: stored ? { value: stored } : null } } : {});
     const first = await t.app.inject({ method: 'GET', url: '/shopify/charts/onboarding', headers: await auth() });
     expect(first.statusCode).toBe(200);
-    // the seeded fixtures have complete charts, so "assign" is already done; template is next
-    expect(first.json().next).toBe('template');
+    // R5: the seeded fixtures already have charts, so "template" and "assign" are done without a
+    // saved pick (a chart that reached products proves a template was chosen); the theme block is next.
+    expect(first.json().next).toBe('themeBlock');
+    expect(first.json().steps.find((s: { key: string }) => s.key === 'template').done).toBe(true);
     expect(first.json().steps.map((s: { key: string }) => s.key)).toEqual(['connect', 'template', 'assign', 'themeBlock', 'test']);
 
     const put = await t.app.inject({ method: 'PUT', url: '/shopify/charts/onboarding', headers: await auth(), payload: { templateId: 'au-womens-body' } });

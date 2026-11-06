@@ -4,10 +4,10 @@ GPU half of the Phase 0 spike (`docs/ENGINE-HANDOFF.md`), following shortlist A 
 
 - **Stage 1b** (optional, for shop photos): dresses our bare mannequin, rendered at the front and back camera of the turntable, from a shop photo of the garment on a person or flat-lay. Garment segmentation with Grounding DINO + SAM 2.1, try-on with FASHN VTON v1.5 or Qwen-Image-Edit-2511 (all Apache-2.0), alignment QA against our silhouette. Its output is the front and back still stage 2 pins. See [Stage 1b](#stage-1b-dress-our-mannequin-from-shop-photos).
 
-- **Stage 2**: Wan2.2-Fun-A14B-Control (Apache-2.0), driven by the depth video of our own bare mannequin along the fixed turntable path, with the front and back stills pinned at the first and last frame of each half turn. Because the control video is our own render, the camera pose of every generated frame is known.
+- **Stage 2**: Wan2.2-Fun-A14B-Control (Apache-2.0), driven by the depth video of our own mannequin **wearing a coarse proxy garment** (from the category and the size chart; `--control bare` renders the bare mannequin) along the fixed turntable path, with the front and back stills pinned at the first and last frame of each half turn. Because the control video is our own render, the camera pose of every generated frame is known. The prompts are neutral (no product title, no brand) and every generated frame is scored against the proxy silhouette. See [Stage 2 after run 10](#stage-2-after-run-10-control-proxy-neutral-prompts-consistency-metric).
 - **Stage 4**: 2D Gaussian splatting with gsplat's `rasterization_2dgs` (Apache-2.0) plus a mask loss, then Open3D TSDF fusion (MIT), cleanup and decimation to 8–15k triangles, written as `.glb`.
 
-> **Status: nothing in this folder has run on a GPU.** The build container that wrote it cannot reach Modal, because the network proxy blocks gRPC. Everything that needs Modal or a GPU is untested; see [What is not tested](#what-is-not-tested). No cost or quality number here is measured. Every cost figure is an **estimate**: list price × seconds.
+> **Status.** The build container that wrote this folder cannot reach Modal (the network proxy blocks gRPC); runs go through GitHub Actions. Stage 4 on synthetic frames and one full `run_phase0.py` (run 10: stage 2 on an H100, about 24 min, cost estimate $1.59; stage 4 on an L40S) have run there. Run 10 showed the dress turning into trousers between the pinned frames and the product name rendered as text; the control proxy, the neutral prompts and the consistency metric that answer this **have not run on a GPU yet**. See [What is not tested](#what-is-not-tested). Every cost figure is an **estimate**: list price × seconds.
 
 ## Files
 
@@ -16,10 +16,11 @@ GPU half of the Phase 0 spike (`docs/ENGINE-HANDOFF.md`), following shortlist A 
 | `smoke.py` | Modal hello world: CPU function, GPU cold start, torch matmul | Modal |
 | `smoke_cpu.py` | The same without a GPU (login, image, remote call) | Modal |
 | `stage1_dress.py` | Stage 1b app: weights download (once), `dress` (segment the shop photo, try-on onto our render, garment mask, alignment QA, composite, record) | Modal, GPU |
-| `stage2_video.py` | Stage 2 app: weights download (once), `generate` (3 clips, assembled turntable, drift check, cost record) | Modal, GPU |
+| `stage2_video.py` | Stage 2 app: weights download (once), `generate` (3 clips with the manifest's prompts, assembled turntable, drift check, cost record), `score_consistency` (CPU: per-frame silhouette vs the control proxy) | Modal, GPU |
 | `stage4_recon.py` | Stage 4 app: `reconstruct` (2DGS → TSDF → mesh → `.glb` + metrics + cost record) | Modal, GPU |
+| `stage4b_retexture.py` | Stage 4b app (CPU, pure Python, no video model): re-textures a cut family's reference mesh for one colour/print variant from the variant's stage 1b front/back stills; writes `stage4b/<source>/variants/<id>/{texture.png, material.json, preview.glb, record.json}` and `variants.json` into the reference job | Modal (CPU) |
 | `run_phase0.py` | Runs stage 2 and stage 4 for one product (stage 1b first with `--dress`) and prints the cost summary | Modal, GPU |
-| `phase0_lib.py` | Pure Python: manifest checks and `input_hash`, pinned versions, pose conversions, clip assembly, cost estimate, settings; stage 1b pins, settings, manifest wiring, mask operations and alignment QA | nothing |
+| `phase0_lib.py` | Pure Python: manifest checks and `input_hash`, pinned versions, pose conversions, clip assembly, cost estimate, settings; stage 1b pins, settings, manifest wiring, mask operations and alignment QA; stage 2 control mode, prompt guard and garment-consistency metric | nothing |
 | `phase0_mesh.py` | GPU-free half of stage 4: TSDF fusion, mannequin removal, cleanup, decimation, truth comparison, `.glb` | numpy, scipy, Open3D, trimesh |
 | `phase0_modal.py` | The two Volumes; job upload and download | Modal |
 | `requirements-stage{1,2,4}.in` / `.txt` | Direct pins / full lock of each GPU image (stage1 = stage 1b) | — |
@@ -89,11 +90,12 @@ The exporter prints one line per product, for example `[export:phase0] aalter-st
 
 | Path | Content |
 | --- | --- |
-| `manifest.json` | Product id and name, photos by role with sha256, base size, size chart as garment girths per anchor ring, fabric (`material.json` format), mannequin version and `.glb` sha256, camera, control encoding, clips, seeds, pinned models, `hash_inputs`, `input_hash` |
+| `manifest.json` | Product id and name, `product_source` (spike fixture or shop), photos by role with sha256, base size, size chart as garment girths per anchor ring, fabric (`material.json` format), mannequin version and `.glb` sha256, camera, control mode, proxy spec and encoding, stage 2 prompts, clips, seeds, pinned models, `hash_inputs`, `input_hash` (control mode, proxy spec and prompts are hashed) |
 | `cameras_opencv.json` | `K` and a world-to-camera `w2c` per frame. OpenCV axes (x right, y down, z forward). World = mannequin space in metres, +Y up, +Z front. Pixel-corner origin (cx = W/2), as in COLMAP, Nerfstudio and gsplat; subtract 0.5 for Open3D/OpenCV. |
 | `transforms.json` | The same poses for Nerfstudio (`transform_matrix` = camera-to-world, OpenGL axes). `file_path` points at `frames/NNNN.png`, which stage 2 fills. |
-| `control/depth_mm/`, `control/depth_vis/`, `control/mask/` | Bare-mannequin depth (16-bit PNG, mm, 0 = background), the 8-bit control frames (near = 255) and the silhouette, for the 160 frames of `turntable_mid` |
-| `motion/…` | The same for the 81 frames of the motion clip, seen from the fixed motion camera (radius 520 cm, so the raised arms stay in frame) |
+| `control/depth_mm/`, `control/depth_vis/`, `control/mask/` | Control depth (16-bit PNG, mm, 0 = background), the 8-bit control frames (near = 255) and the silhouette, for the 160 frames of `turntable_mid`: the mannequin wearing the proxy garment (`--control proxy`, default) or the bare mannequin (`--control bare`) |
+| `control/proxy_mask/`, `control/proxy.glb` | Proxy mode only: where the proxy is visible per frame (the reference of the consistency metric), and the proxy volume in metres (inspection only) |
+| `motion/…` | The same for the 81 frames of the motion clip, seen from the fixed motion camera (radius 520 cm, so the raised arms stay in frame); the proxy is posed with the mannequin's rig |
 | `mannequin.glb` | Base-size mannequin (M) in metres |
 | `photos/` | `front`, `back` and `detail_N` |
 | `synthetic/` | The synthetic garment dressed along the same path (`rgb/`, `garment_mask/`, `transforms.json`, `garment_truth.glb`), so stage 4 can be measured against a known mesh |
@@ -168,7 +170,7 @@ The job timeout is 120 minutes. Stage 2 with 40 steps, plus the first 69 GB weig
 
 ```sh
 cd spikes/garment-engine/modal
-python -m pytest -q tests                                    # 57 pass with requirements-local.txt; the mesh tests skip without numpy/Open3D
+python -m pytest -q tests                                    # with requirements-local.txt; the mesh tests skip without numpy/Open3D
 pip install -r requirements-mesh-test.txt && python -m pytest -q tests   # Python 3.10–3.12: 59 expected (33 before stage 1b; not re-run with Open3D since)
 pnpm --filter @curtain/garment-spike test                    # includes the exporter tests (vitest)
 ```
@@ -192,7 +194,16 @@ pnpm --filter @curtain/garment-spike export:phase0 -- --product <id> --on-model 
 | `dress/bare_front.png`, `dress/bare_back.png` | Our bare mannequin rendered at turntable frame 0 and N/2: same camera (`cameras_opencv.json`), same light, studio background `[235, 235, 235]`. The silhouettes are `control/mask/0000.png` and `control/mask/<N/2>.png` |
 | `manifest.json` | `photos` front/back point at `stage1b/front.png` / `stage1b/back.png` with `produced_by: "stage1b"`, `sha256: null` and `invented` (true for a back without a photo); a `stage1b` section lists the sources, the two views and `invented_back` |
 
-The product's category picks the try-on category (`dress` → one-pieces, `top`/`outerwear` → tops, `bottom` → bottoms). The spike exporter knows only its own product ids; a product from a shop must be added to `src/product.ts` first.
+The product's category picks the try-on category (`dress` → one-pieces, `top`/`outerwear` → tops, `bottom` → bottoms). `dress/bare_mask_<view>.png` is the bare mannequin's silhouette at that frame: the alignment QA compares with our mannequin, not with the control proxy.
+
+### Export a product of a validated shop
+
+```sh
+pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch-images   # images of the committed images.json into data/bohohippychic/raw/ (gitignored); writes no JSON
+pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product azure-palm-baby-doll-dress
+```
+
+The payload, size chart and base size (AU 12, ours) come from the committed `data/bohohippychic/products.json`, the photos from `images.json` and `raw/`: per role a no-model photo on a plain background first, else the first photo of that role that shows the whole garment (`--front-image N` / `--back-image N` pick positions by hand). `--on-model` or `--flat-lay` follow from the chosen front photo. Without `raw/<handle>/` the exporter stops and names the `--fetch-images` command. The hand classification (front/back, on model) is keyed by image position and pinned by the sha256 in the **committed** `images.json`: `--fetch-images` downloads from the committed URLs and refuses bytes with another hash before writing them, and the exporter checks the hash again. Neither rewrites `images.json`, so on a fresh runner a changed or reordered shop photo fails the run instead of silently taking the old classification. A full `shop:bohohippychic -- --fetch` (local maintenance: re-reads the catalogue and rebuilds `products.json` and `images.json`) refuses to write when any image's hash, URL or position changed, until the classification in `src/shopSelection.ts` was reviewed and it is re-run with `--accept-image-changes`. Re-fetching is never the fix for a hash mismatch. Only the five validation products can be exported; a runner-up such as `seraphina-embroidered-mirror-work-maxi-dress` has no payload or image classification yet. The synthetic garment (stage 4 truth) exists for dresses and tops only; trousers, skirts and outerwear export without `synthetic/`.
 
 ### Run stage 1b
 
@@ -261,6 +272,51 @@ No stage 1b run has happened, so there is no measured time. Planning figures: FA
 
 Everything that needs Modal or a GPU: the image build (the lock resolves; `pip install --no-deps` of fashn-vton and the parser check are untested), the weight downloads, the transformers calls for Grounding DINO and SAM 2 (written against transformers 4.57.3's documented API, not executed), FASHN's pipeline with our label maps in place of its parser, **whether DWPose finds a body on our grey mannequin** (the record counts the keypoints it found; if it finds none, FASHN's output will be poor and the qwen engine is the fallback), whether either model keeps our mannequin's pose and camera (that is what the QA measures), the QA thresholds, the back views, timings and costs. Tested without a GPU: the manifest wiring end to end through the TypeScript exporter, the mask operations, the alignment QA on synthetic scenes, the stage 2 gate in `run_phase0.py`, the requirement pins, and that the apps register without function-name clashes.
 
+## Stage 2 after run 10: control proxy, neutral prompts, consistency metric
+
+Run 10 (GitHub Actions, aalter-studio-2, synthetic stills) followed the pinned front and back frames and the camera path, but between them the dress turned into trousers (frames 20, 60, 100) and the product name appeared as text in frame 20; stage 4 on those frames reached a mask IoU of 0.90, against 0.99 on the synthetic truth. Two causes: the control depth showed the **bare** mannequin (two separate legs), and the prompt held the product title in quotes. Export 0.2.0 changes three things. None of them has run on a GPU yet.
+
+**Control proxy** (`src/proxy.ts`, `--control proxy|bare`, default `proxy`, in the manifest as `control.mode` / `control.proxy` and in `input_hash`). The control video shows our mannequin wearing a coarse, closed garment volume built only from the category and the chart at the base size:
+
+| Kind | Proxy |
+| --- | --- |
+| dress | one closed volume from just below the neck to the hem (chart length), chart girths + ease at chest, waist and hip, flaring below the hip and always clearing both legs; sleeves when the product gives a sleeve length |
+| skirt (a bottom whose subcategory or pattern says skirt) | one closed volume from the waist to the hem |
+| trousers (other bottoms) | a seat from the waist to the crotch, then two closed legs to the hem (outseam or inseam), with a gap between them; wide-leg patterns widen the legs |
+| top, outerwear | torso shell to the hem (default just below the hip) and sleeves to the sleeve length (outerwear without one: to the wrist) |
+
+Girths follow `evalChart`: a garment chart as printed (a one-size product's flat measurements, doubled by the shop parser), a body chart plus the product's ease, else the fit engine's category default ease; rings without a chart value get the mannequin's girth plus a proxy default. A girth below the mannequin's body + 1 cm is raised and the spec says so. A test measures the proxy mesh at every anchor and finds the chart value within 1 cm, and checks that a dress or skirt proxy has no gap between the legs in the rendered depth (front, back and diagonals) while trousers keep theirs. The proxy is only the control signal: no anchor, grading or fit step reads it, and it never appears in an output.
+
+**Prompts** (manifest `prompt`, hashed). A neutral description made only of fixed vocabulary: colour (nearest basic colour of `primaryColorHex`, else a colour word of the name mapped to a plain colour; the word itself is not used), length, sleeves, a plain style word and the fabric, e.g. *"a blue knee-length babydoll dress in a fluid viscose fabric, one closed skirt that falls from the waist to the hem and covers both legs"*. Never the product title, the brand or quotes. The negative prompt always holds text, letters, words, captions, typography, watermark, logo, label and brand name, plus trousers / pants / shorts / two separate legs of fabric for a dress or skirt, and dress / skirt / gown for trousers. `stage2_video.py` and `run_phase0.py` refuse a manifest whose prompts fail `lib.prompt_problems` (title, brand, quotes, missing negative terms) or that has no prompts (exported before 0.2.0: re-export).
+
+**Garment consistency** (`stage2_video.score_consistency`, a CPU function that runs after `generate`; `stage2/record.json` → `consistency`; `cost_summary.json` → `stage2.consistency` without the per-frame list). For every generated clip frame, at stride 2: the frame's foreground (background colour estimated from the border, opened, small specks dropped) against the control silhouette at the same pose (`silhouette_iou`), the same IoU within the rows the proxy spans (`zone_iou`), and the share of the visible proxy the frame covers (`garment_cover`). A frame is flagged when one is below `CONSISTENCY_THRESHOLDS` (0.85 / 0.80 / 0.90, **initial values, not tuned on real output**). Trousers drawn over a dress proxy leave the gap between the legs uncovered (low `garment_cover`); a skirt drawn over a trouser proxy fills the gap (low `zone_iou`). The record lists every frame, the flagged frames with reasons, and min/mean per metric overall and per clip. With `--control bare` only the silhouette IoU is reported, and the record says the bare mannequin is no garment reference.
+
+What the metric cannot see, and says so in the record (`label`, `blind_frames`, `low_contrast_frames`):
+
+- **Side views.** Trousers over a dress proxy show up as background between the legs. Around 90° and 270° the legs overlap, so a drifted frame has the same silhouette as a correct one and passes. Each frame carries `drift_visible` (our own control has a gap between the legs below the proxy's hem, or the proxy itself has one, within the proxy's columns); frames without it are listed in `blind_frames`, and `drift_visible` in the summary gives min/mean over the frames that can show drift. Read a pass on blind frames as "no evidence", not as "consistent".
+- **Light garments.** The foreground is everything that differs from the border colour by more than 20 levels. White, cream and light-grey garments (Celeste White, Luna Cami White, the Heirloom lace) merge into the light-grey background and all three numbers drop for that reason alone. Each frame carries `contrast` (mean colour inside the proxy vs the background, max over channels); frames below `CONSISTENCY_MIN_CONTRAST` (40) are listed in `low_contrast_frames`.
+- **The proxy's guessed flare.** `garment_cover` is measured against the proxy, whose dress flare is a default (hem_flare 1.35 for a babydoll, e.g. Azure Palm with girths 102/84/81.5/110). A correct but narrower dress covers less of it and can fall below 0.90. Set `min_garment_cover` per proxy kind from the first proxy-control run (run 11), not before.
+
+Re-score without the GPU: `modal run spikes/garment-engine/modal/stage2_video.py --job-dir … --consistency-only`.
+
+## Stage 4b: re-texture a cut family's variants
+
+Shops sell one cut in many colours and prints. The full pipeline runs once per cut family (`data/bohohippychic/families.json`, `src/families.ts`), for its reference member; every other member only needs stage 4b:
+
+```sh
+# reference: full run (stage 1b -> 2 -> 4); variant: its own export and stage 1b stills only
+modal run spikes/garment-engine/modal/run_phase0.py --job-dir <reference job> --dress
+modal run spikes/garment-engine/modal/run_phase0.py --job-dir <variant job> --dress --dress-only
+modal run spikes/garment-engine/modal/stage4b_retexture.py --ref-job-dir <reference job> --source stage2 \
+  --variant-job-dir <variant job> --variant-id <handle> --family-id <families.json id>
+# dry run on the reference's synthetic frames (known print, no variant job):
+modal run spikes/garment-engine/modal/stage4b_retexture.py --ref-job-dir <reference job> --source synthetic --synthetic-variant
+```
+
+The variant's stills are projected through the reference's turntable cameras at frame 0 and N/2 (the variant's `cameras_opencv.json` must be equal), with a z-buffer of the garment mesh, the variant's stage 1b garment mask and a grazing-angle cut; what neither still sees is filled by mirroring the nearest seen print around the turntable axis (the mean camera centre of `cameras_opencv.json`, recorded as `settings.axis_xz`). A real variant without `stage1b/garment_mask_<view>.png` is refused, because the z-buffer holds only the garment mesh and skin or mannequin colour would bake into the texture; `--allow-missing-mask` accepts it and writes a warning into `record.json` (`warnings`). Options: `--texture-size 1024 --min-cos 0.2 --depth-eps-cm 1.0 --recon-if-missing --download-only --force-upload --allow-missing-mask`. `CURTAIN_MODAL_GPU_RETEXTURE` (default empty) keeps it on CPU.
+
+**Not run on Modal.** Tested here: GLB I/O, the atlas, the z-buffer and visibility, the projection and fill on a synthetic quad and cylinder seen from the exporter's cameras, the axis from the cameras, the mask refusal and the records (`tests/test_stage4b_retexture.py`). A 12k-triangle cylinder at 480×832 with a 1024 texture takes about 4 s locally. No CPU price is in the research doc, so its cost record has no dollar figure.
+
 ## Settings (environment variables)
 
 | Variable | Default | Effect |
@@ -293,7 +349,10 @@ Every run writes its own cost record (`stage2/record.json` → `cost`, `stage4/<
 
 Tested here:
 
-- The exporter: vitest for pose conventions, PNG encoding, depth range, manifest hash stability and photo rules.
+- The exporter: vitest for pose conventions, PNG encoding, depth range, manifest hash stability and photo rules; the control proxy (girths at the anchors, closed parts, no gap between the legs for a dress or skirt, a gap for trousers); shop products from the committed `products.json` / `images.json` with stand-in image bytes; the prompts (no title, brand or distinctive title word for all seven products).
+- Stage 2's prompt guard and consistency metric (`tests/test_stage2_control.py`): synthetic frames where trousers over a dress proxy and a skirt over a trouser proxy are flagged, a dress over a dress proxy passes, a side view is reported as blind to leg drift, and a cream dress is reported as low contrast.
+- Stage 4b's pure helpers (`tests/test_stage4b_retexture.py`).
+- The proxy geometry is part of `input_hash` (the sha256 of `control/proxy.glb` sits in `hash_inputs.control.proxy`), so a change to the proxy mesh code changes the job id even without a `PROXY_VERSION` bump, and `--skip-video` cannot reuse stage 2 outputs made with other control frames.
 - `phase0_lib`: pytest, including the stage 1b helpers (`tests/test_stage1_dress.py`; its exporter round trip needs Node and `pnpm build:packages`, and skips otherwise).
 - `phase0_mesh`: pytest with Open3D. This includes fusing depth rendered with the exporter's cameras and getting the surface back. Separately, fusing all 160 exported bare-mannequin depth frames reproduced `mannequin.glb` to 0.31 cm mean (voxel 0.4 cm) and the mannequin-removal step dropped 99.9% of its vertices. That was a one-off check, not a committed test.
 - The four Modal apps import under modal 1.6.3, and their functions and `App.include` register without name clashes.
@@ -306,11 +365,12 @@ Not tested, because each of these needs Modal or a GPU:
 - Whether **Wan2.2-Fun-A14B-Control accepts start and end frames together with a control video**. The VideoX-Fun example passes `start_image=None` by default. If the pinned frames do not hold, use `--no-pin-frames`, or try the InP variant as the research doc suggests.
 - Whether the depth encoding suits the model: it was trained on depth from a monocular estimator, not our linear metric encoding (`--control-encoding inverse` is the alternative).
 - Video quality, the turntable assembly on real output, and the seam drift numbers.
+- Whether the proxy control stops the dress → trousers drift, whether the model copies the proxy's coarse shape (flare, hem) instead of the pinned stills, and how the consistency thresholds should be set. The dress proxy is rigid with the pelvis in the motion clip, so a stepping leg can show through it there.
 - gsplat 2DGS training: learning rates, densification and the mask loss on our scenes, the iteration count, and the median-depth TSDF on thin cloth.
 - The `foreground` mask mode on generated frames, followed by removing the mannequin in 3D. Garment within `--remove-cm` (0.6 cm) of the body is removed with it. Stage 3's garment masks (`stage3/garment_mask/`, used automatically when present) are the real answer.
 - Timings, GPU seconds and costs.
 
-Built but not run: the dressing stills (stage 1b, see its section). Not built: stage 3 on generated frames, the 4-step LightWan path, the hosted Kling path (shortlist B), NeuS reconstruction (method B), texture projection, and the Koyeb comparison.
+Built but not run: the dressing stills (stage 1b, see its section) and the variant re-texture (stage 4b). Not built: stage 3 on generated frames, the 4-step LightWan path, the hosted Kling path (shortlist B), NeuS reconstruction (method B), texture projection from the merchant photos onto the reference mesh itself, and the Koyeb comparison.
 
 ## Privacy
 

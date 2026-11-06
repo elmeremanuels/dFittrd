@@ -1,0 +1,96 @@
+# Shopify App Store requirements checklist
+
+Checked against the repository on 2026-11-06 (branch `claude/garment-engine`) for the standalone plugin (D11, D17). Nothing here has been run against a live Shopify store yet; "done" means done in code and tests, "verify" means it needs the dev store.
+
+Sources (read 2026-11-06):
+
+- App Store requirements, numbered items: https://shopify.dev/docs/apps/launch/shopify-app-store/app-store-requirements
+- Listing and performance guidance (Lighthouse, field limits): https://shopify.dev/docs/apps/launch/shopify-app-store/best-practices
+- Mandatory compliance webhooks: https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance
+- Expiring offline access tokens: https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/offline-access-tokens
+
+Status: **done**, **verify** (code is there, a live store must confirm), **gap** (work needed), **founder** (a decision or an account action), **n/a**.
+
+## Summary
+
+Two stages, two different bars:
+
+1. **Pilot (custom distribution, bohohippychic.com.au).** Custom apps are not reviewed and the expiring-token deadline does not apply to them. What is needed: the dev store end-to-end (STATUS "Recommended next steps" 2), the AU chart assigned, billing matching D17, the privacy policy reviewed enough to link from the fit tool. Blocking: **B1** (billing does not match D17) and the live-store items marked verify. Fixed in the release v1 pass (see section G): **G1** (AUD prices made every product of the pilot shop un-try-able) and **G2** (a chart assigned in the builder was not enough to get a size).
+2. **Public listing.** Additionally blocking: **A3** (expiring offline tokens, required for new public apps; non-expiring tokens are delisted from 1 January 2027), **L1** (final privacy policy and terms, not drafts), **P1** (Lighthouse impact measured), the listing assets and the review screencast.
+
+## A. Authentication and installation
+
+| # | Requirement | Status | Evidence / what to do |
+| --- | --- | --- | --- |
+| A1 | 1.1.1 Session tokens; works without third-party cookies or local storage (also in Chrome incognito) | done, verify | `packages/shopify-app/admin/index.html` uses `shopify.idToken()` and sends `Authorization: Bearer <session token>`; no cookies or storage in the admin page (README "The embedded admin page"). The api verifies the token: `apps/api/src/auth/shopifySessionToken.ts`, `packages/shopify-app/src/sessionToken.ts`. Verify in incognito on the dev store. |
+| A2 | 2.3.1 to 2.3.4 Install from a Shopify surface, authenticate immediately, land in the app UI, same on reinstall | done, verify | Managed installation (`use_legacy_install_flow = false` in `packages/shopify-app/shopify.app.toml`), token exchange on first admin load (`POST /shopify/token-exchange`, `apps/api/src/shopify/routes.ts`). No shop-domain field anywhere. Reinstall clears `uninstalledAt`/`purgeAfter` and unpauses (`routes.ts` token-exchange handler). `[auth].redirect_urls` answers with a redirect to the embedded home (`GET /shopify/auth/callback`). |
+| A3 | 3.1.2 Expiring offline access tokens (non-expiring tokens are not permitted for public apps; delisted 1 Jan 2027, API rejected 1 Apr 2027; custom apps exempt) | **gap** | `requestTokenExchange` supports `expiring` (`packages/shopify-app/src/tokenExchange.ts`), but the api calls it without (`apps/api/src/shopify/client.ts` `tokenExchange`) and `shopify_sessions` has no refresh-token column (`apps/api/src/db/schema.ts`). Needed: request `expiring: true`, store the refresh token encrypted with its expiry, refresh before use in jobs and webhooks (sync, backfill, billing rollup), refresh at least every 90 days for dormant shops, never refresh and exchange for one shop at the same time, tests. Owner: api. |
+| A4 | 3.1.1 Valid TLS | done (prod) | Caddy terminates TLS (`infra/Caddyfile`, D9). |
+| A5 | 3.2.x Only necessary scopes | done | `read_products,write_products` only (`shopify.app.toml`, `REQUIRED_SCOPES` in `packages/shopify-app/src/appConfig.ts`). No customer, order or script-tag scopes, so no Protected Customer Data request is needed. `read_orders` stays off (D7). |
+
+## B. Billing
+
+| # | Requirement | Status | Evidence / what to do |
+| --- | --- | --- | --- |
+| B1 | 1.2.1 Charge through Shopify Billing API | done; **gap vs D17** | `appSubscriptionCreate` via `POST /shopify/billing/subscribe` (`apps/api/src/shopify/routes.ts`, `packages/shopify-app/src/graphql/billing.ts`). But the plans are still free / starter (EUR 29 + usage line) / pro (EUR 149 + usage) in `apps/api/src/billing/plans.ts`, and the subscription adds a usage line with `cappedAmount`. D17 says one flat USD 8.99 per month, no usage charge. Change the plan table to one recurring line in USD (converted for other billing currencies as D17 says), drop the usage line and the nightly Shopify usage push for that plan, keep the daily caps as fair use. Owner: api. |
+| B2 | 1.2.2 Accept, decline and re-approve on reinstall | verify | `app_subscriptions/update` sets `paused` from the status and `plan` to free on CANCELLED/EXPIRED/DECLINED/FROZEN (`routes.ts`). A paused shop still renders the button; the fit tool shows the paused screen (D7, `apps/web/src/embed/flow.ts`). Verify on the dev store: decline, then approve again, then uninstall and reinstall (Shopify cancels the subscription on uninstall; the admin must ask for approval again). With D17 decide what an unsubscribed shop gets (today a new shop starts on `free`, 50 sessions). |
+| B3 | 1.2.3 Plan changes without support or reinstall | verify | With one plan (D17) this is subscribe / cancel from the admin page plan button. If a second plan or an annual option comes back, `appSubscriptionCreate` with `replacementBehavior` is needed (not used today). |
+| B4 | 4.2.1 to 4.2.3 Pricing only in the Pricing section, complete, including trial | founder | `docs/app-store/listing.md` "Pricing". Trial is `trialDays: 14` in `plans.ts` today; the listing must match whatever B1 ships. |
+
+## C. Webhooks, privacy and data (GDPR)
+
+| # | Requirement | Status | Evidence / what to do |
+| --- | --- | --- | --- |
+| C1 | Subscribe to `customers/data_request`, `customers/redact`, `shop/redact` before publishing | done, verify | `compliance_topics` in `shopify.app.toml`; handled in `apps/api/src/shopify/routes.ts`; tested in `apps/api/src/shopify.test.ts` ("GDPR topics"). Shopify notes that `shopify app webhook trigger` does not test the subscription itself: confirm deliveries after `shopify app deploy`. |
+| C2 | Invalid HMAC answers 401; valid requests answer 2xx | done | `verifyWebhookHmac` on the raw body, `unauthorized('bad webhook hmac')` (`routes.ts`); duplicates by `X-Shopify-Webhook-Id` (`security-review.test.ts`). |
+| C3 | Complete data requests within 30 days, even when no personal data is held | done | `customers/*` are acknowledged and logged without the customer fields (`loggablePayload`, `apps/api/README.md` security review). We hold no Shopify customer data, so there is nothing to return or erase; the privacy policy says so. |
+| C4 | `shop/redact` (sent 48 h after uninstall) erases shop data | done | `purge-shop` job 48 h later, cascade delete (`apps/api/src/jobs/maintenance.ts`). |
+| C5 | Uninstall cleanup | done, verify | `app/uninstalled`: pause, delete the offline sessions, `purgeAfter` = now + 48 h; the hourly prune purges even if `shop/redact` never arrives (`routes.ts`, `maintenance.ts`). Shopify stops rendering the app block once the app is uninstalled. Verify whether `$app:curtain` product metafields survive uninstall (the README assumes the shop keeps them for reinstall). |
+| C6 | Privacy policy (required by the listing guidance) | **draft** | `docs/legal/privacy.md`, served at `/privacy` (`apps/web/src/routes/LegalRoute.tsx`). DRAFT for legal review; placeholders for entity, retention, hosting region, subprocessors. |
+| C7 | Terms of service | **draft** | `docs/legal/terms.md`, served at `/terms`. DRAFT. |
+| C8 | 5.1.5 Customer data collected through the Online Store must be returned to the merchant's admin | n/a (legal review) | Curtain collects no Shopify customer data; shoppers are anonymous devices and merchants get aggregates only (D3). Confirm with Shopify review that anonymous size advice is not "customer data" in the sense of API Terms 2.3.17. |
+| C9 | Retention of shopper records | **gap** (policy) | Devices, try sessions, ledger and usage rows have no automatic expiry (only renders, 24 h, and shops after uninstall). The privacy policy carries a placeholder; add a prune job once the founder sets the period. Also the AUTH-1 residual (STATUS "Known gaps"): a lost rotated token orphans server rows out of reach of Forget me. |
+
+## D. Platform and storefront
+
+| # | Requirement | Status | Evidence / what to do |
+| --- | --- | --- | --- |
+| D1 | 5.1.1 Theme changes only through theme app extensions; no Script Tag or Asset API | done | One app block, `packages/shopify-app/extensions/try-button/blocks/try-it-on.liquid` (`target: content`, product template only). No `write_script_tags` or `write_themes` scope; no ScriptTag or theme Asset API calls in `apps/api` or `packages/shopify-app`. |
+| D2 | 5.1.2 Block shows correctly in the theme editor and storefront | verify | `extension.test.ts` covers the Liquid output; setup notices for the editor are in `locales/en.default.json`. Run `shopify app build` (Theme Check) and test on Dawn and one other Online Store 2.0 theme. |
+| D3 | 5.1.3 Detailed onboarding for adding the block, deep link recommended | done | Admin onboarding step "Add the Try it on block" with `addAppBlockId` deep link (`packages/shopify-app/src/deepLinks.ts`, `admin/index.html`). Add a help page with screenshots (support docs). |
+| D4 | 5.1.4 App name branding on the storefront | done | The storefront shows "Try it on"; the Curtain name appears inside the overlay the shopper uses directly, plus a privacy line. |
+| D5 | Performance: must not lower Lighthouse performance by more than 10 points (weighted home 17 %, product 40 %, collection 43 %) | **gap** (not measured) | Block only on product pages; `sdk.v1.js` is 19.5 KB raw, 7.8 KB gzip (budget 8 KB), loaded `defer` from Shopify's CDN, once per page; CSS 1 KB; no request to our api until the shopper clicks. Measure: average several Lighthouse runs on the review store's home, a collection and a product page, with and without the block, and record the numbers here. |
+| D6 | 2.2.3 Latest App Bridge, script first | done | `admin/index.html` loads `https://cdn.shopify.com/shopifycloud/app-bridge.js` as the first script (`APP_BRIDGE_SCRIPT_URL`). |
+| D7 | 2.2.4 GraphQL Admin API only | done | All Admin calls go to `/admin/api/{version}/graphql.json` (`packages/shopify-app/src/graphql/client.ts`); version `2026-10`. |
+| D8 | 2.2.2 Consistent embedded experience; 2.1.3 working UI, no 404/500 | verify | Polaris-like static admin page with CSP `frame-ancestors` for the shop and `admin.shopify.com` (`adminContentSecurityPolicy`). Check every admin link and the billing redirect (`open(url, '_top')`) inside the admin iframe. |
+| D9 | 2.1.4 Data sync | done, verify | Product webhooks and the bulk backfill (`packages/shopify-app/src/graphql/bulk.ts`, `apps/api/src/jobs/syncShopifyProduct.ts`). |
+
+## E. Listing and submission
+
+| # | Requirement | Status | Evidence / what to do |
+| --- | --- | --- | --- |
+| E1 | 4.1.1 / 4.1.2 Name matches the dashboard, unique, ≤ 30 characters | founder | `name = "Curtain: Fit & Size Finder"` in `shopify.app.toml` and the listing draft. "Curtain" alone collides with curtain-calculator apps in search. Trademark clearance still open (D1). |
+| E2 | 4.3.1 "Merchant must have online store" | to set | Listing form. |
+| E3 | 4.3.2 Only fully supported languages | to set | List English only (admin and fit tool are English). |
+| E4 | 4.3.3 to 4.3.7 No statistics, guarantees, reviews or prices in texts and images | done in draft | `docs/app-store/listing.md`. Keep "estimate" wording (AGENTS.md rule 3). |
+| E5 | 4.4.x Icon 1200 × 1200, 3 to 6 screenshots 1600 × 900, real UI, unique, no Shopify marks | gap | Screenshot plan in `listing.md`; capture from `pnpm demo` and the review store. |
+| E6 | 4.5.3 Demo screencast (English) | gap | Script in `listing.md` "Review submission". |
+| E7 | 4.5.4 / 4.5.5 Test credentials without 2FA | to set | Fit tool needs no account; give a review store if one is used. |
+| E8 | 4.5.6 Emergency developer contact | founder | Partner Dashboard. |
+| E9 | Support contact and Shopify-specific help docs | founder | Placeholders in `listing.md`. |
+| E10 | Public distribution switch (irreversible) | founder | Only after the pilot: one custom app per pilot shop until then (`packages/shopify-app/README.md`). |
+
+## F. Our own release gates (not Shopify's, from AGENTS.md and STATUS.md)
+
+- Privacy e2e (Playwright, no image or large body leaves the page) running in CI: not yet (STATUS "Recommended next steps" 5).
+- Live-store verification list in `packages/shopify-app/README.md` "Must be verified against a live store": items 1 to 9 still open.
+- The fit tool's privacy line should link to `/privacy` once the policy is final (embed code, not changed here).
+
+## G. Pilot blockers found in the release v1 review (6 Nov 2026)
+
+| # | Blocker | Status | Evidence / fix |
+| --- | --- | --- | --- |
+| G1 | Every product of an AUD shop failed with "the shop has not finished this product": `fromShopifyProduct` dropped non-EUR prices, `priceEur` is required in `GarmentPayloadSchema`, and `GET /v1/try` answered 422 `product_incomplete`. bohohippychic.com.au prices in AUD. | **fixed** | The mapper converts with the EUR rate table (`priceToEur` in `packages/schema/src/mappings/common.ts`; the sync jobs pass `DEFAULT_EUR_RATES`), and the try route no longer needs a price at all (G2). Tests: `packages/schema/src/sizeAdvice.test.ts` (AUD → mapper → `GarmentPayloadSchema`), `apps/api/src/pilot-size-advice.test.ts` (AUD product → upsert → `/v1/sdk/sessions` → `/v1/try`). |
+| G2 | Assigning a template chart (the two-minute setup) did not make a product try-able: fabric, pattern block and colour were also required and only fabric had a UI. | **fixed** | `sizeAdviceGarment` (`packages/schema/src/sizeAdvice.ts`): category + chart type + chart are enough; price, colour (the shop's brand colour), pattern block (`unspecified`, the fit engine's category defaults) and fabric (non-stretch woven) default. The try route, the stored product status and the admin checklist use this one predicate. |
+| G3 | The admin said "Needs data" and asked for flat-lay photos that size advice does not use. | **fixed** | The checklist marks only the three size-advice fields required; the flat-lay row is hidden unless the 3D render is on the plan (`productChecklist(..., { render: true })`). |
+

@@ -9,7 +9,10 @@ Steps:
      --allow-invented-back is missing. A job whose stills come from stage 1b cannot run stage 2 before them.
   1. check the job manifest (input_hash, pinned versions, front + back photos) and upload the job once
   2. download the pinned Wan2.2-Fun-A14B-Control weights into the weights Volume (once)
-  3. stage 2: generate turntable_a, turntable_b and motion; assemble the 160 turntable frames
+  3. stage 2: generate turntable_a, turntable_b and motion with the manifest's neutral prompts (refused
+     when lib.prompt_problems finds the title, the brand or a missing negative term) and the control
+     the exporter rendered (`control.mode`: proxy garment by default); assemble the 160 turntable frames;
+     score every generated frame against the control silhouette (stage2_video.score_consistency, CPU)
   4. stage 4 on the generated frames (source stage2) and, unless --no-synthetic-recon, on the exporter's
      synthetic frames (source synthetic: same camera path, known garment, so the error is measured)
   5. download stage2/ and stage4/ into the job dir and write cost_summary.json; print the cost table
@@ -44,8 +47,8 @@ app.include(stage4_recon.app)
 
 
 def _dress_gate(m: dict, job_dir: str, dress_record: dict | None, *, accept_failed: bool, allow_invented: bool) -> list[str]:
-    """Reasons not to start stage 2 on this job's pinned stills (empty = go)."""
-    reasons = []
+    """Reasons not to start stage 2 on this job's pinned stills and prompts (empty = go)."""
+    reasons = [f"prompt: {p}" for p in lib.prompt_problems(m)]
     pending = lib.stills_pending(m, lambda rel: os.path.exists(os.path.join(job_dir, rel)))
     if pending:
         reasons.append(f"stage 1b stills missing for {', '.join(pending)}: run with --dress (or stage1_dress.py) first")
@@ -67,6 +70,9 @@ def _base_summary(m: dict, cfg: dict) -> dict:
         "invented_back": prov["invented_back"],
         "invented_roles": prov["invented_roles"],
         "stills": prov["photos"],
+        "control_mode": lib.control_mode(m),
+        "control_proxy": (m["control"].get("proxy") or {}).get("kind"),
+        "prompt": (m.get("prompt") or {}).get("description"),
         "settings": cfg,
     }
     if prov["invented_roles"]:
@@ -138,8 +144,15 @@ def main(
         t = time.time()
         rec = stage2_video.generate.remote(job_id, steps=steps, control_encoding=control_encoding, pin_frames=not no_pin_frames)
         costs.append(_with_wall(rec["cost"], cfg["gpu_video"], time.time() - t))
-        summary["stage2"] = {k: rec[k] for k in ("clips", "turntable_frames_assembled", "seams", "load_seconds", "steps")}
+        summary["stage2"] = {k: rec[k] for k in ("clips", "turntable_frames_assembled", "seams", "load_seconds", "steps", "control_mode")}
         print(f"[phase0] stage 2: {len(rec['clips'])} clips, {rec['turntable_frames_assembled']} turntable frames, seams {rec['seams']}")
+        try:
+            cons = stage2_video.score_consistency.remote(job_id)
+            summary["stage2"]["consistency"] = {k: v for k, v in cons.items() if k != "frames_detail"}
+            print(stage2_video.consistency_line(cons).replace("[stage2]", "[phase0] stage 2"))
+        except Exception as e:  # noqa: BLE001 - the metric must not cost the stage 4 run
+            print(f"[phase0] stage 2 consistency scoring failed: {e}")
+            summary["stage2"]["consistency"] = {"error": str(e)}
 
     sources = ["stage2"] + ([] if no_synthetic_recon or not m.get("synthetic") else ["synthetic"])
     calls = {}

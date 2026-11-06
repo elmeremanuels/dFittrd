@@ -1,5 +1,6 @@
 /** products/update → GraphQL product + metafields → @curtain/schema fromShopifyProduct → upsert (content_hash no-op). */
 import { fromShopifyProduct, shopifyExternalId, type MappingWarning } from '@curtain/schema';
+import { DEFAULT_EUR_RATES } from '@curtain/shopify-app';
 import type { App } from '../app.js';
 import { JOB } from './queue.js';
 import { archiveProduct, upsertProduct } from '../services/products.js';
@@ -27,7 +28,7 @@ export function makeSyncShopifyProductHandler(app: App) {
       return;
     }
     const warnings: MappingWarning[] = [];
-    const draft = fromShopifyProduct(node, undefined, { warnings, defaultBrand: shop.name });
+    const draft = fromShopifyProduct(node, undefined, { warnings, defaultBrand: shop.name, eurRates: DEFAULT_EUR_RATES });
     if (!draft.id || !draft.name) {
       app.log.warn({ shopId, productGid, warnings }, 'sync skipped: product node unusable');
       return;
@@ -53,7 +54,7 @@ export function makeBackfillHandler(app: App) {
     const page = await shopify.fetchProductsPage(shop.domain, token, cursor);
     for (const node of page.nodes) {
       const warnings: MappingWarning[] = [];
-      const draft = fromShopifyProduct(node, undefined, { warnings, defaultBrand: shop.name });
+      const draft = fromShopifyProduct(node, undefined, { warnings, defaultBrand: shop.name, eurRates: DEFAULT_EUR_RATES });
       if (!draft.id || !draft.name) continue;
       await upsertProduct(db, shopId, draft.id, { ...draft, brand: draft.brand ?? shop.name }, { handle: node.handle ?? null });
     }

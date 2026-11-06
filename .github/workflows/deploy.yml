@@ -1,0 +1,327 @@
+name: deploy
+
+# One-click production deploy to the founder's VPS (D9, docs/DEPLOY.md).
+# Run it from Actions → deploy → Run workflow (deploy | rollback | status), or push to `release`.
+# Secrets never come from the repo: the server writes infra/.env from /etc/curtain/curtain.env.
+#
+# The VPS_* secrets are **production environment secrets** (Settings → Environments → production),
+# not repository secrets: only jobs that run in that environment can read them, after its
+# protection rules (required reviewer, deployment branches release and main) have passed. A workflow
+# pushed on any other branch therefore never sees the deploy key. The guard below only checks the
+# ref and the non-secret variables; the secrets are checked inside the environment jobs.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: deploy builds and ships this ref; rollback returns to the previous release; status prints both
+        type: choice
+        options: [deploy, rollback, status]
+        default: deploy
+      skip_tests:
+        description: Skip typecheck, lint and tests (emergency fixes only; the bundle secret scan always runs)
+        type: boolean
+        default: false
+  push:
+    branches: [release]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '10.28.0'
+
+jobs:
+  guard:
+    name: guard · ref and variables
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      action: ${{ steps.plan.outputs.action }}
+      domain: ${{ steps.plan.outputs.domain }}
+      app_url: ${{ steps.plan.outputs.app_url }}
+      api_url: ${{ steps.plan.outputs.api_url }}
+      image_repo: ${{ steps.plan.outputs.image_repo }}
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      - name: check the ref and the variables
+        env:
+          DOMAIN: ${{ vars.DOMAIN }}
+          APP_SUBDOMAIN: ${{ vars.APP_SUBDOMAIN || 'app' }}
+          API_SUBDOMAIN: ${{ vars.API_SUBDOMAIN || 'api' }}
+          REF: ${{ github.ref }}
+        run: |
+          # Production runs only from release (or main). The production environment's deployment
+          # branch rule enforces the same on GitHub's side; this check fails early with a clear message.
+          case "$REF" in
+            refs/heads/release|refs/heads/main) ;;
+            *) echo "production deploys run only from the release or main branch, not $REF"
+               echo "### Deploy blocked: $REF is not release or main" >> "$GITHUB_STEP_SUMMARY"
+               exit 1 ;;
+          esac
+          missing=()
+          [ -n "$DOMAIN" ] || missing+=("repository variable DOMAIN (e.g. curtain.fit)")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "Missing (Settings → Secrets and variables → Actions):"
+            printf '  - %s\n' "${missing[@]}"
+            {
+              echo "### Deploy blocked: missing configuration"
+              printf -- '- %s\n' "${missing[@]}"
+              echo
+              echo "See docs/DEPLOY.md, \"Set once\"."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if ! [[ "$DOMAIN" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]]; then
+            echo "DOMAIN must be a bare lowercase domain like curtain.fit (no scheme, no subdomain prefix)"; exit 1
+          fi
+          # infra/Caddyfile and docker-compose.yml serve app.<DOMAIN> and api.<DOMAIN> (the CSP test
+          # in apps/api pins them). Other subdomains need those files changed first.
+          if [ "$APP_SUBDOMAIN" != app ] || [ "$API_SUBDOMAIN" != api ]; then
+            echo "APP_SUBDOMAIN/API_SUBDOMAIN other than app/api are not supported yet (infra/Caddyfile pins them)"; exit 1
+          fi
+          echo "ref and variables are fine; the production secrets are checked inside the environment"
+
+      - id: plan
+        env:
+          DOMAIN: ${{ vars.DOMAIN }}
+          ACTION: ${{ inputs.action || 'deploy' }}
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          owner="$(printf '%s' "$REPO_OWNER" | tr '[:upper:]' '[:lower:]')"
+          {
+            echo "action=$ACTION"
+            echo "domain=$DOMAIN"
+            echo "app_url=https://app.$DOMAIN"
+            echo "api_url=https://api.$DOMAIN"
+            echo "image_repo=ghcr.io/$owner/curtain-api"
+            echo "tag=git-${GITHUB_SHA::12}"
+          } >> "$GITHUB_OUTPUT"
+
+  check:
+    name: typecheck · lint · test (api, web)
+    needs: guard
+    if: needs.guard.outputs.action == 'deploy' && !inputs.skip_tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: pnpm/action-setup@v4.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: build the packages api and web import
+        run: pnpm --filter '@curtain/api^...' --filter '@curtain/web^...' build
+      - run: pnpm --filter @curtain/api --filter @curtain/web typecheck
+      - run: pnpm --filter @curtain/api --filter @curtain/web lint
+      - run: pnpm --filter @curtain/api --filter @curtain/web test
+
+  web:
+    name: build web (static)
+    needs: guard
+    if: needs.guard.outputs.action == 'deploy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: pnpm/action-setup@v4.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: build the packages web imports (and the sdk for the secret scan)
+        run: pnpm --filter '@curtain/web^...' --filter @curtain/sdk build
+      - name: self-hosted MediaPipe models (zero third-party requests, D3)
+        run: pnpm --filter @curtain/web models
+      - name: build
+        env:
+          # The app talks to the api origin directly; Caddy does not proxy /v1 on app.<domain>.
+          VITE_API_URL: ${{ needs.guard.outputs.api_url }}
+        run: pnpm --filter @curtain/web build
+      - name: bundle secret scan (D3)
+        run: node scripts/check-bundle-secrets.mjs
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: web-dist
+          path: apps/web/dist
+          if-no-files-found: error
+          retention-days: 14
+
+  image:
+    name: api image → GHCR
+    needs: guard
+    if: needs.guard.outputs.action == 'deploy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: docker/setup-buildx-action@v3.11.1
+      - uses: docker/login-action@v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6.18.0
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+          tags: |
+            ${{ needs.guard.outputs.image_repo }}:${{ needs.guard.outputs.tag }}
+            ${{ needs.guard.outputs.image_repo }}:release
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.title=curtain-api
+          cache-from: type=gha,scope=curtain-api
+          cache-to: type=gha,scope=curtain-api,mode=max
+
+  deploy:
+    name: deploy → VPS
+    needs: [guard, check, web, image]
+    if: >-
+      !cancelled() && needs.guard.outputs.action == 'deploy'
+      && needs.web.result == 'success' && needs.image.result == 'success'
+      && (needs.check.result == 'success' || needs.check.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: ${{ needs.guard.outputs.app_url }}
+    permissions:
+      contents: read
+      packages: read
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_PORT: ${{ vars.VPS_PORT || '22' }}
+      DOMAIN: ${{ needs.guard.outputs.domain }}
+      IMAGE_REPO: ${{ needs.guard.outputs.image_repo }}
+      TAG: ${{ needs.guard.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/download-artifact@v4.3.0
+        with:
+          name: web-dist
+          path: web-dist
+      - name: ssh key and pinned host key (production environment secrets)
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          missing=()
+          for name in VPS_HOST VPS_USER VPS_SSH_KEY VPS_SSH_KNOWN_HOSTS; do
+            [ -n "${!name}" ] || missing+=("production environment secret $name")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing (Settings → Environments → production → Environment secrets):\n'
+            printf '  - %s\n' "${missing[@]}"
+            { echo "### Deploy blocked: missing configuration"; printf -- '- %s\n' "${missing[@]}"; echo; echo "See docs/DEPLOY.md, \"Set once\"."; } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          case "$VPS_SSH_KEY" in
+            *"PRIVATE KEY"*) ;;
+            *) echo "VPS_SSH_KEY does not look like a private key (paste the whole file, header lines included)"; exit 1 ;;
+          esac
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/curtain_deploy"
+          chmod 600 "$HOME/.ssh/curtain_deploy"
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          echo "SSH_OPTS=-i $HOME/.ssh/curtain_deploy -o IdentitiesOnly=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts" >> "$GITHUB_ENV"
+      - name: ship (sync, pull, migrate, swap, server-side health check with automatic rollback)
+        env:
+          WEB_DIST: web-dist
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/deploy.sh deploy
+      - name: health check from outside
+        id: health
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 10 "https://api.$DOMAIN/healthz" && curl -fsS --max-time 10 -o /dev/null "https://app.$DOMAIN/"; then
+              echo; echo "healthy after $i tries"; exit 0
+            fi
+            sleep 6
+          done
+          echo "https://api.$DOMAIN/healthz or https://app.$DOMAIN/ did not answer"; exit 1
+      - name: roll back (external health check failed)
+        if: failure() && steps.health.outcome == 'failure'
+        run: scripts/deploy.sh rollback
+      - name: summary
+        if: always()
+        run: |
+          {
+            echo "### Deploy ${{ job.status }}"
+            echo "- image: \`$IMAGE_REPO:$TAG\`"
+            echo "- app: https://app.$DOMAIN"
+            echo "- api: https://api.$DOMAIN/healthz"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: remove the key
+        if: always()
+        run: rm -f "$HOME/.ssh/curtain_deploy"
+
+  operate:
+    name: ${{ needs.guard.outputs.action }} on VPS
+    needs: guard
+    if: needs.guard.outputs.action != 'deploy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: ${{ needs.guard.outputs.app_url }}
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_PORT: ${{ vars.VPS_PORT || '22' }}
+      DOMAIN: ${{ needs.guard.outputs.domain }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: ssh key and pinned host key (production environment secrets)
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          missing=()
+          for name in VPS_HOST VPS_USER VPS_SSH_KEY VPS_SSH_KNOWN_HOSTS; do
+            [ -n "${!name}" ] || missing+=("production environment secret $name")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing (Settings → Environments → production → Environment secrets):\n'
+            printf '  - %s\n' "${missing[@]}"
+            { echo "### Deploy blocked: missing configuration"; printf -- '- %s\n' "${missing[@]}"; echo; echo "See docs/DEPLOY.md, \"Set once\"."; } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          case "$VPS_SSH_KEY" in
+            *"PRIVATE KEY"*) ;;
+            *) echo "VPS_SSH_KEY does not look like a private key (paste the whole file, header lines included)"; exit 1 ;;
+          esac
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/curtain_deploy"
+          chmod 600 "$HOME/.ssh/curtain_deploy"
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          echo "SSH_OPTS=-i $HOME/.ssh/curtain_deploy -o IdentitiesOnly=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts" >> "$GITHUB_ENV"
+      - env:
+          ACTION: ${{ needs.guard.outputs.action }}
+        run: scripts/deploy.sh "$ACTION"
+      - name: health check
+        if: needs.guard.outputs.action == 'rollback'
+        run: curl -fsS --retry 10 --retry-delay 6 --retry-all-errors --max-time 10 "https://api.$DOMAIN/healthz"
+      - name: remove the key
+        if: always()
+        run: rm -f "$HOME/.ssh/curtain_deploy"

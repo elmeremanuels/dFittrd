@@ -331,7 +331,7 @@
         var r = await api('GET', '/v1/merchant/products?limit=200');
         state.products = r;
         text('products-counts', '· ' + r.counts.active + ' try-able, ' + r.counts.incomplete + ' need data');
-        text('txt-data', r.counts.incomplete === 0 ? 'All synced products are try-able.' : r.counts.incomplete + ' product(s) are missing size chart, fabric or flat-lay data.');
+        text('txt-data', r.counts.incomplete === 0 ? 'All synced products are try-able.' : r.counts.incomplete + ' product(s) need a size chart and its type (body or garment) before shoppers can get a size.');
         text('products-note', r.nextCursor ? 'Showing the first 200 products.' : '');
         renderProducts();
       }
@@ -418,7 +418,8 @@
         });
         $('btn-theme-done').disabled = r.steps.some(function (st) { return st.key === 'themeBlock' && st.done; });
         $('btn-test-done').disabled = r.steps.some(function (st) { return st.key === 'test' && st.done; });
-        if (r.state.templateId && !charts.tpl) selectTemplate(r.state.templateId, false);
+        // A saved template wins over the default; the default (AU) is only picked when nothing is saved.
+        if (!charts.tpl) selectTemplate(r.state.templateId && charts.templates.some(function (t) { return t.id === r.state.templateId; }) ? r.state.templateId : defaultTemplateId(), false);
         return r;
       }
       async function saveOnboarding(patch) {
@@ -436,7 +437,10 @@
           var kind = el('span', { class: 'pill', text: t.kind === 'body' ? 'Body measurements' : 'Garment measurements' });
           list.appendChild(el('label', { class: 'tpl', for: 'tpl-' + t.id }, [input, el('span', null, [el('b', { text: t.label }), ' ', kind, el('small', { text: t.description })])]));
         });
-        if (!charts.tpl) selectTemplate((r.templates.find(function (t) { return t.id === 'au-womens-body'; }) || r.templates[0]).id, false);
+      }
+      function defaultTemplateId() {
+        var t = charts.templates.find(function (x) { return x.id === 'au-womens-body'; }) || charts.templates[0];
+        return t ? t.id : null;
       }
 
       function selectTemplate(id, save) {
@@ -561,6 +565,7 @@
           if (total.failed.length) lines.push(total.failed.length + ' could not be written: ' + total.failed.slice(0, 3).map(function (f) { return f.message; }).join(' · '));
           note('assign-status', total.failed.length ? 'warning' : 'success', lines);
           note('chart-check', 'warning', warnings);
+          if (total.written > 0 && charts.tpl) saveOnboarding({ templateId: charts.tpl.id });
           setTimeout(function () { loadProducts().catch(function () {}); loadOnboarding().catch(function () {}); }, 2500);
         } catch (err) {
           var details = err.details && err.details.errors ? err.details.errors : [err.message];
@@ -645,7 +650,21 @@
         box.appendChild(form);
       }
 
-      document.querySelectorAll('input[name="chart-type"]').forEach(function (r) { r.addEventListener('change', function () { charts.type = r.value; charts.edited = true; renderChart(); }); });
+      document.querySelectorAll('input[name="chart-type"]').forEach(function (r) {
+        r.addEventListener('change', function () {
+          var bodyNumbers = charts.tpl && charts.tpl.kind === 'body' && charts.type === 'body' && r.value === 'garment';
+          if (charts.tpl && charts.tpl.kind === 'body' && r.value === 'body' && !Object.keys(charts.values).length) { selectTemplate(charts.tpl.id, false); return; }
+          charts.type = r.value; charts.edited = true;
+          // Body numbers read as garment numbers leave no ease: every size would come out one too large.
+          if (bodyNumbers) {
+            charts.values = {};
+            renderChart();
+            note('chart-check', 'warning', ['The template’s body numbers were cleared: garment measurements are taken flat on the finished garment and are larger. Enter the garment’s own numbers, or switch back to body measurements.']);
+            return;
+          }
+          renderChart();
+        });
+      });
       document.querySelectorAll('input[name="chart-unit"]').forEach(function (r) { r.addEventListener('change', function () { charts.unit = r.value; renderChart(); }); });
       $('btn-add-size').addEventListener('click', function () {
         var v = $('custom-size').value.trim().slice(0, 16);
@@ -687,7 +706,7 @@
         try {
           if (shop) { $('lnk-theme').href = themeLink(); check('chk-theme', false); }
           await ensureInstalled();
-          var results = await Promise.allSettled([loadUsage(), loadProducts(), loadLedger(), loadTemplates().then(loadOnboarding)]);
+          var results = await Promise.allSettled([loadUsage(), loadProducts(), loadLedger(), loadTemplates().then(loadOnboarding).catch(function (err) { if (!charts.tpl && defaultTemplateId()) selectTemplate(defaultTemplateId(), false); throw err; })]);
           var failed = results.filter(function (r) { return r.status === 'rejected'; });
           if (failed.length) banner('warning', 'Some panels could not load: ' + failed.map(function (f) { return f.reason && f.reason.message; }).join(' · '));
         } catch (err) {

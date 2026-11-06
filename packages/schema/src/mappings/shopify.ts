@@ -27,6 +27,8 @@ import {
   inferCategory,
   warn,
   type MappingWarning,
+  priceToEur,
+  type EurRateTable,
   type WarningSink,
 } from './common';
 
@@ -330,6 +332,8 @@ export interface FromShopifyOptions {
   warnings?: WarningSink;
   /** Fallback brand when the product has no vendor and no brand metafield (usually the shop name). */
   defaultBrand?: string;
+  /** EUR-based rates for shops that price in another currency (e.g. AUD). Without one the price is left out. */
+  eurRates?: EurRateTable;
 }
 
 /**
@@ -373,12 +377,12 @@ export function fromShopifyProduct(
   const subcategory = coerceString(get('subcategory'));
   if (subcategory) out.subcategory = subcategory;
 
-  // Price — only EUR is accepted; other currencies are reported, not converted.
+  // Price — EUR as is; another currency (the AUD pilot shop) is converted with `eurRates` and reported.
   const money = p.priceRangeV2?.minVariantPrice ?? p.priceRange?.minVariantPrice;
   if (money) {
     const amount = coerceNumber(money.amount);
-    if (amount !== undefined && money.currencyCode.toUpperCase() === 'EUR') out.priceEur = amount;
-    else if (amount !== undefined) warn(sink, { source: 'priceRangeV2', path: 'priceEur', message: `price is in ${money.currencyCode}, not EUR` });
+    const eur = amount === undefined ? undefined : priceToEur(amount, money.currencyCode, options.eurRates, sink, 'priceRangeV2');
+    if (eur !== undefined) out.priceEur = eur;
   } else {
     const first = nodesOf(p.variants)[0];
     const amount = coerceNumber(first?.price);

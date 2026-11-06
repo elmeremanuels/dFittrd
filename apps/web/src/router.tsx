@@ -47,6 +47,10 @@ export const routes: RouteObject[] = [
       { path: 'pair', element: <PairRoute /> },
     ],
   },
+  // Public legal pages (App Store listing URLs), outside the phone frame and onboarding guard.
+  // Lazy, so the policy text is not in the app's main chunk.
+  { path: '/privacy', lazy: async () => ({ Component: (await import('@/routes/LegalRoute')).PrivacyRoute }) },
+  { path: '/terms', lazy: async () => ({ Component: (await import('@/routes/LegalRoute')).TermsRoute }) },
   { path: '/merchant/login', element: <MerchantLogin /> },
   {
     path: '/merchant',

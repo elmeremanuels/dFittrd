@@ -10,6 +10,7 @@
     "export:phase0": "tsx src/exportCli.ts",
     "shop:bohohippychic": "tsx src/shopCli.ts",
     "report:bohohippychic": "tsx scripts/report-bohohippychic.ts",
+    "families:bohohippychic": "tsx scripts/families-bohohippychic.ts",
     "viewer": "vite --config viewer/vite.config.ts",
     "viewer:smoke": "node viewer/smoke.mjs",
     "test": "vitest run && vitest run --config viewer/vitest.config.ts",

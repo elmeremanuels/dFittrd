@@ -123,11 +123,12 @@ export function TryRoute(): ReactNode {
           <div className="min-w-0">
             <p className="eyebrow text-coral-ink">{g.brand}</p>
             <h1 className="font-display text-2xl leading-tight">{g.name}</h1>
+            {/* 'woven' / 'unspecified' are the size-advice defaults (@curtain/schema sizeAdvice), not shop data. */}
             <p className="text-xs text-ink-mute">
-              {g.fabric.primary} · {g.patternBlock}
+              {[g.fabric.primary !== 'woven' ? g.fabric.primary : null, g.patternBlock !== 'unspecified' ? g.patternBlock : null].filter(Boolean).join(' · ')}
             </p>
           </div>
-          <p className="font-display text-2xl">{eur(g.priceEur)}</p>
+          {g.priceEur > 0 && <p className="font-display text-2xl">{eur(g.priceEur)}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
           <ColourChip hex={g.primaryColorHex} target={target} />

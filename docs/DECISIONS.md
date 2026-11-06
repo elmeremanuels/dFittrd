@@ -107,3 +107,7 @@ Amended Nov 2026 (review finding R1): one breadth, `shoulder_width`, joins the v
 ## D16 — Assets in file storage behind Caddy; GPU work on a hosted GPU service
 
 The VPS orchestrates and serves; it never runs models. Asset bundles (a few MB per product) live on a disk volume served by Caddy under immutable, versioned paths and are included in the nightly backup. GPU work runs per job on a hosted service that scales to zero, in an EU region. This keeps the spirit of D9 (no object store, small VPS). D3 is unchanged: garment assets are public product data; the shopper's body and photos stay on the device.
+
+## D17 — Price: USD 8.99 per month, flat
+
+Founder decision (Nov 2026). One plan for the standalone plugin at USD 8.99 per month per shop, billed through the Shopify Billing API (Stripe for WooCommerce), in line with flat-priced size apps such as SmartSize. No usage charge per try-on session: the session stays the unit we count (D7) for analytics and abuse limits, and the per-plan daily caps and anomaly alerts stay as fair-use protection. Shops billed in another currency are charged the converted amount through the existing rate table, with USD as the base. The 3D garment engine (D12) is not part of this plan; its pricing is decided after Phase 0.

@@ -109,7 +109,7 @@ describe('shop products: exported job', () => {
     expect(files.get('dress/source_front.jpg')).toEqual(fakeBytes('azure-palm-baby-doll-dress', 1));
     expect(m.control.mode).toBe('proxy');
     expect(m.control.proxy?.kind).toBe('dress');
-    expect(m.synthetic).not.toBeNull(); // dresses have the synthetic garment (colour from the name: no primaryColorHex in the draft)
+    expect(m.synthetic).not.toBeNull(); // dresses have the synthetic garment (fallback colour: no primaryColorHex in the draft, never one from the name)
     expect(inputHash(m.hash_inputs)).toBe(m.input_hash);
   });
 
@@ -133,5 +133,18 @@ describe('shop products: exported job', () => {
       }
       expect(m.prompt.negative).toMatch(/\btext\b.*\bletters\b.*\bwords\b.*\bwatermark\b.*\blogo\b/);
     }
+  });
+
+  it('never takes a colour from a word of the product name (run 13: "Azure Palm" is a cream print, Qwen painted it blue)', () => {
+    for (const { handle } of productsJson.products) {
+      const { manifest: m } = shopJob(handle);
+      // No primaryColorHex in the shop drafts: no colour in the prompt at all; stage 1b measures it from the cut-out.
+      expect(m.prompt.colour.name, handle).toBeNull();
+      expect(m.prompt.colour.source, handle).toMatch(/never a colour/);
+      const text = `${m.prompt.description} ${m.prompt.turntable} ${m.prompt.motion}`.toLowerCase();
+      for (const c of ['blue', 'pink', 'red', 'rust', 'orange', 'brown']) expect(text, `${handle}: ${c}`).not.toMatch(new RegExp(`\\b${c}\\b`));
+    }
+    const azure = shopJob('azure-palm-baby-doll-dress').manifest.prompt;
+    expect(azure.description).toBe('a knee-length babydoll dress in a fluid viscose fabric, one closed skirt that falls from the waist to the hem and covers both legs');
   });
 });

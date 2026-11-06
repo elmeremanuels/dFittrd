@@ -309,7 +309,14 @@ export function shopPhotos(shop: ShopId, handle: string, choice: ShopPhotoChoice
 // Video prompt: a neutral garment description, never the product title or the brand
 // ---------------------------------------------------------------------------
 
-export const PROMPT_VERSION = 'neutral-prompt-0.1.0';
+/**
+ * 0.2.0 (after run 13): the colour never comes from a word of the product name. Shop names such as "Azure Palm",
+ * "Rosewater" or "Earthweave Rust" name a print or a collection, not the garment's colour: run 13's Qwen engine
+ * read "blue" (from "Azure") and painted a solid blue dress, where the garment is a pastel tropical print on cream.
+ * The colour is `primaryColorHex` (merchant data) or none; for shop photos stage 1b measures it from the garment
+ * cut-out (`phase0_dress.garment_colour`) and puts it in its own instruction.
+ */
+export const PROMPT_VERSION = 'neutral-prompt-0.2.0';
 
 /** Basic colour names and their sRGB, for the nearest-colour name of `primaryColorHex`. */
 const BASIC_COLOURS: readonly [string, [number, number, number]][] = [
@@ -320,25 +327,17 @@ const BASIC_COLOURS: readonly [string, [number, number, number]][] = [
   ['blue', [40, 90, 190]], ['navy blue', [30, 40, 85]], ['purple', [110, 60, 150]], ['lilac', [195, 170, 215]], ['pink', [235, 150, 175]],
 ];
 
-/** Colour words that occur in product names, mapped to a plain colour (the name word itself never reaches the prompt). */
-const COLOUR_WORDS: Readonly<Record<string, string>> = {
-  azure: 'blue', blue: 'blue', cobalt: 'blue', sky: 'light blue', denim: 'blue', indigo: 'navy blue', navy: 'navy blue', teal: 'teal', turquoise: 'turquoise',
-  crimson: 'red', red: 'red', scarlet: 'red', cherry: 'red', ruby: 'red', burgundy: 'burgundy', wine: 'burgundy', maroon: 'burgundy',
-  rose: 'pink', rosewater: 'pink', pink: 'pink', blush: 'pink', fuchsia: 'pink', coral: 'coral',
-  green: 'green', emerald: 'green', olive: 'olive green', sage: 'sage green', khaki: 'olive green', mint: 'mint green',
-  yellow: 'yellow', mustard: 'mustard yellow', gold: 'gold', orange: 'orange', rust: 'rust orange', terracotta: 'rust orange',
-  purple: 'purple', lilac: 'lilac', lavender: 'lilac', plum: 'purple', violet: 'purple',
-  black: 'black', white: 'white', ivory: 'cream', cream: 'cream', ecru: 'cream', beige: 'beige', sand: 'beige', camel: 'camel',
-  brown: 'brown', chocolate: 'brown', tan: 'tan', grey: 'grey', gray: 'grey', charcoal: 'charcoal grey', silver: 'grey',
-};
-
 export interface PromptColour {
   name: string | null;
   source: string;
 }
 
-/** The garment's colour as a plain colour name: from `primaryColorHex`, else from a colour word of the product name, else none. */
-export function promptColour(p: Pick<GarmentPayload, 'primaryColorHex' | 'name'>): PromptColour {
+/**
+ * The garment's colour as a plain colour name: from `primaryColorHex` (merchant data), else none. Never from a word of
+ * the product name (a print or collection name, see `PROMPT_VERSION`). With no colour the stage 2 prompt names none: the
+ * pinned stills carry it, and stage 1b measures it from the shop photo's garment cut-out for its own instruction.
+ */
+export function promptColour(p: Pick<GarmentPayload, 'primaryColorHex'>): PromptColour {
   const hex = p.primaryColorHex as string | undefined;
   if (hex && /^#?[0-9a-f]{3}([0-9a-f]{3})?$/i.test(hex)) {
     const h = hex.replace('#', '');
@@ -352,11 +351,10 @@ export function promptColour(p: Pick<GarmentPayload, 'primaryColorHex' | 'name'>
     }
     return { name: best[0], source: `primaryColorHex ${hex} → nearest basic colour` };
   }
-  for (const word of p.name.toLowerCase().split(/[^a-z]+/)) {
-    const c = COLOUR_WORDS[word];
-    if (c) return { name: c, source: 'a colour word of the product name, mapped to a plain colour name (the word itself is not used)' };
-  }
-  return { name: null, source: 'no primaryColorHex and no colour word in the name: colour left to the pinned stills' };
+  return {
+    name: null,
+    source: 'no primaryColorHex: no colour in the prompt (product-name words are print or collection names, never a colour); stage 1b measures it from the garment cut-out',
+  };
 }
 
 /** Plain style words per kind; only these ever come from the product's subcategory or pattern block. */

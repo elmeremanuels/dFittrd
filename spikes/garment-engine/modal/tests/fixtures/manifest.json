@@ -1,7 +1,7 @@
 {
   "format": "curtain.phase0.job",
   "format_version": 1,
-  "job_id": "monochrome-03-802a2d1ce47d",
+  "job_id": "monochrome-03-a31584e09586",
   "product_id": "monochrome-03",
   "product_name": "Heavyweight Boxy Tee",
   "category": "top",
@@ -91,7 +91,7 @@
     "version": "0.1.0",
     "shape": "M",
     "glb": "mannequin.glb",
-    "glb_sha256": "64f2413f3c945ae88c46d0c35e129e3da5209660f09cf43bce8579a6bb94bed9",
+    "glb_sha256": "ee7cd0e75c8d300b119a071694676df6aed5aca3fa1de8fdbe31fc291471ed16",
     "unit": "m",
     "stature_cm": 168
   },
@@ -163,7 +163,7 @@
       "sleeve_source": "sleeve_length 22 cm",
       "notes": [],
       "glb": "control/proxy.glb",
-      "glb_sha256": "438028f69df28aa8a40f7b0fe1049d9ec3d17db35be316f17aa2e6653f6d22b7"
+      "glb_sha256": "1378c199972c2db9c0df670acb04001987b61dda667327e405f7def98c3ea2cc"
     },
     "depth_mm_dir": "control/depth_mm",
     "depth_vis_dir": "control/depth_vis",
@@ -187,7 +187,7 @@
     "far_cm": 536
   },
   "prompt": {
-    "version": "neutral-prompt-0.1.0",
+    "version": "neutral-prompt-0.2.0",
     "kind": "top",
     "description": "a black short-sleeved t-shirt in a crisp cotton fabric",
     "colour": {
@@ -297,9 +297,9 @@
       "licence": "Apache-2.0 (gsplat), MIT (Open3D)"
     }
   },
-  "exporter": "@curtain/garment-spike phase0-export-0.4.0",
+  "exporter": "@curtain/garment-spike phase0-export-0.5.0",
   "hash_inputs": {
-    "exporter": "phase0-export-0.4.0",
+    "exporter": "phase0-export-0.5.0",
     "product": {
       "schemaVersion": 1,
       "id": "monochrome-03",
@@ -461,11 +461,11 @@
         "sleeve_cm": 22,
         "sleeve_source": "sleeve_length 22 cm",
         "notes": [],
-        "glb_sha256": "438028f69df28aa8a40f7b0fe1049d9ec3d17db35be316f17aa2e6653f6d22b7"
+        "glb_sha256": "1378c199972c2db9c0df670acb04001987b61dda667327e405f7def98c3ea2cc"
       }
     },
     "prompt": {
-      "version": "neutral-prompt-0.1.0",
+      "version": "neutral-prompt-0.2.0",
       "kind": "top",
       "description": "a black short-sleeved t-shirt in a crisp cotton fabric",
       "colour": {
@@ -501,5 +501,5 @@
     },
     "synthetic": true
   },
-  "input_hash": "802a2d1ce47d70da9fbb46f65b31cacd0c71b0f1386714c63a96fd1b031ad224"
+  "input_hash": "a31584e095864a69e014b08723287fdfc619114b6754a35ad177734b27991138"
 }

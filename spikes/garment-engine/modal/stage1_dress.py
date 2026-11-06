@@ -21,17 +21,21 @@ two legs, and the "back" as a front) the engine dresses the PROXY-DRESSED manneq
               repaints the proxy region only and fills a dress volume, not two legs. Its packaged human
               parser (NVIDIA SegFormer licence, non-commercial) is NOT installed
        qwen   Qwen-Image-Edit-2511 (Apache-2.0): picture 1 = the proxy-dressed render, picture 2 = the SAM 2
-              cut-out of the shop photo, instruction built from the manifest's neutral description
-              (lib.qwen_dress_prompt: "dress the mannequin in this exact garment: <description>", "back
-              view" for the back camera; never the product title or brand)
+              cut-out of the shop photo, instruction built from the manifest's neutral description and the
+              colour measured on the cut-out (lib.qwen_dress_prompt: "dress the mannequin in this exact garment:
+              <description>; colours: <phrase>, as in picture 2", "back view" for the back camera; never the
+              product title, the brand or a colour word of the product name)
   4. without a back photo the back is GENERATED (fashn: the front photo onto the back target; qwen: the
      dressed front still as picture 2) and marked `invented: true` in every record (D13: validation only)
   5. garment mask on each generated still: difference to the proxy-dressed target inside the edit region,
      refined by SAM 2, clipped to the region for the composite; the same mask NOT clipped is kept for the QA
-     (inside fraction and cut share: a sleeve past the region fails); QA v2 (phase0_dress.still_qa): silhouette against the proxy-dressed silhouette,
+     (inside fraction and cut share: a sleeve past the region fails); QA v2 (phase0_dress.still_qa): silhouette tolerance band against the proxy-dressed silhouette,
      garment against the proxy, leg gap and skirt cover below the crotch for a dress or skirt, mannequin
      outside the edit region against our render, placeholder left-overs; for the back also
-     phase0_dress.back_view_checks against the chosen front still and the shop photos (only a front still that
+     phase0_dress.back_view_checks against the chosen front still and the shop photos; print fidelity
+     (phase0_dress.print_fidelity: Lab palette and edge density against the shop photo's garment). Selection
+     (phase0_dress.pick_engine, stage1b-qa-0.4.0): pass every hard check -> highest print fidelity -> highest
+     silhouette-band score; a candidate that fails print fidelity is never picked (only a front still that
      passed QA, or with --accept-failed, serves as the back's reference). The v1 numbers
      against the bare mannequin are kept as `qa_v1_vs_bare`. The pinned still is our BARE render with only
      the garment pixels pasted in: the placeholder never appears, and where the garment leaves the proxy
@@ -361,7 +365,8 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
         else:
             pictures = [target, s["cutout"]]
             meta["method"] = f"qwen: SAM 2 garment cut-out of the {'back' if name == 'back' else 'front'} shop photo onto our proxy-dressed render"
-        prompt, negative = lib.qwen_dress_prompt(m, name, invented)
+        # The colour words come from the garment cut-out's pixels (dq.garment_colour), never from the product name.
+        prompt, negative = lib.qwen_dress_prompt(m, name, invented, colour=s.get("colour"))
         # The canvas is the size the pipeline VAE-encodes picture 1 at (multiples of 32), so output and picture-1
         # latents share one token grid; the pipeline's default would follow image[-1], the garment cut-out.
         cw, ch = lib.qwen_canvas(W, H)
@@ -425,10 +430,12 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
                 pad = int(0.04 * max(src.size))
                 cut = Image.fromarray(arr).crop((max(0, x0 - pad), max(0, y0 - pad), min(src.width, x1 + 1 + pad), min(src.height, y1 + 1 + pad)))
                 cut.save(os.path.join(job, f"{lib.STAGE1B_DIR}/source/{src_view}_cutout.png"))
+                colour = dq.garment_colour(np.asarray(src), smask)
                 sources[src_view] = {
                     "image": src,
                     "mask": smask,
                     "cutout": cut,
+                    "colour": colour,
                     "record": {
                         "photo": src_rel,
                         "size": list(src.size),
@@ -439,6 +446,7 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
                         "garment_px": int(smask.sum()),
                         "mask": save_mask(smask, f"{lib.STAGE1B_DIR}/source/{src_view}_mask.png"),
                         "cutout": f"{lib.STAGE1B_DIR}/source/{src_view}_cutout.png",
+                        "colour": colour,
                     },
                 }
             s = sources[src_view]
@@ -479,7 +487,11 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
                     keep = bare_mask & ~region
                     mae = float(np.abs(gen_np.astype(np.int16) - bare_np.astype(np.int16))[keep].mean()) if keep.any() else None
                     residue = dq.proxy_residue(gen_np, target_np, proxy, garment)
-                    qa = dq.still_qa(garment, fg, bare_mask, proxy, region, kind=kind, mannequin_mae=mae, residue=residue, garment_full=garment_full)
+                    # Print fidelity: the candidate's garment against the shop photo's (palette and print); a failure is never picked.
+                    fid = dq.print_fidelity(gen_np, garment, np.asarray(s["image"]), s["mask"]) if garment.any() else None
+                    qa = dq.still_qa(garment, fg, bare_mask, proxy, region, kind=kind, mannequin_mae=mae, residue=residue, garment_full=garment_full,
+                                     sleeve_band_px=region_rec["sleeve_band_px"], fidelity=fid, rgb=gen_np, bare_rgb=bare_np)
+                    c["candidate_colour"] = dq.garment_colour(gen_np, garment)
                     g_b = garment.astype(np.uint8).tobytes()
                     v1 = lib.alignment_qa(g_b, fg_b, bare_mask.astype(np.uint8).tobytes(), W, H, v1_margin,
                                           mannequin_mae=lib.mean_abs_diff(gen_np.tobytes(), bare_np.tobytes(), lib.mask_andnot(bare_mask.astype(np.uint8).tobytes(), g_b)))
@@ -511,7 +523,10 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
             decision = dq.pick_engine(candidates)
             rec["selection"] = decision
             rec["candidates"] = [{k: val for k, val in c.items() if k != "_arrays"} for c in candidates]
-            chosen = next((c for c in candidates if c["engine"] == decision["engine"]), None)
+            # `engine` is the candidate the view shows (pinned when it passed); when every candidate failed print fidelity
+            # none is picked and the highest fidelity is only kept as the rejected still.
+            shown = decision["engine"] or decision.get("rejected_still")
+            chosen = next((c for c in candidates if c["engine"] == shown), None)
             if chosen is None:
                 raise RuntimeError("; ".join(c.get("error", "") for c in candidates))
             arr = chosen["_arrays"]
@@ -606,8 +621,12 @@ def run_local(job_dir: str, *, engine: str, steps: int, seed: int | None, compos
     for v in record["views"]:
         for c in v.get("candidates", []):
             q = c.get("qa", {})
-            print(f"[stage1b] {v['view']} / {c['engine']}: pass={q.get('pass')} score={q.get('score')} silhouette_iou={q.get('silhouette_iou')} garment_proxy_iou={q.get('garment_proxy_iou')} "
-                  f"leg_gap_rows={q.get('leg_gap_rows')}/{q.get('skirt_zone_rows')} skirt_cover={q.get('skirt_cover')} inside={q.get('inside_fraction')} mae={q.get('mannequin_mae_8bit')} "
+            f = q.get("fidelity") or {}
+            b = q.get("silhouette_band") or {}
+            print(f"[stage1b] {v['view']} / {c['engine']}: pass={q.get('pass')} fidelity={f.get('score')} (hellinger {f.get('lab_hellinger')}, dE {f.get('median_delta_e')}, "
+                  f"edges {f.get('edge_ratio')}) colour={(c.get('candidate_colour') or {}).get('phrase')!r} silhouette band inside={b.get('garment_inside')} torso={b.get('torso_cover')} "
+                  f"outside={b.get('foreground_outside')} (iou {q.get('silhouette_iou')}) garment_proxy_iou={q.get('garment_proxy_iou')} "
+                  f"leg_gap_rows={q.get('leg_gap_rows')}/{q.get('skirt_zone_rows')} (all {q.get('leg_gap_rows_all')}, hem {q.get('garment_hem_rows')}) skirt_cover={q.get('skirt_cover')} inside={q.get('inside_fraction')} mae={q.get('mannequin_mae_8bit')} "
                   f"cut_px={q.get('cut_px')} residue={q.get('proxy_residue')} back_view={(c.get('back_view') or {}).get('pass')} {q.get('failures', [])} warnings={q.get('warnings', [])}")
         q = v.get("qa", {})
         print(f"[stage1b] {v['view']}{' (INVENTED)' if v.get('invented') else ''}: picked {v.get('engine')} ({(v.get('selection') or {}).get('reason')}), pass={q.get('pass')} mask={v.get('mask_source')} {q.get('failures', [])}")

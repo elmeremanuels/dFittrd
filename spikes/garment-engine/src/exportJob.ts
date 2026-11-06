@@ -61,7 +61,7 @@ import { evalChart } from './evalChart';
 import { generateGarment } from './garment';
 import { encodePng } from './exportPng';
 import { cameraBasis, opencvCamerasJson, transformsJson } from './exportPoses';
-import { garmentSpec, materialJson, promptColour, resolveSpikeProduct, videoPrompt, type ProductSource, type ResolvedProduct, type VideoPrompt } from './product';
+import { garmentSpec, materialJson, resolveSpikeProduct, videoPrompt, type ProductSource, type ResolvedProduct, type VideoPrompt } from './product';
 import { CONTROL_MODES, buildProxy, proxyRecord, proxySpec, type ControlMode, type Proxy, type ProxyOptions } from './proxy';
 import { hexToRgb, render, type DrawItem, type Render } from './raster';
 import { GARMENT_ID, MANNEQUIN_GREY, MANNEQUIN_ID } from './separation';
@@ -74,9 +74,12 @@ import { GARMENT_ID, MANNEQUIN_GREY, MANNEQUIN_ID } from './separation';
  * romper). Per view `dress/proxy_<view>.png` (our mannequin wearing the control proxy in a flat neutral material,
  * `STAGE1B_PROXY_RGB`) and `dress/proxy_mask_<view>.png` (the visible proxy), built in every control mode; hashed as
  * `stage1b.target`.
+ * 0.5.0 (after run 13): the prompt colour never comes from a word of the product name (`neutral-prompt-0.2.0`; run 13's Qwen
+ * engine painted the "Azure Palm" pastel print as a solid blue dress); with no primaryColorHex the description names no
+ * colour, and stage 1b measures one from the garment cut-out. The synthetic garment of such a product is the fallback colour.
  * The version is hashed, so a re-export changes the job id (run 11a's `aalter-studio-2-28080a938e84` was 0.2.0).
  */
-export const EXPORT_VERSION = 'phase0-export-0.4.0';
+export const EXPORT_VERSION = 'phase0-export-0.5.0';
 /** Id of the control proxy in the rasterizer's id buffer. */
 export const PROXY_ID = 3;
 /** Albedo of the proxy where it is rendered for a picture (the control frames only use depth and ids). */
@@ -87,12 +90,11 @@ const PROXY_GREY: [number, number, number] = [0.62, 0.62, 0.62];
  * and the studio background (235) by colour, so stage 1b can tell proxy left-overs from both.
  */
 export const STAGE1B_PROXY_RGB: [number, number, number] = [0.72, 0.68, 0.62];
-/** Synthetic garment colour when the product has no primaryColorHex (shop drafts): a plain colour from its name, else this. */
+/**
+ * Synthetic garment colour when the product has no primaryColorHex (shop drafts). Since 0.5.0 never a colour from the
+ * product name (a print or collection name: "Azure Palm" is a cream print, not blue).
+ */
 const FALLBACK_GARMENT_HEX = '#7a5c8a';
-const NAMED_HEX: Readonly<Record<string, string>> = {
-  blue: '#3a5fb0', 'light blue': '#96bee6', 'navy blue': '#1e2855', red: '#b8202c', pink: '#e896b0', burgundy: '#6b1f2a', green: '#2f8a4a',
-  'olive green': '#5b6b3c', 'sage green': '#a0b496', cream: '#f2ebdd', white: '#f5f5f5', black: '#151515', beige: '#d7c4a0', brown: '#6e4628', grey: '#808080',
-};
 export const MANIFEST_FORMAT = 'curtain.phase0.job';
 
 /**
@@ -541,8 +543,7 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
   const garmentItem = (): DrawItem => {
     if (!garment) {
       const spec = garmentSpec(payload, baseSize);
-      const named = promptColour(payload).name;
-      spec.colorHex = (spec.colorHex as string | undefined) ?? (named ? NAMED_HEX[named] : undefined) ?? FALLBACK_GARMENT_HEX;
+      spec.colorHex = (spec.colorHex as string | undefined) ?? FALLBACK_GARMENT_HEX;
       garment = generateGarment(mannequin, spec);
       garmentColor = hexToRgb(spec.colorHex);
     }

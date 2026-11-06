@@ -549,8 +549,9 @@ INVENTED_BACK_LABEL = "INVENTED BACK: no back photo was given, the model made it
 
 # Qwen-Image-Edit-2511 instructions (stage 1b, export 0.4.0). Picture 1 is our mannequin wearing the proxy in a flat
 # beige; picture 2 the garment cut out of the shop photo by SAM 2 (or, for an invented back, the dressed front still).
-# Built from the manifest's NEUTRAL description (prompt.description: colour, length, sleeves, style, fabric), never
-# the product title or brand (run 10 rendered the title as text).
+# Built from the manifest's NEUTRAL description (prompt.description: length, sleeves, style, fabric; a colour only from
+# primaryColorHex) plus the colour measured from the cut-out (`qwen_dress_prompt(colour=...)`), never the product title,
+# the brand or a colour word of the name (run 10 rendered the title as text; run 13 painted "Azure" blue).
 QWEN_DRESS_PROMPTS = {
     "front": (
         "Picture 1 shows a plain grey studio mannequin from the front, wearing a plain beige placeholder garment. "
@@ -584,23 +585,51 @@ QWEN_KIND_NEGATIVE = {
 }
 
 
-def neutral_description(m: Mapping[str, Any]) -> str:
-    """The manifest's neutral garment description (export 0.2.0+), else the plain category."""
+# The exporter's colour came from a word of the product name before neutral-prompt-0.2.0 (export 0.5.0): run 13's
+# "Azure Palm" became "blue", and Qwen painted the cream print solid blue. Such a colour is dropped here, so a job
+# exported with 0.4.0 gets the measured colour too.
+NAME_COLOUR_SOURCE = "a colour word of the product name"
+
+
+def neutral_description(m: Mapping[str, Any], drop_colour: bool = False) -> str:
+    """The manifest's neutral description (export 0.2.0+), else the plain category. A colour the exporter took from a
+    word of the product name (before export 0.5.0) is removed; with `drop_colour` any colour of the description is
+    (stage 1b names the colour it measured on the garment cut-out instead)."""
     d = ((m.get("prompt") or {}).get("description") or "").strip()
+    colour = (m.get("prompt") or {}).get("colour") or {}
+    name = colour.get("name")
+    if d and name and (drop_colour or str(colour.get("source", "")).startswith(NAME_COLOUR_SOURCE)):
+        hit = re.match(r"^(a|an) " + re.escape(str(name)) + r" (.+)$", d)
+        if hit:
+            rest = hit.group(2)
+            d = ("an " if rest[:1].lower() in "aeiou" else "a ") + rest
+        else:
+            d = re.sub(r"\b" + re.escape(str(name)) + r" ", "", d, count=1)
     return d or f"a {m['category']}"
 
 
-def qwen_dress_prompt(m: Mapping[str, Any], view: str, invented: bool) -> tuple[str, str]:
-    """(instruction, negative prompt) for Qwen-Image-Edit at `view`. Raises ValueError when the instruction would
-    carry the product title or the brand."""
+def qwen_dress_prompt(m: Mapping[str, Any], view: str, invented: bool, colour: Mapping[str, Any] | None = None) -> tuple[str, str]:
+    """(instruction, negative prompt) for Qwen-Image-Edit at `view`. `colour` is `phase0_dress.garment_colour` of the
+    shop photo's garment cut-out: its phrase is the only colour the instruction names ("colours: multicolour print on
+    cream, as in picture 2"); a print whose edge density also says printed (`printed_by_edges`) adds "solid colour, plain
+    fabric" to the negative. Raises ValueError when the
+    instruction would carry the product title or the brand."""
     key = "front" if view == "front" else ("back_invented" if invented else "back")
-    text = QWEN_DRESS_PROMPTS[key].format(description=neutral_description(m))
+    phrase = (colour or {}).get("phrase")
+    description = neutral_description(m, drop_colour=bool(phrase))
+    if phrase:
+        description = f"{description}; colours: {phrase}, as in picture 2"
+    text = QWEN_DRESS_PROMPTS[key].format(description=description)
     product = (m.get("hash_inputs") or {}).get("product") or {}
     for what, value in (("product title", m.get("product_name")), ("brand", product.get("brand"))):
         if value and str(value).strip().lower() in text.lower():
             raise ValueError(f"stage 1b instruction contains the {what} {value!r}")
     kind = ((m.get("control") or {}).get("proxy") or {}).get("kind") or ((m.get("stage1b") or {}).get("target") or {}).get("proxy_kind")
     neg = QWEN_NEGATIVE + (", " + QWEN_KIND_NEGATIVE[kind] if kind in QWEN_KIND_NEGATIVE else "")
+    # "solid colour, plain fabric" pushes Qwen towards a print: only when the chromaticity rule AND the cut-out's edge
+    # density both say "printed" (a plain dark garment once read as a print from noise; colour-0.2.0 records the edges).
+    if (colour or {}).get("kind") == "print" and (colour or {}).get("printed_by_edges") is True:
+        neg += ", solid colour, plain fabric"
     return text, neg
 
 
@@ -1050,6 +1079,12 @@ def prompt_problems(m: Mapping[str, Any]) -> list[str]:
                 problems.append(f"{key} prompt contains the {what} {value!r}")
         if '"' in text or "“" in text or "”" in text:
             problems.append(f"{key} prompt contains quoted text (models render it as letters)")
+    colour = p.get("colour") if isinstance(p.get("colour"), Mapping) else {}
+    if colour.get("name") and str(colour.get("source", "")).startswith(NAME_COLOUR_SOURCE):
+        problems.append(
+            f"prompt colour {colour['name']!r} was taken from a word of the product name (a print or collection name: run 13's "
+            "\"Azure Palm\" cream print became blue); re-export with phase0-export-0.5.0 or later"
+        )
     for term in PROMPT_REQUIRED_NEGATIVE + PROMPT_KIND_NEGATIVE.get(p.get("kind", ""), ()):
         if not _has_word(p["negative"], term):
             problems.append(f"negative prompt lacks {term!r}")

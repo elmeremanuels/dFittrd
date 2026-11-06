@@ -2,12 +2,12 @@
 
 GPU half of the Phase 0 spike (`docs/ENGINE-HANDOFF.md`), following shortlist A of `docs/research/garment-engine.md`:
 
-- **Stage 1b** (optional, for shop photos): dresses our mannequin **wearing the coarse proxy** (export 0.4.0; before: the bare mannequin), rendered at the front and back camera of the turntable, from a shop photo of the garment on a person or flat-lay. Garment segmentation with Grounding DINO + SAM 2.1, try-on with FASHN VTON v1.5, Qwen-Image-Edit-2511 or both (all Apache-2.0), QA against the proxy silhouette with a leg-gap check. Its output is the front and back still stage 2 pins. See [Stage 1b](#stage-1b-dress-our-mannequin-from-shop-photos) and [Stage 1b after run 12](#stage-1b-after-run-12-proxy-dressed-target-both-engines-leg-gap-true-back).
+- **Stage 1b** (optional, for shop photos): dresses our mannequin **wearing the coarse proxy** (export 0.4.0; before: the bare mannequin), rendered at the front and back camera of the turntable, from a shop photo of the garment on a person or flat-lay. Garment segmentation with Grounding DINO + SAM 2.1, try-on with FASHN VTON v1.5, Qwen-Image-Edit-2511 or both (all Apache-2.0), QA against the proxy silhouette (a tolerance band) with a leg-gap check and print fidelity against the shop photo; the instruction's colour is measured on the garment cut-out, never taken from the product name. Its output is the front and back still stage 2 pins. See [Stage 1b](#stage-1b-dress-our-mannequin-from-shop-photos), [after run 12](#stage-1b-after-run-12-proxy-dressed-target-both-engines-leg-gap-true-back) and [after run 13](#stage-1b-after-run-13-colour-from-pixels-print-fidelity-leg-gap-above-the-hem-silhouette-band).
 
 - **Stage 2**: Wan2.2-Fun-A14B-Control (Apache-2.0), driven by the depth video of our own mannequin **wearing a coarse proxy garment** (from the category and the size chart; `--control bare` renders the bare mannequin) along the fixed turntable path, with the front and back stills pinned at the first and last frame of each half turn. Because the control video is our own render, the camera pose of every generated frame is known. The prompts are neutral (no product title, no brand) and every generated frame's garment is scored against the pinned stills carried to its camera. See [Stage 2 after run 10](#stage-2-after-run-10-control-proxy-neutral-prompts-consistency-metric) and [Stage 2 after run 11](#stage-2-after-run-11-garment-masks-consistency-v2-stage-4-alpha-targets-proxy-length).
 - **Stage 4**: 2D Gaussian splatting with gsplat's `rasterization_2dgs` (Apache-2.0) plus a mask loss (on generated frames: our garment masks by default), then Open3D TSDF fusion (MIT), cleanup and decimation to 8–15k triangles, written as `.glb`.
 
-> **Status.** The build container that wrote this folder cannot reach Modal (the network proxy blocks gRPC); runs go through GitHub Actions. Stage 4 on synthetic frames and one full `run_phase0.py` (run 10: stage 2 on an H100, about 24 min, cost estimate $1.59; stage 4 on an L40S) have run there. Run 10 showed the dress turning into trousers between the pinned frames and the product name rendered as text; run 11a (proxy control, neutral prompts) kept the dress a dress and drew no text; its consistency and stage 4 numbers were wrong for reasons in our code, fixed and re-measured on its output on CPU (see [Stage 2 after run 11](#stage-2-after-run-11-garment-masks-consistency-v2-stage-4-alpha-targets-proxy-length)); export 0.3.0 and the new stage 4 alpha targets **have not run on a GPU yet**. Run 12 (Bohohippychic azure-palm-baby-doll-dress, stage 1b with FASHN on the bare mannequin, then stage 2 and 4, cost estimate $1.73) dressed the babydoll dress as a romper; export 0.4.0 and the stage 1b rework that follows from it ([Stage 1b after run 12](#stage-1b-after-run-12-proxy-dressed-target-both-engines-leg-gap-true-back)) **have not run on a GPU yet**. See [What is not tested](#what-is-not-tested). Every cost figure is an **estimate**: list price × seconds.
+> **Status.** The build container that wrote this folder cannot reach Modal (the network proxy blocks gRPC); runs go through GitHub Actions. Stage 4 on synthetic frames and one full `run_phase0.py` (run 10: stage 2 on an H100, about 24 min, cost estimate $1.59; stage 4 on an L40S) have run there. Run 10 showed the dress turning into trousers between the pinned frames and the product name rendered as text; run 11a (proxy control, neutral prompts) kept the dress a dress and drew no text; its consistency and stage 4 numbers were wrong for reasons in our code, fixed and re-measured on its output on CPU (see [Stage 2 after run 11](#stage-2-after-run-11-garment-masks-consistency-v2-stage-4-alpha-targets-proxy-length)); export 0.3.0 and the new stage 4 alpha targets **have not run on a GPU yet**. Run 12 (Bohohippychic azure-palm-baby-doll-dress, stage 1b with FASHN on the bare mannequin, then stage 2 and 4, cost estimate $1.73) dressed the babydoll dress as a romper; run 13 (stage 1b only, both engines on the proxy-dressed target of export 0.4.0, cost estimate $0.21) got the right dress from FASHN and a solid blue one from Qwen, whose instruction took "blue" from the product name; export 0.5.0 and QA `stage1b-qa-0.4.0` / `0.5.0` (after a review of run 13's QA) that follow from it ([Stage 1b after run 13](#stage-1b-after-run-13-colour-from-pixels-print-fidelity-leg-gap-above-the-hem-silhouette-band)) **have not run on a GPU yet**. See [What is not tested](#what-is-not-tested). Every cost figure is an **estimate**: list price × seconds.
 
 ## Files
 
@@ -16,7 +16,7 @@ GPU half of the Phase 0 spike (`docs/ENGINE-HANDOFF.md`), following shortlist A 
 | `smoke.py` | Modal hello world: CPU function, GPU cold start, torch matmul | Modal |
 | `smoke_cpu.py` | The same without a GPU (login, image, remote call) | Modal |
 | `stage1_dress.py` | Stage 1b app: weights download (once), `dress` (segment the shop photo, try-on onto our proxy-dressed render with one engine or both, garment mask, QA v2, back-view checks, composite, record) | Modal, GPU |
-| `phase0_dress.py` | numpy, CPU: stage 1b edit region, FASHN label map, garment prior against the proxy-dressed target, QA v2 (proxy silhouette, leg gap, skirt cover, placeholder left-overs), back-view checks, engine choice; `python phase0_dress.py <job>` re-scores a finished job's stills | numpy, Pillow |
+| `phase0_dress.py` | numpy, CPU: stage 1b edit region, FASHN label map, garment prior against the proxy-dressed target, garment colour from the cut-out, QA v2 (silhouette band, leg gap above the hem, skirt cover, placeholder left-overs, print fidelity), back-view checks, engine choice; `python phase0_dress.py <job>` re-scores a finished job's stills, per engine candidate | numpy, Pillow |
 | `stage2_video.py` | Stage 2 app: weights download (once), `generate` (3 clips with the manifest's prompts, assembled turntable, drift check, cost record), `score_consistency` (CPU: per-frame silhouette vs the control proxy) | Modal, GPU |
 | `stage4_recon.py` | Stage 4 app: `reconstruct` (2DGS → TSDF → mesh → `.glb` + metrics + cost record) | Modal, GPU |
 | `stage4b_retexture.py` | Stage 4b app (CPU, pure Python, no video model): re-textures a cut family's reference mesh for one colour/print variant from the variant's stage 1b front/back stills; writes `stage4b/<source>/variants/<id>/{texture.png, material.json, preview.glb, record.json}` and `variants.json` into the reference job | Modal (CPU) |
@@ -303,7 +303,7 @@ What the stills show, looked at by eye:
 
 The garment mask is the difference to the proxy-dressed target inside the edit region, refined by SAM 2 and clipped to the region for the composite; the same garment **not** clipped (`garment_mask_unclipped_<view>.png`) is what the QA's inside fraction is measured on. The pinned still is still our **bare** render with only the garment pasted in: the placeholder never appears, and where the garment leaves the proxy region uncovered our bare mannequin shows.
 
-**QA v2** (`phase0_dress.still_qa`, `STILL_QA_THRESHOLDS`, version `stage1b-qa-0.3.0`; row counts for 832-px frames, scaled; "warn" = recorded under `warnings`, does not fail the still until re-tuned, `hard_checks` makes it fail):
+**QA v2** (`phase0_dress.still_qa`, `STILL_QA_THRESHOLDS`, version `stage1b-qa-0.3.0`; from `stage1b-qa-0.4.0` the silhouette IoU is replaced by a tolerance band, the leg gap counts only rows above the garment's own hem, print fidelity is added and the engine order changed: [after run 13](#stage-1b-after-run-13-colour-from-pixels-print-fidelity-leg-gap-above-the-hem-silhouette-band); row counts for 832-px frames, scaled; "warn" = recorded under `warnings`, does not fail the still until re-tuned, `hard_checks` makes it fail):
 
 | Metric | Meaning | Pass |
 | --- | --- | --- |
@@ -370,6 +370,120 @@ modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-eng
 
 Without `--accept-failed-dress` stage 2 starts only when both stills pass QA v2, so a failed stage 1b costs stage 1b only. Re-score a finished job on CPU: `python -I spikes/garment-engine/modal/phase0_dress.py spikes/garment-engine/out/phase0/azure-palm-baby-doll-dress`.
 
+## Stage 1b after run 13: colour from pixels, print fidelity, leg gap above the hem, silhouette band
+
+Run 13 (GitHub Actions + Modal, H100, `--dress-only --dress-engine both`) ran stage 1b alone on the same Bohohippychic `azure-palm-baby-doll-dress` (front #1, back #4, on model), export 0.4.0 (proxy-dressed target), job `azure-palm-baby-doll-dress-6d2f2611a144`, seed 43. Model load 42.5 s; FASHN 7.1 s / 4.6 s per view, Qwen 65.5 s / 65.3 s; 189 GPU s, cost estimate about $0.21 (GPU only, list price).
+
+What the stills show, looked at by eye:
+
+- **FASHN** dressed both views as a knee-length babydoll with the shop's pastel tropical print on cream, puffed sleeves and a tiered skirt: the right answer. It is shorter and narrower than the proxy, so our legs show below its hem inside the proxy's skirt zone.
+- **Qwen** ignored picture 2's print and painted a **solid blue** dress on both views. Its instruction said *"a blue knee-length babydoll dress"*: the exporter had taken "blue" from the product name ("Azure Palm" names the print; the garment is cream and pastel). On the back it repainted the whole figure.
+- The QA failed every candidate. FASHN narrowly: silhouette IoU vs the proxy-dressed mannequin 0.836 / 0.828 < 0.85, and a "leg gap" of 5 / 109 rows on the front, which are the rows at its own tiered hem (531–535, hem at 535), not a romper. The old `qa_score` then put **Qwen's blue front** (0.836 vs 0.756) into `rejected/front.png` as the "best": wrong.
+
+### What changed (export 0.5.0, `stage1b-qa-0.4.0`)
+
+**1. Colour from pixels, never from the name.** `src/product.ts` `promptColour` (prompt version `neutral-prompt-0.2.0`, export `phase0-export-0.5.0`) takes the colour from `primaryColorHex` (merchant data) or names none; the product-name lookup (`azure → blue`, `rosewater → pink`, `rust → rust orange`, …) is gone, also for the synthetic garment's colour (the fallback colour now). Stage 1b measures the colour on the shop photo's SAM 2 cut-out (`phase0_dress.garment_colour`): a print when at least `print_share` 0.12 of the pixels lie more than 0.03 from the median in chromaticity (r, g) = (R, G)/(R+G+B), which shading does not change; then *"multicolour print on <ground>"*, the ground being the median colour's name in Lab (the exporter's basic colours plus peach, mint and sage). Two far-apart names with ≥ 25 % each give *"<a> and <b>"*; otherwise the median colour's name. Too few pixels: no colour. `lib.qwen_dress_prompt(..., colour=)` appends *"; colours: <phrase>, as in picture 2"* (dropping any colour of the manifest's description) and, for a print, *"solid colour, plain fabric"* to the negative. A manifest from export 0.4.0 has its name-derived colour removed by `lib.neutral_description`, and `lib.prompt_problems` refuses it for stage 2 (re-export). Stored in the record as `source_segmentation.colour` and per candidate `candidate_colour`.
+
+**2. Print fidelity** (`phase0_dress.print_fidelity`, in `still_qa(fidelity=…)`): the candidate's garment pixels (its mask on the raw still) against the shop photo's garment (photo + SAM 2 mask). Palette: Hellinger distance of the joint L\*a\*b\* histograms (8 × 10 × 10 bins over L 0–100, a −40–40, b −40–60, smoothed over neighbouring bins so one colour on a bin edge is not two palettes) **> 0.60 fails**, Delta E of the median colours **> 20 fails**. Texture: edge density (share of pixels inside the eroded mask where L\* changes by more than 4 per pixel), the shop garment scaled to the candidate garment's height first; when the shop garment is printed (density ≥ 0.15) a ratio **< 0.35 fails** ("print lost"). `fidelity.score` = 1 − Hellinger.
+
+**3. Leg gap above the garment's own hem** (`phase0_dress.leg_gap_above_hem`): the hem is the lowest garment row in each leg's column band (left and right of the body axis), the higher of the two; a gap row counts only when it lies more than `hem_tol_frac` 0.01 of the height (8 rows at 832) above it. A dress shorter than the proxy, with a hem that dips at the centre, no longer counts as a romper; a romper's gap runs from the crotch to near its hem and still does. `leg_gap_rows_all` keeps the old count.
+
+**4. Silhouette tolerance band** (`phase0_dress.silhouette_band`) replaces `silhouette_iou ≥ 0.85` (still recorded, not checked): the proxy is coarse (default flare, length from the chart). Three hard checks, dilation 0.015 and erosion 0.01 of the height (12 / 8 px at 832): **garment inside** the proxy plus the sleeve band, dilated, ≥ 0.96 (unclipped garment); **torso cover**: the garment covers ≥ 0.92 of the eroded proxy from its top edge to the crotch; **foreground outside** our mannequin wearing the proxy, dilated, ≤ 0.03. `silhouette_score` = mean of inside and torso cover.
+
+**5. Engine selection** (`phase0_dress.pick_engine`): pass every hard check → highest print fidelity (`fidelity.score`, to 2 decimals) → highest silhouette score; the record keeps `order`, `reason`, `passed`, `fidelity_failed` and both scores per engine. A candidate that fails print fidelity is **never** picked, not even as the rejected still to look at; when every candidate fails fidelity, `engine` is null and the highest fidelity goes to `rejected/` as `rejected_still`.
+
+### Measured on run 13 and run 12 output (CPU)
+
+`python -I phase0_dress.py <job dir>` (it now scores each engine's candidate, `raw/<view>_<engine>.png` with `candidates/<view>_<engine>_garment_mask[_unclipped].png`, and picks). Run 12 is the FASHN romper on the bare mannequin (its masks were made against the bare render; proxy masks from `control/proxy_mask/0000.png` / `0080.png`).
+
+| Front / back | Run 13 FASHN | Run 13 Qwen | Run 12 FASHN (romper) |
+| --- | --- | --- | --- |
+| Shop cut-out colour (`garment_colour`) | multicolour print on cream (accent share 0.179 / 0.260, median Lab 79.5 1.8 9.3 / 76.9 2.5 9.5) | same | same |
+| Candidate colour | multicolour print on light grey (0.200 / 0.193) | navy blue / light blue (0.075 / 0.084) | multicolour print on light grey (0.138 / 0.188) |
+| Fidelity: Lab Hellinger (fail > 0.60) | 0.096 / 0.083 | **0.966 / 0.957** | 0.201 / 0.137 |
+| Fidelity: median Delta E (fail > 20) | 4.6 / 2.4 | **61.2 / 57.6** | 9.0 / 5.1 |
+| Fidelity: edge density ratio (fail < 0.35) | 0.80 (0.360 / 0.449) / 0.64 (0.312 / 0.486) | **0.17 / 0.21** | 0.80 / 0.76 |
+| Fidelity | pass / pass | **FAIL / FAIL** | pass / pass |
+| Old `silhouette_iou` (was ≥ 0.85; recorded only) | 0.836 / 0.828 | 0.847 / 0.336 | 0.766 / 0.762 |
+| Band: garment inside (≥ 0.96) | 0.978 / 0.979 | **0.929** / **0.393** | 0.997 / 0.995 |
+| Band: torso cover (≥ 0.92) | 0.967 / 1.000 | 0.953 / **0.591** | **0.840 / 0.850** |
+| Band: foreground outside (≤ 0.03) | 0.013 / 0.009 | 0.027 / **0.507** | 0.002 / 0.003 |
+| Leg-gap rows above the hem / all (fail ≥ 4 and > 3 % of 109) | 0 / 5 and 0 / 1 (hems 535 / 533) | 3 / 12 and 0 / 0 | **67 / 76 and 58 / 67** (hems 537 / 529) |
+| Other hard checks | pass (inside 1.000 / 0.998, MAE 7.5 / 8.7) | back: cut by the region (inside 0.497), MAE 75.3 | — |
+| Warnings (not checks) | garment-proxy IoU 0.640 / 0.645, skirt cover 0.697 / 0.643 | IoU 0.686 / 0.450 | IoU 0.504 / 0.490, skirt cover 0.377 / 0.350 |
+| **QA v2 (0.4.0)** | **pass / pass** | **fail / fail** | **fail / fail** |
+| Selection | **fashn** on both views ("the only candidate that passes every check"; fidelity 0.904 / 0.917 vs 0.034 / 0.043) | `fidelity_failed` | rejected (no candidate passes) |
+
+Back-view checks with FASHN's front and back: pass (mirror ratio 0.91; neckline depth back still 0.038 vs back photo 0.006, within 0.05). Run 12's back still fails the neckline as before (0.117).
+
+So on the two runs FASHN's stills pass every hard check and are picked; Qwen's fail print fidelity (palette and texture), and on the back also the band, the cut and the MAE; run 12's romper fails the leg gap above its own hem and the torso cover (its front is open down to the waist) but **passes** print fidelity, as it should (the print is right, the shape is wrong). Margins are thin where noted: garment inside 0.978 / 0.979 against 0.96 (FASHN) and 0.929 (Qwen front); torso cover 0.92 sits between 0.85 (romper) and 0.967 (FASHN front). Every threshold is set on one product, two runs: re-check on the next product. The colour description was also checked on synthetic scenes (tests: a pastel print on cream → "multicolour print on cream", never blue; a shaded black dress → "black"; black and white halves → "black and white").
+
+### Not tested (after run 13)
+
+Nothing of this section has run on a GPU: the Qwen instruction with the measured colour (whether Qwen then keeps the print is open; the fidelity check is what catches it if not), export 0.5.0, the selection inside the app. Print fidelity compares a studio render with a shop photo under other light (FASHN's colours are about 4 L\* darker); a garment whose shop photo is strongly lit or tinted may fail the median Delta E (since `fidelity-0.2.0` exposure is normalised: see the review below; a tinted light is still a palette change). Stage 2's prompt has no colour for a shop product without `primaryColorHex` (the pinned stills carry it); passing stage 1b's measured colour into the stage 2 prompt is open. The Qwen candidate's sleeves past the sleeve band (front, rows 376–416) fail the band; a sleeve length from the product would serve both the band and the edit region.
+
+### Review of run 13's QA (`stage1b-qa-0.5.0`, `colour-0.2.0`, `fidelity-0.2.0`; CPU only, no GPU)
+
+Run 13's stills were looked at: FASHN's are the right answer on both views (the knee-length babydoll in the shop's pastel tropical print, puffed sleeves, tiered skirt), Qwen's are a solid blue dress and, on the back, a repainted figure. The 0.4.0 checks pick FASHN on both views, but a review with probes on the real stills and synthetic scenes found five weaknesses. Each is fixed below and covered by tests in `tests/test_stage1b_qa.py`.
+
+**1. Colour words of dark plain garments** (`garment_colour`, `colour-0.2.0`). Shaded plain garments (sin folds, JPEG q85) were named as two colours: plain purple came out as *"navy blue and purple"*, dark green as *"olive green and black"*, brown as *"brown and black"*, teal and olive with *"charcoal grey"*. With noise sigma 8, every dark plain garment came out as a print (black 0.19, navy 0.19–0.26, burgundy 0.45 accent share). The wrong phrase went into Qwen's instruction, and for a "print" *"solid colour, plain fabric"* went into its negative prompt. Changes:
+- Two names count as one colour when their pixels share a hue (a\*b\* angle within 35°), or when one of them is black, charcoal or grey still tinted towards the other's hue (`_same_colour`).
+- Such a folded solid is named by the chromatic name nearest the median's hue (`_hue_name`).
+- The print rule smooths 3 × 3 first, uses a lit floor of R+G+B ≥ 90, and needs a chromaticity distance of max(0.03, 12 / (R+G+B)), so a fixed 8-bit change counts the same on a dark pixel as on a light one.
+- *"solid colour, plain fabric"* goes into the negative prompt only when the cut-out's edge density also says printed (`printed_by_edges`, ≥ 0.15 at 300 rows).
+
+After the change, all 8 dark solids × 2 shading/noise settings are named by their hue with accent 0.000. Before the change, accent was 0.19–0.49; without the smoothing it would still reach 0.085. Black/white and black/red halves stay two-tone. Run 13: shop 0.167 / 0.248 (*multicolour print on cream*), FASHN 0.184 / 0.177, Qwen 0.020 / 0.017. Limit: a print whose motifs are 1–2 px wide at the image's scale is averaged away too.
+
+**2. Print fidelity at the shop photo's exposure** (`print_fidelity`, `fidelity-0.2.0`). Median ΔE ≤ 20 on absolute L\* failed a correct garment rendered 25 % darker (x0.75: 21.9) and passed clearly wrong grounds (pink tint 17.1, mint ground 18.0). Changes:
+- The candidate is now scaled in linear light so that its median luminance matches the shop garment's (`exposure_gain`). A gain beyond 1/3–3 fails, which catches black against charcoal.
+- The palette is then compared with limits **Hellinger ≤ 0.35, median ΔE ≤ 10**.
+- The histogram uses linear (tent) bin assignment, so a flat colour on a bin edge no longer jumps bins.
+
+The unnormalised numbers stay in the record. Measured on run 13's FASHN front against the real shop cut-out (Hellinger / ΔE after the gain):
+
+| Change applied to the still | After the gain | Result |
+| --- | --- | --- |
+| as is (gain 1.13) | 0.060 / 2.0 (0.1.0: 0.096 / 4.5) | pass |
+| exposure x1.15 … x0.65 (gain 0.83 … 2.94) | 0.059–0.068 / 2.0–2.2 (0.1.0 at x0.75: 0.437 / 21.9, fail) | pass |
+| exposure x0.55 / x0.45 (gain 4.2 / 6.4) | 0.214 / 10.7, 0.433 / 21.7 | fail (gain) |
+| saturation −25 % / −50 % | 0.116 / 3.9, 0.190 / 5.7 | pass |
+| mild pink / yellow tint | 0.258 / 7.5, 0.266 / 8.2 | pass (below resolution) |
+| ground recoloured white | 0.251 / 9.5 | pass (cream vs white is below resolution) |
+| pink / blue / yellow / green tint | 0.451 / 13.6, 0.326 / 12.1, 0.516 / 18.0, 0.501 / 15.4 | fail |
+| ground to light pink / light blue / mint / yellow | 0.424 / 14.2, 0.454 / 18.8, 0.467 / 14.6, 0.625 / 27.2 | fail |
+| run 13 Qwen front / back (gain 5.17 / 3.17) | 0.942 / 62.6, 0.952 / 55.0 | fail |
+
+Other reference points: FASHN back 0.080 / 2.3, and run 12's FASHN (right print, scored against run 13's shop masks) 0.161 / 5.6 and 0.102 / 3.0. The limits sit between the largest lighting or render difference (0.19 / 5.7) and the smallest hue change that must fail (0.33 / 12.1). On synthetic solids, white against light grey passes (gain 1.40): a pure lightness difference cannot be told from lighting.
+
+**3. Closed romper with a short inseam** (`leg_gap_above_hem`). The 8-row hem allowance covered every gap row of a romper whose hem sits right under the crotch. On run 13's front geometry, 6- and 10-row shorts passed every hard check (a hole of about 13 rows, 5 cm at 832 px). Rows near the hem are now excused only when the hem lies more than 2 × 8 rows below the crotch (`leg_gap_hem_excused`). The same probes, re-run:
+- 4, 6, 10 and 14-row shorts fail with 4, 6, 10 and 14 counted rows; 20 rows fail with 11.
+- Tops ending 10/20/40 rows above the crotch fail torso cover (0.908 / 0.851 / 0.742).
+- Trousers to the ankle fail (109/109 rows).
+- FASHN's babydoll passes.
+
+**4. Hem from garment-coloured pixels** (`garment_coloured`, `still_qa(rgb=, bare_rgb=)`). The hem was taken from the clipped garment mask, so the pass depended on SAM 2's mask leaving out FASHN's repainted legs. With the unclipped mask as the garment, the hem was at 588 / 592 and the correct babydoll failed the leg gap (38 / 36 rows).
+
+The hem now comes from the garment pixels whose colour is likelier under the garment's own palette (its pixels above the crotch) than under our mannequin's legs (our bare render). The garment palette is opened by 1 px, and a hem row needs at least 3 pixels per leg band. With the unclipped mask, the hem is then 533 / 532 and the still passes. The colour rule is used only when it separates the two on known pixels (at most 10 % of our legs read as garment, at least 70 % of the garment does). Run 13: FASHN 0.0 / 0.86, Qwen 0.0 / 1.0. A grey garment (leak 0.37–0.63) falls back to the mask, so a grey romper's legs stay in its hem. The record says which (`garment_hem_basis`).
+
+**5. A dress longer than the proxy's guessed hem** (`silhouette_band`, `hem_extend_frac` 0.06). Every dress without "maxi" or length data gets the knee proxy. A dress 20 rows (about 8 cm) longer than it failed the band (garment inside 0.952), while a shorter one passed. The band now runs on 50 rows (about 20 cm) below the proxy hem, straight down at the hem's width. A dress reaching the feet still fails.
+
+**Open:** the edit region is not extended (FASHN's input stays as on run 13). A dress more than the 25 px edit margin past the proxy hem is still cut by the region and fails `min_inside_fraction` (+40 rows: inside 0.954), and FASHN cannot draw it longer than the region anyway. A length from the product, or a downward margin on the region, would need a GPU run.
+
+Run 13 re-scored (`python -I phase0_dress.py <job dir>`):
+
+| Front / back | FASHN | Qwen |
+| --- | --- | --- |
+| Band: garment inside | 0.981 / 0.988 | 0.929 / 0.452 |
+| Hem rows | 533–537 / 532–535 (garment-coloured) | — |
+| Leg-gap rows | 0 / 0 | — |
+| Fidelity (Hellinger / ΔE / edge ratio) | 0.060 / 2.0 / 0.80 and 0.080 / 2.3 / 0.64 | 0.942 / 62.6 and 0.952 / 55.0, gain 5.17 / 3.17 |
+| Result | **pass / pass** | **fail / fail** |
+| Selection | **fashn** on both views | — |
+
+Back-view checks: pass (mirror ratio 0.91).
+
+**Not tested:** none of this has run on a GPU. Use run 13's recipe (stage 1b only, both engines) to confirm the selection there.
+
 ## Stage 2 after run 10: control proxy, neutral prompts, consistency metric
 
 Run 10 (GitHub Actions, aalter-studio-2, synthetic stills) followed the pinned front and back frames and the camera path, but between them the dress turned into trousers (frames 20, 60, 100) and the product name appeared as text in frame 20; stage 4 on those frames reached a mask IoU of 0.90, against 0.99 on the synthetic truth. Two causes: the control depth showed the **bare** mannequin (two separate legs), and the prompt held the product title in quotes. Export 0.2.0 changes three things. None of them has run on a GPU yet.
@@ -385,7 +499,7 @@ Run 10 (GitHub Actions, aalter-studio-2, synthetic stills) followed the pinned f
 
 Girths follow `evalChart`: a garment chart as printed (a one-size product's flat measurements, doubled by the shop parser), a body chart plus the product's ease, else the fit engine's category default ease; rings without a chart value get the mannequin's girth plus a proxy default. A girth below the mannequin's body + 1 cm is raised and the spec says so. A test measures the proxy mesh at every anchor and finds the chart value within 1 cm, and checks that a dress or skirt proxy has no gap between the legs in the rendered depth (front, back and diagonals) while trousers keep theirs. The proxy is only the control signal: no anchor, grading or fit step reads it, and it never appears in an output.
 
-**Prompts** (manifest `prompt`, hashed). A neutral description made only of fixed vocabulary: colour (nearest basic colour of `primaryColorHex`, else a colour word of the name mapped to a plain colour; the word itself is not used), length, sleeves, a plain style word and the fabric, e.g. *"a blue knee-length babydoll dress in a fluid viscose fabric, one closed skirt that falls from the waist to the hem and covers both legs"*. Never the product title, the brand or quotes. The negative prompt always holds text, letters, words, captions, typography, watermark, logo, label and brand name, plus trousers / pants / shorts / two separate legs of fabric for a dress or skirt, and dress / skirt / gown for trousers. `stage2_video.py` and `run_phase0.py` refuse a manifest whose prompts fail `lib.prompt_problems` (title, brand, quotes, missing negative terms) or that has no prompts (exported before 0.2.0: re-export).
+**Prompts** (manifest `prompt`, hashed). A neutral description made only of fixed vocabulary: colour (nearest basic colour of `primaryColorHex`, else none; until export 0.5.0 a colour word of the name, which run 13 showed is a print name: see [Stage 1b after run 13](#stage-1b-after-run-13-colour-from-pixels-print-fidelity-leg-gap-above-the-hem-silhouette-band)), length, sleeves, a plain style word and the fabric, e.g. *"a knee-length babydoll dress in a fluid viscose fabric, one closed skirt that falls from the waist to the hem and covers both legs"*. Never the product title, the brand or quotes. The negative prompt always holds text, letters, words, captions, typography, watermark, logo, label and brand name, plus trousers / pants / shorts / two separate legs of fabric for a dress or skirt, and dress / skirt / gown for trousers. `stage2_video.py` and `run_phase0.py` refuse a manifest whose prompts fail `lib.prompt_problems` (title, brand, quotes, missing negative terms, a colour taken from the product name) or that has no prompts (exported before 0.2.0: re-export).
 
 **Garment consistency v1** (superseded after run 11 by v2, see the next section; still written as `stage2/record.json` → `consistency_v1`). (`stage2_video.score_consistency`, a CPU function that runs after `generate`; `cost_summary.json` → `stage2.consistency` without the per-frame list). For every generated clip frame, at stride 2: the frame's foreground (background colour estimated from the border, opened, small specks dropped) against the control silhouette at the same pose (`silhouette_iou`), the same IoU within the rows the proxy spans (`zone_iou`), and the share of the visible proxy the frame covers (`garment_cover`). A frame is flagged when one is below `CONSISTENCY_THRESHOLDS` (0.85 / 0.80 / 0.90, **initial values, not tuned on real output**). Trousers drawn over a dress proxy leave the gap between the legs uncovered (low `garment_cover`); a skirt drawn over a trouser proxy fills the gap (low `zone_iou`). The record lists every frame, the flagged frames with reasons, and min/mean per metric overall and per clip. With `--control bare` only the silhouette IoU is reported, and the record says the bare mannequin is no garment reference.
 

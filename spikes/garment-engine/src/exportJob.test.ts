@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { mockGarment } from '@curtain/schema';
 import { EXPORT_VERSION, PINNED_MODELS, canonicalJson, controlFrame, depthRange, exportJob, inputHash, sha256, turntableClips, type ExportOptions, type Phase0Manifest } from './exportJob';
 import { decodePng } from './exportPng';
-import { NEGATIVE_BASE, SPIKE_PRODUCT_IDS, garmentSpec } from './product';
+import { NEGATIVE_BASE, SPIKE_PRODUCT_IDS, garmentSpec, promptColour } from './product';
 import { render } from './raster';
 import { MANNEQUIN_GREY, MANNEQUIN_ID } from './separation';
 
@@ -259,5 +259,15 @@ describe('stage 2 prompt', () => {
     );
     expect(job.manifest.prompt.description).toBe('a black short-sleeved t-shirt in a crisp cotton fabric');
     expect(job.manifest.prompt.colour.source).toMatch(/primaryColorHex #111111/);
+  });
+
+  it('takes the colour from primaryColorHex only, never from a word of the product name', () => {
+    expect(promptColour({ primaryColorHex: '#111111' }).name).toBe('black'); // a solid black dress
+    expect(promptColour({ primaryColorHex: '' }).name).toBeNull();
+    // A name word is a print or collection name: "Azure Palm" is a cream print, not blue (run 13).
+    const azure = { primaryColorHex: '', name: 'Azure Palm Baby Doll Dress' };
+    expect(promptColour(azure).name).toBeNull();
+    const rosewater = { primaryColorHex: '#f2ebdd', name: 'Rosewater Blouse' };
+    expect(promptColour(rosewater).name).toBe('cream');
   });
 });

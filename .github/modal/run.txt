@@ -1,5 +1,7 @@
 # One command per line; pushing a change to this file runs them on Modal via GitHub Actions.
-# run 11a: synthetic dress again, proxy control + neutral prompts
+# run 11b: one Bohohippychic product end to end (stage 1b dress + 2 + 4), images checked against the committed hashes
 pnpm build:packages
-pnpm --filter @curtain/garment-spike export:phase0 -- --product aalter-studio-2 --synthetic-photos
-modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/aalter-studio-2
+pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch-images
+git diff --exit-code -- spikes/garment-engine/data/bohohippychic/images.json spikes/garment-engine/data/bohohippychic/products.json
+pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product azure-palm-baby-doll-dress
+modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/azure-palm-baby-doll-dress --dress --dress-engine fashn --no-synthetic-recon --accept-failed-dress

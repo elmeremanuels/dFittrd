@@ -16,8 +16,9 @@ This module replaces both:
     grey: its chroma and brightness) is sampled from the frame's own head, hands and feet (the bare
     silhouette away from the proxy). Outside the body the garment is what differs from a smooth
     background model (a quadratic per channel, fitted to the frame outside the loose envelope, so the
-    noise floor is about 1.5 levels instead of the 20-level tolerance), with hysteresis: weak pixels
-    count only when they connect to the garment on the body. Holes up to 0.2% of the frame are filled.
+    noise sigma measured on run 11a about 0.5 levels instead of the 20-level tolerance), with hysteresis:
+    weak pixels count only when they connect to the garment on the body. Holes up to 1% of the frame
+    (`hole_frac`) are filled.
 
 ``garment_reference``
     What the garment should look like at every turntable camera: the visual hull carved by the pinned
@@ -26,24 +27,24 @@ This module replaces both:
     cannot see), projected back into each camera.
 
 ``frame_garment_consistency``
-    One generated garment mask against its reference: IoU, and the drift checks of run 10: for a dress
-    or skirt, rows below the crotch where the garment splits into two legs with background between them
-    while the reference is closed; for trousers, rows where the reference has two legs and the garment
-    one.
+    One generated garment mask against its reference: IoU, the share of the reference covered and of the
+    garment outside it, and the drift checks of run 10: for a dress or skirt, how much of the reference's
+    closed skirt below the crotch the garment covers (run 10's trousers had touching legs, so they rarely
+    left a background gap on the axis) and rows where the garment splits into two legs with background
+    between them; for trousers, rows where the reference has two legs and the garment one.
 
 Everything is a drift check, not a measurement of the garment (AGENTS.md rule 3).
 """
 from __future__ import annotations
 
 import json
-import math
 import os
 from typing import Any, Mapping, Sequence
 
 import numpy as np
 
 GARMENT_SEGMENT_VERSION = "garment-segment-0.1.0"
-CONSISTENCY_V2_VERSION = "garment-consistency-0.2.0"
+CONSISTENCY_V2_VERSION = "garment-consistency-0.3.0"
 
 SEGMENT_DEFAULTS: dict[str, float] = {
     "envelope_px": 40,  # the garment lies within the control silhouette dilated by this much
@@ -52,8 +53,8 @@ SEGMENT_DEFAULTS: dict[str, float] = {
     "bg_hi": 14.0,  # ... strong foreground
     "bg_sigma_lo": 4.0,  # or this many noise sigmas, whichever is larger
     "bg_sigma_hi": 8.0,
-    "mannequin_chroma_margin": 4.0,  # over the samples' 99th percentile chroma
-    "mannequin_lum_margin": 15.0,  # beyond the samples' 0.5 / 99.5 percentile brightness
+    "mannequin_chroma_margin": 3.0,  # over the head's 99th percentile chroma
+    "mannequin_lum_margin": 10.0,  # below the darkest and above the brightest sampled level
     "mannequin_loose_factor": 2.0,  # where our control shows bare mannequin, a looser chroma ceiling (colour bleed at the cuffs)
     "mannequin_min_samples": 300,
     "ambiguous_core_frac": 0.5,  # the garment core reads as mannequin colour: garment ~ mannequin grey
@@ -175,12 +176,86 @@ def iou(a: np.ndarray, b: np.ndarray) -> float:
 # --- the bare mannequin's silhouette from mannequin.glb ---------------------------------------------------
 
 
-def read_glb_mesh(data: bytes) -> tuple[np.ndarray, np.ndarray]:
-    """(positions [n,3] metres, faces [m,3]) of every triangle primitive in a .glb (stage 4b's reader)."""
-    import stage4b_retexture as s4b
+_GLB_DTYPE = {5120: "<i1", 5121: "<u1", 5122: "<i2", 5123: "<u2", 5125: "<u4", 5126: "<f4"}
+_GLB_NCOMP = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}
 
-    mesh = s4b.read_glb(data)
-    return np.asarray(mesh["positions"], dtype=np.float64), np.asarray(mesh["faces"], dtype=np.int64)
+
+def _glb_node_matrix(node: Mapping[str, Any]) -> np.ndarray:
+    if "matrix" in node:
+        return np.asarray(node["matrix"], dtype=np.float64).reshape(4, 4).T  # column-major
+    qx, qy, qz, qw = node.get("rotation", (0.0, 0.0, 0.0, 1.0))
+    r = np.array([
+        [1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qz * qw), 2 * (qx * qz + qy * qw)],
+        [2 * (qx * qy + qz * qw), 1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz - qx * qw)],
+        [2 * (qx * qz - qy * qw), 2 * (qy * qz + qx * qw), 1 - 2 * (qx * qx + qy * qy)],
+    ])
+    m = np.eye(4)
+    m[:3, :3] = r * np.asarray(node.get("scale", (1.0, 1.0, 1.0)))[None, :]
+    m[:3, 3] = node.get("translation", (0.0, 0.0, 0.0))
+    return m
+
+
+def read_glb_mesh(data: bytes) -> tuple[np.ndarray, np.ndarray]:
+    """(positions [n,3], faces [m,3]) of every triangle primitive under the default scene of a .glb, node
+    transforms applied (the same subset of glTF as stage4b_retexture.read_glb, in numpy, so the stage 2
+    image needs no other module)."""
+    import struct
+
+    if len(data) < 20 or data[:4] != b"glTF":
+        raise ValueError("not a GLB")
+    _, length = struct.unpack_from("<II", data, 4)
+    gltf, binary, off = None, b"", 12
+    while off + 8 <= min(length, len(data)):
+        clen, ctype = struct.unpack_from("<II", data, off)
+        chunk = data[off + 8: off + 8 + clen]
+        if ctype == 0x4E4F534A:
+            gltf = json.loads(chunk.decode("utf-8"))
+        elif ctype == 0x004E4942:
+            binary = chunk
+        off += 8 + clen
+    if gltf is None:
+        raise ValueError("GLB without a JSON chunk")
+
+    def accessor(i: int) -> np.ndarray:
+        acc = gltf["accessors"][i]
+        view = gltf["bufferViews"][acc["bufferView"]]
+        n = _GLB_NCOMP[acc["type"]]
+        dt = np.dtype(_GLB_DTYPE[acc["componentType"]])
+        start = int(view.get("byteOffset", 0)) + int(acc.get("byteOffset", 0))
+        stride = int(view.get("byteStride", 0)) or n * dt.itemsize
+        count = int(acc["count"])
+        raw = np.frombuffer(binary, dtype=np.uint8, count=stride * (count - 1) + n * dt.itemsize if count else 0, offset=start)
+        rows = np.lib.stride_tricks.as_strided(raw, shape=(count, n * dt.itemsize), strides=(stride, 1)) if count else raw.reshape(0, n * dt.itemsize)
+        return np.ascontiguousarray(rows).view(dt).reshape(count, n)
+
+    pos: list[np.ndarray] = []
+    faces: list[np.ndarray] = []
+    base = 0
+
+    def visit(ni: int, parent: np.ndarray) -> None:
+        nonlocal base
+        node = gltf["nodes"][ni]
+        m = parent @ _glb_node_matrix(node)
+        if "mesh" in node:
+            for prim in gltf["meshes"][node["mesh"]]["primitives"]:
+                if prim.get("mode", 4) != 4:
+                    continue
+                p = accessor(prim["attributes"]["POSITION"]).astype(np.float64)
+                p = p @ m[:3, :3].T + m[:3, 3]
+                idx = accessor(prim["indices"]).reshape(-1).astype(np.int64) if "indices" in prim else np.arange(len(p))
+                pos.append(p)
+                faces.append(idx.reshape(-1, 3) + base)
+                base += len(p)
+        for c in node.get("children", []):
+            visit(c, m)
+
+    scenes = gltf.get("scenes")
+    roots = scenes[gltf.get("scene", 0)].get("nodes", []) if scenes else range(len(gltf.get("nodes", [])))
+    for ni in roots:
+        visit(ni, np.eye(4))
+    if not faces:
+        raise ValueError("GLB without triangles")
+    return np.concatenate(pos), np.concatenate(faces)
 
 
 def project_points(K: Sequence[Sequence[float]], w2c: Sequence[Sequence[float]], pts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -331,17 +406,29 @@ def segment_garment(rgb: np.ndarray, bare: np.ndarray, envelope: np.ndarray, pri
     weak = env & ~manq & (dbg > lo)
     strong = env & ~manq & (dbg > hi)
     cand = on_body | weak
-    seed = drop_small(on_body, p["speck_frac"]) if on_body.any() else strong
+    # Seeds: the garment on the body, and strong foreground well inside the proxy (where only the visible
+    # part of a posed mannequin is known, the garment on the body is not).
+    seed = drop_small(on_body | (strong & erode(prior_m, 3)), p["speck_frac"])
+    if not seed.any():
+        seed = strong
     g = keep_touching(cand, seed)
     r = int(p["open_r"])
     if r > 0:
         g = dilate(erode(g, r), r) | (g & on_body)
     # Holes: shaded garment inside the proxy reads as grey and is filled; mannequin seen in front of the
     # garment in our control (a hand over the skirt) stays out.
-    keep_out = manq & visible
+    keep_out = manq & dilate(visible, 2)
     g = g | (fill_holes(g, int(p["hole_frac"] * h * w)) & ~keep_out)
     g = drop_small(g, p["speck_frac"])
     outside = g & ~bare
+    # Strong foreground far from where any garment can be: text, logos, props (run 10 drew the product
+    # name above the mannequin). Components under 20 px are noise.
+    stray = (dbg > hi) & ~env
+    stray_px = 0
+    if stray.any():
+        lab, n = label(stray)
+        sizes = np.bincount(lab.ravel(), minlength=n + 1)[1:]
+        stray_px = int(sizes[sizes >= 20].sum())
     info = {
         "version": GARMENT_SEGMENT_VERSION,
         "garment_px": int(g.sum()),
@@ -351,6 +438,7 @@ def segment_garment(rgb: np.ndarray, bare: np.ndarray, envelope: np.ndarray, pri
         "ambiguous_with_mannequin": bool(ambiguous),
         # Garment contrast against the background where only the background model can find it (off the body).
         "contrast_off_body": None if not outside.any() else round(float(np.median(dbg[outside])), 2),
+        "stray_px": stray_px,
         "contrast_on_body": None if not (g & bare).any() else round(float(np.median(dbg[g & bare])), 2),
     }
     return g, info
@@ -451,7 +539,7 @@ def stills_garment_masks(scene: JobScene) -> dict[str, dict[str, Any]]:
 # --- reference: pinned stills carried to every camera through a visual hull -------------------------------
 
 
-REFERENCE_DEFAULTS = {"voxel_m": 0.01, "envelope_px": 10, "carve_every": 2, "splat_px": 2}
+REFERENCE_DEFAULTS = {"voxel_m": 0.01, "envelope_px": 4, "carve_every": 2, "splat_px": 2}
 
 
 def garment_reference(scene: JobScene, stills: Mapping[str, Mapping[str, Any]], params: Mapping[str, float] | None = None) -> dict[str, Any]:
@@ -521,72 +609,118 @@ def runs(row: np.ndarray) -> list[tuple[int, int]]:
     return list(zip(np.nonzero(d == 1)[0].tolist(), np.nonzero(d == -1)[0].tolist()))
 
 
-def leg_rows(bare: np.ndarray) -> tuple[int, int, int, int] | None:
-    """Rows and columns where our bare mannequin's legs stand apart: (y0, y1, x0, x1), y1 exclusive, from
-    the first row below the torso where the silhouette within the central columns splits into two runs
-    down to the last such row. None in a side view (the legs overlap)."""
+def leg_rows(bare: np.ndarray, min_rows: int = 4) -> tuple[int, int, int, int] | None:
+    """Rows and columns where our bare mannequin's legs stand apart: (y0, y1, x0, x1), y1 exclusive. A leg
+    row has background on the body axis (the middle of the lowest third of the silhouette, where only the
+    legs are) between two runs; the hands beside the hips do not count, since the hips cover the axis
+    there. None when fewer than `min_rows` such rows exist (side views: the legs overlap)."""
     bare = np.asarray(bare, dtype=bool)
     rows = np.nonzero(bare.any(axis=1))[0]
     if len(rows) == 0:
         return None
-    top, bottom = rows[0], rows[-1] + 1
-    hip = top + int(0.45 * (bottom - top))
+    top, bottom = int(rows[0]), int(rows[-1]) + 1
+    low = bare[top + 2 * (bottom - top) // 3:bottom]
+    xs = np.nonzero(low.any(axis=0))[0]
+    axis = int(round((xs[0] + xs[-1]) / 2))
     split = []
-    for y in range(hip, bottom):
-        rr = runs(bare[y])
-        if len(rr) < 2:
+    for y in range(top + (bottom - top) // 3, bottom):
+        if bare[y, axis]:
             continue
-        # The two runs nearest the body axis (the median column of the lower body) must flank it.
-        xs = np.nonzero(bare[hip:bottom].any(axis=0))[0]
-        axis = (xs[0] + xs[-1]) / 2
+        rr = runs(bare[y])
         left = [r for r in rr if r[1] <= axis]
-        right = [r for r in rr if r[0] >= axis]
+        right = [r for r in rr if r[0] > axis]
         if left and right:
             split.append((y, left[-1][0], right[0][1]))
-    if len(split) < 4:
+    if len(split) < min_rows:
         return None
-    ys = [s[0] for s in split]
-    return ys[0], ys[-1] + 1, min(s[1] for s in split), max(s[2] for s in split)
+    # The longest stretch of consecutive leg rows (from the crotch down to the feet).
+    best, cur = [split[0]], [split[0]]
+    for s0, s1 in zip(split, split[1:]):
+        cur = cur + [s1] if s1[0] == s0[0] + 1 else [s1]
+        if len(cur) > len(best):
+            best = cur
+    if len(best) < min_rows:
+        return None
+    return best[0][0], best[-1][0] + 1, min(s[1] for s in best), max(s[2] for s in best)
 
 
-def gap_profile(garment: np.ndarray, reference: np.ndarray, legs: tuple[int, int, int, int] | None) -> dict[str, int]:
-    """Within the leg rows (and columns): rows where the reference is one closed run but the garment splits
-    into two or more with a gap of >= 2 px (`leg_gap_rows`, a dress or skirt turning into trousers), and rows
-    where the reference has two runs but the garment one (`merged_leg_rows`, trousers turning into a skirt).
-    Rows count only where both cover the leg columns at all."""
-    out = {"leg_gap_rows": 0, "merged_leg_rows": 0, "leg_zone_rows": 0}
+def gap_profile(garment: np.ndarray, reference: np.ndarray, legs: tuple[int, int, int, int] | None, axis: int | None = None) -> dict[str, int]:
+    """Within the leg rows: rows where the reference covers the body axis (between the legs) but the garment
+    leaves it open with garment on both sides (`leg_gap_rows`: a dress or skirt drawn as trousers), and rows
+    where the reference leaves the axis open between two legs but the garment covers it (`merged_leg_rows`:
+    trousers drawn as a skirt). `leg_zone_rows` counts the leg rows where either covers the leg columns.
+
+    The skirt zone is the leg rows where the reference covers the body axis: from the crotch down to the
+    reference's hem, where a dress or skirt is one closed volume and trousers are two. `skirt_zone_rows`
+    counts them; `skirt_zone_ref_px` / `skirt_zone_cover_px` are the reference pixels in those rows and how
+    many of them the garment covers. Trousers drawn with touching legs leave no background gap on the axis
+    (run 10: at most 13 gap rows), but they are narrower than the dress there, which this measures."""
+    out = {"leg_gap_rows": 0, "merged_leg_rows": 0, "leg_zone_rows": 0, "skirt_zone_rows": 0, "skirt_zone_ref_px": 0, "skirt_zone_cover_px": 0}
     if legs is None:
         return out
     y0, y1, x0, x1 = legs
+    ax = (x0 + x1) // 2 if axis is None else axis
     for y in range(y0, y1):
-        g = runs(garment[y, x0:x1])
-        r = runs(reference[y, x0:x1])
-        if not g or not r:
+        g, r = garment[y], reference[y]
+        if r[ax]:
+            out["skirt_zone_rows"] += 1
+            out["skirt_zone_ref_px"] += int(r.sum())
+            out["skirt_zone_cover_px"] += int((g & r).sum())
+        if not (g[x0:x1].any() or r[x0:x1].any()):
             continue
         out["leg_zone_rows"] += 1
-        g_gap = len(g) >= 2 and max(b[0] - a[1] for a, b in zip(g, g[1:])) >= 2
-        r_gap = len(r) >= 2 and max(b[0] - a[1] for a, b in zip(r, r[1:])) >= 2
-        if g_gap and not r_gap:
+        g_both = g[x0:ax].any() and g[ax + 1:x1].any()
+        r_both = r[x0:ax].any() and r[ax + 1:x1].any()
+        if r[ax] and not g[ax] and g_both:
             out["leg_gap_rows"] += 1
-        elif r_gap and not g_gap:
+        elif r_both and not r[ax] and g[ax]:
             out["merged_leg_rows"] += 1
     return out
 
 
+# Measured on CPU on run 11a (no frame drifted) and on run 10's clips scored against run 11a's scene (the dress
+# drawn as trousers between the pinned frames); one product, so every value here is PROVISIONAL until a second
+# product or run is scored. Row and pixel counts are for 480x832 frames: `scaled_thresholds` scales them.
 CONSISTENCY_V2_THRESHOLDS: dict[str, float] = {
-    # Turntable frames, against the pinned stills carried by the camera (see the README for how these were
-    # set on run 11a, where no frame drifted, and run 10, where the dress became trousers between the
-    # pinned frames).
-    "min_garment_iou": 0.80,
-    # Motion frames (posed, no hull): against the posed proxy, a loose envelope only.
-    "min_envelope_cover": 0.75,
-    # Drift checks, share of the leg rows.
-    "max_leg_gap_frac": 0.15,
+    # Turntable frames, against the pinned stills carried by the camera. Run 11a turntable min 0.852 (margin
+    # about 0.03); run 10 frames 10-15 past a pinned still score 0.82-0.87 and pass this, so the skirt-zone
+    # check below carries those.
+    "min_garment_iou": 0.82,
+    # Dress/skirt, turntable and motion: share of the reference covered in the skirt zone (crotch to the
+    # reference hem). Run 11a min 0.962 over 98 frames with a skirt zone; run 10's borderline frames: a10
+    # 0.875, b89 0.814, b93 0.782, b95 0.768, b142 0.798, a68 0.766.
+    "min_skirt_cover": 0.90,
+    "min_skirt_zone_rows": 20,  # below this the skirt zone is a few rows at a side view: not checked
+    # Motion frames (posed, no hull): against the posed proxy, a loose envelope.
+    "min_envelope_cover": 0.82,  # run 11a motion min 0.848; run 10 motion median 0.808
+    # ... and the other side: garment pixels outside the posed proxy dilated by `envelope_out_px`, as a share
+    # of the garment (a longer or wider garment than the proxy, a scale jump, a prop merged into the garment).
+    "max_outside_envelope": 0.10,
+    "envelope_out_px": 12,
+    # Leg drift checks: absolute rows (run 11a: at most 2 gap rows; run 10: up to 13) and a share of the
+    # skirt zone (dress/skirt) or of the leg rows (trousers).
+    "min_leg_gap_rows": 4,
+    "max_leg_gap_frac": 0.03,
     "max_merged_leg_frac": 0.15,
+    "min_drift_rows": 3,  # merged-leg check: at least this many rows
+    # Strong foreground outside the loose envelope (text, logos), share of the frame.
+    "max_stray_frac": 0.0005,
 }
 
+_ROW_THRESHOLDS = ("min_skirt_zone_rows", "min_leg_gap_rows", "min_drift_rows", "envelope_out_px")
 
-def frame_garment_consistency(garment: np.ndarray, reference: np.ndarray, bare: np.ndarray, *, kind: str, reference_kind: str) -> dict[str, Any]:
+
+def scaled_thresholds(height: int, thresholds: Mapping[str, float] | None = None) -> dict[str, float]:
+    """The thresholds for frames `height` pixels tall (the defaults are for 832)."""
+    t = {**CONSISTENCY_V2_THRESHOLDS, **(thresholds or {})}
+    f = height / 832.0
+    for k in _ROW_THRESHOLDS:
+        if thresholds is None or k not in thresholds:
+            t[k] = max(1, int(round(t[k] * f)))
+    return t
+
+
+def frame_garment_consistency(garment: np.ndarray, reference: np.ndarray, bare: np.ndarray, *, kind: str, reference_kind: str, envelope_out_px: int | None = None) -> dict[str, Any]:
     """One generated frame's garment mask against its reference (`reference_kind`: 'pinned hull' or 'proxy
     envelope'). `kind` is the proxy kind (dress, skirt, trousers, top, outerwear)."""
     g = np.asarray(garment, dtype=bool)
@@ -597,19 +731,24 @@ def frame_garment_consistency(garment: np.ndarray, reference: np.ndarray, bare: 
     gp = gap_profile(g, r, legs)
     hem = lambda m: None if not m.any() else int(np.nonzero(m.any(axis=1))[0][-1])  # noqa: E731
     gh, rh = hem(g), hem(r)
+    out_px = CONSISTENCY_V2_THRESHOLDS["envelope_out_px"] * g.shape[0] / 832.0 if envelope_out_px is None else envelope_out_px
+    outside = int((g & ~dilate(r, max(1, int(round(out_px))))).sum())
     return {
         "reference": reference_kind,
         "garment_px": gn,
         "garment_iou": round(iou(g, r), 4),
         "reference_cover": None if rn == 0 else round(inter / rn, 4),
         "garment_inside": None if gn == 0 else round(inter / gn, 4),
+        "outside_envelope": None if gn == 0 else round(outside / gn, 4),
         "hem_offset_px": None if gh is None or rh is None else gh - rh,
-        **gp,
+        **{k: v for k, v in gp.items() if not k.startswith("skirt_zone_") or k == "skirt_zone_rows"},
+        "skirt_cover": None if gp["skirt_zone_ref_px"] == 0 else round(gp["skirt_zone_cover_px"] / gp["skirt_zone_ref_px"], 4),
         "drift_visible": legs is not None,
     }
 
 
 def garment_flags(row: Mapping[str, Any], kind: str, thresholds: Mapping[str, float] | None = None) -> list[str]:
+    """Garment drift of one frame. `thresholds` as `scaled_thresholds` gives them for the frame size."""
     t = {**CONSISTENCY_V2_THRESHOLDS, **(thresholds or {})}
     out: list[str] = []
     if row["garment_px"] == 0:
@@ -617,35 +756,50 @@ def garment_flags(row: Mapping[str, Any], kind: str, thresholds: Mapping[str, fl
     if row["reference"] == "pinned hull":
         if row["garment_iou"] < t["min_garment_iou"]:
             out.append(f"garment IoU vs the pinned stills {row['garment_iou']:.3f} < {t['min_garment_iou']}")
-    elif row["reference_cover"] is not None and row["reference_cover"] < t["min_envelope_cover"]:
-        out.append(f"posed proxy covered {row['reference_cover']:.3f} < {t['min_envelope_cover']}")
+    else:
+        if row["reference_cover"] is not None and row["reference_cover"] < t["min_envelope_cover"]:
+            out.append(f"posed proxy covered {row['reference_cover']:.3f} < {t['min_envelope_cover']}")
+        if row.get("outside_envelope") is not None and row["outside_envelope"] > t["max_outside_envelope"]:
+            out.append(f"{row['outside_envelope']:.3f} of the garment outside the posed proxy envelope > {t['max_outside_envelope']} "
+                       "(a larger or longer garment, a scale jump, or a prop merged into it)")
+    skirt_rows = row.get("skirt_zone_rows") or 0
+    if kind in ("dress", "skirt") and skirt_rows >= t["min_skirt_zone_rows"]:
+        if row.get("skirt_cover") is not None and row["skirt_cover"] < t["min_skirt_cover"]:
+            out.append(f"skirt zone covered {row['skirt_cover']:.3f} < {t['min_skirt_cover']} (narrower than the reference below the crotch: trousers or a narrower garment)")
+        if row["leg_gap_rows"] >= t["min_leg_gap_rows"] and row["leg_gap_rows"] / skirt_rows > t["max_leg_gap_frac"]:
+            out.append(f"gap between the legs in {row['leg_gap_rows']}/{skirt_rows} skirt-zone rows (dress/skirt drawn as trousers)")
     zone = row.get("leg_zone_rows") or 0
-    if zone:
-        if kind in ("dress", "skirt") and row["leg_gap_rows"] / zone > t["max_leg_gap_frac"]:
-            out.append(f"gap between the legs in {row['leg_gap_rows']}/{zone} leg rows (dress/skirt drawn as trousers)")
-        if kind == "trousers" and row["merged_leg_rows"] / zone > t["max_merged_leg_frac"]:
-            out.append(f"legs merged in {row['merged_leg_rows']}/{zone} leg rows (trousers drawn as a skirt)")
+    if zone and kind == "trousers" and row["merged_leg_rows"] >= t["min_drift_rows"] and row["merged_leg_rows"] / zone > t["max_merged_leg_frac"]:
+        out.append(f"legs merged in {row['merged_leg_rows']}/{zone} leg rows (trousers drawn as a skirt)")
     return out
+
+
+def artefact_flags(row: Mapping[str, Any], thresholds: Mapping[str, float] | None = None) -> list[str]:
+    """Problems of the frame that are not garment drift: strong foreground outside the loose envelope
+    (text, a logo, props such as the blocks run 11a drew around the feet in the motion clip)."""
+    t = {**CONSISTENCY_V2_THRESHOLDS, **(thresholds or {})}
+    if row.get("stray_frac") is not None and row["stray_frac"] > t["max_stray_frac"]:
+        return [f"foreground outside the garment envelope on {row['stray_frac']:.4f} of the frame (text, logo or prop)"]
+    return []
 
 
 CONSISTENCY_V2_LABEL = (
     "garment consistency v2: each generated frame's garment (segmented against our own bare mannequin and a "
     "background model) vs the pinned front/back stills carried to that camera through a visual hull (the "
     "proxy only bounds the depth the two stills cannot see); motion frames vs the posed proxy as a loose "
-    "envelope. Drift checks: a gap between the legs for a dress or skirt, merged legs for trousers, only in "
-    "frames where our mannequin's legs stand apart (`drift_visible`). A drift check, not a measurement of the "
+    "envelope, both ways (proxy covered, garment outside it). Drift checks: for a dress or skirt the share of "
+    "the reference covered below the crotch (`skirt_cover`) and a gap between the legs, for trousers merged "
+    "legs, only in frames where our mannequin's legs stand apart (`drift_visible`). Thresholds are provisional "
+    "(one product). A drift check, not a measurement of the "
     "garment. A garment the colour of the grey mannequin cannot be told from it by colour "
     "(`ambiguous_with_mannequin`): on the body the proxy is used instead."
 )
 
 
-def score_job(job_dir: str, manifest: Mapping[str, Any], clip_ids: Sequence[str] | None = None, *, thresholds: Mapping[str, float] | None = None, write_masks: str | None = None, frames_dir: str | None = None) -> dict[str, Any]:
-    """Consistency v2 for every generated clip frame of a job (stage2/clips/<clip>/NNNN.png), plus the
-    garment masks of the assembled turntable (stage2/frames) when `frames_dir` is given; masks are written
-    to `write_masks`/NNNN.png (the stage 4 alpha targets). Returns the `consistency` block."""
+def score_job(job_dir: str, manifest: Mapping[str, Any], clip_ids: Sequence[str] | None = None, *, thresholds: Mapping[str, float] | None = None) -> dict[str, Any]:
+    """Consistency v2 for every generated clip frame of a job (stage2/clips/<clip>/NNNN.png). Returns the
+    `consistency` block for stage2/record.json."""
     import time
-
-    from PIL import Image
 
     t0 = time.time()
     scene = JobScene(job_dir, manifest)
@@ -653,7 +807,7 @@ def score_job(job_dir: str, manifest: Mapping[str, Any], clip_ids: Sequence[str]
     kind = proxy_spec.get("kind") or {"dress": "dress", "top": "top", "outerwear": "outerwear"}.get(manifest.get("category"), "dress")
     stills = stills_garment_masks(scene)
     ref = garment_reference(scene, stills)
-    t = {**CONSISTENCY_V2_THRESHOLDS, **(thresholds or {})}
+    t = scaled_thresholds(scene.height, thresholds)
     wanted = set(clip_ids) if clip_ids is not None else None
     rows: list[dict[str, Any]] = []
     ref_cache: dict[int, np.ndarray] = {}
@@ -675,30 +829,22 @@ def score_job(job_dir: str, manifest: Mapping[str, Any], clip_ids: Sequence[str]
             else:
                 pr = scene.proxy(ckind, idx)
                 reference, rk = (pr if pr is not None else scene.control(ckind, idx)), "proxy envelope"
-            row = {"clip": clip["id"], "j": j, "frame": idx, **frame_garment_consistency(g, reference, bare, kind=kind, reference_kind=rk),
-                   "ambiguous_with_mannequin": info["ambiguous_with_mannequin"], "contrast_off_body": info["contrast_off_body"]}
+            row = {"clip": clip["id"], "j": j, "frame": idx, **frame_garment_consistency(g, reference, bare, kind=kind, reference_kind=rk, envelope_out_px=int(t["envelope_out_px"])),
+                   "ambiguous_with_mannequin": info["ambiguous_with_mannequin"], "contrast_off_body": info["contrast_off_body"],
+                   "stray_frac": round(info["stray_px"] / rgb.shape[0] / rgb.shape[1], 5)}
             row["reasons"] = garment_flags(row, kind, t)
             row["flagged"] = bool(row["reasons"])
+            row["artefacts"] = artefact_flags(row, t)
             rows.append(row)
-    masks_written = 0
-    if frames_dir and write_masks:
-        os.makedirs(write_masks, exist_ok=True)
-        for idx in sorted(scene.w2c):
-            path = os.path.join(frames_dir, f"{idx:04d}.png")
-            if not os.path.exists(path):
-                continue
-            g, _ = scene.segment(_read_rgb(path), "turntable", idx)
-            Image.fromarray((g * 255).astype(np.uint8)).save(os.path.join(write_masks, f"{idx:04d}.png"))
-            masks_written += 1
     return consistency_v2_summary(rows, kind=kind, thresholds=t, stills={v: {"frame": s["frame"], "source": s["source"]} for v, s in stills.items()},
                                   bare_source=dict(scene.bare_source), reference={"voxels": int(len(ref["points"])), "voxel_m": ref["voxel_m"], "pinned_frames": ref["pinned_frames"], "carved_frames": len(ref["carved_frames"])},
-                                  masks_written=masks_written, seconds=round(time.time() - t0, 1))
+                                  seconds=round(time.time() - t0, 1))
 
 
 def consistency_v2_summary(rows: Sequence[Mapping[str, Any]], *, kind: str, thresholds: Mapping[str, float], **extra: Any) -> dict[str, Any]:
     def stats(rs: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-        out: dict[str, Any] = {"frames": len(rs), "flagged": sum(1 for r in rs if r["flagged"])}
-        for k in ("garment_iou", "reference_cover", "garment_inside"):
+        out: dict[str, Any] = {"frames": len(rs), "flagged": sum(1 for r in rs if r["flagged"]), "artefacts": sum(1 for r in rs if r.get("artefacts"))}
+        for k in ("garment_iou", "reference_cover", "garment_inside", "outside_envelope", "skirt_cover"):
             vals = [r[k] for r in rs if r.get(k) is not None]
             out[k] = None if not vals else {"min": round(min(vals), 4), "mean": round(sum(vals) / len(vals), 4)}
         return out
@@ -713,10 +859,12 @@ def consistency_v2_summary(rows: Sequence[Mapping[str, Any]], *, kind: str, thre
         "segmentation": GARMENT_SEGMENT_VERSION,
         "proxy_kind": kind,
         "thresholds": dict(thresholds),
-        "thresholds_note": "set on run 11a (no drift) and run 10 (dress drawn as trousers), CPU, see modal/README.md",
+        "thresholds_note": "PROVISIONAL: set on one product, run 11a (no drift) and run 10 (dress drawn as trousers), CPU; margins about 0.03 (garment IoU) and 0.06 (skirt cover); see modal/README.md",
         **stats(rows),
         "per_clip": {c: stats(rs) for c, rs in clips.items()},
         "flagged_frames": flagged,
+        # Not garment drift, reported apart: text, logos, props outside the envelope.
+        "artefact_frames": [{**ref(r), "reasons": r["artefacts"]} for r in rows if r.get("artefacts")],
         "blind_frames": [ref(r) for r in rows if not r["drift_visible"]],
         "ambiguous_frames": [ref(r) for r in rows if r.get("ambiguous_with_mannequin")],
         "pass": not flagged,
@@ -724,3 +872,165 @@ def consistency_v2_summary(rows: Sequence[Mapping[str, Any]], *, kind: str, thre
         **extra,
         "frames_detail": list(rows),
     }
+
+
+# --- stage 4 alpha targets ---------------------------------------------------------------------------------
+
+STAGE2_MASK_DIR = "stage2/garment_mask"
+STAGE4_MASK_SOURCES = ("garment", "foreground")
+
+
+MASK_RECORD = "record.json"
+
+
+def file_set_sha256(paths: Sequence[str]) -> str:
+    """One sha256 over a set of files: each file's base name and the sha256 of its bytes, in the given order."""
+    import hashlib
+
+    h = hashlib.sha256()
+    for p in paths:
+        with open(p, "rb") as f:
+            h.update(os.path.basename(p).encode("utf-8") + b"\0" + hashlib.sha256(f.read()).digest())
+    return h.hexdigest()
+
+
+def mask_set_hashes(job_dir: str, ids: Sequence[int], *, frames_dir: str = "stage2/frames", out_dir: str = STAGE2_MASK_DIR) -> dict[str, Any]:
+    """The hashes that tie a mask set to the frames it was segmented from (job-relative dirs, NNNN.png)."""
+    ids = sorted(int(i) for i in ids)
+    return {
+        "frames_dir": frames_dir,
+        "frames_sha256": file_set_sha256([os.path.join(job_dir, frames_dir, f"{i:04d}.png") for i in ids]),
+        "masks_sha256": file_set_sha256([os.path.join(job_dir, out_dir, f"{i:04d}.png") for i in ids]),
+        "frame_ids": [ids[0], ids[-1], len(ids)] if ids else [],
+    }
+
+
+def write_turntable_masks(job_dir: str, manifest: Mapping[str, Any], *, frames_dir: str = "stage2/frames", out_dir: str = STAGE2_MASK_DIR, params: Mapping[str, float] | None = None) -> dict[str, Any]:
+    """Garment masks of the assembled turntable (stage 4's alpha targets for source stage2), 8-bit 0/255,
+    one per camera, into `out_dir` (job-relative), and `out_dir`/record.json: the segmentation version and
+    the sha256 of the frame set and of the mask set (`mask_record_check` compares them before a reuse).
+    Returns that record: frames, ambiguous frames, garment px, hashes."""
+    from PIL import Image
+
+    scene = JobScene(job_dir, manifest)
+    os.makedirs(os.path.join(job_dir, out_dir), exist_ok=True)
+    px, ambiguous, low = [], [], []
+    ids = sorted(scene.w2c)
+    for idx in ids:
+        path = os.path.join(job_dir, frames_dir, f"{idx:04d}.png")
+        if not os.path.exists(path):
+            raise FileNotFoundError(path)
+        g, info = scene.segment(_read_rgb(path), "turntable", idx, params)
+        Image.fromarray((g * 255).astype(np.uint8)).save(os.path.join(job_dir, out_dir, f"{idx:04d}.png"))
+        px.append(int(g.sum()))
+        if info["ambiguous_with_mannequin"]:
+            ambiguous.append(idx)
+        c = info["contrast_off_body"]
+        if c is not None:
+            low.append(c)
+    record = {
+        "dir": out_dir,
+        "segmentation": GARMENT_SEGMENT_VERSION,
+        "params": {**SEGMENT_DEFAULTS, **(params or {})},
+        "frames": len(px),
+        "garment_px": {"min": min(px), "mean": round(sum(px) / len(px), 1), "max": max(px)} if px else None,
+        "ambiguous_frames": ambiguous,
+        "contrast_off_body": {"min": round(min(low), 2), "median": round(float(np.median(low)), 2)} if low else None,
+        "bare_source": dict(scene.bare_source),
+        **mask_set_hashes(job_dir, ids, frames_dir=frames_dir, out_dir=out_dir),
+    }
+    with open(os.path.join(job_dir, out_dir, MASK_RECORD), "w") as f:
+        json.dump(record, f, indent=1)
+    return record
+
+
+def mask_record_check(job_dir: str, ids: Sequence[int], *, frames_dir: str = "stage2/frames", out_dir: str = STAGE2_MASK_DIR) -> tuple[dict[str, Any] | None, str | None]:
+    """(record, None) when the masks in `out_dir` can be reused: their record.json names the current
+    segmentation version and the sha256 of the current frames and of the masks on disk. Else (record or
+    None, the reason to segment again): no record, an older segmentation, frames from another stage 2 run
+    (same job id, re-run or --skip-video over older frames), masks changed or missing."""
+    rec_path = os.path.join(job_dir, out_dir, MASK_RECORD)
+    if not os.path.exists(rec_path):
+        return None, "no mask record (masks from before the record, or none)"
+    with open(rec_path) as f:
+        rec = json.load(f)
+    if rec.get("segmentation") != GARMENT_SEGMENT_VERSION:
+        return rec, f"segmentation {rec.get('segmentation')} != {GARMENT_SEGMENT_VERSION}"
+    if rec.get("frames_dir") != frames_dir:
+        return rec, f"masks of {rec.get('frames_dir')}, not {frames_dir}"
+    missing = [i for i in ids if not os.path.exists(os.path.join(job_dir, out_dir, f"{int(i):04d}.png")) or not os.path.exists(os.path.join(job_dir, frames_dir, f"{int(i):04d}.png"))]
+    if missing:
+        return rec, f"{len(missing)} masks or frames missing (first {missing[0]})"
+    now = mask_set_hashes(job_dir, ids, frames_dir=frames_dir, out_dir=out_dir)
+    if now["frames_sha256"] != rec.get("frames_sha256"):
+        return rec, "the frames changed since the masks were written"
+    if now["masks_sha256"] != rec.get("masks_sha256"):
+        return rec, "the masks changed since their record was written"
+    return rec, None
+
+
+def ensure_turntable_masks(job_dir: str, manifest: Mapping[str, Any], ids: Sequence[int], *, frames_dir: str = "stage2/frames", out_dir: str = STAGE2_MASK_DIR, write: Any = None) -> dict[str, Any]:
+    """Stage 4's alpha targets for source stage2: reuses `out_dir` only when `mask_record_check` passes,
+    else segments the frames again (`write`, default `write_turntable_masks`). Returns {record,
+    computed_here, reason} for metrics.json."""
+    rec, why = mask_record_check(job_dir, ids, frames_dir=frames_dir, out_dir=out_dir)
+    if why is None:
+        return {"record": rec, "computed_here": False, "reason": "reused: segmentation version and frame/mask hashes match"}
+    rec = (write or write_turntable_masks)(job_dir, manifest, frames_dir=frames_dir, out_dir=out_dir)
+    return {"record": rec, "computed_here": True, "reason": f"computed here: {why}"}
+
+
+def alpha_target_check(job_dir: str, manifest: Mapping[str, Any], mask_dir: str = STAGE2_MASK_DIR) -> dict[str, Any] | None:
+    """IoU of stage 4's alpha targets with the synthetic truth masks, when the job's stills are the synthetic
+    garment (dry runs): at the pinned frames (0, N/2) the generated frame IS the still, so this is a real
+    check of the segmentation; at the other frames the video model draws its own garment, so the IoU is a
+    loose comparison (it mixes segmentation error with the model's deviation from the synthetic garment).
+    None when the job has no synthetic truth or real stills."""
+    syn = manifest.get("synthetic")
+    if not syn or not all(p.get("synthetic") for p in manifest["photos"] if p.get("role") in ("front", "back")):
+        return None
+    n = int(manifest["camera"]["frames"])
+    vals: dict[int, float] = {}
+    for idx in range(n):
+        a = os.path.join(job_dir, mask_dir, f"{idx:04d}.png")
+        b = os.path.join(job_dir, syn["garment_mask_dir"], f"{idx:04d}.png")
+        if os.path.exists(a) and os.path.exists(b):
+            vals[idx] = round(iou(_read_mask(a), _read_mask(b)), 4)
+    if not vals:
+        return None
+    pinned = {str(i): vals[i] for i in (0, n // 2) if i in vals}
+    v = list(vals.values())
+    return {
+        "pinned_iou": pinned,
+        "all_frames_iou": {"frames": len(v), "min": min(v), "mean": round(sum(v) / len(v), 4), "worst_frame": min(vals, key=vals.get)},
+        "note": "pinned frames: the generated frame is the synthetic still, a real check; other frames: loose (the model's garment is not the synthetic one)",
+    }
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """CPU only, on a downloaded job: garment masks for stage 4, the alpha-target check and consistency v2."""
+    import argparse
+
+    ap = argparse.ArgumentParser(description=main.__doc__)
+    ap.add_argument("job_dir")
+    ap.add_argument("--write-masks", action="store_true", help=f"write {STAGE2_MASK_DIR}/ from stage2/frames")
+    ap.add_argument("--score", action="store_true", help="consistency v2 of stage2/clips (prints the summary, writes stage2/consistency_v2.json)")
+    a = ap.parse_args(argv)
+    with open(os.path.join(a.job_dir, "manifest.json")) as f:
+        m = json.load(f)
+    if a.write_masks:
+        print(json.dumps(write_turntable_masks(a.job_dir, m), indent=1))
+        print(json.dumps(alpha_target_check(a.job_dir, m), indent=1))
+    if a.score:
+        c = score_job(a.job_dir, m)
+        with open(os.path.join(a.job_dir, "stage2", "consistency_v2.json"), "w") as f:
+            json.dump(c, f, indent=1)
+        print(json.dumps({k: v for k, v in c.items() if k not in ("frames_detail", "label")}, indent=1)[:4000])
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    raise SystemExit(main())

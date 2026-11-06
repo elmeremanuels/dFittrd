@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { mockGarment } from '@curtain/schema';
 import { EXPORT_VERSION, PINNED_MODELS, canonicalJson, controlFrame, depthRange, exportJob, inputHash, sha256, turntableClips, type ExportOptions, type Phase0Manifest } from './exportJob';
 import { decodePng } from './exportPng';
-import { NEGATIVE_BASE, SPIKE_PRODUCT_IDS } from './product';
+import { NEGATIVE_BASE, SPIKE_PRODUCT_IDS, garmentSpec } from './product';
 import { render } from './raster';
 import { MANNEQUIN_GREY, MANNEQUIN_ID } from './separation';
 
@@ -189,6 +189,54 @@ describe('control mode (proxy | bare)', () => {
     // Synthetic stills and frames do not depend on the control mode.
     expect(sha256(bytesOf(bare.files.get('photos/front.png')))).toBe(sha256(bytesOf(job.files.get('photos/front.png'))));
     expect(() => run({ ...SMALL_JOB, control: 'depth' as never })).toThrow(/unknown control mode/);
+  });
+});
+
+describe('garment segmentation inputs and the proxy length (export 0.3.0)', () => {
+  const px = (f: Uint8Array | string | undefined): Uint8Array => Uint8Array.from(decodePng(bytesOf(f)).data);
+
+  it('writes the bare mannequin silhouette per frame in proxy mode: what the bare control renders, and it covers the visible mannequin', () => {
+    const m = job.manifest;
+    expect(m.control.bare_mask_dir).toBe('control/bare_mask');
+    expect(m.motion.bare_mask_dir).toBe('motion/bare_mask');
+    const bare = run({ ...SMALL_JOB, control: 'bare' });
+    expect(bare.manifest.control.bare_mask_dir).toBeNull();
+    for (let i = 0; i < 8; i++) {
+      const name = String(i).padStart(4, '0');
+      const b = px(job.files.get(`control/bare_mask/${name}.png`));
+      // Identical to the bare control's silhouette at the same camera.
+      expect(sha256(b)).toBe(sha256(px(bare.files.get(`control/mask/${name}.png`))));
+      const c = px(job.files.get(`control/mask/${name}.png`));
+      const p = px(job.files.get(`control/proxy_mask/${name}.png`));
+      for (let k = 0; k < b.length; k++) if (c[k] && !p[k]) expect(b[k]).toBe(255);
+    }
+    for (let i = 0; i < 5; i++) expect(job.files.has(`motion/bare_mask/${String(i).padStart(4, '0')}.png`)).toBe(true);
+  });
+
+  it('pins no still in the motion clip: the stills are drawn at the turntable camera, not the motion camera', () => {
+    const motion = job.manifest.clips.find((c) => c.id === 'motion')!;
+    expect([motion.first_photo, motion.last_photo]).toEqual([null, null]);
+  });
+
+  it('with synthetic stills, the proxy hem is the synthetic garment hem, also for a product without shoulder_to_hem', () => {
+    const payload = mockGarment('aalter-studio-2');
+    const mq = buildMannequin(bodyShape(BASE_SHAPE_ID));
+    const hps = mq.landmarks.hps[1];
+    // With a chart length both agree already (run 11a: 112 cm, hem 26.6 cm above the floor).
+    const own = run({ ...SMALL_JOB, productId: 'aalter-studio-2' }).manifest.control.proxy!;
+    expect(own.length_source).toMatch(/^shoulder_to_hem 112/);
+    expect(hps - (own.hem_y_cm as number)).toBeCloseTo(112, 1);
+    const { lengthCm: _drop, ...rest } = payload;
+    const noLength = { ...rest } as typeof payload;
+    const product = { id: payload.id, payload: noLength, baseSize: 'M', source: { kind: 'spike' as const } };
+    const synth = garmentSpec(noLength, 'M').shoulderToHemCm;
+    const withStills = run({ ...SMALL_JOB, productId: payload.id, product }).manifest.control.proxy!;
+    expect(withStills.length_source).toMatch(/synthetic stills/);
+    expect(hps - (withStills.hem_y_cm as number)).toBeCloseTo(synth, 1);
+    // Merchant photos: the product's own rule (no length: pattern words or the knee), not the synthetic default.
+    const photo = { role: 'front' as const, ext: 'png', bytes: new Uint8Array([1, 2, 3]), source: 'f.png' };
+    const real = run({ productId: payload.id, product, frames: 8, width: 64, height: 112, motionFrames: 5, photos: [photo, { ...photo, role: 'back' as const, source: 'b.png' }] }).manifest.control.proxy!;
+    expect(real.length_source).not.toMatch(/synthetic stills/);
   });
 });
 

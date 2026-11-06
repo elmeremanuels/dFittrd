@@ -107,6 +107,14 @@ export interface ProxySpec {
   notes: string[];
 }
 
+/** Overrides for a job whose pinned stills show a known garment (the synthetic stills): the proxy's hem must be that garment's, or the control video and the stills disagree on the length. */
+export interface ProxyOptions {
+  /** High point shoulder to hem, cm (dress, top, outerwear; `buildProxy` throws when given for a skirt or trousers). */
+  shoulderToHemCm?: number;
+  /** Where that length comes from, recorded as `length_source`. */
+  lengthSource?: string;
+}
+
 export interface Proxy {
   spec: ProxySpec;
   /** Closed parts in cm, mannequin space: `body` (+ `leg_l`/`leg_r` for trousers, `sleeve_l`/`sleeve_r`), named so `skinWeights` poses them. */
@@ -170,7 +178,7 @@ function ringGirths(m: Mannequin, p: GarmentPayload, kind: ProxyKind, baseSize: 
 
 const round1 = (x: number): number => Math.round(x * 10) / 10;
 
-function hemFor(m: Mannequin, p: GarmentPayload, kind: ProxyKind, topY: number): { hemY: number; lengthCm: number; lengthSource: string } {
+function hemFor(m: Mannequin, p: GarmentPayload, kind: ProxyKind, topY: number, opts: ProxyOptions = {}): { hemY: number; lengthCm: number; lengthSource: string } {
   const len = (p.lengthCm ?? {}) as Partial<Record<string, number>>;
   const hps = m.landmarks.hps[1];
   const waistY = m.morphHeights.waist;
@@ -183,6 +191,10 @@ function hemFor(m: Mannequin, p: GarmentPayload, kind: ProxyKind, topY: number):
     if (/mini|short/i.test(words)) return [(h.thigh + h.knee) / 2 + 4, 'subcategory/pattern "mini": above the knee'];
     return fallback;
   };
+  // The override is a shoulder-to-hem length: it has no meaning for a waist-down kind, so refuse it rather than drop it.
+  if (opts.shoulderToHemCm !== undefined && (kind === 'skirt' || kind === 'trousers')) {
+    throw new Error(`proxy: shoulderToHemCm override given for a ${kind} proxy; it applies to dress, top and outerwear only`);
+  }
   let hemY: number;
   let source: string;
   if (kind === 'trousers') {
@@ -195,6 +207,8 @@ function hemFor(m: Mannequin, p: GarmentPayload, kind: ProxyKind, topY: number):
     if (len.waist_to_hem !== undefined) [hemY, source] = [waistY - len.waist_to_hem, `waist_to_hem ${len.waist_to_hem} cm`];
     else if (len.outseam !== undefined) [hemY, source] = [waistY - len.outseam, `outseam ${len.outseam} cm from the waist`];
     else [hemY, source] = byWord([h.knee, 'no length given: to the knee']);
+  } else if (opts.shoulderToHemCm !== undefined) {
+    [hemY, source] = [hps - opts.shoulderToHemCm, opts.lengthSource ?? `shoulder_to_hem ${opts.shoulderToHemCm} cm (override)`];
   } else {
     if (len.shoulder_to_hem !== undefined) [hemY, source] = [hps - len.shoulder_to_hem, `shoulder_to_hem ${len.shoulder_to_hem} cm`];
     else if (len.waist_to_hem !== undefined) [hemY, source] = [waistY - len.waist_to_hem, `waist_to_hem ${len.waist_to_hem} cm`];
@@ -216,13 +230,13 @@ function sleeveFor(m: Mannequin, p: GarmentPayload, kind: ProxyKind): { sleeveCm
 }
 
 /** The proxy's spec for a product at its base size on our mannequin. */
-export function proxySpec(m: Mannequin, p: GarmentPayload, baseSize: string): ProxySpec {
+export function proxySpec(m: Mannequin, p: GarmentPayload, baseSize: string, opts: ProxyOptions = {}): ProxySpec {
   const kind = proxyKind(p);
   const { girths, girthSource, chartType, notes } = ringGirths(m, p, kind, baseSize);
   const shoulderY = m.morphHeights.shoulder;
   // Lower body: 2 cm above the waist ring, so the ring lies on the shell's side, not on its cap.
   const topY = kind === 'skirt' || kind === 'trousers' ? m.morphHeights.waist + 2 : shoulderY + 0.35 * (m.morphHeights.neck - shoulderY);
-  const { hemY, lengthCm, lengthSource } = hemFor(m, p, kind, topY);
+  const { hemY, lengthCm, lengthSource } = hemFor(m, p, kind, topY, opts);
   const { sleeveCm, sleeveSource } = sleeveFor(m, p, kind);
   let hemFlare: number | null = null;
   if (kind === 'trousers') {
@@ -398,8 +412,8 @@ function sleeves(m: Mannequin, spec: ProxySpec): Part[] {
 }
 
 /** The proxy volume for a product at its base size on our mannequin (closed parts, cm). Deterministic. */
-export function buildProxy(m: Mannequin, p: GarmentPayload, baseSize: string): Proxy {
-  const spec = proxySpec(m, p, baseSize);
+export function buildProxy(m: Mannequin, p: GarmentPayload, baseSize: string, opts: ProxyOptions = {}): Proxy {
+  const spec = proxySpec(m, p, baseSize, opts);
   const parts = spec.kind === 'trousers' ? trouserParts(m, spec) : [bodyShell(m, spec, spec.hemY, { coverLegs: true })];
   parts.push(...sleeves(m, spec));
   return { spec, mesh: mergeParts(parts) };

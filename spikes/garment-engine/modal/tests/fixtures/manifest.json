@@ -1,7 +1,7 @@
 {
   "format": "curtain.phase0.job",
   "format_version": 1,
-  "job_id": "monochrome-03-283322eea377",
+  "job_id": "monochrome-03-e83b43167ca2",
   "product_id": "monochrome-03",
   "product_name": "Heavyweight Boxy Tee",
   "category": "top",
@@ -91,7 +91,7 @@
     "version": "0.1.0",
     "shape": "M",
     "glb": "mannequin.glb",
-    "glb_sha256": "717b821f27e50fc4d94913fe770699a6f444a20db27bf7891cacecb1ab2c93c4",
+    "glb_sha256": "6be890f495d2647b3c0b78fa0ce343e2d6206f1560019140b257d4c3131d1ebf",
     "unit": "m",
     "stature_cm": 168
   },
@@ -163,12 +163,13 @@
       "sleeve_source": "sleeve_length 22 cm",
       "notes": [],
       "glb": "control/proxy.glb",
-      "glb_sha256": "828e75c55a8596423498a65e2b9bb2b905a37606c43b374742966438ec7a91ee"
+      "glb_sha256": "542328d9f8dc2dd7a8dfee54aa643e1c5f5223a3e99b6686c1392953751570ea"
     },
     "depth_mm_dir": "control/depth_mm",
     "depth_vis_dir": "control/depth_vis",
     "mask_dir": "control/mask",
     "proxy_mask_dir": "control/proxy_mask",
+    "bare_mask_dir": "control/bare_mask",
     "near_cm": 259,
     "far_cm": 382,
     "encoding": "mannequin wearing the coarse proxy garment (control signal only, never an output); depth_mm: uint16 mm, 0 = background; depth_vis: uint8, linear in depth, near_cm = 255, far_cm = 1, background 0; mask: 255 = mannequin or proxy; proxy_mask: 255 = proxy visible"
@@ -181,6 +182,7 @@
     "depth_vis_dir": "motion/depth_vis",
     "mask_dir": "motion/mask",
     "proxy_mask_dir": "motion/proxy_mask",
+    "bare_mask_dir": "motion/bare_mask",
     "near_cm": 504,
     "far_cm": 536
   },
@@ -248,7 +250,7 @@
       "mask_dir": "motion/mask",
       "depth_mm_dir": "motion/depth_mm",
       "proxy_mask_dir": "motion/proxy_mask",
-      "first_photo": "front",
+      "first_photo": null,
       "last_photo": null,
       "times_s": [
         0,
@@ -295,9 +297,9 @@
       "licence": "Apache-2.0 (gsplat), MIT (Open3D)"
     }
   },
-  "exporter": "@curtain/garment-spike phase0-export-0.2.0",
+  "exporter": "@curtain/garment-spike phase0-export-0.3.0",
   "hash_inputs": {
-    "exporter": "phase0-export-0.2.0",
+    "exporter": "phase0-export-0.3.0",
     "product": {
       "schemaVersion": 1,
       "id": "monochrome-03",
@@ -459,7 +461,7 @@
         "sleeve_cm": 22,
         "sleeve_source": "sleeve_length 22 cm",
         "notes": [],
-        "glb_sha256": "828e75c55a8596423498a65e2b9bb2b905a37606c43b374742966438ec7a91ee"
+        "glb_sha256": "542328d9f8dc2dd7a8dfee54aa643e1c5f5223a3e99b6686c1392953751570ea"
       }
     },
     "prompt": {
@@ -499,5 +501,5 @@
     },
     "synthetic": true
   },
-  "input_hash": "283322eea3775ce26a456fba66260787255e44327df3f67c677ce874adc3b501"
+  "input_hash": "e83b43167ca2f75248ffd775bab91956e4c0725661a8d863eaa44fc9e22587a4"
 }

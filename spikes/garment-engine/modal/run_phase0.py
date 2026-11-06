@@ -20,6 +20,7 @@ Steps:
 Options: --steps 40 --iterations 10000 --triangles 12000 --skip-video (reuse stage2/ already in the Volume)
          --no-synthetic-recon --control-encoding linear|inverse --no-pin-frames --force-upload
          --dress --dress-engine fashn|qwen --dress-steps N --accept-failed-dress --allow-invented-back --dress-only
+         --stage2-masks garment|foreground (stage 4's alpha targets on the generated frames; recorded)
 Every number this prints about cost is an ESTIMATE (list price x GPU seconds); the Modal invoice is
 the measurement. NOT TESTED on a GPU: the build container cannot reach Modal.
 """
@@ -101,6 +102,7 @@ def main(
     accept_failed_dress: bool = False,
     allow_invented_back: bool = False,
     dress_only: bool = False,
+    stage2_masks: str = "garment",
 ):
     cfg = stage2_video.CFG
     m = pm.load_local_job(job_dir)
@@ -154,10 +156,11 @@ def main(
             print(f"[phase0] stage 2 consistency scoring failed: {e}")
             summary["stage2"]["consistency"] = {"error": str(e)}
 
+    summary["stage4_masks"] = stage2_masks  # stage 4's alpha targets on the generated frames, whatever stage 2 did
     sources = ["stage2"] + ([] if no_synthetic_recon or not m.get("synthetic") else ["synthetic"])
     calls = {}
     for source in sources:
-        calls[source] = (time.time(), stage4_recon.reconstruct.spawn(job_id, source=source, iterations=iterations, triangles=triangles))
+        calls[source] = (time.time(), stage4_recon.reconstruct.spawn(job_id, source=source, iterations=iterations, triangles=triangles, stage2_masks=stage2_masks))
     for source, (t, call) in calls.items():
         try:
             met = call.get()
@@ -166,7 +169,7 @@ def main(
             summary[f"stage4_{source}"] = {"error": str(e)}
             continue
         costs.append(_with_wall(met["cost"], cfg["gpu_recon"], time.time() - t))
-        summary[f"stage4_{source}"] = {k: met[k] for k in ("mask_mode", "psnr_masked", "mask_iou", "mesh", "vs_truth", "seconds")}
+        summary[f"stage4_{source}"] = {k: met.get(k) for k in ("mask_mode", "alpha_targets", "psnr_masked", "mask_iou", "mesh", "vs_truth", "seconds")}
         print(f"[phase0] stage 4 ({source}): {met['mesh']['triangles']} triangles, mask IoU {met['mask_iou']}, vs truth {met['vs_truth']}")
 
     pm.download_dir(job_dir, job_id, "stage2")

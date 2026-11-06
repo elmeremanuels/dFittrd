@@ -298,3 +298,23 @@ Usage, file layout and what is not tested: `spikes/garment-engine/modal/README.m
 - The model may copy the proxy's coarse shape (flare, hem line, no waist definition) instead of the pinned stills. A proxy that is too tight or too loose then becomes the garment's silhouette in the video. The proxy only has to be right in topology (one volume or two legs); its girths come from the chart.
 - In the motion clip the dress proxy moves rigidly with the pelvis, so a stepping leg can push through it.
 - If the drift persists with the proxy, the next options are the VACE-Fun or InP variants, a lower control strength, or the hosted path (shortlist B).
+
+## Stage 2 after run 11: what the numbers meant (2026-11-06)
+
+**What run 11a showed.** With the proxy control and the neutral prompts (export 0.2.0) the dress stayed a dress in every frame and no text appeared. Three numbers said otherwise, each because of our measurement, not the video:
+
+1. **Consistency.** The first metric flagged 233 of 243 frames, the pinned still at frame 0 included. It took every pixel 20 levels off the border colour as "garment" and compared it with the coarse proxy's silhouette; a cream dress on the light-grey studio loses its light parts that way.
+2. **Stage 4 mask IoU 0.84** (run 10: 0.90). Stage 4 trained against the same border-colour foreground. Emulated on CPU at the pinned frames, that target misses 21–25% of the garment.
+3. **The hem.** Measured on the frames, the generated hem is not higher than the truth: the proxy's hem equals the synthetic truth's in all 160 frames (`shoulder_to_hem` 112 cm), and the generated hem lies a median 0.3 cm below it.
+
+**Change (CPU code, export 0.3.0; not yet run on a GPU).**
+
+1. **Garment masks from the scene, not from the frame alone** (`modal/phase0_garment.py`). The exporter now writes the bare mannequin's full silhouette per frame (`control/bare_mask`, `motion/bare_mask`). Inside it a pixel is mannequin or garment, never background, so contrast with the background does not matter there; the mannequin's grey is sampled from the frame's own head. Outside the body a smooth background model (noise about 0.5 levels instead of a 20-level tolerance) finds the garment's edge. Measured on run 11a output (CPU): IoU 0.979 and 0.976 with the synthetic truth at the pinned frames.
+2. **Consistency v2.** Each frame's garment is compared with the pinned front and back stills carried to its camera through a visual hull; the proxy only bounds the depth the two stills cannot see. For a dress or skirt, the share of the reference covered below the crotch (the skirt zone) catches trousers with touching legs, which leave no gap between the legs; the leg-gap check counts rows against that zone. Motion frames are checked both ways against the posed proxy (covered, and garment outside it). Text and props are reported apart. Measured on CPU: run 11a 0/162 turntable frames flagged and 17/81 motion frames (its scale jump, and blocks at the feet merged into the garment), against 233/243 with v1; run 10 202/243 (v1: 243/243), including frames 20, 60 and 100 and 31 turntable frames the IoU alone let through.
+3. **Stage 4 alpha targets** default to these garment masks (`--stage2-masks garment|foreground`, recorded in `metrics.json`).
+4. **Proxy length.** The hem already followed the product length; with synthetic stills and no product length, the proxy now takes the synthetic garment's length so control and stills agree.
+5. **Motion clip.** Run 11a's motion clip drew blocks around the feet in every frame and started with the front still drawn at the turntable camera (320 cm) while the motion camera stands at 520 cm. Export 0.3.0 no longer pins that still in the motion clip.
+
+Numbers and usage: `spikes/garment-engine/modal/README.md`, section "Stage 2 after run 11".
+
+**Risks.** The thresholds are set on one product and are provisional: run 11a's worst turntable frame clears the IoU threshold by about 0.03 and the skirt-zone threshold by about 0.06. Stage 4's masks are tied to their frames by sha256 and re-segmented when they do not match. The thresholds are set on one product, the visual hull uses only two stills, and a garment the colour of the grey mannequin cannot be told from it by colour (recorded per frame). The stage 4 effect of the new masks needs the next GPU run.

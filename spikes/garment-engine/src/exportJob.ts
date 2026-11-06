@@ -14,6 +14,8 @@
  *                            src/proxy.ts) or the bare mannequin (`--control bare`)
  *   control/depth_vis/       the same depth as the control video frames: 8-bit, near bright, 0 = background
  *   control/mask/            the control silhouette (mannequin + proxy), 8-bit 0/255
+ *   control/bare_mask/       proxy only (since 0.3.0): the bare mannequin's full silhouette, not occluded
+ *                            by the proxy; stage 2/4 segment the garment of a generated frame against it
  *   control/proxy_mask/      proxy only: where the proxy is visible (the garment zone stage 2's
  *                            consistency metric checks), 8-bit 0/255
  *   control/proxy.glb        proxy only: the proxy volume, metres (a control signal, never an output)
@@ -60,12 +62,17 @@ import { generateGarment } from './garment';
 import { encodePng } from './exportPng';
 import { cameraBasis, opencvCamerasJson, transformsJson } from './exportPoses';
 import { garmentSpec, materialJson, promptColour, resolveSpikeProduct, videoPrompt, type ProductSource, type ResolvedProduct, type VideoPrompt } from './product';
-import { CONTROL_MODES, buildProxy, proxyRecord, proxySpec, type ControlMode, type Proxy } from './proxy';
+import { CONTROL_MODES, buildProxy, proxyRecord, proxySpec, type ControlMode, type Proxy, type ProxyOptions } from './proxy';
 import { hexToRgb, render, type DrawItem, type Render } from './raster';
 import { GARMENT_ID, MANNEQUIN_GREY, MANNEQUIN_ID } from './separation';
 
-/** 0.2.0: control proxy (`control.mode`), neutral prompts (`prompt`), shop products (`product_source`); all three are hashed. */
-export const EXPORT_VERSION = 'phase0-export-0.2.0';
+/**
+ * 0.2.0: control proxy (`control.mode`), neutral prompts (`prompt`), shop products (`product_source`); all three are hashed.
+ * 0.3.0: the bare mannequin's silhouette per frame (`control.bare_mask_dir`, `motion.bare_mask_dir`), no still pinned in the
+ * motion clip, and with synthetic stills the proxy takes the synthetic garment's length (`length_source: "synthetic stills: …"`).
+ * The version is hashed, so a re-export changes the job id (run 11a's `aalter-studio-2-28080a938e84` was 0.2.0).
+ */
+export const EXPORT_VERSION = 'phase0-export-0.3.0';
 /** Id of the control proxy in the rasterizer's id buffer. */
 export const PROXY_ID = 3;
 /** Albedo of the proxy where it is rendered for a picture (the control frames only use depth and ids). */
@@ -267,11 +274,13 @@ export interface Phase0Manifest {
     depth_vis_dir: string;
     mask_dir: string;
     proxy_mask_dir: string | null;
+    /** Proxy mode: the bare mannequin's full silhouette per frame (control/mask holds mannequin + proxy). Bare mode: null (control/mask is it). */
+    bare_mask_dir: string | null;
     near_cm: number;
     far_cm: number;
     encoding: string;
   };
-  motion: { clip_id: string; radius_cm: number; camera: string; depth_mm_dir: string; depth_vis_dir: string; mask_dir: string; proxy_mask_dir: string | null; near_cm: number; far_cm: number };
+  motion: { clip_id: string; radius_cm: number; camera: string; depth_mm_dir: string; depth_vis_dir: string; mask_dir: string; proxy_mask_dir: string | null; bare_mask_dir: string | null; near_cm: number; far_cm: number };
   /** Stage 2 prompts (hashed): neutral description, never the product title or brand. */
   prompt: VideoPrompt;
   clips: ManifestClip[];
@@ -492,8 +501,16 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
   const bareItem: DrawItem = { positions: body.positions, indices: body.indices, color: MANNEQUIN_GREY, id: MANNEQUIN_ID };
 
   // Control proxy: the mannequin wears a coarse closed garment volume in the control video (src/proxy.ts).
-  const pSpec = proxySpec(mannequin, payload, baseSize);
-  const proxy: Proxy | null = control === 'proxy' ? buildProxy(mannequin, payload, baseSize) : null;
+  // With synthetic stills the pinned frames show the synthetic garment, so the proxy's hem is that
+  // garment's (a product without shoulder_to_hem would otherwise get the proxy's own default length).
+  const proxyOpts: ProxyOptions = {};
+  if (options.syntheticPhotos && syntheticSupported) {
+    const own = (payload.lengthCm as Partial<Record<string, number>> | undefined)?.shoulder_to_hem;
+    const synth = garmentSpec(payload, baseSize).shoulderToHemCm;
+    if (own !== synth) Object.assign(proxyOpts, { shoulderToHemCm: synth, lengthSource: `synthetic stills: the synthetic garment's shoulder_to_hem ${synth} cm` });
+  }
+  const pSpec = proxySpec(mannequin, payload, baseSize, proxyOpts);
+  const proxy: Proxy | null = control === 'proxy' ? buildProxy(mannequin, payload, baseSize, proxyOpts) : null;
   const proxyItem: DrawItem | null = proxy ? { positions: proxy.mesh.positions, indices: proxy.mesh.indices, color: PROXY_GREY, id: PROXY_ID } : null;
   const controlItems: DrawItem[] = proxyItem ? [bareItem, proxyItem] : [bareItem];
   const prompt = videoPrompt(mannequin, payload, pSpec);
@@ -593,7 +610,12 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
     put(`control/depth_mm/${pad4(f.index)}.png`, grey(width, height, c.depthMm, 16));
     put(`control/depth_vis/${pad4(f.index)}.png`, grey(width, height, c.depthVis));
     put(`control/mask/${pad4(f.index)}.png`, grey(width, height, c.mask));
-    if (proxy) put(`control/proxy_mask/${pad4(f.index)}.png`, grey(width, height, idMask(r, PROXY_ID)));
+    if (proxy) {
+      put(`control/proxy_mask/${pad4(f.index)}.png`, grey(width, height, idMask(r, PROXY_ID)));
+      // The bare mannequin's full silhouette (not occluded by the proxy): stage 2/4 segment the garment
+      // of a generated frame against it (modal/phase0_garment.py).
+      put(`control/bare_mask/${pad4(f.index)}.png`, grey(width, height, idMask(render([bareItem], f, width, height), MANNEQUIN_ID)));
+    }
   }
   put('cameras_opencv.json', json(opencvCamerasJson(path, width, height)));
   put('transforms.json', json(transformsJson(path, width, height, { image: (i) => `frames/${pad4(i)}.png` })));
@@ -623,7 +645,10 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
     put(`motion/depth_mm/${pad4(i)}.png`, grey(width, height, c.depthMm, 16));
     put(`motion/depth_vis/${pad4(i)}.png`, grey(width, height, c.depthVis));
     put(`motion/mask/${pad4(i)}.png`, grey(width, height, c.mask));
-    if (proxy) put(`motion/proxy_mask/${pad4(i)}.png`, grey(width, height, idMask(r, PROXY_ID)));
+    if (proxy) {
+      put(`motion/proxy_mask/${pad4(i)}.png`, grey(width, height, idMask(r, PROXY_ID)));
+      put(`motion/bare_mask/${pad4(i)}.png`, grey(width, height, idMask(render([{ ...bareItem, positions: pos.body }], cam, width, height), MANNEQUIN_ID)));
+    }
   });
   put('motion/cameras_opencv.json', json(opencvCamerasJson({ id: 'motion', frames: [cam] }, width, height)));
 
@@ -703,17 +728,18 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
       depth_vis_dir: 'control/depth_vis',
       mask_dir: 'control/mask',
       proxy_mask_dir: proxyMaskDir,
+      bare_mask_dir: proxy ? 'control/bare_mask' : null,
       near_cm: range.nearCm,
       far_cm: range.farCm,
       encoding:
         `${control === 'proxy' ? 'mannequin wearing the coarse proxy garment (control signal only, never an output)' : 'bare mannequin'}; ` +
         'depth_mm: uint16 mm, 0 = background; depth_vis: uint8, linear in depth, near_cm = 255, far_cm = 1, background 0; mask: 255 = mannequin or proxy; proxy_mask: 255 = proxy visible',
     },
-    motion: { clip_id: MOTION_CLIP.id, radius_cm: motionRadiusCm, camera: 'motion/cameras_opencv.json', depth_mm_dir: 'motion/depth_mm', depth_vis_dir: 'motion/depth_vis', mask_dir: 'motion/mask', proxy_mask_dir: proxy ? 'motion/proxy_mask' : null, near_cm: mNear, far_cm: mFar },
+    motion: { clip_id: MOTION_CLIP.id, radius_cm: motionRadiusCm, camera: 'motion/cameras_opencv.json', depth_mm_dir: 'motion/depth_mm', depth_vis_dir: 'motion/depth_vis', mask_dir: 'motion/mask', proxy_mask_dir: proxy ? 'motion/proxy_mask' : null, bare_mask_dir: proxy ? 'motion/bare_mask' : null, near_cm: mNear, far_cm: mFar },
     prompt,
     clips: [
       ...clips.map((c) => ({ ...c, kind: 'turntable' as const, fps, control_dir: 'control/depth_vis', mask_dir: 'control/mask', depth_mm_dir: 'control/depth_mm', proxy_mask_dir: proxyMaskDir })),
-      { id: 'motion', kind: 'motion', fps, frame_indices: times.map((_, i) => i), control_dir: 'motion/depth_vis', mask_dir: 'motion/mask', depth_mm_dir: 'motion/depth_mm', proxy_mask_dir: proxy ? 'motion/proxy_mask' : null, first_photo: 'front', last_photo: null, times_s: times.map((t) => Math.round(t * 1e6) / 1e6) },
+      { id: 'motion', kind: 'motion', fps, frame_indices: times.map((_, i) => i), control_dir: 'motion/depth_vis', mask_dir: 'motion/mask', depth_mm_dir: 'motion/depth_mm', proxy_mask_dir: proxy ? 'motion/proxy_mask' : null, first_photo: null, last_photo: null, times_s: times.map((t) => Math.round(t * 1e6) / 1e6) },
     ],
     synthetic: withSynthetic
       ? { dir: 'synthetic', transforms: 'synthetic/transforms.json', rgb_dir: 'synthetic/rgb', garment_mask_dir: 'synthetic/garment_mask', truth_glb: 'synthetic/garment_truth.glb', background_rgb: [...STUDIO_RGB] }

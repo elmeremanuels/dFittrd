@@ -13,13 +13,22 @@ Then median depth is rendered per view and fused with Open3D's TSDF, the mesh is
 Sources:
   synthetic  the exporter's synthetic dressed turntable with ground-truth garment masks and a truth mesh,
              so the reconstruction error is measured (chamfer distance, F-score) without any video model
-  stage2     stage 2's generated frames (stage2/frames). Masks: stage3/garment_mask if present, else a
-             foreground mask from the background colour, and the mannequin is removed in 3D afterwards
-             (vertices within --remove-cm of the known mannequin surface or inside it)
+  stage2     stage 2's generated frames (stage2/frames). Alpha targets (`--stage2-masks`, recorded in
+             metrics.json as `alpha_targets`): stage3/garment_mask if present; else `garment` (default):
+             stage2/garment_mask, the garment segmented against our own bare mannequin and a background
+             model (phase0_garment; written by stage 2's score_consistency with a record.json of the
+             segmentation version and the sha256 of the frames and masks; segmented again here when that
+             record is missing or does not match the frames; both hashes go into alpha_targets);
+             or `foreground`: everything that differs from the border colour, mannequin included, which is
+             then removed in 3D (vertices within --remove-cm of the known mannequin surface or inside it).
+             Run 11a trained on `foreground`: emulated on CPU, that target missed 21-25% of the garment at
+             the pinned frames (cream on light grey); the garment masks reach IoU 0.98 there.
 
 Run (from the repo root):
   modal run spikes/garment-engine/modal/stage4_recon.py --job-dir spikes/garment-engine/out/phase0/aalter-studio-2 --source synthetic
-Options: --iterations 10000 --triangles 12000 --voxel-cm 0.4 --remove-cm 0.6 --download-only
+Options: --iterations 10000 --triangles 12000 --voxel-cm 0.4 --remove-cm 0.6 --stage2-masks garment|foreground --download-only
+         --job-id <id> (a job already in the Volume, e.g. run 11a's aalter-studio-2-28080a938e84 from export 0.2.0;
+         no local manifest needed, outputs downloaded into --job-dir)
 
 Environment: CURTAIN_MODAL_GPU_RECON (default L40S), CURTAIN_MODAL_REGION, CURTAIN_MODAL_TIMEOUT_RECON.
 
@@ -59,7 +68,7 @@ image = (
     .pip_install_from_requirements(REQUIREMENTS)
     .env({"TORCH_CUDA_ARCH_LIST": CUDA_ARCHS, "TORCH_EXTENSIONS_DIR": GSPLAT_EXT_DIR, "MAX_JOBS": "8"})
     .run_commands("python -c \"from gsplat.cuda._backend import _C; assert _C is not None, 'gsplat CUDA extension did not build'\"")
-    .add_local_python_source("phase0_lib", "phase0_mesh", "phase0_modal")
+    .add_local_python_source("phase0_lib", "phase0_mesh", "phase0_modal", "phase0_garment")
 )
 
 
@@ -84,7 +93,7 @@ def _load_mask(path):
     timeout=CFG["timeout_recon"],
     region=CFG["region"],
 )
-def reconstruct(job_id: str, source: str = "synthetic", iterations: int = 10000, triangles: int = 12000, voxel_cm: float = 0.4, remove_cm: float = 0.6, holdout_every: int = 8) -> dict:
+def reconstruct(job_id: str, source: str = "synthetic", iterations: int = 10000, triangles: int = 12000, voxel_cm: float = 0.4, remove_cm: float = 0.6, holdout_every: int = 8, stage2_masks: str = "garment") -> dict:
     import math
     import subprocess
 
@@ -117,11 +126,36 @@ def reconstruct(job_id: str, source: str = "synthetic", iterations: int = 10000,
         frame_path = lambda i: f"{job}/{m['synthetic']['rgb_dir']}/{i:04d}.png"  # noqa: E731
         mask_path = lambda i: f"{job}/{m['synthetic']['garment_mask_dir']}/{i:04d}.png"  # noqa: E731
         mask_mode = "garment"
+        alpha_targets = {"source": "synthetic truth", "dir": m["synthetic"]["garment_mask_dir"]}
     elif source == "stage2":
+        import phase0_garment as pg
+
+        if stage2_masks not in pg.STAGE4_MASK_SOURCES:
+            raise ValueError(f"unknown --stage2-masks {stage2_masks!r}: use one of {', '.join(pg.STAGE4_MASK_SOURCES)}")
         frame_path = lambda i: f"{job}/stage2/frames/{i:04d}.png"  # noqa: E731
         stage3 = f"{job}/stage3/garment_mask"
-        mask_mode = "garment" if os.path.isdir(stage3) else "foreground"
-        mask_path = (lambda i: f"{stage3}/{i:04d}.png") if mask_mode == "garment" else None  # noqa: E731
+        if os.path.isdir(stage3):
+            mask_mode, mdir = "garment", "stage3/garment_mask"
+            alpha_targets = {"source": "stage3", "dir": mdir, **pg.mask_set_hashes(job, sorted(w2cs), out_dir=mdir)}
+        elif stage2_masks == "garment":
+            # Reused only when stage2/garment_mask/record.json names this segmentation version and the
+            # sha256 of these very frames and masks; else segmented again here (a re-run of stage 2 under
+            # the same job id, --skip-video over older frames, or masks from an older segmentation).
+            mask_mode, mdir = "garment", pg.STAGE2_MASK_DIR
+            ens = pg.ensure_turntable_masks(job, m, sorted(w2cs))
+            rec = ens["record"]
+            alpha_targets = {
+                "source": "stage2 garment segmentation", "dir": mdir, "segmentation": rec["segmentation"],
+                "computed_here": ens["computed_here"], "reason": ens["reason"],
+                "frames_sha256": rec["frames_sha256"], "masks_sha256": rec["masks_sha256"],
+                "record": {k: v for k, v in rec.items() if k not in ("params",)},
+            }
+        else:
+            mask_mode, mdir = "foreground", None
+            alpha_targets = {"source": "foreground (border colour; mannequin included, removed in 3D)"}
+        if mdir:
+            alpha_targets["vs_synthetic_truth"] = pg.alpha_target_check(job, m, mdir)
+        mask_path = (lambda i: f"{job}/{mdir}/{i:04d}.png") if mdir else None  # noqa: E731
     else:
         raise ValueError(f"unknown source {source!r}: use synthetic or stage2")
     ids = sorted(w2cs)
@@ -241,6 +275,7 @@ def reconstruct(job_id: str, source: str = "synthetic", iterations: int = 10000,
         "input_hash": m["input_hash"],
         "source": source,
         "mask_mode": mask_mode,
+        "alpha_targets": alpha_targets,
         "method": RECON,
         "gpu_name": gpu_name,
         "iterations": iterations,
@@ -262,14 +297,25 @@ def reconstruct(job_id: str, source: str = "synthetic", iterations: int = 10000,
 
 
 @app.local_entrypoint()
-def main(job_dir: str, source: str = "synthetic", iterations: int = 10000, triangles: int = 12000, voxel_cm: float = 0.4, remove_cm: float = 0.6, download_only: bool = False, force_upload: bool = False):
-    m = pm.load_local_job(job_dir)
-    job_id = m["job_id"]
+def main(job_dir: str, source: str = "synthetic", iterations: int = 10000, triangles: int = 12000, voxel_cm: float = 0.4, remove_cm: float = 0.6, stage2_masks: str = "garment", download_only: bool = False, force_upload: bool = False, job_id: str = ""):
+    """`--job-id` runs on a job already in the jobs Volume (e.g. an older export whose id the current
+    exporter no longer produces) without reading or uploading a local manifest; outputs go to --job-dir."""
+    upload = not job_id
+    if job_id:
+        local = os.path.join(job_dir, "manifest.json")
+        if os.path.exists(local) and lib.load_manifest(local)["job_id"] != job_id:
+            raise SystemExit(f"{local} is job {lib.load_manifest(local)['job_id']}, not {job_id}: use another --job-dir for the Volume job")
+        os.makedirs(job_dir, exist_ok=True)
+    else:
+        job_id = pm.load_local_job(job_dir)["job_id"]
     if not download_only:
-        pm.upload_job(job_dir, job_id, force=force_upload)
+        if upload:
+            pm.upload_job(job_dir, job_id, force=force_upload)
+        else:
+            print(f"[stage4] --job-id {job_id}: using the job in the Volume as it is (no upload)")
         t = time.time()
-        metrics = reconstruct.remote(job_id, source=source, iterations=iterations, triangles=triangles, voxel_cm=voxel_cm, remove_cm=remove_cm)
+        metrics = reconstruct.remote(job_id, source=source, iterations=iterations, triangles=triangles, voxel_cm=voxel_cm, remove_cm=remove_cm, stage2_masks=stage2_masks)
         metrics["cost"] = lib.cost_record(metrics["cost"]["stage"], gpu=CFG["gpu_recon"], region=CFG["region"], gpu_seconds=metrics["cost"]["gpu_seconds"], wall_seconds=time.time() - t)
-        print(json.dumps({k: metrics[k] for k in ("mask_mode", "psnr_masked", "mask_iou", "mesh", "vs_truth", "seconds")}, indent=2))
+        print(json.dumps({k: metrics[k] for k in ("mask_mode", "alpha_targets", "psnr_masked", "mask_iou", "mesh", "vs_truth", "seconds")}, indent=2))
         print(lib.format_cost_table([metrics["cost"]]))
     pm.download_dir(job_dir, job_id, f"stage4/{source}")

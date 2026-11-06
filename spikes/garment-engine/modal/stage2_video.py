@@ -8,16 +8,20 @@ mannequin, which turned a dress into trousers in the first GPU run):
 
   turntable_a  front -> back  (start frame = front still, end frame = back still)
   turntable_b  back -> front  (start frame = back still,  end frame = front still)
-  motion       the stored motion clip from the fixed motion camera (start frame = front still)
+  motion       the stored motion clip from the fixed motion camera (no pinned frame since export 0.3.0: the
+               front still is drawn at the turntable camera, 320 cm, the motion camera stands at 520 cm, and
+               run 11a's motion clip jumped in scale after its pinned first frame; older manifests still pin it)
 
 The front still is also the reference image of every clip. The prompts come from the manifest
 (`prompt`: a neutral description from category, colour, length, sleeves and fabric, never the product
 title or brand; the negative prompt bans text, letters, logos and the wrong garment); the app refuses a
 manifest whose prompts fail `lib.prompt_problems`. The 160 turntable poses are then filled from the two
 half turns (stage2/frames/NNNN.png, matching transforms.json); the frames both clips render (the back
-and the front) are compared as a drift check. Then `score_consistency` (CPU, no GPU) compares every
-generated frame's silhouette with the control's (proxy) silhouette and writes the per-frame numbers and
-the flagged frames into stage2/record.json (`consistency`).
+and the front) are compared as a drift check. Then `score_consistency` (CPU, no GPU) segments the garment
+in every generated frame (phase0_garment: against our own bare mannequin and a background model), compares
+it with the pinned stills carried to that camera, writes the per-frame numbers and the flagged frames into
+stage2/record.json (`consistency`; the first proxy-silhouette metric as `consistency_v1`) and the turntable's
+garment masks into stage2/garment_mask/ (stage 4's alpha targets).
 
 Run (from the repo root, after `pnpm --filter @curtain/garment-spike export:phase0`):
   modal run spikes/garment-engine/modal/stage2_video.py --job-dir spikes/garment-engine/out/phase0/aalter-studio-2
@@ -71,7 +75,7 @@ image = (
         f"cd {VXF_DIR} && git checkout {VIDEO['code_revision']}",
     )
     .env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "PYTHONPATH": VXF_DIR})
-    .add_local_python_source("phase0_lib", "phase0_modal")
+    .add_local_python_source("phase0_lib", "phase0_modal", "phase0_garment")
 )
 
 
@@ -265,13 +269,23 @@ def generate(job_id: str, steps: int = 40, clip_ids: list[str] | None = None, co
     return record
 
 
-@app.function(image=image, volumes={pm.JOBS_DIR: pm.jobs}, timeout=1800, region=CFG["region"])
-def score_consistency(job_id: str, stride: int = lib.CONSISTENCY_STRIDE) -> dict:
-    """Per-frame garment consistency of the generated clips (CPU only): the silhouette of every frame in
-    stage2/clips/ against the control silhouette and the proxy mask the exporter rendered for that pose.
-    Writes `consistency` into stage2/record.json and returns it."""
+@app.function(image=image, volumes={pm.JOBS_DIR: pm.jobs}, timeout=3600, region=CFG["region"])
+def score_consistency(job_id: str, stride: int = lib.CONSISTENCY_STRIDE, v1: bool = True, masks: bool = True) -> dict:
+    """Per-frame garment consistency of the generated clips (CPU only), written into stage2/record.json:
+
+    consistency     v2 (phase0_garment): each frame's garment, segmented against our own bare mannequin and a
+                    background model, vs the pinned stills carried to that camera through a visual hull (the
+                    proxy only bounds the depth); motion frames vs the posed proxy as a loose envelope; leg
+                    drift checks; artefacts (text, props) reported apart
+    consistency_v1  the first metric (frame foreground vs the proxy silhouette), kept for comparison; it
+                    flagged 233/243 frames of run 11a, where no frame drifted (`v1=False` skips it)
+
+    With `masks`, also writes stage2/garment_mask/NNNN.png for the assembled turntable: stage 4's alpha
+    targets for source stage2 (`--stage2-masks garment`)."""
     import imageio.v2 as imageio
     import numpy as np
+
+    import phase0_garment as pg
 
     pm.jobs.reload()
     job = f"{pm.JOBS_DIR}/{job_id}"
@@ -280,24 +294,36 @@ def score_consistency(job_id: str, stride: int = lib.CONSISTENCY_STRIDE) -> dict
     with open(rec_path) as f:
         record = json.load(f)
     done = [c["id"] for c in record.get("clips", [])]
-    t0 = time.time()
 
-    def mask(rel: str) -> np.ndarray:
-        a = np.asarray(imageio.imread(os.path.join(job, rel)))
-        return (a[..., 0] if a.ndim == 3 else a)[::stride, ::stride] > 127
-
-    rows = []
-    for item in lib.consistency_plan(m, done):
-        rgb = np.asarray(imageio.imread(os.path.join(job, item["generated"])))[..., :3][::stride, ::stride]
-        h, w = rgb.shape[:2]
-        rgb_bytes = np.ascontiguousarray(rgb, dtype=np.uint8).tobytes()
-        fg = lib.frame_foreground(rgb_bytes, w, h)
-        ctrl = mask(item["control_mask"]).astype(np.uint8).tobytes()
-        prox = mask(item["proxy_mask"]).astype(np.uint8).tobytes() if item["proxy_mask"] else None
-        rows.append({"clip": item["clip"], "j": item["j"], "frame": item["frame"], **lib.frame_consistency(fg, ctrl, prox, w, h, rgb=rgb_bytes)})
-    summary = lib.consistency_summary(rows, mode=lib.control_mode(m), stride=stride)
-    summary["seconds"] = round(time.time() - t0, 1)
+    summary = pg.score_job(job, m, done)
     record["consistency"] = summary
+    if masks and os.path.isdir(f"{job}/stage2/frames"):
+        try:
+            record["garment_masks"] = pg.write_turntable_masks(job, m)
+            record["garment_masks"]["vs_synthetic_truth"] = pg.alpha_target_check(job, m)
+        except FileNotFoundError as e:
+            record["garment_masks"] = {"error": f"turntable incomplete: {e}"}
+
+    if v1:
+        t0 = time.time()
+
+        def mask(rel: str) -> np.ndarray:
+            a = np.asarray(imageio.imread(os.path.join(job, rel)))
+            return (a[..., 0] if a.ndim == 3 else a)[::stride, ::stride] > 127
+
+        rows = []
+        for item in lib.consistency_plan(m, done):
+            rgb = np.asarray(imageio.imread(os.path.join(job, item["generated"])))[..., :3][::stride, ::stride]
+            h, w = rgb.shape[:2]
+            rgb_bytes = np.ascontiguousarray(rgb, dtype=np.uint8).tobytes()
+            fg = lib.frame_foreground(rgb_bytes, w, h)
+            ctrl = mask(item["control_mask"]).astype(np.uint8).tobytes()
+            prox = mask(item["proxy_mask"]).astype(np.uint8).tobytes() if item["proxy_mask"] else None
+            rows.append({"clip": item["clip"], "j": item["j"], "frame": item["frame"], **lib.frame_consistency(fg, ctrl, prox, w, h, rgb=rgb_bytes)})
+        v1s = lib.consistency_summary(rows, mode=lib.control_mode(m), stride=stride)
+        v1s["seconds"] = round(time.time() - t0, 1)
+        v1s["superseded_by"] = "consistency (v2)"
+        record["consistency_v1"] = v1s
     with open(rec_path, "w") as f:
         json.dump(record, f, indent=2)
     pm.jobs.commit()
@@ -305,14 +331,16 @@ def score_consistency(job_id: str, stride: int = lib.CONSISTENCY_STRIDE) -> dict
 
 
 def consistency_line(c: dict) -> str:
-    """One log line: flagged frames and the worst numbers."""
-    worst = lambda k: "n/a" if not c.get(k) else f"{c[k]['min']:.3f}"  # noqa: E731
+    """One log line: drift-flagged frames, artefact frames and the worst numbers (consistency v2)."""
+    if "version" not in c:  # a v1 block
+        worst = lambda k: "n/a" if not c.get(k) else f"{c[k]['min']:.3f}"  # noqa: E731
+        return f"[stage2] consistency v1 vs {c['control_mode']} control: {c['flagged']}/{c['frames']} frames flagged; min silhouette IoU {worst('silhouette_iou')}"
     flagged = ", ".join(f"{f['clip']}#{f['j']}" for f in c["flagged_frames"][:12]) + (" ..." if len(c["flagged_frames"]) > 12 else "")
+    iou = c.get("garment_iou") or {}
     return (
-        f"[stage2] consistency vs {c['control_mode']} control: {c['flagged']}/{c['frames']} frames flagged"
-        f"{f' ({flagged})' if flagged else ''}; min silhouette IoU {worst('silhouette_iou')}, min zone IoU {worst('zone_iou')}, "
-        f"min proxy cover {worst('garment_cover')} (thresholds {c['thresholds_note']}); "
-        f"{len(c.get('blind_frames', []))} frames blind to leg drift (legs overlap), {len(c.get('low_contrast_frames', []))} low-contrast frames"
+        f"[stage2] garment consistency ({c['version']}): {c['flagged']}/{c['frames']} frames flagged for drift"
+        f"{f' ({flagged})' if flagged else ''}; garment IoU min {iou.get('min', 'n/a')} mean {iou.get('mean', 'n/a')}; "
+        f"{len(c.get('artefact_frames', []))} frames with artefacts (text, props), {len(c.get('blind_frames', []))} frames blind to leg drift"
     )
 
 

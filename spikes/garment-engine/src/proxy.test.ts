@@ -7,7 +7,8 @@ import { describe, expect, it } from 'vitest';
 import { measureRing } from './anchoring';
 import { evalChart, evalChartRow } from './evalChart';
 import { PROXY_ID, controlFrame, depthRange, idMask } from './exportJob';
-import { SPIKE_PRODUCT_IDS } from './product';
+import { generateGarment } from './garment';
+import { SPIKE_PRODUCT_IDS, garmentSpec } from './product';
 import { MIN_CLEARANCE_CM, buildProxy, proxyKind, proxyRecord, type ProxyKind } from './proxy';
 import { render } from './raster';
 import { MANNEQUIN_GREY, MANNEQUIN_ID } from './separation';
@@ -145,6 +146,66 @@ describe('control proxy in the depth frames', () => {
       }
     }
     expect(inProxy).toBeGreaterThan(500);
+  });
+});
+
+describe('control proxy: the hem follows the product length exactly', () => {
+  /** Lowest point of the mesh within 15 cm of the body axis (the hem, not a sleeve hanging past it in the A-pose). */
+  const lowestY = (mesh: Mesh): number => {
+    let y = Infinity;
+    for (let i = 0; i < mesh.positions.length; i += 3) if (Math.abs(mesh.positions[i]!) < 15) y = Math.min(y, mesh.positions[i + 1]!);
+    return y;
+  };
+
+  it('puts the mesh hem at the chart length for every product with a length, not only the spec', () => {
+    let checked = 0;
+    for (const [id, payload, size] of PRODUCTS) {
+      const { spec, mesh } = buildProxy(m, payload, size);
+      // The mesh's lowest point near the axis is the hem ring: a closed cap at hemY, nothing below it.
+      expect(lowestY(mesh), id).toBeCloseTo(spec.hemY, 6);
+      const len = (payload.lengthCm ?? {}) as Partial<Record<string, number>>;
+      if (spec.lengthSource.includes('clamped')) continue;
+      if ((spec.kind === 'dress' || spec.kind === 'top' || spec.kind === 'outerwear') && len.shoulder_to_hem !== undefined) {
+        expect(m.landmarks.hps[1] - spec.hemY, id).toBeCloseTo(len.shoulder_to_hem, 6);
+        checked++;
+      } else if (spec.kind === 'trousers' && len.outseam !== undefined) {
+        expect(m.morphHeights.waist - spec.hemY, id).toBeCloseTo(len.outseam, 6);
+        checked++;
+      } else if (spec.kind === 'skirt' && len.waist_to_hem !== undefined) {
+        expect(m.morphHeights.waist - spec.hemY, id).toBeCloseTo(len.waist_to_hem, 6);
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThanOrEqual(3);
+  });
+
+  it('aalter-studio-2: the proxy hem is the synthetic garment truth hem (run 11a: both 26.6 cm above the floor)', () => {
+    const payload = mockGarment('aalter-studio-2');
+    const proxy = buildProxy(m, payload, 'M');
+    const truth = generateGarment(m, garmentSpec(payload, 'M'));
+    expect(lowestY(proxy.mesh)).toBeCloseTo(lowestY(truth), 6);
+    expect(proxy.spec.hemY).toBeCloseTo(m.landmarks.hps[1] - 112, 6);
+  });
+
+  it('takes an explicit shoulder-to-hem override (the synthetic stills) and records where it came from', () => {
+    const payload = mockGarment('aalter-studio-2');
+    const { lengthCm: _drop, ...rest } = payload;
+    const noLength = rest as GarmentPayload;
+    const own = buildProxy(m, noLength, 'M').spec;
+    const synth = garmentSpec(noLength, 'M').shoulderToHemCm;
+    // Without a length the proxy and the synthetic garment disagree (proxy: pattern words or the knee).
+    expect(Math.abs(m.landmarks.hps[1] - own.hemY - synth)).toBeGreaterThan(1);
+    const { spec, mesh } = buildProxy(m, noLength, 'M', { shoulderToHemCm: synth, lengthSource: 'synthetic stills' });
+    expect(m.landmarks.hps[1] - spec.hemY).toBeCloseTo(synth, 6);
+    expect(spec.lengthSource).toBe('synthetic stills');
+    expect(lowestY(mesh)).toBeCloseTo(lowestY(generateGarment(m, garmentSpec(noLength, 'M'))), 6);
+  });
+
+  it('refuses the shoulder-to-hem override for skirt and trousers proxies instead of ignoring it', () => {
+    for (const id of ['crimson-wildflower-maxi-skirt', 'rosewater-palazzo-pants']) {
+      const [p, size] = product(id);
+      expect(() => buildProxy(m, p, size, { shoulderToHemCm: 100 })).toThrow(/shoulderToHemCm override given for a (skirt|trousers) proxy/);
+    }
   });
 });
 

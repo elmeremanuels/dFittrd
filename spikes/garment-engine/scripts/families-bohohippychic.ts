@@ -2,7 +2,7 @@
  * Cut families for bohohippychic.com.au: the whole public catalogue grouped into families of one
  * cut in several colours or prints (src/families.ts), with a reference member per family.
  *
- *   pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch      # catalogue pages into raw/ (once)
+ *   pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch-catalogue # catalogue pages into raw/ (once; writes no JSON)
  *   pnpm --filter @curtain/garment-spike families:bohohippychic -- --fetch  # + main photos for the silhouette check
  *   pnpm --filter @curtain/garment-spike families:bohohippychic             # offline: silhouettes from what raw/ has
  *
@@ -49,11 +49,11 @@ const threshold = values.threshold !== undefined ? Number(values.threshold) : SI
 if (!(threshold > 0 && threshold < 1)) throw new Error(`--threshold ${values.threshold}: use a number between 0 and 1`);
 
 function loadCatalogue(): { products: ShopifyProduct[]; pages: string[] } {
-  if (!existsSync(rawDir)) throw new Error(`${relative(pkgDir, rawDir)} is missing; run \`shop:bohohippychic -- --fetch\` first`);
+  if (!existsSync(rawDir)) throw new Error(`${relative(pkgDir, rawDir)} is missing; run \`shop:bohohippychic -- --fetch-catalogue\` first`);
   const pages = readdirSync(rawDir)
     .filter((f) => /^products-page\d+\.json$/.test(f))
     .sort((a, b) => Number(a.match(/\d+/)![0]) - Number(b.match(/\d+/)![0]));
-  if (!pages.length) throw new Error(`no products-page<N>.json in ${relative(pkgDir, rawDir)}; run \`shop:bohohippychic -- --fetch\` first`);
+  if (!pages.length) throw new Error(`no products-page<N>.json in ${relative(pkgDir, rawDir)}; run \`shop:bohohippychic -- --fetch-catalogue\` first`);
   const byId = new Map<number, ShopifyProduct>();
   for (const f of pages) {
     const parsed = JSON.parse(readFileSync(join(rawDir, f), 'utf8')) as { products: ShopifyProduct[] };

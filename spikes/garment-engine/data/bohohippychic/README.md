@@ -3,15 +3,25 @@
 This is an internal validation of the garment engine on a real shop, before anything is installed on it. Boho Hippy Chic (Australia, AUD, Shopify) gave the founder its consent to use its **public** product data and photos for this. No plugin, no admin access, and no shop credentials are involved.
 
 ```sh
-pnpm --filter @curtain/garment-spike shop:bohohippychic             # offline, from raw/
-pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch  # re-download the catalogue and images into raw/
+pnpm --filter @curtain/garment-spike shop:bohohippychic                      # offline, from raw/: rebuilds products.json and images.json
+pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch-images    # images of the committed images.json into raw/, checked against its sha256; writes no JSON (use this on CI)
+pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch-catalogue # catalogue pages into raw/; writes no JSON
+pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch           # re-download catalogue and images, then rebuild both JSON files
+```
+
+The hand classification in `src/shopSelection.ts` is keyed by image **position** and pinned by the sha256 in the committed `images.json`. `--fetch-images` and the exporter compare downloaded bytes with those committed hashes and never rewrite them, so a photo the shop changed or reordered fails the run. A rebuild (`--fetch` or no option) refuses to write `images.json` when any image's hash, URL or position differs from the committed one; look at the photos, update `SHOP_IMAGE_CLASSIFICATION`, then re-run with `--accept-image-changes` and commit both. Re-fetching alone never gets past the check.
+
+```sh
+# cut families of the whole catalogue (families.json); see the spike README
+pnpm --filter @curtain/garment-spike families:bohohippychic
 ```
 
 | File | Committed | Contents |
 | --- | --- | --- |
 | `raw/` | **no** (gitignored) | `products-page1..3.json` (`/products.json?limit=250&page=N`, 667 products) and `raw/<handle>/NN.jpg`, the images as served |
 | `products.json` | yes | Five GarmentPayload v1 drafts with completeness, evidence per value, warnings, the 3D-readiness check, the selection notes and the rejected product types |
-| `images.json` | yes | Every image of the five products: URL, size, sha256, and a classification made by eye (role, on model, background, garment fully visible, notes). No image bytes. |
+| `images.json` | yes | Every image of the five products: URL, size, sha256, and a classification made by eye (role, on model, background, garment fully visible, notes). No image bytes. The sha256 pins the classification to the bytes that were looked at (`src/shopImages.ts`). |
+| `families.json` | yes | Cut families of the whole catalogue (`families:bohohippychic`): handles, titles, counts; no image bytes |
 | `fixtures/products.sample.json` | yes | A trimmed text-only copy of 3 products for `src/shop.test.ts` |
 
 The code is in `src/shop.ts` (parsing and payloads), `src/shopSelection.ts` (selection and image classification) and `src/shopCli.ts` (I/O). The AU chart is documented in `docs/research/au-size-chart.md`.

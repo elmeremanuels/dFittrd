@@ -20,7 +20,7 @@
     "ownAsset": "a member whose fabric or size chart (buildShopPayload: fabric, sizeChartType, sizeChart, ease, lengthCm) differs from the reference needs its own full run; every other member only needs stage 4b (re-texture)",
     "assetEligible": "product types the engine builds assets for today: Dresses, Tops, Pants, Skirts, Jackets & Knits, Clothing",
     "pendingCategory": [
-      "Jumpsuits & Sets: eligible once the category exists (overalls, jumpsuits and pant suits span torso and legs: no engine category, no combined dress + bottom anchor subset, and proxy.ts has no proxy for them (export:phase0 refuses them)); counted in counts.pendingCategory, not in counts.assetEligible"
+      "Jumpsuits & Sets: eligible once the category exists (overalls, jumpsuits and pant suits span torso and legs: no engine category (the schema reads the type as \"dress\", which has no legs), no combined dress + bottom anchor subset, no control proxy with legs, and no validation product (export:phase0 --shop refuses them)); counted in counts.pendingCategory, not in counts.assetEligible"
     ],
     "limits": [
       "Every main photo on this shop is on a model in a styled set (busy background, legs or head cut off), so no reference is \"without a model\" and the border-colour mask refuses the photos (silhouette.failedByReason). The silhouette check is implemented and tested on fixtures but splits nothing here; it needs plain-backdrop photos or garment masks from a segmentation model (main-mask.png, e.g. stage 1b Grounding DINO + SAM 2 on Modal).",
@@ -1254,7 +1254,7 @@
         "DEFAULT TITLE"
       ],
       "assetEligible": false,
-      "pendingCategory": "overalls, jumpsuits and pant suits span torso and legs: no engine category, no combined dress + bottom anchor subset, and proxy.ts has no proxy for them (export:phase0 refuses them)",
+      "pendingCategory": "overalls, jumpsuits and pant suits span torso and legs: no engine category (the schema reads the type as \"dress\", which has no legs), no combined dress + bottom anchor subset, no control proxy with legs, and no validation product (export:phase0 --shop refuses them)",
       "textMatch": "similar",
       "reference": "nomad-overalls-blue",
       "referenceWhy": "no member classified as without a model; main photo 800×1200 (largest in the family, ties broken by image count, then handle); 4 images",

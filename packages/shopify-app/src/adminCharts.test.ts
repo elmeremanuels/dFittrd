@@ -72,7 +72,6 @@ function mountPage(routes: Record<string, (c: Call) => unknown>, picker?: (opts:
       const h = routes[key] ?? DEFAULTS[key];
       if (!h) return new Response(JSON.stringify({ error: { code: 'nope', message: `unmocked ${key}` } }), { status: 404 });
       const r = h(call);
-      if (r && typeof r === 'object' && '__status' in r) return new Response(JSON.stringify((r as { body: unknown }).body), { status: (r as { __status: number }).__status });
       return new Response(JSON.stringify(r), { status: 200 });
     }),
   );

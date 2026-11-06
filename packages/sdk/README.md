@@ -113,7 +113,7 @@ Every message is `{ source: 'curtain', v: 1, type, … }`; anything else is igno
 | iframe → page | `curtain:size-selected` | `{ productExternalId, size }` | Ignored unless `productExternalId` is the opened product and `size` is 1–64 characters. Closes the overlay, then selects the variant (below). |
 | iframe → page | `curtain:close` | `{}` | Closes the overlay. |
 | iframe → page | `curtain:resize` | `{ height }` | Ignored: the overlay is full-screen. |
-| peek → page | `curtain:peek-size` | `{ height }` | Size peek only (below): sets the peek iframe's height (0–200 px). |
+| peek → page | `curtain:peek-size` | `{ height }` | Size peek only (below): `112` (`PEEK_HEIGHT`) shows the peek, anything else collapses it to 0. |
 | peek → page | `curtain:peek-open` | `{}` | Size peek only: clicks the shop's button, which opens the overlay. |
 
 ### Variant selection
@@ -158,24 +158,32 @@ decide how it is built:
   `<iframe src="{data-app}/embed/peek?shop={data-shop}&product={id}" title="Your size"
   referrerpolicy="origin">`, lazily: an `IntersectionObserver` inserts it when the button comes
   within 300 px of the viewport. It starts at `height: 0; visibility: hidden` (no space, out of the
-  tab order) and grows only when the peek reports a height, at most 200 px. So a first-time
-  visitor never causes a layout shift, and a returning shopper causes one, once.
+  tab order) and opens only when the peek reports exactly `PEEK_HEIGHT` (112 px); any other value
+  collapses it. So a first-time visitor never causes a layout shift, and a returning shopper causes
+  one, once.
 - **The page never learns the size.** The iframe is on our origin: the page cannot read it. The
   SDK accepts two messages from it, only from that iframe's window and the `data-app` origin:
   `curtain:peek-size { height }` and `curtain:peek-open {}`. Neither carries a size, a measurement
   or an id. The size reaches the page only when the shopper presses "Choose size" in the overlay
   (`curtain:size-selected`, as before).
-- **One bit is visible.** The page can see whether the peek grew, so it can tell that this browser
-  has a remembered profile on this shop. That is the cost of reserving space only for shoppers who
-  have one; it says nothing about the size or the body.
-- **Tokenless, and not billed.** The SDK sends nothing to the api for the peek. Inside the iframe
-  (`apps/web/src/embed/peek.ts`) the peek first reads its own partitioned storage: no profile, no
-  remembered device, or "Remember me" off → it collapses (`height: 0`) without any api request.
-  Only with a remembered profile does it mint a session (`POST /v1/sdk/sessions` with
-  `surface: 'api'`, which `fit-shown` never bills), resolve it with the remembered device, and
-  compute the fit on the device with `@curtain/fit-engine`. It never calls `fit-shown` and never
-  registers a device. The billable session starts when the shopper opens the overlay.
-- **Opening the overlay.** The peek's "See how size M fits you" button posts `curtain:peek-open`;
+- **One bit is visible.** The page can see whether the peek opened: this browser has a remembered
+  profile on this shop (and the product is try-able). That is the cost of reserving space only for
+  shoppers who have one. The height never depends on the fit: with a profile the peek always opens
+  at the same 112 px, also when no size fits ("No size fits well") or none can be recommended yet
+  ("Can't recommend a size yet"), every line is cut to one line in a box that clips, and the height
+  is posted once and never re-measured. So a page script cannot learn the size, the length of the
+  size label, which fit note was picked or anything about the body by probing products (for example
+  one-size products with narrow charts) or by resizing the frame.
+- **Tokenless, read-only, not billed.** The SDK sends nothing to the api for the peek. Inside the
+  iframe (`apps/web/src/embed/peek.ts`) the peek first reads its own partitioned storage: no
+  profile, no remembered device, or "Remember me" off → it collapses (`height: 0`) without any api
+  request. Only with a remembered profile does it make one read-only lookup, `GET /v1/peek` with the
+  remembered device (answered only for a device already paired with this shop and a try-able
+  product), and compute the fit on the device with `@curtain/fit-engine`. The lookup mints no try
+  session, so peek views never appear in the merchant's session counts or the k-anonymity floor and
+  never use the shop's SDK rate limit; it has its own per-IP limit. It never calls `fit-shown` and
+  never registers a device. The billable session starts when the shopper opens the overlay.
+- **Opening the overlay.** The peek's "See how size M fits you" (or "Open the fitting room") button posts `curtain:peek-open`;
   the SDK then clicks the shop's own button, so the normal overlay flow (and the merchant's own
   click listeners) run. A returning shopper lands straight on the result.
 - The drawing is labelled "Estimate" (AGENTS.md rule 3) and the peek says "Only you can see this.

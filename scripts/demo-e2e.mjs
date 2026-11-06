@@ -9,8 +9,9 @@
  * Size peek: on the first visit the peek iframe next to the button stays at height 0 and makes no
  * api request. After the fit, a reload shows "Your size: X" (the size just chosen) and the
  * shopper's figure inside the peek iframe, without a click; the merchant page's own DOM never
- * contains that text and cannot read the iframe; the peek mints only an unbillable (`api`) session
- * and never calls fit-shown. Then "See how size X fits you" in the peek opens the overlay, and a
+ * contains that text and cannot read the iframe; the frame is exactly 112 px (PEEK_HEIGHT, never a
+ * measured height); the peek makes one read-only `GET /v1/peek`, mints no try session and never
+ * calls fit-shown. Then "See how size X fits you" in the peek opens the overlay, and a
  * returning shopper ("Remember me" is on by default) must land straight on the result (§1.4).
  * Console errors and uncaught exceptions in the page or the iframe fail the flow.
  *
@@ -148,6 +149,8 @@ async function flow(browser, base, spec, log) {
     await peek.getByTestId('estimate-badge').waitFor();
     await page.waitForFunction((sel) => parseFloat(document.querySelector(sel)?.style.height || '0') > 40, PEEK);
     await page.waitForTimeout(300);
+    // P2: one fixed height, whatever the size label or note
+    if ((await peekHeight(page)) !== 112) throw new Error(`the peek frame is ${await peekHeight(page)} px, expected the fixed 112`);
     await shot('5-size-peek');
     log(`ok: the peek shows "${peekText}" and the figure`);
 
@@ -167,8 +170,11 @@ async function flow(browser, base, spec, log) {
     if (leak.readable !== null) throw new Error('the merchant page can read the peek iframe');
     // The SDK writes nothing on the frame beyond what it set itself (its height is in the style).
     if (leak.attrs.join(' ') !== 'referrerpolicy src style title') throw new Error(`unexpected peek iframe attributes: ${leak.attrs.join(' ')}`);
-    const sessions = peekRequests.api.filter((r) => r.path === '/v1/sdk/sessions');
-    if (sessions.length !== 1 || JSON.parse(sessions[0].body).surface !== 'api') throw new Error(`the peek should mint one unbillable 'api' session, saw ${JSON.stringify(sessions)}`);
+    // C1/C2: one read-only lookup, no try session (merchant analytics and the SDK rate limit stay clean)
+    const sessions = peekRequests.api.filter((r) => r.path === '/v1/sdk/sessions' || r.path.startsWith('/v1/try/'));
+    if (sessions.length) throw new Error(`the peek minted or resolved a try session: ${JSON.stringify(sessions)}`);
+    const lookups = peekRequests.api.filter((r) => r.path === '/v1/peek');
+    if (lookups.length !== 1 || lookups[0].method !== 'GET') throw new Error(`the peek should make one GET /v1/peek, saw ${JSON.stringify(peekRequests.api)}`);
     if (peekRequests.api.some((r) => r.path.endsWith('/fit-shown'))) throw new Error('the peek reported fit-shown (billing)');
     // The detector behind the first-visit "no React" check does see React when it loads.
     if (!peekRequests.assets.some((x) => REACT_ASSET.test(x))) throw new Error('expected the peek with a profile to load React (the first-visit check would be vacuous)');

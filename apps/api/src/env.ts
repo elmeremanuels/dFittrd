@@ -141,8 +141,9 @@ export const EnvSchema = z.object({
   // ---- D17 flat plan + expiring Shopify offline tokens (A3) ---------------------------------
   /**
    * Free trial of the one Curtain plan (USD 8.99 per month, D17), Shopify and Stripe alike. The
-   * pre-D17 plans had 14 days; the default is 7 until the founder confirms the length. A shop that
-   * subscribes again gets only what is left of its first trial.
+   * pre-D17 plans had 14 days; the default is 7 until the founder confirms the length. The clock
+   * starts when the first subscription becomes active (Shopify ACTIVE, Stripe trialing or active),
+   * not when it is created; a shop that subscribes again gets only what is left of its first trial.
    */
   BILLING_TRIAL_DAYS: z.coerce.number().int().min(0).max(30).default(7),
   /**

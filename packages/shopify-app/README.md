@@ -274,6 +274,9 @@ app per shop; switch to public distribution before the App Store listing (irreve
 5. **Billing**: `appSubscriptionCreate` in the dev store's billing currency (and an AUD store for the pilot) (`test: true`), `confirmationUrl`
    flow, `app_subscriptions/update` payload, `appUsageRecordCreate` cap error wording (we match
    `/capped amount|cap/i` → `capReached`).
+   Also: decline, approve, uninstall and reinstall (the api drops the shop to `free` on uninstall and
+   reconciles with `currentAppInstallation.activeSubscriptions` on every token exchange: confirm the
+   list is empty after a reinstall and holds the new subscription after approval).
 6. **Webhooks**: declared subscriptions fire to `PUBLIC_API_URL/shopify/webhooks` after
    `shopify app deploy`; header names; HMAC with the client secret (not the API key).
 7. **Theme editor deep link** `addAppBlockId={client_id}/try-it-on&target=mainSection`

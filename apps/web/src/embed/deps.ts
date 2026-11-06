@@ -8,7 +8,7 @@ import type { ClientLedgerEntry } from '@/db/db';
 import { originOf, type ParentWindowLike } from './protocol';
 import { createEmbedStore, type EmbedStore } from './storage';
 
-export type EmbedApi = Pick<ApiClient, 'resolveTry' | 'fitShown' | 'deleteMe' | 'requestHeroRender' | 'heroRenderStatus'>;
+export type EmbedApi = Pick<ApiClient, 'resolveTry' | 'resolvePeek' | 'fitShown' | 'deleteMe' | 'requestHeroRender' | 'heroRenderStatus'>;
 
 export interface EmbedDeps {
   store: EmbedStore;

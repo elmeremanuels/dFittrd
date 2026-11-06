@@ -11,19 +11,33 @@ App Store. Benchmark: SmartSize (size charts, chart templates, unit conversion, 
 next to the size selector). The 3D garment engine keeps being built on this branch in the
 background (section below); nothing in the release depends on it.
 
-### Verification run (6 Nov 2026, repo root, demo stopped, `.demo-db` removed first)
+### Verification run (6 Nov 2026, second review pass, repo root, demo stopped, `.demo-db` removed first)
 
 | Command | Result |
 |---|---|
-| `flock /tmp/curtain-pnpm.lock pnpm install` | pass, lockfile up to date |
-| `pnpm check` | pass (build, typecheck, lint, tests, app builds, secret scan clean; SDK 7,802 B gzip of 8,192) |
-| `pnpm demo:e2e` | pass, both flows (WooCommerce and Shopify Dawn), returning shopper included |
+| `flock /tmp/curtain-pnpm.lock pnpm install` | pass, lockfile up to date, no dependency changes |
+| `pnpm check` | pass (build, typecheck, lint, tests, app builds, secret scan clean; SDK 8,178 B gzip of 8,192) |
+| `pnpm demo:e2e` | pass, both flows (WooCommerce and Shopify Dawn), returning shopper and the size peek included (peek frame exactly 112 px, one `GET /v1/peek`, no try session) |
 
-Tests: schema 351, shopify-app 139, api 159, web 300, sdk 90, fit-engine 111, taste-engine 95,
-tryon-providers 70, anchors 53, mannequin 38, woocommerce-plugin 66 (PHP), demo-shop 8,
-garment spike 219 + 47.
+Tests: schema 351, shopify-app 165, api 203, web 324, sdk 102, fit-engine 111, taste-engine 95,
+tryon-providers 70, anchors 53, mannequin 38, woocommerce-plugin 69 (PHP), demo-shop 8,
+garment spike 219 + 47 (the spike is another workflow's; it passed in this run).
 
-### Fixed in the release review pass (R1–R7)
+### Fixed in the second release review pass (P1, P2, B1–B4, C1, C2, T1)
+
+| # | Finding | Fix | Test |
+|---|---|---|---|
+| P1 (high) | The size peek collapsed when no size fitted, so any script on the merchant page could frame `/embed/peek?product=<any id>` and bisect the shopper's measurements with one-size or narrow-chart products; every probe also minted and resolved a try session. | Once a remembered profile exists the peek always opens, at one fixed height, with a neutral "No size fits well" / "Can't recommend a size yet" line in the same box (`peekOutcome`, `apps/web/src/embed/peek.ts`). Expand/collapse now depends only on profile presence, the shop and the product. The lookup is the new read-only `GET /v1/peek` (`apps/api/src/routes/try.ts`): only for a device already paired with the shop and a product with status `active`. The SDK README's "one bit" paragraph now says exactly what that bit is. | `apps/web/src/embed/__tests__/peek.test.tsx` (P1: shown whether or not a size fits), `apps/api/src/peek.test.ts` |
+| P2 (medium) | The peek posted its measured height on every resize, so the page could read the size label length and which note was picked by stepping the frame width. | `PEEK_HEIGHT = 112` posted once, never measured or re-posted; the box clips and every line is truncated to one line; the page body cannot scroll. The SDK accepts exactly 112 or collapses to 0 (`packages/sdk/src/peek.ts`). | `peek.test.tsx` (P1/P2, P2), `packages/sdk/src/peek.test.ts` (privacy P2), demo e2e (frame is 112 px) |
+| B1 (high) | Uninstall then reinstall left the shop on `curtain`, unpaused, with no subscription (Shopify cancels on uninstall and the CANCELLED webhook never arrives); the admin showed "Subscribed" and disabled the button. | `app/uninstalled` sets `plan: 'free'`, clears `billingRef`, `subscriptionStatus`, `pendingSubscriptionId`, `legacyPlan` (keeps `trialStartedAt`); a reinstall starts from that state; every token exchange reconciles with `currentAppInstallation.activeSubscriptions` (`reconcileSubscription`, `apps/api/src/shopify/routes.ts`). A plan granted by hand (no Shopify `billingRef`, e.g. a free pilot) is never reconciled away. | `apps/api/src/shopify/billing.test.ts` (uninstall → reinstall → usage `free`, Subscribe offered; missed webhook; by-hand plan), `packages/shopify-app/src/adminCharts.test.ts` (plan button) |
+| B2 (high) | Migration 0004 moved starter/pro shops to `curtain` while their old EUR 29/149 subscription kept charging; the admin showed "Curtain · US$8.99", Subscribed. | `GET /v1/merchant/usage` returns `plan.legacyPlan` and `switchVia` (and no `chargePrice`) while `settings.legacyPlan` is set. The Shopify admin shows "Retired plan (starter) at its old price" with an enabled **Switch to Curtain (US$8.99)**; the ACTIVE update of the new subscription ends the legacy state (Shopify replaces the old one on approval). WooCommerce: the console shows the same state with a **Switch to Curtain** button (`POST /v1/merchant/billing/stripe/checkout`, no trial); the completed Checkout cancels the old Stripe subscription (`StripeClient.cancelSubscription`). | `billing.test.ts` (legacy switch), `apps/api/src/stripe.test.ts` (Stripe switch, old subscription cancelled, never billed twice), `apps/web/src/merchant/plan.test.ts`, `adminCharts.test.ts` |
+| B3 (medium) | The trial clock started when the subscription was created (PENDING), so a merchant who declined and came back a week later got no trial. | `trialStartedAt` is written on the first ACTIVE (`applySubscriptionUpdate`), never at subscribe time. | `billing.test.ts` (trial clock) |
+| B4 (low) | WooCommerce got a full trial on every reconnect. | `/v1/merchant/woo/connect` passes `remainingTrialDays(...)`; the Stripe webhook records `trialStartedAt` on the first trialing/active subscription (Stripe's `trial_start` when sent). | `stripe.test.ts` (remaining trial) |
+| C1 (medium) | Peek views were counted as abandoned try-on sessions and toward the k floor. | The peek no longer creates try sessions at all (`GET /v1/peek` is read-only), so analytics see only real button sessions. | `peek.test.ts`, `peek.test.tsx`, demo e2e |
+| C2 (low) | Peek mints used the shop's SDK rate limit that real "Try it on" clicks need. | No mint; `GET /v1/peek` has its own per-IP limit (`peek-ip:`, `TRY_RATE_LIMIT_PER_MIN`). | `peek.test.ts` (six peeks, then the button's sessions still pass at `SDK_RATE_LIMIT_PER_MIN=3`) |
+| T1 (low) | A terminal refresh failure discarded a still-valid access token. | Returns the current token while it is valid; the daily job counts a refresh as done only when a new token came back. | `apps/api/src/shopify/tokens.test.ts` |
+
+### Fixed in the first release review pass (R1–R7)
 
 | # | Finding | Fix | Test |
 |---|---|---|---|
@@ -40,68 +54,108 @@ garment spike 219 + 47.
 - Shopper side: the "Try it on" theme app block (placed by the merchant, under the size picker on
   Dawn), the full-screen overlay with About you (metric or imperial), optional on-device scan, the
   size recommendation with per-point fit, the product's own size table with the size highlighted,
-  "Choose size" selecting the variant on the page, remember me / forget me. No app install.
+  "Choose size" selecting the variant on the page, remember me / forget me, and the size peek next
+  to the button for returning shoppers (one fixed height, read-only lookup, never billed). No app
+  install.
 - Merchant side: embedded admin with five-step onboarding, AU/UK/EU/US women's body templates and
   garment templates, cm/in, bulk assign by collection, tag, type or picker, description import for
   one-size items, per-product checklist and preview link, usage and privacy ledger.
 - A product is try-able as soon as a chart is assigned (R2), also in AUD (R1).
-- Backend: managed install and token exchange, GDPR webhooks, product sync and backfill, billing
-  through `appSubscriptionCreate`, one-click deploy with rollback, backups and a restore drill
-  script (`docs/DEPLOY.md`).
+- Billing (D17, checklist B1): one flat plan "Curtain", USD 8.99 per 30 days through
+  `appSubscriptionCreate` (one recurring line, no usage line), converted for the shop's billing
+  currency (AUD for the pilot), 7-day trial (`BILLING_TRIAL_DAYS`) that starts on approval and is
+  never handed out twice; decline, cancel, freeze, uninstall/reinstall and pre-D17 legacy shops are
+  handled; WooCommerce the same through Stripe.
+- Expiring offline tokens (checklist A3): token exchange asks for expiring tokens, refresh tokens are
+  stored encrypted, refreshed before use and daily for dormant shops, never refreshed and exchanged
+  at the same time.
+- Backend: managed install and token exchange, GDPR webhooks, product sync and backfill, one-click
+  VPS deploy with rollback, backups and a restore drill script (`docs/DEPLOY.md`), and the
+  `shopify-deploy` workflow that renders the app config and runs `shopify app deploy`.
 
-### Still blocking in code
+### Still blocking
 
 | For | Item | Where |
 |---|---|---|
-| pilot | **B1** billing still has free / starter EUR 29 + usage / pro; D17 says one flat USD 8.99 per month, no usage line. Until it is changed the pilot shop would be asked for the wrong price. Workaround for a pilot: leave the pilot shop on the free plan (50 sessions) or raise its cap by hand. | `apps/api/src/billing/plans.ts`, checklist B1 |
-| pilot | The live-store items in `packages/shopify-app/README.md` "Must be verified against a live store" (GraphQL `2026-10` queries, theme block on Dawn and the pilot theme, sync, billing in AUD, GDPR deliveries). | README |
-| public | **A3** expiring offline tokens (required for new public apps; non-expiring tokens are delisted from 1 Jan 2027). | checklist A3 |
-| public | Lighthouse impact measured (D5), privacy e2e in CI, listing screenshots and screencast. | checklist D5, E5, E6, F |
+| pilot | The live-store items in `packages/shopify-app/README.md` "Must be verified against a live store" (GraphQL `2026-10` queries, theme block on Dawn and the pilot theme, sync, billing in AUD incl. decline / reinstall, `activeSubscriptions` shape, GDPR deliveries). Nothing has run against a real store yet. | README, checklist B2, D2 |
+| pilot | Founder accounts and settings below; legal review of the privacy policy enough to link it from the fit tool. | below, checklist C6 |
+| public | Lighthouse impact measured (D5), privacy e2e in CI, listing screenshots and screencast, final privacy policy and terms. | checklist D5, E5, E6, F, C6, C7 |
 | competitive | Versus SmartSize: no men / kids / lingerie / shoe templates, no screenshot import, no automatic button placement on every theme, admin in English only, no reviews or Built for Shopify badge yet. Where we are ahead: an actual size recommendation on every plan, from body or garment charts, without the shopper's measurements leaving the browser. | `packages/shopify-app/README.md` "Versus SmartSize" |
 
 ### What the founder must provide
 
-1. **Shopify Partner account** and an app in it (name: "Curtain: Fit & Size Finder" or the cleared
-   trademark), its client id and secret (go into `/etc/curtain/curtain.env` on the VPS, never into
-   the repo), a development store for the dry run, and an emergency contact.
-2. **VPS** (2 vCPU / 4 GB is enough) and the GitHub settings from `docs/DEPLOY.md` §5: the
-   `production` environment with you as required reviewer, deployment branches `release` and `main`,
-   and the four `VPS_*` **environment** secrets; repository variable `DOMAIN`.
-3. **DNS**: `app.<domain>` and `api.<domain>` A/AAAA records to the VPS (`docs/DEPLOY.md` §2).
-4. **Prices**: confirm D17 (USD 8.99 flat, trial length) so B1 can be built, and what the pilot shop
-   pays (free pilot or the real plan).
-5. **Legal review** of `docs/legal/privacy.md` and `docs/legal/terms.md`: legal entity, address,
+1. **Shopify Partner account**, an app created manually in it (name `Curtain: Fit & Size Finder`,
+   matching `shopify.app.toml`; trademark question in checklist E1), a development store for the dry
+   run, and an emergency contact (`docs/DEPLOY.md` "Shopify app deploy", "Set once: Partner
+   Dashboard").
+2. **VPS** (2 vCPU / 4 GB is enough), bootstrapped with `scripts/deploy-bootstrap.sh`, and **DNS**
+   `app.<domain>` and `api.<domain>` A/AAAA records to it (`docs/DEPLOY.md` §1–§4).
+3. **Secrets, each in exactly one place** (never in the repository):
+
+   | Name | Where | Value |
+   |---|---|---|
+   | `SHOPIFY_API_KEY` | `/etc/curtain/curtain.env` on the VPS **and** GitHub secret (for `shopify-deploy`) | the app's Client ID (Partner Dashboard → the app → Client credentials) |
+   | `SHOPIFY_API_SECRET` | **only** `/etc/curtain/curtain.env` on the VPS, never GitHub | the app's Client secret (webhook HMAC, session tokens, token exchange) |
+   | `SHOPIFY_CLI_PARTNERS_TOKEN` | GitHub secret (for `shopify-deploy`) | Partner Dashboard → Settings → CLI token; shortest expiry you will renew; it can deploy every app in the organisation |
+   | `VPS_HOST`, `VPS_USER` (`deploy`), `VPS_SSH_KEY`, `VPS_SSH_KNOWN_HOSTS` | GitHub **environment** secrets of `production` (not repository secrets) | `docs/DEPLOY.md` §3 and §5 |
+   | `ACME_EMAIL`, `BACKUP_AGE_RECIPIENT` (and optionally `BACKUP_RCLONE_REMOTE`) | `/etc/curtain/curtain.env` | `docs/DEPLOY.md` §4 |
+
+4. **Variable**: repository variable `DOMAIN` = the bare domain (e.g. `curtain.fit`); optional
+   `SHOPIFY_APP_HANDLE` (default `curtain`) and `VPS_PORT`.
+5. **GitHub environment protection** (Settings → Environments):
+   - `production`: **Required reviewers** = you; **Deployment branches** = `release` and `main`
+     only; *Allow administrators to bypass* off. Required: it is the gate in front of the deploy key.
+   - `shopify` (created by the first `shopify-deploy` run): before the pilot goes live add yourself
+     as required reviewer and move `SHOPIFY_CLI_PARTNERS_TOKEN` and `SHOPIFY_API_KEY` there as
+     environment secrets, then delete the repository secrets. Restrict its deployment branches to
+     `release`/`main` once agents no longer deploy from `claude/**` branches (`docs/DEPLOY.md`
+     "Harden").
+6. **Prices**: D17 is built (USD 8.99 per month, flat). Confirm the trial length (default 7 days,
+   `BILLING_TRIAL_DAYS` in `/etc/curtain/curtain.env`) and whether the pilot shop pays: a free pilot
+   is `UPDATE shops SET plan = 'curtain' WHERE domain = '<shop>.myshopify.com'` with no
+   `billing_ref` (the token-exchange reconcile never touches a plan granted by hand); otherwise the
+   merchant subscribes in the admin.
+7. **Legal review** of `docs/legal/privacy.md` and `docs/legal/terms.md`: legal entity, address,
    retention period for shopper records (C9), hosting region, subprocessors. Not legal advice.
-6. Support e-mail and a help page for the listing; trademark clearance (D1) before the public listing.
+8. Support e-mail and a help page for the listing; trademark clearance (D1) before the public listing.
 
 ### Install unlisted at the pilot shop, step by step
 
-1. **Server**: run `scripts/deploy-bootstrap.sh` on the VPS, fill `/etc/curtain/curtain.env`
-   (Shopify client id and secret, `PUBLIC_API_URL=https://api.<domain>`,
-   `PUBLIC_APP_URL=https://app.<domain>`), set the GitHub environment as above.
-2. **Deploy**: push to `release` (or Actions → deploy → branch `release` → `deploy`), approve the
-   run, wait for `https://api.<domain>/healthz` to answer.
-3. **App config**: in `packages/shopify-app`, `pnpm configure` for a `prod` config with the public
-   URLs, then `shopify app deploy` (publishes the theme block, the webhooks and the GDPR topics).
-4. **Dry run on a development store** with an AUD billing currency: install, open the admin, pick the
-   AU template, assign it to a collection, add the block in the theme editor, open a product,
-   "Try it on", get a size, choose it. Work through the live-store verification list.
+1. **Server**: `scripts/deploy-bootstrap.sh` on the VPS, fill `/etc/curtain/curtain.env`
+   (`SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `ACME_EMAIL`, `BACKUP_AGE_RECIPIENT`; the bootstrap
+   generated the database password and the JWT, pepper and encryption keys), set the GitHub
+   `production` environment, its secrets and `DOMAIN` as above.
+2. **Deploy the backend**: push to `release` (or Actions → deploy → branch `release` → `deploy`),
+   approve the run, wait for `https://api.<domain>/healthz` to answer.
+3. **Deploy the Shopify app**: run the `shopify-deploy` workflow on `release` (or push to `release`
+   with a change under `packages/shopify-app`, `packages/sdk`, `packages/schema` or
+   `.github/shopify/deploy.txt`). It renders `shopify.app.prod.toml` for `https://api.<domain>`,
+   builds the theme block with the SDK and runs `shopify app deploy`, which publishes the block, the
+   webhooks and the GDPR topics. Check the app URL in the Partner Dashboard is
+   `https://api.<domain>/shopify/admin`.
+4. **Dry run on a development store** with an AUD billing currency: install, open the app in the
+   admin (token exchange), pick the AU template, assign it to a collection, add the block with the
+   theme editor deep link, open a product, "Try it on", get a size, choose it, reload and see the
+   size peek. Billing: Subscribe → approve (test charge), decline once, then uninstall and
+   reinstall and check the admin offers Subscribe again. Work through the live-store verification
+   list in `packages/shopify-app/README.md`.
 5. **Custom distribution**: Partner Dashboard → the app → Distribution → *Custom distribution* →
-   the pilot shop's `*.myshopify.com` domain → generate the install link (irreversible for that
-   app; one custom app per shop).
-6. **Merchant install**: the owner of bohohippychic.com.au opens the link while logged in, approves
-   the scopes (`read_products`, `write_products`), and lands in the Curtain admin. The catalogue
+   the pilot shop's `*.myshopify.com` domain (not `bohohippychic.com.au`) → generate the install
+   link (irreversible for that app; one custom app per shop).
+6. **Merchant install**: the owner opens the link while logged in to their store admin, approves
+   the scopes (`read_products`, `write_products`) and lands in the Curtain admin. The catalogue
    backfill starts on its own.
 7. **Setup in the admin (about 10 minutes)**: keep the preselected AU template, untick sizes the shop
    does not sell (keep 8–16), assign it to the Dresses (and Tops) collections, click "Add the block"
-   (theme editor deep link), place it under the size picker, save the theme.
+   (theme editor deep link), place it under the size picker, save the theme. Paid pilot: Subscribe
+   and approve (AUD, about A$13.80); free pilot: the founder grants the plan by hand (founder step 6).
 8. **Test**: open a dress on the live shop, "Try it on", enter height and weight, get a size, choose
-   it, check the size is selected on the page and the admin shows the session. Then mark "Test it
-   on a product" done.
+   it, check the size is selected on the page and the admin shows the session. Reload: the size
+   peek shows the size next to the button. Then mark "Test it on a product" done.
 9. **Watch the first week**: usage and anomalies in the admin, `docker compose logs api` on the VPS,
    the nightly backup and one restore drill.
-10. **Public listing later**: finish A3, B1, D5, the legal review and the listing assets, then switch
-    a (new) app to public distribution and submit (`docs/app-store/checklist.md`).
+10. **Public listing later**: Lighthouse (D5), the legal review and the listing assets, then a
+    (new) app with public distribution and submit (`docs/app-store/checklist.md`).
 
 ## Garment engine — Phase 0 preparation (Nov 2026)
 

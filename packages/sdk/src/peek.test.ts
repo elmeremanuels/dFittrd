@@ -4,7 +4,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STRINGS } from './i18n';
-import { PEEK_MAX_HEIGHT } from './peek';
+import { PEEK_HEIGHT } from './peek';
 import { configFromScript, destroy, init } from './sdk';
 
 const SHOP = 'pk_' + 'test_abcdef123456';
@@ -170,20 +170,23 @@ describe('size peek: messages', () => {
     return { b, f: peeks()[0]! };
   }
 
-  it('curtain:peek-size grows the frame (capped) and a zero height collapses it again', () => {
+  it('curtain:peek-size opens the frame only at the one fixed height; 0 collapses it again', () => {
+    expect(PEEK_HEIGHT).toBe(112); // apps/web PEEK_HEIGHT
     const { f } = setup();
-    post(f, msg('curtain:peek-size', { height: 118.2 }));
-    expect(f.style.height).toBe('119px');
+    post(f, msg('curtain:peek-size', { height: PEEK_HEIGHT }));
+    expect(f.style.height).toBe('112px');
     expect(f.style.visibility).toBe('');
-    post(f, msg('curtain:peek-size', { height: 5000 }));
-    expect(f.style.height).toBe(`${PEEK_MAX_HEIGHT}px`);
     post(f, msg('curtain:peek-size', { height: 0 }));
     expect(f.style.height).toBe('0px');
     expect(f.style.visibility).toBe('hidden');
-    for (const bad of [-20, 'tall', null, NaN]) {
-      post(f, msg('curtain:peek-size', { height: 50 }));
-      post(f, msg('curtain:peek-size', { height: bad }));
-      expect(f.style.height, String(bad)).toBe('0px');
+  });
+
+  it('privacy (P2): any other height collapses, so the page never learns more than one bit from the frame', () => {
+    const { f } = setup();
+    for (const other of [118.2, 111, 113, 5000, -20, 'tall', '112', null, NaN]) {
+      post(f, msg('curtain:peek-size', { height: PEEK_HEIGHT }));
+      post(f, msg('curtain:peek-size', { height: other }));
+      expect(f.style.height, String(other)).toBe('0px');
     }
   });
 

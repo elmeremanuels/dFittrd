@@ -50,11 +50,11 @@ typecheck · test · build · bundle-secret-scan and builds/pushes the image to 
 | Area | Routes | Auth |
 |---|---|---|
 | App | `POST /v1/devices`, `POST /v1/devices/rotate`, `PUT /v1/me/signature`, `DELETE /v1/me/signature` ("Delete my scan"), `GET /v1/me/ledger`, `GET /v1/me/export`, `DELETE /v1/me`, `GET /v1/shops/:shopId/products`, `GET /v1/products/:id` (uuid, or external id + `?shopId`), `POST /v1/swipes`, `PUT/GET /v1/wardrobe[/:productId]`, `GET /v1/fit/cohort/:productId[?shopId]` | Bearer device JWT (30 d, `token_version` rotation) |
-| Try-on | `GET /v1/try/:token` → `{ shop, garment, trySession.intentToken, pairing, embed.allowedOrigins }`, `POST /v1/try/:token/fit-shown` → `{ billed }` | device JWT |
+| Try-on | `GET /v1/try/:token` → `{ shop, garment, trySession.intentToken, pairing, embed.allowedOrigins }`, `POST /v1/try/:token/fit-shown` → `{ billed }`, `GET /v1/peek?shop&product&page` → `{ shop, garment, embed.allowedOrigins }` (the size peek: read-only, no try session, only for a device already paired with the shop and a try-able product, own per-IP limit) | device JWT |
 | SDK | `POST /v1/sdk/sessions` (CORS `*`, per-shop rate limit, `embedUrl` always, `qrSvg` except for `surface: 'embed'`, 402 + the same body when paused), `GET /sdk/v1.js`, `GET /v1/sdk/media?shop=<id>&u=<url>` (the shop's logo or a product photo through `safeFetch`: allowlisted per shop, raster only, `MEDIA_PROXY_*` size cap, cache and rate limit) | public |
 | Renders | `POST /v1/renders/hero` → 202, `GET /v1/renders/:jobId`, `GET /v1/renders/:jobId/image\|video?exp&sig` | device JWT / signed URL |
-| Merchant | `PUT /v1/merchant/products/:externalId`, `POST …/products/validate`, `DELETE …/products/:externalId`, `GET …/products`, `GET …/usage`, `GET …/ledger`, `GET …/usage/anomalies`, `GET …/analytics/swipes`, `GET …/analytics/abandoned`, `GET …/analytics/fit-sizes`, `POST …/keys/rotate`, `PUT /v1/merchant/shops/self`, `POST /v1/merchant/woo/connect`, `POST /v1/merchant/woo/complete` | PK-HMAC, Bearer `sk_…`, or Shopify session token |
-| Shopify | `GET /shopify/admin` (embedded admin page from `@curtain/shopify-app`, `frame-ancestors` CSP), `GET /shopify/auth/callback` (302 to the embedded app home), `POST /shopify/token-exchange` (also writes the theme block's app-data metafields: public key, API/app URL), `POST /shopify/webhooks`, `POST /shopify/billing/subscribe` | none (page/redirect) / session token / webhook HMAC |
+| Merchant | `PUT /v1/merchant/products/:externalId`, `POST …/products/validate`, `DELETE …/products/:externalId`, `GET …/products`, `GET …/usage`, `GET …/ledger`, `GET …/usage/anomalies`, `GET …/analytics/swipes`, `GET …/analytics/abandoned`, `GET …/analytics/fit-sizes`, `POST …/keys/rotate`, `PUT /v1/merchant/shops/self`, `POST /v1/merchant/woo/connect`, `POST /v1/merchant/woo/complete`, `POST /v1/merchant/billing/stripe/checkout` (WooCommerce: Checkout for the Curtain plan, also the switch from a retired plan) | PK-HMAC, Bearer `sk_…`, or Shopify session token |
+| Shopify | `GET /shopify/admin` (embedded admin page from `@curtain/shopify-app`, `frame-ancestors` CSP), `GET /shopify/auth/callback` (302 to the embedded app home), `POST /shopify/token-exchange` (also writes the theme block's app-data metafields: public key, API/app URL), `POST /shopify/webhooks`, `POST /shopify/billing/subscribe` (the plan follows Shopify's active subscriptions on every token exchange; uninstall drops the shop to `free`) | none (page/redirect) / session token / webhook HMAC |
 | Billing | `POST /v1/billing/stripe/webhook` | Stripe signature |
 | Ops | `GET /healthz`, `GET /readyz` (db + jobs), `GET /v1/openapi.json` | public |
 
@@ -153,8 +153,8 @@ in an overlay on the merchant page.
 * Logs: pino, `authorization`/`cookie`/HMAC headers redacted, **no client IP** unless `LOG_IPS=1`;
   compose rotates `docker logs` at 7 × 20 MB, so nothing about a request outlives a week.
 * Shopify `customers/data_request` and `customers/redact` are acknowledged no-ops (no customer PII
-  held); `shop/redact` purges the shop via a job 48 h later; `app/uninstalled` drops the token and
-  pauses the shop.
+  held); `shop/redact` purges the shop via a job 48 h later; `app/uninstalled` drops the token,
+  pauses the shop and sets it to `free` with no subscription (Shopify cancels it on uninstall).
 
 ## Local demo
 

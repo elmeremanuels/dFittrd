@@ -98,6 +98,14 @@ describe('shop products: exported job', () => {
     expect(m.stage1b?.invented_back).toBe(false);
     expect(m.stage1b?.views.map((v) => v.bare_mask)).toEqual(['dress/bare_mask_front.png', 'dress/bare_mask_back.png']);
     expect(files.has('dress/bare_mask_front.png')).toBe(true);
+    // 0.4.0: stage 1b dresses the proxy-dressed mannequin (run 12: the bare legs became a romper).
+    expect(m.stage1b?.views.map((v) => [v.proxy_rgb, v.proxy_mask])).toEqual([
+      ['dress/proxy_front.png', 'dress/proxy_mask_front.png'],
+      ['dress/proxy_back.png', 'dress/proxy_mask_back.png'],
+    ]);
+    expect(files.has('dress/proxy_front.png') && files.has('dress/proxy_mask_back.png')).toBe(true);
+    expect(m.stage1b?.target).toMatchObject({ kind: 'proxy_dressed', proxy_kind: 'dress', proxy_glb_sha256: m.control.proxy?.glb_sha256 });
+    expect(m.hash_inputs.stage1b).toMatchObject({ target: { kind: 'proxy_dressed' } });
     expect(files.get('dress/source_front.jpg')).toEqual(fakeBytes('azure-palm-baby-doll-dress', 1));
     expect(m.control.mode).toBe('proxy');
     expect(m.control.proxy?.kind).toBe('dress');

@@ -3,8 +3,10 @@
   modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/aalter-studio-2
 
 Steps:
-  0. optional, --dress: stage 1b dresses our mannequin from the shop photos of a job exported with
-     --on-model/--flat-lay (stage1_dress.py) and writes the front/back stills stage 2 pins. Stage 2 does
+  0. optional, --dress: stage 1b dresses our PROXY-DRESSED mannequin (export 0.4.0+) from the shop photos of a
+     job exported with --on-model/--flat-lay (stage1_dress.py; --dress-engine fashn|qwen|both, `both` runs each
+     view through both engines and pins the still that passes QA v2 with the best score) and writes the
+     front/back stills stage 2 pins. Stage 2 does
      not start when a still failed QA (unless --accept-failed-dress) or when the back was invented and
      --allow-invented-back is missing. A job whose stills come from stage 1b cannot run stage 2 before them.
   1. check the job manifest (input_hash, pinned versions, front + back photos) and upload the job once
@@ -19,7 +21,7 @@ Steps:
 
 Options: --steps 40 --iterations 10000 --triangles 12000 --skip-video (reuse stage2/ already in the Volume)
          --no-synthetic-recon --control-encoding linear|inverse --no-pin-frames --force-upload
-         --dress --dress-engine fashn|qwen --dress-steps N --accept-failed-dress --allow-invented-back --dress-only
+         --dress --dress-engine fashn|qwen|both --dress-steps N --accept-failed-dress --allow-invented-back --dress-only
          --stage2-masks garment|foreground (stage 4's alpha targets on the generated frames; recorded)
 Every number this prints about cost is an ESTIMATE (list price x GPU seconds); the Modal invoice is
 the measurement. NOT TESTED on a GPU: the build container cannot reach Modal.
@@ -50,6 +52,11 @@ app.include(stage4_recon.app)
 def _dress_gate(m: dict, job_dir: str, dress_record: dict | None, *, accept_failed: bool, allow_invented: bool) -> list[str]:
     """Reasons not to start stage 2 on this job's pinned stills and prompts (empty = go)."""
     reasons = [f"prompt: {p}" for p in lib.prompt_problems(m)]
+    if m.get("stage1b"):
+        try:
+            lib.stage1b_plan(m)
+        except lib.ManifestError as e:
+            reasons.append(f"stage 1b: {e}")
     pending = lib.stills_pending(m, lambda rel: os.path.exists(os.path.join(job_dir, rel)))
     if pending:
         reasons.append(f"stage 1b stills missing for {', '.join(pending)}: run with --dress (or stage1_dress.py) first")
@@ -118,11 +125,24 @@ def main(
 
     dress_record = None
     if dress or dress_only:
+        lib.dress_engines(dress_engine)  # an unknown engine fails here, before any GPU time
         dcfg = stage1_dress.CFG
         t = time.time()
         dress_record = stage1_dress.run_local(job_dir, engine=dress_engine, steps=dress_steps, seed=None, composite=True, accept_failed=accept_failed_dress, category="", force_upload=force_upload)
         costs.append(lib.cost_record("stage1b_dress", gpu=dcfg["gpu_dress"], region=dcfg["region"], gpu_seconds=dress_record["cost"]["gpu_seconds"], wall_seconds=time.time() - t))
-        summary["stage1b"] = {"engine": dress_engine, "summary": dress_record["summary"], "views": [{k: v.get(k) for k in ("view", "invented", "method", "mask_source", "qa", "still")} for v in dress_record["views"]]}
+        summary["stage1b"] = {
+            "engine": dress_engine,
+            "qa_version": dress_record.get("qa_version"),
+            "target": dress_record.get("target"),
+            "summary": dress_record["summary"],
+            "views": [
+                {
+                    **{k: v.get(k) for k in ("view", "invented", "engine", "selection", "method", "mask_source", "qa", "back_view", "still")},
+                    "candidates": [{k: c.get(k) for k in ("engine", "qa", "back_view", "error", "seconds")} for c in v.get("candidates", [])],
+                }
+                for v in dress_record["views"]
+            ],
+        }
     if lib.invented_roles(m):
         print("[phase0] WARNING: " + lib.INVENTED_BACK_LABEL)
     stop = [] if (skip_video or dress_only) else _dress_gate(m, job_dir, dress_record, accept_failed=accept_failed_dress, allow_invented=allow_invented_back)

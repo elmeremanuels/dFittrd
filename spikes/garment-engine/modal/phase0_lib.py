@@ -455,11 +455,23 @@ STAGE1B_MODELS: dict[str, dict[str, Any]] = {
         "id": "Qwen/Qwen-Image-Edit-2511",
         "revision": "6f3ccc0b56e431dc6a0c2b2039706d7d26f22cb9",
         "licence": "Apache-2.0",
-        "use": "multi-image edit: our bare mannequin + the garment cut-out, and the invented back",
+        "use": "multi-image edit: our proxy-dressed mannequin + the SAM 2 garment cut-out, and the invented back",
     },
 }
 STAGE1B_ENGINES = ("fashn", "qwen")
+# --engine / --dress-engine choices: one engine, or `both` (each view dressed by both, the still that passes QA
+# with the best score is pinned, both are recorded).
+DRESS_ENGINE_CHOICES = STAGE1B_ENGINES + ("both",)
 STAGE1B_DIR = "stage1b"
+# The first export whose stage 1b views carry the proxy-dressed target (dress/proxy_<view>.png, proxy_mask).
+STAGE1B_TARGET_EXPORT = "phase0-export-0.4.0"
+
+
+def dress_engines(choice: str) -> list[str]:
+    """The engines one stage 1b call runs, in order (FASHN first: seconds, then Qwen: minutes)."""
+    if choice not in DRESS_ENGINE_CHOICES:
+        raise ValueError(f"engine {choice!r}: use one of {', '.join(DRESS_ENGINE_CHOICES)}")
+    return list(STAGE1B_ENGINES) if choice == "both" else [choice]
 
 STAGE1B_DEFAULTS = {
     # Qwen-Image-Edit (20B transformer + 7B text encoder, about 58 GB in bf16) fits an H100 without
@@ -535,6 +547,63 @@ STAGE1B_LABEL = "generated still: our mannequin dressed from a shop photo by a m
 INVENTED_BACK_LABEL = "INVENTED BACK: no back photo was given, the model made it up; validation only, never for a published asset (D13)"
 
 
+# Qwen-Image-Edit-2511 instructions (stage 1b, export 0.4.0). Picture 1 is our mannequin wearing the proxy in a flat
+# beige; picture 2 the garment cut out of the shop photo by SAM 2 (or, for an invented back, the dressed front still).
+# Built from the manifest's NEUTRAL description (prompt.description: colour, length, sleeves, style, fabric), never
+# the product title or brand (run 10 rendered the title as text).
+QWEN_DRESS_PROMPTS = {
+    "front": (
+        "Picture 1 shows a plain grey studio mannequin from the front, wearing a plain beige placeholder garment. "
+        "Picture 2 is the garment, cut out of a shop photo. "
+        "Dress the mannequin in this exact garment: {description}. "
+        "The garment replaces the beige placeholder completely, with the same colour, print, fabric, length, neckline and sleeves as picture 2. "
+        "Same pose, same camera, same framing, plain light-grey background. No person, no face, no extra clothing, no text."
+    ),
+    "back": (
+        "Picture 1 shows a plain grey studio mannequin from behind, a back view, wearing a plain beige placeholder garment. "
+        "Picture 2 is the back of the garment, cut out of a shop photo taken from behind. "
+        "Dress the mannequin in this exact garment, back view: {description}. "
+        "Show the back of the garment as picture 2 shows it, not its front: no front neckline and no front opening. "
+        "The garment replaces the beige placeholder completely. "
+        "Same pose, same camera, same framing, plain light-grey background. No person, no face, no extra clothing, no text."
+    ),
+    "back_invented": (
+        "Picture 1 shows a plain grey studio mannequin from behind, a back view, wearing a plain beige placeholder garment. "
+        "Picture 2 shows the same mannequin from the front wearing a garment. "
+        "Dress the mannequin of picture 1 in the same garment, back view: {description}; same colour, print, fabric and length, "
+        "a plain back with no front neckline, no front opening and no added details. "
+        "The garment replaces the beige placeholder completely. "
+        "Same pose, same camera, same framing, plain light-grey background. No person, no face, no extra clothing, no text."
+    ),
+}
+QWEN_NEGATIVE = "person, human, face, hands, skin, hair, extra limbs, changed pose, different camera angle, cropped, text, letters, watermark, logo, blurry, busy background, beige placeholder"
+QWEN_KIND_NEGATIVE = {
+    "dress": "trousers, pants, shorts, romper, jumpsuit, two separate legs of fabric",
+    "skirt": "trousers, pants, shorts, two separate legs of fabric",
+    "trousers": "dress, skirt, gown",
+}
+
+
+def neutral_description(m: Mapping[str, Any]) -> str:
+    """The manifest's neutral garment description (export 0.2.0+), else the plain category."""
+    d = ((m.get("prompt") or {}).get("description") or "").strip()
+    return d or f"a {m['category']}"
+
+
+def qwen_dress_prompt(m: Mapping[str, Any], view: str, invented: bool) -> tuple[str, str]:
+    """(instruction, negative prompt) for Qwen-Image-Edit at `view`. Raises ValueError when the instruction would
+    carry the product title or the brand."""
+    key = "front" if view == "front" else ("back_invented" if invented else "back")
+    text = QWEN_DRESS_PROMPTS[key].format(description=neutral_description(m))
+    product = (m.get("hash_inputs") or {}).get("product") or {}
+    for what, value in (("product title", m.get("product_name")), ("brand", product.get("brand"))):
+        if value and str(value).strip().lower() in text.lower():
+            raise ValueError(f"stage 1b instruction contains the {what} {value!r}")
+    kind = ((m.get("control") or {}).get("proxy") or {}).get("kind") or ((m.get("stage1b") or {}).get("target") or {}).get("proxy_kind")
+    neg = QWEN_NEGATIVE + (", " + QWEN_KIND_NEGATIVE[kind] if kind in QWEN_KIND_NEGATIVE else "")
+    return text, neg
+
+
 def tryon_category(category: str) -> str:
     try:
         return TRYON_CATEGORY[category]
@@ -576,6 +645,11 @@ def stage1b_plan(m: Mapping[str, Any]) -> list[dict[str, Any]]:
             problems.append(f"{name}: the photo's invented flag differs from the stage1b view")
     if bool(spec.get("invented_back")) != bool(views["back"].get("invented")):
         problems.append("invented_back differs from the back view")
+    if not all(views[n].get("proxy_rgb") and views[n].get("proxy_mask") for n in views) or (spec.get("target") or {}).get("kind") != "proxy_dressed":
+        problems.append(
+            f"stage1b views have no proxy-dressed target (dress/proxy_<view>.png): exported before {STAGE1B_TARGET_EXPORT}; "
+            "re-export (run 12 dressed the BARE mannequin and FASHN drew a romper over the two legs)"
+        )
     if problems:
         raise ManifestError("; ".join(problems))
     return [dict(views["front"]), dict(views["back"])]
@@ -857,6 +931,25 @@ def fit_size(w: int, h: int, area: int, multiple: int = 16) -> tuple[int, int]:
     """(W, H) with the aspect of w x h, about `area` pixels, both multiples of `multiple` (the edit model's canvas)."""
     s = math.sqrt(area / (w * h))
     return max(multiple, int(round(w * s / multiple)) * multiple), max(multiple, int(round(h * s / multiple)) * multiple)
+
+
+# Qwen-Image-Edit-Plus (diffusers 0.37.1, pipeline_qwenimage_edit_plus.py) encodes every input picture for the VAE
+# at calculate_dimensions(VAE_IMAGE_SIZE = 1024 * 1024, width / height), rounded to multiples of 32. The output
+# canvas must be that same size for picture 1 (our proxy-dressed render), or the output latent grid is a token
+# column wider or narrower than picture 1's and the model, which copies positions token for token, can draw the
+# mannequin shifted or scaled against the turntable camera. fit_size(480, 832, 1 MP, 16) gives 784 x 1344 (49 x 84
+# tokens of 16 px) against picture 1's 768 x 1344 (48 x 84).
+QWEN_VAE_IMAGE_AREA = 1024 * 1024
+
+
+def qwen_canvas(w: int, h: int, area: int = QWEN_VAE_IMAGE_AREA) -> tuple[int, int]:
+    """(W, H) of diffusers' `calculate_dimensions(area, w / h)` in the Qwen-Image-Edit-Plus pipeline: the size a
+    w x h input picture is VAE-encoded at, multiples of 32. stage1_dress.py passes it as the output canvas and checks
+    it against the pipeline's own function at run time."""
+    ratio = w / h
+    width = math.sqrt(area * ratio)
+    height = width / ratio
+    return int(round(width / 32) * 32), int(round(height / 32) * 32)
 
 
 def stage1b_summary(views: Sequence[Mapping[str, Any]], *, invented_back: bool) -> dict[str, Any]:

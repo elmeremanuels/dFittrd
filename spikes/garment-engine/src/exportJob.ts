@@ -70,13 +70,23 @@ import { GARMENT_ID, MANNEQUIN_GREY, MANNEQUIN_ID } from './separation';
  * 0.2.0: control proxy (`control.mode`), neutral prompts (`prompt`), shop products (`product_source`); all three are hashed.
  * 0.3.0: the bare mannequin's silhouette per frame (`control.bare_mask_dir`, `motion.bare_mask_dir`), no still pinned in the
  * motion clip, and with synthetic stills the proxy takes the synthetic garment's length (`length_source: "synthetic stills: …"`).
+ * 0.4.0: stage 1b dresses the PROXY-DRESSED mannequin (run 12: FASHN dressed the bare mannequin's two separate legs as a
+ * romper). Per view `dress/proxy_<view>.png` (our mannequin wearing the control proxy in a flat neutral material,
+ * `STAGE1B_PROXY_RGB`) and `dress/proxy_mask_<view>.png` (the visible proxy), built in every control mode; hashed as
+ * `stage1b.target`.
  * The version is hashed, so a re-export changes the job id (run 11a's `aalter-studio-2-28080a938e84` was 0.2.0).
  */
-export const EXPORT_VERSION = 'phase0-export-0.3.0';
+export const EXPORT_VERSION = 'phase0-export-0.4.0';
 /** Id of the control proxy in the rasterizer's id buffer. */
 export const PROXY_ID = 3;
 /** Albedo of the proxy where it is rendered for a picture (the control frames only use depth and ids). */
 const PROXY_GREY: [number, number, number] = [0.62, 0.62, 0.62];
+/**
+ * Albedo of the proxy in the stage 1b target render (`dress/proxy_<view>.png`): a flat, untextured warm neutral, so
+ * the try-on model reads it as one closed garment volume to replace, and it differs from the grey mannequin (0.5)
+ * and the studio background (235) by colour, so stage 1b can tell proxy left-overs from both.
+ */
+export const STAGE1B_PROXY_RGB: [number, number, number] = [0.72, 0.68, 0.62];
 /** Synthetic garment colour when the product has no primaryColorHex (shop drafts): a plain colour from its name, else this. */
 const FALLBACK_GARMENT_HEX = '#7a5c8a';
 const NAMED_HEX: Readonly<Record<string, string>> = {
@@ -204,6 +214,13 @@ export interface Stage1bView {
   /** Bare mannequin at this frame: studio RGB and the silhouette (255 = mannequin), whatever the control mode. */
   bare_rgb: string;
   bare_mask: string;
+  /**
+   * Since 0.4.0: our mannequin wearing the control proxy (flat neutral `STAGE1B_PROXY_RGB`) at this frame, the image
+   * stage 1b dresses, and the visible proxy (255). Stage 1b lets the model change only the proxy region dilated by a
+   * category margin and compares the dressed still's silhouette with the proxy's.
+   */
+  proxy_rgb: string;
+  proxy_mask: string;
   /** Outputs stage 1b writes. */
   still: string;
   garment_mask: string;
@@ -217,6 +234,8 @@ export interface Stage1bSpec {
   views: Stage1bView[];
   invented_back: boolean;
   background_rgb: number[];
+  /** What stage 1b dresses (0.4.0): the proxy-dressed mannequin; the proxy's kind and the flat material's albedo. */
+  target: { kind: 'proxy_dressed'; proxy_kind: string; proxy_glb_sha256: string; proxy_rgb: number[] };
   record: string;
   note: string;
 }
@@ -512,6 +531,8 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
   const pSpec = proxySpec(mannequin, payload, baseSize, proxyOpts);
   const proxy: Proxy | null = control === 'proxy' ? buildProxy(mannequin, payload, baseSize, proxyOpts) : null;
   const proxyItem: DrawItem | null = proxy ? { positions: proxy.mesh.positions, indices: proxy.mesh.indices, color: PROXY_GREY, id: PROXY_ID } : null;
+  // Stage 1b dresses the mannequin WEARING the proxy (same proxy as the control), in every control mode.
+  const dressProxy: Proxy | null = options.onModel ? (proxy ?? buildProxy(mannequin, payload, baseSize, proxyOpts)) : null;
   const controlItems: DrawItem[] = proxyItem ? [bareItem, proxyItem] : [bareItem];
   const prompt = videoPrompt(mannequin, payload, pSpec);
 
@@ -561,6 +582,12 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
       const r = render([bareItem], path.frames[frame]!, width, height);
       put(bare, rgbPng(width, height, studioRgb(r)));
       put(bareMask, grey(width, height, idMask(r, MANNEQUIN_ID)));
+      const proxyRgb = `dress/proxy_${view}.png`;
+      const proxyMask = `dress/proxy_mask_${view}.png`;
+      const dp = dressProxy!;
+      const rp = render([bareItem, { positions: dp.mesh.positions, indices: dp.mesh.indices, color: STAGE1B_PROXY_RGB, id: PROXY_ID }], path.frames[frame]!, width, height);
+      put(proxyRgb, rgbPng(width, height, studioRgb(rp)));
+      put(proxyMask, grey(width, height, idMask(rp, PROXY_ID)));
       const src = sources.find((s) => s.role === view);
       return {
         view,
@@ -568,6 +595,8 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
         source: src ? src.path : null,
         bare_rgb: bare,
         bare_mask: bareMask,
+        proxy_rgb: proxyRgb,
+        proxy_mask: proxyMask,
         still: `${STAGE1B_DIR}/${view}.png`,
         garment_mask: `${STAGE1B_DIR}/garment_mask_${view}.png`,
         invented: !src,
@@ -581,6 +610,7 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
       views,
       invented_back: inventedBack,
       background_rgb: [...STUDIO_RGB],
+      target: { kind: 'proxy_dressed', proxy_kind: dressProxy!.spec.kind, proxy_glb_sha256: sha256(proxyGlbBytes(dressProxy!, product.id, baseSize)), proxy_rgb: [...STAGE1B_PROXY_RGB] },
       record: `${STAGE1B_DIR}/record.json`,
       note:
         'Validation input: shop photos dressed onto our mannequin by stage 1b (generated, an estimate). ' +
@@ -592,11 +622,7 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
   // Control proxy file (inspection only; the frames below are what stage 2 reads).
   let manifestProxy: ManifestProxy | null = null;
   if (proxy) {
-    const glb = writeGlb([{ name: 'control-proxy', positions: proxy.mesh.positions, indices: proxy.mesh.indices, baseColor: [0.62, 0.62, 0.62, 1], roughness: 0.9 }], {
-      scale: 0.01,
-      generator: `@curtain/garment-spike ${EXPORT_VERSION}`,
-      extras: { productId: product.id, baseSize, unit: 'm', controlProxy: true, note: 'control signal for stage 2 only, never an output' },
-    });
+    const glb = proxyGlbBytes(proxy, product.id, baseSize);
     put('control/proxy.glb', glb);
     manifestProxy = { ...proxyRecord(proxy.spec), glb: 'control/proxy.glb', glb_sha256: sha256(glb) };
   }
@@ -684,7 +710,7 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
       ? [...sources.map((s) => ({ role: s.role, sha256: s.sha256, synthetic: false })), ...photos.filter((p) => p.photo.role === 'detail').map((p) => ({ role: p.photo.role, sha256: p.photo.sha256, synthetic: false }))]
       : photos.map((p) => ({ role: p.photo.role, sha256: p.photo.sha256, synthetic: p.photo.synthetic })),
     // Absent (undefined, so not hashed) unless onModel.
-    stage1b: onModel ? { source_kind: onModel.kind, invented_back: stage1b!.invented_back } : undefined,
+    stage1b: onModel ? { source_kind: onModel.kind, invented_back: stage1b!.invented_back, target: stage1b!.target } : undefined,
     control: { mode: control, proxy: proxyHashed },
     prompt,
     seeds,
@@ -753,6 +779,14 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
   };
   put('manifest.json', json(manifest));
   return { manifest, files, bytes };
+}
+
+function proxyGlbBytes(proxy: Proxy, productId: string, baseSize: string): Uint8Array {
+  return writeGlb([{ name: 'control-proxy', positions: proxy.mesh.positions, indices: proxy.mesh.indices, baseColor: [0.62, 0.62, 0.62, 1], roughness: 0.9 }], {
+    scale: 0.01,
+    generator: `@curtain/garment-spike ${EXPORT_VERSION}`,
+    extras: { productId, baseSize, unit: 'm', controlProxy: true, note: 'control signal for stage 2 only, never an output' },
+  });
 }
 
 function concat(a: ArrayLike<number>, b: ArrayLike<number>): Float64Array {

@@ -35,6 +35,9 @@ def load(name):
         return json.load(f)
 
 
+TARGET = {"kind": "proxy_dressed", "proxy_kind": "top", "proxy_glb_sha256": "c" * 64, "proxy_rgb": [0.72, 0.68, 0.62]}
+
+
 def on_model(base, *, back=False, kind="on_model"):
     """The fixture manifest turned into an --on-model export, the way src/exportJob.ts writes one
     (src/exportJob.ts and the round trip test below keep the two in step)."""
@@ -53,16 +56,18 @@ def on_model(base, *, back=False, kind="on_model"):
         "sources": sources,
         "views": [
             {"view": v, "frame": f, "source": (None if v == "back" and not back else f"dress/source_{v}.jpg"), "bare_rgb": f"dress/bare_{v}.png",
-             "bare_mask": f"control/mask/{f:04d}.png", "still": f"stage1b/{v}.png", "garment_mask": f"stage1b/garment_mask_{v}.png", "invented": v == "back" and not back}
+             "bare_mask": f"control/mask/{f:04d}.png", "proxy_rgb": f"dress/proxy_{v}.png", "proxy_mask": f"dress/proxy_mask_{v}.png",
+             "still": f"stage1b/{v}.png", "garment_mask": f"stage1b/garment_mask_{v}.png", "invented": v == "back" and not back}
             for v, f in (("front", 0), ("back", n // 2))
         ],
         "invented_back": not back,
         "background_rgb": list(STUDIO),
+        "target": TARGET,
         "record": "stage1b/record.json",
         "note": "",
     }
     m["hash_inputs"]["photos"] = [{"role": s["role"], "sha256": s["sha256"], "synthetic": False} for s in sources]
-    m["hash_inputs"]["stage1b"] = {"source_kind": kind, "invented_back": not back}
+    m["hash_inputs"]["stage1b"] = {"source_kind": kind, "invented_back": not back, "target": TARGET}
     m["input_hash"] = lib.input_hash(m["hash_inputs"])
     m["job_id"] = f"{m['product_id']}-{m['input_hash'][:12]}"
     return m
@@ -171,6 +176,12 @@ def test_plan_refuses_a_job_without_stage1b_or_with_inconsistent_flags(manifest)
     bad["photos"][0]["path"] = "photos/front.png"
     with pytest.raises(lib.ManifestError, match="must point at"):
         lib.stage1b_plan(bad)
+    old = copy.deepcopy(m)  # exported before 0.4.0: dressed the bare mannequin (run 12)
+    for v in old["stage1b"]["views"]:
+        del v["proxy_rgb"], v["proxy_mask"]
+    del old["stage1b"]["target"]
+    with pytest.raises(lib.ManifestError, match="proxy-dressed target"):
+        lib.stage1b_plan(old)
     bad = copy.deepcopy(m)
     bad["stage1b"]["views"][0]["source"] = None
     bad["stage1b"]["views"][0]["invented"] = True
@@ -379,6 +390,12 @@ def test_stage1_app_installs_fashn_without_dependencies_and_checks_the_parser_is
     for node in ast.walk(ast.parse(src)):
         if isinstance(node, ast.Call) and getattr(node.func, "attr", "") in ("pip_install", "uv_pip_install"):
             pytest.fail("stage1_dress.py must install from requirements-stage1.txt only")
+    # Run 12: FASHN maskless on the bare mannequin drew a romper. The engines now get the proxy-dressed target and
+    # FASHN runs masked with our edit region as its label map.
+    assert "segmentation_free=False" in src and "segmentation_free=True" not in src
+    assert 'v["proxy_rgb"]' in src and "dq.edit_region(" in src and "dq.fashn_person_labels(" in src
+    assert "lib.qwen_dress_prompt(m, name" in src and "product_name" not in src
+    assert '"phase0_garment", "phase0_dress"' in src  # shipped into the image
     # The invented back is flagged in the record of the view and in the summary.
     assert 'rec["label"] = lib.INVENTED_BACK_LABEL' in src and "invented_back=bool(spec[\"invented_back\"])" in src
 
@@ -399,7 +416,9 @@ def test_stage1_app_and_run_phase0_register_without_name_clashes():
     assert s1 == {"download_dress_weights", "dress"}
     assert s1.isdisjoint(s2) and s1.isdisjoint(s4), "App.include would let one function shadow another"
     assert names(run_phase0.app) == s1 | s2 | s4
-    assert set(stage1_dress.ENGINE_STEPS) == set(lib.STAGE1B_ENGINES) == set(stage1_dress.ENGINE_WEIGHTS)
+    assert set(stage1_dress.ENGINE_STEPS) == set(lib.STAGE1B_ENGINES)
+    assert set(stage1_dress.ENGINE_WEIGHTS) == set(lib.DRESS_ENGINE_CHOICES)
+    assert set(stage1_dress.ENGINE_WEIGHTS["both"]) == set(stage1_dress.ENGINE_WEIGHTS["fashn"]) | set(stage1_dress.ENGINE_WEIGHTS["qwen"])
 
 
 def test_run_phase0_does_not_start_stage2_on_missing_failed_or_invented_stills(manifest, tmp_path):
@@ -497,6 +516,12 @@ def test_exporter_on_model_job_round_trip(tmp_path):
     assert lib.invented_roles(m) == ["back"] and back["source"] is None
     for v in (front, back):
         assert _png_size(job / v["bare_rgb"]) == (64, 112) and (job / v["bare_mask"]).exists()
+        # 0.4.0: the proxy-dressed target and the visible proxy, also for the (default) proxy control
+        assert _png_size(job / v["proxy_rgb"]) == (64, 112) and (job / v["proxy_mask"]).exists()
+    assert m["stage1b"]["target"]["kind"] == "proxy_dressed" and m["hash_inputs"]["stage1b"]["target"] == m["stage1b"]["target"]
+    assert m["stage1b"]["target"]["proxy_glb_sha256"] == m["control"]["proxy"]["glb_sha256"]
+    bare_ctl = lib.load_manifest(str(_export(tmp_path, "e", "--on-model", "--control", "bare", "--front", str(shop / "front.jpg")) / "manifest.json"))
+    assert bare_ctl["control"]["proxy"] is None and bare_ctl["stage1b"]["target"]["proxy_kind"] == m["stage1b"]["target"]["proxy_kind"]
     assert (job / "dress" / "source_front.jpg").read_bytes() == (shop / "front.jpg").read_bytes()
     assert not (job / "photos").exists()
     assert lib.stills_pending(m, lambda rel: (job / rel).exists()) == ["front", "back"]

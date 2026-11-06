@@ -2,12 +2,12 @@
 
 GPU half of the Phase 0 spike (`docs/ENGINE-HANDOFF.md`), following shortlist A of `docs/research/garment-engine.md`:
 
-- **Stage 1b** (optional, for shop photos): dresses our bare mannequin, rendered at the front and back camera of the turntable, from a shop photo of the garment on a person or flat-lay. Garment segmentation with Grounding DINO + SAM 2.1, try-on with FASHN VTON v1.5 or Qwen-Image-Edit-2511 (all Apache-2.0), alignment QA against our silhouette. Its output is the front and back still stage 2 pins. See [Stage 1b](#stage-1b-dress-our-mannequin-from-shop-photos).
+- **Stage 1b** (optional, for shop photos): dresses our mannequin **wearing the coarse proxy** (export 0.4.0; before: the bare mannequin), rendered at the front and back camera of the turntable, from a shop photo of the garment on a person or flat-lay. Garment segmentation with Grounding DINO + SAM 2.1, try-on with FASHN VTON v1.5, Qwen-Image-Edit-2511 or both (all Apache-2.0), QA against the proxy silhouette with a leg-gap check. Its output is the front and back still stage 2 pins. See [Stage 1b](#stage-1b-dress-our-mannequin-from-shop-photos) and [Stage 1b after run 12](#stage-1b-after-run-12-proxy-dressed-target-both-engines-leg-gap-true-back).
 
 - **Stage 2**: Wan2.2-Fun-A14B-Control (Apache-2.0), driven by the depth video of our own mannequin **wearing a coarse proxy garment** (from the category and the size chart; `--control bare` renders the bare mannequin) along the fixed turntable path, with the front and back stills pinned at the first and last frame of each half turn. Because the control video is our own render, the camera pose of every generated frame is known. The prompts are neutral (no product title, no brand) and every generated frame's garment is scored against the pinned stills carried to its camera. See [Stage 2 after run 10](#stage-2-after-run-10-control-proxy-neutral-prompts-consistency-metric) and [Stage 2 after run 11](#stage-2-after-run-11-garment-masks-consistency-v2-stage-4-alpha-targets-proxy-length).
 - **Stage 4**: 2D Gaussian splatting with gsplat's `rasterization_2dgs` (Apache-2.0) plus a mask loss (on generated frames: our garment masks by default), then Open3D TSDF fusion (MIT), cleanup and decimation to 8–15k triangles, written as `.glb`.
 
-> **Status.** The build container that wrote this folder cannot reach Modal (the network proxy blocks gRPC); runs go through GitHub Actions. Stage 4 on synthetic frames and one full `run_phase0.py` (run 10: stage 2 on an H100, about 24 min, cost estimate $1.59; stage 4 on an L40S) have run there. Run 10 showed the dress turning into trousers between the pinned frames and the product name rendered as text; run 11a (proxy control, neutral prompts) kept the dress a dress and drew no text; its consistency and stage 4 numbers were wrong for reasons in our code, fixed and re-measured on its output on CPU (see [Stage 2 after run 11](#stage-2-after-run-11-garment-masks-consistency-v2-stage-4-alpha-targets-proxy-length)); export 0.3.0 and the new stage 4 alpha targets **have not run on a GPU yet**. See [What is not tested](#what-is-not-tested). Every cost figure is an **estimate**: list price × seconds.
+> **Status.** The build container that wrote this folder cannot reach Modal (the network proxy blocks gRPC); runs go through GitHub Actions. Stage 4 on synthetic frames and one full `run_phase0.py` (run 10: stage 2 on an H100, about 24 min, cost estimate $1.59; stage 4 on an L40S) have run there. Run 10 showed the dress turning into trousers between the pinned frames and the product name rendered as text; run 11a (proxy control, neutral prompts) kept the dress a dress and drew no text; its consistency and stage 4 numbers were wrong for reasons in our code, fixed and re-measured on its output on CPU (see [Stage 2 after run 11](#stage-2-after-run-11-garment-masks-consistency-v2-stage-4-alpha-targets-proxy-length)); export 0.3.0 and the new stage 4 alpha targets **have not run on a GPU yet**. Run 12 (Bohohippychic azure-palm-baby-doll-dress, stage 1b with FASHN on the bare mannequin, then stage 2 and 4, cost estimate $1.73) dressed the babydoll dress as a romper; export 0.4.0 and the stage 1b rework that follows from it ([Stage 1b after run 12](#stage-1b-after-run-12-proxy-dressed-target-both-engines-leg-gap-true-back)) **have not run on a GPU yet**. See [What is not tested](#what-is-not-tested). Every cost figure is an **estimate**: list price × seconds.
 
 ## Files
 
@@ -15,7 +15,8 @@ GPU half of the Phase 0 spike (`docs/ENGINE-HANDOFF.md`), following shortlist A 
 | --- | --- | --- |
 | `smoke.py` | Modal hello world: CPU function, GPU cold start, torch matmul | Modal |
 | `smoke_cpu.py` | The same without a GPU (login, image, remote call) | Modal |
-| `stage1_dress.py` | Stage 1b app: weights download (once), `dress` (segment the shop photo, try-on onto our render, garment mask, alignment QA, composite, record) | Modal, GPU |
+| `stage1_dress.py` | Stage 1b app: weights download (once), `dress` (segment the shop photo, try-on onto our proxy-dressed render with one engine or both, garment mask, QA v2, back-view checks, composite, record) | Modal, GPU |
+| `phase0_dress.py` | numpy, CPU: stage 1b edit region, FASHN label map, garment prior against the proxy-dressed target, QA v2 (proxy silhouette, leg gap, skirt cover, placeholder left-overs), back-view checks, engine choice; `python phase0_dress.py <job>` re-scores a finished job's stills | numpy, Pillow |
 | `stage2_video.py` | Stage 2 app: weights download (once), `generate` (3 clips with the manifest's prompts, assembled turntable, drift check, cost record), `score_consistency` (CPU: per-frame silhouette vs the control proxy) | Modal, GPU |
 | `stage4_recon.py` | Stage 4 app: `reconstruct` (2DGS → TSDF → mesh → `.glb` + metrics + cost record) | Modal, GPU |
 | `stage4b_retexture.py` | Stage 4b app (CPU, pure Python, no video model): re-textures a cut family's reference mesh for one colour/print variant from the variant's stage 1b front/back stills; writes `stage4b/<source>/variants/<id>/{texture.png, material.json, preview.glb, record.json}` and `variants.json` into the reference job | Modal (CPU) |
@@ -209,15 +210,17 @@ The payload, size chart and base size (AU 12, ours) come from the committed `dat
 ### Run stage 1b
 
 ```sh
-modal run spikes/garment-engine/modal/stage1_dress.py --job-dir spikes/garment-engine/out/phase0/<id> [--engine fashn|qwen]
+modal run spikes/garment-engine/modal/stage1_dress.py --job-dir spikes/garment-engine/out/phase0/<id> [--engine fashn|qwen|both]
 ```
 
 or as the first step of the full run (stage 2 only starts when both stills passed QA and, for an invented back, with `--allow-invented-back`):
 
 ```sh
-modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/<id> --dress --dress-engine fashn --allow-invented-back
+modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/<id> --dress --dress-engine both --allow-invented-back
 modal run spikes/garment-engine/modal/run_phase0.py --job-dir … --dress --dress-only   # stage 1b only, no video
 ```
+
+The steps and the QA below are the version run 12 ran (export 0.2.0, bare mannequin). From export 0.4.0 stage 1b dresses the proxy-dressed mannequin and QA v2 replaces this table: see [Stage 1b after run 12](#stage-1b-after-run-12-proxy-dressed-target-both-engines-leg-gap-true-back). The v1 numbers are still recorded per candidate as `qa_v1_vs_bare`.
 
 Per view (front first, then back) the app:
 
@@ -272,6 +275,100 @@ No stage 1b run has happened, so there is no measured time. Planning figures: FA
 ### Not tested (stage 1b)
 
 Everything that needs Modal or a GPU: the image build (the lock resolves; `pip install --no-deps` of fashn-vton and the parser check are untested), the weight downloads, the transformers calls for Grounding DINO and SAM 2 (written against transformers 4.57.3's documented API, not executed), FASHN's pipeline with our label maps in place of its parser, **whether DWPose finds a body on our grey mannequin** (the record counts the keypoints it found; if it finds none, FASHN's output will be poor and the qwen engine is the fallback), whether either model keeps our mannequin's pose and camera (that is what the QA measures), the QA thresholds, the back views, timings and costs. Tested without a GPU: the manifest wiring end to end through the TypeScript exporter, the mask operations, the alignment QA on synthetic scenes, the stage 2 gate in `run_phase0.py`, the requirement pins, and that the apps register without function-name clashes.
+
+## Stage 1b after run 12: proxy-dressed target, both engines, leg gap, true back
+
+Run 12 (GitHub Actions + Modal, H100 for stages 1b and 2, L40S for stage 4) ran Bohohippychic `azure-palm-baby-doll-dress` end to end from its public shop photos (front #1, back #4, on model): job `azure-palm-baby-doll-dress-e50eae989373`, export 0.2.0, stage 1b with FASHN v1.5 in maskless mode on the **bare** mannequin, `--accept-failed-dress`. Cost estimate $1.62–1.73 for the run, of which stage 1b $0.03–0.12 (30 GPU s, 107 s wall).
+
+What the stills show, looked at by eye:
+
+- FASHN transferred the print, the colours and the puffed elbow sleeves convincingly.
+- It dressed our mannequin as a **romper**: two separate legs of fabric over the thighs, ending mid-thigh, and an open front down to the waist. The shop photo shows a knee-length babydoll dress, one closed skirt. Maskless mode lets the model keep our visible bare legs, and it fitted the garment around them.
+- The **back** still is a front-like view with another neckline (a scoop that shows the grey chest), not the closed back of the back photo. Our mannequin has no face; DWPose found 18/18 keypoints on both views, so FASHN has no way to know it is looking at a back.
+- The QA failed both stills (silhouette IoU 0.808 / 0.806, mannequin MAE 30.4 / 36.0), but for the wrong reason: it compared with the bare mannequin and saw a moved mannequin, not a dress drawn as shorts. Stage 2 then copied the wrong shape faithfully: the pinned stills dominate the proxy control.
+
+### What changed (export 0.4.0, `stage1_dress.py`, `phase0_dress.py`)
+
+**Target: the proxy-dressed mannequin.** The exporter renders, per view, our mannequin wearing the same coarse proxy as the stage 2 control (one closed volume from below the neck to the hem for a dress) in a flat neutral beige (`STAGE1B_PROXY_RGB` 0.72/0.68/0.62, distinct from the grey mannequin and the studio background): `dress/proxy_<view>.png`, and the visible proxy `dress/proxy_mask_<view>.png`. They are built in every control mode (also `--control bare`) and hashed (`stage1b.target`, with the proxy's glb hash). `stage1b_plan` refuses a job without them (exported before 0.4.0). The rendered proxy mask of the azure job is pixel-identical to run 12's `control/proxy_mask/0000.png`.
+
+**Edit region** (`phase0_dress.edit_region`): the proxy plus the mannequin's arms in a sleeve band (14 % of the frame height below the proxy's top edge; 10 % before the review below, which cut run 12's sleeves), dilated by a category margin (`EDIT_MARGIN_FRAC`: 3 % of the height for one-pieces = 25 px, about 10 cm; 2 % tops; 3 % bottoms), cut 2 % above the proxy's top edge (never the head). The old 8 % margin made a box around the whole figure. Saved as `stage1b/edit_region_<view>.png`.
+
+**Engines** (`--engine fashn|qwen|both`, `--dress-engine` on `run_phase0.py`):
+
+| Engine | Inputs | Notes |
+| --- | --- | --- |
+| `fashn` | person = proxy-dressed render, garment = shop photo (front or back), category dress → one-pieces, **masked** (`segmentation_free=False`) | Our label map takes the parser's place: the edit region gets the category's garment label (FASHN greys it and repaints it), the head `face`, the rest of the mannequin `hands` (both in FASHN's exclusion set, kept as they are). It can no longer see two legs under the garment. But FASHN greys its area with 127, so the beige proxy never reaches the model: what it gets from the proxy is the **outline** of its mask (plus DWPose), and its own inpaint area is wider than our edit region (see the review below) |
+| `qwen` | picture 1 = proxy-dressed render, picture 2 = the SAM 2 cut-out of the shop photo (the back photo for the back), 40 steps, canvas = the size the pipeline VAE-encodes picture 1 at (768 × 1344 for 480 × 832) | Instruction from the manifest's neutral description (`lib.qwen_dress_prompt`), e.g. *"Dress the mannequin in this exact garment: a blue knee-length babydoll dress in a fluid viscose fabric, one closed skirt that falls from the waist to the hem and covers both legs. The garment replaces the beige placeholder completely … Same pose, same camera, same framing, plain light-grey background."* The back says *"a back view"* and *"Show the back of the garment as picture 2 shows it, not its front: no front neckline and no front opening"*. Never the title or brand (refused). Negative adds *trousers, pants, shorts, romper, jumpsuit, two separate legs of fabric* for a dress |
+| `both` | each view through both engines (both pipelines stay loaded: about 8 + 58 GB on the H100) | The candidate that passes QA with the best `qa_score` (mean of silhouette IoU, garment-proxy IoU, skirt cover and 1 − MAE/50; a ranking, not a quality measure) is pinned; if none passes, the best score goes to `rejected/`. Both are recorded (`views[].candidates`, `raw/<view>_<engine>.png`, `candidates/<view>_<engine>_garment_mask.png`, `selection`) |
+
+The garment mask is the difference to the proxy-dressed target inside the edit region, refined by SAM 2 and clipped to the region for the composite; the same garment **not** clipped (`garment_mask_unclipped_<view>.png`) is what the QA's inside fraction is measured on. The pinned still is still our **bare** render with only the garment pasted in: the placeholder never appears, and where the garment leaves the proxy region uncovered our bare mannequin shows.
+
+**QA v2** (`phase0_dress.still_qa`, `STILL_QA_THRESHOLDS`, version `stage1b-qa-0.3.0`; row counts for 832-px frames, scaled; "warn" = recorded under `warnings`, does not fail the still until re-tuned, `hard_checks` makes it fail):
+
+| Metric | Meaning | Pass |
+| --- | --- | --- |
+| `silhouette_iou` | Foreground of the generated still vs our mannequin **wearing the proxy** (bare ∪ proxy), not the bare mannequin | ≥ 0.85 |
+| `garment_proxy_iou` | Garment mask vs the proxy silhouette; at the back camera, the proxy's back silhouette | ≥ 0.70, **warn** |
+| leg gap (`leg_gap_rows`, `leg_gap`) | Dress or skirt: rows of the skirt zone (from the crotch, where our legs stand apart, to the proxy's hem) where the garment leaves the body axis open between two legs, as consistency v2 (`phase0_garment.leg_rows`, `gap_profile`) | fail at ≥ 4 rows and > 3 % of the zone |
+| `skirt_cover` | Share of the proxy the garment covers in the skirt zone | ≥ 0.70, **warn** |
+| `inside_fraction`, `cut_px`, `cut_rows` | Garment pixels inside the edit region, on the **unclipped** garment mask (`inside_basis`): a sleeve or hem the region (and so the composite) would chop | ≥ 0.97 |
+| `mannequin_mae_8bit` | Mannequin outside the edit region, generated vs our render | ≤ 25 |
+| `proxy_residue` | Share of the proxy still showing the flat placeholder | ≤ 0.05 |
+| `cover_fraction`, `touches_border` | As v1 | ≥ 0.05, false |
+
+**True back** (`phase0_dress.back_view_checks`, back view with a back photo; the chosen front still and both shop photos are compared, result in `back_view` and, on failure, in the QA failures):
+
+- the back still's garment must match the proxy's back silhouette (`garment_proxy_iou` above);
+- **mirror**: the back still must differ from the horizontally mirrored front still (block means over each garment's box, 48 × 80) at least half as much as the shop's back photo differs from its mirrored front photo (`min_mirror_diff_ratio` 0.5; for a plain garment both are small, so the bar drops with them);
+- **neckline** (a heuristic): when the shop's back is closed (its neckline at least 0.05 of the garment height shallower than the front's), the back still's neckline may be at most 0.05 deeper than the back photo's.
+
+### Measured on run 12 output (CPU)
+
+`python phase0_dress.py <run 12 job dir>` on the real run 12 stills (`stage1b/raw/<view>.png`, the garment masks stage 1b made, `dress/bare_mask_<view>.png`, `control/proxy_mask/0000.png` and `0080.png`, the shop photos and their SAM 2 masks). The same QA on the exporter's synthetic dress at the same two cameras (a render with a known dress, the positive control; not a model output) is in the last column.
+
+| | Run 12 front | Run 12 back | Synthetic dress, frame 0 / 80 |
+| --- | --- | --- | --- |
+| v1 (record; recomputed here to the digit): silhouette IoU vs the bare mannequin | 0.808 FAIL | 0.806 FAIL | — |
+| v1: mannequin MAE (uncovered, vs bare) | 30.4 FAIL | 36.0 FAIL | — |
+| v1: inside / cover | 1.000 / 0.532 | 1.000 / 0.518 | — |
+| v2 `silhouette_iou` vs bare ∪ proxy | **0.766 FAIL** | **0.762 FAIL** | 0.961 / 0.960 |
+| v2 `garment_proxy_iou` | **0.504 FAIL** | **0.490 FAIL** | 0.932 / 0.932 |
+| v2 leg gap (rows of the skirt zone) | **76 / 109 FAIL** | **67 / 109 FAIL** | 0 / 109 |
+| v2 `skirt_cover` | **0.377 FAIL** | **0.350 FAIL** | 0.846 / 0.846 |
+| v2 garment hem (row) vs proxy hem (row 568) | 539 | 531 | 566 |
+| v2 `inside_fraction` (edit region), sleeve band 10 % → 14 % | 0.974 → 1.000 | 0.971 → 1.000 | 1.000 |
+| v2 mannequin MAE outside the edit region, band 10 % → 14 % | 13.0 → 11.4 | 16.0 → 14.6 | 0 |
+| v2 `proxy_residue` | not measurable (no proxy target in run 12) | | |
+| back view: mirror difference stills / shop photos | — | 26.1 / 28.7 = **0.91, passes** | — |
+| back view: neckline depth back still / back photo / front photo / front still | — | 0.117 / 0.006 / 0.127 / 0.187: **FAIL** (front features on the back) | — |
+
+So both run 12 stills fail QA v2 **for the right reason**: the leg gap (the romper's two legs below the crotch), with the low skirt cover and garment-proxy IoU that come with it. The MAE no longer fails (outside the edit region FASHN changed the mannequin by 13–16 levels; the composite replaces it anyway). The back fails the neckline heuristic: its open neckline is the front's, the back photo's is closed. The **mirror check does not catch run 12's back** (ratio 0.91): the print differs between the two stills, so pixel statistics see a different image; only the shape cue (neckline) sees a front. The synthetic dress passes every check. Thresholds are set between these two cases, one product: re-tune on the first proxy-dressed run.
+
+### Review of the rework (QA `stage1b-qa-0.3.0`; CPU on run 12's stills, no GPU)
+
+- **Sleeve band.** On run 12 the region (proxy top row 235, band 83 px, margin 25 px) stopped at row 343 on the arms; the azure dress's puffed sleeves end at about rows 350 (front) and 365 (back). That was most of the 2.6–2.9 % of garment outside the region, and a correct dress would have been pinned with its sleeves chopped at a horizontal line. `SLEEVE_BAND_FRAC` is now 0.14 for one-pieces and tops (116 px; region to row 376, `arm_rows_end` in the record): inside fraction 1.000 / 1.000 on run 12 (0.12 still cut the back: 0.997). A longer sleeve is still cut, and now fails (next point). A band from the product's sleeve length would be better.
+- **Inside fraction was vacuous.** The app ANDed the garment mask with the region before the QA, so `inside_fraction` was 1.0 by construction (run 12's 0.974 / 0.971 came from the re-score on the old v1 masks). The app now also builds the garment without the clip (`phase0_dress.unclipped_garment`: the difference prior in the region grown by the sleeve band, kept where it connects to the garment, plus SAM 2's unclipped mask when SAM won), saves it, and `still_qa(garment_full=…)` measures `inside_fraction`, `cut_px`, `cut_rows` and the border check on it. A garment the region would chop fails with "garment cut by the edit region".
+- **Qwen canvas.** `fit_size(480, 832, 1 MP, 16)` gave 784 × 1344, while diffusers 0.37.1 (`pipeline_qwenimage_edit_plus.calculate_dimensions`) VAE-encodes picture 1 at 768 × 1344 (multiples of 32): 49 against 48 token columns, so the mannequin could come out about 2 % narrower or shifted (up to about 10 px at the right edge) after the resize to 480 × 832, straight into the silhouette IoU, the MAE and the composite. The canvas is now `lib.qwen_canvas` (the same formula), checked against the pipeline's own function at run time and recorded as `canvas` and `picture1_vae_size`. Explicit sizes stay: the pipeline's default would follow the last picture, the garment cut-out.
+- **FASHN's grey.** FASHN's `create_clothing_agnostic_image` (pinned commit) greys `buffer_mask | hybrid(contour, bounding box)` dilated about 33 px left/right and 16 px up/down at 864 px, minus identity/hands/feet labels, with value 127, background inside the box included. So FASHN's inpaint area is wider than proxy + 25 px (only the composite is held to the region), and the beige proxy is greyed out before the model sees it. Our bare mannequin's grey is median 116, 75th percentile 124, and 56 % of its pixels are within 12 of 127 on every channel (`mannequin_grey` in the record and the re-score): the grey area merges into the grey arms, legs and neck. FASHN's benefit from the proxy is the mask outline, plus DWPose. The app now saves the agnostic image FASHN saw (`candidates/<view>_fashn_agnostic.png`, with its 127-filled pixels inside and outside our region in the record), so the first GPU run shows what it was given. Open: shade the target's mannequin away from 127 in the exporter. The label map itself checks out against the pinned commit (label ids as the model card, `hands` and `face` in the exclusion set, the stand-in provides every symbol `pipeline.py` and `agnostic.py` import, the call signature matches).
+- **Proxy-shape checks warn.** `garment_proxy_iou ≥ 0.70` and `skirt_cover ≥ 0.70` are measured against a proxy whose flare is a default (hem_flare 1.35), and their only positive control is the exporter's synthetic dress, a render on the proxy's own mesh family. A correct but narrower or shorter dress could fail them. They are now warnings (`STILL_QA_WARN_ONLY`) until reviewed on the first proxy-dressed run (both are logged per candidate); the leg gap stays the hard dress-shape failure. Run 12 still fails, on the leg gap and the silhouette.
+- **Front reference.** A rejected front still was still used as picture 2 of Qwen's invented back and as the reference of the back-view checks. Now only a front that passed QA (or `--accept-failed`) is the reference; otherwise the record says why (`not_back_reference`, `back_view.note`), and the invented back is not generated.
+- `python -I phase0_dress.py <job>` works (the module puts its own directory on `sys.path` before importing `phase0_garment`). The Qwen model pin now says it edits the proxy-dressed mannequin.
+
+### Not tested (after run 12)
+
+Nothing of this section has run on a GPU: export 0.4.0, FASHN in masked mode with our label map (written against `fashn_vton` at the pinned commit, `pipeline.py` and `preprocessing/agnostic.py` read, not executed), the Qwen engine and its instruction, `--engine both` with both pipelines in one container (memory), the back-view checks inside the app, timings and cost. The first Qwen run also downloads 57.7 GB of weights on a CPU container (`CURTAIN_MODAL_TIMEOUT_DOWNLOAD`, 2 h), which may not fit next to stage 2 in a 120-minute GitHub job: run it with `--dress-only` first. Neither engine knows our faceless mannequin's back from its front except through the instruction (Qwen) and the garment photo; the back-view checks are there to catch it. Cost estimate for `both` on an H100: FASHN seconds plus Qwen minutes per view, about $0.20–0.50 per product (not measured).
+
+Re-run this product (from the repo root; the 0.4.0 export changes the job id, expected `azure-palm-baby-doll-dress-6d2f2611a144`):
+
+```sh
+pnpm build:packages
+pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch-images
+git diff --exit-code -- spikes/garment-engine/data/bohohippychic/images.json spikes/garment-engine/data/bohohippychic/products.json
+pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product azure-palm-baby-doll-dress
+modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/azure-palm-baby-doll-dress --dress --dress-engine both --no-synthetic-recon
+```
+
+Without `--accept-failed-dress` stage 2 starts only when both stills pass QA v2, so a failed stage 1b costs stage 1b only. Re-score a finished job on CPU: `python -I spikes/garment-engine/modal/phase0_dress.py spikes/garment-engine/out/phase0/azure-palm-baby-doll-dress`.
 
 ## Stage 2 after run 10: control proxy, neutral prompts, consistency metric
 

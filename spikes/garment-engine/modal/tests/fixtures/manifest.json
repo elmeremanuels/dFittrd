@@ -1,7 +1,7 @@
 {
   "format": "curtain.phase0.job",
   "format_version": 1,
-  "job_id": "monochrome-03-e83b43167ca2",
+  "job_id": "monochrome-03-802a2d1ce47d",
   "product_id": "monochrome-03",
   "product_name": "Heavyweight Boxy Tee",
   "category": "top",
@@ -91,7 +91,7 @@
     "version": "0.1.0",
     "shape": "M",
     "glb": "mannequin.glb",
-    "glb_sha256": "6be890f495d2647b3c0b78fa0ce343e2d6206f1560019140b257d4c3131d1ebf",
+    "glb_sha256": "64f2413f3c945ae88c46d0c35e129e3da5209660f09cf43bce8579a6bb94bed9",
     "unit": "m",
     "stature_cm": 168
   },
@@ -163,7 +163,7 @@
       "sleeve_source": "sleeve_length 22 cm",
       "notes": [],
       "glb": "control/proxy.glb",
-      "glb_sha256": "542328d9f8dc2dd7a8dfee54aa643e1c5f5223a3e99b6686c1392953751570ea"
+      "glb_sha256": "438028f69df28aa8a40f7b0fe1049d9ec3d17db35be316f17aa2e6653f6d22b7"
     },
     "depth_mm_dir": "control/depth_mm",
     "depth_vis_dir": "control/depth_vis",
@@ -297,9 +297,9 @@
       "licence": "Apache-2.0 (gsplat), MIT (Open3D)"
     }
   },
-  "exporter": "@curtain/garment-spike phase0-export-0.3.0",
+  "exporter": "@curtain/garment-spike phase0-export-0.4.0",
   "hash_inputs": {
-    "exporter": "phase0-export-0.3.0",
+    "exporter": "phase0-export-0.4.0",
     "product": {
       "schemaVersion": 1,
       "id": "monochrome-03",
@@ -461,7 +461,7 @@
         "sleeve_cm": 22,
         "sleeve_source": "sleeve_length 22 cm",
         "notes": [],
-        "glb_sha256": "542328d9f8dc2dd7a8dfee54aa643e1c5f5223a3e99b6686c1392953751570ea"
+        "glb_sha256": "438028f69df28aa8a40f7b0fe1049d9ec3d17db35be316f17aa2e6653f6d22b7"
       }
     },
     "prompt": {
@@ -501,5 +501,5 @@
     },
     "synthetic": true
   },
-  "input_hash": "e83b43167ca2f75248ffd775bab91956e4c0725661a8d863eaa44fc9e22587a4"
+  "input_hash": "802a2d1ce47d70da9fbb46f65b31cacd0c71b0f1386714c63a96fd1b031ad224"
 }

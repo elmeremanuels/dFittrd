@@ -34,7 +34,13 @@ jobs:
       - name: Check and normalise Modal secrets
         run: |
           clean() { printf '%s' "$1" | tr -d '[:space:]"'"'"; }
+          # Accept a pasted 'modal token set --token-id ak-... --token-secret as-...' line in either secret.
+          both="$MODAL_TOKEN_ID $MODAL_TOKEN_SECRET"
+          pid=$(printf '%s' "$both" | grep -oE 'ak-[A-Za-z0-9]+' | head -n1 || true)
+          psec=$(printf '%s' "$both" | grep -oE 'as-[A-Za-z0-9]+' | head -n1 || true)
           id=$(clean "$MODAL_TOKEN_ID"); sec=$(clean "$MODAL_TOKEN_SECRET")
+          if [ -n "$pid" ] && [ "$id" != "$pid" ]; then echo "::add-mask::$pid"; id=$pid; echo "::warning::MODAL_TOKEN_ID held more than the Token ID; the ak- value was extracted. Please store only the Token ID."; fi
+          if [ -n "$psec" ] && [ "$sec" != "$psec" ]; then echo "::add-mask::$psec"; sec=$psec; echo "::warning::MODAL_TOKEN_SECRET held more than the Token Secret; the as- value was extracted. Please store only the Token Secret."; fi
           echo "::add-mask::$id"; echo "::add-mask::$sec"
           if [ -z "$id" ] || [ -z "$sec" ]; then
             echo "::error::Add repository secrets MODAL_TOKEN_ID and MODAL_TOKEN_SECRET (Settings > Secrets and variables > Actions)."

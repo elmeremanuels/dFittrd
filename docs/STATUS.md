@@ -1,4 +1,4 @@
-# Status — 2026-11-05
+# Status — 2026-11-06
 
 This is the integration snapshot after the parallel build and review passes. Read it with
 `docs/DECISIONS.md` (why), `docs/ARCHITECTURE.md` (layout) and `docs/HANDOFF.md` (product truth).
@@ -10,6 +10,79 @@ done **without** a GPU service, video models or pilot photos: the carry-over fin
 vocabulary and fabric library, the canonical mannequin, the model-free pipeline stages and a spike
 viewer. **Phase 0 itself has not started.** None of its six acceptance items (size test, fabric
 test, chart agreement on real products, view agreement, measured cost, write-up) is met yet.
+
+### Round of 6 Nov 2026: carry-over leftovers, Modal pipeline, viewer speed
+
+**Verification run (6 Nov 2026, repo root, demo stopped, `.demo-db` removed first)**
+
+| Command | Result |
+|---|---|
+| `flock /tmp/curtain-pnpm.lock pnpm install` | pass, lockfile up to date |
+| `pnpm check` | pass (secret scan clean, SDK 7,802 B gzip of 8,192) |
+| `pnpm demo:e2e` | pass, both flows (WooCommerce and Shopify Dawn) |
+| `pnpm --filter @curtain/garment-spike build:bundle` | pass: aalter-studio-2 14,720 triangles, 296 KB, IoU 0.9955, 3.9 s; monochrome-03 7,808 triangles, 165 KB, IoU 0.9912, 3.2 s |
+| `pnpm --filter @curtain/garment-spike export:phase0 -- --product all --synthetic-photos` | pass: 160 turntable + 81 motion frames at 480×832 per product, 1,052 files, 17.6 / 14.7 MB, 13–14 s each |
+| `pnpm --filter @curtain/garment-spike viewer:smoke` | pass, 14 screenshots, 67 s total |
+| `python -m pytest -q tests` in `spikes/garment-engine/modal` (Python 3.11, Open3D 0.19.0) | 33 passed |
+
+Tests: schema 319, fit-engine 111, anchors 53, mannequin 38, taste-engine 95, sdk 90,
+tryon-providers 70, shopify-app 104, woocommerce-plugin 66 (PHP), api 146, web 261,
+garment spike 91 + viewer 43. Web: 31 precache entries.
+Not run here: the Playwright privacy e2e, the api Docker image build, real phones, any `modal run`
+from this container.
+
+**Carry-over findings closed this round** (numbers as in the list below): #16 head top without
+hair (`headTopWithoutHair`, web `headTop.test.ts`), #20 neutral fit term for items without fit
+points (taste-engine `carryover.test.ts`), #22 seen memory, wardrobe and outbox keyed by shop and
+item with a Dexie migration (taste-engine, web `shopKeys.test.ts`), #23 `/v1/swipes` accepts the
+valid events of a batch and reports the rejected ones (api `swipes.test.ts`), #24 an explicit
+`unknown` wardrobe size instead of `"ONE"` (`WARDROBE_SIZE_UNKNOWN`). Also this round: the fabric
+library wired into the Woo meta box and Shopify metafield mappings (schema `fabricWiring.test.ts`,
+plugin `fabric-text.test.php`), `billing_anomalies` in the drizzle schema and snapshots, merchant
+views moved to `routes/merchant.ts`, and the Caddy CSP `img-src` narrowed to our own origins.
+#17 has only been made one named constant; the prior share itself is unchanged.
+
+**Review findings fixed at the end of this round**
+
+| Id | Fix | Test |
+|---|---|---|
+| cohort-unknown-bucket-server (low) | `fitCohort` no longer counts `unknown` rows as a size bucket; they still count towards `n` and the kept rate. The web client's filter stays as a fallback for older servers. | api `analytics.test.ts` |
+| R-yoke-not-from-width (medium) | D15 in `DECISIONS.md`, `ENGINE-HANDOFF.md`, the viewer README and the code comments now say what the code does: `shoulder_width` drives only the size-to-size ratio of the shoulder ring. The synthetic yoke's absolute width is the mannequin torso's (about 21.6 cm half-width on the ring, about 26 cm just around it), and the `anchors.json` seams at ±width/2 are notional chart points, not on the mesh. Not fixed in geometry. | spike `grading.test.ts` pins the gap |
+| R-readme-p99-inconsistent (low) | The viewer README gives the strain per product: dress p99 9–11.5 %, tee p99 11–24 % (XS–L). | viewer `engine.test.ts`: tee XS–L p99 < 25 %, max < 45 % |
+| R-node-bench-removed (low) | New `spikes/garment-engine/viewer/scripts/bench-drape.ts` reproduces the node "after" numbers. The "before" numbers came from a deleted scratch script of the old engine and are labelled as a one-off. | — (script, not a test) |
+
+**Modal pipeline.** The code is in `spikes/garment-engine/modal/` (stage 2 video with
+Wan2.2-Fun-A14B-Control, stage 4 gsplat 2DGS reconstruction + TSDF mesh, `run_phase0.py`, cost
+records). This cloud session cannot reach Modal (the network proxy blocks gRPC), so nothing was run
+from here. Runs go through `.github/workflows/modal.yml` on GitHub runners, triggered by
+`.github/modal/run.txt`, or from the founder's computer (`modal/README.md`). Recorded on GitHub
+Actions so far (branch `claude/garment-engine`, 6 Nov 2026; checked with `gh run list`/`gh run view`):
+
+- `smoke.py`: passed on an L4 (CUDA, 20 × 4096² matmul in 0.43 s, 15.6 s wall with cold start). Five earlier runs failed on secret formatting and GPU selection.
+- `stage4_recon.py --source synthetic` on aalter-studio-2 (L40S): the first attempt failed; after the per-camera colour fix it passed. 10k iterations in 64.6 s train + 8.0 s fuse + 2.9 s mesh, 79 GPU s. Masked PSNR 31.3 train / 31.1 holdout, mask IoU 0.993 / 0.992, mesh 12,000 triangles (in budget, edge-manifold, not watertight), against the synthetic truth: Chamfer mean 1.45 cm, F-score 0.41 at 1 cm and 0.79 at 2 cm, max error 9.8 cm. Cost **estimate** $0.04–0.05 (list price × seconds; the Modal invoice is the measurement and was not read).
+- Stage 2 (Wan2.2 video) has **not** produced a result yet: run 10 (`run_phase0.py`, stage 2 then stage 4) was queued in `run.txt` while this was written; its outcome is not recorded here. So no generated video, no seam drift, no stage 4 on generated frames, and no real GPU cost per product exist yet. The founder's computer remains the fallback if the Actions route stops working.
+
+**Spike viewer, measured before and after** (4-core build container, headless Chromium with
+SwiftShader, so rendering also runs on the CPU; numbers from `viewer:smoke`):
+
+| | Before (5 Nov) | After (6 Nov, this run) |
+|---|---|---|
+| Dress, one size | 6.2–7.6 s | 1.2–1.4 s per size (3 workers), first drape after page load 2.61 s (worker start in the Vite dev server) |
+| Dress, three sizes side by side | 20–24 s | 2.2–2.3 s wall (sizes in parallel) |
+| Tee, three sizes | 13.6 s | 2.4 s wall, 0.93–0.96 s per size |
+| Node CPU, one size (`viewer/scripts/bench-drape.ts`) | dress 3.0 s, tee 1.45 s (one-off, script gone) | dress 1.0–1.07 s, tee 0.32–0.47 s |
+| Edge strain after the drape (node) | — | dress p99 9–11.5 %, tee p99 11–24 % (XS–L), max 18–39 % |
+| Production build, largest chunk | 199 KB gzip | 208 KB gzip (`scene`, three.js not split; budget 400 KB) |
+
+1 of 16 fresh drapes in the smoke run is over the 2 s budget (the first one). Phone: not measured.
+
+**Remaining gaps after this round**
+
+- Stage 2 on a GPU without a recorded result; stages 3 and 4 never run on generated video.
+- The synthetic yoke is the mannequin's width, not the chart's; real seams need a reconstruction with seams or a tailored synthetic yoke.
+- Tee strain is high on small sizes (p99 up to 24 %), and the body-104/90/112 smoke case shows 53.5 % neck strain (body wider at the shoulders than the garment, not checked). The v0 mannequin's arms overlap the torso.
+- Drape on a mid-range phone, the hero-render flow, the blind tests with five people and pilot data: all still open (see "What Phase 0 still needs").
+- Carry-over #14 (SDK licence, founder) and #17 (population prior share, needs tape-measured volunteers) stay open.
 
 ### Verification run (5 Nov 2026, repo root, fresh `.demo-db`)
 
@@ -60,15 +133,10 @@ Closed (code and tests in this branch):
 18. The console shows the size distribution of standalone sessions (`analytics/fit-sizes`, k-floored).
 19. The abandoned-opens k floor counts distinct devices, not sessions.
 
-Still open:
+Still open as of 5 Nov (16, 20, 22, 23 and 24 were closed on 6 Nov, see the round above):
 
 14. SDK is `UNLICENSED` but ships in a GPL plugin: founder decision, before WordPress.org.
-16. Scan head-top row includes hair (girths about 1–3 % low); the face step says "models not available" while loading. Not touched.
 17. About 58 % population prior in the girth means: needs the tape-measured volunteers.
-20. Items without fit points never earn the fit term in deck ranking.
-22. Item ids namespaced by shop: server side done; `taste-engine` and `apps/web/src/store` still key by `itemId`.
-23. `/v1/swipes` still rejects a whole batch for one bad event.
-24. Wardrobe size null vs `"ONE"` mismatch between `taste-engine` and `WardrobePutRequest`.
 21. Superseded by the Phase 5 photo finish.
 
 ### What was built for the engine, and what each proves
@@ -82,8 +150,8 @@ Still open:
 | Canonical mannequin v0 | `packages/mannequin` | Deterministic procedural body in 3 shapes (XS/M/XXL), 14.8–15.2k triangles each, girth on the mesh equal to the table at every ring, length lines, turntable camera paths (72 frames at three heights), a 6 s motion clip with a 10-joint rig, a glTF writer. | Not anthropometric; limbs overlap the torso; Phase 1 replaces the shape table. |
 | Spike stage 3 (separation) | `spikes/garment-engine/src/separation.ts` | Difference mask vs the bare mannequin works on our own synthetic renders: IoU 0.9955 / 0.9912 over 72 frames. | Untested on generated video; fails for a garment the colour of the mannequin (IoU < 0.5); no SAM 2 / motion signal yet. |
 | Spike stage 5 (anchoring, calibration) | `src/anchoring.ts` | Plane slicing measures any mesh in mannequin space; least-squares global scale then per-ring correction removes a simulated reconstruction error (6.3–6.6 cm max before, 1.65 / 0.00 cm residual after the global scale, 0.00 cm after calibration). | Chart agreement is ~0 by construction on synthetic data; the real tolerance needs Phase 0 data. |
-| Spike stage 6 (grading) and bundle | `src/grading.ts`, `src/bundle.ts` | Per-size targets from the chart, standard increments where it has no column (logged), and the bundle format (base.glb, anchors.json, grading.json, material.json, qa.json) with an input hash, deterministic. | No Draco, no KTX2, no textures or UVs; `shoulder_width` not yet in grading.json. |
-| Spike viewer | `spikes/garment-engine/viewer` | The device half end to end on synthetic data: avatar from typed measurements, per-anchor placement from fit-engine slack, PBD drape with collision, S/M/L side by side, fit map, linen/silk presets, and `blind.html` for the size and fabric tests with CSV export. | Not the product viewer (`packages/garment-viewer`, Phase 2); no WebGPU, no fallback, no textures; drape far above the 2 s budget in software rendering. |
+| Spike stage 6 (grading) and bundle | `src/grading.ts`, `src/bundle.ts` | Per-size targets from the chart, standard increments where it has no column (logged), and the bundle format (base.glb, anchors.json, grading.json, material.json, qa.json) with an input hash, deterministic. | No Draco, no KTX2, no textures or UVs; `shoulder_width` in grading.json drives only the size ratio of the yoke, not its absolute width. |
+| Spike viewer | `spikes/garment-engine/viewer` | The device half end to end on synthetic data: avatar from typed measurements, per-anchor placement from fit-engine slack, PBD drape with collision, S/M/L side by side, fit map, linen/silk presets, and `blind.html` for the size and fabric tests with CSV export. | Not the product viewer (`packages/garment-viewer`, Phase 2); no WebGPU, no fallback, no textures; drape per size about 1.2–1.4 s in software rendering since 6 Nov, the first drape after page load over 2 s; not measured on a phone. |
 | Research | `docs/research/garment-engine.md`, `fabrics.md`; banned-model lint extended (`tryon-providers` `bannedModels.ts`) | Shortlist with licences: Wan2.2-Fun Control (Apache-2.0) vs Kling 3.0 Pro (hosted); gsplat 2DGS vs NeuS-style SDF; Anny body model (Apache-2.0); Modal EU / Koyeb. Two plan risks found: no hosted video API with verified camera-trajectory control, and none with an EU region. | Cost per product is an **estimate** ($1.3–5.6 per attempt, $250 Phase 0 budget), not a measurement. |
 
 ### What Phase 0 still needs
@@ -104,7 +172,7 @@ Still open:
 | Separation IoU, 72 frames | 0.9955 (lowest frame 0.988) / 0.9912 (lowest 0.982) |
 | Mannequin v0 | 14.8–15.2k triangles per shape |
 | Spike viewer production build | largest chunk 758 KB raw, 199 KB gzip (three.js included); handoff budget 400 KB gzip |
-| Drape settle, 1.5 s of cloth | about 1.2 s CPU per size in node; headless SwiftShader smoke 7.6–10.2 s per size, 24 s for three sizes (rendering on the CPU too). Phone budget ≤ 2 s per size: not measured |
+| Drape settle, 1.5 s of cloth | 5 Nov figures, superseded: see "Spike viewer, measured before and after" in the 6 Nov round. Phone budget ≤ 2 s per size: not measured |
 | Asset budget ≤ 3 MB per product | 165–295 KB without textures |
 
 ## Verification run before the engine branch (repo root, Node 22, pnpm 10.28.0)
@@ -385,9 +453,10 @@ logo proxy (#11), the Woo backfill endpoint (#13) and the readme headers and Con
 - `/v1/swipes` is atomic but all-or-nothing per batch (#23). The client batches per shop, so a
   redacted shop drops only its own swipes.
 - `SaveOutboxEntry.size` can be null, but `WardrobePutRequestSchema.size` cannot (#24).
-- `grading.json` does not carry `shoulder_width` yet, and the spike viewer does not place the yoke
-  from it (R1 follow-up).
-- Spike viewer: largest chunk 199 KB gzip (under the 400 KB budget, but three.js is not split);
+- `grading.json` carries `shoulder_width`, but it only drives the size-to-size ratio of the yoke;
+  the synthetic yoke's absolute width is the mannequin torso's, and the `anchors.json` seams are
+  notional chart points (R1 follow-up, D15).
+- Spike viewer: largest chunk 208 KB gzip (under the 400 KB budget, but three.js is not split);
   drape settle not measured on a phone; no textures, no WebGPU, no drawn-overlay fallback.
 
 **Product scope not built yet** (handoff §8):

@@ -1,7 +1,7 @@
 # One command per line; pushing a change to this file runs them on Modal via GitHub Actions.
-# run 13: stage 1b only, both engines (FASHN + Qwen) on the proxy-dressed mannequin, Bohohippychic azure dress
+# run 14: azure dress end to end with the FASHN stills from the proxy-dressed target (visually reviewed; QA thresholds still provisional)
 pnpm build:packages
 pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch-images
 git diff --exit-code -- spikes/garment-engine/data/bohohippychic/images.json spikes/garment-engine/data/bohohippychic/products.json
 pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product azure-palm-baby-doll-dress
-modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/azure-palm-baby-doll-dress --dress --dress-engine both --dress-only
+modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/azure-palm-baby-doll-dress --dress --dress-engine fashn --accept-failed-dress --no-synthetic-recon

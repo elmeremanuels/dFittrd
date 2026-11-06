@@ -1,3 +1,5 @@
 # One command per line; pushing a change to this file runs them on Modal via GitHub Actions.
-# run 7: GPU smoke on L4 after the payment method was added
-modal run spikes/garment-engine/modal/smoke.py
+# run 8: stage 4 reconstruction on the synthetic garment (no video model)
+pnpm build:packages
+pnpm --filter @curtain/garment-spike export:phase0 -- --product aalter-studio-2 --synthetic-photos
+modal run spikes/garment-engine/modal/stage4_recon.py --job-dir spikes/garment-engine/out/phase0/aalter-studio-2 --source synthetic

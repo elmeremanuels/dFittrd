@@ -139,8 +139,8 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   for (let i = 0; i < noCollide.length; i++) if (inside[i] === 1 && graded.positions[3 * i + 1]! > m.morphHeights.chest) noCollide[i] = 1;
   const yoke = yokeHeight(m);
   const start = Float32Array.from(placed.positions);
-  // The yoke is where grading put it: the shoulder ring grades with `shoulder_width` (D15 breadth),
-  // so its seams sit at ±width/2 of this size. Pinning only out to the seams or the body's shoulder
+  // The yoke is where grading put it: the shoulder ring grades by the `shoulder_width` ratio between
+  // sizes (D15 breadth); its base width is the mesh's (on the synthetic garment, the mannequin torso's). Pinning only out to the seams or the body's shoulder
   // points was measured and rejected: on the v0 mannequin the freed cloth lands in the arm junction
   // and sags (p99 strain 26–35 % instead of 11–24 % on the tee).
   const pinned = new Uint8Array(chains.length);

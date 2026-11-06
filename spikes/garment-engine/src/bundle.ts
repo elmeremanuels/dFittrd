@@ -121,7 +121,8 @@ export function buildBundle(productId: (typeof SPIKE_PRODUCT_IDS)[number], optio
         }];
       }),
     ),
-    // D15 breadth: the chart's width at the base size and where its seams sit (no seam detection on a mesh yet).
+    // D15 breadth: the chart's width at the base size and its notional seam points at ±width/2 (chart points,
+    // not on the mesh: no seam detection yet, and the synthetic yoke follows the mannequin torso).
     breadths: spec.shoulderWidthCm === undefined ? {} : {
       shoulder_width: { widthCm: round(spec.shoulderWidthCm, 2), source: 'chart', ring: 'shoulder', seams: shoulderSeams(mannequin, spec.shoulderWidthCm).map((p) => roundVec(p, 2)) },
     },

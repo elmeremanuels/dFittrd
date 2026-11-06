@@ -3,7 +3,7 @@
  * K distinct pseudonymous users contributed to it. Never a signature, never a device id.
  */
 import { and, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
-import type { AnalyticsFitSizesResponse, AnalyticsSwipesResponse, FitCohortResponse } from '@curtain/schema';
+import { WARDROBE_SIZE_UNKNOWN, type AnalyticsFitSizesResponse, type AnalyticsSwipesResponse, type FitCohortResponse } from '@curtain/schema';
 import type { Db } from '../db/client.js';
 import { products, swipeEvents, trySessions, wardrobeItems } from '../db/schema.js';
 import { dayEnd, dayStart } from '../lib/time.js';
@@ -124,7 +124,8 @@ export async function fitCohort(db: Db, productId: string, shopId: string | unde
   let kept = 0;
   let decided = 0;
   for (const r of rows) {
-    sizeHistogram[r.size] = (sizeHistogram[r.size] ?? 0) + 1;
+    // 'unknown' is a marker, not a chart size: it counts towards n and the kept rate but never becomes a bucket.
+    if (r.size !== WARDROBE_SIZE_UNKNOWN) sizeHistogram[r.size] = (sizeHistogram[r.size] ?? 0) + 1;
     if (r.state === 'kept') {
       kept++;
       decided++;

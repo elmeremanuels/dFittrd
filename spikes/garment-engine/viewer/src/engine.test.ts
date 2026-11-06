@@ -160,6 +160,18 @@ describe('neckline on small sizes (regression: 21–33 % edge strain before the 
   }, 30_000);
 });
 
+describe('tee edge strain on the v0 mannequin (backs the README figure: p99 11–24 % for XS–L)', () => {
+  const tee = spikeBundle('monochrome-03');
+  const teeSession = openSession(m, tee);
+  const teeFit = fitForBody(teeSession.payload, meas);
+  it.each(['XS', 'S', 'M', 'L'] as const)('monochrome-03 %s stays below 25 %% p99 and 45 %% max edge strain after the drape', (size) => {
+    const f = prepareFit(teeSession, avatar, field, teeFit, size, viewerMaterial('product', tee.material));
+    relax(f);
+    expect(strainQuantile(f.cloth, 0.99)).toBeLessThan(0.25);
+    expect(strainQuantile(f.cloth, 1)).toBeLessThan(0.45);
+  }, 30_000);
+});
+
 describe('drape off the main thread', () => {
   it('a worker job (structured clone, time slices) gives exactly the drape of relax()', () => {
     const a = prepareFit(session, avatar, field, fit, 'S', viewerMaterial('silk', dress.material));

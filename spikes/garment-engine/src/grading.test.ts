@@ -58,7 +58,7 @@ describe.each(SPIKE_PRODUCT_IDS)('stage 6 — grading of %s', (id) => {
     expect(grading.estimates.shoulder).toBe('breadth');
   });
 
-  it('places the shoulder seams of every size at ±shoulder_width/2: the shoulder line scales with the width', () => {
+  it('scales the shoulder line of every size by the shoulder_width ratio (the base width is the mesh width, not the chart width)', () => {
     const shoulderRing = m.rings.find((r) => r.id === 'shoulder')!;
     const halfWidth = (positions: ArrayLike<number>): number => {
       let w = 0;
@@ -67,6 +67,12 @@ describe.each(SPIKE_PRODUCT_IDS)('stage 6 — grading of %s', (id) => {
     };
     const base = halfWidth(baseMesh.positions);
     expect(base).toBeGreaterThan(0);
+    // Known gap (D15): the synthetic yoke is lofted from the mannequin torso, so its base half-width on the
+    // ring is the torso's plus clearance (about 21.6 cm for both products), not the chart's width/2
+    // (19.75 cm dress, 25 cm tee). The shoulderSeams points are notional chart points, not on the mesh.
+    expect(base).toBeGreaterThan(21);
+    expect(base).toBeLessThan(22.5);
+    expect(Math.abs(base - grading.base.shoulder_width! / 2)).toBeGreaterThan(1.5);
     for (const s of grading.sizes) {
       const graded = halfWidth(applyGrading(m, baseMesh, chains, grading, s.size).positions);
       expect(graded / base, s.size).toBeCloseTo(s.targets.shoulder_width! / grading.base.shoulder_width!, 3);

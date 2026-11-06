@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createDevice, makeApp, seedShop, type TestApp } from './test/helpers.js';
 import { hueBucket } from './services/analytics.js';
+import { WARDROBE_SIZE_UNKNOWN } from '@curtain/schema';
 
 describe('k-anonymity floor (K_ANON=5)', () => {
   let t: TestApp;
@@ -33,6 +34,17 @@ describe('k-anonymity floor (K_ANON=5)', () => {
     expect(six.json()).toMatchObject({ n: 6, sizeHistogram: { M: 5 } });
     expect(six.json().sizeHistogram.XL).toBeUndefined();
     expect(six.json().keptRate).toBeCloseTo(5 / 6, 3);
+  });
+
+  it('cohort: wardrobe rows saved without a size count towards n but never appear as an "unknown" size bucket', async () => {
+    for (const d of devices.slice(0, 5)) {
+      const r = await t.app.inject({ method: 'PUT', url: '/v1/wardrobe/raw-denim-01', headers: d.auth, payload: { shopId: s.shop.id, size: WARDROBE_SIZE_UNKNOWN, state: 'kept' } });
+      expect(r.statusCode).toBeLessThan(300);
+    }
+    const res = await t.app.inject({ method: 'GET', url: '/v1/fit/cohort/raw-denim-01', headers: devices[0]!.auth });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ productId: 'raw-denim-01', n: 5, kAnonymityFloor: 5, sizeHistogram: {}, keptRate: 1 });
+    expect(res.json().sizeHistogram[WARDROBE_SIZE_UNKNOWN]).toBeUndefined();
   });
 
   it('merchant swipe analytics suppress groups with fewer than K users and carry no body data', async () => {

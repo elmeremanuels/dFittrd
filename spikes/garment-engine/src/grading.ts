@@ -10,7 +10,9 @@
  * shoulder column is a width, never the `shoulder` ring. Its base value is the chart's (a
  * reconstruction has no seams to measure). When the chart has no shoulder girth, the `shoulder`
  * ring grades by the width ratio (`breadth`, an estimate): the radial morph scales a cross-section
- * uniformly, so the seams at ±width/2 land exactly on the target width.
+ * uniformly, so the shoulder line's width changes between sizes by exactly the width ratio. The base
+ * width is the mesh's own (on the synthetic garment, the mannequin torso's), not the chart's: the
+ * seams at ±width/2 (`shoulderSeams`) are notional chart points, not mesh features.
  */
 import { BREADTH_RING, gradeSizes, isAnchorBreadth, type AnchorBreadth, type AnchorId, type AnchorLength, type AnchorRing, type AnchorValues } from '@curtain/anchors';
 import { sizeLabelKey } from '@curtain/schema';
@@ -67,7 +69,7 @@ export interface GradingJson {
     method: 'anchors.gradingMorph';
     chains: { body: 'radial about +Y'; arm: 'radial about the arm axis' };
     heights: Record<AnchorRing, number>;
-    /** Breadths: the ring whose height they sit at; the seams are at ±width/2 there (`shoulderSeams`). */
+    /** Breadths: the ring whose height they sit at; the notional chart seams are at ±width/2 there (`shoulderSeams`). */
     breadths?: Partial<Record<AnchorBreadth, { ring: AnchorRing; height: number }>>;
   };
   /** Calibrated base-size value per anchor. */

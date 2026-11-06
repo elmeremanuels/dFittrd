@@ -46,9 +46,9 @@ export interface GarmentSpec {
   /** Garment girths at the base size (cm) at the rings the chart (or a default ease) defines. */
   rings: Partial<Record<AnchorRing, number>>;
   /**
-   * D15 breadth `shoulder_width` at the base size: seam to seam across the back, cm. Places the
-   * shoulder seams (`shoulderSeams`) and, through grading, the yoke; the lofted body itself follows
-   * the torso, so a dropped shoulder is not modelled in the synthetic geometry.
+   * D15 breadth `shoulder_width` at the base size: seam to seam across the back, cm. Gives the
+   * notional shoulder seams (`shoulderSeams`) and, through grading, the yoke's width ratio between
+   * sizes; the lofted body itself follows the torso, so its yoke is the mannequin's width, not this one.
    */
   shoulderWidthCm?: number;
   /** High point shoulder to hem, cm. */
@@ -188,7 +188,8 @@ export function generateGarment(m: Mannequin, spec: GarmentSpec): Mesh {
 
 /**
  * The garment's shoulder seam points for a shoulder width (seam to seam across the back, cm): at
- * ±width/2, on the shoulder ring's height, in the frontal plane of the mannequin.
+ * ±width/2, on the shoulder ring's height, in the frontal plane of the mannequin. Notional chart points:
+ * nothing moves the mesh onto them, and the synthetic garment's yoke is wider (the mannequin torso's).
  */
 export function shoulderSeams(m: Mannequin, widthCm: number): [Vec3, Vec3] {
   const y = m.morphHeights.shoulder;

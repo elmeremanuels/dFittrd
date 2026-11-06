@@ -247,6 +247,7 @@ def generate(job_id: str, steps: int = 40, clip_ids: list[str] | None = None, co
         "turntable_frames_assembled": assembled,
         "seams": seams_out,
         "synthetic_photos": any(p.get("synthetic") for p in m["photos"]),
+        "stills": lib.photo_provenance(m),
         "cost": lib.cost_record("stage2_video", gpu=CFG["gpu_video"], region=CFG["region"], gpu_seconds=gpu_seconds),
         "label": "generated video: an estimate of the garment, not a measurement (AGENTS.md rule 3)",
     }

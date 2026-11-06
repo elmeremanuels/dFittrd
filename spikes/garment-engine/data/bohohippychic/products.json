@@ -62,14 +62,22 @@
     {
       "type": "Jumpsuits & Sets",
       "count": 12,
-      "reason": "Not one of the five collections in the brief; overalls and pant suits need the dress + bottom anchor subsets together (later)."
+      "reason": "Clothing category WITHOUT a validation product (see SHOP_UNCOVERED_CATEGORIES): the engine has no combined dress + bottom anchor subset for overalls, jumpsuits and pant suits yet. The founder accepts this gap or asks for a product from it."
+    }
+  ],
+  "uncoveredClothingCategories": [
+    {
+      "productType": "Jumpsuits & Sets",
+      "reason": "No validation product: jumpsuits, overalls and pant suits span the torso and the legs, and the engine has no combined dress + bottom anchor subset for them yet (anchoring, calibration and grading would have to be added first). Not chosen by us on scope grounds; the founder decides whether to accept the gap or to add one product from this category.",
+      "count": 12,
+      "decision": "founder to confirm"
     }
   ],
   "method": {
     "sizeChart": "AU size options use AU_WOMENS_BODY_CHART (@curtain/schema, docs/research/au-size-chart.md) restricted to the sizes offered, sizeChartType 'body'; S-M style options use the mean of the AU rows the stated range covers; one-size items use flat measurements from the text as a 'garment' chart.",
     "baseSize": "AU 12 (or the range that holds it) for every size-ranged item: our default, not stated by the shop. GarmentPayload v1 has no baseSize field, so it sits beside the payload.",
     "ease": "Only where the shop prints garment measurements: printed value at the base size minus the AU body chart at the base size.",
-    "fabric": "The fabric sentence of the description (labels, percentages, \"crafted from\", never styling advice) through resolveFabricText/fabricFromText; the fabric library fills weight, stretch, drape, opacity and sheen.",
+    "fabric": "The fabric sentence of the description (labels, percentages, \"crafted from\", never styling advice) through resolveFabricText/fabricFromText; the fabric library fills weight, stretch, drape, opacity and sheen. `blend` only when the text states the composition (\"100% rayon\", \"65% acrylic 35% wool\"); a bare fibre name (\"rayon\") gives no blend and a warning.",
     "images": "images.json: every image looked at and classified by hand; sha256 of the file as downloaded."
   },
   "products": [
@@ -97,13 +105,7 @@
           "stretchPct": 1.5,
           "drape": 0.85,
           "opacity": 0.8,
-          "sheen": 0.3,
-          "blend": [
-            [
-              "viscose",
-              100
-            ]
-          ]
+          "sheen": 0.3
         },
         "sizeChartType": "body",
         "sizeChart": [
@@ -221,7 +223,7 @@
       "evidence": {
         "category": "inferCategory(\"Dresses\") → dress",
         "patternBlock": "title/tags keyword → empire",
-        "fabric": "\"This lightweight rayon mini dress features a dreamy palm and villa-inspired print in soft pastel hues, evoking the spirit of island adventures.\" → viscose; weight/stretch/drape/opacity/sheen from the fabric library v1.0.0 (blend)",
+        "fabric": "\"This lightweight rayon mini dress features a dreamy palm and villa-inspired print in soft pastel hues, evoking the spirit of island adventures.\" → viscose (composition not stated: no blend; the library defaults treat it as a single fibre); weight/stretch/drape/opacity/sheen from the fabric library v1.0.0 (blend)",
         "sizeChart": "Size option [\"8\",\"10\",\"12\",\"14\",\"16\"] → AU_WOMENS_BODY_CHART rows",
         "baseSize": "AU 12, the default base size for size-ranged items (not stated by the shop)",
         "printedTable": "size-per-row: \"Size Bust Length 8 94cm 90cm 10 98cm 90cm 12 102cm 91cm 14 106cm 92cm 16 112cm 93cm\" → garment (mean |Δ| vs AU body chart 7.4 cm)",
@@ -229,6 +231,7 @@
         "lengthCm": "printed Length at AU 12: 91 cm"
       },
       "warnings": [
+        "fabric composition not stated (only \"viscose\" named): blend left out; weight/stretch/drape use the single-fibre library default",
         "the AU body chart has no shoulder width; the shoulder fit point is skipped",
         "price is 79 AUD; priceEur is left out (no exchange rate is assumed)"
       ],
@@ -906,13 +909,7 @@
           "stretchPct": 1.5,
           "drape": 0.85,
           "opacity": 0.8,
-          "sheen": 0.3,
-          "blend": [
-            [
-              "viscose",
-              100
-            ]
-          ]
+          "sheen": 0.3
         },
         "sizeChartType": "body",
         "sizeChart": [
@@ -1047,12 +1044,13 @@
       "evidence": {
         "category": "inferCategory(\"Skirts\") → bottom",
         "patternBlock": "title/tags keyword → a-line",
-        "fabric": "\"Crafted from lightweight, breathable rayon , this flowing maxi skirt features a rich crimson base adorned with soft floral detailing and a contrasting border hem.\" → viscose; weight/stretch/drape/opacity/sheen from the fabric library v1.0.0 (blend)",
+        "fabric": "\"Crafted from lightweight, breathable rayon , this flowing maxi skirt features a rich crimson base adorned with soft floral detailing and a contrasting border hem.\" → viscose (composition not stated: no blend; the library defaults treat it as a single fibre); weight/stretch/drape/opacity/sheen from the fabric library v1.0.0 (blend)",
         "sizeChart": "Size option [\"8\",\"10\",\"12\",\"14\",\"16\"] → AU_WOMENS_BODY_CHART rows",
         "baseSize": "AU 12, the default base size for size-ranged items (not stated by the shop)",
         "stretchZones": "\"elasticated waistband\" in the text"
       },
       "warnings": [
+        "fabric composition not stated (only \"viscose\" named): blend left out; weight/stretch/drape use the single-fibre library default",
         "price is 69 AUD; priceEur is left out (no exchange rate is assumed)"
       ],
       "baseSize": "12",

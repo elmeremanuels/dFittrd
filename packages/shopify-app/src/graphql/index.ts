@@ -4,3 +4,4 @@ export * from './metafields';
 export * from './bulk';
 export * from './billing';
 export * from './shop';
+export * from './charts';

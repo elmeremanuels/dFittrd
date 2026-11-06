@@ -16,3 +16,5 @@ export * from './sync';
 export * from './appConfig';
 export * from './deepLinks';
 export * from './admin';
+export * from './descriptionImport';
+export * from './chartBuilder';

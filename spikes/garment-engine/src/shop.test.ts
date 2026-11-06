@@ -14,7 +14,7 @@ import {
   rankCandidates,
   type ShopifyProduct,
 } from './shop';
-import { SHOP_IMAGE_CLASSIFICATION, SHOP_SELECTION } from './shopSelection';
+import { SHOP_IMAGE_CLASSIFICATION, SHOP_REJECTED_TYPES, SHOP_SELECTION, SHOP_UNCOVERED_CATEGORIES } from './shopSelection';
 
 const fixture = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'data', 'bohohippychic', 'fixtures', 'products.sample.json'), 'utf8'),
@@ -124,7 +124,11 @@ describe('buildShopPayload', () => {
     expect(r.payload).toMatchObject({ category: 'dress', patternBlock: 'empire', sizeChartType: 'body', lengthCm: { shoulder_to_hem: 91 } });
     expect(r.payload.sizeChart).toEqual(AU_WOMENS_BODY_CHART.filter((row) => ['8', '10', '12', '14', '16'].includes(row.size)));
     expect(r.payload.ease).toEqual({ bust: 102 - 95 });
-    expect(r.payload.fabric).toMatchObject({ primary: 'viscose', blend: [['viscose', 100]] });
+    // "lightweight rayon" states no composition: no blend in the payload, the default is a warning
+    expect(r.payload.fabric).toMatchObject({ primary: 'viscose' });
+    expect(r.payload.fabric?.blend).toBeUndefined();
+    expect(r.evidence.fabric).toContain('composition not stated');
+    expect(r.warnings.some((w) => w.startsWith('fabric composition not stated'))).toBe(true);
     expect(r.payload.priceEur).toBeUndefined();
     expect(r.completeness.status).toBe('incomplete');
     expect(r.completeness.missing.map((m) => m.field)).toContain('flatLayPhoto');
@@ -171,6 +175,15 @@ describe('selection data', () => {
       expect(cls.map((c) => c.position)).toEqual(p.images.map((i) => i.position));
       expect(cls.some((c) => c.role === 'back')).toBe(true);
     }
+  });
+
+  it('lists every clothing category without a product as uncovered, and no reason cites "the brief"', () => {
+    expect(SHOP_UNCOVERED_CATEGORIES.map((u) => u.productType)).toEqual(['Jumpsuits & Sets']);
+    for (const u of SHOP_UNCOVERED_CATEGORIES) {
+      expect(SHOP_SELECTION.some((s) => s.productType === u.productType)).toBe(false);
+      expect(SHOP_REJECTED_TYPES[u.productType]).toContain('WITHOUT a validation product');
+    }
+    for (const reason of [...Object.values(SHOP_REJECTED_TYPES), ...SHOP_UNCOVERED_CATEGORIES.map((u) => u.reason)]) expect(reason).not.toMatch(/\bbrief\b/);
   });
 
   it('ranks by the preference order: sizes, 3+ images, fabric, garment measurements', () => {

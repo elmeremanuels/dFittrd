@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
@@ -114,7 +114,7 @@ describe('EmbedApp', () => {
     expect(Object.keys(body).sort()).toEqual(['confidence', 'intentToken', 'recommendedSize']);
     expect(body.intentToken).toBe('intent-token-0123456789');
     // switching sizes, editing and resubmitting do not bill again
-    const radios = screen.getAllByRole('radio', { name: /^[A-Z0-9]/ });
+    const radios = within(screen.getByRole('radiogroup', { name: 'Compare sizes' })).getAllByRole('radio');
     await user.click(radios[radios.length - 1]!);
     await user.click(screen.getByTestId('edit-measurements'));
     await user.click(await screen.findByTestId('see-my-size'));
@@ -311,4 +311,107 @@ describe('EmbedApp', () => {
     await screen.findByRole('heading', { name: 'About you' });
     expect(screen.getByTestId('embed-shop-name').style.color).toBe('rgb(47, 79, 58)');
   });
+
+  describe('units (cm/inch) and the size chart', () => {
+    const heading = () => screen.findByRole('heading', { level: 2, name: /We recommend|No size fits well/ });
+
+    it('an en-US shopper gets feet, inches and pounds, and the same size as in metric', async () => {
+      const user = userEvent.setup();
+      const metric = setup();
+      await fillAbout(user, '170.2', '63.5');
+      const metricHeading = (await heading()).textContent;
+      metric.unmount();
+
+      setup({ locale: 'en-US' });
+      await screen.findByRole('heading', { name: 'About you' });
+      expect(screen.getByRole('radio', { name: /Imperial/ })).toBeChecked();
+      await user.type(screen.getByLabelText('Height, feet'), '5');
+      await user.type(screen.getByLabelText('Height, inches'), '7');
+      await user.type(screen.getByLabelText(/^Weight/), '140');
+      await user.click(screen.getByTestId('see-my-size'));
+      expect((await heading()).textContent).toBe(metricHeading);
+      for (const li of within(screen.getByTestId('fit-points')).getAllByRole('listitem')) expect(li.textContent).not.toMatch(/\bcm\b/);
+    });
+
+    it('validation messages use the shopper’s units', async () => {
+      const user = userEvent.setup();
+      setup({ locale: 'en-US' });
+      await user.type(await screen.findByLabelText('Height, feet'), '3');
+      await user.click(screen.getByTestId('see-my-size'));
+      expect(await screen.findByText('Between 4 ft 0 in and 7 ft 6 in')).toBeInTheDocument();
+      expect(screen.getByText('Enter your weight in lb')).toBeInTheDocument();
+      // switching units re-checks in the new ones
+      await user.click(screen.getByRole('radio', { name: /Metric/ }));
+      expect(await screen.findByText('Between 120 and 230 cm')).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Height/)).toHaveValue('91.4');
+    });
+
+    it('the toggle converts what was typed and is remembered on this shop', async () => {
+      const user = userEvent.setup();
+      const name = `curtain-embed-units-${++dbN}`;
+      const first = setup({ store: createEmbedStore({ openDb: () => new EmbedDb(name) }) });
+      await user.type(await screen.findByLabelText(/^Height/), '170');
+      await user.type(screen.getByLabelText(/^Weight/), '64');
+      await user.click(screen.getByRole('radio', { name: /Imperial/ }));
+      expect(screen.getByLabelText('Height, feet')).toHaveValue('5');
+      expect(screen.getByLabelText('Height, inches')).toHaveValue('7');
+      expect(screen.getByLabelText(/^Weight/)).toHaveValue('141.1');
+      // and back: the metric values are untouched
+      await user.click(screen.getByRole('radio', { name: /Metric/ }));
+      expect(screen.getByLabelText(/^Height/)).toHaveValue('170');
+      expect(screen.getByLabelText(/^Weight/)).toHaveValue('64');
+      await user.click(screen.getByRole('radio', { name: /Imperial/ }));
+      await waitFor(async () => expect(await first.store.persistedKeys()).toContain('pref:units'));
+      first.unmount();
+
+      // next visit (an Australian browser): the choice wins over the locale
+      setup({ store: createEmbedStore({ openDb: () => new EmbedDb(name) }) });
+      expect(await screen.findByLabelText('Height, feet')).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: /Imperial/ })).toBeChecked();
+    });
+
+    it('nothing is stored for the units with "Remember me" off', async () => {
+      const user = userEvent.setup();
+      const { store } = setup({ store: createEmbedStore({ remember: false, openDb: () => new EmbedDb(`curtain-embed-units-${++dbN}`) }) });
+      await screen.findByRole('heading', { name: 'About you' });
+      await user.click(screen.getByRole('radio', { name: /Imperial/ }));
+      expect(screen.getByLabelText('Height, feet')).toBeInTheDocument();
+      expect(await store.persistedKeys()).toEqual([]);
+    });
+
+    it('the result has a Size chart tab with the product chart and the recommended size highlighted', async () => {
+      const user = userEvent.setup();
+      setup();
+      await fillAbout(user);
+      await heading();
+      const size = screen.getByTestId('choose-size').textContent!.replace('Choose size ', '');
+      const fitTab = screen.getByRole('tab', { name: 'How it fits' });
+      const chartTab = screen.getByRole('tab', { name: 'Size chart' });
+      expect(fitTab).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByTestId('fit-points')).toBeVisible();
+      expect(screen.queryByRole('table')).not.toBeInTheDocument(); // hidden panel
+
+      // keyboard: arrow keys move between the tabs (WAI-ARIA tabs)
+      fitTab.focus();
+      await user.keyboard('{ArrowRight}');
+      expect(chartTab).toHaveFocus();
+      expect(chartTab).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByRole('tabpanel', { name: 'Size chart' })).toBeVisible();
+      const table = screen.getByRole('table', { name: 'Body measurements, in centimetres' });
+      expect(within(table).getAllByRole('rowheader').map((h) => h.textContent?.replace('Recommended', ''))).toEqual(garment.sizeChart.map((r) => r.size));
+      expect(within(table).getByRole('rowheader', { name: /Recommended/ })).toHaveTextContent(size);
+
+      // the result's unit toggle switches the chart (and is the same preference as on About you)
+      await user.click(screen.getByRole('radio', { name: /Imperial/ }));
+      expect(screen.getByRole('table', { name: 'Body measurements, in inches' })).toBeInTheDocument();
+      chartTab.focus();
+      await user.keyboard('{Home}');
+      expect(fitTab).toHaveFocus();
+      expect(fitTab).toHaveAttribute('aria-selected', 'true');
+      for (const li of within(screen.getByTestId('fit-points')).getAllByRole('listitem')) expect(li.textContent).not.toMatch(/\bcm\b/);
+      // choosing still posts the same size
+      expect(screen.getByTestId('choose-size')).toHaveTextContent(`Choose size ${size}`);
+    });
+  });
 });
+

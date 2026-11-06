@@ -420,6 +420,43 @@ def test_run_phase0_does_not_start_stage2_on_missing_failed_or_invented_stills(m
     assert run_phase0._dress_gate(manifest, str(tmp_path), None, accept_failed=False, allow_invented=False) == []
 
 
+def test_photo_provenance_reads_the_invented_back_from_the_manifest(manifest):
+    prov = lib.photo_provenance(on_model(manifest))
+    assert prov["invented_back"] is True and prov["invented_roles"] == ["back"] and prov["label"] == lib.INVENTED_BACK_LABEL
+    assert [(p["role"], p["produced_by"], p["invented"]) for p in prov["photos"]] == [("front", "stage1b", False), ("back", "stage1b", True)]
+    real = lib.photo_provenance(on_model(manifest, back=True))
+    assert real["invented_back"] is False and real["invented_roles"] == [] and "label" not in real
+    assert lib.photo_provenance(manifest)["invented_back"] is False
+
+
+def test_stage2_record_carries_the_stills_provenance():
+    with open(os.path.join(MODAL_DIR, "stage2_video.py"), encoding="utf-8") as f:
+        assert '"stills": lib.photo_provenance(m)' in f.read()
+
+
+def test_run_phase0_summary_flags_an_invented_back_when_stage1b_ran_on_its_own(manifest, tmp_path, monkeypatch):
+    """The documented flow: stage1_dress.py first, then run_phase0.py without --dress. The summary must
+    still say the back is invented, from the manifest, without a stage 1b record in this call."""
+    pytest.importorskip("modal")
+    import phase0_modal as pm
+    import run_phase0
+
+    m = on_model(manifest)
+    (tmp_path / "stage1b").mkdir()
+    for v in ("front", "back"):
+        (tmp_path / "stage1b" / f"{v}.png").write_bytes(b"x")
+    monkeypatch.setattr(pm, "load_local_job", lambda job_dir: m)
+    monkeypatch.setattr(pm, "upload_job", lambda *a, **kw: None)
+    main = run_phase0.main.info.raw_f
+    with pytest.raises(SystemExit):
+        main(str(tmp_path))  # no --dress, no --allow-invented-back: the gate stops before stage 2
+    s = json.loads((tmp_path / "cost_summary.json").read_text())
+    assert s["invented_back"] is True and s["invented_roles"] == ["back"] and s["label"] == lib.INVENTED_BACK_LABEL
+    assert "stage1b" not in s and any("INVENTED" in r for r in s["stopped_before_stage2"])
+    assert [p["invented"] for p in s["stills"]] == [False, True]
+    assert run_phase0._base_summary(on_model(manifest, back=True), {})["invented_back"] is False
+
+
 # --- round trip through the TypeScript exporter --------------------------------------------------------
 
 

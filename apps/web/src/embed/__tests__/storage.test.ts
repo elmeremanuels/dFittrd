@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { EMPTY_ABOUT } from '../aboutYou';
-import { createEmbedStore, EMBED_DB_NAME, EmbedDb, REMEMBER_PREF_KEY, type RememberedProfile } from '../storage';
+import { createEmbedStore, EMBED_DB_NAME, EmbedDb, REMEMBER_PREF_KEY, UNITS_PREF_KEY, type RememberedProfile } from '../storage';
 
 const SHOP_A = '00000000-0000-4000-8000-00000000000a';
 const SHOP_B = '00000000-0000-4000-8000-00000000000b';
@@ -154,5 +154,45 @@ describe('embed storage (remember / forget)', () => {
     await s.setDevice({ deviceId: device.deviceId, token: '', expiresAt: new Date(0).toISOString() });
     expect(s.getDevice().token).toBeNull();
     expect(await s.persistedKeys()).toEqual([]);
+  });
+
+  it('remembers the chosen units across visits, only with "Remember me" on', async () => {
+    const name = freshDbName();
+    const s1 = createEmbedStore({ openDb: () => new EmbedDb(name) });
+    await s1.init();
+    expect(await s1.loadUnits()).toBeNull();
+    await s1.saveUnits('imperial');
+    expect(await s1.persistedKeys()).toEqual([UNITS_PREF_KEY]);
+
+    const s2 = createEmbedStore({ openDb: () => new EmbedDb(name) });
+    await s2.init();
+    expect(await s2.loadUnits()).toBe('imperial');
+
+    // off: wiped from the database, kept in memory for this page only
+    await s2.setRemember(false);
+    expect(await s2.loadUnits()).toBe('imperial');
+    expect(await s2.persistedKeys()).toEqual([]);
+    await s2.saveUnits('metric');
+    expect(await s2.persistedKeys()).toEqual([]);
+    const s3 = createEmbedStore({ openDb: () => new EmbedDb(name) });
+    await s3.init();
+    expect(await s3.loadUnits()).toBeNull();
+
+    // back on: what is in memory is written again
+    await s2.setRemember(true);
+    expect(await s2.persistedKeys()).toEqual([UNITS_PREF_KEY]);
+
+    // forget me clears it
+    await s2.forget();
+    expect(await s2.loadUnits()).toBeNull();
+    expect(await s2.persistedKeys()).toEqual([]);
+  });
+
+  it('ignores a stored units value it does not know', async () => {
+    const name = freshDbName();
+    await new EmbedDb(name).kv.put({ key: UNITS_PREF_KEY, value: 'furlongs' });
+    const s = createEmbedStore({ openDb: () => new EmbedDb(name) });
+    await s.init();
+    expect(await s.loadUnits()).toBeNull();
   });
 });

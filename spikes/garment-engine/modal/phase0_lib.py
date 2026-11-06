@@ -587,6 +587,20 @@ def invented_roles(m: Mapping[str, Any]) -> list[str]:
     return [p["role"] for p in m["photos"] if p.get("invented")]
 
 
+def photo_provenance(m: Mapping[str, Any]) -> dict[str, Any]:
+    """Where the pinned stills come from, for every record downstream of them (stage 2 record.json,
+    cost_summary.json): read from the manifest, so it holds whether stage 1b ran in this call or before."""
+    roles = invented_roles(m)
+    out: dict[str, Any] = {
+        "invented_back": "back" in roles,
+        "invented_roles": roles,
+        "photos": [{k: p.get(k) for k in ("role", "produced_by", "invented", "synthetic")} for p in m["photos"] if p.get("role") in ("front", "back")],
+    }
+    if roles:
+        out["label"] = INVENTED_BACK_LABEL
+    return out
+
+
 # --- masks and images (flat, row-major) ------------------------------------------------------------
 
 

@@ -56,6 +56,24 @@ def _dress_gate(m: dict, job_dir: str, dress_record: dict | None, *, accept_fail
     return reasons
 
 
+def _base_summary(m: dict, cfg: dict) -> dict:
+    """The head of cost_summary.json. The invented-back flag comes from the manifest, so it is there
+    whether stage 1b ran in this call (--dress) or before it (stage1_dress.py on its own)."""
+    prov = lib.photo_provenance(m)
+    summary = {
+        "job_id": m["job_id"],
+        "input_hash": m["input_hash"],
+        "synthetic_photos": any(p.get("synthetic") for p in m["photos"]),
+        "invented_back": prov["invented_back"],
+        "invented_roles": prov["invented_roles"],
+        "stills": prov["photos"],
+        "settings": cfg,
+    }
+    if prov["invented_roles"]:
+        summary["label"] = prov["label"]
+    return summary
+
+
 def _with_wall(cost: dict, gpu: str, wall: float) -> dict:
     return lib.cost_record(cost["stage"], gpu=gpu, region=stage2_video.CFG["region"], gpu_seconds=cost["gpu_seconds"], wall_seconds=wall)
 
@@ -88,7 +106,7 @@ def main(
     t_all = time.time()
     pm.upload_job(job_dir, job_id, force=force_upload)
     costs: list[dict] = []
-    summary: dict = {"job_id": job_id, "input_hash": m["input_hash"], "synthetic_photos": synthetic_photos, "settings": cfg}
+    summary: dict = _base_summary(m, cfg)
 
     dress_record = None
     if dress or dress_only:
@@ -97,7 +115,6 @@ def main(
         dress_record = stage1_dress.run_local(job_dir, engine=dress_engine, steps=dress_steps, seed=None, composite=True, accept_failed=accept_failed_dress, category="", force_upload=force_upload)
         costs.append(lib.cost_record("stage1b_dress", gpu=dcfg["gpu_dress"], region=dcfg["region"], gpu_seconds=dress_record["cost"]["gpu_seconds"], wall_seconds=time.time() - t))
         summary["stage1b"] = {"engine": dress_engine, "summary": dress_record["summary"], "views": [{k: v.get(k) for k in ("view", "invented", "method", "mask_source", "qa", "still")} for v in dress_record["views"]]}
-        summary["invented_back"] = dress_record["invented_back"]
     if lib.invented_roles(m):
         print("[phase0] WARNING: " + lib.INVENTED_BACK_LABEL)
     stop = [] if (skip_video or dress_only) else _dress_gate(m, job_dir, dress_record, accept_failed=accept_failed_dress, allow_invented=allow_invented_back)

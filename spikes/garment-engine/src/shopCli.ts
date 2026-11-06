@@ -19,7 +19,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { SHOP, buildShopPayload, rankCandidates, type ShopifyProduct } from './shop';
-import { SHOP_IMAGE_CLASSIFICATION, SHOP_REJECTED_TYPES, SHOP_SELECTION, type ImageClassification } from './shopSelection';
+import { SHOP_IMAGE_CLASSIFICATION, SHOP_REJECTED_TYPES, SHOP_SELECTION, SHOP_UNCOVERED_CATEGORIES, type ImageClassification } from './shopSelection';
 
 const { values } = parseArgs({
   args: process.argv.slice(2).filter((a) => a !== '--'),
@@ -176,11 +176,12 @@ async function main(): Promise<void> {
     rejectedProductTypes: Object.entries(typeCounts)
       .filter(([t]) => !SHOP_SELECTION.some((s) => s.productType === t))
       .map(([type, count]) => ({ type, count, reason: SHOP_REJECTED_TYPES[type] ?? 'not reviewed' })),
+    uncoveredClothingCategories: SHOP_UNCOVERED_CATEGORIES.map((u) => ({ ...u, count: typeCounts[u.productType] ?? 0, decision: 'founder to confirm' })),
     method: {
       sizeChart: "AU size options use AU_WOMENS_BODY_CHART (@curtain/schema, docs/research/au-size-chart.md) restricted to the sizes offered, sizeChartType 'body'; S-M style options use the mean of the AU rows the stated range covers; one-size items use flat measurements from the text as a 'garment' chart.",
       baseSize: 'AU 12 (or the range that holds it) for every size-ranged item: our default, not stated by the shop. GarmentPayload v1 has no baseSize field, so it sits beside the payload.',
       ease: 'Only where the shop prints garment measurements: printed value at the base size minus the AU body chart at the base size.',
-      fabric: 'The fabric sentence of the description (labels, percentages, "crafted from", never styling advice) through resolveFabricText/fabricFromText; the fabric library fills weight, stretch, drape, opacity and sheen.',
+      fabric: 'The fabric sentence of the description (labels, percentages, "crafted from", never styling advice) through resolveFabricText/fabricFromText; the fabric library fills weight, stretch, drape, opacity and sheen. `blend` only when the text states the composition ("100% rayon", "65% acrylic 35% wool"); a bare fibre name ("rayon") gives no blend and a warning.',
       images: 'images.json: every image looked at and classified by hand; sha256 of the file as downloaded.',
     },
     products: productsOut,

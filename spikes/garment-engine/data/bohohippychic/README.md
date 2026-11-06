@@ -20,13 +20,17 @@ The code is in `src/shop.ts` (parsing and payloads), `src/shopSelection.ts` (sel
 
 | Collection | Product | Sizes | Fabric (from text) | Measurements in text | Images | Completeness |
 | --- | --- | --- | --- | --- | --- | --- |
-| Dresses | `azure-palm-baby-doll-dress` | AU 8–16 | rayon → viscose 100 | garment bust and length per size → ease bust +7 cm, shoulder_to_hem 91 cm at AU 12 | 4 (3 front, 1 back) | 0.697, incomplete |
+| Dresses | `azure-palm-baby-doll-dress` | AU 8–16 | rayon → viscose (composition not stated: no blend) | garment bust and length per size → ease bust +7 cm, shoulder_to_hem 91 cm at AU 12 | 4 (3 front, 1 back) | 0.697, incomplete |
 | Tops | `rosewater-blouse` | AU 8–16 | 100% rayon | none | 5 (3 front, side, back) | 0.576, incomplete |
 | Pants | `rosewater-palazzo-pants` | AU 8–16 | 100% rayon | waist, hips and length per size → ease hip +14 cm, outseam 99 cm; elastic waist not used (see warnings) | 5 (4 front, back) | 0.676, incomplete |
-| Skirts | `crimson-wildflower-maxi-skirt` | AU 8–16 | rayon | none | 3 (side, front, back) | 0.559, incomplete |
+| Skirts | `crimson-wildflower-maxi-skirt` | AU 8–16 | rayon → viscose (composition not stated: no blend) | none | 3 (side, front, back) | 0.559, incomplete |
 | Jackets & Knits | `woodstock-wanderer-knit-cardi` | S-M = AU 8–12, M-L = AU 14–16 | 65% acrylic, 35% wool | none | 3 (front, 3/4 back, back) | 0.576, incomplete |
 
-The reasons for each choice, the runners-up and the rejected collections (Jewellery, Bags, Gift Ideas, Gift Card, Body Care, Clothing, Jumpsuits & Sets, untyped) are in `products.json` → `selection` and `rejectedProductTypes`.
+The reasons for each choice, the runners-up and the rejected product types (Jewellery, Bags, Gift Ideas, Gift Card, Body Care, Clothing, Jumpsuits & Sets, untyped) are in `products.json` → `selection` and `rejectedProductTypes`.
+
+**Deviation to confirm: one clothing category has no product.** The request was one product from each category. The shop's sixth clothing category, **Jumpsuits & Sets** (12 products in `products.json`, the `jumpsuits-sets` collection), has no validation product. The reason is technical, not scope: jumpsuits, overalls and pant suits span the torso and the legs, and the engine has no combined dress + bottom anchor subset for them yet, so anchoring, calibration and grading would have to be added first. The founder accepts this gap or asks for one product from it (`products.json` → `uncoveredClothingCategories`, `src/shopSelection.ts` → `SHOP_UNCOVERED_CATEGORIES`). The generated Phase 0 report (`docs/research/phase0-bohohippychic.md`) says the same.
+
+Fabric `blend` is written only when the text states the composition. "100% rayon" gives `[["viscose",100]]`; a bare "rayon" (the dress and the skirt) gives no `blend`, and a warning says the library's single-fibre default fills weight, stretch and drape.
 
 ## What this shows
 

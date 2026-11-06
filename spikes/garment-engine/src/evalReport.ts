@@ -85,6 +85,8 @@ export interface ReportInput {
   blindShot: string | null;
   /** Path from the report's folder to the repository root, for links. */
   toRoot: string;
+  /** Clothing categories of the shop without a validation product, with the reason (a deviation the founder confirms). */
+  uncoveredCategories?: readonly { productType: string; reason: string }[];
 }
 
 // ---------------------------------------------------------------------------
@@ -438,6 +440,7 @@ export function renderReport(input: ReportInput): string {
       '- An open-front garment (the cardigan) has no closed loop at the chest, waist or hip unless the reconstruction closes it; the evaluation reports that as a failure at those anchors rather than guessing a girth.',
       '- The XS and XXL renders use the viewer\'s avatar: the M mannequin morphed to the XS or XXL ring girths at chest, waist and hip (stature and arms stay M).',
       '- Trousers and skirts hang from their waistband in the viewer; that is checked only on a skirt cut from the synthetic dress (a unit test and one headless render), never on a reconstructed bottom.',
+      ...(input.uncoveredCategories ?? []).map((u) => `- **Not covered: ${u.productType}.** The request was one product from each clothing category; this one has none. ${u.reason}`),
     ].join('\n'),
     '',
   );

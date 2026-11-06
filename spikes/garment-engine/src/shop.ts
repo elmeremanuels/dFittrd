@@ -424,7 +424,12 @@ export function buildShopPayload(p: ShopifyProduct): ShopPayloadResult {
     const named = resolveFabricText(statement);
     if (resolved && named) {
       payload.fabric = resolvedFabricToPayload(resolved);
-      evidence.fabric = `"${statement}" → ${named.primary}${named.blend ? ` ${JSON.stringify(named.blend)}` : ''}; weight/stretch/drape/opacity/sheen from the fabric library v${resolved.libraryVersion} (${resolved.provenance.drape})`;
+      // `blend` only when the text states the composition: "rayon" alone is not "100% rayon" (a
+      // "rayon blend" exists too). The library still resolves the single fibre at 100% for the
+      // weight/stretch/drape defaults; that share is a default, never a payload value.
+      if (!named.blend) delete payload.fabric.blend;
+      evidence.fabric = `"${statement}" → ${named.primary}${named.blend ? ` ${JSON.stringify(named.blend)}` : ' (composition not stated: no blend; the library defaults treat it as a single fibre)'}; weight/stretch/drape/opacity/sheen from the fabric library v${resolved.libraryVersion} (${resolved.provenance.drape})`;
+      if (!named.blend) warnings.push(`fabric composition not stated (only "${named.primary}" named): blend left out; weight/stretch/drape use the single-fibre library default`);
       if (resolved.unknown.length) warnings.push(`fabric names not in the library: ${resolved.unknown.join(', ')}`);
       if (/\bknit\b/i.test(text) && !resolved.construction) {
         warnings.push('the product is a knit but the fabric library has no generic sweater-knit construction; stretch and drape come from the fibres alone and understate a knit');

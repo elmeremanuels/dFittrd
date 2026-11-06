@@ -10,4 +10,5 @@ export * from './mappings/common';
 export * from './mappings/shopify';
 export * from './mappings/woo';
 export * from './mappings/fabricText';
+export * from './chartTemplates';
 export * from './fixtures';

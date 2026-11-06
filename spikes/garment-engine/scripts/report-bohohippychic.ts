@@ -27,6 +27,7 @@ import { arr, chooseMesh, evaluateProduct, num, obj, readJob, str, type Json, ty
 import { renderReport, type ProductRenders, type ProductSection, type RenderShot, type ShopImage, type ShopProduct, type SyntheticSection } from '../src/evalReport';
 import { generateGarment } from '../src/garment';
 import { garmentSpec } from '../src/product';
+import { SHOP_UNCOVERED_CATEGORIES } from '../src/shopSelection';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const spikeDir = resolve(here, '..');
@@ -218,6 +219,7 @@ const markdown = renderReport({
   blindUrl: `http://127.0.0.1:5178/blind.html?products=${blindIds.join(',')}`,
   blindShot: renders && shopIds.length && renders.blindShots.length ? renders.blindShots[renders.blindShots.length - 1]! : null,
   toRoot: relative(dirname(reportPath), repoRoot).split('\\').join('/') || '.',
+  uncoveredCategories: SHOP_UNCOVERED_CATEGORIES,
 });
 mkdirSync(dirname(reportPath), { recursive: true });
 writeFileSync(reportPath, markdown);

@@ -83,9 +83,22 @@ export const SHOP_REJECTED_TYPES: Readonly<Record<string, string>> = {
   'Gift Card': 'Not a garment.',
   'Body Care': 'Not a garment.',
   Clothing: 'Catch-all type for tees, tops and dresses that belong to Tops or Dresses (e.g. starlight-cotton-*-tee, coastal-breeze-maxi-dress); not a separate category.',
-  'Jumpsuits & Sets': 'Not one of the five collections in the brief; overalls and pant suits need the dress + bottom anchor subsets together (later).',
+  'Jumpsuits & Sets': 'Clothing category WITHOUT a validation product (see SHOP_UNCOVERED_CATEGORIES): the engine has no combined dress + bottom anchor subset for overalls, jumpsuits and pant suits yet. The founder accepts this gap or asks for a product from it.',
   '': 'Untyped products (a cami top and a lounge set) that duplicate Tops and sets.',
 };
+
+/**
+ * Clothing categories of the shop that have no product in this validation set. The request was "one
+ * from each category", so each entry is a deviation the founder has to accept or overrule; it is
+ * printed in products.json, the data README and the generated Phase 0 report.
+ */
+export const SHOP_UNCOVERED_CATEGORIES: readonly { productType: string; reason: string }[] = [
+  {
+    productType: 'Jumpsuits & Sets',
+    reason:
+      'No validation product: jumpsuits, overalls and pant suits span the torso and the legs, and the engine has no combined dress + bottom anchor subset for them yet (anchoring, calibration and grading would have to be added first). Not chosen by us on scope grounds; the founder decides whether to accept the gap or to add one product from this category.',
+  },
+];
 
 export type ImageRole = 'front' | 'back' | 'side' | 'detail' | 'flatlay';
 

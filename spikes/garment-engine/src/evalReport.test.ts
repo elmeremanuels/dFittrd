@@ -2,6 +2,7 @@ import { readFileSync, rmSync } from 'node:fs';
 import { afterAll, describe, expect, it } from 'vitest';
 import { chooseMesh, evaluateProduct, readJob, type JobFiles, type ProductEval } from './evalJob';
 import { reconstructedDress, shopPayloads, syntheticDress, writeFakeJob } from './evalFixtures';
+import { SHOP_UNCOVERED_CATEGORIES } from './shopSelection';
 import { costTotal, plannedPhotos, renderReport, stageStatuses, usedInputs, verdicts, type ProductSection, type ReportInput, type ShopImage, type ShopProduct } from './evalReport';
 
 const images = (JSON.parse(readFileSync(new URL('../data/bohohippychic/images.json', import.meta.url), 'utf8')) as { products: Record<string, ShopImage[]> }).products;
@@ -45,6 +46,14 @@ describe('report with nothing run', () => {
     expect(v.map((x) => x.item)).toEqual(['Size test', 'Fabric test', 'Chart agreement', 'View agreement', 'Cost', 'Write-up']);
     expect(v.find((x) => x.item === 'Size test')!.state).toBe('needs people');
     expect(v.find((x) => x.item === 'Chart agreement')!.state).toBe('not yet measurable');
+  });
+
+  it('names a clothing category without a validation product as a deviation, not as the brief', () => {
+    const withGap = renderReport({ ...input(shopPayloads().map((p) => missing(p.handle))), uncoveredCategories: SHOP_UNCOVERED_CATEGORIES });
+    expect(withGap).toMatch(/\*\*Not covered: Jumpsuits & Sets\.\*\* The request was one product from each clothing category/);
+    expect(withGap).toMatch(/founder decides/);
+    expect(withGap).not.toMatch(/brief/);
+    expect(md).not.toMatch(/Not covered/);
   });
 
   it('is deterministic', () => {

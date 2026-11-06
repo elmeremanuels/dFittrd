@@ -178,16 +178,72 @@ export function shoulderSlopeFromMask(mask: CategoryMask, lm: readonly Landmark[
   return Math.max(0, Math.min(45, mean));
 }
 
-/** First foreground row scanning down the columns around `xNorm` (head top). -1 when none. */
+/**
+ * First foreground row scanning down the columns around `xNorm`. This is the top of the person
+ * INCLUDING hair; the scale uses `headTopWithoutHair` instead (carry-over #16). -1 when none.
+ */
 export function headTopRow(mask: CategoryMask, xNorm: number, bandFrac = 0.08): number {
+  return firstRowInBand(mask, xNorm, bandFrac, isPerson);
+}
+
+/**
+ * Height of the skull vertex above the hairline as a fraction of the hairline → chin distance.
+ * Approximate adult proportions, not a measurement: hairline (trichion) → chin ≈ 18 cm (forehead
+ * ≈ 6 cm + nasion → menton ≈ 12 cm) and vertex → chin ≈ 23 cm, so the vertex sits ≈ 5 cm, or
+ * ≈ 0.28 of the face height, above the hairline. To be calibrated with the tape-measured pilot
+ * volunteers (docs/ENGINE-HANDOFF.md §Pilot, carry-over #16), together with SCAN_PRIOR_SIGMA_CM.
+ */
+export const VERTEX_ABOVE_HAIRLINE_RATIO = 0.28;
+
+export interface HeadTop {
+  /** Mask row of the head top without hair (may be fractional); -1 when there is no person. */
+  row: number;
+  /** First person row, hair included (the old head top). */
+  personTop: number;
+  /** How the row was found. */
+  method: 'face-proportion' | 'no-hair' | 'person-top';
+}
+
+/**
+ * Head top without hair (carry-over #16). The user's stature is measured to the skull, but the
+ * segmenter's person mask includes the hair, so the first person row overstates the head-top →
+ * heel span and every girth comes out 1–3 % low. With the multiclass segmenter's classes, around
+ * the nose column:
+ * - no hair above the face (bald, hair tied back below the crown): the first person row is the skull;
+ * - hair on top: the vertex is estimated from the face itself, `VERTEX_ABOVE_HAIRLINE_RATIO` of the
+ *   hairline → chin distance above the hairline (first → last face-skin row), and clamped between the
+ *   top of the hair and the hairline. Hair volume (a bun, curls) then no longer moves the scale.
+ * - no face skin in the band (back view, face covered): the first person row, as before.
+ */
+export function headTopWithoutHair(mask: CategoryMask, xNorm: number, bandFrac = 0.08): HeadTop {
+  const personTop = firstRowInBand(mask, xNorm, bandFrac, isPerson);
+  if (personTop < 0) return { row: -1, personTop, method: 'person-top' };
+  const hairline = firstRowInBand(mask, xNorm, bandFrac, (c) => c === SEG.FACE_SKIN);
+  if (hairline < 0) return { row: personTop, personTop, method: 'person-top' };
+  let hairAbove = false;
+  for (let y = personTop; y < hairline && !hairAbove; y++) hairAbove = rowInBandHas(mask, y, xNorm, bandFrac, (c) => c === SEG.HAIR);
+  if (!hairAbove) return { row: personTop, personTop, method: 'no-hair' };
+  let chin = hairline;
+  for (let y = hairline; y < mask.height; y++) if (rowInBandHas(mask, y, xNorm, bandFrac, (c) => c === SEG.FACE_SKIN)) chin = y;
+  const vertex = hairline - VERTEX_ABOVE_HAIRLINE_RATIO * (chin - hairline);
+  return { row: Math.min(hairline, Math.max(personTop, vertex)), personTop, method: 'face-proportion' };
+}
+
+function bandOf(mask: CategoryMask, xNorm: number, bandFrac: number): [number, number] {
   const cx = Math.round(xNorm * mask.width);
   const half = Math.max(1, Math.round(mask.width * bandFrac));
-  for (let y = 0; y < mask.height; y++) {
-    const row = y * mask.width;
-    for (let x = Math.max(0, cx - half); x <= Math.min(mask.width - 1, cx + half); x++) {
-      if (isPerson(mask.data[row + x] ?? 0)) return y;
-    }
-  }
+  return [Math.max(0, cx - half), Math.min(mask.width - 1, cx + half)];
+}
+
+function rowInBandHas(mask: CategoryMask, y: number, xNorm: number, bandFrac: number, test: (c: number) => boolean): boolean {
+  const [x0, x1] = bandOf(mask, xNorm, bandFrac);
+  const row = y * mask.width;
+  for (let x = x0; x <= x1; x++) if (test(mask.data[row + x] ?? 0)) return true;
+  return false;
+}
+
+function firstRowInBand(mask: CategoryMask, xNorm: number, bandFrac: number, test: (c: number) => boolean): number {
+  for (let y = 0; y < mask.height; y++) if (rowInBandHas(mask, y, xNorm, bandFrac, test)) return y;
   return -1;
 }
 

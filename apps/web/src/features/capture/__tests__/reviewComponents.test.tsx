@@ -26,7 +26,7 @@ vi.mock('../platform/camera', async (importOriginal) => {
 vi.stubGlobal('matchMedia', (q: string) => ({ matches: /prefers-reduced-motion/.test(q), media: q, onchange: null, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false }));
 
 const { BodyStep } = await import('../components/BodyStep');
-const { FaceStep } = await import('../components/FaceStep');
+const { FaceStep, faceModelsState } = await import('../components/FaceStep');
 
 beforeAll(() => {
   // jsdom implements neither playback nor srcObject; keep both observable
@@ -125,5 +125,43 @@ describe('FaceStep', () => {
     const again = screen.getByLabelText('Camera preview') as HTMLVideoElement;
     expect(again).not.toBe(first);
     expect(again.srcObject).toBe(stream);
+  });
+
+  it('says the models are loading (not "not available") while they load, then works once ready (#16)', async () => {
+    const session = fakeSession({
+      analyseFace: vi.fn(async () => ({ type: 'faceResult', faceFound: true, skin: null, faceTile: null })),
+    });
+    const { container, rerender } = render(<FaceStep session={session} models="loading" cameraAllowed onDone={() => undefined} onSkip={() => undefined} />);
+    expect(screen.getByRole('status')).toHaveTextContent(/Loading the scan models/);
+    expect(screen.getByRole('status')).not.toHaveTextContent(/not available/);
+    expect(screen.getByRole('button', { name: /Take photo/ })).toBeDisabled();
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input).toBeDisabled();
+
+    rerender(<FaceStep session={session} models="ready" cameraAllowed onDone={() => undefined} onSkip={() => undefined} />);
+    expect(screen.getByRole('status')).toHaveTextContent(/Centre your face/);
+    expect(screen.getByRole('button', { name: /Take photo/ })).toBeEnabled();
+    fireEvent.change(input, { target: { files: [new File(['x'], 'me.jpg', { type: 'image/jpeg' })] } });
+    await screen.findByRole('button', { name: /Retake/ });
+    expect(session.analyseFace).toHaveBeenCalledTimes(1);
+  });
+
+  it('says "not available" only when loading failed', () => {
+    render(<FaceStep session={fakeSession()} models="failed" cameraAllowed onDone={() => undefined} onSkip={() => undefined} />);
+    expect(screen.getByRole('status')).toHaveTextContent(/not available on this device/);
+    expect(screen.getByRole('button', { name: /Take photo/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Skip this step/ })).toBeEnabled();
+  });
+
+  it('faceModelsState separates loading from failed', () => {
+    const s = fakeSession();
+    expect(faceModelsState(s, 'idle')).toBe('loading');
+    expect(faceModelsState(s, 'loading')).toBe('loading');
+    expect(faceModelsState(null, 'loading')).toBe('loading');
+    expect(faceModelsState(s, 'ready')).toBe('ready');
+    expect(faceModelsState(s, undefined)).toBe('ready');
+    expect(faceModelsState(s, 'failed')).toBe('unavailable');
+    expect(faceModelsState(null, 'ready')).toBe('unavailable');
+    expect(faceModelsState(null, undefined)).toBe('unavailable');
   });
 });

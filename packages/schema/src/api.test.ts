@@ -21,7 +21,13 @@ import {
   SdkSessionResponseSchema,
   ShopProductsQuerySchema,
   SignaturePutRequestSchema,
+  SwipeBatchEnvelopeSchema,
   SwipeBatchRequestSchema,
+  SwipeBatchResponseSchema,
+  SwipeRejectionSchema,
+  SWIPE_BATCH_MAX,
+  WARDROBE_SIZE_UNKNOWN,
+  isKnownWardrobeSize,
   TryResolveResponseSchema,
   UsageResponseSchema,
   WardrobePutRequestSchema,
@@ -118,6 +124,33 @@ describe('try / shop / swipes / wardrobe DTOs', () => {
     expect(SwipeBatchRequestSchema.safeParse({ events: Array(101).fill(ev) }).success).toBe(false);
     const parsed = SwipeBatchRequestSchema.parse({ events: [{ ...ev, bust: 88 }] });
     expect(parsed.events[0]).not.toHaveProperty('bust');
+  });
+
+  it('the swipe envelope accepts malformed events so the server can reject them one by one (#23)', () => {
+    const ev = { itemId: 'aalter-studio-1', action: 'love', at: 1, sizeAtSwipe: 'M', fitScore: 1, dealIndex: 0, shopId: UUID, clientId: 'c_00000001' };
+    expect(SwipeBatchEnvelopeSchema.safeParse({ events: [ev, { itemId: '' }, 42] }).success).toBe(true);
+    expect(SwipeBatchEnvelopeSchema.safeParse({ events: [] }).success).toBe(false);
+    expect(SwipeBatchEnvelopeSchema.safeParse({ events: Array(SWIPE_BATCH_MAX + 1).fill(ev) }).success).toBe(false);
+    const res = SwipeBatchResponseSchema.safeParse({
+      accepted: 1,
+      duplicates: 0,
+      acceptedClientIds: ['c_00000001'],
+      rejected: [{ index: 1, clientId: null, reason: 'invalid_event', detail: 'itemId' }],
+      usageEventsCreated: 0,
+      ledgerEntryId: UUID,
+    });
+    expect(res.success).toBe(true);
+    expect(SwipeRejectionSchema.safeParse({ index: 0, clientId: 'c_1', reason: 'teapot' }).success).toBe(false);
+  });
+
+  it('an unknown wardrobe size is the explicit marker, never a guessed label (#24)', () => {
+    expect(WARDROBE_SIZE_UNKNOWN).toBe('unknown');
+    expect(WardrobePutRequestSchema.safeParse({ shopId: UUID, size: WARDROBE_SIZE_UNKNOWN, state: 'saved' }).success).toBe(true);
+    expect(isKnownWardrobeSize(WARDROBE_SIZE_UNKNOWN)).toBe(false);
+    expect(isKnownWardrobeSize(null)).toBe(false);
+    expect(isKnownWardrobeSize('')).toBe(false);
+    expect(isKnownWardrobeSize('ONE')).toBe(true);
+    expect(isKnownWardrobeSize('M')).toBe(true);
   });
 
   it('wardrobe states are the four lifecycle states', () => {

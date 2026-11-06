@@ -3,12 +3,15 @@
  * drains them in order: swipes are batched (≤ 100) to POST /v1/swipes, save/wardrobe rows go to
  * PUT /v1/wardrobe/:productId, the fit signature to PUT /v1/me/signature and "Delete my scan" to
  * DELETE /v1/me/signature. The signature PUT and DELETE rows go out in queue order, one at a time,
- * so a PUT queued before a delete can never land after it (PRIV-1). Network errors and 5xx back
+ * so a PUT queued before a delete can never land after it (PRIV-1). The swipe route accepts a
+ * batch per event (#23): the rows the server stored (`acceptedClientIds`) and the ones it rejected
+ * (always permanent) are deleted; a row the response does not mention stays and is retried.
+ * Network errors and 5xx back
  * off exponentially (1 s · 2^n, max 10 min); permanent 4xx rows are dropped with the error
  * recorded, and so are rows after MAX_ATTEMPTS, except the signature delete, which retries until
  * the server confirms. No body data is ever in this queue (taste-engine contract 2).
  */
-import type { SwipeBatchRequest, SwipeWireEvent, WardrobePutRequest, FitSignatureWire } from '@curtain/schema';
+import { isKnownWardrobeSize, WARDROBE_SIZE_UNKNOWN, type SwipeBatchRequest, type SwipeBatchResponse, type SwipeWireEvent, type WardrobePutRequest, type FitSignatureWire } from '@curtain/schema';
 import { isSaveOutboxEntry, type OutboxEntry } from '@curtain/taste-engine';
 import { ApiError, type ApiClient } from '@/api/client';
 import type { AppDb, OutboxRow } from '@/db/db';
@@ -19,6 +22,26 @@ export const MAX_ATTEMPTS = 12;
 
 export function backoffMs(attempts: number): number {
   return Math.min(10 * 60_000, 1000 * 2 ** Math.max(0, attempts - 1));
+}
+
+/**
+ * Split the rows of one swipe batch by the server's per-event answer (#23). `rows[i]` was sent as
+ * `events[i]`. Stored = clientId in `acceptedClientIds` (new or duplicate); rejected = reported in
+ * `rejected` (every reason is permanent); unanswered = neither, kept for a retry.
+ */
+export function settleSwipeBatch(rows: readonly OutboxRow[], res: Pick<SwipeBatchResponse, 'acceptedClientIds' | 'rejected'>): { stored: OutboxRow[]; rejected: OutboxRow[]; unanswered: OutboxRow[] } {
+  const acceptedIds = new Set(res.acceptedClientIds);
+  const rejectedIdx = new Set(res.rejected.map((r) => r.index));
+  const rejectedIds = new Set(res.rejected.map((r) => r.clientId).filter((id): id is string => id !== null));
+  const stored: OutboxRow[] = [];
+  const rejected: OutboxRow[] = [];
+  const unanswered: OutboxRow[] = [];
+  rows.forEach((row, i) => {
+    if (acceptedIds.has(row.clientId)) stored.push(row);
+    else if (rejectedIdx.has(i) || rejectedIds.has(row.clientId)) rejected.push(row);
+    else unanswered.push(row);
+  });
+  return { stored, rejected, unanswered };
 }
 
 export interface SyncerOptions {
@@ -116,9 +139,10 @@ export class OutboxSyncer {
     const due = await db.outbox.where('nextAt').belowOrEqual(this.now()).sortBy('seq');
     if (due.length === 0) return;
 
-    // One batch per shop: the API rejects a whole batch (422 unknown_shop) when one shop is unknown
-    // (e.g. erased by shop/redact), and a permanent error drops the batch — it must not take other
-    // shops' swipes (and their billable intent tokens) with it.
+    // One batch per shop. The API reports rejected events one by one (#23), so a shop erased by
+    // shop/redact no longer fails the others; per-shop batches still keep a whole-batch failure
+    // (a permanent 4xx on the envelope) from taking other shops' swipes, and their billable intent
+    // tokens, with it, and give the privacy ledger one shop per entry.
     const swipes = due.filter((r) => r.kind === 'swipe').slice(0, MAX_BATCH);
     const byShop = new Map<string, OutboxRow[]>();
     for (const row of swipes) {
@@ -151,13 +175,18 @@ export class OutboxSyncer {
     }
     if (events.length === 0) return;
     const batch: SwipeBatchRequest = { events };
+    let res: SwipeBatchResponse;
     try {
-      await this.opts.client.postSwipes(batch);
-      await this.opts.db.outbox.bulkDelete(sendable.map((r) => r.seq!));
-      this.opts.onSynced?.('swipe', sendable.length);
+      res = await this.opts.client.postSwipes(batch);
     } catch (e) {
       await this.fail(sendable, e);
+      return;
     }
+    const { stored, rejected, unanswered } = settleSwipeBatch(sendable, res);
+    await this.opts.db.outbox.bulkDelete([...stored, ...rejected].map((r) => r.seq!));
+    if (stored.length > 0) this.opts.onSynced?.('swipe', stored.length);
+    // A row the server neither stored nor rejected (should not happen) is retried with backoff.
+    if (unanswered.length > 0) await this.fail(unanswered, new Error('swipe not acknowledged by the server'));
   }
 
   private async sendSignature(row: OutboxRow): Promise<void> {
@@ -185,9 +214,11 @@ export class OutboxSyncer {
   }
 
   private async sendWardrobe(row: OutboxRow): Promise<void> {
-    const p = row.payload as { productId: string; shopId: string; size: string; state: WardrobePutRequest['state'] };
+    const p = row.payload as { productId: string; shopId: string; size: string | null; state: WardrobePutRequest['state'] };
+    // An unknown size is sent as the explicit marker (#24); a row queued by an older build may hold null.
+    const size = isKnownWardrobeSize(p.size) ? p.size : WARDROBE_SIZE_UNKNOWN;
     try {
-      await this.opts.client.putWardrobe(p.productId, { shopId: p.shopId, size: p.size, state: p.state });
+      await this.opts.client.putWardrobe(p.productId, { shopId: p.shopId, size, state: p.state });
       await this.opts.db.outbox.delete(row.seq!);
       this.opts.onSynced?.('wardrobe', 1);
     } catch (e) {

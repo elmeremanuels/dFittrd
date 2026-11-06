@@ -205,7 +205,8 @@ export function CaptureStep({ onComplete, onSkip, persist = true, modelBase, ini
         {stage === 'face' ? (
           <FaceStep
             key="face"
-            session={modelsReady ? session : null}
+            session={session}
+            models={caps.models}
             cameraAllowed={caps.camera === true}
             onDone={(r) => {
               setFace(r);

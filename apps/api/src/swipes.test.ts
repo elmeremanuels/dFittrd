@@ -78,24 +78,49 @@ describe('POST /v1/swipes — batch, idempotent, billable by intent token (D7)',
     expect(daily[0]!.fitSessions).toBe(3);
   });
 
-  it('validates the batch: unknown shop 422, > 100 events 400, unknown keys stripped', async () => {
+  it('accepts the valid events of a batch and reports the rejected ones per event (#23)', async () => {
     const d = await createDevice(t);
     await resolveTry(d);
-    const unknown = await t.app.inject({ method: 'POST', url: '/v1/swipes', headers: d.auth, payload: { events: [ev({ shopId: '00000000-0000-4000-8000-000000000000' })] } });
-    expect(unknown.statusCode).toBe(422);
-    // a mixed batch is rejected before anything is written: no half batch, no usage event
+    const GHOST = '00000000-0000-4000-8000-000000000000';
+    const unknown = await t.app.inject({ method: 'POST', url: '/v1/swipes', headers: d.auth, payload: { events: [ev({ shopId: GHOST, clientId: 'ghost-only-1' })] } });
+    expect(unknown.statusCode).toBe(200);
+    expect(unknown.json()).toMatchObject({ accepted: 0, duplicates: 0, acceptedClientIds: [], rejected: [{ index: 0, clientId: 'ghost-only-1', reason: 'unknown_shop' }], usageEventsCreated: 0 });
+
+    // a mixed batch: the known event is stored and billed, the unknown shop and the malformed events are reported
     const knownFirst = ev({ clientId: 'mixed-known-1', itemId: 'raw-denim-01', sizeAtSwipe: '28' });
-    const mixed = await t.app.inject({ method: 'POST', url: '/v1/swipes', headers: d.auth, payload: { events: [knownFirst, ev({ shopId: '00000000-0000-4000-8000-000000000000' })] } });
-    expect(mixed.statusCode).toBe(422);
-    expect(mixed.json()).toMatchObject({ error: { code: 'unknown_shop' } });
-    expect(await t.handle.db.select().from(swipeEvents).where(and(eq(swipeEvents.deviceId, d.deviceId), eq(swipeEvents.clientId, 'mixed-known-1')))).toHaveLength(0);
-    expect(await t.handle.db.select().from(usageEvents).where(eq(usageEvents.deviceId, d.deviceId))).toHaveLength(0);
-    // the same known event alone is then accepted (not a duplicate)
+    const mixed = await t.app.inject({
+      method: 'POST',
+      url: '/v1/swipes',
+      headers: d.auth,
+      payload: {
+        events: [knownFirst, ev({ shopId: GHOST, clientId: 'mixed-ghost-1' }), ev({ clientId: 'mixed-bad-score', fitScore: 7 }), 'not an event', ev({ clientId: 'mixed-known-2', itemId: 'monochrome-02', sizeAtSwipe: null, fitScore: null })],
+      },
+    });
+    expect(mixed.statusCode).toBe(200);
+    const body = mixed.json();
+    expect(body).toMatchObject({ accepted: 2, duplicates: 0, acceptedClientIds: ['mixed-known-1', 'mixed-known-2'], usageEventsCreated: 1 });
+    expect(body.rejected).toEqual([
+      { index: 1, clientId: 'mixed-ghost-1', reason: 'unknown_shop' },
+      { index: 2, clientId: 'mixed-bad-score', reason: 'invalid_event', detail: 'fitScore' },
+      { index: 3, clientId: null, reason: 'invalid_event', detail: 'event' },
+    ]);
+    expect(await t.handle.db.select().from(swipeEvents).where(and(eq(swipeEvents.deviceId, d.deviceId), eq(swipeEvents.clientId, 'mixed-known-1')))).toHaveLength(1);
+    expect(await t.handle.db.select().from(swipeEvents).where(and(eq(swipeEvents.deviceId, d.deviceId), eq(swipeEvents.clientId, 'mixed-bad-score')))).toHaveLength(0);
+    expect(await t.handle.db.select().from(usageEvents).where(eq(usageEvents.deviceId, d.deviceId))).toHaveLength(1);
+
+    // replaying the accepted events is idempotent: duplicates, listed as stored, billed once
     const retry = await t.app.inject({ method: 'POST', url: '/v1/swipes', headers: d.auth, payload: { events: [knownFirst] } });
-    expect(retry.json()).toMatchObject({ accepted: 1, duplicates: 0, usageEventsCreated: 1 });
+    expect(retry.json()).toMatchObject({ accepted: 0, duplicates: 1, acceptedClientIds: ['mixed-known-1'], rejected: [], usageEventsCreated: 0 });
+    expect(await t.handle.db.select().from(usageEvents).where(eq(usageEvents.deviceId, d.deviceId))).toHaveLength(1);
+
+    // the envelope itself is still validated as a whole
     const big = await t.app.inject({ method: 'POST', url: '/v1/swipes', headers: d.auth, payload: { events: Array.from({ length: 101 }, () => ev()) } });
     expect(big.statusCode).toBe(400);
-    const extra = await t.app.inject({ method: 'POST', url: '/v1/swipes', headers: d.auth, payload: { events: [ev({ bust: 92, photo: 'x' })] } });
+    const empty = await t.app.inject({ method: 'POST', url: '/v1/swipes', headers: d.auth, payload: { events: [] } });
+    expect(empty.statusCode).toBe(400);
+    // unknown keys (body data) are stripped, never stored
+    const extra = await t.app.inject({ method: 'POST', url: '/v1/swipes', headers: d.auth, payload: { events: [ev({ bust: 92, photo: 'x', clientId: 'extra-keys-1' })] } });
     expect(extra.statusCode).toBe(200);
+    expect(extra.json().acceptedClientIds).toEqual(['extra-keys-1']);
   });
 });

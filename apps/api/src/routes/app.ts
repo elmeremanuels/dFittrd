@@ -24,13 +24,15 @@ import {
   SignatureDeleteResponseSchema,
   SignaturePutRequestSchema,
   SignaturePutResponseSchema,
-  SwipeBatchRequestSchema,
+  SwipeBatchEnvelopeSchema,
   SwipeBatchResponseSchema,
+  SwipeWireEventSchema,
   WardrobeItemSchema,
   WardrobeListResponseSchema,
   WardrobePutParamsSchema,
   WardrobePutRequestSchema,
   FS_LENGTH,
+  type SwipeRejection,
   type SwipeWireEvent,
 } from '@curtain/schema';
 import { requireDevice, requireDeviceForRotation } from '../auth/device.js';
@@ -53,6 +55,19 @@ const uuid = z.uuid();
 export function deckBillingDay(clientAt: number, now: Date): string {
   const delta = Math.abs(clientAt - now.getTime());
   return utcDay(delta <= 36 * HOUR ? new Date(clientAt) : now);
+}
+
+/** The clientId of a raw (possibly invalid) swipe event, when it has a usable one; else null. */
+export function readableClientId(raw: unknown): string | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const id = (raw as { clientId?: unknown }).clientId;
+  return typeof id === 'string' && id.length > 0 && id.length <= 64 ? id : null;
+}
+
+/** Field path of a validation issue, value-free ("reasons.2", "fitScore"); "event" for the event itself. */
+function issuePath(path: readonly PropertyKey[] | undefined): string {
+  const p = (path ?? []).map((k) => String(k)).join('.');
+  return (p || 'event').slice(0, 200);
 }
 
 export const appRoutes: FastifyPluginAsyncZod = async (app) => {
@@ -207,25 +222,45 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
   );
 
   // ---- swipes (batch ≤ 100, no body data) ---------------------------------------------------
-  app.post('/v1/swipes', { schema: { body: SwipeBatchRequestSchema, response: { 200: SwipeBatchResponseSchema } }, preHandler: requireDevice }, async (req) => {
+  /**
+   * Partial acceptance (carry-over #23): every event is validated on its own. Valid events of known
+   * shops are stored; the others come back in `rejected` with a permanent reason, so one bad event
+   * never blocks the rest of an outbox. Stored events (new or replayed) are listed by clientId in
+   * `acceptedClientIds`; the client deletes exactly those and the rejected ones.
+   *
+   * Idempotency and billing are unchanged: an event is keyed by (device, clientId), and the inserts,
+   * usage events and ledger entry of the accepted events share one transaction, so a server error
+   * stores nothing of the batch and the client's retry replays it in full.
+   */
+  app.post('/v1/swipes', { schema: { body: SwipeBatchEnvelopeSchema, response: { 200: SwipeBatchResponseSchema } }, preHandler: requireDevice }, async (req) => {
     const deviceId = req.device!.id;
     const now = ctx.now();
-    let accepted = 0;
-    let duplicates = 0;
-    let usageEventsCreated = 0;
-    // All-or-nothing: every shop is checked before anything is written, and the inserts, usage
-    // events and ledger entry share one transaction. A 422 therefore never leaves half a batch
-    // behind (the client drops a batch on a permanent error and batches per shop for that reason).
-    const shopIds = new Set(req.body.events.map((e) => e.shopId));
+    const rejected: SwipeRejection[] = [];
+    const valid: { index: number; ev: SwipeWireEvent }[] = [];
+    req.body.events.forEach((raw, index) => {
+      const parsed = SwipeWireEventSchema.safeParse(raw);
+      if (parsed.success) valid.push({ index, ev: parsed.data });
+      else rejected.push({ index, clientId: readableClientId(raw), reason: 'invalid_event', detail: issuePath(parsed.error.issues[0]?.path) });
+    });
+    const shopIds = new Set(valid.map((v) => v.ev.shopId));
     const shopsById = new Map<string, ShopRow>();
     for (const shopId of shopIds) {
       const shop = await findShopById(db, shopId);
-      if (!shop) throw unprocessable('unknown_shop', `unknown shop ${shopId}`);
-      shopsById.set(shopId, shop);
+      if (shop) shopsById.set(shopId, shop);
     }
+    const storable = valid.filter(({ index, ev }) => {
+      if (shopsById.has(ev.shopId)) return true;
+      rejected.push({ index, clientId: ev.clientId, reason: 'unknown_shop' });
+      return false;
+    });
+    rejected.sort((a, b) => a.index - b.index);
     const log = req.log;
     return db.transaction(async (tx) => {
-      for (const ev of req.body.events) {
+      let accepted = 0;
+      let duplicates = 0;
+      let usageEventsCreated = 0;
+      const acceptedClientIds: string[] = [];
+      for (const { ev } of storable) {
         const product = await findProduct(tx, ev.shopId, ev.itemId);
         const inserted = await tx
           .insert(swipeEvents)
@@ -244,6 +279,7 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
           })
           .onConflictDoNothing({ target: [swipeEvents.deviceId, swipeEvents.clientId] })
           .returning({ id: swipeEvents.id });
+        acceptedClientIds.push(ev.clientId);
         if (inserted.length === 0) {
           duplicates++;
           continue;
@@ -272,12 +308,13 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
         const outcome = await billFitSession(tx, env, shop, { deviceId, productId: product.id, idempotencyKey: key, at: now }, log);
         if (outcome === 'billed') usageEventsCreated++;
       }
+      // The ledger records what the device sent, rejected events included (field names, never values).
       const entry = await writeLedger(tx, {
         deviceId,
         kind: 'swipe_batch',
         payloadSummary: { bytes: byteLength(req.body), fields: ['events'], ...(shopIds.size === 1 ? { shopId: [...shopIds][0]! } : {}) },
       });
-      return { accepted, duplicates, usageEventsCreated, ledgerEntryId: entry.id };
+      return { accepted, duplicates, acceptedClientIds, rejected, usageEventsCreated, ledgerEntryId: entry.id };
     });
   });
 

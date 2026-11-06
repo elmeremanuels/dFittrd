@@ -5,7 +5,7 @@
  */
 import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import type { FitResult } from '@curtain/fit-engine';
-import { MOCK_GARMENTS, type BodyProfile, type FitSignatureWire, type GarmentPayload, type ShopBranding, type SwipeAction, type SwipeEvent, type WardrobeState } from '@curtain/schema';
+import { MOCK_GARMENTS, WARDROBE_SIZE_UNKNOWN, isKnownWardrobeSize, type BodyProfile, type FitSignatureWire, type GarmentPayload, type ShopBranding, type SwipeAction, type SwipeEvent, type WardrobeState } from '@curtain/schema';
 import {
   applyOnboardingVibes,
   applySwipe,
@@ -18,7 +18,7 @@ import {
 } from '@curtain/taste-engine';
 import { deleteScan, saveBodyProfile } from '@/features/capture/storage';
 import type { SkinEstimate } from '@/features/capture/types';
-import { clearAppTables, type AppDb, type ClientLedgerEntry, type ConsentTier, type OutboxRow, type PendingIntentRow, type SettingsRow, SINGLETON_ID, type WardrobeRow } from '@/db/db';
+import { clearAppTables, type AppDb, type ClientLedgerEntry, type ConsentTier, type OutboxRow, type PendingIntentRow, type SettingsRow, SINGLETON_ID, wardrobeClientId, type WardrobeRow } from '@/db/db';
 import type { ApiClient, DeviceCredentials } from '@/api/client';
 import { newId } from '@/lib/ids';
 import { seasonKey } from '@/lib/season';
@@ -40,8 +40,14 @@ export interface CatalogItem {
   shopId: string;
 }
 
+/**
+ * A catalogue garment as the deck sees it: the payload plus its shop, so the taste engine keys its
+ * seen memory by (shop, item) and a dealt card always knows its shop (carry-over #22).
+ */
+export type ShopGarment = GarmentPayload & { shopId: string };
+
 export interface DeckState {
-  current: ScoredItem<GarmentPayload> | null;
+  current: ScoredItem<ShopGarment> | null;
   notInYourSize: number;
   exhausted: boolean;
 }
@@ -70,8 +76,12 @@ export interface AppState {
   hydrate: () => Promise<void>;
   fit: (garment: GarmentPayload) => FitResult | null;
   hasMeasurements: () => boolean;
-  /** Shop of a catalogue garment (by object first: ids are only unique within one shop). */
-  shopIdFor: (garment: GarmentPayload) => string;
+  /**
+   * Shop of a garment: its own `shopId` (dealt cards carry it), else the catalogue entry holding this
+   * exact object, else the one shop whose catalogue has this id. Null when that is ambiguous or
+   * unknown: ids are only unique within one shop, so there is no first-match guess (#22).
+   */
+  shopIdFor: (garment: GarmentPayload) => string | null;
 
   setProfile: (profile: BodyProfile, extras?: { skin?: SkinEstimate | null; signature?: FitSignatureWire | null }) => Promise<void>;
   completeOnboarding: (vibes: string[]) => Promise<void>;
@@ -80,8 +90,9 @@ export interface AppState {
 
   dealNext: () => void;
   swipe: (action: SwipeAction, ctx?: SwipeContext) => Promise<SwipeEvent | null>;
+  /** `size` null or `WARDROBE_SIZE_UNKNOWN` stores the unknown marker, never a guessed label (#24). */
   saveToWardrobe: (garment: GarmentPayload, shopId: string, size: string | null, intentToken?: string) => Promise<void>;
-  setWardrobeState: (productId: string, state: WardrobeState) => Promise<void>;
+  setWardrobeState: (shopId: string, productId: string, state: WardrobeState) => Promise<void>;
 
   setPendingIntent: (token: string | null) => Promise<void>;
   addPairedShop: (shop: ShopBranding, products: GarmentPayload[]) => Promise<void>;
@@ -118,8 +129,19 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
   let client: ApiClient | null = deps.client ?? null;
   let syncer: OutboxSyncer | null = null;
 
+  // One ShopGarment per catalogue entry, kept stable so the fit cache (per garment object) still hits.
+  const deckGarments = new WeakMap<CatalogItem, ShopGarment>();
+  const deckGarmentOf = (c: CatalogItem): ShopGarment => {
+    let g = deckGarments.get(c);
+    if (!g) {
+      g = { ...c.garment, shopId: c.shopId };
+      deckGarments.set(c, g);
+    }
+    return g;
+  };
+
   const store = create<AppState>()((set, get) => {
-    const garmentsOf = (catalog: CatalogItem[]): GarmentPayload[] => catalog.map((c) => c.garment);
+    const garmentsOf = (catalog: CatalogItem[]): ShopGarment[] => catalog.map(deckGarmentOf);
 
     const enqueue = async (rows: Omit<OutboxRow, 'seq' | 'attempts' | 'nextAt' | 'createdAt'>[]): Promise<void> => {
       if (rows.length === 0) return;
@@ -186,8 +208,13 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
       },
 
       shopIdFor(garment) {
+        const own = (garment as Partial<ShopGarment>).shopId;
+        if (typeof own === 'string' && own) return own;
         const { catalog } = get();
-        return (catalog.find((c) => c.garment === garment) ?? catalog.find((c) => c.garment.id === garment.id))?.shopId ?? MOCK_SHOP_ID;
+        const exact = catalog.find((c) => c.garment === garment);
+        if (exact) return exact.shopId;
+        const shops = new Set(catalog.filter((c) => c.garment.id === garment.id).map((c) => c.shopId));
+        return shops.size === 1 ? [...shops][0]! : null;
       },
 
       async setProfile(profile, extras) {
@@ -250,9 +277,12 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
         const { deck, taste } = get();
         const garment = ctx.garment ?? deck.current?.garment;
         if (!garment) return null;
+        // A swipe that cannot be attributed to one shop is not recorded: the seen memory, the outbox
+        // and the wardrobe are all keyed by shop (#22), and guessing would file it under the wrong one.
         const shopId = ctx.shopId ?? get().shopIdFor(garment);
+        if (!shopId) return null;
         const fit = get().fit(garment);
-        const applied = applySwipe(taste, garment, fit, action, now());
+        const applied = applySwipe(taste, { ...garment, shopId }, fit, action, now());
         const { state, entries } = drainOutbox(applied.state);
         set({ taste: state });
         await saveTaste(db, state);
@@ -273,7 +303,7 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
         // Advance only if the swiped card is still the one on the deck: the awaits above can outlive a
         // deck reset (paired catalogue arrived, re-measure) and must not skip the freshly dealt card.
         const dealt = deck.current;
-        if (dealt && dealt.garment.id === garment.id && get().deck.current === dealt) get().dealNext();
+        if (dealt && dealt.garment.id === garment.id && dealt.garment.shopId === shopId && get().deck.current === dealt) get().dealNext();
         return applied.event;
       },
 
@@ -281,7 +311,7 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
         const row: WardrobeRow = {
           productId: garment.id,
           shopId,
-          size: size ?? 'ONE',
+          size: isKnownWardrobeSize(size) ? size : WARDROBE_SIZE_UNKNOWN,
           state: 'saved',
           updatedAt: now(),
           garment: {
@@ -295,12 +325,12 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
           },
         };
         await db.wardrobe.put(row);
-        set({ wardrobe: [row, ...get().wardrobe.filter((w) => w.productId !== row.productId)] });
+        set({ wardrobe: [row, ...get().wardrobe.filter((w) => !(w.productId === row.productId && w.shopId === row.shopId))] });
         if (shopId === MOCK_SHOP_ID) return; // demo rail: on-device only
         await enqueue([
           {
             kind: 'wardrobe',
-            clientId: `wardrobe:${garment.id}`,
+            clientId: wardrobeClientId(shopId, garment.id),
             shopId,
             payload: { productId: garment.id, shopId, size: row.size, state: 'saved' },
             ...(intentToken ? { intentToken } : {}),
@@ -308,17 +338,17 @@ export function createAppStore(deps: StoreDeps): AppStore & { attachClient: (c: 
         ]);
       },
 
-      async setWardrobeState(productId, state) {
-        const existing = get().wardrobe.find((w) => w.productId === productId);
+      async setWardrobeState(shopId, productId, state) {
+        const existing = get().wardrobe.find((w) => w.productId === productId && w.shopId === shopId);
         if (!existing) return;
         const row: WardrobeRow = { ...existing, state, updatedAt: now() };
         await db.wardrobe.put(row);
-        set({ wardrobe: get().wardrobe.map((w) => (w.productId === productId ? row : w)) });
-        if (row.shopId !== MOCK_SHOP_ID) await enqueue([{ kind: 'wardrobe', clientId: `wardrobe:${productId}`, shopId: row.shopId, payload: { productId, shopId: row.shopId, size: row.size, state } }]);
+        set({ wardrobe: get().wardrobe.map((w) => (w === existing ? row : w)) });
+        if (row.shopId !== MOCK_SHOP_ID) await enqueue([{ kind: 'wardrobe', clientId: wardrobeClientId(shopId, productId), shopId, payload: { productId, shopId, size: row.size, state } }]);
 
-        // kept / returned feed the fit engine's history tie-break (handoff §4.2)
+        // kept / returned feed the fit engine's history tie-break (handoff §4.2); an unknown size teaches nothing
         const profile = get().profile;
-        if (profile && (state === 'kept' || state === 'returned')) {
+        if (profile && (state === 'kept' || state === 'returned') && isKnownWardrobeSize(row.size)) {
           const history = (profile.history ?? []).filter((h) => !(h.brand === row.garment.brand && h.size === row.size));
           history.push({ brand: row.garment.brand, size: row.size, kept: state === 'kept' });
           const next: BodyProfile = { ...profile, history, updatedAt: now() };

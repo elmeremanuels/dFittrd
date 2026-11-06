@@ -227,7 +227,7 @@ function project(pos: Float32Array, w: Float32Array, pairs: Uint32Array, restLen
     const dx = pos[3 * b]! - pos[3 * a]!;
     const dy = pos[3 * b + 1]! - pos[3 * a + 1]!;
     const dz = pos[3 * b + 2]! - pos[3 * a + 2]!;
-    const d = Math.hypot(dx, dy, dz);
+    const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
     if (d < 1e-9) continue;
     const c = ((d - restLen[e]!) / (d * ws)) * k;
     pos[3 * a] = pos[3 * a]! + wa * c * dx;
@@ -247,9 +247,10 @@ function projectTethers(pos: Float32Array, w: Float32Array, tether: Int32Array, 
     const dx = pos[3 * i]! - pos[3 * p]!;
     const dy = pos[3 * i + 1]! - pos[3 * p + 1]!;
     const dz = pos[3 * i + 2]! - pos[3 * p + 2]!;
-    const d = Math.hypot(dx, dy, dz);
     const r = rest[i]!;
-    if (d <= r || d < 1e-9) continue;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 <= r * r || d2 < 1e-18) continue;
+    const d = Math.sqrt(d2);
     const k = r / d;
     pos[3 * i] = pos[3 * p]! + dx * k;
     pos[3 * i + 1] = pos[3 * p + 1]! + dy * k;
@@ -258,6 +259,34 @@ function projectTethers(pos: Float32Array, w: Float32Array, tether: Int32Array, 
 }
 
 export type Collide = (pos: Float32Array, i: number) => boolean;
+
+/**
+ * Static pre-solve of the pinned particles (no gravity, no time): they move under the edge
+ * constraints and collision while every free particle is held, then they are pinned where they
+ * ended up. Pins are never projected by the solver, so an edge between two pins that starts
+ * stretched stays stretched (the neckline tear on small sizes); this settles the pinned set onto
+ * the body first. Returns the largest edge strain between two pinned particles afterwards.
+ */
+export function settlePins(cloth: Cloth, collide: Collide | null, iterations = 40): number {
+  const { pos, invMass } = cloth;
+  const n = invMass.length;
+  const w = new Float32Array(n);
+  for (let i = 0; i < n; i++) w[i] = invMass[i] === 0 ? 1 : 0;
+  for (let it = 0; it < iterations; it++) {
+    project(pos, w, cloth.edges, cloth.edgeRest, 1);
+    if (collide) for (let i = 0; i < n; i++) if (w[i] !== 0) collide(pos, i);
+  }
+  cloth.prev.set(pos);
+  cloth.anchor.set(pos);
+  let worst = 0;
+  for (let e = 0; e < cloth.edgeRest.length; e++) {
+    const a = cloth.edges[2 * e]!;
+    const b = cloth.edges[2 * e + 1]!;
+    if (invMass[a] !== 0 || invMass[b] !== 0 || cloth.edgeRest[e]! <= 0) continue;
+    worst = Math.max(worst, dist(pos, a, b) / cloth.edgeRest[e]! - 1);
+  }
+  return worst;
+}
 
 /** Advance by `frames` frames of `params.dt`. Returns the largest particle displacement of the last substep (cm), a settle signal. */
 export function stepCloth(cloth: Cloth, params: ClothParams, collide: Collide | null, frames = 1): number {
@@ -280,7 +309,7 @@ export function stepCloth(cloth: Cloth, params: ClothParams, collide: Collide | 
         let ax = 0;
         let az = 0;
         if (cling[i] === 1 && params.clingAccel > 0) {
-          const r = Math.hypot(x, z) || 1;
+          const r = Math.sqrt(x * x + z * z) || 1;
           ax = (-x / r) * params.clingAccel;
           az = (-z / r) * params.clingAccel;
         }
@@ -300,13 +329,16 @@ export function stepCloth(cloth: Cloth, params: ClothParams, collide: Collide | 
       }
       for (let i = 0; i < n; i++) {
         if (invMass[i] === 0) continue;
-        const m = Math.hypot(pos[3 * i]! - prev[3 * i]!, pos[3 * i + 1]! - prev[3 * i + 1]!, pos[3 * i + 2]! - prev[3 * i + 2]!);
-        if (m > maxMove) maxMove = m;
+        const mx = pos[3 * i]! - prev[3 * i]!;
+        const my = pos[3 * i + 1]! - prev[3 * i + 1]!;
+        const mz = pos[3 * i + 2]! - prev[3 * i + 2]!;
+        const m2 = mx * mx + my * my + mz * mz;
+        if (m2 > maxMove) maxMove = m2;
       }
     }
     cloth.time += params.dt;
   }
-  return maxMove;
+  return Math.sqrt(maxMove);
 }
 
 export function isSettled(cloth: Cloth, params: ClothParams): boolean {

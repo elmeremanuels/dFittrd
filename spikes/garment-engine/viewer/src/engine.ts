@@ -11,8 +11,8 @@ import { applyGrading } from '../../src/grading';
 import type { MaterialJson } from '../../src/product';
 import { insideCanonical, makeCollider, type Avatar, type BodyField } from './body';
 import type { SpikeBundle } from './bundle';
-import { clothParams, createCloth, stepCloth, type Cloth, type ClothMaterial, type ClothParams } from './cloth';
-import { fitLines, gapsForSize, heatColors, heatField, placeGarment, placementMorph, type FitLine, type HeatField, type Placement } from './fitting';
+import { clothParams, createCloth, settlePins, stepCloth, type Cloth, type ClothMaterial, type ClothParams } from './cloth';
+import { fitLines, gapsForSize, heatColors, heatField, placeGarment, placementMorph, sizeEntry, type FitLine, type HeatField, type Placement } from './fitting';
 
 // ---------------------------------------------------------------------------
 // Fabric presets for the Phase 0 fabric test
@@ -100,6 +100,10 @@ export interface FitInstance {
   /** Particles that never collide (see `insideCanonical`). */
   noCollide: Uint8Array;
   indices: Uint32Array;
+  /** Pinned particles (the yoke), 1 = pinned. */
+  pinned: Uint8Array;
+  /** Garment shoulder width of this size (grading.json `shoulder_width`), cm, when the chart has one. */
+  shoulderWidthCm: number | undefined;
 }
 
 /**
@@ -111,6 +115,9 @@ export function yokeHeight(m: Mannequin): number {
   const arm = m.arms.left;
   return Math.min(m.morphHeights.shoulder - 3, arm.joint[1] + arm.axis[1] * armpitDistance(m));
 }
+
+/** Collision clearance between cloth and avatar, cm. */
+export const CLEARANCE_CM = 0.35;
 
 /** Steps 1–3 of §Fitting, and the cloth ready for step 4. */
 export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyField, fit: FitResult, size: string, material: ViewerMaterial, durationS = 1.5): FitInstance {
@@ -126,18 +133,18 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   const inside = insideCanonical(m, graded.positions, chains);
   for (let i = 0; i < noCollide.length; i++) if (inside[i] === 1 && graded.positions[3 * i + 1]! > m.morphHeights.chest) noCollide[i] = 1;
   const yoke = yokeHeight(m);
-  // The yoke is pinned where it was placed; lift it clear of the shoulders first (a smaller size can
-  // sit a few mm inside them). Only near the centre line: at the sides the v0 arm junction widens the torso.
   const start = Float32Array.from(placed.positions);
-  const lift = makeCollider(field, 0.35, chains, noCollide);
-  for (let i = 0; i < chains.length; i++) if (chains[i] === 0 && start[3 * i + 1]! >= yoke && Math.abs(start[3 * i]!) < 14) lift(start, i);
-  const cloth = createCloth(
-    start,
-    graded.positions,
-    graded.indices,
-    (i) => chains[i] === 0 && placed.positions[3 * i + 1]! >= yoke,
-    (i) => chains[i] === 0,
-  );
+  // The yoke is where grading put it: the shoulder ring grades with `shoulder_width` (D15 breadth),
+  // so its seams sit at ±width/2 of this size. Pinning only out to the seams or the body's shoulder
+  // points was measured and rejected: on the v0 mannequin the freed cloth lands in the arm junction
+  // and sags (p99 strain 26–35 % instead of 11–24 % on the tee).
+  const pinned = new Uint8Array(chains.length);
+  for (let i = 0; i < chains.length; i++) if (chains[i] === 0 && start[3 * i + 1]! >= yoke) pinned[i] = 1;
+  const cloth = createCloth(start, graded.positions, graded.indices, (i) => pinned[i] === 1, (i) => chains[i] === 0);
+  const collide = makeCollider(field, CLEARANCE_CM, chains, noCollide);
+  // Settle the yoke onto the avatar before pinning it: a small size sits a few mm inside the neck
+  // and shoulders, and a stretched edge between two pins never relaxes (the neckline tears).
+  settlePins(cloth, collide);
   return {
     size: placement.size,
     gaps,
@@ -147,9 +154,11 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
     material,
     params: clothParams(material, durationS),
     cloth,
-    collide: makeCollider(field, 0.35, chains, noCollide),
+    collide,
     noCollide,
     indices: graded.indices,
+    pinned,
+    shoulderWidthCm: sizeEntry(session.bundle.grading, size).targets.shoulder_width,
   };
 }
 

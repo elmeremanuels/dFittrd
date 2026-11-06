@@ -237,13 +237,48 @@ export const SwipeWireEventSchema = SwipeEventSchema.extend({
 });
 export type SwipeWireEvent = z.infer<typeof SwipeWireEventSchema>;
 
-/** POST /v1/swipes */
-export const SwipeBatchRequestSchema = z.object({ events: z.array(SwipeWireEventSchema).min(1).max(100) });
+export const SWIPE_BATCH_MAX = 100;
+
+/** POST /v1/swipes — what the client sends (every event valid). */
+export const SwipeBatchRequestSchema = z.object({ events: z.array(SwipeWireEventSchema).min(1).max(SWIPE_BATCH_MAX) });
 export type SwipeBatchRequest = z.infer<typeof SwipeBatchRequestSchema>;
 
+/**
+ * POST /v1/swipes — what the server accepts at the envelope level (carry-over #23). Each event is
+ * validated on its own against `SwipeWireEventSchema`, so one malformed event (an older client, a
+ * corrupted outbox row) is reported in `rejected` instead of failing the whole batch.
+ */
+export const SwipeBatchEnvelopeSchema = z.object({ events: z.array(z.unknown()).min(1).max(SWIPE_BATCH_MAX) });
+export type SwipeBatchEnvelope = z.infer<typeof SwipeBatchEnvelopeSchema>;
+
+/**
+ * Why one event of a batch was not stored. Every reason is permanent: re-sending the same event
+ * cannot succeed, so the client drops it. Transient failures (5xx, network) fail the whole batch
+ * and nothing of it is stored.
+ */
+export const SWIPE_REJECT_REASONS = ['invalid_event', 'unknown_shop'] as const;
+export type SwipeRejectReason = (typeof SWIPE_REJECT_REASONS)[number];
+
+export const SwipeRejectionSchema = z.object({
+  /** Position of the event in the request's `events`. */
+  index: z.number().int().nonnegative(),
+  /** The event's clientId when it had a readable one. */
+  clientId: z.string().max(64).nullable(),
+  reason: z.enum(SWIPE_REJECT_REASONS),
+  /** Short, value-free description (field path of the first issue for `invalid_event`). */
+  detail: z.string().max(200).optional(),
+});
+export type SwipeRejection = z.infer<typeof SwipeRejectionSchema>;
+
 export const SwipeBatchResponseSchema = z.object({
+  /** Events newly stored by this batch. */
   accepted: z.number().int().nonnegative(),
+  /** Events already stored by an earlier batch (same device and clientId); idempotent replay. */
   duplicates: z.number().int().nonnegative(),
+  /** clientIds that are stored on the server now (accepted plus duplicates): the client deletes these. */
+  acceptedClientIds: z.array(z.string().max(64)).max(SWIPE_BATCH_MAX),
+  /** Events that were not stored, with the reason; all permanent. */
+  rejected: z.array(SwipeRejectionSchema).max(SWIPE_BATCH_MAX),
   /** Distinct billable fit sessions created by this batch. */
   usageEventsCreated: z.number().int().nonnegative(),
   ledgerEntryId: uuid,
@@ -257,11 +292,28 @@ export type SwipeBatchResponse = z.infer<typeof SwipeBatchResponseSchema>;
 export const WARDROBE_STATES = ['saved', 'bought', 'kept', 'returned'] as const;
 export type WardrobeState = (typeof WARDROBE_STATES)[number];
 
+/**
+ * Wardrobe size when no size was known at save time (nothing fit, no measurements, no fit points):
+ * an explicit marker, never a guessed label such as "ONE" (carry-over #24). The taste engine's
+ * `SaveOutboxEntry.size` uses the same marker (`UNKNOWN_SIZE` there, guarded to be identical).
+ * Cohort size histograms skip it.
+ */
+export const WARDROBE_SIZE_UNKNOWN = 'unknown' as const;
+export type WardrobeSizeUnknown = typeof WARDROBE_SIZE_UNKNOWN;
+
+/** A size label from the product's chart, or `WARDROBE_SIZE_UNKNOWN`. */
+export const WardrobeSizeSchema = z.string().min(1).max(16);
+export type WardrobeSize = string;
+
+export function isKnownWardrobeSize(size: string | null | undefined): size is string {
+  return typeof size === 'string' && size.length > 0 && size !== WARDROBE_SIZE_UNKNOWN;
+}
+
 /** PUT /v1/wardrobe/:productId */
 export const WardrobePutParamsSchema = z.object({ productId: z.string().min(1).max(128) });
 export const WardrobePutRequestSchema = z.object({
   shopId: uuid,
-  size: z.string().min(1).max(16),
+  size: WardrobeSizeSchema,
   state: z.enum(WARDROBE_STATES),
 });
 export type WardrobePutRequest = z.infer<typeof WardrobePutRequestSchema>;
@@ -269,7 +321,7 @@ export type WardrobePutRequest = z.infer<typeof WardrobePutRequestSchema>;
 export const WardrobeItemSchema = z.object({
   productId: z.string().min(1).max(128),
   shopId: uuid,
-  size: z.string().min(1).max(16),
+  size: WardrobeSizeSchema,
   state: z.enum(WARDROBE_STATES),
   updatedAt: isoDate,
 });

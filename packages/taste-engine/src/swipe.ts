@@ -10,6 +10,7 @@ import {
   EVENTS_RING_SIZE,
   LOVED_PRICES_KEEP,
   SEEN_FOREVER,
+  UNKNOWN_SIZE,
   WARM_UP_MULTIPLIER,
   WARM_UP_SWIPES,
   type DeckGarment,
@@ -21,6 +22,7 @@ import {
   type SwipeEvent,
   type TasteProfile,
   type TasteState,
+  garmentKey,
 } from './types';
 import { clamp, dominantAxis, round4 } from './util';
 
@@ -96,8 +98,10 @@ export interface ApplySwipeResult {
 /**
  * Apply one swipe. `fit` is the on-device fit result for the card (null when none was computed).
  * `now` is epoch milliseconds. The returned event is also in `state.events` and `state.outbox`.
- * `save` additionally pushes `{type:'save', itemId, size}` to the outbox; the caller adds the
- * item to the wardrobe. `love` never touches the wardrobe (handoff §5).
+ * `save` additionally pushes `{type:'save', itemId, shopId?, size}` to the outbox (size
+ * `UNKNOWN_SIZE` when nothing was recommended); the caller adds the item to the wardrobe. The
+ * seen memory is keyed by `garmentKey(garment)` (shop + item); the penalty memory stays keyed by
+ * features (hue, fabric, cut), so a 'less' still carries across shops. `love` never touches the wardrobe (handoff §5).
  */
 export function applySwipe(
   state: TasteState,
@@ -147,7 +151,7 @@ export function applySwipe(
   };
 
   const outbox: OutboxEntry[] = [...state.outbox, event];
-  if (action === 'save') outbox.push({ type: 'save', itemId: garment.id, size: sizeAtSwipe });
+  if (action === 'save') outbox.push({ type: 'save', itemId: garment.id, ...(garment.shopId ? { shopId: garment.shopId } : {}), size: sizeAtSwipe ?? UNKNOWN_SIZE });
 
   const events = [...state.events, event];
   if (events.length > EVENTS_RING_SIZE) events.splice(0, events.length - EVENTS_RING_SIZE);
@@ -156,7 +160,7 @@ export function applySwipe(
     profile: { ...profile, axes, colour, fabric, cut, silhouette, price, swipeCount: profile.swipeCount + 1 },
     penalties,
     events,
-    seen: { ...state.seen, [garment.id]: action === 'pass' ? state.dealIndex : SEEN_FOREVER },
+    seen: { ...state.seen, [garmentKey(garment)]: action === 'pass' ? state.dealIndex : SEEN_FOREVER },
     dealIndex: state.dealIndex,
     outbox,
     loveCounts,

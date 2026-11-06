@@ -72,7 +72,9 @@ describe('app store persistence', () => {
     expect(s.settings.vibes).toEqual(['Minimal', 'Eclectic']);
     expect(s.profile?.measurements.bust?.mean).toBe(88);
     expect(s.taste.profile).toEqual(store.getState().taste.profile);
-    expect(s.taste.seen[first!.garment.id]).toBe(-1);
+    // the seen memory is keyed by shop and item (#22)
+    expect(s.taste.seen[`${SHOP}:${first!.garment.id}`]).toBe(-1);
+    expect(s.taste.seen[first!.garment.id]).toBeUndefined();
     expect(s.wardrobe).toHaveLength(1);
     expect(s.wardrobe[0]?.size).toBe('M');
     expect(s.ledger.map((l) => l.id)).toContain('l1');
@@ -86,10 +88,10 @@ describe('app store persistence', () => {
     await store.getState().setProfile(PROFILE);
     const wrap = MOCK_GARMENTS_BY_ID['aalter-studio-1']!;
     await store.getState().saveToWardrobe(wrap, MOCK_SHOP_ID, 'M');
-    await store.getState().setWardrobeState(wrap.id, 'returned');
+    await store.getState().setWardrobeState(MOCK_SHOP_ID, wrap.id, 'returned');
     expect(store.getState().profile?.history).toEqual([{ brand: wrap.brand, size: 'M', kept: false }]);
     expect(store.getState().fitCtx?.userBody.history).toEqual([{ brand: wrap.brand, size: 'M', kept: false }]);
-    await store.getState().setWardrobeState(wrap.id, 'kept');
+    await store.getState().setWardrobeState(MOCK_SHOP_ID, wrap.id, 'kept');
     expect(store.getState().profile?.history).toEqual([{ brand: wrap.brand, size: 'M', kept: true }]);
   });
 

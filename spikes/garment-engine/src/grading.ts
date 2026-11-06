@@ -5,8 +5,14 @@
  * an estimate. Per size only these targets are stored (grading.json); the device morphs the base
  * mesh with `gradingMorph` from `@curtain/anchors` (radially about each chain's axis, smoothly
  * between neighbouring rings), which `applyGrading` reproduces here.
+ *
+ * The breadth `shoulder_width` (D15 amendment, R1) is carried as its own target: the chart's
+ * shoulder column is a width, never the `shoulder` ring. Its base value is the chart's (a
+ * reconstruction has no seams to measure). When the chart has no shoulder girth, the `shoulder`
+ * ring grades by the width ratio (`breadth`, an estimate): the radial morph scales a cross-section
+ * uniformly, so the seams at ±width/2 land exactly on the target width.
  */
-import { gradeSizes, type AnchorId, type AnchorLength, type AnchorRing, type AnchorValues } from '@curtain/anchors';
+import { BREADTH_RING, gradeSizes, isAnchorBreadth, type AnchorBreadth, type AnchorId, type AnchorLength, type AnchorRing, type AnchorValues } from '@curtain/anchors';
 import { sizeLabelKey } from '@curtain/schema';
 import type { Mannequin, Mesh } from '@curtain/mannequin';
 import type { AnchorMeasurements } from './anchoring';
@@ -40,7 +46,7 @@ export const STANDARD_INCREMENTS_CM: Readonly<Record<AnchorId, number>> = {
   shoulder_width: 1,
 };
 
-export type TargetSource = 'chart' | 'increment' | 'hip-delta';
+export type TargetSource = 'chart' | 'increment' | 'hip-delta' | 'breadth';
 
 export interface SizeGrading {
   size: string;
@@ -57,7 +63,13 @@ export interface GradingJson {
   baseSize: string;
   unit: 'cm';
   /** How the device applies the targets. */
-  morph: { method: 'anchors.gradingMorph'; chains: { body: 'radial about +Y'; arm: 'radial about the arm axis' }; heights: Record<AnchorRing, number> };
+  morph: {
+    method: 'anchors.gradingMorph';
+    chains: { body: 'radial about +Y'; arm: 'radial about the arm axis' };
+    heights: Record<AnchorRing, number>;
+    /** Breadths: the ring whose height they sit at; the seams are at ±width/2 there (`shoulderSeams`). */
+    breadths?: Partial<Record<AnchorBreadth, { ring: AnchorRing; height: number }>>;
+  };
   /** Calibrated base-size value per anchor. */
   base: AnchorValues;
   sizes: SizeGrading[];
@@ -80,6 +92,13 @@ export function gradeGarment(m: Mannequin, chart: GarmentChart, baseSize: string
   for (const [id, l] of Object.entries(base.lengths) as [AnchorLength, NonNullable<AnchorMeasurements['lengths'][AnchorLength]>][]) {
     if (!l.fromMannequin) baseValues[id] = l.lengthCm;
   }
+  // Breadths come from the chart at the base size (the calibration target; no seams on a mesh).
+  for (const [id, w] of Object.entries(baseRow.breadths) as [AnchorBreadth, number][]) baseValues[id] = w;
+  const chartValue = (row: GarmentChart['rows'][number], id: AnchorId): number | undefined =>
+    isAnchorBreadth(id) ? row.breadths[id] : (row.rings as Partial<Record<AnchorId, number>>)[id];
+  // A breadth's ring without a girth column of its own grades with the breadth.
+  const ringOfBreadth = new Map<AnchorRing, AnchorBreadth>();
+  for (const id of Object.keys(baseRow.breadths) as AnchorBreadth[]) ringOfBreadth.set(BREADTH_RING[id], id);
   const estimates: GradingJson['estimates'] = {};
   const sizes: SizeGrading[] = chart.rows.map((row, i) => {
     const step = i - baseIdx;
@@ -87,21 +106,27 @@ export function gradeGarment(m: Mannequin, chart: GarmentChart, baseSize: string
     const sources: SizeGrading['sources'] = {};
     for (const [id, b] of Object.entries(baseValues) as [AnchorId, number][]) {
       const ringId = id as AnchorRing;
-      const chartNow = row.rings[ringId];
-      const chartBase = baseRow.rings[ringId];
-      let delta: number;
+      const chartNow = chartValue(row, id);
+      const chartBase = chartValue(baseRow, id);
+      const breadth = ringOfBreadth.get(ringId);
+      const wNow = breadth && row.breadths[breadth];
+      const wBase = breadth && baseRow.breadths[breadth];
+      let value: number;
       let source: TargetSource;
       if (chartNow !== undefined && chartBase !== undefined) {
-        delta = chartNow - chartBase;
+        value = b + chartNow - chartBase;
         source = 'chart';
+      } else if (wNow !== undefined && wBase !== undefined && wBase > 0) {
+        value = b * (wNow / wBase); // the ring scales with its breadth (uniform cross-section scale)
+        source = 'breadth';
       } else if (spansBothLegs.has(ringId) && row.rings.hip !== undefined && baseRow.rings.hip !== undefined) {
-        delta = row.rings.hip - baseRow.rings.hip; // a skirt grades with the hip
+        value = b + row.rings.hip - baseRow.rings.hip; // a skirt grades with the hip
         source = 'hip-delta';
       } else {
-        delta = step * STANDARD_INCREMENTS_CM[id];
+        value = b + step * STANDARD_INCREMENTS_CM[id];
         source = 'increment';
       }
-      targets[id] = round2(b + delta);
+      targets[id] = round2(value);
       sources[id] = source;
       if (source !== 'chart') estimates[id] = source;
     }
@@ -111,6 +136,8 @@ export function gradeGarment(m: Mannequin, chart: GarmentChart, baseSize: string
   gradeSizes(baseValues, sizes.map((s) => ({ size: s.size, target: s.targets })), { heights: m.morphHeights });
   const heights = {} as Record<AnchorRing, number>;
   for (const [k, v] of Object.entries(m.morphHeights) as [AnchorRing, number][]) heights[k] = round2(v);
+  const breadths: NonNullable<GradingJson['morph']['breadths']> = {};
+  for (const id of Object.keys(baseRow.breadths) as AnchorBreadth[]) breadths[id] = { ring: BREADTH_RING[id], height: heights[BREADTH_RING[id]] };
   const roundedBase: AnchorValues = {};
   for (const [k, v] of Object.entries(baseValues) as [AnchorId, number][]) roundedBase[k] = round2(v);
   return {
@@ -119,7 +146,7 @@ export function gradeGarment(m: Mannequin, chart: GarmentChart, baseSize: string
     productId: chart.productId,
     baseSize,
     unit: 'cm',
-    morph: { method: 'anchors.gradingMorph', chains: { body: 'radial about +Y', arm: 'radial about the arm axis' }, heights },
+    morph: { method: 'anchors.gradingMorph', chains: { body: 'radial about +Y', arm: 'radial about the arm axis' }, heights, ...(Object.keys(breadths).length ? { breadths } : {}) },
     base: roundedBase,
     sizes,
     estimates,

@@ -24,7 +24,7 @@ import {
   type Mesh,
 } from '@curtain/mannequin';
 import { applyCalibration, calibrate, chartAgreement, measureGarment, ringGirths, type AnchorMeasurements, type Calibration, type ChartAgreement } from './anchoring';
-import { assignChains, distortGarment, generateGarment, type Distortion } from './garment';
+import { assignChains, distortGarment, generateGarment, shoulderSeams, type Distortion } from './garment';
 import { gradeGarment, type GradingJson } from './grading';
 import { chartRow, garmentChart, garmentSpec, materialJson, spikeProduct, type MaterialJson, type SPIKE_PRODUCT_IDS } from './product';
 import { hexToRgb } from './raster';
@@ -121,6 +121,10 @@ export function buildBundle(productId: (typeof SPIKE_PRODUCT_IDS)[number], optio
         }];
       }),
     ),
+    // D15 breadth: the chart's width at the base size and where its seams sit (no seam detection on a mesh yet).
+    breadths: spec.shoulderWidthCm === undefined ? {} : {
+      shoulder_width: { widthCm: round(spec.shoulderWidthCm, 2), source: 'chart', ring: 'shoulder', seams: shoulderSeams(mannequin, spec.shoulderWidthCm).map((p) => roundVec(p, 2)) },
+    },
     lengths: Object.fromEntries(Object.entries(measurements.lengths).map(([id, l]) => [id, { lengthCm: round(l!.lengthCm, 2), start: roundVec(l!.start, 2), end: roundVec(l!.end, 2), fromMannequin: l!.fromMannequin }])),
     calibration: {
       globalScale: round(calibration.globalScale, 6),

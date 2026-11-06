@@ -21,11 +21,36 @@ import {
   type ItemFeatures,
   type TasteProfile,
   type TasteState,
+  garmentKey,
 } from './types';
 import { dominantAxis, topAxis } from './util';
 
 /** Weights of the base score (spec §rankDeck step 2). They sum to 1. */
 export const BASE_WEIGHTS = Object.freeze({ style: 0.4, colour: 0.2, fabric: 0.1, cut: 0.1, fit: 0.15, price: 0.05 });
+
+/**
+ * Fit score used for an item whose fit was never scored (`score === null` with a size: accessories,
+ * one-size charts, no fit points) when the deck has no scored item to average: the midpoint of the
+ * fit score's 0..1 range, so the item earns half the fit weight (carry-over #20).
+ */
+export const NEUTRAL_FIT_SCORE = 0.5;
+
+/**
+ * The neutral fit term for unscored items: the mean fit score of the scored candidates in the same
+ * deck, or `NEUTRAL_FIT_SCORE` when none is scored. An accessory then ranks as if it fit like the
+ * average item it is dealt with: never pushed below every scored item for lacking fit points (the
+ * old behaviour, 0), never lifted above well-fitting items either.
+ */
+export function neutralFitScore(fits: readonly (FitResultLike | null | undefined)[]): number {
+  let sum = 0;
+  let n = 0;
+  for (const f of fits) {
+    if (!f || f.recommendedSize === null || f.score === null || !Number.isFinite(f.score)) continue;
+    sum += f.score;
+    n += 1;
+  }
+  return n > 0 ? sum / n : NEUTRAL_FIT_SCORE;
+}
 
 /** The caller's on-device fit function (`computeFit` from @curtain/fit-engine, or a cache in front of it). */
 export type FitFor<G extends DeckGarment> = (garment: G) => FitResultLike | null;
@@ -66,9 +91,10 @@ export interface DealNextResult<G extends DeckGarment = DeckGarment> {
 /**
  * Candidate rule 1: never seen, or passed ≥ RESURFACE_AFTER (200) deals ago.
  * Loved / saved / 'less' items are stored as SEEN_FOREVER and never come back.
+ * `key` is the seen-memory key: `garmentKey(garment)` (shop + item id).
  */
-export function isEligible(state: Pick<TasteState, 'seen' | 'dealIndex'>, itemId: string): boolean {
-  const at = state.seen[itemId];
+export function isEligible(state: Pick<TasteState, 'seen' | 'dealIndex'>, key: string): boolean {
+  const at = state.seen[key];
   if (at === undefined) return true;
   if (at === SEEN_FOREVER) return false;
   return state.dealIndex - at >= RESURFACE_AFTER;
@@ -90,23 +116,31 @@ export function noveltyOf(features: Pick<ItemFeatures, 'axes'>, loveCounts: Read
 
 /**
  * base = 0.40·styleMatch + 0.20·(colour+1)/2 + 0.10·(fabric+1)/2 + 0.10·(cut+1)/2 + 0.15·fit.score + 0.05·priceFit
+ *
+ * An unscored fit (`fit.score === null`) uses `neutralFit` instead (see `neutralFitScore`).
  */
-export function baseScore(profile: TasteProfile, f: ItemFeatures, fit: FitResultLike): number {
+export function baseScore(profile: TasteProfile, f: ItemFeatures, fit: FitResultLike, neutralFit: number = NEUTRAL_FIT_SCORE): number {
   const w = BASE_WEIGHTS;
   return (
     w.style * styleMatch(profile.axes, f.axes) +
     (w.colour * ((profile.colour[f.hue] ?? 0) + 1)) / 2 +
     (w.fabric * ((profile.fabric[f.fabric] ?? 0) + 1)) / 2 +
     (w.cut * ((profile.cut[f.cut] ?? 0) + 1)) / 2 +
-    w.fit * (fit.score ?? 0) +
+    w.fit * (fit.score ?? neutralFit) +
     w.price * priceFit(f.priceEur, profile.price.p80)
   );
 }
 
 /** Score one garment against the state (no eligibility check). */
-export function scoreItem<G extends DeckGarment>(state: TasteState, garment: G, fit: FitResultLike, catalogIndex = 0): ScoredItem<G> {
+export function scoreItem<G extends DeckGarment>(
+  state: TasteState,
+  garment: G,
+  fit: FitResultLike,
+  catalogIndex = 0,
+  neutralFit: number = NEUTRAL_FIT_SCORE,
+): ScoredItem<G> {
   const features = featurize(garment);
-  const base = baseScore(state.profile, features, fit);
+  const base = baseScore(state.profile, features, fit, neutralFit);
   const pen = penaltyOf(state.penalties, features);
   const novelty = noveltyOf(features, state.loveCounts);
   return { garment, features, fit, base, penalty: pen, novelty, score: base - pen + state.profile.explorationBonus * novelty, catalogIndex };
@@ -118,17 +152,20 @@ export function rankCandidates<G extends DeckGarment>(
   state: TasteState,
   fitFor: FitFor<G>,
 ): { ranked: ScoredItem<G>[]; notInYourSize: number } {
-  const ranked: ScoredItem<G>[] = [];
+  const candidates: { garment: G; fit: FitResultLike; catalogIndex: number }[] = [];
   let notInYourSize = 0;
   catalog.forEach((garment, catalogIndex) => {
-    if (!isEligible(state, garment.id)) return;
+    if (!isEligible(state, garmentKey(garment))) return;
     const fit = fitFor(garment);
     if (!fit || fit.recommendedSize === null) {
       notInYourSize += 1;
       return;
     }
-    ranked.push(scoreItem(state, garment, fit, catalogIndex));
+    candidates.push({ garment, fit, catalogIndex });
   });
+  // Unscored items (accessories) get the deck's mean fit term, not 0 (carry-over #20).
+  const neutralFit = neutralFitScore(candidates.map((c) => c.fit));
+  const ranked = candidates.map((c) => scoreItem(state, c.garment, c.fit, c.catalogIndex, neutralFit));
   ranked.sort((a, b) => b.score - a.score || a.catalogIndex - b.catalogIndex);
   return { ranked, notInYourSize };
 }

@@ -1,11 +1,14 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { WARDROBE_STATES, type FitCohortResponse, type WardrobeState } from '@curtain/schema';
+import { WARDROBE_STATES, isKnownWardrobeSize, type FitCohortResponse, type WardrobeState } from '@curtain/schema';
 import { CohortBars } from '@/components/CohortBars';
 import { eur } from '@/lib/format';
 import { api, MOCK_SHOP_ID, useApp } from '@/store';
 
 const STATE_LABEL: Record<WardrobeState, string> = { saved: 'Saved', bought: 'Bought', kept: 'Kept', returned: 'Returned' };
+
+/** Item ids are only unique within one shop (#22): rows, cohort cache and toggles key by shop + id. */
+const rowKey = (w: { shopId: string; productId: string }): string => `${w.shopId}:${w.productId}`;
 
 /** Saved items with their size; bought → kept / returned feeds the fit engine's history (handoff §4.2). */
 export function WardrobeRoute(): ReactNode {
@@ -14,16 +17,16 @@ export function WardrobeRoute(): ReactNode {
   const [open, setOpen] = useState<string | null>(null);
   const [cohort, setCohort] = useState<Record<string, FitCohortResponse | null>>({});
 
-  const toggle = (productId: string): void => {
-    const next = open === productId ? null : productId;
+  const toggle = (key: string): void => {
+    const next = open === key ? null : key;
     setOpen(next);
     if (!next || next in cohort) return;
-    const item = wardrobe.find((w) => w.productId === next);
+    const item = wardrobe.find((w) => rowKey(w) === next);
     if (!item || item.shopId === MOCK_SHOP_ID) {
       setCohort((c) => ({ ...c, [next]: null }));
       return;
     }
-    api.fitCohort(next).then(
+    api.fitCohort(item.productId, item.shopId).then(
       (r) => setCohort((c) => ({ ...c, [next]: r })),
       () => setCohort((c) => ({ ...c, [next]: null })),
     );
@@ -45,7 +48,7 @@ export function WardrobeRoute(): ReactNode {
       ) : (
         <ul className="space-y-3">
           {wardrobe.map((w) => (
-            <li key={w.productId} className="card space-y-3">
+            <li key={rowKey(w)} className="card space-y-3">
               <div className="flex items-center gap-3">
                 <span className="h-12 w-12 shrink-0 rounded-2xl border border-ink/10" style={{ backgroundColor: w.garment.primaryColorHex }} aria-hidden />
                 <div className="min-w-0 flex-1">
@@ -54,18 +57,18 @@ export function WardrobeRoute(): ReactNode {
                     {w.garment.name}
                   </p>
                   <p className="text-xs text-ink-mute">
-                    Size {w.size} · {eur(w.garment.priceEur)} · {STATE_LABEL[w.state]}
+                    {isKnownWardrobeSize(w.size) ? `Size ${w.size}` : 'Size not known'} · {eur(w.garment.priceEur)} · {STATE_LABEL[w.state]}
                   </p>
                 </div>
-                <button type="button" className="btn-ghost min-h-9 px-3 text-xs" aria-expanded={open === w.productId} onClick={() => toggle(w.productId)}>
-                  {open === w.productId ? 'Less' : 'More'}
+                <button type="button" className="btn-ghost min-h-9 px-3 text-xs" aria-expanded={open === rowKey(w)} onClick={() => toggle(rowKey(w))}>
+                  {open === rowKey(w) ? 'Less' : 'More'}
                 </button>
               </div>
-              {open === w.productId ? (
+              {open === rowKey(w) ? (
                 <div className="space-y-3">
                   <div role="radiogroup" aria-label={`Status of ${w.garment.name}`} className="grid grid-cols-4 gap-1">
                     {WARDROBE_STATES.map((s) => (
-                      <button key={s} type="button" role="radio" aria-checked={w.state === s} onClick={() => void setWardrobeState(w.productId, s)} className={`rounded-full border px-2 py-1.5 text-xs font-medium ${w.state === s ? 'border-coral bg-coral text-ink' : 'border-ink/10 bg-white/60 text-ink-soft'}`}>
+                      <button key={s} type="button" role="radio" aria-checked={w.state === s} onClick={() => void setWardrobeState(w.shopId, w.productId, s)} className={`rounded-full border px-2 py-1.5 text-xs font-medium ${w.state === s ? 'border-coral bg-coral text-ink' : 'border-ink/10 bg-white/60 text-ink-soft'}`}>
                         {STATE_LABEL[s]}
                       </button>
                     ))}
@@ -76,7 +79,7 @@ export function WardrobeRoute(): ReactNode {
                       Open in shop
                     </a>
                   ) : null}
-                  <CohortBars cohort={cohort[w.productId] ?? null} highlight={w.size} />
+                  <CohortBars cohort={cohort[rowKey(w)] ?? null} highlight={isKnownWardrobeSize(w.size) ? w.size : null} />
                 </div>
               ) : null}
             </li>

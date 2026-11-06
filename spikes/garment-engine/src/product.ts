@@ -3,7 +3,7 @@
  * anchor id as garment girths, the synthetic garment spec at the base size, and material.json from
  * the fabric library.
  */
-import { FIT_POINT_TO_ANCHOR, type AnchorRing } from '@curtain/anchors';
+import { FIT_POINT_TO_ANCHOR, type AnchorBreadth, type AnchorRing } from '@curtain/anchors';
 import { FABRIC_LIBRARY_VERSION, duplicateSizeLabels, isFabricConstructionId, lookupFabricId, mockGarment, resolveFabric, sizeLabelKey, type GarmentPayload } from '@curtain/schema';
 import type { GarmentSpec, SpikeCategory } from './garment';
 
@@ -14,13 +14,15 @@ export const SPIKE_PRODUCT_IDS = ['aalter-studio-2', 'monochrome-03'] as const;
  * Fallback ease per category (cm) for a body chart whose product gives none for a point. Same
  * numbers as the fit engine's category defaults (`packages/fit-engine/src/constants.ts`).
  */
-export const CATEGORY_DEFAULT_EASE: Readonly<Record<SpikeCategory, Partial<Record<'bust' | 'waist' | 'hip', number>>>> = {
-  dress: { bust: 6, waist: 4, hip: 6 },
-  top: { bust: 8, waist: 8, hip: 6 },
+export const CATEGORY_DEFAULT_EASE: Readonly<Record<SpikeCategory, Partial<Record<'bust' | 'waist' | 'hip' | 'shoulder', number>>>> = {
+  dress: { bust: 6, waist: 4, hip: 6, shoulder: 1 },
+  top: { bust: 8, waist: 8, hip: 6, shoulder: 1 },
 };
 
 /** Girth points of the chart that are anchor rings. `shoulder` is a width in charts, not the shoulder ring girth, so it is not used as a girth. */
 const GIRTH_POINTS = ['bust', 'waist', 'hip'] as const;
+/** Width points of the chart: the chart's `shoulder` is the D15 breadth `shoulder_width` (R1), never the `shoulder` ring. */
+const BREADTH_POINTS = ['shoulder'] as const;
 
 export interface ChartRow {
   size: string;
@@ -28,6 +30,10 @@ export interface ChartRow {
   rings: Partial<Record<AnchorRing, number>>;
   /** Rings whose value is body + the category default ease (no product ease given). */
   defaultEase: AnchorRing[];
+  /** Garment widths per breadth anchor (`shoulder_width`: seam to seam across the back), cm. */
+  breadths: Partial<Record<AnchorBreadth, number>>;
+  /** Breadths whose value is body + the category default ease. */
+  defaultEaseBreadths: AnchorBreadth[];
 }
 
 export interface GarmentChart {
@@ -58,7 +64,20 @@ export function garmentChart(p: GarmentPayload): GarmentChart {
         rings[anchor] = v + (productEase ?? CATEGORY_DEFAULT_EASE[category][point] ?? 0);
       }
     }
-    return { size: row.size, rings, defaultEase };
+    const breadths: Partial<Record<AnchorBreadth, number>> = {};
+    const defaultEaseBreadths: AnchorBreadth[] = [];
+    for (const point of BREADTH_POINTS) {
+      const v = row[point];
+      if (v === undefined) continue;
+      const anchor = FIT_POINT_TO_ANCHOR[point] as AnchorBreadth;
+      if (type === 'garment') breadths[anchor] = v;
+      else {
+        const productEase = p.ease?.[point];
+        if (productEase === undefined) defaultEaseBreadths.push(anchor);
+        breadths[anchor] = v + (productEase ?? CATEGORY_DEFAULT_EASE[category][point] ?? 0);
+      }
+    }
+    return { size: row.size, rings, defaultEase, breadths, defaultEaseBreadths };
   });
   return { productId: p.id, category, type, rows };
 }
@@ -81,6 +100,7 @@ export function garmentSpec(p: GarmentPayload, baseSize = 'M'): GarmentSpec {
     colorHex: p.primaryColorHex,
     baseSize,
     rings: base.rings,
+    ...(base.breadths.shoulder_width !== undefined ? { shoulderWidthCm: base.breadths.shoulder_width } : {}),
     shoulderToHemCm: len.shoulder_to_hem ?? (chart.category === 'dress' ? 105 : 64),
     sleeveCm: len.sleeve_length ?? 0,
     hemFlare: chart.category === 'dress' ? (p.patternBlock === 'a-line' ? 1.25 : 1.1) : 1,

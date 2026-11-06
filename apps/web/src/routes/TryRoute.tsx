@@ -58,7 +58,7 @@ export function TryRoute(): ReactNode {
           } catch {
             await addPairedShop(data.shop, [data.garment]);
           }
-          api.fitCohort(data.garment.id).then(setCohort, () => setCohort(null));
+          api.fitCohort(data.garment.id, data.shop.id).then(setCohort, () => setCohort(null));
         }
       } catch (e) {
         if (!cancelled) setState({ status: 'error', message: e instanceof Error ? e.message : 'This link could not be opened.' });

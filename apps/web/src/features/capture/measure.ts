@@ -26,6 +26,25 @@ export function scaleCmPerPx(heightCm: number, headTopPx: number, heelPx: number
   return heightCm / span;
 }
 
+/**
+ * Weight of the scan in the prior blend of bust/waist/hip/thigh means (carry-over #17): the scan's
+ * girth is weighted as if its error were this σ (cm), the prior by its own σ (2.2–3.9 cm), so the
+ * prior carries 51–77 % of the mean depending on the level (`priorShare`; the November review quoted
+ * ≈ 58 %). Ellipse-on-silhouette error is larger
+ * than the published table, hence 4 cm. Left as is on purpose: changing it needs pilot data. It is
+ * to be tuned with the tape-measured volunteers (docs/ENGINE-HANDOFF.md §Pilot "10–20 volunteers
+ * with a tape measure", calibration of the scan; docs/STATUS.md "Calibrate capture on a
+ * tape-measured pilot set"), together with VERTEX_ABOVE_HAIRLINE_RATIO in maskGeometry.ts.
+ */
+export const SCAN_PRIOR_SIGMA_CM = 4;
+
+/** Share of the prior in a blended mean: wP / (wS + wP) with wS = 1/SCAN_PRIOR_SIGMA_CM², wP = 1/σp². */
+export function priorShare(priorSigmaCm: number): number {
+  const wS = 1 / (SCAN_PRIOR_SIGMA_CM * SCAN_PRIOR_SIGMA_CM);
+  const wP = 1 / (priorSigmaCm * priorSigmaCm);
+  return wP / (wS + wP);
+}
+
 /** Per-girth scan sigma (cm) for v1 (body-scan.md §Accuracy evidence → verdict). */
 export const SCAN_SIGMA_CM: Record<Level, number> = {
   neck: 1.5,
@@ -156,8 +175,7 @@ export function measureScan(input: MeasureInput): ScanMeasurements {
         const g = girths[level];
         const p = prior[level];
         if (!g || !p) continue;
-        // ellipse-on-silhouette error is larger than the published table; weight it like σ = 4 cm
-        const wS = 1 / 16;
+        const wS = 1 / (SCAN_PRIOR_SIGMA_CM * SCAN_PRIOR_SIGMA_CM);
         const wP = 1 / (p.sigma * p.sigma);
         g.mean = (g.mean * wS + p.mean * wP) / (wS + wP);
       }

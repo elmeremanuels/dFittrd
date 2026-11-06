@@ -27,15 +27,19 @@ export {
   EVENTS_RING_SIZE,
   EXPLORATION_EVERY,
   HUE_BINS,
+  ITEM_KEY_SEPARATOR,
   LOVED_PRICES_KEEP,
   PENALTY_CARDS,
   PENALTY_MAX_STRENGTH,
   RESURFACE_AFTER,
   SEEN_FOREVER,
   SILHOUETTES,
+  UNKNOWN_SIZE,
   WARM_UP_MULTIPLIER,
   WARM_UP_SWIPES,
+  garmentKey,
   isSaveOutboxEntry,
+  itemKey,
 } from './types';
 
 export {
@@ -84,11 +88,13 @@ export { PENALTY_FULL_MATCH, PENALTY_TWO_MATCH, addPenalty, penalty, tickPenalti
 
 export {
   BASE_WEIGHTS,
+  NEUTRAL_FIT_SCORE,
   baseScore,
   dealNext,
   isEligible,
   isExplorationDeal,
   leastLovedAxes,
+  neutralFitScore,
   noveltyOf,
   orderDeals,
   rankCandidates,

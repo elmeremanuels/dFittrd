@@ -3,11 +3,15 @@
  * feature. Version 1 (capture, `features/capture/storage.ts`) holds bodyProfile / baseFrame /
  * faceTile / silhouette / keys; version 2 (this file) adds the app tables listed in
  * docs/ARCHITECTURE.md: taste, wardrobe, swipes, outbox, ledger, settings, pendingIntent, renders.
+ * Version 3 namespaces item ids by shop (carry-over #22): the wardrobe moves to `wardrobeItems`
+ * keyed by [shopId+productId], the taste seen memory is re-keyed `<shopId>:<itemId>` and wardrobe
+ * outbox rows get the shop in their clientId. Version 4 drops the old `wardrobe` table (Dexie
+ * cannot change a primary key in place, so the copy and the drop are two versions).
  * Nothing in here is ever synced as-is; the sync layer reads `outbox` only.
  */
-import type { EntityTable } from 'dexie';
+import type { EntityTable, Table, Transaction } from 'dexie';
 import type { GarmentPayload, ShopBranding, SwipeEvent, WardrobeState } from '@curtain/schema';
-import type { OutboxEntry, TasteState } from '@curtain/taste-engine';
+import { itemKey, SEEN_FOREVER, type OutboxEntry, type TasteState } from '@curtain/taste-engine';
 import { CurtainDb, setDb } from '@/features/capture/storage';
 
 export const SINGLETON_ID = 'current';
@@ -22,6 +26,7 @@ export interface TasteRow {
 export interface WardrobeRow {
   productId: string;
   shopId: string;
+  /** Size label, or `WARDROBE_SIZE_UNKNOWN` when no size was known at save time (#24). */
   size: string;
   state: WardrobeState;
   updatedAt: number;
@@ -43,15 +48,28 @@ export type OutboxKind = 'swipe' | 'save' | 'signature' | 'signature_delete' | '
 export interface OutboxRow {
   seq?: number;
   kind: OutboxKind;
-  /** Idempotency key (SwipeWireEvent.clientId / wardrobe productId / 'signature' / 'signature:delete'). */
+  /** Idempotency key (SwipeWireEvent.clientId / `wardrobeClientId(shopId, productId)` / 'signature' / 'signature:delete'). */
   clientId: string;
   shopId: string | null;
-  payload: OutboxEntry | { productId: string; shopId: string; size: string; state: WardrobeState } | { version: 1; vector: number[]; quality: number } | null;
+  payload: OutboxEntry | WardrobeOutboxPayload | { version: 1; vector: number[]; quality: number } | null;
   intentToken?: string;
   attempts: number;
   nextAt: number;
   createdAt: number;
   lastError?: string;
+}
+
+export interface WardrobeOutboxPayload {
+  productId: string;
+  shopId: string;
+  /** Size label or `WARDROBE_SIZE_UNKNOWN` (same convention as `WardrobePutRequest.size`). */
+  size: string;
+  state: WardrobeState;
+}
+
+/** Outbox idempotency key of a wardrobe row: one pending PUT per (shop, product). */
+export function wardrobeClientId(shopId: string, productId: string): string {
+  return `wardrobe:${shopId}:${productId}`;
 }
 
 export interface ClientLedgerEntry {
@@ -101,9 +119,13 @@ export interface RenderRow {
   garmentId: string;
 }
 
+/** Primary key of a wardrobe row: [shopId, productId] (an item id is only unique within one shop). */
+export type WardrobeKey = [string, string];
+
 export class AppDb extends CurtainDb {
   taste!: EntityTable<TasteRow, 'id'>;
-  wardrobe!: EntityTable<WardrobeRow, 'productId'>;
+  /** The `wardrobeItems` table (v3+), keyed by [shopId+productId]. */
+  wardrobe!: Table<WardrobeRow, WardrobeKey>;
   swipes!: EntityTable<SwipeRow, 'seq'>;
   outbox!: EntityTable<OutboxRow, 'seq'>;
   ledger!: EntityTable<ClientLedgerEntry, 'id'>;
@@ -124,7 +146,77 @@ export class AppDb extends CurtainDb {
       pendingIntent: 'id',
       renders: 'id, at, garmentId',
     });
+    this.version(3)
+      .stores({ wardrobeItems: '[shopId+productId], productId, shopId, state, updatedAt' })
+      .upgrade((tx) => migrateToShopKeys(tx));
+    this.version(4).stores({ wardrobe: null });
+    // `db.wardrobe` keeps its name for callers; the rows live in `wardrobeItems` now.
+    this.wardrobe = this.table('wardrobeItems');
   }
+}
+
+/** Wardrobe key of a row. */
+export function wardrobeKey(row: Pick<WardrobeRow, 'shopId' | 'productId'>): WardrobeKey {
+  return [row.shopId, row.productId];
+}
+
+/**
+ * Seen-memory keys written before v3 are bare item ids. Each is re-keyed with the shop of the
+ * latest local swipe on that id (the `swipes` table keeps the shop of every swipe); a bare id
+ * swiped in two shops is re-keyed for both. Ids with no local swipe are dropped: at worst that
+ * item is dealt once more.
+ */
+export function migrateSeen(seen: Readonly<Record<string, number>>, shopsByItem: ReadonlyMap<string, ReadonlySet<string>>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [key, at] of Object.entries(seen)) {
+    const shops = shopsByItem.get(key);
+    if (!shops || shops.size === 0) continue;
+    for (const shopId of shops) {
+      const k = itemKey(shopId, key);
+      const prev = out[k];
+      // keep the strongest memory: SEEN_FOREVER beats a pass; a later pass beats an earlier one
+      out[k] = prev === undefined ? at : prev === SEEN_FOREVER || at === SEEN_FOREVER ? SEEN_FOREVER : Math.max(prev, at);
+    }
+  }
+  return out;
+}
+
+/** v2 → v3 (carry-over #22, #24): wardrobe rows, taste seen memory and wardrobe outbox ids get the shop. */
+export async function migrateToShopKeys(tx: Transaction): Promise<void> {
+  const oldWardrobe = (await tx.table('wardrobe').toArray()) as WardrobeRow[];
+  // A stored "ONE" stays: it may be a real one-size label, and nothing tells the two apart now.
+  await tx.table('wardrobeItems').bulkPut(oldWardrobe);
+
+  const shopsByItem = new Map<string, Set<string>>();
+  await tx
+    .table('swipes')
+    .toCollection()
+    .each((row: SwipeRow) => {
+      const set = shopsByItem.get(row.event.itemId) ?? new Set<string>();
+      set.add(row.shopId);
+      shopsByItem.set(row.event.itemId, set);
+    });
+  for (const w of oldWardrobe) {
+    const set = shopsByItem.get(w.productId) ?? new Set<string>();
+    set.add(w.shopId);
+    shopsByItem.set(w.productId, set);
+  }
+  await tx
+    .table('taste')
+    .toCollection()
+    .modify((row: TasteRow) => {
+      if (!row.state?.seen) return;
+      row.state = { ...row.state, seen: migrateSeen(row.state.seen, shopsByItem) };
+    });
+
+  await tx
+    .table('outbox')
+    .toCollection()
+    .modify((row: OutboxRow) => {
+      if (row.kind !== 'wardrobe' || !row.shopId) return;
+      const p = row.payload as WardrobeOutboxPayload | null;
+      if (p && typeof p.productId === 'string') row.clientId = wardrobeClientId(row.shopId, p.productId);
+    });
 }
 
 let shared: AppDb | null = null;

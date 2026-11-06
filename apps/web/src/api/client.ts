@@ -39,8 +39,16 @@ import type {
   WardrobeListResponse,
   WardrobePutRequest,
 } from '@curtain/schema';
+import { WARDROBE_SIZE_UNKNOWN } from '@curtain/schema';
 import type { ClientLedgerEntry } from '@/db/db';
 import { newId } from '@/lib/ids';
+
+/** A cohort without the unknown-size bucket (#24): "unknown" is a marker, not a size people chose. */
+export function withoutUnknownSize(cohort: FitCohortResponse): FitCohortResponse {
+  if (!(WARDROBE_SIZE_UNKNOWN in cohort.sizeHistogram)) return cohort;
+  const { [WARDROBE_SIZE_UNKNOWN]: _unknown, ...sizeHistogram } = cohort.sizeHistogram;
+  return { ...cohort, sizeHistogram };
+}
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
@@ -382,8 +390,13 @@ export class ApiClient {
   getProduct(id: string): Promise<ProductGetResponse> {
     return this.request('GET', `/v1/products/${encodeURIComponent(id)}`);
   }
-  fitCohort(productId: string): Promise<FitCohortResponse> {
-    return this.request('GET', `/v1/fit/cohort/${encodeURIComponent(productId)}`);
+  /**
+   * Cohort of one product in one shop (#22: ids are only unique within a shop). The unknown-size
+   * marker is not a size, so its bucket is dropped from the histogram (#24).
+   */
+  async fitCohort(productId: string, shopId: string): Promise<FitCohortResponse> {
+    const res = await this.request<FitCohortResponse>('GET', `/v1/fit/cohort/${encodeURIComponent(productId)}?shopId=${encodeURIComponent(shopId)}`);
+    return withoutUnknownSize(res);
   }
   /** Opt-in hero render: `person.kind` is 'avatarRender' by type — a raw frame cannot be passed. */
   requestHeroRender(req: HeroRenderRequest): Promise<HeroRenderAccepted> {

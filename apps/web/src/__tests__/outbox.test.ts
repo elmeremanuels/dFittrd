@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppDb } from '@/db/db';
-import { OutboxSyncer } from '@/sync/outbox';
+import { OutboxSyncer, settleSwipeBatch } from '@/sync/outbox';
 import type { ApiClient } from '@/api/client';
 
 let db: AppDb;
@@ -29,7 +29,7 @@ describe('OutboxSyncer offline behaviour', () => {
     // only the syncer's timers: fake-indexeddb needs the real setImmediate
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     await db.outbox.add({ kind: 'swipe', clientId: 'c1', shopId: '00000000-0000-4000-8000-000000000001', payload: EVENT, attempts: 0, nextAt: 0, createdAt: 0 });
-    const postSwipes = vi.fn(async () => ({ accepted: 1, duplicates: 0, usageEventsCreated: 0, ledgerEntryId: 'l' }));
+    const postSwipes = vi.fn(async () => ({ accepted: 1, duplicates: 0, acceptedClientIds: ['c1'], rejected: [], usageEventsCreated: 0, ledgerEntryId: 'l' }));
     const syncer = new OutboxSyncer({ db, client: { postSwipes } as unknown as ApiClient, now: () => Date.now() });
     const schedule = vi.spyOn(syncer, 'schedule');
     syncer.start();
@@ -81,13 +81,59 @@ describe('OutboxSyncer batching', () => {
     const postSwipes = vi.fn(async (batch: { events: { shopId: string; clientId: string }[] }) => {
       sent.push(batch.events.map((e) => e.clientId));
       if (batch.events.some((e) => e.shopId === A)) throw new ApiError(422, 'unknown_shop', `unknown shop ${A}`);
-      return { accepted: batch.events.length, duplicates: 0, usageEventsCreated: 0, ledgerEntryId: 'l' };
+      return { accepted: batch.events.length, duplicates: 0, acceptedClientIds: batch.events.map((e) => e.clientId), rejected: [], usageEventsCreated: 0, ledgerEntryId: 'l' };
     });
     const syncer = new OutboxSyncer({ db, client: { postSwipes } as unknown as ApiClient, now: () => 1 });
     await syncer.flush();
     expect(sent).toContainEqual(['b1']);
     expect(sent).toContainEqual(['a1', 'a2']);
     expect(await db.outbox.count()).toBe(0); // B delivered, A permanently rejected
+    await syncer.stop();
+  });
+
+  it('deletes only the accepted and the permanently rejected events of a batch; the rest is retried (#23)', async () => {
+    vi.stubGlobal('navigator', { onLine: true });
+    const A = '11111111-1111-4111-8111-111111111111';
+    await db.outbox.bulkAdd([
+      { kind: 'swipe', clientId: 'ok-1', shopId: A, payload: EVENT, attempts: 0, nextAt: 0, createdAt: 0 },
+      { kind: 'swipe', clientId: 'bad-1', shopId: A, payload: { ...EVENT, itemId: 'y' }, attempts: 0, nextAt: 0, createdAt: 0 },
+      { kind: 'swipe', clientId: 'dup-1', shopId: A, payload: { ...EVENT, itemId: 'z' }, attempts: 0, nextAt: 0, createdAt: 0 },
+      { kind: 'swipe', clientId: 'lost-1', shopId: A, payload: { ...EVENT, itemId: 'w' }, attempts: 0, nextAt: 0, createdAt: 0 },
+    ]);
+    const onSynced = vi.fn();
+    const postSwipes = vi.fn(async () => ({
+      accepted: 1,
+      duplicates: 1,
+      acceptedClientIds: ['ok-1', 'dup-1'],
+      rejected: [{ index: 1, clientId: 'bad-1', reason: 'invalid_event' as const, detail: 'fitScore' }],
+      usageEventsCreated: 0,
+      ledgerEntryId: 'l',
+    }));
+    const syncer = new OutboxSyncer({ db, client: { postSwipes } as unknown as ApiClient, now: () => 1, onSynced });
+    await syncer.flush();
+    const left = await db.outbox.toArray();
+    expect(left.map((r) => r.clientId)).toEqual(['lost-1']);
+    expect(left[0]).toMatchObject({ attempts: 1, nextAt: 1 + 1000 });
+    expect(onSynced).toHaveBeenCalledWith('swipe', 2);
+    await syncer.stop();
+  });
+
+  it('settleSwipeBatch matches a rejection without a readable clientId by its index', () => {
+    const rows = ['r0', 'r1', 'r2'].map((clientId, seq) => ({ seq, kind: 'swipe' as const, clientId, shopId: 's', payload: EVENT, attempts: 0, nextAt: 0, createdAt: 0 }));
+    const out = settleSwipeBatch(rows, { acceptedClientIds: ['r2'], rejected: [{ index: 0, clientId: null, reason: 'invalid_event' }] });
+    expect(out.stored.map((r) => r.clientId)).toEqual(['r2']);
+    expect(out.rejected.map((r) => r.clientId)).toEqual(['r0']);
+    expect(out.unanswered.map((r) => r.clientId)).toEqual(['r1']);
+  });
+
+  it('sends an unknown wardrobe size as the explicit marker, also for a legacy null row (#24)', async () => {
+    vi.stubGlobal('navigator', { onLine: true });
+    const A = '11111111-1111-4111-8111-111111111111';
+    await db.outbox.add({ kind: 'wardrobe', clientId: `wardrobe:${A}:belt`, shopId: A, payload: { productId: 'belt', shopId: A, size: null as unknown as string, state: 'saved' }, attempts: 0, nextAt: 0, createdAt: 0 });
+    const putWardrobe = vi.fn(async () => ({}));
+    const syncer = new OutboxSyncer({ db, client: { putWardrobe } as unknown as ApiClient, now: () => 1 });
+    await syncer.flush();
+    expect(putWardrobe).toHaveBeenCalledWith('belt', { shopId: A, size: 'unknown', state: 'saved' });
     await syncer.stop();
   });
 });

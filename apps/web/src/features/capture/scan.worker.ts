@@ -11,7 +11,7 @@ import { placeLevels } from './crossSections';
 import { estimateSkin, sampleClassLab, sampleSkinLab, SKIN_SAMPLE_INDICES } from './faceSkin';
 import { neighbourhood, retainedIndices } from './frameRetainer';
 import { SEG } from './landmarks';
-import { headTopRow, medianMask, sampleLevels, samplesToFramePx, shoulderSlopeFromMask, type CategoryMask } from './maskGeometry';
+import { headTopWithoutHair, medianMask, sampleLevels, samplesToFramePx, shoulderSlopeFromMask, type CategoryMask } from './maskGeometry';
 import { measureScan } from './measure';
 import { MODEL_BASE, MODEL_FILES, VISION_WASM_ES_MODULE, resolveModelBase, type PoseVariant } from './models';
 import { gateFrame, selectFrames } from './poseGate';
@@ -165,7 +165,8 @@ function viewMeasurement(view: 'front' | 'side', f: StoredFrame, mask: CategoryM
   // widths are measured in mask pixels; the scale (head-top → heel) is in frame pixels
   const samples = samplesToFramePx(sampleLevels(mask, placements), mask.width, f.bitmap.width);
   const nose = f.landmarks[0] as Landmark;
-  const headTopMask = headTopRow(mask, nose.x);
+  // Head top without hair (carry-over #16): the stature the user typed ends at the skull.
+  const headTopMask = headTopWithoutHair(mask, nose.x).row;
   const headTopPx = headTopMask >= 0 ? (headTopMask / mask.height) * f.bitmap.height : Math.max(0, (nose.y - 0.08) * f.bitmap.height);
   const heelPx = Math.max(...[29, 30, 27, 28].map((i) => (f.landmarks[i] as Landmark).y)) * f.bitmap.height;
   return {

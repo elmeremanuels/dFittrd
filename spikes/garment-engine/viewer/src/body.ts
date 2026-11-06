@@ -9,7 +9,7 @@
 import { gradingMorph, type AnchorRing, type AnchorValues, type GradingMorph } from '@curtain/anchors';
 import type { UserBody } from '@curtain/schema';
 import type { Mannequin, Mesh } from '@curtain/mannequin';
-import { armpitDistance, ellipseRadius, radialMorph, type ChainAssignment } from '../../src/garment';
+import { armpitDistance, radialMorph, type ChainAssignment } from '../../src/garment';
 
 /** The girths a shopper types (cm). They are the fit-engine points `bust`, `waist`, `hip`. */
 export interface BodyMeasurements {
@@ -169,13 +169,14 @@ const sample = (t: Table, x: number, out: Float32Array): boolean => {
 
 /** Push the 2D offset (dx, dz) from an ellipse centre out to the ellipse grown by `clearance`; returns the new offset or null when outside. */
 export function pushOutOfEllipse(dx: number, dz: number, a: number, b: number, clearance: number): [number, number] | null {
-  const r = Math.hypot(dx, dz);
   const A = a + clearance;
   const B = b + clearance;
-  if (r < 1e-6) return [A, 0];
-  const re = ellipseRadius(A, B, Math.atan2(dz, dx));
-  if (r >= re) return null;
-  const k = re / r;
+  if (dx * dx + dz * dz < 1e-12) return [A, 0];
+  // (dx, dz) = r·û and the ellipse's polar radius along û is 1/√(ûx²/A² + ûz²/B²), so the radial
+  // scale onto the ellipse is 1/√q with q = (dx/A)² + (dz/B)² (no trigonometry in the hot loop).
+  const q = (dx * dx) / (A * A) + (dz * dz) / (B * B);
+  if (q >= 1) return null;
+  const k = 1 / Math.sqrt(q);
   return [dx * k, dz * k];
 }
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Camera, Check, ImagePlus, RefreshCw, SkipForward } from 'lucide-react';
 import { MONK_SWATCHES } from '../faceSkin';
 import { attachStream, bitmapFromFile, captureStill, openCamera, type CameraHandle } from '../platform/camera';
+import type { FlowCaps } from '../captureMachine';
 import type { ScanSession } from '../scanSession';
 import type { SkinEstimate } from '../types';
 import { EstimateBadge, GhostButton, Panel, PrimaryButton, PrivacyNote, StepHeader } from './ui';
@@ -13,6 +14,12 @@ export interface FaceStepResult {
 
 interface Props {
   session: ScanSession | null;
+  /**
+   * Load state of the scan models (carry-over #16): while 'idle' or 'loading' the step says so and
+   * waits; only 'failed' (or no session at all) means "not available". Defaults to 'ready' when a
+   * session is given.
+   */
+  models?: FlowCaps['models'];
   cameraAllowed: boolean;
   onDone: (result: FaceStepResult) => void;
   onSkip: () => void;
@@ -20,7 +27,17 @@ interface Props {
 
 type Phase = 'preview' | 'analysing' | 'review';
 
-export function FaceStep({ session, cameraAllowed, onDone, onSkip }: Props): ReactNode {
+const UNAVAILABLE = 'The scan models are not available on this device; you can skip this step.';
+
+/** What the face step can do with the models right now. */
+export function faceModelsState(session: ScanSession | null, models: FlowCaps['models'] | undefined): 'loading' | 'ready' | 'unavailable' {
+  const m = models ?? (session ? 'ready' : 'failed');
+  if (m === 'failed') return 'unavailable';
+  if (m === 'idle' || m === 'loading') return 'loading';
+  return session ? 'ready' : 'unavailable';
+}
+
+export function FaceStep({ session, models, cameraAllowed, onDone, onSkip }: Props): ReactNode {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const camRef = useRef<CameraHandle | null>(null);
   const [phase, setPhase] = useState<Phase>('preview');
@@ -62,10 +79,13 @@ export function FaceStep({ session, cameraAllowed, onDone, onSkip }: Props): Rea
     };
   }, [tileUrl]);
 
+  const modelsState = faceModelsState(session, models);
+  const busy = phase === 'analysing' || modelsState === 'loading';
+
   const analyse = async (bitmap: ImageBitmap): Promise<void> => {
-    if (!session) {
+    if (!session || modelsState !== 'ready') {
       bitmap.close();
-      setError('The scan models are not available on this device; you can skip this step.');
+      setError(modelsState === 'loading' ? 'The scan models are still loading; try again in a moment.' : UNAVAILABLE);
       return;
     }
     setPhase('analysing');
@@ -126,16 +146,18 @@ export function FaceStep({ session, cameraAllowed, onDone, onSkip }: Props): Rea
             </div>
           </div>
           <p role="status" aria-live="polite" className="min-h-5 text-center text-sm text-ink/60">
-            {phase === 'analysing' ? 'Reading skin tone…' : (error ?? 'Centre your face in the oval, neutral expression.')}
+            {phase === 'analysing'
+              ? 'Reading skin tone…'
+              : (error ?? (modelsState === 'loading' ? 'Loading the scan models on this device…' : modelsState === 'unavailable' ? UNAVAILABLE : 'Centre your face in the oval, neutral expression.'))}
           </p>
           {cameraAllowed && !cameraError ? (
-            <PrimaryButton onClick={() => void takePhoto()} disabled={phase === 'analysing'}>
+            <PrimaryButton onClick={() => void takePhoto()} disabled={busy || modelsState === 'unavailable'}>
               <Camera className="h-5 w-5" aria-hidden /> Take photo
             </PrimaryButton>
           ) : null}
           <label className="inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-ink/10 bg-white/40 px-5 text-sm font-medium text-ink/80 hover:bg-white/70">
             <ImagePlus className="h-4 w-4" aria-hidden /> Choose a photo
-            <input type="file" accept="image/*" capture="user" className="sr-only" onChange={(e) => void onFile(e.target.files?.[0])} disabled={phase === 'analysing'} />
+            <input type="file" accept="image/*" capture="user" className="sr-only" onChange={(e) => void onFile(e.target.files?.[0])} disabled={busy || modelsState === 'unavailable'} />
           </label>
           <GhostButton onClick={onSkip}>
             <SkipForward className="h-4 w-4" aria-hidden /> Skip this step

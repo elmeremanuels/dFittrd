@@ -6,7 +6,7 @@
  * types come from @curtain/schema only). Everything below is on-device state that never
  * leaves the phone except through `outbox` (swipe events + save markers, no body data).
  */
-import type { GarmentPayload, PassReason, SwipeAction, SwipeEvent, TASTE_AXES, TasteAxis } from '@curtain/schema';
+import type { GarmentPayload, PassReason, SwipeAction, SwipeEvent, TASTE_AXES, TasteAxis, WardrobeSizeUnknown } from '@curtain/schema';
 
 export type { SwipeEvent, SwipeAction, PassReason, GarmentPayload };
 
@@ -83,11 +83,25 @@ export interface PenaltyEntry {
   strength: number;
 }
 
+/**
+ * Size of a saved item when nothing told us the size (nothing fit, no measurements, a chart without
+ * fit points): an explicit marker, never a guessed label (carry-over #24). Identical to
+ * `WARDROBE_SIZE_UNKNOWN` in @curtain/schema, which `WardrobePutRequest.size` uses; cohort size
+ * histograms skip it.
+ */
+export const UNKNOWN_SIZE = 'unknown' as const;
+// Compile-time guard: the local marker must be exactly the schema's wardrobe marker.
+const _unknownSizeMatchesSchema: WardrobeSizeUnknown = UNKNOWN_SIZE;
+void _unknownSizeMatchesSchema;
+
 /** Marker pushed to the outbox on `save` so the sync layer can mirror the wardrobe (§5). */
 export interface SaveOutboxEntry {
   type: 'save';
   itemId: string;
-  size: string | null;
+  /** The item's shop when the garment carried one (`DeckGarment.shopId`). */
+  shopId?: string;
+  /** Size recommended at save time, or `UNKNOWN_SIZE`; the same convention as `WardrobePutRequest.size`. */
+  size: string;
 }
 
 export type OutboxEntry = SwipeEvent | SaveOutboxEntry;
@@ -102,9 +116,10 @@ export interface TasteState {
   /** Ring buffer, max EVENTS_RING_SIZE (500), oldest first. */
   events: SwipeEvent[];
   /**
-   * itemId → dealIndex at which it was swiped. Items swiped `pass` become eligible again
-   * RESURFACE_AFTER (200) deals later. Items swiped love/save/less are stored as
-   * SEEN_FOREVER (-1) and never return.
+   * itemKey(shopId, itemId) → dealIndex at which it was swiped. Item ids are only unique within
+   * one shop, so the key carries the shop (carry-over #22); a garment without `shopId` is keyed by
+   * its bare id. Items swiped `pass` become eligible again RESURFACE_AFTER (200) deals later. Items
+   * swiped love/save/less are stored as SEEN_FOREVER (-1) and never return.
    */
   seen: Record<string, number>;
   /** Number of cards dealt so far (one per card shown). */
@@ -147,7 +162,28 @@ export type FeaturizableGarment = Pick<GarmentPayload, 'category' | 'priceEur' |
   styleTags?: GarmentPayload['styleTags'];
 };
 
-export type DeckGarment = FeaturizableGarment & { id: string };
+/**
+ * A garment the deck can deal. `id` is the shop-scoped external id; `shopId` namespaces it, so two
+ * shops selling an item with the same id are two different cards (carry-over #22). Leave `shopId`
+ * out only for a single-shop catalogue.
+ */
+export type DeckGarment = FeaturizableGarment & { id: string; shopId?: string };
+
+/**
+ * Separator between shop and item id in a seen-memory key. Shop ids are UUIDs (no ':'), so the
+ * first ':' always ends the shop part, whatever the item id contains.
+ */
+export const ITEM_KEY_SEPARATOR = ':';
+
+/** Seen-memory key of an item: `<shopId>:<itemId>`, or the bare item id without a shop. */
+export function itemKey(shopId: string | null | undefined, itemId: string): string {
+  return shopId ? `${shopId}${ITEM_KEY_SEPARATOR}${itemId}` : itemId;
+}
+
+/** `itemKey` of a deck garment. */
+export function garmentKey(garment: Pick<DeckGarment, 'id' | 'shopId'>): string {
+  return itemKey(garment.shopId, garment.id);
+}
 
 export const EVENTS_RING_SIZE = 500;
 export const LOVED_PRICES_KEEP = 50;

@@ -119,7 +119,7 @@ describe('SwipeDeck', () => {
     const fit = useApp.getState().fit(garment)!;
     expect(fit.recommendedSize).toBeNull();
     const state = useApp.getState().taste;
-    useApp.setState({ deck: { current: taste.scoreItem(state, garment, fit, 0), notInYourSize: 1, exhausted: false } });
+    useApp.setState({ deck: { current: taste.scoreItem(state, { ...garment, shopId: MOCK_SHOP_ID }, fit, 0), notInYourSize: 1, exhausted: false } });
     renderDeck();
     const panel = await screen.findByTestId('fit-panel');
     expect(within(panel).getByText('No size fits')).toBeInTheDocument();

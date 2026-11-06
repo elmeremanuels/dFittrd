@@ -4,13 +4,22 @@
  * the estimate disclaimer, and the "Choose size X" action.
  */
 import { CheckCircle2, Pencil } from 'lucide-react';
-import { useMemo, type ReactNode } from 'react';
+import { useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { BodyProfile, GarmentPayload } from '@curtain/schema';
 import { AvatarView } from '@/components/AvatarView';
 import { EstimateDisclaimer } from '@/components/EstimateBadge';
 import { FitPanel } from '@/components/FitPanel';
 import { pct } from '@/lib/format';
 import { bandText, fitWithAdvice, gapText, neighbourSizes, pointLabel, priorKeys, usablePoints, type EmbedFit, type FitPreference, type SizeAdvice } from './aboutYou';
+import { UnitToggle } from './EmbedScreens';
+import { SizeChartTable } from './SizeChartTable';
+import type { Units } from './units';
+
+const TABS = [
+  { key: 'fit', label: 'How it fits' },
+  { key: 'chart', label: 'Size chart' },
+] as const;
+type TabKey = (typeof TABS)[number]['key'];
 
 const BAND_CLASS: Record<string, string> = {
   tight: 'bg-bad/10 text-bad',
@@ -39,6 +48,8 @@ export interface ResultScreenProps {
   /** Rendered below the result (the optional "See it on me" panel). */
   extra?: ReactNode;
   avatarRef?: React.RefObject<HTMLDivElement | null>;
+  units: Units;
+  onUnits: (u: Units) => void;
 }
 
 export function ResultScreen({
@@ -57,9 +68,24 @@ export function ResultScreen({
   currentVariantSize,
   extra,
   avatarRef,
+  units,
+  onUnits,
 }: ResultScreenProps): ReactNode {
   const { fit, userBody } = embedFit;
   const shown = useMemo(() => fitWithAdvice(fit, advice, garment.category, profile), [fit, advice, garment.category, profile]);
+  const [tab, setTab] = useState<TabKey>('fit');
+  const tabsId = useId();
+  const tabRefs = useRef<Partial<Record<TabKey, HTMLButtonElement | null>>>({});
+  // WAI-ARIA tabs: arrow keys, Home and End move between the tabs (automatic activation).
+  const onTabKey = (e: KeyboardEvent<HTMLButtonElement>): void => {
+    const i = TABS.findIndex((t) => t.key === tab);
+    const next = e.key === 'ArrowRight' ? (i + 1) % TABS.length : e.key === 'ArrowLeft' ? (i - 1 + TABS.length) % TABS.length : e.key === 'Home' ? 0 : e.key === 'End' ? TABS.length - 1 : -1;
+    const target = TABS[next];
+    if (!target) return;
+    e.preventDefault();
+    setTab(target.key);
+    tabRefs.current[target.key]?.focus();
+  };
 
   // F1: no size could be scored (e.g. a shoe without a shoe size): ask for what is missing instead
   // of presenting the engine's placeholder as a recommendation.
@@ -75,9 +101,13 @@ export function ResultScreen({
           <p className="mt-1 text-sm text-ink-soft" data-testid="no-points-text">
             {shoes
               ? 'Shoes are sized by your foot. Add your EU shoe size and we’ll check the fit.'
-              : 'This item is sized by measurements we don’t have for you yet. Add your measurements, or use the shop’s size chart for this one.'}
+              : 'This item is sized by measurements we don’t have for you yet. Add your measurements, or use the size chart below.'}
           </p>
         </div>
+        <div className="flex justify-end">
+          <UnitToggle units={units} onChange={onUnits} />
+        </div>
+        <SizeChartTable garment={garment} recommended={null} units={units} />
         <div className="sticky bottom-0 -mx-4 bg-gradient-to-t from-cream via-cream to-cream/0 px-4 pt-4 pb-2">
           <button type="button" className="btn-coral w-full" onClick={onEdit} data-testid="edit-measurements">
             <Pencil className="h-4 w-4" aria-hidden /> {shoes ? 'Add my shoe size' : 'Edit my measurements'}
@@ -139,33 +169,65 @@ export function ResultScreen({
         </div>
       ) : null}
 
-      <div className="grid items-start gap-4 min-[500px]:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
-        <div ref={avatarRef} className="mirror-frame mx-auto aspect-[5/8] w-full max-w-[15rem] border-[8px]">
-          <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={profile.measurements.height?.mean} bodyLabel="Body from your answers" />
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="inline-grid grid-cols-2 gap-1 rounded-full border border-ink/10 bg-white/60 p-1" role="tablist" aria-label="Result details">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                ref={(el) => {
+                  tabRefs.current[t.key] = el;
+                }}
+                type="button"
+                role="tab"
+                id={`${tabsId}-tab-${t.key}`}
+                aria-selected={tab === t.key}
+                aria-controls={`${tabsId}-panel-${t.key}`}
+                tabIndex={tab === t.key ? 0 : -1}
+                onClick={() => setTab(t.key)}
+                onKeyDown={onTabKey}
+                className={`min-h-9 rounded-full px-3.5 text-sm font-medium whitespace-nowrap transition-colors ${tab === t.key ? 'bg-ink text-white' : 'text-ink-soft hover:bg-white'}`}
+                data-testid={`tab-${t.key}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <UnitToggle units={units} onChange={onUnits} />
         </div>
-        {points.length > 0 ? (
-          <section className="card space-y-2 p-3" aria-labelledby="points-title">
-            <h3 id="points-title" className="eyebrow">
-              How size {selected} fits you
-            </h3>
-            <ul className="divide-y divide-ink/5" data-testid="fit-points">
-              {points.map((p) => (
-                <li key={p.point} className="flex items-center justify-between gap-3 py-1.5 text-sm">
-                  <span className="min-w-0">
-                    <span className="font-medium">{pointLabel(p.point)}</span>
-                    <span className="block text-xs text-ink-mute">{gapText(p)}</span>
-                  </span>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${BAND_CLASS[p.band] ?? ''}`}>{bandText(p.band)}</span>
-                </li>
-              ))}
-            </ul>
-            {estimated.length > 0 ? (
-              <p className="text-xs text-ink-mute">
-                {estimated.map(pointLabel).join(', ')} estimated from your height and weight. Add your own measurements for a higher confidence.
-              </p>
-            ) : null}
-          </section>
-        ) : null}
+        <div role="tabpanel" id={`${tabsId}-panel-fit`} aria-labelledby={`${tabsId}-tab-fit`} hidden={tab !== 'fit'}>
+        <div className="grid items-start gap-4 min-[500px]:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
+          <div ref={avatarRef} className="mirror-frame mx-auto aspect-[5/8] w-full max-w-[15rem] border-[8px]">
+            <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={profile.measurements.height?.mean} bodyLabel="Body from your answers" />
+          </div>
+          {points.length > 0 ? (
+            <section className="card space-y-2 p-3" aria-labelledby="points-title">
+              <h3 id="points-title" className="eyebrow">
+                How size {selected} fits you
+              </h3>
+              <ul className="divide-y divide-ink/5" data-testid="fit-points">
+                {points.map((p) => (
+                  <li key={p.point} className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                    <span className="min-w-0">
+                      <span className="font-medium">{pointLabel(p.point)}</span>
+                      <span className="block text-xs text-ink-mute">{gapText(p, units)}</span>
+                    </span>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${BAND_CLASS[p.band] ?? ''}`}>{bandText(p.band)}</span>
+                  </li>
+                ))}
+              </ul>
+              {estimated.length > 0 ? (
+                <p className="text-xs text-ink-mute">
+                  {estimated.map(pointLabel).join(', ')} estimated from your height and weight. Add your own measurements for a higher confidence.
+                </p>
+              ) : null}
+            </section>
+          ) : null}
+        </div>
+        </div>
+        <div role="tabpanel" id={`${tabsId}-panel-chart`} aria-labelledby={`${tabsId}-tab-chart`} hidden={tab !== 'chart'}>
+          <SizeChartTable garment={garment} recommended={advice.size} units={units} />
+        </div>
       </div>
 
       <EstimateDisclaimer />

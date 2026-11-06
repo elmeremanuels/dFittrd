@@ -6,9 +6,10 @@ import { AlertTriangle, Camera, Clock, PackageX, PauseCircle, Ruler, ShieldCheck
 import { useId, useState, type ReactNode } from 'react';
 import type { GarmentPayload, ShopBranding } from '@curtain/schema';
 import { readableTextColor } from '@/lib/contrast';
-import { ABOUT_LABELS, ABOUT_RANGES, ABOUT_UNITS, AGE_RANGES, FIT_PREFERENCES, measurementFieldsFor, requiredFieldsFor, type AboutField, type AboutForm, type FitPreference } from './aboutYou';
+import { ABOUT_LABELS, AGE_RANGES, FIT_PREFERENCES, isImperialField, measurementFieldsFor, rangeFor, requiredFieldsFor, setImperialEntry, unitFor, type AboutField, type AboutForm, type FitPreference } from './aboutYou';
 import type { BlockedKind } from './flow';
 import { mediaProxyUrl } from './media';
+import { UNIT_SYSTEMS, type Units } from './units';
 
 // ---------------------------------------------------------------------------
 // Shell
@@ -103,34 +104,112 @@ export function EmbedFooter({
 // About you
 // ---------------------------------------------------------------------------
 
-function TextNumber({ field, value, error, optional, onChange }: { field: AboutField; value: string; error?: string | undefined; optional?: boolean; onChange: (v: string) => void }): ReactNode {
+const UNIT_TEXT: Record<Units, { name: string; short: string }> = {
+  metric: { name: 'Metric', short: 'cm · kg' },
+  imperial: { name: 'Imperial', short: 'in · lb' },
+};
+
+/** cm/kg or in/lb, for every input and every number in the embed. Remembered per shopper. */
+export function UnitToggle({ units, onChange }: { units: Units; onChange: (u: Units) => void }): ReactNode {
+  const name = useId();
+  return (
+    <fieldset className="shrink-0" data-testid="unit-toggle">
+      <legend className="sr-only">Units</legend>
+      <div className="inline-grid grid-cols-2 gap-1 rounded-full border border-ink/10 bg-white/60 p-1">
+        {UNIT_SYSTEMS.map((u) => (
+          <label
+            key={u}
+            className={`flex min-h-9 cursor-pointer items-center justify-center rounded-full px-3 text-xs font-medium whitespace-nowrap transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-coral ${units === u ? 'bg-ink text-white' : 'text-ink-soft hover:bg-white'}`}
+          >
+            <input type="radio" name={name} value={u} checked={units === u} onChange={() => onChange(u)} className="sr-only" />
+            <span className="sr-only">{UNIT_TEXT[u].name}, </span>
+            {UNIT_TEXT[u].short}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function NumberInput({
+  id,
+  label,
+  unit,
+  value,
+  placeholder,
+  error,
+  describedBy,
+  onChange,
+}: {
+  id: string;
+  label?: string;
+  unit: string;
+  value: string;
+  placeholder: string;
+  error: boolean;
+  describedBy: string | undefined;
+  onChange: (v: string) => void;
+}): ReactNode {
+  return (
+    <div className="relative min-w-0 flex-1">
+      <input
+        id={id}
+        type="text"
+        inputMode="decimal"
+        autoComplete="off"
+        value={value}
+        placeholder={placeholder}
+        aria-label={label}
+        aria-invalid={error}
+        aria-describedby={describedBy}
+        onChange={(e) => onChange(e.target.value)}
+        className={`field-input pr-10 ${error ? 'border-coral' : ''}`}
+      />
+      <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-ink-mute">{unit}</span>
+    </div>
+  );
+}
+
+const ERROR_CLASS = 'text-xs text-coral-ink';
+
+/** One About-you number in the shopper's units (height in imperial: feet and inches). */
+function AboutNumber({ field, form, error, optional, onChange }: { field: AboutField; form: AboutForm; error?: string | undefined; optional?: boolean; onChange: (f: AboutForm) => void }): ReactNode {
   const id = useId();
-  const [lo, hi] = ABOUT_RANGES[field];
+  const errId = error ? `${id}-err` : undefined;
+  const imperial = form.units === 'imperial' && isImperialField(field);
+  const [lo, hi] = rangeFor(field, form.units);
+  const optionalText = optional ? <span className="font-normal normal-case tracking-normal">(optional)</span> : null;
+  const errorText = error ? (
+    <p id={errId} role="alert" className={ERROR_CLASS}>
+      {error}
+    </p>
+  ) : null;
+
+  if (imperial && field === 'height') {
+    const set = (k: 'heightFt' | 'heightIn') => (v: string) => onChange(setImperialEntry(form, k, v));
+    return (
+      <div className="min-w-0 space-y-1" role="group" aria-labelledby={`${id}-label`}>
+        <span id={`${id}-label`} className="eyebrow block">
+          {ABOUT_LABELS[field]} {optionalText}
+        </span>
+        <div className="flex gap-2">
+          <NumberInput id={`${id}-ft`} label="Height, feet" unit="ft" value={form.imperial.heightFt} placeholder={`${Math.floor(lo / 12)}–${Math.floor(hi / 12)}`} error={!!error} describedBy={errId} onChange={set('heightFt')} />
+          <NumberInput id={`${id}-in`} label="Height, inches" unit="in" value={form.imperial.heightIn} placeholder="0–11" error={!!error} describedBy={errId} onChange={set('heightIn')} />
+        </div>
+        {errorText}
+      </div>
+    );
+  }
+
+  const value = imperial ? form.imperial[field as Exclude<AboutField, 'height' | 'footEu'>] : form[field];
+  const change = (v: string): void => onChange(imperial ? setImperialEntry(form, field as Exclude<AboutField, 'height' | 'footEu'>, v) : { ...form, [field]: v });
   return (
     <div className="min-w-0 space-y-1">
       <label htmlFor={id} className="eyebrow block">
-        {ABOUT_LABELS[field]} {optional ? <span className="font-normal normal-case tracking-normal">(optional)</span> : null}
+        {ABOUT_LABELS[field]} {optionalText}
       </label>
-      <div className="relative">
-        <input
-          id={id}
-          type="text"
-          inputMode="decimal"
-          autoComplete="off"
-          value={value}
-          placeholder={`${lo}–${hi}`}
-          aria-invalid={!!error}
-          aria-describedby={error ? `${id}-err` : undefined}
-          onChange={(e) => onChange(e.target.value)}
-          className={`field-input pr-12 ${error ? 'border-coral' : ''}`}
-        />
-        <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-ink-mute">{ABOUT_UNITS[field]}</span>
-      </div>
-      {error ? (
-        <p id={`${id}-err`} role="alert" className="text-xs text-coral-ink">
-          {error}
-        </p>
-      ) : null}
+      <NumberInput id={id} unit={unitFor(field, form.units)} value={value} placeholder={`${lo}–${hi}`} error={!!error} describedBy={errId} onChange={change} />
+      {errorText}
     </div>
   );
 }
@@ -144,6 +223,7 @@ export function AboutScreen({
   editing,
   canScan,
   onChange,
+  onUnits,
   onSubmit,
 }: {
   form: AboutForm;
@@ -152,6 +232,7 @@ export function AboutScreen({
   editing: boolean;
   canScan: boolean;
   onChange: (f: AboutForm) => void;
+  onUnits: (u: Units) => void;
   onSubmit: (scan: boolean) => void;
 }): ReactNode {
   const set = <K extends keyof AboutForm>(k: K, v: AboutForm[K]): void => onChange({ ...form, [k]: v });
@@ -169,19 +250,22 @@ export function AboutScreen({
       }}
       aria-labelledby="about-title"
     >
-      <div>
-        <p className="eyebrow text-coral-ink">{editing ? 'Edit my measurements' : 'Step 1 of 2'}</p>
-        <h2 id="about-title" className="font-display text-3xl leading-tight" tabIndex={-1} data-step-heading>
-          About you
-        </h2>
-        <p className="text-sm text-ink-soft">{required.length > 0 ? 'Three numbers' : 'Two numbers'} and you’ll see your size. Metric, takes under 30 seconds.</p>
+      <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
+        <div className="min-w-0">
+          <p className="eyebrow text-coral-ink">{editing ? 'Edit my measurements' : 'Step 1 of 2'}</p>
+          <h2 id="about-title" className="font-display text-3xl leading-tight" tabIndex={-1} data-step-heading>
+            About you
+          </h2>
+        </div>
+        <UnitToggle units={form.units} onChange={onUnits} />
+        <p className="w-full text-sm text-ink-soft">{required.length > 0 ? 'Three numbers' : 'Two numbers'} and you’ll see your size. Takes under 30 seconds.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <TextNumber field="height" value={form.height} error={errors.height} onChange={(v) => set('height', v)} />
-        <TextNumber field="weight" value={form.weight} error={errors.weight} onChange={(v) => set('weight', v)} />
+        <AboutNumber field="height" form={form} error={errors.height} onChange={onChange} />
+        <AboutNumber field="weight" form={form} error={errors.weight} onChange={onChange} />
         {required.map((f) => (
-          <TextNumber key={f} field={f} value={form[f]} error={errors[f]} onChange={(v) => set(f, v)} />
+          <AboutNumber key={f} field={f} form={form} error={errors[f]} onChange={onChange} />
         ))}
       </div>
 
@@ -236,7 +320,7 @@ export function AboutScreen({
           <div id="known-measurements" className="space-y-3">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {fields.map((f) => (
-                <TextNumber key={f} field={f} value={form[f]} error={errors[f]} optional onChange={(v) => set(f, v)} />
+                <AboutNumber key={f} field={f} form={form} error={errors[f]} optional onChange={onChange} />
               ))}
             </div>
             <label className="flex items-center gap-2 text-sm">

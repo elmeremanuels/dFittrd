@@ -11,24 +11,30 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import type { BodyProfile, TryResolveResponse } from '@curtain/schema';
 import { ApiError } from '@/api/client';
-import { adviseSize, EMPTY_ABOUT, fitForProfile, mergeAboutIntoScan, profileFromAbout, sizeConfidence, validateAbout, type AboutField, type AboutForm } from './aboutYou';
+import { adviseSize, EMPTY_ABOUT, fitForProfile, mergeAboutIntoScan, normalizeAbout, profileFromAbout, sizeConfidence, switchUnits, validateAbout, type AboutField, type AboutForm } from './aboutYou';
 import { isMockToken, mockTokensEnabled, resolveMock, type EmbedApi, type EmbedDeps } from './deps';
 import { AboutScreen, BlockedScreen, EmbedFooter, EmbedFrame, LoadingScreen, ProductHeader } from './EmbedScreens';
 import { classifyError, flowReducer, INITIAL_FLOW } from './flow';
 import { HeroRenderPanel, heroRendersEnabled } from './HeroRender';
 import { createParentChannel, parseParentMessage, resolveTargetOrigin, type ParentContext } from './protocol';
 import { ResultScreen } from './ResultScreen';
+import { defaultUnits, type Units } from './units';
 
 const CaptureStep = lazy(() => import('@/features/capture/components/CaptureStep'));
 
 const NO_CONTEXT: ParentContext = { locale: null, currentVariantSize: null };
+
+/** The browser's own language: the shopper's choice, so it decides the default units first. */
+function browserLocale(): string | null {
+  return typeof navigator !== 'undefined' ? (navigator.language ?? null) : null;
+}
 
 export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): ReactNode {
   const { store } = deps;
   const [flow, dispatch] = useReducer(flowReducer, INITIAL_FLOW);
   const [attempt, setAttempt] = useState(0);
   const [data, setData] = useState<TryResolveResponse | null>(null);
-  const [about, setAbout] = useState<AboutForm>(EMPTY_ABOUT);
+  const [aboutState, setAbout] = useState<AboutForm>(EMPTY_ABOUT);
   const [errors, setErrors] = useState<Partial<Record<AboutField, string>>>({});
   const [profile, setProfile] = useState<BodyProfile | null>(null);
   const [remember, setRememberState] = useState(store.remember);
@@ -37,6 +43,13 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
   const [chooseFallback, setChooseFallback] = useState<string | null>(null);
   const [forgetStatus, setForgetStatus] = useState<string | null>(null);
   const [context, setContext] = useState<ParentContext>(NO_CONTEXT);
+  /** Units the shopper picked (here or on an earlier visit to this shop); null follows the locale. */
+  const [chosenUnits, setChosenUnits] = useState<Units | null>(null);
+  const shopperLocale = deps.locale === undefined ? browserLocale() : deps.locale;
+  const units: Units = chosenUnits ?? defaultUnits(shopperLocale, context.locale);
+  // The inputs follow the effective units (a stored choice, else the locale, which can arrive late
+  // from the shop page). Switching never changes the metric values the fit engine reads.
+  const about = useMemo(() => switchUnits(aboutState, units), [aboutState, units]);
   const apiRef = useRef<EmbedApi | null>(null);
   const fitShownFor = useRef<Set<string>>(new Set());
   const readySent = useRef(false);
@@ -63,10 +76,12 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         const resolved = mock ? resolveMock(token, deps.referrer) : await api().resolveTry(token);
         if (cancelled) return;
         const remembered = await store.loadProfile(resolved.shop.id);
+        const storedUnits = await store.loadUnits();
         if (cancelled) return;
         setData(resolved);
+        if (storedUnits) setChosenUnits(storedUnits);
         if (remembered) {
-          setAbout(remembered.about);
+          setAbout(normalizeAbout(remembered.about));
           setProfile(remembered.profile);
         }
         dispatch({ type: 'resolved', paused: resolved.shop.paused, remembered: !!remembered });
@@ -229,6 +244,12 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
     setForgetStatus(serverOk ? 'Forgotten. Nothing about you is stored here any more.' : 'Deleted from this browser. We could not reach Curtain to delete the anonymous device; try again later.');
   };
 
+  const changeUnits = (u: Units): void => {
+    setChosenUnits(u);
+    setAbout(switchUnits(about, u));
+    void store.saveUnits(u);
+  };
+
   const close = channel.canPost ? () => channel.post({ type: 'curtain:close' }) : null;
 
   // --- render -----------------------------------------------------------------------------------
@@ -261,6 +282,11 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         onChange={(f) => {
           setAbout(f);
           if (Object.keys(errors).length > 0) setErrors(validateAbout(f, data.garment.category));
+        }}
+        onUnits={(u) => {
+          changeUnits(u);
+          // Messages name the units ("Between 4 ft 0 in and 7 ft 6 in"): re-check in the new ones.
+          if (Object.keys(errors).length > 0) setErrors(validateAbout(switchUnits(about, u), data.garment.category));
         }}
         onSubmit={submitAbout}
       />
@@ -304,6 +330,8 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         chooseFallback={chooseFallback}
         currentVariantSize={context.currentVariantSize}
         avatarRef={avatarRef}
+        units={units}
+        onUnits={changeUnits}
         extra={heroRendersEnabled(data) && !mock ? <HeroRenderPanel getApi={api} data={data} size={shownSize} getAvatarSvg={getAvatarSvg} /> : null}
       />
     );

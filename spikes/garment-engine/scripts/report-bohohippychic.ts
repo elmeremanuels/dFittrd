@@ -100,8 +100,10 @@ function shopProducts(): { shop: { domain: string; brand: string; currency: stri
 function writeBundle(id: string, ev: ProductEval, images: Map<string, Uint8Array>): string | null {
   if (!ev.bundle) return null;
   const dir = join(evalOut, id);
-  // A fresh bundle replaces the old one; earlier renders describe the old bundle, so they go too.
-  rmSync(dir, { recursive: true, force: true });
+  // A changed bundle replaces the old one, and the old renders go with it; the same bundle keeps them.
+  const qaPath = join(dir, 'qa.json');
+  const previous = existsSync(qaPath) ? str((JSON.parse(readFileSync(qaPath, 'utf8')) as Json).inputHash) : null;
+  if (previous !== ev.bundle.inputHash) rmSync(dir, { recursive: true, force: true });
   mkdirSync(join(dir, 'view'), { recursive: true });
   for (const [name, data] of Object.entries(ev.bundle.files)) writeFileSync(join(dir, name), data);
   for (const [name, png] of images) writeFileSync(join(dir, name), png);

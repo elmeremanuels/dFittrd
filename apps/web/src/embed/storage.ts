@@ -12,6 +12,9 @@
  * - Turning "Remember me" off is itself remembered (UX-1 / F2 / SEC-3): one non-personal row,
  *   `pref:remember = false`, read by `init()` before anything else, so the next visit starts with
  *   the switch off and writes nothing. Turning it back on removes the row.
+ * - The shopper's choice of units (cm/kg or in/lb), `pref:units`, once they pick one. Like the
+ *   profile it is only written with "Remember me" on, and "Forget me" clears it. Without a choice
+ *   the embed follows the browser's locale.
  * - If IndexedDB is unavailable (blocked third-party storage, private mode) everything stays in
  *   memory and the page still works.
  */
@@ -19,6 +22,7 @@ import Dexie, { type Table } from 'dexie';
 import type { BodyProfile, DeviceTokenResponse } from '@curtain/schema';
 import type { DeviceCredentials } from '@/api/client';
 import type { AboutForm } from './aboutYou';
+import { isUnits, type Units } from './units';
 
 export const EMBED_DB_NAME = 'curtain-embed';
 
@@ -45,6 +49,8 @@ export class EmbedDb extends Dexie {
 const DEVICE_KEY = 'device';
 /** The shopper's opt-out of "Remember me". Holds no personal data. */
 export const REMEMBER_PREF_KEY = 'pref:remember';
+/** The shopper's explicit choice of units. */
+export const UNITS_PREF_KEY = 'pref:units';
 const profileKey = (shopId: string): string => `profile:${shopId}`;
 
 const NO_DEVICE: DeviceCredentials = { deviceId: null, token: null, expiresAt: null };
@@ -59,6 +65,9 @@ export interface EmbedStore {
   reloadDevice(): Promise<DeviceCredentials>;
   loadProfile(shopId: string): Promise<RememberedProfile | null>;
   saveProfile(p: RememberedProfile): Promise<void>;
+  /** The units the shopper chose on this shop (null: never chose, follow the locale). */
+  loadUnits(): Promise<Units | null>;
+  saveUnits(units: Units): Promise<void>;
   /** Off → wipe IndexedDB (memory keeps working); on → write what is in memory. */
   setRemember(on: boolean): Promise<void>;
   /** Forget me: wipe memory and IndexedDB. */
@@ -92,6 +101,7 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
   let dbBroken = false;
   let device: DeviceCredentials = NO_DEVICE;
   const profiles = new Map<string, RememberedProfile>();
+  let units: Units | null = null;
   /** Shared by every caller, so a second `init()` (StrictMode, retry) waits for the same read. */
   let loading: Promise<void> | null = null;
 
@@ -124,6 +134,7 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
     const rows: KvRow[] = [];
     if (device.token) rows.push({ key: DEVICE_KEY, value: device });
     for (const p of profiles.values()) rows.push({ key: profileKey(p.shopId), value: p });
+    if (units) rows.push({ key: UNITS_PREF_KEY, value: units });
     if (rows.length > 0) await safe((d) => d.kv.bulkPut(rows));
   };
 
@@ -177,6 +188,17 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
       profiles.set(p.shopId, p);
       if (remember) await safe((d) => d.kv.put({ key: profileKey(p.shopId), value: p }));
     },
+    async loadUnits() {
+      if (units || !remember) return units;
+      const row = await safe((d) => d.kv.get(UNITS_PREF_KEY));
+      const v = row?.value;
+      if (isUnits(v)) units = v;
+      return units;
+    },
+    async saveUnits(u) {
+      units = u;
+      if (remember) await safe((d) => d.kv.put({ key: UNITS_PREF_KEY, value: u }));
+    },
     async setRemember(on) {
       if (on === remember) return;
       remember = on;
@@ -191,6 +213,7 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
     async forget() {
       device = NO_DEVICE;
       profiles.clear();
+      units = null;
       await safe((d) => d.kv.clear());
       // Forgetting the data keeps the shopper's choice not to be remembered.
       if (!remember) await safe((d) => d.kv.put({ key: REMEMBER_PREF_KEY, value: false }));

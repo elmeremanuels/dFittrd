@@ -39,7 +39,7 @@ function fakeApi(over: Partial<{ [K in keyof EmbedApi]: EmbedApi[K] }> = {}) {
 }
 
 let dbN = 0;
-function setup(opts: { api?: ReturnType<typeof fakeApi>; referrer?: string; store?: EmbedStore; token?: string; allowMock?: boolean } = {}) {
+function setup(opts: { api?: ReturnType<typeof fakeApi>; referrer?: string; store?: EmbedStore; token?: string; allowMock?: boolean; locale?: string | null } = {}) {
   const api = opts.api ?? fakeApi();
   const parent = { postMessage: vi.fn() };
   const store = opts.store ?? createEmbedStore({ openDb: () => new EmbedDb(`curtain-embed-ui-${++dbN}`) });
@@ -51,6 +51,8 @@ function setup(opts: { api?: ReturnType<typeof fakeApi>; referrer?: string; stor
     ancestorOrigins: null,
     appUrl: 'https://app.curtain.example/',
     canScan: false,
+    // The pilot shop is Australian (metric). jsdom's own navigator.language is en-US.
+    locale: opts.locale === undefined ? 'en-AU' : opts.locale,
     ...(opts.allowMock !== undefined ? { allowMock: opts.allowMock } : {}),
   };
   const utils = render(

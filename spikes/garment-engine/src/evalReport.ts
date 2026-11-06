@@ -437,7 +437,7 @@ export function renderReport(input: ReportInput): string {
       '- Calibration scales each critical ring to its chart value, so after calibration the chart agreement is near 0 by construction. The informative numbers are the error before calibration and after the global scale.',
       '- An open-front garment (the cardigan) has no closed loop at the chest, waist or hip unless the reconstruction closes it; the evaluation reports that as a failure at those anchors rather than guessing a girth.',
       '- The XS and XXL renders use the viewer\'s avatar: the M mannequin morphed to the XS or XXL ring girths at chest, waist and hip (stature and arms stay M).',
-      '- Trousers and skirts have not been draped in the viewer on a real mesh yet; the viewer pins a bottom at its waistband, which only the synthetic dress has exercised indirectly.',
+      '- Trousers and skirts hang from their waistband in the viewer; that is checked only on a skirt cut from the synthetic dress (a unit test and one headless render), never on a reconstructed bottom.',
     ].join('\n'),
     '',
   );

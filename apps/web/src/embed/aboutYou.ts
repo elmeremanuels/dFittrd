@@ -11,6 +11,7 @@ import { computeFit, isPointFit, sigmaFromBodyProfile, type FitResult, type Poin
 import { toUserBody, type BodyMeasurementKey, type BodyProfile, type GarmentCategory, type GarmentPayload, type UserBody } from '@curtain/schema';
 import { fuseProfile, type ManualEntries } from '@/features/capture/fuse';
 import type { Sex } from '@/features/capture/types';
+import { cmToFtIn, cmToIn, ftInToCm, inToCm, IN_PER_FT, isUnits, kgToLb, lbToKg, lengthText, metricText, numberText, round1, type Units } from './units';
 
 export const FIT_PREFERENCES = ['snug', 'regular', 'relaxed'] as const;
 export type FitPreference = (typeof FIT_PREFERENCES)[number];
@@ -18,9 +19,34 @@ export type FitPreference = (typeof FIT_PREFERENCES)[number];
 export const AGE_RANGES = ['', '18-24', '25-34', '35-44', '45-54', '55-64', '65+'] as const;
 export type AgeRange = (typeof AGE_RANGES)[number];
 
+/** What the shopper typed while in imperial units (the metric fields hold the converted value). */
+export interface ImperialEntries {
+  heightFt: string;
+  heightIn: string;
+  /** lb */
+  weight: string;
+  /** in */
+  bust: string;
+  waist: string;
+  hip: string;
+  inseam: string;
+}
+
+export type ImperialKey = keyof ImperialEntries;
+
+export const EMPTY_IMPERIAL: ImperialEntries = { heightFt: '', heightIn: '', weight: '', bust: '', waist: '', hip: '', inseam: '' };
+
+/**
+ * The About-you answers. `height`, `weight` and the girths are always the canonical METRIC values
+ * (cm, kg) the fit engine reads, whatever `units` the shopper types in; `imperial` keeps the
+ * imperial text as typed (see units.ts).
+ */
 export interface AboutForm {
   height: string;
   weight: string;
+  /** The system the inputs are shown in. */
+  units: Units;
+  imperial: ImperialEntries;
   preference: FitPreference;
   /** Optional, stays on this device; not used by the fit engine. */
   ageRange: AgeRange;
@@ -40,6 +66,8 @@ export interface AboutForm {
 export const EMPTY_ABOUT: AboutForm = {
   height: '',
   weight: '',
+  units: 'metric',
+  imperial: EMPTY_IMPERIAL,
   preference: 'regular',
   ageRange: '',
   sex: 'unspecified',
@@ -74,6 +102,7 @@ export const ABOUT_LABELS: Record<AboutField, string> = {
   footEu: 'Shoe size (EU)',
 };
 
+/** Metric units of each field (the canonical values). For the shopper's own units use `unitFor`. */
 export const ABOUT_UNITS: Record<AboutField, string> = { height: 'cm', weight: 'kg', bust: 'cm', waist: 'cm', hip: 'cm', inseam: 'cm', footEu: 'EU' };
 
 /**
@@ -94,11 +123,122 @@ export function requiredFieldsFor(category: GarmentCategory): AboutField[] {
   return category === 'shoes' ? ['footEu'] : [];
 }
 
-const REQUIRED_TEXT: Partial<Record<AboutField, string>> = {
-  height: 'Enter your height in cm',
-  weight: 'Enter your weight in kg',
-  footEu: 'Enter your EU shoe size',
+const REQUIRED_TEXT: Record<Units, Partial<Record<AboutField, string>>> = {
+  metric: { height: 'Enter your height in cm', weight: 'Enter your weight in kg', footEu: 'Enter your EU shoe size' },
+  imperial: { height: 'Enter your height in feet and inches', weight: 'Enter your weight in lb', footEu: 'Enter your EU shoe size' },
 };
+
+/** Fields typed in imperial units when `units` is imperial (the EU shoe size never is). */
+export function isImperialField(f: AboutField): f is Exclude<AboutField, 'footEu'> {
+  return f !== 'footEu';
+}
+
+/** The unit shown next to a field. Height in imperial has two inputs (ft and in): its total is in inches. */
+export function unitFor(field: AboutField, units: Units): string {
+  if (field === 'footEu') return 'EU';
+  if (units === 'metric') return field === 'weight' ? 'kg' : 'cm';
+  return field === 'weight' ? 'lb' : 'in';
+}
+
+/**
+ * The accepted range in the shopper's units (height in imperial: total inches). The imperial
+ * bounds are the metric ones converted and rounded inwards, so every value inside them is inside
+ * the metric range the fit engine was validated for.
+ */
+export function rangeFor(field: AboutField, units: Units): readonly [number, number] {
+  const [lo, hi] = ABOUT_RANGES[field];
+  if (units === 'metric' || !isImperialField(field)) return [lo, hi];
+  const conv = field === 'weight' ? kgToLb : cmToIn;
+  return [Math.ceil(conv(lo) - 1e-9), Math.floor(conv(hi) + 1e-9)];
+}
+
+const ftIn = (totalIn: number): string => `${Math.floor(totalIn / IN_PER_FT)} ft ${totalIn % IN_PER_FT} in`;
+
+/** "Between 120 and 230 cm" / "Between 4 ft 0 in and 7 ft 6 in" / "Between 67 and 551 lb". */
+export function rangeText(field: AboutField, units: Units): string {
+  const [lo, hi] = rangeFor(field, units);
+  if (units === 'imperial' && field === 'height') return `Between ${ftIn(lo)} and ${ftIn(hi)}`;
+  return `Between ${lo} and ${hi} ${unitFor(field, units)}`;
+}
+
+type FieldRead = { state: 'empty' } | { state: 'invalid'; message: string } | { state: 'ok'; metric: number };
+
+const readNumber = (raw: string, toMetric: (n: number) => number): FieldRead => {
+  if (raw.trim() === '') return { state: 'empty' };
+  const n = parseDecimal(raw);
+  return n === null ? { state: 'invalid', message: 'Enter a number' } : { state: 'ok', metric: toMetric(n) };
+};
+
+function readHeightFtIn(ftRaw: string, inRaw: string): FieldRead {
+  if (ftRaw.trim() === '' && inRaw.trim() === '') return { state: 'empty' };
+  const ft = ftRaw.trim() === '' ? 0 : parseDecimal(ftRaw);
+  const inches = inRaw.trim() === '' ? 0 : parseDecimal(inRaw);
+  if (ft === null || inches === null) return { state: 'invalid', message: 'Enter a number' };
+  if (ft < 0 || !Number.isInteger(ft)) return { state: 'invalid', message: 'Enter whole feet, e.g. 5 ft 7 in' };
+  if (inches < 0 || inches >= IN_PER_FT) return { state: 'invalid', message: 'Inches go from 0 to 11.9' };
+  return { state: 'ok', metric: ftInToCm(ft, inches) };
+}
+
+/** A field's value in metric (cm / kg / EU), read from what the shopper typed in their units. */
+function readField(form: AboutForm, f: AboutField): FieldRead {
+  if (form.units === 'metric' || !isImperialField(f)) return readNumber(form[f], (n) => n);
+  if (f === 'height') return readHeightFtIn(form.imperial.heightFt, form.imperial.heightIn);
+  if (f === 'weight') return readNumber(form.imperial.weight, lbToKg);
+  return readNumber(form.imperial[f], inToCm);
+}
+
+/**
+ * Type into an imperial input: keeps the text as typed and sets the canonical metric field to its
+ * exact conversion (0.1 cm / 0.1 kg), or empty while the text is empty or not a number.
+ */
+export function setImperialEntry(form: AboutForm, key: ImperialKey, value: string): AboutForm {
+  const imperial = { ...form.imperial, [key]: value };
+  const field: Exclude<AboutField, 'footEu'> = key === 'heightFt' || key === 'heightIn' ? 'height' : key;
+  const next: AboutForm = { ...form, imperial };
+  const read = readField({ ...next, units: 'imperial' }, field);
+  next[field] = read.state === 'ok' ? metricText(read.metric) : '';
+  return next;
+}
+
+/** Imperial text for a canonical metric value (height: inches to the nearest half). */
+function imperialFrom(field: Exclude<AboutField, 'footEu'>, metric: number): Partial<ImperialEntries> {
+  if (field === 'height') {
+    const { ft, in: inches } = cmToFtIn(metric);
+    return { heightFt: String(ft), heightIn: numberText(inches, 1) };
+  }
+  return { [field]: numberText(field === 'weight' ? kgToLb(metric) : cmToIn(metric), 1) };
+}
+
+const IMPERIAL_FIELDS = ['height', 'weight', 'bust', 'waist', 'hip', 'inseam'] as const;
+
+/**
+ * Switch the inputs to `units`. The canonical metric values never change, so the fit stays exactly
+ * the same. Imperial text the shopper typed is kept while it still converts to the metric value;
+ * otherwise (they typed in cm since) it is rewritten from the metric value.
+ */
+export function switchUnits(form: AboutForm, units: Units): AboutForm {
+  if (units === form.units) return form;
+  if (units === 'metric') return { ...form, units };
+  const imperial: ImperialEntries = { ...form.imperial };
+  for (const f of IMPERIAL_FIELDS) {
+    const metric = parseDecimal(form[f]);
+    const typed = readField({ ...form, units: 'imperial', imperial }, f);
+    if (metric === null) {
+      if (f === 'height') Object.assign(imperial, { heightFt: '', heightIn: '' });
+      else imperial[f] = '';
+      continue;
+    }
+    if (typed.state === 'ok' && round1(typed.metric) === round1(metric)) continue;
+    Object.assign(imperial, imperialFrom(f, metric));
+  }
+  return { ...form, units, imperial };
+}
+
+/** A stored or partial About-you form (saved before units existed) as a complete one. */
+export function normalizeAbout(raw: Partial<AboutForm> | null | undefined): AboutForm {
+  const base: AboutForm = { ...EMPTY_ABOUT, ...(raw ?? {}) };
+  return { ...base, units: isUnits(base.units) ? base.units : 'metric', imperial: { ...EMPTY_IMPERIAL, ...(raw?.imperial ?? {}) } };
+}
 
 export function parseDecimal(s: string): number | null {
   const t = s.trim().replace(',', '.');
@@ -108,25 +248,30 @@ export function parseDecimal(s: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Field → message; empty object when the form can be submitted. Height and weight are required. */
+/**
+ * Field → message; empty object when the form can be submitted. Height and weight are required.
+ * Checks what the shopper typed in their own units (`form.units`).
+ */
 export function validateAbout(form: AboutForm, category: GarmentCategory): Partial<Record<AboutField, string>> {
   const errors: Partial<Record<AboutField, string>> = {};
   const required: AboutField[] = ['height', 'weight', ...requiredFieldsFor(category)];
   const fields: AboutField[] = [...required, ...(form.knowsMeasurements ? measurementFieldsFor(category) : [])];
   for (const f of fields) {
-    const raw = form[f];
-    if (raw.trim() === '') {
-      const text = required.includes(f) ? REQUIRED_TEXT[f] : undefined;
+    const read = readField(form, f);
+    if (read.state === 'empty') {
+      const text = required.includes(f) ? REQUIRED_TEXT[form.units][f] : undefined;
       if (text) errors[f] = text;
       continue;
     }
-    const n = parseDecimal(raw);
-    if (n === null) {
-      errors[f] = 'Enter a number';
+    if (read.state === 'invalid') {
+      errors[f] = read.message;
       continue;
     }
+    // The metric range is the one the fit engine was validated for; imperial entries are checked
+    // on their exact conversion and the message shows the (inward-rounded) bounds in their units.
     const [lo, hi] = ABOUT_RANGES[f];
-    if (n < lo || n > hi) errors[f] = `Between ${lo} and ${hi} ${ABOUT_UNITS[f]}`;
+    const n = round1(read.metric);
+    if (n < lo || n > hi) errors[f] = rangeText(f, form.units);
   }
   return errors;
 }
@@ -348,9 +493,9 @@ export function bandText(band: PointFit['band']): string {
   return BAND_TEXT[band];
 }
 
-/** "2.0 cm of room" / "1.5 cm too tight" relative to the ease the garment is designed for. */
-export function gapText(p: PointFit): string {
-  const d = Math.round((p.gapCm) * 10) / 10;
+/** "2.0 cm more room than designed" / "0.6 in less room …", relative to the ease the garment is designed for. */
+export function gapText(p: PointFit, units: Units = 'metric'): string {
+  const d = Math.round(p.gapCm * 10) / 10;
   if (Math.abs(d) < 0.5) return 'as designed';
-  return d > 0 ? `${d.toFixed(1)} cm more room than designed` : `${Math.abs(d).toFixed(1)} cm less room than designed`;
+  return d > 0 ? `${lengthText(d, units)} more room than designed` : `${lengthText(Math.abs(d), units)} less room than designed`;
 }

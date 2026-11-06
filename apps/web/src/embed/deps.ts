@@ -21,6 +21,8 @@ export interface EmbedDeps {
   appUrl: string;
   /** Camera scan offered at all (`navigator.mediaDevices` exists). */
   canScan: boolean;
+  /** The shopper's locale for the default units (default: `navigator.language`; null: none). */
+  locale?: string | null;
   /** Resolve `mock:` tokens (default: `mockTokensEnabled()`, i.e. dev builds or VITE_DEMO=1 only). */
   allowMock?: boolean;
 }

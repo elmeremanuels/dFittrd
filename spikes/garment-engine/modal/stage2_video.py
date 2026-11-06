@@ -44,37 +44,10 @@ MODEL_DIR = f"{pm.WEIGHTS_DIR}/hf/{VIDEO['id']}@{VIDEO['revision']}"
 VXF_DIR = "/opt/VideoX-Fun"
 WAN_CONFIG = f"{VXF_DIR}/config/wan2.2/wan_civitai_i2v.yaml"
 
-# Pinned to versions of the VideoX-Fun commit's era (Sept 2025); transitive dependencies float.
-STAGE2_PACKAGES = [
-    "torch==2.7.1",
-    "torchvision==0.22.1",
-    "numpy==1.26.4",
-    "diffusers==0.35.1",
-    "transformers==4.56.1",
-    "accelerate==1.10.1",
-    "safetensors==0.6.2",
-    "huggingface_hub==0.34.4",
-    "hf_transfer==0.1.9",
-    "einops==0.8.1",
-    "omegaconf==2.3.0",
-    "sentencepiece==0.2.1",
-    "ftfy==6.3.1",
-    "timm==1.0.19",
-    "tomesd==0.1.3",
-    "torchsde==0.2.6",
-    "torchdiffeq==0.2.5",
-    "scikit-image==0.25.2",
-    "opencv-python-headless==4.10.0.84",
-    "imageio==2.37.0",
-    "imageio-ffmpeg==0.6.0",
-    "av==15.1.0",
-    "decord==0.6.0",
-    "func_timeout==4.3.5",
-    "albumentations==2.0.8",
-    "librosa==0.11.0",
-    "pillow==11.3.0",
-    "packaging==25.0",
-]
+# Every Python package is pinned: requirements-stage2.in holds the direct pins (versions of the
+# VideoX-Fun commit's era, Sept 2025), requirements-stage2.txt the full lock compiled from it with
+#   uv pip compile requirements-stage2.in --python-version 3.11 --python-platform x86_64-manylinux_2_31 --no-header --no-annotate -o requirements-stage2.txt
+REQUIREMENTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "requirements-stage2.txt")
 
 PROMPT = (
     "The garment \"{name}\" ({category}) dressed on a plain mid-grey studio mannequin, rotating slowly on a turntable, "
@@ -91,7 +64,7 @@ app = modal.App("curtain-phase0-stage2-video")
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("git", "ffmpeg", "libgl1", "libglib2.0-0")
-    .pip_install(*STAGE2_PACKAGES)
+    .pip_install_from_requirements(REQUIREMENTS)
     .run_commands(
         f"git clone https://github.com/aigc-apps/VideoX-Fun {VXF_DIR}",
         f"cd {VXF_DIR} && git checkout {VIDEO['code_revision']}",

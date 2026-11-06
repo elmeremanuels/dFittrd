@@ -45,18 +45,10 @@ RECON = lib.PINNED_MODELS["recon"]
 CUDA_ARCHS = "8.0;8.6;8.9;9.0"  # A100, A10, L4/L40S, H100
 GSPLAT_EXT_DIR = "/opt/torch_extensions"
 
-STAGE4_PACKAGES = [
-    "torch==2.7.1",
-    "numpy==1.26.4",
-    f"gsplat=={RECON['version']}",
-    "ninja==1.11.1.4",
-    "jaxtyping==0.3.2",
-    "rich==14.1.0",
-    f"open3d=={RECON['mesher_version']}",
-    "trimesh==4.8.1",
-    "scipy==1.15.3",
-    "pillow==11.3.0",
-]
+# Every Python package is pinned: requirements-stage4.in holds the direct pins (gsplat and Open3D at
+# PINNED_MODELS["recon"]), requirements-stage4.txt the full lock compiled from it with
+#   uv pip compile requirements-stage4.in --python-version 3.11 --python-platform x86_64-manylinux_2_31 --no-header --no-annotate -o requirements-stage4.txt
+REQUIREMENTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "requirements-stage4.txt")
 
 app = modal.App("curtain-phase0-stage4-recon")
 
@@ -64,7 +56,7 @@ image = (
     # The devel image has nvcc, which gsplat needs to compile its CUDA extension (done once, at build time).
     modal.Image.from_registry("nvidia/cuda:12.6.3-devel-ubuntu22.04", add_python="3.11")
     .apt_install("git", "libgl1", "libgomp1", "libglib2.0-0", "build-essential")
-    .pip_install(*STAGE4_PACKAGES)
+    .pip_install_from_requirements(REQUIREMENTS)
     .env({"TORCH_CUDA_ARCH_LIST": CUDA_ARCHS, "TORCH_EXTENSIONS_DIR": GSPLAT_EXT_DIR, "MAX_JOBS": "8"})
     .run_commands("python -c \"from gsplat.cuda._backend import _C; assert _C is not None, 'gsplat CUDA extension did not build'\"")
     .add_local_python_source("phase0_lib", "phase0_mesh", "phase0_modal")

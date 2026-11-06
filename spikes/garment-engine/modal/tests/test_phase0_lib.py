@@ -124,7 +124,8 @@ def test_projection_and_principal_point_conventions():
     look_at_height = 0.52 * load("manifest.json")["mannequin"]["stature_cm"] / 100
     u, v, z = lib.project(k, cv[0], [0.0, look_at_height, 0.0])
     assert abs(u - cams["width"] / 2) < 1e-3 and abs(v - cams["height"] / 2) < 1e-3
-    assert abs(z - 3.2) < 1e-6
+    stature = load("manifest.json")["mannequin"]["stature_cm"] / 100
+    assert abs(z - ((3.2**2 + ((0.6 - 0.52) * stature) ** 2) ** 0.5)) < 1e-5  # camera at 0.6 x stature, aimed at 0.52 x stature
     u_head = lib.project(k, cv[0], [0.0, 1.6, 0.0])[1]
     assert u_head < v  # image y points down
     k_int = lib.k_integer_centres(k)
@@ -245,14 +246,32 @@ def test_phase0_lib_does_not_import_modal_or_third_party_packages():
     assert imported <= {"__future__", "hashlib", "json", "math", "os", "typing"}
 
 
-@pytest.mark.parametrize("name", ["stage2_video.py", "stage4_recon.py", "run_phase0.py", "smoke.py"])
-def test_modal_apps_parse_and_pin_their_packages(name):
-    src = open(os.path.join(MODAL_DIR, name), encoding="utf-8").read()
-    tree = ast.parse(src)  # syntax check without importing modal
+@pytest.mark.parametrize("name", ["stage2_video.py", "stage4_recon.py", "run_phase0.py", "phase0_modal.py", "phase0_mesh.py", "smoke.py"])
+def test_modal_apps_parse_and_pin_inline_packages(name):
+    tree = ast.parse(open(os.path.join(MODAL_DIR, name), encoding="utf-8").read())  # syntax check without importing modal
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and getattr(node.func, "attr", "") in ("pip_install", "uv_pip_install"):
-            for arg in node.args:
-                values = [arg] if isinstance(arg, ast.Constant) else getattr(arg, "elts", [])
-                for v in values:
-                    if isinstance(v, ast.Constant) and isinstance(v.value, str) and not v.value.startswith("-"):
-                        assert "==" in v.value, f"{name}: unpinned package {v.value!r}"
+            for v in node.args:
+                if isinstance(v, ast.Constant) and isinstance(v.value, str):
+                    assert "==" in v.value, f"{name}: unpinned package {v.value!r}"
+
+
+def _reqs(name):
+    with open(os.path.join(MODAL_DIR, name), encoding="utf-8") as f:
+        return [line.split("#")[0].strip() for line in f if line.split("#")[0].strip()]
+
+
+@pytest.mark.parametrize("stage", ["stage2", "stage4"])
+def test_image_requirements_are_fully_pinned_and_locked(stage):
+    direct, lock = _reqs(f"requirements-{stage}.in"), _reqs(f"requirements-{stage}.txt")
+    assert lock and all("==" in r for r in direct + lock)
+    locked = {r.split("==")[0].lower().replace("_", "-"): r.split("==")[1] for r in lock}
+    for r in direct:
+        name, version = r.split("==")
+        assert locked.get(name.lower().replace("_", "-")) == version, f"{stage}: {r} not in the lock"
+
+
+def test_recon_requirements_match_the_pinned_versions():
+    direct = _reqs("requirements-stage4.in")
+    assert f"gsplat=={lib.PINNED_MODELS['recon']['version']}" in direct
+    assert f"open3d=={lib.PINNED_MODELS['recon']['mesher_version']}" in direct

@@ -102,7 +102,7 @@ The pipeline renders the garment on our own canonical mannequin with a known cam
 
 Body scan, fit engine, garment asset and renderer all use the same named anchors: the 12 rings (neck, shoulder, chest, underbust, waist, hip, thigh, knee, calf, ankle, upper_arm, wrist) and the lengths (shoulder_to_waist, shoulder_to_hem, waist_to_hem, sleeve, inseam, rise). Why: the size advice and the picture come from the same numbers, so they can never contradict each other.
 
-Amended Nov 2026 (review finding R1): one breadth, `shoulder_width`, joins the vocabulary. The fit point `shoulder` and every size chart's shoulder column are a width across the back (~40 cm), while the ring `shoulder` is the torso girth at the shoulder line (~100 cm). The fit point now maps to `shoulder_width`, so a width gap is never keyed under the girth ring.
+Amended Nov 2026 (review finding R1): one breadth, `shoulder_width`, joins the vocabulary. The fit point `shoulder` and every size chart's shoulder column are a width across the back (~40 cm), while the ring `shoulder` is the torso girth at the shoulder line (~100 cm). The fit point now maps to `shoulder_width`, so a width gap is never keyed under the girth ring. The asset carries it too: `grading.json` stores a `shoulder_width` target per size (from the chart's shoulder column, with the product's shoulder ease on a body chart), `anchors.json` records it with the seam points at ±width/2 on the shoulder ring's height, and the yoke is placed from it: when the chart has no shoulder girth, the `shoulder` ring grades by the width ratio (logged as an estimate), so the radial morph puts each size's seams at ±width/2.
 
 ## D16 — Assets in file storage behind Caddy; GPU work on a hosted GPU service
 

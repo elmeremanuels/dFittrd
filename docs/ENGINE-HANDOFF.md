@@ -187,7 +187,7 @@ One enum in `packages/schema`, used everywhere:
 
 - **Rings (12, from the scan):** `neck`, `shoulder`, `chest`, `underbust`, `waist`, `hip`, `thigh`, `knee`, `calf`, `ankle`, `upper_arm`, `wrist`.
 - **Lengths:** `shoulder_to_waist`, `shoulder_to_hem`, `waist_to_hem`, `sleeve`, `inseam`, `rise`.
-- **Breadth (added Nov 2026, review finding R1, see D15):** `shoulder_width`, the width across the back that the fit point `shoulder` and size charts mean; the ring `shoulder` stays the girth.
+- **Breadth (added Nov 2026, review finding R1, see D15):** `shoulder_width`, the width across the back (seam to seam) that the fit point `shoulder` and size charts mean, measured at the height of the `shoulder` ring; the ring `shoulder` stays the girth. `grading.json` carries a `shoulder_width` target per size and the yoke is placed from it.
 
 The scan already measures the 12 rings; give them these ids. The fit engine's per-point output is re-keyed to the same ids. A garment uses the subset its category needs.
 

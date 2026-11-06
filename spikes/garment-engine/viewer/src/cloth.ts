@@ -25,8 +25,12 @@ export interface ClothParams {
   damping: number;
   /** Horizontal pull towards the body axis on free body-chain particles, cm/s². */
   clingAccel: number;
-  /** Simulated duration of one relaxation, s. */
+  /** Simulated duration of one relaxation, s (the cap). */
   durationS: number;
+  /** Early exit: the drape counts as settled once no particle moves more than `calmCm` per substep for `calmFrames` frames in a row, after at least `minDurationS`. */
+  calmCm: number;
+  calmFrames: number;
+  minDurationS: number;
 }
 
 /** What the solver reads from material.json or a fabric preset (`@curtain/schema` fabric library values). */
@@ -56,6 +60,9 @@ export function clothParams(mat: ClothMaterial, durationS = 1.5): ClothParams {
     damping: 2.5 + 6 * (mat.simulation.damping ?? 0.1) + 3 * (1 - mat.drape),
     clingAccel: 90 * mat.drape * mat.drape,
     durationS,
+    calmCm: 0.02,
+    calmFrames: 6,
+    minDurationS: Math.min(durationS, 0.5),
   };
 }
 
@@ -77,6 +84,8 @@ export interface Cloth {
   tetherRest: Float32Array;
   /** Simulated time so far, s. */
   time: number;
+  /** Frames in a row whose largest particle move stayed under `ClothParams.calmCm`. */
+  calmFrames: number;
 }
 
 /** Unique undirected edges and, per interior edge, the two opposite vertices. */
@@ -213,7 +222,7 @@ export function createCloth(start: ArrayLike<number>, rest: ArrayLike<number>, i
     cl[i] = cling(i) ? 1 : 0;
   }
   const { tether, tetherRest } = tethers(n, edges, edgeRest, (i) => invMass[i] === 0);
-  return { pos, prev: Float32Array.from(pos), invMass, anchor: Float32Array.from(pos), cling: cl, edges, edgeRest, bends, bendRest, tether, tetherRest, time: 0 };
+  return { pos, prev: Float32Array.from(pos), invMass, anchor: Float32Array.from(pos), cling: cl, edges, edgeRest, bends, bendRest, tether, tetherRest, time: 0, calmFrames: 0 };
 }
 
 function project(pos: Float32Array, w: Float32Array, pairs: Uint32Array, restLen: Float32Array, k: number): void {
@@ -337,12 +346,15 @@ export function stepCloth(cloth: Cloth, params: ClothParams, collide: Collide | 
       }
     }
     cloth.time += params.dt;
+    cloth.calmFrames = maxMove < params.calmCm * params.calmCm ? cloth.calmFrames + 1 : 0;
   }
   return Math.sqrt(maxMove);
 }
 
+/** At the duration cap, or calm (see `ClothParams.calmCm`) after the minimum duration. */
 export function isSettled(cloth: Cloth, params: ClothParams): boolean {
-  return cloth.time >= params.durationS - 1e-9;
+  if (cloth.time >= params.durationS - 1e-9) return true;
+  return cloth.time >= params.minDurationS - 1e-9 && params.calmFrames > 0 && cloth.calmFrames >= params.calmFrames;
 }
 
 /** Relative stretch of every edge against its rest length (0.05 = 5 % longer), sorted ascending. */

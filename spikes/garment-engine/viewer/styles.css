@@ -41,6 +41,12 @@ ul.lines li.room { border-color: #67a9cf; }
 .status { position: absolute; top: 10px; left: 12px; font-size: 12px; background: rgb(255 255 255 / 0.85); padding: 4px 8px; border-radius: 4px; }
 .labels { position: absolute; inset: 0; pointer-events: none; }
 .labels div { position: absolute; transform: translate(-50%, 0); background: rgb(255 255 255 / 0.9); border-radius: 4px; padding: 2px 8px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.anchor-labels { position: absolute; inset: 0; pointer-events: none; }
+.anchor-labels div { position: absolute; transform: translate(-50%, -50%); background: rgb(255 255 255 / 0.82); border-radius: 3px; padding: 0 4px; font-size: 10px; line-height: 14px; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ink); }
+.outline-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; margin-top: 4px; }
+.outline-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.outline-legend i { display: inline-block; width: 18px; border-top: 3px solid currentColor; }
+.outline-legend i.dashed { border-top-style: dashed; }
 .legend { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-top: 4px; }
 .legend .bar { flex: 1; height: 10px; border-radius: 3px; background: linear-gradient(90deg, #b3172b, #ef8a62, #f7f2eb, #67a9cf, #2166ab); }
 .error { color: var(--tension); font-weight: 600; }

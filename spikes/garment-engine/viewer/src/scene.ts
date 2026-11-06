@@ -5,6 +5,9 @@
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import type { Mesh } from '@curtain/mannequin';
 import type { ViewerMaterial } from './engine';
 
@@ -125,6 +128,16 @@ export class Figure {
     this.garment.geometry.computeVertexNormals();
   }
 
+  /** See-through garment, so outlines drawn over it stay readable (the silhouette comparison). */
+  setFaded(faded: boolean): void {
+    if (faded === this.faded) return;
+    this.faded = faded;
+    this.applyColour();
+  }
+
+  private faded = false;
+  private baseOpacity = 1;
+
   /** Vertex colours of the heat map, or `null` for the fabric colour. */
   setHeat(colors: Float32Array | null): void {
     const on = colors !== null;
@@ -152,8 +165,7 @@ export class Figure {
     m.sheen = Math.min(1, vm.sheen * 1.4);
     m.sheenRoughness = 0.25 + 0.5 * (1 - vm.sheen);
     m.sheenColor = new THREE.Color(0xffffff);
-    m.opacity = Math.max(0.85, Math.min(1, vm.opacity));
-    m.transparent = m.opacity < 1;
+    this.baseOpacity = Math.max(0.85, Math.min(1, vm.opacity));
     this.applyColour();
   }
 
@@ -161,11 +173,69 @@ export class Figure {
     const m = this.garment.material;
     m.vertexColors = this.heatOn;
     m.color = this.heatOn ? new THREE.Color(0xffffff) : this.fabricColour.clone();
+    m.opacity = this.faded ? 0.3 : this.baseOpacity;
+    m.transparent = m.opacity < 1;
+    m.depthWrite = !this.faded;
     m.needsUpdate = true;
   }
 
   dispose(): void {
     this.garment.geometry.dispose();
     this.garment.material.dispose();
+  }
+}
+
+/** One silhouette outline per size, drawn on top of everything (no depth test) in the frontal plane. */
+export interface OutlineSpec {
+  size: string;
+  points: readonly (readonly [number, number])[];
+  color: string;
+  dashed: boolean;
+}
+
+/**
+ * Overlaid front silhouettes (the S/M/L comparison). Fat lines (`Line2`), since WebGL draws plain
+ * lines one pixel wide; positioned like a figure (`group.position.x`), slightly in front of it.
+ */
+export class Outlines {
+  readonly group = new THREE.Group();
+  private lines: Line2[] = [];
+
+  constructor(private readonly stage: Stage) {
+    this.group.renderOrder = 10;
+    stage.scene.add(this.group);
+  }
+
+  set(specs: readonly OutlineSpec[], x: number): void {
+    this.clear();
+    this.group.position.set(x, 0, 30);
+    const size = this.stage.renderer.getSize(new THREE.Vector2());
+    for (const spec of specs) {
+      if (spec.points.length < 2) continue;
+      const geometry = new LineGeometry();
+      geometry.setPositions(spec.points.flatMap(([px, py]) => [px, py, 0]));
+      const material = new LineMaterial({ color: spec.color, linewidth: 2.5, depthTest: false, transparent: true, dashed: spec.dashed, dashSize: 2.5, gapSize: 1.5 });
+      material.resolution.set(size.x, size.y);
+      const line = new Line2(geometry, material);
+      if (spec.dashed) line.computeLineDistances();
+      line.renderOrder = 10;
+      this.lines.push(line);
+      this.group.add(line);
+    }
+  }
+
+  /** Keep the line width in pixels after a resize. */
+  resize(): void {
+    const size = this.stage.renderer.getSize(new THREE.Vector2());
+    for (const l of this.lines) l.material.resolution.set(size.x, size.y);
+  }
+
+  clear(): void {
+    for (const l of this.lines) {
+      this.group.remove(l);
+      l.geometry.dispose();
+      l.material.dispose();
+    }
+    this.lines = [];
   }
 }

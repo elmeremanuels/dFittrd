@@ -30,9 +30,12 @@ export function backoffMs(attempts: number): number {
  * `rejected` (every reason is permanent); unanswered = neither, kept for a retry.
  */
 export function settleSwipeBatch(rows: readonly OutboxRow[], res: Pick<SwipeBatchResponse, 'acceptedClientIds' | 'rejected'>): { stored: OutboxRow[]; rejected: OutboxRow[]; unanswered: OutboxRow[] } {
-  const acceptedIds = new Set(res.acceptedClientIds);
-  const rejectedIdx = new Set(res.rejected.map((r) => r.index));
-  const rejectedIds = new Set(res.rejected.map((r) => r.clientId).filter((id): id is string => id !== null));
+  // A response without the per-event lists (an older server) settles nothing: every row is retried,
+  // which is safe because the server deduplicates by clientId.
+  const rejectedList = res.rejected ?? [];
+  const acceptedIds = new Set(res.acceptedClientIds ?? []);
+  const rejectedIdx = new Set(rejectedList.map((r) => r.index));
+  const rejectedIds = new Set(rejectedList.map((r) => r.clientId).filter((id): id is string => id !== null));
   const stored: OutboxRow[] = [];
   const rejected: OutboxRow[] = [];
   const unanswered: OutboxRow[] = [];

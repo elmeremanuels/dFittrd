@@ -36,6 +36,9 @@
       </div>
       <label class="row"><input type="checkbox" id="heat" data-testid="heat" /> Show fit map (tension and room)</label>
       <div class="legend" id="legend" hidden><span>tension</span><span class="bar"></span><span>room</span></div>
+      <label class="row"><input type="checkbox" id="outlines" data-testid="outlines" /> Compare outlines (sizes overlaid)</label>
+      <div class="outline-legend" id="outline-legend" hidden></div>
+      <p class="muted">Side by side shows each size's garment numbers on the model: cm, the fit engine's gap after the dot, ≈ for an estimate without a chart column.</p>
       <div class="seg" style="margin-top: 6px">
         <button id="reset" class="ghost" data-testid="reset">Reset view</button>
         <button id="redrape" class="ghost" data-testid="redrape">Drape again</button>
@@ -56,6 +59,7 @@
     </aside>
     <main>
       <canvas id="stage" data-testid="stage"></canvas>
+      <div class="anchor-labels" id="anchor-labels"></div>
       <div class="labels" id="labels"></div>
       <div class="status" id="status" data-testid="status">Loading…</div>
     </main>

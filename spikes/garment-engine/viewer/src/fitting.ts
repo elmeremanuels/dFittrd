@@ -7,7 +7,7 @@
  * loop "does not close" is the fit engine's `tight` band, which it derived from the product's own
  * stretch; the display fabric preset (linen, silk) never changes it (R2).
  */
-import { BREADTH_RING, gradingMorph, isAnchorBreadth, isAnchorRing, monotoneProfile, type AnchorRing, type AnchorValues, type GradingMorph, type Knot } from '@curtain/anchors';
+import { BREADTH_RING, gradingMorph, isAnchorBreadth, isAnchorRing, monotoneProfile, type AnchorId, type AnchorRing, type AnchorValues, type GradingMorph, type Knot } from '@curtain/anchors';
 import { anchorGaps, computeFit, type AnchorGaps, type Band, type FitAnchorId, type FitResult } from '@curtain/fit-engine';
 import type { GarmentPayload } from '@curtain/schema';
 import type { GradingJson } from '../../src/grading';
@@ -208,4 +208,93 @@ export function heatColors(positions: ArrayLike<number>, chains: Uint8Array, fie
     out[3 * i + 2] = rgb[2];
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Size readability without the fit map: per-anchor numbers and silhouette outlines
+// ---------------------------------------------------------------------------
+
+/** Anchors labelled on the model in side-by-side view, top to bottom. */
+export const LABELLED_ANCHORS = ['shoulder_width', 'chest', 'waist', 'hip'] as const satisfies readonly AnchorId[];
+
+export interface AnchorLabel {
+  anchor: (typeof LABELLED_ANCHORS)[number];
+  /** Body height the label sits at (the ring, or the breadth's ring), cm. */
+  height: number;
+  /** Garment value of this size from grading.json, cm (girth, or width for `shoulder_width`). */
+  valueCm: number;
+  /** `true` when grading.json logged the value as an estimate (no chart column). */
+  estimate: boolean;
+  /** Fit-engine gap at this anchor (rule 4: read, never computed here), cm. */
+  gapCm: number | undefined;
+  text: string;
+}
+
+const SHORT: Readonly<Record<AnchorLabel['anchor'], string>> = { shoulder_width: 'shoulders', chest: 'chest', waist: 'waist', hip: 'hip' };
+
+/**
+ * The numbers behind the geometry, per anchor and size: the garment's graded value (an estimate is
+ * marked "≈") and the fit engine's gap ("+3.2" more room, "−1.5" tighter). Geometry stays as
+ * graded; the labels only say what it already shows.
+ */
+export function anchorLabels(grading: GradingJson, size: string, gaps: AnchorGaps | null, heights: Readonly<Partial<Record<AnchorRing, number>>>): AnchorLabel[] {
+  const entry = sizeEntry(grading, size);
+  const out: AnchorLabel[] = [];
+  for (const anchor of LABELLED_ANCHORS) {
+    const valueCm = entry.targets[anchor];
+    const ring = isAnchorBreadth(anchor) ? BREADTH_RING[anchor] : anchor;
+    const height = heights[ring];
+    if (valueCm === undefined || height === undefined) continue;
+    const estimate = entry.sources[anchor] !== undefined && entry.sources[anchor] !== 'chart';
+    const gapCm = gaps?.gaps[anchor as FitAnchorId];
+    const gap = gapCm === undefined ? '' : ` · ${gapCm > 0 ? '+' : gapCm < 0 ? '−' : '±'}${round1(Math.abs(gapCm))}`;
+    out.push({ anchor, height, valueCm, estimate, gapCm, text: `${SHORT[anchor]} ${estimate ? '≈' : ''}${round1(valueCm)}${gap}` });
+  }
+  return out;
+}
+
+/** Front-most body-chain particle within `tolCm` of a height (where a label sits on the model), or `null`. */
+export function frontAt(positions: ArrayLike<number>, chains: Uint8Array, y: number, tolCm = 1): [number, number, number] | null {
+  let best = -1;
+  for (let i = 0; i < chains.length; i++) {
+    if (chains[i] !== 0 || Math.abs(positions[3 * i + 1]! - y) > tolCm) continue;
+    if (best < 0 || positions[3 * i + 2]! > positions[3 * best + 2]!) best = i;
+  }
+  return best < 0 ? null : [positions[3 * best]!, positions[3 * best + 1]!, positions[3 * best + 2]!];
+}
+
+/**
+ * Front silhouette of the garment body (sleeves left out): per `binCm` of height the outermost x
+ * on each side, as a closed polyline in the frontal plane (x, y): down the right side, across the
+ * hem, up the left side. Outlines of several sizes overlaid show the size difference as it is.
+ */
+export function frontOutline(positions: ArrayLike<number>, chains: Uint8Array, binCm = 1): [number, number][] {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = 0; i < chains.length; i++) {
+    if (chains[i] !== 0) continue;
+    const y = positions[3 * i + 1]!;
+    if (y < lo) lo = y;
+    if (y > hi) hi = y;
+  }
+  if (!Number.isFinite(lo)) return [];
+  const n = Math.max(1, Math.ceil((hi - lo) / binCm));
+  const minX = new Float64Array(n).fill(Infinity);
+  const maxX = new Float64Array(n).fill(-Infinity);
+  for (let i = 0; i < chains.length; i++) {
+    if (chains[i] !== 0) continue;
+    const k = Math.min(n - 1, Math.floor((hi - positions[3 * i + 1]!) / binCm));
+    const x = positions[3 * i]!;
+    if (x < minX[k]!) minX[k] = x;
+    if (x > maxX[k]!) maxX[k] = x;
+  }
+  const right: [number, number][] = [];
+  const left: [number, number][] = [];
+  for (let k = 0; k < n; k++) {
+    if (!Number.isFinite(maxX[k]!)) continue;
+    const y = Math.max(lo, hi - (k + 0.5) * binCm);
+    right.push([maxX[k]!, y]);
+    left.push([minX[k]!, y]);
+  }
+  return [...right, ...left.reverse(), right[0]!];
 }

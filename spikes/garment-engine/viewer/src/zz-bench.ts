@@ -37,6 +37,6 @@ for (const id of ['aalter-studio-2', 'monochrome-03'] as const) {
     let pp = 0; for (let e = 0; e < c.edgeRest.length; e++) { const a = c.edges[2*e]!, bb = c.edges[2*e+1]!; if (c.invMass[a] !== 0 || c.invMass[bb] !== 0) continue; const d = Math.hypot(c.pos[3*a]!-c.pos[3*bb]!, c.pos[3*a+1]!-c.pos[3*bb+1]!, c.pos[3*a+2]!-c.pos[3*bb+2]!); pp = Math.max(pp, d / c.edgeRest[e]! - 1); }
     let worstAll = 0;
     for (let e = 0; e < c.edgeRest.length; e++) { const a = c.edges[2*e]!, bb = c.edges[2*e+1]!; const d = Math.hypot(c.pos[3*a]!-c.pos[3*bb]!, c.pos[3*a+1]!-c.pos[3*bb+1]!, c.pos[3*a+2]!-c.pos[3*bb+2]!); worstAll = Math.max(worstAll, d / c.edgeRest[e]! - 1); }
-    console.log(`${id} ${size}: prepare ${(t1 - t0).toFixed(0)} ms, relax ${(t2 - t1).toFixed(0)} ms, n=${c.invMass.length}, neck max strain ${(worst * 100).toFixed(1)}% @y${worstY.toFixed(1)}, pinpin ${(pp*100).toFixed(1)}%, all max ${(worstAll*100).toFixed(1)}%, p99 ${(strainQuantile(c, 0.99)*100).toFixed(1)}%`);
+    console.log(`${id} ${size}: prepare ${(t1 - t0).toFixed(0)} ms, relax ${(t2 - t1).toFixed(0)} ms (${c.time.toFixed(2)} s cloth), n=${c.invMass.length}, neck max strain ${(worst * 100).toFixed(1)}% @y${worstY.toFixed(1)}, pinpin ${(pp*100).toFixed(1)}%, all max ${(worstAll*100).toFixed(1)}%, p99 ${(strainQuantile(c, 0.99)*100).toFixed(1)}%`);
   }
 }

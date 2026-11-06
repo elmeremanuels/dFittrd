@@ -11,7 +11,8 @@ import { applyGrading } from '../../src/grading';
 import type { MaterialJson } from '../../src/product';
 import { insideCanonical, makeCollider, type Avatar, type BodyField } from './body';
 import type { SpikeBundle } from './bundle';
-import { clothParams, createCloth, settlePins, stepCloth, type Cloth, type ClothMaterial, type ClothParams } from './cloth';
+import type { DrapeJob } from './drapeJob';
+import { clothParams, createCloth, isSettled, settlePins, stepCloth, type Cloth, type ClothMaterial, type ClothParams } from './cloth';
 import { fitLines, gapsForSize, heatColors, heatField, placeGarment, placementMorph, sizeEntry, type FitLine, type HeatField, type Placement } from './fitting';
 
 // ---------------------------------------------------------------------------
@@ -102,6 +103,10 @@ export interface FitInstance {
   indices: Uint32Array;
   /** Pinned particles (the yoke), 1 = pinned. */
   pinned: Uint8Array;
+  /** Grading chain per particle (the session's). */
+  chains: ChainAssignment;
+  /** The avatar's collision tables (what a drape worker needs to rebuild `collide`). */
+  field: BodyField;
   /** Garment shoulder width of this size (grading.json `shoulder_width`), cm, when the chart has one. */
   shoulderWidthCm: number | undefined;
 }
@@ -158,15 +163,43 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
     noCollide,
     indices: graded.indices,
     pinned,
+    chains,
+    field,
     shoulderWidthCm: sizeEntry(session.bundle.grading, size).targets.shoulder_width,
   };
 }
 
-/** Run the whole relaxation at once (tests, the blind page's pre-render). */
+/** Run the whole relaxation at once, up to the duration cap or until calm (tests, the blind page's pre-render). */
 export function relax(fit: FitInstance): Float32Array {
-  const frames = Math.round(fit.params.durationS / fit.params.dt);
-  stepCloth(fit.cloth, fit.params, fit.collide, frames);
+  while (!isSettled(fit.cloth, fit.params)) stepCloth(fit.cloth, fit.params, fit.collide, 1);
   return fit.cloth.pos;
+}
+
+/** The drape of a fit as a job for a Web Worker (`drapeJob.ts`); the worker rebuilds the collider. */
+export function drapeJobOf(fit: FitInstance): Omit<DrapeJob, 'id'> {
+  return { cloth: fit.cloth, params: fit.params, field: fit.field, chains: fit.chains, noCollide: fit.noCollide, clearanceCm: CLEARANCE_CM };
+}
+
+/**
+ * Largest edge strain at the neckline: edges of the body chain with both ends above the shoulder
+ * ring less 1 cm (0.05 = 5 % longer than at rest). Regression check for the neckline tears that
+ * small sizes showed before the yoke was settled onto the body (21–33 % on XS and S).
+ */
+export function necklineStrain(fit: Pick<FitInstance, 'cloth' | 'chains'>, m: Mannequin): number {
+  const { cloth, chains } = fit;
+  const y0 = m.morphHeights.shoulder - 1;
+  let worst = 0;
+  for (let e = 0; e < cloth.edgeRest.length; e++) {
+    const a = cloth.edges[2 * e]!;
+    const b = cloth.edges[2 * e + 1]!;
+    const r = cloth.edgeRest[e]!;
+    if (chains[a] !== 0 || chains[b] !== 0 || r <= 0 || cloth.pos[3 * a + 1]! < y0 || cloth.pos[3 * b + 1]! < y0) continue;
+    const dx = cloth.pos[3 * a]! - cloth.pos[3 * b]!;
+    const dy = cloth.pos[3 * a + 1]! - cloth.pos[3 * b + 1]!;
+    const dz = cloth.pos[3 * a + 2]! - cloth.pos[3 * b + 2]!;
+    worst = Math.max(worst, Math.sqrt(dx * dx + dy * dy + dz * dz) / r - 1);
+  }
+  return worst;
 }
 
 export function heatFor(fit: FitInstance, chains: ChainAssignment, out?: Float32Array): Float32Array {

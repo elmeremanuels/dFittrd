@@ -20,8 +20,9 @@ leave the device** — see “Privacy guarantees” below.
     │                                   │                     the midline, torso/arm levels rejected where a limb touches)
     │                                   │   maskGeometry.ts   width (front) / depth (side) per level, clothing coverage,
     │                                   │                     shoulder slope from the mask's top contour
-    │                                   │   measure.ts        scale = height / (head-top→heel px); Ramanujan ellipse girths;
-    │                                   │                     mean blended with prior.ts; σ from the v1 table; quality gate
+    │                                   │   measure.ts        scale = height / (head-top→heel px), head top WITHOUT hair
+    │                                   │                     (headTopWithoutHair); Ramanujan ellipse girths; mean
+    │                                   │                     blended with prior.ts (SCAN_PRIOR_SIGMA_CM); σ from the v1 table
     │   ◀── landmarks, 2 masks, girths, lengths, posture, quality, ONE cream-background base frame, ONE face tile
     ├── manual measurements (+ “how did you measure”: tape 1.5 / memory 2.5 / guess 4 cm)
     └── fuse.ts  inverse-variance fusion scan ⊕ manual (⊕ prior fallback), 2σ agreement test, conflict flags,
@@ -73,6 +74,15 @@ Wire and body types (`BodyProfile`, `Measurement`, `UserBody`, `FitSignature*`) 
 - Height comes from the user (image height alone is 1–7 cm off). Clothing is the largest error source: the segmenter's
   clothes/skin ratio lowers quality and inflates σ. The σ reported for the scan is the published-style table, not the
   formal inverse-variance blend of ellipse and prior (their errors are not independent of clothing/pose error).
+- Head top (carry-over #16): the stature ends at the skull, but the person mask includes hair. `headTopWithoutHair`
+  takes the first person row only when there is no hair above the face; with hair on top it places the vertex
+  `VERTEX_ABOVE_HAIRLINE_RATIO` (0.28, approximate adult proportions) of the hairline → chin distance above the
+  hairline (face-skin class), clamped between the hair top and the hairline. Hair volume no longer shrinks the scale
+  (6 cm of hair read girths ≈ 3.4 % low before; synthetic test `headTop.test.ts`). Without a face in the band (back
+  view) it falls back to the first person row. The ratio is not measured: calibrate it with the tape-measured pilot.
+- Prior weight (carry-over #17): `SCAN_PRIOR_SIGMA_CM` (4 cm) is the one knob; the prior carries 51–77 % of the
+  blended girth mean depending on the level (`priorShare`). Unchanged until the tape-measured pilot data exist.
+- The face step tells "models loading" (buttons disabled, waits) apart from "models failed" (not available, skip).
 - Adequate for 4–6 cm size steps; every render built on it is labelled an estimate.
 
 ## Fetching the models (self-hosted)

@@ -1,3 +1,4 @@
 # One command per line; pushing a change to this file runs them on Modal via GitHub Actions.
-# run 5: smoke test, default GPU L4
-modal run spikes/garment-engine/modal/smoke.py
+# run 6: CPU smoke, then GPU smoke on a T4
+modal run spikes/garment-engine/modal/smoke_cpu.py
+CURTAIN_MODAL_GPU=T4 modal run spikes/garment-engine/modal/smoke.py

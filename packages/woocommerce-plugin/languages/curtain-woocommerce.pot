@@ -144,6 +144,15 @@ msgstr ""
 msgid "Fabric *"
 msgstr ""
 
+#. translators: %s: fibres read from the product's material attribute, e.g. "viscose 95 %, elastane 5 %"
+#: includes/class-product-meta.php
+msgid "Found in this product's attributes: %s. Check it, add stretch and drape, then update the product."
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Use these fibres"
+msgstr ""
+
 #: includes/class-product-meta.php
 msgid "Primary fibre *"
 msgstr ""

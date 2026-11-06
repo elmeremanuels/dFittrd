@@ -247,6 +247,7 @@ final class Product_Meta {
 		$flat_url  = (string) $get( 'flat_lay_photo' );
 		$custom_lengths = array_diff_key( $lengths, array_flip( Vocab::LENGTH_KEYS ) );
 		$other_zones    = array_values( array_diff( array_map( 'strval', $zones ), Vocab::STRETCH_ZONES ) );
+		$prefill        = array() === $fabric ? self::fabric_prefill( $id ) : null;
 
 		wp_nonce_field( self::NONCE, self::NONCE );
 		self::render_status( $id );
@@ -286,6 +287,12 @@ final class Product_Meta {
 			</div>
 
 			<h4><?php esc_html_e( 'Fabric *', 'curtain-woocommerce' ); ?></h4>
+			<?php if ( null !== $prefill ) : ?>
+				<p class="curtain-fabric-prefill" data-prefill="<?php echo esc_attr( (string) wp_json_encode( $prefill ) ); ?>">
+					<?php echo esc_html( sprintf( /* translators: %s: fibres read from the product's material attribute, e.g. "viscose 95 %, elastane 5 %" */ __( 'Found in this product\'s attributes: %s. Check it, add stretch and drape, then update the product.', 'curtain-woocommerce' ), self::fabric_summary( $prefill ) ) ); ?>
+					<button type="button" class="button-link curtain-fabric-prefill-use"><?php esc_html_e( 'Use these fibres', 'curtain-woocommerce' ); ?></button>
+				</p>
+			<?php endif; ?>
 			<div class="curtain-grid">
 				<label><span><?php esc_html_e( 'Primary fibre *', 'curtain-woocommerce' ); ?></span><input type="text" list="curtain-fibres" name="curtain[fabric_primary]" value="<?php echo esc_attr( (string) ( $fabric['primary'] ?? '' ) ); ?>" maxlength="64">
 					<datalist id="curtain-fibres"><?php foreach ( Vocab::FABRIC_PRIMARIES as $f ) : ?><option value="<?php echo esc_attr( $f ); ?>"></option><?php endforeach; ?></datalist></label>
@@ -480,6 +487,35 @@ final class Product_Meta {
 			default:
 				return $col;
 		}
+	}
+
+	/**
+	 * Fabric names read from the product's own "Material" / "Materiaal" / "Samenstelling" attribute
+	 * (Fabric_Text, the twin of fabricFromProductText), offered when the product has no Curtain
+	 * fabric yet. Prefill only: nothing is stored until the merchant uses it and saves, because a
+	 * fabric without stretch and drape is not a valid payload.
+	 *
+	 * @return array{primary:string,blend?:array<int,array{0:string,1:int|float}>}|null
+	 */
+	public static function fabric_prefill( int $product_id ): ?array {
+		$product = function_exists( 'wc_get_product' ) ? wc_get_product( $product_id ) : null;
+		if ( ! $product instanceof \WC_Product ) {
+			return null;
+		}
+		$snapshot = Product_Snapshot::from_product( $product );
+		return Fabric_Text::prefill_from_attributes( (array) ( $snapshot['attributes'] ?? array() ) );
+	}
+
+	/** "viscose 95 %, elastane 5 %" (or just the primary). @param array{primary:string,blend?:array<int,array{0:string,1:int|float}>} $prefill */
+	public static function fabric_summary( array $prefill ): string {
+		if ( empty( $prefill['blend'] ) ) {
+			return $prefill['primary'];
+		}
+		$parts = array();
+		foreach ( $prefill['blend'] as $row ) {
+			$parts[] = $row[0] . ' ' . self::num( $row[1] ) . ' %';
+		}
+		return ( $prefill['primary'] !== $prefill['blend'][0][0] ? $prefill['primary'] . ': ' : '' ) . implode( ', ', $parts );
 	}
 
 	/** Number for an input value: ints stay ints, empty stays empty. @param mixed $v */

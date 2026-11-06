@@ -36,3 +36,4 @@
 .curtain-badge--pending, .curtain-badge--retrying { background: #fff3cd; color: #7a5a00; }
 .curtain-missing { margin-right: 4px; }
 .curtain-missing--heavy { background: #ffe0d8; }
+.curtain-fabric-prefill { background: #f0f6fc; border-left: 4px solid #72aee6; padding: 6px 10px; margin: 0 0 8px; }

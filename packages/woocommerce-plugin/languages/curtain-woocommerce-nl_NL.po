@@ -146,6 +146,15 @@ msgstr "Het kledingstuk plat op een witte achtergrond, vooraanzicht. Dit zien sh
 msgid "Fabric *"
 msgstr "Stof *"
 
+#. translators: %s: fibres read from the product's material attribute, e.g. "viscose 95 %, elastane 5 %"
+#: includes/class-product-meta.php
+msgid "Found in this product's attributes: %s. Check it, add stretch and drape, then update the product."
+msgstr "Gevonden in de attributen van dit product: %s. Controleer het, vul rek en val in en werk het product daarna bij."
+
+#: includes/class-product-meta.php
+msgid "Use these fibres"
+msgstr "Deze vezels gebruiken"
+
 #: includes/class-product-meta.php
 msgid "Primary fibre *"
 msgstr "Hoofdvezel *"

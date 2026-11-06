@@ -80,6 +80,34 @@
 		});
 		frame.open();
 	});
+	// Fabric prefill from the product's material attribute: fills the primary and the blend rows.
+	// Nothing is stored until the merchant saves (stretch and drape are still theirs to fill in).
+	$(document).on('click', '.curtain-fabric-prefill-use', function (e) {
+		e.preventDefault();
+		var $note = $(this).closest('.curtain-fabric-prefill');
+		var prefill;
+		try { prefill = JSON.parse($note.attr('data-prefill') || '{}'); } catch (err) { return; }
+		var $box = $note.closest('.curtain-box');
+		$box.find('input[name="curtain[fabric_primary]"]').val(prefill.primary || '');
+		var blend = Array.isArray(prefill.blend) ? prefill.blend : [];
+		var $table = $box.find('.curtain-repeater[data-repeater="fabric_blend"]');
+		if (blend.length && $table.length) {
+			var $rows = $table.find('tbody tr');
+			$rows.slice(1).remove();
+			var $template = $rows.first();
+			$template.find('input').val('');
+			blend.forEach(function (row, i) {
+				var $row = i === 0 ? $template : $template.clone();
+				$row.find('input').eq(0).val(row[0]);
+				$row.find('input').eq(1).val(row[1]);
+				if (i > 0) $table.find('tbody').append($row);
+			});
+			renumber($table);
+		}
+		$note.remove();
+		$box.find('input[name="curtain[fabric_stretch_pct]"]').trigger('focus');
+	});
+
 	$(document).on('click', '.curtain-flatlay-remove', function (e) {
 		e.preventDefault();
 		var $box = $(this).closest('.curtain-flatlay');

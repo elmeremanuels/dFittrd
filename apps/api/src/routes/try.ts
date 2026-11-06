@@ -16,6 +16,12 @@
  * its per-plan daily cap (carry-over #7; the swipe path shares the helper). Anything else is
  * recorded on the try session but answers `billed: false`. Both routes are rate-limited per client IP.
  *
+ * GET /v1/peek — the size peek's read-only lookup (shop branding, garment, allowed origins) for a
+ * device already paired with the shop. It mints no try session, resolves nothing, creates no
+ * pairing and bills nothing, so peek views never show up in merchant analytics, never count toward
+ * the k floor (C1) and never use the shop's SDK rate limit that real button clicks need (C2). Its own
+ * per-IP limit (`peek-ip:`).
+ *
  * The merchant views of the same data (GET /v1/merchant/usage/anomalies, GET
  * /v1/merchant/analytics/fit-sizes) live in routes/merchant.ts with the other merchant routes.
  */
@@ -24,6 +30,8 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import {
   FitShownRequestSchema,
   FitShownResponseSchema,
+  PeekQuerySchema,
+  PeekResponseSchema,
   TryResolveParamsSchema,
   TryResolveResponseSchema,
   type PairingSource,
@@ -32,10 +40,10 @@ import { requireDevice } from '../auth/device.js';
 import { pairings, trySessions, usageEvents } from '../db/schema.js';
 import { pseudonymFor } from '../lib/crypto.js';
 import { conflict, forbidden, gone, HttpError, notFound, unauthorized, unprocessable } from '../lib/errors.js';
-import { embedAllowedOrigins } from '../services/embed.js';
+import { embedAllowedOrigins, originOf } from '../services/embed.js';
 import { byteLength, fieldNames, writeLedger } from '../services/ledger.js';
-import { asTryGarment, findProductById } from '../services/products.js';
-import { findShopById, isPaused, shopBranding } from '../services/shops.js';
+import { asTryGarment, findProduct, findProductById } from '../services/products.js';
+import { findShopById, findShopByPrefix, isPaused, shopBranding } from '../services/shops.js';
 import { billFitSession } from '../services/usage.js';
 import { dayStart, utcDay } from '../lib/time.js';
 
@@ -90,6 +98,29 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
         pairing: { created, pairedAt: pairing.pairedAt.toISOString() },
         embed: { allowedOrigins: embedAllowedOrigins(shop, session.pageOrigin) },
       };
+    },
+  );
+
+  app.get(
+    '/v1/peek',
+    {
+      schema: { querystring: PeekQuerySchema, response: { 200: PeekResponseSchema } },
+      preHandler: requireDevice,
+      config: { rateLimit: { max: env.TRY_RATE_LIMIT_PER_MIN, timeWindow: '1 minute', keyGenerator: (req: { ip: string }) => `peek-ip:${req.ip}` } },
+    },
+    async (req) => {
+      const shop = await findShopByPrefix(db, req.query.shop);
+      if (!shop || shop.uninstalledAt) throw notFound('shop');
+      // A paused shop shows no peek (the button still opens the paused screen).
+      if (isPaused(shop)) throw new HttpError(402, 'shop_paused', 'this shop has paused Curtain');
+      // Only products the button can really open: try-able, not incomplete or archived.
+      const product = await findProduct(db, shop.id, req.query.product);
+      const garment = product && product.status === 'active' ? asTryGarment(product, { colorHex: shop.settings.brandColor ?? undefined }) : null;
+      if (!garment) throw notFound('product');
+      // Only a shopper who already used the fitting room on this shop (read, never created here).
+      const paired = await db.query.pairings.findFirst({ where: and(eq(pairings.deviceId, req.device!.id), eq(pairings.shopId, shop.id)) });
+      if (!paired) throw notFound('pairing');
+      return { shop: shopBranding(shop), garment, embed: { allowedOrigins: embedAllowedOrigins(shop, originOf(req.query.page)) } };
     },
   );
 

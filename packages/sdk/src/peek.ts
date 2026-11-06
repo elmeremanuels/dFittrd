@@ -7,12 +7,14 @@
  *
  * Privacy (D3): the page sees the iframe and its height, never what is inside it. The only messages
  * the SDK accepts are `curtain:peek-size { height }` and `curtain:peek-open {}`, from the peek's own
- * window on the app origin. Neither carries a size. The size reaches the page only when the shopper
- * presses "Choose size" in the overlay (`curtain:size-selected`).
+ * window on the app origin. Neither carries a size. The height is `PEEK_HEIGHT` or 0 and nothing
+ * else: one bit (a remembered profile on this shop, for a try-able product), never the fit outcome
+ * or the length of what the peek says. The size reaches the page only when the shopper presses
+ * "Choose size" in the overlay (`curtain:size-selected`).
  */
 
-/** Tallest peek the page makes room for, in px. */
-export const PEEK_MAX_HEIGHT = 200;
+/** The one height a shown peek has, in px (apps/web `PEEK_HEIGHT`; keep the two equal). */
+export const PEEK_HEIGHT = 112;
 
 let frames: [HTMLIFrameElement, HTMLElement][] = [];
 let observers: IntersectionObserver[] = [];
@@ -24,8 +26,8 @@ function onMessage(e: MessageEvent): void {
   for (const [f, b] of frames)
     if (f.contentWindow === e.source) {
       if (d.type === 'curtain:peek-size') {
-        // Anything but a positive number (NaN, negative, a string that is not one) collapses.
-        const h = d.height > 0 ? Math.min(PEEK_MAX_HEIGHT, Math.ceil(d.height)) : 0;
+        // Only the one fixed height opens it; anything else (0, another number, NaN, a string) collapses.
+        const h = d.height === PEEK_HEIGHT ? PEEK_HEIGHT : 0;
         f.style.height = h + 'px';
         f.style.visibility = h ? '' : 'hidden';
       } else if (d.type === 'curtain:peek-open') b.click();

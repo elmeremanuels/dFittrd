@@ -192,6 +192,34 @@ describe('expiring offline tokens (A3)', () => {
     expect((await client.offlineSession(domain))!.refreshToken).toBeNull();
   });
 
+  it('a terminal refresh failure within the margin keeps the still-valid access token until it expires (T1)', async () => {
+    const domain = 'terminal-valid.myshopify.com';
+    await shopWithSession(domain);
+    let grants = 0;
+    t.fetchMock.on(`https://${domain}/admin/oauth/access_token`, () => {
+      grants++;
+      return json({ error: 'invalid_request', error_description: 'This request requires an active refresh_token' }, 401);
+    });
+    clock = new Date(clock.getTime() + 58 * 60_000); // inside SHOPIFY_TOKEN_REFRESH_MARGIN_SEC, not expired
+    expect(await client.accessTokenFor(domain)).toBe(AT(1));
+    expect((await client.offlineSession(domain))!.refreshToken).toBeNull();
+    expect(await client.accessTokenFor(domain)).toBe(AT(1));
+    expect(grants).toBe(1);
+    clock = new Date(clock.getTime() + 3 * 60_000);
+    expect(await client.accessTokenFor(domain)).toBeNull();
+  });
+
+  it('the daily job counts a refresh that did not produce a new token as failed, not refreshed', async () => {
+    const domain = 'job-terminal.myshopify.com';
+    const { shop } = await seedShop(t, { platform: 'shopify', domain, products: [] });
+    await client.saveOfflineSession(shop.id, domain, AT(1), 'read_products', { expiresIn: 3600, refreshToken: RT(1), refreshTokenExpiresIn: 86_400 });
+    t.fetchMock.on(/\/admin\/oauth\/access_token$/, () => json({ error: 'invalid_request' }, 401));
+    const r = await client.refreshDueTokens();
+    expect(r.refreshed).toBe(0);
+    expect(r.failed).toBeGreaterThanOrEqual(1);
+    expect(await client.accessTokenFor(domain)).toBe(AT(1)); // still usable until it expires
+  });
+
   it('a transient failure keeps the still-valid token, and throws once it has expired (the job retries later)', async () => {
     const domain = 'transient.myshopify.com';
     await shopWithSession(domain);

@@ -17,8 +17,9 @@
  *    and refreshing one each retire the other's result"): both go through `lockShop`. The lock is
  *    per process; the api runs as one process with its job runner (D9), so that is enough today.
  *    A second replica would need a database lock here;
- *  - a terminal refresh failure (401) drops the refresh token; the next admin open runs token
- *    exchange again. Until then jobs see no token and skip the shop;
+ *  - a terminal refresh failure (401) drops the refresh token and keeps the access token until it
+ *    expires; the next admin open runs token exchange again. Once it has expired, jobs see no token
+ *    and skip the shop;
  *  - `refreshDueTokens` (daily job) refreshes dormant shops before the 90-day refresh token runs
  *    out and migrates stored non-expiring tokens to expiring ones.
  */
@@ -33,6 +34,7 @@ import {
   fetchPrimaryDomainHost,
   fetchProduct,
   fetchProductsPage,
+  getActiveSubscriptions,
   isDevelopmentStore,
   migrateToExpiringToken,
   refreshAccessToken,
@@ -42,6 +44,7 @@ import {
   TokenExchangeError,
   tokenExpiries,
   verifyWebhookHmac,
+  type ActiveSubscription,
   type AdminGraphqlClient,
   type EurRates,
   type FetchLike as ShopifyFetchLike,
@@ -301,7 +304,8 @@ export class ShopifyClient {
     } catch (err) {
       if (err instanceof TokenExchangeError && err.terminal) {
         await this.dropRefreshToken(shopDomain);
-        return null;
+        // The access token still works until it expires (same rule as no refresh token above).
+        return stillValid ? cur.accessToken : null;
       }
       if (stillValid) return cur.accessToken;
       throw err;
@@ -354,7 +358,9 @@ export class ShopifyClient {
           const ok = await this.lockShop(row.shopDomain, async () => {
             const cur = await this.offlineSession(row.shopDomain);
             if (!cur?.refreshToken) return false;
-            return (await this.refreshLocked(row.shopDomain, cur)) !== null;
+            // Refreshed only when a new token came back: a failure may still return the current one.
+            const token = await this.refreshLocked(row.shopDomain, cur);
+            return token !== null && token !== cur.accessToken;
           });
           if (ok) result.refreshed++;
           else result.failed++;
@@ -413,6 +419,11 @@ export class ShopifyClient {
   /** Partner development stores accept test charges only. */
   async isDevelopmentStore(shopDomain: string, accessToken: string): Promise<boolean> {
     return isDevelopmentStore(this.admin(shopDomain, accessToken));
+  }
+
+  /** The app's active subscriptions as Shopify reports them (reconciled on every token exchange). */
+  async activeSubscriptions(shopDomain: string, accessToken: string): Promise<ActiveSubscription[]> {
+    return getActiveSubscriptions(this.admin(shopDomain, accessToken));
   }
 
   /** D17: one recurring line, in `plan.currencyCode` (default USD). */

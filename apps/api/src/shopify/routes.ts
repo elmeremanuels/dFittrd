@@ -13,11 +13,17 @@
  *  - POST /shopify/billing/subscribe  appSubscriptionCreate for the one D17 plan, "Curtain": one recurring
  *    line of USD 8.99 per 30 days, no usage line. A shop billed in a currency our rate table covers is
  *    charged the converted amount; the currency, the USD rate and the price are stored on the shop.
- *    The plan changes only when Shopify reports the subscription ACTIVE (app_subscriptions/update).
+ *    The plan changes only when Shopify reports the subscription ACTIVE (app_subscriptions/update),
+ *    and the trial clock starts then too (never at PENDING: a merchant who declines keeps the trial).
+ *
+ * Uninstall and reinstall (checklist B2): Shopify cancels the subscription on uninstall, and the
+ * CANCELLED update never reaches us because the app's webhooks are gone by then. So app/uninstalled
+ * resets the shop to `free` with no subscription, a reinstall starts from that state, and every
+ * token exchange reconciles the plan with the subscriptions Shopify reports (`reconcileSubscription`).
  */
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { adminAppUrl, adminContentSecurityPolicy, CURTAIN_PLAN, renderAdminPage, setAppDataMetafields } from '@curtain/shopify-app';
+import { adminAppUrl, adminContentSecurityPolicy, CURTAIN_PLAN, renderAdminPage, setAppDataMetafields, type ActiveSubscription } from '@curtain/shopify-app';
 import { z } from 'zod';
 import { requireMerchant } from '../auth/merchant.js';
 import { isShopifyDomain, verifyShopifySessionToken } from '../auth/shopifySessionToken.js';
@@ -28,7 +34,7 @@ import { JOB } from '../jobs/queue.js';
 import { badRequest, forbidden, serviceUnavailable, unauthorized } from '../lib/errors.js';
 import { HOUR } from '../lib/time.js';
 import { archiveProduct } from '../services/products.js';
-import { createShop, findShopByDomain, issueMerchantKeys, updateSettings, type ShopRow } from '../services/shops.js';
+import { clearSettings, createShop, findShopByDomain, issueMerchantKeys, updateSettings, type ShopRow } from '../services/shops.js';
 import { shopifyChartRoutes } from './charts.js';
 import { billingSettingsPatch } from './client.js';
 
@@ -100,7 +106,10 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
         let row = await findShopByDomain(db, shopDomain);
         if (!row) row = await createShop(db, { platform: 'shopify', domain: shopDomain, name: shopDomain.replace(/\.myshopify\.com$/, ''), plan: 'free' });
         if (row.uninstalledAt || !row.apiKeyPrefix) {
-          await db.update(shops).set({ uninstalledAt: null, purgeAfter: null, paused: false, installedAt: now(), updatedAt: now() }).where(eq(shops.id, row.id));
+          // A reinstall starts like a new install: Shopify cancelled the old subscription on uninstall.
+          const reset = row.uninstalledAt ? { plan: 'free' as const, billingRef: null } : {};
+          await db.update(shops).set({ uninstalledAt: null, purgeAfter: null, paused: false, installedAt: now(), updatedAt: now(), ...reset }).where(eq(shops.id, row.id));
+          if (row.uninstalledAt) await clearSettings(db, row.id, SUBSCRIPTION_KEYS);
         }
         if (!row.apiKeyPrefix) await issueMerchantKeys(db, env, row);
         const { accessToken: at, scope: sc, ...expiring } = tok;
@@ -119,6 +128,14 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
         if (primaryDomain && primaryDomain !== shopDomain) await updateSettings(db, shop.id, { primaryDomain });
       } catch (err) {
         req.log.warn({ err, shopDomain }, 'primary domain could not be read; the embed posts to the myshopify.com origin only (continuing)');
+      }
+      // B2: the plan follows what Shopify reports (a missed webhook, a reinstall, a legacy subscription).
+      try {
+        const subs = await shopify.activeSubscriptions(shopDomain, accessToken);
+        const r = await reconcileSubscription(db, (await findShopByDomain(db, shopDomain))!, subs, now());
+        if (r !== 'unchanged') req.log.info({ shopDomain, result: r }, 'shop plan reconciled with Shopify subscriptions');
+      } catch (err) {
+        req.log.warn({ err, shopDomain }, 'active subscriptions could not be read; plan left as stored (continuing)');
       }
       const fresh = (await findShopByDomain(db, shopDomain))!;
       // The theme block reads app.metafields.curtain.{public_key,api_url,app_url}; without them the
@@ -166,8 +183,8 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
       });
       await updateSettings(db, shop.id, {
         subscriptionStatus: 'PENDING',
+        // The trial clock starts when Shopify reports the subscription ACTIVE, not here (B3).
         ...(r.subscriptionId ? { pendingSubscriptionId: r.subscriptionId } : {}),
-        ...(shop.settings.trialStartedAt || trialDays === 0 ? {} : { trialStartedAt: now().toISOString() }),
         ...billingSettingsPatch(r),
       });
       req.log.info({ shopDomain: shop.domain, currency: r.currencyCode, usdRate: r.usdRate, price: r.price, trialDays, test }, 'shopify subscription created (pending approval)');
@@ -229,7 +246,13 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
         }
         case 'app/uninstalled': {
           if (!shop) break;
-          await db.update(shops).set({ uninstalledAt: now(), paused: true, purgeAfter: new Date(now().getTime() + 48 * HOUR), updatedAt: now() }).where(eq(shops.id, shop.id));
+          // Shopify cancels the subscription on uninstall; its CANCELLED update never reaches us (the
+          // webhooks go with the app), so the shop drops to `free` here. trialStartedAt is kept.
+          await db
+            .update(shops)
+            .set({ uninstalledAt: now(), paused: true, plan: 'free', billingRef: null, purgeAfter: new Date(now().getTime() + 48 * HOUR), updatedAt: now() })
+            .where(eq(shops.id, shop.id));
+          await clearSettings(db, shop.id, SUBSCRIPTION_KEYS);
           await shopify.deleteSessions(shop.id);
           break;
         }
@@ -264,6 +287,32 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
 /** Shopify AppSubscriptionStatus values that end a subscription. */
 const ENDED = ['CANCELLED', 'EXPIRED', 'DECLINED'];
 
+/** Settings that describe a subscription; cleared when the shop no longer has one (uninstall). */
+const SUBSCRIPTION_KEYS: (keyof ShopSettings)[] = ['subscriptionStatus', 'pendingSubscriptionId', 'legacyPlan'];
+
+/** A Shopify subscription id as stored in billingRef (Stripe ids look different). */
+const isShopifySubscription = (ref: string | null): boolean => typeof ref === 'string' && ref.startsWith('gid://shopify/AppSubscription/');
+
+/**
+ * The stored plan against the subscriptions Shopify reports (`currentAppInstallation.activeSubscriptions`),
+ * on every token exchange. ACTIVE there and not here → applied as an ACTIVE update. None ACTIVE (or
+ * FROZEN) while the shop is on `curtain` through a Shopify subscription → `free` and paused, as a
+ * cancel would. A plan granted by hand (no Shopify billingRef, e.g. a free pilot) is never touched.
+ */
+export async function reconcileSubscription(db: Db, shop: ShopRow, subs: Pick<ActiveSubscription, 'id' | 'status'>[], at: Date): Promise<'unchanged' | 'activated' | 'ended'> {
+  const active = subs.find((s) => s.status.toUpperCase() === 'ACTIVE');
+  if (active) {
+    if (shop.plan === 'curtain' && !shop.paused && shop.billingRef === active.id) return 'unchanged';
+    await applySubscriptionUpdate(db, shop, { app_subscription: { status: 'ACTIVE', admin_graphql_api_id: active.id } }, at);
+    return 'activated';
+  }
+  if (subs.some((s) => s.status.toUpperCase() === 'FROZEN')) return 'unchanged';
+  if (shop.plan !== 'curtain' || !isShopifySubscription(shop.billingRef)) return 'unchanged';
+  await updateSettings(db, shop.id, { subscriptionStatus: 'NONE' }, { plan: 'free', paused: true, billingRef: null });
+  await clearSettings(db, shop.id, ['legacyPlan']);
+  return 'ended';
+}
+
 /**
  * APP_SUBSCRIPTIONS_UPDATE (D17). ACTIVE → plan `curtain`, unpaused, this subscription becomes the
  * shop's billingRef. FROZEN (the store's own Shopify bill is unpaid) → paused, plan kept, so ACTIVE
@@ -271,6 +320,10 @@ const ENDED = ['CANCELLED', 'EXPIRED', 'DECLINED'];
  * paused. The same statuses for any other subscription (an old one Shopify replaces when the
  * merchant approves a new one, a declined second attempt) change nothing but the log, so they can
  * never pause a shop that is paying. PENDING / ACCEPTED only record the status.
+ *
+ * The first ACTIVE starts the trial clock (`trialStartedAt`, B3). An ACTIVE for a new subscription
+ * (the pending one, or any other than the stored billingRef) ends a pre-D17 legacy plan: Shopify
+ * replaces the old subscription when the merchant approves the new one (B2).
  * https://shopify.dev/docs/api/webhooks/latest?reference=toml#list-of-topics-app_subscriptions/update
  */
 export async function applySubscriptionUpdate(db: Db, shop: ShopRow, payload: Record<string, unknown>, at: Date): Promise<'activated' | 'frozen' | 'ended' | 'other_subscription' | 'recorded'> {
@@ -279,8 +332,14 @@ export async function applySubscriptionUpdate(db: Db, shop: ShopRow, payload: Re
   const id = sub.admin_graphql_api_id ?? null;
   const current = shop.billingRef;
   if (status === 'ACTIVE') {
-    await updateSettings(db, shop.id, { subscriptionStatus: status }, { plan: 'curtain', paused: false, billingRef: id ?? current, periodStart: shop.plan === 'curtain' && current === id ? shop.periodStart : at.toISOString().slice(0, 10) });
-    await clearSetting(db, shop.id, 'pendingSubscriptionId');
+    const legacySwitch = shop.settings.legacyPlan !== undefined && id !== null && (id === shop.settings.pendingSubscriptionId || (current !== null && id !== current));
+    await updateSettings(
+      db,
+      shop.id,
+      { subscriptionStatus: status, ...(shop.settings.trialStartedAt ? {} : { trialStartedAt: at.toISOString() }) },
+      { plan: 'curtain', paused: false, billingRef: id ?? current, periodStart: shop.plan === 'curtain' && current === id ? shop.periodStart : at.toISOString().slice(0, 10) },
+    );
+    await clearSettings(db, shop.id, legacySwitch ? ['pendingSubscriptionId', 'legacyPlan'] : ['pendingSubscriptionId']);
     return 'activated';
   }
   const isCurrent = id !== null && current === id;
@@ -295,19 +354,11 @@ export async function applySubscriptionUpdate(db: Db, shop: ShopRow, payload: Re
   if (id !== null && current !== null && current !== id) return 'other_subscription';
   if (ENDED.includes(status) && id !== null && shop.settings.pendingSubscriptionId === id) {
     await updateSettings(db, shop.id, { subscriptionStatus: status });
-    await clearSetting(db, shop.id, 'pendingSubscriptionId');
+    await clearSettings(db, shop.id, ['pendingSubscriptionId']);
     return 'recorded';
   }
   await updateSettings(db, shop.id, { subscriptionStatus: status });
   return 'recorded';
-}
-
-async function clearSetting(db: Db, shopId: string, key: keyof ShopSettings): Promise<void> {
-  const row = await db.query.shops.findFirst({ where: eq(shops.id, shopId) });
-  if (!row || !(key in row.settings)) return;
-  const settings = { ...row.settings };
-  delete settings[key];
-  await db.update(shops).set({ settings }).where(eq(shops.id, shopId));
 }
 
 function header(v: string | string[] | undefined): string | undefined {

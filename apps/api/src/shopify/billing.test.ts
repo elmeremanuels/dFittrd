@@ -7,6 +7,7 @@ import { testEnv } from '../env.js';
 import { hmacBase64 } from '../lib/crypto.js';
 import { updateSettings } from '../services/shops.js';
 import { json, makeApp, seedShop, type TestApp } from '../test/helpers.js';
+import { reconcileSubscription } from './routes.js';
 import { billingSettingsPatch, shopBillingCurrency, type ShopifyBillingSettings } from './client.js';
 
 const API_KEY = 'shpa_billingkey';
@@ -91,7 +92,8 @@ describe('Shopify billing: the one Curtain plan (D17)', () => {
     const stored = (await t.handle.db.query.shops.findFirst({ where: eq(shops.id, shop.id) }))!;
     expect(stored.settings as ShopifyBillingSettings).toMatchObject({ billingCurrency: 'USD', billingUsdRate: 1, billingPrice: 8.99 });
     expect(stored.settings).toMatchObject({ subscriptionStatus: 'PENDING', pendingSubscriptionId: 'gid://shopify/AppSubscription/1' });
-    expect(stored.settings.trialStartedAt).toBeTypeOf('string');
+    // B3: the trial clock does not start before the merchant approves
+    expect(stored.settings.trialStartedAt).toBeUndefined();
     // nothing changes until Shopify reports the subscription ACTIVE
     expect(stored).toMatchObject({ plan: 'free', billingRef: null });
   });
@@ -280,5 +282,143 @@ describe('shop billing settings helpers', () => {
   it('the api env defaults to the one pinned Admin API version (#4)', () => {
     expect(testEnv().SHOPIFY_API_VERSION).toBe(DEFAULT_API_VERSION);
     expect(DEFAULT_API_VERSION).toBe('2026-10');
+  });
+});
+
+describe('Shopify billing: trial clock, uninstall and reinstall, legacy plans (checklist B2, B3)', () => {
+  let t: TestApp;
+  beforeAll(async () => {
+    t = await makeApp({ SHOPIFY_API_KEY: API_KEY, SHOPIFY_API_SECRET: API_SECRET });
+  });
+  afterAll(async () => {
+    await t.close();
+  });
+
+  const SUB = (n: number) => `gid://shopify/AppSubscription/${n}`;
+  const row = async (id: string) => (await t.handle.db.query.shops.findFirst({ where: eq(shops.id, id) }))!;
+  const webhook = (shop: string, topic: string, payload: object) => {
+    const body = JSON.stringify(payload);
+    return t.app.inject({
+      method: 'POST',
+      url: '/shopify/webhooks',
+      headers: { 'content-type': 'application/json', 'x-shopify-topic': topic, 'x-shopify-shop-domain': shop, 'x-shopify-webhook-id': `wh-${Math.random().toString(36).slice(2)}`, 'x-shopify-hmac-sha256': hmacBase64(API_SECRET, body) },
+      payload: body,
+    });
+  };
+  const subUpdate = (shop: string, status: string, id: string) => webhook(shop, 'app_subscriptions/update', { app_subscription: { admin_graphql_api_id: id, name: 'Curtain', status } });
+  const auth = async (domain: string) => ({ authorization: `Bearer ${await sessionToken(domain)}` });
+
+  /** Token exchange + the Admin API calls of an admin open; `active` is what Shopify reports. */
+  function mockInstall(shop: string, active: () => Array<{ id: string; status: string }>, seen: Gql[] = []) {
+    t.fetchMock.on(`https://${shop}/admin/oauth/access_token`, () => json({ access_token: TOKEN, scope: 'read_products,write_products' }));
+    t.fetchMock.on(`https://${shop}/admin/api/`, async (_url, init) => {
+      const q = JSON.parse(String(init?.body)) as Gql;
+      seen.push(q);
+      if (q.query.includes('activeSubscriptions')) {
+        return json({
+          data: {
+            currentAppInstallation: {
+              activeSubscriptions: active().map((s) => ({ ...s, name: 'Curtain', test: true, trialDays: 7, currentPeriodEnd: null, lineItems: [{ id: 'li', plan: { pricingDetails: { __typename: 'AppRecurringPricing', price: { amount: '8.99', currencyCode: 'USD' } } } }] })),
+            },
+          },
+        });
+      }
+      if (q.query.includes('shopBillingPreferences')) return json({ data: { shopBillingPreferences: { currency: 'USD' }, shop: { currencyCode: 'USD' } } });
+      if (q.query.includes('partnerDevelopment')) return json({ data: { shop: { plan: { partnerDevelopment: true } } } });
+      if (q.query.includes('appSubscriptionCreate')) {
+        return json({ data: { appSubscriptionCreate: { userErrors: [], confirmationUrl: `https://${shop}/admin/charges/2/confirm`, appSubscription: { id: SUB(2), status: 'PENDING', lineItems: [] } } } });
+      }
+      return json({ errors: [{ message: 'not mocked here' }] }, 400);
+    });
+  }
+  const tokenExchange = async (domain: string) => t.app.inject({ method: 'POST', url: '/shopify/token-exchange', payload: { shop: domain, sessionToken: await sessionToken(domain) } });
+  const usage = async (domain: string) => (await t.app.inject({ method: 'GET', url: '/v1/merchant/usage?from=2026-11-01&to=2026-11-04', headers: await auth(domain) })).json().plan;
+
+  it('the trial clock starts when Shopify reports ACTIVE, not when the subscription is created; a decline keeps the full trial', async () => {
+    const domain = 'trial-clock.myshopify.com';
+    const { shop } = await seedShop(t, { platform: 'shopify', domain, plan: 'free', products: [] });
+    await t.app.ctx.shopify.saveOfflineSession(shop.id, domain, TOKEN, 'read_products');
+    mockInstall(domain, () => []);
+    expect((await t.app.inject({ method: 'POST', url: '/shopify/billing/subscribe', headers: await auth(domain), payload: {} })).json().trialDays).toBe(7);
+    expect((await row(shop.id)).settings.trialStartedAt).toBeUndefined();
+    await subUpdate(domain, 'DECLINED', SUB(2));
+    expect((await row(shop.id)).settings.trialStartedAt).toBeUndefined();
+    // the merchant comes back much later: still the whole trial
+    expect((await t.app.inject({ method: 'POST', url: '/shopify/billing/subscribe', headers: await auth(domain), payload: {} })).json().trialDays).toBe(7);
+    await subUpdate(domain, 'ACTIVE', SUB(2));
+    const started = (await row(shop.id)).settings.trialStartedAt;
+    expect(Date.parse(started!)).toBeGreaterThan(Date.now() - 60_000);
+    // a later ACTIVE (e.g. after FROZEN) never moves it
+    await subUpdate(domain, 'ACTIVE', SUB(2));
+    expect((await row(shop.id)).settings.trialStartedAt).toBe(started);
+  });
+
+  it('uninstall then reinstall: plan free with no subscription, Subscribe offered again (Shopify cancelled the old one)', async () => {
+    const domain = 'reinstall.myshopify.com';
+    const { shop } = await seedShop(t, { platform: 'shopify', domain, plan: 'free', products: [] });
+    let active: Array<{ id: string; status: string }> = [];
+    mockInstall(domain, () => active);
+    expect((await tokenExchange(domain)).statusCode).toBe(200);
+    active = [{ id: SUB(1), status: 'ACTIVE' }];
+    await subUpdate(domain, 'ACTIVE', SUB(1));
+    expect(await row(shop.id)).toMatchObject({ plan: 'curtain', paused: false, billingRef: SUB(1) });
+    const trialStartedAt = (await row(shop.id)).settings.trialStartedAt;
+
+    await webhook(domain, 'app/uninstalled', { id: 1, domain });
+    active = []; // Shopify cancels the subscription on uninstall; the CANCELLED update never reaches us
+    let s = await row(shop.id);
+    expect(s).toMatchObject({ plan: 'free', paused: true, billingRef: null });
+    expect(s.settings.subscriptionStatus).toBeUndefined();
+    expect(s.settings.trialStartedAt).toBe(trialStartedAt); // the trial is not handed out twice
+
+    expect((await tokenExchange(domain)).statusCode).toBe(200);
+    s = await row(shop.id);
+    expect(s).toMatchObject({ plan: 'free', paused: false, billingRef: null, uninstalledAt: null });
+    expect(await usage(domain)).toMatchObject({ name: 'free', paused: false });
+    expect((await usage(domain)).legacyPlan).toBeUndefined();
+  });
+
+  it('token exchange reconciles a missed webhook: ACTIVE in Shopify → curtain; nothing active → free and paused', async () => {
+    const domain = 'reconcile.myshopify.com';
+    const { shop } = await seedShop(t, { platform: 'shopify', domain, plan: 'free', products: [] });
+    let active: Array<{ id: string; status: string }> = [{ id: SUB(4), status: 'ACTIVE' }];
+    mockInstall(domain, () => active);
+    expect((await tokenExchange(domain)).statusCode).toBe(200);
+    expect(await row(shop.id)).toMatchObject({ plan: 'curtain', paused: false, billingRef: SUB(4) });
+    active = [];
+    expect((await tokenExchange(domain)).statusCode).toBe(200);
+    expect(await row(shop.id)).toMatchObject({ plan: 'free', paused: true, billingRef: null });
+  });
+
+  it('a plan granted by hand (no Shopify subscription on record, e.g. a free pilot) is never reconciled away', async () => {
+    const { shop } = await seedShop(t, { platform: 'shopify', domain: 'by-hand.myshopify.com', plan: 'curtain', products: [] });
+    expect(await reconcileSubscription(t.handle.db, shop, [], new Date())).toBe('unchanged');
+    expect(await row(shop.id)).toMatchObject({ plan: 'curtain', paused: false });
+    await updateSettings(t.handle.db, shop.id, {}, { billingRef: SUB(5), paused: true });
+    expect(await reconcileSubscription(t.handle.db, await row(shop.id), [{ id: SUB(5), status: 'FROZEN' }], new Date())).toBe('unchanged');
+  });
+
+  it('a shop moved from a retired plan is offered the switch until the new subscription is ACTIVE', async () => {
+    const domain = 'legacy-starter.myshopify.com';
+    const { shop } = await seedShop(t, { platform: 'shopify', domain, plan: 'curtain', products: [] });
+    await t.app.ctx.shopify.saveOfflineSession(shop.id, domain, TOKEN, 'read_products');
+    // what migration 0004 leaves: plan curtain, the old subscription still billing at its old price
+    await updateSettings(t.handle.db, shop.id, { legacyPlan: 'starter', subscriptionStatus: 'ACTIVE' }, { billingRef: SUB(10) });
+    mockInstall(domain, () => [{ id: SUB(10), status: 'ACTIVE' }]);
+    let plan = await usage(domain);
+    expect(plan).toMatchObject({ name: 'curtain', legacyPlan: 'starter', switchVia: 'shopify' });
+    expect(plan.chargePrice).toBeUndefined();
+    // an update of the old subscription keeps the legacy state
+    await subUpdate(domain, 'ACTIVE', SUB(10));
+    expect((await usage(domain)).legacyPlan).toBe('starter');
+
+    expect((await t.app.inject({ method: 'POST', url: '/shopify/billing/subscribe', headers: await auth(domain), payload: {} })).statusCode).toBe(200);
+    expect((await row(shop.id)).settings.legacyPlan).toBe('starter'); // nothing changes before approval
+    await subUpdate(domain, 'ACTIVE', SUB(2)); // approved: Shopify replaces the old subscription
+    await subUpdate(domain, 'CANCELLED', SUB(10));
+    plan = await usage(domain);
+    expect(plan).toMatchObject({ name: 'curtain', paused: false, chargePrice: 8.99, chargeCurrency: 'USD' });
+    expect(plan.legacyPlan).toBeUndefined();
+    expect(await row(shop.id)).toMatchObject({ billingRef: SUB(2) });
   });
 });

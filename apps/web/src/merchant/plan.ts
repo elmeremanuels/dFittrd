@@ -18,3 +18,31 @@ export function planPriceText(plan: Pick<UsageResponse['plan'], 'priceUsdPerMont
   if (plan.chargeCurrency && plan.chargeCurrency !== 'USD' && typeof plan.chargePrice === 'number') return `${money(plan.chargePrice, plan.chargeCurrency)} per month (${usd})`;
   return `${usd} per month`;
 }
+
+export type PlanState = 'legacy' | 'active' | 'paused' | 'none';
+
+/**
+ * Which plan state the console shows. `legacy` (B2): the shop still pays a retired pre-D17
+ * subscription at its old price, so it is not "Active" on Curtain and is offered the switch.
+ */
+export function planState(plan: Pick<UsageResponse['plan'], 'name' | 'paused' | 'legacyPlan'>): PlanState {
+  if (plan.paused) return 'paused';
+  if (plan.name === 'free') return 'none';
+  return plan.legacyPlan ? 'legacy' : 'active';
+}
+
+/** The status line under the plan card. */
+export function planStatusText(plan: Pick<UsageResponse['plan'], 'name' | 'paused' | 'legacyPlan' | 'switchVia'>): string {
+  switch (planState(plan)) {
+    case 'paused':
+      return 'Paused: no active subscription.';
+    case 'none':
+      return 'Not subscribed yet.';
+    case 'active':
+      return 'Active.';
+    case 'legacy':
+      return `Still billed on the retired “${plan.legacyPlan}” plan at its old price. ${
+        plan.switchVia === 'shopify' ? 'Open Curtain in your Shopify admin and approve the Curtain plan to switch.' : 'Switch to the Curtain plan below; the old subscription is cancelled when the new one starts.'
+      }`;
+  }
+}

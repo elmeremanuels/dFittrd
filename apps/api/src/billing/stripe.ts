@@ -73,6 +73,21 @@ export class StripeClient {
   }
 
   /**
+   * Cancels a subscription now (DELETE /v1/subscriptions/:id). Used for a retired pre-D17
+   * subscription once the merchant's new Curtain subscription has started (B2). An already
+   * cancelled or missing subscription (404) counts as done.
+   */
+  async cancelSubscription(id: string): Promise<void> {
+    const res = await this.fetchImpl(`${this.env.STRIPE_API_URL}/v1/subscriptions/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${this.env.STRIPE_SECRET}` },
+    });
+    if (res.ok || res.status === 404) return;
+    const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `stripe cancel failed (${res.status})`);
+  }
+
+  /**
    * Verifies `Stripe-Signature: t=…,v1=…` (HMAC-SHA256 of `${t}.${body}` with the webhook secret,
    * 5-minute tolerance) and returns the parsed event, or null.
    */

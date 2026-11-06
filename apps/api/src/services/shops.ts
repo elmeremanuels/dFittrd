@@ -167,6 +167,15 @@ export async function updateSettings(db: Db, shopId: string, patch: Partial<Shop
   return row!;
 }
 
+/** Removes settings keys (no-op when none is set). */
+export async function clearSettings(db: Db, shopId: string, keys: readonly (keyof ShopSettings)[]): Promise<void> {
+  const row = await findShopById(db, shopId);
+  if (!row || !keys.some((k) => k in row.settings)) return;
+  const settings = { ...row.settings };
+  for (const k of keys) delete settings[k];
+  await db.update(shops).set({ settings }).where(eq(shops.id, shopId));
+}
+
 function compact<T extends object>(o: T): Partial<T> {
   return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
 }

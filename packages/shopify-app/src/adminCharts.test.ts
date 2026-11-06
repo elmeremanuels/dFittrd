@@ -262,3 +262,40 @@ describe('admin page: size chart builder', () => {
     });
   });
 });
+
+describe('admin page: the plan button (checklist B2)', () => {
+  const usage = (plan: Record<string, unknown>) => () => ({
+    from: '',
+    to: '',
+    days: [],
+    totals: { fitSessions: 0, heroRenders: 0, costUsd: 0 },
+    plan: { name: 'free', includedSessions: 50, overageEurPerSession: 0, priceUsdPerMonth: 0, periodStart: '', periodEnd: '', sessionsUsedThisPeriod: 0, paused: false, ...plan },
+  });
+
+  it('a shop without a plan (new install, or reinstalled after uninstall) can subscribe', async () => {
+    mountPage({ 'GET /v1/merchant/usage': usage({ name: 'free' }) });
+    await vi.waitFor(() => expect($('btn-plan').textContent).toBe('Subscribe'));
+    expect($('btn-plan').disabled).toBe(false);
+    expect($('usage-plan').textContent).toBe('No plan');
+  });
+
+  it('an active Curtain subscription shows Subscribed', async () => {
+    mountPage({ 'GET /v1/merchant/usage': usage({ name: 'curtain', priceUsdPerMonth: 8.99, chargePrice: 13.8, chargeCurrency: 'AUD' }) });
+    await vi.waitFor(() => expect($('btn-plan').textContent).toBe('Subscribed'));
+    expect($('btn-plan').disabled).toBe(true);
+    expect($('usage-plan').textContent).toBe('Curtain · 13.80 AUD per month');
+  });
+
+  it('a shop still on a retired plan is offered the switch, not shown as subscribed at US$8.99', async () => {
+    const calls = mountPage({
+      'GET /v1/merchant/usage': usage({ name: 'curtain', priceUsdPerMonth: 8.99, legacyPlan: 'starter', switchVia: 'shopify' }),
+      'POST /shopify/billing/subscribe': () => ({ confirmationUrl: null, subscriptionId: 'gid://shopify/AppSubscription/9', currency: 'USD', price: 8.99, trialDays: 0, test: true }),
+    });
+    await vi.waitFor(() => expect($('btn-plan').textContent).toBe('Switch to Curtain (US$8.99)'));
+    expect($('btn-plan').disabled).toBe(false);
+    expect($('chk-plan').classList.contains('done')).toBe(false);
+    expect($('usage-plan').textContent).toBe('Retired plan (starter) at its old price');
+    $('btn-plan').click();
+    await vi.waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/shopify/billing/subscribe')).toBe(true));
+  });
+});

@@ -3,7 +3,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { StripeClient } from './billing/stripe.js';
 import { shops } from './db/schema.js';
 import { testEnv } from './env.js';
-import { json, makeApp, type TestApp } from './test/helpers.js';
+import { updateSettings } from './services/shops.js';
+import { json, makeApp, seedShop, type TestApp } from './test/helpers.js';
 
 describe('Stripe (WooCommerce billing)', () => {
   let t: TestApp;
@@ -143,3 +144,86 @@ describe('Stripe Checkout parameters for the one Curtain plan (D17)', () => {
   });
 });
 
+
+describe('Stripe: remaining trial and the switch from a retired plan (B2, B4)', () => {
+  let t: TestApp;
+  const checkouts: URLSearchParams[] = [];
+  const cancelled: string[] = [];
+  beforeAll(async () => {
+    t = await makeApp({ STRIPE_SECRET: 'sk_' + 'test_stripe_456', STRIPE_PRICE_CURTAIN: 'price_curtain', STRIPE_WEBHOOK_SECRET: 'whsec' + '_test_456' });
+    t.fetchMock.on('https://api.stripe.com/v1/checkout/sessions', async (_u, init) => {
+      const params = new URLSearchParams(String(init?.body));
+      checkouts.push(params);
+      return json({ id: `cs_${checkouts.length}`, url: `https://checkout.stripe.com/c/pay/cs_${checkouts.length}` });
+    });
+    t.fetchMock.on('https://api.stripe.com/v1/subscriptions/', async (url, init) => {
+      expect(init?.method).toBe('DELETE');
+      cancelled.push(decodeURIComponent(url.split('/').pop()!));
+      return json({ id: url.split('/').pop(), status: 'canceled' });
+    });
+  });
+  afterAll(async () => {
+    await t.close();
+  });
+
+  const row = async (id: string) => (await t.handle.db.query.shops.findFirst({ where: eq(shops.id, id) }))!;
+  const event = (type: string, object: Record<string, unknown>) => JSON.stringify({ id: `evt_${Math.random().toString(36).slice(2)}`, type, created: Math.floor(Date.now() / 1000), data: { object } });
+  const post = (body: string) => t.app.inject({ method: 'POST', url: '/v1/billing/stripe/webhook', headers: { 'content-type': 'application/json', 'stripe-signature': t.app.ctx.stripe.sign(body) }, payload: body });
+  const trialParam = () => checkouts[checkouts.length - 1]!.get('subscription_data[trial_period_days]');
+
+  it('the first trialing subscription starts the trial clock; a reconnect gets only the remainder', async () => {
+    const connect = await t.app.inject({ method: 'POST', url: '/v1/merchant/woo/connect', payload: { siteUrl: 'https://trial-woo.example', name: 'Trial Woo' } });
+    expect(connect.statusCode).toBe(200);
+    expect(trialParam()).toBe('7');
+    const shopId = connect.json<{ shopId: string }>().shopId;
+    expect((await row(shopId)).settings.trialStartedAt).toBeUndefined();
+    const trialStart = Math.floor(Date.now() / 1000) - 5 * 86_400 - 60;
+    await post(event('customer.subscription.updated', { id: 'sub_t1', status: 'trialing', trial_start: trialStart, metadata: { shopId } }));
+    expect((await row(shopId)).settings.trialStartedAt).toBe(new Date(trialStart * 1000).toISOString());
+    // a later event never moves it
+    await post(event('checkout.session.completed', { id: 'cs_x', customer: 'cus_t', subscription: 'sub_t1', metadata: { shopId } }));
+    expect((await row(shopId)).settings.trialStartedAt).toBe(new Date(trialStart * 1000).toISOString());
+
+    // the merchant leaves and connects again: 2 of the 7 days are left
+    await updateSettings(t.handle.db, shopId, {}, { uninstalledAt: new Date(), connectState: 'manual' });
+    expect((await t.app.inject({ method: 'POST', url: '/v1/merchant/woo/connect', payload: { siteUrl: 'https://trial-woo.example', name: 'Trial Woo' } })).statusCode).toBe(200);
+    expect(trialParam()).toBe('2');
+    await updateSettings(t.handle.db, shopId, { trialStartedAt: new Date(Date.now() - 30 * 86_400_000).toISOString() }, { uninstalledAt: new Date(), connectState: 'manual' });
+    await t.app.inject({ method: 'POST', url: '/v1/merchant/woo/connect', payload: { siteUrl: 'https://trial-woo.example', name: 'Trial Woo' } });
+    expect(trialParam()).toBeNull(); // trial used up: charged from the start
+  });
+
+  it('a shop still paying a retired plan switches through Checkout; the old subscription is cancelled, never billed twice', async () => {
+    const { shop, apiKey } = await seedShop(t, { platform: 'woocommerce', domain: 'legacy-woo.example', plan: 'curtain', products: [] });
+    await updateSettings(t.handle.db, shop.id, { legacyPlan: 'pro', stripeSubscriptionId: 'sub_legacy' }, { billingRef: 'sub_legacy', connectState: 'complete' });
+    const auth = { authorization: `Bearer ${apiKey}` };
+    const usage = async () => (await t.app.inject({ method: 'GET', url: '/v1/merchant/usage?from=2026-11-01&to=2026-11-04', headers: auth })).json().plan;
+    expect(await usage()).toMatchObject({ name: 'curtain', legacyPlan: 'pro', switchVia: 'stripe' });
+
+    const res = await t.app.inject({ method: 'POST', url: '/v1/merchant/billing/stripe/checkout', headers: auth, payload: {} });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ trialDays: 0 });
+    expect(trialParam()).toBeNull(); // the shop has been paying: no trial on the switch
+    expect(checkouts[checkouts.length - 1]!.get('metadata[shopId]')).toBe(shop.id);
+
+    await post(event('checkout.session.completed', { id: 'cs_sw', customer: 'cus_l', subscription: 'sub_new', metadata: { shopId: shop.id } }));
+    expect(cancelled).toEqual(['sub_legacy']);
+    const s = await row(shop.id);
+    expect(s).toMatchObject({ plan: 'curtain', paused: false, billingRef: 'sub_new', connectState: 'complete' });
+    expect(s.settings.legacyPlan).toBeUndefined();
+    expect((await usage()).legacyPlan).toBeUndefined();
+    // Stripe then reports the old one deleted: not the current subscription, the shop keeps running
+    await post(event('customer.subscription.deleted', { id: 'sub_legacy', status: 'canceled', metadata: { shopId: shop.id } }));
+    expect(await row(shop.id)).toMatchObject({ plan: 'curtain', paused: false, billingRef: 'sub_new' });
+
+    // already on Curtain: no second Checkout
+    expect((await t.app.inject({ method: 'POST', url: '/v1/merchant/billing/stripe/checkout', headers: auth, payload: {} })).statusCode).toBe(409);
+  });
+
+  it('Shopify shops never get a Stripe Checkout', async () => {
+    const { apiKey } = await seedShop(t, { platform: 'shopify', domain: 'not-woo.myshopify.com', plan: 'free', products: [] });
+    const res = await t.app.inject({ method: 'POST', url: '/v1/merchant/billing/stripe/checkout', headers: { authorization: `Bearer ${apiKey}` }, payload: {} });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('not_woocommerce');
+  });
+});

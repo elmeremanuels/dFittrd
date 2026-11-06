@@ -24,6 +24,8 @@ import type {
   MerchantLedgerResponse,
   MerchantProductsQuery,
   MerchantProductsResponse,
+  PeekQuery,
+  PeekResponse,
   ProductGetResponse,
   ShopProductsQuery,
   ShopProductsResponse,
@@ -375,6 +377,11 @@ export class ApiClient {
   resolveTry(token: string): Promise<TryResolveResponse> {
     return this.request('GET', `/v1/try/${encodeURIComponent(token)}`);
   }
+  /** The size peek's read-only lookup: no try session, no pairing, nothing billed (apps/web/src/embed/peek.ts). */
+  resolvePeek(q: PeekQuery): Promise<PeekResponse> {
+    const p = new URLSearchParams({ shop: q.shop, product: q.product, page: q.page });
+    return this.request('GET', `/v1/peek?${p.toString()}`);
+  }
   /** Standalone embed billing event: the size label and confidence only — never a measurement (D3, D11). */
   fitShown(token: string, req: FitShownRequest): Promise<FitShownResponse> {
     return this.request('POST', `/v1/try/${encodeURIComponent(token)}/fit-shown`, req);
@@ -451,6 +458,10 @@ export class MerchantApi {
   }
   ledger(cursor?: string): Promise<MerchantLedgerResponse> {
     return this.client.request('GET', `/v1/merchant/ledger${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, undefined, { auth: this.auth });
+  }
+  /** WooCommerce: a Stripe Checkout for the Curtain plan (also the switch from a retired plan, B2). */
+  stripeCheckout(): Promise<{ checkoutUrl: string; trialDays: number }> {
+    return this.client.request('POST', '/v1/merchant/billing/stripe/checkout', {}, { auth: this.auth });
   }
 }
 

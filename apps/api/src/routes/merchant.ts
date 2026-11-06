@@ -29,6 +29,7 @@ import {
   validateGarmentDraft,
 } from '@curtain/schema';
 import { requireMerchant } from '../auth/merchant.js';
+import { remainingTrialDays } from '../billing/plans.js';
 import { ledgerEntries, shops } from '../db/schema.js';
 import { hmacHex, randomAlnum, safeEqual } from '../lib/crypto.js';
 import { badRequest, conflict, forbidden, notFound, serviceUnavailable } from '../lib/errors.js';
@@ -143,6 +144,26 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
   // Static and platform-neutral; the Shopify writes live in apps/api/src/shopify/charts.ts.
   app.get('/v1/merchant/charts/templates', { schema: { response: { 200: ChartTemplatesResponseSchema } }, preHandler: requireMerchant }, async () => chartTemplatesDto());
 
+  /**
+   * WooCommerce (Stripe) only: a Checkout for the Curtain plan from the console, for a shop without
+   * an active plan or one still paying a retired pre-D17 plan (B2). When it completes, the Stripe
+   * webhook cancels the old subscription. A legacy switch gets no trial (the shop has been paying).
+   */
+  app.post(
+    '/v1/merchant/billing/stripe/checkout',
+    { schema: { response: { 200: z.object({ checkoutUrl: z.string(), trialDays: z.number().int().nonnegative() }) } }, preHandler: requireMerchant, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req) => {
+      const shop = req.shop!;
+      if (shop.platform !== 'woocommerce') throw badRequest('not_woocommerce', 'Shopify shops subscribe from the Curtain page in the Shopify admin');
+      if (!stripe.configured()) throw serviceUnavailable('stripe_not_configured', 'billing is not set up on this server');
+      if (shop.plan === 'curtain' && !isPaused(shop) && !shop.settings.legacyPlan) throw conflict('already_subscribed', 'this shop is already on the Curtain plan');
+      const trialDays = shop.settings.legacyPlan ? 0 : remainingTrialDays(env.BILLING_TRIAL_DAYS, shop.settings.trialStartedAt, now());
+      const back = `${env.PUBLIC_APP_URL}/merchant/usage`;
+      const session = await stripe.createCheckoutSession({ shopId: shop.id, shopDomain: shop.domain, successUrl: `${back}?billing=done`, cancelUrl: `${back}?billing=cancelled`, trialDays });
+      return { checkoutUrl: session.url, trialDays };
+    },
+  );
+
   // ---- usage / ledger / analytics ---------------------------------------------------------------
   app.get('/v1/merchant/usage', { schema: { querystring: DateRangeQuerySchema, response: { 200: UsageResponseSchema } }, preHandler: requireMerchant }, async (req) => {
     const shop = req.shop!;
@@ -154,6 +175,8 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
     const period = periodFor(shop.periodStart, now());
     const spec = planInfo(shop);
     const used = await fitSessionsBetween(db, shop.id, period.start, utcDay(now()));
+    // B2: a shop migrated from starter / pro still pays its old subscription until it switches.
+    const legacyPlan = shop.plan === 'curtain' ? shop.settings.legacyPlan?.slice(0, 32) || undefined : undefined;
     return {
       from: req.query.from,
       to: req.query.to,
@@ -164,9 +187,11 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
         includedSessions: spec.includedSessions,
         overageEurPerSession: spec.overageEurPerSession,
         priceUsdPerMonth: spec.priceUsdPerMonth,
-        ...(shop.plan === 'curtain' && typeof shop.settings.billingPrice === 'number' && shop.settings.billingCurrency
+        // A legacy shop still pays its old subscription's price: the stored price is the new plan's.
+        ...(shop.plan === 'curtain' && !legacyPlan && typeof shop.settings.billingPrice === 'number' && shop.settings.billingCurrency
           ? { chargePrice: shop.settings.billingPrice, chargeCurrency: shop.settings.billingCurrency }
           : {}),
+        ...(legacyPlan ? { legacyPlan, switchVia: shop.platform === 'shopify' ? ('shopify' as const) : ('stripe' as const) } : {}),
         periodStart: period.start,
         periodEnd: period.end,
         sessionsUsedThisPeriod: used,
@@ -281,6 +306,8 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
         successUrl: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}curtain=connected`,
         cancelUrl: `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}curtain=cancelled`,
         ...(req.body.email ? { email: req.body.email } : {}),
+        // B4: a reconnect gets only what is left of the first trial (the Stripe webhook records its start).
+        trialDays: remainingTrialDays(env.BILLING_TRIAL_DAYS, shop.settings.trialStartedAt, now()),
       });
       return { shopId: shop.id, connectToken, mode, checkoutUrl: session.url, verification };
     },

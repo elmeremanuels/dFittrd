@@ -312,7 +312,9 @@
         state.usage = u;
         var plan = u.plan;
         var price = plan.chargeCurrency && plan.chargeCurrency !== 'USD' && typeof plan.chargePrice === 'number' ? plan.chargePrice.toFixed(2) + ' ' + plan.chargeCurrency + ' per month' : 'US$' + (plan.priceUsdPerMonth || 8.99).toFixed(2) + ' per month';
-        text('usage-plan', (plan.name === 'free' ? 'No plan' : 'Curtain · ' + price) + (plan.paused ? ' · paused' : ''));
+        // B2: a shop moved from a retired plan still pays that plan's old price until it approves Curtain.
+        var legacy = plan.name !== 'free' && !!plan.legacyPlan;
+        text('usage-plan', (plan.name === 'free' ? 'No plan' : legacy ? 'Retired plan (' + plan.legacyPlan + ') at its old price' : 'Curtain · ' + price) + (plan.paused ? ' · paused' : ''));
         text('usage-sessions', String(plan.sessionsUsedThisPeriod));
         text('usage-renders', String(u.totals.heroRenders));
         $('usage-meter').style.width = '0%';
@@ -320,10 +322,11 @@
         var bars = $('usage-bars'); bars.textContent = '';
         var max = Math.max(1, Math.max.apply(null, u.days.map(function (d) { return d.fitSessions; }).concat([0])));
         u.days.forEach(function (d) { var i = el('i', { title: d.day + ': ' + d.fitSessions }); i.style.height = Math.max(2, Math.round(100 * d.fitSessions / max)) + '%'; bars.appendChild(i); });
-        var onPlan = plan.name !== 'free' && !plan.paused;
+        var onPlan = plan.name !== 'free' && !plan.paused && !legacy;
         check('chk-plan', onPlan);
         $('btn-plan').disabled = onPlan;
-        $('btn-plan').textContent = onPlan ? 'Subscribed' : 'Subscribe';
+        $('btn-plan').textContent = onPlan ? 'Subscribed' : legacy ? 'Switch to Curtain (US$' + (plan.priceUsdPerMonth || 8.99).toFixed(2) + ')' : 'Subscribe';
+        if (legacy && !plan.paused) banner('info', 'Your shop is still billed on the retired ' + plan.legacyPlan + ' plan at its old price. Switch to Curtain (US$' + (plan.priceUsdPerMonth || 8.99).toFixed(2) + ' per month, flat): Shopify replaces the old subscription when you approve.');
         if (plan.paused) banner('warning', 'Your shop is paused: shoppers see a “taking a short break” screen. Approve the Curtain plan to resume.');
       }
 

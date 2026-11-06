@@ -189,6 +189,27 @@ export const TryResolveResponseSchema = z.object({
 export type TryResolveResponse = z.infer<typeof TryResolveResponseSchema>;
 
 /**
+ * GET /v1/peek?shop&product&page (device JWT) — the size peek next to the button (apps/web
+ * `/embed/peek`). Read-only: it creates no try session and no pairing, writes nothing and bills
+ * nothing. Only a device already paired with the shop (it used the fitting room there) gets an
+ * answer, and only for a product that is try-able (`active`). `page` is the merchant page's origin
+ * as the browser reported it; it joins `allowedOrigins` only when it belongs to the shop.
+ */
+export const PeekQuerySchema = z.object({
+  shop: z.string().regex(/^pk_(live|test)_[A-Za-z0-9]{6,32}$/),
+  product: z.string().min(1).max(128),
+  page: httpUrl,
+});
+export type PeekQuery = z.infer<typeof PeekQuerySchema>;
+
+export const PeekResponseSchema = z.object({
+  shop: ShopBrandingSchema,
+  garment: GarmentPayloadSchema,
+  embed: z.object({ allowedOrigins: z.array(z.string().min(1).max(256)).max(32) }),
+});
+export type PeekResponse = z.infer<typeof PeekResponseSchema>;
+
+/**
  * POST /v1/try/:token/fit-shown (device JWT) — the billing event of the standalone embed (D7, D11).
  * Only the chosen size label and the confidence go up; the body is strict, so a client that tries
  * to send measurements is rejected instead of silently stripped (D3).
@@ -556,6 +577,13 @@ export const UsageResponseSchema = z.object({
     /** The price the shop is charged and its currency, when a Shopify subscription recorded them. */
     chargePrice: z.number().nonnegative().optional(),
     chargeCurrency: z.string().regex(/^[A-Z]{3}$/).optional(),
+    /**
+     * Set while the shop still pays through a retired pre-D17 subscription (`starter` / `pro`, at its
+     * old price). The admin and the console then offer "Switch to Curtain" instead of "Subscribed";
+     * `switchVia` says where: the Shopify approval screen or a Stripe Checkout (WooCommerce).
+     */
+    legacyPlan: z.string().min(1).max(32).optional(),
+    switchVia: z.enum(['shopify', 'stripe']).optional(),
     periodStart: dateOnly,
     periodEnd: dateOnly,
     sessionsUsedThisPeriod: z.number().int().nonnegative(),

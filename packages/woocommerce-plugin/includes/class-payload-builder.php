@@ -472,10 +472,28 @@ final class Payload_Builder {
 			}
 			return null;
 		}
-		$out     = array();
-		$primary = self::coerce_string( $v['primary'] ?? $v['fibre'] ?? $v['fiber'] ?? $v['material'] ?? null );
+		$out        = array();
+		$text_blend = null;
+		$primary    = self::coerce_string( $v['primary'] ?? $v['fibre'] ?? $v['fiber'] ?? $v['material'] ?? null );
 		if ( null !== $primary ) {
-			$out['primary'] = strtolower( $primary );
+			// Names resolve to fabric library ids, as coerceFabric does ("Katoen" → cotton, "Lyocell"
+			// → tencel); v1 primaries stay as they are; a composition typed here fills the blend.
+			$lower = function_exists( 'mb_strtolower' ) ? mb_strtolower( $primary, 'UTF-8' ) : strtolower( $primary );
+			if ( ! Fabric_Text::available() || Fabric_Text::is_v1_primary( $lower ) ) {
+				$out['primary'] = $lower;
+			} else {
+				$id   = Fabric_Text::library_id( $primary );
+				$text = null === $id ? Fabric_Text::resolve( $primary ) : null;
+				if ( null !== $id ) {
+					$out['primary'] = Fabric_Text::payload_name( $id );
+				} elseif ( null !== $text ) {
+					$out['primary'] = $text['primary'];
+					$text_blend     = $text['blend'] ?? null;
+				} else {
+					$out['primary'] = $lower;
+					$this->warn( '_curtain_fabric', 'fabric.primary', "'" . $primary . "' is not in the fabric library; drape and texture use defaults" );
+				}
+			}
 		}
 		foreach ( array( 'weightGsm', 'stretchPct', 'drape', 'opacity', 'sheen' ) as $k ) {
 			if ( ! isset( $v[ $k ] ) || '' === $v[ $k ] ) {
@@ -509,12 +527,20 @@ final class Payload_Builder {
 					$pct   = self::coerce_number( $b['pct'] ?? $b['percent'] ?? $b['share'] ?? null );
 				}
 				if ( null !== $fibre && null !== $pct ) {
+					$id = Fabric_Text::library_id( $fibre );
+					if ( null !== $id ) {
+						$lower = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( $fibre ), 'UTF-8' ) : strtolower( trim( $fibre ) );
+						$fibre = Fabric_Text::is_v1_primary( $lower ) ? $lower : Fabric_Text::payload_name( $id );
+					}
 					$blend[] = array( $fibre, self::num( $pct ) );
 				}
 			}
 			if ( $blend ) {
 				$out['blend'] = $blend;
 			}
+		}
+		if ( ! isset( $out['blend'] ) && null !== $text_blend ) {
+			$out['blend'] = $text_blend;
 		}
 		return $out ? $out : null;
 	}

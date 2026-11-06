@@ -166,7 +166,9 @@ def reconstruct(job_id: str, source: str = "synthetic", iterations: int = 10000,
     def render(idx: list[int], mode: str = "RGB+ED"):
         return rasterization_2dgs(
             means=params["means"], quats=params["quats"], scales=torch.exp(params["scales"]),
-            opacities=torch.sigmoid(params["opacities"]), colors=torch.sigmoid(params["colors"]),
+            opacities=torch.sigmoid(params["opacities"]),
+            # gsplat 1.5.3 does not expand [N, D] colors per camera before appending depth, so pass [C, N, D].
+            colors=torch.sigmoid(params["colors"])[None].expand(len(idx), -1, -1),
             viewmats=viewmats[idx], Ks=Ks[idx], width=W, height=H, render_mode=mode, distloss=True,
             near_plane=0.2, far_plane=20.0,
         )

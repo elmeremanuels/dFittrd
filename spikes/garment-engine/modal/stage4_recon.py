@@ -37,6 +37,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import modal  # noqa: E402
 
 import phase0_lib as lib  # noqa: E402
+import phase0_mesh as pmesh  # noqa: E402
 import phase0_modal as pm  # noqa: E402
 
 CFG = lib.settings()
@@ -66,7 +67,7 @@ image = (
     .pip_install(*STAGE4_PACKAGES)
     .env({"TORCH_CUDA_ARCH_LIST": CUDA_ARCHS, "TORCH_EXTENSIONS_DIR": GSPLAT_EXT_DIR, "MAX_JOBS": "8"})
     .run_commands("python -c \"from gsplat.cuda._backend import _C; assert _C is not None, 'gsplat CUDA extension did not build'\"")
-    .add_local_python_source("phase0_lib", "phase0_modal")
+    .add_local_python_source("phase0_lib", "phase0_mesh", "phase0_modal")
 )
 
 
@@ -84,24 +85,6 @@ def _load_mask(path):
     return (np.asarray(Image.open(path).convert("L")) > 127).astype(np.float32)
 
 
-def _foreground_mask(rgb, threshold=0.1):
-    """Foreground = differs from the frame's border colour (median), cleaned, largest component."""
-    import numpy as np
-    from scipy import ndimage
-
-    border = np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]])
-    bg = np.median(border, axis=0)
-    fg = np.abs(rgb - bg).max(axis=2) > threshold
-    fg = ndimage.binary_opening(fg, iterations=1)
-    fg = ndimage.binary_closing(fg, iterations=2)
-    fg = ndimage.binary_fill_holes(fg)
-    lab, n = ndimage.label(fg)
-    if n > 1:
-        sizes = ndimage.sum(fg, lab, range(1, n + 1))
-        fg = lab == (1 + int(np.argmax(sizes)))
-    return fg.astype(np.float32)
-
-
 @app.function(
     image=image,
     gpu=CFG["gpu_recon"],
@@ -114,7 +97,6 @@ def reconstruct(job_id: str, source: str = "synthetic", iterations: int = 10000,
     import subprocess
 
     import numpy as np
-    import open3d as o3d
     import torch
     import torch.nn.functional as F
     import trimesh
@@ -155,7 +137,7 @@ def reconstruct(job_id: str, source: str = "synthetic", iterations: int = 10000,
     if missing:
         raise FileNotFoundError(f"{len(missing)} frames missing for source {source} (first: {frame_path(missing[0])})")
     rgbs = np.stack([_load_rgb(frame_path(i)) for i in ids])
-    masks = np.stack([_load_mask(mask_path(i)) if mask_path else _foreground_mask(rgbs[k]) for k, i in enumerate(ids)])
+    masks = np.stack([_load_mask(mask_path(i)) if mask_path else pmesh.foreground_mask(rgbs[k]) for k, i in enumerate(ids)])
     holdout = [k for k in range(len(ids)) if holdout_every and k % holdout_every == holdout_every // 2]
     train = [k for k in range(len(ids)) if k not in holdout]
     images = torch.tensor(rgbs, device=dev)
@@ -229,86 +211,35 @@ def reconstruct(job_id: str, source: str = "synthetic", iterations: int = 10000,
             print(f"[stage4] {last}")
     train_s = time.time() - t0
 
-    # ---- evaluate views, render depth, fuse -----------------------------------------------------------
+    # ---- evaluate views, render median depth, fuse ------------------------------------------------------
     t0 = time.time()
-    volume = o3d.pipelines.integration.ScalableTSDFVolume(
-        voxel_length=voxel_cm / 100.0, sdf_trunc=4 * voxel_cm / 100.0, color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8)
-    K_int = lib.k_integer_centres(K)  # Open3D: centre of pixel (0,0) at (0,0)
-    intr = o3d.camera.PinholeCameraIntrinsic(W, H, K_int[0][0], K_int[1][1], K_int[0][2], K_int[1][2])
     psnr = {"train": [], "holdout": []}
     iou = {"train": [], "holdout": []}
+    depths, colors_u8 = [], []
     with torch.no_grad():
         for k in range(len(ids)):
             colors, alphas, _, _, _, median, _ = render([k])
             a = alphas[0, ..., 0]
-            msk = alphas_gt[k][..., 0]
+            msk = alphas_gt[k][..., 0] > 0.5
             pred_mask = a > 0.5
-            inter = (pred_mask & (msk > 0.5)).sum().item()
-            union = (pred_mask | (msk > 0.5)).sum().item()
             split = "holdout" if k in holdout else "train"
-            iou[split].append(inter / max(union, 1))
-            sel = msk > 0.5
-            if sel.any():
-                mse = ((colors[0, ..., :3] - images[k]) ** 2)[sel].mean().item()
+            iou[split].append((pred_mask & msk).sum().item() / max((pred_mask | msk).sum().item(), 1))
+            if msk.any():
+                mse = ((colors[0, ..., :3] - images[k]) ** 2)[msk].mean().item()
                 psnr[split].append(10 * math.log10(1.0 / max(mse, 1e-10)))
-            depth = torch.where(pred_mask & (msk > 0.5), median[0, ..., 0], torch.zeros_like(a)).cpu().numpy().astype(np.float32)
-            color = (np.clip(images[k].cpu().numpy(), 0, 1) * 255).astype(np.uint8)
-            rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
-                o3d.geometry.Image(color), o3d.geometry.Image(depth), depth_scale=1.0, depth_trunc=20.0, convert_rgb_to_intensity=False)
-            volume.integrate(rgbd, intr, np.array(w2cs[ids[k]], dtype=np.float64))
+            depths.append(torch.where(pred_mask & msk, median[0, ..., 0], torch.zeros_like(a)).cpu().numpy().astype(np.float32))
+            colors_u8.append((images[k].clamp(0, 1).cpu().numpy() * 255).round().astype(np.uint8))
+    mesh = pmesh.fuse_tsdf(depths, colors_u8, K, [w2cs[i] for i in ids], W, H, voxel_cm=voxel_cm)
     fuse_s = time.time() - t0
 
-    # ---- mesh: extract, remove the mannequin (foreground mode), clean, decimate ------------------------
+    # ---- mesh: remove the mannequin (foreground masks only), clean, decimate --------------------------
     t0 = time.time()
-    mesh = volume.extract_triangle_mesh()
     raw_triangles = len(mesh.triangles)
-    removed_mannequin = 0
-    if mask_mode == "foreground" and len(mesh.vertices):
-        scene = o3d.t.geometry.RaycastingScene()
-        scene.add_triangles(o3d.t.geometry.TriangleMesh.from_legacy(o3d.io.read_triangle_mesh(f"{job}/{m['mannequin']['glb']}")))
-        sd = scene.compute_signed_distance(o3d.core.Tensor(np.asarray(mesh.vertices, dtype=np.float32))).numpy()
-        drop = sd < remove_cm / 100.0
-        removed_mannequin = int(drop.sum())
-        mesh.remove_vertices_by_mask(drop)
-    mesh.remove_degenerate_triangles()
-    mesh.remove_duplicated_triangles()
-    mesh.remove_duplicated_vertices()
-    mesh.remove_non_manifold_edges()
-    if len(mesh.triangles):
-        clusters, counts, _ = mesh.cluster_connected_triangles()
-        clusters, counts = np.asarray(clusters), np.asarray(counts)
-        small = counts[clusters] < 0.01 * len(clusters)
-        mesh.remove_triangles_by_mask(small)
-        mesh.remove_unreferenced_vertices()
-    target = lib.triangle_target(triangles)
-    if len(mesh.triangles) > target:
-        mesh = mesh.simplify_quadric_decimation(target_number_of_triangles=target)
-    mesh.compute_vertex_normals()
+    removed = pmesh.remove_near_surface(mesh, f"{job}/{m['mannequin']['glb']}", remove_cm) if mask_mode == "foreground" else 0
+    mesh = pmesh.clean_and_decimate(mesh, triangles)
     mesh_s = time.time() - t0
-
-    v = np.asarray(mesh.vertices)
-    f_ = np.asarray(mesh.triangles)
-    vc = (np.asarray(mesh.vertex_colors) * 255).astype(np.uint8) if mesh.has_vertex_colors() else None
-    tm = trimesh.Trimesh(vertices=v, faces=f_, vertex_colors=vc, process=False)
-    tm.metadata["extras"] = {"jobId": job_id, "inputHash": m["input_hash"], "source": source, "unit": "m", "estimate": True}
-    tm.export(f"{out}/garment.glb")
-
-    # ---- metrics ----------------------------------------------------------------------------------------
-    truth = None
-    if source == "synthetic" and len(f_):
-        gt = o3d.io.read_triangle_mesh(f"{job}/{m['synthetic']['truth_glb']}")
-        p_rec = mesh.sample_points_uniformly(50000)
-        p_gt = gt.sample_points_uniformly(50000)
-        d1 = np.asarray(p_rec.compute_point_cloud_distance(p_gt)) * 100
-        d2 = np.asarray(p_gt.compute_point_cloud_distance(p_rec)) * 100
-        fs = lambda t: 2 * (d1 < t).mean() * (d2 < t).mean() / max((d1 < t).mean() + (d2 < t).mean(), 1e-9)  # noqa: E731
-        truth = {
-            "chamfer_cm_mean": round(float((d1.mean() + d2.mean()) / 2), 3),
-            "recon_to_truth_cm": {"mean": round(float(d1.mean()), 3), "p95": round(float(np.percentile(d1, 95)), 3), "max": round(float(d1.max()), 3)},
-            "truth_to_recon_cm": {"mean": round(float(d2.mean()), 3), "p95": round(float(np.percentile(d2, 95)), 3), "max": round(float(d2.max()), 3)},
-            "fscore_1cm": round(float(fs(1.0)), 4),
-            "fscore_2cm": round(float(fs(2.0)), 4),
-        }
+    glb_bytes = pmesh.write_glb(mesh, f"{out}/garment.glb")
+    truth = pmesh.compare_to_truth(mesh, f"{job}/{m['synthetic']['truth_glb']}", seed=seed) if source == "synthetic" and len(mesh.triangles) else None
     mean = lambda xs: round(float(np.mean(xs)), 4) if xs else None  # noqa: E731
     metrics = {
         "format": "curtain.phase0.recon-metrics",
@@ -323,18 +254,7 @@ def reconstruct(job_id: str, source: str = "synthetic", iterations: int = 10000,
         "final": last,
         "psnr_masked": {"train": mean(psnr["train"]), "holdout": mean(psnr["holdout"])},
         "mask_iou": {"train": mean(iou["train"]), "holdout": mean(iou["holdout"])},
-        "mesh": {
-            "triangles_raw": raw_triangles,
-            "triangles": int(len(f_)),
-            "vertices": int(len(v)),
-            "budget": list(lib.TRIANGLE_BUDGET),
-            "within_budget": lib.TRIANGLE_BUDGET[0] <= len(f_) <= lib.TRIANGLE_BUDGET[1],
-            "watertight": bool(mesh.is_watertight()),
-            "edge_manifold": bool(mesh.is_edge_manifold()),
-            "removed_mannequin_vertices": removed_mannequin,
-            "bbox_m": [np.round(v.min(axis=0), 4).tolist(), np.round(v.max(axis=0), 4).tolist()] if len(v) else None,
-            "voxel_cm": voxel_cm,
-        },
+        "mesh": {**pmesh.mesh_report(mesh), "triangles_raw": raw_triangles, "removed_mannequin_vertices": removed, "voxel_cm": voxel_cm, "glb_bytes": glb_bytes},
         "vs_truth": truth,
         "seconds": {"train": round(train_s, 1), "fuse": round(fuse_s, 1), "mesh": round(mesh_s, 1)},
         "label": "reconstructed geometry: an estimate, not a measurement (AGENTS.md rule 3)",

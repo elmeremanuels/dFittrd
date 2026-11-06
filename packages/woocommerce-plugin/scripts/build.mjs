@@ -3,6 +3,7 @@
  * Build the distributable plugin zip:
  *   1. copy ../sdk/dist/sdk.v1.js            → assets/sdk.v1.js         (bundled, never remote: WP.org rule)
  *   2. copy ../schema/dist/garment*.schema.json → assets/                (local JSON Schema validation)
+ *      and write assets/fabric-library.json from @curtain/schema         (fabric names → library ids)
  *   3. php -l every PHP file
  *   4. check the translations and compile languages/*.po to .mo in the staged copy
  *   5. zip dist/curtain-woocommerce.zip with a top-level `curtain-woocommerce/` folder
@@ -15,6 +16,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync } f
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeFabricLibraryAsset } from './fabric-library.mjs';
 import { lintAll } from './lint.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -43,6 +45,9 @@ for (const [from, to] of sources) {
   copyFileSync(from, join(root, to));
   console.log(`copied ${to} (${statSync(join(root, to)).size} B)`);
 }
+
+// The fabric lexicon the PHP fabric-text twin reads (includes/class-fabric-text.php).
+console.log(`wrote ${writeFabricLibraryAsset(root).slice(root.length + 1)}`);
 
 // Secret guard (AGENTS.md rule 2): the bundled SDK must not carry any provider key.
 const sdk = readFileSync(join(root, 'assets/sdk.v1.js'), 'utf8');

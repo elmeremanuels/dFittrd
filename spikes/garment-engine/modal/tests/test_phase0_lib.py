@@ -99,11 +99,12 @@ def test_transforms_and_opencv_files_carry_the_same_poses():
     assert sorted(ns) == sorted(cv) == list(range(8))
     assert lib.max_abs_diff(k_ns, k_cv) < 1e-9
     for i in ns:
+        # The files round to 6 decimals (micrometres), so rotations are orthonormal to about 1e-6.
         assert lib.max_abs_diff(ns[i], cv[i]) < 5e-6
         # Round trip OpenCV -> OpenGL -> OpenCV.
-        assert lib.max_abs_diff(lib.opengl_c2w_to_opencv_w2c(lib.opencv_w2c_to_opengl_c2w(cv[i])), cv[i]) < 1e-12
+        assert lib.max_abs_diff(lib.opengl_c2w_to_opencv_w2c(lib.opencv_w2c_to_opengl_c2w(cv[i])), cv[i]) < 1e-5
         ident = lib.mat_mul(cv[i], lib.invert_rigid(cv[i]))
-        assert lib.max_abs_diff(ident, [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]) < 1e-9
+        assert lib.max_abs_diff(ident, [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]) < 1e-5
 
 
 def test_frame_0_is_front_and_frame_n_over_2_is_back():
@@ -122,7 +123,7 @@ def test_projection_and_principal_point_conventions():
     assert k[0][2] == cams["width"] / 2 and k[1][2] == cams["height"] / 2  # pixel-corner origin
     look_at_height = 0.52 * load("manifest.json")["mannequin"]["stature_cm"] / 100
     u, v, z = lib.project(k, cv[0], [0.0, look_at_height, 0.0])
-    assert abs(u - cams["width"] / 2) < 1e-6 and abs(v - cams["height"] / 2) < 1e-6
+    assert abs(u - cams["width"] / 2) < 1e-3 and abs(v - cams["height"] / 2) < 1e-3
     assert abs(z - 3.2) < 1e-6
     u_head = lib.project(k, cv[0], [0.0, 1.6, 0.0])[1]
     assert u_head < v  # image y points down
@@ -163,7 +164,10 @@ def test_control_value_matches_the_exporter_encoding(manifest):
     assert lib.control_value(int(far * 10), near, far) == 1
     mid = lib.control_value(int((near + far) * 5), near, far)
     assert 126 <= mid <= 129
-    assert lib.control_value(int((near + far) * 5), near, far, "inverse") > mid  # inverse depth favours near
+    inv = lib.control_value(int((near + far) * 5), near, far, "inverse")
+    assert inv < mid  # 1/depth spends more of the 8 bits near the camera, so the middle sits lower
+    assert lib.control_value(int(near * 10), near, far, "inverse") == 255
+    assert lib.control_value(int(far * 10), near, far, "inverse") == 1
     with pytest.raises(ValueError):
         lib.control_value(3000, near, far, "log")
 

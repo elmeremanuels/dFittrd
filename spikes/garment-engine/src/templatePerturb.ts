@@ -18,11 +18,23 @@ export interface TemplatePerturbation {
   sleeveScale: number;
   /** Sleeves: length scale along the arm axis from the shoulder joint. */
   sleeveLengthScale: number;
+  /**
+   * Body and legs: an extra scale of the depth (z) alone, about the mannequin's centre at each height
+   * (torso, below the crotch the leg), after `bodyScale`. Default 1. Front and back views see width, not
+   * depth, so a template wrong only here tests what two views recover of depth (review F1).
+   */
+  depthScale?: number;
 }
 
 export const PERTURBATIONS: readonly TemplatePerturbation[] = [
   { label: 'wider +8 %, hem 8 cm higher, sleeves +10 % wide, 15 % shorter', bodyScale: 1.08, hemRaiseCm: 8, sleeveScale: 1.1, sleeveLengthScale: 0.85 },
   { label: 'narrower −6 %, hem 8 cm lower, sleeves +10 % wide, 10 % longer', bodyScale: 0.94, hemRaiseCm: -8, sleeveScale: 1.1, sleeveLengthScale: 1.1 },
+];
+
+/** Depth-only wrong templates: width, hem and sleeves as predicted, the body's (and legs') depth 15 % off. */
+export const DEPTH_PERTURBATIONS: readonly TemplatePerturbation[] = [
+  { label: 'depth +15 % (width unchanged)', bodyScale: 1, hemRaiseCm: 0, sleeveScale: 1, sleeveLengthScale: 1, depthScale: 1.15 },
+  { label: 'depth −15 % (width unchanged)', bodyScale: 1, hemRaiseCm: 0, sleeveScale: 1, sleeveLengthScale: 1, depthScale: 0.85 },
 ];
 
 /**
@@ -44,18 +56,25 @@ export function perturbTemplate(m: Mannequin, proxy: Mesh, p: TemplatePerturbati
     if (part === 'body') yMin = Math.min(yMin, P[3 * i + 1]!);
     if (part === 'leg_l' || part === 'leg_r') legMin = Math.min(legMin, P[3 * i + 1]!);
   }
+  const ds = p.depthScale ?? 1;
+  const torsoTop = m.morphHeights.shoulder;
+  const centreZ = (y: number, side: 1 | -1): number => (y < crotch ? m.legAt(y, side)?.cz : m.torsoAt(Math.min(y, torsoTop))?.cz) ?? m.torsoAt(crotch + 1)?.cz ?? 0;
   for (let i = 0; i < P.length / 3; i++) {
     const part = proxy.partNames[proxy.vertexPart[i]!];
     const x = P[3 * i]!, y = P[3 * i + 1]!, z = P[3 * i + 2]!;
     if (part === 'body') {
       P[3 * i] = x * p.bodyScale;
       P[3 * i + 2] = z * p.bodyScale;
+      if (ds !== 1) {
+        const cz = centreZ(y, x >= 0 ? 1 : -1);
+        P[3 * i + 2] = cz + (P[3 * i + 2]! - cz) * ds;
+      }
       if (!trousers && y < waist && waist > yMin) P[3 * i + 1] = y + p.hemRaiseCm * ((waist - y) / (waist - yMin));
     } else if (part === 'leg_l' || part === 'leg_r') {
       const l = m.legAt(Math.min(y, crotch - 0.5), part === 'leg_l' ? 1 : -1);
       const cx = l?.cx ?? 0, cz = l?.cz ?? 0;
       P[3 * i] = cx + (x - cx) * p.bodyScale;
-      P[3 * i + 2] = cz + (z - cz) * p.bodyScale;
+      P[3 * i + 2] = cz + (z - cz) * p.bodyScale * ds;
       if (y < crotch && crotch > legMin) P[3 * i + 1] = y + p.hemRaiseCm * ((crotch - y) / (crotch - legMin));
     } else if (part === 'sleeve_l' || part === 'sleeve_r') {
       const f = part === 'sleeve_l' ? m.arms.left : m.arms.right;

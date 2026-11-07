@@ -2,7 +2,9 @@
  * The predicted route's two-view fit (docs/PREDICTION-ENGINE.md §4.5, V0): stage 4t from the front and
  * back views only (frames 0 and N/2), with the template's depth (`depthPrior: 'template'`). The synthetic
  * shirt dress (`aalter-studio-2`) at 60 frames and half resolution, fitted from a template that is NOT
- * the garment (8 % wider, hem 8 cm higher: `PERTURBATIONS[0]`).
+ * the garment (8 % wider, hem 8 cm higher: `PERTURBATIONS[0]`); the lateral scale with the garment
+ * itself as template (a skirt whose synthetic truth is its proxy, opened); and a template wrong only in
+ * depth, which two views cannot correct.
  */
 import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh, turntablePath, type Mesh } from '@curtain/mannequin';
 import { mockGarment } from '@curtain/schema';
@@ -12,10 +14,10 @@ import { clothInsideBody } from './eval';
 import { maskIou, type Mask } from './evalPng';
 import { generateGarment } from './garment';
 import { garmentSpec } from './product';
-import { buildProxy } from './proxy';
+import { buildProxy, syntheticGarmentFromProxy } from './proxy';
 import { stage4tSplit } from './stage4t';
 import { fitTemplate, type TemplateFitResult } from './templateFit';
-import { PERTURBATIONS, perturbTemplate } from './templatePerturb';
+import { DEPTH_PERTURBATIONS, PERTURBATIONS, perturbTemplate } from './templatePerturb';
 import { cameraFromFrame, idMask, rasterize, type PinholeCamera } from './views';
 
 const m = buildMannequin(bodyShape(BASE_SHAPE_ID));
@@ -31,12 +33,24 @@ const proxy = buildProxy(m, payload, 'M', { shoulderToHemCm: garmentSpec(payload
 const bad = perturbTemplate(m, proxy, PERTURBATIONS[0]!);
 const { train, holdout } = stage4tSplit(FRAMES, [0, FRAMES / 2]);
 
+const deep = perturbTemplate(m, proxy, DEPTH_PERTURBATIONS[0]!);
+const skirtPayload = mockGarment('rue-marais-bottom-01');
+const skirtTruth = syntheticGarmentFromProxy(m, skirtPayload, '38');
+const skirtProxy = buildProxy(m, skirtPayload, '38').mesh;
+
 let withTemplate: TemplateFitResult;
 let withHull: TemplateFitResult;
+let fromTrueSpec: TemplateFitResult;
+let fromDeep: TemplateFitResult;
+let skirtFit: TemplateFitResult;
 beforeAll(() => {
   const views = { cameras: cams, masks, train, holdout };
   withTemplate = fitTemplate({ mannequin: m, body, proxy: bad, views, options: { depthPrior: 'template' } });
   withHull = fitTemplate({ mannequin: m, body, proxy: bad, views, options: { depthPrior: 'hull' } });
+  fromTrueSpec = fitTemplate({ mannequin: m, body, proxy, views, options: { depthPrior: 'template' } });
+  fromDeep = fitTemplate({ mannequin: m, body, proxy: deep, views, options: { depthPrior: 'template' } });
+  const skirtMasks = cams.map((c) => visibleMask(c, skirtTruth));
+  skirtFit = fitTemplate({ mannequin: m, body, proxy: skirtProxy, views: { cameras: cams, masks: skirtMasks, train, holdout }, options: { category: 'bottom', depthPrior: 'template' } });
 }, 300_000);
 
 describe('stage4tSplit', () => {
@@ -77,5 +91,38 @@ describe('two-view fit with the template depth', () => {
   it('matches the side views it never saw better than the template does', () => {
     const iou = (g: Pick<Mesh, 'positions' | 'indices'>): number => holdout.reduce((s, v) => s + maskIou(visibleMask(cams[v]!, g), masks[v]!).iou, 0) / holdout.length;
     expect(iou(withTemplate.mesh)).toBeGreaterThan(iou(bad));
+  });
+});
+
+describe('two-view lateral scale and depth', () => {
+  // ±1.5 %: at this half resolution a pixel is about 2 mm, 1 % of a skirt's 20 cm half-width (the
+  // synthetic jobs at full resolution read 0.99-1.02, out/prediction-v0); the old estimator read 0.96-0.97.
+  it('reads the width the masks show without bias: the garment itself as template scales by 1.00 ± 1.5 %', () => {
+    const skirt = skirtFit.report.twoView!.parts.find((p) => p.name === 'body')!;
+    expect(skirt.measuredPlus).toBeGreaterThan(0);
+    expect(Math.abs(skirt.scale.median - 1)).toBeLessThanOrEqual(0.015);
+    expect(chamfer(skirtFit.mesh, skirtTruth, 30000).chamferCmMean).toBeLessThan(chamfer(skirtProxy, skirtTruth, 30000).chamferCmMean);
+    const dress = fromTrueSpec.report.twoView!.parts.find((p) => p.name === 'body')!;
+    expect(Math.abs(dress.scale.median - 1)).toBeLessThanOrEqual(0.015);
+  });
+
+  it('perturbs depth alone: width unchanged, depth 15 % larger about the body', () => {
+    const extent = (mesh: Mesh, d: 0 | 2): number => {
+      let lo = Infinity, hi = -Infinity;
+      for (let i = d; i < mesh.positions.length; i += 3) {
+        lo = Math.min(lo, mesh.positions[i]!);
+        hi = Math.max(hi, mesh.positions[i]!);
+      }
+      return hi - lo;
+    };
+    expect(extent(deep, 0)).toBeCloseTo(extent(proxy, 0), 6);
+    expect(extent(deep, 2) / extent(proxy, 2)).toBeGreaterThan(1.1);
+  });
+
+  it('does not recover a depth error: two views keep the template depth, so a 15 % deeper template stays well off', () => {
+    const good = chamfer(fromTrueSpec.mesh, truth, 30000).chamferCmMean;
+    const off = chamfer(fromDeep.mesh, truth, 30000).chamferCmMean;
+    expect(off).toBeGreaterThan(good + 0.3);
+    expect(fromDeep.report.twoView!.parts.find((p) => p.name === 'body')!.scale.median).toBeCloseTo(1, 1);
   });
 });

@@ -7,14 +7,18 @@
  * prediction reconstruct a garment almost as well as stage 4t on the full turntable? Per job, from the
  * same masks and cameras:
  *
- * - `P0 alone`: the template itself, no frames (the P0 rule template is today's control proxy,
- *   `buildProxy` with the rules of proxy.ts: FLARE_RULES, LEG_RULES, PROXY_DEFAULT_EASE, hemFor,
- *   sleeveFor), rebuilt with its parts;
+ * - `P0 alone`: the template itself, no frames. The base template is, on a synthetic job, the true-spec
+ *   template (V0 (a)): `buildProxy` given the truth's own length (lofted dresses and tops), and for a
+ *   skirt, trousers or cardigan the very proxy the truth is cut from; on a GPU job (run 14) the rule P0
+ *   (`buildProxy` with the rules of proxy.ts: FLARE_RULES, LEG_RULES, PROXY_DEFAULT_EASE, hemFor,
+ *   sleeveFor). Synthetic dresses and tops also get the rule P0 (printed length, no truth) as a row;
  * - `two-view`: stage 4t from frames 0 and N/2 only with the template's depth (`depthPrior:
- *   'template'`), from (a) P0, (b) the two `PERTURBATIONS` of P0 (a wrong prediction: ±8 % width,
- *   hem ±8 cm, sleeves), (c) another product's proxy; plus P0 with the hull's depth (`depthPrior:
- *   'hull'`), the turntable fit run unchanged on two views, to show why the option exists;
- * - `full`: stage 4t from the 128 training frames of the turntable, from P0.
+ *   'template'`), from (a) the base template, the rule P0, (b) the two `PERTURBATIONS` of the base (a
+ *   wrong prediction: ±8 % width and depth, hem ±8 cm, sleeves), the two `DEPTH_PERTURBATIONS` (depth
+ *   ±15 % alone: what two views cannot see), (c) another product's proxy; plus the base with the hull's
+ *   depth (`depthPrior: 'hull'`), the turntable fit run unchanged on two views, to show why the option
+ *   exists;
+ * - `full`: stage 4t from the 128 training frames of the turntable, from the base template.
  *
  * Reference: `synthetic/garment_truth.glb` for synthetic jobs (`--source synthetic`, chosen when the job
  * has no stage 2 frames); for a GPU job (run 14) the full stage 4t fit computed here (the GPU frames
@@ -42,7 +46,7 @@ import { garmentSpec } from '../src/product';
 import { buildProxy, type ProxyOptions } from '../src/proxy';
 import { loadJobViews, stage4tSplit, type JobViews, type Stage4tSource } from '../src/stage4t';
 import { fitTemplate, type TemplateFitOptions } from '../src/templateFit';
-import { GARMENT_REGIONS, garmentRegion, PERTURBATIONS, perturbTemplate } from '../src/templatePerturb';
+import { DEPTH_PERTURBATIONS, GARMENT_REGIONS, garmentRegion, PERTURBATIONS, perturbTemplate } from '../src/templatePerturb';
 import { idMask, rasterize } from '../src/views';
 
 const args = process.argv.slice(2).filter((a) => a !== '--');
@@ -157,9 +161,15 @@ for (const d of dirs) {
   const payload = manifest.hash_inputs?.product ?? mockGarment(manifest.product_id);
   const features = parseFeatures(manifest.features);
   const proxyOpts: ProxyOptions = features ? { features } : {};
-  // As the exporter builds it for synthetic stills: a lofted synthetic garment drops its length vertically.
-  if (source === 'synthetic' && (payload.category === 'dress' || payload.category === 'top')) proxyOpts.shoulderToHemCm = garmentSpec(payload, manifest.base_size).shoulderToHemCm;
-  const p0 = buildProxy(m, payload, manifest.base_size, proxyOpts).mesh;
+  // The rule template (P0 as production would build it: hem from the printed length or hemFor, no truth).
+  const ruleP0 = buildProxy(m, payload, manifest.base_size, proxyOpts).mesh;
+  // On synthetic jobs the base template is the true-spec template (V0 (a)), as the exporter builds the
+  // control: a lofted synthetic dress or top is given the truth's own length as a vertical drop; a skirt,
+  // trousers or cardigan's truth IS this proxy, opened (`syntheticGarmentFromProxy`). On a GPU job the
+  // base is the rule P0.
+  const lofted = source === 'synthetic' && (payload.category === 'dress' || payload.category === 'top');
+  const p0 = lofted ? buildProxy(m, payload, manifest.base_size, { ...proxyOpts, shoulderToHemCm: garmentSpec(payload, manifest.base_size).shoulderToHemCm }).mesh : ruleP0;
+  const base = source === 'synthetic' ? 'true-spec template (V0 a)' : 'P0';
   const exported = existsSync(join(jobDir, 'control/proxy.glb')) ? glb(join(jobDir, 'control/proxy.glb')) : null;
   const p0Note = exported ? (weldVertices(p0).positions.length === exported.positions.length ? 'same vertex count as control/proxy.glb' : `control/proxy.glb has ${exported.positions.length / 3} welded vertices, today's P0 ${weldVertices(p0).positions.length / 3} (an older proxy version exported the job)`) : 'no control/proxy.glb';
   const views = loadJobViews(jobDir, source);
@@ -185,12 +195,15 @@ for (const d of dirs) {
     rows.push(row);
     console.log(`[v0]   ${row.route.padEnd(20)} ${row.template.padEnd(34)} Chamfer ${row.chamferCm.toFixed(3)} F1 ${row.fscore1cm.toFixed(3)} hem ${row.hemErrCm} length ${row.lengthErrCm} cuff ${row.cuffErrCm} inside ${row.insideShare} IoU ${row.holdoutSilhouetteIou} (${row.seconds} s)`);
   };
-  push(score('full stage 4t', 'P0', fullFit.mesh, ref, refShape, kind, views, full.holdout, sdf, fullFit.seconds));
+  push(score('full stage 4t', base, fullFit.mesh, ref, refShape, kind, views, full.holdout, sdf, fullFit.seconds));
   const other = OTHER[kind];
   const otherPayload = other ? mockGarment(other) : null;
+  const short = base === 'P0' ? 'P0' : 'true-spec';
   const templates: { label: string; mesh: Mesh }[] = [
-    { label: 'P0', mesh: p0 },
-    ...PERTURBATIONS.map((p, k) => ({ label: k === 0 ? 'P0 wider +8 %, hem 8 cm up' : 'P0 narrower −6 %, hem 8 cm down', mesh: perturbTemplate(m, p0, p) })),
+    { label: base, mesh: p0 },
+    ...(lofted ? [{ label: 'rule P0 (printed length, no truth)', mesh: ruleP0 }] : []),
+    ...PERTURBATIONS.map((p, k) => ({ label: k === 0 ? `${short} wider +8 %, hem 8 cm up` : `${short} narrower −6 %, hem 8 cm down`, mesh: perturbTemplate(m, p0, p) })),
+    ...DEPTH_PERTURBATIONS.map((p, k) => ({ label: k === 0 ? `${short} depth +15 % only` : `${short} depth −15 % only`, mesh: perturbTemplate(m, p0, p) })),
     ...(otherPayload ? [{ label: `other product ${other}`, mesh: buildProxy(m, otherPayload, midSize(otherPayload)).mesh }] : []),
   ];
   const twoViewReports: Record<string, unknown> = {};
@@ -199,12 +212,12 @@ for (const d of dirs) {
     const f = fit(t.mesh, two, 'template');
     twoViewReports[t.label] = f.twoView;
     push(score('two-view', t.label, f.mesh, ref, refShape, kind, views, two.holdout, sdf, f.seconds));
-    if (t.label === 'P0') {
+    if (t.label === base) {
       const h = fit(t.mesh, two, 'hull');
       push(score('two-view, hull depth', t.label, h.mesh, ref, refShape, kind, views, two.holdout, sdf, h.seconds));
     }
   }
-  results.push({ productId: manifest.product_id, job: basename(jobDir), kind, category, source, reference: refLabel, p0: p0Note, refShape, split: { full: { train: full.train.length, holdout: full.holdout.length }, twoView: { train: two.train, holdout: two.holdout.length } }, rows, twoViewReports });
+  results.push({ productId: manifest.product_id, job: basename(jobDir), kind, category, source, reference: refLabel, base, p0: p0Note, refShape, split: { full: { train: full.train.length, holdout: full.holdout.length }, twoView: { train: two.train, holdout: two.holdout.length } }, rows, twoViewReports });
 }
 mkdirSync(dirname(outPath), { recursive: true });
 writeFileSync(outPath, `${JSON.stringify({ format: 'curtain.prediction.v0', formatVersion: 1, samples: SAMPLES, g1V0ChamferCm: 2, results }, null, 2)}\n`);

@@ -1555,6 +1555,8 @@ export interface TwoViewReport {
 
 /** Smallest |lateral component| of a ray for its hull to give the silhouette's half-width (the ray then leaves the views' slab sideways). */
 export const TWO_VIEW_LATERAL_MIN = 0.7;
+/** Per side of a ring, how many of the most lateral rays give the lateral scale (median of their hull / template radius). */
+export const TWO_VIEW_LATERAL_RAYS = 3;
 /** Range of the lateral scale applied to a template ring. */
 export const TWO_VIEW_SCALE: readonly [number, number] = [0.5, 2];
 
@@ -1562,9 +1564,11 @@ export const TWO_VIEW_SCALE: readonly [number, number] = [0.5, 2];
  * Targets for the two-view fit (`depthPrior: 'template'`). Per ring (a row of a body, sleeve or leg
  * grid: rays square to one axis): the template point on every ray is split into a lateral offset (in
  * the views' image plane, square to the part's axis) and a depth offset (along the cameras' axis). The
- * half-width the masks show on each side comes from the hull of the rays that point sideways
+ * width the masks show on each side comes from the hull of the rays that point sideways
  * (`TWO_VIEW_LATERAL_MIN`): seen from the front and the back, a sideways ray is carved where it leaves
- * the silhouette. The template's lateral offsets are scaled per side to that width; rings without
+ * the silhouette. The lateral scale per side is the median of hull / template radius over the
+ * `TWO_VIEW_LATERAL_RAYS` rays closest to lateral (1.00 when the template is the garment); the
+ * template's lateral offsets are scaled by it; rings without
  * such a ray (an arm beside the bodice, every ray capped) take the scale interpolated from the rings
  * above and below. Each ray's target is where it meets the scaled cross-section, bounded by its hull,
  * at full weight. Shoulder-cap rows (rays fanned from the joint) keep their hull where a view carves
@@ -1640,20 +1644,21 @@ function templateDepthTargets(a: {
     const kPlus = new Array<number>(rows).fill(NaN), kMinus = new Array<number>(rows).fill(NaN);
     const idx = (r: number, c: number): number => p.offset + (first + r) * p.cols + c;
     for (let r = 0; r < rows; r++) {
-      let tPlus = 0, tMinus = 0;
-      const wPlus: number[] = [], wMinus: number[] = [];
+      // Per side: the rays closest to lateral, each as its own ratio hull / template radius. Not the median
+      // half-width over every sideways ray against the template's widest point: under perspective the front
+      // and back silhouettes' intersection is narrower away from the plane of their contour, so an oblique
+      // ray leaves it early and that ratio read 3-4 % narrow with the truth as template (review F4).
+      const sides: { r: number; dl: number }[][] = [[], []];
       for (let c = 0; c < p.cols; c++) {
         const i = idx(r, c);
         if (blocked[i]) continue;
         const dl = dot(rays[i]!.d, L);
-        const lt = s0[i]! * dl;
-        if (lt > tPlus) tPlus = lt;
-        if (-lt > tMinus) tMinus = -lt;
-        if (!present[i] || hull[i]! < 0 || capped[i] || Math.abs(dl) < TWO_VIEW_LATERAL_MIN) continue;
-        (dl > 0 ? wPlus : wMinus).push(hull[i]! * Math.abs(dl));
+        if (!present[i] || hull[i]! < 0 || capped[i] || Math.abs(dl) < TWO_VIEW_LATERAL_MIN || !(s0[i]! * Math.abs(dl) > 1)) continue;
+        sides[dl > 0 ? 0 : 1]!.push({ r: hull[i]! / s0[i]!, dl: Math.abs(dl) });
       }
-      if (wPlus.length && tPlus > 1) kPlus[r] = median(wPlus) / tPlus;
-      if (wMinus.length && tMinus > 1) kMinus[r] = median(wMinus) / tMinus;
+      const est = (q: { r: number; dl: number }[]): number => (q.length ? median([...q].sort((x, y) => y.dl - x.dl).slice(0, TWO_VIEW_LATERAL_RAYS).map((x) => x.r)) : NaN);
+      kPlus[r] = est(sides[0]!);
+      kMinus[r] = est(sides[1]!);
     }
     const fill = (k: number[]): { known: number; k: number[] } => {
       const known = k.map((x, r) => (Number.isFinite(x) ? r : -1)).filter((r) => r >= 0);

@@ -10,6 +10,7 @@ import { PROXY_ID, controlFrame, depthRange, idMask } from './exportJob';
 import { generateGarment } from './garment';
 import { garmentLengths } from './garmentLength';
 import { SPIKE_PRODUCT_IDS, garmentSpec } from './product';
+import { predict, type Prediction } from './predict';
 import { MIN_CLEARANCE_CM, buildProxy, proxyKind, proxyRecord, type ProxyKind } from './proxy';
 import { render } from './raster';
 import { MANNEQUIN_GREY, MANNEQUIN_ID } from './separation';
@@ -257,5 +258,44 @@ describe('control proxy: lengths, sleeves and one-size', () => {
     const tight = buildProxy(m, { ...oneSize, sizeChart: [{ size: 'ONE', bust: 80 }] }, 'ONE').spec;
     expect(tight.girths.chest).toBe(m.shape.rings.chest.circumferenceCm + MIN_CLEARANCE_CM);
     expect(tight.girthSource.chest).toBe('raised to clear the mannequin');
+  });
+});
+
+describe('control proxy: shape defaults from the drape prediction (P0)', () => {
+  const [payload, baseSize] = product('crimson-wildflower-maxi-skirt');
+  const prediction = predict({ id: 'crimson-wildflower-maxi-skirt', payload, baseSize });
+
+  it('is the same proxy with the prediction passed in or predicted inside', () => {
+    expect(proxyRecord(buildProxy(m, payload, baseSize, { prediction }).spec)).toEqual(proxyRecord(buildProxy(m, payload, baseSize).spec));
+  });
+
+  it('takes hem flare, length and default ease from the prediction, never the chart girths at the anchors', () => {
+    const wider: Prediction = { ...prediction, pattern: { ...prediction.pattern, hemFlare: { ...prediction.pattern.hemFlare, value: 1.6 }, length: { ...prediction.pattern.length, rule: { from: 'landmark', at: ['knee'], plusCm: 0 } } } };
+    const a = buildProxy(m, payload, baseSize, { prediction }).spec;
+    const b = buildProxy(m, payload, baseSize, { prediction: wider }).spec;
+    expect(b.hemFlare).toBe(1.6);
+    expect(b.hemY).toBeCloseTo(m.morphHeights.knee, 6);
+    expect(b.hemY).toBeGreaterThan(a.hemY);
+    expect(b.girths.waist).toBe(a.girths.waist);
+    expect(b.girths.hip).toBe(a.girths.hip);
+    const easier: Prediction = { ...prediction, pattern: { ...prediction.pattern, defaultEase: { ...prediction.pattern.defaultEase, waist: { value: 30, sigma: 3, provenance: 'rule', source: 'test' } } } };
+    // The waist comes from the chart (the fit engine's girth): a predicted default never replaces it.
+    expect(buildProxy(m, payload, baseSize, { prediction: easier }).spec.girths.waist).toBe(a.girths.waist);
+  });
+
+  it('refuses a prediction for another kind of garment, or for another payload of the same kind', () => {
+    const [dress, size] = product('azure-palm-baby-doll-dress');
+    expect(() => buildProxy(m, dress, size, { prediction })).toThrow(/prediction is for a skirt/);
+    expect(() => buildProxy(m, { ...payload, id: 'another-skirt' }, baseSize, { prediction })).toThrow(/prediction is for payload/);
+  });
+
+  it('writes a shape default a title token set into the proxy notes (hashed through the manifest)', () => {
+    const { patternBlock: _b, subcategory: _s, ...rest } = mockGarment('aalter-studio-2');
+    const bare = { ...rest, lengthCm: {}, name: 'Tiered Maxi Dress' } as GarmentPayload;
+    const spec = buildProxy(m, bare, 'M').spec;
+    expect(spec.hemFlare).toBe(1.35);
+    expect(spec.notes).toEqual(expect.arrayContaining([expect.stringMatching(/^hemFlare from the title: title "tier"/), expect.stringMatching(/^length from the title: title "maxi"/)]));
+    // A product whose block or subcategory set the defaults (all five run 15 products) gets no such note.
+    expect(buildProxy(m, payload, baseSize, { prediction }).spec.notes.join(' ')).not.toMatch(/from the title/);
   });
 });

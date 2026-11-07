@@ -20,9 +20,20 @@
  *   outerwear   as top; sleeves to the wrist when the product gives no sleeve length
  *
  * Girths: the chart row of the base size through `evalChart` (garment chart as printed, e.g. one-size
- * flat measurements doubled by the shop parser; body chart + product ease, else the fit engine's
- * category default ease). A ring the chart does not give is the mannequin's girth + `PROXY_DEFAULT_EASE`.
+ * flat measurements doubled by the shop parser; body chart + the ease the fit engine uses: the product's,
+ * else the pattern block's `BLOCKS` ease, else the category default). These are the D15 pins: at every
+ * critical anchor the proxy's girth is the fit engine's (docs/PREDICTION-ENGINE.md §2, `predictBoundary.test.ts`).
+ * A ring the chart does not give is the mannequin's girth + the predicted default ease (`PROXY_DEFAULT_EASE`).
  * A girth below the mannequin's body + `MIN_CLEARANCE_CM` is raised to it and the spec says so.
+ *
+ * Drape prediction P0 (Nov 2026, `src/predict/`): the shape defaults (hem flare, trouser legs, default ease,
+ * length and sleeve rules, the front opening's words) come from `predict()` (prediction.json), never from fabric.
+ * For the five run 15 products and the two spike fixtures the refactor alone gave byte-identical proxies and job
+ * ids. The D15 fix that came with it (the block ease above; before it the proxy used the category default where a
+ * block has its own ease) changes the girths, and so the proxy and the job id, of products whose block sets an ease
+ * the product does not: of the five, the shirt blouse (chest 103 → 105), the A-line skirt (waist 79.5 → 80.5) and the
+ * oversized cardigan (chest 102 → 104). PROXY_VERSION stays 0.3.0 so the other products keep their job ids; the
+ * change is in the hashed girths and glb. A chart thigh is never widened for a wide leg (D15); only a default one is.
  *
  * Lengths (0.2.0): a printed shoulder_to_hem is a flat-lay length, measured along the garment from the
  * high point shoulder (`garmentLength.ts`), not a vertical drop. The hem goes where the proxy's own
@@ -50,13 +61,14 @@ import type { GarmentPayload } from '@curtain/schema';
 import { evalChart, evalChartRow, isEvalCategory, type EvalCategory } from './evalChart';
 import type { GarmentFeatures, SleeveStyle } from './features';
 import { hemForSurfaceLength, sagittalProfile } from './garmentLength';
+import { PROXY_DEFAULT_EASE, SLEEVE_STYLE_ALONG, predict, proxyKind, styleWords, titleRules, type ArmFractions, type LengthRule, type Prediction, type ProxyKind } from './predict';
 
 export const PROXY_VERSION = 'control-proxy-0.3.0';
 export const CONTROL_MODES = ['proxy', 'bare'] as const;
 export type ControlMode = (typeof CONTROL_MODES)[number];
 
-export const PROXY_KINDS = ['dress', 'skirt', 'trousers', 'top', 'outerwear'] as const;
-export type ProxyKind = (typeof PROXY_KINDS)[number];
+// The kinds, the kind rule and the shape defaults live in the predictor (P0, `src/predict/`); re-exported for the callers of 0.3.0.
+export { PROXY_DEFAULT_EASE, PROXY_KINDS, proxyKind, type ProxyKind } from './predict';
 
 /** A girth never sits closer to the mannequin than this (cm of girth), so the proxy always covers the body. */
 export const MIN_CLEARANCE_CM = 1;
@@ -68,15 +80,6 @@ const BODY_SEGMENTS = 64;
 const LIMB_SEGMENTS = 32;
 const STEP_CM = 1.5;
 
-/** Ease (cm of girth) over the mannequin where the chart gives no value for a ring. A control choice, not chart data. */
-export const PROXY_DEFAULT_EASE: Readonly<Record<ProxyKind, Partial<Record<AnchorRing, number>>>> = {
-  dress: { chest: 6, underbust: 6, waist: 4, hip: 6, upper_arm: 6, wrist: 4 },
-  skirt: { waist: 2, hip: 5 },
-  trousers: { waist: 2, hip: 5, thigh: 3, knee: 6 },
-  top: { chest: 8, underbust: 8, waist: 8, hip: 6, upper_arm: 6, wrist: 4 },
-  outerwear: { chest: 12, underbust: 12, waist: 12, hip: 10, upper_arm: 8, wrist: 6 },
-};
-
 /** The rings the proxy body passes through, top to bottom, per kind (trouser legs add the thigh). */
 const BODY_RINGS: Readonly<Record<ProxyKind, readonly AnchorRing[]>> = {
   dress: ['chest', 'underbust', 'waist', 'hip'],
@@ -86,22 +89,7 @@ const BODY_RINGS: Readonly<Record<ProxyKind, readonly AnchorRing[]>> = {
   outerwear: ['chest', 'underbust', 'waist', 'hip'],
 };
 
-/** Hem girth over hip girth for a dress or skirt, by pattern block or subcategory word (first match wins). */
-const FLARE_RULES: readonly [RegExp, number][] = [
-  [/pencil|bodycon|sheath|column|slip|tube/i, 1.0],
-  [/tier|full|circle|fit-and-flare|skater|babydoll|baby-doll|empire|peasant/i, 1.35],
-  [/a-line|aline|trapeze|swing|maxi/i, 1.25],
-];
-const DEFAULT_FLARE = 1.1;
-
-/** Trouser leg shape by pattern block or subcategory word: thigh girth floor (share of the hip girth) and hem/thigh ratio. */
-const LEG_RULES: readonly [RegExp, { thighOfHip: number; hemOfThigh: number | 'ankle' }][] = [
-  [/palazzo|wide|culotte|flare|bootcut|boot-cut|barrel/i, { thighOfHip: 0.6, hemOfThigh: 1.1 }],
-  [/skinny|slim|tapered|legging|jogger|cigarette/i, { thighOfHip: 0, hemOfThigh: 'ankle' }],
-];
-const DEFAULT_LEG = { thighOfHip: 0, hemOfThigh: 0.85 } as const;
-
-export type GirthSource = 'garment chart' | 'body chart + product ease' | 'body chart + category default ease' | 'mannequin + proxy default ease' | 'raised to clear the mannequin' | 'pattern block: wide leg';
+export type GirthSource = 'garment chart' | 'body chart + product ease' | 'body chart + category default ease' | 'body chart + pattern block ease' | 'mannequin + proxy default ease' | 'raised to clear the mannequin' | 'pattern block: wide leg';
 
 export interface ProxySpec {
   version: typeof PROXY_VERSION;
@@ -157,6 +145,12 @@ export interface ProxyOptions {
   lengthSource?: string;
   /** Sleeve style, front closure and neckline from the shop description (`features.ts`). */
   features?: GarmentFeatures;
+  /**
+   * The P0 drape prediction (`src/predict/`, prediction.json) whose pattern parameters shape the proxy: hem flare,
+   * trouser legs, default ease, length and sleeve rules, front opening words. Absent: `predict()` of the payload and
+   * `features`. It never touches the chart girths at the anchors (§2, D15).
+   */
+  prediction?: Prediction;
 }
 
 export interface Proxy {
@@ -164,22 +158,6 @@ export interface Proxy {
   /** Closed parts in cm, mannequin space: `body` (+ `leg_l`/`leg_r` for trousers, `sleeve_l`/`sleeve_r`), named so `skinWeights` poses them. */
   mesh: Mesh;
 }
-
-/** The proxy kind of a product: the category, and for bottoms the word "skirt" in subcategory or pattern block. */
-export function proxyKind(p: Pick<GarmentPayload, 'category' | 'subcategory' | 'patternBlock'>): ProxyKind {
-  switch (p.category) {
-    case 'dress':
-    case 'top':
-    case 'outerwear':
-      return p.category;
-    case 'bottom':
-      return /skirt|skort/i.test(`${p.subcategory ?? ''} ${p.patternBlock ?? ''}`) ? 'skirt' : 'trousers';
-    default:
-      throw new Error(`no control proxy for category ${p.category}`);
-  }
-}
-
-const styleWords = (p: Pick<GarmentPayload, 'subcategory' | 'patternBlock'>): string => `${p.patternBlock ?? ''} ${p.subcategory ?? ''}`;
 
 /** Category default ease of the fit engine re-keyed by ring (bust → chest). */
 function categoryEase(category: EvalCategory, ring: AnchorRing): number | undefined {
@@ -189,7 +167,7 @@ function categoryEase(category: EvalCategory, ring: AnchorRing): number | undefi
   return undefined;
 }
 
-function ringGirths(m: Mannequin, p: GarmentPayload, kind: ProxyKind, baseSize: string): Pick<ProxySpec, 'girths' | 'girthSource' | 'chartType' | 'notes'> {
+function ringGirths(m: Mannequin, p: GarmentPayload, kind: ProxyKind, baseSize: string, defaults: Prediction['pattern']['defaultEase']): Pick<ProxySpec, 'girths' | 'girthSource' | 'chartType' | 'notes'> {
   if (!isEvalCategory(p.category)) throw new Error(`no control proxy for category ${p.category}`);
   const chart = evalChart(p);
   const row = evalChartRow(chart, baseSize);
@@ -204,9 +182,9 @@ function ringGirths(m: Mannequin, p: GarmentPayload, kind: ProxyKind, baseSize: 
     let src: GirthSource;
     if (fromChart !== undefined) {
       g = fromChart;
-      src = chart.type === 'garment' ? 'garment chart' : row.defaultEase.includes(id) ? 'body chart + category default ease' : 'body chart + product ease';
+      src = chart.type === 'garment' ? 'garment chart' : row.blockEase?.includes(id) ? 'body chart + pattern block ease' : row.defaultEase.includes(id) ? 'body chart + category default ease' : 'body chart + product ease';
     } else {
-      g = body + (PROXY_DEFAULT_EASE[kind][id] ?? categoryEase(chart.category, id) ?? 4);
+      g = body + (defaults[id]?.value ?? categoryEase(chart.category, id) ?? 4);
       src = 'mannequin + proxy default ease';
     }
     if (g < body + MIN_CLEARANCE_CM) {
@@ -222,19 +200,16 @@ function ringGirths(m: Mannequin, p: GarmentPayload, kind: ProxyKind, baseSize: 
 
 const round1 = (x: number): number => Math.round(x * 10) / 10;
 
-function hemFor(m: Mannequin, p: GarmentPayload, kind: ProxyKind, topY: number, opts: ProxyOptions = {}): { hemY: number; lengthCm: number; lengthSource: string; surface: boolean } {
-  const len = (p.lengthCm ?? {}) as Partial<Record<string, number>>;
+/** A length rule's height on mannequin M (the same arithmetic as 0.3.0's inline defaults, so the hem is the same to the bit). */
+function landmarkY(m: Mannequin, at: readonly string[]): number {
+  const h = m.morphHeights as Record<string, number>;
+  return at.length === 2 ? (h[at[0]!]! + h[at[1]!]!) / 2 : h[at[0]!]!;
+}
+
+function hemFor(m: Mannequin, kind: ProxyKind, topY: number, rule: LengthRule, ruleSource: string, opts: ProxyOptions = {}): { hemY: number; lengthCm: number; lengthSource: string; surface: boolean } {
   const hps = m.landmarks.hps[1];
   const waistY = m.morphHeights.waist;
   const crotchY = m.landmarks.crotch[1];
-  const h = m.morphHeights;
-  const words = styleWords(p);
-  const byWord = (fallback: [number, string]): [number, string] => {
-    if (/maxi|floor|full-length/i.test(words)) return [h.ankle + 3, 'subcategory/pattern "maxi": just above the ankle'];
-    if (/midi|tea/i.test(words)) return [(h.knee + h.calf) / 2, 'subcategory/pattern "midi": between knee and calf'];
-    if (/mini|short/i.test(words)) return [(h.thigh + h.knee) / 2 + 4, 'subcategory/pattern "mini": above the knee'];
-    return fallback;
-  };
   // The override is a shoulder-to-hem length: it has no meaning for a waist-down kind, so refuse it rather than drop it.
   if (opts.shoulderToHemCm !== undefined && (kind === 'skirt' || kind === 'trousers')) {
     throw new Error(`proxy: shoulderToHemCm override given for a ${kind} proxy; it applies to dress, top and outerwear only`);
@@ -242,65 +217,52 @@ function hemFor(m: Mannequin, p: GarmentPayload, kind: ProxyKind, topY: number, 
   let hemY: number;
   let source: string;
   let surface = false;
-  if (kind === 'trousers') {
-    if (len.outseam !== undefined) [hemY, source] = [waistY - len.outseam, `outseam ${len.outseam} cm from the waist`];
-    else if (len.inseam !== undefined) [hemY, source] = [crotchY - len.inseam, `inseam ${len.inseam} cm from the crotch`];
-    else if (len.waist_to_hem !== undefined) [hemY, source] = [waistY - len.waist_to_hem, `waist_to_hem ${len.waist_to_hem} cm`];
-    else if (/short/i.test(words)) [hemY, source] = [h.thigh - 4, 'subcategory/pattern "short": mid thigh'];
-    else [hemY, source] = [h.ankle + 1, 'no length given: full length to the ankle'];
-  } else if (kind === 'skirt') {
-    if (len.waist_to_hem !== undefined) [hemY, source] = [waistY - len.waist_to_hem, `waist_to_hem ${len.waist_to_hem} cm`];
-    else if (len.outseam !== undefined) [hemY, source] = [waistY - len.outseam, `outseam ${len.outseam} cm from the waist`];
-    else [hemY, source] = byWord([h.knee, 'no length given: to the knee']);
-  } else if (opts.shoulderToHemCm !== undefined) {
+  if (opts.shoulderToHemCm !== undefined) {
     [hemY, source] = [hps - opts.shoulderToHemCm, opts.lengthSource ?? `shoulder_to_hem ${opts.shoulderToHemCm} cm (override)`];
+  } else if (rule.from === 'printed') {
+    // A flat-lay length starts from the vertical drop; proxySpec moves the hem up until the front surface has this length.
+    const origin = rule.origin === 'hps' ? hps : rule.origin === 'crotch' ? crotchY : waistY;
+    [hemY, source] = [origin - rule.cm, ruleSource];
+    surface = rule.definition === 'hps_surface';
   } else {
-    if (len.shoulder_to_hem !== undefined) {
-      // Start from the vertical drop; proxySpec moves the hem up until the front surface has this length.
-      [hemY, source] = [hps - len.shoulder_to_hem, `shoulder_to_hem ${len.shoulder_to_hem} cm (flat-lay: along the front from the HPS)`];
-      surface = true;
-    }
-    else if (len.waist_to_hem !== undefined) [hemY, source] = [waistY - len.waist_to_hem, `waist_to_hem ${len.waist_to_hem} cm`];
-    else if (kind === 'dress') [hemY, source] = byWord([h.knee, 'no length given: to the knee']);
-    else [hemY, source] = [h.hip - 3, 'no length given: just below the hip ring'];
+    const base = landmarkY(m, rule.at);
+    [hemY, source] = [rule.plusCm === 0 ? base : base + rule.plusCm, ruleSource];
   }
   const clamped = Math.min(topY - 10, Math.max(1, hemY));
   if (clamped !== hemY) {
     source += `; clamped to ${round1(clamped)} cm above the floor`;
     surface = false;
   }
-  const printed = surface ? len.shoulder_to_hem! : round1((kind === 'skirt' || kind === 'trousers' ? waistY : hps) - clamped);
+  const printed = surface && rule.from === 'printed' ? rule.cm : round1((kind === 'skirt' || kind === 'trousers' ? waistY : hps) - clamped);
   return { hemY: clamped, lengthCm: printed, lengthSource: source, surface };
+}
+
+/** Distance along the arm for arm fractions on mannequin M (round1 for a sleeve style). */
+function alongArm(m: Mannequin, f: ArmFractions): number {
+  return f.ua * m.arms.left.upperArmCm + f.fa * m.arms.left.forearmCm + f.wrist * m.morphHeights.wrist + f.plusCm;
 }
 
 /** Sleeve length along the arm from the shoulder joint for a sleeve style word (no length printed): a control choice, not a measurement. */
 export function sleeveForStyle(m: Mannequin, style: SleeveStyle): { cm: number; where: string } {
-  const ua = m.arms.left.upperArmCm, fa = m.arms.left.forearmCm, wrist = m.morphHeights.wrist;
-  switch (style) {
-    case 'sleeveless':
-      return { cm: 0, where: 'no sleeve shell' };
-    case 'short':
-      return { cm: round1(0.45 * ua), where: 'about half the upper arm' };
-    case 'half':
-      return { cm: round1(ua + 3), where: 'just below the elbow' };
-    case 'three-quarter':
-      return { cm: round1(ua + 0.6 * fa), where: 'between the elbow and the wrist' };
-    case 'long':
-      return { cm: round1(wrist + 1.5), where: 'to the wrist' };
-  }
+  const s = SLEEVE_STYLE_ALONG[style];
+  return { cm: style === 'sleeveless' ? 0 : round1(alongArm(m, s.along)), where: s.where };
 }
 
-function sleeveFor(m: Mannequin, p: GarmentPayload, kind: ProxyKind, features?: GarmentFeatures): { sleeveCm: number; sleeveSource: string; sleeveStyle: SleeveStyle | null } {
-  const given = (p.lengthCm as Partial<Record<string, number>> | undefined)?.sleeve_length;
+function sleeveFor(m: Mannequin, pred: Prediction['pattern']['sleeve']): { sleeveCm: number; sleeveSource: string; sleeveStyle: SleeveStyle | null } {
   const wrist = m.morphHeights.wrist;
-  if (kind === 'skirt' || kind === 'trousers') return { sleeveCm: 0, sleeveSource: 'no sleeves for this kind', sleeveStyle: null };
-  if (given !== undefined) return { sleeveCm: Math.min(given, wrist + 1.5), sleeveSource: `sleeve_length ${given} cm`, sleeveStyle: null };
-  if (features?.sleeve) {
-    const s = sleeveForStyle(m, features.sleeve);
-    return { sleeveCm: s.cm, sleeveSource: `no sleeve length given; sleeve style "${features.sleeve}" from the description: ${s.where} (${s.cm} cm along the arm, a control estimate)`, sleeveStyle: features.sleeve };
+  const rule = pred.rule;
+  switch (rule.from) {
+    case 'none':
+      return { sleeveCm: 0, sleeveSource: pred.source, sleeveStyle: null };
+    case 'printed':
+      return { sleeveCm: Math.min(rule.cm, wrist + 1.5), sleeveSource: pred.source, sleeveStyle: null };
+    case 'style': {
+      const s = sleeveForStyle(m, rule.style);
+      return { sleeveCm: s.cm, sleeveSource: `${pred.source} (${s.cm} cm along the arm, a control estimate)`, sleeveStyle: rule.style };
+    }
+    case 'kind-default':
+      return { sleeveCm: alongArm(m, rule.along), sleeveSource: pred.source, sleeveStyle: null };
   }
-  if (kind === 'outerwear') return { sleeveCm: wrist + 1.5, sleeveSource: 'no sleeve length given: outerwear default, to the wrist', sleeveStyle: null };
-  return { sleeveCm: 0, sleeveSource: 'no sleeve length given: no sleeve shell (the bare arm stays in the control)', sleeveStyle: null };
 }
 
 /**
@@ -308,7 +270,7 @@ function sleeveFor(m: Mannequin, p: GarmentPayload, kind: ProxyKind, features?: 
  * fronts 2 x 4 cm apart there; a deep V ends at the underbust ring, a V 4 cm below the chest ring.
  * At the top the opening is the neckline's width (the high point shoulder's x + 1 cm each side).
  */
-function frontOpeningFor(m: Mannequin, kind: ProxyKind, topY: number, hemY: number, features?: GarmentFeatures): FrontOpening | null {
+function frontOpeningFor(m: Mannequin, kind: ProxyKind, topY: number, hemY: number, features: Prediction['pattern']['front']): FrontOpening | null {
   if (kind !== 'outerwear' || !features) return null;
   const topHalf = round1(Math.abs(m.landmarks.hps[0]) + 1);
   if (features.front === 'open') return { kind: 'open', topY, bottomY: hemY, topHalfWidthCm: topHalf, bottomHalfWidthCm: 4, neckline: features.neckline ?? null, buttoned: false, source: 'front "open" from the description: open to the hem' };
@@ -376,26 +338,36 @@ function applyOpening(m: Mannequin, part: Part, o: FrontOpening): Set<number> {
 /** The proxy's spec for a product at its base size on our mannequin. */
 export function proxySpec(m: Mannequin, p: GarmentPayload, baseSize: string, opts: ProxyOptions = {}): ProxySpec {
   const kind = proxyKind(p);
-  const { girths, girthSource, chartType, notes } = ringGirths(m, p, kind, baseSize);
+  const prediction = opts.prediction ?? predict({ id: p.id, payload: p, baseSize, features: opts.features ?? null });
+  if (prediction.pattern.kind !== kind) throw new Error(`proxy: the prediction is for a ${prediction.pattern.kind}, the product is a ${kind}`);
+  // A prediction of another product (a stale or copied prediction.json of the same kind) must not shape this one. A
+  // prediction.json written before `payloadId` existed (drape-prior-p0-0.1.0) cannot be checked here; callers that read one
+  // from a job check its productId against the manifest.
+  const pid = (prediction as { payloadId?: unknown }).payloadId;
+  if (pid !== undefined && pid !== String(p.id)) throw new Error(`proxy: the prediction is for payload ${String(pid)} (${prediction.productId}), the product's payload id is ${p.id}`);
+  const pattern = prediction.pattern;
+  const { girths, girthSource, chartType, notes } = ringGirths(m, p, kind, baseSize, pattern.defaultEase);
   const shoulderY = m.morphHeights.shoulder;
   // Lower body: 2 cm above the waist ring, so the ring lies on the shell's side, not on its cap.
   const topY = kind === 'skirt' || kind === 'trousers' ? m.morphHeights.waist + 2 : shoulderY + 0.35 * (m.morphHeights.neck - shoulderY);
-  const hem = hemFor(m, p, kind, topY, opts);
+  const hem = hemFor(m, kind, topY, pattern.length.rule, pattern.length.source, opts);
   let { hemY } = hem;
   const { lengthCm, lengthSource } = hem;
-  const { sleeveCm, sleeveSource, sleeveStyle } = sleeveFor(m, p, kind, opts.features);
-  let hemFlare: number | null = null;
-  if (kind === 'trousers') {
-    const rule = LEG_RULES.find(([re]) => re.test(styleWords(p)))?.[1] ?? DEFAULT_LEG;
-    hemFlare = rule.hemOfThigh === 'ankle' ? null : rule.hemOfThigh;
-    const floor = rule.thighOfHip * (girths.hip ?? 0);
-    if (girths.thigh !== undefined && floor > girths.thigh) {
-      notes.push(`thigh: ${round1(girths.thigh)} cm (${girthSource.thigh}) raised to ${round1(floor)} cm, ${rule.thighOfHip} × the hip girth, for a wide leg ("${styleWords(p).trim()}")`);
+  const { sleeveCm, sleeveSource, sleeveStyle } = sleeveFor(m, pattern.sleeve);
+  const hemFlare: number | null = pattern.hemFlare.value;
+  if (kind === 'trousers' && pattern.legs) {
+    const thighOfHip = pattern.legs.thighOfHip.value;
+    const floor = thighOfHip * (girths.hip ?? 0);
+    // D15: a thigh the chart gives (and the fit engine fits) is never raised; only a default thigh widens for a wide leg.
+    const fromChart = thighFitted({ girthSource } as ProxySpec);
+    if (girths.thigh !== undefined && floor > girths.thigh && !fromChart) {
+      notes.push(`thigh: ${round1(girths.thigh)} cm (${girthSource.thigh}) raised to ${round1(floor)} cm, ${thighOfHip} × the hip girth, for a wide leg ("${styleWords(p).trim()}")`);
       girths.thigh = floor;
       girthSource.thigh = 'pattern block: wide leg';
+    } else if (girths.thigh !== undefined && floor > girths.thigh) {
+      notes.push(`thigh: ${round1(girths.thigh)} cm from the chart kept (D15: the fit engine's girth), not raised to ${round1(floor)} cm for a wide leg`);
     }
-  } else if (kind === 'dress' || kind === 'skirt') hemFlare = FLARE_RULES.find(([re]) => re.test(styleWords(p)))?.[1] ?? DEFAULT_FLARE;
-  else hemFlare = 1.05;
+  }
   const legTop = m.landmarks.crotch[1];
   const anchors = [...BODY_RINGS[kind], ...(sleeveCm > m.morphHeights.upper_arm ? (['upper_arm'] as const) : []), ...(sleeveCm >= m.morphHeights.wrist ? (['wrist'] as const) : [])].filter((id) => {
     if (id === 'upper_arm' || id === 'wrist') return true;
@@ -410,6 +382,8 @@ export function proxySpec(m: Mannequin, p: GarmentPayload, baseSize: string, opt
     }
   }
   if (p.sizeChartType === 'garment' && p.sizeChart.length === 1) notes.push('one size: girths from the flat measurements (garment chart, as parsed)');
+  // A shape default a title token set (proxy 0.3.0 used its own default there): visible in the manifest.
+  for (const [param, src] of titleRules(pattern)) notes.push(`${param} from the title: ${src}`);
   const spec: ProxySpec = { version: PROXY_VERSION, kind, category: p.category as EvalCategory, baseSize, chartType, girths, girthSource, anchors, topY, hemY, lengthCm, lengthSource, lengthDefinition: hem.surface ? 'hps_surface' : 'drop', hemDropCm: 0, hemFlare, sleeveCm, sleeveSource, sleeveStyle, frontOpening: null, notes };
   if (hem.surface) {
     // Fixed point: the shell's flare depends on the hem, the hem on the shell's front surface length.
@@ -431,7 +405,7 @@ export function proxySpec(m: Mannequin, p: GarmentPayload, baseSize: string, opt
     }
   }
   spec.hemDropCm = round1((kind === 'skirt' || kind === 'trousers' ? m.morphHeights.waist : m.landmarks.hps[1]) - spec.hemY);
-  spec.frontOpening = frontOpeningFor(m, kind, topY, spec.hemY, opts.features);
+  spec.frontOpening = frontOpeningFor(m, kind, topY, spec.hemY, pattern.front);
   if (kind === 'outerwear' && !spec.frontOpening) notes.push('outerwear without an opening in the description: closed shell (the video model decides the front)');
   return spec;
 }
@@ -548,6 +522,12 @@ function hemAlongFront(m: Mannequin, shell: Part, lengthCm: number): number {
   return hemForSurfaceLength(hps, lengthCm, z, 0.1, prof[prof.length - 1]!.y);
 }
 
+/** The thigh girth is the chart's (the fit engine fits it), not a default or a wide-leg floor. */
+const thighFitted = (spec: ProxySpec): boolean => {
+  const src = spec.girthSource.thigh;
+  return src === 'garment chart' || src === 'body chart + product ease' || src === 'body chart + category default ease' || src === 'body chart + pattern block ease';
+};
+
 /** One trouser leg section at height y: girth from thigh to hem, covering the mannequin leg, centre moved out for wide legs. */
 function legSection(m: Mannequin, spec: ProxySpec, y: number, side: Side): { centre: Vec3; a: number; b: number } {
   const thighY = m.morphHeights.thigh;
@@ -556,7 +536,14 @@ function legSection(m: Mannequin, spec: ProxySpec, y: number, side: Side): { cen
   const t = y >= thighY ? 0 : (thighY - y) / Math.max(1e-9, thighY - spec.hemY);
   let { a, b } = ellipseFromCircumference(thigh + (hemGirth - thigh) * t, m.shape.rings.thigh.aspect);
   const leg = m.legAt(y, side);
-  if (leg) {
+  if (leg && (a < leg.a + 0.5 || b < leg.b + 0.5) && y === thighY && thighFitted(spec)) {
+    // D15: at the thigh ring of a chart thigh the fit engine fits, the girth is the chart's. Growing each axis to cover
+    // the leg + 0.5 cm made it larger (indigo-02: 60.1 cm for a 59.5 cm chart thigh); the leg's own ellipse scaled to
+    // the girth covers the leg (the girth clears the mannequin's thigh by at least MIN_CLEARANCE_CM) and keeps it.
+    const s = (thigh + (hemGirth - thigh) * t) / ellipseCircumference(leg.a, leg.b);
+    a = leg.a * s;
+    b = leg.b * s;
+  } else if (leg) {
     a = Math.max(a, leg.a + 0.5);
     b = Math.max(b, leg.b + 0.5);
   }
@@ -678,8 +665,18 @@ function proxyParts(m: Mannequin, p: GarmentPayload, baseSize: string, opts: Pro
  * template (`stage4t -- --template-size <size>`) to see the fit move.
  */
 export function syntheticGarmentFromProxy(m: Mannequin, p: GarmentPayload, baseSize: string, opts: ProxyOptions = {}): Mesh {
+  const kind = proxyKind(p);
+  if (kind !== 'skirt' && kind !== 'trousers' && kind !== 'outerwear') throw new Error(`syntheticGarmentFromProxy: ${kind} uses the lofted synthetic garment (garment.ts)`);
+  return openedProxy(m, p, baseSize, opts).mesh;
+}
+
+/**
+ * The proxy of any kind opened as a garment is (end caps and an outerwear front opening removed, see
+ * `syntheticGarmentFromProxy`): the P0 predicted shape as a surface, for the shadow Chamfer against the
+ * stage 4t mesh (`drapeLog.ts`; a closed cap at the hem or the neckline would count as cloth).
+ */
+export function openedProxy(m: Mannequin, p: GarmentPayload, baseSize: string, opts: ProxyOptions = {}): { spec: ProxySpec; mesh: Mesh } {
   const { spec, parts, opening } = proxyParts(m, p, baseSize, opts);
-  if (spec.kind !== 'skirt' && spec.kind !== 'trousers' && spec.kind !== 'outerwear') throw new Error(`syntheticGarmentFromProxy: ${spec.kind} uses the lofted synthetic garment (garment.ts)`);
   const open = parts.map((part, pi) => {
     const nv = part.positions.length / 3;
     // closedTube appends its two poles last: every triangle that uses one is a cap.
@@ -693,7 +690,7 @@ export function syntheticGarmentFromProxy(m: Mannequin, p: GarmentPayload, baseS
     }
     return { name: part.name, positions: part.positions.slice(0, (nv - 2) * 3), indices };
   });
-  return mergeParts(open);
+  return { spec, mesh: mergeParts(open) };
 }
 
 /** The spec as recorded in the manifest and hashed (rounded to 0.1 mm so the hash never depends on float noise). */

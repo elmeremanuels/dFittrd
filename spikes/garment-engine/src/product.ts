@@ -8,20 +8,12 @@ import { FIT_POINT_TO_ANCHOR, type AnchorBreadth, type AnchorRing } from '@curta
 import { FABRIC_LIBRARY_VERSION, duplicateSizeLabels, isFabricConstructionId, lookupFabricId, mockGarment, resolveFabric, sizeLabelKey, type GarmentPayload } from '@curtain/schema';
 import type { Mannequin } from '@curtain/mannequin';
 import type { GarmentSpec, SpikeCategory } from './garment';
+import { easeFor } from './evalChart';
 import { parseFeatures, type GarmentFeatures, type SleeveStyle } from './features';
 import type { ProxyKind, ProxySpec } from './proxy';
 
 /** The two Phase 0 spike products from the schema fixtures: a long-sleeved shirt dress (body chart) and a T-shirt (garment chart). */
 export const SPIKE_PRODUCT_IDS = ['aalter-studio-2', 'monochrome-03'] as const;
-
-/**
- * Fallback ease per category (cm) for a body chart whose product gives none for a point. Same
- * numbers as the fit engine's category defaults (`packages/fit-engine/src/constants.ts`).
- */
-export const CATEGORY_DEFAULT_EASE: Readonly<Record<SpikeCategory, Partial<Record<'bust' | 'waist' | 'hip' | 'shoulder', number>>>> = {
-  dress: { bust: 6, waist: 4, hip: 6, shoulder: 1 },
-  top: { bust: 8, waist: 8, hip: 6, shoulder: 1 },
-};
 
 /** Girth points of the chart that are anchor rings. `shoulder` is a width in charts, not the shoulder ring girth, so it is not used as a girth. */
 const GIRTH_POINTS = ['bust', 'waist', 'hip'] as const;
@@ -32,8 +24,10 @@ export interface ChartRow {
   size: string;
   /** Garment girths per ring, cm. */
   rings: Partial<Record<AnchorRing, number>>;
-  /** Rings whose value is body + the category default ease (no product ease given). */
+  /** Rings whose value is body + a default ease (no product ease given): the pattern block's or the category's. */
   defaultEase: AnchorRing[];
+  /** Of those, the rings whose default is the pattern block's `BLOCKS` ease (`evalChart`; absent when none). */
+  blockEase?: AnchorRing[];
   /** Garment widths per breadth anchor (`shoulder_width`: seam to seam across the back), cm. */
   breadths: Partial<Record<AnchorBreadth, number>>;
   /** Breadths whose value is body + the category default ease. */
@@ -57,15 +51,18 @@ export function garmentChart(p: GarmentPayload): GarmentChart {
   const rows = p.sizeChart.map((row) => {
     const rings: Partial<Record<AnchorRing, number>> = {};
     const defaultEase: AnchorRing[] = [];
+    const blockEase: AnchorRing[] = [];
     for (const point of GIRTH_POINTS) {
       const v = row[point];
       if (v === undefined) continue;
       const anchor = FIT_POINT_TO_ANCHOR[point] as AnchorRing;
       if (type === 'garment') rings[anchor] = v;
       else {
-        const productEase = p.ease?.[point];
-        if (productEase === undefined) defaultEase.push(anchor);
-        rings[anchor] = v + (productEase ?? CATEGORY_DEFAULT_EASE[category][point] ?? 0);
+        // The fit engine's ease (product, else pattern block, else category default), as `evalChart` (D15).
+        const e = easeFor(p, category, point);
+        if (e?.isDefault) defaultEase.push(anchor);
+        if (e?.fromBlock) blockEase.push(anchor);
+        rings[anchor] = v + (e?.ease ?? 0);
       }
     }
     const breadths: Partial<Record<AnchorBreadth, number>> = {};
@@ -76,12 +73,12 @@ export function garmentChart(p: GarmentPayload): GarmentChart {
       const anchor = FIT_POINT_TO_ANCHOR[point] as AnchorBreadth;
       if (type === 'garment') breadths[anchor] = v;
       else {
-        const productEase = p.ease?.[point];
-        if (productEase === undefined) defaultEaseBreadths.push(anchor);
-        breadths[anchor] = v + (productEase ?? CATEGORY_DEFAULT_EASE[category][point] ?? 0);
+        const e = easeFor(p, category, point);
+        if (e?.isDefault) defaultEaseBreadths.push(anchor);
+        breadths[anchor] = v + (e?.ease ?? 0);
       }
     }
-    return { size: row.size, rings, defaultEase, breadths, defaultEaseBreadths };
+    return { size: row.size, rings, defaultEase, ...(blockEase.length ? { blockEase } : {}), breadths, defaultEaseBreadths };
   });
   return { productId: p.id, category, type, rows };
 }

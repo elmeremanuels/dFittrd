@@ -2,13 +2,19 @@
  * The size chart of any Phase 0 product as garment girths per anchor ring, for the evaluation of a
  * reconstructed garment. `product.ts` `garmentChart` does the same for the spike's two schema
  * fixtures and accepts only dresses and tops; the shop validation set also has trousers, a skirt and
- * a cardigan. Same rules: a garment chart is used as is; a body chart gets the product's ease, else
- * the fit engine's category default ease (`CATEGORY_EASE`), and every ring that used the default is
- * listed. Only the category's rings are kept (`CATEGORY_ANCHORS`): the AU body chart lists a bust
- * for trousers too. A test checks that both give the same chart for the spike products.
+ * a cardigan. Same rules: a garment chart is used as is; a body chart gets the ease the fit engine uses
+ * (`easeTargetFor`: the product's ease, else the pattern block's `BLOCKS` ease, else the category default
+ * `CATEGORY_EASE`), and every ring that used a default is listed. Only the category's rings are kept
+ * (`CATEGORY_ANCHORS`): the AU body chart lists a bust for trousers too. A test checks that both give the
+ * same chart for the spike products.
+ *
+ * Before drape-prior P0 the block ease was left out (product ease, else the category default): an oversized
+ * cardigan's chest was 102 cm here and in its control proxy while `computeFit` sized it as 104 (block
+ * `oversized`, bust +14), a shirt blouse 103 against 105, an A-line skirt's waist 79.5 against 80.5. The picture and
+ * the size advice must not contradict each other (D15; docs/PREDICTION-ENGINE.md §2 test 2).
  */
 import { CATEGORY_ANCHORS, FIT_POINT_TO_ANCHOR, isAnchorRing, type AnchorBreadth, type AnchorCategory, type AnchorRing } from '@curtain/anchors';
-import { CATEGORY_EASE, CATEGORY_POINTS, blockRule } from '@curtain/fit-engine';
+import { CATEGORY_POINTS, blockRule, easeTargetFor, type FitGarment, type Point } from '@curtain/fit-engine';
 import { duplicateSizeLabels, sizeLabelKey, type GarmentPayload } from '@curtain/schema';
 import type { SpikeCategory } from './garment';
 import type { ChartRow, GarmentChart } from './product';
@@ -37,12 +43,18 @@ export interface EvalChart extends Omit<GarmentChart, 'category'> {
   notFitted: { rings: AnchorRing[]; block: string; label: string } | null;
 }
 
-/** The chart's ease for one point: the product's, else the category default, else none. */
-function easeFor(p: GarmentPayload, category: EvalCategory, point: GirthPoint | 'shoulder'): { ease: number; isDefault: boolean } | null {
+/**
+ * The chart's ease for one point, as the fit engine takes it (`easeTargetFor`): the product's, else the pattern
+ * block's, else the category default, else none. `isDefault`: not the product's own; `fromBlock`: the block's.
+ */
+export function easeFor(p: GarmentPayload, category: EvalCategory, point: GirthPoint | 'shoulder'): { ease: number; isDefault: boolean; fromBlock: boolean } | null {
   const own = (p.ease as Partial<Record<string, number>> | undefined)?.[point];
-  if (own !== undefined) return { ease: own, isDefault: false };
-  const d = (CATEGORY_EASE[category] as Partial<Record<string, number>>)[point];
-  return d === undefined ? null : { ease: d, isDefault: true };
+  if (own !== undefined) return { ease: own, isDefault: false, fromBlock: false };
+  const garment = { ...p, category, fabric: p.fabric ?? { stretchPct: 0 } } as unknown as FitGarment;
+  const e = easeTargetFor(garment, point as Point);
+  if (e === undefined) return null;
+  const fromBlock = (blockRule(p.patternBlock).ease as Partial<Record<string, number>>)[point] !== undefined;
+  return { ease: e, isDefault: true, fromBlock };
 }
 
 export function evalChart(p: GarmentPayload): EvalChart {
@@ -57,6 +69,7 @@ export function evalChart(p: GarmentPayload): EvalChart {
   const rows: ChartRow[] = p.sizeChart.map((row) => {
     const rings: Partial<Record<AnchorRing, number>> = {};
     const defaultEase: AnchorRing[] = [];
+    const blockEase: AnchorRing[] = [];
     for (const point of GIRTH_POINTS) {
       const v = row[point];
       if (v === undefined) continue;
@@ -68,6 +81,7 @@ export function evalChart(p: GarmentPayload): EvalChart {
       }
       const e = easeFor(p, category, point);
       if (e?.isDefault) defaultEase.push(anchor);
+      if (e?.fromBlock) blockEase.push(anchor);
       rings[anchor] = v + (e?.ease ?? 0);
     }
     const breadths: Partial<Record<AnchorBreadth, number>> = {};
@@ -81,9 +95,9 @@ export function evalChart(p: GarmentPayload): EvalChart {
         breadths.shoulder_width = sw + (e?.ease ?? 0);
       }
     }
-    return { size: row.size, rings, defaultEase, breadths, defaultEaseBreadths };
+    return { size: row.size, rings, defaultEase, ...(blockEase.length ? { blockEase } : {}), breadths, defaultEaseBreadths };
   });
-  const provenance = type === 'garment' ? 'garment chart, as printed' : `body chart + ${p.ease && Object.keys(p.ease).length ? `product ease (${Object.entries(p.ease).map(([k, v]) => `${k} +${v} cm`).join(', ')}) and ` : ''}fit-engine category default ease where the product gives none`;
+  const provenance = type === 'garment' ? 'garment chart, as printed' : `body chart + ${p.ease && Object.keys(p.ease).length ? `product ease (${Object.entries(p.ease).map(([k, v]) => `${k} +${v} cm`).join(', ')}) and ` : ''}the fit engine's default ease where the product gives none (pattern block ${p.patternBlock ? `"${p.patternBlock}"` : 'none'}, else the category default)`;
   const rule = blockRule(p.patternBlock);
   const named = new Set<string>(p.criticalFitPoints ?? []);
   // As `computeFit`: a point the product names as critical is checked even when its block skips it.

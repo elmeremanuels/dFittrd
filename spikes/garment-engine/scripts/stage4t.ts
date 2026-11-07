@@ -10,12 +10,20 @@
  * Writes <job dir>/stage4t/<source>/{garment.glb, texture.jpg, metrics.json, preview/*.png}. The job
  * dir is under out/ (gitignored). `report:bohohippychic` then evaluates stage4t/stage2/garment.glb when
  * it exists, ahead of the 2DGS mesh.
+ *
+ * Then the drape log (docs/PREDICTION-ENGINE.md §5 step 1, `src/drapeLog.ts`): exemplar.json (the measured pattern of
+ * the fitted mesh) and shadow.json (the job's P0 prediction against it) in the same directory; --no-log skips it. A
+ * template built here (no control/proxy.glb, or --template-size) takes its shape defaults from the job's prediction.json.
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { BASE_SHAPE_ID, bodyShape, buildMannequin } from '@curtain/mannequin';
 import { mockGarment, type GarmentPayload } from '@curtain/schema';
+import { drapeLogJob, familyIdOf } from '../src/drapeLogJob';
+import { PREDICTION_FILE } from '../src/exportJob';
 import { parseFeatures } from '../src/features';
+import { PREDICTOR_VERSION, type Prediction } from '../src/predict';
 import { buildProxy } from '../src/proxy';
 import { runStage4t, type Stage4tSource } from '../src/stage4t';
 
@@ -35,6 +43,11 @@ const manifest = JSON.parse(readFileSync(join(jobDir, 'manifest.json'), 'utf8'))
   hash_inputs?: { product?: GarmentPayload };
 };
 const kind = manifest.control?.proxy?.kind;
+// The P0 prediction the job was exported with: a template built here takes its shape defaults from it (as the control proxy did).
+const predictionPath = join(jobDir, PREDICTION_FILE);
+const jobPrediction = existsSync(predictionPath) ? (JSON.parse(readFileSync(predictionPath, 'utf8')) as Prediction) : undefined;
+if (jobPrediction && jobPrediction.productId !== manifest.product_id) throw new Error(`${predictionPath}: prediction for ${jobPrediction.productId}, the job is ${manifest.product_id}`);
+if (jobPrediction && jobPrediction.predictorVersion !== PREDICTOR_VERSION) console.log(`[stage4t] note: ${PREDICTION_FILE} is ${jobPrediction.predictorVersion}, this code is ${PREDICTOR_VERSION} (a template built here follows the job's prediction)`);
 const tAt = args.indexOf('--template-size');
 const templateSize = tAt >= 0 ? args[tAt + 1] : undefined;
 const category = (['dress', 'top', 'outerwear', 'bottom'].includes(manifest.category ?? '') ? manifest.category : 'dress') as 'dress' | 'top' | 'outerwear' | 'bottom';
@@ -45,13 +58,13 @@ if (templateSize) {
   const payload = manifest.hash_inputs?.product;
   if (!payload) throw new Error('--template-size needs the product payload in manifest.hash_inputs');
   const features = parseFeatures(manifest.features);
-  proxy = buildProxy(buildMannequin(bodyShape(BASE_SHAPE_ID)), payload, templateSize, features ? { features } : {}).mesh;
+  proxy = buildProxy(buildMannequin(bodyShape(BASE_SHAPE_ID)), payload, templateSize, { ...(features ? { features } : {}), ...(jobPrediction ? { prediction: jobPrediction } : {}) }).mesh;
   proxyLabel = `buildProxy(${manifest.product_id}, size ${templateSize}) (--template-size: not the job's base size ${manifest.base_size})`;
 } else try {
   readFileSync(join(jobDir, 'control/proxy.glb'));
 } catch {
   try {
-    proxy = buildProxy(buildMannequin(bodyShape(BASE_SHAPE_ID)), mockGarment(manifest.product_id ?? ''), manifest.base_size ?? 'M').mesh;
+    proxy = buildProxy(buildMannequin(bodyShape(BASE_SHAPE_ID)), mockGarment(manifest.product_id ?? ''), manifest.base_size ?? 'M', jobPrediction ? { prediction: jobPrediction } : {}).mesh;
     proxyLabel = `buildProxy(${manifest.product_id}, ${manifest.base_size}) (no control/proxy.glb in the job)`;
   } catch {
     proxy = null;
@@ -79,3 +92,11 @@ console.log(
 console.log(`[stage4t] texture: ${(mt.bake.seenShare * 100).toFixed(1)} % of the chart texels sampled from frames; shoulder caps (within ${mt.bake.capTexture.radiusCm} cm of the cap tops) ${(mt.bake.capTexture.seenShare * 100).toFixed(1)} % of ${mt.bake.capTexture.texels}`);
 if (mt.bake.holdoutMean) console.log(`[stage4t] holdout photometric: texture MAE ${mt.bake.holdoutMean.maeTexture} (PSNR ${mt.bake.holdoutMean.psnrTexture} dB), one mean colour MAE ${mt.bake.holdoutMean.maeMeanColour} (PSNR ${mt.bake.holdoutMean.psnrMeanColour} dB); on 8×8 blocks texture ${mt.bake.holdoutMean.maeTextureBlock8} vs mean colour ${mt.bake.holdoutMean.maeMeanColourBlock8}`);
 console.log(`[stage4t] wrote ${out}`);
+if (!args.includes('--no-log')) {
+  const ps = (manifest as { product_source?: { kind?: string; shop?: string; handle?: string } }).product_source;
+  const famFile = ps?.kind === 'shop' && ps.shop ? join(dirname(fileURLToPath(import.meta.url)), '..', 'data', ps.shop, 'families.json') : null;
+  const familyId = famFile && existsSync(famFile) && ps?.handle ? familyIdOf(JSON.parse(readFileSync(famFile, 'utf8')), ps.handle) : null;
+  const log = drapeLogJob(jobDir, source, { familyId });
+  const sh = log.shadow;
+  console.log(`[stage4t] drape log: exemplar.json, shadow.json (cell ${sh.cell}); P0 shape vs stage 4t Chamfer ${sh.chamfer.chamferCmMean} cm, hem height ${sh.v1.hemHeightErrCm} cm, length ${sh.v1.lengthErrCm} cm, hem girth ${sh.v1.hemGirthErrPct} %`);
+}

@@ -4,9 +4,13 @@ import { fileURLToPath } from 'node:url';
 import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh, turntablePath } from '@curtain/mannequin';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { mockGarment } from '@curtain/schema';
-import { EXPORT_VERSION, PINNED_MODELS, canonicalJson, controlFrame, depthRange, exportJob, inputHash, sha256, turntableClips, type ExportOptions, type Phase0Manifest } from './exportJob';
+import { computeFit, type FitGarment } from '@curtain/fit-engine';
+import { AU_WOMENS_BODY_CHART, type GarmentPayload } from '@curtain/schema';
+import { PREDICTOR_VERSION, predict, withSyntheticLength, type Prediction } from './predict';
+import { EXPORT_VERSION, PINNED_MODELS, PREDICTION_FILE, canonicalJson, controlFrame, depthRange, exportJob, inputHash, sha256, turntableClips, type ExportOptions, type Phase0Manifest } from './exportJob';
 import { decodePng } from './exportPng';
-import { NEGATIVE_BASE, SPIKE_PRODUCT_IDS, garmentSpec, promptColour } from './product';
+import { NEGATIVE_BASE, SPIKE_PRODUCT_IDS, garmentSpec, isSpikeProductId, promptColour, resolveSpikeProduct, shopProduct, type ResolvedProduct } from './product';
+import { proxySpec } from './proxy';
 import { render } from './raster';
 import { MANNEQUIN_GREY, MANNEQUIN_ID } from './separation';
 
@@ -23,6 +27,9 @@ const bytesOf = (d: Uint8Array | string | undefined): Uint8Array => {
   if (d === undefined) throw new Error('missing file');
   return typeof d === 'string' ? new TextEncoder().encode(d) : d;
 };
+
+const shopJson = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'data', 'bohohippychic', 'products.json'), 'utf8')) as unknown;
+const resolve = (id: string): ResolvedProduct => (isSpikeProductId(id) ? resolveSpikeProduct(id) : shopProduct('bohohippychic', shopJson as never, id));
 
 let job: ReturnType<typeof run>;
 beforeAll(() => {
@@ -153,6 +160,72 @@ describe('job manifest', () => {
     expect(f.input_hash).toBe(job.manifest.input_hash);
     expect(f.models).toEqual(PINNED_MODELS);
     expect(inputHash(f.hash_inputs)).toBe(f.input_hash);
+  });
+});
+
+describe('prediction.json (drape prediction P0)', () => {
+  it('writes the shadow prediction, records its sha256 outside hash_inputs, and the proxy is the one the prediction shapes', () => {
+    const m = job.manifest;
+    const text = job.files.get(PREDICTION_FILE) as string;
+    const pr = JSON.parse(text) as Prediction;
+    expect(pr).toMatchObject({ format: 'curtain.drape.prediction', productId: 'monochrome-03', payloadId: 'monochrome-03', baseSize: 'M', predictorVersion: PREDICTOR_VERSION, route: { decision: 'gpu' } });
+    // Synthetic stills of a lofted top: the prediction with the synthetic garment's length, recorded as such.
+    const plain = predict({ id: 'monochrome-03', payload: mockGarment('monochrome-03'), baseSize: 'M', source: { kind: 'spike' } });
+    const synth = garmentSpec(mockGarment('monochrome-03'), 'M').shoulderToHemCm;
+    expect(JSON.stringify(pr)).toBe(JSON.stringify(withSyntheticLength(plain, synth, `synthetic stills: the synthetic garment's shoulder_to_hem ${synth} cm (vertical drop)`)));
+    expect(pr.pattern.length).toMatchObject({ provenance: 'synthetic', rule: { from: 'printed', key: 'shoulder_to_hem', cm: synth, origin: 'hps', definition: 'drop' }, overridden: { rule: plain.pattern.length.rule, provenance: plain.pattern.length.provenance } });
+    expect(m.prediction).toEqual({ file: PREDICTION_FILE, sha256: sha256(text), predictor_version: PREDICTOR_VERSION, hashed: false });
+    expect(JSON.stringify(m.hash_inputs)).not.toMatch(/prediction/);
+    // The proxy record in hash_inputs is the one built from that prediction: everything of it that shapes the control is hashed.
+    expect((m.hash_inputs.control as { proxy: { hem_flare: number } }).proxy.hem_flare).toBe(pr.pattern.hemFlare.value);
+  });
+
+  it('prediction.json alone rebuilds the control proxy the job had (the synthetic length override included)', () => {
+    const mq = buildMannequin(bodyShape(BASE_SHAPE_ID));
+    for (const id of ['monochrome-03', 'aalter-studio-2', 'rosewater-blouse', 'woodstock-wanderer-knit-cardi', 'rosewater-palazzo-pants']) {
+      const r = run({ ...SMALL_JOB, productId: id, product: resolve(id) });
+      const pr = JSON.parse(r.files.get(PREDICTION_FILE) as string) as Prediction;
+      const payload = r.manifest.hash_inputs.product as GarmentPayload;
+      const spec = proxySpec(mq, payload, r.manifest.base_size, { ...(r.manifest.features ? { features: r.manifest.features } : {}), prediction: pr });
+      const rec = r.manifest.control.proxy!;
+      expect(Math.round(spec.hemY * 100) / 100, id).toBe(rec.hem_y_cm);
+      expect(spec.lengthSource, id).toBe(rec.length_source);
+      expect(Object.fromEntries(Object.entries(spec.girths).map(([k, v]) => [k, Math.round(v * 100) / 100])), id).toEqual(rec.girths_cm);
+    }
+  });
+
+  it('refuses a prediction made for another payload', () => {
+    const mq = buildMannequin(bodyShape(BASE_SHAPE_ID));
+    const other = predict({ id: 'other', payload: { ...mockGarment('monochrome-03'), id: 'other' }, baseSize: 'M' });
+    expect(() => proxySpec(mq, mockGarment('monochrome-03'), 'M', { prediction: other })).toThrow(/prediction is for payload other/);
+  });
+});
+
+/** §2 sizing boundary through the exporter: nothing the exporter predicts reaches the payload it hashes (stage4t --template-size and the drape log read that payload back). */
+describe('the exporter never writes a prediction into the payload (§2)', () => {
+  function deepFreeze<T>(x: T): T {
+    if (x && typeof x === 'object') {
+      for (const v of Object.values(x as Record<string, unknown>)) deepFreeze(v);
+      Object.freeze(x);
+    }
+    return x;
+  }
+  const USERS = AU_WOMENS_BODY_CHART.map((r) => ({ measurements: { bust: r.bust!, waist: r.waist!, hip: r.hip!, shoulder: 38, thigh: 56 } }));
+  const fit = (g: GarmentPayload): string => JSON.stringify(USERS.map((u) => computeFit(g as unknown as FitGarment, u)));
+  const IDS = ['azure-palm-baby-doll-dress', 'rosewater-blouse', 'rosewater-palazzo-pants', 'crimson-wildflower-maxi-skirt', 'woodstock-wanderer-knit-cardi', 'aalter-studio-2', 'monochrome-03'];
+
+  it.each(IDS)('%s: manifest.hash_inputs.product is the frozen input payload, and computeFit on it is unchanged', (id) => {
+    const product = deepFreeze(structuredClone(resolve(id)));
+    const before = JSON.stringify(product.payload);
+    const advice = fit(product.payload);
+    const r = run({ ...SMALL_JOB, productId: id, product });
+    const hashed = r.manifest.hash_inputs.product as GarmentPayload;
+    expect(hashed).toEqual(product.payload);
+    expect(JSON.stringify(hashed)).toBe(before);
+    expect(fit(hashed)).toBe(advice);
+    // The predicted stretch differs from the payload's where the prior differs, and it stayed out of the payload.
+    const pr = JSON.parse(r.files.get(PREDICTION_FILE) as string) as Prediction;
+    if (product.payload.fabric?.stretchPct !== undefined && pr.material.stretchPct.value !== product.payload.fabric.stretchPct) expect(hashed.fabric!.stretchPct).toBe(product.payload.fabric.stretchPct);
   });
 });
 

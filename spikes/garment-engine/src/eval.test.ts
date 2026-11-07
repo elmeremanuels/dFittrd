@@ -115,9 +115,10 @@ describe('evaluateGarment: a bottom (skirt cut from the synthetic dress)', () =>
   const shop = shopPayload('crimson-wildflower-maxi-skirt');
   const r = evaluateGarment({ productId: shop.handle, payload: shop.payload, baseSize: '12', mesh: syntheticSkirt(), mannequin: m, source: src });
 
-  it('calibrates the waist against the AU chart plus the bottom default ease; the a-line hip is reported, not calibrated', () => {
+  it('calibrates the waist against the AU chart plus the a-line block ease the fit engine uses; the a-line hip is reported, not calibrated', () => {
     expect(r.critical).toEqual(['waist']);
-    expect(r.rows.find((x) => x.anchor === 'waist')!.chartCm).toBe(79.5);
+    // AU 12 waist 77.5 + 3 (BLOCKS['a-line'].ease.waist, as computeFit); the category default +2 was used before drape-prior P0.
+    expect(r.rows.find((x) => x.anchor === 'waist')!.chartCm).toBe(80.5);
     const hip = r.rows.find((x) => x.anchor === 'hip')!;
     expect(hip.chartCm).toBe(109);
     expect(hip.notFitted).toBe(true);

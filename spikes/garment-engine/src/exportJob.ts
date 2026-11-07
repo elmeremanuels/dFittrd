@@ -6,6 +6,9 @@
  *   manifest.json            job manifest (product, photos by role, base size, chart, fabric, mannequin
  *                            version, seeds, pinned model versions, input_hash)
  *   mannequin.glb            the bare mannequin, metres, mannequin space
+ *   prediction.json          the P0 drape prediction (src/predict/, docs/PREDICTION-ENGINE.md §4.1): material
+ *                            vector, pattern parameters with σ and provenance, route (always gpu); the proxy
+ *                            takes its shape defaults from it. A shadow record: not in input_hash itself
  *   cameras_opencv.json      per-frame K and world-to-camera (OpenCV)
  *   transforms.json          the same poses for Nerfstudio (OpenGL camera-to-world); `file_path`
  *                            points at frames/NNNN.png, which stage 2 fills
@@ -64,6 +67,7 @@ import { cameraBasis, opencvCamerasJson, transformsJson } from './exportPoses';
 import { garmentSpec, materialJson, resolveSpikeProduct, videoPrompt, type ProductSource, type ResolvedProduct, type VideoPrompt } from './product';
 import { CONTROL_MODES, buildProxy, proxyRecord, proxySpec, syntheticGarmentFromProxy, type ControlMode, type Proxy, type ProxyOptions } from './proxy';
 import type { GarmentFeatures } from './features';
+import { PREDICTOR_VERSION, predict, withSyntheticLength, type Prediction } from './predict';
 import { hexToRgb, render, type DrawItem, type Render } from './raster';
 import { GARMENT_ID, MANNEQUIN_GREY, MANNEQUIN_ID } from './separation';
 
@@ -152,6 +156,8 @@ export type SourceKind = (typeof SOURCE_KINDS)[number];
 
 /** Where stage 1b (modal/stage1_dress.py) writes the dressed stills that stage 2 pins at frame 0 and N/2. */
 export const STAGE1B_DIR = 'stage1b';
+/** The P0 drape prediction of the job (docs/PREDICTION-ENGINE.md §4.1). */
+export const PREDICTION_FILE = 'prediction.json';
 
 export interface OnModelOptions {
   /** Default `on_model`. */
@@ -319,6 +325,8 @@ export interface Phase0Manifest {
   seeds: { video: number; recon: number };
   models: typeof PINNED_MODELS;
   exporter: string;
+  /** The P0 shadow prediction (prediction.json). Not in hash_inputs: what of it shapes the control is hashed through `control.proxy`. */
+  prediction?: { file: string; sha256: string; predictor_version: string; hashed: false };
   /** Exactly what input_hash covers (paths and timestamps are left out on purpose). */
   hash_inputs: Record<string, unknown>;
   input_hash: string;
@@ -530,14 +538,18 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
   // Control proxy: the mannequin wears a coarse closed garment volume in the control video (src/proxy.ts).
   // With synthetic stills the pinned frames show the synthetic garment, so the proxy's hem is that
   // garment's (a product without shoulder_to_hem would otherwise get the proxy's own default length).
-  const proxyOpts: ProxyOptions = features ? { features } : {};
+  // The P0 drape prediction (src/predict/): the proxy's shape defaults come from it, and it is written as prediction.json
+  // (a shadow prediction, scored against stage 4t by `predict:log`). Not hashed on its own: everything of it that shapes
+  // the control (hem flare, legs, default ease, length and sleeve rules, front opening) is hashed through the proxy record
+  // and glb below; its material vector, σ and route drive nothing yet (docs/PREDICTION-ENGINE.md "P0 status").
+  let prediction: Prediction = predict({ id: product.id, payload, baseSize, features, source: product.source });
   if (options.syntheticPhotos && lofted) {
-    const own = (payload.lengthCm as Partial<Record<string, number>> | undefined)?.shoulder_to_hem;
-    const synth = garmentSpec(payload, baseSize).shoulderToHemCm;
     // Always the override: the synthetic garment drops its length vertically, while a printed length is flat-lay (proxy 0.2.0).
-    void own;
-    Object.assign(proxyOpts, { shoulderToHemCm: synth, lengthSource: `synthetic stills: the synthetic garment's shoulder_to_hem ${synth} cm (vertical drop)` });
+    // It goes into the prediction (provenance `synthetic`), so prediction.json is the shape the control and the template had.
+    const synth = garmentSpec(payload, baseSize).shoulderToHemCm;
+    prediction = withSyntheticLength(prediction, synth, `synthetic stills: the synthetic garment's shoulder_to_hem ${synth} cm (vertical drop)`);
   }
+  const proxyOpts: ProxyOptions = { ...(features ? { features } : {}), prediction };
   const pSpec = proxySpec(mannequin, payload, baseSize, proxyOpts);
   const proxy: Proxy | null = control === 'proxy' ? buildProxy(mannequin, payload, baseSize, proxyOpts) : null;
   const proxyItem: DrawItem | null = proxy ? { positions: proxy.mesh.positions, indices: proxy.mesh.indices, color: PROXY_GREY, id: PROXY_ID } : null;
@@ -581,6 +593,8 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
     extras: { mannequinVersion: MANNEQUIN_VERSION, shape: BASE_SHAPE_ID, unit: 'm' },
   });
   put('mannequin.glb', mannequinGlb);
+  const predictionJson = json(prediction);
+  put(PREDICTION_FILE, predictionJson);
   for (const p of photos) if (p.bytes) put(p.photo.path, p.bytes);
 
   // Stage 1b inputs: the shop photos and the bare mannequin at the two pinned frames (same camera, same
@@ -790,6 +804,7 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
     seeds,
     models: PINNED_MODELS,
     exporter: `@curtain/garment-spike ${EXPORT_VERSION}`,
+    prediction: { file: PREDICTION_FILE, sha256: sha256(predictionJson), predictor_version: PREDICTOR_VERSION, hashed: false },
     hash_inputs: hashInputs,
     input_hash: hash,
   };

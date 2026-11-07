@@ -11,6 +11,7 @@
     "stage4t": "tsx scripts/stage4t.ts",
     "stage4t:perturbed": "tsx scripts/stage4t-perturbed.ts",
     "stage4t:compare": "tsx scripts/stage4t-compare.ts",
+    "predict:log": "tsx scripts/predict-log.ts",
     "shop:bohohippychic": "tsx src/shopCli.ts",
     "report:bohohippychic": "tsx scripts/report-bohohippychic.ts",
     "families:bohohippychic": "tsx scripts/families-bohohippychic.ts",

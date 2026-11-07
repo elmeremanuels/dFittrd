@@ -12,7 +12,10 @@ import { round, roundVec, vertexNormals, writeGlb } from '@curtain/mannequin';
 import type { GarmentPayload } from '@curtain/schema';
 import { EVAL_MANNEQUIN, EVAL_VERSION, SOURCE_LABEL, type EvalResult } from './eval';
 import type { ShopPhotoScore, TurntableScore, ViewScore } from './evalView';
+import type { EvalTexture } from './evalJob';
+import { writeTexturedGlb } from './glbTextured';
 import { materialJson, type MaterialJson } from './product';
+import { renderPositions } from './templateFit';
 import { hexToRgb } from './raster';
 
 /** Display colour when neither the payload nor the reconstruction gives one; never written as product data. */
@@ -50,9 +53,12 @@ export function evalMaterial(payload: GarmentPayload, meanColorHex: string | nul
   return { ...mat, baseColorHex: colour, provenance: { ...mat.provenance, baseColorHex: colourSource } };
 }
 
-export function evalBundle(result: EvalResult, payload: GarmentPayload, opts: { meanColorHex?: string | null; view?: ViewAgreement | null; inputs?: Record<string, unknown> } = {}): { files: EvalBundleFiles; inputHash: string; bytes: number } {
+export function evalBundle(result: EvalResult, payload: GarmentPayload, opts: { meanColorHex?: string | null; view?: ViewAgreement | null; inputs?: Record<string, unknown>; texture?: EvalTexture | null } = {}): { files: EvalBundleFiles; inputHash: string; bytes: number } {
   const m = result.mannequin;
-  const material = evalMaterial(payload, opts.meanColorHex ?? null);
+  const tex = opts.texture ?? null;
+  const baseMaterial = evalMaterial(payload, opts.meanColorHex ?? null);
+  // With a baked texture the colour is a fallback only (the viewer draws the map from base.glb).
+  const material: MaterialJson = tex ? { ...baseMaterial, provenance: { ...baseMaterial.provenance, baseColorHex: `${baseMaterial.provenance.baseColorHex === 'product' ? 'product' : 'reconstruction (mean garment colour of the frames)'}; display fallback only: base.glb carries the baked texture (stage 4t)` } } : baseMaterial;
   const synthetic = result.source.kind !== 'stage4';
   const inputHash = createHash('sha256').update(JSON.stringify({ payload, baseSize: result.baseSize, mesh: result.source.sha256, simulatedError: result.source.simulatedError, mannequin: EVAL_MANNEQUIN, eval: EVAL_VERSION })).digest('hex');
   const chartBase = result.chart.rows.find((r) => r.size === result.baseSize)?.rings ?? {};
@@ -124,11 +130,25 @@ export function evalBundle(result: EvalResult, payload: GarmentPayload, opts: { 
   };
 
   const color = hexToRgb(material.baseColorHex);
-  const glb = writeGlb([{ name: result.productId, positions: result.baseMesh.positions, normals: vertexNormals(result.baseMesh), indices: result.baseMesh.indices, baseColor: [color[0], color[1], color[2], 1], roughness: 0.85, doubleSided: true }], {
-    scale: 0.01,
-    generator: `@curtain/garment-spike ${EVAL_VERSION}`,
-    extras: { productId: result.productId, baseSize: result.baseSize, unit: 'm', synthetic, inputHash, source: result.source.kind },
-  });
+  const extras = { productId: result.productId, baseSize: result.baseSize, unit: 'm', synthetic, inputHash, source: result.source.kind };
+  let glb: Uint8Array;
+  if (tex) {
+    // Render mesh (UV seams duplicate vertices) at the calibrated positions; normals of the welded mesh, so the seams do not show.
+    const wn = vertexNormals(result.baseMesh);
+    const normals = new Float32Array(tex.remap.length * 3);
+    for (let r = 0; r < tex.remap.length; r++) for (let c = 0; c < 3; c++) normals[3 * r + c] = wn[3 * tex.remap[r]! + c]!;
+    glb = writeTexturedGlb({ name: result.productId, positions: renderPositions(tex, result.baseMesh.positions), uvs: tex.uvs, indices: tex.indices, normals, image: tex.image.bytes, mimeType: tex.image.mimeType, roughness: 0.85, doubleSided: true }, {
+      scale: 0.01,
+      generator: `@curtain/garment-spike ${EVAL_VERSION}`,
+      extras: { ...extras, texture: 'baseColorTexture (stage 4t bake)', weldedVertices: result.baseMesh.positions.length / 3 },
+    });
+  } else {
+    glb = writeGlb([{ name: result.productId, positions: result.baseMesh.positions, normals: vertexNormals(result.baseMesh), indices: result.baseMesh.indices, baseColor: [color[0], color[1], color[2], 1], roughness: 0.85, doubleSided: true }], {
+      scale: 0.01,
+      generator: `@curtain/garment-spike ${EVAL_VERSION}`,
+      extras,
+    });
+  }
 
   const evalJson = {
     format: 'curtain.phase0.eval',
@@ -144,6 +164,7 @@ export function evalBundle(result: EvalResult, payload: GarmentPayload, opts: { 
     critical: result.critical,
     anchors: result.rows,
     lengths: result.lengths,
+    lengthDefinitions: result.lengthDefinitions,
     agreement: qa.chartAgreement,
     globalScale: round(result.calibration.globalScale, 6),
     ringCorrections: anchors.calibration.ringCorrections,

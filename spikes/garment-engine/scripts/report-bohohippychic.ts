@@ -112,16 +112,24 @@ function writeBundle(id: string, ev: ProductEval, images: Map<string, Uint8Array
   return rel(dir);
 }
 
-function run(id: string, payload: GarmentPayload, baseSize: string, jobDir: string, allowSynthetic: boolean): { job: ReturnType<typeof readJob>; ev: ProductEval | null; error: string | null; bundleRel: string | null } {
+function run(id: string, payload: GarmentPayload, baseSize: string, jobDir: string, allowSynthetic: boolean): { job: ReturnType<typeof readJob>; ev: ProductEval | null; alternative: ProductEval | null; error: string | null; bundleRel: string | null } {
   const job = readJob(jobDir);
   const choice = chooseMesh(job, {
     allowSynthetic,
     ...(allowSynthetic ? { fallbackTruth: () => generateGarment(buildMannequin(bodyShape(BASE_SHAPE_ID)), garmentSpec(payload, baseSize)) } : {}),
   });
-  if (!choice) return { job, ev: null, error: job.exists ? 'no stage 4 mesh (stage4/stage2/garment.glb) in the job dir' : 'no job dir', bundleRel: null };
+  if (!choice) return { job, ev: null, alternative: null, error: job.exists ? 'no stage 4 mesh (stage4/stage2/garment.glb) in the job dir' : 'no job dir', bundleRel: null };
+  // The spike's synthetic garment drops its printed length vertically; a shop's printed length is flat-lay.
+  const printedLength = allowSynthetic ? 'drop' : 'flat-lay';
   try {
     const images = new Map<string, Uint8Array>();
-    const ev = evaluateProduct({ productId: id, payload, baseSize, job, choice, writeImage: (name, png) => images.set(name, png) });
+    const ev = evaluateProduct({ productId: id, payload, baseSize, job, choice, printedLength, writeImage: (name, png) => images.set(name, png) });
+    // Stage 4t is the asset when it exists; stage 4 (2DGS) is evaluated alongside for the comparison table only (no bundle, no pictures).
+    let alternative: ProductEval | null = null;
+    if (choice.kind === 'stage4t' && job.stage4.stage2?.glb) {
+      const alt = chooseMesh(job, { allowSynthetic: false, prefer: 'stage4' });
+      if (alt && alt.kind === 'stage4') alternative = evaluateProduct({ productId: id, payload, baseSize, job, choice: alt, printedLength });
+    }
     const bundleRel = writeBundle(id, ev, images);
     const r = ev.result;
     console.log(
@@ -129,11 +137,11 @@ function run(id: string, payload: GarmentPayload, baseSize: string, jobDir: stri
         `view ${ev.view.views.map((v) => `${v.view} ${v.iou.toFixed(3)}`).join(', ') || '—'}, ${r.health.triangles} triangles, bundle ${ev.bundle ? `${(ev.bundle.bytes / 1024).toFixed(0)} KB` : 'not written'}`,
     );
     for (const w of r.warnings) console.log(`[report] ${id}: warning: ${w}`);
-    return { job, ev, error: null, bundleRel };
+    return { job, ev, alternative, error: null, bundleRel };
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     console.error(`[report] ${id}: evaluation failed: ${error}`);
-    return { job, ev: null, error: `evaluation failed: ${error}`, bundleRel: null };
+    return { job, ev: null, alternative: null, error: `evaluation failed: ${error}`, bundleRel: null };
   }
 }
 
@@ -189,7 +197,7 @@ for (const p of products) {
   const jobDir = join(outDir, 'phase0', p.handle);
   const r = run(p.handle, p.payload, p.baseSize, jobDir, false);
   if (!r.ev) console.log(`[report] ${p.handle}: ${r.error}`);
-  sections.push({ id: p.handle, shop: p, images: images[p.handle] ?? [], job: r.job, jobRel: rel(jobDir), eval: r.ev, evalError: r.error, bundleRel: r.bundleRel });
+  sections.push({ id: p.handle, shop: p, images: images[p.handle] ?? [], job: r.job, jobRel: rel(jobDir), eval: r.ev, evalError: r.error, bundleRel: r.bundleRel, alternative: r.alternative });
 }
 
 let synthetic: (Omit<SyntheticSection, 'renders'> & { ev: ProductEval | null }) | null = null;

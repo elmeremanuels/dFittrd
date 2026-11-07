@@ -100,21 +100,66 @@ export function meshGeometry(mesh: Pick<Mesh, 'positions' | 'indices'>): THREE.B
 
 const BODY_MATERIAL = new THREE.MeshStandardMaterial({ color: '#8C8C8C', roughness: 0.75, metalness: 0 });
 
+/** A baked texture for a figure: render-mesh UVs and triangles, render vertex → particle, and the decoded image. */
+export interface FigureTexture {
+  uvs: Float32Array;
+  indices: Uint32Array;
+  remap: Uint32Array;
+  image: ImageBitmap;
+}
+
+/** One THREE texture per decoded image, shared by every figure of the product. */
+const TEXTURES = new WeakMap<ImageBitmap, THREE.Texture>();
+function textureOf(image: ImageBitmap): THREE.Texture {
+  let t = TEXTURES.get(image);
+  if (!t) {
+    t = new THREE.Texture(image);
+    t.flipY = false; // glTF UVs: v down
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4;
+    t.needsUpdate = true;
+    TEXTURES.set(image, t);
+  }
+  return t;
+}
+
 export class Figure {
   readonly group = new THREE.Group();
   readonly body: THREE.Mesh;
   readonly garment: THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhysicalMaterial>;
   private heatOn = false;
+  /** Render vertex → particle when textured (UV seams duplicate particles), else null (one vertex per particle). */
+  private readonly remap: Uint32Array | null;
+  private readonly map: THREE.Texture | null;
+  private readonly scratch: Float32Array | null;
 
-  constructor(bodyGeometry: THREE.BufferGeometry, garmentIndices: Uint32Array, vertexCount: number) {
+  constructor(bodyGeometry: THREE.BufferGeometry, garmentIndices: Uint32Array, vertexCount: number, texture?: FigureTexture | null) {
     this.body = new THREE.Mesh(bodyGeometry, BODY_MATERIAL);
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertexCount * 3), 3));
-    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(vertexCount * 3).fill(1), 3));
-    g.setIndex(new THREE.BufferAttribute(garmentIndices, 1));
+    const n = texture ? texture.remap.length : vertexCount;
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
+    if (texture) g.setAttribute('uv', new THREE.BufferAttribute(texture.uvs, 2));
+    g.setIndex(new THREE.BufferAttribute(texture ? texture.indices : garmentIndices, 1));
+    this.remap = texture ? texture.remap : null;
+    this.map = texture ? textureOf(texture.image) : null;
+    this.scratch = texture ? new Float32Array(n * 3) : null;
     this.garment = new THREE.Mesh(g, new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide }));
     this.garment.frustumCulled = false;
     this.group.add(this.body, this.garment);
+  }
+
+  /** Per-particle values (xyz or rgb) onto the render vertices. */
+  private expand(perParticle: Float32Array): Float32Array {
+    if (!this.remap || !this.scratch) return perParticle;
+    const r = this.remap, out = this.scratch;
+    for (let v = 0; v < r.length; v++) {
+      const p = 3 * r[v]!;
+      out[3 * v] = perParticle[p]!;
+      out[3 * v + 1] = perParticle[p + 1]!;
+      out[3 * v + 2] = perParticle[p + 2]!;
+    }
+    return out;
   }
 
   setBody(geometry: THREE.BufferGeometry): void {
@@ -123,9 +168,25 @@ export class Figure {
 
   setPositions(pos: Float32Array): void {
     const attr = this.garment.geometry.getAttribute('position') as THREE.BufferAttribute;
-    (attr.array as Float32Array).set(pos);
+    (attr.array as Float32Array).set(this.expand(pos));
     attr.needsUpdate = true;
     this.garment.geometry.computeVertexNormals();
+    if (this.remap) {
+      // Average the normals of the seam duplicates, or the UV seams show as a crease.
+      const nAttr = this.garment.geometry.getAttribute('normal') as THREE.BufferAttribute;
+      const nrm = nAttr.array as Float32Array;
+      const r = this.remap;
+      let particles = 0;
+      for (let v = 0; v < r.length; v++) particles = Math.max(particles, r[v]! + 1);
+      const acc = new Float32Array(particles * 3);
+      for (let v = 0; v < r.length; v++) for (let c = 0; c < 3; c++) acc[3 * r[v]! + c] = acc[3 * r[v]! + c]! + nrm[3 * v + c]!;
+      for (let v = 0; v < r.length; v++) {
+        const p = 3 * r[v]!;
+        const l = Math.hypot(acc[p]!, acc[p + 1]!, acc[p + 2]!) || 1;
+        for (let c = 0; c < 3; c++) nrm[3 * v + c] = acc[p + c]! / l;
+      }
+      nAttr.needsUpdate = true;
+    }
   }
 
   /** See-through garment, so outlines drawn over it stay readable (the silhouette comparison). */
@@ -143,7 +204,7 @@ export class Figure {
     const on = colors !== null;
     if (colors) {
       const attr = this.garment.geometry.getAttribute('color') as THREE.BufferAttribute;
-      (attr.array as Float32Array).set(colors);
+      (attr.array as Float32Array).set(this.expand(colors));
       attr.needsUpdate = true;
     }
     if (on !== this.heatOn) {
@@ -172,7 +233,9 @@ export class Figure {
   private applyColour(): void {
     const m = this.garment.material;
     m.vertexColors = this.heatOn;
-    m.color = this.heatOn ? new THREE.Color(0xffffff) : this.fabricColour.clone();
+    // The baked texture is the garment's colour; the fit map replaces it while it is on.
+    m.map = this.heatOn ? null : this.map;
+    m.color = this.heatOn || this.map ? new THREE.Color(0xffffff) : this.fabricColour.clone();
     m.opacity = this.faded ? 0.3 : this.baseOpacity;
     m.transparent = m.opacity < 1;
     m.depthWrite = !this.faded;

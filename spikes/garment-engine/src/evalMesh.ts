@@ -207,6 +207,11 @@ export function weldVerticesWithColors(mesh: Mesh, colors: ArrayLike<number> | n
   return { mesh: out, colors: c };
 }
 
+/** `weldVertices` that also returns the map from every input vertex to its welded vertex (UV seams, render meshes). */
+export function weldWithRemap(mesh: Mesh, epsCm = 1e-4): { mesh: Mesh; remap: Uint32Array } {
+  return weld(mesh, epsCm);
+}
+
 function weld(mesh: Mesh, epsCm: number): { mesh: Mesh; remap: Uint32Array } {
   const map = new Map<string, number>();
   const remap = new Uint32Array(mesh.positions.length / 3);

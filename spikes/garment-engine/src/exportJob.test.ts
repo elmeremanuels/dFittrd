@@ -166,7 +166,7 @@ describe('control mode (proxy | bare)', () => {
     expect(m.control.proxy_mask_dir).toBe('control/proxy_mask');
     expect(m.motion.proxy_mask_dir).toBe('motion/proxy_mask');
     expect(m.clips.map((c) => c.proxy_mask_dir)).toEqual(['control/proxy_mask', 'control/proxy_mask', 'motion/proxy_mask']);
-    expect(m.hash_inputs.control).toEqual({ mode: 'proxy', proxy: expect.objectContaining({ kind: 'top', version: 'control-proxy-0.1.0' }) });
+    expect(m.hash_inputs.control).toEqual({ mode: 'proxy', proxy: expect.objectContaining({ kind: 'top', version: 'control-proxy-0.2.0' }) });
     // The proxy geometry is hashed, not only its spec: a mesh change without a PROXY_VERSION bump
     // still changes input_hash and the job id (cached stage 2 outputs are keyed by the job id).
     expect((m.hash_inputs.control as { proxy: { glb_sha256: string } }).proxy.glb_sha256).toBe(m.control.proxy?.glb_sha256);
@@ -222,9 +222,11 @@ describe('garment segmentation inputs and the proxy length (export 0.3.0)', () =
     const payload = mockGarment('aalter-studio-2');
     const mq = buildMannequin(bodyShape(BASE_SHAPE_ID));
     const hps = mq.landmarks.hps[1];
-    // With a chart length both agree already (run 11a: 112 cm, hem 26.6 cm above the floor).
+    // With a chart length the synthetic stills still set the hem: the synthetic garment drops its 112 cm
+    // vertically (run 11a: hem 26.6 cm above the floor), while a printed length is flat-lay (proxy 0.2.0).
     const own = run({ ...SMALL_JOB, productId: 'aalter-studio-2' }).manifest.control.proxy!;
-    expect(own.length_source).toMatch(/^shoulder_to_hem 112/);
+    expect(own.length_source).toMatch(/synthetic stills/);
+    expect(own.length_definition).toBe('drop');
     expect(hps - (own.hem_y_cm as number)).toBeCloseTo(112, 1);
     const { lengthCm: _drop, ...rest } = payload;
     const noLength = { ...rest } as typeof payload;

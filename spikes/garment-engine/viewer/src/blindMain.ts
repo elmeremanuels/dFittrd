@@ -120,7 +120,7 @@ async function showTrial(): Promise<void> {
     }
     const n = s.bundle.baseMesh.positions.length / 3;
     figures = [-1, 1].map((x) => {
-      const f = new Figure(bodyGeometry, s.bundle.baseMesh.indices, n);
+      const f = new Figure(bodyGeometry, s.bundle.baseMesh.indices, n, s.bundle.render && s.bundle.textureImage ? { ...s.bundle.render, image: s.bundle.textureImage } : null);
       f.group.position.x = (x * SPACING_CM) / 2;
       stage.scene.add(f.group);
       return f;

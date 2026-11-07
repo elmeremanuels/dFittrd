@@ -23,9 +23,10 @@ import { DEFAULT_DISTORTION } from './bundle';
 import { asGradingChart, criticalRings, evalChart, evalChartRow, type EvalCategory, type EvalChart } from './evalChart';
 import { meshHealth, type MeshHealth } from './evalMesh';
 import { assignChains, distortGarment, type ChainAssignment, type Distortion, type SpikeCategory } from './garment';
+import { garmentLengths, type LengthMeasure } from './garmentLength';
 import { gradeGarment, type GradingJson } from './grading';
 
-export const EVAL_VERSION = 'phase0-eval-0.2.0';
+export const EVAL_VERSION = 'phase0-eval-0.3.0';
 /** Phase 0 acceptance: calibrated circumference within ±2 cm of the chart at the critical anchors. */
 export const CHART_TOLERANCE_CM = 2;
 /** A global scale further than this from 1 means the reconstruction's size (or its unit) is off, not just its shape. */
@@ -33,8 +34,8 @@ export const GLOBAL_SCALE_WARN = 0.1;
 /** A per-ring correction outside 1 ± this means calibration reshaped the garment, not just nudged it. */
 export const RING_CORRECTION_WARN = 0.08;
 
-/** Where the evaluated mesh came from. Only `stage4` is a real result for a product. */
-export type MeshSourceKind = 'stage4' | 'stage4-synthetic' | 'synthetic-truth';
+/** Where the evaluated mesh came from. Only `stage4` and `stage4t` are real results for a product. */
+export type MeshSourceKind = 'stage4' | 'stage4t' | 'stage4-synthetic' | 'synthetic-truth';
 
 export interface MeshSource {
   kind: MeshSourceKind;
@@ -47,6 +48,7 @@ export interface MeshSource {
 
 export const SOURCE_LABEL: Readonly<Record<MeshSourceKind, string>> = {
   stage4: 'stage 4 reconstruction of the stage 2 video (GPU output)',
+  stage4t: 'stage 4t template fit of the stage 2 video (CPU: the control proxy fitted to the garment masks, texture baked from the frames)',
   'stage4-synthetic': 'stage 4 reconstruction of the synthetic frames (tests the reconstruction only, not a product result)',
   'synthetic-truth': "the spike's synthetic ground-truth garment with its simulated reconstruction error (tests this tooling only, not a product result)",
 };
@@ -79,7 +81,12 @@ export interface AnchorRow {
 
 export interface LengthRow {
   id: string;
+  /** The length as the printed value means it (shoulder_to_hem of a shop: flat-lay, along the garment front from the HPS). */
   measuredCm: number | null;
+  /** shoulder_to_hem only: the vertical drop from the HPS to the front hem (the spike's measurement up to eval 0.2.0). */
+  dropCm?: number | null;
+  /** How `measuredCm` is taken. */
+  definition?: 'flat-lay' | 'drop';
   /** What the shop printed (payload `lengthCm`), cm. */
   printedCm: number | null;
   diffCm: number | null;
@@ -95,6 +102,10 @@ export interface EvalResult {
   critical: AnchorRing[];
   rows: AnchorRow[];
   lengths: LengthRow[];
+  /** Every length definition on the reconstructed and on the calibrated mesh (`garmentLength.ts`). */
+  lengthDefinitions: { reconstructed: LengthMeasure[]; calibrated: LengthMeasure[] };
+  /** Flat-lay minus vertical drop of shoulder_to_hem on the calibrated mesh: added to the graded drops to compare with a printed table. */
+  flatLayOffsetCm: number | null;
   calibration: Calibration;
   /** Acceptance item "chart agreement" on the calibrated mesh. */
   agreement: ChartAgreement & { missing: AnchorRing[] };
@@ -210,6 +221,8 @@ export interface EvaluateOptions {
   source: Omit<MeshSource, 'sha256'>;
   mannequin?: Mannequin;
   toleranceCm?: number;
+  /** What the printed shoulder_to_hem means: a shop's garment table is flat-lay (default); the spike's synthetic garment is built with a vertical drop. */
+  printedLength?: 'flat-lay' | 'drop';
 }
 
 export function evaluateGarment(o: EvaluateOptions): EvalResult {
@@ -308,17 +321,29 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
     if (!l.fromMannequin && !lengthIds.has(k)) lengthIds.set(k, id);
   }
   if (category === 'bottom' && !lengthIds.has('outseam')) lengthIds.set('outseam', 'outseam');
+  const printedLength = o.printedLength ?? 'flat-lay';
+  const defsCal = garmentLengths(m, baseMesh);
+  const defsRec = garmentLengths(m, mesh);
+  const flat = defsCal.find((d) => d.definition === 'hps_surface')?.lengthCm ?? null;
+  const drop = defsCal.find((d) => d.definition === 'hps_drop')?.lengthCm ?? null;
   for (const [id, key] of lengthIds) {
-    const mv = key ? measuredLength(key) : null;
+    let mv = key ? measuredLength(key) : null;
     const pv = printed[id] ?? null;
     let note: string | null = null;
+    if (key === 'shoulder_to_hem' && printedLength === 'flat-lay' && mv !== null && flat !== null) {
+      const dropCm = mv;
+      mv = flat;
+      const diff = pv !== null ? r2(mv - pv) : null;
+      lengths.push({ id, measuredCm: r2(mv), dropCm: r2(dropCm), definition: 'flat-lay', printedCm: pv, diffCm: diff, note: `flat-lay: along the garment front from the high point shoulder (src/garmentLength.ts); vertical drop ${r2(dropCm)} cm` });
+      continue;
+    }
     const onMannequin = key !== null && key !== 'outseam' && measurements.lengths[key]?.fromMannequin === true;
     if (!key) note = 'no measurement for this length in the spike';
     else if (onMannequin) note = "the garment covers the mannequin's whole line here; the spike has no seam to measure it on the garment";
     else if (mv === null) note = 'the garment edge was not found on this line';
     else if (key === 'outseam') note = 'top of the garment to its lowest point (no waistband or side-seam detection in the spike)';
-    else if (key === 'shoulder_to_hem') note = 'high point shoulder to the front hem, on the mannequin';
-    lengths.push({ id, measuredCm: mv === null ? null : r2(mv), printedCm: pv, diffCm: mv !== null && pv !== null ? r2(mv - pv) : null, note });
+    else if (key === 'shoulder_to_hem') note = "high point shoulder to the front hem, vertical drop (the spike's synthetic garment is built this way)";
+    lengths.push({ id, measuredCm: mv === null ? null : r2(mv), ...(key === 'shoulder_to_hem' ? { definition: 'drop' as const } : {}), printedCm: pv, diffCm: mv !== null && pv !== null ? r2(mv - pv) : null, note });
   }
 
   let grading: GradingJson | null = null;
@@ -340,6 +365,8 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
     critical,
     rows,
     lengths,
+    lengthDefinitions: { reconstructed: defsRec, calibrated: defsCal },
+    flatLayOffsetCm: printedLength === 'flat-lay' && flat !== null && drop !== null ? r2(flat - drop) : null,
     calibration,
     agreement,
     before: { maxAbsCm: beforeMax === null ? null : r2(beforeMax), pass: beforeMax !== null && beforeMax <= tol && missing.length === 0 },

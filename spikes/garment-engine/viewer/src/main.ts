@@ -201,7 +201,8 @@ async function refresh(): Promise<void> {
         f.dispose();
       }
       const n = s.bundle.baseMesh.positions.length / 3;
-      figures = sizes.map(() => new Figure(av.geometry, s.bundle.baseMesh.indices, n));
+      const tex = s.bundle.render && s.bundle.textureImage ? { ...s.bundle.render, image: s.bundle.textureImage } : null;
+      figures = sizes.map(() => new Figure(av.geometry, s.bundle.baseMesh.indices, n, tex));
       figures.forEach((f, k) => {
         f.group.position.x = (k - (sizes.length - 1) / 2) * SPACING_CM;
         f.group.rotation.y = (viewYawDeg * Math.PI) / 180;

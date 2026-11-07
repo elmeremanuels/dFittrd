@@ -23,14 +23,22 @@
  * flat measurements doubled by the shop parser; body chart + product ease, else the fit engine's
  * category default ease). A ring the chart does not give is the mannequin's girth + `PROXY_DEFAULT_EASE`.
  * A girth below the mannequin's body + `MIN_CLEARANCE_CM` is raised to it and the spec says so.
+ *
+ * Lengths (0.2.0): a printed shoulder_to_hem is a flat-lay length, measured along the garment from the
+ * high point shoulder (`garmentLength.ts`), not a vertical drop. The hem goes where the proxy's own
+ * front surface through the HPS reaches that length (0.1.0 dropped it vertically: on run 14's
+ * babydoll the proxy hem sat at the knee, 7 cm below where a 91 cm flat-lay length ends, and the
+ * stills and the video were shorter than the control). An explicit `shoulderToHemCm` override (the
+ * synthetic stills) stays a vertical drop: that is how the spike's synthetic garment is built.
  */
 import { CATEGORY_ANCHORS, FIT_POINT_TO_ANCHOR, ellipseCircumference, ellipseFromCircumference, monotoneProfile, type AnchorRing } from '@curtain/anchors';
 import { CATEGORY_EASE } from '@curtain/fit-engine';
 import { along, loftSections, mergeParts, polygonCompensation, signedVolume, stations, type Mannequin, type Mesh, type Section, type Side, type Vec3 } from '@curtain/mannequin';
 import type { GarmentPayload } from '@curtain/schema';
 import { evalChart, evalChartRow, isEvalCategory, type EvalCategory } from './evalChart';
+import { hemForSurfaceLength, sagittalProfile } from './garmentLength';
 
-export const PROXY_VERSION = 'control-proxy-0.1.0';
+export const PROXY_VERSION = 'control-proxy-0.2.0';
 export const CONTROL_MODES = ['proxy', 'bare'] as const;
 export type ControlMode = (typeof CONTROL_MODES)[number];
 
@@ -99,6 +107,10 @@ export interface ProxySpec {
   /** Length the hem comes from, and where it was read. */
   lengthCm: number;
   lengthSource: string;
+  /** How `lengthCm` is measured: along the garment front from the HPS (a printed flat-lay length) or as a vertical drop (override, defaults, waist-down kinds). */
+  lengthDefinition: 'hps_surface' | 'drop';
+  /** Vertical drop from the HPS (dress, top, outerwear) or the waist (skirt, trousers) to the hem, cm. */
+  hemDropCm: number;
   /** Dress/skirt: hem girth over hip girth before leg clearance. Trousers: hem girth over thigh girth (null: tapered to the ankle). */
   hemFlare: number | null;
   /** Sleeve length from the shoulder joint along the arm, cm (0 = no sleeve shell). */
@@ -178,7 +190,7 @@ function ringGirths(m: Mannequin, p: GarmentPayload, kind: ProxyKind, baseSize: 
 
 const round1 = (x: number): number => Math.round(x * 10) / 10;
 
-function hemFor(m: Mannequin, p: GarmentPayload, kind: ProxyKind, topY: number, opts: ProxyOptions = {}): { hemY: number; lengthCm: number; lengthSource: string } {
+function hemFor(m: Mannequin, p: GarmentPayload, kind: ProxyKind, topY: number, opts: ProxyOptions = {}): { hemY: number; lengthCm: number; lengthSource: string; surface: boolean } {
   const len = (p.lengthCm ?? {}) as Partial<Record<string, number>>;
   const hps = m.landmarks.hps[1];
   const waistY = m.morphHeights.waist;
@@ -197,6 +209,7 @@ function hemFor(m: Mannequin, p: GarmentPayload, kind: ProxyKind, topY: number, 
   }
   let hemY: number;
   let source: string;
+  let surface = false;
   if (kind === 'trousers') {
     if (len.outseam !== undefined) [hemY, source] = [waistY - len.outseam, `outseam ${len.outseam} cm from the waist`];
     else if (len.inseam !== undefined) [hemY, source] = [crotchY - len.inseam, `inseam ${len.inseam} cm from the crotch`];
@@ -210,14 +223,22 @@ function hemFor(m: Mannequin, p: GarmentPayload, kind: ProxyKind, topY: number, 
   } else if (opts.shoulderToHemCm !== undefined) {
     [hemY, source] = [hps - opts.shoulderToHemCm, opts.lengthSource ?? `shoulder_to_hem ${opts.shoulderToHemCm} cm (override)`];
   } else {
-    if (len.shoulder_to_hem !== undefined) [hemY, source] = [hps - len.shoulder_to_hem, `shoulder_to_hem ${len.shoulder_to_hem} cm`];
+    if (len.shoulder_to_hem !== undefined) {
+      // Start from the vertical drop; proxySpec moves the hem up until the front surface has this length.
+      [hemY, source] = [hps - len.shoulder_to_hem, `shoulder_to_hem ${len.shoulder_to_hem} cm (flat-lay: along the front from the HPS)`];
+      surface = true;
+    }
     else if (len.waist_to_hem !== undefined) [hemY, source] = [waistY - len.waist_to_hem, `waist_to_hem ${len.waist_to_hem} cm`];
     else if (kind === 'dress') [hemY, source] = byWord([h.knee, 'no length given: to the knee']);
     else [hemY, source] = [h.hip - 3, 'no length given: just below the hip ring'];
   }
   const clamped = Math.min(topY - 10, Math.max(1, hemY));
-  if (clamped !== hemY) source += `; clamped to ${round1(clamped)} cm above the floor`;
-  return { hemY: clamped, lengthCm: round1((kind === 'skirt' || kind === 'trousers' ? waistY : hps) - clamped), lengthSource: source };
+  if (clamped !== hemY) {
+    source += `; clamped to ${round1(clamped)} cm above the floor`;
+    surface = false;
+  }
+  const printed = surface ? len.shoulder_to_hem! : round1((kind === 'skirt' || kind === 'trousers' ? waistY : hps) - clamped);
+  return { hemY: clamped, lengthCm: printed, lengthSource: source, surface };
 }
 
 function sleeveFor(m: Mannequin, p: GarmentPayload, kind: ProxyKind): { sleeveCm: number; sleeveSource: string } {
@@ -236,7 +257,9 @@ export function proxySpec(m: Mannequin, p: GarmentPayload, baseSize: string, opt
   const shoulderY = m.morphHeights.shoulder;
   // Lower body: 2 cm above the waist ring, so the ring lies on the shell's side, not on its cap.
   const topY = kind === 'skirt' || kind === 'trousers' ? m.morphHeights.waist + 2 : shoulderY + 0.35 * (m.morphHeights.neck - shoulderY);
-  const { hemY, lengthCm, lengthSource } = hemFor(m, p, kind, topY, opts);
+  const hem = hemFor(m, p, kind, topY, opts);
+  let { hemY } = hem;
+  const { lengthCm, lengthSource } = hem;
   const { sleeveCm, sleeveSource } = sleeveFor(m, p, kind);
   let hemFlare: number | null = null;
   if (kind === 'trousers') {
@@ -264,7 +287,28 @@ export function proxySpec(m: Mannequin, p: GarmentPayload, baseSize: string, opt
     }
   }
   if (p.sizeChartType === 'garment' && p.sizeChart.length === 1) notes.push('one size: girths from the flat measurements (garment chart, as parsed)');
-  return { version: PROXY_VERSION, kind, category: p.category as EvalCategory, baseSize, chartType, girths, girthSource, anchors, topY, hemY, lengthCm, lengthSource, hemFlare, sleeveCm, sleeveSource, notes };
+  const spec: ProxySpec = { version: PROXY_VERSION, kind, category: p.category as EvalCategory, baseSize, chartType, girths, girthSource, anchors, topY, hemY, lengthCm, lengthSource, lengthDefinition: hem.surface ? 'hps_surface' : 'drop', hemDropCm: 0, hemFlare, sleeveCm, sleeveSource, notes };
+  if (hem.surface) {
+    // Fixed point: the shell's flare depends on the hem, the hem on the shell's front surface length.
+    for (let k = 0; k < 6; k++) {
+      // Built 10 cm past the current hem (the flare continues), so the length can also grow back.
+      const shell = bodyShell(m, spec, Math.max(1, spec.hemY - 10), { coverLegs: kind === 'dress' });
+      const next = Math.max(spec.hemY - 40, hemAlongFront(m, shell, lengthCm));
+      const moved = Math.abs(next - spec.hemY);
+      spec.hemY = Math.min(topY - 10, Math.max(1, next));
+      hemY = spec.hemY;
+      if (moved < 0.01) break;
+    }
+    spec.anchors = spec.anchors.filter((id) => id === 'upper_arm' || id === 'wrist' || m.morphHeights[id] >= spec.hemY);
+    for (const id of Object.keys(spec.girths) as AnchorRing[]) {
+      if (!spec.anchors.includes(id)) {
+        delete spec.girths[id];
+        delete spec.girthSource[id];
+      }
+    }
+  }
+  spec.hemDropCm = round1((kind === 'skirt' || kind === 'trousers' ? m.morphHeights.waist : m.landmarks.hps[1]) - spec.hemY);
+  return spec;
 }
 
 // ---------------------------------------------------------------------------
@@ -348,6 +392,23 @@ function bodyShell(m: Mannequin, spec: ProxySpec, bottomY: number, opts: ShellOp
     return section([0, y, cz], a, b, BODY_SEGMENTS);
   });
   return closedTube('body', sections, BODY_SEGMENTS);
+}
+
+/** Hem height at which the shell's front surface, from the high point shoulder down the sagittal plane through it, is `lengthCm` long (above the shell's top: straight from the HPS). */
+function hemAlongFront(m: Mannequin, shell: Part, lengthCm: number): number {
+  const hps = m.landmarks.hps;
+  const prof = sagittalProfile({ positions: Float64Array.from(shell.positions), indices: Uint32Array.from(shell.indices) }, hps[0], 1);
+  if (prof.length < 2) return hps[1] - lengthCm;
+  const top = prof[0]!;
+  const z = (y: number): number => {
+    if (y >= top.y) return hps[2] + ((top.z - hps[2]) * (hps[1] - y)) / Math.max(1e-9, hps[1] - top.y);
+    for (let k = 1; k < prof.length; k++) {
+      const a = prof[k - 1]!, b = prof[k]!;
+      if (y <= a.y && y >= b.y) return a.z + ((b.z - a.z) * (a.y - y)) / Math.max(1e-9, a.y - b.y);
+    }
+    return prof[prof.length - 1]!.z;
+  };
+  return hemForSurfaceLength(hps, lengthCm, z, 0.1, prof[prof.length - 1]!.y);
 }
 
 /** One trouser leg section at height y: girth from thigh to hem, covering the mannequin leg, centre moved out for wide legs. */
@@ -435,6 +496,8 @@ export function proxyRecord(spec: ProxySpec): Record<string, unknown> {
     hem_y_cm: r(spec.hemY),
     length_cm: r(spec.lengthCm),
     length_source: spec.lengthSource,
+    length_definition: spec.lengthDefinition,
+    hem_drop_cm: r(spec.hemDropCm),
     hem_flare: spec.hemFlare,
     sleeve_cm: r(spec.sleeveCm),
     sleeve_source: spec.sleeveSource,

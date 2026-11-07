@@ -528,7 +528,9 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
   if (options.syntheticPhotos && syntheticSupported) {
     const own = (payload.lengthCm as Partial<Record<string, number>> | undefined)?.shoulder_to_hem;
     const synth = garmentSpec(payload, baseSize).shoulderToHemCm;
-    if (own !== synth) Object.assign(proxyOpts, { shoulderToHemCm: synth, lengthSource: `synthetic stills: the synthetic garment's shoulder_to_hem ${synth} cm` });
+    // Always the override: the synthetic garment drops its length vertically, while a printed length is flat-lay (proxy 0.2.0).
+    void own;
+    Object.assign(proxyOpts, { shoulderToHemCm: synth, lengthSource: `synthetic stills: the synthetic garment's shoulder_to_hem ${synth} cm (vertical drop)` });
   }
   const pSpec = proxySpec(mannequin, payload, baseSize, proxyOpts);
   const proxy: Proxy | null = control === 'proxy' ? buildProxy(mannequin, payload, baseSize, proxyOpts) : null;

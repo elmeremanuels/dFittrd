@@ -20,9 +20,14 @@ import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh, turntable
 import type { GarmentPayload } from '@curtain/schema';
 import { evaluateGarment, SIMULATED_ERROR, type EvalResult, type MeshSourceKind } from './eval';
 import { evalBundle, type ViewAgreement } from './evalBundle';
-import { readGarmentGlb, weldVerticesWithColors } from './evalMesh';
+import { readGarmentGlb, weldVerticesWithColors, weldWithRemap } from './evalMesh';
+import { readTexturedGlb } from './glbTextured';
+import type { RgbImage } from './jpeg';
+import { renderTextured } from './stage4t';
+import { renderPositions } from './templateFit';
+import { cameraFromFrame } from './views';
 import { decodeAnyPng, maskFromPng, maskPng, type Mask } from './evalPng';
-import { colourRender, garmentSilhouette, overlayPng, overlayRgb, scoreView, shopPhotoScore, sideBySidePng, type TurntableScore, type ViewName, type ViewReference } from './evalView';
+import { colourRender, garmentSilhouette, overlayPng, overlayRgb, RENDER_BACKGROUND, scoreView, shopPhotoScore, sideBySidePng, type TurntableScore, type ViewName, type ViewReference } from './evalView';
 import { maskIou } from './evalPng';
 
 export type Json = Record<string, unknown>;
@@ -76,6 +81,8 @@ export interface JobFiles {
   /** Garment masks of the generated frames (`stage2/garment_mask/`, the stage 2 segmentation stage 4 trains on) and their record. */
   stage2Masks: { count: number; record: Json | null };
   stage4: Partial<Record<'stage2' | 'synthetic', { glb: string | null; metrics: Json | null }>>;
+  /** Stage 4t (template fit + bake, `scripts/stage4t.ts`): textured garment.glb, metrics.json, atlas.png. */
+  stage4t: Partial<Record<'stage2' | 'synthetic', { glb: string | null; metrics: Json | null; atlas: string | null }>>;
   costSummary: Json | null;
   /** Every cost record found: cost_summary.json when present, else the stages' own records. */
   costs: CostRecord[];
@@ -90,6 +97,13 @@ export function readJob(dir: string): JobFiles {
     const metrics = readJson(at(`stage4/${source}/metrics.json`));
     if (existsSync(glb) || metrics) stage4[source] = { glb: existsSync(glb) ? `stage4/${source}/garment.glb` : null, metrics };
   }
+  const stage4t: JobFiles['stage4t'] = {};
+  for (const source of ['stage2', 'synthetic'] as const) {
+    const glb = at(`stage4t/${source}/garment.glb`);
+    const metrics = readJson(at(`stage4t/${source}/metrics.json`));
+    const atlas = at(`stage4t/${source}/atlas.png`);
+    if (existsSync(glb) || metrics) stage4t[source] = { glb: existsSync(glb) ? `stage4t/${source}/garment.glb` : null, metrics, atlas: existsSync(atlas) ? `stage4t/${source}/atlas.png` : null };
+  }
   const maskDir = at('stage3/garment_mask');
   const stage3Masks = existsSync(maskDir) ? readdirSync(maskDir).filter((f) => f.endsWith('.png')).length : 0;
   const files: JobFiles = {
@@ -101,6 +115,7 @@ export function readJob(dir: string): JobFiles {
     stage3Masks,
     stage2Masks: { count: existsSync(at('stage2/garment_mask')) ? readdirSync(at('stage2/garment_mask')).filter((f) => f.endsWith('.png')).length : 0, record: readJson(at('stage2/garment_mask/record.json')) },
     stage4,
+    stage4t,
     costSummary: readJson(at('cost_summary.json')),
     costs: [],
   };
@@ -164,6 +179,19 @@ export interface ViewMeshes {
   reconstructed?: Mesh;
   /** Per-vertex RGB of both meshes (same vertex order), for the colour renders. */
   colors?: ArrayLike<number> | null;
+  /** A baked texture (stage 4t): the render mesh's UVs and topology, its map onto `calibrated`, and the atlas pixels. */
+  texture?: EvalTexture | null;
+}
+
+/** A stage 4t texture carried through the evaluation into the bundle. */
+export interface EvalTexture {
+  uvs: Float32Array;
+  indices: Uint32Array;
+  /** Render vertex → vertex of the welded (evaluated) mesh. */
+  remap: Uint32Array;
+  image: { bytes: Uint8Array; mimeType: 'image/jpeg' | 'image/png' };
+  /** Decoded atlas for the software renders (stage4t/<source>/atlas.png), when present. */
+  atlas: RgbImage | null;
 }
 
 export function viewAgreement(job: JobFiles, m: Mannequin, meshes: Mesh | ViewMeshes, writeImage?: (name: string, png: Uint8Array) => void): ViewAgreement {
@@ -242,7 +270,11 @@ export function viewAgreement(job: JobFiles, m: Mannequin, meshes: Mesh | ViewMe
           frameRgb = null;
         }
       }
-      const panels = [...(frameRgb ? [frameRgb] : []), colourRender(body, garment, vm.colors ?? null, cf, width, height), overlayRgb(calibratedVisible, ref)];
+      const tex = vm.texture;
+      const shown = tex && tex.atlas
+        ? renderTextured(cameraFromFrame(cf, width, height), { positions: renderPositions(tex, garment.positions), uvs: tex.uvs, indices: tex.indices }, tex.atlas, body, RENDER_BACKGROUND)
+        : colourRender(body, garment, vm.colors ?? null, cf, width, height);
+      const panels = [...(frameRgb ? [frameRgb] : []), shown, overlayRgb(calibratedVisible, ref)];
       writeImage(`view/turntable_${angleDeg}.png`, sideBySidePng(width, height, panels));
     }
   }
@@ -263,13 +295,17 @@ export interface MeshChoice {
  * `allowSynthetic` (the spike's own product only), fall back to stage 4 on the synthetic frames,
  * then to the synthetic ground truth (`synthetic/garment_truth.glb`, or `fallbackTruth`).
  */
-export function chooseMesh(job: JobFiles, opts: { allowSynthetic: boolean; fallbackTruth?: () => Mesh }): MeshChoice | null {
+export function chooseMesh(job: JobFiles, opts: { allowSynthetic: boolean; fallbackTruth?: () => Mesh; prefer?: 'stage4t' | 'stage4' }): MeshChoice | null {
   const read = (rel: string): Uint8Array | null => {
     const p = safeJoin(job.dir, rel);
     return p && existsSync(p) ? new Uint8Array(readFileSync(p)) : null;
   };
+  // Stage 4t (template fit) first: stage 4's 2DGS mesh is the alternative (run 14: 22 % of it inside the mannequin).
+  const t2 = job.stage4t.stage2?.glb;
+  if (t2 && (opts.prefer ?? 'stage4t') === 'stage4t') return { kind: 'stage4t', path: t2, bytes: read(t2), mesh: null };
   const s2 = job.stage4.stage2?.glb;
   if (s2) return { kind: 'stage4', path: s2, bytes: read(s2), mesh: null };
+  if (t2) return { kind: 'stage4t', path: t2, bytes: read(t2), mesh: null };
   if (!opts.allowSynthetic) return null;
   const syn = job.stage4.synthetic?.glb;
   if (syn) return { kind: 'stage4-synthetic', path: syn, bytes: read(syn), mesh: null };
@@ -284,6 +320,8 @@ export function chooseMesh(job: JobFiles, opts: { allowSynthetic: boolean; fallb
 
 export interface ProductEval {
   result: EvalResult;
+  /** stage4t/<source>/metrics.json when the evaluated mesh is stage 4t's. */
+  stage4t?: Json | null;
   view: ViewAgreement;
   bundle: ReturnType<typeof evalBundle> | null;
   meanColorHex: string | null;
@@ -300,13 +338,37 @@ export function evaluateProduct(o: {
   job: JobFiles;
   choice: MeshChoice;
   writeImage?: (name: string, png: Uint8Array) => void;
+  /** What the printed shoulder_to_hem means (`evaluateGarment`). */
+  printedLength?: 'flat-lay' | 'drop';
 }): ProductEval {
   const t0 = performance.now();
   let mesh: Mesh;
   let meanColorHex: string | null = null;
   let colors: Float32Array | null = null;
+  let texture: EvalTexture | null = null;
   if (o.choice.mesh) mesh = o.choice.mesh;
-  else {
+  else if (o.choice.kind === 'stage4t') {
+    if (!o.choice.bytes) throw new Error(`${o.choice.path}: missing`);
+    const g = readTexturedGlb(o.choice.bytes);
+    if (!g.uvs || !g.image) throw new Error(`${o.choice.path}: no TEXCOORD_0 or no embedded image`);
+    const raw: Mesh = { positions: g.positions, indices: g.indices, vertexPart: new Uint8Array(g.positions.length / 3), partNames: ['garment'] };
+    const w = weldWithRemap(raw);
+    mesh = w.mesh;
+    const source = o.choice.path.split('/')[1] === 'synthetic' ? 'synthetic' : 'stage2';
+    const atlasRel = o.job.stage4t[source]?.atlas ?? null;
+    let atlas: RgbImage | null = null;
+    if (atlasRel) {
+      const img = decodeAnyPng(new Uint8Array(readFileSync(safeJoin(o.job.dir, atlasRel)!)));
+      if (img.channels >= 3) {
+        const data = new Uint8Array(img.width * img.height * 3);
+        for (let p = 0; p < img.width * img.height; p++) for (let c = 0; c < 3; c++) data[3 * p + c] = img.data[p * img.channels + c]!;
+        atlas = { width: img.width, height: img.height, data };
+      }
+    }
+    texture = { uvs: g.uvs, indices: g.indices, remap: w.remap, image: { bytes: g.image.bytes, mimeType: g.image.mimeType === 'image/png' ? 'image/png' : 'image/jpeg' }, atlas };
+    const mc = arr(obj(o.job.stage4t[source]?.metrics?.bake)?.meanColour).map((x) => num(x) ?? 0);
+    if (mc.length === 3) meanColorHex = `#${mc.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+  } else {
     if (!o.choice.bytes) throw new Error(`${o.choice.path}: missing`);
     const g = readGarmentGlb(o.choice.bytes);
     const w = weldVerticesWithColors(g.mesh, g.colors);
@@ -323,11 +385,13 @@ export function evaluateProduct(o: {
     mesh,
     mannequin: m,
     source: { kind: o.choice.kind, path: o.choice.path, simulatedError: o.choice.kind === 'synthetic-truth' ? SIMULATED_ERROR : null },
+    ...(o.printedLength ? { printedLength: o.printedLength } : {}),
   });
   const t2 = performance.now();
   // The simulated error of a synthetic truth changes positions, not the vertex order: the colours still apply.
-  const view = viewAgreement(o.job, m, { calibrated: result.baseMesh, reconstructed: result.reconstructed, colors }, o.writeImage);
+  const view = viewAgreement(o.job, m, { calibrated: result.baseMesh, reconstructed: result.reconstructed, colors, texture }, o.writeImage);
   const t3 = performance.now();
-  const bundle = result.grading ? evalBundle(result, o.payload, { meanColorHex, view, inputs: { jobDir: o.job.dir, manifestInputHash: str(o.job.manifest?.input_hash) } }) : null;
-  return { result, view, bundle, meanColorHex, readMs: Math.round(t1 - t0), evalMs: Math.round(t2 - t1), viewMs: Math.round(t3 - t2) };
+  const bundle = result.grading ? evalBundle(result, o.payload, { meanColorHex, view, texture, inputs: { jobDir: o.job.dir, manifestInputHash: str(o.job.manifest?.input_hash) } }) : null;
+  const stage4t = o.choice.kind === 'stage4t' ? o.job.stage4t[o.choice.path.split('/')[1] === 'synthetic' ? 'synthetic' : 'stage2']?.metrics ?? null : null;
+  return { result, view, bundle, meanColorHex, stage4t, readMs: Math.round(t1 - t0), evalMs: Math.round(t2 - t1), viewMs: Math.round(t3 - t2) };
 }

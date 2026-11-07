@@ -8,6 +8,7 @@ import { measureRing } from './anchoring';
 import { evalChart, evalChartRow } from './evalChart';
 import { PROXY_ID, controlFrame, depthRange, idMask } from './exportJob';
 import { generateGarment } from './garment';
+import { garmentLengths } from './garmentLength';
 import { SPIKE_PRODUCT_IDS, garmentSpec } from './product';
 import { MIN_CLEARANCE_CM, buildProxy, proxyKind, proxyRecord, type ProxyKind } from './proxy';
 import { render } from './raster';
@@ -166,7 +167,11 @@ describe('control proxy: the hem follows the product length exactly', () => {
       const len = (payload.lengthCm ?? {}) as Partial<Record<string, number>>;
       if (spec.lengthSource.includes('clamped')) continue;
       if ((spec.kind === 'dress' || spec.kind === 'top' || spec.kind === 'outerwear') && len.shoulder_to_hem !== undefined) {
-        expect(m.landmarks.hps[1] - spec.hemY, id).toBeCloseTo(len.shoulder_to_hem, 6);
+        // A printed shoulder_to_hem is a flat-lay length: along the proxy's front from the HPS, not a vertical drop.
+        expect(spec.lengthDefinition, id).toBe('hps_surface');
+        const along = garmentLengths(m, mesh).find((l) => l.definition === 'hps_surface')!.lengthCm!;
+        expect(Math.abs(along - len.shoulder_to_hem), id).toBeLessThan(0.3);
+        expect(spec.hemDropCm, id).toBeLessThan(len.shoulder_to_hem);
         checked++;
       } else if (spec.kind === 'trousers' && len.outseam !== undefined) {
         expect(m.morphHeights.waist - spec.hemY, id).toBeCloseTo(len.outseam, 6);
@@ -179,12 +184,26 @@ describe('control proxy: the hem follows the product length exactly', () => {
     expect(checked).toBeGreaterThanOrEqual(3);
   });
 
-  it('aalter-studio-2: the proxy hem is the synthetic garment truth hem (run 11a: both 26.6 cm above the floor)', () => {
+  it('aalter-studio-2 with synthetic stills: the proxy hem is the synthetic garment truth hem (run 11a: both 26.6 cm above the floor)', () => {
+    // The spike's synthetic garment drops its shoulder_to_hem vertically; the exporter passes it as the override (exportJob).
     const payload = mockGarment('aalter-studio-2');
-    const proxy = buildProxy(m, payload, 'M');
+    const synth = garmentSpec(payload, 'M').shoulderToHemCm;
+    const proxy = buildProxy(m, payload, 'M', { shoulderToHemCm: synth, lengthSource: 'synthetic stills' });
     const truth = generateGarment(m, garmentSpec(payload, 'M'));
     expect(lowestY(proxy.mesh)).toBeCloseTo(lowestY(truth), 6);
     expect(proxy.spec.hemY).toBeCloseTo(m.landmarks.hps[1] - 112, 6);
+    expect(proxy.spec.lengthDefinition).toBe('drop');
+  });
+
+  it('run 14 babydoll (printed Length 91 cm): the hem ends 91 cm along the front, about 10 cm above a 91 cm vertical drop', () => {
+    const [p, size] = product('azure-palm-baby-doll-dress');
+    const { spec, mesh } = buildProxy(m, p, size);
+    expect(spec.lengthCm).toBe(91);
+    const lengths = garmentLengths(m, mesh);
+    expect(Math.abs(lengths.find((l) => l.definition === 'hps_surface')!.lengthCm! - 91)).toBeLessThan(0.3);
+    // 0.1.0 put the hem at the knee (47.6 cm); a flat-lay 91 cm ends well above it on our mannequin.
+    expect(spec.hemY - (m.landmarks.hps[1] - 91)).toBeGreaterThan(5);
+    expect(spec.hemY).toBeGreaterThan(m.morphHeights.knee + 5);
   });
 
   it('takes an explicit shoulder-to-hem override (the synthetic stills) and records where it came from', () => {
@@ -213,7 +232,9 @@ describe('control proxy: lengths, sleeves and one-size', () => {
   it('takes the hem from the chart lengths and the sleeves from sleeve_length', () => {
     const aalter = buildProxy(m, mockGarment('aalter-studio-2'), 'M').spec;
     expect(aalter.lengthSource).toMatch(/shoulder_to_hem 112/);
-    expect(m.landmarks.hps[1] - aalter.hemY).toBeCloseTo(112, 6);
+    expect(aalter.lengthCm).toBe(112);
+    expect(aalter.lengthDefinition).toBe('hps_surface');
+    expect(m.landmarks.hps[1] - aalter.hemY).toBeLessThan(112);
     expect(aalter.sleeveCm).toBeGreaterThan(50);
     const [pants, size] = product('rosewater-palazzo-pants');
     const palazzo = buildProxy(m, pants, size).spec;

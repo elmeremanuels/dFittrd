@@ -161,6 +161,7 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   // and sags (p99 strain 26–35 % instead of 11–24 % on the tee).
   const pinned = new Uint8Array(chains.length);
   for (let i = 0; i < chains.length; i++) if (chains[i] === 0 && start[3 * i + 1]! >= yoke) pinned[i] = 1;
+  pinLoosePieces(m, start, graded.indices, pinned);
   const cloth = createCloth(start, graded.positions, graded.indices, (i) => pinned[i] === 1, (i) => chains[i] === 0);
   const collide = makeCollider(field, CLEARANCE_CM, chains, noCollide);
   // Settle the yoke onto the avatar before pinning it: a small size sits a few mm inside the neck
@@ -186,6 +187,51 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
     field,
     shoulderWidthCm: sizeEntry(session.bundle.grading, size).targets.shoulder_width,
   };
+}
+
+/** A loose piece's shoulder end: this many cm along the arm from its point nearest the shoulder joint is pinned. */
+export const SLEEVE_CAP_CM = 4;
+
+/**
+ * Pieces of the garment with no pinned particle (stage 4t's sleeves are tubes of their own that
+ * overlap the bodice at the armhole, not sewn to it) would slide down the A-pose arm or fall: pin
+ * each such piece's shoulder end, the particles within `SLEEVE_CAP_CM` along the arm of its point
+ * nearest the shoulder joint (on the side of the body it lies on). Mutates `pinned`.
+ */
+export function pinLoosePieces(m: Mannequin, pos: ArrayLike<number>, indices: ArrayLike<number>, pinned: Uint8Array): number {
+  const n = pinned.length;
+  const parent = new Int32Array(n).map((_, i) => i);
+  const find = (x: number): number => {
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]!]!;
+      x = parent[x]!;
+    }
+    return x;
+  };
+  for (let t = 0; t < indices.length; t += 3) {
+    const a = find(indices[t]!);
+    parent[find(indices[t + 1]!)] = a;
+    parent[find(indices[t + 2]!)] = a;
+  }
+  const pieces = new Map<number, number[]>();
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    (pieces.get(r) ?? pieces.set(r, []).get(r)!).push(i);
+  }
+  let added = 0;
+  for (const members of pieces.values()) {
+    if (members.length < 3 || members.some((i) => pinned[i])) continue;
+    let sx = 0;
+    for (const i of members) sx += pos[3 * i]!;
+    const arm = sx >= 0 ? m.arms.left : m.arms.right;
+    const along = (i: number): number => (pos[3 * i]! - arm.joint[0]) * arm.axis[0] + (pos[3 * i + 1]! - arm.joint[1]) * arm.axis[1] + (pos[3 * i + 2]! - arm.joint[2]) * arm.axis[2];
+    const s0 = Math.min(...members.map(along));
+    for (const i of members) if (along(i) <= s0 + SLEEVE_CAP_CM) {
+      pinned[i] = 1;
+      added++;
+    }
+  }
+  return added;
 }
 
 /** Run the whole relaxation at once, up to the duration cap or until calm (tests, the blind page's pre-render). */

@@ -1,7 +1,7 @@
 {
   "format": "curtain.phase0.job",
   "format_version": 1,
-  "job_id": "monochrome-03-a31584e09586",
+  "job_id": "monochrome-03-c23476bacee7",
   "product_id": "monochrome-03",
   "product_name": "Heavyweight Boxy Tee",
   "category": "top",
@@ -128,7 +128,7 @@
   "control": {
     "mode": "proxy",
     "proxy": {
-      "version": "control-proxy-0.1.0",
+      "version": "control-proxy-0.2.0",
       "kind": "top",
       "category": "top",
       "base_size": "M",
@@ -157,7 +157,9 @@
       "top_y_cm": 136.75,
       "hem_y_cm": 72.6,
       "length_cm": 66,
-      "length_source": "shoulder_to_hem 66 cm",
+      "length_source": "synthetic stills: the synthetic garment's shoulder_to_hem 66 cm (vertical drop)",
+      "length_definition": "drop",
+      "hem_drop_cm": 66,
       "hem_flare": 1.05,
       "sleeve_cm": 22,
       "sleeve_source": "sleeve_length 22 cm",
@@ -427,7 +429,7 @@
     "control": {
       "mode": "proxy",
       "proxy": {
-        "version": "control-proxy-0.1.0",
+        "version": "control-proxy-0.2.0",
         "kind": "top",
         "category": "top",
         "base_size": "M",
@@ -456,7 +458,9 @@
         "top_y_cm": 136.75,
         "hem_y_cm": 72.6,
         "length_cm": 66,
-        "length_source": "shoulder_to_hem 66 cm",
+        "length_source": "synthetic stills: the synthetic garment's shoulder_to_hem 66 cm (vertical drop)",
+        "length_definition": "drop",
+        "hem_drop_cm": 66,
         "hem_flare": 1.05,
         "sleeve_cm": 22,
         "sleeve_source": "sleeve_length 22 cm",
@@ -501,5 +505,5 @@
     },
     "synthetic": true
   },
-  "input_hash": "a31584e095864a69e014b08723287fdfc619114b6754a35ad177734b27991138"
+  "input_hash": "c23476bacee7310e34bab33b27bb2a242e44941bd0d0993d4ee0e7a0a2d38904"
 }

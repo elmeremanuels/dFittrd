@@ -20,6 +20,11 @@
  * checks them against the committed sha256, which this exporter checks again). The
  * job is a stage 1b job: --on-model or --flat-lay follow from the chosen front photo.
  *
+ * --shop <shop> --product <handle> --synthetic-photos: the same product (payload, chart, features, proxy,
+ * prompt) with the spike's synthetic garment as the pinned stills instead of the shop photos: a dry run
+ * of every non-GPU part for the product's garment kind without raw/ and without stage 1b. Written to
+ * out/phase0-synthetic/<handle>/ unless --out is given, so it never mixes with a real job's GPU outputs.
+ *
  * --control proxy (default) | bare: the control depth video shows our mannequin wearing a coarse proxy
  * garment from the category and chart (src/proxy.ts), or the bare mannequin. Recorded in the manifest
  * and input_hash.
@@ -89,32 +94,38 @@ if (values.shop !== undefined) {
   const shop = values.shop as ShopId;
   if (!(SHOPS as readonly string[]).includes(shop)) throw new Error(`unknown shop ${values.shop}; known: ${SHOPS.join(', ')}`);
   if (values.product === 'all') throw new Error(`--shop ${shop} needs --product <handle>`);
-  if (values.front || values.back || values['synthetic-photos']) throw new Error('--shop takes its photos from data/<shop>/ (choose with --front-image/--back-image); --front, --back and --synthetic-photos do not apply');
+  if (values.front || values.back) throw new Error('--shop takes its photos from data/<shop>/ (choose with --front-image/--back-image); --front and --back do not apply');
   const dataDir = join(pkgDir, 'data', shop);
   const rawDir = join(dataDir, 'raw');
   const product = shopProduct(shop, JSON.parse(readFileSync(join(dataDir, 'products.json'), 'utf8')), values.product, values['base-size']);
-  const choice = shopPhotoChoice(JSON.parse(readFileSync(join(dataDir, 'images.json'), 'utf8')), product.id, { front: position('front-image', values['front-image']), back: position('back-image', values['back-image']) });
-  if (!existsSync(join(rawDir, product.id))) {
-    throw new Error(`data/${shop}/raw/${product.id}/ is missing (shop images are gitignored): run \`pnpm --filter @curtain/garment-spike shop:${shop} -- --fetch-images\` first`);
+  if (values['synthetic-photos']) {
+    if (onModel || values['front-image'] || values['back-image']) throw new Error('--synthetic-photos replaces the shop photos: --on-model, --flat-lay, --front-image and --back-image do not apply');
+    console.log(`[export:phase0] ${product.id}: synthetic stills instead of the shop photos (a dry run without stage 1b; never a real job)`);
+    products = [product];
+  } else {
+    const choice = shopPhotoChoice(JSON.parse(readFileSync(join(dataDir, 'images.json'), 'utf8')), product.id, { front: position('front-image', values['front-image']), back: position('back-image', values['back-image']) });
+    if (!existsSync(join(rawDir, product.id))) {
+      throw new Error(`data/${shop}/raw/${product.id}/ is missing (shop images are gitignored): run \`pnpm --filter @curtain/garment-spike shop:${shop} -- --fetch-images\` first`);
+    }
+    const shopPics = shopPhotos(shop, product.id, choice, (handle, img) => {
+      const dir = join(rawDir, handle);
+      const name = existsSync(dir) ? readdirSync(dir).find((f) => f.startsWith(`${String(img.position).padStart(2, '0')}.`)) : undefined;
+      return name ? { bytes: readFileSync(join(dir, name)), ext: extname(name).slice(1), file: `raw/${handle}/${name}` } : undefined;
+    }, sha256);
+    const kind = choice.sourceKind;
+    if (onModel && onModel.kind !== kind) throw new Error(`--${onModel.kind === 'on_model' ? 'on-model' : 'flat-lay'} contradicts the chosen front photo (${kind}, from images.json)`);
+    onModel = { kind };
+    photos.push(...shopPics);
+    for (const w of choice.why) console.log(`[export:phase0] ${product.id}: ${w}`);
+    products = [product];
   }
-  const shopPics = shopPhotos(shop, product.id, choice, (handle, img) => {
-    const dir = join(rawDir, handle);
-    const name = existsSync(dir) ? readdirSync(dir).find((f) => f.startsWith(`${String(img.position).padStart(2, '0')}.`)) : undefined;
-    return name ? { bytes: readFileSync(join(dir, name)), ext: extname(name).slice(1), file: `raw/${handle}/${name}` } : undefined;
-  }, sha256);
-  const kind = choice.sourceKind;
-  if (onModel && onModel.kind !== kind) throw new Error(`--${onModel.kind === 'on_model' ? 'on-model' : 'flat-lay'} contradicts the chosen front photo (${kind}, from images.json)`);
-  onModel = { kind };
-  photos.push(...shopPics);
-  for (const w of choice.why) console.log(`[export:phase0] ${product.id}: ${w}`);
-  products = [product];
 } else {
   const ids = values.product === 'all' ? [...SPIKE_PRODUCT_IDS] : [values.product];
   if (ids.length > 1 && (values.front || values.back || values.detail)) throw new Error('photos belong to one product: pass --product <id> with --front/--back/--detail');
   products = ids.map((id) => resolveSpikeProduct(id, values['base-size']));
 }
 
-const root = values.out ? resolve(values.out) : join(pkgDir, 'out', 'phase0');
+const root = values.out ? resolve(values.out) : join(pkgDir, 'out', values.shop !== undefined && values['synthetic-photos'] ? 'phase0-synthetic' : 'phase0');
 for (const product of products) {
   const productId = product.id;
   const t0 = Date.now();

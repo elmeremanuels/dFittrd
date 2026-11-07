@@ -113,13 +113,40 @@ describe('shop products: exported job', () => {
     expect(inputHash(m.hash_inputs)).toBe(m.input_hash);
   });
 
-  it('exports trousers, a skirt and a cardigan without the synthetic garment (it exists for dresses and tops only)', () => {
+  it('exports trousers, a skirt and a cardigan with their own synthetic garment (export 0.6.0: the proxy, opened)', () => {
     for (const h of ['rosewater-palazzo-pants', 'crimson-wildflower-maxi-skirt', 'woodstock-wanderer-knit-cardi']) {
-      const { manifest: m } = shopJob(h);
-      expect(m.synthetic, h).toBeNull();
+      const { manifest: m, files } = shopJob(h);
+      expect(m.synthetic, h).not.toBeNull();
+      expect(files.has('synthetic/garment_truth.glb'), h).toBe(true);
       expect(m.control.proxy?.kind, h).toBe({ 'rosewater-palazzo-pants': 'trousers', 'crimson-wildflower-maxi-skirt': 'skirt', 'woodstock-wanderer-knit-cardi': 'outerwear' }[h]);
+      expect(inputHash(m.hash_inputs)).toBe(m.input_hash);
     }
-    expect(() => shopJob('rosewater-palazzo-pants', { synthetic: true })).toThrow(/dresses and tops/);
+    expect(shopJob('rosewater-palazzo-pants', { synthetic: false }).manifest.synthetic).toBeNull();
+  });
+
+  it('carries the garment features into the manifest, the hash, the proxy and the prompt', () => {
+    const blouse = shopJob('rosewater-blouse').manifest;
+    expect(blouse.features).toMatchObject({ sleeve: 'half', front: 'buttoned' });
+    expect(blouse.hash_inputs.features).toEqual(blouse.features);
+    expect(blouse.control.proxy).toMatchObject({ sleeve_style: 'half' });
+    expect(blouse.control.proxy?.sleeve_cm as number).toBeGreaterThan(25);
+    expect(blouse.prompt.description).toBe('a half-sleeved blouse in a fluid viscose fabric');
+    const cardi = shopJob('woodstock-wanderer-knit-cardi').manifest;
+    expect(cardi.features).toMatchObject({ front: 'buttoned', neckline: 'deep-v' });
+    expect(cardi.control.proxy?.front_opening).toMatchObject({ kind: 'v', neckline: 'deep-v', buttoned: true });
+    expect(cardi.prompt.description).toBe('a long-sleeved cardigan in a heavy acrylic and wool fabric, with a deep V neckline open to the underbust, buttoned below it');
+    expect(cardi.prompt.negative).toMatch(/closed pullover/);
+    const pants = shopJob('rosewater-palazzo-pants').manifest;
+    expect(pants.prompt.description).toBe('full-length wide-leg trousers in a fluid viscose fabric, worn at the waist on a bare torso, two separate trouser legs from the hip to the hem');
+    expect(pants.prompt.negative).toMatch(/\bskirt\b.*one closed skirt between the legs.*\bbodice\b/);
+    const skirt = shopJob('crimson-wildflower-maxi-skirt').manifest;
+    expect(skirt.prompt.description).toMatch(/^an ankle-length maxi A-line skirt .*worn at the waist on a bare torso, one closed skirt/);
+    expect(skirt.prompt.negative).toMatch(/\btrousers\b.*two separate legs of fabric.*\bdress\b.*\bbodice\b/);
+    // The dress's proxy does not change with its features (a buttoned front means nothing for a dress proxy): the
+    // azure rerun gets the same control geometry as proxy 0.2.0.
+    const azure = shopJob('azure-palm-baby-doll-dress').manifest;
+    expect(azure.features).toMatchObject({ front: 'buttoned' });
+    expect(azure.control.proxy).toMatchObject({ front_opening: null, sleeve_style: null, sleeve_cm: 0, length_definition: 'hps_surface' });
   });
 
   it('never puts the product title, the brand or a distinctive word of the title into the prompts', () => {

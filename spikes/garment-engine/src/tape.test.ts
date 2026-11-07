@@ -49,6 +49,28 @@ describe('tapeGirth', () => {
     expect(Math.abs(t.girthCm - perimeter(17, 12))).toBeLessThan(2);
   });
 
+  it('bridges an outerwear front opening only at the front and only when asked (fronts laid closed)', () => {
+    // A cardigan at the chest: an ellipse with 70-110 degrees (the front, +v) missing: an 8 cm wide V.
+    const open = ellipse(17, 12, 400, () => 0, (110 * Math.PI) / 180, ((70 + 360) * Math.PI) / 180);
+    expect(tapeGirth(open, C, U, V)).toBeNull();
+    const t = tapeGirth(open, C, U, V, { frontOpeningCm: 30 })!;
+    expect(t.frontGapCm!).toBeGreaterThan(6);
+    expect(t.frontGapCm!).toBeLessThan(10);
+    expect(t.maxGapCm).toBe(0);
+    // The bridged arc is not cloth: coverage is the cloth found (40 of 360 degrees missing), so a ring that needs more
+    // cloth than that fails even with the opening bridged.
+    expect(t.coverage).toBeCloseTo(1 - 40 / 360, 1);
+    expect(t.coverage).toBeLessThan(0.95);
+    expect(tapeGirth(open, C, U, V, { frontOpeningCm: 30, minCoverage: 0.95 })).toBeNull();
+    // Bridged by the radius interpolated across the gap (as any bridged hole): the closed garment's girth within 0.5 cm.
+    const closed = tapeGirth(ellipse(17, 12, 400), C, U, V)!.girthCm;
+    expect(Math.abs(t.girthCm - closed)).toBeLessThan(0.5);
+    // The same gap at the back is not a front opening; nor is one wider than the limit.
+    const back = ellipse(17, 12, 400, () => 0, (290 * Math.PI) / 180, ((250 + 360) * Math.PI) / 180);
+    expect(tapeGirth(back, C, U, V, { frontOpeningCm: 30 })).toBeNull();
+    expect(tapeGirth(open, C, U, V, { frontOpeningCm: 5 })).toBeNull();
+  });
+
   it('densifies a loop so a long edge is not a gap', () => {
     const d = densifyLoop({ points: [[0, 0, 0], [2, 0, 0], [2, 0, 2]], closed: true }, 0.5);
     expect(d.points.length).toBe(4 + 4 + 6);

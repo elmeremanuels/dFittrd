@@ -437,6 +437,15 @@ def test_run_phase0_does_not_start_stage2_on_missing_failed_or_invented_stills(m
     assert any("QA failed for back" in r for r in gate(failed, allow_invented=True))
     assert gate(failed, allow_invented=True, accept_failed=True) == []
     assert run_phase0._dress_gate(manifest, str(tmp_path), None, accept_failed=False, allow_invented=False) == []
+    # A different garment (stage1b-qa-0.6.1 type_failures) is never overridden by --accept-failed-dress.
+    typed = {"summary": {"usable_for_stage2": False, "failed_views": ["front"], "type_failed_views": ["front"], "type_failures": {"front": ["legs merged: 80/120 rows"]}}}
+    reasons = gate(typed, allow_invented=True, accept_failed=True)
+    assert len(reasons) == 1 and "different garment in front (front: legs merged)" in reasons[0], reasons
+    # Stage 1b run on its own before this call: its record.json decides.
+    (tmp_path / "stage1b" / "record.json").write_text(json.dumps(typed))
+    assert any("different garment" in r for r in gate(allow_invented=True, accept_failed=True))
+    (tmp_path / "stage1b" / "record.json").write_text(json.dumps(failed))
+    assert gate(allow_invented=True, accept_failed=True) == []
 
 
 def test_photo_provenance_reads_the_invented_back_from_the_manifest(manifest):

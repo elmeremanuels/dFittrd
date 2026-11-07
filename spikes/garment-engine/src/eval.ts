@@ -23,7 +23,8 @@ import { DEFAULT_DISTORTION } from './bundle';
 import { asGradingChart, criticalRings, evalChart, evalChartRow, type EvalCategory, type EvalChart } from './evalChart';
 import { meshHealth, type MeshHealth } from './evalMesh';
 import { assignChains, distortGarment, type ChainAssignment, type Distortion, type SpikeCategory } from './garment';
-import { garmentLengths, type LengthMeasure } from './garmentLength';
+import { bottomLengths, garmentLengths, type BottomLengthMeasure, type LengthMeasure } from './garmentLength';
+import { openingHalfWidth, proxyKind, type FrontOpening } from './proxy';
 import { gradeGarment, type GradingJson } from './grading';
 
 export const EVAL_VERSION = 'phase0-eval-0.3.0';
@@ -103,7 +104,7 @@ export interface EvalResult {
   rows: AnchorRow[];
   lengths: LengthRow[];
   /** Every length definition on the reconstructed and on the calibrated mesh (`garmentLength.ts`). */
-  lengthDefinitions: { reconstructed: LengthMeasure[]; calibrated: LengthMeasure[] };
+  lengthDefinitions: { reconstructed: LengthMeasure[]; calibrated: LengthMeasure[]; bottom?: BottomLengthMeasure[] };
   /** Flat-lay minus vertical drop of shoulder_to_hem on the calibrated mesh: added to the graded drops to compare with a printed table. */
   flatLayOffsetCm: number | null;
   calibration: Calibration;
@@ -195,6 +196,18 @@ function verticalExtent(mesh: Mesh, chains: ChainAssignment): { minY: number; ma
   return { minY, maxY };
 }
 
+/**
+ * Slack (cm, chord) on top of the product's own front opening at a ring that the tape still bridges as that opening:
+ * the fronts' edges of a reconstruction are a little ragged and hang a little apart. Wider than that is a hole.
+ */
+export const FRONT_OPENING_SLACK_CM = 4;
+
+/** Widest front opening (chord, cm) bridged at height y: the opening's width there plus the slack; 0 outside its rows. */
+export function frontOpeningCap(o: FrontOpening, y: number): number {
+  const half = openingHalfWidth(o, y);
+  return half < 0 ? 0 : 2 * half + FRONT_OPENING_SLACK_CM;
+}
+
 /** Payload `lengthCm` keys → the measured length that answers them. */
 const LENGTH_KEYS: Readonly<Record<string, AnchorLength | 'outseam'>> = {
   shoulder_to_hem: 'shoulder_to_hem',
@@ -202,6 +215,7 @@ const LENGTH_KEYS: Readonly<Record<string, AnchorLength | 'outseam'>> = {
   waist_to_hem: 'waist_to_hem',
   sleeve_length: 'sleeve',
   outseam: 'outseam',
+  inseam: 'inseam',
 };
 
 /**
@@ -223,6 +237,12 @@ export interface EvaluateOptions {
   toleranceCm?: number;
   /** What the printed shoulder_to_hem means: a shop's garment table is flat-lay (default); the spike's synthetic garment is built with a vertical drop. */
   printedLength?: 'flat-lay' | 'drop';
+  /**
+   * Outerwear only: the product's front opening (the control proxy's, manifest `control.proxy.front_opening`, which
+   * comes from the description's own words). The tape bridges it at a ring as the fronts laid closed, up to its width
+   * there + `FRONT_OPENING_SLACK_CM`. Absent or null: no opening is bridged (a gap at the front is a hole).
+   */
+  frontOpening?: FrontOpening | null;
 }
 
 export function evaluateGarment(o: EvaluateOptions): EvalResult {
@@ -248,7 +268,11 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
   const chains = garmentChains(m, mesh, category);
   // A tape measure round the outside, own body part only: real reconstructions are noisy, have holes
   // and fuse the sleeves to the bodice (run 14); on smooth meshes it equals the loop length.
-  const measureOpts: MeasureOptions = { girth: 'tape', body: buildMannequinMesh(m) };
+  // Outerwear whose description gives a front opening (a V, an open front): it is bridged at the front as a flat-lay
+  // chest lays the fronts closed, up to the opening's own width at that ring + FRONT_OPENING_SLACK_CM. Any other gap
+  // wider than the tape's 4 cm, and every other garment's, stays "no girth".
+  const opening = category === 'outerwear' ? (o.frontOpening ?? null) : null;
+  const measureOpts: MeasureOptions = { girth: 'tape', body: buildMannequinMesh(m), ...(opening ? { frontOpeningAt: (y: number) => frontOpeningCap(opening, y) } : {}) };
   const raw = measureGarment(m, mesh, cat, chains, measureOpts);
   const measured = ringGirths(raw);
   const t1 = performance.now();
@@ -287,6 +311,7 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
     if (mv === null) note = raw.rings[anchor] === undefined && chartCm !== null ? 'the garment does not go round this ring (open front, garment does not reach it, or a hole wider than the tape bridges)' : null;
     else if (isNotFitted) note = `not a fit point of the ${chart.notFitted!.block} block (${chart.notFitted!.label}): reported, not calibrated`;
     else if (chartCm === null) note = 'no chart value: scaled with the global scale';
+    if (mv !== null && raw.rings[anchor]?.tape?.frontGapCm) note = `${note ? `${note}; ` : ''}front opening ${raw.rings[anchor]!.tape!.frontGapCm} cm bridged (the fronts laid closed, as a flat-lay chest)`;
     else if (raw.rings[anchor]?.spansBothLegs) note = 'loop encloses both legs (skirt)';
     const t = raw.rings[anchor]?.tape;
     return { anchor, critical: isCritical, chartCm, ease, measuredCm: mv === null ? null : r2(mv), polylineCm: t && t.loopLengthCm !== null ? r2(t.loopLengthCm) : null, tapeCoverage: t ? r2(t.coverage) : null, notFitted: isNotFitted, beforeCm: before === null ? null : r2(before), afterGlobalCm: afterGlobal === null ? null : r2(afterGlobal), afterCm: afterCm === null ? null : r2(afterCm), pass, note };
@@ -309,7 +334,18 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
   const lengths: LengthRow[] = [];
   const printed = (o.payload.lengthCm ?? {}) as Record<string, number>;
   const ext = verticalExtent(baseMesh, chains);
+  const printedLengthDef = o.printedLength ?? 'flat-lay';
+  // Bottoms (per type, `bottomLengths`): a skirt's waist_to_hem along the centre front, the outseam down the side seam, the
+  // inseam down the inner leg of trousers; flat-lay along the garment, or the vertical drop.
+  const trousers = category === 'bottom' && proxyKind(o.payload) === 'trousers';
+  const bottomDefs = category === 'bottom' ? bottomLengths(m, baseMesh, trousers) : undefined;
+  const bottomLen = (flat: string, drop: string): number | null => bottomDefs?.find((d) => d.definition === (printedLengthDef === 'flat-lay' ? flat : drop))?.lengthCm ?? null;
   const measuredLength = (id: AnchorLength | 'outseam'): number | null => {
+    if (category === 'bottom' && bottomDefs) {
+      if (id === 'outseam') return bottomLen('outseam_side', 'outseam_drop') ?? (Number.isFinite(ext.minY) ? ext.maxY - ext.minY : null);
+      if (id === 'inseam') return trousers ? bottomLen('inseam_inner', 'inseam_drop') : null;
+      if (id === 'waist_to_hem') return trousers ? null : bottomLen('waist_to_hem_front', 'outseam_drop');
+    }
     if (id === 'outseam') return category === 'bottom' && Number.isFinite(ext.minY) ? ext.maxY - ext.minY : null;
     const l = measurements.lengths[id];
     return l && !l.fromMannequin ? l.lengthCm : null;
@@ -321,7 +357,8 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
     if (!l.fromMannequin && !lengthIds.has(k)) lengthIds.set(k, id);
   }
   if (category === 'bottom' && !lengthIds.has('outseam')) lengthIds.set('outseam', 'outseam');
-  const printedLength = o.printedLength ?? 'flat-lay';
+  if (trousers && !lengthIds.has('inseam')) lengthIds.set('inseam', 'inseam');
+  const printedLength = printedLengthDef;
   const defsCal = garmentLengths(m, baseMesh);
   const defsRec = garmentLengths(m, mesh);
   const flat = defsCal.find((d) => d.definition === 'hps_surface')?.lengthCm ?? null;
@@ -338,10 +375,13 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
       continue;
     }
     const onMannequin = key !== null && key !== 'outseam' && measurements.lengths[key]?.fromMannequin === true;
-    if (!key) note = 'no measurement for this length in the spike';
+    if (trousers && key === 'waist_to_hem') note = 'trousers: no centre-front length (the front ends at the crotch); see outseam and inseam';
+    else if (!key) note = 'no measurement for this length in the spike';
     else if (onMannequin) note = "the garment covers the mannequin's whole line here; the spike has no seam to measure it on the garment";
     else if (mv === null) note = 'the garment edge was not found on this line';
-    else if (key === 'outseam') note = 'top of the garment to its lowest point (no waistband or side-seam detection in the spike)';
+    else if (category === 'bottom' && (key === 'outseam' || key === 'inseam' || key === 'waist_to_hem')) {
+      note = `${printedLength === 'flat-lay' ? 'flat-lay, along the garment' : 'vertical drop'}: ${key === 'outseam' ? 'top edge down the side seam to the hem' : key === 'inseam' ? 'crotch down the inner leg to the hem' : 'top edge at the centre front to the hem'} (src/garmentLength.ts bottomLengths)`;
+    }
     else if (key === 'shoulder_to_hem') note = "high point shoulder to the front hem, vertical drop (the spike's synthetic garment is built this way)";
     lengths.push({ id, measuredCm: mv === null ? null : r2(mv), ...(key === 'shoulder_to_hem' ? { definition: 'drop' as const } : {}), printedCm: pv, diffCm: mv !== null && pv !== null ? r2(mv - pv) : null, note });
   }
@@ -365,7 +405,7 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
     critical,
     rows,
     lengths,
-    lengthDefinitions: { reconstructed: defsRec, calibrated: defsCal },
+    lengthDefinitions: { reconstructed: defsRec, calibrated: defsCal, ...(bottomDefs ? { bottom: bottomDefs } : {}) },
     flatLayOffsetCm: printedLength === 'flat-lay' && flat !== null && drop !== null ? r2(flat - drop) : null,
     calibration,
     agreement,

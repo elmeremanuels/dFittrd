@@ -235,6 +235,13 @@
         "the AU body chart has no shoulder width; the shoulder fit point is skipped",
         "price is 79 AUD; priceEur is left out (no exchange rate is assumed)"
       ],
+      "features": {
+        "version": "garment-features-0.1.0",
+        "evidence": [
+          "front buttoned: \"button-down front\""
+        ],
+        "front": "buttoned"
+      },
       "baseSize": "12",
       "selection": {
         "why": "Only dress that meets all four criteria with 4 images: AU 8–16, front/back/3-4 views, \"lightweight rayon\", and a printed garment table (bust and length per size, ~7 cm over the AU body bust, so garment measurements).",
@@ -506,6 +513,15 @@
         "the AU body chart has no shoulder width; the shoulder fit point is skipped",
         "price is 69 AUD; priceEur is left out (no exchange rate is assumed)"
       ],
+      "features": {
+        "version": "garment-features-0.1.0",
+        "evidence": [
+          "sleeve half: \"half sleeve\"",
+          "front buttoned: \"button-down front\""
+        ],
+        "sleeve": "half",
+        "front": "buttoned"
+      },
       "baseSize": "12",
       "selection": {
         "why": "AU 8–16, 5 images (4 of the blouse) with a clean straight back view, \"100% lightweight rayon\". It prints no measurements; the one top that does (meadowlight-blouse) shows the blouse in 2 photos only.",
@@ -786,6 +802,10 @@
         "printed waist 112 cm at AU 12 not used as ease: the waist is elastic and the text does not say relaxed or stretched",
         "price is 69 AUD; priceEur is left out (no exchange rate is assumed)"
       ],
+      "features": {
+        "version": "garment-features-0.1.0",
+        "evidence": []
+      },
       "baseSize": "12",
       "selection": {
         "why": "AU 8–16, 5 images with a back view, \"100% lightweight rayon\", and a printed garment table (waist, hips, length per AU size).",
@@ -1053,6 +1073,10 @@
         "fabric composition not stated (only \"viscose\" named): blend left out; weight/stretch/drape use the single-fibre library default",
         "price is 69 AUD; priceEur is left out (no exchange rate is assumed)"
       ],
+      "features": {
+        "version": "garment-features-0.1.0",
+        "evidence": []
+      },
       "baseSize": "12",
       "selection": {
         "why": "AU 8–16, 3 images (side with slit, front, back), \"lightweight, breathable rayon\", elastic drawstring waist visible in every photo. No skirt prints measurements.",
@@ -1302,6 +1326,15 @@
         "the AU body chart has no shoulder width; the shoulder fit point is skipped",
         "price is 49 AUD; priceEur is left out (no exchange rate is assumed)"
       ],
+      "features": {
+        "version": "garment-features-0.1.0",
+        "evidence": [
+          "front buttoned: \"button front\"",
+          "neckline deep V: \"deep V neckline\""
+        ],
+        "front": "buttoned",
+        "neckline": "deep-v"
+      },
       "baseSize": "S-M",
       "selection": {
         "why": "No jacket or knit is sold in AU 8–16. Several knits tie on the text criteria (S-M/M-L mapped to AU 8–12 and 14–16 in the text, 3 images, wool/acrylic). This cardigan has front, 3/4 back and a straight back, a stated composition (35% wool 65% acrylic), and an open button front, the closest to a jacket in the collection.",

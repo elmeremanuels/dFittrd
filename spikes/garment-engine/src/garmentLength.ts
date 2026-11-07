@@ -176,3 +176,151 @@ export function hemForSurfaceLength(hps: Vec3, lengthCm: number, profileZ: (y: n
   }
   return floorY;
 }
+
+// ---------------------------------------------------------------------------
+// Per garment type: what a shop's printed length means for bottoms
+// ---------------------------------------------------------------------------
+
+/**
+ * Length definitions per garment type. Tops, dresses and outerwear: from the high point shoulder
+ * (`garmentLengths` above). A skirt: waist to hem along the centre front from the garment's top edge
+ * (the waistband), and down the side seam. Trousers: the outseam (top edge down the side seam to the
+ * hem, along the garment) and the inseam (from the crotch down the inner leg to the hem). Each also
+ * as a vertical drop (what the evaluation's `outseam`, the vertical extent, was before).
+ */
+export const BOTTOM_LENGTH_DEFINITIONS = ['waist_to_hem_front', 'outseam_side', 'outseam_drop', 'inseam_inner', 'inseam_drop'] as const;
+export type BottomLengthDefinition = (typeof BOTTOM_LENGTH_DEFINITIONS)[number];
+
+export const BOTTOM_LENGTH_LABEL: Readonly<Record<BottomLengthDefinition, string>> = {
+  waist_to_hem_front: 'top edge at the centre front, along the garment front to the hem (skirt length, flat-lay)',
+  outseam_side: 'top edge at the side, along the side seam to the hem (outseam, flat-lay)',
+  outseam_drop: 'top edge at the side, vertical drop to the hem',
+  inseam_inner: 'crotch along the inner leg to the hem (inseam, flat-lay)',
+  inseam_drop: 'crotch point, vertical drop to the hem of the inner leg',
+};
+
+export interface BottomLengthMeasure {
+  definition: BottomLengthDefinition;
+  label: string;
+  lengthCm: number | null;
+  topY: number | null;
+  hemY: number | null;
+  note: string | null;
+}
+
+/**
+ * Profile of the garment in the plane z = `z` (normal +z), on the side `side` of x = 0: per `binCm`
+ * of height the outermost (`outer`: largest |x|) or innermost (smallest |x| beyond `minAbsX`) slice
+ * point, smoothed as `sagittalProfile`. The returned `z` field holds that |x|.
+ */
+export function coronalProfile(
+  mesh: Pick<Mesh, 'positions' | 'indices'>,
+  z: number,
+  side: 1 | -1,
+  outer: boolean,
+  opts: { binCm?: number; smoothCm?: number; maxY?: number; minAbsX?: number; maxAbsX?: number } = {},
+): ProfilePoint[] {
+  const binCm = opts.binCm ?? 0.5;
+  const smoothCm = opts.smoothCm ?? PROFILE_SMOOTH_CM;
+  // Every triangle's crossing of the plane, unchained: the seat and the leg tubes overlap and open polylines through them
+  // did not survive loop chaining (the side profile jumped to the inner surface over 8 cm of height).
+  const pts: [number, number][] = [];
+  const P = mesh.positions, I = mesh.indices;
+  const zc = z + 0.013; // off the exact plane: a grid fitted round a vertical axis has a column of vertices on it
+  const keep = (x: number, y: number): void => {
+    if (side * x > (opts.minAbsX ?? 0) && side * x < (opts.maxAbsX ?? Infinity) && y <= (opts.maxY ?? Infinity)) pts.push([side * x, y]);
+  };
+  for (let t = 0; t < I.length; t += 3) {
+    const cut: [number, number][] = [];
+    for (let k = 0; k < 3; k++) {
+      const a = I[t + k]!, b = I[t + ((k + 1) % 3)]!;
+      const za = P[3 * a + 2]! - zc, zb = P[3 * b + 2]! - zc;
+      if ((za < 0) === (zb < 0)) continue;
+      const f = za / (za - zb);
+      cut.push([P[3 * a]! + f * (P[3 * b]! - P[3 * a]!), P[3 * a + 1]! + f * (P[3 * b + 1]! - P[3 * a + 1]!)]);
+    }
+    if (cut.length !== 2) continue;
+    // Sampled along the segment, so every height bin it spans gets a point (a coarse grid's rows are further apart than a bin).
+    const [p0, p1] = cut as [[number, number], [number, number]];
+    const n = Math.max(1, Math.ceil(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / (binCm / 2)));
+    for (let j = 0; j <= n; j++) keep(p0[0] + ((p1[0] - p0[0]) * j) / n, p0[1] + ((p1[1] - p0[1]) * j) / n);
+  }
+  if (pts.length < 2) return [];
+  const top = Math.max(...pts.map((p) => p[1]));
+  const bottom = Math.min(...pts.map((p) => p[1]));
+  const n = Math.max(1, Math.ceil((top - bottom) / binCm));
+  const v = new Float64Array(n + 1).fill(NaN);
+  for (const [ax, y] of pts) {
+    const k = Math.min(n, Math.round((top - y) / binCm));
+    if (Number.isNaN(v[k]!) || (outer ? ax > v[k]! : ax < v[k]!)) v[k] = ax;
+  }
+  const raw: ProfilePoint[] = [];
+  for (let k = 0; k <= n; k++) if (!Number.isNaN(v[k]!)) raw.push({ y: top - k * binCm, z: v[k]! });
+  // The ends: a tape along the side stops at the hem's own edge. A hem that is not level ends in bins holding only the
+  // other side of the tube (the inner hem of a leg, 24 cm across): drop end bins that jump more than END_JUMP_CM.
+  const END_JUMP_CM = 3, END_WINDOW_CM = 6;
+  for (let i = raw.length - 1; i > 0 && raw[raw.length - 1]!.y > raw[i]!.y - END_WINDOW_CM; i--) {
+    if (Math.abs(raw[i]!.z - raw[i - 1]!.z) > END_JUMP_CM) {
+      raw.length = i;
+      break;
+    }
+  }
+  for (let i = 1; i < raw.length - 1 && raw[i]!.y > raw[0]!.y - END_WINDOW_CM; i++) {
+    if (Math.abs(raw[i]!.z - raw[i - 1]!.z) > END_JUMP_CM) {
+      raw.splice(0, i);
+      break;
+    }
+  }
+  if (smoothCm <= 0 || raw.length < 5) return raw;
+  const half = Math.max(1, Math.round(smoothCm / binCm / 2));
+  const med = raw.map((_, i) => {
+    const w = raw.slice(Math.max(0, i - half), i + half + 1).map((q) => q.z).sort((a, b) => a - b);
+    return w[w.length >> 1]!;
+  });
+  return raw.map((q, i) => {
+    const w = med.slice(Math.max(0, i - half), i + half + 1);
+    return { y: q.y, z: w.reduce((a, b) => a + b, 0) / w.length };
+  });
+}
+
+/** Length definitions of a skirt (`trousers` false) or of trousers worn on the mannequin. */
+export function bottomLengths(m: Mannequin, mesh: Pick<Mesh, 'positions' | 'indices'>, trousers: boolean): BottomLengthMeasure[] {
+  const r1 = (x: number): number => Math.round(x * 100) / 100;
+  const out: BottomLengthMeasure[] = [];
+  const none = (d: BottomLengthDefinition, note: string): BottomLengthMeasure => ({ definition: d, label: BOTTOM_LENGTH_LABEL[d], lengthCm: null, topY: null, hemY: null, note });
+  const measure = (d: BottomLengthDefinition, prof: ProfilePoint[], drop: boolean, note: string | null = null): BottomLengthMeasure => {
+    const top = prof[0]!, hem = prof[prof.length - 1]!;
+    return { definition: d, label: BOTTOM_LENGTH_LABEL[d], lengthCm: r1(drop ? top.y - hem.y : profileLength(prof)), topY: r1(top.y), hemY: r1(hem.y), note };
+  };
+  if (!trousers) {
+    const front = sagittalProfile(mesh, 0, 1);
+    out.push(front.length >= 2 ? measure('waist_to_hem_front', front, false) : none('waist_to_hem_front', 'no garment at the centre front'));
+  }
+  // Side seam: the outermost garment points on the left in the frontal plane through the hip's centre.
+  const cz = m.torsoAt(m.morphHeights.hip)?.cz ?? 0;
+  // Outer and inner surfaces apart at the leg's centre line: a tube's far side never enters the other's profile.
+  const legX = m.landmarks.legX;
+  const side = coronalProfile(mesh, cz, 1, true, { minAbsX: legX });
+  if (side.length >= 2) out.push(measure('outseam_side', side, false), measure('outseam_drop', side, true));
+  else out.push(none('outseam_side', 'no garment at the side'), none('outseam_drop', 'no garment at the side'));
+  if (trousers) {
+    // Inner leg: the innermost garment points left of the centre plane, below the crotch (+2 cm: the seat's lower edge).
+    const crotch = m.landmarks.crotch;
+    const leg = m.legAt(crotch[1] - 10, 1);
+    const inner = coronalProfile(mesh, leg?.cz ?? 0, 1, false, { maxY: crotch[1] + 2, minAbsX: 0.05, maxAbsX: legX });
+    if (inner.length >= 2) {
+      // From the crotch point: where the fitted inner leg starts lower (thighs that touch leave no ray to carve), the gap is
+      // bridged straight up to the crotch, as a tape from the crotch seam would run.
+      const start = inner[0]!;
+      const gap = crotch[1] - start.y;
+      const note = gap > 3 ? `the inner leg starts ${r1(gap)} cm below the crotch point; bridged straight` : null;
+      const hem = inner[inner.length - 1]!;
+      const flat = profileLength(inner, crotch[1]) + (gap > 0 ? Math.hypot(gap, start.z) : 0);
+      out.push(
+        { definition: 'inseam_inner', label: BOTTOM_LENGTH_LABEL.inseam_inner, lengthCm: r1(flat), topY: r1(Math.max(crotch[1], start.y)), hemY: r1(hem.y), note },
+        { definition: 'inseam_drop', label: BOTTOM_LENGTH_LABEL.inseam_drop, lengthCm: r1(crotch[1] - hem.y), topY: r1(crotch[1]), hemY: r1(hem.y), note },
+      );
+    } else out.push(none('inseam_inner', 'no inner leg below the crotch: one closed volume (a skirt), not trousers'), none('inseam_drop', 'no inner leg below the crotch'));
+  }
+  return out;
+}

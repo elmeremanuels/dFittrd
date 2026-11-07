@@ -30,6 +30,14 @@
  * Output: one welded mesh (body + sleeves as separate open tubes; each sleeve starts with a shoulder
  * cap, `SHOULDER_CAP`, that closes over the arm cap and overlaps the bodice), exact 4 mm clearance,
  * outward triangles, and a render copy with a UV seam per tube (cylindrical charts) for the bake.
+ *
+ * Trousers (`legs`, 0.3.0): the body tube is the seat, from the waist to just below the crotch, and
+ * each leg is its own tube round the mannequin's leg axis (rays horizontal from the leg centre), with
+ * its hem found per column on the masks like a cuff. One tube round both legs (what a skirt is) can
+ * only carve the gap between the legs from outside: the rays start beyond the far leg, so the inner
+ * leg surfaces and the crotch never existed and a trouser became a skirt.
+ * Open fronts: a front opening is rays carved down to the body (mannequin visible between the fronts);
+ * the region touches the neckline row, so the noise-hole fill leaves it open.
  */
 import { type Mannequin, type Mesh, type Side, type Vec3 } from '@curtain/mannequin';
 import { buildBodySdf, MIN_CLEARANCE_CM, type BodySdf } from './bodySdf';
@@ -85,6 +93,8 @@ export interface TemplateFitOptions {
   category: 'dress' | 'top' | 'outerwear' | 'bottom';
   /** Fit sleeves when the masks show them (default true). */
   sleeves: boolean;
+  /** Trousers: the body tube ends at the crotch and each leg is fitted as its own tube (default false: a bottom is a skirt). */
+  legs: boolean;
 }
 
 export const DEFAULT_FIT_OPTIONS: TemplateFitOptions = {
@@ -102,6 +112,7 @@ export const DEFAULT_FIT_OPTIONS: TemplateFitOptions = {
   silhouetteRounds: 6,
   category: 'dress',
   sleeves: true,
+  legs: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -467,6 +478,15 @@ function bodyRay(m: Mannequin, y: number, theta: number): Ray {
   return { o: [cx, y, cz], d, own, lastExit: y < m.morphHeights.hip };
 }
 
+/** A trouser-leg ray: horizontal, from the mannequin leg's centre at `legTop − s`. */
+function legRay(m: Mannequin, side: Side, legTop: number, s: number, phi: number): Ray {
+  const y = legTop - s;
+  const l = m.legAt(y, side) ?? m.legAt(Math.min(legTop, Math.max(1, y)), side);
+  const cx = l?.cx ?? side * m.landmarks.legX, cz = l?.cz ?? 0;
+  const d: Vec3 = [Math.sin(phi), 0, Math.cos(phi)];
+  return { o: [cx, y, cz], d, own: l ? ellipseRadius(l.a, l.b, d[0], d[2]) : null };
+}
+
 function sleeveRay(m: Mannequin, side: Side, s: number, phi: number): Ray {
   const f = side === 1 ? m.arms.left : m.arms.right;
   const o: Vec3 = [f.joint[0] + f.axis[0] * s, f.joint[1] + f.axis[1] * s, f.joint[2] + f.axis[2] * s];
@@ -569,20 +589,24 @@ function runEnd(scan: ProfileScan, gapCm: number, searchCm: number): number {
 // Grid
 // ---------------------------------------------------------------------------
 
+type PartName = 'body' | 'sleeve_l' | 'sleeve_r' | 'leg_l' | 'leg_r';
+
 interface PartGrid {
-  name: 'body' | 'sleeve_l' | 'sleeve_r';
+  name: PartName;
   rows: number;
   cols: number;
   /** First vertex index of this part. */
   offset: number;
   /** v coordinate (0 top / shoulder end … 1 hem / cuff) per vertex of the part. */
   v: Float64Array;
-  /** Sleeves: the arm side and the cuff (distance along the arm) per column. */
+  /** Sleeves and legs: the side and the cuff or hem (distance along the arm, or down from the leg top) per column. */
   side?: Side;
   cuff?: number[];
   /** Sleeves: rows of the shoulder cap before the first row square to the arm (`SHOULDER_CAP`). */
   capRows?: number;
 }
+
+const isSleeve = (p: PartGrid): boolean => p.name === 'sleeve_l' || p.name === 'sleeve_r';
 
 export interface FitIteration {
   /** `hull` (first solve) or `silhouette <round>`. */
@@ -614,6 +638,8 @@ export interface TemplateFitReport {
   /** Template vertices per part before trimming, and kept. */
   parts: { name: string; rows: number; cols: number; vertices: number; kept: number; hemOrCuff: { min: number; max: number; mean: number } | null }[];
   sleeves: { left: boolean; right: boolean; reason: string };
+  /** Trousers: one tube per leg found in the masks (`fitted`: the option was on). */
+  legs: { left: boolean; right: boolean; fitted: boolean };
   /** Rays: blocked by another body part (armhole), empty (carved at the body), capped at the next body part, with no hull (filled by smoothness), body rays ended at a fitted sleeve, rays of the shoulder caps (`SHOULDER_CAP`), vertices moved out to the clearance by the exact distance (`pushToClearance`: of them inside the mannequin, and still below the clearance after its passes). */
   rays: { total: number; blocked: number; empty: number; capped: number; filled: number; sleeveClamped: number; shoulderCap: number; exactClearancePushed: number; exactClearanceInside: number; exactClearanceUnresolved: number };
   /** The control's bare arm cap (`CONTROL_CAP`): training views with a control, the zone's radius (px, mean), sleeve-head rays whose presence the control decided (kept at the clearance), and of those on the cap rows. */
@@ -660,6 +686,14 @@ export const ATLAS_CHARTS: Record<'body' | 'sleeve_l' | 'sleeve_r', [number, num
   sleeve_l: [0.004, 0.684, 0.496, 0.996],
   sleeve_r: [0.504, 0.684, 0.996, 0.996],
 };
+/** Trousers: a short seat chart on top, the two long legs side by side below. */
+export const ATLAS_CHARTS_TROUSERS: Record<'body' | 'leg_l' | 'leg_r', [number, number, number, number]> = {
+  body: [0.004, 0.004, 0.996, 0.246],
+  leg_l: [0.004, 0.254, 0.496, 0.996],
+  leg_r: [0.504, 0.254, 0.996, 0.996],
+};
+const chartOf = (name: PartName): [number, number, number, number] =>
+  name === 'leg_l' || name === 'leg_r' ? ATLAS_CHARTS_TROUSERS[name] : name === 'body' ? ATLAS_CHARTS.body : ATLAS_CHARTS[name];
 
 export interface FitInputs {
   mannequin: Mannequin;
@@ -756,7 +790,15 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
   // Each sample is voted on at the radius of the garment just above it (the skirt continued downwards),
   // so the hem is where most views stop seeing cloth: the median hem of frames that disagree.
   const along = (ray: Ray, t: number): number[] => [ray.o[0] + t * ray.d[0], ray.o[1] + t * ray.d[1], ray.o[2] + t * ray.d[2]];
+  const legs = isBottom && opt.legs;
+  const crotchY = m.landmarks.crotch[1];
+  // Trousers: the seat tube ends just below the crotch, where the leg tubes (from legTop down) take over.
+  const legTop = crotchY + 2;
   for (let c = 0; c < C; c++) {
+    if (legs) {
+      hemRaw.push(crotchY - 1);
+      continue;
+    }
     const present: boolean[] = [];
     let rPrev = NaN;
     for (let y = yScanTop; y >= yFloor; y += scanStep) {
@@ -779,7 +821,7 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
 
   // --- 2. Sleeve extents: cuff per column.
   const sleeveSides: Side[] = [];
-  const cuffs = new Map<Side, number[]>();
+  const cuffs = new Map<number, number[]>(); // key: arm side (±1), or ±2 for the trouser legs
   const sleeveNotes: string[] = [];
   // A sleeve may cover the wrist and part of the hand (the synthetic shirt dress's cuff ends 1.5 cm past the wrist): scan to the fingertips.
   const armLen = m.arms.left.upperArmCm + m.arms.left.forearmCm + m.arms.left.handCm;
@@ -818,6 +860,40 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
       } else sleeveNotes.push(`${name}: no sleeve (${known.length}/${Cs} columns with garment, median end ${known.length ? percentile(known, 0.5).toFixed(1) : '—'} cm)`);
     }
   }
+  // --- 2b. Trouser legs: hem per column of each leg (distance down from legTop), as a cuff.
+  const legSides: Side[] = [];
+  if (legs) {
+    for (const side of [1, -1] as Side[]) {
+      const Cs = opt.sleeveColumns;
+      const raw: number[] = [];
+      for (let c = 0; c < Cs; c++) {
+        const phi = (2 * Math.PI * c) / Cs;
+        const present: boolean[] = [];
+        let rPrev = NaN;
+        for (let sd = 0; sd <= legTop - yFloor; sd += 0.5) {
+          const ray = legRay(m, side, legTop, sd, phi);
+          const range = rayRange(sdf, ray, opt.clearanceCm, 30, opt.blockedCm);
+          if (range.blocked) {
+            present.push(false);
+            continue;
+          }
+          const hs = hullAlong(ev, ray, range).s;
+          const test = Number.isFinite(rPrev) ? Math.min(range.hi, Math.max(range.lo, rPrev)) : range.lo;
+          present.push(votePresent(ev, along(ray, test), ray.d, hs >= 0).present);
+          if (hs >= 0) rPrev = hs;
+        }
+        raw.push(runEnd({ start: 0, step: 0.5, present }, 2, 8));
+      }
+      const known = raw.filter(Number.isFinite);
+      const name = side === 1 ? 'left' : 'right';
+      if (known.length >= 0.4 * Cs && percentile(known, 0.5) > 4) {
+        legSides.push(side);
+        const med = percentile(known, 0.5);
+        // A hem is close to level; columns between the legs see the other leg and run long: hold within 4 cm of the median.
+        cuffs.set(2 * side, circularSmooth(fillCircular(raw).map((x) => Math.min(med + 4, Math.max(med - 4, x))), 2, 1));
+      } else sleeveNotes.push(`${name} leg: none in the masks (${known.length}/${Cs} columns with garment): the trousers end at the crotch`);
+    }
+  }
   lap('cuffs');
 
   // --- 3. Grid. Body rows: equal arc length along the torso profile from the neck down to ySplit, then
@@ -850,7 +926,7 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
     if (rowsY[rowsY.length - 1]! - ySplit < rowSpacing / 2) rowsY.pop();
     rowsY.push(ySplit);
     const lowRows = Math.max(1, Math.ceil((ySplit - Math.min(...hem)) / rowSpacing));
-    const sleeveRows = sleeveSides.map((side) => Math.max(3, Math.ceil(Math.max(...cuffs.get(side)!) / sleeveRowSpacing) + 1) + SHOULDER_CAP.rows);
+    const sleeveRows = [...sleeveSides, ...legSides.map((sd) => 2 * sd)].map((key, k) => Math.max(3, Math.ceil(Math.max(...cuffs.get(key)!) / sleeveRowSpacing) + 1) + (k < sleeveSides.length ? SHOULDER_CAP.rows : 0));
     const predicted = 2 * ((rowsY.length + lowRows - 1) * cols + sleeveRows.reduce((n, r) => n + (r - 1) * sleeveCols, 0));
     return { rowsY, lowRows, sleeveRows, cols, sleeveCols, rowSpacing, sleeveRowSpacing, predicted };
   };
@@ -876,14 +952,24 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
     rays.push(bodyRay(m, y, thetaG(c)));
     vCoord.push((yTop - y) / bodyLen);
   }
-  sleeveSides.forEach((side, si) => {
+  [...sleeveSides.map((side) => ({ side, leg: false })), ...legSides.map((side) => ({ side, leg: true }))].forEach(({ side, leg }, si) => {
     const Cs = lay.sleeveCols;
-    const cuff = Cs === opt.sleeveColumns ? cuffs.get(side)! : resample(cuffs.get(side)!, Cs);
+    const key = leg ? 2 * side : side;
+    const cuff = Cs === opt.sleeveColumns ? cuffs.get(key)! : resample(cuffs.get(key)!, Cs);
     const maxCuff = Math.max(...cuff);
     const Rs = lay.sleeveRows[si]!;
     const K = SHOULDER_CAP.rows;
     const Ra = Rs - K; // rows square to the arm, from the joint to the cuff
     const offset = rays.length;
+    if (leg) {
+      parts.push({ name: side === 1 ? 'leg_l' : 'leg_r', rows: Rs, cols: Cs, offset, v: new Float64Array(0), side, cuff });
+      for (let r = 0; r < Rs; r++) for (let c = 0; c < Cs; c++) {
+        const sAlong = (r / (Rs - 1)) * cuff[c]!;
+        rays.push(legRay(m, side, legTop, sAlong, (2 * Math.PI * c) / Cs));
+        vCoord.push(sAlong / maxCuff);
+      }
+      return;
+    }
     parts.push({ name: side === 1 ? 'sleeve_l' : 'sleeve_r', rows: Rs, cols: Cs, offset, v: new Float64Array(0), side, cuff, capRows: K });
     // The sleeve head: the arm's cap, from the joint to the upper-arm ring where the cap's bulge ends.
     const headCm = m.morphHeights.upper_arm;
@@ -907,13 +993,17 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
   for (const p of parts) for (let k = 0; k < (p.capRows ?? 0) * p.cols; k++) isCap[p.offset + k] = 1;
   lap('grid');
 
+  const partOfIndex = (i: number): PartGrid => {
+    for (let k = parts.length - 1; k >= 0; k--) if (i >= parts[k]!.offset) return parts[k]!;
+    return parts[0]!;
+  };
   // --- 4. Per vertex: admissible range, template radius (proxy), hull.
   const lo = new Float64Array(N), hi = new Float64Array(N), hull = new Float64Array(N), s0 = new Float64Array(N);
   const blocked = new Uint8Array(N), empty = new Uint8Array(N), capped = new Uint8Array(N), byControl = new Uint8Array(N);
   for (let i = 0; i < N; i++) {
     const ray = rays[i]!;
-    const isSleeve = i >= parts[0]!.rows * parts[0]!.cols;
-    const range = rayRange(sdf, ray, opt.clearanceCm, isSleeve ? (isCap[i] ? SHOULDER_CAP.maxExtentCm : 18) : 35, opt.blockedCm);
+    const own = partOfIndex(i);
+    const range = rayRange(sdf, ray, opt.clearanceCm, own.name === 'body' ? 35 : isSleeve(own) ? (isCap[i] ? SHOULDER_CAP.maxExtentCm : 18) : 30, opt.blockedCm);
     lo[i] = range.lo;
     hi[i] = range.hi;
     blocked[i] = range.blocked ? 1 : 0;
@@ -1130,7 +1220,7 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
   // smoothness term carries the bodice across from the front and the back.
   let sleeveClamped = 0;
   if (sleeveSides.length && !isBottom) {
-    const sleeves = parts.filter((p) => p.side !== undefined && p.cuff);
+    const sleeves = parts.filter((p) => isSleeve(p) && p.cuff);
     const sleeveRadius = (p: PartGrid, x: number, y: number, z: number): number => {
       const f = p.side === 1 ? m.arms.left : m.arms.right;
       const rx = x - f.joint[0], ry = y - f.joint[1], rz = z - f.joint[2];
@@ -1322,7 +1412,7 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
   const rmap: number[] = [];
   const rIndex = new Map<string, number>();
   const charts: RenderMesh['charts'] = {};
-  for (const p of parts) charts[p.name] = ATLAS_CHARTS[p.name];
+  for (const p of parts) charts[p.name] = chartOf(p.name);
   const renderVertex = (i: number, seam: boolean): number => {
     const key = `${i}:${seam ? 1 : 0}`;
     let r = rIndex.get(key);
@@ -1330,7 +1420,7 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
     const p = partOf(i);
     const k = i - p.offset;
     const row = Math.floor(k / p.cols), col = k % p.cols;
-    const [u0, v0, u1, v1] = ATLAS_CHARTS[p.name];
+    const [u0, v0, u1, v1] = chartOf(p.name);
     const u = (seam ? p.cols : col) / p.cols;
     const vv = p.name === 'body' ? vCoord[i]! : row / (p.rows - 1);
     r = rpos.length / 3;
@@ -1360,10 +1450,11 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
     parts: parts.map((p) => {
       let kept = 0;
       for (let k = 0; k < p.rows * p.cols; k++) kept += present[p.offset + k]!;
-      const ext = p.name === 'body' ? nonEmptyHem : cuffs.get(p.name === 'sleeve_l' ? 1 : -1) ?? [];
+      const ext = p.name === 'body' ? nonEmptyHem : cuffs.get(({ sleeve_l: 1, sleeve_r: -1, leg_l: 2, leg_r: -2 } as const)[p.name]) ?? [];
       return { name: p.name, rows: p.rows, cols: p.cols, vertices: p.rows * p.cols, kept, hemOrCuff: ext.length ? { min: round2(Math.min(...ext)), max: round2(Math.max(...ext)), mean: round2(ext.reduce((a, b) => a + b, 0) / ext.length) } : null };
     }),
     sleeves: { left: sleeveSides.includes(1), right: sleeveSides.includes(-1), reason: sleeveNotes.join('; ') || (opt.sleeves && !isBottom ? 'sleeves found in the masks' : 'not fitted for this category') },
+    legs: { left: legSides.includes(1), right: legSides.includes(-1), fitted: legs },
     rays: { total: N, blocked: sum(blocked), empty: sum(empty), capped: sum(capped), filled: sum(filled), sleeveClamped, shoulderCap: sum(isCap), exactClearancePushed: sum(exact.pushed), exactClearanceInside: exact.inside, exactClearanceUnresolved: exact.unresolved },
     controlCap: { views: ev.dictated.filter(Boolean).length, radiusPx: round2(ev.dictatedRadiusPx), decided: sum(Uint8Array.from(byControl, (b, i) => (b && present[i] ? 1 : 0))), decidedCapRows: sum(Uint8Array.from(byControl, (b, i) => (b && present[i] && isCap[i] ? 1 : 0))) },
     moveFromTemplateCm: moves.length ? { mean: round2(moves.reduce((a, b) => a + b, 0) / moves.length), p5: round2(percentile(moves, 0.05)), p95: round2(percentile(moves, 0.95)) } : null,

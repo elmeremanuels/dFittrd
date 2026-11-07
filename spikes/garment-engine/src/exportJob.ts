@@ -62,7 +62,8 @@ import { generateGarment } from './garment';
 import { encodePng } from './exportPng';
 import { cameraBasis, opencvCamerasJson, transformsJson } from './exportPoses';
 import { garmentSpec, materialJson, resolveSpikeProduct, videoPrompt, type ProductSource, type ResolvedProduct, type VideoPrompt } from './product';
-import { CONTROL_MODES, buildProxy, proxyRecord, proxySpec, type ControlMode, type Proxy, type ProxyOptions } from './proxy';
+import { CONTROL_MODES, buildProxy, proxyRecord, proxySpec, syntheticGarmentFromProxy, type ControlMode, type Proxy, type ProxyOptions } from './proxy';
+import type { GarmentFeatures } from './features';
 import { hexToRgb, render, type DrawItem, type Render } from './raster';
 import { GARMENT_ID, MANNEQUIN_GREY, MANNEQUIN_ID } from './separation';
 
@@ -77,9 +78,14 @@ import { GARMENT_ID, MANNEQUIN_GREY, MANNEQUIN_ID } from './separation';
  * 0.5.0 (after run 13): the prompt colour never comes from a word of the product name (`neutral-prompt-0.2.0`; run 13's Qwen
  * engine painted the "Azure Palm" pastel print as a solid blue dress); with no primaryColorHex the description names no
  * colour, and stage 1b measures one from the garment cut-out. The synthetic garment of such a product is the fallback colour.
+ * 0.6.0 (categories): the product's garment features (`features.ts`: sleeve style, front closure, neckline from the shop
+ * description) reach the proxy (control-proxy-0.3.0: sleeve shells from a sleeve style, an outerwear front opening) and the
+ * prompt (neutral-prompt-0.3.0), and are hashed and written to the manifest (`features`); the synthetic garment (stage 4
+ * truth, synthetic stills) exists for every kind: skirt, trousers and outerwear use `syntheticGarmentFromProxy`; a shop
+ * product may be exported with synthetic stills (a dry run without stage 1b).
  * The version is hashed, so a re-export changes the job id (run 11a's `aalter-studio-2-28080a938e84` was 0.2.0).
  */
-export const EXPORT_VERSION = 'phase0-export-0.5.0';
+export const EXPORT_VERSION = 'phase0-export-0.6.0';
 /** Id of the control proxy in the rasterizer's id buffer. */
 export const PROXY_ID = 3;
 /** Albedo of the proxy where it is rendered for a picture (the control frames only use depth and ids). */
@@ -185,7 +191,7 @@ export interface ExportOptions {
    * merchant owns the back).
    */
   onModel?: OnModelOptions | boolean;
-  /** Write the synthetic dressed turntable (default: true for dresses and tops, the only synthetic garments; an error for other categories). */
+  /** Write the synthetic dressed turntable (default true; dresses and tops are lofted (`garment.ts`), skirts, trousers and outerwear come from the proxy's surfaces (`syntheticGarmentFromProxy`)). */
   synthetic?: boolean;
 }
 
@@ -268,6 +274,8 @@ export interface Phase0Manifest {
   product_name: string;
   category: string;
   product_source: ProductSource;
+  /** Sleeve style, front closure and neckline from the shop description (null: none, e.g. the spike fixtures). Hashed. */
+  features: GarmentFeatures | null;
   base_size: string;
   chart: { type: 'body' | 'garment'; unit: 'cm'; rows: { size: string; rings: Record<string, number>; default_ease: string[] }[] };
   fabric: ReturnType<typeof materialJson>;
@@ -510,12 +518,10 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
 
   const payload: GarmentPayload = product.payload;
   const chart = evalChart(payload);
-  // The synthetic garment (stage 4 truth, synthetic stills) exists for dresses and tops only.
-  const syntheticSupported = payload.category === 'dress' || payload.category === 'top';
-  const withSynthetic = options.synthetic ?? syntheticSupported;
-  if ((withSynthetic || options.syntheticPhotos) && !syntheticSupported) {
-    throw new Error(`the spike's synthetic garment exists for dresses and tops, not ${payload.category}: export with synthetic false (--no-synthetic) and without syntheticPhotos`);
-  }
+  // The synthetic garment (stage 4 truth, synthetic stills): lofted for dresses and tops, the proxy's opened surfaces for the other kinds.
+  const lofted = payload.category === 'dress' || payload.category === 'top';
+  const withSynthetic = options.synthetic ?? true;
+  const features = product.features ?? null;
   const mannequin: Mannequin = buildMannequin(bodyShape(BASE_SHAPE_ID));
   const body: Mesh = buildMannequinMesh(mannequin);
   const path = turntablePath(mannequin, 'turntable_mid', { frames: framesPerTurn });
@@ -524,8 +530,8 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
   // Control proxy: the mannequin wears a coarse closed garment volume in the control video (src/proxy.ts).
   // With synthetic stills the pinned frames show the synthetic garment, so the proxy's hem is that
   // garment's (a product without shoulder_to_hem would otherwise get the proxy's own default length).
-  const proxyOpts: ProxyOptions = {};
-  if (options.syntheticPhotos && syntheticSupported) {
+  const proxyOpts: ProxyOptions = features ? { features } : {};
+  if (options.syntheticPhotos && lofted) {
     const own = (payload.lengthCm as Partial<Record<string, number>> | undefined)?.shoulder_to_hem;
     const synth = garmentSpec(payload, baseSize).shoulderToHemCm;
     // Always the override: the synthetic garment drops its length vertically, while a printed length is flat-lay (proxy 0.2.0).
@@ -544,10 +550,15 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
   let garmentColor: [number, number, number] = [0, 0, 0];
   const garmentItem = (): DrawItem => {
     if (!garment) {
-      const spec = garmentSpec(payload, baseSize);
-      spec.colorHex = (spec.colorHex as string | undefined) ?? FALLBACK_GARMENT_HEX;
-      garment = generateGarment(mannequin, spec);
-      garmentColor = hexToRgb(spec.colorHex);
+      const hex = (payload.primaryColorHex as string | undefined) ?? FALLBACK_GARMENT_HEX;
+      if (lofted) {
+        const spec = garmentSpec(payload, baseSize);
+        spec.colorHex = hex;
+        // A sleeve style from the features (no printed sleeve length): the synthetic garment's sleeves are the proxy's.
+        if (pSpec.sleeveStyle) spec.sleeveCm = pSpec.sleeveCm;
+        garment = generateGarment(mannequin, spec);
+      } else garment = syntheticGarmentFromProxy(mannequin, payload, baseSize, proxyOpts);
+      garmentColor = hexToRgb(hex);
     }
     return { positions: garment.positions, indices: garment.indices, color: garmentColor, id: GARMENT_ID };
   };
@@ -705,6 +716,7 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
   const hashInputs = {
     exporter: EXPORT_VERSION,
     product: payload,
+    features: features ?? undefined,
     base_size: baseSize,
     mannequin: { version: MANNEQUIN_VERSION, shape: BASE_SHAPE_ID },
     camera: { path_id: path.id, frames: framesPerTurn, width, height, fov_y_deg: path.frames[0]!.fovYDeg, radius_cm: path.radiusCm },
@@ -731,6 +743,7 @@ export function exportJob(options: ExportOptions, emit: Emit): ExportResult {
     product_name: payload.name,
     category: chart.category,
     product_source: product.source,
+    features,
     base_size: baseSize,
     chart: { type: chart.type, unit: 'cm', rows: chart.rows.map((r) => ({ size: r.size, rings: r.rings as Record<string, number>, default_ease: r.defaultEase })) },
     fabric: materialJson(payload),

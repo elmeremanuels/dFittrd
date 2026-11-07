@@ -44,14 +44,26 @@ export interface TapeOptions {
   maxGapDeg?: number;
   /** Widest gap that is bridged, as the straight distance between the cloth on either side, cm. */
   maxGapCm?: number;
+  /**
+   * Outerwear with a front opening (a V-neck cardigan, an open front): one gap centred on the front (+v, within
+   * `FRONT_SECTOR_DEG`) is bridged up to this chord (cm) and 150 degrees, as a flat-lay chest measure lays the fronts
+   * closed. The caller sets it to the product's own opening at that ring (`eval.ts`: the proxy's front opening + a
+   * few cm), never a blanket value. The bridged bins are NOT counted as cloth in `coverage`: a reconstruction must
+   * still hold `minCoverage` of the ring without them. 0 (default): an opening at the front is a gap like any other.
+   */
+  frontOpeningCm?: number;
 }
+
+/** Half-width of the front sector a front opening's middle must lie in, degrees round +v. */
+export const FRONT_SECTOR_DEG = 35;
 
 /**
  * `maxGapCm` 4: run 14's holes are 1–2 bins (5–10°, under 3 cm at the chest); an open front a few
  * cm wide (a cardigan) is not bridged, so it is reported as no girth rather than as a closed one.
  */
-export const TAPE_DEFAULTS: Required<TapeOptions> = { bins: 72, smoothBins: 5, minCoverage: 0.6, maxGapDeg: 60, maxGapCm: 4 };
-export const TAPE_VERSION = 'tape-girth-0.1.0';
+export const TAPE_DEFAULTS: Required<TapeOptions> = { bins: 72, smoothBins: 5, minCoverage: 0.6, maxGapDeg: 60, maxGapCm: 4, frontOpeningCm: 0 };
+/** 0.2.0: `frontOpeningCm` (an outerwear front opening bridged as the fronts closed, not counted in `coverage`). */
+export const TAPE_VERSION = 'tape-girth-0.2.0';
 
 export interface TapeGirth {
   girthCm: number;
@@ -62,6 +74,8 @@ export interface TapeGirth {
   /** Widest bridged gap, degrees, and as a chord, cm. */
   maxGapDeg: number;
   maxGapCm: number;
+  /** Chord (cm) of the front opening bridged under `frontOpeningCm` (null: none). Not counted in maxGapDeg/maxGapCm. */
+  frontGapCm: number | null;
   /** Slice points used (after the body-part filter). */
   points: number;
 }
@@ -124,10 +138,8 @@ export function tapeGirth(pts: readonly Vec3[], centre: Vec3, u: Vec3, v: Vec3, 
   const filled = radius.filter((r) => r !== null).length;
   const clothFilled = cloth.filter((r) => r !== null).length;
   if (filled === 0) return null;
-  const coverage = clothFilled / B;
-  // Widest circular run of bins without cloth, in angle and as the chord across the empty arc.
-  let maxGap = 0;
-  let maxChord = 0;
+  // Circular runs of bins without cloth: angle, chord across the empty arc, and the angle of the run's middle.
+  const runs: { bins: number; chord: number; midDeg: number }[] = [];
   if (clothFilled < B) {
     const start = cloth.findIndex((r) => r !== null);
     let run = 0;
@@ -138,13 +150,26 @@ export function tapeGirth(pts: readonly Vec3[], centre: Vec3, u: Vec3, v: Vec3, 
         if (run > 0) {
           const ra = cloth[(i - run - 1 + B) % B]!, rb = cloth[i]!;
           const dTheta = (run * 2 * Math.PI) / B;
-          maxChord = Math.max(maxChord, Math.sqrt(Math.max(0, ra * ra + rb * rb - 2 * ra * rb * Math.cos(dTheta))));
+          const first = (i - run + B) % B;
+          runs.push({ bins: run, chord: Math.sqrt(Math.max(0, ra * ra + rb * rb - 2 * ra * rb * Math.cos(dTheta))), midDeg: (((first + run / 2) / B) * 360) % 360 });
         }
-        maxGap = Math.max(maxGap, run);
         run = 0;
       }
     }
   }
+  // The front opening: the widest run centred on +v (90 degrees in this frame), when the option allows it.
+  let front: (typeof runs)[number] | null = null;
+  if (o.frontOpeningCm > 0) {
+    for (const r of runs) {
+      const off = Math.abs(((r.midDeg - 90 + 540) % 360) - 180);
+      if (off <= FRONT_SECTOR_DEG && r.chord <= o.frontOpeningCm && (r.bins * 360) / B <= 150 && (!front || r.bins > front.bins)) front = r;
+    }
+  }
+  const others = runs.filter((r) => r !== front);
+  const maxGap = Math.max(0, ...others.map((r) => r.bins));
+  const maxChord = Math.max(0, ...others.map((r) => r.chord));
+  // Coverage is the cloth found: the bridged front opening is not counted, so it cannot excuse missing cloth elsewhere.
+  const coverage = clothFilled / B;
   const maxGapDeg = (maxGap * 360) / B;
   if (coverage < o.minCoverage || filled / B < o.minCoverage / 2 || maxGapDeg > o.maxGapDeg || maxChord > o.maxGapCm) return null;
   // Bridge: linear in the angle between the nearest bins of the own part on either side.
@@ -169,7 +194,7 @@ export function tapeGirth(pts: readonly Vec3[], centre: Vec3, u: Vec3, v: Vec3, 
     girth += Math.hypot(b[0] - a[0], b[1] - a[1]);
   }
   const loop: Loop = { closed: true, points: hp.map(([x, z]): Vec3 => [centre[0] + u[0] * x + v[0] * z, centre[1] + u[1] * x + v[1] * z, centre[2] + u[2] * x + v[2] * z]) };
-  return { girthCm: girth, loop, coverage, maxGapDeg, maxGapCm: Math.round(maxChord * 100) / 100, points: pts.length };
+  return { girthCm: girth, loop, coverage, maxGapDeg, maxGapCm: Math.round(maxChord * 100) / 100, frontGapCm: front ? Math.round(front.chord * 100) / 100 : null, points: pts.length };
 }
 
 /** Points along a loop's segments, at most `stepCm` apart, so an empty angular bin means missing cloth, not a long edge. */

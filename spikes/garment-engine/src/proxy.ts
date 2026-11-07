@@ -30,15 +30,28 @@
  * babydoll the proxy hem sat at the knee, 7 cm below where a 91 cm flat-lay length ends, and the
  * stills and the video were shorter than the control). An explicit `shoulderToHemCm` override (the
  * synthetic stills) stays a vertical drop: that is how the spike's synthetic garment is built.
+ *
+ * Features (0.3.0, `features.ts`, from the shop description's own words): a sleeve style gives the
+ * sleeve shells where the product has no sleeve length ("half sleeves": to just below the elbow; 0.2.0
+ * gave a top without a sleeve length bare arms, so the control video showed none and stage 1b's fixed
+ * sleeve band cut a longer sleeve), and an outerwear front opening ("open front", "deep V neckline",
+ * "V-neck") is pushed into the mannequin: the control and the stage 1b target then show our mannequin
+ * between the fronts, so the video model keeps a cardigan open instead of drawing a closed jumper. The
+ * shell stays one closed volume (stage 4t reads it as a signed distance). A product without these
+ * features gets exactly the 0.2.0 geometry (the azure babydoll's proxy is unchanged). Trousers (0.3.0):
+ * the seat tapers from the hip onto the two leg tops; 0.2.0 kept the hip ellipse down to the crotch and
+ * the seat stood 2-4 cm proud of the legs at the front and back, a ledge that reads as a skort (the seat
+ * now ends on the convex hull of the two leg tops: no deeper and no wider than the legs).
  */
 import { CATEGORY_ANCHORS, FIT_POINT_TO_ANCHOR, ellipseCircumference, ellipseFromCircumference, monotoneProfile, type AnchorRing } from '@curtain/anchors';
 import { CATEGORY_EASE } from '@curtain/fit-engine';
 import { along, loftSections, mergeParts, polygonCompensation, signedVolume, stations, type Mannequin, type Mesh, type Section, type Side, type Vec3 } from '@curtain/mannequin';
 import type { GarmentPayload } from '@curtain/schema';
 import { evalChart, evalChartRow, isEvalCategory, type EvalCategory } from './evalChart';
+import type { GarmentFeatures, SleeveStyle } from './features';
 import { hemForSurfaceLength, sagittalProfile } from './garmentLength';
 
-export const PROXY_VERSION = 'control-proxy-0.2.0';
+export const PROXY_VERSION = 'control-proxy-0.3.0';
 export const CONTROL_MODES = ['proxy', 'bare'] as const;
 export type ControlMode = (typeof CONTROL_MODES)[number];
 
@@ -116,7 +129,24 @@ export interface ProxySpec {
   /** Sleeve length from the shoulder joint along the arm, cm (0 = no sleeve shell). */
   sleeveCm: number;
   sleeveSource: string;
+  /** Sleeve style word the sleeve came from (features), else null. */
+  sleeveStyle: SleeveStyle | null;
+  /** Outerwear only: the front opening pushed into the mannequin (null: closed shell). */
+  frontOpening: FrontOpening | null;
   notes: string[];
+}
+
+/** A front opening of an outerwear proxy: |x| < half-width on the front half (z > the torso centre), from `topY` down to `bottomY`; the half-width runs linearly from top to bottom. */
+export interface FrontOpening {
+  kind: 'v' | 'open';
+  topY: number;
+  bottomY: number;
+  topHalfWidthCm: number;
+  bottomHalfWidthCm: number;
+  /** The neckline word it came from (null: an open front without one), and whether the front buttons below it. */
+  neckline: 'v' | 'deep-v' | null;
+  buttoned: boolean;
+  source: string;
 }
 
 /** Overrides for a job whose pinned stills show a known garment (the synthetic stills): the proxy's hem must be that garment's, or the control video and the stills disagree on the length. */
@@ -125,6 +155,8 @@ export interface ProxyOptions {
   shoulderToHemCm?: number;
   /** Where that length comes from, recorded as `length_source`. */
   lengthSource?: string;
+  /** Sleeve style, front closure and neckline from the shop description (`features.ts`). */
+  features?: GarmentFeatures;
 }
 
 export interface Proxy {
@@ -241,13 +273,104 @@ function hemFor(m: Mannequin, p: GarmentPayload, kind: ProxyKind, topY: number, 
   return { hemY: clamped, lengthCm: printed, lengthSource: source, surface };
 }
 
-function sleeveFor(m: Mannequin, p: GarmentPayload, kind: ProxyKind): { sleeveCm: number; sleeveSource: string } {
+/** Sleeve length along the arm from the shoulder joint for a sleeve style word (no length printed): a control choice, not a measurement. */
+export function sleeveForStyle(m: Mannequin, style: SleeveStyle): { cm: number; where: string } {
+  const ua = m.arms.left.upperArmCm, fa = m.arms.left.forearmCm, wrist = m.morphHeights.wrist;
+  switch (style) {
+    case 'sleeveless':
+      return { cm: 0, where: 'no sleeve shell' };
+    case 'short':
+      return { cm: round1(0.45 * ua), where: 'about half the upper arm' };
+    case 'half':
+      return { cm: round1(ua + 3), where: 'just below the elbow' };
+    case 'three-quarter':
+      return { cm: round1(ua + 0.6 * fa), where: 'between the elbow and the wrist' };
+    case 'long':
+      return { cm: round1(wrist + 1.5), where: 'to the wrist' };
+  }
+}
+
+function sleeveFor(m: Mannequin, p: GarmentPayload, kind: ProxyKind, features?: GarmentFeatures): { sleeveCm: number; sleeveSource: string; sleeveStyle: SleeveStyle | null } {
   const given = (p.lengthCm as Partial<Record<string, number>> | undefined)?.sleeve_length;
   const wrist = m.morphHeights.wrist;
-  if (kind === 'skirt' || kind === 'trousers') return { sleeveCm: 0, sleeveSource: 'no sleeves for this kind' };
-  if (given !== undefined) return { sleeveCm: Math.min(given, wrist + 1.5), sleeveSource: `sleeve_length ${given} cm` };
-  if (kind === 'outerwear') return { sleeveCm: wrist + 1.5, sleeveSource: 'no sleeve length given: outerwear default, to the wrist' };
-  return { sleeveCm: 0, sleeveSource: 'no sleeve length given: no sleeve shell (the bare arm stays in the control)' };
+  if (kind === 'skirt' || kind === 'trousers') return { sleeveCm: 0, sleeveSource: 'no sleeves for this kind', sleeveStyle: null };
+  if (given !== undefined) return { sleeveCm: Math.min(given, wrist + 1.5), sleeveSource: `sleeve_length ${given} cm`, sleeveStyle: null };
+  if (features?.sleeve) {
+    const s = sleeveForStyle(m, features.sleeve);
+    return { sleeveCm: s.cm, sleeveSource: `no sleeve length given; sleeve style "${features.sleeve}" from the description: ${s.where} (${s.cm} cm along the arm, a control estimate)`, sleeveStyle: features.sleeve };
+  }
+  if (kind === 'outerwear') return { sleeveCm: wrist + 1.5, sleeveSource: 'no sleeve length given: outerwear default, to the wrist', sleeveStyle: null };
+  return { sleeveCm: 0, sleeveSource: 'no sleeve length given: no sleeve shell (the bare arm stays in the control)', sleeveStyle: null };
+}
+
+/**
+ * The front opening of an outerwear proxy from its features: an open front runs to the hem with the
+ * fronts 2 x 4 cm apart there; a deep V ends at the underbust ring, a V 4 cm below the chest ring.
+ * At the top the opening is the neckline's width (the high point shoulder's x + 1 cm each side).
+ */
+function frontOpeningFor(m: Mannequin, kind: ProxyKind, topY: number, hemY: number, features?: GarmentFeatures): FrontOpening | null {
+  if (kind !== 'outerwear' || !features) return null;
+  const topHalf = round1(Math.abs(m.landmarks.hps[0]) + 1);
+  if (features.front === 'open') return { kind: 'open', topY, bottomY: hemY, topHalfWidthCm: topHalf, bottomHalfWidthCm: 4, neckline: features.neckline ?? null, buttoned: false, source: 'front "open" from the description: open to the hem' };
+  if (features.neckline === 'deep-v') {
+    return { kind: 'v', topY, bottomY: Math.max(hemY, m.morphHeights.underbust), topHalfWidthCm: topHalf, bottomHalfWidthCm: 0, neckline: 'deep-v', buttoned: features.front === 'buttoned', source: `neckline "deep V" from the description${features.front === 'buttoned' ? ' (button front: closed below it)' : ''}: V to the underbust ring` };
+  }
+  if (features.neckline === 'v') return { kind: 'v', topY, bottomY: Math.max(hemY, m.morphHeights.chest - 4), topHalfWidthCm: topHalf, bottomHalfWidthCm: 0, neckline: 'v', buttoned: features.front === 'buttoned', source: 'neckline "V" from the description: V to 4 cm below the chest ring' };
+  return null;
+}
+
+/** A front opening read back from a manifest's `control.proxy.front_opening` (`proxyRecord`): data, checked; null when absent or malformed. */
+export function frontOpeningFromRecord(x: unknown): FrontOpening | null {
+  if (!x || typeof x !== 'object') return null;
+  const o = x as Record<string, unknown>;
+  const n = (k: string): number | null => (typeof o[k] === 'number' && Number.isFinite(o[k]) ? (o[k] as number) : null);
+  const topY = n('top_y_cm'), bottomY = n('bottom_y_cm'), top = n('top_half_width_cm'), bottom = n('bottom_half_width_cm');
+  if (topY === null || bottomY === null || top === null || bottom === null || topY < bottomY || top < 0 || bottom < 0) return null;
+  if (o.kind !== 'v' && o.kind !== 'open') return null;
+  const neckline = o.neckline === 'v' || o.neckline === 'deep-v' ? o.neckline : null;
+  return { kind: o.kind, topY, bottomY, topHalfWidthCm: top, bottomHalfWidthCm: bottom, neckline, buttoned: o.buttoned === true, source: typeof o.source === 'string' ? o.source : 'manifest control.proxy.front_opening' };
+}
+
+/** Half-width (cm) of the opening at height y, or -1 outside its rows. */
+export function openingHalfWidth(o: FrontOpening, y: number): number {
+  if (y > o.topY + 1e-9 || y < o.bottomY - 1e-9) return -1;
+  const t = (o.topY - y) / Math.max(1e-9, o.topY - o.bottomY);
+  return o.topHalfWidthCm + (o.bottomHalfWidthCm - o.topHalfWidthCm) * t;
+}
+
+/** Inset (cm) of the opening's shell inside the mannequin surface: the mannequin is what the depth and the stage 1b target show there. */
+const OPENING_INSET_CM = 0.6;
+/** Width (cm) of the ramp outside the opening's edge over which the shell steps down onto the mannequin (about one shell segment). */
+const OPENING_RAMP_CM = 1.6;
+
+const ellipseRadiusAlong = (a: number, b: number, ux: number, uz: number): number => 1 / Math.sqrt((ux * ux) / (a * a) + (uz * uz) / (b * b));
+
+/** Pushes the shell's vertices inside the opening onto the torso, OPENING_INSET_CM inside it (the shell stays closed). Returns the moved vertices. */
+function applyOpening(m: Mannequin, part: Part, o: FrontOpening): Set<number> {
+  const moved = new Set<number>();
+  const P = part.positions;
+  for (let v = 0; v < P.length; v += 3) {
+    const x = P[v]!, y = P[v + 1]!, z = P[v + 2]!;
+    const t = m.torsoAt(y);
+    if (!t || z <= t.cz) continue;
+    const half = openingHalfWidth(o, y);
+    if (half < 0) continue;
+    // Pushed fully inside the opening, not at all beyond OPENING_RAMP_CM outside it, linearly between: the step from the
+    // front to the mannequin is a narrow ramp along the edge (pushing only the vertices inside left a sawtooth where
+    // the quads' diagonals cross the edge).
+    const w = Math.min(1, Math.max(0, (half - Math.abs(x - t.cx)) / OPENING_RAMP_CM + 1));
+    if (w <= 0) continue;
+    const dx = x - t.cx, dz = z - t.cz;
+    const r = Math.hypot(dx, dz);
+    if (r < 1e-9) continue;
+    const target = Math.max(0.1, ellipseRadiusAlong(t.a, t.b, dx / r, dz / r) - OPENING_INSET_CM);
+    if (target >= r) continue;
+    const nr = r + (target - r) * w;
+    P[v] = t.cx + (dx / r) * nr;
+    P[v + 2] = t.cz + (dz / r) * nr;
+    if (w >= 1) moved.add(v / 3);
+  }
+  return moved;
 }
 
 /** The proxy's spec for a product at its base size on our mannequin. */
@@ -260,7 +383,7 @@ export function proxySpec(m: Mannequin, p: GarmentPayload, baseSize: string, opt
   const hem = hemFor(m, p, kind, topY, opts);
   let { hemY } = hem;
   const { lengthCm, lengthSource } = hem;
-  const { sleeveCm, sleeveSource } = sleeveFor(m, p, kind);
+  const { sleeveCm, sleeveSource, sleeveStyle } = sleeveFor(m, p, kind, opts.features);
   let hemFlare: number | null = null;
   if (kind === 'trousers') {
     const rule = LEG_RULES.find(([re]) => re.test(styleWords(p)))?.[1] ?? DEFAULT_LEG;
@@ -287,7 +410,7 @@ export function proxySpec(m: Mannequin, p: GarmentPayload, baseSize: string, opt
     }
   }
   if (p.sizeChartType === 'garment' && p.sizeChart.length === 1) notes.push('one size: girths from the flat measurements (garment chart, as parsed)');
-  const spec: ProxySpec = { version: PROXY_VERSION, kind, category: p.category as EvalCategory, baseSize, chartType, girths, girthSource, anchors, topY, hemY, lengthCm, lengthSource, lengthDefinition: hem.surface ? 'hps_surface' : 'drop', hemDropCm: 0, hemFlare, sleeveCm, sleeveSource, notes };
+  const spec: ProxySpec = { version: PROXY_VERSION, kind, category: p.category as EvalCategory, baseSize, chartType, girths, girthSource, anchors, topY, hemY, lengthCm, lengthSource, lengthDefinition: hem.surface ? 'hps_surface' : 'drop', hemDropCm: 0, hemFlare, sleeveCm, sleeveSource, sleeveStyle, frontOpening: null, notes };
   if (hem.surface) {
     // Fixed point: the shell's flare depends on the hem, the hem on the shell's front surface length.
     for (let k = 0; k < 6; k++) {
@@ -308,6 +431,8 @@ export function proxySpec(m: Mannequin, p: GarmentPayload, baseSize: string, opt
     }
   }
   spec.hemDropCm = round1((kind === 'skirt' || kind === 'trousers' ? m.morphHeights.waist : m.landmarks.hps[1]) - spec.hemY);
+  spec.frontOpening = frontOpeningFor(m, kind, topY, spec.hemY, opts.features);
+  if (kind === 'outerwear' && !spec.frontOpening) notes.push('outerwear without an opening in the description: closed shell (the video model decides the front)');
   return spec;
 }
 
@@ -347,6 +472,12 @@ interface ShellOptions {
   coverLegs: boolean;
   /** Below the hip, the half-width (x) the shell must reach at height y (the trouser seat holds both leg tops). */
   minHalfWidth?: (y: number) => number;
+  /**
+   * Below the hip, the semi-axes the shell runs into at `bottomY` (smoothstep from the hip ellipse): the trouser seat
+   * tapers onto the two leg tops instead of ending in a ledge (0.2.0's seat kept the hip ellipse to the crotch and
+   * stood 4 cm proud of the legs at the front and back: a step that reads as a skort or an overskirt).
+   */
+  bottomTarget?: { a: number; b: number };
 }
 
 /** Body shell from the spec's top down to `bottomY` (dress, skirt, top, outerwear, and the trouser seat). */
@@ -376,6 +507,12 @@ function bodyShell(m: Mannequin, spec: ProxySpec, bottomY: number, opts: ShellOp
     } else {
       const t = (yHip - y) / Math.max(1e-9, yHip - spec.hemY);
       ({ a, b } = ellipseFromCircumference(hipGirth * (1 + (flare - 1) * t), hipAspect));
+      if (opts.bottomTarget) {
+        const u = Math.min(1, Math.max(0, (yHip - y) / Math.max(1e-9, yHip - bottomY)));
+        const w = u * u * (3 - 2 * u);
+        a += (opts.bottomTarget.a - a) * w;
+        b += (opts.bottomTarget.b - b) * w;
+      }
       const leg = m.legAt(y, 1);
       if (opts.coverLegs && leg) {
         // One closed volume around both legs, with clearance: no gap between the legs.
@@ -441,14 +578,54 @@ function trouserParts(m: Mannequin, spec: ProxySpec): Part[] {
     return closedTube(side === 1 ? 'leg_l' : 'leg_r', sections, LIMB_SEGMENTS);
   });
   const seatBottom = crotchY - 1;
+  // The seat's lowest ring is the smallest ellipse round both leg tops (0.5 cm clear): its half-width reaches the legs'
+  // outer edge and its depth covers each leg's front and back at the leg's centre x, so the seat's surface runs on into
+  // the legs' (no ledge); between the legs it closes the crotch.
+  const top = legSection(m, spec, seatBottom, 1);
+  const A = top.centre[0] + top.a + 0.5;
+  const reach = Math.abs(top.centre[2]) + top.b + 0.5;
+  const B = reach / Math.sqrt(Math.max(0.25, 1 - (top.centre[0] / A) ** 2));
   const seat = bodyShell(m, spec, seatBottom, {
     coverLegs: false,
+    bottomTarget: { a: A, b: B },
+    // Where the legs are (from their top down), the seat holds them whatever the taper gives.
     minHalfWidth: (y) => {
+      if (y > legTop) return 0;
       const s = legSection(m, spec, Math.max(y, seatBottom), 1);
       return s.centre[0] + s.a + 0.5;
     },
   });
+  flattenSeatOverLegs(m, seat, seatBottom, { cx: top.centre[0], a: top.a + 0.5, reach });
   return [seat, ...legs];
+}
+
+/**
+ * The seat's lower part, from the hip down to `bottomY`, eased (smoothstep) onto the convex hull of the two leg tops:
+ * between the legs no deeper than a leg, outside them the leg's own ellipse. An ellipse round both legs is deepest at
+ * the centre front and back, and stood 2.3 cm proud of the legs there (a ledge in the side view); the hull runs on into
+ * the legs. Never moves a vertex inside the torso + LEG_CLEARANCE_CM, and only ever towards the axis.
+ */
+function flattenSeatOverLegs(m: Mannequin, seat: Part, bottomY: number, leg: { cx: number; a: number; reach: number }): void {
+  const yHip = m.morphHeights.hip;
+  const P = seat.positions;
+  for (let v = 0; v < P.length; v += 3) {
+    const x = P[v]!, y = P[v + 1]!, z = P[v + 2]!;
+    if (y >= yHip) continue;
+    const u = Math.min(1, Math.max(0, (yHip - y) / Math.max(1e-9, yHip - bottomY)));
+    const w = u * u * (3 - 2 * u);
+    const ax = Math.abs(x);
+    const dx = ax - leg.cx;
+    const hull = dx <= 0 ? leg.reach : dx < leg.a ? leg.reach * Math.sqrt(1 - (dx / leg.a) ** 2) : 0;
+    if (Math.abs(z) <= hull) continue;
+    let nz = Math.abs(z) + (hull - Math.abs(z)) * w;
+    const t = m.torsoAt(y);
+    if (t) {
+      const ta = t.a + LEG_CLEARANCE_CM, tb = t.b + LEG_CLEARANCE_CM;
+      const q = (x - t.cx) / ta;
+      if (q * q < 1) nz = Math.max(nz, Math.abs(t.cz) + tb * Math.sqrt(1 - q * q));
+    }
+    if (nz < Math.abs(z)) P[v + 2] = Math.sign(z) * nz;
+  }
 }
 
 function sleeves(m: Mannequin, spec: ProxySpec): Part[] {
@@ -474,10 +651,49 @@ function sleeves(m: Mannequin, spec: ProxySpec): Part[] {
 
 /** The proxy volume for a product at its base size on our mannequin (closed parts, cm). Deterministic. */
 export function buildProxy(m: Mannequin, p: GarmentPayload, baseSize: string, opts: ProxyOptions = {}): Proxy {
+  const { spec, parts } = proxyParts(m, p, baseSize, opts);
+  return { spec, mesh: mergeParts(parts) };
+}
+
+function proxyParts(m: Mannequin, p: GarmentPayload, baseSize: string, opts: ProxyOptions): { spec: ProxySpec; parts: Part[]; opening: Set<number> } {
   const spec = proxySpec(m, p, baseSize, opts);
   const parts = spec.kind === 'trousers' ? trouserParts(m, spec) : [bodyShell(m, spec, spec.hemY, { coverLegs: true })];
+  let opening = new Set<number>();
+  if (spec.frontOpening) {
+    opening = applyOpening(m, parts[0]!, spec.frontOpening);
+    if (opening.size === 0) throw new Error('proxy: the front opening moved no vertex of the body shell');
+  }
   parts.push(...sleeves(m, spec));
-  return { spec, mesh: mergeParts(parts) };
+  return { spec, parts, opening };
+}
+
+/**
+ * A synthetic GARMENT (not a control) for the kinds the spike's lofted garment (`garment.ts`) does not
+ * build: skirt, trousers, outerwear. The proxy's own surfaces, opened where a garment is open: every
+ * tube loses its end caps (waist, hem, crotch ends of the seat and the legs, neckline, cuffs, armholes)
+ * and an outerwear front opening loses the triangles pushed into the mannequin, so the fronts end in
+ * a real edge. Used as the stage 4 truth and for the synthetic stills of these kinds (export with
+ * synthetic stills): a known shape to measure stage 4t against without a video model. It is the
+ * product's own control shape, so a fit from `control/proxy.glb` starts on it; fit from another
+ * template (`stage4t -- --template-size <size>`) to see the fit move.
+ */
+export function syntheticGarmentFromProxy(m: Mannequin, p: GarmentPayload, baseSize: string, opts: ProxyOptions = {}): Mesh {
+  const { spec, parts, opening } = proxyParts(m, p, baseSize, opts);
+  if (spec.kind !== 'skirt' && spec.kind !== 'trousers' && spec.kind !== 'outerwear') throw new Error(`syntheticGarmentFromProxy: ${spec.kind} uses the lofted synthetic garment (garment.ts)`);
+  const open = parts.map((part, pi) => {
+    const nv = part.positions.length / 3;
+    // closedTube appends its two poles last: every triangle that uses one is a cap.
+    const poles = new Set([nv - 2, nv - 1]);
+    const indices: number[] = [];
+    for (let t = 0; t < part.indices.length; t += 3) {
+      const tri = [part.indices[t]!, part.indices[t + 1]!, part.indices[t + 2]!];
+      if (tri.some((v) => poles.has(v))) continue;
+      if (pi === 0 && opening.size && tri.every((v) => opening.has(v))) continue;
+      indices.push(...tri);
+    }
+    return { name: part.name, positions: part.positions.slice(0, (nv - 2) * 3), indices };
+  });
+  return mergeParts(open);
 }
 
 /** The spec as recorded in the manifest and hashed (rounded to 0.1 mm so the hash never depends on float noise). */
@@ -501,6 +717,10 @@ export function proxyRecord(spec: ProxySpec): Record<string, unknown> {
     hem_flare: spec.hemFlare,
     sleeve_cm: r(spec.sleeveCm),
     sleeve_source: spec.sleeveSource,
+    sleeve_style: spec.sleeveStyle,
+    front_opening: spec.frontOpening
+      ? { kind: spec.frontOpening.kind, top_y_cm: r(spec.frontOpening.topY), bottom_y_cm: r(spec.frontOpening.bottomY), top_half_width_cm: r(spec.frontOpening.topHalfWidthCm), bottom_half_width_cm: r(spec.frontOpening.bottomHalfWidthCm), neckline: spec.frontOpening.neckline, buttoned: spec.frontOpening.buttoned, source: spec.frontOpening.source }
+      : null,
     notes: spec.notes,
   };
 }

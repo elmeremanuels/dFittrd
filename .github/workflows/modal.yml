@@ -22,7 +22,9 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # Run 14 took 2,311 s wall for one product (stage 1b + 2 + 4); five products in one run.txt need about 200 min.
+    # 330 stays under the 360-minute limit of GitHub-hosted runners.
+    timeout-minutes: 330
     env:
       MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
       MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
@@ -86,8 +88,14 @@ jobs:
             echo "::endgroup::"
             if [ "$rc" -ne 0 ]; then status=$rc; break; fi
           done < .github/modal/run.txt
-          cp -r spikes/garment-engine/out modal-out/spike-out 2>/dev/null || true
           exit $status
+      # Its own step with always(): a failed command, or the job hitting timeout-minutes, still keeps the outputs the
+      # finished commands wrote (cost_summary.json and the downloaded stage folders exist only on this runner).
+      - name: Collect outputs
+        if: always()
+        run: |
+          mkdir -p modal-out
+          cp -r spikes/garment-engine/out modal-out/spike-out 2>/dev/null || true
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4

@@ -36,6 +36,8 @@ to the hem for a dress, flat neutral material) at the front and back camera (`dr
     waistband) fails beyond ``max_above_waist_frac``. An outerwear proxy with a front opening (control-proxy-0.3.0) must
     stay open: the opening zone (`front_opening_zone`: our mannequin visible between the proxy's two fronts) is kept out
     of the edit region, and a garment covering more than ``max_opening_cover`` of it fails (a cardigan drawn closed).
+    stage1b-qa-0.6.1: these three are also listed as ``type_failures``. They are a different garment, not a provisional
+    silhouette or fidelity miss, so ``--accept-failed-dress`` does not override them: ``run_phase0`` stops before stage 2.
 
 ``back_view_checks``
     The back still must not be a front: its garment matches the proxy's back silhouette (in ``still_qa``),
@@ -64,7 +66,7 @@ if _HERE not in sys.path:
 
 import phase0_garment as pg  # noqa: E402
 
-STAGE1B_QA_VERSION = "stage1b-qa-0.6.0"
+STAGE1B_QA_VERSION = "stage1b-qa-0.6.1"
 
 # The proxy is dilated by this share of the frame height to give the edit region (0.03 of 832 px = 25 px, about 10 cm
 # at the turntable distance): enough for ease and a fuller flare, small enough that the region keeps the proxy's
@@ -1015,12 +1017,17 @@ def still_qa(
             )
         if skirt_cover is not None and skirt_cover < t["min_skirt_cover"]:
             soft("min_skirt_cover", f"skirt zone: proxy covered {skirt_cover:.3f} < {t['min_skirt_cover']} below the crotch")
+    # The garment-type checks (a different garment drawn: trousers as a skirt, a skirt or trousers with a bodice, an
+    # open front closed) are listed in `type_failures` as well: `--accept-failed-dress` never overrides them
+    # (`phase0_lib.stage1b_summary` `type_failed_views`, `run_phase0._dress_gate`), so a wrong garment cannot reach stage 2.
+    n_before_type = len(failures)
     if kind == "trousers" and trouser_rows >= t["min_merged_leg_rows"] and prof["merged_leg_rows"] / trouser_rows > t["max_merged_leg_frac"]:
         failures.append(f"legs merged: the garment closes the body axis between the legs in {prof['merged_leg_rows']}/{trouser_rows} leg rows where the proxy's legs stand apart (trousers drawn as a skirt)")
     if kind in ("skirt", "trousers") and above_frac > t["max_above_waist_frac"]:
         failures.append(f"garment above the waistband: {above_frac:.3f} of the garment lies more than {band['dilate_px']} px above the proxy's top edge > {t['max_above_waist_frac']} (a {kind} drawn with a bodice)")
     if opening_cover is not None and opening_cover > t["max_opening_cover"]:
         failures.append(f"front opening closed: the garment covers {opening_cover:.3f} of the proxy's front opening ({zone_px} px) > {t['max_opening_cover']} (an open front drawn closed)")
+    type_failures = failures[n_before_type:]
     if fidelity is not None and fidelity.get("pass") is False:
         failures.extend(f"print fidelity: {f}" for f in fidelity.get("failures", []))
     return {
@@ -1064,6 +1071,7 @@ def still_qa(
         "warn_only": sorted(STILL_QA_WARN_ONLY - hard),
         "pass": not failures,
         "failures": failures,
+        "type_failures": list(type_failures),
         "warnings": warnings,
         "label": QA_LABEL,
     }

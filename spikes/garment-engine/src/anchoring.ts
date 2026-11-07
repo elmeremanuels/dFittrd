@@ -32,8 +32,11 @@ export interface RingMeasurement {
 export interface MeasureOptions {
   girth?: 'loop' | 'tape';
   body?: Mesh;
-  /** `girth: 'tape'`: bridge one front opening up to this chord (cm), the fronts laid closed (outerwear; `TapeOptions.frontOpeningCm`). */
-  frontOpeningCm?: number;
+  /**
+   * `girth: 'tape'`: the widest front opening (chord, cm) bridged at a ring at height y, the fronts laid closed
+   * (outerwear with an opening; `TapeOptions.frontOpeningCm`). 0 or absent: no front opening is bridged at that ring.
+   */
+  frontOpeningAt?: (y: number) => number;
 }
 
 export interface LengthMeasurement {
@@ -80,7 +83,8 @@ export function measureRing(mesh: Mesh, ring: RingFrame, opts: MeasureOptions = 
       const fused = closedLoop !== null && bodyLoops.some((b) => b !== own && b.points.length > 2 && loopContains(closedLoop, centroid(b), ring.u, ring.v));
       if (own && (closedLoop === null || fused)) pts = pointsOfPart(dense, bodyLoops, own);
     }
-    const t = tapeGirth(pts, centre, ring.u, ring.v, opts.frontOpeningCm ? { frontOpeningCm: opts.frontOpeningCm } : {}, all);
+    const frontCap = opts.frontOpeningAt ? opts.frontOpeningAt(ring.centre[1]) : 0;
+    const t = tapeGirth(pts, centre, ring.u, ring.v, frontCap > 0 ? { frontOpeningCm: frontCap } : {}, all);
     if (!t) return null;
     loop = t.loop;
     tape = { coverage: t.coverage, maxGapDeg: t.maxGapDeg, maxGapCm: t.maxGapCm, frontGapCm: t.frontGapCm, points: t.points, loopLengthCm: closedLoop ? loopLength(closedLoop) : null };

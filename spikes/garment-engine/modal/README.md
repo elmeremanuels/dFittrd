@@ -239,7 +239,7 @@ Alignment QA (`phase0_lib.alignment_qa`, thresholds in `STAGE1B_QA_THRESHOLDS`, 
 | `mannequin_mae_8bit` | Uncovered mannequin pixels, generated vs ours, before compositing | ≤ 25 |
 | `touches_border` | Garment reaches the frame edge | false |
 
-A still that passes goes to `stage1b/<view>.png`, where stage 2 reads it. A still that fails goes to `stage1b/rejected/<view>.png`, and stage 2 will not start (`--accept-failed` on the app or `--accept-failed-dress` on `run_phase0.py` overrides; the record then says `qa_overridden: true`). `stage1b/record.json` holds the pins, the engine, steps and seed, per view the method, the shop-photo segmentation, the DWPose keypoints found on our mannequin (fashn), the mask source, the QA numbers and the still's sha256, the summary and the cost estimate.
+A still that passes goes to `stage1b/<view>.png`, where stage 2 reads it. A still that fails goes to `stage1b/rejected/<view>.png`, and stage 2 will not start (`--accept-failed` on the app or `--accept-failed-dress` on `run_phase0.py` overrides; the record then says `qa_overridden: true`). A garment-type failure (stage1b-qa-0.6.1 `type_failures`: trousers with merged legs, a skirt or trousers with a bodice, an open front drawn closed) is never overridden: `run_phase0.py` stops before stage 2 whatever the flag says. `stage1b/record.json` holds the pins, the engine, steps and seed, per view the method, the shop-photo segmentation, the DWPose keypoints found on our mannequin (fashn), the mask source, the QA numbers and the still's sha256, the summary and the cost estimate.
 
 ### Licences and what we do not use
 

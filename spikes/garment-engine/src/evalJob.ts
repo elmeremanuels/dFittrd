@@ -23,6 +23,7 @@ import { evalBundle, type ViewAgreement } from './evalBundle';
 import { readGarmentGlb, weldVerticesWithColors, weldWithRemap } from './evalMesh';
 import { readTexturedGlb } from './glbTextured';
 import type { RgbImage } from './jpeg';
+import { frontOpeningFromRecord } from './proxy';
 import { renderTextured } from './stage4t';
 import { renderPositions } from './templateFit';
 import { cameraFromFrame } from './views';
@@ -386,6 +387,8 @@ export function evaluateProduct(o: {
     mannequin: m,
     source: { kind: o.choice.kind, path: o.choice.path, simulatedError: o.choice.kind === 'synthetic-truth' ? SIMULATED_ERROR : null },
     ...(o.printedLength ? { printedLength: o.printedLength } : {}),
+    // Outerwear: the control proxy's front opening (from the description) is what the tape may bridge at the front.
+    frontOpening: frontOpeningFromRecord(obj(obj(o.job.manifest?.control)?.proxy)?.front_opening),
   });
   const t2 = performance.now();
   // The simulated error of a synthetic truth changes positions, not the vertex order: the colours still apply.

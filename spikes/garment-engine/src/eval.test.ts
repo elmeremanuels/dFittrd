@@ -1,10 +1,13 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { mockGarment } from '@curtain/schema';
-import { CHART_TOLERANCE_CM, evaluateGarment, SIMULATED_ERROR } from './eval';
+import { CHART_TOLERANCE_CM, evaluateGarment, frontOpeningCap, SIMULATED_ERROR } from './eval';
 import { evalBundle, PLACEHOLDER_COLOR_HEX } from './evalBundle';
 import { cropMesh, fixtureMannequin as m, reconstructedDress, shopPayload, syntheticDress, syntheticSkirt } from './evalFixtures';
 import { readGarmentGlb } from './evalMesh';
 import { radialMorph } from './garment';
+import { shopProduct } from './product';
+import { proxySpec } from './proxy';
 
 const fixture = mockGarment('aalter-studio-2');
 const src = { kind: 'stage4' as const, path: 'stage4/stage2/garment.glb', simulatedError: null };
@@ -70,24 +73,41 @@ describe('evaluateGarment: what fails', () => {
     expect(r.agreement.missing).toEqual(['chest']);
   });
 
-  it('bridges an outerwear front opening as the fronts laid closed, but no other garment\'s and no opening at the back', () => {
+  it('bridges a cardigan\'s own front opening (from its description) as the fronts laid closed, and nothing wider or elsewhere', () => {
     const shop = shopPayload('woodstock-wanderer-knit-cardi');
+    const cardi = shopProduct('bohohippychic', JSON.parse(readFileSync(new URL('../data/bohohippychic/products.json', import.meta.url), 'utf8')) as unknown, shop.handle);
+    const opening = proxySpec(m, cardi.payload, 'S-M', { features: cardi.features! }).frontOpening!;
+    expect(opening.kind).toBe('v');
+    const chestCap = frontOpeningCap(opening, m.morphHeights.chest);
+    expect(chestCap).toBeGreaterThan(6 + 1);
+    expect(chestCap).toBeLessThan(20);
     const open = cropMesh(reconstructedDress(), (x, y, z) => !(z > 0 && Math.abs(x) < 3) && y > m.morphHeights.hip - 5);
-    const r = evaluateGarment({ productId: shop.handle, payload: shop.payload, baseSize: 'S-M', mesh: open, mannequin: m, source: src });
+    const ev = (mesh: typeof open, frontOpening: typeof opening | null, handle = shop.handle, payload = shop.payload, size = 'S-M') =>
+      evaluateGarment({ productId: handle, payload, baseSize: size, mesh, mannequin: m, source: src, frontOpening });
+    const r = ev(open, opening);
     expect(r.category).toBe('outerwear');
-    // A cardigan's 6 cm front opening is bridged at the front (a flat-lay chest lays the fronts closed) and says so.
+    // The 6 cm cut lies inside the V's width at the chest: bridged, and the note says so.
     expect(r.agreement.missing).toEqual([]);
     const chest = r.rows.find((x) => x.anchor === 'chest')!;
     expect(chest.measuredCm).not.toBeNull();
     expect(chest.note).toMatch(/front opening [\d.]+ cm bridged/);
+    // The bridged arc is not counted as cloth.
+    expect(chest.tapeCoverage!).toBeLessThan(1);
+    // The waist lies below the V (it ends at the underbust, buttoned below): no opening there, so the cut is a hole.
+    expect(r.rows.find((x) => x.anchor === 'waist')!.measuredCm).toBeNull();
+    // Outerwear whose description gives no opening: the same cut is a hole at the chest.
+    expect(ev(open, null).agreement.missing).toEqual(['chest']);
+    // A gap at the front wider than the V there + the slack is a hole, not the opening.
+    const wide = cropMesh(reconstructedDress(), (x, y, z) => !(z > 0 && Math.abs(x) < chestCap / 2 + 3) && y > m.morphHeights.hip - 5);
+    expect(ev(wide, opening).agreement.missing).toEqual(['chest']);
     // The same cut on a top is still no girth: the tape bridges holes up to 4 cm, never a 6 cm opening, outside outerwear.
     const top = shopPayload('rosewater-blouse');
-    const rt = evaluateGarment({ productId: top.handle, payload: top.payload, baseSize: '12', mesh: open, mannequin: m, source: src });
+    const rt = ev(open, opening, top.handle, top.payload, '12');
     expect(rt.agreement.missing).toEqual(['chest']);
     expect(rt.agreement.pass).toBe(false);
     // And a cardigan cut open at the BACK is a hole, not a front opening.
     const back = cropMesh(reconstructedDress(), (x, y, z) => !(z < 0 && Math.abs(x) < 3) && y > m.morphHeights.hip - 5);
-    expect(evaluateGarment({ productId: shop.handle, payload: shop.payload, baseSize: 'S-M', mesh: back, mannequin: m, source: src }).agreement.missing).toEqual(['chest']);
+    expect(ev(back, opening).agreement.missing).toEqual(['chest']);
   });
 });
 

@@ -62,6 +62,38 @@ describe('control proxy 0.3.0: features', () => {
   });
 });
 
+describe('control proxy 0.3.0: trousers', () => {
+  it('tapers the seat onto the two leg tops: no ledge at the front, the back or the sides (0.2.0 stood 4 cm proud)', () => {
+    const { mesh } = proxyOf(shop('rosewater-palazzo-pants'));
+    const P = mesh.positions;
+    const crotch = m.landmarks.crotch[1];
+    const seat = mesh.partNames.indexOf('body'), leg = mesh.partNames.indexOf('leg_l');
+    // The leg's top: its centre x and its widest |x| and |z|.
+    let legMaxX = 0, legMaxZ = 0, legCx = 0, nLeg = 0;
+    for (let v = 0; v < P.length / 3; v++) {
+      if (mesh.vertexPart[v] !== leg || P[3 * v + 1]! < crotch - 4) continue;
+      legMaxX = Math.max(legMaxX, Math.abs(P[3 * v]!));
+      legMaxZ = Math.max(legMaxZ, Math.abs(P[3 * v + 2]!));
+      legCx += P[3 * v]!;
+      nLeg++;
+    }
+    legCx /= nLeg;
+    // The seat's lowest 3 cm: no wider than the legs (front view), nowhere deeper than a leg (side view: 0.2.0's
+    // ellipse was 2-4 cm deeper at the centre front and back), and over the leg's centre still holding the leg.
+    let seatMaxX = 0, seatMaxZ = 0, seatZOverLeg = 0;
+    for (let v = 0; v < P.length / 3; v++) {
+      if (mesh.vertexPart[v] !== seat || P[3 * v + 1]! > crotch + 2) continue;
+      const x = P[3 * v]!;
+      seatMaxX = Math.max(seatMaxX, Math.abs(x));
+      seatMaxZ = Math.max(seatMaxZ, Math.abs(P[3 * v + 2]!));
+      if (Math.abs(Math.abs(x) - Math.abs(legCx)) < 1.5) seatZOverLeg = Math.max(seatZOverLeg, Math.abs(P[3 * v + 2]!));
+    }
+    expect(seatMaxX).toBeLessThan(legMaxX + 1);
+    expect(seatMaxZ).toBeLessThan(legMaxZ + 1);
+    expect(seatZOverLeg).toBeGreaterThanOrEqual(legMaxZ - 0.5);
+  });
+});
+
 describe('synthetic garments of the other kinds', () => {
   it('opens every tube: the skirt at the waist and the hem, the trousers at the waist and both hems, the cardigan down its V', () => {
     const loops = (h: string): number => boundaryLoops(syntheticGarmentFromProxy(m, shop(h).payload, shop(h).baseSize, shop(h).features ? { features: shop(h).features! } : {})).loops;

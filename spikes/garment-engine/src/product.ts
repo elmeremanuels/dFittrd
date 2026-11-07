@@ -323,7 +323,8 @@ export function shopPhotos(shop: ShopId, handle: string, choice: ShopPhotoChoice
  * "half sleeves" is "half-sleeved", it was named without sleeves), an outerwear front opening is described ("open at
  * the front", "with a deep V neckline, buttoned below it") and its negative prompt bans a closed pullover; a skirt
  * or trousers is "worn at the waist on a bare torso" and its negative prompt bans a dress, a bodice and a top (the
- * lower body must not grow a bodice); trousers also ban culottes drawn as a skirt.
+ * lower body must not grow a bodice); trousers also ban culottes drawn as a skirt, and a skort, an overskirt or a
+ * peplum (the seat over the two legs read as a short skirt).
  */
 export const PROMPT_VERSION = 'neutral-prompt-0.3.0';
 
@@ -385,12 +386,17 @@ export const NEGATIVE_BASE = [
 export const NEGATIVE_BY_KIND: Readonly<Record<ProxyKind, readonly string[]>> = {
   dress: ['trousers', 'pants', 'shorts', 'jumpsuit', 'two separate legs of fabric'],
   skirt: ['trousers', 'pants', 'shorts', 'jumpsuit', 'two separate legs of fabric', 'dress', 'bodice', 'top', 'shirt'],
-  trousers: ['dress', 'skirt', 'gown', 'one closed skirt between the legs', 'jumpsuit', 'bodice', 'top', 'shirt'],
+  // skort / overskirt / peplum: the seat over two legs read as a short skirt over trousers (run 15 review).
+  trousers: ['dress', 'skirt', 'gown', 'one closed skirt between the legs', 'skort', 'overskirt', 'peplum', 'jumpsuit', 'bodice', 'top', 'shirt'],
   top: ['dress', 'long skirt', 'trousers'],
   outerwear: ['dress', 'long skirt', 'trousers'],
 };
-/** Outerwear with a front opening: the closed garment it must not turn into. */
-export const NEGATIVE_OPEN_FRONT = ['closed pullover', 'jumper closed at the front', 'sweater', 'high round neckline'] as const;
+/**
+ * Outerwear with a front opening: the closed garment it must not turn into. Not "sweater": a knit cardigan is a
+ * "cardigan sweater", and banning the word pushes the model away from the knit the prompt asks for (the Qwen
+ * negative, `phase0_lib.QWEN_OPEN_FRONT_NEGATIVE`, never had it).
+ */
+export const NEGATIVE_OPEN_FRONT = ['closed pullover', 'jumper closed at the front', 'high round neckline'] as const;
 
 export interface VideoPrompt {
   version: typeof PROMPT_VERSION;

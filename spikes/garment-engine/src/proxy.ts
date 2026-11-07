@@ -38,7 +38,10 @@
  * "V-neck") is pushed into the mannequin: the control and the stage 1b target then show our mannequin
  * between the fronts, so the video model keeps a cardigan open instead of drawing a closed jumper. The
  * shell stays one closed volume (stage 4t reads it as a signed distance). A product without these
- * features gets exactly the 0.2.0 geometry (the azure babydoll's proxy is unchanged).
+ * features gets exactly the 0.2.0 geometry (the azure babydoll's proxy is unchanged). Trousers (0.3.0):
+ * the seat tapers from the hip onto the two leg tops; 0.2.0 kept the hip ellipse down to the crotch and
+ * the seat stood 2-4 cm proud of the legs at the front and back, a ledge that reads as a skort (the seat
+ * now ends on the convex hull of the two leg tops: no deeper and no wider than the legs).
  */
 import { CATEGORY_ANCHORS, FIT_POINT_TO_ANCHOR, ellipseCircumference, ellipseFromCircumference, monotoneProfile, type AnchorRing } from '@curtain/anchors';
 import { CATEGORY_EASE } from '@curtain/fit-engine';
@@ -316,6 +319,18 @@ function frontOpeningFor(m: Mannequin, kind: ProxyKind, topY: number, hemY: numb
   return null;
 }
 
+/** A front opening read back from a manifest's `control.proxy.front_opening` (`proxyRecord`): data, checked; null when absent or malformed. */
+export function frontOpeningFromRecord(x: unknown): FrontOpening | null {
+  if (!x || typeof x !== 'object') return null;
+  const o = x as Record<string, unknown>;
+  const n = (k: string): number | null => (typeof o[k] === 'number' && Number.isFinite(o[k]) ? (o[k] as number) : null);
+  const topY = n('top_y_cm'), bottomY = n('bottom_y_cm'), top = n('top_half_width_cm'), bottom = n('bottom_half_width_cm');
+  if (topY === null || bottomY === null || top === null || bottom === null || topY < bottomY || top < 0 || bottom < 0) return null;
+  if (o.kind !== 'v' && o.kind !== 'open') return null;
+  const neckline = o.neckline === 'v' || o.neckline === 'deep-v' ? o.neckline : null;
+  return { kind: o.kind, topY, bottomY, topHalfWidthCm: top, bottomHalfWidthCm: bottom, neckline, buttoned: o.buttoned === true, source: typeof o.source === 'string' ? o.source : 'manifest control.proxy.front_opening' };
+}
+
 /** Half-width (cm) of the opening at height y, or -1 outside its rows. */
 export function openingHalfWidth(o: FrontOpening, y: number): number {
   if (y > o.topY + 1e-9 || y < o.bottomY - 1e-9) return -1;
@@ -457,6 +472,12 @@ interface ShellOptions {
   coverLegs: boolean;
   /** Below the hip, the half-width (x) the shell must reach at height y (the trouser seat holds both leg tops). */
   minHalfWidth?: (y: number) => number;
+  /**
+   * Below the hip, the semi-axes the shell runs into at `bottomY` (smoothstep from the hip ellipse): the trouser seat
+   * tapers onto the two leg tops instead of ending in a ledge (0.2.0's seat kept the hip ellipse to the crotch and
+   * stood 4 cm proud of the legs at the front and back: a step that reads as a skort or an overskirt).
+   */
+  bottomTarget?: { a: number; b: number };
 }
 
 /** Body shell from the spec's top down to `bottomY` (dress, skirt, top, outerwear, and the trouser seat). */
@@ -486,6 +507,12 @@ function bodyShell(m: Mannequin, spec: ProxySpec, bottomY: number, opts: ShellOp
     } else {
       const t = (yHip - y) / Math.max(1e-9, yHip - spec.hemY);
       ({ a, b } = ellipseFromCircumference(hipGirth * (1 + (flare - 1) * t), hipAspect));
+      if (opts.bottomTarget) {
+        const u = Math.min(1, Math.max(0, (yHip - y) / Math.max(1e-9, yHip - bottomY)));
+        const w = u * u * (3 - 2 * u);
+        a += (opts.bottomTarget.a - a) * w;
+        b += (opts.bottomTarget.b - b) * w;
+      }
       const leg = m.legAt(y, 1);
       if (opts.coverLegs && leg) {
         // One closed volume around both legs, with clearance: no gap between the legs.
@@ -551,14 +578,54 @@ function trouserParts(m: Mannequin, spec: ProxySpec): Part[] {
     return closedTube(side === 1 ? 'leg_l' : 'leg_r', sections, LIMB_SEGMENTS);
   });
   const seatBottom = crotchY - 1;
+  // The seat's lowest ring is the smallest ellipse round both leg tops (0.5 cm clear): its half-width reaches the legs'
+  // outer edge and its depth covers each leg's front and back at the leg's centre x, so the seat's surface runs on into
+  // the legs' (no ledge); between the legs it closes the crotch.
+  const top = legSection(m, spec, seatBottom, 1);
+  const A = top.centre[0] + top.a + 0.5;
+  const reach = Math.abs(top.centre[2]) + top.b + 0.5;
+  const B = reach / Math.sqrt(Math.max(0.25, 1 - (top.centre[0] / A) ** 2));
   const seat = bodyShell(m, spec, seatBottom, {
     coverLegs: false,
+    bottomTarget: { a: A, b: B },
+    // Where the legs are (from their top down), the seat holds them whatever the taper gives.
     minHalfWidth: (y) => {
+      if (y > legTop) return 0;
       const s = legSection(m, spec, Math.max(y, seatBottom), 1);
       return s.centre[0] + s.a + 0.5;
     },
   });
+  flattenSeatOverLegs(m, seat, seatBottom, { cx: top.centre[0], a: top.a + 0.5, reach });
   return [seat, ...legs];
+}
+
+/**
+ * The seat's lower part, from the hip down to `bottomY`, eased (smoothstep) onto the convex hull of the two leg tops:
+ * between the legs no deeper than a leg, outside them the leg's own ellipse. An ellipse round both legs is deepest at
+ * the centre front and back, and stood 2.3 cm proud of the legs there (a ledge in the side view); the hull runs on into
+ * the legs. Never moves a vertex inside the torso + LEG_CLEARANCE_CM, and only ever towards the axis.
+ */
+function flattenSeatOverLegs(m: Mannequin, seat: Part, bottomY: number, leg: { cx: number; a: number; reach: number }): void {
+  const yHip = m.morphHeights.hip;
+  const P = seat.positions;
+  for (let v = 0; v < P.length; v += 3) {
+    const x = P[v]!, y = P[v + 1]!, z = P[v + 2]!;
+    if (y >= yHip) continue;
+    const u = Math.min(1, Math.max(0, (yHip - y) / Math.max(1e-9, yHip - bottomY)));
+    const w = u * u * (3 - 2 * u);
+    const ax = Math.abs(x);
+    const dx = ax - leg.cx;
+    const hull = dx <= 0 ? leg.reach : dx < leg.a ? leg.reach * Math.sqrt(1 - (dx / leg.a) ** 2) : 0;
+    if (Math.abs(z) <= hull) continue;
+    let nz = Math.abs(z) + (hull - Math.abs(z)) * w;
+    const t = m.torsoAt(y);
+    if (t) {
+      const ta = t.a + LEG_CLEARANCE_CM, tb = t.b + LEG_CLEARANCE_CM;
+      const q = (x - t.cx) / ta;
+      if (q * q < 1) nz = Math.max(nz, Math.abs(t.cz) + tb * Math.sqrt(1 - q * q));
+    }
+    if (nz < Math.abs(z)) P[v + 2] = Math.sign(z) * nz;
+  }
 }
 
 function sleeves(m: Mannequin, spec: ProxySpec): Part[] {

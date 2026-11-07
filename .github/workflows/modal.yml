@@ -88,8 +88,14 @@ jobs:
             echo "::endgroup::"
             if [ "$rc" -ne 0 ]; then status=$rc; break; fi
           done < .github/modal/run.txt
-          cp -r spikes/garment-engine/out modal-out/spike-out 2>/dev/null || true
           exit $status
+      # Its own step with always(): a failed command, or the job hitting timeout-minutes, still keeps the outputs the
+      # finished commands wrote (cost_summary.json and the downloaded stage folders exist only on this runner).
+      - name: Collect outputs
+        if: always()
+        run: |
+          mkdir -p modal-out
+          cp -r spikes/garment-engine/out modal-out/spike-out 2>/dev/null || true
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4

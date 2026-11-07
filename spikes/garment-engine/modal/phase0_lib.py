@@ -590,7 +590,7 @@ QWEN_NEGATIVE = "person, human, face, hands, skin, hair, extra limbs, changed po
 QWEN_KIND_NEGATIVE = {
     "dress": "trousers, pants, shorts, romper, jumpsuit, two separate legs of fabric",
     "skirt": "trousers, pants, shorts, two separate legs of fabric, dress, bodice, top",
-    "trousers": "dress, skirt, gown, one closed skirt between the legs, bodice, top",
+    "trousers": "dress, skirt, gown, one closed skirt between the legs, skort, overskirt, peplum, bodice, top",
 }
 # Outerwear whose proxy has a front opening (control-proxy-0.3.0): the closed garment it must not turn into.
 QWEN_OPEN_FRONT_NEGATIVE = "closed pullover, jumper closed at the front, high round neckline"
@@ -997,10 +997,15 @@ def qwen_canvas(w: int, h: int, area: int = QWEN_VAE_IMAGE_AREA) -> tuple[int, i
 def stage1b_summary(views: Sequence[Mapping[str, Any]], *, invented_back: bool) -> dict[str, Any]:
     """Overall verdict over the per-view QA records; an invented back is a warning on every summary."""
     failed = [v["view"] for v in views if not v.get("qa", {}).get("pass")]
+    # A garment-type failure (stage1b-qa-0.6.1 `type_failures`: legs merged, a bodice on a skirt or trousers, an open
+    # front closed) is a different garment: `--accept-failed-dress` does not override it (run_phase0._dress_gate).
+    type_failed = [v["view"] for v in views if (v.get("qa") or {}).get("type_failures")]
     warnings = [INVENTED_BACK_LABEL] if invented_back else []
     return {
         "pass": not failed,
         "failed_views": failed,
+        "type_failed_views": type_failed,
+        "type_failures": {v["view"]: list(v["qa"]["type_failures"]) for v in views if (v.get("qa") or {}).get("type_failures")},
         "invented_back": invented_back,
         "warnings": warnings,
         "label": STAGE1B_LABEL,
@@ -1024,7 +1029,14 @@ CONTROL_MODES = ("proxy", "bare")
 # Always in the negative prompt (the title was rendered as text), matched as whole words.
 PROMPT_REQUIRED_NEGATIVE = ("text", "letters", "words", "watermark", "logo")
 # Per proxy kind: the garment the video must not turn into.
-PROMPT_KIND_NEGATIVE = {"dress": ("trousers",), "skirt": ("trousers", "dress", "bodice"), "trousers": ("dress", "skirt", "bodice")}
+PROMPT_KIND_NEGATIVE = {
+    "dress": ("trousers",),
+    "skirt": ("trousers", "dress", "bodice"),
+    "trousers": ("dress", "skirt", "bodice", "skort", "overskirt"),
+    # A top or outerwear garment must not be drawn down to a dress (the exporter bans "dress, long skirt, trousers").
+    "top": ("dress",),
+    "outerwear": ("dress",),
+}
 # Outerwear with a front opening (manifest control.proxy.front_opening, export 0.6.0): it must stay open.
 PROMPT_OPEN_FRONT_NEGATIVE = ("closed pullover",)
 

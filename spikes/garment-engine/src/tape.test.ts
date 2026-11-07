@@ -57,7 +57,11 @@ describe('tapeGirth', () => {
     expect(t.frontGapCm!).toBeGreaterThan(6);
     expect(t.frontGapCm!).toBeLessThan(10);
     expect(t.maxGapCm).toBe(0);
-    expect(t.coverage).toBe(1);
+    // The bridged arc is not cloth: coverage is the cloth found (40 of 360 degrees missing), so a ring that needs more
+    // cloth than that fails even with the opening bridged.
+    expect(t.coverage).toBeCloseTo(1 - 40 / 360, 1);
+    expect(t.coverage).toBeLessThan(0.95);
+    expect(tapeGirth(open, C, U, V, { frontOpeningCm: 30, minCoverage: 0.95 })).toBeNull();
     // Bridged by the radius interpolated across the gap (as any bridged hole): the closed garment's girth within 0.5 cm.
     const closed = tapeGirth(ellipse(17, 12, 400), C, U, V)!.girthCm;
     expect(Math.abs(t.girthCm - closed)).toBeLessThan(0.5);

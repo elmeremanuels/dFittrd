@@ -47,7 +47,9 @@ export interface TapeOptions {
   /**
    * Outerwear with a front opening (a V-neck cardigan, an open front): one gap centred on the front (+v, within
    * `FRONT_SECTOR_DEG`) is bridged up to this chord (cm) and 150 degrees, as a flat-lay chest measure lays the fronts
-   * closed. 0 (default): an opening at the front is a gap like any other.
+   * closed. The caller sets it to the product's own opening at that ring (`eval.ts`: the proxy's front opening + a
+   * few cm), never a blanket value. The bridged bins are NOT counted as cloth in `coverage`: a reconstruction must
+   * still hold `minCoverage` of the ring without them. 0 (default): an opening at the front is a gap like any other.
    */
   frontOpeningCm?: number;
 }
@@ -60,7 +62,7 @@ export const FRONT_SECTOR_DEG = 35;
  * cm wide (a cardigan) is not bridged, so it is reported as no girth rather than as a closed one.
  */
 export const TAPE_DEFAULTS: Required<TapeOptions> = { bins: 72, smoothBins: 5, minCoverage: 0.6, maxGapDeg: 60, maxGapCm: 4, frontOpeningCm: 0 };
-/** 0.2.0: `frontOpeningCm` (an outerwear front opening bridged as the fronts closed). */
+/** 0.2.0: `frontOpeningCm` (an outerwear front opening bridged as the fronts closed, not counted in `coverage`). */
 export const TAPE_VERSION = 'tape-girth-0.2.0';
 
 export interface TapeGirth {
@@ -166,8 +168,8 @@ export function tapeGirth(pts: readonly Vec3[], centre: Vec3, u: Vec3, v: Vec3, 
   const others = runs.filter((r) => r !== front);
   const maxGap = Math.max(0, ...others.map((r) => r.bins));
   const maxChord = Math.max(0, ...others.map((r) => r.chord));
-  // Coverage counts the bridged front opening as cloth: the fronts are laid closed.
-  const coverage = (clothFilled + (front?.bins ?? 0)) / B;
+  // Coverage is the cloth found: the bridged front opening is not counted, so it cannot excuse missing cloth elsewhere.
+  const coverage = clothFilled / B;
   const maxGapDeg = (maxGap * 360) / B;
   if (coverage < o.minCoverage || filled / B < o.minCoverage / 2 || maxGapDeg > o.maxGapDeg || maxChord > o.maxGapCm) return null;
   // Bridge: linear in the angle between the nearest bins of the own part on either side.

@@ -7,7 +7,8 @@ Steps:
      job exported with --on-model/--flat-lay (stage1_dress.py; --dress-engine fashn|qwen|both, `both` runs each
      view through both engines and pins the still that passes QA v2 with the best score) and writes the
      front/back stills stage 2 pins. Stage 2 does
-     not start when a still failed QA (unless --accept-failed-dress) or when the back was invented and
+     not start when a still failed QA (unless --accept-failed-dress; a garment-type failure, stage1b-qa-0.6.1
+     `type_failures`, is never overridden) or when the back was invented and
      --allow-invented-back is missing. A job whose stills come from stage 1b cannot run stage 2 before them.
   1. check the job manifest (input_hash, pinned versions, front + back photos) and upload the job once
   2. download the pinned Wan2.2-Fun-A14B-Control weights into the weights Volume (once)
@@ -60,8 +61,21 @@ def _dress_gate(m: dict, job_dir: str, dress_record: dict | None, *, accept_fail
     pending = lib.stills_pending(m, lambda rel: os.path.exists(os.path.join(job_dir, rel)))
     if pending:
         reasons.append(f"stage 1b stills missing for {', '.join(pending)}: run with --dress (or stage1_dress.py) first")
+    if dress_record is None and m.get("stage1b"):
+        # Stage 1b ran before this call (stage1_dress.py on its own): its record still decides the type checks.
+        rec_path = os.path.join(job_dir, lib.STAGE1B_DIR, "record.json")
+        if os.path.exists(rec_path):
+            with open(rec_path) as f:
+                dress_record = json.load(f)
     if dress_record is not None and not dress_record["summary"]["usable_for_stage2"] and not accept_failed:
         reasons.append(f"stage 1b QA failed for {', '.join(dress_record['summary']['failed_views'])} (see stage1b/record.json); --accept-failed-dress overrides")
+    # A different garment (trousers drawn as a skirt, a bodice on a skirt or trousers, an open front closed) is never
+    # overridden: --accept-failed-dress only accepts the provisional silhouette and fidelity checks. Stage 2 is about
+    # 90% of a product's GPU cost (run 14: about $1.47 of $1.6).
+    type_failed = (dress_record or {}).get("summary", {}).get("type_failed_views") or []
+    if type_failed:
+        detail = "; ".join(f"{view}: {', '.join(f.split(':')[0] for f in fs)}" for view, fs in (dress_record["summary"].get("type_failures") or {}).items())
+        reasons.append(f"stage 1b drew a different garment in {', '.join(type_failed)} ({detail}); --accept-failed-dress does not override this")
     if lib.invented_roles(m) and not allow_invented:
         reasons.append("the back still is INVENTED (no back photo, D13); pass --allow-invented-back for a validation run")
     return reasons

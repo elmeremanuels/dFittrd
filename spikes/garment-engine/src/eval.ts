@@ -24,7 +24,7 @@ import { asGradingChart, criticalRings, evalChart, evalChartRow, type EvalCatego
 import { meshHealth, type MeshHealth } from './evalMesh';
 import { assignChains, distortGarment, type ChainAssignment, type Distortion, type SpikeCategory } from './garment';
 import { bottomLengths, garmentLengths, type BottomLengthMeasure, type LengthMeasure } from './garmentLength';
-import { proxyKind } from './proxy';
+import { openingHalfWidth, proxyKind, type FrontOpening } from './proxy';
 import { gradeGarment, type GradingJson } from './grading';
 
 export const EVAL_VERSION = 'phase0-eval-0.3.0';
@@ -196,8 +196,17 @@ function verticalExtent(mesh: Mesh, chains: ChainAssignment): { minY: number; ma
   return { minY, maxY };
 }
 
-/** Widest front opening of outerwear the tape bridges (cm, chord): an open cardigan's fronts a hand's width apart. */
-export const OUTERWEAR_FRONT_OPENING_CM = 30;
+/**
+ * Slack (cm, chord) on top of the product's own front opening at a ring that the tape still bridges as that opening:
+ * the fronts' edges of a reconstruction are a little ragged and hang a little apart. Wider than that is a hole.
+ */
+export const FRONT_OPENING_SLACK_CM = 4;
+
+/** Widest front opening (chord, cm) bridged at height y: the opening's width there plus the slack; 0 outside its rows. */
+export function frontOpeningCap(o: FrontOpening, y: number): number {
+  const half = openingHalfWidth(o, y);
+  return half < 0 ? 0 : 2 * half + FRONT_OPENING_SLACK_CM;
+}
 
 /** Payload `lengthCm` keys → the measured length that answers them. */
 const LENGTH_KEYS: Readonly<Record<string, AnchorLength | 'outseam'>> = {
@@ -228,6 +237,12 @@ export interface EvaluateOptions {
   toleranceCm?: number;
   /** What the printed shoulder_to_hem means: a shop's garment table is flat-lay (default); the spike's synthetic garment is built with a vertical drop. */
   printedLength?: 'flat-lay' | 'drop';
+  /**
+   * Outerwear only: the product's front opening (the control proxy's, manifest `control.proxy.front_opening`, which
+   * comes from the description's own words). The tape bridges it at a ring as the fronts laid closed, up to its width
+   * there + `FRONT_OPENING_SLACK_CM`. Absent or null: no opening is bridged (a gap at the front is a hole).
+   */
+  frontOpening?: FrontOpening | null;
 }
 
 export function evaluateGarment(o: EvaluateOptions): EvalResult {
@@ -253,9 +268,11 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
   const chains = garmentChains(m, mesh, category);
   // A tape measure round the outside, own body part only: real reconstructions are noisy, have holes
   // and fuse the sleeves to the bodice (run 14); on smooth meshes it equals the loop length.
-  // Outerwear: a cardigan's V or open front is bridged at the front as a flat-lay chest lays the fronts closed (up to
-  // OUTERWEAR_FRONT_OPENING_CM); every other garment's opening wider than the tape's 4 cm stays "no girth".
-  const measureOpts: MeasureOptions = { girth: 'tape', body: buildMannequinMesh(m), ...(category === 'outerwear' ? { frontOpeningCm: OUTERWEAR_FRONT_OPENING_CM } : {}) };
+  // Outerwear whose description gives a front opening (a V, an open front): it is bridged at the front as a flat-lay
+  // chest lays the fronts closed, up to the opening's own width at that ring + FRONT_OPENING_SLACK_CM. Any other gap
+  // wider than the tape's 4 cm, and every other garment's, stays "no girth".
+  const opening = category === 'outerwear' ? (o.frontOpening ?? null) : null;
+  const measureOpts: MeasureOptions = { girth: 'tape', body: buildMannequinMesh(m), ...(opening ? { frontOpeningAt: (y: number) => frontOpeningCap(opening, y) } : {}) };
   const raw = measureGarment(m, mesh, cat, chains, measureOpts);
   const measured = ringGirths(raw);
   const t1 = performance.now();

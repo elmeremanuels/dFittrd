@@ -1,4 +1,4 @@
-"""Stage 1b QA for the other garment kinds (stage1b-qa-0.6.0): trousers keep two legs, a skirt or trousers grows no
+"""Stage 1b QA for the other garment kinds (stage1b-qa-0.6.0; type_failures 0.6.1): trousers keep two legs, a skirt or trousers grows no
 bodice, an outerwear front opening stays open (and is kept out of the edit region), and FASHN labels a trouser
 garment `pants`. Synthetic masks at a quarter of 480x832 (the layout of test_stage1b_qa.py); numpy only."""
 import os
@@ -44,6 +44,8 @@ def test_trousers_keep_two_legs_and_a_skirt_drawn_instead_fails():
     assert good["merged_leg_rows"] == 0 and good["trouser_leg_rows"] > 50
     bad = qa(SKIRT_DRAWN, TROUSERS, "trousers")
     assert any("legs merged" in f for f in bad["failures"]), bad["failures"]
+    assert [f.split(":")[0] for f in bad["type_failures"]] == ["legs merged"]
+    assert good["type_failures"] == []
     # Wide legs that touch for a few rows under the crotch are still trousers.
     touching = TROUSERS | box(58, 122, 62, 132)
     assert qa(touching, TROUSERS, "trousers")["pass"]
@@ -58,6 +60,7 @@ def test_a_skirt_or_trousers_drawn_with_a_bodice_fails():
     r = qa(dress, SKIRT, "skirt")
     assert r["above_waist_fraction"] > 0.2
     assert any("above the waistband" in f for f in r["failures"]), r["failures"]
+    assert any("above the waistband" in f for f in r["type_failures"])
     # A waistband drawn a few rows higher than the proxy's top edge is fine.
     assert qa(SKIRT | box(44, 76, 76, 80), SKIRT, "skirt")["pass"]
     r2 = qa(TROUSERS | box(46, 42, 74, 80), TROUSERS, "trousers")
@@ -92,6 +95,7 @@ def test_outerwear_opening_stays_open_in_the_region_and_a_closed_front_fails():
     closed = CARDI | V
     bad = qa(closed, CARDI, "outerwear", region=plain, cat="tops")
     assert any("front opening closed" in f for f in bad["failures"]), bad["failures"]
+    assert any("front opening closed" in f for f in bad["type_failures"])
     # Not checked at the back camera (no zone) or for a closed outerwear proxy.
     assert qa(box(44, 42, 76, 125), box(44, 42, 76, 125), "outerwear", cat="tops")["front_opening_cover"] is None
 
@@ -104,3 +108,16 @@ def test_fashn_labels_trousers_as_pants_and_keeps_the_other_categories():
     pants = lib.FASHN_LABEL_IDS["pants"]
     assert list(lib.fashn_label_map([1, 0, 1], "bottoms", "trousers")) == [pants, 0, pants]
     assert "pants" in lib.FASHN_BODY_COVERAGE_TO_LABELS[lib.FASHN_CATEGORY_TO_BODY_COVERAGE["bottoms"]]
+
+
+def test_a_type_failure_is_listed_per_view_and_a_provisional_failure_is_not():
+    views = [
+        {"view": "front", "qa": {"pass": False, "failures": ["legs merged: x", "silhouette band: y"], "type_failures": ["legs merged: x"]}},
+        {"view": "back", "qa": {"pass": False, "failures": ["silhouette band: y"], "type_failures": []}},
+    ]
+    s = lib.stage1b_summary(views, invented_back=False)
+    assert s["failed_views"] == ["front", "back"] and s["type_failed_views"] == ["front"]
+    assert s["type_failures"] == {"front": ["legs merged: x"]}
+    # A record without type_failures (QA before 0.6.1, an engine error) is no type failure.
+    assert lib.stage1b_summary([{"view": "front", "qa": {"pass": False, "failures": ["RuntimeError: x"]}}], invented_back=False)["type_failed_views"] == []
+

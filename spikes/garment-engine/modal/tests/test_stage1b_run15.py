@@ -316,9 +316,14 @@ def test_conform_widens_a_skirt_to_the_proxy_at_the_hips_and_leaves_the_rest():
     out, mask, rec = dq.conform_to_proxy(gen, g, SKIRT_PROXY4, BARE4, region, kind="skirt")
     assert rec["applied"] and rec["capped_rows"] == 0 and rec["max_stretch"] == pytest.approx(136 / 120, abs=0.02)
     after = dq.hip_profile(mask, SKIRT_PROXY4, BARE4, legs, kind="skirt", short_px=5)
-    assert after["short_rows"] == 0
-    # Hip rows (waistband to the crotch, row 480) now span the proxy, filled with the skirt's own colours.
-    for y in (330, 400, 470):
+    # 0.9.0: the stretch ramps in over 25 rows from the skirt's top (a slanted waistband is not squared off), so only
+    # rows near the top may still be short, far under the check's share.
+    ramp = int(round(dq.CONFORM["ramp_frac"] * 832))
+    assert after["short_frac"] <= 0.25 and after["short_frac"] < dq.STILL_QA_THRESHOLDS["max_hip_short_frac"]
+    top = 320
+    assert g[top + 2].sum() < mask[top + 2].sum() < SKIRT_PROXY4[top + 2].sum()  # partly stretched at the top
+    # Below the ramp the hip rows (to the crotch, row 480) span the proxy, filled with the skirt's own colours.
+    for y in (top + ramp + 5, 400, 470):
         assert mask[y].sum() == SKIRT_PROXY4[y].sum() and (mask[y] == SKIRT_PROXY4[y]).all()
         reds = out[y][mask[y]]
         assert (np.abs(reds.astype(int) - (117, 117, 117)).max(axis=1) > 30).all()  # no mannequin grey pasted in
@@ -342,11 +347,11 @@ def test_conform_caps_the_stretch_and_the_hip_check_still_fails():
     assert dq.hip_profile(mask, SKIRT_PROXY4, BARE4, legs, kind="skirt", short_px=5)["short_frac"] > dq.STILL_QA_THRESHOLDS["max_hip_short_frac"]
 
 
-def test_conform_leaves_tops_trousers_and_open_rows_alone():
+def test_conform_leaves_tops_outerwear_and_open_rows_alone():
     region, _ = dq.edit_region(TOP4, BARE4, "tops")
     gen = render4([(TOP4, print4())])
     narrow = TOP4 & ~up(box(44, 42, 46, 125))
-    for kind in ("top", "outerwear", "trousers"):
+    for kind in ("top", "outerwear"):
         out, mask, rec = dq.conform_to_proxy(gen, narrow, TOP4, BARE4, region, kind=kind)
         assert not rec["applied"] and (mask == narrow).all() and (out == gen).all()
     # A skirt open in the middle of its rows (an engine's slit) is not stretched across the gap.
@@ -355,6 +360,59 @@ def test_conform_leaves_tops_trousers_and_open_rows_alone():
     g[:, 220:260] = False
     _, mask, rec = dq.conform_to_proxy(gen_s, g, SKIRT_PROXY4, BARE4, region_s, kind="skirt")
     assert not mask[:, 225:255].any()
+
+
+TROUSERS4 = up(PROXY_TROUSERS)
+
+
+def test_conform_widens_trousers_above_the_crotch_only():
+    """0.9.0 (review of 0.8.0): trousers are hip-checked too, so a correct two-leg draw a few px inside the proxy at the
+    hips (run 15's palazzo: 5 / 14 px) must be conformed there, not stopped; the legs below the crotch stay as drawn."""
+    gap = dq.trouser_gap_zone(TROUSERS4, BARE4)
+    region, _ = dq.edit_region(TROUSERS4, BARE4, "bottoms", open_crotch=gap)
+    p = dq.qa_proxy(TROUSERS4, gap)
+    drawn = p & ~up(box(44, 80, 46, 200)) & ~up(box(74, 80, 76, 200))  # 8 px a side inside the proxy, hips and legs
+    stripes = np.zeros(BARE4.shape + (3,), np.float64)
+    stripes[:] = (170, 30, 40)
+    stripes[:, (np.arange(480) // 6) % 2 == 1] = (230, 170, 180)
+    gen = render4([(drawn, stripes)], seed=6)
+    legs = dq.pg.leg_rows(BARE4)
+    before = dq.hip_profile(drawn & region, p, BARE4, legs, kind="trousers", short_px=5)
+    assert before["short_rows"] == before["rows"] > 0
+    out, mask, rec = dq.conform_to_proxy(gen, drawn & region, p, BARE4, region, kind="trousers")
+    assert rec["applied"] and rec["capped_rows"] == 0
+    after = dq.hip_profile(mask, p, BARE4, legs, kind="trousers", short_px=5)
+    ramp = int(round(dq.CONFORM["ramp_frac"] * 832))
+    assert after["short_frac"] < dq.STILL_QA_THRESHOLDS["max_hip_short_frac"] and after["short_rows"] <= ramp  # only in the ramp-in
+    y = 320 + ramp + 5
+    assert (mask[y] == p[y]).all()
+    crotch = legs[0]
+    assert (mask[crotch:] == (drawn & region)[crotch:]).all() and (out[crotch:] == gen[crotch:]).all()
+
+
+def test_composite_mask_closes_a_notch_below_the_proxy_but_not_with_the_floor():
+    """0.9.0 (review of 0.8.0): run 15's blouse front, the shirt-tail drawn below the proxy's hem and missed by the chosen
+    mask, was left out of the composite (a straight cut, our grey below it): now added when it joins the garment and is
+    not grey. The engine's floor (white highlight, grey shadow) over our feet is not added."""
+    region, _ = dq.edit_region(TOP4, BARE4, "tops")
+    tail = up(box(44, 125, 76, 131)) & region & ~TOP4  # below the proxy, inside the region's margin
+    assert tail.sum() > 100
+    cream = np.zeros(BARE4.shape + (3,), np.float64)
+    cream[:] = (226, 206, 196)  # the print's pale ground, chroma 30
+    floor = up(box(46, 131, 74, 133)) & region & ~TOP4 & ~tail
+    gen = render4([(TOP4, print4()), (tail, cream), (floor, (250, 250, 250))], seed=7)
+    chosen = TOP4 & ~up(box(60, 115, 76, 125))  # the difference mask missed the right side of the hem
+    garment, rec = dq.still_garment_mask(gen, chosen, BARE4, TOP4, region, bg=STUDIO)
+    assert garment[tail].mean() > 0.95 and rec["added_outside_px"] > 0
+    assert not garment[floor].any()
+    bare_rgb = render4([], seed=7)
+    hole = dq.unpasted_cloth(gen, garment & ~tail, bare_rgb, BARE4, region, STUDIO, rec["mannequin"])
+    assert hole["frac"] > dq.STILL_QA_THRESHOLDS["max_unpasted_frac"] and hole["px"] >= 0.9 * (tail & BARE4).sum()  # on our body only
+    ok = dq.unpasted_cloth(gen, garment, bare_rgb, BARE4, region, STUDIO, rec["mannequin"])
+    assert ok["px"] == 0
+    # The QA lists it as a TYPE failure (a notch the video would carry), never overridden.
+    q = dq.still_qa(garment & ~tail, BARE4 | garment, BARE4, TOP4, region, kind="top", unpasted=hole)
+    assert any(f.startswith("garment cut by the composite") for f in q["type_failures"]), q["failures"]
 
 
 def test_pick_engine_prefers_a_candidate_without_a_type_failure():
@@ -372,10 +430,18 @@ def test_pick_engine_prefers_a_candidate_without_a_type_failure():
 def test_stage1_app_uses_the_run15_fixes():
     with open(os.path.join(MODAL_DIR, "stage1_dress.py"), encoding="utf-8") as f:
         src = f.read()
-    for needle in ("dq.clean_source_mask(smask_sam)", "dq.still_garment_mask(gen_np, chosen_mask, bare_mask, proxy_q, region)",
+    for needle in ("dq.clean_source_mask(smask_sam)", "dq.still_garment_mask(gen_np, chosen_mask, bare_mask, proxy_q, region, bg=bg)", "dq.unpasted_cloth(", "unpasted=unpasted",
                    "open_crotch=crotch_gap", "keep_visible=crotch_gap", "dq.engine_target(", "dq.view_agreement(", "dq.apply_view_agreement(",
                    "dq.still_qa(garment, fg, bare_mask, proxy_q, region",
                    "dq.conform_to_proxy(gen_np, garment, proxy_q, bare_mask, region, kind=kind)", "_conformed.png"):
         assert needle in src, needle
-    assert dq.STAGE1B_QA_VERSION == "stage1b-qa-0.8.0"
+    assert dq.STAGE1B_QA_VERSION == "stage1b-qa-0.9.0"
     json.dumps(dq.VIEW_THRESHOLDS)
+
+
+def test_rescore_rebuilds_the_app_path_only_for_jobs_before_0_8_0():
+    assert dq._version_at_least("stage1b-qa-0.8.0", (0, 8, 0)) and dq._version_at_least("stage1b-qa-0.10.1", (0, 8, 0))
+    assert not dq._version_at_least("stage1b-qa-0.7.0", (0, 8, 0)) and not dq._version_at_least(None, (0, 8, 0))
+    assert not dq._version_at_least("garbage", (0, 8, 0))
+    with pytest.raises(ValueError):
+        dq.rescore_job("/nonexistent", {"stage1b": {}}, path="both")

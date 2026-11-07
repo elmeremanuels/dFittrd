@@ -492,10 +492,10 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
                     chosen_mask = np.frombuffer(bytes(gb), np.uint8).reshape(H, W).astype(bool) & region
                     # The mask the composite pastes: the chosen mask plus what is not our grey mannequin inside the proxy
                     # (run 15's blouse: the difference mask lost the print's cream ground, the proxy's own beige).
-                    garment, c["composite_mask"] = dq.still_garment_mask(gen_np, chosen_mask, bare_mask, proxy_q, region)
+                    garment, c["composite_mask"] = dq.still_garment_mask(gen_np, chosen_mask, bare_mask, proxy_q, region, bg=bg)
                     # Skirt and dress: the hips widened to the proxy's (FASHN redraws a slimmer body under its grey box and
                     # our hips showed beside run 15's skirt). The raw output above stays as drawn; the conformed still is
-                    # what the composite, the QA and the record use (stage1b-qa-0.8.0).
+                    # what the composite, the QA and the record use (stage1b-qa-0.8.0; trousers above the crotch since 0.9.0).
                     conf_np, garment, c["conform"] = dq.conform_to_proxy(gen_np, garment, proxy_q, bare_mask, region, kind=kind)
                     if c["conform"]["applied"]:
                         gen_np = conf_np
@@ -503,6 +503,9 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
                         conf_rel = f"{lib.STAGE1B_DIR}/candidates/{name}_{eng}_conformed.png"
                         gen.save(os.path.join(job, conf_rel))
                         c["conformed"] = conf_rel
+                    # Cloth the engine drew on our body that the composite would not paste (a notch; stage1b-qa-0.9.0).
+                    cm = c["composite_mask"]
+                    unpasted = dq.unpasted_cloth(gen_np, garment, bare_np, bare_mask, region, bg, None if cm["ambiguous_with_mannequin"] else cm["mannequin"])
                     # The same garment NOT clipped to the region: QA's inside fraction and cut share are measured on
                     # it (on `garment` they are 1.0 and 0 by construction), so a sleeve the composite would chop fails.
                     garment_full = dq.unclipped_garment(gen_np, target_np, region, bg, ring_px=region_rec["sleeve_band_px"] or region_rec["margin_px"],
@@ -515,7 +518,7 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
                     # Print fidelity: the candidate's garment against the shop photo's (palette and print); a failure is never picked.
                     fid = dq.print_fidelity(gen_np, garment, np.asarray(s["image"]), s["mask"]) if garment.any() else None
                     qa = dq.still_qa(garment, fg, bare_mask, proxy_q, region, kind=kind, mannequin_mae=mae, residue=residue, garment_full=garment_full,
-                                     sleeve_band_px=region_rec["sleeve_band_px"], fidelity=fid, rgb=gen_np, bare_rgb=bare_np)
+                                     sleeve_band_px=region_rec["sleeve_band_px"], fidelity=fid, rgb=gen_np, bare_rgb=bare_np, unpasted=unpasted)
                     c["candidate_colour"] = dq.garment_colour(gen_np, garment)
                     g_b = garment.astype(np.uint8).tobytes()
                     v1 = lib.alignment_qa(g_b, fg_b, bare_mask.astype(np.uint8).tobytes(), W, H, v1_margin,

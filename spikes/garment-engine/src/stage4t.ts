@@ -253,6 +253,26 @@ export interface Stage4tInputs {
   previews?: boolean;
   mannequin?: Mannequin;
   log?: (msg: string) => void;
+  /**
+   * Fit and bake from these frames only (the predicted route, docs/PREDICTION-ENGINE.md §4.5: the
+   * stage 1b front and back stills are frames 0 and N/2), instead of every frame but the holdout. The
+   * holdout stays the turntable's (index mod 5 = 2), so the scores compare with a full fit. With at
+   * most `TWO_VIEW_MAX` views the fit takes its depth from the template (`depthPrior: 'template'`)
+   * unless `fit.depthPrior` says otherwise.
+   */
+  views?: readonly number[];
+}
+
+/** Up to this many fitting views, `views` fits with the template's depth (front and back cannot carve depth). */
+export const TWO_VIEW_MAX = 4;
+
+/** Train and holdout frames: every frame but index mod 5 = 2, or only `views` (holdout unchanged, minus `views`). */
+export function stage4tSplit(frames: number, views?: readonly number[]): { train: number[]; holdout: number[]; rule: string } {
+  const split = splitFrames(frames);
+  if (!views) return { ...split, rule: 'frame index mod 5 = 2 is held out (not used by the fit or the bake)' };
+  for (const v of views) if (!Number.isInteger(v) || v < 0 || v >= frames) throw new Error(`stage 4t: view ${v} is not a frame (0..${frames - 1})`);
+  const train = [...new Set(views)].sort((a, b) => a - b);
+  return { train, holdout: split.holdout.filter((v) => !train.includes(v)), rule: `fitted and baked from frames ${train.join(', ')} only; frame index mod 5 = 2 is held out (the other frames are unused)` };
 }
 
 const sha = (b: Uint8Array): string => createHash('sha256').update(b).digest('hex');
@@ -277,12 +297,13 @@ export function runStage4t(o: Stage4tInputs): Stage4tResult {
   }
   if (!proxy) proxyLabel = 'none (mannequin + 1.5 cm)';
   const views = loadJobViews(o.dir, o.source);
-  const { train, holdout } = splitFrames(views.cameras.length);
+  const { train, holdout, rule } = stage4tSplit(views.cameras.length, o.views);
+  const depthPrior = o.fit?.depthPrior ?? (o.views && train.length <= TWO_VIEW_MAX ? 'template' : 'hull');
   lap('read');
   log(`stage 4t: ${views.cameras.length} views (${train.length} train, ${holdout.length} holdout), proxy ${proxyLabel}`);
   const sdf = buildBodySdf(body);
   lap('sdf');
-  const fit = fitTemplate({ mannequin: m, body, sdf, proxy, views: { cameras: views.cameras, masks: views.masks, train, holdout, frames: views.frames, ...(views.control ? { control: views.control } : {}) }, options: { category: o.category, ...o.fit } });
+  const fit = fitTemplate({ mannequin: m, body, sdf, proxy, views: { cameras: views.cameras, masks: views.masks, train, holdout, frames: views.frames, ...(views.control ? { control: views.control } : {}) }, options: { category: o.category, ...o.fit, depthPrior } });
   lap('fit');
   log(`stage 4t: fitted ${fit.mesh.indices.length / 3} triangles, ${fit.report.iterations} sweeps, converged ${fit.report.converged}`);
   const ious = viewIous(fit.mesh, body, views, train);
@@ -356,7 +377,7 @@ export function runStage4t(o: Stage4tInputs): Stage4tResult {
     version: STAGE4T_VERSION,
     source: o.source,
     inputs: { cameras: 'cameras_opencv.json', maskDir: views.maskDir, framesDir: views.framesDir, controlDir: views.controlDir, proxy: proxyLabel, mannequinSha256: sha(bodyBytes), masksSha256: masksSha.digest('hex') },
-    split: { train: train.length, holdout: holdout.length, rule: 'frame index mod 5 = 2 is held out (not used by the fit or the bake)' },
+    split: { train: train.length, holdout: holdout.length, rule },
     fit: fit.report,
     iou: { train: summarise(ious, 'train'), holdout: summarise(ious, 'holdout'), perView: ious },
     insideBody: { sdfInside, sdfBelowClearance: sdfBelow, exact: { minCm: Math.round(exactMin * 1000) / 1000, belowClearance: exactBelow, below3mm: exactBelow3, method: 'unsigned point-to-triangle distance to mannequin.glb (exact), inside/outside from the SDF sign' }, vertices: nv, share: r4(sdfInside / nv), analytic: clothInsideBody(m, fit.mesh) },

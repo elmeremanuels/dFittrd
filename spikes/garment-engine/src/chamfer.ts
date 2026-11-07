@@ -68,13 +68,16 @@ export function nearestDistances(from: Float64Array, to: Float64Array, cellCm = 
     let best = Infinity;
     for (let r = 0; r < 64; r++) {
       // Search shells of growing radius until the best distance is certainly inside the searched cube.
-      for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) for (let dz = -r; dz <= r; dz++) {
-        if (Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz)) !== r) continue;
-        const list = grid.get(key(cx + dx, cy + dy, cz + dz));
-        if (!list) continue;
-        for (const j of list) {
-          const d = (to[3 * j]! - x) ** 2 + (to[3 * j + 1]! - y) ** 2 + (to[3 * j + 2]! - z) ** 2;
-          if (d < best) best = d;
+      // Only the shell's cells (O(r²) per shell, not the whole cube): far-apart surfaces stay cheap.
+      for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
+        const onFace = Math.abs(dx) === r || Math.abs(dy) === r;
+        for (let dz = -r; dz <= r; dz += onFace || r === 0 ? 1 : 2 * r) {
+          const list = grid.get(key(cx + dx, cy + dy, cz + dz));
+          if (!list) continue;
+          for (const j of list) {
+            const d = (to[3 * j]! - x) ** 2 + (to[3 * j + 1]! - y) ** 2 + (to[3 * j + 2]! - z) ** 2;
+            if (d < best) best = d;
+          }
         }
       }
       if (best <= (r * cellCm) ** 2) break;
@@ -100,11 +103,12 @@ const stats = (d: Float64Array): { mean: number; p95: number; max: number } => {
   return { mean: r(mean), p95: r(s[Math.floor(0.95 * (s.length - 1))]!), max: r(s[s.length - 1]!) };
 };
 
-export function chamfer(recon: Pick<Mesh, 'positions' | 'indices'>, truth: Pick<Mesh, 'positions' | 'indices'>, samples = 50000, seed = 0): ChamferReport {
+/** `cellCm`: the nearest-neighbour grid's cell (the result is exact for any cell; a coarser one is faster when the surfaces lie far apart). */
+export function chamfer(recon: Pick<Mesh, 'positions' | 'indices'>, truth: Pick<Mesh, 'positions' | 'indices'>, samples = 50000, seed = 0, cellCm = 1): ChamferReport {
   const a = samplePoints(recon, samples, seed);
   const b = samplePoints(truth, samples, seed + 1);
-  const d1 = nearestDistances(a, b);
-  const d2 = nearestDistances(b, a);
+  const d1 = nearestDistances(a, b, cellCm);
+  const d2 = nearestDistances(b, a, cellCm);
   const f = (t: number): number => {
     let p = 0, r = 0;
     for (const x of d1) if (x < t) p++;
@@ -138,11 +142,12 @@ export function regionChamfer(
   regionOf: (x: number, y: number, z: number) => string,
   samples = 50000,
   seed = 0,
+  cellCm = 1,
 ): RegionChamfer[] {
   const a = samplePoints(recon, samples, seed);
   const b = samplePoints(truth, samples, seed + 1);
-  const d1 = nearestDistances(a, b);
-  const d2 = nearestDistances(b, a);
+  const d1 = nearestDistances(a, b, cellCm);
+  const d2 = nearestDistances(b, a, cellCm);
   const acc = new Map(regions.map((r) => [r, { s1: 0, n1: 0, s2: 0, n2: 0 }]));
   const add = (pts: Float64Array, d: Float64Array, first: boolean): void => {
     for (let i = 0; i < d.length; i++) {

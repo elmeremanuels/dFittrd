@@ -80,13 +80,28 @@ def test_prompt_guard_refuses_title_brand_quotes_and_missing_negatives(manifest)
 def test_prompt_guard_wants_the_wrong_garment_in_the_negative(manifest):
     dress = copy.deepcopy(manifest)
     dress["prompt"]["kind"] = "dress"
+    # The fixture is a top, whose negative bans trousers too since neutral-prompt-0.3.0: take them out.
+    dress["prompt"]["negative"] = dress["prompt"]["negative"].replace(", trousers", "")
     assert "negative prompt lacks 'trousers'" in lib.prompt_problems(dress)
     dress["prompt"]["negative"] += ", trousers"
     assert lib.prompt_problems(dress) == []
     trousers = copy.deepcopy(manifest)
     trousers["prompt"]["kind"] = "trousers"
     trousers["prompt"]["negative"] = "text, letters, words, watermark, logo, trousers"
-    assert {"negative prompt lacks 'dress'", "negative prompt lacks 'skirt'"} <= set(lib.prompt_problems(trousers))
+    assert {"negative prompt lacks 'dress'", "negative prompt lacks 'skirt'", "negative prompt lacks 'bodice'"} <= set(lib.prompt_problems(trousers))
+    skirt = copy.deepcopy(manifest)
+    skirt["prompt"]["kind"] = "skirt"
+    skirt["prompt"]["negative"] = "text, letters, words, watermark, logo, trousers"
+    assert {"negative prompt lacks 'dress'", "negative prompt lacks 'bodice'"} <= set(lib.prompt_problems(skirt))
+    cardi = copy.deepcopy(manifest)
+    cardi["prompt"]["kind"] = "outerwear"
+    cardi["control"]["proxy"]["front_opening"] = {"kind": "v"}
+    cardi["control"]["proxy"]["kind"] = "outerwear"
+    assert "negative prompt lacks 'closed pullover'" in lib.prompt_problems(cardi)
+    cardi["prompt"]["negative"] += ", closed pullover"
+    assert lib.prompt_problems(cardi) == []
+    neg = lib.qwen_dress_prompt(cardi, "front", False)[1]
+    assert "closed pullover" in neg
 
 
 def test_a_manifest_without_prompts_must_be_re_exported(manifest):

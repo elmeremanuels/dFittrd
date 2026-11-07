@@ -529,9 +529,18 @@ FASHN_IDENTITY_LABELS = ["face", "hair", "jewelry", "bag", "glasses", "hat"]
 FASHN_GARMENT_LABEL = {"one-pieces": "dress", "tops": "top", "bottoms": "skirt"}
 
 
-def fashn_label_map(garment: Sequence[int], tryon_cat: str) -> bytearray:
+def fashn_garment_label(tryon_cat: str, kind: str | None = None) -> str:
+    """The FASHN label our garment pixels and the edit region get: the category's, except `pants` for a trousers
+    proxy (bottoms default to `skirt`; a palazzo labelled skirt is still a lower-body garment to FASHN, but the label
+    should not say skirt where the control and the proxy say two legs)."""
+    if tryon_cat == "bottoms" and kind == "trousers":
+        return "pants"
+    return FASHN_GARMENT_LABEL[tryon_cat]
+
+
+def fashn_label_map(garment: Sequence[int], tryon_cat: str, kind: str | None = None) -> bytearray:
     """Our garment mask as a FASHN label map (0 = background, garment = the category's label id)."""
-    label = FASHN_LABEL_IDS[FASHN_GARMENT_LABEL[tryon_cat]]
+    label = FASHN_LABEL_IDS[fashn_garment_label(tryon_cat, kind)]
     return bytearray(label if v else 0 for v in garment)
 # Garment pixels may extend past the bare silhouette (ease, flare, sleeves): margin as a fraction of
 # the frame height. 0.08 of 832 px is about 16 cm at the turntable distance. Initial values, not tuned.
@@ -580,9 +589,11 @@ QWEN_DRESS_PROMPTS = {
 QWEN_NEGATIVE = "person, human, face, hands, skin, hair, extra limbs, changed pose, different camera angle, cropped, text, letters, watermark, logo, blurry, busy background, beige placeholder"
 QWEN_KIND_NEGATIVE = {
     "dress": "trousers, pants, shorts, romper, jumpsuit, two separate legs of fabric",
-    "skirt": "trousers, pants, shorts, two separate legs of fabric",
-    "trousers": "dress, skirt, gown",
+    "skirt": "trousers, pants, shorts, two separate legs of fabric, dress, bodice, top",
+    "trousers": "dress, skirt, gown, one closed skirt between the legs, bodice, top",
 }
+# Outerwear whose proxy has a front opening (control-proxy-0.3.0): the closed garment it must not turn into.
+QWEN_OPEN_FRONT_NEGATIVE = "closed pullover, jumper closed at the front, high round neckline"
 
 
 # The exporter's colour came from a word of the product name before neutral-prompt-0.2.0 (export 0.5.0): run 13's
@@ -626,6 +637,8 @@ def qwen_dress_prompt(m: Mapping[str, Any], view: str, invented: bool, colour: M
             raise ValueError(f"stage 1b instruction contains the {what} {value!r}")
     kind = ((m.get("control") or {}).get("proxy") or {}).get("kind") or ((m.get("stage1b") or {}).get("target") or {}).get("proxy_kind")
     neg = QWEN_NEGATIVE + (", " + QWEN_KIND_NEGATIVE[kind] if kind in QWEN_KIND_NEGATIVE else "")
+    if kind == "outerwear" and ((m.get("control") or {}).get("proxy") or {}).get("front_opening"):
+        neg += ", " + QWEN_OPEN_FRONT_NEGATIVE
     # "solid colour, plain fabric" pushes Qwen towards a print: only when the chromaticity rule AND the cut-out's edge
     # density both say "printed" (a plain dark garment once read as a print from noise; colour-0.2.0 records the edges).
     if (colour or {}).get("kind") == "print" and (colour or {}).get("printed_by_edges") is True:
@@ -1011,7 +1024,9 @@ CONTROL_MODES = ("proxy", "bare")
 # Always in the negative prompt (the title was rendered as text), matched as whole words.
 PROMPT_REQUIRED_NEGATIVE = ("text", "letters", "words", "watermark", "logo")
 # Per proxy kind: the garment the video must not turn into.
-PROMPT_KIND_NEGATIVE = {"dress": ("trousers",), "skirt": ("trousers",), "trousers": ("dress", "skirt")}
+PROMPT_KIND_NEGATIVE = {"dress": ("trousers",), "skirt": ("trousers", "dress", "bodice"), "trousers": ("dress", "skirt", "bodice")}
+# Outerwear with a front opening (manifest control.proxy.front_opening, export 0.6.0): it must stay open.
+PROMPT_OPEN_FRONT_NEGATIVE = ("closed pullover",)
 
 # Per-frame consistency thresholds. INITIAL VALUES, not tuned on any real output: set them from the
 # first run with the proxy control. Computed on masks subsampled by CONSISTENCY_STRIDE.
@@ -1085,7 +1100,8 @@ def prompt_problems(m: Mapping[str, Any]) -> list[str]:
             f"prompt colour {colour['name']!r} was taken from a word of the product name (a print or collection name: run 13's "
             "\"Azure Palm\" cream print became blue); re-export with phase0-export-0.5.0 or later"
         )
-    for term in PROMPT_REQUIRED_NEGATIVE + PROMPT_KIND_NEGATIVE.get(p.get("kind", ""), ()):
+    opening = ((m.get("control") or {}).get("proxy") or {}).get("front_opening") if isinstance(m.get("control"), Mapping) else None
+    for term in PROMPT_REQUIRED_NEGATIVE + PROMPT_KIND_NEGATIVE.get(p.get("kind", ""), ()) + (PROMPT_OPEN_FRONT_NEGATIVE if opening else ()):
         if not _has_word(p["negative"], term):
             problems.append(f"negative prompt lacks {term!r}")
     return problems

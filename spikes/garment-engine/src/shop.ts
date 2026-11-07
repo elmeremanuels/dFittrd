@@ -26,6 +26,7 @@ import {
   type LengthCm,
   type SizeRow,
 } from '@curtain/schema';
+import { garmentFeatures, type GarmentFeatures } from './features';
 
 // ---------------------------------------------------------------------------
 // Shopify products.json (the public storefront endpoint), the fields we read
@@ -369,6 +370,8 @@ export interface ShopPayloadResult {
   /** Where each value came from. */
   evidence: Record<string, string>;
   warnings: string[];
+  /** Sleeve style, front closure and neckline from the description's own words (`features.ts`); beside the payload, which has no field for them. */
+  features: GarmentFeatures;
 }
 
 function roundHalf(v: number): number {
@@ -548,6 +551,7 @@ export function buildShopPayload(p: ShopifyProduct): ShopPayloadResult {
     fullSchemaIssues,
     evidence,
     warnings,
+    features: garmentFeatures(text, category),
   };
   if (baseSize) out.baseSize = baseSize;
   return out;

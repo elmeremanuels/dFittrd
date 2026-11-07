@@ -335,7 +335,7 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
         meta: dict = {"steps": steps_for[eng], "target": "proxy-dressed render"}
         if eng == "fashn":
             n_pose, n_agn = len(poses), len(agnostic)
-            garment_labels = np.frombuffer(bytes(lib.fashn_label_map(s["mask"].astype(np.uint8).tobytes(), tryon_cat)), np.uint8).reshape(s["mask"].shape)
+            garment_labels = np.frombuffer(bytes(lib.fashn_label_map(s["mask"].astype(np.uint8).tobytes(), tryon_cat, kind)), np.uint8).reshape(s["mask"].shape)
             parser.queue = [labels, garment_labels]
             result = fashn_pipe(
                 person_image=target,
@@ -407,11 +407,11 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
                     raise RuntimeError(f"{rel} is {img.size}, expected {(W, H)}")
             bare_mask = read_mask(v["bare_mask"])
             proxy = read_mask(v["proxy_mask"])
-            region, region_rec = dq.edit_region(proxy, bare_mask, tryon_cat)
+            region, region_rec = dq.edit_region(proxy, bare_mask, tryon_cat, keep_open=kind == "outerwear")
             rec["edit_region"] = {**region_rec, "mask": save_mask(region, f"{lib.STAGE1B_DIR}/edit_region_{name}.png")}
             # FASHN fills its inpaint area with grey 127, close to our mannequin's own grey: the record says how close.
             rec["mannequin_grey"] = dq.grey_collision(np.asarray(bare), bare_mask)
-            person_labels = dq.fashn_person_labels(region, bare_mask, proxy, lib.FASHN_LABEL_IDS, lib.FASHN_GARMENT_LABEL[tryon_cat])
+            person_labels = dq.fashn_person_labels(region, bare_mask, proxy, lib.FASHN_LABEL_IDS, lib.fashn_garment_label(tryon_cat, kind))
 
             # 1. The shop photo for this view: garment box and mask (the back photo for the back; the front
             #    photo for an invented back).

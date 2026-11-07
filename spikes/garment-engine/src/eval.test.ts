@@ -70,15 +70,24 @@ describe('evaluateGarment: what fails', () => {
     expect(r.agreement.missing).toEqual(['chest']);
   });
 
-  it('cannot close an open front: a cardigan cut open at the centre front has no chest loop', () => {
+  it('bridges an outerwear front opening as the fronts laid closed, but no other garment\'s and no opening at the back', () => {
     const shop = shopPayload('woodstock-wanderer-knit-cardi');
     const open = cropMesh(reconstructedDress(), (x, y, z) => !(z > 0 && Math.abs(x) < 3) && y > m.morphHeights.hip - 5);
     const r = evaluateGarment({ productId: shop.handle, payload: shop.payload, baseSize: 'S-M', mesh: open, mannequin: m, source: src });
     expect(r.category).toBe('outerwear');
-    // The tape bridges holes up to 4 cm, never a 6 cm front opening. Waist and hip are not critical (oversized block) but get no girth either.
-    expect(r.agreement.missing).toEqual(['chest']);
-    expect(r.rows.find((x) => x.anchor === 'waist')!.measuredCm).toBeNull();
-    expect(r.agreement.pass).toBe(false);
+    // A cardigan's 6 cm front opening is bridged at the front (a flat-lay chest lays the fronts closed) and says so.
+    expect(r.agreement.missing).toEqual([]);
+    const chest = r.rows.find((x) => x.anchor === 'chest')!;
+    expect(chest.measuredCm).not.toBeNull();
+    expect(chest.note).toMatch(/front opening [\d.]+ cm bridged/);
+    // The same cut on a top is still no girth: the tape bridges holes up to 4 cm, never a 6 cm opening, outside outerwear.
+    const top = shopPayload('rosewater-blouse');
+    const rt = evaluateGarment({ productId: top.handle, payload: top.payload, baseSize: '12', mesh: open, mannequin: m, source: src });
+    expect(rt.agreement.missing).toEqual(['chest']);
+    expect(rt.agreement.pass).toBe(false);
+    // And a cardigan cut open at the BACK is a hole, not a front opening.
+    const back = cropMesh(reconstructedDress(), (x, y, z) => !(z < 0 && Math.abs(x) < 3) && y > m.morphHeights.hip - 5);
+    expect(evaluateGarment({ productId: shop.handle, payload: shop.payload, baseSize: 'S-M', mesh: back, mannequin: m, source: src }).agreement.missing).toEqual(['chest']);
   });
 });
 

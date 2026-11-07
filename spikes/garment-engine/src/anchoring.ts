@@ -32,6 +32,8 @@ export interface RingMeasurement {
 export interface MeasureOptions {
   girth?: 'loop' | 'tape';
   body?: Mesh;
+  /** `girth: 'tape'`: bridge one front opening up to this chord (cm), the fronts laid closed (outerwear; `TapeOptions.frontOpeningCm`). */
+  frontOpeningCm?: number;
 }
 
 export interface LengthMeasurement {
@@ -78,10 +80,10 @@ export function measureRing(mesh: Mesh, ring: RingFrame, opts: MeasureOptions = 
       const fused = closedLoop !== null && bodyLoops.some((b) => b !== own && b.points.length > 2 && loopContains(closedLoop, centroid(b), ring.u, ring.v));
       if (own && (closedLoop === null || fused)) pts = pointsOfPart(dense, bodyLoops, own);
     }
-    const t = tapeGirth(pts, centre, ring.u, ring.v, {}, all);
+    const t = tapeGirth(pts, centre, ring.u, ring.v, opts.frontOpeningCm ? { frontOpeningCm: opts.frontOpeningCm } : {}, all);
     if (!t) return null;
     loop = t.loop;
-    tape = { coverage: t.coverage, maxGapDeg: t.maxGapDeg, maxGapCm: t.maxGapCm, points: t.points, loopLengthCm: closedLoop ? loopLength(closedLoop) : null };
+    tape = { coverage: t.coverage, maxGapDeg: t.maxGapDeg, maxGapCm: t.maxGapCm, frontGapCm: t.frontGapCm, points: t.points, loopLengthCm: closedLoop ? loopLength(closedLoop) : null };
   }
   if (!loop) return null;
   let offsetCm: RingMeasurement['offsetCm'] = null;

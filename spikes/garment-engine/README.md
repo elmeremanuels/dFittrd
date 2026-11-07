@@ -80,6 +80,31 @@ Result (7 Nov 2026): synthetic shirt dress Chamfer 0.44 cm to the truth (2DGS 1.
 
 Garment length: `src/garmentLength.ts` measures shoulder to hem four ways (vertical drop from the HPS, flat-lay along the front from the HPS, back length, shoulder-point drop). A shop's printed length is read as flat-lay; the spike's synthetic garment is built as a vertical drop (`printedLength` in `evaluateGarment`). Proxy 0.2.0 ends its hem where its own front is the printed length long.
 
+## Other categories: blouse, trousers, skirt, cardigan (7 Nov 2026, before the next GPU run)
+
+One product per Bohohippychic category (`rosewater-blouse`, `rosewater-palazzo-pants`, `crimson-wildflower-maxi-skirt`, `woodstock-wanderer-knit-cardi`, next to the azure dress) checked through every non-GPU step; what was missing is now built and tested:
+
+- **Garment features** (`src/features.ts`, `features` beside the payload in `products.json`, hashed into the job): sleeve style, front closure and neckline from the description's own words ("airy half sleeves", "deep V neckline with button front"). The payload has no field for them.
+- **Proxy 0.3.0** (`src/proxy.ts`): a sleeve style gives sleeve shells where no sleeve length is printed (the blouse had bare arms in its control, and stage 1b's fixed sleeve band would have cut its sleeves); an outerwear front opening (open front, V, deep V) is pushed into the mannequin so the control and the stage 1b target show the mannequin between the fronts (the shell stays closed for stage 4t's signed distance). Products without these features get byte-identical geometry to 0.2.0 (checked for the dress, the trousers and the skirt). Trousers (seat + two legs with a gap) and the skirt (waist to hem, no bodice) were already in 0.2.0.
+- **Prompts** (`neutral-prompt-0.3.0`): "a half-sleeved blouse", "with a deep V neckline open to the underbust, buttoned below it"; skirt and trousers are "worn at the waist on a bare torso" and ban dress, bodice and top; trousers also ban "one closed skirt between the legs"; an open front bans a closed pullover. The Modal prompt guard (`phase0_lib.prompt_problems`) requires these terms.
+- **Stage 1b QA 0.6.0** (`modal/phase0_dress.py`): trousers fail when the garment closes the axis between the proxy's legs in more than 25 % of the leg rows; a skirt or trousers fails with more than 5 % of the garment above the waistband; an outerwear front opening is kept out of FASHN's edit region and fails when more than half of it is covered. FASHN labels a trouser garment `pants`. Thresholds provisional (no generated still of these kinds seen yet); the proxy-dressed renders of all five products pass every check.
+- **Export 0.6.0**: the synthetic garment (stage 4 truth) exists for every kind; skirt, trousers and outerwear use the proxy's own surfaces with the caps and the front opening removed (`syntheticGarmentFromProxy`). `export:phase0 -- --shop <shop> --product <handle> --synthetic-photos` is a dry run without raw photos and stage 1b (written to `out/phase0-synthetic/`).
+- **Stage 4t 0.3.0** (`src/templateFit.ts`): trousers are fitted as a seat plus one tube per leg (`legs`, from the manifest's proxy kind). One tube round both legs, as a skirt is fitted, has no inner leg at all: the trousers became a skirt (test). `stage4t -- --template-size <size>` fits from the proxy of another size.
+- **Lengths per type** (`src/garmentLength.ts` `bottomLengths`, used by `evaluateGarment`): trousers outseam (top edge down the side seam) and inseam (crotch down the inner leg), skirt waist to hem (centre front), each flat-lay or as a drop; tops keep the HPS definitions. **Outerwear chest:** the tape bridges one front opening up to 30 cm, as a flat-lay chest lays the fronts closed (any other garment still gets no girth across an opening wider than 4 cm).
+
+Measured on this 4-core machine. Real jobs (shop photos from `raw/`, stage 1b inputs): 1,543 files, 16.2–18.1 MB, 23–25 s each. Stage 4t on each product's synthetic frames (160 views, 128 train, 32 holdout, fitted from `control/proxy.glb`):
+
+| Product | Triangles | Chamfer to the truth | Holdout IoU visible / silhouette | Inside the mannequin | Length on the fit (truth) | Chest/waist before calibration | Time |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| blouse (top, half sleeves) | 10,460 | 0.481 cm | 0.977 / 0.952 | 0 of 5,394 | HPS flat-lay 72.54 (73.01) | chest 102.16 / chart 103 | 83 s |
+| palazzo (trousers, 2 legs) | 9,600 | 0.874 cm | 0.973 / 0.960 | 0 of 4,940 | outseam 102.82 (103.58), inseam 73.79 (71.50) | waist 81.12 / 79.5, hip 120.96 / 118 | 88 s |
+| maxi skirt | 12,496 | 0.290 cm | 0.987 / 0.976 | 0 of 6,336 | waist to hem 94.46 (95.12) | waist 81.00 / 79.5 | 75 s |
+| cardigan (deep V, sleeves) | 10,023 | 0.520 cm | 0.972 / 0.955 | 0 of 5,181 | HPS flat-lay 60.50 (62.68) | chest 102.88 / 102 (V bridged) | 81 s |
+
+Fitted instead from the proxy at another size (blouse 16, palazzo 8, skirt 16, cardigan M-L), every product lands on the same surface (identical Chamfer and IoU; the palazzo's template moved 1.57 cm on average instead of 0.51). The truths are the products' own proxies (opened), so these numbers prove the pipeline handles each garment type, not that a generated video will be fitted this well. The palazzo hip (120.96 against 118) is the proxy's seat, which is widened to hold the wide legs; the truth has it too.
+
+Not covered here: the viewer (`viewer/`) has only been checked on dresses, tops and a skirt cut from the dress; trousers with two leg tubes and an open cardigan have never been draped in it. The stage 2 consistency metric checks merged legs (trousers) and a gap between the legs (dress, skirt), not a closed front (outerwear).
+
 ## Cut families: build once per cut, swap the print
 
 Shops sell one cut in many colours and prints. The full pipeline (stage 1b → 2 → 4) runs once per **cut family**, for its reference member; every other member only gets **stage 4b**, a new texture projected from its own front and back stills onto the reference mesh.

@@ -166,7 +166,7 @@ describe('control mode (proxy | bare)', () => {
     expect(m.control.proxy_mask_dir).toBe('control/proxy_mask');
     expect(m.motion.proxy_mask_dir).toBe('motion/proxy_mask');
     expect(m.clips.map((c) => c.proxy_mask_dir)).toEqual(['control/proxy_mask', 'control/proxy_mask', 'motion/proxy_mask']);
-    expect(m.hash_inputs.control).toEqual({ mode: 'proxy', proxy: expect.objectContaining({ kind: 'top', version: 'control-proxy-0.2.0' }) });
+    expect(m.hash_inputs.control).toEqual({ mode: 'proxy', proxy: expect.objectContaining({ kind: 'top', version: 'control-proxy-0.3.0' }) });
     // The proxy geometry is hashed, not only its spec: a mesh change without a PROXY_VERSION bump
     // still changes input_hash and the job id (cached stage 2 outputs are keyed by the job id).
     expect((m.hash_inputs.control as { proxy: { glb_sha256: string } }).proxy.glb_sha256).toBe(m.control.proxy?.glb_sha256);

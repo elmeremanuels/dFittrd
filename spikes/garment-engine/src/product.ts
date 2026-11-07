@@ -8,6 +8,7 @@ import { FIT_POINT_TO_ANCHOR, type AnchorBreadth, type AnchorRing } from '@curta
 import { FABRIC_LIBRARY_VERSION, duplicateSizeLabels, isFabricConstructionId, lookupFabricId, mockGarment, resolveFabric, sizeLabelKey, type GarmentPayload } from '@curtain/schema';
 import type { Mannequin } from '@curtain/mannequin';
 import type { GarmentSpec, SpikeCategory } from './garment';
+import { parseFeatures, type GarmentFeatures, type SleeveStyle } from './features';
 import type { ProxyKind, ProxySpec } from './proxy';
 
 /** The two Phase 0 spike products from the schema fixtures: a long-sleeved shirt dress (body chart) and a T-shirt (garment chart). */
@@ -185,6 +186,8 @@ export interface ResolvedProduct {
   payload: GarmentPayload;
   baseSize: string;
   source: ProductSource;
+  /** Sleeve style, front closure, neckline from the shop description (`features.ts`); none for the spike fixtures. */
+  features?: GarmentFeatures;
 }
 
 export function isSpikeProductId(id: string): id is (typeof SPIKE_PRODUCT_IDS)[number] {
@@ -197,7 +200,7 @@ export function resolveSpikeProduct(id: string, baseSize?: string): ResolvedProd
 }
 
 interface ShopProductsFile {
-  products: { handle: string; productType: string; payload: GarmentPayload; baseSize?: string; selection?: { runnersUp?: { handle: string }[] } }[];
+  products: { handle: string; productType: string; payload: GarmentPayload; baseSize?: string; features?: unknown; selection?: { runnersUp?: { handle: string }[] } }[];
 }
 
 /** A product of a shop's committed `products.json` (the GarmentPayload v1 draft and our base size). */
@@ -214,7 +217,8 @@ export function shopProduct(shop: ShopId, productsJson: unknown, handle: string,
   }
   const size = baseSize ?? entry.baseSize;
   if (!size) throw new Error(`${handle}: products.json gives no base size; pass --base-size`);
-  return { id: handle, payload: entry.payload, baseSize: size, source: { kind: 'shop', shop, handle, product_type: entry.productType, data: `data/${shop}/products.json` } };
+  const features = parseFeatures(entry.features);
+  return { id: handle, payload: entry.payload, baseSize: size, source: { kind: 'shop', shop, handle, product_type: entry.productType, data: `data/${shop}/products.json` }, ...(features ? { features } : {}) };
 }
 
 /** One image of a shop product as classified by hand in `images.json`. */
@@ -315,8 +319,13 @@ export function shopPhotos(shop: ShopId, handle: string, choice: ShopPhotoChoice
  * read "blue" (from "Azure") and painted a solid blue dress, where the garment is a pastel tropical print on cream.
  * The colour is `primaryColorHex` (merchant data) or none; for shop photos stage 1b measures it from the garment
  * cut-out (`phase0_dress.garment_colour`) and puts it in its own instruction.
+ * 0.3.0: the sleeve word comes from the proxy's sleeve style when the product has no sleeve length (a blouse with
+ * "half sleeves" is "half-sleeved", it was named without sleeves), an outerwear front opening is described ("open at
+ * the front", "with a deep V neckline, buttoned below it") and its negative prompt bans a closed pullover; a skirt
+ * or trousers is "worn at the waist on a bare torso" and its negative prompt bans a dress, a bodice and a top (the
+ * lower body must not grow a bodice); trousers also ban culottes drawn as a skirt.
  */
-export const PROMPT_VERSION = 'neutral-prompt-0.2.0';
+export const PROMPT_VERSION = 'neutral-prompt-0.3.0';
 
 /** Basic colour names and their sRGB, for the nearest-colour name of `primaryColorHex`. */
 const BASIC_COLOURS: readonly [string, [number, number, number]][] = [
@@ -375,11 +384,13 @@ export const NEGATIVE_BASE = [
 /** Per kind: the garment the first GPU run drifted into must not appear. */
 export const NEGATIVE_BY_KIND: Readonly<Record<ProxyKind, readonly string[]>> = {
   dress: ['trousers', 'pants', 'shorts', 'jumpsuit', 'two separate legs of fabric'],
-  skirt: ['trousers', 'pants', 'shorts', 'jumpsuit', 'two separate legs of fabric'],
-  trousers: ['dress', 'skirt', 'gown', 'one closed skirt between the legs'],
-  top: ['dress', 'long skirt'],
-  outerwear: ['dress', 'long skirt'],
+  skirt: ['trousers', 'pants', 'shorts', 'jumpsuit', 'two separate legs of fabric', 'dress', 'bodice', 'top', 'shirt'],
+  trousers: ['dress', 'skirt', 'gown', 'one closed skirt between the legs', 'jumpsuit', 'bodice', 'top', 'shirt'],
+  top: ['dress', 'long skirt', 'trousers'],
+  outerwear: ['dress', 'long skirt', 'trousers'],
 };
+/** Outerwear with a front opening: the closed garment it must not turn into. */
+export const NEGATIVE_OPEN_FRONT = ['closed pullover', 'jumper closed at the front', 'sweater', 'high round neckline'] as const;
 
 export interface VideoPrompt {
   version: typeof PROMPT_VERSION;
@@ -403,8 +414,18 @@ function lengthWord(m: Mannequin, kind: ProxyKind, hemY: number): string {
   return 'ankle-length maxi';
 }
 
-function sleeveWord(m: Mannequin, kind: ProxyKind, sleeveCm: number, given: boolean): string {
-  if (kind === 'skirt' || kind === 'trousers' || (!given && kind !== 'outerwear')) return '';
+const STYLE_SLEEVE_WORD: Readonly<Record<SleeveStyle, string>> = {
+  sleeveless: 'sleeveless',
+  short: 'short-sleeved',
+  half: 'half-sleeved',
+  'three-quarter': 'three-quarter-sleeved',
+  long: 'long-sleeved',
+};
+
+function sleeveWord(m: Mannequin, kind: ProxyKind, sleeveCm: number, given: boolean, style: SleeveStyle | null): string {
+  if (kind === 'skirt' || kind === 'trousers') return '';
+  if (!given && style) return STYLE_SLEEVE_WORD[style];
+  if (!given && kind !== 'outerwear') return '';
   if (sleeveCm <= 0) return 'sleeveless';
   if (sleeveCm >= m.morphHeights.wrist - 4) return 'long-sleeved';
   if (sleeveCm >= m.arms.left.upperArmCm - 2) return 'three-quarter-sleeved';
@@ -425,19 +446,26 @@ function fabricWords(mat: MaterialJson): string {
  * only of fixed vocabulary, so neither the product title nor the brand (nor any other shop text) can
  * reach the video model. The negative prompt bans text and logos, and the garment the run drifted into.
  */
-export function videoPrompt(m: Mannequin, p: GarmentPayload, spec: Pick<ProxySpec, 'kind' | 'hemY' | 'sleeveCm'>): VideoPrompt {
+export function videoPrompt(m: Mannequin, p: GarmentPayload, spec: Pick<ProxySpec, 'kind' | 'hemY' | 'sleeveCm'> & Partial<Pick<ProxySpec, 'sleeveStyle' | 'frontOpening'>>): VideoPrompt {
   const kind = spec.kind;
   const colour = promptColour(p);
   const style = STYLE_WORDS[kind].find(([re]) => re.test(`${p.subcategory ?? ''} ${p.patternBlock ?? ''}`))?.[1] ?? KIND_NOUN[kind];
   const given = (p.lengthCm as Partial<Record<string, number>> | undefined)?.sleeve_length !== undefined;
-  const words = [colour.name ?? '', lengthWord(m, kind, spec.hemY), sleeveWord(m, kind, spec.sleeveCm, given), style].filter(Boolean).join(' ');
+  const words = [colour.name ?? '', lengthWord(m, kind, spec.hemY), sleeveWord(m, kind, spec.sleeveCm, given, spec.sleeveStyle ?? null), style].filter(Boolean).join(' ');
+  const opening = spec.frontOpening ?? null;
   const plural = kind === 'trousers' && !/skirt|dress/.test(style);
   const shape =
-    kind === 'dress' || kind === 'skirt'
+    kind === 'dress'
       ? ', one closed skirt that falls from the waist to the hem and covers both legs'
-      : kind === 'trousers'
-        ? ', two separate trouser legs from the hip to the hem'
-        : '';
+      : kind === 'skirt'
+        ? ', worn at the waist on a bare torso, one closed skirt that falls from the waist to the hem and covers both legs'
+        : kind === 'trousers'
+          ? ', worn at the waist on a bare torso, two separate trouser legs from the hip to the hem'
+          : opening?.kind === 'open'
+            ? ', worn open at the front, the mannequin visible between the fronts'
+            : opening
+              ? `, with a ${opening.neckline === 'deep-v' ? 'deep V neckline open to the underbust' : 'V neckline open to the chest'}${opening.buttoned ? ', buttoned below it' : ''}`
+              : '';
   const description = `${plural ? '' : /^[aeiou]/i.test(words) ? 'an ' : 'a '}${words} in a ${fabricWords(materialJson(p))}${shape}`;
   const cap = description.charAt(0).toUpperCase() + description.slice(1);
   return {
@@ -447,6 +475,6 @@ export function videoPrompt(m: Mannequin, p: GarmentPayload, spec: Pick<ProxySpe
     colour,
     turntable: `${cap}, dressed on a plain mid-grey studio mannequin, rotating slowly on a turntable, neutral soft studio light, plain light-grey seamless background, locked camera, sharp fabric detail.`,
     motion: `${cap}, dressed on a plain mid-grey studio mannequin that raises and lowers its arms, turns around and takes a step; the fabric moves naturally; neutral studio light, plain light-grey background, locked camera.`,
-    negative: [...NEGATIVE_BASE, ...NEGATIVE_BY_KIND[kind]].join(', '),
+    negative: [...NEGATIVE_BASE, ...NEGATIVE_BY_KIND[kind], ...(opening ? NEGATIVE_OPEN_FRONT : [])].join(', '),
   };
 }

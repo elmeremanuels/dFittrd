@@ -1,7 +1,11 @@
 /**
  * Stage 4t (template fit + texture bake) on a Phase 0 job dir, CPU:
  *
- *   pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic] [--no-previews]
+ *   pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic] [--no-previews] [--template-size <size>]
+ *
+ * Trousers (the manifest's proxy kind) are fitted with one tube per leg. --template-size fits from the
+ * product's proxy at another chart size instead of control/proxy.glb (a template that is not the garment:
+ * on a synthetic job of a skirt, trousers or outerwear the truth IS the base-size proxy, opened).
  *
  * Writes <job dir>/stage4t/<source>/{garment.glb, texture.jpg, metrics.json, preview/*.png}. The job
  * dir is under out/ (gitignored). `report:bohohippychic` then evaluates stage4t/stage2/garment.glb when
@@ -10,7 +14,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { BASE_SHAPE_ID, bodyShape, buildMannequin } from '@curtain/mannequin';
-import { mockGarment } from '@curtain/schema';
+import { mockGarment, type GarmentPayload } from '@curtain/schema';
+import { parseFeatures } from '../src/features';
 import { buildProxy } from '../src/proxy';
 import { runStage4t, type Stage4tSource } from '../src/stage4t';
 
@@ -21,12 +26,28 @@ const at = args.indexOf('--source');
 const source = (at >= 0 ? args[at + 1] : 'stage2') as Stage4tSource;
 if (source !== 'stage2' && source !== 'synthetic') throw new Error(`--source must be stage2 or synthetic, got ${source}`);
 const jobDir = resolve(dir);
-const manifest = JSON.parse(readFileSync(join(jobDir, 'manifest.json'), 'utf8')) as { category?: string; product_id?: string; base_size?: string };
+const manifest = JSON.parse(readFileSync(join(jobDir, 'manifest.json'), 'utf8')) as {
+  category?: string;
+  product_id?: string;
+  base_size?: string;
+  features?: unknown;
+  control?: { proxy?: { kind?: string } | null };
+  hash_inputs?: { product?: GarmentPayload };
+};
+const kind = manifest.control?.proxy?.kind;
+const tAt = args.indexOf('--template-size');
+const templateSize = tAt >= 0 ? args[tAt + 1] : undefined;
 const category = (['dress', 'top', 'outerwear', 'bottom'].includes(manifest.category ?? '') ? manifest.category : 'dress') as 'dress' | 'top' | 'outerwear' | 'bottom';
 // A job exported before the proxy existed (the synthetic product's export 0.1.0) has no control/proxy.glb: build it from the schema fixture.
 let proxy = null;
 let proxyLabel: string | undefined;
-try {
+if (templateSize) {
+  const payload = manifest.hash_inputs?.product;
+  if (!payload) throw new Error('--template-size needs the product payload in manifest.hash_inputs');
+  const features = parseFeatures(manifest.features);
+  proxy = buildProxy(buildMannequin(bodyShape(BASE_SHAPE_ID)), payload, templateSize, features ? { features } : {}).mesh;
+  proxyLabel = `buildProxy(${manifest.product_id}, size ${templateSize}) (--template-size: not the job's base size ${manifest.base_size})`;
+} else try {
   readFileSync(join(jobDir, 'control/proxy.glb'));
 } catch {
   try {
@@ -37,7 +58,7 @@ try {
   }
 }
 const t0 = performance.now();
-const res = runStage4t({ dir: jobDir, source, category, proxy, ...(proxyLabel ? { proxyLabel } : {}), previews: !args.includes('--no-previews'), log: (m) => console.log(`[stage4t] ${m}`) });
+const res = runStage4t({ dir: jobDir, source, category, fit: { legs: kind === 'trousers' }, proxy, ...(proxyLabel ? { proxyLabel } : {}), previews: !args.includes('--no-previews'), log: (m) => console.log(`[stage4t] ${m}`) });
 const out = join(jobDir, 'stage4t', source);
 mkdirSync(out, { recursive: true });
 for (const [name, data] of Object.entries(res.files)) {

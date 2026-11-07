@@ -22,7 +22,9 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # Run 14 took 2,311 s wall for one product (stage 1b + 2 + 4); five products in one run.txt need about 200 min.
+    # 330 stays under the 360-minute limit of GitHub-hosted runners.
+    timeout-minutes: 330
     env:
       MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
       MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}

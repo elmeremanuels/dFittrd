@@ -95,6 +95,16 @@ export interface TemplateFitOptions {
   sleeves: boolean;
   /** Trousers: the body tube ends at the crotch and each leg is fitted as its own tube (default false: a bottom is a skirt). */
   legs: boolean;
+  /**
+   * Where the depth comes from. `hull` (default): the visual hull of the training views, which needs
+   * views from the side (the turntable). `template`: the predicted route's two-view fit (front and back
+   * stills only, docs/PREDICTION-ENGINE.md §4.5): front and back views see width, outline, hem and
+   * cuffs but nothing about depth (their visual hull is a slab, open towards the cameras), so every
+   * ring keeps the template's cross-section, scaled along the views' lateral axis to the width the masks
+   * show on each side (`TwoViewReport`); the hull only bounds it. The carving threshold defaults to 0
+   * (a point outside any view's silhouette is outside the garment).
+   */
+  depthPrior: 'hull' | 'template';
 }
 
 export const DEFAULT_FIT_OPTIONS: TemplateFitOptions = {
@@ -113,6 +123,7 @@ export const DEFAULT_FIT_OPTIONS: TemplateFitOptions = {
   category: 'dress',
   sleeves: true,
   legs: false,
+  depthPrior: 'hull',
 };
 
 // ---------------------------------------------------------------------------
@@ -280,7 +291,7 @@ function buildEvidence(views: FitViews, body: Mesh, m: Mannequin, opt: TemplateF
       dictated.push(Uint8Array.from(grown, (g, i) => (g && !ctl.proxy.data[i] ? 1 : 0)));
     } else dictated.push(null);
   });
-  const tau = opt.tau ?? Math.max(1, Math.round(0.05 * n));
+  const tau = opt.tau ?? (opt.depthPrior === 'template' ? 0 : Math.max(1, Math.round(0.05 * n)));
   return { n, width, height, rt, intr, code, garment, centres, bodyDepth, dictated, dictatedRadiusPx: radiusViews ? radiusSum / radiusViews : 0, tau, margin: opt.occlusionMarginCm };
 }
 
@@ -644,6 +655,8 @@ export interface TemplateFitReport {
   rays: { total: number; blocked: number; empty: number; capped: number; filled: number; sleeveClamped: number; shoulderCap: number; exactClearancePushed: number; exactClearanceInside: number; exactClearanceUnresolved: number };
   /** The control's bare arm cap (`CONTROL_CAP`): training views with a control, the zone's radius (px, mean), sleeve-head rays whose presence the control decided (kept at the clearance), and of those on the cap rows. */
   controlCap: { views: number; radiusPx: number; decided: number; decidedCapRows: number };
+  /** `depthPrior: 'template'` only (else null): how the template's cross-sections were scaled to the masks. */
+  twoView: TwoViewReport | null;
   /** Hull minus template (proxy) radius over rays with both, cm: how far carving/expansion moved it. */
   moveFromTemplateCm: { mean: number; p5: number; p95: number } | null;
   /** Jacobi sweeps over all solves. */
@@ -782,6 +795,38 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
   const C = opt.bodyColumns;
   const theta = (c: number): number => (2 * Math.PI * c) / C;
 
+  // Template radius along a ray: where it leaves the proxy volume (closed), null when the ray starts outside it.
+  const templateAlong = (ray: Ray): number | null => {
+    if (!proxySdf || proxySdf.at(...(ray.o as [number, number, number])) >= 0) return null;
+    let t = 0;
+    while (t < 60 && proxySdf.at(ray.o[0] + t * ray.d[0], ray.o[1] + t * ray.d[1], ray.o[2] + t * ray.d[2]) < 0) t += 0.25;
+    return t < 60 ? t : null;
+  };
+  // The radius the extent scans continue below/beyond the last sample: the hull's. With the template's depth
+  // (two views), a capped hull (a ray towards the cameras, which no view carves) is not a radius: the scan
+  // takes the template's there, so the next sample is voted on where the cloth would be and not 35 cm in
+  // front of it.
+  // With front and back views the hull is a slab, so an oblique ray's hull lies at the slab's corner, beyond
+  // the cloth, where a point projects outside the silhouette: the template's radius, kept inside the slab.
+  // Beyond the template's hem or cuff the last radius carries on (the template's cross-section continues).
+  const scanRadius = (ray: Ray, hh: { s: number; capped: boolean }, prev: number): number => {
+    if (opt.depthPrior !== 'template') return hh.s;
+    const t = templateAlong(ray) ?? (Number.isFinite(prev) ? prev : Infinity);
+    const inSlab = hh.s >= 0 && !hh.capped ? 0.98 * hh.s : Infinity;
+    const r = Math.min(t, inSlab);
+    return Number.isFinite(r) ? r : prev;
+  };
+  // Presence where too few views face a point for the facing-weighted vote (`MIN_INFORMATIVE`): the hull is
+  // non-empty (turntable), or, with the template's depth, no view carves the point where the cloth would be.
+  // With front and back views only, "the hull is non-empty" asks about the point next to the body (a leg
+  // under a flared skirt), and the front of the hem, which hangs in front of that point and projects below
+  // it from a camera at chest height, kept it: the hem ran 3-4 cm long all round.
+  const fewViewsPresent = (ray: Ray, t: number, hs: number): boolean => {
+    if (opt.depthPrior !== 'template') return hs >= 0;
+    const [x, y, z] = along(ray, t);
+    return carveCount(ev, x!, y!, z!, ev.tau, ray.head === true) <= ev.tau;
+  };
+
   // --- 1. Body extents: hem per column (scan from the chest, or the waist for a bottom, downwards).
   const yScanTop = isBottom ? h.waist : h.chest;
   const yFloor = 2;
@@ -808,10 +853,11 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
         present.push(true);
         continue;
       }
-      const hs = hullAlong(ev, ray, range).s;
+      const hh = hullAlong(ev, ray, range);
+      const hs = hh.s;
       const test = Number.isFinite(rPrev) ? Math.min(range.hi, Math.max(range.lo, rPrev)) : range.lo;
-      present.push(votePresent(ev, along(ray, test), ray.d, hs >= 0).present);
-      if (hs >= 0) rPrev = hs;
+      present.push(votePresent(ev, along(ray, test), ray.d, fewViewsPresent(ray, test, hs)).present);
+      if (hs >= 0) rPrev = scanRadius(ray, hh, rPrev);
     }
     hemRaw.push(runEnd({ start: yScanTop, step: scanStep, present }, 2, 25));
   }
@@ -840,10 +886,11 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
             present.push(false);
             continue;
           }
-          const hs = hullAlong(ev, ray, range).s;
+          const hh = hullAlong(ev, ray, range);
+          const hs = hh.s;
           const test = Number.isFinite(rPrev) ? Math.min(range.hi, Math.max(range.lo, rPrev)) : range.lo;
-          present.push(votePresent(ev, along(ray, test), ray.d, hs >= 0).present);
-          if (hs >= 0) rPrev = hs;
+          present.push(votePresent(ev, along(ray, test), ray.d, fewViewsPresent(ray, test, hs)).present);
+          if (hs >= 0) rPrev = scanRadius(ray, hh, rPrev);
         }
         raw.push(runEnd({ start: 3, step: 0.5, present }, 2, 6));
       }
@@ -877,10 +924,11 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
             present.push(false);
             continue;
           }
-          const hs = hullAlong(ev, ray, range).s;
+          const hh = hullAlong(ev, ray, range);
+          const hs = hh.s;
           const test = Number.isFinite(rPrev) ? Math.min(range.hi, Math.max(range.lo, rPrev)) : range.lo;
-          present.push(votePresent(ev, along(ray, test), ray.d, hs >= 0).present);
-          if (hs >= 0) rPrev = hs;
+          present.push(votePresent(ev, along(ray, test), ray.d, fewViewsPresent(ray, test, hs)).present);
+          if (hs >= 0) rPrev = scanRadius(ray, hh, rPrev);
         }
         raw.push(runEnd({ start: 0, step: 0.5, present }, 2, 8));
       }
@@ -1000,6 +1048,8 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
   // --- 4. Per vertex: admissible range, template radius (proxy), hull.
   const lo = new Float64Array(N), hi = new Float64Array(N), hull = new Float64Array(N), s0 = new Float64Array(N);
   const blocked = new Uint8Array(N), empty = new Uint8Array(N), capped = new Uint8Array(N), byControl = new Uint8Array(N);
+  /** Template radius where the ray starts inside the template volume (else NaN: beyond its hem or cuff, above its neckline). */
+  const tplS = new Float64Array(N).fill(NaN);
   for (let i = 0; i < N; i++) {
     const ray = rays[i]!;
     const own = partOfIndex(i);
@@ -1008,21 +1058,23 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
     hi[i] = range.hi;
     blocked[i] = range.blocked ? 1 : 0;
     // Template: where the ray leaves the proxy volume (the proxy is closed), else 1.5 cm off the body.
-    let tpl = range.lo + 1.5;
-    if (proxySdf && proxySdf.at(...(ray.o as [number, number, number])) < 0) {
-      let s = 0;
-      while (s < 60 && proxySdf.at(ray.o[0] + s * ray.d[0], ray.o[1] + s * ray.d[1], ray.o[2] + s * ray.d[2]) < 0) s += 0.25;
-      if (s < 60) tpl = s;
-    }
+    const tplRaw = templateAlong(ray);
+    if (tplRaw !== null) tplS[i] = tplRaw;
+    const tpl = tplRaw ?? range.lo + 1.5;
     s0[i] = Math.min(range.hi, Math.max(range.lo, tpl));
     const hh = hullAlong(ev, ray, range);
     hull[i] = hh.s;
     capped[i] = hh.capped ? 1 : 0;
     // Presence by the median vote at the hull (or the template where the hull is empty; on the sleeve
     // head the clearance, where the control's bare cap zone is drawn: `CONTROL_CAP`).
-    const testS = hh.s >= 0 ? hh.s : ray.head ? range.lo : s0[i]!;
+    // With the template's depth (two views) the vote is taken where the cloth would be: the template's radius,
+    // inside the slab the two silhouettes leave (just inside the hull: on the hull a point is on the carving
+    // boundary), and the hull alone beyond the template's hem or cuff.
+    const testS = opt.depthPrior === 'template' && !ray.head
+      ? Math.min(hh.s >= 0 && !hh.capped ? 0.98 * hh.s : Infinity, tplRaw ?? (hh.s >= 0 && !hh.capped ? Infinity : s0[i]!))
+      : hh.s >= 0 ? hh.s : ray.head ? range.lo : s0[i]!;
     if (range.blocked) continue;
-    const vote = votePresent(ev, [ray.o[0] + testS * ray.d[0], ray.o[1] + testS * ray.d[1], ray.o[2] + testS * ray.d[2]], ray.d, hh.s >= 0, ray.head === true);
+    const vote = votePresent(ev, [ray.o[0] + testS * ray.d[0], ray.o[1] + testS * ray.d[1], ray.o[2] + testS * ray.d[2]], ray.d, fewViewsPresent(ray, testS, hh.s), ray.head === true);
     empty[i] = vote.present ? 0 : 1;
     if (vote.byControl) byControl[i] = 1;
   }
@@ -1149,6 +1201,7 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
       w[i] = 0.05;
     }
   }
+  const twoView = opt.depthPrior === 'template' ? templateDepthTargets({ views: inp.views, parts, rays, isCap, present, blocked, capped, byControl, hull, s0, tplS, lo, hi, target, w, mannequin: m }) : null;
   const s = Float64Array.from(target);
   for (let i = 0; i < N; i++) s[i] = Math.min(hi[i]!, Math.max(lo[i]!, s[i]!));
   const next = new Float64Array(N);
@@ -1457,6 +1510,7 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
     legs: { left: legSides.includes(1), right: legSides.includes(-1), fitted: legs },
     rays: { total: N, blocked: sum(blocked), empty: sum(empty), capped: sum(capped), filled: sum(filled), sleeveClamped, shoulderCap: sum(isCap), exactClearancePushed: sum(exact.pushed), exactClearanceInside: exact.inside, exactClearanceUnresolved: exact.unresolved },
     controlCap: { views: ev.dictated.filter(Boolean).length, radiusPx: round2(ev.dictatedRadiusPx), decided: sum(Uint8Array.from(byControl, (b, i) => (b && present[i] ? 1 : 0))), decidedCapRows: sum(Uint8Array.from(byControl, (b, i) => (b && present[i] && isCap[i] ? 1 : 0))) },
+    twoView,
     moveFromTemplateCm: moves.length ? { mean: round2(moves.reduce((a, b) => a + b, 0) / moves.length), p5: round2(percentile(moves, 0.05)), p95: round2(percentile(moves, 0.95)) } : null,
     iterations,
     converged,
@@ -1486,3 +1540,191 @@ export function renderPositions(render: Pick<RenderMesh, 'remap'>, welded: Array
 }
 
 export { project };
+
+// ---------------------------------------------------------------------------
+// Two views: depth from the template (`depthPrior: 'template'`)
+// ---------------------------------------------------------------------------
+
+export interface TwoViewReport {
+  /** Unit vector the training cameras look along (principal axis of their viewing directions, sign folded to +z). */
+  depthAxis: [number, number, number];
+  /** Per part: rings (rows below the shoulder cap) and how many of them got a width from the masks on each side; the lateral scale applied (template width → mask width) over the rows. */
+  parts: { name: string; rows: number; measuredPlus: number; measuredMinus: number; scale: { median: number; min: number; max: number } }[];
+  note: string;
+}
+
+/** Smallest |lateral component| of a ray for its hull to give the silhouette's half-width (the ray then leaves the views' slab sideways). */
+export const TWO_VIEW_LATERAL_MIN = 0.7;
+/** Per side of a ring, how many of the most lateral rays give the lateral scale (median of their hull / template radius). */
+export const TWO_VIEW_LATERAL_RAYS = 3;
+/** Range of the lateral scale applied to a template ring. */
+export const TWO_VIEW_SCALE: readonly [number, number] = [0.5, 2];
+
+/**
+ * Targets for the two-view fit (`depthPrior: 'template'`). Per ring (a row of a body, sleeve or leg
+ * grid: rays square to one axis): the template point on every ray is split into a lateral offset (in
+ * the views' image plane, square to the part's axis) and a depth offset (along the cameras' axis). The
+ * width the masks show on each side comes from the hull of the rays that point sideways
+ * (`TWO_VIEW_LATERAL_MIN`): seen from the front and the back, a sideways ray is carved where it leaves
+ * the silhouette. The lateral scale per side is the median of hull / template radius over the
+ * `TWO_VIEW_LATERAL_RAYS` rays closest to lateral (1.00 when the template is the garment); the
+ * template's lateral offsets are scaled by it; rings without
+ * such a ray (an arm beside the bodice, every ray capped) take the scale interpolated from the rings
+ * above and below. Each ray's target is where it meets the scaled cross-section, bounded by its hull,
+ * at full weight. Shoulder-cap rows (rays fanned from the joint) keep their hull where a view carves
+ * it (the outline over the shoulder), else the template. Mutates `target` and `w`.
+ */
+function templateDepthTargets(a: {
+  views: FitViews;
+  parts: PartGrid[];
+  rays: Ray[];
+  isCap: Uint8Array;
+  present: Uint8Array;
+  blocked: Uint8Array;
+  capped: Uint8Array;
+  byControl: Uint8Array;
+  hull: Float64Array;
+  s0: Float64Array;
+  tplS: Float64Array;
+  lo: Float64Array;
+  hi: Float64Array;
+  target: Float64Array;
+  w: Float64Array;
+  mannequin: Mannequin;
+}): TwoViewReport {
+  const { parts, rays, isCap, present, blocked, capped, byControl, hull, lo, hi, target, w, mannequin: m } = a;
+  // Template radius per ray. Where the ray misses the template (a garment longer than the predicted one, a
+  // sleeve past the template's cuff), the template's cross-section continues: the radius of the nearest row
+  // of the same column that has one, not the body-hugging fallback `s0` (which would pull the extra length
+  // of a skirt onto the legs, front and back, where two views cannot see it).
+  const s0 = Float64Array.from(a.s0);
+  for (const p of parts) {
+    const first = p.capRows ?? 0;
+    for (let c = 0; c < p.cols; c++) {
+      const col: number[] = [];
+      for (let r = first; r < p.rows; r++) col.push(p.offset + r * p.cols + c);
+      const known = col.filter((i) => Number.isFinite(a.tplS[i]!));
+      if (!known.length) continue;
+      let last = a.tplS[known[0]!]!;
+      for (const i of col) {
+        if (Number.isFinite(a.tplS[i]!)) last = a.tplS[i]!;
+        else if (!blocked[i]) s0[i] = Math.min(hi[i]!, Math.max(lo[i]!, last));
+      }
+    }
+  }
+  // Depth axis: principal direction of the training cameras' optical axes (third row of R).
+  const M = new Float64Array(9);
+  for (const v of a.views.train) {
+    const R = a.views.cameras[v]!.R;
+    const f = [R[6]!, R[7]!, R[8]!];
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) M[3 * i + j] = M[3 * i + j]! + f[i]! * f[j]!;
+  }
+  let D = [0.1, 0.2, 1];
+  for (let it = 0; it < 60; it++) {
+    const n = [0, 1, 2].map((i) => M[3 * i]! * D[0]! + M[3 * i + 1]! * D[1]! + M[3 * i + 2]! * D[2]!);
+    const l = Math.hypot(n[0]!, n[1]!, n[2]!) || 1;
+    D = n.map((x) => x / l);
+  }
+  if (D[2]! < 0) D = D.map((x) => -x);
+  const dot = (p: readonly number[], q: readonly number[]): number => p[0]! * q[0]! + p[1]! * q[1]! + p[2]! * q[2]!;
+  const median = (xs: number[]): number => {
+    const q = [...xs].sort((x, y) => x - y);
+    return q.length ? q[q.length >> 1]! : NaN;
+  };
+  const out: TwoViewReport['parts'] = [];
+  for (const p of parts) {
+    const axis: readonly number[] = p.name === 'sleeve_l' ? m.arms.left.axis : p.name === 'sleeve_r' ? m.arms.right.axis : [0, 1, 0];
+    const dd = dot(D, axis);
+    let Dp = [D[0]! - dd * axis[0]!, D[1]! - dd * axis[1]!, D[2]! - dd * axis[2]!];
+    const ln = Math.hypot(Dp[0]!, Dp[1]!, Dp[2]!) || 1;
+    Dp = Dp.map((x) => x / ln);
+    const L = [axis[1]! * Dp[2]! - axis[2]! * Dp[1]!, axis[2]! * Dp[0]! - axis[0]! * Dp[2]!, axis[0]! * Dp[1]! - axis[1]! * Dp[0]!];
+    const first = p.capRows ?? 0;
+    const rows = p.rows - first;
+    const kPlus = new Array<number>(rows).fill(NaN), kMinus = new Array<number>(rows).fill(NaN);
+    const idx = (r: number, c: number): number => p.offset + (first + r) * p.cols + c;
+    for (let r = 0; r < rows; r++) {
+      // Per side: the rays closest to lateral, each as its own ratio hull / template radius. Not the median
+      // half-width over every sideways ray against the template's widest point: under perspective the front
+      // and back silhouettes' intersection is narrower away from the plane of their contour, so an oblique
+      // ray leaves it early and that ratio read 3-4 % narrow with the truth as template (review F4).
+      const sides: { r: number; dl: number }[][] = [[], []];
+      for (let c = 0; c < p.cols; c++) {
+        const i = idx(r, c);
+        if (blocked[i]) continue;
+        const dl = dot(rays[i]!.d, L);
+        if (!present[i] || hull[i]! < 0 || capped[i] || Math.abs(dl) < TWO_VIEW_LATERAL_MIN || !(s0[i]! * Math.abs(dl) > 1)) continue;
+        sides[dl > 0 ? 0 : 1]!.push({ r: hull[i]! / s0[i]!, dl: Math.abs(dl) });
+      }
+      const est = (q: { r: number; dl: number }[]): number => (q.length ? median([...q].sort((x, y) => y.dl - x.dl).slice(0, TWO_VIEW_LATERAL_RAYS).map((x) => x.r)) : NaN);
+      kPlus[r] = est(sides[0]!);
+      kMinus[r] = est(sides[1]!);
+    }
+    const fill = (k: number[]): { known: number; k: number[] } => {
+      const known = k.map((x, r) => (Number.isFinite(x) ? r : -1)).filter((r) => r >= 0);
+      if (!known.length) return { known: 0, k: k.map(() => 1) };
+      return {
+        known: known.length,
+        k: k.map((x, r) => {
+          if (Number.isFinite(x)) return x;
+          let q0 = -1, q1 = -1;
+          for (const q of known) {
+            if (q < r) q0 = q;
+            else if (q1 < 0) q1 = q;
+          }
+          if (q0 < 0) return k[q1]!;
+          if (q1 < 0) return k[q0]!;
+          return k[q0]! + ((k[q1]! - k[q0]!) * (r - q0)) / (q1 - q0);
+        }),
+      };
+    };
+    const clampK = (x: number): number => Math.min(TWO_VIEW_SCALE[1], Math.max(TWO_VIEW_SCALE[0], x));
+    const fp = fill(kPlus), fm = fill(kMinus);
+    const applied: number[] = [];
+    for (let r = 0; r < rows; r++) {
+      const k1 = clampK(fp.k[r]!), k2 = clampK(fm.k[r]!);
+      applied.push(k1, k2);
+      const pts: { phi: number; rho: number }[] = [];
+      for (let c = 0; c < p.cols; c++) {
+        const i = idx(r, c);
+        if (blocked[i]) continue;
+        const d = rays[i]!.d;
+        const l = s0[i]! * dot(d, L), z = s0[i]! * dot(d, Dp);
+        const ls = l * (l >= 0 ? k1 : k2);
+        pts.push({ phi: Math.atan2(z, ls), rho: Math.hypot(ls, z) });
+      }
+      if (pts.length < 3) continue;
+      pts.sort((x, y) => x.phi - y.phi);
+      const rhoAt = (psi: number): number => {
+        let j = pts.findIndex((q) => q.phi >= psi);
+        if (j < 0) j = 0;
+        const b = pts[j]!, aPt = pts[(j - 1 + pts.length) % pts.length]!;
+        let span = b.phi - aPt.phi, off = psi - aPt.phi;
+        if (span <= 0) span += 2 * Math.PI;
+        if (off < 0) off += 2 * Math.PI;
+        const t = Math.min(1, Math.max(0, off / span));
+        return aPt.rho * (1 - t) + b.rho * t;
+      };
+      for (let c = 0; c < p.cols; c++) {
+        const i = idx(r, c);
+        if (!present[i] || byControl[i]) continue;
+        const d = rays[i]!.d;
+        let tgt = rhoAt(Math.atan2(dot(d, Dp), dot(d, L)));
+        if (hull[i]! >= 0 && !capped[i]) tgt = Math.min(tgt, hull[i]!);
+        target[i] = Math.min(hi[i]!, Math.max(lo[i]!, tgt));
+        w[i] = 1;
+      }
+    }
+    for (let k = 0; k < first * p.cols; k++) {
+      const i = p.offset + k;
+      if (!isCap[i] || !present[i] || byControl[i]) continue;
+      if (hull[i]! < 0 || capped[i]) {
+        target[i] = Math.min(hi[i]!, Math.max(lo[i]!, s0[i]!));
+        w[i] = 1;
+      }
+    }
+    const sorted = [...applied].sort((x, y) => x - y);
+    out.push({ name: p.name, rows, measuredPlus: fp.known, measuredMinus: fm.known, scale: { median: round2(sorted[sorted.length >> 1] ?? 1), min: round2(sorted[0] ?? 1), max: round2(sorted[sorted.length - 1] ?? 1) } });
+  }
+  return { depthAxis: D.map((x) => Math.round(x * 1e4) / 1e4) as [number, number, number], parts: out, note: "per ring the template's cross-section is scaled along the lateral axis (image plane, square to the part's axis) to the half-width the masks show on each side; the depth is the template's" };
+}

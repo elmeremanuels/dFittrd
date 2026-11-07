@@ -1,11 +1,15 @@
 /**
  * Stage 4t (template fit + texture bake) on a Phase 0 job dir, CPU:
  *
- *   pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic] [--no-previews] [--template-size <size>]
+ *   pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic] [--no-previews] [--template-size <size>] [--views 0,80]
  *
  * Trousers (the manifest's proxy kind) are fitted with one tube per leg. --template-size fits from the
  * product's proxy at another chart size instead of control/proxy.glb (a template that is not the garment:
  * on a synthetic job of a skirt, trousers or outerwear the truth IS the base-size proxy, opened).
+ *
+ * --views 0,80 is the predicted route's two-view fit (docs/PREDICTION-ENGINE.md §4.5, V0): fitted and baked
+ * from those frames only (the pinned front and back stills are frames 0 and N/2), depth from the template
+ * (`depthPrior: 'template'`), scored on the usual holdout frames; written to stage4t/<source>-views-0-80/.
  *
  * Writes <job dir>/stage4t/<source>/{garment.glb, texture.jpg, metrics.json, preview/*.png}. The job
  * dir is under out/ (gitignored). `report:bohohippychic` then evaluates stage4t/stage2/garment.glb when
@@ -70,9 +74,12 @@ if (templateSize) {
     proxy = null;
   }
 }
+const vAt = args.indexOf('--views');
+const views = vAt >= 0 ? (args[vAt + 1] ?? '').split(',').map((x) => Number(x.trim())) : undefined;
+if (views && views.some((v) => !Number.isInteger(v))) throw new Error(`--views takes frame indices separated by commas, got ${args[vAt + 1]}`);
 const t0 = performance.now();
-const res = runStage4t({ dir: jobDir, source, category, fit: { legs: kind === 'trousers' }, proxy, ...(proxyLabel ? { proxyLabel } : {}), previews: !args.includes('--no-previews'), log: (m) => console.log(`[stage4t] ${m}`) });
-const out = join(jobDir, 'stage4t', source);
+const res = runStage4t({ dir: jobDir, source, ...(views ? { views } : {}), category, fit: { legs: kind === 'trousers' }, proxy, ...(proxyLabel ? { proxyLabel } : {}), previews: !args.includes('--no-previews'), log: (m) => console.log(`[stage4t] ${m}`) });
+const out = join(jobDir, 'stage4t', views ? `${source}-views-${views.join('-')}` : source);
 mkdirSync(out, { recursive: true });
 for (const [name, data] of Object.entries(res.files)) {
   if (name === 'previews') continue;

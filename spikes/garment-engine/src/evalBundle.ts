@@ -59,7 +59,8 @@ export function evalBundle(result: EvalResult, payload: GarmentPayload, opts: { 
   const baseMaterial = evalMaterial(payload, opts.meanColorHex ?? null);
   // With a baked texture the colour is a fallback only (the viewer draws the map from base.glb).
   const material: MaterialJson = tex ? { ...baseMaterial, provenance: { ...baseMaterial.provenance, baseColorHex: `${baseMaterial.provenance.baseColorHex === 'product' ? 'product' : 'reconstruction (mean garment colour of the frames)'}; display fallback only: base.glb carries the baked texture (stage 4t)` } } : baseMaterial;
-  const synthetic = result.source.kind !== 'stage4';
+  // Stage 4 (2DGS) and stage 4t (template fit) of a generated video are real results for a product; the rest tests the tooling.
+  const synthetic = result.source.kind !== 'stage4' && result.source.kind !== 'stage4t';
   const inputHash = createHash('sha256').update(JSON.stringify({ payload, baseSize: result.baseSize, mesh: result.source.sha256, simulatedError: result.source.simulatedError, mannequin: EVAL_MANNEQUIN, eval: EVAL_VERSION })).digest('hex');
   const chartBase = result.chart.rows.find((r) => r.size === result.baseSize)?.rings ?? {};
 

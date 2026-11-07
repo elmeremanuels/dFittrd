@@ -10,7 +10,9 @@ const fixture = mockGarment('aalter-studio-2');
 const src = { kind: 'stage4' as const, path: 'stage4/stage2/garment.glb', simulatedError: null };
 
 describe('evaluateGarment: synthetic dress', () => {
-  const r = evaluateGarment({ productId: 'aalter-studio-2', payload: fixture, baseSize: 'M', mesh: reconstructedDress(), mannequin: m, source: src });
+  // The spike's synthetic garment is built with its shoulder_to_hem as a vertical drop (garment.ts); a
+  // shop's printed length is flat-lay (the default). Same choice as report-bohohippychic for this product.
+  const r = evaluateGarment({ productId: 'aalter-studio-2', payload: fixture, baseSize: 'M', mesh: reconstructedDress(), mannequin: m, source: src, printedLength: 'drop' });
 
   it('reports the error per anchor before calibration, after the global scale and after calibration', () => {
     const chest = r.rows.find((x) => x.anchor === 'chest')!;

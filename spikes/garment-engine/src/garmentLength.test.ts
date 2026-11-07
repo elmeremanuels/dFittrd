@@ -14,14 +14,14 @@ const hps = m.landmarks.hps;
  * A garment-like tube round the body axis: front depth z(y) = depth(y), elliptical sections wide
  * enough to contain the HPS plane, from `top` down to `hem`.
  */
-function tube(top: number, hem: number, depth: (y: number) => number, halfWidth = 25, rows = 120, cols = 96): Mesh {
+function tube(top: number, hem: number, depth: (y: number) => number, halfWidth = 25, rows = 120, cols = 96, backDepth: (y: number) => number = depth): Mesh {
   const pos: number[] = [];
   const idx: number[] = [];
   for (let r = 0; r <= rows; r++) {
     const y = top - ((top - hem) * r) / rows;
     for (let c = 0; c < cols; c++) {
       const t = (2 * Math.PI * c) / cols;
-      pos.push(halfWidth * Math.sin(t), y, depth(y) * Math.cos(t));
+      pos.push(halfWidth * Math.sin(t), y, (Math.cos(t) >= 0 ? depth(y) : backDepth(y)) * Math.cos(t));
     }
   }
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
@@ -76,9 +76,13 @@ describe('length definitions on known shapes', () => {
   });
 
   it('matchPrinted names the definition closest to the printed value', () => {
-    const t = tube(hps[1], hps[1] - 80, (y) => 12 + (30 * (hps[1] - y)) / 80);
-    const r = matchPrinted(garmentLengths(m, t), 85.4);
+    // Flared at the front only: a front/back symmetric cone gives the back length the same slant, and
+    // the centre back (x = 0) is a little longer than the HPS plane, so the printed value must tell them apart.
+    const t = tube(hps[1], hps[1] - 80, (y) => 12 + (30 * (hps[1] - y)) / 80, 25, 120, 96, () => 12);
+    const slant = Math.hypot(80, zAt(42) - zAt(12));
+    const r = matchPrinted(garmentLengths(m, t), slant);
     expect(r.best).toBe('hps_surface');
+    expect(Math.abs(r.residualCm.back_neck_surface!)).toBeGreaterThan(4);
     expect(Math.abs(r.residualCm.hps_drop!)).toBeGreaterThan(5);
   });
 

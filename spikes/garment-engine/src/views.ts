@@ -248,20 +248,46 @@ export function removeSpecks(mask: Mask, minArea: number): Mask {
   return { width: w, height: h, data };
 }
 
-export interface MaskCleanup {
-  /** Closing radius, px (fills cracks). */
-  closeRadius: number;
-  /** Interior holes up to this many pixels are filled. */
-  maxHoleArea: number;
-  /** Foreground specks below this many pixels are removed. */
-  minSpeckArea: number;
+/**
+ * Pixels per cm on the garment for a camera: the focal length over the camera's horizontal distance
+ * to the mannequin's vertical axis (x = z = 0), where the garment is. Run 14's turntable (fx 1143 px at
+ * 480 × 832, 320 cm away) gives 3.57 px/cm, about 12.8 px per cm².
+ */
+export function pixelsPerCm(cam: Pick<PinholeCamera, 'fx' | 'fy' | 'centre'>): number {
+  const d = Math.hypot(cam.centre[0], cam.centre[2]);
+  return (0.5 * (cam.fx + cam.fy)) / Math.max(d, 1);
 }
 
-export const DEFAULT_CLEANUP: MaskCleanup = { closeRadius: 2, maxHoleArea: 600, minSpeckArea: 80 };
+/**
+ * Mask clean-up, in garment units so that it means the same opening at any resolution and camera
+ * distance (converted with `pixelsPerCm`). Interior holes up to `maxHoleCm2` are filled as mask
+ * noise: 12 cm² is an opening of about 3.5 × 3.5 cm (153 px at run 14's 480 × 832, 38 px at half
+ * that). A real opening of 10 × 5 cm (50 cm², about 640 px at 480 × 832) stays open; the smallest
+ * square opening that survives is about 3.5 cm on a side. The noise-hole fill of the fit grid
+ * (`NOISE_HOLE_VERTICES` in templateFit.ts, about 3 × 3 cm) is the same size.
+ */
+export interface MaskCleanup {
+  /** Closing radius, cm on the garment (fills cracks); at least 1 px. */
+  closeRadiusCm: number;
+  /** Interior holes up to this area (cm² on the garment) are filled. */
+  maxHoleCm2: number;
+  /** Foreground specks below this area (cm²) are removed. */
+  minSpeckCm2: number;
+}
 
-export function cleanMask(mask: Mask, c: MaskCleanup = DEFAULT_CLEANUP): Mask {
-  const closed = morph(morph(mask, c.closeRadius, true), c.closeRadius, false);
-  return removeSpecks(fillHoles(closed, c.maxHoleArea), c.minSpeckArea);
+/** 0.56 cm and 6.3 cm² were the earlier pixel thresholds (2 px, 80 px) at run 14's 3.57 px/cm. */
+export const DEFAULT_CLEANUP: MaskCleanup = { closeRadiusCm: 0.56, maxHoleCm2: 12, minSpeckCm2: 6.3 };
+
+/** The clean-up's pixel thresholds at `pxPerCm`. */
+export function cleanupPixels(pxPerCm: number, c: MaskCleanup = DEFAULT_CLEANUP): { closeRadius: number; maxHoleArea: number; minSpeckArea: number } {
+  const a = pxPerCm * pxPerCm;
+  return { closeRadius: Math.max(1, Math.round(c.closeRadiusCm * pxPerCm)), maxHoleArea: Math.round(c.maxHoleCm2 * a), minSpeckArea: Math.round(c.minSpeckCm2 * a) };
+}
+
+export function cleanMask(mask: Mask, pxPerCm: number, c: MaskCleanup = DEFAULT_CLEANUP): Mask {
+  const px = cleanupPixels(pxPerCm, c);
+  const closed = morph(morph(mask, px.closeRadius, true), px.closeRadius, false);
+  return removeSpecks(fillHoles(closed, px.maxHoleArea), px.minSpeckArea);
 }
 
 /**

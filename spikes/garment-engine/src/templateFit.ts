@@ -33,9 +33,9 @@
 import { type Mannequin, type Mesh, type Side, type Vec3 } from '@curtain/mannequin';
 import { buildBodySdf, MIN_CLEARANCE_CM, type BodySdf } from './bodySdf';
 import type { Mask } from './evalPng';
-import { cleanMask, DEFAULT_CLEANUP, morph, project, rasterize, type MaskCleanup, type PinholeCamera } from './views';
+import { cleanMask, DEFAULT_CLEANUP, morph, pixelsPerCm, project, rasterize, type MaskCleanup, type PinholeCamera } from './views';
 
-export const TEMPLATE_FIT_VERSION = 'stage4t-template-fit-0.1.0';
+export const TEMPLATE_FIT_VERSION = 'stage4t-template-fit-0.2.0';
 
 export interface FitViews {
   cameras: PinholeCamera[];
@@ -185,7 +185,7 @@ function buildEvidence(views: FitViews, body: Mesh, opt: TemplateFitOptions): Ev
     rt.set(cam.t, 12 * k + 9);
     intr.set([cam.fx, cam.fy, cam.cx, cam.cy], 4 * k);
     centres.set(cam.centre, 3 * k);
-    const clean = cleanMask(mask, opt.cleanup).data;
+    const clean = cleanMask(mask, pixelsPerCm(cam), opt.cleanup).data;
     const r = rasterize(cam, [{ positions: body.positions, indices: body.indices, id: 1 }]);
     // The ring round our own arms (not the arms themselves): a grey pixel there may be the generated
     // arm where ours is not, with our torso behind it, and would carve cloth that the arm hides.
@@ -288,6 +288,12 @@ const SIL_GAIN = 0.7;
 /** Rows within this distance of the hem or a cuff follow the surface above them (cm), with a slope of at most `EDGE_SLOPE` cm per cm. */
 const EDGE_FREE_CM = 5;
 const EDGE_SLOPE = 0.8;
+/**
+ * Largest interior hole (grid vertices) filled as mask noise. About 2 × 2 cells (≈ 3 × 3 cm on the
+ * default grid), the same size as the mask clean-up's 12 cm² (views.ts `DEFAULT_CLEANUP`), so an
+ * opening the cleaned masks still show (a keyhole of 10 × 5 cm is about 20 vertices) stays open.
+ */
+const NOISE_HOLE_VERTICES = 4;
 /** Largest distance of a sleeve column's end from the median cuff, cm. */
 const CUFF_SPREAD_CM = 3;
 
@@ -468,6 +474,9 @@ interface PartGrid {
   offset: number;
   /** v coordinate (0 top / shoulder end … 1 hem / cuff) per vertex of the part. */
   v: Float64Array;
+  /** Sleeves: the arm side and the cuff (distance along the arm) per column. */
+  side?: Side;
+  cuff?: number[];
 }
 
 export interface FitIteration {
@@ -500,8 +509,8 @@ export interface TemplateFitReport {
   /** Template vertices per part before trimming, and kept. */
   parts: { name: string; rows: number; cols: number; vertices: number; kept: number; hemOrCuff: { min: number; max: number; mean: number } | null }[];
   sleeves: { left: boolean; right: boolean; reason: string };
-  /** Rays: blocked by another body part (armhole), empty (carved at the body), capped at the next body part, with no hull (filled by smoothness). */
-  rays: { total: number; blocked: number; empty: number; capped: number; filled: number };
+  /** Rays: blocked by another body part (armhole), empty (carved at the body), capped at the next body part, with no hull (filled by smoothness), body rays ended at a fitted sleeve. */
+  rays: { total: number; blocked: number; empty: number; capped: number; filled: number; sleeveClamped: number };
   /** Hull minus template (proxy) radius over rays with both, cm: how far carving/expansion moved it. */
   moveFromTemplateCm: { mean: number; p5: number; p95: number } | null;
   /** Jacobi sweeps over all solves. */
@@ -617,7 +626,8 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
   const sleeveSides: Side[] = [];
   const cuffs = new Map<Side, number[]>();
   const sleeveNotes: string[] = [];
-  const armLen = m.arms.left.upperArmCm + m.arms.left.forearmCm;
+  // A sleeve may cover the wrist and part of the hand (the synthetic shirt dress's cuff ends 1.5 cm past the wrist): scan to the fingertips.
+  const armLen = m.arms.left.upperArmCm + m.arms.left.forearmCm + m.arms.left.handCm;
   if (opt.sleeves && !isBottom) {
     for (const side of [1, -1] as Side[]) {
       const Cs = opt.sleeveColumns;
@@ -717,7 +727,7 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
     const maxCuff = Math.max(...cuff);
     const Rs = lay.sleeveRows[si]!;
     const offset = rays.length;
-    parts.push({ name: side === 1 ? 'sleeve_l' : 'sleeve_r', rows: Rs, cols: Cs, offset, v: new Float64Array(0) });
+    parts.push({ name: side === 1 ? 'sleeve_l' : 'sleeve_r', rows: Rs, cols: Cs, offset, v: new Float64Array(0), side, cuff });
     for (let r = 0; r < Rs; r++) for (let c = 0; c < Cs; c++) {
       const sAlong = (r / (Rs - 1)) * cuff[c]!;
       rays.push(sleeveRay(m, side, sAlong, (2 * Math.PI * c) / Cs));
@@ -804,7 +814,7 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
           stack.push(q);
         }
       }
-      if (!edge && !anyBlocked && region.length <= 24) for (const j of region) { present[j] = 1; filled[j] = 1; }
+      if (!edge && !anyBlocked && region.length <= NOISE_HOLE_VERTICES) for (const j of region) { present[j] = 1; filled[j] = 1; }
     }
     // Spikes: present vertices with fewer than two present neighbours, repeatedly.
     for (let pass = 0; pass < 4; pass++) {
@@ -934,6 +944,61 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
   };
   solve('hull');
   extrapolate();
+
+  // The bodice may not run into the sleeves. Between the A-pose arm and the torso the masks cannot
+  // carve: every front or back view sees the sleeve there and every side view the arm, so the hull of
+  // a body ray passing between them stays open until the arm (run 14: the bodice spread into a lens
+  // reaching the arms, chest girth 121.5 cm by the tape against 99.0 cm on the 2DGS mesh). With the
+  // sleeves fitted, a body ray ends where it would enter a sleeve (its fitted radius round the arm
+  // axis, minus the clearance); the cloth behind the sleeve is not seen by any view, and the
+  // smoothness term carries the bodice across from the front and the back.
+  let sleeveClamped = 0;
+  if (sleeveSides.length && !isBottom) {
+    const sleeves = parts.filter((p) => p.side !== undefined && p.cuff);
+    const sleeveRadius = (p: PartGrid, x: number, y: number, z: number): number => {
+      const f = p.side === 1 ? m.arms.left : m.arms.right;
+      const rx = x - f.joint[0], ry = y - f.joint[1], rz = z - f.joint[2];
+      const t = rx * f.axis[0] + ry * f.axis[1] + rz * f.axis[2];
+      const cu = rx * f.u[0] + ry * f.u[1] + rz * f.u[2], cv = rx * f.v[0] + ry * f.v[1] + rz * f.v[2];
+      const phi = (Math.atan2(cv, cu) + 2 * Math.PI) % (2 * Math.PI);
+      const fc = (phi / (2 * Math.PI)) * p.cols;
+      const c0 = Math.floor(fc) % p.cols, c1 = (c0 + 1) % p.cols, a = fc - Math.floor(fc);
+      const radiusAt = (c: number): number => {
+        const cuffC = p.cuff![c]!;
+        if (t < 0 || t > cuffC) return -1;
+        const fr = (t / cuffC) * (p.rows - 1);
+        const r0 = Math.min(p.rows - 2, Math.floor(fr)), b = fr - r0;
+        const i0 = p.offset + r0 * p.cols + c, i1 = i0 + p.cols;
+        if (!present[i0] || !present[i1]) return -1;
+        return s[i0]! * (1 - b) + s[i1]! * b;
+      };
+      const ra = radiusAt(c0), rb = radiusAt(c1);
+      if (ra < 0 || rb < 0) return Infinity; // no fitted sleeve here: not inside it
+      return Math.hypot(cu, cv) - (ra * (1 - a) + rb * a);
+    };
+    const body = parts[0]!;
+    for (let i = body.offset; i < body.offset + body.rows * body.cols; i++) {
+      if (!present[i]) continue;
+      const ray = rays[i]!;
+      if (ray.o[1] < h.waist) continue;
+      for (let t = lo[i]!; t <= Math.max(s[i]!, lo[i]!) + 1e-9; t += 0.25) {
+        const x = ray.o[0] + t * ray.d[0], y = ray.o[1] + t * ray.d[1], z = ray.o[2] + t * ray.d[2];
+        if (sleeves.some((p) => sleeveRadius(p, x, y, z) < opt.clearanceCm)) {
+          const cap = Math.max(lo[i]!, t - 0.25);
+          if (cap < hi[i]!) {
+            hi[i] = cap;
+            sleeveClamped++;
+          }
+          break;
+        }
+      }
+    }
+    if (sleeveClamped) {
+      for (let i = 0; i < N; i++) if (present[i]) s[i] = Math.min(hi[i]!, Math.max(lo[i]!, s[i]!));
+      solve('sleeve exclusion');
+      extrapolate();
+    }
+  }
 
   // Silhouette rounds: where a vertex lies on the rendered garment's outline in a training view, the
   // mask's outline along the same image direction says how far to move it (in or out). The median over
@@ -1116,7 +1181,7 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
       return { name: p.name, rows: p.rows, cols: p.cols, vertices: p.rows * p.cols, kept, hemOrCuff: ext.length ? { min: round2(Math.min(...ext)), max: round2(Math.max(...ext)), mean: round2(ext.reduce((a, b) => a + b, 0) / ext.length) } : null };
     }),
     sleeves: { left: sleeveSides.includes(1), right: sleeveSides.includes(-1), reason: sleeveNotes.join('; ') || (opt.sleeves && !isBottom ? 'sleeves found in the masks' : 'not fitted for this category') },
-    rays: { total: N, blocked: sum(blocked), empty: sum(empty), capped: sum(capped), filled: sum(filled) },
+    rays: { total: N, blocked: sum(blocked), empty: sum(empty), capped: sum(capped), filled: sum(filled), sleeveClamped },
     moveFromTemplateCm: moves.length ? { mean: round2(moves.reduce((a, b) => a + b, 0) / moves.length), p5: round2(percentile(moves, 0.05)), p95: round2(percentile(moves, 0.95)) } : null,
     iterations,
     converged,

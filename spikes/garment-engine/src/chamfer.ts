@@ -116,3 +116,47 @@ export function chamfer(recon: Pick<Mesh, 'positions' | 'indices'>, truth: Pick<
   const s1 = stats(d1), s2 = stats(d2);
   return { chamferCmMean: Math.round(((s1.mean + s2.mean) / 2) * 1000) / 1000, reconToTruthCm: s1, truthToReconCm: s2, fscore1cm: f(1), fscore2cm: f(2), samples };
 }
+
+/**
+ * The same Chamfer split by region: every sample (on either surface) is assigned to a region by
+ * `regionOf` at its own position, and per region the mean of the two directions' means over the
+ * samples that fall in it. A region with no samples on one side reports that direction as null.
+ */
+export interface RegionChamfer {
+  region: string;
+  chamferCmMean: number | null;
+  reconToTruthCm: number | null;
+  truthToReconCm: number | null;
+  reconSamples: number;
+  truthSamples: number;
+}
+
+export function regionChamfer(
+  recon: Pick<Mesh, 'positions' | 'indices'>,
+  truth: Pick<Mesh, 'positions' | 'indices'>,
+  regions: readonly string[],
+  regionOf: (x: number, y: number, z: number) => string,
+  samples = 50000,
+  seed = 0,
+): RegionChamfer[] {
+  const a = samplePoints(recon, samples, seed);
+  const b = samplePoints(truth, samples, seed + 1);
+  const d1 = nearestDistances(a, b);
+  const d2 = nearestDistances(b, a);
+  const acc = new Map(regions.map((r) => [r, { s1: 0, n1: 0, s2: 0, n2: 0 }]));
+  const add = (pts: Float64Array, d: Float64Array, first: boolean): void => {
+    for (let i = 0; i < d.length; i++) {
+      const e = acc.get(regionOf(pts[3 * i]!, pts[3 * i + 1]!, pts[3 * i + 2]!));
+      if (!e) continue;
+      if (first) { e.s1 += d[i]!; e.n1++; } else { e.s2 += d[i]!; e.n2++; }
+    }
+  };
+  add(a, d1, true);
+  add(b, d2, false);
+  const r3 = (x: number): number => Math.round(x * 1000) / 1000;
+  return regions.map((region) => {
+    const e = acc.get(region)!;
+    const m1 = e.n1 ? e.s1 / e.n1 : null, m2 = e.n2 ? e.s2 / e.n2 : null;
+    return { region, chamferCmMean: m1 !== null && m2 !== null ? r3((m1 + m2) / 2) : null, reconToTruthCm: m1 === null ? null : r3(m1), truthToReconCm: m2 === null ? null : r3(m2), reconSamples: e.n1, truthSamples: e.n2 };
+  });
+}

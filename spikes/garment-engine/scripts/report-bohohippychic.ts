@@ -99,6 +99,9 @@ function shopProducts(): { shop: { domain: string; brand: string; currency: stri
 // Evaluation and bundle output
 // ---------------------------------------------------------------------------
 
+/** The 2DGS (stage 4) bundle of a product whose asset is stage 4t, kept for the before/after renders. */
+const ALT_SUFFIX = '-2dgs';
+
 function writeBundle(id: string, ev: ProductEval, images: Map<string, Uint8Array>): string | null {
   if (!ev.bundle) return null;
   const dir = join(evalOut, id);
@@ -128,7 +131,12 @@ function run(id: string, payload: GarmentPayload, baseSize: string, jobDir: stri
     let alternative: ProductEval | null = null;
     if (choice.kind === 'stage4t' && job.stage4.stage2?.glb) {
       const alt = chooseMesh(job, { allowSynthetic: false, prefer: 'stage4' });
-      if (alt && alt.kind === 'stage4') alternative = evaluateProduct({ productId: id, payload, baseSize, job, choice: alt, printedLength });
+      if (alt && alt.kind === 'stage4') {
+        // Its bundle and turntable pictures go to eval/<id>-2dgs, so --renders can draw the old asset next to the new one.
+        const altImages = new Map<string, Uint8Array>();
+        alternative = evaluateProduct({ productId: id, payload, baseSize, job, choice: alt, printedLength, writeImage: (name, png) => altImages.set(name, png) });
+        writeBundle(`${id}${ALT_SUFFIX}`, alternative, altImages);
+      }
     }
     const bundleRel = writeBundle(id, ev, images);
     const r = ev.result;
@@ -207,10 +215,14 @@ if (!flag('no-synthetic')) {
 }
 
 if (flag('renders')) {
-  const ids = [...sections.filter((s) => s.eval?.bundle).map((s) => `eval/${s.id}`), ...(synthetic?.ev?.bundle ? [`eval/${SYNTHETIC_ID}`] : [])];
+  const ids = [
+    ...sections.filter((s) => s.eval?.bundle).map((s) => `eval/${s.id}`),
+    ...sections.filter((s) => s.alternative?.bundle && existsSync(join(evalOut, `${s.id}${ALT_SUFFIX}`, 'grading.json'))).map((s) => `eval/${s.id}${ALT_SUFFIX}`),
+    ...(synthetic?.ev?.bundle ? [`eval/${SYNTHETIC_ID}`] : []),
+  ];
   if (ids.length === 0) console.log('[report] --renders: no bundle to render');
   else {
-    const shopIds = ids.filter((id) => id !== `eval/${SYNTHETIC_ID}`);
+    const shopIds = ids.filter((id) => id !== `eval/${SYNTHETIC_ID}` && !id.endsWith(ALT_SUFFIX));
     const blind = shopIds.length ? ['--blind', shopIds.join(',')] : ['--no-blind'];
     const res = spawnSync(process.execPath, [join(spikeDir, 'viewer', 'render-eval.mjs'), ...ids, ...blind], { stdio: 'inherit', cwd: spikeDir });
     if (res.status !== 0) console.error(`[report] render-eval exited with ${res.status}; its problems are listed in the report`);

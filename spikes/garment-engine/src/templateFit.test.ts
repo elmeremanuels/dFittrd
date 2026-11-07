@@ -8,7 +8,7 @@ import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh, turntable
 import { mockGarment } from '@curtain/schema';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { buildBodySdf, MIN_CLEARANCE_CM } from './bodySdf';
-import { chamfer } from './chamfer';
+import { chamfer, regionChamfer } from './chamfer';
 import { clothInsideBody } from './eval';
 import { maskIou, type Mask } from './evalPng';
 import { garmentSilhouette } from './evalView';
@@ -17,7 +17,8 @@ import { garmentSpec } from './product';
 import { buildProxy } from './proxy';
 import { boundaryLoops } from './stage4t';
 import { fitTemplate, renderPositions, type TemplateFitResult } from './templateFit';
-import { cameraFromFrame, idMask, rasterize, splitFrames, type PinholeCamera } from './views';
+import { GARMENT_REGIONS, garmentRegion, PERTURBATIONS, perturbTemplate } from './templatePerturb';
+import { cameraFromFrame, cleanMask, cleanupPixels, idMask, pixelsPerCm, rasterize, splitFrames, type PinholeCamera } from './views';
 
 const m = buildMannequin(bodyShape(BASE_SHAPE_ID));
 const body = buildMannequinMesh(m);
@@ -33,6 +34,25 @@ const { train, holdout } = splitFrames(FRAMES);
 /** The synthetic stills' proxy: hem at the synthetic garment's (vertical) length, as the exporter passes it. */
 const proxy = buildProxy(m, payload, 'M', { shoulderToHemCm: garmentSpec(payload, 'M').shoulderToHemCm }).mesh;
 
+/** A 10 × 4.7 cm keyhole in the front panel between the underbust and the chest. */
+const keyhole = (p: number[]): boolean => p[2]! > 0 && Math.abs(p[0]!) < 5 && p[1]! > m.morphHeights.underbust + 1 && p[1]! < m.morphHeights.chest - 1;
+const withHole = (mesh: Mesh): Mesh => {
+  const tris: number[] = [];
+  for (let t = 0; t < mesh.indices.length; t += 3) {
+    const c = [0, 1, 2].map((k) => mesh.indices[t + k]!);
+    const centre = [0, 1, 2].map((d) => c.reduce((s, v) => s + mesh.positions[3 * v + d]!, 0) / 3);
+    if (!keyhole(centre)) tris.push(...c);
+  }
+  return { ...mesh, indices: Uint32Array.from(tris) };
+};
+
+/**
+ * Yields to the event loop between long synchronous steps: vitest's worker RPC times out when one
+ * synchronous stretch outlasts its 60 s timer, which a fit plus four Chamfer passes did under the
+ * root `pnpm check` (every workspace testing at once on 4 cores).
+ */
+const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+
 let fit: TemplateFitResult;
 beforeAll(() => {
   fit = fitTemplate({ mannequin: m, body, proxy, views: { cameras: cams, masks, train, holdout } });
@@ -45,6 +65,41 @@ describe('pinhole cameras', () => {
       const theirs = garmentSilhouette(null, body, path.frames[k]!, W, H);
       expect(maskIou(idMask(ours, 1), theirs).iou).toBeGreaterThan(0.995);
     }
+  });
+});
+
+describe('mask clean-up in garment units', () => {
+  it('keeps a 10 × 4.7 cm keyhole open at the production resolution (480 × 832) and at half of it', () => {
+    const holed = withHole(truth);
+    for (const [w, h] of [[480, 832], [240, 416]] as const) {
+      const full = turntablePath(m, 'turntable_mid', { frames: 4 });
+      const cam = cameraFromFrame(full.frames[0]!, w, h);
+      const ppc = pixelsPerCm(cam);
+      const px = cleanupPixels(ppc);
+      const whole = visibleMask(cam, truth), open = visibleMask(cam, holed);
+      let holePx = 0, kept = 0;
+      const clean = cleanMask(open, ppc);
+      for (let i = 0; i < whole.data.length; i++) if (whole.data[i] && !open.data[i]) {
+        holePx++;
+        if (!clean.data[i]) kept++;
+      }
+      // The keyhole is several times the noise threshold at both sizes, and the clean-up leaves it open
+      // (the closing may eat a pixel or two of its rim).
+      expect(holePx).toBeGreaterThan(3 * px.maxHoleArea);
+      expect(kept / holePx).toBeGreaterThan(0.9);
+    }
+  });
+  it('fills a hole of 2.5 × 2.5 cm (mask noise) and converts with the camera distance', () => {
+    const cam = cameraFromFrame(path.frames[0]!, 480, 832);
+    const ppc = pixelsPerCm(cam);
+    const fx = cam.fy, d = Math.hypot(cam.centre[0], cam.centre[2]);
+    expect(ppc).toBeCloseTo(fx / d, 6);
+    const side = Math.round(2.5 * ppc);
+    const data = new Uint8Array(480 * 832).fill(0);
+    for (let y = 200; y < 600; y++) for (let x = 140; x < 340; x++) data[y * 480 + x] = 1;
+    for (let y = 400; y < 400 + side; y++) for (let x = 240; x < 240 + side; x++) data[y * 480 + x] = 0;
+    const clean = cleanMask({ width: 480, height: 832, data }, ppc);
+    for (let y = 400; y < 400 + side; y++) for (let x = 240; x < 240 + side; x++) expect(clean.data[y * 480 + x]).toBe(1);
   });
 });
 
@@ -73,6 +128,27 @@ describe('template fit on the synthetic dress', () => {
     expect(c.chamferCmMean).toBeLessThan(0.8);
     expect(c.fscore2cm).toBeGreaterThan(0.9);
   });
+
+  it('finds the garment when the template is NOT the garment (perturbed proxy: girth, hem height, sleeves)', async () => {
+    // The exported proxy is built from the same garment spec as the truth, so it starts about 0.3 to 0.6 cm
+    // (Chamfer) from it and the test above shows little more than "the fit stays near a good start". Here the
+    // template is 8 % wider, its hem 8 cm higher and its sleeves 10 % wider and 15 % shorter: the fit must
+    // land as close to the truth as from the exported proxy, in every region.
+    const bad = perturbTemplate(m, proxy, PERTURBATIONS[0]!);
+    const region = garmentRegion(m);
+    const before = chamfer(bad, truth, 30000);
+    await tick();
+    expect(before.chamferCmMean).toBeGreaterThan(1.2);
+    const f = fitTemplate({ mannequin: m, body, proxy: bad, views: { cameras: cams, masks, train, holdout } });
+    await tick();
+    const after = chamfer(f.mesh, truth, 30000);
+    const fromExported = chamfer(fit.mesh, truth, 30000);
+    await tick();
+    expect(after.chamferCmMean).toBeLessThan(0.8);
+    expect(Math.abs(after.chamferCmMean - fromExported.chamferCmMean)).toBeLessThan(0.1);
+    for (const r of regionChamfer(f.mesh, truth, GARMENT_REGIONS, region, 30000)) expect(r.chamferCmMean ?? Infinity).toBeLessThan(1.2);
+    expect(clothInsideBody(m, f.mesh).share).toBe(0);
+  }, 300_000);
 
   it('keeps every vertex at least the clearance outside the mannequin (signed distance) and none inside by the evaluation test', () => {
     const sdf = buildBodySdf(body);
@@ -135,16 +211,10 @@ describe('template fit on the synthetic dress', () => {
   });
 
   it('carves an opening the masks show: a mask with a hole at the chest front gives a hole in the bodice', () => {
-    // Same dress, but the front panel cut out between the underbust and the chest (a keyhole): masks
-    // rendered from that truth, the fit must not cover the hole where the mannequin is visible.
-    const hole = (p: number[]): boolean => p[2]! > 0 && Math.abs(p[0]!) < 5 && p[1]! > m.morphHeights.underbust + 1 && p[1]! < m.morphHeights.chest - 1;
-    const tris: number[] = [];
-    for (let t = 0; t < truth.indices.length; t += 3) {
-      const c = [0, 1, 2].map((k) => truth.indices[t + k]!);
-      const centre = [0, 1, 2].map((d) => c.reduce((s, v) => s + truth.positions[3 * v + d]!, 0) / 3);
-      if (!hole(centre)) tris.push(...c);
-    }
-    const holed = { ...truth, indices: Uint32Array.from(tris) };
+    // Same dress, but the front panel cut out between the underbust and the chest (a keyhole of 10 × 4.7 cm,
+    // about 150 px at this half resolution, 600 px at 480 × 832): masks rendered from that truth, the fit
+    // must not cover the hole where the mannequin is visible.
+    const holed = withHole(truth);
     const hm = cams.map((c) => visibleMask(c, holed));
     const f = fitTemplate({ mannequin: m, body, proxy, views: { cameras: cams, masks: hm, train, holdout } });
     let inHole = 0;

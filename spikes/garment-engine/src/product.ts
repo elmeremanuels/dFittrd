@@ -395,7 +395,9 @@ function lengthWord(m: Mannequin, kind: ProxyKind, hemY: number): string {
   const h = m.morphHeights;
   if (kind === 'trousers') return hemY <= h.ankle + 6 ? 'full-length' : hemY >= h.thigh - 8 ? '' : 'cropped';
   if (kind === 'top' || kind === 'outerwear') return hemY < h.thigh ? 'long' : hemY > h.waist ? 'cropped' : '';
-  if (hemY > h.knee + 6) return 'short';
+  // Proxy 0.2.0 ends a printed flat-lay length higher than a vertical drop did (run 14's 91 cm: 9 cm above the knee): "above-knee", not a mini.
+  if (hemY > h.knee + 16) return 'short';
+  if (hemY > h.knee + 6) return 'above-knee';
   if (hemY >= h.knee - 4) return 'knee-length';
   if (hemY > h.ankle + 8) return 'midi';
   return 'ankle-length maxi';

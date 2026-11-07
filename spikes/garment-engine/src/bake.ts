@@ -30,9 +30,18 @@ export interface BakeOptions {
   minCos: number;
   /** Jacobi iterations over the unseen texels after pull-push. */
   smoothIterations: number;
+  /**
+   * No sample closer than this to the mask's edge, px. The generated frames' masks overshoot the
+   * cloth by a pixel or two at the hem and the cuffs, so the outermost mask pixels show the legs or
+   * the studio (run 14: a dark and white fringe along the hem in the atlas); those texels are filled
+   * from their neighbours instead.
+   */
+  minEdgePx: number;
+  /** Pass 3: a kept sample further than this from the texel's blend (|ΔR| + |ΔG| + |ΔB|, 0–765) is an outlier; 0 = no pass 3. */
+  outlierL1: number;
 }
 
-export const DEFAULT_BAKE: BakeOptions = { size: 2048, anglePower: 4, edgePx: 6, depthTolCm: 1, keepRatio: 0.95, minCos: 0.15, smoothIterations: 30 };
+export const DEFAULT_BAKE: BakeOptions = { size: 2048, anglePower: 4, edgePx: 6, depthTolCm: 1, keepRatio: 0.95, minCos: 0.15, smoothIterations: 30, minEdgePx: 3, outlierL1: 90 };
 
 export interface BakeInputs {
   render: Pick<RenderMesh, 'positions' | 'uvs' | 'indices' | 'remap'>;
@@ -58,6 +67,9 @@ export interface BakeReport {
   seenShare: number;
   /** Mean number of views blended per seen texel. */
   meanViewsPerTexel: number;
+  /** Samples dropped by pass 3 as outliers, and their share of the kept samples. */
+  outlierSamples: number;
+  outlierShare: number;
   timingsMs: Record<string, number>;
   options: BakeOptions;
 }
@@ -151,7 +163,7 @@ function sampleView(pv: PreparedView, tx: Texels, opt: BakeOptions, wOut: Float3
   const P = tx.pos, N = tx.nrm;
   const r0 = R[0]!, r1 = R[1]!, r2 = R[2]!, r3 = R[3]!, r4 = R[4]!, r5 = R[5]!, r6 = R[6]!, r7 = R[7]!, r8 = R[8]!;
   const t0 = t[0]!, t1 = t[1]!, t2 = t[2]!;
-  const minCos = opt.minCos, tol = opt.depthTolCm, invEdge = 1 / opt.edgePx, pw = opt.anglePower;
+  const minCos = opt.minCos, tol = opt.depthTolCm, invEdge = 1 / opt.edgePx, pw = opt.anglePower, minEdge = opt.minEdgePx;
   for (let i = 0; i < n; i++) {
     wOut[i] = 0;
     if (only && !only[i]) continue;
@@ -169,6 +181,7 @@ function sampleView(pv: PreparedView, tx: Texels, opt: BakeOptions, wOut: Float3
     if (ids[p] !== 2 || !mask[p]) continue;
     const dd = depth[p]! - zc;
     if (dd > tol || dd < -tol) continue;
+    if (edge[p]! < minEdge) continue;
     const e = edge[p]! * invEdge;
     if (e <= 0) continue;
     const c2 = cos * cos;
@@ -280,9 +293,49 @@ export function bakeTexture(inp: BakeInputs): BakeResult {
     }
   }
   lap('pass2');
+  // Pass 3: the generated frames disagree (a swinging tier, a leg or the studio showing at the hem in
+  // one frame): keep only the kept samples within `outlierL1` (sum over RGB) of the pass-2 blend, and
+  // blend again. A texel whose samples all disagree keeps the pass-2 blend.
+  let rejected = 0;
+  if (opt.outlierL1 > 0) {
+    const mean = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) if (wsum[i]! > 0) for (let ch = 0; ch < 3; ch++) mean[3 * i + ch] = acc[3 * i + ch]! / wsum[i]!;
+    const acc2 = new Float32Array(n * 3);
+    const wsum2 = new Float32Array(n);
+    const count2 = new Uint16Array(n);
+    for (const v of views) {
+      const pv = prepareView(inp, v)!;
+      sampleView(pv, tx, opt, w, col, seenMask);
+      for (let i = 0; i < n; i++) {
+        const wi = w[i]!;
+        if (wi <= 0 || wi < opt.keepRatio * best[i]!) continue;
+        const d = Math.abs(col[3 * i]! - mean[3 * i]!) + Math.abs(col[3 * i + 1]! - mean[3 * i + 1]!) + Math.abs(col[3 * i + 2]! - mean[3 * i + 2]!);
+        if (d > opt.outlierL1) {
+          rejected++;
+          continue;
+        }
+        acc2[3 * i] = acc2[3 * i]! + wi * col[3 * i]!;
+        acc2[3 * i + 1] = acc2[3 * i + 1]! + wi * col[3 * i + 1]!;
+        acc2[3 * i + 2] = acc2[3 * i + 2]! + wi * col[3 * i + 2]!;
+        wsum2[i] = wsum2[i]! + wi;
+        count2[i] = count2[i]! + 1;
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      if (wsum2[i]! <= 0) continue;
+      acc[3 * i] = acc2[3 * i]!;
+      acc[3 * i + 1] = acc2[3 * i + 1]!;
+      acc[3 * i + 2] = acc2[3 * i + 2]!;
+      wsum[i] = wsum2[i]!;
+      count[i] = count2[i]!;
+    }
+    lap('pass3');
+  }
   const rgb = new Float32Array(S * S * 3);
   const weight = new Float32Array(S * S);
   let seen = 0, viewsSum = 0;
+  let keptSamples = 0;
+  for (let i = 0; i < n; i++) keptSamples += count[i]!;
   for (let i = 0; i < n; i++) {
     if (wsum[i]! <= 0) continue;
     const k = tx.index[i]!;
@@ -318,7 +371,7 @@ export function bakeTexture(inp: BakeInputs): BakeResult {
     atlas: { width: S, height: S, data },
     seenWeight,
     texels: tx,
-    report: { size: S, views: views.length, chartTexels: n, seenTexels: seen, filledTexels: n - seen, seenShare: n ? Math.round((seen / n) * 10000) / 10000 : 0, meanViewsPerTexel: seen ? Math.round((viewsSum / seen) * 100) / 100 : 0, timingsMs: timings, options: opt },
+    report: { size: S, views: views.length, chartTexels: n, seenTexels: seen, filledTexels: n - seen, seenShare: n ? Math.round((seen / n) * 10000) / 10000 : 0, meanViewsPerTexel: seen ? Math.round((viewsSum / seen) * 100) / 100 : 0, outlierSamples: rejected, outlierShare: keptSamples + rejected ? Math.round((rejected / (keptSamples + rejected)) * 10000) / 10000 : 0, timingsMs: timings, options: opt },
   };
 }
 
@@ -342,7 +395,7 @@ export interface PhotometricCheck {
  * the old bundle had.
  */
 export function photometricCheck(inp: BakeInputs, bake: BakeResult, v: number, meanColour: [number, number, number]): PhotometricCheck | null {
-  const opt: BakeOptions = { ...DEFAULT_BAKE, ...inp.options, edgePx: 1e-9, minCos: 0.05, anglePower: 1 };
+  const opt: BakeOptions = { ...DEFAULT_BAKE, ...inp.options, edgePx: 1e-9, minCos: 0.05, anglePower: 1, minEdgePx: 0 };
   const pv = prepareView(inp, v);
   if (!pv) return null;
   const tx = bake.texels;

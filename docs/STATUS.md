@@ -161,29 +161,71 @@ garment spike 219 + 47 (the spike is another workflow's; it passed in this run).
 
 Bohohippychic `azure-palm-baby-doll-dress`, job `azure-palm-baby-doll-dress-6d2f2611a144`:
 stage 1b FASHN on the proxy-dressed mannequin (QA overridden), stage 2 Wan2.2-Fun-A14B-Control
-with the proxy control, stage 4 gsplat 2DGS on the stage 2 garment masks. Full write-up, every
-render and the runs 10–14 timeline: [`docs/research/phase0-bohohippychic.md`](research/phase0-bohohippychic.md)
-(renders under `spikes/garment-engine/out/eval/`, gitignored: the links resolve only in a checkout
-where run 14's outputs are in `out/phase0/` and `report:bohohippychic -- --renders` has run).
+with the proxy control, stage 4 gsplat 2DGS on the stage 2 garment masks, and since 7 Nov stage 4t
+(CPU template fit + texture bake, branch `claude/garment-engine-template-fit-wip`), which is now the
+evaluated asset. Full write-up, every render and the runs 10–14 timeline:
+[`docs/research/phase0-bohohippychic.md`](research/phase0-bohohippychic.md) ("Template fit"
+section; renders under `spikes/garment-engine/out/eval/`, gitignored: the links resolve only in a
+checkout where run 14's outputs are in `out/phase0/` and `report:bohohippychic -- --renders` has run).
 
-| What | Number |
-| --- | --- |
-| Stage 4 | mask IoU 0.925 train / 0.917 holdout, 11,999 triangles |
-| Stage 2 consistency (0.3.0) | 31 of 243 frames flagged (side views, end of the motion clip), 0 artefact frames |
-| Chart agreement (chest, the only critical anchor of an empire babydoll) | 99.0 cm reconstructed vs 102 cm printed: −2.98 cm before calibration, global scale 1.030, −0.71 cm after; passes, by construction |
-| Length | shoulder to hem 83.3 cm vs 91 cm printed (−7.7 cm) |
-| View agreement vs the pinned stills | silhouette IoU 0.93 front / 0.95 back; with the mannequin in front 0.71 / 0.75 |
-| Turntable 0° / 90° / 180° vs the stage 2 frames | silhouette IoU 0.93 / 0.85 / 0.95 |
-| Cloth inside the mannequin | 21.9 % of the vertices (2.3 % on the synthetic dress) |
-| Cost (estimate, list price × GPU s) | 1,493 GPU s, 2,311 s wall, $1.57–1.63; runs 10–14 together 6,648 GPU s, $6.89–7.52 |
+**Stage 4t** (`spikes/garment-engine/src/templateFit.ts`, `bake.ts`, `stage4t.ts`;
+`pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic]`): the
+control proxy remeshed into a body tube and two sleeve tubes, each vertex moved along a fixed ray
+to the visual hull of 128 of the 160 stage 2 garment masks (32 held out), kept at least 4 mm
+outside `mannequin.glb` (signed distance), hem and cuffs found on the masks, the bodice stopped at
+the fitted sleeves, then the print projected from the same frames into a 2048² atlas, JPEG, in a
+textured `garment.glb`. About 87 s per product on a 4-core CPU.
 
-The evaluation tooling broke on this first real mesh (polyline girths on a rippled surface, no
-chest loop with fused sleeves, waist and hip critical for an empire dress) and was fixed: a tape
-measure girth (`spikes/garment-engine/src/tape.ts`) and the fit engine's pattern-block rule for
-critical anchors. Verdict: the silhouette is right, the appearance is not yet. In the viewer the
-mannequin shows through the bodice and the print is lost (the bundle carries one mean colour),
-so the five-person size and fabric tests should not run on this asset yet. Chart agreement is
-measured on 1 of 5 products (4 needed); cost is measured; the Modal invoice is not read.
+The synthetic dress's template is built from the same spec as its truth (0.57 cm Chamfer before
+any fit), so its 0.44 cm alone does not show that the fit survives a wrong template.
+`stage4t:perturbed` fits the same masks from a template 8 % wider with the hem 8 cm higher, one 6 %
+narrower with the hem 8 cm lower, and another product's proxy: every start lands at 0.437 cm
+(shoulders 0.81, bodice 0.42, skirt 0.33, sleeves 0.58 cm). The shoulders and sleeves end further
+from the truth than the correct template was (0.60 and 0.29 cm): that is the visual hull's limit
+(the underarm and the shoulder slope are not visible in any silhouette), not the template.
+
+| What | 2DGS (stage 4) | Template fit (stage 4t) |
+| --- | --- | --- |
+| Synthetic dress, Chamfer to the truth | 1.45 cm | 0.44 cm (F-score 0.96 at 1 cm), 0 vertices inside; the same 0.437 cm from templates 1.55–3.11 cm off the truth (see below) |
+| Cloth inside the mannequin (run 14) | 21.9 % more than 3 mm inside (analytic test); 26.2 % inside by the SDF sign | 0 of 5,780; closest vertex 3.7 mm from `mannequin.glb` (exact distance) |
+| Turntable IoU visible / silhouette at 0° / 90° / 180° | 0.65 / 0.93, 0.76 / 0.83, 0.67 / 0.93 | 0.90 / 0.90, 0.92 / 0.86, 0.94 / 0.93 |
+| All 160 frames, holdout IoU visible / silhouette (32 frames never used) | 0.697 / 0.900 | 0.906 / 0.887: the outline fits slightly worse, the visible garment much better |
+| View agreement vs the pinned stills, visible front / back | 0.71 / 0.75 | 0.91 / 0.94 (initial bar 0.85) |
+| Chest (chart 102 cm), before calibration / after | 99.0 cm: −2.98 / −0.71 cm, scale 1.030 | 101.5 cm: −0.50 / 0.00 cm, scale 1.005 |
+| Shoulder to hem, vertical drop / flat-lay (printed 91 cm) | 83.3 / 86.6 cm | 84.4 / 92.6 cm |
+| Mesh | 11,999 triangles, ragged hem | 11,227 triangles, 3 open tubes, 0 non-manifold edges, not watertight by design |
+| Colour, size | one mean colour, bundle 255 KB | baked texture (holdout MAE 21.0 vs 24.3 for one colour), `garment.glb` 716 KB, bundle 756 KB |
+
+The length: a shop's "Length" is read as flat-lay (along the garment from the high point
+shoulder); only that reading comes near 91 cm. Proxy 0.1.0 dropped 91 cm vertically and put run
+14's control hem at the knee, about 8 cm below the generated dress; proxy 0.2.0 fixes it (hem
+57.3 cm above the floor, prompt "above-knee"). In the viewer the dress is now closed in every size
+and view, carries the print, and 8 / 12 / 16 differ visibly. Still wrong: the shoulder tops are
+bare (horizontal rays cannot form the shoulder; the sleeves are not stitched to the body tube) and
+the sleeves droop after the drape. The five-person panel stays on hold (1 of 5 products has a
+bundle). Cost of run 14 (estimate, list price × GPU s): 1,493 GPU s, $1.57–1.63; runs 10–14
+6,648 GPU s, $6.89–7.52; stage 4t adds CPU time only.
+
+Fixed failures from the interrupted work: the bake test's expected seen share (the test was
+wrong: five views at ±50° see 70 % of a cylinder, not < 60 %; it now computes the share from the
+geometry), the synthetic-dress length test (the test: the spike's synthetic garment is a vertical
+drop, the default is now flat-lay), the length-definition test (the test: a front/back symmetric
+cone cannot tell the front from the back length), the shop prompt (expectation and code updated
+together for proxy 0.2.0: the generated hem is above the knee, so "knee-length" became
+"above-knee" in both), the template fit's sleeve scan (the code: it stopped at the wrist, the
+synthetic cuff ends 1.5 cm past it) and its hole test.
+
+Review round (7 Nov): mask clean-up now in garment units (holes up to 12 cm² filled; the earlier
+600 px threshold erased a 10 × 5 cm keyhole at 480 × 832 too, not only at half resolution; the hole
+test is back at 10 × 4.7 cm with its original bounds, plus a mask test at 480 × 832); a fit from
+perturbed templates and another product's proxy (above); clearance reported by the exact distance
+to the mannequin's triangles; the 2DGS holdout IoU measured with the same projection; a bake test
+with the default edge margin on masks that overshoot the cloth; stage 4t 0.2.0. Run 14's fit is
+unchanged by the new clean-up. Checks: spike `vitest` 267 + viewer 47 passed, typecheck and lint
+clean, Modal pytest 169 passed (1 skipped), root `pnpm check` passed. Under the root check the
+spike's shop-export tests had hit vitest's 5 s default and the new perturbed-template test tripped
+vitest's 60 s worker RPC timer; the spike's `testTimeout` is now 60 s and that test yields between
+its steps.
 
 ## Garment engine — Phase 0 preparation (Nov 2026)
 

@@ -9,6 +9,8 @@
     "build:bundle": "tsx scripts/build-bundle.ts",
     "export:phase0": "tsx src/exportCli.ts",
     "stage4t": "tsx scripts/stage4t.ts",
+    "stage4t:perturbed": "tsx scripts/stage4t-perturbed.ts",
+    "stage4t:compare": "tsx scripts/stage4t-compare.ts",
     "shop:bohohippychic": "tsx src/shopCli.ts",
     "report:bohohippychic": "tsx scripts/report-bohohippychic.ts",
     "families:bohohippychic": "tsx scripts/families-bohohippychic.ts",

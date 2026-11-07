@@ -24,10 +24,11 @@ import { decodeAnyPng, maskFromPng, maskIou, type Mask } from './evalPng';
 import { encodePng } from './exportPng';
 import { writeTexturedGlb } from './glbTextured';
 import { encodeJpeg, type RgbImage } from './jpeg';
+import { distancesToMesh } from './meshDistance';
 import { fitTemplate, type RenderMesh, type TemplateFitOptions, type TemplateFitReport } from './templateFit';
 import { camerasFromOpencvJson, idMask, project, rasterize, splitFrames, type PinholeCamera } from './views';
 
-export const STAGE4T_VERSION = 'stage4t-0.1.0';
+export const STAGE4T_VERSION = 'stage4t-0.2.0';
 export type Stage4tSource = 'stage2' | 'synthetic';
 
 export interface JobViews {
@@ -151,8 +152,14 @@ export interface Stage4tMetrics {
   split: { train: number; holdout: number; rule: string };
   fit: TemplateFitReport;
   iou: { train: IouSummary; holdout: IouSummary; perView: ViewIou[] };
-  /** Vertices whose signed distance to mannequin.glb is below 0 (inside) and below the 4 mm clearance; and the evaluation's analytic test (3 mm). */
-  insideBody: { sdfInside: number; sdfBelowClearance: number; vertices: number; share: number; analytic: InsideBody };
+  /**
+   * Vertices whose signed distance to mannequin.glb is below 0 (inside) and below the 4 mm clearance
+   * (grid SDF, trilinear, the fit's own constraint); the exact distance to the mannequin's triangles
+   * for the same vertices (`meshDistance.ts`: minimum, and how many lie below the clearance and below
+   * 3 mm; the grid SDF may differ from it by a few tenths of a millimetre); and the evaluation's
+   * analytic test (3 mm inside the analytic mannequin).
+   */
+  insideBody: { sdfInside: number; sdfBelowClearance: number; exact: { minCm: number; belowClearance: number; below3mm: number; method: string }; vertices: number; share: number; analytic: InsideBody };
   mesh: { triangles: number; vertices: number; budget: [number, number]; withinBudget: boolean; components: number; boundaryEdges: number; boundaryLoops: number; nonManifoldEdges: number; inconsistentEdges: number; degenerateTriangles: number; watertight: boolean; note: string };
   vsTruth: ChamferReport | null;
   bake: BakeReport & { jpegBytes: number; jpegQuality: number; holdout: PhotometricCheck[]; holdoutMean: { maeTexture: number; maeMeanColour: number; psnrTexture: number; psnrMeanColour: number; maeTextureBlock8: number; maeMeanColourBlock8: number } | null; meanColour: [number, number, number] };
@@ -226,6 +233,13 @@ export function runStage4t(o: Stage4tInputs): Stage4tResult {
     if (d < 0) sdfInside++;
     if (d < fit.report.options.clearanceCm - 0.02) sdfBelow++;
   }
+  const exactD = distancesToMesh(fit.mesh.positions, body, 2);
+  let exactMin = Infinity, exactBelow = 0, exactBelow3 = 0;
+  for (const d of exactD) {
+    exactMin = Math.min(exactMin, d);
+    if (d < fit.report.options.clearanceCm) exactBelow++;
+    if (d < 0.3) exactBelow3++;
+  }
   const topo = topology(fit.mesh);
   const loops = boundaryLoops(fit.mesh);
   let truth = o.truth ?? null;
@@ -283,7 +297,7 @@ export function runStage4t(o: Stage4tInputs): Stage4tResult {
     split: { train: train.length, holdout: holdout.length, rule: 'frame index mod 5 = 2 is held out (not used by the fit or the bake)' },
     fit: fit.report,
     iou: { train: summarise(ious, 'train'), holdout: summarise(ious, 'holdout'), perView: ious },
-    insideBody: { sdfInside, sdfBelowClearance: sdfBelow, vertices: nv, share: r4(sdfInside / nv), analytic: clothInsideBody(m, fit.mesh) },
+    insideBody: { sdfInside, sdfBelowClearance: sdfBelow, exact: { minCm: Math.round(exactMin * 1000) / 1000, belowClearance: exactBelow, below3mm: exactBelow3, method: 'unsigned point-to-triangle distance to mannequin.glb (exact), inside/outside from the SDF sign' }, vertices: nv, share: r4(sdfInside / nv), analytic: clothInsideBody(m, fit.mesh) },
     mesh: {
       triangles: topo.triangles,
       vertices: topo.vertices,

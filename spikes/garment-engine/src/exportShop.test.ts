@@ -145,6 +145,6 @@ describe('shop products: exported job', () => {
       for (const c of ['blue', 'pink', 'red', 'rust', 'orange', 'brown']) expect(text, `${handle}: ${c}`).not.toMatch(new RegExp(`\\b${c}\\b`));
     }
     const azure = shopJob('azure-palm-baby-doll-dress').manifest.prompt;
-    expect(azure.description).toBe('a knee-length babydoll dress in a fluid viscose fabric, one closed skirt that falls from the waist to the hem and covers both legs');
+    expect(azure.description).toBe('an above-knee babydoll dress in a fluid viscose fabric, one closed skirt that falls from the waist to the hem and covers both legs');
   });
 });

@@ -94,7 +94,7 @@ describe('texture bake: checkerboard on a known cylinder', () => {
 
   it('puts every seen texel at its checker colour, away from the cell borders', () => {
     const v = views(Array.from({ length: 24 }, (_, k) => k * 15));
-    const bake = bakeTexture({ render: cyl.render, welded: cyl.welded, body: null, cameras: v.cams, frames: v.frames, masks: v.masks, views: v.cams.map((_, k) => k), options: { size: S, edgePx: 2 } });
+    const bake = bakeTexture({ render: cyl.render, welded: cyl.welded, body: null, cameras: v.cams, frames: v.frames, masks: v.masks, views: v.cams.map((_, k) => k), options: { size: S, edgePx: 2, minEdgePx: 0 } }); // exact masks: no overshoot to keep away from
     expect(bake.report.seenShare).toBeGreaterThan(0.98);
     let checked = 0, right = 0;
     for (let ty = 0; ty < S; ty++) for (let tx = 0; tx < S; tx++) {
@@ -113,9 +113,26 @@ describe('texture bake: checkerboard on a known cylinder', () => {
 
   it('fills the side no view sees by diffusion: no hole, colours within the seen ones', () => {
     const v = views([-50, -25, 0, 25, 50]);
-    const bake = bakeTexture({ render: cyl.render, welded: cyl.welded, body: null, cameras: v.cams, frames: v.frames, masks: v.masks, views: v.cams.map((_, k) => k), options: { size: S, edgePx: 2 } });
-    expect(bake.report.filledTexels).toBeGreaterThan(0.3 * bake.report.chartTexels);
-    expect(bake.report.seenShare).toBeLessThan(0.6);
+    const bake = bakeTexture({ render: cyl.render, welded: cyl.welded, body: null, cameras: v.cams, frames: v.frames, masks: v.masks, views: v.cams.map((_, k) => k), options: { size: S, edgePx: 2, minEdgePx: 0 } }); // exact masks: no overshoot to keep away from
+    // Expected seen share from the geometry alone: a point at θ on the cylinder is seen when some camera
+    // is in front of it with cos(normal, direction to camera) ≥ minCos (0.15). Five cameras at ±50°
+    // 140 cm away see about 255° of the 360° round; the back ≈ 105° is never seen.
+    let seenCols = 0;
+    const steps = 3600;
+    for (let k = 0; k < steps; k++) {
+      const t = (2 * Math.PI * k) / steps;
+      const p = [R * Math.sin(t), R * Math.cos(t)], nrm = [Math.sin(t), Math.cos(t)];
+      if ([-50, -25, 0, 25, 50].some((az) => {
+        const c = [140 * Math.sin((az * Math.PI) / 180) - p[0]!, 140 * Math.cos((az * Math.PI) / 180) - p[1]!];
+        return (c[0]! * nrm[0]! + c[1]! * nrm[1]!) / Math.hypot(c[0]!, c[1]!) >= 0.15;
+      })) seenCols++;
+    }
+    const expectedSeen = seenCols / steps;
+    expect(expectedSeen).toBeGreaterThan(0.6);
+    expect(expectedSeen).toBeLessThan(0.8);
+    // The camera ray is not horizontal off the centre row and the mask edge ramp drops a texel or two: within 3 points of the geometry.
+    expect(Math.abs(bake.report.seenShare - expectedSeen)).toBeLessThan(0.03);
+    expect(bake.report.filledTexels).toBeGreaterThan(0.2 * bake.report.chartTexels);
     // The back (θ = 180°) is filled with colours between the two checker colours, never the black of an empty texel.
     for (let ty = 8; ty < S; ty += 16) {
       const k = ty * S + Math.floor(S / 2);
@@ -126,6 +143,50 @@ describe('texture bake: checkerboard on a known cylinder', () => {
         expect(c[ch]).toBeLessThanOrEqual(Math.max(A[ch]!, B[ch]!) + 2);
       }
     }
+  });
+
+  it('with the default options (3 px off the mask edge, outlier pass) bakes through masks that overshoot the cloth by 2 px', () => {
+    // The generated frames' masks overshoot the cloth by a pixel or two: in every frame the outer 2 px
+    // of the cylinder's silhouette show the studio grey (235) while the mask still says garment there.
+    const v = views(Array.from({ length: 24 }, (_, k) => k * 15));
+    const W = 160, H = 160;
+    let fringe = 0;
+    const frames = v.frames.map((f, k) => {
+      const mk = v.masks[k]!.data;
+      const out = Uint8Array.from(f);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        if (!mk[y * W + x]) continue;
+        let edge = false;
+        for (let dy = -2; dy <= 2 && !edge; dy++) for (let dx = -2; dx <= 2; dx++) {
+          const yy = y + dy, xx = x + dx;
+          if (yy < 0 || yy >= H || xx < 0 || xx >= W || !mk[yy * W + xx]) { edge = true; break; }
+        }
+        if (edge) { out.set([235, 235, 235], 3 * (y * W + x)); fringe++; }
+      }
+      return out;
+    });
+    expect(fringe).toBeGreaterThan(24 * 100);
+    const bake = bakeTexture({ render: cyl.render, welded: cyl.welded, body: null, cameras: v.cams, frames, masks: v.masks, views: v.cams.map((_, k) => k), options: { size: S } });
+    expect(bake.report.options.minEdgePx).toBe(3);
+    expect(bake.report.options.outlierL1).toBe(90);
+    expect(bake.report.seenShare).toBeGreaterThan(0.95);
+    // With the edge margin no grey sample is taken, so the outlier pass has little to drop.
+    expect(bake.report.outlierShare).toBeLessThan(0.02);
+    let checked = 0, right = 0, grey = 0;
+    for (let ty = 0; ty < S; ty++) for (let tx = 0; tx < S; tx++) {
+      const u = (tx + 0.5) / S, vv = (ty + 0.5) / S;
+      const theta = 2 * Math.PI * u, y = Y1 - (Y1 - Y0) * vv;
+      const fu = ((u * 8) % 1), fy = (((Y1 - y) / 4) % 1);
+      const k = ty * S + tx;
+      const c = bake.atlas.data.subarray(3 * k, 3 * k + 3);
+      if (near(c, [235, 235, 235], 40)) grey++;
+      if (Math.min(fu, 1 - fu) < 0.06 || Math.min(fy, 1 - fy) < 0.06) continue;
+      checked++;
+      if (near(c, checker(theta, y), 40)) right++;
+    }
+    expect(checked).toBeGreaterThan(40000);
+    expect(right / checked).toBeGreaterThan(0.97);
+    expect(grey).toBe(0);
   });
 
   it('pull-push fills every empty pixel from the weighted ones', () => {

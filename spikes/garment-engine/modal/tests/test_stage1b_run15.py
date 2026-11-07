@@ -171,13 +171,46 @@ def test_a_cropped_garment_fails_and_a_skirt_with_a_lower_waistband_does_not():
     r = qa(bolero, TOP, "outerwear", "tops")
     assert r["garment_body"]["body_length"] < dq.STILL_QA_THRESHOLDS["min_body_length"]
     assert any(f.startswith("body too short") for f in r["type_failures"]), r["type_failures"]
-    # Run 15's skirt front: drawn narrower and with the waistband lower than the proxy's, but down to the hem. The
-    # provisional torso cover fails it; no type check does.
+    # A skirt with its waistband lower than the proxy's, as wide as the proxy and down to the hem: no type failure.
     skirt_proxy = box(44, 80, 76, 196)
-    skirt = box(46, 92, 74, 198)
-    s = qa(skirt, skirt_proxy, "skirt", "bottoms")
+    low = box(44, 92, 76, 198)
+    s = qa(low, skirt_proxy, "skirt", "bottoms")
     assert s["type_failures"] == [], s["type_failures"]
     assert s["garment_body"]["body_length"] >= 1.0
+    assert s["hips"]["short_rows"] == 0 and s["hips"]["zone"][0] > 92  # the hip zone starts at the garment's own top
+
+
+def test_a_skirt_narrower_than_the_proxy_at_the_hips_is_a_type_failure():
+    """Run 15's skirt (founder: "see the hips"): drawn narrower than the proxy (3 px a side at a quarter of 832; run 15
+    8-12 px at full size) and than our hips, which show beside it in both stills; the video opened a side slit there.
+    0.7.0 let it through; 0.8.0 stops it."""
+    skirt_proxy = box(44, 80, 76, 196)
+    narrow = box(47, 92, 73, 198)
+    s = qa(narrow, skirt_proxy, "skirt", "bottoms")
+    hips = s["hips"]
+    assert hips["zone"] == [94, 120]  # from the garment's own top + 2 rows to the crotch (our legs part at row 120)
+    assert hips["short_rows"] == hips["rows"] and hips["rows"] >= s["thresholds"]["min_hip_rows"]
+    assert hips["median_short_px"] == [3.0, 3.0] and hips["exposed_frac"] == 1.0  # our hips (46-74) beside it
+    assert any(f.startswith("narrow at the hips") for f in s["type_failures"]), s["type_failures"]
+    # Narrower than the proxy's ease but over our hips: not this failure (the mannequin does not show).
+    over = box(45, 92, 75, 198)  # 1 px a side inside the proxy (44-76), over our hips (46-74)
+    e = qa(over, skirt_proxy, "skirt", "bottoms")
+    assert e["hips"]["short_frac"] == 1.0 and e["hips"]["exposed_frac"] == 0.0
+    assert not any(f.startswith("narrow at the hips") for f in e["type_failures"]), e["type_failures"]
+    # The babydoll of test_stage1b_qa before 0.8.0 (box 47-73 over our 46-74 hips) now fails here as it should.
+    from test_stage1b_qa import PROXY as DRESS_PROXY, REGION as DRESS_REGION
+    old = box(47, 42, 73, 120) | box(48, 120, 72, 136)
+    d = dq.still_qa(old, BARE | old, BARE, DRESS_PROXY, DRESS_REGION, kind="dress", mannequin_mae=5.0, residue=0.0)
+    assert any(f.startswith("narrow at the hips") for f in d["type_failures"]), d["type_failures"]
+    # One side short in a quarter of the rows only (a hand, a fold): not a failure.
+    folds = skirt_proxy.copy()
+    folds[100:106, 44:47] = False
+    f = qa(folds, skirt_proxy, "skirt", "bottoms")
+    assert 0 < f["hips"]["short_frac"] <= 0.5 and not any(x.startswith("narrow") for x in f["type_failures"])
+    # Tops and outerwear have no hip zone (arms beside the hips); trousers are checked above the crotch.
+    assert qa(TOP, TOP, "top", "tops")["hips"]["zone"] is None
+    tr = dq.hip_profile(box(46, 80, 74, 122), box(44, 80, 76, 122), BARE, (120, 200, 47, 73), kind="trousers", short_px=2)
+    assert tr["short_rows"] == tr["rows"] > 0
 
 
 def test_front_and_back_of_different_garments_fail_on_the_back_as_a_type_failure():
@@ -257,7 +290,83 @@ def test_merged_legs_are_measured_on_what_the_engine_drew_not_on_the_clipped_com
     assert dq.qa_proxy(PROXY_TROUSERS, None) is PROXY_TROUSERS
 
 
-# --- 5. the app wires it in --------------------------------------------------------------------------------
+# --- 5. the hips conformed to the proxy (stage1b-qa-0.8.0) ------------------------------------------------
+
+
+SKIRT_PROXY4 = up(box(44, 80, 76, 196))
+
+
+def striped_skirt(inset):
+    """A skirt `inset` px a side narrower than the proxy (full 480x832), vertical red and pink stripes 6 px wide."""
+    g = SKIRT_PROXY4.copy()
+    g[:, :176 + inset] = False
+    g[:, 304 - inset:] = False
+    stripes = np.zeros(BARE4.shape + (3,), np.float64)
+    stripes[:] = (170, 30, 40)
+    stripes[:, (np.arange(480) // 6) % 2 == 1] = (230, 170, 180)
+    return g, render4([(g, stripes)], seed=5)
+
+
+def test_conform_widens_a_skirt_to_the_proxy_at_the_hips_and_leaves_the_rest():
+    region, _ = dq.edit_region(SKIRT_PROXY4, BARE4, "bottoms")
+    g, gen = striped_skirt(8)
+    legs = dq.pg.leg_rows(BARE4)
+    before = dq.hip_profile(g, SKIRT_PROXY4, BARE4, legs, kind="skirt", short_px=5)
+    assert before["short_rows"] == before["rows"] > 0 and before["median_short_px"] == [8.0, 8.0]
+    out, mask, rec = dq.conform_to_proxy(gen, g, SKIRT_PROXY4, BARE4, region, kind="skirt")
+    assert rec["applied"] and rec["capped_rows"] == 0 and rec["max_stretch"] == pytest.approx(136 / 120, abs=0.02)
+    after = dq.hip_profile(mask, SKIRT_PROXY4, BARE4, legs, kind="skirt", short_px=5)
+    assert after["short_rows"] == 0
+    # Hip rows (waistband to the crotch, row 480) now span the proxy, filled with the skirt's own colours.
+    for y in (330, 400, 470):
+        assert mask[y].sum() == SKIRT_PROXY4[y].sum() and (mask[y] == SKIRT_PROXY4[y]).all()
+        reds = out[y][mask[y]]
+        assert (np.abs(reds.astype(int) - (117, 117, 117)).max(axis=1) > 30).all()  # no mannequin grey pasted in
+    # Below the crotch the stretch ramps out over 50 rows; further down the skirt is as drawn.
+    ramp_out = int(round(dq.CONFORM["ramp_out_frac"] * 832))
+    y = 480 + ramp_out + 5
+    assert (mask[y] == g[y]).all() and (out[y] == gen[y]).all()
+    assert (mask[480 + ramp_out // 2].sum() - g[480 + ramp_out // 2].sum()) in range(4, 13)
+    # Never narrows: a skirt as wide as the proxy is left alone; nor outside the edit region.
+    same, same_mask, rec2 = dq.conform_to_proxy(gen, SKIRT_PROXY4, SKIRT_PROXY4, BARE4, region, kind="skirt")
+    assert not rec2["applied"] and (same_mask == SKIRT_PROXY4).all()
+    assert (mask <= region).all()
+
+
+def test_conform_caps_the_stretch_and_the_hip_check_still_fails():
+    region, _ = dq.edit_region(SKIRT_PROXY4, BARE4, "bottoms")
+    g, gen = striped_skirt(24)  # 136 / 88 = 1.55 > 1.25: an engine that drew a much slimmer skirt
+    out, mask, rec = dq.conform_to_proxy(gen, g, SKIRT_PROXY4, BARE4, region, kind="skirt")
+    assert rec["capped_rows"] > 0
+    legs = dq.pg.leg_rows(BARE4)
+    assert dq.hip_profile(mask, SKIRT_PROXY4, BARE4, legs, kind="skirt", short_px=5)["short_frac"] > dq.STILL_QA_THRESHOLDS["max_hip_short_frac"]
+
+
+def test_conform_leaves_tops_trousers_and_open_rows_alone():
+    region, _ = dq.edit_region(TOP4, BARE4, "tops")
+    gen = render4([(TOP4, print4())])
+    narrow = TOP4 & ~up(box(44, 42, 46, 125))
+    for kind in ("top", "outerwear", "trousers"):
+        out, mask, rec = dq.conform_to_proxy(gen, narrow, TOP4, BARE4, region, kind=kind)
+        assert not rec["applied"] and (mask == narrow).all() and (out == gen).all()
+    # A skirt open in the middle of its rows (an engine's slit) is not stretched across the gap.
+    region_s, _ = dq.edit_region(SKIRT_PROXY4, BARE4, "bottoms")
+    g, gen_s = striped_skirt(8)
+    g[:, 220:260] = False
+    _, mask, rec = dq.conform_to_proxy(gen_s, g, SKIRT_PROXY4, BARE4, region_s, kind="skirt")
+    assert not mask[:, 225:255].any()
+
+
+def test_pick_engine_prefers_a_candidate_without_a_type_failure():
+    fashn = {"engine": "fashn", "qa": {"pass": False, "score": 0.95, "failures": ["legs merged"], "type_failures": ["legs merged"], "fidelity": {"pass": True, "score": 0.9}}}
+    qwen = {"engine": "qwen", "qa": {"pass": False, "score": 0.80, "failures": ["silhouette band"], "type_failures": [], "fidelity": {"pass": True, "score": 0.6}}}
+    d = dq.pick_engine([fashn, qwen])
+    assert d["engine"] == "qwen" and d["type_failed"] == ["fashn"]
+    d2 = dq.pick_engine([fashn])
+    assert d2["engine"] == "fashn"  # every candidate has one: shown as rejected, the gate stops it
+
+
+# --- 6. the app wires it in --------------------------------------------------------------------------------
 
 
 def test_stage1_app_uses_the_run15_fixes():
@@ -265,7 +374,8 @@ def test_stage1_app_uses_the_run15_fixes():
         src = f.read()
     for needle in ("dq.clean_source_mask(smask_sam)", "dq.still_garment_mask(gen_np, chosen_mask, bare_mask, proxy_q, region)",
                    "open_crotch=crotch_gap", "keep_visible=crotch_gap", "dq.engine_target(", "dq.view_agreement(", "dq.apply_view_agreement(",
-                   "dq.still_qa(garment, fg, bare_mask, proxy_q, region"):
+                   "dq.still_qa(garment, fg, bare_mask, proxy_q, region",
+                   "dq.conform_to_proxy(gen_np, garment, proxy_q, bare_mask, region, kind=kind)", "_conformed.png"):
         assert needle in src, needle
-    assert dq.STAGE1B_QA_VERSION == "stage1b-qa-0.7.0"
+    assert dq.STAGE1B_QA_VERSION == "stage1b-qa-0.8.0"
     json.dumps(dq.VIEW_THRESHOLDS)

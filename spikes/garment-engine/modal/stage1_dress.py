@@ -48,6 +48,8 @@ two legs, and the "back" as a front) the engine dresses the PROXY-DRESSED manneq
        stage1b/edit_region_<view>.png                what the engines were allowed to change
        stage1b/raw/<view>.png, raw/<view>_<engine>.png  model outputs resized to the frame, uncomposited
        stage1b/candidates/<view>_<engine>_garment_mask.png, _garment_mask_unclipped.png
+      stage1b/candidates/<view>_<engine>_conformed.png   skirt/dress: the raw output with the hips widened to the proxy
+                                                    (dq.conform_to_proxy); raw/<view>.png is this one when it exists
        stage1b/candidates/<view>_fashn_agnostic.png  the clothing-agnostic image FASHN saw (its grey inpaint area)
        stage1b/rejected/<view>.png                   a still that failed QA
        stage1b/source/<view>_mask.png, _cutout.png   the shop-photo segmentation
@@ -491,6 +493,16 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
                     # The mask the composite pastes: the chosen mask plus what is not our grey mannequin inside the proxy
                     # (run 15's blouse: the difference mask lost the print's cream ground, the proxy's own beige).
                     garment, c["composite_mask"] = dq.still_garment_mask(gen_np, chosen_mask, bare_mask, proxy_q, region)
+                    # Skirt and dress: the hips widened to the proxy's (FASHN redraws a slimmer body under its grey box and
+                    # our hips showed beside run 15's skirt). The raw output above stays as drawn; the conformed still is
+                    # what the composite, the QA and the record use (stage1b-qa-0.8.0).
+                    conf_np, garment, c["conform"] = dq.conform_to_proxy(gen_np, garment, proxy_q, bare_mask, region, kind=kind)
+                    if c["conform"]["applied"]:
+                        gen_np = conf_np
+                        gen = Image.fromarray(conf_np)
+                        conf_rel = f"{lib.STAGE1B_DIR}/candidates/{name}_{eng}_conformed.png"
+                        gen.save(os.path.join(job, conf_rel))
+                        c["conformed"] = conf_rel
                     # The same garment NOT clipped to the region: QA's inside fraction and cut share are measured on
                     # it (on `garment` they are 1.0 and 0 by construction), so a sleeve the composite would chop fails.
                     garment_full = dq.unclipped_garment(gen_np, target_np, region, bg, ring_px=region_rec["sleeve_band_px"] or region_rec["margin_px"],

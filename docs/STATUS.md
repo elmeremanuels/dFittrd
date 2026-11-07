@@ -177,8 +177,14 @@ proxy's beige) → a colour-model composite mask; holes in the shop photo's SAM 
 127 sleeves → mask closing and hole fill; the trouser edit region closed the palazzo's 6 px leg gap → a
 20 px strip kept open and visible to FASHN. New type checks (see-through, body too short, front/back of
 different garments; merged legs on what the engine drew) stop such stills before stage 2 even with
-`--accept-failed-dress`; replayed on run 15 they stop blouse and cardigan and pass azure and the skirt.
-The cardigan front (a cropped open cardigan over a drawn midriff) is not fixed.
+`--accept-failed-dress`; replayed on run 15 they stop blouse and cardigan and pass azure.
+The cardigan front (a cropped open cardigan over a drawn midriff) is not fixed. **0.8.0, the skirt's hips**
+(founder's review: "see the hips"): FASHN's grey box hides our hips, so it draws the skirt on a slimmer body of its
+own; pasted on our render, our hips show beside it (front row 428: garment 176-306, our hips 170-309, proxy
+165-314) and the video opened a side slit. The hips of a skirt or dress are now stretched to the proxy's width
+(`conform_to_proxy`; replay: 64/64 and 92/94 short rows → 0, max stretch 1.14), and "narrow at the hips" is a new
+type check (replay: stops the skirt in both views, passes azure). Run 16a (proposed): stage 1b alone on blouse,
+cardigan, palazzo (both engines) and skirt.
 
 **Stage 4t** (`spikes/garment-engine/src/templateFit.ts`, `bake.ts`, `stage4t.ts`;
 `pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic]`): the

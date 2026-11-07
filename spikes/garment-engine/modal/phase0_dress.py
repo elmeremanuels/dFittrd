@@ -81,7 +81,7 @@ if _HERE not in sys.path:
 
 import phase0_garment as pg  # noqa: E402
 
-STAGE1B_QA_VERSION = "stage1b-qa-0.7.0"
+STAGE1B_QA_VERSION = "stage1b-qa-0.8.0"
 
 # The proxy is dilated by this share of the frame height to give the edit region (0.03 of 832 px = 25 px, about 10 cm
 # at the turntable distance): enough for ease and a fuller flare, small enough that the region keeps the proxy's
@@ -149,6 +149,18 @@ STILL_QA_THRESHOLDS: dict[str, float] = {
     #   body_length   blouse front 0.295, cardigan front 0.469; every other view 0.89-1.05 (run 14 azure 0.892 / 0.895)
     "max_see_through": 0.02,  # our mannequin inside the garment's own outline, on the eroded proxy, share of that outline
     "min_body_length": 0.70,  # garment bottom / proxy bottom from the proxy's top edge, central body columns (not trousers)
+    # stage1b-qa-0.8.0 (founder's review of run 15's skirt: "see the hips"), a TYPE check. In the hip zone (`hip_profile`)
+    # a row is short when the garment stops at least `hip_short_frac` of the height (5 px at 832, about 2 cm) inside the
+    # proxy's run on either side. Run 15 replay (`hip_profile` on the pasted masks): skirt front 64 / 64 rows short
+    # (median 8 / 8 px per side), back 94 / 94 (8 / 5 px); azure 9 / 67 rows at <= 3 px (0 at 5 px), back 0; run 14 azure
+    # 0 / 0. The video then opened the skirt into a side slit (frames 20, 40), the stills showing our hip beside it.
+    "hip_short_frac": 0.006,
+    "max_hip_short_frac": 0.5,  # share of the hip-zone rows that may be short
+    # ... and our mannequin must show beside the garment (between it and the proxy's edge) in more than this share of the
+    # zone rows: a garment narrower than the proxy's ease but over our hips is not this failure (run 15 skirt 1.0 / 1.0,
+    # azure 0 / 0). Both conditions together.
+    "max_hip_exposed_frac": 0.25,
+    "min_hip_rows": 12,  # rows for 832 px frames; scaled: fewer zone rows, not checked
 }
 # stage1b-qa-0.7.0: front and back of the same garment. Run 15 (the masks stage 1b pinned): length gap cardigan 0.458,
 # blouse 0.632 (torn front), azure 0.007, run 14 azure 0.003, skirt 0.037; sleeve cover gap cardigan 0.638 (long knit
@@ -179,7 +191,7 @@ TROUSER_GAP_FRAC = 0.024
 # as on GPU run 13): a dress more than the edit margin (25 px) past the proxy hem is still cut by the region and fails
 # `min_inside_fraction`; an open issue (README).
 SILHOUETTE_BAND = {"band_dilate_frac": 0.015, "band_erode_frac": 0.01, "hem_tol_frac": 0.01, "hem_extend_frac": 0.06}
-_ROW_KEYS = ("min_skirt_zone_rows", "min_leg_gap_rows", "min_merged_leg_rows")
+_ROW_KEYS = ("min_skirt_zone_rows", "min_leg_gap_rows", "min_merged_leg_rows", "min_hip_rows")
 # Not a check since stage1b-qa-0.4.0: recorded for comparison with the run 12 / run 13 records.
 LEGACY_MIN_SILHOUETTE_IOU = 0.85
 # Checks that only WARN until re-tuned on a generated dress: both compare with the proxy, whose flare is a guess
@@ -207,7 +219,7 @@ QA_LABEL = (
     "proxy left-overs, print fidelity against the shop photo's garment at the same exposure; back view: not a mirrored "
     "front, neckline not deeper than the back photo's. Type checks (never overridden): legs merged, a bodice on a skirt or "
     "trousers, an open front closed, our mannequin seen through the garment, a body far shorter than the proxy, front and "
-    "back of different garments (0.7.0). Provisional thresholds (runs 12, 13, 15 and the synthetic dress). A "
+    "back of different garments (0.7.0), a garment narrower than the proxy at the hips (0.8.0). Provisional thresholds (runs 12, 13, 15 and the synthetic dress). A "
     "check, not a measurement; every still is a generated estimate."
 )
 
@@ -504,6 +516,201 @@ def garment_body(garment: np.ndarray, proxy: np.ndarray, bare: np.ndarray, *, ki
     out["sleeve_share"] = round(n / max(1, int(p.sum())), 4)
     out["sleeve_cover"] = None if n == 0 else round(float((g & sleeve).sum()) / n, 4)
     return out
+
+
+# Hip conform (stage1b-qa-0.8.0). FASHN's agnostic image hides our mannequin inside a grey box from the waist down
+# (candidates/<view>_fashn_agnostic.png), so it redraws the body under a skirt from the pose alone, slimmer than ours,
+# and fits the skirt to that body: run 15's skirt at row 428 (front) spans x 176-306 where our hips span 170-309 and the
+# proxy 165-314. The composite pastes it onto our wider bare render and our hips show beside it. `conform_to_proxy`
+# widens each garment row of a skirt or dress to the proxy's run (never narrows), at most by `max_stretch`.
+CONFORM = {"max_stretch": 1.25, "ramp_frac": 0.03, "ramp_out_frac": 0.06, "smooth_rows": 9, "min_fill": 0.8, "pad_frac": 0.015}
+CONFORM_KINDS = frozenset({"skirt", "dress"})
+
+
+def _centre_run(row: np.ndarray, cx: int) -> tuple[int, int] | None:
+    if cx < 0 or cx >= len(row) or not row[cx]:
+        return None
+    x0 = cx
+    while x0 > 0 and row[x0 - 1]:
+        x0 -= 1
+    x1 = cx
+    while x1 < len(row) - 1 and row[x1 + 1]:
+        x1 += 1
+    return x0, x1
+
+
+def _proxy_axis(proxy: np.ndarray) -> int:
+    xs = np.nonzero(np.asarray(proxy, dtype=bool))[1]
+    return int(round(float(xs.mean()))) if len(xs) else 0
+
+
+def _garment_top(garment: np.ndarray, cx: int, half: int) -> int | None:
+    col = np.asarray(garment, dtype=bool)[:, max(0, cx - half):cx + half + 1].any(axis=1)
+    ys = np.nonzero(col)[0]
+    return int(ys[0]) if len(ys) else None
+
+
+def hip_zone(garment: np.ndarray, proxy: np.ndarray, legs: tuple[int, int, int, int] | None, kind: str) -> tuple[int, int] | None:
+    """Rows (y0, y1 exclusive) of the hips: from the garment's own top (skirt, trousers; a lower waistband is not a
+    gap) or the lower 30 % of the proxy's torso above the crotch (dress), to the crotch (`legs[0]`). None for tops,
+    outerwear, a view without separate legs, or an empty proxy."""
+    p = np.asarray(proxy, dtype=bool)
+    if kind not in ("skirt", "dress", "trousers") or legs is None or not p.any():
+        return None
+    h = p.shape[0]
+    rows = np.nonzero(p.any(axis=1))[0]
+    top, crotch = int(rows[0]), int(legs[0])
+    cx = _proxy_axis(p)
+    y0 = top if kind != "dress" else crotch - int(round(0.3 * (crotch - top)))
+    gt = _garment_top(garment, cx, max(1, int(round(0.012 * h))))
+    if gt is None:
+        return None
+    y0 = max(y0, gt + max(1, int(round(0.01 * h))))
+    return (y0, crotch) if crotch > y0 else None
+
+
+def hip_profile(garment: np.ndarray, proxy: np.ndarray, bare: np.ndarray, legs: tuple[int, int, int, int] | None, *, kind: str,
+                short_px: int) -> dict[str, Any]:
+    """Is the garment as wide as the proxy at the hips? Per row of `hip_zone`: the proxy's run through its axis, and how
+    far inside it the garment's outermost pixel (within that run) stops on each side. A row is short when either side
+    stops `short_px` or more inside; `body_exposed_px` / `exposed_rows` count our bare mannequin between the garment
+    and the proxy's edge (what the composite shows beside the garment)."""
+    g = np.asarray(garment, dtype=bool)
+    p = np.asarray(proxy, dtype=bool)
+    b = np.asarray(bare, dtype=bool)
+    zone = hip_zone(g, p, legs, kind)
+    out: dict[str, Any] = {"zone": None if zone is None else list(zone), "rows": 0, "short_rows": 0, "short_frac": None,
+                           "median_short_px": None, "max_short_px": None, "body_exposed_px": 0, "exposed_rows": 0, "exposed_frac": None,
+                           "short_px": int(short_px)}
+    if zone is None:
+        return out
+    cx = _proxy_axis(p)
+    left, right, exposed, exposed_rows = [], [], 0, 0
+    for y in range(*zone):
+        run = _centre_run(p[y], cx)
+        if run is None:
+            continue
+        x0, x1 = run
+        gx = np.nonzero(g[y, x0:x1 + 1])[0]
+        if len(gx) == 0:
+            continue
+        sl, sr = int(gx[0]), int(x1 - x0 - gx[-1])
+        left.append(sl)
+        right.append(sr)
+        e = int(b[y, x0:x0 + sl].sum()) + int(b[y, x1 + 1 - sr:x1 + 1].sum())
+        exposed += e
+        exposed_rows += int(e > 0)
+    if not left:
+        return out
+    L, R = np.array(left), np.array(right)
+    short = (L >= short_px) | (R >= short_px)
+    out.update({"rows": len(L), "short_rows": int(short.sum()), "short_frac": round(float(short.mean()), 4),
+                "median_short_px": [float(np.median(L)), float(np.median(R))], "max_short_px": [int(L.max()), int(R.max())],
+                "body_exposed_px": int(exposed), "exposed_rows": exposed_rows, "exposed_frac": round(exposed_rows / len(L), 4)})
+    return out
+
+
+def _smooth(v: np.ndarray, k: int) -> np.ndarray:
+    if k <= 1 or len(v) < k:
+        return v
+    pad = k // 2
+    vp = np.pad(v, pad, mode="edge")
+    return np.array([float(np.median(vp[i:i + k])) for i in range(len(v))])
+
+
+def conform_to_proxy(gen: np.ndarray, garment: np.ndarray, proxy: np.ndarray, bare: np.ndarray, region: np.ndarray, *, kind: str,
+                     params: Mapping[str, float] | None = None) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
+    """(still, garment mask, record): each garment row of the hips of a skirt (from its own top) or a dress (from the hip
+    zone, with a ramp of `ramp_frac` of the height above it) down to the crotch stretched sideways to the proxy's run
+    through its axis where it falls short of it, by linear resampling of the engine's own pixels; below the crotch the
+    stretch ramps out over `ramp_out_frac` of the height (50 rows at 832), so the skirt below keeps the flare the engine
+    drew (the proxy's flare is a guess). Never narrows, never moves pixels outside the garment's
+    row span into it, at most `max_stretch` per row (a row needing more is left as drawn, and the hip check sees it).
+    The shortfalls are median-smoothed over `smooth_rows` rows so the edge stays a smooth curve. Rows whose garment
+    covers less than `min_fill` of its own span (an open garment) are left as drawn. Other kinds: unchanged."""
+    c = {**CONFORM, **(params or {})}
+    g = np.asarray(garment, dtype=bool)
+    p = np.asarray(proxy, dtype=bool)
+    r = np.asarray(region, dtype=bool)
+    img = np.asarray(gen)
+    rec: dict[str, Any] = {"applied": False, "kind": kind, "params": c, "rows": 0, "capped_rows": 0, "added_px": 0, "max_stretch": 1.0}
+    if kind not in CONFORM_KINDS or not g.any() or not p.any():
+        rec["note"] = "not a skirt or dress (or empty): unchanged"
+        return img, g, rec
+    h, w = g.shape
+    legs = pg.leg_rows(np.asarray(bare, dtype=bool))
+    cx = _proxy_axis(p)
+    gt = _garment_top(g, cx, max(1, int(round(0.012 * h))))
+    if gt is None:
+        rec["note"] = "no garment on the proxy's axis: unchanged"
+        return img, g, rec
+    zone = hip_zone(g, p, legs, kind)
+    if zone is None:
+        rec["note"] = "no hip zone (no separate legs in this view): unchanged"
+        return img, g, rec
+    if kind == "skirt":
+        start, ramp = gt, 0
+    else:
+        ramp = max(1, int(round(c["ramp_frac"] * h)))
+        start = max(gt, zone[0] - ramp)
+    crotch = zone[1]
+    ramp_out = max(1, int(round(c["ramp_out_frac"] * h)))
+    pad = max(1, int(round(c["pad_frac"] * h)))
+    ys, spans = [], []
+    for y in range(start, min(h, crotch + ramp_out)):
+        run = _centre_run(p[y], cx)
+        if run is None:
+            continue
+        x0, x1 = run
+        lo, hi = max(0, x0 - pad), min(w - 1, x1 + pad)
+        gx = np.nonzero(g[y, lo:hi + 1])[0]
+        if len(gx) < 2:
+            continue
+        gl, gr = lo + int(gx[0]), lo + int(gx[-1])
+        if g[y, gl:gr + 1].mean() < c["min_fill"]:
+            continue
+        ys.append(y)
+        spans.append((gl, gr, x0, x1))
+    if not ys:
+        rec["note"] = "no garment rows on the proxy: unchanged"
+        return img, g, rec
+    S = np.array(spans, dtype=np.float64)
+    short_l = _smooth(np.maximum(0.0, S[:, 0] - S[:, 2]), int(c["smooth_rows"]))
+    short_r = _smooth(np.maximum(0.0, S[:, 3] - S[:, 1]), int(c["smooth_rows"]))
+    out = img.astype(np.float64).copy()
+    mask = g.copy()
+    rows = capped = added = 0
+    worst = 1.0
+    for i, y in enumerate(ys):
+        wgt = 1.0 if ramp == 0 else float(np.clip((y - start) / ramp, 0.0, 1.0))
+        if y >= crotch:
+            wgt *= float(np.clip(1.0 - (y - crotch) / ramp_out, 0.0, 1.0))
+        gl, gr = int(S[i, 0]), int(S[i, 1])
+        nl = int(round(gl - wgt * short_l[i]))
+        nr = int(round(gr + wgt * short_r[i]))
+        if nl >= gl and nr <= gr:
+            continue
+        stretch = (nr - nl) / max(1.0, float(gr - gl))
+        if stretch > c["max_stretch"]:
+            capped += 1
+            continue
+        xs = np.arange(nl, nr + 1)
+        sx = gl + (xs - nl) * (gr - gl) / max(1, nr - nl)
+        x_lo = np.floor(sx).astype(int)
+        x_hi = np.minimum(x_lo + 1, w - 1)
+        f = (sx - x_lo)[:, None]
+        src = img[y].astype(np.float64)
+        out[y, nl:nr + 1] = src[x_lo] * (1 - f) + src[x_hi] * f
+        new_row = g[y, np.clip(np.rint(sx).astype(int), 0, w - 1)]
+        before = int(mask[y].sum())
+        mask[y, nl:nr + 1] = new_row
+        mask[y] &= r[y]
+        added += int(mask[y].sum()) - before
+        rows += 1
+        worst = max(worst, stretch)
+    rec.update({"applied": rows > 0, "rows": rows, "capped_rows": capped, "added_px": added, "max_stretch": round(worst, 4),
+                "start_row": int(start), "median_short_px": [float(np.median(short_l)), float(np.median(short_r))]})
+    return np.clip(np.rint(out), 0, 255).astype(np.uint8), mask, rec
 
 
 def view_agreement(front: Mapping[str, Any] | None, back: Mapping[str, Any] | None, thresholds: Mapping[str, float] | None = None) -> dict[str, Any]:
@@ -1280,6 +1487,14 @@ def still_qa(
     bl = body["body_length"]
     if bl is not None and bl < t["min_body_length"]:
         failures.append(f"body too short: the garment reaches {bl:.3f} of the proxy's length in the body columns < {t['min_body_length']} (a cropped or shrunken garment)")
+    hips = hip_profile(g, p, b, legs, kind=kind, short_px=max(1, int(round(t["hip_short_frac"] * h))))
+    if (hips["rows"] >= t["min_hip_rows"] and hips["short_frac"] is not None and hips["short_frac"] > t["max_hip_short_frac"]
+            and hips["exposed_frac"] > t["max_hip_exposed_frac"]):
+        ml, mr = hips["median_short_px"]
+        failures.append(f"narrow at the hips: the garment stops {hips['short_px']}+ px inside the proxy in {hips['short_rows']}/{hips['rows']} hip rows "
+                        f"(median {ml:.0f} / {mr:.0f} px left / right) > {t['max_hip_short_frac']}, our mannequin beside it in {hips['exposed_rows']} rows "
+                        f"({hips['body_exposed_px']} px) > {t['max_hip_exposed_frac']} "
+                        f"(the video opens a side slit there)")
     type_failures = failures[n_before_type:]
     if fidelity is not None and fidelity.get("pass") is False:
         failures.extend(f"print fidelity: {f}" for f in fidelity.get("failures", []))
@@ -1317,6 +1532,7 @@ def still_qa(
         "merged_leg_rows": prof_drawn["merged_leg_rows"],
         "merged_leg_rows_basis": "unclipped garment (what the engine drew)" if kind == "trousers" else "garment mask (clipped)",
         "garment_body": body,
+        "hips": hips,
         "above_waist_px": above_px,
         "above_waist_fraction": round(above_frac, 4),
         "front_opening_px": zone_px,
@@ -1382,6 +1598,15 @@ def pick_engine(candidates: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         why = "the only candidate that passes every check" if len(passing) == 1 else "passes every check; highest print fidelity, then silhouette score"
         return {**out, "engine": best["engine"], "reason": why}
     pool = [c for c in ok if c["engine"] not in fid_failed]
+    # A candidate with a TYPE failure (a different garment drawn: trousers as a skirt, torn, shrunken) is shown only when
+    # every candidate has one: with --accept-failed-dress a still that fails only provisional checks can still be used,
+    # and run 16's palazzo runs both engines so Qwen's two legs can stand in for FASHN's skirt.
+    typed_ok = [c for c in pool if not (c["qa"].get("type_failures") or [])]
+    out["type_failed"] = [c["engine"] for c in ok if (c["qa"].get("type_failures") or [])]
+    if typed_ok:
+        best = max(typed_ok, key=key)
+        why = "no engine passed QA: best of the candidates without a type failure whose print fidelity did not fail, rejected"
+        return {**out, "engine": best["engine"], "reason": why}
     if pool:
         best = max(pool, key=key)
         return {**out, "engine": best["engine"], "reason": "no engine passed QA: best of the candidates whose print fidelity did not fail, rejected"}
@@ -1562,6 +1787,10 @@ def rescore_job(job_dir: str, manifest: Mapping[str, Any]) -> dict[str, Any]:
         cands: list[dict[str, Any]] = []
         arrays: dict[str, tuple[np.ndarray, np.ndarray]] = {}
         for eng, raw_rel, mask_rel, unclipped_rel in entries:
+            # Since 0.8.0 stage 1b also saves the conformed still (`conform_to_proxy`) the composite used; QA it, not the raw.
+            conformed_rel = f"{lib.STAGE1B_DIR}/candidates/{name}_{eng}_conformed.png" if eng else None
+            if conformed_rel and os.path.exists(p(conformed_rel)):
+                raw_rel = conformed_rel
             raw = _read_rgb(p(raw_rel))
             saved = _read_mask(p(mask_rel))
             garment_full = _read_mask(p(unclipped_rel)) if os.path.exists(p(unclipped_rel)) else saved
@@ -1575,6 +1804,13 @@ def rescore_job(job_dir: str, manifest: Mapping[str, Any]) -> dict[str, Any]:
             qa = still_qa(garment, fg, bare, proxy_q, region, kind=kind, mannequin_mae=mae, residue=residue, garment_full=garment_full,
                           sleeve_band_px=region_rec["sleeve_band_px"], fidelity=fid, rgb=raw, bare_rgb=bare_rgb)
             qa["score"] = qa_score(qa)
+            # What the 0.8.0 conform would do with this still (a replay on CPU; the record of a 0.8.0 run has it already).
+            conformed = None
+            if not (conformed_rel and raw_rel == conformed_rel):
+                c_img, c_mask, c_rec = conform_to_proxy(raw, garment, proxy_q, bare, region, kind=kind)
+                legs_c = pg.leg_rows(bare)
+                c_rec["hips_after"] = hip_profile(c_mask, proxy_q, bare, legs_c, kind=kind, short_px=max(1, int(round(qa["thresholds"]["hip_short_frac"] * h))))
+                conformed = c_rec
             label = eng or "still"
             cands.append({
                 "engine": label,
@@ -1583,6 +1819,7 @@ def rescore_job(job_dir: str, manifest: Mapping[str, Any]) -> dict[str, Any]:
                 "garment_mask_unclipped": unclipped_rel if os.path.exists(p(unclipped_rel)) else f"{mask_rel} (no unclipped mask: used as is)",
                 "candidate_colour": garment_colour(raw, garment),
                 "qa": qa,
+                "conform_replay": conformed,
             })
             arrays[label] = (raw, garment)
         decision = pick_engine(cands)
@@ -1655,6 +1892,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     for name, v in rec["views"].items():
         q = v.get("qa") or {}
         body = q.get("garment_body") or {}
+        hp = q.get("hips") or {}
+        print(f"[stage1b-qa] {name}: hips short {hp.get('short_rows')}/{hp.get('rows')} rows (median {hp.get('median_short_px')} px, max {hp.get('max_short_px')}, "
+              f"mannequin beside {hp.get('body_exposed_px')} px)", file=sys.stderr)
+        for c in v["candidates"]:
+            cr = c.get("conform_replay")
+            if cr:
+                ha = cr.get("hips_after") or {}
+                print(f"[stage1b-qa] {name}/{c['engine']} conform replay: rows {cr['rows']} capped {cr['capped_rows']} +{cr['added_px']} px max stretch {cr['max_stretch']}; "
+                      f"hips after: short {ha.get('short_rows')}/{ha.get('rows')} (median {ha.get('median_short_px')})", file=sys.stderr)
         print(f"[stage1b-qa] {name}: see-through {body.get('see_through')} body length {body.get('body_length')} sleeve cover {body.get('sleeve_cover')} "
               f"(sleeve share {body.get('sleeve_share')}); TYPE failures (never overridden): {q.get('type_failures')}", file=sys.stderr)
     return 0

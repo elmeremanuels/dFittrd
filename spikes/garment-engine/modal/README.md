@@ -486,7 +486,7 @@ Back-view checks: pass (mirror ratio 0.91).
 
 ## Stage 1b after run 15: torn and shrunken stills, the trouser region, type checks (`stage1b-qa-0.7.0`)
 
-Run 15 (GitHub Actions run 42402554810, code at 91ed5b2, FASHN, `--accept-failed-dress`) ran one product per category. The azure dress (stage 1b passed) and the maxi skirt (front failed only the provisional torso cover, 0.727: drawn narrower, waistband lower) look right. The blouse and the cardigan stills were broken and stage 2 ran on them anyway (about $1.64 and $1.65), because `--accept-failed-dress` overrode every failure they had. The palazzo was stopped by the merged-legs type check (259 / 255 of 259 / 255 rows). Every number below was measured on CPU on run 15's own files (`stage1b/raw`, `candidates/`, masks, `source/`, `record.json`, `log.txt`).
+Run 15 (GitHub Actions run 42402554810, code at 91ed5b2, FASHN, `--accept-failed-dress`) ran one product per category. The azure dress (stage 1b passed) looks right. The maxi skirt's waistband and print are right, but it is narrower than our mannequin at the hips: our grey hips show beside it in both stills, and the video opened it into a long side slit from hip to hem (frames 20 and 40); its front failed only the provisional torso cover (0.727) and was overridden. 0.7.0 below still let it through; 0.8.0 (next section) stops it and fixes the cause. The blouse and the cardigan stills were broken and stage 2 ran on them anyway (about $1.64 and $1.65), because `--accept-failed-dress` overrode every failure they had. The palazzo was stopped by the merged-legs type check (259 / 255 of 259 / 255 rows). Every number below was measured on CPU on run 15's own files (`stage1b/raw`, `candidates/`, masks, `source/`, `record.json`, `log.txt`).
 
 ### Causes, with the evidence
 
@@ -509,14 +509,39 @@ Run 15 (GitHub Actions run 42402554810, code at 91ed5b2, FASHN, `--accept-failed
 | --- | --- | --- | --- | --- |
 | azure front / back | 0 / 0 | 0.993 / 0.987 | (no proxy sleeves) | none |
 | run 14 azure front / back | 0 / 0 | 0.892 / 0.895 | (no proxy sleeves) | none |
-| skirt front / back | 0 / 0 | 1.051 / 1.014 | — | none (front still fails the provisional torso cover 0.727) |
+| skirt front / back | 0 / 0 | 1.051 / 1.014 | — | none in 0.7.0 (front fails the provisional torso cover 0.727); 0.8.0: narrow at the hips, both views |
 | blouse front / back | **0.108** / **0.044** | **0.295** / 0.927 | 0.447 / 0.609 | front: see-through, body too short; back: see-through, views disagree (length gap 0.632) |
 | cardigan front / back | 0 / **0.037** | **0.469** / 0.927 | 0.905 / **0.267** | front: body too short; back: see-through, views disagree (length gap 0.459, sleeve gap 0.638) |
 | palazzo front / back | 0 / 0 | — | — | legs merged 259 / 255 rows (as before) |
 
-So 0.7.0 would have stopped the blouse and the cardigan after stage 1b (about $0.03-0.07 each instead of $1.64-1.65) and lets azure and the skirt through. With the new composite on the same raw outputs the blouse passes every check, front and back (torso cover 0.989 / 0.952, length gap 0.078); the cardigan still fails (front body length 0.620, views disagree: length gap 0.318, sleeve gap 0.633). Thresholds are provisional: one run, five products.
+So 0.7.0 would have stopped the blouse and the cardigan after stage 1b (about $0.03-0.07 each instead of $1.64-1.65) and lets azure and the skirt through (the skirt wrongly: see 0.8.0). With the new composite on the same raw outputs the blouse passes every check, front and back (torso cover 0.989 / 0.952, length gap 0.078); the cardigan still fails (front body length 0.620, views disagree: length gap 0.318, sleeve gap 0.633). Thresholds are provisional: one run, five products.
 
 **Not tested on a GPU:** the cleaned shop masks as FASHN input, the trouser strip in FASHN's and Qwen's input, Qwen on trousers and outerwear. The cardigan front's cause is not fixed.
+
+## Stage 1b after the review of run 15's skirt: the hips (`stage1b-qa-0.8.0`)
+
+The founder's review of run 15: "see the hips". The skirt is narrower than our mannequin at the hips; in both stills our grey hip shows on the sides, and in the stage 2 frames (20 and 40, three-quarter and side) the skirt opens into a wedge-shaped slit with the grey leg visible from hip to hem.
+
+**Cause: FASHN redraws the body under a skirt, slimmer than ours.** FASHN's agnostic image for `bottoms` (`candidates/<view>_fashn_agnostic.png`) is one grey box from the waist down: it does not show our hips, so FASHN draws a body from the pose keypoints alone and fits the skirt to that body. In its raw output (`raw/front_fashn.png`) the skirt's sides at the hips stand on studio background, inside the line of our hips. The composite then pastes the garment onto our bare render, whose hips are wider: at row 428 (front) the garment spans x 176-306, our hips 170-309 and the proxy 165-314. Not the cause: the proxy (hip girth 109 cm = the AU size-12 body chart + category default ease; its hip 150 px wide at row 428, our hips 140) or the edit region (x 139-340 at that row, 25 px past the proxy), and not the shop cut-out (checked by eye: the whole skirt, waistband to hem, small notches where the model's hands rest at the waist; detector score 0.686, SAM 0.993; the model in the photo is slim, which FASHN's body follows). The slit in the video most likely follows from the stills (inferred, not measured): the depth control there is the proxy's surface, wider than the garment, and the pinned stills show our grey hip in that band.
+
+**Fix: `conform_to_proxy`.** For a skirt (from its own top) or a dress (the lower 30 % of the torso above the crotch, ramped in over 3 % of the height), each garment row is stretched sideways to the proxy's run through its axis where it falls short of it, by linear resampling of the engine's own pixels; the shortfalls are median-smoothed over 9 rows; below the crotch the stretch ramps out over 6 % of the height (50 rows), so the lower skirt keeps the flare the engine drew. It never narrows, never stretches across a row the garment leaves open (fill < 0.8), stops at 1.25 per row (a row needing more is left as drawn and the check below sees it) and stays in the edit region. Stage 1b saves the raw output as before and the conformed one as `candidates/<view>_<engine>_conformed.png`; the composite, the QA and the record (`conform`) use the conformed still. Replayed on run 15's skirt (0.7.0 composite mask, then conform): front 119 rows widened, +1,603 px, max stretch 1.14, short hip rows 64 / 64 → 0; back 149 rows, +1,691 px, max 1.12, 92 / 94 → 0; azure front 36 rows, +70 px, max 1.02 (no visible change), back none; run 14 azure none.
+
+**Check: narrow at the hips** (TYPE, never overridden). `hip_profile`: in the hip zone (skirt and trousers from the garment's own top + 1 % of the height, so a lower waistband is not a gap; dress the lower 30 % of the torso; to the crotch; not tops or outerwear, whose arms hang beside the hips) a row is short when the garment stops 0.6 % of the height (5 px at 832) or more inside the proxy's run on either side. It fails when more than half the zone rows are short AND our mannequin shows between the garment and the proxy's edge in more than a quarter of them (a garment narrower than the proxy's ease but over our hips is not this failure).
+
+| Run 15, as pinned (0.8.0 replay, `python -I phase0_dress.py <job dir>`) | short hip rows | mannequin beside, rows (px) | median short px L / R | Type failure |
+| --- | --- | --- | --- | --- |
+| skirt front / back | 61/61, 92/92 | 61 (628), 92 (617) | 12 / 10, 11 / 7 | narrow at the hips, both |
+| azure front / back (run 14 the same) | 0/68, 0/68 | 0, 0 | 0 / 0 | none |
+| palazzo front / back | 84/84, 74/74 | 83 (528), 39 (91) | 6 / 19, 7 / 13 | narrow at the hips + legs merged |
+| blouse, cardigan | no hip zone (tops) | — | — | as 0.7.0 |
+
+The conform replay in the same output (`conform_replay` per candidate) brings the skirt to 0 short rows in both views. `pick_engine` now prefers a candidate without a type failure when none passes (a FASHN skirt for trousers is not shown over a Qwen pair of legs that only failed a provisional check).
+
+**Palazzo.** The shop photo's legs are so wide that they read as one skirt, and the cut-out has no visible gap between them; FASHN copies the garment's look. With 0.7.0 FASHN's input shows a gap between the proxy's legs (the `feet` strip), never tried on a GPU. Qwen-Image-Edit is told in words what FASHN can only infer from the picture ("two separate trouser legs from the hip to the hem"; negative "one closed skirt between the legs, skort, overskirt"). Run 16a therefore runs stage 1b alone on the palazzo with both engines: `pick_engine` takes whichever draws two legs, and the merged-legs gate (on what the engine drew, unclipped) stays. Not chosen: masking the gap out of the edit area alone (that is the 0.7.0 strip already; it cannot make FASHN draw a leg's inner edge the photo does not show) or a palazzo rule that cuts a gap into a drawn skirt (it would invent geometry).
+
+**Black panels in stage 2** (blouse frames 20 and 100, cardigan 100-140): checked again on the frames: frame 0 is the pinned still with its mannequin patches inside the blouse's outline, and the dark panels at frame 20 sit where those patches turn towards the camera. Caused by the stills; stage 2 unchanged.
+
+**Not tested on a GPU:** the conform inside the stage 1b app, and whether stage 2 keeps a conformed skirt closed at the side. Thresholds: one run, five products.
 
 ## Stage 2 after run 10: control proxy, neutral prompts, consistency metric
 

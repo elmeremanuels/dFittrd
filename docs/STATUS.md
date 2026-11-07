@@ -168,6 +168,18 @@ evaluated asset. Full write-up, every render and the runs 10–14 timeline:
 section; renders under `spikes/garment-engine/out/eval/`, gitignored: the links resolve only in a
 checkout where run 14's outputs are in `out/phase0/` and `report:bohohippychic -- --renders` has run).
 
+**Run 15 and stage 1b QA 0.7.0 (7 Nov).** Run 15 (one product per category, FASHN, `--accept-failed-dress`):
+azure dress and maxi skirt look right; the blouse and cardigan stills were torn or shrunken and still cost
+about $1.64 and $1.65 of stage 2 (whose black panels come from those stills, not from stage 2); the palazzo
+was stopped by the merged-legs check (~$0.03). Causes and fixes (`spikes/garment-engine/modal/README.md`,
+"Stage 1b after run 15"): the composite pasted a difference mask that lost the blouse's cream ground (the
+proxy's beige) → a colour-model composite mask; holes in the shop photo's SAM 2 mask became FASHN's grey
+127 sleeves → mask closing and hole fill; the trouser edit region closed the palazzo's 6 px leg gap → a
+20 px strip kept open and visible to FASHN. New type checks (see-through, body too short, front/back of
+different garments; merged legs on what the engine drew) stop such stills before stage 2 even with
+`--accept-failed-dress`; replayed on run 15 they stop blouse and cardigan and pass azure and the skirt.
+The cardigan front (a cropped open cardigan over a drawn midriff) is not fixed.
+
 **Stage 4t** (`spikes/garment-engine/src/templateFit.ts`, `bake.ts`, `stage4t.ts`;
 `pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic]`): the
 control proxy remeshed into a body tube and two sleeve tubes (each starting with a shoulder cap of

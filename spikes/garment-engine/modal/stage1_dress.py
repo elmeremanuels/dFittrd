@@ -407,11 +407,17 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
                     raise RuntimeError(f"{rel} is {img.size}, expected {(W, H)}")
             bare_mask = read_mask(v["bare_mask"])
             proxy = read_mask(v["proxy_mask"])
-            region, region_rec = dq.edit_region(proxy, bare_mask, tryon_cat, keep_open=kind == "outerwear")
+            # Trousers: a gap kept open between the proxy's legs (out of the region, painted as our bare render in the
+            # engine's input, visible in FASHN's agnostic image); the QA compares with the proxy minus that gap.
+            crotch_gap = dq.trouser_gap_zone(proxy, bare_mask) if kind == "trousers" else None
+            region, region_rec = dq.edit_region(proxy, bare_mask, tryon_cat, keep_open=kind == "outerwear", open_crotch=crotch_gap)
+            proxy_q = dq.qa_proxy(proxy, crotch_gap)
+            if crotch_gap is not None:
+                target = Image.fromarray(dq.engine_target(np.asarray(target), np.asarray(bare), crotch_gap))
             rec["edit_region"] = {**region_rec, "mask": save_mask(region, f"{lib.STAGE1B_DIR}/edit_region_{name}.png")}
             # FASHN fills its inpaint area with grey 127, close to our mannequin's own grey: the record says how close.
             rec["mannequin_grey"] = dq.grey_collision(np.asarray(bare), bare_mask)
-            person_labels = dq.fashn_person_labels(region, bare_mask, proxy, lib.FASHN_LABEL_IDS, lib.fashn_garment_label(tryon_cat, kind))
+            person_labels = dq.fashn_person_labels(region, bare_mask, proxy, lib.FASHN_LABEL_IDS, lib.fashn_garment_label(tryon_cat, kind), keep_visible=crotch_gap)
 
             # 1. The shop photo for this view: garment box and mask (the back photo for the back; the front
             #    photo for an invented back).
@@ -422,7 +428,9 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
                 box, det_score, label = detect(src)
                 if box is None:
                     raise RuntimeError(f"no {lib.GARMENT_PROMPT[tryon_cat]!r} found in {src_rel}")
-                smask, sam_score = sam_mask(src, box)
+                smask_sam, sam_score = sam_mask(src, box)
+                # Holes in SAM 2's mask become FASHN's grey 127 in its garment image, drawn as grey cloth (run 15).
+                smask, mask_cleanup = dq.clean_source_mask(smask_sam)
                 arr = np.asarray(src).copy()
                 arr[~smask] = bg
                 y0, y1 = np.where(smask.any(axis=1))[0][[0, -1]]
@@ -444,6 +452,8 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
                         "detector_label": label,
                         "sam_score": round(sam_score, 3),
                         "garment_px": int(smask.sum()),
+                        "sam_px": int(smask_sam.sum()),
+                        "mask_cleanup": mask_cleanup,
                         "mask": save_mask(smask, f"{lib.STAGE1B_DIR}/source/{src_view}_mask.png"),
                         "cutout": f"{lib.STAGE1B_DIR}/source/{src_view}_cutout.png",
                         "colour": colour,
@@ -477,7 +487,10 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
                         refined = (rmask & region).astype(np.uint8).tobytes()
                         c["sam_score"] = round(rscore, 3)
                     gb, mask_source, agree = lib.choose_garment_mask(prior.astype(np.uint8).tobytes(), refined)
-                    garment = np.frombuffer(bytes(gb), np.uint8).reshape(H, W).astype(bool) & region
+                    chosen_mask = np.frombuffer(bytes(gb), np.uint8).reshape(H, W).astype(bool) & region
+                    # The mask the composite pastes: the chosen mask plus what is not our grey mannequin inside the proxy
+                    # (run 15's blouse: the difference mask lost the print's cream ground, the proxy's own beige).
+                    garment, c["composite_mask"] = dq.still_garment_mask(gen_np, chosen_mask, bare_mask, proxy_q, region)
                     # The same garment NOT clipped to the region: QA's inside fraction and cut share are measured on
                     # it (on `garment` they are 1.0 and 0 by construction), so a sleeve the composite would chop fails.
                     garment_full = dq.unclipped_garment(gen_np, target_np, region, bg, ring_px=region_rec["sleeve_band_px"] or region_rec["margin_px"],
@@ -486,10 +499,10 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
                     fg = np.frombuffer(bytes(fg_b), np.uint8).reshape(H, W).astype(bool)
                     keep = bare_mask & ~region
                     mae = float(np.abs(gen_np.astype(np.int16) - bare_np.astype(np.int16))[keep].mean()) if keep.any() else None
-                    residue = dq.proxy_residue(gen_np, target_np, proxy, garment)
+                    residue = dq.proxy_residue(gen_np, target_np, proxy_q, garment)
                     # Print fidelity: the candidate's garment against the shop photo's (palette and print); a failure is never picked.
                     fid = dq.print_fidelity(gen_np, garment, np.asarray(s["image"]), s["mask"]) if garment.any() else None
-                    qa = dq.still_qa(garment, fg, bare_mask, proxy, region, kind=kind, mannequin_mae=mae, residue=residue, garment_full=garment_full,
+                    qa = dq.still_qa(garment, fg, bare_mask, proxy_q, region, kind=kind, mannequin_mae=mae, residue=residue, garment_full=garment_full,
                                      sleeve_band_px=region_rec["sleeve_band_px"], fidelity=fid, rgb=gen_np, bare_rgb=bare_np)
                     c["candidate_colour"] = dq.garment_colour(gen_np, garment)
                     g_b = garment.astype(np.uint8).tobytes()
@@ -568,6 +581,17 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
             rec["label"] = lib.INVENTED_BACK_LABEL
         view_records.append(rec)
         print(f"[stage1b] {name}: {rec.get('engine') or 'no engine'} picked ({(rec.get('selection') or {}).get('reason')}); QA {'pass' if rec['qa'].get('pass') else 'FAIL'} {rec['qa'].get('failures', [])}")
+
+    # Front and back of the same garment (stage1b-qa-0.7.0): length and sleeves of the two shown stills. A failure is a
+    # TYPE failure on the back (never overridden by --accept-failed-dress; run_phase0 stops before stage 2).
+    by_view = {r["view"]: r for r in view_records}
+    agreement = dq.view_agreement(((by_view.get("front") or {}).get("qa") or {}).get("garment_body"),
+                                  ((by_view.get("back") or {}).get("qa") or {}).get("garment_body"))
+    if "back" in by_view:
+        by_view["back"]["view_agreement"] = agreement
+        dq.apply_view_agreement(by_view["back"].get("qa"), agreement)
+        if agreement.get("failures"):
+            print(f"[stage1b] front and back disagree (type failure): {agreement['failures']}")
 
     model_pins = {k: M[k] for k in ENGINE_WEIGHTS[engine]}
     record = {

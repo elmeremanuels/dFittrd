@@ -484,6 +484,40 @@ Back-view checks: pass (mirror ratio 0.91).
 
 **Not tested:** none of this has run on a GPU. Use run 13's recipe (stage 1b only, both engines) to confirm the selection there.
 
+## Stage 1b after run 15: torn and shrunken stills, the trouser region, type checks (`stage1b-qa-0.7.0`)
+
+Run 15 (GitHub Actions run 42402554810, code at 91ed5b2, FASHN, `--accept-failed-dress`) ran one product per category. The azure dress (stage 1b passed) and the maxi skirt (front failed only the provisional torso cover, 0.727: drawn narrower, waistband lower) look right. The blouse and the cardigan stills were broken and stage 2 ran on them anyway (about $1.64 and $1.65), because `--accept-failed-dress` overrode every failure they had. The palazzo was stopped by the merged-legs type check (259 / 255 of 259 / 255 rows). Every number below was measured on CPU on run 15's own files (`stage1b/raw`, `candidates/`, masks, `source/`, `record.json`, `log.txt`).
+
+### Causes, with the evidence
+
+1. **Blouse front torn: the composite, not FASHN.** FASHN's raw front (`raw/front_fashn.png`) is a whole half-sleeved blouse. Stage 1b pastes only the garment MASK onto our bare render, and SAM 2 disagreed with the difference prior (IoU 0.427), so the prior was pasted: pixels that differ from the proxy-dressed target by more than 24 levels. The target's placeholder beige (0.72, 0.68, 0.62) is the blouse's cream ground, so the mask kept 21,112 px of a garment of about 40,000; 0.108 of the outline that was pasted showed our mannequin through it. The back (SAM 2's mask, holes at the print) showed 0.044.
+2. **Black panels in stage 2: the stills.** The stage 2 frames are dark exactly where the pinned stills show our grey mannequin inside the proxy outline (blouse frames 20 and 100, cardigan 100-140), while the depth control there is the proxy's cloth surface, and the azure and skirt videos (whole stills) have none. Wan2.2 drew those patches as dark cloth. Nothing in stage 2 masks or blackens its conditioning; no stage 2 change.
+3. **Cardigan back grey sleeves: holes in the shop photo's mask.** SAM 2's mask of the back photo had 8,422 px of enclosed holes in the knit sleeves (median colour (84, 39, 25), the brown sleeve). FASHN's `create_garment_image` (pinned commit) sets every pixel outside our mask to grey 127, and FASHN drew grey sleeves: 75 % of the proxy's back sleeve pixels are grey-like in its raw (lum 123, chroma 2); 1.9 % on the front.
+4. **Cardigan front cropped: FASHN's reading of the photo, partly ours.** FASHN drew an open cropped cardigan ending at the underbust over a drawn bare midriff (navel) and a grey waistband, not the buttoned hip-length cardigan. In its garment image the model's hair covers her right shoulder (SAM 2 leaves out the shoulder, the collar and the top of that front; not fixable by segmentation), and the lace top under the V is grey 127. The kept-open V notch is not the cause: it is 745 px, mean value 125.5 against FASHN's fill of 127 (22.6 % exactly 127), so FASHN's input hardly shows it. **Not fixed**: run 16 runs stage 1b alone on it with both engines.
+5. **Palazzo drawn as a skirt: our edit region was one block.** The palazzo proxy's legs stand 6 px apart (2.4 cm) on most of 259 leg rows; the 25 px edit margin closed the gap, and FASHN's agnostic image (re-computed here on CPU with the pinned `agnostic.py` + `masks.py`: 0 px differ from the one run 15 saved) is one grey rectangle from the waist to the feet. The shop photo itself shows no gap between the legs either.
+
+### What changed
+
+- `clean_source_mask`: the shop photo's SAM 2 mask is closed by 0.35 % of the long side (4 px at 1200) and its enclosed holes up to 1 % of the photo are filled; only adds pixels. Run 15's masks: cardigan back +13,136 px (4.8 %, the sleeves), cardigan front +1,487, every other photo 48-332 px (0.02-0.11 %). The record has `source_segmentation.mask_cleanup` and `sam_px`.
+- `still_garment_mask`: the composite pastes the chosen mask plus every pixel inside the proxy (or within 0.4 % of the height of the chosen mask) that our mannequin colour model (`phase0_garment.segment_garment`, sampled from the still's own head) does not call mannequin, also at twice its chroma ceiling (FASHN's drawn midriff, chroma 8-15, stays out). A garment that reads as mannequin grey keeps the chosen mask. Replayed on run 15's raw outputs (with the pinned masks as the chosen ones): blouse front 21,112 → 39,073 px, see-through 0.108 → 0.002, body length 0.295 → 1.005; back 31,922 → 35,748 px, see-through 0.044 → 0; azure +1,468 / +1,395 px, skirt +1,609 / +1,768 px, no change in any check.
+- Trousers (`trouser_gap_zone`, `edit_region(open_crotch=...)`, `engine_target`, `qa_proxy`): a strip between the proxy's legs from its crotch down, at least 2.4 % of the height wide (20 px at 832), is taken out of the edit region, painted as our bare render in the engine's input (FASHN and Qwen) and labelled `feet` in FASHN's person label map, which its agnostic step keeps visible for lower-body garments. Re-computed with FASHN's own agnostic code on run 15's palazzo views: 4,708 / 4,644 px of the strip visible in 257 / 253 rows (0 before). The QA compares with the proxy minus the strip. Merged legs are counted on the unclipped garment (what the engine drew), so the composite's gap cannot hide a skirt; run 15's palazzo still fails with 259 / 255 merged rows.
+- New TYPE checks (listed in `type_failures`: `--accept-failed-dress` does not override them, `run_phase0` stops before stage 2): **see-through** > 0.02 (our mannequin in the enclosed holes of the garment mask on the eroded proxy; an outerwear opening excluded), **body too short** < 0.70 (garment bottom over proxy bottom from the proxy's top, central half of the body columns; not trousers), and on the back still **views disagree**: body lengths more than 0.25 apart, or sleeve cover more than 0.40 apart when the proxy's sleeves are at least 15 % of it.
+
+### Run 15 re-scored (`python -I phase0_dress.py <job dir>`, the stills and masks as pinned)
+
+| View | see-through | body length | sleeve cover | Type failures (0.7.0) |
+| --- | --- | --- | --- | --- |
+| azure front / back | 0 / 0 | 0.993 / 0.987 | (no proxy sleeves) | none |
+| run 14 azure front / back | 0 / 0 | 0.892 / 0.895 | (no proxy sleeves) | none |
+| skirt front / back | 0 / 0 | 1.051 / 1.014 | — | none (front still fails the provisional torso cover 0.727) |
+| blouse front / back | **0.108** / **0.044** | **0.295** / 0.927 | 0.447 / 0.609 | front: see-through, body too short; back: see-through, views disagree (length gap 0.632) |
+| cardigan front / back | 0 / **0.037** | **0.469** / 0.927 | 0.905 / **0.267** | front: body too short; back: see-through, views disagree (length gap 0.459, sleeve gap 0.638) |
+| palazzo front / back | 0 / 0 | — | — | legs merged 259 / 255 rows (as before) |
+
+So 0.7.0 would have stopped the blouse and the cardigan after stage 1b (about $0.03-0.07 each instead of $1.64-1.65) and lets azure and the skirt through. With the new composite on the same raw outputs the blouse passes every check, front and back (torso cover 0.989 / 0.952, length gap 0.078); the cardigan still fails (front body length 0.620, views disagree: length gap 0.318, sleeve gap 0.633). Thresholds are provisional: one run, five products.
+
+**Not tested on a GPU:** the cleaned shop masks as FASHN input, the trouser strip in FASHN's and Qwen's input, Qwen on trousers and outerwear. The cardigan front's cause is not fixed.
+
 ## Stage 2 after run 10: control proxy, neutral prompts, consistency metric
 
 Run 10 (GitHub Actions, aalter-studio-2, synthetic stills) followed the pinned front and back frames and the camera path, but between them the dress turned into trousers (frames 20, 60, 100) and the product name appeared as text in frame 20; stage 4 on those frames reached a mask IoU of 0.90, against 0.99 on the synthetic truth. Two causes: the control depth showed the **bare** mannequin (two separate legs), and the prompt held the product title in quotes. Export 0.2.0 changes three things. None of them has run on a GPU yet.

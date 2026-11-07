@@ -170,39 +170,59 @@ checkout where run 14's outputs are in `out/phase0/` and `report:bohohippychic -
 
 **Stage 4t** (`spikes/garment-engine/src/templateFit.ts`, `bake.ts`, `stage4t.ts`;
 `pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic]`): the
-control proxy remeshed into a body tube and two sleeve tubes, each vertex moved along a fixed ray
-to the visual hull of 128 of the 160 stage 2 garment masks (32 held out), kept at least 4 mm
-outside `mannequin.glb` (signed distance), hem and cuffs found on the masks, the bodice stopped at
+control proxy remeshed into a body tube and two sleeve tubes (each starting with a shoulder cap of
+rays fanned from the shoulder joint), each vertex moved along a fixed ray to the visual hull of 128
+of the 160 stage 2 garment masks (32 held out), kept at least 4 mm outside `mannequin.glb` (signed
+distance, then checked by the exact distance), hem and cuffs found on the masks, the bodice stopped at
 the fitted sleeves, then the print projected from the same frames into a 2048² atlas, JPEG, in a
-textured `garment.glb`. About 87 s per product on a 4-core CPU.
+textured `garment.glb`. About 86 s per product on a 4-core CPU. Version 0.3.0 since 7 Nov (below).
 
 The synthetic dress's template is built from the same spec as its truth (0.57 cm Chamfer before
-any fit), so its 0.44 cm alone does not show that the fit survives a wrong template.
+any fit), so its 0.443 cm alone does not show that the fit survives a wrong template.
 `stage4t:perturbed` fits the same masks from a template 8 % wider with the hem 8 cm higher, one 6 %
-narrower with the hem 8 cm lower, and another product's proxy: every start lands at 0.437 cm
-(shoulders 0.81, bodice 0.42, skirt 0.33, sleeves 0.58 cm). The shoulders and sleeves end further
+narrower with the hem 8 cm lower, and another product's proxy: every start lands at 0.442–0.443 cm
+(shoulders 0.82, bodice 0.44, skirt 0.34, sleeves 0.57 cm; 0.2.0 without shoulder caps: 0.437,
+0.81, 0.42, 0.33, 0.58). The shoulders and sleeves end further
 from the truth than the correct template was (0.60 and 0.29 cm): that is the visual hull's limit
 (the underarm and the shoulder slope are not visible in any silhouette), not the template.
 
-| What | 2DGS (stage 4) | Template fit (stage 4t) |
+| What | 2DGS (stage 4) | Template fit (stage 4t 0.3.0; 0.2.0 in brackets) |
 | --- | --- | --- |
-| Synthetic dress, Chamfer to the truth | 1.45 cm | 0.44 cm (F-score 0.96 at 1 cm), 0 vertices inside; the same 0.437 cm from templates 1.55–3.11 cm off the truth (see below) |
-| Cloth inside the mannequin (run 14) | 21.9 % more than 3 mm inside (analytic test); 26.2 % inside by the SDF sign | 0 of 5,780; closest vertex 3.7 mm from `mannequin.glb` (exact distance) |
-| Turntable IoU visible / silhouette at 0° / 90° / 180° | 0.65 / 0.93, 0.76 / 0.83, 0.67 / 0.93 | 0.90 / 0.90, 0.92 / 0.86, 0.94 / 0.93 |
-| All 160 frames, holdout IoU visible / silhouette (32 frames never used) | 0.697 / 0.900 | 0.906 / 0.887: the outline fits slightly worse, the visible garment much better |
-| View agreement vs the pinned stills, visible front / back | 0.71 / 0.75 | 0.91 / 0.94 (initial bar 0.85) |
-| Chest (chart 102 cm), before calibration / after | 99.0 cm: −2.98 / −0.71 cm, scale 1.030 | 101.5 cm: −0.50 / 0.00 cm, scale 1.005 |
-| Shoulder to hem, vertical drop / flat-lay (printed 91 cm) | 83.3 / 86.6 cm | 84.4 / 92.6 cm |
-| Mesh | 11,999 triangles, ragged hem | 11,227 triangles, 3 open tubes, 0 non-manifold edges, not watertight by design |
-| Colour, size | one mean colour, bundle 255 KB | baked texture (holdout MAE 21.0 vs 24.3 for one colour), `garment.glb` 716 KB, bundle 756 KB |
+| Synthetic dress, Chamfer to the truth | 1.45 cm | 0.443 cm (F-score 0.956 at 1 cm), 0 vertices inside; 0.442–0.443 cm from templates 1.55–3.11 cm off the truth (0.437) |
+| Cloth inside the mannequin (run 14) | 21.9 % more than 3 mm inside (analytic test); 26.2 % inside by the SDF sign | 0 of 5,778; closest vertex 4.0 mm from `mannequin.glb` (exact distance) (3.7 mm) |
+| Turntable IoU visible / silhouette at 0° / 90° / 180° | 0.65 / 0.93, 0.76 / 0.83, 0.67 / 0.93 | 0.90 / 0.90, 0.92 / 0.86, 0.93 / 0.93 |
+| All 160 frames, holdout IoU visible / silhouette (32 frames never used) | 0.697 / 0.900 | 0.901 / 0.884 (0.906 / 0.887): the outline fits slightly worse, the visible garment much better |
+| View agreement vs the pinned stills, visible front / back | 0.71 / 0.75 | 0.90 / 0.93 (0.91 / 0.94; initial bar 0.85) |
+| Chest (chart 102 cm), before calibration / after | 99.0 cm: −2.98 / −0.71 cm, scale 1.030 | 101.1 cm: −0.86 / 0.00 cm, scale 1.009 (101.5 cm, −0.50) |
+| Shoulder to hem, vertical drop / flat-lay (printed 91 cm) | 83.3 / 86.6 cm | 84.4 / 92.7 cm |
+| Mesh | 11,999 triangles, ragged hem | 11,216 triangles, 3 open tubes (sleeves with shoulder caps), 0 non-manifold edges, not watertight by design |
+| Colour, size | one mean colour, bundle 255 KB | baked texture (holdout MAE 21.0 vs 24.3 for one colour; the shoulder caps' print 48.8 % sampled, the rest fill, not covered by that check), `garment.glb` 724 KB, bundle 765 KB |
 
 The length: a shop's "Length" is read as flat-lay (along the garment from the high point
 shoulder); only that reading comes near 91 cm. Proxy 0.1.0 dropped 91 cm vertically and put run
 14's control hem at the knee, about 8 cm below the generated dress; proxy 0.2.0 fixes it (hem
 57.3 cm above the floor, prompt "above-knee"). In the viewer the dress is now closed in every size
-and view, carries the print, and 8 / 12 / 16 differ visibly. Still wrong: the shoulder tops are
-bare (horizontal rays cannot form the shoulder; the sleeves are not stitched to the body tube) and
-the sleeves droop after the drape. The five-person panel stays on hold (1 of 5 products has a
+and view, carries the print, and 8 / 12 / 16 differ visibly.
+
+Shoulders and sleeves (stage 4t 0.3.0 + viewer, 7 Nov): 0.2.0 left the shoulder tops bare and the
+sleeves drooped in the drape. Causes: run 14's control proxy is sleeveless (the product gives no
+sleeve length), so the generated video shows the v0 arm cap bare and the masks carved it; body
+rays (horizontal) and sleeve rays (square to the arm) run parallel to the cloth over the cap; and
+only the sleeve particles above the yoke height were pinned, so each sleeve pivoted down (not the
+material: bend, stretch and solver iterations change it by at most 0.2 cm). Fixes: shoulder-cap
+rows fanned from the shoulder joint; on the sleeve head, a frame's non-garment pixels are left out
+only where its control render shows the bare arm cap (grown by clearance + 0.3 cm; elsewhere, and
+on frames without a control, they carve as everywhere, so a cold-shoulder garment stays open when
+its control covers the cap); exact 4 mm clearance, inside vertices included; in the viewer every
+sleeve pinned all round its head, a gathered cuff on a 0.5 cm leash, and a capped sleeve lifted
+out of the arm cap after grading. Now the shoulders are closed in AU 12 and 16 in every view and
+in AU 8 from the front and three-quarter; from the side AU 8 still shows the torso at the back
+shoulder. Drape, M mannequin, free sleeve particles, AU 12: centroid drop 1.14 / 0.88 cm (old pins
+1.44 / 1.15), cuff band drop 0.27 / 0.42 cm (1.57 / 2.04); p99 / max edge strain AU 8 11.7 / 42.0 %
+(old pins 10.7 / 28.2; the maximum on pinned edges at the lifted size-8 cap), AU 12 7.8 / 26.0 %
+(8.0 / 26.0), AU 16 8.4 / 28.3 % (8.3 / 24.9). The cap's print is mostly fill: 48.8 % of its texels
+are sampled from a frame, 68 % of its vertices are seen bare by most frames. Checks: spike `vitest`
+271 + viewer 51 passed, both typechecks and lint clean. The five-person panel stays on hold (1 of 5 products has a
 bundle). Cost of run 14 (estimate, list price × GPU s): 1,493 GPU s, $1.57–1.63; runs 10–14
 6,648 GPU s, $6.89–7.52; stage 4t adds CPU time only.
 

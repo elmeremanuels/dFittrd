@@ -5,9 +5,10 @@ import { buildBundle } from '../../src/bundle';
 import { measureRing } from '../../src/anchoring';
 import { bodyField, buildAvatar, makeCollider, mannequinMeasurements } from './body';
 import { meshFromGlb, type SpikeBundle } from './bundle';
-import { strainQuantile } from './cloth';
+import { clothParams, createCloth, stepCloth, strainQuantile } from './cloth';
 import { advance, jobCollider, type DrapeJob } from './drapeJob';
-import { defaultTrio, drapeJobOf, heatFor, necklineStrain, openSession, prepareFit, relax, viewerMaterial } from './engine';
+import { armCapLifter, CUFF_LEASH_CM, defaultTrio, drapeJobOf, heatFor, necklineStrain, openSession, pinLoosePieces, prepareFit, relax, viewerMaterial, yokeHeight } from './engine';
+import { armpitDistance } from '../../src/garment';
 import { anchorLabels, fitForBody, frontOutline } from './fitting';
 
 const m = buildMannequin(bodyShape(BASE_SHAPE_ID));
@@ -240,5 +241,109 @@ describe('avatar', () => {
     for (let t = 0; t < a.mesh.indices.length; t += 3) if (a.mesh.vertexPart[a.mesh.indices[t]!] === torso) tris.push(a.mesh.indices[t]!, a.mesh.indices[t + 1]!, a.mesh.indices[t + 2]!);
     const g = measureRing({ ...a.mesh, indices: Uint32Array.from(tris) }, m.rings.find((r) => r.id === 'waist')!)!.circumferenceCm;
     expect(Math.abs(g - 80) / 80).toBeLessThan(0.01);
+  });
+});
+
+describe('sleeve pieces (stage 4t: tubes of their own, not sewn to the bodice)', () => {
+  // A bodice tube round the torso and a sleeve tube along the left arm: rings of 24 particles.
+  const tube = (centre: (k: number) => [number, number, number], u: readonly number[], v: readonly number[], radius: (k: number) => number, rings: number, offset: number, pos: number[], idx: number[]): void => {
+    for (let k = 0; k < rings; k++) for (let c = 0; c < 24; c++) {
+      const a = (2 * Math.PI * c) / 24, o = centre(k), r = radius(k);
+      pos.push(o[0] + r * (Math.cos(a) * u[0]! + Math.sin(a) * v[0]!), o[1] + r * (Math.cos(a) * u[1]! + Math.sin(a) * v[1]!), o[2] + r * (Math.cos(a) * u[2]! + Math.sin(a) * v[2]!));
+    }
+    for (let k = 0; k < rings - 1; k++) for (let c = 0; c < 24; c++) {
+      const a = offset + k * 24 + c, b = offset + k * 24 + ((c + 1) % 24);
+      idx.push(a, a + 24, b + 24, a, b + 24, b);
+    }
+  };
+  const garment = (cuffRadius: number): { pos: Float64Array; idx: Uint32Array; sleeve: number; along: (i: number) => number } => {
+    const pos: number[] = [], idx: number[] = [];
+    tube((k) => [0, m.morphHeights.shoulder - 2 - 2 * k, 0], [1, 0, 0], [0, 0, 1], () => 20, 40, 0, pos, idx);
+    const sleeve = pos.length / 3;
+    const arm = m.arms.left;
+    // From 1 cm above the joint to 30 cm down the arm: a puff of 7.5 cm narrowing over the last 6 cm to the cuff.
+    const s = (k: number): number => -1 + k * 1.55;
+    tube((k) => [arm.joint[0] + arm.axis[0] * s(k), arm.joint[1] + arm.axis[1] * s(k), arm.joint[2] + arm.axis[2] * s(k)], arm.u, arm.v, (k) => (k <= 16 ? 7.5 : 7.5 + ((k - 16) / 4) * (cuffRadius - 7.5)), 21, sleeve, pos, idx);
+    const along = (i: number): number => (pos[3 * i]! - arm.joint[0]) * arm.axis[0] + (pos[3 * i + 1]! - arm.joint[1]) * arm.axis[1] + (pos[3 * i + 2]! - arm.joint[2]) * arm.axis[2];
+    return { pos: Float64Array.from(pos), idx: Uint32Array.from(idx), sleeve, along };
+  };
+
+  it('pins the whole sleeve head down to the armpit, underside included, not only what lies above the yoke', () => {
+    const g = garment(m.armAt(30, 1)!.a + 1);
+    const n = g.pos.length / 3;
+    const pinned = new Uint8Array(n);
+    const yoke = yokeHeight(m);
+    for (let i = 0; i < n; i++) if (g.pos[3 * i + 1]! >= yoke) pinned[i] = 1; // what the yoke rule pins
+    const yokeOnly = Uint8Array.from(pinned);
+    pinLoosePieces(m, g.pos, g.idx, pinned);
+    const head = armpitDistance(m);
+    let headParticles = 0, headPinnedByYoke = 0;
+    for (let i = g.sleeve; i < n; i++) {
+      if (g.along(i) > head) continue;
+      headParticles++;
+      headPinnedByYoke += yokeOnly[i]!;
+      expect(pinned[i]).toBe(1);
+    }
+    // The yoke alone holds only the top of the head: the case that let the sleeves pivot down.
+    expect(headPinnedByYoke).toBeLessThan(headParticles);
+    // The bodice is not touched.
+    for (let i = 0; i < g.sleeve; i++) expect(pinned[i]).toBe(yokeOnly[i]);
+  });
+
+  it('marks a gathered cuff (close to the arm, narrower than the puff) for the leash, never pins it, and leaves a wide cuff free', () => {
+    for (const [cuffRadius, held] of [[m.armAt(30, 1)!.a + 1, true], [8, false]] as const) {
+      const g = garment(cuffRadius);
+      const n = g.pos.length / 3;
+      const pinned = new Uint8Array(n), cuffs = new Uint8Array(n);
+      pinLoosePieces(m, g.pos, g.idx, pinned, g.pos, cuffs);
+      let cuff = 0, cuffMarked = 0, cuffPinned = 0, mid = 0;
+      for (let i = g.sleeve; i < n; i++) {
+        const s = g.along(i);
+        if (s >= 29) {
+          cuff++;
+          cuffMarked += cuffs[i]!;
+          cuffPinned += pinned[i]!;
+        } else if (s > 10 && s < 25) mid += pinned[i]! + cuffs[i]!;
+      }
+      expect(cuffMarked).toBe(held ? cuff : 0);
+      expect(cuffPinned).toBe(0);
+      expect(mid).toBe(0);
+    }
+  });
+
+  it('holds a leashed particle within CUFF_LEASH_CM of its anchor while gravity pulls it', () => {
+    // Two pinned particles and a free one hanging below them on long edges: free, it falls; leashed, it stays within the leash.
+    const start = [0, 100, 0, 1, 100, 0, 0.5, 99, 0];
+    const rest = [0, 100, 0, 1, 100, 0, 0.5, 80, 0];
+    const idx = [0, 1, 2];
+    const drop = (leash: number): number => {
+      const c = createCloth(start, rest, idx, (i) => i < 2, () => false);
+      c.leash[2] = leash;
+      const params = clothParams(viewerMaterial('linen', { baseColorHex: '#ffffff' } as never), 1.5);
+      for (let f = 0; f < 60; f++) stepCloth(c, params, null, 1);
+      return Math.hypot(c.pos[6]! - start[6]!, c.pos[7]! - start[7]!, c.pos[8]! - start[8]!);
+    };
+    expect(drop(0)).toBeGreaterThan(5);
+    expect(drop(CUFF_LEASH_CM)).toBeLessThanOrEqual(CUFF_LEASH_CM + 1e-4);
+  });
+
+  it('lifts cloth out of the arm cap (a smaller size grades the shoulder inwards into it) but leaves the underarm alone', () => {
+    const f = m.arms.left;
+    const lift = armCapLifter(m, 0.35);
+    const at = (s: number, ru: number, rv = 0): Float32Array => Float32Array.from([0, 1, 2].map((d) => f.joint[d]! + s * f.axis[d]! + ru * f.u[d]! + rv * f.v[d]!));
+    const radial = (p: Float32Array, s: number): number => Math.hypot(...[0, 1, 2].map((d) => p[d]! - f.joint[d]! - s * f.axis[d]!));
+    // On top of the cap (u points up and out on the left arm), 1 cm inside the surface: out to surface + clearance.
+    const a3 = m.armAt(3, 1)!.a;
+    const top = at(3, a3 - 1);
+    expect(lift(top, 0)).toBe(true);
+    expect(radial(top, 3)).toBeCloseTo(a3 + 0.35, 3);
+    expect(lift(top, 0)).toBe(false);
+    // Above the joint the cap narrows to its pole (a cone): a point outside the cone stays.
+    expect(lift(at(-3, 2.5), 0)).toBe(false);
+    expect(lift(at(-1, 3), 0)).toBe(true);
+    // Under the arm, where the v0 arm runs into the torso: never pushed.
+    expect(lift(at(3, -(a3 - 1)), 0)).toBe(false);
+    // Below the armpit the collider handles the arm: not this.
+    expect(lift(at(armpitDistance(m) + 2, 1), 0)).toBe(false);
   });
 });

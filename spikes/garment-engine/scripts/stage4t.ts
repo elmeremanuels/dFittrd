@@ -55,5 +55,6 @@ console.log(
     (mt.vsTruth ? `, Chamfer vs truth ${mt.vsTruth.chamferCmMean} cm` : '') +
     `, texture ${(mt.bake.jpegBytes / 1024).toFixed(0)} KB, glb ${(mt.glbBytes / 1024).toFixed(0)} KB, ${((performance.now() - t0) / 1000).toFixed(1)} s`,
 );
+console.log(`[stage4t] texture: ${(mt.bake.seenShare * 100).toFixed(1)} % of the chart texels sampled from frames; shoulder caps (within ${mt.bake.capTexture.radiusCm} cm of the cap tops) ${(mt.bake.capTexture.seenShare * 100).toFixed(1)} % of ${mt.bake.capTexture.texels}`);
 if (mt.bake.holdoutMean) console.log(`[stage4t] holdout photometric: texture MAE ${mt.bake.holdoutMean.maeTexture} (PSNR ${mt.bake.holdoutMean.psnrTexture} dB), one mean colour MAE ${mt.bake.holdoutMean.maeMeanColour} (PSNR ${mt.bake.holdoutMean.psnrMeanColour} dB); on 8×8 blocks texture ${mt.bake.holdoutMean.maeTextureBlock8} vs mean colour ${mt.bake.holdoutMean.maeMeanColourBlock8}`);
 console.log(`[stage4t] wrote ${out}`);

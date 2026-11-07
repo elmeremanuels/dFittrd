@@ -82,6 +82,8 @@ export interface Cloth {
   /** Long-range attachment per particle: nearest pinned particle (−1: none) and the geodesic rest distance to it. */
   tether: Int32Array;
   tetherRest: Float32Array;
+  /** Soft hold per particle: a free particle stays within this many cm of its anchor (0 = none; a gathered cuff, `engine.CUFF_LEASH_CM`). */
+  leash: Float32Array;
   /** Simulated time so far, s. */
   time: number;
   /** Frames in a row whose largest particle move stayed under `ClothParams.calmCm`. */
@@ -222,7 +224,7 @@ export function createCloth(start: ArrayLike<number>, rest: ArrayLike<number>, i
     cl[i] = cling(i) ? 1 : 0;
   }
   const { tether, tetherRest } = tethers(n, edges, edgeRest, (i) => invMass[i] === 0);
-  return { pos, prev: Float32Array.from(pos), invMass, anchor: Float32Array.from(pos), cling: cl, edges, edgeRest, bends, bendRest, tether, tetherRest, time: 0, calmFrames: 0 };
+  return { pos, prev: Float32Array.from(pos), invMass, anchor: Float32Array.from(pos), cling: cl, edges, edgeRest, bends, bendRest, tether, tetherRest, leash: new Float32Array(n), time: 0, calmFrames: 0 };
 }
 
 function project(pos: Float32Array, w: Float32Array, pairs: Uint32Array, restLen: Float32Array, k: number): void {
@@ -264,6 +266,23 @@ function projectTethers(pos: Float32Array, w: Float32Array, tether: Int32Array, 
     pos[3 * i] = pos[3 * p]! + dx * k;
     pos[3 * i + 1] = pos[3 * p + 1]! + dy * k;
     pos[3 * i + 2] = pos[3 * p + 2]! + dz * k;
+  }
+}
+
+/** Pull every leashed free particle back inside the sphere of its leash round its anchor. */
+function projectLeashes(pos: Float32Array, w: Float32Array, anchor: Float32Array, leash: Float32Array): void {
+  for (let i = 0; i < leash.length; i++) {
+    const r = leash[i]!;
+    if (r <= 0 || w[i] === 0) continue;
+    const dx = pos[3 * i]! - anchor[3 * i]!;
+    const dy = pos[3 * i + 1]! - anchor[3 * i + 1]!;
+    const dz = pos[3 * i + 2]! - anchor[3 * i + 2]!;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 <= r * r) continue;
+    const k = r / Math.sqrt(d2);
+    pos[3 * i] = anchor[3 * i]! + dx * k;
+    pos[3 * i + 1] = anchor[3 * i + 1]! + dy * k;
+    pos[3 * i + 2] = anchor[3 * i + 2]! + dz * k;
   }
 }
 
@@ -333,6 +352,8 @@ export function stepCloth(cloth: Cloth, params: ClothParams, collide: Collide | 
         projectTethers(pos, invMass, cloth.tether, cloth.tetherRest);
         project(pos, invMass, cloth.edges, cloth.edgeRest, kS);
         project(pos, invMass, cloth.bends, cloth.bendRest, kB);
+        // After the edges, so a leash holds as a constraint and not only as a start point (collision still wins).
+        projectLeashes(pos, invMass, cloth.anchor, cloth.leash);
         // Collide halfway and after the last iteration: enough to keep the cloth out, at a third of the cost.
         if (collide && (it === params.iterations - 1 || it === params.iterations >> 1)) for (let i = 0; i < n; i++) if (invMass[i] !== 0) collide(pos, i);
       }

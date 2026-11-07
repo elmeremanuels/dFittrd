@@ -57,6 +57,8 @@ export interface GarmentSession {
   chains: ChainAssignment;
   /** Particles exempt from collision (`insideCanonical` of the base mesh). */
   noCollide: Uint8Array;
+  /** Particles never lifted out of an arm's cap (`armCapLifter`): all but the sleeve pieces that carry a shoulder cap (`shoulderCapPieces`), and those the base mesh already has inside the cap. */
+  noLift: Uint8Array;
   /** Graded meshes per size label (the size switch is instant after the first time). */
   graded: Map<string, Mesh>;
 }
@@ -64,7 +66,12 @@ export interface GarmentSession {
 export function openSession(m: Mannequin, bundle: SpikeBundle, payload: GarmentPayload = bundle.payload ?? mockGarment(bundle.productId)): GarmentSession {
   // A bottom has no sleeves: all of it follows the body (the A-pose elbows hang at waist height).
   const chains = bundle.anchors.category === 'bottom' ? new Uint8Array(bundle.baseMesh.positions.length / 3) : assignChains(m, bundle.baseMesh);
-  return { m, bundle, payload, chains, noCollide: insideCanonical(m, bundle.baseMesh.positions, chains), graded: new Map() };
+  const probe = Float32Array.from(bundle.baseMesh.positions);
+  const lift = armCapLifter(m, 0);
+  const capped = shoulderCapPieces(m, bundle.baseMesh.positions, bundle.baseMesh.indices, chains.length);
+  const noLift = new Uint8Array(chains.length);
+  for (let i = 0; i < noLift.length; i++) noLift[i] = !capped[i] || lift(probe, i) ? 1 : 0;
+  return { m, bundle, payload, chains, noCollide: insideCanonical(m, bundle.baseMesh.positions, chains), noLift, graded: new Map() };
 }
 
 export function sizeLabels(session: GarmentSession): string[] {
@@ -161,15 +168,22 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   // and sags (p99 strain 26–35 % instead of 11–24 % on the tee).
   const pinned = new Uint8Array(chains.length);
   for (let i = 0; i < chains.length; i++) if (chains[i] === 0 && start[3 * i + 1]! >= yoke) pinned[i] = 1;
-  pinLoosePieces(m, start, graded.indices, pinned);
+  const cuff = new Uint8Array(chains.length);
+  pinLoosePieces(m, start, graded.indices, pinned, session.bundle.baseMesh.positions, cuff);
+  const lift = armCapLifter(m, CLEARANCE_CM, session.noLift);
+  for (let i = 0; i < chains.length; i++) lift(start, i);
   const cloth = createCloth(start, graded.positions, graded.indices, (i) => pinned[i] === 1, (i) => chains[i] === 0);
+  for (let i = 0; i < chains.length; i++) if (cuff[i] && !pinned[i]) cloth.leash[i] = CUFF_LEASH_CM;
   const collide = makeCollider(field, CLEARANCE_CM, chains, noCollide);
   // Settle the yoke onto the avatar before pinning it: a small size sits a few mm inside the neck
   // and shoulders, and a stretched edge between two pins never relaxes (the neckline tears).
   // Known gap: on a body much wider at the shoulders than the garment, the particles exempt from
   // collision stay inside and the loop's stretch concentrates next to them (33–53 % on the
   // 104/90/112 body in S–L, from 124–287 % before). Letting them collide here was measured worse.
-  settlePins(cloth, collide);
+  settlePins(cloth, (p, i) => {
+    const a = collide(p, i);
+    return lift(p, i) || a;
+  });
   return {
     size: placement.size,
     gaps,
@@ -189,17 +203,49 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   };
 }
 
-/** A loose piece's shoulder end: this many cm along the arm from its point nearest the shoulder joint is pinned. */
+/** A sleeve piece's head: at least this many cm along the arm from its point nearest the shoulder joint is pinned. */
 export const SLEEVE_CAP_CM = 4;
 
 /**
- * Pieces of the garment with no pinned particle (stage 4t's sleeves are tubes of their own that
- * overlap the bodice at the armhole, not sewn to it) would slide down the A-pose arm or fall: pin
- * each such piece's shoulder end, the particles within `SLEEVE_CAP_CM` along the arm of its point
- * nearest the shoulder joint (on the side of the body it lies on). Mutates `pinned`.
+ * Stage 4t's sleeves are tubes of their own that overlap the bodice at the armhole, not sewn to it.
+ * A sewn sleeve hangs from its whole armhole seam; pinning only the particles that happen to lie
+ * above the yoke height (the top of the sleeve head) let each sleeve pivot down round those pins in
+ * the drape (run 14: the sleeve's centroid dropped 1.7–2.4 cm towards the underarm and the puff
+ * collapsed onto the arm). So every piece other than the largest (the bodice) is pinned all round
+ * its head: the particles up to the armpit along the arm (`armpitDistance`, where the arm's inner
+ * side leaves the torso: the armhole seam line), and at least `SLEEVE_CAP_CM` from the piece's point
+ * nearest the shoulder joint (on the side of the body it lies on). A gathered cuff is marked in
+ * `cuff` (`gatheredCuff`, decided on `base`, the base-size positions, so every size marks the same
+ * particles): `prepareFit` holds it on a leash (`CUFF_LEASH_CM`), not a pin. Mutates `pinned` (and
+ * `cuff`); returns the number of particles it pinned.
  */
-export function pinLoosePieces(m: Mannequin, pos: ArrayLike<number>, indices: ArrayLike<number>, pinned: Uint8Array): number {
-  const n = pinned.length;
+export function pinLoosePieces(m: Mannequin, pos: ArrayLike<number>, indices: ArrayLike<number>, pinned: Uint8Array, base: ArrayLike<number> = pos, cuff?: Uint8Array): number {
+  const all = meshPieces(indices, pinned.length);
+  if (all.length < 2) return 0;
+  const largest = all.reduce((a, b) => (b.length > a.length ? b : a));
+  const head = armpitDistance(m);
+  let added = 0;
+  for (const members of all) {
+    if (members === largest) continue;
+    let sx = 0;
+    for (const i of members) sx += pos[3 * i]!;
+    const arm = sx >= 0 ? m.arms.left : m.arms.right;
+    const along = (i: number): number => (pos[3 * i]! - arm.joint[0]) * arm.axis[0] + (pos[3 * i + 1]! - arm.joint[1]) * arm.axis[1] + (pos[3 * i + 2]! - arm.joint[2]) * arm.axis[2];
+    const s0 = Math.min(...members.map(along));
+    const limit = Math.max(s0 + SLEEVE_CAP_CM, head);
+    for (const i of members) if (!pinned[i] && along(i) <= limit) {
+      pinned[i] = 1;
+      added++;
+    }
+    // Whether the cuff is gathered is the product's: decided on the base-size garment, the same particles in every size.
+    const alongBase = (i: number): number => (base[3 * i]! - arm.joint[0]) * arm.axis[0] + (base[3 * i + 1]! - arm.joint[1]) * arm.axis[1] + (base[3 * i + 2]! - arm.joint[2]) * arm.axis[2];
+    if (cuff) for (const i of gatheredCuff(m, arm, members, alongBase, base)) if (!pinned[i]) cuff[i] = 1;
+  }
+  return added;
+}
+
+/** Connected pieces of a mesh (particle lists, pieces of fewer than 3 particles left out). */
+export function meshPieces(indices: ArrayLike<number>, n: number): number[][] {
   const parent = new Int32Array(n).map((_, i) => i);
   const find = (x: number): number => {
     while (parent[x] !== x) {
@@ -218,20 +264,129 @@ export function pinLoosePieces(m: Mannequin, pos: ArrayLike<number>, indices: Ar
     const r = find(i);
     (pieces.get(r) ?? pieces.set(r, []).get(r)!).push(i);
   }
-  let added = 0;
-  for (const members of pieces.values()) {
-    if (members.length < 3 || members.some((i) => pinned[i])) continue;
+  return [...pieces.values()].filter((p) => p.length >= 3);
+}
+
+/** A sleeve piece carries a shoulder cap when it reaches at least this far above the shoulder joint along the arm (cm). */
+export const SHOULDER_CAP_REACH_CM = 2;
+
+/**
+ * 1 for particles of the pieces other than the largest (the bodice) that reach over the shoulder
+ * joint: stage 4t's sleeves with their shoulder cap (run 14: 7–8 cm above the joint). A set-in sleeve
+ * that starts at the joint (the synthetic garments: −0.3 cm) is not one; the bodice covers its cap.
+ */
+export function shoulderCapPieces(m: Mannequin, pos: ArrayLike<number>, indices: ArrayLike<number>, n: number): Uint8Array {
+  const out = new Uint8Array(n);
+  const all = meshPieces(indices, n);
+  if (all.length < 2) return out;
+  const largest = all.reduce((a, b) => (b.length > a.length ? b : a));
+  for (const p of all) {
+    if (p === largest) continue;
     let sx = 0;
-    for (const i of members) sx += pos[3 * i]!;
-    const arm = sx >= 0 ? m.arms.left : m.arms.right;
-    const along = (i: number): number => (pos[3 * i]! - arm.joint[0]) * arm.axis[0] + (pos[3 * i + 1]! - arm.joint[1]) * arm.axis[1] + (pos[3 * i + 2]! - arm.joint[2]) * arm.axis[2];
-    const s0 = Math.min(...members.map(along));
-    for (const i of members) if (along(i) <= s0 + SLEEVE_CAP_CM) {
-      pinned[i] = 1;
-      added++;
-    }
+    for (const i of p) sx += pos[3 * i]!;
+    const f = sx >= 0 ? m.arms.left : m.arms.right;
+    let s0 = Infinity;
+    for (const i of p) s0 = Math.min(s0, (pos[3 * i]! - f.joint[0]) * f.axis[0] + (pos[3 * i + 1]! - f.joint[1]) * f.axis[1] + (pos[3 * i + 2]! - f.joint[2]) * f.axis[2]);
+    if (s0 <= -SHOULDER_CAP_REACH_CM) for (const i of p) out[i] = 1;
   }
-  return added;
+  return out;
+}
+
+/** The cuff band: the last this many cm of a sleeve along the arm. */
+export const CUFF_BAND_CM = 2;
+/** A cuff counts as gathered onto the arm when its mean radius is at most this far outside the arm's surface (cm) … */
+export const GATHERED_CUFF_GAP_CM = 2;
+/** … and at most this share of the sleeve's widest mean radius (a puff narrowing to an elastic cuff). */
+export const GATHERED_CUFF_RATIO = 0.8;
+
+/**
+ * A gathered cuff (an elastic or a band narrower than the sleeve, sitting close to the arm) grips the
+ * forearm: it holds the far end of the sleeve where the frames show it, and the puff between head and
+ * cuff keeps its volume instead of sliding down the A-pose arm and the cuff opening up. Returns the
+ * cuff band of such a sleeve; a wide or open cuff (a bell sleeve) gives none.
+ *
+ * The band is held on a leash of `CUFF_LEASH_CM` round its placed position, not pinned: a hard pin
+ * (measured on run 14, M mannequin) kept it exactly in place but raised the sleeve's own p99 edge
+ * strain in AU 12 from 5.8 % (cuff free) to 16.7 %, the stretch landing just above the cuff where the
+ * puff settles against a fixed ring. Free, the band fell 1.6–1.9 cm and the right cuff opened from
+ * 5.5 to 7.2 cm radius.
+ */
+export const CUFF_LEASH_CM = 0.5;
+
+export function gatheredCuff(m: Mannequin, arm: Mannequin['arms']['left'], members: readonly number[], along: (i: number) => number, pos: ArrayLike<number>): number[] {
+  const sMax = Math.max(...members.map(along));
+  const radius = (i: number, s: number): number => {
+    const x = pos[3 * i]! - (arm.joint[0] + arm.axis[0] * s), y = pos[3 * i + 1]! - (arm.joint[1] + arm.axis[1] * s), z = pos[3 * i + 2]! - (arm.joint[2] + arm.axis[2] * s);
+    return Math.hypot(x, y, z);
+  };
+  // Mean radius per 2 cm band along the arm.
+  const bands = new Map<number, { r: number; n: number }>();
+  for (const i of members) {
+    const s = along(i);
+    const b = Math.floor(s / CUFF_BAND_CM);
+    const e = bands.get(b) ?? { r: 0, n: 0 };
+    e.r += radius(i, s);
+    e.n++;
+    bands.set(b, e);
+  }
+  const widest = Math.max(...[...bands.values()].filter((e) => e.n >= 4).map((e) => e.r / e.n));
+  const cuff = members.filter((i) => along(i) >= sMax - CUFF_BAND_CM);
+  if (cuff.length < 4) return [];
+  let cuffR = 0, armR = 0;
+  for (const i of cuff) {
+    const s = along(i);
+    cuffR += radius(i, s);
+    const e = m.armAt(Math.max(0, s), arm.side);
+    armR += e ? (e.a + e.b) / 2 : 0;
+  }
+  cuffR /= cuff.length;
+  armR /= cuff.length;
+  return cuffR - armR <= GATHERED_CUFF_GAP_CM && cuffR <= GATHERED_CUFF_RATIO * widest ? cuff : [];
+}
+
+/**
+ * Pushes a particle out of the upper half of an arm's cap: the cone above the shoulder joint and the
+ * arm down to the armpit, on the side away from the underarm. The collider leaves that zone out
+ * (body-chain particles meet the torso only, sleeve particles the arm below the armpit only, because
+ * the v0 arm overlaps the torso there), and a smaller size grades the shoulder cloth inwards about
+ * the body axis, into the cap (run 14, AU 8: a grey patch on the shoulder once stage 4t had closed
+ * it). Applied to the placed garment and inside the pin settle, whether or not the particle is
+ * exempt from collision (the exemption is for the torso junction, not the cap). Particles in `skip`
+ * are never moved: the session passes those the base garment already has inside the cap (the
+ * synthetic garments lie inside the v0 arm where it overlaps the torso; lifting them tore the
+ * neckline), so only cloth that grading pushed in is lifted. The cap is the canonical one: the
+ * avatar's arms are not morphed. Returns a function (pos, i) → moved.
+ */
+export function armCapLifter(m: Mannequin, clearanceCm: number, skip?: Uint8Array): (pos: Float32Array, i: number) => boolean {
+  const head = armpitDistance(m);
+  const arms = [m.arms.left, m.arms.right].map((f) => {
+    const a0 = m.armAt(0, f.side)!;
+    // The mannequin closes the arm above the joint with a cone to its start pole, 0.9 upper-arm radii
+    // above the joint (`@curtain/mannequin` model.ts; the section at the joint is 1.18 upper-arm radii).
+    return { f, a0, pole: (0.9 / 1.18) * a0.a };
+  });
+  return (pos, i) => {
+    if (skip && skip[i] === 1) return false;
+    let moved = false;
+    for (const { f, a0, pole } of arms) {
+      const rx = pos[3 * i]! - f.joint[0], ry = pos[3 * i + 1]! - f.joint[1], rz = pos[3 * i + 2]! - f.joint[2];
+      const s = rx * f.axis[0] + ry * f.axis[1] + rz * f.axis[2];
+      if (s > (head) || s <= -pole) continue;
+      const ru = rx * f.u[0] + ry * f.u[1] + rz * f.u[2], rv = rx * f.v[0] + ry * f.v[1] + rz * f.v[2];
+      // The underarm (below the arm axis) stays out: there the arm runs into the torso.
+      if (s >= 0 && ru * f.u[1] + rv * f.v[1] <= 0) continue;
+      const e = s >= 0 ? m.armAt(s, f.side)! : a0;
+      const t = s >= 0 ? 1 : 1 + s / pole;
+      const A = e.a * t + clearanceCm, B = e.b * t + clearanceCm;
+      const q = (ru / A) ** 2 + (rv / B) ** 2;
+      // On the surface within float32 rounding (positions are Float32Array) counts as outside.
+      if (q >= 1 - 1e-4 || q < 1e-9) continue;
+      const k = 1 / Math.sqrt(q) - 1;
+      for (let d = 0; d < 3; d++) pos[3 * i + d] = pos[3 * i + d]! + k * (ru * f.u[d]! + rv * f.v[d]!);
+      moved = true;
+    }
+    return moved;
+  };
 }
 
 /** Run the whole relaxation at once, up to the duration cap or until calm (tests, the blind page's pre-render). */

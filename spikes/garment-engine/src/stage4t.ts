@@ -9,7 +9,8 @@
  *
  * Inputs read (all written by our own exporter and GPU stages, treated as data): manifest.json,
  * cameras_opencv.json, mannequin.glb, control/proxy.glb (else the proxy is built from the payload),
- * <source>/garment_mask/NNNN.png and the frames (stage2/frames or synthetic/rgb).
+ * <source>/garment_mask/NNNN.png, the frames (stage2/frames or synthetic/rgb) and, for stage 2, the control
+ * render the frames were generated from (control/mask, control/proxy_mask; `templateFit.CONTROL_CAP`).
  */
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
@@ -28,7 +29,7 @@ import { distancesToMesh } from './meshDistance';
 import { fitTemplate, type RenderMesh, type TemplateFitOptions, type TemplateFitReport } from './templateFit';
 import { camerasFromOpencvJson, idMask, project, rasterize, splitFrames, type PinholeCamera } from './views';
 
-export const STAGE4T_VERSION = 'stage4t-0.2.0';
+export const STAGE4T_VERSION = 'stage4t-0.3.0';
 export type Stage4tSource = 'stage2' | 'synthetic';
 
 export interface JobViews {
@@ -37,6 +38,9 @@ export interface JobViews {
   frames: (Uint8Array | null)[];
   maskDir: string;
   framesDir: string;
+  /** The control render each stage 2 frame was generated from (control/mask, control/proxy_mask; none for the synthetic renders): `FitViews.control`. */
+  control: ({ mannequin: Mask; proxy: Mask } | null)[] | null;
+  controlDir: string | null;
 }
 
 const name4 = (i: number): string => String(i).padStart(4, '0');
@@ -62,7 +66,22 @@ export function loadJobViews(dir: string, source: Stage4tSource): JobViews {
     return m;
   });
   const frames = cameras.map((c, i) => rgbOf(join(dir, framesDir, `${name4(i)}.png`), c.width, c.height));
-  return { cameras, masks, frames, maskDir, framesDir };
+  // Stage 2's frames follow the exporter's control render; the synthetic frames are renders of a known garment and follow none.
+  const readMask = (p: string, c: PinholeCamera): Mask | null => {
+    if (!existsSync(p)) return null;
+    const mk = maskFromPng(decodeAnyPng(new Uint8Array(readFileSync(p))));
+    return mk.width === c.width && mk.height === c.height ? mk : null;
+  };
+  const control = source === 'stage2' && existsSync(join(dir, 'control/mask'))
+    ? cameras.map((c, i) => {
+        const mannequin = readMask(join(dir, 'control/mask', `${name4(i)}.png`), c);
+        if (!mannequin) return null;
+        // A bare control (no proxy) has no proxy mask: the whole mannequin is bare.
+        const proxy = readMask(join(dir, 'control/proxy_mask', `${name4(i)}.png`), c) ?? { width: c.width, height: c.height, data: new Uint8Array(c.width * c.height) };
+        return { mannequin, proxy };
+      })
+    : null;
+  return { cameras, masks, frames, maskDir, framesDir, control, controlDir: control ? 'control/mask, control/proxy_mask' : null };
 }
 
 export interface ViewIou {
@@ -92,6 +111,48 @@ export function viewIous(mesh: Pick<Mesh, 'positions' | 'indices'>, body: Pick<M
     const sil = rasterize(cam, [{ positions: mesh.positions, indices: mesh.indices, id: 2 }]);
     return { frame: i, azimuthDeg: cam.azimuthDeg, split: trainSet.has(i) ? 'train' : 'holdout', visible: r4(maskIou(idMask(vis, 2), views.masks[i]!).iou), silhouette: r4(maskIou(idMask(sil, 2), views.masks[i]!).iou) };
   });
+}
+
+/** Within this distance of an arm's cap top (cm): the shoulder-cap region of `capTextureShare`. */
+export const CAP_REGION_CM = 6;
+
+export interface CapTexture {
+  radiusCm: number;
+  /** Atlas texels whose surface point lies within `radiusCm` of either cap top. */
+  texels: number;
+  /** Share of them sampled from at least one training frame; the rest is diffusion fill from the neighbouring print. */
+  seenShare: number;
+  note: string;
+}
+
+/**
+ * How much of the shoulder cap's print comes from the frames. The cap top is the highest point of each
+ * arm's section at the shoulder joint (per side). The holdout photometric check compares only inside
+ * the garment masks, and a sleeveless control leaves the cap bare in the frames (`templateFit.CONTROL_CAP`),
+ * so it cannot judge the cap's print: this share says how much of it is sampled at all.
+ */
+export function capTextureShare(m: Mannequin, texels: { index: Int32Array; pos: Float32Array }, seenWeight: Float32Array): CapTexture {
+  const tops = [m.arms.left, m.arms.right].map((f) => {
+    const a0 = m.armAt(0, f.side)!;
+    let best: number[] = [], by = -Infinity;
+    for (let k = 0; k < 720; k++) {
+      const t = (k * Math.PI) / 360;
+      const p = [0, 1, 2].map((d) => f.joint[d]! + a0.a * Math.cos(t) * f.u[d]! + a0.b * Math.sin(t) * f.v[d]!);
+      if (p[1]! > by) {
+        by = p[1]!;
+        best = p;
+      }
+    }
+    return best;
+  });
+  let all = 0, seen = 0;
+  for (let i = 0; i < texels.index.length; i++) {
+    const x = texels.pos[3 * i]!, y = texels.pos[3 * i + 1]!, z = texels.pos[3 * i + 2]!;
+    if (!tops.some((T) => Math.hypot(x - T[0]!, y - T[1]!, z - T[2]!) < CAP_REGION_CM)) continue;
+    all++;
+    if (seenWeight[texels.index[i]!]! > 0) seen++;
+  }
+  return { radiusCm: CAP_REGION_CM, texels: all, seenShare: all ? r4(seen / all) : 0, note: 'texels within radiusCm of the top of either arm cap (highest point of the arm section at the joint) sampled from a training frame; the rest is filled by diffusion. The holdout photometric check does not cover the cap.' };
 }
 
 export function summarise(ious: readonly ViewIou[], split: 'train' | 'holdout'): IouSummary {
@@ -148,7 +209,7 @@ export interface Stage4tMetrics {
   formatVersion: 1;
   version: typeof STAGE4T_VERSION;
   source: Stage4tSource;
-  inputs: { cameras: string; maskDir: string; framesDir: string; proxy: string; mannequinSha256: string; masksSha256: string };
+  inputs: { cameras: string; maskDir: string; framesDir: string; controlDir: string | null; proxy: string; mannequinSha256: string; masksSha256: string };
   split: { train: number; holdout: number; rule: string };
   fit: TemplateFitReport;
   iou: { train: IouSummary; holdout: IouSummary; perView: ViewIou[] };
@@ -162,7 +223,7 @@ export interface Stage4tMetrics {
   insideBody: { sdfInside: number; sdfBelowClearance: number; exact: { minCm: number; belowClearance: number; below3mm: number; method: string }; vertices: number; share: number; analytic: InsideBody };
   mesh: { triangles: number; vertices: number; budget: [number, number]; withinBudget: boolean; components: number; boundaryEdges: number; boundaryLoops: number; nonManifoldEdges: number; inconsistentEdges: number; degenerateTriangles: number; watertight: boolean; note: string };
   vsTruth: ChamferReport | null;
-  bake: BakeReport & { jpegBytes: number; jpegQuality: number; holdout: PhotometricCheck[]; holdoutMean: { maeTexture: number; maeMeanColour: number; psnrTexture: number; psnrMeanColour: number; maeTextureBlock8: number; maeMeanColourBlock8: number } | null; meanColour: [number, number, number] };
+  bake: BakeReport & { jpegBytes: number; jpegQuality: number; holdout: PhotometricCheck[]; holdoutMean: { maeTexture: number; maeMeanColour: number; psnrTexture: number; psnrMeanColour: number; maeTextureBlock8: number; maeMeanColourBlock8: number } | null; meanColour: [number, number, number]; capTexture: CapTexture };
   glbBytes: number;
   timingsMs: Record<string, number>;
 }
@@ -221,7 +282,7 @@ export function runStage4t(o: Stage4tInputs): Stage4tResult {
   log(`stage 4t: ${views.cameras.length} views (${train.length} train, ${holdout.length} holdout), proxy ${proxyLabel}`);
   const sdf = buildBodySdf(body);
   lap('sdf');
-  const fit = fitTemplate({ mannequin: m, body, sdf, proxy, views: { cameras: views.cameras, masks: views.masks, train, holdout, frames: views.frames }, options: { category: o.category, ...o.fit } });
+  const fit = fitTemplate({ mannequin: m, body, sdf, proxy, views: { cameras: views.cameras, masks: views.masks, train, holdout, frames: views.frames, ...(views.control ? { control: views.control } : {}) }, options: { category: o.category, ...o.fit } });
   lap('fit');
   log(`stage 4t: fitted ${fit.mesh.indices.length / 3} triangles, ${fit.report.iterations} sweeps, converged ${fit.report.converged}`);
   const ious = viewIous(fit.mesh, body, views, train);
@@ -250,6 +311,7 @@ export function runStage4t(o: Stage4tInputs): Stage4tResult {
   const bakeIn = { render: fit.render, welded: fit.mesh, body, cameras: views.cameras, frames: views.frames, masks: views.masks, views: train, ...(o.bake ? { options: o.bake } : {}) };
   const bake = bakeTexture(bakeIn);
   lap('bake');
+  const capTexture = capTextureShare(m, bake.texels, bake.seenWeight);
   // Mean garment colour over the training frames' masks: the one colour the old bundle carried.
   const meanColour: [number, number, number] = [0, 0, 0];
   let mc = 0;
@@ -293,7 +355,7 @@ export function runStage4t(o: Stage4tInputs): Stage4tResult {
     formatVersion: 1,
     version: STAGE4T_VERSION,
     source: o.source,
-    inputs: { cameras: 'cameras_opencv.json', maskDir: views.maskDir, framesDir: views.framesDir, proxy: proxyLabel, mannequinSha256: sha(bodyBytes), masksSha256: masksSha.digest('hex') },
+    inputs: { cameras: 'cameras_opencv.json', maskDir: views.maskDir, framesDir: views.framesDir, controlDir: views.controlDir, proxy: proxyLabel, mannequinSha256: sha(bodyBytes), masksSha256: masksSha.digest('hex') },
     split: { train: train.length, holdout: holdout.length, rule: 'frame index mod 5 = 2 is held out (not used by the fit or the bake)' },
     fit: fit.report,
     iou: { train: summarise(ious, 'train'), holdout: summarise(ious, 'holdout'), perView: ious },
@@ -310,10 +372,10 @@ export function runStage4t(o: Stage4tInputs): Stage4tResult {
       inconsistentEdges: topo.inconsistentEdges,
       degenerateTriangles: topo.degenerateTriangles,
       watertight: topo.watertight,
-      note: 'open by design: one body tube and one tube per sleeve (separate components overlapping at the armhole, not stitched); openings at the neckline, hem, cuffs and armholes are the boundary loops',
+      note: 'open by design: one body tube and one tube per sleeve whose shoulder cap closes over the arm cap and overlaps the bodice (separate components, not stitched); openings at the neckline, hem, cuffs and underarms are the boundary loops',
     },
     vsTruth,
-    bake: { ...bake.report, jpegBytes: jpeg.length, jpegQuality: quality, holdout: checks, holdoutMean: checks.length ? { maeTexture: avg('maeTexture'), maeMeanColour: avg('maeMeanColour'), psnrTexture: avg('psnrTexture'), psnrMeanColour: avg('psnrMeanColour'), maeTextureBlock8: avg('maeTextureBlock8'), maeMeanColourBlock8: avg('maeMeanColourBlock8') } : null, meanColour },
+    bake: { ...bake.report, jpegBytes: jpeg.length, jpegQuality: quality, holdout: checks, holdoutMean: checks.length ? { maeTexture: avg('maeTexture'), maeMeanColour: avg('maeMeanColour'), psnrTexture: avg('psnrTexture'), psnrMeanColour: avg('psnrMeanColour'), maeTextureBlock8: avg('maeTextureBlock8'), maeMeanColourBlock8: avg('maeMeanColourBlock8') } : null, meanColour, capTexture },
     glbBytes: glb.length,
     timingsMs: timings,
   };

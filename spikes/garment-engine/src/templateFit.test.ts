@@ -11,12 +11,13 @@ import { buildBodySdf, MIN_CLEARANCE_CM } from './bodySdf';
 import { chamfer, regionChamfer } from './chamfer';
 import { clothInsideBody } from './eval';
 import { maskIou, type Mask } from './evalPng';
+import { distancesToMesh } from './meshDistance';
 import { garmentSilhouette } from './evalView';
 import { generateGarment } from './garment';
 import { garmentSpec } from './product';
 import { buildProxy } from './proxy';
 import { boundaryLoops } from './stage4t';
-import { fitTemplate, renderPositions, type TemplateFitResult } from './templateFit';
+import { fitTemplate, pushToClearance, renderPositions, SHOULDER_CAP, type FitViews, type TemplateFitResult } from './templateFit';
 import { GARMENT_REGIONS, garmentRegion, PERTURBATIONS, perturbTemplate } from './templatePerturb';
 import { cameraFromFrame, cleanMask, cleanupPixels, idMask, pixelsPerCm, rasterize, splitFrames, type PinholeCamera } from './views';
 
@@ -51,6 +52,36 @@ const withHole = (mesh: Mesh): Mesh => {
  * synchronous stretch outlasts its 60 s timer, which a fit plus four Chamfer passes did under the
  * root `pnpm check` (every workspace testing at once on 4 cores).
  */
+/**
+ * The top of an arm's cap (the v0 mannequin's shoulder bump, up and out from the joint): on the left
+ * arm `joint + a·u`, where u points up-and-out; the right arm's u points the other way round (the same
+ * formula lands at the inner side of its cap, x ≈ −15), so the right cap is the left one mirrored. And
+ * the share of the left cap that the garment leaves visible from above and from up-and-out.
+ */
+const capTop = (side: 1 | -1 = 1): number[] => {
+  const f = m.arms.left, a0 = m.armAt(0, 1)!.a;
+  const p = [0, 1, 2].map((k) => f.joint[k]! + a0 * f.u[k]!);
+  return [side * p[0]!, p[1]!, p[2]!];
+};
+const bareCapShare = (garment: Pick<Mesh, 'positions' | 'indices'>): number => {
+  const T = capTop();
+  const f = m.arms.left;
+  let bare = 0, all = 0;
+  for (const dir of [[0, 1, 0], f.u]) {
+    const cam = cameraFromFrame({ index: 0, azimuthDeg: 0, position: [T[0]! + 60 * dir[0]!, T[1]! + 60 * dir[1]!, T[2]! + 60 * dir[2]!], lookAt: T as [number, number, number], up: [0, 0, -1], fovYDeg: 12 } as never, 96, 96);
+    const r = rasterize(cam, [{ positions: body.positions, indices: body.indices, id: 1 }, { positions: garment.positions, indices: garment.indices, id: 2 }]);
+    // A disc of about 4 cm radius round the cap top (fov 12° at 60 cm: 12.6 cm across 96 px).
+    for (let y = 0; y < 96; y++) for (let x = 0; x < 96; x++) {
+      if (Math.hypot(x - 47.5, y - 47.5) > 30) continue;
+      const id = r.ids[y * 96 + x];
+      if (!id) continue;
+      all++;
+      if (id === 1) bare++;
+    }
+  }
+  return bare / Math.max(1, all);
+};
+
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
 let fit: TemplateFitResult;
@@ -105,6 +136,27 @@ describe('mask clean-up in garment units', () => {
 
 describe('body SDF (mannequin.glb as closed parts)', () => {
   const sdf = buildBodySdf(body);
+  it('pushToClearance moves a point inside the mannequin out to the clearance, not only one just outside it', () => {
+    const t = m.torsoAt(110)!;
+    const o = [t.cx, 110, t.cz], d = [0, 0, 1];
+    const rays = [{ o, d }, { o, d }, { o, d }];
+    // 3 cm inside the front surface, 0.1 cm outside it, and 2 cm outside it.
+    const s = Float64Array.from([t.b - 3, t.b + 0.1, t.b + 2]);
+    expect(sdf.at(o[0]!, o[1]!, o[2]! + s[0]!)).toBeLessThan(0);
+    const r = pushToClearance(rays, s, [0, 1, 2], body, sdf, MIN_CLEARANCE_CM);
+    expect([...r.pushed]).toEqual([1, 1, 0]);
+    expect(r.inside).toBe(1);
+    expect(r.unresolved).toBe(0);
+    const pts = Float64Array.from([0, 1, 2].flatMap((i) => [o[0]!, o[1]!, o[2]! + s[i]!]));
+    const dist = distancesToMesh(pts, body, 3);
+    for (let i = 0; i < 3; i++) {
+      expect(sdf.at(pts[3 * i]!, pts[3 * i + 1]!, pts[3 * i + 2]!)).toBeGreaterThan(0);
+      expect(dist[i]!).toBeGreaterThanOrEqual(MIN_CLEARANCE_CM);
+    }
+    // Moved to the clearance, not far beyond it.
+    expect(dist[0]!).toBeLessThan(MIN_CLEARANCE_CM + 0.2);
+    expect(s[2]).toBe(t.b + 2);
+  });
   it('is the distance to the torso surface within 0.05 cm near it, negative inside', () => {
     const t = m.torsoAt(110)!;
     for (const d of [-1, -0.4, 0.4, 1, 1.5]) {
@@ -208,6 +260,68 @@ describe('template fit on the synthetic dress', () => {
     const back = renderPositions(r, fit.mesh.positions);
     for (let i = 0; i < back.length; i++) expect(back[i]).toBe(r.positions[i]);
     expect(r.indices.length).toBe(fit.mesh.indices.length);
+  });
+
+  describe('the shoulder over the arm cap (CONTROL_CAP)', () => {
+    // Run 14: the shop product gives no sleeve length, so its control proxy is sleeveless and ends at the
+    // shoulder line; the v0 arm cap stands out above it and the generated video leaves a grey cap at the
+    // outer shoulder top although the dress has puff sleeves. Same here: the truth with its cloth over the
+    // left cap cut away (within 7 cm of the cap top), masks rendered from that. The very same masks are
+    // what a cold-shoulder dress with sleeves gives: only the control tells the two apart.
+    const T = capTop();
+    const tris: number[] = [];
+    for (let t = 0; t < truth.indices.length; t += 3) {
+      const c = [0, 1, 2].map((k) => truth.indices[t + k]!);
+      const centre = [0, 1, 2].map((d) => c.reduce((acc, v) => acc + truth.positions[3 * v + d]!, 0) / 3);
+      if (Math.hypot(centre[0]! - T[0]!, centre[1]! - T[1]!, centre[2]! - T[2]!) > 7) tris.push(...c);
+    }
+    const bareTruth = { ...truth, indices: Uint32Array.from(tris) };
+    const bareMasks = (): Mask[] => cams.map((c) => visibleMask(c, bareTruth));
+    /** The control each frame would be generated from: control/mask (mannequin or proxy) and control/proxy_mask. */
+    const controlOf = (ctlProxy: Pick<Mesh, 'positions' | 'indices'>): NonNullable<FitViews['control']> =>
+      cams.map((c) => {
+        const r = rasterize(c, [{ positions: body.positions, indices: body.indices, id: 1 }, { positions: ctlProxy.positions, indices: ctlProxy.indices, id: 2 }]);
+        const proxyMask = idMask(r, 2);
+        return { mannequin: { ...proxyMask, data: Uint8Array.from(r.ids, (id) => (id ? 1 : 0)) }, proxy: proxyMask };
+      });
+    /** The shop case: the product has no sleeve length, so the proxy has no sleeve shell. */
+    const sleeveless = buildProxy(m, { ...payload, lengthCm: Object.fromEntries(Object.entries(payload.lengthCm ?? {}).filter(([k]) => k !== 'sleeve_length')) } as typeof payload, 'M', { shoulderToHemCm: garmentSpec(payload, 'M').shoulderToHemCm });
+
+    it('the cut leaves the cap bare in the masks; without a control the fit follows the masks on the intact dress too', () => {
+      expect(sleeveless.spec.sleeveCm).toBe(0);
+      expect(buildProxy(m, payload, 'M', { shoulderToHemCm: garmentSpec(payload, 'M').shoulderToHemCm }).spec.sleeveCm).toBeGreaterThan(50);
+      expect(bareCapShare(bareTruth)).toBeGreaterThan(0.9);
+      // The synthetic dress itself lies inside the v0 arm's cap at its top (its sleeve starts at the joint
+      // and the cap bulges through the shoulder): about 45 % of the disc shows the mannequin.
+      const truthShare = bareCapShare(truth);
+      expect(truthShare).toBeGreaterThan(0.3);
+      // No control on the synthetic renders: the cap rows are carved like the rest and follow the masks
+      // (a little more covered than the truth: the fit keeps the clearance).
+      expect(fit.report.controlCap.views).toBe(0);
+      expect(bareCapShare(fit.mesh)).toBeLessThan(truthShare);
+      expect(bareCapShare(fit.mesh)).toBeGreaterThan(truthShare - 0.15);
+    });
+
+    it('covers the cap where the frames follow a sleeveless control that leaves it bare (run 14)', () => {
+      const f = fitTemplate({ mannequin: m, body, proxy, views: { cameras: cams, masks: bareMasks(), train, holdout, control: controlOf(sleeveless.mesh) } });
+      expect(f.report.controlCap.views).toBe(train.length);
+      expect(f.report.controlCap.decidedCapRows).toBeGreaterThan(0);
+      expect(bareCapShare(f.mesh)).toBeLessThan(0.02);
+      expect(f.report.rays.shoulderCap).toBe(2 * SHOULDER_CAP.rows * f.report.parts[1]!.cols);
+      expect(f.report.belowClearance).toBe(0);
+      expect(f.report.rays.exactClearanceUnresolved).toBe(0);
+    }, 300_000);
+
+    it('leaves the cap open (cold shoulder) where nothing says the frames were told to show it bare', () => {
+      // No control (frames that are renders or photos), and a control whose proxy has sleeves over the cap:
+      // the frames' mannequin and background over the cap are evidence, as everywhere else.
+      for (const control of [undefined, controlOf(proxy)]) {
+        const f = fitTemplate({ mannequin: m, body, proxy, views: { cameras: cams, masks: bareMasks(), train, holdout, ...(control ? { control } : {}) } });
+        // The sleeved proxy still leaves a sliver of the cap bare in the control (7 head rays decided there).
+        if (!control) expect(f.report.controlCap.decided).toBe(0);
+        expect(bareCapShare(f.mesh)).toBeGreaterThan(0.9);
+      }
+    }, 600_000);
   });
 
   it('carves an opening the masks show: a mask with a hole at the chest front gives a hole in the bodice', () => {

@@ -1,29 +1,35 @@
 # One command per line; pushing a change to this file runs them on Modal via GitHub Actions.
-# run 15: one product per Bohohippychic category end to end (stage 1b FASHN -> stage 2 -> stage 4), export 0.6.0,
-# control proxy 0.3.0, prompt 0.3.0, stage 1b QA 0.6.1 (thresholds provisional). At most about $1.63 per product,
-# about $8.15 in all (GPU list price, not the invoice); a product stopped after stage 1b costs about $0.03-0.07.
-# Needs timeout-minutes 330 in .github/workflows/modal.yml (run 14: 2,311 s wall for one product).
+# run 16a: stage 1b ONLY (--dress-only, no stage 2) on the four run 15 products that were wrong plus azure as a control,
+# export 0.6.0 with the P0 / D15 ease fix (blouse, skirt and cardigan proxies changed by 1-2 cm, so their job ids differ
+# from run 15), control proxy 0.3.0, prompt 0.3.0, stage 1b QA 0.9.0 (thresholds provisional): composites from the
+# mannequin colour model (no background, the region outside the proxy only when it is cloth), cleaned shop masks, the
+# trouser gap strip, hips of skirts, dresses and trousers conformed to the proxy, print edge ratio >= 0.5, and the type
+# checks (see-through, body too short, front/back of different garments, legs merged, narrow at the hips, drawn but not pasted).
+# Blouse, cardigan and palazzo run both engines (FASHN + Qwen; pick_engine prefers a candidate without a type failure);
+# skirt and azure run FASHN only (skirt: checks the hip conform on GPU; azure: a dress that passed must still pass).
+# Cost estimate (GPU list price, not the invoice): about $0.21-0.25 per product with both engines (run 13: 189 GPU s,
+# $0.21), about $0.03-0.07 for FASHN only: about $0.70-0.90 in all, at most about $1.05. No stage 2 is run.
 # Order: every export (no GPU) runs before the first GPU command, so a non-GPU failure stops the run before any spend.
-# Each modal line ends in `|| echo ::warning::`: a product that fails, or that stage 1b stops before stage 2, does not
-# skip the products after it, and the workflow's exit status no longer shows a product failure. Read the warnings
-# and each product's cost_summary.json (`stopped_before_stage2`) in the artifact.
-# --accept-failed-dress overrides only the provisional silhouette and fidelity checks: a garment-type failure
-# (trousers drawn as a skirt, a bodice on a skirt or trousers, an open front drawn closed) stops before stage 2.
+# Each modal line ends in `|| echo ::warning::`: a product that fails does not skip the products after it. Read each
+# product's stage1b/record.json (qa, type_failures, unpasted, conform with headroom, selection) and the stills before 16b.
 pnpm build:packages
 pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch-images
 git diff --exit-code -- spikes/garment-engine/data/bohohippychic/images.json spikes/garment-engine/data/bohohippychic/products.json
-# azure dress rerun: proxy hem from the 91 cm flat-lay length (run 14's control, proxy 0.1.0, had hem_y 47.6 cm; now 57.3 cm, about 10 cm higher); job azure-palm-baby-doll-dress-de3bc1eeb3e0
-pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product azure-palm-baby-doll-dress
-# top: blouse with half-sleeve shells from the description ("airy half sleeves"); job rosewater-blouse-129498b959df
+# top: blouse with half-sleeve shells; run 15's torn stills came from our composite (the cream ground is the proxy's beige); FASHN's back print is washed out (edge ratio 0.40)
 pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product rosewater-blouse
-# trousers: wide-leg palazzo, seat tapered onto two legs with a crotch (no ledge), outseam 99 cm, FASHN label pants, bans skort/overskirt; job rosewater-palazzo-pants-b85affd79b61
+# trousers: wide-leg palazzo; the shop photo's legs read as one skirt; gap strip kept open and visible to FASHN, Qwen told "two separate trouser legs"
 pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product rosewater-palazzo-pants
-# skirt: maxi A-line from the waistband to above the ankle, no bodice; job crimson-wildflower-maxi-skirt-9a2b6e7f37ce
+# skirt: maxi; run 15's FASHN skirt was narrower than our hips (grey hips beside it, side slit in the video); hips now conformed to the proxy
 pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product crimson-wildflower-maxi-skirt
-# outerwear: knit cardigan, long sleeves, deep V kept open in the control and in FASHN's edit area; job woodstock-wanderer-knit-cardi-56e306f6033b
+# outerwear: knit cardigan; run 15 front a cropped bolero (cause not fixed), back grey sleeves from holes in the shop mask (fixed)
 pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product woodstock-wanderer-knit-cardi
-modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/azure-palm-baby-doll-dress --dress --dress-engine fashn --accept-failed-dress --no-synthetic-recon || echo "::warning::azure-palm-baby-doll-dress: run_phase0 failed or stopped before stage 2"
-modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/rosewater-blouse --dress --dress-engine fashn --accept-failed-dress --no-synthetic-recon || echo "::warning::rosewater-blouse: run_phase0 failed or stopped before stage 2"
-modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/rosewater-palazzo-pants --dress --dress-engine fashn --accept-failed-dress --no-synthetic-recon || echo "::warning::rosewater-palazzo-pants: run_phase0 failed or stopped before stage 2"
-modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/crimson-wildflower-maxi-skirt --dress --dress-engine fashn --accept-failed-dress --no-synthetic-recon || echo "::warning::crimson-wildflower-maxi-skirt: run_phase0 failed or stopped before stage 2"
-modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/woodstock-wanderer-knit-cardi --dress --dress-engine fashn --accept-failed-dress --no-synthetic-recon || echo "::warning::woodstock-wanderer-knit-cardi: run_phase0 failed or stopped before stage 2"
+# control: azure dress (passed in runs 14 and 15); the conform and the new composite must leave it passing
+pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product azure-palm-baby-doll-dress
+modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/rosewater-blouse --dress --dress-engine both --dress-only --no-synthetic-recon || echo "::warning::rosewater-blouse: stage 1b failed"
+modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/rosewater-palazzo-pants --dress --dress-engine both --dress-only --no-synthetic-recon || echo "::warning::rosewater-palazzo-pants: stage 1b failed"
+modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/crimson-wildflower-maxi-skirt --dress --dress-engine fashn --dress-only --no-synthetic-recon || echo "::warning::crimson-wildflower-maxi-skirt: stage 1b failed"
+modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/woodstock-wanderer-knit-cardi --dress --dress-engine both --dress-only --no-synthetic-recon || echo "::warning::woodstock-wanderer-knit-cardi: stage 1b failed"
+modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/azure-palm-baby-doll-dress --dress --dress-engine fashn --dress-only --no-synthetic-recon || echo "::warning::azure-palm-baby-doll-dress: stage 1b failed"
+# Then run 16b (separate push): only products whose 16a stills have no type failure and pass, or whose only failures
+# are the provisional ones the founder accepts, end to end with the run 15 line (--dress --dress-engine <picked engine>
+# --accept-failed-dress --no-synthetic-recon), about $1.65-1.71 each; the skirt first (the slit fix in stage 2 is inferred).

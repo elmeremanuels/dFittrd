@@ -14,6 +14,7 @@ import { GarmentCategorySchema, GarmentPayloadDraftSchema, GarmentPayloadSchema,
 import { FitSignatureWireSchema } from './fitSignature';
 import { SwipeEventSchema } from './swipe';
 import { completenessScore, type CompletenessResult } from './completeness';
+import { GarmentAssetRefSchema } from './garmentAsset';
 
 // ---------------------------------------------------------------------------
 // Shared
@@ -185,6 +186,12 @@ export const TryResolveResponseSchema = z.object({
    * `postMessage` targetOrigin. It never posts to `*`.
    */
   embed: z.object({ allowedOrigins: z.array(z.string().min(1).max(256)).max(32) }),
+  /**
+   * The product's approved 3D bundle (D13, D16), only when the shop has the 3D estimate switched on
+   * and the bundle still matches the live chart. Absent or null: the overlay behaves as before.
+   * Optional so older embeds keep parsing.
+   */
+  asset: GarmentAssetRefSchema.nullable().optional(),
 });
 export type TryResolveResponse = z.infer<typeof TryResolveResponseSchema>;
 

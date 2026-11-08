@@ -13,3 +13,4 @@ export * from './mappings/fabricText';
 export * from './chartTemplates';
 export * from './fixtures';
 export * from './sizeAdvice';
+export * from './garmentAsset';

@@ -36,6 +36,13 @@
       "when": 1793939296231,
       "tag": "0004_flat_plan_expiring_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794122577661,
+      "tag": "0005_garment_assets",
+      "breakpoints": true
     }
   ]
 }

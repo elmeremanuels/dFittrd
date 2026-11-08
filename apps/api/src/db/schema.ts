@@ -67,6 +67,11 @@ export interface ShopSettings {
   legacyPlan?: string;
   /** Shopify: subscription status from app_subscriptions/update. */
   subscriptionStatus?: string;
+  /**
+   * The optional 3D estimate in the overlay (D16, D17): off unless switched on by hand for a pilot
+   * until 3D pricing is decided. Without it no asset ref is ever handed out.
+   */
+  garment3d?: boolean;
   /** Stripe: customer id (the merchant identity for WooCommerce, D6). */
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
@@ -180,12 +185,47 @@ export const products = pgTable(
     createdAt: ts('created_at').notNull().defaultNow(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
     archivedAt: ts('archived_at'),
+    /** The approved garment asset version shoppers see (D13); null = no 3D view. */
+    activeAssetVersion: text('active_asset_version'),
   },
   (t) => [
     uniqueIndex('products_shop_external_uq').on(t.shopId, t.externalId),
     index('products_shop_status_idx').on(t.shopId, t.status),
     index('products_payload_gin').using('gin', t.payload),
   ],
+);
+
+export type GarmentAssetStatus = 'awaiting_approval' | 'approved' | 'rejected' | 'superseded';
+
+/**
+ * Garment asset versions (docs/ENGINE-HANDOFF.md §Stage 8, D13, D16): one row per imported bundle.
+ * The files live under ASSET_DIR/<shopId>/<productId>/<version>/ and are served as public, immutable
+ * static files. Shoppers only ever see `products.active_asset_version`, set by merchant approval.
+ */
+export const garmentAssets = pgTable(
+  'garment_assets',
+  {
+    id: id(),
+    shopId: uuid('shop_id')
+      .notNull()
+      .references(() => shops.id, { onDelete: 'cascade' }),
+    productId: uuid('product_id')
+      .notNull()
+      .references(() => products.id, { onDelete: 'cascade' }),
+    version: text('version').notNull(),
+    status: text('status').$type<GarmentAssetStatus>().notNull().default('awaiting_approval'),
+    qa: jsonb('qa').$type<Record<string, unknown>>().notNull().default({}),
+    baseSize: text('base_size').notNull(),
+    sizes: text('sizes').array().notNull().default(sql`'{}'::text[]`),
+    bundlePath: text('bundle_path').notNull(),
+    bytes: integer('bytes').notNull(),
+    inputHash: text('input_hash'),
+    rejectReason: text('reject_reason'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    approvedAt: ts('approved_at'),
+    approvedBy: text('approved_by'),
+  },
+  (t) => [uniqueIndex('garment_assets_product_version_uq').on(t.productId, t.version), index('garment_assets_shop_idx').on(t.shopId)],
 );
 
 export const productImages = pgTable(
@@ -494,6 +534,7 @@ export const schema = {
   shops,
   shopifySessions,
   products,
+  garmentAssets,
   productImages,
   devices,
   fitSignatures,

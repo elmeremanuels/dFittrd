@@ -23,6 +23,7 @@ import { appRoutes } from './routes/app.js';
 import { merchantRoutes } from './routes/merchant.js';
 import { opsRoutes } from './routes/ops.js';
 import { renderRoutes } from './routes/renders.js';
+import { assetRoutes } from './routes/assets.js';
 import { sdkRoutes } from './routes/sdk.js';
 import { tryRoutes } from './routes/try.js';
 import { RenderStore } from './services/renders.js';
@@ -169,6 +170,7 @@ export async function build(opts: BuildOptions): Promise<App> {
   await app.register(appRoutes);
   await app.register(tryRoutes);
   await app.register(renderRoutes);
+  await app.register(assetRoutes);
   await app.register(sdkRoutes);
   await app.register(merchantRoutes);
   await app.register(shopifyRoutes);

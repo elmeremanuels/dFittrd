@@ -58,8 +58,20 @@ mv "$PART" "$BACKUP_DIR/$FILE"
 trap - EXIT
 echo "✓ $BACKUP_DIR/$FILE ($SIZE bytes)"
 
+# Approved garment bundles (D16): the assets volume, next to the database dump.
+AFILE="curtain-${LABEL}-${STAMP}.assets.tar.gz.age"
+echo "→ archiving the garment assets volume"
+if docker compose -p curtain exec -T api sh -c 'test -d /data/assets && tar -C /data/assets -cf - .' 2>/dev/null \
+  | gzip -9 | age -r "$BACKUP_AGE_RECIPIENT" -o "$BACKUP_DIR/$AFILE"; then
+  (cd "$BACKUP_DIR" && sha256sum "$AFILE" > "$AFILE.sha256")
+  echo "✓ $BACKUP_DIR/$AFILE"
+else
+  rm -f "$BACKUP_DIR/$AFILE"
+  echo "note: no garment assets archived (volume empty or api not running)"
+fi
+
 echo "→ pruning local backups older than $KEEP_DAYS days"
-find "$BACKUP_DIR" -maxdepth 1 -type f -name 'curtain-*.sql.gz.age*' -mtime +"$KEEP_DAYS" -delete
+find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'curtain-*.sql.gz.age*' -o -name 'curtain-*.assets.tar.gz.age*' \) -mtime +"$KEEP_DAYS" -delete
 
 if [ "$LOCAL_ONLY" = 1 ] || [ -z "${BACKUP_RCLONE_REMOTE:-}" ]; then
   [ "$LOCAL_ONLY" = 1 ] || echo "note: BACKUP_RCLONE_REMOTE not set; the backup stays on this server only"
@@ -70,6 +82,7 @@ command -v rclone >/dev/null || { echo "backup: rclone not installed but BACKUP_
 echo "→ uploading to $BACKUP_RCLONE_REMOTE"
 rclone copy --quiet "$BACKUP_DIR/$FILE" "$BACKUP_RCLONE_REMOTE/"
 rclone copy --quiet "$BACKUP_DIR/$FILE.sha256" "$BACKUP_RCLONE_REMOTE/"
+[ -f "$BACKUP_DIR/${AFILE:-none}" ] && rclone copy --quiet "$BACKUP_DIR/$AFILE" "$BACKUP_RCLONE_REMOTE/" && rclone copy --quiet "$BACKUP_DIR/$AFILE.sha256" "$BACKUP_RCLONE_REMOTE/"
 echo "→ pruning offsite backups older than $REMOTE_KEEP_DAYS days"
 rclone delete --quiet --min-age "${REMOTE_KEEP_DAYS}d" --include 'curtain-*' "$BACKUP_RCLONE_REMOTE/" || true
 echo "✓ offsite copy done"

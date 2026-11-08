@@ -61,3 +61,22 @@ describe('infra/Caddyfile CSP img-src', () => {
     expect(web('embed/media.ts')).toContain('/v1/sdk/media?shop=');
   });
 });
+
+describe('infra/Caddyfile garment assets (D16)', () => {
+  const block = /handle_path \/assets\/\* \{([\s\S]*?)\n\t\}/.exec(caddyfile)?.[1] ?? '';
+  it('serves the bundle files read-only, immutable, cross-origin for the app only, without logs or cookies', () => {
+    expect(block).toContain('root * /srv/assets');
+    expect(block).toContain('file_server');
+    expect(block).toContain('header Cache-Control "public, max-age=31536000, immutable"');
+    expect(block).toContain('header Cross-Origin-Resource-Policy "cross-origin"');
+    expect(block).toContain('header Access-Control-Allow-Origin "https://app.{$DOMAIN}"');
+    expect(block).toContain('log_skip');
+    expect(block).toContain('header -Set-Cookie');
+    // Only the five bundle files: never payload.json, renders or photos.
+    expect(block).toMatch(/base\\\.glb\|anchors\\\.json\|grading\\\.json\|material\\\.json\|qa\\\.json/);
+    expect(block).not.toContain('payload');
+  });
+  it('needs no CSP change: the embed already connects to the api origin only', () => {
+    for (const p of policies) expect(p.get('connect-src')).toEqual(["'self'", 'https://api.{$DOMAIN}']);
+  });
+});

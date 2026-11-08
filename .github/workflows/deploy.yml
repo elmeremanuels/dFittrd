@@ -79,8 +79,8 @@ jobs:
           if ! [[ "$DOMAIN" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]]; then
             echo "DOMAIN must be a bare lowercase domain like curtain.fit (no scheme, no subdomain prefix)"; exit 1
           fi
-          # infra/Caddyfile and docker-compose.yml serve app.<DOMAIN> and api.<DOMAIN> (the CSP test
-          # in apps/api pins them). Other subdomains need those files changed first.
+          # infra/Caddyfile and docker-compose.yml serve <DOMAIN> and www.<DOMAIN> (the site), app.<DOMAIN>
+          # and api.<DOMAIN> (the Caddy tests in apps/api pin them). Other subdomains need those files changed first.
           if [ "$APP_SUBDOMAIN" != app ] || [ "$API_SUBDOMAIN" != api ]; then
             echo "APP_SUBDOMAIN/API_SUBDOMAIN other than app/api are not supported yet (infra/Caddyfile pins them)"; exit 1
           fi
@@ -120,9 +120,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: build the packages api and web import
         run: pnpm --filter '@curtain/api^...' --filter '@curtain/web^...' build
-      - run: pnpm --filter @curtain/api --filter @curtain/web typecheck
-      - run: pnpm --filter @curtain/api --filter @curtain/web lint
+      - run: pnpm --filter @curtain/api --filter @curtain/web --filter @curtain/site typecheck
+      - run: pnpm --filter @curtain/api --filter @curtain/web --filter @curtain/site lint
       - run: pnpm --filter @curtain/api --filter @curtain/web test
+      # infra/Caddyfile serves all four hosts: a file Caddy rejects would take app and api down, so it is
+      # validated here with the image docker-compose.yml pins (the server validates it again before a deploy).
+      - name: caddy validate (infra/Caddyfile, pinned caddy image)
+        run: DOMAIN=example.test infra/scripts/caddy-validate.sh
 
   web:
     name: build web (static)
@@ -155,6 +159,55 @@ jobs:
         with:
           name: web-dist
           path: apps/web/dist
+          if-no-files-found: error
+          retention-days: 14
+
+  # The marketing site on <DOMAIN>. `build:release` refuses while a launch gate in apps/site/src/data/site.ts
+  # is open (legal name, mailbox, legal review: docs/SITE.md). Then this job still succeeds, with a warning,
+  # and the deploy ships app and api without the site: the site never blocks the plugin.
+  site:
+    name: build site (release build, curtain.fit)
+    needs: guard
+    if: needs.guard.outputs.action == 'deploy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      built: ${{ steps.build.outputs.built }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: pnpm/action-setup@v4.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @curtain/site...
+      - name: build:release (skipped with a warning while launch gates are open)
+        id: build
+        shell: bash
+        run: |
+          if pnpm --filter @curtain/site build:release 2>&1 | tee site-build.log; then
+            echo "built=true" >> "$GITHUB_OUTPUT"
+            echo "### Site: release build ok, will be published on https://$DOMAIN" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "built=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=curtain.fit not published::The site release build refused or failed (see the log); app and api deploy without it."
+            {
+              echo "### Site not published (app and api still deploy)"
+              echo '```'
+              grep -E 'refused|Launch gates|^  - |failed|Error' site-build.log || tail -n 20 site-build.log
+              echo '```'
+              echo "Clear the launch gates in apps/site/src/data/site.ts (docs/SITE.md), then deploy again."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+        env:
+          DOMAIN: ${{ needs.guard.outputs.domain }}
+      - if: steps.build.outputs.built == 'true'
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: site-dist
+          path: apps/site/dist
           if-no-files-found: error
           retention-days: 14
 
@@ -194,7 +247,8 @@ jobs:
 
   deploy:
     name: deploy → VPS
-    needs: [guard, check, web, image]
+    # `site` is listed for its output only: whatever its result, app and api deploy (the condition ignores it).
+    needs: [guard, check, web, image, site]
     if: >-
       !cancelled() && needs.guard.outputs.action == 'deploy'
       && needs.web.result == 'success' && needs.image.result == 'success'
@@ -214,12 +268,18 @@ jobs:
       DOMAIN: ${{ needs.guard.outputs.domain }}
       IMAGE_REPO: ${{ needs.guard.outputs.image_repo }}
       TAG: ${{ needs.guard.outputs.tag }}
+      SITE_BUILT: ${{ needs.site.outputs.built == 'true' }}
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: actions/download-artifact@v4.3.0
         with:
           name: web-dist
           path: web-dist
+      - if: needs.site.outputs.built == 'true'
+        uses: actions/download-artifact@v4.3.0
+        with:
+          name: site-dist
+          path: site-dist
       - name: ssh key and pinned host key (production environment secrets)
         env:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
@@ -247,6 +307,7 @@ jobs:
       - name: ship (sync, pull, migrate, swap, server-side health check with automatic rollback)
         env:
           WEB_DIST: web-dist
+          SITE_DIST: ${{ needs.site.outputs.built == 'true' && 'site-dist' || '' }}
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: scripts/deploy.sh deploy
@@ -263,6 +324,15 @@ jobs:
       - name: roll back (external health check failed)
         if: failure() && steps.health.outcome == 'failure'
         run: scripts/deploy.sh rollback
+      - name: site check from outside (warning only, never fails the deploy)
+        if: success() && env.SITE_BUILT == 'true'
+        continue-on-error: true
+        run: |
+          if curl -fsS --max-time 10 --retry 5 --retry-delay 6 --retry-all-errors -o /dev/null "https://$DOMAIN/"; then
+            echo "https://$DOMAIN/ ok"
+          else
+            echo "::warning title=curtain.fit did not answer::https://$DOMAIN/ did not answer (DNS for @ and www pointing at the VPS?). App and api are deployed."
+          fi
       - name: summary
         if: always()
         run: |
@@ -271,6 +341,7 @@ jobs:
             echo "- image: \`$IMAGE_REPO:$TAG\`"
             echo "- app: https://app.$DOMAIN"
             echo "- api: https://api.$DOMAIN/healthz"
+            if [ "$SITE_BUILT" = true ]; then echo "- site: https://$DOMAIN"; else echo "- site: not published (launch gates open, see the site job)"; fi
           } >> "$GITHUB_STEP_SUMMARY"
       - name: remove the key
         if: always()

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Validate infra/Caddyfile with the same Caddy image the stack runs (not part of CI; run it on the VPS
-# or any machine with Docker before the first deploy that carries the /assets block).
+# Validate infra/Caddyfile with the same Caddy image the stack runs. CI runs it in the deploy workflow's
+# check job and infra/scripts/deploy.sh validates again on the VPS before a deploy; run it by hand on any
+# machine with Docker after changing the Caddyfile.
 #
 #   infra/scripts/caddy-validate.sh            # DOMAIN defaults to example.test
 set -euo pipefail

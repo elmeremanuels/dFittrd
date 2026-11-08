@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 # Ship a release to the VPS from a GitHub runner (.github/workflows/deploy.yml) or a laptop.
 #
-#   scripts/deploy.sh deploy     sync infra/ and the web bundle, then run infra/scripts/deploy.sh there
+#   scripts/deploy.sh deploy     sync infra/, the web bundle and the site, then run infra/scripts/deploy.sh there
 #   scripts/deploy.sh rollback   run infra/scripts/deploy.sh --rollback there
 #   scripts/deploy.sh status     print the current and previous release on the server
 #
 # Environment:
 #   VPS_HOST, VPS_USER           where to ssh (the key and known_hosts come from ~/.ssh or SSH_OPTS)
 #   VPS_PORT                     optional, default 22
-#   DOMAIN                       serves app.<DOMAIN> and api.<DOMAIN>
+#   DOMAIN                       serves <DOMAIN> (the site), www.<DOMAIN>, app.<DOMAIN> and api.<DOMAIN>
 #   IMAGE_REPO, TAG              deploy only: ghcr.io/<owner>/curtain-api and the tag to run
 #   WEB_DIST                     deploy only, optional: a built apps/web/dist to publish
+#   SITE_DIST                    deploy only, optional: apps/site/dist from `build:release` to publish on
+#                                <DOMAIN>. Left out (or not a site build): the site on the server stays as it
+#                                is and app/api deploy as usual; the site never blocks the plugin.
 #   GHCR_USER, GHCR_TOKEN        optional: a registry login used for this pull only (logged out after);
 #                                the token goes over ssh stdin, never on a command line
 #   REMOTE_DIR                   optional, default /opt/curtain
@@ -57,7 +60,10 @@ esac
 RSYNC_SSH="${SSH[*]}"
 
 echo "→ syncing infra/ to $VPS_HOST:$REMOTE_DIR/infra (never .env)"
-remote "mkdir -p $(printf '%q' "$REMOTE_DIR")/infra $(printf '%q' "$REMOTE_DIR")/web/releases"
+remote "mkdir -p $(printf '%q' "$REMOTE_DIR")/infra $(printf '%q' "$REMOTE_DIR")/web/releases $(printf '%q' "$REMOTE_DIR")/site/releases"
+# Servers deployed before Caddyfile.good existed: keep the Caddyfile they run now as the last good one,
+# so a failed deploy of a changed Caddyfile can go back to it (infra/scripts/deploy.sh, restore_caddyfile).
+remote "cd $(printf '%q' "$REMOTE_DIR")/infra && if [ -f .deploy/current ] && [ -f Caddyfile ] && [ ! -f .deploy/Caddyfile.good ]; then cp Caddyfile .deploy/Caddyfile.good; fi"
 rsync -rlptz --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "$RSYNC_SSH" \
   "$ROOT/infra/Caddyfile" "$ROOT/infra/docker-compose.yml" "$ROOT/infra/.env.example" \
   "$TARGET:$REMOTE_DIR/infra/"
@@ -73,6 +79,23 @@ if [ -n "${WEB_DIST:-}" ]; then
   WEB_ARGS="$(printf ' --web-release %q' "$RELEASE")"
 fi
 
+SITE_ARGS=""
+if [ -n "${SITE_DIST:-}" ]; then
+  if [ -f "$SITE_DIST/index.html" ] && [ -f "$SITE_DIST/404.html" ]; then
+    SITE_RELEASE="$REMOTE_DIR/site/releases/$TAG"
+    echo "→ uploading the site to $SITE_RELEASE"
+    if rsync -rlptz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "$RSYNC_SSH" "$SITE_DIST/" "$TARGET:$SITE_RELEASE/"; then
+      SITE_ARGS="$(printf ' --site-release %q' "$SITE_RELEASE")"
+    else
+      echo "WARNING: uploading the site failed; deploying app and api without it (the site on the server stays as it is)" >&2
+    fi
+  else
+    echo "WARNING: $SITE_DIST is not a site build (no index.html and 404.html); deploying app and api without it" >&2
+  fi
+else
+  echo "→ no SITE_DIST: the site on the server stays as it is"
+fi
+
 LOGGED_IN=0
 logout_registry() {
   if [ "$LOGGED_IN" = 1 ]; then remote "docker logout ghcr.io >/dev/null" || true; fi
@@ -85,4 +108,4 @@ if [ -n "${GHCR_TOKEN:-}" ]; then
 fi
 
 echo "→ running the server-side deploy"
-remote "$(printf '%q --domain %q --image-repo %q --tag %q' "$REMOTE_DEPLOY" "$DOMAIN" "$IMAGE_REPO" "$TAG")$WEB_ARGS"
+remote "$(printf '%q --domain %q --image-repo %q --tag %q' "$REMOTE_DEPLOY" "$DOMAIN" "$IMAGE_REPO" "$TAG")$WEB_ARGS$SITE_ARGS"

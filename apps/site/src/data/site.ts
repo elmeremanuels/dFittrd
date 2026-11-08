@@ -24,13 +24,23 @@ export const site = {
     url: 'https://bohohippychic.com.au',
     /** FOUNDER: update when the pilot goes live on their store. */
     status: 'Being set up — not live on their store yet.',
-    /** PILOT: flip to true only with their written approval of images (DECISIONS D13). */
-    assetsApproved: false,
     /**
-     * LAUNCH GATE: true once Bohohippychic has agreed in writing to be named as our pilot shop.
-     * The preview build names them (the founder's request); the release build refuses until this is true.
+     * Where the permission below comes from. Bohohippychic granted the use of its name, logo, product photos and
+     * the 3D bundles derived from them, on the website and in demos (docs/DECISIONS.md, "Pilot permission (8 Nov 2026)"; docs/REFINEMENT.md B1).
      */
-    nameApproved: false,
+    permissionSource: 'founder statement 8 Nov 2026, written confirmation held by founder',
+    /** Their logo, product photos and our 3D estimates of their garments may be shown (see permissionSource).
+     * The build fails if any page shows a partner image while this is false. */
+    assetsApproved: true,
+    /** LAUNCH GATE: Bohohippychic has agreed to be named as our pilot shop (see permissionSource). */
+    nameApproved: true,
+    /**
+     * LAUNCH GATE (docs/REFINEMENT.md B2): the founder has looked at our 3D estimates of their garments
+     * (renders/azure-estimate*, run 17b; renders/skirt-estimate*, run 17d) next to their photos and signed them off
+     * for a public page that carries Bohohippychic's name. Set to true then, or take the estimates off the pages
+     * (/, /3d/, /pilot/): the release build refuses while a page shows one and this is false.
+     */
+    estimatesReviewed: false,
     /** FOUNDER: set to false to describe them neutrally ("an Australian boho label") instead of by name. */
     showName: true,
   },
@@ -61,14 +71,15 @@ export function openDecisions(): string[] {
   if (!site.responseTime) open.push('responseTime');
   if (!site.legalName) open.push('legalName (footer, imprint)');
   if (site.trialDays === null) open.push('trialDays (pricing, FAQ)');
-  if (!site.partner.assetsApproved) open.push('partner.assetsApproved (Bohohippychic imagery placeholders shown)');
   return open;
 }
 
 /** Must all be cleared before the site goes public: `pnpm --filter @curtain/site build:release` fails otherwise. */
-export function launchGates(): string[] {
+/** `showsPartnerEstimates`: the build found a page that shows one of our 3D estimates of a Bohohippychic garment. */
+export function launchGates(opts: { showsPartnerEstimates?: boolean } = {}): string[] {
   const gates: string[] = [];
-  if (site.partner.showName && !site.partner.nameApproved) gates.push('partner.nameApproved: Bohohippychic has not yet agreed in writing to be named (or set partner.showName=false)');
+  if (site.partner.showName && !site.partner.nameApproved) gates.push('partner.nameApproved: Bohohippychic has not agreed to be named (or set partner.showName=false)');
+  if (opts.showsPartnerEstimates && !site.partner.estimatesReviewed) gates.push('partner.estimatesReviewed: founder sign-off of the Bohohippychic 3D estimates on /, /3d/ and /pilot/ (REFINEMENT B2), or take them off the pages');
   if (!site.legalName || !site.company.address || !site.company.registration) gates.push('legalName + company.address + company.registration: needed for the imprint and the waitlist notice (GDPR Art. 13)');
   if (!site.mailboxReady) gates.push(`mailboxReady: create ${site.contactEmail} before the waitlist goes live`);
   if (!site.waitlistNoticeReviewed) gates.push('waitlistNoticeReviewed: legal review of /legal/#waitlist');

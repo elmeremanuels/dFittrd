@@ -32,7 +32,8 @@ en de beslissingen.
 |---|---|
 | Plugin (maatadvies, Shopify en WooCommerce, optionele 3D-schatting) | Klaar en getest in de demowinkel, op branch `claude/garment-engine` |
 | Uitrolworkflow `.github/workflows/deploy.yml` | Klaar, nog **nooit gedraaid**; staat nog niet op `main` |
-| Website `apps/site` (curtain.fit) | **Wordt nog gebouwd** op branch `claude/site`; komt daarna op `claude/garment-engine` |
+| Website `apps/site` (curtain.fit) | Klaar en samengevoegd in `claude/garment-engine`, met Bohohippychic-beelden. Gaat pas live als de launch gates dicht zijn (zie "Wat nog bij Elmer ligt") |
+| Toestemming Bohohippychic | **Gegeven** (verklaring Elmer, 8 nov 2026): naam, logo, productfoto's en de 3D-modellen daarvan, op de website en in demo's. Elmer bewaart de schriftelijke bevestiging |
 | `main` op GitHub | Bevat alleen een oude init-commit; al het werk moet daar nog naartoe (stap 6) |
 | VPS | Elmer heeft er een. Nog niet ingericht voor Curtain; IP-adres nog niet bekend bij de bouwsessie |
 | Domein `curtain.fit` | Geregistreerd bij Hostinger |
@@ -48,8 +49,12 @@ HTTPS regelt. Hostinger blijft alleen de registrar en DNS.
 | `app.curtain.fit` | Klantenvenster (maatadvies, 3D) |
 | `api.curtain.fit` | Plugin-API |
 
-De Caddy-regels voor `curtain.fit` en `www` voegt de bouwsessie toe zodra de website klaar is. De
-uitrol neemt de site dan mee. Tot dat moment levert de eerste uitrol alleen `app` en `api` op.
+De Caddy-regels voor `curtain.fit` (website) en `www.curtain.fit` (doorverwijzing naar `curtain.fit`)
+staan in `infra/Caddyfile`; de uitrol bouwt de site mee met `build:release`. Zolang er een launch gate
+open staat (bedrijfsgegevens, mailbox, juridische check, Elmers akkoord op de 3D-schattingen), weigert die build. De uitrol slaat de site dan
+over met een waarschuwing in de samenvatting en zet `app` en `api` gewoon live. Er verschijnt dan nog
+niets op `curtain.fit` (Caddy geeft 404). Zodra de gates dicht zijn, publiceert de volgende uitrol de
+site vanzelf.
 
 ## Stappen
 
@@ -153,12 +158,14 @@ moet beslissen hoe het werk daar komt:
 Ga naar *Actions* → **deploy** → *Run workflow* → branch `main`, actie `deploy`.
 
 1. Elmer keurt goed in de *production*-melding.
-2. De stappen zijn guard, check, web, image en deploy. De eerste keer duurt het iets langer, omdat
-   Caddy de certificaten ophaalt.
+2. De stappen zijn guard, check, web, site, image en deploy. De eerste keer duurt het iets langer,
+   omdat Caddy de certificaten ophaalt. Een gele waarschuwing bij **site** ("curtain.fit not
+   published") is verwacht zolang de launch gates open staan; de rest gaat gewoon door.
 3. Controleer daarna:
    - `https://api.curtain.fit/healthz` geeft OK;
    - `https://app.curtain.fit/` laadt;
-   - zodra de website is toegevoegd: `https://curtain.fit` en `https://www.curtain.fit`.
+   - als de site-stap groen was zonder waarschuwing: `https://curtain.fit` laadt en
+     `https://www.curtain.fit` stuurt door naar `https://curtain.fit`.
 4. Gaat er iets mis, dan rolt de workflow zelf terug. Geef de stap en de foutmelding door aan de
    bouwsessie; plak geen geheimen.
 
@@ -190,7 +197,21 @@ De stappen staan in `docs/DEPLOY.md`, onder "Shopify app deploy" → "Set once":
 - Proeftijd en wat er gebeurt na de proef. De prijs is USD 8,99 per maand.
 - Of de appnaam definitief is. Er is ook een merkrechtvraag; zie checklist E1 in de docs.
 - Juridische check van de privacyverklaring en de voorwaarden.
-- Toestemming van Bohohippychic voor hun naam, logo en productbeelden op de website en in 3D-demo's.
+- Voor de website (`apps/site/src/data/site.ts`, uitleg in `docs/SITE.md`; daarna een nieuwe uitrol):
+  - officiële bedrijfsnaam (`legalName`), adres (`company.address`), KvK-nummer (`company.registration`)
+    en btw-nummer (`company.vat`, als die er is);
+  - de mailbox `hello@curtain.fit` aanmaken bij Hostinger (of een doorstuuradres) en dan `mailboxReady: true`;
+  - juridische check van de wachtlijstverklaring op `/legal/#waitlist`, dan `waitlistNoticeReviewed: true`;
+  - de 3D-schattingen van de Azure-jurk en de maxirok naast de foto's bekijken (op `/`, `/3d/` en `/pilot/`).
+    Goed genoeg: `partner.estimatesReviewed: true`. Niet goed genoeg: de schattingen van die pagina's halen
+    (REFINEMENT B2);
+  - optioneel: proeftijd (`trialDays`), reactietijd, apart privacy-adres.
+- Bohohippychic: toestemming is gegeven. Bewaar de schriftelijke bevestiging; een citaat van hen komt
+  alleen op de site als ze zelf een tekst aanleveren. Vraag ze ook te bevestigen dat de productfoto's van
+  henzelf zijn (of dat ze ze mogen doorgeven, inclusief de rechten van de modellen), en of ze als
+  "Bohohippychic" of "Boho Hippy Chic" genoemd willen worden.
+- DNS bij Hostinger: bij het weghalen van de parkeerrecords voor `@` en `www` de mailrecords (MX, SPF,
+  DKIM) laten staan.
 - De 3D-schatting staat bij echte winkels uit tot de goedkeuringsknoppen in het winkelbeheer er zijn.
 
 ## Terugmelden aan de bouwsessie

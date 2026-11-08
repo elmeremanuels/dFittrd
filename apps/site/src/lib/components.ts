@@ -46,9 +46,16 @@ export function estimateTag(label = 'Estimate'): SafeHtml {
   return html`<span class="tag tag--estimate">${label}</span>`;
 }
 
-function creditLine(i: ImageInfo): SafeHtml | string {
+/** The short credit under a figure: CC0 photographer, or Bohohippychic's permission (photos and estimates made from them). */
+export function creditLine(i: ImageInfo): SafeHtml | string {
   if (i.kind === 'photo') {
     return html`<span class="fig__credit">Photo: <a href="/credits/#${i.anchor}">${i.credit}</a>, CC0</span>`;
+  }
+  if (i.kind === 'partner') {
+    return html`<span class="fig__credit">Photo: <a href="/credits/#${i.anchor}">Bohohippychic</a>, used with permission</span>`;
+  }
+  if (i.partnerDerived) {
+    return html`<span class="fig__credit">From <a href="/credits/#${i.anchor}">Bohohippychic's photos</a>, used with permission</span>`;
   }
   return '';
 }
@@ -177,9 +184,7 @@ export function lookbook(label: string, cards: LookCard[], opts: { title?: strin
             ? html`<div class="phone phone--sm"><div class="phone__screen">${picture(c.id, { sizes: '260px', pos: c.pos })}</div></div>`
             : picture(c.id, { sizes: '(min-width: 1024px) 26vw, 70vw', pos: c.pos })
         }${i.estimate ? estimateTag() : ''}</div>
-        <figcaption class="look__cap"><span class="fig__no">Fig. ${n}</span><span class="look__title">${c.title}</span>${c.text ? html`<span class="look__text">${c.text}</span>` : ''}${
-          i.kind === 'photo' ? html`<span class="fig__credit">Photo: ${i.credit}, CC0</span>` : ''
-        }</figcaption>
+        <figcaption class="look__cap"><span class="fig__no">Fig. ${n}</span><span class="look__title">${c.title}</span>${c.text ? html`<span class="look__text">${c.text}</span>` : ''}${creditLine(i)}</figcaption>
       </figure>
     </li>`;
     })}
@@ -198,14 +203,9 @@ export function faqList(items: Qa[], startOpen = false): SafeHtml {
   )}</div>`;
 }
 
-export function placeholderFrame(label: string, note: string, ratio: '45' | '34' | '23' | '169' = '45'): SafeHtml {
-  return html`<figure class="placeholder ratio-${ratio}" data-placeholder>
-  <div class="placeholder__inner">
-    <span class="tag tag--outline">Placeholder</span>
-    <p class="placeholder__label">${label}</p>
-    <p class="placeholder__note">${note}</p>
-  </div>
-</figure>`;
+/** Bohohippychic's logo, self-hosted, from their site (used with permission). */
+export function partnerLogo(cls = ''): SafeHtml {
+  return picture('partner/logo', { cls: `partner-logo ${cls}`.trim(), sizes: '(min-width: 1024px) 160px, 120px' });
 }
 
 export function marginNote(content: Child): SafeHtml {

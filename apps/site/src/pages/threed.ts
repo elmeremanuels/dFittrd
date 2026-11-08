@@ -1,6 +1,7 @@
 import { em, html, type SafeHtml } from '../lib/html.ts';
 import { chapter, device, ESTIMATE_CAPTION, ESTIMATE_CAPTION_VIEWER, estimateTag, figure, marginNote, nextFig, picture, textLink } from '../lib/components.ts';
 import { closingCta } from '../lib/blocks.ts';
+import { partnerName } from '../data/site.ts';
 import { type Page } from './types.ts';
 
 /** S, M and L as three separate crops, with the garment measurements as a real table instead of baked-in labels. */
@@ -37,7 +38,7 @@ export const threed: Page = {
   body: () => html`
 <section class="page-hero wrap split split--7-5">
   ${chapter({ level: 1, kicker: 'In development · demo only · not part of the plan', title: 'Your product photos, *in three dimensions.*', standfirst: 'An honest preview of how a garment hangs, at the size Curtain recommended. We call it an estimate, every time.' })}
-  <div class="page-hero__aside">${figure('renders/engine-dress-M-portrait', { ratio: '23', caption: `A synthetic test dress, size M. ${ESTIMATE_CAPTION}`, eager: true, sizes: '(min-width: 1024px) 30vw, 90vw', reveal: false })}</div>
+  <div class="page-hero__aside">${figure('renders/azure-estimate-3q', { ratio: '23', caption: `The Azure Palm Baby Doll Dress, size 12, estimated from ${partnerName}'s product photos. ${ESTIMATE_CAPTION}`, eager: true, sizes: '(min-width: 1024px) 30vw, 90vw', reveal: false })}</div>
 </section>
 
 <section class="section wrap" aria-labelledby="engine-h">
@@ -69,7 +70,7 @@ export const threed: Page = {
   <div class="wrap">
     <div class="section-head"><div><p class="kicker">Graded, not guessed</p><h2 class="h2" id="sizes-h" data-reveal="lines">${em('One garment, *every size.*')}</h2></div></div>
     ${sizeLineup()}
-    <p class="micro">All garments on this page are synthetic test garments made by us. No shop's product photos are shown.</p>
+    <p class="micro">The line-up shows a synthetic test garment made by us. The dress at the top of the page is our estimate of a garment from ${partnerName}, our pilot shop, made from their product photos and shown with their permission.</p>
   </div>
 </section>
 
@@ -91,7 +92,7 @@ export const threed: Page = {
     <li><span class="tag tag--pill">Needs</span><p>A phone or computer with WebGL2. Without it, the button doesn't appear and the size advice works as usual.</p></li>
     <li><span class="tag tag--pill">Price</span><p>Decided after the pilot. Not part of the USD 8.99 plan.</p></li>
   </ul>
-  ${marginNote(html`Rights: a shop's garment is only shown in 3D after that shop approves it. ${textLink('/privacy-promise/', 'Privacy & trust')}`)}
+  ${marginNote(html`Rights: a shop's garment is shown in 3D only with that shop's permission, and on its own store only after it approves that garment. ${textLink('/privacy-promise/', 'Privacy & trust')}`)}
 </section>
 ${closingCta('Want your pieces *in 3D first?*')}
 `,

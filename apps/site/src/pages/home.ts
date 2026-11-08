@@ -1,8 +1,8 @@
 import { em, html } from '../lib/html.ts';
-import { button, chapter, DEMO_NOTE, device, ESTIMATE_CAPTION, ESTIMATE_CAPTION_VIEWER, faqList, figure, lookbook, marquee, picture, placeholderFrame, textLink } from '../lib/components.ts';
+import { button, chapter, DEMO_NOTE, device, ESTIMATE_CAPTION, ESTIMATE_CAPTION_VIEWER, faqList, figure, lookbook, marquee, partnerLogo, picture, textLink } from '../lib/components.ts';
 import { closingCta, journalTeaser, ledger } from '../lib/blocks.ts';
 import { faq } from '../data/content.ts';
-import { partnerName, site } from '../data/site.ts';
+import { PartnerName, partnerName, site } from '../data/site.ts';
 import { type Page } from './types.ts';
 
 export const home: Page = {
@@ -11,7 +11,7 @@ export const home: Page = {
     title: 'Curtain — your private fitting room for fashion shops',
     description:
       'Curtain gives your shoppers a size they can trust, right on your product page. Size advice from your own charts, measurements kept on their device. For Shopify and WooCommerce.',
-    preload: { id: 'photos/editorial-black-beige-1-portrait', widths: [600, 910], sizes: '(min-width: 1024px) 40vw, 100vw' },
+    preload: { id: 'partner/azure-front', widths: [600, 800], sizes: '(min-width: 1024px) 40vw, 100vw' },
     bodyClass: 'is-home',
   },
   body: () => html`
@@ -20,8 +20,8 @@ export const home: Page = {
     <p class="kicker hero__kicker"><span class="hero__tagline">Your private fitting room</span><span class="hero__issue">${site.issue}</span></p>
     <h1 class="display-xxl hero__title" id="hero-h" data-reveal="lines"><span class="line">The right size,</span> <span class="line"><em>behind the curtain.</em></span></h1>
     <div class="hero__media" data-reveal="img">
-      <div class="hero__photo ratio-23">${picture('photos/editorial-black-beige-1-portrait', { eager: true, sizes: '(min-width: 1024px) 40vw, 100vw' })}</div>
-      <p class="hero__photo-cap">Photo: <a href="/credits/#photos-editorial-black-beige-1">Guste Cibulskyte</a>, CC0</p>
+      <div class="hero__photo ratio-23">${picture('partner/azure-front', { eager: true, sizes: '(min-width: 1024px) 40vw, 100vw', pos: '50% 30%' })}</div>
+      <p class="hero__photo-cap">The Azure Palm Baby Doll Dress by ${partnerName}, our pilot shop. Photo: <a href="/credits/#partner-azure-front">${PartnerName}</a>, used with permission.</p>
       <div class="hero__phone">
         <div class="phone"><div class="phone__screen">${picture('product/mobile-05-size-result', { sizes: '(min-width: 1024px) 220px, 120px', eager: true, alt: 'The Curtain result on a phone: We recommend L, fit score 69%.' })}</div></div>
         <span class="tag tag--estimate">Estimate</span>
@@ -55,7 +55,7 @@ export const home: Page = {
 </section>
 
 <section class="section wrap asym" aria-labelledby="intro-h">
-  <div class="asym__big">${figure('photos/blazer-buttons', { ratio: '45', caption: 'The fitting-room moment: one button, one mirror, a decision in a minute.', sizes: '(min-width: 1024px) 55vw, 100vw', pos: '30% 50%' })}</div>
+  <div class="asym__big">${figure('partner/cardi-front', { ratio: '45', caption: 'A knit cardigan, sizes S-M and M-L. Which one is yours? A size table can only hint.', sizes: '(min-width: 1024px) 55vw, 100vw', pos: '50% 30%' })}</div>
   <div class="asym__text">
     <p class="kicker">The problem</p>
     <h2 class="h2" id="intro-h" data-reveal="lines">${em('Shopping for clothes online is a *guess.*')}</h2>
@@ -101,7 +101,7 @@ ${marquee(['Size advice on the device', 'No photos leave the phone', '3D is an e
       ${textLink('/3d/', 'How the 3D estimate is made')}
     </div>
     <div class="split__media threed">
-      ${figure('renders/engine-dress-M-portrait', { ratio: '23', caption: `A synthetic test dress, size M, from our garment engine. ${ESTIMATE_CAPTION}`, sizes: '(min-width: 1024px) 34vw, 100vw', figCls: 'threed__figure' })}
+      ${figure('renders/azure-estimate', { ratio: '23', caption: `Our estimate of the Azure Palm Baby Doll Dress in size 12, built from ${partnerName}'s product photos. ${ESTIMATE_CAPTION}`, sizes: '(min-width: 1024px) 34vw, 100vw', figCls: 'threed__figure' })}
       ${device('product/desktop-09-3d-estimate-viewer', { device: 'bare', caption: `The viewer in our demo shop. ${ESTIMATE_CAPTION_VIEWER}`, sizes: '(min-width: 1024px) 22vw, 60vw', cls: 'threed__viewer' })}
     </div>
   </div>
@@ -130,28 +130,29 @@ ${marquee(['Size advice on the device', 'No photos leave the phone', '3D is an e
 
 <section class="section wrap split split--7-5 pilot-teaser" aria-labelledby="pilot-h">
   <div class="split__media pilot-teaser__media">
-    ${placeholderFrame('Partner imagery — awaiting approval', "Their photo goes here only with the shop's written approval (DECISIONS D13). No logo, product photos or textures until then.", '45')}
-    <div class="pilot-teaser__mood">${figure('photos/shell-straw-hat', { ratio: '11', caption: 'Mood only. Not a product of our pilot shop.', sizes: '(min-width: 1024px) 22vw, 60vw' })}</div>
+    ${figure('partner/skirt-side', { ratio: '45', caption: 'The Crimson Wildflower Maxi Skirt, from the pilot shop.', sizes: '(min-width: 1024px) 50vw, 100vw', pos: '50% 35%' })}
+    <div class="pilot-teaser__mood">${figure('renders/skirt-estimate-3q', { ratio: '23', caption: `The same skirt as our 3D estimate, size 12. ${ESTIMATE_CAPTION}`, sizes: '(min-width: 1024px) 22vw, 60vw' })}</div>
   </div>
   <div class="split__text">
-    ${chapter({ num: '05', kicker: 'Our pilot partner', title: `Piloting with *${partnerName}.*`, id: 'pilot-h' })}
+    ${site.partner.showName ? html`<div class="partner-mark">${partnerLogo()}</div>` : ''}
+    ${chapter({ num: '05', kicker: 'Our pilot partner', title: `Piloting with *${partnerName}*`, id: 'pilot-h' })}
     <p class="lead">${site.partner.showName ? `Our first shop is ${partnerName}, a boho label from Australia.` : `Our first shop is ${partnerName}.`} We're setting Curtain up with their AU sizes 8 to 16 before anyone else gets it.</p>
+    <p>Their maxi skirt and babydoll dress already appear as 3D estimates in our demo. On their own store, 3D stays off until they can approve each garment.</p>
     <p class="micro">Status: ${site.partner.status}</p>
     ${textLink('/pilot/', 'About the pilot')}
   </div>
 </section>
 
 ${lookbook(
-  'Fit stories',
+  'Where a size table says least',
   [
-    { id: 'photos/maxi-dress-corridor', title: 'The maxi', text: 'Length and drape matter more than a bust number.', pos: '50% 60%' },
-    { id: 'photos/editorial-barrel', title: 'The textured mini', text: 'Waist first, then length.', pos: '74% 50%' },
-    { id: 'photos/beach-dress-walk', title: 'The summer dress', text: 'Relaxed or regular? The shopper says.', pos: '12% 50%' },
-    { id: 'photos/editorial-black-beige-2', title: 'The sleeve', text: 'Shoulders and arms: the fit nobody can see on a size table.', pos: '62% 50%' },
-    { id: 'photos/colour-rail', title: 'The rail', text: 'Forty prints, one size question.' },
-    { id: 'photos/minimal-rail', title: 'The basics', text: 'Even a tee has a fit preference.' },
+    { id: 'partner/azure-back', title: 'The babydoll', text: 'A yoke and two tiers: the shoulders decide, the hem follows.' },
+    { id: 'partner/palazzo-wide', title: 'The palazzo', text: 'Waist and hip first. The width is the style, not the size.' },
+    { id: 'partner/blouse-front', title: 'The blouse', text: 'Loose by design. Relaxed or regular? The shopper says.' },
+    { id: 'partner/skirt-front', title: 'The maxi', text: 'Length and drape matter more than a hip number.' },
+    { id: 'partner/cardi-back', title: 'The knit', text: 'Drop shoulders, ribbed hem: two sizes cover five.' },
   ],
-  { kicker: 'Moodboard', title: 'Fit *stories.*' },
+  { kicker: 'From their rail', title: 'Where a size table *says least.*' },
 )}
 
 <section class="section wrap pricing-teaser" aria-labelledby="price-h">

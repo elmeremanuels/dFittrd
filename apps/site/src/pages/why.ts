@@ -29,7 +29,7 @@ export const why: Page = {
     '01',
     'Sizes are a *guess.*',
     html`<p class="lead dropcap">Size 12 at one label is a 10 at the next. Shoppers know it, so they guess, or order two sizes and send one back.</p><p>A good size chart helps, but it still asks someone to measure themselves and read a grid on a phone. We'd rather answer the question they actually have: which size should I order?</p>`,
-    figure('photos/colour-rail', { ratio: '45', caption: 'Forty prints and one question: which size?', sizes: '(min-width: 1024px) 45vw, 100vw' }),
+    figure('partner/palazzo-wide', { ratio: '45', caption: 'Wide legs, an elastic waist, five sizes. Which one?', sizes: '(min-width: 1024px) 45vw, 100vw', pos: '50% 40%' }),
     false,
   )}
   ${reason(
@@ -50,7 +50,7 @@ export const why: Page = {
     '04',
     'Privacy shouldn’t be the price of a *good fit.*',
     html`<p>Body measurements are personal. Many fit tools send them to a server. We built Curtain the other way round: the size is worked out on the shopper's own device, photos never leave it, and you see totals, not people.</p><p>It's a promise you can put on your product page.</p>${textLink('/privacy-promise/', 'Our privacy promise')}`,
-    figure('photos/beach-dress-walk', { ratio: '34', caption: 'Some things are nobody else’s business.', sizes: '(min-width: 1024px) 40vw, 100vw', pos: '30% 50%' }),
+    figure('partner/blouse-back', { ratio: '34', caption: 'Some things are nobody else’s business.', sizes: '(min-width: 1024px) 40vw, 100vw', pos: '50% 30%' }),
     true,
   )}
 </div>

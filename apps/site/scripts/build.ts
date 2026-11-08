@@ -12,6 +12,7 @@ import { pages } from '../src/pages/index.ts';
 import { layout, type Assets } from '../src/lib/layout.ts';
 import { resetFigures } from '../src/lib/components.ts';
 import { launchGates, openDecisions, site } from '../src/data/site.ts';
+import { images, ogFromPartner, partnerImagePrefixes } from '../src/data/images.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
@@ -77,6 +78,12 @@ function walk(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 const htmlFiles = walk(dist).filter((f) => f.endsWith('.html'));
+const partnerPrefixes = partnerImagePrefixes();
+const estimatePrefixes = Object.values(images)
+  .filter((i) => i.partnerDerived && i.kind === 'render')
+  .map((i) => `/img/${i.id}-`);
+let showsPartnerEstimates = false;
+if (!site.partner.assetsApproved && ogFromPartner) problems.push('/og.jpg: made from a Bohohippychic photo but partner.assetsApproved is false (regenerate it from another image, set ogFromPartner=false)');
 for (const f of htmlFiles) {
   const text = readFileSync(f, 'utf8');
   const rel = '/' + relative(dist, f);
@@ -105,6 +112,12 @@ for (const f of htmlFiles) {
       else if (u.startsWith('/') && !existsSync(join(dist, u))) problems.push(`${rel}: missing image ${u}`);
     }
   }
+  // Bohohippychic imagery (their photos and logo, and our 3D estimates built from their photos) only with their
+  // permission recorded in site.ts; their logo only while they are named. Withdrawing it is one switch: assetsApproved.
+  const partnerShown = partnerPrefixes.filter((p) => text.includes(p));
+  if (!site.partner.assetsApproved && partnerShown.length) problems.push(`${rel}: shows Bohohippychic imagery (${partnerShown.join(', ')}) but partner.assetsApproved is false`);
+  if (estimatePrefixes.some((p) => text.includes(p))) showsPartnerEstimates = true;
+  if (!site.partner.showName && text.includes('/img/partner/logo')) problems.push(`${rel}: shows the Bohohippychic logo but partner.showName is false`);
   for (const m of text.matchAll(/\ssrc="((?:https?:)?\/\/[^"]+)"/g)) problems.push(`${rel}: absolute src ${m[1] ?? ''} (self-host it)`);
   if (/https?:\/\/(?!curtain\.fit|creativecommons\.org|wordpress\.org|bohohippychic\.com\.au|www\.sitemaps\.org)[^"\s]*\.(?:js|css|woff2?)/.test(text)) problems.push(`${rel}: third-party asset reference`);
 }
@@ -123,7 +136,7 @@ const hash = createHash('sha256').update(readFileSync(join(dist, 'index.html')))
 console.log(`✓ curtain.fit: ${htmlFiles.length} pages, ${(size / 1024 / 1024).toFixed(1)} MB in dist/ (index ${hash})`);
 const open = openDecisions();
 if (open.length) console.log(`  Still to decide before launch (src/data/site.ts): ${open.join('; ')}`);
-const gates = launchGates();
+const gates = launchGates({ showsPartnerEstimates });
 if (gates.length) {
   const msg = `Launch gates still open (src/data/site.ts, docs/SITE.md):\n  - ${gates.join('\n  - ')}`;
   if (process.env.CURTAIN_SITE_RELEASE === '1') {

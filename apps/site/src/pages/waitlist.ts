@@ -63,7 +63,7 @@ export const waitlist: Page = {
     </form>
   </div>
   <aside class="waitlist-aside">
-    ${figure('photos/editorial-black-beige-1', { ratio: '34', caption: 'Pilot stage, small group, real attention.', sizes: '(min-width: 1024px) 34vw, 100vw', pos: '40% 50%' })}
+    ${figure('partner/cardi-front', { ratio: '34', caption: 'Pilot stage, small group, real attention.', sizes: '(min-width: 1024px) 34vw, 100vw', pos: '50% 30%' })}
     <div class="contact-card">
       <p class="kicker">Other ways to reach us</p>
       <dl class="spec spec--stack">

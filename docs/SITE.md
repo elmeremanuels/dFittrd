@@ -15,8 +15,9 @@ consumer PWA (`app.<domain>`) and the API (`api.<domain>`), and has nothing to d
   every 3D picture carries an `ESTIMATE` tag and a caption (AGENTS.md rule 3): engine renders say "Estimated drape
   on a standard mannequin. Not a photo, not a guarantee of fit.", viewer screenshots say "Estimated drape on a
   figure built from the entered measurements. Not a photo, not a guarantee of fit."; no testimonials, metrics, customer logos or press; privacy claims
-  follow `docs/legal/privacy.md`; Bohohippychic is named as our pilot shop, and dashed placeholder frames
-  mark where their approved assets will go. No logo, product photo or texture of theirs is used (D13).
+  follow `docs/legal/privacy.md`; Bohohippychic is named as our pilot shop and its logo, product photos and
+  our 3D estimates of its garments are shown with its permission (below). No quote of theirs: a quote
+  appears only when they write one.
 
 ## Commands
 
@@ -42,14 +43,14 @@ still open (see below). The site is part of `pnpm check` through the normal `bui
 | `/how-it-works/` | Shopper walkthrough (5 steps, demo-shop screens) and the merchant side (install, charts, approve 3D, totals) |
 | `/3d/` | The garment engine and the 3D estimate, with synthetic renders only |
 | `/why/` | Sizes are a guess; returns; less shipping; privacy |
-| `/pilot/` | Bohohippychic, the pilot shop, with placeholders for their approved assets |
+| `/pilot/` | Bohohippychic, the pilot shop: their logo and product photos, their photo next to our 3D estimate (demo only), what the pilot covers |
 | `/pricing/` | One plan, USD 8.99 / month per shop |
 | `/privacy-promise/` | The privacy ledger: device / our server / what the shop sees |
 | `/faq/` | Twelve questions |
 | `/about/` | Who we are |
 | `/journal/` | Three story teasers, each marked "Coming soon" |
 | `/waitlist/` | Waitlist and contact form (opens the visitor's e-mail app; no backend) |
-| `/credits/` | Every photo with photographer, source and licence; our own screens and renders |
+| `/credits/` | Bohohippychic images ("courtesy of Bohohippychic, used with permission"), every CC0 photo with photographer, source and licence, our own screens and renders |
 | `/legal/` | Privacy policy, terms, imprint, cookies — "Coming soon" where legal review is pending |
 | `/404.html` | "Wrong size." |
 
@@ -62,14 +63,26 @@ decisions are all in `src/data/site.ts`.
 
 `build:release` fails while any of these is open in `apps/site/src/data/site.ts`:
 
-1. **`partner.nameApproved`** — Bohohippychic has agreed **in writing** to be named as our pilot shop. Until then
-   the preview build names them (the founder's wish) but the site must not go public. If they decline, set
-   `partner.showName: false`: every page then says "an Australian boho label" instead, with no name or link.
-2. **`legalName`, `company.address`, `company.registration`** (and `company.vat` if registered) — the identity
+1. **`partner.nameApproved`** — **cleared** (8 Nov 2026). Bohohippychic has granted permission to use its
+   name, logo, product photos and the 3D bundles derived from them, on the website and in demos
+   (`partner.permissionSource`: "founder statement 8 Nov 2026, written confirmation held by founder";
+   DECISIONS.md, REFINEMENT.md B1). `partner.assetsApproved` is true for the same reason. Should the
+   permission ever be withdrawn: set `partner.showName: false` (every page then says "an Australian boho
+   label", with no name, link or logo) and `partner.assetsApproved: false`; the build then fails on every
+   page that still shows one of their images or one of our 3D estimates built from their photos (every image
+   `images.ts` marks `partnerDerived`), and on `/og.jpg` (made from their photo, `ogFromPartner`), which lists
+   what to replace.
+2. **`partner.estimatesReviewed`** (REFINEMENT B2) — the founder has looked at our 3D estimates of their garments
+   (`renders/azure-estimate*`, run 17b; `renders/skirt-estimate*`, run 17d) next to their photos on `/`, `/3d/` and
+   `/pilot/` and signs them off for a public page under Bohohippychic's name. Known gaps: the azure estimate has a
+   square neck and short puffed sleeves where the dress has a V-neck and 3/4 sleeves; the skirt estimate is a
+   narrow tube without the slit or tiers. Either set it to true, or take the estimates off those pages (the gate
+   only applies while a page shows one).
+3. **`legalName`, `company.address`, `company.registration`** (and `company.vat` if registered) — the identity
    behind the waitlist. GDPR Art. 13 requires it as soon as the site collects e-mail addresses; it fills the
    imprint and the "Who is responsible" line of the waitlist notice on `/legal/#waitlist`.
-3. **`mailboxReady`** — `hello@curtain.fit` (or whatever `contactEmail` is) exists and receives mail.
-4. **`waitlistNoticeReviewed`** — a lawyer has read the waitlist notice on `/legal/#waitlist` (controller,
+4. **`mailboxReady`** — `hello@curtain.fit` (or whatever `contactEmail` is) exists and receives mail.
+5. **`waitlistNoticeReviewed`** — a lawyer has read the waitlist notice on `/legal/#waitlist` (controller,
    purpose, consent as legal basis, retention "12 months after public launch or on request", rights, the right
    to complain to the Autoriteit Persoonsgegevens or another supervisory authority).
 
@@ -86,130 +99,73 @@ Edit `apps/site/src/data/site.ts` (the build lists whatever is still `null`):
 5. **`trialDays`** — trial length (7 days in code, 14 in the listing draft). Until set, the site says the
    trial length is confirmed at launch.
 6. **`partner.status`** — update when the pilot is live on Bohohippychic's store.
-7. **Bohohippychic:** see launch gate 1. When they approve
-   images, a logo or a quote, put the files in `public/img/partner/`, replace the placeholder frames in
-   `src/pages/pilot.ts` and `src/pages/home.ts`, set `partner.assetsApproved: true`, and add the images
-   to `/credits/`. A quote must be their real words, signed off. The site makes no claim that any of their
-   photos were used; only claim that once there is a written OK on file.
+7. **Bohohippychic:** their images are in `public/img/partner/` (photos and logo) and `public/img/renders/`
+   (`azure-estimate*`, `skirt-estimate*`: our estimates of the Azure Palm Baby Doll Dress, run 17b, and the
+   Crimson Wildflower Maxi Skirt, run 17d, both accepted pending founder review, REFINEMENT B2). The
+   official logo file came from their site's header (`bhc-logo.png`); replace it if they send a vector
+   version. A quote is only added when they write one and sign it off; there is no quote slot until then.
 8. **Legal:** the product privacy policy and terms are drafts; `/legal/` says "Coming soon" until a lawyer
    has reviewed them. The waitlist needs a short website privacy notice (a first version is on `/legal/#waitlist`).
 9. **Optional:** a founder name, bio and portrait for `/about/`; one sourced statistic on fit returns for
    `/why/` (with the link); a Dutch version (only the short strings first).
 
-The photos are CC0 from the WordPress Photo Directory, found through Openverse (Unsplash and Pexels could not be
-verified from the build sandbox). CC0 covers copyright, not model releases, so the picks show people from behind
-or cropped. Every photo gets the same grade at prep time (about −20% saturation, slightly warmer, lifted blacks,
-a 6% cream veil) and is encoded to AVIF and WebP under a 230 KB budget; the build fails above 250 KB. Each photo
-appears on at most two pages and never twice on one page. Art-directed crops (the home hero, the per-size 3D
-columns, the product-form screenshot) are separate files, so the browser never downloads pixels it crops away.
-Swapping in licensed campaign photography later is a matter of replacing files in `public/img/photos/`
-(keep the widths listed in `src/data/image-sizes.json`, in AVIF and WebP) and updating `src/data/photo-credits.json` and the
-alt text in `src/data/images.ts`.
+### Images
+
+The strongest pictures lead: Bohohippychic's product photos (home hero, the intro, the pilot teaser, the
+lookbook, `/pilot/`, `/why/`, `/waitlist/`), our 3D estimates of their garments (home 02 and 05, `/3d/`,
+`/pilot/`) and the demo-shop screens. Their photos are shown as published on their shop (800×1200),
+resized to 600 and 800 px wide, without a colour grade; the estimates are clean renders of the viewer
+(`spikes/garment-engine/viewer`, size 12 on the M mannequin, labels hidden), cropped to 2:3. Every 3D picture
+carries the `ESTIMATE` tag and caption, and its credit says it was made from Bohohippychic's photos.
+
+Five CC0 photos remain (knitwear rail, minimal rail, pattern scissors, fabric rolls, draped fabric), from the
+WordPress Photo Directory through Openverse, with the house grade (about −20% saturation, slightly warmer,
+lifted blacks, a 6% cream veil). The weak and repeating ones (the black-and-beige editorial set, blazer,
+colour rail, beach, corridor, barrel, straw hat) were dropped in Nov 2026. CC0 covers copyright, not model
+releases, so those picks show people from behind or cropped.
+
+Everything is AVIF + WebP under a 230 KB budget per file; the build fails above 250 KB. Each image appears on at
+most two pages and never twice on one page. To swap an image: replace the files (keep the widths listed in
+`src/data/image-sizes.json`, AVIF and WebP), then update `src/data/photo-credits.json` (CC0) or
+`partnerProducts` (Bohohippychic) and the alt text in `src/data/images.ts`. The build refuses Bohohippychic
+images and our estimates built from them while `partner.assetsApproved` is false, and their logo while
+`partner.showName` is false.
+
+Rights: the founder's statement covers Bohohippychic's product photos as published. They show identifiable
+models; that rests on Bohohippychic owning the photos (or being allowed to sublicense them, model releases
+included), which the founder confirms with them in the written permission.
 
 ## Deploying to curtain.fit
 
-The site is static: anything that serves a folder over HTTPS works. Two options.
+The site runs on the founder's VPS next to `app.` and `api.`, behind the same Caddy; Hostinger is only
+the registrar and DNS. The deploy workflow builds and publishes it (docs/DEPLOY.md):
 
-### Option A — the existing VPS behind Caddy (recommended)
+- **DNS at Hostinger** (hPanel → Domains → curtain.fit → DNS / Nameservers → DNS records): `A` records for
+  `@`, `www`, `app` and `api` → the VPS IPv4 (and `AAAA` → its IPv6, if it has one). Remove Hostinger's
+  default parking records for `@` and `www` first. Check with
+  `dig +short curtain.fit www.curtain.fit app.curtain.fit api.curtain.fit`.
+- **Caddy** (`infra/Caddyfile`): `{$DOMAIN}` serves the `site` volume (`/srv/site`, read-only) with the
+  shared security headers, a same-origin CSP (`style-src-attr 'unsafe-inline'` only for the image crops,
+  `form-action 'self' mailto:` for the waitlist form), `X-Frame-Options: DENY`, one-year immutable caching
+  for `/assets/*` and `/fonts/*`, one day for `/img/*` (so a replaced photo is gone within a day), an hour
+  for `og.jpg`, the icons, `robots.txt` and `sitemap.xml`, `no-cache` for HTML, one URL per page (`/pilot`
+  redirects with 308 to `/pilot/`) and `/404.html` with status 404. HSTS from the apex does not extend to
+  subdomains (the mailbox hosts are Hostinger's). `www.{$DOMAIN}` redirects permanently to the apex. Pinned by
+  `apps/api/src/caddy-site.test.ts`; the deploy validates the Caddyfile in CI and on the server
+  (`infra/scripts/caddy-validate.sh`, docs/DEPLOY.md).
+- **Build:** the workflow's **site** job runs `pnpm --filter @curtain/site build:release`. While a launch gate
+  is open the build refuses; the job then warns ("curtain.fit not published"), lists the open gates in the
+  run summary, and the deploy ships app and api without the site. The site never blocks the plugin.
+- **Publish:** `scripts/deploy.sh` uploads `SITE_DIST` to `/opt/curtain/site/releases/<tag>/` and
+  `infra/scripts/deploy.sh --site-release` copies it into the `site` volume: every file except the pages
+  first (hashed CSS/JS, fonts, images), then each HTML page through a rename, then it prunes files that
+  belong to neither this release nor the previous one. The site release is recorded with the image and web
+  release, so `rollback` puts the previous site back too. A failed site publish, or `https://curtain.fit/`
+  not answering, only logs a warning; the previous site stays up.
+- **By hand** (from a laptop with ssh access): build with `build:release`, then
+  `SITE_DIST=apps/site/dist scripts/deploy.sh deploy` with the usual variables (docs/DEPLOY.md, "From a laptop").
 
-The VPS already runs Caddy for `app.<domain>` and `api.<domain>` (docs/DEPLOY.md). The site becomes a third
-site block on the same Caddy.
-
-**1. DNS at Hostinger** (hPanel → Domains → curtain.fit → DNS / Nameservers → DNS records). Remove the
-parking `A`/`CNAME` records for `@` and `www` that Hostinger adds by default, then add:
-
-| Type | Name | Points to | TTL |
-|---|---|---|---|
-| A | `@` | the VPS IPv4 | 3600 |
-| AAAA | `@` | the VPS IPv6 (only if the VPS has one) | 3600 |
-| CNAME | `www` | `curtain.fit` | 3600 |
-| A | `app`, `api` | the VPS IPv4 (already needed for the product, see DEPLOY.md) | 3600 |
-
-Check with `dig +short curtain.fit A` and `dig +short www.curtain.fit` before reloading Caddy, so the
-Let's Encrypt challenge finds the server.
-
-**2. Caddy site block.** Add to `infra/Caddyfile` (the `security_headers` snippet already exists there) and
-mount the site folder read-only in `infra/docker-compose.yml` (`- site:/srv/site:ro` on the caddy service
-and a `site:` volume):
-
-```caddy
-{$DOMAIN} {
-	import security_headers
-	root * /srv/site
-	encode zstd gzip
-
-	# No cookies, no third parties: everything is same-origin. style-src-attr allows only the image crop (object-position) attributes.
-	header Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self'; style-src-attr 'unsafe-inline'; script-src 'self'; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' mailto:"
-	header X-Frame-Options "DENY"
-
-	@immutable path /assets/* /fonts/* /img/*
-	header @immutable Cache-Control "public, max-age=31536000, immutable"
-	@html path / *.html */
-	header @html Cache-Control "no-cache"
-
-	try_files {path} {path}/index.html
-	file_server
-	handle_errors {
-		@404 expression {err.status_code} == 404
-		rewrite @404 /404.html
-		file_server
-	}
-}
-
-www.{$DOMAIN} {
-	redir https://{$DOMAIN}{uri} permanent
-}
-```
-
-`/img/*` is marked immutable: if you replace a photo, give the file a new name. Run
-`infra/scripts/caddy-validate.sh` after editing the Caddyfile.
-
-**3. Publish.**
-
-```bash
-pnpm install --frozen-lockfile
-pnpm --filter @curtain/site build:release
-rsync -av --delete apps/site/dist/ <user>@<vps>:/opt/curtain/site-release/
-# on the VPS: copy into the caddy volume, then reload
-docker run --rm -v curtain_site:/srv/site -v /opt/curtain/site-release:/src:ro caddy:2.9-alpine \
-  sh -c 'cp -a /src/assets /src/fonts /src/img /srv/site/ 2>/dev/null; cp -a /src/. /srv/site/'
-docker compose -f /opt/curtain/infra/docker-compose.yml exec caddy caddy reload --config /etc/caddy/Caddyfile
-```
-
-Copying `assets/`, `fonts/` and `img/` first means a visitor never gets new HTML that points at a CSS or JS
-file that isn't there yet. Old hashed files can be cleaned up now and then. Wiring this into
-`infra/scripts/deploy.sh` and CI is a follow-up; it has not been done in this change.
-
-### Option B — Hostinger static hosting
-
-If you'd rather keep the website off the VPS: in hPanel, add curtain.fit as a website on a Hostinger
-hosting plan, then upload the **contents** of `apps/site/dist/` to `public_html/` (File Manager or SFTP).
-Hostinger provides the TLS certificate. Add this `.htaccess` in `public_html/` for clean URLs, caching and
-the 404 page:
-
-```apache
-ErrorDocument 404 /404.html
-DirectorySlash On
-<IfModule mod_headers.c>
-  # One-year caching only for files whose names change when their content does (hashed CSS/JS, fonts, /img/).
-  # og.jpg, favicon.svg and apple-touch-icon.png keep their names, so they get a short cache instead.
-  <If "%{REQUEST_URI} =~ m#^/(assets|fonts|img)/#">
-    Header set Cache-Control "public, max-age=31536000, immutable"
-  </If>
-  <ElseIf "%{REQUEST_URI} =~ m#\.(png|jpg|svg|xml|txt)$#">
-    Header set Cache-Control "public, max-age=3600"
-  </ElseIf>
-  <Else>
-    Header set Cache-Control "no-cache"
-  </Else>
-  Header always set Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self'; style-src-attr 'unsafe-inline'; script-src 'self'; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' mailto:"
-  Header always set X-Frame-Options "DENY"
-  Header always set X-Content-Type-Options "nosniff"
-  Header always set Referrer-Policy "strict-origin-when-cross-origin"
-</IfModule>
-```
-
-In this case leave the `@`/`www` DNS records on Hostinger's hosting, and point only `app` and `api` at the VPS.
+Until the first site release is published, `https://curtain.fit` answers 404 (the volume is empty).
 
 ## After launch
 

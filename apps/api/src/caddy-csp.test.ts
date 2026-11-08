@@ -12,7 +12,8 @@ import { describe, expect, it } from 'vitest';
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const caddyfile = readFileSync(join(root, 'infra/Caddyfile'), 'utf8');
 
-const policies = [...caddyfile.matchAll(/Content-Security-Policy "([^"]+)"/g)].map((m) => {
+// The app and embed policies: the ones that talk to the api (the site's own policy is pinned in caddy-site.test.ts).
+const policies = [...caddyfile.matchAll(/Content-Security-Policy "([^"]+)"/g)].filter((m) => m[1]!.includes('https://api.{$DOMAIN}')).map((m) => {
   const directives = new Map<string, string[]>();
   for (const part of m[1]!.split(';')) {
     const [name, ...values] = part.trim().split(/\s+/);

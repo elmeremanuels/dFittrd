@@ -17,7 +17,7 @@ export const pricing: Page = {
 <section class="wrap pricing-layout">
   ${pricingCard()}
   <div class="pricing-notes">
-    ${figure('photos/editorial-barrel', { ratio: '34', caption: 'Everything you need, nothing you don’t.', sizes: '(min-width: 1024px) 30vw, 100vw', pos: '74% 50%' })}
+    ${figure('photos/minimal-rail', { ratio: '34', caption: 'Everything you need, nothing you don’t.', sizes: '(min-width: 1024px) 30vw, 100vw', pos: '50% 60%' })}
     <dl class="spec spec--stack">
       <div><dt>Billing</dt><dd>Through Shopify on Shopify (in your billing currency where available), and through Stripe on WooCommerce. Prices exclude taxes unless stated at checkout.</dd></div>
       <div><dt>3D estimate</dt><dd>In development (demo only) and not included in this plan. Whether and how it is priced is decided after the pilot.</dd></div>

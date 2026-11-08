@@ -643,26 +643,6 @@ h1.chapter__title {
 /* a bare screenshot is its own frame: no second rule around it */
 .object--bare .object__mat { padding: 0; border: 0; background: none; display: block; }
 
-/* placeholders for partner assets */
-.placeholder {
-  position: relative;
-  background: var(--sand);
-  border: 1px dashed var(--ink);
-  display: grid;
-  place-items: center;
-  padding: 24px;
-}
-.placeholder__inner { max-width: 30ch; text-align: center; display: grid; justify-items: center; gap: 12px; }
-.placeholder__label { font-family: var(--serif); font-size: clamp(20px, 1.8vw, 26px); line-height: 1.2; font-style: italic; }
-.placeholder__note { font-size: 13px; line-height: 1.5; color: var(--muted); }
-.placeholder::before,
-.placeholder::after { content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(to top right, transparent calc(50% - 0.5px), color-mix(in srgb, var(--ink) 18%, transparent) 50%, transparent calc(50% + 0.5px)); }
-.placeholder::after { transform: scaleX(-1); }
-.placeholder__inner { position: relative; z-index: 1; background: var(--sand); padding: 16px; }
-.placeholder-row { display: grid; gap: var(--gutter); }
-@media (min-width: 900px) { .placeholder-row { grid-template-columns: repeat(3, 1fr); } }
-
 .margin-note {
   margin-top: 24px;
   padding-top: 12px;
@@ -806,9 +786,12 @@ h1.chapter__title {
 .pilot-teaser__media { position: relative; padding-bottom: 80px; }
 .pilot-teaser__mood { position: absolute; right: -8px; bottom: 0; width: 46%; }
 .pilot-teaser__mood .fig__frame { border: 8px solid var(--cream); }
+/* the estimate overlaps the photo's lower right corner, so the photo's caption keeps to the left half */
+.pilot-teaser__media > .fig .fig__cap { max-width: 50%; }
 @media (max-width: 639px) {
   .pilot-teaser__media { padding-bottom: 0; }
-  .pilot-teaser__mood { position: static; width: 70%; margin: -48px 0 0 auto; }
+  .pilot-teaser__media > .fig .fig__cap { max-width: none; }
+  .pilot-teaser__mood { position: static; width: 70%; margin: 24px 0 0 auto; }
 }
 
 /* marquee */
@@ -1097,13 +1080,16 @@ h1.chapter__title {
   .pilot-moods { grid-template-columns: 1fr 1fr; }
   .pilot-moods > :last-child { margin-top: 96px; }
 }
-.reserved-list { display: none; border-top: 1px solid var(--ink); }
-.reserved-list li { display: grid; gap: 6px; justify-items: start; padding: 16px 0; border-bottom: 1px dashed var(--ink); }
-.reserved-list li > span:nth-child(2) { font-family: var(--serif); font-style: italic; font-size: 22px; line-height: 1.2; }
-.reserved-list li > span:nth-child(3) { font-size: 14px; color: var(--muted); }
-@media (max-width: 639px) {
-  .placeholder-row { display: none; }
-  .reserved-list { display: grid; }
+.partner-mark { margin-bottom: 28px; }
+.partner-logo img { display: block; width: clamp(96px, 10vw, 140px); height: auto; }
+.section-lead { max-width: 60ch; margin: -8px 0 40px; }
+.pair-grid { display: grid; gap: 56px var(--gutter); }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.pair .fig__frame { background: var(--paper); }
+.pair-note { margin-top: 40px; max-width: 72ch; }
+@media (min-width: 1024px) {
+  .pair-grid { grid-template-columns: 1fr 1fr; gap: var(--gutter); }
+  .pair { gap: var(--gutter); }
 }
 .status-line { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 24px; font-size: 15px; }
 .cover-list { display: grid; border-top: 1px solid var(--ink); }

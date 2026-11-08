@@ -54,12 +54,12 @@ All of R1–R8 can run in parallel: about **10–16 h** wall-clock and **$10–1
 | # | Point | Status |
 |---|---|---|
 | B1 | Bohohippychic permission for its name, logo, product photos and the 3D bundles derived from them (D13) | **Granted.** The founder holds the permission (stated 8 Nov 2026). Keep the written confirmation on file outside the repo. The website and demos may use these assets |
-| B2 | Founder review of the azure and skirt bundles | Open (renders sent 8 Nov 2026) |
+| B2 | Founder review of the azure and skirt bundles | Open (renders sent 8 Nov 2026). Also a site launch gate: `partner.estimatesReviewed` in `apps/site/src/data/site.ts`, because the estimates are shown next to Bohohippychic's photos on `/`, `/3d/` and `/pilot/` (docs/SITE.md) |
 | B3 | Trial length, what happens after the trial, app name and trademark (checklist E1), legal review | Open, founder |
 
 ## Launch path (now)
 
-1. The website `apps/site` is being built (branch `claude/site`). Fill in the Bohohippychic assets (B1).
+1. The website `apps/site` is built and merged; the Bohohippychic assets (B1) are in (8 Nov 2026). It publishes with the deploy once its launch gates are cleared (docs/SITE.md).
 2. Cowork sets up the VPS and DNS (`docs/COWORK-HANDOFF.md`).
 3. The work goes to `main`, the first deploy runs, and curtain.fit, app and api are live.
 4. Shopify: development store first, then the pilot install at Bohohippychic (custom distribution).

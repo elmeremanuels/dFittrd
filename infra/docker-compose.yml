@@ -1,5 +1,6 @@
 # Curtain on one VPS (D2/D9): caddy (TLS + static PWA + reverse proxy), api (one image: API + jobs), postgres.
-# Usage: cp .env.example .env && edit, then `docker compose up -d`. Web bundle is rsynced into the caddy volume by scripts/deploy.sh.
+# Usage: cp .env.example .env && edit, then `docker compose up -d`. The web bundle (app.<domain>) and the marketing
+# site (<domain>, www.<domain>) are published into their caddy volumes by infra/scripts/deploy.sh.
 name: curtain
 
 services:
@@ -16,6 +17,7 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - web:/srv/web:ro
+      - site:/srv/site:ro
       - assets:/srv/assets:ro
       - caddy_data:/data
       - caddy_config:/config
@@ -105,6 +107,7 @@ services:
 
 volumes:
   web:
+  site:
   renders:
   assets:
   pg:

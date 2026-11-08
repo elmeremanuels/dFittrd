@@ -276,6 +276,25 @@ blouse and cardigan, about $1.0-1.2 (at most about $1.5); the blouse and cardiga
 of our proxy, the blouse proxy shorter than the garment, the fitted outerwear proxy against an oversized knit (all
 exporter changes with new job ids: the founder's decision).
 
+**Run 16b (8 Nov, azure: stage 2 + 4 on run 16a's stills recomposed with QA 0.10.1), evaluated like run 15**
+(`spikes/garment-engine/data/bohohippychic/phase0-written.md`, "Run 16b"; stage 4t, drape log, report with renders,
+side-by-side pictures against run 15 in `out/eval/azure-palm-baby-doll-dress/compare/`, gitignored). No grey cap above
+the sleeves in the stills or in any turntable frame (grey shoulder pixels per frame 357 → 78, the rest at the neck edge;
+stage 4t's cap texels sampled from frames 47.5 % → 79.8 %, so run 15's asset had synthesized most of its cap print); no
+black panels or flicker; consistency flags 31 of 243 frames (run 15: 41). Same chest (101.26 cm, −0.74 against 102; run 15
+−0.73) and graded table; texture holdout MAE 20.65 (21.86). Mixed: pinned stills 0.901 / 0.924 (0.889 / 0.938). Worse:
+holdout IoU 0.9127 / 0.8956 (0.9176 / 0.8986), turntable IoU at 90° and 180°; two new visible defects. (1) QA 0.10.1's
+recompose grows the garment mask along the whole outline, not only at the caps, and keeps a cream tail below the hem of
+the back still (missed in the still review); stage 2 grows it into a plain cream, unprinted flap swinging out at one side
+of the hem in turntable_b frames about 84-159 (half the turn, up to ~10 cm), which stage 4t fits (hem girth 155.9 against
+149.5 cm, hem line 56.46 against 57.35 cm, flat-lay 89.79 against 89.98 / printed 91, P0 shadow Chamfer 1.871 against
+1.672 cm, skirt region 1.06 against 0.70). Fix in stage 1b: limit `conform_edges` to the cap rows or trim hanging hem
+fragments in QA. (2) A translucent lower skirt with the grey leg showing through and ragged tips in turntable_a frames
+about 32-56 (stage 2; most of the holdout IoU loss is in frames 40-80). Also 2 vertices 3.3 mm from the mannequin
+(clearance 4 mm). Run 16b is now the azure panel bundle (`review.json`), all of these flagged, not repaired; the AU 8
+back-shoulder patch and the straight side view remain. Panel still on hold (1 of 5 bundles). GPU 1,503 s, $1.59-1.62 for
+stages 2 + 4 only (stage 1b ran in run 16a: 34.6 s, about $0.04; run 15's 1,576 s include its stage 1b).
+
 **Stage 4t** (`spikes/garment-engine/src/templateFit.ts`, `bake.ts`, `stage4t.ts`;
 `pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic]`): the
 control proxy remeshed into a body tube and two sleeve tubes (each starting with a shoulder cap of

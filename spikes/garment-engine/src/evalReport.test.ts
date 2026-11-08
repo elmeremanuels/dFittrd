@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { chooseMesh, evaluateProduct, readJob, type JobFiles, type ProductEval } from './evalJob';
 import { reconstructedDress, shopPayloads, syntheticDress, writeFakeJob } from './evalFixtures';
 import { SHOP_UNCOVERED_CATEGORIES } from './shopSelection';
-import { costTotal, forPanel, parsePrintedTable, plannedPhotos, renderReport, stageStatuses, usedInputs, verdicts, type ProductSection, type ReportInput, type ShopImage, type ShopProduct } from './evalReport';
+import { costScope, costTotal, forPanel, parsePrintedTable, plannedPhotos, renderReport, stageStatuses, usedInputs, verdicts, type ProductSection, type ReportInput, type ShopImage, type ShopProduct } from './evalReport';
 
 const images = (JSON.parse(readFileSync(new URL('../data/bohohippychic/images.json', import.meta.url), 'utf8')) as { products: Record<string, ShopImage[]> }).products;
 const dirs: string[] = [];
@@ -98,6 +98,15 @@ describe('report with a GPU run', () => {
     expect(st.find((s) => s.stage === '3 separation')!.state).toBe('not built');
     expect(st.find((s) => s.stage === '4 reconstruction')!.state).toBe('done');
     expect(costTotal(job).gpuSeconds).toBe(350);
+  });
+
+  it('says when a cost total leaves out a stage 1b reused from an earlier run', () => {
+    const own = costTotal(job);
+    expect(own.stage1bReused).toBeNull();
+    expect(costScope(own)).toBe('');
+    const reused = costTotal({ ...job, costSummary: { ...(job.costSummary as object), stage1b: { reused: 'recompose' } } });
+    expect(reused.gpuSeconds).toBe(350);
+    expect(costScope(reused)).toMatch(/stage 1b recomposed on CPU from an earlier run; that run's stage 1b GPU not included/);
   });
 
   it('calls chart agreement met only with at least 4 of 5 products evaluated and passing', () => {

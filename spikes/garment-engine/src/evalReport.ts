@@ -296,6 +296,16 @@ export interface CostTotal {
   wallSeconds: number | null;
   usdLow: number | null;
   usdHigh: number | null;
+  /**
+   * How the job got its stage 1b stills when it did not draw them itself (`cost_summary.json` `stage1b.reused`,
+   * e.g. 'recompose'): that run's stage 1b GPU is then not in these totals, and every cost line says so.
+   */
+  stage1bReused: string | null;
+}
+
+/** ' (stage 1b reused from an earlier run, its GPU not included)' when the job did not draw its own stills, else ''. */
+export function costScope(c: CostTotal): string {
+  return c.stage1bReused ? ` (stage 1b ${c.stage1bReused === 'recompose' ? 'recomposed on CPU from an earlier run' : `reused (${c.stage1bReused}) from an earlier run`}; that run's stage 1b GPU not included)` : '';
 }
 
 export function costTotal(job: JobFiles | null): CostTotal {
@@ -311,6 +321,7 @@ export function costTotal(job: JobFiles | null): CostTotal {
     wallSeconds: num(job?.costSummary?.wall_seconds) ?? sum((c) => c.wallSeconds),
     usdLow: num(total?.usd_estimate_low) ?? sum((c) => c.usdLow),
     usdHigh: num(total?.usd_estimate_high) ?? sum((c) => c.usdHigh ?? c.usdLow),
+    stage1bReused: str(obj(job?.costSummary?.stage1b)?.reused) ?? null,
   };
 }
 
@@ -517,7 +528,7 @@ function runFacts(job: JobFiles, ev: ProductEval | null): Record<string, string>
     stills: ev?.view.views.length ? ev.view.views.map((v) => `${v.view} ${v.iou.toFixed(3)}`).join(', ') : '—',
     holdout: ho ? `${num(ho.visibleMean)} / ${num(ho.silhouetteMean)}` : '—',
     triangles: r ? String(r.health.triangles) : '—',
-    cost: c.records.length ? `${secs(c.gpuSeconds)} GPU, ${usd(c.usdLow)}–${usd(c.usdHigh)}` : '—',
+    cost: c.records.length ? `${secs(c.gpuSeconds)} GPU, ${usd(c.usdLow)}–${usd(c.usdHigh)}${costScope(c)}` : '—',
   };
 }
 
@@ -576,7 +587,7 @@ function costLines(job: JobFiles | null): string[] {
     '',
     table(['Stage', 'GPU', 'Region', 'GPU s', 'Wall s', 'Estimate low', 'Estimate high'], c.records.map((r) => [r.stage, r.gpu ?? '—', r.region ?? '—', secs(r.gpuSeconds), secs(r.wallSeconds), usd(r.usdLow), usd(r.usdHigh)])),
     '',
-    `Total: ${secs(c.gpuSeconds)} GPU, ${secs(c.wallSeconds)} wall, ${usd(c.usdLow)}–${usd(c.usdHigh)} (estimate).`,
+    `Total: ${secs(c.gpuSeconds)} GPU, ${secs(c.wallSeconds)} wall, ${usd(c.usdLow)}–${usd(c.usdHigh)} (estimate)${costScope(c)}.`,
   ];
   return out;
 }
@@ -701,7 +712,7 @@ export function verdicts(input: ReportInput): Verdict[] {
     text: withCost.length
       ? `Measured for ${withCost.length} of ${ps.length} products (GPU seconds and wall time measured; dollars are list-price estimates until the Modal invoice is read): ${withCost.map((p) => {
           const c = costTotal(p.job);
-          return `${p.shop.handle} ${secs(c.gpuSeconds)} GPU, ${secs(c.wallSeconds)} wall, ${usd(c.usdLow)}–${usd(c.usdHigh)}`;
+          return `${p.shop.handle} ${secs(c.gpuSeconds)} GPU, ${secs(c.wallSeconds)} wall, ${usd(c.usdLow)}–${usd(c.usdHigh)}${costScope(c)}`;
         }).join('; ')}.`
       : 'No GPU run on these products yet, so no GPU seconds, wall time or cost.',
   });
@@ -741,7 +752,7 @@ export function renderReport(input: ReportInput): string {
           state('4 '),
           ev ? `${ev.result.agreement.pass ? 'pass' : 'FAIL'} (before ${cm(ev.result.before.maxAbsCm)} cm, after ${Number.isFinite(ev.result.agreement.maxAbsCm) ? cm(ev.result.agreement.maxAbsCm) : '—'} cm)` : 'not measured',
           vs.length ? ['front', 'back'].map((v) => vs.find((x) => x.view === v)?.iou.toFixed(2) ?? '—').join(' / ') : '—',
-          c.records.length ? `${usd(c.usdLow)}–${usd(c.usdHigh)}` : '—',
+          c.records.length ? `${usd(c.usdLow)}–${usd(c.usdHigh)}${c.stage1bReused ? ' (no stage 1b)' : ''}` : '—',
         ];
       }),
     ),

@@ -1,6 +1,6 @@
 # Phase 0 on bohohippychic.com.au (generated)
 
-Generated 2026-11-07 by `pnpm --filter @curtain/garment-spike report:bohohippychic` (`spikes/garment-engine/scripts/report-bohohippychic.ts`). Do not edit by hand: re-run it after every GPU run. Renders and bundles live under `spikes/garment-engine/out/`, which is gitignored: the links to them below resolve only in a checkout where the GPU outputs are in `out/phase0/` and this script has run with `-- --renders`; elsewhere they are attached separately.
+Generated 2026-11-08 by `pnpm --filter @curtain/garment-spike report:bohohippychic` (`spikes/garment-engine/scripts/report-bohohippychic.ts`). Do not edit by hand: re-run it after every GPU run. Renders and bundles live under `spikes/garment-engine/out/`, which is gitignored: the links to them below resolve only in a checkout where the GPU outputs are in `out/phase0/` and this script has run with `-- --renders`; elsewhere they are attached separately.
 
 Boho Hippy Chic gave the founder consent to use its public product data and photos for this internal validation, before anything is installed on its site. Selection, AU chart and photo classification: `spikes/garment-engine/data/bohohippychic/` and `docs/research/au-size-chart.md`. Everything below that comes from a model is an estimate (AGENTS.md rule 3).
 
@@ -8,7 +8,7 @@ Boho Hippy Chic gave the founder consent to use its public product data and phot
 
 | Product | Category | Back photo | Stage 1b | Stage 2 | Stage 4 | Chart agreement | View IoU front / back | Cost (estimate) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `azure-palm-baby-doll-dress` | dress | real | done | done | done | pass (before 0.73 cm, after 0.00 cm) | 0.89 / 0.94 | $1.66–$1.71 |
+| `azure-palm-baby-doll-dress` | dress | real | done | done | done | pass (before 0.74 cm, after 0.00 cm) | 0.90 / 0.92 | $1.59–$1.62 (no stage 1b) |
 | `rosewater-blouse` (run 15 rejected on review) | top | real | failed | done | done | FAIL (before 10.85 cm, after 6.65 cm) | 0.50 / 0.69 | $1.64–$1.70 |
 | `rosewater-palazzo-pants` (run 15 rejected on review) | bottom | real | failed | not run | not run | not measured | — | $0.03–$0.07 |
 | `crimson-wildflower-maxi-skirt` (run 15 faulty, evaluation only on review) | bottom | real | failed | done | done | FAIL (before — cm, after — cm) | 0.89 / 0.89 | $1.68–$1.74 |
@@ -18,16 +18,16 @@ Boho Hippy Chic gave the founder consent to use its public product data and phot
 
 | Item | State | Evidence |
 | --- | --- | --- |
-| Size test | needs people | Five people who did not build it must pick the smaller size, without labels, in at least 4 of 5 products on the blind page (size mode). Bundles for the test: 1 of 5 products (3 more evaluated but kept off the panel on review: rosewater-blouse rejected, crimson-wildflower-maxi-skirt faulty, woodstock-wanderer-knit-cardi rejected); renders made for 2. Not run with people yet. **Do not run the panel on these assets yet:** Only 1 of 5 products has a panel bundle after run 15 (the azure babydoll; the crimson maxi skirt is kept for evaluation only, marked faulty on review; the blouse and the cardigan were rejected on review, the palazzo stopped before stage 2), the dress still shows the torso at the back of the shoulder in AU 8 from the side, and the skirt is narrower than the mannequin at the hip in its stage 1b stills, so the asset is open at both hips (the grey hip shows from the front and a wedge to mid-thigh from the three-quarter view) and has no measurable waist or hip girth; see the run 15 section and the verdict below. (`spikes/garment-engine/data/bohohippychic/panel-hold.txt`) |
-| Fabric test | needs people | Same five people, fabric mode of the same page (linen versus silk of the same garment). Not run with people yet. **Do not run the panel on these assets yet:** Only 1 of 5 products has a panel bundle after run 15 (the azure babydoll; the crimson maxi skirt is kept for evaluation only, marked faulty on review; the blouse and the cardigan were rejected on review, the palazzo stopped before stage 2), the dress still shows the torso at the back of the shoulder in AU 8 from the side, and the skirt is narrower than the mannequin at the hip in its stage 1b stills, so the asset is open at both hips (the grey hip shows from the front and a wedge to mid-thigh from the three-quarter view) and has no measurable waist or hip girth; see the run 15 section and the verdict below. (`spikes/garment-engine/data/bohohippychic/panel-hold.txt`) |
-| Chart agreement | not yet measurable | 1 of 4 evaluated products within ±2 cm at their critical anchors after calibration (1 without a stage 4 mesh); 4 of 5 needed. After per-ring calibration this is close to 0 by construction, so also read the error before calibration: azure-palm-baby-doll-dress at chest: max \|error\| 0.73 cm before calibration, 0.00 cm after the global scale, 0 by construction with one critical anchor, 0.00 cm after calibration; rosewater-blouse at chest: max \|error\| 10.85 cm before calibration, 0.00 cm after the global scale, 0 by construction with one critical anchor, 6.65 cm after calibration; crimson-wildflower-maxi-skirt at waist: no girth at waist (its cloth does not reach the ring; on its own waistband no closed tape, an opening of 5.81 cm; bridged 94.23 cm against the chart's 80.50); woodstock-wanderer-knit-cardi at chest: no girth at chest. |
-| View agreement | needs people | The merchant must confirm that the front and back renders are recognisably their garment. IoU against the pinned stills (visible with the mannequin in front / garment silhouette alone): azure-palm-baby-doll-dress front 0.89 / 0.89, back 0.94 / 0.94; rosewater-blouse front 0.50 / 0.46, back 0.69 / 0.80; crimson-wildflower-maxi-skirt front 0.89 / 0.85, back 0.89 / 0.89; woodstock-wanderer-knit-cardi front 0.49 / 0.56, back 0.29 / 0.51. Every pinned still on this set comes from stage 1b (generated from photos on a model), so a high IoU says stages 2–4 kept what stage 1b drew, not that stage 1b drew the shop's garment. |
-| Cost | met | Measured for 5 of 5 products (GPU seconds and wall time measured; dollars are list-price estimates until the Modal invoice is read): azure-palm-baby-doll-dress 1576 s GPU, 2271 s wall, $1.66–$1.71; rosewater-blouse 1544 s GPU, 2246 s wall, $1.64–$1.70; rosewater-palazzo-pants 31 s GPU, 100 s wall, $0.03–$0.07; crimson-wildflower-maxi-skirt 1581 s GPU, 2232 s wall, $1.68–$1.74; woodstock-wanderer-knit-cardi 1564 s GPU, 2331 s wall, $1.65–$1.70. |
+| Size test | needs people | Five people who did not build it must pick the smaller size, without labels, in at least 4 of 5 products on the blind page (size mode). Bundles for the test: 1 of 5 products (3 more evaluated but kept off the panel on review: rosewater-blouse rejected, crimson-wildflower-maxi-skirt faulty, woodstock-wanderer-knit-cardi rejected); renders made for 2. Not run with people yet. **Do not run the panel on these assets yet:** Only 1 of 5 products has a panel bundle after runs 15 and 16b (the azure babydoll, run 16b; the crimson maxi skirt is kept for evaluation only, marked faulty on review; the blouse and the cardigan were rejected on review, the palazzo stopped before stage 2), the dress (run 16b: no grey cap above the sleeves any more) still shows the torso at the back of the shoulder in AU 8 from the side, has a cream unprinted flap at one side of the hem in turntable_b frames about 84-159 (seeded by a cream tail below the hem of its own stage 1b back still, which the QA 0.10.1 recompose keeps and stage 2 grows; a stage 1b still defect) and a translucent lower skirt with the grey leg showing through and ragged tips below the hem in turntable_a frames about 32-56 (stage 2), and the skirt is narrower than the mannequin at the hip in its stage 1b stills, so the asset is open at both hips (the grey hip shows from the front and a wedge to mid-thigh from the three-quarter view) and has no measurable waist or hip girth; see the run 15 and run 16b sections and the verdict below. (`spikes/garment-engine/data/bohohippychic/panel-hold.txt`) |
+| Fabric test | needs people | Same five people, fabric mode of the same page (linen versus silk of the same garment). Not run with people yet. **Do not run the panel on these assets yet:** Only 1 of 5 products has a panel bundle after runs 15 and 16b (the azure babydoll, run 16b; the crimson maxi skirt is kept for evaluation only, marked faulty on review; the blouse and the cardigan were rejected on review, the palazzo stopped before stage 2), the dress (run 16b: no grey cap above the sleeves any more) still shows the torso at the back of the shoulder in AU 8 from the side, has a cream unprinted flap at one side of the hem in turntable_b frames about 84-159 (seeded by a cream tail below the hem of its own stage 1b back still, which the QA 0.10.1 recompose keeps and stage 2 grows; a stage 1b still defect) and a translucent lower skirt with the grey leg showing through and ragged tips below the hem in turntable_a frames about 32-56 (stage 2), and the skirt is narrower than the mannequin at the hip in its stage 1b stills, so the asset is open at both hips (the grey hip shows from the front and a wedge to mid-thigh from the three-quarter view) and has no measurable waist or hip girth; see the run 15 and run 16b sections and the verdict below. (`spikes/garment-engine/data/bohohippychic/panel-hold.txt`) |
+| Chart agreement | not yet measurable | 1 of 4 evaluated products within ±2 cm at their critical anchors after calibration (1 without a stage 4 mesh); 4 of 5 needed. After per-ring calibration this is close to 0 by construction, so also read the error before calibration: azure-palm-baby-doll-dress at chest: max \|error\| 0.74 cm before calibration, 0.00 cm after the global scale, 0 by construction with one critical anchor, 0.00 cm after calibration; rosewater-blouse at chest: max \|error\| 10.85 cm before calibration, 0.00 cm after the global scale, 0 by construction with one critical anchor, 6.65 cm after calibration; crimson-wildflower-maxi-skirt at waist: no girth at waist (its cloth does not reach the ring; on its own waistband no closed tape, an opening of 5.81 cm; bridged 94.23 cm against the chart's 80.50); woodstock-wanderer-knit-cardi at chest: no girth at chest. |
+| View agreement | needs people | The merchant must confirm that the front and back renders are recognisably their garment. IoU against the pinned stills (visible with the mannequin in front / garment silhouette alone): azure-palm-baby-doll-dress front 0.90 / 0.90, back 0.92 / 0.92; rosewater-blouse front 0.50 / 0.46, back 0.69 / 0.80; crimson-wildflower-maxi-skirt front 0.89 / 0.85, back 0.89 / 0.89; woodstock-wanderer-knit-cardi front 0.49 / 0.56, back 0.29 / 0.51. Every pinned still on this set comes from stage 1b (generated from photos on a model), so a high IoU says stages 2–4 kept what stage 1b drew, not that stage 1b drew the shop's garment. |
+| Cost | met | Measured for 5 of 5 products (GPU seconds and wall time measured; dollars are list-price estimates until the Modal invoice is read): azure-palm-baby-doll-dress 1503 s GPU, 2135 s wall, $1.59–$1.62 (stage 1b recomposed on CPU from an earlier run; that run's stage 1b GPU not included); rosewater-blouse 1544 s GPU, 2246 s wall, $1.64–$1.70; rosewater-palazzo-pants 31 s GPU, 100 s wall, $0.03–$0.07; crimson-wildflower-maxi-skirt 1581 s GPU, 2232 s wall, $1.68–$1.74; woodstock-wanderer-knit-cardi 1564 s GPU, 2331 s wall, $1.65–$1.70. |
 | Write-up | not met | This document covers the per-product results. Chosen models and licences are in docs/research/garment-engine.md; failures and the tolerances to use from Phase 1 can only be set once the GPU runs above exist. |
 
 Blind test page with these products pre-selected: `http://127.0.0.1:5178/blind.html?products=eval/azure-palm-baby-doll-dress` (viewer dev server, `pnpm --filter @curtain/garment-spike viewer`). It needs the bundles in `out/eval/`, so run the report with GPU outputs first. Not for the panel yet (see the size test row). Screenshot: [blind page](../../spikes/garment-engine/out/eval/blind-size-pair-1.png).
 
-## Runs 10–15 timeline
+## Runs 10–16b timeline
 
 Six GPU runs on Modal (GitHub Actions): the spike's synthetic shirt dress `aalter-studio-2` (runs 10, 11), the shop's `azure-palm-baby-doll-dress` (runs 12–14), and all five shop products (run 15). Costs are the runs' own `cost_summary.json` records: GPU seconds measured, dollars list price × GPU seconds (estimates, GPU only; no Modal invoice read yet). Details per run are in `spikes/garment-engine/modal/README.md` ("after run N" sections).
 
@@ -39,7 +39,8 @@ Six GPU runs on Modal (GitHub Actions): the spike's synthetic shirt dress `aalte
 | 13 | same product, export 0.4.0, stage 1b only, FASHN and Qwen | Both dressing engines on the proxy-dressed target | FASHN: the right garment on both views (knee-length babydoll, the shop's pastel print on cream, puffed sleeves, tiered skirt), shorter and narrower than the proxy. Qwen: a solid blue dress, because the prompt took "blue" from the product name "Azure". QA 0.3.0 failed every still; its score ranked Qwen's blue front best | Export 0.5.0 takes the colour from the photo's pixels, QA 0.4.0–0.5.0 adds print fidelity, a leg gap counted only above the garment's own hem and a silhouette tolerance band, and picks the engine (on run 13's stills: FASHN on both views) | 189 | $0.21–0.58 |
 | 14 | same product, job `azure-palm-baby-doll-dress-6d2f2611a144` (export 0.4.0), FASHN only, `--accept-failed-dress` | The whole chain on a shop product: stage 1b → stage 2 with the proxy control → stage 4 on garment masks | Stills: FASHN's babydoll again; QA 0.3.0 failed them on the old silhouette IoU (0.835 / 0.828 < 0.85) and 6 leg-gap rows on the front (QA 0.4.0 replaced that IoU by a tolerance band and counts leg-gap rows only above the hem; run 14's stills were not re-scored with it). Stage 2: the turntable keeps the print, the puffed sleeves, the waist tie and the tiered skirt in every view; consistency 0.3.0 flagged 31 of 243 frames (turntable_a 35–37 and 43–45, turntable_b 34–47, all side views, and 70–72; motion 73–80), 0 artefact frames. The prompt still said "a blue … dress" (export 0.4.0 predates the colour fix); the pinned stills carried the print anyway. Stage 4: mask IoU 0.925 train / 0.917 holdout, 11,999 triangles. The evaluation below | This write-up: the evaluation tooling fixed on the first real mesh (next section) | 1493 | $1.57–1.63 |
 | 15 | all five shop products, export 0.6.0 (proxy 0.3.0, prompts 0.3.0, stage 1b QA 0.6.1), GitHub Actions run 42402554810, code at 91ed5b2, `--accept-failed-dress` | Every category: dress, blouse, trousers, skirt, cardigan | Azure babydoll (`de3bc1eeb3e0`): stage 1b passed, stills and frames right (puff sleeves, print, babydoll, hem higher than run 14). Maxi skirt (`9a2b6e7f37ce`): stage 1b failed the front on the provisional silhouette score (0.864, overridden); waistband and print right, but at the hips the stills are narrower than the mannequin and the frames open into a slit at the side (the founder: "see the hips"). Blouse (`129498b959df`): FASHN stills torn (print patches with the mannequin through them, the back a pale blotchy shirt), stage 2 frames with black panels on the back and side. Cardigan (`56e306f6033b`): front a shrunken bolero, back a white sleeveless top with holes, frames with black and grey halves and a changing garment. Palazzo (`b85affd79b61`): FASHN drew a closed skirt in both views (legs merged in 259 of 259 rows); the type gate (QA 0.6.1) stopped it before stage 2. Blouse and cardigan reached stage 2 because `--accept-failed-dress` overrides the silhouette and fidelity failures (3,108 GPU s, $3.29–3.40 spent on two rejected products) | This section: stage 4t, the drape log and the evaluation on the two good products; the hem scan past openings, the waistband girth and the viewer's waistband pins for the skirt; blouse, palazzo and cardigan marked rejected in `review.json`. After the run, drape-prior P0 (D15 ease fix) changed the blouse, skirt and cardigan proxies by 1–2 cm, so their current exports are not run 15's controls | 6295 | $6.66–6.93 |
-| **Total** | | | | | **12943** | **$13.55–14.45** |
+| 16a, 16b | azure only for 16b (same job `de3bc1eeb3e0`, export 0.6.0); 16a was stage 1b alone for all five (QA 0.9.0), 16b recomposed azure's 16a FASHN stills on CPU with stage 1b QA 0.10.1 (`--recompose-dress`, pixel hashes `d4cbc556…` / `695c5145…` = the reviewed stills) and ran stage 2 + stage 4 | Whether stills without the grey shoulder caps (present in runs 14, 15 and 16a) give frames and an asset without them | Stills: the caps are covered by the garment's own pixels, but the recompose grew the garment mask along the whole outline, not only at the caps (front +1,557 px, back +1,312 px against run 15's stills; only 706 / 539 of them in the cap rows 200–280, about 225 per view at the hem rows 520–560), and so keeps a thin cream tail hanging below the back hem at the mannequin's left (the cut tie string already in the raw FASHN back, which run 15's composite clipped; flagged in no review of the stills). Stage 2: no grey cap above the sleeves in any turntable frame (grey shoulder pixels per frame 357 → 78 on average, the rest at the neck edge), no black panels, no flicker; but the tail grows into a plain cream, unprinted flap swinging out at that side of the hem in turntable_b frames about 84–159 (about 75 of 160 frames, half the turn; up to 36 px, about 10 cm, at 104–108), and in turntable_a frames about 32–56 the lower skirt on the mannequin's right turns into a translucent panel with the grey leg showing through and ragged tips below the hem. Consistency 0.3.0 flagged 31 of 243 frames (run 15: 41). The motion clip (not used by stage 4t) again shows a sleeveless strappy dress, as in run 15 | Kept as the azure panel bundle (section "Run 16b" below); the hem flap is a stage 1b still defect (the 0.10.1 recompose) that stage 2 amplified, and the translucent hem panel a stage 2 defect, both open | 1503 (stages 2 + 4 only; stage 1b: 34.6 s in run 16a) | $1.59–1.62 (+ about $0.04 for 16a's azure stage 1b) |
+| **Total, runs 10–15** | | | | | **12943** | **$13.55–14.45** |
 
 ### What broke in the evaluation tooling on the first real mesh, and the fix
 
@@ -196,18 +197,65 @@ Run 14 re-logged with the same code: flare 1.35 → 1.33, hem −1.81 cm, flat-l
 - **Skirt, viewer (after the waistband pins):** a floor-length printed skirt hanging from its band in all three sizes; 16 visibly wider than 8 at the top. The texture reads as red with white florals but is streaked by the drape's vertical folds. From the front the grey hip shows at both sides of the band in every size; from the three-quarter view a grey wedge runs from the band to about mid-thigh at the mannequin's left, from the side the hip shows under the arm (re-rendered after this evaluation, same picture). The fit map is almost uncoloured: the fit engine's waist band sits at our waist ring, where the cloth barely is (AU 8 a faint red line at the top edge, 16 a faint blue). Before the fix the front of every size had slid down to the knees.
 - **The 2DGS meshes** of both products show the mannequin through the cloth (17.5–24.7 % inside), as run 14's did.
 
-## Verdict per Phase 0 acceptance item (after run 15)
+## Run 16b (8 Nov 2026): azure from stills without grey shoulder caps
+
+Run 16b re-ran stage 2 (Wan2.2-Fun-A14B-Control, same seeds 43/44/45, same control proxy, same job `azure-palm-baby-doll-dress-de3bc1eeb3e0`) and stage 4 (2DGS) for the azure babydoll only, pinned to run 16a's FASHN stills recomposed on CPU with stage 1b QA 0.10.1: the grey mannequin shoulder caps that runs 14, 15 and 16a had above the puff sleeves are covered with the garment's own pixels (`conform_edges`; the stills' pixel hashes match the reviewed ones). The raw FASHN outputs are the same images as run 15's (raw back differs by a mean of 0.22 in 8 bit, a re-encode), but the recomposed stills differ from run 15's at the hem as well as at the caps: the 0.10.1 composite adds 1,557 (front) and 1,312 (back) garment pixels and drops 14 / 7; only 706 / 539 of the added pixels lie in the cap rows (200–280), about 225 per view at the hem rows (520–560, x 121–356), and on the back still they keep a thin cream tail hanging below the hem at the mannequin's left (the garment now reaches row 539 against 528; the cut tie string that `modal/README.md` lists as cosmetic). It is in `raw/back_fashn.png`, `recomposed/back_fashn.png` and `stage1b/back.png`, not in run 15's `back.png`, and none of the reviews of these stills flagged it. So run 15 against run 16b is not a test of the caps alone. The job is now `out/phase0/azure-palm-baby-doll-dress`; run 15's is kept as `-run15`, run 14's as `-run14`. Stage 4t 0.3.0 (97 s CPU), the drape log and `report:bohohippychic -- --renders` ran on it exactly as on run 15; the report evaluates runs 14 and 15 next to it with the same tooling.
+
+### What the frames show (all 160 turntable frames and the motion clip looked at, next to run 15's)
+
+- **Shoulders: fixed.** Run 15's frames show the grey cap above both sleeves from the front (0–20, 140–159) and the back (60–100); run 16b's show print there in every view (`compare/run15-vs-current-frames-shoulders.png`). Measured roughly (bare-mannequin control mask minus the garment mask, rows 215–262, neck columns left out): 357 grey pixels per frame on average in run 15, 78 in run 16b (front frame 0: 259 → 11; back frame 80: 333 → 72). In stage 4t the cap texels sampled from a frame rise from 47.5 % to 79.8 % (the rest is diffusion fill): in run 15 more than half the cap print was synthesized over pixels that were grey in the frames.
+- **Shoulders, residual:** no grey cap above the sleeves in any turntable frame; the 78 px per frame that remain sit at the neck edge (the V-neck opening and the upper back near the neck in the side views, e.g. frame 128), not on the caps.
+- **New: a cream flap at the side hem, seeded by the stage 1b back still.** Turntable_b starts from the back still with its cream tail below the hem (frame 80 shows it at the same place), and from frame 84 Wan grows it into a plain cream, unprinted panel swinging out from the hem at the mannequin's left, through frame 159: about 75 of 160 frames, half the turn. Against run 15's garment masks 20–40 rows above the hem the skirt is wider by +15 px at frame 84, +25 to +29 at 88–100, +31 at 104 (36 px at the most, about 10 cm, at 104–108), +18 to +27 at 112–136, +15 at 144–148, +12 at 152 and +7 at 156, against 0 to ±5 in frames 0–80; the mask area is +1,700 to +3,400 px from frame 84 on. The stage 2 segmentation keeps it as garment (`compare/run15-vs-current-frames-hem-105-145.png`, `compare/run15-vs-current-masks-hem.png`). Run 15 has a smaller one of the same colour in frames 20–30 and 125–145. It is not the print, so it reads as a lining or a stray panel. Its origin is stage 1b (the 0.10.1 recompose keeping the tail), which stage 2 amplifies; the fix belongs there: limit `conform_edges` to the rows where our body runs past the garment (the caps), or trim fragments hanging below the hem in the QA, and re-review the stills at the hem as well as at the shoulders. Stage 4t fits it: the hem girth is 155.9 cm against run 15's 149.5 (+6.4), the hem flare 1.374 against 1.325, the hem line (median per 10°) 0.9 cm lower, and the mesh at 90° and 180° bulges past the frame at the back of the hem (blue in `compare/run15-vs-current-turntable-90.png`); in the viewer at M it shows only as a slightly longer back hem. Not filled or trimmed.
+- **New, missed in the first pass: a translucent, ragged hem panel.** In turntable_a frames about 32–56 (front to back through the mannequin's right side) the lower skirt on the mannequin's right turns greyish and see-through: the grey leg shows through the printed cloth (32–42), and ragged tips hang below the hem at 40, 46 and 50 (crops in `compare/run15-vs-current-hem-32-56.png`). Run 15 has nothing like it at 32–40 and only a smaller version at 46–50. The mask outline does not change there (hem width within ±1 px of run 15's), so only looking finds it. The stage 4t per-view IoU puts most of run 16b's loss here: frames 40–80 0.923 / 0.906 (visible / silhouette) against run 15's 0.939 / 0.920, while frames 80–120, where the flap is, are level (0.924 / 0.904 against 0.925 / 0.903); 0–40 are slightly better (0.910 / 0.894 against 0.905 / 0.884) and 120–160 slightly worse (0.895 / 0.877 against 0.900 / 0.882). The stage 2 frame in `compare/run15-vs-current-turntable-90.png` (frame 40) shows the panel too.
+- **No black panels, no flicker:** the darkest frame has 129 pixels below luminance 25 (run 15: 159), consecutive frames differ by 2.94 on average (max 4.02 at 136; run 15: 3.02, max 4.05), the two seams 3.21 / 2.47 (run 15: 3.28 / 2.56). Consistency 0.3.0 flags 31 of 243 frames (run 15: 41): the same side views 114–127 and 35–37 on garment IoU (0.77–0.82), frames 17–18 on skirt cover, frame 8 on 4 leg-gap rows of 61 (looked at: a closed skirt whose hem steps up at the button placket between the legs, not two legs), motion 53 and 71–80 outside the envelope. Frame 22 has skirt cover 0.094 on 4 skirt-zone rows (side view, below the 20-row minimum, not flagged).
+- **The motion clip** (81 frames, not used by stage 4t or the bundle) again draws a sleeveless strappy sundress, not this garment, and fades out at the end, as in run 15 (`compare/run15-vs-current-motion.png`); consistency v1 now flags 68 of its 81 frames (run 15: 4).
+
+### Measured, run 16b against run 15 and run 14 (stage 4t, same tooling)
+
+| | Run 16b | Run 15 | Run 14 |
+| --- | --- | --- | --- |
+| Stage 1b | QA 0.10.1 pass (recomposed 16a stills, caps covered) | QA 0.6.1 pass (grey caps, not flagged then) | QA 0.3.0 FAIL, overridden |
+| Chest by the tape before calibration | 101.26 cm (−0.74 against 102), global scale 1.007 | 101.27 (−0.73) | 101.15 (−0.85) |
+| Waist / hip (not fitted by the block) | 85.59 / 113.48 | 85.25 / 112.88 | |
+| Graded chest against the printed table, AU 8–16 | −2 / −1 / 0 / +1 / 0 | same | |
+| Flat-lay shoulder to hem (printed 91) | 89.79 (−1.21); graded −2.22 / −1.22 ×4 | 89.98 (−1.02) | 92.54 |
+| Vertical drop | 81.25 | 81.64 | 84.42 |
+| Hem line above the floor (median per 10°) / centre front | 56.46 / 57.35 | 57.35 / 56.96 | 55.46 / 54.18 |
+| Hem girth / flare | 155.9 cm / 1.374 | 149.5 / 1.325 | |
+| Pinned stills IoU visible | front 0.901, back 0.924 | 0.889, 0.938 | 0.904, 0.933 |
+| Turntable 0° / 90° / 180°, visible (silhouette) | 0.898 (0.898), 0.906 (0.843), 0.922 (0.919) | 0.885 (0.883), 0.929 (0.860), 0.932 (0.930) | |
+| Holdout (32 frames) visible / silhouette | 0.9127 / 0.8956 | 0.9176 / 0.8986 | 0.9009 / 0.8841 |
+| Train visible / silhouette | 0.9128 / 0.8951 | 0.9173 / 0.8972 | 0.9008 / 0.8828 |
+| Shop photo (indicative) | 0.747 / 0.663 | 0.740 / 0.666 | |
+| Clearance | 0 of 5,676 inside; closest 3.33 mm by the exact distance, **2 vertices below the 4 mm clearance** (2 rays the push-out left unresolved), 0 below 3 mm | 0 of 5,661; closest 4.0 mm | 0 of 5,778; 4.0 mm |
+| Texture: chart texels sampled / shoulder caps sampled | 95.4 % / 79.8 % | 93.6 % / 47.5 % | |
+| Texture holdout MAE (one mean colour) | 20.65 (23.34) | 21.86 (24.82) | 21.0 (24.3) |
+| Mesh, bundle | 11,013 triangles, 3 components; 755 KB | 10,983; 750 KB | 11,216; 765 KB |
+| 2DGS on the same video | 21.5 % of the cloth more than 3 mm inside, chest 98.37 (−3.63), turntable visible 0.63 / 0.76 / 0.65 | 24.7 %, 97.68, 0.64 / 0.76 / 0.63 | |
+| GPU (estimate) | 1,503 s, $1.59–1.62 for stages 2 + 4 only (the job's `cost_summary.json` counts 2 stages); stage 1b ran in run 16a (34.6 s, about $0.04) and was recomposed on CPU here, so the product's chain is about 1,537 s, about $1.63–1.66 | 1,576 s, $1.66–1.71 (3 stages, stage 1b 25.6 s included) | 1,493 s, $1.57–1.63 |
+
+Drape prediction P0 in shadow (same cell, same prediction; run 16b's job has its own prediction.json, run 15's was predicted afterwards): hem flare 1.35 against 1.374 (0.20 σ), hem height −0.81 cm (0.41 σ; run 15 +0.08), flat-lay −1.21 (0.61 σ; −1.02), underbust ease +10.8 cm (1.35 σ; +9.0, 1.13 σ), sleeve +32.5 (4.06 σ, unchanged), hem girth +7.0 % (+2.6 %); within 1.28 σ 3 of 5 informative rows (run 15: 4 of 5, the underbust row crosses 1.28 σ). P0 shape against the mesh: Chamfer **1.871 cm** (run 15 1.672), F 0.60 at 1 cm (0.70); shoulders 1.11 (1.13), bodice 0.81 (0.75), skirt **1.06 (0.70)**. The skirt's worse Chamfer and the hem rows are the side flap above. Not a saving either: run 16b's 1,503 GPU s leave out stage 1b, run 15's 1,576 include it; the stage 2 and 4 seconds are about the same (1,503 against 1,550).
+
+### What the run 16b asset looks like (every render looked at; `out/eval/azure-palm-baby-doll-dress/compare/run15-vs-current-*.png`, run 15 on top, same cameras)
+
+- **Viewer, M, AU 8 / 12 / 16, front, three-quarter, side; XS, XXL; fit map:** the same dress as run 15's: closed cloth, print, puff sleeves with gathered cuffs, sizes visibly different, fit map AU 8 red at the chest, 12 light blue, 16 blue. The shoulder tops are closed in both (stage 4t's shoulder-cap rays closed run 15's too), but run 16b's cap print comes from the frames rather than from fill. **Still there in both:** the grey patch at the back of the shoulder next to the neck in AU 8 from the side (about the same size), the straight side view, and on XXL AU 8 (−30.7 cm at the chest) draped loose without strain. Run 16b's back hem hangs slightly lower from the three-quarter view.
+- **Turntable overlays** (`run15-vs-current-turntable-0/90/180.png`): at 0° the run 15 frame shows grey caps above both sleeves, run 16b's none; both meshes have a dark smudge in the baked texture on the back of the left sleeve head at 180° (in both runs); at 90° run 16b's mesh hem flares out at the back past the frame (the flap seen in other frames).
+- **Stills** (`run15-vs-current-stills.png`): the same FASHN drawing; run 16b's front and back have print where run 15's showed grey caps.
+
+**Decision:** run 16b replaces run 15 as the azure panel bundle. It removes the defect a person saw (grey caps in the stills and frames), which run 15's asset only hid by synthesizing the cap print; it measures the same at the chest (−0.74 against −0.73 cm) and on the printed table, and its texture is closer on the held-out frames. Mixed: the pinned stills (front 0.901 against 0.889, back 0.924 against 0.938). Worse: the holdout IoU by 0.005 / 0.003 (most of it in frames 40–80, the translucent hem panel), turntable IoU at 90° (0.906 / 0.843 against 0.929 / 0.860) and 180° (0.922 against 0.932), the hem (the cream side flap: hem girth +6.4 cm, hem line −0.9 cm, flat-lay −0.19 cm, P0 skirt Chamfer 0.70 → 1.06 cm), and clearance (2 vertices at 3.3 mm instead of ≥ 4 mm). Two visible defects are new and open: the cream flap, which the stage 1b back still already seeds (a tail below the hem kept by the 0.10.1 recompose), and the translucent hem panel with the grey leg showing through in turntable_a 32–56 (stage 2). They are flagged here, in `review.json` and in `panel-hold.txt`, not repaired or filled. Both stills need a re-review at the hem before the founder signs off. Run 15 stays in `-run15` for comparison.
+
+## Verdict per Phase 0 acceptance item (after runs 15 and 16b)
 
 | Item | Verdict | Evidence |
 | --- | --- | --- |
-| Size test | **Needs the five-person panel; not run.** 1 of 5 products has a panel bundle (4 needed): the azure babydoll. The skirt has a bundle but is marked faulty in `review.json` (evaluated and rendered, off the blind page and not counted) | Azure (run 15, stage 4t): closed cloth, print, sizes visibly different; still the grey back-shoulder patch in AU 8 and the straight side view. Skirt (run 15, stage 4t): hangs from its band in all sizes after the waistband-pin fix, sizes visibly different at the top on the M mannequin (not between 12 and 16 on XS, not at all on XXL, where the top sits at the hip), but the hips show: the stills are 2.8 cm (front) and 2.0 cm (back) narrower than the mannequin at the hip and the asset is open at both sides there (10.2 and 7.8 cm across at most, the left one down to 70 cm); the fit map is nearly blank. Not fit for the panel. Blouse and cardigan rejected on review, palazzo stopped before stage 2 |
+| Size test | **Needs the five-person panel; not run.** 1 of 5 products has a panel bundle (4 needed): the azure babydoll (run 16b since 8 Nov). The skirt has a bundle but is marked faulty in `review.json` (evaluated and rendered, off the blind page and not counted) | Azure (run 16b, stage 4t): closed cloth, print, sizes visibly different; no grey shoulder caps in its stills or frames any more (run 15's frames had them; its asset synthesized the cap print); new: a plain cream flap at one side of the hem in about 75 frames (turntable_b 84–159), seeded by a cream tail the 0.10.1 recompose keeps below the back still's hem, fitted as a slightly longer, wider back hem (hem girth +6.4 cm); a translucent lower skirt with the grey leg showing through and ragged tips in turntable_a 32–56; and 2 vertices 3.3 mm from the mannequin (clearance 4 mm); still the grey back-shoulder patch in AU 8 and the straight side view. Skirt (run 15, stage 4t): hangs from its band in all sizes after the waistband-pin fix, sizes visibly different at the top on the M mannequin (not between 12 and 16 on XS, not at all on XXL, where the top sits at the hip), but the hips show: the stills are 2.8 cm (front) and 2.0 cm (back) narrower than the mannequin at the hip and the asset is open at both sides there (10.2 and 7.8 cm across at most, the left one down to 70 cm); the fit map is nearly blank. Not fit for the panel. Blouse and cardigan rejected on review, palazzo stopped before stage 2 |
 | Fabric test | **Needs the five-person panel; not run** | No linen/silk judgement of either asset |
-| Chart agreement | **Not met on what exists: 1 of 2 good products passes; not yet measurable as a gate (4 of 5 needed)** | Azure: chest 101.27 cm against 102, −0.73 before calibration, graded chest −2 / −1 / 0 / +1 / 0 against the printed table, flat-lay length 90.12 against 91. Skirt: no girth at its one critical anchor (the waist): the generated band sits 2.6–10.8 cm below our waist ring and is open 5.8 cm at one side; bridged it is 94.23 cm against the chart's 80.5. Hip (not a fit point of the a-line block): no girth either, open at both sides; bridged 107.65 cm against the chart's 109 (−1.35). No skirt length is printed. Blouse (2DGS, rejected): −10.85 cm; cardigan: no chest girth |
-| View agreement | **Measured; merchant confirmation still needed** | Against the pinned stills, visible: azure 0.889 / 0.938, skirt 0.894 / 0.891 (both above 0.85); holdout visible 0.918 and 0.915. The stills are generated, so this measures stages 2–4t |
-| Cost | **Measured (GPU seconds); dollars list-price estimates** | Run 15: 6,295 GPU s, $6.66–6.93 for five products (good products $1.66–1.74 each; $3.29–3.40 went to the two rejected products that `--accept-failed-dress` let through). Runs 10–15: 12,943 GPU s, $13.55–14.45. Stage 4t adds about 90 s of CPU per product. Modal invoice not read |
+| Chart agreement | **Not met on what exists: 1 of 2 good products passes; not yet measurable as a gate (4 of 5 needed)** | Azure (run 16b): chest 101.26 cm against 102, −0.74 before calibration (run 15: −0.73), graded chest −2 / −1 / 0 / +1 / 0 against the printed table, flat-lay length 89.79 against 91 (run 15: 89.98; 90.12 as first reported). Skirt: no girth at its one critical anchor (the waist): the generated band sits 2.6–10.8 cm below our waist ring and is open 5.8 cm at one side; bridged it is 94.23 cm against the chart's 80.5. Hip (not a fit point of the a-line block): no girth either, open at both sides; bridged 107.65 cm against the chart's 109 (−1.35). No skirt length is printed. Blouse (2DGS, rejected): −10.85 cm; cardigan: no chest girth |
+| View agreement | **Measured; merchant confirmation still needed** | Against the pinned stills, visible: azure run 16b 0.901 / 0.924 (run 15 0.889 / 0.938), skirt 0.894 / 0.891 (all above 0.85); holdout visible azure 0.913 (run 15 0.918), skirt 0.915. The stills are generated, so this measures stages 2–4t |
+| Cost | **Measured (GPU seconds); dollars list-price estimates** | Run 15: 6,295 GPU s, $6.66–6.93 for five products (good products $1.66–1.74 each; $3.29–3.40 went to the two rejected products that `--accept-failed-dress` let through). Run 16b (azure, stages 2 and 4 only on stills recomposed on CPU): 1,503 GPU s, $1.59–1.62; with run 16a's azure stage 1b (34.6 s, about $0.04) the product is about 1,537 s, $1.63–1.66, against run 15's 1,576 s, $1.66–1.71 (the generated report's cost row now says that stage 1b is not included). Runs 10–15: 12,943 GPU s, $13.55–14.45 (run 16a's stage 1b not counted here). Stage 4t adds about 90 s of CPU per product. Modal invoice not read |
 | Write-up | **Not met** | One video model and one reconstruction route (2DGS and the CPU template fit on the same video). Three of five run 15 products failed at stage 1b (FASHN), which no later stage repairs |
 
-What the assets need before the panel: three more products whose stills are right (stage 1b is now the bottleneck: FASHN tore the blouse, shrank the cardigan into a bolero and closed the palazzo legs; `--accept-failed-dress` should not have spent stage 2 on the first two); for the skirt, stills that are at least as wide as the mannequin at the hip and whose band sits at the waist (the narrow hips, the side openings and the low front are all in stage 1b's stills already; no later stage should paper over them); for the dress, the run 14 faults listed above.
+What the assets need before the panel: three more products whose stills are right (stage 1b is now the bottleneck: FASHN tore the blouse, shrank the cardigan into a bolero and closed the palazzo legs; `--accept-failed-dress` should not have spent stage 2 on the first two); for the skirt, stills that are at least as wide as the mannequin at the hip and whose band sits at the waist (the narrow hips, the side openings and the low front are all in stage 1b's stills already; no later stage should paper over them); for the dress, the run 14 faults listed above, run 16b's cream hem flap (seeded in stage 1b: the 0.10.1 recompose keeps a tail below the back hem; limit `conform_edges` to the cap rows or trim hanging hem fragments in QA, then re-review the stills at the hem) and its translucent hem panel in turntable_a 32–56 (stage 2).
 
 *The section above is written by hand in `spikes/garment-engine/data/bohohippychic/phase0-written.md` and copied in by the report script; everything else is generated.*
 
@@ -226,7 +274,7 @@ What the assets need before the panel: three more products whose stills are righ
 
 ### 1. Azure Palm Baby Doll Dress (`azure-palm-baby-doll-dress`)
 
-**Review of run 15 (stills and frames looked at):** accepted. stage 1b passed; stills and frames right: puff sleeves, print, babydoll, hem higher than run 14.
+**Review of run 16 (stills and frames looked at):** accepted. run 16b (stage 2 + 4 on run 16a's FASHN stills recomposed with stage 1b QA 0.10.1): no grey cap above the sleeves in the stills or in any turntable frame (the residual grey, 78 px per frame, sits at the neck edge); print, puff sleeves, babydoll as in run 15. Open, flagged, not repaired: (1) the recompose grew the garment mask along the whole outline, not only at the caps, and keeps a thin cream tail below the hem of the back still at the mannequin's left (not in run 15's still; missed when the stills were reviewed); stage 2 grows it into a plain cream unprinted flap swinging out at that side of the hem in turntable_b frames about 84-159 (about half the turn, up to ~10 cm at 104-108), which stage 4t fits as a slightly longer, wider back hem; (2) in turntable_a frames about 32-56 the lower skirt on the mannequin's right is translucent, with the grey leg showing through and ragged tips below the hem (smaller in run 15 at 46-50); most of the holdout IoU loss against run 15 sits in frames 40-80; (3) 2 vertices 3.3 mm from the mannequin; (4) the motion clip draws a sleeveless strappy dress (not used). Looked at by the evaluating agent and a reviewer, not yet by the founder; the stills need a re-review at the hem.
 
 Dresses → category `dress` (babydoll). Completeness 0.697, incomplete.
 
@@ -259,31 +307,31 @@ Data warnings from the selection:
 | --- | --- | --- |
 | 1 ingest and validate | failed | photo contract not met: front photo does not meet the contract (worn by a model, busy background, long edge 1200 px < 1600); add one on a hanger, flat-lay or ghost mannequin; back photo does not meet the contract (worn by a model, busy background, long edge 1200 px < 1600); add one on a hanger, flat-lay or ghost mannequin; base size 12 is our default, not confirmed by the shop |
 | job export | done | job azure-palm-baby-doll-dress-de3bc1eeb3e0, input hash de3bc1eeb3e0 |
-| 1b dress the mannequin | done | engine fashn; QA pass; QA overridden (--accept-failed) |
-| 2 image to video | done | alibaba-pai/Wan2.2-Fun-A14B-Control, 40 steps, 160 turntable frames; seam drift 3.3 / 2.6 (8-bit mean abs) |
+| 1b dress the mannequin | done | engine fashn; QA pass |
+| 2 image to video | done | alibaba-pai/Wan2.2-Fun-A14B-Control, 40 steps, 160 turntable frames; seam drift 3.2 / 2.5 (8-bit mean abs) |
 | 3 separation | done | 160 garment masks of the generated frames (`stage2/garment_mask/`, garment-segment-0.1.0; 0 frames ambiguous with the mannequin); stage 4 trains on them |
-| 4 reconstruction | done | 11999 triangles, mask IoU train 0.9301 / holdout 0.9223 |
-| 4t template fit + bake (CPU) | done | 10983 triangles, IoU visible / silhouette train 0.9173 / 0.8972, holdout 0.9176 / 0.8986, 0 vertices inside the mannequin |
+| 4 reconstruction | done | 11999 triangles, mask IoU train 0.9321 / holdout 0.9248 |
+| 4t template fit + bake (CPU) | done | 11013 triangles, IoU visible / silhouette train 0.9128 / 0.8951, holdout 0.9127 / 0.8956, 0 vertices inside the mannequin |
 | 5 anchoring and calibration | done | stage 4t template fit of the stage 2 video (CPU: the control proxy fitted to the garment masks, texture baked from the frames); global scale 1.007 |
 | 6 grading | done | 8, 10, 12, 14, 16 |
-| 7 QA (chart, view, mesh) | done | chart pass, view front 0.889, back 0.938, 10983 triangles |
-| 8 bundle | done | 750 KB in `spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/` |
+| 7 QA (chart, view, mesh) | done | chart pass, view front 0.901, back 0.924, 11013 triangles |
+| 8 bundle | done | 755 KB in `spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/` |
 
 **Metrics**
 
-Mesh: stage 4t template fit of the stage 2 video (CPU: the control proxy fitted to the garment masks, texture baked from the frames) (`stage4t/stage2/garment.glb`, sha256 c82423f4ce1c).
+Mesh: stage 4t template fit of the stage 2 video (CPU: the control proxy fitted to the garment masks, texture baked from the frames) (`stage4t/stage2/garment.glb`, sha256 a9798108cebe).
 
-**Chart agreement** at base size 12 (tolerance ±2 cm at the critical anchors: chest). Global scale 1.0072, from chest. The `empire` pattern block does not fit waist and hip (empire line hangs from the bust; the fit engine skips them too), so they are reported but neither critical nor calibrated. Girths are a tape measure round the outside of the slice (`src/tape.ts`): the ring's own body part only (a sleeve fused to the bodice is passed under, like a tape under the arm), ripples shorter than about 25° smoothed, holes up to 4 cm bridged, a wider opening refused; the closed slice polyline, where there is one, is shown for comparison.
+**Chart agreement** at base size 12 (tolerance ±2 cm at the critical anchors: chest). Global scale 1.0073, from chest. The `empire` pattern block does not fit waist and hip (empire line hangs from the bust; the fit engine skips them too), so they are reported but neither critical nor calibrated. Girths are a tape measure round the outside of the slice (`src/tape.ts`): the ring's own body part only (a sleeve fused to the bodice is passed under, like a tape under the arm), ripples shorter than about 25° smoothed, holes up to 4 cm bridged, a wider opening refused; the closed slice polyline, where there is one, is shown for comparison.
 
 | Anchor | Critical | Chart (cm) | Ease | Reconstructed, tape (cm) | Slice polyline (cm) | Before | After global scale | After calibration | Pass |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| chest | yes | 102.00 | +7.00 | 101.27 | 105.70 | -0.73 | 0.00 | 0.00 | pass |
-| waist | no | 81.50 | +4.00 (category default) | 85.25 | 85.40 | +3.75 | +4.36 | +4.36 | not fitted |
-| hip | no | 110.00 | +6.00 (category default) | 112.88 | 113.10 | +2.88 | +3.69 | +3.69 | not fitted |
+| chest | yes | 102.00 | +7.00 | 101.26 | 105.64 | -0.74 | 0.00 | 0.00 | pass |
+| waist | no | 81.50 | +4.00 (category default) | 85.59 | 85.76 | +4.09 | +4.72 | +4.72 | not fitted |
+| hip | no | 110.00 | +6.00 (category default) | 113.48 | 113.70 | +3.48 | +4.31 | +4.30 | not fitted |
 
-Before calibration max |error| 0.73 cm (within ±2); after the global scale alone 0.00 cm (within); after per-ring calibration pass. The last one is close to 0 by construction; the first two say how well the reconstruction held the garment's size.
+Before calibration max |error| 0.74 cm (within ±2); after the global scale alone 0.00 cm (within); after per-ring calibration pass. The last one is close to 0 by construction; the first two say how well the reconstruction held the garment's size.
 
-Other rings measured (no chart value, scaled by the global scale only): underbust 93.00, thigh 136.91, upper_arm 53.97 cm.
+Other rings measured (no chart value, scaled by the global scale only): underbust 94.83, thigh 140.21, upper_arm 53.08 cm.
 
 No girth (no cloth round the ring: it does not reach it, an opening wider than 4 cm, or cloth on less than 60 % of the way round): neck, shoulder, knee, wrist.
 
@@ -291,43 +339,43 @@ No girth (no cloth round the ring: it does not reach it, an opening wider than 4
 
 | Length | Mesh (cm) | Definition | Vertical drop (cm) | Printed (cm) | Difference | Note |
 | --- | --- | --- | --- | --- | --- | --- |
-| shoulder_to_hem | 90.12 | flat-lay | 81.64 | 91.00 | -0.88 | flat-lay: along the garment front from the high point shoulder (src/garmentLength.ts); vertical drop 81.64 cm |
-| waist_to_hem | 48.40 | — | — | — | — |  |
+| shoulder_to_hem | 89.78 | flat-lay | 81.25 | 91.00 | -1.22 | flat-lay: along the garment front from the high point shoulder (src/garmentLength.ts); vertical drop 81.25 cm |
+| waist_to_hem | 48.80 | — | — | — | — |  |
 | sleeve_length | 32.50 | — | — | — | — |  |
 
-Every shoulder-to-hem definition on the calibrated mesh (`src/garmentLength.ts`): high point shoulder, vertical drop to the front hem 81.64 cm; high point shoulder, along the garment front to the hem (flat-lay length) 90.12 cm; back neck at the centre back, along the garment back to the hem 79.48 cm; shoulder point (end of the shoulder), vertical drop to the front hem 76.94 cm.
+Every shoulder-to-hem definition on the calibrated mesh (`src/garmentLength.ts`): high point shoulder, vertical drop to the front hem 81.25 cm; high point shoulder, along the garment front to the hem (flat-lay length) 89.78 cm; back neck at the centre back, along the garment back to the hem 83.30 cm; shoulder point (end of the shoulder), vertical drop to the front hem 76.94 cm.
 
-**Grading against the shop's printed garment table** (graded targets in grading.json minus what the shop printed per size; the base size is calibrated to the chart, the other sizes follow the chart's steps; the shop's "Length" is read as shoulder to hem, flat-lay: grading.json's vertical drop + 8.48 cm, the base mesh's flat-lay minus drop):
+**Grading against the shop's printed garment table** (graded targets in grading.json minus what the shop printed per size; the base size is calibrated to the chart, the other sizes follow the chart's steps; the shop's "Length" is read as shoulder to hem, flat-lay: grading.json's vertical drop + 8.53 cm, the base mesh's flat-lay minus drop):
 
 | Size | chest graded | chest printed | diff | shoulder_to_hem graded | shoulder_to_hem printed | diff |
 | --- | --- | --- | --- | --- | --- | --- |
-| 8 | 92.00 | 94.00 | -2.00 | 88.12 | 90.00 | -1.88 |
-| 10 | 97.00 | 98.00 | -1.00 | 89.12 | 90.00 | -0.88 |
-| 12 | 102.00 | 102.00 | 0.00 | 90.12 | 91.00 | -0.88 |
-| 14 | 107.00 | 106.00 | +1.00 | 91.12 | 92.00 | -0.88 |
-| 16 | 112.00 | 112.00 | 0.00 | 92.12 | 93.00 | -0.88 |
+| 8 | 92.00 | 94.00 | -2.00 | 87.78 | 90.00 | -2.22 |
+| 10 | 97.00 | 98.00 | -1.00 | 88.78 | 90.00 | -1.22 |
+| 12 | 102.00 | 102.00 | 0.00 | 89.78 | 91.00 | -1.22 |
+| 14 | 107.00 | 106.00 | +1.00 | 90.78 | 92.00 | -1.22 |
+| 16 | 112.00 | 112.00 | 0.00 | 91.78 | 93.00 | -1.22 |
 
 **View agreement** (the calibrated garment rendered at turntable frame 0 and N/2 against the pinned stills' garment masks; "visible" draws the mannequin as an occluder, as a viewer does, "silhouette" is the garment alone):
 
 | View | Reference | IoU visible | IoU silhouette | Pass (visible ≥ 0.85, initial) | Invented back |
 | --- | --- | --- | --- | --- | --- |
-| front | stage1b `stage1b/garment_mask_front.png` | 0.889 | 0.886 | pass | no |
-| back | stage1b `stage1b/garment_mask_back.png` | 0.938 | 0.935 | pass | no |
+| front | stage1b `stage1b/garment_mask_front.png` | 0.901 | 0.901 | pass | no |
+| back | stage1b `stage1b/garment_mask_back.png` | 0.924 | 0.921 | pass | no |
 
 Against the shop photo (indicative only: different body, pose and camera; both silhouettes cropped and scaled to the same height):
 
 | View | Normalised IoU | Mirrored | Aspect render / photo |
 | --- | --- | --- | --- |
-| front | 0.740 | yes | 1.1 / 1.15 |
-| back | 0.666 | yes | 1.09 / 1.7 |
+| front | 0.747 | yes | 1.08 / 1.15 |
+| back | 0.663 | no | 1.08 / 1.7 |
 
 Against the generated turntable (stage 2 frames, their garment masks from the stage 2 segmentation, the masks stage 4 trained on):
 
 | Angle | Frame | Calibrated: visible | Calibrated: silhouette | Reconstructed: visible | Reconstructed: silhouette | Picture |
 | --- | --- | --- | --- | --- | --- | --- |
-| 0° | 0 | 0.885 | 0.883 | 0.884 | 0.882 | [turntable_0.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/view/turntable_0.png) |
-| 90° | 40 | 0.929 | 0.860 | 0.936 | 0.866 | [turntable_90.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/view/turntable_90.png) |
-| 180° | 80 | 0.932 | 0.930 | 0.929 | 0.927 | [turntable_180.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/view/turntable_180.png) |
+| 0° | 0 | 0.898 | 0.898 | 0.898 | 0.897 | [turntable_0.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/view/turntable_0.png) |
+| 90° | 40 | 0.906 | 0.843 | 0.914 | 0.850 | [turntable_90.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/view/turntable_90.png) |
+| 180° | 80 | 0.922 | 0.919 | 0.921 | 0.917 | [turntable_180.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/view/turntable_180.png) |
 
 Each picture: the stage 2 frame, the calibrated mesh with its baked texture (stage 4t) on our mannequin at the same camera, and the overlay (grey both, red frame mask only, blue mesh only).
 
@@ -335,79 +383,80 @@ Overlays: [front](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dres
 
 **Cloth inside the mannequin** (vertices more than 0.3 cm inside its torso, leg or arm section; hidden by the body in every render, the grey patches in the pictures): 0.0 % as reconstructed (0 vertices), 0.0 % after calibration.
 
-**Mesh health** (mesh as evaluated): 10983 triangles (budget 8000–15000: within), 5661 vertices, 3 components, 347 boundary edges, 0 non-manifold edges, 0 flipped edges, 0 degenerate triangles. Not checked: self-intersection; watertight where expected (openings at neckline, hem and cuffs are allowed but not located).
+**Mesh health** (mesh as evaluated): 11013 triangles (budget 8000–15000: within), 5676 vertices, 3 components, 347 boundary edges, 0 non-manifold edges, 0 flipped edges, 0 degenerate triangles. Not checked: self-intersection; watertight where expected (openings at neckline, hem and cuffs are allowed but not located).
 
-**Stage 4t** (template fit and bake, `stage4t/stage2/metrics.json`): the control proxy remeshed into cylindrical grids (body + two sleeves), carved and expanded along fixed rays to 128 training masks, 6 silhouette rounds, 439 Jacobi sweeps in 8 solves (every solve reached the 0.001 cm tolerance). Silhouette IoU per view, mean (min): train visible 0.9173 (0.8754), silhouette 0.8972 (0.8182); holdout (32 views never used) visible 0.9176 (0.889), silhouette 0.8986 (0.8255). Inside the mannequin (signed distance to mannequin.glb < 0): 0 of 5661 vertices; below the 0.4 cm clearance by that grid SDF: 0; by the exact distance to the mannequin's triangles the closest vertex is 0.4 cm away, 0 vertices lie below the 0.4 cm clearance and 0 below 0.3 cm. Mesh: 10983 triangles, 3 components, 10 boundary loops, 0 non-manifold edges, watertight no (open by design: one body tube and one tube per sleeve whose shoulder cap closes over the arm cap and overlaps the bodice (separate components, not stitched); openings at the neckline, hem, cuffs and underarms are the boundary loops). Texture: 2048² atlas from 128 training views, 93.6 % of the chart texels seen (the rest filled by diffusion), of the shoulder caps' 131146 texels (within 6 cm of either cap top) 47.5 % (the holdout check below does not cover the cap), JPEG 399 KB; on the held-out frames the texture's mean absolute error is 21.86 (one mean colour: 24.82), on 8 × 8 pixel blocks 14.38 (mean colour 18.75), 0–255.
+**Stage 4t** (template fit and bake, `stage4t/stage2/metrics.json`): the control proxy remeshed into cylindrical grids (body + two sleeves), carved and expanded along fixed rays to 128 training masks, 6 silhouette rounds, 453 Jacobi sweeps in 8 solves (every solve reached the 0.001 cm tolerance). Silhouette IoU per view, mean (min): train visible 0.9128 (0.8719), silhouette 0.8951 (0.8066); holdout (32 views never used) visible 0.9127 (0.8785), silhouette 0.8956 (0.82). Inside the mannequin (signed distance to mannequin.glb < 0): 0 of 5676 vertices; below the 0.4 cm clearance by that grid SDF: 2; by the exact distance to the mannequin's triangles the closest vertex is 0.333 cm away, 2 vertices lie below the 0.4 cm clearance and 0 below 0.3 cm. Mesh: 11013 triangles, 3 components, 10 boundary loops, 0 non-manifold edges, watertight no (open by design: one body tube and one tube per sleeve whose shoulder cap closes over the arm cap and overlaps the bodice (separate components, not stitched); openings at the neckline, hem, cuffs and underarms are the boundary loops). Texture: 2048² atlas from 128 training views, 95.4 % of the chart texels seen (the rest filled by diffusion), of the shoulder caps' 129530 texels (within 6 cm of either cap top) 79.8 % (the holdout check below does not cover the cap), JPEG 403 KB; on the held-out frames the texture's mean absolute error is 20.65 (one mean colour: 23.34), on 8 × 8 pixel blocks 13.49 (mean colour 17.48), 0–255.
 
 **Stage 4 (2DGS) against stage 4t (template fit)** on the same video, both through this evaluation:
 
 | Metric | stage 4 reconstruction of the stage 2 video (`stage4/stage2/garment.glb`) | stage 4t template fit of the stage 2 video (`stage4t/stage2/garment.glb`) |
 | --- | --- | --- |
-| chest girth as reconstructed (tape), cm | 97.68 | 101.27 |
-| chart: max \|error\| before calibration, cm | 4.32 | 0.73 |
+| chest girth as reconstructed (tape), cm | 98.37 | 101.26 |
+| chart: max \|error\| before calibration, cm | 3.63 | 0.74 |
 | chart: after the global scale, cm | 0.00 | 0.00 |
-| chart: after calibration, cm | 0.87 | 0.00 |
-| global scale | 1.044 | 1.007 |
-| turntable 0°: IoU visible / silhouette | 0.637 / 0.916 | 0.884 / 0.882 |
-| turntable 90°: IoU visible / silhouette | 0.760 / 0.822 | 0.936 / 0.866 |
-| turntable 180°: IoU visible / silhouette | 0.630 / 0.934 | 0.929 / 0.927 |
-| cloth inside the mannequin (> 0.3 cm), as reconstructed | 24.7 % | 0.0 % |
-| cloth inside the mannequin, after calibration | 19.1 % | 0.0 % |
-| triangles / components / boundary edges | 11999 / 3 / 1025 | 10983 / 3 / 347 |
-| shoulder to hem, vertical drop, cm | 82.42 | 81.64 |
-| shoulder to hem, flat-lay (along the front), cm | 84.67 | 89.98 |
-| colour in the bundle | one mean colour #BBB0A3 | baked texture |
-| bundle size | 258 KB | 750 KB |
+| chart: after calibration, cm | 0.58 | 0.00 |
+| global scale | 1.037 | 1.007 |
+| turntable 0°: IoU visible / silhouette | 0.627 / 0.923 | 0.898 / 0.897 |
+| turntable 90°: IoU visible / silhouette | 0.756 / 0.834 | 0.914 / 0.850 |
+| turntable 180°: IoU visible / silhouette | 0.652 / 0.937 | 0.921 / 0.917 |
+| cloth inside the mannequin (> 0.3 cm), as reconstructed | 21.5 % | 0.0 % |
+| cloth inside the mannequin, after calibration | 17.2 % | 0.0 % |
+| triangles / components / boundary edges | 11999 / 2 / 855 | 11013 / 3 / 347 |
+| shoulder to hem, vertical drop, cm | 82.60 | 81.25 |
+| shoulder to hem, flat-lay (along the front), cm | 87.76 | 89.79 |
+| colour in the bundle | one mean colour #BDB1A4 | baked texture |
+| bundle size | 254 KB | 755 KB |
 
-Evaluation time on the build machine: read 253 ms, measure 108 ms, calibrate 35 ms, grade 1 ms, view renders 1380 ms.
+Evaluation time on the build machine: read 279 ms, measure 94 ms, calibrate 31 ms, grade 1 ms, view renders 1071 ms.
 
 **Drape prediction P0 in shadow mode** (`stage4t/stage2/shadow.json`, predictor drape-prior-p0-0.2.0, cell `dress|empire|above-knee|fluid`; the prediction drives nothing yet: it is compared with what stage 4t measured on this job's mesh):
 
 | Parameter | Predicted | On the P0 proxy | Measured (stage 4t) | Error | σ | |error| / σ | Note |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| hemFlare | 1.350 | 1.326 | 1.325 | -0.025 | 0.12 | 0.21 | predicted before leg clearance; measured on the hem ring 2 cm above the lowest body cloth |
-| defaultEase.underbust | 6.000 | 6.129 | 15.002 | 9.002 | 8.00 | 1.13 | cm of girth over mannequin M |
-| hemY | 57.271 | 57.271 | 57.350 | 0.079 | 2.00 | 0.04 | hem height above the floor; rule: shoulder_to_hem 91 cm (flat-lay: along the front from the HPS) |
-| length.hps_surface | 91.000 | 90.970 | 89.980 | -1.020 | 2.00 | 0.51 | flat-lay: along the front from the HPS |
+| hemFlare | 1.350 | 1.326 | 1.374 | 0.024 | 0.12 | 0.20 | predicted before leg clearance; measured on the hem ring 2 cm above the lowest body cloth |
+| defaultEase.underbust | 6.000 | 6.129 | 16.832 | 10.832 | 8.00 | 1.35 | cm of girth over mannequin M |
+| hemY | 57.271 | 57.271 | 56.460 | -0.811 | 2.00 | 0.41 | hem height above the floor; rule: shoulder_to_hem 91 cm (flat-lay: along the front from the HPS) |
+| length.hps_surface | 91.000 | 90.970 | 89.790 | -1.210 | 2.00 | 0.60 | flat-lay: along the front from the HPS |
 | sleeve.lengthCm | 0.000 | — | 32.500 | 32.500 | 8.00 | 4.06 | no sleeve length given: no sleeve shell (the bare arm stays in the control) |
-| sleeve.upperArmRatio | — | — | 1.927 | — | 0.29 | — |  |
-| depthRatio.hem | — | 0.680 | 0.651 | — | — | — | derived descriptor (P0 predicts no depth): proxy vs stage 4t |
+| sleeve.upperArmRatio | — | — | 1.896 | — | 0.29 | — |  |
+| depthRatio.hem | — | 0.680 | 0.670 | — | — | — | derived descriptor (P0 predicts no depth): proxy vs stage 4t |
 
-P0 shape (the proxy built from the prediction, opened) against the stage 4t mesh: Chamfer 1.672 cm, F-score 0.699 at 1 cm, 0.847 at 2 cm; per region shoulders 1.13, bodice 0.75, skirt 0.70 cm. V1 gate values: hem height error 0.08 cm, length error -1.02 cm, hem girth error 2.6 %, share of informative errors within 1.28 σ 0.80.
-
-- the job has no prediction.json (exported by @curtain/garment-spike phase0-export-0.6.0, before drape-prior P0): predicted now with drape-prior-p0-0.2.0; its control proxy was control-proxy-0.3.0, the P0 shape is today's proxy
+P0 shape (the proxy built from the prediction, opened) against the stage 4t mesh: Chamfer 1.871 cm, F-score 0.604 at 1 cm, 0.780 at 2 cm; per region shoulders 1.11, bodice 0.81, skirt 1.06 cm. V1 gate values: hem height error -0.81 cm, length error -1.21 cm, hem girth error 7.0 %, share of informative errors within 1.28 σ 0.60.
 
 **Earlier runs of this product** (their own job dirs, evaluated now with the same tooling, so their numbers can differ slightly from what was reported at the time):
 
-| Metric | run 14 (`spikes/garment-engine/out/phase0/azure-palm-baby-doll-dress-run14`) | this job (`spikes/garment-engine/out/phase0/azure-palm-baby-doll-dress`) |
-| --- | --- | --- |
-| job (exporter) | `azure-palm-baby-doll-dress-6d2f2611a144` (phase0-export-0.4.0) | `azure-palm-baby-doll-dress-de3bc1eeb3e0` (phase0-export-0.6.0) |
-| control proxy | control-proxy-0.1.0, hem 47.60 cm above the floor | control-proxy-0.3.0, hem 57.27 cm above the floor |
-| stage 1b QA | FAIL (front, back), QA stage1b-qa-0.3.0 | pass, QA stage1b-qa-0.6.1 |
-| evaluated mesh | stage 4t template fit of the stage 2 video | stage 4t template fit of the stage 2 video |
-| critical girth by the tape, as reconstructed, cm | chest 101.15 (-0.85 before calibration) | chest 101.27 (-0.73 before calibration) |
-| front hem above the floor (centre front, as reconstructed), cm | 54.18 | 56.96 |
-| hem line above the floor (median of the lowest cloth per 10° sector, exemplar.json), cm | 55.46 | 57.35 |
-| shoulder to hem, vertical drop, cm | 84.42 | 81.64 |
-| shoulder to hem, flat-lay along the front, cm | 92.54 | 89.98 |
-| pinned stills, IoU visible | front 0.904, back 0.933 | front 0.889, back 0.938 |
-| stage 4t holdout IoU visible / silhouette | 0.9009 / 0.8841 | 0.9176 / 0.8986 |
-| triangles | 11216 | 10983 |
-| GPU cost (estimate) | 1493 s GPU, $1.57–$1.63 | 1576 s GPU, $1.66–$1.71 |
+| Metric | run 14 (`spikes/garment-engine/out/phase0/azure-palm-baby-doll-dress-run14`) | run 15 (`spikes/garment-engine/out/phase0/azure-palm-baby-doll-dress-run15`) | this job (`spikes/garment-engine/out/phase0/azure-palm-baby-doll-dress`) |
+| --- | --- | --- | --- |
+| job (exporter) | `azure-palm-baby-doll-dress-6d2f2611a144` (phase0-export-0.4.0) | `azure-palm-baby-doll-dress-de3bc1eeb3e0` (phase0-export-0.6.0) | `azure-palm-baby-doll-dress-de3bc1eeb3e0` (phase0-export-0.6.0) |
+| control proxy | control-proxy-0.1.0, hem 47.60 cm above the floor | control-proxy-0.3.0, hem 57.27 cm above the floor | control-proxy-0.3.0, hem 57.27 cm above the floor |
+| stage 1b QA | FAIL (front, back), QA stage1b-qa-0.3.0 | pass, QA stage1b-qa-0.6.1 | pass, QA stage1b-qa-0.10.1 |
+| evaluated mesh | stage 4t template fit of the stage 2 video | stage 4t template fit of the stage 2 video | stage 4t template fit of the stage 2 video |
+| critical girth by the tape, as reconstructed, cm | chest 101.15 (-0.85 before calibration) | chest 101.27 (-0.73 before calibration) | chest 101.26 (-0.74 before calibration) |
+| front hem above the floor (centre front, as reconstructed), cm | 54.18 | 56.96 | 57.35 |
+| hem line above the floor (median of the lowest cloth per 10° sector, exemplar.json), cm | 55.46 | 57.35 | 56.46 |
+| shoulder to hem, vertical drop, cm | 84.42 | 81.64 | 81.25 |
+| shoulder to hem, flat-lay along the front, cm | 92.54 | 89.98 | 89.79 |
+| pinned stills, IoU visible | front 0.904, back 0.933 | front 0.889, back 0.938 | front 0.901, back 0.924 |
+| stage 4t holdout IoU visible / silhouette | 0.9009 / 0.8841 | 0.9176 / 0.8986 | 0.9127 / 0.8956 |
+| triangles | 11216 | 10983 | 11013 |
+| GPU cost (estimate) | 1493 s GPU, $1.57–$1.63 | 1576 s GPU, $1.66–$1.71 | 1503 s GPU, $1.59–$1.62 (stage 1b recomposed on CPU from an earlier run; that run's stage 1b GPU not included) |
 
 run 14 against this job: [run14-vs-current-turntable-0.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/compare/run14-vs-current-turntable-0.png) (stage 2 frame | mesh | overlay at 0°, the earlier run on top); [run14-vs-current-turntable-90.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/compare/run14-vs-current-turntable-90.png) (the same at 90°); [run14-vs-current-viewer-M-front.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/compare/run14-vs-current-viewer-M-front.png) (viewer, AU 8 / 12 / 16 on the M mannequin, front, the earlier run on top); [run14-vs-current-viewer-M-side.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/compare/run14-vs-current-viewer-M-side.png) (the same from the side).
 
 run 14 renders: [M-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress-run14/renders/M-plain.png), [M-three-quarter-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress-run14/renders/M-three-quarter-plain.png), [M-side-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress-run14/renders/M-side-plain.png), [XS-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress-run14/renders/XS-plain.png), [XXL-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress-run14/renders/XXL-plain.png).
 
+run 15 against this job: [run15-vs-current-turntable-0.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/compare/run15-vs-current-turntable-0.png) (stage 2 frame | mesh | overlay at 0°, the earlier run on top); [run15-vs-current-turntable-90.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/compare/run15-vs-current-turntable-90.png) (the same at 90°); [run15-vs-current-viewer-M-front.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/compare/run15-vs-current-viewer-M-front.png) (viewer, AU 8 / 12 / 16 on the M mannequin, front, the earlier run on top); [run15-vs-current-viewer-M-side.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/compare/run15-vs-current-viewer-M-side.png) (the same from the side).
+
+run 15 renders: [M-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress-run15/renders/M-plain.png), [M-three-quarter-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress-run15/renders/M-three-quarter-plain.png), [M-side-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress-run15/renders/M-side-plain.png), [XS-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress-run15/renders/XS-plain.png), [XXL-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress-run15/renders/XXL-plain.png).
+
 All dollar figures are **estimates** (list price × GPU seconds, as `phase0_lib.cost_record` writes them); the Modal invoice is the measurement. GPU seconds and wall time are measured.
 
 | Stage | GPU | Region | GPU s | Wall s | Estimate low | Estimate high |
 | --- | --- | --- | --- | --- | --- | --- |
-| stage1b_dress | H100 | any | 26 s | 48 s | $0.03 | $0.05 |
-| stage2_video | H100 | any | 1430 s | 1450 s | $1.57 | $1.59 |
-| stage4_recon[stage2] | L40S | any | 120 s | 127 s | $0.07 | $0.07 |
+| stage2_video | H100 | any | 1398 s | 1423 s | $1.53 | $1.56 |
+| stage4_recon[stage2] | L40S | any | 105 s | 113 s | $0.06 | $0.06 |
 
-Total: 1576 s GPU, 2271 s wall, $1.66–$1.71 (estimate).
+Total: 1503 s GPU, 2135 s wall, $1.59–$1.62 (estimate) (stage 1b recomposed on CPU from an earlier run; that run's stage 1b GPU not included).
 
 **Renders**
 
@@ -415,16 +464,16 @@ Stored under `out/` (gitignored); attach them separately.
 
 | Body | View | Fit map | Sizes | Drape per size | File |
 | --- | --- | --- | --- | --- | --- |
-| M mannequin | front | no | 8, 12, 16 | 1.73 s, 1.67 s, 1.80 s | [M-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/M-plain.png) |
-| M mannequin | front | yes | 8, 12, 16 | 1.73 s, 1.67 s, 1.80 s | [M-fitmap.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/M-fitmap.png) |
-| M mannequin | three-quarter | no | 8, 12, 16 | 4.76 s, 4.71 s, 4.66 s | [M-three-quarter-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/M-three-quarter-plain.png) |
-| M mannequin | three-quarter | yes | 8, 12, 16 | 4.76 s, 4.71 s, 4.66 s | [M-three-quarter-fitmap.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/M-three-quarter-fitmap.png) |
-| M mannequin | side | no | 8, 12, 16 | 5.69 s, 5.66 s, 5.63 s | [M-side-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/M-side-plain.png) |
-| M mannequin | side | yes | 8, 12, 16 | 5.69 s, 5.66 s, 5.63 s | [M-side-fitmap.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/M-side-fitmap.png) |
-| XS shape | front | no | 8, 12, 16 | 5.94 s, 5.91 s, 5.89 s | [XS-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/XS-plain.png) |
-| XS shape | front | yes | 8, 12, 16 | 5.94 s, 5.91 s, 5.89 s | [XS-fitmap.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/XS-fitmap.png) |
-| XXL shape | front | no | 8, 12, 16 | 5.83 s, 5.80 s, 5.77 s | [XXL-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/XXL-plain.png) |
-| XXL shape | front | yes | 8, 12, 16 | 5.83 s, 5.80 s, 5.77 s | [XXL-fitmap.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/XXL-fitmap.png) |
+| M mannequin | front | no | 8, 12, 16 | 2.62 s, 2.57 s, 2.54 s | [M-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/M-plain.png) |
+| M mannequin | front | yes | 8, 12, 16 | 2.62 s, 2.57 s, 2.54 s | [M-fitmap.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/M-fitmap.png) |
+| M mannequin | three-quarter | no | 8, 12, 16 | 5.24 s, 5.21 s, 5.18 s | [M-three-quarter-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/M-three-quarter-plain.png) |
+| M mannequin | three-quarter | yes | 8, 12, 16 | 5.24 s, 5.21 s, 5.18 s | [M-three-quarter-fitmap.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/M-three-quarter-fitmap.png) |
+| M mannequin | side | no | 8, 12, 16 | 5.17 s, 5.13 s, 5.11 s | [M-side-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/M-side-plain.png) |
+| M mannequin | side | yes | 8, 12, 16 | 5.17 s, 5.13 s, 5.11 s | [M-side-fitmap.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/M-side-fitmap.png) |
+| XS shape | front | no | 8, 12, 16 | 5.80 s, 5.78 s, 5.76 s | [XS-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/XS-plain.png) |
+| XS shape | front | yes | 8, 12, 16 | 5.80 s, 5.78 s, 5.76 s | [XS-fitmap.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/XS-fitmap.png) |
+| XXL shape | front | no | 8, 12, 16 | 5.17 s, 5.14 s, 5.11 s | [XXL-plain.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/XXL-plain.png) |
+| XXL shape | front | yes | 8, 12, 16 | 5.17 s, 5.14 s, 5.11 s | [XXL-fitmap.png](../../spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/renders/XXL-fitmap.png) |
 
 ### 2. Rosewater Blouse (`rosewater-blouse`)
 
@@ -532,7 +581,7 @@ Overlays: [front](../../spikes/garment-engine/out/eval/rosewater-blouse/view/fro
 
 - global scale 1.115: the reconstruction is -11.5 % off in size (check units and cameras before trusting the shape)
 
-Evaluation time on the build machine: read 16 ms, measure 99 ms, calibrate 34 ms, grade 0 ms, view renders 1072 ms.
+Evaluation time on the build machine: read 14 ms, measure 36 ms, calibrate 21 ms, grade 0 ms, view renders 1080 ms.
 
 All dollar figures are **estimates** (list price × GPU seconds, as `phase0_lib.cost_record` writes them); the Modal invoice is the measurement. GPU seconds and wall time are measured.
 
@@ -767,7 +816,7 @@ Overlays: [front](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-s
 
 - no garment loop at critical ring waist: chart agreement fails there
 
-Evaluation time on the build machine: read 254 ms, measure 27 ms, calibrate 21 ms, grade 0 ms, view renders 1156 ms.
+Evaluation time on the build machine: read 215 ms, measure 19 ms, calibrate 14 ms, grade 0 ms, view renders 869 ms.
 
 **Drape prediction P0 in shadow mode** (`stage4t/stage2/shadow.json`, predictor drape-prior-p0-0.2.0, cell `skirt|a-line|maxi|fluid`; the prediction drives nothing yet: it is compared with what stage 4t measured on this job's mesh):
 
@@ -800,16 +849,16 @@ Stored under `out/` (gitignored); attach them separately.
 
 | Body | View | Fit map | Sizes | Drape per size | File |
 | --- | --- | --- | --- | --- | --- |
-| M mannequin | front | no | 8, 12, 16 | 6.20 s, 6.17 s, 6.15 s | [M-plain.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/M-plain.png) |
-| M mannequin | front | yes | 8, 12, 16 | 6.20 s, 6.17 s, 6.15 s | [M-fitmap.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/M-fitmap.png) |
-| M mannequin | three-quarter | no | 8, 12, 16 | 5.83 s, 5.80 s, 5.77 s | [M-three-quarter-plain.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/M-three-quarter-plain.png) |
-| M mannequin | three-quarter | yes | 8, 12, 16 | 5.83 s, 5.80 s, 5.77 s | [M-three-quarter-fitmap.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/M-three-quarter-fitmap.png) |
-| M mannequin | side | no | 8, 12, 16 | 5.81 s, 5.78 s, 5.75 s | [M-side-plain.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/M-side-plain.png) |
-| M mannequin | side | yes | 8, 12, 16 | 5.81 s, 5.78 s, 5.75 s | [M-side-fitmap.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/M-side-fitmap.png) |
-| XS shape | front | no | 8, 12, 16 | 5.89 s, 5.86 s, 5.84 s | [XS-plain.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/XS-plain.png) |
-| XS shape | front | yes | 8, 12, 16 | 5.89 s, 5.86 s, 5.84 s | [XS-fitmap.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/XS-fitmap.png) |
-| XXL shape | front | no | 8, 12, 16 | 5.98 s, 5.95 s, 5.93 s | [XXL-plain.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/XXL-plain.png) |
-| XXL shape | front | yes | 8, 12, 16 | 5.98 s, 5.95 s, 5.93 s | [XXL-fitmap.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/XXL-fitmap.png) |
+| M mannequin | front | no | 8, 12, 16 | 5.78 s, 5.75 s, 5.73 s | [M-plain.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/M-plain.png) |
+| M mannequin | front | yes | 8, 12, 16 | 5.78 s, 5.75 s, 5.73 s | [M-fitmap.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/M-fitmap.png) |
+| M mannequin | three-quarter | no | 8, 12, 16 | 5.31 s, 5.28 s, 5.26 s | [M-three-quarter-plain.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/M-three-quarter-plain.png) |
+| M mannequin | three-quarter | yes | 8, 12, 16 | 5.31 s, 5.28 s, 5.26 s | [M-three-quarter-fitmap.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/M-three-quarter-fitmap.png) |
+| M mannequin | side | no | 8, 12, 16 | 5.54 s, 5.51 s, 5.48 s | [M-side-plain.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/M-side-plain.png) |
+| M mannequin | side | yes | 8, 12, 16 | 5.54 s, 5.51 s, 5.48 s | [M-side-fitmap.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/M-side-fitmap.png) |
+| XS shape | front | no | 8, 12, 16 | 5.73 s, 5.70 s, 5.69 s | [XS-plain.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/XS-plain.png) |
+| XS shape | front | yes | 8, 12, 16 | 5.73 s, 5.70 s, 5.69 s | [XS-fitmap.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/XS-fitmap.png) |
+| XXL shape | front | no | 8, 12, 16 | 6.06 s, 6.03 s, 6.01 s | [XXL-plain.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/XXL-plain.png) |
+| XXL shape | front | yes | 8, 12, 16 | 6.06 s, 6.03 s, 6.01 s | [XXL-fitmap.png](../../spikes/garment-engine/out/eval/crimson-wildflower-maxi-skirt/renders/XXL-fitmap.png) |
 
 ### 5. Woodstock Wanderer Knit Cardi (`woodstock-wanderer-knit-cardi`)
 
@@ -916,7 +965,7 @@ Overlays: [front](../../spikes/garment-engine/out/eval/woodstock-wanderer-knit-c
 
 - no garment loop at critical ring chest: chart agreement fails there
 
-Evaluation time on the build machine: read 12 ms, measure 41 ms, calibrate 27 ms, grade 0 ms, view renders 921 ms.
+Evaluation time on the build machine: read 13 ms, measure 38 ms, calibrate 24 ms, grade 0 ms, view renders 899 ms.
 
 All dollar figures are **estimates** (list price × GPU seconds, as `phase0_lib.cost_record` writes them); the Modal invoice is the measurement. GPU seconds and wall time are measured.
 
@@ -978,7 +1027,7 @@ Overlays: [front](../../spikes/garment-engine/out/eval/aalter-studio-2/view/fron
 
 **Mesh health** (mesh as evaluated): 14720 triangles (budget 8000–15000: within), 7488 vertices, 3 components, 256 boundary edges, 0 non-manifold edges, 0 flipped edges, 0 degenerate triangles. Not checked: self-intersection; watertight where expected (openings at neckline, hem and cuffs are allowed but not located).
 
-Evaluation time on the build machine: read 13 ms, measure 29 ms, calibrate 24 ms, grade 0 ms, view renders 150 ms.
+Evaluation time on the build machine: read 12 ms, measure 26 ms, calibrate 19 ms, grade 0 ms, view renders 147 ms.
 
 Bundle: 311 KB in `spikes/garment-engine/out/eval/aalter-studio-2/`.
 
@@ -988,16 +1037,16 @@ Stored under `out/` (gitignored); attach them separately.
 
 | Body | View | Fit map | Sizes | Drape per size | File |
 | --- | --- | --- | --- | --- | --- |
-| M mannequin | front | no | S, M, L | 5.94 s, 5.90 s, 5.87 s | [M-plain.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/M-plain.png) |
-| M mannequin | front | yes | S, M, L | 5.94 s, 5.90 s, 5.87 s | [M-fitmap.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/M-fitmap.png) |
-| M mannequin | three-quarter | no | S, M, L | 5.91 s, 5.87 s, 5.85 s | [M-three-quarter-plain.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/M-three-quarter-plain.png) |
-| M mannequin | three-quarter | yes | S, M, L | 5.91 s, 5.87 s, 5.85 s | [M-three-quarter-fitmap.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/M-three-quarter-fitmap.png) |
-| M mannequin | side | no | S, M, L | 4.81 s, 4.78 s, 4.74 s | [M-side-plain.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/M-side-plain.png) |
-| M mannequin | side | yes | S, M, L | 4.81 s, 4.78 s, 4.74 s | [M-side-fitmap.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/M-side-fitmap.png) |
-| XS shape | front | no | S, M, L | 5.59 s, 5.56 s, 5.53 s | [XS-plain.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/XS-plain.png) |
-| XS shape | front | yes | S, M, L | 5.59 s, 5.56 s, 5.53 s | [XS-fitmap.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/XS-fitmap.png) |
-| XXL shape | front | no | S, M, L | 6.01 s, 5.98 s, 5.95 s | [XXL-plain.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/XXL-plain.png) |
-| XXL shape | front | yes | S, M, L | 6.01 s, 5.98 s, 5.95 s | [XXL-fitmap.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/XXL-fitmap.png) |
+| M mannequin | front | no | S, M, L | 7.78 s, 7.72 s, 7.70 s | [M-plain.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/M-plain.png) |
+| M mannequin | front | yes | S, M, L | 7.78 s, 7.72 s, 7.70 s | [M-fitmap.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/M-fitmap.png) |
+| M mannequin | three-quarter | no | S, M, L | 7.44 s, 7.40 s, 7.38 s | [M-three-quarter-plain.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/M-three-quarter-plain.png) |
+| M mannequin | three-quarter | yes | S, M, L | 7.44 s, 7.40 s, 7.38 s | [M-three-quarter-fitmap.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/M-three-quarter-fitmap.png) |
+| M mannequin | side | no | S, M, L | 7.29 s, 7.26 s, 7.21 s | [M-side-plain.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/M-side-plain.png) |
+| M mannequin | side | yes | S, M, L | 7.29 s, 7.26 s, 7.21 s | [M-side-fitmap.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/M-side-fitmap.png) |
+| XS shape | front | no | S, M, L | 7.37 s, 7.33 s, 7.29 s | [XS-plain.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/XS-plain.png) |
+| XS shape | front | yes | S, M, L | 7.37 s, 7.33 s, 7.29 s | [XS-fitmap.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/XS-fitmap.png) |
+| XXL shape | front | no | S, M, L | 6.95 s, 6.89 s, 6.85 s | [XXL-plain.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/XXL-plain.png) |
+| XXL shape | front | yes | S, M, L | 6.95 s, 6.89 s, 6.85 s | [XXL-fitmap.png](../../spikes/garment-engine/out/eval/aalter-studio-2/renders/XXL-fitmap.png) |
 
 ## How to update this document
 

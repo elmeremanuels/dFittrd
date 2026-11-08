@@ -29,7 +29,8 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { SHOP, buildShopPayload, rankCandidates, type ShopifyProduct } from './shop';
 import { checkImageBytes, committedImages, imageRecordChanges } from './shopImages';
-import { SHOP_IMAGE_CLASSIFICATION, SHOP_REJECTED_TYPES, SHOP_SELECTION, SHOP_UNCOVERED_CATEGORIES, type ImageClassification } from './shopSelection';
+import { threeDReadiness, type ImageRecord } from './shopReadiness';
+import { SHOP_IMAGE_CLASSIFICATION, SHOP_REJECTED_TYPES, SHOP_SELECTION, SHOP_UNCOVERED_CATEGORIES } from './shopSelection';
 
 const { values } = parseArgs({
   args: process.argv.slice(2).filter((a) => a !== '--'),
@@ -140,40 +141,6 @@ async function downloadImages(p: ShopifyProduct): Promise<void> {
   }
 }
 
-interface ImageRecord extends ImageClassification {
-  url: string;
-  width: number;
-  height: number;
-  file: string | null;
-  sha256: string | null;
-  bytes: number | null;
-}
-
-function threeDReadiness(images: readonly ImageRecord[], baseSize: string | undefined, hasFabric: boolean): { ready: boolean; reasons: string[] } {
-  const reasons: string[] = [];
-  const usable = (role: string) =>
-    images.filter((i) => i.role === role && !i.onModel && i.background === 'plain' && i.garmentFullyVisible && Math.max(i.width, i.height) >= MIN_LONG_EDGE);
-  for (const role of ['front', 'back'] as const) {
-    if (usable(role).length) continue;
-    const any = images.filter((i) => i.role === role);
-    if (!any.length) reasons.push(`add a ${role} photo`);
-    else {
-      const why = new Set<string>();
-      for (const i of any) {
-        if (i.onModel) why.add('worn by a model');
-        if (i.background !== 'plain') why.add('busy background');
-        if (!i.garmentFullyVisible) why.add('garment partly hidden');
-        if (Math.max(i.width, i.height) < MIN_LONG_EDGE) why.add(`long edge ${Math.max(i.width, i.height)} px < ${MIN_LONG_EDGE}`);
-      }
-      reasons.push(`${role} photo does not meet the contract (${[...why].join(', ')}); add one on a hanger, flat-lay or ghost mannequin`);
-    }
-  }
-  if (!baseSize) reasons.push('set the base size');
-  else reasons.push(`base size ${baseSize} is our default, not confirmed by the shop`);
-  if (!hasFabric) reasons.push('add the fabric');
-  return { ready: reasons.length === 1 && reasons[0]!.startsWith('base size'), reasons };
-}
-
 async function main(): Promise<void> {
   if (values['fetch-images']) return fetchCommittedImages();
   if (values['fetch-catalogue']) return fetchCatalogue();
@@ -214,7 +181,7 @@ async function main(): Promise<void> {
     productsOut.push({
       ...built,
       selection: { why: sel.why, runnersUp: sel.runnersUp, topByTextCriteria: ranking },
-      threeD: threeDReadiness(records, built.baseSize, built.payload.fabric !== undefined),
+      threeD: threeDReadiness(records, built.baseSize, false, built.payload.fabric !== undefined, MIN_LONG_EDGE),
     });
   }
 

@@ -172,7 +172,7 @@ export function materialJson(p: GarmentPayload): MaterialJson {
 // ---------------------------------------------------------------------------
 
 /** Shops with a committed validation set under data/<shop>/ (products.json, images.json; images in raw/, gitignored). */
-export const SHOPS = ['bohohippychic'] as const;
+export const SHOPS = ['bohohippychic', 'nobodyschild'] as const;
 export type ShopId = (typeof SHOPS)[number];
 
 export type ProductSource = { kind: 'spike' } | { kind: 'shop'; shop: ShopId; handle: string; product_type: string; data: string };
@@ -248,7 +248,8 @@ const noModel = (i: ShopImage): boolean => !i.onModel && i.background === 'plain
 
 /**
  * The front and back photo for stage 1b from `images.json`: per role a no-model photo first, else the
- * first photo of that role that shows the whole garment, else the first of that role. `override`
+ * first photo of that role that shows the whole garment on a plain background, else the first that shows
+ * the whole garment, else the first of that role. `override`
  * picks positions by hand.
  */
 export function shopPhotoChoice(imagesJson: unknown, handle: string, override: { front?: number; back?: number } = {}): ShopPhotoChoice {
@@ -264,7 +265,7 @@ export function shopPhotoChoice(imagesJson: unknown, handle: string, override: {
       return img;
     }
     const ofRole = all.filter((i) => i.role === role);
-    const img = ofRole.find(noModel) ?? ofRole.find((i) => i.garmentFullyVisible) ?? ofRole[0] ?? null;
+    const img = ofRole.find(noModel) ?? ofRole.find((i) => i.garmentFullyVisible && i.background === 'plain') ?? ofRole.find((i) => i.garmentFullyVisible) ?? ofRole[0] ?? null;
     if (img) why.push(`${role}: image ${img.position} (${noModel(img) ? 'no model, plain background' : `on model${img.garmentFullyVisible ? ', garment fully visible' : ', garment partly hidden'}`})`);
     else why.push(`${role}: no ${role} image; stage 1b will INVENT it (validation only, D13)`);
     return img;

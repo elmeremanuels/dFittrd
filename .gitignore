@@ -26,4 +26,4 @@ playwright-report/
 .demo-db/
 
 # Shop validation downloads (shop images and raw JSON are never committed)
-spikes/garment-engine/data/bohohippychic/raw/
+spikes/garment-engine/data/*/raw

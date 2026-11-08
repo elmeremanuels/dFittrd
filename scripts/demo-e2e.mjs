@@ -13,24 +13,33 @@
  * measured height); the peek makes one read-only `GET /v1/peek`, mints no try session and never
  * calls fit-shown. Then "See how size X fits you" in the peek opens the overlay, and a
  * returning shopper ("Remember me" is on by default) must land straight on the result (§1.4).
+ * Optional 3D estimate (D16): aalter-studio-1 has no bundle, so its result shows no 3D button (exactly
+ * today's flow). Then, as the returning shopper, each flow opens the product with an approved bundle
+ * (WooCommerce: the synthetic aalter-studio-2; Dawn: the azure babydoll from its git-ignored
+ * evaluated bundle, skipped with a note when absent), clicks "See it in 3D (estimate)", waits for
+ * the drape, checks the estimate label names the recommended size, and that after the click the
+ * iframe only GETs code from the app origin and the five bundle files under /assets/ (no POST, no
+ * body, no third party), and that the merchant page shows nothing of it.
  * Console errors and uncaught exceptions in the page or the iframe fail the flow.
  *
  * Uses the preinstalled Playwright (`require('playwright')`). Reuses services that are already
  * running (e.g. a `pnpm demo` in another terminal). Screenshots of every step go to
  * test-results/demo-e2e/ (git-ignored). Exits non-zero on the first failure.
  *
+ * Env:   DEMO_E2E_SHOTS  screenshot folder (default test-results/demo-e2e)
+ *        DEMO_AZURE_BUNDLE  the azure babydoll bundle folder (default spikes/garment-engine/out/eval/…)
  * Flags: --skip-build   do not build the packages first
  *        --headed       show the browser
  */
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { startDemo } from './demo.mjs';
+import { DEMO_BUNDLES, URLS, startDemo } from './demo.mjs';
 
 const require = createRequire(import.meta.url);
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const shots = join(root, 'test-results', 'demo-e2e');
+const shots = process.env.DEMO_E2E_SHOTS ? resolve(process.env.DEMO_E2E_SHOTS) : join(root, 'test-results', 'demo-e2e');
 const STEP_TIMEOUT = 30_000;
 
 const PAGES = [
@@ -39,11 +48,15 @@ const PAGES = [
     path: '/product/aalter-studio-1',
     /** The size the page's own variation form now holds (the option's label). */
     pageSize: (page) => page.locator('form.variations_form select[name="attribute_pa_size"]').evaluate((s) => (s.value ? s.selectedOptions[0].text.trim() : '')),
+    /** The synthetic dress bundle (built by `pnpm demo`); its absence skips the 3D step with a note. */
+    threeD: { path: '/product/aalter-studio-2', bundle: DEMO_BUNDLES.synthetic },
   },
   {
     name: 'shopify-dawn',
     path: '/products/aalter-studio-1',
     pageSize: (page) => page.locator('input[type=radio][name="Size"]:checked').evaluate((r) => r.value).catch(() => ''),
+    /** The azure babydoll (the founder's evaluated bundle, git-ignored); skipped with a note when absent. */
+    threeD: { path: '/products/azure-palm-baby-doll-dress', bundle: DEMO_BUNDLES.azure },
   },
 ];
 
@@ -123,6 +136,8 @@ async function flow(browser, base, spec, log) {
     const choose = frame.getByRole('button', { name: /^choose size\s+\S+/i }).first();
     await choose.waitFor();
     await shot('3-result');
+    // ENGINE-HANDOFF item 9: a product without an approved bundle behaves exactly as today.
+    if (await frame.getByTestId('garment3d-open').count()) throw new Error('aalter-studio-1 has no 3D bundle but shows the 3D button');
     const label = (await choose.innerText()).trim();
     const size = label.replace(/^choose size\s+/i, '').trim();
     if (!size) throw new Error(`could not read the size from "${label}"`);
@@ -189,6 +204,8 @@ async function flow(browser, base, spec, log) {
     await shot('6-returning-shopper');
     log('ok: the remembered profile skips straight to the result');
 
+    if (spec.threeD) await threeDStep(page, base, spec, log, shot);
+
     if (errors.length) throw new Error(`errors in the page or the iframe:\n  ${errors.join('\n  ')}`);
   } catch (err) {
     await shot('failure').catch(() => {});
@@ -196,6 +213,70 @@ async function flow(browser, base, spec, log) {
   } finally {
     await context.close();
   }
+}
+
+/**
+ * The optional 3D estimate (D16) on the product with an approved bundle, as the returning shopper:
+ * the overlay lands on the result; "See it in 3D (estimate)" loads the viewer and drapes the
+ * recommended size on a model with the shopper's girths. After the click the iframe may only GET
+ * bundle files under /assets/ from the api (and the viewer's own code from the app origin): no POST,
+ * no request body, no third party. The merchant page learns nothing.
+ */
+async function threeDStep(page, base, spec, log, shot) {
+  const { path, bundle } = spec.threeD;
+  if (!existsSync(join(bundle, 'base.glb'))) {
+    log(`3D: SKIPPED, no bundle at ${bundle} (git-ignored; see docs/PLUGIN.md)`);
+    return;
+  }
+  log(`3D: open ${base}${path}`);
+  await page.goto(base + path);
+  await page.waitForSelector('[data-curtain-product][data-curtain-bound]');
+  await page.getByRole('button', { name: /try it on/i }).first().click();
+  await page.getByRole('dialog').waitFor();
+  const frame = page.frameLocator('[role="dialog"] iframe');
+  const choose = frame.getByRole('button', { name: /^choose size\s+\S+/i }).first();
+  await choose.waitFor();
+  const size = (await choose.innerText()).trim().replace(/^choose size\s+/i, '').trim();
+  const open = frame.getByTestId('garment3d-open');
+  await open.waitFor();
+  await page.waitForTimeout(500); // let fit-shown (billing) go out before the 3D requests are recorded
+
+  const after = [];
+  const onRequest = (r) => {
+    if (!r.frame()?.url().includes('/embed')) return;
+    const u = new URL(r.url());
+    after.push({ method: r.method(), origin: u.origin, path: u.pathname, body: r.postData() ?? null });
+  };
+  page.on('request', onRequest);
+  log('3D: click "See it in 3D (estimate)"');
+  await open.click();
+  const canvas = frame.locator('canvas[data-testid="garment3d-canvas"]');
+  await frame.locator('canvas[data-testid="garment3d-canvas"][data-state="draping"], canvas[data-testid="garment3d-canvas"][data-state="settled"]').first().waitFor({ timeout: 60_000 });
+  log('3D: first frame drawn, draping');
+  const settled = await frame
+    .locator('canvas[data-testid="garment3d-canvas"][data-state="settled"]')
+    .waitFor({ timeout: 45_000 })
+    .then(() => true)
+    .catch(() => false);
+  log(settled ? '3D: drape settled' : '3D: still draping after 45 s (only the first frame is required)');
+  await page.waitForTimeout(400);
+  page.off('request', onRequest);
+  const label = (await frame.getByTestId('garment3d-label').innerText()).replace(/\s+/g, ' ');
+  if (!/estimate/i.test(label)) throw new Error(`3D label does not say estimate: "${label}"`);
+  if (!label.includes(`Size ${size} was picked by the size advice`)) throw new Error(`3D label does not name the recommended size ${size}: "${label}"`);
+  if ((await canvas.getAttribute('data-size'))?.toLowerCase() !== size.toLowerCase()) throw new Error(`3D view shows size ${await canvas.getAttribute('data-size')}, the advice picked ${size}`);
+  await frame.getByTestId('garment3d').scrollIntoViewIfNeeded();
+  await shot('7-3d-estimate');
+
+  const app = new URL(URLS.web).origin;
+  const api = new URL(URLS.api).origin;
+  const bad = after.filter((r) => r.method !== 'GET' || r.body || (r.origin !== app && r.origin !== api) || (r.origin === api && !r.path.startsWith('/assets/')));
+  if (bad.length) throw new Error(`3D view made requests other than GETs of its code and /assets/: ${JSON.stringify(bad.slice(0, 5))}`);
+  const files = after.filter((r) => r.origin === api).map((r) => r.path.split('/').pop());
+  for (const f of ['base.glb', 'anchors.json', 'grading.json', 'material.json', 'qa.json']) if (!files.includes(f)) throw new Error(`3D view did not load ${f} from /assets/`);
+  const leak = await page.evaluate(() => /3D estimate|picked by the size advice/i.test(document.body.innerText) || /garment3d/.test(document.documentElement.outerHTML));
+  if (leak) throw new Error('the merchant page DOM shows the 3D estimate outside the iframe');
+  log(`ok: 3D estimate of size ${size}, labelled an estimate; ${files.length} asset GETs and nothing else went to the api`);
 }
 
 async function main() {

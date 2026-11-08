@@ -8,7 +8,8 @@
  *   /catalog.json        demo.json products enriched with colours/fabric from the schema fixtures
  *   /ext/curtain-try.css the Shopify theme block's stylesheet, served as the real extension would
  *   /img/<id>.svg        the product's flat-lay illustration (the demo seed points productPhotos here,
- *                        so the embed header shows the same garment as the storefront, from no third party)
+ *                        so the embed header shows the same garment as the storefront, from no third party;
+ *                        for a product that is not a schema fixture, drawn from its demo.json `details`)
  *   POST /cart/add       pretend cart: redirects to the product page with ?added=<size>
  */
 import { readFile } from 'node:fs/promises';
@@ -29,6 +30,16 @@ async function fixtureDetails() {
     return new Map(MOCK_GARMENTS.map((g) => [g.id, { name: g.name, category: g.category, subcategory: g.subcategory, patternBlock: g.patternBlock, colorways: g.colorways ?? [], primaryColorHex: g.primaryColorHex, fabric: g.fabric?.blend ?? [], sizingNotes: g.sizingNotes, sizeChart: g.sizeChart ?? [], sizeChartType: g.sizeChartType, lengthCm: g.lengthCm ?? {} }]));
   } catch {
     return new Map(); // schema not built: the pages fall back to neutral colours
+  }
+}
+
+/** Details the demo seed wrote for products that are not schema fixtures (empty when demo.json is missing). */
+async function demoDetails(readDemo) {
+  try {
+    const demo = await readDemo();
+    return new Map(demo.shops.flatMap((s) => s.products.filter((p) => p.details).map((p) => [p.externalId, p.details])));
+  } catch {
+    return new Map();
   }
 }
 
@@ -56,13 +67,14 @@ export function createDemoShopServer({ demoJsonPath = DEFAULT_DEMO_JSON } = {}) 
       if (path === '/demo.json') return send(res, 200, TYPES['.json'], JSON.stringify(await readDemo()));
       if (path === '/catalog.json') {
         const [demo, map] = [await readDemo(), await details];
-        const shops = demo.shops.map((s) => ({ ...s, products: s.products.map((p) => ({ ...p, ...(map.get(p.externalId) ?? {}) })) }));
+        // Products that are not schema fixtures (the azure babydoll from its 3D bundle) carry their own details.
+        const shops = demo.shops.map((s) => ({ ...s, products: s.products.map(({ details, ...p }) => ({ ...p, ...(map.get(p.externalId) ?? details ?? {}) })) }));
         return send(res, 200, TYPES['.json'], JSON.stringify({ ...demo, shops }));
       }
       if (path === '/ext/curtain-try.css') return send(res, 200, TYPES['.css'], await readFile(BLOCK_CSS));
       const img = /^\/img\/([\w-]+)\.svg$/.exec(path);
       if (img) {
-        const d = (await details).get(img[1]);
+        const d = (await details).get(img[1]) ?? (await demoDetails(readDemo)).get(img[1]);
         if (!d) return send(res, 404, 'text/plain', 'Not found');
         const { garmentSvg } = await import('./public/garments.js');
         const svg = garmentSvg(d, d.primaryColorHex, { title: d.name });

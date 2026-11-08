@@ -29,7 +29,7 @@ export const URLS = {
 };
 
 const SERVICES = [
-  { name: 'api', url: URLS.api, health: `${URLS.api}/healthz`, cmd: pnpm, args: ['--filter', '@curtain/api', 'demo'], env: { LOG_LEVEL: 'warn' } },
+  { name: 'api', url: URLS.api, health: `${URLS.api}/healthz`, cmd: pnpm, args: ['--filter', '@curtain/api', 'demo'], env: { LOG_LEVEL: 'warn', ...(process.env.DEMO_AZURE_BUNDLE ? { DEMO_AZURE_BUNDLE: resolve(process.env.DEMO_AZURE_BUNDLE) } : {}) } },
   // The web app talks to the demo api directly (no Caddy in the demo).
   { name: 'web', url: URLS.web, health: `${URLS.web}/`, cmd: pnpm, args: ['--filter', '@curtain/web', 'dev'], env: { VITE_API_URL: URLS.api } },
   { name: 'storefront', url: URLS.storefront, health: `${URLS.storefront}/`, cmd: process.execPath, args: [join(root, 'apps/demo-shop/server.mjs')], env: { PORT: '5180' } },
@@ -60,10 +60,25 @@ function run(cmd, args, label) {
   if (r.status !== 0) throw new Error(`${label} failed (exit ${r.status})`);
 }
 
+/** Git-ignored garment bundles the demo api imports for the optional 3D estimate (apps/api/src/demo.ts). */
+export const DEMO_BUNDLES = {
+  synthetic: join(root, 'spikes', 'garment-engine', 'out', 'aalter-studio-2'),
+  azure: process.env.DEMO_AZURE_BUNDLE ? resolve(process.env.DEMO_AZURE_BUNDLE) : join(root, 'spikes', 'garment-engine', 'out', 'eval', 'azure-palm-baby-doll-dress'),
+};
+
 export function buildForDemo() {
-  const needed = ['schema', 'fit-engine', 'taste-engine', 'tryon-providers', 'sdk'].filter((p) => !existsSync(join(root, 'packages', p, 'dist')));
+  const needed = ['schema', 'fit-engine', 'taste-engine', 'tryon-providers', 'sdk', 'anchors', 'mannequin'].filter((p) => !existsSync(join(root, 'packages', p, 'dist')));
   if (needed.length) run(pnpm, ['-r', '--filter', './packages/**', 'build'], `pnpm build:packages (missing dist: ${needed.join(', ')})`);
   else run(pnpm, ['--filter', '@curtain/sdk', 'build'], 'pnpm --filter @curtain/sdk build');
+  // The synthetic dress bundle (CPU, deterministic, ~8 s). Optional: without it that product has no 3D view.
+  if (!existsSync(join(DEMO_BUNDLES.synthetic, 'base.glb'))) {
+    try {
+      run(pnpm, ['--filter', '@curtain/garment-spike', 'build:bundle'], 'pnpm --filter @curtain/garment-spike build:bundle (synthetic 3D bundles)');
+    } catch (err) {
+      console.warn(`[demo] no synthetic 3D bundle (${err.message}); the demo runs without it`);
+    }
+  }
+  if (!existsSync(join(DEMO_BUNDLES.azure, 'base.glb'))) console.log(`[demo] no azure babydoll bundle at ${DEMO_BUNDLES.azure}: that product is left out (set DEMO_AZURE_BUNDLE)`);
 }
 
 /**
@@ -173,6 +188,8 @@ Curtain demo is running (standalone mode: no app needed).
   Storefront home          ${URLS.storefront}/
   WooCommerce product      ${URLS.storefront}/product/aalter-studio-1
   Shopify Dawn product     ${URLS.storefront}/products/aalter-studio-1
+  3D estimate (synthetic)  ${URLS.storefront}/product/aalter-studio-2
+  3D estimate (azure)      ${URLS.storefront}/products/azure-palm-baby-doll-dress   (when the bundle is present)
   Web app (embed origin)   ${URLS.web}/
   API                      ${URLS.api}/healthz
 

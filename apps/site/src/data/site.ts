@@ -26,8 +26,33 @@ export const site = {
     status: 'Being set up — not live on their store yet.',
     /** PILOT: flip to true only with their written approval of images (DECISIONS D13). */
     assetsApproved: false,
+    /**
+     * LAUNCH GATE: true once Bohohippychic has agreed in writing to be named as our pilot shop.
+     * The preview build names them (the founder's request); the release build refuses until this is true.
+     */
+    nameApproved: false,
+    /** FOUNDER: set to false to describe them neutrally ("an Australian boho label") instead of by name. */
+    showName: true,
   },
+  /**
+   * LAUNCH GATE: the identity behind the waitlist (GDPR Art. 13). The release build refuses while any is empty.
+   * The waitlist notice on /legal/#waitlist and the imprint use these.
+   */
+  company: {
+    address: null as string | null,
+    registration: null as string | null,
+    vat: null as string | null,
+  },
+  /** LAUNCH GATE: true once hello@curtain.fit (or contactEmail) exists and receives mail. */
+  mailboxReady: false,
+  /** LAUNCH GATE: true once a lawyer has reviewed the waitlist notice on /legal/#waitlist. */
+  waitlistNoticeReviewed: false,
 } as const;
+
+/** How the pilot shop is named in running text. */
+export const partnerName: string = site.partner.showName ? site.partner.name : 'an Australian boho label';
+/** Capitalised form for headings and the start of a sentence. */
+export const PartnerName: string = site.partner.showName ? site.partner.name : 'An Australian boho label';
 
 /** Things the build reports as still open, so they don't get forgotten before launch. */
 export function openDecisions(): string[] {
@@ -38,6 +63,16 @@ export function openDecisions(): string[] {
   if (site.trialDays === null) open.push('trialDays (pricing, FAQ)');
   if (!site.partner.assetsApproved) open.push('partner.assetsApproved (Bohohippychic imagery placeholders shown)');
   return open;
+}
+
+/** Must all be cleared before the site goes public: `pnpm --filter @curtain/site build:release` fails otherwise. */
+export function launchGates(): string[] {
+  const gates: string[] = [];
+  if (site.partner.showName && !site.partner.nameApproved) gates.push('partner.nameApproved: Bohohippychic has not yet agreed in writing to be named (or set partner.showName=false)');
+  if (!site.legalName || !site.company.address || !site.company.registration) gates.push('legalName + company.address + company.registration: needed for the imprint and the waitlist notice (GDPR Art. 13)');
+  if (!site.mailboxReady) gates.push(`mailboxReady: create ${site.contactEmail} before the waitlist goes live`);
+  if (!site.waitlistNoticeReviewed) gates.push('waitlistNoticeReviewed: legal review of /legal/#waitlist');
+  return gates;
 }
 
 export interface NavItem {

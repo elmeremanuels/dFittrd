@@ -11,7 +11,7 @@ export const credits: Page = {
   },
   body: () => {
     const all = Object.values(images);
-    const photos = all.filter((i) => i.kind === 'photo');
+    const photos = all.filter((i) => i.kind === 'photo' && !i.id.endsWith('-portrait'));
     const own = all.filter((i) => i.kind !== 'photo');
     return html`
 <section class="page-hero wrap">
@@ -19,9 +19,9 @@ export const credits: Page = {
 </section>
 <section class="section section--tight wrap">
   <h2 class="h2">Photography</h2>
-  <p class="micro">All photos come from the WordPress Photo Directory under CC0 1.0, retrieved November 2026, and are self-hosted. CC0 waives copyright; it does not cover model releases, so we chose pictures where people are seen from behind or cropped. No image on this site comes from a shop.</p>
+  <p class="micro">All photos come from the WordPress Photo Directory under CC0 1.0, retrieved November 2026, and are self-hosted. CC0 waives copyright; it does not cover model releases, so we chose pictures where people are seen from behind or cropped. Every photo gets the same light colour grade and crop for the site. No image on this site comes from a shop.</p>
   <ol class="credits">${photos.map(
-    (i) => html`<li class="credits__item" id="${i.id.replace('/', '-')}">
+    (i) => html`<li class="credits__item" id="${i.anchor}">
       <div class="credits__thumb">${picture(i.id, { sizes: '160px' })}</div>
       <div><p class="credits__title">“${i.sourceTitle ?? ''}”</p><p>Photo by ${i.credit} · <a href="${i.creditUrl ?? '#'}" rel="noopener">source</a> · <a href="${i.licenseUrl ?? '#'}" rel="noopener license">${i.license ?? ''}</a></p></div>
     </li>`,

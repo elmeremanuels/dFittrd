@@ -39,15 +39,15 @@ export const faq: Qa[] = [
   },
   {
     q: 'What does it cost?',
-    a: html`<p>USD ${site.price.amount} a month per shop, flat, ${trial}. No fee per try-on. The 3D estimate is in pilot and will be priced separately later.</p>`,
+    a: html`<p>USD ${site.price.amount} a month per shop, flat, ${trial}. No fee per try-on. The 3D estimate is in development and not part of the plan; whether and how it is priced is decided after the pilot.</p>`,
   },
   {
     q: 'What is the 3D estimate?',
-    a: html`<p>A 3D version of your garment, built from your own front and back product photos and draped on a figure shaped by the shopper's measurements, on their phone. It's always labelled an estimate and only appears for pieces you've approved. <a href="/3d/">How it's made</a>.</p>`,
+    a: html`<p>A 3D version of your garment, built from your own front and back product photos and draped on a figure shaped by the shopper's measurements, on their phone. It's always labelled an estimate and will only appear for pieces you've approved. Today it runs in our demo shop only; at real shops it stays off until the approval screen is finished. <a href="/3d/">How it's made</a>.</p>`,
   },
   {
     q: 'What happens if I cancel or uninstall?',
-    a: html`<p>Your page never breaks. On Shopify, we delete your shop's data 48 hours after you uninstall. Your size charts are stored in your own shop, so they're there if you come back.</p>`,
+    a: html`<p>Your product page keeps working; the button simply goes away. On Shopify, we delete your shop's data from our servers 48 hours after you uninstall. If you come back later, plan to set up your size charts again: the templates make that quick.</p>`,
   },
   {
     q: 'Will it slow my product page down?',
@@ -60,7 +60,10 @@ export interface Story {
   kicker: string;
   title: string;
   dek: string;
-  image: string;
+  /** A photo or render; without one the card is typographic. */
+  image?: string;
+  /** The words set large on a typographic card (`*word*` in coral italic). */
+  typeCard?: string;
   pos?: string;
 }
 
@@ -70,23 +73,22 @@ export const stories: Story[] = [
     kicker: 'Privacy',
     title: 'Why your measurements never leave your phone',
     dek: 'How Curtain works out a size in the browser, and the short list of what we do receive.',
-    image: 'photos/editorial-black-beige-2',
-    pos: '60% 50%',
+    image: 'photos/draped-fabric',
+    pos: '50% 40%',
   },
   {
     id: 'charts',
     kicker: 'Size charts',
     title: 'Body chart or garment chart? The question that decides a size',
     dek: 'A size chart can describe the body a size fits, or the garment itself. Mixing them up is where good sizes go wrong.',
-    image: 'photos/pattern-scissors',
-    pos: '45% 50%',
+    typeCard: 'Body *vs* garment',
   },
   {
     id: 'engine',
     kicker: 'The 3D engine',
     title: 'From two product photos to a 3D estimate (and why we call it an estimate)',
     dek: 'Inside our garment engine: a known mannequin, a known camera, and a merchant who signs off before anyone sees it.',
-    image: 'renders/engine-dress-sizes-fitmap',
-    pos: '50% 40%',
+    image: 'renders/engine-dress-L-col',
+    pos: '50% 30%',
   },
 ];

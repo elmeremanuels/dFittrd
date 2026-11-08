@@ -6,10 +6,14 @@ import { site } from '../data/site.ts';
 
 export function journalCards(headingLevel: 2 | 3 = 3): SafeHtml {
   return html`<ol class="journal-grid">${stories.map((s) => {
-    const i = img(s.image);
+    const i = s.image ? img(s.image) : null;
     const title = headingLevel === 2 ? html`<h2 class="story__title">${s.title}</h2>` : html`<h3 class="story__title">${s.title}</h3>`;
     return html`<li class="story" id="${s.id}" data-reveal="img">
-      <div class="story__img ratio-45">${picture(s.image, { sizes: '(min-width: 1024px) 30vw, 100vw', pos: s.pos })}${i.estimate ? html`<span class="tag tag--estimate">Estimate</span>` : ''}</div>
+      ${
+        s.image && i
+          ? html`<div class="story__img ratio-45">${picture(s.image, { sizes: '(min-width: 1024px) 30vw, 100vw', pos: s.pos })}${i.estimate ? html`<span class="tag tag--estimate">Estimate</span>` : ''}</div>`
+          : html`<div class="story__img story__img--type ratio-45" aria-hidden="true"><span class="story__type">${em(s.typeCard ?? s.kicker)}</span></div>`
+      }
       <p class="story__meta"><span>${s.kicker}</span><span class="story__soon">Coming soon</span></p>
       ${title}
       <p class="story__dek">${s.dek}</p>
@@ -27,7 +31,7 @@ export function journalTeaser(): SafeHtml {
 </section>`;
 }
 
-export function closingCta(title = 'Be one of the first brands *behind the curtain.*'): SafeHtml {
+export function closingCta(title: string): SafeHtml {
   return html`<section class="closing" aria-labelledby="closing-h">
   ${curtainSvg('closing__svg')}
   <div class="closing__inner wrap">
@@ -35,6 +39,7 @@ export function closingCta(title = 'Be one of the first brands *behind the curta
     <h2 class="display-l" id="closing-h" data-reveal="lines">${em(title)}</h2>
     <p class="closing__text">We're onboarding a small number of Shopify and WooCommerce brands after the pilot. Leave your details and we'll be in touch.</p>
     <div class="btn-row">${button('/waitlist/', 'Join the waitlist')}${button('/how-it-works/', 'See how it works', 'secondary')}</div>
+    <p class="closing__issue" aria-hidden="true"><span>Issue</span> <em>01</em><small>${site.issue.replace('Issue 01 — ', '')} · Pilot</small></p>
   </div>
 </section>`;
 }

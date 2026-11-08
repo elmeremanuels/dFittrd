@@ -14,6 +14,6 @@ export const journal: Page = {
   ${chapter({ level: 1, kicker: 'The Journal', title: 'Notes on fit, fabric and a fitting room for the *internet.*', standfirst: 'The first stories are being written. Each one is marked “Coming soon” until it is published.' })}
 </section>
 <section class="section section--tight wrap">${journalCards(2)}</section>
-${closingCta()}
+${closingCta('Read it first: *join the waitlist.*')}
 `,
 };

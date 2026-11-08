@@ -11,7 +11,7 @@ import { build } from 'esbuild';
 import { pages } from '../src/pages/index.ts';
 import { layout, type Assets } from '../src/lib/layout.ts';
 import { resetFigures } from '../src/lib/components.ts';
-import { openDecisions, site } from '../src/data/site.ts';
+import { launchGates, openDecisions, site } from '../src/data/site.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
@@ -94,13 +94,24 @@ for (const f of htmlFiles) {
       if (!new RegExp(`\\sid="${hash}"`).test(tText) && !(target === f && ids.has(hash))) problems.push(`${rel}: missing anchor ${url}`);
     }
   }
-  for (const m of text.matchAll(/srcset="([^"]+)"/g)) {
+  for (const m of text.matchAll(/\shref="#([^"]*)"/g)) {
+    const hash = m[1] ?? '';
+    if (hash && !ids.has(hash)) problems.push(`${rel}: missing same-page anchor #${hash}`);
+  }
+  for (const m of text.matchAll(/\s(?:srcset|imagesrcset)="([^"]+)"/g)) {
     for (const part of (m[1] ?? '').split(',')) {
       const u = part.trim().split(' ')[0] ?? '';
-      if (u.startsWith('/') && !existsSync(join(dist, u))) problems.push(`${rel}: missing image ${u}`);
+      if (/^(?:https?:)?\/\//.test(u)) problems.push(`${rel}: absolute image URL ${u} (self-host it)`);
+      else if (u.startsWith('/') && !existsSync(join(dist, u))) problems.push(`${rel}: missing image ${u}`);
     }
   }
+  for (const m of text.matchAll(/\ssrc="((?:https?:)?\/\/[^"]+)"/g)) problems.push(`${rel}: absolute src ${m[1] ?? ''} (self-host it)`);
   if (/https?:\/\/(?!curtain\.fit|creativecommons\.org|wordpress\.org|bohohippychic\.com\.au|www\.sitemaps\.org)[^"\s]*\.(?:js|css|woff2?)/.test(text)) problems.push(`${rel}: third-party asset reference`);
+}
+/* image weight budget: every image variant under 250 KB */
+for (const f of walk(join(dist, 'img'))) {
+  const kb = statSync(f).size / 1024;
+  if (kb > 250) problems.push(`/${relative(dist, f)}: ${kb.toFixed(0)} KB, over the 250 KB image budget`);
 }
 if (problems.length) {
   console.error('Site checks failed:\n  ' + problems.join('\n  '));
@@ -112,3 +123,12 @@ const hash = createHash('sha256').update(readFileSync(join(dist, 'index.html')))
 console.log(`✓ curtain.fit: ${htmlFiles.length} pages, ${(size / 1024 / 1024).toFixed(1)} MB in dist/ (index ${hash})`);
 const open = openDecisions();
 if (open.length) console.log(`  Still to decide before launch (src/data/site.ts): ${open.join('; ')}`);
+const gates = launchGates();
+if (gates.length) {
+  const msg = `Launch gates still open (src/data/site.ts, docs/SITE.md):\n  - ${gates.join('\n  - ')}`;
+  if (process.env.CURTAIN_SITE_RELEASE === '1') {
+    console.error(`✗ Release build refused. ${msg}`);
+    process.exit(1);
+  }
+  console.log(`  Preview build only. ${msg}`);
+}

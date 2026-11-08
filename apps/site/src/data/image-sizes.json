@@ -1,122 +1,143 @@
 {
- "photos/knits-pampas-rail": {
-  "w": 1800,
-  "h": 1350,
-  "widths": [
-   800,
-   1600
-  ]
- },
- "photos/minimal-rail": {
-  "w": 1200,
-  "h": 1800,
-  "widths": [
-   800,
-   1200
-  ]
- },
- "photos/fitting-rooms": {
-  "w": 1800,
-  "h": 1350,
-  "widths": [
-   800,
-   1600
-  ]
- },
- "photos/maxi-dress-corridor": {
-  "w": 1350,
-  "h": 1800,
-  "widths": [
-   800,
-   1350
-  ]
- },
- "photos/beach-dress-walk": {
-  "w": 1800,
-  "h": 1200,
-  "widths": [
-   800,
-   1600
-  ]
- },
  "photos/editorial-black-beige-1": {
-  "w": 1800,
-  "h": 1200,
+  "w": 2048,
+  "h": 1365,
   "widths": [
    800,
    1600
+  ]
+ },
+ "photos/editorial-black-beige-1-portrait": {
+  "w": 910,
+  "h": 1365,
+  "widths": [
+   600,
+   910
   ]
  },
  "photos/editorial-black-beige-2": {
-  "w": 1800,
-  "h": 1200,
+  "w": 2048,
+  "h": 1365,
   "widths": [
    800,
    1600
   ]
  },
  "photos/editorial-barrel": {
-  "w": 1800,
-  "h": 1200,
+  "w": 2048,
+  "h": 1365,
+  "widths": [
+   800,
+   1600
+  ]
+ },
+ "photos/maxi-dress-corridor": {
+  "w": 1536,
+  "h": 2048,
+  "widths": [
+   800,
+   1350
+  ]
+ },
+ "photos/beach-dress-walk": {
+  "w": 2048,
+  "h": 1365,
+  "widths": [
+   800,
+   1600
+  ]
+ },
+ "photos/colour-rail": {
+  "w": 1312,
+  "h": 2048,
+  "widths": [
+   800,
+   1153
+  ]
+ },
+ "photos/minimal-rail": {
+  "w": 1365,
+  "h": 2048,
+  "widths": [
+   800,
+   1200
+  ]
+ },
+ "photos/knits-pampas-rail": {
+  "w": 2048,
+  "h": 1536,
   "widths": [
    800,
    1600
   ]
  },
  "photos/pattern-scissors": {
-  "w": 1800,
-  "h": 1200,
+  "w": 2048,
+  "h": 1365,
   "widths": [
    800,
    1600
   ]
  },
  "photos/fabric-rolls": {
-  "w": 1800,
-  "h": 1237,
+  "w": 2048,
+  "h": 1407,
   "widths": [
    800,
    1600
-  ]
- },
- "photos/maxi-dress-balcony": {
-  "w": 1350,
-  "h": 1800,
-  "widths": [
-   800,
-   1350
-  ]
- },
- "photos/colour-rail": {
-  "w": 1153,
-  "h": 1800,
-  "widths": [
-   800,
-   1153
   ]
  },
  "photos/shell-straw-hat": {
-  "w": 1800,
-  "h": 1012,
+  "w": 2048,
+  "h": 1151,
   "widths": [
    800,
    1600
   ]
  },
- "photos/leopard-dress-path": {
-  "w": 1350,
-  "h": 1800,
+ "photos/blazer-buttons": {
+  "w": 2048,
+  "h": 1536,
   "widths": [
    800,
-   1350
+   1600
   ]
  },
- "product/desktop-02-product-page": {
-  "w": 2400,
-  "h": 1500,
+ "photos/draped-fabric": {
+  "w": 1536,
+  "h": 2048,
   "widths": [
-   900,
-   1800
+   800,
+   1200
+  ]
+ },
+ "renders/engine-dress-M-portrait": {
+  "w": 1150,
+  "h": 1750,
+  "widths": [
+   700,
+   1150
+  ]
+ },
+ "renders/engine-dress-S-col": {
+  "w": 660,
+  "h": 1430,
+  "widths": [
+   660
+  ]
+ },
+ "renders/engine-dress-M-col": {
+  "w": 660,
+  "h": 1430,
+  "widths": [
+   660
+  ]
+ },
+ "renders/engine-dress-L-col": {
+  "w": 660,
+  "h": 1430,
+  "widths": [
+   660
   ]
  },
  "product/desktop-05-size-result-dialog": {
@@ -125,22 +146,6 @@
   "widths": [
    900,
    1800
-  ]
- },
- "product/desktop-06-size-selected": {
-  "w": 2400,
-  "h": 1500,
-  "widths": [
-   900,
-   1800
-  ]
- },
- "product/desktop-07-size-peek-crop": {
-  "w": 1322,
-  "h": 624,
-  "widths": [
-   900,
-   1322
   ]
  },
  "product/desktop-09-3d-estimate-dialog": {
@@ -180,13 +185,6 @@
    780
   ]
  },
- "product/mobile-05-size-result-scroll1": {
-  "w": 780,
-  "h": 1688,
-  "widths": [
-   780
-  ]
- },
  "product/mobile-06-size-selected": {
   "w": 780,
   "h": 1688,
@@ -194,88 +192,20 @@
    780
   ]
  },
- "product/mobile-07-size-peek": {
-  "w": 780,
-  "h": 1688,
-  "widths": [
-   780
-  ]
- },
- "product/mobile-07-size-peek-crop": {
-  "w": 780,
-  "h": 624,
-  "widths": [
-   780
-  ]
- },
- "product/mobile-09-3d-estimate": {
-  "w": 780,
-  "h": 1688,
-  "widths": [
-   780
-  ]
- },
- "product/mobile-09-3d-estimate-viewer": {
-  "w": 716,
-  "h": 1164,
-  "widths": [
-   716
-  ]
- },
- "renders/engine-dress-M-front": {
-  "w": 2400,
-  "h": 1905,
+ "product/desktop-02-product-form": {
+  "w": 1160,
+  "h": 840,
   "widths": [
    900,
-   1800
+   1160
   ]
  },
- "renders/engine-dress-M-threequarter": {
-  "w": 2400,
-  "h": 1905,
+ "product/desktop-07-size-peek-crop": {
+  "w": 1322,
+  "h": 554,
   "widths": [
    900,
-   1800
-  ]
- },
- "renders/engine-dress-sizes-side": {
-  "w": 2400,
-  "h": 1905,
-  "widths": [
-   900,
-   1800
-  ]
- },
- "renders/engine-dress-sizes-fitmap": {
-  "w": 2400,
-  "h": 1905,
-  "widths": [
-   900,
-   1800
-  ]
- },
- "renders/engine-dress-shape-XS": {
-  "w": 2400,
-  "h": 1905,
-  "widths": [
-   900,
-   1800
-  ]
- },
- "renders/engine-dress-shape-XXL": {
-  "w": 2400,
-  "h": 1905,
-  "widths": [
-   900,
-   1800
-  ]
- },
- "renders/engine-tee-sizes-side": {
-  "w": 2400,
-  "h": 1905,
-  "widths": [
-   900,
-   1800
+   1322
   ]
  }
 }

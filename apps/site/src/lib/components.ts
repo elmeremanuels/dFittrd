@@ -6,7 +6,7 @@ let figNo = 0;
 export function resetFigures(): void {
   figNo = 0;
 }
-function nextFig(): string {
+export function nextFig(): string {
   figNo += 1;
   return String(figNo).padStart(2, '0');
 }
@@ -46,11 +46,11 @@ export function estimateTag(label = 'Estimate'): SafeHtml {
   return html`<span class="tag tag--estimate">${label}</span>`;
 }
 
-function creditLine(i: ImageInfo): SafeHtml {
+function creditLine(i: ImageInfo): SafeHtml | string {
   if (i.kind === 'photo') {
-    return html`<span class="fig__credit">Photo: <a href="/credits/#${i.id.replace('/', '-')}">${i.credit}</a>, CC0</span>`;
+    return html`<span class="fig__credit">Photo: <a href="/credits/#${i.anchor}">${i.credit}</a>, CC0</span>`;
   }
-  return html`<span class="fig__credit">${i.credit}</span>`;
+  return '';
 }
 
 export interface FigureOpts extends PictureOpts {
@@ -93,14 +93,18 @@ export function device(id: string, o: DeviceOpts): SafeHtml {
       : o.device === 'browser'
         ? html`<div class="browser"><div class="browser__bar" aria-hidden="true"><span></span><span></span><span></span><em>${o.url ?? 'demo.curtain.fit'}</em></div><div class="browser__screen">${picture(id, { sizes: o.sizes ?? '(min-width: 1024px) 60vw, 100vw', eager: o.eager, pos: o.pos })}</div></div>`
         : html`<div class="bare">${picture(id, { sizes: o.sizes ?? '(min-width: 1024px) 40vw, 100vw', eager: o.eager, pos: o.pos })}</div>`;
-  return html`<figure class="object ${o.cls ?? ''}" data-reveal="fade">
+  return html`<figure class="object object--${o.device} ${o.cls ?? ''}" data-reveal="fade">
   <div class="object__mat">${inner}${i.estimate ? estimateTag() : ''}</div>
-  <figcaption class="fig__cap"><span class="fig__no">Fig. ${n}</span> ${o.caption} <span class="fig__credit">${i.credit}</span></figcaption>
+  <figcaption class="fig__cap"><span class="fig__no">Fig. ${n}</span> ${o.caption}</figcaption>
 </figure>`;
 }
 
-/** The mandatory caption next to every 3D visual. */
+/** The mandatory caption next to every 3D visual: engine renders on our standard mannequin… */
 export const ESTIMATE_CAPTION = 'Estimated drape on a standard mannequin. Not a photo, not a guarantee of fit.';
+/** …and the in-shop viewer, which drapes the garment on a figure built from the shopper's measurements. */
+export const ESTIMATE_CAPTION_VIEWER = 'Estimated drape on a figure built from the entered measurements. Not a photo, not a guarantee of fit.';
+/** One line per section instead of a credit under every screenshot. */
+export const DEMO_NOTE = 'Screens: our demo shop, Aalter Studio, with fictional products.';
 
 /* ---------- typography blocks ---------- */
 export interface ChapterOpts {
@@ -111,13 +115,11 @@ export interface ChapterOpts {
   level?: 1 | 2;
   id?: string;
   cls?: string;
-  /** Numeral above the text instead of beside it (narrow columns). */
-  stack?: boolean;
 }
 
 export function chapter(o: ChapterOpts): SafeHtml {
   const tag = o.level === 1 ? 'h1' : 'h2';
-  return html`<header class="chapter${o.stack ? ' chapter--stack' : ''} ${o.cls ?? ''}">
+  return html`<header class="chapter ${o.cls ?? ''}">
   ${o.num ? html`<span class="chapter__num" aria-hidden="true">${o.num}</span>` : ''}
   <div class="chapter__text">
     <p class="kicker">${o.kicker}</p>
@@ -137,9 +139,10 @@ export function textLink(href: string, label: string): SafeHtml {
 
 export function marquee(items: string[]): SafeHtml {
   const line = items.map((t) => html`<span>${t}</span><span class="marquee__star" aria-hidden="true">✶</span>`);
-  return html`<section class="marquee" aria-label="In short">
+  return html`<section class="marquee" aria-label="In short" data-marquee>
   <p class="visually-hidden">${items.join('. ')}.</p>
   <div class="marquee__track" aria-hidden="true"><div class="marquee__row">${line}</div><div class="marquee__row">${line}</div></div>
+  <button type="button" class="marquee__toggle" aria-pressed="false" data-marquee-toggle><span class="marquee__icon" aria-hidden="true"></span><span data-label>Pause</span><span class="visually-hidden"> the moving text</span></button>
 </section>`;
 }
 

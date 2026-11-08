@@ -30,30 +30,29 @@ function initHeader(): void {
   header.addEventListener('focusin', () => header.classList.remove('is-hidden'));
 }
 
-/* ---------- full-screen contents menu ---------- */
+/* ---------- full-screen contents menu ----------
+ * Without JS the "Menu" link jumps to the footer. With JS it becomes a real <button>; while the overlay is open
+ * everything behind it is inert, so Tab stays in the header and the overlay. */
 function initMenu(): void {
-  const toggle = document.querySelector<HTMLAnchorElement>('[data-menu-toggle]');
+  const link = document.querySelector<HTMLAnchorElement>('[data-menu-link]');
+  const toggle = document.querySelector<HTMLButtonElement>('[data-menu-toggle]');
   const menu = document.querySelector<HTMLElement>('[data-menu]');
   if (!toggle || !menu) return;
-  toggle.setAttribute('role', 'button');
+  if (link) link.hidden = true;
+  toggle.hidden = false;
+  const behind = Array.from(document.querySelectorAll<HTMLElement>('body > .announce, body > main, body > footer, body > .skip-link'));
   const label = toggle.querySelector('.menu-toggle__label');
   const setOpen = (open: boolean): void => {
     menu.hidden = !open;
     toggle.setAttribute('aria-expanded', String(open));
     if (label) label.textContent = open ? 'Close' : 'Menu';
     document.documentElement.classList.toggle('menu-open', open);
+    behind.forEach((el) => {
+      el.inert = open;
+    });
     if (open) menu.querySelector<HTMLAnchorElement>('a')?.focus();
   };
-  toggle.addEventListener('click', (e) => {
-    e.preventDefault();
-    setOpen(menu.hidden);
-  });
-  toggle.addEventListener('keydown', (e) => {
-    if (e.key === ' ') {
-      e.preventDefault();
-      setOpen(menu.hidden);
-    }
-  });
+  toggle.addEventListener('click', () => setOpen(menu.hidden));
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !menu.hidden) {
       setOpen(false);
@@ -62,6 +61,21 @@ function initMenu(): void {
   });
   menu.addEventListener('click', (e) => {
     if ((e.target as HTMLElement).closest('a')) setOpen(false);
+  });
+}
+
+/* ---------- marquee: a visible pause/play control (WCAG 2.2.2) ---------- */
+function initMarquee(): void {
+  document.querySelectorAll<HTMLElement>('[data-marquee]').forEach((root) => {
+    const btn = root.querySelector<HTMLButtonElement>('[data-marquee-toggle]');
+    const text = btn?.querySelector('[data-label]');
+    if (!btn || !text) return;
+    btn.addEventListener('click', () => {
+      const paused = btn.getAttribute('aria-pressed') !== 'true';
+      btn.setAttribute('aria-pressed', String(paused));
+      root.classList.toggle('is-paused', paused);
+      text.textContent = paused ? 'Play' : 'Pause';
+    });
   });
 }
 
@@ -212,6 +226,7 @@ function initWaitlist(): void {
 document.documentElement.classList.add('js');
 initHeader();
 initMenu();
+initMarquee();
 initReveals();
 initLookbooks();
 initWaitlist();

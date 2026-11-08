@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "tsx scripts/build.ts",
+    "build:release": "CURTAIN_SITE_RELEASE=1 tsx scripts/build.ts",
     "dev": "tsx scripts/build.ts && vite preview --outDir dist --port 4321 --host 0.0.0.0",
     "preview": "vite preview --outDir dist --port 4321 --strictPort",
     "typecheck": "tsc --noEmit -p tsconfig.json",

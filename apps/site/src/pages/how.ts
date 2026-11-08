@@ -1,5 +1,5 @@
 import { em, html, type SafeHtml } from '../lib/html.ts';
-import { chapter, device, ESTIMATE_CAPTION, figure, marginNote, textLink } from '../lib/components.ts';
+import { chapter, DEMO_NOTE, device, ESTIMATE_CAPTION_VIEWER, marginNote, nextFig, picture, textLink } from '../lib/components.ts';
 import { closingCta } from '../lib/blocks.ts';
 import { type Page } from './types.ts';
 
@@ -14,11 +14,34 @@ function row(n: string, title: string, body: SafeHtml, media: SafeHtml, flip = f
 </li>`;
 }
 
+/** A size chart set in type, in the style of our AU template: the merchant's charts are the source of truth. */
+function sizeChartCard(): SafeHtml {
+  const rows: [string, number, number, number][] = [
+    ['8', 82, 66, 90],
+    ['10', 87, 71, 95],
+    ['12', 92, 76, 100],
+    ['14', 97, 81, 105],
+    ['16', 102, 86, 110],
+  ];
+  return html`<figure class="chart-card" data-reveal="fade">
+  <div class="chart-card__sheet">
+    <p class="chart-card__head"><span>Women · body chart</span><span>AU · cm</span></p>
+    <table class="chart-card__table">
+      <caption class="visually-hidden">Example AU women's body chart in centimetres</caption>
+      <thead><tr><th scope="col">Size</th><th scope="col">Bust</th><th scope="col">Waist</th><th scope="col">Hip</th></tr></thead>
+      <tbody>${rows.map(([sz, b, w, h]) => html`<tr${sz === '12' ? html` class="is-hit"` : ''}><th scope="row">${sz}</th><td>${b}</td><td>${w}</td><td>${h}</td></tr>`)}</tbody>
+    </table>
+    <p class="chart-card__foot"><span>Describes</span> the body a size fits · ease set per garment</p>
+  </div>
+  <figcaption class="fig__cap"><span class="fig__no">Fig. ${nextFig()}</span> A size chart set in type, with example numbers (not a real brand's chart). Your own chart is the source of truth; we read it, we never invent one.</figcaption>
+</figure>`;
+}
+
 export const how: Page = {
   meta: {
     path: '/how-it-works/',
     title: 'How it works — Curtain',
-    description: 'Two sides, one fitting room: your shopper gets a size from your own chart in under thirty seconds, you add one block to your theme.',
+    description: 'Two sides, one fitting room: your shopper gets a size from your own chart in a few taps, you add one block to your theme.',
   },
   body: () => html`
 <section class="page-hero wrap">
@@ -27,18 +50,18 @@ export const how: Page = {
 </section>
 
 <section class="section wrap" id="shoppers" aria-labelledby="shoppers-h">
-  <div class="section-head"><div><p class="kicker">Part one</p><h2 class="h2" id="shoppers-h" data-reveal="lines">${em('For your *shoppers.*')}</h2></div></div>
+  <div class="section-head"><div><p class="kicker">Part one</p><h2 class="h2" id="shoppers-h" data-reveal="lines">${em('For your *shoppers.*')}</h2></div><p class="micro">${DEMO_NOTE}</p></div>
   <ol class="walks">
     ${row(
       '01',
       'Tap “Try it on”.',
       html`<p>The button sits under your size picker. It opens an overlay on your own page, on desktop and mobile. No app, no account.</p>`,
-      device('product/desktop-02-product-page', { device: 'browser', caption: 'A product page in our fictional demo shop, with the button under the size picker.', url: 'demo shop · product page' }),
+      device('product/desktop-02-product-form', { device: 'browser', caption: 'The product form, with the button under the size picker.', url: 'demo shop · product page' }),
     )}
     ${row(
       '02',
-      'About you, in under 30 seconds.',
-      html`<p>Height, weight and fit preference: snug, regular or relaxed. Metric or imperial. Shoppers who know their bust, waist and hips can add them, and say whether they used a tape.</p><p>An optional 30-second camera scan can estimate measurements instead. It runs entirely in the browser; the camera frames are never stored or uploaded.</p>`,
+      'About you, in a few taps.',
+      html`<p>Height, weight and fit preference: snug, regular or relaxed. Metric or imperial. Shoppers who know their bust, waist and hips can add them, and say whether they used a tape.</p><p>An optional camera scan can estimate measurements instead. It runs entirely in the browser; the camera frames are never stored or uploaded.</p>`,
       device('product/mobile-04-about-you-filled', { device: 'phone', caption: 'The “About you” step.' }),
       true,
     )}
@@ -63,10 +86,13 @@ export const how: Page = {
     )}
   </ol>
   <aside class="note-band">
-    <p class="kicker">Optional · In pilot</p>
-    <p class="h3">${em('See it in 3D — an *estimate*.')}</p>
-    <p>On products you've approved, shoppers can open a 3D estimate at their recommended size. ${ESTIMATE_CAPTION}</p>
-    ${textLink('/3d/', 'The 3D estimate')}
+    <div class="note-band__img">${picture('renders/engine-dress-S-col', { sizes: '200px', alt: 'A synthetic test dress on our standard mannequin.' })}<span class="tag tag--estimate">Estimate</span></div>
+    <div class="note-band__text">
+      <p class="kicker">Optional · In development · demo only</p>
+      <p class="h3">${em('See it in 3D — an *estimate*.')}</p>
+      <p>In our demo shop, shoppers can open a 3D estimate at their recommended size. At real shops it comes once the approval screen is finished, and only for pieces you approve. ${ESTIMATE_CAPTION_VIEWER}</p>
+      ${textLink('/3d/', 'The 3D estimate')}
+    </div>
   </aside>
 </section>
 
@@ -74,7 +100,7 @@ export const how: Page = {
   <div class="wrap">
     <div class="section-head"><div><p class="kicker">Part two</p><h2 class="h2" id="team-h" data-reveal="lines">${em('For your *team.*')}</h2></div></div>
     <div class="split split--5-7">
-      <div class="split__media">${figure('photos/pattern-scissors', { ratio: '34', caption: 'Charts first. Everything else follows from them.', sizes: '(min-width: 1024px) 36vw, 100vw' })}</div>
+      <div class="split__media">${sizeChartCard()}</div>
       <ol class="team-steps">
         <li><p class="team-steps__n" aria-hidden="true">01</p><h3 class="h3">Install.</h3>
           <p><strong>Shopify:</strong> install the app and add the “Try it on” block in the theme editor, under the size picker.</p>
@@ -83,8 +109,8 @@ export const how: Page = {
         <li><p class="team-steps__n" aria-hidden="true">02</p><h3 class="h3">Your size charts.</h3>
           <p>Start from a sourced women's body chart template (AU, UK, EU or US) or from a garment template, in cm or inches. Assign it to whole collections, tags or product types at once.</p>
           <p>Each chart says whether its numbers describe the body a size fits or the finished garment, so ease is never guessed. A product can take sizes as soon as it has a chart.</p></li>
-        <li><p class="team-steps__n" aria-hidden="true">03</p><h3 class="h3">Approve your 3D pieces <span class="tag tag--pill">Optional · pilot</span></h3>
-          <p>Our garment engine builds a garment from your front and back product photos. Nothing goes live until you approve it. If you later change your size chart so that a size isn't covered, the 3D button simply hides.</p></li>
+        <li><p class="team-steps__n" aria-hidden="true">03</p><h3 class="h3">Approve your 3D pieces <span class="tag tag--pill">Optional · coming</span></h3>
+          <p>Our garment engine builds a garment from your front and back product photos. Nothing goes live until you approve it. The approval screen is still being built, so 3D stays off at real shops for now. If you later change your size chart so that a size isn't covered, the 3D button simply hides.</p></li>
         <li><p class="team-steps__n" aria-hidden="true">04</p><h3 class="h3">See what's happening.</h3>
           <p>Your dashboard shows totals: how many shoppers used Curtain, which sizes were recommended, and which products were opened without a result. You never see a measurement or a person, and a total only shows once a group is large enough that nobody can be singled out.</p></li>
       </ol>

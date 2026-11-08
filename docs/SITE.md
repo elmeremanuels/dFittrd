@@ -10,23 +10,27 @@ consumer PWA (`app.<domain>`) and the API (`api.<domain>`), and has nothing to d
   ESLint blocks known tracker and font-CDN hosts in the source.
 - **Design:** "Fitting Room Editorial": cream paper, Fraunces display type, Inter labels, hairline rules,
   numbered chapters, coral used sparingly (brand tokens from HANDOFF §7). No dark mode by design.
-- **Honesty rules (enforced in the copy and components):** pilot stage is stated openly; every 3D picture
-  carries an `ESTIMATE` tag and the caption "Estimated drape on a standard mannequin. Not a photo, not a
-  guarantee of fit." (AGENTS.md rule 3); no testimonials, metrics, customer logos or press; privacy claims
+- **Honesty rules (enforced in the copy and components):** pilot stage is stated openly; the 3D estimate is
+  labelled "in development · demo only" (it stays off at real shops until the approval screen exists, PLUGIN.md §2);
+  every 3D picture carries an `ESTIMATE` tag and a caption (AGENTS.md rule 3): engine renders say "Estimated drape
+  on a standard mannequin. Not a photo, not a guarantee of fit.", viewer screenshots say "Estimated drape on a
+  figure built from the entered measurements. Not a photo, not a guarantee of fit."; no testimonials, metrics, customer logos or press; privacy claims
   follow `docs/legal/privacy.md`; Bohohippychic is named as our pilot shop, and dashed placeholder frames
   mark where their approved assets will go. No logo, product photo or texture of theirs is used (D13).
 
 ## Commands
 
 ```bash
-pnpm --filter @curtain/site build      # renders dist/, then checks links, anchors, images and <h1> count
+pnpm --filter @curtain/site build      # preview build: renders dist/, checks, lists open decisions and launch gates
+pnpm --filter @curtain/site build:release  # the same, but fails while any launch gate is open (use this to publish)
 pnpm --filter @curtain/site dev        # build + preview on http://localhost:4321
 pnpm --filter @curtain/site typecheck
 pnpm --filter @curtain/site lint
 ```
 
-The build fails on a broken internal link or anchor, a missing image variant, a page without exactly one
-`<h1>`, or a reference to a third-party script, stylesheet or font. It prints the decisions that are
+The build fails on a broken internal link or anchor (including same-page `#` links), a missing image variant,
+an absolute (`http(s)://` or `//`) image URL, any image file over 250 KB, a page without exactly one `<h1>`, or a
+reference to a third-party script, stylesheet or font. It prints the decisions that are
 still open (see below). The site is part of `pnpm check` through the normal `build:apps`, `typecheck` and
 `lint` steps.
 
@@ -54,6 +58,21 @@ Also generated: `sitemap.xml`, `robots.txt`, `og-card.html` (the source of `publ
 Content lives in `apps/site/src/pages/*.ts` and `src/data/content.ts` (FAQ, journal). The open founder
 decisions are all in `src/data/site.ts`.
 
+## Launch gates (the release build refuses until all are cleared)
+
+`build:release` fails while any of these is open in `apps/site/src/data/site.ts`:
+
+1. **`partner.nameApproved`** — Bohohippychic has agreed **in writing** to be named as our pilot shop. Until then
+   the preview build names them (the founder's wish) but the site must not go public. If they decline, set
+   `partner.showName: false`: every page then says "an Australian boho label" instead, with no name or link.
+2. **`legalName`, `company.address`, `company.registration`** (and `company.vat` if registered) — the identity
+   behind the waitlist. GDPR Art. 13 requires it as soon as the site collects e-mail addresses; it fills the
+   imprint and the "Who is responsible" line of the waitlist notice on `/legal/#waitlist`.
+3. **`mailboxReady`** — `hello@curtain.fit` (or whatever `contactEmail` is) exists and receives mail.
+4. **`waitlistNoticeReviewed`** — a lawyer has read the waitlist notice on `/legal/#waitlist` (controller,
+   purpose, consent as legal basis, retention "12 months after public launch or on request", rights, the right
+   to complain to the Autoriteit Persoonsgegevens or another supervisory authority).
+
 ## What the founder must fill in before launch
 
 Edit `apps/site/src/data/site.ts` (the build lists whatever is still `null`):
@@ -67,19 +86,24 @@ Edit `apps/site/src/data/site.ts` (the build lists whatever is still `null`):
 5. **`trialDays`** — trial length (7 days in code, 14 in the listing draft). Until set, the site says the
    trial length is confirmed at launch.
 6. **`partner.status`** — update when the pilot is live on Bohohippychic's store.
-7. **Bohohippychic:** confirm in writing that they agree to be named as our pilot shop. When they approve
+7. **Bohohippychic:** see launch gate 1. When they approve
    images, a logo or a quote, put the files in `public/img/partner/`, replace the placeholder frames in
    `src/pages/pilot.ts` and `src/pages/home.ts`, set `partner.assetsApproved: true`, and add the images
-   to `/credits/`. A quote must be their real words, signed off.
+   to `/credits/`. A quote must be their real words, signed off. The site makes no claim that any of their
+   photos were used; only claim that once there is a written OK on file.
 8. **Legal:** the product privacy policy and terms are drafts; `/legal/` says "Coming soon" until a lawyer
    has reviewed them. The waitlist needs a short website privacy notice (a first version is on `/legal/#waitlist`).
 9. **Optional:** a founder name, bio and portrait for `/about/`; one sourced statistic on fit returns for
    `/why/` (with the link); a Dutch version (only the short strings first).
 
-The photos are CC0 from the WordPress Photo Directory (Unsplash and Pexels could not be verified from the
-build sandbox). CC0 covers copyright, not model releases, so the picks show people from behind or cropped.
+The photos are CC0 from the WordPress Photo Directory, found through Openverse (Unsplash and Pexels could not be
+verified from the build sandbox). CC0 covers copyright, not model releases, so the picks show people from behind
+or cropped. Every photo gets the same grade at prep time (about −20% saturation, slightly warmer, lifted blacks,
+a 6% cream veil) and is encoded to AVIF and WebP under a 230 KB budget; the build fails above 250 KB. Each photo
+appears on at most two pages and never twice on one page. Art-directed crops (the home hero, the per-size 3D
+columns, the product-form screenshot) are separate files, so the browser never downloads pixels it crops away.
 Swapping in licensed campaign photography later is a matter of replacing files in `public/img/photos/`
-(keep the `-800` and `-1600` widths in AVIF and WebP) and updating `src/data/photo-credits.json` and the
+(keep the widths listed in `src/data/image-sizes.json`, in AVIF and WebP) and updating `src/data/photo-credits.json` and the
 alt text in `src/data/images.ts`.
 
 ## Deploying to curtain.fit
@@ -144,7 +168,7 @@ www.{$DOMAIN} {
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm --filter @curtain/site build
+pnpm --filter @curtain/site build:release
 rsync -av --delete apps/site/dist/ <user>@<vps>:/opt/curtain/site-release/
 # on the VPS: copy into the caddy volume, then reload
 docker run --rm -v curtain_site:/srv/site -v /opt/curtain/site-release:/src:ro caddy:2.9-alpine \
@@ -167,9 +191,19 @@ the 404 page:
 ErrorDocument 404 /404.html
 DirectorySlash On
 <IfModule mod_headers.c>
-  <FilesMatch "\.(css|js|woff2|avif|webp|png|jpg|svg)$">
+  # One-year caching only for files whose names change when their content does (hashed CSS/JS, fonts, /img/).
+  # og.jpg, favicon.svg and apple-touch-icon.png keep their names, so they get a short cache instead.
+  <If "%{REQUEST_URI} =~ m#^/(assets|fonts|img)/#">
     Header set Cache-Control "public, max-age=31536000, immutable"
-  </FilesMatch>
+  </If>
+  <ElseIf "%{REQUEST_URI} =~ m#\.(png|jpg|svg|xml|txt)$#">
+    Header set Cache-Control "public, max-age=3600"
+  </ElseIf>
+  <Else>
+    Header set Cache-Control "no-cache"
+  </Else>
+  Header always set Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self'; style-src-attr 'unsafe-inline'; script-src 'self'; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' mailto:"
+  Header always set X-Frame-Options "DENY"
   Header always set X-Content-Type-Options "nosniff"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
 </IfModule>

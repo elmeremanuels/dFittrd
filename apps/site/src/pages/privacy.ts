@@ -21,10 +21,12 @@ export const privacy: Page = {
     <p class="kicker">What we don't do</p>
     <h2 class="h2" data-reveal="lines">${em('No ads. No tracking. *No sales.*')}</h2>
   </div>
-  <div class="prose">
+  <div>
     <p class="lead">No advertising. No tracking cookies in the fit tool. No data sales. No third-party trackers. This website has none either.</p>
-    <h3 class="h3">Forget me</h3>
-    <p>One tap in the fit tool deletes the saved profile from the browser and asks our server to delete what it holds for that device.</p>
+    <ul class="fine fine--spaced">
+      <li><strong>Forget me.</strong> One tap in the fit tool deletes the saved profile from the browser and asks our server to delete what it holds for that device.</li>
+      <li><strong>Remember me is opt-in.</strong> A saved profile is kept per shop, on the shopper's device, only when they ask for it.</li>
+    </ul>
   </div>
 </section>
 <section class="section band-sand">
@@ -37,6 +39,6 @@ export const privacy: Page = {
     </ul>
   </div>
 </section>
-${closingCta()}
+${closingCta('A fitting room that *keeps its secrets.*')}
 `,
 };

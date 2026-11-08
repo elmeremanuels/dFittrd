@@ -1,7 +1,32 @@
-import { em, html } from '../lib/html.ts';
-import { chapter, device, ESTIMATE_CAPTION, figure, marginNote, textLink } from '../lib/components.ts';
+import { em, html, type SafeHtml } from '../lib/html.ts';
+import { chapter, device, ESTIMATE_CAPTION, ESTIMATE_CAPTION_VIEWER, estimateTag, figure, marginNote, nextFig, picture, textLink } from '../lib/components.ts';
 import { closingCta } from '../lib/blocks.ts';
 import { type Page } from './types.ts';
+
+/** S, M and L as three separate crops, with the garment measurements as a real table instead of baked-in labels. */
+function sizeLineup(): SafeHtml {
+  const cols: [string, string, number, number, number, number][] = [
+    ['S', 'renders/engine-dress-S-col', 38.5, 96, 80, 100],
+    ['M', 'renders/engine-dress-M-col', 39.5, 100, 84, 104],
+    ['L', 'renders/engine-dress-L-col', 40.5, 104, 88, 108],
+  ];
+  return html`<figure class="lineup" data-reveal="fade">
+  <div class="lineup__cols">${cols.map(([sz, id]) => html`<div class="lineup__col"><div class="lineup__img">${picture(id, { sizes: '(min-width: 1024px) 300px, 33vw' })}</div><p class="lineup__size">${sz}</p></div>`)}${estimateTag()}</div>
+  <div class="lineup__side">
+  <table class="lineup__table">
+    <caption class="visually-hidden">Garment measurements of the synthetic test dress per size, in centimetres</caption>
+    <thead><tr><th scope="col">Garment, cm</th>${cols.map(([sz]) => html`<th scope="col">${sz}</th>`)}</tr></thead>
+    <tbody>
+      <tr><th scope="row">Shoulders</th>${cols.map((c) => html`<td>${c[2]}</td>`)}</tr>
+      <tr><th scope="row">Chest</th>${cols.map((c) => html`<td>${c[3]}</td>`)}</tr>
+      <tr><th scope="row">Waist</th>${cols.map((c) => html`<td>${c[4]}</td>`)}</tr>
+      <tr><th scope="row">Hip</th>${cols.map((c) => html`<td>${c[5]}</td>`)}</tr>
+    </tbody>
+  </table>
+  <figcaption class="fig__cap"><span class="fig__no">Fig. ${nextFig()}</span> One synthetic test dress, graded to S, M and L from the same numbers as the size advice. ${ESTIMATE_CAPTION}</figcaption>
+  </div>
+</figure>`;
+}
 
 export const threed: Page = {
   meta: {
@@ -11,8 +36,8 @@ export const threed: Page = {
   },
   body: () => html`
 <section class="page-hero wrap split split--7-5">
-  ${chapter({ level: 1, kicker: 'In pilot · not part of the USD 8.99 plan yet', title: 'Your product photos, *in three dimensions.*', standfirst: 'An honest preview of how a garment hangs, at the size Curtain recommended. We call it an estimate, every time.' })}
-  <div class="page-hero__aside">${device('product/mobile-09-3d-estimate-viewer', { device: 'bare', sizes: '(min-width: 1024px) 30vw, 90vw', cls: 'object--narrow', caption: `3D estimate · size XL in the demo shop. ${ESTIMATE_CAPTION}`, eager: true })}</div>
+  ${chapter({ level: 1, kicker: 'In development · demo only · not part of the plan', title: 'Your product photos, *in three dimensions.*', standfirst: 'An honest preview of how a garment hangs, at the size Curtain recommended. We call it an estimate, every time.' })}
+  <div class="page-hero__aside">${figure('renders/engine-dress-M-portrait', { ratio: '23', caption: `A synthetic test dress, size M. ${ESTIMATE_CAPTION}`, eager: true, sizes: '(min-width: 1024px) 30vw, 90vw', reveal: false })}</div>
 </section>
 
 <section class="section wrap" aria-labelledby="engine-h">
@@ -43,12 +68,7 @@ export const threed: Page = {
 <section class="section band-sand" aria-labelledby="sizes-h">
   <div class="wrap">
     <div class="section-head"><div><p class="kicker">Graded, not guessed</p><h2 class="h2" id="sizes-h" data-reveal="lines">${em('One garment, *every size.*')}</h2></div></div>
-    <div class="render-grid">
-      ${figure('renders/engine-dress-sizes-side', { ratio: 'auto', caption: `A synthetic test dress graded to S, M and L, with centimetres at each fit point. ${ESTIMATE_CAPTION}`, sizes: '(min-width: 1024px) 60vw, 100vw', figCls: 'render-grid__wide' })}
-      ${figure('renders/engine-dress-sizes-fitmap', { ratio: 'auto', caption: 'Fit map: red where the fabric is under tension, blue where there is room. An estimate.', sizes: '(min-width: 1024px) 34vw, 100vw' })}
-      ${figure('renders/engine-dress-shape-XS', { ratio: 'auto', caption: 'The same sizes on an XS body shape. An estimate.', sizes: '(min-width: 1024px) 34vw, 100vw' })}
-      ${figure('renders/engine-dress-shape-XXL', { ratio: 'auto', caption: 'And on an XXL body shape. An estimate.', sizes: '(min-width: 1024px) 34vw, 100vw' })}
-    </div>
+    ${sizeLineup()}
     <p class="micro">All garments on this page are synthetic test garments made by us. No shop's product photos are shown.</p>
   </div>
 </section>
@@ -60,19 +80,19 @@ export const threed: Page = {
     <p class="lead">A 3D view depends on your photos, your size chart and our modelling, and modelling can't be exact. So the label stays on: “3D estimate · size M”.</p>
     <p>The size itself always comes from the size advice, never from the picture.</p>
   </div>
-  <div class="split__media">${device('product/desktop-09-3d-estimate-dialog', { device: 'bare', caption: `The label is part of the viewer, not an afterthought. ${ESTIMATE_CAPTION}`, sizes: '(min-width: 1024px) 36vw, 100vw' })}</div>
+  <div class="split__media">${device('product/desktop-09-3d-estimate-dialog', { device: 'bare', caption: `The label is part of the viewer, not an afterthought. ${ESTIMATE_CAPTION_VIEWER}`, sizes: '(min-width: 1024px) 36vw, 100vw' })}</div>
 </section>
 
 <section class="section wrap" aria-labelledby="status-h">
   <div class="section-head"><div><p class="kicker">Honest status</p><h2 class="h2" id="status-h" data-reveal="lines">${em('Where it *stands.*')}</h2></div></div>
   <ul class="status-list">
-    <li><span class="tag tag--pill">Works</span><p>The 3D estimate works in our demo store today. At a real shop it stays off until the approval screen and preview are finished.</p></li>
+    <li><span class="tag tag--pill">Demo only</span><p>The 3D estimate works in our demo store today. At a real shop, including our pilot shop, it stays off until the approval screen and preview are finished.</p></li>
     <li><span class="tag tag--pill">Improving</span><p>Each garment goes through our engine one product at a time. We're still improving which garment types come out well; dresses are furthest along.</p></li>
     <li><span class="tag tag--pill">Needs</span><p>A phone or computer with WebGL2. Without it, the button doesn't appear and the size advice works as usual.</p></li>
     <li><span class="tag tag--pill">Price</span><p>Decided after the pilot. Not part of the USD 8.99 plan.</p></li>
   </ul>
   ${marginNote(html`Rights: a shop's garment is only shown in 3D after that shop approves it. ${textLink('/privacy-promise/', 'Privacy & trust')}`)}
 </section>
-${closingCta()}
+${closingCta('Want your pieces *in 3D first?*')}
 `,
 };

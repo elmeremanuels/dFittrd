@@ -14,7 +14,7 @@ export const ogCard: Page = {
     <p class="og__title">The right size, <em>behind the curtain.</em></p>
     <p class="og__sub">Size advice for fashion shops, computed on the shopper's device.</p>
   </div>
-  <div class="og__img">${picture('photos/maxi-dress-corridor', { eager: true, sizes: '480px' })}</div>
+  <div class="og__img">${picture('photos/editorial-black-beige-1-portrait', { eager: true, sizes: '420px' })}</div>
 </div>
 `,
 };

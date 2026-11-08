@@ -6,8 +6,8 @@ export interface PageMeta {
   path: string;
   title: string;
   description: string;
-  /** Hero image to preload (an images.ts id plus the width that the hero uses on desktop). */
-  preload?: { id: string; width: number };
+  /** Hero image to preload: an images.ts id, its widths and the exact `sizes` of its <picture>, so the browser fetches it once. */
+  preload?: { id: string; widths: number[]; sizes: string };
   ogImage?: string;
   noindex?: boolean;
   bodyClass?: string;
@@ -32,12 +32,13 @@ function header(path: string): SafeHtml {
       <ul>${primaryNav.map((n) => html`<li><a href="${n.href}"${attrs({ 'aria-current': path === n.href ? 'page' : undefined })}>${n.label}</a></li>`)}</ul>
     </nav>
     <div class="site-header__actions">
-      <a class="btn btn--primary btn--sm" href="/waitlist/"><span>Join pilot</span></a>
-      <a class="menu-toggle" href="#site-contents" data-menu-toggle aria-controls="menu-overlay" aria-expanded="false"><span class="menu-toggle__lines" aria-hidden="true"></span><span class="menu-toggle__label">Menu</span></a>
+      <a class="btn btn--primary btn--sm header-cta" href="/waitlist/"><span>Join the waitlist</span></a>
+      <a class="menu-toggle" href="#site-contents" data-menu-link><span class="menu-toggle__lines" aria-hidden="true"></span><span class="menu-toggle__label">Menu</span></a>
+      <button type="button" class="menu-toggle" data-menu-toggle aria-controls="menu-overlay" aria-expanded="false" hidden><span class="menu-toggle__lines" aria-hidden="true"></span><span class="menu-toggle__label">Menu</span></button>
     </div>
   </div>
 </header>
-<div class="menu-overlay" id="menu-overlay" data-menu hidden>
+<div class="menu-overlay" id="menu-overlay" data-menu hidden role="dialog" aria-modal="true" aria-label="Contents">
   <div class="menu-overlay__inner wrap">
     <p class="kicker">Contents · ${site.issue}</p>
     <nav aria-label="Contents">${contentsList(path)}</nav>
@@ -58,22 +59,17 @@ function footer(): SafeHtml {
   <div class="wrap">
     <div class="site-footer__top">
       <div class="site-footer__brand">
-        <p class="site-footer__mark">curtain<span>.fit</span></p>
-        <p class="site-footer__line">Curtain — your private fitting room.</p>
-        <p class="site-footer__news">Fit notes, now and then. <a href="/waitlist/">Join the waitlist<span aria-hidden="true"> →</span></a></p>
+        <p class="site-footer__mark" aria-hidden="true"><span>curtain</span><span class="wordmark__tld">.fit</span></p>
+        <p class="site-footer__line">Your private fitting room. <a href="/waitlist/">Join the waitlist<span aria-hidden="true"> →</span></a></p>
       </div>
       <nav class="site-footer__cols" aria-label="Footer">
-        <div><p class="kicker">Product</p><ul><li><a href="/how-it-works/">How it works</a></li><li><a href="/3d/">The 3D estimate</a></li><li><a href="/pricing/">Pricing</a></li><li><a href="/faq/">FAQ</a></li><li><a href="/privacy-promise/">Privacy &amp; trust</a></li></ul></div>
-        <div><p class="kicker">Company</p><ul><li><a href="/about/">Who we are</a></li><li><a href="/why/">Why we do this</a></li><li><a href="/pilot/">Our pilot partner</a></li><li><a href="/waitlist/">Contact &amp; waitlist</a></li></ul></div>
-        <div><p class="kicker">Journal</p><ul><li><a href="/journal/">All stories</a></li><li><a href="/journal/#privacy">On privacy</a></li><li><a href="/journal/#charts">On size charts</a></li><li><a href="/journal/#engine">On the 3D engine</a></li></ul></div>
-        <div><p class="kicker">Legal</p><ul><li><a href="/legal/#privacy">Privacy policy</a></li><li><a href="/legal/#terms">Terms</a></li><li><a href="/legal/#imprint">Imprint</a></li><li><a href="/legal/#cookies">Cookies</a></li><li><a href="/credits/">Image credits</a></li></ul></div>
+        <div><p class="kicker">Product</p><ul><li><a href="/how-it-works/">How it works</a></li><li><a href="/3d/">The 3D estimate</a></li><li><a href="/pricing/">Pricing</a></li><li><a href="/faq/">FAQ</a></li></ul></div>
+        <div><p class="kicker">Company</p><ul><li><a href="/about/">Who we are</a></li><li><a href="/why/">Why we do this</a></li><li><a href="/pilot/">Our pilot partner</a></li><li><a href="/journal/">Journal</a></li></ul></div>
+        <div><p class="kicker">Trust</p><ul><li><a href="/privacy-promise/">Privacy &amp; trust</a></li><li><a href="/legal/#privacy">Privacy policy</a></li><li><a href="/legal/#terms">Terms</a></li><li><a href="/legal/#imprint">Imprint</a></li></ul></div>
+        <div><p class="kicker">Contact</p><ul><li><a href="/waitlist/">Waitlist</a></li><li><a href="mailto:${site.contactEmail}">E-mail us</a></li><li><a href="/legal/#cookies">Cookies</a></li><li><a href="/credits/">Image credits</a></li></ul></div>
       </nav>
     </div>
     ${tapeDivider()}
-    <div class="site-footer__contents">
-      <p class="kicker">Contents</p>
-      ${contentsList('')}
-    </div>
     <div class="site-footer__small">
       <p>© ${year} ${site.legalName ?? 'curtain.fit'}. Curtain is in pilot. Size advice is advice, and 3D renders are estimates.</p>
       <p>Shopify and WooCommerce are trademarks of their respective owners. No cookies, no trackers on this site.</p>
@@ -86,7 +82,7 @@ export function layout(meta: PageMeta, assets: Assets, body: SafeHtml): string {
   const canonical = site.url + meta.path;
   const og = site.url + (meta.ogImage ?? '/og.jpg');
   const preload = meta.preload
-    ? html`<link rel="preload" as="image" type="image/avif" imagesrcset="/img/${meta.preload.id}-800.avif 800w, /img/${meta.preload.id}-${meta.preload.width}.avif ${meta.preload.width}w" imagesizes="(min-width: 1024px) 45vw, 100vw" fetchpriority="high">`
+    ? html`<link rel="preload" as="image" type="image/avif" imagesrcset="${meta.preload.widths.map((w) => `/img/${meta.preload?.id}-${w}.avif ${w}w`).join(', ')}" imagesizes="${meta.preload.sizes}" fetchpriority="high">`
     : '';
   const page = html`<!doctype html>
 <html lang="en">

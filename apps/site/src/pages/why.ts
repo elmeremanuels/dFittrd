@@ -28,7 +28,7 @@ export const why: Page = {
   ${reason(
     '01',
     'Sizes are a *guess.*',
-    html`<p class="lead dropcap">A 12 at one label is a 10 at the next. Shoppers know it, so they guess, or order two sizes and send one back.</p><p>A good size chart helps, but it still asks someone to measure themselves and read a grid on a phone. We'd rather answer the question they actually have: which size should I order?</p>`,
+    html`<p class="lead dropcap">Size 12 at one label is a 10 at the next. Shoppers know it, so they guess, or order two sizes and send one back.</p><p>A good size chart helps, but it still asks someone to measure themselves and read a grid on a phone. We'd rather answer the question they actually have: which size should I order?</p>`,
     figure('photos/colour-rail', { ratio: '45', caption: 'Forty prints and one question: which size?', sizes: '(min-width: 1024px) 45vw, 100vw' }),
     false,
   )}
@@ -54,6 +54,6 @@ export const why: Page = {
     true,
   )}
 </div>
-${closingCta()}
+${closingCta('Fewer guesses, *fewer parcels back.*')}
 `,
 };

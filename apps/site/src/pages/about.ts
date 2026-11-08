@@ -12,7 +12,7 @@ export const about: Page = {
   body: () => html`
 <section class="page-hero wrap split split--7-5">
   ${chapter({ level: 1, kicker: 'Who we are', title: 'A small studio *behind the curtain.*' })}
-  <div class="page-hero__aside">${figure('photos/knits-pampas-rail', { ratio: '34', caption: 'Soft things, measured carefully.', eager: true, sizes: '(min-width: 1024px) 34vw, 100vw', pos: '60% 50%' })}</div>
+  <div class="page-hero__aside">${figure('photos/editorial-black-beige-2', { ratio: '34', caption: 'Soft things, measured carefully.', eager: true, sizes: '(min-width: 1024px) 34vw, 100vw', pos: '64% 50%', reveal: false })}</div>
 </section>
 
 <section class="section wrap prose-grid">
@@ -43,6 +43,6 @@ export const about: Page = {
     </div>
   </div>
 </section>
-${closingCta()}
+${closingCta('Talk shop *with us.*')}
 `,
 };

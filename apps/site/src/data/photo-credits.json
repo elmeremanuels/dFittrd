@@ -20,16 +20,6 @@
   "id": "photos/minimal-rail"
  },
  {
-  "title": "A row of fitting rooms in a clothing store with open doors each featuring a decorative quilted pattern. Hooks are next to each door on the outside wall. A light blue bench sits against the wall with patterned wallpaper on the right.",
-  "photographer": "Topher",
-  "photographer_url": "https://topher.how",
-  "source_url": "https://wordpress.org/photos/photo/314660c038/",
-  "license": "CC0 1.0",
-  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
-  "provider": "WordPress Photo Directory",
-  "id": "photos/fitting-rooms"
- },
- {
   "title": "A woman with a large white hair bow walking away down an outdoor building corridor, wearing a white dress with large blue floral patterns.",
   "photographer": "Alina Kakshapati",
   "photographer_url": "https://wordpress.org/photos/author/aleenak19/",
@@ -40,7 +30,7 @@
   "id": "photos/maxi-dress-corridor"
  },
  {
-  "title": "A woman in a light yellow dress walks barefoot along a beach, holding a sandal in one hand. Several seagulls are around them, with one bird flapping its wings. The sand is wet, reflecting the sky and the figure\u2019s legs, while rocky formations are visible in the background against a calm ocean.",
+  "title": "A woman in a light yellow dress walks barefoot along a beach, holding a sandal in one hand. Several seagulls are around them, with one bird flapping its wings. The sand is wet, reflecting the sky and the figure’s legs, while rocky formations are visible in the background against a calm ocean.",
   "photographer": "Nilo Velez",
   "photographer_url": "https://www.nilovelez.com",
   "source_url": "https://wordpress.org/photos/photo/8096884ab6/",
@@ -100,16 +90,6 @@
   "id": "photos/fabric-rolls"
  },
  {
-  "title": "A woman with long dark hair wearing a patterned maxi dress stands at a balcony railing, looking out at a massive green mountain under a clear blue sky.",
-  "photographer": "Utsav Singh Rathour",
-  "photographer_url": "https://codepixelzmedia.com",
-  "source_url": "https://wordpress.org/photos/photo/5676a21220/",
-  "license": "CC0 1.0",
-  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
-  "provider": "WordPress Photo Directory",
-  "id": "photos/maxi-dress-balcony"
- },
- {
   "title": "A clothing rack is completely full with many colorful and patterned shirts, dresses, and scarves hanging on wooden hangers.",
   "photographer": "Alina Kakshapati",
   "photographer_url": "https://wordpress.org/photos/author/aleenak19/",
@@ -130,13 +110,33 @@
   "id": "photos/shell-straw-hat"
  },
  {
-  "title": "A woman with long dark hair wearing a leopard print dress walks down a stone path toward an outdoor resort swimming pool.",
-  "photographer": "Alina Kakshapati",
-  "photographer_url": "https://wordpress.org/photos/author/aleenak19/",
-  "source_url": "https://wordpress.org/photos/photo/1666a20520/",
+  "title": "A fashion editorial. Close-up of a person wearing a modern black and beige outfit with oversized sleeves, putting a pink phone case to the transparent pocket.",
+  "photographer": "Guste Cibulskyte",
+  "photographer_url": "https://wordpress.org/photos/author/gusteci/",
+  "source_url": "https://wordpress.org/photos/photo/45268adefc/",
   "license": "CC0 1.0",
   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
   "provider": "WordPress Photo Directory",
-  "id": "photos/leopard-dress-path"
+  "id": "photos/editorial-black-beige-1-portrait"
+ },
+ {
+  "title": "A person is standing in front of a clothing rack, adjusting the buttons on a black blazer.",
+  "photographer": "mdumarshaikh",
+  "photographer_url": "https://wordpress.org/photos/author/mdumarshaikh/",
+  "source_url": "https://wordpress.org/photos/photo/7206946387/",
+  "license": "CC0 1.0",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "provider": "WordPress Photo Directory",
+  "id": "photos/blazer-buttons"
+ },
+ {
+  "title": "A close-up view of draped fabric in soft hues of orange and light purple.",
+  "photographer": "Manjil Aryal",
+  "photographer_url": "https://manjil0809.github.io/Portfolio/",
+  "source_url": "https://wordpress.org/photos/photo/64568c400b/",
+  "license": "CC0 1.0",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "provider": "WordPress Photo Directory",
+  "id": "photos/draped-fabric"
  }
 ]

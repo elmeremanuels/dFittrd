@@ -207,12 +207,14 @@ const reportPath = resolve(repoRoot, option('out') ?? 'docs/research/phase0-boho
 function earlierDirs(handle: string): { dir: string; label: string; n: number }[] {
   const root = join(outDir, 'phase0');
   if (!existsSync(root)) return [];
-  const re = new RegExp(`^${handle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-run(\\d+)$`);
+  // `-run15`, and a lettered re-run of the same number (`-run16b`), sorted by number then letter
+  const re = new RegExp(`^${handle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-run(\\d+)([a-z]?)$`);
   return readdirSync(root)
     .map((d) => ({ d, m: re.exec(d) }))
     .filter((x) => x.m && statSync(join(root, x.d)).isDirectory())
-    .map((x) => ({ dir: x.d, label: `run ${Number(x.m![1])}`, n: Number(x.m![1]) }))
-    .sort((a, b) => a.n - b.n);
+    .map((x) => ({ dir: x.d, label: `run ${Number(x.m![1])}${x.m![2]}`, n: Number(x.m![1]), letter: x.m![2] ?? '' }))
+    .sort((a, b) => a.n - b.n || a.letter.localeCompare(b.letter))
+    .map(({ dir, label, n }) => ({ dir, label, n }));
 }
 
 /** The reviewer's verdict per product on its current run (data/<shop>/review.json, hand-written). */

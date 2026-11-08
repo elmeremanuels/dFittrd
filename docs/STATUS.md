@@ -317,6 +317,30 @@ its 16a raw with 0.12.0 (about $1.6-1.7) and the skirt's extra backs. turntable_
 frame, and 16b's turntable_a shows the string too (frames 40-80); whether the see-through panel in frames 32-56 goes with it
 is what 17b tests (the front still is unchanged).
 
+**Run 17b (8 Nov, azure: stage 2 + 4 again on run 16a's stills recomposed with QA 0.12.0; skirt: 8 more FASHN backs)**,
+evaluated like run 16b (`spikes/garment-engine/data/bohohippychic/phase0-written.md`, "Run 17b"; stage 4t, drape log,
+report with renders, which now lists run 16b as an earlier run; side by side pictures of runs 15 / 16b / 17b in
+`out/eval/azure-palm-baby-doll-dress/compare/run15-16b-17b-*.png` and `run16b-vs-current-*.png`, gitignored). With the cut
+string gone from the back still, the see-through lower skirt with the grey leg through (turntable_a 32-56) and the strings
+(40-80) are gone. **The cream flap in turntable_b 82-155 is not**: same width per frame as in 16b (within 1-4 px), so the
+string did not seed it. **New:** a flat, hard-edged pale rectangle beside the hem in turntable_a 13-31 (up to ~10 cm at frame
+28; fainter also at the right at about 20-28), fully detached from the skirt at frame 30 (gap up to 18 px) and gone in one
+frame at 31 (a local 41-51 px jump; no global flicker). Hem girth 157.7 cm (16b 155.9, run 15 149.5), P0 skirt Chamfer 1.13 cm (1.06, 0.70); holdout IoU 0.9119 / 0.8951, level
+with 16b (0.9127 / 0.8956); chest 101.50 cm (−0.50; 16b −0.74); flat-lay 90.00 (16b 89.79, printed 91); shoulders as 16b;
+2 vertices 3.2 mm from the mannequin. Run 17b replaces 16b as the azure panel bundle, accepted pending founder review: a judgement
+call between two different visible defects (16b: grey leg through a see-through lower skirt plus strings; 17b: the floating
+flat panel), neither panel-clean, the founder chooses; its flap and panel flagged in `review.json` and `panel-hold.txt`, not
+repaired. What still differs from run 15's stills (whose frames had only small flaps) is the hem: the 0.10.1+ composite
+adds about 220-250 px per view in the hem rows and a corner at the flap's side of the back hem; untested. GPU 1,464 s,
+$1.54-1.57. **Skirt:** 5 of 9 backs pair with the front fashn@44 (auto-pick 49), but by eye none has the front's pale pink
+smocked waistband and a clean hem: back 49 has the tier seam exactly where the front's is (row 590 against 593) but a red
+gathered band and a hem 14-66 px wider than the front's over rows 665-715 (stage 2 may grow it into side flaps as in azure); back 50 has the pale band and the seam (585) but a dark strip hanging below the hem between the feet, 16-18 px
+wide (not thin, so QA 0.12.0 neither trims nor fails it); 46 a slit with the grey leg above the hem; 43 and 47 no band. No
+pair pinned. On copies of the artifact, `--recompose-dress --dress-pin front=fashn@44,back=fashn@49` resolves in 17b's
+`stage1b/` and reproduces `8909a1c0…` / `ec73328e…` (numpy 2.2.6 and 2.5.3 alike); 17a-only candidates cannot be pinned
+(only kept from `history/`). Run 17c's stopping rule: if none of its 16 backs passes, a founder decision on 49 or a change to
+the waistband conditioning, not more seeds. 66 GPU s, $0.07-0.18. Panel still on hold (1 of 5 bundles).
+
 **Stage 4t** (`spikes/garment-engine/src/templateFit.ts`, `bake.ts`, `stage4t.ts`;
 `pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic]`): the
 control proxy remeshed into a body tube and two sleeve tubes (each starting with a shoulder cap of

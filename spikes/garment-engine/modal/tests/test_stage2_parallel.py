@@ -235,16 +235,16 @@ def _job(tmp_path, manifest, clips):
     return job
 
 
-def _assemble(s2, monkeypatch, tmp_path, manifest, done_ids, failed):
+def _assemble(s2, monkeypatch, tmp_path, manifest, done_ids, failed, motion=False, gpu_names=None):
     import phase0_modal as pm
 
     vol = FakeVolume()
     monkeypatch.setattr(pm, "JOBS_DIR", str(tmp_path))
     monkeypatch.setattr(pm, "jobs", vol)
-    plan = lib.stage2_clip_plan(manifest)
-    done = [{"id": c, "kind": "turntable", "frames": 5, "seed": 43 + i, "seconds": 450.0, "load_seconds": 15.0, "gpu_seconds": 470.0, "gpu_name": "H100"} for i, c in enumerate(done_ids)]
+    plan = lib.stage2_clip_plan(manifest, motion=motion)
+    done = [{"id": c, "kind": "turntable", "frames": 5, "seed": 43 + i, "seconds": 450.0, "load_seconds": 15.0, "gpu_seconds": 470.0, "gpu_name": (gpu_names or {}).get(c, "H100")} for i, c in enumerate(done_ids)]
     results = {c["id"]: c for c in done}
-    costs = lib.stage2_costs(plan, results, {c: 480.0 for c in ("turntable_a", "turntable_b")}, gpu="H100", region=None, stage_wall_seconds=480.0)
+    costs = lib.stage2_costs(plan, results, {c["id"]: 480.0 for c in plan}, gpu="H100", region=None, stage_wall_seconds=480.0)
     rec = s2.assemble.local(manifest["job_id"], plan, done, failed, {"steps": 40, "guidance_scale": 6.0, "shift": 5.0, "control_encoding": "linear", "pin_frames": True}, costs)
     return rec, vol
 
@@ -293,10 +293,40 @@ def test_assemble_counts_a_clip_with_missing_frames_as_failed(manifest, tmp_path
     assert rec["turntable_frames_assembled"] == 0
 
 
+@pytest.mark.filterwarnings("ignore:The assemble function is executing locally")
+def test_assemble_keeps_the_turntable_when_only_the_motion_clip_failed(manifest, tmp_path, monkeypatch):
+    s2 = _s2()
+    pytest.importorskip("numpy")
+    pytest.importorskip("PIL")
+    job = _job(tmp_path, manifest, ["turntable_a", "turntable_b"])
+    rec, _ = _assemble(s2, monkeypatch, tmp_path, manifest, ["turntable_a", "turntable_b"], [{"id": "motion", "error": "RuntimeError: boom"}], motion=True)
+    assert rec["complete"] is False and rec["failed_clips"] == [{"id": "motion", "error": "RuntimeError: boom"}]
+    assert rec["turntable_frames_assembled"] == 8 and len(rec["seams"]) == 2 and rec["removed_stale"] == []
+    assert len(os.listdir(job / "stage2" / "frames")) == 8
+    assert s2.stage2_turntable_usable(rec) and "stage 4 runs" in s2.stage2_failure_line(rec)
+
+
+@pytest.mark.filterwarnings("ignore:The assemble function is executing locally")
+def test_assemble_records_clips_on_different_gpu_types(manifest, tmp_path, monkeypatch):
+    s2 = _s2()
+    pytest.importorskip("numpy")
+    pytest.importorskip("PIL")
+    _job(tmp_path, manifest, ["turntable_a", "turntable_b"])
+    rec, _ = _assemble(s2, monkeypatch, tmp_path, manifest, ["turntable_a", "turntable_b"], [], gpu_names={"turntable_a": "NVIDIA H100", "turntable_b": "NVIDIA H200"})
+    assert rec["gpu_mismatch"] == ["NVIDIA H100", "NVIDIA H200"] and rec["gpu_name"] == "NVIDIA H100; NVIDIA H200"
+    assert lib.stage2_gpu_mismatch([{"gpu_name": "H100"}, {"gpu_name": "H100"}, {}]) == []
+
+
+def test_clip_containers_get_a_per_clip_timeout():
+    assert lib.settings({})["timeout_clip"] == 2400
+    assert lib.settings({"CURTAIN_MODAL_TIMEOUT_CLIP": "900"})["timeout_clip"] == 900
+    assert "timeout_video" not in lib.settings({})
+
+
 # --- run_phase0 wiring ---------------------------------------------------------------------------------------
 
 
-def _phase0(monkeypatch, manifest, tmp_path, clip_fn):
+def _phase0(monkeypatch, manifest, tmp_path, clip_fn, assemble_error=None):
     pytest.importorskip("modal")
     import phase0_modal as pm
     import run_phase0
@@ -319,13 +349,26 @@ def _phase0(monkeypatch, manifest, tmp_path, clip_fn):
         return {"version": "garment-consistency-0.4.0", "flagged": 0, "frames": 10, "flagged_frames": [], "garment_iou": {"min": 0.9, "mean": 0.95}}
 
     def assemble(job_id, plan, done, failed, settings, costs):
-        ok = not failed
+        if assemble_error:
+            raise assemble_error
+        ok = not any(f["id"].startswith("turntable") for f in failed)
         return {"clips": done, "turntable_frames_assembled": 8 if ok else 0, "seams": [], "load_seconds": 30.0, "steps": settings["steps"], "control_mode": "proxy",
-                "motion": False, "complete": ok, "failed_clips": failed, "parallel": costs["parallel"], "cost": costs["total"], "costs": costs["records"]}
+                "motion": False, "complete": not failed, "failed_clips": failed, "parallel": costs["parallel"], "cost": costs["total"], "costs": costs["records"]}
+
+    def download_dir(job_dir, job_id, sub):  # the Volume still holds an earlier, complete run under the same job id
+        if sub == "stage2":
+            for d in ("frames", "garment_mask"):
+                os.makedirs(os.path.join(job_dir, "stage2", d), exist_ok=True)
+                with open(os.path.join(job_dir, "stage2", d, "0000.png"), "wb") as f:
+                    f.write(b"old")
+            if assemble_error:
+                with open(os.path.join(job_dir, "stage2", "record.json"), "w") as f:
+                    json.dump({"clips": [{"id": "turntable_a"}, {"id": "turntable_b"}, {"id": "motion"}], "turntable_frames_assembled": 160}, f)
+        return 0
 
     monkeypatch.setattr(pm, "load_local_job", lambda job_dir: manifest)
     monkeypatch.setattr(pm, "upload_job", lambda *a, **kw: None)
-    monkeypatch.setattr(pm, "download_dir", lambda *a, **kw: 0)
+    monkeypatch.setattr(pm, "download_dir", download_dir)
     monkeypatch.setattr(stage2_video, "download_weights", FakeRemote(lambda: {"cached": True}))
     monkeypatch.setattr(stage2_video, "generate_clip", clip_fn)
     monkeypatch.setattr(stage2_video, "assemble", FakeRemote(assemble))
@@ -364,6 +407,29 @@ def test_run_phase0_stops_before_stage4_when_a_clip_failed(manifest, tmp_path, m
     s = json.loads((tmp_path / "cost_summary.json").read_text())
     assert s["stopped_after_stage2"][0]["id"] == "turntable_b" and s["stage2"]["complete"] is False
     assert [c["stage"] for c in s["costs"]] == ["stage2_video[turntable_a]", "stage2_video[turntable_b]"] and s["costs"][1]["failed"]
+
+
+def test_run_phase0_after_a_failed_assemble_writes_this_runs_record_not_the_volumes_old_one(manifest, tmp_path, monkeypatch):
+    main, calls = _phase0(monkeypatch, manifest, tmp_path, FakeClipFn(), assemble_error=ConnectionError("volume unavailable"))
+    with pytest.raises(SystemExit) as e:
+        main(str(tmp_path), no_synthetic_recon=True)
+    assert e.value.code == 1 and calls == {"reconstruct": 0, "consistency": 0}
+    rec = json.loads((tmp_path / "stage2" / "record.json").read_text())
+    assert rec["complete"] is False and rec["failed_clips"][-1]["id"] == "assemble" and rec["turntable_frames_assembled"] == 0
+    assert [c["id"] for c in rec["clips"]] == ["turntable_a", "turntable_b"]
+    assert not (tmp_path / "stage2" / "frames").exists() and not (tmp_path / "stage2" / "garment_mask").exists()
+    s = json.loads((tmp_path / "cost_summary.json").read_text())
+    assert s["stopped_after_stage2"][-1]["id"] == "assemble"
+
+
+def test_run_phase0_continues_to_stage4_when_only_the_motion_clip_failed(manifest, tmp_path, monkeypatch):
+    main, calls = _phase0(monkeypatch, manifest, tmp_path, FakeClipFn(fail={"motion"}))
+    main(str(tmp_path), no_synthetic_recon=True, motion=True)
+    assert calls == {"reconstruct": 1, "consistency": 1}
+    s = json.loads((tmp_path / "cost_summary.json").read_text())
+    assert "stopped_after_stage2" not in s and s["stage2"]["complete"] is False and s["stage2"]["turntable_frames_assembled"] == 8
+    assert s["stage2"]["failed_clips"][0]["id"] == "motion"
+    assert [c["stage"] for c in s["costs"]] == ["stage2_video[turntable_a]", "stage2_video[turntable_b]", "stage2_video[motion]", "stage4_recon[stage2]"]
 
 
 def test_rescoring_a_job_dir_follows_the_record_not_stale_clip_folders(tmp_path):

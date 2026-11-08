@@ -434,7 +434,13 @@ stops the run before stage 4 (`complete: false`, `stopped_after_stage2`; no half
 load). **Estimate from run 17d's timings:** stage 2 about 930–960 GPU s, **$1.02–1.05** (was 1,375–1,382 s, $1.51–1.52)
 and about **8–8.5 min wall** (was 23 min); a whole product about 15 min faster. Bit-identical frames to run 17d are not
 promised (fresh pipeline per clip; Modal may hand out an H200, as for 17d's skirt). Tests: `modal/tests/test_stage2_parallel.py`
-(mocked Modal calls), `evalReport.test.ts` (report without motion, per-container costs, incomplete stage 2).
+(mocked Modal calls), `evalReport.test.ts` (report without motion, per-container costs, incomplete stage 2). After review: a failed `assemble` writes this run's record over the
+Volume's older one locally and removes the stale frames (the report also reads `stopped_after_stage2`); a failed `--motion`
+clip no longer discards a good turntable (stage 4 runs, the record says `complete: false`); the clip containers get a
+40-minute timeout (`CURTAIN_MODAL_TIMEOUT_CLIP`, was 3 h); clips on different GPU types are recorded (`gpu_mismatch`) and
+flagged in the report (`H100!` pins the type). The $1.02–1.05 estimate is GPU only: memory reservations (128 GiB per
+container, about $0.3 per product, was about $0.43) come on top, and running in parallel costs one extra cold start
+plus model load (about 30 s, $0.03).
 
 **Stage 4t** (`spikes/garment-engine/src/templateFit.ts`, `bake.ts`, `stage4t.ts`;
 `pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic]`): the

@@ -36,7 +36,7 @@ Options: --steps 40  --motion (add the motion clip)  --clips turntable_a,turntab
          --consistency-only (re-score stage2/ already in the Volume)  --consistency-stride 2
 
 Environment: CURTAIN_MODAL_GPU_VIDEO (default H100), CURTAIN_MODAL_REGION (e.g. eu, 1.15x),
-CURTAIN_MODAL_TIMEOUT_VIDEO (s, default 10800), CURTAIN_MODAL_MEMORY_VIDEO_MB (default 131072),
+CURTAIN_MODAL_TIMEOUT_CLIP (s per clip container, default 2400; 'H100!' in CURTAIN_MODAL_GPU_VIDEO pins the type), CURTAIN_MODAL_MEMORY_VIDEO_MB (default 131072),
 CURTAIN_WAN_MEMORY_MODE (default model_cpu_offload). Every record this writes is an ESTIMATE.
 
 The one-container version ran on GPUs through GitHub Actions (runs 10 to 17d). NOT TESTED on a GPU: the parallel
@@ -176,7 +176,7 @@ def _load_pipeline():
     image=image,
     gpu=CFG["gpu_video"],
     volumes={pm.WEIGHTS_DIR: pm.weights, pm.JOBS_DIR: pm.jobs},
-    timeout=CFG["timeout_video"],
+    timeout=CFG["timeout_clip"],
     memory=CFG["memory_video_mb"],
     region=CFG["region"],
 )
@@ -256,7 +256,8 @@ def assemble(job_id: str, plan: list[dict], done: list[dict], failed: list[dict]
     the frames both render (the seam drift check) and writes stage2/record.json. A clip whose PNGs are not all in the
     Volume counts as failed. When a requested turntable clip failed, no frames are assembled and stale stage2/frames
     and stage2/garment_mask from an earlier run are removed, so nothing downstream reads frames this record does not
-    describe; the record says `complete: false` and lists the failures."""
+    describe; the record says `complete: false` and lists the failures. When only the opt-in motion clip failed, the
+    turntable is still assembled (`complete: false`, frames > 0): stage 4 can run, the failure is reported."""
     import shutil
 
     import numpy as np
@@ -278,7 +279,7 @@ def assemble(job_id: str, plan: list[dict], done: list[dict], failed: list[dict]
     outcome = lib.stage2_outcome(m, plan, ok, failed)
 
     assembled, seams_out, removed = 0, [], []
-    if outcome["turntable"] and not outcome["failed"]:
+    if outcome["turntable"]:
         assignments, seams = lib.turntable_assembly(m)
         os.makedirs(f"{out}/frames", exist_ok=True)
         for idx, cid, j in assignments:
@@ -296,6 +297,9 @@ def assemble(job_id: str, plan: list[dict], done: list[dict], failed: list[dict]
     prompts = lib.video_prompts(m)
     mode_control = lib.control_mode(m)
     names = sorted({c.get("gpu_name") for c in ok if c.get("gpu_name")})
+    mismatch = lib.stage2_gpu_mismatch(ok)
+    if mismatch:
+        print(f"[stage2] WARNING: the clip containers ran on different GPUs ({' / '.join(mismatch)}); pin with CURTAIN_MODAL_GPU_VIDEO='H100!' for comparison runs")
     record = {
         "stage": "stage2_video",
         "runner": lib.STAGE2_RUNNER,
@@ -303,6 +307,7 @@ def assemble(job_id: str, plan: list[dict], done: list[dict], failed: list[dict]
         "input_hash": m["input_hash"],
         "model": VIDEO,
         "gpu_name": "; ".join(names),
+        "gpu_mismatch": mismatch,
         "memory_mode": next((c.get("memory_mode") for c in ok), CFG["wan_memory_mode"]),
         **settings,
         "control_mode": mode_control,
@@ -336,7 +341,9 @@ def run_stage2(m: dict, *, steps: int = 40, clip_ids: list[str] | None = None, m
     """Stage 2 for one job, from the local entrypoint: one `generate_clip` container per clip, spawned together (the
     turntable pair by default, the motion clip only with `motion`), then gathered one by one. A clip that raises is
     recorded as failed and the others are still gathered (each container has committed its own clip); `assemble`
-    then writes the record, which says `complete: false` when any clip failed. The caller stops before stage 4 then.
+    then writes the record, which says `complete: false` when any clip failed. The caller stops before stage 4 when no
+    turntable was assembled (`turntable_frames_assembled == 0`) and writes the returned record locally
+    (`sync_local_record`), so a failed `assemble` never leaves an earlier run's record.json in the job dir.
     `clip_fn` / `assemble_fn` replace the Modal functions in tests."""
     clip_fn = clip_fn or generate_clip
     assemble_fn = assemble_fn or assemble
@@ -363,7 +370,7 @@ def run_stage2(m: dict, *, steps: int = 40, clip_ids: list[str] | None = None, m
         return assemble_fn.remote(job_id, plan, done, failed, settings, costs)
     except Exception as e:  # noqa: BLE001 - the GPU time is spent: report it, never a half job
         print(f"[stage2] assemble FAILED: {type(e).__name__}: {e}")
-        return {"stage": "stage2_video", "runner": lib.STAGE2_RUNNER, "job_id": job_id, "complete": False, "planned_clips": [c["id"] for c in plan],
+        return {"stage": "stage2_video", "runner": lib.STAGE2_RUNNER, "job_id": job_id, "input_hash": m.get("input_hash"), "complete": False, "planned_clips": [c["id"] for c in plan],
                 "failed_clips": failed + [{"id": "assemble", "error": f"{type(e).__name__}: {e}"}], "clips": [{k: c.get(k) for k in ("id", "frames", "seed", "seconds", "load_seconds", "gpu_seconds")} for c in done],
                 "turntable_frames_assembled": 0, "seams": [], "load_seconds": costs["parallel"]["load_seconds_total"], "steps": steps, "control_mode": lib.control_mode(m),
                 "motion": any(c["kind"] == "motion" for c in plan), "cost": costs["total"], "costs": costs["records"], "parallel": costs["parallel"]}
@@ -375,7 +382,34 @@ def stage2_failure_line(rec: dict) -> str:
         return ""
     got = [c["id"] for c in rec.get("clips", [])]
     fails = "; ".join(f"{f['id']}: {f['error']}" for f in rec.get("failed_clips", []))
+    if stage2_turntable_usable(rec):
+        return f"[stage2] INCOMPLETE: {fails}; generated {', '.join(got)}; turntable assembled ({rec['turntable_frames_assembled']} frames), stage 4 runs"
     return f"[stage2] INCOMPLETE: {fails}; generated {', '.join(got) or 'nothing'} (kept in the jobs Volume); no turntable assembled, stage 4 not started"
+
+
+def stage2_turntable_usable(rec: dict) -> bool:
+    """Stage 4 can run on this record: the 160 turntable frames were assembled (a failed motion clip does not block it)."""
+    return int(rec.get("turntable_frames_assembled") or 0) > 0
+
+
+def sync_local_record(job_dir: str, rec: dict) -> list[str]:
+    """After download_dir on an incomplete stage 2: the returned record is the truth for this run. Writes it to
+    <job_dir>/stage2/record.json (when `assemble` failed, the Volume still holds an earlier run's record, which would
+    otherwise be downloaded and reported as done) and, when no turntable was assembled, removes the local
+    stage2/frames and stage2/garment_mask (an earlier run's, downloaded or left in the job dir). Returns what it removed."""
+    import shutil
+
+    out = os.path.join(job_dir, "stage2")
+    os.makedirs(out, exist_ok=True)
+    with open(os.path.join(out, "record.json"), "w") as f:
+        json.dump(rec, f, indent=2)
+    removed = []
+    if not stage2_turntable_usable(rec):
+        for sub in ("frames", "garment_mask"):
+            if os.path.isdir(os.path.join(out, sub)):
+                shutil.rmtree(os.path.join(out, sub))
+                removed.append(f"stage2/{sub}")
+    return removed
 
 
 @app.function(image=image, volumes={pm.JOBS_DIR: pm.jobs}, timeout=3600, region=CFG["region"])
@@ -487,6 +521,9 @@ def main(job_dir: str, steps: int = 40, clips: str = "", motion: bool = False, c
         print(lib.format_cost_table(record["costs"]))
         if not record.get("complete", False):
             pm.download_dir(job_dir, job_id, "stage2")
-            raise SystemExit(stage2_failure_line(record))
+            sync_local_record(job_dir, record)
+            if not stage2_turntable_usable(record):
+                raise SystemExit(stage2_failure_line(record))
+            print(stage2_failure_line(record))
         print(consistency_line(score_consistency.remote(job_id, stride=consistency_stride)))
     pm.download_dir(job_dir, job_id, "stage2")

@@ -13,7 +13,8 @@ Steps:
   1. check the job manifest (input_hash, pinned versions, front + back photos) and upload the job once
   2. download the pinned Wan2.2-Fun-A14B-Control weights into the weights Volume (once)
   3. stage 2: generate turntable_a and turntable_b (the motion clip only with --motion; stage 4 and 4t do not use it), each in
-     its own GPU container in parallel (stage2_video.run_stage2; a failed clip stops the run before stage 4), with the manifest's neutral prompts (refused
+     its own GPU container in parallel (stage2_video.run_stage2; a failed turntable clip stops the run before stage 4;
+     a failed --motion clip is reported and stage 4 still runs), with the manifest's neutral prompts (refused
      when lib.prompt_problems finds the title, the brand or a missing negative term) and the control
      the exporter rendered (`control.mode`: proxy garment by default); assemble the 160 turntable frames;
      score every generated frame against the control silhouette (stage2_video.score_consistency, CPU)
@@ -290,15 +291,18 @@ def main(
         print("[phase0] weights:", stage2_video.download_weights.remote())
         rec = stage2_video.run_stage2(m, steps=steps, motion=motion, control_encoding=control_encoding, pin_frames=not no_pin_frames)
         costs.extend(rec["costs"])  # one record per GPU container (each pays its own model load)
-        summary["stage2"] = {k: rec.get(k) for k in ("clips", "turntable_frames_assembled", "seams", "load_seconds", "steps", "control_mode", "motion", "complete", "failed_clips", "parallel")}
+        summary["stage2"] = {k: rec.get(k) for k in ("clips", "turntable_frames_assembled", "seams", "load_seconds", "steps", "control_mode", "motion", "complete", "failed_clips", "parallel", "gpu_mismatch")}
         print(f"[phase0] stage 2: {len(rec['clips'])} clips, {rec['turntable_frames_assembled']} turntable frames, seams {rec['seams']}")
         if not rec.get("complete", False):
-            # A failed clip never gives a half job: no stage 4 on stale or missing frames. What finished stays in the Volume.
             print(stage2_video.stage2_failure_line(rec).replace("[stage2]", "[phase0] stage 2"))
+        if not stage2_video.stage2_turntable_usable(rec):
+            # A failed turntable clip (or assemble) never gives a half job: no stage 4 on stale or missing frames. What
+            # finished stays in the Volume. The returned record replaces whatever stage2/record.json the Volume held.
             pm.download_dir(job_dir, job_id, "stage2")
+            stage2_video.sync_local_record(job_dir, rec)
             summary["costs"] = costs
             summary["cost_total"] = lib.summarize_costs(costs)
-            summary["stopped_after_stage2"] = rec.get("failed_clips") or ["stage 2 incomplete"]
+            summary["stopped_after_stage2"] = rec.get("failed_clips") or ["stage 2: no turntable assembled"]
             summary["wall_seconds"] = round(time.time() - t_all, 1)
             with open(os.path.join(job_dir, "cost_summary.json"), "w") as f:
                 json.dump(summary, f, indent=2)

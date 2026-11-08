@@ -165,6 +165,22 @@ describe('report with a GPU run', () => {
     expect(bad.detail).toBe('INCOMPLETE: turntable_a (RuntimeError: CUDA out of memory); clips turntable_b; no motion clip; 2 GPU containers in parallel, wall 497 s vs 946 GPU s; no turntable assembled');
   });
 
+  it('marks stage 2 failed when run_phase0 stopped after it, even over an older complete record.json', () => {
+    const stale = { ...(job.stage2 as object), turntable_frames_assembled: 160 };
+    const st = stageStatuses(sec, { ...job, stage2: stale, costSummary: { stopped_after_stage2: [{ id: 'assemble', error: 'RuntimeError: boom' }] } }).find((s) => s.stage === '2 image to video')!;
+    expect(st.state).toBe('failed');
+    expect(st.detail).toMatch(/^INCOMPLETE: assemble \(RuntimeError: boom\)/);
+  });
+
+  it('keeps a turntable assembled when only the opt-in motion clip failed, and warns on mixed GPU types', () => {
+    const s2 = { ...(job.stage2 as object), complete: false, turntable_frames_assembled: 160, clips: [{ id: 'turntable_a' }, { id: 'turntable_b' }], motion: true,
+      failed_clips: [{ id: 'motion', error: 'RuntimeError: boom' }], gpu_mismatch: ['NVIDIA H100 80GB HBM3, 81559 MiB', 'NVIDIA H200, 143771 MiB'] };
+    const st = stageStatuses(sec, { ...job, stage2: s2 }).find((s) => s.stage === '2 image to video')!;
+    expect(st.state).toBe('done');
+    expect(st.detail).toMatch(/160 turntable frames .*INCOMPLETE: motion \(RuntimeError: boom\) \(turntable assembled, stage 4 ran\)/);
+    expect(st.detail).toMatch(/WARNING clips on different GPUs \(NVIDIA H100 80GB HBM3, 81559 MiB \/ NVIDIA H200, 143771 MiB\)/);
+  });
+
   it('says when a cost total leaves out a stage 1b reused from an earlier run', () => {
     const own = costTotal(job);
     expect(own.stage1bReused).toBeNull();

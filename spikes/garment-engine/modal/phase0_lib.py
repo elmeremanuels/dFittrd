@@ -383,7 +383,8 @@ def stage2_turntable_ids(m: Mapping[str, Any]) -> list[str]:
 
 def stage2_outcome(m: Mapping[str, Any], plan: Sequence[Mapping[str, Any]], done: Sequence[Mapping[str, Any]], failed: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """What a stage 2 run produced: `complete` when every planned clip came back, `turntable` when both half turns did
-    (the 160 frames can be assembled). A failed clip never yields a half job: the caller stops before stage 4."""
+    (the 160 frames can be assembled). A failed turntable clip never yields a half job: the caller stops before stage 4.
+    A failed motion clip (opt-in) leaves `complete` false but the turntable usable: stage 4 runs, the failure is reported."""
     ids = [c["id"] for c in done]
     missing = [c["id"] for c in plan if c["id"] not in ids and c["id"] not in {f["id"] for f in failed}]
     turntable = set(stage2_turntable_ids(m)) <= set(ids)
@@ -437,6 +438,14 @@ def stage2_costs(plan: Sequence[Mapping[str, Any]], results: Mapping[str, Mappin
     }
 
 
+def stage2_gpu_mismatch(clips: Sequence[Mapping[str, Any]]) -> list[str]:
+    """The distinct GPU names of the clip containers when they differ (empty when all ran on the same type). Modal may
+    serve an 'H100' request on an H200; with one container per half turn the two halves can then differ, which the
+    seam drift and comparisons with earlier runs should be read against. Pin with CURTAIN_MODAL_GPU_VIDEO='H100!'."""
+    names = sorted({str(c.get("gpu_name")) for c in clips if c.get("gpu_name")})
+    return names if len(names) > 1 else []
+
+
 def stage2_parallel_line(p: Mapping[str, Any]) -> str:
     wall = "n/a" if p.get("wall_seconds") is None else f"{p['wall_seconds']:.0f} s"
     return f"[stage2] {p['containers']} GPU containers in parallel: wall {wall}, GPU {p['gpu_seconds']:.0f} s summed (model load {p['load_seconds_total']:.0f} s of it, paid per container)"
@@ -449,7 +458,9 @@ def stage2_parallel_line(p: Mapping[str, Any]) -> str:
 DEFAULTS = {
     "CURTAIN_MODAL_GPU_VIDEO": "H100",
     "CURTAIN_MODAL_GPU_RECON": "L40S",
-    "CURTAIN_MODAL_TIMEOUT_VIDEO": "10800",
+    # Per clip container (stage2-parallel): one 81-frame clip took 447-462 s in run 17d, the model load 13-16 s; about
+    # 5x that, so a hung container is cut off after 40 min instead of the 3 h the three-clip container had.
+    "CURTAIN_MODAL_TIMEOUT_CLIP": "2400",
     "CURTAIN_MODAL_TIMEOUT_RECON": "3600",
     "CURTAIN_MODAL_TIMEOUT_DOWNLOAD": "7200",
     "CURTAIN_MODAL_MEMORY_VIDEO_MB": "131072",
@@ -478,7 +489,7 @@ def settings(environ: Mapping[str, str] | None = None) -> dict[str, Any]:
         "region": region,
         "gpu_video": get("CURTAIN_MODAL_GPU_VIDEO"),
         "gpu_recon": get("CURTAIN_MODAL_GPU_RECON"),
-        "timeout_video": seconds("CURTAIN_MODAL_TIMEOUT_VIDEO"),
+        "timeout_clip": seconds("CURTAIN_MODAL_TIMEOUT_CLIP"),
         "timeout_recon": seconds("CURTAIN_MODAL_TIMEOUT_RECON"),
         "timeout_download": seconds("CURTAIN_MODAL_TIMEOUT_DOWNLOAD"),
         "memory_video_mb": int(get("CURTAIN_MODAL_MEMORY_VIDEO_MB")),

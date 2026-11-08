@@ -12,7 +12,7 @@ import { CATEGORY_ANCHORS } from '@curtain/anchors';
 import type { GarmentPayload } from '@curtain/schema';
 import { CHART_TOLERANCE_CM, SOURCE_LABEL, type EvalResult } from './eval';
 import { evalMaterial } from './evalBundle';
-import { arr, num, obj, str, type CostRecord, type JobFiles, type ProductEval } from './evalJob';
+import { arr, num, obj, str, type CostRecord, type JobFiles, type Json, type ProductEval } from './evalJob';
 import { VIEW_IOU_PASS } from './evalView';
 
 export interface ShopImage {
@@ -251,7 +251,8 @@ export function stageStatuses(p: { shop?: ShopProduct; eval: ProductEval | null;
   if (!s2) out.push({ stage: '2 image to video', state: 'not run', detail: 'no stage2/record.json' });
   else {
     const seams = arr(s2.seams).map((x) => num(obj(x)?.mean_abs_diff_8bit)).filter((x): x is number => x !== null);
-    out.push({ stage: '2 image to video', state: 'done', detail: `${str(obj(s2.model)?.id) ?? 'model ?'}, ${num(s2.steps) ?? '?'} steps, ${num(s2.turntable_frames_assembled) ?? '?'} turntable frames; seam drift ${seams.length ? seams.map((s) => s.toFixed(1)).join(' / ') : '—'} (8-bit mean abs)` });
+    const cons = consistencyNote(s2.consistency);
+    out.push({ stage: '2 image to video', state: 'done', detail: `${str(obj(s2.model)?.id) ?? 'model ?'}, ${num(s2.steps) ?? '?'} steps, ${num(s2.turntable_frames_assembled) ?? '?'} turntable frames; seam drift ${seams.length ? seams.map((s) => s.toFixed(1)).join(' / ') : '—'} (8-bit mean abs)${cons ? `; ${cons}` : ''}` });
   }
   if (job?.stage3Masks) out.push({ stage: '3 separation', state: 'done', detail: `${job.stage3Masks} garment masks` });
   else if (job?.stage2Masks?.count) {
@@ -271,7 +272,9 @@ export function stageStatuses(p: { shop?: ShopProduct; eval: ProductEval | null;
     const iou = obj(mt?.iou);
     const tr = obj(iou?.train), ho = obj(iou?.holdout);
     const ins = obj(mt?.insideBody);
-    out.push({ stage: '4t template fit + bake (CPU)', state: s4t.glb ? 'done' : 'failed', detail: s4t.glb ? `${num(obj(mt?.mesh)?.triangles) ?? '?'} triangles, IoU visible / silhouette train ${num(tr?.visibleMean) ?? '—'} / ${num(tr?.silhouetteMean) ?? '—'}, holdout ${num(ho?.visibleMean) ?? '—'} / ${num(ho?.silhouetteMean) ?? '—'}, ${num(ins?.sdfInside) ?? '?'} vertices inside the mannequin` : 'metrics without garment.glb' });
+    const offFrames = offReferenceSpans(job?.stage2?.consistency).reduce((n, sp) => n + (num(sp.frames) ?? 0), 0);
+    const hemNote = offFrames ? `; hem girth UNCONFIRMED: fitted from masks of ${offFrames} turntable frames with garment off the stills' hull below the hips (stage 2 off-reference spans)` : '';
+    out.push({ stage: '4t template fit + bake (CPU)', state: s4t.glb ? 'done' : 'failed', detail: s4t.glb ? `${num(obj(mt?.mesh)?.triangles) ?? '?'} triangles, IoU visible / silhouette train ${num(tr?.visibleMean) ?? '—'} / ${num(tr?.silhouetteMean) ?? '—'}, holdout ${num(ho?.visibleMean) ?? '—'} / ${num(ho?.silhouetteMean) ?? '—'}, ${num(ins?.sdfInside) ?? '?'} vertices inside the mannequin${hemNote}` : 'metrics without garment.glb' });
   }
   const ev = p.eval;
   if (ev) {
@@ -284,6 +287,23 @@ export function stageStatuses(p: { shop?: ShopProduct; eval: ProductEval | null;
     for (const s of ['5 anchoring and calibration', '6 grading', '7 QA (chart, view, mesh)', '8 bundle']) out.push({ stage: s, state: 'not run', detail: p.evalError ?? 'needs a stage 4 mesh' });
   }
   return out;
+}
+
+/** Stage 2 consistency (`stage2/record.json` `consistency`, garment-consistency 0.4.0+): spans of turntable frames whose
+ * garment lies off the pinned stills' hull below the hips (a flap or panel the stills do not have). [] for older records. */
+export function offReferenceSpans(consistency: unknown): Json[] {
+  return arr(obj(consistency)?.off_reference_spans).map(obj).filter((x): x is Json => x !== null);
+}
+
+/** One line for the stage table: flagged frames of the stage 2 consistency check and the off-reference spans (flag, never hide). */
+export function consistencyNote(consistency: unknown): string {
+  const c = obj(consistency);
+  if (!c) return '';
+  const spans = offReferenceSpans(c);
+  const head = `consistency ${str(c.version) ?? '?'}: ${num(c.flagged) ?? '?'}/${num(c.frames) ?? '?'} frames flagged`;
+  if (!spans.length) return head;
+  const list = spans.map((sp) => `${str(sp.clip) ?? '?'} j${num(sp.j0) ?? '?'}–${num(sp.j1) ?? '?'} (max ${num(sp.max_px) ?? '?'} px, ${str(sp.side) ?? '?'})`).join(', ');
+  return `${head}; garment off the stills' hull below the hips (flap or panel the stills do not have) in ${list}`;
 }
 
 // ---------------------------------------------------------------------------

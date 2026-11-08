@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { chooseMesh, evaluateProduct, readJob, type JobFiles, type ProductEval } from './evalJob';
 import { reconstructedDress, shopPayloads, syntheticDress, writeFakeJob } from './evalFixtures';
 import { SHOP_UNCOVERED_CATEGORIES } from './shopSelection';
-import { costScope, costTotal, forPanel, parsePrintedTable, plannedPhotos, renderReport, stageStatuses, usedInputs, verdicts, type ProductSection, type ReportInput, type ShopImage, type ShopProduct } from './evalReport';
+import { consistencyNote, costScope, costTotal, forPanel, parsePrintedTable, plannedPhotos, renderReport, stageStatuses, usedInputs, verdicts, type ProductSection, type ReportInput, type ShopImage, type ShopProduct } from './evalReport';
 
 const images = (JSON.parse(readFileSync(new URL('../data/bohohippychic/images.json', import.meta.url), 'utf8')) as { products: Record<string, ShopImage[]> }).products;
 const dirs: string[] = [];
@@ -98,6 +98,29 @@ describe('report with a GPU run', () => {
     expect(st.find((s) => s.stage === '3 separation')!.state).toBe('not built');
     expect(st.find((s) => s.stage === '4 reconstruction')!.state).toBe('done');
     expect(costTotal(job).gpuSeconds).toBe(350);
+  });
+
+  it('flags off-reference spans of stage 2 and marks the stage 4t hem girth unconfirmed', () => {
+    const consistency = {
+      version: 'garment-consistency-0.4.0',
+      frames: 162,
+      flagged: 70,
+      off_reference_spans: [
+        { clip: 'turntable_a', j0: 19, j1: 30, frame0: 19, frame1: 30, frames: 12, max_px: 1941, side: 'image-left' },
+        { clip: 'turntable_b', j0: 18, j1: 78, frame0: 98, frame1: 158, frames: 61, max_px: 1237, side: 'image-left' },
+      ],
+    };
+    expect(consistencyNote(consistency)).toBe(
+      "consistency garment-consistency-0.4.0: 70/162 frames flagged; garment off the stills' hull below the hips (flap or panel the stills do not have) in turntable_a j19–30 (max 1941 px, image-left), turntable_b j18–78 (max 1237 px, image-left)",
+    );
+    expect(consistencyNote({ version: 'garment-consistency-0.3.0', frames: 10, flagged: 0 })).toBe('consistency garment-consistency-0.3.0: 0/10 frames flagged');
+    expect(consistencyNote(undefined)).toBe('');
+    const flaggedJob = { ...job, stage2: { ...(job.stage2 as object), consistency }, stage4t: { stage2: { glb: 'x.glb', metrics: {}, atlas: null, exemplar: null, shadow: null } } };
+    const st = stageStatuses(sec, flaggedJob);
+    expect(st.find((s) => s.stage === '2 image to video')!.detail).toMatch(/turntable_b j18–78 \(max 1237 px, image-left\)/);
+    expect(st.find((s) => s.stage === '4t template fit + bake (CPU)')!.detail).toMatch(/hem girth UNCONFIRMED: fitted from masks of 73 turntable frames/);
+    const clean = stageStatuses(sec, { ...flaggedJob, stage2: { ...(job.stage2 as object), consistency: { ...consistency, off_reference_spans: [] } } });
+    expect(clean.find((s) => s.stage === '4t template fit + bake (CPU)')!.detail).not.toMatch(/UNCONFIRMED/);
   });
 
   it('says when a cost total leaves out a stage 1b reused from an earlier run', () => {

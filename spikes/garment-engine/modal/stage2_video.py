@@ -341,7 +341,15 @@ def consistency_line(c: dict) -> str:
         f"[stage2] garment consistency ({c['version']}): {c['flagged']}/{c['frames']} frames flagged for drift"
         f"{f' ({flagged})' if flagged else ''}; garment IoU min {iou.get('min', 'n/a')} mean {iou.get('mean', 'n/a')}; "
         f"{len(c.get('artefact_frames', []))} frames with artefacts (text, props), {len(c.get('blind_frames', []))} frames blind to leg drift"
+        + off_reference_line(c.get("off_reference_spans") or [])
     )
+
+
+def off_reference_line(spans: list) -> str:
+    """The off-reference spans (garment off the stills' hull below the hips: a flap or panel), for the log."""
+    if not spans:
+        return ""
+    return "; off the stills' hull below the hips: " + ", ".join(f"{s['clip']} j{s['j0']}-{s['j1']} ({s['frames']} frames, max {s['max_px']} px, {s['side']})" for s in spans)
 
 
 @app.local_entrypoint()

@@ -33,6 +33,16 @@ This module replaces both:
     left a background gap on the axis) and rows where the garment splits into two legs with background
     between them; for trousers, rows where the reference has two legs and the garment one.
 
+``off_reference``
+    (consistency 0.4.0) Garment the pinned stills do not have, below the hips: pixels of the frame's garment
+    more than a few px outside the visual hull, off our bare mannequin, per image side. Runs 16b and 17b
+    drew a cream hem flap at the image-left side of turntable_b (frames ~95-159) and a pale panel beside the
+    hem of turntable_a (13-31); the garment IoU flagged only b 114-127, and stage 4t fitted the flap as hem
+    girth (157.7 cm vs 149.5 in run 15). Measured on its own hull, carved with a looser envelope (8 px
+    instead of 4): the stills overhang the control proxy at the hem by up to ~17 px a side, and the 4 px
+    envelope carves that overhang off the hull at the cameras next to the pins, so every run (run 15 too)
+    would read 900+ px off the reference at frames 1-8 and 150-159 though nothing was drawn there.
+
 Everything is a drift check, not a measurement of the garment (AGENTS.md rule 3).
 """
 from __future__ import annotations
@@ -44,7 +54,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 GARMENT_SEGMENT_VERSION = "garment-segment-0.1.0"
-CONSISTENCY_V2_VERSION = "garment-consistency-0.3.0"
+CONSISTENCY_V2_VERSION = "garment-consistency-0.4.0"
 
 SEGMENT_DEFAULTS: dict[str, float] = {
     "envelope_px": 40,  # the garment lies within the control silhouette dilated by this much
@@ -705,9 +715,23 @@ CONSISTENCY_V2_THRESHOLDS: dict[str, float] = {
     "min_drift_rows": 3,  # merged-leg check: at least this many rows
     # Strong foreground outside the loose envelope (text, logos), share of the frame.
     "max_stray_frac": 0.0005,
+    # Dress/skirt turntable frames: garment off the pinned stills' hull below the hips (`off_reference`):
+    # a flap, panel or second hem the stills do not have. Pixels more than `off_reference_margin_px`
+    # outside the hull, off our bare mannequin, in rows below `off_reference_zone_frac` of the bare
+    # silhouette's height; the hull for this check is carved with `off_reference_envelope_px` (see
+    # `off_reference`). Azure palm, CPU, clip frames at 480x832: run 15 max 346 px at
+    # turntable_a j1-8 / b j76-79 (image-right: the front still's hem against the hull next to the pin) and 764
+    # at b j60 (frame 140: its own small flap and background filled between the legs); runs 16b/17b 413-1490 px
+    # over turntable_b j18/20-78 and (17b) 456-2249 over turntable_a j19-30. Margin on run 15 about 54 px.
+    # One product: PROVISIONAL.
+    "max_off_reference_px": 400,
+    "off_reference_margin_px": 6,
+    "off_reference_envelope_px": 8,
+    "off_reference_zone_frac": 0.45,
 }
 
-_ROW_THRESHOLDS = ("min_skirt_zone_rows", "min_leg_gap_rows", "min_drift_rows", "envelope_out_px")
+_ROW_THRESHOLDS = ("min_skirt_zone_rows", "min_leg_gap_rows", "min_drift_rows", "envelope_out_px", "off_reference_margin_px", "off_reference_envelope_px")
+_AREA_THRESHOLDS = ("max_off_reference_px",)
 
 
 def scaled_thresholds(height: int, thresholds: Mapping[str, float] | None = None) -> dict[str, float]:
@@ -717,7 +741,35 @@ def scaled_thresholds(height: int, thresholds: Mapping[str, float] | None = None
     for k in _ROW_THRESHOLDS:
         if thresholds is None or k not in thresholds:
             t[k] = max(1, int(round(t[k] * f)))
+    for k in _AREA_THRESHOLDS:
+        if thresholds is None or k not in thresholds:
+            t[k] = max(1, int(round(t[k] * f * f)))
     return t
+
+
+def off_reference(garment: np.ndarray, reference: np.ndarray, bare: np.ndarray, *, margin_px: int, zone_frac: float = 0.45) -> dict[str, int]:
+    """Garment pixels more than `margin_px` outside `reference` (the pinned stills' hull at this camera), off
+    our bare mannequin, in the rows below `zone_frac` of the bare silhouette's height (hips down): cloth the
+    stills do not have, such as the hem flap runs 16b/17b drew. Split at the body axis (the middle of the
+    bare silhouette's lowest third) into image-left and image-right. It counts what the frame's garment
+    mask holds; it changes nothing (the masks stay stage 4's alpha targets as segmented)."""
+    g = np.asarray(garment, dtype=bool)
+    b = np.asarray(bare, dtype=bool)
+    out = {"off_reference_px": 0, "off_reference_left_px": 0, "off_reference_right_px": 0}
+    ys = np.nonzero(b.any(axis=1))[0]
+    if len(ys) == 0 or not g.any():
+        return out
+    top, bottom = int(ys[0]), int(ys[-1])
+    y0 = top + int(zone_frac * (bottom - top))
+    o = g & ~dilate(np.asarray(reference, dtype=bool), max(1, int(margin_px))) & ~b
+    o[:y0] = False
+    low = b[top + 2 * (bottom - top) // 3:bottom + 1]
+    xs = np.nonzero(low.any(axis=0))[0]
+    axis = int(round((xs[0] + xs[-1]) / 2))
+    out["off_reference_px"] = int(o.sum())
+    out["off_reference_left_px"] = int(o[:, :axis].sum())
+    out["off_reference_right_px"] = out["off_reference_px"] - out["off_reference_left_px"]
+    return out
 
 
 def frame_garment_consistency(garment: np.ndarray, reference: np.ndarray, bare: np.ndarray, *, kind: str, reference_kind: str, envelope_out_px: int | None = None) -> dict[str, Any]:
@@ -762,6 +814,11 @@ def garment_flags(row: Mapping[str, Any], kind: str, thresholds: Mapping[str, fl
         if row.get("outside_envelope") is not None and row["outside_envelope"] > t["max_outside_envelope"]:
             out.append(f"{row['outside_envelope']:.3f} of the garment outside the posed proxy envelope > {t['max_outside_envelope']} "
                        "(a larger or longer garment, a scale jump, or a prop merged into it)")
+    off = row.get("off_reference_px")
+    if kind in ("dress", "skirt") and off is not None and off > t["max_off_reference_px"]:
+        side = "image-left" if row["off_reference_left_px"] >= row["off_reference_right_px"] else "image-right"
+        out.append(f"{off} px of garment off the pinned stills' hull below the hips (left {row['off_reference_left_px']}, right {row['off_reference_right_px']}; "
+                   f"mostly {side}) > {int(t['max_off_reference_px'])}: a flap or panel the stills do not have")
     skirt_rows = row.get("skirt_zone_rows") or 0
     if kind in ("dress", "skirt") and skirt_rows >= t["min_skirt_zone_rows"]:
         if row.get("skirt_cover") is not None and row["skirt_cover"] < t["min_skirt_cover"]:
@@ -789,7 +846,9 @@ CONSISTENCY_V2_LABEL = (
     "proxy only bounds the depth the two stills cannot see); motion frames vs the posed proxy as a loose "
     "envelope, both ways (proxy covered, garment outside it). Drift checks: for a dress or skirt the share of "
     "the reference covered below the crotch (`skirt_cover`) and a gap between the legs, for trousers merged "
-    "legs, only in frames where our mannequin's legs stand apart (`drift_visible`). Thresholds are provisional "
+    "legs, only in frames where our mannequin's legs stand apart (`drift_visible`); for a dress or skirt "
+    "on the turntable, garment off the stills' hull below the hips (`off_reference_px`, per image side: a flap "
+    "or panel the stills do not have; spans in `off_reference_spans`). Thresholds are provisional "
     "(one product). A drift check, not a measurement of the "
     "garment. A garment the colour of the grey mannequin cannot be told from it by colour "
     "(`ambiguous_with_mannequin`): on the body the proxy is used instead."
@@ -808,6 +867,9 @@ def score_job(job_dir: str, manifest: Mapping[str, Any], clip_ids: Sequence[str]
     stills = stills_garment_masks(scene)
     ref = garment_reference(scene, stills)
     t = scaled_thresholds(scene.height, thresholds)
+    # The off-reference check's own hull, carved with a looser envelope (see `off_reference`).
+    ref_off = garment_reference(scene, stills, {"envelope_px": int(t["off_reference_envelope_px"])})
+    off_cache: dict[int, np.ndarray] = {}
     wanted = set(clip_ids) if clip_ids is not None else None
     rows: list[dict[str, Any]] = []
     ref_cache: dict[int, np.ndarray] = {}
@@ -822,14 +884,17 @@ def score_job(job_dir: str, manifest: Mapping[str, Any], clip_ids: Sequence[str]
             rgb = _read_rgb(path)
             g, info = scene.segment(rgb, ckind, idx)
             bare = scene.bare(ckind, idx)
+            off: dict[str, Any] = {}
             if ckind == "turntable":
                 if idx not in ref_cache:
                     ref_cache[idx] = ref["project"](idx)
+                    off_cache[idx] = ref_off["project"](idx)
                 reference, rk = ref_cache[idx], "pinned hull"
+                off = off_reference(g, off_cache[idx], bare, margin_px=int(t["off_reference_margin_px"]), zone_frac=float(t["off_reference_zone_frac"]))
             else:
                 pr = scene.proxy(ckind, idx)
                 reference, rk = (pr if pr is not None else scene.control(ckind, idx)), "proxy envelope"
-            row = {"clip": clip["id"], "j": j, "frame": idx, **frame_garment_consistency(g, reference, bare, kind=kind, reference_kind=rk, envelope_out_px=int(t["envelope_out_px"])),
+            row = {"clip": clip["id"], "j": j, "frame": idx, **frame_garment_consistency(g, reference, bare, kind=kind, reference_kind=rk, envelope_out_px=int(t["envelope_out_px"])), **off,
                    "ambiguous_with_mannequin": info["ambiguous_with_mannequin"], "contrast_off_body": info["contrast_off_body"],
                    "stray_frac": round(info["stray_px"] / rgb.shape[0] / rgb.shape[1], 5)}
             row["reasons"] = garment_flags(row, kind, t)
@@ -847,6 +912,8 @@ def consistency_v2_summary(rows: Sequence[Mapping[str, Any]], *, kind: str, thre
         for k in ("garment_iou", "reference_cover", "garment_inside", "outside_envelope", "skirt_cover"):
             vals = [r[k] for r in rs if r.get(k) is not None]
             out[k] = None if not vals else {"min": round(min(vals), 4), "mean": round(sum(vals) / len(vals), 4)}
+        offs = [r["off_reference_px"] for r in rs if r.get("off_reference_px") is not None]
+        out["off_reference_px"] = None if not offs else {"max": max(offs), "mean": round(sum(offs) / len(offs), 1)}
         return out
 
     clips: dict[str, list[Mapping[str, Any]]] = {}
@@ -859,12 +926,14 @@ def consistency_v2_summary(rows: Sequence[Mapping[str, Any]], *, kind: str, thre
         "segmentation": GARMENT_SEGMENT_VERSION,
         "proxy_kind": kind,
         "thresholds": dict(thresholds),
-        "thresholds_note": "PROVISIONAL: set on one product, run 11a (no drift) and run 10 (dress drawn as trousers), CPU; margins about 0.03 (garment IoU) and 0.06 (skirt cover); see modal/README.md",
+        "thresholds_note": "PROVISIONAL: set on one product, run 11a (no drift) and run 10 (dress drawn as trousers), CPU; margins about 0.03 (garment IoU) and 0.06 (skirt cover); off-reference (0.4.0) set on azure palm runs 15/16b/17b (run 15 max 346 px outside its own flap frames 139-140, threshold 400); see modal/README.md",
         **stats(rows),
         "per_clip": {c: stats(rs) for c, rs in clips.items()},
         "flagged_frames": flagged,
         # Not garment drift, reported apart: text, logos, props outside the envelope.
         "artefact_frames": [{**ref(r), "reasons": r["artefacts"]} for r in rows if r.get("artefacts")],
+        # Garment off the pinned stills' hull below the hips (a flap or panel), as spans of consecutive frames.
+        "off_reference_spans": off_reference_spans(rows, thresholds["max_off_reference_px"]) if kind in ("dress", "skirt") and "max_off_reference_px" in thresholds else [],
         "blind_frames": [ref(r) for r in rows if not r["drift_visible"]],
         "ambiguous_frames": [ref(r) for r in rows if r.get("ambiguous_with_mannequin")],
         "pass": not flagged,
@@ -872,6 +941,33 @@ def consistency_v2_summary(rows: Sequence[Mapping[str, Any]], *, kind: str, thre
         **extra,
         "frames_detail": list(rows),
     }
+
+
+def off_reference_spans(rows: Sequence[Mapping[str, Any]], max_px: float) -> list[dict[str, Any]]:
+    """Consecutive frames of one clip whose `off_reference_px` exceeds `max_px`: {clip, j0, j1, frame0,
+    frame1, frames, max_px, side} (j1/frame1 inclusive; side: where most of the pixels are, image-left or
+    image-right). For the record and the report, so a flap shows as one finding with its extent."""
+    out: list[dict[str, Any]] = []
+    cur: dict[str, Any] | None = None
+    for r in rows:
+        v = r.get("off_reference_px")
+        hit = v is not None and v > max_px
+        if hit and cur is not None and cur["clip"] == r["clip"] and r["j"] == cur["j1"] + 1:
+            cur.update(j1=r["j"], frame1=r["frame"], frames=cur["frames"] + 1, max_px=max(cur["max_px"], v))
+            cur["_l"] += r["off_reference_left_px"]
+            cur["_r"] += r["off_reference_right_px"]
+            continue
+        if cur is not None:
+            out.append(cur)
+            cur = None
+        if hit:
+            cur = {"clip": r["clip"], "j0": r["j"], "j1": r["j"], "frame0": r["frame"], "frame1": r["frame"], "frames": 1, "max_px": v,
+                   "_l": r["off_reference_left_px"], "_r": r["off_reference_right_px"]}
+    if cur is not None:
+        out.append(cur)
+    for s in out:
+        s["side"] = "image-left" if s.pop("_l") >= s.pop("_r") else "image-right"
+    return out
 
 
 # --- stage 4 alpha targets ---------------------------------------------------------------------------------

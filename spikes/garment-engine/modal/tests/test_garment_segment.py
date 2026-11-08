@@ -268,6 +268,84 @@ def test_thresholds_against_both_runs():
         assert giou >= t["min_garment_iou"] and cover < t["min_skirt_cover"], name
 
 
+def _flap_scene():
+    """A front view at 1/4 scale: torso and legs, a skirt hull and a garment with a flap at the image-left hem."""
+    h, w = 208, 120
+    bare = np.zeros((h, w), bool)
+    bare[10:110, 45:75] = True  # torso
+    bare[110:200, 47:58] = True  # left leg
+    bare[110:200, 62:73] = True  # right leg
+    hull = np.zeros((h, w), bool)
+    hull[40:130, 38:82] = True  # the pinned stills' hull: a skirt to row 130
+    return bare, hull
+
+
+def test_off_reference_counts_a_hem_flap_per_side_and_ignores_the_body():
+    """Runs 16b/17b: a cream flap beside the hem at the image-left side, cloth the stills do not have. The
+    garment IoU missed most of those frames; `off_reference` counts it, per image side, off our mannequin."""
+    bare, hull = _flap_scene()
+    t = pg.scaled_thresholds(208)
+    margin = int(t["off_reference_margin_px"])
+    assert margin == 2 and t["max_off_reference_px"] == 25 and t["off_reference_envelope_px"] == 2
+    clean = hull.copy()
+    row = {"garment_px": int(clean.sum()), **pg.frame_garment_consistency(clean, hull, bare, kind="dress", reference_kind="pinned hull"),
+           **pg.off_reference(clean, hull, bare, margin_px=margin)}
+    assert row["off_reference_px"] == 0 and pg.garment_flags(row, "dress", t) == []
+    flap = hull.copy()
+    flap[100:140, 22:38] = True  # beside and below the hem, image-left: 16 x 40, 2 px of it within the margin
+    flap[60:80, 82:84] = True  # 2 px wider at the right hip: within the margin
+    flap[130:150, 47:58] = True  # longer over the left leg: on the bare mannequin, not counted here (hem_offset_px)
+    flap[5:20, 30:36] = True  # above the zone (shoulder height): not counted
+    off = pg.off_reference(flap, hull, bare, margin_px=margin)
+    assert off["off_reference_px"] == off["off_reference_left_px"] > 0 and off["off_reference_right_px"] == 0
+    # The flap minus the 2 px margin around the hull (rows 100-131 / cols 22-35 and rows 132-139 / cols 22-37).
+    assert off["off_reference_px"] == 32 * 14 + 8 * 16
+    row = {"garment_px": int(flap.sum()), **pg.frame_garment_consistency(flap, hull, bare, kind="dress", reference_kind="pinned hull"), **off}
+    flags = pg.garment_flags(row, "dress", t)
+    assert any("off the pinned stills' hull" in f and "image-left" in f for f in flags), flags
+    # Trousers and tops are not flagged on it (thresholds set on one dress); the count is still recorded.
+    assert not any("off the pinned" in f for f in pg.garment_flags(row, "trousers", t))
+    # Frames without the field (motion, records before 0.4.0) are unaffected.
+    assert not any("off the pinned" in f for f in pg.garment_flags({k: v for k, v in row.items() if not k.startswith("off_reference")}, "dress", t))
+
+
+def test_off_reference_spans_group_consecutive_frames_per_clip():
+    def r(clip, j, px, left=None):
+        return {"clip": clip, "j": j, "frame": j + (80 if clip == "turntable_b" else 0), "off_reference_px": px,
+                "off_reference_left_px": px if left is None else left, "off_reference_right_px": px - (px if left is None else left)}
+    rows = [r("turntable_a", 0, 0), r("turntable_a", 1, 500), r("turntable_a", 2, 900), r("turntable_a", 3, 10),
+            r("turntable_a", 4, 700, left=100), r("turntable_b", 0, 600), r("turntable_b", 1, 800),
+            {"clip": "motion", "j": 0, "frame": 0}]
+    spans = pg.off_reference_spans(rows, 400)
+    assert spans == [
+        {"clip": "turntable_a", "j0": 1, "j1": 2, "frame0": 1, "frame1": 2, "frames": 2, "max_px": 900, "side": "image-left"},
+        {"clip": "turntable_a", "j0": 4, "j1": 4, "frame0": 4, "frame1": 4, "frames": 1, "max_px": 700, "side": "image-right"},
+        {"clip": "turntable_b", "j0": 0, "j1": 1, "frame0": 80, "frame1": 81, "frames": 2, "max_px": 800, "side": "image-left"},
+    ]
+    summary = pg.consistency_v2_summary([{**x, "flagged": False, "reasons": [], "drift_visible": True} for x in rows], kind="dress", thresholds=pg.scaled_thresholds(832))
+    assert len(summary["off_reference_spans"]) == 3 and summary["per_clip"]["turntable_a"]["off_reference_px"]["max"] == 900
+    assert summary["per_clip"]["motion"]["off_reference_px"] is None
+    assert pg.consistency_v2_summary([], kind="trousers", thresholds=pg.scaled_thresholds(832))["off_reference_spans"] == []
+
+
+def test_off_reference_thresholds_against_azure_palm_runs():
+    """Measured on CPU on the azure palm baby-doll dress (480x832, hull carved with the 8 px envelope): run 15
+    (small flap) at most 346 px outside its frames 139-140 (764: its own flap and background filled between
+    the legs); runs 16b/17b over the threshold through turntable_b j18/20-78 (frames 98/100-158) and 17b's
+    turntable_a 19-30. The margin on run 15 is about 54 px. With the
+    4 px envelope of the IoU check every run read 900+ px at frames 1-8 (the stills' hem overhang carved off
+    the hull next to the pin), so the check has its own looser hull. One product: provisional."""
+    t = pg.CONSISTENCY_V2_THRESHOLDS
+    # score_job on the clip frames (garment-consistency-0.4.0): run 15 outside b j59-60 at most 346 px (a j1,
+    # image-right: the front still's hem against the hull next to the pin); b j60 764 px.
+    run15_clean_max, run15_flap_frame = 346, 764
+    run17b = {"a j20": 526, "a j24": 1020, "a j29": 2249, "b j18": 415, "b j24": 651, "b j40": 725, "b j60": 1237, "b j78": 420}
+    run16b = {"b j20": 413, "b j40": 856, "b j52": 1490, "b j78": 438}
+    assert run15_clean_max < t["max_off_reference_px"] < run15_flap_frame
+    assert all(v > t["max_off_reference_px"] for v in [*run17b.values(), *run16b.values()])
+    assert t["off_reference_envelope_px"] > pg.REFERENCE_DEFAULTS["envelope_px"]
+
+
 # --- stage 4 alpha targets --------------------------------------------------------------------------------
 
 

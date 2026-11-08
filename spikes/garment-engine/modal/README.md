@@ -846,6 +846,57 @@ front still pixel-identical to 16b's, the back without the string. Its review co
 80-160. If the panel stays with the string gone, it is stage 2's (or the front still's) and stays open; 17b cannot then give a
 panel-clean bundle.
 
+### Azure's hem flaps (runs 16b, 17b): the cause, and the off-reference check (`garment-consistency-0.4.0`)
+
+The cream flap at the image-left of the hem in turntable_b (16b and 17b, frames ~95–158) and 17b's pale rectangle in
+turntable_a 13–31 are cloth Wan drew where the depth control is background. Checked on CPU (no GPU), the full account in
+`data/bohohippychic/phase0-written.md` ("The hem flaps of runs 16b and 17b"):
+
+- **Stage 2's conditioning did not change** between runs 15, 16b and 17b: the `control/` tree has the same sha1
+  (`1ebafa0b…`), and input hash, seeds, pins, prompt, steps, guidance and shift are the same. Only the stills differ.
+- **The flap's colour and side come from the front still**, which is every clip's reference image and turntable_b's end
+  pin: FASHN's cream, unprinted hem corner at the image-left hangs outside and below the control proxy (in run 15 too). The
+  flap stays at the image-left while the body turns. Run 15 has a smaller one of the same colour at the same place.
+- **The 0.10.1+ stills changed little at the hem** (a 1 px outline ring, about symmetric); conform_edges stops at row 460.
+  The largest changes are the shoulder caps and a front-hip band rewritten by the conform. Wan's response to them is not
+  local (removing 49 px of string moved turntable_a). Which change grew the flap is not known without a GPU ablation.
+- **The masks are right** (re-segmentation reproduces them; the flap is 42–59 levels from the background, not bleed), so
+  stage 4t fits the flap: 17b's hem girth is 157.7 cm, 152.9 with the flap pixels cut on a scratch copy (run 15 149.5 →
+  149.4).
+- **Consistency 0.3.0 missed it** (its garment IoU flagged only turntable_b 114–127).
+
+**What changed: consistency 0.4.0** (`phase0_garment.off_reference`, `off_reference_spans`, thresholds
+`max_off_reference_px` 400 (area-scaled), `off_reference_margin_px` 6, `off_reference_envelope_px` 8,
+`off_reference_zone_frac` 0.45). For every turntable frame it counts the garment more than 6 px outside the pinned
+stills' hull, off our bare mannequin, below 45 % of the mannequin's height, per image side. For a dress or skirt a frame
+over 400 px is flagged ("a flap or panel the stills do not have"). The record gets `off_reference_px` /
+`_left_px` / `_right_px` per frame, a per-clip max and mean, and `off_reference_spans` (consecutive flagged frames with
+their side). `stage2_video` logs the spans, and `report:bohohippychic` shows them in the stage 2 row and marks the stage
+4t row "hem girth UNCONFIRMED" while any exist. Nothing is cut from the masks or the asset. The check uses its own hull,
+carved with an 8 px envelope instead of 4: the stills overhang the proxy at the hem by up to ~17 px a side, and the 4 px
+envelope carves that off the hull at the cameras next to the pins, which put every run (run 15 too) at 900+ px at frames
+1–8 and 150–159.
+
+Measured with `score_job` on the clips (CPU, about 50 s per job for the two turntables):
+
+| Run | Flagged off-reference spans | Max px |
+| --- | --- | --- |
+| 15 | turntable_b j59–60 (its own small flap and background filled between the legs) | 764; otherwise at most 346 |
+| 16b | turntable_b j20–78, image-left | 1,490 |
+| 17b | turntable_a j19–30, image-left; turntable_b j18–78, image-left | 2,249 / 1,237 |
+| 14 | turntable_a j1–21 and j60–71, turntable_b j8–23 and j54–79, image-left | 1,304 |
+
+**Provisional:** one product, and the threshold is set on the runs it judges (margin on run 15 about 54 px). The edges of
+the flaps (17b a 13–18, b 82–97) stay below 400 px. Re-score a downloaded job with
+`python -I phase0_garment.py <job dir> --score`.
+
+**Next, not done.** The hem girth as a band (stage 4t again on masks without the off-reference pixels, both numbers
+reported; CPU, about 95 s). Not filling holes that are background coloured (the between-legs fill at frame 140). A
+turntable_b-only stage 2 ablation (seed 44, about 440 GPU s ≈ $0.48 per arm on an H100, about $2–3 in all): the 17b
+stills with run 15's hem rows, hip band or caps; a noise control; `--no-pin-frames`; seed 46. Then, if the overhang is
+confirmed, a control proxy whose hem follows the stage 1b masks (export change, then stage 2 again, about $1.5), or a
+stage 1b QA flag for a hem corner outside the proxy (redraw FASHN, not paint).
+
 ## Stage 2 after run 10: control proxy, neutral prompts, consistency metric
 
 Run 10 (GitHub Actions, aalter-studio-2, synthetic stills) followed the pinned front and back frames and the camera path, but between them the dress turned into trousers (frames 20, 60, 100) and the product name appeared as text in frame 20; stage 4 on those frames reached a mask IoU of 0.90, against 0.99 on the synthetic truth. Two causes: the control depth showed the **bare** mannequin (two separate legs), and the prompt held the product title in quotes. Export 0.2.0 changes three things. None of them has run on a GPU yet.
@@ -987,6 +1038,7 @@ Not tested, because each of these needs Modal or a GPU:
 - Whether **Wan2.2-Fun-A14B-Control accepts start and end frames together with a control video**. The VideoX-Fun example passes `start_image=None` by default. If the pinned frames do not hold, use `--no-pin-frames`, or try the InP variant as the research doc suggests.
 - Whether the depth encoding suits the model: it was trained on depth from a monocular estimator, not our linear metric encoding (`--control-encoding inverse` is the alternative).
 - Video quality, the turntable assembly on real output, and the seam drift numbers.
+- The off-reference check (consistency 0.4.0) on a second product and on a garment that is legitimately wider than the stills' hull at a side view; its 400 px threshold is set on azure runs 15/16b/17b (margin about 54 px on run 15).
 - Consistency v2 and the garment masks on a second product and on a garment the colour of the mannequin; the thresholds are set on one product (run 11a, run 10) and are provisional (margins about 0.03 on the garment IoU and 0.06 on the skirt cover). Whether stage 4 with garment masks beats the 0.84 / 0.90 of runs 11a / 10. Export 0.3.0 (bare masks, no motion pin) in a GPU run. The dress proxy is rigid with the pelvis in the motion clip, so a stepping leg can show through it there.
 - gsplat 2DGS training: learning rates, densification and the mask loss on our scenes, the iteration count, and the median-depth TSDF on thin cloth.
 - The `foreground` mask mode on generated frames, followed by removing the mannequin in 3D. Garment within `--remove-cm` (0.6 cm) of the body is removed with it. Stage 3's garment masks (`stage3/garment_mask/`, used automatically when present) are the real answer.

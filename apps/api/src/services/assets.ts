@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 import { copyFile, mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { and, desc, eq, ne } from 'drizzle-orm';
-import { checkGarmentBundle, GARMENT_BUNDLE_FILES, garmentQaFlags, type GarmentAssetRef, type GarmentBundleProblem, type GarmentPayload, type MerchantGarmentAsset } from '@curtain/schema';
+import { checkGarmentBundle, GARMENT_BUNDLE_FILES, garmentQaFlagNote, garmentQaFlags, type GarmentAssetRef, type GarmentBundleMeta, type GarmentBundleProblem, type GarmentPayload, type MerchantGarmentAsset } from '@curtain/schema';
 import type { Db } from '../db/client.js';
 import { garmentAssets, products, type ShopSettings } from '../db/schema.js';
 import type { Env } from '../env.js';
@@ -134,7 +134,9 @@ export async function listAssets(db: Db, shopId: string, productExternalId: stri
 }
 
 export function assetDto(r: AssetRow, product: Pick<ProductRow, 'externalId' | 'activeAssetVersion'>): MerchantGarmentAsset {
-  const pass = (r.qa as { chartAgreement?: { pass?: unknown } }).chartAgreement?.pass === true;
+  const qa = r.qa as GarmentBundleMeta['qa'];
+  const pass = qa.chartAgreement?.pass === true;
+  const flags = garmentQaFlags(qa) ?? [];
   return {
     id: r.id,
     productExternalId: product.externalId,
@@ -146,7 +148,8 @@ export function assetDto(r: AssetRow, product: Pick<ProductRow, 'externalId' | '
     sizes: r.sizes,
     qaPass: pass,
     // A reading the bundle passed under by a recorded decision (a low-rise waist): shown to the merchant, never silent.
-    qaFlags: garmentQaFlags(r.qa as { chartAgreement?: { pass?: unknown; waistReading?: unknown } }) ?? [],
+    qaFlags: flags,
+    qaNotes: flags.map((f) => garmentQaFlagNote(f, qa)),
     createdAt: r.createdAt.toISOString(),
     approvedAt: r.approvedAt?.toISOString() ?? null,
     rejectReason: r.rejectReason,

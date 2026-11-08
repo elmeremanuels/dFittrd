@@ -73,13 +73,26 @@ await queue.start({ work: true });
 
 /**
  * Git-ignored bundles (generated or shop-derived; never committed). A missing one means that product
- * simply has no 3D view. `pnpm demo` builds the synthetic one; the azure babydoll is the founder's
- * evaluated bundle (spikes/garment-engine report tooling), or set DEMO_AZURE_BUNDLE to its folder.
+ * simply has no 3D view. `pnpm demo` builds the synthetic one; the azure babydoll and the crimson
+ * maxi skirt are the founder's evaluated bundles (spikes/garment-engine report tooling), or set
+ * DEMO_AZURE_BUNDLE / DEMO_SKIRT_BUNDLE to their folders. The skirt passes the import gate only
+ * under the founder's low-rise waist reading, and missed the chart by 2.49 cm (outside ±2) before
+ * calibration, so it must import flagged exactly `low_rise_waist` and `precalibration_outside_tolerance`,
+ * or it gets no 3D view (demoSeed `qaFlags`).
  */
 const spikeOut = join(repoRoot, 'spikes', 'garment-engine', 'out');
 const bundles: DemoGarmentBundle[] = [
   { shop: 'woocommerce', externalId: 'aalter-studio-2', dir: join(spikeOut, 'aalter-studio-2') },
-  { shop: 'shopify', externalId: 'azure-palm-baby-doll-dress', dir: resolve(source.DEMO_AZURE_BUNDLE ?? join(spikeOut, 'eval', 'azure-palm-baby-doll-dress')), payload: true, colorHex: '#4F8FC0' },
+  { shop: 'shopify', externalId: 'azure-palm-baby-doll-dress', dir: resolve(source.DEMO_AZURE_BUNDLE ?? join(spikeOut, 'eval', 'azure-palm-baby-doll-dress')), payload: true, colorHex: '#4F8FC0', colorName: 'Azure' },
+  {
+    shop: 'shopify',
+    externalId: 'crimson-wildflower-maxi-skirt',
+    dir: resolve(source.DEMO_SKIRT_BUNDLE ?? join(spikeOut, 'eval', 'crimson-wildflower-maxi-skirt')),
+    payload: true,
+    colorHex: '#A3243B',
+    colorName: 'Crimson',
+    qaFlags: ['low_rise_waist', 'precalibration_outside_tolerance'],
+  },
 ];
 const manifest = await seedDemo(handle.db, env, { storefrontOrigin, appOrigin: env.PUBLIC_APP_URL, bundles });
 await writeFile(join(dataDir, 'demo.json'), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -100,7 +113,7 @@ const lines = [
     `  ${s.name} (${s.platform})`,
     `    public key   ${s.publicKey}`,
     `    origins      ${s.allowedOrigins.join(', ')}`,
-    `    products     ${s.products.map((p) => `${p.externalId}${p.status === 'active' ? '' : ` [${p.status}]`}${p.asset3d ? ' [3D]' : ''}`).join(', ')}`,
+    `    products     ${s.products.map((p) => `${p.externalId}${p.status === 'active' ? '' : ` [${p.status}]`}${p.asset3d ? ` [3D${p.asset3dFlags?.length ? `, ${p.asset3dFlags.join(', ')}` : ''}]` : ''}`).join(', ')}`,
   ]),
   '',
 ];

@@ -291,6 +291,8 @@ describe('the waist-reading switch (review.json waistReading)', () => {
     const onFull = waistReadingLine({ category: 'bottom', waistband: band, critical: ['waist'], before: { maxAbsCm: 2.49, pass: false }, agreement: { pass: true, toleranceCm: 2, missing: [], waistReading: { kind: 'low-rise', decision: 'founder', dropCm: 4.8, bandYCm: 99.4, waistRingYCm: 104.2, chartWaistCm: 80.5, offsetCm: 5.1, bodyAtBandCm: 79.1, bodyAtWaistCm: 74, targetCm: 85.6 } } as never });
     expect(onFull).toMatch(/misses its target by 2\.49 cm \(tolerance ±2 cm: OUTSIDE\)/);
     expect(onFull).toMatch(/pass after calibration is automatic/);
+    expect(onFull).toMatch(/precalibration_outside_tolerance/);
+    expect(on).not.toMatch(/precalibration_outside_tolerance/);
   });
   it('the trouser join line states the deeper crotch, the band slivers and crossing legs (or that they do not cross)', () => {
     const band = { triangles: 24, longestEdgeCm: 19.41, maxAreaCm2: 27.5, edgesOverCm: 8, overLongCm: 12 };

@@ -12,14 +12,14 @@ import { createDevice, makeApp, seedShop, type TestApp } from './test/helpers.js
 
 const SIZES = MOCK_GARMENTS_BY_ID['aalter-studio-1']!.sizeChart.map((r) => r.size);
 
-async function fakeBundle(opts: { sizes?: string[]; pass?: boolean; seed?: string } = {}): Promise<string> {
+async function fakeBundle(opts: { sizes?: string[]; pass?: boolean; seed?: string; chartAgreement?: Record<string, unknown> } = {}): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'curtain-bundle-'));
   const sizes = opts.sizes ?? SIZES;
   await writeFile(join(dir, 'base.glb'), Buffer.from(`glTF-fake-${opts.seed ?? 'a'}`));
   await writeFile(join(dir, 'anchors.json'), JSON.stringify({ format: 'curtain.garment.anchors', baseSize: sizes[1] }));
   await writeFile(join(dir, 'grading.json'), JSON.stringify({ format: 'curtain.garment.grading', baseSize: sizes[1], sizes: sizes.map((size) => ({ size })) }));
   await writeFile(join(dir, 'material.json'), JSON.stringify({ format: 'curtain.garment.material' }));
-  await writeFile(join(dir, 'qa.json'), JSON.stringify({ format: 'curtain.garment.qa', chartAgreement: { pass: opts.pass ?? true } }));
+  await writeFile(join(dir, 'qa.json'), JSON.stringify({ format: 'curtain.garment.qa', chartAgreement: opts.chartAgreement ?? { pass: opts.pass ?? true } }));
   // Never served: a shop-derived payload next to the bundle.
   await writeFile(join(dir, 'payload.json'), JSON.stringify({ productPhotos: ['https://cdn.example/photo.jpg'] }));
   return dir;
@@ -69,7 +69,7 @@ describe('garment assets (D13, D16)', () => {
     const list = await t.app.inject({ method: 'GET', url: '/v1/merchant/products/aalter-studio-1/assets', headers: auth() });
     expect(list.statusCode).toBe(200);
     const [asset] = list.json<{ assets: { id: string; status: string; live: boolean }[] }>().assets;
-    expect(asset).toMatchObject({ status: 'awaiting_approval', live: false });
+    expect(asset).toMatchObject({ status: 'awaiting_approval', live: false, qaFlags: [], qaNotes: [] });
     const ok = await t.app.inject({ method: 'POST', url: `/v1/merchant/assets/${asset!.id}/approve`, headers: auth() });
     expect(ok.statusCode).toBe(200);
     expect(ok.json().asset).toMatchObject({ status: 'approved', live: true });
@@ -127,6 +127,18 @@ describe('garment assets (D13, D16)', () => {
     const dockerfile = readFileSync(fileURLToPath(new URL('../Dockerfile', import.meta.url)), 'utf8');
     expect(dockerfile).toMatch(/ASSET_DIR=\/data\/assets/);
     expect(dockerfile).toMatch(/mkdir -p [^\n]*\/data\/assets[^\n]*&& chown -R app:app \/data/);
+  });
+
+  it('the asset API shows the merchant each QA flag with a plain sentence before approval (low-rise, outside tolerance before calibration)', async () => {
+    const lowRise = { kind: 'low-rise', decision: 'founder, 2026-11-08', offsetCm: 5.08, targetCm: 85.58, dropCm: 4.76 };
+    const { asset } = await importBundle(t.handle.db, t.env, s.shop.id, 'aalter-studio-1', await fakeBundle({ seed: 'flags', chartAgreement: { pass: true, toleranceCm: 2, beforeCalibrationMaxAbsCm: 2.49, waistReading: lowRise } }));
+    const list = await t.app.inject({ method: 'GET', url: '/v1/merchant/products/aalter-studio-1/assets', headers: auth() });
+    const row = list.json<{ assets: { id: string; status: string; qaFlags: string[]; qaNotes: string[] }[] }>().assets.find((a) => a.id === asset.id)!;
+    expect(row).toMatchObject({ status: 'awaiting_approval', qaFlags: ['low_rise_waist', 'precalibration_outside_tolerance'] });
+    expect(row.qaNotes).toHaveLength(2);
+    expect(row.qaNotes[0]).toMatch(/4\.76 cm below .*founder, 2026-11-08/);
+    expect(row.qaNotes[1]).toMatch(/2\.49 cm, outside the ±2 cm tolerance/);
+    await t.app.inject({ method: 'POST', url: `/v1/merchant/assets/${asset.id}/reject`, headers: auth(), payload: { reason: 'test' } });
   });
 
   it('another shop cannot approve this shop’s asset', async () => {

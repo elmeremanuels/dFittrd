@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TryResolveResponseSchema } from './api';
-import { checkGarmentBundle, garmentBundleFor, garmentQaFlags, GarmentAssetRefSchema, MAX_GARMENT_BUNDLE_BYTES } from './garmentAsset';
+import { checkGarmentBundle, garmentBundleFor, garmentQaFlagNote, garmentQaFlags, GarmentAssetRefSchema, MAX_GARMENT_BUNDLE_BYTES } from './garmentAsset';
 
 const meta = (over: Partial<{ sizes: string[]; pass: boolean; bytes: number; format: string; waistReading: unknown }> = {}) => ({
   anchors: { format: 'curtain.garment.anchors' },
@@ -37,6 +37,22 @@ describe('low-rise waist reading (a recorded founder decision, never silent)', (
       expect(checkGarmentBundle(meta({ waistReading: bad }), ['12'])).toEqual({ ok: false, problem: 'qa_failed' });
     }
     expect(checkGarmentBundle(meta({ pass: false, waistReading: lowRise }), ['12'])).toEqual({ ok: false, problem: 'qa_failed' });
+  });
+});
+
+describe('a pass after calibration over a miss outside tolerance (never looks clean)', () => {
+  const lowRise = { kind: 'low-rise', decision: 'founder, 2026-11-08', offsetCm: 5.08, targetCm: 85.58, dropCm: 4.76 };
+  it('is flagged when the miss before calibration exceeds the tolerance, with or without a low-rise reading', () => {
+    expect(garmentQaFlags({ chartAgreement: { pass: true, toleranceCm: 2, beforeCalibrationMaxAbsCm: 2.49, waistReading: lowRise } })).toEqual(['low_rise_waist', 'precalibration_outside_tolerance']);
+    expect(garmentQaFlags({ chartAgreement: { pass: true, toleranceCm: 2, beforeCalibrationMaxAbsCm: 2.49 } })).toEqual(['precalibration_outside_tolerance']);
+    expect(garmentQaFlags({ chartAgreement: { pass: true, toleranceCm: 2, beforeCalibrationMaxAbsCm: 0.5 } })).toEqual([]);
+    expect(garmentQaFlags({ chartAgreement: { pass: true, toleranceCm: 2, beforeCalibrationMaxAbsCm: 2 } })).toEqual([]);
+    expect(garmentQaFlags({ chartAgreement: { pass: true, beforeCalibrationMaxAbsCm: 9 } })).toEqual([]);
+  });
+  it('has a plain sentence for each flag', () => {
+    const qa = { chartAgreement: { pass: true, toleranceCm: 2, beforeCalibrationMaxAbsCm: 2.49, waistReading: lowRise } };
+    expect(garmentQaFlagNote('low_rise_waist', qa)).toMatch(/4\.76 cm below .*founder, 2026-11-08.*5\.08 cm.*85\.58 cm/);
+    expect(garmentQaFlagNote('precalibration_outside_tolerance', qa)).toMatch(/2\.49 cm, outside the ±2 cm tolerance.*not evidence of fit/);
   });
 });
 

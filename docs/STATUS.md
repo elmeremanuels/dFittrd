@@ -12,7 +12,7 @@ garment bundle. Operator guide: `docs/PLUGIN.md`. Not pushed, not deployed.
 |---|---|
 | `flock /tmp/curtain-pnpm.lock pnpm install` | pass (new workspace package `@curtain/garment-viewer`; `three@0.186.1` for it and apps/web) |
 | `pnpm check` | pass: SDK 8,178 B gzip of 8,192 (untouched); viewer chunk 148.5 KB gzip of 400 KB, three.js in no other chunk, not precached; secret scan clean |
-| `pnpm demo:e2e` | pass, both flows; aalter-studio-1 shows no 3D button (today's flow); 3D step on aalter-studio-2 (Woo, synthetic bundle) and on the azure babydoll (Dawn, evaluated bundle): drape settles, label says estimate and names the recommended size, after the click only GETs of code and the five `/assets/` files |
+| `pnpm demo:e2e` | pass, both flows; aalter-studio-1 shows no 3D button (today's flow); 3D step on aalter-studio-2 (Woo, synthetic bundle) and on the azure babydoll (Dawn, evaluated bundle): drape settles, label says estimate and names the recommended size, after the click only GETs of code and the five `/assets/` files; 8 Nov: also the crimson maxi skirt (Dawn, evaluated bundle, live only flagged `low_rise_waist` and `precalibration_outside_tolerance`, checked in demo.json), drape settles, labelled an estimate |
 
 Tests: schema 356, garment-viewer 47 (incl. parity with the spike), api 211, web 331, demo-shop 9; the rest as in the release run below.
 
@@ -24,7 +24,7 @@ and dev; Caddy `/assets/*` from the `assets` volume, included in the backup; `em
 
 Gated: the shop switch `settings.garment3d` (off by default until D17 prices 3D), the merchant's
 approval (D13), and the bundle covering the live chart. Founder-blocked as before (`docs/PLUGIN.md` §4),
-plus: founder review of the azure bundle, the pilot merchant's approval, legal text for 3D. Not built
+plus: founder review of the azure and skirt bundles, the pilot merchant's approval, legal text for 3D. Not built
 yet: the approval buttons in the Shopify checklist and the Woo console, and the approval preview page.
 
 Import the founder's local azure bundle (stays `awaiting_approval`):
@@ -423,6 +423,30 @@ read where it sits (4.76 cm below the waist ring) against chart + ease + the man
 `low_rise_waist` (`qaFlags`, returned in the merchant asset API; no admin screen shows it yet). Option b: new stills with the band at the waist (GPU). The
 hem over the feet is in the stills (the front still's hem reaches the bottom of the feet), not the fit. The skirt stays
 **faulty**. Panel still on hold (1 of 5 bundles).
+
+**Skirt: the founder chose option A, low-rise (8 Nov, CPU; `phase0-written.md`, "The founder's decision on the skirt").**
+`review.json` now records `"waistReading": { "kind": "low-rise", "decision": "founder Elmer Emanuels, 2026-11-08, option A (chat)" }`
+and `report:bohohippychic -- --renders` was re-run. The report, `qa.json` and the eval warning show the reading: band 4.76 cm
+below our waist ring, chart waist 80.5 cm + body offset +5.08 cm = 85.58 cm, band 88.07 cm: **still +2.49 cm off before
+calibration (outside ±2)**; the pass after calibration (+0.01) is **automatic** (the waist is the only critical point) and
+makes the skirt **2.8 % narrower** (global scale 0.972, hip +1.35 → −1.77). The import gate accepts the real bundle with
+`qaFlags: ["low_rise_waist", "precalibration_outside_tolerance"]` (the second flag added after review, below). **Verdict: accepted pending founder review, as azure**; the decision covers the waist reading
+only, so these stay flagged, not repaired: the hem drawn over the feet (from the stills: foot lobes and grey toes below
+the hem), short stage 2 hem flaps and panels (turntable_b 81-94, turntable_a 1-14; hem girth unconfirmed), the smeared
+print, and AU 8 / 12 / 16 barely differing in the viewer (the weakest point for a size panel; the founder may still
+downgrade it). **Panel still on hold: 2 of 5 bundles** (azure, skirt), 4 needed. **Demo shop:** the skirt is a second 3D
+product on the Dawn page (`/products/crimson-wildflower-maxi-skirt`; local gitignored bundle, `DEMO_SKIRT_BUNDLE`, skipped
+when absent; its texture is shop-derived and stays local). The demo seed approves a bundle only when the import gate passes
+it with exactly the expected QA flags (`low_rise_waist` and `precalibration_outside_tolerance` for the skirt, none for the others); a refused or differently
+flagged bundle leaves the product without 3D and the demo starts anyway (the earlier attempt crashed on `qa_failed`; test
+in `apps/api/src/demoSeed.test.ts`). `pnpm demo:e2e` checks the skirt's flags in demo.json and its estimate label.
+After review (8 Nov): the import gate also flags `precalibration_outside_tolerance` whenever `qa.json` has
+`beforeCalibrationMaxAbsCm` above `toleranceCm` (so a single-anchor automatic pass never looks clean, and the skirt with its
+`waistReading` stripped would still import flagged); the merchant asset API now returns a plain sentence per flag
+(`qaNotes`, `garmentQaFlagNote`). Still open: no approval screen shows the flags (the demo seed approves for the merchant),
+the shopper's 3D view shows only the general estimate label, and the gate cannot yet refuse a bottom whose band sits below
+the waist ring without a `waistReading` (that needs the band height in every bottom's `qa.json`). The founder has still to
+confirm "accepted pending founder review" and the skirt's place on the blind page and in the panel after viewing the renders.
 
 **Stage 4t** (`spikes/garment-engine/src/templateFit.ts`, `bake.ts`, `stage4t.ts`;
 `pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic]`): the

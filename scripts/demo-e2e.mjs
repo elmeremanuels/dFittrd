@@ -15,8 +15,9 @@
  * returning shopper ("Remember me" is on by default) must land straight on the result (§1.4).
  * Optional 3D estimate (D16): aalter-studio-1 has no bundle, so its result shows no 3D button (exactly
  * today's flow). Then, as the returning shopper, each flow opens the product with an approved bundle
- * (WooCommerce: the synthetic aalter-studio-2; Dawn: the azure babydoll from its git-ignored
- * evaluated bundle, skipped with a note when absent), clicks "See it in 3D (estimate)", waits for
+ * (WooCommerce: the synthetic aalter-studio-2; Dawn: the azure babydoll and the crimson maxi skirt
+ * from their git-ignored evaluated bundles, each skipped with a note when absent; the skirt must be
+ * live with exactly the QA flags `low_rise_waist` and `precalibration_outside_tolerance` in demo.json), clicks "See it in 3D (estimate)", waits for
  * the drape, checks the estimate label names the recommended size, and that after the click the
  * iframe only GETs code from the app origin and the five bundle files under /assets/ (no POST, no
  * body, no third party), and that the merchant page shows nothing of it.
@@ -28,6 +29,7 @@
  *
  * Env:   DEMO_E2E_SHOTS  screenshot folder (default test-results/demo-e2e)
  *        DEMO_AZURE_BUNDLE  the azure babydoll bundle folder (default spikes/garment-engine/out/eval/…)
+ *        DEMO_SKIRT_BUNDLE  the crimson maxi skirt bundle folder (default spikes/garment-engine/out/eval/…)
  * Flags: --skip-build   do not build the packages first
  *        --headed       show the browser
  */
@@ -49,14 +51,18 @@ const PAGES = [
     /** The size the page's own variation form now holds (the option's label). */
     pageSize: (page) => page.locator('form.variations_form select[name="attribute_pa_size"]').evaluate((s) => (s.value ? s.selectedOptions[0].text.trim() : '')),
     /** The synthetic dress bundle (built by `pnpm demo`); its absence skips the 3D step with a note. */
-    threeD: { path: '/product/aalter-studio-2', bundle: DEMO_BUNDLES.synthetic },
+    threeD: [{ name: 'synthetic', externalId: 'aalter-studio-2', path: '/product/aalter-studio-2', bundle: DEMO_BUNDLES.synthetic, qaFlags: [] }],
   },
   {
     name: 'shopify-dawn',
     path: '/products/aalter-studio-1',
     pageSize: (page) => page.locator('input[type=radio][name="Size"]:checked').evaluate((r) => r.value).catch(() => ''),
-    /** The azure babydoll (the founder's evaluated bundle, git-ignored); skipped with a note when absent. */
-    threeD: { path: '/products/azure-palm-baby-doll-dress', bundle: DEMO_BUNDLES.azure },
+    /** The founder's evaluated bundles (git-ignored); each skipped with a note when absent. */
+    threeD: [
+      { name: 'azure', externalId: 'azure-palm-baby-doll-dress', path: '/products/azure-palm-baby-doll-dress', bundle: DEMO_BUNDLES.azure, qaFlags: [] },
+      // Live only under the founder's low-rise waist reading, flagged: the import gate refuses it otherwise (qa_failed).
+      { name: 'skirt', externalId: 'crimson-wildflower-maxi-skirt', path: '/products/crimson-wildflower-maxi-skirt', bundle: DEMO_BUNDLES.skirt, qaFlags: ['low_rise_waist', 'precalibration_outside_tolerance'] },
+    ],
   },
 ];
 
@@ -204,7 +210,7 @@ async function flow(browser, base, spec, log) {
     await shot('6-returning-shopper');
     log('ok: the remembered profile skips straight to the result');
 
-    if (spec.threeD) await threeDStep(page, base, spec, log, shot);
+    for (const t of spec.threeD ?? []) await threeDStep(page, base, t, log, shot);
 
     if (errors.length) throw new Error(`errors in the page or the iframe:\n  ${errors.join('\n  ')}`);
   } catch (err) {
@@ -222,13 +228,20 @@ async function flow(browser, base, spec, log) {
  * bundle files under /assets/ from the api (and the viewer's own code from the app origin): no POST,
  * no request body, no third party. The merchant page learns nothing.
  */
-async function threeDStep(page, base, spec, log, shot) {
-  const { path, bundle } = spec.threeD;
+async function threeDStep(page, base, t, log, shot) {
+  const { path, bundle } = t;
   if (!existsSync(join(bundle, 'base.glb'))) {
-    log(`3D: SKIPPED, no bundle at ${bundle} (git-ignored; see docs/PLUGIN.md)`);
+    log(`3D ${t.name}: SKIPPED, no bundle at ${bundle} (git-ignored; see docs/PLUGIN.md)`);
     return;
   }
-  log(`3D: open ${base}${path}`);
+  // The seed approves a bundle only when the import gate passed it with exactly the expected QA flags.
+  const demo = await (await fetch(`${base}/demo.json`)).json();
+  const seeded = demo.shops.flatMap((s) => s.products).find((p) => p.externalId === t.externalId);
+  if (!seeded?.asset3d) throw new Error(`3D ${t.name}: the bundle at ${bundle} is present but ${t.externalId} has no approved 3D asset (refused by the import gate?)`);
+  const flags = [...(seeded.asset3dFlags ?? [])].sort().join(',');
+  if (flags !== [...t.qaFlags].sort().join(',')) throw new Error(`3D ${t.name}: QA flags [${flags}], expected [${t.qaFlags.join(',')}]`);
+  if (t.qaFlags.length) log(`3D ${t.name}: imported flagged ${flags}`);
+  log(`3D ${t.name}: open ${base}${path}`);
   await page.goto(base + path);
   await page.waitForSelector('[data-curtain-product][data-curtain-bound]');
   await page.getByRole('button', { name: /try it on/i }).first().click();
@@ -248,17 +261,17 @@ async function threeDStep(page, base, spec, log, shot) {
     after.push({ method: r.method(), origin: u.origin, path: u.pathname, body: r.postData() ?? null });
   };
   page.on('request', onRequest);
-  log('3D: click "See it in 3D (estimate)"');
+  log(`3D ${t.name}: click "See it in 3D (estimate)"`);
   await open.click();
   const canvas = frame.locator('canvas[data-testid="garment3d-canvas"]');
   await frame.locator('canvas[data-testid="garment3d-canvas"][data-state="draping"], canvas[data-testid="garment3d-canvas"][data-state="settled"]').first().waitFor({ timeout: 60_000 });
-  log('3D: first frame drawn, draping');
+  log(`3D ${t.name}: first frame drawn, draping`);
   const settled = await frame
     .locator('canvas[data-testid="garment3d-canvas"][data-state="settled"]')
     .waitFor({ timeout: 45_000 })
     .then(() => true)
     .catch(() => false);
-  log(settled ? '3D: drape settled' : '3D: still draping after 45 s (only the first frame is required)');
+  log(settled ? `3D ${t.name}: drape settled` : `3D ${t.name}: still draping after 45 s (only the first frame is required)`);
   await page.waitForTimeout(400);
   page.off('request', onRequest);
   const label = (await frame.getByTestId('garment3d-label').innerText()).replace(/\s+/g, ' ');
@@ -266,7 +279,7 @@ async function threeDStep(page, base, spec, log, shot) {
   if (!label.includes(`Size ${size} was picked by the size advice`)) throw new Error(`3D label does not name the recommended size ${size}: "${label}"`);
   if ((await canvas.getAttribute('data-size'))?.toLowerCase() !== size.toLowerCase()) throw new Error(`3D view shows size ${await canvas.getAttribute('data-size')}, the advice picked ${size}`);
   await frame.getByTestId('garment3d').scrollIntoViewIfNeeded();
-  await shot('7-3d-estimate');
+  await shot(`7-3d-estimate-${t.name}`);
 
   const app = new URL(URLS.web).origin;
   const api = new URL(URLS.api).origin;
@@ -276,7 +289,7 @@ async function threeDStep(page, base, spec, log, shot) {
   for (const f of ['base.glb', 'anchors.json', 'grading.json', 'material.json', 'qa.json']) if (!files.includes(f)) throw new Error(`3D view did not load ${f} from /assets/`);
   const leak = await page.evaluate(() => /3D estimate|picked by the size advice/i.test(document.body.innerText) || /garment3d/.test(document.documentElement.outerHTML));
   if (leak) throw new Error('the merchant page DOM shows the 3D estimate outside the iframe');
-  log(`ok: 3D estimate of size ${size}, labelled an estimate; ${files.length} asset GETs and nothing else went to the api`);
+  log(`ok: 3D ${t.name}: estimate of size ${size}, labelled an estimate; ${files.length} asset GETs and nothing else went to the api`);
 }
 
 async function main() {

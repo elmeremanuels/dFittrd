@@ -38,7 +38,9 @@ export const MerchantGarmentAssetSchema = z.object({
   sizes: z.array(z.string()).max(32),
   qaPass: z.boolean(),
   /** QA readings the merchant must see before approving (`garmentQaFlags`), e.g. `low_rise_waist`. */
-  qaFlags: z.array(z.enum(['low_rise_waist'])).max(8).optional(),
+  qaFlags: z.array(z.enum(['low_rise_waist', 'precalibration_outside_tolerance'])).max(8).optional(),
+  /** One plain sentence per flag, in `qaFlags` order (`garmentQaFlagNote`), for the approval screen. */
+  qaNotes: z.array(z.string().max(500)).max(8).optional(),
   createdAt: z.iso.datetime({ offset: true }),
   approvedAt: z.iso.datetime({ offset: true }).nullable(),
   rejectReason: z.string().max(500).nullable(),
@@ -63,9 +65,17 @@ export interface GarmentBundleMeta {
   anchors: { format?: unknown };
   grading: { format?: unknown; baseSize?: unknown; sizes?: unknown };
   material: { format?: unknown };
-  qa: { format?: unknown; chartAgreement?: { pass?: unknown; waistReading?: unknown } };
+  qa: { format?: unknown; chartAgreement?: GarmentChartAgreementMeta };
   /** Total size of the bundle files, bytes, when known. */
   bytes?: number;
+}
+
+/** The parts of qa.json `chartAgreement` the gate reads. */
+export interface GarmentChartAgreementMeta {
+  pass?: unknown;
+  waistReading?: unknown;
+  toleranceCm?: unknown;
+  beforeCalibrationMaxAbsCm?: unknown;
 }
 
 export interface GarmentBundleInfo {
@@ -74,27 +84,47 @@ export interface GarmentBundleInfo {
   sizes: string[];
   /**
    * QA readings the bundle passed under that a person must see before approving it (`garmentQaFlags`): `low_rise_waist` when
-   * its chart waist was read at a band below the waist ring by a recorded decision. Empty for an ordinary pass.
+   * its chart waist was read at a band below the waist ring by a recorded decision; `precalibration_outside_tolerance` when
+   * the chart passed only after calibration and missed by more than the tolerance before it. Empty for an ordinary pass.
    */
   qaFlags: GarmentQaFlag[];
 }
 
-export type GarmentQaFlag = 'low_rise_waist';
+export type GarmentQaFlag = 'low_rise_waist' | 'precalibration_outside_tolerance';
+
+/** A plain sentence for a flag, for the merchant to read before approving (never only the code). */
+export function garmentQaFlagNote(flag: GarmentQaFlag, qa: GarmentBundleMeta['qa']): string {
+  const ca = qa.chartAgreement ?? {};
+  if (flag === 'low_rise_waist') {
+    const wr = (ca.waistReading ?? {}) as { decision?: unknown; dropCm?: unknown; offsetCm?: unknown; targetCm?: unknown };
+    const drop = typeof wr.dropCm === 'number' ? ` ${wr.dropCm} cm` : '';
+    return `Waist read at the garment's own band,${drop} below the body's natural waist, by a recorded decision (${String(wr.decision)}), against the chart's waist plus a stated body offset of ${String(wr.offsetCm)} cm (target ${String(wr.targetCm)} cm); the chart does not say where this band sits.`;
+  }
+  return `Before calibration the garment missed the size chart by ${String(ca.beforeCalibrationMaxAbsCm)} cm, outside the ±${String(ca.toleranceCm)} cm tolerance; it passes only after calibration rescaled it, which is not evidence of fit.`;
+}
 
 /**
  * The flags of a bundle's QA, or `null` when a declared reading is malformed (the bundle is then refused, `qa_failed`).
  * `chartAgreement.waistReading` (spikes/garment-engine src/lowRise.ts): a bottom whose band sits below the body's waist,
  * read at the band against the chart's waist plus a stated body offset, by a founder's recorded decision. It is accepted
  * only as `{ kind: 'low-rise', decision: <non-empty>, offsetCm: <finite>, targetCm: <finite> }`, and always flagged.
+ * `chartAgreement.beforeCalibrationMaxAbsCm` above `toleranceCm` is flagged `precalibration_outside_tolerance`.
  */
 export function garmentQaFlags(qa: GarmentBundleMeta['qa']): GarmentQaFlag[] | null {
+  const flags: GarmentQaFlag[] = [];
   const wr = qa.chartAgreement?.waistReading;
-  if (wr === undefined || wr === null) return [];
-  if (typeof wr !== 'object') return null;
-  const o = wr as { kind?: unknown; decision?: unknown; offsetCm?: unknown; targetCm?: unknown };
-  if (o.kind !== 'low-rise' || typeof o.decision !== 'string' || o.decision.trim() === '') return null;
-  if (typeof o.offsetCm !== 'number' || !Number.isFinite(o.offsetCm) || typeof o.targetCm !== 'number' || !Number.isFinite(o.targetCm)) return null;
-  return ['low_rise_waist'];
+  if (wr !== undefined && wr !== null) {
+    if (typeof wr !== 'object') return null;
+    const o = wr as { kind?: unknown; decision?: unknown; offsetCm?: unknown; targetCm?: unknown };
+    if (o.kind !== 'low-rise' || typeof o.decision !== 'string' || o.decision.trim() === '') return null;
+    if (typeof o.offsetCm !== 'number' || !Number.isFinite(o.offsetCm) || typeof o.targetCm !== 'number' || !Number.isFinite(o.targetCm)) return null;
+    flags.push('low_rise_waist');
+  }
+  // A pass after calibration over a miss outside tolerance before it: flagged, so a single-anchor automatic pass never looks clean.
+  const before = qa.chartAgreement?.beforeCalibrationMaxAbsCm;
+  const tol = qa.chartAgreement?.toleranceCm;
+  if (typeof before === 'number' && typeof tol === 'number' && Number.isFinite(before) && Number.isFinite(tol) && before > tol) flags.push('precalibration_outside_tolerance');
+  return flags;
 }
 
 export type GarmentBundleProblem = 'format' | 'too_large' | 'qa_failed' | 'chart_mismatch';

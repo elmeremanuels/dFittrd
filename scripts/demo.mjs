@@ -29,7 +29,7 @@ export const URLS = {
 };
 
 const SERVICES = [
-  { name: 'api', url: URLS.api, health: `${URLS.api}/healthz`, cmd: pnpm, args: ['--filter', '@curtain/api', 'demo'], env: { LOG_LEVEL: 'warn', ...(process.env.DEMO_AZURE_BUNDLE ? { DEMO_AZURE_BUNDLE: resolve(process.env.DEMO_AZURE_BUNDLE) } : {}) } },
+  { name: 'api', url: URLS.api, health: `${URLS.api}/healthz`, cmd: pnpm, args: ['--filter', '@curtain/api', 'demo'], env: { LOG_LEVEL: 'warn', ...(process.env.DEMO_AZURE_BUNDLE ? { DEMO_AZURE_BUNDLE: resolve(process.env.DEMO_AZURE_BUNDLE) } : {}), ...(process.env.DEMO_SKIRT_BUNDLE ? { DEMO_SKIRT_BUNDLE: resolve(process.env.DEMO_SKIRT_BUNDLE) } : {}) } },
   // The web app talks to the demo api directly (no Caddy in the demo).
   { name: 'web', url: URLS.web, health: `${URLS.web}/`, cmd: pnpm, args: ['--filter', '@curtain/web', 'dev'], env: { VITE_API_URL: URLS.api } },
   { name: 'storefront', url: URLS.storefront, health: `${URLS.storefront}/`, cmd: process.execPath, args: [join(root, 'apps/demo-shop/server.mjs')], env: { PORT: '5180' } },
@@ -64,6 +64,8 @@ function run(cmd, args, label) {
 export const DEMO_BUNDLES = {
   synthetic: join(root, 'spikes', 'garment-engine', 'out', 'aalter-studio-2'),
   azure: process.env.DEMO_AZURE_BUNDLE ? resolve(process.env.DEMO_AZURE_BUNDLE) : join(root, 'spikes', 'garment-engine', 'out', 'eval', 'azure-palm-baby-doll-dress'),
+  /** The crimson maxi skirt (run 17d), accepted as low-rise by the founder: imported only flagged `low_rise_waist` and `precalibration_outside_tolerance`. */
+  skirt: process.env.DEMO_SKIRT_BUNDLE ? resolve(process.env.DEMO_SKIRT_BUNDLE) : join(root, 'spikes', 'garment-engine', 'out', 'eval', 'crimson-wildflower-maxi-skirt'),
 };
 
 export function buildForDemo() {
@@ -79,6 +81,7 @@ export function buildForDemo() {
     }
   }
   if (!existsSync(join(DEMO_BUNDLES.azure, 'base.glb'))) console.log(`[demo] no azure babydoll bundle at ${DEMO_BUNDLES.azure}: that product is left out (set DEMO_AZURE_BUNDLE)`);
+  if (!existsSync(join(DEMO_BUNDLES.skirt, 'base.glb'))) console.log(`[demo] no crimson maxi skirt bundle at ${DEMO_BUNDLES.skirt}: that product is left out (set DEMO_SKIRT_BUNDLE)`);
 }
 
 /**
@@ -190,6 +193,7 @@ Curtain demo is running (standalone mode: no app needed).
   Shopify Dawn product     ${URLS.storefront}/products/aalter-studio-1
   3D estimate (synthetic)  ${URLS.storefront}/product/aalter-studio-2
   3D estimate (azure)      ${URLS.storefront}/products/azure-palm-baby-doll-dress   (when the bundle is present)
+  3D estimate (skirt)      ${URLS.storefront}/products/crimson-wildflower-maxi-skirt   (when present; low-rise waist, flagged)
   Web app (embed origin)   ${URLS.web}/
   API                      ${URLS.api}/healthz
 

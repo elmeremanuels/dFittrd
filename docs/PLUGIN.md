@@ -23,19 +23,27 @@ pnpm check           # the root gate: build, typecheck, lint, tests, app builds,
 | http://localhost:5180/products/aalter-studio-1 | Shopify Dawn-style page, the same |
 | http://localhost:5180/product/aalter-studio-2 | 3D estimate on a synthetic dress bundle (built by `pnpm demo`, about 8 s, CPU only) |
 | http://localhost:5180/products/azure-palm-baby-doll-dress | 3D estimate on the evaluated azure babydoll bundle, when present |
+| http://localhost:5180/products/crimson-wildflower-maxi-skirt | 3D estimate on the evaluated crimson maxi skirt bundle, when present; its waist is read low-rise by the founder's decision, so it imports only flagged `low_rise_waist` and `precalibration_outside_tolerance` (it missed the chart by 2.49 cm, outside ±2, before calibration) |
 
 Press "Try it on", fill in height and weight, then on the result press **See it in 3D (estimate)**.
 
-**The azure bundle is not in git** (shop-derived: texture from the shop's photos). The demo reads it
-from `spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/` (where the report tooling writes
-it) or from `DEMO_AZURE_BUNDLE=<folder>`. Without it the product is left out and the e2e 3D step on
-the Dawn page says `SKIPPED`. The demo copies only the five bundle files (`base.glb`,
+**The azure and skirt bundles are not in git** (shop-derived: texture from the shop's photos). The demo
+reads them from `spikes/garment-engine/out/eval/azure-palm-baby-doll-dress/` and
+`.../crimson-wildflower-maxi-skirt/` (where the report tooling writes them) or from
+`DEMO_AZURE_BUNDLE=<folder>` / `DEMO_SKIRT_BUNDLE=<folder>`. Without one, that product is left out
+and its e2e 3D step on the Dawn page says `SKIPPED`. The seed approves a bundle only when the import
+gate passes it with exactly the QA flags it expects (none for azure, `low_rise_waist` and `precalibration_outside_tolerance` for the skirt,
+whose chart waist is read at its low band by the founder's recorded decision: before calibration it
+misses that target by 2.49 cm, the pass after is automatic); a refused or differently flagged bundle
+leaves that product without 3D, with a warning, and the demo still starts. The demo seed approves on the
+merchant's behalf; in a real shop the merchant asset API returns each flag with a plain sentence (`qaNotes`),
+but no approval screen shows them yet, and the shopper's 3D view shows only the general estimate label. The demo copies only the five bundle files (`base.glb`,
 `anchors.json`, `grading.json`, `material.json`, `qa.json`) into `.demo-db/assets/`; the product's
 `payload.json` gives the size chart, its photos are replaced by the storefront's own drawing.
 
-The storefront uses no shop photos, but **the azure bundle's texture (`base.glb`) is baked from the
-shop's product photos**, so the 3D view shows the shop's print. Keep that bundle local: do not host,
-record or share a demo with it until the pilot merchant has approved it (D13). The synthetic
+The storefront uses no shop photos, but **the azure and skirt bundles' textures (`base.glb`) are baked
+from the shop's product photos**, so the 3D view shows the shop's print. Keep those bundles local: do not host,
+record or share a demo with them until the pilot merchant has approved them (D13). The synthetic
 aalter-studio-2 bundle has no shop-derived content and can be shown anywhere.
 
 Screenshots: `test-results/demo-e2e/` (or `DEMO_E2E_SHOTS=<folder>`).
@@ -94,7 +102,7 @@ do not switch it on for the pilot until the approval UI and the preview exist.
 | Commercial | trial length (`BILLING_TRIAL_DAYS`, default 7); whether the pilot pays; whether 3D is in the USD 8.99 plan or extra (D17) |
 | Legal | privacy and terms review (entity, retention, region, subprocessors); for 3D: "computed on the device, the garment file comes from our server", and the merchant's responsibility for approved assets (D13) |
 | Live store | the "Must be verified against a live store" list in `packages/shopify-app/README.md` (needs Shopify + server first) |
-| Garment engine | founder review of the azure bundle (run 17b against 16b; `data/bohohippychic/review.json`); the pilot merchant's approval of it; GPU credentials before new products can be processed (until then bundles are imported by hand) |
+| Garment engine | founder review of the azure bundle (run 17b against 16b) and of the skirt bundle's remaining defects (run 17d, low-rise accepted; `data/bohohippychic/review.json`); the pilot merchant's approval of them; GPU credentials before new products can be processed (until then bundles are imported by hand) |
 | WooCommerce | a real WordPress test site; Stripe keys and webhook secret |
 | Listing | support e-mail, help page, trademark clearance, listing assets |
 

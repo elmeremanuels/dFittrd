@@ -6,11 +6,11 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { MOCK_GARMENTS_BY_ID, type GarmentPayload } from '@curtain/schema';
+import { garmentQaFlags, MOCK_GARMENTS_BY_ID, type GarmentPayload, type GarmentQaFlag } from '@curtain/schema';
 import type { Db } from './db/client.js';
 import { shops, type ShopSettings } from './db/schema.js';
 import type { Env } from './env.js';
-import { approveAsset, importBundle } from './services/assets.js';
+import { approveAsset, AssetImportError, importBundle, rejectAsset } from './services/assets.js';
 import { embedAllowedOrigins } from './services/embed.js';
 import { upsertProduct } from './services/products.js';
 import { createShop, findShopByDomain, issueMerchantKeys } from './services/shops.js';
@@ -72,8 +72,15 @@ export interface DemoGarmentBundle {
   externalId: string;
   dir: string;
   payload?: boolean;
-  /** Storefront illustration colour for a product from payload.json. */
+  /** Storefront illustration colour (and its colourway name) for a product from payload.json. */
   colorHex?: string;
+  colorName?: string;
+  /**
+   * The QA flags this bundle must import with, exactly (`garmentQaFlags`; default none). The low-rise skirt names
+   * `low_rise_waist` and `precalibration_outside_tolerance`: the import gate passes it only under that recorded reading,
+   * and any other outcome (refused, or passed with other flags) leaves the product without 3D instead of approving it.
+   */
+  qaFlags?: GarmentQaFlag[];
 }
 
 /** Storefront details of a product that is not a schema fixture (the demo storefront draws it from these). */
@@ -100,6 +107,8 @@ export interface DemoProductInfo {
   status: string;
   /** The approved 3D bundle version when the product has the 3D estimate (D16), else null. */
   asset3d: string | null;
+  /** QA readings that bundle passed under (`garmentQaFlags`, e.g. `low_rise_waist`): shown, never silent. */
+  asset3dFlags?: GarmentQaFlag[];
   details?: DemoProductDetails;
 }
 
@@ -125,7 +134,12 @@ export interface DemoManifest {
   shops: DemoShopInfo[];
 }
 
-export async function seedDemo(db: Db, env: Env, opts: { storefrontOrigin?: string; appOrigin?: string; bundles?: DemoGarmentBundle[] } = {}): Promise<DemoManifest> {
+export async function seedDemo(
+  db: Db,
+  env: Env,
+  opts: { storefrontOrigin?: string; appOrigin?: string; bundles?: DemoGarmentBundle[]; warn?: (message: string) => void } = {},
+): Promise<DemoManifest> {
+  const warn = opts.warn ?? ((m: string) => console.warn(`[demo seed] ${m}`));
   const storefront = opts.storefrontOrigin ?? DEMO_STOREFRONT_ORIGIN;
   const appOrigin = opts.appOrigin ?? DEMO_APP_ORIGIN;
   const embedOrigins = [...new Set([storefront, appOrigin])];
@@ -169,11 +183,14 @@ export async function seedDemo(db: Db, env: Env, opts: { storefrontOrigin?: stri
       });
     }
     const bundles = (opts.bundles ?? []).filter((b) => b.shop === spec.key && existsSync(join(b.dir, 'base.glb')));
+    // Products from payload.json go first, in the order the bundles are listed.
+    let payloadAt = 0;
     for (const b of bundles) {
       if (b.payload) {
         const raw = JSON.parse(readFileSync(join(b.dir, 'payload.json'), 'utf8')) as GarmentPayload;
         const photo = `${storefront}/img/${encodeURIComponent(b.externalId)}.svg`;
         const color = b.colorHex ?? '#4F8FC0';
+        const colorName = b.colorName ?? 'Azure';
         // Shop photos never enter the demo: the storefront draws the garment itself.
         const g = { ...raw, id: b.externalId, productUrl: undefined, productPhotos: [photo], flatLayPhoto: photo, primaryColorHex: color };
         const r = await upsertProduct(db, fresh.id, b.externalId, g);
@@ -187,18 +204,35 @@ export async function seedDemo(db: Db, env: Env, opts: { storefrontOrigin?: stri
           photo,
           status: r.product.status,
           asset3d: null,
-          details: { name: raw.name, category: raw.category, subcategory: raw.subcategory, patternBlock: raw.patternBlock, primaryColorHex: color, colorways: [{ name: 'Azure', hex: color }], sizeChart: raw.sizeChart, sizeChartType: raw.sizeChartType, lengthCm: (raw.lengthCm ?? {}) as Record<string, number> },
+          details: { name: raw.name, category: raw.category, subcategory: raw.subcategory, patternBlock: raw.patternBlock, primaryColorHex: color, colorways: [{ name: colorName, hex: color }], sizeChart: raw.sizeChart, sizeChartType: raw.sizeChartType, lengthCm: (raw.lengthCm ?? {}) as Record<string, number> },
         };
         const at = products.findIndex((p) => p.externalId === b.externalId);
         if (at >= 0) products[at] = info;
-        else products.unshift(info);
+        else products.splice(payloadAt++, 0, info);
       }
       const product = products.find((p) => p.externalId === b.externalId);
       if (!product) continue;
-      const { asset } = await importBundle(db, env, fresh.id, b.externalId, b.dir);
-      // The demo merchant approves its own bundle (D13); a real shop does this in the admin.
+      let asset;
+      try {
+        ({ asset } = await importBundle(db, env, fresh.id, b.externalId, b.dir));
+      } catch (err) {
+        // The import gate refused it (e.g. qa_failed): that product has no 3D view; the demo still starts.
+        if (!(err instanceof AssetImportError)) throw err;
+        warn(`${b.externalId}: ${err.message} (${b.dir}); the product is shown without 3D`);
+        continue;
+      }
+      const flags = garmentQaFlags(asset.qa as { chartAgreement?: { waistReading?: unknown } }) ?? [];
+      const want = [...(b.qaFlags ?? [])].sort();
+      if (flags.length !== want.length || [...flags].sort().some((f, i) => f !== want[i])) {
+        warn(`${b.externalId}: bundle ${asset.version} passed the import gate with QA flags [${flags.join(', ')}], expected [${want.join(', ')}]; not approved, the product is shown without 3D`);
+        if (asset.status === 'approved') await rejectAsset(db, fresh.id, asset.id, `demo seed: QA flags [${flags.join(', ')}], expected [${want.join(', ')}]`);
+        continue;
+      }
+      // The demo merchant approves its own bundle (D13), standing in for a person; a real shop does this in the admin,
+      // where the asset API gives each flag a plain sentence (`qaNotes`) and no approval screen shows them yet.
       if (asset.status !== 'approved') await approveAsset(db, fresh.id, asset.id, 'demo-seed');
       product.asset3d = asset.version;
+      if (flags.length) product.asset3dFlags = flags;
     }
     if (bundles.length) {
       await db

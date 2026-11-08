@@ -123,6 +123,13 @@ export interface FitInstance {
   band: BandSlide | null;
 }
 
+/**
+ * A bottom with a stretch waistband: shown at the height the garment was reconstructed at, every size. Its elastic holds it,
+ * and how much a larger size gathers (or a smaller one stretches) depends on the band's relaxed girth, which the bundle does
+ * not measure; so the sizes differ in the viewer only by their graded girths below the band (folded by the drape).
+ */
+export const STRETCH_BAND_LINE: FitLine = { anchor: 'waist', band: undefined, tone: 'even', text: 'Stretch waistband: shown where it was made to sit in every size; how much it gathers or stretches on this body is not modelled (the relaxed band is not measured).' };
+
 /** The text line for a waistband that slid (`slideWaistband`), else none. */
 export function bandLines(band: BandSlide | null): FitLine[] {
   if (!band || band.dropCm <= 0) return [];
@@ -197,7 +204,7 @@ export interface BandSlide {
 const ellipsePerimeter = (a: number, b: number): number => Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)));
 
 /**
- * A bottom hangs from its waistband, and the band is graded with the chart (`hip-delta` for a skirt worn below the waist
+ * A bottom without a stretch waistband hangs from its band, and the band is graded with the chart (`hip-delta` for a skirt worn below the waist
  * ring): a band larger than the body where the garment was reconstructed cannot stay there, it slides down until the body
  * fills it. Before this the band was pinned where the base size sat on the canonical mannequin, so every size hung from the
  * same height and the drape folded the extra girth of the larger sizes away (run 17d skirt on M: graded hip 97.6 to 117.7 cm
@@ -265,7 +272,10 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   for (let i = 0; i < noCollide.length; i++) if (inside[i] === 1 && graded.positions[3 * i + 1]! > m.morphHeights.chest) noCollide[i] = 1;
   const start = Float32Array.from(placed.positions);
   const bottom = session.bundle.anchors.category === 'bottom';
-  const band = bottom ? slideWaistband(field, start, chains, CLEARANCE_CM) : null;
+  // A stretch waistband (the payload's stretch zones) is held by its elastic: how far it gathers depends on its relaxed
+  // girth, which no bundle measures, so it is not slid (the fit lines say so). Only a band without stretch slides.
+  const stretchBand = (session.payload.stretchZones ?? []).includes('waistband');
+  const band = bottom && !stretchBand ? slideWaistband(field, start, chains, CLEARANCE_CM) : null;
   const yoke = pinHeight(m, session.bundle.anchors.category, start, chains);
   // The yoke is where grading put it: the shoulder ring grades by the `shoulder_width` ratio between
   // sizes (D15 breadth); its base width is the mesh's (on the synthetic garment, the mannequin torso's). Pinning only out to the seams or the body's shoulder
@@ -293,7 +303,7 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
     size: placement.size,
     gaps,
     placement,
-    lines: [...fitLines(gaps, placement, session.bundle.qa.chartAgreement.missing ?? []), ...bandLines(band)],
+    lines: [...fitLines(gaps, placement, session.bundle.qa.chartAgreement.missing ?? []), ...bandLines(band), ...(bottom && stretchBand ? [STRETCH_BAND_LINE] : [])],
     band,
     heat: heatField(gaps, m.morphHeights),
     material,

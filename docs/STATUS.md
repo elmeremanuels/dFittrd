@@ -3,6 +3,23 @@
 This is the integration snapshot after the parallel build and review passes. Read it with
 `docs/DECISIONS.md` (why), `docs/ARCHITECTURE.md` (layout) and `docs/HANDOFF.md` (product truth).
 
+## Garment engine — refinement R1, R3, R5, R6 on CPU (branch `claude/refine-cpu`) — 8 Nov 2026
+
+No GPU. Stage 4t 0.5.0 (template fit 0.5.0) re-run on azure 17b, the skirt and the palazzo (17d) from their existing frames;
+`report:bohohippychic --renders` re-run. Details and every table: `spikes/garment-engine/data/bohohippychic/phase0-written.md`,
+"Refinement R1, R3, R5, R6 on CPU"; backlog status in `docs/REFINEMENT.md`.
+
+| Item | Result |
+|---|---|
+| R1 azure flap/panel | Consistency 0.4.0's off-reference pixels (`phase0_garment.py --write-off-reference`) are left out of the fit and the bake, an evidence choice listed in `metrics.json` `offReference` and in the report (EXCLUDED, not UNCONFIRMED). Hem girth 157.7 → **151.8 cm** (run 15: 149.5); holdout unchanged; IoU on the 73 flagged frames 0.897 as segmented, 0.912 with those pixels as don't care. Not confirmed by a clean draw (GPU part open) |
+| R6 bake | Two-band blend (layout from the views' consensus, half the detail of the most face-on view). Holdout MAE azure 20.79 → 19.29, skirt 29.21 → 27.20, **palazzo 29.72 → 26.98, below one flat colour (27.97)**. Flagged: softer than one frame; palazzo PSNR still below flat colour; the gain was chosen with the holdout numbers in view |
+| R5 palazzo | Legs no longer cross (20 → 0); crotch measured from the frames (2.8 / 3.5 cm below the body's, was 6.5) and the seat laid into the crease; one piece, 0 inside. Still faulty: texture seam at the join, the viewer's V fold |
+| R3 skirt sizes | Investigated: grading is right, the drape folds 20 cm of graded hip spread into 5.4 cm and every size hangs from the same band. Viewer (both copies): a non-elastic band slides to where the body fills it, cloth stands on the floor. The skirt's band is elastic and its relaxed girth unmeasured, so it is not slid: **open** |
+| Gates (this worktree) | `pnpm check` pass (a first run failed one fit-engine property test on its 5 s timeout while renders and stage 4t loaded the CPU; fit-engine untouched; passed on an idle machine, the timeout not changed); spike vitest 415 + viewer 57 (`--maxWorkers=2`); modal pytest 276 passed, 2 skipped; `pnpm demo:e2e` pass, both flows, azure and skirt 3D from this worktree's re-evaluated bundles |
+
+Bundles: `out/eval/<handle>/` in this worktree (gitignored); `pnpm demo` reads them from the tree it runs in (or
+`DEMO_AZURE_BUNDLE` / `DEMO_SKIRT_BUNDLE`). The main tree's `out/` was not touched.
+
 ## Release v1 + optional 3D estimate (branch `claude/plugin-v1`) — 8 Nov 2026
 
 Release v1 unchanged, plus an opt-in **3D estimate** in the overlay for products with an approved

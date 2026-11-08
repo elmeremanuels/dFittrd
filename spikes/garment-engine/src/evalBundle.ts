@@ -117,6 +117,8 @@ export function evalBundle(result: EvalResult, payload: GarmentPayload, opts: { 
       pass: result.agreement.pass,
       beforeCalibrationMaxAbsCm: result.before.maxAbsCm,
       afterGlobalScaleMaxAbsCm: result.afterGlobal.maxAbsCm,
+      // A recorded founder choice to read the waist at the band (`src/lowRise.ts`); the import gate surfaces it.
+      ...(result.agreement.waistReading ? { waistReading: result.agreement.waistReading } : {}),
     },
     calibration: {
       globalScale: round(result.calibration.globalScale, 6),

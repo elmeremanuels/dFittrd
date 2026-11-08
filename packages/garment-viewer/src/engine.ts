@@ -189,7 +189,7 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   const pinned = session.bundle.anchors.category === 'bottom' ? waistbandPins(start, graded.indices, chains) : new Uint8Array(chains.length);
   if (session.bundle.anchors.category !== 'bottom') for (let i = 0; i < chains.length; i++) if (chains[i] === 0 && start[3 * i + 1]! >= yoke) pinned[i] = 1;
   const cuff = new Uint8Array(chains.length);
-  pinLoosePieces(m, start, graded.indices, pinned, session.bundle.baseMesh.positions, cuff);
+  pinLoosePieces(m, start, graded.indices, pinned, session.bundle.baseMesh.positions, cuff, session.bundle.anchors.category === 'bottom');
   const lift = armCapLifter(m, CLEARANCE_CM, session.noLift);
   for (let i = 0; i < chains.length; i++) lift(start, i);
   const cloth = createCloth(start, graded.positions, graded.indices, (i) => pinned[i] === 1, (i) => chains[i] === 0);
@@ -239,7 +239,7 @@ export const SLEEVE_CAP_CM = 4;
  * particles): `prepareFit` holds it on a leash (`CUFF_LEASH_CM`), not a pin. Mutates `pinned` (and
  * `cuff`); returns the number of particles it pinned.
  */
-export function pinLoosePieces(m: Mannequin, pos: ArrayLike<number>, indices: ArrayLike<number>, pinned: Uint8Array, base: ArrayLike<number> = pos, cuff?: Uint8Array): number {
+export function pinLoosePieces(m: Mannequin, pos: ArrayLike<number>, indices: ArrayLike<number>, pinned: Uint8Array, base: ArrayLike<number> = pos, cuff?: Uint8Array, bottom = false): number {
   const all = meshPieces(indices, pinned.length);
   if (all.length < 2) return 0;
   const largest = all.reduce((a, b) => (b.length > a.length ? b : a));
@@ -247,6 +247,10 @@ export function pinLoosePieces(m: Mannequin, pos: ArrayLike<number>, indices: Ar
   let added = 0;
   for (const members of all) {
     if (members === largest) continue;
+    if (bottom) {
+      added += pinPieceTop(pos, members, pinned);
+      continue;
+    }
     let sx = 0;
     for (const i of members) sx += pos[3 * i]!;
     const arm = sx >= 0 ? m.arms.left : m.arms.right;
@@ -260,6 +264,26 @@ export function pinLoosePieces(m: Mannequin, pos: ArrayLike<number>, indices: Ar
     // Whether the cuff is gathered is the product's: decided on the base-size garment, the same particles in every size.
     const alongBase = (i: number): number => (base[3 * i]! - arm.joint[0]) * arm.axis[0] + (base[3 * i + 1]! - arm.joint[1]) * arm.axis[1] + (base[3 * i + 2]! - arm.joint[2]) * arm.axis[2];
     if (cuff) for (const i of gatheredCuff(m, arm, members, alongBase, base)) if (!pinned[i]) cuff[i] = 1;
+  }
+  return added;
+}
+
+/**
+ * A bottom's pieces other than the largest are pinned along their top `LOOSE_TOP_PIN_CM`: trousers from stage 4t before
+ * template fit 0.4.0 are a seat tube and two leg tubes that overlap the seat by 3 cm but are not sewn to it. The sleeve
+ * rule (`pinLoosePieces`, along the arm) pinned nothing sensible on a leg, and run 17d's leg tubes fell away from the
+ * seat in the drape (our grey thighs showed between them at every size). Stage 4t 0.4.0 sews the legs to the seat
+ * (`stitchTrousers`, one piece), which this leaves alone.
+ */
+export const LOOSE_TOP_PIN_CM = 3;
+
+function pinPieceTop(pos: ArrayLike<number>, members: readonly number[], pinned: Uint8Array): number {
+  let top = -Infinity;
+  for (const i of members) top = Math.max(top, pos[3 * i + 1]!);
+  let added = 0;
+  for (const i of members) if (!pinned[i] && pos[3 * i + 1]! >= top - LOOSE_TOP_PIN_CM) {
+    pinned[i] = 1;
+    added++;
   }
   return added;
 }

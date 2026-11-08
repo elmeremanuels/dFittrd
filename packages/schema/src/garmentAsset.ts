@@ -37,6 +37,8 @@ export const MerchantGarmentAssetSchema = z.object({
   baseSize: z.string().min(1).max(32),
   sizes: z.array(z.string()).max(32),
   qaPass: z.boolean(),
+  /** QA readings the merchant must see before approving (`garmentQaFlags`), e.g. `low_rise_waist`. */
+  qaFlags: z.array(z.enum(['low_rise_waist'])).max(8).optional(),
   createdAt: z.iso.datetime({ offset: true }),
   approvedAt: z.iso.datetime({ offset: true }).nullable(),
   rejectReason: z.string().max(500).nullable(),
@@ -61,7 +63,7 @@ export interface GarmentBundleMeta {
   anchors: { format?: unknown };
   grading: { format?: unknown; baseSize?: unknown; sizes?: unknown };
   material: { format?: unknown };
-  qa: { format?: unknown; chartAgreement?: { pass?: unknown } };
+  qa: { format?: unknown; chartAgreement?: { pass?: unknown; waistReading?: unknown } };
   /** Total size of the bundle files, bytes, when known. */
   bytes?: number;
 }
@@ -70,6 +72,29 @@ export interface GarmentBundleInfo {
   baseSize: string;
   /** Grading size labels, in chart order. */
   sizes: string[];
+  /**
+   * QA readings the bundle passed under that a person must see before approving it (`garmentQaFlags`): `low_rise_waist` when
+   * its chart waist was read at a band below the waist ring by a recorded decision. Empty for an ordinary pass.
+   */
+  qaFlags: GarmentQaFlag[];
+}
+
+export type GarmentQaFlag = 'low_rise_waist';
+
+/**
+ * The flags of a bundle's QA, or `null` when a declared reading is malformed (the bundle is then refused, `qa_failed`).
+ * `chartAgreement.waistReading` (spikes/garment-engine src/lowRise.ts): a bottom whose band sits below the body's waist,
+ * read at the band against the chart's waist plus a stated body offset, by a founder's recorded decision. It is accepted
+ * only as `{ kind: 'low-rise', decision: <non-empty>, offsetCm: <finite>, targetCm: <finite> }`, and always flagged.
+ */
+export function garmentQaFlags(qa: GarmentBundleMeta['qa']): GarmentQaFlag[] | null {
+  const wr = qa.chartAgreement?.waistReading;
+  if (wr === undefined || wr === null) return [];
+  if (typeof wr !== 'object') return null;
+  const o = wr as { kind?: unknown; decision?: unknown; offsetCm?: unknown; targetCm?: unknown };
+  if (o.kind !== 'low-rise' || typeof o.decision !== 'string' || o.decision.trim() === '') return null;
+  if (typeof o.offsetCm !== 'number' || !Number.isFinite(o.offsetCm) || typeof o.targetCm !== 'number' || !Number.isFinite(o.targetCm)) return null;
+  return ['low_rise_waist'];
 }
 
 export type GarmentBundleProblem = 'format' | 'too_large' | 'qa_failed' | 'chart_mismatch';
@@ -81,6 +106,8 @@ export function checkGarmentBundle(meta: GarmentBundleMeta, chartSizes: readonly
   }
   if (meta.bytes !== undefined && (!Number.isFinite(meta.bytes) || meta.bytes > MAX_GARMENT_BUNDLE_BYTES)) return { ok: false, problem: 'too_large' };
   if (meta.qa.chartAgreement?.pass !== true) return { ok: false, problem: 'qa_failed' };
+  const qaFlags = garmentQaFlags(meta.qa);
+  if (!qaFlags) return { ok: false, problem: 'qa_failed' };
   const { baseSize, sizes: rows } = meta.grading;
   if (typeof baseSize !== 'string' || !Array.isArray(rows) || rows.length === 0 || rows.length > 32) return { ok: false, problem: 'format' };
   const sizes: string[] = [];
@@ -93,7 +120,7 @@ export function checkGarmentBundle(meta: GarmentBundleMeta, chartSizes: readonly
   if (!graded.has(sizeLabelKey(baseSize))) return { ok: false, problem: 'format' };
   // Every size the shop sells must be graded, or the advice could name a size the picture cannot show.
   if (chartSizes.length === 0 || !chartSizes.every((s) => graded.has(sizeLabelKey(s)))) return { ok: false, problem: 'chart_mismatch' };
-  return { ok: true, info: { baseSize, sizes } };
+  return { ok: true, info: { baseSize, sizes, qaFlags } };
 }
 
 /** The bundle check against a garment's live chart: the info, or `null` (fall back to today's flow). */

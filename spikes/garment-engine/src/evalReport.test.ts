@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { chooseMesh, evaluateProduct, readJob, type JobFiles, type ProductEval } from './evalJob';
 import { reconstructedDress, shopPayloads, syntheticDress, writeFakeJob } from './evalFixtures';
 import { SHOP_UNCOVERED_CATEGORIES } from './shopSelection';
-import { consistencyNote, costScope, costTotal, forPanel, offPanelReason, parsePrintedTable, plannedPhotos, renderReport, stageStatuses, usedInputs, verdicts, type ProductSection, type ReportInput, type ShopImage, type ShopProduct } from './evalReport';
+import { consistencyNote, costScope, costTotal, forPanel, offPanelReason, parsePrintedTable, plannedPhotos, renderReport, stageStatuses, usedInputs, verdicts, type ProductSection, type ReportInput, type ShopImage, type ShopProduct, parseWaistReading, waistReadingLine, joinDetail } from './evalReport';
 
 const images = (JSON.parse(readFileSync(new URL('../data/bohohippychic/images.json', import.meta.url), 'utf8')) as { products: Record<string, ShopImage[]> }).products;
 const dirs: string[] = [];
@@ -266,5 +266,40 @@ describe('review verdicts and earlier runs', () => {
     expect(md).toMatch(/\| hem line above the floor \(median of the lowest cloth per 10° sector, exemplar\.json\), cm \| — \| — \|/);
     expect(md).toContain('- run 14: no job dir');
     expect(md).toContain('run14-vs-current-turntable-0.png](');
+  });
+});
+
+describe('the waist-reading switch (review.json waistReading)', () => {
+  it('reads natural by default and low-rise only with a recorded decision', () => {
+    expect(parseWaistReading('x', undefined)).toBeNull();
+    expect(parseWaistReading('x', 'natural')).toBeNull();
+    expect(parseWaistReading('x', { kind: 'natural' })).toBeNull();
+    expect(parseWaistReading('x', { kind: 'low-rise', decision: ' founder, 9 Nov ' })).toEqual({ kind: 'low-rise', decision: 'founder, 9 Nov' });
+    expect(() => parseWaistReading('x', { kind: 'low-rise' })).toThrow(/decision/);
+    expect(() => parseWaistReading('x', 'low-rise')).toThrow();
+    expect(() => parseWaistReading('x', { kind: 'band', decision: 'y' })).toThrow();
+  });
+  it('the report says which reading was used, and names the switch when it is not set', () => {
+    const band = { girthCm: 88, centreY: 100.2 } as never;
+    const off = waistReadingLine({ category: 'bottom', waistband: band, agreement: { pass: false, missing: ['waist'] } as never });
+    expect(off).toMatch(/at our waist ring \(the default\)/);
+    expect(off).toMatch(/"waistReading"/);
+    const on = waistReadingLine({ category: 'bottom', waistband: band, agreement: { pass: true, missing: [], waistReading: { kind: 'low-rise', decision: 'founder', dropCm: 4.8, bandYCm: 99.4, waistRingYCm: 104.2, chartWaistCm: 80.5, offsetCm: 5.1, bodyAtBandCm: 79.1, bodyAtWaistCm: 74, targetCm: 85.6 } } as never });
+    expect(on).toMatch(/LOW-RISE \(founder decision: founder\)/);
+    expect(on).toMatch(/low_rise_waist/);
+    // The miss before calibration is stated, and a pass with the waist as the only critical point is called automatic.
+    const onFull = waistReadingLine({ category: 'bottom', waistband: band, critical: ['waist'], before: { maxAbsCm: 2.49, pass: false }, agreement: { pass: true, toleranceCm: 2, missing: [], waistReading: { kind: 'low-rise', decision: 'founder', dropCm: 4.8, bandYCm: 99.4, waistRingYCm: 104.2, chartWaistCm: 80.5, offsetCm: 5.1, bodyAtBandCm: 79.1, bodyAtWaistCm: 74, targetCm: 85.6 } } as never });
+    expect(onFull).toMatch(/misses its target by 2\.49 cm \(tolerance ±2 cm: OUTSIDE\)/);
+    expect(onFull).toMatch(/pass after calibration is automatic/);
+  });
+  it('the trouser join line states the deeper crotch, the band slivers and crossing legs (or that they do not cross)', () => {
+    const band = { triangles: 24, longestEdgeCm: 19.41, maxAreaCm2: 27.5, edgesOverCm: 8, overLongCm: 12 };
+    const crossing = joinDetail({ belowBodyCrotchCm: 6.5, band: { seat: { ...band, triangles: 114 }, crotch: band }, legOverlap: { fromCm: 69.44, toCm: 54.94, stepCm: 0.5, slices: 30, slicesWithCrossings: 10, crossings: 20, lowestCm: 64.94, byHeight: [] } });
+    expect(crossing).toMatch(/6\.5 cm BELOW the body's crotch/);
+    expect(crossing).toMatch(/crotch floor 24 triangles, longest edge 19\.41 cm/);
+    expect(crossing).toMatch(/leg tubes CROSS each other below the join: 20 crossings in 10 of 30 slices/);
+    expect(joinDetail({ legOverlap: { fromCm: 69, toCm: 55, slices: 30, crossings: 0 } })).toMatch(/do not cross/);
+    expect(joinDetail(null)).toBe('');
+    expect(waistReadingLine({ category: 'dress', waistband: null, agreement: { pass: true, missing: [] } as never })).toBeNull();
   });
 });

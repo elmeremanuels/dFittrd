@@ -398,6 +398,32 @@ the baked print is a patchwork (holdout MAE 29.1, worse than one colour, 27.6). 
 pin the leg tubes, re-bake, check the thigh band and the lower-leg slits. GPU 1,568 s ($1.61-1.63) + 1,469 s ($1.56-1.58). Panel still on hold (1 of 5 bundles, azure, pending
 founder review).
 
+**Run 17d on CPU (8 Nov, no GPU; `phase0-written.md`, "Run 17d on CPU").** **Palazzo:** stage 4t **0.4.0** sews the
+trousers into one piece: the legs start at the join (`trouserJoinHeight`, 69.94 cm, the highest level below the crotch
+where the mannequin's thighs are apart; 0.3.0 started them 2 cm above the crotch, 36 rays blocked by the other thigh, a
+hole at each inseam top and 1 vertex inside) and `stitchTrousers` zips the seat's last ring to the legs' outer arcs and the
+inner arcs to each other (the crotch), from fitted vertices only: 1 component, 3 boundary loops, Euler −1, 0 vertices
+inside (closest 4.39 mm). The patchwork's cause was a chart overlap (the seat used the dress's body chart, over the top two
+thirds of both leg charts); trousers now have their own seat, join and leg charts. The viewer pins the top 3 cm of any loose
+piece of a bottom (`LOOSE_TOP_PIN_CM`, both viewer copies, parity test). Every render: no grey thighs and no shin slivers at
+any size or body. Still **faulty**: holdout texture MAE 29.72 against one colour's 27.97 (worst at the side views; more
+blending only ties it, a blur: the frames disagree on the print), a light hard-edged triangle at the crotch from the front
+and a V fold between the legs. What the join costs: the garment's crotch is 6.5 cm below the body's (a deeper rise than the
+product; the seat is one tube round both thighs from 69.94 to 76.44 cm), closed by a flat floor of band triangles that no
+mask saw (the light triangle; 31 band triangles have an edge over 8 cm, up to 19.4 cm); the leg tubes cross each other
+from 69.4 down to 64.9 cm (`fit.join.legOverlap`, not repaired); the inseam 73.53 cm includes a 6.96 cm straight bridge
+up to the crotch point, the cloth inner leg alone is 66.57 cm. The thigh ring now lies above the join (the seat round both thighs): reported as the seat,
+not calibrated, graded or used by the drape log. Azure and the skirt re-run with 0.4.0: identical texture, IoU, clearance
+and mesh. **Skirt:** the chart's waist is our AU *body* chart's natural waist (the shop prints no garment chart). Option a,
+"low-rise", exists behind a founder switch that is **not set** (`review.json` `waistReading`, `src/lowRise.ts`): the band
+read where it sits (4.76 cm below the waist ring) against chart + ease + the mannequin's own widening there (+5.08 cm):
+88.07 against 85.58: it still misses the chart by +2.49 cm before calibration (outside ±2); the pass after calibration
+(global scale 0.972) is automatic, because the waist is the skirt's only critical point; written into `qa.json`
+(`chartAgreement.waistReading`), and the import gate accepts it only with a recorded decision and flags it
+`low_rise_waist` (`qaFlags`, returned in the merchant asset API; no admin screen shows it yet). Option b: new stills with the band at the waist (GPU). The
+hem over the feet is in the stills (the front still's hem reaches the bottom of the feet), not the fit. The skirt stays
+**faulty**. Panel still on hold (1 of 5 bundles).
+
 **Stage 4t** (`spikes/garment-engine/src/templateFit.ts`, `bake.ts`, `stage4t.ts`;
 `pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic]`): the
 control proxy remeshed into a body tube and two sleeve tubes (each starting with a shoulder cap of
@@ -405,7 +431,7 @@ rays fanned from the shoulder joint), each vertex moved along a fixed ray to the
 of the 160 stage 2 garment masks (32 held out), kept at least 4 mm outside `mannequin.glb` (signed
 distance, then checked by the exact distance), hem and cuffs found on the masks, the bodice stopped at
 the fitted sleeves, then the print projected from the same frames into a 2048² atlas, JPEG, in a
-textured `garment.glb`. About 86 s per product on a 4-core CPU. Version 0.3.0 since 7 Nov (below).
+textured `garment.glb`. About 86 s per product on a 4-core CPU. Version 0.3.0 since 7 Nov (below); 0.4.0 since 8 Nov (trousers sewn into one piece, above).
 
 The synthetic dress's template is built from the same spec as its truth (0.57 cm Chamfer before
 any fit), so its 0.443 cm alone does not show that the fit survives a wrong template.

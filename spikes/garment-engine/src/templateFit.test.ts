@@ -17,7 +17,7 @@ import { generateGarment } from './garment';
 import { garmentSpec } from './product';
 import { buildProxy } from './proxy';
 import { boundaryLoops } from './stage4t';
-import { fitTemplate, pushToClearance, renderPositions, SHOULDER_CAP, type FitViews, type TemplateFitResult } from './templateFit';
+import { ATLAS_CHARTS_TROUSERS, fitTemplate, joinBandStats, legOverlap, orientBand, pushToClearance, renderPositions, SHOULDER_CAP, zipStrip, type FitViews, type TemplateFitResult } from './templateFit';
 import { GARMENT_REGIONS, garmentRegion, PERTURBATIONS, perturbTemplate } from './templatePerturb';
 import { cameraFromFrame, cleanMask, cleanupPixels, idMask, pixelsPerCm, rasterize, splitFrames, type PinholeCamera } from './views';
 
@@ -339,4 +339,68 @@ describe('template fit on the synthetic dress', () => {
     }
     expect(inHole).toBe(0);
   }, 300_000);
+});
+
+describe('trouser join helpers (template fit 0.4.0)', () => {
+  it('the trouser atlas charts do not overlap (run 17d: the seat shared the legs\' texels, a patchwork between crotch and knees)', () => {
+    const rects = Object.values(ATLAS_CHARTS_TROUSERS);
+    for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) {
+      const a = rects[i]!, b = rects[j]!;
+      const overlap = a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+      expect(overlap).toBe(false);
+    }
+  });
+  it('zipStrip covers both sequences in order with one triangle per step', () => {
+    const tris = zipStrip([0, 1, 2, 3], [0, 1.5, 3]);
+    expect(tris).toHaveLength(3 + 2);
+    const used = (s: number): number[] => [...new Set(tris.flatMap((t) => t.filter(([q]) => q === s).map(([, k]) => k)))].sort();
+    expect(used(0)).toEqual([0, 1, 2, 3]);
+    expect(used(1)).toEqual([0, 1, 2]);
+  });
+  it('orientBand turns band triangles so every shared edge runs both ways (consistent winding)', () => {
+    // A fixed quad 0-1-2-3 (two triangles) and a band below it sharing edge 3-2, built wound the wrong way.
+    const fixed = [0, 3, 2, 0, 2, 1];
+    const band: [number, number, number][] = [[3, 2, 5], [3, 5, 4]];
+    expect(orientBand(fixed, band)).toBe(0);
+    const directed = new Set<string>();
+    for (const t of [[0, 3, 2], [0, 2, 1], ...band]) for (let k = 0; k < 3; k++) {
+      const e = `${t[k]},${t[(k + 1) % 3]}`;
+      expect(directed.has(e)).toBe(false);
+      directed.add(e);
+    }
+  });
+  it('joinBandStats reports the band\'s longest edge, largest area and long slivers', () => {
+    // One 20 × 1 cm sliver and one 1 × 1 cm triangle.
+    const pos = [0, 0, 0, 20, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1];
+    const st = joinBandStats([[0, 1, 2], [0, 3, 4]], pos, 8);
+    expect(st.triangles).toBe(2);
+    expect(st.longestEdgeCm).toBeCloseTo(Math.hypot(20, 1), 2);
+    expect(st.maxAreaCm2).toBeCloseTo(10, 2);
+    expect(st.overLongCm).toBe(1);
+  });
+  it('legOverlap finds two leg tubes that cross each other, and none when they stay apart', () => {
+    // Two square tubes (4 columns, rows at y 10 and 0), centred at x = ±c, half-width 2.
+    const tubes = (c: number): Pick<Mesh, 'positions' | 'indices' | 'vertexPart' | 'partNames'> => {
+      const pos: number[] = [], idx: number[] = [], part: number[] = [];
+      for (const [pi, cx] of [[1, c], [2, -c]] as const) {
+        const o = pos.length / 3;
+        for (const y of [10, 0]) for (const [dx, dz] of [[2, 0], [0, 2], [-2, 0], [0, -2]]) {
+          pos.push(cx + dx!, y, dz!);
+          part.push(pi);
+        }
+        for (let k = 0; k < 4; k++) {
+          const a = o + k, b = o + ((k + 1) % 4);
+          idx.push(a, b, a + 4, b, b + 4, a + 4);
+        }
+      }
+      return { positions: Float64Array.from(pos), indices: Uint32Array.from(idx), vertexPart: Uint8Array.from(part), partNames: ['body', 'leg_l', 'leg_r'] };
+    };
+    const apart = legOverlap(tubes(3), 9, 1, 1);
+    expect(apart.crossings).toBe(0);
+    expect(apart.lowestCm).toBeNull();
+    const crossed = legOverlap(tubes(1.37), 9.3, 1.3, 1);
+    expect(crossed.slicesWithCrossings).toBe(crossed.slices);
+    expect(crossed.crossings).toBe(2 * crossed.slices);
+    expect(crossed.lowestCm).toBeCloseTo(1.3, 5);
+  });
 });

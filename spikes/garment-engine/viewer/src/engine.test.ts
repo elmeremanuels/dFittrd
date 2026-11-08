@@ -7,7 +7,7 @@ import { bodyField, buildAvatar, makeCollider, mannequinMeasurements } from './b
 import { meshFromGlb, type SpikeBundle } from './bundle';
 import { clothParams, createCloth, stepCloth, strainQuantile } from './cloth';
 import { advance, jobCollider, type DrapeJob } from './drapeJob';
-import { armCapLifter, CUFF_LEASH_CM, defaultTrio, drapeJobOf, heatFor, necklineStrain, openSession, pinLoosePieces, prepareFit, relax, viewerMaterial, yokeHeight } from './engine';
+import { armCapLifter, CUFF_LEASH_CM, defaultTrio, LOOSE_TOP_PIN_CM, drapeJobOf, heatFor, necklineStrain, openSession, pinLoosePieces, prepareFit, relax, viewerMaterial, yokeHeight } from './engine';
 import { armpitDistance } from '../../src/garment';
 import { anchorLabels, fitForBody, frontOutline } from './fitting';
 
@@ -345,5 +345,41 @@ describe('sleeve pieces (stage 4t: tubes of their own, not sewn to the bodice)',
     expect(lift(at(3, -(a3 - 1)), 0)).toBe(false);
     // Below the armpit the collider handles the arm: not this.
     expect(lift(at(armpitDistance(m) + 2, 1), 0)).toBe(false);
+  });
+});
+
+describe('bottoms with loose pieces (stage 4t trousers before template fit 0.4.0)', () => {
+  /** A vertical open tube round (cx, cz) from y0 up to y1. */
+  const tube = (cx: number, r: number, y0: number, y1: number, offset: number): { pos: number[]; idx: number[] } => {
+    const C = 16, R = 8, pos: number[] = [], idx: number[] = [];
+    for (let i = 0; i <= R; i++) for (let c = 0; c < C; c++) {
+      const t = (2 * Math.PI * c) / C;
+      pos.push(cx + r * Math.sin(t), y0 + ((y1 - y0) * i) / R, r * Math.cos(t));
+    }
+    for (let i = 0; i < R; i++) for (let c = 0; c < C; c++) {
+      const a = offset + i * C + c, b = offset + i * C + ((c + 1) % C), d = a + C, e = b + C;
+      idx.push(a, d, e, a, e, b);
+    }
+    return { pos, idx };
+  };
+  it('pins every leg tube along its top (the join), not by the sleeve rule; one sewn piece pins nothing', () => {
+    const m = buildMannequin(bodyShape(BASE_SHAPE_ID));
+    const seat = tube(0, 20, 75, 105, 0);
+    const legL = tube(10, 12, 5, 78, seat.pos.length / 3);
+    const legR = tube(-10, 12, 5, 78, (seat.pos.length + legL.pos.length) / 3);
+    const pos = [...seat.pos, ...legL.pos, ...legR.pos];
+    const idx = [...seat.idx, ...legL.idx, ...legR.idx];
+    const n = pos.length / 3;
+    const pinned = new Uint8Array(n);
+    const added = pinLoosePieces(m, pos, idx, pinned, pos, undefined, true);
+    expect(added).toBeGreaterThan(0);
+    for (let i = seat.pos.length / 3; i < n; i++) {
+      const y = pos[3 * i + 1]!;
+      expect(pinned[i]).toBe(y >= 78 - LOOSE_TOP_PIN_CM ? 1 : 0);
+    }
+    // The seat (the largest piece) is left to the waistband pins.
+    for (let i = 0; i < seat.pos.length / 3; i++) expect(pinned[i]).toBe(0);
+    // Sewn into one piece there is nothing loose to pin.
+    expect(pinLoosePieces(m, seat.pos, seat.idx, new Uint8Array(seat.pos.length / 3), seat.pos, undefined, true)).toBe(0);
   });
 });

@@ -25,11 +25,12 @@ import { BASE_SHAPE_ID, bodyShape, buildMannequin } from '@curtain/mannequin';
 import { mockGarment, type GarmentPayload } from '@curtain/schema';
 import { arr, chooseMesh, evaluateProduct, num, obj, readJob, str, type Json, type ProductEval } from '../src/evalJob';
 import { decodeAnyPng } from '../src/evalPng';
-import { forPanel, parsePrintedTable, REVIEW_VERDICTS, renderReport, type ReviewVerdict, type EarlierRun, type ProductRenders, type ProductSection, type RenderShot, type ShopImage, type ShopProduct, type SyntheticSection } from '../src/evalReport';
+import { forPanel, parsePrintedTable, parseWaistReading, REVIEW_VERDICTS, renderReport, type ReviewVerdict, type EarlierRun, type ProductRenders, type ProductSection, type RenderShot, type ShopImage, type ShopProduct, type SyntheticSection } from '../src/evalReport';
 import { stackPng } from '../src/evalView';
 import { generateGarment } from '../src/garment';
 import { garmentSpec } from '../src/product';
 import { SHOP_UNCOVERED_CATEGORIES } from '../src/shopSelection';
+import type { WaistReadingChoice } from '../src/lowRise';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const spikeDir = resolve(here, '..');
@@ -117,7 +118,7 @@ function writeBundle(id: string, ev: ProductEval, images: Map<string, Uint8Array
   return rel(dir);
 }
 
-function run(id: string, payload: GarmentPayload, baseSize: string, jobDir: string, allowSynthetic: boolean, opts: { alternative?: boolean } = {}): { job: ReturnType<typeof readJob>; ev: ProductEval | null; alternative: ProductEval | null; error: string | null; bundleRel: string | null } {
+function run(id: string, payload: GarmentPayload, baseSize: string, jobDir: string, allowSynthetic: boolean, opts: { alternative?: boolean; waistReading?: WaistReadingChoice | null } = {}): { job: ReturnType<typeof readJob>; ev: ProductEval | null; alternative: ProductEval | null; error: string | null; bundleRel: string | null } {
   const job = readJob(jobDir);
   const choice = chooseMesh(job, {
     allowSynthetic,
@@ -128,7 +129,7 @@ function run(id: string, payload: GarmentPayload, baseSize: string, jobDir: stri
   const printedLength = allowSynthetic ? 'drop' : 'flat-lay';
   try {
     const images = new Map<string, Uint8Array>();
-    const ev = evaluateProduct({ productId: id, payload, baseSize, job, choice, printedLength, writeImage: (name, png) => images.set(name, png) });
+    const ev = evaluateProduct({ productId: id, payload, baseSize, job, choice, printedLength, waistReading: opts.waistReading ?? null, writeImage: (name, png) => images.set(name, png) });
     // Stage 4t is the asset when it exists; stage 4 (2DGS) is evaluated alongside for the comparison table only (no bundle, no pictures).
     let alternative: ProductEval | null = null;
     if (choice.kind === 'stage4t' && job.stage4.stage2?.glb && opts.alternative !== false) {
@@ -226,7 +227,7 @@ function reviews(): Record<string, ProductSection['review']> {
     const o = obj(v);
     const verdict = str(o?.verdict);
     if (!REVIEW_VERDICTS.includes(verdict as ReviewVerdict)) throw new Error(`review.json: ${h} has verdict ${JSON.stringify(verdict)}; expected ${REVIEW_VERDICTS.join(', ')}`);
-    out[h] = { run: num(o?.run), verdict: verdict as ReviewVerdict, why: str(o?.why) ?? '' };
+    out[h] = { run: num(o?.run), verdict: verdict as ReviewVerdict, why: str(o?.why) ?? '', waistReading: parseWaistReading(h, o?.waistReading) };
   }
   return out;
 }
@@ -238,7 +239,8 @@ const sections: (Omit<ProductSection, 'renders' | 'earlier'> & { id: string; ear
 for (const p of products) {
   if (only && !only.includes(p.handle)) continue;
   const jobDir = join(outDir, 'phase0', p.handle);
-  const r = run(p.handle, p.payload, p.baseSize, jobDir, false);
+  // The founder's waist-reading switch applies to the current run only (review.json speaks about it).
+  const r = run(p.handle, p.payload, p.baseSize, jobDir, false, { waistReading: review[p.handle]?.waistReading ?? null });
   if (!r.ev) console.log(`[report] ${p.handle}: ${r.error}`);
   const earlierRuns: Earlier[] = earlierDirs(p.handle).map((e) => {
     const d = join(outDir, 'phase0', e.dir);

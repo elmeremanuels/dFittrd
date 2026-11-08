@@ -6,13 +6,14 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh, turntablePath, type Mesh } from '@curtain/mannequin';
+import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh, topology, turntablePath, type Mesh } from '@curtain/mannequin';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { buildBodySdf } from './bodySdf';
 import { chamfer } from './chamfer';
 import { bottomLengths } from './garmentLength';
 import { shopProduct, type ResolvedProduct } from './product';
 import { buildProxy, openingHalfWidth, syntheticGarmentFromProxy } from './proxy';
+import { boundaryLoops } from './stage4t';
 import { fitTemplate, type TemplateFitResult } from './templateFit';
 import { cameraFromFrame, idMask, rasterize, splitFrames, type PinholeCamera } from './views';
 
@@ -51,6 +52,42 @@ function crossings(mesh: { positions: ArrayLike<number>; indices: ArrayLike<numb
   return n;
 }
 
+/** Boundary loops of a mesh with their height range. */
+function boundaryLoopYs(mesh: { positions: ArrayLike<number>; indices: ArrayLike<number> }): { minY: number; maxY: number }[] {
+  const count = new Map<string, number>();
+  const I = mesh.indices;
+  for (let t = 0; t < I.length; t += 3) for (let k = 0; k < 3; k++) {
+    const a = I[t + k]!, b = I[t + ((k + 1) % 3)]!;
+    const key = a < b ? `${a},${b}` : `${b},${a}`;
+    count.set(key, (count.get(key) ?? 0) + 1);
+  }
+  const adj = new Map<number, number[]>();
+  for (const [key, c] of count) if (c === 1) {
+    const [a, b] = key.split(',').map(Number) as [number, number];
+    (adj.get(a) ?? adj.set(a, []).get(a)!).push(b);
+    (adj.get(b) ?? adj.set(b, []).get(b)!).push(a);
+  }
+  const seen = new Set<number>();
+  const out: { minY: number; maxY: number }[] = [];
+  for (const s of adj.keys()) {
+    if (seen.has(s)) continue;
+    seen.add(s);
+    const st = [s];
+    let minY = Infinity, maxY = -Infinity;
+    while (st.length) {
+      const v = st.pop()!;
+      minY = Math.min(minY, mesh.positions[3 * v + 1]!);
+      maxY = Math.max(maxY, mesh.positions[3 * v + 1]!);
+      for (const w of adj.get(v)!) if (!seen.has(w)) {
+        seen.add(w);
+        st.push(w);
+      }
+    }
+    out.push({ minY, maxY });
+  }
+  return out;
+}
+
 describe('stage 4t: trousers', () => {
   const pants = shop('rosewater-palazzo-pants');
   const truth = syntheticGarmentFromProxy(m, pants.payload, pants.baseSize);
@@ -75,8 +112,60 @@ describe('stage 4t: trousers', () => {
     expect(Math.abs(L.outseam_drop! - T.outseam_drop!)).toBeLessThan(3);
     expect(Math.abs(L.inseam_drop! - T.inseam_drop!)).toBeLessThan(3);
     expect(L.inseam_inner).not.toBeNull();
-    // Texture charts for the legs.
-    expect(Object.keys(legs.render.charts).sort()).toEqual(['body', 'leg_l', 'leg_r']);
+    // Texture charts for the legs and the join band.
+    expect(Object.keys(legs.render.charts).sort()).toEqual(['body', 'join', 'leg_l', 'leg_r']);
+  });
+
+  it('is one garment: the seat sewn to both legs at the join (template fit 0.4.0), no hole at the top of the inseam', () => {
+    const j = legs.report.join!;
+    expect(j.stitched).toBe(true);
+    expect(j.thighsClear).toBe(true);
+    expect(j.yCm).toBeLessThan(m.landmarks.crotch[1]);
+    expect(j.seatTriangles).toBeGreaterThan(0);
+    expect(j.crotchTriangles).toBeGreaterThan(0);
+    expect(j.unoriented).toBe(0);
+    expect(j.trianglesInsideBody).toBe(0);
+    // Reported, not hidden: how far the garment's crotch lies below the body's, the band's slivers, and whether the legs cross.
+    expect(j.belowBodyCrotchCm).toBeCloseTo(j.crotchCm - j.yCm, 1);
+    expect(j.band!.seat.triangles).toBe(j.seatTriangles);
+    expect(j.band!.crotch.triangles).toBe(j.crotchTriangles);
+    expect(j.legOverlap!.slices).toBeGreaterThan(0);
+    // The inseam bridges from where the inner leg starts (at the join, below the crotch) up to the crotch point: the note says
+    // how much of it is the bridge and what the cloth alone measures.
+    const inner = bottomLengths(m, legs.mesh, true).find((d) => d.definition === 'inseam_inner')!;
+    expect(inner.note).toMatch(/of this inseam is the straight bridge, not cloth; the cloth inner leg from [\d.]+ cm to the hem is [\d.]+ cm/);
+    const [bridge, cloth] = [/; bridged straight: ([\d.]+) cm/, /to the hem is ([\d.]+) cm/].map((re) => Number(re.exec(inner.note!)![1]));
+    expect(bridge! + cloth!).toBeCloseTo(inner.lengthCm!, 1);
+    const topo = topology(legs.mesh);
+    expect(topo.components).toBe(1);
+    expect(topo.nonManifoldEdges).toBe(0);
+    expect(topo.inconsistentEdges).toBe(0);
+    // A pair of pants: the waist and the two leg hems, plus here the crotch window the masks carve: the synthetic truth's
+    // legs part at the crotch, so the front and back of the seat between the crotch and the join (where the mannequin's thighs
+    // touch and the frames show them) are carved away. Run 17d's palazzo frames show cloth across there: 3 loops on it.
+    const loops = boundaryLoopYs(legs.mesh);
+    expect(loops.length).toBeGreaterThanOrEqual(3);
+    expect(loops.filter((l) => l.minY > 100).length).toBe(1); // the waist
+    expect(loops.filter((l) => l.maxY < 10).length).toBe(2); // the hems
+    for (const l of loops.filter((x) => x.minY <= 100 && x.maxY >= 10)) {
+      expect(l.minY).toBeGreaterThanOrEqual(j.yCm - 0.5);
+      expect(l.maxY).toBeLessThanOrEqual(j.crotchCm + 0.5);
+    }
+    expect(boundaryLoops(legs.mesh).loops).toBe(loops.length);
+    // No leg vertex was dropped as blocked by the other thigh (run 17d lost a wedge at the top of each inseam).
+    expect(legs.report.rays.blocked).toBe(0);
+    // The join band's render vertices map onto welded ones and carry UVs inside its own chart.
+    const [u0, v0, u1, v1] = legs.render.charts.join!;
+    let inJoin = 0;
+    for (let k = 0; k < legs.render.uvs.length / 2; k++) {
+      const u = legs.render.uvs[2 * k]!, v = legs.render.uvs[2 * k + 1]!;
+      if (v >= v0 - 1e-6 && v <= v1 + 1e-6) {
+        expect(u).toBeGreaterThanOrEqual(u0 - 1e-6);
+        expect(u).toBeLessThanOrEqual(u1 + 1e-6);
+        inJoin++;
+      }
+    }
+    expect(inJoin).toBe(3 * (j.seatTriangles + j.crotchTriangles));
   });
 
   it('as one tube round both legs (what a skirt is) it has no inner leg: the trousers became a skirt', () => {

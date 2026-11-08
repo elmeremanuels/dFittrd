@@ -13,6 +13,7 @@ import type { GarmentPayload } from '@curtain/schema';
 import { CHART_TOLERANCE_CM, SOURCE_LABEL, type EvalResult } from './eval';
 import { evalMaterial } from './evalBundle';
 import { arr, num, obj, str, type CostRecord, type JobFiles, type Json, type ProductEval } from './evalJob';
+import type { WaistReadingChoice } from './lowRise';
 import { VIEW_IOU_PASS } from './evalView';
 
 export interface ShopImage {
@@ -111,7 +112,7 @@ export interface ProductSection {
    * What a person saw in the current run's stills and frames (`data/<shop>/review.json`). accepted: rendered and on the blind page;
    * faulty: kept for evaluation and rendered, but not a panel bundle and not on the blind page; rejected: evaluated only, no renders.
    */
-  review?: { run: number | null; verdict: ReviewVerdict; why: string } | null;
+  review?: { run: number | null; verdict: ReviewVerdict; why: string; waistReading?: WaistReadingChoice | null } | null;
   /** Earlier GPU runs of the same product kept beside the current job (`out/phase0/<handle>-run<N>/`), evaluated the same way, for comparison. */
   earlier?: EarlierRun[];
 }
@@ -124,6 +125,34 @@ export const REVIEW_VERDICTS: readonly ReviewVerdict[] = ['accepted', 'faulty', 
  * (synthetic and pre-review runs). An evaluated product whose chart agreement fails is never a panel bundle, whatever its
  * review: the plugin's import gate (`checkGarmentBundle`, qa_failed) refuses it, so a shop could not show it.
  */
+/**
+ * The founder's waist-reading switch of a review.json entry (`waistReading`): absent or `"natural"` → null (the chart's waist at
+ * our waist ring, the default); `{ "kind": "low-rise", "decision": "<who, when>" }` → the low-rise reading (`src/lowRise.ts`).
+ * Anything else throws: the switch is never guessed.
+ */
+export function parseWaistReading(handle: string, v: unknown): WaistReadingChoice | null {
+  if (v === undefined || v === null || v === 'natural') return null;
+  const o = obj(v as Json);
+  const kind = str(o?.kind), decision = str(o?.decision);
+  if (kind === 'natural') return null;
+  if (kind !== 'low-rise' || !decision || !decision.trim()) throw new Error(`review.json: ${handle} has waistReading ${JSON.stringify(v)}; expected "natural" or { "kind": "low-rise", "decision": "<who decided, when>" }`);
+  return { kind: 'low-rise', decision: decision.trim() };
+}
+
+/** What the report says about a bottom's waist reading (null for a garment whose waist is read at the ring as usual). */
+export function waistReadingLine(r: Pick<EvalResult, 'agreement' | 'waistband' | 'category'> & Partial<Pick<EvalResult, 'before' | 'critical'>>): string | null {
+  const wr = r.agreement.waistReading;
+  if (wr) {
+    const tol = r.agreement.toleranceCm;
+    const miss = r.before?.maxAbsCm ?? null;
+    const before = miss === null ? '' : ` **Before calibration the band misses its target by ${miss} cm${typeof tol === 'number' ? ` (tolerance ±${tol} cm: ${miss <= tol ? 'within' : 'OUTSIDE'})` : ''}.**`;
+    const onlyPoint = r.critical && r.critical.length === 1 ? ` The waist is this garment's only critical measuring point, so calibration scales the whole garment to it and the pass after calibration is automatic: it is not evidence that the band fits the chart.` : '';
+    return `**Waist read LOW-RISE (founder decision: ${wr.decision}).** The band is measured where it sits, ${wr.dropCm} cm below our waist ring (${wr.bandYCm} cm against ${wr.waistRingYCm} cm), against the chart's waist with ease ${wr.chartWaistCm} cm plus a stated offset of ${wr.offsetCm >= 0 ? '+' : ''}${wr.offsetCm} cm (the mannequin's torso ${wr.bodyAtBandCm} cm there against ${wr.bodyAtWaistCm} cm at the waist ring), target ${wr.targetCm} cm. Written into qa.json (\`chartAgreement.waistReading\`); the plugin's import gate accepts it only with the decision recorded and flags the asset \`low_rise_waist\`.${before}${onlyPoint}`;
+  }
+  if (r.category === 'bottom' && r.waistband) return `**Waist read at our waist ring (the default).** The band does not reach it, so there is no girth there. Founder switch (not set): \`"waistReading": { "kind": "low-rise", "decision": "<who, when>" }\` on this product in \`data/bohohippychic/review.json\` reads the waist at the band with a stated offset (\`src/lowRise.ts\`), flagged in the report, qa.json and by the import gate.`;
+  return null;
+}
+
 export function forPanel(p: Pick<ProductSection, 'review'> & { eval?: ProductSection['eval'] }): boolean {
   if (p.eval && !p.eval.result.agreement.pass) return false;
   return (p.review?.verdict ?? 'accepted') === 'accepted';
@@ -416,6 +445,24 @@ export function costTotal(job: JobFiles | null): CostTotal {
 // Sections
 // ---------------------------------------------------------------------------
 
+/**
+ * The trouser join's extra figures (template fit 0.4.0 metrics, absent in older ones): how far the garment's crotch lies below
+ * the body's, the band's longest triangles (faces no mask saw), and whether the leg tubes cross each other below the join.
+ */
+export function joinDetail(j: Record<string, unknown> | null): string {
+  if (!j) return '';
+  const parts: string[] = [];
+  const below = num(j.belowBodyCrotchCm);
+  if (below !== null && below > 0) parts.push(`the garment's crotch is ${below} cm BELOW the body's crotch (a deeper rise than the product: from the join up to the crotch the seat is one tube round both thighs)`);
+  const band = obj(j.band);
+  const st = (b: Record<string, unknown> | null, name: string): string | null => b ? `${name} ${num(b.triangles)} triangles, longest edge ${num(b.longestEdgeCm)} cm, largest ${num(b.maxAreaCm2)} cm², ${num(b.overLongCm)} with an edge over ${num(b.edgesOverCm)} cm` : null;
+  const bs = [st(obj(band?.seat), 'seat zip'), st(obj(band?.crotch), 'crotch floor')].filter((x): x is string => x !== null);
+  if (bs.length) parts.push(`join band: ${bs.join('; ')} (flat faces between fitted vertices that no mask saw; the crotch floor is the light triangle under the seat)`);
+  const lo = obj(j.legOverlap);
+  if (lo) parts.push((num(lo.crossings) ?? 0) > 0 ? `the leg tubes CROSS each other below the join: ${num(lo.crossings)} crossings in ${num(lo.slicesWithCrossings)} of ${num(lo.slices)} slices from ${num(lo.fromCm)} down to ${num(lo.toCm)} cm, the lowest at ${num(lo.lowestCm)} cm (\`legOverlap\`; the mesh health check does not test self-intersection)` : `the leg tubes do not cross each other from ${num(lo.fromCm)} down to ${num(lo.toCm)} cm (\`legOverlap\`)`);
+  return parts.length ? `; ${parts.join('; ')}` : '';
+}
+
 /** Stage 4t's own metrics (stage4t/<source>/metrics.json) and, when stage 4 was evaluated too, the two meshes side by side. */
 function stage4tLines(ev: ProductEval, alt: ProductEval | null): string[] {
   const out: string[] = [];
@@ -424,7 +471,7 @@ function stage4tLines(ev: ProductEval, alt: ProductEval | null): string[] {
     const iou = obj(mt.iou), tr = obj(iou?.train), ho = obj(iou?.holdout);
     const fit = obj(mt.fit), mesh = obj(mt.mesh), ins = obj(mt.insideBody), bake = obj(mt.bake), hm = obj(bake?.holdoutMean);
     const conv = arr(fit?.convergence).map((c) => obj(c)!);
-    out.push('', `**Stage 4t** (template fit and bake, \`${ev.result.source.path.replace(/garment\.glb$/, 'metrics.json')}\`): the control proxy remeshed into cylindrical grids (body + ${obj(fit?.sleeves)?.left ? 'two sleeves' : 'no sleeves'}), carved and expanded along fixed rays to ${num(mt.split && obj(mt.split)?.train) ?? '?'} training masks, ${arr(fit?.silhouetteRounds).length} silhouette rounds, ${num(fit?.iterations) ?? '?'} Jacobi sweeps in ${conv.length} solves (${fit?.converged === true ? 'every solve reached' : 'NOT every solve reached'} the ${num(obj(fit?.options)?.toleranceCm) ?? '?'} cm tolerance). Silhouette IoU per view, mean (min): train visible ${num(tr?.visibleMean)} (${num(tr?.visibleMin)}), silhouette ${num(tr?.silhouetteMean)} (${num(tr?.silhouetteMin)}); holdout (${num(ho?.views)} views never used) visible ${num(ho?.visibleMean)} (${num(ho?.visibleMin)}), silhouette ${num(ho?.silhouetteMean)} (${num(ho?.silhouetteMin)}). Inside the mannequin (signed distance to mannequin.glb < 0): ${num(ins?.sdfInside)} of ${num(ins?.vertices)} vertices; below the ${num(obj(fit?.options)?.clearanceCm)} cm clearance by that grid SDF: ${num(ins?.sdfBelowClearance)}${obj(ins?.exact) ? `; by the exact distance to the mannequin's triangles the closest vertex is ${num(obj(ins?.exact)?.minCm)} cm away, ${num(obj(ins?.exact)?.belowClearance)} vertices lie below the ${num(obj(fit?.options)?.clearanceCm)} cm clearance and ${num(obj(ins?.exact)?.below3mm)} below 0.3 cm` : ''}. Mesh: ${num(mesh?.triangles)} triangles, ${num(mesh?.components)} components, ${num(mesh?.boundaryLoops)} boundary loops, ${num(mesh?.nonManifoldEdges)} non-manifold edges, watertight ${mesh?.watertight === true ? 'yes' : 'no'} (${str(mesh?.note) ?? ''}). Texture: ${num(bake?.size)}² atlas from ${num(bake?.views)} training views, ${((num(bake?.seenShare) ?? 0) * 100).toFixed(1)} % of the chart texels seen (the rest filled by diffusion)${obj(bake?.capTexture) && (num(obj(bake?.capTexture)?.texels) ?? 0) > 0 ? `, of the shoulder caps' ${num(obj(bake?.capTexture)?.texels)} texels (within ${num(obj(bake?.capTexture)?.radiusCm)} cm of either cap top) ${((num(obj(bake?.capTexture)?.seenShare) ?? 0) * 100).toFixed(1)} % (the holdout check below does not cover the cap)` : ''}, JPEG ${((num(bake?.jpegBytes) ?? 0) / 1024).toFixed(0)} KB; on the held-out frames the texture's mean absolute error is ${num(hm?.maeTexture)} (one mean colour: ${num(hm?.maeMeanColour)}), on 8 × 8 pixel blocks ${num(hm?.maeTextureBlock8)} (mean colour ${num(hm?.maeMeanColourBlock8)}), 0–255.`);
+    out.push('', `**Stage 4t** (template fit and bake, \`${ev.result.source.path.replace(/garment\.glb$/, 'metrics.json')}\`): the control proxy remeshed into cylindrical grids (body + ${obj(fit?.legs)?.fitted === true ? `two legs${obj(fit?.join)?.stitched === true ? `, sewn to the seat at ${num(obj(fit?.join)?.yCm)} cm (the crotch at ${num(obj(fit?.join)?.crotchCm)} cm; ${num(obj(fit?.join)?.seatTriangles)} seat and ${num(obj(fit?.join)?.crotchTriangles)} crotch triangles from the fitted vertices, ${num(obj(fit?.join)?.trianglesInsideBody)} of them cutting into the mannequin${joinDetail(obj(fit?.join))})` : ', NOT sewn to the seat'}` : obj(fit?.sleeves)?.left ? 'two sleeves' : 'no sleeves'}), carved and expanded along fixed rays to ${num(mt.split && obj(mt.split)?.train) ?? '?'} training masks, ${arr(fit?.silhouetteRounds).length} silhouette rounds, ${num(fit?.iterations) ?? '?'} Jacobi sweeps in ${conv.length} solves (${fit?.converged === true ? 'every solve reached' : 'NOT every solve reached'} the ${num(obj(fit?.options)?.toleranceCm) ?? '?'} cm tolerance). Silhouette IoU per view, mean (min): train visible ${num(tr?.visibleMean)} (${num(tr?.visibleMin)}), silhouette ${num(tr?.silhouetteMean)} (${num(tr?.silhouetteMin)}); holdout (${num(ho?.views)} views never used) visible ${num(ho?.visibleMean)} (${num(ho?.visibleMin)}), silhouette ${num(ho?.silhouetteMean)} (${num(ho?.silhouetteMin)}). Inside the mannequin (signed distance to mannequin.glb < 0): ${num(ins?.sdfInside)} of ${num(ins?.vertices)} vertices; below the ${num(obj(fit?.options)?.clearanceCm)} cm clearance by that grid SDF: ${num(ins?.sdfBelowClearance)}${obj(ins?.exact) ? `; by the exact distance to the mannequin's triangles the closest vertex is ${num(obj(ins?.exact)?.minCm)} cm away, ${num(obj(ins?.exact)?.belowClearance)} vertices lie below the ${num(obj(fit?.options)?.clearanceCm)} cm clearance and ${num(obj(ins?.exact)?.below3mm)} below 0.3 cm` : ''}. Mesh: ${num(mesh?.triangles)} triangles, ${num(mesh?.components)} components, ${num(mesh?.boundaryLoops)} boundary loops, ${num(mesh?.nonManifoldEdges)} non-manifold edges, watertight ${mesh?.watertight === true ? 'yes' : 'no'} (${str(mesh?.note) ?? ''}). Texture: ${num(bake?.size)}² atlas from ${num(bake?.views)} training views, ${((num(bake?.seenShare) ?? 0) * 100).toFixed(1)} % of the chart texels seen (the rest filled by diffusion)${obj(bake?.capTexture) && (num(obj(bake?.capTexture)?.texels) ?? 0) > 0 ? `, of the shoulder caps' ${num(obj(bake?.capTexture)?.texels)} texels (within ${num(obj(bake?.capTexture)?.radiusCm)} cm of either cap top) ${((num(obj(bake?.capTexture)?.seenShare) ?? 0) * 100).toFixed(1)} % (the holdout check below does not cover the cap)` : ''}, JPEG ${((num(bake?.jpegBytes) ?? 0) / 1024).toFixed(0)} KB; on the held-out frames the texture's mean absolute error is ${num(hm?.maeTexture)} (one mean colour: ${num(hm?.maeMeanColour)}), on 8 × 8 pixel blocks ${num(hm?.maeTextureBlock8)} (mean colour ${num(hm?.maeMeanColourBlock8)}), 0–255.`);
   }
   if (alt) {
     const a = alt.result, b = ev.result;
@@ -466,6 +513,8 @@ function evalTables(input: ReportInput, ev: ProductEval, bundleRel: string | nul
   out.push('');
   const nf = r.chart.notFitted;
   out.push(`**Chart agreement** at base size ${r.baseSize} (tolerance ±${r.agreement.toleranceCm} cm at the critical anchors: ${r.critical.join(', ') || 'none'}). Global scale ${r.calibration.globalScale.toFixed(4)}, from ${Object.keys(r.calibration.ringCorrections).join(', ') || 'no ring'}.${nf ? ` The \`${nf.block}\` pattern block does not fit ${nf.rings.join(' and ')} (${nf.label}; the fit engine skips ${nf.rings.length > 1 ? 'them' : 'it'} too), so ${nf.rings.length > 1 ? 'they are' : 'it is'} reported but neither critical nor calibrated.` : ''} Girths are a tape measure round the outside of the slice (\`src/tape.ts\`): the ring's own body part only (a sleeve fused to the bodice is passed under, like a tape under the arm), ripples shorter than about 25° smoothed, holes up to 4 cm bridged, a wider opening refused; the closed slice polyline, where there is one, is shown for comparison.`);
+  const wrl = waistReadingLine(r);
+  if (wrl) out.push('', wrl);
   out.push('');
   out.push(
     table(
@@ -496,7 +545,7 @@ function evalTables(input: ReportInput, ev: ProductEval, bundleRel: string | nul
     out.push(table(['Length', 'Mesh (cm)', 'Definition', 'Vertical drop (cm)', 'Printed (cm)', 'Difference', 'Note'], r.lengths.map((l) => [l.id, cm(l.measuredCm), l.definition ?? '—', l.dropCm === undefined ? '—' : cm(l.dropCm), cm(l.printedCm), cm(l.diffCm, true), l.note ?? ''])));
     if (r.category === 'bottom') {
       const defs = r.lengthDefinitions?.bottom ?? [];
-      if (defs.length) out.push('', `Every bottom length definition on the calibrated mesh (\`src/garmentLength.ts\` \`bottomLengths\`): ${defs.map((d) => `${d.label} ${d.lengthCm === null ? `— (${d.note ?? 'not found'})` : `${cm(d.lengthCm)} cm (top ${cm(d.topY)}, hem ${cm(d.hemY)} cm above the floor)`}`).join('; ')}.`);
+      if (defs.length) out.push('', `Every bottom length definition on the calibrated mesh (\`src/garmentLength.ts\` \`bottomLengths\`): ${defs.map((d) => `${d.label} ${d.lengthCm === null ? `— (${d.note ?? 'not found'})` : `${cm(d.lengthCm)} cm (top ${cm(d.topY)}, hem ${cm(d.hemY)} cm above the floor${d.note ? `; ${d.note}` : ''})`}`).join('; ')}.`);
     } else {
       const defs = r.lengthDefinitions?.calibrated ?? [];
       if (defs.length) out.push('', `Every shoulder-to-hem definition on the calibrated mesh (\`src/garmentLength.ts\`): ${defs.map((d) => `${d.label} ${d.lengthCm === null ? '—' : `${cm(d.lengthCm)} cm`}`).join('; ')}.`);

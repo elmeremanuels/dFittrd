@@ -24,6 +24,7 @@ import { asGradingChart, criticalRings, evalChart, evalChartRow, type EvalCatego
 import { meshHealth, type MeshHealth } from './evalMesh';
 import { assignChains, distortGarment, type ChainAssignment, type Distortion, type SpikeCategory } from './garment';
 import { WAISTBAND, waistbandGirth, type WaistbandGirth } from './waistband';
+import { lowRiseWaist, type LowRiseWaist, type WaistReadingChoice } from './lowRise';
 import { openingProfile, sliceAt, type OpeningProfile } from './bottomOpenings';
 import { bottomLengths, garmentLengths, type BottomLengthMeasure, type LengthMeasure } from './garmentLength';
 import { openingHalfWidth, proxyKind, type FrontOpening } from './proxy';
@@ -110,8 +111,8 @@ export interface EvalResult {
   /** Flat-lay minus vertical drop of shoulder_to_hem on the calibrated mesh: added to the graded drops to compare with a printed table. */
   flatLayOffsetCm: number | null;
   calibration: Calibration;
-  /** Acceptance item "chart agreement" on the calibrated mesh. */
-  agreement: ChartAgreement & { missing: AnchorRing[] };
+  /** Acceptance item "chart agreement" on the calibrated mesh; `waistReading` when the waist was read low-rise (`src/lowRise.ts`, a recorded founder choice). */
+  agreement: ChartAgreement & { missing: AnchorRing[]; waistReading?: LowRiseWaist };
   /** The same test before calibration and after the global scale only (diagnostics). */
   before: { maxAbsCm: number | null; pass: boolean };
   afterGlobal: { maxAbsCm: number | null; pass: boolean };
@@ -256,6 +257,11 @@ export interface EvaluateOptions {
    * there + `FRONT_OPENING_SLACK_CM`. Absent or null: no opening is bridged (a gap at the front is a hole).
    */
   frontOpening?: FrontOpening | null;
+  /**
+   * Bottoms: the founder's recorded choice to read the chart's waist at the garment's own lower band (`src/lowRise.ts`).
+   * Absent (the default): the chart's waist is read at the waist ring, and a band that does not reach it has no girth.
+   */
+  waistReading?: WaistReadingChoice | null;
 }
 
 export function evaluateGarment(o: EvaluateOptions): EvalResult {
@@ -288,6 +294,9 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
   const measureOpts: MeasureOptions = { girth: 'tape', body: buildMannequinMesh(m), ...(opening ? { frontOpeningAt: (y: number) => frontOpeningCap(opening, y) } : {}) };
   const raw = measureGarment(m, mesh, cat, chains, measureOpts);
   const measured = ringGirths(raw);
+  // Trousers: a leg ring whose loop goes round both legs is the seat (stage 4t 0.4.0 sews the legs on below the thigh ring,
+  // where the mannequin's thighs part): not a leg girth, so it is neither calibrated nor graded (reported in its row).
+  if (category === 'bottom' && proxyKind(o.payload) === 'trousers') for (const [id, r] of Object.entries(raw.rings)) if (r?.spansBothLegs) delete measured[id as AnchorRing];
   const t1 = performance.now();
 
   // Calibrate only against rings the mesh has a loop at; a missing critical ring is reported, not invented.
@@ -295,8 +304,15 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
   const notFitted = new Set<AnchorRing>(chart.notFitted?.rings ?? []);
   const chartFull = baseRow.rings;
   const chartBase = Object.fromEntries(Object.entries(chartFull).filter(([k]) => !notFitted.has(k as AnchorRing))) as Partial<Record<AnchorRing, number>>;
-  const calibration = calibrate({ measured, chart: chartBase });
-  const baseMesh = applyCalibration(m, mesh, measured, calibration, chains);
+  // A bottom whose cloth does not reach the waist ring: its waistband where it is (report only, not calibrated)…
+  const waistband = category === 'bottom' && chartFull.waist !== undefined && raw.rings.waist === undefined ? waistbandGirth(mesh) : null;
+  // …unless the founder recorded the low-rise reading (`src/lowRise.ts`): then the band is the waist anchor at its own height,
+  // against the chart's waist + the stated body offset, and calibrated like any other critical ring (at the band's height).
+  const lowRise = waistband && o.waistReading && chartFull.waist !== undefined && critical.includes('waist') ? lowRiseWaist(m, waistband, chartFull.waist, o.waistReading) : null;
+  const calMeasured = lowRise ? { ...measured, waist: waistband!.girthCm! } : measured;
+  const calChart = lowRise ? { ...chartBase, waist: lowRise.targetCm } : chartBase;
+  const calibration = calibrate({ measured: calMeasured, chart: calChart });
+  const baseMesh = applyCalibration(m, mesh, calMeasured, calibration, chains, lowRise ? { ...m.morphHeights, waist: lowRise.bandYCm } : m.morphHeights);
   const measurements = measureGarment(m, baseMesh, cat, chains, measureOpts);
   const after = ringGirths(measurements);
   const t2 = performance.now();
@@ -307,11 +323,12 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
     const body = key === 'waist' || key === 'hip' || key === 'bust' || key === 'thigh' ? bodyRow?.[key] : undefined;
     return body === undefined ? null : { cm: r2(chartCm - body), isDefault: baseRow.defaultEase.includes(anchor) };
   };
-  // A bottom whose cloth does not reach the waist ring: its waistband where it is (report only, not calibrated).
-  const waistband = category === 'bottom' && chartFull.waist !== undefined && raw.rings.waist === undefined ? waistbandGirth(mesh) : null;
+  const waistbandAfter = lowRise ? waistbandGirth(baseMesh) : null;
+  if (o.waistReading && !lowRise) warnings.push(`waist reading "${o.waistReading.kind}" was chosen but not applied: ${!waistband ? 'the garment reaches the waist ring (read there as usual)' : waistband.girthCm === null ? 'the band does not go round (an opening wider than the tape bridges)' : 'the waist is not a critical anchor or no decision is recorded'}`);
   // A bottom: where it does not go round (a side opening at the hip leaves the hip with no girth at all).
   const openings = category === 'bottom' ? openingProfile(mesh, m) : null;
-  const rings = new Set<AnchorRing>([...(Object.keys(chartFull) as AnchorRing[]), ...(Object.keys(measured) as AnchorRing[])]);
+  const trousers = category === 'bottom' && proxyKind(o.payload) === 'trousers';
+  const rings = new Set<AnchorRing>([...(Object.keys(chartFull) as AnchorRing[]), ...(Object.keys(measured) as AnchorRing[]), ...(trousers ? (Object.keys(raw.rings) as AnchorRing[]).filter((id) => raw.rings[id]?.spansBothLegs) : [])]);
   const order = m.rings.map((r) => r.id).filter((id, i, a) => a.indexOf(id) === i);
   const rows: AnchorRow[] = order.filter((id) => rings.has(id)).map((anchor) => {
     const chartCm = chartFull[anchor] ?? null;
@@ -329,7 +346,7 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
     else if (isNotFitted) note = `not a fit point of the ${chart.notFitted!.block} block (${chart.notFitted!.label}): reported, not calibrated`;
     else if (chartCm === null) note = 'no chart value: scaled with the global scale';
     if (mv !== null && raw.rings[anchor]?.tape?.frontGapCm) note = `${note ? `${note}; ` : ''}front opening ${raw.rings[anchor]!.tape!.frontGapCm} cm bridged (the fronts laid closed, as a flat-lay chest)`;
-    else if (raw.rings[anchor]?.spansBothLegs) note = 'loop encloses both legs (skirt)';
+    else if (raw.rings[anchor]?.spansBothLegs) note = trousers ? `trousers: the loop here encloses both legs (${r2(raw.rings[anchor]!.circumferenceCm)} cm): the seat, which stage 4t sews to the legs below this ring (where the mannequin's thighs part); not a leg girth, so neither calibrated nor graded` : 'loop encloses both legs (skirt)';
     const t = raw.rings[anchor]?.tape;
     if (mv === null && openings && chartCm !== null && anchor !== 'waist') {
       // No tape girth on a bottom: say how big the cloth is with its openings bridged and where it is open, never a pass.
@@ -338,6 +355,13 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
         const gaps = sl.gaps.map((g) => `${g.chordCm} cm at ${g.midDeg}° (${g.midDeg > 45 && g.midDeg < 135 ? "the mannequin's left" : g.midDeg < -45 && g.midDeg > -135 ? "the mannequin's right" : Math.abs(g.midDeg) <= 45 ? 'front' : 'back'})`).join(', ');
         note = `no tape girth: the cloth goes ${Math.round(sl.coverage * 100)} % of the way round at ${sl.yCm} cm${gaps ? `, open ${gaps}` : ''}; with the openings bridged ${sl.bridgedCm} cm (${cmSigned(sl.bridgedCm - chartCm)} against the chart), the mannequin there ${sl.bodyCm ?? '—'} cm, the cloth at least ${sl.minClearanceCm ?? '—'} cm off it (src/bottomOpenings.ts, as reconstructed)`;
       }
+    }
+    if (anchor === 'waist' && lowRise && waistband && waistbandAfter && chartCm !== null) {
+      const lr = lowRise;
+      const before = waistband.girthCm! - lr.targetCm;
+      const afterG = waistband.girthCm! * calibration.globalScale - lr.targetCm;
+      const afterW = waistbandAfter.girthCm !== null ? waistbandAfter.girthCm - lr.targetCm : null;
+      return { anchor, critical: isCritical, chartCm, ease, measuredCm: waistband.girthCm, polylineCm: null, tapeCoverage: waistband.coverage, notFitted: isNotFitted, beforeCm: r2(before), afterGlobalCm: r2(afterG), afterCm: afterW === null ? null : r2(afterW), pass: isCritical ? afterW !== null && Math.abs(afterW) <= tol : null, note: `${lr.note}; measured on the band (src/waistband.ts) ${waistband.girthCm} cm as reconstructed, ${waistbandAfter.girthCm ?? '—'} cm on the calibrated mesh` };
     }
     if (anchor === 'waist' && waistband && chartCm !== null) {
       const wb = waistband;
@@ -349,9 +373,18 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
     return { anchor, critical: isCritical, chartCm, ease, measuredCm: mv === null ? null : r2(mv), polylineCm: t && t.loopLengthCm !== null ? r2(t.loopLengthCm) : null, tapeCoverage: t ? r2(t.coverage) : null, notFitted: isNotFitted, beforeCm: before === null ? null : r2(before), afterGlobalCm: afterGlobal === null ? null : r2(afterGlobal), afterCm: afterCm === null ? null : r2(afterCm), pass, note };
   });
 
-  const missing = critical.filter((a) => measured[a] === undefined);
+  const lowRiseRow = lowRise ? rows.find((r) => r.anchor === 'waist') : undefined;
+  const missing = critical.filter((a) => measured[a] === undefined && !(a === 'waist' && lowRiseRow && lowRiseRow.afterCm !== null));
   const agreementCore = chartAgreement(after, chartBase, critical, tol);
-  const agreement = { ...agreementCore, pass: agreementCore.pass && missing.length === 0, missing };
+  let agreement: EvalResult['agreement'] = { ...agreementCore, pass: agreementCore.pass && missing.length === 0, missing };
+  if (lowRise && lowRiseRow && lowRiseRow.afterCm !== null) {
+    // The waist read at the band against chart + stated offset; every other critical anchor as usual.
+    const perRingCm = { ...agreementCore.perRingCm, waist: lowRiseRow.afterCm };
+    const v = critical.map((a) => perRingCm[a]).filter((x): x is number => x !== undefined);
+    const maxAbsCm = v.length ? Math.max(...v.map(Math.abs)) : Infinity;
+    agreement = { toleranceCm: tol, perRingCm, maxAbsCm, pass: v.length > 0 && maxAbsCm <= tol && missing.length === 0, missing, waistReading: lowRise };
+    warnings.push(`chart waist read LOW-RISE by founder decision (${lowRise.decision}): band ${lowRise.dropCm} cm below the waist ring, chart waist ${lowRise.chartWaistCm} cm + body offset ${lowRise.offsetCm} cm = ${lowRise.targetCm} cm; before calibration the band misses that target by ${cmSigned(lowRiseRow.beforeCm ?? NaN)} (tolerance ±${tol} cm${lowRiseRow.beforeCm !== null && Math.abs(lowRiseRow.beforeCm) > tol ? ': OUTSIDE' : ''})${critical.length === 1 ? '; the waist is the only critical anchor, so the pass after calibration is automatic (calibration scales the garment to it), not evidence of fit' : ''}; flagged in qa.json and by the import gate`);
+  }
   const critRows = rows.filter((r) => r.critical);
   const beforeMax = maxAbs(critRows.map((r) => r.beforeCm));
   const globalMax = maxAbs(critRows.map((r) => r.afterGlobalCm));
@@ -369,7 +402,6 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
   const printedLengthDef = o.printedLength ?? 'flat-lay';
   // Bottoms (per type, `bottomLengths`): a skirt's waist_to_hem along the centre front, the outseam down the side seam, the
   // inseam down the inner leg of trousers; flat-lay along the garment, or the vertical drop.
-  const trousers = category === 'bottom' && proxyKind(o.payload) === 'trousers';
   const bottomDefs = category === 'bottom' ? bottomLengths(m, baseMesh, trousers) : undefined;
   const bottomLen = (flat: string, drop: string): number | null => bottomDefs?.find((d) => d.definition === (printedLengthDef === 'flat-lay' ? flat : drop))?.lengthCm ?? null;
   const measuredLength = (id: AnchorLength | 'outseam'): number | null => {
@@ -415,6 +447,9 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
     else if (mv === null) note = 'the garment edge was not found on this line';
     else if (category === 'bottom' && (key === 'outseam' || key === 'inseam' || key === 'waist_to_hem')) {
       note = `${printedLength === 'flat-lay' ? 'flat-lay, along the garment' : 'vertical drop'}: ${key === 'outseam' ? 'top edge down the side seam to the hem' : key === 'inseam' ? 'crotch down the inner leg to the hem' : 'top edge at the centre front to the hem'} (src/garmentLength.ts bottomLengths)`;
+      // The definition's own note (e.g. an inner leg that starts below the crotch, bridged straight) goes with the row.
+      const defNote = bottomDefs?.find((d) => d.definition === (key === 'outseam' ? (printedLength === 'flat-lay' ? 'outseam_side' : 'outseam_drop') : key === 'inseam' ? (printedLength === 'flat-lay' ? 'inseam_inner' : 'inseam_drop') : printedLength === 'flat-lay' ? 'waist_to_hem_front' : 'outseam_drop'))?.note;
+      if (defNote) note += `; ${defNote}`;
     }
     else if (key === 'shoulder_to_hem') note = "high point shoulder to the front hem, vertical drop (the spike's synthetic garment is built this way)";
     lengths.push({ id, measuredCm: mv === null ? null : r2(mv), ...(key === 'shoulder_to_hem' ? { definition: 'drop' as const } : {}), printedCm: pv, diffCm: mv !== null && pv !== null ? r2(mv - pv) : null, note });
@@ -424,7 +459,9 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
   let gradingError: string | null = null;
   const t3 = performance.now();
   try {
-    grading = gradeGarment(m, asGradingChart(chart), o.baseSize, measurements);
+    // Trousers: a leg ring round both legs is the seat (see `measured` above), not graded as a leg.
+    const gradingBase = trousers ? { ...measurements, rings: Object.fromEntries(Object.entries(measurements.rings).filter(([, r]) => !r?.spansBothLegs)) } : measurements;
+    grading = gradeGarment(m, asGradingChart(chart), o.baseSize, gradingBase);
   } catch (e) {
     gradingError = e instanceof Error ? e.message : String(e);
   }

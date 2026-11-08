@@ -46,7 +46,7 @@ import { distancesToMesh } from './meshDistance';
 import type { Mask } from './evalPng';
 import { cleanMask, DEFAULT_CLEANUP, morph, pixelsPerCm, project, rasterize, type MaskCleanup, type PinholeCamera } from './views';
 
-export const TEMPLATE_FIT_VERSION = 'stage4t-template-fit-0.3.0';
+export const TEMPLATE_FIT_VERSION = 'stage4t-template-fit-0.4.0';
 
 export interface FitViews {
   cameras: PinholeCamera[];
@@ -681,6 +681,20 @@ export interface TemplateFitReport {
   sleeves: { left: boolean; right: boolean; reason: string };
   /** Trousers: one tube per leg found in the masks (`fitted`: the option was on). */
   legs: { left: boolean; right: boolean; fitted: boolean };
+  /**
+   * Trousers (else null): where the seat is sewn to the legs (`trouserJoinHeight`, `stitchTrousers`): the height, whether
+   * the thighs are apart there, the triangles of the seat zip and of the crotch, band triangles no neighbour could orient,
+   * and band triangles that cut into the mannequin.
+   */
+  join: {
+    yCm: number; crotchCm: number; thighsClear: boolean; stitched: boolean; seatTriangles: number; crotchTriangles: number; unoriented: number; trianglesInsideBody: number; note: string;
+    /** How far the garment's crotch (the join) lies below the body's crotch point, cm: the seat is one tube round both thighs over this height. */
+    belowBodyCrotchCm?: number;
+    /** Size of the band's triangles (`joinBandStats`): long slivers here are faces no mask saw (the crotch floor, the seat-zip fans). */
+    band?: { seat: JoinBandStats; crotch: JoinBandStats } | null;
+    /** Do the leg tubes cross each other below the join (`legOverlap`)? */
+    legOverlap?: LegOverlap | null;
+  } | null;
   /** Rays: blocked by another body part (armhole), empty (carved at the body), capped at the next body part, with no hull (filled by smoothness), body rays ended at a fitted sleeve, rays of the shoulder caps (`SHOULDER_CAP`), vertices moved out to the clearance by the exact distance (`pushToClearance`: of them inside the mannequin, and still below the clearance after its passes). */
   rays: { total: number; blocked: number; empty: number; capped: number; filled: number; sleeveClamped: number; shoulderCap: number; exactClearancePushed: number; exactClearanceInside: number; exactClearanceUnresolved: number };
   /** The control's bare arm cap (`CONTROL_CAP`): training views with a control, the zone's radius (px, mean), sleeve-head rays whose presence the control decided (kept at the clearance), and of those on the cap rows. */
@@ -729,14 +743,93 @@ export const ATLAS_CHARTS: Record<'body' | 'sleeve_l' | 'sleeve_r', [number, num
   sleeve_l: [0.004, 0.684, 0.496, 0.996],
   sleeve_r: [0.504, 0.684, 0.996, 0.996],
 };
-/** Trousers: a short seat chart on top, the two long legs side by side below. */
-export const ATLAS_CHARTS_TROUSERS: Record<'body' | 'leg_l' | 'leg_r', [number, number, number, number]> = {
-  body: [0.004, 0.004, 0.996, 0.246],
+/**
+ * Trousers: a short seat chart on top, the join band under it (`stitchTrousers`: the seat's last ring sewn to the legs'
+ * outer arcs, and the crotch between the legs' inner arcs), the two long legs side by side below. Before 0.4.0 the seat
+ * was given the dress's body chart (v 0.004–0.676), which overlaps the top two thirds of both leg charts: the seat and
+ * the legs were baked into the same texels, and the legs showed the seat's print between the crotch and the knees with a
+ * hard seam at both ends (run 17d's patchwork; holdout MAE 29.06 against 27.56 for one flat colour).
+ */
+export const ATLAS_CHARTS_TROUSERS: Record<'body' | 'join' | 'leg_l' | 'leg_r', [number, number, number, number]> = {
+  body: [0.004, 0.004, 0.996, 0.222],
+  join: [0.004, 0.230, 0.996, 0.246],
   leg_l: [0.004, 0.254, 0.496, 0.996],
   leg_r: [0.504, 0.254, 0.996, 0.996],
 };
-const chartOf = (name: PartName): [number, number, number, number] =>
-  name === 'leg_l' || name === 'leg_r' ? ATLAS_CHARTS_TROUSERS[name] : name === 'body' ? ATLAS_CHARTS.body : ATLAS_CHARTS[name];
+const chartOf = (name: PartName, trousers: boolean): [number, number, number, number] =>
+  trousers && (name === 'leg_l' || name === 'leg_r' || name === 'body') ? ATLAS_CHARTS_TROUSERS[name] : name === 'body' ? ATLAS_CHARTS.body : ATLAS_CHARTS[name as 'sleeve_l' | 'sleeve_r'];
+
+/** The trouser join: searched from 1 cm below the crotch down to at most this far below it (cm), in `JOIN_STEP_CM` steps. */
+export const TROUSER_JOIN = { maxDropCm: 14, stepCm: 0.5 } as const;
+
+/**
+ * The height where the seat is sewn to the legs: the highest level from 1 cm below the crotch down where no leg ray of
+ * either leg is blocked by the other leg (the v0 mannequin's thighs touch below the crotch: run 17d's leg tubes, started 2
+ * cm above the crotch, lost a wedge of blocked vertices on their inner side down to 4.9 cm below it, a hole at the top of
+ * the inseam). Above it the seat goes round both thighs; below it each leg is its own tube. Falls back to 1 cm below the
+ * crotch (and says so) when the thighs touch over the whole search.
+ */
+export function trouserJoinHeight(m: Mannequin, sdf: BodySdf, columns: number, clearanceCm: number, blockedCm: number): { y: number; searchedDownTo: number; clear: boolean } {
+  const crotchY = m.landmarks.crotch[1];
+  const top = crotchY - 1;
+  for (let y = top; y >= top - TROUSER_JOIN.maxDropCm; y -= TROUSER_JOIN.stepCm) {
+    let ok = true;
+    for (const side of [1, -1] as Side[]) {
+      for (let c = 0; c < columns && ok; c++) if (rayRange(sdf, legRay(m, side, y, 0, (2 * Math.PI * c) / columns), clearanceCm, 30, blockedCm).blocked) ok = false;
+      if (!ok) break;
+    }
+    if (ok) return { y: round2(y), searchedDownTo: round2(y), clear: true };
+  }
+  return { y: round2(top), searchedDownTo: round2(top - TROUSER_JOIN.maxDropCm), clear: false };
+}
+
+/** Two sequences of mesh vertices with a non-decreasing parameter each, zipped into a strip of triangles (indices into the sequences: [seq, k]). */
+export function zipStrip(a: readonly number[], b: readonly number[]): [number, number][][] {
+  const out: [number, number][][] = [];
+  let i = 0, j = 0;
+  while (i < a.length - 1 || j < b.length - 1) {
+    const advanceA = j >= b.length - 1 || (i < a.length - 1 && a[i + 1]! <= b[j + 1]!);
+    if (advanceA) {
+      out.push([[0, i], [0, i + 1], [1, j]]);
+      i++;
+    } else {
+      out.push([[0, i], [1, j + 1], [1, j]]);
+      j++;
+    }
+  }
+  return out;
+}
+
+/**
+ * Orients `band` triangles consistently with `fixed` ones (both welded vertex triples): a band triangle that shares an
+ * edge with an oriented triangle runs it the other way; then the band's own neighbours, until nothing changes. Mutates
+ * `band`; returns how many it could not reach (left as built).
+ */
+export function orientBand(fixed: ArrayLike<number>, band: [number, number, number][]): number {
+  const directed = new Set<string>();
+  for (let t = 0; t < fixed.length; t += 3) for (let k = 0; k < 3; k++) directed.add(`${fixed[t + k]},${fixed[t + ((k + 1) % 3)]}`);
+  const done = new Uint8Array(band.length);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let b = 0; b < band.length; b++) {
+      if (done[b]) continue;
+      const tri = band[b]!;
+      let verdict = 0;
+      for (let k = 0; k < 3; k++) {
+        const u = tri[k]!, v = tri[(k + 1) % 3]!;
+        if (directed.has(`${u},${v}`)) verdict = -1;
+        else if (directed.has(`${v},${u}`)) verdict = verdict || 1;
+      }
+      if (!verdict) continue;
+      if (verdict < 0) band[b] = [tri[0], tri[2], tri[1]];
+      for (let k = 0; k < 3; k++) directed.add(`${band[b]![k]},${band[b]![(k + 1) % 3]}`);
+      done[b] = 1;
+      changed = true;
+    }
+  }
+  return band.length - done.reduce((n, x) => n + x, 0);
+}
 
 export interface FitInputs {
   mannequin: Mannequin;
@@ -805,6 +898,197 @@ export function pushToClearance(rays: readonly { o: readonly number[]; d: readon
   return { pushed, inside, unresolved };
 }
 
+export interface JoinTriangle {
+  /** Welded vertex indices. */
+  v: [number, number, number];
+  /** Chart coordinates 0…1 within the band's sub-chart, per corner. */
+  uv: [number, number][];
+  band: 'seat' | 'crotch';
+}
+
+/**
+ * Sews trousers into one piece (template fit 0.4.0): the seat's last ring and the legs' first rings lie at the same
+ * height (`trouserJoinHeight`). Each leg ring splits at its front and back columns (φ 0 and π, the rays straight forward
+ * and back) into an outer arc (away from the other leg) and an inner arc. The seat ring is zipped to the loop of both
+ * outer arcs (left front → round the outside → back, right back → round the outside → front) by the angle about the body
+ * axis; the two inner arcs are zipped to each other front to back: the crotch. Only fitted vertices are used (a missing
+ * vertex is skipped, a missing front or back column replaced by the nearest kept one); no vertex is added or moved.
+ * Returns null (nothing sewn) when a ring keeps fewer than 60 % of its vertices.
+ */
+export function stitchTrousers(parts: readonly PartGrid[], present: Uint8Array, newIndex: Int32Array, pos: readonly number[], fixedTris: readonly number[]): { triangles: JoinTriangle[]; seatTriangles: number; crotchTriangles: number; unoriented: number; note: string } | null {
+  const seat = parts.find((p) => p.name === 'body')!;
+  const L = parts.find((p) => p.name === 'leg_l'), R = parts.find((p) => p.name === 'leg_r');
+  if (!L || !R) return null;
+  const P = (wi: number): [number, number, number] => [pos[3 * wi]!, pos[3 * wi + 1]!, pos[3 * wi + 2]!];
+  const at = (p: PartGrid, r: number, c: number): number => {
+    const i = p.offset + r * p.cols + (((c % p.cols) + p.cols) % p.cols);
+    return present[i] ? newIndex[i]! : -1;
+  };
+  const seatRing: number[] = [];
+  for (let c = 0; c < seat.cols; c++) if (at(seat, seat.rows - 1, c) >= 0) seatRing.push(at(seat, seat.rows - 1, c));
+  const kept = (p: PartGrid): number => Array.from({ length: p.cols }, (_, c) => at(p, 0, c)).filter((x) => x >= 0).length;
+  if (seatRing.length < 0.6 * seat.cols || kept(L) < 0.6 * L.cols || kept(R) < 0.6 * R.cols) return null;
+  // The kept column nearest `c` (searching both ways).
+  const nearest = (p: PartGrid, c: number): number => {
+    for (let k = 0; k < p.cols / 2; k++) for (const cc of [c + k, c - k]) if (at(p, 0, cc) >= 0) return cc;
+    return c;
+  };
+  // Columns from a to b (a ≤ b, unwrapped), kept only.
+  const arc = (p: PartGrid, a: number, b: number, step: 1 | -1): number[] => {
+    const out: number[] = [];
+    for (let c = a; step > 0 ? c <= b : c >= b; c += step) if (at(p, 0, c) >= 0) out.push(at(p, 0, c));
+    return out;
+  };
+  const half = (p: PartGrid): number => p.cols / 2;
+  const lf = nearest(L, 0), lb = nearest(L, half(L)), rf = nearest(R, R.cols), rb = nearest(R, half(R));
+  // Outer arcs: the left leg's +x side (φ 0 … π), the right leg's −x side (φ π … 2π).
+  const outer = [...arc(L, lf <= lb ? lf : lf - L.cols, lb, 1), ...arc(R, rb, rf < rb ? rf + R.cols : rf, 1)];
+  // Inner arcs, front to back: left from φ 2π down to π, right from 0 up to π.
+  const innerL = arc(L, lf <= lb ? lf + L.cols : lf, lb, -1);
+  const innerR = arc(R, rf > rb ? rf - R.cols : rf, rb, 1);
+  // The seat ring and the outer loop by the angle about the body axis (front 0, left +π/2), unwrapped and non-decreasing.
+  let cx = 0, cz = 0;
+  for (const wi of seatRing) {
+    cx += P(wi)[0] / seatRing.length;
+    cz += P(wi)[2] / seatRing.length;
+  }
+  const angle = (wi: number): number => {
+    const a = Math.atan2(P(wi)[0] - cx, P(wi)[2] - cz);
+    return a < 0 ? a + 2 * Math.PI : a;
+  };
+  const closedParam = (seq: number[]): { seq: number[]; t: number[] } => {
+    const k0 = seq.reduce((b, wi, k) => (angle(wi) < angle(seq[b]!) ? k : b), 0);
+    const rot = [...seq.slice(k0), ...seq.slice(0, k0)];
+    const t: number[] = [];
+    let prev = -Infinity, turn = 0;
+    for (const wi of rot) {
+      let a = angle(wi) + turn;
+      if (a < prev - Math.PI) {
+        turn += 2 * Math.PI;
+        a += 2 * Math.PI;
+      }
+      a = Math.max(a, prev);
+      t.push(a);
+      prev = a;
+    }
+    // Closed: the first vertex again, one turn on.
+    rot.push(rot[0]!);
+    t.push(Math.max(t[0]! + 2 * Math.PI, prev));
+    return { seq: rot, t };
+  };
+  const A = closedParam(seatRing), B = closedParam(outer);
+  const triangles: JoinTriangle[] = [];
+  const span = (t: number[]): ((x: number) => number) => {
+    const lo = t[0]!, hi = Math.max(t[t.length - 1]!, lo + 1e-9);
+    return (x) => (x - lo) / (hi - lo);
+  };
+  {
+    const ua = span(A.t), ub = span(B.t);
+    for (const tri of zipStrip(A.t, B.t)) {
+      const v = tri.map(([s, k]) => (s === 0 ? A.seq[k]! : B.seq[k]!)) as [number, number, number];
+      if (v[0] === v[1] || v[1] === v[2] || v[0] === v[2]) continue;
+      triangles.push({ v, uv: tri.map(([s, k]) => (s === 0 ? [ua(A.t[k]!), 0] : [ub(B.t[k]!), 1]) as [number, number]), band: 'seat' });
+    }
+  }
+  const seatTriangles = triangles.length;
+  // Crotch: front (+z) to back, by −z, non-decreasing.
+  const byDepth = (seq: number[]): number[] => {
+    let prev = -Infinity;
+    return seq.map((wi) => (prev = Math.max(prev, -P(wi)[2])));
+  };
+  const tl = byDepth(innerL), tr = byDepth(innerR);
+  const lo = Math.min(tl[0] ?? 0, tr[0] ?? 0), hi = Math.max(tl[tl.length - 1] ?? 1, tr[tr.length - 1] ?? 1, lo + 1e-9);
+  for (const tri of zipStrip(tl, tr)) {
+    const v = tri.map(([s, k]) => (s === 0 ? innerL[k]! : innerR[k]!)) as [number, number, number];
+    if (v[0] === v[1] || v[1] === v[2] || v[0] === v[2]) continue;
+    triangles.push({ v, uv: tri.map(([s, k]) => [((s === 0 ? tl[k]! : tr[k]!) - lo) / (hi - lo), s]) as [number, number][], band: 'crotch' });
+  }
+  const crotchTriangles = triangles.length - seatTriangles;
+  const verts = triangles.map((t) => t.v);
+  const unoriented = orientBand(fixedTris, verts);
+  verts.forEach((v, k) => {
+    const t = triangles[k]!;
+    if (v[1] !== t.v[1]) t.uv = [t.uv[0]!, t.uv[2]!, t.uv[1]!];
+    t.v = v;
+  });
+  return {
+    triangles,
+    seatTriangles,
+    crotchTriangles,
+    unoriented,
+    note: `seat sewn to the legs: the seat's last ring (${seatRing.length} of ${seat.cols} vertices) zipped to both legs' outer arcs (${outer.length}), the inner arcs (${innerL.length} + ${innerR.length}) zipped front to back as the crotch; fitted vertices only, none added`,
+  };
+}
+
+/** Size of the join band's triangles (`stitchTrousers`), per band: count, longest edge, largest area, and how many have an edge over `longCm`. */
+export interface JoinBandStats { triangles: number; longestEdgeCm: number; maxAreaCm2: number; edgesOverCm: number; overLongCm: number }
+
+export function joinBandStats(tris: readonly (readonly [number, number, number])[], pos: ArrayLike<number>, longCm = 8): JoinBandStats {
+  const P = (i: number): number[] => [pos[3 * i]!, pos[3 * i + 1]!, pos[3 * i + 2]!];
+  let longest = 0, area = 0, over = 0;
+  for (const [a, b, c] of tris) {
+    const A = P(a), B = P(b), C = P(c);
+    const e = [[A, B], [B, C], [C, A]].map(([p, q]) => Math.hypot(p![0]! - q![0]!, p![1]! - q![1]!, p![2]! - q![2]!));
+    const m = Math.max(...e);
+    longest = Math.max(longest, m);
+    if (m > longCm) over++;
+    const u = [B[0]! - A[0]!, B[1]! - A[1]!, B[2]! - A[2]!], v = [C[0]! - A[0]!, C[1]! - A[1]!, C[2]! - A[2]!];
+    area = Math.max(area, 0.5 * Math.hypot(u[1]! * v[2]! - u[2]! * v[1]!, u[2]! * v[0]! - u[0]! * v[2]!, u[0]! * v[1]! - u[1]! * v[0]!));
+  }
+  return { triangles: tris.length, longestEdgeCm: round2(longest), maxAreaCm2: round2(area), edgesOverCm: longCm, overLongCm: over };
+}
+
+/**
+ * Do the two leg tubes cross each other? Each leg's triangles are sliced by horizontal planes from `topY` down to `bottomY`
+ * every `stepCm`; a slice counts the crossings between the left leg's segments and the right leg's (in plan, x–z). Two
+ * tubes that only touch or stay apart give 0; a leg whose inner side runs over the centre line into the other gives
+ * crossings. The mesh check (`meshHealth`) does not test self-intersection, so this is the trousers' own test.
+ */
+export interface LegOverlap { fromCm: number; toCm: number; stepCm: number; slices: number; slicesWithCrossings: number; crossings: number; lowestCm: number | null; byHeight: { yCm: number; crossings: number }[] }
+
+export function legOverlap(mesh: Pick<Mesh, 'positions' | 'indices' | 'vertexPart' | 'partNames'>, topY: number, bottomY: number, stepCm = 0.5): LegOverlap {
+  const pos = mesh.positions, idx = mesh.indices;
+  const li = mesh.partNames.indexOf('leg_l'), ri = mesh.partNames.indexOf('leg_r');
+  const legTris = (pi: number): number[] => {
+    const out: number[] = [];
+    for (let t = 0; t < idx.length; t += 3) if ([0, 1, 2].every((k) => mesh.vertexPart[idx[t + k]!] === pi)) out.push(t);
+    return out;
+  };
+  const TL = legTris(li), TR = legTris(ri);
+  type Seg = [number, number, number, number];
+  const slice = (ts: number[], y: number): Seg[] => {
+    const segs: Seg[] = [];
+    for (const t of ts) {
+      const pts: number[][] = [];
+      for (let k = 0; k < 3; k++) {
+        const a = idx[t + k]!, b = idx[t + ((k + 1) % 3)]!;
+        const ya = pos[3 * a + 1]! - y, yb = pos[3 * b + 1]! - y;
+        if ((ya < 0) !== (yb < 0)) {
+          const s = ya / (ya - yb);
+          pts.push([pos[3 * a]! + s * (pos[3 * b]! - pos[3 * a]!), pos[3 * a + 2]! + s * (pos[3 * b + 2]! - pos[3 * a + 2]!)]);
+        }
+      }
+      if (pts.length === 2) segs.push([pts[0]![0]!, pts[0]![1]!, pts[1]![0]!, pts[1]![1]!]);
+    }
+    return segs;
+  };
+  const orient = (ax: number, az: number, bx: number, bz: number, cx: number, cz: number): number => (bx - ax) * (cz - az) - (bz - az) * (cx - ax);
+  const cross = (p: Seg, q: Seg): boolean => {
+    const d1 = orient(q[0], q[1], q[2], q[3], p[0], p[1]), d2 = orient(q[0], q[1], q[2], q[3], p[2], p[3]);
+    const d3 = orient(p[0], p[1], p[2], p[3], q[0], q[1]), d4 = orient(p[0], p[1], p[2], p[3], q[2], q[3]);
+    return d1 * d2 < 0 && d3 * d4 < 0;
+  };
+  const byHeight: { yCm: number; crossings: number }[] = [];
+  for (let y = topY; y >= bottomY - 1e-9; y -= stepCm) {
+    const sl = slice(TL, y), sr = slice(TR, y);
+    let n = 0;
+    for (const p of sl) for (const q of sr) if (cross(p, q)) n++;
+    byHeight.push({ yCm: round2(y), crossings: n });
+  }
+  const hit = byHeight.filter((h) => h.crossings > 0);
+  return { fromCm: round2(topY), toCm: round2(bottomY), stepCm, slices: byHeight.length, slicesWithCrossings: hit.length, crossings: hit.reduce((a, h) => a + h.crossings, 0), lowestCm: hit.length ? Math.min(...hit.map((h) => h.yCm)) : null, byHeight: hit };
+}
+
 export function fitTemplate(inp: FitInputs): TemplateFitResult {
   const opt: TemplateFitOptions = { ...DEFAULT_FIT_OPTIONS, ...inp.options };
   const m = inp.mannequin;
@@ -867,11 +1151,14 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
   const along = (ray: Ray, t: number): number[] => [ray.o[0] + t * ray.d[0], ray.o[1] + t * ray.d[1], ray.o[2] + t * ray.d[2]];
   const legs = isBottom && opt.legs;
   const crotchY = m.landmarks.crotch[1];
-  // Trousers: the seat tube ends just below the crotch, where the leg tubes (from legTop down) take over.
-  const legTop = crotchY + 2;
+  // Trousers: the seat tube ends at the join (`trouserJoinHeight`), where the leg tubes (from legTop down) take over and
+  // are sewn to it (`stitchTrousers`). Before 0.4.0 the legs started 2 cm above the crotch, overlapping the seat by 3 cm,
+  // three separate tubes that the viewer's drape let part.
+  const join = legs ? trouserJoinHeight(m, sdf, opt.sleeveColumns, opt.clearanceCm, opt.blockedCm) : null;
+  const legTop = join ? join.y : crotchY + 2;
   for (let c = 0; c < C; c++) {
     if (legs) {
-      hemRaw.push(crotchY - 1);
+      hemRaw.push(legTop);
       continue;
     }
     const present: boolean[] = [];
@@ -1486,6 +1773,9 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
     tris[t + 2] = tmp;
     tri.corners = [tri.corners[0], tri.corners[2], tri.corners[1]];
   }
+  // --- 7b. Trousers: sew the seat to the legs (`stitchTrousers`), from the fitted vertices only.
+  const stitch = legs && legSides.length === 2 ? stitchTrousers(parts, present, newIndex, pos, tris) : null;
+  if (stitch) for (const t of stitch.triangles) tris.push(t.v[0], t.v[1], t.v[2]);
   const positions = Float64Array.from(pos);
   const mesh: Mesh = { positions, indices: Uint32Array.from(tris), vertexPart: Uint8Array.from(vpart), partNames: parts.map((p) => p.name) };
 
@@ -1495,7 +1785,8 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
   const rmap: number[] = [];
   const rIndex = new Map<string, number>();
   const charts: RenderMesh['charts'] = {};
-  for (const p of parts) charts[p.name] = chartOf(p.name);
+  for (const p of parts) charts[p.name] = chartOf(p.name, legs);
+  if (stitch) charts.join = ATLAS_CHARTS_TROUSERS.join;
   const renderVertex = (i: number, seam: boolean): number => {
     const key = `${i}:${seam ? 1 : 0}`;
     let r = rIndex.get(key);
@@ -1503,7 +1794,7 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
     const p = partOf(i);
     const k = i - p.offset;
     const row = Math.floor(k / p.cols), col = k % p.cols;
-    const [u0, v0, u1, v1] = chartOf(p.name);
+    const [u0, v0, u1, v1] = chartOf(p.name, legs);
     const u = (seam ? p.cols : col) / p.cols;
     const vv = p.name === 'body' ? vCoord[i]! : row / (p.rows - 1);
     r = rpos.length / 3;
@@ -1522,6 +1813,29 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
     const spans = cols.some((c) => c === p.cols - 1) && cols.some((c) => c === 0);
     for (let k = 0; k < 3; k++) rtris.push(renderVertex(corners[k]!, spans && cols[k] === 0));
   }
+  // The join band's own chart: the seat zip on the left 3/4 (u along the seat ring, v 0 seat … 1 leg), the crotch on
+  // the right 1/4 (u front … back, v 0 left leg … 1 right leg). Its vertices are copies of the welded ones (`remap`).
+  if (stitch) {
+    const [u0, v0, u1, v1] = ATLAS_CHARTS_TROUSERS.join;
+    for (const t of stitch.triangles) for (let k = 0; k < 3; k++) {
+      const [uu, vv] = t.uv[k]!;
+      const sub = t.band === 'seat' ? [0, 0.74] : [0.76, 1];
+      const u = u0 + (sub[0]! + uu * (sub[1]! - sub[0]!)) * (u1 - u0);
+      const wi = t.v[k]!;
+      rtris.push(rpos.length / 3);
+      rpos.push(positions[3 * wi]!, positions[3 * wi + 1]!, positions[3 * wi + 2]!);
+      ruv.push(u, v0 + vv * (v1 - v0));
+      rmap.push(wi);
+    }
+  }
+  // Join triangles that cut into the mannequin (sampled at their centroid and edge midpoints): the vertices are held at
+  // the clearance, the band's faces are not.
+  let joinInside = 0;
+  if (stitch) for (const t of stitch.triangles) {
+    const P = t.v.map((wi) => [positions[3 * wi]!, positions[3 * wi + 1]!, positions[3 * wi + 2]!]);
+    const samples = [[1 / 3, 1 / 3, 1 / 3], [0.5, 0.5, 0], [0, 0.5, 0.5], [0.5, 0, 0.5]];
+    if (samples.some((w) => sdf.at(...([0, 1, 2].map((d) => w[0]! * P[0]![d]! + w[1]! * P[1]![d]! + w[2]! * P[2]![d]!)) as [number, number, number]) < 0)) joinInside++;
+  }
   lap('mesh');
 
   const nonEmptyHem = hem.filter(Number.isFinite);
@@ -1538,6 +1852,12 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
     }),
     sleeves: { left: sleeveSides.includes(1), right: sleeveSides.includes(-1), reason: sleeveNotes.join('; ') || (opt.sleeves && !isBottom ? 'sleeves found in the masks' : 'not fitted for this category') },
     legs: { left: legSides.includes(1), right: legSides.includes(-1), fitted: legs },
+    join: legs && join ? {
+      yCm: join.y, crotchCm: round2(crotchY), thighsClear: join.clear, stitched: stitch !== null, seatTriangles: stitch?.seatTriangles ?? 0, crotchTriangles: stitch?.crotchTriangles ?? 0, unoriented: stitch?.unoriented ?? 0, trianglesInsideBody: joinInside, note: stitch ? stitch.note : legSides.length === 2 ? 'not stitched' : 'not stitched: fewer than two legs found',
+      belowBodyCrotchCm: round2(crotchY - join.y),
+      band: stitch ? { seat: joinBandStats(stitch.triangles.filter((t) => t.band === 'seat').map((t) => t.v), positions), crotch: joinBandStats(stitch.triangles.filter((t) => t.band === 'crotch').map((t) => t.v), positions) } : null,
+      legOverlap: legSides.length === 2 ? legOverlap(mesh, join.y - 0.5, join.y - 15) : null,
+    } : null,
     rays: { total: N, blocked: sum(blocked), empty: sum(empty), capped: sum(capped), filled: sum(filled), sleeveClamped, shoulderCap: sum(isCap), exactClearancePushed: sum(exact.pushed), exactClearanceInside: exact.inside, exactClearanceUnresolved: exact.unresolved },
     controlCap: { views: ev.dictated.filter(Boolean).length, radiusPx: round2(ev.dictatedRadiusPx), decided: sum(Uint8Array.from(byControl, (b, i) => (b && present[i] ? 1 : 0))), decidedCapRows: sum(Uint8Array.from(byControl, (b, i) => (b && present[i] && isCap[i] ? 1 : 0))) },
     twoView,

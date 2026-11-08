@@ -163,3 +163,62 @@ describe('evalBundle', () => {
     expect(grading.sizes.map((s) => s.size)).toEqual(['8', '10', '12', '14', '16']);
   });
 });
+
+describe('evaluateGarment: the low-rise waist reading (a recorded founder decision, src/lowRise.ts)', () => {
+  const shop = shopPayload('crimson-wildflower-maxi-skirt');
+  // The synthetic skirt with everything above 4 cm under the waist ring cut away: a band worn low, as run 17d's.
+  const low = cropMesh(syntheticSkirt(), (_x, y) => y < m.morphHeights.waist - 4);
+  const natural = evaluateGarment({ productId: shop.handle, payload: shop.payload, baseSize: '12', mesh: low, mannequin: m, source: src });
+  const choice = { kind: 'low-rise' as const, decision: 'test: founder, 2026-11-09' };
+  const lowRise = evaluateGarment({ productId: shop.handle, payload: shop.payload, baseSize: '12', mesh: low, mannequin: m, source: src, waistReading: choice });
+
+  it('by default the waist has no girth and chart agreement fails (nothing invented)', () => {
+    expect(natural.agreement.pass).toBe(false);
+    expect(natural.agreement.missing).toEqual(['waist']);
+    expect(natural.agreement.waistReading).toBeUndefined();
+    expect(natural.rows.find((x) => x.anchor === 'waist')!.afterCm).toBeNull();
+  });
+
+  it('with the switch, the band is compared with the chart waist plus the stated body offset, calibrated at its own height, and flagged everywhere', () => {
+    const wr = lowRise.agreement.waistReading!;
+    expect(wr.decision).toBe(choice.decision);
+    expect(wr.dropCm).toBeGreaterThan(4);
+    // The body is wider at the band than at the waist ring: the target is the chart's waist plus that, never the band's own girth.
+    expect(wr.offsetCm).toBeGreaterThan(0);
+    expect(wr.targetCm).toBeCloseTo(wr.chartWaistCm + wr.offsetCm, 1);
+    expect(wr.chartWaistCm).toBe(80.5);
+    const row = lowRise.rows.find((x) => x.anchor === 'waist')!;
+    expect(row.note).toMatch(/LOW-RISE READING \(founder decision: test: founder/);
+    expect(row.beforeCm).toBeCloseTo(row.measuredCm! - wr.targetCm, 1);
+    expect(Math.abs(row.afterCm!)).toBeLessThanOrEqual(CHART_TOLERANCE_CM);
+    expect(lowRise.agreement.pass).toBe(true);
+    expect(lowRise.agreement.missing).toEqual([]);
+    expect(lowRise.warnings.some((w) => /LOW-RISE by founder decision/.test(w))).toBe(true);
+    const qa = JSON.parse(evalBundle(lowRise, shop.payload).files['qa.json'] as string) as { chartAgreement: { waistReading?: { kind: string; decision: string } } };
+    expect(qa.chartAgreement.waistReading).toMatchObject({ kind: 'low-rise', decision: choice.decision });
+    const qaNatural = JSON.parse(evalBundle(natural, shop.payload).files['qa.json'] as string) as { chartAgreement: Record<string, unknown> };
+    expect('waistReading' in qaNatural.chartAgreement).toBe(false);
+  });
+
+  it('does nothing without a decision, or on a skirt that reaches the waist ring (and says so)', () => {
+    const anon = evaluateGarment({ productId: shop.handle, payload: shop.payload, baseSize: '12', mesh: low, mannequin: m, source: src, waistReading: { kind: 'low-rise', decision: ' ' } });
+    expect(anon.agreement.pass).toBe(false);
+    expect(anon.warnings.some((w) => /not applied/.test(w))).toBe(true);
+    const full = evaluateGarment({ productId: shop.handle, payload: shop.payload, baseSize: '12', mesh: syntheticSkirt(), mannequin: m, source: src, waistReading: choice });
+    expect(full.agreement.waistReading).toBeUndefined();
+    expect(full.warnings.some((w) => /reaches the waist ring/.test(w))).toBe(true);
+  });
+});
+
+describe('evaluateGarment: trousers whose seat goes round both thighs at the thigh ring', () => {
+  it('reports the loop as the seat, never as a leg girth: not calibrated, not graded', () => {
+    const shop = shopPayload('rosewater-palazzo-pants');
+    // The synthetic skirt stands in for a seat that reaches below the thigh ring (stage 4t 0.4.0 sews the legs on below it).
+    const r = evaluateGarment({ productId: shop.handle, payload: shop.payload, baseSize: '12', mesh: syntheticSkirt(), mannequin: m, source: src });
+    const thigh = r.rows.find((x) => x.anchor === 'thigh')!;
+    expect(thigh.measuredCm).toBeNull();
+    expect(thigh.note).toMatch(/the seat.*not a leg girth/);
+    expect(Object.keys(r.calibration.ringCorrections)).not.toContain('thigh');
+    for (const s of r.grading!.sizes) expect((s.targets as Record<string, number>).thigh).toBeUndefined();
+  });
+});

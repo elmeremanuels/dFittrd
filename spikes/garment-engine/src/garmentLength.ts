@@ -313,9 +313,13 @@ export function bottomLengths(m: Mannequin, mesh: Pick<Mesh, 'positions' | 'indi
       // bridged straight up to the crotch, as a tape from the crotch seam would run.
       const start = inner[0]!;
       const gap = crotch[1] - start.y;
-      const note = gap > 3 ? `the inner leg starts ${r1(gap)} cm below the crotch point; bridged straight` : null;
       const hem = inner[inner.length - 1]!;
-      const flat = profileLength(inner, crotch[1]) + (gap > 0 ? Math.hypot(gap, start.z) : 0);
+      const bridge = gap > 0 ? Math.hypot(gap, start.z) : 0;
+      const cloth = profileLength(inner, crotch[1]);
+      // The bridge is not cloth: say how much of the inseam it is and what the cloth alone measures, so a deeper garment
+      // crotch than the body's (trousers sewn below the crotch, template fit 0.4.0) is not hidden in the number.
+      const note = gap > 3 ? `the inner leg starts ${r1(gap)} cm below the crotch point (at ${r1(start.y)} cm); bridged straight: ${r1(bridge)} cm of this inseam is the straight bridge, not cloth; the cloth inner leg from ${r1(start.y)} cm to the hem is ${r1(cloth)} cm (drop ${r1(start.y - hem.y)} cm)` : null;
+      const flat = cloth + bridge;
       out.push(
         { definition: 'inseam_inner', label: BOTTOM_LENGTH_LABEL.inseam_inner, lengthCm: r1(flat), topY: r1(Math.max(crotch[1], start.y)), hemY: r1(hem.y), note },
         { definition: 'inseam_drop', label: BOTTOM_LENGTH_LABEL.inseam_drop, lengthCm: r1(crotch[1] - hem.y), topY: r1(crotch[1]), hemY: r1(hem.y), note },

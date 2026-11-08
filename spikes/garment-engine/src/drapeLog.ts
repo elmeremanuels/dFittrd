@@ -127,9 +127,11 @@ export function measurePattern(m: Mannequin, mesh: Mesh, ctx: MeasureContext, bo
     hem = tapeAround(slicePoints(mesh, hemSliceY, triOk), hemSliceY);
   }
   const hipSlice = trousers ? null : tapeAround(slicePoints(mesh, hipY0, (t) => chains[mesh.indices[3 * t]!] === 0), hipY0);
-  // Trouser thigh: the left leg's own ring (measureRing on the thigh frame).
+  // Trouser thigh: the left leg's own ring (measureRing on the thigh frame). A loop round both legs there is the seat, not a
+  // leg (stage 4t 0.4.0 sews the legs on below the thigh ring where the mannequin's thighs touch): no thigh, never the seat's girth.
   const thighFrame = m.rings.find((r) => r.id === 'thigh')!;
-  const thigh = trousers ? measureRing(mesh, thighFrame, { girth: 'tape', body }) : null;
+  const thighRing = trousers ? measureRing(mesh, thighFrame, { girth: 'tape', body }) : null;
+  const thigh = thighRing && !thighRing.spansBothLegs ? thighRing : null;
   const hip = girthsCm.hip ?? null;
   let hemFlare: number | null = null;
   let thighOfHip: number | null = null;

@@ -6,5 +6,8 @@ export default defineConfig({
     include: ['src/**/*.test.ts', 'test/**/*.test.ts'],
     environment: 'node',
     testTimeout: 60_000,
+    // At most 2 workers, as the spike's own run (`--maxWorkers=2`): under a busy machine more workers starved vitest's worker RPC
+    // ("[vitest-worker] Timeout calling onTaskUpdate" ended one `pnpm check` with exit 1 although every test passed).
+    maxWorkers: 2,
   },
 });

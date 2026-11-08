@@ -31,6 +31,7 @@ import { decodeAnyPng, maskFromPng, maskPng, type Mask } from './evalPng';
 import { colourRender, garmentSilhouette, overlayPng, overlayRgb, RENDER_BACKGROUND, scoreView, shopPhotoScore, sideBySidePng, type TurntableScore, type ViewName, type ViewReference } from './evalView';
 import { maskIou } from './evalPng';
 import { stillWidths, type StillWidth } from './bottomOpenings';
+import type { WaistReadingChoice } from './lowRise';
 
 export type Json = Record<string, unknown>;
 
@@ -415,6 +416,8 @@ export function evaluateProduct(o: {
   writeImage?: (name: string, png: Uint8Array) => void;
   /** What the printed shoulder_to_hem means (`evaluateGarment`). */
   printedLength?: 'flat-lay' | 'drop';
+  /** The founder's recorded waist reading (`evaluateGarment` `waistReading`, `src/lowRise.ts`). */
+  waistReading?: WaistReadingChoice | null;
 }): ProductEval {
   const t0 = performance.now();
   let mesh: Mesh;
@@ -463,6 +466,7 @@ export function evaluateProduct(o: {
     ...(o.printedLength ? { printedLength: o.printedLength } : {}),
     // Outerwear: the control proxy's front opening (from the description) is what the tape may bridge at the front.
     frontOpening: frontOpeningFromRecord(obj(obj(o.job.manifest?.control)?.proxy)?.front_opening),
+    ...(o.waistReading ? { waistReading: o.waistReading } : {}),
   });
   const t2 = performance.now();
   // The simulated error of a synthetic truth changes positions, not the vertex order: the colours still apply.

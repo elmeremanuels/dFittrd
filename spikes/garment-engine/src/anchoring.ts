@@ -236,8 +236,8 @@ export function calibrate(input: CalibrationInput): Calibration {
 }
 
 /** The calibrated base mesh: each ring scaled to its target, smooth in between (the grading morph of `@curtain/anchors`). */
-export function applyCalibration(m: Mannequin, mesh: Mesh, measured: Partial<Record<AnchorRing, number>>, cal: Calibration, chains: ChainAssignment = assignChains(m, mesh)): Mesh {
-  const morph = gradingMorph(measured as AnchorValues, cal.targets as AnchorValues, { heights: m.morphHeights });
+export function applyCalibration(m: Mannequin, mesh: Mesh, measured: Partial<Record<AnchorRing, number>>, cal: Calibration, chains: ChainAssignment = assignChains(m, mesh), heights: Mannequin['morphHeights'] = m.morphHeights): Mesh {
+  const morph = gradingMorph(measured as AnchorValues, cal.targets as AnchorValues, { heights });
   const hasArm = morph.scales.upper_arm !== undefined || morph.scales.wrist !== undefined;
   return radialMorph(m, mesh, chains, { girthScaleAt: (h, chain) => (chain === 'arm' && !hasArm ? cal.globalScale : morph.girthScaleAt(h, chain)) });
 }

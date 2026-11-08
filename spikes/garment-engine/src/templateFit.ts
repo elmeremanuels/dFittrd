@@ -46,7 +46,7 @@ import { distancesToMesh } from './meshDistance';
 import type { Mask } from './evalPng';
 import { cleanMask, DEFAULT_CLEANUP, morph, pixelsPerCm, project, rasterize, type MaskCleanup, type PinholeCamera } from './views';
 
-export const TEMPLATE_FIT_VERSION = 'stage4t-template-fit-0.4.0';
+export const TEMPLATE_FIT_VERSION = 'stage4t-template-fit-0.5.0';
 
 export interface FitViews {
   cameras: PinholeCamera[];
@@ -65,6 +65,12 @@ export interface FitViews {
    * known garment (the synthetic frames) has none. See `CONTROL_CAP`.
    */
   control?: ({ mannequin: Mask; proxy: Mask } | null)[];
+  /**
+   * Pixels that say nothing, one per camera (or null): left out of the garment and given no information
+   * (neither garment nor carving), after the mask clean-up. Stage 4t passes the consistency check's
+   * off-reference pixels here (cloth the pinned stills do not have: `stage4t.ts`, `OffReference`).
+   */
+  ignore?: (Mask | null)[];
 }
 
 export interface TemplateFitOptions {
@@ -259,7 +265,10 @@ function buildEvidence(views: FitViews, body: Mesh, m: Mannequin, opt: TemplateF
     rt.set(cam.t, 12 * k + 9);
     intr.set([cam.fx, cam.fy, cam.cx, cam.cy], 4 * k);
     centres.set(cam.centre, 3 * k);
-    const clean = cleanMask(mask, pixelsPerCm(cam), opt.cleanup).data;
+    const ign = views.ignore?.[v] ?? null;
+    const clean = Uint8Array.from(cleanMask(mask, pixelsPerCm(cam), opt.cleanup).data);
+    if (ign && (ign.width !== cam.width || ign.height !== cam.height)) throw new Error(`view ${v}: ignore mask ${ign.width}×${ign.height}, camera ${cam.width}×${cam.height}`);
+    if (ign) for (let i = 0; i < clean.length; i++) if (ign.data[i]) clean[i] = 0;
     const r = rasterize(cam, [{ positions: body.positions, indices: body.indices, id: 1 }]);
     // The ring round our own arms (not the arms themselves): a grey pixel there may be the generated
     // arm where ours is not, with our torso behind it, and would carve cloth that the arm hides.
@@ -269,7 +278,7 @@ function buildEvidence(views: FitViews, body: Mesh, m: Mannequin, opt: TemplateF
     const rgb = views.frames?.[v];
     const c = new Uint8Array(width * height);
     for (let i = 0; i < c.length; i++) {
-      if (clean[i]) continue;
+      if (clean[i] || ign?.data[i]) continue;
       if (rgb) {
         const R = rgb[3 * i]!, G = rgb[3 * i + 1]!, B = rgb[3 * i + 2]!;
         const mx = Math.max(R, G, B), sat = mx - Math.min(R, G, B);
@@ -690,6 +699,10 @@ export interface TemplateFitReport {
     yCm: number; crotchCm: number; thighsClear: boolean; stitched: boolean; seatTriangles: number; crotchTriangles: number; unoriented: number; trianglesInsideBody: number; note: string;
     /** How far the garment's crotch (the join) lies below the body's crotch point, cm: the seat is one tube round both thighs over this height. */
     belowBodyCrotchCm?: number;
+    /** 0.5.0: the garment's crotch measured in the front and back views, and the seat vertices laid into the crease below it (`shapeTrouserCrotch`). */
+    garmentCrotch?: TrouserCrotch | null;
+    /** 0.5.0: leg vertices held on their own side of the mid-plane between the legs (`keepLegsApart`). */
+    legSplit?: LegSplit | null;
     /** Size of the band's triangles (`joinBandStats`): long slivers here are faces no mask saw (the crotch floor, the seat-zip fans). */
     band?: { seat: JoinBandStats; crotch: JoinBandStats } | null;
     /** Do the leg tubes cross each other below the join (`legOverlap`)? */
@@ -1089,6 +1102,156 @@ export function legOverlap(mesh: Pick<Mesh, 'positions' | 'indices' | 'vertexPar
   return { fromCm: round2(topY), toCm: round2(bottomY), stepCm, slices: byHeight.length, slicesWithCrossings: hit.length, crossings: hit.reduce((a, h) => a + h.crossings, 0), lowestCm: hit.length ? Math.min(...hit.map((h) => h.yCm)) : null, byHeight: hit };
 }
 
+/** Front and back views for the crotch: within this many degrees of azimuth 0 (front) or 180 (back). */
+export const CROTCH_VIEW_DEG = 15;
+/** The crease test of a seat vertex uses only the views this close to straight front or back: the gap between the legs is a few px wide and closes a few degrees off axis. */
+export const CROTCH_CREASE_VIEW_DEG = 5;
+/** Leg vertices stay at least this far (cm) on their own side of the mid-plane between the legs. */
+export const LEG_MIDPLANE_GAP_CM = 0.2;
+
+export interface TrouserCrotch {
+  /** Garment crotch height in the front and back views (median of the views; the top of the background gap between the legs on the body's centre line), cm; null when no view showed a gap. */
+  frontCm: number | null;
+  backCm: number | null;
+  frontViews: number;
+  backViews: number;
+  /** Below the body's crotch, cm (front / back). */
+  belowBodyCrotchCm: [number | null, number | null];
+  /** Seat vertices between the join and the garment crotch that most of those views see as background between the legs: held in the crease between the thighs (at the clearance). */
+  creaseVertices: number;
+  note: string;
+}
+
+export interface LegSplit { midXCm: number; gapCm: number; clampedRays: number; note: string }
+
+const pixelOf = (e: Evidence, k: number, x: number, y: number, z: number): number => {
+  const o = 12 * k, rt = e.rt, intr = e.intr;
+  const zc = rt[o + 6]! * x + rt[o + 7]! * y + rt[o + 8]! * z + rt[o + 11]!;
+  if (zc <= 0) return -1;
+  const u = (intr[4 * k]! * (rt[o]! * x + rt[o + 1]! * y + rt[o + 2]! * z + rt[o + 9]!)) / zc + intr[4 * k + 2]!;
+  const v = (intr[4 * k + 1]! * (rt[o + 3]! * x + rt[o + 4]! * y + rt[o + 5]! * z + rt[o + 10]!)) / zc + intr[4 * k + 3]!;
+  return u < 0 || v < 0 || u >= e.width || v >= e.height ? -1 : (v | 0) * e.width + (u | 0);
+};
+/**
+ * Background between the legs, by the frame's colour (`PixelClasses`: light and unsaturated), not by the mask: the
+ * garment segmentation counts every pixel inside our bare mannequin's silhouette as mannequin or garment, never
+ * background, and our v0 mannequin's thighs touch down to the join while the generated mannequin's part higher up, so the
+ * masks fill the gap the frames show (run 17d palazzo, front frame: background 10 px wide at the centre from about 3 cm
+ * below the body's crotch, 1–6 px of it outside the mask). Without the frame, the mask decides.
+ */
+const isGap = (views: FitViews, v: number, cls: PixelClasses, p: number): boolean => {
+  if (p < 0) return false;
+  const f = views.frames?.[v];
+  if (!f) return !views.masks[v]!.data[p];
+  const R = f[3 * p]!, G = f[3 * p + 1]!, B = f[3 * p + 2]!;
+  const mx = Math.max(R, G, B);
+  return mx - Math.min(R, G, B) <= cls.maxSat && mx >= cls.backgroundMin;
+};
+
+/**
+ * Trousers, template fit 0.5.0. The seat goes round both thighs down to the join (`trouserJoinHeight`, where the v0
+ * mannequin's thighs stop touching: run 17d's palazzo 6.5 cm below the body's crotch), and before 0.5.0 its front and
+ * back hung straight across the gap between the legs down to there, with the flat crotch band at the join: a light flat
+ * triangle 6.5 cm deep in the front view, where the frames show the legs parting about 3 cm below the body's crotch. Here
+ * the garment's crotch is measured in the training views facing the front and the back (`CROTCH_VIEW_DEG`): per view the
+ * highest height on the body's centre line (the crotch landmark's x and z) from which background runs down between the
+ * legs to the join (cleaned masks; background by colour); the median per side. A seat vertex between the legs' centre lines below that height
+ * and above the join that most of those views see as background at its admissible start (in the crease) is held at its admissible start,
+ * the crease between the thighs at the clearance (hi = lo): the cloth follows the thighs into the crease instead of
+ * bridging it. Nothing is added or removed; mutates `hi`.
+ */
+export function shapeTrouserCrotch(a: { ev: Evidence; views: FitViews; m: Mannequin; parts: readonly PartGrid[]; rays: readonly Ray[]; present: Uint8Array; lo: Float64Array; hi: Float64Array; joinY: number; crotchY: number }): TrouserCrotch {
+  const { ev, views, m, parts, rays, present, lo, hi, joinY, crotchY } = a;
+  const [cxC, , czC] = m.landmarks.crotch;
+  const cls = views.pixelClasses ?? DEFAULT_PIXEL_CLASSES;
+  const gapAt = (k: number, x: number, y: number, z: number): boolean => isGap(views, views.train[k]!, cls, pixelOf(ev, k, x, y, z));
+  const front: number[] = [], back: number[] = [], frontAxis: number[] = [], backAxis: number[] = [];
+  views.train.forEach((v, k) => {
+    const az = ((views.cameras[v]!.azimuthDeg % 360) + 360) % 360;
+    const offF = Math.min(az, 360 - az), offB = Math.abs(az - 180);
+    if (offF <= CROTCH_VIEW_DEG) front.push(k);
+    else if (offB <= CROTCH_VIEW_DEG) back.push(k);
+    if (offF <= CROTCH_CREASE_VIEW_DEG) frontAxis.push(k);
+    else if (offB <= CROTCH_CREASE_VIEW_DEG) backAxis.push(k);
+  });
+  const crotchIn = (ks: number[]): number | null => {
+    const ys: number[] = [];
+    for (const k of ks) {
+      let top: number | null = null;
+      for (let y = joinY; y <= crotchY + 1e-9; y += 0.25) {
+        if (!gapAt(k, cxC, y, czC)) break;
+        top = y;
+      }
+      if (top !== null) ys.push(top);
+    }
+    return ys.length * 2 > ks.length ? round2(percentile(ys, 0.5)) : null;
+  };
+  const yF = crotchIn(front), yB = crotchIn(back);
+  const seat = parts.find((p) => p.name === 'body')!;
+  let crease = 0;
+  for (let k = 0; k < seat.rows * seat.cols; k++) {
+    const i = seat.offset + k;
+    if (!present[i]) continue;
+    const ray = rays[i]!;
+    const y = ray.o[1];
+    const toFront = ray.d[2] >= 0;
+    const top = toFront ? yF : yB;
+    if (top === null || y <= joinY || y >= top) continue;
+    // Tested where the cloth would lie in the crease (the ray's admissible start): the gap the views show is the
+    // background between the thighs, not in front of them.
+    const st = lo[i]!;
+    const x = ray.o[0] + st * ray.d[0], z = ray.o[2] + st * ray.d[2];
+    // Only between the legs: inside the legs' centre lines (a vertex at the hip's side lies outside the silhouette in a front view).
+    if (Math.abs(x - cxC) >= m.landmarks.legX) continue;
+    const ks = toFront ? frontAxis : backAxis;
+    const gaps = ks.filter((kk) => gapAt(kk, x, y, z)).length;
+    if (!ks.length || gaps * 2 <= ks.length) continue;
+    hi[i] = lo[i]!;
+    crease++;
+  }
+  return {
+    frontCm: yF,
+    backCm: yB,
+    frontViews: front.length,
+    backViews: back.length,
+    belowBodyCrotchCm: [yF === null ? null : round2(crotchY - yF), yB === null ? null : round2(crotchY - yB)],
+    creaseVertices: crease,
+    note: `garment crotch from the ${front.length} front and ${back.length} back training views (within ${CROTCH_VIEW_DEG} deg): the top of the background (by colour) between the legs on the body's centre line, median; seat vertices between the legs' centre lines, the join and it that most of the ${frontAxis.length} + ${backAxis.length} views within ${CROTCH_CREASE_VIEW_DEG} deg see as background at the crease are held there at the clearance`,
+  };
+}
+
+/**
+ * Trousers, template fit 0.5.0: run 17d's palazzo leg tubes crossed each other from the join down to 5 cm below it (each
+ * leg's inner side carved out past the centre line by the other leg's cloth in the masks). A leg vertex may not pass the
+ * mid-plane between the two legs' centres (x of their axes at that height) by less than `LEG_MIDPLANE_GAP_CM`: its ray's
+ * upper bound is cut there (never below its admissible start). Mutates `hi`.
+ */
+export function keepLegsApart(a: { m: Mannequin; parts: readonly PartGrid[]; rays: readonly Ray[]; present: Uint8Array; lo: Float64Array; hi: Float64Array }): LegSplit {
+  const { m, parts, rays, lo, hi } = a;
+  let clamped = 0, midSum = 0, midN = 0;
+  for (const p of parts) {
+    if (p.name !== 'leg_l' && p.name !== 'leg_r') continue;
+    const side = p.name === 'leg_l' ? 1 : -1;
+    for (let k = 0; k < p.rows * p.cols; k++) {
+      const i = p.offset + k;
+      const ray = rays[i]!;
+      const y = ray.o[1];
+      const l = m.legAt(y, 1), r = m.legAt(y, -1);
+      const mid = l && r ? (l.cx + r.cx) / 2 : 0;
+      midSum += mid;
+      midN++;
+      const inward = -side * ray.d[0];
+      if (inward <= 1e-6) continue;
+      const sMax = (side * (ray.o[0] - mid) - LEG_MIDPLANE_GAP_CM) / inward;
+      if (sMax < hi[i]!) {
+        hi[i] = Math.max(lo[i]!, sMax);
+        clamped++;
+      }
+    }
+  }
+  return { midXCm: midN ? round2(midSum / midN) : 0, gapCm: LEG_MIDPLANE_GAP_CM, clampedRays: clamped, note: 'leg rays pointing towards the other leg end at the mid-plane between the legs\' centres (minus gapCm), never before their admissible start' };
+}
+
 export function fitTemplate(inp: FitInputs): TemplateFitResult {
   const opt: TemplateFitOptions = { ...DEFAULT_FIT_OPTIONS, ...inp.options };
   const m = inp.mannequin;
@@ -1481,6 +1644,10 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
   }
   lap('presence');
 
+  // --- 5b. Trousers (0.5.0): the crotch from the masks, and the legs kept on their own side.
+  const crotchShape = legs && join && legSides.length === 2 ? shapeTrouserCrotch({ ev, views: inp.views, m, parts, rays, present, lo, hi, joinY: join.y, crotchY }) : null;
+  const legSplit = legs && legSides.length === 2 ? keepLegsApart({ m, parts, rays, present, lo, hi }) : null;
+
   // --- 6. Regularised solve, then silhouette rounds.
   // Grid triangles (grid vertex ids) of quads with ≥ 3 kept corners, in the winding order a, d, cc, b.
   const gridTris: number[] = [];
@@ -1855,6 +2022,8 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
     join: legs && join ? {
       yCm: join.y, crotchCm: round2(crotchY), thighsClear: join.clear, stitched: stitch !== null, seatTriangles: stitch?.seatTriangles ?? 0, crotchTriangles: stitch?.crotchTriangles ?? 0, unoriented: stitch?.unoriented ?? 0, trianglesInsideBody: joinInside, note: stitch ? stitch.note : legSides.length === 2 ? 'not stitched' : 'not stitched: fewer than two legs found',
       belowBodyCrotchCm: round2(crotchY - join.y),
+      garmentCrotch: crotchShape,
+      legSplit,
       band: stitch ? { seat: joinBandStats(stitch.triangles.filter((t) => t.band === 'seat').map((t) => t.v), positions), crotch: joinBandStats(stitch.triangles.filter((t) => t.band === 'crotch').map((t) => t.v), positions) } : null,
       legOverlap: legSides.length === 2 ? legOverlap(mesh, join.y - 0.5, join.y - 15) : null,
     } : null,

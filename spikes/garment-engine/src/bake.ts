@@ -39,9 +39,34 @@ export interface BakeOptions {
   minEdgePx: number;
   /** Pass 3: a kept sample further than this from the texel's blend (|ΔR| + |ΔG| + |ΔB|, 0–765) is an outlier; 0 = no pass 3. */
   outlierL1: number;
+  /**
+   * How the views that see a texel are combined. `best` (stage 4t up to 0.4.0): the views within `keepRatio` of the
+   * texel's best weight, blended (in practice the one or two most face-on frames), then pass 3. `consensus`
+   * (0.5.0): the weighted geometric median (Weiszfeld, `consensusIterations` rounds) of every view whose weight is
+   * at least `consensusRatio` of the texel's best: one colour the views agree on. Generated frames disagree on the
+   * print between views (the video model redraws it as the garment turns); picking the best view per texel then
+   * stitches patches of different drawings together, while the median keeps what most of the views show and drops
+   * the minority drawings like outliers (it replaces pass 3). Where the views agree it is as sharp as any of them;
+   * where they disagree it is softer, never invented. `agreeing`: the consensus first, then as `best` but only among
+   * the samples within `outlierL1` of it (the most face-on views that agree with most of the views): as sharp as one
+   * frame, without the minority drawings; a texel with no agreeing sample keeps the consensus. `twoband`:
+   * `detailSigmaCm`.
+   */
+  blend: 'best' | 'consensus' | 'agreeing' | 'twoband';
+  consensusRatio: number;
+  consensusIterations: number;
+  /**
+   * `twoband` (two-band blending, as in panorama stitching): the colour layout (the atlas low-passed with a Gaussian of
+   * this sigma, cm on the garment) from the consensus, the detail above it (the rest) from the single most face-on
+   * view per texel. The consensus decides which colour sits where (what the views agree on); one frame supplies the
+   * sharpness (no blend of drawings that slide against each other).
+   */
+  detailSigmaCm: number;
+  /** `twoband`: weight of the detail band (1 = the single view's detail in full, 0 = the consensus alone). */
+  detailGain: number;
 }
 
-export const DEFAULT_BAKE: BakeOptions = { size: 2048, anglePower: 4, edgePx: 6, depthTolCm: 1, keepRatio: 0.95, minCos: 0.15, smoothIterations: 30, minEdgePx: 3, outlierL1: 90 };
+export const DEFAULT_BAKE: BakeOptions = { size: 2048, anglePower: 4, edgePx: 6, depthTolCm: 1, keepRatio: 0.95, minCos: 0.15, smoothIterations: 30, minEdgePx: 3, outlierL1: 90, blend: 'best', consensusRatio: 0.25, consensusIterations: 6, detailSigmaCm: 1.5, detailGain: 1 };
 
 export interface BakeInputs {
   render: Pick<RenderMesh, 'positions' | 'uvs' | 'indices' | 'remap'>;
@@ -67,9 +92,13 @@ export interface BakeReport {
   seenShare: number;
   /** Mean number of views blended per seen texel. */
   meanViewsPerTexel: number;
-  /** Samples dropped by pass 3 as outliers, and their share of the kept samples. */
+  /** Samples dropped by pass 3 as outliers, and their share of the kept samples (0 with `blend: 'consensus'`). */
   outlierSamples: number;
   outlierShare: number;
+  /** `consensus` only: mean distance (RGB, 0–441) of a texel's samples from its median, weighted: how much the views disagree. */
+  consensusSpread?: number;
+  /** `twoband` only: the low-pass sigma in atlas texels (`detailSigmaCm` × the render mesh's texels per cm). */
+  detailSigmaTexels?: number;
   timingsMs: Record<string, number>;
   options: BakeOptions;
 }
@@ -247,6 +276,179 @@ export interface BakeResult {
   report: BakeReport;
 }
 
+/**
+ * `blend: 'consensus'`: per texel the weighted geometric median of the samples of every view whose weight is at least
+ * `consensusRatio` of the texel's best (Weiszfeld: start from the weighted mean, then reweight each sample by
+ * weight / distance to the current estimate). Writes the result as acc (colour × wsum), wsum and the number of views,
+ * as pass 2 does; returns the weighted mean distance of the samples from the median (RGB). Views are sampled again
+ * every round (a prepared view holds full-frame buffers, so they are not kept).
+ */
+function consensusBlend(inp: BakeInputs, views: number[], tx: Texels, opt: BakeOptions, best: Float32Array, seenMask: Uint8Array, acc: Float32Array, wsum: Float32Array, count: Uint16Array): number {
+  const n = tx.index.length;
+  const w = new Float32Array(n);
+  const col = new Float32Array(n * 3);
+  const est = new Float32Array(n * 3);
+  const num = new Float64Array(n * 3);
+  const den = new Float64Array(n);
+  const DELTA = 2; // RGB distance floor: samples this close to the estimate count as on it
+  let spreadSum = 0, spreadW = 0;
+  for (let it = 0; it <= opt.consensusIterations; it++) {
+    num.fill(0);
+    den.fill(0);
+    const last = it === opt.consensusIterations;
+    if (last) count.fill(0);
+    for (const v of views) {
+      const pv = prepareView(inp, v)!;
+      sampleView(pv, tx, opt, w, col, seenMask);
+      for (let i = 0; i < n; i++) {
+        const wi = w[i]!;
+        if (wi <= 0 || wi < opt.consensusRatio * best[i]!) continue;
+        let k = wi;
+        if (it > 0) {
+          const d = Math.hypot(col[3 * i]! - est[3 * i]!, col[3 * i + 1]! - est[3 * i + 1]!, col[3 * i + 2]! - est[3 * i + 2]!);
+          k = wi / Math.max(DELTA, d);
+          if (last) {
+            spreadSum += wi * d;
+            spreadW += wi;
+            count[i] = count[i]! + 1;
+          }
+        }
+        num[3 * i] = num[3 * i]! + k * col[3 * i]!;
+        num[3 * i + 1] = num[3 * i + 1]! + k * col[3 * i + 1]!;
+        num[3 * i + 2] = num[3 * i + 2]! + k * col[3 * i + 2]!;
+        den[i] = den[i]! + k;
+      }
+    }
+    for (let i = 0; i < n; i++) if (den[i]! > 0) for (let ch = 0; ch < 3; ch++) est[3 * i + ch] = num[3 * i + ch]! / den[i]!;
+  }
+  for (let i = 0; i < n; i++) {
+    if (den[i]! <= 0) continue;
+    wsum[i] = 1;
+    for (let ch = 0; ch < 3; ch++) acc[3 * i + ch] = est[3 * i + ch]!;
+  }
+  return spreadW ? Math.round((spreadSum / spreadW) * 100) / 100 : 0;
+}
+
+/**
+ * `blend: 'agreeing'`, after `consensusBlend` (acc holds the consensus colour, wsum 1): per texel the best weight among
+ * the samples within `outlierL1` (L1 over RGB) of the consensus, then the blend of those agreeing samples within
+ * `keepRatio` of it. Texels without an agreeing sample keep the consensus. Returns the samples left out as disagreeing.
+ */
+function agreeingBlend(inp: BakeInputs, views: number[], tx: Texels, opt: BakeOptions, seenMask: Uint8Array, acc: Float32Array, wsum: Float32Array, count: Uint16Array): number {
+  const n = tx.index.length;
+  const est = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) if (wsum[i]! > 0) for (let ch = 0; ch < 3; ch++) est[3 * i + ch] = acc[3 * i + ch]! / wsum[i]!;
+  const w = new Float32Array(n);
+  const col = new Float32Array(n * 3);
+  const agrees = (i: number): boolean => Math.abs(col[3 * i]! - est[3 * i]!) + Math.abs(col[3 * i + 1]! - est[3 * i + 1]!) + Math.abs(col[3 * i + 2]! - est[3 * i + 2]!) <= opt.outlierL1;
+  const bestAgree = new Float32Array(n);
+  let rejected = 0;
+  for (const v of views) {
+    sampleView(prepareView(inp, v)!, tx, opt, w, col, seenMask);
+    for (let i = 0; i < n; i++) {
+      if (w[i]! <= 0) continue;
+      if (agrees(i)) { if (w[i]! > bestAgree[i]!) bestAgree[i] = w[i]!; } else rejected++;
+    }
+  }
+  const a2 = new Float32Array(n * 3);
+  const ws2 = new Float32Array(n);
+  const c2 = new Uint16Array(n);
+  for (const v of views) {
+    sampleView(prepareView(inp, v)!, tx, opt, w, col, seenMask);
+    for (let i = 0; i < n; i++) {
+      const wi = w[i]!;
+      if (wi <= 0 || wi < opt.keepRatio * bestAgree[i]! || !agrees(i)) continue;
+      for (let ch = 0; ch < 3; ch++) a2[3 * i + ch] = a2[3 * i + ch]! + wi * col[3 * i + ch]!;
+      ws2[i] = ws2[i]! + wi;
+      c2[i] = c2[i]! + 1;
+    }
+  }
+  for (let i = 0; i < n; i++) {
+    if (ws2[i]! <= 0) continue;
+    for (let ch = 0; ch < 3; ch++) acc[3 * i + ch] = a2[3 * i + ch]!;
+    wsum[i] = ws2[i]!;
+    count[i] = c2[i]!;
+  }
+  return rejected;
+}
+
+/** Atlas texels per cm on the garment: sqrt(UV area in texels² / surface area in cm²) over the render mesh. */
+export function texelsPerCm(render: BakeInputs['render'], size: number): number {
+  const P = render.positions, U = render.uvs, I = render.indices;
+  let a3 = 0, a2 = 0;
+  for (let t = 0; t < I.length; t += 3) {
+    const a = I[t]!, b = I[t + 1]!, c = I[t + 2]!;
+    const ux = P[3 * b]! - P[3 * a]!, uy = P[3 * b + 1]! - P[3 * a + 1]!, uz = P[3 * b + 2]! - P[3 * a + 2]!;
+    const vx = P[3 * c]! - P[3 * a]!, vy = P[3 * c + 1]! - P[3 * a + 1]!, vz = P[3 * c + 2]! - P[3 * a + 2]!;
+    a3 += Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
+    a2 += (Math.abs((U[2 * b]! - U[2 * a]!) * (U[2 * c + 1]! - U[2 * a + 1]!) - (U[2 * c]! - U[2 * a]!) * (U[2 * b + 1]! - U[2 * a + 1]!)) / 2) * size * size;
+  }
+  return a3 > 0 ? Math.sqrt(a2 / a3) : 1;
+}
+
+/** Separable Gaussian blur of an RGB float atlas (S × S × 3), edges clamped. */
+export function gaussianBlur(rgb: Float32Array, S: number, sigma: number): Float32Array {
+  const r = Math.max(1, Math.ceil(3 * sigma));
+  const k = new Float32Array(2 * r + 1);
+  let ks = 0;
+  for (let i = -r; i <= r; i++) ks += k[i + r] = Math.exp(-(i * i) / (2 * sigma * sigma));
+  for (let i = 0; i < k.length; i++) k[i] = k[i]! / ks;
+  const tmp = new Float32Array(rgb.length), out = new Float32Array(rgb.length);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    let a = 0, b = 0, c = 0;
+    for (let i = -r; i <= r; i++) {
+      const xx = Math.min(S - 1, Math.max(0, x + i)), q = 3 * (y * S + xx), wk = k[i + r]!;
+      a += wk * rgb[q]!; b += wk * rgb[q + 1]!; c += wk * rgb[q + 2]!;
+    }
+    const o = 3 * (y * S + x);
+    tmp[o] = a; tmp[o + 1] = b; tmp[o + 2] = c;
+  }
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    let a = 0, b = 0, c = 0;
+    for (let i = -r; i <= r; i++) {
+      const yy = Math.min(S - 1, Math.max(0, y + i)), q = 3 * (yy * S + x), wk = k[i + r]!;
+      a += wk * tmp[q]!; b += wk * tmp[q + 1]!; c += wk * tmp[q + 2]!;
+    }
+    const o = 3 * (y * S + x);
+    out[o] = a; out[o + 1] = b; out[o + 2] = c;
+  }
+  return out;
+}
+
+/** Atlas from per-texel colour sums: seen texels set, the rest filled by pull-push, then Jacobi smoothing of the unseen chart texels. */
+function fillAtlas(acc: Float32Array, wsum: Float32Array, tx: Texels, S: number, smoothIterations: number): { rgb: Float32Array; seenWeight: Float32Array } {
+  const n = tx.index.length;
+  const rgb = new Float32Array(S * S * 3);
+  const weight = new Float32Array(S * S);
+  for (let i = 0; i < n; i++) {
+    if (wsum[i]! <= 0) continue;
+    const k = tx.index[i]!;
+    rgb[3 * k] = acc[3 * i]! / wsum[i]!;
+    rgb[3 * k + 1] = acc[3 * i + 1]! / wsum[i]!;
+    rgb[3 * k + 2] = acc[3 * i + 2]! / wsum[i]!;
+    weight[k] = 1;
+  }
+  const seenWeight = Float32Array.from(weight);
+  pullPush(rgb, weight, S);
+  // Diffusion over the unseen chart texels (pull-push leaves block structure at coarse levels).
+  const unseen: number[] = [];
+  for (let i = 0; i < n; i++) if (wsum[i]! <= 0) unseen.push(tx.index[i]!);
+  for (let it = 0; it < smoothIterations; it++) {
+    for (const k of unseen) {
+      const x = k % S, y = (k - x) / S;
+      for (let ch = 0; ch < 3; ch++) {
+        let sum = 0, cnt = 0;
+        if (x > 0) { sum += rgb[3 * (k - 1) + ch]!; cnt++; }
+        if (x < S - 1) { sum += rgb[3 * (k + 1) + ch]!; cnt++; }
+        if (y > 0) { sum += rgb[3 * (k - S) + ch]!; cnt++; }
+        if (y < S - 1) { sum += rgb[3 * (k + S) + ch]!; cnt++; }
+        rgb[3 * k + ch] = sum / cnt;
+      }
+    }
+  }
+  return { rgb, seenWeight };
+}
+
 export function bakeTexture(inp: BakeInputs): BakeResult {
   const opt: BakeOptions = { ...DEFAULT_BAKE, ...inp.options };
   const S = opt.size;
@@ -273,12 +475,40 @@ export function bakeTexture(inp: BakeInputs): BakeResult {
     for (let i = 0; i < n; i++) if (w[i]! > best[i]!) best[i] = w[i]!;
   }
   lap('pass1');
-  // Pass 2: blend the views within keepRatio of the best.
   const acc = new Float32Array(n * 3);
   const wsum = new Float32Array(n);
   const count = new Uint16Array(n);
   const seenMask = new Uint8Array(n);
   for (let i = 0; i < n; i++) seenMask[i] = best[i]! > 0 ? 1 : 0;
+  let rejected = 0;
+  let spread: number | undefined;
+  // `twoband`: the single most face-on sample per texel (the detail band).
+  let single: { acc: Float32Array; wsum: Float32Array } | null = null;
+  if (opt.blend === 'twoband') {
+    const sa = new Float32Array(n * 3);
+    const sw = new Float32Array(n);
+    for (const v of views) {
+      sampleView(prepareView(inp, v)!, tx, opt, w, col, seenMask);
+      for (let i = 0; i < n; i++) {
+        if (w[i]! <= 0 || w[i]! < best[i]! || sw[i]! > 0) continue;
+        sa[3 * i] = col[3 * i]!;
+        sa[3 * i + 1] = col[3 * i + 1]!;
+        sa[3 * i + 2] = col[3 * i + 2]!;
+        sw[i] = 1;
+      }
+    }
+    single = { acc: sa, wsum: sw };
+    lap('single');
+  }
+  if (opt.blend === 'consensus' || opt.blend === 'agreeing' || opt.blend === 'twoband') {
+    spread = consensusBlend(inp, views, tx, opt, best, seenMask, acc, wsum, count);
+    lap('consensus');
+    if (opt.blend === 'agreeing') {
+      rejected = agreeingBlend(inp, views, tx, opt, seenMask, acc, wsum, count);
+      lap('agreeing');
+    }
+  } else {
+  // Pass 2: blend the views within keepRatio of the best.
   for (const v of views) {
     const pv = prepareView(inp, v)!;
     sampleView(pv, tx, opt, w, col, seenMask);
@@ -296,7 +526,6 @@ export function bakeTexture(inp: BakeInputs): BakeResult {
   // Pass 3: the generated frames disagree (a swinging tier, a leg or the studio showing at the hem in
   // one frame): keep only the kept samples within `outlierL1` (sum over RGB) of the pass-2 blend, and
   // blend again. A texel whose samples all disagree keeps the pass-2 blend.
-  let rejected = 0;
   if (opt.outlierL1 > 0) {
     const mean = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) if (wsum[i]! > 0) for (let ch = 0; ch < 3; ch++) mean[3 * i + ch] = acc[3 * i + ch]! / wsum[i]!;
@@ -331,37 +560,25 @@ export function bakeTexture(inp: BakeInputs): BakeResult {
     }
     lap('pass3');
   }
-  const rgb = new Float32Array(S * S * 3);
-  const weight = new Float32Array(S * S);
+  }
   let seen = 0, viewsSum = 0;
   let keptSamples = 0;
   for (let i = 0; i < n; i++) keptSamples += count[i]!;
   for (let i = 0; i < n; i++) {
     if (wsum[i]! <= 0) continue;
-    const k = tx.index[i]!;
-    rgb[3 * k] = acc[3 * i]! / wsum[i]!;
-    rgb[3 * k + 1] = acc[3 * i + 1]! / wsum[i]!;
-    rgb[3 * k + 2] = acc[3 * i + 2]! / wsum[i]!;
-    weight[k] = 1;
     seen++;
     viewsSum += count[i]!;
   }
-  const seenWeight = Float32Array.from(weight);
-  pullPush(rgb, weight, S);
-  // Diffusion over the unseen chart texels (pull-push leaves block structure at coarse levels).
-  const unseen: number[] = [];
-  for (let i = 0; i < n; i++) if (wsum[i]! <= 0) unseen.push(tx.index[i]!);
-  for (let it = 0; it < opt.smoothIterations; it++) {
-    for (const k of unseen) {
-      const x = k % S, y = (k - x) / S;
-      for (let ch = 0; ch < 3; ch++) {
-        let sum = 0, cnt = 0;
-        if (x > 0) { sum += rgb[3 * (k - 1) + ch]!; cnt++; }
-        if (x < S - 1) { sum += rgb[3 * (k + 1) + ch]!; cnt++; }
-        if (y > 0) { sum += rgb[3 * (k - S) + ch]!; cnt++; }
-        if (y < S - 1) { sum += rgb[3 * (k + S) + ch]!; cnt++; }
-        rgb[3 * k + ch] = sum / cnt;
-      }
+  const { rgb, seenWeight } = fillAtlas(acc, wsum, tx, S, opt.smoothIterations);
+  let sigmaTexels: number | undefined;
+  if (single) {
+    // Two bands: rgb (the consensus) low-passed plus the single view's detail above the same low-pass.
+    sigmaTexels = Math.max(1, opt.detailSigmaCm * texelsPerCm(inp.render, S));
+    const one = fillAtlas(single.acc, single.wsum, tx, S, opt.smoothIterations).rgb;
+    const lowC = gaussianBlur(rgb, S, sigmaTexels), lowB = gaussianBlur(one, S, sigmaTexels);
+    for (let i = 0; i < n; i++) {
+      const k = tx.index[i]!;
+      for (let ch = 0; ch < 3; ch++) rgb[3 * k + ch] = lowC[3 * k + ch]! + opt.detailGain * (one[3 * k + ch]! - lowB[3 * k + ch]!);
     }
   }
   lap('fill');
@@ -371,7 +588,7 @@ export function bakeTexture(inp: BakeInputs): BakeResult {
     atlas: { width: S, height: S, data },
     seenWeight,
     texels: tx,
-    report: { size: S, views: views.length, chartTexels: n, seenTexels: seen, filledTexels: n - seen, seenShare: n ? Math.round((seen / n) * 10000) / 10000 : 0, meanViewsPerTexel: seen ? Math.round((viewsSum / seen) * 100) / 100 : 0, outlierSamples: rejected, outlierShare: keptSamples + rejected ? Math.round((rejected / (keptSamples + rejected)) * 10000) / 10000 : 0, timingsMs: timings, options: opt },
+    report: { size: S, views: views.length, chartTexels: n, seenTexels: seen, filledTexels: n - seen, seenShare: n ? Math.round((seen / n) * 10000) / 10000 : 0, meanViewsPerTexel: seen ? Math.round((viewsSum / seen) * 100) / 100 : 0, outlierSamples: rejected, outlierShare: keptSamples + rejected ? Math.round((rejected / (keptSamples + rejected)) * 10000) / 10000 : 0, ...(spread !== undefined ? { consensusSpread: spread } : {}), ...(sigmaTexels !== undefined ? { detailSigmaTexels: Math.round(sigmaTexels * 10) / 10 } : {}), timingsMs: timings, options: opt },
   };
 }
 

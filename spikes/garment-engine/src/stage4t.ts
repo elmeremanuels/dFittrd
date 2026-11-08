@@ -29,7 +29,7 @@ import { distancesToMesh } from './meshDistance';
 import { fitTemplate, type RenderMesh, type TemplateFitOptions, type TemplateFitReport } from './templateFit';
 import { camerasFromOpencvJson, idMask, project, rasterize, splitFrames, type PinholeCamera } from './views';
 
-export const STAGE4T_VERSION = 'stage4t-0.4.0';
+export const STAGE4T_VERSION = 'stage4t-0.5.0';
 export type Stage4tSource = 'stage2' | 'synthetic';
 
 export interface JobViews {
@@ -84,14 +84,96 @@ export function loadJobViews(dir: string, source: Stage4tSource): JobViews {
   return { cameras, masks, frames, maskDir, framesDir, control, controlDir: control ? 'control/mask, control/proxy_mask' : null };
 }
 
+/** What `phase0_garment.py --write-off-reference` writes: consistency 0.4.0's off-reference pixels of the stage 4 alpha targets. */
+export const OFF_REFERENCE_DIR = 'stage2/off_reference_mask';
+
+/**
+ * How stage 4t treats the consistency check's off-reference pixels (garment more than a few px outside the pinned
+ * stills' visual hull, off our mannequin, hips down: a flap or panel the stills do not have, `phase0_garment.off_reference`).
+ * `pixels` (default when the job has them): those pixels say nothing in the fit (neither garment nor carving) and are not
+ * sampled by the bake or scored by the photometric check, in every frame; the frames stay. `frames`: the flagged frames
+ * (above the check's threshold) are left out of the fit and the bake whole. `none`: as segmented. The garment masks are
+ * never changed; metrics.json lists what was left out and the IoU against the masks as segmented.
+ */
+export type OffReferenceMode = 'pixels' | 'frames' | 'none';
+
+export interface OffReference {
+  record: { version?: string; consistency?: string; thresholds?: Record<string, number>; spans?: unknown[]; garment_masks_sha256?: string | null };
+  /** Per camera: the off-reference pixels (null: none on disk for that frame). */
+  masks: (Mask | null)[];
+  /** Frames above the check's threshold (`max_off_reference_px`). */
+  flagged: number[];
+  /** Off-reference pixels per frame. */
+  px: number[];
+}
+
+/** sha256 over a set of files as `phase0_garment.file_set_sha256` computes it: per file its base name, a NUL and the sha256 of its bytes. */
+export function fileSetSha256(paths: readonly string[]): string {
+  const h = createHash('sha256');
+  for (const p of paths) {
+    h.update(Buffer.from(`${p.split('/').pop()!}\0`, 'utf8'));
+    h.update(createHash('sha256').update(readFileSync(p)).digest());
+  }
+  return h.digest('hex');
+}
+
+/**
+ * The job's off-reference masks (`OFF_REFERENCE_DIR`), or null when it has none. Refuses masks cut from other garment
+ * masks than the ones on disk (the record's sha256 of the garment mask set must match).
+ */
+export function loadOffReference(dir: string, views: Pick<JobViews, 'cameras' | 'maskDir'>): OffReference | null {
+  const recPath = join(dir, OFF_REFERENCE_DIR, 'record.json');
+  if (!existsSync(recPath)) return null;
+  const record = JSON.parse(readFileSync(recPath, 'utf8')) as OffReference['record'] & { garment_mask_dir?: string; frames?: { frame: number; off_reference_px: number; flagged: boolean }[] };
+  if (record.garment_mask_dir && record.garment_mask_dir !== views.maskDir) throw new Error(`${OFF_REFERENCE_DIR}: cut from ${record.garment_mask_dir}, stage 4t fits ${views.maskDir}`);
+  const now = fileSetSha256(views.cameras.map((_, i) => join(dir, views.maskDir, `${name4(i)}.png`)));
+  if (record.garment_masks_sha256 !== now) throw new Error(`${OFF_REFERENCE_DIR}: written for other garment masks (sha256 ${String(record.garment_masks_sha256).slice(0, 12)}…, now ${now.slice(0, 12)}…); run phase0_garment.py --write-off-reference again`);
+  const masks = views.cameras.map((c, i) => {
+    const p = join(dir, OFF_REFERENCE_DIR, `${name4(i)}.png`);
+    if (!existsSync(p)) return null;
+    const mk = maskFromPng(decodeAnyPng(new Uint8Array(readFileSync(p))));
+    if (mk.width !== c.width || mk.height !== c.height) throw new Error(`${OFF_REFERENCE_DIR}/${name4(i)}.png is ${mk.width}×${mk.height}, cameras say ${c.width}×${c.height}`);
+    return mk;
+  });
+  const px = masks.map((mk) => (mk ? mk.data.reduce((n, x) => n + (x ? 1 : 0), 0) : 0));
+  const flagged = (record.frames ?? []).filter((f) => f.flagged).map((f) => f.frame).sort((a, b) => a - b);
+  return { record, masks, flagged, px };
+}
+
+/** `mask` without the pixels of `cut` (a copy), or `mask` itself when there is nothing to cut. */
+export function withoutPixels(mask: Mask, cut: Mask | null | undefined): Mask {
+  if (!cut) return mask;
+  const data = Uint8Array.from(mask.data);
+  for (let i = 0; i < data.length; i++) if (cut.data[i]) data[i] = 0;
+  return { width: mask.width, height: mask.height, data };
+}
+
+/** IoU of a rendered garment with a mask, the pixels of `ignore` counting for neither (don't care). */
+export function maskIouIgnoring(render: Mask, mask: Mask, ignore: Mask | null | undefined): number {
+  if (!ignore) return maskIou(render, mask).iou;
+  let inter = 0, uni = 0;
+  for (let i = 0; i < mask.data.length; i++) {
+    if (ignore.data[i]) continue;
+    const a = render.data[i] ? 1 : 0, b = mask.data[i] ? 1 : 0;
+    inter += a & b;
+    uni += a | b;
+  }
+  return uni ? inter / uni : 0;
+}
+
 export interface ViewIou {
   frame: number;
   azimuthDeg: number;
-  split: 'train' | 'holdout';
+  /** `unused`: neither (frames left out whole by `offReference: 'frames'`, or not among `views`). */
+  split: 'train' | 'holdout' | 'unused';
   /** Garment with the mannequin as occluder (what a viewer shows) against the visible-garment mask. */
   visible: number;
   /** Garment alone. */
   silhouette: number;
+  /** With off-reference pixels (`OffReference`) as don't care: present only when the job has them. */
+  visibleExOffRef?: number;
+  offReferencePx?: number;
+  offReferenceFlagged?: boolean;
 }
 
 export interface IouSummary {
@@ -104,12 +186,17 @@ export interface IouSummary {
 
 const r4 = (x: number): number => Math.round(x * 10000) / 10000;
 
-export function viewIous(mesh: Pick<Mesh, 'positions' | 'indices'>, body: Pick<Mesh, 'positions' | 'indices'>, views: JobViews, train: readonly number[]): ViewIou[] {
+export function viewIous(mesh: Pick<Mesh, 'positions' | 'indices'>, body: Pick<Mesh, 'positions' | 'indices'>, views: JobViews, train: readonly number[], off: OffReference | null = null, holdout?: readonly number[]): ViewIou[] {
   const trainSet = new Set(train);
+  const holdSet = holdout ? new Set(holdout) : null;
+  const flagged = new Set(off?.flagged ?? []);
   return views.cameras.map((cam, i) => {
     const vis = rasterize(cam, [{ positions: body.positions, indices: body.indices, id: 1 }, { positions: mesh.positions, indices: mesh.indices, id: 2 }]);
     const sil = rasterize(cam, [{ positions: mesh.positions, indices: mesh.indices, id: 2 }]);
-    return { frame: i, azimuthDeg: cam.azimuthDeg, split: trainSet.has(i) ? 'train' : 'holdout', visible: r4(maskIou(idMask(vis, 2), views.masks[i]!).iou), silhouette: r4(maskIou(idMask(sil, 2), views.masks[i]!).iou) };
+    const visMask = idMask(vis, 2);
+    const row: ViewIou = { frame: i, azimuthDeg: cam.azimuthDeg, split: trainSet.has(i) ? 'train' : holdSet && !holdSet.has(i) ? 'unused' : 'holdout', visible: r4(maskIou(visMask, views.masks[i]!).iou), silhouette: r4(maskIou(idMask(sil, 2), views.masks[i]!).iou) };
+    if (off) Object.assign(row, { visibleExOffRef: r4(maskIouIgnoring(visMask, views.masks[i]!, off.masks[i])), offReferencePx: off.px[i] ?? 0, offReferenceFlagged: flagged.has(i) });
+    return row;
   });
 }
 
@@ -214,6 +301,12 @@ export interface Stage4tMetrics {
   fit: TemplateFitReport;
   iou: { train: IouSummary; holdout: IouSummary; perView: ViewIou[] };
   /**
+   * The consistency check's off-reference pixels and what stage 4t did with them (`OffReferenceMode`), or null when the
+   * job has none. Lists every frame with such pixels; the IoU against the masks as segmented (all pixels) next to the IoU
+   * with those pixels as don't care, over all frames and over the flagged / not flagged ones.
+   */
+  offReference: OffReferenceMetrics | null;
+  /**
    * Vertices whose signed distance to mannequin.glb is below 0 (inside) and below the 4 mm clearance
    * (grid SDF, trilinear, the fit's own constraint); the exact distance to the mannequin's triangles
    * for the same vertices (`meshDistance.ts`: minimum, and how many lie below the clearance and below
@@ -226,6 +319,24 @@ export interface Stage4tMetrics {
   bake: BakeReport & { jpegBytes: number; jpegQuality: number; holdout: PhotometricCheck[]; holdoutMean: { maeTexture: number; maeMeanColour: number; psnrTexture: number; psnrMeanColour: number; maeTextureBlock8: number; maeMeanColourBlock8: number } | null; meanColour: [number, number, number]; capTexture: CapTexture };
   glbBytes: number;
   timingsMs: Record<string, number>;
+}
+
+export interface OffReferenceMetrics {
+  mode: OffReferenceMode;
+  dir: string;
+  version: string | null;
+  consistency: string | null;
+  thresholds: Record<string, number> | null;
+  spans: unknown[];
+  flaggedFrames: number[];
+  /** Frames left out whole (`frames`), else []. */
+  droppedFrames: number[];
+  /** Every frame with off-reference pixels: [frame, px]. */
+  framesWithPixels: [number, number][];
+  totalPx: number;
+  /** Mean visible IoU per frame group, against the masks as segmented (`all`) and with the off-reference pixels as don't care (`exOffRef`). */
+  iou: Record<'allFrames' | 'flagged' | 'notFlagged', { frames: number; all: number; exOffRef: number }>;
+  note: string;
 }
 
 export interface Stage4tResult {
@@ -261,7 +372,19 @@ export interface Stage4tInputs {
    * unless `fit.depthPrior` says otherwise.
    */
   views?: readonly number[];
+  /** Off-reference pixels (`OffReferenceMode`); default `pixels` when the job has `OFF_REFERENCE_DIR` (stage 2 only), else `none`. */
+  offReference?: OffReferenceMode;
 }
+
+/**
+ * The bake stage 4t 0.5.0 uses (`bake.ts` BakeOptions): two-band blending, the colour layout from the consensus of the views
+ * and half the detail of the single most face-on view. Measured on the holdout frames of azure 17b, the skirt and the
+ * palazzo (17d) against the 0.4.0 bake (`best`), the consensus alone and the full detail band (docs in
+ * data/bohohippychic/phase0-written.md, "Refinement R1/R3/R5/R6"): `best` lost to one flat colour on the palazzo (MAE 29.72
+ * against 27.97); the consensus alone wins on every number but is visibly blurred; the full detail band is the sharpest
+ * but costs 0.2–0.6 MAE on azure and the skirt against 0.4.0. The gain of 0.5 was chosen with those holdout numbers in view.
+ */
+export const STAGE4T_BAKE: Partial<BakeOptions> = { blend: 'twoband', detailGain: 0.5 };
 
 /** Up to this many fitting views, `views` fits with the template's depth (front and back cannot carve depth). */
 export const TWO_VIEW_MAX = 4;
@@ -297,16 +420,27 @@ export function runStage4t(o: Stage4tInputs): Stage4tResult {
   }
   if (!proxy) proxyLabel = 'none (mannequin + 1.5 cm)';
   const views = loadJobViews(o.dir, o.source);
-  const { train, holdout, rule } = stage4tSplit(views.cameras.length, o.views);
+  const split0 = stage4tSplit(views.cameras.length, o.views);
+  // Loaded (and listed in metrics.json) whenever the job has them; `none` only leaves them in the fit and the bake.
+  const offRef = o.source === 'stage2' ? loadOffReference(o.dir, views) : null;
+  const offMode: OffReferenceMode = offRef ? (o.offReference ?? 'pixels') : 'none';
+  if (o.offReference && o.offReference !== 'none' && !offRef) throw new Error(`stage 4t: --off-reference ${o.offReference} but the job has no ${OFF_REFERENCE_DIR}/record.json (phase0_garment.py --write-off-reference)`);
+  const dropped = offMode === 'frames' ? new Set(offRef!.flagged) : new Set<number>();
+  const train = split0.train.filter((v) => !dropped.has(v));
+  const holdout = split0.holdout.filter((v) => !dropped.has(v));
+  const rule = dropped.size ? `${split0.rule}; the ${dropped.size} frames the off-reference check flags are left out of the fit, the bake and the holdout scores` : split0.rule;
+  // Masks the bake samples and the photometric check scores: the off-reference pixels cut (`pixels`).
+  const bakeMasks = offMode === 'pixels' ? views.masks.map((mk, i) => withoutPixels(mk, offRef!.masks[i])) : views.masks;
   const depthPrior = o.fit?.depthPrior ?? (o.views && train.length <= TWO_VIEW_MAX ? 'template' : 'hull');
   lap('read');
   log(`stage 4t: ${views.cameras.length} views (${train.length} train, ${holdout.length} holdout), proxy ${proxyLabel}`);
   const sdf = buildBodySdf(body);
   lap('sdf');
-  const fit = fitTemplate({ mannequin: m, body, sdf, proxy, views: { cameras: views.cameras, masks: views.masks, train, holdout, frames: views.frames, ...(views.control ? { control: views.control } : {}) }, options: { category: o.category, ...o.fit, depthPrior } });
+  if (offRef) log(`stage 4t: off-reference (${offMode}): ${offRef.px.reduce((a, b) => a + b, 0)} px in ${offRef.px.filter((x) => x > 0).length} frames, ${offRef.flagged.length} frames flagged`);
+  const fit = fitTemplate({ mannequin: m, body, sdf, proxy, views: { cameras: views.cameras, masks: views.masks, train, holdout, frames: views.frames, ...(views.control ? { control: views.control } : {}), ...(offMode === 'pixels' ? { ignore: offRef!.masks } : {}) }, options: { category: o.category, ...o.fit, depthPrior } });
   lap('fit');
   log(`stage 4t: fitted ${fit.mesh.indices.length / 3} triangles, ${fit.report.iterations} sweeps, converged ${fit.report.converged}`);
-  const ious = viewIous(fit.mesh, body, views, train);
+  const ious = viewIous(fit.mesh, body, views, train, offRef, dropped.size ? holdout : undefined);
   lap('iou');
   let sdfInside = 0, sdfBelow = 0;
   const nv = fit.mesh.positions.length / 3;
@@ -329,7 +463,7 @@ export function runStage4t(o: Stage4tInputs): Stage4tResult {
   const vsTruth = truth ? chamfer(fit.mesh, truth) : null;
   lap('metrics');
 
-  const bakeIn = { render: fit.render, welded: fit.mesh, body, cameras: views.cameras, frames: views.frames, masks: views.masks, views: train, ...(o.bake ? { options: o.bake } : {}) };
+  const bakeIn = { render: fit.render, welded: fit.mesh, body, cameras: views.cameras, frames: views.frames, masks: bakeMasks, views: train, options: { ...STAGE4T_BAKE, ...o.bake } };
   const bake = bakeTexture(bakeIn);
   lap('bake');
   const capTexture = capTextureShare(m, bake.texels, bake.seenWeight);
@@ -339,7 +473,7 @@ export function runStage4t(o: Stage4tInputs): Stage4tResult {
   for (const v of train) {
     const f = views.frames[v];
     if (!f) continue;
-    const mk = views.masks[v]!.data;
+    const mk = bakeMasks[v]!.data;
     for (let p = 0; p < mk.length; p += 7) if (mk[p]) {
       for (let c = 0; c < 3; c++) meanColour[c] = meanColour[c]! + f[3 * p + c]!;
       mc++;
@@ -380,6 +514,7 @@ export function runStage4t(o: Stage4tInputs): Stage4tResult {
     split: { train: train.length, holdout: holdout.length, rule },
     fit: fit.report,
     iou: { train: summarise(ious, 'train'), holdout: summarise(ious, 'holdout'), perView: ious },
+    offReference: offRef ? offReferenceMetrics(offRef, offMode, [...dropped], ious) : null,
     insideBody: { sdfInside, sdfBelowClearance: sdfBelow, exact: { minCm: Math.round(exactMin * 1000) / 1000, belowClearance: exactBelow, below3mm: exactBelow3, method: 'unsigned point-to-triangle distance to mannequin.glb (exact), inside/outside from the SDF sign' }, vertices: nv, share: r4(sdfInside / nv), analytic: clothInsideBody(m, fit.mesh) },
     mesh: {
       triangles: topo.triangles,
@@ -402,6 +537,35 @@ export function runStage4t(o: Stage4tInputs): Stage4tResult {
   };
   const atlasPng = encodePng({ width: bake.atlas.width, height: bake.atlas.height, channels: 3, bitDepth: 8, data: bake.atlas.data });
   return { mesh: fit.mesh, render: fit.render, atlas: bake.atlas, files: { 'garment.glb': glb, 'texture.jpg': jpeg, 'atlas.png': atlasPng, 'metrics.json': `${JSON.stringify(metrics, null, 2)}\n`, previews }, metrics };
+}
+
+const OFF_REFERENCE_NOTE: Record<OffReferenceMode, string> = {
+  pixels: 'evidence choice: the off-reference pixels (cloth the pinned stills do not have, consistency 0.4.0) say nothing in the fit (neither garment nor carving) and are not sampled by the bake or scored by the photometric check, in every frame; the frames stay in the job and in the fit. The garment masks are not changed.',
+  frames: 'evidence choice: the frames the off-reference check flags are left out of the fit, the bake and the holdout scores whole; their pixels below the threshold elsewhere stay. The garment masks are not changed.',
+  none: 'the off-reference pixels are fitted and baked as segmented (listed only).',
+};
+
+export function offReferenceMetrics(off: OffReference, mode: OffReferenceMode, dropped: number[], ious: readonly ViewIou[]): OffReferenceMetrics {
+  const flagged = new Set(off.flagged);
+  const group = (keep: (r: ViewIou) => boolean): { frames: number; all: number; exOffRef: number } => {
+    const rs = ious.filter(keep);
+    const mean = (f: (r: ViewIou) => number): number => (rs.length ? r4(rs.reduce((a, r) => a + f(r), 0) / rs.length) : 0);
+    return { frames: rs.length, all: mean((r) => r.visible), exOffRef: mean((r) => r.visibleExOffRef ?? r.visible) };
+  };
+  return {
+    mode,
+    dir: OFF_REFERENCE_DIR,
+    version: off.record.version ?? null,
+    consistency: off.record.consistency ?? null,
+    thresholds: off.record.thresholds ?? null,
+    spans: off.record.spans ?? [],
+    flaggedFrames: off.flagged,
+    droppedFrames: dropped.sort((a, b) => a - b),
+    framesWithPixels: off.px.flatMap((n, i) => (n > 0 ? [[i, n] as [number, number]] : [])),
+    totalPx: off.px.reduce((a, b) => a + b, 0),
+    iou: { allFrames: group(() => true), flagged: group((r) => flagged.has(r.frame)), notFlagged: group((r) => !flagged.has(r.frame)) },
+    note: OFF_REFERENCE_NOTE[mode],
+  };
 }
 
 function sideBySide(width: number, height: number, panels: readonly Uint8Array[]): Uint8Array {

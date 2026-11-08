@@ -322,7 +322,7 @@ export function stageStatuses(p: { shop?: ShopProduct; eval: ProductEval | null;
     const tr = obj(iou?.train), ho = obj(iou?.holdout);
     const ins = obj(mt?.insideBody);
     const offFrames = offReferenceSpans(job?.stage2?.consistency).reduce((n, sp) => n + (num(sp.frames) ?? 0), 0);
-    const hemNote = offFrames ? `; hem girth UNCONFIRMED: fitted from masks of ${offFrames} turntable frames with garment off the stills' hull below the hips (stage 2 off-reference spans)` : '';
+    const hemNote = offReferenceNote(obj(mt?.offReference), offFrames);
     out.push({ stage: '4t template fit + bake (CPU)', state: s4t.glb ? 'done' : 'failed', detail: s4t.glb ? `${num(obj(mt?.mesh)?.triangles) ?? '?'} triangles, IoU visible / silhouette train ${num(tr?.visibleMean) ?? '—'} / ${num(tr?.silhouetteMean) ?? '—'}, holdout ${num(ho?.visibleMean) ?? '—'} / ${num(ho?.silhouetteMean) ?? '—'}, ${num(ins?.sdfInside) ?? '?'} vertices inside the mannequin${hemNote}` : 'metrics without garment.glb' });
   }
   const ev = p.eval;
@@ -336,6 +336,23 @@ export function stageStatuses(p: { shop?: ShopProduct; eval: ProductEval | null;
     for (const s of ['5 anchoring and calibration', '6 grading', '7 QA (chart, view, mesh)', '8 bundle']) out.push({ stage: s, state: 'not run', detail: p.evalError ?? 'needs a stage 4 mesh' });
   }
   return out;
+}
+
+/**
+ * The stage 4t row's note on the consistency check's off-reference pixels (garment off the pinned stills' hull below the
+ * hips): what stage 4t did with them (`metrics.json` `offReference`, stage 4t 0.5.0+) and the IoU with and without them; or,
+ * for a fit that used them as segmented, the hem girth marked UNCONFIRMED. '' when there are none.
+ */
+export function offReferenceNote(off: Json | null, offFrames: number): string {
+  const mode = str(off?.mode);
+  const px = num(off?.totalPx) ?? 0;
+  const iou = obj(off?.iou);
+  const all = obj(iou?.allFrames), fl = obj(iou?.flagged);
+  const iouNote = all ? `; visible IoU over all ${num(all.frames) ?? '?'} frames ${num(all.all) ?? '?'} against the masks as segmented, ${num(all.exOffRef) ?? '?'} with the off-reference pixels as don't care (flagged frames ${num(fl?.all) ?? '?'} / ${num(fl?.exOffRef) ?? '?'})` : '';
+  if (mode === 'pixels' && px > 0) return `; EXCLUDED from the fit and the bake (evidence choice, listed in metrics.json offReference): ${px} off-reference px in ${arr(off?.framesWithPixels).length} frames, ${arr(off?.flaggedFrames).length} of them flagged (cloth the pinned stills do not have); the frames stay in the job${iouNote}`;
+  if (mode === 'frames' && arr(off?.droppedFrames).length) return `; EXCLUDED from the fit and the bake (evidence choice): the ${arr(off?.droppedFrames).length} frames the off-reference check flags${iouNote}`;
+  if (px > 0 || offFrames) return `; hem girth UNCONFIRMED: fitted from masks of ${offFrames || arr(off?.flaggedFrames).length} turntable frames with garment off the stills' hull below the hips (stage 2 off-reference spans), as segmented${iouNote}`;
+  return '';
 }
 
 /**

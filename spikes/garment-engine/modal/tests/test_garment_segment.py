@@ -476,3 +476,53 @@ def test_scene_reads_the_exported_bare_mask(tmp_path):
     scene = pg.JobScene(str(job), m)
     assert (scene.bare("turntable", 3) == (b > 0)).all()
     assert scene.bare_source["turntable"] == "exported bare mask"
+
+
+def test_off_reference_mask_is_what_off_reference_counts():
+    bare, hull = _flap_scene()
+    flap = hull.copy()
+    flap[100:140, 22:38] = True
+    o, axis = pg.off_reference_mask(flap, hull, bare, margin_px=2)
+    assert int(o.sum()) == pg.off_reference(flap, hull, bare, margin_px=2)["off_reference_px"] == 32 * 14 + 8 * 16
+    assert axis is not None and not o[:, axis:].any() and not (o & bare).any()
+    empty, none = pg.off_reference_mask(np.zeros_like(flap), hull, bare, margin_px=2)
+    assert none is None and not empty.any()
+
+
+def test_write_off_reference_masks_records_pixels_flags_and_the_mask_hash(tmp_path, monkeypatch):
+    """Stage 4t reads stage2/off_reference_mask/: per turntable frame the off-reference pixels of the garment mask, the
+    frames above the threshold, their spans, and the sha256 of the garment masks they were cut from."""
+    from PIL import Image
+
+    bare, hull = _flap_scene()
+    h, w = bare.shape
+    clean = hull.copy()
+    flap = hull.copy()
+    flap[100:140, 22:38] = True
+    os.makedirs(tmp_path / "stage2" / "garment_mask")
+    for i, g in enumerate([clean, flap, flap, clean]):
+        Image.fromarray((g * 255).astype(np.uint8)).save(tmp_path / "stage2" / "garment_mask" / f"{i:04d}.png")
+
+    class Scene:
+        def __init__(self, job_dir, manifest):
+            self.height, self.width = h, w
+            self.w2c = {i: None for i in range(4)}
+
+        def bare(self, kind, idx):
+            return bare
+
+    monkeypatch.setattr(pg, "JobScene", Scene)
+    monkeypatch.setattr(pg, "stills_garment_masks", lambda scene: {})
+    monkeypatch.setattr(pg, "garment_reference", lambda scene, stills, params=None: {"project": lambda idx: hull})
+    rec = pg.write_off_reference_masks(str(tmp_path), {"control": {"proxy": {"kind": "dress"}}, "category": "dress"})
+    px = 32 * 14 + 8 * 16
+    assert [f["off_reference_px"] for f in rec["frames"]] == [0, px, px, 0]
+    assert rec["flagged_frames"] == [1, 2] and rec["spans"] == [{"frame0": 1, "frame1": 2, "frames": 2, "max_px": px, "side": "image-left"}]
+    assert rec["garment_masks_sha256"] == pg.file_set_sha256([str(tmp_path / "stage2" / "garment_mask" / f"{i:04d}.png") for i in range(4)])
+    on_disk = np.asarray(Image.open(tmp_path / "stage2" / "off_reference_mask" / "0001.png")) > 127
+    assert int(on_disk.sum()) == px
+    with open(tmp_path / "stage2" / "off_reference_mask" / "record.json") as f:
+        assert json.load(f)["version"] == pg.OFF_REFERENCE_MASKS_VERSION
+    # Trousers: not the check's kind, nothing written.
+    rec = pg.write_off_reference_masks(str(tmp_path / "x"), {"control": {"proxy": {"kind": "trousers"}}})
+    assert rec["frames"] == [] and not os.path.exists(tmp_path / "x")

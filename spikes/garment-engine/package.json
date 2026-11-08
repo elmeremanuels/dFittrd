@@ -14,6 +14,8 @@
     "predict:log": "tsx scripts/predict-log.ts",
     "prediction:v0": "tsx scripts/prediction-v0.ts",
     "shop:bohohippychic": "tsx src/shopCli.ts",
+    "shop:import": "tsx src/shopImportCli.ts",
+    "size-advice:shop": "tsx scripts/size-advice-shop.ts",
     "report:bohohippychic": "tsx scripts/report-bohohippychic.ts",
     "families:bohohippychic": "tsx scripts/families-bohohippychic.ts",
     "viewer": "vite --config viewer/vite.config.ts",

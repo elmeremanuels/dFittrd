@@ -1,0 +1,286 @@
+{
+ "note": "Trimmed text-only copy of 4 products of the public /products.json (2 image URLs each, no image bytes) for src/shopImport.test.ts.",
+ "products": [
+  {
+   "id": 15389467509121,
+   "title": "Blue Pinstriped Ezra Midi Dress",
+   "handle": "ezra-midi-dress-2616487001",
+   "body_html": "<ul>\n <li>V-neck</li>\n <li>Button front</li>\n <li>Short puff sleeves</li>\n <li>Tie detail</li>\n <li>Panelled waist</li>\n <li>Shirred waist</li>\n <li>Side pockets</li>\n <li>Relaxed skirt</li>\n <li>Front slit<br>\n </li>\n <li>Lightly lined</li>\n <li>Concealed zip fastening</li>\n <li>Size tip: we recommend your usual size</li>\n </ul>",
+   "vendor": "Nobody's Child",
+   "product_type": "Dresses",
+   "tags": [
+    "CLOTHING",
+    "colour-group:blue",
+    "dress-style:tea dresses",
+    "dress-style:waisted dresses",
+    "end-use:day",
+    "fabric-group:cotton",
+    "fastening:zip",
+    "import:260511",
+    "instock:bleckmann",
+    "length:midaxi",
+    "neckline:v-neck",
+    "netsuite",
+    "patterned:printed",
+    "pockets:pockets",
+    "price-status:markdown",
+    "print-group:embroidered",
+    "product-category:dresses",
+    "product-type:day dresses",
+    "product-type:summer dresses",
+    "season:ss26",
+    "selling-month:ss26",
+    "sleeve-length:short sleeve",
+    "stock level:low",
+    "TOP RATED"
+   ],
+   "options": [
+    {
+     "name": "Size",
+     "values": [
+      "4",
+      "6",
+      "8",
+      "10",
+      "12",
+      "14",
+      "16",
+      "18"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": 55657658810753,
+     "title": "4",
+     "option1": "4",
+     "price": "66.00"
+    }
+   ],
+   "images": [
+    {
+     "id": 81856355959169,
+     "position": 1,
+     "src": "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616487001_13.jpg?v=1779462477",
+     "width": 1600,
+     "height": 2080
+    },
+    {
+     "id": 81856356024705,
+     "position": 2,
+     "src": "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616487001_86.jpg?v=1779462477",
+     "width": 1600,
+     "height": 2080
+    }
+   ]
+  },
+  {
+   "id": 15397781668225,
+   "title": "Black and Blue Check Shirred Ronda Skirt",
+   "handle": "ronda-skirt-2614903002",
+   "body_html": "<ul>\n <li>Mid waist</li>\n <li>Shirred elasticated waist</li>\n <li>Ruffle trim</li>\n <li>Relaxed fit</li>\n </ul>",
+   "vendor": "Nobody's Child",
+   "product_type": "Skirts",
+   "tags": [
+    "asos",
+    "CLOTHING",
+    "colour-group:white",
+    "end-use:day",
+    "end-use:festival",
+    "end-use:holiday/festival",
+    "end-use:wimbledon",
+    "end-use:work",
+    "fabric-group:cotton",
+    "fastening:elasticated",
+    "import:260518",
+    "instock:bleckmann",
+    "length:midi",
+    "Markdown-New-To-Sale",
+    "matching-item:co-ord",
+    "netsuite",
+    "new-season",
+    "patterned:printed",
+    "price-status:markdown",
+    "print-group:check",
+    "product-category:skirts",
+    "product-type:midi skirts",
+    "season:aw26",
+    "selling-month:aw26"
+   ],
+   "options": [
+    {
+     "name": "Size",
+     "values": [
+      "4",
+      "6",
+      "8",
+      "10",
+      "12",
+      "14",
+      "16",
+      "18"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": 55694292812161,
+     "title": "4",
+     "option1": "4",
+     "price": "55.00"
+    }
+   ],
+   "images": [
+    {
+     "id": 82719809307009,
+     "position": 1,
+     "src": "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/2616369001_Skirt_1.jpg?v=1784026086",
+     "width": 1120,
+     "height": 1456
+    },
+    {
+     "id": 82174177771905,
+     "position": 2,
+     "src": "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/2614903002_web.jpg?v=1780580720",
+     "width": 1600,
+     "height": 2080
+    }
+   ]
+  },
+  {
+   "id": 15353086902657,
+   "title": "Ivory Tile Printed Wide Leg Topaz Trousers",
+   "handle": "topaz-trousers-2616025001",
+   "body_html": "<ul>\n <li>Mid waist</li>\n <li>Wide leg</li>\n <li>Elasticated waist</li>\n <li>Drawstring detail</li>\n <li>Side pockets</li>\n <li>Print hand-drawn in-house</li>\n <li>Size tip: we recommend your usual size</li>\n </ul>",
+   "vendor": "Nobody's Child",
+   "product_type": "Trousers",
+   "tags": [
+    "APRIL20",
+    "CLOTHING",
+    "colour-group:cream",
+    "end-use:day",
+    "fabric-group:cotton",
+    "Highsummer26-campaign",
+    "import:260331",
+    "length:regular",
+    "matching-item:co-ord",
+    "netsuite",
+    "patterned:printed",
+    "price-status:markdown",
+    "print-group:embroidered",
+    "product-category:trousers & leggings",
+    "product-category:trousers & shorts",
+    "product-type:wide leg trousers",
+    "season:ss26",
+    "selling-month:ss26",
+    "stock level:low",
+    "SUN15",
+    "TOP RATED"
+   ],
+   "options": [
+    {
+     "name": "Size",
+     "values": [
+      "4",
+      "6",
+      "8",
+      "10",
+      "12",
+      "14",
+      "16",
+      "18"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": 55486349607297,
+     "title": "4",
+     "option1": "4",
+     "price": "47.40"
+    }
+   ],
+   "images": [
+    {
+     "id": 81061647581569,
+     "position": 1,
+     "src": "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616025001_392.jpg?v=1776247024",
+     "width": 1600,
+     "height": 2080
+    },
+    {
+     "id": 82340476125569,
+     "position": 2,
+     "src": "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2615911001_324_f83d17da-73fd-4371-a130-2431a13225ca.jpg?v=1781080111",
+     "width": 1600,
+     "height": 2080
+    }
+   ]
+  },
+  {
+   "id": 15511161176449,
+   "title": "Camel Wool-Blend Neck Tie Jacket",
+   "handle": "tie-neck-df-jacket-2616863001",
+   "body_html": "<ul>\n<li>Round neck</li>\n<li>Detachable scarf tie</li>\n<li>Mock horn button front</li>\n<li>Dropped shoulders</li>\n<li>Long sleeves</li>\n<li>Double-faced with hand-finished seams</li>\n<li>Relaxed fit</li>\n</ul>",
+   "vendor": "Nobody's Child",
+   "product_type": "Outerwear",
+   "tags": [
+    "CLOTHING",
+    "colour-group:beige",
+    "fabric-group:wool",
+    "fastening:button",
+    "import:260824",
+    "instock:bleckmann",
+    "neckline:crew neck",
+    "netsuite",
+    "new in",
+    "new-season",
+    "patterned:plain",
+    "pockets:pockets",
+    "price-status:fullprice",
+    "product-category:jackets & coats",
+    "product-type:jackets",
+    "season:aw26",
+    "selling-month:sep 2026",
+    "sleeve-length:long sleeve",
+    "TOP RATED"
+   ],
+   "options": [
+    {
+     "name": "Size",
+     "values": [
+      "XS",
+      "S",
+      "M",
+      "L",
+      "XL"
+     ]
+    }
+   ],
+   "variants": [
+    {
+     "id": 56165436686721,
+     "title": "XS",
+     "option1": "XS",
+     "price": "145.00"
+    }
+   ],
+   "images": [
+    {
+     "id": 83436106449281,
+     "position": 1,
+     "src": "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/2616863001_1.jpg?v=1787667277",
+     "width": 960,
+     "height": 1248
+    },
+    {
+     "id": 83425247560065,
+     "position": 2,
+     "src": "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616863001_13.jpg?v=1787588736",
+     "width": 1600,
+     "height": 2080
+    }
+   ]
+  }
+ ]
+}

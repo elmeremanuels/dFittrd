@@ -81,6 +81,10 @@ The size option of the product's variation form, named by the *Size attribute* s
 
 One plan, Curtain: USD 8.99 per month per shop, flat, paid through Stripe Checkout, with a free trial. Every try-on session is included; there is no per-session or usage charge. Sessions are counted for your analytics, and a daily fair-use cap stops automated traffic from inflating your numbers.
 
+= Is there a 3D view? =
+
+Optionally, and only for products with a 3D garment file you have approved: the overlay can then show "See it in 3D (estimate)", the garment draped on a model with the shopper's own measurements, computed on the shopper's device. The garment file comes from the Curtain server; nothing about the shopper is sent. It is off by default during the pilot, and the plugin itself needs no change for it.
+
 = What happens when my plan is paused? =
 
 The button keeps rendering (your page never breaks); shoppers see a "shop paused" screen until the subscription is active again.

@@ -189,6 +189,43 @@ describe('texture bake: checkerboard on a known cylinder', () => {
     expect(grey).toBe(0);
   });
 
+  it('consensus and two-band blends keep the colour most views agree on when some frames draw it differently', () => {
+    // 48 views, every third one repainted green inside the garment: a generated frame that drew the print differently.
+    const v = views(Array.from({ length: 48 }, (_, k) => k * 7.5));
+    const frames = v.frames.map((f, k) => {
+      if (k % 3 !== 0) return f;
+      const out = Uint8Array.from(f);
+      const mk = v.masks[k]!.data;
+      for (let p = 0; p < mk.length; p++) if (mk[p]) out.set([40, 200, 60], 3 * p);
+      return out;
+    });
+    const score = (opts: Record<string, unknown>): { right: number; green: number } => {
+      const bake = bakeTexture({ render: cyl.render, welded: cyl.welded, body: null, cameras: v.cams, frames, masks: v.masks, views: v.cams.map((_, k) => k), options: { size: S, edgePx: 2, minEdgePx: 0, ...opts } });
+      let checked = 0, right = 0, green = 0;
+      for (let ty = 0; ty < S; ty++) for (let tx = 0; tx < S; tx++) {
+        const u = (tx + 0.5) / S, vv = (ty + 0.5) / S;
+        const theta = 2 * Math.PI * u, y = Y1 - (Y1 - Y0) * vv;
+        const fu = (u * 8) % 1, fy = ((Y1 - y) / 4) % 1;
+        if (Math.min(fu, 1 - fu) < 0.1 || Math.min(fy, 1 - fy) < 0.1) continue;
+        const c = bake.atlas.data.subarray(3 * (ty * S + tx), 3 * (ty * S + tx) + 3);
+        checked++;
+        if (near(c, checker(theta, y), 40)) right++;
+        if (near(c, [40, 200, 60], 60)) green++;
+      }
+      return { right: right / checked, green: green / checked };
+    };
+    const consensus = score({ blend: 'consensus' });
+    expect(consensus.right).toBeGreaterThan(0.97);
+    expect(consensus.green).toBe(0);
+    const twoband = score({ blend: 'twoband', detailGain: 0.5, detailSigmaCm: 1 });
+    expect(twoband.green).toBeLessThan(0.02);
+    // The 0.4.0 blend mixes the green frames into the checker (muddy: about 0.31 right); two bands with half the detail
+    // keep the consensus layout, softened at the cell borders by the low-pass (about 0.75 right at this atlas scale).
+    const best = score({});
+    expect(best.right).toBeLessThan(0.5);
+    expect(twoband.right).toBeGreaterThan(0.7);
+  });
+
   it('pull-push fills every empty pixel from the weighted ones', () => {
     const n = 8;
     const rgb = new Float32Array(n * n * 3);

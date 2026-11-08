@@ -7,7 +7,7 @@ import { bodyField, buildAvatar, makeCollider, mannequinMeasurements } from './b
 import { meshFromGlb, type SpikeBundle } from './bundle';
 import { clothParams, createCloth, stepCloth, strainQuantile } from './cloth';
 import { advance, jobCollider, type DrapeJob } from './drapeJob';
-import { armCapLifter, CUFF_LEASH_CM, defaultTrio, LOOSE_TOP_PIN_CM, drapeJobOf, heatFor, necklineStrain, openSession, pinLoosePieces, prepareFit, relax, viewerMaterial, yokeHeight } from './engine';
+import { armCapLifter, BAND_HOLD_CM, bandLines, CLEARANCE_CM, CUFF_LEASH_CM, defaultTrio, slideWaistband, LOOSE_TOP_PIN_CM, drapeJobOf, heatFor, necklineStrain, openSession, pinLoosePieces, prepareFit, relax, viewerMaterial, yokeHeight } from './engine';
 import { armpitDistance } from '../../src/garment';
 import { anchorLabels, fitForBody, frontOutline } from './fitting';
 
@@ -381,5 +381,50 @@ describe('bottoms with loose pieces (stage 4t trousers before template fit 0.4.0
     for (let i = 0; i < seat.pos.length / 3; i++) expect(pinned[i]).toBe(0);
     // Sewn into one piece there is nothing loose to pin.
     expect(pinLoosePieces(m, seat.pos, seat.idx, new Uint8Array(seat.pos.length / 3), seat.pos, undefined, true)).toBe(0);
+  });
+});
+
+describe('bottoms: a loose waistband slides down to where the body fills it (single-anchor skirt grading)', () => {
+  /** A ring of `n` particles of girth `g` at height `y` round the body axis, all on the body chain. */
+  const ring = (g: number, y: number, n = 64): Float32Array => {
+    const r = g / (2 * Math.PI);
+    const out = new Float32Array(3 * n);
+    for (let k = 0; k < n; k++) out.set([r * Math.sin((2 * Math.PI * k) / n), y, r * Math.cos((2 * Math.PI * k) / n)], 3 * k);
+    return out;
+  };
+  const y0 = (m.morphHeights.waist + m.morphHeights.hip) / 2;
+  const bodyAt = (yy: number): number => {
+    const t = m.torsoAt(yy)!;
+    return Math.PI * (3 * (t.a + t.b) - Math.sqrt((3 * t.a + t.b) * (t.a + 3 * t.b)));
+  };
+
+  it('keeps a band the body fills (or stretches) where it is, and lowers a larger one to the body girth', () => {
+    const chains = new Uint8Array(64);
+    const tight = ring(bodyAt(y0) - 4, y0 + 2);
+    expect(slideWaistband(field, tight, chains, CLEARANCE_CM).dropCm).toBe(0);
+    expect(tight[1]).toBeCloseTo(y0 + 2, 5);
+    const g = bodyAt(m.morphHeights.hip + 4);
+    const loose = ring(g, y0 + 2);
+    const s = slideWaistband(field, loose, chains, CLEARANCE_CM);
+    expect(s.dropCm).toBeGreaterThan(1);
+    expect(s.pastHips).toBe(false);
+    expect(Math.abs(s.bodyAtRestCm - s.bandGirthCm)).toBeLessThanOrEqual(BAND_HOLD_CM + 0.2);
+    expect(Math.abs(loose[1]! - (y0 + 2 - s.dropCm))).toBeLessThan(0.06); // dropCm is rounded to 0.1
+    expect(bandLines(s)[0]!.text).toContain('slides');
+  });
+
+  it('says so when even the hips do not fill the band', () => {
+    const s = slideWaistband(field, ring(bodyAt(m.morphHeights.hip) + 30, y0 + 2), new Uint8Array(64), CLEARANCE_CM);
+    expect(s.pastHips).toBe(true);
+    expect(bandLines(s)[0]!.text).toContain('would not stay up');
+  });
+
+  it('stands cloth on the floor instead of letting it pass through', () => {
+    const collide = makeCollider(field, CLEARANCE_CM, new Uint8Array(2), Uint8Array.from([0, 1]));
+    const pos = Float32Array.from([80, -3, 0, 80, -1, 0]);
+    expect(collide(pos, 0)).toBe(true);
+    expect(collide(pos, 1)).toBe(true); // exempt from the body, not from the floor
+    expect(pos[1]).toBe(0);
+    expect(pos[4]).toBe(0);
   });
 });

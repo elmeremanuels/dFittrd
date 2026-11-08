@@ -43,6 +43,9 @@ export function pushOutOfEllipse(dx: number, dz: number, a: number, b: number, c
   return [dx * k, dz * k];
 }
 
+/** Height of the floor, cm: no particle goes below it. */
+export const FLOOR_CM = 0;
+
 /**
  * Collision of one particle (index `i` in `pos`) against the avatar: torso and legs as horizontal
  * ellipses at the particle's height, arms as ellipses across the arm axis below the armpit. Returns
@@ -56,11 +59,18 @@ export function makeCollider(field: BodyField, clearanceCm = 0.35, chains?: Uint
   const e = new Float32Array(4);
   const vertical = [field.torso, field.legs[0], field.legs[1]];
   return (pos, i) => {
-    if (skip && skip[i] === 1) return false;
+    // The floor (the canonical mannequin stands on y = 0): a maxi hem rests on it instead of passing through. Before
+    // the skip: a particle exempt from the body still stands on the floor.
+    let floored = false;
+    if (pos[3 * i + 1]! < FLOOR_CM) {
+      pos[3 * i + 1] = FLOOR_CM;
+      floored = true;
+    }
+    if (skip && skip[i] === 1) return floored;
     let x = pos[3 * i]!;
     const y = pos[3 * i + 1]!;
     let z = pos[3 * i + 2]!;
-    let moved = false;
+    let moved = floored;
     const chain = chains ? chains[i]! : -1;
     if (chain <= 0) for (const t of vertical) {
       if (!sample(t, y, e)) continue;

@@ -412,6 +412,168 @@ The founder may still downgrade it to faulty on (1) or (4); then the next step i
 
 **Still for the founder:** "accepted pending founder review" and the skirt's place on the blind page and in the panel (2 of 5) are this write-up's reading of option A, which named only the low-rise waist; the founder is asked to confirm both after looking at the M-plain and side renders.
 
+## Refinement R1, R3, R5, R6 on CPU (8 Nov 2026, no GPU; stage 4t 0.5.0, template fit 0.5.0)
+
+Same jobs, same frames and masks (runs 17b and 17d); nothing generated again. Before/after renders and the comparison
+sheets: the session scratchpad `refine/` (not in the repo). Every number below comes from `stage4t/stage2/metrics.json`,
+`exemplar.json`, the bake-only comparisons on the same fitted meshes, and `viewer/scripts/sizes-drape.ts`.
+
+### R1, azure: the off-reference flap and panel left out of the fit and the bake (an evidence choice, recorded)
+
+`modal/phase0_garment.py <job> --write-off-reference` (CPU, 7 s) writes consistency 0.4.0's off-reference pixels of the
+stage 4 alpha targets to `stage2/off_reference_mask/` (garment more than 6 px outside the pinned stills' visual hull, off
+our mannequin, hips down; the record names the flagged frames, the spans and the sha256 of the garment masks; stage 4t
+refuses the masks if the garment masks changed). It reproduces the clip re-score exactly on the assembled frames: azure
+spans 19–30 (12 frames, max 2,249 px) and 98–158 (61 frames, max 1,237 px), image-left. Stage 4t 0.5.0 by default leaves
+those pixels out in every frame: in the fit they say nothing (neither garment nor carving), the bake does not sample them
+and the photometric check does not score them. The frames stay in the job and in the fit; the masks are unchanged.
+`metrics.json` `offReference` lists all 116 frames with such pixels (56,301 px), the 73 flagged frames and the IoU both
+ways; the report's stage 4t row says EXCLUDED instead of UNCONFIRMED.
+
+| Azure run 17b | As segmented (0.4.0) | Pixels left out (0.5.0 default) | Flagged frames left out whole |
+| --- | --- | --- | --- |
+| Hem girth (`exemplar.json`) | 157.67 cm | **151.84 cm** | 154.64 cm |
+| Holdout visible mean / min | 0.9119 / 0.8747 | 0.9119 / **0.8727** | 0.9303 / 0.9094 (on 14 fewer holdout frames) |
+| Holdout silhouette mean / min | 0.8951 / 0.8264 | 0.8951 / **0.8130** | 0.9134 / 0.8612 (same) |
+| Visible IoU, all 160 frames, masks as segmented / off-reference pixels as don't care | 0.9112 / 0.9187 | 0.9114 / 0.9190 | 0.9004 / 0.9076 |
+| 73 flagged frames, as segmented / don't care | **0.9023** / **0.9172** | **0.8969** / 0.9121 | 0.8636 / 0.8778 |
+| The other 87 frames, as segmented / don't care | 0.9187 / 0.9199 | 0.9236 / 0.9248 | 0.9313 / 0.9325 |
+| P0 hem girth error | +8.2 % | +4.2 % | +6.1 % |
+
+All values from `metrics.json` (`iou.perView`, `iou.holdout`, `offReference.iou`); the as-segmented column is stage 4t
+0.4.0's mesh (0.5.0 with `--off-reference none` gives the same mesh, per-view IoU identical; re-run with the masks present
+to score it with the off-reference pixels as don't care). **What leaving the flap out costs, measured against the masks as
+segmented:** the 73 flagged frames drop 0.9023 → 0.8969 (the mesh no longer covers the flap those masks contain), the other
+87 rise 0.9187 → 0.9236, all 160 frames 0.9112 → 0.9114; the holdout mean is unchanged (0.9119) but its minimum drops
+(visible 0.8747 → 0.8727, silhouette 0.8264 → 0.8130). With the off-reference pixels as don't care (the 0.4.0 mesh
+re-scored with the masks present, `--off-reference none`, scratchpad `refine/jobs/azure-none`), the 0.4.0 mesh is **better
+on the flagged frames (0.9172 against 0.9121)** and worse on the other 87 (0.9199 against 0.9248), all frames level
+(0.9187 against 0.9190): leaving the flap out does not buy a better fit of the rest of those 73 frames; it removes the flap
+from the hem (151.8 against 157.7 cm) and fits the unflagged frames better. An earlier draft of this table gave the 0.5.0 values for the 0.4.0
+mesh as well ("same mesh"); that was wrong and is corrected here.
+
+Run 15 measured 149.5 cm; the remaining 2.3 cm follows the 0.10.1+ stills' slightly wider hem (earlier investigation).
+Leaving the frames out whole loosens the hull (fewer views), as found before, so pixels is the default. The mesh barely
+changes elsewhere (11,002 triangles, 0 inside, holdout unchanged). Seen in the previews: the cream flap stays in the
+generated frames (left panel) and is not in the mesh; the hem at the back-left is a little narrower. **Hem girth 151.8 cm
+is now the fitted value, with the exclusion stated; it is still not confirmed by a clean draw (R1's GPU route, new seeds,
+is not done).** The skirt (run 17d) gets the same treatment: 43,277 px in its frames, 30 flagged (a 1–14, a 71–79, b 81–86,
+b 159, image-right); hem girth 86.0 → 83.4 cm; holdout visible 0.9474 → 0.9461; all-frame IoU 0.9473 / 0.9516 don't care.
+The palazzo (trousers) has no off-reference check.
+
+**Masks are job data, not in the repo.** `stage2/off_reference_mask/` is under the gitignored `out/`; a checkout without
+it would have fitted the flap again with no warning. Stage 4t now refuses a stage 2 job whose consistency check
+(`stage2/consistency_v2.json`, else `stage2/record.json`) has off-reference spans but no masks, unless `--off-reference
+none` is passed (then it logs a warning). After merging, in the main tree: `modal/phase0_garment.py <job> --write-off-reference`
+(CPU) for azure and the skirt, then stage 4t and the report. Older jobs with spans (runs 14, 15, 16b) need the same, or
+`--off-reference none` to reproduce their recorded results.
+
+### R6, the bake: view-consistent blends measured on the held-out frames
+
+The generated frames disagree on the print between views (the video model redraws it as the garment turns), and the 0.4.0
+bake took each texel from its one or two most face-on frames (blend `best`): patches of different drawings stitched
+together, and on the skirt a horizontal smear from blending ~5 frames whose print slides. New blends in `src/bake.ts`
+(all on the same fitted meshes, holdout = every fifth frame, never baked from; MAE 0–255, lower is better; 8×8 = 2 cm blocks):
+
+| Holdout MAE / 8×8 MAE | Azure | Skirt | Palazzo |
+| --- | --- | --- | --- |
+| Pixels scored | 0.5.0 mesh, off-reference pixels not scored | 0.4.0 mesh, all pixels (masks written later) | all pixels (no check) |
+| One flat colour | 23.35 / 17.47 | 34.36 / 22.68 | **27.97 / 21.88** |
+| `best` (0.4.0) | 20.76 / 13.61 | 29.21 / 16.77 | 29.72 / 24.15 (worse than flat) |
+| `consensus` (weighted geometric median of every view within 0.25 of the best weight, ~25 views a texel) | 18.68 / 12.53 | 26.32 / 15.49 | 26.46 / 21.09 |
+| `agreeing` (best view among those within 90 of the consensus) | 19.93 / 13.23 | 27.59 / 16.29 | 29.30 / 23.84 |
+| `twoband`, full detail (layout from the consensus, detail above 1.5 cm from the single most face-on view) | 20.99 / 13.17 | 29.79 / 16.42 | 27.94 / 21.44 |
+| **`twoband`, half detail (stage 4t 0.5.0)** | **19.29 / 12.68** | **27.51 / 15.83** (R1 mesh, off-reference pixels not scored: 27.20 against flat 34.17) | **26.98 / 21.23** (26.96 with R5) |
+
+By eye (holdout views 0/2, 37/42, 82/112 next to the frame; `refine/*-tb5-cmp.png`, `*-4c.png`): `consensus` wins every
+number but is visibly blurred and smears the skirt's flowers horizontally even more; `twoband` full detail is the sharpest
+of all (the skirt's flowers crisp, no streaks, the azure placket and palms sharper than 0.4.0) but costs 0.2–0.6 MAE against
+0.4.0 on azure and the skirt and only ties the flat colour on the palazzo (27.94 vs 27.97); half detail meets the gate
+(palazzo below flat colour by 1.0 MAE and 0.65 on blocks, azure and skirt better than 0.4.0) and is softer than full detail,
+hazy on the palazzo. **Flagged: the detail gain 0.5 was chosen with these holdout numbers in view (two values tried), so
+the margin is optimistic; the palazzo's PSNR is still below the flat colour's (17.01 against 17.28 dB); the half-detail
+texture is visibly softer than full detail.**
+
+**Re-scored on a validation split that played no part in choosing the gain** (review of 8 Nov; `refine/tools/bake-val.mts`,
+`refine/val/`): from the 128 training frames, those with index mod 5 = 4 (32) are left out of the bake and scored; the bake
+uses the other 96; the 0.5.0 meshes as fitted (they did see those 32 frames, as they see every training frame, so the
+geometry is not held out, only the texture); off-reference pixels unscored on azure and the skirt. MAE / 8×8 MAE / PSNR:
+
+| Validation split (mod 5 = 4) | Azure | Skirt | Palazzo |
+| --- | --- | --- | --- |
+| One flat colour | 23.37 / 17.46 / 18.68 dB | 34.30 / 22.52 / 15.47 dB | 28.01 / 21.82 / **17.27 dB** |
+| `best` (0.4.0) | 20.74 / 13.68 / 18.66 dB | 28.75 / 16.62 / 15.48 dB | 29.69 / 24.17 / 16.10 dB |
+| `twoband`, full detail | 20.95 / 13.26 / 18.58 dB | 29.31 / 16.16 / 15.35 dB | 27.86 / 21.41 / 16.62 dB |
+| **`twoband`, half detail (0.5.0)** | **19.29 / 12.76 / 19.43 dB** | **27.22 / 15.61 / 16.14 dB** | **26.96 / 21.23 / 17.00 dB** |
+
+The ranking holds on frames that did not choose the gain: half detail beats `best` on all three and the flat colour on the
+palazzo by 1.05 MAE and 0.59 on blocks (on the original holdout 0.99 and 0.65), with fewer frames in the bake. PSNR on the
+palazzo is still below the flat colour's (17.00 against 17.27 dB): the texture is closer on average but has larger errors
+where it is wrong. So R6's gate (beat the flat colour on held-out frames, by MAE) is met on an independent split; the
+softness is unchanged. The texture cannot be both as sharp as one frame and consistent with all of
+them while the frames disagree; a further stage 2 seed (R6's GPU route) or per-view registration is what would help.
+
+### R5, palazzo: the crotch from the frames, legs kept apart
+
+- **Crossing legs:** template fit 0.5.0 holds each leg's vertices on its own side of the mid-plane between the legs' axes
+  (`keepLegsApart`, 0.2 cm): crossings 20 (69.44–64.94 cm) → **0**.
+- **The crotch:** the masks cannot show it: the segmentation counts every pixel inside our mannequin's silhouette as
+  mannequin or garment, never background, and our thighs touch down to 69.94 cm while the generated mannequin's part
+  higher, so the masks fill the gap the frames show (front frame: background 10 px wide at the centre, 1–6 px of it outside
+  the mask). Measured by colour instead (`shapeTrouserCrotch`): the top of the background between the legs on the body's
+  centre line in the 11 front and 11 back training views (within 15°), median: **the frames put the garment's crotch at
+  73.69 cm front and 72.94 cm back, 2.75 and 3.5 cm below the body's crotch**. That is a measurement of the frames and the
+  target for the crease, not the height of the mesh's crotch: **the mesh's join stays at 69.94 cm, 6.5 cm below the body's
+  crotch** (`fit.join.yCm`, `belowBodyCrotchCm` unchanged). The 27 seat vertices between the legs, below that height and
+  above the join, that the views within 5° of front/back see as background at the crease are laid into the crease between
+  the thighs at the clearance. The seat cannot be sewn higher than 69.94 cm while the v0 thighs touch: the join stays there.
+- **Health:** one piece, 0 non-manifold edges, 3 boundary loops, 0 vertices inside the mannequin (exact minimum 4.0 mm, none below the 4 mm clearance), holdout
+  visible 0.9701 → 0.9702.
+- By eye (shaded and textured renders at 0°, 180°, 90°, `refine/pal-crotch-before-after.png`, at full size): the crease
+  vertices show as **a small, stepped, boxy dark notch above the top of the leg gap that does not connect to it**: a light
+  strip, the old flat crotch floor between the seat's last ring and the legs at the join, still lies between the notch and
+  the gap, front and back; the textured render still shows a dark smudge at the crotch. So the flat triangle is smaller,
+  not gone, and the notch is a new visible defect (the crease displacement is not feathered into the gap). A first version
+  tested the seat's sides too and dented the hip (seen at 90°; restricted to between the legs' centre lines). An earlier
+  draft of this section called the result "a narrow dark slot continuing the leg gap upwards into the crease"; the render
+  does not show that. **Still there:** the blocky notch and the light strip below it, a texture seam
+  at the join (the seat and the legs are different atlas charts; the outline steps by less than 0.1 cm, so it is the print,
+  not the geometry), and in the viewer's drape the inner legs still fold into a V below the crotch (the drape, not the
+  fitted mesh).
+
+### R3, skirt sizes: why AU 8 / 12 / 16 barely differ, measured; no faithful fix without more data
+
+`viewer/scripts/sizes-drape.ts` (canonical M, every size, convex-hull girth of the cloth at fixed heights):
+
+| Skirt run 17d, on M | AU 8 | AU 10 | AU 12 | AU 14 | AU 16 |
+| --- | --- | --- | --- | --- | --- |
+| Graded hip girth (87 cm), cm | 97.6 | 102.6 | 107.6 | 112.6 | 117.7 |
+| Draped, same height | 102.0 | 102.0 | 103.3 | 105.7 | 107.4 |
+| Graded / draped at 60 cm | 101.7 / 90.6 | 106.7 / 91.5 | 111.7 / 93.1 | 116.7 / 95.9 | 121.7 / 99.1 |
+
+Grading is right (hip-delta, 5 cm a size as the chart). The viewer loses it in two places: (1) the drape folds the extra
+girth away (the cling pull towards the body axis, a stated spike heuristic, and gravity on a fluid A-line: 20 cm of graded
+hip spread becomes 5.4 cm); AU 8 and 10 are both smaller than M's hips and sit on the body (their difference is tension, which
+the fit map shows); (2) every size hangs from the same band height. A larger band that is not elastic would slide down until
+the body fills it; `slideWaistband` (viewer, both copies) does that, with a fit line, and a floor now stops hems passing
+through it. **But the skirt and the palazzo both have a stretch waistband (`stretchZones: waistband`): an elastic band
+holds, and how much a larger size gathers depends on its relaxed girth, which no bundle measures, so the slide is not applied
+to them** (a first render with it applied to the elastic skirt showed AU 16 sitting 4.8 cm lower; that would have been
+invented). They show a fit line saying so. **R3 stays open:** it needs the relaxed band girth (chart or a garment
+measurement) or the calibrated drape that replaces the cling heuristic (stage 7). No change to cling: it would change the
+accepted azure. Not tried (review of 8 Nov): a cling reduction scoped to bottoms only, which would leave the dress alone;
+it would still be a tuned heuristic until measured against the chart's hip spread with `sizes-drape.ts`. Note also that the
+new floor stop applies to every garment in the shared viewer package (harmless for the knee-length azure).
+
+### Synthetic bundles under 0.5.0 (truth known)
+
+Stage 4t 0.5.0 on the synthetic jobs (`out/phase0-synthetic/`, last run with 0.3.0): azure Chamfer to the truth 0.335 cm
+(unchanged), holdout visible 0.9788 (unchanged); skirt 0.289 cm, 0.9867 (unchanged); palazzo 0.849 → **0.875 cm** and 0.9726 →
+0.9713 (0.3.0 → 0.5.0, so 0.4.0's sewing is in the difference too; small, noted), legs not crossing, crotch measured 73.94 cm
+(2.5 below the body's, 10 crease vertices). Texture holdout MAE improves on all three (azure 17.65 → 15.72, skirt 17.49 →
+15.50, palazzo 16.30 → 14.69) and still does not beat one flat colour there (15.03 / 14.71 / 14.52): the synthetic garments are
+near flat-coloured, so the flat colour is close to the truth.
+
 ## Verdict per Phase 0 acceptance item (after runs 15, 16b, 17b and 17d; the skirt read low-rise by the founder's decision of 8 Nov)
 
 | Item | Verdict | Evidence |

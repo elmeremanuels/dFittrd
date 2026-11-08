@@ -11,6 +11,7 @@ import { applyGrading } from '../../src/grading';
 import { topEdgePlane } from '../../src/waistband';
 import type { MaterialJson } from '../../src/product';
 import { insideCanonical, makeCollider, type Avatar, type BodyField } from './body';
+import { sample } from './collide';
 import type { SpikeBundle } from './bundle';
 import type { DrapeJob } from './drapeJob';
 import { clothParams, createCloth, isSettled, settlePins, stepCloth, type Cloth, type ClothMaterial, type ClothParams } from './cloth';
@@ -118,6 +119,25 @@ export interface FitInstance {
   field: BodyField;
   /** Garment shoulder width of this size (grading.json `shoulder_width`), cm, when the chart has one. */
   shoulderWidthCm: number | undefined;
+  /** Bottoms: where the waistband rests (`slideWaistband`); null for other garments. */
+  band: BandSlide | null;
+}
+
+/**
+ * A bottom with a stretch waistband: shown at the height the garment was reconstructed at, every size. Its elastic holds it,
+ * and how much a larger size gathers (or a smaller one stretches) depends on the band's relaxed girth, which the bundle does
+ * not measure; so the sizes differ in the viewer only by their graded girths below the band (folded by the drape).
+ */
+export const STRETCH_BAND_LINE: FitLine = { anchor: 'waist', band: undefined, tone: 'even', text: 'Stretch waistband: shown where it was made to sit in every size; how much it gathers or stretches on this body is not modelled (the relaxed band is not measured).' };
+
+/** The text line for a waistband that slid (`slideWaistband`), else none. */
+export function bandLines(band: BandSlide | null): FitLine[] {
+  if (!band || band.dropCm <= 0) return [];
+  const loose = Math.round((band.bandGirthCm - band.bodyAtBandCm) * 10) / 10;
+  const text = band.pastHips
+    ? `The waistband is ${loose} cm larger than the body where it was made to sit and larger than the hips: it slides ${band.dropCm} cm down to the hips and would not stay up.`
+    : `The waistband is ${loose} cm larger than the body where it was made to sit: it slides ${band.dropCm} cm down, to where the body fills it.`;
+  return [{ anchor: 'waist', band: undefined, tone: 'room', text }];
 }
 
 /**
@@ -164,6 +184,76 @@ export function waistbandPins(positions: ArrayLike<number>, indices: ArrayLike<n
   return pinned;
 }
 
+/** A waistband counts as held where the body's girth (plus the clearance) is within this of the band's girth, cm. */
+export const BAND_HOLD_CM = 1;
+/** How far down a loose waistband is followed at most, cm. */
+export const BAND_SEARCH_CM = 30;
+
+export interface BandSlide {
+  /** Girth of the band (convex hull of the top 2 cm of the garment's body chain as placed), cm. */
+  bandGirthCm: number;
+  /** The avatar's torso girth (plus the clearance) where the band was placed, and where it rests, cm. */
+  bodyAtBandCm: number;
+  bodyAtRestCm: number;
+  /** How far the garment was lowered, cm (0 when the body fills the band where it is). */
+  dropCm: number;
+  /** No height down to `BAND_SEARCH_CM` fills the band: lowered to the widest torso girth found (the hips), and it would slide further. */
+  pastHips: boolean;
+}
+
+const ellipsePerimeter = (a: number, b: number): number => Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)));
+
+/**
+ * A bottom without a stretch waistband hangs from its band, and the band is graded with the chart (`hip-delta` for a skirt worn below the waist
+ * ring): a band larger than the body where the garment was reconstructed cannot stay there, it slides down until the body
+ * fills it. Before this the band was pinned where the base size sat on the canonical mannequin, so every size hung from the
+ * same height and the drape folded the extra girth of the larger sizes away (run 17d skirt on M: graded hip 97.6 to 117.7 cm
+ * across AU 8 to 16, draped 102 to 107.4). Here: the band's girth against the avatar's torso girth (`BodyField` ellipses,
+ * plus the clearance) from the band down: the garment is lowered to the first height where the body's girth reaches the
+ * band's less `BAND_HOLD_CM`. A band smaller than the body stays (stretched over it: the fit lines and the map say tight).
+ * Mutates `start` (all particles move down together); returns what it did.
+ */
+export function slideWaistband(field: BodyField, start: Float32Array, chains: ChainAssignment, clearanceCm: number): BandSlide {
+  let top = -Infinity;
+  for (let i = 0; i < chains.length; i++) if (chains[i] === 0) top = Math.max(top, start[3 * i + 1]!);
+  const yb = top - 2;
+  const pts: [number, number][] = [];
+  for (let i = 0; i < chains.length; i++) if (chains[i] === 0 && start[3 * i + 1]! >= yb) pts.push([start[3 * i]!, start[3 * i + 2]!]);
+  const band = hullPerimeter(pts);
+  const e = new Float32Array(4);
+  const body = (y: number): number => (sample(field.torso, y, e) ? ellipsePerimeter(e[2]! + clearanceCm, e[3]! + clearanceCm) : NaN);
+  const at = body(yb);
+  let drop = 0, rest = at, pastHips = false;
+  if (Number.isFinite(at) && band > at + BAND_HOLD_CM) {
+    let best = -Infinity, bestY = yb;
+    let found = false;
+    for (let y = yb; y >= yb - BAND_SEARCH_CM; y -= 0.25) {
+      const g = body(y);
+      if (!Number.isFinite(g)) break;
+      if (g > best) { best = g; bestY = y; }
+      if (g + BAND_HOLD_CM >= band) { drop = yb - y; rest = g; found = true; break; }
+    }
+    if (!found) { drop = yb - bestY; rest = best; pastHips = true; }
+    for (let i = 0; i < chains.length; i++) start[3 * i + 1] = start[3 * i + 1]! - drop;
+  }
+  const r1 = (x: number): number => Math.round(x * 10) / 10;
+  return { bandGirthCm: r1(band), bodyAtBandCm: r1(at), bodyAtRestCm: r1(rest), dropCm: r1(drop), pastHips };
+}
+
+/** Perimeter of the convex hull of 2D points. */
+export function hullPerimeter(pts: [number, number][]): number {
+  if (pts.length < 3) return 0;
+  const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cr = (o: [number, number], a: [number, number], b: [number, number]): number => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo: [number, number][] = [], up: [number, number][] = [];
+  for (const q of p) { while (lo.length >= 2 && cr(lo[lo.length - 2]!, lo[lo.length - 1]!, q) <= 0) lo.pop(); lo.push(q); }
+  for (let k = p.length - 1; k >= 0; k--) { const q = p[k]!; while (up.length >= 2 && cr(up[up.length - 2]!, up[up.length - 1]!, q) <= 0) up.pop(); up.push(q); }
+  const h = [...lo.slice(0, -1), ...up.slice(0, -1)];
+  let per = 0;
+  for (let i = 0; i < h.length; i++) { const a = h[i]!, b = h[(i + 1) % h.length]!; per += Math.hypot(a[0] - b[0], a[1] - b[1]); }
+  return per;
+}
+
 /** Collision clearance between cloth and avatar, cm. */
 export const CLEARANCE_CM = 0.35;
 
@@ -181,6 +271,11 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   const inside = insideCanonical(m, graded.positions, chains);
   for (let i = 0; i < noCollide.length; i++) if (inside[i] === 1 && graded.positions[3 * i + 1]! > m.morphHeights.chest) noCollide[i] = 1;
   const start = Float32Array.from(placed.positions);
+  const bottom = session.bundle.anchors.category === 'bottom';
+  // A stretch waistband (the payload's stretch zones) is held by its elastic: how far it gathers depends on its relaxed
+  // girth, which no bundle measures, so it is not slid (the fit lines say so). Only a band without stretch slides.
+  const stretchBand = (session.payload.stretchZones ?? []).includes('waistband');
+  const band = bottom && !stretchBand ? slideWaistband(field, start, chains, CLEARANCE_CM) : null;
   const yoke = pinHeight(m, session.bundle.anchors.category, start, chains);
   // The yoke is where grading put it: the shoulder ring grades by the `shoulder_width` ratio between
   // sizes (D15 breadth); its base width is the mesh's (on the synthetic garment, the mannequin torso's). Pinning only out to the seams or the body's shoulder
@@ -208,7 +303,8 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
     size: placement.size,
     gaps,
     placement,
-    lines: fitLines(gaps, placement, session.bundle.qa.chartAgreement.missing ?? []),
+    lines: [...fitLines(gaps, placement, session.bundle.qa.chartAgreement.missing ?? []), ...bandLines(band), ...(bottom && stretchBand ? [STRETCH_BAND_LINE] : [])],
+    band,
     heat: heatField(gaps, m.morphHeights),
     material,
     params: clothParams(material, durationS),

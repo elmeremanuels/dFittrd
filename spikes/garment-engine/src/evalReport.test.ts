@@ -141,6 +141,13 @@ describe('report with a GPU run', () => {
     expect(st.find((s) => s.stage === '4t template fit + bake (CPU)')!.detail).toMatch(/hem girth UNCONFIRMED: fitted from masks of 73 turntable frames/);
     const clean = stageStatuses(sec, { ...flaggedJob, stage2: { ...(job.stage2 as object), consistency: { ...consistency, off_reference_spans: [] } } });
     expect(clean.find((s) => s.stage === '4t template fit + bake (CPU)')!.detail).not.toMatch(/UNCONFIRMED/);
+    // Stage 4t 0.5.0 left the off-reference pixels out: the row says so (an evidence choice) instead of UNCONFIRMED.
+    const offReference = { mode: 'pixels', totalPx: 56301, framesWithPixels: [[1, 361], [19, 456]], flaggedFrames: [19], iou: { allFrames: { frames: 160, all: 0.9114, exOffRef: 0.919 }, flagged: { frames: 73, all: 0.8969, exOffRef: 0.9121 } } };
+    const excluded = stageStatuses(sec, { ...flaggedJob, stage4t: { stage2: { glb: 'x.glb', metrics: { offReference }, atlas: null, exemplar: null, shadow: null } } });
+    const d = excluded.find((s) => s.stage === '4t template fit + bake (CPU)')!.detail;
+    expect(d).toMatch(/EXCLUDED from the fit and the bake \(evidence choice, listed in metrics.json offReference\): 56301 off-reference px in 2 frames, 1 of them flagged/);
+    expect(d).toMatch(/0.9114 against the masks as segmented, 0.919 with the off-reference pixels as don't care/);
+    expect(d).not.toMatch(/UNCONFIRMED/);
   });
 
   it('reads a stage 2 run without the motion clip, on one GPU container per clip, and marks an incomplete one failed', () => {

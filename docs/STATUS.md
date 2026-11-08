@@ -3,6 +3,26 @@
 This is the integration snapshot after the parallel build and review passes. Read it with
 `docs/DECISIONS.md` (why), `docs/ARCHITECTURE.md` (layout) and `docs/HANDOFF.md` (product truth).
 
+## Garment engine — refinement R1, R3, R5, R6 on CPU (branch `claude/refine-cpu`) — 8 Nov 2026
+
+No GPU. Stage 4t 0.5.0 (template fit 0.5.0) re-run on azure 17b, the skirt and the palazzo (17d) from their existing frames;
+`report:bohohippychic --renders` re-run. Details and every table: `spikes/garment-engine/data/bohohippychic/phase0-written.md`,
+"Refinement R1, R3, R5, R6 on CPU"; backlog status in `docs/REFINEMENT.md`.
+
+| Item | Result |
+|---|---|
+| R1 azure flap/panel | Consistency 0.4.0's off-reference pixels (`phase0_garment.py --write-off-reference`) are left out of the fit and the bake, an evidence choice listed in `metrics.json` `offReference` and in the report (EXCLUDED, not UNCONFIRMED). Hem girth 157.7 → **151.8 cm** (run 15: 149.5); holdout mean unchanged (0.9119), holdout min 0.8747 → 0.8727 visible, 0.8264 → 0.8130 silhouette; on the 73 flagged frames, against the masks as segmented, 0.9023 → 0.8969 (the flap is no longer covered; 0.9121 with those pixels as don't care), the other 87 frames 0.9187 → 0.9236. Not confirmed by a clean draw (GPU part open). Stage 4t now refuses a job whose consistency check found off-reference spans but has no masks written (run `phase0_garment.py <job> --write-off-reference` first, or pass `--off-reference none`) |
+| R6 bake | Two-band blend (layout from the views' consensus, half the detail of the most face-on view). Holdout MAE, old bake → new, same pixels scored: azure 20.76 → 19.29 (off-reference pixels unscored), skirt 29.21 → 27.51 (0.4.0 mesh, all pixels), **palazzo 29.72 → 26.98, below one flat colour (27.97)**. The gain (0.5) was chosen with the holdout in view, so it was re-scored on a split that played no part (index mod 5 = 4 left out of the bake): palazzo 26.96 against flat 28.01, azure 19.29 against old 20.74, skirt 27.22 against 28.75. Flagged: softer than one frame; palazzo PSNR still below flat colour (17.00 against 17.27 dB) |
+| R5 palazzo | Legs no longer cross (20 → 0); one piece, 0 inside. The frames put the garment's crotch 2.75 / 3.5 cm below the body's; the mesh's join stays 6.5 cm below it, and 27 seat vertices pushed into the crease show as a stepped, boxy notch above the leg gap that does not connect to it (a light strip of the old crotch floor remains between them). Still faulty: that notch, texture seam at the join, the viewer's V fold |
+| R3 skirt sizes | Investigated: grading is right, the drape folds 20 cm of graded hip spread into 5.4 cm and every size hangs from the same band. Viewer (both copies): a non-elastic band slides to where the body fills it, cloth stands on the floor. The skirt's band is elastic and its relaxed girth unmeasured, so it is not slid: **open** |
+| Gates (this worktree) | `pnpm check` pass (a first run failed one fit-engine property test on its 5 s timeout while renders and stage 4t loaded the CPU; fit-engine untouched; passed on an idle machine, the timeout not changed); spike vitest 415 + viewer 57 (`--maxWorkers=2`); modal pytest 276 passed, 2 skipped; `pnpm demo:e2e` pass, both flows, azure and skirt 3D from this worktree's re-evaluated bundles |
+
+Bundles: `out/eval/<handle>/` in this worktree (gitignored); `pnpm demo` reads them from the tree it runs in (or
+`DEMO_AZURE_BUNDLE` / `DEMO_SKIRT_BUNDLE`). The main tree's `out/` was not touched. **Merge notes:** the off-reference
+masks are gitignored job data and exist only in this worktree; in the main tree run `modal/phase0_garment.py <job>
+--write-off-reference` (CPU) for azure and the skirt before stage 4t (stage 4t now refuses a job with off-reference spans
+and no masks), then stage 4t, the report and copy the bundles.
+
 ## Release v1 + optional 3D estimate (branch `claude/plugin-v1`) — 8 Nov 2026
 
 Release v1 unchanged, plus an opt-in **3D estimate** in the overlay for products with an approved

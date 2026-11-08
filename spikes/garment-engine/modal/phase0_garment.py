@@ -747,25 +747,34 @@ def scaled_thresholds(height: int, thresholds: Mapping[str, float] | None = None
     return t
 
 
-def off_reference(garment: np.ndarray, reference: np.ndarray, bare: np.ndarray, *, margin_px: int, zone_frac: float = 0.45) -> dict[str, int]:
-    """Garment pixels more than `margin_px` outside `reference` (the pinned stills' hull at this camera), off
-    our bare mannequin, in the rows below `zone_frac` of the bare silhouette's height (hips down): cloth the
-    stills do not have, such as the hem flap runs 16b/17b drew. Split at the body axis (the middle of the
-    bare silhouette's lowest third) into image-left and image-right. It counts what the frame's garment
-    mask holds; it changes nothing (the masks stay stage 4's alpha targets as segmented)."""
+def off_reference_mask(garment: np.ndarray, reference: np.ndarray, bare: np.ndarray, *, margin_px: int, zone_frac: float = 0.45) -> tuple[np.ndarray, int | None]:
+    """The pixels `off_reference` counts (garment more than `margin_px` outside `reference`, off `bare`, in the rows
+    below `zone_frac` of the bare silhouette's height) as a mask, and the body axis column that splits them into
+    image-left and image-right (None, with an empty mask, when there is no bare silhouette or no garment)."""
     g = np.asarray(garment, dtype=bool)
     b = np.asarray(bare, dtype=bool)
-    out = {"off_reference_px": 0, "off_reference_left_px": 0, "off_reference_right_px": 0}
     ys = np.nonzero(b.any(axis=1))[0]
     if len(ys) == 0 or not g.any():
-        return out
+        return np.zeros(g.shape, dtype=bool), None
     top, bottom = int(ys[0]), int(ys[-1])
     y0 = top + int(zone_frac * (bottom - top))
     o = g & ~dilate(np.asarray(reference, dtype=bool), max(1, int(margin_px))) & ~b
     o[:y0] = False
     low = b[top + 2 * (bottom - top) // 3:bottom + 1]
     xs = np.nonzero(low.any(axis=0))[0]
-    axis = int(round((xs[0] + xs[-1]) / 2))
+    return o, int(round((xs[0] + xs[-1]) / 2))
+
+
+def off_reference(garment: np.ndarray, reference: np.ndarray, bare: np.ndarray, *, margin_px: int, zone_frac: float = 0.45) -> dict[str, int]:
+    """Garment pixels more than `margin_px` outside `reference` (the pinned stills' hull at this camera), off
+    our bare mannequin, in the rows below `zone_frac` of the bare silhouette's height (hips down): cloth the
+    stills do not have, such as the hem flap runs 16b/17b drew. Split at the body axis (the middle of the
+    bare silhouette's lowest third) into image-left and image-right. It counts what the frame's garment
+    mask holds; it changes nothing (the masks stay stage 4's alpha targets as segmented)."""
+    out = {"off_reference_px": 0, "off_reference_left_px": 0, "off_reference_right_px": 0}
+    o, axis = off_reference_mask(garment, reference, bare, margin_px=margin_px, zone_frac=zone_frac)
+    if axis is None:
+        return out
     out["off_reference_px"] = int(o.sum())
     out["off_reference_left_px"] = int(o[:, :axis].sum())
     out["off_reference_right_px"] = out["off_reference_px"] - out["off_reference_left_px"]
@@ -1103,6 +1112,57 @@ def alpha_target_check(job_dir: str, manifest: Mapping[str, Any], mask_dir: str 
     }
 
 
+OFF_REFERENCE_MASK_DIR = "stage2/off_reference_mask"
+OFF_REFERENCE_MASKS_VERSION = "off-reference-masks-0.1.0"
+
+
+def write_off_reference_masks(job_dir: str, manifest: Mapping[str, Any], *, mask_dir: str = STAGE2_MASK_DIR, out_dir: str = OFF_REFERENCE_MASK_DIR, thresholds: Mapping[str, float] | None = None) -> dict[str, Any]:
+    """Consistency 0.4.0's off-reference pixels (`off_reference_mask`) of stage 4's alpha targets (the assembled
+    turntable's garment masks in `mask_dir`, one per camera), as 8-bit 0/255 masks in `out_dir`, and
+    `out_dir`/record.json: per frame the pixel count, per image side, and whether it exceeds
+    `max_off_reference_px` (flagged); the spans of flagged frames; the sha256 of the garment masks they were cut
+    from. CPU, on a downloaded job. Stage 4t (`src/stage4t.ts`, `offReference`) reads them to leave these pixels
+    and the flagged frames out of the fit and the bake, as an evidence choice it records; the garment masks
+    stay as segmented. Only for a dress or skirt (the check's kinds); other kinds get a record with no frames."""
+    from PIL import Image
+
+    scene = JobScene(job_dir, manifest)
+    proxy_spec = manifest["control"].get("proxy") or {}
+    kind = proxy_spec.get("kind") or {"dress": "dress", "top": "top", "outerwear": "outerwear"}.get(manifest.get("category"), "dress")
+    t = scaled_thresholds(scene.height, thresholds)
+    ids = sorted(scene.w2c)
+    rows: list[dict[str, Any]] = []
+    if kind in ("dress", "skirt"):
+        stills = stills_garment_masks(scene)
+        ref_off = garment_reference(scene, stills, {"envelope_px": int(t["off_reference_envelope_px"])})
+        os.makedirs(os.path.join(job_dir, out_dir), exist_ok=True)
+        for idx in ids:
+            g = _read_mask(os.path.join(job_dir, mask_dir, f"{idx:04d}.png"))
+            o, axis = off_reference_mask(g, ref_off["project"](idx), scene.bare("turntable", idx), margin_px=int(t["off_reference_margin_px"]), zone_frac=float(t["off_reference_zone_frac"]))
+            Image.fromarray((o * 255).astype(np.uint8)).save(os.path.join(job_dir, out_dir, f"{idx:04d}.png"))
+            n = int(o.sum())
+            left = 0 if axis is None else int(o[:, :axis].sum())
+            rows.append({"clip": "turntable", "j": idx, "frame": idx, "off_reference_px": n, "off_reference_left_px": left, "off_reference_right_px": n - left,
+                         "flagged": n > t["max_off_reference_px"]})
+    record = {
+        "version": OFF_REFERENCE_MASKS_VERSION,
+        "consistency": CONSISTENCY_V2_VERSION,
+        "kind": kind,
+        "dir": out_dir,
+        "garment_mask_dir": mask_dir,
+        "thresholds": {k: t[k] for k in ("max_off_reference_px", "off_reference_margin_px", "off_reference_envelope_px", "off_reference_zone_frac")},
+        "frames": [{k: r[k] for k in ("frame", "off_reference_px", "off_reference_left_px", "off_reference_right_px", "flagged")} for r in rows],
+        "flagged_frames": [r["frame"] for r in rows if r["flagged"]],
+        "spans": [{k: v for k, v in s.items() if k not in ("clip", "j0", "j1")} for s in off_reference_spans(rows, t["max_off_reference_px"])],
+        "garment_masks_sha256": file_set_sha256([os.path.join(job_dir, mask_dir, f"{i:04d}.png") for i in ids]) if rows else None,
+        "note": "pixels of the assembled turntable's garment masks (stage 4's alpha targets) more than off_reference_margin_px outside the pinned stills' visual hull (carved with off_reference_envelope_px), off our bare mannequin, hips down: cloth the stills do not have (a flap or panel). Frames above max_off_reference_px are flagged. The garment masks are not changed.",
+    }
+    if rows:
+        with open(os.path.join(job_dir, out_dir, "record.json"), "w") as f:
+            json.dump(record, f, indent=1)
+    return record
+
+
 def record_clip_ids(job_dir: str) -> list[str] | None:
     """The clips stage2/record.json says this run generated (None without a record: score every clip on disk). Since
     stage2-parallel-0.1.0 the motion clip is opt-in, so a job dir can hold an earlier run's stage2/clips/motion/ that the
@@ -1123,12 +1183,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("job_dir")
     ap.add_argument("--write-masks", action="store_true", help=f"write {STAGE2_MASK_DIR}/ from stage2/frames")
     ap.add_argument("--score", action="store_true", help="consistency v2 of stage2/clips (prints the summary, writes stage2/consistency_v2.json; report:bohohippychic reads it in place of stage2/record.json's consistency when its version is at least the record's and it is not older than the record, src/evalJob.ts withRescoredConsistency)")
+    ap.add_argument("--write-off-reference", action="store_true", help=f"write {OFF_REFERENCE_MASK_DIR}/ (the off-reference pixels of {STAGE2_MASK_DIR}/, consistency 0.4.0) for stage 4t")
     a = ap.parse_args(argv)
     with open(os.path.join(a.job_dir, "manifest.json")) as f:
         m = json.load(f)
     if a.write_masks:
         print(json.dumps(write_turntable_masks(a.job_dir, m), indent=1))
         print(json.dumps(alpha_target_check(a.job_dir, m), indent=1))
+    if a.write_off_reference:
+        rec = write_off_reference_masks(a.job_dir, m)
+        print(json.dumps({k: v for k, v in rec.items() if k != "frames"}, indent=1))
     if a.score:
         c = score_job(a.job_dir, m, record_clip_ids(a.job_dir))
         with open(os.path.join(a.job_dir, "stage2", "consistency_v2.json"), "w") as f:

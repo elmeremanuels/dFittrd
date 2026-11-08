@@ -11,6 +11,10 @@
  * from those frames only (the pinned front and back stills are frames 0 and N/2), depth from the template
  * (`depthPrior: 'template'`), scored on the usual holdout frames; written to stage4t/<source>-views-0-80/.
  *
+ * --off-reference pixels|frames|none: what to do with consistency 0.4.0's off-reference pixels (stage2/off_reference_mask/,
+ * written by `modal/phase0_garment.py <job> --write-off-reference`): `src/stage4t.ts` OffReferenceMode; default pixels
+ * when the job has them.
+ *
  * Writes <job dir>/stage4t/<source>/{garment.glb, texture.jpg, metrics.json, preview/*.png}. The job
  * dir is under out/ (gitignored). `report:bohohippychic` then evaluates stage4t/stage2/garment.glb when
  * it exists, ahead of the 2DGS mesh.
@@ -77,8 +81,11 @@ if (templateSize) {
 const vAt = args.indexOf('--views');
 const views = vAt >= 0 ? (args[vAt + 1] ?? '').split(',').map((x) => Number(x.trim())) : undefined;
 if (views && views.some((v) => !Number.isInteger(v))) throw new Error(`--views takes frame indices separated by commas, got ${args[vAt + 1]}`);
+const oAt = args.indexOf('--off-reference');
+const offReference = oAt >= 0 ? args[oAt + 1] : undefined;
+if (offReference !== undefined && !['pixels', 'frames', 'none'].includes(offReference)) throw new Error(`--off-reference takes pixels, frames or none, got ${offReference}`);
 const t0 = performance.now();
-const res = runStage4t({ dir: jobDir, source, ...(views ? { views } : {}), category, fit: { legs: kind === 'trousers' }, proxy, ...(proxyLabel ? { proxyLabel } : {}), previews: !args.includes('--no-previews'), log: (m) => console.log(`[stage4t] ${m}`) });
+const res = runStage4t({ dir: jobDir, source, ...(views ? { views } : {}), category, fit: { legs: kind === 'trousers' }, proxy, ...(proxyLabel ? { proxyLabel } : {}), previews: !args.includes('--no-previews'), ...(offReference ? { offReference: offReference as 'pixels' | 'frames' | 'none' } : {}), log: (m) => console.log(`[stage4t] ${m}`) });
 const out = join(jobDir, 'stage4t', views ? `${source}-views-${views.join('-')}` : source);
 mkdirSync(out, { recursive: true });
 for (const [name, data] of Object.entries(res.files)) {

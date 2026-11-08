@@ -1103,6 +1103,18 @@ def alpha_target_check(job_dir: str, manifest: Mapping[str, Any], mask_dir: str 
     }
 
 
+def record_clip_ids(job_dir: str) -> list[str] | None:
+    """The clips stage2/record.json says this run generated (None without a record: score every clip on disk). Since
+    stage2-parallel-0.1.0 the motion clip is opt-in, so a job dir can hold an earlier run's stage2/clips/motion/ that the
+    current record does not describe; it is not scored then."""
+    path = os.path.join(job_dir, "stage2", "record.json")
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        clips = json.load(f).get("clips")
+    return [c["id"] for c in clips] if isinstance(clips, list) else None
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """CPU only, on a downloaded job: garment masks for stage 4, the alpha-target check and consistency v2."""
     import argparse
@@ -1118,7 +1130,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(write_turntable_masks(a.job_dir, m), indent=1))
         print(json.dumps(alpha_target_check(a.job_dir, m), indent=1))
     if a.score:
-        c = score_job(a.job_dir, m)
+        c = score_job(a.job_dir, m, record_clip_ids(a.job_dir))
         with open(os.path.join(a.job_dir, "stage2", "consistency_v2.json"), "w") as f:
             json.dump(c, f, indent=1)
         print(json.dumps({k: v for k, v in c.items() if k not in ("frames_detail", "label")}, indent=1)[:4000])

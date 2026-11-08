@@ -17,7 +17,7 @@ GPU half of the Phase 0 spike (`docs/ENGINE-HANDOFF.md`), following shortlist A 
 | `smoke_cpu.py` | The same without a GPU (login, image, remote call) | Modal |
 | `stage1_dress.py` | Stage 1b app: weights download (once), `dress` (segment the shop photo, try-on onto our proxy-dressed render with one engine or both, garment mask, QA v2, back-view checks, composite, record) | Modal, GPU |
 | `phase0_dress.py` | numpy, CPU: stage 1b edit region, FASHN label map, garment prior against the proxy-dressed target, garment colour from the cut-out, QA v2 (silhouette band, leg gap above the hem, skirt cover, placeholder left-overs, print fidelity), back-view checks, engine choice; `python phase0_dress.py <job>` re-scores a finished job's stills, per engine candidate | numpy, Pillow |
-| `stage2_video.py` | Stage 2 app: weights download (once), `generate` (3 clips with the manifest's prompts, assembled turntable, drift check, cost record), `score_consistency` (CPU: per-frame silhouette vs the control proxy) | Modal, GPU |
+| `stage2_video.py` | Stage 2 app: weights download (once), `generate_clip` (one clip per GPU container: turntable_a and turntable_b in parallel by default, the motion clip only with `--motion`), `assemble` (CPU: turntable, drift check, record with one cost record per container), `score_consistency` (CPU: garment consistency per frame); `run_stage2` spawns and gathers them | Modal, GPU |
 | `stage4_recon.py` | Stage 4 app: `reconstruct` (2DGS → TSDF → mesh → `.glb` + metrics + cost record) | Modal, GPU |
 | `stage4b_retexture.py` | Stage 4b app (CPU, pure Python, no video model): re-textures a cut family's reference mesh for one colour/print variant from the variant's stage 1b front/back stills; writes `stage4b/<source>/variants/<id>/{texture.png, material.json, preview.glb, record.json}` and `variants.json` into the reference job | Modal (CPU) |
 | `run_phase0.py` | Runs stage 2 and stage 4 for one product (stage 1b first with `--dress`) and prints the cost summary | Modal, GPU |
@@ -122,7 +122,7 @@ The run goes through these steps:
 
 1. Checks the manifest and uploads the job to the `curtain-phase0-jobs` Volume. It skips the upload if that job id is already there; the id contains the input hash.
 2. Downloads the 69 GB of weights into `curtain-phase0-weights`. This happens only the first time and prints `{'cached': False, 'bytes': …, 'download_s': …}`. Later runs print `cached: True`.
-3. Runs stage 2. Per clip it prints `[stage2] turntable_a: 81 frames in … s`, then `[phase0] stage 2: 3 clips, 160 turntable frames, seams [...]`. The seams are the mean absolute 8-bit difference between the two half turns at the back frame and at the front frame: a drift check on the pinned frames.
+3. Runs stage 2: turntable_a and turntable_b, each in its own GPU container, at the same time (see [Stage 2 in parallel, motion opt-in](#stage-2-in-parallel-motion-opt-in-stage2-parallel-010)). It prints `[stage2] 2 GPU containers in parallel: wall … s, GPU … s summed (model load … s of it, paid per container)`, then `[phase0] stage 2: 2 clips, 160 turntable frames, seams [...]`. The seams are the mean absolute 8-bit difference between the two half turns at the back frame and at the front frame: a drift check on the pinned frames. When a turntable clip (or `assemble`) fails, the run prints `[phase0] stage 2 INCOMPLETE: …`, writes this run's record to `stage2/record.json` and `cost_summary.json` (`stopped_after_stage2`), and stops before stage 4. When only the opt-in motion clip fails, the turntable is still assembled and stage 4 runs; the record says `complete: false` and the report names the failed clip.
 4. Runs stage 4 on the generated frames and on the synthetic frames, in parallel.
 5. Downloads `stage2/` (clips as mp4 and PNG, the 160 assembled `frames/`, `record.json`) and `stage4/<source>/`, and writes `cost_summary.json`.
 6. Prints the cost table:
@@ -130,18 +130,20 @@ The run goes through these steps:
 ```
 ESTIMATE (GPU list price x seconds; the Modal invoice is the measurement)
 stage                     gpu         region       gpu s   wall s      low     high
-stage2_video              H100        eu             …        …       $…       $…
+stage2_video[turntable_a] H100        eu             …        …       $…       $…
+stage2_video[turntable_b] H100        eu             …        …       $…       $…
 stage4_recon[stage2]      L40S        eu             …        …       $…       $…
 stage4_recon[synthetic]   L40S        eu             …        …       $…       $…
 total                                                …                $…       $…
 research doc estimate per product, one attempt: $1.3 (4-step) to $5.6 (40-step), also an estimate
 ```
 
-In the table, `low` uses the seconds inside the container, model load included. `high` uses your wall clock, which also includes queueing and cold start.
+In the table, `low` uses the seconds inside the container, model load included. `high` uses your wall clock, which also includes queueing and cold start. Stage 2 has one row per GPU container (each loads the model); the total sums them, so the stage's GPU seconds are larger than its wall clock.
 
 Useful flags:
 
 - `--steps 40`: denoising steps.
+- `--motion`: also generate the motion clip (a third GPU container, seed 45 as before). Off by default: stage 4 and stage 4t use only the turntable.
 - `--skip-video`: reuse the `stage2/` outputs already in the Volume.
 - `--no-synthetic-recon`
 - `--control-encoding inverse`: 1/depth instead of linear depth.
@@ -152,7 +154,7 @@ Useful flags:
 Each stage also runs on its own:
 
 ```sh
-modal run spikes/garment-engine/modal/stage2_video.py --job-dir … [--clips turntable_a] [--steps 40]
+modal run spikes/garment-engine/modal/stage2_video.py --job-dir … [--motion] [--clips turntable_a] [--steps 40]
 ```
 
 ### Alternative: run through GitHub Actions
@@ -897,6 +899,74 @@ stills with run 15's hem rows, hip band or caps; a noise control; `--no-pin-fram
 confirmed, a control proxy whose hem follows the stage 1b masks (export change, then stage 2 again, about $1.5), or a
 stage 1b QA flag for a hem corner outside the proxy (redraw FASHN, not paint).
 
+## Stage 2 in parallel, motion opt-in (`stage2-parallel-0.1.0`)
+
+Up to run 17d, `generate` made three clips one after the other in one H100 container: turntable_a, turntable_b and
+the motion clip. Stage 4 and stage 4t use only the 160 turntable frames; the motion clip was only looked at, and it
+often drew a different garment. Now:
+
+- **Motion is opt-in** (`--motion` on `run_phase0.py` and `stage2_video.py`). The record says `motion: false` and
+  lists the clips it generated; consistency, the garment masks, stage 4, stage 4t, `evalJob` and the report read
+  only those (`phase0_garment.py --score` on a job dir follows the record, so an older run's `stage2/clips/motion/`
+  left in the Volume is not scored).
+- **One GPU container per clip** (`generate_clip`, spawned together by `run_stage2`, gathered one by one). Each loads
+  the model, generates its clip, writes `stage2/<clip>.mp4` and `stage2/clips/<clip>/` and commits the jobs Volume.
+  Then `assemble` (CPU) fills `stage2/frames/`, measures the seams and writes `stage2/record.json`
+  (`runner`, `planned_clips`, `complete`, `failed_clips`, per clip `seed`, `seconds`, `load_seconds`, `gpu_seconds`,
+  `gpu_name`; `costs` per container, `cost` summed, `parallel` with wall vs GPU seconds).
+- **Same inputs, same seeds.** The seed of a clip is the video seed plus its index in the manifest: turntable_a 43,
+  turntable_b 44, motion 45, as in every earlier run (until now it was the position among the clips of the call; for
+  the default runs both give the same numbers). Pinned stills, reference image, prompts, control video, steps,
+  guidance and shift are unchanged. Bit-identical frames are not promised: the clip now runs on a fresh pipeline in
+  its own container (before, turntable_b ran after turntable_a in the same one), and Modal may hand out a different
+  GPU type (run 17d's skirt ran on an H200 for an H100 request).
+- **The input hash does not change.** Nothing in the export changed (the manifest still carries the motion clip and
+  its control, so `--motion` works on any job); the clip choice is a run option, not an input. Job ids, the jobs
+  Volume directories, `--reuse-dress`, `--recompose-dress` and `--dress-expect` work as before.
+- **Failures.** A clip that raises is recorded and the other clip is still gathered; what finished stays in the
+  Volume. A clip whose PNGs are not all in the Volume counts as failed. When a requested turntable clip failed,
+  `assemble` assembles nothing and removes an earlier run's `stage2/frames/` and `stage2/garment_mask/` (they would
+  not match the record); the record says `complete: false`, `run_phase0.py` writes `cost_summary.json` with
+  `stopped_after_stage2` and exits 1 before stage 4, and the report marks stage 2 failed. When `assemble` itself
+  fails, the Volume still holds the previous run's `record.json` and frames under the same job id: `run_phase0.py`
+  (and `stage2_video.py`) then write the returned record over the downloaded one (`sync_local_record`) and delete
+  the local `stage2/frames/` and `stage2/garment_mask/`; the report also treats `stopped_after_stage2` in
+  `cost_summary.json` as a failed stage 2. When only the opt-in motion clip fails, the turntable is assembled, the
+  record says `complete: false` with the motion failure, and stage 4 runs. A failed container reports no GPU
+  seconds: its cost row has 0 GPU seconds and its wall time as the high end. Re-running only the failed clip is not
+  supported yet (run the whole stage again).
+- **Timeout per clip.** `generate_clip` uses `CURTAIN_MODAL_TIMEOUT_CLIP` (default 2400 s, about 5x one clip plus
+  the load), which replaces `CURTAIN_MODAL_TIMEOUT_VIDEO` (10800 s, sized for three clips in one container). Results
+  are still gathered in plan order, so a hung turntable_a delays turntable_b's result (not its work) by at most that.
+- **GPU type.** Modal may serve an `H100` request on an H200, and the two half turns now run in separate containers,
+  so they can land on different types. `assemble` then prints a warning and records `gpu_mismatch`; the report shows
+  it next to the seam drift. For comparison runs pin the type: `CURTAIN_MODAL_GPU_VIDEO='H100!'` (Modal's syntax that
+  turns the automatic upgrade off).
+
+**Estimate from run 17d** (two products, one H100/H200 container, 40 steps; `stage2/record.json`):
+
+| | skirt | palazzo |
+| --- | --- | --- |
+| model load | 15.7 s | 12.9 s |
+| turntable_a / turntable_b / motion | 460.5 / 447.4 / 441.4 s | 462.3 / 450.0 / 447.0 s |
+| other in-container time (setup, assembly, record) | 9.6 s | 9.7 s |
+| GPU s / stage wall s / estimate | 1375 / 1388 / $1.51 | 1382 / 1398 / $1.52 |
+
+Per container now: about 3 s setup, the load (13–16 s), the clip (447–462 s) and the Volume commit, so about
+465–480 GPU s. Two containers: about **930–960 GPU s, $1.02–1.05 GPU only** at the H100 list price of $3.95/h (was $1.51–1.52,
+also GPU only: the motion clip is gone). Running in parallel instead of one after the other costs one extra model
+load (about 15 s) plus one extra container boot (13–16 s in 17d; Modal bills from boot, `cost_record` counts only
+in-function seconds), so about 30 s or $0.03. **Not in these figures: memory.** Each clip container reserves
+`CURTAIN_MODAL_MEMORY_VIDEO_MB` = 131072 MB (128 GiB) and Modal bills memory reservations on top of the GPU, roughly
+$1.1/h per container at list prices, so about $0.15 per clip container, about $0.3 per product (before: about $0.43 for
+the one 23-minute container). Lowering the reservation, if `model_cpu_offload` fits in less (the offloaded weights
+need about 70 GB), lowers it. The Modal invoice is the measurement. Stage 2 wall clock: the slower container plus cold start (run 17d: 13–16 s between in-container and caller
+time) plus `assemble` (a CPU container: its own cold start and 160 PNG copies, roughly 10–30 s, not measured), so
+about **8–8.5 min instead of 23 min**. The whole product (17d: 39 and 35 min wall with stage 4 and the downloads)
+would take about 15 min less. Consistency scores 162 frames instead of 243. These are estimates from one run's
+timings; two H100s at once may queue longer than one when capacity is short, and the Modal invoice is the
+measurement. **Not run on a GPU yet**: the wiring is tested with mocked calls (`tests/test_stage2_parallel.py`).
+
 ## Stage 2 after run 10: control proxy, neutral prompts, consistency metric
 
 Run 10 (GitHub Actions, aalter-studio-2, synthetic stills) followed the pinned front and back frames and the camera path, but between them the dress turned into trousers (frames 20, 60, 100) and the product name appeared as text in frame 20; stage 4 on those frames reached a mask IoU of 0.90, against 0.99 on the synthetic truth. Two causes: the control depth showed the **bare** mannequin (two separate legs), and the prompt held the product title in quotes. Export 0.2.0 changes three things. None of them has run on a GPU yet.
@@ -994,9 +1064,9 @@ The variant's stills are projected through the reference's turntable cameras at 
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `CURTAIN_MODAL_REGION` | none (Modal picks) | `eu` pins the EEA at a 1.15× price. `eu-west`/`eu-north`/`eu-south` cost 1.75×. Region selection needs a Modal plan that allows it. |
-| `CURTAIN_MODAL_GPU_VIDEO` | `H100` | GPU for stage 2. The A14B model needs about 80 GB of VRAM, or CPU offload. |
+| `CURTAIN_MODAL_GPU_VIDEO` | `H100` | GPU for stage 2. The A14B model needs about 80 GB of VRAM, or CPU offload. `H100!` stops Modal from serving it on an H200 (comparison runs). |
 | `CURTAIN_MODAL_GPU_RECON` | `L40S` | GPU for stage 4. The image compiles kernels for `A100`, `A10`, `L4`, `L40S` and `H100`. |
-| `CURTAIN_MODAL_TIMEOUT_VIDEO` / `_RECON` / `_DOWNLOAD` | 10800 / 3600 / 7200 s | Function timeouts |
+| `CURTAIN_MODAL_TIMEOUT_CLIP` / `_RECON` / `_DOWNLOAD` | 2400 / 3600 / 7200 s | Function timeouts (`_CLIP` per stage 2 clip container; it replaces `CURTAIN_MODAL_TIMEOUT_VIDEO`) |
 | `CURTAIN_MODAL_MEMORY_VIDEO_MB` | 131072 | Container RAM for stage 2. The offloaded weights need about 70 GB. |
 | `CURTAIN_WAN_MEMORY_MODE` | `model_cpu_offload` | `model_full_load`, `model_cpu_offload`, `model_cpu_offload_and_qfloat8` or `sequential_cpu_offload`, as in VideoX-Fun |
 

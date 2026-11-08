@@ -222,8 +222,8 @@ def test_settings_defaults_and_overrides():
     assert s["region"] is None and s["gpu_video"] == "H100" and s["gpu_recon"] == "L40S"
     s = lib.settings({"CURTAIN_MODAL_REGION": "eu", "CURTAIN_MODAL_GPU_RECON": "A100-80GB", "CURTAIN_MODAL_TIMEOUT_RECON": "1800"})
     assert s["region"] == "eu" and s["gpu_recon"] == "A100-80GB" and s["timeout_recon"] == 1800
-    with pytest.raises(ValueError, match="CURTAIN_MODAL_TIMEOUT_VIDEO"):
-        lib.settings({"CURTAIN_MODAL_TIMEOUT_VIDEO": "10"})
+    with pytest.raises(ValueError, match="CURTAIN_MODAL_TIMEOUT_CLIP"):
+        lib.settings({"CURTAIN_MODAL_TIMEOUT_CLIP": "10"})
     with pytest.raises(ValueError, match="CURTAIN_WAN_MEMORY_MODE"):
         lib.settings({"CURTAIN_WAN_MEMORY_MODE": "fast"})
 

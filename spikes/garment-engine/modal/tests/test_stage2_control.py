@@ -307,7 +307,8 @@ def test_stage2_registers_the_cpu_consistency_function_without_a_gpu():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         names = set(stage2_video.app.registered_functions)
-        assert names == {"download_weights", "generate", "score_consistency"}
+        # stage2-parallel-0.1.0: one GPU container per clip (generate_clip), then the CPU assembly (assemble)
+        assert names == {"download_weights", "generate_clip", "assemble", "score_consistency"}
         assert "score_consistency" in set(run_phase0.app.registered_functions)
 
 

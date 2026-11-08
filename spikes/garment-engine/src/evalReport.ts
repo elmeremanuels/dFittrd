@@ -293,7 +293,15 @@ export function stageStatuses(p: { shop?: ShopProduct; eval: ProductEval | null;
   else {
     const seams = arr(s2.seams).map((x) => num(obj(x)?.mean_abs_diff_8bit)).filter((x): x is number => x !== null);
     const cons = consistencyNote(s2.consistency);
-    out.push({ stage: '2 image to video', state: 'done', detail: `${str(obj(s2.model)?.id) ?? 'model ?'}, ${num(s2.steps) ?? '?'} steps, ${num(s2.turntable_frames_assembled) ?? '?'} turntable frames; seam drift ${seams.length ? seams.map((s) => s.toFixed(1)).join(' / ') : '—'} (8-bit mean abs)${cons ? `; ${cons}` : ''}` });
+    const clips = stage2ClipsNote(s2);
+    const failed = arr(s2.failed_clips).map((f) => `${str(obj(f)?.id) ?? '?'} (${str(obj(f)?.error) ?? '?'})`);
+    const frames = num(s2.turntable_frames_assembled);
+    // run_phase0 stopped after stage 2 (cost_summary.json): this run's frames are not usable, whatever record.json says
+    const stopped = arr(job?.costSummary?.stopped_after_stage2).map((f) => { const o = obj(f); return o ? `${str(o.id) ?? '?'} (${str(o.error) ?? '?'})` : String(f); });
+    const gpus = arr(s2.gpu_mismatch).map(String);
+    const gpuNote = gpus.length > 1 ? `; WARNING clips on different GPUs (${gpus.join(' / ')}): seam drift and comparisons with earlier runs partly hardware` : '';
+    if ((s2.complete === false && !frames) || stopped.length) out.push({ stage: '2 image to video', state: 'failed', detail: `INCOMPLETE: ${(failed.length ? failed : stopped).join('; ') || 'a clip failed'}${clips ? `; ${clips}` : ''}; no turntable assembled` });
+    else out.push({ stage: '2 image to video', state: 'done', detail: `${str(obj(s2.model)?.id) ?? 'model ?'}, ${num(s2.steps) ?? '?'} steps, ${frames ?? '?'} turntable frames${clips ? ` (${clips})` : ''}${s2.complete === false ? `; INCOMPLETE: ${failed.join('; ') || 'a clip failed'} (turntable assembled, stage 4 ran)` : ''}; seam drift ${seams.length ? seams.map((s) => s.toFixed(1)).join(' / ') : '—'} (8-bit mean abs)${gpuNote}${cons ? `; ${cons}` : ''}` });
   }
   if (job?.stage3Masks) out.push({ stage: '3 separation', state: 'done', detail: `${job.stage3Masks} garment masks` });
   else if (job?.stage2Masks?.count) {
@@ -328,6 +336,21 @@ export function stageStatuses(p: { shop?: ShopProduct; eval: ProductEval | null;
     for (const s of ['5 anchoring and calibration', '6 grading', '7 QA (chart, view, mesh)', '8 bundle']) out.push({ stage: s, state: 'not run', detail: p.evalError ?? 'needs a stage 4 mesh' });
   }
   return out;
+}
+
+/**
+ * The clips a stage 2 record lists and how they ran: 'clips turntable_a, turntable_b; no motion clip; 2 GPU containers in
+ * parallel, wall 492 s vs 962 GPU s' (stage2-parallel-0.1.0). '' for a record without a clip list (fixtures, old records).
+ */
+export function stage2ClipsNote(s2: Json | null | undefined): string {
+  const ids = arr(s2?.clips).map((c) => str(obj(c)?.id)).filter((x): x is string => x !== null);
+  if (!ids.length && s2?.complete !== false) return '';
+  const motion = ids.includes('motion') || s2?.motion === true;
+  const par = obj(s2?.parallel);
+  const containers = num(par?.containers);
+  const wall = num(par?.wall_seconds), gpu = num(par?.gpu_seconds);
+  const parNote = containers !== null ? `; ${containers} GPU containers in parallel${wall !== null && gpu !== null ? `, wall ${wall.toFixed(0)} s vs ${gpu.toFixed(0)} GPU s` : ''}` : '';
+  return `clips ${ids.join(', ') || 'none'}${motion ? '' : '; no motion clip'}${parNote}`;
 }
 
 /** Stage 2 consistency (`stage2/record.json` `consistency`, garment-consistency 0.4.0+): spans of turntable frames whose

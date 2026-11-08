@@ -448,6 +448,24 @@ the shopper's 3D view shows only the general estimate label, and the gate cannot
 the waist ring without a `waistReading` (that needs the band height in every bottom's `qa.json`). The founder has still to
 confirm "accepted pending founder review" and the skirt's place on the blind page and in the panel after viewing the renders.
 
+**Stage 2 faster (branch `claude/stage2-fast`, 8 Nov, code only, not run on a GPU; `modal/README.md`, "Stage 2 in
+parallel, motion opt-in").** Founder-approved: the motion clip is now opt-in (`--motion`; stage 4 and stage 4t never used
+it) and the two turntable clips run in two H100 containers at once (`stage2_video.generate_clip`, then `assemble` on CPU;
+`stage2-parallel-0.1.0`). Same seeds per clip (43 / 44, motion 45), same stills, prompts and control; the input hash and
+the job ids do not change, so `--recompose-dress` / `--dress-expect` and the jobs Volume are reused as before. A failed clip
+stops the run before stage 4 (`complete: false`, `stopped_after_stage2`; no half turntable; stale `stage2/frames` and
+`garment_mask` removed); the clip that finished stays in the Volume. Cost rows per container (each pays its own model
+load). **Estimate from run 17d's timings:** stage 2 about 930–960 GPU s, **$1.02–1.05** (was 1,375–1,382 s, $1.51–1.52)
+and about **8–8.5 min wall** (was 23 min); a whole product about 15 min faster. Bit-identical frames to run 17d are not
+promised (fresh pipeline per clip; Modal may hand out an H200, as for 17d's skirt). Tests: `modal/tests/test_stage2_parallel.py`
+(mocked Modal calls), `evalReport.test.ts` (report without motion, per-container costs, incomplete stage 2). After review: a failed `assemble` writes this run's record over the
+Volume's older one locally and removes the stale frames (the report also reads `stopped_after_stage2`); a failed `--motion`
+clip no longer discards a good turntable (stage 4 runs, the record says `complete: false`); the clip containers get a
+40-minute timeout (`CURTAIN_MODAL_TIMEOUT_CLIP`, was 3 h); clips on different GPU types are recorded (`gpu_mismatch`) and
+flagged in the report (`H100!` pins the type). The $1.02–1.05 estimate is GPU only: memory reservations (128 GiB per
+container, about $0.3 per product, was about $0.43) come on top, and running in parallel costs one extra cold start
+plus model load (about 30 s, $0.03).
+
 **Stage 4t** (`spikes/garment-engine/src/templateFit.ts`, `bake.ts`, `stage4t.ts`;
 `pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic]`): the
 control proxy remeshed into a body tube and two sleeve tubes (each starting with a shoulder cap of

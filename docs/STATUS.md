@@ -214,6 +214,33 @@ evaluated asset. Full write-up, every render and the runs 10–14 timeline:
 section; renders under `spikes/garment-engine/out/eval/`, gitignored: the links resolve only in a
 checkout where run 14's outputs are in `out/phase0/` and `report:bohohippychic -- --renders` has run).
 
+**Run 15 and stage 1b QA 0.7.0 (7 Nov).** Run 15 (one product per category, FASHN, `--accept-failed-dress`):
+azure dress looks right; the maxi skirt's waistband and print are right but it is narrower than our hips (0.8.0
+below); the blouse and cardigan stills were torn or shrunken and still cost
+about $1.64 and $1.65 of stage 2 (whose black panels come from those stills, not from stage 2); the palazzo
+was stopped by the merged-legs check (~$0.03). Causes and fixes (`spikes/garment-engine/modal/README.md`,
+"Stage 1b after run 15"): the composite pasted a difference mask that lost the blouse's cream ground (the
+proxy's beige) → a colour-model composite mask; holes in the shop photo's SAM 2 mask became FASHN's grey
+127 sleeves → mask closing and hole fill; the trouser edit region closed the palazzo's 6 px leg gap → a
+20 px strip kept open and visible to FASHN. New type checks (see-through, body too short, front/back of
+different garments; merged legs on what the engine drew) stop such stills before stage 2 even with
+`--accept-failed-dress`; replayed on run 15 they stop blouse and cardigan and pass azure.
+The cardigan front (a cropped open cardigan over a drawn midriff) is not fixed. **0.8.0, the skirt's hips**
+(founder's review: "see the hips"): FASHN's grey box hides our hips, so it draws the skirt on a slimmer body of its
+own; pasted on our render, our hips show beside it (front row 428: garment 176-306, our hips 170-309, proxy
+165-314) and the video opened a side slit. The hips of a skirt or dress are now stretched to the proxy's width
+(`conform_to_proxy`; replay: 64/64 and 92/94 short rows → 0, max stretch 1.14), and "narrow at the hips" is a new
+type check (replay: stops the skirt in both views, passes azure). **0.9.0** (review of 0.8.0): the
+replay now rebuilds the composite as the GPU app does (`--path app`, default); on that path the blouse passes, so the
+earlier "stops the blouse" held only for run 15's pasted masks. Composite fixes seen on the stills: a notch cut into the
+blouse's front hem (the shirt-tail below the proxy was never pasted), white background slivers pasted down our legs
+under run 14's azure (also the cause of a 27/109 leg gap), FASHN's floor under the palazzo hem; a new type check for
+cloth drawn but not pasted (blouse notch 0.014, controls ≤ 0.003); trousers conformed above the crotch; the conform
+ramps in at the waistband (a squared-off shelf before); print fidelity's edge ratio floor 0.35 → 0.5 (the blouse's
+washed-out back, 0.400). Replay on the app path: azure (runs 14 and 15) passes; skirt passes the type checks (front
+fails only the provisional torso cover); blouse front passes, back fails print fidelity; cardigan and palazzo stopped.
+Run 16a (proposed): stage 1b alone on blouse, cardigan, palazzo (both engines), skirt and azure as a control (FASHN).
+
 **Stage 4t** (`spikes/garment-engine/src/templateFit.ts`, `bake.ts`, `stage4t.ts`;
 `pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic]`): the
 control proxy remeshed into a body tube and two sleeve tubes (each starting with a shoulder cap of

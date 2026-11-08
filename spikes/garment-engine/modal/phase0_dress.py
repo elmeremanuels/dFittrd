@@ -39,6 +39,21 @@ to the hem for a dress, flat neutral material) at the front and back camera (`dr
     stage1b-qa-0.6.1: these three are also listed as ``type_failures``. They are a different garment, not a provisional
     silhouette or fidelity miss, so ``--accept-failed-dress`` does not override them: ``run_phase0`` stops before stage 2.
 
+``after run 15`` (stage1b-qa-0.7.0)
+    Run 15's blouse and cardigan stills were torn and paid for stage 2 anyway (--accept-failed-dress). Three causes,
+    all in our code around the engine: (1) the composite pasted only the garment MASK over our bare render, and for
+    the blouse front that mask was the difference against the proxy-dressed target, whose beige (0.72, 0.68, 0.62)
+    is the blouse's cream ground (SAM 2 disagreed, IoU 0.43): 0.108 of the garment's outline showed our mannequin.
+    ``still_garment_mask`` adds what our grey mannequin colour model (``phase0_garment.segment_garment``) says is not
+    mannequin inside the proxy. (2) The shop photo's SAM 2 mask had holes (the cardigan back: 8,422 px in the knit
+    sleeves); FASHN fills everything outside the mask with grey 127 and copied it as grey sleeves.
+    ``clean_source_mask`` closes and fills it. (3) The trousers' edit region was one block: the proxy's 6 px gap
+    between the palazzo legs vanished in the 25 px margin. ``trouser_gap_zone`` keeps a gap open (see
+    ``edit_region(open_crotch=...)``). New TYPE checks, never overridden by --accept-failed-dress: mannequin seen
+    through the garment (``see_through``), a body far shorter than the proxy (``body_length``), front and back of
+    different garments (``view_agreement``: length or sleeves), and merged legs measured on what the engine drew
+    (the unclipped mask), not on the clipped composite.
+
 ``back_view_checks``
     The back still must not be a front: its garment matches the proxy's back silhouette (in ``still_qa``),
     it differs from the mirrored front still at least half as much as the shop's back photo differs from
@@ -66,7 +81,7 @@ if _HERE not in sys.path:
 
 import phase0_garment as pg  # noqa: E402
 
-STAGE1B_QA_VERSION = "stage1b-qa-0.6.1"
+STAGE1B_QA_VERSION = "stage1b-qa-0.9.0"
 
 # The proxy is dilated by this share of the frame height to give the edit region (0.03 of 832 px = 25 px, about 10 cm
 # at the turntable distance): enough for ease and a fuller flare, small enough that the region keeps the proxy's
@@ -128,7 +143,51 @@ STILL_QA_THRESHOLDS: dict[str, float] = {
     "max_above_waist_frac": 0.05,  # skirt/trousers: share of the garment above the proxy's top edge + the band's dilation
     "max_opening_cover": 0.5,  # outerwear with an opening: share of the front opening zone the garment covers
     "min_opening_px": 200,  # below this the view has no opening zone (a back view, a closed proxy): not checked
+    # stage1b-qa-0.7.0 (after run 15), TYPE checks. Measured on run 15's pinned masks (replay, `rescore_job`):
+    #   see_through   blouse front 0.108, back 0.044, cardigan back 0.037; azure 0 / 0, skirt 0 / 0, palazzo 0 / 0,
+    #                 run 14 azure 0 / 0
+    #   body_length   blouse front 0.295, cardigan front 0.469; every other view 0.89-1.05 (run 14 azure 0.892 / 0.895)
+    "max_see_through": 0.02,  # our mannequin inside the garment's own outline, on the eroded proxy, share of that outline
+    "min_body_length": 0.70,  # garment bottom / proxy bottom from the proxy's top edge, central body columns (not trousers)
+    # stage1b-qa-0.8.0 (founder's review of run 15's skirt: "see the hips"), a TYPE check. In the hip zone (`hip_profile`)
+    # a row is short when the garment stops at least `hip_short_frac` of the height (5 px at 832, about 2 cm) inside the
+    # proxy's run on either side. Run 15 replay (`hip_profile` on the pasted masks): skirt front 64 / 64 rows short
+    # (median 8 / 8 px per side), back 94 / 94 (8 / 5 px); azure 9 / 67 rows at <= 3 px (0 at 5 px), back 0; run 14 azure
+    # 0 / 0. The video then opened the skirt into a side slit (frames 20, 40), the stills showing our hip beside it.
+    "hip_short_frac": 0.006,
+    "max_hip_short_frac": 0.5,  # share of the hip-zone rows that may be short
+    # ... and our mannequin must show beside the garment (between it and the proxy's edge) in more than this share of the
+    # zone rows: a garment narrower than the proxy's ease but over our hips is not this failure (run 15 skirt 1.0 / 1.0,
+    # azure 0 / 0). Both conditions together.
+    "max_hip_exposed_frac": 0.25,
+    "min_hip_rows": 12,  # rows for 832 px frames; scaled: fewer zone rows, not checked
+    # stage1b-qa-0.9.0 (review of 0.8.0), a TYPE check: cloth the engine drew on our body inside the edit region that the
+    # composite does not paste (`unpasted_cloth`), share of the pasted garment. Run 15 raw outputs: the blouse front on the
+    # 0.8.0 composite mask 551 px, 0.0141 (rows 428-444, the shirt-tail notch), 0 on the 0.9.0 mask; on the masks run 15
+    # pasted, blouse 0.542 / 0.046, cardigan back 0.024 (torn); controls: azure 0-0.0003, skirt 0-0.0028, palazzo 0-0.0005,
+    # cardigan front 0.005 (pasted) / 0 (0.9.0). Provisional.
+    "max_unpasted_frac": 0.005,
 }
+# stage1b-qa-0.7.0: front and back of the same garment. Run 15 (the masks stage 1b pinned): length gap cardigan 0.458,
+# blouse 0.632 (torn front), azure 0.007, run 14 azure 0.003, skirt 0.037; sleeve cover gap cardigan 0.638 (long knit
+# sleeves on the front, grey sleeves on the back), blouse 0.162. Checked only when the proxy has sleeves (their pixels at
+# least `min_proxy_sleeve_share` of the proxy: cardigan 0.44, blouse 0.32; azure 0.04, a proxy without sleeves).
+VIEW_THRESHOLDS: dict[str, float] = {
+    "max_view_length_gap": 0.25,
+    "max_view_sleeve_gap": 0.40,
+    "min_proxy_sleeve_share": 0.15,
+}
+# Columns this far (share of the height; 6 px at 832) outside the proxy's torso run count as sleeve.
+SLEEVE_PAD_FRAC = 0.0072
+# Shop photo masks (SAM 2 on a busy photo): closed by this share of the photo's long side (4 px at 1200), then holes up to
+# `SOURCE_HOLE_FRAC` of the photo filled. Run 15: the cardigan back's knit sleeves gained 13,136 px (4.8 % of the mask;
+# FASHN had drawn them grey from the 127 fill); every other photo of the five 48-332 px (0.02-0.11 %).
+SOURCE_CLOSE_FRAC = 0.0035
+SOURCE_HOLE_FRAC = 0.01
+# Trousers: the gap kept open between the proxy's legs, from its crotch down, at least this share of the height wide
+# (20 px at 832, about 8 cm at the turntable distance). Run 15's palazzo proxy leaves 6 px there; the 25 px edit margin
+# closed it, so FASHN was given one block to paint and drew a skirt (259 / 259 merged rows).
+TROUSER_GAP_FRAC = 0.024
 # Shares of the frame height (scaled per still): the band's dilation (12 px at 832) and erosion (8 px), and how far above
 # the garment's own hem a leg-gap row must lie (8 px: a tiered or curved hem dips at the centre; run 13's FASHN
 # babydoll has 5 open rows right at its hem, 531-535 with the hem at 535).
@@ -138,7 +197,7 @@ STILL_QA_THRESHOLDS: dict[str, float] = {
 # as on GPU run 13): a dress more than the edit margin (25 px) past the proxy hem is still cut by the region and fails
 # `min_inside_fraction`; an open issue (README).
 SILHOUETTE_BAND = {"band_dilate_frac": 0.015, "band_erode_frac": 0.01, "hem_tol_frac": 0.01, "hem_extend_frac": 0.06}
-_ROW_KEYS = ("min_skirt_zone_rows", "min_leg_gap_rows", "min_merged_leg_rows")
+_ROW_KEYS = ("min_skirt_zone_rows", "min_leg_gap_rows", "min_merged_leg_rows", "min_hip_rows")
 # Not a check since stage1b-qa-0.4.0: recorded for comparison with the run 12 / run 13 records.
 LEGACY_MIN_SILHOUETTE_IOU = 0.85
 # Checks that only WARN until re-tuned on a generated dress: both compare with the proxy, whose flare is a guess
@@ -164,7 +223,9 @@ QA_LABEL = (
     "torso), the garment against the proxy, the skirt zone for a gap between the legs above the garment's own hem (taken "
     "from garment-coloured pixels) and for cover (dress/skirt), the mannequin outside the edit region against our render, "
     "proxy left-overs, print fidelity against the shop photo's garment at the same exposure; back view: not a mirrored "
-    "front, neckline not deeper than the back photo's. Provisional thresholds (run 12, run 13 and the synthetic dress). A "
+    "front, neckline not deeper than the back photo's. Type checks (never overridden): legs merged, a bodice on a skirt or "
+    "trousers, an open front closed, our mannequin seen through the garment, a body far shorter than the proxy, front and "
+    "back of different garments (0.7.0), a garment narrower than the proxy at the hips (0.8.0), cloth the engine drew that the composite does not paste (0.9.0). Provisional thresholds (runs 12, 13, 15 and the synthetic dress). A "
     "check, not a measurement; every still is a generated estimate."
 )
 
@@ -209,6 +270,56 @@ def front_opening_zone(proxy: np.ndarray, bare: np.ndarray) -> np.ndarray:
     return zone
 
 
+def trouser_gap_zone(proxy: np.ndarray, bare: np.ndarray, min_px: int | None = None) -> np.ndarray:
+    """Trousers: the strip between the proxy's two legs, from the first row where the proxy leaves the legs' axis open
+    (the crotch) to its hem, at least `min_px` wide (default `TROUSER_GAP_FRAC` of the height), centred on the proxy's
+    own gap. Empty where the proxy never splits (a side view, a skirt). It is taken out of the edit region and painted
+    as our bare render in the engine's input, so the engine sees the legs apart instead of one block to fill."""
+    p = np.asarray(proxy, dtype=bool)
+    b = np.asarray(bare, dtype=bool)
+    h, w = p.shape
+    zone = np.zeros_like(p)
+    legs = pg.leg_rows(b)
+    if legs is None:
+        return zone
+    min_px = max(1, int(round(TROUSER_GAP_FRAC * h))) if min_px is None else int(min_px)
+    _, _, x0, x1 = legs
+    ax = (x0 + x1) // 2
+    for y in range(int(_rows(p)[0]) if p.any() else h, h):
+        row = p[y]
+        if row[ax] or not row[x0:ax].any() or not row[ax + 1:x1].any():
+            continue
+        a = ax
+        while a > 0 and not row[a - 1]:
+            a -= 1
+        c = ax
+        while c < w - 1 and not row[c + 1]:
+            c += 1
+        mid = (a + c) / 2.0
+        half = max((c - a + 1) / 2.0, min_px / 2.0)
+        zone[y, max(0, int(round(mid - half))):min(w, int(round(mid + half)))] = True
+    return zone
+
+
+def qa_proxy(proxy: np.ndarray, gap: np.ndarray | None) -> np.ndarray:
+    """The proxy the QA compares a still with: the proxy minus the trouser gap kept open in the engine's input (the
+    engine was shown the legs that far apart, so the strip is neither placeholder left over nor torso to cover)."""
+    p = np.asarray(proxy, dtype=bool)
+    return p if gap is None else p & ~np.asarray(gap, dtype=bool)
+
+
+def engine_target(target: np.ndarray, bare_rgb: np.ndarray, gap: np.ndarray | None) -> np.ndarray:
+    """The proxy-dressed render the engine dresses, with the trouser gap painted as our bare render (studio background,
+    the inner thighs where they show): the placeholder legs no longer touch in the engine's input."""
+    t = np.asarray(target)
+    if gap is None or not np.asarray(gap, dtype=bool).any():
+        return t
+    out = t.copy()
+    g = np.asarray(gap, dtype=bool)
+    out[g] = np.asarray(bare_rgb)[g]
+    return out
+
+
 def edit_margin_px(tryon_cat: str, height: int) -> int:
     return max(1, int(round(EDIT_MARGIN_FRAC[tryon_cat] * height)))
 
@@ -216,12 +327,14 @@ def edit_margin_px(tryon_cat: str, height: int) -> int:
 def edit_region(
     proxy: np.ndarray, bare: np.ndarray, tryon_cat: str, margin_px: int | None = None, sleeve_band_frac: float | None = None,
     keep_open: bool = False,
+    open_crotch: np.ndarray | None = None,
 ) -> tuple[np.ndarray, dict[str, Any]]:
     """The area the try-on engine may change: the proxy plus the mannequin's arms in a band below the proxy's top
     edge (sleeves, `sleeve_band_frac` of the height, default `SLEEVE_BAND_FRAC`), dilated by `margin_px` (default
     `EDIT_MARGIN_FRAC`), minus everything above the neckline. `keep_open` (outerwear): the proxy's front opening
     (`front_opening_zone`), eroded by half the margin so the fronts' edges may still move into it, is taken out, so a
-    masked engine cannot close the front. Returns (mask, record)."""
+    masked engine cannot close the front. `open_crotch` (trousers, `trouser_gap_zone`): taken out after the dilation,
+    so the region keeps two legs. Returns (mask, record)."""
     proxy = np.asarray(proxy, dtype=bool)
     bare = np.asarray(bare, dtype=bool)
     h = proxy.shape[0]
@@ -242,8 +355,14 @@ def edit_region(
         zone = pg.erode(front_opening_zone(proxy, bare), max(1, int(margin_px) // 2))
         opening_px = int(zone.sum())
         region &= ~zone
+    crotch_px = 0
+    if open_crotch is not None:
+        gap = np.asarray(open_crotch, dtype=bool)
+        crotch_px = int((region & gap).sum())
+        region &= ~gap
     return region, {
         "kept_open_px": opening_px,
+        "crotch_gap_px": crotch_px,
         "margin_px": int(margin_px),
         "sleeve_band_px": band,
         "neck_margin_px": neck,
@@ -272,10 +391,15 @@ def grey_collision(rgb: np.ndarray, mask: np.ndarray, value: int = 127, tol: int
     }
 
 
-def fashn_person_labels(region: np.ndarray, bare: np.ndarray, proxy: np.ndarray, label_ids: Mapping[str, int], garment_label: str) -> np.ndarray:
+def fashn_person_labels(region: np.ndarray, bare: np.ndarray, proxy: np.ndarray, label_ids: Mapping[str, int], garment_label: str,
+                        keep_visible: np.ndarray | None = None) -> np.ndarray:
     """FASHN's person label map for masked mode (segmentation_free=False): the edit region gets the category's
     garment label (FASHN greys it out and dresses it), the head above the proxy `face` and the rest of our
-    mannequin `hands` (both are in FASHN's exclusion set: kept as they are). We never run FASHN's own parser."""
+    mannequin `hands` (both are in FASHN's exclusion set: kept as they are). We never run FASHN's own parser.
+
+    `keep_visible` (trousers: `trouser_gap_zone`) is labelled `feet`, which FASHN's `create_clothing_agnostic_image`
+    (pinned commit) excludes from its grey inpaint area for lower-body garments; without it the bounding-box part of
+    that area greys the strip between the legs too, and the engine sees one block."""
     region = np.asarray(region, dtype=bool)
     bare = np.asarray(bare, dtype=bool)
     top = int(_rows(proxy)[0])
@@ -285,8 +409,421 @@ def fashn_person_labels(region: np.ndarray, bare: np.ndarray, proxy: np.ndarray,
     head = keep.copy()
     head[top:] = False
     lab[head] = label_ids["face"]
+    if keep_visible is not None:
+        lab[np.asarray(keep_visible, dtype=bool) & ~region] = label_ids["feet"]
     lab[region] = label_ids[garment_label]
     return lab
+
+
+def clean_source_mask(mask: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
+    """The shop photo's garment mask (SAM 2) closed by `SOURCE_CLOSE_FRAC` of the long side and with its enclosed holes up
+    to `SOURCE_HOLE_FRAC` of the photo filled. FASHN replaces every pixel outside this mask with grey 127 in its garment
+    image (`create_garment_image`) and copies that grey as cloth: run 15's cardigan back had 8,422 px of holes in its knit
+    sleeves and FASHN drew grey sleeves (lum 123, chroma 2 on 75 % of the proxy's sleeve pixels). Only adds pixels."""
+    m = np.asarray(mask, dtype=bool)
+    h, w = m.shape
+    r = max(1, int(round(SOURCE_CLOSE_FRAC * max(h, w))))
+    closed = pg.erode(pg.dilate(m, r), r) | m
+    filled = pg.fill_holes(closed, int(SOURCE_HOLE_FRAC * h * w))
+    return filled, {"close_px": r, "max_hole_px": int(SOURCE_HOLE_FRAC * h * w), "added_px": int((filled & ~m).sum()),
+                    "added_share": 0.0 if not m.any() else round(float((filled & ~m).sum()) / float(m.sum()), 4)}
+
+
+UNPASTED = {"diff": 40, "bg_tol": 12}
+REST_MIN_CHROMA = 1.25
+
+
+def still_garment_mask(gen: np.ndarray, chosen: np.ndarray, bare: np.ndarray, proxy: np.ndarray, region: np.ndarray,
+                       grow_px: int | None = None, bg: Sequence[int] | None = None) -> tuple[np.ndarray, dict[str, Any]]:
+    """The garment mask the composite pastes: the chosen mask (SAM 2, or the difference against the proxy-dressed target
+    when SAM 2 disagreed) plus every pixel inside the proxy (or within `grow_px` of the chosen mask) that our grey
+    mannequin colour model (`phase0_garment.segment_garment`, sampled from the still's own head) says is not mannequin,
+    clipped to the edit region. Run 15's blouse front: the difference mask lost the cream ground of the print (it is the
+    proxy's beige), 21,112 px pasted, 0.108 of the outline showed our mannequin; with this 40,303 px and 0.0. When the
+    garment itself reads as mannequin grey (`ambiguous_with_mannequin`), colour cannot tell them apart and the chosen mask
+    is kept as it is. What the engine drew as bare mannequin (grey) stays out, so `see_through` still sees it."""
+    c = np.asarray(chosen, dtype=bool)
+    r = np.asarray(region, dtype=bool)
+    h = c.shape[0]
+    grow_px = max(1, int(round(0.004 * h))) if grow_px is None else int(grow_px)
+    seg, info = pg.segment_garment(gen, bare, r, proxy)
+    rec = {"version": pg.GARMENT_SEGMENT_VERSION, "ambiguous_with_mannequin": bool(info["ambiguous_with_mannequin"]),
+           "mannequin": info["mannequin"], "grow_px": grow_px, "chosen_px": int((c & r).sum())}
+    if info["ambiguous_with_mannequin"]:
+        out = c & r
+    else:
+        allowed = (np.asarray(proxy, dtype=bool) | pg.dilate(c, grow_px)) & r
+        # Only what is clearly not mannequin is added: the colour test at twice the chroma ceiling. Run 15's cardigan
+        # front: FASHN drew a bare midriff in a warm grey (chroma 8-15, lum 116-140), which the strict test calls cloth.
+        loose = pg.mannequin_like(np.asarray(gen)[..., :3], info["mannequin"], 2.0, pg.SEGMENT_DEFAULTS["mannequin_lum_margin"])
+        # Never studio background (`bg`, within `UNPASTED["bg_tol"]`; stage1b-qa-0.9.0): on our body the segmenter counts
+        # whatever is not mannequin grey as cloth, and where FASHN drew slimmer legs than ours it painted background beside
+        # them. Run 14's azure front on the 0.7.0 / 0.8.0 composite: white slivers pasted down our legs below the hem
+        # (the garment-coloured hem moved from about row 531 to 566, a 27 / 109 row leg gap; the pasted mask: 0).
+        if bg is not None:
+            loose = loose | (np.abs(np.asarray(gen)[..., :3].astype(np.int16) - np.asarray(bg, dtype=np.int16)).max(axis=2) <= UNPASTED["bg_tol"])
+        add = seg & allowed & ~loose
+        # Opened by 1 px with the chosen mask (stage1b-qa-0.9.0): the 1-2 px anti-aliased line between FASHN's slimmer leg
+        # and its background (light grey, neither mannequin nor background) is not cloth; gaps inside the garment still fill.
+        add &= pg.dilate(pg.erode(add | c, 1), 1)
+        out = (c | add) & r
+        # stage1b-qa-0.9.0 (review of 0.8.0): also what the engine drew in the rest of the edit region (outside the proxy
+        # and more than `grow_px` from the chosen mask), when it is clearly not mannequin and joins the garment. Run 15's
+        # blouse front: the difference mask missed the pale shirt-tail below the proxy (rows 420-446), 828 px drawn and
+        # not pasted, a straight cut with our grey mannequin below it.
+        rest = seg & r & ~loose & ~out
+        if rest.any():
+            # (`loose` holds the background too: FASHN's floor over our feet below the palazzo hem, run 15 back.)
+            # Each joined piece is kept only when its median chroma is above `REST_MIN_CHROMA` x the mannequin's ceiling:
+            # FASHN's floor highlight and shadow under the palazzo hem are grey or white (run 15: pieces of 61-341 px at
+            # median chroma 3-4), the blouse's shirt-tail is a pale cream print (879 px at 11; the mannequin ceiling 6.0).
+            # A white or grey garment is then extended only inside the proxy and near its chosen mask, as in 0.8.0.
+            joined = _chromatic_pieces(pg.keep_touching(rest | out, out) & rest, gen, REST_MIN_CHROMA * float(info["mannequin"]["chroma_max"]))
+            rec["added_outside_px"] = int(joined.sum())
+            out = out | joined
+        else:
+            rec["added_outside_px"] = 0
+    rec["added_px"] = int((out & ~c).sum())
+    rec["px"] = int(out.sum())
+    return out, rec
+
+
+def _chromatic_pieces(pieces: np.ndarray, rgb: np.ndarray, floor: float) -> np.ndarray:
+    """The connected pieces of `pieces` whose median chroma is above `floor` (not grey or white)."""
+    _, chroma = pg._lum_chroma(np.asarray(rgb)[..., :3])
+    lab, n = pg.label(pieces)
+    keep = np.zeros(n + 1, dtype=bool)
+    for i in range(1, n + 1):
+        keep[i] = float(np.median(chroma[lab == i])) > floor
+    return keep[lab]
+
+
+def unpasted_cloth(gen: np.ndarray, garment: np.ndarray, bare_rgb: np.ndarray, bare: np.ndarray, region: np.ndarray, bg: Sequence[int],
+                   mannequin: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """What the engine drew in the edit region as cloth that the composite does NOT paste (stage1b-qa-0.9.0, review of
+    0.8.0): pixels of the region outside the garment mask that differ from our bare render by more than `diff`, are not
+    studio background (within `bg_tol` of it) and, where `mannequin` (the still's own colour model, from
+    `still_garment_mask`) is given, not mannequin grey at twice its chroma ceiling. The composite shows our bare render
+    there: a notch cut into the garment (run 15's blouse front hem on the 0.7.0 path: 828 px). `see_through` cannot see
+    it: it measures inside the garment's own outline. Only pixels on our body (`bare`) count; the engine's own
+    background beside a slimmer body is not cloth, nor a grey or white piece (`REST_MIN_CHROMA`, as in
+    `still_garment_mask`)."""
+    g = np.asarray(gen)[..., :3].astype(np.int16)
+    m = np.asarray(garment, dtype=bool)
+    r = np.asarray(region, dtype=bool)
+    diff = np.abs(g - np.asarray(bare_rgb)[..., :3].astype(np.int16)).max(axis=2) > UNPASTED["diff"]
+    background = np.abs(g - np.asarray(bg, dtype=np.int16)).max(axis=2) <= UNPASTED["bg_tol"]
+    cand = r & ~m & np.asarray(bare, dtype=bool) & diff & ~background
+    if mannequin is not None:
+        cand &= ~pg.mannequin_like(np.asarray(gen)[..., :3], mannequin, 2.0, pg.SEGMENT_DEFAULTS["mannequin_lum_margin"])
+    # Only what touches the pasted garment (a notch in it), and not single specks along its anti-aliased edge.
+    cand = pg.dilate(pg.erode(cand, 1), 1) & cand
+    joined = pg.keep_touching(cand | pg.dilate(m, 1), m) & cand
+    if mannequin is not None:
+        # The same rule as `still_garment_mask`: grey or white pieces (FASHN's floor under a hem) are not cloth.
+        joined = _chromatic_pieces(joined, gen, REST_MIN_CHROMA * float(mannequin["chroma_max"]))
+    rows = _rows(joined)
+    n, gn = int(joined.sum()), int(m.sum())
+    return {"px": n, "frac": None if gn == 0 else round(n / gn, 4), "rows": None if len(rows) == 0 else [int(rows[0]), int(rows[-1])],
+            "params": dict(UNPASTED), "mannequin_excluded": mannequin is not None}
+
+
+def _torso_run(proxy: np.ndarray) -> tuple[int, int, int, int, int] | None:
+    """(top, bottom row, x0, x1, centre column) of the proxy's body: its run through the centre column at 60 % of its
+    height. None when the centre column is open there (trousers between the legs) or the proxy is empty."""
+    p = np.asarray(proxy, dtype=bool)
+    if not p.any():
+        return None
+    ys, xs = np.nonzero(p)
+    top, bot = int(ys.min()), int(ys.max())
+    cx = int(round(float(xs.mean())))
+    y = int(top + 0.6 * (bot - top))
+    if not p[y, cx]:
+        return None
+    x0 = cx
+    while x0 > 0 and p[y, x0 - 1]:
+        x0 -= 1
+    x1 = cx
+    while x1 < p.shape[1] - 1 and p[y, x1 + 1]:
+        x1 += 1
+    return top, bot, x0, x1, cx
+
+
+def garment_body(garment: np.ndarray, proxy: np.ndarray, bare: np.ndarray, *, kind: str, erode_px: int,
+                 exclude: np.ndarray | None = None) -> dict[str, Any]:
+    """Shape of the pasted garment against the proxy (stage1b-qa-0.7.0).
+
+    see_through   our mannequin INSIDE the garment's own outline (enclosed holes of the garment mask on the proxy eroded
+                  by `erode_px`, on our bare silhouette), as a share of the outline there; `exclude` (an outerwear front
+                  opening) does not count. A torn still (run 15 blouse, cardigan back) shows the mannequin through it.
+    body_length   (median lowest garment row - proxy top) / (median lowest proxy row - proxy top) over the central half
+                  of the proxy's body (`_torso_run`); None for trousers and when the run is not found. A cropped bolero
+                  drawn for a hip-length cardigan (run 15) reaches 0.469 of the proxy.
+    sleeve_cover  share of the proxy's sleeve pixels (outside the torso run by `SLEEVE_PAD_FRAC`) the garment covers, and
+                  sleeve_share, those pixels as a share of the proxy (a proxy without sleeves has only shoulder corners)."""
+    g = np.asarray(garment, dtype=bool)
+    p = np.asarray(proxy, dtype=bool)
+    b = np.asarray(bare, dtype=bool)
+    h = g.shape[0]
+    e = pg.erode(p, int(erode_px)) & b
+    if exclude is not None:
+        e &= ~pg.dilate(np.asarray(exclude, dtype=bool), int(erode_px))
+    filled = pg.fill_holes(g, g.size)
+    outline = int((filled & e).sum())
+    holes = int((filled & ~g & e).sum())
+    out: dict[str, Any] = {"see_through": None if outline == 0 else round(holes / outline, 4), "see_through_px": holes,
+                           "body_length": None, "sleeve_cover": None, "sleeve_share": None}
+    run = _torso_run(p)
+    if run is None:
+        return out
+    top, _, x0, x1, cx = run
+    if kind != "trousers":
+        hw = max(1, (x1 - x0) // 4)
+        cols = range(max(0, cx - hw), min(p.shape[1], cx + hw + 1))
+        pb = [int(np.nonzero(p[:, c])[0].max()) for c in cols if p[:, c].any()]
+        gb = [int(np.nonzero(g[:, c])[0].max()) if g[:, c].any() else top for c in cols]
+        if pb:
+            pbm = float(np.median(pb))
+            out["body_length"] = round((float(np.median(gb)) - top) / max(1.0, pbm - top), 4)
+    pad = max(1, int(round(SLEEVE_PAD_FRAC * h)))
+    X = np.arange(p.shape[1])[None, :]
+    sleeve = p & ((X < x0 - pad) | (X > x1 + pad))
+    n = int(sleeve.sum())
+    out["sleeve_share"] = round(n / max(1, int(p.sum())), 4)
+    out["sleeve_cover"] = None if n == 0 else round(float((g & sleeve).sum()) / n, 4)
+    return out
+
+
+# Hip conform (stage1b-qa-0.8.0). FASHN's agnostic image hides our mannequin inside a grey box from the waist down
+# (candidates/<view>_fashn_agnostic.png), so it redraws the body under a skirt from the pose alone, slimmer than ours,
+# and fits the skirt to that body: run 15's skirt at row 428 (front) spans x 176-306 where our hips span 170-309 and the
+# proxy 165-314. The composite pastes it onto our wider bare render and our hips show beside it. `conform_to_proxy`
+# widens each garment row of a skirt or dress to the proxy's run (never narrows), at most by `max_stretch`.
+CONFORM = {"max_stretch": 1.25, "ramp_frac": 0.03, "ramp_out_frac": 0.06, "smooth_rows": 9, "min_fill": 0.8, "pad_frac": 0.015}
+# stage1b-qa-0.9.0 (review of 0.8.0): trousers too, above the crotch only (their legs below it are left as drawn). Run 15's
+# palazzo is narrower than the proxy at the hips on the app path (85 / 85 and 75 / 75 rows, median 5 / 14 and 5 / 12 px);
+# a correct two-leg draw with the same fit would otherwise be stopped by the never-overridden hip check.
+CONFORM_KINDS = frozenset({"skirt", "dress", "trousers"})
+
+
+def _centre_run(row: np.ndarray, cx: int) -> tuple[int, int] | None:
+    if cx < 0 or cx >= len(row) or not row[cx]:
+        return None
+    x0 = cx
+    while x0 > 0 and row[x0 - 1]:
+        x0 -= 1
+    x1 = cx
+    while x1 < len(row) - 1 and row[x1 + 1]:
+        x1 += 1
+    return x0, x1
+
+
+def _proxy_axis(proxy: np.ndarray) -> int:
+    xs = np.nonzero(np.asarray(proxy, dtype=bool))[1]
+    return int(round(float(xs.mean()))) if len(xs) else 0
+
+
+def _garment_top(garment: np.ndarray, cx: int, half: int) -> int | None:
+    col = np.asarray(garment, dtype=bool)[:, max(0, cx - half):cx + half + 1].any(axis=1)
+    ys = np.nonzero(col)[0]
+    return int(ys[0]) if len(ys) else None
+
+
+def hip_zone(garment: np.ndarray, proxy: np.ndarray, legs: tuple[int, int, int, int] | None, kind: str) -> tuple[int, int] | None:
+    """Rows (y0, y1 exclusive) of the hips: from the garment's own top (skirt, trousers; a lower waistband is not a
+    gap) or the lower 30 % of the proxy's torso above the crotch (dress), to the crotch (`legs[0]`). None for tops,
+    outerwear, a view without separate legs, or an empty proxy."""
+    p = np.asarray(proxy, dtype=bool)
+    if kind not in ("skirt", "dress", "trousers") or legs is None or not p.any():
+        return None
+    h = p.shape[0]
+    rows = np.nonzero(p.any(axis=1))[0]
+    top, crotch = int(rows[0]), int(legs[0])
+    cx = _proxy_axis(p)
+    y0 = top if kind != "dress" else crotch - int(round(0.3 * (crotch - top)))
+    gt = _garment_top(garment, cx, max(1, int(round(0.012 * h))))
+    if gt is None:
+        return None
+    y0 = max(y0, gt + max(1, int(round(0.01 * h))))
+    return (y0, crotch) if crotch > y0 else None
+
+
+def hip_profile(garment: np.ndarray, proxy: np.ndarray, bare: np.ndarray, legs: tuple[int, int, int, int] | None, *, kind: str,
+                short_px: int) -> dict[str, Any]:
+    """Is the garment as wide as the proxy at the hips? Per row of `hip_zone`: the proxy's run through its axis, and how
+    far inside it the garment's outermost pixel (within that run) stops on each side. A row is short when either side
+    stops `short_px` or more inside; `body_exposed_px` / `exposed_rows` count our bare mannequin between the garment
+    and the proxy's edge (what the composite shows beside the garment)."""
+    g = np.asarray(garment, dtype=bool)
+    p = np.asarray(proxy, dtype=bool)
+    b = np.asarray(bare, dtype=bool)
+    zone = hip_zone(g, p, legs, kind)
+    out: dict[str, Any] = {"zone": None if zone is None else list(zone), "rows": 0, "short_rows": 0, "short_frac": None,
+                           "median_short_px": None, "max_short_px": None, "body_exposed_px": 0, "exposed_rows": 0, "exposed_frac": None,
+                           "short_px": int(short_px)}
+    if zone is None:
+        return out
+    cx = _proxy_axis(p)
+    left, right, exposed, exposed_rows = [], [], 0, 0
+    for y in range(*zone):
+        run = _centre_run(p[y], cx)
+        if run is None:
+            continue
+        x0, x1 = run
+        gx = np.nonzero(g[y, x0:x1 + 1])[0]
+        if len(gx) == 0:
+            continue
+        sl, sr = int(gx[0]), int(x1 - x0 - gx[-1])
+        left.append(sl)
+        right.append(sr)
+        e = int(b[y, x0:x0 + sl].sum()) + int(b[y, x1 + 1 - sr:x1 + 1].sum())
+        exposed += e
+        exposed_rows += int(e > 0)
+    if not left:
+        return out
+    L, R = np.array(left), np.array(right)
+    short = (L >= short_px) | (R >= short_px)
+    out.update({"rows": len(L), "short_rows": int(short.sum()), "short_frac": round(float(short.mean()), 4),
+                "median_short_px": [float(np.median(L)), float(np.median(R))], "max_short_px": [int(L.max()), int(R.max())],
+                "body_exposed_px": int(exposed), "exposed_rows": exposed_rows, "exposed_frac": round(exposed_rows / len(L), 4)})
+    return out
+
+
+def _smooth(v: np.ndarray, k: int) -> np.ndarray:
+    if k <= 1 or len(v) < k:
+        return v
+    pad = k // 2
+    vp = np.pad(v, pad, mode="edge")
+    return np.array([float(np.median(vp[i:i + k])) for i in range(len(v))])
+
+
+def conform_to_proxy(gen: np.ndarray, garment: np.ndarray, proxy: np.ndarray, bare: np.ndarray, region: np.ndarray, *, kind: str,
+                     params: Mapping[str, float] | None = None) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
+    """(still, garment mask, record): each garment row of the hips of a skirt or trousers (from its own top; trousers
+    only down to the crotch, their legs are left as drawn) or a dress (from the hip
+    zone, with a ramp of `ramp_frac` of the height above it) down to the crotch stretched sideways to the proxy's run
+    through its axis where it falls short of it, by linear resampling of the engine's own pixels; below the crotch the
+    stretch ramps out over `ramp_out_frac` of the height (50 rows at 832), so the skirt below keeps the flare the engine
+    drew (the proxy's flare is a guess). Never narrows, never moves pixels outside the garment's
+    row span into it, at most `max_stretch` per row (a row needing more is left as drawn, and the hip check sees it).
+    The shortfalls are median-smoothed over `smooth_rows` rows so the edge stays a smooth curve. Rows whose garment
+    covers less than `min_fill` of its own span (an open garment) are left as drawn. Other kinds: unchanged."""
+    c = {**CONFORM, **(params or {})}
+    g = np.asarray(garment, dtype=bool)
+    p = np.asarray(proxy, dtype=bool)
+    r = np.asarray(region, dtype=bool)
+    img = np.asarray(gen)
+    rec: dict[str, Any] = {"applied": False, "kind": kind, "params": c, "rows": 0, "capped_rows": 0, "added_px": 0, "max_stretch": 1.0}
+    if kind not in CONFORM_KINDS or not g.any() or not p.any():
+        rec["note"] = "not a skirt, dress or trousers (or empty): unchanged"
+        return img, g, rec
+    h, w = g.shape
+    legs = pg.leg_rows(np.asarray(bare, dtype=bool))
+    cx = _proxy_axis(p)
+    gt = _garment_top(g, cx, max(1, int(round(0.012 * h))))
+    if gt is None:
+        rec["note"] = "no garment on the proxy's axis: unchanged"
+        return img, g, rec
+    zone = hip_zone(g, p, legs, kind)
+    if zone is None:
+        rec["note"] = "no hip zone (no separate legs in this view): unchanged"
+        return img, g, rec
+    ramp = max(1, int(round(c["ramp_frac"] * h)))
+    if kind in ("skirt", "trousers"):
+        # From the garment's own top, ramping in over `ramp` rows (stage1b-qa-0.9.0): stretched in full from its first
+        # row, a slanted waistband (run 15's skirt front) was squared off to the proxy's width, a shelf at the waist.
+        start = gt
+    else:
+        start = max(gt, zone[0] - ramp)
+    crotch = zone[1]
+    ramp_out = max(1, int(round(c["ramp_out_frac"] * h)))
+    pad = max(1, int(round(c["pad_frac"] * h)))
+    end = crotch if kind == "trousers" else min(h, crotch + ramp_out)
+    ys, spans = [], []
+    for y in range(start, end):
+        run = _centre_run(p[y], cx)
+        if run is None:
+            continue
+        x0, x1 = run
+        lo, hi = max(0, x0 - pad), min(w - 1, x1 + pad)
+        gx = np.nonzero(g[y, lo:hi + 1])[0]
+        if len(gx) < 2:
+            continue
+        gl, gr = lo + int(gx[0]), lo + int(gx[-1])
+        if g[y, gl:gr + 1].mean() < c["min_fill"]:
+            continue
+        ys.append(y)
+        spans.append((gl, gr, x0, x1))
+    if not ys:
+        rec["note"] = "no garment rows on the proxy: unchanged"
+        return img, g, rec
+    S = np.array(spans, dtype=np.float64)
+    short_l = _smooth(np.maximum(0.0, S[:, 0] - S[:, 2]), int(c["smooth_rows"]))
+    short_r = _smooth(np.maximum(0.0, S[:, 3] - S[:, 1]), int(c["smooth_rows"]))
+    out = img.astype(np.float64).copy()
+    mask = g.copy()
+    rows = capped = added = 0
+    worst = 1.0
+    for i, y in enumerate(ys):
+        wgt = 1.0 if ramp == 0 else float(np.clip((y - start) / ramp, 0.0, 1.0))
+        if y >= crotch:
+            wgt *= float(np.clip(1.0 - (y - crotch) / ramp_out, 0.0, 1.0))
+        gl, gr = int(S[i, 0]), int(S[i, 1])
+        nl = int(round(gl - wgt * short_l[i]))
+        nr = int(round(gr + wgt * short_r[i]))
+        if nl >= gl and nr <= gr:
+            continue
+        stretch = (nr - nl) / max(1.0, float(gr - gl))
+        if stretch > c["max_stretch"]:
+            capped += 1
+            continue
+        xs = np.arange(nl, nr + 1)
+        sx = gl + (xs - nl) * (gr - gl) / max(1, nr - nl)
+        x_lo = np.floor(sx).astype(int)
+        x_hi = np.minimum(x_lo + 1, w - 1)
+        f = (sx - x_lo)[:, None]
+        src = img[y].astype(np.float64)
+        out[y, nl:nr + 1] = src[x_lo] * (1 - f) + src[x_hi] * f
+        new_row = g[y, np.clip(np.rint(sx).astype(int), 0, w - 1)]
+        before = int(mask[y].sum())
+        mask[y, nl:nr + 1] = new_row
+        mask[y] &= r[y]
+        added += int(mask[y].sum()) - before
+        rows += 1
+        worst = max(worst, stretch)
+    # `headroom`: how far the largest stretch applied sits below the cap (review of 0.8.0: run 15's skirt back needed 1.235 on
+    # the pasted mask, 1.146 with 4 rows capped on the 0.9.0 composite; a slimmer draw caps more rows, and the hip check
+    # then sees them as drawn).
+    rec.update({"applied": rows > 0, "rows": rows, "capped_rows": capped, "added_px": added, "max_stretch": round(worst, 4),
+                "headroom": round(float(c["max_stretch"]) - worst, 4),
+                "start_row": int(start), "median_short_px": [float(np.median(short_l)), float(np.median(short_r))]})
+    return np.clip(np.rint(out), 0, 255).astype(np.uint8), mask, rec
+
+
+def view_agreement(front: Mapping[str, Any] | None, back: Mapping[str, Any] | None, thresholds: Mapping[str, float] | None = None) -> dict[str, Any]:
+    """Front and back still of the same garment? `front` / `back` are the `garment_body` records of the two stills. The
+    body lengths (each against its own proxy view) may differ by at most `max_view_length_gap`, and when the proxy has
+    sleeves (`min_proxy_sleeve_share`) their sleeve cover by at most `max_view_sleeve_gap`. Run 15's cardigan: a cropped
+    front with long knit sleeves and a full-length sleeveless back. A TYPE check (never overridden)."""
+    t = {**VIEW_THRESHOLDS, **(thresholds or {})}
+    out: dict[str, Any] = {"length_gap": None, "sleeve_gap": None, "thresholds": t, "failures": []}
+    if not front or not back:
+        out["pass"] = None
+        out["note"] = "not checked: a view has no garment record"
+        return out
+    lf, lb = front.get("body_length"), back.get("body_length")
+    if lf is not None and lb is not None:
+        out["length_gap"] = round(abs(float(lf) - float(lb)), 4)
+        if out["length_gap"] > t["max_view_length_gap"]:
+            out["failures"].append(f"front and back differ in length: body length {lf:.3f} vs {lb:.3f} of the proxy (gap {out['length_gap']:.3f} > {t['max_view_length_gap']}; two different garments)")
+    sf, sb = front.get("sleeve_cover"), back.get("sleeve_cover")
+    share = min(float(front.get("sleeve_share") or 0.0), float(back.get("sleeve_share") or 0.0))
+    if sf is not None and sb is not None and share >= t["min_proxy_sleeve_share"]:
+        out["sleeve_gap"] = round(abs(float(sf) - float(sb)), 4)
+        if out["sleeve_gap"] > t["max_view_sleeve_gap"]:
+            out["failures"].append(f"front and back differ in sleeves: sleeve cover {sf:.3f} vs {sb:.3f} of the proxy's sleeves (gap {out['sleeve_gap']:.3f} > {t['max_view_sleeve_gap']}; two different garments)")
+    out["pass"] = not out["failures"]
+    return out
 
 
 def garment_prior(gen: np.ndarray, target: np.ndarray, region: np.ndarray, bg: Sequence[int], *, diff: int = 24, bg_tol: int = 10) -> np.ndarray:
@@ -580,7 +1117,11 @@ FIDELITY_THRESHOLDS = {
     "max_lab_hellinger": 0.35,  # palette after the exposure gain: joint L*a*b* histogram (8 x 10 x 10 bins), Hellinger distance
     "max_median_delta_e": 10.0,  # palette after the exposure gain: the two garments' median colours
     "max_exposure_gain": 3.0,  # linear-light gain that brings the candidate's median luminance to the shop's (x0.65 sRGB = 2.9)
-    "min_edge_ratio": 0.35,  # texture: candidate edge density / shop edge density, when the shop garment is printed
+    # texture: candidate edge density / shop edge density, when the shop garment is printed. 0.35 until stage1b-qa-0.9.0;
+    # raised after run 15's blouse back (FASHN: the right palette, the print washed out to a pale blotchy shirt; 0.404 on
+    # the 0.9.0 composite). FASHN stills that looked right: azure 0.63-0.82 (runs 14 and 15), skirt 0.91, blouse front
+    # 0.95; Qwen's solid blue azure 0.17-0.21. One product sets this floor: provisional.
+    "min_edge_ratio": 0.5,
     "min_shop_edge_density": 0.15,  # below this the shop garment counts as plain: the texture ratio is recorded, not checked
     "edge_threshold_l": 4.0,  # L* change per pixel (central difference) that counts as an edge
 }
@@ -908,6 +1449,7 @@ def still_qa(
     fidelity: Mapping[str, Any] | None = None,
     rgb: np.ndarray | None = None,
     bare_rgb: np.ndarray | None = None,
+    unpasted: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """QA v2 of one dressed still (masks are HxW bool). `kind` is the proxy kind (dress, skirt, trousers, top, outerwear).
 
@@ -949,6 +1491,9 @@ def still_qa(
         sleeve_band_px = int(round(SLEEVE_BAND_FRAC["one-pieces"] * h)) if kind in ("dress", "top", "outerwear") else 0
     band = silhouette_band(g, gf, fg, b, p, legs if kind in ("dress", "skirt") else None, int(sleeve_band_px))
     prof = pg.gap_profile(g, p, legs)
+    # Merged legs are measured on what the engine DREW (the unclipped garment): since stage1b-qa-0.7.0 a trouser region
+    # keeps a gap between the legs, so the clipped composite has two legs whatever the engine painted there.
+    prof_drawn = pg.gap_profile(gf, p, legs) if kind == "trousers" else prof
     hem_tol = max(1, int(round(SILHOUETTE_BAND["hem_tol_frac"] * h)))
     hem_mask, basis = None, "garment mask (clipped; never the unclipped mask)"
     if legs is not None and rgb is not None and bare_rgb is not None:
@@ -972,6 +1517,7 @@ def still_qa(
     # Outerwear: the front opening must stay open.
     zone = front_opening_zone(p, b) if kind == "outerwear" else np.zeros_like(p)
     zone_px = int(zone.sum())
+    body = garment_body(g, p, b, kind=kind, erode_px=band["erode_px"], exclude=zone if zone_px else None)
     opening_cover = None if zone_px < t["min_opening_px"] else float((gf & zone).sum()) / zone_px
     skirt_rows = prof["skirt_zone_rows"]
     skirt_cover = None if prof["skirt_zone_ref_px"] == 0 else prof["skirt_zone_cover_px"] / prof["skirt_zone_ref_px"]
@@ -1021,12 +1567,31 @@ def still_qa(
     # open front closed) are listed in `type_failures` as well: `--accept-failed-dress` never overrides them
     # (`phase0_lib.stage1b_summary` `type_failed_views`, `run_phase0._dress_gate`), so a wrong garment cannot reach stage 2.
     n_before_type = len(failures)
-    if kind == "trousers" and trouser_rows >= t["min_merged_leg_rows"] and prof["merged_leg_rows"] / trouser_rows > t["max_merged_leg_frac"]:
-        failures.append(f"legs merged: the garment closes the body axis between the legs in {prof['merged_leg_rows']}/{trouser_rows} leg rows where the proxy's legs stand apart (trousers drawn as a skirt)")
+    if kind == "trousers" and trouser_rows >= t["min_merged_leg_rows"] and prof_drawn["merged_leg_rows"] / trouser_rows > t["max_merged_leg_frac"]:
+        failures.append(f"legs merged: the garment closes the body axis between the legs in {prof_drawn['merged_leg_rows']}/{trouser_rows} leg rows where the proxy's legs stand apart (trousers drawn as a skirt)")
     if kind in ("skirt", "trousers") and above_frac > t["max_above_waist_frac"]:
         failures.append(f"garment above the waistband: {above_frac:.3f} of the garment lies more than {band['dilate_px']} px above the proxy's top edge > {t['max_above_waist_frac']} (a {kind} drawn with a bodice)")
     if opening_cover is not None and opening_cover > t["max_opening_cover"]:
         failures.append(f"front opening closed: the garment covers {opening_cover:.3f} of the proxy's front opening ({zone_px} px) > {t['max_opening_cover']} (an open front drawn closed)")
+    st = body["see_through"]
+    if st is not None and st > t["max_see_through"]:
+        failures.append(f"see-through: our mannequin shows inside the garment's outline on {st:.3f} of it ({body['see_through_px']} px) > {t['max_see_through']} (a torn garment)")
+    bl = body["body_length"]
+    if bl is not None and bl < t["min_body_length"]:
+        failures.append(f"body too short: the garment reaches {bl:.3f} of the proxy's length in the body columns < {t['min_body_length']} (a cropped or shrunken garment)")
+    un_frac = None if unpasted is None else unpasted.get("frac")
+    if un_frac is not None and un_frac > t["max_unpasted_frac"]:
+        rows = unpasted.get("rows")
+        failures.append(f"garment cut by the composite: {unpasted['px']} px the engine drew as cloth on our body are not pasted ({un_frac:.3f} of the garment"
+                        f"{f', rows {rows[0]}-{rows[1]}' if rows else ''}) > {t['max_unpasted_frac']} (our mannequin shows in a notch)")
+    hips = hip_profile(g, p, b, legs, kind=kind, short_px=max(1, int(round(t["hip_short_frac"] * h))))
+    if (hips["rows"] >= t["min_hip_rows"] and hips["short_frac"] is not None and hips["short_frac"] > t["max_hip_short_frac"]
+            and hips["exposed_frac"] > t["max_hip_exposed_frac"]):
+        ml, mr = hips["median_short_px"]
+        failures.append(f"narrow at the hips: the garment stops {hips['short_px']}+ px inside the proxy in {hips['short_rows']}/{hips['rows']} hip rows "
+                        f"(median {ml:.0f} / {mr:.0f} px left / right) > {t['max_hip_short_frac']}, our mannequin beside it in {hips['exposed_rows']} rows "
+                        f"({hips['body_exposed_px']} px) > {t['max_hip_exposed_frac']} "
+                        f"(the video opens a side slit there)")
     type_failures = failures[n_before_type:]
     if fidelity is not None and fidelity.get("pass") is False:
         failures.extend(f"print fidelity: {f}" for f in fidelity.get("failures", []))
@@ -1061,7 +1626,11 @@ def still_qa(
         "leg_gap": leg_gap_fail,
         "skirt_cover": None if skirt_cover is None else round(skirt_cover, 4),
         "trouser_leg_rows": trouser_rows,
-        "merged_leg_rows": prof["merged_leg_rows"],
+        "merged_leg_rows": prof_drawn["merged_leg_rows"],
+        "merged_leg_rows_basis": "unclipped garment (what the engine drew)" if kind == "trousers" else "garment mask (clipped)",
+        "garment_body": body,
+        "hips": hips,
+        "unpasted": None if unpasted is None else dict(unpasted),
         "above_waist_px": above_px,
         "above_waist_fraction": round(above_frac, 4),
         "front_opening_px": zone_px,
@@ -1127,6 +1696,15 @@ def pick_engine(candidates: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         why = "the only candidate that passes every check" if len(passing) == 1 else "passes every check; highest print fidelity, then silhouette score"
         return {**out, "engine": best["engine"], "reason": why}
     pool = [c for c in ok if c["engine"] not in fid_failed]
+    # A candidate with a TYPE failure (a different garment drawn: trousers as a skirt, torn, shrunken) is shown only when
+    # every candidate has one: with --accept-failed-dress a still that fails only provisional checks can still be used,
+    # and run 16's palazzo runs both engines so Qwen's two legs can stand in for FASHN's skirt.
+    typed_ok = [c for c in pool if not (c["qa"].get("type_failures") or [])]
+    out["type_failed"] = [c["engine"] for c in ok if (c["qa"].get("type_failures") or [])]
+    if typed_ok:
+        best = max(typed_ok, key=key)
+        why = "no engine passed QA: best of the candidates without a type failure whose print fidelity did not fail, rejected"
+        return {**out, "engine": best["engine"], "reason": why}
     if pool:
         best = max(pool, key=key)
         return {**out, "engine": best["engine"], "reason": "no engine passed QA: best of the candidates whose print fidelity did not fail, rejected"}
@@ -1243,6 +1821,17 @@ def back_view_checks(
 # --- re-score a finished stage 1b job on CPU -------------------------------------------------------------
 
 
+def _version_at_least(version: str | None, ref: tuple[int, int, int]) -> bool:
+    """`stage1b-qa-0.8.0` >= (0, 8, 0); None or an unparsable version is False."""
+    if not version:
+        return False
+    try:
+        parts = tuple(int(x) for x in version.rsplit("-", 1)[-1].split(".")[:3])
+    except ValueError:
+        return False
+    return parts >= ref
+
+
 def _read_mask(path: str) -> np.ndarray:
     from PIL import Image
 
@@ -1256,7 +1845,7 @@ def _read_rgb(path: str) -> np.ndarray:
     return np.asarray(Image.open(path).convert("RGB"))
 
 
-def rescore_job(job_dir: str, manifest: Mapping[str, Any]) -> dict[str, Any]:
+def rescore_job(job_dir: str, manifest: Mapping[str, Any], path: str = "app") -> dict[str, Any]:
     """QA v2 on the stage 1b outputs already in `job_dir`, per engine candidate when the job has them
     (`stage1b/raw/<view>_<engine>.png` with `stage1b/candidates/<view>_<engine>_garment_mask[_unclipped].png`, from
     stage1b-qa-0.3.0), else the single still (`stage1b/raw/<view>.png`, `stage1b/garment_mask_<view>.png`); then the
@@ -1264,15 +1853,36 @@ def rescore_job(job_dir: str, manifest: Mapping[str, Any]) -> dict[str, Any]:
     For a job exported before 0.4.0 the proxy mask is control/proxy_mask/<frame>.png (same proxy, same camera) and
     the garment mask is the one stage 1b made against the BARE render (clipped only to v1's wide margin, so it
     serves as the unclipped mask here); the record says so. Print fidelity needs the shop photo and its SAM 2 mask
-    (`stage1b/source/<role>_mask.png`)."""
+    (`stage1b/source/<role>_mask.png`).
+
+    `path` (stage1b-qa-0.9.0, review of 0.8.0): "app" (default) predicts what the current GPU app would paste from the
+    same raw outputs: for a job whose stage 1b ran before 0.8.0, the composite mask is rebuilt with `still_garment_mask`
+    from the saved (chosen) mask and the still and mask conformed with `conform_to_proxy`, as `stage1_dress.py` does;
+    a 0.8.0+ job already saved them (the conformed still and its mask) and is scored as saved. "pasted" scores the masks
+    the run actually pasted (run 15: its difference / SAM 2 masks, the torn blouse), with the conform only replayed."""
+    import json
+
     import phase0_lib as lib
+
+    if path not in ("app", "pasted"):
+        raise ValueError(f"path must be 'app' or 'pasted', not {path!r}")
+    saved_version = None
+    rec_path = os.path.join(job_dir, lib.STAGE1B_DIR, "record.json")
+    if os.path.exists(rec_path):
+        with open(rec_path, encoding="utf-8") as f:
+            saved_version = json.load(f).get("qa_version")
+    app_saved = _version_at_least(saved_version, (0, 8, 0))
 
     spec = manifest["stage1b"]
     kind = ((manifest.get("control") or {}).get("proxy") or {}).get("kind") or (spec.get("target") or {}).get("proxy_kind") or manifest["category"]
     tryon_cat = lib.tryon_category(manifest["category"])
     bg = tuple(spec["background_rgb"])
     p = lambda rel: os.path.join(job_dir, rel)  # noqa: E731
-    out: dict[str, Any] = {"version": STAGE1B_QA_VERSION, "kind": kind, "views": {}, "colour": {}}
+    rebuild = path == "app" and not app_saved
+    out: dict[str, Any] = {"version": STAGE1B_QA_VERSION, "kind": kind, "views": {}, "colour": {}, "path": path, "saved_qa_version": saved_version,
+                           "mask_basis": ("the saved masks: the job's stage 1b already ran the 0.8.0+ composite and conform" if app_saved else
+                                          "rebuilt as the current app would: still_garment_mask on the saved (chosen) mask, then conform_to_proxy" if rebuild else
+                                          "the masks the run pasted (the conform only replayed)")}
     src = {s["role"]: s for s in spec.get("sources", [])}
     shops: dict[str, tuple[np.ndarray, np.ndarray]] = {}
     for role in ("front", "back"):
@@ -1294,7 +1904,10 @@ def rescore_job(job_dir: str, manifest: Mapping[str, Any]) -> dict[str, Any]:
         bare = _read_mask(p(v["bare_mask"]))
         proxy = _read_mask(p(proxy_rel))
         h, w = bare.shape
-        region, region_rec = edit_region(proxy, bare, tryon_cat, keep_open=kind == "outerwear")
+        gap = trouser_gap_zone(proxy, bare) if kind == "trousers" else None
+        region, region_rec = edit_region(proxy, bare, tryon_cat, keep_open=kind == "outerwear", open_crotch=gap)
+        # The proxy as the engine was given it: trousers with the gap between the legs kept open (`qa_proxy`).
+        proxy_q = qa_proxy(proxy, gap)
         target = _read_rgb(p(v["proxy_rgb"])) if v.get("proxy_rgb") else None
         shop = shops.get(name if not v.get("invented") else "front")
         engines = [e for e in ("fashn", "qwen") if os.path.exists(p(f"{lib.STAGE1B_DIR}/raw/{name}_{e}.png")) and os.path.exists(p(f"{lib.STAGE1B_DIR}/candidates/{name}_{e}_garment_mask.png"))]
@@ -1304,19 +1917,44 @@ def rescore_job(job_dir: str, manifest: Mapping[str, Any]) -> dict[str, Any]:
         cands: list[dict[str, Any]] = []
         arrays: dict[str, tuple[np.ndarray, np.ndarray]] = {}
         for eng, raw_rel, mask_rel, unclipped_rel in entries:
+            # Since 0.8.0 stage 1b also saves the conformed still (`conform_to_proxy`) the composite used; QA it, not the raw.
+            conformed_rel = f"{lib.STAGE1B_DIR}/candidates/{name}_{eng}_conformed.png" if eng else None
+            if conformed_rel and os.path.exists(p(conformed_rel)):
+                raw_rel = conformed_rel
             raw = _read_rgb(p(raw_rel))
             saved = _read_mask(p(mask_rel))
             garment_full = _read_mask(p(unclipped_rel)) if os.path.exists(p(unclipped_rel)) else saved
             garment = saved & region
+            # The still's own mannequin colour model (for `unpasted_cloth`), and on the app path the rebuilt composite.
+            composite_mask, comp_rec = still_garment_mask(raw, garment, bare, proxy_q, region, bg=bg)
+            conformed = None
+            if rebuild:
+                c_img, c_mask, c_rec = conform_to_proxy(raw, composite_mask, proxy_q, bare, region, kind=kind)
+                c_rec["basis"] = "app path: still_garment_mask, then conform"
+                conformed = c_rec
+                if c_rec["applied"]:
+                    raw = c_img
+                garment = c_mask
+                garment_full = garment_full | garment
+            unpasted = unpasted_cloth(raw, garment, bare_rgb, bare, region, bg, None if comp_rec["ambiguous_with_mannequin"] else comp_rec["mannequin"])
             fgb = lib.keep_large_components(lib.mask_not(lib.background_mask(raw.tobytes(), w, h, bg, 10)), w, h, 0.02)
             fg = np.frombuffer(bytes(fgb), np.uint8).reshape(h, w).astype(bool)
             keep = bare & ~region
             mae = float(np.abs(raw.astype(np.int16) - bare_rgb.astype(np.int16))[keep].mean()) if keep.any() else None
-            residue = proxy_residue(raw, target, proxy, garment) if target is not None else None
+            residue = proxy_residue(raw, target, proxy_q, garment) if target is not None else None
             fid = print_fidelity(raw, garment, shop[0], shop[1]) if shop is not None and garment.any() else None
-            qa = still_qa(garment, fg, bare, proxy, region, kind=kind, mannequin_mae=mae, residue=residue, garment_full=garment_full,
-                          sleeve_band_px=region_rec["sleeve_band_px"], fidelity=fid, rgb=raw, bare_rgb=bare_rgb)
+            qa = still_qa(garment, fg, bare, proxy_q, region, kind=kind, mannequin_mae=mae, residue=residue, garment_full=garment_full,
+                          sleeve_band_px=region_rec["sleeve_band_px"], fidelity=fid, rgb=raw, bare_rgb=bare_rgb, unpasted=unpasted)
             qa["score"] = qa_score(qa)
+            if conformed is not None:
+                conformed["hips_after"] = qa["hips"]
+            # "pasted": what the conform would do with the pasted mask (a replay on CPU; a 0.8.0+ record has it already).
+            if path == "pasted" and not app_saved:
+                c_img, c_mask, c_rec = conform_to_proxy(raw, garment, proxy_q, bare, region, kind=kind)
+                c_rec["basis"] = "pasted mask (not the app path)"
+                legs_c = pg.leg_rows(bare)
+                c_rec["hips_after"] = hip_profile(c_mask, proxy_q, bare, legs_c, kind=kind, short_px=max(1, int(round(qa["thresholds"]["hip_short_frac"] * h))))
+                conformed = c_rec
             label = eng or "still"
             cands.append({
                 "engine": label,
@@ -1325,6 +1963,8 @@ def rescore_job(job_dir: str, manifest: Mapping[str, Any]) -> dict[str, Any]:
                 "garment_mask_unclipped": unclipped_rel if os.path.exists(p(unclipped_rel)) else f"{mask_rel} (no unclipped mask: used as is)",
                 "candidate_colour": garment_colour(raw, garment),
                 "qa": qa,
+                "composite_mask": comp_rec if rebuild else None,
+                "conform_replay": conformed,
             })
             arrays[label] = (raw, garment)
         decision = pick_engine(cands)
@@ -1346,7 +1986,21 @@ def rescore_job(job_dir: str, manifest: Mapping[str, Any]) -> dict[str, Any]:
         out["back_view"]["note"] = "the picked (or shown-as-rejected) front and back candidates, whether or not the front passed"
     else:
         out["back_view"] = {"pass": None, "failures": [], "note": "not checked: invented back, no shop segmentation or no picked still"}
+    fq, bq = (out["views"].get(n, {}).get("qa") for n in ("front", "back"))
+    out["view_agreement"] = view_agreement((fq or {}).get("garment_body"), (bq or {}).get("garment_body"))
+    apply_view_agreement(bq, out["view_agreement"])
     return out
+
+
+def apply_view_agreement(back_qa: dict[str, Any] | None, agreement: Mapping[str, Any]) -> None:
+    """A failed `view_agreement` fails the back still as a TYPE failure (listed in `type_failures`, so
+    `--accept-failed-dress` never overrides it and `run_phase0` stops before stage 2)."""
+    if back_qa is None or not agreement.get("failures"):
+        return
+    fs = [f"views disagree: {f}" for f in agreement["failures"]]
+    back_qa["failures"] = list(back_qa.get("failures") or []) + fs
+    back_qa["type_failures"] = list(back_qa.get("type_failures") or []) + fs
+    back_qa["pass"] = False
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1356,10 +2010,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Stage 1b QA v2 on a finished job's stills (CPU)")
     ap.add_argument("job_dir")
     ap.add_argument("--out", help="write the JSON here (default: print)")
+    ap.add_argument("--path", choices=("app", "pasted"), default="app",
+                    help="app (default): rebuild the composite as the current GPU app would; pasted: score the masks the run pasted")
     a = ap.parse_args(argv)
     with open(os.path.join(a.job_dir, "manifest.json"), encoding="utf-8") as f:
         m = json.load(f)
-    rec = rescore_job(a.job_dir, m)
+    rec = rescore_job(a.job_dir, m, path=a.path)
+    print(f"[stage1b-qa] {rec['version']} path {rec['path']}: {rec['mask_basis']}", file=sys.stderr)
     text = json.dumps(rec, indent=2)
     if a.out:
         with open(a.out, "w", encoding="utf-8") as f:
@@ -1378,6 +2035,24 @@ def main(argv: Sequence[str] | None = None) -> int:
                   f"{q['failures']}", file=sys.stderr)
         print(f"[stage1b-qa] {name}: selection {v['selection']['engine']} ({v['selection']['reason']})", file=sys.stderr)
     print(f"[stage1b-qa] back view: {rec['back_view'].get('pass')} {rec['back_view'].get('failures')}", file=sys.stderr)
+    va = rec["view_agreement"]
+    print(f"[stage1b-qa] views agree: {va.get('pass')} length gap {va.get('length_gap')} sleeve gap {va.get('sleeve_gap')} {va.get('failures')}", file=sys.stderr)
+    for name, v in rec["views"].items():
+        q = v.get("qa") or {}
+        body = q.get("garment_body") or {}
+        hp = q.get("hips") or {}
+        print(f"[stage1b-qa] {name}: hips short {hp.get('short_rows')}/{hp.get('rows')} rows (median {hp.get('median_short_px')} px, max {hp.get('max_short_px')}, "
+              f"mannequin beside {hp.get('body_exposed_px')} px)", file=sys.stderr)
+        for c in v["candidates"]:
+            cr = c.get("conform_replay")
+            if cr:
+                ha = cr.get("hips_after") or {}
+                print(f"[stage1b-qa] {name}/{c['engine']} conform ({cr.get('basis')}): rows {cr['rows']} capped {cr['capped_rows']} +{cr['added_px']} px max stretch {cr['max_stretch']}; "
+                      f"hips after: short {ha.get('short_rows')}/{ha.get('rows')} (median {ha.get('median_short_px')})", file=sys.stderr)
+        up = q.get("unpasted") or {}
+        print(f"[stage1b-qa] {name}: drawn but not pasted {up.get('px')} px ({up.get('frac')}, rows {up.get('rows')})", file=sys.stderr)
+        print(f"[stage1b-qa] {name}: see-through {body.get('see_through')} body length {body.get('body_length')} sleeve cover {body.get('sleeve_cover')} "
+              f"(sleeve share {body.get('sleeve_share')}); TYPE failures (never overridden): {q.get('type_failures')}", file=sys.stderr)
     return 0
 
 

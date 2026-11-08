@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MOCK_GARMENTS_BY_ID } from '@curtain/schema';
@@ -106,6 +108,25 @@ describe('garment assets (D13, D16)', () => {
     const rej = await t.app.inject({ method: 'POST', url: `/v1/merchant/assets/${asset.id}/reject`, headers: auth(), payload: { reason: 'hem too short' } });
     expect(rej.json().asset).toMatchObject({ status: 'rejected', live: false, rejectReason: 'hem too short' });
     expect(await tryAsset()).toBeNull();
+  });
+
+  it('a rejected version cannot be approved, but re-importing the same bytes puts it back up for review', async () => {
+    const dir = await fakeBundle({ seed: 'c' });
+    const { asset } = await importBundle(t.handle.db, t.env, s.shop.id, 'aalter-studio-1', dir);
+    await t.app.inject({ method: 'POST', url: `/v1/merchant/assets/${asset.id}/reject`, headers: auth(), payload: { reason: 'colour off' } });
+    const blocked = await t.app.inject({ method: 'POST', url: `/v1/merchant/assets/${asset.id}/approve`, headers: auth() });
+    expect(blocked.statusCode).toBe(400);
+    const again = await importBundle(t.handle.db, t.env, s.shop.id, 'aalter-studio-1', dir);
+    expect(again).toMatchObject({ created: false, asset: { id: asset.id, version: asset.version, status: 'awaiting_approval', rejectReason: null } });
+    const ok = await t.app.inject({ method: 'POST', url: `/v1/merchant/assets/${asset.id}/approve`, headers: auth() });
+    expect(ok.json().asset).toMatchObject({ status: 'approved', live: true });
+    expect((await tryAsset())?.version).toBe(asset.version);
+  });
+
+  it('the api image can write the assets volume it mounts', () => {
+    const dockerfile = readFileSync(fileURLToPath(new URL('../Dockerfile', import.meta.url)), 'utf8');
+    expect(dockerfile).toMatch(/ASSET_DIR=\/data\/assets/);
+    expect(dockerfile).toMatch(/mkdir -p [^\n]*\/data\/assets[^\n]*&& chown -R app:app \/data/);
   });
 
   it('another shop cannot approve this shop’s asset', async () => {

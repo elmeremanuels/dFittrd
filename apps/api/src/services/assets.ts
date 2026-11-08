@@ -79,7 +79,12 @@ export async function importBundle(db: Db, env: Env, shopId: string, productExte
   if (!product) throw notFound('product');
   const bundle = await readBundleDir(dir, chartSizesOf(product));
   const existing = await db.query.garmentAssets.findFirst({ where: and(eq(garmentAssets.productId, product.id), eq(garmentAssets.version, bundle.version)) });
-  if (existing) return { asset: existing, created: false };
+  if (existing) {
+    // Re-importing the same bytes after a merchant rejection puts that version back up for review.
+    if (existing.status !== 'rejected') return { asset: existing, created: false };
+    const [reopened] = await db.update(garmentAssets).set({ status: 'awaiting_approval', rejectReason: null }).where(eq(garmentAssets.id, existing.id)).returning();
+    return { asset: reopened!, created: false };
+  }
   const target = assetDir(env, shopId, product.id, bundle.version);
   const tmp = `${target}.tmp-${process.pid}`;
   await rm(tmp, { recursive: true, force: true });
@@ -103,7 +108,7 @@ async function ownAsset(db: Db, shopId: string, assetId: string): Promise<AssetR
 /** D13: the merchant approves a version; it goes live and the previous live version is superseded. */
 export async function approveAsset(db: Db, shopId: string, assetId: string, by: string, now: Date = new Date()): Promise<AssetRow> {
   const a = await ownAsset(db, shopId, assetId);
-  if (a.status === 'rejected') throw badRequest('asset_rejected', 'a rejected asset cannot be approved; import it again');
+  if (a.status === 'rejected') throw badRequest('asset_rejected', 'a rejected asset cannot be approved; import the bundle again to put it back up for review');
   await db
     .update(garmentAssets)
     .set({ status: 'superseded' })

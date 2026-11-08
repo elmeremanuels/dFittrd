@@ -134,7 +134,7 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
           <EstimateBadge className="pointer-events-none absolute bottom-2 left-2 text-[10px]" />
         </div>
       )}
-      {sizes.length > 1 ? (
+      {sizes.length > 1 && phase !== 'failed' ? (
         <div className="mt-2 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Size in 3D">
           {sizes.map((s) => (
             <button key={s} type="button" role="radio" aria-checked={s === size} className={`chip min-h-8 px-2.5 text-xs ${s === size ? 'border-ink bg-ink text-white' : ''}`} onClick={() => onSelect(s)}>

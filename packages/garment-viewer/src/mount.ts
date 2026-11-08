@@ -129,6 +129,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
         fit.cloth.calmFrames = p.calmFrames;
         l.dirty = true;
         if (p.done) l.jobId = null;
+        if (label === current) wake();
       });
     }
     return l;
@@ -147,12 +148,28 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
     const live = ensure(label);
     live.dirty = true;
     state(live.jobId === null && isSettled(live.fit.cloth, live.fit.params) ? 'settled' : 'draping');
+    wake();
     return true;
   };
 
+  // Frames run only while something changes (a drape in progress, the orbit controls moving or
+  // damping out, a resize); once settled and still, the loop stops so a phone is not kept busy.
   let raf = 0;
-  const tick = (): void => {
+  let awakeUntil = 0;
+  function wake(ms = 0): void {
+    awakeUntil = Math.max(awakeUntil, performance.now() + ms);
+    if (!raf && !disposed) raf = requestAnimationFrame(tick);
+  }
+  const onControls = (): void => wake(600);
+  stage.controls.addEventListener('change', onControls);
+  stage.controls.addEventListener('start', onControls);
+  const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => wake(100)) : null;
+  resizeObserver?.observe(canvas);
+
+  function tick(): void {
+    raf = 0;
     if (disposed) return;
+    let busy = false;
     const live = fits.get(current);
     if (live) {
       if (live.jobId === null && !isSettled(live.fit.cloth, live.fit.params)) {
@@ -169,16 +186,17 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
         // The neighbouring sizes drape in the background, so the size switch is instant.
         if (pool) for (const s of neighbours(current)) ensure(s);
       }
+      busy = live.jobId !== null || !isSettled(live.fit.cloth, live.fit.params) || live.dirty;
     }
     stage.render();
-    raf = requestAnimationFrame(tick);
-  };
+    if (!raf && !disposed && (busy || performance.now() < awakeUntil)) raf = requestAnimationFrame(tick);
+  }
 
   if (!setSize(opts.size) && !setSize(ok.baseSize)) {
     state('error');
     throw new GarmentViewError('incompatible');
   }
-  raf = requestAnimationFrame(tick);
+  wake(500);
 
   return {
     setSize,
@@ -186,6 +204,10 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
     dispose() {
       disposed = true;
       cancelAnimationFrame(raf);
+      raf = 0;
+      resizeObserver?.disconnect();
+      stage.controls.removeEventListener('change', onControls);
+      stage.controls.removeEventListener('start', onControls);
       pool?.terminate();
       pool = null;
       figure.dispose();

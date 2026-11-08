@@ -33,6 +33,11 @@ the Dawn page says `SKIPPED`. The demo copies only the five bundle files (`base.
 `anchors.json`, `grading.json`, `material.json`, `qa.json`) into `.demo-db/assets/`; the product's
 `payload.json` gives the size chart, its photos are replaced by the storefront's own drawing.
 
+The storefront uses no shop photos, but **the azure bundle's texture (`base.glb`) is baked from the
+shop's product photos**, so the 3D view shows the shop's print. Keep that bundle local: do not host,
+record or share a demo with it until the pilot merchant has approved it (D13). The synthetic
+aalter-studio-2 bundle has no shop-derived content and can be shown anywhere.
+
 Screenshots: `test-results/demo-e2e/` (or `DEMO_E2E_SHOTS=<folder>`).
 
 ## 2. Install on Shopify (custom app for the pilot)
@@ -66,6 +71,9 @@ approves it** (`POST /v1/merchant/assets/:id/approve`, D13) and the shop's switc
 (`UPDATE shops SET settings = settings || '{"garment3d": true}' WHERE domain = '<shop>'`). If the
 merchant later changes the size chart so a size is no longer graded, the 3D button disappears by
 itself.
+A rejected version cannot be approved; importing the same bundle again puts it back up for review.
+Because there is no merchant approval UI yet (section 5), 3D at a real shop is **demo-only** for now:
+do not switch it on for the pilot until the approval UI and the preview exist.
 
 ## 3. Install on WooCommerce
 
@@ -95,4 +103,6 @@ itself.
 - A merchant approval **UI** (Shopify checklist row, Woo console row) and the approval preview page:
   the api routes exist (`GET /v1/merchant/products/:id/assets`, `POST /v1/merchant/assets/:id/approve|reject`), the buttons do not.
 - No e2e against a real Shopify or WordPress install, billing or webhooks (unit tests only).
+- The Caddy `/assets` block is pinned by a unit test, not yet run through a real Caddy: run
+  `infra/scripts/caddy-validate.sh` before the first deploy that carries it.
 - The 3D view is WebGL2 only and drapes in Web Workers; on devices without WebGL2 the button is hidden.

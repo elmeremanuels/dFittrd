@@ -228,6 +228,12 @@ docker compose -p curtain cp ./azure-palm-baby-doll-dress api:/data/import-azure
 docker compose -p curtain exec api node dist/scripts/import-asset.js --shop <pilot>.myshopify.com --product <external id> --dir /data/import-azure
 ```
 
+The api image creates `/data/assets` owned by `app` (pinned by `apps/api/src/assets.test.ts`), so the
+fresh named volume is writable by the import. Importing the same bundle again after the merchant
+rejected it puts that version back to `awaiting_approval`. The `/assets` block of the Caddyfile is
+pinned by a unit test only: before the first deploy that carries it, run
+`infra/scripts/caddy-validate.sh` (Docker, the stack's Caddy image).
+
 Shoppers see nothing until the merchant approves and the shop's `settings.garment3d` is `true`
 (set by hand while D17 decides 3D pricing). See `docs/PLUGIN.md`.
 

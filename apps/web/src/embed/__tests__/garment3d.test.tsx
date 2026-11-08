@@ -86,5 +86,6 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     setup({ loadViewer: async () => ({ mountGarmentView: async () => Promise.reject(new Error('unsupported')) }) as never });
     fireEvent.click(screen.getByTestId('garment3d-open'));
     expect(await screen.findByTestId('garment3d-failed')).toHaveTextContent('isn’t available on this device');
+    expect(screen.queryByRole('radiogroup', { name: 'Size in 3D' })).toBeNull();
   });
 });

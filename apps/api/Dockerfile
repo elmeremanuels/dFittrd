@@ -46,9 +46,10 @@ ARG GIT_SHA=unknown
 ENV NODE_ENV=production \
     GIT_SHA=${GIT_SHA} \
     PORT=3000 \
-    RENDERS_DIR=/data/renders
+    RENDERS_DIR=/data/renders \
+    ASSET_DIR=/data/assets
 RUN apk add --no-cache libc6-compat tini && addgroup -S app && adduser -S app -G app \
- && mkdir -p /data/renders && chown -R app:app /data
+ && mkdir -p /data/renders /data/assets && chown -R app:app /data
 WORKDIR /app
 COPY --from=build --chown=app:app /out /app
 USER app

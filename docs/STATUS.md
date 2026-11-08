@@ -424,6 +424,18 @@ read where it sits (4.76 cm below the waist ring) against chart + ease + the man
 hem over the feet is in the stills (the front still's hem reaches the bottom of the feet), not the fit. The skirt stays
 **faulty**. Panel still on hold (1 of 5 bundles).
 
+**Stage 2 faster (branch `claude/stage2-fast`, 8 Nov, code only, not run on a GPU; `modal/README.md`, "Stage 2 in
+parallel, motion opt-in").** Founder-approved: the motion clip is now opt-in (`--motion`; stage 4 and stage 4t never used
+it) and the two turntable clips run in two H100 containers at once (`stage2_video.generate_clip`, then `assemble` on CPU;
+`stage2-parallel-0.1.0`). Same seeds per clip (43 / 44, motion 45), same stills, prompts and control; the input hash and
+the job ids do not change, so `--recompose-dress` / `--dress-expect` and the jobs Volume are reused as before. A failed clip
+stops the run before stage 4 (`complete: false`, `stopped_after_stage2`; no half turntable; stale `stage2/frames` and
+`garment_mask` removed); the clip that finished stays in the Volume. Cost rows per container (each pays its own model
+load). **Estimate from run 17d's timings:** stage 2 about 930–960 GPU s, **$1.02–1.05** (was 1,375–1,382 s, $1.51–1.52)
+and about **8–8.5 min wall** (was 23 min); a whole product about 15 min faster. Bit-identical frames to run 17d are not
+promised (fresh pipeline per clip; Modal may hand out an H200, as for 17d's skirt). Tests: `modal/tests/test_stage2_parallel.py`
+(mocked Modal calls), `evalReport.test.ts` (report without motion, per-container costs, incomplete stage 2).
+
 **Stage 4t** (`spikes/garment-engine/src/templateFit.ts`, `bake.ts`, `stage4t.ts`;
 `pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic]`): the
 control proxy remeshed into a body tube and two sleeve tubes (each starting with a shoulder cap of

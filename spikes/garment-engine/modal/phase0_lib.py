@@ -350,6 +350,99 @@ def format_cost_table(records: Iterable[Mapping[str, Any]]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Stage 2 clips: which clips, which seed, one GPU container per clip
+# ---------------------------------------------------------------------------
+
+STAGE2_RUNNER = "stage2-parallel-0.1.0"
+STAGE2_COST_STAGE = "stage2_video"
+
+
+def stage2_clip_plan(m: Mapping[str, Any], clip_ids: Sequence[str] | None = None, *, motion: bool = False) -> list[dict[str, Any]]:
+    """The clips stage 2 generates, in manifest order: {id, kind, index, seed}.
+
+    Default: the turntable clips only (turntable_a, turntable_b); stage 4 and stage 4t use only those. The motion
+    clip is opt-in (`motion=True`, or named in `clip_ids`). The seed is the manifest's video seed plus the clip's
+    index in the manifest's `clips` (turntable_a 43, turntable_b 44, motion 45 for seed 43), so a clip keeps the seed
+    of the earlier three-clip runs whatever else is generated with it. (Until stage2-parallel-0.1.0 the index was the
+    position among the clips generated in that call; for a full run and for the turntable pair the two agree.)"""
+    known = [c["id"] for c in m["clips"]]
+    if clip_ids:
+        unknown = [c for c in clip_ids if c not in known]
+        if unknown:
+            raise ManifestError(f"unknown clip {', '.join(unknown)} (the manifest has {', '.join(known)})")
+        wanted = set(clip_ids) | ({c["id"] for c in m["clips"] if c.get("kind") == "motion"} if motion else set())
+    else:
+        wanted = {c["id"] for c in m["clips"] if c.get("kind") == "turntable" or (motion and c.get("kind") == "motion")}
+    base = int(m["seeds"]["video"])
+    return [{"id": c["id"], "kind": c.get("kind", "turntable"), "index": i, "seed": base + i} for i, c in enumerate(m["clips"]) if c["id"] in wanted]
+
+
+def stage2_turntable_ids(m: Mapping[str, Any]) -> list[str]:
+    return [c["id"] for c in m["clips"] if c.get("kind") == "turntable"]
+
+
+def stage2_outcome(m: Mapping[str, Any], plan: Sequence[Mapping[str, Any]], done: Sequence[Mapping[str, Any]], failed: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """What a stage 2 run produced: `complete` when every planned clip came back, `turntable` when both half turns did
+    (the 160 frames can be assembled). A failed clip never yields a half job: the caller stops before stage 4."""
+    ids = [c["id"] for c in done]
+    missing = [c["id"] for c in plan if c["id"] not in ids and c["id"] not in {f["id"] for f in failed}]
+    turntable = set(stage2_turntable_ids(m)) <= set(ids)
+    return {
+        "complete": not failed and not missing,
+        "turntable": turntable,
+        "generated": ids,
+        "failed": [dict(f) for f in failed] + [{"id": c, "error": "no result returned"} for c in missing],
+        "turntable_requested": any(c["kind"] == "turntable" for c in plan),
+    }
+
+
+def stage2_costs(plan: Sequence[Mapping[str, Any]], results: Mapping[str, Mapping[str, Any]], walls: Mapping[str, float], *, gpu: str, region: str | None, stage_wall_seconds: float | None) -> dict[str, Any]:
+    """The cost records of a stage 2 run with one GPU container per clip, and the stage's wall clock vs GPU seconds.
+
+    One record per container, `stage2_video[<clip>]`: `gpu_seconds` is that container's in-function time (its own
+    model load included: the load is paid once per container), `wall_seconds` the caller's time from spawn to the
+    result (queue and cold start included, so the upper end). A clip that failed returns no GPU seconds: its record
+    has 0 GPU seconds and its wall time as the upper end, with a note. `parallel` sums the containers and sets them
+    against the stage's wall clock."""
+    records = []
+    for c in plan:
+        r = results.get(c["id"])
+        wall = walls.get(c["id"])
+        if r is not None and r.get("gpu_seconds") is not None:
+            records.append(cost_record(f"{STAGE2_COST_STAGE}[{c['id']}]", gpu=gpu, region=region, gpu_seconds=float(r["gpu_seconds"]), wall_seconds=wall,
+                                       extra={"container": c["id"], "load_seconds": r.get("load_seconds"), "gpu_name": r.get("gpu_name")}))
+        else:
+            rec = cost_record(f"{STAGE2_COST_STAGE}[{c['id']}]", gpu=gpu, region=region, gpu_seconds=0.0, wall_seconds=wall, extra={"container": c["id"], "failed": True})
+            rec["notes"] = list(rec["notes"]) + ["the clip failed: its container reported no GPU seconds; the high estimate is its wall time"]
+            records.append(rec)
+    gpu_s = round(sum(r["gpu_seconds"] for r in records), 1)
+    loads = [float(results[c["id"]]["load_seconds"]) for c in plan if results.get(c["id"], {}).get("load_seconds") is not None]
+    # One record for the stage as a whole (stage2/record.json `cost`, read when there is no cost_summary.json): the
+    # containers' GPU seconds summed, the estimates summed (the high end per container, not of the summed seconds).
+    total = cost_record(STAGE2_COST_STAGE, gpu=gpu, region=region, gpu_seconds=gpu_s, wall_seconds=stage_wall_seconds, extra={"containers": len(records)})
+    if all(r.get("usd_estimate_low") is not None for r in records) and records:
+        total["usd_estimate_low"] = round(sum(r["usd_estimate_low"] for r in records), 4)
+        total["usd_estimate_high"] = round(sum(r.get("usd_estimate_high") or r["usd_estimate_low"] for r in records), 4)
+    return {
+        "records": records,
+        "total": total,
+        "parallel": {
+            "runner": STAGE2_RUNNER,
+            "containers": len(records),
+            "gpu_seconds": gpu_s,
+            "load_seconds_total": round(sum(loads), 1),
+            "wall_seconds": None if stage_wall_seconds is None else round(stage_wall_seconds, 1),
+            "label": "GPU seconds summed over the containers (each loads the model); wall seconds of the stage as a whole",
+        },
+    }
+
+
+def stage2_parallel_line(p: Mapping[str, Any]) -> str:
+    wall = "n/a" if p.get("wall_seconds") is None else f"{p['wall_seconds']:.0f} s"
+    return f"[stage2] {p['containers']} GPU containers in parallel: wall {wall}, GPU {p['gpu_seconds']:.0f} s summed (model load {p['load_seconds_total']:.0f} s of it, paid per container)"
+
+
+# ---------------------------------------------------------------------------
 # Settings
 # ---------------------------------------------------------------------------
 

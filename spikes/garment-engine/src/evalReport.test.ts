@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { chooseMesh, evaluateProduct, readJob, type JobFiles, type ProductEval } from './evalJob';
 import { reconstructedDress, shopPayloads, syntheticDress, writeFakeJob } from './evalFixtures';
 import { SHOP_UNCOVERED_CATEGORIES } from './shopSelection';
-import { consistencyNote, costScope, costTotal, forPanel, offPanelReason, parsePrintedTable, plannedPhotos, renderReport, stageStatuses, usedInputs, verdicts, type ProductSection, type ReportInput, type ShopImage, type ShopProduct, parseWaistReading, waistReadingLine, joinDetail } from './evalReport';
+import { consistencyNote, costScope, costTotal, stage2ClipsNote, forPanel, offPanelReason, parsePrintedTable, plannedPhotos, renderReport, stageStatuses, usedInputs, verdicts, type ProductSection, type ReportInput, type ShopImage, type ShopProduct, parseWaistReading, waistReadingLine, joinDetail } from './evalReport';
 
 const images = (JSON.parse(readFileSync(new URL('../data/bohohippychic/images.json', import.meta.url), 'utf8')) as { products: Record<string, ShopImage[]> }).products;
 const dirs: string[] = [];
@@ -141,6 +141,28 @@ describe('report with a GPU run', () => {
     expect(st.find((s) => s.stage === '4t template fit + bake (CPU)')!.detail).toMatch(/hem girth UNCONFIRMED: fitted from masks of 73 turntable frames/);
     const clean = stageStatuses(sec, { ...flaggedJob, stage2: { ...(job.stage2 as object), consistency: { ...consistency, off_reference_spans: [] } } });
     expect(clean.find((s) => s.stage === '4t template fit + bake (CPU)')!.detail).not.toMatch(/UNCONFIRMED/);
+  });
+
+  it('reads a stage 2 run without the motion clip, on one GPU container per clip, and marks an incomplete one failed', () => {
+    const cost = (stage: string, gpu: number, wall: number) => ({ stage, estimate: true, gpu: 'H100', region: 'any', gpu_seconds: gpu, wall_seconds: wall, usd_estimate_low: 0.5, usd_estimate_high: 0.55 });
+    const costs = [cost('stage2_video[turntable_a]', 480, 495), cost('stage2_video[turntable_b]', 466, 497)];
+    const parallel = { runner: 'stage2-parallel-0.1.0', containers: 2, gpu_seconds: 946, load_seconds_total: 29, wall_seconds: 497 };
+    const clips = [{ id: 'turntable_a', frames: 81, seed: 43 }, { id: 'turntable_b', frames: 81, seed: 44 }];
+    const s2 = { ...(job.stage2 as object), clips, motion: false, complete: true, failed_clips: [], parallel, costs };
+    expect(stage2ClipsNote(s2)).toBe('clips turntable_a, turntable_b; no motion clip; 2 GPU containers in parallel, wall 497 s vs 946 GPU s');
+    expect(stage2ClipsNote({ clips: [...clips, { id: 'motion' }] })).toBe('clips turntable_a, turntable_b, motion');
+    expect(stage2ClipsNote(job.stage2)).toBe('');
+    const two = { ...job, stage2: s2, costSummary: { costs, wall_seconds: 900 } };
+    const st = stageStatuses(sec, two).find((s) => s.stage === '2 image to video')!;
+    expect(st.state).toBe('done');
+    expect(st.detail).toMatch(/turntable frames \(clips turntable_a, turntable_b; no motion clip; 2 GPU containers/);
+    const ct = costTotal({ ...two, costs: costs.map((c) => ({ stage: c.stage, gpu: c.gpu, region: c.region, gpuSeconds: c.gpu_seconds, wallSeconds: c.wall_seconds, usdLow: c.usd_estimate_low, usdHigh: c.usd_estimate_high, estimate: true })) });
+    expect(ct.gpuSeconds).toBe(946);
+    expect(ct.usdLow).toBeCloseTo(1.0);
+    const failed = { ...s2, complete: false, clips: clips.slice(1), turntable_frames_assembled: 0, failed_clips: [{ id: 'turntable_a', error: 'RuntimeError: CUDA out of memory' }] };
+    const bad = stageStatuses(sec, { ...job, stage2: failed }).find((s) => s.stage === '2 image to video')!;
+    expect(bad.state).toBe('failed');
+    expect(bad.detail).toBe('INCOMPLETE: turntable_a (RuntimeError: CUDA out of memory); clips turntable_b; no motion clip; 2 GPU containers in parallel, wall 497 s vs 946 GPU s; no turntable assembled');
   });
 
   it('says when a cost total leaves out a stage 1b reused from an earlier run', () => {

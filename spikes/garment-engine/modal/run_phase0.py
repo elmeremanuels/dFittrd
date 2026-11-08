@@ -12,7 +12,8 @@ Steps:
      --allow-invented-back is missing. A job whose stills come from stage 1b cannot run stage 2 before them.
   1. check the job manifest (input_hash, pinned versions, front + back photos) and upload the job once
   2. download the pinned Wan2.2-Fun-A14B-Control weights into the weights Volume (once)
-  3. stage 2: generate turntable_a, turntable_b and motion with the manifest's neutral prompts (refused
+  3. stage 2: generate turntable_a and turntable_b (the motion clip only with --motion; stage 4 and 4t do not use it), each in
+     its own GPU container in parallel (stage2_video.run_stage2; a failed clip stops the run before stage 4), with the manifest's neutral prompts (refused
      when lib.prompt_problems finds the title, the brand or a missing negative term) and the control
      the exporter rendered (`control.mode`: proxy garment by default); assemble the 160 turntable frames;
      score every generated frame against the control silhouette (stage2_video.score_consistency, CPU)
@@ -20,7 +21,7 @@ Steps:
      synthetic frames (source synthetic: same camera path, known garment, so the error is measured)
   5. download stage2/ and stage4/ into the job dir and write cost_summary.json; print the cost table
 
-Options: --steps 40 --iterations 10000 --triangles 12000 --skip-video (reuse stage2/ already in the Volume)
+Options: --steps 40 --motion (also the motion clip, a third container) --iterations 10000 --triangles 12000 --skip-video (reuse stage2/ already in the Volume)
          --no-synthetic-recon --control-encoding linear|inverse --no-pin-frames --force-upload
          --dress --dress-engine fashn|qwen|both --dress-steps N --accept-failed-dress --allow-invented-back --dress-only
          --stage2-masks garment|foreground (stage 4's alpha targets on the generated frames; recorded)
@@ -193,6 +194,7 @@ def main(
     dress_pin: str = "",
     dress_expect: str = "",
     dress_draws: str = "",
+    motion: bool = False,
 ):
     cfg = stage2_video.CFG
     m = pm.load_local_job(job_dir)
@@ -286,11 +288,22 @@ def main(
 
     if not skip_video:
         print("[phase0] weights:", stage2_video.download_weights.remote())
-        t = time.time()
-        rec = stage2_video.generate.remote(job_id, steps=steps, control_encoding=control_encoding, pin_frames=not no_pin_frames)
-        costs.append(_with_wall(rec["cost"], cfg["gpu_video"], time.time() - t))
-        summary["stage2"] = {k: rec[k] for k in ("clips", "turntable_frames_assembled", "seams", "load_seconds", "steps", "control_mode")}
+        rec = stage2_video.run_stage2(m, steps=steps, motion=motion, control_encoding=control_encoding, pin_frames=not no_pin_frames)
+        costs.extend(rec["costs"])  # one record per GPU container (each pays its own model load)
+        summary["stage2"] = {k: rec.get(k) for k in ("clips", "turntable_frames_assembled", "seams", "load_seconds", "steps", "control_mode", "motion", "complete", "failed_clips", "parallel")}
         print(f"[phase0] stage 2: {len(rec['clips'])} clips, {rec['turntable_frames_assembled']} turntable frames, seams {rec['seams']}")
+        if not rec.get("complete", False):
+            # A failed clip never gives a half job: no stage 4 on stale or missing frames. What finished stays in the Volume.
+            print(stage2_video.stage2_failure_line(rec).replace("[stage2]", "[phase0] stage 2"))
+            pm.download_dir(job_dir, job_id, "stage2")
+            summary["costs"] = costs
+            summary["cost_total"] = lib.summarize_costs(costs)
+            summary["stopped_after_stage2"] = rec.get("failed_clips") or ["stage 2 incomplete"]
+            summary["wall_seconds"] = round(time.time() - t_all, 1)
+            with open(os.path.join(job_dir, "cost_summary.json"), "w") as f:
+                json.dump(summary, f, indent=2)
+            print(lib.format_cost_table(costs))
+            raise SystemExit(1)
         try:
             cons = stage2_video.score_consistency.remote(job_id)
             summary["stage2"]["consistency"] = {k: v for k, v in cons.items() if k != "frames_detail"}

@@ -1,41 +1,15 @@
 # One command per line; pushing a change to this file runs them on Modal via GitHub Actions.
-# run 17c: skirt stage 1b only, 16 more FASHN backs beside the reviewed front. Stage 1b QA 0.12.0; no threshold changed. No azure line.
-# Why not the skirt end to end: none of run 17b's backs meets both by-eye criteria (phase0-written.md, "Run 17b").
-#   fashn@49 (auto-pick): tier seam at row 590 like the front's 593 and nothing hanging, but a red gathered waistband,
-#   not the front's and the shop photos' pale pink smocked band, and a hem much wider than the front's: mask width
-#   165/168/183/186 px at rows 665/685/705/715 against 151/142/141/120 (+14 to +66 px, both sides flared out).
-#   Azure 17b showed extra hem width in a still growing into side flaps and hem girth in stage 2.
-#   fashn@50: the pale band and the seam (585), but a dark strip 16-18 px wide hangs below the hem between the feet,
-#   inside the garment mask; stage 2 would grow it. fashn@46: a slit with the grey leg above the hem, seam 5 cm high.
-#   fashn@43 and fashn@47: no band. 12 FASHN backs so far: 2 with the band, 3 with the seam, none with both and clean.
-# Keeps: the front fashn@44 (8909a1c0...) and the back fashn@49 (ec73328e...), the clean back with the right seam,
-#   as the scored reference and the fallback the founder may still accept with its red band and wider hem.
-#   Both resolve after the archive: run 17b's stage1b/ moves into stage1b/history/ and find_kept finds both there.
-#   Checked on a copy of the artifact with the 17a export (input hash 99ab3ce9...); the keeps reproduce both hashes.
-#   17a's back fashn@44 cannot be pinned (not in the current stage1b/); it could be kept from history/,
-#   but it fails torso cover (0.916 < 0.92).
-# Cost estimate (H100 list price $3.95/h; not the invoice): 17b drew 8 backs in 66 GPU s with the load ($0.07-0.18);
-#   16 draws about 100-130 GPU s, about $0.11-0.25. CPU prepare and finalize under a cent each.
-# Order: every export (no GPU) runs before the first GPU command.
-# The modal line ends in || echo ::warning:: so a failure is reported, not hidden. No --accept-failed-dress.
-# Review before 17d: the pairs table and candidates/stills/ at 2-3x next to front fashn@44 and both shop photos.
-#   Pin a back that passes, HAS the pale pink smocked waistband, has its tier seam at about 0.63 of the length
-#   (front row 593 at 832 px), has nothing hanging below the hem and a hem width within about 15 px of the
-#   front's over rows 665-705 (front 151/142/141 px). The front's own hem is uneven and partly sheer at the lower
-#   left (as in the shop photo), so a level-hemmed back will differ there in side views. Then 17d end to end with --recompose-dress
-#   --dress-pin front=fashn@44,back=fashn@<seed> --dress-expect <reviewed hashes>, about $1.6-1.7.
-#   Stopping rule: if none of the 16 passes all three, the next step is not more seeds but a founder decision on
-#   fashn@49 (red band AND wider hem; stage 2 may grow side flaps) or a change to the waistband conditioning
-#   (exporter / prompt). If the founder accepts fashn@49 with both, 17d can pin it now:
-#   --dress-pin front=fashn@44,back=fashn@49 --dress-expect front=8909a1c04e63c3f26a54818a,back=ec73328ec8bbf1a758affe73
+# run 17d: skirt and palazzo end to end (stage 2 + stage 4) from stills already on the Volume, recomposed on CPU with QA 0.12.0. No new draw.
+# skirt: front fashn@44 + back fashn@63 (run 17c). Back has the pale smocked band (thinner than the front's), tier seam row 587 vs 593,
+#   hem 138/137/132 px vs 151/142/141 at rows 665/685/705, nothing below the hem.
+# palazzo: Qwen front + Qwen back (run 16a), approved by the founder (pocket flap, darker print). 0.12.0 leaves both stills unchanged.
+# Checked locally on copies of the artifacts with a fresh export (same job ids 99ab3ce9327b / b85affd79b61): pins resolve, both pairs pass,
+#   hashes below match (numpy 2.2.6 / Pillow 11.3.0, as in the Modal image). A different hash stops the line before stage 2.
+# Cost (H100 list price, not the invoice): about $1.6-1.7 each (16b: 1,503 GPU s = $1.65), about $3.3-3.4 in all. CPU recompose under a cent.
 pnpm build:packages
 pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch-images
 git diff --exit-code -- spikes/garment-engine/data/bohohippychic/images.json spikes/garment-engine/data/bohohippychic/products.json
 pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product crimson-wildflower-maxi-skirt
-modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/crimson-wildflower-maxi-skirt --dress --dress-only --dress-draws "front=keep:fashn@44;back=keep:fashn@49,fashn@54-69" --no-synthetic-recon || echo "::warning::crimson-wildflower-maxi-skirt: run 17c stage 1b (more backs) failed"
-# Not in 17c:
-#   azure: run 17b is the bundle pending founder review (a judgement call against 16b); its flaps (turntable_b 82-155
-#     unchanged; turntable_a 13-31 new, a flat rectangle detached at 30, gone at 31) are not seeded by the cut string. The open question is the 0.10.1+ hem growth of the stills; no GPU run proposed before a CPU look.
-#   blouse: needs a longer proxy (exporter, founder's call).
-#   cardigan: needs the outerwear proxy decision.
-#   palazzo: still waits for sign-off on Qwen's pocket flap and darker print.
+pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product rosewater-palazzo-pants
+modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/crimson-wildflower-maxi-skirt --recompose-dress --dress-pin front=fashn@44,back=fashn@63 --dress-expect front=8909a1c04e63c3f26a54818a,back=14b4b1e6fc52fbf44b10f2b5 --no-synthetic-recon || echo "::warning::crimson-wildflower-maxi-skirt: run 17d failed"
+modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/rosewater-palazzo-pants --recompose-dress --dress-pin front=qwen,back=qwen --dress-expect front=d519f925e95fb9bfa4ee275d,back=a9a3ce42d53ac369fd83eca0 --no-synthetic-recon || echo "::warning::rosewater-palazzo-pants: run 17d failed"

@@ -108,6 +108,8 @@ Amended Nov 2026 (review finding R1): one breadth, `shoulder_width`, joins the v
 
 The VPS orchestrates and serves; it never runs models. Asset bundles (a few MB per product) live on a disk volume served by Caddy under immutable, versioned paths and are included in the nightly backup. GPU work runs per job on a hosted service that scales to zero, in an EU region. This keeps the spirit of D9 (no object store, small VPS). D3 is unchanged: garment assets are public product data; the shopper's body and photos stay on the device.
 
+Pilot permission (8 Nov 2026): the founder states that Bohohippychic has granted permission to use its name, logo, product photos and the 3D bundles derived from them, on the website and in demos. The founder keeps the written confirmation on file outside the repository (see `docs/REFINEMENT.md` B1).
+
 Amended Nov 2026 (branch `claude/plugin-v1`): until the GPU pipeline runs, bundles are imported by hand (`pnpm --filter @curtain/api asset:import`, or `node dist/scripts/import-asset.js` in the api container). The import checks the bundle (format, at most 3 MB, QA chart agreement, every size of the live chart graded), copies only the five bundle files (never `payload.json`, renders or shop photos) to `ASSET_DIR/<shopId>/<productId>/<sha256-16>/` and records it as `awaiting_approval`; shoppers see only the version the merchant approved (D13). Caddy serves `/assets/*` from the `assets` volume, read-only, immutable, CORP cross-origin, ACAO the app origin, no access log; the volume is in the nightly backup. Until D17 prices 3D, a per-shop switch `settings.garment3d` (off by default, set by hand for the pilot) gates the asset ref on `GET /v1/try`.
 
 ## D17 — Price: USD 8.99 per month, flat

@@ -75,6 +75,12 @@ to the hem for a dress, flat neutral material) at the front and back camera (`dr
     (``back_view_checks``, ``view_agreement``, ``view_colour``). ``import_kept`` carries a candidate over from an earlier run
     of the same job (``archive_stage1b`` moves that run into stage1b/history/), re-scored, never redrawn. No threshold changed.
 
+``after run 16b`` (stage1b-qa-0.12.0)
+    Run 16a's azure back carried a cut tie string 12 rows below the hem (pasted by ``still_garment_mask``'s outside-the-proxy
+    step); stage 2 grew it into a cream flap. ``trim_strands`` (in ``compose_candidate``) leaves at most a few thin strings
+    hanging below the hem outside the proxy out of the paste (recorded); ``hanging_strands`` in ``still_qa`` fails any left
+    (TYPE). A fringe (more pieces) is never trimmed, only flagged. No other threshold changed.
+
 ``back_view_checks``
     The back still must not be a front: its garment matches the proxy's back silhouette (in ``still_qa``),
     it differs from the mirrored front still at least half as much as the shop's back photo differs from
@@ -102,7 +108,7 @@ if _HERE not in sys.path:
 
 import phase0_garment as pg  # noqa: E402
 
-STAGE1B_QA_VERSION = "stage1b-qa-0.11.0"
+STAGE1B_QA_VERSION = "stage1b-qa-0.12.0"
 
 # The proxy is dilated by this share of the frame height to give the edit region (0.03 of 832 px = 25 px, about 10 cm
 # at the turntable distance): enough for ease and a fuller flare, small enough that the region keeps the proxy's
@@ -268,7 +274,7 @@ QA_LABEL = (
     "front, neckline not deeper than the back photo's. Type checks (never overridden): legs merged, a bodice on a skirt or "
     "trousers, an open front closed, our mannequin seen through the garment, a body far shorter than the proxy, front and "
     "back of different garments (0.7.0), a garment narrower than the proxy at the hips (0.8.0), cloth the engine drew that the composite does not paste (0.9.0), our mannequin beside the cloth's edge, a shelf in the outline, "
-    "a crotch split too high, a waistband at another height front and back (0.10.0); also front and back of another colour and "
+    "a crotch split too high, a waistband at another height front and back (0.10.0), a thin piece hanging below the hem (0.12.0); also front and back of another colour and "
     "sleeves swapped against the shop photo (0.10.0, not type checks). Provisional thresholds (runs 12-16a and the synthetic dress). A "
     "check, not a measurement; every still is a generated estimate."
 )
@@ -1292,12 +1298,15 @@ def compose_candidate(gen: np.ndarray, chosen: np.ndarray, bare: np.ndarray, bar
     # Trousers (stage1b-qa-0.10.1, review of 0.10.0): the cloth the engine drew in the gap strip between the legs, which the
     # edit region leaves out, is pasted too; then what of our body still shows in the strip is measured (`gap_mannequin`).
     garment, gap_paste = paste_gap_cloth(img, garment, bare, bare_rgb, gap, bg, man)
+    # stage1b-qa-0.12.0 (run 16b's cream hem flap): a cut string hanging below the hem outside the proxy is not pasted
+    garment, strands = trim_strands(garment, proxy_q)
     unpasted = unpasted_cloth(img, garment, bare_rgb, bare, region, bg, man, proxy=proxy_q)
     edges = edge_profile(garment, bare, img, bg, kind=kind)
     gap_m = gap_mannequin(garment, bare, img, gap, bg)
     if gap_m is not None:
         gap_m["pasted_px"], gap_m["pasted_background_px"] = gap_paste["px"], gap_paste.get("background_px", 0)
-    return img, garment, {"composite_mask": comp, "conform": conf, "conform_edges": conf_e, "unpasted": unpasted, "edges": edges, "gap_mannequin": gap_m}
+    return img, garment, {"composite_mask": comp, "conform": conf, "conform_edges": conf_e, "unpasted": unpasted, "edges": edges, "gap_mannequin": gap_m,
+                          "strands": strands}
 
 
 def paste_gap_cloth(img: np.ndarray, garment: np.ndarray, bare: np.ndarray, bare_rgb: np.ndarray, gap: np.ndarray | None, bg: Sequence[int],
@@ -1346,6 +1355,114 @@ def gap_mannequin(garment: np.ndarray, bare: np.ndarray, still: np.ndarray, gap:
     return {"gap_px": int(z.sum()), "body_in_gap_px": int((z & np.asarray(bare, dtype=bool)).sum()), "px": int(expo.sum()),
             "raw_cloth_px": int((expo & notbg).sum()), "raw_background_px": int((expo & ~notbg).sum()),
             "rows": None if len(ys) == 0 else [int(ys[0]), int(ys[-1])]}
+
+
+# stage1b-qa-0.12.0 (run 16b): thin pieces hanging below the hem. Run 16a's azure back (FASHN): a cut tie string, 4-6 px wide, hangs
+# 12 rows below the hem at the mannequin's left; `still_garment_mask` pastes it (the 0.9.0 step that adds joined chromatic
+# pieces outside the proxy, made for run 15's blouse shirt-tail: the string is cream, chroma above the mannequin's), and stage 2
+# grew it into a cream flap swinging at the hem in 75 of 160 turntable frames. Run 14's azure (FASHN): two dark strings 30 rows
+# below the back hem between the legs and one below the front hem, never flagged. A string is not garment body.
+#   width_frac      pieces narrower than this share of the height (an opening by a 7 px square at 832) are thin
+#   min_hang_frac   ... and reaching this share of the height (8 rows at 832) below the hem of the cloth beside them
+#   min_elongation  ... and at least this many times taller than wide (a sliver along the hem is not a string)
+#   max_trim_pieces / max_trim_frac  the composite leaves out at most this many pieces, at most this share of the garment; more
+#                   (a fringe, tassels: a design) is not trimmed, and the TYPE check stops the still for a person to look at
+STRANDS = {"width_frac": 0.008, "min_hang_frac": 0.01, "min_elongation": 1.5, "proxy_pad_px": 1, "min_outside_share": 0.5,
+           "max_trim_pieces": 4, "max_trim_frac": 0.01}
+
+
+def hanging_strands(garment: np.ndarray, proxy: np.ndarray | None = None, params: Mapping[str, float] | None = None) -> dict[str, Any]:
+    """Thin pieces of `garment` hanging below the hem (stage1b-qa-0.12.0): what an opening by a (2r+1) square (r from
+    `STRANDS["width_frac"]`) removes, per 4-connected piece, whose lowest row lies at least `min_hang_frac` of the height below
+    the lowest row of the opened garment in the piece's columns and 2r+1 columns either side (the local hem) and below the
+    opened garment's lowest row anywhere (the hem, not a sleeve end), and that is at least that many rows tall and
+    `min_elongation` times taller than wide (a speck or a sliver along the hem is not a string). `outside_share`: of the piece's pixels below that hem, the share outside the
+    proxy (dilated by `proxy_pad_px`). Returns {params, pieces: [{rows, cols, px, below_px, hang_rows, hem_row, outside_share}],
+    px (below the hem, all pieces), below (HxW int: 1 + the piece's index on its pixels below the hem, else 0)}."""
+    s = {**STRANDS, **(params or {})}
+    g = np.asarray(garment, dtype=bool)
+    h, w = g.shape
+    r = max(1, int(round(s["width_frac"] * h / 2)))
+    min_hang = max(2, int(round(s["min_hang_frac"] * h)))
+    body = pg.dilate(pg.erode(g, r), r) & g
+    thin = g & ~body
+    has = body.any(axis=0)
+    bottom = np.where(has, h - 1 - np.argmax(body[::-1], axis=0), -1)
+    hem_all = int(bottom.max()) if has.any() else -1
+    pd = None if proxy is None else pg.dilate(np.asarray(proxy, dtype=bool), int(s["proxy_pad_px"]))
+    below_all = np.zeros(g.shape, dtype=np.int32)
+    pieces: list[dict[str, Any]] = []
+    lab, n = pg.label(thin)
+    if n:
+        ys_all, xs_all = np.nonzero(lab)
+        ls = lab[ys_all, xs_all]
+        order = np.argsort(ls, kind="stable")
+        ys_all, xs_all, ls = ys_all[order], xs_all[order], ls[order]
+        starts = np.searchsorted(ls, np.arange(1, n + 2))
+        win = 2 * r + 1
+        for i in range(n):
+            ys, xs = ys_all[starts[i]:starts[i + 1]], xs_all[starts[i]:starts[i + 1]]
+            if len(ys) == 0:
+                continue
+            x0, x1, y0, y1 = int(xs.min()), int(xs.max()), int(ys.min()), int(ys.max())
+            nb = bottom[max(0, x0 - win):min(w, x1 + win + 1)]
+            nb = nb[nb >= 0]
+            if nb.size == 0:
+                continue  # no cloth above or beside it: not hanging from this garment's hem
+            hem = int(nb.max())
+            hang = y1 - hem
+            if hang < min_hang or y1 <= hem_all or (y1 - y0 + 1) < max(min_hang, s["min_elongation"] * (x1 - x0 + 1)):
+                continue
+            bel = ys > hem
+            out_share = None if pd is None else round(float((~pd[ys[bel], xs[bel]]).sum()) / max(1, int(bel.sum())), 3)
+            below_all[ys[bel], xs[bel]] = len(pieces) + 1
+            pieces.append({"rows": [y0, y1], "cols": [x0, x1], "px": int(len(ys)), "below_px": int(bel.sum()), "hang_rows": hang,
+                           "hem_row": hem, "outside_share": out_share})
+    return {"params": {**s, "open_px": 2 * r + 1, "min_hang_rows": min_hang}, "pieces": pieces, "px": int((below_all > 0).sum()), "below": below_all}
+
+
+def trim_strands(garment: np.ndarray, proxy: np.ndarray, params: Mapping[str, float] | None = None) -> tuple[np.ndarray, dict[str, Any]]:
+    """The composite's side of `hanging_strands` (stage1b-qa-0.12.0): the part below the hem of each thin hanging piece that lies
+    mostly outside the proxy (`min_outside_share`) is not pasted, when there are at most `max_trim_pieces` such pieces covering at
+    most `max_trim_frac` of the garment (a cut string or two; more is a fringe or tassels, a design: left as drawn and stopped by
+    the TYPE check for a person to look at). Nothing is painted: our bare render shows there, as below any hem. Inside the proxy
+    nothing is trimmed (left to the check). Returns (mask, record: trimmed pieces and px, untrimmed pieces and why)."""
+    s = {**STRANDS, **(params or {})}
+    g = np.asarray(garment, dtype=bool)
+    found = hanging_strands(g, proxy, s)
+    cand = [p for p in found["pieces"] if (p["outside_share"] or 0.0) >= s["min_outside_share"]]
+    rec: dict[str, Any] = {"params": found["params"], "found": len(found["pieces"]), "trimmed": [], "trimmed_px": 0, "not_trimmed": [], "reason": None,
+                           "note": None}
+    if not cand:
+        rec["not_trimmed"] = found["pieces"]
+        rec["reason"] = "no thin piece hangs below the hem outside the proxy" if not found["pieces"] else "inside the proxy: left to the check"
+        return g, rec
+    px = sum(p["below_px"] for p in cand)
+    if len(cand) > s["max_trim_pieces"] or px > s["max_trim_frac"] * max(1, int(g.sum())):
+        rec["not_trimmed"] = found["pieces"]
+        rec["reason"] = (f"{len(cand)} pieces, {px} px: more than {s['max_trim_pieces']} pieces or {s['max_trim_frac']} of the garment "
+                         "(a fringe or tassels?): left as drawn, for a person to look at")
+        return g, rec
+    keep_ids = {id(p) for p in cand}
+    drop = np.isin(found["below"], [i + 1 for i, p in enumerate(found["pieces"]) if id(p) in keep_ids])
+    rec["trimmed"] = cand
+    rec["trimmed_px"] = int((drop & g).sum())
+    rec["not_trimmed"] = [p for p in found["pieces"] if id(p) not in keep_ids]
+    rec["note"] = strands_trim_note(rec)
+    return g & ~drop, rec
+
+
+def strands_trim_note(rec: Mapping[str, Any] | None) -> str | None:
+    """The visible line for a `trim_strands` record that left pixels out (stage1b-qa-0.12.0, review of run 17a: a trim is never
+    silent): None when nothing was trimmed. Goes to the candidate's QA warnings, the stage 1b summary warnings and the logs."""
+    if not rec or not rec.get("trimmed_px"):
+        return None
+    ps = rec["trimmed"]
+    rows = [min(p["hem_row"] + 1 for p in ps), max(p["rows"][1] for p in ps)]
+    cols = [min(p["cols"][0] for p in ps), max(p["cols"][1] for p in ps)]
+    return (f"left out {rec['trimmed_px']} px of {len(ps)} thin piece(s) the engine drew hanging below the hem outside the proxy (a cut string "
+            f"or a sliver), rows "
+            f"{rows[0]}-{rows[1]}, columns {cols[0]}-{cols[1]} (our bare render shows there; nothing painted; not a QA failure)")
 
 
 def view_agreement(front: Mapping[str, Any] | None, back: Mapping[str, Any] | None, thresholds: Mapping[str, float] | None = None) -> dict[str, Any]:
@@ -2115,6 +2232,7 @@ def still_qa(
     edges: Mapping[str, Any] | None = None,
     side: Mapping[str, Any] | None = None,
     gap_body: Mapping[str, Any] | None = None,
+    trimmed: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """QA v2 of one dressed still (masks are HxW bool). `kind` is the proxy kind (dress, skirt, trousers, top, outerwear).
 
@@ -2280,6 +2398,20 @@ def still_qa(
         failures.append(f"our mannequin in the crotch: {gap_body['px']} px of our body show in the gap between the legs (rows {rr[0]}-{rr[1]}; "
                         f"{gap_body['raw_cloth_px']} px where the engine drew cloth or our thighs, {gap_body['raw_background_px']} px where it drew "
                         f"background) > {t['max_gap_mannequin_px']} (grey thighs where the trousers should be)")
+    # stage1b-qa-0.12.0 (run 16b), TYPE: a thin piece hanging below the hem in the pasted mask (the composite leaves out at most
+    # a few cut strings outside the proxy, `trim_strands`; what is left here is inside the proxy, or too many to be strings)
+    strands = hanging_strands(g, p)
+    strands.pop("below")
+    if strands["pieces"]:
+        s0 = max(strands["pieces"], key=lambda q: q["hang_rows"])
+        failures.append(f"thin piece hanging below the hem: {len(strands['pieces'])} piece(s), {strands['px']} px below the hem; the longest "
+                        f"rows {s0['rows'][0]}-{s0['rows'][1]}, columns {s0['cols'][0]}-{s0['cols'][1]}, {s0['hang_rows']} rows below the cloth "
+                        f"beside it (narrower than {strands['params']['open_px']} px: a string, a fragment or a dark sliver the engine drew or the composite "
+                        "pasted; the video swings it into a flap)")
+    # stage1b-qa-0.12.0 (review of run 17a): what `trim_strands` left out of this still is a warning, never silent
+    trim_note = strands_trim_note(trimmed)
+    if trim_note:
+        warnings.append(trim_note)
     type_failures = failures[n_before_type:]
     if fidelity is not None and fidelity.get("pass") is False:
         failures.extend(f"print fidelity: {f}" for f in fidelity.get("failures", []))
@@ -2324,6 +2456,8 @@ def still_qa(
         "body_beside": None if edges is None else dict(edges),
         "gap_mannequin": None if gap_body is None else dict(gap_body),
         "width_steps": steps,
+        "hanging_strands": strands,
+        "strands_trimmed": None if not trim_note else {"trimmed_px": int(trimmed["trimmed_px"]), "pieces": [dict(q) for q in trimmed["trimmed"]], "note": trim_note},
         "crotch": crotch,
         "side_colour": None if side is None else dict(side),
         "above_waist_px": above_px,
@@ -2828,7 +2962,7 @@ def rescore_job(job_dir: str, manifest: Mapping[str, Any], path: str = "app", st
             side = side_colour(raw, garment, shops[name][0], shops[name][1]) if (not v.get("invented") and name in shops and garment.any()) else None
             qa = still_qa(garment, fg, bare, proxy_q, region, kind=kind, mannequin_mae=mae, residue=residue, garment_full=garment_full,
                           sleeve_band_px=region_rec["sleeve_band_px"], fidelity=fid, rgb=raw, bare_rgb=bare_rgb, unpasted=unpasted, edges=edges, side=side,
-                          gap_body=gap_body)
+                          gap_body=gap_body, trimmed=comp.get("strands") if rebuild else None)
             qa["score"] = qa_score(qa)
             if conformed is not None:
                 conformed["hips_after"] = qa["hips"]
@@ -2852,6 +2986,8 @@ def rescore_job(job_dir: str, manifest: Mapping[str, Any], path: str = "app", st
                 "composite_mask": comp if rebuild else None,
                 "conform_replay": conformed,
                 "conform_edges": comp.get("conform_edges") if rebuild else None,
+                # stage1b-qa-0.12.0: the same key as the GPU app's candidate record (stage1_dress.dress)
+                "strands": comp.get("strands") if rebuild else None,
             })
             arrays[label] = (raw, garment)
             if stills_dir:

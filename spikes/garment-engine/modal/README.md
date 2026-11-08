@@ -719,6 +719,133 @@ as Modal functions, moving `stage1b/` on the jobs Volume (`shutil.move`; a copy 
 containers is unverified: 17b pins the reviewed stills with `--reuse-dress --dress-expect` (no redraw) or `--recompose-dress
 --dress-pin front=<engine@seed>,back=<engine@seed> --dress-expect`.
 
+## Stage 1b after run 16b and run 17a: strings below the hem (`stage1b-qa-0.12.0`)
+
+Run 16b's evaluation (`data/bohohippychic/phase0-written.md`, "Run 16b") found a cream tail below the hem of azure's back
+still, which stage 2 grew into a cream flap swinging at the side of the hem in turntable_b frames 84-159 and stage 4t
+fitted (hem girth +6.4 cm). No review of the still had flagged it.
+
+### Cause, with the evidence
+
+The tail is a cut tie string that FASHN drew in `raw/back_fashn.png` (5-6 px wide, columns 157-162, down to row 539, the
+hem beside it at row 527). It is **not** `conform_edges`: that pass added 266 px, all in rows 221-460 (the caps and
+sides). It is `still_garment_mask`. Starting from run 15's SAM 2 mask of the same raw image, which has no string below row
+527, the current composite adds rows 528-539 of the string. Rows 528-530 lie inside the proxy (which ends at row ~529 in those
+columns) or within `grow_px` (3) of the chosen mask, so they are added as non-mannequin cloth there. Rows 531-539 lie outside
+the proxy, inside the edit region (which runs 25 px below the proxy's hem). They come from the 0.9.0 step that adds joined
+chromatic pieces in the edit region outside the proxy (made for run 15's blouse shirt-tail; the cream string is chromatic,
+`added_outside_px` 40). Run 15's composite (QA 0.6.1) pasted SAM 2's mask as it was, so it had no tail.
+
+The +1,312 px "along the whole outline" against run 15 is that grow step plus, for 16b, a replay basis that compounds it: run
+16a (0.9.0) did not save the chosen mask, so the recompose uses 16a's saved composite mask (57,050 px, already grown, the
+string to row 536) as the chosen mask and grows it again (57,387 px, to row 539). Only jobs before 0.10.0 have that basis
+(`composite_mask.chosen_basis` says so). From 0.10.0 on, the app saves the real chosen mask.
+
+The same check finds two thin dark pieces about 30 rows below run 14's azure back hem between the legs and one below its
+front hem. They are dark grey, close to the mannequin's leg shading, so each is a string or a leg-shadow sliver the
+composite pasted; either way they hang below the hem. Runs 14-16b passed them and no review flagged them.
+
+### What changed
+
+| Change | What |
+| --- | --- |
+| `hanging_strands` | Finds the thin pieces of a garment mask that hang below the hem. A thin piece is what an opening by a 7 px square at 832 removes (`STRANDS["width_frac"]` 0.008). A piece counts when its lowest row is at least 8 rows at 832 (`min_hang_frac` 0.01) below the lowest garment row within 7 columns of it, below the garment's lowest row anywhere (the hem, not a sleeve end), at least that many rows tall and 1.5 x taller than wide. Each piece is recorded with its rows, columns, px below the hem and the share of those outside the proxy |
+| `trim_strands`, in `compose_candidate` (app and replay) | A piece mostly outside the proxy (>= 0.5 of its pixels below the hem) is left out of the paste below the hem. Our bare render shows there, as below any hem, and nothing is painted. This applies only to at most 4 such pieces covering at most 0.01 of the garment: a fringe or tassels is a design, so it is never trimmed, only flagged. Nothing inside the proxy is trimmed. Recorded as `strands` (trimmed pieces and px, untrimmed pieces and why) on the candidate, under the same key in the GPU app and in a replay / recompose / finalize. A trim is never silent: its line (`left out N px of K thin piece(s) ... rows a-b, columns c-d (our bare render shows there; nothing painted; not a QA failure)`) goes to the candidate's QA `warnings` and `strands_trimmed`, to the stage 1b `summary.warnings` for a picked still, and is printed by the app, `recompose`, `finalize` and `run_phase0.py` |
+| TYPE check `thin piece hanging below the hem` (`still_qa`, `hanging_strands` in the QA record) | Fails any hanging piece left in the pasted mask (inside the proxy, or too many to trim). Never overridden |
+
+No threshold of an existing check changed, and no existing check was loosened. The composite still adds what it added in
+0.11.0 (the run 15 blouse shirt-tail step runs as before); only the string is taken out again. Tests:
+`tests/test_stage1b_strands.py` (the azure string trimmed, the same string failing the check when left in, a string inside
+the proxy flagged and not trimmed, a 7-string fringe flagged and not trimmed, a wide flap / short spur / speck / sliver /
+cuff tie not counted, the app path `compose_candidate` taking out the string its own outside-the-proxy step pasted, and the
+trim reaching the QA and summary warnings).
+
+### Replayed (`python -I phase0_dress.py <job dir> --stills <dir>`, every candidate)
+
+Run on azure run 16a/16b, run 15 and run 14, palazzo run 16a, and run 17a's skirt, blouse and cardigan (41 candidate stills).
+**3 stills change** (pixel sha256); the other 38 are pixel-identical to 0.11.0. I looked at each changed still at 3x, and
+also at every still that the new check now fails.
+
+| Still | Change | Looked at |
+| --- | --- | --- |
+| azure back (16a raw = the 16b still), FASHN | 49 px left out (rows 528-539, columns 157-162): the string is gone, the hem corner stays. Pixel sha256 `695c51459ff0…` → **`c3e193ed8e5ddad9dce267fd`**; front unchanged `d4cbc556b400eeb9c145f9c1`; both pass, pair checks pass | no tail; the hem matches run 15's at that corner; nothing else differs (only those 49 px) |
+| azure back, run 15 raw, FASHN | the same 47 px | as above |
+| blouse front fashn@45 (17a) | 78 px of grey slivers below the cropped body left out | grey over grey, no visible change; the candidate still fails (see-through, body too short) |
+
+Newly failed by the type check (no pixel change, because the pieces lie inside the proxy): run 14's azure FASHN back (3
+pieces, the 13-row tail and two thin dark pieces 29-31 rows long between the legs) and front (one piece, 24 rows). They are
+visible at 3x; the two between the legs are dark grey (a string or a leg-shadow sliver, not shown to be cloth). Run 14's proxy ran on below the drawn hem, so nothing was trimmed. 17a's blouse fashn@48 front (grey
+fragments 35 rows below its body) and blouse fashn@45 back (a dark sliver) already failed. Every other verdict is unchanged:
+palazzo Qwen/Qwen passes (`d519f925e95f…` / `a9a3ce42d53a…`), the skirt pair passes (below), and no blouse or cardigan pair
+is eligible. The recompose (`recompose_job`) gives the same hashes as the replay under numpy 2.5.3 and under numpy 2.2.6 /
+Pillow 11.3.0 (the Modal image's pins).
+
+### Review of run 17a's skirt pair (front fashn@44, kept back fashn@43)
+
+- **Passes QA**, with little margin on the front, **but the kept back has no waistband** (review of 0.12.0, by eye at 2x):
+  the front (fashn@44) and both shop photos have the pale pink smocked elastic waistband (rows about 358-372 on the front,
+  with the drawstring); back fashn@43 starts at row about 357 in plain red print with no band. The waistband check measures
+  only the height of the garment's top (`top_gap`), not the band. Back fashn@44 has the band. So the pair disagrees twice: the
+  waistband and the tier seam (below). Torso cover is 0.9276 (fashn@45: 0.9215; the limit is 0.92). The
+  waistband is at row 361 on the front, 13 px below the proxy's top (348), and at row 357 on the back (`top_gap` 0.0198 <
+  0.05). The 0.10.0 grey belly (row 388) is gone: at 3x the front waistband sits level with only the grey torso above it, as
+  on the back. There are no holes, no see-through (0 / 2 px) and no hanging strings. Fidelity is 0.94 / 0.89 (dE 0.6 / 3.0),
+  views dE 2.0. Grey feet show under the back hem (the back is 6 rows shorter: 720 against 726), which is normal for a maxi
+  skirt.
+- **The tier seam does not agree.** The smocked pink band at the tier seam is centred at about row 590 on the front (fashn@44;
+  fashn@45 about 587) and about row 552 on the kept back (slanted 540-560 across the back). On the back it is 0.53 of the
+  skirt's length from the waistband and on the front 0.63, about 38 px (about 10 cm at this scale) apart. The shop photos put
+  it at 0.65 (front) and 0.58 (back). The real skirt's seam is level, so their 0.07 is mostly the photos' perspective. The kept
+  back is 0.05 higher than its own shop photo. Stage 2 makes turntable_a from the front and turntable_b from the back, so the
+  side frames would have to join a seam at two heights: a band sloping by about 10 cm from front to back, or a step where the
+  clips meet, which stage 4t would fit. No check measures this (the views' agreement covers length, sleeves and waistband,
+  not print features).
+- **The other eligible pair (fashn@45 / fashn@43) has the same mismatch.** The near-misses: back fashn@44 has its band at
+  about row 588, matching the front within 2 px, but torso cover 0.9156 < 0.92 (its waistband 0.0595 of the length down, row
+  ~370). Back fashn@45's band is at about row 578, but its torso cover is 0.846. Neither threshold is loosened.
+- Verdict: no pair is ready to ship, and fashn@43 is not a back to pin even if the seam were accepted (no waistband). The
+  cheapest next step is more FASHN backs beside the reviewed front:
+  `--dress-draws "front=keep:fashn@44;back=keep:fashn@43,fashn@46-53"` (stage 1b only, about $0.1-0.2; the keeps resolve
+  in run 17a's `stage1b/`, checked on a copy of the artifact: both kept stills reproduce `8909a1c04e63…` / `a1263fc239bc…`).
+  Then pin a back that passes, **has the pink smocked waistband** and has its tier seam at about 0.63 (by eye: no check
+  measures either), in 17c with `--recompose-dress --dress-pin
+  front=fashn@44,back=fashn@<seed> --dress-expect …`.
+
+### Blouse and cardigan after run 17a (what blocks them)
+
+| Product | Best near-miss | What blocks it | Cheapest next step |
+| --- | --- | --- | --- |
+| blouse | front **fashn@44 passes** (the 0.10.1 torso-cover miss was the seed); back qwen@46 fails only `garment_inside` 0.956 < 0.96; qwen@44 is cut by the edit region (inside 0.925) | Qwen draws the shop's curved shirt-tail past the proxy's hem (the 54.2 cm proxy is shorter than the shirt), so a Qwen back is cut or squared off at the proxy's hem. All 4 FASHN backs draw a front-depth neckline on the plain back (back view) and lose the print (edge ratio 0.32-0.40 < 0.5, as in runs 15 and 16a: systematic). By eye, qwen@46 is more orange than the front (pair dE under the limit) and has a straight cut hem. Sleeves are short puffs where the shop has elbow-length sleeves (not measured) | an **exporter decision** (the founder's): a blouse proxy as long as the shirt-tail (new job id), then Qwen backs. More FASHN backs would buy nothing. The 0.2.0 colour phrase worked: no Qwen back is orange-brown any more (pair dE 9.7-15.5 where it was 19.6) |
+| cardigan | none: the kept Qwen front fails `our mannequin beside` (255 px, the shoulder slope); all 4 Qwen backs fail `side_colour` | **The 0.2.0 back prompt did not fix the sleeves:** all 4 backs put the brown sleeve on the viewer's left (cosine -0.97 to -1.00 against the shop back, which has camel left and brown right as seen). They copy the front's layout. They did drop the button and the argyle (a cream plain back, as in the shop), but are drawn too big (`garment_inside` 0.91-0.95, cut by the edit region) | park until the founder decides on the outerwear proxy (oversized, drop shoulder). The side swap needs a different Qwen input (not a prompt sentence): an A/B of the back without picture 1, or with picture 2 mirrored as a labelled diagnostic. Not worth GPU money before the proxy |
+
+**Not tested on a GPU:** `trim_strands` inside the app (the replay and the recompose run the same function). Thresholds rest
+on the azure string, run 14's strings and synthetic scenes. A string shorter than 8 rows below the hem, or one hanging
+beside a hem curved upward by more than its length, is not found. **Open:** the front's cuff ties still differ front to back
+(cosmetic).
+
+### Azure's see-through hem panel in turntable_a 32-56: not shown to be a stage 2 defect
+
+Run 16b's evaluation calls the translucent, ragged lower-skirt panel at the side of turntable_a frames 32-56 a stage 2
+defect. The evidence does not show that, and does not show the opposite either:
+
+- Run 15 and 16b ran stage 2 with the same seeds (43 / 44 / 45), the same control (`proxy.glb` md5 `6dbdcabc…`), steps,
+  prompt (`neutral-prompt-0.3.0`) and model revision. Only the two stills differ, and run 15 has no such panel.
+- **turntable_a is pinned at both ends:** first frame the front still, last frame (80) the back still (`stage2_video.py`,
+  `pin_frames`, clip `start: front, end: back`). So 17b's new back still changes turntable_a too, not only turntable_b.
+- The front still's hem barely changed: in rows 500-560, columns 120-180 (the image-left corner, the side of the panel) the
+  16b mask has 60 px more than run 15's, a one-pixel ring; the lowest garment row per column differs by 0-1 rows; frame 0's
+  masks have the same lowest rows. Of the 1,827 px that differ by more than 30 levels between the two front stills, 126 lie
+  below row 500.
+- The back still's string is the one large hem change (in column 160 the lowest row is 537 against 527), and turntable_a
+  shows it: a thin cream string hangs at the image-left of the hem in 16b frames 40, 48, 64, 72 and 80, none in run 15
+  (frames compared at 2x, rows 440-600). The panel in frames 32-36 is on the same side.
+
+So the string in the back still is the likeliest seed of both the turntable_b flap and the turntable_a strings, and possibly
+of the panel; the front hem is not. That is not proven (Wan is not run here). 17b is the test: same seeds and control, the
+front still pixel-identical to 16b's, the back without the string. Its review covers turntable_a 32-80 as well as turntable_b
+80-160. If the panel stays with the string gone, it is stage 2's (or the front still's) and stays open; 17b cannot then give a
+panel-clean bundle.
+
 ## Stage 2 after run 10: control proxy, neutral prompts, consistency metric
 
 Run 10 (GitHub Actions, aalter-studio-2, synthetic stills) followed the pinned front and back frames and the camera path, but between them the dress turned into trousers (frames 20, 60, 100) and the product name appeared as text in frame 20; stage 4 on those frames reached a mask IoU of 0.90, against 0.99 on the synthetic truth. Two causes: the control depth showed the **bare** mannequin (two separate legs), and the prompt held the product title in quotes. Export 0.2.0 changes three things. None of them has run on a GPU yet.

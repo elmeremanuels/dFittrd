@@ -1235,6 +1235,12 @@ def stage1b_summary(views: Sequence[Mapping[str, Any]], *, invented_back: bool) 
     # front closed) is a different garment: `--accept-failed-dress` does not override it (run_phase0._dress_gate).
     type_failed = [v["view"] for v in views if (v.get("qa") or {}).get("type_failures")]
     warnings = [INVENTED_BACK_LABEL] if invented_back else []
+    # stage1b-qa-0.12.0 (review of run 17a): engine pixels the composite left out of a picked still (a cut string below the hem,
+    # `phase0_dress.trim_strands`) are named here, non-blocking: a still with pixels removed never passes silently
+    for v in views:
+        st = (v.get("qa") or {}).get("strands_trimmed") or {}
+        if st.get("note"):
+            warnings.append(f"{v['view']} still: {st['note']}")
     return {
         "pass": not failed,
         "failed_views": failed,

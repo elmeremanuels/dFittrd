@@ -295,6 +295,28 @@ about 32-56 (stage 2; most of the holdout IoU loss is in frames 40-80). Also 2 v
 back-shoulder patch and the straight side view remain. Panel still on hold (1 of 5 bundles). GPU 1,503 s, $1.59-1.62 for
 stages 2 + 4 only (stage 1b ran in run 16a: 34.6 s, about $0.04; run 15's 1,576 s include its stage 1b).
 
+**Run 17a (8 Nov, stage 1b only, draw plans, QA 0.11.0) and QA 0.12.0** (`spikes/garment-engine/modal/README.md`,
+"Stage 1b after run 16b and run 17a"; CPU only, no GPU). Run 16b's cream hem flap starts in stage 1b, but not in
+`conform_edges`, which only touched rows 221-460. FASHN drew a cut tie string below azure's back hem.
+`still_garment_mask`'s 0.9.0 outside-the-proxy step (made for the blouse's shirt-tail) pasted it, and QA had no check
+below the hem. **0.12.0** leaves at most a few thin strings hanging below the hem outside the proxy out of the paste (only
+our bare render shows there; nothing painted), and a new type check fails any thin piece left hanging (a fringe is never
+trimmed, only flagged). Replayed on 41 candidate stills (azure 14/15/16a, palazzo 16a, skirt, blouse and cardigan 17a): 3
+change. The azure back loses the 49 px string (pixel hash `c3e193ed…`, front `d4cbc556…` unchanged). Run 15's back and a
+broken blouse front change in grey only. A trim is never silent: it is a warning on the still's QA and in the stage 1b
+summary, and is printed. The check also finds two thin dark pieces (a string or a leg-shadow sliver) under run 14's azure,
+which runs 14-16b passed unseen. Skirt: run 17a has an eligible pair (front FASHN seed 44, its waistband at row 361 and the grey belly gone; the 16a
+back kept), but the pair disagrees twice by eye: the kept back has no pink smocked waistband (the front and the shop back
+have one; no check measures the band), and the smocked tier seam sits about 38 px (about 10 cm) higher on the back than on
+the front, which stage 2 would have to join. The back with a matching seam (seed 44) misses torso cover (0.9156 < 0.92). The next step is more FASHN
+backs (about $0.1-0.2) before $1.6 end to end. Blouse: a FASHN front passes now. Every back fails: FASHN loses the print
+and draws a front neckline; Qwen draws the shirt-tail past the proxy's hem. Next step: a longer blouse proxy (exporter,
+founder's call). Cardigan: the 0.2.0 back prompt removed the button and argyle, but all 4 backs still swap the sleeve
+colours. Parked until the founder decides on the oversized outerwear proxy. Run 17b (proposed): azure end to end again from
+its 16a raw with 0.12.0 (about $1.6-1.7) and the skirt's extra backs. turntable_a is pinned to the back still at its last
+frame, and 16b's turntable_a shows the string too (frames 40-80); whether the see-through panel in frames 32-56 goes with it
+is what 17b tests (the front still is unchanged).
+
 **Stage 4t** (`spikes/garment-engine/src/templateFit.ts`, `bake.ts`, `stage4t.ts`;
 `pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic]`): the
 control proxy remeshed into a body tube and two sleeve tubes (each starting with a shoulder cap of

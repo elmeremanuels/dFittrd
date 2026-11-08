@@ -562,7 +562,7 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
                     # (our body still beside the cloth). The raw output above stays as drawn.
                     conf_np, garment, comp = dq.compose_candidate(gen_np, chosen_mask, bare_mask, bare_np, proxy_q, region, bg, kind=kind, gap=crotch_gap)
                     c["composite_mask"], c["conform"], c["conform_edges"] = comp["composite_mask"], comp["conform"], comp["conform_edges"]
-                    c["gap_mannequin"] = comp["gap_mannequin"]
+                    c["gap_mannequin"], c["strands"] = comp["gap_mannequin"], comp["strands"]
                     unpasted, edges = comp["unpasted"], comp["edges"]
                     if c["conform"]["applied"] or c["conform_edges"]["applied"]:
                         gen_np = conf_np
@@ -590,7 +590,7 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
                         side = dq.side_colour(gen_np, garment, np.asarray(s["image"]), s["mask"]) if (garment.any() and not v["invented"]) else None
                         qa = dq.still_qa(garment, fg, bare_mask, proxy_q, region, kind=kind, mannequin_mae=mae, residue=residue, garment_full=garment_full,
                                          sleeve_band_px=region_rec["sleeve_band_px"], fidelity=fid, rgb=gen_np, bare_rgb=bare_np, unpasted=unpasted,
-                                         edges=edges, side=side, gap_body=comp["gap_mannequin"])
+                                         edges=edges, side=side, gap_body=comp["gap_mannequin"], trimmed=comp["strands"])
                         c["candidate_colour"] = dq.garment_colour(gen_np, garment)
                         g_b = garment.astype(np.uint8).tobytes()
                         v1 = lib.alignment_qa(g_b, fg_b, bare_mask.astype(np.uint8).tobytes(), W, H, v1_margin,
@@ -758,6 +758,8 @@ def recompose(job_id: str, pins: dict | None = None, accept_failed: bool = False
     m = lib.load_manifest(f"{job}/manifest.json")
     record = dq.recompose_job(job, m, pins=pins, accept_failed=accept_failed)
     record["recomposed"]["cpu_seconds"] = round(time.time() - t0, 1)
+    for w in record["summary"]["warnings"]:
+        print(f"[stage1b] recompose WARNING: {w}")
     with open(f"{job}/{lib.STAGE1B_DIR}/record.json", "w") as f:
         json.dump(record, f, indent=2)
     pm.jobs.commit()
@@ -802,6 +804,8 @@ def finalize(job_id: str, accept_failed: bool = False) -> dict:
     m = lib.load_manifest(f"{job}/manifest.json")
     record = dq.finalize_draws(job, m, accept_failed=accept_failed)
     record["finalized"]["cpu_seconds"] = round(time.time() - t0, 1)
+    for w in record["summary"]["warnings"]:
+        print(f"[stage1b] finalize WARNING: {w}")
     with open(f"{job}/{lib.STAGE1B_DIR}/record.json", "w") as f:
         json.dump(record, f, indent=2)
     pm.jobs.commit()

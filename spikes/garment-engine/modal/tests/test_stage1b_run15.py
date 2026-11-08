@@ -443,7 +443,7 @@ def test_stage1_app_uses_the_run15_fixes():
                    "dq.still_qa(garment, fg, bare_mask, proxy_q, region", "edges=edges, side=side", "_chosen_mask.png",
                    "dq.pick_engine(candidates, prefer=", "dq.view_colour(", "dq.apply_view_colour(", "_conformed.png"):
         assert needle in src, needle
-    assert dq.STAGE1B_QA_VERSION == "stage1b-qa-0.11.0"
+    assert dq.STAGE1B_QA_VERSION == "stage1b-qa-0.12.0"
     json.dumps(dq.VIEW_THRESHOLDS)
 
 

@@ -140,7 +140,7 @@ def test_our_body_beside_the_cloth_is_a_type_failure_when_it_is_left():
 def test_compose_candidate_is_the_app_path_and_records_each_step():
     region, wedge, garment, gen = shoulder_scene()
     img, mask, rec = dq.compose_candidate(gen, garment, BARE4, render4([], seed=14), TOP4, region, STUDIO, kind="top")
-    assert set(rec) == {"composite_mask", "conform", "conform_edges", "unpasted", "edges", "gap_mannequin"}
+    assert set(rec) == {"composite_mask", "conform", "conform_edges", "unpasted", "edges", "gap_mannequin", "strands"}
     assert rec["gap_mannequin"] is None  # not trousers: no strip
     assert rec["conform_edges"]["applied"] and not rec["conform"]["applied"]  # a top: no hip conform
     assert rec["edges"]["px"] <= 0.05 * wedge.sum() and mask[wedge].mean() > 0.95

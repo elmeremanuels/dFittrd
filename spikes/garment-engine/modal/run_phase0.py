@@ -242,6 +242,8 @@ def main(
                               "views": [{k: v.get(k) for k in ("view", "engine", "selection", "qa", "still", "still_sha256")} for v in dress_record["views"]]}
         print(f"[phase0] stage 1b {reuse}d from the Volume (QA {dress_record.get('qa_version')}): usable for stage 2 {dress_record['summary']['usable_for_stage2']}, "
               f"engines {[(v['view'], v.get('engine')) for v in dress_record['views']]}")
+        for w in dress_record["summary"].get("warnings", []):
+            print(f"[phase0] stage 1b WARNING: {w}")
     elif dress or dress_only:
         lib.dress_engines(dress_engine)  # an unknown engine fails here, before any GPU time
         dcfg = stage1_dress.CFG

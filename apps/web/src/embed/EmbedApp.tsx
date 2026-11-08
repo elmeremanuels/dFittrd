@@ -15,6 +15,7 @@ import { adviseSize, EMPTY_ABOUT, fitForProfile, mergeAboutIntoScan, normalizeAb
 import { isMockToken, mockTokensEnabled, resolveMock, type EmbedApi, type EmbedDeps } from './deps';
 import { AboutScreen, BlockedScreen, EmbedFooter, EmbedFrame, LoadingScreen, ProductHeader } from './EmbedScreens';
 import { classifyError, flowReducer, INITIAL_FLOW } from './flow';
+import { Garment3D } from './Garment3D';
 import { HeroRenderPanel, heroRendersEnabled } from './HeroRender';
 import { createParentChannel, parseParentMessage, resolveTargetOrigin, type ParentContext } from './protocol';
 import { ResultScreen } from './ResultScreen';
@@ -332,7 +333,25 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         avatarRef={avatarRef}
         units={units}
         onUnits={changeUnits}
-        extra={heroRendersEnabled(data) && !mock ? <HeroRenderPanel getApi={api} data={data} size={shownSize} getAvatarSvg={getAvatarSvg} /> : null}
+        extra={
+          <>
+            {heroRendersEnabled(data) && !mock ? <HeroRenderPanel getApi={api} data={data} size={shownSize} getAvatarSvg={getAvatarSvg} /> : null}
+            <Garment3D
+              asset={data.asset}
+              paused={data.shop.paused}
+              garment={data.garment}
+              fit={embedFit.fit}
+              size={shownSize}
+              recommended={advice.size}
+              measurements={embedFit.userBody.measurements}
+              onSelect={(s) => {
+                setSelected(s);
+                setChosen(null);
+                setChooseFallback(null);
+              }}
+            />
+          </>
+        }
       />
     );
   else body = <LoadingScreen />;

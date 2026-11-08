@@ -70,5 +70,11 @@ for (const p of data.products) {
     );
   }
 }
-const bad = rows.filter((r) => r.chart === 'shop' && r.ok === false);
-console.log(`\n[size-advice] ${rows.filter((r) => r.chart === 'shop').length} shop-chart cases, ${bad.length} outside the expected sizes; written to ${out}`);
+const shopRows = rows.filter((r) => r.chart === 'shop');
+const checked = shopRows.filter((r) => r.ok !== undefined);
+const bad = checked.filter((r) => r.ok === false);
+const exact = checked.filter((r) => r.body.startsWith('chart-'));
+console.log(
+  `\n[size-advice] ${shopRows.length} shop-chart cases: ${checked.length} checked (${exact.length} exact rows must give exactly the row's size, ${checked.length - exact.length} between-row bodies either neighbour), ${bad.length} outside the expected sizes; ${shopRows.length - checked.length} without expectation (shape bodies, judged by eye); written to ${out}`,
+);
+if (bad.length > 0) process.exitCode = 1;

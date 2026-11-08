@@ -65,7 +65,11 @@ export function adviseProduct(handle: string, draft: GarmentPayloadDraft, bodies
   });
 }
 
-/** Test bodies from a body chart: the rows themselves (advice must give that size or a neighbour), a body between two rows, and a pear shape. */
+/**
+ * Test bodies from a body chart: the rows themselves (advice must give exactly that size; a neighbour
+ * would hide a one-size error such as the UK template's) and a body halfway between two rows (either
+ * neighbour is acceptable).
+ */
 export function chartBodies(rows: readonly SizeRow[], picks: readonly string[], insideLegCm: number): TestBody[] {
   const out: TestBody[] = [];
   const idx = (s: string) => rows.findIndex((r) => r.size === s);
@@ -73,8 +77,7 @@ export function chartBodies(rows: readonly SizeRow[], picks: readonly string[], 
     const i = idx(s);
     const r = rows[i];
     if (!r || r.bust === undefined || r.waist === undefined || r.hip === undefined) continue;
-    const near = [rows[i - 1]?.size, r.size, rows[i + 1]?.size].filter((x): x is string => x !== undefined);
-    out.push({ id: `chart-${s}`, note: `exactly the shop's body row ${s}`, measurements: { bust: r.bust, waist: r.waist, hip: r.hip, inseam: insideLegCm }, expect: near });
+    out.push({ id: `chart-${s}`, note: `exactly the shop's body row ${s}`, measurements: { bust: r.bust, waist: r.waist, hip: r.hip, inseam: insideLegCm }, expect: [r.size] });
   }
   for (let k = 0; k + 1 < picks.length; k++) {
     const a = rows[idx(picks[k]!)];

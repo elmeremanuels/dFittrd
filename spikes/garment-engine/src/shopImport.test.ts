@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { GarmentPayloadDraftSchema, isSizeAdviceReady } from '@curtain/schema';
+import { GarmentPayloadDraftSchema, isSizeAdviceReady, UK_WOMENS_BODY_TEMPLATE } from '@curtain/schema';
 import type { ShopifyProduct } from './shop';
 import {
   buildImportPayload,
@@ -243,10 +243,20 @@ describe('committed nobodyschild data', () => {
     for (const t of Object.keys(NOBODYSCHILD_REJECTED_TYPES)) expect(adapter.productTypes[t]).toBeUndefined();
   });
 
-  it('size advice on the shop chart gives a chart row its own size or a neighbour', () => {
+  it('size advice on the shop chart gives a chart row exactly its own size, a between-row body a neighbour', () => {
     const bodies = chartBodies(chart.numeric, ['8', '12', '16'], 79);
     for (const p of products.products.filter((x) => x.productType !== 'Outerwear')) {
       for (const row of adviseProduct(p.handle, p.payload as never, bodies, 'shop')) expect(row.ok, `${p.handle} ${row.body} → ${row.recommended}`).toBe(true);
     }
+  });
+
+  it('the exact-row check catches a one-size error (negative control: our UK template advises one size up)', () => {
+    const bodies = chartBodies(chart.numeric, ['8', '12', '16'], 79).filter((b) => b.id.startsWith('chart-'));
+    const dress = products.products.find((x) => x.handle.startsWith('ezra'))!;
+    const sizes = (dress.payload as { sizeChart: { size: string }[] }).sizeChart.map((r) => r.size);
+    const template = UK_WOMENS_BODY_TEMPLATE.rows.filter((r) => sizes.includes(r.size));
+    const rows = adviseProduct(dress.handle, dress.payload as never, bodies, 'uk-template', template);
+    expect(rows.map((r) => r.recommended)).toEqual(['10', '14', '18']);
+    for (const r of rows) expect(r.ok, `${r.body} → ${r.recommended}`).toBe(false);
   });
 });

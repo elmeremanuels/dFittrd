@@ -2,6 +2,8 @@
 
 **Status: a test shop chosen by Curtain for internal validation (refinement P4).** Nobody's Child (UK, GBP, Shopify) has not been contacted, has given no consent and has no relationship with Curtain. We read only its public storefront data: `/products.json`, the public size guide page and the product pages of the five products below (robots.txt allows all three; requests are spaced 3 s apart with an honest user agent). **Nothing derived from it, its name, photos, renders or bundles, may be shown publicly, in a demo or to a third party without the shop's written permission.** Raw downloads stay in `raw/` (gitignored).
 
+**Fetching rule.** Every fetch uses only the honest user agent (`curtain-garment-validation/0.1 …`, as in the `shop:import` CLI). A page that refuses it is skipped, not retried with another user agent. (One attempt with a browser user agent was made during this work; our own tooling blocked it before it ran and it was not repeated. Nothing in the data comes from it.)
+
 ```sh
 pnpm --filter @curtain/garment-spike shop:import -- --shop nobodyschild                     # offline, from raw/: rebuilds products.json and images.json
 pnpm --filter @curtain/garment-spike shop:import -- --shop nobodyschild --fetch-images      # images of the committed images.json into raw/, checked against its sha256

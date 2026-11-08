@@ -114,9 +114,18 @@ export function measurePattern(m: Mannequin, mesh: Mesh, ctx: MeasureContext, bo
   // The hem's upper part (75th percentile of the sector minima; the maximum let one ragged sector, e.g. a trouser leg's
   // inner side under the crotch, lift the hem slice out of the leg).
   const hemTop = minima.length ? minima[Math.floor(0.75 * (minima.length - 1))]! : Infinity;
-  const hemSliceY = Math.min(hemTop + HEM_GIRTH_ABOVE_CM, (trousers ? crotchY : hipY0) - 1);
+  // When the cloth does not go all the way round there (a hem uneven over more than a quarter of the way round: run 15's
+  // maxi skirt hangs 4–5 cm higher over two 40° arcs), the slice moves up 1 cm at a time, at most to HEM_GIRTH_ABOVE_CM
+  // above the highest sector minimum, until the tape closes.
+  const hemCap = (trousers ? crotchY : hipY0) - 1;
   const triOk = (t: number): boolean => onBody(mesh.indices[3 * t]!) && onBody(mesh.indices[3 * t + 1]!) && onBody(mesh.indices[3 * t + 2]!);
-  const hem = Number.isFinite(hemSliceY) ? tapeAround(slicePoints(mesh, hemSliceY, triOk), hemSliceY) : null;
+  let hemSliceY = Math.min(hemTop + HEM_GIRTH_ABOVE_CM, hemCap);
+  let hem = Number.isFinite(hemSliceY) ? tapeAround(slicePoints(mesh, hemSliceY, triOk), hemSliceY) : null;
+  const hemTopMax = minima.length ? Math.min(minima[minima.length - 1]! + HEM_GIRTH_ABOVE_CM, hemCap) : -Infinity;
+  while (!hem && Number.isFinite(hemSliceY) && hemSliceY + 1 <= hemTopMax) {
+    hemSliceY += 1;
+    hem = tapeAround(slicePoints(mesh, hemSliceY, triOk), hemSliceY);
+  }
   const hipSlice = trousers ? null : tapeAround(slicePoints(mesh, hipY0, (t) => chains[mesh.indices[3 * t]!] === 0), hipY0);
   // Trouser thigh: the left leg's own ring (measureRing on the thigh frame).
   const thighFrame = m.rings.find((r) => r.id === 'thigh')!;

@@ -312,10 +312,11 @@ describe('template fit on the synthetic dress', () => {
       expect(f.report.rays.exactClearanceUnresolved).toBe(0);
     }, 300_000);
 
-    it('leaves the cap open (cold shoulder) where nothing says the frames were told to show it bare', () => {
+    it('leaves the cap open (cold shoulder) where nothing says the frames were told to show it bare', async () => {
       // No control (frames that are renders or photos), and a control whose proxy has sleeves over the cap:
       // the frames' mannequin and background over the cap are evidence, as everywhere else.
       for (const control of [undefined, controlOf(proxy)]) {
+        await tick(); // two fits: let the worker answer vitest between them (see templateFitTwoView.test.ts)
         const f = fitTemplate({ mannequin: m, body, proxy, views: { cameras: cams, masks: bareMasks(), train, holdout, ...(control ? { control } : {}) } });
         // The sleeved proxy still leaves a sliver of the cap bare in the control (7 head rays decided there).
         if (!control) expect(f.report.controlCap.decided).toBe(0);

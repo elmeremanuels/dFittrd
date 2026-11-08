@@ -30,6 +30,7 @@ import { cameraFromFrame } from './views';
 import { decodeAnyPng, maskFromPng, maskPng, type Mask } from './evalPng';
 import { colourRender, garmentSilhouette, overlayPng, overlayRgb, RENDER_BACKGROUND, scoreView, shopPhotoScore, sideBySidePng, type TurntableScore, type ViewName, type ViewReference } from './evalView';
 import { maskIou } from './evalPng';
+import { stillWidths, type StillWidth } from './bottomOpenings';
 
 export type Json = Record<string, unknown>;
 
@@ -82,8 +83,11 @@ export interface JobFiles {
   /** Garment masks of the generated frames (`stage2/garment_mask/`, the stage 2 segmentation stage 4 trains on) and their record. */
   stage2Masks: { count: number; record: Json | null };
   stage4: Partial<Record<'stage2' | 'synthetic', { glb: string | null; metrics: Json | null }>>;
-  /** Stage 4t (template fit + bake, `scripts/stage4t.ts`): textured garment.glb, metrics.json, atlas.png. */
-  stage4t: Partial<Record<'stage2' | 'synthetic', { glb: string | null; metrics: Json | null; atlas: string | null }>>;
+  /**
+   * Stage 4t (template fit + bake, `scripts/stage4t.ts`): textured garment.glb, metrics.json, atlas.png, and the drape log
+   * written after it (`src/drapeLogJob.ts`: exemplar.json, the measured pattern; shadow.json, the P0 prediction against it).
+   */
+  stage4t: Partial<Record<'stage2' | 'synthetic', { glb: string | null; metrics: Json | null; atlas: string | null; exemplar: Json | null; shadow: Json | null }>>;
   costSummary: Json | null;
   /** Every cost record found: cost_summary.json when present, else the stages' own records. */
   costs: CostRecord[];
@@ -103,7 +107,8 @@ export function readJob(dir: string): JobFiles {
     const glb = at(`stage4t/${source}/garment.glb`);
     const metrics = readJson(at(`stage4t/${source}/metrics.json`));
     const atlas = at(`stage4t/${source}/atlas.png`);
-    if (existsSync(glb) || metrics) stage4t[source] = { glb: existsSync(glb) ? `stage4t/${source}/garment.glb` : null, metrics, atlas: existsSync(atlas) ? `stage4t/${source}/atlas.png` : null };
+    if (existsSync(glb) || metrics)
+      stage4t[source] = { glb: existsSync(glb) ? `stage4t/${source}/garment.glb` : null, metrics, atlas: existsSync(atlas) ? `stage4t/${source}/atlas.png` : null, exemplar: readJson(at(`stage4t/${source}/exemplar.json`)), shadow: readJson(at(`stage4t/${source}/shadow.json`)) };
   }
   const maskDir = at('stage3/garment_mask');
   const stage3Masks = existsSync(maskDir) ? readdirSync(maskDir).filter((f) => f.endsWith('.png')).length : 0;
@@ -283,6 +288,23 @@ export function viewAgreement(job: JobFiles, m: Mannequin, meshes: Mesh | ViewMe
   return { views, shopPhotos, turntable, notes };
 }
 
+/**
+ * The pinned stills' garment masks against the mannequin's own silhouette in the same camera (rendered from our mesh, not
+ * segmented), on the rows of the given heights (`stillWidths`).
+ */
+export function stillsAgainstBody(job: JobFiles, m: Mannequin, heightsCm: readonly number[]): { view: ViewName; frame: number; widths: StillWidth[] }[] {
+  const { refs } = viewReferences(job);
+  const frames = num(obj(job.manifest?.camera)?.frames);
+  if (!frames) return [];
+  const path = turntablePath(m, 'turntable_mid', { frames });
+  const body = buildMannequinMesh(m);
+  return refs.map((ref) => {
+    const cf = path.frames[ref.frame]!;
+    const bodyMask = garmentSilhouette(null, body, cf, ref.mask.width, ref.mask.height);
+    return { view: ref.view, frame: ref.frame, widths: stillWidths(ref.mask, bodyMask, cameraFromFrame(cf, ref.mask.width, ref.mask.height), heightsCm) };
+  });
+}
+
 export interface MeshChoice {
   kind: MeshSourceKind;
   path: string;
@@ -325,6 +347,8 @@ export interface ProductEval {
   stage4t?: Json | null;
   view: ViewAgreement;
   bundle: ReturnType<typeof evalBundle> | null;
+  /** Bottoms: each pinned still's garment width against the mannequin's on the rows of the top edge, the hip and below. */
+  stills?: { view: ViewName; frame: number; widths: StillWidth[] }[];
   meanColorHex: string | null;
   readMs: number;
   evalMs: number;
@@ -393,8 +417,9 @@ export function evaluateProduct(o: {
   const t2 = performance.now();
   // The simulated error of a synthetic truth changes positions, not the vertex order: the colours still apply.
   const view = viewAgreement(o.job, m, { calibrated: result.baseMesh, reconstructed: result.reconstructed, colors, texture }, o.writeImage);
+  const stills = result.category === 'bottom' ? stillsAgainstBody(o.job, m, [95, 90, m.morphHeights.hip, 84, 80]) : undefined;
   const t3 = performance.now();
   const bundle = result.grading ? evalBundle(result, o.payload, { meanColorHex, view, texture, inputs: { jobDir: o.job.dir, manifestInputHash: str(o.job.manifest?.input_hash) } }) : null;
   const stage4t = o.choice.kind === 'stage4t' ? o.job.stage4t[o.choice.path.split('/')[1] === 'synthetic' ? 'synthetic' : 'stage2']?.metrics ?? null : null;
-  return { result, view, bundle, meanColorHex, stage4t, readMs: Math.round(t1 - t0), evalMs: Math.round(t2 - t1), viewMs: Math.round(t3 - t2) };
+  return { result, view, bundle, ...(stills ? { stills } : {}), meanColorHex, stage4t, readMs: Math.round(t1 - t0), evalMs: Math.round(t2 - t1), viewMs: Math.round(t3 - t2) };
 }

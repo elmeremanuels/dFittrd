@@ -43,12 +43,20 @@ let withHull: TemplateFitResult;
 let fromTrueSpec: TemplateFitResult;
 let fromDeep: TemplateFitResult;
 let skirtFit: TemplateFitResult;
-beforeAll(() => {
+// Five fits in one block: yield to the event loop between them. Run synchronously they held the worker for 60 s and more
+// under the root `pnpm check` (every workspace's tests at once on 4 cores), and vitest's worker RPC timed out
+// ("Timeout calling onTaskUpdate") although every test passed.
+const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+beforeAll(async () => {
   const views = { cameras: cams, masks, train, holdout };
   withTemplate = fitTemplate({ mannequin: m, body, proxy: bad, views, options: { depthPrior: 'template' } });
+  await tick();
   withHull = fitTemplate({ mannequin: m, body, proxy: bad, views, options: { depthPrior: 'hull' } });
+  await tick();
   fromTrueSpec = fitTemplate({ mannequin: m, body, proxy, views, options: { depthPrior: 'template' } });
+  await tick();
   fromDeep = fitTemplate({ mannequin: m, body, proxy: deep, views, options: { depthPrior: 'template' } });
+  await tick();
   const skirtMasks = cams.map((c) => visibleMask(c, skirtTruth));
   skirtFit = fitTemplate({ mannequin: m, body, proxy: skirtProxy, views: { cameras: cams, masks: skirtMasks, train, holdout }, options: { category: 'bottom', depthPrior: 'template' } });
 }, 300_000);

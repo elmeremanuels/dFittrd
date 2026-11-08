@@ -8,6 +8,7 @@ import type { FitResult, AnchorGaps } from '@curtain/fit-engine';
 import type { Mannequin, Mesh } from '@curtain/mannequin';
 import { armpitDistance, assignChains, radialMorph, type ChainAssignment } from '../../src/garment';
 import { applyGrading } from '../../src/grading';
+import { topEdgePlane } from '../../src/waistband';
 import type { MaterialJson } from '../../src/product';
 import { insideCanonical, makeCollider, type Avatar, type BodyField } from './body';
 import type { SpikeBundle } from './bundle';
@@ -144,6 +145,25 @@ export function pinHeight(m: Mannequin, category: string, positions: ArrayLike<n
   return top - WAISTBAND_CM;
 }
 
+/**
+ * Bottoms: the particles of the waistband, the top `WAISTBAND_CM` under the garment's own top edge (`topEdgePlane`: a plane
+ * through the highest cloth per 10° sector, sectors of an opening that reaches the edge dropped). A level line through the
+ * highest point (`pinHeight`) pinned only the back of run 15's maxi skirt, whose generated waistband is 8–10 cm lower at the
+ * front: the front hung free and slid down the legs. On a level waistband both give the same particles.
+ */
+export function waistbandPins(positions: ArrayLike<number>, indices: ArrayLike<number>, chains: ChainAssignment): Uint8Array {
+  const n = chains.length;
+  const pinned = new Uint8Array(n);
+  const plane = topEdgePlane({ positions, indices } as Pick<Mesh, 'positions' | 'indices'>);
+  if (!plane) return pinned;
+  for (let i = 0; i < n; i++) {
+    if (chains[i] !== 0) continue;
+    const x = positions[3 * i]!, y = positions[3 * i + 1]!, z = positions[3 * i + 2]!;
+    if (y >= plane.a + plane.b * x + plane.c * z - WAISTBAND_CM) pinned[i] = 1;
+  }
+  return pinned;
+}
+
 /** Collision clearance between cloth and avatar, cm. */
 export const CLEARANCE_CM = 0.35;
 
@@ -166,8 +186,8 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   // sizes (D15 breadth); its base width is the mesh's (on the synthetic garment, the mannequin torso's). Pinning only out to the seams or the body's shoulder
   // points was measured and rejected: on the v0 mannequin the freed cloth lands in the arm junction
   // and sags (p99 strain 26–35 % instead of 11–24 % on the tee).
-  const pinned = new Uint8Array(chains.length);
-  for (let i = 0; i < chains.length; i++) if (chains[i] === 0 && start[3 * i + 1]! >= yoke) pinned[i] = 1;
+  const pinned = session.bundle.anchors.category === 'bottom' ? waistbandPins(start, graded.indices, chains) : new Uint8Array(chains.length);
+  if (session.bundle.anchors.category !== 'bottom') for (let i = 0; i < chains.length; i++) if (chains[i] === 0 && start[3 * i + 1]! >= yoke) pinned[i] = 1;
   const cuff = new Uint8Array(chains.length);
   pinLoosePieces(m, start, graded.indices, pinned, session.bundle.baseMesh.positions, cuff);
   const lift = armCapLifter(m, CLEARANCE_CM, session.noLift);
@@ -188,7 +208,7 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
     size: placement.size,
     gaps,
     placement,
-    lines: fitLines(gaps, placement),
+    lines: fitLines(gaps, placement, session.bundle.qa.chartAgreement.missing ?? []),
     heat: heatField(gaps, m.morphHeights),
     material,
     params: clothParams(material, durationS),

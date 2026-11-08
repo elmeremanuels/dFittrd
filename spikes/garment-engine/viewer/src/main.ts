@@ -46,7 +46,9 @@ const chartCaption = (qa: { chartAgreement: { maxAbsCm: number | null; pass: boo
   const c = qa.chartAgreement;
   const at = c.critical?.length ? ` at ${c.critical.join(', ')}` : '';
   const one = c.critical?.length === 1 ? ', 0 by construction with one anchor' : '';
-  const after = c.maxAbsCm === null ? 'no girth at a critical anchor' : `${c.maxAbsCm.toFixed(2)} cm`;
+  // No girth at a critical anchor: the calibration had no ring, so its "residual before" (0 over no ring) is not an error of 0.
+  if (c.maxAbsCm === null) return `Chart agreement ${c.pass ? 'pass' : 'FAIL'}${at}: no girth at a critical anchor, so no error before or after calibration.`;
+  const after = `${c.maxAbsCm.toFixed(2)} cm`;
   return `Chart agreement ${c.pass ? 'pass' : 'FAIL'}${at}: max error ${qa.calibration.residualBeforeCm.maxAbs.toFixed(2)} cm before calibration, ${after} after (${qa.calibration.residualAfterGlobalCm.maxAbs.toFixed(2)} cm after the global scale alone${one}).`;
 };
 const setViewerState = (s: 'loading' | 'draping' | 'settled' | 'error'): void => {

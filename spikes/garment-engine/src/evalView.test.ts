@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildMannequinMesh, turntablePath, type Mesh } from '@curtain/mannequin';
 import { decodeAnyPng } from './evalPng';
-import { garmentSilhouette, overlayPng, scoreView, shopPhotoScore } from './evalView';
+import { garmentSilhouette, overlayPng, scoreView, shopPhotoScore, stackPng } from './evalView';
 import { fixtureMannequin as m, syntheticDress } from './evalFixtures';
 
 const body = buildMannequinMesh(m);
@@ -50,5 +50,19 @@ describe('view agreement', () => {
   it('writes an RGB overlay PNG', () => {
     const img = decodeAnyPng(overlayPng(front, front));
     expect([img.width, img.height, img.channels]).toEqual([W, H, 3]);
+  });
+});
+
+describe('stackPng', () => {
+  it('stacks images of different widths top to bottom, 8 px apart, on white; RGBA and grey become RGB', () => {
+    const a = { width: 3, height: 2, channels: 4 as const, data: new Uint8Array(3 * 2 * 4).fill(0).map((_, i) => (i % 4 === 3 ? 255 : i % 4 === 0 ? 200 : 0)) };
+    const b = { width: 2, height: 1, channels: 1 as const, data: new Uint8Array([10, 20]) };
+    const out = decodeAnyPng(stackPng([a, b]));
+    expect([out.width, out.height, out.channels]).toEqual([3, 2 + 8 + 1, 3]);
+    const px = (x: number, y: number): number[] => [0, 1, 2].map((c) => out.data[(y * 3 + x) * 3 + c]!);
+    expect(px(2, 1)).toEqual([200, 0, 0]);
+    expect(px(0, 5)).toEqual([255, 255, 255]); // the gap
+    expect(px(1, 10)).toEqual([20, 20, 20]);
+    expect(px(2, 10)).toEqual([255, 255, 255]); // beyond the narrower image
   });
 });

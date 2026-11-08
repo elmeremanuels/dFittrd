@@ -26,6 +26,29 @@ const shopProduct = (h: string): PredictProduct => {
 };
 
 describe('measurePattern', () => {
+  it('a hem uneven over more than a quarter of the way round still gets a hem girth (the slice moves up until the cloth closes)', () => {
+    // A skirt-like tube round both legs, radius 30 cm, from 100 cm down to a hem at 5 cm, except two 40° arcs (front-left and
+    // back-right) that end at 10 cm: 22 % of the sectors, above the 75th percentile the hem slice starts from (run 15's skirt).
+    const C = 144, R = 96, r = 30;
+    const positions: number[] = [];
+    const indices: number[] = [];
+    const hemAt = (deg: number): number => ((deg >= 30 && deg < 70) || (deg >= 210 && deg < 250) ? 10 : 5);
+    for (let i = 0; i <= R; i++) for (let c = 0; c < C; c++) {
+      const t = (2 * Math.PI * c) / C;
+      const deg = (360 * c) / C;
+      positions.push(r * Math.sin(t), 100 - (i / R) * (100 - hemAt(deg)), r * Math.cos(t));
+    }
+    for (let i = 0; i < R; i++) for (let c = 0; c < C; c++) {
+      const a = i * C + c, b = i * C + ((c + 1) % C), d = (i + 1) * C + c, e = (i + 1) * C + ((c + 1) % C);
+      indices.push(a, d, e, a, e, b);
+    }
+    const mesh = { positions: Float64Array.from(positions), indices: Uint32Array.from(indices), vertexPart: new Uint8Array(positions.length / 3), partNames: ['garment'] } as unknown as Parameters<typeof measurePattern>[1];
+    const pr = predict(shopProduct('crimson-wildflower-maxi-skirt'));
+    const me = measurePattern(m, mesh, { kind: 'skirt', category: 'bottom', rule: pr.pattern.length.rule, frontOpening: null }, body);
+    expect(me.hemY!).toBeCloseTo(5, 0);
+    expect(me.hemGirthCm!).toBeCloseTo(2 * Math.PI * r, -1);
+  });
+
   it('reads back the synthetic shirt dress it was built from (a-line flare 1.25, 58 cm sleeves, chart girths)', () => {
     const p = mockGarment('aalter-studio-2');
     const spec = garmentSpec(p, 'M');

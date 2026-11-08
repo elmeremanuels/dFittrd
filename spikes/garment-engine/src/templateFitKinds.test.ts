@@ -28,6 +28,29 @@ const opts = (p: ResolvedProduct) => (p.features ? { features: p.features } : {}
 const masksOf = (g: Mesh) => cams.map((c) => idMask(rasterize(c, [{ positions: body.positions, indices: body.indices, id: 1 }, { positions: g.positions, indices: g.indices, id: 2 }]), 2));
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
+/** Surfaces a ray from the centre plane between the legs (x 0, z 0, height y) towards the front crosses: odd = inside the cloth. */
+function crossings(mesh: { positions: ArrayLike<number>; indices: ArrayLike<number> }, y: number): number {
+  const P = mesh.positions, I = mesh.indices;
+  const o = [0, y, 0], d = [0, 0, 1];
+  let n = 0;
+  for (let t = 0; t < I.length; t += 3) {
+    const a = 3 * I[t]!, b = 3 * I[t + 1]!, c = 3 * I[t + 2]!;
+    const e1 = [P[b]! - P[a]!, P[b + 1]! - P[a + 1]!, P[b + 2]! - P[a + 2]!];
+    const e2 = [P[c]! - P[a]!, P[c + 1]! - P[a + 1]!, P[c + 2]! - P[a + 2]!];
+    const p = [d[1]! * e2[2]! - d[2]! * e2[1]!, d[2]! * e2[0]! - d[0]! * e2[2]!, d[0]! * e2[1]! - d[1]! * e2[0]!];
+    const det = e1[0]! * p[0]! + e1[1]! * p[1]! + e1[2]! * p[2]!;
+    if (Math.abs(det) < 1e-12) continue;
+    const s = [o[0]! - P[a]!, o[1]! - P[a + 1]!, o[2]! - P[a + 2]!];
+    const u = (s[0]! * p[0]! + s[1]! * p[1]! + s[2]! * p[2]!) / det;
+    if (u < 0 || u > 1) continue;
+    const q = [s[1]! * e1[2]! - s[2]! * e1[1]!, s[2]! * e1[0]! - s[0]! * e1[2]!, s[0]! * e1[1]! - s[1]! * e1[0]!];
+    const v = (d[0]! * q[0]! + d[1]! * q[1]! + d[2]! * q[2]!) / det;
+    if (v < 0 || u + v > 1) continue;
+    if ((e2[0]! * q[0]! + e2[1]! * q[1]! + e2[2]! * q[2]!) / det > 0) n++;
+  }
+  return n;
+}
+
 describe('stage 4t: trousers', () => {
   const pants = shop('rosewater-palazzo-pants');
   const truth = syntheticGarmentFromProxy(m, pants.payload, pants.baseSize);
@@ -60,7 +83,19 @@ describe('stage 4t: trousers', () => {
     expect(oneTube.report.legs.fitted).toBe(false);
     const inner = bottomLengths(m, oneTube.mesh, true).find((d) => d.definition === 'inseam_inner')!;
     expect(inner.lengthCm).toBeNull();
-    expect(chamfer(oneTube.mesh, truth).chamferCmMean).toBeGreaterThan(chamfer(legs.mesh, truth).chamferCmMean);
+    // A skirt has cloth in front of the gap between the legs; trousers do not. This used to be checked by the Chamfer (one
+    // tube further from the truth than the leg tubes), which held only because the one tube's hem scan stopped at the crotch
+    // over the gap and left a slit up the front and back: no skirt either. With the hem scan passing openings (`OPENING`) the
+    // one tube is a closed skirt, and a closed skirt round these wide palazzo legs is closer to them by Chamfer (0.93 against
+    // 0.996 cm), so the check is now the gap itself, 20 to 45 cm below the crotch. Nothing chooses the kind by Chamfer: the
+    // legs fit comes from the proxy kind (`stage4t` `fit.legs = kind === 'trousers'`) and does not run the body hem scan, so
+    // `OPENING` cannot change it; the legs fit's own bound is the Chamfer < 1.5 cm above.
+    const cy = m.landmarks.crotch[1];
+    for (const d of [20, 30, 45]) {
+      expect(crossings(truth, cy - d)).toBe(0);
+      expect(crossings(legs.mesh, cy - d)).toBe(0);
+      expect(crossings(oneTube.mesh, cy - d)).toBeGreaterThan(0);
+    }
   });
 });
 

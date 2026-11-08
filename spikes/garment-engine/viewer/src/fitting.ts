@@ -114,8 +114,13 @@ export interface FitLine {
   text: string;
 }
 
-/** The text under the viewer: the fit engine's per-anchor gaps in words, plus the loop states of step 3. */
-export function fitLines(gaps: AnchorGaps | null, placement: Placement | null): FitLine[] {
+/**
+ * The text under the viewer: the fit engine's per-anchor gaps in words, plus the loop states of step 3. The gaps come from the
+ * size chart; `noGirth` lists the anchors the 3D garment has no measured girth at (an evaluation bundle's
+ * `qa.chartAgreement.missing`, e.g. a skirt worn below the waist ring): their line says it is the chart only, so it is not
+ * read as something measured on the garment shown.
+ */
+export function fitLines(gaps: AnchorGaps | null, placement: Placement | null, noGirth: readonly string[] = []): FitLine[] {
   if (!gaps) return [];
   const lines: FitLine[] = [];
   for (const anchor of Object.keys(gaps.gaps) as FitAnchorId[]) {
@@ -132,6 +137,7 @@ export function fitLines(gaps: AnchorGaps | null, placement: Placement | null): 
     let text = gap > 0 ? `${amount} more room at the ${where}` : gap < 0 ? `${amount} tighter at the ${where}` : `Right on the intended ease at the ${where}`;
     text += band ? ` (${band})` : '';
     if (p?.state === 'stretched') text += `; stretched ${round1(-p.slackCm)} cm over the body`;
+    if (noGirth.includes(anchor)) text += `, from the size chart only: this 3D garment has no measured girth at the ${where}`;
     lines.push({ anchor, band, tone, text: `${text}.` });
   }
   return lines;

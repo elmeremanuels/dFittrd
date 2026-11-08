@@ -18,13 +18,15 @@
  * Everything under out/ is gitignored; shop images are never read here (only the stage 1b masks).
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BASE_SHAPE_ID, bodyShape, buildMannequin } from '@curtain/mannequin';
 import { mockGarment, type GarmentPayload } from '@curtain/schema';
 import { arr, chooseMesh, evaluateProduct, num, obj, readJob, str, type Json, type ProductEval } from '../src/evalJob';
-import { parsePrintedTable, renderReport, type ProductRenders, type ProductSection, type RenderShot, type ShopImage, type ShopProduct, type SyntheticSection } from '../src/evalReport';
+import { decodeAnyPng } from '../src/evalPng';
+import { forPanel, parsePrintedTable, REVIEW_VERDICTS, renderReport, type ReviewVerdict, type EarlierRun, type ProductRenders, type ProductSection, type RenderShot, type ShopImage, type ShopProduct, type SyntheticSection } from '../src/evalReport';
+import { stackPng } from '../src/evalView';
 import { generateGarment } from '../src/garment';
 import { garmentSpec } from '../src/product';
 import { SHOP_UNCOVERED_CATEGORIES } from '../src/shopSelection';
@@ -115,7 +117,7 @@ function writeBundle(id: string, ev: ProductEval, images: Map<string, Uint8Array
   return rel(dir);
 }
 
-function run(id: string, payload: GarmentPayload, baseSize: string, jobDir: string, allowSynthetic: boolean): { job: ReturnType<typeof readJob>; ev: ProductEval | null; alternative: ProductEval | null; error: string | null; bundleRel: string | null } {
+function run(id: string, payload: GarmentPayload, baseSize: string, jobDir: string, allowSynthetic: boolean, opts: { alternative?: boolean } = {}): { job: ReturnType<typeof readJob>; ev: ProductEval | null; alternative: ProductEval | null; error: string | null; bundleRel: string | null } {
   const job = readJob(jobDir);
   const choice = chooseMesh(job, {
     allowSynthetic,
@@ -129,7 +131,7 @@ function run(id: string, payload: GarmentPayload, baseSize: string, jobDir: stri
     const ev = evaluateProduct({ productId: id, payload, baseSize, job, choice, printedLength, writeImage: (name, png) => images.set(name, png) });
     // Stage 4t is the asset when it exists; stage 4 (2DGS) is evaluated alongside for the comparison table only (no bundle, no pictures).
     let alternative: ProductEval | null = null;
-    if (choice.kind === 'stage4t' && job.stage4.stage2?.glb) {
+    if (choice.kind === 'stage4t' && job.stage4.stage2?.glb && opts.alternative !== false) {
       const alt = chooseMesh(job, { allowSynthetic: false, prefer: 'stage4' });
       if (alt && alt.kind === 'stage4') {
         // Its bundle and turntable pictures go to eval/<id>-2dgs, so --renders can draw the old asset next to the new one.
@@ -198,14 +200,51 @@ const date = option('date') ?? new Date().toISOString().slice(0, 10);
 if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`--date must be YYYY-MM-DD, got ${date}`);
 const reportPath = resolve(repoRoot, option('out') ?? 'docs/research/phase0-bohohippychic.md');
 
+/**
+ * Earlier GPU runs of a product kept beside its current job: `out/phase0/<handle>-run<N>/` (e.g. run 14's babydoll after
+ * run 15 replaced `out/phase0/<handle>/`). Evaluated like the current job (no 2DGS alternative), bundled as eval/<dir>.
+ */
+function earlierDirs(handle: string): { dir: string; label: string; n: number }[] {
+  const root = join(outDir, 'phase0');
+  if (!existsSync(root)) return [];
+  const re = new RegExp(`^${handle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-run(\\d+)$`);
+  return readdirSync(root)
+    .map((d) => ({ d, m: re.exec(d) }))
+    .filter((x) => x.m && statSync(join(root, x.d)).isDirectory())
+    .map((x) => ({ dir: x.d, label: `run ${Number(x.m![1])}`, n: Number(x.m![1]) }))
+    .sort((a, b) => a.n - b.n);
+}
+
+/** The reviewer's verdict per product on its current run (data/<shop>/review.json, hand-written). */
+function reviews(): Record<string, ProductSection['review']> {
+  const p = join(dataDir, 'review.json');
+  if (!existsSync(p)) return {};
+  const out: Record<string, ProductSection['review']> = {};
+  for (const [h, v] of Object.entries(obj(readJsonFile(p).products) ?? {})) {
+    const o = obj(v);
+    const verdict = str(o?.verdict);
+    if (!REVIEW_VERDICTS.includes(verdict as ReviewVerdict)) throw new Error(`review.json: ${h} has verdict ${JSON.stringify(verdict)}; expected ${REVIEW_VERDICTS.join(', ')}`);
+    out[h] = { run: num(o?.run), verdict: verdict as ReviewVerdict, why: str(o?.why) ?? '' };
+  }
+  return out;
+}
+
+type Earlier = Omit<EarlierRun, 'renders' | 'comparisons'> & { id: string };
+const review = reviews();
 const { shop, products, images } = shopProducts();
-const sections: (Omit<ProductSection, 'renders'> & { id: string })[] = [];
+const sections: (Omit<ProductSection, 'renders' | 'earlier'> & { id: string; earlierRuns: Earlier[] })[] = [];
 for (const p of products) {
   if (only && !only.includes(p.handle)) continue;
   const jobDir = join(outDir, 'phase0', p.handle);
   const r = run(p.handle, p.payload, p.baseSize, jobDir, false);
   if (!r.ev) console.log(`[report] ${p.handle}: ${r.error}`);
-  sections.push({ id: p.handle, shop: p, images: images[p.handle] ?? [], job: r.job, jobRel: rel(jobDir), eval: r.ev, evalError: r.error, bundleRel: r.bundleRel, alternative: r.alternative });
+  const earlierRuns: Earlier[] = earlierDirs(p.handle).map((e) => {
+    const d = join(outDir, 'phase0', e.dir);
+    const er = run(e.dir, p.payload, p.baseSize, d, false, { alternative: false });
+    if (!er.ev) console.log(`[report] ${e.dir}: ${er.error}`);
+    return { id: e.dir, label: e.label, jobRel: rel(d), job: er.job, eval: er.ev, evalError: er.error, bundleRel: er.bundleRel };
+  });
+  sections.push({ id: p.handle, shop: p, images: images[p.handle] ?? [], job: r.job, jobRel: rel(jobDir), eval: r.ev, evalError: r.error, bundleRel: r.bundleRel, alternative: r.alternative, earlierRuns, review: review[p.handle] ?? null });
 }
 
 let synthetic: (Omit<SyntheticSection, 'renders'> & { ev: ProductEval | null }) | null = null;
@@ -214,19 +253,56 @@ if (!flag('no-synthetic')) {
   synthetic = { productId: SYNTHETIC_ID, eval: r.ev, ev: r.ev, evalError: r.error, bundleRel: r.bundleRel };
 }
 
+// A product whose current run the reviewer rejected is evaluated (its numbers show the failure) but not rendered or blind-tested;
+// a faulty one is rendered too (so the fault can be seen) but kept off the blind page and out of the panel bundles.
+const usable = sections.filter((s) => s.review?.verdict !== 'rejected');
+const panel = sections.filter(forPanel);
 if (flag('renders')) {
   const ids = [
-    ...sections.filter((s) => s.eval?.bundle).map((s) => `eval/${s.id}`),
-    ...sections.filter((s) => s.alternative?.bundle && existsSync(join(evalOut, `${s.id}${ALT_SUFFIX}`, 'grading.json'))).map((s) => `eval/${s.id}${ALT_SUFFIX}`),
+    ...usable.filter((s) => s.eval?.bundle).map((s) => `eval/${s.id}`),
+    ...usable.flatMap((s) => s.earlierRuns.filter((e) => e.eval?.bundle).map((e) => `eval/${e.id}`)),
+    ...usable.filter((s) => s.alternative?.bundle && existsSync(join(evalOut, `${s.id}${ALT_SUFFIX}`, 'grading.json'))).map((s) => `eval/${s.id}${ALT_SUFFIX}`),
     ...(synthetic?.ev?.bundle ? [`eval/${SYNTHETIC_ID}`] : []),
   ];
   if (ids.length === 0) console.log('[report] --renders: no bundle to render');
   else {
-    const shopIds = ids.filter((id) => id !== `eval/${SYNTHETIC_ID}` && !id.endsWith(ALT_SUFFIX));
+    const earlierIds = new Set(sections.flatMap((s) => s.earlierRuns.map((e) => `eval/${e.id}`)));
+    const panelIds = new Set(panel.map((s) => `eval/${s.id}`));
+    const shopIds = ids.filter((id) => panelIds.has(id) && !earlierIds.has(id));
     const blind = shopIds.length ? ['--blind', shopIds.join(',')] : ['--no-blind'];
     const res = spawnSync(process.execPath, [join(spikeDir, 'viewer', 'render-eval.mjs'), ...ids, ...blind], { stdio: 'inherit', cwd: spikeDir });
     if (res.status !== 0) console.error(`[report] render-eval exited with ${res.status}; its problems are listed in the report`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Earlier run against the current job: the same pictures stacked (earlier on top), same camera, so hem heights compare.
+// ---------------------------------------------------------------------------
+
+const PAIRS: { from: (r: RendersFile | null, id: string) => string | null; name: string; caption: string }[] = [
+  { name: 'turntable-0', caption: 'stage 2 frame | mesh | overlay at 0°, the earlier run on top', from: (_r, id) => join(evalOut, id, 'view', 'turntable_0.png') },
+  { name: 'turntable-90', caption: 'the same at 90°', from: (_r, id) => join(evalOut, id, 'view', 'turntable_90.png') },
+  { name: 'viewer-M-front', caption: 'viewer, AU 8 / 12 / 16 on the M mannequin, front, the earlier run on top', from: (r, id) => shotFile(r, id, 'front') },
+  { name: 'viewer-M-side', caption: 'the same from the side', from: (r, id) => shotFile(r, id, 'side') },
+];
+
+function shotFile(r: RendersFile | null, id: string, view: string): string | null {
+  const s = r?.products[`eval/${id}`]?.shots.find((x) => x.shape === 'M' && (x.view ?? 'front') === view && !x.fitMap);
+  return s ? join(repoRoot, s.file) : null;
+}
+
+function comparisons(r: RendersFile | null, current: string, earlier: Earlier): EarlierRun['comparisons'] {
+  const out: EarlierRun['comparisons'] = [];
+  const dir = join(evalOut, current, 'compare');
+  for (const pair of PAIRS) {
+    const a = pair.from(r, earlier.id), b = pair.from(r, current);
+    if (!a || !b || !existsSync(a) || !existsSync(b)) continue;
+    mkdirSync(dir, { recursive: true });
+    const file = join(dir, `${earlier.id.slice(current.length + 1)}-vs-current-${pair.name}.png`);
+    writeFileSync(file, stackPng([decodeAnyPng(new Uint8Array(readFileSync(a))), decodeAnyPng(new Uint8Array(readFileSync(b)))]));
+    out.push({ file: rel(file), caption: pair.caption });
+  }
+  return out;
 }
 
 const writtenPath = join(dataDir, 'phase0-written.md');
@@ -235,12 +311,16 @@ const written = existsSync(writtenPath) ? readFileSync(writtenPath, 'utf8') : nu
 const panelHoldPath = join(dataDir, 'panel-hold.txt');
 const panelHold = existsSync(panelHoldPath) ? readFileSync(panelHoldPath, 'utf8').trim() || null : null;
 const renders = readRenders();
-const shopIds = sections.filter((s) => s.eval?.bundle).map((s) => `eval/${s.id}`);
-const blindIds = shopIds.length ? shopIds : sections.map((s) => `eval/${s.id}`);
+const shopIds = panel.filter((s) => s.eval?.bundle).map((s) => `eval/${s.id}`);
+const blindIds = shopIds.length ? shopIds : panel.map((s) => `eval/${s.id}`);
 const markdown = renderReport({
   date,
   shop,
-  products: sections.map(({ id, ...s }) => ({ ...s, renders: rendersFor(renders, id, s.eval) })),
+  products: sections.map(({ id, earlierRuns, ...s }) => ({
+    ...s,
+    renders: rendersFor(renders, id, s.eval),
+    earlier: earlierRuns.map(({ id: eid, ...e }) => ({ ...e, renders: rendersFor(renders, eid, e.eval), comparisons: s.eval?.bundle && e.eval?.bundle ? comparisons(renders, id, { id: eid, ...e }) : [] })),
+  })),
   synthetic: synthetic ? { productId: synthetic.productId, eval: synthetic.eval, evalError: synthetic.evalError, bundleRel: synthetic.bundleRel, renders: rendersFor(renders, SYNTHETIC_ID, synthetic.ev) } : null,
   blindUrl: `http://127.0.0.1:5178/blind.html?products=${blindIds.join(',')}`,
   blindShot: renders && shopIds.length && renders.blindShots.length ? renders.blindShots[renders.blindShots.length - 1]! : null,

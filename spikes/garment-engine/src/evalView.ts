@@ -14,7 +14,7 @@
  */
 import { type CameraFrame, type Mesh } from '@curtain/mannequin';
 import { encodePng } from './exportPng';
-import { maskIou, mirrorMask, normaliseMask, type Mask, type MaskIou } from './evalPng';
+import { maskIou, mirrorMask, normaliseMask, type DecodedPng, type Mask, type MaskIou } from './evalPng';
 import { render } from './raster';
 import { GARMENT_ID, MANNEQUIN_GREY, MANNEQUIN_ID } from './separation';
 
@@ -169,6 +169,33 @@ export function sideBySidePng(width: number, height: number, panels: readonly Ui
     for (let y = 0; y < height; y++) data.set(p.subarray(y * width * 3, (y + 1) * width * 3), (y * W + x0) * 3);
   });
   return encodePng({ width: W, height, channels: 3, bitDepth: 8, data });
+}
+
+/**
+ * Decoded images stacked top to bottom, 8 px apart, left-aligned on white, as one RGB PNG (the before/after pictures of two
+ * runs: the same camera, so heights in the two rows compare directly). Grey and alpha are converted to RGB on white.
+ */
+export function stackPng(images: readonly DecodedPng[]): Uint8Array {
+  if (!images.length) throw new Error('stackPng: no images');
+  const gap = 8;
+  const W = Math.max(...images.map((i) => i.width));
+  const H = images.reduce((h, i) => h + i.height, 0) + gap * (images.length - 1);
+  const data = new Uint8Array(W * H * 3).fill(255);
+  let y0 = 0;
+  for (const img of images) {
+    const ch = img.channels;
+    for (let y = 0; y < img.height; y++) for (let x = 0; x < img.width; x++) {
+      const i = (y * img.width + x) * ch;
+      const a = ch === 2 ? img.data[i + 1]! / 255 : ch === 4 ? img.data[i + 3]! / 255 : 1;
+      const o = ((y0 + y) * W + x) * 3;
+      for (let c = 0; c < 3; c++) {
+        const v = ch >= 3 ? img.data[i + c]! : img.data[i]!;
+        data[o + c] = Math.round(v * a + 255 * (1 - a));
+      }
+    }
+    y0 += img.height + gap;
+  }
+  return encodePng({ width: W, height: H, channels: 3, bitDepth: 8, data });
 }
 
 /** One turntable angle: the stage 4 mesh rendered at the stage 2 camera against that frame's garment mask. */

@@ -575,10 +575,20 @@ interface ProfileScan {
   present: boolean[];
 }
 
-/** End of the contiguous garment run: first present sample from the start, then until a gap longer than `gapCm`. NaN when nothing is present within `searchCm`. */
-function runEnd(scan: ProfileScan, gapCm: number, searchCm: number): number {
+/**
+ * End of the contiguous garment run: first present sample from the start, then until a gap longer than `gapCm`. NaN when
+ * nothing is present within `searchCm`.
+ *
+ * With `opening`, a gap up to `opening.maxCm` long that is followed by at least `opening.minRunCm` of cloth is an opening
+ * in the garment (a side slit, a cut-out, a pocket opening), not its end: the run carries on below it. The per-vertex
+ * vote carves the opening itself afterwards. Without it, a body column whose waistband sits above a side opening ended
+ * at the waistband, and the hem interpolated between it and its neighbours cut a slit up the side of run 15's skirt
+ * (`OPENING`).
+ */
+export function runEnd(scan: ProfileScan, gapCm: number, searchCm: number, opening?: { maxCm: number; minRunCm: number }): number {
   const { present, step, start } = scan;
   const dir = Math.sign(step);
+  const ds = Math.abs(step);
   let first = -1;
   for (let i = 0; i < present.length && Math.abs(i * step) <= searchCm; i++) if (present[i]) { first = i; break; }
   if (first < 0) return NaN;
@@ -588,13 +598,33 @@ function runEnd(scan: ProfileScan, gapCm: number, searchCm: number): number {
     if (present[i]) {
       last = i;
       gap = 0;
-    } else {
-      gap += Math.abs(step);
-      if (gap > gapCm) break;
+      continue;
     }
+    gap += ds;
+    if (gap <= gapCm) continue;
+    if (!opening) break;
+    // Is the cloth below an opening? The next present sample within maxCm, then a run of minRunCm (gaps up to gapCm inside it).
+    let next = -1;
+    for (let j = i + 1; j < present.length && (j - last) * ds <= opening.maxCm + gapCm; j++) if (present[j]) { next = j; break; }
+    if (next < 0) break;
+    let end = next, g = 0;
+    for (let j = next + 1; j < present.length; j++) {
+      if (present[j]) { end = j; g = 0; }
+      else if ((g += ds) > gapCm) break;
+    }
+    if ((end - next) * ds < opening.minRunCm) break;
+    last = end;
+    gap = 0;
+    i = end;
   }
-  return start + dir * Math.abs(step) * last;
+  return start + dir * ds * last;
 }
+
+/**
+ * Body hem scan: openings the hem passes (`runEnd`). 40 cm covers a side slit from the hip to the knee; 5 cm of cloth below
+ * it rules out a stray vote below the hem (run 15's skirt: single samples a few cm below the hem, never 5 cm).
+ */
+export const OPENING = { maxCm: 40, minRunCm: 5 } as const;
 
 // ---------------------------------------------------------------------------
 // Grid
@@ -859,7 +889,7 @@ export function fitTemplate(inp: FitInputs): TemplateFitResult {
       present.push(votePresent(ev, along(ray, test), ray.d, fewViewsPresent(ray, test, hs)).present);
       if (hs >= 0) rPrev = scanRadius(ray, hh, rPrev);
     }
-    hemRaw.push(runEnd({ start: yScanTop, step: scanStep, present }, 2, 25));
+    hemRaw.push(runEnd({ start: yScanTop, step: scanStep, present }, 2, 25, OPENING));
   }
   const hem = circularSmooth(fillCircular(hemRaw), 4, 2);
   if (!hem.every(Number.isFinite)) throw new Error('stage 4t: no garment found below the chest in any column (masks or cameras wrong?)');

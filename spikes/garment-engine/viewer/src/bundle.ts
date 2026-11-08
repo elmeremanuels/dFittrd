@@ -29,8 +29,8 @@ export interface QaJson {
   format: 'curtain.garment.qa';
   productId: string;
   synthetic: boolean;
-  /** maxAbsCm is null in an evaluation bundle when a critical ring has no girth; `critical` only in evaluation bundles. */
-  chartAgreement: { maxAbsCm: number | null; pass: boolean; critical?: string[] };
+  /** maxAbsCm is null in an evaluation bundle when a critical ring has no girth (listed in `missing`); `critical` and `missing` only in evaluation bundles. */
+  chartAgreement: { maxAbsCm: number | null; pass: boolean; critical?: string[]; missing?: string[] };
   calibration: { residualBeforeCm: { maxAbs: number }; residualAfterGlobalCm: { maxAbs: number } };
   meshHealth: { triangles: number };
 }

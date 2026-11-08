@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { chooseMesh, evaluateProduct, readJob, type JobFiles, type ProductEval } from './evalJob';
 import { reconstructedDress, shopPayloads, syntheticDress, writeFakeJob } from './evalFixtures';
 import { SHOP_UNCOVERED_CATEGORIES } from './shopSelection';
-import { costTotal, parsePrintedTable, plannedPhotos, renderReport, stageStatuses, usedInputs, verdicts, type ProductSection, type ReportInput, type ShopImage, type ShopProduct } from './evalReport';
+import { costTotal, forPanel, parsePrintedTable, plannedPhotos, renderReport, stageStatuses, usedInputs, verdicts, type ProductSection, type ReportInput, type ShopImage, type ShopProduct } from './evalReport';
 
 const images = (JSON.parse(readFileSync(new URL('../data/bohohippychic/images.json', import.meta.url), 'utf8')) as { products: Record<string, ShopImage[]> }).products;
 const dirs: string[] = [];
@@ -157,5 +157,52 @@ describe('report with stage 2 garment masks, a printed table and a written secti
     expect(md.indexOf('## Runs 10–14 timeline')).toBeGreaterThan(md.indexOf('## Phase 0 acceptance'));
     expect(md.indexOf('## Runs 10–14 timeline')).toBeLessThan(md.indexOf('## What this set can and cannot show'));
     expect(md).toMatch(/written by hand in `spikes\/garment-engine\/data\/bohohippychic\/phase0-written\.md`/);
+  });
+});
+
+describe('review verdicts and earlier runs', () => {
+  it('marks a rejected run in the summary, the product section and the size test, and counts it out of the panel bundles', () => {
+    const ps = shopPayloads().map((p) => missing(p.handle));
+    ps[1] = { ...ps[1]!, review: { run: 15, verdict: 'rejected', why: 'stills torn' } };
+    ps[0] = { ...ps[0]!, review: { run: 15, verdict: 'accepted', why: 'stills right' } };
+    const md = renderReport(input(ps));
+    expect(md).toContain(`\`${ps[1]!.shop.handle}\` (run 15 rejected on review)`);
+    // No evaluation (no job dir here): it does not claim numbers it does not have.
+    expect(md).toMatch(/\*\*Review of run 15 \(stills and frames looked at\):\*\* \*\*rejected\*\*\. stills torn\. not rendered and not on the blind page\./);
+    expect(md).not.toMatch(/stills torn\. Evaluated below/);
+    expect(md).toMatch(/\*\*Review of run 15 \(stills and frames looked at\):\*\* accepted\. stills right\./);
+  });
+
+  it('keeps a faulty run in the evaluation but out of the panel bundles and off the blind page', () => {
+    const ps = shopPayloads().map((p) => missing(p.handle));
+    ps[0] = { ...ps[0]!, review: { run: 15, verdict: 'accepted', why: 'stills right' } };
+    ps[2] = { ...ps[2]!, review: { run: 15, verdict: 'faulty', why: 'hips narrow' } };
+    const md = renderReport(input(ps));
+    expect(md).toContain(`\`${ps[2]!.shop.handle}\` (run 15 faulty, evaluation only on review)`);
+    expect(md).toMatch(/\*\*Review of run 15 \(stills and frames looked at\):\*\* \*\*faulty, for evaluation only\*\*\. hips narrow\. Evaluated and rendered below so the fault can be seen, but not a panel bundle and not on the blind page\./);
+    expect(forPanel(ps[0]!)).toBe(true);
+    expect(forPanel(ps[2]!)).toBe(false);
+    expect(forPanel({ review: { run: 15, verdict: 'rejected', why: '' } })).toBe(false);
+    expect(forPanel({ review: null })).toBe(true);
+  });
+
+  it('counts only accepted evaluated products as panel bundles in the size test', () => {
+    const ps = shopPayloads().map((p) => missing(p.handle));
+    const ev = { result: { agreement: { pass: false, missing: [], maxAbsCm: 1 }, before: { maxAbsCm: 1 }, afterGlobal: { maxAbsCm: 1 }, critical: ['chest'], rows: [], waistband: null }, view: { views: [] } } as unknown as ProductEval;
+    ps[0] = { ...ps[0]!, eval: ev, review: { run: 15, verdict: 'accepted', why: '' } };
+    ps[2] = { ...ps[2]!, eval: ev, review: { run: 15, verdict: 'faulty', why: '' } };
+    const size = verdicts(input(ps)).find((v) => v.item === 'Size test')!;
+    expect(size.text).toContain(`Bundles for the test: 1 of ${ps.length} products (1 more evaluated but kept off the panel on review: ${ps[2]!.shop.handle} faulty)`);
+  });
+
+  it('puts an earlier run next to the current job, with its comparison pictures, and invents nothing for a run without a mesh', () => {
+    const ps = shopPayloads().map((p) => missing(p.handle));
+    const h = ps[0]!.shop.handle;
+    ps[0] = { ...ps[0]!, earlier: [{ label: 'run 14', jobRel: `out/phase0/${h}-run14`, job: readJob(`/nonexistent/${h}-run14`), eval: null, evalError: 'no job dir', bundleRel: null, renders: null, comparisons: [{ file: `spikes/garment-engine/out/eval/${h}/compare/run14-vs-current-turntable-0.png`, caption: 'at 0°' }] }] };
+    const md = renderReport(input(ps));
+    expect(md).toContain(`| Metric | run 14 (\`out/phase0/${h}-run14\`) | this job (\`out/phase0/${h}\`) |`);
+    expect(md).toMatch(/\| hem line above the floor \(median of the lowest cloth per 10° sector, exemplar\.json\), cm \| — \| — \|/);
+    expect(md).toContain('- run 14: no job dir');
+    expect(md).toContain('run14-vs-current-turntable-0.png](');
   });
 });

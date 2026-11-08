@@ -56,6 +56,15 @@ describe('placeGarment', () => {
     expect(lines[1]!.text).toMatch(/^Does not close at the waist: the body is 6 cm larger/);
     expect(fitLines(null, null)).toEqual([]);
   });
+
+  it('says a line is the chart only where the 3D garment has no girth', () => {
+    const g = gaps({ waist: 4 }, { waist: 3.6 }, { waist: 'good' });
+    const [plain] = fitLines(g, null);
+    expect(plain!.text).toBe('3.6 cm more room at the waist (good).');
+    const [chartOnly] = fitLines(g, null, ['waist']);
+    expect(chartOnly!.text).toBe('3.6 cm more room at the waist (good), from the size chart only: this 3D garment has no measured girth at the waist.');
+    expect(chartOnly!.tone).toBe('room');
+  });
 });
 
 describe('heat map', () => {

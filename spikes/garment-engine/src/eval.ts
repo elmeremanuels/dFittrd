@@ -23,6 +23,8 @@ import { DEFAULT_DISTORTION } from './bundle';
 import { asGradingChart, criticalRings, evalChart, evalChartRow, type EvalCategory, type EvalChart } from './evalChart';
 import { meshHealth, type MeshHealth } from './evalMesh';
 import { assignChains, distortGarment, type ChainAssignment, type Distortion, type SpikeCategory } from './garment';
+import { WAISTBAND, waistbandGirth, type WaistbandGirth } from './waistband';
+import { openingProfile, sliceAt, type OpeningProfile } from './bottomOpenings';
 import { bottomLengths, garmentLengths, type BottomLengthMeasure, type LengthMeasure } from './garmentLength';
 import { openingHalfWidth, proxyKind, type FrontOpening } from './proxy';
 import { gradeGarment, type GradingJson } from './grading';
@@ -126,10 +128,21 @@ export interface EvalResult {
   baseMesh: Mesh;
   chains: ChainAssignment;
   measurements: AnchorMeasurements;
+  /**
+   * Bottoms whose cloth does not reach the waist ring (worn lower, or tilted): the waistband measured on its own plane under
+   * the top edge (`src/waistband.ts`), as reconstructed. Reported in the waist row; never calibrated on. null otherwise.
+   */
+  waistband: WaistbandGirth | null;
+  /**
+   * Bottoms: where the cloth does not go round the body, slice by slice from the top edge to the hem, as reconstructed
+   * (`src/bottomOpenings.ts`). A hip with no girth is reported from it (bridged girth, the opening). null otherwise.
+   */
+  openings: OpeningProfile | null;
   timingsMs: { measure: number; calibrate: number; grade: number };
 }
 
 const r2 = (x: number): number => Math.round(x * 100) / 100 + 0; // + 0 turns -0 into 0
+const cmSigned = (x: number): string => `${x > 0 ? '+' : ''}${r2(x).toFixed(2)} cm`;
 const maxAbs = (xs: readonly (number | null)[]): number | null => {
   const v = xs.filter((x): x is number => x !== null);
   return v.length ? Math.max(...v.map(Math.abs)) : null;
@@ -294,6 +307,10 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
     const body = key === 'waist' || key === 'hip' || key === 'bust' || key === 'thigh' ? bodyRow?.[key] : undefined;
     return body === undefined ? null : { cm: r2(chartCm - body), isDefault: baseRow.defaultEase.includes(anchor) };
   };
+  // A bottom whose cloth does not reach the waist ring: its waistband where it is (report only, not calibrated).
+  const waistband = category === 'bottom' && chartFull.waist !== undefined && raw.rings.waist === undefined ? waistbandGirth(mesh) : null;
+  // A bottom: where it does not go round (a side opening at the hip leaves the hip with no girth at all).
+  const openings = category === 'bottom' ? openingProfile(mesh, m) : null;
   const rings = new Set<AnchorRing>([...(Object.keys(chartFull) as AnchorRing[]), ...(Object.keys(measured) as AnchorRing[])]);
   const order = m.rings.map((r) => r.id).filter((id, i, a) => a.indexOf(id) === i);
   const rows: AnchorRow[] = order.filter((id) => rings.has(id)).map((anchor) => {
@@ -314,6 +331,21 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
     if (mv !== null && raw.rings[anchor]?.tape?.frontGapCm) note = `${note ? `${note}; ` : ''}front opening ${raw.rings[anchor]!.tape!.frontGapCm} cm bridged (the fronts laid closed, as a flat-lay chest)`;
     else if (raw.rings[anchor]?.spansBothLegs) note = 'loop encloses both legs (skirt)';
     const t = raw.rings[anchor]?.tape;
+    if (mv === null && openings && chartCm !== null && anchor !== 'waist') {
+      // No tape girth on a bottom: say how big the cloth is with its openings bridged and where it is open, never a pass.
+      const sl = sliceAt(openings, m.morphHeights[anchor]);
+      if (sl && sl.bridgedCm !== null) {
+        const gaps = sl.gaps.map((g) => `${g.chordCm} cm at ${g.midDeg}° (${g.midDeg > 45 && g.midDeg < 135 ? "the mannequin's left" : g.midDeg < -45 && g.midDeg > -135 ? "the mannequin's right" : Math.abs(g.midDeg) <= 45 ? 'front' : 'back'})`).join(', ');
+        note = `no tape girth: the cloth goes ${Math.round(sl.coverage * 100)} % of the way round at ${sl.yCm} cm${gaps ? `, open ${gaps}` : ''}; with the openings bridged ${sl.bridgedCm} cm (${cmSigned(sl.bridgedCm - chartCm)} against the chart), the mannequin there ${sl.bodyCm ?? '—'} cm, the cloth at least ${sl.minClearanceCm ?? '—'} cm off it (src/bottomOpenings.ts, as reconstructed)`;
+      }
+    }
+    if (anchor === 'waist' && waistband && chartCm !== null) {
+      const wb = waistband;
+      const at = `the cloth does not reach the waist ring (${r2(m.morphHeights.waist)} cm): its top edge runs from ${wb.backY} cm at the back to ${wb.frontY} cm at the front (plane tilted ${wb.tiltDeg}°); measured on the waistband, ${WAISTBAND.belowCm} cm under that edge (src/waistband.ts), as reconstructed; not calibrated. A band that sits lower than the waist ring lies on the body between the waist and the hip, so its girth says where the skirt is worn as much as how big it is`;
+      const why = wb.girthCm === null ? `; the tape refuses there: an opening of ${wb.maxGapCm} cm (${wb.maxGapDeg}°), with it bridged ${wb.bridgedCm} cm (${wb.bridgedCm !== null ? cmSigned(wb.bridgedCm - chartCm) : '—'} against the chart)` : '';
+      const before = wb.girthCm !== null ? wb.girthCm - chartCm : null;
+      return { anchor, critical: isCritical, chartCm, ease, measuredCm: wb.girthCm, polylineCm: null, tapeCoverage: wb.coverage, notFitted: isNotFitted, beforeCm: before === null ? null : r2(before), afterGlobalCm: null, afterCm: null, pass: isCritical ? false : null, note: `${at}${why}` };
+    }
     return { anchor, critical: isCritical, chartCm, ease, measuredCm: mv === null ? null : r2(mv), polylineCm: t && t.loopLengthCm !== null ? r2(t.loopLengthCm) : null, tapeCoverage: t ? r2(t.coverage) : null, notFitted: isNotFitted, beforeCm: before === null ? null : r2(before), afterGlobalCm: afterGlobal === null ? null : r2(afterGlobal), afterCm: afterCm === null ? null : r2(afterCm), pass, note };
   });
 
@@ -358,6 +390,8 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
   }
   if (category === 'bottom' && !lengthIds.has('outseam')) lengthIds.set('outseam', 'outseam');
   if (trousers && !lengthIds.has('inseam')) lengthIds.set('inseam', 'inseam');
+  // A skirt's length is waist to hem whether or not the shop printed it (none of the shop's skirts prints a length).
+  if (category === 'bottom' && !trousers && !lengthIds.has('waist_to_hem')) lengthIds.set('waist_to_hem', 'waist_to_hem');
   const printedLength = printedLengthDef;
   const defsCal = garmentLengths(m, baseMesh);
   const defsRec = garmentLengths(m, mesh);
@@ -421,6 +455,8 @@ export function evaluateGarment(o: EvaluateOptions): EvalResult {
     baseMesh,
     chains,
     measurements,
+    waistband,
+    openings,
     timingsMs: { measure: Math.round(t1 - t0), calibrate: Math.round(t2 - t1), grade: Math.round(t4 - t3) },
   };
 }

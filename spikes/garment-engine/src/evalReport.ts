@@ -10,7 +10,7 @@
  */
 import { CATEGORY_ANCHORS } from '@curtain/anchors';
 import type { GarmentPayload } from '@curtain/schema';
-import { CHART_TOLERANCE_CM, SOURCE_LABEL } from './eval';
+import { CHART_TOLERANCE_CM, SOURCE_LABEL, type EvalResult } from './eval';
 import { evalMaterial } from './evalBundle';
 import { arr, num, obj, str, type CostRecord, type JobFiles, type ProductEval } from './evalJob';
 import { VIEW_IOU_PASS } from './evalView';
@@ -107,6 +107,36 @@ export interface ProductSection {
   renders: ProductRenders | null;
   /** The other reconstruction of the same video (stage 4 when stage 4t is the evaluated mesh), for the side-by-side table. */
   alternative?: ProductEval | null;
+  /**
+   * What a person saw in the current run's stills and frames (`data/<shop>/review.json`). accepted: rendered and on the blind page;
+   * faulty: kept for evaluation and rendered, but not a panel bundle and not on the blind page; rejected: evaluated only, no renders.
+   */
+  review?: { run: number | null; verdict: ReviewVerdict; why: string } | null;
+  /** Earlier GPU runs of the same product kept beside the current job (`out/phase0/<handle>-run<N>/`), evaluated the same way, for comparison. */
+  earlier?: EarlierRun[];
+}
+
+export type ReviewVerdict = 'accepted' | 'faulty' | 'rejected';
+export const REVIEW_VERDICTS: readonly ReviewVerdict[] = ['accepted', 'faulty', 'rejected'];
+
+/** A product the five-person panel may see: on the blind page and counted as a test bundle. Not reviewed counts as usable (synthetic and pre-review runs). */
+export function forPanel(p: Pick<ProductSection, 'review'>): boolean {
+  return (p.review?.verdict ?? 'accepted') === 'accepted';
+}
+
+/** An earlier GPU run of a product (its own job dir), evaluated with the current tooling. */
+export interface EarlierRun {
+  /** e.g. "run 14", from the dir suffix. */
+  label: string;
+  /** Job dir relative to the repository root. */
+  jobRel: string;
+  job: JobFiles;
+  eval: ProductEval | null;
+  evalError: string | null;
+  bundleRel: string | null;
+  renders: ProductRenders | null;
+  /** Side-by-side pictures of this run against the current one (paths relative to the repository root). */
+  comparisons: { file: string; caption: string }[];
 }
 
 export interface SyntheticSection {
@@ -296,7 +326,7 @@ function stage4tLines(ev: ProductEval, alt: ProductEval | null): string[] {
     const iou = obj(mt.iou), tr = obj(iou?.train), ho = obj(iou?.holdout);
     const fit = obj(mt.fit), mesh = obj(mt.mesh), ins = obj(mt.insideBody), bake = obj(mt.bake), hm = obj(bake?.holdoutMean);
     const conv = arr(fit?.convergence).map((c) => obj(c)!);
-    out.push('', `**Stage 4t** (template fit and bake, \`${ev.result.source.path.replace(/garment\.glb$/, 'metrics.json')}\`): the control proxy remeshed into cylindrical grids (body + ${obj(fit?.sleeves)?.left ? 'two sleeves' : 'no sleeves'}), carved and expanded along fixed rays to ${num(mt.split && obj(mt.split)?.train) ?? '?'} training masks, ${arr(fit?.silhouetteRounds).length} silhouette rounds, ${num(fit?.iterations) ?? '?'} Jacobi sweeps in ${conv.length} solves (${fit?.converged === true ? 'every solve reached' : 'NOT every solve reached'} the ${num(obj(fit?.options)?.toleranceCm) ?? '?'} cm tolerance). Silhouette IoU per view, mean (min): train visible ${num(tr?.visibleMean)} (${num(tr?.visibleMin)}), silhouette ${num(tr?.silhouetteMean)} (${num(tr?.silhouetteMin)}); holdout (${num(ho?.views)} views never used) visible ${num(ho?.visibleMean)} (${num(ho?.visibleMin)}), silhouette ${num(ho?.silhouetteMean)} (${num(ho?.silhouetteMin)}). Inside the mannequin (signed distance to mannequin.glb < 0): ${num(ins?.sdfInside)} of ${num(ins?.vertices)} vertices; below the ${num(obj(fit?.options)?.clearanceCm)} cm clearance by that grid SDF: ${num(ins?.sdfBelowClearance)}${obj(ins?.exact) ? `; by the exact distance to the mannequin's triangles the closest vertex is ${num(obj(ins?.exact)?.minCm)} cm away, ${num(obj(ins?.exact)?.belowClearance)} vertices lie below the ${num(obj(fit?.options)?.clearanceCm)} cm clearance and ${num(obj(ins?.exact)?.below3mm)} below 0.3 cm` : ''}. Mesh: ${num(mesh?.triangles)} triangles, ${num(mesh?.components)} components, ${num(mesh?.boundaryLoops)} boundary loops, ${num(mesh?.nonManifoldEdges)} non-manifold edges, watertight ${mesh?.watertight === true ? 'yes' : 'no'} (${str(mesh?.note) ?? ''}). Texture: ${num(bake?.size)}² atlas from ${num(bake?.views)} training views, ${((num(bake?.seenShare) ?? 0) * 100).toFixed(1)} % of the chart texels seen (the rest filled by diffusion)${obj(bake?.capTexture) ? `, of the shoulder caps' ${num(obj(bake?.capTexture)?.texels)} texels (within ${num(obj(bake?.capTexture)?.radiusCm)} cm of either cap top) ${((num(obj(bake?.capTexture)?.seenShare) ?? 0) * 100).toFixed(1)} % (the holdout check below does not cover the cap)` : ''}, JPEG ${((num(bake?.jpegBytes) ?? 0) / 1024).toFixed(0)} KB; on the held-out frames the texture's mean absolute error is ${num(hm?.maeTexture)} (one mean colour: ${num(hm?.maeMeanColour)}), on 8 × 8 pixel blocks ${num(hm?.maeTextureBlock8)} (mean colour ${num(hm?.maeMeanColourBlock8)}), 0–255.`);
+    out.push('', `**Stage 4t** (template fit and bake, \`${ev.result.source.path.replace(/garment\.glb$/, 'metrics.json')}\`): the control proxy remeshed into cylindrical grids (body + ${obj(fit?.sleeves)?.left ? 'two sleeves' : 'no sleeves'}), carved and expanded along fixed rays to ${num(mt.split && obj(mt.split)?.train) ?? '?'} training masks, ${arr(fit?.silhouetteRounds).length} silhouette rounds, ${num(fit?.iterations) ?? '?'} Jacobi sweeps in ${conv.length} solves (${fit?.converged === true ? 'every solve reached' : 'NOT every solve reached'} the ${num(obj(fit?.options)?.toleranceCm) ?? '?'} cm tolerance). Silhouette IoU per view, mean (min): train visible ${num(tr?.visibleMean)} (${num(tr?.visibleMin)}), silhouette ${num(tr?.silhouetteMean)} (${num(tr?.silhouetteMin)}); holdout (${num(ho?.views)} views never used) visible ${num(ho?.visibleMean)} (${num(ho?.visibleMin)}), silhouette ${num(ho?.silhouetteMean)} (${num(ho?.silhouetteMin)}). Inside the mannequin (signed distance to mannequin.glb < 0): ${num(ins?.sdfInside)} of ${num(ins?.vertices)} vertices; below the ${num(obj(fit?.options)?.clearanceCm)} cm clearance by that grid SDF: ${num(ins?.sdfBelowClearance)}${obj(ins?.exact) ? `; by the exact distance to the mannequin's triangles the closest vertex is ${num(obj(ins?.exact)?.minCm)} cm away, ${num(obj(ins?.exact)?.belowClearance)} vertices lie below the ${num(obj(fit?.options)?.clearanceCm)} cm clearance and ${num(obj(ins?.exact)?.below3mm)} below 0.3 cm` : ''}. Mesh: ${num(mesh?.triangles)} triangles, ${num(mesh?.components)} components, ${num(mesh?.boundaryLoops)} boundary loops, ${num(mesh?.nonManifoldEdges)} non-manifold edges, watertight ${mesh?.watertight === true ? 'yes' : 'no'} (${str(mesh?.note) ?? ''}). Texture: ${num(bake?.size)}² atlas from ${num(bake?.views)} training views, ${((num(bake?.seenShare) ?? 0) * 100).toFixed(1)} % of the chart texels seen (the rest filled by diffusion)${obj(bake?.capTexture) && (num(obj(bake?.capTexture)?.texels) ?? 0) > 0 ? `, of the shoulder caps' ${num(obj(bake?.capTexture)?.texels)} texels (within ${num(obj(bake?.capTexture)?.radiusCm)} cm of either cap top) ${((num(obj(bake?.capTexture)?.seenShare) ?? 0) * 100).toFixed(1)} % (the holdout check below does not cover the cap)` : ''}, JPEG ${((num(bake?.jpegBytes) ?? 0) / 1024).toFixed(0)} KB; on the held-out frames the texture's mean absolute error is ${num(hm?.maeTexture)} (one mean colour: ${num(hm?.maeMeanColour)}), on 8 × 8 pixel blocks ${num(hm?.maeTextureBlock8)} (mean colour ${num(hm?.maeMeanColourBlock8)}), 0–255.`);
   }
   if (alt) {
     const a = alt.result, b = ev.result;
@@ -304,10 +334,16 @@ function stage4tLines(ev: ProductEval, alt: ProductEval | null): string[] {
       const t = e.view.turntable.find((x) => x.angleDeg === deg && x.mesh === 'reconstructed');
       return t ? t[k].toFixed(3) : '—';
     };
-    const len = (e: ProductEval, d: string): string => cm(e.result.lengthDefinitions?.reconstructed.find((x) => x.definition === d)?.lengthCm ?? null);
-    const chest = (e: ProductEval): string => cm(e.result.rows.find((row) => row.anchor === 'chest')?.measuredCm ?? null);
+    const bottom = b.category === 'bottom';
+    // Bottoms: the bottom definitions on the calibrated mesh (a shoulder-to-hem has no meaning for a skirt).
+    const len = (e: ProductEval, d: string): string => cm((bottom ? e.result.lengthDefinitions?.bottom : e.result.lengthDefinitions?.reconstructed)?.find((x) => x.definition === d)?.lengthCm ?? null);
+    const ringOf = b.critical[0] ?? (bottom ? 'waist' : 'chest');
+    const girth = (e: ProductEval): string => cm(e.result.rows.find((row) => row.anchor === ringOf)?.measuredCm ?? null);
+    const lengthRows: string[][] = bottom
+      ? [['waist to hem at the centre front, flat-lay, cm', len(alt, 'waist_to_hem_front'), len(ev, 'waist_to_hem_front')], ['outseam (top edge down the left side), cm', len(alt, 'outseam_side'), len(ev, 'outseam_side')]]
+      : [['shoulder to hem, vertical drop, cm', len(alt, 'hps_drop'), len(ev, 'hps_drop')], ['shoulder to hem, flat-lay (along the front), cm', len(alt, 'hps_surface'), len(ev, 'hps_surface')]];
     const rows: string[][] = [
-      ['chest girth as reconstructed (tape), cm', chest(alt), chest(ev)],
+      [`${ringOf} girth as reconstructed (tape), cm`, girth(alt), girth(ev)],
       ['chart: max |error| before calibration, cm', cm(a.before.maxAbsCm), cm(b.before.maxAbsCm)],
       ['chart: after the global scale, cm', cm(a.afterGlobal.maxAbsCm), cm(b.afterGlobal.maxAbsCm)],
       ['chart: after calibration, cm', Number.isFinite(a.agreement.maxAbsCm) ? cm(a.agreement.maxAbsCm) : '—', Number.isFinite(b.agreement.maxAbsCm) ? cm(b.agreement.maxAbsCm) : '—'],
@@ -316,12 +352,11 @@ function stage4tLines(ev: ProductEval, alt: ProductEval | null): string[] {
       ['cloth inside the mannequin (> 0.3 cm), as reconstructed', `${(a.insideBody.reconstructed.share * 100).toFixed(1)} %`, `${(b.insideBody.reconstructed.share * 100).toFixed(1)} %`],
       ['cloth inside the mannequin, after calibration', `${(a.insideBody.calibrated.share * 100).toFixed(1)} %`, `${(b.insideBody.calibrated.share * 100).toFixed(1)} %`],
       ['triangles / components / boundary edges', `${a.health.triangles} / ${a.health.components} / ${a.health.boundaryEdges}`, `${b.health.triangles} / ${b.health.components} / ${b.health.boundaryEdges}`],
-      ['shoulder to hem, vertical drop, cm', len(alt, 'hps_drop'), len(ev, 'hps_drop')],
-      ['shoulder to hem, flat-lay (along the front), cm', len(alt, 'hps_surface'), len(ev, 'hps_surface')],
+      ...lengthRows,
       ['colour in the bundle', alt.meanColorHex ? `one mean colour ${alt.meanColorHex}` : 'placeholder', ev.result.source.kind === 'stage4t' ? 'baked texture' : ev.meanColorHex ?? '—'],
       ['bundle size', alt.bundle ? `${(alt.bundle.bytes / 1024).toFixed(0)} KB` : '—', ev.bundle ? `${(ev.bundle.bytes / 1024).toFixed(0)} KB` : '—'],
     ];
-    out.push('', `**Stage 4 (2DGS) against stage 4t (template fit)** on the same video, both through this evaluation (the 2DGS column is what the report showed for run 14 before stage 4t):`, '', table(['Metric', `${SOURCE_LABEL[a.source.kind].split(' (')[0]} (\`${a.source.path}\`)`, `${SOURCE_LABEL[b.source.kind].split(' (')[0]} (\`${b.source.path}\`)`], rows));
+    out.push('', `**Stage 4 (2DGS) against stage 4t (template fit)** on the same video, both through this evaluation:`, '', table(['Metric', `${SOURCE_LABEL[a.source.kind].split(' (')[0]} (\`${a.source.path}\`)`, `${SOURCE_LABEL[b.source.kind].split(' (')[0]} (\`${b.source.path}\`)`], rows));
   }
   return out;
 }
@@ -347,7 +382,7 @@ function evalTables(input: ReportInput, ev: ProductEval, bundleRel: string | nul
         cm(row.beforeCm, true),
         cm(row.afterGlobalCm, true),
         cm(row.afterCm, true),
-        row.pass === null ? (row.notFitted ? 'not fitted' : '—') : row.pass ? 'pass' : `FAIL${row.note ? ` (${row.note})` : ''}`,
+        row.pass === null ? `${row.notFitted ? 'not fitted' : '—'}${row.note && row.measuredCm === null ? ` (${row.note})` : ''}` : row.pass ? 'pass' : `FAIL${row.note ? ` (${row.note})` : ''}`,
       ]),
     ),
   );
@@ -357,11 +392,17 @@ function evalTables(input: ReportInput, ev: ProductEval, bundleRel: string | nul
   if (other.length) out.push('', `Other rings measured (no chart value, scaled by the global scale only): ${other.map((row) => `${row.anchor} ${cm(row.measuredCm)}`).join(', ')} cm.`);
   const noGirth = CATEGORY_ANCHORS[r.category].rings.filter((id) => r.measurements.rings[id] === undefined);
   if (noGirth.length) out.push('', `No girth (no cloth round the ring: it does not reach it, an opening wider than 4 cm, or cloth on less than 60 % of the way round): ${noGirth.join(', ')}.`);
+  out.push(...openingLines(r, ev));
   if (r.lengths.length) {
     out.push('', '**Lengths** (calibrated mesh against the printed lengths in the payload; reported, not calibrated):', '');
     out.push(table(['Length', 'Mesh (cm)', 'Definition', 'Vertical drop (cm)', 'Printed (cm)', 'Difference', 'Note'], r.lengths.map((l) => [l.id, cm(l.measuredCm), l.definition ?? '—', l.dropCm === undefined ? '—' : cm(l.dropCm), cm(l.printedCm), cm(l.diffCm, true), l.note ?? ''])));
-    const defs = r.lengthDefinitions?.calibrated ?? [];
-    if (defs.length) out.push('', `Every shoulder-to-hem definition on the calibrated mesh (\`src/garmentLength.ts\`): ${defs.map((d) => `${d.label} ${d.lengthCm === null ? '—' : `${cm(d.lengthCm)} cm`}`).join('; ')}.`);
+    if (r.category === 'bottom') {
+      const defs = r.lengthDefinitions?.bottom ?? [];
+      if (defs.length) out.push('', `Every bottom length definition on the calibrated mesh (\`src/garmentLength.ts\` \`bottomLengths\`): ${defs.map((d) => `${d.label} ${d.lengthCm === null ? `— (${d.note ?? 'not found'})` : `${cm(d.lengthCm)} cm (top ${cm(d.topY)}, hem ${cm(d.hemY)} cm above the floor)`}`).join('; ')}.`);
+    } else {
+      const defs = r.lengthDefinitions?.calibrated ?? [];
+      if (defs.length) out.push('', `Every shoulder-to-hem definition on the calibrated mesh (\`src/garmentLength.ts\`): ${defs.map((d) => `${d.label} ${d.lengthCm === null ? '—' : `${cm(d.lengthCm)} cm`}`).join('; ')}.`);
+    }
   }
   if (r.grading && printed.length) {
     const keys = (['chest', 'waist', 'hip', 'shoulder_to_hem'] as const).filter((k) => printed.some((p) => p.values[k] !== undefined));
@@ -420,6 +461,113 @@ function evalTables(input: ReportInput, ev: ProductEval, bundleRel: string | nul
   return out;
 }
 
+const SIDE_LABEL = { left: "the mannequin's left (+x)", right: "the mannequin's right (−x)", front: 'the front', back: 'the back' } as const;
+
+/** A bottom's openings (`src/bottomOpenings.ts`) and its pinned stills against the mannequin's width. */
+function openingLines(r: EvalResult, ev: ProductEval): string[] {
+  const p = r.openings;
+  if (!p) return [];
+  const out: string[] = [''];
+  const hipY = r.mannequin.morphHeights.hip;
+  const hipChart = r.rows.find((row) => row.anchor === 'hip')?.chartCm ?? null;
+  out.push(
+    p.openings.length
+      ? `**Openings** (\`src/bottomOpenings.ts\`, as reconstructed: horizontal slices every ${p.stepCm} cm, a gap counts when the straight line across it is longer than ${p.minGapCm} cm, between ${cm(p.rangeCm[0])} and ${cm(p.rangeCm[1])} cm above the floor, i.e. below the lowest point of the top edge and above the hem): ${p.openings.map((o) => `${SIDE_LABEL[o.side]} from ${cm(o.topCm)} down to ${cm(o.bottomCm)} cm above the floor, widest ${cm(o.maxChordCm)} cm at ${cm(o.atCm)} cm`).join('; ')}. The hip ring is at ${cm(hipY)} cm, the crotch at ${cm(r.mannequin.landmarks.crotch[1])} cm.${r.source.kind === 'stage4t' ? ' Stage 4t keeps the cloth outside the mannequin, so where the masks show the mannequin it carves an opening (the per-vertex vote over the frames); nothing here is filled from the template.' : ''}`
+      : `**Openings** (\`src/bottomOpenings.ts\`): none wider than ${p.minGapCm} cm between ${cm(p.rangeCm[0])} and ${cm(p.rangeCm[1])} cm above the floor.`,
+  );
+  const rows = p.slices.filter((s) => s.yCm <= p.rangeCm[1] + p.stepCm && (s.gaps.length > 0 || Math.abs(s.yCm - hipY) <= p.stepCm / 2 + 0.01) && s.yCm >= p.rangeCm[0]);
+  if (rows.length) {
+    out.push('', table(
+      ['Height (cm)', 'Cloth round', 'Gaps > ' + p.minGapCm + ' cm (chord at azimuth; +90° = the mannequin\'s left)', 'Bridged girth (cm)', 'Mannequin (cm)', 'Bridged − mannequin', `Bridged − chart hip${hipChart !== null ? ` (${cm(hipChart)})` : ''}`, 'Closest cloth to the body (cm)'],
+      rows.map((s) => [`${cm(s.yCm)}${Math.abs(s.yCm - hipY) <= p.stepCm / 2 + 0.01 ? ' (hip)' : ''}`, `${Math.round(s.coverage * 100)} %`, s.gaps.map((g) => `${cm(g.chordCm)} at ${g.midDeg}°`).join(', ') || '—', cm(s.bridgedCm), cm(s.bodyCm), s.bridgedCm !== null && s.bodyCm !== null ? cm(Math.round((s.bridgedCm - s.bodyCm) * 100) / 100, true) : '—', s.bridgedCm !== null && hipChart !== null && Math.abs(s.yCm - hipY) <= p.stepCm / 2 + 0.01 ? cm(Math.round((s.bridgedCm - hipChart) * 100) / 100, true) : '', cm(s.minClearanceCm)]),
+    ));
+  }
+  const st = ev.stills ?? [];
+  if (st.length) {
+    out.push('', `**The pinned stills against the mannequin's width** (stage 1b garment mask and our mannequin's own silhouette in the same camera, on the row of each height at the axis, cm at the axis's depth). A closed skirt worn on the mannequin cannot be narrower than it; where it is, the generator drew the skirt narrower than the body and the later stages can only show the body there. In the front still the image's left is the mannequin's right; in the back still it is the mannequin's left:`, '');
+    out.push(table(['View', 'Height (cm)', 'Mannequin width', 'Garment width', 'Mannequin outside the garment, image left / right'], st.flatMap((v) => v.widths.map((w) => [v.view, cm(w.yCm), cm(w.bodyCm), cm(w.garmentCm), `${cm(w.bodyOutsideLeftCm)} / ${cm(w.bodyOutsideRightCm)}`]))));
+  }
+  return out;
+}
+
+/** One run's row values for the comparison of earlier runs with the current job. */
+function runFacts(job: JobFiles, ev: ProductEval | null): Record<string, string> {
+  const ctl = obj(obj(job.manifest?.control)?.proxy);
+  const s1b = obj(job.stage1b?.summary);
+  const r = ev?.result ?? null;
+  const rec = r?.lengthDefinitions?.reconstructed ?? [];
+  const drop = rec.find((d) => d.definition === 'hps_drop');
+  const flat = rec.find((d) => d.definition === 'hps_surface');
+  const ex = obj(obj(job.stage4t.stage2?.exemplar)?.pattern);
+  const mt = ev?.stage4t ?? null;
+  const ho = obj(obj(mt?.iou)?.holdout);
+  const c = costTotal(job);
+  const ringOf = r?.critical[0] ?? 'chest';
+  const chest = r?.rows.find((row) => row.anchor === ringOf);
+  return {
+    job: `\`${str(job.manifest?.job_id) ?? '?'}\` (${str(job.manifest?.exporter)?.replace('@curtain/garment-spike ', '') ?? '?'})`,
+    control: ctl ? `${str(ctl.version) ?? '?'}, hem ${cm(num(ctl.hem_y_cm))} cm above the floor` : '—',
+    stage1b: s1b ? `${s1b.pass === true ? 'pass' : `FAIL (${arr(s1b.failed_views).map(String).join(', ') || '?'})`}, QA ${str(job.stage1b?.qa_version) ?? '?'}` : '—',
+    mesh: r ? `${SOURCE_LABEL[r.source.kind].split(' (')[0]}` : '—',
+    chest: chest ? `${ringOf} ${cm(chest.measuredCm)} (${cm(chest.beforeCm, true)} before calibration)` : '—',
+    hemFront: drop?.hemY !== undefined && drop?.hemY !== null ? cm(drop.hemY) : '—',
+    hemLine: num(ex?.hemY) !== null ? cm(num(ex?.hemY)) : '—',
+    drop: cm(drop?.lengthCm ?? null),
+    flat: cm(flat?.lengthCm ?? null),
+    stills: ev?.view.views.length ? ev.view.views.map((v) => `${v.view} ${v.iou.toFixed(3)}`).join(', ') : '—',
+    holdout: ho ? `${num(ho.visibleMean)} / ${num(ho.silhouetteMean)}` : '—',
+    triangles: r ? String(r.health.triangles) : '—',
+    cost: c.records.length ? `${secs(c.gpuSeconds)} GPU, ${usd(c.usdLow)}–${usd(c.usdHigh)}` : '—',
+  };
+}
+
+/** Earlier GPU runs of the product against the current job, same tooling, plus their side-by-side pictures. */
+function earlierRunLines(input: ReportInput, p: ProductSection): string[] {
+  const list = p.earlier ?? [];
+  if (!list.length) return [];
+  const cur = runFacts(p.job, p.eval);
+  const olds = list.map((e) => runFacts(e.job, e.eval));
+  const rows: [string, keyof typeof cur][] = [
+    ['job (exporter)', 'job'],
+    ['control proxy', 'control'],
+    ['stage 1b QA', 'stage1b'],
+    ['evaluated mesh', 'mesh'],
+    ['critical girth by the tape, as reconstructed, cm', 'chest'],
+    ['front hem above the floor (centre front, as reconstructed), cm', 'hemFront'],
+    ['hem line above the floor (median of the lowest cloth per 10° sector, exemplar.json), cm', 'hemLine'],
+    ['shoulder to hem, vertical drop, cm', 'drop'],
+    ['shoulder to hem, flat-lay along the front, cm', 'flat'],
+    ['pinned stills, IoU visible', 'stills'],
+    ['stage 4t holdout IoU visible / silhouette', 'holdout'],
+    ['triangles', 'triangles'],
+    ['GPU cost (estimate)', 'cost'],
+  ];
+  const out: string[] = ['', `**Earlier runs of this product** (their own job dirs, evaluated now with the same tooling, so their numbers can differ slightly from what was reported at the time):`, ''];
+  out.push(table(['Metric', ...list.map((e) => `${e.label} (\`${e.jobRel}\`)`), `this job (\`${p.jobRel}\`)`], rows.map(([label, k]) => [label, ...olds.map((o) => o[k]!), cur[k]!])));
+  for (const e of list) {
+    if (e.evalError) out.push('', `- ${e.label}: ${e.evalError}`);
+    if (e.comparisons.length) out.push('', `${e.label} against this job: ${e.comparisons.map((c) => `${link(input, c.file, c.file.split('/').pop() ?? c.file)} (${c.caption})`).join('; ')}.`);
+    if (e.renders?.shots.length) out.push('', `${e.label} renders: ${e.renders.shots.filter((x) => !x.fitMap).map((x) => link(input, x.file, x.file.split('/').pop() ?? x.file)).join(', ')}.`);
+  }
+  return out;
+}
+
+/** The P0 drape prediction against the measured stage 4t mesh (stage4t/<source>/shadow.json, `src/drapeLog.ts`), shadow mode. */
+function shadowLines(job: JobFiles): string[] {
+  const sh = job.stage4t.stage2?.shadow;
+  if (!sh) return [];
+  const f = (x: unknown, d = 2): string => (num(x) === null ? '—' : num(x)!.toFixed(d));
+  const rows = arr(sh.rows).map((x) => obj(x)!).filter((x) => x);
+  const ch = obj(sh.chamfer);
+  const v1 = obj(sh.v1);
+  const regions = arr(sh.regions).map((x) => obj(x)!).filter((x) => x && num(x.chamferCmMean) !== null);
+  const out = ['', `**Drape prediction P0 in shadow mode** (\`stage4t/stage2/shadow.json\`, predictor ${str(sh.predictorVersion) ?? '?'}, cell \`${str(sh.cell) ?? '?'}\`; the prediction drives nothing yet: it is compared with what stage 4t measured on this job's mesh):`, ''];
+  out.push(table(['Parameter', 'Predicted', 'On the P0 proxy', 'Measured (stage 4t)', 'Error', 'σ', '|error| / σ', 'Note'], rows.map((r) => [str(r.parameter) ?? '?', f(r.predicted, 3), f(r.proxy, 3), f(r.measured, 3), f(r.error, 3), f(r.sigma, 2), f(r.z, 2), `${r.informative === false ? '(not informative) ' : ''}${str(r.note) ?? ''}`])));
+  out.push('', `P0 shape (the proxy built from the prediction, opened) against the stage 4t mesh: Chamfer ${f(ch?.chamferCmMean, 3)} cm, F-score ${f(ch?.fscore1cm, 3)} at 1 cm, ${f(ch?.fscore2cm, 3)} at 2 cm${regions.length ? `; per region ${regions.map((g) => `${str(g.region)} ${f(g.chamferCmMean)}`).join(', ')} cm` : ''}. V1 gate values: hem height error ${f(v1?.hemHeightErrCm)} cm, length error ${f(v1?.lengthErrCm)} cm, hem girth error ${f(v1?.hemGirthErrPct, 1)} %, share of informative errors within 1.28 σ ${f(v1?.sigmaWithin128)}.`);
+  for (const n of arr(sh.notes).map(String)) out.push('', `- ${n}`);
+  return out;
+}
+
 function costLines(job: JobFiles | null): string[] {
   const c = costTotal(job);
   if (!c.records.length) return ['No cost records (no GPU stage has run for this product).'];
@@ -448,6 +596,12 @@ function productSection(input: ReportInput, p: ProductSection, i: number): strin
   const s = p.shop;
   const out: string[] = [];
   out.push(`### ${i + 1}. ${s.payload.name} (\`${s.handle}\`)`, '');
+  if (p.review) {
+    const v = p.review.verdict;
+    const label = v === 'rejected' ? '**rejected**' : v === 'faulty' ? '**faulty, for evaluation only**' : 'accepted';
+    const tail = v === 'rejected' ? `${p.eval ? ' Evaluated below so the numbers show it, but' : ''} not rendered and not on the blind page.` : v === 'faulty' ? ' Evaluated and rendered below so the fault can be seen, but not a panel bundle and not on the blind page.' : '';
+    out.push(`**Review of run ${p.review.run ?? '?'} (stills and frames looked at):** ${label}. ${p.review.why}.${tail}`, '');
+  }
   out.push(`${s.productType} → category \`${s.payload.category}\`${s.payload.subcategory ? ` (${s.payload.subcategory})` : ''}. Completeness ${s.completeness ? `${s.completeness.score.toFixed(3)}, ${s.completeness.status}` : '—'}.`, '');
   out.push(`**Why this product:** ${s.why}${s.runnersUp.length ? ` Runners-up: ${s.runnersUp.map((r) => `\`${r.handle}\``).join(', ')}.` : ''}`, '');
 
@@ -485,9 +639,11 @@ function productSection(input: ReportInput, p: ProductSection, i: number): strin
   out.push('**Metrics**', '');
   if (p.eval) out.push(...evalTables(input, p.eval, p.bundleRel, s.printed ?? [], p.alternative ?? null));
   else out.push(`Chart agreement, view agreement and mesh health: not measured (${p.evalError ?? 'no stage 4 mesh in the job dir'}).`);
+  out.push(...shadowLines(p.job));
+  out.push(...earlierRunLines(input, p));
   out.push('');
   out.push(...costLines(p.job.exists ? p.job : null), '');
-  out.push('**Renders**', '', ...renderLines(input, p.renders), '');
+  out.push('**Renders**', '', ...(p.review?.verdict === 'rejected' && !p.renders ? [`Not rendered: run ${p.review.run ?? '?'} was rejected on review.`] : renderLines(input, p.renders)), '');
   return out;
 }
 
@@ -509,11 +665,12 @@ export function verdicts(input: ReportInput): Verdict[] {
   const withCost = ps.filter((p) => p.job.costs.length);
   const views = evaluated.filter((p) => p.eval!.view.views.length);
   const out: Verdict[] = [];
+  const offPanel = evaluated.filter((p) => !forPanel(p));
   const hold = input.panelHold?.trim() ? ` **Do not run the panel on these assets yet:** ${input.panelHold.trim()}` : '';
   out.push({
     item: 'Size test',
     state: 'needs people',
-    text: `Five people who did not build it must pick the smaller size, without labels, in at least 4 of 5 products on the blind page (size mode). Bundles for the test: ${evaluated.length} of ${ps.length} products; renders made for ${rendered.length}. Not run with people yet.${hold}`,
+    text: `Five people who did not build it must pick the smaller size, without labels, in at least 4 of 5 products on the blind page (size mode). Bundles for the test: ${evaluated.filter(forPanel).length} of ${ps.length} products${offPanel.length ? ` (${offPanel.length} more evaluated but kept off the panel on review: ${offPanel.map((p) => `${p.shop.handle} ${p.review!.verdict}`).join(', ')})` : ''}; renders made for ${rendered.length}. Not run with people yet.${hold}`,
   });
   out.push({ item: 'Fabric test', state: 'needs people', text: `Same five people, fabric mode of the same page (linen versus silk of the same garment). Not run with people yet.${hold}` });
   out.push({
@@ -522,6 +679,11 @@ export function verdicts(input: ReportInput): Verdict[] {
     text: evaluated.length
       ? `${passing.length} of ${evaluated.length} evaluated products within ±${CHART_TOLERANCE_CM} cm at their critical anchors after calibration (${ps.length - evaluated.length} without a stage 4 mesh); 4 of 5 needed. After per-ring calibration this is close to 0 by construction, so also read the error before calibration: ${evaluated.map((p) => {
           const r = p.eval!.result;
+          if (r.agreement.missing.length) {
+            const wb = r.waistband;
+            const band = wb ? ` (its cloth does not reach the ring; on its own waistband ${wb.girthCm !== null ? `${cm(wb.girthCm)} cm` : `no closed tape, an opening of ${cm(wb.maxGapCm)} cm; bridged ${cm(wb.bridgedCm)} cm`} against the chart's ${cm(r.rows.find((row) => row.anchor === 'waist')?.chartCm ?? null)})` : '';
+            return `${p.shop.handle} at ${r.critical.join(', ')}: no girth at ${r.agreement.missing.join(', ')}${band}`;
+          }
           const after = Number.isFinite(r.agreement.maxAbsCm) ? `${cm(r.agreement.maxAbsCm)} cm` : 'no girth';
           const one = r.critical.length === 1 ? ', 0 by construction with one critical anchor' : '';
           return `${p.shop.handle} at ${r.critical.join(', ') || 'no anchor'}: max |error| ${cm(r.before.maxAbsCm)} cm before calibration, ${cm(r.afterGlobal.maxAbsCm)} cm after the global scale${one}, ${after} after calibration`;
@@ -571,7 +733,7 @@ export function renderReport(input: ReportInput): string {
         const vs = ev?.view.views ?? [];
         const c = costTotal(p.job.exists ? p.job : null);
         return [
-          `\`${p.shop.handle}\``,
+          `\`${p.shop.handle}\`${p.review && p.review.verdict !== 'accepted' ? ` (run ${p.review.run ?? '?'} ${p.review.verdict === 'rejected' ? 'rejected' : 'faulty, evaluation only'} on review)` : ''}`,
           p.shop.payload.category,
           back,
           state('1b'),

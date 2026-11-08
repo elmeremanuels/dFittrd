@@ -393,7 +393,7 @@ export function runStage4t(o: Stage4tInputs): Stage4tResult {
       inconsistentEdges: topo.inconsistentEdges,
       degenerateTriangles: topo.degenerateTriangles,
       watertight: topo.watertight,
-      note: 'open by design: one body tube and one tube per sleeve whose shoulder cap closes over the arm cap and overlaps the bodice (separate components, not stitched); openings at the neckline, hem, cuffs and underarms are the boundary loops',
+      note: meshNote(fit.report),
     },
     vsTruth,
     bake: { ...bake.report, jpegBytes: jpeg.length, jpegQuality: quality, holdout: checks, holdoutMean: checks.length ? { maeTexture: avg('maeTexture'), maeMeanColour: avg('maeMeanColour'), psnrTexture: avg('psnrTexture'), psnrMeanColour: avg('psnrMeanColour'), maeTextureBlock8: avg('maeTextureBlock8'), maeMeanColourBlock8: avg('maeMeanColourBlock8') } : null, meanColour, capTexture },
@@ -481,4 +481,14 @@ export function renderTextured(cam: PinholeCamera, render: Pick<RenderMesh, 'pos
   if (body) draw(body.positions, body.indices, null);
   draw(render.positions, render.indices, render.uvs);
   return out;
+}
+
+/** What the boundary loops of a stage 4t mesh are, by the parts it was fitted with (a skirt has no sleeves and no neckline). */
+export function meshNote(report: { sleeves?: { left?: boolean; right?: boolean }; legs?: { fitted?: boolean }; options?: { category?: string } }): string {
+  const sleeves = report.sleeves?.left === true || report.sleeves?.right === true;
+  const legs = report.legs?.fitted === true;
+  if (legs) return 'open by design: a seat tube and one tube per leg (separate components, not stitched); the waist, the crotch join and the leg hems are the boundary loops';
+  if (report.options?.category === 'bottom') return 'open by design: one tube round both legs; the top edge (waistband) and the hem are the boundary loops, any other loop is an opening the masks carved';
+  if (sleeves) return 'open by design: one body tube and one tube per sleeve whose shoulder cap closes over the arm cap and overlaps the bodice (separate components, not stitched); openings at the neckline, hem, cuffs and underarms are the boundary loops';
+  return 'open by design: one body tube; the neckline, the hem and the armholes are the boundary loops';
 }

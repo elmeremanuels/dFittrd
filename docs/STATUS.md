@@ -157,6 +157,52 @@ garment spike 219 + 47 (the spike is another workflow's; it passed in this run).
 10. **Public listing later**: Lighthouse (D5), the legal review and the listing assets, then a
     (new) app with public distribution and submit (`docs/app-store/checklist.md`).
 
+## Garment engine — run 15: five products, two good assets (7 Nov 2026)
+
+Modal run 15 (GitHub Actions 42402554810, code at 91ed5b2) put all five Bohohippychic products through
+stage 1b → 2 → 4. Reviewed by eye (`spikes/garment-engine/data/bohohippychic/review.json`): **azure babydoll
+accepted; crimson maxi skirt `faulty`: evaluated and rendered, but off the blind page and not a panel bundle (narrow at the hips)** (the founder: "see the hips"); **blouse and cardigan rejected** (FASHN stills torn / a bolero, black panels in
+the frames; stage 2 ran only because `--accept-failed-dress` overrides silhouette and fidelity failures),
+**palazzo stopped before stage 2** by the type gate (FASHN drew a closed skirt). GPU: 6,295 s, $6.66–6.93
+(estimate), of which $3.29–3.40 on the two rejected products; runs 10–15: 12,943 GPU s, $13.55–14.45. Details,
+every render: [`docs/research/phase0-bohohippychic.md`](research/phase0-bohohippychic.md) ("Run 15").
+
+Stage 4t and the drape log ran on both good products (CPU, 82–92 s each). Measured (stage 4t, same tooling):
+
+| | Azure run 15 | Azure run 14 | Skirt run 15 |
+| --- | --- | --- | --- |
+| Critical girth before calibration | chest 101.27 vs 102 (−0.73) | 101.15 (−0.85) | waist: no girth (band below the waist ring, open 5.8 cm at one side; bridged 94.23 vs 80.5) |
+| Length | flat-lay 90.12 vs printed 91 | 92.54 | waist to hem 91.63 (nothing printed) |
+| Hem line above the floor | 57.35 cm | 55.46 (run 15 is 1.9 cm higher) | 4.16 (floor-length) |
+| Stills IoU visible front / back | 0.889 / 0.938 | 0.904 / 0.933 | 0.894 / 0.891 |
+| Holdout IoU visible / silhouette | 0.918 / 0.899 | 0.901 / 0.884 | 0.915 / 0.883 |
+| Inside the mannequin | 0 of 5,661 (2DGS 24.7 %) | 0 | 0 of 6,250 (2DGS 17.5 %) |
+| Hip | not fitted (+2.88) | | no girth: open at both sides (10.2 cm at the left, 92 → 70 cm; 7.8 cm at the right, 92 → 86 cm); bridged 107.65 vs the chart's 109 (−1.35) |
+
+Shadow mode, P0 against the measured mesh (first real comparisons): azure run 15 hem height +0.08 cm, flat-lay
+length −1.02 cm, flare 1.35 → 1.325, underbust ease +9.0 cm, sleeves 0 → 32.5 cm (4.1 σ), Chamfer 1.67 cm;
+4 of 5 informative rows within 1.28 σ. Skirt: hem height −7.24 cm (P0's maxi stops above the ankle, FASHN drew it
+to the floor), hem girth −18.5 %, flare not measurable, Chamfer 1.40 cm. Run 14 re-logged: hem −1.81 cm, Chamfer 2.03.
+
+**The skirt's hips, measured** (`src/bottomOpenings.ts`, in the report): FASHN's stage 1b stills are narrower than our mannequin
+on the hip row (34.75 / 35.59 cm against 37.55 cm, front / back), so our grey hip shows 1–2 cm outside the skirt on
+both sides; the video opens a slit from the band to 63–65 cm above the floor at the left (up to 10.6 cm across) and a
+narrower one at the right; stage 4t keeps the cloth outside the body and carves those openings (nothing filled from the
+template). The 3D skirt is not too small (bridged hip −1.35 cm against the chart + ease) and nowhere inside the
+mannequin: it is open. The cause is stage 1b, not stages 2–4t; the skirt is not fit for the panel.
+
+Fixed at the cause on the skirt: (1) the stage 4t hem scan ended a column at the generated side opening under the
+waistband and interpolated a slit up the side (`runEnd` with `OPENING`; holdout visible 0.905 → 0.915; azure
+refitted identically); (2) no waist girth because the band is worn 2.6–10.8 cm below our waist ring and tilted
+(`src/waistband.ts`: the band measured on its own plane, report only, never calibrated); (3) in the viewer the skirt
+slid down the legs because only the top 4 cm under its highest point were pinned (`waistbandPins`: the band under its
+own plane); (4) the drape log's hem girth slice now moves up until the cloth closes; the report and viewer captions
+follow the category for bottoms. The report also evaluates earlier runs kept as `out/phase0/<handle>-run<N>/`
+(run 14 next to run 15, stacked comparison pictures) and marks rejected products (evaluated, not rendered, off the
+blind page). Chart agreement: 1 of 2 good products passes (azure); the skirt has neither a waist nor a hip girth (open), so it fails.
+The panel stays on hold (1 of 5 panel bundles: the skirt's bundle is kept for evaluation only, verdict `faulty`). Next: stage 1b is the bottleneck (3 of 5 failed there); stop
+spending stage 2 on stills a person or the QA rejects.
+
 ## Garment engine — first real asset (run 14)
 
 Bohohippychic `azure-palm-baby-doll-dress`, job `azure-palm-baby-doll-dress-6d2f2611a144`:

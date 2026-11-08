@@ -5,7 +5,7 @@ import { evalBundle } from '../../src/evalBundle';
 import { fixtureMannequin as m, reconstructedDress, shopPayload, syntheticSkirt } from '../../src/evalFixtures';
 import { bodyField, buildAvatar, mannequinMeasurements } from './body';
 import { loadBundle, meshFromGlb } from './bundle';
-import { WAISTBAND_CM, openSession, pinHeight, prepareFit, relax, viewerMaterial, yokeHeight } from './engine';
+import { WAISTBAND_CM, openSession, pinHeight, prepareFit, relax, viewerMaterial, waistbandPins, yokeHeight } from './engine';
 import { fitForBody } from './fitting';
 
 /** An evaluated shop bundle served the way the dev server does it (payload.json included). */
@@ -79,6 +79,42 @@ describe('evaluated shop bundles in the viewer', () => {
     const minY = Math.min(...Array.from({ length: pos.length / 3 }, (_, i) => pos[3 * i + 1]!));
     const minBefore = Math.min(...Array.from({ length: before.length / 3 }, (_, i) => before[3 * i + 1]!));
     expect(minBefore - minY).toBeLessThan(10);
+  });
+
+  it('hangs a skirt worn lower at the front from its own waistband, not from a level line through its highest point', async () => {
+    // Run 15's maxi skirt: the generated waistband is 8–10 cm lower at the front than at the back. Cut the synthetic skirt's
+    // top along a plane that drops 0.4 cm per cm towards the front.
+    const full = syntheticSkirt();
+    const P = full.positions;
+    let top = -Infinity;
+    for (let i = 1; i < P.length; i += 3) top = Math.max(top, P[i]!);
+    const cut = (i: number): boolean => P[3 * i + 1]! > top - 0.5 - 0.4 * Math.max(0, P[3 * i + 2]!);
+    const kept: number[] = [];
+    for (let t = 0; t < full.indices.length; t += 3) if (![0, 1, 2].some((k) => cut(full.indices[t + k]!))) kept.push(full.indices[t]!, full.indices[t + 1]!, full.indices[t + 2]!);
+    // Reindexed without the cut vertices (a reconstruction has no cloth there at all).
+    const map = new Map<number, number>();
+    const positions: number[] = [];
+    const parts: number[] = [];
+    for (const v of kept) if (!map.has(v)) { map.set(v, map.size); positions.push(P[3 * v]!, P[3 * v + 1]!, P[3 * v + 2]!); parts.push(full.vertexPart[v]!); }
+    const tilted: Mesh = { ...full, positions: Float64Array.from(positions), indices: Uint32Array.from(kept.map((v) => map.get(v)!)), vertexPart: Uint8Array.from(parts) };
+    const { fetchFn } = served('crimson-wildflower-maxi-skirt', tilted, '12');
+    const bundle = await loadBundle(fetchFn, 'eval/crimson-wildflower-maxi-skirt');
+    const s = openSession(m, bundle);
+    const fit = prepareFit(s, avatar, field, fitForBody(s.payload, avatarMeas), '12', viewerMaterial('product', bundle.material));
+    const pos0 = Float32Array.from(fit.cloth.pos);
+    const n = pos0.length / 3;
+    // The level line through the highest point would pin nothing at the front; the waistband pins the front too.
+    const level = pinHeight(m, 'bottom', pos0, s.chains);
+    const front = (i: number): boolean => pos0[3 * i + 2]! > 11.5; // the cut is over 4.5 cm below the back there
+    expect(Array.from({ length: n }, (_, i) => i).filter((i) => front(i) && pos0[3 * i + 1]! >= level).length).toBe(0);
+    const pins = waistbandPins(pos0, bundle.baseMesh.indices, s.chains);
+    expect(Array.from({ length: n }, (_, i) => i).filter((i) => front(i) && pins[i]).length).toBeGreaterThan(5);
+    expect(Array.from(fit.pinned)).toEqual(Array.from(pins));
+    // After the drape the front of the waistband is where it was, and the front of the skirt has not slid down the legs.
+    const pos = relax(fit);
+    let frontTop0 = -Infinity, frontTop = -Infinity;
+    for (let i = 0; i < n; i++) if (front(i)) { frontTop0 = Math.max(frontTop0, pos0[3 * i + 1]!); frontTop = Math.max(frontTop, pos[3 * i + 1]!); }
+    expect(frontTop0 - frontTop).toBeLessThan(1);
   });
 
   it('reads the base mesh of an evaluated bundle back in cm', () => {

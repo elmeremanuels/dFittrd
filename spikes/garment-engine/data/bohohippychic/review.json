@@ -1,0 +1,11 @@
+{
+  "format": "curtain.phase0.review",
+  "note": "What a person saw when they looked at each GPU run's stills and frames (the founder's reviewer). A rejected product is still evaluated, so its numbers show the failure, but it gets no renders and is left off the blind page. A faulty product is evaluated and rendered so the fault can be seen, but it is not a panel bundle and is left off the blind page. Verdicts: accepted, faulty, rejected.",
+  "products": {
+    "azure-palm-baby-doll-dress": { "run": 15, "verdict": "accepted", "why": "stage 1b passed; stills and frames right: puff sleeves, print, babydoll, hem higher than run 14" },
+    "crimson-wildflower-maxi-skirt": { "run": 15, "verdict": "faulty", "why": "kept for evaluation, not for the panel: waistband and print right, but NOT at the hips (the founder: \"see the hips\"): in both stage 1b stills the grey mannequin hip shows outside the skirt at the sides, and in the stage 2 frames the skirt opens into a wedge-shaped slit at the side with the grey leg showing. Stage 1b QA failed the front only (silhouette 0.864) and was overridden" },
+    "rosewater-blouse": { "run": 15, "verdict": "rejected", "why": "FASHN stills torn (patches of print with the mannequin showing through, the back a pale blotchy shirt); stage 2 frames contain black panels on the back and side. Stage 2 ran anyway because --accept-failed-dress overrides the silhouette and fidelity failures" },
+    "rosewater-palazzo-pants": { "run": 15, "verdict": "rejected", "why": "FASHN drew a closed skirt in both views (legs merged in 259 of 259 rows); the type gate stopped it before stage 2. The shop photo's legs are so wide they read as a skirt" },
+    "woodstock-wanderer-knit-cardi": { "run": 15, "verdict": "rejected", "why": "front still a shrunken bolero (sleeves and a scrap of front), back a white sleeveless top with holes; stage 2 frames show black and grey halves and a garment that changes" }
+  }
+}

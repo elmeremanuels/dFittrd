@@ -119,9 +119,21 @@ export interface ProductSection {
 export type ReviewVerdict = 'accepted' | 'faulty' | 'rejected';
 export const REVIEW_VERDICTS: readonly ReviewVerdict[] = ['accepted', 'faulty', 'rejected'];
 
-/** A product the five-person panel may see: on the blind page and counted as a test bundle. Not reviewed counts as usable (synthetic and pre-review runs). */
-export function forPanel(p: Pick<ProductSection, 'review'>): boolean {
+/**
+ * A product the five-person panel may see: on the blind page and counted as a test bundle. Not reviewed counts as usable
+ * (synthetic and pre-review runs). An evaluated product whose chart agreement fails is never a panel bundle, whatever its
+ * review: the plugin's import gate (`checkGarmentBundle`, qa_failed) refuses it, so a shop could not show it.
+ */
+export function forPanel(p: Pick<ProductSection, 'review'> & { eval?: ProductSection['eval'] }): boolean {
+  if (p.eval && !p.eval.result.agreement.pass) return false;
   return (p.review?.verdict ?? 'accepted') === 'accepted';
+}
+
+/** Why a product is off the panel: its review verdict, or the import gate for an accepted one whose chart agreement fails. */
+export function offPanelReason(p: Pick<ProductSection, 'review'> & { eval?: ProductSection['eval'] }): string {
+  const v = p.review?.verdict ?? 'accepted';
+  if (v !== 'accepted') return v;
+  return p.eval && !p.eval.result.agreement.pass ? 'chart FAIL (import gate refuses the bundle)' : v;
 }
 
 /** An earlier GPU run of a product (its own job dir), evaluated with the current tooling. */
@@ -295,15 +307,70 @@ export function offReferenceSpans(consistency: unknown): Json[] {
   return arr(obj(consistency)?.off_reference_spans).map(obj).filter((x): x is Json => x !== null);
 }
 
-/** One line for the stage table: flagged frames of the stage 2 consistency check and the off-reference spans (flag, never hide). */
+/** Short labels for the consistency check's other (not off-reference) frame reasons, matched on the reason text. */
+const OTHER_REASONS: { re: RegExp; label: string }[] = [
+  { re: /^skirt zone covered/, label: 'skirt cover below the reference' },
+  { re: /^gap between the legs/, label: 'gap between the legs (skirt drawn as trousers)' },
+  { re: /^legs merged/, label: 'legs merged (trousers drawn as a skirt)' },
+  { re: /^garment IoU vs the pinned stills/, label: 'garment IoU vs the pinned stills low' },
+  { re: /outside the posed proxy envelope/, label: 'garment outside the posed proxy' },
+  { re: /^posed proxy covered/, label: 'posed proxy not covered' },
+];
+
+/** 'j1–4, j7' style ranges of sorted frame indices. */
+function jRanges(js: number[]): string {
+  const xs = [...new Set(js)].sort((a, b) => a - b);
+  const out: string[] = [];
+  for (let i = 0; i < xs.length; ) {
+    let k = i;
+    while (k + 1 < xs.length && xs[k + 1] === xs[k]! + 1) k++;
+    out.push(k > i ? `j${xs[i]}–${xs[k]}` : `j${xs[i]}`);
+    i = k + 1;
+  }
+  return out.join(', ');
+}
+
+/**
+ * The flagged frames' other reasons (everything but off-reference, which has its own spans), by reason and clip:
+ * 'skirt cover below the reference: turntable_a j7–25 (19)'. Frames with several reasons count under each. [] for a
+ * check without per-frame reasons.
+ */
+export function otherFlagReasons(consistency: unknown): string[] {
+  const by = new Map<string, Map<string, number[]>>();
+  for (const f of arr(obj(consistency)?.flagged_frames).map(obj)) {
+    const clip = str(f?.clip) ?? '?';
+    const j = num(f?.j);
+    if (j === null) continue;
+    for (const r of arr(f?.reasons)) {
+      const text = str(r) ?? '';
+      if (/off the pinned stills' hull/.test(text)) continue;
+      const label = OTHER_REASONS.find((x) => x.re.test(text))?.label ?? 'other';
+      const clips = by.get(label) ?? new Map<string, number[]>();
+      clips.set(clip, [...(clips.get(clip) ?? []), j]);
+      by.set(label, clips);
+    }
+  }
+  return [...by].map(([label, clips]) => `${label}: ${[...clips].map(([clip, js]) => `${clip} ${jRanges(js)} (${new Set(js).size})`).join('; ')}`);
+}
+
+/** One line for the stage table: flagged frames of the stage 2 consistency check, the off-reference spans and the other reasons (flag, never hide). */
 export function consistencyNote(consistency: unknown): string {
   const c = obj(consistency);
   if (!c) return '';
   const spans = offReferenceSpans(c);
-  const head = `consistency ${str(c.version) ?? '?'}: ${num(c.flagged) ?? '?'}/${num(c.frames) ?? '?'} frames flagged`;
-  if (!spans.length) return head;
-  const list = spans.map((sp) => `${str(sp.clip) ?? '?'} j${num(sp.j0) ?? '?'}–${num(sp.j1) ?? '?'} (max ${num(sp.max_px) ?? '?'} px, ${str(sp.side) ?? '?'})`).join(', ');
-  return `${head}; garment off the stills' hull below the hips (flap or panel the stills do not have) in ${list}`;
+  const rescored = str(c.rescored_from);
+  const identical = str(c.rescore_identical);
+  const ignored = str(c.rescore_ignored);
+  const how = rescored ? ` (re-scored on CPU, \`${rescored}\`; the GPU run wrote ${str(c.gpu_version) ?? 'no check'})` : identical ? ` (CPU re-score \`${identical}\` identical)` : ignored ? ` (CPU re-score NOT used: ${ignored})` : '';
+  const head = `consistency ${str(c.version) ?? '?'}${how}: ${num(c.flagged) ?? '?'}/${num(c.frames) ?? '?'} frames flagged`;
+  const parts = [head];
+  if (spans.length) {
+    const list = spans.map((sp) => `${str(sp.clip) ?? '?'} j${num(sp.j0) ?? '?'}–${num(sp.j1) ?? '?'} (max ${num(sp.max_px) ?? '?'} px, ${str(sp.side) ?? '?'})`).join(', ');
+    parts.push(`garment off the stills' hull below the hips (flap or panel the stills do not have) in ${list}`);
+  }
+  const other = otherFlagReasons(c);
+  if (other.length) parts.push(`other flags: ${other.join('; ')}`);
+  return parts.join('; ');
 }
 
 // ---------------------------------------------------------------------------
@@ -630,7 +697,7 @@ function productSection(input: ReportInput, p: ProductSection, i: number): strin
   if (p.review) {
     const v = p.review.verdict;
     const label = v === 'rejected' ? '**rejected**' : v === 'faulty' ? '**faulty, for evaluation only**' : 'accepted';
-    const tail = v === 'rejected' ? `${p.eval ? ' Evaluated below so the numbers show it, but' : ''} not rendered and not on the blind page.` : v === 'faulty' ? ' Evaluated and rendered below so the fault can be seen, but not a panel bundle and not on the blind page.' : '';
+    const tail = v === 'rejected' ? `${p.eval ? ' Evaluated below so the numbers show it, but' : ''} not rendered and not on the blind page.` : v === 'faulty' ? ' Evaluated and rendered below so the fault can be seen, but not a panel bundle and not on the blind page.' : !forPanel(p) ? ' Chart agreement fails, so the plugin\'s import gate refuses the bundle: not a panel bundle and not on the blind page.' : '';
     out.push(`**Review of run ${p.review.run ?? '?'} (stills and frames looked at):** ${label}. ${p.review.why}.${tail}`, '');
   }
   out.push(`${s.productType} → category \`${s.payload.category}\`${s.payload.subcategory ? ` (${s.payload.subcategory})` : ''}. Completeness ${s.completeness ? `${s.completeness.score.toFixed(3)}, ${s.completeness.status}` : '—'}.`, '');
@@ -701,7 +768,7 @@ export function verdicts(input: ReportInput): Verdict[] {
   out.push({
     item: 'Size test',
     state: 'needs people',
-    text: `Five people who did not build it must pick the smaller size, without labels, in at least 4 of 5 products on the blind page (size mode). Bundles for the test: ${evaluated.filter(forPanel).length} of ${ps.length} products${offPanel.length ? ` (${offPanel.length} more evaluated but kept off the panel on review: ${offPanel.map((p) => `${p.shop.handle} ${p.review!.verdict}`).join(', ')})` : ''}; renders made for ${rendered.length}. Not run with people yet.${hold}`,
+    text: `Five people who did not build it must pick the smaller size, without labels, in at least 4 of 5 products on the blind page (size mode). Bundles for the test: ${evaluated.filter(forPanel).length} of ${ps.length} products${offPanel.length ? ` (${offPanel.length} more evaluated but kept off the panel: ${offPanel.map((p) => `${p.shop.handle} ${offPanelReason(p)}`).join(', ')})` : ''}; renders made for ${rendered.length}. Not run with people yet.${hold}`,
   });
   out.push({ item: 'Fabric test', state: 'needs people', text: `Same five people, fabric mode of the same page (linen versus silk of the same garment). Not run with people yet.${hold}` });
   out.push({

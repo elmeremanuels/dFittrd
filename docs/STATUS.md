@@ -369,6 +369,35 @@ pair pinned. On copies of the artifact, `--recompose-dress --dress-pin front=fas
 (only kept from `history/`). Run 17c's stopping rule: if none of its 16 backs passes, a founder decision on 49 or a change to
 the waistband conditioning, not more seeds. 66 GPU s, $0.07-0.18. Panel still on hold (1 of 5 bundles).
 
+**Run 17d (8 Nov, stage 2 + 4 for the maxi skirt, front fashn@44 + back fashn@63 from run 17c, and the palazzo, run 16a's
+Qwen front + back approved by the founder; both recomposed with QA 0.12.0)**, evaluated like azure
+(`spikes/garment-engine/data/bohohippychic/phase0-written.md`, "Run 17d": stage 4t, `predict:log`, consistency re-score,
+report with renders; every render and all 160 turntable frames of each looked at). The CPU consistency re-score
+(`phase0_garment.py --score`, `stage2/consistency_v2.json`) now reaches the report (`src/evalJob.ts`
+`withRescoredConsistency`, used only when its version is at least the GPU record's and it is not older than the record);
+on both 17d jobs it equals the GPU check (already 0.4.0), so nothing changes there. The jobs Modal scored 0.3.0 were
+re-scored with 0.4.0 on CPU: **azure 17b (the accepted bundle) now shows its hem flaps in the report as off-reference
+spans, turntable_a j19-30 (up to 2,249 px) and turntable_b j18-78 (frames 98-158, up to 1,237 px), 89 / 243 frames
+flagged (0.3.0: 30), so its hem girth reads UNCONFIRMED**; also azure 16b, 15, 14, the skirt's run 15, blouse and
+cardigan. The stage table also lists frames flagged for other reasons, by reason and clip. **Skirt: the hips are closed** (no grey hip beside the
+skirt in any front or back frame, at most 3 px against run 15's up to 1,356 px; no opening wider than 4 cm in the asset,
+run 15 10.2 and 7.8 cm); hip 110.35 cm against 109 (+1.35); holdout IoU 0.947 (run 15 0.915). Open, flagged: the band sits
+4.0 cm below our waist ring, so there is no chart girth at the waist (on the band 88.07 against 80.5, uncalibrated): chart
+agreement fails and **the plugin's import gate refuses the bundle (`qa_failed`), so it is not in the demo shop**; the hem
+is drawn over the feet (red round both feet in turntable_b 85-159; hem 2.2 cm above the floor, pinched to 86 cm, foot
+lobes in the viewer); short-lived pale side panels and a flat tongue on the floor in turntable_b 81-94 and a hem flare in
+turntable_a 1-14 (consistency 0.4.0 off-reference up to 1,928 px, hem girth unconfirmed); smeared print; sizes differ only a
+little; the turntable_a 15-25 frames flagged only for skirt cover (11 of 41) are a normal rotation, looked at. Verdict:
+**faulty, pending a founder decision** on the low band (first written as accepted; a bundle the plugin's import gate
+refuses is not a panel bundle, and the report's `forPanel` now enforces that). **Palazzo: two legs in every turntable
+frame** (touching to a seam line over up to 65 % of the leg rows in a 75-76 and b 155-156, flagged), chart pass (waist +3.18 cm before calibration, +1.30 after the
+global scale; hip +1.83), outseam 102.51 against the printed 99, inseam 73.59, holdout IoU 0.970; but in the viewer the
+seat and leg tubes (separate, not stitched) part in the drape and **our grey thighs show between them at every size**, grey
+shin slivers show through slits low in the legs (three-quarter and side, every size), 1 vertex inside the mannequin, and
+the baked print is a patchwork (holdout MAE 29.1, worse than one colour, 27.6). Verdict: **faulty**; next on CPU: stitch or
+pin the leg tubes, re-bake, check the thigh band and the lower-leg slits. GPU 1,568 s ($1.61-1.63) + 1,469 s ($1.56-1.58). Panel still on hold (1 of 5 bundles, azure, pending
+founder review).
+
 **Stage 4t** (`spikes/garment-engine/src/templateFit.ts`, `bake.ts`, `stage4t.ts`;
 `pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic]`): the
 control proxy remeshed into a body tube and two sleeve tubes (each starting with a shoulder cap of

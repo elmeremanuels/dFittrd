@@ -117,7 +117,7 @@ export function readJob(dir: string): JobFiles {
     exists,
     manifest: readJson(at('manifest.json')),
     stage1b: readJson(at('stage1b/record.json')),
-    stage2: readJson(at('stage2/record.json')),
+    stage2: withRescoredConsistency(readJson(at('stage2/record.json')), readJson(at(RESCORED_CONSISTENCY)), { record: mtimeMs(at('stage2/record.json')), rescore: mtimeMs(at(RESCORED_CONSISTENCY)) }),
     stage3Masks,
     stage2Masks: { count: existsSync(at('stage2/garment_mask')) ? readdirSync(at('stage2/garment_mask')).filter((f) => f.endsWith('.png')).length : 0, record: readJson(at('stage2/garment_mask/record.json')) },
     stage4,
@@ -130,6 +130,56 @@ export function readJob(dir: string): JobFiles {
     ? fromSummary
     : [files.stage1b?.cost, files.stage2?.cost, files.stage4.stage2?.metrics?.cost, files.stage4.synthetic?.metrics?.cost].map(costRecord).filter((c): c is CostRecord => c !== null);
   return files;
+}
+
+/** Where `phase0_garment.py <job> --score` (CPU) writes a re-scored stage 2 consistency check. */
+export const RESCORED_CONSISTENCY = 'stage2/consistency_v2.json';
+
+/** [major, minor, patch] of a version string such as 'garment-consistency-0.4.0'; null without one. */
+export function consistencyVersion(v: unknown): [number, number, number] | null {
+  const m = typeof v === 'string' ? /(\d+)\.(\d+)\.(\d+)\s*$/.exec(v) : null;
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+function compareVersions(a: [number, number, number], b: [number, number, number]): number {
+  return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+}
+
+/** The frame-level outcome of a consistency check, for telling an identical re-score from a changed one (`seconds` etc. ignored). */
+function checkOutcome(c: unknown): string {
+  const o = c && typeof c === 'object' ? (c as Json) : {};
+  return JSON.stringify([o.version ?? null, o.frames ?? null, o.flagged ?? null, o.flagged_frames ?? null, o.off_reference_spans ?? null]);
+}
+
+/**
+ * The stage 2 record with a CPU re-score of its consistency check (`phase0_garment.py <job> --score`) in place of the one
+ * the GPU run wrote, so the report reads the newer check (e.g. 0.4.0's off-reference spans on a clip scored by 0.3.0 on
+ * Modal). The GPU run's own check stays in `consistency_gpu`; the re-score is marked with `rescored_from`.
+ *
+ * The re-score is used only when it has a version at least the record's and, when both times are known, it is not older
+ * than `stage2/record.json` (a stage 2 re-run makes an old re-score stale). Otherwise the GPU check is kept and
+ * `rescore_ignored` says why. A re-score with the same frame-level outcome as the GPU check is not substituted; the
+ * check is marked `rescore_identical` instead. No record: nothing (a re-score alone is not a stage 2 run).
+ */
+export function withRescoredConsistency(record: Json | null, rescore: Json | null, times?: { record?: number | null; rescore?: number | null }): Json | null {
+  if (!record || !rescore) return record;
+  const gpu = record.consistency && typeof record.consistency === 'object' ? (record.consistency as Json) : null;
+  const ignore = (why: string): Json => (gpu ? { ...record, consistency: { ...gpu, rescore_ignored: why } } : record);
+  const rv = consistencyVersion(rescore.version);
+  if (!rv) return ignore(`${RESCORED_CONSISTENCY} has no version`);
+  const gv = consistencyVersion(gpu?.version);
+  if (gv && compareVersions(rv, gv) < 0) return ignore(`${RESCORED_CONSISTENCY} (${String(rescore.version)}) is older than the GPU check (${String(gpu?.version)})`);
+  if (times?.record != null && times.rescore != null && times.rescore < times.record) return ignore(`${RESCORED_CONSISTENCY} predates stage2/record.json (stage 2 re-run since)`);
+  if (gpu && checkOutcome(gpu) === checkOutcome(rescore)) return { ...record, consistency: { ...gpu, rescore_identical: RESCORED_CONSISTENCY } };
+  return { ...record, consistency: { ...rescore, rescored_from: RESCORED_CONSISTENCY, gpu_version: gpu?.version ?? null }, consistency_gpu: gpu };
+}
+
+function mtimeMs(p: string): number | null {
+  try {
+    return statSync(p).mtimeMs;
+  } catch {
+    return null;
+  }
 }
 
 function readMask(dir: string, rel: string): Mask | null {

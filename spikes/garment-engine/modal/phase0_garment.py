@@ -1110,7 +1110,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=main.__doc__)
     ap.add_argument("job_dir")
     ap.add_argument("--write-masks", action="store_true", help=f"write {STAGE2_MASK_DIR}/ from stage2/frames")
-    ap.add_argument("--score", action="store_true", help="consistency v2 of stage2/clips (prints the summary, writes stage2/consistency_v2.json)")
+    ap.add_argument("--score", action="store_true", help="consistency v2 of stage2/clips (prints the summary, writes stage2/consistency_v2.json; report:bohohippychic reads it in place of stage2/record.json's consistency when its version is at least the record's and it is not older than the record, src/evalJob.ts withRescoredConsistency)")
     a = ap.parse_args(argv)
     with open(os.path.join(a.job_dir, "manifest.json")) as f:
         m = json.load(f)

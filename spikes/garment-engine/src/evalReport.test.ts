@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { chooseMesh, evaluateProduct, readJob, type JobFiles, type ProductEval } from './evalJob';
 import { reconstructedDress, shopPayloads, syntheticDress, writeFakeJob } from './evalFixtures';
 import { SHOP_UNCOVERED_CATEGORIES } from './shopSelection';
-import { consistencyNote, costScope, costTotal, forPanel, parsePrintedTable, plannedPhotos, renderReport, stageStatuses, usedInputs, verdicts, type ProductSection, type ReportInput, type ShopImage, type ShopProduct } from './evalReport';
+import { consistencyNote, costScope, costTotal, forPanel, offPanelReason, parsePrintedTable, plannedPhotos, renderReport, stageStatuses, usedInputs, verdicts, type ProductSection, type ReportInput, type ShopImage, type ShopProduct } from './evalReport';
 
 const images = (JSON.parse(readFileSync(new URL('../data/bohohippychic/images.json', import.meta.url), 'utf8')) as { products: Record<string, ShopImage[]> }).products;
 const dirs: string[] = [];
@@ -115,6 +115,26 @@ describe('report with a GPU run', () => {
     );
     expect(consistencyNote({ version: 'garment-consistency-0.3.0', frames: 10, flagged: 0 })).toBe('consistency garment-consistency-0.3.0: 0/10 frames flagged');
     expect(consistencyNote(undefined)).toBe('');
+    expect(consistencyNote({ version: 'garment-consistency-0.4.0', frames: 10, flagged: 1, rescored_from: 'stage2/consistency_v2.json', gpu_version: 'garment-consistency-0.3.0' })).toBe(
+      'consistency garment-consistency-0.4.0 (re-scored on CPU, `stage2/consistency_v2.json`; the GPU run wrote garment-consistency-0.3.0): 1/10 frames flagged',
+    );
+    expect(consistencyNote({ version: 'garment-consistency-0.4.0', frames: 10, flagged: 0, rescore_identical: 'stage2/consistency_v2.json' })).toBe(
+      'consistency garment-consistency-0.4.0 (CPU re-score `stage2/consistency_v2.json` identical): 0/10 frames flagged',
+    );
+    expect(consistencyNote({ version: 'garment-consistency-0.4.0', frames: 10, flagged: 0, rescore_ignored: 'stale' })).toMatch(/\(CPU re-score NOT used: stale\)/);
+    // Frames flagged for other reasons are listed by reason and clip, not left out.
+    const other = {
+      version: 'garment-consistency-0.4.0', frames: 10, flagged: 4,
+      flagged_frames: [
+        { clip: 'turntable_a', j: 7, reasons: ['skirt zone covered 0.88 < 0.9 (narrower than the reference below the crotch: trousers or a narrower garment)', "900 px of garment off the pinned stills' hull below the hips (left 0 right 900; mostly image-right) > 400: a flap or panel the stills do not have"] },
+        { clip: 'turntable_a', j: 8, reasons: ['skirt zone covered 0.87 < 0.9 (narrower)'] },
+        { clip: 'turntable_a', j: 9, reasons: ['skirt zone covered 0.87 < 0.9 (narrower)'] },
+        { clip: 'turntable_b', j: 2, reasons: ['garment IoU vs the pinned stills 0.80 < 0.82'] },
+      ],
+    };
+    expect(consistencyNote(other)).toBe(
+      'consistency garment-consistency-0.4.0: 4/10 frames flagged; other flags: skirt cover below the reference: turntable_a j7–9 (3); garment IoU vs the pinned stills low: turntable_b j2 (1)',
+    );
     const flaggedJob = { ...job, stage2: { ...(job.stage2 as object), consistency }, stage4t: { stage2: { glb: 'x.glb', metrics: {}, atlas: null, exemplar: null, shadow: null } } };
     const st = stageStatuses(sec, flaggedJob);
     expect(st.find((s) => s.stage === '2 image to video')!.detail).toMatch(/turntable_b j18–78 \(max 1237 px, image-left\)/);
@@ -216,15 +236,25 @@ describe('review verdicts and earlier runs', () => {
     expect(forPanel(ps[2]!)).toBe(false);
     expect(forPanel({ review: { run: 15, verdict: 'rejected', why: '' } })).toBe(false);
     expect(forPanel({ review: null })).toBe(true);
+    // The import gate: an evaluated product whose chart agreement fails is off the panel whatever its review.
+    const evalWith = (pass: boolean) => ({ result: { agreement: { pass } } }) as unknown as ProductSection['eval'];
+    expect(forPanel({ review: { run: 17, verdict: 'accepted', why: '' }, eval: evalWith(false) })).toBe(false);
+    expect(forPanel({ review: { run: 17, verdict: 'accepted', why: '' }, eval: evalWith(true) })).toBe(true);
+    expect(offPanelReason({ review: { run: 17, verdict: 'accepted', why: '' }, eval: evalWith(false) })).toMatch(/import gate refuses/);
   });
 
   it('counts only accepted evaluated products as panel bundles in the size test', () => {
     const ps = shopPayloads().map((p) => missing(p.handle));
     const ev = { result: { agreement: { pass: false, missing: [], maxAbsCm: 1 }, before: { maxAbsCm: 1 }, afterGlobal: { maxAbsCm: 1 }, critical: ['chest'], rows: [], waistband: null }, view: { views: [] } } as unknown as ProductEval;
-    ps[0] = { ...ps[0]!, eval: ev, review: { run: 15, verdict: 'accepted', why: '' } };
+    const passing = { ...ev, result: { ...ev.result, agreement: { ...ev.result.agreement, pass: true } } } as ProductEval;
+    ps[0] = { ...ps[0]!, eval: passing, review: { run: 15, verdict: 'accepted', why: '' } };
     ps[2] = { ...ps[2]!, eval: ev, review: { run: 15, verdict: 'faulty', why: '' } };
     const size = verdicts(input(ps)).find((v) => v.item === 'Size test')!;
-    expect(size.text).toContain(`Bundles for the test: 1 of ${ps.length} products (1 more evaluated but kept off the panel on review: ${ps[2]!.shop.handle} faulty)`);
+    expect(size.text).toContain(`Bundles for the test: 1 of ${ps.length} products (1 more evaluated but kept off the panel: ${ps[2]!.shop.handle} faulty)`);
+    // Accepted on review but refused by the import gate (chart FAIL): off the panel, and the reason is named.
+    ps[3] = { ...ps[3]!, eval: ev, review: { run: 17, verdict: 'accepted', why: '' } };
+    const size2 = verdicts(input(ps)).find((v) => v.item === 'Size test')!;
+    expect(size2.text).toContain(`Bundles for the test: 1 of ${ps.length} products (2 more evaluated but kept off the panel: ${ps[2]!.shop.handle} faulty, ${ps[3]!.shop.handle} chart FAIL (import gate refuses the bundle))`);
   });
 
   it('puts an earlier run next to the current job, with its comparison pictures, and invents nothing for a run without a mesh', () => {

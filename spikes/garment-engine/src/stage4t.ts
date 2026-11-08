@@ -118,6 +118,19 @@ export function fileSetSha256(paths: readonly string[]): string {
 }
 
 /**
+ * The off-reference spans the job's stage 2 consistency check found (the CPU re-score `stage2/consistency_v2.json`, else
+ * the GPU run's `stage2/record.json` consistency), or [] when it has none or no check of that kind. Stage 4t uses it to
+ * refuse a job that has such spans but no masks written for them: without this it would silently fit the flap again.
+ */
+export function offReferenceSpansOnRecord(dir: string): unknown[] {
+  const read = (p: string): unknown => (existsSync(join(dir, p)) ? JSON.parse(readFileSync(join(dir, p), 'utf8')) : null);
+  const v2 = read('stage2/consistency_v2.json') as { off_reference_spans?: unknown[] } | null;
+  if (v2) return Array.isArray(v2.off_reference_spans) ? v2.off_reference_spans : [];
+  const rec = read('stage2/record.json') as { consistency?: { off_reference_spans?: unknown[] } } | null;
+  return Array.isArray(rec?.consistency?.off_reference_spans) ? rec.consistency.off_reference_spans : [];
+}
+
+/**
  * The job's off-reference masks (`OFF_REFERENCE_DIR`), or null when it has none. Refuses masks cut from other garment
  * masks than the ones on disk (the record's sha256 of the garment mask set must match).
  */
@@ -425,6 +438,9 @@ export function runStage4t(o: Stage4tInputs): Stage4tResult {
   const offRef = o.source === 'stage2' ? loadOffReference(o.dir, views) : null;
   const offMode: OffReferenceMode = offRef ? (o.offReference ?? 'pixels') : 'none';
   if (o.offReference && o.offReference !== 'none' && !offRef) throw new Error(`stage 4t: --off-reference ${o.offReference} but the job has no ${OFF_REFERENCE_DIR}/record.json (phase0_garment.py --write-off-reference)`);
+  const spansOnRecord = o.source === 'stage2' && !offRef ? offReferenceSpansOnRecord(o.dir).length : 0;
+  if (spansOnRecord && o.offReference !== 'none') throw new Error(`stage 4t: the job's consistency check found ${spansOnRecord} off-reference span(s) but there is no ${OFF_REFERENCE_DIR}/record.json: run \`modal/phase0_garment.py <job> --write-off-reference\` first, or pass --off-reference none to fit them as segmented`);
+  if (spansOnRecord) log(`stage 4t: WARNING: ${spansOnRecord} off-reference span(s) on record and no ${OFF_REFERENCE_DIR}: fitted and baked as segmented (--off-reference none)`);
   const dropped = offMode === 'frames' ? new Set(offRef!.flagged) : new Set<number>();
   const train = split0.train.filter((v) => !dropped.has(v));
   const holdout = split0.holdout.filter((v) => !dropped.has(v));

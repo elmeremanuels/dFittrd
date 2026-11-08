@@ -4,12 +4,12 @@
  * own side of the mid-plane (`keepLegsApart`).
  */
 import { createHash } from 'node:crypto';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BASE_SHAPE_ID, bodyShape, buildMannequin } from '@curtain/mannequin';
 import { describe, expect, it } from 'vitest';
-import { fileSetSha256, maskIouIgnoring, withoutPixels } from './stage4t';
+import { fileSetSha256, maskIouIgnoring, offReferenceSpansOnRecord, withoutPixels } from './stage4t';
 import { keepLegsApart, LEG_MIDPLANE_GAP_CM } from './templateFit';
 
 const mask = (bits: number[]): { width: number; height: number; data: Uint8Array } => ({ width: bits.length, height: 1, data: Uint8Array.from(bits) });
@@ -38,6 +38,18 @@ describe('off-reference pixels', () => {
       h.update(Buffer.concat([Buffer.from(`${n}\0`), createHash('sha256').update(Buffer.from(`mask ${k}`)).digest()]));
     }
     expect(fileSetSha256(files)).toBe(h.digest('hex'));
+  });
+
+  it('finds the spans on record (CPU re-score first, else the GPU record) so stage 4t can refuse a job without masks', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'offref-'));
+    expect(offReferenceSpansOnRecord(dir)).toEqual([]);
+    mkdirSync(join(dir, 'stage2'));
+    writeFileSync(join(dir, 'stage2/record.json'), JSON.stringify({ consistency: { off_reference_spans: [{ frame0: 1, frame1: 2 }] } }));
+    expect(offReferenceSpansOnRecord(dir)).toHaveLength(1);
+    writeFileSync(join(dir, 'stage2/consistency_v2.json'), JSON.stringify({ off_reference_spans: [{ frame0: 1 }, { frame0: 9 }] }));
+    expect(offReferenceSpansOnRecord(dir)).toHaveLength(2);
+    writeFileSync(join(dir, 'stage2/consistency_v2.json'), JSON.stringify({ off_reference_spans: [] }));
+    expect(offReferenceSpansOnRecord(dir)).toEqual([]);
   });
 });
 

@@ -643,6 +643,82 @@ Also from the review: `--dress-expect front=<hex>,back=<hex>` (with `--recompose
 Not changed (review, low): azure's recomposed shoulders have a squared step at row 238/239 (8-12 px) and a 1-2 px spur on the front right sleeve edge (rows 265-270), cosmetic at 1x; `width_steps` does not scan the shoulders. Qwen's palazzo: a pocket flap sticks out past the left hip (rows ~380-400) and the print is darker than the shop photo (unnormalised median dE 10.4 front / 7.4 back, against azure's 4.3 / 2.5; fidelity compares exposure-normalised); no check measures absolute lightness against the shop (one control is not enough to set one). The palazzo is held out of run 16b until the founder signs off on both.
 
 
+## Stage 1b for run 17a: draw plans, a kept view, the pair (`stage1b-qa-0.11.0`, `qwen-dress-prompt-0.2.0`)
+
+Three products are still open after 0.10.1. The causes were checked against run 16a's raw outputs, its inputs and the shop
+photos. Two causes are in our Qwen input and are fixed. The rest is how the engine drew, and the fix there is more draws,
+not a looser check. No QA threshold changed.
+
+| Product | Defect (0.10.1) | Cause, with the evidence | 17a |
+| --- | --- | --- | --- |
+| skirt | FASHN front waistband about 40 px below the proxy's top (row 388 against 348; grey belly rows 363-398, torso cover 0.771); its back (waist about row 362) passes alone; the pair fails the waistband agreement (0.113 against 0.034) | The engine drew it: raw `front_fashn.png` paints a navel and skin above a low waistband. The two FASHN agnostic images are byte-identical, so nothing in FASHN's input marks the waist; what differs is the garment photo (hands on the waistband, the T-shirt over it on the front photo). Same seed every run (`run_phase0 --dress` passes the manifest's 43), so a retry with the same inputs repeats the draw. Qwen never drew this skirt. | front: FASHN seeds 44-47, Qwen 43-44; back: run 16a's FASHN back **kept** (`keep:fashn@43`), plus FASHN 44-45 and Qwen 43 |
+| blouse | Qwen back dark orange-brown (dE 19.6 against its front, limit 9.5); Qwen front grey caps (84 px); FASHN front torso cover 0.9197 (< 0.92); FASHN back print lost (edge ratio 0.41, also in run 15) | **Our input:** the two views' instructions named different colours: front cut-out "multicolour print on cream" (Lab 79.5/7.9/9.3), back "on peach" (75.1/9.0/10.8), 4.7 apart, across a naming boundary. The caps: `proxy_front.png` leaves our mannequin's dark shoulder tips uncovered and Qwen copies the placeholder's shoulders (exporter geometry). Torso cover is a 0.0003 miss: a new seed is the honest lever. | one colour phrase for both views; front: FASHN 44-49 and run 16a's Qwen front **kept** (`keep:qwen@43`; its caps are the proxy's, so new Qwen fronts are not paid for); back: FASHN 44-47, Qwen 44-46 |
+| cardigan | Qwen back sleeves swapped (brown on the viewer's left, the shop back has it on the right), drawn too big (garment inside 0.935, foreground outside 0.039), a front-style button; Qwen front grey shoulder slope (255 px); FASHN front a cropped bolero (runs 15 and 16a) | **Our input:** the back's negative prompt carried the open-front outerwear negative "closed pullover, jumper closed at the front, high round neckline", which is exactly what the shop back shows; nothing in the back instruction said the sleeves keep their side. (0.10.0 already dropped the front's "deep V ..., buttoned below it" from the back.) The size and the shoulder slope: the outerwear proxy is fitted (upper arm 36 cm, default ease) and the shop knit is oversized with drop shoulders: an exporter mismatch, not a seed. FASHN: systematic in two runs. | a **diagnostic** of the 0.2.0 back prompt, not expected to ship: front run 16a's Qwen front **kept** (`keep:qwen@43`; the shoulder slope is the proxy's), back Qwen 44-47 |
+
+### What changed
+
+| Change | What |
+| --- | --- |
+| `lib.qwen_dress_prompt` (`qwen-dress-prompt-0.2.0`, in every Qwen candidate's record) | the open-front negative on the FRONT only; the back keeps every part on its side of picture 2 (sleeves named for kinds that have them); the back still drops the front's clauses (0.10.0) |
+| `lib.view_colour_phrases` | when the front and back cut-outs' median Lab differ by less than 8.0 (`VIEW_COLOUR["min_limit_delta_e"]`, below which QA holds the stills to one colour anyway) both views name the front's phrase; else each its own (the cardigan: dE 15.5, a peach argyle front and a cream back). Measured from pixels, never the product name; recorded per view (`colour_phrase`) and per run (`colour_phrases`). Applies to every Qwen run with a back photo |
+| `lib.parse_draw_plan`, `stage1_dress.py --draws`, `run_phase0.py --dress-draws` | a draw plan, e.g. `front=fashn@44-47,qwen@43-44;back=keep:fashn,fashn@44-45,qwen@43`: per view, engine@seed draws and at most one `keep:<engine>[@seed]`. Refused before the upload: a malformed plan, a missing view, a duplicate, more than 24 draws, nothing drawn, an invented back, `--engine` / `--seed` / `--dress-engine` with it, `--dress-draws` without `--dress` / `--dress-only` or with a reuse option |
+| `stage1_dress.prepare` (CPU) | looks up each keep first (a missing one stops before anything moves or any GPU starts), then moves the earlier `stage1b/` into `stage1b/history/<utc>/` (`archive_stage1b`; the plain `dress` does too now, so no stale candidate of another engine or seed is ever re-scored), then copies the kept candidate under its plan name (`back_fashn_s43`) and saves its chosen mask, rebuilt from that run's files by the replay's rule (`chosen_mask_from_saved`; for run 16a's 0.9.0 skirt back: the saved composite mask with the hip conform inverted, an estimate, recorded) |
+| `stage1_dress.dress(plan=...)` (GPU) | every draw in one container (models load once), each saved as `<view>_<engine>_s<seed>` with its chosen, garment and unclipped masks and FASHN's agnostic image; no QA and no still here; the record is marked `finalized: false` (stage 2 cannot start on it) |
+| `stage1_dress.finalize` (CPU) = `phase0_dress.finalize_draws` | scores every candidate with the replay code (`rescore_job`, path app), picks the pair (`pick_pair`), writes the stills (`write_stills`, shared with `recompose_job`) and the record with every pair and its failures. One code path for the run and its replay. A view whose draws all failed gives a failing record, not a crash; the draws are downloaded even if the finalize fails |
+| `pick_pair` | eligible = both candidates pass every check of their own AND `back_view_checks`, `view_agreement` (length, sleeves, waistband: TYPE) and `view_colour` pass for the pair, the same checks the one-pair app applies; then same engine, then the higher of the two views' lower print fidelity (2 decimals), then the higher of the two views' lower silhouette score, then the earlier pair. A kept view therefore only ships beside a front it agrees with. No eligible pair: each view shown by `pick_engine` and the shown pair's checks fail the back, as before |
+| candidate names | `lib.candidate_id` (`fashn`, `fashn@44`), found by file name (`candidate_entries`), `pick_engine` returns `candidate`; `--dress-pin front=fashn@45` for a later recompose. A run with one draw per engine is named, scored and picked exactly as before |
+| `still_pixel_sha256` | now also written by the GPU app (not only the recompose), so `--reuse-dress --dress-expect` can pin a 17a still in 17b |
+
+### Review of 0.11.0
+
+| Finding | Change |
+| --- | --- |
+| A seedless `keep:<engine>` takes the lowest seed once the earlier run is a draw plan (several seeds of one engine), not the reviewed one | `find_kept` refuses it (ValueError, before anything moves) when that run has more than one candidate of the engine for the view; run 17a names every keep's seed (`keep:fashn@43`, `keep:qwen@43`) |
+| The cardigan's and the blouse's new Qwen fronts would buy nothing: their failures (shoulder slope 255 px, caps 84 px) are the proxy's, an exporter matter | both keep run 16a's Qwen front instead (re-scored, never redrawn). Its instruction and negative are byte-identical under 0.2.0 (checked against the 16a records), so the kept front is what a new seed would have been asked for. The cardigan line is a diagnostic of the 0.2.0 back prompt: its own-QA failures leave no eligible pair, but every pair's back-view, side-colour and agreement checks are still recorded |
+| `pick_pair` does not rank by margin (best-of-N can pick a just-over-the-line pair) | no ranking change and no threshold change; every pair row now carries each view's `torso_cover` and waistband (`top_offset`), and the log prints them, so the reviewer sees the margin and pins a better pair in 17b with `--recompose-dress --dress-pin ... --dress-expect` |
+| Paid draws were not downloaded when `dress.remote` itself failed (timeout, OOM) | the download runs in `finally` around the dress and the finalize; each plan draw is committed to the Volume as it is saved (`--download-only` also fetches it) |
+| `SHARED_COLOUR_MAX_DELTA_E` is a copy of `VIEW_COLOUR["min_limit_delta_e"]` | a test holds the two equal |
+
+### Replayed on run 16a (CPU; `history/` + keep + finalize, the shop masks of run 16a in place of the new segmentation)
+
+Every candidate of run 16a kept under its plan name and finalized: the per-candidate verdicts are those of the 0.10.1 table
+above, and the stills of the two pairs that pass are pixel-identical to the ones run 16b pins.
+
+| Product | Candidates | Pairs eligible | Result |
+| --- | --- | --- | --- |
+| azure | FASHN front, back | 1 of 1 | passes; pixel sha256 `d4cbc556b400eeb9c145f9c1` / `695c51459ff080c9657cdfbd` (= the 16b `--dress-expect`) |
+| palazzo | FASHN + Qwen both views | 1 of 4 (Qwen/Qwen, dE 4.4, waist gap 0.003) | passes; `d519f925e95fb9bfa4ee275d` / `a9a3ce42d53ac369fd83eca0` (= the held-back 16b line) |
+| skirt | FASHN front, back | 0 of 1 (front own QA; waistband 0.113 vs 0.034) | stopped, front rejected |
+| blouse | FASHN + Qwen both views | 0 of 4 (FASHN/Qwen dE 19.6, Qwen/Qwen 14.0; FASHN front torso 0.920; FASHN back print) | stopped |
+| cardigan | FASHN + Qwen both views | 0 of 4 | stopped (type: front shoulder slope) |
+
+A smoke run of `prepare → dress(plan) → finalize` and of the plain `dress` on CPU with STUB models (torch, Grounding DINO,
+SAM 2, FASHN and Qwen replaced by fakes that return run 16a's outputs) ran every line of the plan path on the skirt,
+blouse and cardigan jobs: one engine call per engine@seed with that seed, the kept back imported and paired, the blouse's
+Qwen calls all naming "cream", the cardigan's front keeping and its back dropping the open-front negative, the plain run
+archiving the plan run into `history/`. It found one defect, fixed: a view whose draws all failed crashed the finalize.
+
+### Run 17a, what passes, what is flagged
+
+- skirt: pass = a front with its waistband at the proxy's top (within about 10 px of row 348), torso cover >= 0.92, no grey
+  belly at 3x, the waistband agreeing with the kept back (or with a new back). If every front still sits low, the next
+  step is an A/B of FASHN's input (the SAM cut-out as a flat-lay, or the inpaint box starting at the proxy's top), never
+  painting cloth over the belly.
+- blouse: pass = `view_colour` within its limit with no change to it, the back's lightness near the front's, by eye no grey
+  caps and sleeve ends level front to back. Flag whatever QA says: the hem is cut flat at the proxy's hem (the proxy, 54.2
+  cm, is shorter than the shirt-tail), the sleeve length is not measured against the shop, and Qwen's front mask falls back
+  to the difference prior when SAM 2 disagrees (check a passing Qwen front by eye).
+- cardigan: pass = the back's sleeves on the shop back's sides (camel left, brown right as seen), no button or argyle on
+  the back, the silhouette band. Expected to stay open: the back drawn too big and the front's shoulder slope, both the
+  fitted outerwear proxy against an oversized drop-shoulder knit (an exporter change, new job ids: the founder's call).
+  Never widened: `garment_inside`, `foreground_outside`, `max_body_beside_px`.
+
+**Not tested on a GPU or against Modal:** the draw plan inside the app (one container, many seeds), `prepare` / `finalize`
+as Modal functions, moving `stage1b/` on the jobs Volume (`shutil.move`; a copy if a rename is refused), the 0.2.0 prompts
+(the colour phrase, the side sentence, the back without the open-front negative). Determinism of a re-draw across
+containers is unverified: 17b pins the reviewed stills with `--reuse-dress --dress-expect` (no redraw) or `--recompose-dress
+--dress-pin front=<engine@seed>,back=<engine@seed> --dress-expect`.
+
 ## Stage 2 after run 10: control proxy, neutral prompts, consistency metric
 
 Run 10 (GitHub Actions, aalter-studio-2, synthetic stills) followed the pinned front and back frames and the camera path, but between them the dress turned into trousers (frames 20, 60, 100) and the product name appeared as text in frame 20; stage 4 on those frames reached a mask IoU of 0.90, against 0.99 on the synthetic truth. Two causes: the control depth showed the **bare** mannequin (two separate legs), and the prompt held the product title in quotes. Export 0.2.0 changes three things. None of them has run on a GPU yet.

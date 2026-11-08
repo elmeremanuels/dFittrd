@@ -480,10 +480,11 @@ def test_qwen_instruction_names_the_measured_colour_never_a_colour_from_the_prod
 
 def test_stage1_app_measures_the_colour_scores_fidelity_and_never_pins_a_fidelity_failure():
     src = open(os.path.join(os.path.dirname(HERE), "stage1_dress.py"), encoding="utf-8").read()
-    assert "dq.garment_colour(np.asarray(src), smask)" in src and 'colour=s.get("colour")' in src
+    # 0.11.0: the colour phrase may be the front's for both views (lib.view_colour_phrases), still measured on the cut-outs
+    assert "dq.garment_colour(np.asarray(src), smask)" in src and 'qwen_colour = s.get("colour")' in src and "colour=colour)" in src
     assert "dq.print_fidelity(gen_np, garment, np.asarray(s[\"image\"]), s[\"mask\"])" in src and "fidelity=fid" in src
     assert 'sleeve_band_px=region_rec["sleeve_band_px"]' in src
-    assert 'shown = decision["engine"] or decision.get("rejected_still")' in src
+    assert "shown = dq.shown_candidate(decision)" in src
 
 
 # --- review of run 13: colour naming of dark solids, exposure-normalised fidelity, short-inseam romper, hem by colour,

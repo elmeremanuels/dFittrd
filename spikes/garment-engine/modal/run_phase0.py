@@ -29,6 +29,9 @@ Options: --steps 40 --iterations 10000 --triangles 12000 --skip-video (reuse sta
          reads that record). Neither redraws a still, so stage 2 pins what was reviewed.
          --dress-expect front=<hex>,back=<hex> (with either: the pixel sha256 of each reviewed still, `phase0_lib.pixel_sha256`
          of the decoded RGB, at least 12 hex characters; a recomposed still that differs stops before stage 2)
+         --dress-draws "front=fashn@44-47,qwen@43;back=keep:fashn,qwen@43" (with --dress / --dress-only, stage1b-qa-0.11.0: a
+         draw plan, `phase0_lib.parse_draw_plan`; several seeds per view in one container, a view kept from the earlier run,
+         the front/back pair picked by the pair checks; replaces --dress-engine; checked before the upload)
 Every number this prints about cost is an ESTIMATE (list price x GPU seconds); the Modal invoice is
 the measurement. NOT TESTED on a GPU: the build container cannot reach Modal.
 """
@@ -99,6 +102,27 @@ def _reuse_mode(*, dress: bool, dress_only: bool, reuse_dress: bool, recompose_d
     return mode
 
 
+def _draw_plan(m: dict, *, dress: bool, dress_only: bool, reuse: str | None, dress_engine: str, text: str) -> dict | None:
+    """--dress-draws (a draw plan, stage1b-qa-0.11.0), refused before the upload when it cannot run: a malformed plan, without
+    --dress / --dress-only, with --reuse-dress / --recompose-dress (no new draw), with --dress-engine (the plan names the engines),
+    or for a job without a back photo."""
+    try:
+        plan = lib.parse_draw_plan(text)
+    except ValueError as e:
+        raise SystemExit(f"[phase0] {e}") from None
+    if plan is None:
+        return None
+    if reuse:
+        raise SystemExit(f"[phase0] --dress-draws is a new draw: it cannot run with --{reuse}-dress")
+    if not (dress or dress_only):
+        raise SystemExit("[phase0] --dress-draws needs --dress or --dress-only")
+    try:
+        stage1_dress.check_plan(m, plan, engine=dress_engine, seed=None)
+    except ValueError as e:
+        raise SystemExit(f"[phase0] {str(e).replace('--engine', '--dress-engine').replace('--draws', '--dress-draws')}") from None
+    return plan
+
+
 def _dress_expect(reuse: str | None, text: str) -> dict[str, str]:
     """--dress-expect (pixel hashes of the reviewed stills), refused without --reuse-dress / --recompose-dress."""
     try:
@@ -158,7 +182,7 @@ def main(
     no_pin_frames: bool = False,
     force_upload: bool = False,
     dress: bool = False,
-    dress_engine: str = "fashn",
+    dress_engine: str = "",
     dress_steps: int = 0,
     accept_failed_dress: bool = False,
     allow_invented_back: bool = False,
@@ -168,6 +192,7 @@ def main(
     recompose_dress: bool = False,
     dress_pin: str = "",
     dress_expect: str = "",
+    dress_draws: str = "",
 ):
     cfg = stage2_video.CFG
     m = pm.load_local_job(job_dir)
@@ -180,6 +205,8 @@ def main(
     # the reuse options are checked before the upload (review of 0.10.0): a contradictory set stops before anything is sent
     reuse = _reuse_mode(dress=dress, dress_only=dress_only, reuse_dress=reuse_dress, recompose_dress=recompose_dress, dress_pin=dress_pin)
     expect = _dress_expect(reuse, dress_expect)
+    plan = _draw_plan(m, dress=dress, dress_only=dress_only, reuse=reuse, dress_engine=dress_engine, text=dress_draws)
+    dress_engine = lib.draw_plan_engines(plan) if plan is not None else (dress_engine or "fashn")
     pm.upload_job(job_dir, job_id, force=force_upload)
     costs: list[dict] = []
     summary: dict = _base_summary(m, cfg)
@@ -219,17 +246,20 @@ def main(
         lib.dress_engines(dress_engine)  # an unknown engine fails here, before any GPU time
         dcfg = stage1_dress.CFG
         t = time.time()
-        dress_record = stage1_dress.run_local(job_dir, engine=dress_engine, steps=dress_steps, seed=None, composite=True, accept_failed=accept_failed_dress, category="", force_upload=force_upload)
+        dress_record = stage1_dress.run_local(job_dir, engine=dress_engine, steps=dress_steps, seed=None, composite=True, accept_failed=accept_failed_dress, category="",
+                                              force_upload=force_upload, plan=plan)
         costs.append(lib.cost_record("stage1b_dress", gpu=dcfg["gpu_dress"], region=dcfg["region"], gpu_seconds=dress_record["cost"]["gpu_seconds"], wall_seconds=time.time() - t))
         summary["stage1b"] = {
             "engine": dress_engine,
+            "plan": plan,
+            "pairs": {k: (dress_record.get("pairs") or {}).get(k) for k in ("reason", "front", "back", "eligible")} if plan is not None else None,
             "qa_version": dress_record.get("qa_version"),
             "target": dress_record.get("target"),
             "summary": dress_record["summary"],
             "views": [
                 {
-                    **{k: v.get(k) for k in ("view", "invented", "engine", "selection", "method", "mask_source", "qa", "back_view", "still")},
-                    "candidates": [{k: c.get(k) for k in ("engine", "qa", "back_view", "error", "seconds")} for c in v.get("candidates", [])],
+                    **{k: v.get(k) for k in ("view", "invented", "engine", "candidate", "selection", "method", "mask_source", "qa", "back_view", "still", "still_pixel_sha256")},
+                    "candidates": [{k: c.get(k) for k in ("id", "engine", "qa", "back_view", "error", "seconds")} for c in v.get("candidates", [])],
                 }
                 for v in dress_record["views"]
             ],

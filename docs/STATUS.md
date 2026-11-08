@@ -261,6 +261,20 @@ pins each recomposed still by the hash of its decoded pixels (identical with num
 failure text for "our mannequin beside" no longer blames shoulder caps; the reuse options are checked before the upload.
 Run 16b (proposed): **azure only**, about $1.6-1.7; the palazzo (passes 0.10.1) waits for the founder's sign-off on Qwen's
 invented pockets and darker print.
+Run 17a prep → **0.11.0** + Qwen prompt 0.2.0 (README, "Stage 1b for run 17a"; not run on a GPU): two causes of the open
+products were our Qwen input and are fixed. The cardigan back was told "no closed pullover, no high round neckline",
+exactly what its shop back shows, and nothing said each sleeve keeps its side. The blouse's two views named different
+colours ("cream" / "peach", shop cut-outs 4.7 apart): one phrase now names both when the cut-outs are one colour. The
+rest is how the engines drew (the skirt's low front waist, the blouse's 0.0003 torso-cover miss), so 17a draws more:
+a draw plan runs several seeds of both engines per view in one container, can KEEP a view from the earlier run (the
+skirt's good FASHN back, re-scored with the current QA, never redrawn), and picks the front/back pair only when the
+pair checks already in the app (back view, view agreement incl. the waistband, view colour) pass. No threshold changed.
+Every stage 1b run now moves the earlier `stage1b/` into `stage1b/history/` (no stale candidates). Replayed on run 16a
+on CPU: every 0.10.1 verdict holds, and azure's and the palazzo's finalized stills are pixel-identical to the reviewed
+16b hashes; a smoke run with stub models ran every line of the new GPU path. Run 17a (proposed, stage 1b only): skirt,
+blouse and cardigan, about $1.0-1.2 (at most about $1.5); the blouse and cardigan keep run 16a's Qwen fronts (their failures are the proxy's), every keep names its seed, and the cardigan line is a diagnostic of the 0.2.0 back prompt. Expected to stay open and flagged: the uncovered shoulder caps
+of our proxy, the blouse proxy shorter than the garment, the fitted outerwear proxy against an oversized knit (all
+exporter changes with new job ids: the founder's decision).
 
 **Stage 4t** (`spikes/garment-engine/src/templateFit.ts`, `bake.ts`, `stage4t.ts`;
 `pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic]`): the

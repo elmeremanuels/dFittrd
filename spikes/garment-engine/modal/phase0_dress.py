@@ -69,6 +69,12 @@ to the hem for a dress, flat neutral material) at the front and back camera (`dr
     (``view_agreement`` top gap, TYPE). ``compose_candidate`` is the one path the GPU app and the replay share;
     ``recompose_job`` re-makes a finished job's stills on CPU (run 16b: stage 2 pins what was reviewed).
 
+``for run 17a`` (stage1b-qa-0.11.0)
+    A draw plan (lib.parse_draw_plan) draws several seeds of both engines per view; ``finalize_draws`` scores every candidate
+    with the replay code and ``pick_pair`` takes a front/back pair only when the pair checks the one-pair app applies all pass
+    (``back_view_checks``, ``view_agreement``, ``view_colour``). ``import_kept`` carries a candidate over from an earlier run
+    of the same job (``archive_stage1b`` moves that run into stage1b/history/), re-scored, never redrawn. No threshold changed.
+
 ``back_view_checks``
     The back still must not be a front: its garment matches the proxy's back silhouette (in ``still_qa``),
     it differs from the mirrored front still at least half as much as the shop's back photo differs from
@@ -96,7 +102,7 @@ if _HERE not in sys.path:
 
 import phase0_garment as pg  # noqa: E402
 
-STAGE1B_QA_VERSION = "stage1b-qa-0.10.1"
+STAGE1B_QA_VERSION = "stage1b-qa-0.11.0"
 
 # The proxy is dilated by this share of the frame height to give the edit region (0.03 of 832 px = 25 px, about 10 cm
 # at the turntable distance): enough for ease and a fuller flare, small enough that the region keeps the proxy's
@@ -2374,43 +2380,146 @@ def pick_engine(candidates: Sequence[Mapping[str, Any]], prefer: str | None = No
         f = _fid(c)
         return (round(float(f["score"]), 2) if f and f.get("score") is not None else -1.0, float(c["qa"].get("score") or 0.0))
 
-    fid_failed = [c["engine"] for c in ok if (_fid(c) or {}).get("pass") is False]
-    passing = [c for c in ok if c["qa"].get("pass") and c["engine"] not in fid_failed]
+    def best_of(pool: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
+        # max() keeps the first of equal keys: the earlier candidate (FASHN before Qwen, the lower seed) wins a tie
+        return max(pool, key=key)
+
+    # stage1b-qa-0.11.0: a candidate is named by `id` (lib.candidate_id: the engine, or engine@seed for a draw plan); the
+    # returned `engine` is the picked candidate's engine and `candidate` its id (equal for a run with one draw per engine).
+    fid_failed = [cid(c) for c in ok if (_fid(c) or {}).get("pass") is False]
+    passing = [c for c in ok if c["qa"].get("pass") and cid(c) not in fid_failed]
     out: dict[str, Any] = {
         "order": "pass all hard checks -> highest print fidelity -> highest silhouette score; a fidelity failure is never picked",
-        "passed": [c["engine"] for c in passing],
+        "passed": [cid(c) for c in passing],
         "fidelity_failed": fid_failed,
-        "scores": {c["engine"]: c["qa"].get("score") for c in ok},
-        "fidelity": {c["engine"]: (_fid(c) or {}).get("score") for c in ok},
+        "scores": {cid(c): c["qa"].get("score") for c in ok},
+        "fidelity": {cid(c): (_fid(c) or {}).get("score") for c in ok},
         "rejected_still": None,
     }
+    picked = lambda c, **kw: {**out, "engine": c["engine"], "candidate": cid(c), **kw}  # noqa: E731
     if not ok:
-        return {**out, "engine": None, "reason": "every engine failed with an error"}
+        return {**out, "engine": None, "candidate": None, "reason": "every engine failed with an error"}
     if passing:
-        best = max(passing, key=key)
+        best = best_of(passing)
         why = "the only candidate that passes every check" if len(passing) == 1 else "passes every check; highest print fidelity, then silhouette score"
-        same = next((c for c in passing if c["engine"] == prefer), None)
+        same_pool = [c for c in passing if c["engine"] == prefer]
+        same = best_of(same_pool) if same_pool else None
         if same is not None and same is not best:
             fb, fs = (_fid(best) or {}).get("score"), (_fid(same) or {}).get("score")
             if fb is not None and fs is not None and float(fs) >= float(fb) - SAME_ENGINE_MARGIN:
-                return {**out, "engine": same["engine"], "prefer": prefer,
-                        "reason": f"passes every check; the front's engine, its print fidelity {float(fs):.3f} within {SAME_ENGINE_MARGIN} of the best ({best['engine']} {float(fb):.3f})"}
-        return {**out, "engine": best["engine"], "reason": why, "prefer": prefer}
-    pool = [c for c in ok if c["engine"] not in fid_failed]
+                return picked(same, prefer=prefer,
+                              reason=f"passes every check; the front's engine, its print fidelity {float(fs):.3f} within {SAME_ENGINE_MARGIN} of the best ({cid(best)} {float(fb):.3f})")
+        return picked(best, reason=why, prefer=prefer)
+    pool = [c for c in ok if cid(c) not in fid_failed]
     # A candidate with a TYPE failure (a different garment drawn: trousers as a skirt, torn, shrunken) is shown only when
     # every candidate has one: with --accept-failed-dress a still that fails only provisional checks can still be used,
     # and run 16's palazzo runs both engines so Qwen's two legs can stand in for FASHN's skirt.
     typed_ok = [c for c in pool if not (c["qa"].get("type_failures") or [])]
-    out["type_failed"] = [c["engine"] for c in ok if (c["qa"].get("type_failures") or [])]
+    out["type_failed"] = [cid(c) for c in ok if (c["qa"].get("type_failures") or [])]
     if typed_ok:
-        best = max(typed_ok, key=key)
         why = "no engine passed QA: best of the candidates without a type failure whose print fidelity did not fail, rejected"
-        return {**out, "engine": best["engine"], "reason": why}
+        return picked(best_of(typed_ok), reason=why)
     if pool:
-        best = max(pool, key=key)
-        return {**out, "engine": best["engine"], "reason": "no engine passed QA: best of the candidates whose print fidelity did not fail, rejected"}
-    best = max(ok, key=key)
-    return {**out, "engine": None, "rejected_still": best["engine"], "reason": "no engine passed QA and every candidate failed print fidelity: none picked; the highest fidelity is kept as rejected"}
+        return picked(best_of(pool), reason="no engine passed QA: best of the candidates whose print fidelity did not fail, rejected")
+    best = best_of(ok)
+    return {**out, "engine": None, "candidate": None, "rejected_still": cid(best),
+            "reason": "no engine passed QA and every candidate failed print fidelity: none picked; the highest fidelity is kept as rejected"}
+
+
+def cid(c: Mapping[str, Any]) -> str:
+    """A candidate record's name (lib.candidate_id): `id`, else its `engine` (records before stage1b-qa-0.11.0)."""
+    return str(c.get("id") or c["engine"])
+
+
+def shown_candidate(decision: Mapping[str, Any]) -> str | None:
+    """The candidate a view shows: the picked one, else the one kept as rejected (every candidate failed print fidelity)."""
+    return decision.get("candidate") or decision.get("rejected_still")
+
+
+# --- several draws per view: pick the front/back PAIR (stage1b-qa-0.11.0, run 17a) ---------------------------------------
+#
+# Run 16a drew one candidate per engine and view and picked each view on its own; a front and back that each passed could still
+# disagree (the skirt: FASHN's back waist 0.034, its front 0.113 below the proxy's top; the blouse: a cream front and an
+# orange-brown back). With a draw plan (lib.parse_draw_plan: several seeds, both engines, a view kept from the earlier run)
+# every front that passes is paired with every back that passes, and a pair is eligible only when the SAME pair checks the
+# single-pair app applies all pass: back_view_checks, view_agreement (length, sleeves, waistband: a TYPE check) and
+# view_colour. No threshold is changed. Among eligible pairs: same engine first (one drawing style), then the higher of the
+# two views' lower print fidelity (2 decimals), then the higher lower silhouette score; the earlier pair wins a tie. Every
+# pair is recorded with its failures. When no pair is eligible the views are shown by the per-view order (pick_engine) and
+# the pair checks of that shown pair fail the back, as before.
+
+PAIR_ORDER = ("eligible = both candidates pass every check of their own and back_view, view_agreement and view_colour pass for the pair; "
+              "then same engine -> higher min print fidelity (2 decimals) -> higher min silhouette score -> earlier pair")
+
+
+def _own_ok(c: Mapping[str, Any]) -> bool:
+    return "error" not in c and bool((c.get("qa") or {}).get("pass")) and (_fid(c) or {}).get("pass") is not False
+
+
+def pair_checks(front: tuple[np.ndarray, np.ndarray], back: tuple[np.ndarray, np.ndarray], front_qa: Mapping[str, Any] | None,
+                back_qa: Mapping[str, Any] | None, shop_front: tuple[np.ndarray, np.ndarray] | None,
+                shop_back: tuple[np.ndarray, np.ndarray] | None) -> dict[str, Any]:
+    """The checks between one front and one back still (each (rgb, garment mask)), exactly those the single-pair app applies to
+    its back: `back_view_checks` (only with both shop photos), `view_agreement` on the two `garment_body` records, `view_colour`."""
+    if shop_front is not None and shop_back is not None:
+        bv = back_view_checks(front[0], front[1], back[0], back[1], shop_front[0], shop_front[1], shop_back[0], shop_back[1])
+    else:
+        bv = {"pass": None, "failures": [], "note": "not checked: no front and back shop photo"}
+    va = view_agreement((front_qa or {}).get("garment_body"), (back_qa or {}).get("garment_body"))
+    vc = view_colour(front, back, shop_front, shop_back)
+    return {"back_view": bv, "view_agreement": va, "view_colour": vc}
+
+
+def pick_pair(fronts: Sequence[Mapping[str, Any]], backs: Sequence[Mapping[str, Any]], checks: Mapping[tuple[str, str], Mapping[str, Any]]) -> dict[str, Any]:
+    """`fronts` / `backs`: candidate records (id or engine, qa with pass and fidelity); `checks`: (front id, back id) -> `pair_checks`
+    (pairs missing from it are not eligible). Returns the pair table (every pair with its failures) and the picked ids, or None
+    for both when no pair is eligible (the caller then shows the views by `pick_engine`)."""
+    table: list[dict[str, Any]] = []
+    best_key: tuple | None = None
+    best: dict[str, Any] | None = None
+    for i, f in enumerate(fronts):
+        for j, b in enumerate(backs):
+            fails: list[str] = []
+            for side, c in (("front", f), ("back", b)):
+                if "error" in c:
+                    fails.append(f"{side} {cid(c)}: {c['error']}")
+                elif not _own_ok(c):
+                    fails.append(f"{side} {cid(c)}: fails its own QA ({len((c.get('qa') or {}).get('failures') or [])} failures)")
+            chk = checks.get((cid(f), cid(b)))
+            if chk is None:
+                fails.append("pair checks not run")
+            else:
+                for name in ("back_view", "view_agreement", "view_colour"):
+                    fails += [f"{name}: {x}" for x in (chk.get(name) or {}).get("failures") or []]
+            ff, fb = (_fid(f) or {}).get("score"), (_fid(b) or {}).get("score")
+            min_fid = None if ff is None or fb is None else round(min(float(ff), float(fb)), 4)
+            sf, sb = (f.get("qa") or {}).get("score"), (b.get("qa") or {}).get("score")
+            min_score = None if sf is None or sb is None else round(min(float(sf), float(sb)), 4)
+            row = {"front": cid(f), "back": cid(b), "same_engine": f.get("engine") == b.get("engine"), "min_fidelity": min_fid, "min_score": min_score,
+                   "eligible": not fails, "failures": fails}
+            # the margins a reviewer weighs (review of 0.11.0: the pick does not rank by them): torso cover per view and
+            # each view's waistband (garment top below the proxy's top, a share of the proxy's length)
+            for side, c in (("front", f), ("back", b)):
+                q = c.get("qa") or {}
+                row[f"{side}_torso_cover"] = (q.get("silhouette_band") or {}).get("torso_cover")
+                row[f"{side}_top_offset"] = (q.get("garment_body") or {}).get("top_offset")
+            if chk is not None:
+                row["delta_e"] = (chk.get("view_colour") or {}).get("delta_e")
+                row["top_gap"] = (chk.get("view_agreement") or {}).get("top_gap")
+            table.append(row)
+            if not fails:
+                k = (row["same_engine"], round(min_fid if min_fid is not None else -1.0, 2), min_score if min_score is not None else 0.0, -(i * len(backs) + j))
+                if best_key is None or k > best_key:
+                    best_key, best = k, row
+    n_ok = sum(r["eligible"] for r in table)
+    out = {"order": PAIR_ORDER, "pairs": table, "eligible": n_ok, "front": None, "back": None}
+    if best is None:
+        out["reason"] = f"no eligible pair among {len(table)}: the views are shown by the per-view order, rejected"
+        return out
+    out.update({"front": best["front"], "back": best["back"],
+                "reason": f"{n_ok} of {len(table)} pairs eligible; picked {best['front']} + {best['back']}"
+                          f"{' (same engine)' if best['same_engine'] else ''}, min print fidelity {best['min_fidelity']}, min silhouette score {best['min_score']}"})
+    return out
 
 
 def front_reference(qa: Mapping[str, Any], accept_failed: bool) -> tuple[bool, str | None]:
@@ -2546,6 +2655,43 @@ def _read_rgb(path: str) -> np.ndarray:
     return np.asarray(Image.open(path).convert("RGB"))
 
 
+def candidate_entries(job_dir: str, view: str) -> list[tuple[str, str]]:
+    """(id, stem) of every candidate of `view` in a finished stage 1b job: `raw/<stem>.png` with
+    `candidates/<stem>_garment_mask.png` (lib.parse_candidate_stem: `front_fashn`, `front_qwen_s44`). Ordered FASHN before Qwen,
+    then by seed: the order ties are broken in. `stage1b/history/` (earlier runs) is not looked at."""
+    import phase0_lib as lib
+
+    raw_dir = os.path.join(job_dir, lib.STAGE1B_DIR, "raw")
+    found: list[tuple[int, int, str, str]] = []
+    for fn in sorted(os.listdir(raw_dir)) if os.path.isdir(raw_dir) else []:
+        stem, ext = os.path.splitext(fn)
+        parsed = lib.parse_candidate_stem(stem) if ext == ".png" else None
+        if parsed is None or parsed[0] != view:
+            continue
+        if not os.path.exists(os.path.join(job_dir, lib.STAGE1B_DIR, "candidates", f"{stem}_garment_mask.png")):
+            continue
+        eng, _, seed = parsed[1].partition("@")
+        found.append((lib.STAGE1B_ENGINES.index(eng), int(seed) if seed else -1, parsed[1], stem))
+    return [(c, st) for _, _, c, st in sorted(found)]
+
+
+def chosen_mask_from_saved(raw_engine: np.ndarray, saved: np.ndarray, region: np.ndarray, *, chosen_path: str | None, conformed_path: str | None,
+                           app_saved: bool, mask_source: str | None, target: np.ndarray | None, bg: Sequence[int]) -> tuple[np.ndarray, str]:
+    """The chosen mask (before the composite's additions and the conforms) from which the app path is rebuilt, and where it came from:
+    0.10.0+: saved by the app;  before 0.8.0: the saved mask is the chosen one;  0.8.0 / 0.9.0: the difference prior when that was
+    chosen (exact, recomputed), else the saved composite mask with the conform inverted (estimate)."""
+    if chosen_path and os.path.exists(chosen_path):
+        return _read_mask(chosen_path) & region, "the chosen mask the app saved"
+    if not app_saved:
+        return saved & region, "the saved (chosen) mask of a job before 0.8.0"
+    if str(mask_source or "").startswith("difference") and target is not None:
+        return garment_prior(raw_engine, target, region, bg) & region, "the difference prior, recomputed (exact)"
+    if conformed_path and os.path.exists(conformed_path):
+        um, urec = unconform_mask(_read_rgb(conformed_path), raw_engine, saved)
+        return um & region, f"the saved composite mask with the conform inverted ({urec['rows']} rows, match error {urec['median_match_error_8bit']}; an estimate, a superset of the chosen mask)"
+    return saved & region, "the saved composite mask (no conform applied; a superset of the chosen mask)"
+
+
 def rescore_job(job_dir: str, manifest: Mapping[str, Any], path: str = "app", stills_dir: str | None = None,
                 pins: Mapping[str, str] | None = None) -> dict[str, Any]:
     """QA v2 on the stage 1b outputs already in `job_dir`, per engine candidate when the job has them
@@ -2562,7 +2708,12 @@ def rescore_job(job_dir: str, manifest: Mapping[str, Any], path: str = "app", st
     for 0.8.0 / 0.9.0 jobs the difference prior recomputed when that was chosen, else the saved composite mask with the
     conform inverted by `unconform_mask`, an estimate; `composite_mask.chosen_basis` says which). "pasted" scores the
     masks the run actually pasted (run 15: its difference / SAM 2 masks, the torn blouse), with the conform only replayed.
-    `stills_dir`: write each candidate's replayed composite and mask there, to look at. `pins`: view -> engine."""
+    `stills_dir`: write each candidate's replayed composite and mask there, to look at. `pins`: view -> candidate (an engine, or
+    engine@seed for a draw plan's candidates).
+
+    stage1b-qa-0.11.0: candidates are found by file name (`candidate_entries`), so a draw plan's several seeds per view are
+    scored too; when any candidate is named engine@seed the front/back PAIR is picked (`pick_pair`, `pairs` in the result),
+    else each view by `pick_engine` as before."""
     import json
 
     import phase0_lib as lib
@@ -2604,6 +2755,7 @@ def rescore_job(job_dir: str, manifest: Mapping[str, Any], path: str = "app", st
             shops[role] = (np.asarray(img), m)
             out["colour"][role] = garment_colour(shops[role][0], m)
     picked: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    all_arrays: dict[str, dict[str, tuple[np.ndarray, np.ndarray]]] = {}
     for v in spec["views"]:
         name, frame = v["view"], int(v["frame"])
         proxy_rel = v.get("proxy_mask") or f"{manifest['control']['proxy_mask_dir']}/{frame:04d}.png"
@@ -2617,16 +2769,18 @@ def rescore_job(job_dir: str, manifest: Mapping[str, Any], path: str = "app", st
         proxy_q = qa_proxy(proxy, gap)
         target = _read_rgb(p(v["proxy_rgb"])) if v.get("proxy_rgb") else None
         shop = shops.get(name if not v.get("invented") else "front")
-        engines = [e for e in ("fashn", "qwen") if os.path.exists(p(f"{lib.STAGE1B_DIR}/raw/{name}_{e}.png")) and os.path.exists(p(f"{lib.STAGE1B_DIR}/candidates/{name}_{e}_garment_mask.png"))]
+        found = candidate_entries(job_dir, name)
+        ids = [c for c, _ in found]
         if pins and pins.get(name):
-            # `pins` (view -> engine): only that engine's candidate is scored and can be picked (run 16b reuses run 16a's
-            # outputs with the engine chosen per view after review)
-            if pins[name] not in engines:
-                raise ValueError(f"{name}: pinned engine {pins[name]!r} has no candidate in this job (have {engines})")
-            engines = [pins[name]]
-        entries = [(e, f"{lib.STAGE1B_DIR}/raw/{name}_{e}.png", f"{lib.STAGE1B_DIR}/candidates/{name}_{e}_garment_mask.png", f"{lib.STAGE1B_DIR}/candidates/{name}_{e}_garment_mask_unclipped.png") for e in engines]
+            # `pins` (view -> candidate): only that candidate is scored and can be picked (run 16b reuses run 16a's outputs with
+            # the engine chosen per view after review; a draw plan's candidates are pinned as engine@seed)
+            if pins[name] not in ids:
+                raise ValueError(f"{name}: pinned engine {pins[name]!r} has no candidate in this job (have {ids})")
+            found = [(c, st) for c, st in found if c == pins[name]]
+        entries = [(c, f"{lib.STAGE1B_DIR}/raw/{st}.png", f"{lib.STAGE1B_DIR}/candidates/{st}_garment_mask.png",
+                    f"{lib.STAGE1B_DIR}/candidates/{st}_garment_mask_unclipped.png", st) for c, st in found]
         if not entries:
-            entries = [(None, f"{lib.STAGE1B_DIR}/raw/{name}.png", v["garment_mask"], v.get("garment_mask_unclipped") or f"{lib.STAGE1B_DIR}/garment_mask_unclipped_{name}.png")]
+            entries = [(None, f"{lib.STAGE1B_DIR}/raw/{name}.png", v["garment_mask"], v.get("garment_mask_unclipped") or f"{lib.STAGE1B_DIR}/garment_mask_unclipped_{name}.png", f"{name}_still")]
         cands: list[dict[str, Any]] = []
         arrays: dict[str, tuple[np.ndarray, np.ndarray]] = {}
         saved_cands = {}
@@ -2634,30 +2788,23 @@ def rescore_job(job_dir: str, manifest: Mapping[str, Any], path: str = "app", st
             with open(rec_path, encoding="utf-8") as f:
                 for sv in json.load(f).get("views", []):
                     if sv.get("view") == name:
-                        saved_cands = {c.get("engine"): c for c in sv.get("candidates", [])}
-        for eng, raw_rel, mask_rel, unclipped_rel in entries:
-            conformed_rel = f"{lib.STAGE1B_DIR}/candidates/{name}_{eng}_conformed.png" if eng else None
-            chosen_rel = f"{lib.STAGE1B_DIR}/candidates/{name}_{eng}_chosen_mask.png" if eng else None
+                        saved_cands = {cid(c): c for c in sv.get("candidates", []) if c.get("id") or c.get("engine")}
+        for eng, raw_rel, mask_rel, unclipped_rel, stem in entries:
+            conformed_rel = f"{lib.STAGE1B_DIR}/candidates/{stem}_conformed.png" if eng else None
+            chosen_rel = f"{lib.STAGE1B_DIR}/candidates/{stem}_chosen_mask.png" if eng else None
             saved = _read_mask(p(mask_rel))
             garment_full = _read_mask(p(unclipped_rel)) if os.path.exists(p(unclipped_rel)) else saved
             raw_engine = _read_rgb(p(raw_rel))  # the engine's output, never conformed
             conformed = None
+            src_c = saved_cands.get(eng) or {}
             if rebuild:
-                # The chosen mask (before the composite's additions and the conforms), from which the app path is rebuilt:
-                #   0.10.0+: saved by the app;  before 0.8.0: the saved mask is the chosen one;  0.8.0 / 0.9.0: the difference
-                #   prior when that was chosen (exact, recomputed), else the saved composite mask with the conform inverted (estimate).
-                src_c = saved_cands.get(eng) or {}
-                if chosen_rel and os.path.exists(p(chosen_rel)):
-                    chosen, basis = _read_mask(p(chosen_rel)) & region, "the chosen mask the app saved"
-                elif not app_saved:
-                    chosen, basis = saved & region, "the saved (chosen) mask of a job before 0.8.0"
-                elif str(src_c.get("mask_source") or "").startswith("difference") and target is not None:
-                    chosen, basis = garment_prior(raw_engine, target, region, bg) & region, "the difference prior, recomputed (exact)"
-                elif conformed_rel and os.path.exists(p(conformed_rel)):
-                    um, urec = unconform_mask(_read_rgb(p(conformed_rel)), raw_engine, saved)
-                    chosen, basis = um & region, f"the saved composite mask with the conform inverted ({urec['rows']} rows, match error {urec['median_match_error_8bit']}; an estimate, a superset of the chosen mask)"
-                else:
-                    chosen, basis = saved & region, "the saved composite mask (no conform applied; a superset of the chosen mask)"
+                chosen, basis = chosen_mask_from_saved(raw_engine, saved, region, chosen_path=p(chosen_rel) if chosen_rel else None,
+                                                       conformed_path=p(conformed_rel) if conformed_rel else None, app_saved=app_saved,
+                                                       mask_source=src_c.get("mask_source"), target=target, bg=bg)
+                kept_from = src_c.get("kept") or (src_c.get("drawn") or {}).get("kept") or {}  # a draw record, or a finalized one
+                if kept_from.get("chosen_mask_basis"):
+                    # a candidate kept from an earlier run (`import_kept`): its chosen mask was rebuilt then, from that run's files
+                    basis = f"kept from {kept_from.get('from')}: {kept_from['chosen_mask_basis']}"
                 raw, garment, comp = compose_candidate(raw_engine, chosen, bare, bare_rgb, proxy_q, region, bg, kind=kind, gap=gap)
                 comp["chosen_basis"] = basis
                 conformed = {**comp["conform"], "basis": "app path: compose_candidate (still_garment_mask, conform_to_proxy, conform_edges)"}
@@ -2694,7 +2841,9 @@ def rescore_job(job_dir: str, manifest: Mapping[str, Any], path: str = "app", st
                 conformed = c_rec
             label = eng or "still"
             cands.append({
-                "engine": label,
+                "id": label,
+                "engine": label.partition("@")[0],
+                "seed": int(label.partition("@")[2]) if "@" in label else src_c.get("seed"),
                 "raw": raw_rel,
                 "garment_mask": mask_rel,
                 "garment_mask_unclipped": unclipped_rel if os.path.exists(p(unclipped_rel)) else f"{mask_rel} (no unclipped mask: used as is)",
@@ -2710,24 +2859,49 @@ def rescore_job(job_dir: str, manifest: Mapping[str, Any], path: str = "app", st
                 from PIL import Image
 
                 os.makedirs(stills_dir, exist_ok=True)
-                Image.fromarray(np.where(garment[..., None], raw, bare_rgb).astype(np.uint8)).save(os.path.join(stills_dir, f"{name}_{label}.png"))
-                Image.fromarray(garment.astype(np.uint8) * 255).save(os.path.join(stills_dir, f"{name}_{label}_mask.png"))
-                cands[-1]["replayed_still"] = os.path.join(stills_dir, f"{name}_{label}.png")
-                cands[-1]["replayed_mask"] = os.path.join(stills_dir, f"{name}_{label}_mask.png")
-        decision = pick_engine(cands, prefer=out["views"].get("front", {}).get("selection", {}).get("engine") if name == "back" else None)
-        shown = decision["engine"] or decision.get("rejected_still")
+                Image.fromarray(np.where(garment[..., None], raw, bare_rgb).astype(np.uint8)).save(os.path.join(stills_dir, f"{stem}.png"))
+                Image.fromarray(garment.astype(np.uint8) * 255).save(os.path.join(stills_dir, f"{stem}_mask.png"))
+                cands[-1]["replayed_still"] = os.path.join(stills_dir, f"{stem}.png")
+                cands[-1]["replayed_mask"] = os.path.join(stills_dir, f"{stem}_mask.png")
         out["views"][name] = {
             "proxy_mask": proxy_rel,
             "edit_region": region_rec,
             "mannequin_grey": grey_collision(bare_rgb, bare),
             "candidates": cands,
-            "selection": decision,
-            "qa": next(c["qa"] for c in cands if c["engine"] == shown) if shown else None,
         }
-        if shown:
-            picked[name] = arrays[shown]
+        all_arrays[name] = arrays
     bv = next(v for v in spec["views"] if v["view"] == "back")
-    if not bv.get("invented") and "back" in src and {"front", "back"} <= set(shops) and {"front", "back"} <= set(picked):
+    real_back = not bv.get("invented") and "back" in src
+    pair_mode = any("@" in c["id"] for vv in out["views"].values() for c in vv["candidates"])
+    decisions: dict[str, dict[str, Any]] = {}
+    if pair_mode and {"front", "back"} <= set(out["views"]):
+        fr, bk = out["views"]["front"]["candidates"], out["views"]["back"]["candidates"]
+        shop_f, shop_b = shops.get("front"), (shops.get("back") if real_back else None)
+        checks = {}
+        for f in fr:
+            for b in bk:
+                if f["id"] in all_arrays["front"] and b["id"] in all_arrays["back"]:
+                    checks[(f["id"], b["id"])] = pair_checks(all_arrays["front"][f["id"]], all_arrays["back"][b["id"]], f["qa"], b["qa"], shop_f, shop_b)
+        pp = pick_pair(fr, bk, checks)
+        out["pairs"] = pp
+        for name, side in (("front", fr), ("back", bk)):
+            d = pick_engine(side)
+            if pp[name] is not None:
+                c = next(x for x in side if x["id"] == pp[name])
+                d = {**d, "engine": c["engine"], "candidate": c["id"], "rejected_still": None, "reason": f"pair: {pp['reason']}"}
+            decisions[name] = d
+        if pp["front"] is None:
+            decisions["back"] = pick_engine(bk, prefer=decisions["front"].get("engine"))
+    for name in out["views"]:
+        if name not in decisions:
+            decisions[name] = pick_engine(out["views"][name]["candidates"], prefer=decisions.get("front", {}).get("engine") if name == "back" else None)
+        decision = decisions[name]
+        shown = shown_candidate(decision)
+        out["views"][name]["selection"] = decision
+        out["views"][name]["qa"] = next(c["qa"] for c in out["views"][name]["candidates"] if c["id"] == shown) if shown else None
+        if shown:
+            picked[name] = all_arrays[name][shown]
+    if real_back and {"front", "back"} <= set(shops) and {"front", "back"} <= set(picked):
         (sf, sfm), (sb, sbm) = shops["front"], shops["back"]
         out["back_view"] = back_view_checks(picked["front"][0], picked["front"][1], picked["back"][0], picked["back"][1], sf, sfm, sb, sbm)
         out["back_view"]["note"] = "the picked (or shown-as-rejected) front and back candidates, whether or not the front passed"
@@ -2753,17 +2927,69 @@ RECOMPOSE_LABEL = ("RECOMPOSED on CPU from an earlier stage 1b run's saved engin
                    "conforms and the QA of the current version on the same raw stills, so a later stage 2 pins stills that were reviewed")
 
 
-def recompose_job(job_dir: str, manifest: Mapping[str, Any], *, pins: Mapping[str, str] | None = None, accept_failed: bool = False) -> dict[str, Any]:
-    """Re-make a finished stage 1b job's pinned stills with the CURRENT composite and QA from its saved raw engine outputs
-    (stage1b-qa-0.10.0, run 16b): `rescore_job(path="app")` per view (only the `pins` engine when given), then, like
-    `stage1_dress.dress`, our bare render with the picked candidate pasted is written to the manifest's still path when its
-    QA passes (or with `accept_failed`; a type failure still stops stage 2 in `run_phase0._dress_gate`), else to
-    `rejected/`. The masks and record.json are rewritten; the run's own record is kept as `record.before_recompose.json`.
-    Refuses a job whose stage 1b record was made for other inputs (input_hash)."""
-    import json
+def write_stills(job_dir: str, manifest: Mapping[str, Any], scored: Mapping[str, Any], *, accept_failed: bool) -> list[dict[str, Any]]:
+    """The pinned stills from a `rescore_job(path="app", stills_dir=...)` result, as `stage1_dress.dress` writes them: per view our
+    bare render with the shown candidate pasted goes to the manifest's still path when its QA passes (or with `accept_failed`;
+    a type failure still stops stage 2 in `run_phase0._dress_gate`), else to `rejected/`; an earlier still is removed first.
+    Records the file and pixel sha256 of each still. Returns the view records."""
+    import hashlib
     import shutil
 
     from PIL import Image
+
+    import phase0_lib as lib
+
+    out_dir = os.path.join(job_dir, lib.STAGE1B_DIR)
+    views = []
+    for v in manifest["stage1b"]["views"]:
+        name = v["view"]
+        sv = scored["views"][name]
+        sel = sv["selection"]
+        shown = shown_candidate(sel)
+        cand = next((c for c in sv["candidates"] if c["id"] == shown), None)
+        still_path = os.path.join(job_dir, v["still"])
+        if os.path.exists(still_path):
+            os.remove(still_path)  # never leave the earlier run's still behind
+        rec: dict[str, Any] = {"view": name, "frame": v["frame"], "invented": v.get("invented", False), "engine": None if cand is None else cand["engine"],
+                               "candidate": shown, "selection": sel, "qa": None if cand is None else cand["qa"], "candidates": sv["candidates"]}
+        if cand is not None:
+            qa = cand["qa"]
+            img = Image.open(cand["replayed_still"]).convert("RGB")
+            if qa["pass"] or accept_failed:
+                img.save(still_path)
+                shutil.copyfile(cand["replayed_mask"], os.path.join(job_dir, v["garment_mask"]))
+                rec["still"] = v["still"]
+                with open(still_path, "rb") as f:
+                    rec["still_sha256"] = hashlib.sha256(f.read()).hexdigest()
+                arr = np.asarray(img)
+                rec["still_pixel_sha256"] = lib.pixel_sha256(arr.tobytes(), arr.shape[1], arr.shape[0])
+                rec["qa_overridden"] = not qa["pass"]
+            else:
+                os.makedirs(os.path.join(out_dir, "rejected"), exist_ok=True)
+                rej = f"{lib.STAGE1B_DIR}/rejected/{name}.png"
+                img.save(os.path.join(job_dir, rej))
+                rec["still"] = None
+                rec["rejected"] = rej
+        else:
+            rec["qa"] = {"pass": False, "failures": ["no candidate to show"], "type_failures": []}
+        views.append(rec)
+    return views
+
+
+# What a draw plan's record carries over from the GPU part into the finished record, and through a later recompose.
+_RECOMPOSE_KEYS = ("stage", "job_id", "input_hash", "engine", "engines", "models", "seed", "steps", "category", "tryon_category", "proxy_kind",
+                   "target", "source_kind", "invented_back", "cost")
+_PLAN_KEYS = ("gpu_name", "load_seconds", "plan", "kept", "archived", "prompt_version", "colour_phrases")
+_RUN_KEYS = _RECOMPOSE_KEYS + _PLAN_KEYS
+
+
+def recompose_job(job_dir: str, manifest: Mapping[str, Any], *, pins: Mapping[str, str] | None = None, accept_failed: bool = False) -> dict[str, Any]:
+    """Re-make a finished stage 1b job's pinned stills with the CURRENT composite and QA from its saved raw engine outputs
+    (stage1b-qa-0.10.0, run 16b): `rescore_job(path="app")` per view (only the `pins` candidate when given), then `write_stills`.
+    The masks and record.json are rewritten; the run's own record is kept as `record.before_recompose.json`.
+    Refuses a job whose stage 1b record was made for other inputs (input_hash)."""
+    import json
+    import shutil
 
     import phase0_lib as lib
 
@@ -2784,43 +3010,10 @@ def recompose_job(job_dir: str, manifest: Mapping[str, Any], *, pins: Mapping[st
     stills_tmp = os.path.join(out_dir, "recomposed")
     scored = rescore_job(job_dir, manifest, path="app", stills_dir=stills_tmp, pins=pins)
     spec = manifest["stage1b"]
-    views = []
-    for v in spec["views"]:
-        name = v["view"]
-        sv = scored["views"][name]
-        sel = sv["selection"]
-        shown = sel["engine"] or sel.get("rejected_still")
-        cand = next((c for c in sv["candidates"] if c["engine"] == shown), None)
-        still_path = os.path.join(job_dir, v["still"])
-        if os.path.exists(still_path):
-            os.remove(still_path)  # never leave the earlier run's still behind
-        rec: dict[str, Any] = {"view": name, "frame": v["frame"], "invented": v.get("invented", False), "engine": shown, "selection": sel,
-                               "qa": None if cand is None else cand["qa"], "candidates": sv["candidates"]}
-        if cand is not None:
-            qa = cand["qa"]
-            img = Image.open(cand["replayed_still"]).convert("RGB")
-            if qa["pass"] or accept_failed:
-                img.save(still_path)
-                shutil.copyfile(cand["replayed_mask"], os.path.join(job_dir, v["garment_mask"]))
-                rec["still"] = v["still"]
-                with open(still_path, "rb") as f:
-                    import hashlib
-
-                    rec["still_sha256"] = hashlib.sha256(f.read()).hexdigest()
-                arr = np.asarray(img)
-                rec["still_pixel_sha256"] = lib.pixel_sha256(arr.tobytes(), arr.shape[1], arr.shape[0])
-                rec["qa_overridden"] = not qa["pass"]
-            else:
-                os.makedirs(os.path.join(out_dir, "rejected"), exist_ok=True)
-                rej = f"{lib.STAGE1B_DIR}/rejected/{name}.png"
-                img.save(os.path.join(job_dir, rej))
-                rec["still"] = None
-                rec["rejected"] = rej
-        else:
-            rec["qa"] = {"pass": False, "failures": ["no candidate to show"], "type_failures": []}
-        views.append(rec)
-    record = {k: before.get(k) for k in ("stage", "job_id", "input_hash", "engine", "engines", "models", "seed", "steps", "category", "tryon_category",
-                                         "proxy_kind", "target", "source_kind", "invented_back", "cost")}
+    views = write_stills(job_dir, manifest, scored, accept_failed=accept_failed)
+    _merge_provenance(views, before)
+    record = {k: before.get(k) for k in _RECOMPOSE_KEYS}
+    record.update({k: before[k] for k in _PLAN_KEYS if k in before})
     record.update({
         "qa_version": STAGE1B_QA_VERSION,
         "recomposed": {"from_qa_version": before.get("qa_version"), "pins": dict(pins or {}), "accept_failed": accept_failed,
@@ -2830,6 +3023,215 @@ def recompose_job(job_dir: str, manifest: Mapping[str, Any], *, pins: Mapping[st
         "view_agreement": scored["view_agreement"],
         "view_colour": scored.get("view_colour"),
         "summary": lib.stage1b_summary(views, invented_back=bool(spec.get("invented_back"))),
+        "label": lib.STAGE1B_LABEL,
+    })
+    if "pairs" in scored:
+        record["pairs"] = scored["pairs"]
+    with open(rec_path, "w", encoding="utf-8") as f:
+        json.dump(record, f, indent=2)
+    return record
+
+
+def _merge_provenance(views: list[dict[str, Any]], run_record: Mapping[str, Any]) -> None:
+    """Adds what the GPU part recorded about each candidate (seed, steps, prompt, method, pose, the FASHN agnostic image, a kept
+    candidate's origin) to the scored candidate records, matched by id; also the view's shop segmentation and edit region."""
+    by_view = {r.get("view"): r for r in run_record.get("views") or []}
+    for v in views:
+        rv = by_view.get(v["view"]) or {}
+        for k in ("source", "source_segmentation", "edit_region", "mannequin_grey", "target", "colour_phrase"):
+            if k in rv and k not in v:
+                v[k] = rv[k]
+        drawn = {cid(c): c for c in rv.get("candidates") or [] if c.get("id") or c.get("engine")}
+        for c in v["candidates"]:
+            d = drawn.get(c["id"])
+            if not d:
+                continue
+            c["drawn"] = {k: d[k] for k in ("seed", "steps", "method", "prompt", "negative_prompt", "prompt_version", "colour_phrase", "pose", "agnostic",
+                                             "model_output_size", "mask_source", "sam_score", "sam_prior_iou", "seconds", "kept", "error") if k in d}
+
+
+# --- run 17a: archive the earlier run, keep a view from it, finish a draw plan ------------------------------------------
+
+
+def archive_stage1b(out_dir: str, stamp: str) -> str | None:
+    """Moves everything in a job's stage1b/ except history/ into stage1b/history/<stamp>/ (stage1b-qa-0.11.0). A new stage 1b run
+    starts clean: run 16a left no stale candidates of another engine or seed for a later replay to pick up (a qwen-only run after
+    a both-engine run kept FASHN's files), and the earlier run stays in the Volume to keep a view from and to audit. Returns the
+    history directory relative to `out_dir`, or None when there was nothing to move."""
+    import shutil
+
+    if not os.path.isdir(out_dir):
+        return None
+    names = [n for n in sorted(os.listdir(out_dir)) if n != "history"]
+    if not names:
+        return None
+    rel = os.path.join("history", stamp)
+    dest = os.path.join(out_dir, rel)
+    k = 1
+    while os.path.exists(dest):
+        k += 1
+        rel = os.path.join("history", f"{stamp}-{k}")
+        dest = os.path.join(out_dir, rel)
+    os.makedirs(dest)
+    for n in names:
+        shutil.move(os.path.join(out_dir, n), os.path.join(dest, n))
+    return rel
+
+
+def find_kept(out_dir: str, view: str, engine: str, seed: int | None, input_hash: str, *, include_current: bool = True) -> dict[str, Any]:
+    """The candidate a draw plan keeps (`keep:<engine>[@seed]`): the newest earlier stage 1b run of THIS job (same input_hash) in
+    `out_dir` (when `include_current`) or `out_dir/history/*` whose record lists a candidate of `view` by `engine` (and `seed`)
+    without an error, with its raw output and garment mask on disk. Raises FileNotFoundError naming what was looked at, and
+    ValueError when no seed is given and that run has more than one candidate of `engine` for `view` (keep:<engine>@<seed>)."""
+    import json
+
+    import phase0_lib as lib
+
+    dirs = [""] if include_current else []
+    hist = os.path.join(out_dir, "history")
+    if os.path.isdir(hist):
+        dirs += [os.path.join("history", n) for n in sorted(os.listdir(hist), reverse=True)]
+    looked = []
+    for rel in dirs:
+        d = os.path.join(out_dir, rel)
+        rp = os.path.join(d, "record.json")
+        if os.path.exists(os.path.join(d, "record.before_recompose.json")):
+            rp = os.path.join(d, "record.before_recompose.json")  # the engine run's record names how its masks were made
+        if not os.path.exists(rp):
+            looked.append(f"{rel or '.'}: no record")
+            continue
+        with open(rp, encoding="utf-8") as f:
+            rec = json.load(f)
+        if rec.get("input_hash") != input_hash:
+            looked.append(f"{rel or '.'}: input_hash {str(rec.get('input_hash'))[:12]}")
+            continue
+        for v in rec.get("views") or []:
+            if v.get("view") != view:
+                continue
+            if seed is None:  # a seedless keep names one candidate only when that run drew one of the engine for the view
+                seeds = [c.get("seed", rec.get("seed")) for c in v.get("candidates") or [] if c.get("engine") == engine and "error" not in c]
+                if len(seeds) > 1:
+                    raise ValueError(f"keep:{engine} for the {view} is ambiguous: {rel or '.'} has {len(seeds)} {engine} candidates "
+                                     f"(seeds {', '.join(str(x) for x in seeds)}); name the reviewed one as keep:{engine}@<seed>")
+            for c in v.get("candidates") or []:
+                if c.get("engine") != engine or "error" in c:
+                    continue
+                c_seed = c.get("seed", rec.get("seed"))
+                if seed is not None and c_seed != seed:
+                    continue
+                stem = lib.candidate_stem(view, cid(c))
+                if not (os.path.exists(os.path.join(d, "raw", f"{stem}.png")) and os.path.exists(os.path.join(d, "candidates", f"{stem}_garment_mask.png"))):
+                    looked.append(f"{rel or '.'}: {stem} files missing")
+                    continue
+                return {"dir": rel, "stem": stem, "engine": engine, "seed": None if c_seed is None else int(c_seed), "qa_version": rec.get("qa_version"),
+                        "candidate": c, "steps": (rec.get("steps") or {}).get(engine) if isinstance(rec.get("steps"), Mapping) else rec.get("steps")}
+        looked.append(f"{rel or '.'}: no {view} {engine}{'' if seed is None else f'@{seed}'} candidate")
+    raise FileNotFoundError(f"keep:{engine}{'' if seed is None else f'@{seed}'} for the {view}: no earlier stage 1b run of this job has it ({'; '.join(looked) or 'nothing in ' + out_dir})")
+
+
+def import_kept(job_dir: str, manifest: Mapping[str, Any], view: str, found: Mapping[str, Any]) -> dict[str, Any]:
+    """Copies a kept candidate (`find_kept`, from stage1b/history/) into this run's stage1b/ under its plan name
+    (`<view>_<engine>_s<seed>`) and saves its chosen mask (rebuilt from that run's files by `chosen_mask_from_saved`, the replay's
+    rule), so the finalize scores it with the CURRENT QA and pairs it like a new draw. Nothing is redrawn and nothing passes
+    unchecked. Returns the candidate's draw record (id, engine, seed, kept: origin, then-QA version, chosen-mask basis)."""
+    import shutil
+
+    import phase0_lib as lib
+
+    out = os.path.join(job_dir, lib.STAGE1B_DIR)
+    src = os.path.join(out, found["dir"])
+    if found["seed"] is None:
+        raise ValueError(f"keep {view} {found['engine']}: the earlier run records no seed, so the candidate cannot be named")
+    new_id = lib.candidate_id(found["engine"], found["seed"])
+    stem = lib.candidate_stem(view, new_id)
+    v = next(x for x in manifest["stage1b"]["views"] if x["view"] == view)
+    spec = manifest["stage1b"]
+    kind = ((manifest.get("control") or {}).get("proxy") or {}).get("kind") or (spec.get("target") or {}).get("proxy_kind") or manifest["category"]
+    tryon_cat = lib.tryon_category(manifest["category"])
+    bare = _read_mask(os.path.join(job_dir, v["bare_mask"]))
+    proxy = _read_mask(os.path.join(job_dir, v.get("proxy_mask") or f"{manifest['control']['proxy_mask_dir']}/{int(v['frame']):04d}.png"))
+    gap = trouser_gap_zone(proxy, bare) if kind == "trousers" else None
+    region, _ = edit_region(proxy, bare, tryon_cat, keep_open=kind == "outerwear", open_crotch=gap)
+    target = _read_rgb(os.path.join(job_dir, v["proxy_rgb"])) if v.get("proxy_rgb") else None
+    os.makedirs(os.path.join(out, "raw"), exist_ok=True)
+    os.makedirs(os.path.join(out, "candidates"), exist_ok=True)
+    copied = []
+    for sub, suffix in (("raw", ""), ("candidates", "_garment_mask"), ("candidates", "_garment_mask_unclipped"), ("candidates", "_conformed"),
+                        ("candidates", "_chosen_mask"), ("candidates", "_fashn_agnostic")):
+        a = os.path.join(src, sub, f"{found['stem']}{suffix}.png")
+        if os.path.exists(a):
+            shutil.copyfile(a, os.path.join(out, sub, f"{stem}{suffix}.png"))
+            copied.append(f"{sub}/{stem}{suffix}.png")
+    c = found["candidate"]
+    raw_engine = _read_rgb(os.path.join(out, "raw", f"{stem}.png"))
+    saved = _read_mask(os.path.join(out, "candidates", f"{stem}_garment_mask.png"))
+    chosen, basis = chosen_mask_from_saved(raw_engine, saved, region, chosen_path=os.path.join(out, "candidates", f"{stem}_chosen_mask.png"),
+                                           conformed_path=os.path.join(out, "candidates", f"{stem}_conformed.png"),
+                                           app_saved=_version_at_least(found.get("qa_version"), (0, 8, 0)), mask_source=c.get("mask_source"), target=target,
+                                           bg=tuple(spec["background_rgb"]))
+    _save_mask(chosen, os.path.join(out, "candidates", f"{stem}_chosen_mask.png"))
+    rec = {k: c[k] for k in ("method", "prompt", "negative_prompt", "pose", "agnostic", "model_output_size", "mask_source", "sam_score", "sam_prior_iou") if k in c}
+    rec.update({"id": new_id, "engine": found["engine"], "seed": found["seed"], "steps": found.get("steps"),
+                "kept": {"from": f"{lib.STAGE1B_DIR}/{found['dir']}", "stem_then": found["stem"], "qa_version": found.get("qa_version"),
+                         "qa_pass_then": (c.get("qa") or {}).get("pass"), "chosen_mask_basis": basis, "files": copied,
+                         "note": "kept from an earlier run of this job: not redrawn; scored and paired with the current QA like a new draw"}})
+    return rec
+
+
+def _save_mask(mask: np.ndarray, path: str) -> None:
+    from PIL import Image
+
+    Image.fromarray(np.asarray(mask, dtype=bool).astype(np.uint8) * 255).save(path)
+
+
+FINALIZE_LABEL = ("draw plan: every candidate scored on CPU from its saved files with the app's composite and QA (rescore_job, path app), the front/back "
+                  "pair picked by pick_pair; the GPU part only drew and saved the candidates")
+
+
+def finalize_draws(job_dir: str, manifest: Mapping[str, Any], *, accept_failed: bool = False) -> dict[str, Any]:
+    """The second half of a draw-plan run (stage1b-qa-0.11.0, run 17a): stage1_dress.dress drew every candidate of the plan and
+    saved its files and a draw record (record.json, `finalized: false`); here each candidate is scored with the same code a
+    replay uses, the pair is picked (`pick_pair`), and the stills, masks and the finished record.json are written
+    (`write_stills`). One code path for the run and its replay; a CPU function on Modal (stage1_dress.finalize)."""
+    import json
+
+    import phase0_lib as lib
+
+    out_dir = os.path.join(job_dir, lib.STAGE1B_DIR)
+    rec_path = os.path.join(out_dir, "record.json")
+    with open(rec_path, encoding="utf-8") as f:
+        drawn = json.load(f)
+    if drawn.get("input_hash") != manifest.get("input_hash"):
+        raise ValueError(f"stage 1b record is for input_hash {drawn.get('input_hash')!r}, the manifest has {manifest.get('input_hash')!r}")
+    if not drawn.get("plan"):
+        raise ValueError("finalize_draws: this stage 1b record is not a draw plan's (no `plan`); use recompose_job")
+    empty = [v["view"] for v in manifest["stage1b"]["views"] if not candidate_entries(job_dir, v["view"])]
+    if empty:
+        # every draw of a view failed (the GPU part recorded why): nothing to score; the record says so and stage 2 cannot start
+        why = {v.get("view"): v.get("error") or "; ".join(c.get("error", "") for c in v.get("candidates") or []) for v in drawn.get("views") or []}
+        views = [{"view": v["view"], "candidate": None, "still": None, "candidates": next((x.get("candidates") for x in drawn.get("views") or [] if x.get("view") == v["view"]), []),
+                  "qa": {"pass": False, "failures": [f"no candidate to score: {why.get(v['view']) or 'no draw saved'}"] if v["view"] in empty else ["the other view has no candidate: no pair"],
+                         "type_failures": []}} for v in manifest["stage1b"]["views"]]
+        record = {k: drawn[k] for k in _RUN_KEYS if k in drawn}
+        record.update({"qa_version": STAGE1B_QA_VERSION, "finalized": {"label": FINALIZE_LABEL, "error": f"no candidate for {', '.join(empty)}"}, "views": views,
+                       "summary": lib.stage1b_summary(views, invented_back=bool(manifest["stage1b"].get("invented_back"))), "label": lib.STAGE1B_LABEL})
+        with open(rec_path, "w", encoding="utf-8") as f:
+            json.dump(record, f, indent=2)
+        return record
+    scored = rescore_job(job_dir, manifest, path="app", stills_dir=os.path.join(out_dir, "candidates", "stills"))
+    views = write_stills(job_dir, manifest, scored, accept_failed=accept_failed)
+    _merge_provenance(views, drawn)
+    record = {k: drawn[k] for k in _RUN_KEYS if k in drawn}
+    record.update({
+        "qa_version": STAGE1B_QA_VERSION,
+        "finalized": {"label": FINALIZE_LABEL, "mask_basis": scored["mask_basis"]},
+        "views": views,
+        "pairs": scored.get("pairs"),
+        "back_view": scored["back_view"],
+        "view_agreement": scored["view_agreement"],
+        "view_colour": scored.get("view_colour"),
+        "summary": lib.stage1b_summary(views, invented_back=bool(manifest["stage1b"].get("invented_back"))),
+        "accept_failed": accept_failed,
         "label": lib.STAGE1B_LABEL,
     })
     with open(rec_path, "w", encoding="utf-8") as f:

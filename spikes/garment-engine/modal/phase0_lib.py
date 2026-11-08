@@ -574,6 +574,7 @@ QWEN_DRESS_PROMPTS = {
         "Picture 2 is the back of the garment, cut out of a shop photo taken from behind. "
         "Dress the mannequin in this exact garment, back view: {description}. "
         "Show the back of the garment as picture 2 shows it, not its front: no front neckline and no front opening. "
+        "{sides}"
         "The garment replaces the beige placeholder completely. "
         "Same pose, same camera, same framing, plain light-grey background. No person, no face, no extra clothing, no text."
     ),
@@ -592,8 +593,24 @@ QWEN_KIND_NEGATIVE = {
     "skirt": "trousers, pants, shorts, two separate legs of fabric, dress, bodice, top",
     "trousers": "dress, skirt, gown, one closed skirt between the legs, skort, overskirt, peplum, bodice, top",
 }
-# Outerwear whose proxy has a front opening (control-proxy-0.3.0): the closed garment it must not turn into.
+# Outerwear whose proxy has a front opening (control-proxy-0.3.0): the closed garment it must not turn into. FRONT view only
+# (qwen-dress-prompt-0.2.0): run 16a's cardigan back was told "no closed pullover, no high round neckline", which is what its
+# shop back photo shows (a closed knit back with a round neck).
 QWEN_OPEN_FRONT_NEGATIVE = "closed pullover, jumper closed at the front, high round neckline"
+# The back (qwen-dress-prompt-0.2.0): every part stays on its side of picture 2; the sleeves named for kinds that have them.
+QWEN_BACK_SIDES = "Keep every part on the side of the picture where picture 2 shows it. "
+QWEN_BACK_SLEEVE_SIDES = ("Keep every part on the side of the picture where picture 2 shows it: a sleeve on the left of picture 2 is the left sleeve "
+                          "of the result, in the colour it has there, and the same for the right. ")
+_NO_SLEEVES = frozenset({"skirt", "trousers"})
+# The version of the Qwen instruction rules, in every candidate record (run 17a: the first GPU draws of 0.2.0).
+#   0.1.0  run 13-16a
+#   0.2.0  the back: front-only clauses dropped and QWEN_BACK_NEGATIVE (stage1b-qa-0.10.0), every part kept on its side of
+#          picture 2 (run 16a's cardigan back: sleeve colours swapped), no open-front negative; one colour phrase for both
+#          views when the two shop cut-outs are one colour (`view_colour_phrases`; run 16a's blouse: "cream" / "peach")
+QWEN_PROMPT_VERSION = "qwen-dress-prompt-0.2.0"
+# Two shop cut-outs whose median Lab differ by less than this are ONE garment colour, named once for both views. The same
+# number as phase0_dress.VIEW_COLOUR["min_limit_delta_e"]: below it the QA would hold the two stills to one colour anyway.
+SHARED_COLOUR_MAX_DELTA_E = 8.0
 
 
 # The exporter's colour came from a word of the product name before neutral-prompt-0.2.0 (export 0.5.0): run 13's
@@ -632,14 +649,15 @@ def qwen_dress_prompt(m: Mapping[str, Any], view: str, invented: bool, colour: M
         description = back_description(description)
     if phrase:
         description = f"{description}; colours: {phrase}, as in picture 2"
-    text = QWEN_DRESS_PROMPTS[key].format(description=description)
+    kind = ((m.get("control") or {}).get("proxy") or {}).get("kind") or ((m.get("stage1b") or {}).get("target") or {}).get("proxy_kind")
+    sides = QWEN_BACK_SIDES if kind in _NO_SLEEVES else QWEN_BACK_SLEEVE_SIDES
+    text = QWEN_DRESS_PROMPTS[key].format(description=description, sides=sides)
     product = (m.get("hash_inputs") or {}).get("product") or {}
     for what, value in (("product title", m.get("product_name")), ("brand", product.get("brand"))):
         if value and str(value).strip().lower() in text.lower():
             raise ValueError(f"stage 1b instruction contains the {what} {value!r}")
-    kind = ((m.get("control") or {}).get("proxy") or {}).get("kind") or ((m.get("stage1b") or {}).get("target") or {}).get("proxy_kind")
     neg = QWEN_NEGATIVE + (", " + QWEN_KIND_NEGATIVE[kind] if kind in QWEN_KIND_NEGATIVE else "")
-    if kind == "outerwear" and ((m.get("control") or {}).get("proxy") or {}).get("front_opening"):
+    if key == "front" and kind == "outerwear" and ((m.get("control") or {}).get("proxy") or {}).get("front_opening"):
         neg += ", " + QWEN_OPEN_FRONT_NEGATIVE
     # "solid colour, plain fabric" pushes Qwen towards a print: only when the chromaticity rule AND the cut-out's edge
     # density both say "printed" (a plain dark garment once read as a print from noise; colour-0.2.0 records the edges).
@@ -656,6 +674,27 @@ def qwen_dress_prompt(m: Mapping[str, Any], view: str, invented: bool, colour: M
 # negative prompt names them. Not tried on a GPU yet.
 _FRONT_ONLY = re.compile(r"\b(neckline|neck|button\w*|opening|open|placket|zip\w*|v[- ]neck|wrap|lapel\w*|collar\w*|tie[sd]?)\b", re.I)
 QWEN_BACK_NEGATIVE = "buttons on the back, front opening, front neckline, placket"
+
+
+def view_colour_phrases(colours: Mapping[str, Mapping[str, Any] | None], max_delta_e: float = SHARED_COLOUR_MAX_DELTA_E) -> dict[str, dict[str, Any]]:
+    """The colour words each view's Qwen instruction names, from `phase0_dress.garment_colour` of the shop cut-outs (`colours`:
+    role -> record with `phrase` and `median_lab`). When a front and a back photo were both measured and their median Lab differ
+    by less than `max_delta_e`, the garment is one colour and both views name the FRONT's phrase (run 16a's blouse: front
+    "multicolour print on cream" L 79.5, back "on peach" L 75.1, dE 4.7, a naming boundary; Qwen drew the back orange-brown).
+    Otherwise each view keeps its own (run 16a's cardigan: an argyle front on peach and a plain cream back, dE 15.5, really
+    different). Measured from pixels only, never from the product name. Returns role -> {phrase, source, delta_e}."""
+    out: dict[str, dict[str, Any]] = {}
+    f, b = colours.get("front") or {}, colours.get("back") or {}
+    de = None
+    if f.get("median_lab") is not None and b.get("median_lab") is not None:
+        de = round(math.dist([float(x) for x in f["median_lab"]], [float(x) for x in b["median_lab"]]), 2)
+    for role, c in colours.items():
+        c = c or {}
+        out[role] = {"phrase": c.get("phrase"), "source": f"the {role} shop cut-out", "delta_e": de}
+    if de is not None and de < max_delta_e and f.get("phrase") and "back" in out:
+        out["back"] = {"phrase": f["phrase"], "source": f"the front shop cut-out (the back cut-out, {b.get('phrase')!r}, is within dE {de} < {max_delta_e}: one colour)",
+                       "delta_e": de}
+    return out
 
 
 def back_description(description: str) -> str:
@@ -1020,8 +1059,33 @@ def qwen_canvas(w: int, h: int, area: int = QWEN_VAE_IMAGE_AREA) -> tuple[int, i
     return int(round(width / 32) * 32), int(round(height / 32) * 32)
 
 
+def candidate_id(engine: str, seed: int | None) -> str:
+    """A stage 1b candidate's name: the engine for a one-draw-per-engine run (run 16a and before), `engine@seed` for a draw
+    plan (`parse_draw_plan`, run 17a), where one view can hold several draws of one engine."""
+    return engine if seed is None else f"{engine}@{int(seed)}"
+
+
+def candidate_stem(view: str, cid: str) -> str:
+    """File stem of a candidate: raw/<stem>.png, candidates/<stem>_garment_mask.png, ... (`front_fashn`, `front_fashn_s44`)."""
+    eng, _, seed = cid.partition("@")
+    return f"{view}_{eng}" + (f"_s{int(seed)}" if seed else "")
+
+
+_STEM = re.compile(r"^(front|back)_(fashn|qwen)(?:_s(\d+))?$")
+
+
+def parse_candidate_stem(stem: str) -> tuple[str, str] | None:
+    """`front_fashn_s44` -> ("front", "fashn@44"), `back_qwen` -> ("back", "qwen"); None for anything else."""
+    hit = _STEM.match(stem)
+    return None if not hit else (hit.group(1), candidate_id(hit.group(2), None if hit.group(3) is None else int(hit.group(3))))
+
+
+_PIN = re.compile(r"^(fashn|qwen)(?:@(\d+))?$")
+
+
 def parse_dress_pins(text: str | None) -> dict[str, str]:
-    """"front=qwen,back=fashn" -> {"front": "qwen", "back": "fashn"} (the run_phase0 --dress-pin option)."""
+    """"front=qwen,back=fashn@44" -> {"front": "qwen", "back": "fashn@44"} (the run_phase0 --dress-pin option; a draw plan's
+    candidates are named engine@seed)."""
     out: dict[str, str] = {}
     for part in (text or "").split(","):
         part = part.strip()
@@ -1029,10 +1093,103 @@ def parse_dress_pins(text: str | None) -> dict[str, str]:
             continue
         view, _, eng = part.partition("=")
         view, eng = view.strip(), eng.strip()
-        if view not in ("front", "back") or eng not in ("fashn", "qwen"):
-            raise ValueError(f"--dress-pin: {part!r} is not front|back=fashn|qwen")
+        if view not in ("front", "back") or not _PIN.match(eng):
+            raise ValueError(f"--dress-pin: {part!r} is not front|back=fashn|qwen[@seed]")
         out[view] = eng
     return out
+
+
+# Run 17a: several draws per view in one container (the models load once), each candidate scored, then the front/back PAIR
+# picked by the pair checks (phase0_dress.pick_pair). A cap so a typo ("44-4400") cannot buy a thousand draws.
+MAX_PLAN_DRAWS = 24
+_DRAW = re.compile(r"^(fashn|qwen)@(\d+)(?:-(\d+))?$")
+_KEEP = re.compile(r"^keep:(fashn|qwen)(?:@(\d+))?$")
+
+
+def parse_draw_plan(text: str | None) -> dict[str, dict[str, Any]] | None:
+    """The --draws / --dress-draws option: "front=fashn@44-47,qwen@43-44;back=keep:fashn,qwen@43" ->
+    {"front": {"draws": [["fashn", 44], ...], "keep": None}, "back": {"draws": [["qwen", 43]], "keep": {"engine": "fashn", "seed": None}}}.
+
+    Per view (both views are required): `engine@seed` or `engine@first-last` draws, and at most one `keep:engine[@seed]`, the
+    candidate of that engine (and seed) from this job's earlier stage 1b run in the jobs Volume, re-scored with the current QA
+    and never re-drawn. None for an empty text. Raises ValueError for anything else: an unknown view or engine, a duplicate
+    draw, a view without a candidate, no draw at all (re-scoring only is --recompose-dress), or more than `MAX_PLAN_DRAWS`."""
+    if not (text or "").strip():
+        return None
+    plan: dict[str, dict[str, Any]] = {}
+    for part in str(text).split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        view, eq, items = part.partition("=")
+        view = view.strip()
+        if view not in ("front", "back") or not eq:
+            raise ValueError(f"--draws: {part!r} is not front|back=<engine@seed[-seed]>[,...][,keep:<engine>[@seed]]")
+        if view in plan:
+            raise ValueError(f"--draws: {view} given twice")
+        draws: list[list[Any]] = []
+        keep = None
+        for item in items.split(","):
+            item = item.strip()
+            d, k = _DRAW.match(item), _KEEP.match(item)
+            if d:
+                a = int(d.group(2))
+                b = int(d.group(3)) if d.group(3) is not None else a
+                if b < a:
+                    raise ValueError(f"--draws: {item!r}: the seed range runs backwards")
+                if b - a + 1 > MAX_PLAN_DRAWS:
+                    raise ValueError(f"--draws: {item!r} is more than {MAX_PLAN_DRAWS} draws")
+                for sd in range(a, b + 1):
+                    if [d.group(1), sd] in draws:
+                        raise ValueError(f"--draws: {view} draws {d.group(1)}@{sd} twice")
+                    draws.append([d.group(1), sd])
+            elif k:
+                if keep is not None:
+                    raise ValueError(f"--draws: {view} keeps two candidates; keep at most one per view")
+                keep = {"engine": k.group(1), "seed": None if k.group(2) is None else int(k.group(2))}
+            else:
+                raise ValueError(f"--draws: {item!r} in {view} is not engine@seed, engine@first-last or keep:engine[@seed]")
+        if keep is not None and keep["seed"] is not None and [keep["engine"], keep["seed"]] in draws:
+            raise ValueError(f"--draws: {view} keeps and draws {keep['engine']}@{keep['seed']}")
+        plan[view] = {"draws": draws, "keep": keep}
+    missing = [v for v in ("front", "back") if v not in plan]
+    if missing:
+        raise ValueError(f"--draws: no plan for {', '.join(missing)} (both views need at least one draw or a keep)")
+    n = sum(len(p["draws"]) for p in plan.values())
+    if n == 0:
+        raise ValueError("--draws: nothing to draw (keeping only is a re-score: use --recompose-dress)")
+    if n > MAX_PLAN_DRAWS:
+        raise ValueError(f"--draws: {n} draws > {MAX_PLAN_DRAWS}")
+    return plan
+
+
+def describe_draw_plan(plan: Mapping[str, Mapping[str, Any]]) -> str:
+    """"front: fashn@44, qwen@43; back: keep fashn, qwen@43 (3 draws)" for the log."""
+    parts = []
+    for view, p in plan.items():
+        items = [candidate_id(e, sd) for e, sd in p["draws"]]
+        if p.get("keep"):
+            items.insert(0, "keep " + candidate_id(p["keep"]["engine"], p["keep"]["seed"]))
+        parts.append(f"{view}: {', '.join(items)}")
+    return "; ".join(parts) + f" ({sum(len(p['draws']) for p in plan.values())} draws)"
+
+
+def draw_plan_engines(plan: Mapping[str, Mapping[str, Any]]) -> str:
+    """The engine weights a plan needs, as a --engine choice ("fashn", "qwen" or "both"); a keep loads no engine."""
+    used = {e for p in plan.values() for e, _ in p["draws"]}
+    return "both" if used == {"fashn", "qwen"} else next(iter(used))
+
+
+# GPU seconds per draw on an H100 in run 16a (FASHN 5.2-8.5 s, Qwen 65.5-68.2 s) and the model load (FASHN 9.6-15 s, both
+# 42.6-77.7 s); segmentation, masks and the finalize are on top. An ESTIMATE printed before the spend, not a measurement.
+PLAN_SECONDS = {"fashn": 8.0, "qwen": 68.0, "load_fashn": 15.0, "load_qwen": 78.0, "per_view": 10.0}
+
+
+def draw_plan_seconds(plan: Mapping[str, Mapping[str, Any]]) -> float:
+    eng = draw_plan_engines(plan)
+    s = sum(PLAN_SECONDS[e] for p in plan.values() for e, _ in p["draws"]) + 2 * PLAN_SECONDS["per_view"]
+    s += PLAN_SECONDS["load_qwen"] if eng in ("qwen", "both") else PLAN_SECONDS["load_fashn"]
+    return s
 
 
 def pixel_sha256(rgb: bytes, w: int, h: int) -> str:

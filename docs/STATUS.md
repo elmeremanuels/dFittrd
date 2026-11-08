@@ -3,6 +3,34 @@
 This is the integration snapshot after the parallel build and review passes. Read it with
 `docs/DECISIONS.md` (why), `docs/ARCHITECTURE.md` (layout) and `docs/HANDOFF.md` (product truth).
 
+## Release v1 + optional 3D estimate (branch `claude/plugin-v1`) — 8 Nov 2026
+
+Release v1 unchanged, plus an opt-in **3D estimate** in the overlay for products with an approved
+garment bundle. Operator guide: `docs/PLUGIN.md`. Not pushed, not deployed.
+
+| Command (worktree, fresh `.demo-db`) | Result |
+|---|---|
+| `flock /tmp/curtain-pnpm.lock pnpm install` | pass (new workspace package `@curtain/garment-viewer`; `three@0.186.1` for it and apps/web) |
+| `pnpm check` | pass: SDK 8,178 B gzip of 8,192 (untouched); viewer chunk 148.5 KB gzip of 400 KB, three.js in no other chunk, not precached; secret scan clean |
+| `pnpm demo:e2e` | pass, both flows; aalter-studio-1 shows no 3D button (today's flow); 3D step on aalter-studio-2 (Woo, synthetic bundle) and on the azure babydoll (Dawn, evaluated bundle): drape settles, label says estimate and names the recommended size, after the click only GETs of code and the five `/assets/` files |
+
+Tests: schema 356, garment-viewer 47 (incl. parity with the spike), api 211, web 331, demo-shop 9; the rest as in the release run below.
+
+What was added: `@curtain/schema` `GarmentAssetRef` + `checkGarmentBundle`, optional `asset` on
+`GET /v1/try`; `packages/garment-viewer` (device modules forked from the spike, which is untouched;
+takes the embed's FitResult, never recomputes a fit); api migration 0005 (`garment_assets`,
+`products.active_asset_version`), `asset:import`, merchant approve/reject routes, `/assets/*` in demo
+and dev; Caddy `/assets/*` from the `assets` volume, included in the backup; `embed/Garment3D.tsx`.
+
+Gated: the shop switch `settings.garment3d` (off by default until D17 prices 3D), the merchant's
+approval (D13), and the bundle covering the live chart. Founder-blocked as before (`docs/PLUGIN.md` §4),
+plus: founder review of the azure bundle, the pilot merchant's approval, legal text for 3D. Not built
+yet: the approval buttons in the Shopify checklist and the Woo console, and the approval preview page.
+
+Import the founder's local azure bundle (stays `awaiting_approval`):
+`pnpm --filter @curtain/api asset:import --shop <pilot>.myshopify.com --product azure-palm-baby-doll-dress --dir spikes/garment-engine/out/eval/azure-palm-baby-doll-dress`
+(the product id is the shop's external id of that product).
+
 ## Release v1 (standalone plugin) — 6 Nov 2026
 
 Goal: ship size advice **without** the 3D engine (D11, D17) to Shopify, first as a custom

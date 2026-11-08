@@ -10,6 +10,8 @@ curtain/
 ├─ packages/
 │  ├─ schema/              @curtain/schema — zod: GarmentPayload v1, FitSignature v1, SwipeEvent, API DTOs, completenessScore, platform mappings
 │  ├─ fit-engine/          @curtain/fit-engine — pure TS: computeFit / recommendSize (handoff §4.1–4.2)
+│  ├─ anchors/, mannequin/ @curtain/anchors (D15 vocabulary), @curtain/mannequin (procedural canonical body, glTF)
+│  ├─ garment-viewer/      @curtain/garment-viewer — the overlay's optional 3D estimate (three.js, drape workers; TS source, lazy chunk)
 │  ├─ taste-engine/        @curtain/taste-engine — pure TS: applySwipe, penalty memory, rankDeck, Style DNA (handoff §5)
 │  ├─ tryon-providers/     @curtain/tryon-providers — server-only AI adapters (FASHN, Vertex stub, Grok video stub, Mock) + TryOnRouter
 │  ├─ sdk/                 @curtain/sdk — <6 KB vanilla IIFE for merchant pages: button scan, handshake, QR modal
@@ -35,11 +37,13 @@ curtain/
 
 **Hero render (opt-in).** App composites an avatar render (base frame with anonymised head) → `POST /v1/renders/hero` with per-render consent → pg-boss job → `TryOnRouter` → provider → result stored ≤ 24 h → app re-composites the real face tile locally → ledger entry with provider, model, retention.
 
+**3D estimate (optional, D16).** A bundle is imported (`asset:import`) into the `assets` volume as `awaiting_approval`; merchant approval sets `products.active_asset_version`. With `settings.garment3d` on and the bundle still covering the live chart, `GET /v1/try/:token` adds `asset` (a URL under `https://api.<domain>/assets/…`, immutable, served by Caddy). Only after the shopper presses "See it in 3D (estimate)" does the iframe load the viewer chunk and GET the five bundle files; the drape runs in Web Workers with the embed's own fit result. Nothing goes up.
+
 **Merchant sync.** Shopify `products/update` webhook or WooCommerce push-on-save → normalise to `GarmentPayload` → `products` upsert (`content_hash` no-op) → `completenessScore` → status `active | incomplete` with `missing_fields`.
 
 ## Postgres (Drizzle)
 
-`shops`, `shopify_sessions`, `products`, `product_images`, `devices`, `fit_signatures`, `pairings` (with per-shop pseudonym), `try_sessions`, `swipe_events`, `wardrobe_items`, `usage_events` + `usage_daily`, `render_jobs`, `ledger_entries`, `webhook_log` (with payload for replay), `order_outcomes` (schema only, attribution off by default), `pgboss.*`.
+`shops`, `shopify_sessions`, `products` (with `active_asset_version`), `garment_assets`, `product_images`, `devices`, `fit_signatures`, `pairings` (with per-shop pseudonym), `try_sessions`, `swipe_events`, `wardrobe_items`, `usage_events` + `usage_daily`, `render_jobs`, `ledger_entries`, `webhook_log` (with payload for replay), `order_outcomes` (schema only, attribution off by default), `pgboss.*`.
 
 ## On-device (IndexedDB via Dexie, never synced)
 
@@ -47,4 +51,4 @@ curtain/
 
 ## Deployment
 
-`infra/docker-compose.yml`: `caddy` (TLS, static PWA, reverse proxy), `api` (one image, runs migrations on start, pg-boss in-process; `JOBS=1` turns a replica into a jobs-only worker), `postgres`. Web bundle rsynced into the Caddy volume. GitHub Actions: test + typecheck + build + bundle secret grep + api image to GHCR.
+`infra/docker-compose.yml`: `caddy` (TLS, static PWA, reverse proxy, `/assets/*` from the read-only `assets` volume), `api` (one image; writes `assets` at `ASSET_DIR`; runs migrations on start, pg-boss in-process; `JOBS=1` turns a replica into a jobs-only worker), `postgres`. Web bundle rsynced into the Caddy volume. GitHub Actions: test + typecheck + build + bundle secret grep + api image to GHCR.

@@ -3,11 +3,14 @@
  * public keys and the products. Used by `pnpm --filter @curtain/api demo` (src/demo.ts) and tested
  * in demoSeed.test.ts. Never used by the production server.
  */
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { MOCK_GARMENTS_BY_ID, type GarmentPayload } from '@curtain/schema';
 import type { Db } from './db/client.js';
 import { shops, type ShopSettings } from './db/schema.js';
 import type { Env } from './env.js';
+import { approveAsset, importBundle } from './services/assets.js';
 import { embedAllowedOrigins } from './services/embed.js';
 import { upsertProduct } from './services/products.js';
 import { createShop, findShopByDomain, issueMerchantKeys } from './services/shops.js';
@@ -58,6 +61,34 @@ export const DEMO_SHOPS: DemoShopSpec[] = [
   },
 ];
 
+/**
+ * A garment bundle for the demo's optional 3D estimate (D16). Bundles are git-ignored, generated or
+ * shop-derived files: when `dir` is missing the product simply has no 3D view (today's flow).
+ * `payload: true` takes the product itself from the bundle's payload.json (an evaluated shop
+ * product that is not a schema fixture); its photos are replaced by the storefront's illustration.
+ */
+export interface DemoGarmentBundle {
+  shop: DemoShopSpec['key'];
+  externalId: string;
+  dir: string;
+  payload?: boolean;
+  /** Storefront illustration colour for a product from payload.json. */
+  colorHex?: string;
+}
+
+/** Storefront details of a product that is not a schema fixture (the demo storefront draws it from these). */
+export interface DemoProductDetails {
+  name: string;
+  category: string;
+  subcategory?: string;
+  patternBlock?: string;
+  primaryColorHex: string;
+  colorways: { name: string; hex: string }[];
+  sizeChart: GarmentPayload['sizeChart'];
+  sizeChartType?: string;
+  lengthCm: Record<string, number>;
+}
+
 export interface DemoProductInfo {
   externalId: string;
   name: string;
@@ -67,6 +98,9 @@ export interface DemoProductInfo {
   sizes: string[];
   photo: string | null;
   status: string;
+  /** The approved 3D bundle version when the product has the 3D estimate (D16), else null. */
+  asset3d: string | null;
+  details?: DemoProductDetails;
 }
 
 export interface DemoShopInfo {
@@ -91,7 +125,7 @@ export interface DemoManifest {
   shops: DemoShopInfo[];
 }
 
-export async function seedDemo(db: Db, env: Env, opts: { storefrontOrigin?: string; appOrigin?: string } = {}): Promise<DemoManifest> {
+export async function seedDemo(db: Db, env: Env, opts: { storefrontOrigin?: string; appOrigin?: string; bundles?: DemoGarmentBundle[] } = {}): Promise<DemoManifest> {
   const storefront = opts.storefrontOrigin ?? DEMO_STOREFRONT_ORIGIN;
   const appOrigin = opts.appOrigin ?? DEMO_APP_ORIGIN;
   const embedOrigins = [...new Set([storefront, appOrigin])];
@@ -131,7 +165,46 @@ export async function seedDemo(db: Db, env: Env, opts: { storefrontOrigin?: stri
         sizes: g.sizeChart.map((s) => s.size),
         photo,
         status: r.product.status,
+        asset3d: null,
       });
+    }
+    const bundles = (opts.bundles ?? []).filter((b) => b.shop === spec.key && existsSync(join(b.dir, 'base.glb')));
+    for (const b of bundles) {
+      if (b.payload) {
+        const raw = JSON.parse(readFileSync(join(b.dir, 'payload.json'), 'utf8')) as GarmentPayload;
+        const photo = `${storefront}/img/${encodeURIComponent(b.externalId)}.svg`;
+        const color = b.colorHex ?? '#4F8FC0';
+        // Shop photos never enter the demo: the storefront draws the garment itself.
+        const g = { ...raw, id: b.externalId, productUrl: undefined, productPhotos: [photo], flatLayPhoto: photo, primaryColorHex: color };
+        const r = await upsertProduct(db, fresh.id, b.externalId, g);
+        const info: DemoProductInfo = {
+          externalId: b.externalId,
+          name: raw.name,
+          brand: raw.brand,
+          category: raw.category,
+          priceEur: raw.priceEur ?? null,
+          sizes: raw.sizeChart.map((x) => x.size),
+          photo,
+          status: r.product.status,
+          asset3d: null,
+          details: { name: raw.name, category: raw.category, subcategory: raw.subcategory, patternBlock: raw.patternBlock, primaryColorHex: color, colorways: [{ name: 'Azure', hex: color }], sizeChart: raw.sizeChart, sizeChartType: raw.sizeChartType, lengthCm: (raw.lengthCm ?? {}) as Record<string, number> },
+        };
+        const at = products.findIndex((p) => p.externalId === b.externalId);
+        if (at >= 0) products[at] = info;
+        else products.unshift(info);
+      }
+      const product = products.find((p) => p.externalId === b.externalId);
+      if (!product) continue;
+      const { asset } = await importBundle(db, env, fresh.id, b.externalId, b.dir);
+      // The demo merchant approves its own bundle (D13); a real shop does this in the admin.
+      if (asset.status !== 'approved') await approveAsset(db, fresh.id, asset.id, 'demo-seed');
+      product.asset3d = asset.version;
+    }
+    if (bundles.length) {
+      await db
+        .update(shops)
+        .set({ settings: { ...fresh.settings, garment3d: true } })
+        .where(eq(shops.id, fresh.id));
     }
     out.push({
       key: spec.key,

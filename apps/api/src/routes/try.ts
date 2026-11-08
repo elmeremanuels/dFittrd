@@ -42,6 +42,7 @@ import { pseudonymFor } from '../lib/crypto.js';
 import { conflict, forbidden, gone, HttpError, notFound, unauthorized, unprocessable } from '../lib/errors.js';
 import { embedAllowedOrigins, originOf } from '../services/embed.js';
 import { byteLength, fieldNames, writeLedger } from '../services/ledger.js';
+import { activeAssetRef } from '../services/assets.js';
 import { asTryGarment, findProduct, findProductById } from '../services/products.js';
 import { findShopById, findShopByPrefix, isPaused, shopBranding } from '../services/shops.js';
 import { billFitSession } from '../services/usage.js';
@@ -97,6 +98,8 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
         trySession: { id: session.id, expiresAt: session.expiresAt.toISOString(), intentToken: session.intentToken },
         pairing: { created, pairedAt: pairing.pairedAt.toISOString() },
         embed: { allowedOrigins: embedAllowedOrigins(shop, session.pageOrigin) },
+        // D13/D16: only an approved bundle that still matches the live chart, only with the 3D estimate on.
+        asset: await activeAssetRef(db, env, shop, product, garment),
       };
     },
   );

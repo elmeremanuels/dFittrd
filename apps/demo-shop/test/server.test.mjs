@@ -16,6 +16,23 @@ writeFileSync(
     publicKey: key,
     shops: [
       { key: 'woocommerce', name: 'Aalter Studio', publicKey: key, products: [{ externalId: 'aalter-studio-1', name: 'Linen Wrap Dress', category: 'dress', priceEur: 149, sizes: ['XS', 'S', 'M', 'L'], status: 'active' }] },
+      {
+        key: 'shopify',
+        name: 'Aalter Studio (Shopify)',
+        publicKey: key,
+        products: [
+          {
+            externalId: 'azure-palm-baby-doll-dress',
+            name: 'Azure Palm Baby Doll Dress',
+            category: 'dress',
+            priceEur: null,
+            sizes: ['8', '10', '12'],
+            status: 'active',
+            asset3d: '0123456789abcdef',
+            details: { name: 'Azure Palm Baby Doll Dress', category: 'dress', patternBlock: 'empire', primaryColorHex: '#4F8FC0', colorways: [{ name: 'Azure', hex: '#4F8FC0' }], sizeChart: [{ size: '8', measurements: {} }], lengthCm: {} },
+          },
+        ],
+      },
     ],
   }),
 );
@@ -100,4 +117,17 @@ test('serves product illustrations for the embed header (UX-3: no third-party im
   assert.match(await res.text(), /^<svg [^>]*role="img"/);
   assert.equal((await fetch(`${base}/img/no-such-product.svg`)).status, 404);
   assert.equal((await fetch(`${base}/img/..%2Fserver.mjs`)).status, 404);
+});
+
+test('a product with a 3D bundle that is not a schema fixture: its page, catalog entry and illustration render', async () => {
+  const page = await fetch(`${base}/products/azure-palm-baby-doll-dress`);
+  assert.equal(page.status, 200);
+  const catalog = await (await fetch(`${base}/catalog.json`)).json();
+  const azure = catalog.shops[1].products[0];
+  assert.equal(azure.primaryColorHex, '#4F8FC0');
+  assert.equal(azure.asset3d, '0123456789abcdef');
+  assert.equal(azure.details, undefined);
+  const svg = await fetch(`${base}/img/azure-palm-baby-doll-dress.svg`);
+  assert.equal(svg.status, 200);
+  assert.match(await svg.text(), /#4F8FC0/i);
 });

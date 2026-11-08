@@ -16,6 +16,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/migrate.js && node dist/server.js",
     "migrate": "node dist/migrate.js",
+    "asset:import": "tsx src/scripts/import-asset.ts",
     "db:generate": "drizzle-kit generate",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",

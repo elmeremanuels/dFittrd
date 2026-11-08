@@ -82,11 +82,18 @@ const config = {
       workbox: {
         // Offline shell: the app bundle, fonts and icons. Models are cached on first use, not precached.
         globPatterns: ['**/*.{js,css,html,svg,png,woff2,webmanifest}'],
-        globIgnores: ['**/models/**'],
+        // The 3D viewer (three.js + the drape worker) is loaded only after the shopper asks for it:
+        // never precached, cached on first use instead (scripts/check-viewer-chunk.mjs pins this).
+        globIgnores: ['**/models/**', '**/garment-viewer-*.js', '**/drape.worker-*.js'],
         // /embed is framed inside merchant pages: never served from the app's SW cache.
         navigateFallbackDenylist: [/^\/v1\//, /^\/merchant/, /^\/embed/],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         runtimeCaching: [
+          {
+            urlPattern: ({ url }) => /\/assets\/(garment-viewer|drape\.worker)-[\w-]+\.js$/.test(url.pathname),
+            handler: 'CacheFirst',
+            options: { cacheName: 'curtain-garment-viewer', expiration: { maxEntries: 8, maxAgeSeconds: 60 * 60 * 24 * 30 }, cacheableResponse: { statuses: [200] } },
+          },
           {
             urlPattern: ({ url }) => url.pathname.startsWith('/models/'),
             handler: 'CacheFirst',
@@ -104,11 +111,16 @@ const config = {
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
   },
+  // Pre-bundle three at dev start-up: discovering it on the first 3D click would make Vite reload the page.
+  optimizeDeps: { include: ['three', 'three/addons/controls/OrbitControls.js'] },
+  worker: { format: 'es' as const },
   build: {
     rollupOptions: {
       output: {
         manualChunks: {
           engines: ['@curtain/schema', '@curtain/fit-engine', '@curtain/taste-engine'],
+          // Loaded only by import() from the 3D estimate button (embed/Garment3D.tsx).
+          'garment-viewer': ['three', '@curtain/garment-viewer'],
           vendor: ['react', 'react-dom', 'react-router', 'motion/react', 'zustand', 'dexie'],
         },
       },

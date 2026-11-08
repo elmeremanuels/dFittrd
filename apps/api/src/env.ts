@@ -64,6 +64,14 @@ export const EnvSchema = z.object({
   /** Optional absolute path to sdk.v1.js; default resolves @curtain/sdk from node_modules. */
   SDK_FILE: z.string().optional(),
 
+  // ---- garment assets (D16): public, immutable bundle files ------------------------------
+  /** Where imported bundles live: <ASSET_DIR>/<shopId>/<productId>/<version>/ (a docker volume in production). */
+  ASSET_DIR: z.string().default('./data/assets'),
+  /** Public base URL of the bundle files; default `<PUBLIC_API_URL>/assets` (Caddy serves the path in production). */
+  ASSET_BASE_URL: z.url({ protocol: /^https?$/ }).optional(),
+  /** Serve /assets/* from this process (demo and dev). In production Caddy serves them. */
+  SERVE_ASSETS: bool.default(false),
+
   // ---- renders ------------------------------------------------------------------------
   RENDERS_DIR: z.string().default('./data/renders'),
   RENDER_RETENTION_HOURS: z.coerce.number().min(1).max(24).default(24),

@@ -46,10 +46,11 @@ describe('migration 0004: one flat plan, refresh token columns', () => {
     return rows[0]!;
   };
 
-  it('is named 0004_* and is the last migration in the journal', () => {
+  it('is named 0004_* and is in the journal at index 4 (0005 garment assets follows it)', () => {
     const journal = JSON.parse(readFileSync(join(migrationsFolder(), 'meta', '_journal.json'), 'utf8')) as { entries: Array<{ idx: number; tag: string }> };
-    expect(journal.entries.at(-1)).toMatchObject({ idx: 4, tag: files.at(-1)!.replace(/\.sql$/, '') });
-    expect(files.at(-1)).toMatch(/^0004_/);
+    const f0004 = files.find((f) => f.startsWith('0004_'))!;
+    expect(journal.entries[4]).toMatchObject({ idx: 4, tag: f0004.replace(/\.sql$/, '') });
+    expect(journal.entries.at(-1)).toMatchObject({ tag: files.at(-1)!.replace(/\.sql$/, '') });
   });
 
   it('moves starter and pro to curtain and remembers the old plan', async () => {

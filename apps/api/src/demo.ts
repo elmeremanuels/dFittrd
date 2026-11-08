@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { MockProvider, TryOnRouter } from '@curtain/tryon-providers';
 import { build } from './app.js';
 import { connectPglite } from './db/client.js';
-import { DEMO_APP_ORIGIN, DEMO_STOREFRONT_ORIGIN, seedDemo } from './demoSeed.js';
+import { DEMO_APP_ORIGIN, DEMO_STOREFRONT_ORIGIN, seedDemo, type DemoGarmentBundle } from './demoSeed.js';
 import { loadEnv } from './env.js';
 import { MemoryQueue } from './jobs/queue.js';
 import { resolveSdkFile } from './routes/sdk.js';
@@ -36,6 +36,9 @@ const env = loadEnv({
   JOBS: '0',
   TRYON_ORDER: 'mock',
   RENDERS_DIR: join(dataDir, 'renders'),
+  // The optional 3D estimate (D16): bundles copied into the demo database folder, served by this process.
+  ASSET_DIR: join(dataDir, 'assets'),
+  SERVE_ASSETS: '1',
   ...source,
   PORT: port,
   PUBLIC_APP_URL: source.PUBLIC_APP_URL ?? DEMO_APP_ORIGIN,
@@ -68,7 +71,17 @@ const app = await build({ env, db: handle.db, queue, tryon });
 await app.renders.init();
 await queue.start({ work: true });
 
-const manifest = await seedDemo(handle.db, env, { storefrontOrigin, appOrigin: env.PUBLIC_APP_URL });
+/**
+ * Git-ignored bundles (generated or shop-derived; never committed). A missing one means that product
+ * simply has no 3D view. `pnpm demo` builds the synthetic one; the azure babydoll is the founder's
+ * evaluated bundle (spikes/garment-engine report tooling), or set DEMO_AZURE_BUNDLE to its folder.
+ */
+const spikeOut = join(repoRoot, 'spikes', 'garment-engine', 'out');
+const bundles: DemoGarmentBundle[] = [
+  { shop: 'woocommerce', externalId: 'aalter-studio-2', dir: join(spikeOut, 'aalter-studio-2') },
+  { shop: 'shopify', externalId: 'azure-palm-baby-doll-dress', dir: resolve(source.DEMO_AZURE_BUNDLE ?? join(spikeOut, 'eval', 'azure-palm-baby-doll-dress')), payload: true, colorHex: '#4F8FC0' },
+];
+const manifest = await seedDemo(handle.db, env, { storefrontOrigin, appOrigin: env.PUBLIC_APP_URL, bundles });
 await writeFile(join(dataDir, 'demo.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 
 await app.listen({ host: env.HOST, port: env.PORT });
@@ -87,7 +100,7 @@ const lines = [
     `  ${s.name} (${s.platform})`,
     `    public key   ${s.publicKey}`,
     `    origins      ${s.allowedOrigins.join(', ')}`,
-    `    products     ${s.products.map((p) => `${p.externalId}${p.status === 'active' ? '' : ` [${p.status}]`}`).join(', ')}`,
+    `    products     ${s.products.map((p) => `${p.externalId}${p.status === 'active' ? '' : ` [${p.status}]`}${p.asset3d ? ' [3D]' : ''}`).join(', ')}`,
   ]),
   '',
 ];

@@ -16,6 +16,7 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - web:/srv/web:ro
+      - assets:/srv/assets:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
@@ -43,11 +44,13 @@ services:
       PORT: '3000'
       DATABASE_URL: postgres://${POSTGRES_USER:-curtain}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-curtain}
       RENDERS_DIR: /data/renders
+      ASSET_DIR: /data/assets
       PUBLIC_APP_URL: https://app.${DOMAIN}
       PUBLIC_API_URL: https://api.${DOMAIN}
       JOBS: ${JOBS:-both}
     volumes:
       - renders:/data/renders
+      - assets:/data/assets
     expose:
       - '3000'
     depends_on:
@@ -103,6 +106,7 @@ services:
 volumes:
   web:
   renders:
+  assets:
   pg:
   caddy_data:
   caddy_config:

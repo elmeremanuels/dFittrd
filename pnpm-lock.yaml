@@ -102,6 +102,42 @@ importers:
         specifier: workspace:*
         version: link:../../packages/schema
 
+  apps/site:
+    devDependencies:
+      '@eslint/js':
+        specifier: 9.39.5
+        version: 9.39.5
+      '@fontsource-variable/fraunces':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource-variable/inter':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@types/node':
+        specifier: ^22.14.0
+        version: 22.20.5
+      esbuild:
+        specifier: 0.25.12
+        version: 0.25.12
+      eslint:
+        specifier: 9.39.5
+        version: 9.39.5(jiti@2.7.0)
+      globals:
+        specifier: 17.14.0
+        version: 17.14.0
+      tsx:
+        specifier: 4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: ~5.8.2
+        version: 5.8.3
+      typescript-eslint:
+        specifier: 8.72.1
+        version: 8.72.1(eslint@9.39.5(jiti@2.7.0))(typescript@5.8.3)
+      vite:
+        specifier: ^6.2.3
+        version: 6.4.5(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)
+
   apps/web:
     dependencies:
       '@curtain/anchors':

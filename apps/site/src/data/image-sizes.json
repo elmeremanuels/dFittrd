@@ -1,0 +1,211 @@
+{
+ "photos/editorial-black-beige-1": {
+  "w": 2048,
+  "h": 1365,
+  "widths": [
+   800,
+   1600
+  ]
+ },
+ "photos/editorial-black-beige-1-portrait": {
+  "w": 910,
+  "h": 1365,
+  "widths": [
+   600,
+   910
+  ]
+ },
+ "photos/editorial-black-beige-2": {
+  "w": 2048,
+  "h": 1365,
+  "widths": [
+   800,
+   1600
+  ]
+ },
+ "photos/editorial-barrel": {
+  "w": 2048,
+  "h": 1365,
+  "widths": [
+   800,
+   1600
+  ]
+ },
+ "photos/maxi-dress-corridor": {
+  "w": 1536,
+  "h": 2048,
+  "widths": [
+   800,
+   1350
+  ]
+ },
+ "photos/beach-dress-walk": {
+  "w": 2048,
+  "h": 1365,
+  "widths": [
+   800,
+   1600
+  ]
+ },
+ "photos/colour-rail": {
+  "w": 1312,
+  "h": 2048,
+  "widths": [
+   800,
+   1153
+  ]
+ },
+ "photos/minimal-rail": {
+  "w": 1365,
+  "h": 2048,
+  "widths": [
+   800,
+   1200
+  ]
+ },
+ "photos/knits-pampas-rail": {
+  "w": 2048,
+  "h": 1536,
+  "widths": [
+   800,
+   1600
+  ]
+ },
+ "photos/pattern-scissors": {
+  "w": 2048,
+  "h": 1365,
+  "widths": [
+   800,
+   1600
+  ]
+ },
+ "photos/fabric-rolls": {
+  "w": 2048,
+  "h": 1407,
+  "widths": [
+   800,
+   1600
+  ]
+ },
+ "photos/shell-straw-hat": {
+  "w": 2048,
+  "h": 1151,
+  "widths": [
+   800,
+   1600
+  ]
+ },
+ "photos/blazer-buttons": {
+  "w": 2048,
+  "h": 1536,
+  "widths": [
+   800,
+   1600
+  ]
+ },
+ "photos/draped-fabric": {
+  "w": 1536,
+  "h": 2048,
+  "widths": [
+   800,
+   1200
+  ]
+ },
+ "renders/engine-dress-M-portrait": {
+  "w": 1150,
+  "h": 1750,
+  "widths": [
+   700,
+   1150
+  ]
+ },
+ "renders/engine-dress-S-col": {
+  "w": 660,
+  "h": 1430,
+  "widths": [
+   660
+  ]
+ },
+ "renders/engine-dress-M-col": {
+  "w": 660,
+  "h": 1430,
+  "widths": [
+   660
+  ]
+ },
+ "renders/engine-dress-L-col": {
+  "w": 660,
+  "h": 1430,
+  "widths": [
+   660
+  ]
+ },
+ "product/desktop-05-size-result-dialog": {
+  "w": 2080,
+  "h": 1736,
+  "widths": [
+   900,
+   1800
+  ]
+ },
+ "product/desktop-09-3d-estimate-dialog": {
+  "w": 2080,
+  "h": 1736,
+  "widths": [
+   900,
+   1800
+  ]
+ },
+ "product/desktop-09-3d-estimate-viewer": {
+  "w": 1056,
+  "h": 1618,
+  "widths": [
+   900,
+   1056
+  ]
+ },
+ "product/mobile-02-product-page": {
+  "w": 780,
+  "h": 1688,
+  "widths": [
+   780
+  ]
+ },
+ "product/mobile-04-about-you-filled": {
+  "w": 780,
+  "h": 1688,
+  "widths": [
+   780
+  ]
+ },
+ "product/mobile-05-size-result": {
+  "w": 780,
+  "h": 1688,
+  "widths": [
+   780
+  ]
+ },
+ "product/mobile-06-size-selected": {
+  "w": 780,
+  "h": 1688,
+  "widths": [
+   780
+  ]
+ },
+ "product/desktop-02-product-form": {
+  "w": 1160,
+  "h": 840,
+  "widths": [
+   900,
+   1160
+  ]
+ },
+ "product/desktop-07-size-peek-crop": {
+  "w": 1322,
+  "h": 554,
+  "widths": [
+   900,
+   1322
+  ]
+ }
+}

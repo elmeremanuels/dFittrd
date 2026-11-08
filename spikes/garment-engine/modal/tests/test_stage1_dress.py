@@ -413,7 +413,7 @@ def test_stage1_app_and_run_phase0_register_without_name_clashes():
             return set(a.registered_functions)
 
     s1, s2, s4 = names(stage1_dress.app), names(stage2_video.app), names(stage4_recon.app)
-    assert s1 == {"download_dress_weights", "dress"}
+    assert s1 == {"download_dress_weights", "dress", "recompose"}  # recompose: CPU, stage1b-qa-0.10.0 (run 16b)
     assert s1.isdisjoint(s2) and s1.isdisjoint(s4), "App.include would let one function shadow another"
     assert names(run_phase0.app) == s1 | s2 | s4
     assert set(stage1_dress.ENGINE_STEPS) == set(lib.STAGE1B_ENGINES)

@@ -239,7 +239,28 @@ cloth drawn but not pasted (blouse notch 0.014, controls ≤ 0.003); trousers co
 ramps in at the waistband (a squared-off shelf before); print fidelity's edge ratio floor 0.35 → 0.5 (the blouse's
 washed-out back, 0.400). Replay on the app path: azure (runs 14 and 15) passes; skirt passes the type checks (front
 fails only the provisional torso cover); blouse front passes, back fails print fidelity; cardigan and palazzo stopped.
-Run 16a (proposed): stage 1b alone on blouse, cardigan, palazzo (both engines), skirt and azure as a control (FASHN).
+Run 16a (8 Nov, stage 1b only, QA 0.9.0): five reviews of the stills found defects QA passed. **0.10.0**
+(`spikes/garment-engine/modal/README.md`, "Stage 1b after run 16a"; CPU replay of run 16a's raw outputs, no GPU):
+our code caused the palazzo's leg holes (the mannequin colour test applied off our body; now on the body only, and holes
+off it are counted), azure's grey shoulder caps (present in runs 14-16a, never flagged; the engines draw narrower
+shoulders than our mannequin: `conform_edges` stretches the garment's outer band over our body, and what is left is a
+new type check), the palazzo's yoke shelf (the trouser conform to the proxy's stepped hip block: removed, plus a shelf
+check), the mixed-engine palazzo pair (the back now prefers the front's engine) and the blouse's inflated mask. New
+checks for what the engines drew: a crotch split far above the proxy's, a waistband at another height front and back
+(type), front and back of different colours, sleeves swapped against the shop photo (hard). Replayed: azure passes
+(runs 14, 15, 16a), the palazzo passes with Qwen for both views (holes 752 → 24 px, no shelf, crotch on the proxy's
+line); skirt (front waist 40 px low), blouse (back colour) and cardigan (shoulder band, swapped back sleeves) are
+stopped. `run_phase0.py --recompose-dress --dress-pin ...` re-makes the stills on CPU from the raw outputs the jobs
+Volume keeps, so run 16b's stage 2 pins the reviewed stills (not tested against Modal). Run 16b (proposed): azure
+(FASHN) and palazzo (Qwen) end to end, about $3.2-3.4 (at most about $3.5); skirt front, blouse and cardigan need another stage 1b attempt.
+Review of 0.10.0 → **0.10.1**: the palazzo's recomposed stills still showed our grey thighs in a rectangular notch at the
+crotch (the trouser gap strip, out of the edit region, was never pasted, though Qwen drew cloth there: front 715, back
+657 px), and QA passed it. The composite now pastes the engine's cloth in the strip (and its own background gap's edge),
+and a new type check fails our body left in it (> 40 px at 832; Qwen 0 / 0 px after, FASHN 704 / 696). `--dress-expect`
+pins each recomposed still by the hash of its decoded pixels (identical with numpy 2.2.6 as in the Modal image). The
+failure text for "our mannequin beside" no longer blames shoulder caps; the reuse options are checked before the upload.
+Run 16b (proposed): **azure only**, about $1.6-1.7; the palazzo (passes 0.10.1) waits for the founder's sign-off on Qwen's
+invented pockets and darker print.
 
 **Stage 4t** (`spikes/garment-engine/src/templateFit.ts`, `bake.ts`, `stage4t.ts`;
 `pnpm --filter @curtain/garment-spike stage4t -- <job dir> [--source stage2|synthetic]`): the

@@ -1,35 +1,27 @@
 # One command per line; pushing a change to this file runs them on Modal via GitHub Actions.
-# run 16a: stage 1b ONLY (--dress-only, no stage 2) on the four run 15 products that were wrong plus azure as a control,
-# export 0.6.0 with the P0 / D15 ease fix (blouse, skirt and cardigan proxies changed by 1-2 cm, so their job ids differ
-# from run 15), control proxy 0.3.0, prompt 0.3.0, stage 1b QA 0.9.0 (thresholds provisional): composites from the
-# mannequin colour model (no background, the region outside the proxy only when it is cloth), cleaned shop masks, the
-# trouser gap strip, hips of skirts, dresses and trousers conformed to the proxy, print edge ratio >= 0.5, and the type
-# checks (see-through, body too short, front/back of different garments, legs merged, narrow at the hips, drawn but not pasted).
-# Blouse, cardigan and palazzo run both engines (FASHN + Qwen; pick_engine prefers a candidate without a type failure);
-# skirt and azure run FASHN only (skirt: checks the hip conform on GPU; azure: a dress that passed must still pass).
-# Cost estimate (GPU list price, not the invoice): about $0.21-0.25 per product with both engines (run 13: 189 GPU s,
-# $0.21), about $0.03-0.07 for FASHN only: about $0.70-0.90 in all, at most about $1.05. No stage 2 is run.
-# Order: every export (no GPU) runs before the first GPU command, so a non-GPU failure stops the run before any spend.
-# Each modal line ends in `|| echo ::warning::`: a product that fails does not skip the products after it. Read each
-# product's stage1b/record.json (qa, type_failures, unpasted, conform with headroom, selection) and the stills before 16b.
+# run 16b: stage 2 + stage 4 for the AZURE control only, from its run 16a stills recomposed on CPU with stage 1b QA 0.10.1
+# (no engine is run again). The jobs Volume keeps /<job_id>/stage1b/ from run 16a; a fresh export gives the same job id
+# (azure-palm-baby-doll-dress-de3bc1eeb3e0, checked in review), so --recompose-dress re-makes the stills from run 16a's raw
+# FASHN outputs with the 0.10.1 composite and QA. --dress-expect pins the reviewed pixels: if the recomposed still's pixel
+# sha256 (decoded RGB, not the PNG file; identical with numpy 2.2.6 as in the Modal image) differs, the run stops before
+# stage 2. A changed job id or a record for other inputs also stops it before any GPU time.
+# 0.10.1 vs run 16a: azure's grey shoulder caps covered with the garment's own pixels (0 px of mannequin left beside the cloth);
+# the azure stills are pixel-identical to the 0.10.0 replay the reviewer checked.
+# Cost estimate (GPU list price, not the invoice): stage 2 + stage 4 about $1.60-1.68 (run 15's per-product cost minus its
+# $0.03-0.07 of stage 1b); the CPU recompose well under a cent. About $1.6-1.7 in all, at most about $1.75.
+# Before reading stage 2: check stage1b/record.json "recomposed" and summary.usable_for_stage2, and that the log printed
+# "still pixel sha256: d4cbc556b400eeb9..." (front) and "695c51459ff080c9..." (back).
 pnpm build:packages
 pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch-images
 git diff --exit-code -- spikes/garment-engine/data/bohohippychic/images.json spikes/garment-engine/data/bohohippychic/products.json
-# top: blouse with half-sleeve shells; run 15's torn stills came from our composite (the cream ground is the proxy's beige); FASHN's back print is washed out (edge ratio 0.40)
-pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product rosewater-blouse
-# trousers: wide-leg palazzo; the shop photo's legs read as one skirt; gap strip kept open and visible to FASHN, Qwen told "two separate trouser legs"
-pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product rosewater-palazzo-pants
-# skirt: maxi; run 15's FASHN skirt was narrower than our hips (grey hips beside it, side slit in the video); hips now conformed to the proxy
-pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product crimson-wildflower-maxi-skirt
-# outerwear: knit cardigan; run 15 front a cropped bolero (cause not fixed), back grey sleeves from holes in the shop mask (fixed)
-pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product woodstock-wanderer-knit-cardi
-# control: azure dress (passed in runs 14 and 15); the conform and the new composite must leave it passing
 pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product azure-palm-baby-doll-dress
-modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/rosewater-blouse --dress --dress-engine both --dress-only --no-synthetic-recon || echo "::warning::rosewater-blouse: stage 1b failed"
-modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/rosewater-palazzo-pants --dress --dress-engine both --dress-only --no-synthetic-recon || echo "::warning::rosewater-palazzo-pants: stage 1b failed"
-modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/crimson-wildflower-maxi-skirt --dress --dress-engine fashn --dress-only --no-synthetic-recon || echo "::warning::crimson-wildflower-maxi-skirt: stage 1b failed"
-modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/woodstock-wanderer-knit-cardi --dress --dress-engine both --dress-only --no-synthetic-recon || echo "::warning::woodstock-wanderer-knit-cardi: stage 1b failed"
-modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/azure-palm-baby-doll-dress --dress --dress-engine fashn --dress-only --no-synthetic-recon || echo "::warning::azure-palm-baby-doll-dress: stage 1b failed"
-# Then run 16b (separate push): only products whose 16a stills have no type failure and pass, or whose only failures
-# are the provisional ones the founder accepts, end to end with the run 15 line (--dress --dress-engine <picked engine>
-# --accept-failed-dress --no-synthetic-recon), about $1.65-1.71 each; the skirt first (the slit fix in stage 2 is inferred).
+modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/azure-palm-baby-doll-dress --recompose-dress --dress-pin front=fashn,back=fashn --dress-expect front=d4cbc556b400eeb9c145f9c1,back=695c51459ff080c9657cdfbd --no-synthetic-recon || echo "::warning::azure-palm-baby-doll-dress: run 16b failed"
+# Held back, only after the founder signs off in writing on Qwen's invented pocket flap (left hip) and darker print
+# (unnormalised median dE 10.4 front / 7.4 back against the shop photo, azure 4.3 / 2.5). The 0.10.1 stills pass, with no grey
+# left at the crotch (0 / 0 px); with sign-off it is one more line, about +$1.6-1.7:
+#   pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product rosewater-palazzo-pants
+#   modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/rosewater-palazzo-pants --recompose-dress --dress-pin front=qwen,back=qwen --dress-expect front=d519f925e95fb9bfa4ee275d,back=a9a3ce42d53ac369fd83eca0 --no-synthetic-recon || echo "::warning::rosewater-palazzo-pants: run 16b failed"
+# Not in 16b (another stage-1b-only attempt first, --dress-only):
+#   crimson-wildflower-maxi-skirt: FASHN drew the front waist ~40 px low (grey belly, rows 363-398); re-dress the FRONT, both engines, another seed.
+#   rosewater-blouse: Qwen back dark orange-brown (dE 19.6 vs front); Qwen front grey caps (84 px); FASHN front torso cover 0.920; FASHN back print lost.
+#   woodstock-wanderer-knit-cardi: Qwen front grey shoulder slope (255 px); Qwen back sleeve colours swapped, drawn too big; FASHN front cropped.

@@ -628,6 +628,8 @@ def qwen_dress_prompt(m: Mapping[str, Any], view: str, invented: bool, colour: M
     key = "front" if view == "front" else ("back_invented" if invented else "back")
     phrase = (colour or {}).get("phrase")
     description = neutral_description(m, drop_colour=bool(phrase))
+    if key == "back":
+        description = back_description(description)
     if phrase:
         description = f"{description}; colours: {phrase}, as in picture 2"
     text = QWEN_DRESS_PROMPTS[key].format(description=description)
@@ -643,7 +645,31 @@ def qwen_dress_prompt(m: Mapping[str, Any], view: str, invented: bool, colour: M
     # density both say "printed" (a plain dark garment once read as a print from noise; colour-0.2.0 records the edges).
     if (colour or {}).get("kind") == "print" and (colour or {}).get("printed_by_edges") is True:
         neg += ", solid colour, plain fabric"
+    if key == "back":
+        neg += ", " + QWEN_BACK_NEGATIVE
     return text, neg
+
+
+# stage1b-qa-0.10.0 (run 16a): the back instruction carried the front's features ("a long-sleeved cardigan ..., with a deep V
+# neckline open to the underbust, buttoned below it") and Qwen drew a front button on the cardigan's plain knit back. For a
+# back drawn from a real back photo, clauses about the neckline, buttons, an opening or a placket are dropped, and the
+# negative prompt names them. Not tried on a GPU yet.
+_FRONT_ONLY = re.compile(r"\b(neckline|neck|button\w*|opening|open|placket|zip\w*|v[- ]neck|wrap|lapel\w*|collar\w*|tie[sd]?)\b", re.I)
+QWEN_BACK_NEGATIVE = "buttons on the back, front opening, front neckline, placket"
+
+
+def back_description(description: str) -> str:
+    """The neutral description without the clauses that describe the garment's front (see `_FRONT_ONLY`). Clauses are the
+    parts split at ", with ", "; " and ", "; the first (the garment itself) is always kept."""
+    parts = re.split(r"(, with |; |, )", description)
+    keep = [parts[0]]
+    i = 1
+    while i < len(parts) - 1:
+        sep, clause = parts[i], parts[i + 1]
+        if not _FRONT_ONLY.search(clause):
+            keep.append(sep + clause)
+        i += 2
+    return "".join(keep)
 
 
 def tryon_category(category: str) -> str:
@@ -992,6 +1018,57 @@ def qwen_canvas(w: int, h: int, area: int = QWEN_VAE_IMAGE_AREA) -> tuple[int, i
     width = math.sqrt(area * ratio)
     height = width / ratio
     return int(round(width / 32) * 32), int(round(height / 32) * 32)
+
+
+def parse_dress_pins(text: str | None) -> dict[str, str]:
+    """"front=qwen,back=fashn" -> {"front": "qwen", "back": "fashn"} (the run_phase0 --dress-pin option)."""
+    out: dict[str, str] = {}
+    for part in (text or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        view, _, eng = part.partition("=")
+        view, eng = view.strip(), eng.strip()
+        if view not in ("front", "back") or eng not in ("fashn", "qwen"):
+            raise ValueError(f"--dress-pin: {part!r} is not front|back=fashn|qwen")
+        out[view] = eng
+    return out
+
+
+def pixel_sha256(rgb: bytes, w: int, h: int) -> str:
+    """sha256 of a still's decoded pixels (8-bit RGB, row-major) with its size: the same image gives the same hash whatever
+    the PNG encoder (zlib level, numpy / Pillow version), unlike a hash of the file (run 16b, review of 0.10.0)."""
+    if len(rgb) != w * h * 3:
+        raise ValueError(f"pixel_sha256: {len(rgb)} bytes is not {w}x{h} RGB")
+    return hashlib.sha256(f"{w}x{h}x3:".encode() + bytes(rgb)).hexdigest()
+
+
+def parse_dress_expect(text: str | None) -> dict[str, str]:
+    """"front=<hex>,back=<hex>" -> {"front": ..., "back": ...} (the run_phase0 --dress-expect option): the pixel hash
+    (`pixel_sha256`) each recomposed still must have; a hex prefix of at least 12 characters is enough."""
+    out: dict[str, str] = {}
+    for part in (text or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        view, _, hx = part.partition("=")
+        view, hx = view.strip(), hx.strip().lower()
+        if view not in ("front", "back") or not re.fullmatch(r"[0-9a-f]{12,64}", hx):
+            raise ValueError(f"--dress-expect: {part!r} is not front|back=<12-64 hex characters of the pixel sha256>")
+        out[view] = hx
+    return out
+
+
+def dress_expect_problems(expect: Mapping[str, str], got: Mapping[str, str | None]) -> list[str]:
+    """Each view whose still's pixel hash does not start with the expected one (a missing still counts)."""
+    out = []
+    for view, hx in expect.items():
+        g = got.get(view)
+        if g is None:
+            out.append(f"{view}: no still to compare with the reviewed one (expected pixel sha256 {hx})")
+        elif not g.startswith(hx):
+            out.append(f"{view}: the still is not the one reviewed: pixel sha256 {g[:16]}..., expected {hx[:16]}...")
+    return out
 
 
 def stage1b_summary(views: Sequence[Mapping[str, Any]], *, invented_back: bool) -> dict[str, Any]:

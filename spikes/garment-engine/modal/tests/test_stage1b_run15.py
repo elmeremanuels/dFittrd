@@ -365,29 +365,36 @@ def test_conform_leaves_tops_outerwear_and_open_rows_alone():
 TROUSERS4 = up(PROXY_TROUSERS)
 
 
-def test_conform_widens_trousers_above_the_crotch_only():
-    """0.9.0 (review of 0.8.0): trousers are hip-checked too, so a correct two-leg draw a few px inside the proxy at the
-    hips (run 15's palazzo: 5 / 14 px) must be conformed there, not stopped; the legs below the crotch stay as drawn."""
+def test_trousers_are_not_conformed_to_the_proxy_but_their_hips_cover_our_body():
+    """0.10.0 (run 16a's palazzo back): widening the hips to the trousers proxy's hip block, which ends in a step, over legs
+    left as drawn made a yoke shelf. Trousers are no longer conformed to the proxy; where the engine drew them slimmer than
+    OUR hips (background beside them), `conform_edges` stretches the cloth over our body, which tapers into the thighs."""
     gap = dq.trouser_gap_zone(TROUSERS4, BARE4)
     region, _ = dq.edit_region(TROUSERS4, BARE4, "bottoms", open_crotch=gap)
     p = dq.qa_proxy(TROUSERS4, gap)
-    drawn = p & ~up(box(44, 80, 46, 200)) & ~up(box(74, 80, 76, 200))  # 8 px a side inside the proxy, hips and legs
+    legs = dq.pg.leg_rows(BARE4)
+    crotch = legs[0]
+    hips = np.zeros_like(BARE4)
+    hips[320:crotch] = True  # the proxy's top (row 80 at quarter scale) to the crotch
+    drawn = p & ~(up(box(44, 80, 48, 200)) & hips) & ~(up(box(72, 80, 76, 200)) & hips)  # 8 px inside OUR hips a side
     stripes = np.zeros(BARE4.shape + (3,), np.float64)
     stripes[:] = (170, 30, 40)
     stripes[:, (np.arange(480) // 6) % 2 == 1] = (230, 170, 180)
-    gen = render4([(drawn, stripes)], seed=6)
-    legs = dq.pg.leg_rows(BARE4)
-    before = dq.hip_profile(drawn & region, p, BARE4, legs, kind="trousers", short_px=5)
-    assert before["short_rows"] == before["rows"] > 0
-    out, mask, rec = dq.conform_to_proxy(gen, drawn & region, p, BARE4, region, kind="trousers")
-    assert rec["applied"] and rec["capped_rows"] == 0
-    after = dq.hip_profile(mask, p, BARE4, legs, kind="trousers", short_px=5)
-    ramp = int(round(dq.CONFORM["ramp_frac"] * 832))
-    assert after["short_frac"] < dq.STILL_QA_THRESHOLDS["max_hip_short_frac"] and after["short_rows"] <= ramp  # only in the ramp-in
-    y = 320 + ramp + 5
-    assert (mask[y] == p[y]).all()
-    crotch = legs[0]
-    assert (mask[crotch:] == (drawn & region)[crotch:]).all() and (out[crotch:] == gen[crotch:]).all()
+    gen = render4([(BARE4 & hips & ~drawn, STUDIO), (drawn, stripes)], seed=6)
+    same, same_mask, rec = dq.conform_to_proxy(gen, drawn & region, p, BARE4, region, kind="trousers")
+    assert not rec["applied"] and (same_mask == (drawn & region)).all() and "trousers" not in dq.CONFORM_KINDS
+    before = dq.edge_profile(drawn & region, BARE4, gen, STUDIO, kind="trousers")
+    assert before["px"] > 0
+    out, mask, er = dq.conform_edges(gen, drawn & region, BARE4, region, STUDIO, kind="trousers")
+    # only the garment's first row is left (its core, eroded by 1 px, is empty there): it stays counted
+    assert er["applied"] and er["capped_rows"] <= 2
+    after = dq.edge_profile(mask, BARE4, out, STUDIO, kind="trousers")
+    assert after["px"] <= 2 * 8 and after["px"] < before["px"] / 20
+    assert not (BARE4 & hips & region & ~mask)[legs[0] - 40:legs[0]].any()  # our hips covered
+    assert (mask[crotch:] == (drawn & region)[crotch:]).all() and (out[crotch:] == gen[crotch:]).all()  # legs as drawn
+    assert dq.width_steps(mask, BARE4, kind="trousers", step_px=6, proxy=p)["steps"] == []
+    q = dq.still_qa(mask, BARE4 | mask, BARE4, p, region, kind="trousers", edges=dq.edge_profile(mask, BARE4, out, STUDIO, kind="trousers"))
+    assert not q["type_failures"], q["type_failures"]
 
 
 def test_composite_mask_closes_a_notch_below_the_proxy_but_not_with_the_floor():
@@ -430,12 +437,13 @@ def test_pick_engine_prefers_a_candidate_without_a_type_failure():
 def test_stage1_app_uses_the_run15_fixes():
     with open(os.path.join(MODAL_DIR, "stage1_dress.py"), encoding="utf-8") as f:
         src = f.read()
-    for needle in ("dq.clean_source_mask(smask_sam)", "dq.still_garment_mask(gen_np, chosen_mask, bare_mask, proxy_q, region, bg=bg)", "dq.unpasted_cloth(", "unpasted=unpasted",
+    for needle in ("dq.clean_source_mask(smask_sam)", "dq.compose_candidate(gen_np, chosen_mask, bare_mask, bare_np, proxy_q, region, bg, kind=kind, gap=crotch_gap)", "unpasted=unpasted",
+                   "gap_body=comp[\"gap_mannequin\"]",
                    "open_crotch=crotch_gap", "keep_visible=crotch_gap", "dq.engine_target(", "dq.view_agreement(", "dq.apply_view_agreement(",
-                   "dq.still_qa(garment, fg, bare_mask, proxy_q, region",
-                   "dq.conform_to_proxy(gen_np, garment, proxy_q, bare_mask, region, kind=kind)", "_conformed.png"):
+                   "dq.still_qa(garment, fg, bare_mask, proxy_q, region", "edges=edges, side=side", "_chosen_mask.png",
+                   "dq.pick_engine(candidates, prefer=", "dq.view_colour(", "dq.apply_view_colour(", "_conformed.png"):
         assert needle in src, needle
-    assert dq.STAGE1B_QA_VERSION == "stage1b-qa-0.9.0"
+    assert dq.STAGE1B_QA_VERSION == "stage1b-qa-0.10.1"
     json.dumps(dq.VIEW_THRESHOLDS)
 
 

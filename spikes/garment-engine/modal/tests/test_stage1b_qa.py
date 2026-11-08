@@ -244,7 +244,7 @@ def test_proxy_shape_checks_warn_until_retuned_and_the_leg_gap_stays_hard():
     # A real babydoll can be narrower and shorter than the proxy's guessed flare: low skirt cover, no leg gap. It covers
     # our hips (since stage1b-qa-0.8.0 a garment narrower than our own hips, mannequin beside it, is a type failure:
     # test_stage1b_run15.test_a_skirt_narrower_than_the_proxy_at_the_hips_is_a_type_failure).
-    narrow = box(46, 42, 74, 120) | box(48, 120, 72, 136)
+    narrow = box(46, 42, 74, 120) | box(47, 120, 73, 128) | box(48, 128, 72, 136)  # tapering (a 2 px step is a shelf since 0.10.0)
     q = dq.still_qa(narrow, foreground(narrow), BARE, PROXY, REGION, kind="dress", mannequin_mae=5.0, residue=0.0)
     assert q["leg_gap_rows"] == 0 and q["skirt_cover"] < 0.7
     assert q["pass"], q["failures"]

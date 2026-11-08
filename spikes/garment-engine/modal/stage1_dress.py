@@ -48,8 +48,13 @@ two legs, and the "back" as a front) the engine dresses the PROXY-DRESSED manneq
        stage1b/edit_region_<view>.png                what the engines were allowed to change
        stage1b/raw/<view>.png, raw/<view>_<engine>.png  model outputs resized to the frame, uncomposited
        stage1b/candidates/<view>_<engine>_garment_mask.png, _garment_mask_unclipped.png
-      stage1b/candidates/<view>_<engine>_conformed.png   skirt/dress: the raw output with the hips widened to the proxy
-                                                    (dq.conform_to_proxy); raw/<view>.png is this one when it exists
+      stage1b/candidates/<view>_<engine>_conformed.png   the raw output with a skirt's or dress's hips widened to the proxy
+                                                    (dq.conform_to_proxy) and the garment's outer edge stretched over our
+                                                    body where the engine drew background (dq.conform_edges, 0.10.0);
+                                                    raw/<view>.png is this one when it exists
+       stage1b/candidates/<view>_<engine>_chosen_mask.png  the mask the composite starts from (0.10.0): replays are exact
+       stage1b/record.before_recompose.json         after `recompose` (CPU, 0.10.0): this run's own record; record.json then
+                                                    holds the stills re-made from the saved raw outputs (no engine run)
        stage1b/candidates/<view>_fashn_agnostic.png  the clothing-agnostic image FASHN saw (its grey inpaint area)
        stage1b/rejected/<view>.png                   a still that failed QA
        stage1b/source/<view>_mask.png, _cutout.png   the shop-photo segmentation
@@ -396,6 +401,8 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
     view_records: list[dict] = []
     front_pick: dict | None = None
     front_note: str | None = None
+    front_engine: str | None = None
+    shown_arrays: dict[str, tuple] = {}
     for v in views:
         t1 = time.time()
         name = v["view"]
@@ -490,22 +497,25 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
                         c["sam_score"] = round(rscore, 3)
                     gb, mask_source, agree = lib.choose_garment_mask(prior.astype(np.uint8).tobytes(), refined)
                     chosen_mask = np.frombuffer(bytes(gb), np.uint8).reshape(H, W).astype(bool) & region
-                    # The mask the composite pastes: the chosen mask plus what is not our grey mannequin inside the proxy
-                    # (run 15's blouse: the difference mask lost the print's cream ground, the proxy's own beige).
-                    garment, c["composite_mask"] = dq.still_garment_mask(gen_np, chosen_mask, bare_mask, proxy_q, region, bg=bg)
-                    # Skirt and dress: the hips widened to the proxy's (FASHN redraws a slimmer body under its grey box and
-                    # our hips showed beside run 15's skirt). The raw output above stays as drawn; the conformed still is
-                    # what the composite, the QA and the record use (stage1b-qa-0.8.0; trousers above the crotch since 0.9.0).
-                    conf_np, garment, c["conform"] = dq.conform_to_proxy(gen_np, garment, proxy_q, bare_mask, region, kind=kind)
-                    if c["conform"]["applied"]:
+                    # stage1b-qa-0.10.0: the chosen mask is saved, so a later replay (`rescore_job`, `recompose_job`) rebuilds
+                    # the app path exactly.
+                    c["chosen_mask"] = save_mask(chosen_mask, f"{lib.STAGE1B_DIR}/candidates/{name}_{eng}_chosen_mask.png")
+                    # The composite (dq.compose_candidate, shared with the replay): the chosen mask plus what is not our grey
+                    # mannequin (run 15's blouse; off our body, inside the proxy, every non-background piece since 0.10.0:
+                    # run 16a's palazzo holes), the hips of a skirt or dress widened to the proxy (run 15's skirt; trousers no
+                    # longer: run 16a's shelf), the garment's outer edge stretched over our body where the engine drew
+                    # background (run 16a's grey shoulder caps), and the QA inputs `unpasted` (a notch or hole) and `edges`
+                    # (our body still beside the cloth). The raw output above stays as drawn.
+                    conf_np, garment, comp = dq.compose_candidate(gen_np, chosen_mask, bare_mask, bare_np, proxy_q, region, bg, kind=kind, gap=crotch_gap)
+                    c["composite_mask"], c["conform"], c["conform_edges"] = comp["composite_mask"], comp["conform"], comp["conform_edges"]
+                    c["gap_mannequin"] = comp["gap_mannequin"]
+                    unpasted, edges = comp["unpasted"], comp["edges"]
+                    if c["conform"]["applied"] or c["conform_edges"]["applied"]:
                         gen_np = conf_np
                         gen = Image.fromarray(conf_np)
                         conf_rel = f"{lib.STAGE1B_DIR}/candidates/{name}_{eng}_conformed.png"
                         gen.save(os.path.join(job, conf_rel))
                         c["conformed"] = conf_rel
-                    # Cloth the engine drew on our body that the composite would not paste (a notch; stage1b-qa-0.9.0).
-                    cm = c["composite_mask"]
-                    unpasted = dq.unpasted_cloth(gen_np, garment, bare_np, bare_mask, region, bg, None if cm["ambiguous_with_mannequin"] else cm["mannequin"])
                     # The same garment NOT clipped to the region: QA's inside fraction and cut share are measured on
                     # it (on `garment` they are 1.0 and 0 by construction), so a sleeve the composite would chop fails.
                     garment_full = dq.unclipped_garment(gen_np, target_np, region, bg, ring_px=region_rec["sleeve_band_px"] or region_rec["margin_px"],
@@ -517,8 +527,11 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
                     residue = dq.proxy_residue(gen_np, target_np, proxy_q, garment)
                     # Print fidelity: the candidate's garment against the shop photo's (palette and print); a failure is never picked.
                     fid = dq.print_fidelity(gen_np, garment, np.asarray(s["image"]), s["mask"]) if garment.any() else None
+                    # Left and right against the shop photo of the same view (0.10.0: run 16a's cardigan back, sleeves swapped).
+                    side = dq.side_colour(gen_np, garment, np.asarray(s["image"]), s["mask"]) if (garment.any() and not v["invented"]) else None
                     qa = dq.still_qa(garment, fg, bare_mask, proxy_q, region, kind=kind, mannequin_mae=mae, residue=residue, garment_full=garment_full,
-                                     sleeve_band_px=region_rec["sleeve_band_px"], fidelity=fid, rgb=gen_np, bare_rgb=bare_np, unpasted=unpasted)
+                                     sleeve_band_px=region_rec["sleeve_band_px"], fidelity=fid, rgb=gen_np, bare_rgb=bare_np, unpasted=unpasted,
+                                     edges=edges, side=side, gap_body=comp["gap_mannequin"])
                     c["candidate_colour"] = dq.garment_colour(gen_np, garment)
                     g_b = garment.astype(np.uint8).tobytes()
                     v1 = lib.alignment_qa(g_b, fg_b, bare_mask.astype(np.uint8).tobytes(), W, H, v1_margin,
@@ -548,7 +561,8 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
                 candidates.append(c)
                 print(f"[stage1b] {name} / {eng}: QA {'pass' if c['qa'].get('pass') else 'FAIL'} score {c['qa'].get('score')} {c['qa'].get('failures', [])}")
 
-            decision = dq.pick_engine(candidates)
+            # The back takes the front's engine when it passes and its fidelity is within dq.SAME_ENGINE_MARGIN (0.10.0).
+            decision = dq.pick_engine(candidates, prefer=front_engine if name == "back" else None)
             rec["selection"] = decision
             rec["candidates"] = [{k: val for k, val in c.items() if k != "_arrays"} for c in candidates]
             # `engine` is the candidate the view shows (pinned when it passed); when every candidate failed print fidelity
@@ -558,6 +572,9 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
             if chosen is None:
                 raise RuntimeError("; ".join(c.get("error", "") for c in candidates))
             arr = chosen["_arrays"]
+            shown_arrays[name] = (arr["gen_np"], arr["garment"])
+            if name == "front":
+                front_engine = shown
             rec.update({k: chosen.get(k) for k in ("engine", "method", "prompt", "pose", "mask_source", "sam_prior_iou", "qa", "qa_v1_vs_bare", "back_view", "model_output_size")})
             raw_rel = f"{lib.STAGE1B_DIR}/raw/{name}.png"
             arr["gen"].save(os.path.join(job, raw_rel))
@@ -607,6 +624,15 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
         dq.apply_view_agreement(by_view["back"].get("qa"), agreement)
         if agreement.get("failures"):
             print(f"[stage1b] front and back disagree (type failure): {agreement['failures']}")
+        # Colour of the two shown stills against the shop photos' own front/back difference (0.10.0; not a type failure).
+        if {"front", "back"} <= set(shown_arrays):
+            shop_f = (np.asarray(sources["front"]["image"]), sources["front"]["mask"]) if "front" in sources else None
+            shop_b = (np.asarray(sources["back"]["image"]), sources["back"]["mask"]) if "back" in sources else None
+            vcol = dq.view_colour(shown_arrays["front"], shown_arrays["back"], shop_f, shop_b)
+            by_view["back"]["view_colour"] = vcol
+            dq.apply_view_colour(by_view["back"].get("qa"), vcol)
+            if vcol.get("failures"):
+                print(f"[stage1b] front and back differ in colour: {vcol['failures']}")
 
     model_pins = {k: M[k] for k in ENGINE_WEIGHTS[engine]}
     record = {
@@ -636,6 +662,25 @@ def dress(job_id: str, engine: str = "fashn", steps: int = 0, seed: int | None =
         "label": lib.STAGE1B_LABEL,
     }
     with open(f"{out}/record.json", "w") as f:
+        json.dump(record, f, indent=2)
+    pm.jobs.commit()
+    return record
+
+
+@app.function(image=image, volumes={pm.JOBS_DIR: pm.jobs}, timeout=1800, memory=8192, cpu=2.0, region=CFG["region"])
+def recompose(job_id: str, pins: dict | None = None, accept_failed: bool = False) -> dict:
+    """CPU only, no engine (stage1b-qa-0.10.0, run 16b): re-make this job's pinned stills from the raw engine outputs a
+    finished stage 1b run left in the jobs Volume, with the current composite, conforms and QA
+    (`phase0_dress.recompose_job`; `pins` = view -> engine). Stage 2 then pins stills that were reviewed, not a new draw."""
+    import phase0_dress as dq
+
+    t0 = time.time()
+    pm.jobs.reload()
+    job = f"{pm.JOBS_DIR}/{job_id}"
+    m = lib.load_manifest(f"{job}/manifest.json")
+    record = dq.recompose_job(job, m, pins=pins, accept_failed=accept_failed)
+    record["recomposed"]["cpu_seconds"] = round(time.time() - t0, 1)
+    with open(f"{job}/{lib.STAGE1B_DIR}/record.json", "w") as f:
         json.dump(record, f, indent=2)
     pm.jobs.commit()
     return record

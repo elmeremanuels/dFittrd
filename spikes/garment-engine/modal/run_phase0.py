@@ -24,6 +24,11 @@ Options: --steps 40 --iterations 10000 --triangles 12000 --skip-video (reuse sta
          --no-synthetic-recon --control-encoding linear|inverse --no-pin-frames --force-upload
          --dress --dress-engine fashn|qwen|both --dress-steps N --accept-failed-dress --allow-invented-back --dress-only
          --stage2-masks garment|foreground (stage 4's alpha targets on the generated frames; recorded)
+         --reuse-dress (stage 1b's stills as the jobs Volume holds them; no engine) | --recompose-dress [--dress-pin front=qwen,back=qwen]
+         (re-make them on CPU from the saved raw outputs with the current composite and QA, stage1b-qa-0.10.x; the gate then
+         reads that record). Neither redraws a still, so stage 2 pins what was reviewed.
+         --dress-expect front=<hex>,back=<hex> (with either: the pixel sha256 of each reviewed still, `phase0_lib.pixel_sha256`
+         of the decoded RGB, at least 12 hex characters; a recomposed still that differs stops before stage 2)
 Every number this prints about cost is an ESTIMATE (list price x GPU seconds); the Modal invoice is
 the measurement. NOT TESTED on a GPU: the build container cannot reach Modal.
 """
@@ -81,6 +86,41 @@ def _dress_gate(m: dict, job_dir: str, dress_record: dict | None, *, accept_fail
     return reasons
 
 
+def _reuse_mode(*, dress: bool, dress_only: bool, reuse_dress: bool, recompose_dress: bool, dress_pin: str) -> str | None:
+    """None (stage 1b runs or is not used), "reuse" or "recompose". Refuses contradictory options before any spend."""
+    if reuse_dress and recompose_dress:
+        raise SystemExit("[phase0] --reuse-dress and --recompose-dress: pick one")
+    mode = "recompose" if recompose_dress else "reuse" if reuse_dress else None
+    if mode and (dress or dress_only):
+        raise SystemExit(f"[phase0] --{mode}-dress uses the stage 1b outputs already in the Volume: it cannot run with --dress / --dress-only (a new draw)")
+    lib.parse_dress_pins(dress_pin)  # a malformed pin fails here, before any spend
+    if dress_pin and mode != "recompose":
+        raise SystemExit("[phase0] --dress-pin needs --recompose-dress (it picks the engine per view among the saved candidates)")
+    return mode
+
+
+def _dress_expect(reuse: str | None, text: str) -> dict[str, str]:
+    """--dress-expect (pixel hashes of the reviewed stills), refused without --reuse-dress / --recompose-dress."""
+    try:
+        expect = lib.parse_dress_expect(text)
+    except ValueError as e:
+        raise SystemExit(f"[phase0] {e}") from None
+    if expect and not reuse:
+        raise SystemExit("[phase0] --dress-expect needs --recompose-dress or --reuse-dress (it checks the reused stills)")
+    return expect
+
+
+def _reused_record_problem(m: dict, record: dict) -> str | None:
+    """Why a stage 1b record from the Volume must not feed this job's stage 2 (None = fine)."""
+    if record.get("input_hash") != m.get("input_hash"):
+        return f"the stage 1b record in the Volume is for input_hash {record.get('input_hash')!r}, this export has {m.get('input_hash')!r}"
+    if record.get("job_id") not in (None, m.get("job_id")):
+        return f"the stage 1b record is for job {record.get('job_id')!r}, not {m.get('job_id')!r}"
+    if "summary" not in record or "views" not in record:
+        return "the stage 1b record has no summary or views"
+    return None
+
+
 def _base_summary(m: dict, cfg: dict) -> dict:
     """The head of cost_summary.json. The invented-back flag comes from the manifest, so it is there
     whether stage 1b ran in this call (--dress) or before it (stage1_dress.py on its own)."""
@@ -124,6 +164,10 @@ def main(
     allow_invented_back: bool = False,
     dress_only: bool = False,
     stage2_masks: str = "garment",
+    reuse_dress: bool = False,
+    recompose_dress: bool = False,
+    dress_pin: str = "",
+    dress_expect: str = "",
 ):
     cfg = stage2_video.CFG
     m = pm.load_local_job(job_dir)
@@ -133,12 +177,45 @@ def main(
     if synthetic_photos:
         print("[phase0] the front/back stills are SYNTHETIC renders (dry run), not merchant photos")
     t_all = time.time()
+    # the reuse options are checked before the upload (review of 0.10.0): a contradictory set stops before anything is sent
+    reuse = _reuse_mode(dress=dress, dress_only=dress_only, reuse_dress=reuse_dress, recompose_dress=recompose_dress, dress_pin=dress_pin)
+    expect = _dress_expect(reuse, dress_expect)
     pm.upload_job(job_dir, job_id, force=force_upload)
     costs: list[dict] = []
     summary: dict = _base_summary(m, cfg)
 
     dress_record = None
-    if dress or dress_only:
+    if reuse:
+        # stage1b-qa-0.10.0 (run 16b): no engine runs. The jobs Volume keeps /<job_id>/stage1b/ from the earlier stage 1b run
+        # (the job id holds the input hash, so a re-export of the same inputs lands on the same directory); --recompose-dress
+        # re-makes its stills with the current composite and QA on CPU, --reuse-dress takes them as they are.
+        t = time.time()
+        if reuse == "recompose":
+            dress_record = stage1_dress.recompose.remote(job_id, pins=lib.parse_dress_pins(dress_pin) or None, accept_failed=accept_failed_dress)
+        n = pm.download_dir(job_dir, job_id, lib.STAGE1B_DIR)
+        rec_path = os.path.join(job_dir, lib.STAGE1B_DIR, "record.json")
+        if n == 0 or not os.path.exists(rec_path):
+            raise SystemExit(f"[phase0] no stage 1b outputs for {job_id} in the jobs Volume: run stage 1b (--dress) first")
+        with open(rec_path) as f:
+            dress_record = json.load(f)
+        problem = _reused_record_problem(m, dress_record)
+        if problem:
+            raise SystemExit(f"[phase0] {problem}")
+        # The stills' decoded pixels (`still_pixel_sha256`, hashed by the recompose in the Modal image, numpy / Pillow as pinned
+        # there) against the ones reviewed (--dress-expect): a still that differs stops before stage 2. The local client has
+        # only `modal` installed, so the hash is read from the record, not recomputed here.
+        got = {v["view"]: (v.get("still_pixel_sha256") if v.get("still") else None) for v in dress_record["views"]}
+        for view, hx in got.items():
+            print(f"[phase0] stage 1b {view} still pixel sha256: {hx}")
+        bad = lib.dress_expect_problems(expect, got)
+        if bad:
+            raise SystemExit("[phase0] not starting stage 2: " + "; ".join(bad))
+        summary["stage1b"] = {"reused": reuse, "still_pixel_sha256": got, "expected_pixel_sha256": expect or None, "qa_version": dress_record.get("qa_version"), "recomposed": dress_record.get("recomposed"),
+                              "summary": dress_record["summary"], "seconds": round(time.time() - t, 1),
+                              "views": [{k: v.get(k) for k in ("view", "engine", "selection", "qa", "still", "still_sha256")} for v in dress_record["views"]]}
+        print(f"[phase0] stage 1b {reuse}d from the Volume (QA {dress_record.get('qa_version')}): usable for stage 2 {dress_record['summary']['usable_for_stage2']}, "
+              f"engines {[(v['view'], v.get('engine')) for v in dress_record['views']]}")
+    elif dress or dress_only:
         lib.dress_engines(dress_engine)  # an unknown engine fails here, before any GPU time
         dcfg = stage1_dress.CFG
         t = time.time()

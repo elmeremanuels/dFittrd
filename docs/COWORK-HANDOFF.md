@@ -35,7 +35,7 @@ en de beslissingen.
 | Website `apps/site` (curtain.fit) | Klaar en samengevoegd in `claude/garment-engine`, met Bohohippychic-beelden. Gaat pas live als de launch gates dicht zijn (zie "Wat nog bij Elmer ligt") |
 | Toestemming Bohohippychic | **Gegeven** (verklaring Elmer, 8 nov 2026): naam, logo, productfoto's en de 3D-modellen daarvan, op de website en in demo's. Elmer bewaart de schriftelijke bevestiging |
 | `main` op GitHub | Bevat alleen een oude init-commit; al het werk moet daar nog naartoe (stap 6) |
-| VPS | Elmer heeft er een. Nog niet ingericht voor Curtain; IP-adres nog niet bekend bij de bouwsessie |
+| VPS | Elmer schaft een tweede, aparte VPS aan voor Curtain (9 nov 2026). De hele serverstraat is op een gesimuleerde verse Ubuntu 24.04 gerepeteerd (`docs/GOLIVE-REHEARSAL.md`) |
 | Domein `curtain.fit` | Geregistreerd bij Hostinger |
 
 ## Plan: alles op één VPS
@@ -63,7 +63,8 @@ site vanzelf.
 - IPv4-adres en eventueel IPv6-adres van de VPS.
 - Besturingssysteem: Ubuntu 24.04 of Debian 12. Als dat niet zo is, eerst aan Elmer vragen of
   herinstalleren mag; dat wist de server.
-- Minimaal 2 vCPU, 4 GB RAM en 40 GB schijf.
+- 2 vCPU, 2 GB RAM (4 GB mag ook) en 40 GB SSD, regio Sydney, Ubuntu 24.04. Gemeten in de generale repetitie
+  (`docs/GOLIVE-REHEARSAL.md`); voeg in DNS nog geen AAAA-records (IPv6) toe.
 - Root-toegang met SSH.
 - **Draait er al iets op de server?** Bijvoorbeeld een andere website, of iets op poort 80 en 443.
   Zo ja: **stoppen en Elmer vragen.** Caddy heeft poort 80 en 443 nodig.

@@ -29,8 +29,10 @@ client secret, …) lives in `/etc/curtain/curtain.env` on the VPS.
 
 ### 1. A server
 
-Any VPS with 2 vCPU, 4 GB RAM and 40 GB disk runs the whole stack (Caddy, the api, Postgres). Use
-Ubuntu 24.04 or Debian 12. For the Australian pilot shop a Sydney region keeps the api close to its
+A VPS with **2 vCPU, 2 GB RAM and 40 GB SSD** runs the whole stack (Caddy, the api, Postgres) with room to
+spare; 4 GB RAM is fine too if it costs little more. Measured in the go-live rehearsal (`docs/GOLIVE-REHEARSAL.md`, §4):
+the stack peaks under 0.8 GB with page cache, and even 1 vCPU / 1 GB served 1,400 req/s; disk use is under 5 GB. Use
+Ubuntu 24.04 (rehearsed end to end) or Debian 12. For the Australian pilot shop a Sydney region keeps the api close to its
 shoppers (Hetzner has no AU region; Vultr, DigitalOcean, Linode and AWS Lightsail do). The api never
 runs models, so no GPU.
 
@@ -45,7 +47,10 @@ DNS only (no Hostinger hosting): hPanel → Domains → curtain.fit → DNS / Na
 | A | `www` | `www.<domain>` (redirects to `<domain>`) | the server's IPv4 | 300 |
 | A | `app` | `app.<domain>` | the server's IPv4 | 300 |
 | A | `api` | `api.<domain>` | the server's IPv4 | 300 |
-| AAAA | `@`, `www`, `app`, `api` | | the server's IPv6 (optional, only if the server has one) | 300 |
+| AAAA | `@`, `www`, `app`, `api` | | the server's IPv6: leave these out at first (see below) | 300 |
+
+IPv6 has not been tested. When AAAA records exist, Let's Encrypt validates over IPv6, so a server that does not answer
+on IPv6 gets no certificates. Add them later, once `curl -6 https://api.<domain>/healthz` works from an IPv6 network.
 
 Remove the `A`/`CNAME` records for `@` and `www` that Hostinger adds by default (parking page or
 Hostinger hosting) first; note what was there. Leave the mail records alone (`MX`, the SPF `TXT`, the
@@ -172,6 +177,10 @@ Actions → **deploy** → Run workflow → branch `release` (or `main`) → act
 
 The first deploy takes a minute longer: Caddy fetches the certificates.
 
+Docker Hub limits anonymous pulls per IP. The deploy pulls the new api image (required) and then `caddy` and
+`postgres`; when Docker Hub refuses (429) or is down and those images are already on the server, it warns and goes on.
+To lift the limit for good, log the server in once with a free Docker Hub account: `sudo -u deploy docker login`.
+
 ### Rollback
 
 Actions → deploy → action `rollback` returns to the previous release (image, web and site). Running it
@@ -192,12 +201,12 @@ restore from the pre-deploy backup.
 
 `scripts/deploy.sh` is what the workflow runs. With the same variables (`VPS_HOST`, `VPS_USER`,
 `DOMAIN`, `IMAGE_REPO`, `TAG`, optional `WEB_DIST`, optional `SITE_DIST` (= `apps/site/dist` after
-`pnpm --filter @curtain/site build:release`), `GHCR_USER`/`GHCR_TOKEN`) it deploys from any machine
+`pnpm --filter @curtain/site build:release`; a refused release build removes `dist/`, so it cannot be shipped by mistake), `GHCR_USER`/`GHCR_TOKEN`) it deploys from any machine
 that has ssh and rsync. Without `SITE_DIST` the site on the server stays as it is. `scripts/deploy.sh status` and `rollback` need only the first three.
 
 ## Backups
 
-`infra/scripts/backup.sh` runs every night at 03:17 UTC as `deploy` (`/etc/cron.d/curtain-backup`,
+`infra/scripts/backup.sh` runs every night at 03:17 server time (UTC on Ubuntu cloud images; check `timedatectl`) as `deploy` (`/etc/cron.d/curtain-backup`,
 log in `/var/log/curtain/backup.log`) and before every deploy. It streams `pg_dump | gzip | age` to
 `/var/backups/curtain/curtain-<label>-<UTC time>.sql.gz.age` with a `.sha256` next to it, keeps
 `BACKUP_KEEP_DAYS` (14) days locally and, when `BACKUP_RCLONE_REMOTE` is set, copies the nightly dump
@@ -273,6 +282,18 @@ With `https://api.<domain>/healthz` green:
 The public App Store listing comes later and needs the checklist in `packages/shopify-app/README.md`.
 
 ## What was verified, and what not
+
+**Go-live rehearsal (9 Nov 2026, `docs/GOLIVE-REHEARSAL.md`).** On a simulated fresh Ubuntu 24.04 VPS (systemd, sshd,
+ufw, Docker from Docker's repo) with the unchanged Caddyfile and compose file: the bootstrap (three runs, idempotent,
+`--harden-ssh`), first deploy, upgrade with a site release, a release that rolled itself back, an invalid Caddyfile,
+manual rollbacks, the nightly backup from the cron line, the restore drill, a real restore, compose restarts, a reboot
+and a power cut, 46 edge checks after each, and a capped load test. Every workflow `run:` step was run by hand. Fixed on
+the way: a Docker Hub rate limit (429) no longer blocks a deploy when Caddy and Postgres are already on the server;
+`DOMAIN=app.curtain.fit` is refused; a refused site release build leaves nothing to publish. Still not run: Let's
+Encrypt, GHCR, the workflow on GitHub, rclone, IPv6. Each deploy has about 3 s of api 502s while the container swaps.
+
+Earlier:
+
 
 Verified on a Docker host (Nov 2026): the api image builds from `apps/api/Dockerfile`; a local
 "server" ran first deploy, upgrade, a failing release that rolled itself back, a manual rollback, the

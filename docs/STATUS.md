@@ -3,6 +3,17 @@
 This is the integration snapshot after the parallel build and review passes. Read it with
 `docs/DECISIONS.md` (why), `docs/ARCHITECTURE.md` (layout) and `docs/HANDOFF.md` (product truth).
 
+## Go-live rehearsal of the server stack (branch `claude/golive-prod`) — 9 Nov 2026
+
+The production path ran end to end on a simulated fresh Ubuntu 24.04 VPS (systemd, sshd, ufw, Docker from Docker's
+repo) with the unchanged `infra/Caddyfile` and `docker-compose.yml`: bootstrap (idempotent, `--harden-ssh`), first
+deploy (29 s), upgrade with a site release (14 s), automatic rollback of a broken release, an invalid Caddyfile refused
+untouched, manual rollbacks, nightly backup from the cron line, restore drill passed, a real restore, restarts, a reboot
+and a power cut (back in 4–5 s), 46 edge checks after each. Fixed: Docker Hub 429s no longer block a deploy;
+`DOMAIN=app.curtain.fit` is refused; a refused site release build leaves nothing to publish. Refinement M3 closed.
+Measured: idle RSS 100 MiB, under load < 0.8 GB with cache, disk < 5 GB; advice 2 vCPU / 2 GB / 40 GB, Sydney, IPv4
+only at first. Details and what is still open: `docs/GOLIVE-REHEARSAL.md`.
+
 ## Garment engine — refinement R1, R3, R5, R6 on CPU (branch `claude/refine-cpu`) — 8 Nov 2026
 
 No GPU. Stage 4t 0.5.0 (template fit 0.5.0) re-run on azure 17b, the skirt and the palazzo (17d) from their existing frames;

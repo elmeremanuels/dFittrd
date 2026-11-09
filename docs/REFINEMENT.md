@@ -45,7 +45,7 @@ All of R1–R8 can run in parallel: about **10–16 h** wall-clock and **$10–1
 |---|---|---|---|---|
 | M1 | No approval screen for 3D assets in the Shopify and Woo admin. `settings.garment3d` is set by hand. QA flags (`low_rise_waist`) and `qaNotes` are visible only in the API | Admin row with preview, approve/reject and the notes | 4–6 h | 1 after launch (before 3D at a real shop) |
 | M2 | The import gate trusts qa.json | Recompute key QA fields at import | 2 h | 3 |
-| M3 | The Caddy `/assets` block has not been validated against a real Caddy | `infra/scripts/caddy-validate.sh` on the VPS before the first deploy | 15 min | at deploy |
+| M3 | ~~The Caddy `/assets` block has not been validated against a real Caddy~~ **Closed 9 Nov 2026**: `caddy-validate.sh` passes with Caddy 2.9.1 and the block was exercised over HTTPS (`docs/GOLIVE-REHEARSAL.md`) | `infra/scripts/caddy-validate.sh` also runs on every deploy | done | done |
 | M4 | 3D pricing (D17) | Founder decision | – | founder |
 | M5 | The demo price shows EUR 0 for the azure product | Cosmetic, demo only | 15 min | 4 |
 

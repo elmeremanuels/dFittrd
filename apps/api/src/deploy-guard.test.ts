@@ -90,3 +90,21 @@ describe('the site release build fails closed', () => {
     expect(release.indexOf('process.exit(1)')).toBeGreaterThan(cleanup);
   });
 });
+
+describe('the server deploy does not depend on Docker Hub for images it already has', () => {
+  const serverDeploy = read('infra/scripts/deploy.sh');
+
+  it('pulls the api image (required) and tolerates a failed caddy/postgres pull when the image is on the host', () => {
+    expect(serverDeploy).not.toContain('compose pull --quiet api caddy postgres');
+    const fn = serverDeploy.slice(serverDeploy.indexOf('pull_images() {'), serverDeploy.indexOf('\n}\n', serverDeploy.indexOf('pull_images() {')));
+    expect(fn).toContain('compose pull --quiet api || return 1');
+    expect(fn).toContain('compose config --images caddy postgres');
+    expect(fn).toMatch(/if ! docker pull -q "\$img"[\s\S]*docker image inspect "\$img"[\s\S]*WARNING[\s\S]*return 1/);
+  });
+
+  it('a failed pull stops before anything changes and puts infra/.env back on the running image', () => {
+    const failed = serverDeploy.slice(serverDeploy.indexOf('if ! pull_images; then'));
+    expect(failed.indexOf('write-env.sh" --domain "$DOMAIN" --image "$CUR_IMAGE"')).toBeLessThan(failed.indexOf('exit 1'));
+    expect(serverDeploy.indexOf('if ! pull_images; then')).toBeLessThan(serverDeploy.indexOf('log "running migrations"'));
+  });
+});

@@ -154,7 +154,7 @@ publish_web() {
 # not there yet; then prune what belongs to neither this release nor the previous one.
 publish_site() {
   local release="$1" previous="${2:-}"
-  [ -f "$release/index.html" ] && [ -f "$release/404.html" ] || { echo "deploy: no index.html and 404.html in $release" >&2; return 1; }
+  if [ ! -f "$release/index.html" ] || [ ! -f "$release/404.html" ]; then echo "deploy: no index.html and 404.html in $release" >&2; return 1; fi
   local prev_mount=()
   if [ -n "$previous" ] && [ -d "$previous" ] && [ "$previous" != "$release" ]; then
     prev_mount=(-v "$previous:/prev:ro")
@@ -287,11 +287,34 @@ log "deploying $NEW_IMAGE ${WEB_RELEASE:+(web $(basename "$WEB_RELEASE"))} ${SIT
 
 "$HERE/scripts/write-env.sh" --domain "$DOMAIN" --image "$NEW_IMAGE"
 
+# The new api image must come from the registry. Caddy and Postgres are pinned tags that are normally
+# already here: a Docker Hub outage or its anonymous rate limit (429) must not block a deploy, or an
+# emergency fix, when the host has them. Only an image that is missing locally is fatal.
+pull_images() {
+  compose pull --quiet api || return 1
+  local img
+  for img in $(compose config --images caddy postgres | sort -u); do
+    [ "$img" = "$NEW_IMAGE" ] && continue
+    if ! docker pull -q "$img" >/dev/null; then
+      if docker image inspect "$img" >/dev/null 2>&1; then
+        log "WARNING: could not pull $img (registry down or rate limited); using the copy already on this host"
+      else
+        log "could not pull $img and it is not on this host"
+        return 1
+      fi
+    fi
+  done
+}
+
 if [ "$DEPLOY_SKIP_PULL" = 1 ]; then
   log "DEPLOY_SKIP_PULL=1: using images already on this host"
 else
   log "pulling images"
-  compose pull --quiet api caddy postgres
+  if ! pull_images; then
+    log "pulling images failed; nothing was changed on the running stack"
+    [ -n "$CUR_IMAGE" ] && "$HERE/scripts/write-env.sh" --domain "$DOMAIN" --image "$CUR_IMAGE"
+    exit 1
+  fi
 fi
 
 log "validating infra/Caddyfile"

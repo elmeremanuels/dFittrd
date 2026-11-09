@@ -1,7 +1,7 @@
 {
   "name": "@curtain/woocommerce-plugin",
   "version": "0.1.0",
-  "description": "Curtain for WooCommerce — PHP 8.3 WordPress plugin: garment fit-data meta box, push-on-save sync with PK-HMAC, bundled try-on SDK button, Connect round-trip. Built to dist/curtain-woocommerce.zip.",
+  "description": "Curtain for WooCommerce \u2014 PHP 8.3 WordPress plugin: garment fit-data meta box, push-on-save sync with PK-HMAC, bundled try-on SDK button, Connect round-trip. Built to dist/curtain-woocommerce.zip.",
   "license": "GPL-2.0-or-later",
   "private": true,
   "type": "module",
@@ -12,10 +12,13 @@
     "build": "node scripts/build.mjs",
     "test": "node scripts/export-fixtures.mjs && php tests/run.php",
     "typecheck": "node scripts/lint.mjs",
-    "lint": "node scripts/lint.mjs"
+    "lint": "node scripts/lint.mjs",
+    "e2e:wp": "node e2e/run.mjs",
+    "e2e:wp:matrix": "node e2e/run.mjs --php=8.3 && node e2e/run.mjs --php=8.2 --skip-build && node e2e/run.mjs --php=8.1 --skip-build"
   },
   "devDependencies": {
     "@curtain/schema": "workspace:*",
-    "@curtain/sdk": "workspace:*"
+    "@curtain/sdk": "workspace:*",
+    "@curtain/shopify-app": "workspace:*"
   }
 }

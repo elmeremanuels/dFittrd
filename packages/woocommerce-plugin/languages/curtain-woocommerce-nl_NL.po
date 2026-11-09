@@ -58,6 +58,14 @@ msgstr "Kies een flat-lay-foto"
 msgid "Use this image"
 msgstr "Deze afbeelding gebruiken"
 
+#: includes/class-product-meta.php
+msgid "Replace the size chart below with this template?"
+msgstr "De maattabel hieronder vervangen door dit sjabloon?"
+
+#: includes/class-product-meta.php
+msgid "Fill in the measurements of each finished size (cm, all round)."
+msgstr "Vul per maat de maten van het afgewerkte kledingstuk in (cm, rondom)."
+
 #: includes/class-product-meta.php includes/class-settings.php
 msgid "Curtain"
 msgstr "Curtain"
@@ -206,6 +214,30 @@ msgstr "kledingmaten (plat gemeten)"
 #: includes/class-product-meta.php
 msgid "body measurements (the body each size is cut for)"
 msgstr "lichaamsmaten (het lichaam waarvoor elke maat is gesneden)"
+
+#: includes/class-product-meta.php
+msgid "Start from a template"
+msgstr "Begin met een sjabloon"
+
+#: includes/class-product-meta.php
+msgid "— choose a template —"
+msgstr "— kies een sjabloon —"
+
+#: includes/class-product-meta.php
+msgid "Body charts (numbers filled in)"
+msgstr "Lichaamsmaten (cijfers ingevuld)"
+
+#: includes/class-product-meta.php
+msgid "Garment charts (you measure each size)"
+msgstr "Kledingstukmaten (u meet elke maat)"
+
+#: includes/class-product-meta.php
+msgid "Use template"
+msgstr "Sjabloon gebruiken"
+
+#: includes/class-product-meta.php
+msgid "Fills the chart below; nothing is saved until you update the product. Check the sizes against your own labels."
+msgstr "Vult de tabel hieronder; er wordt pas iets opgeslagen als u het product bijwerkt. Controleer de maten tegen uw eigen maatlabels."
 
 #: includes/class-product-meta.php
 msgid "Add size"
@@ -581,8 +613,8 @@ msgid "Position"
 msgstr "Positie"
 
 #: includes/class-settings.php
-msgid "woocommerce_single_product_summary priority: 35 = after the add-to-cart form, 25 = before it, 15 = after the price."
-msgstr "Prioriteit in woocommerce_single_product_summary: 35 = na het winkelwagenformulier, 25 = ervoor, 15 = na de prijs."
+msgid "Classic themes: woocommerce_single_product_summary priority, 35 = after the add-to-cart form, 25 = before it, 15 = after the price. Block themes always place the button right under the add-to-cart form."
+msgstr "Klassieke thema's: prioriteit van woocommerce_single_product_summary, 35 = na het winkelwagenformulier, 25 = ervoor, 15 = na de prijs. Blokthema's zetten de knop altijd direct onder het winkelwagenformulier."
 
 #: includes/class-settings.php
 msgid "Label"

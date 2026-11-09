@@ -108,6 +108,45 @@
 		$box.find('input[name="curtain[fabric_stretch_pct]"]').trigger('focus');
 	});
 
+	// Size chart template (assets/chart-templates.json from @curtain/schema): a body template fills
+	// sizes and numbers, a garment template fills the size labels and leaves the numbers to measure.
+	$(document).on('change', '.curtain-template-select', function () {
+		var id = this.value;
+		var t = (curtainAdmin.templates || []).filter(function (x) { return x.id === id; })[0];
+		var $note = $(this).closest('.curtain-template').find('.curtain-template-note');
+		if (!$note.data('default')) $note.data('default', $note.text());
+		$note.text(t ? t.description + (t.kind === 'garment' ? ' ' + curtainAdmin.measureNote : '') : $note.data('default'));
+	});
+	$(document).on('click', '.curtain-template-apply', function (e) {
+		e.preventDefault();
+		var $wrap = $(this).closest('.curtain-template');
+		var id = $wrap.find('.curtain-template-select').val();
+		var t = (curtainAdmin.templates || []).filter(function (x) { return x.id === id; })[0];
+		if (!t) return;
+		var $box = $wrap.closest('.curtain-box');
+		var $table = $box.find('.curtain-repeater[data-repeater="size_chart"]');
+		var $rows = $table.find('tbody tr');
+		var filled = $rows.find('input').filter(function () { return this.value !== ''; }).length > 0;
+		if (filled && !window.confirm(curtainAdmin.replaceChart)) return;
+		$box.find('input[name="curtain[size_chart_type]"][value="' + t.kind + '"]').prop('checked', true).trigger('change');
+		var $template = $rows.first().clone();
+		$template.find('input').val('');
+		$table.find('tbody').empty();
+		t.sizes.forEach(function (size) {
+			var $row = $template.clone();
+			var data = t.kind === 'body' ? (t.rows || []).filter(function (r) { return r.size === size; })[0] || { size: size } : { size: size };
+			$row.find('input').each(function () {
+				var m = /\[([a-zA-Z]+)\]$/.exec(this.getAttribute('name') || '');
+				if (m && data[m[1]] !== undefined && data[m[1]] !== null) this.value = String(data[m[1]]);
+			});
+			$table.find('tbody').append($row);
+		});
+		renumber($table);
+		if (t.kind === 'garment' && t.points && t.points.length) {
+			$table.find('tbody tr').first().find('input[name$="[' + t.points[0] + ']"]').trigger('focus');
+		}
+	});
+
 	$(document).on('click', '.curtain-flatlay-remove', function (e) {
 		e.preventDefault();
 		var $box = $(this).closest('.curtain-flatlay');

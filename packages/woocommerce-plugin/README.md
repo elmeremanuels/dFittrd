@@ -1,10 +1,10 @@
 # @curtain/woocommerce-plugin
 
-**Curtain for WooCommerce** — a dependency-free PHP 8.2+ WordPress/WooCommerce plugin (docs/DECISIONS.md D6/D7):
+**Curtain for WooCommerce** — a dependency-free PHP 8.1+ WordPress/WooCommerce plugin (docs/DECISIONS.md D6/D7):
 
-- product-edit meta box for every GarmentPayload §3.1 field, saved as `_curtain_*` post meta in the exact formats `@curtain/schema`'s `fromWooMeta` reads;
+- product-edit meta box for every GarmentPayload §3.1 field, with "Start from a template" (the size chart templates of `@curtain/schema`), saved as `_curtain_*` post meta in the exact formats `@curtain/schema`'s `fromWooMeta` reads;
 - push-on-save sync to `PUT /v1/merchant/products/{id}` with **PK-HMAC** auth (retries via Action Scheduler, WP-Cron fallback), `DELETE` on trash/unpublish, "Sync all" backfill;
-- bundled `assets/sdk.v1.js` (copied from `@curtain/sdk` at build time — never loaded remotely) + "Try it on" button on single product pages;
+- bundled `assets/sdk.v1.js` (copied from `@curtain/sdk` at build time — never loaded remotely) + "Try it on" button on single product pages (classic themes: `woocommerce_single_product_summary` at the configured priority; block themes: right after the add-to-cart form block);
 - Connect round-trip (`POST /v1/merchant/woo/connect` → Stripe Checkout → `/complete` → `PUT /v1/merchant/shops/self`), manual key paste, status, ads toggle;
 - domain proof for every Connect (manual key and Stripe): `GET /wp-json/curtain/v1/verify` at the host root, only while a Connect is pending (the former signed backfill endpoint was removed, see below);
 - local validation against `assets/garment-draft.schema.json` (from `@curtain/schema`) and the backend dry-run `POST /v1/merchant/products/validate` for inline completeness feedback;
@@ -15,7 +15,7 @@ Nothing leaves the site until the merchant clicks **Connect**; the secret key is
 ## Layout
 
 ```
-curtain.php                 plugin header, requirements check (WC ≥ 9, PHP ≥ 8.2), HPOS declaration, boot
+curtain.php                 plugin header, requirements check (WC ≥ 9, PHP ≥ 8.1), HPOS declaration, boot
 uninstall.php                queue + notices always removed; settings/meta only when the option says so
 includes/
   autoload.php               class-map autoloader for the Curtain\ namespace
@@ -30,7 +30,7 @@ includes/
   class-sanitizer.php        meta-box POST → _curtain_* meta rows
   class-product-snapshot.php WC_Product → plain array (REST v3 subset) + meta reader
   class-product-meta.php     the meta box (render, save, validate, list column)
-  class-sync.php             hooks, jobs, retry policy
+  class-sync.php             hooks, jobs, retry policy, EUR conversion of non-EUR prices (assets/eur-rates.json)
   class-queue.php            Action Scheduler / WP-Cron abstraction
   class-frontend.php         SDK enqueue (data-shop/data-api/data-mode/data-size-option/data-locale/data-label), button, shortcode
   class-rest.php             Connect domain proof (verify route + meta tag)
@@ -68,14 +68,21 @@ pnpm --filter @curtain/woocommerce-plugin typecheck   # php -l on every PHP file
 pnpm --filter @curtain/woocommerce-plugin test        # export fixtures from @curtain/schema, then php tests/run.php
 pnpm --filter @curtain/woocommerce-plugin build       # copy sdk + schema json into assets/, php -l, zip → dist/curtain-woocommerce.zip
 php tests/run.php hmac                                 # run a subset
+pnpm --filter @curtain/woocommerce-plugin e2e:wp      # real WordPress + WooCommerce in Docker, Playwright (docs/LAUNCH-WOO.md)
+pnpm --filter @curtain/woocommerce-plugin e2e:wp -- --php=8.1   # 8.1 | 8.2 | 8.3; e2e:wp:matrix runs all three
+phpcs                                                  # phpcs.xml.dist: WordPress-Extra + PHP 8.1+ (composer tools, see the file)
 ```
+
+`e2e/run.mjs` uploads the built zip through wp-admin, connects (domain proof on, then off for localhost), fills the
+meta box from a template, checks the signed push in the api, runs the shopper flow on Storefront, Twenty Twenty-Four
+and Twenty Twenty-Five (also with the add-to-cart form moved into a template part), deactivates, uninstalls and runs Plugin Check. Screenshots: `test-results/woo-wp-e2e/`.
 
 `build` needs `@curtain/sdk` and `@curtain/schema` built first (the root `pnpm build` does packages before apps). The tests run under plain `php` with the shims in `tests/shims.php` (no WordPress, no Brain Monkey); they cover the HMAC signer against Node-computed vectors, the secret store, the JSON Schema validator against the bundled schema, the sanitiser, the payload builder's byte-for-byte parity with `fromWooMeta` on all 41 `MOCK_GARMENTS`, and the push/delete jobs end-to-end through a mocked `wp_remote_request` (including the retry policy).
 
 ## Pilot store install (direct zip)
 
 1. `pnpm --filter @curtain/woocommerce-plugin build` → `dist/curtain-woocommerce.zip`.
-2. WordPress admin → *Plugins → Add New → Upload Plugin* → upload the zip → *Activate*. Requires WooCommerce ≥ 9.0, PHP ≥ 8.2.
+2. WordPress admin → *Plugins → Add New → Upload Plugin* → upload the zip → *Activate*. Requires WooCommerce ≥ 9.0, PHP ≥ 8.1.
 3. *WooCommerce → Curtain*. For staging, set **API base URL** to the staging api first (Advanced section). Click **Connect to Curtain**:
    - with Stripe configured on the api the admin is sent to Checkout and back to the settings page (`?curtain=connected`), which finishes the token exchange automatically (or via *Finish connection*);
    - without Stripe (`mode: manual-key`) the connection completes immediately on the free plan.
@@ -85,7 +92,7 @@ php tests/run.php hmac                                 # run a subset
 
 ## WP.org submission checklist
 
-- [ ] Plugin slug `curtain-woocommerce`, text domain identical, `Stable tag` = plugin header version = `CURTAIN_VERSION` (the build script enforces this).
+- [ ] Plugin slug `curtain-woocommerce` (see the trademark item below), text domain identical, `Stable tag` = plugin header version = `CURTAIN_VERSION` (the build script enforces this).
 - [ ] GPL-2.0-or-later headers; no Composer/vendor code; no minified-only JS (meta-box.js is source; sdk.v1.js ships with its source in `packages/sdk`).
 - [ ] No remote code: `assets/sdk.v1.js` is bundled; the only external calls are the documented API calls.
 - [ ] *External services* section in `readme.txt` lists the API host, what is sent, when, and links to terms + privacy (done; update the URLs when the legal pages go live).
@@ -95,12 +102,14 @@ php tests/run.php hmac                                 # run a subset
 - [ ] HPOS compatibility declared; `Requires Plugins: woocommerce`.
 - [ ] Trademark: "WooCommerce" only in the descriptive sense ("for WooCommerce"), not as the first word of the slug.
 - [ ] Screenshots `assets/screenshot-1.png` … in the SVN `assets/` folder (not in the zip) — to produce from the pilot store.
-- [ ] Run PHPCS with WordPress-Extra + WooCommerce-Core rulesets once available (not available offline here); `php -l` is enforced by the build.
+- [x] PHPCS (`phpcs.xml.dist`, WordPress-Extra + PHPCompatibilityWP 8.1+): 0 errors, 16 deliberate warnings. WooCommerce-Core adds 329 docblock-style errors (cosmetic). `php -l` is enforced by the build.
+- [x] Plugin Check 2.2.0 on WordPress 7.1.4: 0 errors (`e2e:wp`).
+- [ ] Slug: Plugin Check warns that `curtain-woocommerce` uses the WooCommerce trademark; WordPress.org accepts `…-for-woocommerce`. Rename slug, text domain and language files together before submitting.
 - [ ] Submit at https://wordpress.org/plugins/developers/add/ with the built zip; expect a multi-week review and keep the direct-zip install for the pilot.
 
 ## Manual verification (needs a WordPress + WooCommerce install and the api)
 
-1. **Activation guards**: activate on PHP < 8.2 / without WooCommerce / with WooCommerce 8.x → admin error notice, no fatal.
+1. **Activation guards**: activate on PHP < 8.1 / without WooCommerce / with WooCommerce 8.x → admin error notice, no fatal.
 2. **Connect (Stripe mode)**: api with `STRIPE_*` set → Connect redirects to Checkout → after payment the settings page shows *Connected*, plan, `pk_` prefix; `shops` row has `connect_state = complete`. Cancelled checkout → *Finish connection* reports `payment_pending`.
 3. **Connect (manual mode)**: api without Stripe → connection completes immediately on the free plan.
 4. **Push on save**: update a product → Action Scheduler (*WooCommerce → Status → Scheduled Actions*, group `curtain`) shows `curtain_push_product`; the api `products` row is upserted; the meta box shows the score/missing fields; the product list column shows the status badge. Trash → `curtain_delete_product` → api status `archived`. Untrash/publish → pushed again.

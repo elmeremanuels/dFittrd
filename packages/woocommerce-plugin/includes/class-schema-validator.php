@@ -12,7 +12,7 @@
  * case-insensitive), as the zod `SizeChartSchema` refinement requires.
  *
  * Data is the PHP-array form of JSON (`json_decode(..., true)`): a list is an array, an
- * associative array is an object, an empty array satisfies either. No WordPress dependency.
+ * associative array is an object, an empty array satisfies either. Only WordPress's escaping and URL helpers (esc_html, wp_parse_url).
  *
  * @package Curtain
  */
@@ -21,7 +21,7 @@ declare(strict_types=1);
 
 namespace Curtain;
 
-defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
+defined( 'ABSPATH' ) || exit;
 
 final class Schema_Validator {
 
@@ -41,12 +41,12 @@ final class Schema_Validator {
 
 	public static function from_file( string $path, bool $strict_http_urls = true ): self {
 		if ( ! is_readable( $path ) ) {
-			throw new \RuntimeException( 'schema file not readable: ' . $path );
+			throw new \RuntimeException( esc_html( 'schema file not readable: ' . $path ) );
 		}
 		$json = file_get_contents( $path );
 		$data = json_decode( (string) $json, true );
 		if ( ! is_array( $data ) ) {
-			throw new \RuntimeException( 'schema file is not valid JSON: ' . $path );
+			throw new \RuntimeException( esc_html( 'schema file is not valid JSON: ' . $path ) );
 		}
 		return new self( $data, $strict_http_urls );
 	}
@@ -283,7 +283,7 @@ final class Schema_Validator {
 				if ( ! $this->strict_http_urls ) {
 					return true;
 				}
-				$scheme = strtolower( (string) parse_url( $value, PHP_URL_SCHEME ) );
+				$scheme = strtolower( (string) wp_parse_url( $value, PHP_URL_SCHEME ) );
 				return 'http' === $scheme || 'https' === $scheme;
 			case 'email':
 				return false !== filter_var( $value, FILTER_VALIDATE_EMAIL );
@@ -379,8 +379,8 @@ final class Schema_Validator {
 	/** @param array<string,mixed> $schema */
 	private static function schema_wants( array $schema, string $type ): bool {
 		if ( ! isset( $schema['type'] ) ) {
-			return 'object' === $type && ( isset( $schema['properties'] ) || isset( $schema['required'] ) || isset( $schema['additionalProperties'] ) || isset( $schema['propertyNames'] ) )
-				|| 'array' === $type && ( isset( $schema['items'] ) || isset( $schema['prefixItems'] ) || isset( $schema['minItems'] ) );
+			return ( 'object' === $type && ( isset( $schema['properties'] ) || isset( $schema['required'] ) || isset( $schema['additionalProperties'] ) || isset( $schema['propertyNames'] ) ) )
+				|| ( 'array' === $type && ( isset( $schema['items'] ) || isset( $schema['prefixItems'] ) || isset( $schema['minItems'] ) ) );
 		}
 		$types = is_array( $schema['type'] ) ? $schema['type'] : array( $schema['type'] );
 		return in_array( $type, $types, true );

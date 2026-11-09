@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 namespace Curtain;
 
-defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
+defined( 'ABSPATH' ) || exit;
 
 final class Settings {
 
@@ -32,33 +32,33 @@ final class Settings {
 	/** @return array<string,mixed> */
 	public static function defaults(): array {
 		return array(
-			'api_base'            => CURTAIN_DEFAULT_API_BASE,
-			'api_key'             => '',
-			'public_key_prefix'   => '',
-			'shop_id'             => '',
-			'shop_name'           => '',
-			'plan'                => '',
-			'paused'              => false,
-			'connected_at'        => 0,
-			'connect_token'       => '',
-			'connect_shop_id'     => '',
-			'connect_mode'        => '',
+			'api_base'             => CURTAIN_DEFAULT_API_BASE,
+			'api_key'              => '',
+			'public_key_prefix'    => '',
+			'shop_id'              => '',
+			'shop_name'            => '',
+			'plan'                 => '',
+			'paused'               => false,
+			'connected_at'         => 0,
+			'connect_token'        => '',
+			'connect_shop_id'      => '',
+			'connect_mode'         => '',
 			'connect_verify_nonce' => '',
-			'ads_enabled'         => false,
-			'button_enabled'      => true,
-			'button_priority'     => 35,
-			'button_label'        => '',
-			'button_scope'        => 'active',
-			'mode'                => self::MODE_EMBED,
-			'size_attribute'      => self::DEFAULT_SIZE_ATTRIBUTE,
-			'show_size'           => true,
-			'locale'              => 'auto',
-			'default_brand'       => '',
-			'share_admin_email'   => true,
-			'delete_on_uninstall' => false,
-			'last_sync_at'        => 0,
-			'last_status_at'      => 0,
-			'last_error'          => '',
+			'ads_enabled'          => false,
+			'button_enabled'       => true,
+			'button_priority'      => 35,
+			'button_label'         => '',
+			'button_scope'         => 'active',
+			'mode'                 => self::MODE_EMBED,
+			'size_attribute'       => self::DEFAULT_SIZE_ATTRIBUTE,
+			'show_size'            => true,
+			'locale'               => 'auto',
+			'default_brand'        => '',
+			'share_admin_email'    => true,
+			'delete_on_uninstall'  => false,
+			'last_sync_at'         => 0,
+			'last_status_at'       => 0,
+			'last_error'           => '',
 		);
 	}
 
@@ -200,8 +200,8 @@ final class Settings {
 				if ( '' === $name ) {
 					continue;
 				}
-				$label = is_object( $tax ) ? (string) ( $tax->attribute_label ?? '' ) : (string) ( $tax['attribute_label'] ?? '' );
-				$slug  = self::sanitize_size_attribute( 'pa_' . $name );
+				$label        = is_object( $tax ) ? (string) ( $tax->attribute_label ?? '' ) : (string) ( $tax['attribute_label'] ?? '' );
+				$slug         = self::sanitize_size_attribute( 'pa_' . $name );
 				$out[ $slug ] = ( '' !== $label ? $label : $name ) . ' (' . $slug . ')';
 			}
 		}
@@ -285,15 +285,22 @@ final class Settings {
 		return rtrim( $url, '/' );
 	}
 
-	private static function guard( string $action ): void {
+	/** Capability check for every admin-post handler; each handler verifies its own nonce right after. */
+	private static function guard(): void {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			wp_die( esc_html__( 'You are not allowed to manage Curtain settings.', 'curtain-woocommerce' ), 403 );
 		}
-		check_admin_referer( $action );
 	}
 
 	private static function redirect( string $notice, string $type = 'success' ): void {
-		set_transient( 'curtain_notice_' . get_current_user_id(), array( 'type' => $type, 'text' => $notice ), 60 );
+		set_transient(
+			'curtain_notice_' . get_current_user_id(),
+			array(
+				'type' => $type,
+				'text' => $notice,
+			),
+			60
+		);
 		wp_safe_redirect( self::page_url() );
 		exit;
 	}
@@ -316,7 +323,8 @@ final class Settings {
 	// ---- handlers --------------------------------------------------------------------------
 
 	public static function handle_save(): void {
-		self::guard( 'curtain_save' );
+		self::guard();
+		check_admin_referer( 'curtain_save' );
 		$in = isset( $_POST['curtain'] ) && is_array( $_POST['curtain'] ) ? wp_unslash( $_POST['curtain'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised field by field below.
 
 		$api_base = self::sanitize_api_base( (string) ( $in['api_base'] ?? '' ) );
@@ -355,7 +363,8 @@ final class Settings {
 
 	/** Step 1: create the shop on our backend, then go to Stripe Checkout (or finish immediately). */
 	public static function handle_connect(): void {
-		self::guard( 'curtain_connect' );
+		self::guard();
+		check_admin_referer( 'curtain_connect' );
 		$s      = self::all();
 		$client = new Api_Client( $s );
 		$email  = ! empty( $s['share_admin_email'] ) ? (string) get_option( 'admin_email' ) : null;
@@ -369,9 +378,9 @@ final class Settings {
 		$data = $res['data'] ?? array();
 		self::update(
 			array(
-				'connect_token'   => (string) ( $data['connectToken'] ?? '' ),
-				'connect_shop_id' => (string) ( $data['shopId'] ?? '' ),
-				'connect_mode'    => (string) ( $data['mode'] ?? '' ),
+				'connect_token'        => (string) ( $data['connectToken'] ?? '' ),
+				'connect_shop_id'      => (string) ( $data['shopId'] ?? '' ),
+				'connect_mode'         => (string) ( $data['mode'] ?? '' ),
 				// Every Connect path (manual key and Stripe): published at /wp-json/curtain/v1/verify
 				// until Connect finishes, so the API can check that this site asked for the keys (Rest).
 				'connect_verify_nonce' => (string) ( $data['verification']['nonce'] ?? '' ),
@@ -391,7 +400,8 @@ final class Settings {
 
 	/** Step 2 (manual retry button after Checkout). */
 	public static function handle_complete(): void {
-		self::guard( 'curtain_complete' );
+		self::guard();
+		check_admin_referer( 'curtain_complete' );
 		self::finish_connect();
 	}
 
@@ -415,16 +425,16 @@ final class Settings {
 		$data = $res['data'] ?? array();
 		self::update(
 			array(
-				'api_key'           => (string) ( $data['apiKey'] ?? '' ),
-				'public_key_prefix' => (string) ( $data['publicKeyPrefix'] ?? '' ),
-				'shop_id'           => (string) ( $data['shopId'] ?? '' ),
-				'plan'              => (string) ( $data['plan'] ?? '' ),
-				'connected_at'      => time(),
-				'connect_token'     => '',
-				'connect_shop_id'   => '',
-				'connect_mode'      => '',
+				'api_key'              => (string) ( $data['apiKey'] ?? '' ),
+				'public_key_prefix'    => (string) ( $data['publicKeyPrefix'] ?? '' ),
+				'shop_id'              => (string) ( $data['shopId'] ?? '' ),
+				'plan'                 => (string) ( $data['plan'] ?? '' ),
+				'connected_at'         => time(),
+				'connect_token'        => '',
+				'connect_shop_id'      => '',
+				'connect_mode'         => '',
 				'connect_verify_nonce' => '',
-				'last_error'        => '',
+				'last_error'           => '',
 			)
 		);
 		self::hello();
@@ -434,7 +444,8 @@ final class Settings {
 
 	/** Paste a key issued by the Curtain console (sk_live_…): the hello returns its pk_ prefix. */
 	public static function handle_manual_key(): void {
-		self::guard( 'curtain_manual_key' );
+		self::guard();
+		check_admin_referer( 'curtain_manual_key' );
 		$key = isset( $_POST['curtain_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['curtain_api_key'] ) ) : '';
 		if ( ! Hmac::is_secret_key( $key ) ) {
 			self::redirect( __( 'That does not look like a Curtain secret key (sk_live_… or sk_test_…).', 'curtain-woocommerce' ), 'error' );
@@ -462,20 +473,21 @@ final class Settings {
 	}
 
 	public static function handle_disconnect(): void {
-		self::guard( 'curtain_disconnect' );
+		self::guard();
+		check_admin_referer( 'curtain_disconnect' );
 		Queue::cancel_all();
 		self::update(
 			array(
-				'api_key'           => '',
-				'public_key_prefix' => '',
-				'shop_id'           => '',
-				'shop_name'         => '',
-				'plan'              => '',
-				'paused'            => false,
-				'connected_at'      => 0,
-				'connect_token'     => '',
-				'connect_shop_id'   => '',
-				'connect_mode'      => '',
+				'api_key'              => '',
+				'public_key_prefix'    => '',
+				'shop_id'              => '',
+				'shop_name'            => '',
+				'plan'                 => '',
+				'paused'               => false,
+				'connected_at'         => 0,
+				'connect_token'        => '',
+				'connect_shop_id'      => '',
+				'connect_mode'         => '',
 				'connect_verify_nonce' => '',
 			)
 		);
@@ -483,7 +495,8 @@ final class Settings {
 	}
 
 	public static function handle_status(): void {
-		self::guard( 'curtain_status' );
+		self::guard();
+		check_admin_referer( 'curtain_status' );
 		$res = self::hello();
 		if ( $res['ok'] ) {
 			self::redirect( __( 'Status refreshed.', 'curtain-woocommerce' ) );
@@ -492,7 +505,8 @@ final class Settings {
 	}
 
 	public static function handle_sync_all(): void {
-		self::guard( 'curtain_sync_all' );
+		self::guard();
+		check_admin_referer( 'curtain_sync_all' );
 		if ( ! self::is_connected() ) {
 			self::redirect( __( 'Connect the shop first.', 'curtain-woocommerce' ), 'warning' );
 		}
@@ -556,17 +570,35 @@ final class Settings {
 					<td>
 						<?php if ( $connected ) : ?>
 							<strong style="color:#1a7f37">●</strong> <?php esc_html_e( 'Connected', 'curtain-woocommerce' ); ?>
-							<?php if ( '' !== (string) $s['shop_name'] ) : ?> — <?php echo esc_html( (string) $s['shop_name'] ); ?><?php endif; ?>
+							<?php
+							if ( '' !== (string) $s['shop_name'] ) :
+								?>
+								— <?php echo esc_html( (string) $s['shop_name'] ); ?><?php endif; ?>
 							<br><code><?php echo esc_html( (string) $s['public_key_prefix'] ); ?></code>
-							<?php if ( '' !== (string) $s['plan'] ) : ?> · <?php echo esc_html( sprintf( /* translators: %s: plan name */ __( 'plan: %s', 'curtain-woocommerce' ), (string) $s['plan'] ) ); ?><?php endif; ?>
-							<?php if ( ! empty( $s['paused'] ) ) : ?> · <strong style="color:#b32d2e"><?php esc_html_e( 'paused (no active subscription: the button still renders, shoppers see a "shop paused" screen)', 'curtain-woocommerce' ); ?></strong><?php endif; ?>
+							<?php
+							if ( '' !== (string) $s['plan'] ) :
+								?>
+								· <?php echo esc_html( sprintf( /* translators: %s: plan name */ __( 'plan: %s', 'curtain-woocommerce' ), (string) $s['plan'] ) ); ?><?php endif; ?>
+							<?php
+							if ( ! empty( $s['paused'] ) ) :
+								?>
+								· <strong style="color:#b32d2e"><?php esc_html_e( 'paused (no active subscription: the button still renders, shoppers see a "shop paused" screen)', 'curtain-woocommerce' ); ?></strong><?php endif; ?>
 							<br><span class="description">
 								<?php echo esc_html( sprintf( /* translators: 1: key storage scheme, 2: queue backend */ __( 'Key stored with %1$s · job queue: %2$s', 'curtain-woocommerce' ), Secret_Store::scheme(), Queue::backend() ) ); ?>
 								<?php $pending_jobs = Queue::pending_count(); ?>
-								<?php if ( null !== $pending_jobs ) : ?> · <?php echo esc_html( sprintf( /* translators: %d: number of jobs */ _n( '%d pending job', '%d pending jobs', $pending_jobs, 'curtain-woocommerce' ), $pending_jobs ) ); ?><?php endif; ?>
-								<?php if ( ! empty( $s['last_sync_at'] ) ) : ?> · <?php echo esc_html( sprintf( /* translators: %s: date */ __( 'last sync %s', 'curtain-woocommerce' ), wp_date( 'Y-m-d H:i', (int) $s['last_sync_at'] ) ) ); ?><?php endif; ?>
+								<?php
+								if ( null !== $pending_jobs ) :
+									?>
+									· <?php echo esc_html( sprintf( /* translators: %d: number of jobs */ _n( '%d pending job', '%d pending jobs', $pending_jobs, 'curtain-woocommerce' ), $pending_jobs ) ); ?><?php endif; ?>
+								<?php
+								if ( ! empty( $s['last_sync_at'] ) ) :
+									?>
+									· <?php echo esc_html( sprintf( /* translators: %s: date */ __( 'last sync %s', 'curtain-woocommerce' ), wp_date( 'Y-m-d H:i', (int) $s['last_sync_at'] ) ) ); ?><?php endif; ?>
 							</span>
-							<?php if ( '' !== (string) $s['last_error'] ) : ?><br><span style="color:#b32d2e"><?php echo esc_html( sprintf( /* translators: %s: error message */ __( 'Last error: %s', 'curtain-woocommerce' ), (string) $s['last_error'] ) ); ?></span><?php endif; ?>
+							<?php
+							if ( '' !== (string) $s['last_error'] ) :
+								?>
+								<br><span style="color:#b32d2e"><?php echo esc_html( sprintf( /* translators: %s: error message */ __( 'Last error: %s', 'curtain-woocommerce' ), (string) $s['last_error'] ) ); ?></span><?php endif; ?>
 						<?php elseif ( $pending ) : ?>
 							<strong style="color:#b26b00">●</strong> <?php esc_html_e( 'Waiting for checkout to complete.', 'curtain-woocommerce' ); ?>
 						<?php else : ?>
@@ -646,7 +678,7 @@ final class Settings {
 					<tr>
 						<th scope="row"><label for="curtain_button_priority"><?php esc_html_e( 'Position', 'curtain-woocommerce' ); ?></label></th>
 						<td><input type="number" id="curtain_button_priority" name="curtain[button_priority]" min="1" max="100" value="<?php echo esc_attr( (string) $s['button_priority'] ); ?>" class="small-text">
-						<p class="description"><?php esc_html_e( 'woocommerce_single_product_summary priority: 35 = after the add-to-cart form, 25 = before it, 15 = after the price.', 'curtain-woocommerce' ); ?></p></td>
+						<p class="description"><?php esc_html_e( 'Classic themes: woocommerce_single_product_summary priority, 35 = after the add-to-cart form, 25 = before it, 15 = after the price. Block themes always place the button right under the add-to-cart form.', 'curtain-woocommerce' ); ?></p></td>
 					</tr>
 					<tr>
 						<th scope="row"><label for="curtain_button_label"><?php esc_html_e( 'Label', 'curtain-woocommerce' ); ?></label></th>

@@ -10,6 +10,8 @@
 declare(strict_types=1);
 
 define( 'CURTAIN_TESTING', true );
+// Every plugin file starts with `defined( 'ABSPATH' ) || exit;` (the form Plugin Check recognises).
+define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 define( 'CURTAIN_VERSION', '0.1.0' );
 define( 'CURTAIN_PLUGIN_FILE', dirname( __DIR__ ) . '/curtain.php' );
 define( 'CURTAIN_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
@@ -115,7 +117,7 @@ function delete_post_meta( int $post_id, string $key ): bool { unset( Curtain_Te
 // ---- posts ----------------------------------------------------------------------------------
 function get_post_status( int $id ) { return Curtain_Test_State::$posts[ $id ]['status'] ?? false; }
 function get_post_type( int $id ) { return Curtain_Test_State::$posts[ $id ]['type'] ?? false; }
-function get_post( int $id ) { return isset( Curtain_Test_State::$posts[ $id ] ) ? (object) array( 'ID' => $id ) : null; }
+function get_post( int $id ) { return isset( Curtain_Test_State::$posts[ $id ] ) ? (object) array( 'ID' => $id, 'post_type' => Curtain_Test_State::$posts[ $id ]['type'] ?? 'post', 'post_content' => Curtain_Test_State::$posts[ $id ]['content'] ?? '' ) : null; }
 function wp_get_post_parent_id( int $id ): int { return (int) ( Curtain_Test_State::$posts[ $id ]['parent'] ?? 0 ); }
 function get_permalink( int $id ): string { return 'https://shop.example/product/p' . $id . '/'; }
 function wp_get_attachment_url( int $id ) { return $id > 0 ? 'https://shop.example/wp-content/uploads/att-' . $id . '.jpg' : false; }
@@ -151,7 +153,12 @@ function wp_next_scheduled( string $hook, array $args = array() ) {
 	foreach ( Curtain_Test_State::$cron as $job ) { if ( $job['hook'] === $hook && $job['args'] === $args ) { return $job['ts']; } }
 	return false;
 }
+// WordPress core semantics: wp_clear_scheduled_hook() only removes events whose args equal $args
+// exactly (default []); wp_unschedule_hook() removes every event of the hook, whatever its args.
 function wp_clear_scheduled_hook( string $hook, array $args = array() ): void {
+	Curtain_Test_State::$cron = array_values( array_filter( Curtain_Test_State::$cron, static fn( $j ) => ! ( $j['hook'] === $hook && $j['args'] === $args ) ) );
+}
+function wp_unschedule_hook( string $hook ): void {
 	Curtain_Test_State::$cron = array_values( array_filter( Curtain_Test_State::$cron, static fn( $j ) => $j['hook'] !== $hook ) );
 }
 

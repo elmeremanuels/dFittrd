@@ -10,7 +10,7 @@ declare(strict_types=1);
 
 namespace Curtain;
 
-defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
+defined( 'ABSPATH' ) || exit;
 
 final class Queue {
 
@@ -60,12 +60,19 @@ final class Queue {
 	/** Remove every pending Curtain job (deactivation / uninstall / disconnect). */
 	public static function cancel_all(): void {
 		if ( function_exists( 'as_unschedule_all_actions' ) ) {
+			// Hook + group + empty args only cancels jobs whose args are exactly [] (Action Scheduler
+			// matches args literally), so the queued pushes ([id, attempt]) survived deactivation.
+			// Group alone and hook alone are Action Scheduler's "cancel all" forms. Found on a real
+			// WooCommerce 11.2 install (docs/LAUNCH-WOO.md).
+			as_unschedule_all_actions( '', array(), self::GROUP );
 			foreach ( self::HOOKS as $hook ) {
-				as_unschedule_all_actions( $hook, array(), self::GROUP );
+				as_unschedule_all_actions( $hook );
 			}
 		}
+		// WP-Cron backend: wp_clear_scheduled_hook( $hook ) only clears events with args [] (core
+		// matches args exactly); wp_unschedule_hook() removes every event of the hook.
 		foreach ( self::HOOKS as $hook ) {
-			wp_clear_scheduled_hook( $hook );
+			wp_unschedule_hook( $hook );
 		}
 	}
 

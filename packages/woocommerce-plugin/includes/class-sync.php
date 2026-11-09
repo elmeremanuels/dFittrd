@@ -13,7 +13,7 @@ declare(strict_types=1);
 
 namespace Curtain;
 
-defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
+defined( 'ABSPATH' ) || exit;
 
 final class Sync {
 
@@ -141,7 +141,12 @@ final class Sync {
 			update_post_meta( $product_id, Vocab::META_CONTENT_HASH, (string) ( $data['contentHash'] ?? '' ) );
 			update_post_meta( $product_id, Vocab::META_SYNCED_AT, (string) ( $data['updatedAt'] ?? gmdate( 'c' ) ) );
 			delete_post_meta( $product_id, Vocab::META_SYNC_ERROR );
-			Settings::update( array( 'last_sync_at' => time(), 'last_error' => '' ) );
+			Settings::update(
+				array(
+					'last_sync_at' => time(),
+					'last_error'   => '',
+				)
+			);
 			return self::outcome( true, 'synced', (string) ( $data['status'] ?? 'ok' ) );
 		}
 
@@ -237,8 +242,18 @@ final class Sync {
 			$meta,
 			array(
 				'default_brand' => '' !== (string) $settings['default_brand'] ? (string) $settings['default_brand'] : get_bloginfo( 'name' ),
+				'eur_rates'     => self::eur_rates(),
 			)
 		);
+	}
+
+	/** @return array<string,float> The EUR rate table shipped in the zip (assets/eur-rates.json). */
+	public static function eur_rates(): array {
+		static $rates = null;
+		if ( null === $rates ) {
+			$rates = Payload_Builder::load_eur_rates( CURTAIN_PLUGIN_DIR . 'assets/eur-rates.json' );
+		}
+		return $rates;
 	}
 
 	/**

@@ -10,7 +10,7 @@ declare(strict_types=1);
 
 namespace Curtain;
 
-defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
+defined( 'ABSPATH' ) || exit;
 
 final class Plugin {
 

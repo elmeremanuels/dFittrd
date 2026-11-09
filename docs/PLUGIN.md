@@ -90,8 +90,12 @@ do not switch it on for the pilot until the approval UI and the preview exist.
 3. WooCommerce → **Curtain** → **Connect now**: proves the domain, creates the shop and, for a
    paid plan, opens Stripe Checkout (USD 8.99 per month, trial).
 4. Per product: the **Curtain — fit data** meta box (size chart from a template or by hand). Saving
-   pushes the product (HMAC-signed). The button appears under the variation form.
+   pushes the product (HMAC-signed). The button appears under the variation form (classic and block themes).
 5. 3D: the same import and approval as Shopify; the plugin needs no change (the SDK opens the same overlay).
+
+Verified on a real WordPress 7.1.4 + WooCommerce 11.2.2 (official Docker images, PHP 8.1, 8.2 and 8.3; Storefront,
+Twenty Twenty-Four, Twenty Twenty-Five): `pnpm --filter @curtain/woocommerce-plugin e2e:wp`. Results, the defects it
+found (all fixed) and what still needs a live site: `docs/LAUNCH-WOO.md`.
 
 ## 4. Founder-blocked (do not work around)
 
@@ -103,14 +107,15 @@ do not switch it on for the pilot until the approval UI and the preview exist.
 | Legal | privacy and terms review (entity, retention, region, subprocessors); for 3D: "computed on the device, the garment file comes from our server", and the merchant's responsibility for approved assets (D13) |
 | Live store | the "Must be verified against a live store" list in `packages/shopify-app/README.md` (needs Shopify + server first) |
 | Garment engine | founder review of the azure bundle (run 17b against 16b) and of the skirt bundle's remaining defects (run 17d, low-rise accepted; `data/bohohippychic/review.json`); the pilot merchant's approval of them; GPU credentials before new products can be processed (until then bundles are imported by hand) |
-| WooCommerce | a real WordPress test site; Stripe keys and webhook secret |
+| WooCommerce | a public https WordPress test site (the domain proof cannot pass on localhost); Stripe keys and webhook secret; for the WordPress.org directory the slug decision (`curtain-woocommerce` is refused as a trademark use, `…-for-woocommerce` is allowed) and a wordpress.org account (`docs/LAUNCH-WOO.md`) |
 | Listing | support e-mail, help page, trademark clearance, listing assets |
 
 ## 5. What is not covered yet
 
 - A merchant approval **UI** (Shopify checklist row, Woo console row) and the approval preview page:
   the api routes exist (`GET /v1/merchant/products/:id/assets`, `POST /v1/merchant/assets/:id/approve|reject`), the buttons do not.
-- No e2e against a real Shopify or WordPress install, billing or webhooks (unit tests only).
+- No e2e against a real Shopify install, billing or webhooks (unit tests only). WordPress + WooCommerce: real-install e2e
+  since 9 Nov (`docs/LAUNCH-WOO.md`), on the free path without Stripe and with the domain proof refused for localhost.
 - The Caddy `/assets` block is pinned by a unit test, not yet run through a real Caddy: run
   `infra/scripts/caddy-validate.sh` before the first deploy that carries it.
 - The 3D view is WebGL2 only and drapes in Web Workers; on devices without WebGL2 the button is hidden.

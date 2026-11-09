@@ -7,7 +7,7 @@
 
 declare(strict_types=1);
 
-defined( 'ABSPATH' ) || defined( 'CURTAIN_TESTING' ) || exit;
+defined( 'ABSPATH' ) || exit;
 
 spl_autoload_register(
 	static function ( string $class ): void {

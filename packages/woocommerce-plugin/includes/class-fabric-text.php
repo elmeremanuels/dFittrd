@@ -15,7 +15,7 @@ declare(strict_types=1);
 
 namespace Curtain;
 
-defined( 'ABSPATH' ) || defined( 'CURTAIN_TESTING' ) || exit;
+defined( 'ABSPATH' ) || exit;
 
 final class Fabric_Text {
 
@@ -153,7 +153,8 @@ final class Fabric_Text {
 		usort(
 			$list,
 			static function ( array $a, array $b ): int {
-				return strlen( $b['term'] ) <=> strlen( $a['term'] ) ?: $a['i'] <=> $b['i'];
+				$by_length = strlen( $b['term'] ) <=> strlen( $a['term'] );
+				return 0 !== $by_length ? $by_length : $a['i'] <=> $b['i'];
 			}
 		);
 		self::$lexicon = array_map(
@@ -292,10 +293,10 @@ final class Fabric_Text {
 			}
 		);
 
-		$pct_first   = self::pair_percentages( $events, true );
-		$name_first  = self::pair_percentages( $events, false );
+		$pct_first    = self::pair_percentages( $events, true );
+		$name_first   = self::pair_percentages( $events, false );
 		$first_is_pct = 'pct' === $events[0]['kind'];
-		$better      = static function ( array $x, array $y ): bool {
+		$better       = static function ( array $x, array $y ): bool {
 			return $x['fibrePairs'] > $y['fibrePairs'] || ( $x['fibrePairs'] === $y['fibrePairs'] && $x['pairs'] > $y['pairs'] );
 		};
 		$pick         = $better( $pct_first, $name_first ) ? $pct_first : ( $better( $name_first, $pct_first ) ? $name_first : ( $first_is_pct ? $pct_first : $name_first ) );
@@ -376,8 +377,8 @@ final class Fabric_Text {
 		$primary_id = $parsed['construction'] ?? ( null !== $top ? $top['fibre'] : $parsed['ids'][0] );
 		$out        = array( 'primary' => self::payload_name( $primary_id ) );
 		if ( ! $parsed['sharesAssumed'] && $parsed['composition'] ) {
-			$stated        = 1 === preg_match( '/\d\s*%/', self::normalise( $text ) );
-			$only_primary  = 1 === count( $parsed['composition'] ) && $parsed['composition'][0]['fibre'] === $primary_id;
+			$stated       = 1 === preg_match( '/\d\s*%/', self::normalise( $text ) );
+			$only_primary = 1 === count( $parsed['composition'] ) && $parsed['composition'][0]['fibre'] === $primary_id;
 			if ( $stated || ! $only_primary ) {
 				$out['blend'] = array_map(
 					static fn ( array $c ): array => array( self::payload_name( $c['fibre'] ), $c['pct'] ),

@@ -9,8 +9,8 @@
  *   sig = HMAC-SHA256( sk_live_… , "METHOD\n<request target>\n<ts>\n<sha256hex(body)>" )
  *
  * The request target is the path plus the query string exactly as sent (no scheme/host).
- * The window is ±300 s. This class is pure PHP (no WordPress functions) so it is unit-tested
- * without a WordPress runtime and reused by the signed REST endpoint for verification.
+ * The window is ±300 s. Apart from wp_parse_url() (Plugin Check requires it over parse_url) this
+ * class is pure PHP, so it is unit-tested without a WordPress runtime.
  *
  * @package Curtain
  */
@@ -19,7 +19,7 @@ declare(strict_types=1);
 
 namespace Curtain;
 
-defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
+defined( 'ABSPATH' ) || exit;
 
 final class Hmac {
 
@@ -44,7 +44,7 @@ final class Hmac {
 	 * Request target (path + query) of an absolute or relative URL, as the api sees it in `req.raw.url`.
 	 */
 	public static function target_from_url( string $url ): string {
-		$parts = parse_url( $url );
+		$parts = wp_parse_url( $url );
 		if ( false === $parts ) {
 			return '/';
 		}

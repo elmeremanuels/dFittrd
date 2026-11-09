@@ -5,7 +5,7 @@
  * Description:       Adds a "Try it on" button to your product pages and syncs garment fit data (size chart, fabric, flat-lay) to Curtain, the private fitting room. Nothing is sent until you connect your shop.
  * Version:           0.1.0
  * Requires at least: 6.6
- * Requires PHP:      8.2
+ * Requires PHP:      8.1
  * Requires Plugins:  woocommerce
  * WC requires at least: 9.0
  * WC tested up to:   11.2
@@ -27,7 +27,7 @@ define( 'CURTAIN_VERSION', '0.1.0' );
 define( 'CURTAIN_PLUGIN_FILE', __FILE__ );
 define( 'CURTAIN_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CURTAIN_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
-define( 'CURTAIN_MIN_PHP', '8.2' );
+define( 'CURTAIN_MIN_PHP', '8.1' );
 define( 'CURTAIN_MIN_WC', '9.0' );
 define( 'CURTAIN_DEFAULT_API_BASE', 'https://api.curtain.fit' );
 

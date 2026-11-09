@@ -13,6 +13,9 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MOCK_GARMENTS, fromWooMeta, toWooMeta, ESTIMATE_DISCLAIMER, FABRIC_TEXT_FIELD, fabricFromProductText, resolveFabricText } from '@curtain/schema';
+import { writeChartTemplatesAsset } from './chart-templates.mjs';
+import { writeEurRatesAsset } from './eur-rates.mjs';
+import { DEFAULT_EUR_RATES } from '@curtain/shopify-app';
 import { writeFabricLibraryAsset } from './fabric-library.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -41,6 +44,17 @@ writeFileSync(join(root, 'tests/fixtures/garments.json'), JSON.stringify({ discl
 console.log(`wrote tests/fixtures/garments.json (${cases.length} garments)`);
 
 writeFabricLibraryAsset(root);
+writeChartTemplatesAsset(root);
+writeEurRatesAsset(root);
+
+// Shop prices in other currencies (the pilot sells in AUD): what fromWooMeta makes of them with the
+// api's EUR rate table. The PHP builder must give the same priceEur and the same warnings.
+const priceCases = [['89.95', 'EUR'], ['149', 'AUD'], ['149.00', 'aud'], ['120', 'USD'], ['10', 'XTS']].map(([price, currency]) => {
+  const warnings = [];
+  const out = fromWooMeta({ id: 1, name: 'Price case', price }, {}, { warnings, currency, eurRates: DEFAULT_EUR_RATES, defaultBrand: 'Fixture Shop' });
+  return { price, currency, priceEur: out.priceEur ?? null, warnings };
+});
+writeFileSync(join(root, 'tests/fixtures/prices.json'), JSON.stringify(priceCases, null, 1));
 
 // Fabric text as shops write it (care labels, attributes, the meta box), English and Dutch.
 const texts = [

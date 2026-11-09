@@ -563,6 +563,9 @@ importers:
       '@curtain/sdk':
         specifier: workspace:*
         version: link:../sdk
+      '@curtain/shopify-app':
+        specifier: workspace:*
+        version: link:../shopify-app
 
   spikes/garment-engine:
     dependencies:

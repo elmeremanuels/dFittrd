@@ -3,6 +3,18 @@
 This is the integration snapshot after the parallel build and review passes. Read it with
 `docs/DECISIONS.md` (why), `docs/ARCHITECTURE.md` (layout) and `docs/HANDOFF.md` (product truth).
 
+## WooCommerce plugin on a real WordPress (branch `claude/golive-woo`) — 9 Nov 2026
+
+First run of the plugin inside WordPress: official `wordpress` (PHP 8.1, 8.2, 8.3; WordPress 7.1.4) and `mariadb`
+images, WooCommerce 11.2.2, Storefront, Twenty Twenty-Four and Twenty Twenty-Five, against the local api and web.
+`pnpm --filter @curtain/woocommerce-plugin e2e:wp` (repeatable, Playwright screenshots in `test-results/woo-wp-e2e/`).
+Upload and activate, Connect (domain proof refused for localhost as designed, then completed with the proof off; no
+Stripe), the meta box from a size chart template, the HMAC push read back from the api, the shopper flow with the size
+selected in the variation dropdown on all three themes, deactivate, uninstall, Plugin Check 0 errors. Six defects found
+and fixed (queue not cleared on deactivate, button above the form on block themes, Plugin Check errors, AUD prices
+dropped, no chart templates in the Woo meta box, checkbox layout). Plugin now requires PHP 8.1. Details, screenshots
+and what still needs a live site: `docs/LAUNCH-WOO.md`.
+
 ## Garment engine — refinement R1, R3, R5, R6 on CPU (branch `claude/refine-cpu`) — 8 Nov 2026
 
 No GPU. Stage 4t 0.5.0 (template fit 0.5.0) re-run on azure 17b, the skirt and the palazzo (17d) from their existing frames;

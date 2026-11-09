@@ -227,12 +227,22 @@ the admin loads `/shopify/admin`, which performs the token exchange on first loa
 
 ### Pilot: custom distribution
 
-For the pilot shops the app is **not** listed: in the Partner Dashboard → the app → *Distribution*
-→ *Custom distribution* → enter the shop's `*.myshopify.com` domain → generate the install link and
-send it to the merchant (`customInstallUrl` shows the shape; the signed link only comes from the
-dashboard). Custom-distribution apps cannot use the Billing API's public pricing page but **can**
-create app subscriptions with `appSubscriptionCreate` (test charges on dev stores). One custom
-app per shop; switch to public distribution before the App Store listing (irreversible).
+For the pilot shop the app is **not** listed: Dev Dashboard → the app → Home → *Distribution* →
+*Select distribution method* → *Custom distribution* → *Manage custom install link* → the shop's
+`*.myshopify.com` domain → *Generate link*, and send it to the merchant (`customInstallUrl` shows
+the shape; the signed link only comes from the dashboard). Read
+https://shopify.dev/docs/apps/launch/distribution before choosing (2026-11-09):
+
+- The method **cannot be changed** after it is chosen. The App Store listing is therefore a second
+  app with its own client id and secret (docs/LAUNCH-SHOPIFY.md, "App Store listing later").
+- A custom-distribution app **"Can't charge merchants through Shopify's app billing system"**:
+  `appSubscriptionCreate` answers with the userError developers report as "Custom apps cannot use
+  the Billing API". Run the api with `SHOPIFY_DISTRIBUTION=custom`: every install and reinstall is
+  granted the `curtain` plan by hand (`subscriptionStatus: ARRANGED`, no `billingRef`), the admin
+  shows "arranged with Curtain" instead of Subscribe, and `/shopify/billing/subscribe` answers 409
+  `billing_not_available` (also when Shopify refuses it while the env says `public`).
+- `$app:curtain` metafields belong to the app that wrote them, so the size charts the pilot app wrote
+  are not visible to the App Store app (the namespace expands to `app--{app id}--curtain`).
 
 ### App Store listing checklist
 
@@ -259,6 +269,13 @@ app per shop; switch to public distribution before the App Store listing (irreve
       and a test subscription.
 
 ## Must be verified against a live store (cannot be done offline)
+
+`apps/api/src/shopify/contract.test.ts` runs items 1, 2, 4, 5, 6 and 9 (the Admin API side)
+against a fake Shopify (`apps/api/src/test/fakeShopify`) that validates every GraphQL document
+against an excerpt of the 2026-10 schema and signs ID tokens and webhooks like Shopify does. That
+proves our side of each contract as the reference describes it; it does not prove Shopify behaves
+as described (the fake's `ASSUMPTION` comments), and items 3, 7, 8 and 10 have no offline
+equivalent at all. The dev-store script with expected results is `docs/LAUNCH-SHOPIFY.md`.
 
 1. **Token exchange** end-to-end: App Bridge `idToken()` → `POST /shopify/token-exchange` → `shpat_…`;
    stale-token 400 retry path.
@@ -307,7 +324,8 @@ app per shop; switch to public distribution before the App Store listing (irreve
   are approximate list rates, reviewed with pricing, not live FX; `parseEurRates` reads an override
   table from JSON.
 - `shopify.app.toml` keys follow the current reference (`[access_scopes].use_legacy_install_flow`,
-  `[webhooks].api_version`, `[[webhooks.subscriptions]].compliance_topics`, `[build].include_config_on_deploy`).
+  `[webhooks].api_version`, `[[webhooks.subscriptions]].compliance_topics`). `include_config_on_deploy`
+  was removed: the CLI (4.9.5 and 5.0.1) deletes it as "no longer supported", deploy always includes the config.
   Webhook `uri`s are absolute (`{{PUBLIC_API_URL}}/shopify/webhooks`) because `application_url`
   is the admin page on the same origin; relative `/shopify/webhooks` also validates.
 - The metafield **keys are the schema contract's** (`size_chart`, `fabric`, `flat_lay_photo`, …),

@@ -24,6 +24,8 @@ const PLACEHOLDER_RE = /\{\{\s*([A-Z0-9_]+)\s*\}\}/g;
 
 /** A bare lowercase domain such as `curtain.fit` (no scheme, no path). Same rule as `.github/workflows/deploy.yml`. */
 export const BARE_DOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+/** The hosts the stack derives from DOMAIN; a DOMAIN that already starts with one is a mistake (`app.curtain.fit` → `api.app.curtain.fit`). */
+export const STACK_SUBDOMAIN_RE = /^(www|app|api)\./;
 /** The app's client id from the Partner Dashboard (also called the API key; not secret, but kept out of the repo). */
 export const CLIENT_ID_RE = /^[a-f0-9]{32}$/i;
 
@@ -34,6 +36,9 @@ export const CLIENT_ID_RE = /^[a-f0-9]{32}$/i;
 export function appUrlsForDomain(domain: string): { PUBLIC_API_URL: string; PUBLIC_APP_URL: string } {
   if (!BARE_DOMAIN_RE.test(domain)) {
     throw new AppConfigError('DOMAIN must be a bare lowercase domain like curtain.fit (no scheme, no subdomain prefix)', ['invalid DOMAIN']);
+  }
+  if (STACK_SUBDOMAIN_RE.test(domain)) {
+    throw new AppConfigError(`DOMAIN must be the bare domain (e.g. curtain.fit), not ${domain}: api. and app. are added to it`, ['invalid DOMAIN']);
   }
   return { PUBLIC_API_URL: `https://api.${domain}`, PUBLIC_APP_URL: `https://app.${domain}` };
 }

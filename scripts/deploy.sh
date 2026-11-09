@@ -36,6 +36,9 @@ if [ "${#MISSING[@]}" -gt 0 ]; then
 fi
 [[ "${TAG:-x}" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "deploy: TAG has unexpected characters" >&2; exit 2; }
 [[ "$DOMAIN" =~ ^[a-z0-9.-]+$ ]] || { echo "deploy: DOMAIN has unexpected characters" >&2; exit 2; }
+case "$DOMAIN" in
+  www.*|app.*|api.*) echo "deploy: DOMAIN must be the bare domain (e.g. curtain.fit), not $DOMAIN; www., app. and api. are added by the stack" >&2; exit 2 ;;
+esac
 
 # shellcheck disable=SC2206 # SSH_OPTS is a deliberate word list
 SSH=(ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 ${SSH_OPTS:-})

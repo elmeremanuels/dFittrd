@@ -44,7 +44,7 @@ describe('deploy config from DOMAIN (what shopify-deploy.yml renders)', () => {
   });
 
   it('rejects a DOMAIN that is not a bare lowercase domain', () => {
-    for (const bad of ['https://curtain.fit', 'api.curtain.fit/', 'Curtain.fit', 'localhost', 'curtain.fit ', '-x.fit']) {
+    for (const bad of ['https://curtain.fit', 'api.curtain.fit/', 'Curtain.fit', 'localhost', 'curtain.fit ', '-x.fit', 'app.curtain.fit', 'api.curtain.fit', 'www.curtain.fit']) {
       expect(() => appUrlsForDomain(bad), bad).toThrow(AppConfigError);
     }
     expect(appUrlsForDomain('shop.example.com.au').PUBLIC_API_URL).toBe('https://api.shop.example.com.au');

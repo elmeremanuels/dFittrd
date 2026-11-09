@@ -140,6 +140,9 @@ const gates = launchGates({ showsPartnerEstimates });
 if (gates.length) {
   const msg = `Launch gates still open (src/data/site.ts, docs/SITE.md):\n  - ${gates.join('\n  - ')}`;
   if (process.env.CURTAIN_SITE_RELEASE === '1') {
+    // Fail closed: leave nothing publishable behind, so `SITE_DIST=apps/site/dist scripts/deploy.sh` after a
+    // refused release build cannot ship a site whose launch gates are open (docs/DEPLOY.md, "From a laptop").
+    rmSync(dist, { recursive: true, force: true });
     console.error(`✗ Release build refused. ${msg}`);
     process.exit(1);
   }

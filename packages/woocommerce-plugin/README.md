@@ -1,6 +1,6 @@
 # @curtain/woocommerce-plugin
 
-**Curtain for WooCommerce** — a dependency-free PHP 8.2+ WordPress/WooCommerce plugin (docs/DECISIONS.md D6/D7):
+**Curtain for WooCommerce** — a dependency-free PHP 8.1+ WordPress/WooCommerce plugin (docs/DECISIONS.md D6/D7):
 
 - product-edit meta box for every GarmentPayload §3.1 field, saved as `_curtain_*` post meta in the exact formats `@curtain/schema`'s `fromWooMeta` reads;
 - push-on-save sync to `PUT /v1/merchant/products/{id}` with **PK-HMAC** auth (retries via Action Scheduler, WP-Cron fallback), `DELETE` on trash/unpublish, "Sync all" backfill;
@@ -15,7 +15,7 @@ Nothing leaves the site until the merchant clicks **Connect**; the secret key is
 ## Layout
 
 ```
-curtain.php                 plugin header, requirements check (WC ≥ 9, PHP ≥ 8.2), HPOS declaration, boot
+curtain.php                 plugin header, requirements check (WC ≥ 9, PHP ≥ 8.1), HPOS declaration, boot
 uninstall.php                queue + notices always removed; settings/meta only when the option says so
 includes/
   autoload.php               class-map autoloader for the Curtain\ namespace
@@ -100,7 +100,7 @@ php tests/run.php hmac                                 # run a subset
 
 ## Manual verification (needs a WordPress + WooCommerce install and the api)
 
-1. **Activation guards**: activate on PHP < 8.2 / without WooCommerce / with WooCommerce 8.x → admin error notice, no fatal.
+1. **Activation guards**: activate on PHP < 8.1 / without WooCommerce / with WooCommerce 8.x → admin error notice, no fatal.
 2. **Connect (Stripe mode)**: api with `STRIPE_*` set → Connect redirects to Checkout → after payment the settings page shows *Connected*, plan, `pk_` prefix; `shops` row has `connect_state = complete`. Cancelled checkout → *Finish connection* reports `payment_pending`.
 3. **Connect (manual mode)**: api without Stripe → connection completes immediately on the free plan.
 4. **Push on save**: update a product → Action Scheduler (*WooCommerce → Status → Scheduled Actions*, group `curtain`) shows `curtain_push_product`; the api `products` row is upserted; the meta box shows the score/missing fields; the product list column shows the status badge. Trash → `curtain_delete_product` → api status `archived`. Untrash/publish → pushed again.

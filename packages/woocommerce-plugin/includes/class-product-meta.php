@@ -262,18 +262,18 @@ final class Product_Meta {
 			return is_array( $v ) ? $v : array();
 		};
 
-		$fabric    = $json( 'fabric' );
-		$ease      = $json( 'ease' );
-		$lengths   = $json( 'length_cm' );
-		$chart     = $json( 'size_chart' );
-		$critical  = $json( 'critical_fit_points' );
-		$zones     = $json( 'stretch_zones' );
-		$tags      = $json( 'style_tags' );
-		$colorways = $json( 'colorways' );
-		$block     = (string) $get( 'pattern_block' );
-		$custom    = '' !== $block && ! in_array( $block, Vocab::PATTERN_BLOCKS, true );
-		$flat_id   = (int) $get( 'flat_lay_photo_id' );
-		$flat_url  = (string) $get( 'flat_lay_photo' );
+		$fabric         = $json( 'fabric' );
+		$ease           = $json( 'ease' );
+		$lengths        = $json( 'length_cm' );
+		$chart          = $json( 'size_chart' );
+		$critical       = $json( 'critical_fit_points' );
+		$zones          = $json( 'stretch_zones' );
+		$tags           = $json( 'style_tags' );
+		$colorways      = $json( 'colorways' );
+		$block          = (string) $get( 'pattern_block' );
+		$custom         = '' !== $block && ! in_array( $block, Vocab::PATTERN_BLOCKS, true );
+		$flat_id        = (int) $get( 'flat_lay_photo_id' );
+		$flat_url       = (string) $get( 'flat_lay_photo' );
 		$custom_lengths = array_diff_key( $lengths, array_flip( Vocab::LENGTH_KEYS ) );
 		$other_zones    = array_values( array_diff( array_map( 'strval', $zones ), Vocab::STRETCH_ZONES ) );
 		$prefill        = array() === $fabric ? self::fabric_prefill( $id ) : null;
@@ -294,7 +294,7 @@ final class Product_Meta {
 						<?php endforeach; ?>
 					</select></label>
 				<label><span><?php esc_html_e( 'Subcategory', 'curtain-woocommerce' ); ?></span><input type="text" name="curtain[subcategory]" value="<?php echo esc_attr( (string) $get( 'subcategory' ) ); ?>" placeholder="wrap-midi" maxlength="64"></label>
-				<label><span><?php esc_html_e( 'Brand', 'curtain-woocommerce' ); ?></span><input type="text" name="curtain[brand]" value="<?php echo esc_attr( (string) $get( 'brand' ) ); ?>" placeholder="<?php echo esc_attr( (string) ( Settings::get( 'default_brand' ) ?: get_bloginfo( 'name' ) ) ); ?>" maxlength="120"></label>
+				<label><span><?php esc_html_e( 'Brand', 'curtain-woocommerce' ); ?></span><input type="text" name="curtain[brand]" value="<?php echo esc_attr( (string) $get( 'brand' ) ); ?>" placeholder="<?php echo esc_attr( (string) ( '' !== (string) Settings::get( 'default_brand' ) ? Settings::get( 'default_brand' ) : get_bloginfo( 'name' ) ) ); ?>" maxlength="120"></label>
 				<label><span><?php esc_html_e( 'Pattern block', 'curtain-woocommerce' ); ?></span>
 					<select name="curtain[pattern_block]" class="curtain-pattern-block">
 						<option value=""><?php esc_html_e( '— none —', 'curtain-woocommerce' ); ?></option>
@@ -309,7 +309,11 @@ final class Product_Meta {
 			<h4><?php esc_html_e( 'Flat-lay photo *', 'curtain-woocommerce' ); ?></h4>
 			<div class="curtain-flatlay">
 				<input type="hidden" name="curtain[flat_lay_id]" class="curtain-flatlay-id" value="<?php echo esc_attr( (string) $flat_id ); ?>">
-				<div class="curtain-flatlay-preview"><?php if ( '' !== $flat_url ) : ?><img src="<?php echo esc_url( $flat_url ); ?>" alt=""><?php endif; ?></div>
+				<div class="curtain-flatlay-preview">
+				<?php
+				if ( '' !== $flat_url ) :
+					?>
+					<img src="<?php echo esc_url( $flat_url ); ?>" alt=""><?php endif; ?></div>
 				<button type="button" class="button curtain-flatlay-pick"><?php esc_html_e( 'Choose from media library', 'curtain-woocommerce' ); ?></button>
 				<button type="button" class="button-link-delete curtain-flatlay-remove" <?php echo '' === $flat_url ? 'style="display:none"' : ''; ?>><?php esc_html_e( 'Remove', 'curtain-woocommerce' ); ?></button>
 				<p class="description"><?php esc_html_e( 'The garment laid flat on a white background, front view. This is what shoppers see draped on their own silhouette (labelled as an estimate).', 'curtain-woocommerce' ); ?></p>
@@ -324,11 +328,19 @@ final class Product_Meta {
 			<?php endif; ?>
 			<div class="curtain-grid">
 				<label><span><?php esc_html_e( 'Primary fibre *', 'curtain-woocommerce' ); ?></span><input type="text" list="curtain-fibres" name="curtain[fabric_primary]" value="<?php echo esc_attr( (string) ( $fabric['primary'] ?? '' ) ); ?>" maxlength="64">
-					<datalist id="curtain-fibres"><?php foreach ( Vocab::FABRIC_PRIMARIES as $f ) : ?><option value="<?php echo esc_attr( $f ); ?>"></option><?php endforeach; ?></datalist></label>
+					<datalist id="curtain-fibres">
+					<?php
+					foreach ( Vocab::FABRIC_PRIMARIES as $f ) :
+						?>
+						<option value="<?php echo esc_attr( $f ); ?>"></option><?php endforeach; ?></datalist></label>
 				<label><span><?php esc_html_e( 'Weight (g/m²)', 'curtain-woocommerce' ); ?></span><input type="number" name="curtain[fabric_weight_gsm]" value="<?php echo esc_attr( self::num( $fabric['weightGsm'] ?? '' ) ); ?>" min="1" max="2000" step="1"></label>
 				<label><span><?php esc_html_e( 'Stretch % *', 'curtain-woocommerce' ); ?></span><input type="number" name="curtain[fabric_stretch_pct]" value="<?php echo esc_attr( self::num( $fabric['stretchPct'] ?? '' ) ); ?>" min="0" max="100" step="1" placeholder="0 = none, 30 = jersey"></label>
 				<label><span><?php esc_html_e( 'Drape (0 stiff – 1 fluid) *', 'curtain-woocommerce' ); ?></span><input type="number" name="curtain[fabric_drape]" value="<?php echo esc_attr( self::num( $fabric['drape'] ?? '' ) ); ?>" min="0" max="1" step="0.05" list="curtain-drape">
-					<datalist id="curtain-drape"><?php foreach ( Vocab::drape_presets() as $v => $label ) : ?><option value="<?php echo esc_attr( $v ); ?>" label="<?php echo esc_attr( $label ); ?>"></option><?php endforeach; ?></datalist></label>
+					<datalist id="curtain-drape">
+					<?php
+					foreach ( Vocab::drape_presets() as $v => $label ) :
+						?>
+						<option value="<?php echo esc_attr( $v ); ?>" label="<?php echo esc_attr( $label ); ?>"></option><?php endforeach; ?></datalist></label>
 				<label><span><?php esc_html_e( 'Opacity (0 sheer – 1 opaque)', 'curtain-woocommerce' ); ?></span><input type="number" name="curtain[fabric_opacity]" value="<?php echo esc_attr( self::num( $fabric['opacity'] ?? '' ) ); ?>" min="0" max="1" step="0.05"></label>
 				<label><span><?php esc_html_e( 'Sheen (0 matte – 1 shiny)', 'curtain-woocommerce' ); ?></span><input type="number" name="curtain[fabric_sheen]" value="<?php echo esc_attr( self::num( $fabric['sheen'] ?? '' ) ); ?>" min="0" max="1" step="0.05"></label>
 			</div>
@@ -361,12 +373,18 @@ final class Product_Meta {
 					<option value=""><?php esc_html_e( '— choose a template —', 'curtain-woocommerce' ); ?></option>
 					<optgroup label="<?php esc_attr_e( 'Body charts (numbers filled in)', 'curtain-woocommerce' ); ?>">
 						<?php foreach ( $templates as $t ) : ?>
-							<?php if ( 'body' === $t['kind'] ) : ?><option value="<?php echo esc_attr( (string) $t['id'] ); ?>"><?php echo esc_html( (string) $t['label'] ); ?></option><?php endif; ?>
+							<?php
+							if ( 'body' === $t['kind'] ) :
+								?>
+								<option value="<?php echo esc_attr( (string) $t['id'] ); ?>"><?php echo esc_html( (string) $t['label'] ); ?></option><?php endif; ?>
 						<?php endforeach; ?>
 					</optgroup>
 					<optgroup label="<?php esc_attr_e( 'Garment charts (you measure each size)', 'curtain-woocommerce' ); ?>">
 						<?php foreach ( $templates as $t ) : ?>
-							<?php if ( 'garment' === $t['kind'] ) : ?><option value="<?php echo esc_attr( (string) $t['id'] ); ?>"><?php echo esc_html( (string) $t['label'] ); ?></option><?php endif; ?>
+							<?php
+							if ( 'garment' === $t['kind'] ) :
+								?>
+								<option value="<?php echo esc_attr( (string) $t['id'] ); ?>"><?php echo esc_html( (string) $t['label'] ); ?></option><?php endif; ?>
 						<?php endforeach; ?>
 					</optgroup>
 				</select>
@@ -376,11 +394,14 @@ final class Product_Meta {
 			<?php endif; ?>
 			<table class="curtain-table curtain-repeater" data-repeater="size_chart">
 				<thead><tr>
-					<?php foreach ( Vocab::SIZE_ROW_COLUMNS as $col ) : ?><th><?php echo esc_html( self::column_label( $col ) ); ?></th><?php endforeach; ?><th></th>
+					<?php
+					foreach ( Vocab::SIZE_ROW_COLUMNS as $col ) :
+						?>
+						<th><?php echo esc_html( self::column_label( $col ) ); ?></th><?php endforeach; ?><th></th>
 				</tr></thead>
 				<tbody>
 					<?php
-					$rows = array_values( array_filter( $chart, 'is_array' ) );
+					$rows   = array_values( array_filter( $chart, 'is_array' ) );
 					$rows[] = array();
 					foreach ( $rows as $i => $row ) :
 						?>
@@ -500,9 +521,15 @@ final class Product_Meta {
 					<?php if ( is_array( $validation ) && isset( $validation['completeness']['score'] ) ) : ?>
 						· <?php echo esc_html( sprintf( /* translators: %d: percentage */ __( 'completeness %d%%', 'curtain-woocommerce' ), (int) round( (float) $validation['completeness']['score'] * 100 ) ) ); ?>
 					<?php endif; ?>
-					<?php if ( '' !== $synced_at ) : ?> · <span class="description"><?php echo esc_html( sprintf( /* translators: %s: date */ __( 'synced %s', 'curtain-woocommerce' ), $synced_at ) ); ?></span><?php endif; ?>
+					<?php
+					if ( '' !== $synced_at ) :
+						?>
+						· <span class="description"><?php echo esc_html( sprintf( /* translators: %s: date */ __( 'synced %s', 'curtain-woocommerce' ), $synced_at ) ); ?></span><?php endif; ?>
 				</p>
-				<?php if ( '' !== $error ) : ?><p class="curtain-error"><?php echo esc_html( $error ); ?></p><?php endif; ?>
+				<?php
+				if ( '' !== $error ) :
+					?>
+					<p class="curtain-error"><?php echo esc_html( $error ); ?></p><?php endif; ?>
 				<?php if ( is_array( $validation ) && ! empty( $validation['completeness']['missing'] ) ) : ?>
 					<p><?php esc_html_e( 'Missing for a better fit:', 'curtain-woocommerce' ); ?>
 					<?php foreach ( (array) $validation['completeness']['missing'] as $m ) : ?>
@@ -512,7 +539,11 @@ final class Product_Meta {
 			<?php endif; ?>
 			<?php if ( is_array( $local ) && ( ! empty( $local['issues'] ) || ! empty( $local['missingHeavy'] ) ) ) : ?>
 				<?php if ( ! empty( $local['missingHeavy'] ) ) : ?>
-					<p><?php esc_html_e( 'Required before the product can be active:', 'curtain-woocommerce' ); ?> <?php foreach ( (array) $local['missingHeavy'] as $f ) : ?><code><?php echo esc_html( (string) $f ); ?></code> <?php endforeach; ?></p>
+					<p><?php esc_html_e( 'Required before the product can be active:', 'curtain-woocommerce' ); ?>
+					<?php
+					foreach ( (array) $local['missingHeavy'] as $f ) :
+						?>
+						<code><?php echo esc_html( (string) $f ); ?></code> <?php endforeach; ?></p>
 				<?php endif; ?>
 				<?php if ( ! empty( $local['issues'] ) ) : ?>
 					<ul class="curtain-issues">

@@ -23,21 +23,60 @@ final class Vocab {
 	public const TASTE_AXES = array( 'bohemian', 'minimal', 'classic', 'avantGarde', 'sporty' );
 
 	public const FABRIC_PRIMARIES = array(
-		'linen', 'cotton', 'wool', 'silk', 'cashmere', 'tencel', 'modal', 'denim', 'jersey',
-		'technical', 'leather', 'viscose', 'polyester', 'nylon', 'elastane',
+		'linen',
+		'cotton',
+		'wool',
+		'silk',
+		'cashmere',
+		'tencel',
+		'modal',
+		'denim',
+		'jersey',
+		'technical',
+		'leather',
+		'viscose',
+		'polyester',
+		'nylon',
+		'elastane',
 	);
 
 	public const PATTERN_BLOCKS = array(
-		'wrap', 'a-line', 'fit-and-flare', 'skater', 'sheath', 'bodycon', 'column', 'empire', 'tent',
-		'trapeze', 'oversized', 'boxy', 'bias', 'shirt', 't-shirt', 'straight', 'wide-leg', 'bootcut',
-		'skinny', 'slim',
+		'wrap',
+		'a-line',
+		'fit-and-flare',
+		'skater',
+		'sheath',
+		'bodycon',
+		'column',
+		'empire',
+		'tent',
+		'trapeze',
+		'oversized',
+		'boxy',
+		'bias',
+		'shirt',
+		't-shirt',
+		'straight',
+		'wide-leg',
+		'bootcut',
+		'skinny',
+		'slim',
 	);
 
 	public const STRETCH_ZONES = array( 'waist-tie', 'waistband', 'side-panel', 'back-panel', 'cuff', 'rib-hem', 'stretch-knit' );
 
 	public const LENGTH_KEYS = array(
-		'shoulder_to_hem', 'shoulder_to_waist', 'sleeve_length', 'back_length', 'inseam', 'outseam',
-		'rise', 'waist_to_hem', 'chest_width', 'heel_height', 'strap_drop',
+		'shoulder_to_hem',
+		'shoulder_to_waist',
+		'sleeve_length',
+		'back_length',
+		'inseam',
+		'outseam',
+		'rise',
+		'waist_to_hem',
+		'chest_width',
+		'heel_height',
+		'strap_drop',
 	);
 
 	/** Size-chart columns, in table order. */
@@ -70,15 +109,15 @@ final class Vocab {
 	);
 
 	/** Plugin-private meta keys (not part of the wire mapping). */
-	public const META_FLAT_LAY_ID    = '_curtain_flat_lay_photo_id';
-	public const META_SYNC_STATUS    = '_curtain_sync_status';
-	public const META_SYNC_ERROR     = '_curtain_sync_error';
-	public const META_SYNCED_AT      = '_curtain_synced_at';
-	public const META_CONTENT_HASH   = '_curtain_content_hash';
-	public const META_SCORE          = '_curtain_score';
-	public const META_MISSING        = '_curtain_missing_fields';
-	public const META_VALIDATION     = '_curtain_validation';
-	public const META_LOCAL_ISSUES   = '_curtain_local_issues';
+	public const META_FLAT_LAY_ID  = '_curtain_flat_lay_photo_id';
+	public const META_SYNC_STATUS  = '_curtain_sync_status';
+	public const META_SYNC_ERROR   = '_curtain_sync_error';
+	public const META_SYNCED_AT    = '_curtain_synced_at';
+	public const META_CONTENT_HASH = '_curtain_content_hash';
+	public const META_SCORE        = '_curtain_score';
+	public const META_MISSING      = '_curtain_missing_fields';
+	public const META_VALIDATION   = '_curtain_validation';
+	public const META_LOCAL_ISSUES = '_curtain_local_issues';
 
 	/**
 	 * Keyword table for inferring a category from WooCommerce category names (mappings/common.ts).
@@ -111,7 +150,8 @@ final class Vocab {
 			if ( in_array( $h, self::CATEGORIES, true ) ) {
 				return $h;
 			}
-			$segments = array_reverse( preg_split( '/\s*[>\/]\s*/', $h ) ?: array( $h ) );
+			$parts    = preg_split( '/\s*[>\/]\s*/', $h );
+			$segments = array_reverse( false !== $parts ? $parts : array( $h ) );
 			foreach ( $segments as $seg ) {
 				foreach ( self::category_keywords() as $pair ) {
 					if ( preg_match( $pair[1], $seg ) ) {

@@ -379,8 +379,8 @@ final class Schema_Validator {
 	/** @param array<string,mixed> $schema */
 	private static function schema_wants( array $schema, string $type ): bool {
 		if ( ! isset( $schema['type'] ) ) {
-			return 'object' === $type && ( isset( $schema['properties'] ) || isset( $schema['required'] ) || isset( $schema['additionalProperties'] ) || isset( $schema['propertyNames'] ) )
-				|| 'array' === $type && ( isset( $schema['items'] ) || isset( $schema['prefixItems'] ) || isset( $schema['minItems'] ) );
+			return ( 'object' === $type && ( isset( $schema['properties'] ) || isset( $schema['required'] ) || isset( $schema['additionalProperties'] ) || isset( $schema['propertyNames'] ) ) )
+				|| ( 'array' === $type && ( isset( $schema['items'] ) || isset( $schema['prefixItems'] ) || isset( $schema['minItems'] ) ) );
 		}
 		$types = is_array( $schema['type'] ) ? $schema['type'] : array( $schema['type'] );
 		return in_array( $type, $types, true );

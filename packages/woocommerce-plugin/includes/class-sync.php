@@ -141,7 +141,12 @@ final class Sync {
 			update_post_meta( $product_id, Vocab::META_CONTENT_HASH, (string) ( $data['contentHash'] ?? '' ) );
 			update_post_meta( $product_id, Vocab::META_SYNCED_AT, (string) ( $data['updatedAt'] ?? gmdate( 'c' ) ) );
 			delete_post_meta( $product_id, Vocab::META_SYNC_ERROR );
-			Settings::update( array( 'last_sync_at' => time(), 'last_error' => '' ) );
+			Settings::update(
+				array(
+					'last_sync_at' => time(),
+					'last_error'   => '',
+				)
+			);
 			return self::outcome( true, 'synced', (string) ( $data['status'] ?? 'ok' ) );
 		}
 

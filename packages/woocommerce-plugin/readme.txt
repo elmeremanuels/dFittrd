@@ -3,7 +3,7 @@ Contributors: curtain
 Tags: woocommerce, virtual try-on, size guide, fit, fashion
 Requires at least: 6.6
 Tested up to: 7.1
-Requires PHP: 8.2
+Requires PHP: 8.1
 WC requires at least: 9.0
 WC tested up to: 11.2
 Stable tag: 0.1.0
@@ -54,7 +54,7 @@ Curtain privacy policy: https://curtain.fit/privacy
 
 == Installation ==
 
-1. Upload the plugin zip under *Plugins → Add New → Upload Plugin* and activate it (WooCommerce 9.0 or newer and PHP 8.2 or newer are required).
+1. Upload the plugin zip under *Plugins → Add New → Upload Plugin* and activate it (WooCommerce 9.0 or newer and PHP 8.1 or newer are required).
 2. Go to *WooCommerce → Curtain* and click **Connect to Curtain**. Complete checkout if asked; you are sent back to the settings page and your published products start syncing in the background.
 3. Open a product, fill in the **Curtain — fit data** box (at least category, size chart + chart type, fabric and a flat-lay photo) and update it. The box shows the completeness score and what is still missing.
 4. Products that are complete ("active") show the **Try it on** button on their product page.

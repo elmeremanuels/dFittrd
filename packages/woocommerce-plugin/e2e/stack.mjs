@@ -26,6 +26,9 @@ export const cacheDir = join(pluginRoot, 'e2e', '.cache');
 
 /** Pinned downloads from downloads.wordpress.org. */
 export const DOWNLOADS = {
+  // The official images ship the newest WordPress of their tag; wordpress:php8.1-apache stopped at
+  // 6.9 (PHP 8.1 is end of life), and WooCommerce 11.2 needs 7.0. Older cores are updated to this.
+  wordpress: { file: 'wordpress-7.1.4.zip', url: 'https://downloads.wordpress.org/release/wordpress-7.1.4.zip' },
   woocommerce: { file: 'woocommerce.11.2.2.zip', url: 'https://downloads.wordpress.org/plugin/woocommerce.11.2.2.zip' },
   storefront: { file: 'storefront.4.6.2.zip', url: 'https://downloads.wordpress.org/theme/storefront.4.6.2.zip' },
   twentytwentyfour: { file: 'twentytwentyfour.1.6.zip', url: 'https://downloads.wordpress.org/theme/twentytwentyfour.1.6.zip' },

@@ -32,33 +32,33 @@ final class Settings {
 	/** @return array<string,mixed> */
 	public static function defaults(): array {
 		return array(
-			'api_base'            => CURTAIN_DEFAULT_API_BASE,
-			'api_key'             => '',
-			'public_key_prefix'   => '',
-			'shop_id'             => '',
-			'shop_name'           => '',
-			'plan'                => '',
-			'paused'              => false,
-			'connected_at'        => 0,
-			'connect_token'       => '',
-			'connect_shop_id'     => '',
-			'connect_mode'        => '',
+			'api_base'             => CURTAIN_DEFAULT_API_BASE,
+			'api_key'              => '',
+			'public_key_prefix'    => '',
+			'shop_id'              => '',
+			'shop_name'            => '',
+			'plan'                 => '',
+			'paused'               => false,
+			'connected_at'         => 0,
+			'connect_token'        => '',
+			'connect_shop_id'      => '',
+			'connect_mode'         => '',
 			'connect_verify_nonce' => '',
-			'ads_enabled'         => false,
-			'button_enabled'      => true,
-			'button_priority'     => 35,
-			'button_label'        => '',
-			'button_scope'        => 'active',
-			'mode'                => self::MODE_EMBED,
-			'size_attribute'      => self::DEFAULT_SIZE_ATTRIBUTE,
-			'show_size'           => true,
-			'locale'              => 'auto',
-			'default_brand'       => '',
-			'share_admin_email'   => true,
-			'delete_on_uninstall' => false,
-			'last_sync_at'        => 0,
-			'last_status_at'      => 0,
-			'last_error'          => '',
+			'ads_enabled'          => false,
+			'button_enabled'       => true,
+			'button_priority'      => 35,
+			'button_label'         => '',
+			'button_scope'         => 'active',
+			'mode'                 => self::MODE_EMBED,
+			'size_attribute'       => self::DEFAULT_SIZE_ATTRIBUTE,
+			'show_size'            => true,
+			'locale'               => 'auto',
+			'default_brand'        => '',
+			'share_admin_email'    => true,
+			'delete_on_uninstall'  => false,
+			'last_sync_at'         => 0,
+			'last_status_at'       => 0,
+			'last_error'           => '',
 		);
 	}
 
@@ -200,8 +200,8 @@ final class Settings {
 				if ( '' === $name ) {
 					continue;
 				}
-				$label = is_object( $tax ) ? (string) ( $tax->attribute_label ?? '' ) : (string) ( $tax['attribute_label'] ?? '' );
-				$slug  = self::sanitize_size_attribute( 'pa_' . $name );
+				$label        = is_object( $tax ) ? (string) ( $tax->attribute_label ?? '' ) : (string) ( $tax['attribute_label'] ?? '' );
+				$slug         = self::sanitize_size_attribute( 'pa_' . $name );
 				$out[ $slug ] = ( '' !== $label ? $label : $name ) . ' (' . $slug . ')';
 			}
 		}
@@ -293,7 +293,14 @@ final class Settings {
 	}
 
 	private static function redirect( string $notice, string $type = 'success' ): void {
-		set_transient( 'curtain_notice_' . get_current_user_id(), array( 'type' => $type, 'text' => $notice ), 60 );
+		set_transient(
+			'curtain_notice_' . get_current_user_id(),
+			array(
+				'type' => $type,
+				'text' => $notice,
+			),
+			60
+		);
 		wp_safe_redirect( self::page_url() );
 		exit;
 	}
@@ -371,9 +378,9 @@ final class Settings {
 		$data = $res['data'] ?? array();
 		self::update(
 			array(
-				'connect_token'   => (string) ( $data['connectToken'] ?? '' ),
-				'connect_shop_id' => (string) ( $data['shopId'] ?? '' ),
-				'connect_mode'    => (string) ( $data['mode'] ?? '' ),
+				'connect_token'        => (string) ( $data['connectToken'] ?? '' ),
+				'connect_shop_id'      => (string) ( $data['shopId'] ?? '' ),
+				'connect_mode'         => (string) ( $data['mode'] ?? '' ),
 				// Every Connect path (manual key and Stripe): published at /wp-json/curtain/v1/verify
 				// until Connect finishes, so the API can check that this site asked for the keys (Rest).
 				'connect_verify_nonce' => (string) ( $data['verification']['nonce'] ?? '' ),
@@ -418,16 +425,16 @@ final class Settings {
 		$data = $res['data'] ?? array();
 		self::update(
 			array(
-				'api_key'           => (string) ( $data['apiKey'] ?? '' ),
-				'public_key_prefix' => (string) ( $data['publicKeyPrefix'] ?? '' ),
-				'shop_id'           => (string) ( $data['shopId'] ?? '' ),
-				'plan'              => (string) ( $data['plan'] ?? '' ),
-				'connected_at'      => time(),
-				'connect_token'     => '',
-				'connect_shop_id'   => '',
-				'connect_mode'      => '',
+				'api_key'              => (string) ( $data['apiKey'] ?? '' ),
+				'public_key_prefix'    => (string) ( $data['publicKeyPrefix'] ?? '' ),
+				'shop_id'              => (string) ( $data['shopId'] ?? '' ),
+				'plan'                 => (string) ( $data['plan'] ?? '' ),
+				'connected_at'         => time(),
+				'connect_token'        => '',
+				'connect_shop_id'      => '',
+				'connect_mode'         => '',
 				'connect_verify_nonce' => '',
-				'last_error'        => '',
+				'last_error'           => '',
 			)
 		);
 		self::hello();
@@ -471,16 +478,16 @@ final class Settings {
 		Queue::cancel_all();
 		self::update(
 			array(
-				'api_key'           => '',
-				'public_key_prefix' => '',
-				'shop_id'           => '',
-				'shop_name'         => '',
-				'plan'              => '',
-				'paused'            => false,
-				'connected_at'      => 0,
-				'connect_token'     => '',
-				'connect_shop_id'   => '',
-				'connect_mode'      => '',
+				'api_key'              => '',
+				'public_key_prefix'    => '',
+				'shop_id'              => '',
+				'shop_name'            => '',
+				'plan'                 => '',
+				'paused'               => false,
+				'connected_at'         => 0,
+				'connect_token'        => '',
+				'connect_shop_id'      => '',
+				'connect_mode'         => '',
 				'connect_verify_nonce' => '',
 			)
 		);
@@ -563,17 +570,35 @@ final class Settings {
 					<td>
 						<?php if ( $connected ) : ?>
 							<strong style="color:#1a7f37">●</strong> <?php esc_html_e( 'Connected', 'curtain-woocommerce' ); ?>
-							<?php if ( '' !== (string) $s['shop_name'] ) : ?> — <?php echo esc_html( (string) $s['shop_name'] ); ?><?php endif; ?>
+							<?php
+							if ( '' !== (string) $s['shop_name'] ) :
+								?>
+								— <?php echo esc_html( (string) $s['shop_name'] ); ?><?php endif; ?>
 							<br><code><?php echo esc_html( (string) $s['public_key_prefix'] ); ?></code>
-							<?php if ( '' !== (string) $s['plan'] ) : ?> · <?php echo esc_html( sprintf( /* translators: %s: plan name */ __( 'plan: %s', 'curtain-woocommerce' ), (string) $s['plan'] ) ); ?><?php endif; ?>
-							<?php if ( ! empty( $s['paused'] ) ) : ?> · <strong style="color:#b32d2e"><?php esc_html_e( 'paused (no active subscription: the button still renders, shoppers see a "shop paused" screen)', 'curtain-woocommerce' ); ?></strong><?php endif; ?>
+							<?php
+							if ( '' !== (string) $s['plan'] ) :
+								?>
+								· <?php echo esc_html( sprintf( /* translators: %s: plan name */ __( 'plan: %s', 'curtain-woocommerce' ), (string) $s['plan'] ) ); ?><?php endif; ?>
+							<?php
+							if ( ! empty( $s['paused'] ) ) :
+								?>
+								· <strong style="color:#b32d2e"><?php esc_html_e( 'paused (no active subscription: the button still renders, shoppers see a "shop paused" screen)', 'curtain-woocommerce' ); ?></strong><?php endif; ?>
 							<br><span class="description">
 								<?php echo esc_html( sprintf( /* translators: 1: key storage scheme, 2: queue backend */ __( 'Key stored with %1$s · job queue: %2$s', 'curtain-woocommerce' ), Secret_Store::scheme(), Queue::backend() ) ); ?>
 								<?php $pending_jobs = Queue::pending_count(); ?>
-								<?php if ( null !== $pending_jobs ) : ?> · <?php echo esc_html( sprintf( /* translators: %d: number of jobs */ _n( '%d pending job', '%d pending jobs', $pending_jobs, 'curtain-woocommerce' ), $pending_jobs ) ); ?><?php endif; ?>
-								<?php if ( ! empty( $s['last_sync_at'] ) ) : ?> · <?php echo esc_html( sprintf( /* translators: %s: date */ __( 'last sync %s', 'curtain-woocommerce' ), wp_date( 'Y-m-d H:i', (int) $s['last_sync_at'] ) ) ); ?><?php endif; ?>
+								<?php
+								if ( null !== $pending_jobs ) :
+									?>
+									· <?php echo esc_html( sprintf( /* translators: %d: number of jobs */ _n( '%d pending job', '%d pending jobs', $pending_jobs, 'curtain-woocommerce' ), $pending_jobs ) ); ?><?php endif; ?>
+								<?php
+								if ( ! empty( $s['last_sync_at'] ) ) :
+									?>
+									· <?php echo esc_html( sprintf( /* translators: %s: date */ __( 'last sync %s', 'curtain-woocommerce' ), wp_date( 'Y-m-d H:i', (int) $s['last_sync_at'] ) ) ); ?><?php endif; ?>
 							</span>
-							<?php if ( '' !== (string) $s['last_error'] ) : ?><br><span style="color:#b32d2e"><?php echo esc_html( sprintf( /* translators: %s: error message */ __( 'Last error: %s', 'curtain-woocommerce' ), (string) $s['last_error'] ) ); ?></span><?php endif; ?>
+							<?php
+							if ( '' !== (string) $s['last_error'] ) :
+								?>
+								<br><span style="color:#b32d2e"><?php echo esc_html( sprintf( /* translators: %s: error message */ __( 'Last error: %s', 'curtain-woocommerce' ), (string) $s['last_error'] ) ); ?></span><?php endif; ?>
 						<?php elseif ( $pending ) : ?>
 							<strong style="color:#b26b00">●</strong> <?php esc_html_e( 'Waiting for checkout to complete.', 'curtain-woocommerce' ); ?>
 						<?php else : ?>

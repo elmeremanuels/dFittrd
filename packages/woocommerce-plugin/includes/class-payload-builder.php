@@ -221,7 +221,15 @@ final class Payload_Builder {
 			$out['patternBlock'] = strtolower( $block );
 		}
 
-		$ease = $this->coerce_keyed_numbers( $get( '_curtain_ease' ), 'ease', Vocab::FIT_POINTS, array( 'hips' => 'hip', 'chest' => 'bust' ) );
+		$ease = $this->coerce_keyed_numbers(
+			$get( '_curtain_ease' ),
+			'ease',
+			Vocab::FIT_POINTS,
+			array(
+				'hips'  => 'hip',
+				'chest' => 'bust',
+			)
+		);
 		if ( null !== $ease ) {
 			$out['ease'] = $ease;
 		}
@@ -371,7 +379,7 @@ final class Payload_Builder {
 		}
 		if ( is_string( $v ) ) {
 			$out = array();
-			foreach ( preg_split( '/[,|;\n]/', $v ) ?: array() as $s ) {
+			foreach ( (array) preg_split( '/[,|;\n]/', $v ) as $s ) {
 				$s = trim( $s );
 				if ( '' !== $s ) {
 					$out[] = $s;
@@ -430,7 +438,11 @@ final class Payload_Builder {
 		$out = array();
 		foreach ( $list as $s ) {
 			$s = strtolower( $s );
-			$s = array( 'hips' => 'hip', 'chest' => 'bust', 'shoulders' => 'shoulder' )[ $s ] ?? $s;
+			$s = array(
+				'hips'      => 'hip',
+				'chest'     => 'bust',
+				'shoulders' => 'shoulder',
+			)[ $s ] ?? $s;
 			if ( in_array( $s, Vocab::FIT_POINTS, true ) && ! in_array( $s, $out, true ) ) {
 				$out[] = $s;
 			}

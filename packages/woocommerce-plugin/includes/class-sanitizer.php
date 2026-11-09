@@ -70,7 +70,13 @@ final class Sanitizer {
 		if ( $blend ) {
 			$fabric['blend'] = array_slice( $blend, 0, 8 );
 		}
-		foreach ( array( 'weightGsm' => 'fabric_weight_gsm', 'stretchPct' => 'fabric_stretch_pct', 'drape' => 'fabric_drape', 'opacity' => 'fabric_opacity', 'sheen' => 'fabric_sheen' ) as $key => $field ) {
+		foreach ( array(
+			'weightGsm'  => 'fabric_weight_gsm',
+			'stretchPct' => 'fabric_stretch_pct',
+			'drape'      => 'fabric_drape',
+			'opacity'    => 'fabric_opacity',
+			'sheen'      => 'fabric_sheen',
+		) as $key => $field ) {
 			$n = self::number( $in[ $field ] ?? '' );
 			if ( null !== $n ) {
 				$fabric[ $key ] = $n;
@@ -78,7 +84,7 @@ final class Sanitizer {
 		}
 		foreach ( array( 'drape', 'opacity', 'sheen' ) as $unit ) {
 			if ( isset( $fabric[ $unit ] ) && ( $fabric[ $unit ] < 0 || $fabric[ $unit ] > 1 ) ) {
-				$errors[]         = 'fabric.' . $unit;
+				$errors[]        = 'fabric.' . $unit;
 				$fabric[ $unit ] = max( 0, min( 1, $fabric[ $unit ] ) );
 			}
 		}
@@ -151,7 +157,7 @@ final class Sanitizer {
 
 		// -- notes / score --------------------------------------------------------------------
 		$meta['_curtain_sizing_notes'] = self::or_null( self::textarea( $in['sizing_notes'] ?? '', 500 ) );
-		$tts                            = self::number( $in['true_to_size_score'] ?? '' );
+		$tts                           = self::number( $in['true_to_size_score'] ?? '' );
 		if ( null !== $tts && ( $tts < 0 || $tts > 1 ) ) {
 			$errors[] = 'trueToSizeScore';
 			$tts      = null;
@@ -175,7 +181,7 @@ final class Sanitizer {
 				$zones[] = $z;
 			}
 		}
-		foreach ( preg_split( '/[,|;\n]/', self::text( $in['stretch_zones_other'] ?? '', 400 ) ) ?: array() as $z ) {
+		foreach ( (array) preg_split( '/[,|;\n]/', self::text( $in['stretch_zones_other'] ?? '', 400 ) ) as $z ) {
 			$z = strtolower( trim( $z ) );
 			if ( '' !== $z && strlen( $z ) <= 64 && ! in_array( $z, $zones, true ) ) {
 				$zones[] = $z;
@@ -214,7 +220,7 @@ final class Sanitizer {
 				$errors[] = 'colorways';
 				continue;
 			}
-			$cw = array(
+			$cw  = array(
 				'name' => $name,
 				'hex'  => $chex,
 			);
@@ -227,10 +233,10 @@ final class Sanitizer {
 		$meta['_curtain_colorways'] = $colorways ? self::json( array_slice( $colorways, 0, 40 ) ) : null;
 
 		// -- flat-lay -------------------------------------------------------------------------
-		$flat_id  = absint( $in['flat_lay_id'] ?? 0 );
-		$flat_url = Payload_Builder::coerce_url( self::text( $in['flat_lay_url'] ?? '', 2048 ) );
-		$meta[ Vocab::META_FLAT_LAY_ID ]   = $flat_id > 0 ? (string) $flat_id : null;
-		$meta['_curtain_flat_lay_photo']  = $flat_url;
+		$flat_id                         = absint( $in['flat_lay_id'] ?? 0 );
+		$flat_url                        = Payload_Builder::coerce_url( self::text( $in['flat_lay_url'] ?? '', 2048 ) );
+		$meta[ Vocab::META_FLAT_LAY_ID ] = $flat_id > 0 ? (string) $flat_id : null;
+		$meta['_curtain_flat_lay_photo'] = $flat_url;
 
 		return array(
 			'meta'   => $meta,

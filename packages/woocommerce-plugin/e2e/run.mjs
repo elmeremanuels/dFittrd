@@ -18,13 +18,13 @@
  * "delete all data" ticked (settings, meta and transients gone). Then Plugin Check (the official
  * plugin-check plugin) on a fresh copy of the zip.
  *
- * `--php=8.1`: WordPress on PHP 8.1 must refuse to activate the plugin (it needs 8.2) without a
- * fatal error; every PHP file is also linted with that PHP.
+ * `--php=8.1|8.2|8.3` picks the official `wordpress:php<X.Y>-apache` image; a core older than the
+ * pinned 7.1.4 (the 8.1 image ships 6.9) is updated from the pinned zip first.
  *
  * Screenshots and report.json: test-results/woo-wp-e2e/php<XY>/ (git-ignored).
  * Flags: --php=8.1|8.2|8.3  --skip-build  --keep (leave the containers running)  --headed
  */
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createHmac, createHash } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -86,6 +86,13 @@ const notices = async (page) => (await page.locator('.wrap .notice, #wpbody-cont
 function setupWordPress(dl) {
   wp(cfg, ['core', 'install', `--url=${WP}`, '--title=Curtain E2E Boutique', `--admin_user=${ADMIN.user}`, `--admin_password=${ADMIN.pass}`, '--admin_email=admin@example.test', '--skip-email']);
   const mounts = { [join(pluginRoot, 'e2e', '.cache')]: '/dl', [join(pluginRoot, 'e2e')]: '/e2e' };
+  const core = wp(cfg, ['core', 'version']);
+  if (core !== '7.1.4') {
+    log(`the image ships WordPress ${core}: update to 7.1.4 from the pinned zip`);
+    wp(cfg, ['core', 'update', `/dl/${dl.wordpress.split('/').pop()}`, '--force'], { mounts });
+    wp(cfg, ['core', 'update-db']);
+    report.environment.imageWordPress = core;
+  }
   wp(cfg, ['plugin', 'install', `/dl/${dl.woocommerce.split('/').pop()}`, '--activate'], { mounts });
   wp(cfg, ['theme', 'install', `/dl/${dl.storefront.split('/').pop()}`], { mounts });
   // Twenty Twenty-Four/Five ship with WordPress; install the pinned zip only when missing.
@@ -116,30 +123,6 @@ async function uploadPlugin(page, zip) {
 }
 
 // ---------------------------------------------------------------------------------------------
-
-async function php81(browser, zip) {
-  log('PHP 8.1: the plugin needs PHP 8.2; WordPress must refuse activation without a fatal error');
-  const { ctx, page } = await login(browser);
-  await uploadPlugin(page, zip);
-  const body = await page.locator('.wrap').innerText();
-  await shot(page, 'php81-upload-result', { fullPage: true });
-  // WordPress 5.2+ checks "Requires PHP" before activating; no Activate link, a clear message.
-  const activate = await page.getByRole('link', { name: /activate plugin/i }).count();
-  check(activate === 0 && /requires PHP|PHP version/i.test(body), 'php8.1: upload shows no Activate link and names the PHP requirement', body);
-  const forced = wp(cfg, ['plugin', 'activate', 'curtain-woocommerce'], { allowFail: true });
-  check(forced.status !== 0 && /PHP/i.test(forced.stderr + forced.stdout), 'php8.1: wp plugin activate refuses on the PHP requirement', forced.stderr);
-  await page.goto(`${WP}/wp-admin/plugins.php`);
-  await shot(page, 'php81-plugins-screen');
-  const front = await (await fetch(`${WP}/`)).status;
-  check(front === 200, 'php8.1: the site still answers 200', String(front));
-  // Syntax on 8.1: the files would still parse (no 8.2-only syntax), so a host on 8.1 never white-screens.
-  const lint = spawnSync('docker', ['exec', `${cfg.prefix}-wp`, 'sh', '-c', 'cd /var/www/html/wp-content/plugins/curtain-woocommerce && find . -name "*.php" -print0 | xargs -0 -n1 php -l'], { encoding: 'utf8' });
-  const bad = lint.stdout.split('\n').filter((l) => l && !l.startsWith('No syntax errors'));
-  report.php81Lint = { files: lint.stdout.split('\n').filter((l) => l.startsWith('No syntax errors')).length, errors: bad };
-  if (bad.length) report.warnings.push(`PHP 8.1 php -l: ${bad.join(' | ')}`);
-  pass('php8.1: php -l of every plugin file', bad.length ? `${bad.length} file(s) do not parse on 8.1 (plugin refuses to activate anyway)` : `${report.php81Lint.files} files parse`);
-  await ctx.close();
-}
 
 async function merchantAndShopper(browser, zip, productId, api) {
   const { ctx, page } = await login(browser);
@@ -238,6 +221,8 @@ async function merchantAndShopper(browser, zip, productId, api) {
   check(/Active/i.test(panel), 'Update → push job → api verdict: Curtain status Active', panel);
   const meta = wp(cfg, ['post', 'meta', 'get', String(productId), '_curtain_sync_status']);
   check(meta === 'active', 'post meta _curtain_sync_status = active', meta);
+  const issues = wp(cfg, ['post', 'meta', 'get', String(productId), '_curtain_local_issues']);
+  check(/converted from AUD at [0-9.]+ per EUR/.test(issues) && !/not EUR/.test(issues), 'AUD shop: the price is converted to priceEur with the api rate table (no "not EUR" warning)', issues);
 
   // ---- the push really arrived, HMAC-signed -----------------------------------------------------------
   const pk = stored.public_key_prefix;
@@ -246,6 +231,7 @@ async function merchantAndShopper(browser, zip, productId, api) {
   const listed = await fetch(API + target, { headers: { authorization: pkHmac(pk, sk, 'GET', target) } });
   const list = await listed.json();
   const row = (list.products ?? list.items ?? list.data ?? []).find((p) => String(p.externalId ?? p.id) === String(productId));
+  report.pushedProduct = row ?? null;
   check(listed.status === 200 && row && /active/.test(JSON.stringify(row)), 'signed GET /v1/merchant/products returns the pushed product as active', JSON.stringify(list).slice(0, 400));
   const forged = await fetch(API + target, { headers: { authorization: pkHmac(pk, sk.slice(0, -1) + (sk.endsWith('a') ? 'b' : 'a'), 'GET', target) } });
   check(forged.status === 401, 'a forged PK-HMAC signature is refused (401)', String(forged.status));
@@ -404,15 +390,11 @@ async function main() {
     await startWordPress(cfg, log);
     const productId = setupWordPress(dl);
     browser = await chromium.launch({ headless: !flag('headed') });
-    if (cfg.php === '8.1') {
-      await php81(browser, zip);
-    } else {
-      log('start the api (domain proof on) and the web app');
-      await api.start({ proof: true });
-      await web.start();
-      await merchantAndShopper(browser, zip, productId, api);
-      await pluginCheck(zip);
-    }
+    log('start the api (domain proof on) and the web app');
+    await api.start({ proof: true });
+    await web.start();
+    await merchantAndShopper(browser, zip, productId, api);
+    await pluginCheck(zip);
     const dbg = debugLog(cfg);
     writeFileSync(join(shots, 'debug.log'), dbg);
     const ours = dbg.split('\n').filter((l) => /curtain/i.test(l) && /PHP (Fatal|Warning|Notice|Deprecated|Parse)/.test(l));

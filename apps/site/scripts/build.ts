@@ -148,3 +148,12 @@ if (gates.length) {
   }
   console.log(`  Preview build only. ${msg}`);
 }
+if (process.env.CURTAIN_SITE_RELEASE === '1') {
+  // Only a release build with every launch gate closed gets this marker. The deploy (scripts/deploy.sh and
+  // infra/scripts/site-release-check.sh) publishes no site without it, so a preview build (`pnpm check`,
+  // `pnpm --filter @curtain/site build`) in apps/site/dist can never be shipped by mistake. The hashes tie the
+  // marker to these exact pages; the marker itself is not copied into the site volume.
+  const sha = (f: string) => createHash('sha256').update(readFileSync(join(dist, f))).digest('hex');
+  writeFileSync(join(dist, 'curtain-release.txt'), `curtain-site-release 1\nindex.html ${sha('index.html')}\n404.html ${sha('404.html')}\n`);
+  console.log('  Release build: dist/curtain-release.txt written');
+}

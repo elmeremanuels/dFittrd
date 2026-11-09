@@ -154,7 +154,8 @@ publish_web() {
 # not there yet; then prune what belongs to neither this release nor the previous one.
 publish_site() {
   local release="$1" previous="${2:-}"
-  if [ ! -f "$release/index.html" ] || [ ! -f "$release/404.html" ]; then echo "deploy: no index.html and 404.html in $release" >&2; return 1; fi
+  # A second guard on the server: never publish a preview build (open launch gates), whoever uploaded it.
+  "$HERE/scripts/site-release-check.sh" "$release" || return 1
   local prev_mount=()
   if [ -n "$previous" ] && [ -d "$previous" ] && [ "$previous" != "$release" ]; then
     prev_mount=(-v "$previous:/prev:ro")
@@ -164,7 +165,7 @@ publish_site() {
     -v "${PROJECT}_site:/srv/site" -v "$release:/src:ro" "${prev_mount[@]}" "$CADDY_IMAGE" -euc '
       cd /src
       find . -type d -exec mkdir -p /srv/site/{} \;
-      find . -type f ! -name "*.html" -exec cp -p {} /srv/site/{} \;
+      find . -type f ! -name "*.html" ! -path ./curtain-release.txt -exec cp -p {} /srv/site/{} \;
       find . -type f -name "*.html" | while read -r f; do
         cp -p "$f" "/srv/site/$f.next" && mv -f "/srv/site/$f.next" "/srv/site/$f"
       done
@@ -292,8 +293,12 @@ log "deploying $NEW_IMAGE ${WEB_RELEASE:+(web $(basename "$WEB_RELEASE"))} ${SIT
 # emergency fix, when the host has them. Only an image that is missing locally is fatal.
 pull_images() {
   compose pull --quiet api || return 1
-  local img
-  for img in $(compose config --images caddy postgres | sort -u); do
+  local img imgs
+  # Captured first: inside `if ! pull_images` set -e is off, and a failing `compose config` in a loop's word
+  # list would give an empty list and skip the caddy/postgres check without a word.
+  imgs="$(compose config --images caddy postgres)" || { log "compose config --images failed"; return 1; }
+  [ -n "$imgs" ] || { log "compose config --images listed no caddy/postgres image"; return 1; }
+  for img in $(printf '%s\n' "$imgs" | sort -u); do
     [ "$img" = "$NEW_IMAGE" ] && continue
     if ! docker pull -q "$img" >/dev/null; then
       if docker image inspect "$img" >/dev/null 2>&1; then

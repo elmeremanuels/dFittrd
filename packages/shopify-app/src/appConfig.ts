@@ -25,7 +25,8 @@ const PLACEHOLDER_RE = /\{\{\s*([A-Z0-9_]+)\s*\}\}/g;
 /** A bare lowercase domain such as `curtain.fit` (no scheme, no path). Same rule as `.github/workflows/deploy.yml`. */
 export const BARE_DOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 /** The hosts the stack derives from DOMAIN; a DOMAIN that already starts with one is a mistake (`app.curtain.fit` → `api.app.curtain.fit`). */
-export const STACK_SUBDOMAIN_RE = /^(www|app|api)\./;
+/** Only names with 3+ labels, so an apex such as `api.co` still passes (no public-suffix list: `api.co.uk` would not). */
+export const STACK_SUBDOMAIN_RE = /^(www|app|api)\.[^.]+\.[^.]+/;
 /** The app's client id from the Partner Dashboard (also called the API key; not secret, but kept out of the repo). */
 export const CLIENT_ID_RE = /^[a-f0-9]{32}$/i;
 

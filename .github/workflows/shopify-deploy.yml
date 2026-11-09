@@ -131,8 +131,9 @@ jobs:
           if ! [[ "$DOMAIN" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]]; then
             echo "DOMAIN must be a bare lowercase domain like curtain.fit (no scheme, no subdomain prefix)"; exit 1
           fi
+          # Only names with 3+ labels: app.curtain.fit is refused, an apex such as api.co still passes (api.co.uk would not: no public-suffix list here).
           case "$DOMAIN" in
-            www.*|app.*|api.*) echo "DOMAIN must be the bare domain (curtain.fit), not $DOMAIN: api. and app. are added to it"; exit 1 ;;
+            www.*.*|app.*.*|api.*.*) echo "DOMAIN must be the bare domain (curtain.fit), not $DOMAIN: api. and app. are added to it"; exit 1 ;;
           esac
           echo "secrets and variables are set"
 

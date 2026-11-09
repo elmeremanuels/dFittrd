@@ -181,7 +181,7 @@ Disk on the VPS after all of this: Docker and containerd 2.0 GB with three api v
 | D1 | **A Docker Hub 429 (rate limit) or outage stopped every deploy** at `compose pull`, although `caddy:2.9-alpine` and `postgres:16-alpine` were already on the server. Anonymous Hub pulls are rate-limited per IP and VPS IPs are shared; it happened twice in this rehearsal. An emergency fix would have been blocked too | `infra/scripts/deploy.sh` pulls the api image (required) and then caddy/postgres; a failed pull of an image already on the host only warns, a missing one is still fatal | `apps/api/src/deploy-guard.test.ts`; runs 6, 7, 8 above |
 | D2 | A failed pull exited (via `set -e`) with `infra/.env` already pointing at the new, unpulled image, unlike every other early failure | the failed pull puts `infra/.env` back on the running image before exiting | same test; run 7 |
 | D3 | `DOMAIN=app.curtain.fit` (or `api.`/`www.`) passed the deploy guard, `scripts/deploy.sh` and the Shopify config renderer, although the message says "no subdomain prefix". It would have asked Let's Encrypt for `app.app.curtain.fit` and sent Shopify webhooks to `api.app.curtain.fit` | refused in `deploy.yml`, `shopify-deploy.yml`, `scripts/deploy.sh` and `packages/shopify-app/src/appConfig.ts` | `deploy-guard.test.ts` runs the guard's shell block and `scripts/deploy.sh`; `deployConfig.test.ts` |
-| D4 | A refused `build:release` left a complete `apps/site/dist/` behind. CI never uploads it, but the laptop path (`SITE_DIST=apps/site/dist`) would have published a site with open launch gates (including the waitlist notice that still needs legal review) | the refused release build removes `dist/` (fail closed) | `deploy-guard.test.ts`; checked by running the build |
+| D4 | A refused `build:release` left a complete `apps/site/dist/` behind. CI never uploads it, but the laptop path (`SITE_DIST=apps/site/dist`) would have published a site with open launch gates (including the waitlist notice that still needs legal review) | the refused release build removes `dist/` (fail closed). **Review follow-up:** that alone did not cover a plain preview build (`pnpm check` leaves one in `apps/site/dist` with the gates open). Now only a release build with every gate closed writes `dist/curtain-release.txt` (sha256 of `index.html` and `404.html`), and `scripts/deploy.sh` and the server's `publish_site` (`infra/scripts/site-release-check.sh`) refuse a site without a matching marker; the marker is not copied into the site volume | `deploy-guard.test.ts` runs the check script and `scripts/deploy.sh` with ssh/rsync stubs; by hand: preview build refused, a gates-closed release build (launch gates patched closed for the run only) accepted, a changed `404.html` refused, `publish_site` with the real `caddy:2.9-alpine` image published the release without the marker and refused a preview |
 | — | `shellcheck` SC2015 in `publish_site` (CI does not run shellcheck) | rewritten as an `if` | `shellcheck` clean |
 
 ## 6. Still open (needs the real server, store or founder)
@@ -210,3 +210,22 @@ Disk on the VPS after all of this: Docker and containerd 2.0 GB with three api v
 - `pnpm --filter @curtain/shopify-app test`: pass.
 - `infra/scripts/caddy-validate.sh` (Caddy v2.9.1): "Valid configuration" for `example.test` and `curtain.fit`. This closes
   refinement M3 (the `/assets` block against a real Caddy), and the block was also exercised over HTTPS above.
+
+## Review follow-up (9 Nov 2026)
+
+An adversarial review of this work found one medium and four low issues; all are fixed except the info items:
+
+- **Site preview builds could be published** (medium): see D4 above. A site release from before the marker existed
+  can no longer be re-published by a rollback; there is no such release on the new VPS, so this has no effect there.
+- **`pull_images` and a failing `compose config`** (low): the image list is captured first; a failure or an empty list
+  now fails the pull step (before any change, with `infra/.env` put back) instead of silently skipping the caddy/postgres check.
+- **DOMAIN prefix guard** (low): it now refuses `www.`/`app.`/`api.` only on names with three or more labels, so an
+  apex such as `api.co` passes. Without a public-suffix list, `api.co.uk` would still be refused (comment in each guard).
+- **Tests that only read source text** (low): `deploy-guard.test.ts` now runs the Shopify guard block, the site release
+  check, `scripts/deploy.sh deploy` with ssh/rsync stubs, and the real `pull_images` with docker/compose stubs
+  (Hub up, Hub down with and without local images, api pull failure, `compose config` failure or empty).
+- **Out-of-scope edit to apps/site** (low): kept (a few lines in `scripts/build.ts` that write the marker); the guarantee
+  itself is enforced on the deploy side.
+- Still open (info): the rehearsal's edge-check, probe and load scripts were not committed, so the 46 checks cannot be re-run
+  from the repo. They should become a go-live smoke test run against the real VPS after the first deploy.
+

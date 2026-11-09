@@ -142,10 +142,10 @@ describe('deploy: the site is published like the web app but never blocks it', (
     }
   });
 
-  it('the runner uploads SITE_DIST as its own release and skips it with a warning when it is not a site build', () => {
+  it('the runner uploads SITE_DIST as its own release and skips it with a warning when it is not a site release build', () => {
     expect(runnerDeploy).toContain('SITE_RELEASE="$REMOTE_DIR/site/releases/$TAG"');
     expect(runnerDeploy).toContain("SITE_ARGS=\"$(printf ' --site-release %q' \"$SITE_RELEASE\")\"");
-    expect(runnerDeploy).toMatch(/WARNING: \$SITE_DIST is not a site build/);
+    expect(runnerDeploy).toMatch(/WARNING: \$SITE_DIST is not a site release build/);
     expect(runnerDeploy).toContain('$WEB_ARGS$SITE_ARGS');
   });
 

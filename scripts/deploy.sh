@@ -12,8 +12,9 @@
 #   IMAGE_REPO, TAG              deploy only: ghcr.io/<owner>/curtain-api and the tag to run
 #   WEB_DIST                     deploy only, optional: a built apps/web/dist to publish
 #   SITE_DIST                    deploy only, optional: apps/site/dist from `build:release` to publish on
-#                                <DOMAIN>. Left out (or not a site build): the site on the server stays as it
-#                                is and app/api deploy as usual; the site never blocks the plugin.
+#                                <DOMAIN>. Left out, or not a release build (no matching curtain-release.txt,
+#                                infra/scripts/site-release-check.sh): the site on the server stays as it is
+#                                and app/api deploy as usual; the site never blocks the plugin.
 #   GHCR_USER, GHCR_TOKEN        optional: a registry login used for this pull only (logged out after);
 #                                the token goes over ssh stdin, never on a command line
 #   REMOTE_DIR                   optional, default /opt/curtain
@@ -36,8 +37,9 @@ if [ "${#MISSING[@]}" -gt 0 ]; then
 fi
 [[ "${TAG:-x}" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "deploy: TAG has unexpected characters" >&2; exit 2; }
 [[ "$DOMAIN" =~ ^[a-z0-9.-]+$ ]] || { echo "deploy: DOMAIN has unexpected characters" >&2; exit 2; }
+# Only names with 3+ labels: app.curtain.fit is refused, an apex such as api.co still passes (api.co.uk would not: no public-suffix list here).
 case "$DOMAIN" in
-  www.*|app.*|api.*) echo "deploy: DOMAIN must be the bare domain (e.g. curtain.fit), not $DOMAIN; www., app. and api. are added by the stack" >&2; exit 2 ;;
+  www.*.*|app.*.*|api.*.*) echo "deploy: DOMAIN must be the bare domain (e.g. curtain.fit), not $DOMAIN; www., app. and api. are added by the stack" >&2; exit 2 ;;
 esac
 
 # shellcheck disable=SC2206 # SSH_OPTS is a deliberate word list
@@ -84,7 +86,9 @@ fi
 
 SITE_ARGS=""
 if [ -n "${SITE_DIST:-}" ]; then
-  if [ -f "$SITE_DIST/index.html" ] && [ -f "$SITE_DIST/404.html" ]; then
+  # Only a build:release with every launch gate closed is published (it writes curtain-release.txt); a preview
+  # build in apps/site/dist, e.g. after `pnpm check`, is skipped with a warning.
+  if "$ROOT/infra/scripts/site-release-check.sh" "$SITE_DIST"; then
     SITE_RELEASE="$REMOTE_DIR/site/releases/$TAG"
     echo "→ uploading the site to $SITE_RELEASE"
     if rsync -rlptz --delete --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r -e "$RSYNC_SSH" "$SITE_DIST/" "$TARGET:$SITE_RELEASE/"; then
@@ -93,7 +97,7 @@ if [ -n "${SITE_DIST:-}" ]; then
       echo "WARNING: uploading the site failed; deploying app and api without it (the site on the server stays as it is)" >&2
     fi
   else
-    echo "WARNING: $SITE_DIST is not a site build (no index.html and 404.html); deploying app and api without it" >&2
+    echo "WARNING: $SITE_DIST is not a site release build (see above); deploying app and api without it" >&2
   fi
 else
   echo "→ no SITE_DIST: the site on the server stays as it is"

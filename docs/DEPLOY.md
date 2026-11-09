@@ -201,7 +201,7 @@ restore from the pre-deploy backup.
 
 `scripts/deploy.sh` is what the workflow runs. With the same variables (`VPS_HOST`, `VPS_USER`,
 `DOMAIN`, `IMAGE_REPO`, `TAG`, optional `WEB_DIST`, optional `SITE_DIST` (= `apps/site/dist` after
-`pnpm --filter @curtain/site build:release`; a refused release build removes `dist/`, so it cannot be shipped by mistake), `GHCR_USER`/`GHCR_TOKEN`) it deploys from any machine
+`pnpm --filter @curtain/site build:release`. Only a release build with every launch gate closed writes `dist/curtain-release.txt` (the sha256 of `index.html` and `404.html`); `scripts/deploy.sh` and, again, the server (`infra/scripts/site-release-check.sh`) publish no site without a matching marker. A preview build, such as the one `pnpm check` leaves in `apps/site/dist`, is skipped with a warning and app and api deploy as usual), `GHCR_USER`/`GHCR_TOKEN`) it deploys from any machine
 that has ssh and rsync. Without `SITE_DIST` the site on the server stays as it is. `scripts/deploy.sh status` and `rollback` need only the first three.
 
 ## Backups

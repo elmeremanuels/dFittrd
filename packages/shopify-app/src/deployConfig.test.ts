@@ -48,6 +48,8 @@ describe('deploy config from DOMAIN (what shopify-deploy.yml renders)', () => {
       expect(() => appUrlsForDomain(bad), bad).toThrow(AppConfigError);
     }
     expect(appUrlsForDomain('shop.example.com.au').PUBLIC_API_URL).toBe('https://api.shop.example.com.au');
+    // A two-label apex that happens to start with api./app. is a real domain, not a prefixed one.
+    expect(appUrlsForDomain('api.co').PUBLIC_API_URL).toBe('https://api.api.co');
   });
 
   it('rejects urls that disagree with DOMAIN', () => {

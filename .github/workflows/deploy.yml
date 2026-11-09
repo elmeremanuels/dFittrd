@@ -80,8 +80,9 @@ jobs:
             echo "DOMAIN must be a bare lowercase domain like curtain.fit (no scheme, no subdomain prefix)"; exit 1
           fi
           # The stack adds www., app. and api. itself: DOMAIN=app.curtain.fit would ask Let's Encrypt for app.app.curtain.fit.
+          # Only names with 3+ labels: app.curtain.fit is refused, an apex such as api.co still passes (api.co.uk would not: no public-suffix list here).
           case "$DOMAIN" in
-            www.*|app.*|api.*) echo "DOMAIN must be the bare domain (curtain.fit), not $DOMAIN: the deploy adds www., app. and api. itself"; exit 1 ;;
+            www.*.*|app.*.*|api.*.*) echo "DOMAIN must be the bare domain (curtain.fit), not $DOMAIN: the deploy adds www., app. and api. itself"; exit 1 ;;
           esac
           # infra/Caddyfile and docker-compose.yml serve <DOMAIN> and www.<DOMAIN> (the site), app.<DOMAIN>
           # and api.<DOMAIN> (the Caddy tests in apps/api pin them). Other subdomains need those files changed first.

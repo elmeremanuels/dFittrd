@@ -34,6 +34,16 @@ import {
 
 export const SHOPIFY_METAFIELD_NAMESPACE = '$app:curtain' as const;
 
+/**
+ * The namespace as the Admin API *returns* it. Requests use `$app:curtain`; Shopify expands the
+ * app-reserved prefix and responses carry `app--{app id}--curtain` ("$app:influencer →
+ * app--123456--influencer", https://shopify.dev/docs/apps/build/metafields). Matching only the
+ * request form dropped every real metafield, so a live product synced without its size chart.
+ */
+export function isCurtainMetafieldNamespace(namespace: string): boolean {
+  return namespace === SHOPIFY_METAFIELD_NAMESPACE || namespace === 'curtain' || /^app--\d+--curtain$/.test(namespace);
+}
+
 export const SHOPIFY_METAFIELD_TYPES = [
   'single_line_text_field',
   'multi_line_text_field',
@@ -314,7 +324,7 @@ export function indexShopifyMetafields(input: ShopifyMetafieldsInput | undefined
       const mf = ShopifyMetafieldSchema.safeParse(raw);
       if (!mf.success) continue;
       const { namespace, key, value, jsonValue } = mf.data;
-      if (namespace && namespace !== SHOPIFY_METAFIELD_NAMESPACE && namespace !== 'curtain') continue;
+      if (namespace && !isCurtainMetafieldNamespace(namespace)) continue;
       const k = key.includes('.') ? key.slice(key.lastIndexOf('.') + 1) : key;
       out.set(k, jsonValue !== undefined ? jsonValue : value);
     }

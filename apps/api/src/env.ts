@@ -97,6 +97,15 @@ export const EnvSchema = z.object({
   SHOPIFY_SCOPES: z.string().default('read_products,write_products'),
   /** The app's handle (shopify.app.toml `handle`): /shopify/auth/callback redirects to admin.shopify.com/store/<s>/apps/<handle>. */
   SHOPIFY_APP_HANDLE: z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/).default('curtain'),
+  /**
+   * The app's distribution method in the Dev Dashboard (irreversible there). `custom`: one store (or
+   * one Plus organisation) by install link; Shopify does not let custom-distribution apps charge
+   * through its billing system ("Can't charge merchants through Shopify's app billing system",
+   * https://shopify.dev/docs/apps/launch/distribution), so the plan is arranged directly with the
+   * merchant: every install and reinstall is granted the `curtain` plan by hand (no billingRef) and
+   * /shopify/billing/subscribe answers 409. `public`: App Store / unlisted, Billing API.
+   */
+  SHOPIFY_DISTRIBUTION: z.enum(['public', 'custom']).default('public'),
   /** GraphQL endpoint template for tests/mocks; `{shop}` is replaced by the shop domain. */
   SHOPIFY_ADMIN_URL_TEMPLATE: z.string().default('https://{shop}/admin/api/{version}/graphql.json'),
 

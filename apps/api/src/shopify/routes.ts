@@ -21,9 +21,9 @@
  * resets the shop to `free` with no subscription, a reinstall starts from that state, and every
  * token exchange reconciles the plan with the subscriptions Shopify reports (`reconcileSubscription`).
  */
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { adminAppUrl, adminContentSecurityPolicy, CURTAIN_PLAN, renderAdminPage, setAppDataMetafields, type ActiveSubscription } from '@curtain/shopify-app';
+import { adminAppUrl, adminContentSecurityPolicy, CURTAIN_PLAN, renderAdminPage, setAppDataMetafields, ShopifyGraphqlError, type ActiveSubscription } from '@curtain/shopify-app';
 import { z } from 'zod';
 import { requireMerchant } from '../auth/merchant.js';
 import { isShopifyDomain, verifyShopifySessionToken } from '../auth/shopifySessionToken.js';
@@ -31,7 +31,7 @@ import { PLAN_SPECS, remainingTrialDays } from '../billing/plans.js';
 import type { Db } from '../db/client.js';
 import { shops, webhookLog, type ShopSettings } from '../db/schema.js';
 import { JOB } from '../jobs/queue.js';
-import { badRequest, forbidden, serviceUnavailable, unauthorized } from '../lib/errors.js';
+import { badRequest, conflict, forbidden, serviceUnavailable, unauthorized } from '../lib/errors.js';
 import { HOUR } from '../lib/time.js';
 import { archiveProduct } from '../services/products.js';
 import { clearSettings, createShop, findShopByDomain, issueMerchantKeys, updateSettings, type ShopRow } from '../services/shops.js';
@@ -65,7 +65,7 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
     { schema: { querystring: z.object({ shop: z.string().max(255).optional() }).passthrough() }, config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
     async (req, reply) => {
       if (!env.SHOPIFY_API_KEY) throw serviceUnavailable('shopify_not_configured', 'SHOPIFY_API_KEY/SECRET are not set');
-      const html = renderAdminPage({ apiKey: env.SHOPIFY_API_KEY, apiUrl: env.PUBLIC_API_URL, appUrl: env.PUBLIC_APP_URL, appHandle: env.SHOPIFY_APP_HANDLE });
+      const html = renderAdminPage({ apiKey: env.SHOPIFY_API_KEY, apiUrl: env.PUBLIC_API_URL, appUrl: env.PUBLIC_APP_URL, appHandle: env.SHOPIFY_APP_HANDLE, billing: env.SHOPIFY_DISTRIBUTION === 'custom' ? 'arranged' : 'shopify' });
       // The page is framed by the Shopify admin: helmet's X-Frame-Options would block it, and the
       // CSP limits framing to this shop and admin.shopify.com (Shopify's embedded-app requirement).
       reply.removeHeader('x-frame-options');
@@ -112,6 +112,12 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
           if (row.uninstalledAt) await clearSettings(db, row.id, SUBSCRIPTION_KEYS);
         }
         if (!row.apiKeyPrefix) await issueMerchantKeys(db, env, row);
+        // Custom distribution cannot bill through Shopify: the plan is arranged with the merchant, so
+        // an install (and a reinstall, which reset the shop to `free` above) is granted it by hand.
+        // A shop already on `curtain` is left alone, so a pause set by the operator survives.
+        if (env.SHOPIFY_DISTRIBUTION === 'custom' && (row.uninstalledAt || row.plan !== 'curtain')) {
+          await updateSettings(db, row.id, { subscriptionStatus: 'ARRANGED' }, { plan: 'curtain', paused: false, billingRef: null, periodStart: now().toISOString().slice(0, 10) });
+        }
         const { accessToken: at, scope: sc, ...expiring } = tok;
         await shopify.saveOfflineSession(row.id, shopDomain, at, sc, expiring);
         return { shop: row, accessToken: at, scope: sc };
@@ -164,6 +170,7 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
     async (req) => {
       const shop = req.shop!;
       if (shop.platform !== 'shopify') throw badRequest('not_shopify', 'Shopify billing is only for Shopify shops');
+      if (env.SHOPIFY_DISTRIBUTION === 'custom') throw conflict('billing_not_available', CUSTOM_BILLING_MESSAGE);
       const token = await shopify.accessTokenFor(shop.domain);
       if (!token) throw unauthorized('shop has no offline token — run token exchange', 'shop_not_installed');
       const spec = PLAN_SPECS.curtain;
@@ -172,15 +179,24 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
       if (currency.fallback) req.log.warn({ shopDomain: shop.domain, billingCurrency: currency.billingCurrency }, 'no rate for the shop billing currency; charging in USD');
       const test = await billingTestFlag(req.body.test, () => shopify.isDevelopmentStore(shop.domain, token));
       const trialDays = remainingTrialDays(env.BILLING_TRIAL_DAYS, shop.settings.trialStartedAt, now());
-      const r = await shopify.appSubscriptionCreate(shop.domain, token, {
-        name: CURTAIN_PLAN.name,
-        returnUrl: req.body.returnUrl ?? `${env.PUBLIC_APP_URL}/merchant?billing=done`,
-        priceUsdPerMonth: spec.priceUsdPerMonth,
-        trialDays,
-        test,
-        currencyCode: currency.currencyCode,
-        usdRate: currency.usdRate,
-      });
+      const r = await shopify
+        .appSubscriptionCreate(shop.domain, token, {
+          name: CURTAIN_PLAN.name,
+          returnUrl: req.body.returnUrl ?? `${env.PUBLIC_APP_URL}/merchant?billing=done`,
+          priceUsdPerMonth: spec.priceUsdPerMonth,
+          trialDays,
+          test,
+          currencyCode: currency.currencyCode,
+          usdRate: currency.usdRate,
+        })
+        .catch((err: unknown) => {
+          // SHOPIFY_DISTRIBUTION says public but the Dev Dashboard says custom (or none chosen yet).
+          if (isBillingRefusedForDistribution(err)) {
+            req.log.error({ shopDomain: shop.domain }, 'Shopify refused the Billing API for this app: set SHOPIFY_DISTRIBUTION=custom, or use the public-distribution app');
+            throw conflict('billing_not_available', CUSTOM_BILLING_MESSAGE);
+          }
+          throw err;
+        });
       await updateSettings(db, shop.id, {
         subscriptionStatus: 'PENDING',
         // The trial clock starts when Shopify reports the subscription ACTIVE, not here (B3).
@@ -220,12 +236,21 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
     const payload = (req.body ?? {}) as Record<string, unknown>;
     const shop = shopDomain ? await findShopByDomain(db, shopDomain) : undefined;
 
-    const logged = await db
+    let logged = await db
       .insert(webhookLog)
       .values({ platform: 'shopify', shopId: shop?.id ?? null, shopDomain, topic, eventId, externalId: externalIdOf(payload), payload: loggablePayload(topic, payload), status: 'received' })
       .onConflictDoNothing({ target: [webhookLog.platform, webhookLog.eventId] })
       .returning({ id: webhookLog.id });
-    if (logged.length === 0) return reply.code(200).send({ ok: true, duplicate: true });
+    if (logged.length === 0) {
+      // A delivery we have seen. Shopify retries a non-2xx answer (8 times over 4 hours), so a
+      // delivery whose processing failed is claimed again and reprocessed; any other is acknowledged.
+      logged = await db
+        .update(webhookLog)
+        .set({ status: 'received', error: null, processedAt: null })
+        .where(and(eq(webhookLog.platform, 'shopify'), eq(webhookLog.eventId, eventId), eq(webhookLog.status, 'failed')))
+        .returning({ id: webhookLog.id });
+      if (logged.length === 0) return reply.code(200).send({ ok: true, duplicate: true });
+    }
     const logId = logged[0]!.id;
     const finish = (status: 'processed' | 'ignored' | 'failed', error?: string) =>
       db.update(webhookLog).set({ status, processedAt: now(), ...(error ? { error } : {}) }).where(eq(webhookLog.id, logId));
@@ -279,10 +304,23 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
     } catch (err) {
       req.log.error({ err, topic, shopDomain }, 'webhook processing failed');
       await finish('failed', err instanceof Error ? err.message : String(err));
+      // Not acknowledged: Shopify redelivers with the same X-Shopify-Webhook-Id, which is reprocessed above.
+      return reply.code(500).send({ ok: false });
     }
     return reply.code(200).send({ ok: true });
   });
 };
+
+const CUSTOM_BILLING_MESSAGE = 'This Curtain app is distributed to your store directly (custom distribution); Shopify does not let it charge through Shopify billing. Your plan is arranged with Curtain.';
+
+/**
+ * The userError Shopify returns when an app without public distribution calls the Billing API
+ * (wording reported by developers: "Custom apps cannot use the Billing API", "Apps without a public
+ * distribution cannot use the Billing API"). Matched loosely: the exact text is not documented.
+ */
+export function isBillingRefusedForDistribution(err: unknown): boolean {
+  return err instanceof ShopifyGraphqlError && err.code === 'user_errors' && /custom apps cannot use the billing api|without a public distribution/i.test(err.message);
+}
 
 /** Shopify AppSubscriptionStatus values that end a subscription. */
 const ENDED = ['CANCELLED', 'EXPIRED', 'DECLINED'];

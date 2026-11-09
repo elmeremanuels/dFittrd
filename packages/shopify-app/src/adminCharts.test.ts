@@ -18,6 +18,7 @@ interface El {
   value: string;
   checked: boolean;
   disabled: boolean;
+  hidden: boolean;
   textContent: string | null;
   innerHTML: string;
   classList: { contains(c: string): boolean };
@@ -43,10 +44,10 @@ interface Call {
   auth: string | null;
 }
 
-function mountPage(routes: Record<string, (c: Call) => unknown>, picker?: (opts: Record<string, unknown>) => unknown): Call[] {
+function mountPage(routes: Record<string, (c: Call) => unknown>, picker?: (opts: Record<string, unknown>) => unknown, opts: { billing?: 'shopify' | 'arranged' } = {}): Call[] {
   const calls: Call[] = [];
   history.replaceState(null, '', '/shopify/admin?shop=bohohippychic.myshopify.com');
-  const html = renderAdminPage({ apiKey: API_KEY, apiUrl: 'https://api.curtain.fit', appUrl: 'https://app.curtain.fit', template });
+  const html = renderAdminPage({ apiKey: API_KEY, apiUrl: 'https://api.curtain.fit', appUrl: 'https://app.curtain.fit', template, ...(opts.billing ? { billing: opts.billing } : {}) });
   const config = /<script id="curtain-config" type="application\/json">([\s\S]*?)<\/script>/.exec(html)![1]!;
   const body = /<body>([\s\S]*?)<script>/.exec(html)![1]!;
   const script = /<script>\s*([\s\S]*?)<\/script>\s*<\/body>/.exec(html)![1]!;
@@ -304,5 +305,21 @@ describe('admin page: the plan button (checklist B2)', () => {
     $('btn-plan').click();
     await vi.waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/shopify/billing/subscribe')).toBe(true));
     await vi.waitFor(() => expect($('banner').textContent).toContain('Subscription created'));
+  });
+
+  it('custom distribution (billing arranged): no Subscribe button, the plan reads as arranged, no billing call', async () => {
+    const calls = mountPage({ 'GET /v1/merchant/usage': usage({ name: 'curtain', priceUsdPerMonth: 8.99 }) }, undefined, { billing: 'arranged' });
+    await settled('Curtain · arranged with Curtain');
+    expect($('btn-plan').hidden).toBe(true);
+    expect($('chk-plan').classList.contains('done')).toBe(true);
+    expect($('txt-plan').textContent).toContain('arranged directly with Curtain');
+    expect(calls.some((c) => c.path === '/shopify/billing/subscribe')).toBe(false);
+  });
+
+  it('custom distribution, paused shop: told to contact Curtain, never to approve a Shopify charge', async () => {
+    mountPage({ 'GET /v1/merchant/usage': usage({ name: 'curtain', paused: true }) }, undefined, { billing: 'arranged' });
+    await settled('Curtain · arranged with Curtain · paused');
+    expect($('banner').textContent).toContain('Contact Curtain support');
+    expect($('banner').textContent).not.toContain('Approve');
   });
 });

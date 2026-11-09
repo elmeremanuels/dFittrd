@@ -12,7 +12,7 @@ describe('admin page', () => {
     expect(html).toContain(`<script src="${APP_BRIDGE_SCRIPT_URL}"></script>`);
     expect(html).not.toContain('__CURTAIN_');
     const json = /<script id="curtain-config" type="application\/json">(.*?)<\/script>/s.exec(html)![1]!;
-    expect(JSON.parse(json)).toEqual({ apiKey: API_KEY, apiUrl: 'https://api.curtain.fit', appUrl: 'https://app.curtain.fit', appHandle: 'curtain', blockHandle: 'try-it-on', disclaimer: ESTIMATE_DISCLAIMER });
+    expect(JSON.parse(json)).toEqual({ apiKey: API_KEY, apiUrl: 'https://api.curtain.fit', appUrl: 'https://app.curtain.fit', appHandle: 'curtain', blockHandle: 'try-it-on', billing: 'shopify', disclaimer: ESTIMATE_DISCLAIMER });
   });
 
   it('cannot be broken out of with </script> in config values', () => {

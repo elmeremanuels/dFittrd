@@ -25,14 +25,16 @@ export const repoRoot = resolve(pluginRoot, '..', '..');
 export const cacheDir = join(pluginRoot, 'e2e', '.cache');
 
 /** Pinned downloads from downloads.wordpress.org. */
+// sha256 recorded from the first download (the WordPress zip also matches wordpress.org's published
+// .sha1); a mismatch fails the run instead of silently testing other code.
 export const DOWNLOADS = {
   // The official images ship the newest WordPress of their tag; wordpress:php8.1-apache stopped at
   // 6.9 (PHP 8.1 is end of life), and WooCommerce 11.2 needs 7.0. Older cores are updated to this.
-  wordpress: { file: 'wordpress-7.1.4.zip', url: 'https://downloads.wordpress.org/release/wordpress-7.1.4.zip' },
-  woocommerce: { file: 'woocommerce.11.2.2.zip', url: 'https://downloads.wordpress.org/plugin/woocommerce.11.2.2.zip' },
-  storefront: { file: 'storefront.4.6.2.zip', url: 'https://downloads.wordpress.org/theme/storefront.4.6.2.zip' },
-  twentytwentyfour: { file: 'twentytwentyfour.1.6.zip', url: 'https://downloads.wordpress.org/theme/twentytwentyfour.1.6.zip' },
-  'plugin-check': { file: 'plugin-check.2.2.0.zip', url: 'https://downloads.wordpress.org/plugin/plugin-check.2.2.0.zip' },
+  wordpress: { file: 'wordpress-7.1.4.zip', url: 'https://downloads.wordpress.org/release/wordpress-7.1.4.zip', sha256: 'a147146c159362778ecbbbfb07bb20ddf4e85b130f971c824e656a8f938c5f87' },
+  woocommerce: { file: 'woocommerce.11.2.2.zip', url: 'https://downloads.wordpress.org/plugin/woocommerce.11.2.2.zip', sha256: 'a4746183efd951de5837396aad119f7cf508f06cb699ccb590a01cada4c44932' },
+  storefront: { file: 'storefront.4.6.2.zip', url: 'https://downloads.wordpress.org/theme/storefront.4.6.2.zip', sha256: '163b5bf217dad76a823432d8c01598ab3dc3f15cbdd69067b98f5a6ddf05c1c4' },
+  twentytwentyfour: { file: 'twentytwentyfour.1.6.zip', url: 'https://downloads.wordpress.org/theme/twentytwentyfour.1.6.zip', sha256: '9128150eff2682bf07ca7fdada2d2ed86a8f0d9210814d5369241e51e7a50baf' },
+  'plugin-check': { file: 'plugin-check.2.2.0.zip', url: 'https://downloads.wordpress.org/plugin/plugin-check.2.2.0.zip', sha256: 'c9d26a644c4be2f7eb6223e837b2b38a9780a7873e7db30f49507412d541243b' },
 };
 
 export function config(overrides = {}) {
@@ -66,8 +68,19 @@ export async function fetchDownloads(log) {
       writeFileSync(path, Buffer.from(await res.arrayBuffer()));
     }
     const sha = createHash('sha256').update(readFileSync(path)).digest('hex');
-    log(`${d.file} sha256 ${sha}`);
+    if (d.sha256 && sha !== d.sha256) throw new Error(`${d.file}: sha256 ${sha}, expected ${d.sha256} (delete e2e/.cache/${d.file} to re-download; update DOWNLOADS only after checking the new file)`);
+    log(`${d.file} sha256 ${sha} (pinned, verified)`);
     out[name] = path;
+  }
+  return out;
+}
+
+/** The content digests of the images under test (tags move; report.json records what really ran). */
+export function imageDigests(cfg) {
+  const out = {};
+  for (const image of [cfg.dbImage, cfg.wpImage, cfg.cliImage]) {
+    const r = spawnSync('docker', ['image', 'inspect', '--format', '{{join .RepoDigests ","}}', image], { encoding: 'utf8' });
+    out[image] = r.status === 0 ? r.stdout.trim() : 'unknown';
   }
   return out;
 }
@@ -117,7 +130,7 @@ export async function startWordPress(cfg, log) {
   log(`start ${cfg.wpImage} on http://localhost:${cfg.wpPort}`);
   sh('docker', ['volume', 'create', `${cfg.prefix}-html`]);
   const extra = "define('WP_DEBUG_LOG', true); define('WP_DEBUG_DISPLAY', false); define('WP_ENVIRONMENT_TYPE', 'local');";
-  const apache = `sed -i 's/^Listen 80$/Listen ${cfg.wpPort}/' /etc/apache2/ports.conf && sed -i 's/:80>/:${cfg.wpPort}>/' /etc/apache2/sites-enabled/000-default.conf && exec docker-entrypoint.sh apache2-foreground`;
+  const apache = `sed -i 's/^Listen 80$/Listen 127.0.0.1:${cfg.wpPort}/' /etc/apache2/ports.conf && sed -i 's/:80>/:${cfg.wpPort}>/' /etc/apache2/sites-enabled/000-default.conf && exec docker-entrypoint.sh apache2-foreground`;
   sh('docker', [
     'run', '-d', '--name', `${cfg.prefix}-wp`, '--network', 'host', '-v', `${cfg.prefix}-html:/var/www/html`,
     '-e', `WORDPRESS_DB_HOST=127.0.0.1:${cfg.dbPort}`, '-e', 'WORDPRESS_DB_USER=wp', '-e', 'WORDPRESS_DB_PASSWORD=e2e-wp', '-e', 'WORDPRESS_DB_NAME=wp',

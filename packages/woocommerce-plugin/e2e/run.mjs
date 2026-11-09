@@ -11,8 +11,8 @@
  * connection" completes), fill the fit-data meta box from a size chart template, pick the
  * flat-lay in the media modal, Update → the HMAC-signed push lands in the api (read back with a
  * signed GET; a forged signature is refused).
- * Shopper (Storefront, Twenty Twenty-Four, Twenty Twenty-Five): the button sits under the variation
- * form, "Try it on" → overlay → About you → result → "Choose size X" → the variation dropdown holds X
+ * Shopper (Storefront, Twenty Twenty-Four, Twenty Twenty-Five, and TT5 with the add-to-cart form moved
+ * into a template part): the button sits under the variation form, "Try it on" → overlay → About you → result → "Choose size X" → the variation dropdown holds X
  * and WooCommerce shows that variation's price.
  * Lifecycle: deactivate (queue cleared, button and script gone), reactivate, uninstall with
  * "delete all data" ticked (settings, meta and transients gone). Then Plugin Check (the official
@@ -29,7 +29,7 @@ import { createHmac, createHash } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { apiService, config, debugLog, fetchDownloads, freshDir, pluginRoot, pullImages, removeStack, repoRoot, startWordPress, webService, wp } from './stack.mjs';
+import { apiService, config, debugLog, fetchDownloads, freshDir, imageDigests, pluginRoot, pullImages, removeStack, repoRoot, startWordPress, webService, wp } from './stack.mjs';
 
 const require = createRequire(import.meta.url);
 const arg = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split('=')[1];
@@ -79,6 +79,20 @@ async function login(browser) {
   await page.click('#wp-submit');
   await page.waitForURL(/wp-admin/);
   return { ctx, page };
+}
+
+/**
+ * GET a page as text. One retry: Node's fetch reuses a keep-alive socket that Apache may already have
+ * closed (KeepAliveTimeout 5 s) while a slow WP-CLI container ran in between ("other side closed").
+ */
+async function fetchText(url, what = url) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await (await fetch(url)).text();
+    } catch (e) {
+      if (attempt >= 2) throw new Error(`fetch ${what} ${JSON.stringify(url)}: ${e.cause?.message ?? e.message}`);
+    }
+  }
 }
 
 const notices = async (page) => (await page.locator('.wrap .notice, #wpbody-content > .notice').allInnerTexts()).map((t) => t.replace(/\s*Dismiss this notice\.\s*/g, ' ').trim()).filter(Boolean);
@@ -158,8 +172,21 @@ async function merchantAndShopper(browser, zip, productId, api) {
   const token = wp(cfg, ['eval', 'echo \\Curtain\\Settings::get("connect_token");']);
   const expected = `cv_${createHmac('sha256', DEV_JWT_SECRET).update(`woo-domain-proof:${token}`).digest('hex').slice(0, 40)}`;
   check(pretty.nonce === expected && query.nonce === expected, 'pending Connect: /wp-json/curtain/v1/verify and ?rest_route= publish exactly the nonce the api derives from the Connect token', JSON.stringify({ pretty, query, expected }));
-  const html = await (await fetch(`${WP}/`)).text();
-  check(!html.includes(expected), 'the nonce is not reflected in page HTML (REST route only)', 'nonce found in the front page HTML');
+  // Pages a visitor or the merchant can load while the Connect is pending: none may carry the nonce.
+  const pages = {
+    front: `${WP}/`,
+    product: wp(cfg, ['eval', `echo get_permalink(${productId});`]),
+    shop: wp(cfg, ['eval', 'echo wc_get_page_permalink("shop");']),
+  };
+  const leaks = [];
+  for (const [name, url] of Object.entries(pages)) {
+    const body = await fetchText(url, name);
+    if (body.length < 500) leaks.push(`${name}: suspiciously short page (${body.length} B)`);
+    if (body.includes(expected)) leaks.push(`${name} (${url})`);
+  }
+  await page.goto(`${WP}/wp-admin/admin.php?page=curtain`);
+  if ((await page.content()).includes(expected)) leaks.push('wp-admin Curtain settings page');
+  check(leaks.length === 0, 'the nonce is not in the HTML of the front page, the product page, the shop page or the Curtain settings page (REST route only)', leaks.join('; '));
 
   log('restart the api with WOO_DOMAIN_PROOF=0 (a localhost site cannot be proven; production keeps it on)');
   await api.stop();
@@ -235,8 +262,9 @@ async function merchantAndShopper(browser, zip, productId, api) {
   check(listed.status === 200 && row && /active/.test(JSON.stringify(row)), 'signed GET /v1/merchant/products returns the pushed product as active', JSON.stringify(list).slice(0, 400));
   const forged = await fetch(API + target, { headers: { authorization: pkHmac(pk, sk.slice(0, -1) + (sk.endsWith('a') ? 'b' : 'a'), 'GET', target) } });
   check(forged.status === 401, 'a forged PK-HMAC signature is refused (401)', String(forged.status));
-  const putLines = api.lines.filter((l) => l.includes(`/v1/merchant/products/${productId}`));
-  pass('api log shows the plugin\'s PUT', `${putLines.length} log line(s) for /v1/merchant/products/${productId}`);
+  // pino pretty-prints the request over several lines: "method": "PUT" right above its "url".
+  const putLines = api.lines.filter((l, i) => l.includes(`"url": "/v1/merchant/products/${productId}"`) && /"method": "PUT"/.test(api.lines[i - 1] ?? ''));
+  check(putLines.length > 0, 'api log shows the plugin\'s PUT', `no PUT line for /v1/merchant/products/${productId} in ${api.lines.length} api log line(s)`);
 
   // ---- storefront, per theme ----------------------------------------------------------------------
   const permalink = wp(cfg, ['eval', `echo get_permalink(${productId});`]);
@@ -244,6 +272,14 @@ async function merchantAndShopper(browser, zip, productId, api) {
     wp(cfg, ['theme', 'activate', theme]);
     await shopperFlow(browser, theme, permalink);
   }
+  // A merchant who moved the add-to-cart form into a template part in the Site Editor (TT5 still
+  // active): the button must still sit under the form, not fall back above the excerpt.
+  const tp = wp(cfg, ['eval-file', '/e2e/template-part.php'], { mounts: { [join(pluginRoot, 'e2e')]: '/e2e' } });
+  log(`template part variant: ${tp.split('\n').pop()}`);
+  const tpHtml = await fetchText(permalink);
+  check(/class="[^"]*wp-block-template-part[^"]*"[\s\S]*variations_form/.test(tpHtml), 'twentytwentyfive, form moved into a template part: the product page renders the form from the template part', 'no template-part wrapper before the variation form');
+  await shopperFlow(browser, 'twentytwentyfive-template-part', permalink);
+  wp(cfg, ['eval-file', '/e2e/template-part.php', 'remove'], { mounts: { [join(pluginRoot, 'e2e')]: '/e2e' } });
   wp(cfg, ['theme', 'activate', 'storefront']);
 
   // ---- deactivate / reactivate -------------------------------------------------------------------
@@ -254,11 +290,11 @@ async function merchantAndShopper(browser, zip, productId, api) {
   await shot(page, 'plugins-deactivated');
   const pendingAfter = wp(cfg, ['eval', 'echo count(as_get_scheduled_actions(array("group" => "curtain", "status" => "pending"), "ids"));']);
   check(pendingAfter === '0', 'deactivate clears the pending curtain jobs (Action Scheduler)', pendingAfter);
-  const offHtml = await (await fetch(permalink)).text();
+  const offHtml = await fetchText(permalink);
   check(!offHtml.includes('curtain-try-button') && !offHtml.includes('sdk.v1.js'), 'deactivated: no button and no SDK on the product page', 'still rendered');
   await page.locator('tr[data-plugin="curtain-woocommerce/curtain.php"] .activate a').click();
   await page.waitForURL(/plugins\.php/);
-  const onHtml = await (await fetch(permalink)).text();
+  const onHtml = await fetchText(permalink);
   check(onHtml.includes('curtain-try-button'), 'reactivated: settings kept, the button is back without reconnecting', 'button missing after reactivation');
 
   // ---- uninstall with "delete all data" -------------------------------------------------------------
@@ -341,6 +377,27 @@ async function shopperFlow(browser, theme, permalink) {
   await ctx.close();
 }
 
+/**
+ * Uninstall after WooCommerce was deactivated first: Action Scheduler's API is gone, so uninstall.php
+ * must clear its tables itself, and WP-Cron events with args must go too (wp_unschedule_hook).
+ * Uses the copy Plugin Check just installed.
+ */
+function uninstallWithoutWooCommerce(productId) {
+  wp(cfg, ['plugin', 'activate', 'curtain-woocommerce']);
+  wp(cfg, ['plugin', 'deactivate', 'curtain-woocommerce']);
+  // Jobs left behind after deactivation (as if queued by an older version), one per backend.
+  wp(cfg, ['eval', `as_schedule_single_action(time() + 3600, "curtain_push_product", array(${productId}, 0), "curtain"); wp_schedule_single_event(time() + 3600, "curtain_push_product", array(${productId}, 1));`]);
+  const count = () => ({
+    as: wp(cfg, ['db', 'query', "SELECT COUNT(*) FROM wp_actionscheduler_actions WHERE hook LIKE 'curtain\\_%'", '--skip-column-names']),
+    cron: wp(cfg, ['eval', '$n = 0; foreach ( (array) _get_cron_array() as $ev ) { foreach ( array_keys( (array) $ev ) as $h ) { if ( 0 === strpos( (string) $h, "curtain_" ) ) { $n++; } } } echo $n;']),
+  });
+  const before = count();
+  wp(cfg, ['plugin', 'deactivate', 'woocommerce']);
+  wp(cfg, ['plugin', 'uninstall', 'curtain-woocommerce']);
+  const after = count();
+  check(Number(before.as) > 0 && Number(before.cron) > 0 && after.as === '0' && after.cron === '0', 'uninstall after WooCommerce was deactivated: Action Scheduler rows and WP-Cron events (with args) of Curtain all gone', JSON.stringify({ before, after }));
+}
+
 async function pluginCheck(zip) {
   // A fresh copy of the zip next to the official Plugin Check plugin, run with WP-CLI.
   const mounts = { [join(pluginRoot, 'e2e', '.cache')]: '/dl', [join(pluginRoot, 'dist')]: '/plugin' };
@@ -381,6 +438,8 @@ async function main() {
   if (!existsSync(zip)) throw new Error(`missing ${zip}: run the build first`);
   const dl = await fetchDownloads(log);
   pullImages(cfg, log);
+  report.environment.images = imageDigests(cfg);
+  for (const [image, digest] of Object.entries(report.environment.images)) log(`image ${image} = ${digest}`);
   const { chromium } = require('playwright');
   const api = apiService(cfg, { dataDir: freshDir(join(work, 'api-db')), logFile: join(work, 'api.log') });
   const web = webService(cfg, { logFile: join(work, 'web.log') });
@@ -395,6 +454,7 @@ async function main() {
     await web.start();
     await merchantAndShopper(browser, zip, productId, api);
     await pluginCheck(zip);
+    uninstallWithoutWooCommerce(productId);
     const dbg = debugLog(cfg);
     writeFileSync(join(shots, 'debug.log'), dbg);
     const ours = dbg.split('\n').filter((l) => /curtain/i.test(l) && /PHP (Fatal|Warning|Notice|Deprecated|Parse)/.test(l));

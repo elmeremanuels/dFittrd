@@ -378,8 +378,9 @@ final class Payload_Builder {
 			return $out ? $out : null;
 		}
 		if ( is_string( $v ) ) {
-			$out = array();
-			foreach ( (array) preg_split( '/[,|;\n]/', $v ) as $s ) {
+			$out   = array();
+			$parts = preg_split( '/[,|;\n]/', $v );
+			foreach ( is_array( $parts ) ? $parts : array() as $s ) {
 				$s = trim( $s );
 				if ( '' !== $s ) {
 					$out[] = $s;

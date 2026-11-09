@@ -69,8 +69,10 @@ final class Queue {
 				as_unschedule_all_actions( $hook );
 			}
 		}
+		// WP-Cron backend: wp_clear_scheduled_hook( $hook ) only clears events with args [] (core
+		// matches args exactly); wp_unschedule_hook() removes every event of the hook.
 		foreach ( self::HOOKS as $hook ) {
-			wp_clear_scheduled_hook( $hook );
+			wp_unschedule_hook( $hook );
 		}
 	}
 

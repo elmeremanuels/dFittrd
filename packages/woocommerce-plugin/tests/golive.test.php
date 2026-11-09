@@ -130,3 +130,63 @@ test(
 		}
 	}
 );
+
+test(
+	'Queue::cancel_all also clears WP-Cron events that carry args (no Action Scheduler)',
+	static function (): void {
+		Curtain_Test_State::$cron = array(
+			array( 'ts' => time() + 60, 'hook' => 'curtain_push_product', 'args' => array( 11, 0 ) ),
+			array( 'ts' => time() + 60, 'hook' => 'curtain_delete_product', 'args' => array( '9', 2 ) ),
+			array( 'ts' => time() + 60, 'hook' => 'curtain_sync_all', 'args' => array( 1 ) ),
+			array( 'ts' => time() + 60, 'hook' => 'wp_version_check', 'args' => array() ),
+		);
+		Queue::cancel_all();
+		assert_same( 1, count( Curtain_Test_State::$cron ), 'only the unrelated core event is left' );
+		assert_same( 'wp_version_check', Curtain_Test_State::$cron[0]['hook'] );
+		Curtain_Test_State::$cron = array();
+	}
+);
+
+test(
+	'uninstall.php clears WP-Cron events of every args and Action Scheduler rows without WooCommerce',
+	static function (): void {
+		$src = (string) file_get_contents( dirname( __DIR__ ) . '/uninstall.php' );
+		assert_true( str_contains( $src, 'wp_unschedule_hook( $curtain_hook )' ), 'wp_unschedule_hook, not wp_clear_scheduled_hook' );
+		assert_false( str_contains( $src, 'wp_clear_scheduled_hook( $' ), 'no args-matching clear left' );
+		assert_true( str_contains( $src, 'actionscheduler_actions' ), 'direct table cleanup when the AS API is gone' );
+	}
+);
+
+if ( ! function_exists( 'get_stylesheet' ) ) {
+	function get_stylesheet(): string { return 'twentytwentyfive'; }
+}
+if ( ! function_exists( 'get_block_template' ) ) {
+	function get_block_template( string $id, string $type = 'wp_template' ) {
+		$parts = Curtain_Test_State::$options['_template_parts'] ?? array();
+		return 'wp_template_part' === $type && isset( $parts[ $id ] ) ? (object) array( 'content' => $parts[ $id ] ) : null;
+	}
+}
+
+test(
+	'block template detection follows nesting, template parts and synced patterns',
+	static function (): void {
+		$form = array( 'blockName' => 'woocommerce/add-to-cart-form', 'attrs' => array(), 'innerBlocks' => array() );
+		$nested = array( array( 'blockName' => 'core/group', 'attrs' => array(), 'innerBlocks' => array( array( 'blockName' => 'core/columns', 'attrs' => array(), 'innerBlocks' => array( $form ) ) ) ) );
+		assert_true( Frontend::blocks_have_form_block( $nested ), 'nested in group/columns' );
+
+		Curtain_Test_State::$options['_template_parts'] = array( 'twentytwentyfive//product-buy' => '<!-- wp:woocommerce/add-to-cart-form /-->' );
+		$part = array( array( 'blockName' => 'core/template-part', 'attrs' => array( 'slug' => 'product-buy' ), 'innerBlocks' => array() ) );
+		assert_true( Frontend::blocks_have_form_block( $part ), 'inside a template part (Site Editor move)' );
+		$other = array( array( 'blockName' => 'core/template-part', 'attrs' => array( 'slug' => 'footer' ), 'innerBlocks' => array() ) );
+		assert_false( Frontend::blocks_have_form_block( $other ), 'a template part without the form' );
+
+		Curtain_Test_State::$posts[ 7001 ] = array( 'type' => 'wp_block', 'content' => '<!-- wp:group --><!-- wp:woocommerce/add-to-cart-with-options --><!-- /wp:woocommerce/add-to-cart-with-options --><!-- /wp:group -->' );
+		assert_true( Frontend::blocks_have_form_block( array( array( 'blockName' => 'core/block', 'attrs' => array( 'ref' => 7001 ), 'innerBlocks' => array() ) ) ), 'inside a synced pattern' );
+		Curtain_Test_State::$posts[ 7002 ] = array( 'type' => 'post', 'content' => '<!-- wp:woocommerce/add-to-cart-form /-->' );
+		assert_false( Frontend::blocks_have_form_block( array( array( 'blockName' => 'core/block', 'attrs' => array( 'ref' => 7002 ), 'innerBlocks' => array() ) ) ), 'core/block only follows wp_block posts' );
+
+		Curtain_Test_State::$options['_template_parts'] = array( 'twentytwentyfive//loop' => '<!-- wp:template-part {"slug":"loop"} /-->' );
+		assert_false( Frontend::content_has_form_block( '<!-- wp:template-part {"slug":"loop"} /-->' ), 'self-including part terminates' );
+		unset( Curtain_Test_State::$options['_template_parts'], Curtain_Test_State::$posts[ 7001 ], Curtain_Test_State::$posts[ 7002 ] );
+	}
+);

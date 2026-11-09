@@ -26,15 +26,32 @@ $curtain_settings = is_array( $curtain_settings ) ? $curtain_settings : array();
 if ( function_exists( 'as_unschedule_all_actions' ) ) {
 	as_unschedule_all_actions( '', array(), 'curtain' );
 }
-foreach ( array( 'curtain_push_product', 'curtain_delete_product', 'curtain_sync_all' ) as $curtain_hook ) {
+$curtain_hooks = array( 'curtain_push_product', 'curtain_delete_product', 'curtain_sync_all' );
+foreach ( $curtain_hooks as $curtain_hook ) {
 	if ( function_exists( 'as_unschedule_all_actions' ) ) {
 		as_unschedule_all_actions( $curtain_hook );
 	}
-	wp_clear_scheduled_hook( $curtain_hook );
+	// Every WP-Cron event of the hook, whatever its args (wp_clear_scheduled_hook() would only
+	// match events with args []).
+	wp_unschedule_hook( $curtain_hook );
+}
+
+global $wpdb;
+
+// WooCommerce already deactivated: Action Scheduler's API is gone but its tables stay, so remove
+// the Curtain rows (and their log lines) directly.
+if ( ! function_exists( 'as_unschedule_all_actions' ) ) {
+	$curtain_as_actions = $wpdb->prefix . 'actionscheduler_actions';
+	$curtain_as_logs    = $wpdb->prefix . 'actionscheduler_logs';
+	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $curtain_as_actions ) ) ) === $curtain_as_actions ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $curtain_as_logs ) ) ) === $curtain_as_logs ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->query( $wpdb->prepare( 'DELETE l FROM %i l INNER JOIN %i a ON a.action_id = l.action_id WHERE a.hook IN (%s, %s, %s)', $curtain_as_logs, $curtain_as_actions, $curtain_hooks[0], $curtain_hooks[1], $curtain_hooks[2] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		$wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE hook IN (%s, %s, %s)', $curtain_as_actions, $curtain_hooks[0], $curtain_hooks[1], $curtain_hooks[2] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
 }
 
 // Transient notices.
-global $wpdb;
 $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\_transient\_curtain\_%' OR option_name LIKE '\_transient\_timeout\_curtain\_%'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 
 if ( ! empty( $curtain_settings['delete_on_uninstall'] ) ) {

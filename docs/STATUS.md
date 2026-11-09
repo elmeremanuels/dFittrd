@@ -12,8 +12,10 @@ Upload and activate, Connect (domain proof refused for localhost as designed, th
 Stripe), the meta box from a size chart template, the HMAC push read back from the api, the shopper flow with the size
 selected in the variation dropdown on all three themes, deactivate, uninstall, Plugin Check 0 errors. Six defects found
 and fixed (queue not cleared on deactivate, button above the form on block themes, Plugin Check errors, AUD prices
-dropped, no chart templates in the Woo meta box, checkbox layout). Plugin now requires PHP 8.1. Details, screenshots
-and what still needs a live site: `docs/LAUNCH-WOO.md`.
+dropped, no chart templates in the Woo meta box, checkbox layout). Plugin now requires PHP 8.1 (founder to confirm).
+Review follow-up: WP-Cron jobs now also cleared on deactivate/uninstall, button placement follows a form moved into a
+template part (new e2e variant), 39 checks per PHP version. Details, screenshots and what still needs a live site:
+`docs/LAUNCH-WOO.md`.
 
 ## Garment engine — refinement R1, R3, R5, R6 on CPU (branch `claude/refine-cpu`) — 8 Nov 2026
 

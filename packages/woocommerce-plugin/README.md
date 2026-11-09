@@ -75,14 +75,14 @@ phpcs                                                  # phpcs.xml.dist: WordPre
 
 `e2e/run.mjs` uploads the built zip through wp-admin, connects (domain proof on, then off for localhost), fills the
 meta box from a template, checks the signed push in the api, runs the shopper flow on Storefront, Twenty Twenty-Four
-and Twenty Twenty-Five, deactivates, uninstalls and runs Plugin Check. Screenshots: `test-results/woo-wp-e2e/`.
+and Twenty Twenty-Five (also with the add-to-cart form moved into a template part), deactivates, uninstalls and runs Plugin Check. Screenshots: `test-results/woo-wp-e2e/`.
 
 `build` needs `@curtain/sdk` and `@curtain/schema` built first (the root `pnpm build` does packages before apps). The tests run under plain `php` with the shims in `tests/shims.php` (no WordPress, no Brain Monkey); they cover the HMAC signer against Node-computed vectors, the secret store, the JSON Schema validator against the bundled schema, the sanitiser, the payload builder's byte-for-byte parity with `fromWooMeta` on all 41 `MOCK_GARMENTS`, and the push/delete jobs end-to-end through a mocked `wp_remote_request` (including the retry policy).
 
 ## Pilot store install (direct zip)
 
 1. `pnpm --filter @curtain/woocommerce-plugin build` → `dist/curtain-woocommerce.zip`.
-2. WordPress admin → *Plugins → Add New → Upload Plugin* → upload the zip → *Activate*. Requires WooCommerce ≥ 9.0, PHP ≥ 8.2.
+2. WordPress admin → *Plugins → Add New → Upload Plugin* → upload the zip → *Activate*. Requires WooCommerce ≥ 9.0, PHP ≥ 8.1.
 3. *WooCommerce → Curtain*. For staging, set **API base URL** to the staging api first (Advanced section). Click **Connect to Curtain**:
    - with Stripe configured on the api the admin is sent to Checkout and back to the settings page (`?curtain=connected`), which finishes the token exchange automatically (or via *Finish connection*);
    - without Stripe (`mode: manual-key`) the connection completes immediately on the free plan.

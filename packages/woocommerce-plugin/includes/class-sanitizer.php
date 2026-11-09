@@ -181,7 +181,8 @@ final class Sanitizer {
 				$zones[] = $z;
 			}
 		}
-		foreach ( (array) preg_split( '/[,|;\n]/', self::text( $in['stretch_zones_other'] ?? '', 400 ) ) as $z ) {
+		$other = preg_split( '/[,|;\n]/', self::text( $in['stretch_zones_other'] ?? '', 400 ) );
+		foreach ( is_array( $other ) ? $other : array() as $z ) {
 			$z = strtolower( trim( $z ) );
 			if ( '' !== $z && strlen( $z ) <= 64 && ! in_array( $z, $zones, true ) ) {
 				$zones[] = $z;

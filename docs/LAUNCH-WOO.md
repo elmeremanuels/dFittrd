@@ -15,7 +15,8 @@ pnpm --filter @curtain/woocommerce-plugin e2e:wp:matrix   # 8.3, 8.2 and 8.1 one
 ```
 
 Needs Docker and Chromium (Playwright). Flags: `--keep` leaves the containers running (WordPress on
-`http://localhost:809<minor>`, user `admin`, password in `e2e/run.mjs`), `--skip-build`, `--headed`.
+`http://localhost:809<minor>`, Apache bound to 127.0.0.1 only, user `admin`, password in `e2e/run.mjs`), `--skip-build`,
+`--headed`. `report.json` also records the content digest of each Docker image that ran (the tags move).
 Screenshots, `report.json`, `plugin-check.json` and the PHP `debug.log` go to
 `test-results/woo-wp-e2e/php<XY>/` (git-ignored). The script exits non-zero on the first failed check.
 
@@ -25,7 +26,7 @@ Screenshots, `report.json`, `plugin-check.json` and the PHP `debug.log` go to
 |---|---|
 | WordPress | official `wordpress:php8.1-apache`, `php8.2-apache`, `php8.3-apache` images, **WordPress 7.1.4** (the 8.1 image ships 6.9; the script updates it from the pinned `wordpress-7.1.4.zip`, because WooCommerce 11.2 needs 7.0) |
 | Database | official `mariadb:11` (11.8.9) |
-| WooCommerce | 11.2.2 from downloads.wordpress.org (pinned, SHA-256 printed every run) |
+| WooCommerce | 11.2.2 from downloads.wordpress.org (pinned; every zip's SHA-256 is checked against `DOWNLOADS` in `e2e/stack.mjs` and a mismatch fails the run. The hashes were recorded from the first download; the WordPress zip also matches wordpress.org's published `.sha1`) |
 | Themes | Storefront 4.6.2 (classic), Twenty Twenty-Four 1.6 and Twenty Twenty-Five 1.5 (block themes; 1.4 on the 8.1 image) |
 | WP-CLI | official `wordpress:cli-php8.3`, only for setup and read-back (install, fixtures, meta and option reads, Plugin Check) |
 | Shop | AUD store, global attribute `pa_size` with AU sizes 8–16, one published variable dress (`e2e/fixtures.php`), a flat-lay PNG drawn by the script |
@@ -37,7 +38,8 @@ integration plugin) was not needed.
 
 ## Verified, on PHP 8.1.34, 8.2.35 and 8.3.36 (every check passed on all three)
 
-Evidence: `test-results/woo-wp-e2e/php81|php82|php83/report.json` (33, 33 and 33 checks on the final run).
+Evidence: `test-results/woo-wp-e2e/php81|php82|php83/report.json` (39, 39 and 39 checks on the final run; 33 before the review follow-up below added the
+template-part variant, the wider nonce check and the uninstall-without-WooCommerce check).
 
 **Merchant**
 
@@ -46,7 +48,8 @@ Evidence: `test-results/woo-wp-e2e/php81|php82|php83/report.json` (33, 33 and 33
 3. **Connect with the domain proof on** (production default): the api refuses a localhost site (`domain_unverified`) and the
    admin shows the plugin's explanation. While the Connect is pending, `/wp-json/curtain/v1/verify` and
    `/?rest_route=/curtain/v1/verify` both publish **exactly the nonce the api derives** from the Connect token
-   (HMAC of the token with the api's secret, recomputed by the script); the nonce is not in any page HTML.
+   (HMAC of the token with the api's secret, recomputed by the script); the nonce is not in the HTML of the front page,
+   the product page, the shop page or the Curtain settings page in wp-admin (the pages the run fetches).
 4. The api restarts with `WOO_DOMAIN_PROOF=0` (a localhost site cannot be proven, see "Not verified"); **Finish connection**
    → Connected, `pk_` prefix, plan `free` (no Stripe: the api runs without Stripe keys, so Connect takes the manual-key path).
    The verify route then answers 404. The secret key is stored encrypted in `wp_options` (no `sk_` in the row).
@@ -58,7 +61,9 @@ Evidence: `test-results/woo-wp-e2e/php81|php82|php83/report.json` (33, 33 and 33
 7. The push really arrived: a **PK-HMAC-signed** `GET /v1/merchant/products` (signed by the script exactly as the plugin
    signs) returns the product as active; a forged signature gets 401.
 
-**Shopper, on Storefront, Twenty Twenty-Four and Twenty Twenty-Five**
+**Shopper, on Storefront, Twenty Twenty-Four, Twenty Twenty-Five, and Twenty Twenty-Five with the add-to-cart form moved
+into a template part** (`e2e/template-part.php` stores the part and a customised `single-product` template the way the
+Site Editor does)
 
 8. The product page loads the **bundled** `sdk.v1.js` from the plugin folder with `data-shop`, `data-api`, `data-mode="embed"`,
    `data-size-option="pa_size"`.
@@ -85,8 +90,8 @@ PHPCompatibilityWP reports nothing for `testVersion 8.1-`.
 
 | # | Found on the real install | Fix |
 |---|---|---|
-| W1 (high) | **Deactivate, Disconnect and uninstall left every queued push behind.** `as_unschedule_all_actions( $hook, array(), 'curtain' )` only cancels jobs whose args are exactly `[]` (Action Scheduler matches args literally) and every Curtain job carries `[id, attempt]`; seen as a pending `curtain_push_product` after deactivation. A later reactivation (or a disconnected shop) would still push. | `Queue::cancel_all()` and `uninstall.php` use Action Scheduler's group-wide and hook-wide forms. Regression test with the real matching rules (`tests/golive.test.php`). |
-| W2 (high) | **Block themes put the button in the wrong place.** On Twenty Twenty-Four/Five WooCommerce's block-template compatibility fires every `woocommerce_single_product_summary` callback *before the excerpt*, whatever the priority, so the button sat above the size dropdown and the price. | On a block single-product template the button is appended after the `woocommerce/add-to-cart-form` (or `add-to-cart-with-options`) block; classic themes keep the summary hook and its priority setting; one button per product either way. Setting text updated (EN + NL). |
+| W1 (high) | **Deactivate, Disconnect and uninstall left every queued push behind.** `as_unschedule_all_actions( $hook, array(), 'curtain' )` only cancels jobs whose args are exactly `[]` (Action Scheduler matches args literally) and every Curtain job carries `[id, attempt]`; seen as a pending `curtain_push_product` after deactivation. A later reactivation (or a disconnected shop) would still push. | `Queue::cancel_all()` and `uninstall.php` use Action Scheduler's group-wide and hook-wide forms, and `wp_unschedule_hook()` for the WP-Cron backend (`wp_clear_scheduled_hook( $hook )` has the same args-must-match trap). Uninstall after WooCommerce was already deactivated deletes the Curtain rows from the Action Scheduler tables directly. Regression tests with the real matching rules of both backends (`tests/golive.test.php`). |
+| W2 (high) | **Block themes put the button in the wrong place.** On Twenty Twenty-Four/Five WooCommerce's block-template compatibility fires every `woocommerce_single_product_summary` callback *before the excerpt*, whatever the priority, so the button sat above the size dropdown and the price. | On a block single-product template the button is appended after the `woocommerce/add-to-cart-form` (or `add-to-cart-with-options`) block; the form block is found wherever the template pulls it in (nested, in a template part, a synced pattern or a registered pattern), so a merchant who moves it in the Site Editor keeps the button under it; classic themes keep the summary hook and its priority setting; one button per product either way. Setting text updated (EN + NL). |
 | W3 (medium) | **Plugin Check errors** that block a WordPress.org review: the direct-access guard form `defined('ABSPATH') \|\| defined('CURTAIN_TESTING') \|\| exit;` is not recognised (17 files), `parse_url()` (3), unescaped exception text (2). Nonce checks lived in a helper, so the sniff flagged the form handlers. | `defined( 'ABSPATH' ) \|\| exit;` everywhere (the test shims define `ABSPATH`), `wp_parse_url()`, `esc_html()` in exceptions, `check_admin_referer()` in each handler. |
 | W4 (medium) | **AUD shops pushed no price** and every product showed "price is in AUD, not EUR" in the meta box and an invalid backend validation; the pilot sells in AUD. (The TypeScript mapping already converts; the PHP twin did not.) | The PHP builder converts with the api's EUR rate table (`assets/eur-rates.json`, generated from `DEFAULT_EUR_RATES`) exactly like `priceToEur`, with the same "converted … (approximate)" warning; parity fixtures from `@curtain/schema`. |
 | W5 (medium) | **No size chart templates in the Woo meta box** (docs/PLUGIN.md promised "from a template or by hand"; only Shopify had them). | "Start from a template": the AU/UK/EU/FR/US body charts and the garment charts from `@curtain/schema` (`assets/chart-templates.json`, generated at build); a body chart fills the numbers, a garment chart the labels; asks before replacing a filled chart. EN + NL strings. |
@@ -131,8 +136,34 @@ they are cosmetic and not required by the WordPress.org review.
 | `08…11-storefront-*.png` | Storefront: product with button, About you, size advice, size 12 selected with price |
 | `12…15-twentytwentyfour-*.png` | The same on Twenty Twenty-Four |
 | `16…19-twentytwentyfive-*.png` | The same on Twenty Twenty-Five |
-| `20-plugins-deactivated.png`, `21-plugins-deleted.png` | Deactivated; deleted |
+| `20…23-twentytwentyfive-template-part-*.png` | The same on Twenty Twenty-Five with the add-to-cart form inside a template part |
+| `24-plugins-deactivated.png`, `25-plugins-deleted.png` | Deactivated; deleted |
 | `plugin-check.json`, `report.json`, `debug.log` | Raw Plugin Check findings, every check with environment and versions, the PHP log |
+
+## Review follow-up (9 Nov 2026)
+
+An adversarial review re-ran the 8.3 leg, the unit tests on 8.1, PHPCS and the gates, and passed the work with low and
+informational findings. Changes made for them:
+
+- **WP-Cron cleanup** (low): `Queue::cancel_all()` and `uninstall.php` used `wp_clear_scheduled_hook( $hook )`, which
+  core only applies to events with args `[]`; every Curtain event has args, so on a shop without Action Scheduler the
+  jobs survived. Now `wp_unschedule_hook()`. Uninstall after WooCommerce was deactivated also removes the Curtain rows
+  from the Action Scheduler tables (e2e: jobs on both backends, WooCommerce deactivated, `wp plugin uninstall` → none
+  left). The test shim now has core's matching rule, and the new unit test fails with the old call (77/78).
+- **Button placement with a template part** (low): the form block was only found when it sat in the top-level template
+  text. Detection now walks the parsed blocks, template parts, synced patterns and registered patterns. New e2e variant
+  (TT5 with the form moved into a template part): the old code put the button 290 px *above* the form
+  (`test-results/golive-woo-e2e-8.3-old-frontend-regression.log`), the new code passes.
+- The "api log shows the PUT" check could not fail; it now requires a `PUT` of the product in the api log.
+- The nonce check fetched only the front page; it now covers the front, product, shop and Curtain settings pages.
+- README said PHP ≥ 8.2 in one place; now 8.1 everywhere.
+- Download hashes are verified, image digests recorded, the e2e Apache listens on 127.0.0.1 only, and two
+  `(array) preg_split()` casts were replaced by an `is_array()` check.
+
+Still open from the review: the PHP 8.1 minimum is a product decision for the founder (8.1 has had no security fixes
+since 31 Dec 2025; revert `Requires PHP`, `CURTAIN_MIN_PHP`, readme.txt and the PHPCS `testVersion` to keep 8.2);
+the size chart templates fill every size of the template (AU 8–20) even when the shop sells fewer, and nothing marks
+the rows as template values until the merchant edits them.
 
 ## Not verified here (needs a live site, the VPS or the founder)
 

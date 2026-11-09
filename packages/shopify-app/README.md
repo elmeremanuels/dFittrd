@@ -93,7 +93,7 @@ contract. Because the asset origin is `cdn.shopify.com`, `data-api` is always se
 A small inline guard loads the script once even if the block is placed twice.
 
 Where the values come from: on install the api writes **app-data metafields** on the
-`AppInstallation` (`setAppDataMetafields`): `curtain.public_key` (= `pk_live_…`), `curtain.api_url`,
+`AppInstallation` (`setAppDataMetafields`): `curtain.public_key` (the shop's public key), `curtain.api_url`,
 `curtain.app_url`. The block reads them as `app.metafields.curtain.public_key` and
 `app.metafields.curtain.api_url`. The block settings `shop_key` / `api_url` override them for dev
 stores. The secret `sk_…` key never appears anywhere in the extension (tested).
@@ -277,7 +277,7 @@ proves our side of each contract as the reference describes it; it does not prov
 as described (the fake's `ASSUMPTION` comments), and items 3, 7, 8 and 10 have no offline
 equivalent at all. The dev-store script with expected results is `docs/LAUNCH-SHOPIFY.md`.
 
-1. **Token exchange** end-to-end: App Bridge `idToken()` → `POST /shopify/token-exchange` → `shpat_…`;
+1. **Token exchange** end-to-end: App Bridge `idToken()` → `POST /shopify/token-exchange` → an offline access token;
    stale-token 400 retry path.
 2. **Metafield definitions**: `metafieldDefinitionCreate` with `validations` (`choices`, `min`/`max`)
    and `access` on the `$app:curtain` namespace for API version 2026-10; the exact `code` on

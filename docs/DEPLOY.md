@@ -351,8 +351,12 @@ address must answer before Shopify sends anything to it.
      (checklist, Summary). They **cannot** charge through Shopify's billing system
      ("Can't charge merchants through Shopify's app billing system",
      https://shopify.dev/docs/apps/launch/distribution). Set `SHOPIFY_DISTRIBUTION=custom` in
-     `/etc/curtain/curtain.env`: the api then grants the plan on install and the admin shows the plan
-     as arranged with Curtain instead of a Subscribe button.
+     `/etc/curtain/curtain.env` (the bootstrap writes it): the api then grants the plan on install and
+     the admin shows the plan as arranged with Curtain instead of a Subscribe button. With
+     `SHOPIFY_API_KEY` set, the api will not start in production without this line, and
+     `infra/scripts/write-env.sh` stops the deploy if it is missing or not `custom`/`public`.
+     Preflight after the first deploy: `docker compose logs api | grep 'shopify app configured'`
+     shows `"distribution":"custom"`.
 
 ### Set once: GitHub
 

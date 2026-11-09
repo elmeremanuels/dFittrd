@@ -18,12 +18,22 @@ Shopify: custom distribution "Can't charge merchants through Shopify's app billi
 "You can't change the distribution method after you select it"
 (https://shopify.dev/docs/apps/launch/distribution). Consequences, already built in:
 
-- Set `SHOPIFY_DISTRIBUTION=custom` in `/etc/curtain/curtain.env`. The api then gives the shop the
-  Curtain plan on install (and again on a reinstall), the admin page says "arranged with Curtain"
-  instead of showing a Subscribe button, and the billing route answers 409 `billing_not_available`.
+- Set `SHOPIFY_DISTRIBUTION=custom` in `/etc/curtain/curtain.env` (`scripts/deploy-bootstrap.sh`
+  writes that line; `infra/.env.example` defaults to `custom` too). In production the api refuses
+  to start when `SHOPIFY_API_KEY` is set and this line is missing, and `write-env.sh` stops the
+  deploy with the reason, so a wrong guess cannot silently leave the pilot shop on `free`. At start
+  the api logs `shopify app configured` with `distribution: "custom"`: check it once.
+- The api then gives the shop the Curtain plan on the first install (and on a reinstall), the admin
+  page says "arranged with Curtain" instead of showing a Subscribe button, and the billing route
+  answers 409 `billing_not_available`. Other admin opens never touch the plan.
 - Payment for the pilot (free, or an invoice outside Shopify) is your agreement with the merchant.
-- To pause the shop by hand: `UPDATE shops SET paused = true WHERE domain = '<handle>.myshopify.com';`
-  (the next admin open leaves a pause alone; a reinstall grants the plan again).
+- Your levers (SQL on the VPS; each survives later admin opens):
+  - pause the button: `UPDATE shops SET paused = true WHERE domain = '<handle>.myshopify.com';`
+    (an uninstall + reinstall unpauses it, like any reinstall);
+  - revoke the arranged plan (stopped paying): `UPDATE shops SET plan = 'free', settings = settings
+    || '{"arrangedPlan":"free"}' WHERE domain = '<handle>.myshopify.com';`. `arrangedPlan` survives
+    an uninstall, so a reinstall keeps the shop on `free`. Set it back to `"curtain"` (and
+    `plan = 'curtain'`) to restore.
 
 **A2. The App Store listing will be a second app.** Because the method is fixed, the public listing
 needs a new app created with public distribution: a new client id and secret, its own review. The
@@ -58,11 +68,18 @@ from your Partner account, not from a store's organisation.
 6. **Server env** (`/etc/curtain/curtain.env`, then restart the api):
    `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `SHOPIFY_DISTRIBUTION=custom`,
    `SHOPIFY_API_VERSION=2026-10`, `SHOPIFY_APP_HANDLE=curtain`, `SHOPIFY_EXPIRING_OFFLINE_TOKENS=1`.
+   `SHOPIFY_DISTRIBUTION` is required (the api will not start without it once the key is set).
 7. **Emergency developer contact** (Partner Dashboard → Settings): an e-mail you read. Shopify
    sends webhook failure warnings there.
 8. **Development store** (Dev Dashboard → *Dev stores* → create): for the dry run in part D. Give
    it a few dresses with S/M/L or 8–14 size variants.
-9. **Deploy the app config and the theme block**: GitHub → Actions → `shopify-deploy` → Run
+9. **Dry run of the CI deploy first.** With `SHOPIFY_SERVICE_ACCOUNT_TOKEN` the job installs
+   Shopify CLI 5.0.1, a new major (published 4 Nov 2026) that no deploy of ours has used yet; only
+   its flag names were compared offline. Run `shopify-deploy` once with *release* **unticked**.
+   Expected: green, the summary names a version `git-…`, and the Dev Dashboard's *Versions* list
+   shows it as **not** released. Record the result in row D0 of part D. If it fails on
+   the CLI itself, use `SHOPIFY_CLI_PARTNERS_TOKEN` (CLI 4.9.5 path) for the pilot and report it.
+   **Then deploy the app config and the theme block**: GitHub → Actions → `shopify-deploy` → Run
    workflow on `release`, tick *release* (or push to `release`). Expected: the run summary says
    "Shopify deploy: success", version `git-…`, application_url
    `https://api.curtain.fit/shopify/admin`, webhooks `https://api.curtain.fit/shopify/webhooks`.
@@ -82,8 +99,23 @@ secret exactly as Shopify signs them, and every GraphQL document validated again
 come back as `app--{id}--curtain` and were being ignored; custom apps cannot bill; failed webhooks
 were acknowledged and lost.
 
+The excerpt is hand-written, so the same documents can also be checked against Shopify's **real**
+2026-10 Admin schema, fetched from the public introspection proxy behind shopify.dev's GraphiQL
+explorer (no credentials, no store):
+
+```
+pnpm --filter @curtain/api shopify:schema 2026-10 /tmp/admin-2026-10.json
+CURTAIN_SHOPIFY_INTROSPECTION=/tmp/admin-2026-10.json pnpm --filter @curtain/api exec vitest run src/shopify/contract.test.ts
+```
+
+Result on 9 Nov 2026 (3,716 types): every document the harness saw the code send (queries,
+mutations and the bulk export's inner query) validates with zero errors, the variables of every
+call coerce against the real input types, and the only deprecated fields in use are
+`Product.featuredImage` and `Product.images`. Re-run it when bumping `SHOPIFY_API_VERSION`.
+
 It **cannot** prove: that Shopify behaves as the fake assumes (each `ASSUMPTION` in the fake's
-source), that the hand-written schema excerpt matches the real schema in every detail, anything in
+source), that the fake's *answers* have the real shape in every detail (only the requests are
+checked against the real schema), code paths the harness never drives, anything in
 Liquid or the theme editor, App Bridge inside the admin iframe, real deliveries and retries, or the
 storefront. Those are part D.
 
@@ -98,13 +130,14 @@ store".
 
 | # | Do | Expected | Covers | Result |
 |---|---|---|---|---|
-| D1 | Dev Dashboard → the app → install on the development store (the *Test on dev store* / install option). Approve the scopes. | The consent screen lists only *products* (read and write). You land inside the Shopify admin on the Curtain page, no login form, no shop-domain field. The page says "Connected. Public key pk_live_…". Log: `shopify metafield definitions ensured`, `created: 17`. DB: `SELECT plan, paused, billing_ref, settings->>'subscriptionStatus' FROM shops WHERE domain='<dev>.myshopify.com';` → `curtain`, `false`, NULL, `ARRANGED`. | README 1, A1/A2 | |
+| D0 | (B9) `shopify-deploy` with *release* unticked, using `SHOPIFY_SERVICE_ACCOUNT_TOKEN` (CLI 5.0.1). | Green run; summary names `git-…`; the Dev Dashboard lists that version, not released. | CI on CLI 5.x | |
+| D1 | Dev Dashboard → the app → install on the development store (the *Test on dev store* / install option). Approve the scopes. | The consent screen lists only *products* (read and write). You land inside the Shopify admin on the Curtain page, no login form, no shop-domain field. The page says "Connected. Public key …" followed by the shop's public key (it starts with `pk` + `_live_`). Log: `shopify app configured` with `distribution: "custom"` at api start, then `shopify metafield definitions ensured`, `created: 17`. DB: `SELECT plan, paused, billing_ref, settings->>'subscriptionStatus' FROM shops WHERE domain='<dev>.myshopify.com';` → `curtain`, `false`, NULL, `ARRANGED`. | README 1, A1/A2 | |
 | D2 | Reload the Curtain page twice. | No error banner. Log: `created: 0, existing: 17`. DB: `SELECT expires_at, refresh_token_enc IS NOT NULL FROM shopify_sessions;` → an expiry about 1 h ahead, `true`. | README 1 and 2 (TAKEN path), A3 | |
 | D3 | Shopify admin → Settings → Custom data → Products. | 17 Curtain definitions (Size chart type, Size chart (cm), Fabric, …), owned by the app. Open a product: the Curtain metafields are editable. | README 2 | |
 | D4 | In the Curtain page keep the AU template, assign it to a collection of dresses (Preview first). | Preview shows the right count and a sample. Assign reports N written. Within a minute the products table shows them as **Try-able**. DB: `SELECT status, count(*) FROM products GROUP BY 1;` → `active` for those products. (This is the namespace check of G4 on real data.) | README 9, G4 | |
 | D5 | Edit one product's title in Shopify. | Within seconds: DB `SELECT topic, status FROM webhook_log ORDER BY received_at DESC LIMIT 3;` → `products/update`, `processed`. The Curtain products table shows the new title after a reload. | README 6 | |
 | D6 | Curtain page → "Add the block" (onboarding step). | The theme editor opens on a product template of the current theme (use **Dawn**) with "Try it on" added in the main section. Save. | README 7, checklist D3 | |
-| D7 | Open a product page on the storefront, view source. | A `<script … data-curtain-sdk data-shop="pk_live_…" data-api="https://api.curtain.fit" …>` is added (via the inline loader), `sdk.v1.js` comes from `cdn.shopify.com`. If `data-shop` is empty: the app-data metafields did not reach Liquid; fill the block's two advanced settings and report it (README 3). | README 3 | |
+| D7 | Open a product page on the storefront, view source. | A `<script … data-curtain-sdk data-shop="<the public key>" data-api="https://api.curtain.fit" …>` is added (via the inline loader), `sdk.v1.js` comes from `cdn.shopify.com`. If `data-shop` is empty: the app-data metafields did not reach Liquid; fill the block's two advanced settings and report it (README 3). | README 3 | |
 | D8 | On that page: *Try it on* → height and weight → result. Choose the size. | The overlay shows a size labelled as an estimate; choosing it selects that variant in the product form; *Add to cart* adds it. Reload: the size peek shows the size. Try once on an iPhone (Safari) and an Android phone (Chrome). | storefront, README 10 | |
 | D9 | Open the Curtain page in a Chrome **incognito** window (third-party cookies blocked). | It loads and works the same. Browser console: no CSP or frame errors. | checklist A1, D8 | |
 | D10 | Wait more than 1 hour, open the Curtain page. | It works. Log shows no `shopify token refresh failed`. DB: `expires_at` moved forward. | A3 (expiring tokens) | |
@@ -136,7 +169,9 @@ the bulk export (`runProductBackfill`; the api backfills with the paged products
 6. **Verify on the live shop**: D4, D5, D7 and D8 on two real products (one dress, one skirt), on a
    phone. Write the results next to part D.
 7. **Watch the first week**: `webhook_log` rows with `status='failed'` (Shopify retries those for 4
-   hours; a row that stays failed needs a look), and the emergency-contact inbox.
+   hours; a row that stays failed needs a look, and every failure is retried, so a bug in one topic
+   shows up as the same id failing 8 times), rows stuck in `status='received'` for minutes (a
+   redelivery reclaims them after 30 s; if none comes, look), and the emergency-contact inbox.
 8. **Rollback**: pause (`UPDATE shops SET paused = true …`) shows shoppers a short-break screen
    while the button stays; the merchant can also remove the block in the theme editor or uninstall.
 

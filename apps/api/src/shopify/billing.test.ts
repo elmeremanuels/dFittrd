@@ -152,7 +152,7 @@ describe('Shopify billing: the one Curtain plan (D17)', () => {
 describe('Shopify billing test flag in production', () => {
   let t: TestApp;
   beforeAll(async () => {
-    t = await makeApp({ NODE_ENV: 'production', SHOPIFY_API_KEY: API_KEY, SHOPIFY_API_SECRET: API_SECRET });
+    t = await makeApp({ NODE_ENV: 'production', SHOPIFY_API_KEY: API_KEY, SHOPIFY_API_SECRET: API_SECRET, SHOPIFY_DISTRIBUTION: 'public' });
   });
   afterAll(async () => {
     await t.close();

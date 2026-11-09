@@ -68,6 +68,13 @@ describe('env', () => {
     expect(() => loadEnv({ ENCRYPTION_KEY: 'nothex' })).toThrow(/64 hex/);
     expect(() => loadEnv({ RENDER_RETENTION_HOURS: '48' })).toThrow(EnvError);
     expect(() => loadEnv({ SHOPIFY_API_KEY: 'k' })).toThrow(/SHOPIFY_API_SECRET/);
+    // No silent default in production: the distribution decides who gets the plan (review finding).
+    const prodBase = { NODE_ENV: 'production', JWT_SECRET: 'x'.repeat(32), SHOP_KEY_PEPPER: 'p', ENCRYPTION_KEY: 'a'.repeat(64), SHOPIFY_API_KEY: 'k', SHOPIFY_API_SECRET: 's' };
+    expect(() => loadEnv(prodBase)).toThrow(/SHOPIFY_DISTRIBUTION/);
+    expect(loadEnv({ ...prodBase, SHOPIFY_DISTRIBUTION: 'custom' }).SHOPIFY_DISTRIBUTION).toBe('custom');
+    expect(() => loadEnv({ ...prodBase, SHOPIFY_DISTRIBUTION: 'private' })).toThrow(EnvError);
+    expect(loadEnv({ NODE_ENV: 'production', JWT_SECRET: 'x'.repeat(32), SHOP_KEY_PEPPER: 'p', ENCRYPTION_KEY: 'a'.repeat(64) }).SHOPIFY_DISTRIBUTION).toBe('public');
+    expect(loadEnv({ SHOPIFY_API_KEY: 'k', SHOPIFY_API_SECRET: 's' }).SHOPIFY_DISTRIBUTION).toBe('public');
     expect(loadEnv({ TRYON_REQUIRE_EU: 'true', CORS_ORIGINS: 'https://a.test, https://b.test' })).toMatchObject({ TRYON_REQUIRE_EU: true, CORS_ORIGINS: ['https://a.test', 'https://b.test'] });
     expect(testEnv().devSecrets).toBe(false);
   });

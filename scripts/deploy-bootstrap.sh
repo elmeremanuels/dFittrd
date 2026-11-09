@@ -135,6 +135,8 @@ ACME_EMAIL=
 # Shopify app (Partner Dashboard → the app → Client credentials)
 SHOPIFY_API_KEY=
 SHOPIFY_API_SECRET=
+# custom = the pilot app (install link, plan arranged outside Shopify billing); public = App Store app
+SHOPIFY_DISTRIBUTION=custom
 
 # Backups: the age PUBLIC key (age1…). Keep the private key off this server.
 BACKUP_AGE_RECIPIENT=

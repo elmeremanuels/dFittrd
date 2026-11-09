@@ -4,7 +4,7 @@
  */
 import { build } from './app.js';
 import { connectPostgres } from './db/client.js';
-import { loadEnv } from './env.js';
+import { isShopifyConfigured, loadEnv } from './env.js';
 import { scheduleCrons } from './jobs/index.js';
 import { PgBossQueue } from './jobs/queue.js';
 import { backfillKeyLookups } from './services/shops.js';
@@ -14,6 +14,7 @@ const handle = connectPostgres(env.DATABASE_URL);
 const queue = new PgBossQueue({ connectionString: env.DATABASE_URL, onError: (err) => app.log.error({ err }, 'pg-boss error') });
 const app = await build({ env, db: handle.db, queue });
 
+if (isShopifyConfigured(env)) app.log.info({ distribution: env.SHOPIFY_DISTRIBUTION, apiVersion: env.SHOPIFY_API_VERSION }, 'shopify app configured');
 if (env.devSecrets) app.log.warn('running with generated dev secrets — set JWT_SECRET, SHOP_KEY_PEPPER and ENCRYPTION_KEY');
 await app.renders.init();
 const backfilled = await backfillKeyLookups(handle.db, env);

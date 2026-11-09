@@ -19,11 +19,23 @@ declare(strict_types=1);
 
 namespace Curtain;
 
-defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
+defined( 'ABSPATH' ) || exit;
 
 final class Frontend {
 
 	public const HANDLE = 'curtain-sdk';
+
+	/**
+	 * Block themes: the blocks that hold the add-to-cart / variation form. The button is appended
+	 * after the first of them that renders. WooCommerce's block template compatibility layer fires
+	 * every `woocommerce_single_product_summary` callback *before* the post excerpt, whatever its
+	 * priority, which put the button above the price form on Twenty Twenty-Four/Five (found on a
+	 * real WordPress 7.1 + WooCommerce 11.2 install, docs/LAUNCH-WOO.md).
+	 */
+	public const FORM_BLOCKS = array( 'woocommerce/add-to-cart-form', 'woocommerce/add-to-cart-with-options' );
+
+	/** @var array<int,bool> Product ids whose button was printed on this request (one per product). */
+	private static array $rendered = array();
 
 	public static function register(): void {
 		add_action( 'wp_enqueue_scripts', array( self::class, 'enqueue' ) );
@@ -37,6 +49,47 @@ final class Frontend {
 			return;
 		}
 		add_action( 'woocommerce_single_product_summary', array( self::class, 'render_button' ), (int) Settings::get( 'button_priority' ) );
+		add_filter( 'render_block', array( self::class, 'after_form_block' ), 10, 2 );
+	}
+
+	/**
+	 * Whether the current block template places the add-to-cart form with a block (then the button
+	 * goes after that block, not at the summary hook). False for classic themes and for block themes
+	 * that render the classic single-product template.
+	 */
+	public static function template_has_form_block(): bool {
+		global $_wp_current_template_content;
+		if ( ! is_string( $_wp_current_template_content ) || '' === $_wp_current_template_content ) {
+			return false;
+		}
+		foreach ( self::FORM_BLOCKS as $name ) {
+			if ( str_contains( $_wp_current_template_content, '<!-- wp:' . $name . ' ' ) || str_contains( $_wp_current_template_content, '<!-- wp:' . $name . ' /-->' ) || str_contains( $_wp_current_template_content, '<!-- wp:' . $name . '-->' ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * `render_block`: append the button after the product's add-to-cart form block (block themes).
+	 *
+	 * @param string|mixed        $content Rendered block HTML.
+	 * @param array<string,mixed> $block   Parsed block.
+	 * @return string|mixed
+	 */
+	public static function after_form_block( $content, $block ) {
+		if ( ! is_string( $content ) || ! is_array( $block ) || ! in_array( (string) ( $block['blockName'] ?? '' ), self::FORM_BLOCKS, true ) ) {
+			return $content;
+		}
+		if ( ! function_exists( 'is_product' ) || ! is_product() ) {
+			return $content;
+		}
+		$product = wc_get_product( get_the_ID() );
+		if ( ! $product instanceof \WC_Product || isset( self::$rendered[ $product->get_id() ] ) || ! self::eligible( $product ) ) {
+			return $content;
+		}
+		self::$rendered[ $product->get_id() ] = true;
+		return $content . self::button_html( $product, Settings::button_label(), 'button alt' );
 	}
 
 	public static function enqueue(): void {
@@ -98,9 +151,14 @@ final class Frontend {
 
 	public static function render_button(): void {
 		global $product;
-		if ( ! $product instanceof \WC_Product || ! self::eligible( $product ) ) {
+		if ( ! $product instanceof \WC_Product || isset( self::$rendered[ $product->get_id() ] ) || ! self::eligible( $product ) ) {
 			return;
 		}
+		// Block template with a form block: after_form_block() places it under the form instead.
+		if ( self::template_has_form_block() ) {
+			return;
+		}
+		self::$rendered[ $product->get_id() ] = true;
 		echo self::button_html( $product, Settings::button_label(), 'button alt' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in button_html().
 	}
 

@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 namespace Curtain;
 
-defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
+defined( 'ABSPATH' ) || exit;
 
 final class Settings {
 
@@ -285,11 +285,11 @@ final class Settings {
 		return rtrim( $url, '/' );
 	}
 
-	private static function guard( string $action ): void {
+	/** Capability check for every admin-post handler; each handler verifies its own nonce right after. */
+	private static function guard(): void {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			wp_die( esc_html__( 'You are not allowed to manage Curtain settings.', 'curtain-woocommerce' ), 403 );
 		}
-		check_admin_referer( $action );
 	}
 
 	private static function redirect( string $notice, string $type = 'success' ): void {
@@ -316,7 +316,8 @@ final class Settings {
 	// ---- handlers --------------------------------------------------------------------------
 
 	public static function handle_save(): void {
-		self::guard( 'curtain_save' );
+		self::guard();
+		check_admin_referer( 'curtain_save' );
 		$in = isset( $_POST['curtain'] ) && is_array( $_POST['curtain'] ) ? wp_unslash( $_POST['curtain'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised field by field below.
 
 		$api_base = self::sanitize_api_base( (string) ( $in['api_base'] ?? '' ) );
@@ -355,7 +356,8 @@ final class Settings {
 
 	/** Step 1: create the shop on our backend, then go to Stripe Checkout (or finish immediately). */
 	public static function handle_connect(): void {
-		self::guard( 'curtain_connect' );
+		self::guard();
+		check_admin_referer( 'curtain_connect' );
 		$s      = self::all();
 		$client = new Api_Client( $s );
 		$email  = ! empty( $s['share_admin_email'] ) ? (string) get_option( 'admin_email' ) : null;
@@ -391,7 +393,8 @@ final class Settings {
 
 	/** Step 2 (manual retry button after Checkout). */
 	public static function handle_complete(): void {
-		self::guard( 'curtain_complete' );
+		self::guard();
+		check_admin_referer( 'curtain_complete' );
 		self::finish_connect();
 	}
 
@@ -434,7 +437,8 @@ final class Settings {
 
 	/** Paste a key issued by the Curtain console (sk_live_…): the hello returns its pk_ prefix. */
 	public static function handle_manual_key(): void {
-		self::guard( 'curtain_manual_key' );
+		self::guard();
+		check_admin_referer( 'curtain_manual_key' );
 		$key = isset( $_POST['curtain_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['curtain_api_key'] ) ) : '';
 		if ( ! Hmac::is_secret_key( $key ) ) {
 			self::redirect( __( 'That does not look like a Curtain secret key (sk_live_… or sk_test_…).', 'curtain-woocommerce' ), 'error' );
@@ -462,7 +466,8 @@ final class Settings {
 	}
 
 	public static function handle_disconnect(): void {
-		self::guard( 'curtain_disconnect' );
+		self::guard();
+		check_admin_referer( 'curtain_disconnect' );
 		Queue::cancel_all();
 		self::update(
 			array(
@@ -483,7 +488,8 @@ final class Settings {
 	}
 
 	public static function handle_status(): void {
-		self::guard( 'curtain_status' );
+		self::guard();
+		check_admin_referer( 'curtain_status' );
 		$res = self::hello();
 		if ( $res['ok'] ) {
 			self::redirect( __( 'Status refreshed.', 'curtain-woocommerce' ) );
@@ -492,7 +498,8 @@ final class Settings {
 	}
 
 	public static function handle_sync_all(): void {
-		self::guard( 'curtain_sync_all' );
+		self::guard();
+		check_admin_referer( 'curtain_sync_all' );
 		if ( ! self::is_connected() ) {
 			self::redirect( __( 'Connect the shop first.', 'curtain-woocommerce' ), 'warning' );
 		}
@@ -646,7 +653,7 @@ final class Settings {
 					<tr>
 						<th scope="row"><label for="curtain_button_priority"><?php esc_html_e( 'Position', 'curtain-woocommerce' ); ?></label></th>
 						<td><input type="number" id="curtain_button_priority" name="curtain[button_priority]" min="1" max="100" value="<?php echo esc_attr( (string) $s['button_priority'] ); ?>" class="small-text">
-						<p class="description"><?php esc_html_e( 'woocommerce_single_product_summary priority: 35 = after the add-to-cart form, 25 = before it, 15 = after the price.', 'curtain-woocommerce' ); ?></p></td>
+						<p class="description"><?php esc_html_e( 'Classic themes: woocommerce_single_product_summary priority, 35 = after the add-to-cart form, 25 = before it, 15 = after the price. Block themes always place the button right under the add-to-cart form.', 'curtain-woocommerce' ); ?></p></td>
 					</tr>
 					<tr>
 						<th scope="row"><label for="curtain_button_label"><?php esc_html_e( 'Label', 'curtain-woocommerce' ); ?></label></th>

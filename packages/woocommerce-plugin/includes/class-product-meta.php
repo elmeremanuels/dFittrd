@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 namespace Curtain;
 
-defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
+defined( 'ABSPATH' ) || exit;
 
 final class Product_Meta {
 
@@ -55,8 +55,37 @@ final class Product_Meta {
 				'chooseFlatLay' => __( 'Choose flat-lay photo', 'curtain-woocommerce' ),
 				'useImage'      => __( 'Use this image', 'curtain-woocommerce' ),
 				'sizeColumns'   => Vocab::SIZE_ROW_COLUMNS,
+				'templates'     => self::chart_templates(),
+				'replaceChart'  => __( 'Replace the size chart below with this template?', 'curtain-woocommerce' ),
+				'measureNote'   => __( 'Fill in the measurements of each finished size (cm, all round).', 'curtain-woocommerce' ),
 			)
 		);
+	}
+
+	/**
+	 * The size chart templates from @curtain/schema (assets/chart-templates.json, written by the
+	 * build): body charts with their numbers, garment charts with the labels and points to measure.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	public static function chart_templates(): array {
+		static $templates = null;
+		if ( null !== $templates ) {
+			return $templates;
+		}
+		$templates = array();
+		$file      = CURTAIN_PLUGIN_DIR . 'assets/chart-templates.json';
+		if ( ! is_readable( $file ) ) {
+			return $templates;
+		}
+		$data = json_decode( (string) file_get_contents( $file ), true ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local plugin file.
+		foreach ( (array) ( $data['templates'] ?? array() ) as $t ) {
+			if ( ! is_array( $t ) || ! isset( $t['id'], $t['kind'], $t['label'], $t['sizes'] ) || ! in_array( $t['kind'], array( 'body', 'garment' ), true ) ) {
+				continue;
+			}
+			$templates[] = $t;
+		}
+		return $templates;
 	}
 
 	// ---- list column ----------------------------------------------------------------------
@@ -324,6 +353,27 @@ final class Product_Meta {
 				<label><input type="radio" name="curtain[size_chart_type]" value="garment" <?php checked( $get( 'size_chart_type' ), 'garment' ); ?>> <?php esc_html_e( 'garment measurements (measured flat)', 'curtain-woocommerce' ); ?></label>
 				<label><input type="radio" name="curtain[size_chart_type]" value="body" <?php checked( $get( 'size_chart_type' ), 'body' ); ?>> <?php esc_html_e( 'body measurements (the body each size is cut for)', 'curtain-woocommerce' ); ?></label>
 			</p>
+			<?php $templates = self::chart_templates(); ?>
+			<?php if ( array() !== $templates ) : ?>
+			<p class="curtain-template">
+				<label for="curtain-chart-template"><strong><?php esc_html_e( 'Start from a template', 'curtain-woocommerce' ); ?></strong></label>
+				<select id="curtain-chart-template" class="curtain-template-select">
+					<option value=""><?php esc_html_e( '— choose a template —', 'curtain-woocommerce' ); ?></option>
+					<optgroup label="<?php esc_attr_e( 'Body charts (numbers filled in)', 'curtain-woocommerce' ); ?>">
+						<?php foreach ( $templates as $t ) : ?>
+							<?php if ( 'body' === $t['kind'] ) : ?><option value="<?php echo esc_attr( (string) $t['id'] ); ?>"><?php echo esc_html( (string) $t['label'] ); ?></option><?php endif; ?>
+						<?php endforeach; ?>
+					</optgroup>
+					<optgroup label="<?php esc_attr_e( 'Garment charts (you measure each size)', 'curtain-woocommerce' ); ?>">
+						<?php foreach ( $templates as $t ) : ?>
+							<?php if ( 'garment' === $t['kind'] ) : ?><option value="<?php echo esc_attr( (string) $t['id'] ); ?>"><?php echo esc_html( (string) $t['label'] ); ?></option><?php endif; ?>
+						<?php endforeach; ?>
+					</optgroup>
+				</select>
+				<button type="button" class="button curtain-template-apply"><?php esc_html_e( 'Use template', 'curtain-woocommerce' ); ?></button>
+				<span class="description curtain-template-note"><?php esc_html_e( 'Fills the chart below; nothing is saved until you update the product. Check the sizes against your own labels.', 'curtain-woocommerce' ); ?></span>
+			</p>
+			<?php endif; ?>
 			<table class="curtain-table curtain-repeater" data-repeater="size_chart">
 				<thead><tr>
 					<?php foreach ( Vocab::SIZE_ROW_COLUMNS as $col ) : ?><th><?php echo esc_html( self::column_label( $col ) ); ?></th><?php endforeach; ?><th></th>

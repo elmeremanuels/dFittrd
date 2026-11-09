@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Curtain for WooCommerce 0.1.0\n"
 "Report-Msgid-Bugs-To: https://curtain.fit/woocommerce\n"
-"POT-Creation-Date: 2026-11-06 04:35+0000\n"
+"POT-Creation-Date: 2026-11-09 03:47+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -54,6 +54,14 @@ msgstr ""
 
 #: includes/class-product-meta.php
 msgid "Use this image"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Replace the size chart below with this template?"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Fill in the measurements of each finished size (cm, all round)."
 msgstr ""
 
 #: includes/class-product-meta.php includes/class-settings.php
@@ -203,6 +211,30 @@ msgstr ""
 
 #: includes/class-product-meta.php
 msgid "body measurements (the body each size is cut for)"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Start from a template"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "— choose a template —"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Body charts (numbers filled in)"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Garment charts (you measure each size)"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Use template"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Fills the chart below; nothing is saved until you update the product. Check the sizes against your own labels."
 msgstr ""
 
 #: includes/class-product-meta.php
@@ -579,7 +611,7 @@ msgid "Position"
 msgstr ""
 
 #: includes/class-settings.php
-msgid "woocommerce_single_product_summary priority: 35 = after the add-to-cart form, 25 = before it, 15 = after the price."
+msgid "Classic themes: woocommerce_single_product_summary priority, 35 = after the add-to-cart form, 25 = before it, 15 = after the price. Block themes always place the button right under the add-to-cart form."
 msgstr ""
 
 #: includes/class-settings.php

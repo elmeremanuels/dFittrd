@@ -10,6 +10,8 @@
 declare(strict_types=1);
 
 define( 'CURTAIN_TESTING', true );
+// Every plugin file starts with `defined( 'ABSPATH' ) || exit;` (the form Plugin Check recognises).
+define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 define( 'CURTAIN_VERSION', '0.1.0' );
 define( 'CURTAIN_PLUGIN_FILE', dirname( __DIR__ ) . '/curtain.php' );
 define( 'CURTAIN_PLUGIN_DIR', dirname( __DIR__ ) . '/' );

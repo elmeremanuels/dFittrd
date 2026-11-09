@@ -67,7 +67,7 @@ test(
 );
 
 test(
-	'non-EUR shops get no priceEur and a warning (contract: only EUR prices are mapped)',
+	'non-EUR shops without a rate table get no priceEur and a warning',
 	static function (): void {
 		$b = Payload_Builder::build( array( 'id' => 1, 'name' => 'X', 'price' => '10', 'currency' => 'USD' ), array() );
 		assert_false( isset( $b['payload']['priceEur'] ) );
@@ -160,5 +160,23 @@ test(
 		assert_same( 64, strlen( Payload_Builder::hash( $a ) ) );
 		assert_same( array( 'category', 'sizeChartType', 'sizeChart', 'flatLayPhoto' ), Payload_Builder::missing_heavy_fields( $a ) );
 		assert_same( array(), Payload_Builder::missing_heavy_fields( curtain_full_garment() ) );
+	}
+);
+
+test(
+	'non-EUR shop prices: converted with the api rate table exactly like priceToEur (AUD pilot)',
+	static function (): void {
+		$cases = json_decode( (string) file_get_contents( __DIR__ . '/fixtures/prices.json' ), true );
+		$rates = Payload_Builder::load_eur_rates( dirname( __DIR__ ) . '/assets/eur-rates.json' );
+		assert_true( isset( $rates['AUD'] ) && $rates['AUD'] > 1, 'AUD rate loaded from assets/eur-rates.json' );
+		assert_true( is_array( $cases ) && count( $cases ) >= 5, 'price fixtures present' );
+		foreach ( $cases as $c ) {
+			$b = Payload_Builder::build( array( 'id' => 1, 'name' => 'Price case', 'price' => $c['price'] ), array(), array( 'currency' => $c['currency'], 'eur_rates' => $rates, 'default_brand' => 'Fixture Shop' ) );
+			assert_same( $c['priceEur'], $b['payload']['priceEur'] ?? null, $c['currency'] . ' ' . $c['price'] );
+			assert_json_equal( $c['warnings'], $b['warnings'], $c['currency'] . ' warnings' );
+		}
+		$none = Payload_Builder::build( array( 'id' => 1, 'name' => 'x', 'price' => '149', 'currency' => 'AUD' ), array(), array() );
+		assert_false( isset( $none['payload']['priceEur'] ), 'no rate table: no price, with a warning' );
+		assert_same( array(), Payload_Builder::load_eur_rates( '/nonexistent/eur-rates.json' ) );
 	}
 );

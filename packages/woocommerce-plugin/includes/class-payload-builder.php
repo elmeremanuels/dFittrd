@@ -15,7 +15,7 @@ declare(strict_types=1);
 
 namespace Curtain;
 
-defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
+defined( 'ABSPATH' ) || exit;
 
 final class Payload_Builder {
 
@@ -37,6 +37,31 @@ final class Payload_Builder {
 			'payload'  => $b->run( $product, $meta, $opts ),
 			'warnings' => $b->warnings,
 		);
+	}
+
+	/**
+	 * The EUR rate table from assets/eur-rates.json (`{ "rates": { "AUD": 1.78, … } }`), or [] when
+	 * the file is missing or malformed (non-EUR prices are then left out, with a warning).
+	 *
+	 * @return array<string,float>
+	 */
+	public static function load_eur_rates( string $file ): array {
+		if ( ! is_readable( $file ) ) {
+			return array();
+		}
+		$data  = json_decode( (string) file_get_contents( $file ), true ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local plugin file.
+		$rates = array();
+		foreach ( (array) ( $data['rates'] ?? array() ) as $code => $rate ) {
+			if ( is_string( $code ) && 1 === preg_match( '/^[A-Z]{3}$/', $code ) && ( is_int( $rate ) || is_float( $rate ) ) && $rate > 0 ) {
+				$rates[ $code ] = (float) $rate;
+			}
+		}
+		return $rates;
+	}
+
+	/** A rate as JavaScript prints it in a template string (1.78, 102, 0.87). */
+	private static function num_text( float $n ): string {
+		return (string) self::num( $n );
 	}
 
 	/**
@@ -129,13 +154,19 @@ final class Payload_Builder {
 			$out['subcategory'] = $sub;
 		}
 
-		$currency = strtoupper( (string) ( $product['currency'] ?? $opts['currency'] ?? 'EUR' ) );
+		$currency = strtoupper( trim( (string) ( $product['currency'] ?? $opts['currency'] ?? 'EUR' ) ) );
 		$amount   = self::coerce_number( $product['price'] ?? null ) ?? self::coerce_number( $product['regular_price'] ?? null );
 		if ( null !== $amount ) {
+			// priceToEur in @curtain/schema: EUR as is, another currency through the api's rate table
+			// (1 EUR = n units, assets/eur-rates.json), approximate and said so in a warning.
+			$rate = $opts['eur_rates'][ $currency ] ?? null;
 			if ( 'EUR' === $currency ) {
 				$out['priceEur'] = self::num( $amount );
+			} elseif ( ( is_int( $rate ) || is_float( $rate ) ) && is_finite( (float) $rate ) && $rate > 0 ) {
+				$out['priceEur'] = self::num( round( $amount / (float) $rate * 100 ) / 100 );
+				$this->warn( 'price', 'priceEur', 'price converted from ' . $currency . ' at ' . self::num_text( (float) $rate ) . ' per EUR (approximate)' );
 			} else {
-				$this->warn( 'price', 'priceEur', 'price is in ' . $currency . ', not EUR' );
+				$this->warn( 'price', 'priceEur', 'price is in ' . $currency . ', not EUR, and no rate is known' );
 			}
 		}
 
@@ -376,7 +407,7 @@ final class Payload_Builder {
 		if ( false === filter_var( $s, FILTER_VALIDATE_URL ) ) {
 			return null;
 		}
-		$scheme = strtolower( (string) parse_url( $s, PHP_URL_SCHEME ) );
+		$scheme = strtolower( (string) wp_parse_url( $s, PHP_URL_SCHEME ) );
 		return ( 'http' === $scheme || 'https' === $scheme ) ? $s : null;
 	}
 

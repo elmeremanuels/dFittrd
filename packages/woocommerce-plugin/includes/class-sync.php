@@ -13,7 +13,7 @@ declare(strict_types=1);
 
 namespace Curtain;
 
-defined('ABSPATH') || defined('CURTAIN_TESTING') || exit;
+defined( 'ABSPATH' ) || exit;
 
 final class Sync {
 
@@ -237,8 +237,18 @@ final class Sync {
 			$meta,
 			array(
 				'default_brand' => '' !== (string) $settings['default_brand'] ? (string) $settings['default_brand'] : get_bloginfo( 'name' ),
+				'eur_rates'     => self::eur_rates(),
 			)
 		);
+	}
+
+	/** @return array<string,float> The EUR rate table shipped in the zip (assets/eur-rates.json). */
+	public static function eur_rates(): array {
+		static $rates = null;
+		if ( null === $rates ) {
+			$rates = Payload_Builder::load_eur_rates( CURTAIN_PLUGIN_DIR . 'assets/eur-rates.json' );
+		}
+		return $rates;
 	}
 
 	/**

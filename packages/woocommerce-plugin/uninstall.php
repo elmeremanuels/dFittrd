@@ -21,9 +21,14 @@ $curtain_settings = get_option( $curtain_option, array() );
 $curtain_settings = is_array( $curtain_settings ) ? $curtain_settings : array();
 
 // Job queue (Action Scheduler if WooCommerce is still around, WP-Cron always).
+// Group alone / hook alone: Action Scheduler's "cancel everything" forms (hook + group + [] would
+// only match jobs whose args are exactly [], and every Curtain job has args).
+if ( function_exists( 'as_unschedule_all_actions' ) ) {
+	as_unschedule_all_actions( '', array(), 'curtain' );
+}
 foreach ( array( 'curtain_push_product', 'curtain_delete_product', 'curtain_sync_all' ) as $curtain_hook ) {
 	if ( function_exists( 'as_unschedule_all_actions' ) ) {
-		as_unschedule_all_actions( $curtain_hook, array(), 'curtain' );
+		as_unschedule_all_actions( $curtain_hook );
 	}
 	wp_clear_scheduled_hook( $curtain_hook );
 }

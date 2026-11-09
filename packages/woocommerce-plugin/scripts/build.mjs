@@ -4,6 +4,8 @@
  *   1. copy ../sdk/dist/sdk.v1.js            → assets/sdk.v1.js         (bundled, never remote: WP.org rule)
  *   2. copy ../schema/dist/garment*.schema.json → assets/                (local JSON Schema validation)
  *      and write assets/fabric-library.json from @curtain/schema         (fabric names → library ids)
+ *      and assets/chart-templates.json from @curtain/schema              (size chart templates)
+ *      and assets/eur-rates.json from @curtain/shopify-app               (shop price → priceEur)
  *   3. php -l every PHP file
  *   4. check the translations and compile languages/*.po to .mo in the staged copy
  *   5. zip dist/curtain-woocommerce.zip with a top-level `curtain-woocommerce/` folder
@@ -16,6 +18,8 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync } f
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeChartTemplatesAsset } from './chart-templates.mjs';
+import { writeEurRatesAsset } from './eur-rates.mjs';
 import { writeFabricLibraryAsset } from './fabric-library.mjs';
 import { lintAll } from './lint.mjs';
 
@@ -48,6 +52,10 @@ for (const [from, to] of sources) {
 
 // The fabric lexicon the PHP fabric-text twin reads (includes/class-fabric-text.php).
 console.log(`wrote ${writeFabricLibraryAsset(root).slice(root.length + 1)}`);
+// The size chart templates the meta box offers (includes/class-product-meta.php).
+console.log(`wrote ${writeChartTemplatesAsset(root).slice(root.length + 1)}`);
+// The EUR rate table for non-EUR shop prices (includes/class-payload-builder.php).
+console.log(`wrote ${writeEurRatesAsset(root).slice(root.length + 1)}`);
 
 // Secret guard (AGENTS.md rule 2): the bundled SDK must not carry any provider key.
 const sdk = readFileSync(join(root, 'assets/sdk.v1.js'), 'utf8');

@@ -37,3 +37,7 @@
 .curtain-missing { margin-right: 4px; }
 .curtain-missing--heavy { background: #ffe0d8; }
 .curtain-fabric-prefill { background: #f0f6fc; border-left: 4px solid #72aee6; padding: 6px 10px; margin: 0 0 8px; }
+.curtain-template { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.curtain-template .description { flex-basis: 100%; margin: 0; }
+/* Checkbox lists inside the grid: box and label on one line (the grid's labels are columns). */
+.curtain-grid label.curtain-check { display: inline-flex; flex-direction: row; align-items: center; gap: 4px; }

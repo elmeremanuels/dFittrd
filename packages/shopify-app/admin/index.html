@@ -324,6 +324,14 @@
         u.days.forEach(function (d) { var i = el('i', { title: d.day + ': ' + d.fitSessions }); i.style.height = Math.max(2, Math.round(100 * d.fitSessions / max)) + '%'; bars.appendChild(i); });
         var onPlan = plan.name !== 'free' && !plan.paused && !legacy;
         check('chk-plan', onPlan);
+        if (cfg.billing === 'arranged') {
+          // Custom distribution: Shopify does not let this app charge through its billing system.
+          $('btn-plan').hidden = true;
+          text('usage-plan', (plan.name === 'free' ? 'No plan' : 'Curtain · arranged with Curtain') + (plan.paused ? ' · paused' : ''));
+          text('txt-plan', onPlan ? 'Your Curtain plan is arranged directly with Curtain. Every try-on session is included; sessions are counted, never billed through Shopify.' : 'Your Curtain plan is arranged directly with Curtain. Contact Curtain support to (re)activate it.');
+          if (plan.paused) banner('warning', 'Your shop is paused: shoppers see a “taking a short break” screen. Contact Curtain support to resume.');
+          return;
+        }
         $('btn-plan').disabled = onPlan;
         $('btn-plan').textContent = onPlan ? 'Subscribed' : legacy ? 'Switch to Curtain (US$' + (plan.priceUsdPerMonth || 8.99).toFixed(2) + ')' : 'Subscribe';
         if (legacy && !plan.paused) banner('info', 'Your shop is still billed on the retired ' + plan.legacyPlan + ' plan at its old price. Switch to Curtain (US$' + (plan.priceUsdPerMonth || 8.99).toFixed(2) + ' per month, flat): Shopify replaces the old subscription when you approve.');

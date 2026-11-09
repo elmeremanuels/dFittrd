@@ -1,0 +1,415 @@
+# Excerpt of the Shopify GraphQL Admin API schema, version 2026-10, for the offline contract harness
+# (apps/api/src/shopify/contract.test.ts). Only the types and fields Curtain sends are here; every
+# document the api and @curtain/shopify-app send is validated against this excerpt with graphql-js
+# (unknown fields, wrong arguments, wrong variable types and missing required arguments fail).
+#
+# Written from the shopify.dev reference pages (read 2026-11-09), among them:
+#   https://shopify.dev/docs/api/admin-graphql/latest/mutations/appSubscriptionCreate
+#   https://shopify.dev/docs/api/admin-graphql/latest/queries/shopBillingPreferences
+#   https://shopify.dev/docs/api/admin-graphql/latest/input-objects/MetafieldDefinitionInput
+#   https://shopify.dev/docs/api/admin-graphql/latest/enums/MetafieldAdminAccessInput
+#   https://shopify.dev/docs/api/admin-graphql/latest/input-objects/MetafieldsSetInput
+#   https://shopify.dev/docs/api/admin-graphql/latest/mutations/bulkOperationRunQuery
+#   https://shopify.dev/docs/api/admin-graphql/latest/objects/Product (featuredImage, images deprecated)
+# It is NOT the real schema: a field that exists here may differ in a way this excerpt does not
+# model (nullability details, extra required arguments added later). The real check is running the
+# same documents against a development store (docs/LAUNCH-SHOPIFY.md, step D2: the Shopify GraphiQL
+# app on the dev store, API version 2026-10).
+
+scalar URL
+scalar DateTime
+scalar Decimal
+scalar Money
+scalar JSON
+scalar HTML
+
+interface Node {
+  id: ID!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+type UserError {
+  field: [String!]
+  message: String!
+}
+
+enum CurrencyCode { USD EUR AUD GBP CAD NZD JPY CHF SEK NOK DKK PLN SGD HKD INR BRL MXN ZAR }
+
+type MoneyV2 {
+  amount: Decimal!
+  currencyCode: CurrencyCode!
+}
+
+input MoneyInput {
+  amount: Decimal!
+  currencyCode: CurrencyCode!
+}
+
+# ---- shop ---------------------------------------------------------------------------------------
+
+type Domain {
+  host: String!
+  url: URL!
+}
+
+type ShopPlan {
+  partnerDevelopment: Boolean!
+  shopifyPlus: Boolean!
+  publicDisplayName: String!
+}
+
+type Shop implements Node {
+  id: ID!
+  name: String!
+  myshopifyDomain: String!
+  currencyCode: CurrencyCode!
+  primaryDomain: Domain!
+  plan: ShopPlan!
+}
+
+type ShopBillingPreferences {
+  currency: CurrencyCode!
+}
+
+# ---- products -----------------------------------------------------------------------------------
+
+enum ProductStatus { ACTIVE ARCHIVED DRAFT UNLISTED }
+enum ProductSortKeys { CREATED_AT ID INVENTORY_TOTAL PRODUCT_TYPE PUBLISHED_AT RELEVANCE TITLE UPDATED_AT VENDOR }
+enum CountPrecision { AT_LEAST EXACT }
+
+type Count {
+  count: Int!
+  precision: CountPrecision!
+}
+
+type TaxonomyCategory implements Node {
+  id: ID!
+  name: String!
+  fullName: String!
+}
+
+type Image {
+  id: ID
+  url: URL!
+  altText: String
+}
+
+type ImageEdge { cursor: String! node: Image! }
+type ImageConnection { edges: [ImageEdge!]! nodes: [Image!]! pageInfo: PageInfo! }
+
+type SelectedOption {
+  name: String!
+  value: String!
+}
+
+type ProductVariant implements Node {
+  id: ID!
+  title: String!
+  price: Money!
+  selectedOptions: [SelectedOption!]!
+}
+
+type ProductVariantEdge { cursor: String! node: ProductVariant! }
+type ProductVariantConnection { edges: [ProductVariantEdge!]! nodes: [ProductVariant!]! pageInfo: PageInfo! }
+
+type ProductPriceRangeV2 {
+  minVariantPrice: MoneyV2!
+  maxVariantPrice: MoneyV2!
+}
+
+type ProductOptionValue {
+  id: ID!
+  name: String!
+}
+
+type ProductOption implements Node {
+  id: ID!
+  name: String!
+  position: Int!
+  optionValues: [ProductOptionValue!]!
+}
+
+enum MetafieldOwnerType { PRODUCT PRODUCTVARIANT COLLECTION SHOP CUSTOMER ORDER API_PERMISSION }
+
+type Metafield implements Node {
+  id: ID!
+  namespace: String!
+  key: String!
+  type: String!
+  value: String!
+  jsonValue: JSON!
+  ownerType: MetafieldOwnerType!
+  compareDigest: String!
+}
+
+type MetafieldEdge { cursor: String! node: Metafield! }
+type MetafieldConnection { edges: [MetafieldEdge!]! nodes: [Metafield!]! pageInfo: PageInfo! }
+
+type Product implements Node {
+  id: ID!
+  handle: String!
+  title: String!
+  vendor: String!
+  productType: String!
+  status: ProductStatus!
+  onlineStoreUrl: URL
+  onlineStorePreviewUrl: URL
+  descriptionHtml: HTML!
+  category: TaxonomyCategory
+  featuredImage: Image @deprecated(reason: "Use `featuredMedia` instead.")
+  images(first: Int, after: String, last: Int, before: String, reverse: Boolean = false): ImageConnection! @deprecated(reason: "Use `media` instead.")
+  priceRangeV2: ProductPriceRangeV2!
+  options(first: Int): [ProductOption!]!
+  variants(first: Int, after: String, last: Int, before: String, reverse: Boolean = false): ProductVariantConnection!
+  metafield(namespace: String, key: String!): Metafield
+  metafields(namespace: String, keys: [String!], first: Int, after: String, last: Int, before: String, reverse: Boolean = false): MetafieldConnection!
+}
+
+type ProductEdge { cursor: String! node: Product! }
+type ProductConnection { edges: [ProductEdge!]! nodes: [Product!]! pageInfo: PageInfo! }
+
+# ---- metafield definitions ----------------------------------------------------------------------
+
+enum MetafieldAdminAccessInput { MERCHANT_READ MERCHANT_READ_WRITE }
+enum MetafieldStorefrontAccessInput { NONE PUBLIC_READ }
+enum MetafieldCustomerAccountAccessInput { NONE READ READ_WRITE }
+
+input MetafieldAccessInput {
+  admin: MetafieldAdminAccessInput
+  storefront: MetafieldStorefrontAccessInput
+  customerAccount: MetafieldCustomerAccountAccessInput
+}
+
+input MetafieldDefinitionValidationInput {
+  name: String!
+  value: String!
+}
+
+input MetafieldDefinitionInput {
+  namespace: String
+  key: String!
+  name: String!
+  description: String
+  ownerType: MetafieldOwnerType!
+  type: String!
+  validations: [MetafieldDefinitionValidationInput!]
+  access: MetafieldAccessInput
+  pin: Boolean = false
+}
+
+type MetafieldDefinitionType {
+  name: String!
+  category: String!
+}
+
+type MetafieldDefinition implements Node {
+  id: ID!
+  namespace: String!
+  key: String!
+  name: String!
+  description: String
+  ownerType: MetafieldOwnerType!
+  type: MetafieldDefinitionType!
+  pinnedPosition: Int
+}
+
+type MetafieldDefinitionEdge { cursor: String! node: MetafieldDefinition! }
+type MetafieldDefinitionConnection { edges: [MetafieldDefinitionEdge!]! nodes: [MetafieldDefinition!]! pageInfo: PageInfo! }
+
+enum MetafieldDefinitionCreateUserErrorCode { INVALID TAKEN BLANK TOO_LONG TOO_SHORT INCLUSION PRESENT RESOURCE_TYPE_LIMIT_EXCEEDED LIMIT_EXCEEDED INVALID_OPTION DUPLICATE_OPTION UNSTRUCTURED_ALREADY_EXISTS INVALID_INPUT_COMBINATION }
+
+type MetafieldDefinitionCreateUserError {
+  field: [String!]
+  message: String!
+  code: MetafieldDefinitionCreateUserErrorCode
+}
+
+type MetafieldDefinitionCreatePayload {
+  createdDefinition: MetafieldDefinition
+  userErrors: [MetafieldDefinitionCreateUserError!]!
+}
+
+input MetafieldsSetInput {
+  ownerId: ID!
+  namespace: String
+  key: String!
+  type: String
+  value: String!
+  compareDigest: String
+}
+
+enum MetafieldsSetUserErrorCode { BLANK INCLUSION INVALID INVALID_TYPE INVALID_VALUE LESS_THAN_OR_EQUAL_TO PRESENT TAKEN TOO_LONG TOO_SHORT APP_NOT_AUTHORIZED STALE_OBJECT INVALID_COMPARE_DIGEST }
+
+type MetafieldsSetUserError {
+  field: [String!]
+  message: String!
+  code: MetafieldsSetUserErrorCode
+  elementIndex: Int
+}
+
+type MetafieldsSetPayload {
+  metafields: [Metafield!]
+  userErrors: [MetafieldsSetUserError!]!
+}
+
+# ---- app installation and billing ---------------------------------------------------------------
+
+enum AppSubscriptionStatus { ACTIVE CANCELLED DECLINED EXPIRED FROZEN PENDING ACCEPTED }
+enum AppPricingInterval { ANNUAL EVERY_30_DAYS }
+enum AppSubscriptionReplacementBehavior { APPLY_IMMEDIATELY APPLY_ON_NEXT_BILLING_CYCLE STANDARD }
+
+type AppRecurringPricing {
+  price: MoneyV2!
+  interval: AppPricingInterval!
+  planHandle: String
+}
+
+type AppUsagePricing {
+  terms: String!
+  cappedAmount: MoneyV2!
+  balanceUsed: MoneyV2!
+  interval: AppPricingInterval!
+}
+
+union AppPricingDetails = AppRecurringPricing | AppUsagePricing
+
+type AppPlanV2 {
+  pricingDetails: AppPricingDetails!
+}
+
+type AppSubscriptionLineItem {
+  id: ID!
+  plan: AppPlanV2!
+}
+
+type AppSubscription implements Node {
+  id: ID!
+  name: String!
+  status: AppSubscriptionStatus!
+  test: Boolean!
+  trialDays: Int!
+  createdAt: DateTime!
+  currentPeriodEnd: DateTime
+  returnUrl: URL!
+  lineItems: [AppSubscriptionLineItem!]!
+}
+
+type AppInstallation implements Node {
+  id: ID!
+  activeSubscriptions: [AppSubscription!]!
+  metafield(namespace: String, key: String!): Metafield
+}
+
+input AppRecurringPricingInput {
+  price: MoneyInput!
+  interval: AppPricingInterval = EVERY_30_DAYS
+  planHandle: String
+}
+
+input AppUsagePricingInput {
+  cappedAmount: MoneyInput!
+  terms: String!
+}
+
+input AppPlanInput {
+  appRecurringPricingDetails: AppRecurringPricingInput
+  appUsagePricingDetails: AppUsagePricingInput
+}
+
+input AppSubscriptionLineItemInput {
+  plan: AppPlanInput!
+}
+
+type AppSubscriptionCreatePayload {
+  appSubscription: AppSubscription
+  confirmationUrl: URL
+  userErrors: [UserError!]!
+}
+
+type AppSubscriptionCancelPayload {
+  appSubscription: AppSubscription
+  userErrors: [UserError!]!
+}
+
+type AppUsageRecord implements Node {
+  id: ID!
+}
+
+type AppUsageRecordCreatePayload {
+  appUsageRecord: AppUsageRecord
+  userErrors: [UserError!]!
+}
+
+# ---- bulk operations ----------------------------------------------------------------------------
+
+enum BulkOperationStatus { CANCELED CANCELING COMPLETED CREATED EXPIRED FAILED RUNNING }
+enum BulkOperationErrorCode { ACCESS_DENIED INTERNAL_SERVER_ERROR TIMEOUT }
+enum BulkOperationType { MUTATION QUERY }
+
+type BulkOperation implements Node {
+  id: ID!
+  status: BulkOperationStatus!
+  errorCode: BulkOperationErrorCode
+  createdAt: DateTime!
+  completedAt: DateTime
+  objectCount: String!
+  rootObjectCount: String!
+  fileSize: String
+  url: URL
+  partialDataUrl: URL
+  query: String!
+  type: BulkOperationType!
+}
+
+enum BulkOperationUserErrorCode { INVALID OPERATION_IN_PROGRESS LIMIT_REACHED }
+
+type BulkOperationUserError {
+  field: [String!]
+  message: String!
+  code: BulkOperationUserErrorCode
+}
+
+type BulkOperationRunQueryPayload {
+  bulkOperation: BulkOperation
+  userErrors: [BulkOperationUserError!]!
+}
+
+type BulkOperationCancelPayload {
+  bulkOperation: BulkOperation
+  userErrors: [UserError!]!
+}
+
+# ---- roots --------------------------------------------------------------------------------------
+
+type QueryRoot {
+  shop: Shop!
+  shopBillingPreferences: ShopBillingPreferences!
+  currentAppInstallation: AppInstallation!
+  product(id: ID!): Product
+  products(first: Int, after: String, last: Int, before: String, query: String, sortKey: ProductSortKeys = ID, reverse: Boolean = false): ProductConnection!
+  productsCount(query: String, limit: Int = 10000): Count
+  node(id: ID!): Node
+  nodes(ids: [ID!]!): [Node]!
+  metafieldDefinitions(ownerType: MetafieldOwnerType!, namespace: String, key: String, first: Int, after: String, last: Int, before: String, reverse: Boolean = false): MetafieldDefinitionConnection!
+}
+
+type Mutation {
+  metafieldDefinitionCreate(definition: MetafieldDefinitionInput!): MetafieldDefinitionCreatePayload
+  metafieldsSet(metafields: [MetafieldsSetInput!]!): MetafieldsSetPayload
+  appSubscriptionCreate(name: String!, lineItems: [AppSubscriptionLineItemInput!]!, returnUrl: URL!, test: Boolean = false, trialDays: Int, replacementBehavior: AppSubscriptionReplacementBehavior = STANDARD): AppSubscriptionCreatePayload
+  appSubscriptionCancel(id: ID!, prorate: Boolean = false): AppSubscriptionCancelPayload
+  appUsageRecordCreate(subscriptionLineItemId: ID!, price: MoneyInput!, description: String!, idempotencyKey: String): AppUsageRecordCreatePayload
+  bulkOperationRunQuery(query: String!, groupObjects: Boolean! = false): BulkOperationRunQueryPayload
+  bulkOperationCancel(id: ID!): BulkOperationCancelPayload
+}
+
+schema {
+  query: QueryRoot
+  mutation: Mutation
+}

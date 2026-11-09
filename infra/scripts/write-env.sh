@@ -93,6 +93,15 @@ ENC="$(value ENCRYPTION_KEY)"
 JWT="$(value JWT_SECRET)"
 [ "${#JWT}" -ge 32 ] || { echo "write-env: JWT_SECRET must be at least 32 characters" >&2; exit 1; }
 
+# The api refuses to boot in production with SHOPIFY_API_KEY set and no valid SHOPIFY_DISTRIBUTION
+# (it decides who gets the plan); fail here first, with the reason, instead of a crash-looping container.
+if [ -n "$(value SHOPIFY_API_KEY)" ]; then
+  case "$(value SHOPIFY_DISTRIBUTION)" in
+    custom|public) ;;
+    *) echo "write-env: SHOPIFY_DISTRIBUTION must be custom or public when SHOPIFY_API_KEY is set (match the app's distribution in the Dev Dashboard)" >&2; exit 1 ;;
+  esac
+fi
+
 # Optional, but the pilot needs them: say so without failing the deploy.
 for key in SHOPIFY_API_KEY SHOPIFY_API_SECRET BACKUP_AGE_RECIPIENT; do
   [ -n "$(value "$key")" ] || echo "write-env: note: $key is empty" >&2

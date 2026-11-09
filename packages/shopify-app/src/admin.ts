@@ -20,6 +20,12 @@ export interface AdminPageConfig {
   appUrl: string;
   appHandle?: string;
   blockHandle?: string;
+  /**
+   * How the plan is paid. `shopify` (default): the Subscribe button (Billing API, public
+   * distribution). `arranged`: a custom-distribution app, which Shopify does not let charge through
+   * its billing system; the page shows the plan as arranged with Curtain and no Subscribe button.
+   */
+  billing?: 'shopify' | 'arranged';
   /** Override the HTML template (tests). */
   template?: string;
 }
@@ -65,6 +71,7 @@ export function renderAdminPage(cfg: AdminPageConfig): string {
     appUrl: cfg.appUrl.replace(/\/$/, ''),
     appHandle: cfg.appHandle ?? 'curtain',
     blockHandle: cfg.blockHandle ?? BLOCK_HANDLE,
+    billing: cfg.billing ?? 'shopify',
     /** Hard rule 3: every render is labelled an estimate — the page shows this next to the ledger. */
     disclaimer: ESTIMATE_DISCLAIMER,
   };

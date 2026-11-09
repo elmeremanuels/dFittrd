@@ -33,7 +33,8 @@ describe('deploy config from DOMAIN (what shopify-deploy.yml renders)', () => {
     expect(v.topics.sort()).toEqual([...SHOPIFY_WEBHOOK_TOPICS].sort());
     expect(v.complianceTopics.sort()).toEqual([...SHOPIFY_COMPLIANCE_TOPICS].sort());
     expect(parsed.handle).toBe('curtain');
-    expect((parsed.build as Record<string, unknown>).include_config_on_deploy).toBe(true);
+    // Removed by the CLI itself ("no longer supported", 4.9.5 and 5.0.1): deploy always includes the config.
+    expect((parsed.build as Record<string, unknown>).include_config_on_deploy).toBeUndefined();
     expect((parsed.build as Record<string, unknown>).dev_store_url).toBeUndefined();
   });
 
@@ -170,15 +171,19 @@ describe('.github/workflows/shopify-deploy.yml', () => {
 
   it('pins the Shopify CLI to an exact version and calls the scripts that exist', () => {
     expect(wf).toMatch(/SHOPIFY_CLI_VERSION: '\d+\.\d+\.\d+'/);
-    expect(wf).toContain('"@shopify/cli@${SHOPIFY_CLI_VERSION}"');
+    expect(wf).toMatch(/SHOPIFY_CLI_VERSION_SERVICE_ACCOUNT: '5\.\d+\.\d+'/);
+    expect(wf).toContain('"@shopify/cli@${cli}"');
     expect(wf).toContain('packages/shopify-app/scripts/deploy-plan.mjs');
     expect(wf).toContain('configure prod');
     expect(wf).toContain(DEPLOY_TXT);
   });
 
-  it('hands the partners token value to the deploy step only; the guard sees whether it is set', () => {
+  it('hands the CLI credential values to the deploy step only; the guard sees whether they are set', () => {
     expect(wf.split('${{ secrets.SHOPIFY_CLI_PARTNERS_TOKEN }}').length - 1).toBe(1);
+    expect(wf.split('${{ secrets.SHOPIFY_SERVICE_ACCOUNT_TOKEN }}').length - 1).toBe(1);
     expect(wf).toContain("${{ secrets.SHOPIFY_CLI_PARTNERS_TOKEN != '' }}");
+    expect(wf).toContain("${{ secrets.SHOPIFY_SERVICE_ACCOUNT_TOKEN != '' }}");
+    expect(wf).toContain('unset SHOPIFY_CLI_PARTNERS_TOKEN');
     const deployLine = wf.split('\n').find((l) => /^\s*shopify app deploy /.test(l)) ?? '';
     expect(deployLine).toContain('--config prod');
     expect(deployLine).not.toContain('--allow-deletes');

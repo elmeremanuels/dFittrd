@@ -59,7 +59,8 @@ describe('devices → signature → export → delete cascade', () => {
     expect(ledger.json().entries).toHaveLength(1);
     expect(ledger.json().entries[0]).toMatchObject({ kind: 'signature_sync', payloadSummary: { fields: ['version', 'vector', 'quality'] } });
     // the ledger never stores values
-    expect(JSON.stringify(ledger.json())).not.toContain('"92');
+    // (ids left out: a random uuid that starts with 92 made this flaky)
+    expect(JSON.stringify(ledger.json().entries.map(({ id: _id, ...rest }: { id: string }) => rest))).not.toContain('"92');
 
     // re-put overwrites (one row per device)
     const again = await t.app.inject({ method: 'PUT', url: '/v1/me/signature', headers: d.auth, payload: { version: 1, vector: vector(0.9), quality: 0.9 } });

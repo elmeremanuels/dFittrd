@@ -71,4 +71,5 @@ embedded = false
 [build]
 automatically_update_urls_on_dev = false
 dev_store_url = "{{SHOPIFY_DEV_STORE}}"
-include_config_on_deploy = true
+# No `include_config_on_deploy`: `shopify app deploy` always includes this configuration and the CLI
+# (4.9.5, 5.0.1) removes the key from the file with a "no longer supported" notice.

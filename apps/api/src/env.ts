@@ -97,6 +97,17 @@ export const EnvSchema = z.object({
   SHOPIFY_SCOPES: z.string().default('read_products,write_products'),
   /** The app's handle (shopify.app.toml `handle`): /shopify/auth/callback redirects to admin.shopify.com/store/<s>/apps/<handle>. */
   SHOPIFY_APP_HANDLE: z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/).default('curtain'),
+  /**
+   * The app's distribution method in the Dev Dashboard (irreversible there). `custom`: one store (or
+   * one Plus organisation) by install link; Shopify does not let custom-distribution apps charge
+   * through its billing system ("Can't charge merchants through Shopify's app billing system",
+   * https://shopify.dev/docs/apps/launch/distribution), so the plan is arranged directly with the
+   * merchant: every install and reinstall is granted the `curtain` plan by hand (no billingRef) and
+   * /shopify/billing/subscribe answers 409. `public`: App Store / unlisted, Billing API.
+   * Required in production when SHOPIFY_API_KEY is set (no silent default: a wrong guess either
+   * leaves a pilot shop on `free` or hands out the plan for nothing); `public` elsewhere.
+   */
+  SHOPIFY_DISTRIBUTION: z.enum(['public', 'custom']).optional(),
   /** GraphQL endpoint template for tests/mocks; `{shop}` is replaced by the shop domain. */
   SHOPIFY_ADMIN_URL_TEMPLATE: z.string().default('https://{shop}/admin/api/{version}/graphql.json'),
 
@@ -173,7 +184,8 @@ export const EnvSchema = z.object({
   SHOPIFY_REFRESH_TOKEN_RENEW_DAYS: z.coerce.number().int().min(1).max(80).default(30),
 });
 
-export type Env = z.infer<typeof EnvSchema> & {
+export type Env = Omit<z.infer<typeof EnvSchema>, 'SHOPIFY_DISTRIBUTION'> & {
+  SHOPIFY_DISTRIBUTION: 'public' | 'custom';
   JWT_SECRET: string;
   SHOP_KEY_PEPPER: string;
   ENCRYPTION_KEY: string;
@@ -217,9 +229,13 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
   if (JWT_SECRET.length < 32) throw new EnvError('JWT_SECRET must be at least 32 characters');
   if (!/^[0-9a-fA-F]{64}$/.test(ENCRYPTION_KEY)) throw new EnvError('ENCRYPTION_KEY must be 64 hex characters (32 bytes)');
   if (e.SHOPIFY_API_KEY && !e.SHOPIFY_API_SECRET) throw new EnvError('SHOPIFY_API_SECRET is required when SHOPIFY_API_KEY is set');
+  if (prod && e.SHOPIFY_API_KEY && !e.SHOPIFY_DISTRIBUTION) {
+    throw new EnvError('SHOPIFY_DISTRIBUTION (custom|public) is required in production when SHOPIFY_API_KEY is set: it must match the app\'s distribution method in the Dev Dashboard');
+  }
+  const SHOPIFY_DISTRIBUTION = e.SHOPIFY_DISTRIBUTION ?? 'public';
   if (e.VERTEX_TRYON_ENABLED && !e.VERTEX_PROJECT) throw new EnvError('VERTEX_PROJECT is required when VERTEX_TRYON_ENABLED=1');
   const devSecrets = !e.JWT_SECRET || !e.SHOP_KEY_PEPPER || !e.ENCRYPTION_KEY;
-  return { ...e, JWT_SECRET, SHOP_KEY_PEPPER, ENCRYPTION_KEY, devSecrets };
+  return { ...e, SHOPIFY_DISTRIBUTION, JWT_SECRET, SHOP_KEY_PEPPER, ENCRYPTION_KEY, devSecrets };
 }
 
 /** Test helper: a fully valid env with random secrets and overrides. */

@@ -7,6 +7,7 @@ import {
   SHOPIFY_METAFIELD_NAMESPACE,
   fromShopifyProduct,
   indexShopifyMetafields,
+  isCurtainMetafieldNamespace,
   shopifyExternalId,
   toShopifyMetafields,
   type MappingWarning,
@@ -182,6 +183,16 @@ describe('helpers', () => {
     expect(shopifyExternalId('gid://shopify/Product/8812345678901')).toBe('8812345678901');
     expect(shopifyExternalId('gid://shopify/Product/42?foo=bar')).toBe('42');
     expect(shopifyExternalId('already-plain')).toBe('already-plain');
+  });
+
+  it('reads the namespace in the form the Admin API returns it (app--{id}--curtain), never another app\'s', () => {
+    const live = METAFIELDS.map((m) => (m.namespace === '$app:curtain' ? { ...m, namespace: 'app--2841567--curtain' } : m));
+    expect(fromShopifyProduct(PRODUCT, live)).toEqual(fromShopifyProduct(PRODUCT, METAFIELDS));
+    expect(fromShopifyProduct(PRODUCT, live).sizeChart).toEqual(WRAP.sizeChart);
+    expect(isCurtainMetafieldNamespace('app--2841567--curtain')).toBe(true);
+    expect(isCurtainMetafieldNamespace('app--2841567--curtain-x')).toBe(false);
+    expect(isCurtainMetafieldNamespace('app--2841567')).toBe(false);
+    expect(isCurtainMetafieldNamespace('other_app')).toBe(false);
   });
 
   it('indexShopifyMetafields prefers jsonValue and strips namespaced keys', () => {

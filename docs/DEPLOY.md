@@ -345,11 +345,15 @@ address must answer before Shopify sends anything to it.
    - **Client secret**. Goes **only** into `SHOPIFY_API_SECRET` in `/etc/curtain/curtain.env`. It
      never goes into GitHub: the api uses it for webhook HMACs, session tokens and token exchange,
      and the CLI does not need it.
-4. **CLI token.** Partner Dashboard → **Settings** → **CLI token** → **Manage tokens** → generate
-   one, with the shortest expiry you are willing to renew. Store it as the GitHub secret
-   `SHOPIFY_CLI_PARTNERS_TOKEN`. The token can deploy **every** app in the Partner organisation, so
-   treat it like the deploy key (see "Harden" below). Renew it before it expires; a deploy with an
-   expired token fails at the deploy step with an authentication error.
+4. **CLI credential for CI.** shopify.dev now documents a **service account** for CI
+   (https://shopify.dev/docs/apps/launch/deployment/deploy-in-ci-cd-pipeline): create one with the
+   **App development** permission (Dev Dashboard → the app → Settings, or the organisation's
+   Settings → Users → Security) and store its token as the GitHub secret
+   `SHOPIFY_SERVICE_ACCOUNT_TOKEN`. Only Shopify CLI 5.x reads that variable, so the workflow then
+   installs `SHOPIFY_CLI_VERSION_SERVICE_ACCOUNT` (5.0.1) instead of 4.9.5. The older Partner
+   Dashboard **CLI token** (`SHOPIFY_CLI_PARTNERS_TOKEN`) still works with both CLI lines, if your
+   dashboard still offers it. Either credential can deploy apps in the organisation, so treat it like
+   the deploy key (see "Harden" below) and renew it before it expires.
 5. **Development store.** Partner Dashboard → **Stores** → **Add store** → **Create development
    store** (for testing apps). Use it for the dry run before the pilot. Charges on development stores
    are always test charges (D17, `shop.plan.partnerDevelopment`).
@@ -362,15 +366,24 @@ address must answer before Shopify sends anything to it.
      in to their store admin and approves the scopes (products only, D7).
    - The distribution method cannot be changed once chosen. This custom app serves the pilot shop
      (and other stores in the same Plus organisation, if any). The public App Store listing will be
-     a separate app with its own client id; point `SHOPIFY_API_KEY` at that app when the time comes.
+     a separate app with its own client id; point `SHOPIFY_API_KEY` at that app when the time comes
+     (docs/LAUNCH-SHOPIFY.md, "App Store listing later", explains what does not carry over).
    - Custom apps are not reviewed by Shopify and the expiring-token deadline does not apply to them
-     (checklist, Summary). They can still bill through `appSubscriptionCreate` (D17).
+     (checklist, Summary). They **cannot** charge through Shopify's billing system
+     ("Can't charge merchants through Shopify's app billing system",
+     https://shopify.dev/docs/apps/launch/distribution). Set `SHOPIFY_DISTRIBUTION=custom` in
+     `/etc/curtain/curtain.env` (the bootstrap writes it): the api then grants the plan on install and
+     the admin shows the plan as arranged with Curtain instead of a Subscribe button. With
+     `SHOPIFY_API_KEY` set, the api will not start in production without this line, and
+     `infra/scripts/write-env.sh` stops the deploy if it is missing or not `custom`/`public`.
+     Preflight after the first deploy: `docker compose logs api | grep 'shopify app configured'`
+     shows `"distribution":"custom"`.
 
 ### Set once: GitHub
 
 | Kind | Name | Value |
 |---|---|---|
-| repository secret | `SHOPIFY_CLI_PARTNERS_TOKEN` | the CLI token (step 4) |
+| repository secret | `SHOPIFY_SERVICE_ACCOUNT_TOKEN` (or `SHOPIFY_CLI_PARTNERS_TOKEN`) | the CI credential (step 4) |
 | repository secret | `SHOPIFY_API_KEY` | the client id (step 3) |
 | repository variable | `DOMAIN` | the same bare domain the VPS deploy uses, e.g. `curtain.fit` |
 | repository variable | `SHOPIFY_APP_HANDLE` | optional, default `curtain`; the app's handle (its admin URL) |
@@ -382,7 +395,7 @@ with no rules, so the repository secrets above work as they are.
 any branch. To put the CLI token behind your approval, as §5 above does for the VPS key:
 
 1. Settings → Environments → `shopify` → **Required reviewers**: add yourself.
-2. Add `SHOPIFY_CLI_PARTNERS_TOKEN` (and `SHOPIFY_API_KEY`) as **environment secrets** there, then
+2. Add the CI credential (and `SHOPIFY_API_KEY`) as **environment secrets** there, then
    delete the repository secrets.
 3. Optional: **Deployment branches** → `release` and `main` only. This also turns off the
    `claude/**` trigger below (those runs would stop at the environment), so leave it open while
@@ -430,7 +443,8 @@ What the run does:
    `https://api.<DOMAIN>/shopify/webhooks`. It validates the result against the api's topic list,
    scopes and managed install before anything is sent.
 5. Installs the Shopify CLI at the pinned version (`SHOPIFY_CLI_VERSION`, `4.9.5`, the last 4.x;
-   5.0 is a new major and should be adopted on purpose) and runs
+   with a service-account token `SHOPIFY_CLI_VERSION_SERVICE_ACCOUNT`, `5.0.1`, because 4.x does not
+   read that variable) and runs
    `shopify app deploy --config prod` with `--allow-updates` (release) or `--no-release` (version
    only). `--allow-deletes` is never passed: removing an extension or a webhook needs a person.
 6. Deletes the rendered config.
@@ -447,8 +461,9 @@ SHOPIFY_API_KEY=<client id> DOMAIN=<domain> pnpm --filter @curtain/shopify-app c
 
 ### After the first released version
 
-1. In the Partner Dashboard, check the app's URLs: the app URL is `https://api.<domain>/shopify/admin`
-   (`include_config_on_deploy = true` pushes it from the toml).
+1. In the Dev Dashboard, check the app's URLs: the app URL is `https://api.<domain>/shopify/admin`
+   (`shopify app deploy` always pushes the configuration from the toml; the old
+   `include_config_on_deploy` key is no longer supported and has been removed from the template).
 2. Install on the development store (Distribution → the install link, or Test your app), open the app
    in the admin once (this runs the token exchange), add the "Try it on" block on a product page
    with the onboarding deep link, and check one product.

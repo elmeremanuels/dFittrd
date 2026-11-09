@@ -13,10 +13,16 @@ name: shopify-deploy
 # packages/shopify-app/scripts/deploy-plan.mjs makes that decision (unit-tested); a claude/** push
 # that did not touch deploy.txt ends green at the plan job.
 #
-# Needs repository secrets SHOPIFY_CLI_PARTNERS_TOKEN (Partner Dashboard → Settings → CLI token)
-# and SHOPIFY_API_KEY (the app's client id), and repository variable DOMAIN. The deploy job runs
-# in the `shopify` environment, so the token can be moved to an environment secret behind a
-# required reviewer without changing this file.
+# Needs one CLI credential and SHOPIFY_API_KEY (the app's client id) as secrets, and repository
+# variable DOMAIN:
+#   - SHOPIFY_SERVICE_ACCOUNT_TOKEN (preferred; what shopify.dev documents for CI since the Dev
+#     Dashboard: a service account with the "App development" permission,
+#     https://shopify.dev/docs/apps/launch/deployment/deploy-in-ci-cd-pipeline). Only Shopify CLI 5.x
+#     reads it (checked in the 4.9.5 and 5.0.1 packages), so with it the job installs
+#     SHOPIFY_CLI_VERSION_SERVICE_ACCOUNT;
+#   - or SHOPIFY_CLI_PARTNERS_TOKEN (the older Partner Dashboard CLI token; CLI 4.9.5 and 5.x read it).
+# The deploy job runs in the `shopify` environment, so the credential can be moved to an environment
+# secret behind a required reviewer without changing this file.
 on:
   workflow_dispatch:
     inputs:
@@ -49,6 +55,10 @@ env:
   PNPM_VERSION: '10.28.0'
   # Exact pin. 4.9.5 is the last 4.x (27 Oct 2026); 5.0 is a new major, adopt it deliberately.
   SHOPIFY_CLI_VERSION: '4.9.5'
+  # With a service-account token: the first CLI line that reads SHOPIFY_SERVICE_ACCOUNT_TOKEN. Its
+  # `app deploy` flags used below (--config --no-release --allow-updates --version --message
+  # --source-control-url --no-color) are unchanged from 4.9.5 (oclif manifest of 5.0.1).
+  SHOPIFY_CLI_VERSION_SERVICE_ACCOUNT: '5.0.1'
 
 jobs:
   plan:
@@ -110,11 +120,14 @@ jobs:
     steps:
       - name: guard · secrets and variables
         env:
+          HAS_SERVICE_ACCOUNT_TOKEN: ${{ secrets.SHOPIFY_SERVICE_ACCOUNT_TOKEN != '' }}
           HAS_PARTNERS_TOKEN: ${{ secrets.SHOPIFY_CLI_PARTNERS_TOKEN != '' }}
           HAS_API_KEY: ${{ secrets.SHOPIFY_API_KEY != '' }}
         run: |
           missing=()
-          [ "$HAS_PARTNERS_TOKEN" = true ] || missing+=("secret SHOPIFY_CLI_PARTNERS_TOKEN (Partner Dashboard → Settings → CLI token)")
+          if [ "$HAS_SERVICE_ACCOUNT_TOKEN" != true ] && [ "$HAS_PARTNERS_TOKEN" != true ]; then
+            missing+=("secret SHOPIFY_SERVICE_ACCOUNT_TOKEN (a service account with the App development permission; Dev Dashboard → the app → Settings) or SHOPIFY_CLI_PARTNERS_TOKEN (older Partner Dashboard CLI token)")
+          fi
           [ "$HAS_API_KEY" = true ] || missing+=("secret SHOPIFY_API_KEY (the app's client id: Partner Dashboard → Apps → the app → Client credentials)")
           [ -n "$DOMAIN" ] || missing+=("variable DOMAIN (e.g. curtain.fit; the api must answer on https://api.<DOMAIN>)")
           if [ "${#missing[@]}" -gt 0 ]; then
@@ -163,18 +176,25 @@ jobs:
           pnpm configure prod
 
       - name: install the Shopify CLI
+        env:
+          HAS_SERVICE_ACCOUNT_TOKEN: ${{ secrets.SHOPIFY_SERVICE_ACCOUNT_TOKEN != '' }}
         run: |
-          npm install --global --no-audit --no-fund "@shopify/cli@${SHOPIFY_CLI_VERSION}"
+          cli="$SHOPIFY_CLI_VERSION"
+          if [ "$HAS_SERVICE_ACCOUNT_TOKEN" = true ]; then cli="$SHOPIFY_CLI_VERSION_SERVICE_ACCOUNT"; fi
+          npm install --global --no-audit --no-fund "@shopify/cli@${cli}"
           shopify version
 
       - name: shopify app deploy
         id: deploy
         working-directory: packages/shopify-app
         env:
+          SHOPIFY_SERVICE_ACCOUNT_TOKEN: ${{ secrets.SHOPIFY_SERVICE_ACCOUNT_TOKEN }}
           SHOPIFY_CLI_PARTNERS_TOKEN: ${{ secrets.SHOPIFY_CLI_PARTNERS_TOKEN }}
           SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
           CI: 'true'
         run: |
+          # Exactly one credential reaches the CLI: the service account when it is set.
+          if [ -n "$SHOPIFY_SERVICE_ACCOUNT_TOKEN" ]; then unset SHOPIFY_CLI_PARTNERS_TOKEN; else unset SHOPIFY_SERVICE_ACCOUNT_TOKEN; fi
           if [ "$RELEASE" = true ]; then mode=--allow-updates; else mode=--no-release; fi
           # --allow-updates releases and accepts added or changed extensions and config; removals still
           # need a person (--allow-deletes is deliberately not passed).
@@ -186,10 +206,10 @@ jobs:
         run: |
           {
             echo "### Shopify deploy: ${{ job.status }}"
-            echo "- version: \`$VERSION\` ($( [ "$RELEASE" = true ] && echo released || echo 'not released: Partner Dashboard → the app → Versions → Release' ))"
+            echo "- version: \`$VERSION\` ($( [ "$RELEASE" = true ] && echo released || echo 'not released: Dev Dashboard → the app → Versions → Release' ))"
             echo "- application_url: https://api.$DOMAIN/shopify/admin"
             echo "- webhooks: https://api.$DOMAIN/shopify/webhooks"
-            echo "- Shopify CLI $SHOPIFY_CLI_VERSION"
+            echo "- Shopify CLI $(shopify version 2>/dev/null || echo "$SHOPIFY_CLI_VERSION")"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: remove the rendered config

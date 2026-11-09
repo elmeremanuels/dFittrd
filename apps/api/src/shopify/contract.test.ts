@@ -14,7 +14,9 @@
  * (marked in its source) are not Shopify's behaviour until a store confirms them, and nothing here
  * touches Liquid, the theme editor, App Bridge or the admin iframe.
  */
+import { readFileSync } from 'node:fs';
 import { eq } from 'drizzle-orm';
+import { buildClientSchema, getVariableValues, Kind, NoDeprecatedCustomRule, parse, specifiedRules, validate, type IntrospectionQuery, type OperationDefinitionNode } from 'graphql';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { CHART_TEMPLATES } from '@curtain/schema';
 import { createAdminClient, METAFIELD_DEFINITION_INPUTS, runProductBackfill, syncProductNode } from '@curtain/shopify-app';
@@ -38,6 +40,9 @@ interface Harness {
   clock: { at: Date };
 }
 
+/** Every fake of this file, for the optional real-schema check at the end. */
+const allFakes: FakeShopify[] = [];
+
 async function harness(distribution: 'public' | 'custom', envDistribution: 'public' | 'custom' = distribution): Promise<Harness> {
   const clock = { at: new Date('2026-11-09T09:00:00Z') };
   const now = () => new Date(clock.at);
@@ -50,6 +55,7 @@ async function harness(distribution: 'public' | 'custom', envDistribution: 'publ
     deliver: async ({ url, headers, body }) => (await t.app.inject({ method: 'POST', url, headers, payload: body })).statusCode,
   });
   t.fetchMock.on(() => true, (url, init) => fake.fetch(url, init));
+  allFakes.push(fake);
   return { t, fake, clock };
 }
 
@@ -236,6 +242,23 @@ describe('contract: public-distribution app on an AUD development store', () => 
     await drainAll(h.t);
   });
 
+  it('11b. webhooks: a claim abandoned in "received" (crash or DB outage before finish) is reprocessed once stale, not acked as a duplicate', async () => {
+    expect(await h.fake.productUpdated(SHOP, dress)).toBe(200);
+    const d = h.fake.webhooks.at(-1)!;
+    // what a process restart between the insert and finish() leaves behind
+    await h.t.handle.db.update(webhookLog).set({ status: 'received', processedAt: null, error: null }).where(eq(webhookLog.eventId, d.webhookId));
+    const redeliver = () => h.t.app.inject({ method: 'POST', url: '/shopify/webhooks', headers: d.headers, payload: d.body });
+    // a redelivery while the claim may still be live is acknowledged, not processed twice
+    expect((await redeliver()).json()).toEqual({ ok: true, duplicate: true });
+    h.clock.at = new Date(h.clock.at.getTime() + 31_000);
+    const res = await redeliver();
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true });
+    expect((await h.t.handle.db.query.webhookLog.findFirst({ where: eq(webhookLog.eventId, d.webhookId) }))?.status).toBe('processed');
+    expect((await redeliver()).json()).toEqual({ ok: true, duplicate: true });
+    await drainAll(h.t);
+  });
+
   it('12. uninstall: app/uninstalled drops the shop to free, pauses it, deletes the tokens; Shopify refuses the old token', async () => {
     const token = (await h.t.app.ctx.shopify.accessTokenFor(SHOP))!;
     await h.fake.uninstall(SHOP);
@@ -340,6 +363,7 @@ describe('contract: custom-distribution app (the pilot)', () => {
 
   it('an operator pause survives the next admin open; uninstall → free; reinstall → granted again', async () => {
     const id = (await shopRow(h.t, SHOP))!.id;
+    expect((await shopRow(h.t, SHOP))?.settings.arrangedPlan).toBe('curtain');
     await h.t.handle.db.update(shops).set({ paused: true }).where(eq(shops.id, id));
     await openAdmin(h, SHOP);
     expect((await shopRow(h.t, SHOP))?.paused).toBe(true);
@@ -348,6 +372,28 @@ describe('contract: custom-distribution app (the pilot)', () => {
     h.fake.install(SHOP);
     await openAdmin(h, SHOP);
     expect(await shopRow(h.t, SHOP)).toMatchObject({ plan: 'curtain', paused: false, billingRef: null });
+  });
+
+  it('an operator downgrade to free sticks across admin opens; arrangedPlan=free also survives uninstall + reinstall', async () => {
+    const id = (await shopRow(h.t, SHOP))!.id;
+    // downgrade by hand: the next admin open must not grant the plan back
+    await h.t.handle.db.update(shops).set({ plan: 'free' }).where(eq(shops.id, id));
+    await openAdmin(h, SHOP);
+    expect((await shopRow(h.t, SHOP))?.plan).toBe('free');
+    // revoke: an uninstall + reinstall cannot restore it either
+    const row = (await shopRow(h.t, SHOP))!;
+    await h.t.handle.db.update(shops).set({ settings: { ...row.settings, arrangedPlan: 'free' } }).where(eq(shops.id, id));
+    await h.fake.uninstall(SHOP);
+    h.fake.install(SHOP);
+    expect((await openAdmin(h, SHOP)).statusCode).toBe(200);
+    expect((await shopRow(h.t, SHOP))?.plan).toBe('free');
+    // re-arranged: arrangedPlan=curtain applies at the next reinstall
+    const r2 = (await shopRow(h.t, SHOP))!;
+    await h.t.handle.db.update(shops).set({ settings: { ...r2.settings, arrangedPlan: 'curtain' } }).where(eq(shops.id, id));
+    await h.fake.uninstall(SHOP);
+    h.fake.install(SHOP);
+    await openAdmin(h, SHOP);
+    expect(await shopRow(h.t, SHOP)).toMatchObject({ plan: 'curtain', paused: false });
   });
 
   it('no GraphQL violations', () => {
@@ -371,5 +417,45 @@ describe('contract: SHOPIFY_DISTRIBUTION=public on an app the Dev Dashboard set 
     } finally {
       await h.t.close();
     }
+  });
+});
+
+/**
+ * Optional: the same documents against Shopify's REAL 2026-10 Admin schema, not the hand-written
+ * excerpt. Off by default (no network in the suite). To run it, fetch the public introspection once
+ * (no credentials, no store) and point the env var at the file:
+ *   pnpm --filter @curtain/api shopify:schema 2026-10 /tmp/admin-2026-10.json
+ *   CURTAIN_SHOPIFY_INTROSPECTION=/tmp/admin-2026-10.json pnpm --filter @curtain/api exec vitest run src/shopify/contract.test.ts
+ */
+/** Product.featuredImage / Product.images: still served in 2026-10, to move to featuredMedia / media. */
+const KNOWN_DEPRECATED = ['The field Product.featuredImage is deprecated. Use `featuredMedia` instead.', 'The field Product.images is deprecated. Use `media` instead.'];
+const INTROSPECTION = process.env.CURTAIN_SHOPIFY_INTROSPECTION;
+describe.skipIf(!INTROSPECTION)('contract: every document against the real Admin schema (CURTAIN_SHOPIFY_INTROSPECTION)', () => {
+  it('validates with zero errors; the deprecated fields in use are exactly the known ones', () => {
+    const json = JSON.parse(readFileSync(INTROSPECTION!, 'utf8')) as { data: IntrospectionQuery };
+    const schema = buildClientSchema(json.data);
+    const docs = new Map<string, Record<string, unknown>[]>();
+    for (const f of allFakes) for (const [q, vars] of f.documents) docs.set(q, [...(docs.get(q) ?? []), ...vars]);
+    expect(docs.size).toBeGreaterThanOrEqual(14);
+    const errors: string[] = [];
+    const deprecated = new Set<string>();
+    let coerced = 0;
+    for (const [q, calls] of docs) {
+      const doc = parse(q);
+      const label = q.slice(0, 60).replace(/\s+/g, ' ');
+      for (const e of validate(schema, doc, specifiedRules)) errors.push(`${label}…: ${e.message}`);
+      for (const e of validate(schema, doc, [NoDeprecatedCustomRule])) deprecated.add(e.message);
+      // The variables the code really sent, coerced against the real input types (enums, required fields, scalars).
+      const op = doc.definitions.find((d): d is OperationDefinitionNode => d.kind === Kind.OPERATION_DEFINITION)!;
+      for (const vars of calls) {
+        const r = getVariableValues(schema, op.variableDefinitions ?? [], vars);
+        if (r.errors) errors.push(...r.errors.map((e) => `${label}… variables: ${e.message}`));
+        coerced++;
+      }
+    }
+    expect(errors).toEqual([]);
+    expect(coerced).toBeGreaterThan(20);
+    // Recorded so a newly deprecated field shows up as a diff here.
+    expect([...deprecated].sort()).toEqual(KNOWN_DEPRECATED);
   });
 });

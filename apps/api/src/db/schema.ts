@@ -65,8 +65,14 @@ export interface ShopSettings {
   trialStartedAt?: string;
   /** Set by migration 0004 on shops that were on the retired `starter` / `pro` plans. */
   legacyPlan?: string;
-  /** Shopify: subscription status from app_subscriptions/update. */
+  /** Shopify: subscription status from app_subscriptions/update (`ARRANGED` under custom distribution). */
   subscriptionStatus?: string;
+  /**
+   * Shopify custom distribution only: the plan arranged with the merchant outside Shopify billing.
+   * Set to `curtain` on the first install; the operator sets `free` to revoke it. Survives uninstall,
+   * and a reinstall grants exactly this (so uninstall + reinstall cannot undo a revoke).
+   */
+  arrangedPlan?: 'curtain' | 'free';
   /**
    * The optional 3D estimate in the overlay (D16, D17): off unless switched on by hand for a pilot
    * until 3D pricing is decided. Without it no asset ref is ever handed out.

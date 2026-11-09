@@ -17,6 +17,7 @@
     "start": "node dist/migrate.js && node dist/server.js",
     "migrate": "node dist/migrate.js",
     "asset:import": "tsx src/scripts/import-asset.ts",
+    "shopify:schema": "tsx src/scripts/fetch-admin-schema.ts",
     "db:generate": "drizzle-kit generate",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",

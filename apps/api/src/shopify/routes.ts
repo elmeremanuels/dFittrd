@@ -21,7 +21,7 @@
  * resets the shop to `free` with no subscription, a reinstall starts from that state, and every
  * token exchange reconciles the plan with the subscriptions Shopify reports (`reconcileSubscription`).
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { adminAppUrl, adminContentSecurityPolicy, CURTAIN_PLAN, renderAdminPage, setAppDataMetafields, ShopifyGraphqlError, type ActiveSubscription } from '@curtain/shopify-app';
 import { z } from 'zod';
@@ -112,11 +112,17 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
           if (row.uninstalledAt) await clearSettings(db, row.id, SUBSCRIPTION_KEYS);
         }
         if (!row.apiKeyPrefix) await issueMerchantKeys(db, env, row);
-        // Custom distribution cannot bill through Shopify: the plan is arranged with the merchant, so
-        // an install (and a reinstall, which reset the shop to `free` above) is granted it by hand.
-        // A shop already on `curtain` is left alone, so a pause set by the operator survives.
-        if (env.SHOPIFY_DISTRIBUTION === 'custom' && (row.uninstalledAt || row.plan !== 'curtain')) {
-          await updateSettings(db, row.id, { subscriptionStatus: 'ARRANGED' }, { plan: 'curtain', paused: false, billingRef: null, periodStart: now().toISOString().slice(0, 10) });
+        // Custom distribution cannot bill through Shopify: the plan is arranged with the merchant. Only
+        // the first install and a reinstall (which reset the shop to `free` above) apply the arranged
+        // plan; every other admin open leaves the row alone, so an operator pause or a downgrade to
+        // `free` sticks. settings.arrangedPlan (default `curtain`) is the operator's revoke switch.
+        if (env.SHOPIFY_DISTRIBUTION === 'custom' && (row.uninstalledAt || !row.apiKeyPrefix)) {
+          const arranged = row.settings.arrangedPlan ?? 'curtain';
+          if (arranged === 'curtain') {
+            await updateSettings(db, row.id, { subscriptionStatus: 'ARRANGED', arrangedPlan: 'curtain' }, { plan: 'curtain', paused: false, billingRef: null, periodStart: now().toISOString().slice(0, 10) });
+          } else {
+            req.log.info({ shopDomain }, 'custom distribution: arranged plan is revoked (settings.arrangedPlan=free); shop stays on free');
+          }
         }
         const { accessToken: at, scope: sc, ...expiring } = tok;
         await shopify.saveOfflineSession(row.id, shopDomain, at, sc, expiring);
@@ -238,16 +244,26 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
 
     let logged = await db
       .insert(webhookLog)
-      .values({ platform: 'shopify', shopId: shop?.id ?? null, shopDomain, topic, eventId, externalId: externalIdOf(payload), payload: loggablePayload(topic, payload), status: 'received' })
+      .values({ platform: 'shopify', shopId: shop?.id ?? null, shopDomain, topic, eventId, externalId: externalIdOf(payload), payload: loggablePayload(topic, payload), status: 'received', receivedAt: now() })
       .onConflictDoNothing({ target: [webhookLog.platform, webhookLog.eventId] })
       .returning({ id: webhookLog.id });
     if (logged.length === 0) {
       // A delivery we have seen. Shopify retries a non-2xx answer (8 times over 4 hours), so a
       // delivery whose processing failed is claimed again and reprocessed; any other is acknowledged.
+      // A row still 'received' after WEBHOOK_STALE_CLAIM_MS is an abandoned claim (the process died,
+      // or the DB failed inside finish()), and is claimed again too. While a row is 'received',
+      // processedAt holds the time of the latest claim (receivedAt for the first one).
+      const staleBefore = new Date(now().getTime() - WEBHOOK_STALE_CLAIM_MS);
       logged = await db
         .update(webhookLog)
-        .set({ status: 'received', error: null, processedAt: null })
-        .where(and(eq(webhookLog.platform, 'shopify'), eq(webhookLog.eventId, eventId), eq(webhookLog.status, 'failed')))
+        .set({ status: 'received', error: null, processedAt: now() })
+        .where(
+          and(
+            eq(webhookLog.platform, 'shopify'),
+            eq(webhookLog.eventId, eventId),
+            or(eq(webhookLog.status, 'failed'), and(eq(webhookLog.status, 'received'), sql`coalesce(${webhookLog.processedAt}, ${webhookLog.receivedAt}) < ${staleBefore.toISOString()}::timestamptz`)),
+          ),
+        )
         .returning({ id: webhookLog.id });
       if (logged.length === 0) return reply.code(200).send({ ok: true, duplicate: true });
     }
@@ -310,6 +326,12 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
     return reply.code(200).send({ ok: true });
   });
 };
+
+/**
+ * A webhook row left in 'received' this long is treated as abandoned and may be claimed again by
+ * Shopify's redelivery. Shopify gives a delivery 5 s to answer, so a live claim is far younger.
+ */
+export const WEBHOOK_STALE_CLAIM_MS = 30_000;
 
 const CUSTOM_BILLING_MESSAGE = 'This Curtain app is distributed to your store directly (custom distribution); Shopify does not let it charge through Shopify billing. Your plan is arranged with Curtain.';
 

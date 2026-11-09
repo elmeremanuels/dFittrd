@@ -158,6 +158,11 @@ export class FakeShopify {
   readonly violations: Violation[] = [];
   /** Deprecated fields the code selects (Product.featuredImage, Product.images in 2026-10). */
   readonly deprecatedUses = new Set<string>();
+  /**
+   * Every distinct GraphQL document the code sent (bulk inner queries included) with the variables
+   * of each call, for the optional check against the real schema (contract.test.ts).
+   */
+  readonly documents = new Map<string, Record<string, unknown>[]>();
   readonly webhooks: WebhookDelivery[] = [];
   /** Access tokens: value → shop, expiry, revoked. */
   private readonly tokens = new Map<string, { shop: string; expiresAt: Date | null; revoked: boolean }>();
@@ -530,6 +535,7 @@ export class FakeShopify {
       return json({ errors: '[API] Invalid API key or access token (unrecognized login or wrong password)' }, 401);
     }
     const { query, variables = {} } = JSON.parse(String(init.body)) as { query: string; variables?: Record<string, unknown> };
+    this.documents.set(query, [...(this.documents.get(query) ?? []), variables]);
     let doc: DocumentNode;
     try {
       doc = parse(query);
@@ -564,6 +570,7 @@ export class FakeShopify {
 
   /** Validate a bulk query document the way bulkOperationRunQuery does (schema + documented limits). */
   bulkQueryProblems(query: string): string[] {
+    if (!this.documents.has(query)) this.documents.set(query, []);
     let doc: DocumentNode;
     try {
       doc = parse(query);

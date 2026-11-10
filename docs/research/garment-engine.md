@@ -188,6 +188,7 @@ Status: **OK** = commercial use allowed for us; **Condition** = allowed under a 
 | Garment3DGen, GarmentDreamer | Garment | CC BY-NC 4.0 | **Banned** |
 | SMPLicit | Garment / body | MPI non-commercial | **Banned** (`smpl`) |
 | Sewformer, GarVerseLOD, Gaussian Garments, GarmentCrafter | Garment | No licence file | **Banned** |
+| NvidiaWarp-GarmentCode ([licence](https://github.com/maria-korosteleva/NvidiaWarp-GarmentCode/blob/main/LICENSE.md)), GarmentCode's simulator fork; Design2GarmentCode's default simulation path points to it | Garment simulation | NVIDIA Source Code License, clause 3.3 (research or evaluation only) | **Banned** (`nvidiawarp-garmentcode`; added 10 Nov 2026, docs/research/shortcut-to-step3.md). GarmentCode itself (MIT) stays OK: drape its patterns with Newton, libuipc or Blender on the server |
 | Anny, MHR | Body | Apache-2.0 | OK |
 | MakeHuman / MPFB2 | Body | Assets CC0, code GPLv3 | OK (assets only) |
 | SMPL, SMPL+H, SMPL-X | Body | MPI non-commercial; commercial via Max Planck Innovation | **Banned** (`smpl`, `smpl-x`) unless we buy a licence |

@@ -46,6 +46,7 @@ describe('banned-model list (garment engine licence check, docs/research/garment
       'zhongjinluo/GarVerseLOD',
       'eth-ait/Gaussian-Garments',
       'humansensinglab/garment-crafter',
+      'maria-korosteleva/NvidiaWarp-GarmentCode',
       'SMPL',
       'SMPL+H',
       'smplx',

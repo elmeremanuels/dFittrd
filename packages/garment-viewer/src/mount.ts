@@ -13,7 +13,7 @@ import { loadBundleFrom, type FetchLike } from './bundle';
 import { checkBundle, gradingLabel } from './bundleCheck';
 import { isSettled, stepCloth } from './cloth';
 import { DrapePool } from './drapePool';
-import { drapeJobOf, openSession, prepareFit, viewerMaterial, type FitInstance } from './engine';
+import { DEFAULT_DRAPE, drapeJobOf, openSession, prepareFit, viewerMaterial, type DrapeOptions, type FitInstance } from './engine';
 import { Figure, Stage, meshGeometry } from './scene';
 
 export type GarmentViewState = 'loading' | 'draping' | 'settled' | 'error';
@@ -32,6 +32,8 @@ export interface MountOptions {
   /** Called on every state change (the overlay shows a spinner, then the canvas). */
   onState?: (state: GarmentViewState) => void;
   fetch?: FetchLike;
+  /** Drape settings (step-3 control: cling switch, girth loops, waistband model); default `DEFAULT_DRAPE`, the drape as before. */
+  drape?: DrapeOptions;
 }
 
 export interface GarmentView {
@@ -118,7 +120,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
   const ensure = (label: string): Live => {
     let live = fits.get(label);
     if (live) return live;
-    const fit = prepareFit(session, avatar, field, opts.fit, label, material);
+    const fit = prepareFit(session, avatar, field, opts.fit, label, material, 1.5, opts.drape ?? DEFAULT_DRAPE);
     live = { fit, jobId: null, dirty: true };
     fits.set(label, live);
     const l = live;

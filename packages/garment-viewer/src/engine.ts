@@ -14,7 +14,7 @@ import { insideCanonical, makeCollider, type Avatar, type BodyField } from './bo
 import { sample } from './collide';
 import type { SpikeBundle } from './bundle';
 import type { DrapeJob } from './drapeJob';
-import { clothParams, createCloth, isSettled, settlePins, stepCloth, type Cloth, type ClothMaterial, type ClothParams } from './cloth';
+import { clothParams, createCloth, isSettled, loopGirth, setLoops, settlePins, stepCloth, type Cloth, type ClothMaterial, type ClothParams, type GirthLoop } from './cloth';
 import { fitLines, gapsForSize, heatColors, heatField, placeGarment, placementMorph, sizeEntry, type FitLine, type HeatField, type Placement } from './fitting';
 
 // ---------------------------------------------------------------------------
@@ -119,8 +119,206 @@ export interface FitInstance {
   field: BodyField;
   /** Garment shoulder width of this size (grading.json `shoulder_width`), cm, when the chart has one. */
   shoulderWidthCm: number | undefined;
-  /** Bottoms: where the waistband rests (`slideWaistband`); null for other garments. */
+  /** Bottoms: where the waistband rests (`slideWaistband`, or `fitElasticBand` with a band spec); null for other garments. */
   band: BandSlide | null;
+  /** The drape options this fit was made with. */
+  options: DrapeOptions;
+  /** Girth loops installed on the cloth (`anchorLoops`): ring name and its minimum girth, cm. */
+  loops: { ring: string; minGirthCm: number; particles: number }[];
+}
+
+// ---------------------------------------------------------------------------
+// Step-3 control (docs/research/shortcut-to-step3.md §4, days 1-2)
+// ---------------------------------------------------------------------------
+
+/**
+ * A stretch waistband as measured on the garment: relaxed girth (lying flat, doubled) and the girth
+ * it stretches to at most, both of `measuredSize`. Other sizes are graded from it by
+ * `gradeCmPerSize` per chart step (relaxed), keeping the measured stretch ratio.
+ */
+export interface WaistbandSpec {
+  relaxedCm: number;
+  stretchedCm: number;
+  /** The size that was measured (default: the grading's base size). */
+  measuredSize?: string;
+  /** Relaxed-girth step per size, cm (default: the chart's hip step, else 5). */
+  gradeCmPerSize?: number;
+  /** True while the numbers are assumptions, not a tape measurement: the fit line says so. */
+  assumed: boolean;
+}
+
+export interface DrapeOptions {
+  /** The cling pull towards the body axis (`clothParams`). */
+  cling: boolean;
+  /** Girth loops at the hip, waist and hem rings (`anchorLoops`): the share of the graded girth a loop may not fold below; 0 = off. */
+  loopRetain: number;
+  /** Bottoms with a stretch waistband: the band model (`fitElasticBand`); null = not modelled. */
+  waistband: WaistbandSpec | null;
+  /** Rings that get a girth loop (default all of `LOOP_RINGS`). */
+  loopRings?: readonly LoopRing[];
+}
+
+export const LOOP_RINGS = ['waist', 'hip', 'hem'] as const;
+export type LoopRing = (typeof LOOP_RINGS)[number];
+
+/**
+ * Drape options from URL-style parameters (the spike page, the sizes-drape script): `cling=0`,
+ * `loops=<retain>` (cling stays as set), `rings=hip,waist`, `band=<relaxed>:<stretched>` in cm of the
+ * base size (an assumption unless `bandMeasured=1`). Anything missing keeps `DEFAULT_DRAPE`.
+ */
+export function drapeOptionsFrom(get: (key: string) => string | null): DrapeOptions {
+  const o: DrapeOptions = { ...DEFAULT_DRAPE };
+  if (get('cling') === '0') o.cling = false;
+  const retain = Number(get('loops'));
+  if (Number.isFinite(retain) && retain > 0 && retain <= 1.2) o.loopRetain = retain;
+  const rings = (get('rings') ?? '').split(',').filter((r): r is LoopRing => (LOOP_RINGS as readonly string[]).includes(r));
+  if (rings.length) o.loopRings = rings;
+  const [r, st] = (get('band') ?? '').split(':').map(Number);
+  if (r !== undefined && st !== undefined && Number.isFinite(r) && Number.isFinite(st) && r > 20 && st >= r) o.waistband = { relaxedCm: r, stretchedCm: st, assumed: get('bandMeasured') !== '1' };
+  return o;
+}
+
+/** What the viewer ships with: the drape as it was before the step-3 control (cling on, no loops, no band model). */
+export const DEFAULT_DRAPE: DrapeOptions = { cling: true, loopRetain: 0, waistband: null };
+
+/** Half-height of the slice of particles that forms a girth loop, cm. */
+export const LOOP_SLICE_CM = 1.5;
+/** A loop component needs at least this many particles. */
+export const LOOP_MIN_PARTICLES = 12;
+
+/**
+ * Girth loops of a fit: at the hip and waist rings (the mannequin's morph heights) and 2 cm above
+ * the hem, the free body-chain particles whose graded (rest) height is within `LOOP_SLICE_CM`, split
+ * into connected pieces along the mesh edges (the two leg tubes of a trouser are two loops). Each
+ * loop may not fold below `retain` × its graded girth (convex hull in x–z of the graded mesh: the
+ * per-size cut from grading.json). Rings with pinned particles are skipped (the pins hold them).
+ */
+export function anchorLoops(m: Mannequin, rest: ArrayLike<number>, indices: ArrayLike<number>, chains: ChainAssignment, pinned: Uint8Array, retain: number, only: readonly LoopRing[] = LOOP_RINGS): (GirthLoop & { ring: string })[] {
+  const n = chains.length;
+  let hemY = Infinity;
+  for (let i = 0; i < n; i++) if (chains[i] === 0) hemY = Math.min(hemY, rest[3 * i + 1]!);
+  const rings = ([['waist', m.morphHeights.waist], ['hip', m.morphHeights.hip], ['hem', hemY + 2]] as [LoopRing, number][]).filter(([r]) => only.includes(r));
+  const out: (GirthLoop & { ring: string })[] = [];
+  const adj = new Map<number, number[]>();
+  for (let t = 0; t < indices.length; t += 3) for (let k = 0; k < 3; k++) {
+    const a = indices[t + k]!, b = indices[t + ((k + 1) % 3)]!;
+    (adj.get(a) ?? adj.set(a, []).get(a)!).push(b);
+    (adj.get(b) ?? adj.set(b, []).get(b)!).push(a);
+  }
+  const scratch: number[] = [];
+  for (const [ring, y] of rings) {
+    const sel = new Uint8Array(n);
+    let pinnedHere = false;
+    for (let i = 0; i < n; i++) {
+      if (chains[i] !== 0 || Math.abs(rest[3 * i + 1]! - y) > LOOP_SLICE_CM) continue;
+      if (pinned[i]) pinnedHere = true;
+      else sel[i] = 1;
+    }
+    if (pinnedHere) continue;
+    const seen = new Uint8Array(n);
+    for (let i = 0; i < n; i++) {
+      if (!sel[i] || seen[i]) continue;
+      const comp: number[] = [];
+      const stack = [i];
+      seen[i] = 1;
+      while (stack.length) {
+        const v = stack.pop()!;
+        comp.push(v);
+        for (const u of adj.get(v) ?? []) if (sel[u] && !seen[u]) { seen[u] = 1; stack.push(u); }
+      }
+      if (comp.length < LOOP_MIN_PARTICLES) continue;
+      const g = loopGirth(rest, comp, 0, comp.length, scratch, new Int32Array(comp.length + 1));
+      if (g > 0) out.push({ ring, particles: comp, minGirthCm: retain * g });
+    }
+  }
+  return out;
+}
+
+/** Relaxed and stretched girth of the band in `size`, cm (`WaistbandSpec`). */
+export function bandFor(spec: WaistbandSpec, grading: SpikeBundle['grading'], size: string): { relaxedCm: number; stretchedCm: number } {
+  const step = sizeEntry(grading, size).step;
+  const step0 = sizeEntry(grading, spec.measuredSize ?? grading.baseSize).step;
+  let grade = spec.gradeCmPerSize;
+  if (grade === undefined) {
+    const hips = grading.sizes.filter((s) => s.targets.hip !== undefined).sort((a, b) => a.step - b.step);
+    const lo = hips[0], hi = hips[hips.length - 1];
+    grade = lo && hi && hi.step > lo.step ? (hi.targets.hip! - lo.targets.hip!) / (hi.step - lo.step) : 5;
+  }
+  const relaxedCm = spec.relaxedCm + (step - step0) * grade;
+  return { relaxedCm, stretchedCm: relaxedCm * (spec.stretchedCm / spec.relaxedCm) };
+}
+
+/** Extra particles under the band whose girth is blended from the band's to their own, cm. */
+export const BAND_BLEND_CM = 8;
+
+export interface ElasticBand extends BandSlide {
+  relaxedCm: number;
+  stretchedCm: number;
+  /** Girth the band takes on this body, cm: the body's (plus the clearance) where it rests, at least the relaxed girth, at most the stretched. */
+  onBodyCm: number;
+  /** The body is larger than the band stretches to where it was made to sit: it would not go on (shown at its stretch limit, flagged). */
+  overstretched: boolean;
+  assumed: boolean;
+}
+
+/**
+ * A stretch waistband with a known relaxed girth `R` and stretch limit `S`: it stays where the
+ * garment was made to sit when the body (plus the clearance) there is at least `R`, stretched to
+ * the body's girth (at most `S`); a band looser than the body slides down to where the body fills
+ * it (as `slideWaistband` does with the sewn girth). Then the top `WAISTBAND_CM` of the body chain is
+ * scaled about its centre to the band's girth on the body, blended back to the cut over
+ * `BAND_BLEND_CM` below: the fabric is gathered (or stretched) by the band. Mutates `start`.
+ */
+export function fitElasticBand(field: BodyField, start: Float32Array, chains: ChainAssignment, clearanceCm: number, band: { relaxedCm: number; stretchedCm: number }, assumed: boolean): ElasticBand {
+  let top = -Infinity;
+  for (let i = 0; i < chains.length; i++) if (chains[i] === 0) top = Math.max(top, start[3 * i + 1]!);
+  const yb = top - 2;
+  const e = new Float32Array(4);
+  const body = (y: number): number => (sample(field.torso, y, e) ? ellipsePerimeter(e[2]! + clearanceCm, e[3]! + clearanceCm) : NaN);
+  const R = band.relaxedCm, S = band.stretchedCm;
+  const at = body(yb);
+  let drop = 0, rest = at, pastHips = false;
+  if (Number.isFinite(at) && R > at + BAND_HOLD_CM) {
+    let best = -Infinity, bestY = yb, found = false;
+    for (let y = yb; y >= yb - BAND_SEARCH_CM; y -= 0.25) {
+      const g = body(y);
+      if (!Number.isFinite(g)) break;
+      if (g > best) { best = g; bestY = y; }
+      if (g + BAND_HOLD_CM >= R) { drop = yb - y; rest = g; found = true; break; }
+    }
+    if (!found) { drop = yb - bestY; rest = best; pastHips = true; }
+    for (let i = 0; i < chains.length; i++) start[3 * i + 1] = start[3 * i + 1]! - drop;
+  }
+  const onBody = Number.isFinite(rest) ? Math.min(S, Math.max(R, rest)) : R;
+  const overstretched = Number.isFinite(rest) && rest > S;
+  // Scale the band about its centre to the girth on the body.
+  const yTop = top - drop;
+  const pts: [number, number][] = [];
+  let cx = 0, cz = 0, k = 0;
+  for (let i = 0; i < chains.length; i++) if (chains[i] === 0 && start[3 * i + 1]! >= yTop - 2) { pts.push([start[3 * i]!, start[3 * i + 2]!]); cx += start[3 * i]!; cz += start[3 * i + 2]!; k++; }
+  const sewn = hullPerimeter(pts);
+  if (k > 0 && sewn > 0) {
+    cx /= k; cz /= k;
+    const s = onBody / sewn;
+    for (let i = 0; i < chains.length; i++) {
+      if (chains[i] !== 0) continue;
+      const d = yTop - WAISTBAND_CM - start[3 * i + 1]!; // > 0 below the band
+      const t = d <= 0 ? 1 : Math.max(0, 1 - d / BAND_BLEND_CM);
+      if (t === 0) continue;
+      const f = 1 + (s - 1) * t;
+      start[3 * i] = cx + (start[3 * i]! - cx) * f;
+      start[3 * i + 2] = cz + (start[3 * i + 2]! - cz) * f;
+    }
+  }
+  const r1 = (x: number): number => Math.round(x * 10) / 10;
+  return { bandGirthCm: r1(sewn), bodyAtBandCm: r1(at), bodyAtRestCm: r1(rest), dropCm: r1(drop), pastHips, relaxedCm: r1(R), stretchedCm: r1(S), onBodyCm: r1(onBody), overstretched, assumed };
+}
+
+/** The text line for a modelled stretch waistband. */
+export function elasticBandLine(b: ElasticBand): FitLine {
+  const src = b.assumed ? 'assumed band (not measured yet)' : 'measured band';
+  const where = b.pastHips ? `slides ${b.dropCm} cm down past the hips and would not stay up` : b.dropCm > 0 ? `is looser than the body where it was made to sit and slides ${b.dropCm} cm down` : b.overstretched ? 'would have to stretch past its limit: too small for this body' : `stretches to ${b.onBodyCm} cm`;
+  return { anchor: 'waist', band: undefined, tone: b.overstretched ? 'strain' : b.dropCm > 0 ? 'room' : 'even', text: `Stretch waistband (${src}: relaxed ${b.relaxedCm} cm, stretches to ${b.stretchedCm} cm): ${where}.` };
 }
 
 /**
@@ -258,7 +456,7 @@ export function hullPerimeter(pts: [number, number][]): number {
 export const CLEARANCE_CM = 0.35;
 
 /** Steps 1–3 of §Fitting, and the cloth ready for step 4. */
-export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyField, fit: FitResult, size: string, material: ViewerMaterial, durationS = 1.5): FitInstance {
+export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyField, fit: FitResult, size: string, material: ViewerMaterial, durationS = 1.5, options: DrapeOptions = DEFAULT_DRAPE): FitInstance {
   const { m, chains } = session;
   const graded = gradedMesh(session, size);
   const gaps = gapsForSize(fit, size);
@@ -275,7 +473,9 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   // A stretch waistband (the payload's stretch zones) is held by its elastic: how far it gathers depends on its relaxed
   // girth, which no bundle measures, so it is not slid (the fit lines say so). Only a band without stretch slides.
   const stretchBand = (session.payload.stretchZones ?? []).includes('waistband');
-  const band = bottom && !stretchBand ? slideWaistband(field, start, chains, CLEARANCE_CM) : null;
+  // With a band spec (`WaistbandSpec`), every bottom's band is modelled from it instead.
+  const elastic = bottom && options.waistband ? fitElasticBand(field, start, chains, CLEARANCE_CM, bandFor(options.waistband, session.bundle.grading, size), options.waistband.assumed) : null;
+  const band = elastic ?? (bottom && !stretchBand ? slideWaistband(field, start, chains, CLEARANCE_CM) : null);
   const yoke = pinHeight(m, session.bundle.anchors.category, start, chains);
   // The yoke is where grading put it: the shoulder ring grades by the `shoulder_width` ratio between
   // sizes (D15 breadth); its base width is the mesh's (on the synthetic garment, the mannequin torso's). Pinning only out to the seams or the body's shoulder
@@ -288,6 +488,8 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   const lift = armCapLifter(m, CLEARANCE_CM, session.noLift);
   for (let i = 0; i < chains.length; i++) lift(start, i);
   const cloth = createCloth(start, graded.positions, graded.indices, (i) => pinned[i] === 1, (i) => chains[i] === 0);
+  const loops = options.loopRetain > 0 ? anchorLoops(m, graded.positions, graded.indices, chains, pinned, options.loopRetain, options.loopRings) : [];
+  setLoops(cloth, loops);
   for (let i = 0; i < chains.length; i++) if (cuff[i] && !pinned[i]) cloth.leash[i] = CUFF_LEASH_CM;
   const collide = makeCollider(field, CLEARANCE_CM, chains, noCollide);
   // Settle the yoke onto the avatar before pinning it: a small size sits a few mm inside the neck
@@ -303,11 +505,13 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
     size: placement.size,
     gaps,
     placement,
-    lines: [...fitLines(gaps, placement, session.bundle.qa.chartAgreement.missing ?? []), ...bandLines(band), ...(bottom && stretchBand ? [STRETCH_BAND_LINE] : [])],
+    lines: [...fitLines(gaps, placement, session.bundle.qa.chartAgreement.missing ?? []), ...(elastic ? [elasticBandLine(elastic)] : [...bandLines(band), ...(bottom && stretchBand ? [STRETCH_BAND_LINE] : [])])],
     band,
+    options,
+    loops: loops.map((l) => ({ ring: l.ring, minGirthCm: Math.round(l.minGirthCm * 10) / 10, particles: l.particles.length })),
     heat: heatField(gaps, m.morphHeights),
     material,
-    params: clothParams(material, durationS),
+    params: clothParams(material, durationS, { cling: options.cling }),
     cloth,
     collide,
     noCollide,

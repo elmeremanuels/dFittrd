@@ -7,7 +7,9 @@
  * scale and translation; normals and normal deltas int8) and, in a second file, EXT_meshopt_compression on top.
  *
  * Measures (girth = viewer/scripts/sizes-drape.ts measure, `girthAt`): the garment girth at the body's hip height and at
- * the hem line (y = 22 cm) for every direct drape; on the held-out body the blend of each size (piecewise and linear
+ * the hem line (y = 22 cm) for every direct drape, plus the garment-relative measures of relgirth.ts (hipRel: 14.2 cm
+ * below the settled top edge; hemRel: 15 cm above the settled bottom edge; hipRing: the rest hip-line particles), which
+ * do not move along the garment when the band changes how high a skirt sits; on the held-out body the blend of each size (piecewise and linear
  * basis, `morphBlend.ts`) against that body's direct drape: per-vertex distance and the girth spread across sizes,
  * against the graded spread (rest geometry: 20.1 cm at the mannequin hip).
  *
@@ -19,6 +21,7 @@ import { gzipSync } from 'node:zlib';
 import { MeshoptEncoder } from 'meshoptimizer';
 import { blend, morphWeights, type MorphBasis } from '../../src/morphBlend';
 import { girthAt } from './girth';
+import { relGirths, rings } from './relgirth';
 
 const [root, band, heldOut = 't-0.40'] = [process.argv[2]!, process.argv[3]!, process.argv[4]];
 const GRID = [
@@ -65,10 +68,16 @@ function dist(a: Float32Array, b: Float32Array): { rms: number; p95: number; max
   return { rms: r2(Math.sqrt(d.reduce((s, x) => s + x * x, 0) / d.length)), p95: r2(d[Math.floor(0.95 * d.length)]!), max: r2(d[d.length - 1]!) };
 }
 
-/** Girth at the body's hip, at the hem line and at the band's settled height. */
-function girths(pos: Float32Array, body: BodyMeta): { hip: number; hem: number } {
-  return { hip: girthAt(pos, indices, body.achieved.hipY), hem: girthAt(pos, indices, HEM_Y) };
+type G = { hip: number; hem: number; hipRel: number; hemRel: number; hipRing: number };
+const KEYS = ['hip', 'hem', 'hipRel', 'hemRel', 'hipRing'] as const;
+const restOf = (s: string): Float32Array => f32(join(root, 'rest', `rest-${s}.bin`));
+const RINGS = rings(restOf('8'));
+/** Girth at the body's hip and at the hem line (fixed heights), and the garment-relative girths. */
+function girths(pos: Float32Array, body: BodyMeta): G {
+  const r = relGirths(pos, indices, RINGS);
+  return { hip: girthAt(pos, indices, body.achieved.hipY), hem: girthAt(pos, indices, HEM_Y), hipRel: r.hipRel, hemRel: r.hemRel, hipRing: r.hipRing };
 }
+const sp = (a: G, b: G): G => Object.fromEntries(KEYS.map((k) => [k, r1(b[k] - a[k])])) as G;
 
 // ---- 1. Direct drapes: girth table, CPU cost. ----
 const table: Record<string, Record<string, unknown>> = {};
@@ -82,8 +91,15 @@ for (const b of [...GRID.map((g) => g.id), heldOut]) {
     table[b]![s] = { ...girths(drape(b, s), body), bandY: j.band.settledMeanY, bandGirth: j.band.settledGirthCm, bandRelaxed: j.band.relaxedCm, bandStrain: j.band.strainVsRelaxed, inside: j.insideBody, cpuS: j.cpuSecondsSim, lastMaxMoveCm: j.settle.at(-1)?.[1] };
   }
 }
-const spread = (b: string, k: 'hip' | 'hem'): number => r1((table[b]!['16'] as Record<string, number>)[k]! - (table[b]!['8'] as Record<string, number>)[k]!);
-const graded = { hip: r1(restMeta.sizes.find((s) => s.size === '16')!.girths['87']! - restMeta.sizes.find((s) => s.size === '8')!.girths['87']!), hem: r1(restMeta.sizes.find((s) => s.size === '16')!.girths['20']! - restMeta.sizes.find((s) => s.size === '8')!.girths['20']!) };
+const spread = (b: string, k: keyof G): number => r1((table[b]!['16'] as Record<string, number>)[k]! - (table[b]!['8'] as Record<string, number>)[k]!);
+const relRef = Object.fromEntries(['8', '16'].map((s) => [s, relGirths(restOf(s), indices, RINGS)]));
+const graded: G = {
+  hip: r1(restMeta.sizes.find((s) => s.size === '16')!.girths['87']! - restMeta.sizes.find((s) => s.size === '8')!.girths['87']!),
+  hem: r1(restMeta.sizes.find((s) => s.size === '16')!.girths['20']! - restMeta.sizes.find((s) => s.size === '8')!.girths['20']!),
+  hipRel: r1(relRef['16']!.hipRel - relRef['8']!.hipRel),
+  hemRel: r1(relRef['16']!.hemRel - relRef['8']!.hemRel),
+  hipRing: r1(relRef['16']!.hipRing - relRef['8']!.hipRing),
+};
 
 // ---- 2. Blend on the held-out body. ----
 const H = bodyOf(heldOut);
@@ -92,8 +108,8 @@ mkdirSync(blendOut, { recursive: true });
 const blends: Record<string, unknown> = {};
 for (const basis of ['piecewise', 'linear'] as MorphBasis[]) {
   const per: Record<string, unknown> = {};
-  const g: Record<string, { hip: number; hem: number }> = {};
-  const gp: Record<string, { hip: number; hem: number }> = {};
+  const g: Record<string, G> = {};
+  const gp: Record<string, G> = {};
   for (const s of SIZES) {
     const base = drape('t+0.00', s), lo = drape('t-1.00', s), hi = drape('t+1.00', s);
     const targets = basis === 'piecewise'
@@ -111,8 +127,8 @@ for (const basis of ['piecewise', 'linear'] as MorphBasis[]) {
   }
   blends[basis] = {
     perSize: per,
-    spread: { hip: r1(g['16']!.hip - g['8']!.hip), hem: r1(g['16']!.hem - g['8']!.hem) },
-    spreadPolished: gp['8'] && gp['16'] ? { hip: r1(gp['16'].hip - gp['8'].hip), hem: r1(gp['16'].hem - gp['8'].hem) } : null,
+    spread: sp(g['8']!, g['16']!),
+    spreadPolished: gp['8'] && gp['16'] ? sp(gp['8'], gp['16']) : null,
   };
 }
 
@@ -234,13 +250,12 @@ const report = {
   heldOut: { id: heldOut, t: H.t, label: H.label, hipCm: H.achieved.hipCm, waistCm: H.achieved.waistCm },
   graded,
   direct: table,
-  directSpread: Object.fromEntries([...GRID.map((g) => g.id), heldOut].map((b) => [b, { hip: spread(b, 'hip'), hem: spread(b, 'hem') }])),
+  directSpread: Object.fromEntries([...GRID.map((g) => g.id), heldOut].map((b) => [b, Object.fromEntries(KEYS.map((k) => [k, spread(b, k)]))])),
   blends,
   survivalOnHeldOut: {
-    directHip: r2(spread(heldOut, 'hip') / graded.hip),
-    directHem: r2(spread(heldOut, 'hem') / graded.hem),
-    piecewiseHip: r2((blends.piecewise as { spread: { hip: number } }).spread.hip / graded.hip),
-    piecewiseHem: r2((blends.piecewise as { spread: { hem: number } }).spread.hem / graded.hem),
+    direct: Object.fromEntries(KEYS.map((k) => [k, r2(spread(heldOut, k) / graded[k])])),
+    piecewise: Object.fromEntries(KEYS.map((k) => [k, r2((blends.piecewise as { spread: G }).spread[k] / graded[k])])),
+    linear: Object.fromEntries(KEYS.map((k) => [k, r2((blends.linear as { spread: G }).spread[k] / graded[k])])),
   },
   bundleBytes: sizes,
   cost: { drapes: n, cpuSecondsSimTotal: r1(cpu), cpuSecondsPerDrape: r1(cpu / n), wallSecondsPerDrape: r1(wall / n) },

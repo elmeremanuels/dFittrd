@@ -13,9 +13,20 @@ Method (docs/research/step3-serverdrape-spike.md):
   the fabric below keeps its graded girth, so a band shorter than the fabric gathers it. The band is softer than the
   fabric (structural stiffness vertex group; the ratio is assumed in band-model.json).
 - Start shape: the rest geometry pushed radially out of the body (ray from outside towards the vertical axis, arms
-  ignored) plus 8 mm, so no particle starts inside. Blender builds the springs from this start shape, so a size that is
-  smaller than the body somewhere starts at the body's girth there (its tension is not modelled; only the band is
-  shortened on purpose). The band then contracts onto the body.
+  ignored) plus `--pushout` cm (default 0.8), so no particle starts inside. Blender builds the springs from this start
+  shape. Two rest modes (`--restmode`):
+  * `pushed` (the first run's mode): the springs keep the pushed lengths, so a size smaller than the body starts at the
+    body's girth + push-out with no tension (the push-out offset then sets that size's girth), and the band shrink acts
+    on the pushed band girth.
+  * `graded`: every pushed particle in the hip/waist zone (rest height above the body's hip - TENSION_BELOW_HIP_CM)
+    also gets a per-vertex shrink max(r_rest / r_start, `--tensionfloor`), so the springs return towards the graded rest
+    lengths: a size smaller than the body is under tension there and the push-out offset drops out. Blender's shrink is
+    isotropic, so the vertical springs at that particle shorten by the same factor (a side effect: tight zones also
+    pull up). The zone and the floor exist because the rest geometry is a reconstructed drape, not a pattern: with
+    every pushed particle restored and no floor ("gradedall") the legs (A-pose) and the inward-turned hem pushed
+    particles out by up to 1.9x, and restoring that pulled the AU 8 skirt 18 cm down the body. A rest shape key would be the exact tool, but Blender 4.2 ignores `rest_shape_key` (tested
+    again: a grid with a half-size rest key falls bit-identical to one without).
+  The band then contracts onto the body.
 - Solver: Blender cloth (implicit integration, mass-spring with angular bending), self-collision on, body collision,
   gravity, no pins and no cling: the band is held only by its own elastic tension and friction.
 - Output: settled positions (Float32 xyz, cm, mannequin frame) and a JSON with CPU seconds, settle trace and checks.
@@ -34,12 +45,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import band_model  # noqa: E402
 
 MANNEQUIN_HIP_Y = 87.36  # packages/mannequin morphHeights.hip, shape M
+TENSION_BELOW_HIP_CM = 12.0  # restmode graded: the tension zone reaches this far below the body's hip line
 CM = 0.01
 
 
 def args() -> dict:
     a = sys.argv[sys.argv.index("--") + 1:]
-    out = {"frames": "96", "band": "W-6", "json": None, "quality": "10", "mass": "physical", "bending": "0.005"}
+    out = {"frames": "96", "band": "W-6", "json": None, "quality": "10", "mass": "physical", "bending": "0.005",
+           "pushout": "0.8", "restmode": "pushed", "model": None, "tensionfloor": "0.9"}
     for i in range(0, len(a), 2):
         out[a[i].lstrip("-")] = a[i + 1]
     return out
@@ -129,13 +142,18 @@ def main() -> None:
     band = np.fromfile(os.path.join(a["rest"], "band.bin"), dtype=np.uint8).astype(bool)
     dy = body_meta["achieved"]["hipY"] - MANNEQUIN_HIP_Y
     rest[:, 1] += dy
-    bm = band_model.load()
+    bm = band_model.load(a["model"])
     girth = band_model.band_girth(bm, a["band"], size)
+    pushout = float(a["pushout"]) * CM
+    restmode = a["restmode"]
+    assert restmode in ("pushed", "graded", "gradedall"), restmode
+    floor = float(a["tensionfloor"]) if restmode == "graded" else 0.0
     k = girth["relaxedCm"] / srow["bandGradedGirthCm"]
 
     # Start shape: pushed radially out of the body (torso and legs; arms ignored).
     start = to_blender(rest)
     pushed = 0
+    ratio = np.ones(len(start))  # r_rest / r_start per particle (1 = not pushed)
     for i, p in enumerate(start):
         r = float(np.hypot(p[0], p[1]))
         if r < 1e-4:
@@ -145,20 +163,31 @@ def main() -> None:
         hit = bvh_torso.ray_cast(o, -d, 0.9)
         if hit[0] is None:
             continue
-        rb = float(np.hypot(hit[0].x, hit[0].y)) + 0.008
+        rb = float(np.hypot(hit[0].x, hit[0].y)) + pushout
         if r < rb:
             start[i, 0] = d.x * rb
             start[i, 1] = d.y * rb
+            ratio[i] = r / rb
             pushed += 1
 
+    if a.get("dumpratio"):
+        ratio.astype(np.float32).tofile(a["dumpratio"])
     garment = mesh_object("skirt", start, idx)
     for poly in garment.data.polygons:
         poly.use_smooth = True
     # The band's relaxed girth: Blender's per-vertex shrink (rest lengths x (1 - shrink)). A "rest shape key" was tried
     # first and Blender 4.2 ignored it (drapes with different band girths came out bit-identical), so it is not used.
+    if restmode == "graded":
+        zone = rest[:, 1] > body_meta["achieved"]["hipY"] - TENSION_BELOW_HIP_CM
+        tens = np.where(zone, np.maximum(ratio, floor), 1.0)
+    elif restmode == "gradedall":
+        tens = ratio
+    else:
+        tens = np.ones(len(ratio))
+    scale = np.where(band, k, 1.0) * tens
     shrink = garment.vertex_groups.new(name="shrink")
-    for i in np.nonzero(band)[0]:
-        shrink.add([int(i)], float(1.0 - k), "REPLACE")
+    for i in np.nonzero(scale < 1.0)[0]:
+        shrink.add([int(i)], float(1.0 - scale[i]), "REPLACE")
     vg = garment.vertex_groups.new(name="fabric")
     vg.add([int(i) for i in np.nonzero(~band)[0]], 1.0, "REPLACE")
 
@@ -178,7 +207,7 @@ def main() -> None:
     s.shrink_max = 1.0
     # Viscose challis (drape 0.85): between Blender's silk (5) and cotton (15) presets. ASSUMED mapping, not calibrated.
     fabric_tension = 10.0
-    elastic = fabric_tension * bm["assumed"]["elasticToFabricStiffness"]
+    elastic = fabric_tension * girth["elasticToFabricStiffness"]
     s.tension_stiffness = elastic
     s.tension_stiffness_max = fabric_tension
     s.compression_stiffness = elastic
@@ -241,7 +270,10 @@ def main() -> None:
         "size": size,
         "band": {**girth, "variant": a["band"], "gradedCm": srow["bandGradedGirthCm"], "restScale": round(k, 4), "settledGirthCm": round(band_girth, 1), "settledMeanY": round(band_y, 2), "startMeanY": round(float(rest[band][:, 1].mean()), 2), "strainVsRelaxed": round(band_girth / girth["relaxedCm"] - 1, 3), "pastStretched": band_girth > girth["stretchedCm"]},
         "dyCm": round(dy, 2),
+        "config": band_model.drape_key(girth, float(a["pushout"]), restmode, floor),
+        "tensionParticles": int((tens < 1.0).sum()),
         "pushedOut": pushed,
+        "pushedRatioMin": round(float(ratio.min()), 3),
         "particles": len(rest),
         "triangles": len(idx),
         "frames": frames,

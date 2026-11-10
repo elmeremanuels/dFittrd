@@ -48,6 +48,11 @@ for (const size of sizeLabels(session)) {
     topY: top,
     hemY: minY,
     bandGradedGirthCm: girthAt(pos, indices, top - 2),
+    // The hem as a tape would see it: the girth just above the bottom edge, and the largest girth in the bottom 25 cm
+    // (the reconstructed hem turns inward below y ~ 10, so the edge is smaller than the sweep). Compared with the
+    // founder's measured hem sweep by serverdrape/band_model.py hem_check.
+    hemEdgeGirthCm: girthAt(pos, indices, minY + 0.5),
+    hemSweepMaxCm: Math.max(...Array.from({ length: 25 }, (_, k) => girthAt(pos, indices, minY + 0.5 + k)).filter((x) => !Number.isNaN(x))),
     girths: Object.fromEntries(HEIGHTS.map((y) => [y, girthAt(pos, indices, y)])),
   });
   if (sizes.length === 1) writeFileSync(join(outDir, 'band.bin'), Buffer.from(band.buffer));

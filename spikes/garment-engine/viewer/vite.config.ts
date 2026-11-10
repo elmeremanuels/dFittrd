@@ -56,7 +56,7 @@ function bundleServer(): Plugin {
  */
 function serverdrapeServer(): Plugin {
   const dir = resolve(outDir, 'serverdrape');
-  const ok = /^\/(web\/skirt-[\w.-]+\.glb|bodies\/t[-+]\d\.\d\d\.obj|bodies\/bodies\.json|report-[\w-]+\.json)$/;
+  const ok = /^\/(web\/skirt-[\w.+-]+\.glb|bodies\/t[-+]\d\.\d\d\.obj|bodies\/bodies\.json|report-[\w.+-]+\.json)$/;
   return {
     name: 'curtain-spike-serverdrape',
     configureServer(server) {

@@ -34,7 +34,7 @@ try {
       const cdp = await ctx.newCDPSession(page);
       await cdp.send('Emulation.setCPUThrottlingRate', { rate: throttle });
       const t0 = Date.now();
-      await page.goto(`${base}morph.html?band=${band}&body=${body}&glb=${glb}&morph=${morph}`);
+      await page.goto(`${base}morph.html?band=${encodeURIComponent(band)}&body=${body}&glb=${glb}&morph=${morph}`);
       await page.waitForFunction(() => ['ready', 'error'].includes(document.documentElement.dataset.state ?? ''), null, { timeout: 180000 });
       const ready = Date.now() - t0;
       await page.waitForTimeout(3000);

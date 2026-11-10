@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "productId": "10894387020081",
   "product": "Crimson Wildflower Maxi Skirt (pilot, elastic waistband)",
-  "README": "The waistband of the pilot skirt is NOT measured yet. Every number under `assumed` is an assumption, not a measurement. When the founder has the tape numbers, fill `measured` (relaxed and stretched band girth of the sample, flat hem sweep) and run drape.sh with BAND=measured: nothing else changes. `relaxedGirthCm` is the band's full girth lying relaxed (flat width x 2); `stretchedGirthCm` the full girth pulled to its comfortable maximum; `hemSweepCm` the full hem girth (flat hem width x 2). If only the sample size is measured, `gradePerSizeCm` says how much the band changes per chart size (null = assume the chart's waist step, 5 cm per AU size).",
+  "README": "The waistband of the pilot skirt is NOT measured yet. Every number under `assumed` is an assumption, not a measurement. When the founder has the tape numbers, fill `measured` (copy `measuredTemplate`) and run `BAND=measured serverdrape/drape.sh`: nothing else changes, and drapes cached with other band numbers are re-run automatically. Fields: `relaxedGirthCm` = the band's full girth lying relaxed (flat width x 2); `stretchedGirthCm` = the full girth pulled to its comfortable maximum; `hemSweepCm` = the full hem girth (flat hem width x 2); `gradePerSizeCm` = how much the band changes per chart size if only the sample size is measured (null = the chart's waist step, 5 cm per AU size). What each field DOES: relaxedGirthCm sets the band's rest girth per size (drives the drape); stretchedGirthCm sets the band's stiffness via the stretch ratio (drives the drape; mapping in band_model.py, ASSUMED); hemSweepCm is a CHECK only (drape.sh warns when the reconstructed garment's hem differs by more than 5 %).",
   "measured": null,
   "measuredTemplate": {
     "sampleSize": "12",
@@ -15,16 +15,51 @@
     "measuredOn": ""
   },
   "assumed": {
-    "note": "ASSUMED, not measured. relaxed(size) = chart waist(size) + offsetCm when graded, else the fixed girth for every size; stretched = relaxed x stretchRatio. The elastic stiffness relative to the fabric is assumed too (elasticToFabricStiffness).",
-    "chartWaistCm": { "8": 67.5, "10": 72.5, "12": 77.5, "14": 82.5, "16": 87.5 },
+    "note": "ASSUMED, not measured. relaxed(size) = chart waist(size) + offsetCm when graded, else the fixed girth for every size; stretched = relaxed x stretchRatio (per variant, else the default). The band's tension stiffness relative to the fabric is elasticToFabricStiffness x (stiffnessReferenceStretchRatio - 1) / (stretchRatio - 1): ASSUMED mapping and ASSUMED constant.",
+    "chartWaistCm": {
+      "8": 67.5,
+      "10": 72.5,
+      "12": 77.5,
+      "14": 82.5,
+      "16": 87.5
+    },
     "stretchRatio": 1.5,
+    "stiffnessReferenceStretchRatio": 1.5,
     "elasticToFabricStiffness": 0.08,
     "default": "W-6",
     "variants": {
-      "W-0": { "graded": true, "offsetCm": 0, "why": "band relaxed = body waist of the size: loose at the low-rise line" },
-      "W-6": { "graded": true, "offsetCm": -6, "why": "typical elastic skirt band, about 6 cm under the body waist (assumption, not a measurement)" },
-      "W-12": { "graded": true, "offsetCm": -12, "why": "tight band" },
-      "ONE-70": { "graded": false, "fixedCm": 70, "why": "one band for every size (the 'every size hangs from the same band' hypothesis of REFINEMENT R3)" }
+      "W-0": {
+        "graded": true,
+        "offsetCm": 0,
+        "why": "band relaxed = body waist of the size: loose at the low-rise line"
+      },
+      "W-6": {
+        "graded": true,
+        "offsetCm": -6,
+        "why": "typical elastic skirt band, about 6 cm under the body waist (assumption, not a measurement)"
+      },
+      "W-12": {
+        "graded": true,
+        "offsetCm": -12,
+        "why": "tight band"
+      },
+      "ONE-70": {
+        "graded": false,
+        "fixedCm": 70,
+        "why": "one band for every size (the 'every size hangs from the same band' hypothesis of REFINEMENT R3)"
+      },
+      "W-6-s1.25": {
+        "graded": true,
+        "offsetCm": -6,
+        "stretchRatio": 1.25,
+        "why": "W-6 with a firm band (stretches 25 %): twice as stiff"
+      },
+      "W-6-s2.0": {
+        "graded": true,
+        "offsetCm": -6,
+        "stretchRatio": 2.0,
+        "why": "W-6 with a very stretchy band (stretches 100 %): half as stiff"
+      }
     }
   }
 }

@@ -80,6 +80,17 @@ def main():
     gap = spec.get("gapM", 0.75)
     n = len(items)
     rot = {"front": 0, "side": 90, "back": 180, "three": 30}[spec.get("view", "front")]
+    # Camera first, so the labels are placed inside its frame (a fixed z cropped the title off a wide, close shot).
+    width = (n - 1) * gap + 0.9
+    cam_d = spec.get("camDistanceM", max(4.6, width * 1.25))
+    lens = 50
+    W, H = sc.render.resolution_x, sc.render.resolution_y
+    # Blender's default sensor fit (AUTO): the 36 mm sensor spans the larger image side.
+    half_w = (cam_d + 0.3) * 18 / lens * (1 if W >= H else W / H)
+    half_h = half_w * H / W
+    frame_top = 1.0 + half_h
+    title_z = frame_top - 0.06 * (cam_d + 0.3) / 4.6 - 0.04
+    label_z = min(1.86, title_z - 0.1 * (cam_d + 0.3) / 4.6)
     for i, it in enumerate(items):
         dx = (i - (n - 1) / 2) * gap
         bv, bf = read_obj(it["body"])
@@ -94,23 +105,21 @@ def main():
         if it.get("garment"):
             obj(f"skirt{i}", pg @ R.T, gi, cloth, dx)
         # Label as text.
-        bpy.ops.object.text_add(location=(dx - 0.12, 0.3, 1.86))
+        bpy.ops.object.text_add(location=(dx - 0.12, 0.3, label_z))
         t = bpy.context.object
         t.data.body = it.get("label", "")
         t.data.size = 0.07
         t.rotation_euler = (np.radians(90), 0, 0)
         t.data.materials.append(material(f"ink{i}", "#1A1612", 0.9))
     if spec.get("title"):
-        bpy.ops.object.text_add(location=(-(n - 1) / 2 * gap - 0.3, 0.3, 1.98))
+        bpy.ops.object.text_add(location=(-half_w + 0.15, 0.3, title_z))
         t = bpy.context.object
         t.data.body = spec["title"]
         t.data.size = 0.055
         t.rotation_euler = (np.radians(90), 0, 0)
         t.data.materials.append(material("inkt", "#1A1612", 0.9))
-    width = (n - 1) * gap + 0.9
-    cam_d = spec.get("camDistanceM", max(4.6, width * 1.25))
     cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam"))
-    cam.data.lens = 50
+    cam.data.lens = lens
     cam.location = (0, -cam_d, 1.0)
     cam.rotation_euler = (np.radians(90), 0, 0)
     sc.collection.objects.link(cam)

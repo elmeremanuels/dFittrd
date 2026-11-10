@@ -21,6 +21,8 @@
  * the drape, checks the estimate label names the recommended size, and that after the click the
  * iframe only GETs code from the app origin and the five bundle files under /assets/ (no POST, no
  * body, no third party), and that the merchant page shows nothing of it.
+ * Size rings (route R5 mock): the result shows the recommended size's rings with an estimate note, and
+ * switching to a neighbouring size in "Compare sizes" redraws them; the 3D view lists the same rings.
  * Console errors and uncaught exceptions in the page or the iframe fail the flow.
  *
  * Uses the preinstalled Playwright (`require('playwright')`). Reuses services that are already
@@ -61,7 +63,7 @@ const PAGES = [
     threeD: [
       { name: 'azure', externalId: 'azure-palm-baby-doll-dress', path: '/products/azure-palm-baby-doll-dress', bundle: DEMO_BUNDLES.azure, qaFlags: [] },
       // Live only under the founder's low-rise waist reading, flagged: the import gate refuses it otherwise (qa_failed).
-      { name: 'skirt', externalId: 'crimson-wildflower-maxi-skirt', path: '/products/crimson-wildflower-maxi-skirt', bundle: DEMO_BUNDLES.skirt, qaFlags: ['low_rise_waist', 'precalibration_outside_tolerance'] },
+      { name: 'skirt', externalId: 'crimson-wildflower-maxi-skirt', path: '/products/crimson-wildflower-maxi-skirt', bundle: DEMO_BUNDLES.skirt, qaFlags: ['low_rise_waist', 'precalibration_outside_tolerance'], rings: 'pilot-skirt' },
     ],
   },
 ];
@@ -144,6 +146,7 @@ async function flow(browser, base, spec, log) {
     await shot('3-result');
     // ENGINE-HANDOFF item 9: a product without an approved bundle behaves exactly as today.
     if (await frame.getByTestId('garment3d-open').count()) throw new Error('aalter-studio-1 has no 3D bundle but shows the 3D button');
+    await sizeRingsStep(frame, log, shot);
     const label = (await choose.innerText()).trim();
     const size = label.replace(/^choose size\s+/i, '').trim();
     if (!size) throw new Error(`could not read the size from "${label}"`);
@@ -222,6 +225,37 @@ async function flow(browser, base, spec, log) {
 }
 
 /**
+ * Size rings (route R5 mock): the result draws the recommended size's rings over the 2D figure,
+ * labelled in words, with the estimate note; another size in "Compare sizes" redraws them for that
+ * size (other girth, its own label). Ends back on the recommended size.
+ */
+async function sizeRingsStep(frame, log, shot, name = '3b-size-rings-other') {
+  const layer = frame.locator('[data-testid="size-rings"]');
+  await layer.waitFor();
+  const rec = await layer.getAttribute('data-size');
+  const state = async () => ({
+    size: await layer.getAttribute('data-size'),
+    girths: (await frame.locator('[data-testid="size-rings"] > g[data-girth]').evaluateAll((els) => els.map((e) => e.getAttribute('data-girth')))).join(','),
+    chips: (await frame.getByTestId('size-ring-chips').innerText()).replace(/\s+/g, ' ').trim(),
+  });
+  const first = await state();
+  if (!first.girths || !first.chips) throw new Error('size rings: no ring or no label drawn');
+  if (!/estimate/i.test(await frame.getByTestId('size-rings-legend').innerText())) throw new Error('size rings: the legend does not say estimate');
+  const radios = frame.getByRole('radiogroup', { name: /compare sizes/i }).getByRole('radio');
+  let other = null;
+  for (let i = 0; i < (await radios.count()); i++) if ((await radios.nth(i).getAttribute('aria-checked')) !== 'true') other = radios.nth(i);
+  if (!other) throw new Error('size rings: no other size to compare');
+  await other.click();
+  await frame.locator(`[data-testid="size-rings"]:not([data-size="${rec}"])`).waitFor();
+  const next = await state();
+  if (next.girths === first.girths) throw new Error(`size rings: switching ${first.size} → ${next.size} did not change the rings (${next.girths})`);
+  await shot(name);
+  log(`ok: size rings ${first.size} [${first.chips}] → ${next.size} [${next.chips}]`);
+  await frame.getByRole('radiogroup', { name: /compare sizes/i }).getByRole('radio', { name: new RegExp(`^${rec}\\b`) }).click();
+  await frame.locator(`[data-testid="size-rings"][data-size="${rec}"]`).waitFor();
+}
+
+/**
  * The optional 3D estimate (D16) on the product with an approved bundle, as the returning shopper:
  * the overlay lands on the result; "See it in 3D (estimate)" loads the viewer and drapes the
  * recommended size on a model with the shopper's girths. After the click the iframe may only GET
@@ -250,6 +284,15 @@ async function threeDStep(page, base, t, log, shot) {
   const choose = frame.getByRole('button', { name: /^choose size\s+\S+/i }).first();
   await choose.waitFor();
   const size = (await choose.innerText()).trim().replace(/^choose size\s+/i, '').trim();
+  if (t.rings === 'pilot-skirt') {
+    // The pilot skirt's 2D rings in the real embed: waist (with the ASSUMED band range), hip, hem.
+    await frame.locator('[data-testid="size-rings"]').waitFor();
+    for (const k of ['waist', 'hip', 'hem']) await frame.getByTestId(`size-ring-chip-${k}`).waitFor();
+    const waistChip = (await frame.getByTestId('size-ring-chip-waist').innerText()).replace(/\s+/g, ' ');
+    if (!/band \d+-\d+ cm assumed/.test(waistChip)) throw new Error(`3D ${t.name}: the waist ring does not show the assumed band range: "${waistChip}"`);
+    if (!/assumed/.test(await frame.getByTestId('size-ring-chip-hem').innerText())) throw new Error(`3D ${t.name}: the hem ring is not labelled assumed`);
+    await sizeRingsStep(frame, log, shot, `3b-size-rings-${t.name}`);
+  }
   const open = frame.getByTestId('garment3d-open');
   await open.waitFor();
   await page.waitForTimeout(500); // let fit-shown (billing) go out before the 3D requests are recorded
@@ -276,6 +319,12 @@ async function threeDStep(page, base, t, log, shot) {
   page.off('request', onRequest);
   const label = (await frame.getByTestId('garment3d-label').innerText()).replace(/\s+/g, ' ');
   if (!/estimate/i.test(label)) throw new Error(`3D label does not say estimate: "${label}"`);
+  if (!(await frame.getByTestId('garment3d-rings').innerText()).trim()) throw new Error(`3D ${t.name}: no size-ring summary under the 3D view`);
+  if (t.rings === 'pilot-skirt') {
+    // the clinging 3D drape does not show the hem width (REFINEMENT R3): no hem number under it
+    if (/hem/i.test(await frame.getByTestId('garment3d-rings').innerText())) throw new Error(`3D ${t.name}: the 3D ring summary lists the hem the drape does not show`);
+    await frame.getByTestId('garment3d-hem-note').waitFor();
+  }
   if (!label.includes(`Size ${size} was picked by the size advice`)) throw new Error(`3D label does not name the recommended size ${size}: "${label}"`);
   if ((await canvas.getAttribute('data-size'))?.toLowerCase() !== size.toLowerCase()) throw new Error(`3D view shows size ${await canvas.getAttribute('data-size')}, the advice picked ${size}`);
   await frame.getByTestId('garment3d').scrollIntoViewIfNeeded();

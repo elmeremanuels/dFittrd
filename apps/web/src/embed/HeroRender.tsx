@@ -26,6 +26,8 @@ const POLL_LIMIT = 45;
 /** Rasterise the avatar SVG to a PNG (base64, no data: prefix). Browser only. */
 export async function rasterizeAvatar(svg: SVGSVGElement): Promise<{ base64: string; width: number; height: number }> {
   const clone = svg.cloneNode(true) as SVGSVGElement;
+  // The size rings are a measuring aid on screen, never part of the person image sent for a render.
+  clone.querySelectorAll('[data-testid="size-rings"]').forEach((n) => n.remove());
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   clone.setAttribute('width', String(RENDER_W));
   clone.setAttribute('height', String(RENDER_H));

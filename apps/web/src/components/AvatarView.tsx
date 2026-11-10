@@ -5,6 +5,8 @@ import { fitGapsForRender } from '@curtain/fit-engine';
 import { ESTIMATE_DISCLAIMER, type GarmentPayload, type UserBody } from '@curtain/schema';
 import { adjustColor, bodyGeometry, bodyPath, fabricLook, garmentGeometry, isHex, levelY, VIEW_H, VIEW_W, HEAD_TOP_Y } from '@/render/body';
 import { EstimateBadge } from './EstimateBadge';
+import { SizeRingsChips, SizeRingsLayer } from './SizeRings';
+import type { RingOverlay } from '@/render/rings';
 
 export interface AvatarMedia {
   faceUrl: string | null;
@@ -32,6 +34,13 @@ export interface AvatarViewProps {
    * disclaimer). The badge stays: every render is labelled an estimate (AGENTS.md rule 3).
    */
   compact?: boolean;
+  /**
+   * Size rings (route R5): the garment's graded girths of the size on screen plus ghosts of its
+   * neighbours, drawn over the figure. Ignored in `compact` mode (too small to read).
+   */
+  rings?: RingOverlay | null;
+  /** Skirt hem sweep of this size, cm (ring input): the drawn hem then matches the hem ring. */
+  hemSweepCm?: number | null;
 }
 
 const NO_MEDIA: AvatarMedia = { faceUrl: null, baseFrame: null };
@@ -44,13 +53,13 @@ const NO_MEDIA: AvatarMedia = { faceUrl: null, baseFrame: null };
  * engine's per-point slack, hem from lengthCm, look from fabric) → face tile at the head. Always
  * carries the estimate badge.
  */
-export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false }: AvatarViewProps): ReactNode {
+export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false, rings = null, hemSweepCm = null }: AvatarViewProps): ReactNode {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const reduce = useReducedMotion();
 
   const body = useMemo(() => bodyGeometry(measurements, heightCm), [measurements, heightCm]);
   const gaps = useMemo(() => (fit ? fitGapsForRender(fit, size ?? undefined) : null), [fit, size]);
-  const geom = useMemo(() => (garment ? garmentGeometry({ garment, gaps, body }) : null), [garment, gaps, body]);
+  const geom = useMemo(() => (garment ? garmentGeometry({ garment, gaps, body, hemSweepCm }) : null), [garment, gaps, body, hemSweepCm]);
   const look = useMemo(() => (garment ? fabricLook(garment.fabric) : null), [garment]);
 
   const skin = isHex(skinHex) ? skinHex! : '#DFC3A8';
@@ -180,10 +189,13 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
           </motion.g>
         ) : null}
 
+        {rings && !compact ? <SizeRingsLayer overlay={rings} /> : null}
+
         {/* floor shadow */}
         <ellipse cx={VIEW_W / 2} cy={levelY('sole') + 6} rx={body.hipHalf + 18} ry={5} fill="rgba(26,22,18,0.12)" />
       </svg>
 
+      {rings && !compact ? <SizeRingsChips overlay={rings} /> : null}
       {!bare && compact ? (
         <span className="chip pointer-events-none absolute bottom-0.5 left-1/2 -translate-x-1/2 bg-ink/85 px-1.5 py-0 text-[9px] whitespace-nowrap text-cream shadow" title={ESTIMATE_DISCLAIMER} data-testid="estimate-badge">
           Estimate

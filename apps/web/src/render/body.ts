@@ -55,6 +55,11 @@ export function halfWidthFromGirth(girthCm: number, ppc: number, r = 0.7): numbe
   return (Math.max(0, girthCm) / (Math.PI * (1 + r))) * ppc;
 }
 
+/** Depth / width of a hanging hem's cross-section (the hem ring and a skirt's drawn hem share it). */
+export const HEM_DEPTH = 0.95;
+/** Size rings and a drawn hem never run off the 200 px viewBox. */
+export const MAX_RING_RX = 97;
+
 /** Real-world proportions (cm) the silhouette uses where no measurement exists. */
 const HEAD_HALF_WIDTH_CM = 7.4;
 const NECK_HALF_WIDTH_CM = 5.8;
@@ -219,13 +224,23 @@ function hemFromLength(lengthCm: GarmentPayload['lengthCm'], key: string, fromY:
   return fallbackY;
 }
 
+/** A bottom that is a skirt (one tube from the waist), by subcategory or block. */
+export function isSkirt(garment: Pick<GarmentPayload, 'category' | 'patternBlock'> & Partial<Pick<GarmentPayload, 'subcategory'>>): boolean {
+  return garment.category === 'bottom' && /skirt/.test(`${garment.subcategory ?? ''} ${garment.patternBlock}`);
+}
+
 export interface GarmentRenderInput {
   garment: Pick<GarmentPayload, 'category' | 'patternBlock' | 'lengthCm' | 'fabric'> & Partial<Pick<GarmentPayload, 'subcategory'>>;
   gaps: RenderGaps | null;
+  /**
+   * Hem sweep of a skirt for this size, cm (ring input, assumed or measured). When given, the
+   * skirt's hem is drawn at that girth, the same rule as the hem ring, so the two agree.
+   */
+  hemSweepCm?: number | null;
   body: BodyGeometry;
 }
 
-export function garmentGeometry({ garment, gaps, body: g }: GarmentRenderInput): GarmentGeometry {
+export function garmentGeometry({ garment, gaps, body: g, hemSweepCm = null }: GarmentRenderInput): GarmentGeometry {
   const drape = garment.fabric.drape;
   const strain: GarmentGeometry['strain'] = [];
   const folds: GarmentGeometry['folds'] = [];
@@ -326,6 +341,26 @@ export function garmentGeometry({ garment, gaps, body: g }: GarmentRenderInput):
     }
     case 'bottom': {
       const waistY = levelY('waist') + (garment.lengthCm?.rise ? Math.max(-10, 8 - garment.lengthCm.rise * g.pxPerCm * 0.4) : 2);
+      if (isSkirt(garment)) {
+        // A skirt is one tube from the waist, not two legs (step 3 rings mock: the maxi skirt was drawn as trousers).
+        const sub = garment.subcategory ?? '';
+        const fallback = /maxi/.test(sub) ? levelY('ankle') - 4 : /midi/.test(sub) ? levelY('calf') : /mini/.test(sub) ? levelY('thigh') + 8 : levelY('knee') + 6;
+        hemY = hemFromLength(garment.lengthCm, 'outseam', waistY, g.pxPerCm, fallback);
+        const flared = /a-line|flare|skater|circle|tier|wrap/.test(`${garment.patternBlock} ${sub}`);
+        const hemHalf =
+          hemSweepCm != null && hemSweepCm > 0
+            ? Math.max(hipHalf, Math.min(MAX_RING_RX, halfWidthFromGirth(hemSweepCm, ppc, HEM_DEPTH)))
+            : flared ? hipHalf + 10 + drape * 12 : /pencil|bodycon|straight/.test(garment.patternBlock) ? hipHalf - 2 : hipHalf + 4;
+        path = mirroredPath([
+          { x: waistHalf + 1, y: waistY },
+          { x: hipHalf + (flared ? 2 : 0), y: levelY('hip') },
+          { x: hemHalf, y: hemY - sag * 0.5 },
+          { x: hemHalf * 0.5, y: hemY + sag * 0.4 },
+          { x: 0, y: hemY },
+        ]);
+        addFolds(hipSlack ?? 8 + drape * 6, levelY('hip') + 12, hemY - 8, hemHalf * 0.7);
+        break;
+      }
       const inseam = garment.lengthCm?.inseam;
       const outseam = garment.lengthCm?.outseam;
       hemY = outseam ? hemFromLength(garment.lengthCm, 'outseam', waistY, g.pxPerCm, levelY('ankle')) : inseam ? Math.min(FEET_Y, levelY('crotch') + inseam * g.pxPerCm) : levelY('ankle');

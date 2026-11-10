@@ -28,6 +28,15 @@ function setup(over: Partial<Garment3DProps> = {}) {
 }
 
 describe('Garment3D (opt-in 3D estimate, D16)', () => {
+  it('the ring summary follows the shopper\'s units and marks estimated girths', async () => {
+    setup({ units: 'imperial', estimated: ['bust'] });
+    fireEvent.click(screen.getByTestId('garment3d-open'));
+    const rings = await screen.findByTestId('garment3d-rings');
+    expect(rings).toHaveTextContent(/about [\d.]+ in (room|short)/);
+    expect(rings).not.toHaveTextContent(/ cm /);
+    expect(screen.queryByTestId('garment3d-hem-note')).toBeNull(); // no hem input for this product
+  });
+
   it('renders nothing without an asset (a product without a bundle behaves exactly as today)', () => {
     const { container, loadViewer } = setup({ asset: null });
     expect(container).toBeEmptyDOMElement();
@@ -69,6 +78,10 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     expect(label).toHaveTextContent(/estimate/i);
     expect(label).toHaveTextContent('Size M was picked by the size advice.');
     expect(label).toHaveTextContent('You are looking at size L.');
+    // the same size-ring numbers as the 2D figure, as text (route R5)
+    expect(screen.getByTestId('garment3d-rings')).toHaveAccessibleName('Size rings of size L (estimate)');
+    expect(screen.getByTestId('garment3d-rings')).toHaveTextContent(/Bust/);
+    expect(screen.getByTestId('garment3d-rings')).toHaveTextContent(/\d cm (room|short)/);
     expect(screen.getByText(/Estimate · not measured/)).toBeInTheDocument();
   });
 

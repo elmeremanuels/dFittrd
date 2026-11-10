@@ -10,11 +10,14 @@
  * - Always labelled an estimate (rule 3). On any error it closes and the 2D figure above stays.
  */
 import { Box, X } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { FitResult } from '@curtain/fit-engine';
 import type * as GarmentViewer from '@curtain/garment-viewer';
 import type { GarmentAssetRef, GarmentPayload, UserBody } from '@curtain/schema';
 import { EstimateBadge } from '@/components/EstimateBadge';
+import { ringInputsFor } from '@/render/ringInputs';
+import { ringOverlayFor } from '@/render/rings';
+import type { Units } from './units';
 
 type ViewerModule = typeof GarmentViewer;
 type View = Awaited<ReturnType<ViewerModule['mountGarmentView']>>;
@@ -41,6 +44,11 @@ export interface Garment3DProps {
   /** The size the advice picked (null when nothing fits well). */
   recommended: string | null;
   measurements: UserBody['measurements'];
+  /** The shopper's units and height, so the ring numbers match the 2D figure's. */
+  units?: Units;
+  heightCm?: number | undefined;
+  /** Body girths estimated from height and weight (BodyProfile source 'prior'). */
+  estimated?: readonly string[];
   onSelect: (size: string) => void;
   /** Tests inject these; the app uses the real chunk and the real check. */
   loadViewer?: () => Promise<ViewerModule>;
@@ -49,13 +57,22 @@ export interface Garment3DProps {
 
 type Phase = 'idle' | 'loading' | 'draping' | 'settled' | 'failed';
 
-export function Garment3D({ asset, paused, garment, fit, size, recommended, measurements, onSelect, loadViewer = () => import('@curtain/garment-viewer'), webgl2 = hasWebGL2 }: Garment3DProps): ReactNode {
+export function Garment3D({ asset, paused, garment, fit, size, recommended, measurements, units = 'metric', heightCm, estimated = [], onSelect, loadViewer = () => import('@curtain/garment-viewer'), webgl2 = hasWebGL2 }: Garment3DProps): ReactNode {
   const [supported] = useState(() => !!asset && webgl2());
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>('idle');
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const viewRef = useRef<View | null>(null);
   const sizeRef = useRef(size);
+  // The same size-ring numbers as the 2D figure (route R5), as text under the 3D view: the drape
+  // can hide part of the graded difference, the rings say it in numbers.
+  // The hem is left out: the 3D drape does not show the hem width yet (docs/REFINEMENT.md R3).
+  const rings = useMemo(
+    () => (open ? ringOverlayFor({ garment, fit, size, measurements, heightCm, inputs: ringInputsFor(garment), units, estimated }) : null),
+    [open, garment, fit, size, measurements, heightCm, units, estimated],
+  );
+  const ringList = rings ? rings.selected.rings.filter((r) => r.key !== 'hem') : [];
+  const hemLeftOut = !!rings && rings.selected.rings.some((r) => r.key === 'hem');
 
   useEffect(() => {
     if (!open || !asset) return;
@@ -148,6 +165,20 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
         {recommended ? `Size ${recommended} was picked by the size advice.` : 'No size fits well; the size advice decides, not this picture.'}
         {recommended && recommended !== size ? ` You are looking at size ${size}.` : ''}
       </p>
+      {ringList.length > 0 ? (
+        <ul className="mt-1.5 flex flex-wrap gap-1 text-[11px]" aria-label={`Size rings of size ${size} (estimate)`} data-testid="garment3d-rings">
+          {ringList.map((r) => (
+            <li key={r.key} className="chip px-2 py-0.5" title={r.text}>
+              <span className="font-semibold">{r.key === 'hip' ? 'Hips' : r.key[0]!.toUpperCase() + r.key.slice(1)}</span> {`${r.chip[0].toLowerCase()}, ${r.chip[1]}`}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {hemLeftOut ? (
+        <p className="mt-1 text-[11px] leading-snug text-ink-mute" data-testid="garment3d-hem-note">
+          The 3D drape does not show the hem width yet; see the hem ring on the figure above.
+        </p>
+      ) : null}
     </section>
   );
 }

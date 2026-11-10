@@ -50,9 +50,35 @@ function bundleServer(): Plugin {
   };
 }
 
+/**
+ * R2 spike (docs/research/step3-serverdrape-spike.md): `/serverdrape/` serves the baked morph GLBs and the Anny body
+ * OBJs from `../out/serverdrape/` for `morph.html`. Only those two file shapes; nothing else under out/.
+ */
+function serverdrapeServer(): Plugin {
+  const dir = resolve(outDir, 'serverdrape');
+  const ok = /^\/(web\/skirt-[\w.-]+\.glb|bodies\/t[-+]\d\.\d\d\.obj|bodies\/bodies\.json|report-[\w-]+\.json)$/;
+  return {
+    name: 'curtain-spike-serverdrape',
+    configureServer(server) {
+      server.middlewares.use('/serverdrape', (req, res) => {
+        const path = decodeURIComponent((req.url ?? '/').split('?')[0]!);
+        const file = resolve(dir, `.${path}`);
+        if (!ok.test(path) || !file.startsWith(dir + sep) || !existsSync(file)) {
+          res.statusCode = 404;
+          res.end('not found');
+          return;
+        }
+        res.setHeader('Content-Type', path.endsWith('.glb') ? 'model/gltf-binary' : path.endsWith('.json') ? 'application/json' : 'text/plain');
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(readFileSync(file));
+      });
+    },
+  };
+}
+
 export default defineConfig({
   root: viewerDir,
-  plugins: [bundleServer()],
+  plugins: [bundleServer(), serverdrapeServer()],
   server: { port: 5178, strictPort: false, host: '127.0.0.1' },
   build: {
     outDir: resolve(outDir, 'viewer-dist'),

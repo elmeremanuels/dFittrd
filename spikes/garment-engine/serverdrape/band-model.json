@@ -1,0 +1,30 @@
+{
+  "format": "curtain.spike.bandModel",
+  "formatVersion": 1,
+  "productId": "10894387020081",
+  "product": "Crimson Wildflower Maxi Skirt (pilot, elastic waistband)",
+  "README": "The waistband of the pilot skirt is NOT measured yet. Every number under `assumed` is an assumption, not a measurement. When the founder has the tape numbers, fill `measured` (relaxed and stretched band girth of the sample, flat hem sweep) and run drape.sh with BAND=measured: nothing else changes. `relaxedGirthCm` is the band's full girth lying relaxed (flat width x 2); `stretchedGirthCm` the full girth pulled to its comfortable maximum; `hemSweepCm` the full hem girth (flat hem width x 2). If only the sample size is measured, `gradePerSizeCm` says how much the band changes per chart size (null = assume the chart's waist step, 5 cm per AU size).",
+  "measured": null,
+  "measuredTemplate": {
+    "sampleSize": "12",
+    "relaxedGirthCm": 0,
+    "stretchedGirthCm": 0,
+    "hemSweepCm": 0,
+    "gradePerSizeCm": null,
+    "measuredBy": "",
+    "measuredOn": ""
+  },
+  "assumed": {
+    "note": "ASSUMED, not measured. relaxed(size) = chart waist(size) + offsetCm when graded, else the fixed girth for every size; stretched = relaxed x stretchRatio. The elastic stiffness relative to the fabric is assumed too (elasticToFabricStiffness).",
+    "chartWaistCm": { "8": 67.5, "10": 72.5, "12": 77.5, "14": 82.5, "16": 87.5 },
+    "stretchRatio": 1.5,
+    "elasticToFabricStiffness": 0.08,
+    "default": "W-6",
+    "variants": {
+      "W-0": { "graded": true, "offsetCm": 0, "why": "band relaxed = body waist of the size: loose at the low-rise line" },
+      "W-6": { "graded": true, "offsetCm": -6, "why": "typical elastic skirt band, about 6 cm under the body waist (assumption, not a measurement)" },
+      "W-12": { "graded": true, "offsetCm": -12, "why": "tight band" },
+      "ONE-70": { "graded": false, "fixedCm": 70, "why": "one band for every size (the 'every size hangs from the same band' hypothesis of REFINEMENT R3)" }
+    }
+  }
+}

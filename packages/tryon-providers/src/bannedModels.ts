@@ -52,6 +52,8 @@ export const BANNED_MODELS = [
   'garverselod',
   'gaussian-garments',
   'garment-crafter',
+  // The GarmentCode simulator fork (NVIDIA Source Code License clause 3.3: research only); upstream GarmentCode stays OK
+  'nvidiawarp-garmentcode',
   // Human parsing (stage 1b research, docs/research/garment-engine.md "Stage 1b")
   'fashn-human-parser',
   'facebook/sapiens',
@@ -103,6 +105,7 @@ export const BANNED_MODEL_NOTES: Readonly<Record<BannedModel, BanNote>> = {
   garverselod: { reason: 'no-licence', licence: 'no licence file in the repository', source: 'https://github.com/zhongjinluo/GarVerseLOD' },
   'gaussian-garments': { reason: 'no-licence', licence: 'no licence file in the repository', source: 'https://github.com/eth-ait/Gaussian-Garments' },
   'garment-crafter': { reason: 'no-licence', licence: 'no licence file in the repository', source: 'https://github.com/humansensinglab/garment-crafter' },
+  'nvidiawarp-garmentcode': { reason: 'non-commercial', licence: 'NVIDIA Source Code License, clause 3.3: research or evaluation use only', source: 'https://raw.githubusercontent.com/maria-korosteleva/NvidiaWarp-GarmentCode/main/LICENSE.md' },
   'fashn-human-parser': { reason: 'non-commercial', licence: 'NVIDIA Source Code License for SegFormer (research or evaluation only); the pip package wrapper inherits it', source: 'https://huggingface.co/fashn-ai/fashn-human-parser' },
   'facebook/sapiens': { reason: 'non-commercial', licence: 'CC BY-NC 4.0 (Hugging Face licence tag of the Sapiens checkpoints)', source: 'https://huggingface.co/facebook/sapiens-seg-1b' },
 };

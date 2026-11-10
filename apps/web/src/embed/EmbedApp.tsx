@@ -11,7 +11,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import type { BodyProfile, TryResolveResponse } from '@curtain/schema';
 import { ApiError } from '@/api/client';
-import { adviseSize, EMPTY_ABOUT, fitForProfile, mergeAboutIntoScan, normalizeAbout, profileFromAbout, sizeConfidence, switchUnits, validateAbout, type AboutField, type AboutForm } from './aboutYou';
+import { adviseSize, EMPTY_ABOUT, fitForProfile, mergeAboutIntoScan, normalizeAbout, priorKeys, profileFromAbout, sizeConfidence, switchUnits, validateAbout, type AboutField, type AboutForm } from './aboutYou';
 import { isMockToken, mockTokensEnabled, resolveMock, type EmbedApi, type EmbedDeps } from './deps';
 import { AboutScreen, BlockedScreen, EmbedFooter, EmbedFrame, LoadingScreen, ProductHeader } from './EmbedScreens';
 import { classifyError, flowReducer, INITIAL_FLOW } from './flow';
@@ -344,6 +344,9 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
               size={shownSize}
               recommended={advice.size}
               measurements={embedFit.userBody.measurements}
+              units={units}
+              heightCm={profile.measurements.height?.mean}
+              estimated={priorKeys(profile)}
               onSelect={(s) => {
                 setSelected(s);
                 setChosen(null);

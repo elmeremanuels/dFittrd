@@ -78,9 +78,11 @@ export function ResultScreen({
   const [tab, setTab] = useState<TabKey>('fit');
   const [showRings, setShowRings] = useState(true);
   const heightCm = profile.measurements.height?.mean;
+  const ringInputs = useMemo(() => ringInputsFor(garment), [garment]);
+  const priorGirths = useMemo(() => priorKeys(profile), [profile]);
   const rings = useMemo(
-    () => (advice.noPoints ? null : ringOverlayFor({ garment, fit, size: selected, measurements: userBody.measurements, heightCm, inputs: ringInputsFor(garment), units })),
-    [advice.noPoints, garment, fit, selected, userBody.measurements, heightCm, units],
+    () => (advice.noPoints ? null : ringOverlayFor({ garment, fit, size: selected, measurements: userBody.measurements, heightCm, inputs: ringInputs, units, estimated: priorGirths })),
+    [advice.noPoints, garment, fit, selected, userBody.measurements, heightCm, ringInputs, units, priorGirths],
   );
   const tabsId = useId();
   const tabRefs = useRef<Partial<Record<TabKey, HTMLButtonElement | null>>>({});
@@ -207,7 +209,7 @@ export function ResultScreen({
         <div className="grid items-start gap-4 min-[500px]:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
           <div className="mx-auto w-full max-w-[15rem] space-y-1.5">
             <div ref={avatarRef} className="mirror-frame aspect-[5/8] w-full border-[8px]">
-              <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} bodyLabel="Body from your answers" rings={showRings ? rings : null} />
+              <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} bodyLabel="Body from your answers" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} />
             </div>
             {rings ? (
               <div className="space-y-1 text-[11px] leading-snug text-ink-mute" data-testid="size-rings-legend">

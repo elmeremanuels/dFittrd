@@ -5,7 +5,8 @@
  * Payloads are git-ignored bundle files (spikes/garment-engine/out/eval/<id>/payload.json).
  *
  *   node scripts/rings-shots.mjs <out dir> [payload.json …]
- * Sizes: AU 8 / 12 / 16 for every body, plus the body's recommended size.
+ * Sizes: AU 8 / 12 / 16 for every body (FORCED: a harness render, not a view a shopper can always
+ * reach; the embed's "Compare sizes" only offers the sizes next to the advice).
  */
 import { existsSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -46,7 +47,9 @@ try {
         const file = join(out, `${id}-${body}-au${size}.png`);
         await page.locator('[data-testid="harness"]').screenshot({ path: file });
         const chips = await page.getByTestId('size-ring-text').innerText();
-        console.log(`${id} ${body} AU${size} (recommended ${rec}): ${chips.replace(/\s+/g, ' ').trim()}`);
+        // On-screen width of the waist ring (CSS px at this 390 px viewport): how much one size step moves it.
+        const waistPx = await page.locator('[data-testid="size-ring-waist"] path').nth(2).evaluate((el) => el.getBoundingClientRect().width);
+        console.log(`${id} ${body} AU${size} (recommended ${rec}) [waist ring ${waistPx.toFixed(1)} CSS px wide]: ${chips.replace(/\s+/g, ' ').trim()}`);
       }
     }
   }

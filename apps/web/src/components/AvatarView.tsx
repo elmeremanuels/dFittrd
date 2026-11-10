@@ -39,6 +39,8 @@ export interface AvatarViewProps {
    * neighbours, drawn over the figure. Ignored in `compact` mode (too small to read).
    */
   rings?: RingOverlay | null;
+  /** Skirt hem sweep of this size, cm (ring input): the drawn hem then matches the hem ring. */
+  hemSweepCm?: number | null;
 }
 
 const NO_MEDIA: AvatarMedia = { faceUrl: null, baseFrame: null };
@@ -51,13 +53,13 @@ const NO_MEDIA: AvatarMedia = { faceUrl: null, baseFrame: null };
  * engine's per-point slack, hem from lengthCm, look from fabric) → face tile at the head. Always
  * carries the estimate badge.
  */
-export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false, rings = null }: AvatarViewProps): ReactNode {
+export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false, rings = null, hemSweepCm = null }: AvatarViewProps): ReactNode {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const reduce = useReducedMotion();
 
   const body = useMemo(() => bodyGeometry(measurements, heightCm), [measurements, heightCm]);
   const gaps = useMemo(() => (fit ? fitGapsForRender(fit, size ?? undefined) : null), [fit, size]);
-  const geom = useMemo(() => (garment ? garmentGeometry({ garment, gaps, body }) : null), [garment, gaps, body]);
+  const geom = useMemo(() => (garment ? garmentGeometry({ garment, gaps, body, hemSweepCm }) : null), [garment, gaps, body, hemSweepCm]);
   const look = useMemo(() => (garment ? fabricLook(garment.fabric) : null), [garment]);
 
   const skin = isHex(skinHex) ? skinHex! : '#DFC3A8';

@@ -10,7 +10,7 @@ On the result screen of the `/embed` flow ("How it fits" tab), over the existing
 - **A chip per ring** in words and numbers: "Tight / 6 cm short", "Good fit / 5 cm room", "Loose / 15 cm room", "Not checked / 7 cm room" (the fit engine does not score that point for this cut, e.g. an A-line hip), "Hem / 200 cm assumed". Colour is never the only signal; screen readers get one sentence per ring.
 - **Ghost rings**: faint dashed rings of the sizes on either side, labelled with their size.
 - **Legend** under the figure: which size is solid, which are ghosts, and the estimate notes. A "Hide size rings" button switches the layer off; the tight/loose look of the figure (strain marks, folds) stays either way.
-- **3D view** (products with an approved bundle): the same ring numbers as a line of text under the 3D estimate. The rings are not drawn in 3D.
+- **3D view** (products with an approved bundle): the same ring numbers (same units as the 2D figure) as a line of text under the 3D estimate. The rings are not drawn in 3D. The hem is left out there, with the note "The 3D drape does not show the hem width yet": the 3D skirt still hangs as a narrow tube (REFINEMENT R3).
 
 Every number on a ring comes from `@curtain/fit-engine`'s per-point output for that size (`chartCm`, `bodyCm`, `band`). The ring code decides no size and no band.
 
@@ -18,26 +18,33 @@ Every number on a ring comes from `@curtain/fit-engine`'s per-point output for t
 
 | Input | Status | Value used | Where to change it |
 |---|---|---|---|
-| Garment girth at bust / waist / hip | Size chart + the engine's designed ease | e.g. skirt AU 12 waist 77.5 + 3 = 80.5 cm | — |
-| Pilot skirt waistband, relaxed / stretched | **ASSUMED, not measured** | size 12: 69 / 96 cm, graded ±5 cm per size with the chart | `PILOT_SKIRT_TAPE` in `apps/web/src/render/ringInputs.ts` |
-| Pilot skirt hem sweep | **ASSUMED, not measured** | size 12: 200 cm, graded with the chart's hip step | same |
-| Body | The tester's typed answers | — | — |
+| Girth drawn at bust / waist / hip | The size chart's **body** girth plus the engine's designed ease (the pilot skirt's chart is a body chart, so this is not a garment girth; rings and screen-reader text say so) | skirt AU 12 waist: engine `chartCm` 80.5 cm (77.5 + 3 a-line waist ease), printed rounded as 81 cm; AU 8: 70.5, printed 71 | — |
+| Pilot skirt waistband, relaxed / stretched | **ASSUMED, not measured** | size 12: 70 / 110 cm, graded ±5 cm per size with the chart's waist step | `PILOT_SKIRT_TAPE` in `apps/web/src/render/ringInputs.ts` |
+| Pilot skirt closure | **ASSUMED pull-on** (the shop lists no zip; "comfortable stretch at the waist") | pull-on: the stretched band must pass over the hips | `closure: 'pull-on' \| 'zip'` in `PILOT_SKIRT_TAPE` |
+| Pilot skirt hem sweep | **ASSUMED, not measured** | size 12: 200 cm, graded with the chart's hip step (±5 cm per size; a real A-line hem probably grades more, also an assumption). The 2D skirt's hem is now drawn at this same girth, so drawing and hem ring agree | same |
+| Body girths | The tester's typed answers; when only height and weight are given, an estimate ("about … (estimated from your height and weight)", room rounded to 2 cm) | — | — |
 
 The 3D proxy's lowest graded ring (about 102 cm at size 12 in `grading.json`) is **not** used for the hem: it is narrower than the hips, which no A-line maxi is, because the generated mesh clings (REFINEMENT R3).
 
-**To plug in the real numbers:** fill in `PILOT_SKIRT_TAPE = { sampleSize: '12', bandRelaxedCm: …, bandStretchedCm: …, hemSweepCm: … }` (any one sample size; the other sizes are graded with the chart's steps), then run `pnpm --filter @curtain/web test`. The labels then say "measured" and the rings move.
+**To plug in the real numbers:** fill in `PILOT_SKIRT_TAPE = { sampleSize: '12', bandRelaxedCm: …, bandStretchedCm: …, hemSweepCm: …, closure: 'pull-on' }` (any one sample size; the other sizes are graded with the chart's steps), then run `pnpm --filter @curtain/web test`. The labels then say "measured" and the rings move.
 
 ### Band sweep (assumed values; what the measurement will decide)
 
-How far the elastic band would be stretched on each test body (body waist between the assumed relaxed and stretched girth; 0% = band at rest, 100% = fully stretched). The fit engine's word for the waist does not change with these values; only the drawn band bracket does.
+**Correction (review of 10 Nov):** the first version of this table only compared the body *waist* with the band and concluded that an average body "could pull on AU 8". That ignored that a pull-on skirt's band has to stretch over the **hips**, and its scenarios (stretched 88-104 cm at size 12) were so small that no test body could pull on even its *recommended* size. The scenarios are now re-centred so that every one stretches to at least the chart hip of the same size (size 12: chart hip 104), and the table has a hip column.
 
-| Scenario (size 12 relaxed / stretched) | Slim in AU 8 (waist 64) | Average in AU 12 (76) | Curvy in AU 16 (86) | Average in AU 8 | Curvy in AU 12 |
+Generated by `node apps/web/scripts/band-sweep.mjs` (uses `bandSweep()` from `ringInputs.ts`). Waist % = how far the band is stretched at the body waist (0% = at rest, below 0 it does not grip). "Over hips" = stretched band minus body hip, cm; negative = it will not pull on (if the skirt is really pull-on). The fit engine's word for the waist does not change with these values; only the band bracket, the chip's "band … assumed" line and the screen-reader text do.
+
+| Scenario (size 12 relaxed / stretched) | Slim in AU 8 (recommended; waist 64, hip 90) | Average in AU 12 (recommended; waist 76, hip 102) | Curvy in AU 16 (recommended; waist 86, hip 116) | Average in AU 8 (two sizes down) | Curvy in AU 12 (two sizes down) |
 |---|---|---|---|---|---|
-| low 64 / 88 | 54-78: 42% | 64-88: 50% | 74-98: 50% | 54-78: 92% | 64-88: 92% |
-| **mid 69 / 96 (drawn)** | 59-86: 19% | 69-96: 26% | 79-106: 26% | 59-86: 63% | 69-96: 63% |
-| high 74 / 104 | 64-94: 0% (band does not grip) | 74-104: 7% | 84-114: 7% | 64-94: 40% | 74-104: 40% |
+| low 66 / 104 | 56-94: waist 21%, +4 over hips | 66-104: waist 26%, +2 over hips | 76-114: waist 26%, **-2 at hips: will not pull on** | 56-94: waist 53%, **-8 at hips** | 66-104: waist 53%, **-12 at hips** |
+| **mid 70 / 110 (drawn)** | 60-100: waist 10%, +10 over hips | 70-110: waist 15%, +8 over hips | 80-120: waist 15%, +4 over hips | 60-100: waist 40%, **-2 at hips** | 70-110: waist 40%, **-6 at hips** |
+| high 74 / 116 | 64-106: waist 0% (only just grips), +16 over hips | 74-116: waist 5%, +14 over hips | 84-126: waist 5%, +10 over hips | 64-106: waist 29%, +4 over hips | 74-116: waist 29%, +0 over hips |
 
-Reading: under every assumed scenario the average body could physically pull on AU 8 and the curvy body AU 12, while the fit engine calls those sizes "tight" (it treats the chart's waist plus 2.9 cm ease as the target). Under "high", the slim body's AU 8 band would not grip at all. Which of these is true is exactly what the founder's tape measurement settles; until then the rings say "assumed".
+Reading:
+- The hips, not the waist, decide whether a smaller size goes on. Under the low and mid scenarios, two sizes down does **not** pass over the hips for the average or the curvy body, which agrees with the fit engine's "tight". Only under "high" (a band that stretches 42 cm) would it go on.
+- Under "low", even the curvy body's recommended AU 16 is 2 cm short at the hips: her hips (116) are above the chart's AU 16 hip (114), and a band that stretches only to the chart hip is too small for her.
+- Under "high", the slim body's AU 8 band is at rest on her waist (0%): it would sit, but not grip.
+- So the tape measurement has to give **both** the stretched band girth and whether the skirt has a zip. With a zip, the hip column does not apply.
 
 ## 2. Test script (15 minutes per person, 5 people)
 
@@ -93,16 +100,17 @@ Made with `node apps/web/scripts/rings-shots.mjs <out>` (dev-only harness `apps/
 
 | File | What it shows |
 |---|---|
-| `crimson-wildflower-maxi-skirt-sheet.png` | 3 x 3: rows slim / average / curvy, columns AU 8 / 12 / 16 (figure only) |
+| `crimson-wildflower-maxi-skirt-sheet.png` | 3 x 3: rows slim / average / curvy, columns AU 8 / 12 / 16 (figure only). **Harness renders with forced sizes:** in the real embed "Compare sizes" offers only the sizes next to the advice, so e.g. a curvy shopper never sees AU 8 or AU 12 |
 | `crimson-wildflower-maxi-skirt-average-au12.png` | Full result, average body, recommended AU 12: waist "Good fit / 5 cm room", hip "Not checked", hem "200 cm assumed", ghosts 10 and 14 |
 | `crimson-wildflower-maxi-skirt-curvy-au12.png` | Curvy body looking at AU 12 (recommended 16): waist ring "Tight / 6 cm short", inside the body outline |
 | `crimson-wildflower-maxi-skirt-slim-au16.png` | Slim body looking at AU 16: "Loose / 27 cm room" |
 | `azure-palm-baby-doll-dress-sheet.png` | 3 x 3 for an AU 8-16 empire dress: bust ring scored, waist and hip "Not checked" (empire line) |
-| `test-results/demo-e2e/shopify-dawn-3b-size-rings-other.png` (demo:e2e) | The real embed after switching to a neighbouring size |
+| `test-results/demo-e2e/shopify-dawn-3b-size-rings-other.png` (demo:e2e) | The real embed after switching to a neighbouring size (Linen Wrap Dress) |
+| `test-results/demo-e2e/shopify-dawn-3b-size-rings-skirt.png` (demo:e2e) | The real embed, pilot skirt, after switching to a neighbouring size: waist (with "band … assumed"), hip and hem rings |
 
 ## 4. Known limits of the mock
 
-- **The graded step is small on screen.** At true scale a 5 cm girth step moves a ring about 1.6 cm per side, about 1.5 mm on a phone. The ghost rings nearly overlap the solid ring; the size difference is carried by the chip text, not by the geometry. Exaggerating the rings would misstate the garment, so the test should tell us whether the text is enough.
+- **The graded step is small on screen.** At true scale a 5 cm waist girth step moves a ring 5 / (π × 1.75) ≈ 0.9 cm per side, about 2.5 viewBox units, which at the mirror's scale (about 0.69 CSS px per unit) is **about 1.7 CSS px per side, roughly 0.3 mm** on a 390 px wide phone. Measured in the harness (`rings-shots.mjs` logs the drawn width): the waist ring is 48.6 / 55.5 / 62.3 CSS px wide at AU 8 / 12 / 16 for the average body, i.e. about 3.5 CSS px wider per size. (The first version said 1.6 cm and 1.5 mm; that was the diameter-style 5/π number and wrong.) The ghost rings nearly overlap the solid ring; the size difference is carried by the chip text, not by the geometry. Exaggerating the rings would misstate the garment, so the test should tell us whether the text is enough.
 - The 2D garment drawing itself barely changes between sizes for loose-cut points (an A-line skirt hangs the same from the drawing's point of view); only the waist strain and the rings change.
 - "Room" on a ring is garment minus body girth (total ease), so a "Good fit" can show 5 cm room; testers may expect 0. The list beside the figure counts room *relative to the designed ease* instead ("3.2 cm less room than designed" next to a ring chip "Snug / 1 cm room" for the same point, seen in the demo:e2e screenshot). Both come from the same engine numbers, but two "room" figures on one screen may confuse; watch for it and pick one wording after the test.
 - The engine's confidence on the result card is low for these inputs (22-30%); that is the engine's existing true-to-size handling, unchanged here.

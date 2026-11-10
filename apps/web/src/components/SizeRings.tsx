@@ -95,6 +95,7 @@ export function SizeRingsChips({ overlay }: { overlay: RingOverlay }): ReactNode
           >
             <span className="font-semibold">{r.chip[0]}</span>
             <span className="text-ink-soft">{r.chip[1]}</span>
+            {r.chipNote ? <span className="text-ink-mute">{r.chipNote}</span> : null}
           </span>
         ))}
       </div>

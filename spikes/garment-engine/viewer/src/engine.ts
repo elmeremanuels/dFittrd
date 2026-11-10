@@ -164,7 +164,8 @@ export type LoopRing = (typeof LOOP_RINGS)[number];
 /**
  * Drape options from URL-style parameters (the spike page, the sizes-drape script): `cling=0`,
  * `loops=<retain>` (cling stays as set), `rings=hip,waist`, `band=<relaxed>:<stretched>` in cm of the
- * base size (an assumption unless `bandMeasured=1`). Anything missing keeps `DEFAULT_DRAPE`.
+ * base size (always an assumption: a measured band comes only from the data file, waistbands.json, never from a
+ * URL). Anything missing keeps `DEFAULT_DRAPE`.
  */
 export function drapeOptionsFrom(get: (key: string) => string | null): DrapeOptions {
   const o: DrapeOptions = { ...DEFAULT_DRAPE };
@@ -174,7 +175,7 @@ export function drapeOptionsFrom(get: (key: string) => string | null): DrapeOpti
   const rings = (get('rings') ?? '').split(',').filter((r): r is LoopRing => (LOOP_RINGS as readonly string[]).includes(r));
   if (rings.length) o.loopRings = rings;
   const [r, st] = (get('band') ?? '').split(':').map(Number);
-  if (r !== undefined && st !== undefined && Number.isFinite(r) && Number.isFinite(st) && r > 20 && st >= r) o.waistband = { relaxedCm: r, stretchedCm: st, assumed: get('bandMeasured') !== '1' };
+  if (r !== undefined && st !== undefined && Number.isFinite(r) && Number.isFinite(st) && r > 20 && st >= r) o.waistband = { relaxedCm: r, stretchedCm: st, assumed: true };
   return o;
 }
 

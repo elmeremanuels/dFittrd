@@ -1,7 +1,7 @@
 {
   "format": "curtain.spike.waistbands",
   "formatVersion": 1,
-  "about": "Tape measurements of stretch waistbands for the step-3 control (docs/research/shortcut-to-step3.md §4; docs/REFINEMENT.md R3). Fill in relaxedCm (band lying flat, unstretched, measured edge to edge and doubled), stretchedCm (band pulled to its comfortable limit, doubled), hemSweepCm (hem lying flat, doubled) and the size measured. Then run: pnpm --filter @curtain/garment-spike exec tsx viewer/scripts/sizes-drape.ts out/eval/<handle> --modes base,band:measured --band-file data/bohohippychic/waistbands.json. Until a value is filled in, every band number in the step-3 results is an ASSUMPTION (the assumedSweep below).",
+  "about": "Tape measurements of stretch waistbands for the step-3 control (docs/research/shortcut-to-step3.md §4; docs/REFINEMENT.md R3). Fill in relaxedCm (band lying flat, unstretched, measured edge to edge and doubled), stretchedCm (band pulled to its comfortable limit, doubled), hemSweepCm (hem lying flat, doubled) and measuredSize, the size you measured: one of the grading sizes \"8\", \"10\", \"12\", \"14\", \"16\" (\"AU 12\" or a bare 12 is accepted too). Optional gradeCmPerSize: how much the relaxed band grows per size step, cm, if the brand's chart says so (left null, the chart's hip step, 5 cm, is ASSUMED). Then run: pnpm --filter @curtain/garment-spike exec tsx viewer/scripts/sizes-drape.ts out/eval/<handle> --modes base,band:measured --band-file data/bohohippychic/waistbands.json. hemSweepCm is printed against the graded mesh of the measured size (a check of the cut, not of the drape). Until a value is filled in, every band number in the step-3 results is an ASSUMPTION (the assumedSweep below).",
   "assumedSweep": {
     "note": "ASSUMED, not measured: relaxed / stretched girth of the base size (AU 12), cm; other sizes step by the chart's hip step (5 cm) and keep the stretch ratio.",
     "values": [
@@ -16,6 +16,7 @@
       "stretchedCm": null,
       "hemSweepCm": null,
       "measuredSize": null,
+      "gradeCmPerSize": null,
       "measuredOn": null,
       "status": "not measured (founder to supply)"
     },
@@ -24,6 +25,7 @@
       "stretchedCm": null,
       "hemSweepCm": null,
       "measuredSize": null,
+      "gradeCmPerSize": null,
       "measuredOn": null,
       "status": "not measured"
     }

@@ -23,9 +23,9 @@ import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh } from '@c
 import type { GarmentPayload } from '@curtain/schema';
 import { bodyField, buildAvatar, mannequinMeasurements } from '../src/body';
 import { sample } from '../src/collide';
-import { isSettled, stepCloth, strainQuantile } from '../src/cloth';
+import { isSettled, loopGirth, stepCloth, strainQuantile } from '../src/cloth';
 import { meshFromGlb, type SpikeBundle } from '../src/bundle';
-import { DEFAULT_DRAPE, gradedMesh, openSession, prepareFit, sizeLabels, viewerMaterial, type DrapeOptions, type WaistbandSpec } from '../src/engine';
+import { DEFAULT_DRAPE, LOOP_RINGS, LOOP_SLICE_CM, gradedMesh, openSession, prepareFit, sizeLabels, viewerMaterial, type DrapeOptions, type WaistbandSpec } from '../src/engine';
 import { fitForBody } from '../src/fitting';
 
 const argv = process.argv.slice(2);
@@ -81,12 +81,28 @@ const torsoGirth = (y: number): number => {
   return Math.round(Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b))) * 10) / 10;
 };
 
+interface BandFileEntry { relaxedCm: number | null; stretchedCm: number | null; hemSweepCm?: number | null; measuredSize?: string | number | null; gradeCmPerSize?: number | null }
+/** The founder's tape measurements (waistbands.json) for this bundle's product, validated before any drape runs. */
+let bandEntry: (BandFileEntry & { size: string }) | undefined;
+/** "AU 12", "size 12", "12" and 12 all mean the grading label "12". */
+function normaliseSize(v: string | number, labels: readonly string[]): string {
+  const raw = String(v).trim().replace(/^(au|size|sz)\s*/i, '').trim();
+  const hit = labels.find((l) => l.trim().toUpperCase() === raw.toUpperCase());
+  if (!hit) throw new Error(`measuredSize ${JSON.stringify(v)} is not one of the grading sizes ${labels.join(', ')}`);
+  return hit;
+}
 function readBandFile(): WaistbandSpec {
-  if (!bandFile) throw new Error('band:measured needs --band-file');
-  const j = JSON.parse(readFileSync(bandFile, 'utf8')) as { products: Record<string, { relaxedCm: number | null; stretchedCm: number | null; measuredSize?: string | null }> };
-  const p = j.products[bundle.productId];
-  if (!p || p.relaxedCm == null || p.stretchedCm == null) throw new Error(`${bandFile}: product ${bundle.productId} has no measured band yet`);
-  return { relaxedCm: p.relaxedCm, stretchedCm: p.stretchedCm, measuredSize: p.measuredSize ?? undefined, assumed: false };
+  if (!bandEntry) {
+    if (!bandFile) throw new Error('band:measured needs --band-file');
+    const j = JSON.parse(readFileSync(bandFile, 'utf8')) as { products: Record<string, BandFileEntry> };
+    const p = j.products[bundle.productId];
+    if (!p || p.relaxedCm == null || p.stretchedCm == null) throw new Error(`${bandFile}: product ${bundle.productId} has no measured band yet`);
+    if (!(p.relaxedCm > 20 && p.stretchedCm >= p.relaxedCm)) throw new Error(`${bandFile}: ${bundle.productId} needs 20 < relaxedCm <= stretchedCm (got ${p.relaxedCm} / ${p.stretchedCm})`);
+    const size = normaliseSize(p.measuredSize ?? bundle.grading.baseSize, bundle.grading.sizes.map((x) => x.size));
+    bandEntry = { ...p, size };
+  }
+  const p = bandEntry;
+  return { relaxedCm: p.relaxedCm!, stretchedCm: p.stretchedCm!, measuredSize: p.size, ...(p.gradeCmPerSize != null ? { gradeCmPerSize: p.gradeCmPerSize } : {}), assumed: false };
 }
 
 function parseMode(spec: string): DrapeOptions {
@@ -105,15 +121,22 @@ function parseMode0(spec: string): DrapeOptions {
   throw new Error(`unknown mode ${spec}`);
 }
 
-interface SizeRow { size: string; graded: number[]; start: number[]; draped: number[]; hip: { graded: number; draped: number }; hem: { graded: number; draped: number }; hemYDraped: number; settledS: number; residualCm: number; p99StrainPct: number; finite: boolean; solveMs: number; band: unknown; loops: unknown; lines: string[] }
-const results: { mode: string; options: DrapeOptions; rows: SizeRow[]; hipSpread: { graded: number; draped: number; survivesPct: number }; hemSpread: { graded: number; draped: number; survivesPct: number } }[] = [];
+interface SizeRow { size: string; graded: number[]; start: number[]; draped: number[]; hip: { graded: number; draped: number }; hem: { graded: number; draped: number }; hemYDraped: number; settledS: number; residualCm: number; p99StrainPct: number; finite: boolean; solveMs: number; band: unknown; loops: unknown; loopState: LoopState[]; lines: string[] }
+/** A girth loop after the drape: active when the drape sits on its minimum (the loop, not the cloth, set that girth). */
+interface LoopState { ring: string; particles: number; minGirthCm: number; drapedCm: number; active: boolean }
+type Spread = { graded: number; draped: number; survivesPct: number };
+const results: { mode: string; options: DrapeOptions; rows: SizeRow[]; hipSpread: Spread; hemSpread: Spread; byHeight: (Spread & { y: number; loopRing: string | null })[]; ringsInstalled: string[]; ringsSkipped: string[]; ringsNeverActive: string[] }[] = [];
+
+// Parse every mode (and read the band file) before any drape runs, so a bad mode fails fast instead of after minutes of draping.
+const modeList = (modesArg ?? 'base').split(',');
+const parsedModes = new Map(modeList.map((k) => [k, parseMode(k)] as const));
 
 if (benchArg) {
-  const modes = (modesArg ?? 'base').split(',');
+  const modes = modeList;
   const times = new Map<string, number[]>(modes.map((k) => [k, []]));
   const material = viewerMaterial('product', bundle.material);
   for (let round = 0; round < Number(benchArg); round++) for (const mode of modes) {
-    const f = prepareFit(session, avatar, field, fit, bundle.grading.baseSize, material, 1.5, parseMode(mode));
+    const f = prepareFit(session, avatar, field, fit, bundle.grading.baseSize, material, 1.5, parsedModes.get(mode)!);
     const t0 = performance.now();
     stepCloth(f.cloth, f.params, f.collide, 90);
     times.get(mode)!.push((performance.now() - t0) / 90);
@@ -125,8 +148,9 @@ if (benchArg) {
   process.exit(0);
 }
 console.log(`${bundle.productId} (${dir}); heights ${ys.join(' / ')} cm; body hull ${ys.map((y) => girth(avatar.mesh.positions, avatar.mesh.indices, y)).join(' / ')}; torso ellipse at hip ${hipY.toFixed(1)}: ${torsoGirth(hipY)}`);
-for (const mode of (modesArg ?? 'base').split(',')) {
-  const options = parseMode(mode);
+const writeJson = (): void => { if (jsonOut) writeFileSync(jsonOut, JSON.stringify({ productId: bundle.productId, dir, heights: ys, hipY, hemY, torsoAtHip: torsoGirth(hipY), results }, null, 1)); };
+for (const mode of modeList) {
+  const options = parsedModes.get(mode)!;
   const rows: SizeRow[] = [];
   for (const size of sizeLabels(session)) {
     const g = gradedMesh(session, size);
@@ -144,20 +168,52 @@ for (const mode of (modesArg ?? 'base').split(',')) {
     for (let i = 0; i < out.length; i += 3) residual = Math.max(residual, Math.hypot(f.cloth.pos[i]! - out[i]!, f.cloth.pos[i + 1]! - out[i + 1]!, f.cloth.pos[i + 2]! - out[i + 2]!));
     let minY = Infinity;
     for (let i = 1; i < out.length; i += 3) minY = Math.min(minY, out[i]!);
-    rows.push({ size, graded: ys.map((y) => girth(g.positions, f.indices, y)), start: ys.map((y) => girth(start, f.indices, y)), draped: ys.map((y) => girth(out, f.indices, y)), hip: { graded: girth(g.positions, f.indices, hipY), draped: girth(out, f.indices, hipY) }, hem: { graded: girth(g.positions, f.indices, hemY), draped: girth(out, f.indices, hemY) }, hemYDraped: Math.round(minY * 10) / 10, settledS: Math.round(settledS * 100) / 100, residualCm: Math.round(residual * 100) / 100, p99StrainPct: Math.round(strainQuantile(f.cloth, 0.99) * 1000) / 10, finite, solveMs: Math.round(solveMs), band: f.band, loops: f.loops, lines: f.lines.map((l) => l.text) });
+    const c = f.cloth, scratch: number[] = [], hull = new Int32Array(c.loops.length + 2);
+    const loopState: LoopState[] = f.loops.map((l, k) => {
+      const d = loopGirth(out, c.loops, c.loopStart[k]!, c.loopStart[k + 1]!, scratch, hull);
+      return { ring: l.ring, particles: l.particles, minGirthCm: l.minGirthCm, drapedCm: Math.round(d * 10) / 10, active: d <= c.loopMin[k]! * 1.01 };
+    });
+    rows.push({ size, graded: ys.map((y) => girth(g.positions, f.indices, y)), start: ys.map((y) => girth(start, f.indices, y)), draped: ys.map((y) => girth(out, f.indices, y)), hip: { graded: girth(g.positions, f.indices, hipY), draped: girth(out, f.indices, hipY) }, hem: { graded: girth(g.positions, f.indices, hemY), draped: girth(out, f.indices, hemY) }, hemYDraped: Math.round(minY * 10) / 10, settledS: Math.round(settledS * 100) / 100, residualCm: Math.round(residual * 100) / 100, p99StrainPct: Math.round(strainQuantile(f.cloth, 0.99) * 1000) / 10, finite, solveMs: Math.round(solveMs), band: f.band, loops: f.loops, loopState, lines: f.lines.map((l) => l.text) });
   }
-  const spread = (k: 'hip' | 'hem'): { graded: number; draped: number; survivesPct: number } => {
-    const a = rows[0]![k], z = rows[rows.length - 1]![k];
+  const spreadOf = (a: { graded: number; draped: number }, z: { graded: number; draped: number }): Spread => {
     const gs = Math.round((z.graded - a.graded) * 10) / 10, ds = Math.round((z.draped - a.draped) * 10) / 10;
     return { graded: gs, draped: ds, survivesPct: Math.round((ds / gs) * 100) };
   };
-  const r = { mode, options, rows, hipSpread: spread('hip'), hemSpread: spread('hem') };
+  const spread = (k: 'hip' | 'hem'): Spread => spreadOf(rows[0]![k], rows[rows.length - 1]![k]);
+  // Which rings hold a loop, and at what height: a spread measured at a loop ring is imposed by the loop (it holds the
+  // hull at retain × the graded girth there), not predicted by the drape. Off-ring heights are the honest evidence.
+  const installed = [...new Set(rows.flatMap((r) => r.loopState.map((l) => l.ring)))];
+  const requested = options.loopRetain > 0 ? [...(options.loopRings ?? LOOP_RINGS)] : [];
+  const skipped = requested.filter((r) => !installed.includes(r));
+  const neverActive = installed.filter((r) => !rows.some((row) => row.loopState.some((l) => l.ring === r && l.active)));
+  let restHem = Infinity;
+  const g0 = gradedMesh(session, rows[0]!.size).positions;
+  for (let i = 1; i < g0.length; i += 3) restHem = Math.min(restHem, g0[i]!);
+  const ringY: Record<string, number> = { waist: m.morphHeights.waist, hip: m.morphHeights.hip, hem: restHem + 2 };
+  const ringAt = (y: number): string | null => installed.find((r) => Math.abs(ringY[r]! - y) <= LOOP_SLICE_CM + 0.5) ?? null;
+  const byHeight = ys.map((y, i) => ({ y, loopRing: ringAt(y), ...spreadOf({ graded: rows[0]!.graded[i]!, draped: rows[0]!.draped[i]! }, { graded: rows[rows.length - 1]!.graded[i]!, draped: rows[rows.length - 1]!.draped[i]! }) }));
+  const r = { mode, options, rows, hipSpread: spread('hip'), hemSpread: spread('hem'), byHeight, ringsInstalled: installed, ringsSkipped: skipped, ringsNeverActive: neverActive };
   results.push(r);
-  console.log(`\n== ${mode}: hip@${hipY.toFixed(1)} graded spread ${r.hipSpread.graded} -> draped ${r.hipSpread.draped} cm (${r.hipSpread.survivesPct} %); hem@${hemY} graded ${r.hemSpread.graded} -> draped ${r.hemSpread.draped} cm (${r.hemSpread.survivesPct} %)`);
+  const hipRing = ringAt(hipY);
+  const hipTag = hipRing ? ` [AT THE ${hipRing.toUpperCase()} LOOP: imposed by the loop, not predicted]` : '';
+  console.log(`\n== ${mode}: hip@${hipY.toFixed(1)} graded spread ${r.hipSpread.graded} -> draped ${r.hipSpread.draped} cm (${r.hipSpread.survivesPct} %)${hipTag}; hem@${hemY} graded ${r.hemSpread.graded} -> draped ${r.hemSpread.draped} cm (${r.hemSpread.survivesPct} %)`);
+  console.log(`   spread by height (AU ${rows[0]!.size}->${rows[rows.length - 1]!.size}, graded -> draped cm): ${byHeight.map((b) => `y${b.y} ${b.graded}->${b.draped} (${b.survivesPct}%)${b.loopRing ? `[${b.loopRing} loop]` : ''}`).join(' | ')}`);
+  const off = byHeight.filter((b) => !b.loopRing && Number.isFinite(b.survivesPct));
+  if (requested.length) console.log(`   loops: requested ${requested.join('+')}; installed ${installed.join('+') || 'none'}${skipped.length ? `; SKIPPED ${skipped.join('+')} (no free cloth particles at that ring, or pinned)` : ''}${neverActive.length ? `; NEVER ACTIVE ${neverActive.join('+')} (the drape never fell to the loop's minimum)` : ''}; off-ring heights: ${off.map((b) => `y${b.y} ${b.survivesPct}%`).join(', ')}`);
   for (const row of rows) {
     console.log(`${row.size}: hip ${row.hip.graded}->${row.hip.draped} hem ${row.hem.graded}->${row.hem.draped} | draped ${row.draped.join(' / ')} | lowest y ${row.hemYDraped}, settled ${row.settledS} s, residual ${row.residualCm} cm/1 s, p99 strain ${row.p99StrainPct} %, ${row.finite ? 'finite' : 'NaN!'}, ${row.solveMs} ms`);
     if (row.band) console.log(`   band ${JSON.stringify(row.band)}`);
-    if (Array.isArray(row.loops) && row.loops.length) console.log(`   loops ${JSON.stringify(row.loops)}`);
+    if (row.loopState.length) console.log(`   loops ${row.loopState.map((l) => `${l.ring}(${l.particles}p) min ${l.minGirthCm} draped ${l.drapedCm}${l.active ? ' ACTIVE' : ''}`).join('; ')}`);
   }
+  writeJson();
 }
-if (jsonOut) writeFileSync(jsonOut, JSON.stringify({ productId: bundle.productId, dir, heights: ys, hipY, hemY, torsoAtHip: torsoGirth(hipY), results }, null, 1));
+// The founder's hem sweep (waistbands.json hemSweepCm, flat × 2) against the graded mesh of the measured size: a check
+// of the cut (grading.json), not of the drape. The graded hem tucks in at the floor (REFINEMENT R2), so the widest hull
+// girth in the bottom 30 cm is the comparable number.
+if (bandEntry) {
+  const g = gradedMesh(session, bandEntry.size);
+  let widest = 0, at = 0;
+  for (let y = 1; y <= 30; y++) { const v = girth(g.positions, g.indices, y); if (v > widest) { widest = v; at = y; } }
+  const sweep = bandEntry.hemSweepCm;
+  console.log(`\n[hem sweep] AU ${bandEntry.size}: measured ${sweep ?? 'not given'} cm; graded mesh widest hull girth in the bottom 30 cm ${widest} cm (y=${at}), at y=${hemY} ${girth(g.positions, g.indices, hemY)} cm${sweep ? `; mesh / measured ${Math.round((widest / sweep) * 100)} %` : ''}`);
+}

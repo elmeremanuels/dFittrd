@@ -151,6 +151,6 @@ describe('drape options from URL parameters', () => {
     expect(q('')).toEqual(DEFAULT_DRAPE);
     expect(q('cling=0&loops=1&rings=hip,waist,nope&band=72:97')).toEqual({ cling: false, loopRetain: 1, loopRings: ['hip', 'waist'], waistband: { relaxedCm: 72, stretchedCm: 97, assumed: true } });
     expect(q('band=97:72&loops=-1').waistband).toBeNull();
-    expect(q('band=72:97&bandMeasured=1').waistband?.assumed).toBe(false);
+    expect(q('band=72:97&bandMeasured=1').waistband?.assumed).toBe(true); // a URL can never claim a measured band
   });
 });

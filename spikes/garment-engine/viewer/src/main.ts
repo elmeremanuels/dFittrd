@@ -68,7 +68,7 @@ const fixedSizes = (params.get('sizes') ?? '').split(',').map((x) => x.trim()).f
 /** `view=front|three-quarter|side`: each figure turns about its own axis (0°, 45°, 90°), so sizes side by side stay apart. */
 const VIEW_YAW_DEG: Readonly<Record<string, number>> = { front: 0, 'three-quarter': 45, side: 90 };
 const viewYawDeg = VIEW_YAW_DEG[params.get('view') ?? 'front'] ?? 0;
-/** Step-3 control (docs/research/shortcut-to-step3.md): `cling=0`, `loops=<retain>`, `rings=hip,waist`, `band=<relaxed>:<stretched>` (cm, an assumption unless `bandMeasured=1`). Fixed per page load. */
+/** Step-3 control (docs/research/shortcut-to-step3.md): `cling=0`, `loops=<retain>`, `rings=hip,waist`, `band=<relaxed>:<stretched>` (cm, always labelled an assumption; a measured band comes only from waistbands.json). Fixed per page load. */
 const DRAPE = drapeOptionsFrom((k) => params.get(k));
 const state = {
   productId: params.get('product') ?? '',

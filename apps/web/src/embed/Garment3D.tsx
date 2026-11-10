@@ -10,11 +10,13 @@
  * - Always labelled an estimate (rule 3). On any error it closes and the 2D figure above stays.
  */
 import { Box, X } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { FitResult } from '@curtain/fit-engine';
 import type * as GarmentViewer from '@curtain/garment-viewer';
 import type { GarmentAssetRef, GarmentPayload, UserBody } from '@curtain/schema';
 import { EstimateBadge } from '@/components/EstimateBadge';
+import { ringInputsFor } from '@/render/ringInputs';
+import { ringOverlayFor } from '@/render/rings';
 
 type ViewerModule = typeof GarmentViewer;
 type View = Awaited<ReturnType<ViewerModule['mountGarmentView']>>;
@@ -56,6 +58,9 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const viewRef = useRef<View | null>(null);
   const sizeRef = useRef(size);
+  // The same size-ring numbers as the 2D figure (route R5), as text under the 3D view: the drape
+  // can hide part of the graded difference, the rings say it in numbers.
+  const rings = useMemo(() => (open ? ringOverlayFor({ garment, fit, size, measurements, inputs: ringInputsFor(garment) }) : null), [open, garment, fit, size, measurements]);
 
   useEffect(() => {
     if (!open || !asset) return;
@@ -148,6 +153,15 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
         {recommended ? `Size ${recommended} was picked by the size advice.` : 'No size fits well; the size advice decides, not this picture.'}
         {recommended && recommended !== size ? ` You are looking at size ${size}.` : ''}
       </p>
+      {rings ? (
+        <ul className="mt-1.5 flex flex-wrap gap-1 text-[11px]" aria-label={`Size rings of size ${size} (estimate)`} data-testid="garment3d-rings">
+          {rings.selected.rings.map((r) => (
+            <li key={r.key} className="chip px-2 py-0.5" title={r.text}>
+              <span className="font-semibold">{r.key === 'hip' ? 'Hips' : r.key[0]!.toUpperCase() + r.key.slice(1)}</span> {r.chip[0] === 'Hem' ? r.chip[1] : `${r.chip[0].toLowerCase()}, ${r.chip[1]}`}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </section>
   );
 }

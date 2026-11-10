@@ -69,6 +69,9 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     expect(label).toHaveTextContent(/estimate/i);
     expect(label).toHaveTextContent('Size M was picked by the size advice.');
     expect(label).toHaveTextContent('You are looking at size L.');
+    // the same size-ring numbers as the 2D figure, as text (route R5)
+    expect(screen.getByTestId('garment3d-rings')).toHaveAccessibleName('Size rings of size L (estimate)');
+    expect(screen.getByTestId('garment3d-rings')).toHaveTextContent(/Bust/);
     expect(screen.getByText(/Estimate · not measured/)).toBeInTheDocument();
   });
 

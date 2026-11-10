@@ -61,6 +61,11 @@ describe('banned-model list (garment engine licence check, docs/research/garment
     expect(findBanned('SMPL-X')).toBe('smpl-x');
   });
 
+  it('bans the research-only Warp fork of GarmentCode but not GarmentCode itself', () => {
+    expect(findBanned('maria-korosteleva/NvidiaWarp-GarmentCode')).toBe('nvidiawarp-garmentcode');
+    expect(findBanned('maria-korosteleva/GarmentCode')).toBeUndefined();
+  });
+
   it('does not block the commercially licensed candidates from the research doc', () => {
     for (const id of [
       'Wan-AI/Wan2.2-I2V-A14B',

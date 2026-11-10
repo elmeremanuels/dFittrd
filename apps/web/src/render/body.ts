@@ -219,6 +219,11 @@ function hemFromLength(lengthCm: GarmentPayload['lengthCm'], key: string, fromY:
   return fallbackY;
 }
 
+/** A bottom that is a skirt (one tube from the waist), by subcategory or block. */
+export function isSkirt(garment: Pick<GarmentPayload, 'category' | 'patternBlock'> & Partial<Pick<GarmentPayload, 'subcategory'>>): boolean {
+  return garment.category === 'bottom' && /skirt/.test(`${garment.subcategory ?? ''} ${garment.patternBlock}`);
+}
+
 export interface GarmentRenderInput {
   garment: Pick<GarmentPayload, 'category' | 'patternBlock' | 'lengthCm' | 'fabric'> & Partial<Pick<GarmentPayload, 'subcategory'>>;
   gaps: RenderGaps | null;
@@ -326,6 +331,23 @@ export function garmentGeometry({ garment, gaps, body: g }: GarmentRenderInput):
     }
     case 'bottom': {
       const waistY = levelY('waist') + (garment.lengthCm?.rise ? Math.max(-10, 8 - garment.lengthCm.rise * g.pxPerCm * 0.4) : 2);
+      if (isSkirt(garment)) {
+        // A skirt is one tube from the waist, not two legs (step 3 rings mock: the maxi skirt was drawn as trousers).
+        const sub = garment.subcategory ?? '';
+        const fallback = /maxi/.test(sub) ? levelY('ankle') - 4 : /midi/.test(sub) ? levelY('calf') : /mini/.test(sub) ? levelY('thigh') + 8 : levelY('knee') + 6;
+        hemY = hemFromLength(garment.lengthCm, 'outseam', waistY, g.pxPerCm, fallback);
+        const flared = /a-line|flare|skater|circle|tier|wrap/.test(`${garment.patternBlock} ${sub}`);
+        const hemHalf = flared ? hipHalf + 10 + drape * 12 : /pencil|bodycon|straight/.test(garment.patternBlock) ? hipHalf - 2 : hipHalf + 4;
+        path = mirroredPath([
+          { x: waistHalf + 1, y: waistY },
+          { x: hipHalf + (flared ? 2 : 0), y: levelY('hip') },
+          { x: hemHalf, y: hemY - sag * 0.5 },
+          { x: hemHalf * 0.5, y: hemY + sag * 0.4 },
+          { x: 0, y: hemY },
+        ]);
+        addFolds(hipSlack ?? 8 + drape * 6, levelY('hip') + 12, hemY - 8, hemHalf * 0.7);
+        break;
+      }
       const inseam = garment.lengthCm?.inseam;
       const outseam = garment.lengthCm?.outseam;
       hemY = outseam ? hemFromLength(garment.lengthCm, 'outseam', waistY, g.pxPerCm, levelY('ankle')) : inseam ? Math.min(FEET_Y, levelY('crotch') + inseam * g.pxPerCm) : levelY('ankle');

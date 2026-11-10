@@ -10,6 +10,8 @@ import { AvatarView } from '@/components/AvatarView';
 import { EstimateDisclaimer } from '@/components/EstimateBadge';
 import { FitPanel } from '@/components/FitPanel';
 import { pct } from '@/lib/format';
+import { ringInputsFor } from '@/render/ringInputs';
+import { ringOverlayFor } from '@/render/rings';
 import { bandText, fitWithAdvice, gapText, neighbourSizes, pointLabel, priorKeys, usablePoints, type EmbedFit, type FitPreference, type SizeAdvice } from './aboutYou';
 import { UnitToggle } from './EmbedScreens';
 import { SizeChartTable } from './SizeChartTable';
@@ -74,6 +76,12 @@ export function ResultScreen({
   const { fit, userBody } = embedFit;
   const shown = useMemo(() => fitWithAdvice(fit, advice, garment.category, profile), [fit, advice, garment.category, profile]);
   const [tab, setTab] = useState<TabKey>('fit');
+  const [showRings, setShowRings] = useState(true);
+  const heightCm = profile.measurements.height?.mean;
+  const rings = useMemo(
+    () => (advice.noPoints ? null : ringOverlayFor({ garment, fit, size: selected, measurements: userBody.measurements, heightCm, inputs: ringInputsFor(garment), units })),
+    [advice.noPoints, garment, fit, selected, userBody.measurements, heightCm, units],
+  );
   const tabsId = useId();
   const tabRefs = useRef<Partial<Record<TabKey, HTMLButtonElement | null>>>({});
   // WAI-ARIA tabs: arrow keys, Home and End move between the tabs (automatic activation).
@@ -197,8 +205,28 @@ export function ResultScreen({
         </div>
         <div role="tabpanel" id={`${tabsId}-panel-fit`} aria-labelledby={`${tabsId}-tab-fit`} hidden={tab !== 'fit'}>
         <div className="grid items-start gap-4 min-[500px]:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
-          <div ref={avatarRef} className="mirror-frame mx-auto aspect-[5/8] w-full max-w-[15rem] border-[8px]">
-            <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={profile.measurements.height?.mean} bodyLabel="Body from your answers" />
+          <div className="mx-auto w-full max-w-[15rem] space-y-1.5">
+            <div ref={avatarRef} className="mirror-frame aspect-[5/8] w-full border-[8px]">
+              <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} bodyLabel="Body from your answers" rings={showRings ? rings : null} />
+            </div>
+            {rings ? (
+              <div className="space-y-1 text-[11px] leading-snug text-ink-mute" data-testid="size-rings-legend">
+                <button type="button" className="chip min-h-8 px-2.5 text-xs" aria-pressed={showRings} onClick={() => setShowRings((v) => !v)} data-testid="size-rings-toggle">
+                  {showRings ? 'Hide size rings' : 'Show size rings'}
+                </button>
+                {showRings ? (
+                  <>
+                    <p>
+                      <span className="font-semibold text-ink">Solid rings: size {rings.size}.</span>
+                      {rings.ghosts.length > 0 ? ` Faint dashed rings: size ${rings.ghosts.map((g) => g.size).join(' and ')}.` : ''} Dashed coloured rings are estimates.
+                    </p>
+                    {rings.notes.map((n) => (
+                      <p key={n}>{n}</p>
+                    ))}
+                  </>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           {points.length > 0 ? (
             <section className="card space-y-2 p-3" aria-labelledby="points-title">

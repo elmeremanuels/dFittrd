@@ -15,7 +15,10 @@ import { topEdgePlane } from '../src/core/waistband';
 import { weldWithRemap } from '../src/core/weld';
 import { meshFromGlb } from '../src/bundle';
 import { LOOSE_TOP_PIN_CM, pinLoosePieces } from '../src/engine';
-import { LOOSE_TOP_PIN_CM as SPIKE_LOOSE_TOP_PIN_CM, pinLoosePieces as spikePinLoosePieces } from '../../../spikes/garment-engine/viewer/src/engine';
+import { LOOSE_TOP_PIN_CM as SPIKE_LOOSE_TOP_PIN_CM, pinLoosePieces as spikePinLoosePieces, anchorLoops as spikeAnchorLoops, bandFor as spikeBandFor, drapeOptionsFrom as spikeDrapeOptionsFrom, DEFAULT_DRAPE as SPIKE_DEFAULT_DRAPE } from '../../../spikes/garment-engine/viewer/src/engine';
+import { anchorLoops, bandFor, drapeOptionsFrom, DEFAULT_DRAPE } from '../src/engine';
+import { clothParams } from '../src/cloth';
+import { clothParams as spikeClothParams } from '../../../spikes/garment-engine/viewer/src/cloth';
 
 const m = buildMannequin(bodyShape(BASE_SHAPE_ID));
 const b = buildBundle('aalter-studio-2', { skipSeparation: true });
@@ -45,6 +48,21 @@ describe('fork parity with spikes/garment-engine', () => {
       const a = new Uint8Array(n), b = new Uint8Array(n);
       expect(pinLoosePieces(m, mesh.positions, cut, a, mesh.positions, undefined, bottom)).toBe(spikePinLoosePieces(m, mesh.positions, cut, b, mesh.positions, undefined, bottom));
       expect(a).toEqual(b);
+    }
+  });
+  it('has the same step-3 drape controls (cling switch, girth loops, band grading, options)', () => {
+    const mat = { drape: 0.85, bendStiffness: 0.04, stretchPct: 1.5, simulation: { damping: 0.035 } };
+    for (const cling of [true, false]) expect(clothParams(mat, 1.5, { cling })).toEqual(spikeClothParams(mat, 1.5, { cling }));
+    expect(DEFAULT_DRAPE).toEqual(SPIKE_DEFAULT_DRAPE);
+    const q = new URLSearchParams('cling=0&loops=0.95&rings=hip&band=72:97');
+    expect(drapeOptionsFrom((k) => q.get(k))).toEqual(spikeDrapeOptionsFrom((k) => q.get(k)));
+    const chains = assignChains(m, mesh);
+    const pins = new Uint8Array(chains.length);
+    for (const { size } of grading.sizes) {
+      const g = applyGrading(m, mesh, chains, grading, size);
+      expect(anchorLoops(m, g.positions, g.indices, chains, pins, 1)).toEqual(spikeAnchorLoops(m, g.positions, g.indices, chains, pins, 1));
+      const spec = { relaxedCm: 72, stretchedCm: 97, assumed: true };
+      expect(bandFor(spec, grading, size)).toEqual(spikeBandFor(spec, grading, size));
     }
   });
 });

@@ -8,6 +8,11 @@
  * each interior edge, and a small "cling" pull towards the body axis that grows with the fabric's
  * drape so a fluid fabric settles closer to the body than a crisp one. Stage 7 replaces the cling
  * heuristic with the calibrated drape simulation.
+ *
+ * Step-3 control (docs/research/shortcut-to-step3.md, days 1-2): the cling pull can be switched off
+ * (`clothParams(…, { cling: false })`), and girth loops (`setLoops`) can hold a ring of particles
+ * (hip, hem) at no less than a share of its graded girth, so the drape cannot fold a larger size's
+ * extra girth away. Both are off unless asked for.
  */
 
 export interface ClothParams {
@@ -23,8 +28,10 @@ export interface ClothParams {
   bendStiffness: number;
   /** Velocity decay per second. */
   damping: number;
-  /** Horizontal pull towards the body axis on free body-chain particles, cm/s². */
+  /** Horizontal pull towards the body axis on free body-chain particles, cm/s² (0 = off). */
   clingAccel: number;
+  /** 0..1 share of a girth loop's shortfall corrected per projection (`setLoops`; no loops, no effect). */
+  loopStiffness: number;
   /** Simulated duration of one relaxation, s (the cap). */
   durationS: number;
   /** Early exit: the drape counts as settled once no particle moves more than `calmCm` per substep for `calmFrames` frames in a row, after at least `minDurationS`. */
@@ -44,11 +51,18 @@ export interface ClothMaterial {
 
 const clamp = (x: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, x));
 
+/** Cling pull of a fabric, cm/s²: grows with drape (the heuristic the step-3 control switches off). */
+export const clingAccelOf = (drape: number): number => 90 * drape * drape;
+
+/** Default `ClothParams.loopStiffness`. */
+export const LOOP_STIFFNESS = 0.5;
+
 /**
  * Map fabric data to solver settings. Bend stiffness is log-mapped (the library spans two decades);
- * stretch fabrics get softer edges; drape drives the cling pull and lowers damping.
+ * stretch fabrics get softer edges; drape drives the cling pull and lowers damping. `opts.cling`
+ * false switches the cling pull off (default on).
  */
-export function clothParams(mat: ClothMaterial, durationS = 1.5): ClothParams {
+export function clothParams(mat: ClothMaterial, durationS = 1.5, opts: { cling?: boolean } = {}): ClothParams {
   const bendT = clamp((Math.log10(Math.max(mat.bendStiffness, 0.005)) + 2) / 2.2, 0, 1); // 0.01 → 0, ~1.6 → 1
   return {
     gravity: 981,
@@ -58,7 +72,8 @@ export function clothParams(mat: ClothMaterial, durationS = 1.5): ClothParams {
     stretchStiffness: clamp(1 - mat.stretchPct / 100, 0.6, 1),
     bendStiffness: 0.02 + 0.9 * bendT * bendT,
     damping: 2.5 + 6 * (mat.simulation.damping ?? 0.1) + 3 * (1 - mat.drape),
-    clingAccel: 90 * mat.drape * mat.drape,
+    clingAccel: opts.cling === false ? 0 : clingAccelOf(mat.drape),
+    loopStiffness: LOOP_STIFFNESS,
     durationS,
     calmCm: 0.02,
     calmFrames: 6,
@@ -84,6 +99,10 @@ export interface Cloth {
   tetherRest: Float32Array;
   /** Soft hold per particle: a free particle stays within this many cm of its anchor (0 = none; a gathered cuff, `engine.CUFF_LEASH_CM`). */
   leash: Float32Array;
+  /** Girth loops (`setLoops`): particles of loop k are `loops[loopStart[k]..loopStart[k+1]]`; its convex hull in x–z is held at no less than `loopMin[k]` cm. */
+  loops: Int32Array;
+  loopStart: Int32Array;
+  loopMin: Float32Array;
   /** Simulated time so far, s. */
   time: number;
   /** Frames in a row whose largest particle move stayed under `ClothParams.calmCm`. */
@@ -224,7 +243,83 @@ export function createCloth(start: ArrayLike<number>, rest: ArrayLike<number>, i
     cl[i] = cling(i) ? 1 : 0;
   }
   const { tether, tetherRest } = tethers(n, edges, edgeRest, (i) => invMass[i] === 0);
-  return { pos, prev: Float32Array.from(pos), invMass, anchor: Float32Array.from(pos), cling: cl, edges, edgeRest, bends, bendRest, tether, tetherRest, leash: new Float32Array(n), time: 0, calmFrames: 0 };
+  return { pos, prev: Float32Array.from(pos), invMass, anchor: Float32Array.from(pos), cling: cl, edges, edgeRest, bends, bendRest, tether, tetherRest, leash: new Float32Array(n), loops: new Int32Array(0), loopStart: new Int32Array(1), loopMin: new Float32Array(0), time: 0, calmFrames: 0 };
+}
+
+export interface GirthLoop {
+  particles: readonly number[];
+  /** Smallest girth (convex hull perimeter in x–z) the loop may fold to, cm. */
+  minGirthCm: number;
+}
+
+/** Install girth loops on a cloth (replaces any it had). */
+export function setLoops(cloth: Cloth, loops: readonly GirthLoop[]): void {
+  const start = new Int32Array(loops.length + 1);
+  for (let k = 0; k < loops.length; k++) start[k + 1] = start[k]! + loops[k]!.particles.length;
+  const flat = new Int32Array(start[loops.length]!);
+  for (let k = 0; k < loops.length; k++) flat.set(loops[k]!.particles, start[k]!);
+  cloth.loops = flat;
+  cloth.loopStart = start;
+  cloth.loopMin = Float32Array.from(loops, (l) => l.minGirthCm);
+}
+
+/**
+ * Perimeter of the convex hull in x–z of particles `ids[from..to)` (Andrew's monotone chain). `order`
+ * and `hull` are scratch of at least `to − from` entries.
+ */
+export function loopGirth(pos: ArrayLike<number>, ids: ArrayLike<number>, from: number, to: number, order: number[], hull: Int32Array): number {
+  const m = to - from;
+  if (m < 3) return 0;
+  order.length = m;
+  for (let k = 0; k < m; k++) order[k] = ids[from + k]!;
+  order.sort((a, b) => pos[3 * a]! - pos[3 * b]! || pos[3 * a + 2]! - pos[3 * b + 2]!);
+  const cross = (o: number, a: number, b: number): number => (pos[3 * a]! - pos[3 * o]!) * (pos[3 * b + 2]! - pos[3 * o + 2]!) - (pos[3 * a + 2]! - pos[3 * o + 2]!) * (pos[3 * b]! - pos[3 * o]!);
+  let h = 0;
+  for (let k = 0; k < m; k++) {
+    while (h >= 2 && cross(hull[h - 2]!, hull[h - 1]!, order[k]!) <= 0) h--;
+    hull[h++] = order[k]!;
+  }
+  const lower = h + 1;
+  for (let k = m - 2; k >= 0; k--) {
+    while (h >= lower && cross(hull[h - 2]!, hull[h - 1]!, order[k]!) <= 0) h--;
+    hull[h++] = order[k]!;
+  }
+  let per = 0;
+  for (let k = 0; k < h - 1; k++) per += Math.hypot(pos[3 * hull[k + 1]!]! - pos[3 * hull[k]!]!, pos[3 * hull[k + 1]! + 2]! - pos[3 * hull[k]! + 2]!);
+  return per;
+}
+
+const loopScratch: { order: number[]; hull: Int32Array } = { order: [], hull: new Int32Array(0) };
+
+/**
+ * Girth loops: a loop whose hull girth fell below its minimum is widened about its own centre (x–z
+ * only) by `k` of the shortfall. One-sided, like a hoop: it never pulls a loop in, so it cannot
+ * fight collision, which runs after it.
+ */
+function projectLoops(pos: Float32Array, w: Float32Array, cloth: Cloth, k: number): void {
+  const { loops, loopStart, loopMin } = cloth;
+  for (let l = 0; l < loopMin.length; l++) {
+    const a = loopStart[l]!;
+    const b = loopStart[l + 1]!;
+    if (loopScratch.hull.length < b - a + 1) loopScratch.hull = new Int32Array(2 * (b - a + 1));
+    const g = loopGirth(pos, loops, a, b, loopScratch.order, loopScratch.hull);
+    if (g <= 1e-6 || g >= loopMin[l]!) continue;
+    let cx = 0;
+    let cz = 0;
+    for (let j = a; j < b; j++) {
+      cx += pos[3 * loops[j]!]!;
+      cz += pos[3 * loops[j]! + 2]!;
+    }
+    cx /= b - a;
+    cz /= b - a;
+    const s = 1 + k * (loopMin[l]! / g - 1);
+    for (let j = a; j < b; j++) {
+      const i = loops[j]!;
+      if (w[i] === 0) continue;
+      pos[3 * i] = cx + (pos[3 * i]! - cx) * s;
+      pos[3 * i + 2] = cz + (pos[3 * i + 2]! - cz) * s;
+    }
+  }
 }
 
 function project(pos: Float32Array, w: Float32Array, pairs: Uint32Array, restLen: Float32Array, k: number): void {
@@ -354,8 +449,11 @@ export function stepCloth(cloth: Cloth, params: ClothParams, collide: Collide | 
         project(pos, invMass, cloth.bends, cloth.bendRest, kB);
         // After the edges, so a leash holds as a constraint and not only as a start point (collision still wins).
         projectLeashes(pos, invMass, cloth.anchor, cloth.leash);
+        const mid = it === params.iterations - 1 || it === params.iterations >> 1;
+        // Girth loops at the collision points (twice a substep): the hull sort is the costly part.
+        if (mid && cloth.loopMin.length > 0 && params.loopStiffness > 0) projectLoops(pos, invMass, cloth, params.loopStiffness);
         // Collide halfway and after the last iteration: enough to keep the cloth out, at a third of the cost.
-        if (collide && (it === params.iterations - 1 || it === params.iterations >> 1)) for (let i = 0; i < n; i++) if (invMass[i] !== 0) collide(pos, i);
+        if (collide && mid) for (let i = 0; i < n; i++) if (invMass[i] !== 0) collide(pos, i);
       }
       for (let i = 0; i < n; i++) {
         if (invMass[i] === 0) continue;

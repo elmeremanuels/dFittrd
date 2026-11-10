@@ -6,3 +6,4 @@
 export { mountGarmentView, supportsWebGL2, GarmentViewError, type GarmentView, type GarmentViewState, type MountOptions } from './mount';
 export { checkBundle, gradingLabel } from './bundleCheck';
 export type { BodyMeasurements } from './body';
+export type { DrapeOptions, WaistbandSpec } from './engine';

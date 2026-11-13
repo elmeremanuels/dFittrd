@@ -1,0 +1,75 @@
+# Curtain — Shopify app configuration (TEMPLATE)
+#
+# This file is a template: `{{VAR}}` placeholders are filled by `pnpm --filter @curtain/shopify-app configure`
+# from the environment (SHOPIFY_API_KEY, PUBLIC_API_URL, PUBLIC_APP_URL, optional SHOPIFY_API_VERSION
+# (default: DEFAULT_API_VERSION in src/types.ts, currently 2026-10),
+# SHOPIFY_DEV_STORE, SHOPIFY_APP_HANDLE) into `shopify.app.<env>.toml`, which is git-ignored. Then run
+# `shopify app dev --config <env>` / `shopify app deploy --config <env>`.
+#
+# Platform facts (verified against shopify.dev, Nov 2026, see README):
+#  - managed installation / token exchange: `use_legacy_install_flow = false` (no OAuth redirect code)
+#  - declarative webhooks incl. the three GDPR compliance topics, delivered to the api
+#  - the admin page is embedded (App Bridge) and served by the api at /shopify/admin
+#  - scopes are the Protected Customer Data minimum: products only (D7: order attribution off)
+
+# App Store listing (docs/app-store/listing.md, docs/app-store/checklist.md). These are set in the
+# Partner Dashboard listing form, not in this file; recorded here so config and listing stay in step:
+#  - App name: must match `name` below (requirement 4.1.1), max 30 characters, and lead with the brand
+#    (4.1.2). Bare "Curtain" sits next to curtain-calculator apps in search, so the listing name adds
+#    what it does. Founder to confirm (D1).
+#  - Privacy policy URL:   <PUBLIC_APP_URL>/privacy   (apps/web route, text in docs/legal/privacy.md, DRAFT)
+#  - Terms of service URL: <PUBLIC_APP_URL>/terms     (apps/web route, text in docs/legal/terms.md, DRAFT)
+#  - Support / emergency developer contact (4.5.6): [SUPPORT EMAIL], [EMERGENCY CONTACT]
+#  - Sales channel requirement: "Merchant must have online store" (4.3.1, the theme app extension)
+name = "Curtain: Fit & Size Finder"
+client_id = "{{SHOPIFY_API_KEY}}"
+application_url = "{{PUBLIC_API_URL}}/shopify/admin"
+embedded = true
+handle = "{{SHOPIFY_APP_HANDLE}}"
+extension_directories = ["extensions/*"]
+
+[access_scopes]
+# D7: `read_orders` stays OFF by default. Enabling order attribution would create a re-identification
+# bridge between pseudonymous users and the merchant's customers; if ever enabled, disclose it in the
+# grant sheet and store only an HMAC of the order id.
+scopes = "read_products,write_products"
+# scopes = "read_products,write_products,read_orders"
+use_legacy_install_flow = false
+
+[access.admin]
+# The admin page talks to OUR api with a session token; it does not need Direct API access.
+embedded_app_direct_api_access = false
+
+[auth]
+# Managed installation needs no callback, but Shopify requires at least one redirect URL before the
+# app can be made public. The api answers this path with a redirect to the embedded app home.
+redirect_urls = ["{{PUBLIC_API_URL}}/shopify/auth/callback"]
+
+[webhooks]
+api_version = "{{SHOPIFY_API_VERSION}}"
+
+# One HMAC-verified endpoint for everything; the api dispatches on X-Shopify-Topic and logs every
+# delivery (webhook_log) for replay. Keep this list in sync with SHOPIFY_WEBHOOK_TOPICS in
+# packages/shopify-app/src/webhookHmac.ts and SHOPIFY_TOPICS in apps/api/src/shopify/routes.ts.
+[[webhooks.subscriptions]]
+topics = ["products/create", "products/update", "products/delete"]
+uri = "{{PUBLIC_API_URL}}/shopify/webhooks"
+
+[[webhooks.subscriptions]]
+topics = ["app/uninstalled", "app_subscriptions/update"]
+uri = "{{PUBLIC_API_URL}}/shopify/webhooks"
+
+# GDPR: we hold no customer PII (anonymous devices, pseudonymous pairings) — customers/* are
+# acknowledged and logged; shop/redact purges the shop 48 h later (D3).
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+uri = "{{PUBLIC_API_URL}}/shopify/webhooks"
+
+[pos]
+embedded = false
+
+[build]
+automatically_update_urls_on_dev = false
+dev_store_url = "{{SHOPIFY_DEV_STORE}}"
+# No `include_config_on_deploy`: `shopify app deploy` always includes this configuration and the CLI
+# (4.9.5, 5.0.1) removes the key from the file with a "no longer supported" notice.

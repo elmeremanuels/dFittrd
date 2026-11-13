@@ -1,0 +1,21 @@
+{
+  "format": "curtain.spike.tapeMeasurements",
+  "formatVersion": 1,
+  "product": "crimson-wildflower-maxi-skirt",
+  "productId": "10894387020081",
+  "source": "Hand-written tape measurements by the shop (Bohohippychic), photo of the notebook page received 13 Nov 2026. Transcribed by hand; the photo itself is not in the repo.",
+  "method": "Garment lying flat. Every girth is the flat width x 2. waistRelaxedCm = waistband relaxed; waistStretchedCm = waistband pulled to its comfortable limit; hipCm = full girth at the hip line of the shop's sketch; hemSweepCm = full hem girth; lengthCm = waistband to hem, flat, front and back equal.",
+  "measuredSizes": ["8", "10", "14"],
+  "notMeasuredSizes": ["12", "16"],
+  "sizes": {
+    "8": { "waistRelaxedCm": 67, "waistStretchedCm": 94, "hipCm": 112, "hemSweepCm": 230, "lengthCm": 103 },
+    "10": { "waistRelaxedCm": 71, "waistStretchedCm": 100, "hipCm": 122, "hemSweepCm": 248, "lengthCm": 103 },
+    "14": { "waistRelaxedCm": 80, "waistStretchedCm": 110, "hipCm": 126, "hemSweepCm": 260, "lengthCm": 104 }
+  },
+  "transcriptionNotes": [
+    "Size 8 hem: the page first said flat 137 cm / 274 cm, struck through and corrected to flat 115 cm / 230 cm. A stale 'x2 = 279 cm' remains on the flat line. 230 cm is used (it also fits the 248 and 260 of the other sizes).",
+    "Size 10 hem: flat 124 cm with an overwritten digit; the total on the page is 248 cm, which matches.",
+    "Hip steps are uneven: 112 -> 122 (+10 for one size) -> 126 (+4 for two sizes). Not corrected here. The hip line of an A-line skirt is not a fixed seam, so the measuring height may have differed per size; ask the shop at what distance below the band the hip was measured.",
+    "Sizes 12 and 16 were not measured. Any value for them is interpolated (12, between 10 and 14) or extrapolated (16) and must be labelled so."
+  ]
+}

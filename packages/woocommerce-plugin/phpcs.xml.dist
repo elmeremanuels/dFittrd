@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<!--
+  PHPCS for the shipped plugin code (not tests/ or scripts/). Needs the composer tools, which are
+  not part of the pnpm workspace:
+    composer global require wp-coding-standards/wpcs:^3 phpcompatibility/phpcompatibility-wp:"*" woocommerce/woocommerce-sniffs:"*"
+    phpcs                          (this ruleset: WordPress-Extra + PHP 8.1+ compatibility)
+    phpcs with standard WooCommerce-Core adds the docblock rules
+  Results of 9 Nov 2026: docs/LAUNCH-WOO.md "PHPCS".
+-->
+<ruleset name="Curtain for WooCommerce">
+	<file>curtain.php</file>
+	<file>uninstall.php</file>
+	<file>includes</file>
+	<arg name="extensions" value="php"/>
+	<arg value="s"/>
+
+	<config name="minimum_wp_version" value="6.6"/>
+	<config name="testVersion" value="8.1-"/>
+
+	<rule ref="WordPress-Extra"/>
+	<rule ref="PHPCompatibilityWP"/>
+
+	<rule ref="WordPress.WP.I18n">
+		<properties>
+			<property name="text_domain" type="array">
+				<element value="curtain-woocommerce"/>
+			</property>
+		</properties>
+	</rule>
+	<!-- WooCommerce registers this capability; WPCS does not know it. -->
+	<rule ref="WordPress.WP.Capabilities">
+		<properties>
+			<property name="custom_capabilities" type="array">
+				<element value="manage_woocommerce"/>
+			</property>
+		</properties>
+	</rule>
+</ruleset>

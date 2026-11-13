@@ -1,0 +1,11 @@
+{
+  "curtain": {
+    "try_button": {
+      "label": "Try it on",
+      "hint": "Bekijk privé hoe het jou past, hier op deze pagina. Je maten blijven op dit apparaat. Elke weergave is een schatting.",
+      "hint_app": "Bekijk privé hoe het jou past. Opent de Curtain-app op je telefoon. Elke weergave is een schatting.",
+      "not_connected": "Curtain is nog niet gekoppeld aan deze winkel. Open de Curtain-app in je beheer om de installatie af te ronden.",
+      "needs_product": "Voeg dit blok toe aan een productsjabloon: het heeft een product nodig om te passen."
+    }
+  }
+}

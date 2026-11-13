@@ -1,0 +1,51 @@
+{
+  "curtain": {
+    "block": {
+      "name": "Try it on"
+    },
+    "settings": {
+      "label": {
+        "label": "Button label",
+        "info": "Leave empty for the translated default (\"Try it on\")."
+      },
+      "alignment": {
+        "label": "Button position",
+        "left": "Left",
+        "center": "Centered",
+        "full": "Full width"
+      },
+      "mode": {
+        "label": "Experience",
+        "info": "On the product page: shoppers get their size right here in an overlay, no app needed. Curtain app: phones open the Curtain app, desktops show a QR code.",
+        "embed": "On the product page (no app needed)",
+        "app": "Curtain app"
+      },
+      "size_option": {
+        "label": "Size option name",
+        "info": "The product option that holds the size. Curtain selects the recommended size in it. Also matches Maat, Taille and Größe."
+      },
+      "show_hint": {
+        "label": "Show the privacy hint under the button"
+      },
+      "show_size": {
+        "label": "Show the shopper's size on product pages",
+        "info": "A shopper who found their size here before sees it next to the button, with a small drawing of their figure in that size, without clicking. Only the shopper sees it: your store cannot read it."
+      },
+      "unstyled": {
+        "label": "Use my theme's button styling",
+        "info": "Skips Curtain's coral button style so the theme's own styles apply."
+      },
+      "advanced": {
+        "header": "Advanced (dev stores only)"
+      },
+      "shop_key": {
+        "label": "Public shop key override",
+        "info": "pk_live_… or pk_test_…. Filled automatically on install; only set this for a development store."
+      },
+      "api_url": {
+        "label": "API origin override",
+        "info": "https://api.curtain.fit by default. Only for staging environments."
+      }
+    }
+  }
+}

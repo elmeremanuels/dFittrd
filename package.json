@@ -1,34 +1,20 @@
 {
-  "name": "react-example",
+  "name": "curtain",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "version": "0.1.0",
+  "description": "Curtain — your private fitting room. Consumer PWA + merchant plugins + one backend.",
+  "packageManager": "pnpm@10.28.0",
+  "engines": { "node": ">=22" },
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "vite build",
-    "preview": "vite preview",
-    "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@google/genai": "^1.29.0",
-    "@tailwindcss/vite": "^4.1.14",
-    "@vitejs/plugin-react": "^5.0.4",
-    "lucide-react": "^0.546.0",
-    "react": "^19.0.1",
-    "react-dom": "^19.0.1",
-    "vite": "^6.2.3",
-    "express": "^4.21.2",
-    "dotenv": "^17.2.3",
-    "motion": "^12.23.24"
-  },
-  "devDependencies": {
-    "@types/node": "^22.14.0",
-    "autoprefixer": "^10.4.21",
-    "tailwindcss": "^4.1.14",
-    "tsx": "^4.21.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.3",
-    "@types/express": "^4.17.21"
+    "dev": "pnpm --filter @curtain/web dev",
+    "build": "pnpm build:packages && pnpm build:apps",
+    "build:packages": "pnpm -r --filter './packages/**' build",
+    "build:apps": "pnpm -r --filter './apps/**' build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "demo": "node scripts/demo.mjs",
+    "demo:e2e": "node scripts/demo-e2e.mjs",
+    "check": "pnpm build:packages && pnpm typecheck && pnpm lint && pnpm test && pnpm build:apps && node scripts/check-bundle-secrets.mjs"
   }
 }

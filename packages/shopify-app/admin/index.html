@@ -1,0 +1,733 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Curtain</title>
+  <!-- App Bridge (the only third-party script; required for embedded apps). The api key is public. -->
+  <meta name="shopify-api-key" content="__CURTAIN_SHOPIFY_API_KEY__" />
+  <script src="__CURTAIN_APP_BRIDGE_URL__"></script>
+  <script id="curtain-config" type="application/json">__CURTAIN_CONFIG_JSON__</script>
+  <style>
+    /* Polaris-like, CSS only. No fonts loaded (system stack), no images. */
+    :root {
+      --p-bg: #f1f2f4; --p-surface: #ffffff; --p-text: #303030; --p-text-subdued: #616161;
+      --p-border: #e3e3e3; --p-primary: #303030; --p-success-bg: #cdfee1; --p-success-fg: #0c5132;
+      --p-warning-bg: #ffeb78; --p-warning-fg: #4f4700; --p-critical-bg: #fed3d1; --p-critical-fg: #8e1f0b;
+      --p-info-bg: #e0f0ff; --p-info-fg: #00527c; --p-radius: 12px; --coral: #ff5a3c; --cream: #f5efe7; --ink: #1a1612;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--p-bg); color: var(--p-text); font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    .page { max-width: 1040px; margin: 0 auto; padding: 20px 16px 48px; }
+    .page-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    h1 { font-size: 20px; margin: 0; font-weight: 650; }
+    h2 { font-size: 14px; margin: 0 0 12px; font-weight: 650; }
+    .brand { display: inline-flex; align-items: center; gap: 8px; }
+    .brand i { width: 14px; height: 14px; border-radius: 50%; background: var(--coral); display: inline-block; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    @media (min-width: 820px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
+    .card { background: var(--p-surface); border-radius: var(--p-radius); box-shadow: 0 1px 0 rgba(0,0,0,.07), 0 0 0 1px rgba(0,0,0,.05); padding: 16px; }
+    .card + .card { margin-top: 16px; }
+    .subdued { color: var(--p-text-subdued); }
+    .badge { display: inline-block; border-radius: 8px; padding: 1px 8px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+    .badge-success { background: var(--p-success-bg); color: var(--p-success-fg); }
+    .badge-warning { background: var(--p-warning-bg); color: var(--p-warning-fg); }
+    .badge-critical { background: var(--p-critical-bg); color: var(--p-critical-fg); }
+    .badge-info { background: var(--p-info-bg); color: var(--p-info-fg); }
+    .btn { display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; border: 1px solid #8a8a8a; background: #fff; color: var(--p-text); padding: 6px 12px; font: inherit; font-weight: 550; cursor: pointer; text-decoration: none; }
+    .btn:hover { background: #f7f7f7; }
+    .btn-primary { background: var(--p-primary); border-color: var(--p-primary); color: #fff; }
+    .btn-primary:hover { background: #1a1a1a; }
+    .btn[disabled] { opacity: .5; cursor: default; }
+    ul.checklist { list-style: none; margin: 0; padding: 0; }
+    ul.checklist li { display: grid; grid-template-columns: 24px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--p-border); }
+    ul.checklist li:first-child { border-top: 0; padding-top: 0; }
+    .check { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #8a8a8a; display: inline-grid; place-items: center; font-size: 12px; }
+    .check.done { background: var(--p-success-fg); border-color: var(--p-success-fg); color: #fff; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px 6px; border-top: 1px solid var(--p-border); vertical-align: top; }
+    th { font-weight: 550; color: var(--p-text-subdued); border-top: 0; font-size: 12px; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .meter { height: 8px; border-radius: 4px; background: #e3e3e3; overflow: hidden; }
+    .meter > i { display: block; height: 100%; background: var(--coral); }
+    .stat { display: flex; flex-direction: column; gap: 2px; }
+    .stat b { font-size: 20px; font-weight: 650; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 12px; }
+    .bars { display: flex; align-items: flex-end; gap: 2px; height: 48px; margin-top: 8px; }
+    .bars i { flex: 1; background: var(--coral); min-height: 1px; opacity: .85; border-radius: 2px 2px 0 0; }
+    .banner { border-radius: var(--p-radius); padding: 12px 14px; margin-bottom: 16px; display: none; }
+    .banner.show { display: block; }
+    .banner-critical { background: var(--p-critical-bg); color: var(--p-critical-fg); }
+    .banner-warning { background: var(--p-warning-bg); color: var(--p-warning-fg); }
+    .banner-info { background: var(--p-info-bg); color: var(--p-info-fg); }
+    .empty { padding: 12px 0; color: var(--p-text-subdued); }
+    .filters { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+    .filters .btn { padding: 3px 10px; font-weight: 500; }
+    .filters .btn.active { background: var(--p-text); color: #fff; border-color: var(--p-text); }
+    .privacy { background: var(--cream); color: var(--ink); border-radius: 8px; padding: 10px 12px; margin-top: 12px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .skeleton { height: 12px; border-radius: 6px; background: linear-gradient(90deg, #eee, #f7f7f7, #eee); background-size: 200% 100%; animation: sk 1.2s infinite; }
+    @keyframes sk { to { background-position: -200% 0; } }
+    fieldset { border: 0; margin: 0 0 12px; padding: 0; min-width: 0; }
+    legend { font-weight: 600; padding: 0; margin-bottom: 6px; }
+    label { cursor: pointer; }
+    .stack { display: flex; flex-direction: column; gap: 6px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .tpl { display: grid; grid-template-columns: 20px 1fr; gap: 8px; padding: 8px 10px; border: 1px solid var(--p-border); border-radius: 8px; }
+    .tpl:has(input:checked) { border-color: var(--p-text); background: #fafafa; }
+    .tpl small { display: block; color: var(--p-text-subdued); }
+    .input { font: inherit; border: 1px solid #8a8a8a; border-radius: 8px; padding: 5px 8px; background: #fff; color: var(--p-text); }
+    .input:focus-visible, .btn:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid #005bd3; outline-offset: 1px; }
+    .chart-table input { width: 72px; font: inherit; border: 1px solid #b5b5b5; border-radius: 6px; padding: 3px 6px; text-align: right; }
+    .chart-table td, .chart-table th { padding: 4px 6px; }
+    .steps { counter-reset: s; }
+    .step-h { display: flex; align-items: center; gap: 8px; margin: 16px 0 8px; font-size: 13px; font-weight: 650; }
+    .step-h::before { counter-increment: s; content: counter(s); display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--p-text); color: #fff; font-size: 11px; }
+    .note { padding: 8px 10px; border-radius: 8px; margin-top: 8px; }
+    .note-info { background: var(--p-info-bg); color: var(--p-info-fg); }
+    .note-warning { background: var(--p-warning-bg); color: var(--p-warning-fg); }
+    .note-critical { background: var(--p-critical-bg); color: var(--p-critical-fg); }
+    .note-success { background: var(--p-success-bg); color: var(--p-success-fg); }
+    .hidden { display: none !important; }
+    details summary { cursor: pointer; color: var(--p-text-subdued); }
+    ul.plain { margin: 4px 0 0; padding-left: 18px; }
+    .pill { display: inline-block; border-radius: 6px; padding: 0 6px; font-size: 11px; font-weight: 600; background: #ebebeb; }
+    @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="page-header">
+      <h1 class="brand"><i aria-hidden="true"></i> Curtain</h1>
+      <span id="shop-domain" class="subdued mono"></span>
+    </header>
+
+    <div id="banner" class="banner" role="status" aria-live="polite"></div>
+
+    <div class="grid grid-2">
+      <section class="card" aria-labelledby="h-onboarding">
+        <h2 id="h-onboarding">Get set up</h2>
+        <ul class="checklist" id="checklist">
+          <li data-step="connect"><span class="check" id="chk-install"></span><div><b>Connect this store</b><div class="subdued" id="txt-install">Checking…</div></div><span></span></li>
+          <li data-step="template"><span class="check" id="chk-template"></span><div><b>Pick a size chart template</b><div class="subdued" id="txt-template">Your region’s body chart (AU, UK, EU, US), or garment measurements you fill in.</div></div><a class="btn" href="#charts">Choose</a></li>
+          <li data-step="assign"><span class="check" id="chk-assign"></span><div><b>Assign it to products</b><div class="subdued" id="txt-assign">By collection, tag, product type, or pick products.</div></div><a class="btn" href="#assign">Assign</a></li>
+          <li data-step="themeBlock"><span class="check" id="chk-theme"></span><div><b>Add the “Try it on” block</b><div class="subdued">Opens the theme editor on your product template with the block pre-added. Save the theme, then mark it done.</div></div><span class="row"><a class="btn" id="lnk-theme" target="_top" rel="noopener">Add to theme</a><button class="btn" type="button" id="btn-theme-done">Done</button></span></li>
+          <li data-step="test"><span class="check" id="chk-test"></span><div><b>Test it on a product</b><div class="subdued" id="txt-test">Open a product with a chart, click “Try it on” and get a size.</div></div><span class="row"><a class="btn" href="#products">Pick a product</a><button class="btn" type="button" id="btn-test-done">Done</button></span></li>
+        </ul>
+        <p class="subdued" id="txt-data" style="margin:10px 0 0"></p>
+        <div class="privacy">
+          <b>Privacy by construction.</b> Shoppers' photos and measurements never leave their device. You receive aggregates only (k-anonymity floor), never a device id, a measurement or a photo.
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="h-usage">
+        <h2 id="h-usage">Plan &amp; usage</h2>
+        <div class="stats">
+          <div class="stat"><span class="subdued">Plan</span><b id="usage-plan">–</b></div>
+          <div class="stat"><span class="subdued">Try-on sessions this period</span><b id="usage-sessions">–</b></div>
+          <div class="stat"><span class="subdued">Hero renders (30 d)</span><b id="usage-renders">–</b></div>
+        </div>
+        <div class="meter" aria-hidden="true"><i id="usage-meter" style="width:0%"></i></div>
+        <div class="subdued" id="usage-period" style="margin-top:6px"></div>
+        <div class="bars" id="usage-bars" aria-label="Try-on sessions per day, last 30 days" role="img"></div>
+        <div class="subdued" style="margin-top:8px">One try-on session = one product resolved by one shopper with a fit result, counted once per intent (retries are never counted twice).</div>
+        <div class="row" style="margin-top:12px"><span class="check" id="chk-plan" aria-hidden="true"></span><span class="subdued" id="txt-plan">Curtain: US$8.99 per month, flat, with a free trial. Every try-on session is included; sessions are counted, never billed. Without a plan the button keeps rendering; shoppers see a pause screen.</span><button class="btn btn-primary" id="btn-plan" type="button" disabled>Subscribe</button></div>
+      </section>
+    </div>
+
+    <section class="card steps" id="charts" aria-labelledby="h-charts" style="margin-top:16px">
+      <h2 id="h-charts">Size charts</h2>
+      <p class="subdued" style="margin:0">Shoppers get their size from your chart. Pick a standard body chart for your region, or enter the measurements of the finished garment per size. Products keep the chart in their own metafields (Metafields → Curtain).</p>
+
+      <h3 class="step-h" id="h-tpl">Choose a template</h3>
+      <fieldset aria-labelledby="h-tpl">
+        <legend class="sr">Template</legend>
+        <div class="grid grid-2" id="tpl-list"><div class="skeleton"></div></div>
+      </fieldset>
+      <div id="tpl-sources" class="subdued"></div>
+
+      <h3 class="step-h" id="h-edit">Check the numbers</h3>
+      <fieldset class="row" aria-labelledby="h-type">
+        <legend id="h-type">These numbers are</legend>
+        <label><input type="radio" name="chart-type" value="body" /> the <b>body</b> each size fits</label>
+        <label><input type="radio" name="chart-type" value="garment" /> the finished <b>garment</b> (measured all round)</label>
+      </fieldset>
+      <div class="row" style="margin-bottom:8px">
+        <fieldset class="row" style="margin:0"><legend class="sr">Unit</legend>
+          <label><input type="radio" name="chart-unit" value="cm" checked /> cm</label>
+          <label><input type="radio" name="chart-unit" value="in" /> inches</label>
+        </fieldset>
+        <span class="subdued" id="sizes-label">Sizes:</span>
+        <span class="row" id="size-boxes" role="group" aria-labelledby="sizes-label"></span>
+        <span class="row"><label for="custom-size" class="sr">Add a size</label><input class="input" id="custom-size" maxlength="16" size="6" placeholder="Add size" /><button class="btn" type="button" id="btn-add-size">Add</button></span>
+      </div>
+      <div style="overflow:auto">
+        <table class="chart-table" aria-describedby="chart-help">
+          <thead id="chart-head"></thead>
+          <tbody id="chart-body"></tbody>
+        </table>
+      </div>
+      <p class="subdued" id="chart-help" style="margin:6px 0 0">Bust, waist and hip all round. If you measured a garment laid flat, double the width. Values are stored in cm.</p>
+      <div id="chart-check" role="status" aria-live="polite"></div>
+
+      <h3 class="step-h" id="assign">Assign to products</h3>
+      <fieldset aria-labelledby="h-sel">
+        <legend id="h-sel">Which products</legend>
+        <div class="stack">
+          <div class="row"><input type="radio" name="sel-kind" value="collection" id="sk-collection" checked /><label for="sk-collection">A collection</label> <button class="btn" type="button" id="btn-pick-collection">Choose collection</button> <span class="subdued" id="sel-collection"></span></div>
+          <div class="row"><input type="radio" name="sel-kind" value="tag" id="sk-tag" /><label for="sk-tag">Products tagged</label> <input class="input" id="sel-tag" maxlength="255" aria-label="Tag" data-kind="tag" /></div>
+          <div class="row"><input type="radio" name="sel-kind" value="productType" id="sk-type" /><label for="sk-type">Product type</label> <input class="input" id="sel-type" maxlength="255" aria-label="Product type" data-kind="productType" /></div>
+          <div class="row"><input type="radio" name="sel-kind" value="products" id="sk-products" /><label for="sk-products">Products I pick</label> <button class="btn" type="button" id="btn-pick-products">Choose products</button> <span class="subdued" id="sel-products"></span></div>
+        </div>
+      </fieldset>
+      <label><input type="checkbox" id="sel-overwrite" /> Replace charts products already have</label>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" type="button" id="btn-preview">Preview</button>
+        <button class="btn btn-primary" type="button" id="btn-assign">Assign chart</button>
+      </div>
+      <div id="assign-status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="card hidden" id="product-panel" aria-labelledby="h-product" style="margin-top:16px">
+      <div class="page-header" style="margin-bottom:8px">
+        <h2 id="h-product" tabindex="-1" style="margin:0">Product</h2>
+        <span class="row"><a class="btn" id="lnk-preview" target="_blank" rel="noopener">Try it on (preview) ↗</a><a class="btn" id="lnk-admin" target="_top" rel="noopener">Edit in Shopify</a><button class="btn" type="button" id="btn-close-product">Close</button></span>
+      </div>
+      <div class="grid grid-2">
+        <div>
+          <h3 style="font-size:13px;margin:0 0 6px">Checklist</h3>
+          <ul class="checklist" id="product-checklist"></ul>
+        </div>
+        <div>
+          <h3 style="font-size:13px;margin:0 0 6px">Import from description</h3>
+          <p class="subdued" style="margin:0 0 8px">For one-size pieces: reads the measurements and fabric printed in the product description. Nothing is saved until you confirm.</p>
+          <button class="btn" type="button" id="btn-import">Read the description</button>
+          <div id="import-result" role="status" aria-live="polite"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="products" aria-labelledby="h-products" style="margin-top:16px">
+      <h2 id="h-products">Products <span class="subdued" id="products-counts"></span></h2>
+      <div class="filters" role="group" aria-label="Filter by status">
+        <button class="btn active" type="button" data-filter="all">All</button>
+        <button class="btn" type="button" data-filter="incomplete">Needs data</button>
+        <button class="btn" type="button" data-filter="active">Try-able</button>
+      </div>
+      <div style="overflow:auto">
+        <table>
+          <thead><tr><th>Product</th><th>Category</th><th>Status</th><th class="num">Completeness</th><th>Missing</th><th><span class="sr">Actions</span></th></tr></thead>
+          <tbody id="products-body"><tr><td colspan="6"><div class="skeleton"></div></td></tr></tbody>
+        </table>
+      </div>
+      <p class="subdued" id="products-note" style="margin:8px 0 0"></p>
+    </section>
+
+    <section class="card" aria-labelledby="h-ledger" style="margin-top:16px">
+      <h2 id="h-ledger">Privacy ledger</h2>
+      <p class="subdued" style="margin:0 0 8px">Everything Curtain sent to an AI provider on behalf of your shoppers' opt-in hero renders. Inputs are never a shopper photo: an anonymised avatar render and your flat-lay only. Results are deleted within 24 hours.</p>
+      <div style="overflow:auto">
+        <table>
+          <thead><tr><th>When</th><th>Product</th><th>Provider</th><th>Model</th><th>Inputs</th><th class="num">Retention</th></tr></thead>
+          <tbody id="ledger-body"><tr><td colspan="6"><div class="skeleton"></div></td></tr></tbody>
+        </table>
+      </div>
+      <p class="subdued" id="disclaimer" style="margin:10px 0 0"></p>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      'use strict';
+      var cfg = JSON.parse(document.getElementById('curtain-config').textContent);
+      var params = new URLSearchParams(location.search);
+      // The shop App Bridge reports wins over the query string, and only a *.myshopify.com domain is
+      // accepted: `shop` is used to build admin links before the server has verified anything.
+      function validShop(v) { v = String(v || '').trim().toLowerCase(); return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(v) ? v : ''; }
+      var shop = validShop(window.shopify && shopify.config && shopify.config.shop) || validShop(params.get('shop'));
+      var state = { installed: null, products: null, usage: null, ledger: null, filter: 'all' };
+
+      function $(id) { return document.getElementById(id); }
+      function text(id, value) { $(id).textContent = value; }
+      function el(tag, attrs, children) {
+        var node = document.createElement(tag);
+        if (attrs) Object.keys(attrs).forEach(function (k) {
+          if (k === 'text') node.textContent = attrs[k];
+          else if (k === 'class') node.className = attrs[k];
+          else node.setAttribute(k, attrs[k]);
+        });
+        (children || []).forEach(function (c) { node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+        return node;
+      }
+      function banner(kind, message) {
+        var b = $('banner');
+        b.className = 'banner show banner-' + kind;
+        b.textContent = message;
+      }
+      function check(id, done) { var c = $(id); c.classList.toggle('done', !!done); c.textContent = done ? '✓' : ''; }
+      function day(d) { return d.toISOString().slice(0, 10); }
+      function fmtDate(iso) { var d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); }
+
+      async function idToken() {
+        if (!window.shopify || typeof shopify.idToken !== 'function') throw new Error('App Bridge did not load. Open this page from your Shopify admin.');
+        return shopify.idToken();
+      }
+      async function api(method, path, body, auth) {
+        var headers = { accept: 'application/json' };
+        if (body) headers['content-type'] = 'application/json';
+        if (auth !== false) headers.authorization = 'Bearer ' + (await idToken());
+        var res = await fetch(cfg.apiUrl + path, { method: method, headers: headers, body: body ? JSON.stringify(body) : undefined, credentials: 'omit', cache: 'no-store' });
+        var data = null;
+        try { data = await res.json(); } catch (_) { data = null; }
+        if (!res.ok) {
+          var err = new Error((data && data.error && data.error.message) || ('HTTP ' + res.status));
+          err.status = res.status;
+          err.code = data && data.error && data.error.code;
+          err.details = data && data.error && data.error.details;
+          throw err;
+        }
+        return data;
+      }
+
+      // 1. Managed installation: exchange the session token for an offline token (idempotent server-side).
+      async function ensureInstalled() {
+        if (!shop) throw new Error('Missing ?shop= parameter. Open the app from the Shopify admin.');
+        text('shop-domain', shop);
+        var r = await api('POST', '/shopify/token-exchange', { shop: shop, sessionToken: await idToken() }, false);
+        state.installed = r;
+        check('chk-install', true);
+        text('txt-install', 'Connected. Public key ' + r.publicKeyPrefix + (r.backfillQueued ? ' · importing your catalogue…' : ''));
+        return r;
+      }
+
+      function themeLink() {
+        var p = new URLSearchParams({ template: 'product', addAppBlockId: cfg.apiKey + '/' + cfg.blockHandle, target: 'mainSection' });
+        return 'https://' + shop + '/admin/themes/current/editor?' + p.toString();
+      }
+
+      async function loadUsage() {
+        var to = new Date(); var from = new Date(to.getTime() - 29 * 86400000);
+        var u = await api('GET', '/v1/merchant/usage?from=' + day(from) + '&to=' + day(to));
+        state.usage = u;
+        var plan = u.plan;
+        var price = plan.chargeCurrency && plan.chargeCurrency !== 'USD' && typeof plan.chargePrice === 'number' ? plan.chargePrice.toFixed(2) + ' ' + plan.chargeCurrency + ' per month' : 'US$' + (plan.priceUsdPerMonth || 8.99).toFixed(2) + ' per month';
+        // B2: a shop moved from a retired plan still pays that plan's old price until it approves Curtain.
+        var legacy = plan.name !== 'free' && !!plan.legacyPlan;
+        text('usage-plan', (plan.name === 'free' ? 'No plan' : legacy ? 'Retired plan (' + plan.legacyPlan + ') at its old price' : 'Curtain · ' + price) + (plan.paused ? ' · paused' : ''));
+        text('usage-sessions', String(plan.sessionsUsedThisPeriod));
+        text('usage-renders', String(u.totals.heroRenders));
+        $('usage-meter').style.width = '0%';
+        text('usage-period', 'Period ' + plan.periodStart + ' → ' + plan.periodEnd + ' · sessions are counted for your analytics, not billed');
+        var bars = $('usage-bars'); bars.textContent = '';
+        var max = Math.max(1, Math.max.apply(null, u.days.map(function (d) { return d.fitSessions; }).concat([0])));
+        u.days.forEach(function (d) { var i = el('i', { title: d.day + ': ' + d.fitSessions }); i.style.height = Math.max(2, Math.round(100 * d.fitSessions / max)) + '%'; bars.appendChild(i); });
+        var onPlan = plan.name !== 'free' && !plan.paused && !legacy;
+        check('chk-plan', onPlan);
+        if (cfg.billing === 'arranged') {
+          // Custom distribution: Shopify does not let this app charge through its billing system.
+          $('btn-plan').hidden = true;
+          text('usage-plan', (plan.name === 'free' ? 'No plan' : 'Curtain · arranged with Curtain') + (plan.paused ? ' · paused' : ''));
+          text('txt-plan', onPlan ? 'Your Curtain plan is arranged directly with Curtain. Every try-on session is included; sessions are counted, never billed through Shopify.' : 'Your Curtain plan is arranged directly with Curtain. Contact Curtain support to (re)activate it.');
+          if (plan.paused) banner('warning', 'Your shop is paused: shoppers see a “taking a short break” screen. Contact Curtain support to resume.');
+          return;
+        }
+        $('btn-plan').disabled = onPlan;
+        $('btn-plan').textContent = onPlan ? 'Subscribed' : legacy ? 'Switch to Curtain (US$' + (plan.priceUsdPerMonth || 8.99).toFixed(2) + ')' : 'Subscribe';
+        if (legacy && !plan.paused) banner('info', 'Your shop is still billed on the retired ' + plan.legacyPlan + ' plan at its old price. Switch to Curtain (US$' + (plan.priceUsdPerMonth || 8.99).toFixed(2) + ' per month, flat): Shopify replaces the old subscription when you approve.');
+        if (plan.paused) banner('warning', 'Your shop is paused: shoppers see a “taking a short break” screen. Approve the Curtain plan to resume.');
+      }
+
+      async function loadProducts() {
+        var r = await api('GET', '/v1/merchant/products?limit=200');
+        state.products = r;
+        text('products-counts', '· ' + r.counts.active + ' try-able, ' + r.counts.incomplete + ' need data');
+        text('txt-data', r.counts.incomplete === 0 ? 'All synced products are try-able.' : r.counts.incomplete + ' product(s) need a size chart and its type (body or garment) before shoppers can get a size.');
+        text('products-note', r.nextCursor ? 'Showing the first 200 products.' : '');
+        renderProducts();
+      }
+
+      function renderProducts() {
+        var body = $('products-body'); body.textContent = '';
+        var items = (state.products ? state.products.items : []).filter(function (p) { return state.filter === 'all' ? p.status !== 'archived' : p.status === state.filter; });
+        if (!items.length) { body.appendChild(el('tr', null, [el('td', { colspan: '6', class: 'empty', text: state.products && state.products.items.length ? 'Nothing here.' : 'No products synced yet. Publish a product and give it Curtain fields in the product admin (Metafields → Curtain).' })])); return; }
+        items.forEach(function (p) {
+          var badge = p.status === 'active' ? ['badge-success', 'Try-able'] : p.status === 'incomplete' ? ['badge-warning', 'Needs data'] : ['badge-critical', 'Archived'];
+          var missing = p.missingFields.slice(0, 4).join(', ') + (p.missingFields.length > 4 ? ' +' + (p.missingFields.length - 4) : '');
+          body.appendChild(el('tr', null, [
+            el('td', null, [el('b', { text: p.name }), el('div', { class: 'subdued mono', text: p.externalId })]),
+            el('td', { text: p.category || '–' }),
+            el('td', null, [el('span', { class: 'badge ' + badge[0], text: badge[1] })]),
+            el('td', { class: 'num', text: Math.round(p.score * 100) + '%' }),
+            el('td', { class: 'subdued', text: missing || '–' }),
+            el('td', null, [el('span', { class: 'row' }, [
+              el('button', { class: 'btn', type: 'button', 'data-product': p.externalId, 'data-name': p.name, text: 'Size chart' }),
+              el('a', { class: 'btn', href: 'https://' + shop + '/admin/products/' + encodeURIComponent(p.externalId), target: '_top', rel: 'noopener', text: 'Edit' })
+            ])])
+          ]));
+        });
+      }
+
+      async function loadLedger() {
+        var r = await api('GET', '/v1/merchant/ledger?limit=20');
+        state.ledger = r;
+        var body = $('ledger-body'); body.textContent = '';
+        if (!r.entries.length) { body.appendChild(el('tr', null, [el('td', { colspan: '6', class: 'empty', text: 'No AI renders yet. Nothing has been sent to any provider on behalf of your shop.' })])); return; }
+        r.entries.forEach(function (e) {
+          body.appendChild(el('tr', null, [
+            el('td', { text: fmtDate(e.at) }),
+            el('td', { class: 'mono', text: e.productExternalId || '–' }),
+            el('td', { text: e.provider }),
+            el('td', { text: e.model }),
+            el('td', { text: e.inputs.join(', ') }),
+            el('td', { class: 'num', text: e.retentionHours + ' h' })
+          ]));
+        });
+      }
+
+      async function subscribe() {
+        var btn = $('btn-plan'); btn.disabled = true;
+        try {
+          var r = await api('POST', '/shopify/billing/subscribe', { plan: 'curtain', returnUrl: 'https://admin.shopify.com/store/' + shop.replace(/\.myshopify\.com$/, '') + '/apps/' + cfg.appHandle });
+          if (r.confirmationUrl) open(r.confirmationUrl, '_top');
+          else banner('info', 'Subscription created. Refresh to see its status.');
+        } catch (err) {
+          banner('critical', 'Could not start billing: ' + err.message);
+          btn.disabled = false;
+        }
+      }
+
+
+      // ---- size chart builder ---------------------------------------------------------------------
+      var CM_PER_IN = 2.54;
+      var POINT_LABELS = { bust: 'Bust', waist: 'Waist', hip: 'Hip', shoulder: 'Shoulder', thigh: 'Thigh', inseam: 'Inseam' };
+      var charts = { templates: [], tpl: null, type: 'body', unit: 'cm', allSizes: [], sizes: [], values: {}, points: ['bust', 'waist', 'hip'], edited: false };
+      var sel = { collection: null, products: [] };
+      var STEP_CHECK = { connect: 'chk-install', template: 'chk-template', assign: 'chk-assign', themeBlock: 'chk-theme', test: 'chk-test' };
+      var STEP_TEXT = { template: 'txt-template', assign: 'txt-assign', test: 'txt-test' };
+
+      function note(id, kind, lines) {
+        var box = $(id); box.textContent = '';
+        if (!lines || !lines.length) return;
+        var n = el('div', { class: 'note note-' + kind });
+        if (lines.length === 1) n.textContent = lines[0];
+        else n.appendChild(el('ul', { class: 'plain' }, lines.map(function (l) { return el('li', { text: l }); })));
+        box.appendChild(n);
+      }
+      function radioValue(name) { var r = document.querySelector('input[name="' + name + '"]:checked'); return r ? r.value : null; }
+      function setRadio(name, value) { document.querySelectorAll('input[name="' + name + '"]').forEach(function (r) { r.checked = r.value === value; }); }
+      function toUnit(cm) { if (typeof cm !== 'number') return ''; return charts.unit === 'in' ? String(Math.round(cm / CM_PER_IN * 4) / 4) : String(cm); }
+      function toCm(v) { var n = Number(String(v).replace(',', '.')); if (!isFinite(n) || n <= 0) return null; return Math.round((charts.unit === 'in' ? n * CM_PER_IN : n) * 2) / 2; }
+
+      async function loadOnboarding() {
+        var r = await api('GET', '/shopify/charts/onboarding');
+        r.steps.forEach(function (st) {
+          if (STEP_CHECK[st.key]) check(STEP_CHECK[st.key], st.done);
+          if (STEP_TEXT[st.key]) text(STEP_TEXT[st.key], st.detail);
+          var li = document.querySelector('[data-step="' + st.key + '"]');
+          if (li) { if (st.key === r.next) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current'); }
+        });
+        $('btn-theme-done').disabled = r.steps.some(function (st) { return st.key === 'themeBlock' && st.done; });
+        $('btn-test-done').disabled = r.steps.some(function (st) { return st.key === 'test' && st.done; });
+        // A saved template wins over the default; the default (AU) is only picked when nothing is saved.
+        if (!charts.tpl) selectTemplate(r.state.templateId && charts.templates.some(function (t) { return t.id === r.state.templateId; }) ? r.state.templateId : defaultTemplateId(), false);
+        return r;
+      }
+      async function saveOnboarding(patch) {
+        try { await api('PUT', '/shopify/charts/onboarding', patch); await loadOnboarding(); }
+        catch (err) { banner('warning', 'Could not save the setup step: ' + err.message); }
+      }
+
+      async function loadTemplates() {
+        var r = await api('GET', '/v1/merchant/charts/templates');
+        charts.templates = r.templates;
+        var list = $('tpl-list'); list.textContent = '';
+        r.templates.forEach(function (t) {
+          var input = el('input', { type: 'radio', name: 'tpl', value: t.id, id: 'tpl-' + t.id });
+          input.addEventListener('change', function () { selectTemplate(t.id, true); });
+          var kind = el('span', { class: 'pill', text: t.kind === 'body' ? 'Body measurements' : 'Garment measurements' });
+          list.appendChild(el('label', { class: 'tpl', for: 'tpl-' + t.id }, [input, el('span', null, [el('b', { text: t.label }), ' ', kind, el('small', { text: t.description })])]));
+        });
+      }
+      function defaultTemplateId() {
+        var t = charts.templates.find(function (x) { return x.id === 'au-womens-body'; }) || charts.templates[0];
+        return t ? t.id : null;
+      }
+
+      function selectTemplate(id, save) {
+        var t = charts.templates.find(function (x) { return x.id === id; });
+        if (!t) return;
+        charts.tpl = t; charts.type = t.kind; charts.edited = false;
+        charts.points = t.kind === 'body' ? ['bust', 'waist', 'hip'] : t.points.slice();
+        charts.allSizes = t.sizes.slice(); charts.sizes = t.defaultSizes.slice(); charts.values = {};
+        (t.rows || []).forEach(function (r) { charts.values[r.size] = { bust: r.bust, waist: r.waist, hip: r.hip }; });
+        setRadio('tpl', id); setRadio('chart-type', charts.type);
+        var src = $('tpl-sources'); src.textContent = '';
+        if (t.sources && t.sources.length) {
+          var used = t.sources.filter(function (x) { return x.inMedian; });
+          src.appendChild(el('details', null, [
+            el('summary', { text: 'Sources: median of ' + used.length + ' published charts, read ' + used[0].accessed + (t.weakSizes && t.weakSizes.length ? ' · sizes ' + t.weakSizes.join(', ') + ' rest on fewer than three' : '') }),
+            el('ul', { class: 'plain' }, t.sources.map(function (x) { return el('li', null, [el('a', { href: x.url, target: '_blank', rel: 'noopener noreferrer', text: x.publisher }), x.inMedian ? '' : ' (comparison only)', x.note ? ' — ' + x.note : '']); }))
+          ]));
+        }
+        renderSizes(); renderChart(); note('chart-check', 'info', []);
+        if (save) saveOnboarding({ templateId: id });
+      }
+
+      function renderSizes() {
+        var box = $('size-boxes'); box.textContent = '';
+        charts.allSizes.forEach(function (size) {
+          var cb = el('input', { type: 'checkbox', value: size });
+          cb.checked = charts.sizes.indexOf(size) >= 0;
+          cb.addEventListener('change', function () {
+            charts.sizes = charts.allSizes.filter(function (s) { return s === size ? cb.checked : charts.sizes.indexOf(s) >= 0; });
+            renderChart();
+          });
+          box.appendChild(el('label', null, [cb, ' ' + size]));
+        });
+      }
+
+      function renderChart() {
+        var u = charts.unit === 'in' ? 'in' : 'cm';
+        var head = $('chart-head'); head.textContent = '';
+        head.appendChild(el('tr', null, [el('th', { scope: 'col', text: 'Size' })].concat(charts.points.map(function (p) { return el('th', { scope: 'col', class: 'num', text: POINT_LABELS[p] + ' (' + u + ')' }); }))));
+        var body = $('chart-body'); body.textContent = '';
+        if (!charts.sizes.length) { body.appendChild(el('tr', null, [el('td', { colspan: String(charts.points.length + 1), class: 'empty', text: 'Tick at least one size.' })])); return; }
+        charts.sizes.forEach(function (size) {
+          var weak = charts.tpl && charts.tpl.weakSizes && charts.tpl.weakSizes.indexOf(size) >= 0 && charts.type === 'body' && !charts.edited;
+          var cells = [el('th', { scope: 'row' }, [size, weak ? el('span', { class: 'pill', title: 'Fewer than three sources', text: ' estimate' }) : ''])];
+          charts.points.forEach(function (p) {
+            var v = charts.values[size] && charts.values[size][p];
+            var input = el('input', { inputmode: 'decimal', 'aria-label': 'Size ' + size + ' ' + POINT_LABELS[p] + ' in ' + u, value: toUnit(v) });
+            input.addEventListener('change', function () {
+              charts.values[size] = charts.values[size] || {};
+              charts.values[size][p] = toCm(input.value);
+              charts.edited = true;
+            });
+            cells.push(el('td', { class: 'num' }, [input]));
+          });
+          body.appendChild(el('tr', null, cells));
+        });
+      }
+
+      function chartSpec() {
+        var t = charts.tpl;
+        if (t && t.kind === 'body' && charts.type === 'body' && !charts.edited) return { templateId: t.id, sizes: charts.sizes.slice() };
+        return {
+          sizeChartType: charts.type,
+          unit: 'cm',
+          sizeChart: charts.sizes.map(function (size) {
+            var row = { size: size }; var v = charts.values[size] || {};
+            charts.points.forEach(function (p) { if (typeof v[p] === 'number') row[p] = v[p]; });
+            return row;
+          })
+        };
+      }
+      function localCheck() {
+        var errs = [];
+        if (!charts.sizes.length) errs.push('Tick at least one size.');
+        if (charts.type !== 'body' && charts.type !== 'garment') errs.push('Say whether the numbers are body or garment measurements.');
+        var spec = chartSpec();
+        if (spec.sizeChart) spec.sizeChart.forEach(function (r) { if (Object.keys(r).length < 2) errs.push('Size ' + r.size + ' has no measurements.'); });
+        return errs;
+      }
+
+      function selector() {
+        var kind = radioValue('sel-kind');
+        if (kind === 'collection') { if (!sel.collection) throw new Error('Choose a collection first.'); return { kind: 'collection', collectionId: sel.collection.id }; }
+        if (kind === 'tag') { var tag = $('sel-tag').value.trim(); if (!tag) throw new Error('Enter a tag.'); return { kind: 'tag', tag: tag }; }
+        if (kind === 'productType') { var pt = $('sel-type').value.trim(); if (!pt) throw new Error('Enter a product type.'); return { kind: 'productType', productType: pt }; }
+        if (!sel.products.length) throw new Error('Choose products first.');
+        return { kind: 'products', productIds: sel.products.map(function (p) { return p.id; }) };
+      }
+
+      async function pick(type, multiple) {
+        if (!window.shopify || typeof shopify.resourcePicker !== 'function') throw new Error('The Shopify picker is not available here. Open the app from your Shopify admin.');
+        var opts = { type: type, multiple: multiple, action: 'select' };
+        if (type === 'product') { opts.filter = { variants: false, archived: false }; if (sel.products.length) opts.selectionIds = sel.products.map(function (p) { return { id: p.id }; }); }
+        return (await shopify.resourcePicker(opts)) || [];
+      }
+
+      async function previewSelection() {
+        try {
+          var r = await api('POST', '/shopify/charts/preview', { selector: selector() });
+          var charted = r.sample.filter(function (x) { return x.hasChart; }).length;
+          note('assign-status', 'info', [(r.precision === 'AT_LEAST' ? 'At least ' : '') + r.count + ' product(s) match' + (r.sample.length ? ', e.g. ' + r.sample.map(function (x) { return x.title; }).join(', ') : '') + '.' + (charted ? ' Some already have a chart (kept unless you tick “Replace”).' : '')]);
+          return r;
+        } catch (err) { note('assign-status', 'critical', [err.message]); return null; }
+      }
+
+      async function assignChart() {
+        var errs = localCheck();
+        if (errs.length) { note('chart-check', 'critical', errs); var h = $('h-edit'); if (h.scrollIntoView) h.scrollIntoView({ block: 'start' }); return; }
+        var selection;
+        try { selection = selector(); } catch (err) { note('assign-status', 'critical', [err.message]); return; }
+        var btn = $('btn-assign'); btn.disabled = true;
+        var total = { written: 0, skipped: 0, failed: [] }; var cursor = null; var warnings = [];
+        try {
+          for (var guard = 0; guard < 200; guard++) {
+            var r = await api('POST', '/shopify/charts/assign', { selector: selection, chart: chartSpec(), overwrite: $('sel-overwrite').checked, cursor: cursor });
+            total.written += r.written.length; total.skipped += r.skipped.length; total.failed = total.failed.concat(r.failed); warnings = r.warnings;
+            note('assign-status', 'info', ['Assigning… ' + total.written + ' product(s) done.']);
+            cursor = r.nextCursor;
+            if (!cursor) break;
+          }
+          var lines = ['Chart assigned to ' + total.written + ' product(s).' + (total.skipped ? ' ' + total.skipped + ' already had a chart and were kept.' : '') + ' Curtain is re-reading them now.'];
+          if (total.failed.length) lines.push(total.failed.length + ' could not be written: ' + total.failed.slice(0, 3).map(function (f) { return f.message; }).join(' · '));
+          note('assign-status', total.failed.length ? 'warning' : 'success', lines);
+          note('chart-check', 'warning', warnings);
+          if (total.written > 0 && charts.tpl) saveOnboarding({ templateId: charts.tpl.id });
+          setTimeout(function () { loadProducts().catch(function () {}); loadOnboarding().catch(function () {}); }, 2500);
+        } catch (err) {
+          var details = err.details && err.details.errors ? err.details.errors : [err.message];
+          note('assign-status', 'critical', ['Nothing more was written. ' + (total.written ? total.written + ' product(s) were done before the error.' : '')].concat(details));
+        } finally { btn.disabled = false; }
+      }
+
+      // ---- one product: checklist, preview, import from description -------------------------------
+      var current = null;
+      async function openProduct(id, name) {
+        current = { id: id, name: name };
+        $('product-panel').classList.remove('hidden');
+        text('h-product', name);
+        $('product-checklist').textContent = ''; $('import-result').textContent = '';
+        $('product-checklist').appendChild(el('li', null, [el('span'), el('div', { class: 'skeleton' }), el('span')]));
+        $('h-product').focus();
+        try {
+          var c = await api('GET', '/shopify/products/' + encodeURIComponent(id) + '/checklist');
+          var list = $('product-checklist'); list.textContent = '';
+          c.items.forEach(function (it) {
+            list.appendChild(el('li', null, [
+              el('span', { class: 'check' + (it.done ? ' done' : ''), 'aria-hidden': 'true', text: it.done ? '✓' : '' }),
+              el('div', null, [el('b', { text: it.label }), it.required && !it.done ? el('span', { class: 'pill', text: ' required' }) : '', el('span', { class: 'sr', text: it.done ? ' (done)' : ' (to do)' }), el('div', { class: 'subdued', text: it.hint })]),
+              el('span')
+            ]));
+          });
+          var prev = $('lnk-preview');
+          if (c.previewUrl) { prev.href = c.previewUrl; prev.classList.remove('hidden'); } else prev.classList.add('hidden');
+          $('lnk-admin').href = c.adminUrl;
+        } catch (err) { $('product-checklist').textContent = ''; note('import-result', 'critical', ['Could not load the product: ' + err.message]); }
+      }
+
+      async function importDescription() {
+        if (!current) return;
+        var box = $('import-result'); box.textContent = '';
+        var r;
+        try { r = await api('GET', '/shopify/products/' + encodeURIComponent(current.id) + '/chart-import'); }
+        catch (err) { note('import-result', 'critical', [err.message]); return; }
+        if (r.warnings.length) box.appendChild(el('div', { class: 'note note-warning' }, [el('ul', { class: 'plain' }, r.warnings.map(function (w) { return el('li', { text: w }); }))]));
+        if (!r.proposal && !r.fabric) { box.appendChild(el('p', { class: 'subdued', text: 'Nothing to import.' })); return; }
+        var form = el('form', { class: 'stack', style: 'margin-top:8px' });
+        var row = r.proposal ? r.proposal.sizeChart[0] : null;
+        var inputs = {};
+        if (row) {
+          form.appendChild(el('div', { class: 'row' }, [el('b', { text: 'Size ' + row.size }), el('span', { class: 'pill', text: r.proposal.sizeChartType === 'body' ? 'Body measurements' : 'Garment measurements' })]));
+          ['bust', 'waist', 'hip'].forEach(function (p) {
+            var id = 'imp-' + p;
+            inputs[p] = el('input', { class: 'input', id: id, inputmode: 'decimal', size: '6', value: row[p] != null ? String(row[p]) : '' });
+            form.appendChild(el('label', { for: id, class: 'row' }, [POINT_LABELS[p] + ' (cm, all round)', inputs[p]]));
+          });
+        }
+        if (r.lengthCm && r.lengthCm.shoulder_to_hem) {
+          inputs.length = el('input', { class: 'input', id: 'imp-length', inputmode: 'decimal', size: '6', value: String(r.lengthCm.shoulder_to_hem) });
+          form.appendChild(el('label', { for: 'imp-length', class: 'row' }, ['Length, shoulder to hem (cm)', inputs.length]));
+        }
+        var useFabric = null;
+        if (r.fabric) {
+          useFabric = el('input', { type: 'checkbox', id: 'imp-fabric' }); useFabric.checked = true;
+          form.appendChild(el('label', { for: 'imp-fabric' }, [useFabric, ' Fabric: ' + r.fabric.primary + (r.fabric.blend ? ' (' + r.fabric.blend.map(function (b) { return b[1] + '% ' + b[0]; }).join(', ') + ')' : '') + ', stretch ' + r.fabric.stretchPct + '%']));
+        }
+        form.appendChild(el('details', null, [el('summary', { text: 'Where this came from' }), el('ul', { class: 'plain' }, r.evidence.map(function (e) { return el('li', { text: e }); }))]));
+        if (r.hasChart && row) form.appendChild(el('p', { class: 'note note-warning', text: 'This product already has a size chart; confirming replaces it.' }));
+        var submit = el('button', { class: 'btn btn-primary', type: 'submit', text: row ? 'Save this chart' : 'Save the fabric' });
+        form.appendChild(el('div', null, [submit]));
+        form.addEventListener('submit', async function (ev) {
+          ev.preventDefault(); submit.disabled = true;
+          var body = {};
+          if (row) {
+            var out = { size: row.size };
+            ['bust', 'waist', 'hip'].forEach(function (p) { var n = Number(inputs[p].value.replace(',', '.')); if (inputs[p].value && isFinite(n) && n > 0) out[p] = n; });
+            body.sizeChartType = r.proposal.sizeChartType; body.sizeChart = [out];
+          }
+          if (inputs.length && Number(inputs.length.value) > 0) body.lengthCm = { shoulder_to_hem: Number(inputs.length.value) };
+          if (useFabric && useFabric.checked) body.fabric = r.fabric;
+          if (!body.sizeChart) { note('import-result', 'warning', ['Saving fabric alone: use “Edit in Shopify” → Metafields → Curtain, or enter a chart above.']); submit.disabled = false; return; }
+          try {
+            var w = await api('PUT', '/shopify/products/' + encodeURIComponent(current.id) + '/chart', body);
+            note('import-result', 'success', ['Saved (' + w.written.join(', ') + '). Curtain is re-reading the product.'].concat(w.warnings));
+            setTimeout(function () { if (current) openProduct(current.id, current.name); loadProducts().catch(function () {}); loadOnboarding().catch(function () {}); }, 2500);
+          } catch (err) { submit.disabled = false; note('import-result', 'critical', (err.details && err.details.errors) || [err.message]); }
+        });
+        box.appendChild(form);
+      }
+
+      document.querySelectorAll('input[name="chart-type"]').forEach(function (r) {
+        r.addEventListener('change', function () {
+          var bodyNumbers = charts.tpl && charts.tpl.kind === 'body' && charts.type === 'body' && r.value === 'garment';
+          if (charts.tpl && charts.tpl.kind === 'body' && r.value === 'body' && !Object.keys(charts.values).length) { selectTemplate(charts.tpl.id, false); return; }
+          charts.type = r.value; charts.edited = true;
+          // Body numbers read as garment numbers leave no ease: every size would come out one too large.
+          if (bodyNumbers) {
+            charts.values = {};
+            renderChart();
+            note('chart-check', 'warning', ['The template’s body numbers were cleared: garment measurements are taken flat on the finished garment and are larger. Enter the garment’s own numbers, or switch back to body measurements.']);
+            return;
+          }
+          renderChart();
+        });
+      });
+      document.querySelectorAll('input[name="chart-unit"]').forEach(function (r) { r.addEventListener('change', function () { charts.unit = r.value; renderChart(); }); });
+      $('btn-add-size').addEventListener('click', function () {
+        var v = $('custom-size').value.trim().slice(0, 16);
+        if (!v || charts.allSizes.some(function (s) { return s.toUpperCase() === v.toUpperCase(); })) return;
+        charts.allSizes.push(v); charts.sizes.push(v); charts.edited = true; $('custom-size').value = '';
+        renderSizes(); renderChart();
+      });
+      $('btn-pick-collection').addEventListener('click', async function () {
+        try { var r = await pick('collection', false); if (r[0]) { sel.collection = { id: r[0].id, title: r[0].title }; text('sel-collection', r[0].title); setRadio('sel-kind', 'collection'); } }
+        catch (err) { note('assign-status', 'critical', [err.message]); }
+      });
+      $('btn-pick-products').addEventListener('click', async function () {
+        try { var r = await pick('product', true); sel.products = r.map(function (p) { return { id: p.id, title: p.title }; }).slice(0, 250); text('sel-products', sel.products.length + ' selected'); setRadio('sel-kind', 'products'); }
+        catch (err) { note('assign-status', 'critical', [err.message]); }
+      });
+      ['sel-tag', 'sel-type'].forEach(function (id) { $(id).addEventListener('focus', function () { setRadio('sel-kind', $(id).getAttribute('data-kind')); }); });
+      $('btn-preview').addEventListener('click', previewSelection);
+      $('btn-assign').addEventListener('click', assignChart);
+      $('btn-theme-done').addEventListener('click', function () { saveOnboarding({ themeBlockConfirmed: true }); });
+      $('btn-test-done').addEventListener('click', function () { saveOnboarding({ tested: true }); });
+      $('btn-import').addEventListener('click', importDescription);
+      $('btn-close-product').addEventListener('click', function () { $('product-panel').classList.add('hidden'); var b = current && document.querySelector('[data-product="' + String(current.id).replace(/[^0-9A-Za-z_-]/g, '') + '"]'); current = null; if (b) b.focus(); });
+      $('products-body').addEventListener('click', function (ev) {
+        var b = ev.target.closest && ev.target.closest('[data-product]');
+        if (b) openProduct(b.getAttribute('data-product'), b.getAttribute('data-name'));
+      });
+
+      document.querySelectorAll('[data-filter]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          document.querySelectorAll('[data-filter]').forEach(function (x) { x.classList.toggle('active', x === b); });
+          state.filter = b.getAttribute('data-filter');
+          renderProducts();
+        });
+      });
+      $('btn-plan').addEventListener('click', subscribe);
+      text('disclaimer', cfg.disclaimer);
+
+      (async function main() {
+        try {
+          if (shop) { $('lnk-theme').href = themeLink(); check('chk-theme', false); }
+          await ensureInstalled();
+          var results = await Promise.allSettled([loadUsage(), loadProducts(), loadLedger(), loadTemplates().then(loadOnboarding).catch(function (err) { if (!charts.tpl && defaultTemplateId()) selectTemplate(defaultTemplateId(), false); throw err; })]);
+          var failed = results.filter(function (r) { return r.status === 'rejected'; });
+          if (failed.length) banner('warning', 'Some panels could not load: ' + failed.map(function (f) { return f.reason && f.reason.message; }).join(' · '));
+        } catch (err) {
+          var msg = err && err.code === 'shopify_not_configured' ? 'The Curtain API is not configured for Shopify yet (SHOPIFY_API_KEY/SECRET).' : (err && err.message) || String(err);
+          banner('critical', msg);
+          text('txt-install', 'Not connected.');
+          $('products-body').textContent = ''; $('ledger-body').textContent = '';
+        }
+      })();
+    })();
+  </script>
+</body>
+</html>

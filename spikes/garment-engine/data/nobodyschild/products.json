@@ -1,0 +1,1522 @@
+{
+  "shop": {
+    "id": "nobodyschild",
+    "domain": "nobodyschild.com",
+    "brand": "Nobody's Child",
+    "currency": "GBP",
+    "status": "Test shop chosen by Curtain for internal validation (refinement P4). Not a partner, not contacted, no consent given. Public storefront data only; no public use of its name, photos or anything derived from them without the shop's written permission."
+  },
+  "source": "https://nobodyschild.com/products.json?limit=250&page=N (public storefront endpoint), pages products-page1.json, products-page2.json, products-page3.json, products-page4.json, products-page5.json, products-page6.json, products-page7.json, products-page8.json, products-page9.json, products-page10.json, products-page11.json, products-page12.json, products-page13.json, products-page14.json, products-page15.json; the size guide https://nobodyschild.com/pages/size-guide; the product pages of the selection (read 2026-11-08)",
+  "catalogue": {
+    "products": 3680,
+    "byProductType": {
+      "Tops": 853,
+      "Dresses": 1212,
+      "Knitwear": 360,
+      "Outerwear": 184,
+      "Footwear": 122,
+      "Skirts": 165,
+      "Jewellery": 30,
+      "Blazers": 47,
+      "Bags": 50,
+      "Belts": 10,
+      "Nightwear": 18,
+      "Scarf": 2,
+      "Jeans": 60,
+      "Leggings": 11,
+      "Soft accessories": 98,
+      "Accessories": 22,
+      "Trousers": 163,
+      "Jumpsuits & Playsuits": 73,
+      "Homeware": 6,
+      "Athleisure": 19,
+      "Shorts": 96,
+      "Sweatshirts": 1,
+      "Jumpers": 3,
+      "Cardigans": 3,
+      "Chore Jacket": 1,
+      "Homewear": 4,
+      "Beauty": 8,
+      "Swimwear": 18,
+      "Blouses": 2,
+      "Bag": 2,
+      "Bracelets": 2,
+      "": 29,
+      "Kidswear": 4,
+      "Gift Card": 1,
+      "Shirts": 1
+    }
+  },
+  "sizeChart": {
+    "system": "UK",
+    "numeric": [
+      {
+        "size": "4",
+        "bust": 78,
+        "waist": 60,
+        "hip": 85
+      },
+      {
+        "size": "6",
+        "bust": 82,
+        "waist": 64,
+        "hip": 89
+      },
+      {
+        "size": "8",
+        "bust": 86,
+        "waist": 68,
+        "hip": 93
+      },
+      {
+        "size": "10",
+        "bust": 90,
+        "waist": 72,
+        "hip": 97
+      },
+      {
+        "size": "12",
+        "bust": 95,
+        "waist": 78,
+        "hip": 102
+      },
+      {
+        "size": "14",
+        "bust": 100,
+        "waist": 83,
+        "hip": 107
+      },
+      {
+        "size": "16",
+        "bust": 107,
+        "waist": 90,
+        "hip": 114
+      },
+      {
+        "size": "18",
+        "bust": 114,
+        "waist": 97,
+        "hip": 121
+      },
+      {
+        "size": "20",
+        "bust": 119,
+        "waist": 102,
+        "hip": 126
+      },
+      {
+        "size": "22",
+        "bust": 124,
+        "waist": 107,
+        "hip": 131
+      },
+      {
+        "size": "24",
+        "bust": 129,
+        "waist": 112,
+        "hip": 136
+      }
+    ],
+    "letter": [
+      {
+        "size": "XS",
+        "covers": [
+          "4",
+          "6"
+        ],
+        "bust": 82,
+        "waist": 64,
+        "hip": 89
+      },
+      {
+        "size": "S",
+        "covers": [
+          "8",
+          "10"
+        ],
+        "bust": 90,
+        "waist": 72,
+        "hip": 97
+      },
+      {
+        "size": "M",
+        "covers": [
+          "12",
+          "14"
+        ],
+        "bust": 100,
+        "waist": 83,
+        "hip": 107
+      },
+      {
+        "size": "L",
+        "covers": [
+          "16",
+          "18"
+        ],
+        "bust": 114,
+        "waist": 97,
+        "hip": 121
+      },
+      {
+        "size": "XL",
+        "covers": [
+          "20",
+          "22"
+        ],
+        "bust": 124,
+        "waist": 107,
+        "hip": 131
+      }
+    ],
+    "insideLeg": {
+      "short": 74,
+      "regular": 79,
+      "long": 84
+    },
+    "source": {
+      "url": "https://nobodyschild.com/pages/size-guide",
+      "accessed": "2026-11-08",
+      "note": "The shop's own women's body chart, cm table (the page also prints inches). Single sizes UK 4–24 with EU and US labels; dual (letter) sizes XS–XL; inside leg Short/Regular/Long."
+    },
+    "defects": [
+      "letter XS: EU range printed as \"32-24\"",
+      "letter M: US size \"6-8\" in one table, \"8-10\" in the other",
+      "letter L: US size \"10-12\" in one table, \"12-14\" in the other"
+    ]
+  },
+  "rejectedProductTypes": [
+    {
+      "type": "Knitwear",
+      "count": 360,
+      "reason": "mapped to top, but no product selected from it"
+    },
+    {
+      "type": "Footwear",
+      "count": 122,
+      "reason": "Shoes: not part of the garment engine."
+    },
+    {
+      "type": "Jewellery",
+      "count": 30,
+      "reason": "Accessory."
+    },
+    {
+      "type": "Blazers",
+      "count": 47,
+      "reason": "mapped to outerwear, but no product selected from it"
+    },
+    {
+      "type": "Bags",
+      "count": 50,
+      "reason": "Accessory."
+    },
+    {
+      "type": "Belts",
+      "count": 10,
+      "reason": "Accessory."
+    },
+    {
+      "type": "Nightwear",
+      "count": 18,
+      "reason": "Not selected."
+    },
+    {
+      "type": "Scarf",
+      "count": 2,
+      "reason": "Accessory."
+    },
+    {
+      "type": "Jeans",
+      "count": 60,
+      "reason": "mapped to bottom, but no product selected from it"
+    },
+    {
+      "type": "Leggings",
+      "count": 11,
+      "reason": "Stretch bottom; not selected."
+    },
+    {
+      "type": "Soft accessories",
+      "count": 98,
+      "reason": "Accessory: no 3D asset."
+    },
+    {
+      "type": "Accessories",
+      "count": 22,
+      "reason": "Accessory."
+    },
+    {
+      "type": "Jumpsuits & Playsuits",
+      "count": 73,
+      "reason": "Spans torso and legs: the engine has no combined anchor subset (as Bohohippychic's Jumpsuits & Sets)."
+    },
+    {
+      "type": "Homeware",
+      "count": 6,
+      "reason": "Not a garment."
+    },
+    {
+      "type": "Athleisure",
+      "count": 19,
+      "reason": "Not selected."
+    },
+    {
+      "type": "Shorts",
+      "count": 96,
+      "reason": "Bottom without a proxy length rule for shorts yet; not selected."
+    },
+    {
+      "type": "Sweatshirts",
+      "count": 1,
+      "reason": "Not selected."
+    },
+    {
+      "type": "Jumpers",
+      "count": 3,
+      "reason": "Three products typed outside Knitwear; not selected."
+    },
+    {
+      "type": "Cardigans",
+      "count": 3,
+      "reason": "Three products typed outside Knitwear; not selected."
+    },
+    {
+      "type": "Chore Jacket",
+      "count": 1,
+      "reason": "One product typed outside Outerwear; not selected."
+    },
+    {
+      "type": "Homewear",
+      "count": 4,
+      "reason": "Not selected."
+    },
+    {
+      "type": "Beauty",
+      "count": 8,
+      "reason": "Not a garment."
+    },
+    {
+      "type": "Swimwear",
+      "count": 18,
+      "reason": "Not selected."
+    },
+    {
+      "type": "Blouses",
+      "count": 2,
+      "reason": "mapped to top, but no product selected from it"
+    },
+    {
+      "type": "Bag",
+      "count": 2,
+      "reason": "Accessory."
+    },
+    {
+      "type": "Bracelets",
+      "count": 2,
+      "reason": "Accessory."
+    },
+    {
+      "type": "",
+      "count": 29,
+      "reason": "Untyped products."
+    },
+    {
+      "type": "Kidswear",
+      "count": 4,
+      "reason": "Not womenswear; the shop prints a separate children's chart."
+    },
+    {
+      "type": "Gift Card",
+      "count": 1,
+      "reason": "Not a garment."
+    },
+    {
+      "type": "Shirts",
+      "count": 1,
+      "reason": "mapped to top, but no product selected from it"
+    }
+  ],
+  "method": {
+    "sizeChart": "The shop's own printed body chart (size guide, cm table), restricted to the sizes the product offers, sizeChartType 'body'. Letter sizes use the shop's letter table. Trousers get the shop's body inside leg for their length tag.",
+    "baseSize": "The size the model wears, printed on the product page (the photographed size, stated by the shop). For letter-sized products: the letter the shop's chart maps that size to. Otherwise the middle of the range (our default, flagged).",
+    "fabric": "The product page's 'Fabric Main:' composition through resolveFabricText/fabricFromText. Lining and trims are listed as warnings (one fabric per payload). The fabric-group tag is never used as a composition.",
+    "lengths": "The product page's 'Wearing length' (read only inside the product's own block, never from cross-sell drawers), checked against a plausibility range per category and length band; never used for trousers.",
+    "images": "images.json: every image looked at and classified by hand; sha256 of the file as downloaded."
+  },
+  "products": [
+    {
+      "handle": "ezra-midi-dress-2616487001",
+      "productType": "Dresses",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "15389467509121",
+        "brand": "Nobody's Child",
+        "name": "Blue Pinstriped Ezra Midi Dress",
+        "productUrl": "https://nobodyschild.com/products/ezra-midi-dress-2616487001",
+        "productPhotos": [
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616487001_13.jpg?v=1779462477",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616487001_86.jpg?v=1779462477",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616487001_18.jpg?v=1779462477",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616487001_50.jpg?v=1779462477",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616487001_68.jpg?v=1779462478",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616487001_27.jpg?v=1779462477",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616487001_23.jpg?v=1779462477"
+        ],
+        "category": "dress",
+        "subcategory": "midaxi-dress",
+        "fabric": {
+          "primary": "cotton",
+          "weightGsm": 240,
+          "stretchPct": 1.5,
+          "drape": 0.5,
+          "opacity": 0.85,
+          "sheen": 0.08,
+          "blend": [
+            [
+              "cotton",
+              100
+            ]
+          ]
+        },
+        "sizeChartType": "body",
+        "sizeChart": [
+          {
+            "size": "4",
+            "bust": 78,
+            "waist": 60,
+            "hip": 85
+          },
+          {
+            "size": "6",
+            "bust": 82,
+            "waist": 64,
+            "hip": 89
+          },
+          {
+            "size": "8",
+            "bust": 86,
+            "waist": 68,
+            "hip": 93
+          },
+          {
+            "size": "10",
+            "bust": 90,
+            "waist": 72,
+            "hip": 97
+          },
+          {
+            "size": "12",
+            "bust": 95,
+            "waist": 78,
+            "hip": 102
+          },
+          {
+            "size": "14",
+            "bust": 100,
+            "waist": 83,
+            "hip": 107
+          },
+          {
+            "size": "16",
+            "bust": 107,
+            "waist": 90,
+            "hip": 114
+          },
+          {
+            "size": "18",
+            "bust": 114,
+            "waist": 97,
+            "hip": 121
+          }
+        ],
+        "lengthCm": {
+          "shoulder_to_hem": 130
+        },
+        "sizingNotes": "Size tip: we recommend your usual size"
+      },
+      "price": {
+        "amount": 66,
+        "currency": "GBP"
+      },
+      "completeness": {
+        "score": 0.636,
+        "missing": [
+          {
+            "field": "flatLayPhoto",
+            "reason": "flatLayPhoto (garment laid flat on white, https URL) is the input of the on-device render; without it the item cannot be shown on the user.",
+            "weight": 3,
+            "severity": "heavy"
+          },
+          {
+            "field": "ease",
+            "reason": "ease (garment minus body per fit point, cm) makes the size recommendation precise; category defaults are used when absent.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "criticalFitPoints",
+            "reason": "criticalFitPoints tells the fit engine where this garment cares most (double weight); all category points weigh equally when absent.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "sizeChart.shoulder",
+            "reason": "shoulder is a default fit point for this category; rows without it skip the shoulder check.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "primaryColorHex",
+            "reason": "primaryColorHex feeds the colour affinity of the taste engine and the render tint.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "trueToSizeScore",
+            "reason": "trueToSizeScore (from past return data) narrows or widens the size tie band; 0.8 is assumed.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "colorways",
+            "reason": "colorways let the user try every colour the shop sells; only the primary colour is shown when absent.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "styleTags",
+            "reason": "styleTags (0..1 per taste axis) override the inferred style of the item in the swipe deck.",
+            "weight": 1,
+            "severity": "light"
+          }
+        ],
+        "status": "incomplete",
+        "checked": [
+          "category",
+          "sizeChartType",
+          "sizeChart",
+          "fabric.primary",
+          "flatLayPhoto",
+          "fabric.stretchPct",
+          "fabric.drape",
+          "ease",
+          "lengthCm",
+          "criticalFitPoints",
+          "sizeChart.shoulder",
+          "primaryColorHex",
+          "productPhotos",
+          "trueToSizeScore",
+          "fabric.opacity",
+          "fabric.sheen",
+          "colorways",
+          "styleTags"
+        ]
+      },
+      "fullSchemaIssues": [
+        "priceEur: Invalid input: expected number, received undefined",
+        "primaryColorHex: Invalid input: expected string, received undefined",
+        "patternBlock: Invalid input: expected string, received undefined"
+      ],
+      "evidence": {
+        "category": "product_type \"Dresses\" → dress; length band \"midaxi\" (length tag)",
+        "fabric": "product page \"Fabric Main: 100% Cotton | Lining: 100% Cotton\" → cotton [[\"cotton\",100]]; weight/stretch/drape/opacity/sheen from the fabric library v1.0.0",
+        "sizeChart": "the shop's printed UK body chart (https://nobodyschild.com/pages/size-guide, read 2026-11-08) restricted to numeric sizes 4,6,8,10,12,14,16,18",
+        "baseSize": "\"Model's height is 5'8.5\" - she wears a UK size 8\": the photographed size, stated by the shop",
+        "lengthCm": "\"Wearing length is: 130cm\" → shoulder_to_hem (130 cm within 105–140 cm for a dress, midaxi); assumed measured at the model's size, which the shop does not say"
+      },
+      "warnings": [
+        "other fabric parts not modelled (payload has one fabric): Lining: 100% Cotton",
+        "\"Shirred waist\": a shirred zone stretches, but the payload has no stretch zone for a bodice; the fit engine treats it as the fabric's stretch",
+        "the shop's body chart has no shoulder width; the shoulder fit point is skipped",
+        "colour is only named (blue): primaryColorHex left out (no name-to-hex guess)",
+        "price is 66 GBP; priceEur is left out (no exchange rate is assumed)"
+      ],
+      "features": {
+        "version": "garment-features-0.1.0",
+        "evidence": [
+          "sleeve short: \"short sleeve\"",
+          "front buttoned: \"Button front\"",
+          "neckline V: \"V-neck\""
+        ],
+        "sleeve": "short",
+        "front": "buttoned",
+        "neckline": "v"
+      },
+      "baseSize": "8",
+      "baseSizeSource": "shop",
+      "page": {
+        "fabricOther": [
+          "Lining: 100% Cotton"
+        ],
+        "evidence": {
+          "fabric": "\"Fabric Main: 100% Cotton | Lining: 100% Cotton\"",
+          "modelSize": "\"Model's height is 5'8.5\" - she wears a UK size 8\"",
+          "wearingLength": "\"Wearing length is: 130cm\""
+        },
+        "fabricMain": "100% Cotton",
+        "modelHeight": "5'8.5\"",
+        "modelSize": {
+          "system": "UK",
+          "size": "8"
+        },
+        "wearingLengthCm": 130
+      },
+      "selection": {
+        "why": "UK 4–18, 7 photos with a straight full-length front (#3) and a straight full-length back (#5) on a plain studio backdrop; \"Main: 100% Cotton\", wearing length 130 cm, short puff sleeves, V-neck, shirred waist.",
+        "runnersUp": [
+          {
+            "handle": "rebecca-midi-dress-2614747001",
+            "whyNot": "85% cotton 15% linen, 134 cm, but no straight back photo (3/4 and side views only) and two photos in a street set."
+          },
+          {
+            "handle": "tiffany-midi-dress-2617333001",
+            "whyNot": "100% polyester satin slip; not reviewed by eye."
+          },
+          {
+            "handle": "denise-cord-mini-dress-2617008001",
+            "whyNot": "100% cotton cord, 88 cm; not reviewed by eye."
+          }
+        ]
+      },
+      "threeD": {
+        "ready": false,
+        "reasons": [
+          "front photo does not meet the contract (worn by a model, garment partly hidden); add one on a hanger, flat-lay or ghost mannequin",
+          "back photo does not meet the contract (worn by a model); add one on a hanger, flat-lay or ghost mannequin"
+        ]
+      }
+    },
+    {
+      "handle": "sallie-top-2617136001",
+      "productType": "Tops",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "15397781176705",
+        "brand": "Nobody's Child",
+        "name": "Black and Blue Check Shirred Sallie Top",
+        "productUrl": "https://nobodyschild.com/products/sallie-top-2617136001",
+        "productPhotos": [
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/2617136001_Top_1.jpg?v=1784026086",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2617136001__8.jpg?v=1778171602",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/2617136001_Top_2.jpg?v=1784026086",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2617136001.jpg?v=1778171602",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2617136001__13.jpg?v=1778171602",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2617136001__17.jpg?v=1778171602",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2617136001__10.jpg?v=1778171602"
+        ],
+        "category": "top",
+        "subcategory": "top",
+        "fabric": {
+          "primary": "cotton",
+          "weightGsm": 240,
+          "stretchPct": 1.5,
+          "drape": 0.5,
+          "opacity": 0.85,
+          "sheen": 0.08,
+          "blend": [
+            [
+              "cotton",
+              100
+            ]
+          ]
+        },
+        "sizeChartType": "body",
+        "sizeChart": [
+          {
+            "size": "4",
+            "bust": 78,
+            "waist": 60,
+            "hip": 85
+          },
+          {
+            "size": "6",
+            "bust": 82,
+            "waist": 64,
+            "hip": 89
+          },
+          {
+            "size": "8",
+            "bust": 86,
+            "waist": 68,
+            "hip": 93
+          },
+          {
+            "size": "10",
+            "bust": 90,
+            "waist": 72,
+            "hip": 97
+          },
+          {
+            "size": "12",
+            "bust": 95,
+            "waist": 78,
+            "hip": 102
+          },
+          {
+            "size": "14",
+            "bust": 100,
+            "waist": 83,
+            "hip": 107
+          },
+          {
+            "size": "16",
+            "bust": 107,
+            "waist": 90,
+            "hip": 114
+          },
+          {
+            "size": "18",
+            "bust": 114,
+            "waist": 97,
+            "hip": 121
+          }
+        ],
+        "lengthCm": {
+          "shoulder_to_hem": 53
+        }
+      },
+      "price": {
+        "amount": 41,
+        "currency": "GBP"
+      },
+      "completeness": {
+        "score": 0.636,
+        "missing": [
+          {
+            "field": "flatLayPhoto",
+            "reason": "flatLayPhoto (garment laid flat on white, https URL) is the input of the on-device render; without it the item cannot be shown on the user.",
+            "weight": 3,
+            "severity": "heavy"
+          },
+          {
+            "field": "ease",
+            "reason": "ease (garment minus body per fit point, cm) makes the size recommendation precise; category defaults are used when absent.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "criticalFitPoints",
+            "reason": "criticalFitPoints tells the fit engine where this garment cares most (double weight); all category points weigh equally when absent.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "sizeChart.shoulder",
+            "reason": "shoulder is a default fit point for this category; rows without it skip the shoulder check.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "primaryColorHex",
+            "reason": "primaryColorHex feeds the colour affinity of the taste engine and the render tint.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "trueToSizeScore",
+            "reason": "trueToSizeScore (from past return data) narrows or widens the size tie band; 0.8 is assumed.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "colorways",
+            "reason": "colorways let the user try every colour the shop sells; only the primary colour is shown when absent.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "styleTags",
+            "reason": "styleTags (0..1 per taste axis) override the inferred style of the item in the swipe deck.",
+            "weight": 1,
+            "severity": "light"
+          }
+        ],
+        "status": "incomplete",
+        "checked": [
+          "category",
+          "sizeChartType",
+          "sizeChart",
+          "fabric.primary",
+          "flatLayPhoto",
+          "fabric.stretchPct",
+          "fabric.drape",
+          "ease",
+          "lengthCm",
+          "criticalFitPoints",
+          "sizeChart.shoulder",
+          "primaryColorHex",
+          "productPhotos",
+          "trueToSizeScore",
+          "fabric.opacity",
+          "fabric.sheen",
+          "colorways",
+          "styleTags"
+        ]
+      },
+      "fullSchemaIssues": [
+        "priceEur: Invalid input: expected number, received undefined",
+        "primaryColorHex: Invalid input: expected string, received undefined",
+        "patternBlock: Invalid input: expected string, received undefined"
+      ],
+      "evidence": {
+        "category": "product_type \"Tops\" → top",
+        "fabric": "product page \"Fabric Main: 100% Cotton\" → cotton [[\"cotton\",100]]; weight/stretch/drape/opacity/sheen from the fabric library v1.0.0",
+        "sizeChart": "the shop's printed UK body chart (https://nobodyschild.com/pages/size-guide, read 2026-11-08) restricted to numeric sizes 4,6,8,10,12,14,16,18",
+        "baseSize": "\"Model's height is 5'10\" - she wears a UK size 8\": the photographed size, stated by the shop",
+        "lengthCm": "\"Wearing length is: 53cm\" → shoulder_to_hem (53 cm within 35–85 cm for a top); assumed measured at the model's size, which the shop does not say"
+      },
+      "warnings": [
+        "\"Shirred bodice\": a shirred zone stretches, but the payload has no stretch zone for a bodice; the fit engine treats it as the fabric's stretch",
+        "the shop's body chart has no shoulder width; the shoulder fit point is skipped",
+        "colour is only named (white): primaryColorHex left out (no name-to-hex guess)",
+        "price is 41 GBP; priceEur is left out (no exchange rate is assumed)"
+      ],
+      "features": {
+        "version": "garment-features-0.1.0",
+        "evidence": [
+          "sleeve sleeveless: \"Sleeveless\""
+        ],
+        "sleeve": "sleeveless"
+      },
+      "baseSize": "8",
+      "baseSizeSource": "shop",
+      "page": {
+        "fabricOther": [],
+        "evidence": {
+          "fabric": "\"Fabric Main: 100% Cotton\"",
+          "modelSize": "\"Model's height is 5'10\" - she wears a UK size 8\"",
+          "wearingLength": "\"Wearing length is: 53cm\""
+        },
+        "fabricMain": "100% Cotton",
+        "modelHeight": "5'10\"",
+        "modelSize": {
+          "system": "UK",
+          "size": "8"
+        },
+        "wearingLengthCm": 53
+      },
+      "selection": {
+        "why": "UK 4–18, sleeveless shirred top, \"Main: 100% Cotton\", wearing length 53 cm; a closed top (no layering) with a full straight front (#4). The only back photo (#5) is a 3/4 back crop with the hair over the back.",
+        "runnersUp": [
+          {
+            "handle": "dahlia-shirt-2616973001",
+            "whyNot": "100% cotton shirt, 72 cm, but worn open over a white tank in every front photo and the back is a 3/4 turn."
+          },
+          {
+            "handle": "bonnie-collared-blouse-2615827001",
+            "whyNot": "The product page prints \"Wearing length is: 4.7cm\" (a typo), so no length."
+          },
+          {
+            "handle": "augusta-blouse-short-sleeve-2517568003",
+            "whyNot": "100% cotton with a nylon trim, no wearing length; not reviewed by eye."
+          }
+        ]
+      },
+      "threeD": {
+        "ready": false,
+        "reasons": [
+          "front photo does not meet the contract (worn by a model, busy background, long edge 1456 px < 1600); add one on a hanger, flat-lay or ghost mannequin",
+          "back photo does not meet the contract (worn by a model, garment partly hidden); add one on a hanger, flat-lay or ghost mannequin"
+        ]
+      }
+    },
+    {
+      "handle": "ronda-skirt-2614903002",
+      "productType": "Skirts",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "15397781668225",
+        "brand": "Nobody's Child",
+        "name": "Black and Blue Check Shirred Ronda Skirt",
+        "productUrl": "https://nobodyschild.com/products/ronda-skirt-2614903002",
+        "productPhotos": [
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/2616369001_Skirt_1.jpg?v=1784026086",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/2614903002_web.jpg?v=1780580720",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/2616369001_Skirt_2.jpg?v=1784026086",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2617136001.jpg?v=1778171602",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2614903002__88.jpg?v=1778171589",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2614903002__62.jpg?v=1778171589",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2614903002__35.jpg?v=1778171589"
+        ],
+        "category": "bottom",
+        "subcategory": "midi-skirt",
+        "fabric": {
+          "primary": "cotton",
+          "weightGsm": 240,
+          "stretchPct": 1.5,
+          "drape": 0.5,
+          "opacity": 0.85,
+          "sheen": 0.08,
+          "blend": [
+            [
+              "cotton",
+              100
+            ]
+          ]
+        },
+        "sizeChartType": "body",
+        "sizeChart": [
+          {
+            "size": "4",
+            "bust": 78,
+            "waist": 60,
+            "hip": 85
+          },
+          {
+            "size": "6",
+            "bust": 82,
+            "waist": 64,
+            "hip": 89
+          },
+          {
+            "size": "8",
+            "bust": 86,
+            "waist": 68,
+            "hip": 93
+          },
+          {
+            "size": "10",
+            "bust": 90,
+            "waist": 72,
+            "hip": 97
+          },
+          {
+            "size": "12",
+            "bust": 95,
+            "waist": 78,
+            "hip": 102
+          },
+          {
+            "size": "14",
+            "bust": 100,
+            "waist": 83,
+            "hip": 107
+          },
+          {
+            "size": "16",
+            "bust": 107,
+            "waist": 90,
+            "hip": 114
+          },
+          {
+            "size": "18",
+            "bust": 114,
+            "waist": 97,
+            "hip": 121
+          }
+        ],
+        "lengthCm": {
+          "waist_to_hem": 90
+        },
+        "stretchZones": [
+          "waistband"
+        ]
+      },
+      "price": {
+        "amount": 55,
+        "currency": "GBP"
+      },
+      "completeness": {
+        "score": 0.618,
+        "missing": [
+          {
+            "field": "flatLayPhoto",
+            "reason": "flatLayPhoto (garment laid flat on white, https URL) is the input of the on-device render; without it the item cannot be shown on the user.",
+            "weight": 3,
+            "severity": "heavy"
+          },
+          {
+            "field": "ease",
+            "reason": "ease (garment minus body per fit point, cm) makes the size recommendation precise; category defaults are used when absent.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "criticalFitPoints",
+            "reason": "criticalFitPoints tells the fit engine where this garment cares most (double weight); all category points weigh equally when absent.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "sizeChart.thigh",
+            "reason": "thigh is a default fit point for bottoms; rows without it skip the thigh check.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "sizeChart.inseam",
+            "reason": "inseam lets the fit engine check leg length; rows without it skip it.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "primaryColorHex",
+            "reason": "primaryColorHex feeds the colour affinity of the taste engine and the render tint.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "trueToSizeScore",
+            "reason": "trueToSizeScore (from past return data) narrows or widens the size tie band; 0.8 is assumed.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "colorways",
+            "reason": "colorways let the user try every colour the shop sells; only the primary colour is shown when absent.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "styleTags",
+            "reason": "styleTags (0..1 per taste axis) override the inferred style of the item in the swipe deck.",
+            "weight": 1,
+            "severity": "light"
+          }
+        ],
+        "status": "incomplete",
+        "checked": [
+          "category",
+          "sizeChartType",
+          "sizeChart",
+          "fabric.primary",
+          "flatLayPhoto",
+          "fabric.stretchPct",
+          "fabric.drape",
+          "ease",
+          "lengthCm",
+          "criticalFitPoints",
+          "sizeChart.thigh",
+          "sizeChart.inseam",
+          "primaryColorHex",
+          "productPhotos",
+          "trueToSizeScore",
+          "fabric.opacity",
+          "fabric.sheen",
+          "colorways",
+          "styleTags"
+        ]
+      },
+      "fullSchemaIssues": [
+        "priceEur: Invalid input: expected number, received undefined",
+        "primaryColorHex: Invalid input: expected string, received undefined",
+        "patternBlock: Invalid input: expected string, received undefined"
+      ],
+      "evidence": {
+        "category": "product_type \"Skirts\" → bottom (skirt); length band \"midi\" (length tag)",
+        "fabric": "product page \"Fabric Main: 100% Cotton\" → cotton [[\"cotton\",100]]; weight/stretch/drape/opacity/sheen from the fabric library v1.0.0",
+        "sizeChart": "the shop's printed UK body chart (https://nobodyschild.com/pages/size-guide, read 2026-11-08) restricted to numeric sizes 4,6,8,10,12,14,16,18",
+        "baseSize": "\"Model's height is 5'7\" - she wears a UK size 8\": the photographed size, stated by the shop",
+        "lengthCm": "\"Wearing Length is: 90cm\" → waist_to_hem (90 cm within 60–92 cm for a bottom (skirt), midi); assumed measured at the model's size, which the shop does not say",
+        "stretchZones": "\"Shirred\" (description or fastening tag)"
+      },
+      "warnings": [
+        "colour is only named (white): primaryColorHex left out (no name-to-hex guess)",
+        "price is 55 GBP; priceEur is left out (no exchange rate is assumed)"
+      ],
+      "features": {
+        "version": "garment-features-0.1.0",
+        "evidence": []
+      },
+      "baseSize": "8",
+      "baseSizeSource": "shop",
+      "page": {
+        "fabricOther": [],
+        "evidence": {
+          "fabric": "\"Fabric Main: 100% Cotton\"",
+          "modelSize": "\"Model's height is 5'7\" - she wears a UK size 8\"",
+          "wearingLength": "\"Wearing Length is: 90cm\""
+        },
+        "fabricMain": "100% Cotton",
+        "modelHeight": "5'7\"",
+        "modelSize": {
+          "system": "UK",
+          "size": "8"
+        },
+        "wearingLengthCm": 90
+      },
+      "selection": {
+        "why": "UK 4–18, \"Main: 100% Cotton\", wearing length 90 cm, shirred elasticated waist; a full straight front (#4) and a full straight back (#5) on a plain backdrop. The matching top covers the waistband in the front photo; a red jumper over the shoulders in the back photo.",
+        "runnersUp": [
+          {
+            "handle": "penrith-button-through-midaxi-skirt-2614897001",
+            "whyNot": "UK 4–24 (the widest range) and 85% cotton 15% linen, but no back photo at all (a side view at most)."
+          },
+          {
+            "handle": "adwoa-linen-column-skirt-2615318001",
+            "whyNot": "55% linen 45% viscose, 96 cm, but no back photo (front and side crops only)."
+          }
+        ]
+      },
+      "threeD": {
+        "ready": false,
+        "reasons": [
+          "front photo does not meet the contract (worn by a model, busy background, long edge 1456 px < 1600); add one on a hanger, flat-lay or ghost mannequin",
+          "back photo does not meet the contract (worn by a model); add one on a hanger, flat-lay or ghost mannequin"
+        ]
+      }
+    },
+    {
+      "handle": "topaz-trousers-2616025001",
+      "productType": "Trousers",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "15353086902657",
+        "brand": "Nobody's Child",
+        "name": "Ivory Tile Printed Wide Leg Topaz Trousers",
+        "productUrl": "https://nobodyschild.com/products/topaz-trousers-2616025001",
+        "productPhotos": [
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616025001_392.jpg?v=1776247024",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2615911001_324_f83d17da-73fd-4371-a130-2431a13225ca.jpg?v=1781080111",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616025001_399.jpg?v=1776247024",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616025001_406.jpg?v=1776247024",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616025001_387.jpg?v=1776247024"
+        ],
+        "category": "bottom",
+        "subcategory": "wide-leg-trousers",
+        "patternBlock": "wide-leg",
+        "fabric": {
+          "primary": "cotton",
+          "weightGsm": 240,
+          "stretchPct": 1.5,
+          "drape": 0.5,
+          "opacity": 0.85,
+          "sheen": 0.08,
+          "blend": [
+            [
+              "cotton",
+              100
+            ]
+          ]
+        },
+        "sizeChartType": "body",
+        "sizeChart": [
+          {
+            "size": "4",
+            "bust": 78,
+            "waist": 60,
+            "hip": 85,
+            "inseam": 79
+          },
+          {
+            "size": "6",
+            "bust": 82,
+            "waist": 64,
+            "hip": 89,
+            "inseam": 79
+          },
+          {
+            "size": "8",
+            "bust": 86,
+            "waist": 68,
+            "hip": 93,
+            "inseam": 79
+          },
+          {
+            "size": "10",
+            "bust": 90,
+            "waist": 72,
+            "hip": 97,
+            "inseam": 79
+          },
+          {
+            "size": "12",
+            "bust": 95,
+            "waist": 78,
+            "hip": 102,
+            "inseam": 79
+          },
+          {
+            "size": "14",
+            "bust": 100,
+            "waist": 83,
+            "hip": 107,
+            "inseam": 79
+          },
+          {
+            "size": "16",
+            "bust": 107,
+            "waist": 90,
+            "hip": 114,
+            "inseam": 79
+          },
+          {
+            "size": "18",
+            "bust": 114,
+            "waist": 97,
+            "hip": 121,
+            "inseam": 79
+          }
+        ],
+        "stretchZones": [
+          "waistband"
+        ],
+        "sizingNotes": "Size tip: we recommend your usual size"
+      },
+      "price": {
+        "amount": 47.4,
+        "currency": "GBP"
+      },
+      "completeness": {
+        "score": 0.588,
+        "missing": [
+          {
+            "field": "flatLayPhoto",
+            "reason": "flatLayPhoto (garment laid flat on white, https URL) is the input of the on-device render; without it the item cannot be shown on the user.",
+            "weight": 3,
+            "severity": "heavy"
+          },
+          {
+            "field": "ease",
+            "reason": "ease (garment minus body per fit point, cm) makes the size recommendation precise; category defaults are used when absent.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "lengthCm",
+            "reason": "lengthCm (e.g. shoulder_to_hem) places the hem and sleeves on the user; without it the render uses category averages.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "criticalFitPoints",
+            "reason": "criticalFitPoints tells the fit engine where this garment cares most (double weight); all category points weigh equally when absent.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "sizeChart.thigh",
+            "reason": "thigh is a default fit point for bottoms; rows without it skip the thigh check.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "primaryColorHex",
+            "reason": "primaryColorHex feeds the colour affinity of the taste engine and the render tint.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "trueToSizeScore",
+            "reason": "trueToSizeScore (from past return data) narrows or widens the size tie band; 0.8 is assumed.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "colorways",
+            "reason": "colorways let the user try every colour the shop sells; only the primary colour is shown when absent.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "styleTags",
+            "reason": "styleTags (0..1 per taste axis) override the inferred style of the item in the swipe deck.",
+            "weight": 1,
+            "severity": "light"
+          }
+        ],
+        "status": "incomplete",
+        "checked": [
+          "category",
+          "sizeChartType",
+          "sizeChart",
+          "fabric.primary",
+          "flatLayPhoto",
+          "fabric.stretchPct",
+          "fabric.drape",
+          "ease",
+          "lengthCm",
+          "criticalFitPoints",
+          "sizeChart.thigh",
+          "sizeChart.inseam",
+          "primaryColorHex",
+          "productPhotos",
+          "trueToSizeScore",
+          "fabric.opacity",
+          "fabric.sheen",
+          "colorways",
+          "styleTags"
+        ]
+      },
+      "fullSchemaIssues": [
+        "priceEur: Invalid input: expected number, received undefined",
+        "primaryColorHex: Invalid input: expected string, received undefined"
+      ],
+      "evidence": {
+        "category": "product_type \"Trousers\" → bottom (trousers); length band \"regular\" (length tag)",
+        "fabric": "product page \"Fabric Main: 100% Cotton\" → cotton [[\"cotton\",100]]; weight/stretch/drape/opacity/sheen from the fabric library v1.0.0",
+        "sizeChart": "the shop's printed UK body chart (https://nobodyschild.com/pages/size-guide, read 2026-11-08) restricted to numeric sizes 4,6,8,10,12,14,16,18",
+        "inseam": "length tag \"regular\" → the shop's body inside leg 79 cm (same for every size; the chart has no inside leg per size)",
+        "baseSize": "\"Model's height is 5'9 - she wears a UK size 8\": the photographed size, stated by the shop",
+        "stretchZones": "\"Elasticated\" (description or fastening tag)"
+      },
+      "warnings": [
+        "no wearing length in cm on the product page",
+        "colour is only named (cream): primaryColorHex left out (no name-to-hex guess)",
+        "price is 47.4 GBP; priceEur is left out (no exchange rate is assumed)"
+      ],
+      "features": {
+        "version": "garment-features-0.1.0",
+        "evidence": []
+      },
+      "baseSize": "8",
+      "baseSizeSource": "shop",
+      "page": {
+        "fabricOther": [],
+        "evidence": {
+          "fabric": "\"Fabric Main: 100% Cotton\"",
+          "modelSize": "\"Model's height is 5'9 - she wears a UK size 8\""
+        },
+        "fabricMain": "100% Cotton",
+        "modelHeight": "5'9",
+        "modelSize": {
+          "system": "UK",
+          "size": "8"
+        }
+      },
+      "selection": {
+        "why": "UK 4–18, wide leg, \"Main: 100% Cotton\", elasticated drawstring waist, length tag \"regular\" (the shop's inside leg 79 cm); full straight front (#5) and back (#4). The print is on the front only: the back is plain.",
+        "runnersUp": [
+          {
+            "handle": "barrel-leg-tie-trousers-2615226001",
+            "whyNot": "100% cotton, but a barrel leg (no proxy shape for it) and the back photo has the arms raised over the head."
+          },
+          {
+            "handle": "rue-tailored-wide-leg-trousers-2616917001",
+            "whyNot": "Wool blend with elastane; not reviewed by eye."
+          }
+        ]
+      },
+      "threeD": {
+        "ready": false,
+        "reasons": [
+          "front photo does not meet the contract (worn by a model); add one on a hanger, flat-lay or ghost mannequin",
+          "back photo does not meet the contract (worn by a model); add one on a hanger, flat-lay or ghost mannequin"
+        ]
+      }
+    },
+    {
+      "handle": "tie-neck-df-jacket-2616863001",
+      "productType": "Outerwear",
+      "payload": {
+        "schemaVersion": 1,
+        "id": "15511161176449",
+        "brand": "Nobody's Child",
+        "name": "Camel Wool-Blend Neck Tie Jacket",
+        "productUrl": "https://nobodyschild.com/products/tie-neck-df-jacket-2616863001",
+        "productPhotos": [
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/2616863001_1.jpg?v=1787667277",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616863001_13.jpg?v=1787588736",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616863001_30.jpg?v=1787588735",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/2616863001_2.jpg?v=1787667275",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616863001_53.jpg?v=1787588783",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616863001_11.jpg?v=1787588736",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616863001_44.jpg?v=1787588783",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616863001_18.jpg?v=1787588735",
+          "https://cdn.shopify.com/s/files/1/0640/7005/8155/files/NC_WEB_2616863001_63.jpg?v=1787588736"
+        ],
+        "category": "outerwear",
+        "subcategory": "jacket",
+        "fabric": {
+          "primary": "wool",
+          "weightGsm": 241,
+          "stretchPct": 2,
+          "drape": 0.549,
+          "opacity": 0.911,
+          "sheen": 0.197,
+          "blend": [
+            [
+              "wool",
+              51
+            ],
+            [
+              "polyester",
+              49
+            ]
+          ]
+        },
+        "sizeChartType": "body",
+        "sizeChart": [
+          {
+            "size": "XS",
+            "bust": 82,
+            "waist": 64,
+            "hip": 89
+          },
+          {
+            "size": "S",
+            "bust": 90,
+            "waist": 72,
+            "hip": 97
+          },
+          {
+            "size": "M",
+            "bust": 100,
+            "waist": 83,
+            "hip": 107
+          },
+          {
+            "size": "L",
+            "bust": 114,
+            "waist": 97,
+            "hip": 121
+          },
+          {
+            "size": "XL",
+            "bust": 124,
+            "waist": 107,
+            "hip": 131
+          }
+        ],
+        "lengthCm": {
+          "shoulder_to_hem": 59
+        }
+      },
+      "price": {
+        "amount": 145,
+        "currency": "GBP"
+      },
+      "completeness": {
+        "score": 0.636,
+        "missing": [
+          {
+            "field": "flatLayPhoto",
+            "reason": "flatLayPhoto (garment laid flat on white, https URL) is the input of the on-device render; without it the item cannot be shown on the user.",
+            "weight": 3,
+            "severity": "heavy"
+          },
+          {
+            "field": "ease",
+            "reason": "ease (garment minus body per fit point, cm) makes the size recommendation precise; category defaults are used when absent.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "criticalFitPoints",
+            "reason": "criticalFitPoints tells the fit engine where this garment cares most (double weight); all category points weigh equally when absent.",
+            "weight": 2,
+            "severity": "medium"
+          },
+          {
+            "field": "sizeChart.shoulder",
+            "reason": "shoulder is a default fit point for this category; rows without it skip the shoulder check.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "primaryColorHex",
+            "reason": "primaryColorHex feeds the colour affinity of the taste engine and the render tint.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "trueToSizeScore",
+            "reason": "trueToSizeScore (from past return data) narrows or widens the size tie band; 0.8 is assumed.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "colorways",
+            "reason": "colorways let the user try every colour the shop sells; only the primary colour is shown when absent.",
+            "weight": 1,
+            "severity": "light"
+          },
+          {
+            "field": "styleTags",
+            "reason": "styleTags (0..1 per taste axis) override the inferred style of the item in the swipe deck.",
+            "weight": 1,
+            "severity": "light"
+          }
+        ],
+        "status": "incomplete",
+        "checked": [
+          "category",
+          "sizeChartType",
+          "sizeChart",
+          "fabric.primary",
+          "flatLayPhoto",
+          "fabric.stretchPct",
+          "fabric.drape",
+          "ease",
+          "lengthCm",
+          "criticalFitPoints",
+          "sizeChart.shoulder",
+          "primaryColorHex",
+          "productPhotos",
+          "trueToSizeScore",
+          "fabric.opacity",
+          "fabric.sheen",
+          "colorways",
+          "styleTags"
+        ]
+      },
+      "fullSchemaIssues": [
+        "priceEur: Invalid input: expected number, received undefined",
+        "primaryColorHex: Invalid input: expected string, received undefined",
+        "patternBlock: Invalid input: expected string, received undefined"
+      ],
+      "evidence": {
+        "category": "product_type \"Outerwear\" → outerwear",
+        "fabric": "product page \"Fabric Main: 51% Wool, 49% Polyester | Binding: 100% Cotton\" → wool [[\"wool\",51],[\"polyester\",49]]; weight/stretch/drape/opacity/sheen from the fabric library v1.0.0",
+        "sizeChart": "the shop's printed UK body chart (https://nobodyschild.com/pages/size-guide, read 2026-11-08) restricted to letter sizes XS,S,M,L,XL",
+        "baseSize": "\"Model's height is 5'10\" - she wears a UK size S\": the photographed size, stated by the shop (a letter size, labelled \"UK size\")",
+        "lengthCm": "\"Wearing length is: 59cm\" → shoulder_to_hem (59 cm within 40–125 cm for a outerwear); assumed measured at the model's size, which the shop does not say"
+      },
+      "warnings": [
+        "other fabric parts not modelled (payload has one fabric): Binding: 100% Cotton",
+        "the shop's body chart has no shoulder width; the shoulder fit point is skipped",
+        "colour is only named (beige): primaryColorHex left out (no name-to-hex guess)",
+        "price is 145 GBP; priceEur is left out (no exchange rate is assumed)"
+      ],
+      "features": {
+        "version": "garment-features-0.1.0",
+        "evidence": [
+          "sleeve long: \"Long sleeve\"",
+          "front buttoned: \"button front\""
+        ],
+        "sleeve": "long",
+        "front": "buttoned"
+      },
+      "baseSize": "S",
+      "baseSizeSource": "shop",
+      "page": {
+        "fabricOther": [
+          "Binding: 100% Cotton"
+        ],
+        "evidence": {
+          "fabric": "\"Fabric Main: 51% Wool, 49% Polyester | Binding: 100% Cotton\"",
+          "modelSize": "\"Model's height is 5'10\" - she wears a UK size S\"",
+          "wearingLength": "\"Wearing length is: 59cm\""
+        },
+        "fabricMain": "51% Wool, 49% Polyester",
+        "modelHeight": "5'10\"",
+        "modelSize": {
+          "system": "UK",
+          "size": "S"
+        },
+        "wearingLengthCm": 59
+      },
+      "selection": {
+        "why": "XS–XL (letter sizes through the shop's letter chart), \"Main: 51% Wool, 49% Polyester\", wearing length 59 cm, button front, long sleeves; the only selected product with a no-model photo (#4, on a hanger), plus a full front (#2) and a straight back (#5).",
+        "runnersUp": [
+          {
+            "handle": "cropped-freddie-barn-coat-2616246003",
+            "whyNot": "100% cotton, 57 cm, but worn open over a tee in every photo and no straight back."
+          },
+          {
+            "handle": "collared-bomber-jacket-2616826001",
+            "whyNot": "100% nylon; the product page prints no model size."
+          }
+        ]
+      },
+      "threeD": {
+        "ready": false,
+        "reasons": [
+          "front photo does not meet the contract (worn by a model, busy background, long edge 1248 px < 1600); add one on a hanger, flat-lay or ghost mannequin",
+          "back photo does not meet the contract (worn by a model); add one on a hanger, flat-lay or ghost mannequin"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "name": "@curtain/garment-viewer",
+  "version": "0.1.0",
+  "description": "Curtain on-device 3D estimate (docs/ENGINE-HANDOFF.md): loads an approved garment bundle, builds an avatar from the shopper's girths with the procedural mannequin, drapes the recommended size in Web Workers and renders it with three.js. Device-side modules forked from spikes/garment-engine. Consumed as TypeScript source.",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@curtain/anchors": "workspace:*",
+    "@curtain/fit-engine": "workspace:*",
+    "@curtain/mannequin": "workspace:*",
+    "@curtain/schema": "workspace:*",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@types/node": "22.20.5",
+    "@types/three": "0.186.0",
+    "eslint": "9.39.5",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "3.2.7"
+  }
+}

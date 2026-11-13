@@ -1,0 +1,42 @@
+/* Layout only. The SDK injects the button styling (pk-btn: coral #FF5A3C on cream #F5EFE7, ink text) unless the block is set to unstyled. */
+.curtain-try {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 1rem 0;
+}
+.curtain-try--left { align-items: flex-start; }
+.curtain-try--center { align-items: center; text-align: center; }
+.curtain-try--full { align-items: stretch; }
+.curtain-try--full .curtain-try__button { width: 100%; justify-content: center; }
+.curtain-try__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+.curtain-try__icon { flex: none; }
+.curtain-try__hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  opacity: 0.75;
+}
+.curtain-try__setup {
+  margin: 0.5rem 0;
+  padding: 0.6rem 0.8rem;
+  border: 1px dashed #c97a4f;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+}
+.curtain-try__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

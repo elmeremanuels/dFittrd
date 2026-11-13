@@ -1,0 +1,66 @@
+# Refinement backlog
+
+This is the refinement memory: every known defect and improvement that is **parked** while we launch.
+
+**Rule (founder, 8 Nov 2026).** Launch as soon as possible. First land a customer or an investor, then
+develop further. Nothing on this list blocks the launch. Pick items up after the launch, in the order
+of the "Priority" column, or earlier when a customer or investor asks for one.
+
+Estimates are wall-clock time for one agent session working on its own, plus GPU list price. They
+are not invoices. Generative steps (the video model) improve with retries but are not guaranteed.
+
+## 1. 3D garments (garment engine)
+
+The garments that ship for the demo and the pilot are **azure** (run 17b) and the **maxi skirt**
+(run 17d, low-rise). Both are accepted pending founder review, and every 3D view is labelled an
+estimate.
+
+| # | Product | Open point | Cause (as far as known) | Proposed fix | Time | GPU | Priority | Status |
+|---|---|---|---|---|---|---|---|---|
+| R1 | Azure babydoll | Cream hem flap in turntable_b frames 82–155, and a flat panel beside the hem in turntable_a 13–31. Hem girth is unconfirmed (157.7 cm; 152.9 cm without the flap; run 15: 149.5 cm) | Wan2.2 draws cloth outside the depth control at the image-left hem. The trigger of the growth from run 15 is not proven (`phase0-written.md`, "Run 17b"; hem-flap investigation) | Run stage 2 again with 2–3 other seeds per clip (parallel stage 2) and pick the clip with the lowest off-reference score (consistency 0.4.0). Keep the rejected draws on record | 2–3 h | $2–3 | 2 | **8 Nov, CPU done (stage 4t 0.5.0):** the off-reference pixels are left out of the fit and the bake (recorded in `metrics.json` `offReference`): hem girth 157.7 → 151.8 cm, holdout mean unchanged (min 0.8747 → 0.8727), the 73 flagged frames 0.9023 → 0.8969 against the masks as segmented. Stage 4t refuses a job with off-reference spans and no masks. GPU part (new seeds) still open |
+| R2 | Maxi skirt | Hem drawn over the feet (grey toes show) and a smeared print | The stage 1b stills (FASHN fashn@44/63) | New stills with the band at the waist and the hem above the feet (draw plan, stage 1b only), then end to end | 3–4 h | ~$1.5 | 3 | open |
+| R3 | Maxi skirt | AU 8/12/16 barely differ in the viewer | Grading or drape of a skirt with one critical point (the low-rise waist) | CPU: investigate the grading for single-anchor bottoms | 2–3 h | – | 2 | **8 Nov, investigated, open:** grading is right; the drape folds 20 cm of hip spread into 5.4 cm (cling heuristic, gravity) and every size hangs from the same band. A non-elastic band now slides down (viewer); the skirt's band is elastic, and its relaxed girth is not measured, so nothing is faked for it. Needs that girth or the calibrated drape. **10 Nov, step-3 control (CPU, opt-in, not the default; reviewed and corrected the same day):** `sizes-drape.ts --modes` on the run 17d bundle, M mannequin (hip 100 cm), AU 8→16 hull-girth spread (graded ≈ 20 cm at every height). *What the drape predicts* (no constraint at the measured height): baseline (cling on) y 80 / 75 / 60 / 40 / 20 cm: 25 / 27 / 42 / 49 / 42 % of the cut survives; cling off: 31 / 41 / 65 / 67 / 73 %. So the cling heuristic is what collapses the lower skirt; the hip ring itself stays at 27 % with cling off (AU 8–10 are smaller than this body's hip and sit on it). *What the hip loop imposes*: cling off + a girth loop at the hip ring (retain 1.0) gives 78 % at y 87.4, but that is the loop's own target (the hull is held at ≥ retain × the graded girth exactly there), so it is enforced, not predicted; off the ring it adds 9–19 points just below the hip (y 80 / 75 / 70: 50 / 50 / 55 %) and ≈ 0 below y 60 (69 / 70 / 72 %). The waist loop is skipped on this skirt (no free cloth at the waist morph height, R4) and the hem loop only holds the floor tuck of R2 (min 77–93 cm against a graded 108–130 cm at y 20), so the skirt result is a hip loop alone. Visual cost (renders, looked at): at retain 1.0 AU 16 gets a hooped, boxy hip, a horizontal shelf standing off the body at the hip ring (clearly visible in side view); retain 0.97 softens it only a little; the palazzo's AU 16 hip turns into a rectangular block at both. Cling off alone shows none of this. An ASSUMED stretch band (AU 12 relaxed/stretched 72/97, 80/108, 88/119 cm) gives hip-ring 77 / 32 / 13 %, because the looser bands slide down; between the rings (72/97) only 38–53 %. Stable (no NaN; residual motion as baseline), no measurable solver cost. Verdict: cling off is the real, non-circular gain; the hip loop is a hack that sets the hip girth by construction and is not worth shipping as is. Still needs the measured band (`spikes/garment-engine/data/bohohippychic/waistbands.json`) and a calibrated drape (R2 route) |
+| R4 | Maxi skirt | Low-rise reading misses the chart by 2.49 cm before calibration; the pass after calibration is automatic | The band sits 4.76 cm below the waist ring (founder decision A, 8 Nov 2026) | Solved by R2 (band at the waist) | – | – | with R2 | open |
+| R5 | Palazzo | Light flat triangle at the crotch: the garment crotch is 6.5 cm lower than the body's. Horizontal seam line on the upper thigh. Leg tubes cross below the join | Stage 4t 0.4.0 join (fitted vertices only, flat crotch floor) | CPU: shape the crotch to the body's crotch and stop the legs crossing | 3–5 h | – | 3 | **8 Nov, CPU partly done (template fit 0.5.0):** legs no longer cross (20 → 0); one piece, 0 inside. The frames put the garment's crotch at 73.7 / 72.9 cm (2.75 / 3.5 below the body's), but the mesh's join stays 6.5 cm below it; the 27 seat vertices pushed into the crease show as a boxy notch that does not connect to the leg gap, with a light strip of the old floor below it. Open: that notch (feather the crease into the gap), texture seam at the join, the viewer's V fold |
+| R6 | Palazzo | Patchy print from the side; texture scores worse than one flat colour (29.72 vs 27.97) | The generated frames disagree on the print between views | One more stage 2 seed, or a view-consistent bake | 1–2 h | ~$1 | 4 | **8 Nov, CPU done (two-band bake):** palazzo holdout MAE 29.72 → 26.98 (flat colour 27.97), azure 20.76 → 19.29, skirt 29.21 → 27.51 (old → new on the same pixels); confirmed on an independent validation split (palazzo 26.96 against flat 28.01); softer than one frame, PSNR on the palazzo still below flat colour, gain picked with the holdout in view |
+| R7 | Blouse | Back cut straight at the hem; no usable pair | Our blouse proxy (54.2 cm) is shorter than the real shirt-tail. FASHN backs draw a front neckline | Exporter: a longer proxy for tops with a shirt-tail (new job ids), then stage 1b + end to end | 4–6 h | $2–3 | 3 | open |
+| R8 | Cardigan | Grey shoulders on the front; back sleeves swapped, drawn too big | Fitted outerwear proxy against an oversized drop-shoulder knit. Back prompt 0.2.0 did not fix the sleeve sides | Exporter: a wide outerwear proxy with a dropped shoulder (new job ids), then stage 1b + end to end | 5–8 h | $2–3 | 3 | open |
+| R9 | All | Proxy leaves the mannequin's shoulder caps uncovered (blouse and cardigan Qwen fronts) | Exporter proxy geometry | Covered by R7/R8 | – | – | with R7/R8 | open |
+| R10 | All | Thresholds rest on one shop and five products (stage 1b QA, consistency 0.4.0 off-reference, conform cap) | Little data | Re-tune on a second shop | 2–4 h | – | 4 | open |
+
+All of R1–R8 can run in parallel: about **10–16 h** wall-clock and **$10–15** GPU in total.
+
+## 2. Pipeline
+
+| # | Open point | Proposed fix | Time | Priority |
+|---|---|---|---|---|
+| P1 | Parallel stage 2 (motion clip off) has not run on a GPU yet | Comes with the first GPU run of R1/R2. Check the wall clock (~8 min) and the cost (~$1.05) against the estimate | – | with R1 |
+| P2 | Re-running only a failed stage 2 clip is not supported | Reuse a finished clip from the Volume | 2 h | 4 |
+| P3 | Every product still needs by-eye review (for example 4 runs to find a good skirt back) | Automate the checks we now find by hand (waistband present, seam height, hem width, view agreement on print features) | 1–2 weeks | 1 after launch |
+| P4 | Second shop | Validate the pipeline outside Bohohippychic | 1–2 days + GPU | 2 after launch |
+
+## 3. Plugin and merchant side
+
+| # | Open point | Proposed fix | Time | Priority |
+|---|---|---|---|---|
+| M1 | No approval screen for 3D assets in the Shopify and Woo admin. `settings.garment3d` is set by hand. QA flags (`low_rise_waist`) and `qaNotes` are visible only in the API | Admin row with preview, approve/reject and the notes | 4–6 h | 1 after launch (before 3D at a real shop) |
+| M2 | The import gate trusts qa.json | Recompute key QA fields at import | 2 h | 3 |
+| M3 | ~~The Caddy `/assets` block has not been validated against a real Caddy~~ **Closed 9 Nov 2026**: `caddy-validate.sh` passes with Caddy 2.9.1 and the block was exercised over HTTPS (`docs/GOLIVE-REHEARSAL.md`) | `infra/scripts/caddy-validate.sh` also runs on every deploy | done | done |
+| M4 | 3D pricing (D17) | Founder decision | – | founder |
+| M5 | The demo price shows EUR 0 for the azure product | Cosmetic, demo only | 15 min | 4 |
+
+## 4. Decisions and permissions
+
+| # | Point | Status |
+|---|---|---|
+| B1 | Bohohippychic permission for its name, logo, product photos and the 3D bundles derived from them (D13) | **Granted.** The founder holds the permission (stated 8 Nov 2026). Keep the written confirmation on file outside the repo. The website and demos may use these assets |
+| B2 | Founder review of the azure and skirt bundles | Open (renders sent 8 Nov 2026). Also a site launch gate: `partner.estimatesReviewed` in `apps/site/src/data/site.ts`, because the estimates are shown next to Bohohippychic's photos on `/`, `/3d/` and `/pilot/` (docs/SITE.md) |
+| B3 | Trial length, what happens after the trial, app name and trademark (checklist E1), legal review | Open, founder |
+
+## Launch path (now)
+
+1. The website `apps/site` is built and merged; the Bohohippychic assets (B1) are in (8 Nov 2026). It publishes with the deploy once its launch gates are cleared (docs/SITE.md).
+2. Cowork sets up the VPS and DNS (`docs/COWORK-HANDOFF.md`).
+3. The work goes to `main`, the first deploy runs, and curtain.fit, app and api are live.
+4. Shopify: development store first, then the pilot install at Bohohippychic (custom distribution).
+5. Investor and customer material: demo shop with 3D (azure and skirt), the website, and a short demo video or deck.

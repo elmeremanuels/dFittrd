@@ -323,3 +323,31 @@ describe('admin page: the plan button (checklist B2)', () => {
     expect($('banner').textContent).not.toContain('Approve');
   });
 });
+
+describe('admin page: men\u2019s templates', () => {
+  it('prints Chest for a men\u2019s template and the waist and inseam columns of the jeans chart', async () => {
+    const calls = mountPage({});
+    await vi.waitFor(() => expect(document.querySelectorAll('input[name="tpl"]').length).toBeGreaterThan(5));
+    expect($('chart-head').textContent).toContain('Bust');
+    const letters = $('tpl-mens-letter-body');
+    letters.checked = true;
+    fire(letters, 'change');
+    expect($('chart-head').textContent).toContain('Chest (cm)');
+    expect($('chart-head').textContent).not.toContain('Bust');
+    expect(($('chart-body').querySelectorAll('input')[0] as El).value).toBe('95');
+    const jeans = $('tpl-mens-jeans-wl-body');
+    jeans.checked = true;
+    fire(jeans, 'change');
+    expect($('chart-head').textContent).toBe('SizeWaist (cm)Inseam (cm)');
+    expect($('chart-body').querySelectorAll('tr').length).toBe(19);
+    const first = $('chart-body').querySelectorAll('input');
+    expect([(first[0] as El).value, (first[1] as El).value]).toEqual(['71', '81']);
+    const women = $('tpl-uk-womens-body');
+    women.checked = true;
+    fire(women, 'change');
+    expect($('chart-head').textContent).toContain('Bust (cm)');
+    // Each pick saves the template to onboarding; let those finish before the page is torn down.
+    await vi.waitFor(() => expect(calls.filter((c) => c.method === 'PUT').map((c) => c.body)).toEqual([{ templateId: 'mens-letter-body' }, { templateId: 'mens-jeans-wl-body' }, { templateId: 'uk-womens-body' }]));
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  });
+});

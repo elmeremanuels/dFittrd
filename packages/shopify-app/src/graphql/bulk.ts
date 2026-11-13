@@ -46,6 +46,7 @@ export function bulkProductsQuery(namespace: string = SHOPIFY_METAFIELD_NAMESPAC
           title
           vendor
           productType
+          tags
           status
           onlineStoreUrl
           category { name fullName }

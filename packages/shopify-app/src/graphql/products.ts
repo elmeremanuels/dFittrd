@@ -11,6 +11,8 @@ export const PRODUCT_NODE_FIELDS = /* GraphQL */ `
   title
   vendor
   productType
+  tags
+  collections(first: 10) { nodes { title handle } }
   status
   onlineStoreUrl
   category { name fullName }

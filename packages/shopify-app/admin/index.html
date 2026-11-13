@@ -401,6 +401,8 @@
       // ---- size chart builder ---------------------------------------------------------------------
       var CM_PER_IN = 2.54;
       var POINT_LABELS = { bust: 'Bust', waist: 'Waist', hip: 'Hip', shoulder: 'Shoulder', thigh: 'Thigh', inseam: 'Inseam' };
+      // The stored point stays `bust`; a men's or unisex template prints it as "Chest" (bustLabelKey in @curtain/schema).
+      function pointLabel(p) { var a = charts.tpl && charts.tpl.audience; return p === 'bust' && (a === 'men' || a === 'unisex') ? 'Chest' : POINT_LABELS[p]; }
       var charts = { templates: [], tpl: null, type: 'body', unit: 'cm', allSizes: [], sizes: [], values: {}, points: ['bust', 'waist', 'hip'], edited: false };
       var sel = { collection: null, products: [] };
       var STEP_CHECK = { connect: 'chk-install', template: 'chk-template', assign: 'chk-assign', themeBlock: 'chk-theme', test: 'chk-test' };
@@ -458,9 +460,9 @@
         var t = charts.templates.find(function (x) { return x.id === id; });
         if (!t) return;
         charts.tpl = t; charts.type = t.kind; charts.edited = false;
-        charts.points = t.kind === 'body' ? ['bust', 'waist', 'hip'] : t.points.slice();
+        charts.points = t.kind === 'body' ? (t.points || ['bust', 'waist', 'hip']).slice() : t.points.slice();
         charts.allSizes = t.sizes.slice(); charts.sizes = t.defaultSizes.slice(); charts.values = {};
-        (t.rows || []).forEach(function (r) { charts.values[r.size] = { bust: r.bust, waist: r.waist, hip: r.hip }; });
+        (t.rows || []).forEach(function (r) { var v = {}; charts.points.forEach(function (p) { v[p] = r[p]; }); charts.values[r.size] = v; });
         setRadio('tpl', id); setRadio('chart-type', charts.type);
         var src = $('tpl-sources'); src.textContent = '';
         if (t.sources && t.sources.length) {
@@ -490,7 +492,7 @@
       function renderChart() {
         var u = charts.unit === 'in' ? 'in' : 'cm';
         var head = $('chart-head'); head.textContent = '';
-        head.appendChild(el('tr', null, [el('th', { scope: 'col', text: 'Size' })].concat(charts.points.map(function (p) { return el('th', { scope: 'col', class: 'num', text: POINT_LABELS[p] + ' (' + u + ')' }); }))));
+        head.appendChild(el('tr', null, [el('th', { scope: 'col', text: 'Size' })].concat(charts.points.map(function (p) { return el('th', { scope: 'col', class: 'num', text: pointLabel(p) + ' (' + u + ')' }); }))));
         var body = $('chart-body'); body.textContent = '';
         if (!charts.sizes.length) { body.appendChild(el('tr', null, [el('td', { colspan: String(charts.points.length + 1), class: 'empty', text: 'Tick at least one size.' })])); return; }
         charts.sizes.forEach(function (size) {
@@ -498,7 +500,7 @@
           var cells = [el('th', { scope: 'row' }, [size, weak ? el('span', { class: 'pill', title: 'Fewer than three sources', text: ' estimate' }) : ''])];
           charts.points.forEach(function (p) {
             var v = charts.values[size] && charts.values[size][p];
-            var input = el('input', { inputmode: 'decimal', 'aria-label': 'Size ' + size + ' ' + POINT_LABELS[p] + ' in ' + u, value: toUnit(v) });
+            var input = el('input', { inputmode: 'decimal', 'aria-label': 'Size ' + size + ' ' + pointLabel(p) + ' in ' + u, value: toUnit(v) });
             input.addEventListener('change', function () {
               charts.values[size] = charts.values[size] || {};
               charts.values[size][p] = toCm(input.value);

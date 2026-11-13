@@ -135,3 +135,12 @@ What stays as it was: **body measurements are typed in by hand by default**; the
 Why: shoppers want to see their own face and skin tone next to the garment, and most accept sending a face photo as long as they never have to send a photo of their body. Before this ships to real shoppers: explicit consent wording, the privacy policy and the merchant data-processing terms need a lawyer's review (face data is biometric or sensitive data in several jurisdictions), and the upload route needs its own abuse limits and a test that proves nothing is stored.
 
 Addition (13 Nov 2026, founder): the prompt itself speaks plain human language, one or two short sentences per item ("We use your photo to draw your face on the avatar. It is deleted right after."). The full legal text is not shown in the prompt; it is one tap away behind a link ("Read the full privacy terms"). The plain text must never promise more than the legal text does.
+
+## D20 — Skin tone in the hero render, a remembered photo, men's garments only with 3D, and who reviews the legal text
+
+Founder decisions (13 Nov 2026), answering the open questions of `docs/research/photo-avatar-plan.md`.
+
+1. **"See it on me" may carry the shopper's skin tone.** The hero render stays opt-in as it is; when the shopper has chosen or confirmed a skin tone, that tone (a colour value, nothing else) may go with the avatar render so the result matches what they see. No photo, no face, no measurement goes with it. This revises D3 for this one value on this one opt-in route; the fit signature still carries no colour data.
+2. **The embed may remember the photo for the next visit.** Rule: the face photo result (face tile, face texture, skin tone) may be kept on the device, encrypted, per shop site, so a returning shopper sees themselves at once. The avatar prompt says so in plain language, "Delete my photo" and "Forget me" remove it, and it is never kept on a server.
+3. **No men's product goes live with a 2D figure only.** A men's garment is shown with the full experience (male body, 3D drape, men's fit points) or not at all. Until that works, men's products show "Men's clothing: coming soon" in place of the Try it on flow. So the male 3D pipeline (plan slice 8) is part of the scope, not an optional later step.
+4. **Naomi reviews the legal text.** The consent copy, the privacy terms draft and the counsel brief go to her; the photo-based face stays behind its flag until she has answered.

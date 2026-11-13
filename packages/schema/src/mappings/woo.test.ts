@@ -172,3 +172,40 @@ describe('toWooMeta / indexWooMeta', () => {
     expect(m.get('_curtain_ease')).toEqual([{ bust: 1 }]);
   });
 });
+
+describe('audience from WooCommerce product data', () => {
+  const product = (over: Partial<WooProduct>): WooProduct => ({ id: 7, name: 'Slim jeans', price: '99', ...over });
+
+  it('leaves the field out when nothing says who the product is for (today’s behaviour)', () => {
+    expect('audience' in fromWooMeta(PRODUCT)).toBe(false);
+    expect('audience' in fromWooMeta(product({}))).toBe(false);
+  });
+
+  it('reads a Gender attribute, category paths, tags and the name, in that order', () => {
+    expect(fromWooMeta(product({ attributes: [{ name: 'Geslacht', slug: 'pa_geslacht', options: ['Heren'] }] })).audience).toBe('men');
+    expect(fromWooMeta(product({ categories: [{ name: 'Heren > Jeans' }] })).audience).toBe('men');
+    expect(fromWooMeta(product({ tags: [{ name: 'mens' }] })).audience).toBe('men');
+    expect(fromWooMeta(product({ name: 'Herenjeans slim fit' })).audience).toBe('men');
+    expect(fromWooMeta(product({ categories: [{ name: 'Dames' }, { name: 'Heren' }] })).audience).toBe('unisex');
+    expect(fromWooMeta(product({ attributes: [{ name: 'Gender', options: ['Women'] }], categories: [{ name: 'Men' }] })).audience).toBe('women');
+    // An attribute that is not about the audience is not read as one.
+    expect(fromWooMeta(product({ attributes: [{ name: 'Collectie', slug: 'pa_collectie', options: ['Heren'] }] })).audience).toBeUndefined();
+  });
+
+  it('does not find "men" inside "women"', () => {
+    expect(fromWooMeta(product({ name: "Women's slim jeans", categories: [{ name: 'Women > Jeans' }], tags: [{ name: 'womens' }] })).audience).toBe('women');
+  });
+
+  it('the meta box value overrides; none leaves the field out; nonsense warns and is ignored', () => {
+    expect(fromWooMeta(product({ categories: [{ name: 'Heren' }] }), { _curtain_audience: 'women' }).audience).toBe('women');
+    expect('audience' in fromWooMeta(product({ categories: [{ name: 'Heren' }] }), { _curtain_audience: 'none' })).toBe(false);
+    const warnings: MappingWarning[] = [];
+    expect(fromWooMeta(product({ categories: [{ name: 'Heren' }] }), { _curtain_audience: 'kids' }, { warnings }).audience).toBe('men');
+    expect(warnings).toEqual([{ source: '_curtain_audience', path: 'audience', message: "expected women, men, unisex or none, got 'kids'" }]);
+  });
+
+  it('has a meta key and writes the audience back', () => {
+    expect(WOO_META_KEYS.find((k) => k.key === '_curtain_audience')).toMatchObject({ path: 'audience', kind: 'enum', heavy: false, options: ['women', 'men', 'unisex', 'none'] });
+    expect(toWooMeta({ audience: 'unisex' })).toEqual([{ key: '_curtain_audience', value: 'unisex' }]);
+  });
+});

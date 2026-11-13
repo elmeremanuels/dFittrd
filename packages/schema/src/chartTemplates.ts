@@ -14,10 +14,12 @@
  * Unit conversion is here too: the builder accepts inches and stores centimetres.
  */
 import { z } from 'zod';
-import { FabricSchema, LengthCmSchema, SizeChartSchema, SizeRowSchema, duplicateSizeLabels, type GarmentPayload, type SizeRow } from './garment';
+import { FabricSchema, GarmentAudienceSchema, LengthCmSchema, SizeChartSchema, SizeRowSchema, duplicateSizeLabels, type GarmentAudience, type GarmentPayload, type SizeRow } from './garment';
 import { AU_WOMENS_BODY_CHART, AU_WOMENS_CHART_SOURCES } from './fixtures/charts';
+import { MENS_BODY_CHART_TEMPLATES } from './chartTemplatesMen';
 
-export type ChartRegion = 'AU' | 'UK' | 'EU' | 'US';
+/** `INT` = not tied to a region (letter sizes, jeans in inches). */
+export type ChartRegion = 'AU' | 'UK' | 'EU' | 'US' | 'INT';
 export type ChartKind = 'body' | 'garment';
 export type ChartUnit = 'cm' | 'in';
 /** Points a chart row can carry (SizeRow keys measured in cm). */
@@ -39,6 +41,8 @@ export interface ChartSourceRef {
   form: 'single' | 'range' | 'inches';
   /** False = read for comparison only, not in the median. */
   inMedian: boolean;
+  /** When set, the source counts for these points only (its other numbers are comparison only). */
+  points?: readonly ChartPoint[];
   note?: string;
 }
 
@@ -62,6 +66,12 @@ interface TemplateBase {
 export interface BodyChartTemplate extends TemplateBase {
   kind: 'body';
   region: ChartRegion;
+  /** Who the chart is for. Absent on the women's templates (they predate the field). */
+  audience?: GarmentAudience;
+  /** True = a generic template built from several published charts, not any brand's chart. */
+  generic?: boolean;
+  /** Points the rows carry. Absent = bust, waist, hip. */
+  points?: readonly ChartPoint[];
   /** Body measurements in cm, one row per label in `sizes`. */
   rows: readonly SizeRow[];
   sources: readonly ChartSourceRef[];
@@ -381,13 +391,16 @@ export const US_WOMENS_BODY_TEMPLATE: BodyChartTemplate = bodyTemplate(
   US_WOMENS_CHART_SOURCES,
 );
 
-export const BODY_CHART_TEMPLATES: readonly BodyChartTemplate[] = [
+export const WOMENS_BODY_CHART_TEMPLATES: readonly BodyChartTemplate[] = [
   AU_WOMENS_BODY_TEMPLATE,
   UK_WOMENS_BODY_TEMPLATE,
   EU_WOMENS_BODY_TEMPLATE,
   EU_FR_WOMENS_BODY_TEMPLATE,
   US_WOMENS_BODY_TEMPLATE,
 ];
+
+/** Women's templates first (unchanged order), then the generic men's templates (`chartTemplatesMen.ts`). */
+export const BODY_CHART_TEMPLATES: readonly BodyChartTemplate[] = [...WOMENS_BODY_CHART_TEMPLATES, ...MENS_BODY_CHART_TEMPLATES];
 
 export const GARMENT_CHART_TEMPLATES: readonly GarmentChartTemplate[] = [
   {
@@ -553,12 +566,15 @@ export function checkChart(input: { sizeChartType?: string; sizeChart?: readonly
     }
   }
   for (const p of CHART_POINTS) {
-    let prev: { size: string; v: number } | undefined;
+    let prev: { size: string; v: number; row: SizeRow } | undefined;
     for (const r of rows) {
       const v = r[p];
       if (typeof v !== 'number') continue;
-      if (prev && v < prev.v) warnings.push(`${p} gets smaller from size ${prev.size} (${prev.v}) to ${r.size} (${v}): sizes must be in ascending order.`);
-      prev = { size: r.size, v };
+      // A waist × length grid (jeans 30/34 → 32/30) restarts the inseam at every new waist: that is
+      // ascending order, not a mistake, as long as a girth grew on the same step.
+      const grid = p === 'inseam' && prev !== undefined && girthGrew(prev.row, r);
+      if (prev && v < prev.v && !grid) warnings.push(`${p} gets smaller from size ${prev.size} (${prev.v}) to ${r.size} (${v}): sizes must be in ascending order.`);
+      prev = { size: r.size, v, row: r };
     }
   }
   if (input.sizeChartType === 'garment' && rows.length) {
@@ -570,6 +586,10 @@ export function checkChart(input: { sizeChartType?: string; sizeChart?: readonly
     }
   }
   return { ok: errors.length === 0, errors, warnings };
+}
+
+function girthGrew(a: SizeRow, b: SizeRow): boolean {
+  return (['bust', 'waist', 'hip'] as const).some((g) => typeof a[g] === 'number' && typeof b[g] === 'number' && (b[g] as number) > (a[g] as number));
 }
 
 /** The body template whose bust/waist/hip rows equal `rows` for every size they share (R6). */
@@ -685,6 +705,7 @@ const TemplateSourceSchema = z.object({
   accessed: z.string(),
   form: z.enum(['single', 'range', 'inches']),
   inMedian: z.boolean(),
+  points: z.array(z.enum(CHART_POINTS)).optional(),
   note: z.string().optional(),
 });
 
@@ -695,7 +716,9 @@ export const ChartTemplateDtoSchema = z.object({
   description: z.string(),
   sizes: z.array(z.string()),
   defaultSizes: z.array(z.string()),
-  region: z.enum(['AU', 'UK', 'EU', 'US']).optional(),
+  region: z.enum(['AU', 'UK', 'EU', 'US', 'INT']).optional(),
+  audience: GarmentAudienceSchema.optional(),
+  generic: z.boolean().optional(),
   rows: z.array(SizeRowSchema).optional(),
   sources: z.array(TemplateSourceSchema).optional(),
   weakSizes: z.array(z.string()).optional(),

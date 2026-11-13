@@ -221,3 +221,43 @@ describe('helpers', () => {
     expect(GarmentPayloadSchema.safeParse(back).success).toBe(true);
   });
 });
+
+describe('audience from Shopify product data', () => {
+  const node = (over: Partial<ShopifyProductNode>): ShopifyProductNode => ({ id: 'gid://shopify/Product/1', title: 'Oxford Shirt', vendor: 'Noordman', ...over });
+  const mf = (value: string): ShopifyMetafield[] => [{ namespace: '$app:curtain', key: 'audience', type: 'single_line_text_field', value }];
+
+  it('leaves the field out when nothing says who the product is for (today’s behaviour)', () => {
+    expect('audience' in fromShopifyProduct(PRODUCT, METAFIELDS)).toBe(false);
+    expect('audience' in fromShopifyProduct(node({}))).toBe(false);
+  });
+
+  it('reads product type, tags, title and collections, in that order', () => {
+    expect(fromShopifyProduct(node({ productType: "Men's Shirts" })).audience).toBe('men');
+    expect(fromShopifyProduct(node({ tags: ['oxford', 'Mens'] })).audience).toBe('men');
+    expect(fromShopifyProduct(node({ title: 'Overhemd heren' })).audience).toBe('men');
+    expect(fromShopifyProduct(node({ collections: { nodes: [{ title: 'Heren', handle: 'heren' }] } })).audience).toBe('men');
+    expect(fromShopifyProduct(node({ collections: { edges: [{ node: { title: 'Men' } }, { node: { title: 'Women' } }] } })).audience).toBe('unisex');
+    expect(fromShopifyProduct(node({ productType: 'Womens tops', tags: ['men'], title: "Men's tee" })).audience).toBe('women');
+    expect(fromShopifyProduct(node({ tags: null, collections: null, productType: null })).audience).toBeUndefined();
+  });
+
+  it('does not find "men" inside "women"', () => {
+    expect(fromShopifyProduct(node({ title: "Women's Oxford Shirt" })).audience).toBe('women');
+    expect(fromShopifyProduct(node({ productType: 'Womenswear', tags: ['womens'], collections: { nodes: [{ title: 'Women', handle: 'women' }] } })).audience).toBe('women');
+  });
+
+  it('the merchant metafield overrides everything; none leaves the field out; nonsense warns and is ignored', () => {
+    expect(fromShopifyProduct(node({ productType: "Men's Shirts" }), mf('women')).audience).toBe('women');
+    expect(fromShopifyProduct(node({ title: "Women's shirt" }), mf('Unisex')).audience).toBe('unisex');
+    expect('audience' in fromShopifyProduct(node({ productType: "Men's Shirts" }), mf('none'))).toBe(false);
+    const warnings: MappingWarning[] = [];
+    expect(fromShopifyProduct(node({ productType: "Men's Shirts" }), mf('kids'), { warnings }).audience).toBe('men');
+    expect(warnings).toEqual([{ source: 'audience', path: 'audience', message: "expected women, men, unisex or none, got 'kids'" }]);
+  });
+
+  it('has a metafield definition and writes the audience back', () => {
+    const def = SHOPIFY_METAFIELD_DEFINITIONS.find((d) => d.key === 'audience')!;
+    expect(def).toMatchObject({ path: 'audience', type: 'single_line_text_field', heavy: false });
+    expect(toShopifyMetafields({ audience: 'men' }, 'gid://shopify/Product/1')).toEqual([{ ownerId: 'gid://shopify/Product/1', namespace: SHOPIFY_METAFIELD_NAMESPACE, key: 'audience', type: 'single_line_text_field', value: 'men' }]);
+  });
+});

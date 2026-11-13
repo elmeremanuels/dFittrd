@@ -31,6 +31,7 @@ import {
   type EurRateTable,
   type WarningSink,
 } from './common';
+import { coerceAudienceOverride, inferAudience } from './audience';
 
 export const SHOPIFY_METAFIELD_NAMESPACE = '$app:curtain' as const;
 
@@ -61,6 +62,7 @@ export type ShopifyMetafieldType = (typeof SHOPIFY_METAFIELD_TYPES)[number];
 export type ShopifyMetafieldPath =
   | 'category'
   | 'subcategory'
+  | 'audience'
   | 'sizeChartType'
   | 'sizeChart'
   | 'fabric'
@@ -237,6 +239,15 @@ export const SHOPIFY_METAFIELD_DEFINITIONS: readonly ShopifyMetafieldDefinition[
     pin: false,
   },
   {
+    key: 'audience',
+    name: 'Audience',
+    type: 'single_line_text_field',
+    path: 'audience',
+    description: "women | men | unisex. Read from the product type, tags, title and collections when empty; 'none' leaves it out.",
+    heavy: false,
+    pin: false,
+  },
+  {
     key: 'brand',
     name: 'Brand override',
     type: 'single_line_text_field',
@@ -282,6 +293,8 @@ export const ShopifyProductNodeSchema = z.object({
   title: z.string(),
   vendor: z.string().optional().nullable(),
   productType: z.string().optional().nullable(),
+  tags: z.array(z.string()).optional().nullable(),
+  collections: connection(z.object({ title: z.string().optional().nullable(), handle: z.string().optional().nullable() })),
   status: z.string().optional().nullable(),
   onlineStoreUrl: z.string().optional().nullable(),
   category: z.object({ name: z.string().optional().nullable(), fullName: z.string().optional().nullable() }).optional().nullable(),
@@ -386,6 +399,21 @@ export function fromShopifyProduct(
 
   const subcategory = coerceString(get('subcategory'));
   if (subcategory) out.subcategory = subcategory;
+
+  // Audience: the merchant's metafield, else read from type, taxonomy, tags, title, collections.
+  const audienceRaw = coerceString(get('audience'));
+  if (audienceRaw && coerceAudienceOverride(audienceRaw) === undefined) {
+    warn(sink, { source: 'audience', path: 'audience', message: `expected women, men, unisex or none, got '${audienceRaw}'` });
+  }
+  const audience = inferAudience({
+    override: audienceRaw,
+    productType: p.productType,
+    category: [p.category?.fullName, p.category?.name],
+    tags: p.tags ?? [],
+    title: p.title,
+    collections: nodesOf(p.collections).flatMap((c) => [c.title, c.handle]),
+  });
+  if (audience) out.audience = audience;
 
   // Price — EUR as is; another currency (the AUD pilot shop) is converted with `eurRates` and reported.
   const money = p.priceRangeV2?.minVariantPrice ?? p.priceRange?.minVariantPrice;

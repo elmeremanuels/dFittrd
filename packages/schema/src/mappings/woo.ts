@@ -31,6 +31,7 @@ import {
   type EurRateTable,
   type WarningSink,
 } from './common';
+import { AUDIENCE_ATTRIBUTE_FIELD, coerceAudienceOverride, inferAudience } from './audience';
 
 export const WOO_META_PREFIX = '_curtain_' as const;
 
@@ -39,6 +40,7 @@ export type WooMetaKind = 'string' | 'text' | 'json' | 'number' | 'list' | 'url'
 export type WooMetaPath =
   | 'category'
   | 'subcategory'
+  | 'audience'
   | 'brand'
   | 'sizeChartType'
   | 'sizeChart'
@@ -84,6 +86,7 @@ export const WOO_META_KEYS: readonly WooMetaKey[] = [
   { key: '_curtain_primary_color_hex', path: 'primaryColorHex', kind: 'color', label: 'Primary colour', description: '#RRGGBB', heavy: false },
   { key: '_curtain_colorways', path: 'colorways', kind: 'json', label: 'Colorways', description: '[{"name":"…","hex":"#…"}]', heavy: false },
   { key: '_curtain_subcategory', path: 'subcategory', kind: 'string', label: 'Subcategory', description: 'e.g. wrap-midi', heavy: false },
+  { key: '_curtain_audience', path: 'audience', kind: 'enum', label: 'Audience', description: "Read from the product categories, tags, a Gender attribute and the name when empty; 'none' leaves it out.", heavy: false, options: ['women', 'men', 'unisex', 'none'] },
   { key: '_curtain_brand', path: 'brand', kind: 'string', label: 'Brand', description: 'Defaults to the Brand attribute / brand taxonomy / shop name.', heavy: false },
 ];
 
@@ -106,6 +109,7 @@ export const WooProductSchema = z.object({
   regular_price: z.union([z.string(), z.number()]).optional().nullable(),
   images: z.array(z.object({ src: z.string().optional(), alt: z.string().optional() })).optional(),
   categories: z.array(z.object({ id: z.number().optional(), name: z.string(), slug: z.string().optional() })).optional(),
+  tags: z.array(z.object({ id: z.number().optional(), name: z.string(), slug: z.string().optional() })).optional(),
   brands: z.array(z.object({ id: z.number().optional(), name: z.string(), slug: z.string().optional() })).optional(),
   attributes: z.array(z.object({ name: z.string(), slug: z.string().optional(), options: z.array(z.string()).optional() })).optional(),
   meta_data: z.array(WooMetaDataSchema).optional(),
@@ -172,6 +176,20 @@ export function fromWooMeta(product: WooProduct, meta?: WooMetaInput, options: F
 
   const subcategory = coerceString(get('_curtain_subcategory'));
   if (subcategory) out.subcategory = subcategory;
+
+  // Audience: the merchant's meta box value, else a Gender attribute, categories, tags, the name.
+  const audienceRaw = coerceString(get('_curtain_audience'));
+  if (audienceRaw && coerceAudienceOverride(audienceRaw) === undefined) {
+    warn(sink, { source: '_curtain_audience', path: 'audience', message: `expected women, men, unisex or none, got '${audienceRaw}'` });
+  }
+  const audience = inferAudience({
+    override: audienceRaw,
+    attribute: (p.attributes ?? []).filter((a) => AUDIENCE_ATTRIBUTE_FIELD.test(a.slug ?? '') || AUDIENCE_ATTRIBUTE_FIELD.test(a.name.trim())).flatMap((a) => a.options ?? []),
+    category: (p.categories ?? []).map((c) => c.name),
+    tags: (p.tags ?? []).map((t) => t.name),
+    title: p.name,
+  });
+  if (audience) out.audience = audience;
 
   const currency = (options.currency ?? 'EUR').toUpperCase();
   const amount = coerceNumber(p.price) ?? coerceNumber(p.regular_price);

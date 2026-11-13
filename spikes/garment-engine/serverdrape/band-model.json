@@ -3,8 +3,21 @@
   "formatVersion": 1,
   "productId": "10894387020081",
   "product": "Crimson Wildflower Maxi Skirt (pilot, elastic waistband)",
-  "README": "The waistband of the pilot skirt is NOT measured yet. Every number under `assumed` is an assumption, not a measurement. When the founder has the tape numbers, fill `measured` (copy `measuredTemplate`) and run `BAND=measured serverdrape/drape.sh`: nothing else changes, and drapes cached with other band numbers are re-run automatically. Fields: `relaxedGirthCm` = the band's full girth lying relaxed (flat width x 2); `stretchedGirthCm` = the full girth pulled to its comfortable maximum; `hemSweepCm` = the full hem girth (flat hem width x 2); `gradePerSizeCm` = how much the band changes per chart size if only the sample size is measured (null = the chart's waist step, 5 cm per AU size). What each field DOES: relaxedGirthCm sets the band's rest girth per size (drives the drape); stretchedGirthCm sets the band's stiffness via the stretch ratio (drives the drape; mapping in band_model.py, ASSUMED); hemSweepCm is a CHECK only (drape.sh warns when the reconstructed garment's hem differs by more than 5 %).",
-  "measured": null,
+  "README": "The waistband of the pilot skirt was tape-measured by the shop on 13 Nov 2026 for AU 8, 10 and 14 (`measured.tapeFile`, the single source of truth; AU 12 is INTERPOLATED and AU 16 EXTRAPOLATED by band_model.tape_value, linear in the AU size number, AU 16 continuing the AU 10-14 slope, and both are labelled so everywhere). Run `BAND=measured serverdrape/drape.sh`. Every number under `assumed` is an assumption, not a measurement, kept for comparison. `measured` forms: (a) per size: `tapeFile` (path relative to this file) or an inline `sizes` map {size: {relaxedGirthCm, stretchedGirthCm, hemSweepCm, hipCm, lengthCm}}; (b) one sample (copy `measuredTemplate`): `sampleSize` + `relaxedGirthCm`, `stretchedGirthCm`, `hemSweepCm`, graded by `gradePerSizeCm` (null = the chart's waist step, 5 cm per AU size). Fields: `relaxedGirthCm` = the band's full girth lying relaxed (flat width x 2); `stretchedGirthCm` = the full girth pulled to its comfortable maximum; `hemSweepCm` = the full hem girth (flat hem width x 2). What each field DOES: relaxedGirthCm sets the band's rest girth per size (drives the drape); stretchedGirthCm sets the band's stiffness via the stretch ratio (drives the drape; mapping in band_model.py, ASSUMED); hemSweepCm is a CHECK for the reconstructed rest geometry (drape.sh warns when its hem differs by more than 5 %) and an INPUT of the POM rest geometry (pom_rest.py), as are hipCm and lengthCm.",
+  "measured": {
+    "tapeFile": "../data/bohohippychic/tape/crimson-wildflower-maxi-skirt.json",
+    "measuredBy": "the shop (Bohohippychic), hand-written; transcribed by hand",
+    "measuredOn": "2026-11-13",
+    "measuredSizes": [
+      "8",
+      "10",
+      "14"
+    ],
+    "notMeasured": {
+      "12": "interpolated between AU 10 and 14",
+      "16": "extrapolated: the AU 10-14 slope continued"
+    }
+  },
   "measuredTemplate": {
     "sampleSize": "12",
     "relaxedGirthCm": 0,

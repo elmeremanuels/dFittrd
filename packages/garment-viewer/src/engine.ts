@@ -135,6 +135,14 @@ export interface FitInstance {
  * A stretch waistband as measured on the garment: relaxed girth (lying flat, doubled) and the girth
  * it stretches to at most, both of `measuredSize`. Other sizes are graded from it by
  * `gradeCmPerSize` per chart step (relaxed), keeping the measured stretch ratio.
+ *
+ * With `sizes` (tape measurements of more than one size, keyed by the grading's size label) a measured
+ * size uses its own two numbers; a size between two measured ones is interpolated linearly on the
+ * grading step, relaxed and stretched each on their own; a size outside them continues the line
+ * through the two nearest measured sizes (extrapolated). `relaxedCm` / `stretchedCm` /
+ * `measuredSize` then only describe one of the measured sizes (kept so older readers still work) and
+ * are used for every size only when `sizes` holds fewer than two usable entries. `bandFor` reports
+ * which of these a size's numbers are (`BandSource`), and the fit line says so.
  */
 export interface WaistbandSpec {
   relaxedCm: number;
@@ -143,8 +151,69 @@ export interface WaistbandSpec {
   measuredSize?: string;
   /** Relaxed-girth step per size, cm (default: the chart's hip step, else 5). */
   gradeCmPerSize?: number;
+  /** Tape measurements per size label, cm. Sizes that are not in the grading are ignored. */
+  sizes?: Readonly<Record<string, { relaxedCm: number; stretchedCm: number }>>;
   /** True while the numbers are assumptions, not a tape measurement: the fit line says so. */
   assumed: boolean;
+}
+
+/**
+ * Where a size's band numbers come from: the tape (`measured`), a line between two measured sizes
+ * (`interpolated`), a line continued past the measured sizes (`extrapolated`), one measured size
+ * stepped by the grade (`graded`), or no measurement at all (`assumed`).
+ */
+export type BandSource = 'measured' | 'interpolated' | 'extrapolated' | 'graded' | 'assumed';
+
+/** The band of one size: its two girths, cm, and where they come from. */
+export interface SizeBand {
+  relaxedCm: number;
+  stretchedCm: number;
+  source: BandSource;
+}
+
+/** One product of the waistband data file (`data/<shop>/waistbands.json`): the old one-size form, the per-size form, or both. */
+export interface BandFileEntry {
+  relaxedCm?: number | null;
+  stretchedCm?: number | null;
+  measuredSize?: string | number | null;
+  gradeCmPerSize?: number | null;
+  hemSweepCm?: number | null;
+  sizes?: Record<string, { waistRelaxedCm?: number | null; waistStretchedCm?: number | null; relaxedCm?: number | null; stretchedCm?: number | null; hipCm?: number | null; hemSweepCm?: number | null; lengthCm?: number | null }> | null;
+}
+
+/** "AU 12", "size 12", "12" and 12 all mean the grading label "12". */
+export function normaliseSizeLabel(v: string | number, labels: readonly string[]): string {
+  const raw = String(v).trim().replace(/^(au|size|sz)\s*/i, '').trim();
+  const hit = labels.find((l) => l.trim().toUpperCase() === raw.toUpperCase());
+  if (!hit) throw new Error(`size ${JSON.stringify(v)} is not one of the grading sizes ${labels.join(', ')}`);
+  return hit;
+}
+
+/**
+ * A measured band (`assumed: false`) from a product's entry in the waistband data file. Accepts the per-size form
+ * (`sizes`: one object per measured size, `waistRelaxedCm` / `waistStretchedCm` as in the tape files, or `relaxedCm` /
+ * `stretchedCm`), the old one-size form (`relaxedCm`, `stretchedCm`, `measuredSize`, `gradeCmPerSize`), or both.
+ * Throws when the entry holds no measurement, a size that is not in the grading, or girths that make no sense.
+ */
+export function waistbandFromFile(entry: BandFileEntry | undefined, grading: SpikeBundle['grading']): WaistbandSpec {
+  const labels = grading.sizes.map((s) => s.size);
+  const ok = (r: unknown, st: unknown): boolean => typeof r === 'number' && typeof st === 'number' && r > 20 && st >= r;
+  const sizes: Record<string, { relaxedCm: number; stretchedCm: number }> = {};
+  for (const [label, v] of Object.entries(entry?.sizes ?? {})) {
+    const r = v.waistRelaxedCm ?? v.relaxedCm, st = v.waistStretchedCm ?? v.stretchedCm;
+    if (r == null && st == null) continue;
+    if (!ok(r, st)) throw new Error(`size ${label} needs 20 < relaxed <= stretched (got ${String(r)} / ${String(st)})`);
+    sizes[normaliseSizeLabel(label, labels)] = { relaxedCm: r as number, stretchedCm: st as number };
+  }
+  const measured = Object.keys(sizes);
+  const single = entry?.relaxedCm != null && entry.stretchedCm != null;
+  if (!single && measured.length === 0) throw new Error('no measured band yet');
+  if (single && !ok(entry.relaxedCm, entry.stretchedCm)) throw new Error(`needs 20 < relaxedCm <= stretchedCm (got ${String(entry.relaxedCm)} / ${String(entry.stretchedCm)})`);
+  // The one-size fields: as given, else the measured size nearest the base size.
+  const step = (l: string): number => sizeEntry(grading, l).step;
+  const size = single ? normaliseSizeLabel(entry.measuredSize ?? grading.baseSize, labels) : [...measured].sort((a, b) => Math.abs(step(a) - step(grading.baseSize)) - Math.abs(step(b) - step(grading.baseSize)))[0]!;
+  const one = single ? { relaxedCm: entry.relaxedCm!, stretchedCm: entry.stretchedCm! } : sizes[size]!;
+  return { ...one, measuredSize: size, ...(entry?.gradeCmPerSize != null ? { gradeCmPerSize: entry.gradeCmPerSize } : {}), ...(measured.length ? { sizes } : {}), assumed: false };
 }
 
 export interface DrapeOptions {
@@ -235,9 +304,27 @@ export function anchorLoops(m: Mannequin, rest: ArrayLike<number>, indices: Arra
   return out;
 }
 
-/** Relaxed and stretched girth of the band in `size`, cm (`WaistbandSpec`). */
-export function bandFor(spec: WaistbandSpec, grading: SpikeBundle['grading'], size: string): { relaxedCm: number; stretchedCm: number } {
+/**
+ * Relaxed and stretched girth of the band in `size`, cm, and where the numbers come from (`WaistbandSpec`).
+ * Per-size measurements: the size's own; else the line through the two measured sizes around it (interpolated), or
+ * through the two nearest measured sizes when it lies outside them (extrapolated), on the grading step.
+ */
+export function bandFor(spec: WaistbandSpec, grading: SpikeBundle['grading'], size: string): SizeBand {
   const step = sizeEntry(grading, size).step;
+  const known = grading.sizes.filter((s) => spec.sizes?.[s.size] !== undefined).map((s) => ({ step: s.step, ...spec.sizes![s.size]! })).sort((a, b) => a.step - b.step);
+  const own = known.find((k) => k.step === step);
+  if (own) return { relaxedCm: own.relaxedCm, stretchedCm: own.stretchedCm, source: spec.assumed ? 'assumed' : 'measured' };
+  if (known.length >= 2) {
+    const above = known.findIndex((k) => k.step > step);
+    const inside = above > 0;
+    const hi = above < 0 ? known.length - 1 : Math.max(1, above);
+    const a = known[hi - 1]!, b = known[hi]!;
+    const t = (step - a.step) / (b.step - a.step);
+    const relaxedCm = a.relaxedCm + t * (b.relaxedCm - a.relaxedCm);
+    // A line continued downwards could cross: the stretched girth is never below the relaxed one.
+    return { relaxedCm, stretchedCm: Math.max(relaxedCm, a.stretchedCm + t * (b.stretchedCm - a.stretchedCm)), source: spec.assumed ? 'assumed' : inside ? 'interpolated' : 'extrapolated' };
+  }
+  if (known.length === 1) spec = { ...spec, relaxedCm: known[0]!.relaxedCm, stretchedCm: known[0]!.stretchedCm, measuredSize: grading.sizes.find((s) => s.step === known[0]!.step)!.size };
   const step0 = sizeEntry(grading, spec.measuredSize ?? grading.baseSize).step;
   let grade = spec.gradeCmPerSize;
   if (grade === undefined) {
@@ -246,7 +333,7 @@ export function bandFor(spec: WaistbandSpec, grading: SpikeBundle['grading'], si
     grade = lo && hi && hi.step > lo.step ? (hi.targets.hip! - lo.targets.hip!) / (hi.step - lo.step) : 5;
   }
   const relaxedCm = spec.relaxedCm + (step - step0) * grade;
-  return { relaxedCm, stretchedCm: relaxedCm * (spec.stretchedCm / spec.relaxedCm) };
+  return { relaxedCm, stretchedCm: relaxedCm * (spec.stretchedCm / spec.relaxedCm), source: spec.assumed ? 'assumed' : step === step0 ? 'measured' : 'graded' };
 }
 
 /** Extra particles under the band whose girth is blended from the band's to their own, cm. */
@@ -260,6 +347,8 @@ export interface ElasticBand extends BandSlide {
   /** The body is larger than the band stretches to where it was made to sit: it would not go on (shown at its stretch limit, flagged). */
   overstretched: boolean;
   assumed: boolean;
+  /** Where this size's two girths come from; only `measured` is a tape measurement of this size. */
+  source: BandSource;
 }
 
 /**
@@ -270,7 +359,7 @@ export interface ElasticBand extends BandSlide {
  * scaled about its centre to the band's girth on the body, blended back to the cut over
  * `BAND_BLEND_CM` below: the fabric is gathered (or stretched) by the band. Mutates `start`.
  */
-export function fitElasticBand(field: BodyField, start: Float32Array, chains: ChainAssignment, clearanceCm: number, band: { relaxedCm: number; stretchedCm: number }, assumed: boolean): ElasticBand {
+export function fitElasticBand(field: BodyField, start: Float32Array, chains: ChainAssignment, clearanceCm: number, band: { relaxedCm: number; stretchedCm: number; source?: BandSource }, assumed: boolean): ElasticBand {
   let top = -Infinity;
   for (let i = 0; i < chains.length; i++) if (chains[i] === 0) top = Math.max(top, start[3 * i + 1]!);
   const yb = top - 2;
@@ -312,12 +401,21 @@ export function fitElasticBand(field: BodyField, start: Float32Array, chains: Ch
     }
   }
   const r1 = (x: number): number => Math.round(x * 10) / 10;
-  return { bandGirthCm: r1(sewn), bodyAtBandCm: r1(at), bodyAtRestCm: r1(rest), dropCm: r1(drop), pastHips, relaxedCm: r1(R), stretchedCm: r1(S), onBodyCm: r1(onBody), overstretched, assumed };
+  return { bandGirthCm: r1(sewn), bodyAtBandCm: r1(at), bodyAtRestCm: r1(rest), dropCm: r1(drop), pastHips, relaxedCm: r1(R), stretchedCm: r1(S), onBodyCm: r1(onBody), overstretched, assumed, source: assumed ? 'assumed' : (band.source ?? 'measured') };
 }
+
+/** How the fit line names a band's numbers: only `measured` may be called measured. */
+export const BAND_SOURCE_TEXT: Record<BandSource, string> = {
+  measured: 'measured band',
+  interpolated: 'interpolated band (this size was not measured: a line between the measured sizes around it)',
+  extrapolated: 'extrapolated band (this size was not measured: a line continued past the measured sizes)',
+  graded: 'graded band (this size was not measured: another size stepped by the grade)',
+  assumed: 'assumed band (not measured yet)',
+};
 
 /** The text line for a modelled stretch waistband. */
 export function elasticBandLine(b: ElasticBand): FitLine {
-  const src = b.assumed ? 'assumed band (not measured yet)' : 'measured band';
+  const src = BAND_SOURCE_TEXT[b.assumed ? 'assumed' : b.source];
   const where = b.pastHips ? `slides ${b.dropCm} cm down past the hips and would not stay up` : b.dropCm > 0 ? `is looser than the body where it was made to sit and slides ${b.dropCm} cm down` : b.overstretched ? 'would have to stretch past its limit: too small for this body' : `stretches to ${b.onBodyCm} cm`;
   return { anchor: 'waist', band: undefined, tone: b.overstretched ? 'strain' : b.dropCm > 0 ? 'room' : 'even', text: `Stretch waistband (${src}: relaxed ${b.relaxedCm} cm, stretches to ${b.stretchedCm} cm): ${where}.` };
 }

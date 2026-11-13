@@ -11,7 +11,11 @@
  *   loops:<retain>[:<rings>]  cling off + girth loops holding <retain> of the graded girth at <rings> (e.g. hip+waist; default waist+hip+hem)
  *   cling+loops:<r>    cling on + girth loops
  *   band:<R>:<S>[:<r>] cling off + loops <r> (default 0.9) + stretch waistband relaxed <R> / stretched <S> cm (base size)
- *   band:measured[:r]  the same with the band read from --band-file (refused while it holds no measurement)
+ *   band:measured[:r]  the same with the band read from --band-file (refused while it holds no measurement); sizes the
+ *                      file does not measure are interpolated or extrapolated (`bandFor`) and printed as such
+ *   cling+band:…       any band mode with the cling pull left on (r = 0 switches the loops off: `band:measured:0`)
+ * With a band file that holds per-size tape measurements the script ends with the cut check: hip girth, hem girth and
+ * length of the graded mesh per size next to the tape values (measured, interpolated or extrapolated, labelled).
  * `--bench <n>`: instead, time 90 frames (1.5 s of cloth) of the base size per mode, n rounds interleaved across the
  * modes (so load from other processes hits all of them alike), and print the min and median ms per frame.
  * Run: pnpm --filter @curtain/garment-spike exec tsx viewer/scripts/sizes-drape.ts out/eval/<id> [y1,y2,...]
@@ -25,7 +29,7 @@ import { bodyField, buildAvatar, mannequinMeasurements } from '../src/body';
 import { sample } from '../src/collide';
 import { isSettled, loopGirth, stepCloth, strainQuantile } from '../src/cloth';
 import { meshFromGlb, type SpikeBundle } from '../src/bundle';
-import { DEFAULT_DRAPE, LOOP_RINGS, LOOP_SLICE_CM, gradedMesh, openSession, prepareFit, sizeLabels, viewerMaterial, type DrapeOptions, type WaistbandSpec } from '../src/engine';
+import { DEFAULT_DRAPE, LOOP_RINGS, LOOP_SLICE_CM, bandFor, gradedMesh, openSession, prepareFit, sizeLabels, viewerMaterial, waistbandFromFile, type BandFileEntry, type BandSource, type DrapeOptions, type WaistbandSpec } from '../src/engine';
 import { fitForBody } from '../src/fitting';
 
 const argv = process.argv.slice(2);
@@ -81,36 +85,26 @@ const torsoGirth = (y: number): number => {
   return Math.round(Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b))) * 10) / 10;
 };
 
-interface BandFileEntry { relaxedCm: number | null; stretchedCm: number | null; hemSweepCm?: number | null; measuredSize?: string | number | null; gradeCmPerSize?: number | null }
 /** The founder's tape measurements (waistbands.json) for this bundle's product, validated before any drape runs. */
-let bandEntry: (BandFileEntry & { size: string }) | undefined;
-/** "AU 12", "size 12", "12" and 12 all mean the grading label "12". */
-function normaliseSize(v: string | number, labels: readonly string[]): string {
-  const raw = String(v).trim().replace(/^(au|size|sz)\s*/i, '').trim();
-  const hit = labels.find((l) => l.trim().toUpperCase() === raw.toUpperCase());
-  if (!hit) throw new Error(`measuredSize ${JSON.stringify(v)} is not one of the grading sizes ${labels.join(', ')}`);
-  return hit;
-}
+let bandEntry: BandFileEntry | undefined;
+let bandSpec: WaistbandSpec | undefined;
 function readBandFile(): WaistbandSpec {
-  if (!bandEntry) {
+  if (!bandSpec) {
     if (!bandFile) throw new Error('band:measured needs --band-file');
     const j = JSON.parse(readFileSync(bandFile, 'utf8')) as { products: Record<string, BandFileEntry> };
-    const p = j.products[bundle.productId];
-    if (!p || p.relaxedCm == null || p.stretchedCm == null) throw new Error(`${bandFile}: product ${bundle.productId} has no measured band yet`);
-    if (!(p.relaxedCm > 20 && p.stretchedCm >= p.relaxedCm)) throw new Error(`${bandFile}: ${bundle.productId} needs 20 < relaxedCm <= stretchedCm (got ${p.relaxedCm} / ${p.stretchedCm})`);
-    const size = normaliseSize(p.measuredSize ?? bundle.grading.baseSize, bundle.grading.sizes.map((x) => x.size));
-    bandEntry = { ...p, size };
+    bandEntry = j.products[bundle.productId];
+    try { bandSpec = waistbandFromFile(bandEntry, bundle.grading); } catch (e) { throw new Error(`${bandFile}: product ${bundle.productId}: ${(e as Error).message}`); }
   }
-  const p = bandEntry;
-  return { relaxedCm: p.relaxedCm!, stretchedCm: p.stretchedCm!, measuredSize: p.size, ...(p.gradeCmPerSize != null ? { gradeCmPerSize: p.gradeCmPerSize } : {}), assumed: false };
+  return bandSpec;
 }
 
 function parseMode(spec: string): DrapeOptions {
   const o = parseMode0(spec);
-  const rings = spec.split(':').find((x) => /^[a-z]+(\+[a-z]+)*$/.test(x) && x !== spec.split(':')[0] && x !== 'measured');
+  const rings = spec.split(':').find((x) => /^[a-z]+(\+[a-z]+)*$/.test(x) && x !== spec.split(':')[0] && x !== 'measured' && x !== 'band');
   return rings ? { ...o, loopRings: rings.split('+') as DrapeOptions['loopRings'] } : o;
 }
 function parseMode0(spec: string): DrapeOptions {
+  if (spec.startsWith('cling+band:')) return { ...parseMode0(spec.slice('cling+'.length)), cling: true };
   const [kind, a, b, c] = spec.split(':');
   if (kind === 'base') return DEFAULT_DRAPE;
   if (kind === 'nocling') return { cling: false, loopRetain: 0, waistband: null };
@@ -207,13 +201,41 @@ for (const mode of modeList) {
   }
   writeJson();
 }
-// The founder's hem sweep (waistbands.json hemSweepCm, flat × 2) against the graded mesh of the measured size: a check
-// of the cut (grading.json), not of the drape. The graded hem tucks in at the floor (REFINEMENT R2), so the widest hull
-// girth in the bottom 30 cm is the comparable number.
-if (bandEntry) {
-  const g = gradedMesh(session, bandEntry.size);
-  let widest = 0, at = 0;
-  for (let y = 1; y <= 30; y++) { const v = girth(g.positions, g.indices, y); if (v > widest) { widest = v; at = y; } }
-  const sweep = bandEntry.hemSweepCm;
-  console.log(`\n[hem sweep] AU ${bandEntry.size}: measured ${sweep ?? 'not given'} cm; graded mesh widest hull girth in the bottom 30 cm ${widest} cm (y=${at}), at y=${hemY} ${girth(g.positions, g.indices, hemY)} cm${sweep ? `; mesh / measured ${Math.round((widest / sweep) * 100)} %` : ''}`);
+// The cut check (not a drape result): the graded mesh per size against the tape. The mesh numbers are convex-hull girths
+// of the graded (undraped) mesh; the tape numbers are flat widths × 2 (`hipCm` at the shop's hip line, whose distance
+// below the band is not on record; `hemSweepCm` the full hem; `lengthCm` band to hem). A size the tape does not hold is
+// interpolated or extrapolated by the rule of `bandFor` (a line on the grading step through the two measured sizes
+// around it, or the two nearest) and printed with that label, never as measured.
+if (bandSpec && bandEntry) {
+  const labels = sizeLabels(session);
+  const tape = (key: 'hipCm' | 'hemSweepCm' | 'lengthCm', size: string): { v: number; source: BandSource } | null => {
+    const sizes: Record<string, { relaxedCm: number; stretchedCm: number }> = {};
+    for (const [l, e] of Object.entries(bandEntry!.sizes ?? {})) if (typeof e[key] === 'number' && labels.includes(l)) sizes[l] = { relaxedCm: e[key], stretchedCm: e[key] };
+    if (Object.keys(sizes).length < 2) { const own = sizes[size]; return own ? { v: own.relaxedCm, source: 'measured' } : null; }
+    const b = bandFor({ relaxedCm: 0, stretchedCm: 0, sizes, assumed: false }, bundle.grading, size);
+    return { v: Math.round(b.relaxedCm * 10) / 10, source: b.source };
+  };
+  const show = (t: { v: number; source: BandSource } | null): string => (t ? `${t.v} (${t.source})` : 'not given');
+  const pct = (mesh: number, t: { v: number } | null): string => (t ? `, mesh/tape ${Math.round((mesh / t.v) * 100)} %` : '');
+  console.log(`\n[cut check] graded mesh (hull girths, cm) against the tape; tape values are measured only where they say so`);
+  const cut: unknown[] = [];
+  for (const size of labels) {
+    const g = gradedMesh(session, size);
+    let top = -Infinity, bottom = Infinity;
+    for (let i = 1; i < g.positions.length; i += 3) { top = Math.max(top, g.positions[i]!); bottom = Math.min(bottom, g.positions[i]!); }
+    let widest = 0, at = 0;
+    for (let y = Math.ceil(bottom) + 1; y <= bottom + 30; y++) { const v = girth(g.positions, g.indices, y); if (v > widest) { widest = v; at = y; } }
+    let hipMax = 0, hipMaxAt = 0;
+    for (let d = 10; d <= 30; d++) { const v = girth(g.positions, g.indices, top - d); if (v > hipMax) { hipMax = v; hipMaxAt = d; } }
+    const below = [15, 20, 25].map((d) => `${d} cm below the band ${girth(g.positions, g.indices, top - d)}`);
+    const hipRing = girth(g.positions, g.indices, hipY), hemLow = girth(g.positions, g.indices, bottom + 1), length = Math.round((top - bottom) * 10) / 10;
+    const band = bandFor(bandSpec, bundle.grading, size);
+    const tHip = tape('hipCm', size), tHem = tape('hemSweepCm', size), tLen = tape('lengthCm', size);
+    cut.push({ size, band, mesh: { hipRingCm: hipRing, hipWidest10to30BelowBandCm: hipMax, hemWidestBottom30Cm: widest, hemLowestCm: hemLow, lengthCm: length, topY: Math.round(top * 10) / 10, bottomY: Math.round(bottom * 10) / 10 }, tape: { hip: tHip, hem: tHem, length: tLen } });
+    console.log(`AU ${size}: band relaxed ${Math.round(band.relaxedCm * 10) / 10} / stretched ${Math.round(band.stretchedCm * 10) / 10} (${band.source})`);
+    console.log(`   hip: tape ${show(tHip)}; mesh at the hip ring y=${hipY.toFixed(1)} ${hipRing}${pct(hipRing, tHip)}; ${below.join(', ')}; widest 10-30 cm below the band ${hipMax} (${hipMaxAt} cm below)${pct(hipMax, tHip)}`);
+    console.log(`   hem: tape ${show(tHem)}; mesh widest in the bottom 30 cm ${widest} (y=${at})${pct(widest, tHem)}; 1 cm above the mesh's lowest point ${hemLow}${pct(hemLow, tHem)}`);
+    console.log(`   length: tape ${show(tLen)}; mesh top y=${top.toFixed(1)} to lowest y=${bottom.toFixed(1)}: ${length}${pct(length, tLen)}`);
+  }
+  if (jsonOut) writeFileSync(jsonOut, JSON.stringify({ productId: bundle.productId, dir, heights: ys, hipY, hemY, torsoAtHip: torsoGirth(hipY), results, cutCheck: cut }, null, 1));
 }

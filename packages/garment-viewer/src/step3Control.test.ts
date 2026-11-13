@@ -8,7 +8,7 @@ import { buildBundle } from '../../../spikes/garment-engine/src/bundle';
 import { bodyField, buildAvatar, mannequinMeasurements } from './body';
 import { meshFromGlb, type SpikeBundle } from './bundle';
 import { clingAccelOf, clothParams, createCloth, loopGirth, setLoops, stepCloth } from './cloth';
-import { anchorLoops, bandFor, DEFAULT_DRAPE, drapeOptionsFrom, elasticBandLine, fitElasticBand, gradedMesh, openSession, prepareFit, viewerMaterial, type DrapeOptions } from './engine';
+import { anchorLoops, bandFor, DEFAULT_DRAPE, drapeOptionsFrom, elasticBandLine, fitElasticBand, gradedMesh, openSession, prepareFit, viewerMaterial, waistbandFromFile, type BandFileEntry, type DrapeOptions } from './engine';
 import { fitForBody } from './fitting';
 
 const m = buildMannequin(bodyShape(BASE_SHAPE_ID));
@@ -114,11 +114,61 @@ describe('stretch waistband model', () => {
   it('grades the relaxed band by the chart step and keeps the stretch ratio', () => {
     const g = dress.grading;
     const base = bandFor({ relaxedCm: 70, stretchedCm: 98, assumed: true }, g, g.baseSize);
-    expect(base).toEqual({ relaxedCm: 70, stretchedCm: 98 });
+    expect(base).toEqual({ relaxedCm: 70, stretchedCm: 98, source: 'assumed' });
     const larger = g.sizes.find((s) => s.step === 1)!;
     const up = bandFor({ relaxedCm: 70, stretchedCm: 98, gradeCmPerSize: 5, assumed: true }, g, larger.size);
     expect(up.relaxedCm).toBe(75);
     expect(up.stretchedCm / up.relaxedCm).toBeCloseTo(1.4, 6);
+    // One measured size (the old data-file form): that size is measured, every other one is graded from it.
+    expect(bandFor({ relaxedCm: 70, stretchedCm: 98, gradeCmPerSize: 5, assumed: false }, g, g.baseSize).source).toBe('measured');
+    expect(bandFor({ relaxedCm: 70, stretchedCm: 98, gradeCmPerSize: 5, assumed: false }, g, larger.size)).toEqual({ relaxedCm: 75, stretchedCm: 105, source: 'graded' });
+  });
+
+  // A five-size ladder like the pilot skirt's (AU 8-16, base 12); only the labels and steps matter to the band.
+  const ladder = { ...dress.grading, baseSize: '12', sizes: ['8', '10', '12', '14', '16'].map((size, k) => ({ ...dress.grading.sizes[0]!, size, step: k - 2 })) } as SpikeBundle['grading'];
+  // The shop's tape of the pilot skirt, 13 Nov 2026 (data/bohohippychic/tape/crimson-wildflower-maxi-skirt.json): AU 8, 10 and 14.
+  const tape = { '8': { waistRelaxedCm: 67, waistStretchedCm: 94, hipCm: 112 }, '10': { waistRelaxedCm: 71, waistStretchedCm: 100 }, '14': { waistRelaxedCm: 80, waistStretchedCm: 110 } };
+
+  it('uses the tape per measured size, interpolates between two measured sizes and extrapolates past them, and says which', () => {
+    const spec = waistbandFromFile({ sizes: tape }, ladder);
+    expect(spec.assumed).toBe(false);
+    expect(spec.measuredSize).toBe('10'); // the measured size nearest the base size (10 and 14 tie: the smaller comes first)
+    expect(bandFor(spec, ladder, '8')).toEqual({ relaxedCm: 67, stretchedCm: 94, source: 'measured' });
+    expect(bandFor(spec, ladder, '10')).toEqual({ relaxedCm: 71, stretchedCm: 100, source: 'measured' });
+    expect(bandFor(spec, ladder, '14')).toEqual({ relaxedCm: 80, stretchedCm: 110, source: 'measured' });
+    // AU 12, not measured: halfway between 10 and 14. AU 16, not measured: the 10-14 line continued one size.
+    expect(bandFor(spec, ladder, '12')).toEqual({ relaxedCm: 75.5, stretchedCm: 105, source: 'interpolated' });
+    expect(bandFor(spec, ladder, '16')).toEqual({ relaxedCm: 84.5, stretchedCm: 115, source: 'extrapolated' });
+    // Below the smallest measured size: the line through the two smallest.
+    const upper = waistbandFromFile({ sizes: { '10': tape['10'], '14': tape['14'] } }, ladder);
+    expect(bandFor(upper, ladder, '8')).toEqual({ relaxedCm: 66.5, stretchedCm: 95, source: 'extrapolated' });
+    // "AU 12" style labels are accepted; a size the grading does not have is refused.
+    expect(bandFor(waistbandFromFile({ sizes: { 'AU 8': tape['8'], 'size 14': tape['14'] } }, ladder), ladder, '12').source).toBe('interpolated');
+    expect(() => waistbandFromFile({ sizes: { '18': tape['8'] } }, ladder)).toThrow(/not one of the grading sizes/);
+  });
+
+  it('keeps the one-size form of the data file working, and refuses an entry without a measurement', () => {
+    const one = waistbandFromFile({ relaxedCm: 75, stretchedCm: 105, measuredSize: 'AU 12', gradeCmPerSize: 4 }, ladder);
+    expect(one).toEqual({ relaxedCm: 75, stretchedCm: 105, measuredSize: '12', gradeCmPerSize: 4, assumed: false });
+    expect(bandFor(one, ladder, '12')).toEqual({ relaxedCm: 75, stretchedCm: 105, source: 'measured' });
+    expect(bandFor(one, ladder, '16')).toEqual({ relaxedCm: 83, stretchedCm: 83 * 1.4, source: 'graded' });
+    // One size in the per-size form behaves the same: graded from that size.
+    const single = waistbandFromFile({ sizes: { '8': tape['8'] }, gradeCmPerSize: 4 }, ladder);
+    expect(bandFor(single, ladder, '8').source).toBe('measured');
+    expect(bandFor(single, ladder, '10')).toEqual({ relaxedCm: 71, stretchedCm: 71 * (94 / 67), source: 'graded' });
+    const empties: (BandFileEntry | undefined)[] = [undefined, {}, { relaxedCm: null, stretchedCm: null, sizes: {} }, { sizes: { '8': { hipCm: 112 } } }];
+    for (const empty of empties) expect(() => waistbandFromFile(empty, ladder)).toThrow(/no measured band yet/);
+    expect(() => waistbandFromFile({ relaxedCm: 100, stretchedCm: 90 }, ladder)).toThrow(/relaxedCm <= stretchedCm/);
+    expect(() => waistbandFromFile({ sizes: { '8': { waistRelaxedCm: 94, waistStretchedCm: 67 } } }, ladder)).toThrow(/relaxed <= stretched/);
+  });
+
+  it('never calls an interpolated or extrapolated band measured in the fit line', () => {
+    const spec = waistbandFromFile({ sizes: tape }, ladder);
+    const line = (size: string): string => { const s = skirt(); return elasticBandLine(fitElasticBand(field, s.start, s.chains, 0.35, bandFor(spec, ladder, size), spec.assumed)).text; };
+    expect(line('8')).toContain('(measured band:');
+    expect(line('12')).toContain('interpolated band (this size was not measured');
+    expect(line('16')).toContain('extrapolated band (this size was not measured');
+    for (const size of ['12', '16']) expect(line(size)).not.toContain('(measured band');
   });
 
   it('stays and stretches to the body when the relaxed band is smaller; slides down when larger; flags an overstretch', () => {

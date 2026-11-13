@@ -15,8 +15,8 @@ import { topEdgePlane } from '../src/core/waistband';
 import { weldWithRemap } from '../src/core/weld';
 import { meshFromGlb } from '../src/bundle';
 import { LOOSE_TOP_PIN_CM, pinLoosePieces } from '../src/engine';
-import { LOOSE_TOP_PIN_CM as SPIKE_LOOSE_TOP_PIN_CM, pinLoosePieces as spikePinLoosePieces, anchorLoops as spikeAnchorLoops, bandFor as spikeBandFor, drapeOptionsFrom as spikeDrapeOptionsFrom, DEFAULT_DRAPE as SPIKE_DEFAULT_DRAPE } from '../../../spikes/garment-engine/viewer/src/engine';
-import { anchorLoops, bandFor, drapeOptionsFrom, DEFAULT_DRAPE } from '../src/engine';
+import { LOOSE_TOP_PIN_CM as SPIKE_LOOSE_TOP_PIN_CM, pinLoosePieces as spikePinLoosePieces, anchorLoops as spikeAnchorLoops, bandFor as spikeBandFor, drapeOptionsFrom as spikeDrapeOptionsFrom, waistbandFromFile as spikeWaistbandFromFile, BAND_SOURCE_TEXT as SPIKE_BAND_SOURCE_TEXT, DEFAULT_DRAPE as SPIKE_DEFAULT_DRAPE } from '../../../spikes/garment-engine/viewer/src/engine';
+import { anchorLoops, bandFor, drapeOptionsFrom, waistbandFromFile, BAND_SOURCE_TEXT, DEFAULT_DRAPE } from '../src/engine';
 import { clothParams } from '../src/cloth';
 import { clothParams as spikeClothParams } from '../../../spikes/garment-engine/viewer/src/cloth';
 
@@ -64,5 +64,14 @@ describe('fork parity with spikes/garment-engine', () => {
       const spec = { relaxedCm: 72, stretchedCm: 97, assumed: true };
       expect(bandFor(spec, grading, size)).toEqual(spikeBandFor(spec, grading, size));
     }
+    // Per-size tape measurements (the data file's form): the same spec, and the same measured, interpolated and
+    // extrapolated band per size.
+    expect(BAND_SOURCE_TEXT).toEqual(SPIKE_BAND_SOURCE_TEXT);
+    const labels = grading.sizes.map((s) => s.size);
+    const entry = { sizes: { [labels[0]!]: { waistRelaxedCm: 67, waistStretchedCm: 94 }, [labels[1]!]: { waistRelaxedCm: 71, waistStretchedCm: 100 } } };
+    const perSize = waistbandFromFile(entry, grading);
+    expect(perSize).toEqual(spikeWaistbandFromFile(entry, grading));
+    for (const size of labels) expect(bandFor(perSize, grading, size)).toEqual(spikeBandFor(perSize, grading, size));
+    expect(labels.length < 3 || bandFor(perSize, grading, labels[2]!).source === 'extrapolated').toBe(true);
   });
 });

@@ -10,6 +10,8 @@
  *
  *   node spikes/garment-engine/viewer/drape-control.mjs eval/<id> --out <dir> [--throttle 4]
  *        [--set name=query ...]   e.g. --set base= --set best=cling=0&loops=1&rings=hip,waist
+ *        --set measured=cling=0&band=measured   the shop's tape of the band (data/bohohippychic/waistbands.json)
+ * Every shot carries an "ESTIMATE" tag with the setting's name.
  *
  * Uses the preinstalled Playwright (`require('playwright')`), not a dependency of the package.
  */
@@ -62,6 +64,13 @@ try {
     for (const view of ['front', 'side']) {
       await page.goto(`${base}index.html?product=${encodeURIComponent(id)}&${sizesQ}&view=${view}${q ? `&${q}` : ''}`);
       await settle(page);
+      // Every render is labelled an estimate in the picture itself (the page's own label sits below the fold of the shot).
+      await page.evaluate((text) => {
+        const tag = document.createElement('div');
+        tag.textContent = text;
+        tag.style.cssText = 'position:fixed;right:12px;top:12px;z-index:99;padding:6px 10px;border-radius:6px;background:#1A1612;color:#F5EFE7;font:600 13px/1.3 Inter,system-ui,sans-serif;max-width:560px';
+        document.body.append(tag);
+      }, `ESTIMATE, not a measurement: simulated drape of a reconstructed mesh on a procedural mannequin. Setting "${name}"${q ? ` (${q})` : ' (viewer default)'}.`);
       const file = join(outDir, `${id.replace(/\W+/g, '_')}-${name}-${view}.png`);
       await page.screenshot({ path: file });
       entry.shots.push(file);

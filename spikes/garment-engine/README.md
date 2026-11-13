@@ -168,6 +168,63 @@ modal run spikes/garment-engine/modal/stage4b_retexture.py --ref-job-dir <refere
 - **Silhouette check: implemented, splits nothing here.** All 94 main photos it looked at are on a model in a styled set; the border-colour mask refuses every one ("not a plain backdrop"), so no member is split and no member is checked. It works on plain-backdrop photos (tests) and accepts a garment mask from a segmentation model (`raw/<handle>/main-mask.png`).
 - **Stage 4b** (`modal/stage4b_retexture.py`, pure Python, CPU, no video model): projects the variant's front/back stills through the known turntable cameras (frame 0 and N/2), with a z-buffer, the garment mask and a grazing-angle cut; the sides neither still sees are filled by mirroring the nearest seen print across the visibility boundary in a cylinder grid around the turntable axis (no generative fill). It writes `stage4b/<source>/variants/<id>/{texture.png, material.json, preview.glb, record.json}` and the bundle's `variants.json` into the reference job. Stage 4 writes no UVs yet, so stage 4b gives every triangle its own atlas cell (`garment_uv.glb`, shared by the family). On a 12k-triangle cylinder at 480×832 with a 1024 texture the core takes about 4 s locally; it has not run on Modal.
 
+## Tape measurements of the pilot skirt (13 Nov 2026, CPU only)
+
+The shop tape-measured the Crimson Wildflower Maxi Skirt in AU 8, 10 and 14 (`data/bohohippychic/tape/crimson-wildflower-maxi-skirt.json`, the single source of truth; read its `transcriptionNotes`). `data/bohohippychic/waistbands.json` (format 2) repeats the measured sizes for the viewer; `viewer/src/tapeBand.test.ts` keeps the two in step. **AU 12 and 16 were not measured.** Rule for them, everywhere: a line on the grading step through the two measured sizes around the size (12: halfway between 10 and 14, *interpolated*) or through the two nearest measured sizes when it lies outside them (16: the 10–14 line continued one size, *extrapolated*). Full girths, cm:
+
+| AU | Band relaxed | Band stretched | Hip (tape) | Hem sweep (tape) | Length (tape) | Source |
+|---|---|---|---|---|---|---|
+| 8 | 67 | 94 | 112 | 230 | 103 | measured |
+| 10 | 71 | 100 | 122 | 248 | 103 | measured |
+| 12 | 75.5 | 105 | 124 | 254 | 103.5 | **interpolated** |
+| 14 | 80 | 110 | 126 | 260 | 104 | measured |
+| 16 | 84.5 | 115 | 128 | 266 | 104.5 | **extrapolated** |
+
+The hip steps are uneven (+10 cm from 8 to 10, then +4 cm over the two sizes to 14). They are reported, not corrected: the hip line of an A-line skirt is not a seam, and the height it was measured at is not on record.
+
+**The reconstructed mesh against the tape** (`sizes-drape.ts … --modes band:measured:0 --band-file data/bohohippychic/waistbands.json`, the `[cut check]` block; run 17d bundle, graded mesh, convex-hull girths):
+
+| AU | Mesh hip at the hip ring (y 87.4) | of tape | Mesh hip, widest 10–30 cm below the band | Mesh hem, widest in the bottom 30 cm | of tape | Mesh hem at its lowest edge | Mesh length | of tape |
+|---|---|---|---|---|---|---|---|---|
+| 8 | 97.4 | 87 % | 102.2 | 109.0 | 47 % | 72.7 | 99.4 | 97 % |
+| 10 | 102.4 | 84 % | 107.2 | 114.8 | 46 % | 76.7 | 99.4 | 97 % |
+| 12 | 107.4 | 87 % (tape interpolated) | 112.2 | 120.6 | 47 % (tape interpolated) | 80.6 | 99.4 | 96 % (tape interpolated) |
+| 14 | 112.4 | 89 % | 117.2 | 126.4 | 49 % | 84.5 | 99.4 | 96 % |
+| 16 | 117.4 | 92 % (tape extrapolated) | 122.2 | 132.1 | 50 % (tape extrapolated) | 88.5 | 99.4 | 95 % (tape extrapolated) |
+
+The mesh is a column: 10.6–19.6 cm short at the hip and **half the real hem** (a third at its tucked-in lowest edge, R2). Its length is not graded. Between AU 8 and 14 the real hem grows 30 cm and the real hip 14 cm (measured); the mesh grows 17.4 and 15 cm.
+
+**The measured band on the M mannequin** (81.0 cm at the band's height, clearance included; `fitElasticBand`):
+
+| AU | Band (source) | Slides | Girth on the body | Stretched by |
+|---|---|---|---|---|
+| 8 | 67 / 94 (measured) | no | 81.0 | 14.0 cm (21 %; 52 % of its range) |
+| 10 | 71 / 100 (measured) | no | 81.0 | 10.0 cm (14 %; 34 %) |
+| 12 | 75.5 / 105 (interpolated) | no | 81.0 | 5.5 cm (7 %; 19 %) |
+| 14 | 80 / 110 (measured) | no | 81.0 | 1.0 cm (1 %; 3 %) |
+| 16 | 84.5 / 115 (extrapolated) | 1.5 cm down | 84.5 | 0 (relaxed) |
+
+AU 8→16 hull-girth spread after the drape, cm (share of the mesh's own graded spread, which is ≈ 20 cm at every height):
+
+| Setting | y 100 | y 95 | y 87.4 (hip ring) | y 80 | y 75 | y 70 | y 60 | y 40 | y 20 |
+|---|---|---|---|---|---|---|---|---|---|
+| Graded mesh | 15.8 | 17.9 | 20.0 | 20.1 | 20.0 | 20.0 | 19.7 | 20.2 | 21.9 |
+| Default (cling on, band at its mesh girth) | 12.3 (78 %) | 9.4 (53 %) | 5.5 (28 %) | 5.0 (25 %) | 5.3 (27 %) | 5.8 (29 %) | 8.2 (42 %) | 9.8 (49 %) | 9.3 (42 %) |
+| Cling off | 12.3 (78 %) | 9.8 (55 %) | 5.4 (27 %) | 6.3 (31 %) | 8.1 (41 %) | 9.7 (49 %) | 12.8 (65 %) | 13.5 (67 %) | 15.9 (73 %) |
+| Measured band, cling off | 2.5 (16 %) | 3.8 (21 %) | 4.3 (22 %) | 4.8 (24 %) | 5.7 (29 %) | 6.7 (34 %) | 8.1 (41 %) | 10.7 (53 %) | 11.6 (53 %) |
+| Measured band, cling on | 2.5 (16 %) | 3.7 (21 %) | 4.1 (21 %) | 3.8 (19 %) | 3.9 (20 %) | 4.6 (23 %) | 5.6 (28 %) | 6.9 (34 %) | 7.1 (32 %) |
+
+The AU 16 end of these spreads rests on an extrapolated band. All sizes settle with finite positions; residual motion in the second after the 1.5 s freeze 1.1–1.9 cm (measured band, cling off), p99 edge strain 5.7–7.1 %.
+
+Reading:
+
+- **The band does not slide; it gathers.** On an M body every size from 8 to 14 grips at the same 81 cm, so the measured band takes size difference away at the top of the skirt (y 100: 12.3 → 2.5 cm) and the sizes hang from the same ring. That is what an elastic pull-on band does; it is a result, not a defect of the model.
+- **Which assumed scenario was right.** Of the 10 Nov sweep (AU 12 relaxed : stretched 72:97, 80:108, 88:119, graded 5 cm per size at a fixed stretch ratio), 72:97 was nearest in relaxed girth (3.6 cm below the tape on average) and in behaviour (only AU 16 slides, 0.3 cm); 80:108 matches the stretched girth better (0.5–6.5 cm above the tape) but slides AU 14 and 16 by 1.8 and 3.8 cm, which the tape does not support; 88:119 is wrong. The measured grade is 4–4.5 cm per size relaxed and the stretch ratio 1.38–1.41 (assumed: 5 cm and 1.35).
+- **Every earlier "% of the spread survives" number is relative to the mesh, not to the skirt.** Those percentages (here, `docs/REFINEMENT.md` R3, `docs/research/shortcut-to-step3.md`, `docs/research/step3-serverdrape-spike.md`) divide the draped spread by the graded spread of this same mesh. With half the hem missing from the mesh they cannot say how much of the real garment's size difference shows; they only say what the drape does to the reconstruction.
+- **Cling stays on by default.** Cling off against the default, AU 8→16: skirt y 60 / 20 42 / 42 % → 65 / 73 %; azure dress hip ring 39 → 63 %, y 60 65 → 104 %; palazzo hip ring 31 → 33 %, y 70 57 → 74 %. Motion left in the second after the freeze (largest particle move, AU 8 / 12 / 16): skirt 1.1 / 1.0 / 2.0 → 2.0 / 1.7 / 2.4 cm; azure 4.5 / 3.6 / 4.7 → 2.2 / 2.4 / 3.2 cm; palazzo 6.4 / 3.4 / 4.8 → 9.9 / 9.7 / 9.6 cm (p95 3.3 / 1.7 / 1.5 → 4.0 / 4.3 / 3.4 cm). Renders: the azure skirt flares more and the sizes read better; the palazzo's legs hang wider and no longer pinch below the knee, but its crotch notch (R5) shows more plainly and the frozen pose is further from rest. Better on two, worse on the palazzo's stability, so the default is unchanged and `cling=0` stays opt-in.
+
+Renders (`viewer/drape-control.mjs … --set band-measured='cling=0&band=measured'`, in the gitignored `out/tape-viewer/`, each tagged ESTIMATE): AU 8, 12 and 16 are three near-identical columns with the same band girth; the hem is a little fuller with cling off and tapers to the ankles with cling on. None shows the A-line of the real skirt.
+
 ## Second shop: nobodyschild.com (8 Nov 2026, CPU only)
 
 A **test shop chosen by us, not a partner** (no contact, no consent; public data only, no public use without its written permission). `shop:import -- --shop nobodyschild` (`src/shopImport.ts`, adapter `src/shops/nobodyschild.ts`) reads the shop's own UK body chart from its size guide, the composition, the photographed size and the wearing length from the product's own blocks of its page, and maps product types and tags to categories. Five jobs (dress, top, skirt, trousers, jacket) are exported, `size-advice:shop` runs the plugin's size path on test bodies, and `modal/stage1b_preflight.py` checks stage 1b inputs on CPU (positive and negative control). Findings, gaps and the proposed GPU run (about $8–9 for five products, estimate): `docs/research/second-shop.md`; data: `data/nobodyschild/README.md`.

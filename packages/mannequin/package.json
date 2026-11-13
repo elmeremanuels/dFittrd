@@ -1,7 +1,7 @@
 {
   "name": "@curtain/mannequin",
   "version": "0.1.0",
-  "description": "Curtain canonical mannequin v0 (docs/ENGINE-HANDOFF.md §The canonical mannequin): a procedural A-pose body lofted through the D15 anchor rings in three shapes, its anchor rings and length lines, fixed turntable camera paths, one motion clip on a simple rig, and a minimal glTF 2.0 binary writer. Pure TypeScript; the only runtime dependency is @curtain/anchors.",
+  "description": "Curtain canonical mannequin v0 (docs/ENGINE-HANDOFF.md §The canonical mannequin): a procedural A-pose body lofted through the D15 anchor rings, in a female family (three shapes) and a male family (five shapes), its anchor rings and length lines, fixed turntable camera paths, one motion clip on a simple rig, and a minimal glTF 2.0 binary writer. Pure TypeScript; the only runtime dependency is @curtain/anchors.",
   "license": "UNLICENSED",
   "private": true,
   "type": "module",
@@ -24,6 +24,7 @@
   "scripts": {
     "build": "tsup",
     "build:assets": "tsx scripts/build-assets.ts",
+    "preview": "tsx scripts/preview.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint ."

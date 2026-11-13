@@ -1,5 +1,6 @@
 /**
- * The canonical mannequin's body shapes (v0: three, spanning the women's size range XS…XXL).
+ * The canonical mannequin's female body shapes (v0: three, spanning the women's size range XS…XXL).
+ * The male family and the family-aware API are in `families.ts`.
  *
  * Source of the numbers. The control girths (chest = bust, waist, hip) sit inside the size
  * intervals of EN 13402-3 (women's bust/waist/hip, cm) and agree with the body-type size charts in
@@ -27,15 +28,39 @@ export interface RingSpec {
 export const BODY_SHAPE_IDS = ['XS', 'M', 'XXL'] as const;
 export type BodyShapeId = (typeof BODY_SHAPE_IDS)[number];
 
-export interface BodyShape {
-  id: BodyShapeId;
-  statureCm: number;
-  rings: Readonly<Record<AnchorRing, RingSpec>>;
-  /** Where each number comes from: `table` = EN 13402-3 / fixture control girth, `proportion` = representative value. */
-  provenance: Readonly<Record<AnchorRing, 'table' | 'proportion'>>;
+/** The shape families: `female` is the v0 family below; `male` is in `families.ts`. */
+export const BODY_FAMILIES = ['female', 'male'] as const;
+export type BodyFamily = (typeof BODY_FAMILIES)[number];
+
+/**
+ * Levels of the body as fractions of stature. A level that is given moves that landmark there and
+ * stretches the body between its neighbours (`levelWarp` in `model.ts`); a level that is left out
+ * stays at the nominal fraction (`NOMINAL_LEVELS`). The female family gives none.
+ */
+export interface BodyLevels {
+  knee?: number;
+  /** Crotch point: inseam / stature. */
+  crotch?: number;
+  hip?: number;
+  waist?: number;
+  chest?: number;
+  /** The shoulder ring (the arm joint sits just under it). Everything above it keeps its nominal share of the rest. */
+  shoulder?: number;
 }
 
-const ASPECT: Readonly<Record<AnchorRing, number>> = {
+export interface BodyShape {
+  /** A size of the family (`XS`, `M`, …) or `custom` for a shape built from typed measurements. */
+  id: string;
+  family: BodyFamily;
+  statureCm: number;
+  rings: Readonly<Record<AnchorRing, RingSpec>>;
+  /** Where each number comes from: `table` = read from the family's cited table, `proportion` = representative or derived value. */
+  provenance: Readonly<Record<AnchorRing, 'table' | 'proportion'>>;
+  /** Landmark levels that differ from the nominal ones (none for the female family). */
+  levels?: Readonly<BodyLevels>;
+}
+
+export const FEMALE_ASPECT: Readonly<Record<AnchorRing, number>> = {
   neck: 0.9,
   shoulder: 0.5,
   chest: 0.68,
@@ -84,8 +109,8 @@ const GIRTHS: Readonly<Record<BodyShapeId, { stature: number; girths: Readonly<R
 function shape(id: BodyShapeId): BodyShape {
   const { stature, girths } = GIRTHS[id];
   const rings = {} as Record<AnchorRing, RingSpec>;
-  for (const ring of Object.keys(girths) as AnchorRing[]) rings[ring] = { circumferenceCm: girths[ring], aspect: ASPECT[ring] };
-  return { id, statureCm: stature, rings, provenance: PROVENANCE };
+  for (const ring of Object.keys(girths) as AnchorRing[]) rings[ring] = { circumferenceCm: girths[ring], aspect: FEMALE_ASPECT[ring] };
+  return { id, family: 'female', statureCm: stature, rings, provenance: PROVENANCE };
 }
 
 export const BODY_SHAPES: Readonly<Record<BodyShapeId, BodyShape>> = {

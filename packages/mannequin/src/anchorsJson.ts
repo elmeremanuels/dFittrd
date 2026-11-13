@@ -8,6 +8,7 @@ import { type AnchorRing } from '@curtain/anchors';
 import { round, roundVec, type Vec3 } from './math';
 import type { Mesh } from './mesh';
 import type { Mannequin, RingFrame } from './model';
+import type { BodyFamily } from './shapes';
 import { loopAround, loopLength, slice } from './slice';
 
 /** Girth of the mesh at a ring: the loop of the ring's own part, around the ring centre, in the ring plane. */
@@ -23,6 +24,8 @@ export interface MannequinAnchorsJson {
   formatVersion: 1;
   mannequinVersion: string;
   shape: string;
+  /** Present only when the family is not `female`: a file without it is a female shape (every v0 file and bundle). */
+  family?: BodyFamily;
   unit: 'cm';
   axes: { up: '+Y'; front: '+Z'; left: '+X' };
   statureCm: number;
@@ -75,6 +78,7 @@ export function mannequinAnchorsJson(mannequin: Mannequin, mesh: Mesh, extra: { 
     formatVersion: 1,
     mannequinVersion: mannequin.version,
     shape: mannequin.shape.id,
+    ...(mannequin.shape.family === 'female' ? {} : { family: mannequin.shape.family }),
     unit: 'cm',
     axes: { up: '+Y', front: '+Z', left: '+X' },
     statureCm: mannequin.statureCm,

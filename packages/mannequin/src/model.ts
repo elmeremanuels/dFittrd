@@ -1,13 +1,15 @@
 /**
- * The procedural canonical mannequin (v0): a fixed A-pose body made of five lofted parts (torso with
+ * The procedural canonical mannequin (v0), one generator for both families: a fixed A-pose body made of five lofted parts (torso with
  * head, two legs, two arms). Every part is a stack of elliptical cross-sections; the anchor rings of
  * `@curtain/anchors` are exact sections, so the girth of the mesh at every anchor is the shape's
  * table value. Between rings the axes follow the monotone cubic of `@curtain/anchors`
  * (`monotoneProfile`), the same interpolation the grading morph uses.
  *
  * Proportions (fractions of stature) follow the nominal ring heights of `@curtain/anchors`
- * (`NOMINAL_RING_HEIGHTS`) and common drafting proportions for limbs and head. Everything is a pure
- * function of the body shape: same shape in, same numbers out.
+ * (`NOMINAL_RING_HEIGHTS`) and common drafting proportions for limbs and head. A shape may move the
+ * knee, crotch, hip, waist, chest and shoulder levels (`BodyShape.levels`, used by the male family); the body
+ * is then stretched linearly between those levels. Everything is a pure function of the body shape:
+ * same shape in, same numbers out.
  */
 import {
   NOMINAL_RING_HEIGHTS,
@@ -19,7 +21,7 @@ import {
   type Ellipse,
 } from '@curtain/anchors';
 import { along, lerp, normalize, type Vec3 } from './math';
-import type { BodyShape } from './shapes';
+import type { BodyLevels, BodyShape } from './shapes';
 
 export const MANNEQUIN_VERSION = '0.1.0';
 
@@ -165,6 +167,31 @@ interface Knot {
 
 const H = NOMINAL_RING_HEIGHTS;
 
+/** The fractions of stature the generator's own proportions put each `BodyLevels` landmark at. */
+export const NOMINAL_LEVELS: Readonly<Required<BodyLevels>> = { knee: H.knee, crotch: 0.455, hip: H.hip, waist: H.waist, chest: H.chest, shoulder: H.shoulder };
+
+/**
+ * Maps a nominal fraction of stature to the fraction on a body with the given levels: piecewise
+ * linear through (0, 0), every given level (nominal → given) and (1, 1). `null` when no level is
+ * given (the body keeps the nominal proportions exactly). Throws a `RangeError` when the given
+ * levels are not finite or do not rise strictly from the floor to the top of the head.
+ */
+export function levelWarp(levels: Readonly<BodyLevels> | undefined): ((f: number) => number) | null {
+  const keys = (Object.keys(NOMINAL_LEVELS) as (keyof BodyLevels)[]).filter((k) => levels?.[k] !== undefined);
+  if (keys.length === 0) return null;
+  const xs = [0, ...keys.map((k) => NOMINAL_LEVELS[k]), 1];
+  const ys = [0, ...keys.map((k) => levels![k]!), 1];
+  for (let i = 1; i < ys.length; i++) {
+    if (!Number.isFinite(ys[i]!) || !(ys[i]! > ys[i - 1]!)) throw new RangeError(`body levels must rise strictly between 0 and 1: ${JSON.stringify(levels)}`);
+  }
+  return (f) => {
+    let i = 1;
+    while (i < xs.length - 1 && f > xs[i]!) i++;
+    const t = (f - xs[i - 1]!) / (xs[i]! - xs[i - 1]!);
+    return ys[i - 1]! + (ys[i]! - ys[i - 1]!) * t;
+  };
+}
+
 /** Perimeter of the `n`-gon with vertices at uniform parameter angles on the ellipse. */
 export function polygonPerimeter(a: number, b: number, n: number): number {
   let p = 0;
@@ -222,7 +249,8 @@ export function buildMannequin(shape: BodyShape, options: BuildOptions = {}): Ma
   const legSegments = options.legSegments ?? 32;
   const armSegments = options.armSegments ?? 24;
   const ring = (id: AnchorRing): Ellipse => ellipseFromCircumference(shape.rings[id].circumferenceCm, shape.rings[id].aspect);
-  const y = (f: number): number => f * S;
+  const warp = levelWarp(shape.levels);
+  const y = (f: number): number => (warp ? warp(f) : f) * S;
   const E = {} as Record<AnchorRing, Ellipse>;
   for (const id of Object.keys(shape.rings) as AnchorRing[]) E[id] = ring(id);
 

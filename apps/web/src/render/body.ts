@@ -345,7 +345,8 @@ export function garmentGeometry({ garment, gaps, body: g, hemSweepCm = null }: G
         // A skirt is one tube from the waist, not two legs (step 3 rings mock: the maxi skirt was drawn as trousers).
         const sub = garment.subcategory ?? '';
         const fallback = /maxi/.test(sub) ? levelY('ankle') - 4 : /midi/.test(sub) ? levelY('calf') : /mini/.test(sub) ? levelY('thigh') + 8 : levelY('knee') + 6;
-        hemY = hemFromLength(garment.lengthCm, 'outseam', waistY, g.pxPerCm, fallback);
+        // a skirt's own length key is waist_to_hem (band to hem, flat); outseam is kept for older payloads
+        hemY = hemFromLength(garment.lengthCm, garment.lengthCm?.waist_to_hem ? 'waist_to_hem' : 'outseam', waistY, g.pxPerCm, fallback);
         const flared = /a-line|flare|skater|circle|tier|wrap/.test(`${garment.patternBlock} ${sub}`);
         const hemHalf =
           hemSweepCm != null && hemSweepCm > 0

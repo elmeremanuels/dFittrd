@@ -18,9 +18,13 @@ export function ringStroke(ring: Pick<Ring, 'band'>): string {
   return ring.band ? BAND_STROKE[ring.band] : NEUTRAL;
 }
 
-/** Estimates (assumed girths, unscored points) are dashed; scored chart rings are solid. */
+/**
+ * Dashed: chart girths the engine did not score, and girths that are estimated or assumed for this
+ * size (also the elastic band's). Solid: scored chart rings and girths tape-measured in this size.
+ */
 function dashed(ring: Ring): boolean {
-  return ring.band === null || (ring.source !== 'chart' && ring.source !== 'measured') || (ring.stretch !== undefined && ring.stretch.source !== 'measured');
+  if (ring.source === 'chart') return ring.band === null || (ring.stretch !== undefined && ring.stretch.source !== 'measured');
+  return ring.source !== 'measured' || ring.clamped === true;
 }
 
 export function SizeRingsLayer({ overlay }: { overlay: RingOverlay }): ReactNode {

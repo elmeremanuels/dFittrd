@@ -49,11 +49,12 @@ describe('size rings on the result (route R5 mock)', () => {
     expect(container.querySelector('[data-testid="size-ring-waist"]')).toHaveAttribute('data-band', 'good');
     // colour is never alone: the chip says it in words
     expect(screen.getByTestId('size-ring-chip-waist')).toHaveTextContent(/Good fit.*cm room/);
-    expect(screen.getByTestId('size-ring-chip-hem')).toHaveTextContent(/assumed/);
+    expect(screen.getByTestId('size-ring-chip-hem')).toHaveTextContent(/254 cm estimated/);
+    expect(screen.getByTestId('size-ring-chip-hip')).toHaveTextContent(/Hips.*cm room.*skirt 124 cm estimated/);
     expect(screen.getByTestId('size-ring-text')).toHaveTextContent(/Waist: good fit/);
     const legend = screen.getByTestId('size-rings-legend');
     expect(legend).toHaveTextContent(/estimate/i);
-    expect(legend).toHaveTextContent(/girth assumed, not measured yet/);
+    expect(legend).toHaveTextContent(/Elastic waistband: measured on sizes 8, 10 and 14; size 12 was not measured and is estimated/);
   });
 
   it('switching size redraws the rings for that size', async () => {

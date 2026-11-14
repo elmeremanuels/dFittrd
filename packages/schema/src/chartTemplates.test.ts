@@ -14,6 +14,7 @@ import {
   GARMENT_CHART_TEMPLATES,
   UK_WOMENS_BODY_TEMPLATE,
   US_WOMENS_BODY_TEMPLATE,
+  WOMENS_BODY_CHART_TEMPLATES,
   chartFromBodyTemplate,
   chartFromGarmentTemplate,
   chartPayload,
@@ -45,8 +46,17 @@ describe('chart templates: body charts', () => {
       expect(t.sources.filter((s) => s.inMedian).length).toBeGreaterThanOrEqual(2);
       for (const s of t.sources) {
         expect(s.url).toMatch(/^https:\/\//);
-        expect(s.accessed).toBe('2026-11-06');
+        expect(s.accessed).toBe(t.audience === 'men' ? '2026-11-13' : '2026-11-06');
       }
+    }
+  });
+
+  it('the women\u2019s templates are the five from before the men\u2019s were added, first and in the same order', () => {
+    expect(WOMENS_BODY_CHART_TEMPLATES.map((t) => t.id)).toEqual(['au-womens-body', 'uk-womens-body', 'eu-womens-body', 'eu-fr-womens-body', 'us-womens-body']);
+    expect(BODY_CHART_TEMPLATES.slice(0, 5)).toEqual([...WOMENS_BODY_CHART_TEMPLATES]);
+    for (const t of WOMENS_BODY_CHART_TEMPLATES) {
+      expect(t.audience).toBeUndefined();
+      expect(t.points).toBeUndefined();
     }
   });
 
@@ -68,7 +78,7 @@ describe('chart templates: body charts', () => {
   });
 
   it('every point grows by 1.5–7.5 cm per size and has a body shape (hip > bust > waist)', () => {
-    for (const t of BODY_CHART_TEMPLATES) {
+    for (const t of WOMENS_BODY_CHART_TEMPLATES) {
       for (let i = 0; i < t.rows.length; i++) {
         const r = t.rows[i]!;
         expect(r.hip!).toBeGreaterThan(r.bust!);

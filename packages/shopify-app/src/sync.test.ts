@@ -92,3 +92,22 @@ describe('syncProductNode', () => {
     expect(r.skipped).toEqual(['3']);
   });
 });
+
+describe('audience on a synced product', () => {
+  const node = (over: Record<string, unknown>) => ({ id: 'gid://shopify/Product/77', title: 'Oxford Shirt', vendor: 'Noordman', ...over });
+
+  it('reads tags and collections from the product node and keeps the merchant override on top', async () => {
+    const { syncProductNode } = await import('./sync');
+    const { PRODUCT_NODE_FIELDS } = await import('./graphql/products');
+    const { bulkProductsQuery } = await import('./graphql/bulk');
+    expect(PRODUCT_NODE_FIELDS).toMatch(/\btags\b/);
+    expect(PRODUCT_NODE_FIELDS).toMatch(/collections\(first: 10\) \{ nodes \{ title handle \} \}/);
+    expect(bulkProductsQuery()).toMatch(/\btags\b/);
+    expect(syncProductNode(node({ tags: ['mens', 'oxford'] })).draft.audience).toBe('men');
+    expect(syncProductNode(node({ collections: { nodes: [{ title: 'Heren', handle: 'heren' }] } })).draft.audience).toBe('men');
+    expect(syncProductNode(node({ title: "Women's Oxford Shirt" })).draft.audience).toBe('women');
+    expect(syncProductNode(node({})).draft.audience).toBeUndefined();
+    const overridden = syncProductNode(node({ tags: ['mens'], metafields: { nodes: [{ namespace: 'app--123--curtain', key: 'audience', type: 'single_line_text_field', value: 'unisex' }] } }));
+    expect(overridden.draft.audience).toBe('unisex');
+  });
+});

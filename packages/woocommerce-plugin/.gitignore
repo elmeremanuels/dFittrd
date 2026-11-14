@@ -12,5 +12,6 @@ assets/eur-rates.json
 tests/fixtures/garments.json
 tests/fixtures/fabric-text.json
 tests/fixtures/prices.json
+tests/fixtures/audience.json
 # Pinned WordPress.org downloads for the real-WordPress e2e (e2e/stack.mjs)
 e2e/.cache/

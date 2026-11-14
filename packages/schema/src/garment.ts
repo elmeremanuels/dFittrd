@@ -16,6 +16,21 @@ import { z } from 'zod';
 export const GARMENT_CATEGORIES = ['top', 'bottom', 'dress', 'outerwear', 'shoes', 'accessory'] as const;
 export type GarmentCategory = (typeof GARMENT_CATEGORIES)[number];
 
+/**
+ * Who a garment is cut for (photo-avatar plan, slice 3 "Men v1"). Optional on the payload: absent
+ * means "not specified" and keeps the behaviour from before the field existed (the women's figure
+ * and the "Bust" label). The mappings fill it from shop data with a merchant override
+ * (`mappings/audience.ts`). It changes labels and which figure is drawn, never the fit maths.
+ *
+ * Decision D20 (13 Nov 2026): no men's product goes live with a 2D figure only. Until the male 3D
+ * pipeline works, the web layer shows "Men's clothing: coming soon" for `audience: 'men'` in place
+ * of the Try it on flow. So a wrong `men` (the inference reads text and can be wrong) now hides
+ * the flow for that product; the merchant override is the fix. This package only carries the
+ * value; the gate lives in the web layer.
+ */
+export const GARMENT_AUDIENCES = ['women', 'men', 'unisex'] as const;
+export type GarmentAudience = (typeof GARMENT_AUDIENCES)[number];
+
 /** Fit points read by `@curtain/fit-engine` (fit-engine-spec.md `Point`). */
 export const FIT_POINTS = ['bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'foot'] as const;
 export type FitPoint = (typeof FIT_POINTS)[number];
@@ -120,6 +135,7 @@ export type HexColor = z.infer<typeof HexColorSchema>;
 const httpUrl = z.url({ protocol: /^https?$/ }).max(2048);
 
 export const GarmentCategorySchema = z.enum(GARMENT_CATEGORIES);
+export const GarmentAudienceSchema = z.enum(GARMENT_AUDIENCES);
 export const FitPointSchema = z.enum(FIT_POINTS);
 export const TasteAxisSchema = z.enum(TASTE_AXES);
 
@@ -272,6 +288,9 @@ export const GarmentPayloadSchema = z
     name: z.string().min(1).max(200),
     category: GarmentCategorySchema,
     subcategory: z.string().min(1).max(64).optional().describe('e.g. wrap-midi, slip, straight'),
+    audience: GarmentAudienceSchema.optional().describe(
+      "Who the garment is cut for: 'women', 'men' or 'unisex'. Optional; absent = not specified (the women's figure and the \"Bust\" label, as before the field existed). The chest measurement is stored in the 'bust' fit point for every audience.",
+    ),
     priceEur: z.number().min(0).max(1_000_000),
     productUrl: httpUrl.optional().describe('Canonical product page'),
 

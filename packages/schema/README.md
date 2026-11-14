@@ -99,6 +99,57 @@ implements the validate dry-run. `API_ROUTES` lists the method + path per DTO.
   `warnings` sink; the result is a draft for `completenessScore` / `GarmentPayloadSchema`.
 - `mappings/common.ts` exports the coercers (`coerceSizeChart`, `coerceFabric`, `inferCategory`, …). `coerceUnit` (0..1 fields such as `trueToSizeScore`) accepts a fraction, an explicit percentage (`"92%"`) or a whole number 2..100 read as a percentage; a fraction above 1 such as `1.5` is rejected, not read as 1.5 %.
 
+### Audience and men's data (photo-avatar plan slice 3; decision D20)
+
+- `GarmentPayload.audience?: 'women' | 'men' | 'unisex'` (`GARMENT_AUDIENCES`). Optional: absent = not
+  specified = the behaviour from before the field. The JSON Schema carries it as a closed enum.
+  Under D20 the web layer shows "Men's clothing: coming soon" for `men` until the male 3D pipeline
+  works; this package only carries the value.
+- `audience.ts`: `bustLabelKey(audience)` → `'chest'` for men and unisex, else `'bust'`;
+  `fitPointLabelKey(point, audience)`, `fitPointLabel(point, audience)` (English). The stored fit
+  point stays `bust` everywhere; only the printed word changes. Pure, no DOM.
+- `mappings/audience.ts`: `inferAudience(hints)` / `inferAudienceDecision(hints)` read the override,
+  a gender attribute, product type, category, tags, title and collections, strongest first, as whole
+  words ("women" is not read as "men"). `coerceAudienceOverride`, the word lists and
+  `AUDIENCE_CASES` (`mappings/audienceCases.ts`, replayed by the WooCommerce plugin's PHP twin) are
+  exported.
+  - **It runs for every product on its next sync**, also for products that predate the field: the
+    field is optional in the schema, but a shop's payloads gain an audience wherever the product
+    data names one. The merchant override (Shopify metafield `audience`, Woo meta
+    `_curtain_audience`) corrects it; the value `none` sends nothing.
+  - The singular words "man", "woman", "lady", "dame", "heer", "vrouw" are names as often as
+    audiences. They are read anywhere only in the override and the gender attribute; in a product
+    type, category, tag or collection only as the whole value or a whole path segment ("Man",
+    "Man > Jeans", "gender:man"); never in a title. So "Iron Man", "Spider-Man", "Isle of Man
+    souvenirs", "Lady Gaga" and "Notre Dame" say nothing.
+  - A word after "not" / "niet" / "from" (up to two words back) is skipped ("not for men",
+    "borrowed from the men"); a word before "fit", "style", "cut", "look" or "inspired" is a style
+    ("Women's Tee (Men's fit)" is women's); a Dutch or German compound needs a clothing word after
+    the prefix (`herenjeans` yes, Herrenberg and Herentals no).
+  - It is still a guess from text: "Men in Black Tee" reads as men's. `isWeakAudienceSource(source)`
+    is true for `title` and `collections`; under D20 the web layer should not hide Try it on for a
+    `men` that rests on a weak source without the merchant's confirmation. The payload does not
+    carry the source: that wiring is not built.
+- `chartTemplatesMen.ts`: generic men's **body** templates, not any brand's chart, each cell the
+  median of published charts read on 2026-11-13 with the source tables in the file:
+  `MENS_LETTER_BODY_TEMPLATE` (XS–3XL; chest, waist, seat; XXL and 3XL marked weak because the
+  sources differ by more than `MENS_WEAK_SPREAD_CM` = 10 cm), `MENS_EU_BODY_TEMPLATE` (44–58, German /
+  Dutch numbering; every size is marked weak, two sources per cell; BAUR's misprinted size 52 seat is
+  interpolated), `MENS_JEANS_WL_BODY_TEMPLATE` (W/L grid; waist and inside leg only, in effect the
+  inch label in cm). `jeansSizeLabel`, `parseJeansSize`.
+  - **Not offered yet.** Each source carries `terms` (the publisher's terms page, read 2026-11-14,
+    and what it says). No source allows commercial use: Nike and Arc'teryx license content for
+    personal, non-commercial use only, Rab forbids commercial use without authorisation, OTTO
+    reserves commercial text and data mining, Swix, Lidl, BAUR and Outdoor Renner are silent, BCF's
+    terms could not be read. The three templates therefore carry `legalReview: 'pending'` and are
+    left out of `OFFERED_CHART_TEMPLATES`, `chartTemplatesDto()` and the WooCommerce asset. They
+    still resolve by id. To release after counsel (Naomi) has answered: remove `legalReview` from
+    the templates. Open questions for her: are body measurement tables facts that may be reused;
+    may the source rows be stored verbatim in the repository (database right); the same for the
+    women's templates, which are offered today and rest on the same kind of source.
+- `fixtures/mens.ts`: `MENS_OXFORD_SHIRT`, `MENS_STRAIGHT_JEANS`, `MENS_TEST_BODIES` (slim, medium,
+  broad; invented numbers). Kept out of `MOCK_GARMENTS`.
+
 ### `fixtures/`
 
 `MOCK_GARMENTS` (41 payloads, 6 categories, 12 brands), `MOCK_GARMENTS_BY_ID`,

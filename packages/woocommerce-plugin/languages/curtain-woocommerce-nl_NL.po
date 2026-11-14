@@ -115,6 +115,30 @@ msgid "Subcategory"
 msgstr "Subcategorie"
 
 #: includes/class-product-meta.php
+msgid "Made for"
+msgstr "Gemaakt voor"
+
+#: includes/class-product-meta.php
+msgid "Read from categories, tags and name"
+msgstr "Afleiden uit categorieën, tags en naam"
+
+#: includes/class-product-meta.php
+msgid "Women"
+msgstr "Dames"
+
+#: includes/class-product-meta.php
+msgid "Men"
+msgstr "Heren"
+
+#: includes/class-product-meta.php
+msgid "Unisex"
+msgstr "Uniseks"
+
+#: includes/class-product-meta.php
+msgid "Leave out"
+msgstr "Weglaten"
+
+#: includes/class-product-meta.php
 msgid "Brand"
 msgstr "Merk"
 
@@ -352,6 +376,10 @@ msgstr "Vereist voordat het product actief kan zijn:"
 #: includes/class-product-meta.php includes/class-settings.php
 msgid "Size"
 msgstr "Maat"
+
+#: includes/class-product-meta.php
+msgid "chest"
+msgstr "borst"
 
 #: includes/class-product-meta.php
 msgid "Foot EU"

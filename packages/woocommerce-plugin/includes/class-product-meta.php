@@ -294,6 +294,14 @@ final class Product_Meta {
 						<?php endforeach; ?>
 					</select></label>
 				<label><span><?php esc_html_e( 'Subcategory', 'curtain-woocommerce' ); ?></span><input type="text" name="curtain[subcategory]" value="<?php echo esc_attr( (string) $get( 'subcategory' ) ); ?>" placeholder="wrap-midi" maxlength="64"></label>
+				<label><span><?php esc_html_e( 'Made for', 'curtain-woocommerce' ); ?></span>
+					<select name="curtain[audience]">
+						<option value=""><?php esc_html_e( 'Read from categories, tags and name', 'curtain-woocommerce' ); ?></option>
+						<option value="women" <?php selected( $get( 'audience' ), 'women' ); ?>><?php esc_html_e( 'Women', 'curtain-woocommerce' ); ?></option>
+						<option value="men" <?php selected( $get( 'audience' ), 'men' ); ?>><?php esc_html_e( 'Men', 'curtain-woocommerce' ); ?></option>
+						<option value="unisex" <?php selected( $get( 'audience' ), 'unisex' ); ?>><?php esc_html_e( 'Unisex', 'curtain-woocommerce' ); ?></option>
+						<option value="none" <?php selected( $get( 'audience' ), 'none' ); ?>><?php esc_html_e( 'Leave out', 'curtain-woocommerce' ); ?></option>
+					</select></label>
 				<label><span><?php esc_html_e( 'Brand', 'curtain-woocommerce' ); ?></span><input type="text" name="curtain[brand]" value="<?php echo esc_attr( (string) $get( 'brand' ) ); ?>" placeholder="<?php echo esc_attr( (string) ( '' !== (string) Settings::get( 'default_brand' ) ? Settings::get( 'default_brand' ) : get_bloginfo( 'name' ) ) ); ?>" maxlength="120"></label>
 				<label><span><?php esc_html_e( 'Pattern block', 'curtain-woocommerce' ); ?></span>
 					<select name="curtain[pattern_block]" class="curtain-pattern-block">
@@ -397,7 +405,7 @@ final class Product_Meta {
 					<?php
 					foreach ( Vocab::SIZE_ROW_COLUMNS as $col ) :
 						?>
-						<th><?php echo esc_html( self::column_label( $col ) ); ?></th><?php endforeach; ?><th></th>
+						<th><?php echo esc_html( self::column_label( $col, (string) $get( 'audience' ) ) ); ?></th><?php endforeach; ?><th></th>
 				</tr></thead>
 				<tbody>
 					<?php
@@ -557,10 +565,18 @@ final class Product_Meta {
 		<?php
 	}
 
-	private static function column_label( string $col ): string {
-		switch ( $col ) {
+	/**
+	 * Header of a size chart column. $audience is the merchant's "Made for" value: only men and
+	 * unisex change a header (bust → chest). A product without that value keeps the headers it
+	 * always had, also when the audience is read from its name or tags at sync time.
+	 */
+	private static function column_label( string $col, string $audience = '' ): string {
+		switch ( Vocab::size_column_key( $col, $audience ) ) {
 			case 'size':
 				return __( 'Size', 'curtain-woocommerce' );
+			case 'chest':
+				// The stored point is `bust` for every audience; on men's garments it holds the chest.
+				return __( 'chest', 'curtain-woocommerce' );
 			case 'footEu':
 				return __( 'Foot EU', 'curtain-woocommerce' );
 			case 'footLengthCm':

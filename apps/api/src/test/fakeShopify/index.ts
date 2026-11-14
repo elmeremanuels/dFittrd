@@ -619,6 +619,12 @@ export class FakeShopify {
       onlineStorePreviewUrl: `https://${store.domain}/products/${p.handle}?preview_key=fake`,
       descriptionHtml: p.descriptionHtml,
       category: p.category ? { __typename: 'TaxonomyCategory', ...p.category } : null,
+      tags: p.tags,
+      collections: (a: { first?: number }) =>
+        conn(
+          p.collections.map((id) => ({ __typename: 'Collection', id: `gid://shopify/Collection/${id}`, title: `Collection ${id}`, handle: `collection-${id}` })),
+          a.first,
+        ),
       featuredImage: { id: `gid://shopify/ProductImage/${p.id.split('/').pop()}1`, url: p.imageUrl },
       images: (a: { first?: number }) => conn([{ id: `gid://shopify/ProductImage/${p.id.split('/').pop()}1`, url: p.imageUrl }], a.first),
       priceRangeV2: { minVariantPrice: { amount: p.price, currencyCode: p.currencyCode }, maxVariantPrice: { amount: p.price, currencyCode: p.currencyCode } },
@@ -901,7 +907,7 @@ export class FakeShopify {
     for (const p of list) {
       const v = this.productView(store, p);
       roots.push(
-        JSON.stringify({ id: p.id, handle: v.handle, title: v.title, vendor: v.vendor, productType: v.productType, status: v.status, onlineStoreUrl: v.onlineStoreUrl, category: p.category ? { name: p.category.name, fullName: p.category.fullName } : null, featuredImage: { url: p.imageUrl }, priceRangeV2: { minVariantPrice: { amount: p.price, currencyCode: p.currencyCode } } }),
+        JSON.stringify({ id: p.id, handle: v.handle, title: v.title, vendor: v.vendor, productType: v.productType, tags: p.tags, status: v.status, onlineStoreUrl: v.onlineStoreUrl, category: p.category ? { name: p.category.name, fullName: p.category.fullName } : null, featuredImage: { url: p.imageUrl }, priceRangeV2: { minVariantPrice: { amount: p.price, currencyCode: p.currencyCode } } }),
       );
       const kids = [
         JSON.stringify({ id: `gid://shopify/ProductImage/${p.id.split('/').pop()}1`, url: p.imageUrl, __parentId: p.id }),

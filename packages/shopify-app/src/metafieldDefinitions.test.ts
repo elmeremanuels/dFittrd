@@ -33,6 +33,7 @@ const CONTRACT_KEYS = [
   'primary_color_hex',
   'colorways',
   'subcategory',
+  'audience',
   'brand',
 ];
 

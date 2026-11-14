@@ -21,6 +21,13 @@ describe('garmentJsonSchema', () => {
     expect(schema.properties.category).toMatchObject({ enum: ['top', 'bottom', 'dress', 'outerwear', 'shoes', 'accessory'] });
   });
 
+  it('carries the optional audience as a closed enum, in the full and the draft schema', () => {
+    expect(schema.properties.audience).toMatchObject({ type: 'string', enum: ['women', 'men', 'unisex'] });
+    expect(schema.required).not.toContain('audience');
+    const draft = garmentDraftJsonSchema() as Obj & { properties: Record<string, Obj> };
+    expect(draft.properties.audience).toMatchObject({ enum: ['women', 'men', 'unisex'] });
+  });
+
   it('keeps the open vocabularies as strings with examples, and nested objects typed', () => {
     expect(schema.properties.patternBlock).toMatchObject({ type: 'string', examples: expect.arrayContaining(['wrap', 'bias', 'straight']) });
     const fabric = schema.properties.fabric as Obj & { properties: Record<string, Obj>; required: string[] };

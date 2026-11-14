@@ -14,10 +14,12 @@
  * Unit conversion is here too: the builder accepts inches and stores centimetres.
  */
 import { z } from 'zod';
-import { FabricSchema, LengthCmSchema, SizeChartSchema, SizeRowSchema, duplicateSizeLabels, type GarmentPayload, type SizeRow } from './garment';
+import { FabricSchema, GarmentAudienceSchema, LengthCmSchema, SizeChartSchema, SizeRowSchema, duplicateSizeLabels, type GarmentAudience, type GarmentPayload, type SizeRow } from './garment';
 import { AU_WOMENS_BODY_CHART, AU_WOMENS_CHART_SOURCES } from './fixtures/charts';
+import { MENS_BODY_CHART_TEMPLATES } from './chartTemplatesMen';
 
-export type ChartRegion = 'AU' | 'UK' | 'EU' | 'US';
+/** `INT` = not tied to a region (letter sizes, jeans in inches). */
+export type ChartRegion = 'AU' | 'UK' | 'EU' | 'US' | 'INT';
 export type ChartKind = 'body' | 'garment';
 export type ChartUnit = 'cm' | 'in';
 /** Points a chart row can carry (SizeRow keys measured in cm). */
@@ -39,7 +41,32 @@ export interface ChartSourceRef {
   form: 'single' | 'range' | 'inches';
   /** False = read for comparison only, not in the median. */
   inMedian: boolean;
+  /** When set, the source counts for these points only (its other numbers are comparison only). */
+  points?: readonly ChartPoint[];
   note?: string;
+  /** What the publisher's own terms say about reusing its content, as read at `url` on `read`. */
+  terms?: ChartSourceTerms;
+}
+
+/**
+ * `personal-only`: the terms license the content for personal, non-commercial use only.
+ * `commercial-prohibited`: commercial use without permission is expressly forbidden.
+ * `tdm-reserved`: the publisher reserves commercial text and data mining (§ 44b UrhG).
+ * `silent`: the pages read say nothing on reuse of the site's content (no licence is granted).
+ * `not-read`: the terms could not be read.
+ * None of these is a licence for commercial use.
+ */
+export const CHART_SOURCE_REUSE = ['personal-only', 'commercial-prohibited', 'tdm-reserved', 'silent', 'not-read'] as const;
+export type ChartSourceReuse = (typeof CHART_SOURCE_REUSE)[number];
+
+export interface ChartSourceTerms {
+  /** The terms page(s) read. */
+  url: string;
+  /** Date read. */
+  read: string;
+  reuse: ChartSourceReuse;
+  /** What the page says, quoted or summarised. */
+  says: string;
 }
 
 /** One source chart as published, converted to cm (ranges → midpoint). */
@@ -62,11 +89,25 @@ interface TemplateBase {
 export interface BodyChartTemplate extends TemplateBase {
   kind: 'body';
   region: ChartRegion;
+  /** Who the chart is for. Absent on the women's templates (they predate the field). */
+  audience?: GarmentAudience;
+  /** True = a generic template built from several published charts, not any brand's chart. */
+  generic?: boolean;
+  /** Points the rows carry. Absent = bust, waist, hip. */
+  points?: readonly ChartPoint[];
   /** Body measurements in cm, one row per label in `sizes`. */
   rows: readonly SizeRow[];
   sources: readonly ChartSourceRef[];
-  /** Labels resting on fewer than three sources: shown as "weakly sourced" in the builder. */
+  /**
+   * Labels shown as an estimate in the builder: resting on fewer than three sources, or (men's
+   * templates) on sources that disagree by more than `MENS_WEAK_SPREAD_CM` on a girth.
+   */
   weakSizes: readonly string[];
+  /**
+   * `pending` = the template is not offered in any picker until counsel has answered whether its
+   * source charts may be used commercially (see `chartTemplatesMen.ts`). It still resolves by id.
+   */
+  legalReview?: 'pending';
 }
 
 export interface GarmentChartTemplate extends TemplateBase {
@@ -381,13 +422,16 @@ export const US_WOMENS_BODY_TEMPLATE: BodyChartTemplate = bodyTemplate(
   US_WOMENS_CHART_SOURCES,
 );
 
-export const BODY_CHART_TEMPLATES: readonly BodyChartTemplate[] = [
+export const WOMENS_BODY_CHART_TEMPLATES: readonly BodyChartTemplate[] = [
   AU_WOMENS_BODY_TEMPLATE,
   UK_WOMENS_BODY_TEMPLATE,
   EU_WOMENS_BODY_TEMPLATE,
   EU_FR_WOMENS_BODY_TEMPLATE,
   US_WOMENS_BODY_TEMPLATE,
 ];
+
+/** Women's templates first (unchanged order), then the generic men's templates (`chartTemplatesMen.ts`). */
+export const BODY_CHART_TEMPLATES: readonly BodyChartTemplate[] = [...WOMENS_BODY_CHART_TEMPLATES, ...MENS_BODY_CHART_TEMPLATES];
 
 export const GARMENT_CHART_TEMPLATES: readonly GarmentChartTemplate[] = [
   {
@@ -429,6 +473,14 @@ export const GARMENT_CHART_TEMPLATES: readonly GarmentChartTemplate[] = [
 ];
 
 export const CHART_TEMPLATES: readonly ChartTemplate[] = [...BODY_CHART_TEMPLATES, ...GARMENT_CHART_TEMPLATES];
+
+/** False for a template that waits for the legal review: it stays out of every picker. */
+export function isOfferedChartTemplate(t: ChartTemplate): boolean {
+  return !(t.kind === 'body' && t.legalReview === 'pending');
+}
+
+/** The templates a merchant is offered (Shopify chart builder, WooCommerce template picker). */
+export const OFFERED_CHART_TEMPLATES: readonly ChartTemplate[] = CHART_TEMPLATES.filter(isOfferedChartTemplate);
 
 export function chartTemplateById(id: string): ChartTemplate | undefined {
   return CHART_TEMPLATES.find((t) => t.id === id);
@@ -553,12 +605,15 @@ export function checkChart(input: { sizeChartType?: string; sizeChart?: readonly
     }
   }
   for (const p of CHART_POINTS) {
-    let prev: { size: string; v: number } | undefined;
+    let prev: { size: string; v: number; row: SizeRow } | undefined;
     for (const r of rows) {
       const v = r[p];
       if (typeof v !== 'number') continue;
-      if (prev && v < prev.v) warnings.push(`${p} gets smaller from size ${prev.size} (${prev.v}) to ${r.size} (${v}): sizes must be in ascending order.`);
-      prev = { size: r.size, v };
+      // A waist × length grid (jeans 30/34 → 32/30) restarts the inseam at every new waist: that is
+      // ascending order, not a mistake, as long as a girth grew on the same step.
+      const grid = p === 'inseam' && prev !== undefined && girthGrew(prev.row, r);
+      if (prev && v < prev.v && !grid) warnings.push(`${p} gets smaller from size ${prev.size} (${prev.v}) to ${r.size} (${v}): sizes must be in ascending order.`);
+      prev = { size: r.size, v, row: r };
     }
   }
   if (input.sizeChartType === 'garment' && rows.length) {
@@ -570,6 +625,10 @@ export function checkChart(input: { sizeChartType?: string; sizeChart?: readonly
     }
   }
   return { ok: errors.length === 0, errors, warnings };
+}
+
+function girthGrew(a: SizeRow, b: SizeRow): boolean {
+  return (['bust', 'waist', 'hip'] as const).some((g) => typeof a[g] === 'number' && typeof b[g] === 'number' && (b[g] as number) > (a[g] as number));
 }
 
 /** The body template whose bust/waist/hip rows equal `rows` for every size they share (R6). */
@@ -685,7 +744,9 @@ const TemplateSourceSchema = z.object({
   accessed: z.string(),
   form: z.enum(['single', 'range', 'inches']),
   inMedian: z.boolean(),
+  points: z.array(z.enum(CHART_POINTS)).optional(),
   note: z.string().optional(),
+  terms: z.object({ url: z.string(), read: z.string(), reuse: z.enum(CHART_SOURCE_REUSE), says: z.string() }).optional(),
 });
 
 export const ChartTemplateDtoSchema = z.object({
@@ -695,7 +756,10 @@ export const ChartTemplateDtoSchema = z.object({
   description: z.string(),
   sizes: z.array(z.string()),
   defaultSizes: z.array(z.string()),
-  region: z.enum(['AU', 'UK', 'EU', 'US']).optional(),
+  region: z.enum(['AU', 'UK', 'EU', 'US', 'INT']).optional(),
+  audience: GarmentAudienceSchema.optional(),
+  generic: z.boolean().optional(),
+  legalReview: z.literal('pending').optional(),
   rows: z.array(SizeRowSchema).optional(),
   sources: z.array(TemplateSourceSchema).optional(),
   weakSizes: z.array(z.string()).optional(),
@@ -703,9 +767,12 @@ export const ChartTemplateDtoSchema = z.object({
 });
 export const ChartTemplatesResponseSchema = z.object({ templates: z.array(ChartTemplateDtoSchema) });
 
-/** Templates as plain JSON for the wire (the frozen constants copied). */
-export function chartTemplatesDto(): z.infer<typeof ChartTemplatesResponseSchema> {
-  return { templates: CHART_TEMPLATES.map((t) => JSON.parse(JSON.stringify(t)) as z.infer<typeof ChartTemplateDtoSchema>) };
+/**
+ * Templates as plain JSON for the wire (the frozen constants copied). Templates that wait for the
+ * legal review are left out unless `includePendingLegalReview` is set (tests, internal tools).
+ */
+export function chartTemplatesDto(opts: { includePendingLegalReview?: boolean } = {}): z.infer<typeof ChartTemplatesResponseSchema> {
+  return { templates: (opts.includePendingLegalReview ? CHART_TEMPLATES : OFFERED_CHART_TEMPLATES).map((t) => JSON.parse(JSON.stringify(t)) as z.infer<typeof ChartTemplateDtoSchema>) };
 }
 
 export const ProductChartImportResponseSchema = z.object({

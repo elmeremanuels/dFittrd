@@ -56,16 +56,20 @@ TENSION_BELOW_HIP_CM = 12.0  # restmode graded: the tension zone reaches this fa
 #   run the cloth in the regime Blender's own fabric presets are tuned for and pick the drapiest one that does not
 #   stretch: Silk's mass (0.15), bending (0.05), shear and compression (5) and air drag (1); Cotton's tension (15) and
 #   damping (5), because a woven viscose does not grow under its own weight (bundle stretchPct 1.5) and the damping
-#   settles the hem sooner. The 165 gsm then enters only through the band: the band's tension is set so that
-#   pulling it to its MEASURED stretched girth takes `bandLimitForceOverWeight` x the skirt's weight (ASSUMED 3, about
-#   8.5 N for this 0.29 kg skirt: an ordinary waistband elastic; not measured), so a band that stretches further is
-#   softer, as in band_model.py. Gravity is switched on after the band has contracted (frames `ramp`): the POM rest
+#   settles the hem sooner. The fabric's 165 gsm does NOT enter this preset (review finding, 14 Nov 2026): the
+#   particle mass is the preset's 0.15 (scaled by the size's fabric area per particle against `massRefAreaCm2`, so
+#   every size and mesh has the same simulated weight per unit area), and the band force is a multiple of that
+#   SIMULATED weight, so a heavier or lighter fabric would drape identically. "Viscose 165 gsm" is met only by the
+#   choice of preset. The band's tension is set so that pulling it to its MEASURED stretched girth takes
+#   `bandLimitForceOverWeight` x the skirt's weight (ASSUMED 3; for the real 0.27-0.31 kg skirt that would be about
+#   8-9 N, an ordinary waistband elastic; not measured; override with --bandforce), so a band that stretches further
+#   is softer, as in band_model.py. Gravity is switched on after the band has contracted (frames `ramp`): the POM rest
 #   shape starts with the band at the fabric's girth, wider than the waist, and would fall before the band grips.
 CLOTH = {
     "default": {"mass": None, "tension": 10.0, "compression": 10.0, "shear": 5.0, "bending": 0.005, "damping": None, "ramp": None,
-                "airDamping": 1.0, "bandLimitForceOverWeight": None},
+                "airDamping": 1.0, "bandLimitForceOverWeight": None, "massRefAreaCm2": None},
     "viscose-soft": {"mass": 0.15, "tension": 15.0, "compression": 5.0, "shear": 5.0, "bending": 0.05, "damping": 5.0, "ramp": [10, 30],
-                     "airDamping": 1.0, "bandLimitForceOverWeight": 3.0},
+                     "airDamping": 1.0, "bandLimitForceOverWeight": 3.0, "massRefAreaCm2": 1.44},
 }
 CM = 0.01
 
@@ -73,7 +77,7 @@ CM = 0.01
 def args() -> dict:
     a = sys.argv[sys.argv.index("--") + 1:]
     out = {"frames": "96", "band": "W-6", "json": None, "quality": "10", "mass": "physical", "bending": None, "cloth": "default",
-           "pushout": "0.8", "restmode": "pushed", "model": None, "tensionfloor": "0.9"}
+           "pushout": "0.8", "restmode": "pushed", "model": None, "tensionfloor": "0.9", "floor": "0"}
     for i in range(0, len(a), 2):
         out[a[i].lstrip("-")] = a[i + 1]
     return out
@@ -147,7 +151,10 @@ def main() -> None:
     body.collision.thickness_inner = 0.02
     body.collision.cloth_friction = 10.0
     body.collision.damping = 0.5
-    floor = mesh_object("floor", np.array([[-1, -1, 0], [1, -1, 0], [1, 1, 0], [-1, 1, 0]], float), np.array([[0, 1, 2], [0, 2, 3]]))
+    # --floor: height of the floor in cm (default 0, the soles). A negative value stands the body on a plinth, so a
+    # hem longer than the leg hangs free instead of crumpling on the floor (for hem measurements).
+    floor_z = float(a["floor"]) * CM
+    floor = mesh_object("floor", np.array([[-1.5, -1.5, floor_z], [1.5, -1.5, floor_z], [1.5, 1.5, floor_z], [-1.5, 1.5, floor_z]], float), np.array([[0, 1, 2], [0, 2, 3]]))
     floor.modifiers.new("collision", "COLLISION")
     floor.collision.cloth_friction = 10.0
     torso_faces = bf[~arm[bf].any(1)]
@@ -172,10 +179,16 @@ def main() -> None:
     preset = dict(CLOTH[a["cloth"]])
     if a["bending"] is not None:
         preset["bending"] = float(a["bending"])
+    overrides = {}  # experiment overrides; part of the drape cache key (band_model.drape_key)
     if a.get("air"):
-        preset["airDamping"] = float(a["air"])
-    if a.get("bandforce"):  # experiment: override the ASSUMED band force (x the skirt's weight at the stretched girth)
-        preset["bandLimitForceOverWeight"] = float(a["bandforce"])
+        preset["airDamping"] = overrides["air"] = float(a["air"])
+    if a.get("bandforce"):  # override the ASSUMED band force (x the skirt's weight at the stretched girth)
+        preset["bandLimitForceOverWeight"] = overrides["bandForce"] = float(a["bandforce"])
+    if float(a["floor"]) != 0.0:
+        overrides["floorCm"] = float(a["floor"])
+    if a.get("ramp"):  # gravity ramp frames "start,end": a later ramp lets the band contract onto the body first
+        preset["ramp"] = [int(x) for x in a["ramp"].split(",")]
+        overrides["rampStart"], overrides["rampEnd"] = preset["ramp"]
     k = girth["relaxedCm"] / srow["bandGradedGirthCm"]
 
     # Start shape: pushed radially out of the body (torso and legs; arms ignored).
@@ -229,7 +242,9 @@ def main() -> None:
     # cloth then hardly sags (a stiff tube). "preset": Blender's silk preset vertex mass (0.15 kg), which its stiffness
     # presets are tuned against. Neither is calibrated to this fabric (stage 7 calibration is open).
     s.mass = preset["mass"] or (area * meta["weightGsm"] / 1000.0 / len(rest) if a["mass"] == "physical" else 0.15)
-    s.air_damping = float(a.get("air") or preset["airDamping"])
+    if preset["mass"] and preset["massRefAreaCm2"]:  # the same simulated weight per unit area for every size and mesh
+        s.mass = preset["mass"] * (area * 1e4 / len(rest)) / preset["massRefAreaCm2"]
+    s.air_damping = preset["airDamping"]
     s.vertex_group_shrink = "shrink"
     s.shrink_min = 0.0
     s.shrink_max = 1.0
@@ -295,6 +310,8 @@ def main() -> None:
     t_sim = time.process_time()
     w_sim = time.time()
     co = np.zeros(len(rest) * 3, dtype=np.float32)
+    hem_edge = rest[:, 1] < rest[:, 1].min() + 0.5  # the bottom ring(s): its hull is traced to show the settle noise
+    hem_trace = []
     for f in range(1, frames + 1):
         scene.frame_set(f)
         ev = garment.evaluated_get(bpy.context.evaluated_depsgraph_get())
@@ -304,6 +321,8 @@ def main() -> None:
             trace.append([f, round(float(np.linalg.norm(cur - prev, axis=1).max() / CM), 3), round(float(np.linalg.norm(cur - prev, axis=1).mean() / CM), 4), round(float(np.percentile(cur[:, 2], 2) / CM), 2)])
             if os.environ.get("DRAPE_DEBUG"):
                 print("TRACE", trace[-1], "gravity weight", ev.modifiers["cloth"].settings.effector_weights.gravity, flush=True)
+        if f > frames - 24 and hem_edge.sum() >= 8:
+            hem_trace.append(round(hull_perimeter(cur[hem_edge][:, :2]) / CM, 1))
         prev = cur.copy()
     cpu_sim = time.process_time() - t_sim
     wall_sim = time.time() - w_sim
@@ -336,8 +355,9 @@ def main() -> None:
         "size": size,
         "band": {**girth, "variant": a["band"], "gradedCm": srow["bandGradedGirthCm"], "restScale": round(k, 4), "settledGirthCm": round(band_girth, 1), "settledMeanY": round(band_y, 2), "startMeanY": round(float(rest[band][:, 1].mean()), 2), "strainVsRelaxed": round(band_girth / girth["relaxedCm"] - 1, 3), "pastStretched": band_girth > girth["stretchedCm"]},
         "dyCm": round(dy, 2),
-        "config": band_model.drape_key(girth, float(a["pushout"]), restmode, floor, a["cloth"]),
-        "cloth": {"preset": a["cloth"], **preset, "bandTension": round(float(elastic), 4)},
+        "config": band_model.drape_key(girth, float(a["pushout"]), restmode, floor, a["cloth"], overrides),
+        "cloth": {"preset": a["cloth"], **preset, "bandTension": round(float(elastic), 4),
+                  "simulatedWeightUnits": round(0.001 * s.mass * len(rest) * 9.81, 4), "realWeightAt165GsmN": round(area * meta["weightGsm"] / 1000.0 * 9.81, 3)},
         "tensionParticles": int((tens < 1.0).sum()),
         "pushedOut": pushed,
         "pushedRatioMin": round(float(ratio.min()), 3),
@@ -353,6 +373,8 @@ def main() -> None:
         "insideBody": inside,
         "insideDepthCmP95": round(float(np.percentile(depth, 95)), 2) if depth else 0.0,
         "settle": trace[-6:],
+        "settleUnit": "cm per frame (1/24 s), sampled every 4th frame: [frame, max, mean, 2nd percentile height]",
+        "hemEdgeHullLast24FramesCm": {"min": min(hem_trace), "max": max(hem_trace), "mean": round(float(np.mean(hem_trace)), 1)} if hem_trace else None,
         "settleFull": trace if a["cloth"] != "default" else None,
         "cpuSecondsSim": round(cpu_sim, 1),
         "wallSecondsSim": round(wall_sim, 1),

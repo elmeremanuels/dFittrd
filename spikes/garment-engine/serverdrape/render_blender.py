@@ -4,6 +4,7 @@ blender -b --factory-startup -P render_blender.py -- --spec SPEC.json --out OUT.
 SPEC: {"items": [{"body": "x.obj", "garment": "y.bin", "indices": "indices.bin", "label": "AU 8"}, ...],
        "view": "front" | "side" | "back", "title": "...", "colour": "#A44B48", "width": 1500, "height": 900}
 garment may be null (body only). Flat colour by default. Optional: an item's "view" overrides the spec's; an item's
+Optional "floorM": the floor's height in m (default 0).
 "uvs" (Float32 uv per vertex, u around the garment) with the spec's "texture" (an image file outside the repo, e.g. the
 stage-4t bake) textures that garment; an item's "colour" overrides the cloth colour. Shop images stay out of the repo.
 """
@@ -154,7 +155,8 @@ def main():
         L.rotation_euler = (Vector((0, 0, 1.0)) - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
         sc.collection.objects.link(L)
     floor = bpy.data.meshes.new("floor")
-    floor.from_pydata([(-6, -6, 0), (6, -6, 0), (6, 6, 0), (-6, 6, 0)], [], [(0, 1, 2, 3)])
+    fz = spec.get("floorM", 0.0)  # below 0 when the drapes were run with the floor lowered (drape_blender.py --floor)
+    floor.from_pydata([(-6, -6, fz), (6, -6, fz), (6, 6, fz), (-6, 6, fz)], [], [(0, 1, 2, 3)])
     fo = bpy.data.objects.new("floor", floor)
     floor.materials.append(material("floorm", "#E8E1D7", 0.9))
     sc.collection.objects.link(fo)

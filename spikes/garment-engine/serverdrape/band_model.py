@@ -122,7 +122,8 @@ def band_girth(model: dict, variant: str, size: str) -> dict:
             "elasticToFabricStiffness": round(_elastic(model, ratio), 5), "source": f"ASSUMED {variant}"}
 
 
-def drape_key(girth: dict, pushout_cm: float, restmode: str, tension_floor: float = 0.0, cloth: str = "default") -> dict:
+def drape_key(girth: dict, pushout_cm: float, restmode: str, tension_floor: float = 0.0, cloth: str = "default",
+              overrides: dict | None = None) -> dict:
     """Everything a drape's result depends on beyond body, size, rest geometry and the solver constants: the grid driver
     re-runs a cached drape when this differs (e.g. after `measured` is filled or corrected)."""
     key = {"relaxedCm": round(girth["relaxedCm"], 2), "stretchedCm": round(girth["stretchedCm"], 2),
@@ -131,6 +132,8 @@ def drape_key(girth: dict, pushout_cm: float, restmode: str, tension_floor: floa
         key["tensionFloor"] = round(tension_floor, 3)
     if cloth != "default":
         key["cloth"] = cloth  # drape_blender.py CLOTH preset; absent for the first runs' values
+    for name, value in sorted((overrides or {}).items()):  # --bandforce, --air, --floor: absent when not overridden
+        key[name] = round(float(value), 4)
     return key
 
 

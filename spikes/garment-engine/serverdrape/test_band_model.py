@@ -103,6 +103,15 @@ class DrapeKey(unittest.TestCase):
         self.assertEqual(k, band_model.cached_key({"config": dict(k)}))
         self.assertEqual(band_model.drape_key(g, 0.8, "pushed", 0.0, "viscose-soft")["cloth"], "viscose-soft")
 
+    def test_experiment_overrides_are_in_the_key(self):
+        g = {"relaxedCm": 67, "stretchedCm": 94, "elasticToFabricStiffness": 0.09926}
+        base = band_model.drape_key(g, 0.8, "pushed", 0.0, "viscose-soft")
+        self.assertEqual(base, band_model.drape_key(g, 0.8, "pushed", 0.0, "viscose-soft", {}))
+        forced = band_model.drape_key(g, 0.8, "pushed", 0.0, "viscose-soft", {"bandForce": 8, "floorCm": -40})
+        self.assertNotEqual(base, forced)
+        self.assertEqual((forced["bandForce"], forced["floorCm"]), (8.0, -40.0))
+        self.assertNotEqual(forced, band_model.drape_key(g, 0.8, "pushed", 0.0, "viscose-soft", {"bandForce": 3, "floorCm": -40}))
+
 
 class SingleSample(unittest.TestCase):
     def setUp(self):

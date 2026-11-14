@@ -4,7 +4,8 @@ python3 run_grid.py <outDir> <bodyIds,...> <sizes,...> <bandVariants,...> [frame
 Writes <outDir>/drapes/<band><TAG>/<body>__<size>.bin/.json. A cached drape is reused only when its key (the resolved
 band girths and stiffness, push-out, rest mode: band_model.drape_key) matches what band-model.json gives now; otherwise
 it is re-run (so correcting `measured` re-drapes). Env: BLENDER (binary), JOBS (2), PUSHOUT (cm, 0.8),
-RESTMODE (pushed | graded | gradedall), CLOTH (default | viscose-soft), TENSION_FLOOR (0.9, graded only), TAG (suffix of the output directory, e.g. "+graded"), BAND_MODEL (band-model.json path).
+RESTMODE (pushed | graded | gradedall), CLOTH (default | viscose-soft), BANDFORCE (x skirt weight at the stretched
+girth, overrides the preset's ASSUMED 3), FLOOR_CM (floor height, e.g. -40 = body on a plinth), AIR (air drag), RAMP ("start,end" gravity ramp frames), TENSION_FLOOR (0.9, graded only), TAG (suffix of the output directory, e.g. "+graded"), BAND_MODEL (band-model.json path).
 """
 import itertools
 import json
@@ -23,13 +24,19 @@ RESTMODE = os.environ.get("RESTMODE", "pushed")
 FLOOR = float(os.environ.get("TENSION_FLOOR", "0.9"))
 TAG = os.environ.get("TAG", "")
 CLOTH = os.environ.get("CLOTH", "default")  # drape_blender.py CLOTH preset
+OVERRIDES = {k: float(os.environ[e]) for k, e in (("bandForce", "BANDFORCE"), ("floorCm", "FLOOR_CM"), ("air", "AIR"))
+             if os.environ.get(e) and not (k == "floorCm" and float(os.environ[e]) == 0.0)}
+FLAGS = {"bandForce": "--bandforce", "floorCm": "--floor", "air": "--air"}
+RAMP = os.environ.get("RAMP")  # "start,end" frames of the gravity ramp (drape_blender.py --ramp)
+if RAMP:
+    OVERRIDES["rampStart"], OVERRIDES["rampEnd"] = (float(x) for x in RAMP.split(","))
 
 
 def job(out, body, size, band, frames, model):
     d = os.path.join(out, "drapes", band + TAG)
     os.makedirs(d, exist_ok=True)
     base = os.path.join(d, f"{body}__{size}")
-    want = band_model.drape_key(band_model.band_girth(model, band, size), PUSHOUT, RESTMODE, FLOOR, CLOTH)
+    want = band_model.drape_key(band_model.band_girth(model, band, size), PUSHOUT, RESTMODE, FLOOR, CLOTH, OVERRIDES)
     if os.path.exists(base + ".json"):
         have = band_model.cached_key(json.load(open(base + ".json")))
         if have == want:
@@ -40,6 +47,11 @@ def job(out, body, size, band, frames, model):
            "--body", os.path.join(out, "bodies", body + ".obj"), "--rest", os.path.join(out, "rest"), "--size", size,
            "--band", band, "--out", base + ".bin", "--json", base + ".json", "--frames", str(frames),
            "--pushout", str(PUSHOUT), "--restmode", RESTMODE, "--tensionfloor", str(FLOOR), "--cloth", CLOTH]
+    for k, v in OVERRIDES.items():
+        if k in FLAGS:
+            cmd += [FLAGS[k], str(v)]
+    if RAMP:
+        cmd += ["--ramp", RAMP]
     if os.environ.get("BAND_MODEL"):
         cmd += ["--model", os.environ["BAND_MODEL"]]
     r = subprocess.run(cmd, capture_output=True, text=True)

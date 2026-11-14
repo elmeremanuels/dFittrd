@@ -249,6 +249,8 @@ async function sizeRingsStep(frame, log, shot, name = '3b-size-rings-other') {
   await frame.locator(`[data-testid="size-rings"]:not([data-size="${rec}"])`).waitFor();
   const next = await state();
   if (next.girths === first.girths) throw new Error(`size rings: switching ${first.size} → ${next.size} did not change the rings (${next.girths})`);
+  // bring the hem chip (the lowest label of the figure) into view, so the screenshot shows all rings
+  await frame.getByTestId('size-ring-chips').locator('span[data-testid^="size-ring-chip-"]').last().scrollIntoViewIfNeeded().catch(() => {});
   await shot(name);
   log(`ok: size rings ${first.size} [${first.chips}] → ${next.size} [${next.chips}]`);
   await frame.getByRole('radiogroup', { name: /compare sizes/i }).getByRole('radio', { name: new RegExp(`^${rec}\\b`) }).click();
@@ -285,12 +287,17 @@ async function threeDStep(page, base, t, log, shot) {
   await choose.waitFor();
   const size = (await choose.innerText()).trim().replace(/^choose size\s+/i, '').trim();
   if (t.rings === 'pilot-skirt') {
-    // The pilot skirt's 2D rings in the real embed: waist (with the ASSUMED band range), hip, hem.
+    // The pilot skirt's 2D rings in the real embed: waist (with the band range from the shop's tape), the
+    // tape-measured garment hip and the hem, each labelled measured or estimated for the size on screen.
     await frame.locator('[data-testid="size-rings"]').waitFor();
     for (const k of ['waist', 'hip', 'hem']) await frame.getByTestId(`size-ring-chip-${k}`).waitFor();
     const waistChip = (await frame.getByTestId('size-ring-chip-waist').innerText()).replace(/\s+/g, ' ');
-    if (!/band \d+-\d+ cm assumed/.test(waistChip)) throw new Error(`3D ${t.name}: the waist ring does not show the assumed band range: "${waistChip}"`);
-    if (!/assumed/.test(await frame.getByTestId('size-ring-chip-hem').innerText())) throw new Error(`3D ${t.name}: the hem ring is not labelled assumed`);
+    const src = '(measured|estimated|rough estimate)';
+    if (!new RegExp(`by the size chart.*band [\\d.]+-[\\d.]+ cm ${src}`).test(waistChip)) throw new Error(`3D ${t.name}: the waist ring does not show the band range with its source: "${waistChip}"`);
+    if (!new RegExp(`skirt [\\d.]+ cm ${src}`).test(await frame.getByTestId('size-ring-chip-hip').innerText())) throw new Error(`3D ${t.name}: the hip ring does not show the tape-measured garment hip`);
+    if (!new RegExp(`[\\d.]+ cm ${src}`).test(await frame.getByTestId('size-ring-chip-hem').innerText())) throw new Error(`3D ${t.name}: the hem ring is not labelled measured or estimated`);
+    const legend = (await frame.getByTestId('size-rings-legend').innerText()).replace(/\s+/g, ' ');
+    if (!/The waist ring shows the size chart/.test(legend) || /Rings show the size chart/.test(legend)) throw new Error(`3D ${t.name}: the legend does not limit "size chart plus ease" to the waist ring: "${legend}"`);
     await sizeRingsStep(frame, log, shot, `3b-size-rings-${t.name}`);
   }
   const open = frame.getByTestId('garment3d-open');

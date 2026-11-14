@@ -31,6 +31,7 @@ import { SHOP, buildShopPayload, rankCandidates, type ShopifyProduct } from './s
 import { checkImageBytes, committedImages, imageRecordChanges } from './shopImages';
 import { threeDReadiness, type ImageRecord } from './shopReadiness';
 import { SHOP_IMAGE_CLASSIFICATION, SHOP_REJECTED_TYPES, SHOP_SELECTION, SHOP_UNCOVERED_CATEGORIES } from './shopSelection';
+import { applyTape, parseTape } from './shopTape';
 
 const { values } = parseArgs({
   args: process.argv.slice(2).filter((a) => a !== '--'),
@@ -176,7 +177,10 @@ async function main(): Promise<void> {
     });
     imagesOut[sel.handle] = records;
 
-    const built = buildShopPayload(p);
+    // Shop tape measurements (data/<shop>/tape/<handle>.json, committed) put a length into the payload.
+    const tapeFile = join(dataDir, 'tape', `${sel.handle}.json`);
+    const fromText = buildShopPayload(p);
+    const built = existsSync(tapeFile) ? applyTape(fromText, parseTape(JSON.parse(readFileSync(tapeFile, 'utf8'))), relative(dataDir, tapeFile)) : fromText;
     const ranking = rankCandidates(products, sel.productType).slice(0, 5);
     productsOut.push({
       ...built,
@@ -198,6 +202,7 @@ async function main(): Promise<void> {
       sizeChart: "AU size options use AU_WOMENS_BODY_CHART (@curtain/schema, docs/research/au-size-chart.md) restricted to the sizes offered, sizeChartType 'body'; S-M style options use the mean of the AU rows the stated range covers; one-size items use flat measurements from the text as a 'garment' chart.",
       baseSize: 'AU 12 (or the range that holds it) for every size-ranged item: our default, not stated by the shop. GarmentPayload v1 has no baseSize field, so it sits beside the payload.',
       ease: 'Only where the shop prints garment measurements: printed value at the base size minus the AU body chart at the base size.',
+      tape: 'Where the shop tape-measured the garment (tape/<handle>.json): lengthCm.waist_to_hem is the mean over the MEASURED sizes; the elastic band, hem sweep, garment hip and per-size values stay in the tape file (no ease.hip: one number misstates the uneven measured hips) (src/shopTape.ts says what GarmentPayload v1 cannot carry).',
       fabric: 'The fabric sentence of the description (labels, percentages, "crafted from", never styling advice) through resolveFabricText/fabricFromText; the fabric library fills weight, stretch, drape, opacity and sheen. `blend` only when the text states the composition ("100% rayon", "65% acrylic 35% wool"); a bare fibre name ("rayon") gives no blend and a warning.',
       images: 'images.json: every image looked at and classified by hand; sha256 of the file as downloaded.',
     },

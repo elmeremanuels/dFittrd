@@ -3,8 +3,12 @@
  * garment's graded girths at bust (tops and dresses), waist, hip and hem drawn as rings around the
  * 2D figure, plus faint "ghost" rings of the neighbouring sizes. Pure geometry over the fit
  * engine's own per-point output (`chartCm`, `bodyCm`, `band`): this file never decides a size or a
- * band. The waistband and hem come from `ringInputs.ts` and carry their source (assumed /
- * measured) into the label.
+ * band. The waistband, the garment's own hip girth and the hem come from `ringInputs.ts` and carry
+ * their source for the size on screen (measured / interpolated / extrapolated / assumed) into the
+ * label. The waist ring of an elastic band stays the engine's chart girth (the tape has no single
+ * waist girth, only a relaxed-to-stretched range), so its chip says "by the size chart" instead of a
+ * room figure that the band range printed under it would contradict. A hip the engine does not score (an A-line) is drawn at the garment's tape-measured hip
+ * girth when there is one, with the room as plain arithmetic and still without a tight / loose word.
  *
  * A ring is the front view of a horizontal ellipse at its body level: half-width from the girth by
  * the same rule the body outline uses (`halfWidthFromGirth`), so a ring smaller than the body sits
@@ -14,7 +18,7 @@ import { easeTargetFor, fitGapsForRender, isPointFit, type Band, type FitResult,
 import type { GarmentPayload, UserBody } from '@curtain/schema';
 import { cmToIn, type Units } from '@/embed/units';
 import { bodyGeometry, garmentGeometry, halfWidthFromGirth, HEM_DEPTH, levelY, MAX_RING_RX, type BodyGeometry } from './body';
-import { bandSweep, type GarmentRingInputs, type RingSource } from './ringInputs';
+import { bandSweep, joinSizes, sourceAt, sourceSentence, SOURCE_WORD, type GarmentRingInputs, type RingSource } from './ringInputs';
 
 export type RingKey = 'bust' | 'waist' | 'hip' | 'hem';
 
@@ -51,7 +55,9 @@ export interface Ring {
   chipNote?: string;
   /** One sentence for the list and screen readers. */
   text: string;
-  /** Elastic band range (assumed / measured), when known. */
+  /** The ring is drawn narrower than its girth, because the full girth does not fit the picture. */
+  clamped?: boolean;
+  /** Elastic band range and its source for this size, when known. */
   stretch?: { relaxedCm: number; stretchedCm: number; relaxedRx: number; stretchedRx: number; source: RingSource };
 }
 
@@ -75,7 +81,7 @@ export interface RingOverlay {
 }
 
 export interface RingOverlayInput {
-  garment: Pick<GarmentPayload, 'category' | 'sizeChart' | 'sizeChartType' | 'stretchZones' | 'patternBlock'> & Partial<Pick<GarmentPayload, 'ease'>>;
+  garment: Pick<GarmentPayload, 'category' | 'sizeChart' | 'sizeChartType' | 'stretchZones' | 'patternBlock'> & Partial<Pick<GarmentPayload, 'ease' | 'subcategory'>>;
   fit: FitResult;
   size: string;
   body: BodyGeometry;
@@ -124,6 +130,16 @@ export function roomText(roomCm: number, units: Units = 'metric', approx = false
   return roomCm > 0 ? `${roomLength(roomCm, units)} room` : `${roomLength(-roomCm, units)} short`;
 }
 
+/**
+ * A tape girth for a label: like `roomLength`, but a half centimetre is kept ("75.5 cm"), so an
+ * interpolated band of 75.5 cm is not printed as the shopper's own 76 cm waist.
+ */
+export function tapeLength(cm: number, units: Units = 'metric'): string {
+  if (units === 'imperial') return roomLength(cm, units);
+  const half = Math.round(cm * 2) / 2;
+  return `${Number.isInteger(half) ? half : half.toFixed(1)} cm`;
+}
+
 /** "you 76 cm" / "you about 76 cm (estimated from your height and weight)". */
 function youText(bodyCm: number, units: Units, estimated: boolean): string {
   return estimated ? `you about ${roomLength(bodyCm, units)} (estimated from your height and weight)` : `you ${roomLength(bodyCm, units)}`;
@@ -139,7 +155,6 @@ function bodyHalf(key: Exclude<RingKey, 'hem'>, g: BodyGeometry): number {
   return key === 'bust' ? g.bustHalf : key === 'waist' ? g.waistHalf : g.hipHalf;
 }
 
-const sourceText: Record<RingSource, string> = { measured: 'measured', assumed: 'assumed, not measured' };
 
 function ringsFor(input: RingOverlayInput, sizeFit: SizeFit): Ring[] {
   const { garment, fit, body, measurements, inputs, hemY, units = 'metric', estimated = [] } = input;
@@ -169,11 +184,25 @@ function ringsFor(input: RingOverlayInput, sizeFit: SizeFit): Ring[] {
         text: `${label(key)}: ${BAND_WORD[pf.band].toLowerCase()}, ${roomText(room, units, est)} (${girthText(pf.chartCm, bodyChart, units)}, ${youText(pf.bodyCm, units, est)})`,
       };
     } else if (skipped && row) {
-      // The engine does not score this point for the cut (e.g. an A-line hip): draw the chart girth,
-      // say why it is not checked, and give no tight / loose word.
+      // The engine does not score this point for the cut (e.g. an A-line hip): no tight / loose word.
       const raw = row[key as Point & keyof typeof row] as number | undefined;
       const bodyCm = measurements?.[key];
-      if (raw !== undefined) {
+      const tapeCm = key === 'hip' ? inputs?.hip?.girthCm[sizeFit.size] : undefined;
+      if (tapeCm !== undefined && inputs?.hip) {
+        // The garment's own hip girth from the tape: drawn as it is, room is plain arithmetic.
+        const src = sourceAt(inputs.hip, sizeFit.size);
+        const rx = Math.min(MAX_RX, halfWidthFromGirth(tapeCm, ppc, DEPTH[key]));
+        const room = bodyCm !== undefined ? Math.round((tapeCm - bodyCm) * 10) / 10 : null;
+        const where = inputs.hip.belowBandCm != null ? `${roomLength(inputs.hip.belowBandCm, units)} below the band` : 'at its hip line';
+        ring = {
+          key, size: sizeFit.size, y, rx, ry: Math.max(2.5, rx * TILT), bodyRx,
+          garmentCm: tapeCm, bodyCm: bodyCm ?? null, roomCm: room, band: null, source: src, basis: 'garment', bodyEstimated: est,
+          chip: ['Hips', room !== null ? roomText(room, units, est) : `${tapeLength(tapeCm, units)} around`],
+          chipNote: `${/skirt/.test(garment.subcategory ?? '') ? 'skirt' : 'garment'} ${tapeLength(tapeCm, units)} ${SOURCE_WORD[src]}`,
+          text: `${label(key)}: the garment is ${tapeLength(tapeCm, units)} around ${where} (${sourceSentence(src, inputs.measuredSizes)})${room !== null ? `, ${youText(bodyCm!, units, est)}: ${roomText(room, units, est)}` : ''}; no tight or loose word, ${skipped.label}`,
+        };
+      } else if (raw !== undefined) {
+        // No tape: draw the chart girth and say why it is not checked.
         // The engine's own designed-ease rule (garment ease, then block, then category), not a copy.
         const ease = bodyChart ? (easeTargetFor({ ...garment, id: '', brand: '', fabric: { stretchPct: 0 } }, key as Point) ?? 0) : 0;
         const garmentCm = Math.round((raw + ease) * 10) / 10;
@@ -189,35 +218,42 @@ function ringsFor(input: RingOverlayInput, sizeFit: SizeFit): Ring[] {
       }
     }
     if (!ring) continue;
+    if (pf && key === 'hip' && inputs?.hip?.girthCm[sizeFit.size] !== undefined) {
+      // The engine scored the hip from the chart; the tape girth is added as information only.
+      const src = sourceAt(inputs.hip, sizeFit.size);
+      ring.text += `; the garment itself is ${tapeLength(inputs.hip.girthCm[sizeFit.size]!, units)} around at its hip line (${sourceSentence(src, inputs.measuredSizes)})`;
+    }
     if (key === 'waist' && elastic) {
       const relaxed = inputs?.band?.relaxedCm[sizeFit.size];
       const stretched = inputs?.band?.stretchedCm[sizeFit.size];
       if (inputs?.band && relaxed !== undefined && stretched !== undefined) {
+        const bandSource = sourceAt(inputs.band, sizeFit.size);
         ring.stretch = {
           relaxedCm: relaxed,
           stretchedCm: stretched,
           relaxedRx: Math.min(MAX_RX, halfWidthFromGirth(relaxed, ppc, DEPTH.waist)),
           stretchedRx: Math.min(MAX_RX, halfWidthFromGirth(stretched, ppc, DEPTH.waist)),
-          source: inputs.band.source,
+          source: bandSource,
         };
-        ring.chipNote = `band ${roomLength(relaxed, units).replace(/ (cm|in)$/, '')}-${roomLength(stretched, units)}${inputs.band.source === 'measured' ? '' : ' assumed'}`;
-        ring.text += `; elastic band ${roomLength(relaxed, units)} relaxed to ${roomLength(stretched, units)} stretched (${sourceText[inputs.band.source]})`;
+        // The engine's word stays; the room figure (chart + designed ease minus body) would sit right above a
+        // band range that contradicts it, so the chip names its basis instead. The sentence keeps the number.
+        if (pf) ring.chip = [ring.chip[0], 'by the size chart'];
+        ring.chipNote = `band ${tapeLength(relaxed, units).replace(/ (cm|in)$/, '')}-${tapeLength(stretched, units)} ${SOURCE_WORD[bandSource]}`;
+        ring.text += `; elastic band ${tapeLength(relaxed, units)} relaxed to ${tapeLength(stretched, units)} stretched (${sourceSentence(bandSource, inputs.measuredSizes)})`;
         const hip = measurements?.hip;
         const waist = measurements?.waist;
         const sweep = hip !== undefined && waist !== undefined ? bandSweep(inputs.band, sizeFit.size, { waist, hip }) : null;
         if (sweep && inputs.band.closure === 'pull-on') {
           const c = sweep.hipClearanceCm;
           const hipCm = hip as number;
-          const bandMeasured = inputs.band.source === 'measured';
           const closureMeasured = inputs.band.closureSource === 'measured';
+          const bandHow = bandSource === 'measured' ? 'band measured' : bandSource === 'assumed' ? 'band girth assumed, not measured' : 'band girth estimated from the measured sizes';
           const how =
-            bandMeasured && closureMeasured
+            bandSource === 'measured' && closureMeasured
               ? 'measured'
-              : bandMeasured
-                ? 'band measured, pull-on closure assumed'
-                : closureMeasured
-                  ? 'band girth assumed, not measured'
-                  : 'band girth and pull-on closure assumed, not measured';
+              : bandSource === 'assumed' && !closureMeasured
+                ? 'band girth and pull-on closure assumed, not measured'
+                : `${bandHow}${closureMeasured ? '' : ', pull-on closure assumed'}`;
           ring.text +=
             c >= 0
               ? `; stretched, it passes over hips of ${roomLength(hipCm, units)} with ${roomLength(c, units)} to spare (${how})`
@@ -232,12 +268,16 @@ function ringsFor(input: RingOverlayInput, sizeFit: SizeFit): Ring[] {
   const sweep = inputs?.hem?.sweepCm[sizeFit.size];
   const y = ringY('hem', garment.category, hemY);
   if (inputs?.hem && sweep !== undefined && y !== null) {
-    const rx = Math.min(MAX_RX, halfWidthFromGirth(sweep, ppc, DEPTH.hem));
+    const full = halfWidthFromGirth(sweep, ppc, DEPTH.hem);
+    const rx = Math.min(MAX_RX, full);
+    const clamped = full > MAX_RX;
+    const src = sourceAt(inputs.hem, sizeFit.size);
     out.push({
       key: 'hem', size: sizeFit.size, y, rx, ry: Math.max(2.5, rx * TILT), bodyRx: null,
-      garmentCm: sweep, bodyCm: null, roomCm: null, band: null, source: inputs.hem.source, basis: 'garment', bodyEstimated: false,
-      chip: ['Hem', `${roomLength(sweep, units)}${inputs.hem.source === 'measured' ? '' : ' assumed'}`],
-      text: `Hem: ${roomLength(sweep, units)} around (${sourceText[inputs.hem.source]})`,
+      garmentCm: sweep, bodyCm: null, roomCm: null, band: null, source: src, basis: 'garment', bodyEstimated: false,
+      chip: ['Hem', `${tapeLength(sweep, units)} ${SOURCE_WORD[src]}`],
+      ...(clamped ? { clamped, chipNote: 'wider than drawn' } : {}),
+      text: `Hem: ${tapeLength(sweep, units)} around (${sourceSentence(src, inputs.measuredSizes)})${clamped ? '; spread out it is wider than this picture, so the ring is drawn narrower than the real hem' : ''}`,
     });
   }
   return out;
@@ -246,6 +286,21 @@ function ringsFor(input: RingOverlayInput, sizeFit: SizeFit): Ring[] {
 /** What a scored or chart girth is: the garment's, or (body chart) the body girth plus designed ease. */
 function girthText(cm: number, bodyChart: boolean, units: Units): string {
   return bodyChart ? `size chart body girth plus designed ease: ${roomLength(cm, units)}` : `garment ${roomLength(cm, units)} from the size chart`;
+}
+
+/** One legend phrase for a tape value of the size on screen: measured, estimated (how), or assumed. */
+function sourceNote(source: RingSource, size: string, measuredSizes: readonly string[] = []): string {
+  const on = measuredSizes.length ? ` on size${measuredSizes.length > 1 ? 's' : ''} ${joinSizes(measuredSizes)}` : '';
+  switch (source) {
+    case 'measured':
+      return `measured on the garment${on}`;
+    case 'interpolated':
+      return `measured${on}; size ${size} was not measured and is estimated from the sizes on either side (interpolated)`;
+    case 'extrapolated':
+      return `measured${on}; size ${size} was not measured and is estimated by continuing the step of the nearest measured sizes (extrapolated)`;
+    default:
+      return 'girth assumed, not measured yet';
+  }
 }
 
 function label(key: RingKey): string {
@@ -269,21 +324,40 @@ export function ringOverlay(input: RingOverlayInput): RingOverlay | null {
   if (before) ghosts.push({ size: before.size, side: 'smaller', rings: ringsFor(input, before) });
   if (after) ghosts.push({ size: after.size, side: 'larger', rings: ringsFor(input, after) });
   const bodyChart = garment.sizeChartType === 'body';
+  // Which rings are size-chart girths: all of them without garment inputs; with a tape or an assumed
+  // input the hip and hem rings are the garment's own girths, and the first sentence must not cover them.
+  const chartRings = selected.rings.filter((r) => r.source === 'chart').map((r) => label(r.key).toLowerCase());
+  const allChart = chartRings.length === selected.rings.length;
+  const which = allChart ? 'Rings show' : chartRings.length === 1 ? `The ${chartRings[0]} ring shows` : `The ${joinSizes(chartRings)} rings show`;
+  const one = !allChart && chartRings.length === 1;
+  const others = allChart ? '' : ' The other rings are the garment’s own girths; each says below whether it is measured, estimated or assumed.';
   const notes = [
-    bodyChart
-      ? 'Rings show the size chart’s body girths plus the designed ease, around a figure drawn from your answers: an estimate, not a measured garment.'
-      : 'Rings show the garment’s size-chart girths around a figure drawn from your answers: an estimate, not a measured garment.',
+    chartRings.length === 0
+      ? 'Rings show the garment’s own girths around a figure drawn from your answers: the picture is an estimate; each ring says below whether it is measured, estimated or assumed.'
+      : bodyChart
+        ? `${which} the size chart’s body girth${one ? '' : 's'} plus the designed ease, around a figure drawn from your answers: an estimate, not a measured garment.${others}`
+        : `${which} the garment’s size-chart girth${one ? '' : 's'} around a figure drawn from your answers: an estimate, not a measured garment.${others}`,
   ];
   if ((input.estimated ?? []).some((k) => (POINTS_FOR[garment.category] ?? []).includes(k as RingKey)))
     notes.push('Body girths marked “about” are estimated from your height and weight; add your measurements for exact numbers.');
+  // The first tape note says in full where the numbers come from; the next ones use one word.
+  let explained = false;
+  const how = (source: RingSource): string => {
+    if (explained || source === 'assumed') return source === 'assumed' ? 'assumed, not measured yet' : SOURCE_WORD[source];
+    explained = true;
+    return sourceNote(source, size, inputs?.measuredSizes);
+  };
   const band = inputs?.band;
   if ((garment.stretchZones ?? []).includes('waistband'))
     notes.push(
       band
-        ? `Elastic waistband: ${band.source === 'measured' ? 'measured' : 'girth assumed, not measured yet'}; the waist ring is the size chart plus designed ease, the bracket under it the band’s relaxed-to-stretched range.`
+        ? `Elastic waistband: ${sourceAt(band, size) === 'assumed' ? 'girth assumed, not measured yet' : how(sourceAt(band, size))}; the waist ring is the size chart plus designed ease, the bracket under it the band’s relaxed-to-stretched range.`
         : 'Elastic waistband: its girth is not measured.',
     );
-  if (inputs?.hem) notes.push(`Hem: ${sourceText[inputs.hem.source]}.`);
+  if (inputs?.hip?.girthCm[size] !== undefined && selected.rings.some((r) => r.key === 'hip' && r.source !== 'chart'))
+    notes.push(`Hips: the garment’s own girth at its hip line, ${how(sourceAt(inputs.hip, size))}${inputs.hip.belowBandCm == null ? ' (the shop did not say how far below the band)' : ''}. The size advice does not use it.`);
+  if (inputs?.hem?.sweepCm[size] !== undefined)
+    notes.push(`Hem: ${how(sourceAt(inputs.hem, size))}${selected.rings.some((r) => r.key === 'hem' && r.clamped) ? '; wider than this picture can show, so it is drawn narrower than it is' : ''}.`);
   return { size, selected, ghosts, notes };
 }
 

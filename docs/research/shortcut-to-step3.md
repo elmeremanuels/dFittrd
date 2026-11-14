@@ -2,6 +2,8 @@
 
 Research date: 10 Nov 2026. Sources: six web, GitHub and Hugging Face research passes, then a verification pass on four of the six routes. Repo context comes from `docs/ENGINE-HANDOFF.md`, `docs/REFINEMENT.md`, `docs/research/garment-engine.md` and `spikes/garment-engine/data/bohohippychic/phase0-written.md`. Scores are the verified (adjusted) scores where a verification ran. Routes R4 and R6 were not verified, so they keep their research scores. All time estimates are agent estimates, not measurements.
 
+> **Caveat added 14 Nov 2026 (shop tape of the pilot skirt):** every "% of the graded spread survives" figure in this document divides the draped spread by the graded spread of the *reconstructed mesh* (about 20 cm AU 8→16, from the chart's 5 cm hip step), not of the real garment. The tape shows that mesh has 46–50 % of the real hem sweep and a chart hip 6–20 cm below the tape's. The figures describe what the drape does to the mesh; they do not say how much of the real skirt's size difference shows. See `docs/REFINEMENT.md` R3 (13–14 Nov) and "Tape measurements of the pilot skirt" in `spikes/garment-engine/README.md`.
+
 ---
 
 ## 1. The answer in 5 lines

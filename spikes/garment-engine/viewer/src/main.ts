@@ -26,7 +26,8 @@ import { bodyField, buildAvatar, mannequinMeasurements, sanitiseMeasurements, ty
 import { listBundles, loadBundle } from './bundle';
 import { stepCloth, isSettled } from './cloth';
 import { DrapePool } from './drapePool';
-import { FABRIC_PRESETS, drapeJobOf, drapeOptionsFrom, heatFor, necklineStrain, openSession, prepareFit, sizeLabels, viewerMaterial, type FabricPreset, type FitInstance, type GarmentSession } from './engine';
+import waistbandData from '../../data/bohohippychic/waistbands.json';
+import { FABRIC_PRESETS, bandFor, drapeJobOf, drapeOptionsFrom, heatFor, necklineStrain, openSession, prepareFit, sizeLabels, viewerMaterial, waistbandFromFile, type BandFileEntry, type DrapeOptions, type FabricPreset, type FitInstance, type GarmentSession } from './engine';
 import { anchorLabels, fitForBody, frontAt, frontOutline, type AnchorLabel } from './fitting';
 import { Figure, Outlines, Stage, meshGeometry, type OutlineSpec } from './scene';
 
@@ -68,8 +69,41 @@ const fixedSizes = (params.get('sizes') ?? '').split(',').map((x) => x.trim()).f
 /** `view=front|three-quarter|side`: each figure turns about its own axis (0°, 45°, 90°), so sizes side by side stay apart. */
 const VIEW_YAW_DEG: Readonly<Record<string, number>> = { front: 0, 'three-quarter': 45, side: 90 };
 const viewYawDeg = VIEW_YAW_DEG[params.get('view') ?? 'front'] ?? 0;
-/** Step-3 control (docs/research/shortcut-to-step3.md): `cling=0`, `loops=<retain>`, `rings=hip,waist`, `band=<relaxed>:<stretched>` (cm, always labelled an assumption; a measured band comes only from waistbands.json). Fixed per page load. */
+/** Step-3 control (docs/research/shortcut-to-step3.md): `cling=0`, `loops=<retain>`, `rings=hip,waist`, `band=<relaxed>:<stretched>` (cm, always labelled an assumption; a measured band comes only from waistbands.json: `band=measured`, `drapeFor`). Fixed per page load. */
 const DRAPE = drapeOptionsFrom((k) => params.get(k));
+/**
+ * `band=measured`: the shop's tape measurements of this product's waistband (data/bohohippychic/waistbands.json), the only
+ * way the page shows a measured band. Sizes the tape does not hold are interpolated or extrapolated and the fit line says
+ * so. A product without a measurement throws (the page shows the error) rather than fall back to a guess.
+ */
+function drapeFor(s: GarmentSession): DrapeOptions {
+  if (params.get('band') !== 'measured') return DRAPE;
+  // The page names an evaluated bundle `eval/<handle>`; the data file is keyed by the handle.
+  const handle = s.bundle.productId.split('/').pop()!;
+  const entry = (waistbandData as { products: Record<string, BandFileEntry | undefined> }).products[handle];
+  try {
+    return { ...DRAPE, waistband: waistbandFromFile(entry, s.bundle.grading) };
+  } catch (e) {
+    throw new Error(`band=measured: ${s.bundle.productId}: ${(e as Error).message}`);
+  }
+}
+/**
+ * `band=measured`: the on-model hip number is the grading's (the shop's chart, which the mesh is calibrated to), and the
+ * tape of the garment disagrees with it. The label then says which is which: "hip 97.2 chart · tape 112", with "≈" and
+ * "interpolated" / "extrapolated" for a size the shop did not measure (the rule of `bandFor`). The tape's hip height is
+ * not on record, so the two are not the same line on the garment.
+ */
+function hipLabelWithTape(s: GarmentSession, size: string, text: string): string {
+  if (params.get('band') !== 'measured') return text;
+  const entry = (waistbandData as { products: Record<string, BandFileEntry | undefined> }).products[s.bundle.productId.split('/').pop()!];
+  const labels = sizeLabels(s);
+  const sizes: Record<string, { relaxedCm: number; stretchedCm: number }> = {};
+  for (const [l, e] of Object.entries(entry?.sizes ?? {})) if (typeof e.hipCm === 'number' && labels.includes(l)) sizes[l] = { relaxedCm: e.hipCm, stretchedCm: e.hipCm };
+  if (Object.keys(sizes).length < 2 && !sizes[size]) return `${text} chart · tape: not measured`;
+  const t = sizes[size] ? { relaxedCm: sizes[size].relaxedCm, source: 'measured' } : bandFor({ relaxedCm: 0, stretchedCm: 0, sizes, assumed: false }, s.bundle.grading, size);
+  const v = Math.round(t.relaxedCm * 10) / 10;
+  return `${text} chart · tape ${t.source === 'measured' ? `${v}` : `≈${v} ${t.source}`}`;
+}
 const state = {
   productId: params.get('product') ?? '',
   body: 'mannequin' as BodyMode,
@@ -259,7 +293,7 @@ function ensureFit(s: GarmentSession, size: string): string {
   if (fits.has(key)) return key;
   const b = measurements();
   const av = avatarFor(b);
-  const f: LiveFit = { ...prepareFit(s, av.avatar, av.field, fitFor(s, b), size, viewerMaterial(state.fabric, s.bundle.material), 1.5, DRAPE), startedAt: performance.now(), settledMs: null, computeMs: 0, jobId: null, dirty: true, labels: null };
+  const f: LiveFit = { ...prepareFit(s, av.avatar, av.field, fitFor(s, b), size, viewerMaterial(state.fabric, s.bundle.material), 1.5, drapeFor(s)), startedAt: performance.now(), settledMs: null, computeMs: 0, jobId: null, dirty: true, labels: null };
   fits.set(key, f);
   if (pool) {
     f.jobId = pool.start(drapeJobOf(f), (p) => {
@@ -366,7 +400,7 @@ function updateLabels(): void {
       f.labels = [];
       for (const label of anchorLabels(s.bundle.grading, f.size, f.gaps, m.morphHeights)) {
         const at = frontAt(f.cloth.pos, f.chains, label.height);
-        if (at) f.labels.push({ label, at });
+        if (at) f.labels.push({ label: label.anchor === 'hip' ? { ...label, text: hipLabelWithTape(s, f.size, label.text) } : label, at });
       }
     }
     for (const { label, at } of f.labels) {

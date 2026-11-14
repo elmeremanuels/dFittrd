@@ -2,6 +2,8 @@
 
 Date: 10 Nov 2026. Branch `claude/step3-serverdrape`. Plan: `docs/research/shortcut-to-step3.md` §4, days 2-5 (R2 spike). Product: the pilot maxi skirt (`out/eval/crimson-wildflower-maxi-skirt`, run 17d bundle). Every render and every number below is an **estimate** from a simulation. Nothing was measured on a real garment or a real phone.
 
+> **Caveat added 14 Nov 2026 (shop tape of the pilot skirt):** every "% of the graded spread survives" figure in this document divides the draped spread by the graded spread of the *reconstructed mesh* (about 20 cm AU 8→16, from the chart's 5 cm hip step), not of the real garment. The tape shows that mesh has 46–50 % of the real hem sweep and a chart hip 6–20 cm below the tape's. The figures describe what the drape does to the mesh; they do not say how much of the real skirt's size difference shows. See `docs/REFINEMENT.md` R3 (13–14 Nov) and "Tape measurements of the pilot skirt" in `spikes/garment-engine/README.md`.
+
 ## 1. Answer
 
 Revised after review (second pass, same day). The first pass called this "a marginal GO on the hip, a clear GO on the hem". That overclaimed: the hem number was a fixed-height measure that the assumed band moved around, and the hip number depends on a solver parameter (the push-out offset). The numbers below replace it.

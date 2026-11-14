@@ -43,13 +43,16 @@ Chest, waist and hip sit inside the EN 13402-3 size intervals and match the body
 | XL | 114 | 102 | 108 | 42.5 | 53.5 | 177 | 85 | 43.5 |
 | XXL | 123 | 111 | 114.5 | 43.5 | 56.5 | 179 | 85.5 | 45.75 |
 
-**Sources (read 13 Nov 2026).**
+**Sources (read 13 Nov 2026, read again at source 14 Nov 2026).**
 
-- **Chest, waist, neck: EN 13402-3 men's values.** Chest and waist in 4 cm steps at drop −12 cm, the neck girth the standard associates with each chest girth, and the letter intervals (S 86–94, M 94–102, L 102–110, XL 110–118, XXL 118–129). Each letter size takes the midpoint of the two steps it combines. The standard itself is sold by CEN members and was **not** read: the values were read from the tables of the Wikipedia article "Joint European standard for size labelling of clothes" (article text CC BY-SA 4.0; only numbers were taken, no text). Check them against a bought copy of the standard before anyone calls the table "EN 13402".
-- **Everything else: ANSUR II**, the 2012 Anthropometric Survey of U.S. Army Personnel (report NATICK/TR-15/007, distribution statement on the report: "Approved for public release; distribution is unlimited"; a U.S. Government work, public domain in the United States, so commercial use is allowed). File `ANSUR_II_MALE_Public.csv` (4082 men) from https://www.openlab.psu.edu/ansur2/, sha256 `0547aea0…caac64` (full hash in `scripts/derive-male-table.ts`). The file is not in the repo. Per size, each value is the least-squares line of the measure on chest girth over all 4082 men, at the size's chest girth, rounded to 0.5 cm. `scripts/derive-male-table.ts <csv>` prints the table again.
+- **Chest, waist, neck: EN 13402-3 men's values.** Chest and waist in 4 cm steps at drop −12 cm, the neck girth the standard associates with each chest girth, and the letter intervals (S 86–94, M 94–102, L 102–110, XL 110–118, XXL 118–129). Each letter size takes the midpoint of the two steps it combines. The standard itself is sold by CEN members and was **not** read: the values were read from the tables of the Wikipedia article "Joint European standard for size labelling of clothes" (article text CC BY-SA 4.0; only numbers were taken, no text). The article cites BS EN 13402-3:2004; the 2013 and 2017 editions were not read, and neither was ISO 8559. The product must not call this ladder "EN 13402" until a bought copy of the current standard has been checked.
+- **Everything else: ANSUR II**, the 2012 Anthropometric Survey of U.S. Army Personnel (report NATICK/TR-15/007). Licence as read at source: the report's cover and its box 12 "Distribution / availability statement" both say "Approved for public release; distribution is unlimited" (PDF linked from the page below, opened 14 Nov 2026). The download page itself states no licence. A work of the U.S. Government is public domain in the United States; that is an inference from the report's origin, not a sentence in it, it says nothing about other countries, and two of the report's authors work for a contractor (Anthrotech). This package ships statistics derived from the file (five rows of rounded regression values), not the file or the report. File `ANSUR_II_MALE_Public.csv` (4082 men) from https://www.openlab.psu.edu/ansur2/, sha256 `0547aea0…caac64` (full hash in `scripts/derive-male-table.ts`). The file is not in the repo. Per size, each value is the least-squares line of the measure on chest girth over all 4082 men, at the size's chest girth, rounded to 0.5 cm. `scripts/derive-male-table.ts <csv>` prints the table again.
 - No SMPL, SMPL-X, Anny or other body model, and no scan, is used.
 
-**What the two sources say about each other.** At the same chest girth ANSUR's waist (measured at the navel) is 76 / 85 / 94 / 103.5 / 113.5, within 2.5 cm of the EN waist. ANSUR's neck girth is 36 / 38 / 40 / 41.5 / 44, 1.5 to 2 cm under the EN neck girth (the two are measured at different heights on the neck). The table uses the EN values.
+**The two sources do not measure the same waist or the same neck.** The table uses the EN values for both; ANSUR does not confirm them.
+
+- Waist: EN means the natural waist, between the top of the hip bones and the lower ribs. ANSUR's only waist girth is at the navel (omphalion), lower on the body: 76 / 85 / 94 / 103.5 / 113.5 at the five chest girths. That these land within 2.5 cm of the EN waist is not a check of the EN drop. The mesh puts the waist ring at the natural-waist level (0.621 of stature), not at the navel (0.602).
+- Neck: EN measures 2 cm below the Adam's apple and at the seventh cervical vertebra, so low and slanted. ANSUR's neck girth is at the Adam's apple, perpendicular to the neck's axis (36 / 38 / 40 / 41.5 / 44, 1.5 to 2 cm under EN); its second girth is at the base of the neck (mean 43.5). The EN value lies between the two. Definitions read in NATICK/TR-15/007, measurements 62 and 63.
 
 **Limits of the table.** ANSUR II is a military sample (young, fit, U.S.). It is not the civilian or the European population. Stature and inseam hardly follow chest girth (r = 0.25 and 0.12), so their steps per size are small. XS and 3XL are left out: 22 and 20 men in the sample.
 
@@ -84,7 +87,7 @@ const m = buildBody({ family: 'male', heightCm: 182, shoulderCm: 42, bust: 102, 
 const mesh = buildMannequinMesh(m);  // closed mesh, rings exact, same Mannequin interface as before
 ```
 
-`BodyInput` is the intended shape of `MountOptions.body` in `@curtain/garment-viewer` and of the 2D figure's props. Neither is wired yet; this package does not edit them.
+`BodyInput` is the intended shape of `MountOptions.body` in `@curtain/garment-viewer` and of the 2D figure's props. Neither is wired yet; this package does not edit them. D20 point 3 stands above this contract: a male body from this package does not make a men's product ready. A men's garment goes live only with the male body, a 3D drape built on it and men's fit points together; until then the product shows "Men's clothing: coming soon", and the male 2D figure alone is never the men's experience.
 
 ```ts
 interface BodyInput {
@@ -114,7 +117,7 @@ What the adopters must do themselves:
 - **Ring heights.** Use `mannequin.morphHeights`, never `NOMINAL_RING_HEIGHTS × stature`: the male rings sit at other levels (crotch 0.483 of stature against 0.455).
 - **2D figure.** `referenceMeasurements(familyShape('male'))` and `mannequin.rings` (width `2a`, depth `2b`, height `centre[1]`) give a male silhouette from the same numbers.
 
-## How the male M body reads (looked at, 13 Nov 2026)
+## How the male M body reads (looked at, 13 and 14 Nov 2026)
 
 `pnpm --filter @curtain/mannequin preview` renders female M and male M, front and side, at one scale.
 

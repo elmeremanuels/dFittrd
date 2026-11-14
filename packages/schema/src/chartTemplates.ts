@@ -44,6 +44,29 @@ export interface ChartSourceRef {
   /** When set, the source counts for these points only (its other numbers are comparison only). */
   points?: readonly ChartPoint[];
   note?: string;
+  /** What the publisher's own terms say about reusing its content, as read at `url` on `read`. */
+  terms?: ChartSourceTerms;
+}
+
+/**
+ * `personal-only`: the terms license the content for personal, non-commercial use only.
+ * `commercial-prohibited`: commercial use without permission is expressly forbidden.
+ * `tdm-reserved`: the publisher reserves commercial text and data mining (§ 44b UrhG).
+ * `silent`: the pages read say nothing on reuse of the site's content (no licence is granted).
+ * `not-read`: the terms could not be read.
+ * None of these is a licence for commercial use.
+ */
+export const CHART_SOURCE_REUSE = ['personal-only', 'commercial-prohibited', 'tdm-reserved', 'silent', 'not-read'] as const;
+export type ChartSourceReuse = (typeof CHART_SOURCE_REUSE)[number];
+
+export interface ChartSourceTerms {
+  /** The terms page(s) read. */
+  url: string;
+  /** Date read. */
+  read: string;
+  reuse: ChartSourceReuse;
+  /** What the page says, quoted or summarised. */
+  says: string;
 }
 
 /** One source chart as published, converted to cm (ranges → midpoint). */
@@ -75,8 +98,16 @@ export interface BodyChartTemplate extends TemplateBase {
   /** Body measurements in cm, one row per label in `sizes`. */
   rows: readonly SizeRow[];
   sources: readonly ChartSourceRef[];
-  /** Labels resting on fewer than three sources: shown as "weakly sourced" in the builder. */
+  /**
+   * Labels shown as an estimate in the builder: resting on fewer than three sources, or (men's
+   * templates) on sources that disagree by more than `MENS_WEAK_SPREAD_CM` on a girth.
+   */
   weakSizes: readonly string[];
+  /**
+   * `pending` = the template is not offered in any picker until counsel has answered whether its
+   * source charts may be used commercially (see `chartTemplatesMen.ts`). It still resolves by id.
+   */
+  legalReview?: 'pending';
 }
 
 export interface GarmentChartTemplate extends TemplateBase {
@@ -443,6 +474,14 @@ export const GARMENT_CHART_TEMPLATES: readonly GarmentChartTemplate[] = [
 
 export const CHART_TEMPLATES: readonly ChartTemplate[] = [...BODY_CHART_TEMPLATES, ...GARMENT_CHART_TEMPLATES];
 
+/** False for a template that waits for the legal review: it stays out of every picker. */
+export function isOfferedChartTemplate(t: ChartTemplate): boolean {
+  return !(t.kind === 'body' && t.legalReview === 'pending');
+}
+
+/** The templates a merchant is offered (Shopify chart builder, WooCommerce template picker). */
+export const OFFERED_CHART_TEMPLATES: readonly ChartTemplate[] = CHART_TEMPLATES.filter(isOfferedChartTemplate);
+
 export function chartTemplateById(id: string): ChartTemplate | undefined {
   return CHART_TEMPLATES.find((t) => t.id === id);
 }
@@ -707,6 +746,7 @@ const TemplateSourceSchema = z.object({
   inMedian: z.boolean(),
   points: z.array(z.enum(CHART_POINTS)).optional(),
   note: z.string().optional(),
+  terms: z.object({ url: z.string(), read: z.string(), reuse: z.enum(CHART_SOURCE_REUSE), says: z.string() }).optional(),
 });
 
 export const ChartTemplateDtoSchema = z.object({
@@ -719,6 +759,7 @@ export const ChartTemplateDtoSchema = z.object({
   region: z.enum(['AU', 'UK', 'EU', 'US', 'INT']).optional(),
   audience: GarmentAudienceSchema.optional(),
   generic: z.boolean().optional(),
+  legalReview: z.literal('pending').optional(),
   rows: z.array(SizeRowSchema).optional(),
   sources: z.array(TemplateSourceSchema).optional(),
   weakSizes: z.array(z.string()).optional(),
@@ -726,9 +767,12 @@ export const ChartTemplateDtoSchema = z.object({
 });
 export const ChartTemplatesResponseSchema = z.object({ templates: z.array(ChartTemplateDtoSchema) });
 
-/** Templates as plain JSON for the wire (the frozen constants copied). */
-export function chartTemplatesDto(): z.infer<typeof ChartTemplatesResponseSchema> {
-  return { templates: CHART_TEMPLATES.map((t) => JSON.parse(JSON.stringify(t)) as z.infer<typeof ChartTemplateDtoSchema>) };
+/**
+ * Templates as plain JSON for the wire (the frozen constants copied). Templates that wait for the
+ * legal review are left out unless `includePendingLegalReview` is set (tests, internal tools).
+ */
+export function chartTemplatesDto(opts: { includePendingLegalReview?: boolean } = {}): z.infer<typeof ChartTemplatesResponseSchema> {
+  return { templates: (opts.includePendingLegalReview ? CHART_TEMPLATES : OFFERED_CHART_TEMPLATES).map((t) => JSON.parse(JSON.stringify(t)) as z.infer<typeof ChartTemplateDtoSchema>) };
 }
 
 export const ProductChartImportResponseSchema = z.object({

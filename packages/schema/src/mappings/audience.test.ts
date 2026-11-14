@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AUDIENCE_ATTRIBUTE_FIELD, audienceOfTexts, audienceWords, coerceAudienceOverride, inferAudience, inferAudienceDecision } from './audience';
+import { AUDIENCE_ATTRIBUTE_FIELD, AUDIENCE_COMPOUND_TAILS, AUDIENCE_SOURCES, audienceOfTexts, isWeakAudienceSource, audienceWords, coerceAudienceOverride, inferAudience, inferAudienceDecision } from './audience';
 import { AUDIENCE_CASES } from './audienceCases';
 
 describe('inferAudience', () => {
@@ -21,12 +21,35 @@ describe('inferAudience', () => {
     expect(audienceWords('  ')).toEqual([]);
   });
 
-  it('reads ambiguous words only from structured fields', () => {
-    expect(audienceOfTexts(['Man'], true)).toBe('men');
-    expect(audienceOfTexts(['Man'], false)).toBeUndefined();
-    expect(audienceOfTexts(['Woman'], true)).toBe('women');
-    expect(audienceOfTexts(['Woman'], false)).toBeUndefined();
-    expect(audienceOfTexts([null, undefined, ''], true)).toBeUndefined();
+  it('reads the singular name-like words by source: anywhere, as a whole value, or never', () => {
+    expect(audienceOfTexts(['Man'], 'anywhere')).toBe('men');
+    expect(audienceOfTexts(['For the man'], 'anywhere')).toBe('men');
+    expect(audienceOfTexts(['Man'], 'whole')).toBe('men');
+    expect(audienceOfTexts(['Kleding > Heer'], 'whole')).toBe('men');
+    expect(audienceOfTexts(['Iron Man'], 'whole')).toBeUndefined();
+    expect(audienceOfTexts(['Man'], 'never')).toBeUndefined();
+    expect(audienceOfTexts(['Woman'], 'whole')).toBe('women');
+    expect(audienceOfTexts(['Wonder Woman'], 'whole')).toBeUndefined();
+    expect(audienceOfTexts(['Woman'], 'never')).toBeUndefined();
+    expect(audienceOfTexts([null, undefined, ''], 'anywhere')).toBeUndefined();
+  });
+
+  it('the false positives a review found in tags, collections and titles are pinned as cases', () => {
+    const names = AUDIENCE_CASES.map((c) => c.name);
+    for (const n of ['iron man as a tag', 'one-man-show as a tag', 'spider-man as a collection', 'isle of man as a product type', 'not for men', 'lady gaga as a tag', 'notre dame as a collection', 'herentals and herrenberg are towns', 'borrowed from the men', "men's fit on a women's product is a style"]) expect(names).toContain(n);
+  });
+
+  it('marks a title or a collection as a weak source', () => {
+    expect(AUDIENCE_SOURCES.filter(isWeakAudienceSource)).toEqual(['title', 'collections']);
+    expect(isWeakAudienceSource(inferAudienceDecision({ title: 'Men in Black Tee' })!.source)).toBe(true);
+    expect(isWeakAudienceSource(inferAudienceDecision({ override: 'men', title: 'Men in Black Tee' })!.source)).toBe(false);
+  });
+
+  it('a compound needs a clothing word after the prefix; the tail list is ASCII', () => {
+    for (const t of AUDIENCE_COMPOUND_TAILS) expect(t).toMatch(/^[a-z]+$/);
+    expect(audienceOfTexts(['Herenschoenen'], 'never')).toBe('men');
+    expect(audienceOfTexts(['Vrouwenkleding'], 'never')).toBe('women');
+    expect(audienceOfTexts(['Herenhuis'], 'never')).toBeUndefined();
   });
 
   it('coerces the override', () => {

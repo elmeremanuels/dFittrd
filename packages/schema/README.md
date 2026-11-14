@@ -112,14 +112,41 @@ implements the validate dry-run. `API_ROUTES` lists the method + path per DTO.
   a gender attribute, product type, category, tags, title and collections, strongest first, as whole
   words ("women" is not read as "men"). `coerceAudienceOverride`, the word lists and
   `AUDIENCE_CASES` (`mappings/audienceCases.ts`, replayed by the WooCommerce plugin's PHP twin) are
-  exported. It is a guess from text: "Men in Black Tee" reads as men's. The merchant override
-  (Shopify metafield `audience`, Woo meta `_curtain_audience`, value `none` = send nothing) is the fix.
+  exported.
+  - **It runs for every product on its next sync**, also for products that predate the field: the
+    field is optional in the schema, but a shop's payloads gain an audience wherever the product
+    data names one. The merchant override (Shopify metafield `audience`, Woo meta
+    `_curtain_audience`) corrects it; the value `none` sends nothing.
+  - The singular words "man", "woman", "lady", "dame", "heer", "vrouw" are names as often as
+    audiences. They are read anywhere only in the override and the gender attribute; in a product
+    type, category, tag or collection only as the whole value or a whole path segment ("Man",
+    "Man > Jeans", "gender:man"); never in a title. So "Iron Man", "Spider-Man", "Isle of Man
+    souvenirs", "Lady Gaga" and "Notre Dame" say nothing.
+  - A word after "not" / "niet" / "from" (up to two words back) is skipped ("not for men",
+    "borrowed from the men"); a word before "fit", "style", "cut", "look" or "inspired" is a style
+    ("Women's Tee (Men's fit)" is women's); a Dutch or German compound needs a clothing word after
+    the prefix (`herenjeans` yes, Herrenberg and Herentals no).
+  - It is still a guess from text: "Men in Black Tee" reads as men's. `isWeakAudienceSource(source)`
+    is true for `title` and `collections`; under D20 the web layer should not hide Try it on for a
+    `men` that rests on a weak source without the merchant's confirmation. The payload does not
+    carry the source: that wiring is not built.
 - `chartTemplatesMen.ts`: generic men's **body** templates, not any brand's chart, each cell the
   median of published charts read on 2026-11-13 with the source tables in the file:
-  `MENS_LETTER_BODY_TEMPLATE` (XS–3XL; chest, waist, seat), `MENS_EU_BODY_TEMPLATE` (44–58, German /
-  Dutch numbering; every size is marked weak, two sources per cell), `MENS_JEANS_WL_BODY_TEMPLATE`
-  (W/L grid; waist and inside leg only). `jeansSizeLabel`, `parseJeansSize`. No source page grants a
-  licence for its chart, the same open legal point as the women's templates.
+  `MENS_LETTER_BODY_TEMPLATE` (XS–3XL; chest, waist, seat; XXL and 3XL marked weak because the
+  sources differ by more than `MENS_WEAK_SPREAD_CM` = 10 cm), `MENS_EU_BODY_TEMPLATE` (44–58, German /
+  Dutch numbering; every size is marked weak, two sources per cell; BAUR's misprinted size 52 seat is
+  interpolated), `MENS_JEANS_WL_BODY_TEMPLATE` (W/L grid; waist and inside leg only, in effect the
+  inch label in cm). `jeansSizeLabel`, `parseJeansSize`.
+  - **Not offered yet.** Each source carries `terms` (the publisher's terms page, read 2026-11-14,
+    and what it says). No source allows commercial use: Nike and Arc'teryx license content for
+    personal, non-commercial use only, Rab forbids commercial use without authorisation, OTTO
+    reserves commercial text and data mining, Swix, Lidl, BAUR and Outdoor Renner are silent, BCF's
+    terms could not be read. The three templates therefore carry `legalReview: 'pending'` and are
+    left out of `OFFERED_CHART_TEMPLATES`, `chartTemplatesDto()` and the WooCommerce asset. They
+    still resolve by id. To release after counsel (Naomi) has answered: remove `legalReview` from
+    the templates. Open questions for her: are body measurement tables facts that may be reused;
+    may the source rows be stored verbatim in the repository (database right); the same for the
+    women's templates, which are offered today and rest on the same kind of source.
 - `fixtures/mens.ts`: `MENS_OXFORD_SHIRT`, `MENS_STRAIGHT_JEANS`, `MENS_TEST_BODIES` (slim, medium,
   broad; invented numbers). Kept out of `MOCK_GARMENTS`.
 

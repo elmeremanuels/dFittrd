@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   BODY_CHART_TEMPLATES,
+  CHART_SOURCE_REUSE,
   CHART_TEMPLATES,
   ChartTemplatesResponseSchema,
+  OFFERED_CHART_TEMPLATES,
+  isOfferedChartTemplate,
   bodyTemplateMatching,
   chartFromBodyTemplate,
   chartPayload,
@@ -16,6 +19,9 @@ import {
   MENS_BODY_CHART_TEMPLATES,
   MENS_CHART_SOURCE_SPREAD,
   MENS_CHART_SOURCES_ACCESSED,
+  MENS_CHART_TERMS_READ,
+  MENS_JEANS_CHART_SOURCES,
+  MENS_WEAK_SPREAD_CM,
   MENS_EU_BODY_TEMPLATE,
   MENS_EU_CHART_SOURCES,
   MENS_JEANS_WL_BODY_TEMPLATE,
@@ -66,24 +72,33 @@ describe("men's chart templates", () => {
       { size: 'XXL', bust: 123, waist: 108, hip: 121 },
       { size: '3XL', bust: 131, waist: 118.5, hip: 128 },
     ]);
-    expect(MENS_LETTER_BODY_TEMPLATE.weakSizes).toEqual([]);
+    // XXL and 3XL: four sources, but more than 10 cm apart on the chest and waist.
+    expect(MENS_LETTER_BODY_TEMPLATE.weakSizes).toEqual(['XXL', '3XL']);
+    expect(MENS_WEAK_SPREAD_CM).toBe(10);
+    expect(MENS_CHART_SOURCE_SPREAD['mens-letter-body']!['XXL']!.bust).toBe(14);
+    for (const size of ['XS', 'S', 'M', 'L', 'XL']) for (const d of Object.values(MENS_CHART_SOURCE_SPREAD['mens-letter-body']![size]!)) expect(d, size).toBeLessThanOrEqual(10);
     expect(MENS_LETTER_BODY_TEMPLATE.defaultSizes).toEqual(['S', 'M', 'L', 'XL', 'XXL']);
   });
 
-  it('pins the 44–58 chart; every size rests on two sources, size 52 seat on one', () => {
+  it('pins the 44–58 chart; every size rests on two sources, the BAUR seat of size 52 is interpolated', () => {
     expect(MENS_EU_BODY_TEMPLATE.rows).toEqual([
       { size: '44', bust: 88, waist: 74.5, hip: 92.5 },
       { size: '46', bust: 92, waist: 78.5, hip: 96 },
       { size: '48', bust: 96, waist: 83, hip: 99.5 },
       { size: '50', bust: 100, waist: 87.5, hip: 103 },
-      { size: '52', bust: 104, waist: 92.5, hip: 105.5 },
+      { size: '52', bust: 104, waist: 92.5, hip: 106.5 },
       { size: '54', bust: 108, waist: 97.5, hip: 110 },
       { size: '56', bust: 112, waist: 102.5, hip: 113.5 },
       { size: '58', bust: 116, waist: 107.5, hip: 117 },
     ]);
     expect(MENS_EU_BODY_TEMPLATE.weakSizes).toEqual([...MENS_EU_BODY_TEMPLATE.sizes]);
     const { counts } = mensChartFromSources(['50', '52'], ['bust', 'waist', 'hip'], MENS_EU_CHART_SOURCES);
-    expect(counts).toEqual({ '50': 2, '52': 1 });
+    expect(counts).toEqual({ '50': 2, '52': 2 });
+    // The seat now steps evenly (3–4 cm) through 50, 52, 54.
+    const seat = MENS_EU_BODY_TEMPLATE.rows.map((r) => r.hip!);
+    for (let i = 1; i < seat.length; i++) expect(seat[i]! - seat[i - 1]!, String(i)).toBeGreaterThanOrEqual(3);
+    for (let i = 1; i < seat.length; i++) expect(seat[i]! - seat[i - 1]!, String(i)).toBeLessThanOrEqual(4);
+    expect(MENS_EU_CHART_SOURCES.find((s) => s.id === 'baur')!.note).toMatch(/interpolated by us/);
     // BAUR repeats the OTTO chest and waist: it must not count for them.
     const baur = MENS_EU_CHART_SOURCES.find((s) => s.id === 'baur')!;
     const otto = MENS_EU_CHART_SOURCES.find((s) => s.id === 'otto')!;
@@ -113,6 +128,49 @@ describe("men's chart templates", () => {
       expect(Math.abs(r.waist! - s.waist * 2.54), r.size).toBeLessThanOrEqual(1);
       expect(Math.abs(r.inseam! - s.length * 2.54), r.size).toBeLessThanOrEqual(1);
     }
+  });
+
+  it('records the terms of every source, none of which allows commercial use, and stays out of the pickers until the legal review', () => {
+    const all = [...MENS_LETTER_CHART_SOURCES, ...MENS_EU_CHART_SOURCES, ...MENS_JEANS_CHART_SOURCES];
+    for (const s of all) {
+      expect(s.terms, s.id).toBeDefined();
+      expect(s.terms!.url).toMatch(/^https:\/\//);
+      expect(s.terms!.read).toBe(MENS_CHART_TERMS_READ);
+      expect(CHART_SOURCE_REUSE).toContain(s.terms!.reuse);
+      expect(s.terms!.says.length).toBeGreaterThan(40);
+    }
+    expect(Object.fromEntries(all.map((s) => [s.id, s.terms!.reuse]))).toEqual({
+      nike: 'personal-only',
+      arcteryx: 'personal-only',
+      swix: 'silent',
+      macpac: 'not-read',
+      rab: 'commercial-prohibited',
+      otto: 'tdm-reserved',
+      lidl: 'silent',
+      baur: 'silent',
+      'ebay-de': 'silent',
+      'otto-jeans': 'tdm-reserved',
+      'outdoor-renner': 'silent',
+      'rab-legs': 'commercial-prohibited',
+    });
+    for (const t of MENS_BODY_CHART_TEMPLATES) {
+      expect(t.legalReview).toBe('pending');
+      expect(isOfferedChartTemplate(t)).toBe(false);
+      expect(OFFERED_CHART_TEMPLATES).not.toContain(t);
+      expect(t.sources.every((s) => s.terms !== undefined)).toBe(true);
+    }
+    expect(chartTemplatesDto().templates.filter((t) => t.audience === 'men')).toEqual([]);
+    expect(chartTemplatesDto().templates.map((t) => t.id)).toEqual(OFFERED_CHART_TEMPLATES.map((t) => t.id));
+    expect(chartTemplatesDto({ includePendingLegalReview: true }).templates.filter((t) => t.audience === 'men')).toHaveLength(3);
+    // The women's templates and the garment templates are offered as before.
+    expect(OFFERED_CHART_TEMPLATES).toHaveLength(CHART_TEMPLATES.length - 3);
+  });
+
+  it('says in the jeans description that the columns are the inch label and which widths have one source', () => {
+    expect(MENS_JEANS_WL_BODY_TEMPLATE.description).toMatch(/in effect the inch label in cm/);
+    expect(MENS_JEANS_WL_BODY_TEMPLATE.description).toMatch(/28, 29 and 33 from OTTO alone/);
+    const { counts } = mensChartFromSources(['W28', 'W29', 'W33', 'W32'], ['waist'], MENS_JEANS_CHART_SOURCES);
+    expect(counts).toEqual({ W28: 1, W29: 1, W33: 1, W32: 2 });
   });
 
   it('parses and prints jeans labels', () => {
@@ -166,7 +224,7 @@ describe("men's chart templates", () => {
       { size: '32/32', waist: 81, inseam: 81 },
       { size: '34/32', waist: 86, inseam: 81 },
     ]);
-    const dto = chartTemplatesDto();
+    const dto = chartTemplatesDto({ includePendingLegalReview: true });
     expect(ChartTemplatesResponseSchema.safeParse(dto).success).toBe(true);
     expect(dto.templates.find((t) => t.id === 'eu-mens-body')).toMatchObject({ audience: 'men', generic: true, region: 'EU', points: ['bust', 'waist', 'hip'] });
   });

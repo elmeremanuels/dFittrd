@@ -3,7 +3,9 @@
 blender -b --factory-startup -P render_blender.py -- --spec SPEC.json --out OUT.png
 SPEC: {"items": [{"body": "x.obj", "garment": "y.bin", "indices": "indices.bin", "label": "AU 8"}, ...],
        "view": "front" | "side" | "back", "title": "...", "colour": "#A44B48", "width": 1500, "height": 900}
-garment may be null (body only). Flat colour, no product texture (shop images stay out of the repo).
+garment may be null (body only). Flat colour by default. Optional: an item's "view" overrides the spec's; an item's
+"uvs" (Float32 uv per vertex, u around the garment) with the spec's "texture" (an image file outside the repo, e.g. the
+stage-4t bake) textures that garment; an item's "colour" overrides the cloth colour. Shop images stay out of the repo.
 """
 import json
 import sys
@@ -35,11 +37,19 @@ def read_obj(path: str):
     return np.array(v), np.array(f)
 
 
-def obj(name, verts, faces, mat, dx):
+def obj(name, verts, faces, mat, dx, uvs=None):
     me = bpy.data.meshes.new(name)
     me.from_pydata((verts + np.array([dx, 0, 0])).tolist(), [], faces.tolist())
     for p in me.polygons:
         p.use_smooth = True
+    if uvs is not None:
+        layer = me.uv_layers.new(name="uv")
+        for p in me.polygons:
+            u = np.array([uvs[v, 0] for v in p.vertices])
+            if u.max() - u.min() > 0.5:  # the triangle crosses the u seam: unwrap it
+                u = np.where(u < 0.5, u + 1.0, u)
+            for li, v, uu in zip(p.loop_indices, p.vertices, u):
+                layer.data[li].uv = (float(uu), 1.0 - float(uvs[v, 1]))  # glTF v runs down, Blender's up
     me.materials.append(mat)
     ob = bpy.data.objects.new(name, me)
     bpy.context.scene.collection.objects.link(ob)
@@ -54,6 +64,15 @@ def material(name, hexcol, rough=0.7, sheen=0.0):
     rgb = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
     b.inputs["Base Color"].default_value = (*[c ** 2.2 for c in rgb], 1)
     b.inputs["Roughness"].default_value = rough
+    return m
+
+
+def textured(name, path, rough=0.8):
+    m = material(name, "#FFFFFF", rough)
+    tex = m.node_tree.nodes.new("ShaderNodeTexImage")
+    tex.image = bpy.data.images.load(path)
+    tex.extension = "REPEAT"
+    m.node_tree.links.new(tex.outputs["Color"], m.node_tree.nodes["Principled BSDF"].inputs["Base Color"])
     return m
 
 
@@ -79,7 +98,8 @@ def main():
     items = spec["items"]
     gap = spec.get("gapM", 0.75)
     n = len(items)
-    rot = {"front": 0, "side": 90, "back": 180, "three": 30}[spec.get("view", "front")]
+    rots = {"front": 0, "side": 90, "back": 180, "three": 30}
+    tex_mat = textured("tex", spec["texture"]) if spec.get("texture") else None
     # Camera first, so the labels are placed inside its frame (a fixed z cropped the title off a wide, close shot).
     width = (n - 1) * gap + 0.9
     cam_d = spec.get("camDistanceM", max(4.6, width * 1.25))
@@ -99,16 +119,18 @@ def main():
             g = np.fromfile(it["garment"], dtype=np.float32).reshape(-1, 3).astype(np.float64)
             gi = np.fromfile(it["indices"], dtype=np.uint32).reshape(-1, 3).astype(np.int64)
             pg = to_blender(g)
-        th = np.radians(rot)
+        th = np.radians(rots[it.get("view", spec.get("view", "front"))])
         R = np.array([[np.cos(th), -np.sin(th), 0], [np.sin(th), np.cos(th), 0], [0, 0, 1]])
         obj(f"body{i}", pb @ R.T, bf, skin, dx)
         if it.get("garment"):
-            obj(f"skirt{i}", pg @ R.T, gi, cloth, dx)
+            uvs = np.fromfile(it["uvs"], dtype=np.float32).reshape(-1, 2) if it.get("uvs") and tex_mat else None
+            mat = tex_mat if uvs is not None else (material(f"cloth{i}", it["colour"], 0.8) if it.get("colour") else cloth)
+            obj(f"skirt{i}", pg @ R.T, gi, mat, dx, uvs)
         # Label as text.
         bpy.ops.object.text_add(location=(dx - 0.12, 0.3, label_z))
         t = bpy.context.object
         t.data.body = it.get("label", "")
-        t.data.size = 0.07
+        t.data.size = spec.get("labelSize", 0.07)
         t.rotation_euler = (np.radians(90), 0, 0)
         t.data.materials.append(material(f"ink{i}", "#1A1612", 0.9))
     if spec.get("title"):

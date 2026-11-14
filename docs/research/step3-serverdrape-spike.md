@@ -2,6 +2,8 @@
 
 Date: 10 Nov 2026. Branch `claude/step3-serverdrape`. Plan: `docs/research/shortcut-to-step3.md` §4, days 2-5 (R2 spike). Product: the pilot maxi skirt (`out/eval/crimson-wildflower-maxi-skirt`, run 17d bundle). Every render and every number below is an **estimate** from a simulation. Nothing was measured on a real garment or a real phone.
 
+**Update 14 Nov 2026:** the shop tape-measured the skirt. §8 has the measured band on this mesh, the finding that the reconstructed mesh has half the real hem, and variant POM (a rest geometry from tape measurements alone). §1-§7 are the 10 Nov state under assumed bands.
+
 ## 1. Answer
 
 Revised after review (second pass, same day). The first pass called this "a marginal GO on the hip, a clear GO on the hem". That overclaimed: the hem number was a fixed-height measure that the assumed band moved around, and the hip number depends on a solver parameter (the push-out offset). The numbers below replace it.
@@ -235,3 +237,130 @@ Saved in `/tmp/claude-0/-home-user/45896997-2c70-517e-89a4-f66870da365e/scratchp
 4. Measure fps and load time on one real mid-range Android (WebGL2), against `morph=0` as the control.
 5. Add a second shape axis (height) and decide the grid density per size (plan risk: 8-12 drapes per size for 2 axes).
 6. Production bundle: add UVs and texture, and the morph-weight rule in `grading.json` or the glTF extras (already in the spike's extras).
+
+## 8. Tape measurements of the real skirt, and variant POM (14 Nov 2026)
+
+Branch `claude/tape-serverdrape`. The shop tape-measured the pilot skirt in AU 8, 10 and 14 (`spikes/garment-engine/data/bohohippychic/tape/crimson-wildflower-maxi-skirt.json`, the single source of truth). Everything below is still an **estimate** from a simulation; only the five tape numbers per measured size are measurements.
+
+Provenance used everywhere in this section: **AU 8, 10, 14 = measured. AU 12 = INTERPOLATED** (linear in the AU size number between 10 and 14). **AU 16 = EXTRAPOLATED** (the AU 10-14 slope continued by one size: value(16) = value(14) + (value(14) − value(10)) / 2). Rule in `band_model.tape_value`; `rest.json`, the drape JSON and the render labels carry it.
+
+| Full girth, cm | AU 8 (measured) | AU 10 (measured) | AU 12 (INTERPOLATED) | AU 14 (measured) | AU 16 (EXTRAPOLATED) |
+|---|---|---|---|---|---|
+| Band relaxed | 67 | 71 | 75.5 | 80 | 84.5 |
+| Band stretched | 94 | 100 | 105 | 110 | 115 |
+| Hip | 112 | 122 | 124 | 126 | 128 |
+| Hem sweep | 230 | 248 | 254 | 260 | 266 |
+| Length | 103 | 103 | 103.5 | 104 | 104.5 |
+
+### 8.1 What the tape says about the reconstructed mesh (verified)
+
+- **Hem.** `band_model.py` on the reconstructed rest geometry warns for every size: hem sweep 109.1 / 114.9 / 120.7 / 126.4 / 132.2 cm (AU 8-16, widest ring; the hem edge itself is 72-88 cm) against the tape's 230 / 248 / 254 / 260 / 266: **−50 to −54 %**. The reconstruction has half the real hem.
+- **Hip.** The reconstructed rest hip (hull at the mannequin hip line) is 97.4 / 102.4 / 107.4 / 112.4 / 117.4 cm against the tape's 112 / 122 / 124 / 126 / 128: **14.6 / 19.6 / 16.6 / 13.6 / 10.6 cm too small**. The reconstruction is the garment as it hangs on a model (folds closed), not the cut.
+- **Band.** Relaxed 67 cm (AU 8) is the chart waist of the size (67.5); stretched 94 cm is the chart hip (94). A pull-on band that just clears the hips. Stretch ratio 1.36-1.41 (assumed before: 1.5).
+- **Uneven hip steps (reported, not corrected):** 112 → 122 (+10 cm for one size) → 126 (+4 cm for two sizes). The hem steps are also uneven (+18, then +12 for two sizes); the band steps are even (4-4.5 cm per size relaxed). The hip line of an A-line skirt is not a seam, so the measuring height probably differed per size. Consequence here: AU 12 (interpolated) gets hip 124, and the POM "hip spread" AU 8-14 of 14 cm rests on that uneven AU 10 step. To ask the shop: at what distance below the band was the hip measured?
+
+### 8.2 Measured band on the reconstructed mesh (`BAND=measured serverdrape/drape.sh`)
+
+`band-model.json` `measured` now points at the tape file; `band_model.py` resolves relaxed and stretched girth per size (the single-sample form still works; tests in `test_band_model.py`). Held-out body (hip 100, waist 73.5), direct drapes, push-out 0.8 cm, spread = AU 16 − AU 8 (AU 16 band extrapolated, AU 12 interpolated):
+
+| Band | Top edge after settling, AU 8 / 12 / 16 (cm) | Hip fixed | hipRel | hipRing | Hem fixed (y = 22) | hemRel |
+|---|---|---|---|---|---|---|
+| **measured** (67 / 75.5 / 84.5, ratio 1.36-1.40) | 105.9 / 106.5 / 104.0 | 11.6 (58 %) | 13.3 (67 %) | 13.5 (68 %) | 17.9 (82 %) | 17.7 (79 %) |
+| W-0 (ASSUMED 67.5 / 77.5 / 87.5) | 105.2 / 105.7 / 103.6 | 11.6 (58 %) | 13.0 (65 %) | 13.5 (68 %) | 17.5 (80 %) | 17.3 (77 %) |
+| W-6 (ASSUMED) | 106.9 / 108.0 / 104.8 | 12.1 (60 %) | 13.5 (68 %) | 14.4 (72 %) | 18.8 (86 %) | 18.5 (82 %) |
+| W-12 (ASSUMED) | 109.1 / 109.6 / 107.2 | 12.6 (63 %) | 15.3 (77 %) | 16.9 (85 %) | 24.9 (114 %) | 18.3 (81 %) |
+| ONE-70 (ASSUMED) | 105.1 / 108.6 / 108.4 | 13.1 (65 %) | 12.1 (61 %) | 8.1 (41 %) | 9.8 (45 %) | 17.5 (78 %) |
+
+- **W-0 was closest** (band = chart waist): same hip spread, top edges within 0.4-0.8 cm, hem within 0.4 cm. The main run's W-6 sat the skirt 0.8-1.5 cm too high. W-12 and ONE-70 were wrong.
+- Settled band (mean height / girth): AU 8 103.8 cm / 82.2 cm, AU 12 104.3 / 81.9, AU 16 101.9 / 86.6. Blend on the held-out body (piecewise): hip fixed 12.0, hipRel 13.1, hipRing 13.2, hemRel 18.6 cm; vertex RMS 1.18 / 0.84 / 0.50 cm. Bundle 377,072 bytes meshopt (790,916 quantised). 0 particles inside the body. 109-143 CPU-s per held-out drape.
+- So the measured band changes little on this mesh: the §1 hip verdict (58 % fixed, 67 % garment-relative) stands. **But the percentages are of the wrong reference**: the "graded spread" of 20 cm is the reconstruction's own, on a mesh whose hip is 11-20 cm smaller and whose hem is half the real one. The hem-sweep warning is the important output of this run.
+
+### 8.3 Variant POM: a rest geometry from the five tape numbers alone (`pom_rest.py`)
+
+Our own numpy code, no pattern library, no photo reconstruction. Per size, an A-line surface of revolution over an ellipse, built so that it is developable (every ring has exactly its tape girth, every meridian exactly the tape length; test `test_pom.py`):
+
+- fabric girth at the top edge = the band's **stretched** girth (ASSUMED: an elastic casing stretches until the fabric lies flat); the top 4 cm (ASSUMED) are the band, whose rest length the drape shortens to the **relaxed** girth, which gathers the fabric into the band;
+- hip girth = tape hip, placed **20 cm below the top edge (ASSUMED**: the usual pattern hip depth; the shop's sketch gives no distance);
+- hem girth = tape hem sweep at the tape length; girth piecewise linear in between (ASSUMED profile).
+- 11,160 particles, 22,080 triangles, one topology for all sizes. UVs map onto the stage-4t texture's cylinder layout, so the existing texture can be reused in review renders; the print is then stretched sideways about 2x, because that texture was baked on a garment half as wide.
+
+Cloth preset `viscose-soft` (`drape_blender.py`), **ASSUMED, not calibrated**. Rationale: the first runs used the physical particle mass (about 3e-5 kg) with stiffness and air-drag constants that Blender's presets tune for 0.15-0.3 kg particles; only the ratio matters in Blender's cloth, so that cloth was orders of magnitude too stiff and too air-damped per unit weight (the "stiff tubes"). The new preset runs in the regime of Blender's own fabric presets and takes the drapiest one that does not stretch: Silk's mass 0.15, bending 0.05, shear and compression 5, air drag 1; Cotton's tension 15 and damping 5 (a woven viscose does not grow under its weight). The 165 gsm enters through the band only: the band's tension is set so that pulling it to its measured stretched girth takes 3 × the skirt's weight (ASSUMED, about 8.5 N for this 0.29 kg skirt). Gravity ramps on over frames 10-30 while the band contracts. 144 frames.
+
+### 8.4 POM on the held-out body (hip 100, waist 73.5): against the tape
+
+`pom_measure.py`: **hull** = convex-hull perimeter of the slice (what the eye or a loose tape around the hanging skirt sees), **path** = length of the slice curve, folds included (the fabric that is there). hipRing / hemRing are the very particles of the tape's hip line and of the hem edge.
+
+| | AU 8 (measured) | AU 10 (measured) | AU 12 (INTERPOLATED) | AU 14 (measured) | AU 16 (EXTRAPOLATED) |
+|---|---|---|---|---|---|
+| Tape hip (flat garment) | 112 | 122 | 124 | 126 | 128 |
+| Hip-line fabric after draping, path | 112.4 | 120.8 | 123.0 | 125.1 | 127.3 |
+| Hip-line fabric, hull | 107.8 | 112.1 | 113.4 | 115.2 | 117.3 |
+| Slice at the body's hip height, hull / path | 107.1 / 111.6 | 108.9 / 117.8 | 108.9 / 118.7 | 108.9 / 119.5 | 108.4 / 118.8 |
+| Tape hem sweep | 230 | 248 | 254 | 260 | 266 |
+| Hem edge after draping, path | 230.0 | 248.0 | 254.1 | 260.2 | 265.8 |
+| Hem edge, hull | 156.8 | 166.2 | 168.3 | 185.1 | 178.2 |
+| Slice 15 cm above the hem, hull / path | 146.5 / 209.0 | 156.6 / 224.9 | 160.4 / 229.2 | 167.5 / 229.4 | 155.9 / 226.2 |
+| Length along the fabric (tape 103-104.5) | 102.1 | 101.9 | 102.4 | 102.9 | 103.3 |
+| Settled band: mean height / girth (relaxed) | 104.4 / 78.4 (67) | 102.4 / 80.1 (71) | 100.6 / 81.7 (75.5) | 98.4 / 87.0 (80) | 94.6 / 94.7 (84.5) |
+| Hem edge mean height above the floor | 5.8 | 4.3 | 3.0 | 4.3 | 4.2 |
+| Last 4 frames: max / mean particle move (cm) | 0.47 / 0.03 | 0.49 / 0.02 | 0.41 / 0.02 | 0.58 / 0.04 | **1.98 / 0.20** |
+| Particles inside the body | 0 | 0 | 0 | 0 | 0 |
+| CPU-s (wall-s, 4 threads) | 269 (144) | 246 (149) | 262 (149) | 253 (144) | 222 (133) |
+
+Spread AU 14 − AU 8 (both ends measured), against the real 14 cm (hip) and 30 cm (hem):
+
+| Measure | POM drape | Reconstructed mesh, same band | Tape |
+|---|---|---|---|
+| Hip-line fabric, path | **12.7** | 7.4 (slice path) | 14 |
+| Hip, hull (garment-relative slice / hip-line ring) | 7.2 / 7.4 | 8.5 | 14 (flat) |
+| Slice at the body's hip height, hull | 1.8 | 7.7 | n/a |
+| Hem edge, path | **30.2** | n/a | 30 |
+| Hem edge, hull | 28.3 | n/a | n/a |
+| Slice 15 cm above the hem, hull / path | 21.0 / 20.4 (rest 27.1) | 12.6 / 10.2 (rest 16.9) | n/a |
+
+AU 16 − AU 8 (AU 16 extrapolated): hip path 14.9 (tape 16), hip hull 9.5, hem edge path 35.8 (tape 36), hem edge hull 21.4.
+
+Reading:
+
+- **The fabric is conserved.** Path lengths match the tape within 1.2 cm at the hip and 0.2 cm at the hem; fabric strain mean 0.0 %, p5-p95 −1.5 to +0.9 %. The girth the garment has is now the girth the shop measured, which the reconstruction could never give.
+- **Hull is not the tape number, and should not be.** A 112-126 cm hip on a 100 cm body hangs in folds: the hull at the hip line is 4.6-10.0 cm less than the path, and the hem hull is 157-185 cm for a 230-260 cm sweep. At the body's own hip height the hull is 107-109 cm for every size (spread 1.8 cm): every size is larger than this body there and simply hangs past it. The visible size difference is in the hem volume, the fold depth and where the band sits, not in a hip hull.
+- **The band decides the height.** AU 8 sits at the waist (band 104 cm high, stretched 17 % over its relaxed girth); AU 14 slides to 98 cm; AU 16 to 95 cm, on the hip, and its hem pools on the floor. On a 168 cm body the 103 cm skirt reaches the floor in every size (hem edge 3-6 cm above it on average, lowest particles on it).
+- **Stability.** AU 8-14 settle to 0.4-0.6 cm maximum and 0.02-0.04 cm mean particle movement per 4 frames at frame 144 (a few hem folds still creep). **AU 16 has not settled** on the held-out body (2 cm per 4 frames, band still slipping). On the AU 8 grid body **AU 16 fell to the floor** (band at 22 cm): the band starts at the fabric girth (115 cm), wider than that body's 94 cm hip, and the assumed band force (3 × weight at full stretch) does not stop it. With 8 × weight (about 23 N, one test run) it stays up at 96 cm with girth 87.6 cm. So the band's force, which nobody measured, decides whether a too-large size stays on.
+- **Morph bake (device blend) is poor for POM.** Bundle: **694,640 bytes meshopt (613,264 gzip)**, 1,342,828 quantised (3 sizes × base + 2 targets, 11,160 vertices; 1.8x the reconstructed mesh's 377 KB). Blend against the direct drape on the held-out body: vertex RMS 2.3 / 2.6 / 19.1 cm (AU 8 / 12 / 16; AU 16 is destroyed by the grid drape that fell), p95 4.6 / 5.3 cm for AU 8 / 12. Folds form at different places on each grid body, so a linear blend averages them away: the blended hem hull is 6.5-14 cm below the direct drape (140.0 vs 146.5; 146.4 vs 160.4). The reconstructed mesh blended at 0.5-1.2 cm RMS because it has no folds. **Blending fold-carrying drapes linearly does not work as it stands.**
+- **Cost.** 253 CPU-s median per POM drape (213-388; 12 drapes, 3,032 CPU-s in total, about 50 CPU-minutes per product for 3 sizes × 4 bodies), 2.3x the reconstructed mesh (more particles, twice the frames).
+
+### 8.5 Renders (all labelled ESTIMATE; measured / INTERPOLATED / EXTRAPOLATED in the labels)
+
+In `/tmp/claude-0/-home-user/45896997-2c70-517e-89a4-f66870da365e/scratchpad/tape/serverdrape/`, not committed. AU 8 / 12 / 16 were used for the side-by-side because the reconstructed drapes and the bake exist for those sizes; that puts one measured, one interpolated and one extrapolated size in the picture. `pom-all-front.png` shows all five, so the three measured sizes can be compared directly.
+
+| File | Honest read |
+|---|---|
+| `compare-front.png` | Left three (reconstruction): narrow sacks, the hem narrower than the hip, lumpy surface, hardly any difference between sizes except width. Right three (POM): reads as a flared maxi skirt: gathered band, vertical folds opening towards a wide hem. AU 8 sits at the waist; AU 12 a little lower and fuller; AU 16 hangs on the hips and its hem crumples on the floor. The size difference is clearly visible, mostly as band height and hem volume. Defects: the gathers at the band are shallow and regular (mesh-scale), the folds are fewer and broader than real viscose, flat colour reads pink rather than crimson |
+| `compare-side.png` | Reconstruction: the "harem trouser" hem drawn in at the ankles, in every size. POM: a clean A-line silhouette with a swinging hem; AU 12 shows deep folds at the back; AU 16's hem lies in a ruffle on the floor (it is too long once it slides to the hips: plausible for two sizes too large, but that drape had not settled) |
+| `pom-all-front.png` | AU 8, 10, 12, 14, 16 front. A steady progression: the band drops from waist to hip and the hem gets fuller. AU 14 and 16 fold onto the floor. AU 10 against AU 8 is a visible step (the +10 cm hip of the tape) |
+| `pom-textured.png` | AU 8 and AU 14 with the stage-4t texture. The print follows the folds and makes it look like a garment, but it is blurred and stretched sideways about 2x, with a pale band near the hem from the old texture. Not shippable as is; needs a texture made for the POM layout |
+
+### 8.6 Verdict
+
+**GO for tape measurements (POMs) as the main geometric input for skirts. NO-GO for continuing to treat the photo reconstruction as the garment's cut.** Photos stay for what they are good at: print and colour (texture), and a check on silhouette.
+
+- The reconstruction misses the two numbers that define this skirt (hem −50 %, hip −11 to −20 cm) and no band or solver tuning repairs that. Five tape numbers per size give a rest shape that conserves the measured girths to about 1 cm after draping and looks like the product type.
+- **Not a go for shipping yet**, for three reasons that the tape does not fix: (1) the device blend of folded drapes loses the folds (2.3-2.6 cm RMS, hem hull −6 to −14 cm): needs another on-device representation (more grid bodies, nearest-drape selection instead of blending, or blending a low-frequency shape plus a fold detail layer); (2) too-large sizes are unstable because the band force is assumed; (3) cloth parameters and the hip depth are assumed.
+- **What to ask of each merchant, per skirt: 5 measurements, flat, on at least 3 sizes** (smallest, largest and one in between; the others are interpolated and labelled so. Extrapolation beyond the measured range, as AU 16 here, should be avoided by measuring the end sizes):
+  1. waistband relaxed (flat width × 2);
+  2. waistband stretched to its comfortable limit;
+  3. hip width at a **stated distance below the band** (ask for 20 cm, the same for every size);
+  4. hem sweep (flat hem width × 2);
+  5. length, band to hem.
+  Worth adding as a sixth where possible: the weight of the garment (gives the fabric weight check) or the pull needed to stretch the band (a luggage scale), because the band force decided whether AU 16 stayed on.
+- Sizing decisions remain with `@curtain/fit-engine`; nothing here feeds it.
+
+### 8.7 Open after this run
+
+1. The hip depth (20 cm) and the hip-step anomaly (112 → 122 → 126): ask the shop.
+2. Band force is ASSUMED (3 × weight); AU 16 slips or falls with it and holds with 8 ×.
+3. Cloth parameters are ASSUMED (Blender preset regime), not calibrated; folds are broader than real viscose.
+4. Blend of folded drapes (see verdict). The morph page was not re-run for POM.
+5. A texture for the POM layout (the reused one is stretched 2x).
+6. Body height: only 168 cm bodies; the hem touches the floor on all of them.
+7. CPU seconds were measured with other agents on the 4-core machine (load average up to 12): expect ±30 %.

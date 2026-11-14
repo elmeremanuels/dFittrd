@@ -4,7 +4,7 @@ python3 run_grid.py <outDir> <bodyIds,...> <sizes,...> <bandVariants,...> [frame
 Writes <outDir>/drapes/<band><TAG>/<body>__<size>.bin/.json. A cached drape is reused only when its key (the resolved
 band girths and stiffness, push-out, rest mode: band_model.drape_key) matches what band-model.json gives now; otherwise
 it is re-run (so correcting `measured` re-drapes). Env: BLENDER (binary), JOBS (2), PUSHOUT (cm, 0.8),
-RESTMODE (pushed | graded | gradedall), TENSION_FLOOR (0.9, graded only), TAG (suffix of the output directory, e.g. "+graded"), BAND_MODEL (band-model.json path).
+RESTMODE (pushed | graded | gradedall), CLOTH (default | viscose-soft), TENSION_FLOOR (0.9, graded only), TAG (suffix of the output directory, e.g. "+graded"), BAND_MODEL (band-model.json path).
 """
 import itertools
 import json
@@ -22,13 +22,14 @@ PUSHOUT = float(os.environ.get("PUSHOUT", "0.8"))
 RESTMODE = os.environ.get("RESTMODE", "pushed")
 FLOOR = float(os.environ.get("TENSION_FLOOR", "0.9"))
 TAG = os.environ.get("TAG", "")
+CLOTH = os.environ.get("CLOTH", "default")  # drape_blender.py CLOTH preset
 
 
 def job(out, body, size, band, frames, model):
     d = os.path.join(out, "drapes", band + TAG)
     os.makedirs(d, exist_ok=True)
     base = os.path.join(d, f"{body}__{size}")
-    want = band_model.drape_key(band_model.band_girth(model, band, size), PUSHOUT, RESTMODE, FLOOR)
+    want = band_model.drape_key(band_model.band_girth(model, band, size), PUSHOUT, RESTMODE, FLOOR, CLOTH)
     if os.path.exists(base + ".json"):
         have = band_model.cached_key(json.load(open(base + ".json")))
         if have == want:
@@ -38,7 +39,7 @@ def job(out, body, size, band, frames, model):
     cmd = [BLENDER, "-b", "--factory-startup", "-P", os.path.join(HERE, "drape_blender.py"), "--",
            "--body", os.path.join(out, "bodies", body + ".obj"), "--rest", os.path.join(out, "rest"), "--size", size,
            "--band", band, "--out", base + ".bin", "--json", base + ".json", "--frames", str(frames),
-           "--pushout", str(PUSHOUT), "--restmode", RESTMODE, "--tensionfloor", str(FLOOR)]
+           "--pushout", str(PUSHOUT), "--restmode", RESTMODE, "--tensionfloor", str(FLOOR), "--cloth", CLOTH]
     if os.environ.get("BAND_MODEL"):
         cmd += ["--model", os.environ["BAND_MODEL"]]
     r = subprocess.run(cmd, capture_output=True, text=True)

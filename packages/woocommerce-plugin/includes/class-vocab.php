@@ -90,7 +90,7 @@ final class Vocab {
 	 * Meta keys in display order: key → [path, kind, heavy]. Mirrors WOO_META_KEYS.
 	 */
 	public const META_KEYS = array(
-		'_curtain_category'            => array( 'category', 'enum', true ),
+		'_curtain_category'            => array( 'category', 'enum', 'whole' ),
 		'_curtain_size_chart_type'     => array( 'sizeChartType', 'enum', true ),
 		'_curtain_size_chart'          => array( 'sizeChart', 'json', true ),
 		'_curtain_fabric'              => array( 'fabric', 'json', true ),
@@ -179,8 +179,18 @@ final class Vocab {
 	public const AUDIENCE_UNISEX_WORDS           = array( 'unisex', 'uniseks', 'genderneutral', 'genderneutraal', 'genderless' );
 	public const AUDIENCE_MEN_PREFIXES           = array( 'heren', 'herren', 'mannen' );
 	public const AUDIENCE_WOMEN_PREFIXES         = array( 'dames', 'damen', 'vrouwen' );
-	public const AUDIENCE_PREFIX_EXCEPTIONS      = array( 'herenhui', 'herenig' );
-	public const AUDIENCE_STYLE_WORDS            = array( 'inspired' );
+	/** What must follow the prefix for a compound to count: the start of a clothing word (ASCII only). */
+	public const AUDIENCE_COMPOUND_TAILS         = array(
+		'jeans', 'jas', 'jack', 'hemd', 'overhemd', 'shirt', 'tshirt', 'broek', 'hose', 'trui', 'pullover', 'pulli', 'sweater', 'hoodie',
+		'vest', 'weste', 'pak', 'anzug', 'kostuum', 'colbert', 'sakko', 'blazer', 'mantel', 'kleding', 'kleidung', 'bekleidung', 'mode',
+		'fashion', 'schoen', 'schuh', 'laars', 'stiefel', 'sneaker', 'sandal', 'sandaal', 'onder', 'unter', 'ober', 'boven', 'sok', 'socke',
+		'zwem', 'bade', 'short', 'bermuda', 'polo', 'top', 'blouse', 'bluse', 'jurk', 'kleid', 'rok', 'rock', 'legging', 'pyjama', 'nacht',
+		'boxer', 'slip', 'regen', 'winter', 'zomer', 'sommer', 'sport', 'outdoor', 'ski', 'fleece', 'thermo', 'chino', 'pantalon', 'tas',
+		'riem', 'muts', 'sjaal', 'schal', 'handschoen', 'handschuh', 'maat', 'afdeling', 'collectie', 'kollektion', 'artikel',
+	);
+	public const AUDIENCE_STYLE_WORDS            = array( 'inspired', 'fit', 'style', 'styled', 'cut', 'look' );
+	/** A word with one of these up to two words before it is skipped ("not for men"). */
+	public const AUDIENCE_NEGATING_WORDS         = array( 'not', 'non', 'niet', 'geen', 'nicht', 'kein', 'keine', 'from' );
 	public const AUDIENCE_GENDER_NEUTRAL_WORDS   = array( 'neutral', 'neutraal', 'neutrale', 'free' );
 	public const AUDIENCE_NONE_VALUES            = array( 'none', 'unspecified', 'not specified', 'n/a', '-' );
 
@@ -206,51 +216,60 @@ final class Vocab {
 
 	/** @param array<int, string> $prefixes */
 	private static function audience_compound( string $word, array $prefixes ): bool {
-		foreach ( self::AUDIENCE_PREFIX_EXCEPTIONS as $x ) {
-			if ( str_starts_with( $word, $x ) ) {
-				return false;
-			}
-		}
-		$len = function_exists( 'mb_strlen' ) ? mb_strlen( $word, 'UTF-8' ) : strlen( $word );
 		foreach ( $prefixes as $p ) {
-			if ( $len >= strlen( $p ) + 3 && str_starts_with( $word, $p ) ) {
-				return true;
+			if ( ! str_starts_with( $word, $p ) ) {
+				continue;
+			}
+			$rest = substr( $word, strlen( $p ) );
+			foreach ( self::AUDIENCE_COMPOUND_TAILS as $t ) {
+				if ( str_starts_with( $rest, $t ) ) {
+					return true;
+				}
 			}
 		}
 		return false;
 	}
 
 	/**
-	 * What the texts of one source say. $structured also reads the words that are too ambiguous
-	 * for a product name ("man", "woman", "lady").
+	 * What the texts of one source say. $singular says how the name-like singular words ("man",
+	 * "woman", "lady", "dame", "heer", "vrouw") are read: 'anywhere' (override, gender attribute),
+	 * 'whole' (only as the whole value or a whole path segment: product type, category, tags,
+	 * collections) or 'never' (product name). "Iron Man" as a tag is a name, not an audience.
 	 *
 	 * @param array<int, mixed> $texts
 	 */
-	public static function audience_of_texts( array $texts, bool $structured ): ?string {
+	public static function audience_of_texts( array $texts, string $singular ): ?string {
 		$men   = false;
 		$women = false;
 		foreach ( $texts as $text ) {
 			if ( ! is_string( $text ) ) {
 				continue;
 			}
-			$words = self::audience_words( $text );
-			$n     = count( $words );
-			for ( $i = 0; $i < $n; $i++ ) {
-				$w    = $words[ $i ];
-				$next = $words[ $i + 1 ] ?? null;
-				if ( in_array( $w, self::AUDIENCE_UNISEX_WORDS, true ) ) {
-					return 'unisex';
-				}
-				if ( 'gender' === $w && null !== $next && in_array( $next, self::AUDIENCE_GENDER_NEUTRAL_WORDS, true ) ) {
-					return 'unisex';
-				}
-				if ( null !== $next && in_array( $next, self::AUDIENCE_STYLE_WORDS, true ) ) {
-					continue;
-				}
-				if ( in_array( $w, self::AUDIENCE_MEN_WORDS, true ) || ( $structured && in_array( $w, self::AUDIENCE_MEN_STRUCTURED_WORDS, true ) ) || self::audience_compound( $w, self::AUDIENCE_MEN_PREFIXES ) ) {
-					$men = true;
-				} elseif ( in_array( $w, self::AUDIENCE_WOMEN_WORDS, true ) || ( $structured && in_array( $w, self::AUDIENCE_WOMEN_STRUCTURED_WORDS, true ) ) || self::audience_compound( $w, self::AUDIENCE_WOMEN_PREFIXES ) ) {
-					$women = true;
+			$segments = preg_split( '/[>\/|:;,]+/', $text );
+			foreach ( false === $segments ? array( $text ) : $segments as $segment ) {
+				$words         = self::audience_words( $segment );
+				$n             = count( $words );
+				$read_singular = 'anywhere' === $singular || ( 'whole' === $singular && 1 === $n );
+				for ( $i = 0; $i < $n; $i++ ) {
+					$w    = $words[ $i ];
+					$next = $words[ $i + 1 ] ?? null;
+					if ( in_array( $w, self::AUDIENCE_UNISEX_WORDS, true ) ) {
+						return 'unisex';
+					}
+					if ( 'gender' === $w && null !== $next && in_array( $next, self::AUDIENCE_GENDER_NEUTRAL_WORDS, true ) ) {
+						return 'unisex';
+					}
+					if ( null !== $next && in_array( $next, self::AUDIENCE_STYLE_WORDS, true ) ) {
+						continue;
+					}
+					if ( ( $i >= 1 && in_array( $words[ $i - 1 ], self::AUDIENCE_NEGATING_WORDS, true ) ) || ( $i >= 2 && in_array( $words[ $i - 2 ], self::AUDIENCE_NEGATING_WORDS, true ) ) ) {
+						continue;
+					}
+					if ( in_array( $w, self::AUDIENCE_MEN_WORDS, true ) || ( $read_singular && in_array( $w, self::AUDIENCE_MEN_STRUCTURED_WORDS, true ) ) || self::audience_compound( $w, self::AUDIENCE_MEN_PREFIXES ) ) {
+						$men = true;
+					} elseif ( in_array( $w, self::AUDIENCE_WOMEN_WORDS, true ) || ( $read_singular && in_array( $w, self::AUDIENCE_WOMEN_STRUCTURED_WORDS, true ) ) || self::audience_compound( $w, self::AUDIENCE_WOMEN_PREFIXES ) ) {
+						$women = true;
+					}
 				}
 			}
 		}
@@ -284,7 +303,7 @@ final class Vocab {
 		if ( in_array( $t, self::AUDIENCE_NONE_VALUES, true ) ) {
 			return 'none';
 		}
-		return self::audience_of_texts( array( $t ), true );
+		return self::audience_of_texts( array( $t ), 'anywhere' );
 	}
 
 	/**
@@ -304,12 +323,12 @@ final class Vocab {
 			);
 		}
 		$steps = array(
-			array( 'attribute', (array) ( $hints['attribute'] ?? array() ), true ),
-			array( 'productType', array( $hints['productType'] ?? null ), true ),
-			array( 'category', (array) ( $hints['category'] ?? array() ), true ),
-			array( 'tags', (array) ( $hints['tags'] ?? array() ), true ),
-			array( 'title', array( $hints['title'] ?? null ), false ),
-			array( 'collections', (array) ( $hints['collections'] ?? array() ), true ),
+			array( 'attribute', (array) ( $hints['attribute'] ?? array() ), 'anywhere' ),
+			array( 'productType', array( $hints['productType'] ?? null ), 'whole' ),
+			array( 'category', (array) ( $hints['category'] ?? array() ), 'whole' ),
+			array( 'tags', (array) ( $hints['tags'] ?? array() ), 'whole' ),
+			array( 'title', array( $hints['title'] ?? null ), 'never' ),
+			array( 'collections', (array) ( $hints['collections'] ?? array() ), 'whole' ),
 		);
 		foreach ( $steps as $step ) {
 			$audience = self::audience_of_texts( $step[1], $step[2] );
@@ -321,6 +340,15 @@ final class Vocab {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * The name a size chart column is shown under: `chest` for the `bust` column when the merchant
+	 * set the audience to men or unisex, otherwise the column's own key (so a women's product, and
+	 * every product without the "Made for" value, shows what it always showed).
+	 */
+	public static function size_column_key( string $col, ?string $audience ): string {
+		return 'bust' === $col && in_array( $audience, array( 'men', 'unisex' ), true ) ? 'chest' : $col;
 	}
 
 	/** The audience for the payload, or null (leave the field out). @param array<string, mixed> $hints */

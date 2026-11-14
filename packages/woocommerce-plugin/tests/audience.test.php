@@ -129,24 +129,34 @@ test(
 );
 
 test(
-	'the chart templates asset carries the men\'s templates with their own points',
+	'the chart templates asset leaves the men\'s templates out until their sources passed the legal review',
 	static function (): void {
 		$data = json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/assets/chart-templates.json' ), true );
-		$by   = array();
+		$ids  = array();
 		foreach ( $data['templates'] as $t ) {
-			$by[ $t['id'] ] = $t;
+			$ids[] = $t['id'];
+			assert_false( isset( $t['audience'] ) && 'men' === $t['audience'], $t['id'] );
 		}
 		foreach ( array( 'mens-letter-body', 'eu-mens-body', 'mens-jeans-wl-body' ) as $id ) {
-			assert_true( isset( $by[ $id ] ), $id );
-			assert_same( 'men', $by[ $id ]['audience'] );
-			assert_same( 'body', $by[ $id ]['kind'] );
-			assert_same( count( $by[ $id ]['sizes'] ), count( $by[ $id ]['rows'] ) );
+			assert_false( in_array( $id, $ids, true ), $id );
 		}
-		assert_same( array( 'size', 'bust', 'waist', 'hip' ), array_keys( $by['mens-letter-body']['rows'][0] ) );
-		assert_same( array( 'size', 'waist', 'inseam' ), array_keys( $by['mens-jeans-wl-body']['rows'][0] ), 'jeans W/L: waist and inside leg only' );
-		assert_false( isset( $by['au-womens-body']['audience'] ) && 'men' === $by['au-womens-body']['audience'] );
-		foreach ( $by['mens-jeans-wl-body']['rows'][0] as $column => $_ ) {
+		assert_true( in_array( 'au-womens-body', $ids, true ) && in_array( 'garment-letter-top', $ids, true ) );
+		// The meta box table still has the columns a men's jeans chart needs (waist, inseam).
+		foreach ( array( 'size', 'waist', 'inseam' ) as $column ) {
 			assert_true( in_array( $column, Vocab::SIZE_ROW_COLUMNS, true ), "the meta box table has a $column column" );
 		}
+	}
+);
+
+test(
+	'the bust column is headed chest only when the merchant set men or unisex',
+	static function (): void {
+		assert_same( 'chest', Vocab::size_column_key( 'bust', 'men' ) );
+		assert_same( 'chest', Vocab::size_column_key( 'bust', 'unisex' ) );
+		assert_same( 'bust', Vocab::size_column_key( 'bust', 'women' ) );
+		assert_same( 'bust', Vocab::size_column_key( 'bust', '' ), 'no value: the header a women\'s shop always had' );
+		assert_same( 'bust', Vocab::size_column_key( 'bust', null ) );
+		assert_same( 'bust', Vocab::size_column_key( 'bust', 'none' ) );
+		assert_same( 'waist', Vocab::size_column_key( 'waist', 'men' ) );
 	}
 );

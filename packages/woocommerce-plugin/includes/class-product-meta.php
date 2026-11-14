@@ -405,7 +405,7 @@ final class Product_Meta {
 					<?php
 					foreach ( Vocab::SIZE_ROW_COLUMNS as $col ) :
 						?>
-						<th><?php echo esc_html( self::column_label( $col ) ); ?></th><?php endforeach; ?><th></th>
+						<th><?php echo esc_html( self::column_label( $col, (string) $get( 'audience' ) ) ); ?></th><?php endforeach; ?><th></th>
 				</tr></thead>
 				<tbody>
 					<?php
@@ -565,13 +565,18 @@ final class Product_Meta {
 		<?php
 	}
 
-	private static function column_label( string $col ): string {
-		switch ( $col ) {
+	/**
+	 * Header of a size chart column. $audience is the merchant's "Made for" value: only men and
+	 * unisex change a header (bust → chest). A product without that value keeps the headers it
+	 * always had, also when the audience is read from its name or tags at sync time.
+	 */
+	private static function column_label( string $col, string $audience = '' ): string {
+		switch ( Vocab::size_column_key( $col, $audience ) ) {
 			case 'size':
 				return __( 'Size', 'curtain-woocommerce' );
-			case 'bust':
+			case 'chest':
 				// The stored point is `bust` for every audience; on men's garments it holds the chest.
-				return __( 'bust / chest', 'curtain-woocommerce' );
+				return __( 'chest', 'curtain-woocommerce' );
 			case 'footEu':
 				return __( 'Foot EU', 'curtain-woocommerce' );
 			case 'footLengthCm':

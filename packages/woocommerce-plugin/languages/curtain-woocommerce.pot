@@ -376,7 +376,7 @@ msgid "Size"
 msgstr ""
 
 #: includes/class-product-meta.php
-msgid "bust / chest"
+msgid "chest"
 msgstr ""
 
 #: includes/class-product-meta.php

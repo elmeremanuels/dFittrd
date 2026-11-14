@@ -140,6 +140,41 @@ in an overlay on the merchant page.
   first call writes one `fit` ledger line for the shopper (field names only) and keeps the size label
   and confidence on `try_sessions` for aggregate merchant analytics.
 
+### Men's gate (D20 point 3, `docs/research/men-3d-plan.md` slice M0)
+
+No men's product goes live with a 2D figure only. One helper decides it, `shopperReadiness` in
+`services/readiness.ts`, and every route that serves product or fit data calls it. It is behind
+`MEN_3D_GATE` (read in `env.ts` only, **default off**: with it off no response changes).
+
+With `MEN_3D_GATE=1`, a product whose payload says `audience: 'men'` is **coming soon** unless the
+shop has the 3D estimate on (`settings.garment3d`) and the product has an approved bundle that still
+covers the live chart and was built on the male mannequin (`assetMannequinFamily`: `qa.json`
+`mannequin.family: 'male'`; absent = female, so no bundle that exists today passes).
+
+| Route | A men's product that is coming soon |
+|---|---|
+| `POST /v1/sdk/sessions` | the usual body plus `productState: 'coming_soon'`; the session is still minted |
+| `GET /v1/try/:token` | 422 `men_coming_soon`: no garment, no pairing, the session stays unresolved |
+| `POST /v1/try/:token/fit-shown` | `200 { billed: false }` |
+| `GET /v1/peek` | 404 |
+| `GET /v1/shops/:shopId/products` | left out of the list |
+| `GET /v1/products/:id` | 422 `men_coming_soon` |
+| `POST /v1/renders/hero` | 422 `men_coming_soon`, nothing queued |
+| `GET /v1/fit/cohort/:productId` | the empty cohort (`n: 0`, no size histogram) |
+| `GET /v1/merchant/products` | `menGate: 'coming_soon'` on the product (the merchant's badge) |
+
+* A men's product that passes gets `requires3d: true` on `GET /v1/try/:token`, and only for an
+  overlay session (`surface: 'embed'`). The peek, the app's deck and product page, the hero render,
+  the cohort and app-mode try sessions draw the 2D figure only, so there it stays coming soon.
+* Not gated, so unchanged: `women`, `unisex`, no audience; a `men` that was read from a title or a
+  collection only (`isWeakAudienceSource`; the merchant list says `menGate: 'audience_unconfirmed'`);
+  men's shoes and accessories unless `MEN_3D_GATE_SHOES_ACCESSORIES=1` (open founder question).
+* The audience source is stored in `products.audience_source` (migration
+  `0006_men_gate_audience_source`). The Shopify sync fills it; the merchant API (the WooCommerce
+  plugin) does not send it, so there it is null and counts as a strong source.
+* Not checked yet: the supported men's garment types (plan section 2) and the men's chart columns
+  (slice M2a). Tests: `src/men-gate.test.ts`.
+
 ### Privacy (D3), enforced by construction
 
 * No route accepts a photo except `POST /v1/renders/hero`; `PersonInput.kind` is the literal
@@ -200,6 +235,7 @@ billing (replay, paused, measurements rejected, grace window) in `src/embed.test
 Stripe Connect round-trip, k-anonymity floor, usage rollup, env/crypto/token units, and the
 security-review regressions (`src/security-review.test.ts`: HMAC replay, key lookup, billing
 integrity, per-shop rate limit, GDPR payload hygiene, webhook replay, Woo takeover, SSRF guard),
+the men's gate on and off on every route (`src/men-gate.test.ts`),
 billing caps and anomalies (`src/billing-integrity.test.ts`), the merchant route layout, the shared
 DTOs and the drizzle snapshot of `billing_anomalies` (`src/merchant-routes.test.ts`), and the web
 CSP in `infra/Caddyfile` (`src/caddy-csp.test.ts`).

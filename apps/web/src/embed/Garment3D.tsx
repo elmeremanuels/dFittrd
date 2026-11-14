@@ -8,6 +8,9 @@
  *   `import()` and the bundle files are GET from `asset.baseUrl`. Nothing about the body goes up (D3).
  * - The view takes the embed's own FitResult and size; it never computes a fit (rule 4, D15).
  * - Always labelled an estimate (rule 3). On any error it closes and the 2D figure above stays.
+ * - `required` (a men's product, D20 point 3: never a 2D figure only): the view opens by itself,
+ *   cannot be closed and reports `settled` or `failed`; the embed shows nothing of the result until
+ *   it has settled and replaces it by "Men's clothing: coming soon" when it fails.
  */
 import { Box, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -50,6 +53,10 @@ export interface Garment3DProps {
   /** Body girths estimated from height and weight (BodyProfile source 'prior'). */
   estimated?: readonly string[];
   onSelect: (size: string) => void;
+  /** The product may only be shown with this view (see the file header). */
+  required?: boolean;
+  /** With `required`: the view has settled, or it failed (no WebGL2, bundle error, incompatible). */
+  onRequiredState?: (state: 'settled' | 'failed') => void;
   /** Tests inject these; the app uses the real chunk and the real check. */
   loadViewer?: () => Promise<ViewerModule>;
   webgl2?: () => boolean;
@@ -57,10 +64,20 @@ export interface Garment3DProps {
 
 type Phase = 'idle' | 'loading' | 'draping' | 'settled' | 'failed';
 
-export function Garment3D({ asset, paused, garment, fit, size, recommended, measurements, units = 'metric', heightCm, estimated = [], onSelect, loadViewer = () => import('@curtain/garment-viewer'), webgl2 = hasWebGL2 }: Garment3DProps): ReactNode {
+export function Garment3D({ asset, paused, garment, fit, size, recommended, measurements, units = 'metric', heightCm, estimated = [], onSelect, required = false, onRequiredState, loadViewer = () => import('@curtain/garment-viewer'), webgl2 = hasWebGL2 }: Garment3DProps): ReactNode {
   const [supported] = useState(() => !!asset && webgl2());
-  const [open, setOpen] = useState(false);
-  const [phase, setPhase] = useState<Phase>('idle');
+  const usable = !!asset && !paused && supported;
+  const [open, setOpen] = useState(required && usable);
+  const [phase, setPhase] = useState<Phase>(required && usable ? 'loading' : 'idle');
+  const onRequiredRef = useRef(onRequiredState);
+  useEffect(() => {
+    onRequiredRef.current = onRequiredState;
+  });
+  useEffect(() => {
+    if (!required) return;
+    if (!usable || phase === 'failed') onRequiredRef.current?.('failed');
+    else if (phase === 'settled') onRequiredRef.current?.('settled');
+  }, [required, usable, phase]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const viewRef = useRef<View | null>(null);
   const sizeRef = useRef(size);
@@ -132,9 +149,11 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
     <section className="mt-4 rounded-2xl border border-line bg-white/60 p-3" aria-label="3D estimate" data-testid="garment3d">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">3D estimate · size {size}</h3>
-        <button type="button" className="chip px-2 py-1 text-xs" onClick={() => setOpen(false)} aria-label="Close the 3D view">
-          <X className="h-3.5 w-3.5" aria-hidden />
-        </button>
+        {required ? null : (
+          <button type="button" className="chip px-2 py-1 text-xs" onClick={() => setOpen(false)} aria-label="Close the 3D view">
+            <X className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        )}
       </div>
       {phase === 'failed' ? (
         <p className="mt-2 text-sm text-ink-soft" role="status" data-testid="garment3d-failed">

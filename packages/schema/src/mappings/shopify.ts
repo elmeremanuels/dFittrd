@@ -31,7 +31,7 @@ import {
   type EurRateTable,
   type WarningSink,
 } from './common';
-import { coerceAudienceOverride, inferAudience } from './audience';
+import { coerceAudienceOverride, inferAudienceDecision, type AudienceDecision } from './audience';
 
 export const SHOPIFY_METAFIELD_NAMESPACE = '$app:curtain' as const;
 
@@ -357,6 +357,13 @@ export interface FromShopifyOptions {
   defaultBrand?: string;
   /** EUR-based rates for shops that price in another currency (e.g. AUD). Without one the price is left out. */
   eurRates?: EurRateTable;
+  /**
+   * Called once with how the audience was decided (the value and the source that decided it), or
+   * `undefined` when nothing in the product names an audience. The payload carries the value only;
+   * a caller that gates on `men` (decision D20) keeps the source so a guess from a title or a
+   * collection (`isWeakAudienceSource`) does not hide a product on its own.
+   */
+  onAudience?: (decision: AudienceDecision | undefined) => void;
 }
 
 /**
@@ -405,7 +412,7 @@ export function fromShopifyProduct(
   if (audienceRaw && coerceAudienceOverride(audienceRaw) === undefined) {
     warn(sink, { source: 'audience', path: 'audience', message: `expected women, men, unisex or none, got '${audienceRaw}'` });
   }
-  const audience = inferAudience({
+  const audienceDecision = inferAudienceDecision({
     override: audienceRaw,
     productType: p.productType,
     category: [p.category?.fullName, p.category?.name],
@@ -413,6 +420,8 @@ export function fromShopifyProduct(
     title: p.title,
     collections: nodesOf(p.collections).flatMap((c) => [c.title, c.handle]),
   });
+  options.onAudience?.(audienceDecision);
+  const audience = audienceDecision?.audience;
   if (audience) out.audience = audience;
 
   // Price — EUR as is; another currency (the AUD pilot shop) is converted with `eurRates` and reported.

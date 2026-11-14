@@ -161,10 +161,23 @@ export function assetBaseUrl(env: Env): string {
 }
 
 /**
- * The asset ref for `GET /v1/try`, or null: the shop has the 3D estimate on, the product's active
- * version is approved, and the bundle grades every size of the live chart (else today's flow).
+ * The mannequin family a bundle was built on. The male pipeline (plan slice M1) adds
+ * `mannequin.family` to the bundle; absent means female, which is every bundle that exists today.
+ * Of the bundle files the api keeps only qa.json (the `qa` column), so the value is read there:
+ * `qa.mannequin.family`. ASSUMPTION of slice M0: M1 writes it to qa.json. If M1 puts it in another
+ * file, change this one function (and store the value on import).
  */
-export async function activeAssetRef(db: Db, env: Env, shop: { id: string; settings: ShopSettings }, product: ProductRow, garment: GarmentPayload): Promise<GarmentAssetRef | null> {
+export function assetMannequinFamily(a: Pick<AssetRow, 'qa'>): 'female' | 'male' {
+  const mannequin = (a.qa as { mannequin?: { family?: unknown } } | null)?.mannequin;
+  return mannequin?.family === 'male' ? 'male' : 'female';
+}
+
+/**
+ * The live asset of a product, as the ref `GET /v1/try` hands out plus its row, or null: the shop
+ * has the 3D estimate on, the product's active version is approved, and the bundle grades every
+ * size of the live chart (else today's flow).
+ */
+export async function activeAsset(db: Db, env: Env, shop: { id: string; settings: ShopSettings }, product: ProductRow, garment: GarmentPayload): Promise<{ ref: GarmentAssetRef; row: AssetRow } | null> {
   if (shop.settings.garment3d !== true || !product.activeAssetVersion) return null;
   const a = await db.query.garmentAssets.findFirst({ where: and(eq(garmentAssets.productId, product.id), eq(garmentAssets.version, product.activeAssetVersion)) });
   if (!a || a.status !== 'approved' || a.shopId !== shop.id) return null;
@@ -184,5 +197,10 @@ export async function activeAssetRef(db: Db, env: Env, shop: { id: string; setti
   } catch {
     return null; // the files are gone (volume not restored): no 3D, never a broken button
   }
-  return { version: a.version, baseUrl: `${assetBaseUrl(env)}/${shop.id}/${product.id}/${a.version}`, baseSize: r.info.baseSize, sizes: r.info.sizes, label: 'estimate' };
+  return { ref: { version: a.version, baseUrl: `${assetBaseUrl(env)}/${shop.id}/${product.id}/${a.version}`, baseSize: r.info.baseSize, sizes: r.info.sizes, label: 'estimate' }, row: a };
+}
+
+/** The asset ref for `GET /v1/try`, or null (see `activeAsset`). */
+export async function activeAssetRef(db: Db, env: Env, shop: { id: string; settings: ShopSettings }, product: ProductRow, garment: GarmentPayload): Promise<GarmentAssetRef | null> {
+  return (await activeAsset(db, env, shop, product, garment))?.ref ?? null;
 }

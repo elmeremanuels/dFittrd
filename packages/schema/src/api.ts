@@ -22,6 +22,26 @@ import { GarmentAssetRefSchema } from './garmentAsset';
 
 export const ESTIMATE_DISCLAIMER = 'Estimate — generated from your measurements and the shop’s garment data, not a photo of you.';
 
+/**
+ * D20 point 3 (men's gate, plan slice M0): the error code of a men's product that is not ready for
+ * the full 3D experience. `GET /v1/try/:token`, `GET /v1/products/:id` and `POST /v1/renders/hero`
+ * answer 422 with this code and no product data; the embed shows "Men's clothing: coming soon".
+ */
+export const MEN_COMING_SOON_CODE = 'men_coming_soon';
+
+/** What a shopper gets for a product. Absent on the wire means `ready` (today's flow). */
+export const PRODUCT_SHOPPER_STATES = ['coming_soon'] as const;
+export const ProductShopperStateSchema = z.enum(PRODUCT_SHOPPER_STATES);
+export type ProductShopperState = z.infer<typeof ProductShopperStateSchema>;
+
+/**
+ * The men's gate as the merchant sees it per product. `coming_soon`: shoppers see "Men's clothing:
+ * coming soon" until the product has an approved 3D bundle on the male body and the shop has the 3D
+ * estimate on. `audience_unconfirmed`: the audience `men` was guessed from a title or a collection
+ * only, so the product is not gated until the merchant sets the audience.
+ */
+export const MERCHANT_MEN_GATE_STATES = ['coming_soon', 'audience_unconfirmed'] as const;
+
 const uuid = z.uuid();
 const isoDate = z.iso.datetime({ offset: true });
 const dateOnly = z.iso.date();
@@ -192,6 +212,13 @@ export const TryResolveResponseSchema = z.object({
    * Optional so older embeds keep parsing.
    */
   asset: GarmentAssetRefSchema.nullable().optional(),
+  /**
+   * D20 point 3 (men's gate, plan slice M0): `true` only for a men's product that passed the gate.
+   * The embed may show it only with the working 3D view: when `asset` is missing or the 3D view
+   * fails on the device, it shows "Men's clothing: coming soon" with no figure and no size. Absent
+   * for every other product (and whenever the gate is off): the overlay behaves as before.
+   */
+  requires3d: z.literal(true).optional(),
 });
 export type TryResolveResponse = z.infer<typeof TryResolveResponseSchema>;
 
@@ -466,6 +493,12 @@ export const SdkSessionResponseSchema = z.object({
   expiresAt: isoDate,
   /** Below plan: the button still renders, the deep link shows "shop paused" (D7). */
   shopPaused: z.boolean(),
+  /**
+   * D20 point 3 (men's gate, plan slice M0): `coming_soon` for a men's product without the full 3D
+   * experience. The session is still minted and the overlay shows "Men's clothing: coming soon";
+   * the SDK may act on this later (slice M0b: the line in place of the button). Absent: ready.
+   */
+  productState: ProductShopperStateSchema.optional(),
 });
 export type SdkSessionResponse = z.infer<typeof SdkSessionResponseSchema>;
 
@@ -531,6 +564,8 @@ export const MerchantProductSummarySchema = z.object({
   missingFields: z.array(z.string()),
   flatLayProcessedUrl: httpUrl.nullable(),
   updatedAt: isoDate,
+  /** The men's gate for this product (`MERCHANT_MEN_GATE_STATES`). Absent: not a gated men's product, or the gate is off. */
+  menGate: z.enum(MERCHANT_MEN_GATE_STATES).optional(),
 });
 export type MerchantProductSummary = z.infer<typeof MerchantProductSummarySchema>;
 

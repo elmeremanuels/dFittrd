@@ -38,6 +38,7 @@ import { periodFor, utcDay } from '../lib/time.js';
 import { abandonedAnalytics, fitSizeAnalytics, swipeAnalytics } from '../services/analytics.js';
 import { decodeCursor, encodeCursor } from '../services/ledger.js';
 import { archiveProduct, listMerchantProducts, upsertProduct } from '../services/products.js';
+import { merchantMenGate } from '../services/readiness.js';
 import { connectTokenHash, createShop, findShopByConnectToken, findShopByDomain, isPaused, issueMerchantKeys, planInfo, updateSettings } from '../services/shops.js';
 import { billingAnomalyReport, fitSessionsBetween, usageDays } from '../services/usage.js';
 
@@ -136,7 +137,8 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
   );
 
   app.get('/v1/merchant/products', { schema: { querystring: MerchantProductsQuerySchema, response: { 200: MerchantProductsResponseSchema } }, preHandler: requireMerchant }, async (req) => {
-    return listMerchantProducts(db, req.shop!.id, req.query);
+    // Men's gate badge per product (services/readiness.ts); nothing is added while the gate is off.
+    return listMerchantProducts(db, req.shop!.id, req.query, (row) => merchantMenGate({ db, env }, row, req.shop!));
   });
 
   // ---- size charts ------------------------------------------------------------------------------

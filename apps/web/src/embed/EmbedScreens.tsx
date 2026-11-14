@@ -2,7 +2,7 @@
  * Presentational pieces of the standalone embed (docs/STANDALONE.md §1.3). No state lives here
  * beyond local UI toggles; EmbedApp owns the flow.
  */
-import { AlertTriangle, Camera, Clock, PackageX, PauseCircle, Ruler, ShieldCheck, WifiOff } from 'lucide-react';
+import { AlertTriangle, Camera, Clock, Hourglass, PackageX, PauseCircle, Ruler, ShieldCheck, WifiOff } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
 import type { GarmentPayload, ShopBranding } from '@curtain/schema';
 import { readableTextColor } from '@/lib/contrast';
@@ -370,6 +370,12 @@ const BLOCKED: Record<BlockedKind, { icon: ReactNode; title: string; text: strin
     title: 'Not ready for this product yet',
     text: 'The shop has not finished the size data for this item, so we can’t give an honest recommendation.',
   },
+  // D20 point 3: no figure and no size for a men's product without the full 3D experience.
+  comingSoon: {
+    icon: <Hourglass className="h-8 w-8" aria-hidden />,
+    title: 'Men’s clothing: coming soon',
+    text: 'The fitting room is not ready for men’s clothing yet. For now, use the shop’s own size chart on the product page.',
+  },
   offline: {
     icon: <WifiOff className="h-8 w-8" aria-hidden />,
     title: 'You seem to be offline',
@@ -387,10 +393,21 @@ const BLOCKED: Record<BlockedKind, { icon: ReactNode; title: string; text: strin
   },
 };
 
-export function BlockedScreen({ kind, onRetry, onClose }: { kind: BlockedKind; onRetry: (() => void) | null; onClose: (() => void) | null }): ReactNode {
-  const b = BLOCKED[kind];
+/** The coming-soon screen in Dutch (the rest of the overlay is English only so far). */
+const COMING_SOON_NL = {
+  title: 'Herenkleding: binnenkort beschikbaar',
+  text: 'De paskamer is nog niet klaar voor herenkleding. Gebruik voorlopig de maattabel van de winkel op de productpagina.',
+  close: 'Terug naar de winkel',
+} as const;
+
+/** Dutch for a Dutch browser or a Dutch shop page (`nl`, `nl-NL`, `nl_BE`). */
+export const isDutchLocale = (locale: string | null | undefined): boolean => /^nl(?:[-_]|$)/i.test(locale ?? '');
+
+export function BlockedScreen({ kind, onRetry, onClose, locale = null }: { kind: BlockedKind; onRetry: (() => void) | null; onClose: (() => void) | null; locale?: string | null }): ReactNode {
+  const dutch = kind === 'comingSoon' && isDutchLocale(locale);
+  const b = dutch ? { ...BLOCKED[kind], ...COMING_SOON_NL } : BLOCKED[kind];
   return (
-    <section className="flex flex-1 flex-col items-center justify-center gap-3 py-10 text-center" aria-labelledby="blocked-title" data-testid={`blocked-${kind}`}>
+    <section className="flex flex-1 flex-col items-center justify-center gap-3 py-10 text-center" aria-labelledby="blocked-title" data-testid={`blocked-${kind}`} lang={dutch ? 'nl' : undefined}>
       <span className="flex h-16 w-16 items-center justify-center rounded-full bg-white/80 text-coral-ink shadow">{b.icon}</span>
       <h2 id="blocked-title" className="font-display text-2xl" tabIndex={-1} data-step-heading>
         {b.title}
@@ -404,7 +421,7 @@ export function BlockedScreen({ kind, onRetry, onClose }: { kind: BlockedKind; o
         ) : null}
         {onClose ? (
           <button type="button" className="btn-ghost" onClick={onClose}>
-            Back to the shop
+            {dutch ? COMING_SOON_NL.close : 'Back to the shop'}
           </button>
         ) : null}
       </div>

@@ -23,6 +23,7 @@ import { qrSvg } from '../lib/qr.js';
 import { safeFetch, UnsafeUrlError } from '../lib/safeFetch.js';
 import { originOf } from '../services/embed.js';
 import { findProduct } from '../services/products.js';
+import { shopperReadiness, surfaceOfSession } from '../services/readiness.js';
 import { findShopById, findShopByPrefix, isPaused, type ShopRow } from '../services/shops.js';
 
 export const MediaProxyQuerySchema = z.object({
@@ -78,6 +79,8 @@ export const sdkRoutes: FastifyPluginAsyncZod = async (app) => {
         ...(req.body.surface === 'embed' ? {} : { qrSvg: await qrSvg(tryUrl) }),
         expiresAt: expiresAt.toISOString(),
         shopPaused: isPaused(shop),
+        // Men's gate (services/readiness.ts): the overlay still opens and shows the coming-soon line.
+        ...((await shopperReadiness({ db, env }, product, { surface: surfaceOfSession(req.body.surface), shop })).state === 'coming_soon' ? { productState: 'coming_soon' as const } : {}),
       };
       return reply.code(body.shopPaused ? 402 : 200).send(body);
     },

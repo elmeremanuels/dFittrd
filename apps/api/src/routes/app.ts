@@ -40,6 +40,7 @@ import { devices, fitSignatures, ledgerEntries, pairings, renderJobs, swipeEvent
 import { forbidden, notFound, unauthorized, unprocessable } from '../lib/errors.js';
 import { HOUR, utcDay } from '../lib/time.js';
 import { fitCohort } from '../services/analytics.js';
+import { isComingSoonByExternalId, menComingSoon, shopperReadiness, withoutComingSoon } from '../services/readiness.js';
 import { byteLength, fieldNames, listLedger, toDto, writeLedger } from '../services/ledger.js';
 import { asGarment, findProduct, findProductById, listActiveGarments } from '../services/products.js';
 import { findShopById, type ShopRow } from '../services/shops.js';
@@ -201,7 +202,8 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
     async (req) => {
       const pairing = await db.query.pairings.findFirst({ where: and(eq(pairings.deviceId, req.device!.id), eq(pairings.shopId, req.params.shopId)) });
       if (!pairing) throw forbidden('shop is not paired with this device', 'not_paired');
-      return listActiveGarments(db, req.params.shopId, req.query);
+      // Men's gate (services/readiness.ts): products in the coming-soon state are left out.
+      return listActiveGarments(db, req.params.shopId, req.query, (rows) => withoutComingSoon({ db, env }, rows));
     },
   );
 
@@ -215,6 +217,8 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
           ? await findProduct(db, req.query.shopId, req.params.id)
           : undefined;
       if (!row || row.status === 'archived') throw notFound('product');
+      // Men's gate: the app's product page draws the 2D figure only (a flat surface).
+      if ((await shopperReadiness({ db, env }, row, { surface: 'flat' })).state === 'coming_soon') throw menComingSoon();
       const garment = asGarment(row);
       if (!garment) throw unprocessable('product_incomplete', 'product is not complete enough to try on');
       return { shopId: row.shopId, garment };
@@ -345,6 +349,12 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
   app.get(
     '/v1/fit/cohort/:productId',
     { schema: { params: z.object({ productId: z.string().min(1).max(128) }), querystring: z.object({ shopId: uuid.optional() }), response: { 200: FitCohortResponseSchema } }, preHandler: requireDevice },
-    async (req) => fitCohort(db, req.params.productId, req.query.shopId, env.K_ANON),
+    async (req) => {
+      // Men's gate: no size histogram (it is size advice) for a product in the coming-soon state.
+      if (await isComingSoonByExternalId({ db, env }, req.params.productId, req.query.shopId)) {
+        return { productId: req.params.productId, n: 0, kAnonymityFloor: env.K_ANON, sizeHistogram: {}, keptRate: null };
+      }
+      return fitCohort(db, req.params.productId, req.query.shopId, env.K_ANON);
+    },
   );
 };

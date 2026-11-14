@@ -2,7 +2,8 @@
  * Wiring of the embed: its own ApiClient (device token from the embed store, never the app's
  * store or database), the parent window, and the `mock:` tokens used in development and tests.
  */
-import { MOCK_GARMENTS_BY_ID, type TryResolveResponse } from '@curtain/schema';
+import type * as GarmentViewer from '@curtain/garment-viewer';
+import { MEN_COMING_SOON_CODE, MOCK_GARMENTS_BY_ID, type TryResolveResponse } from '@curtain/schema';
 import { ApiClient, ApiError, NetworkError, apiBaseUrl } from '@/api/client';
 import type { ClientLedgerEntry } from '@/db/db';
 import { originOf, type ParentWindowLike } from './protocol';
@@ -23,6 +24,9 @@ export interface EmbedDeps {
   canScan: boolean;
   /** The shopper's locale for the default units (default: `navigator.language`; null: none). */
   locale?: string | null;
+  /** WebGL2 check and viewer chunk for the 3D view (tests inject these; default: the real ones). */
+  webgl2?: () => boolean;
+  loadViewer?: () => Promise<typeof GarmentViewer>;
   /** Resolve `mock:` tokens (default: `mockTokensEnabled()`, i.e. dev builds or VITE_DEMO=1 only). */
   allowMock?: boolean;
 }
@@ -77,8 +81,8 @@ export function mockTokensEnabled(env: { DEV?: boolean; VITE_DEMO?: string } = i
 
 /**
  * `mock:<garment id>` resolves to a bundled fixture without any network call (dev, demo
- * screenshots, tests). `mock:paused:<id>`, `mock:expired`, `mock:incomplete` and `mock:offline`
- * show the blocked screens. The allowed origin of a mock is the framing page's own origin in a
+ * screenshots, tests). `mock:paused:<id>`, `mock:expired`, `mock:incomplete`, `mock:comingsoon`
+ * and `mock:offline` show the blocked screens. The allowed origin of a mock is the framing page's own origin in a
  * dev build only, so the size-selected message can be tried locally.
  */
 export function resolveMock(token: string, referrer: string): TryResolveResponse {
@@ -86,6 +90,7 @@ export function resolveMock(token: string, referrer: string): TryResolveResponse
   const variant = parts[1] ?? '';
   if (variant === 'expired') throw new ApiError(410, 'gone', 'try link expired');
   if (variant === 'incomplete') throw new ApiError(422, 'product_incomplete', 'the shop has not finished this product');
+  if (variant === 'comingsoon') throw new ApiError(422, MEN_COMING_SOON_CODE, 'Men’s clothing: coming soon');
   if (variant === 'offline') throw new NetworkError('offline (mock)');
   const paused = variant === 'paused';
   const id = paused ? (parts[2] ?? '') : variant;

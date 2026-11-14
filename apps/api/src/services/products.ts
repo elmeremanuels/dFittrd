@@ -4,6 +4,7 @@ import {
   GarmentPayloadSchema,
   completenessScore,
   sizeAdviceGarment,
+  type AudienceSource,
   type GarmentPayload,
   type GarmentPayloadDraft,
   type MerchantProductSummary,
@@ -26,7 +27,18 @@ export interface UpsertResult {
  * Merchant upsert: validates the draft, runs completenessScore, stores status + missing field
  * paths. Equal content hash → no-op (returns changed: false and leaves updated_at alone).
  */
-export async function upsertProduct(db: Db, shopId: string, externalId: string, input: unknown, opts: { handle?: string | null } = {}): Promise<UpsertResult> {
+export async function upsertProduct(
+  db: Db,
+  shopId: string,
+  externalId: string,
+  input: unknown,
+  /**
+   * `audienceSource`: where the payload's audience was read from, when the caller knows (the
+   * Shopify sync). Left out: unknown; a changed payload then clears the stored source, an
+   * unchanged one keeps it. The men's gate reads it (services/readiness.ts).
+   */
+  opts: { handle?: string | null; audienceSource?: AudienceSource | null } = {},
+): Promise<UpsertResult> {
   const draft = GarmentPayloadDraftSchema.parse({ ...(input as object), id: externalId });
   const completeness = completenessScore(draft);
   const missingFields = completeness.missing.map((m) => m.field);
@@ -36,6 +48,11 @@ export async function upsertProduct(db: Db, shopId: string, externalId: string, 
   const hash = contentHash(draft);
   const existing = await db.query.products.findFirst({ where: and(eq(products.shopId, shopId), eq(products.externalId, externalId)) });
   if (existing && existing.contentHash === hash && existing.status !== 'archived') {
+    if (opts.audienceSource !== undefined && opts.audienceSource !== existing.audienceSource) {
+      // Same content, but the sync now knows the source (products stored before the column existed).
+      const [row] = await db.update(products).set({ audienceSource: opts.audienceSource }).where(eq(products.id, existing.id)).returning();
+      return { product: row!, changed: false, score: completeness.score, missingFields, status };
+    }
     return { product: existing, changed: false, score: completeness.score, missingFields, status };
   }
   const values = {
@@ -53,6 +70,7 @@ export async function upsertProduct(db: Db, shopId: string, externalId: string, 
     contentHash: hash,
     updatedAt: new Date(),
     archivedAt: null,
+    audienceSource: opts.audienceSource ?? null,
   };
   const [row] = await db
     .insert(products)
@@ -106,7 +124,7 @@ export function asGarment(row: ProductRow): GarmentPayload | null {
   return parsed.success ? parsed.data : null;
 }
 
-export function toSummary(row: ProductRow, flatLayProcessedUrl: string | null = null): MerchantProductSummary {
+export function toSummary(row: ProductRow, flatLayProcessedUrl: string | null = null, menGate?: MerchantProductSummary['menGate']): MerchantProductSummary {
   const cat = row.category as MerchantProductSummary['category'];
   return {
     externalId: row.externalId,
@@ -117,6 +135,8 @@ export function toSummary(row: ProductRow, flatLayProcessedUrl: string | null = 
     missingFields: row.missingFields,
     flatLayProcessedUrl,
     updatedAt: row.updatedAt.toISOString(),
+    // Only for a men's product under the men's gate; absent otherwise, so the body is unchanged.
+    ...(menGate ? { menGate } : {}),
   };
 }
 
@@ -130,7 +150,13 @@ export function decodeIdCursor(cursor: string | undefined): string | null {
   return s.length ? s : null;
 }
 
-export async function listActiveGarments(db: Db, shopId: string, q: { cursor?: string; category?: string; limit: number }) {
+export async function listActiveGarments(
+  db: Db,
+  shopId: string,
+  q: { cursor?: string; category?: string; limit: number },
+  /** The men's gate (`withoutComingSoon`): drops rows that are not ready for shoppers. The cursor still walks every row. */
+  keep: (rows: ProductRow[]) => Promise<ProductRow[]> = async (rows) => rows,
+) {
   const after = decodeIdCursor(q.cursor);
   const conds: SQL[] = [eq(products.shopId, shopId), eq(products.status, 'active')];
   if (q.category) conds.push(eq(products.category, q.category));
@@ -142,12 +168,18 @@ export async function listActiveGarments(db: Db, shopId: string, q: { cursor?: s
     .orderBy(asc(products.externalId))
     .limit(q.limit + 1);
   const page = rows.slice(0, q.limit);
-  const items = page.map(asGarment).filter((g): g is GarmentPayload => g !== null);
+  const items = (await keep(page)).map(asGarment).filter((g): g is GarmentPayload => g !== null);
   const last = page[page.length - 1];
   return { items, nextCursor: rows.length > q.limit && last ? encodeIdCursor(last.externalId) : null };
 }
 
-export async function listMerchantProducts(db: Db, shopId: string, q: { status?: ProductStatus; cursor?: string; limit: number }) {
+export async function listMerchantProducts(
+  db: Db,
+  shopId: string,
+  q: { status?: ProductStatus; cursor?: string; limit: number },
+  /** The men's gate badge per row (`merchantMenGate`); the default adds nothing. */
+  menGateOf: (row: ProductRow) => Promise<MerchantProductSummary['menGate']> = async () => undefined,
+) {
   const after = decodeIdCursor(q.cursor);
   const conds: SQL[] = [eq(products.shopId, shopId)];
   if (q.status) conds.push(eq(products.status, q.status));
@@ -175,8 +207,10 @@ export async function listMerchantProducts(db: Db, shopId: string, q: { status?:
   const counts = { active: 0, incomplete: 0, archived: 0 };
   for (const c of countRows) counts[c.status] = c.n;
   const last = page[page.length - 1];
+  const items: MerchantProductSummary[] = [];
+  for (const p of page) items.push(toSummary(p, flatByProduct.get(p.id) ?? null, await menGateOf(p)));
   return {
-    items: page.map((p) => toSummary(p, flatByProduct.get(p.id) ?? null)),
+    items,
     nextCursor: rows.length > q.limit && last ? encodeIdCursor(last.externalId) : null,
     counts,
   };

@@ -17,6 +17,7 @@ import { JOB } from '../jobs/queue.js';
 import { badRequest, forbidden, notFound, tooLarge, unprocessable } from '../lib/errors.js';
 import { HOUR } from '../lib/time.js';
 import { asGarment, findProduct } from '../services/products.js';
+import { menComingSoon, shopperReadiness } from '../services/readiness.js';
 import { signedRenderUrl } from '../services/renders.js';
 import { findShopById } from '../services/shops.js';
 
@@ -59,6 +60,9 @@ export const renderRoutes: FastifyPluginAsyncZod = async (app) => {
       if (!product || product.status === 'archived') throw notFound('product');
       const shop = await findShopById(db, req.body.shopId);
       if (!shop) throw notFound('shop');
+      // Men's gate (services/readiness.ts): the hero render is made from the 2D avatar drawing (a flat
+      // surface), so a gated men's product never gets one; the male 2D figure is a later slice.
+      if ((await shopperReadiness({ db, env }, product, { surface: 'flat', shop })).state === 'coming_soon') throw menComingSoon();
       if (!asGarment(product)) throw unprocessable('product_incomplete', 'product is not complete enough to render');
 
       const createdAt = now();

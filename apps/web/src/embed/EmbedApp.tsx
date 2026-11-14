@@ -7,6 +7,12 @@
  * `POST /v1/devices` (anonymous device), `GET /v1/try/:token`, ONE `POST …/fit-shown`
  * `{ intentToken, recommendedSize, confidence }`, `DELETE /v1/me` on "Forget me", and the opt-in
  * hero render of the avatar drawing. Never a measurement, a photo or a frame.
+ *
+ * Men's gate (D20 point 3, docs/research/men-3d-plan.md slice M0): a men's product is shown with
+ * the working 3D view or not at all. The server answers `men_coming_soon` for a product that is not
+ * ready; a ready one arrives with `requires3d`. Then nothing of the result (no 2D figure, no size)
+ * is visible until the 3D view has settled, fit-shown waits for it, and a device without WebGL2 or
+ * a failing bundle ends on "Men's clothing: coming soon".
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import type { BodyProfile, TryResolveResponse } from '@curtain/schema';
@@ -15,7 +21,7 @@ import { adviseSize, EMPTY_ABOUT, fitForProfile, mergeAboutIntoScan, normalizeAb
 import { isMockToken, mockTokensEnabled, resolveMock, type EmbedApi, type EmbedDeps } from './deps';
 import { AboutScreen, BlockedScreen, EmbedFooter, EmbedFrame, LoadingScreen, ProductHeader } from './EmbedScreens';
 import { classifyError, flowReducer, INITIAL_FLOW } from './flow';
-import { Garment3D } from './Garment3D';
+import { Garment3D, hasWebGL2 } from './Garment3D';
 import { HeroRenderPanel, heroRendersEnabled } from './HeroRender';
 import { createParentChannel, parseParentMessage, resolveTargetOrigin, type ParentContext } from './protocol';
 import { ResultScreen } from './ResultScreen';
@@ -44,6 +50,8 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
   const [chooseFallback, setChooseFallback] = useState<string | null>(null);
   const [forgetStatus, setForgetStatus] = useState<string | null>(null);
   const [context, setContext] = useState<ParentContext>(NO_CONTEXT);
+  /** `requires3d` products only: the 3D view has settled (until then the result stays hidden and unbilled). */
+  const [view3dReady, setView3dReady] = useState(false);
   /** Units the shopper picked (here or on an earlier visit to this shop); null follows the locale. */
   const [chosenUnits, setChosenUnits] = useState<Units | null>(null);
   const shopperLocale = deps.locale === undefined ? browserLocale() : deps.locale;
@@ -76,6 +84,11 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         if (mockToken && !mock) throw new ApiError(410, 'gone', 'try link expired');
         const resolved = mock ? resolveMock(token, deps.referrer) : await api().resolveTry(token);
         if (cancelled) return;
+        // Men's gate: a product that needs the 3D view is not opened on a device that cannot show it.
+        if (resolved.requires3d && !resolved.shop.paused && (!resolved.asset || !(deps.webgl2 ?? hasWebGL2)())) {
+          dispatch({ type: 'failed', kind: 'comingSoon' });
+          return;
+        }
         const remembered = await store.loadProfile(resolved.shop.id);
         const storedUnits = await store.loadUnits();
         if (cancelled) return;
@@ -93,7 +106,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
     return () => {
       cancelled = true;
     };
-  }, [token, attempt, mock, mockToken, deps.referrer, store, api]);
+  }, [token, attempt, mock, mockToken, deps.referrer, deps.webgl2, store, api]);
 
   // --- parent channel ---------------------------------------------------------------------------
   const targetOrigin = useMemo(
@@ -146,6 +159,8 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
   // "no size fits well" (UX-2) or "we can't recommend a size yet" (F1): no size was recommended.
   useEffect(() => {
     if (flow.step !== 'result' || !data || !embedFit || !advice || mock || !advice.size) return;
+    // Men's gate: nothing is "shown" (and nothing billed) before the required 3D view has settled.
+    if (data.requires3d && !view3dReady) return;
     const intent = data.trySession.intentToken;
     if (fitShownFor.current.has(intent)) return;
     fitShownFor.current.add(intent);
@@ -158,7 +173,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         if (e instanceof ApiError && (e.status === 402 || e.code === 'shop_paused')) dispatch({ type: 'paused' });
         // Anything else: the shopper still has their size; analytics simply miss this one.
       });
-  }, [flow.step, data, embedFit, advice, mock, token, api]);
+  }, [flow.step, data, embedFit, advice, mock, token, api, view3dReady]);
 
   // Remember the profile on this shop (only with "Remember me" on; the store enforces that too).
   useEffect(() => {
@@ -241,6 +256,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
     setSelected(null);
     setChosen(null);
     setChooseFallback(null);
+    setView3dReady(false);
     dispatch({ type: 'forgotten' });
     setForgetStatus(serverOk ? 'Forgotten. Nothing about you is stored here any more.' : 'Deleted from this browser. We could not reach Curtain to delete the anonymous device; try again later.');
   };
@@ -269,6 +285,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
             : null
         }
         onClose={close}
+        locale={shopperLocale ?? context.locale}
       />
     );
   else if (!data) body = <LoadingScreen />;
@@ -310,8 +327,9 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         </div>
       </Suspense>
     );
-  else if (flow.step === 'result' && profile && embedFit && advice && shownSize)
-    body = (
+  else if (flow.step === 'result' && profile && embedFit && advice && shownSize) {
+    const requires3d = data.requires3d === true;
+    const result = (
       <ResultScreen
         garment={data.garment}
         profile={profile}
@@ -325,7 +343,11 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
           setChooseFallback(null);
         }}
         onChoose={choose}
-        onEdit={() => dispatch({ type: 'edit' })}
+        onEdit={() => {
+          // A required 3D view is mounted again when the shopper comes back to the result.
+          setView3dReady(false);
+          dispatch({ type: 'edit' });
+        }}
         returning={flow.returning}
         chosen={chosen}
         chooseFallback={chooseFallback}
@@ -335,7 +357,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         onUnits={changeUnits}
         extra={
           <>
-            {heroRendersEnabled(data) && !mock ? <HeroRenderPanel getApi={api} data={data} size={shownSize} getAvatarSvg={getAvatarSvg} /> : null}
+            {heroRendersEnabled(data) && !mock && !requires3d ? <HeroRenderPanel getApi={api} data={data} size={shownSize} getAvatarSvg={getAvatarSvg} /> : null}
             <Garment3D
               asset={data.asset}
               paused={data.shop.paused}
@@ -347,6 +369,10 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
               units={units}
               heightCm={profile.measurements.height?.mean}
               estimated={priorKeys(profile)}
+              required={requires3d}
+              onRequiredState={(state) => (state === 'settled' ? setView3dReady(true) : dispatch({ type: 'comingSoon' }))}
+              {...(deps.webgl2 ? { webgl2: deps.webgl2 } : {})}
+              {...(deps.loadViewer ? { loadViewer: deps.loadViewer } : {})}
               onSelect={(s) => {
                 setSelected(s);
                 setChosen(null);
@@ -357,11 +383,28 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         }
       />
     );
-  else body = <LoadingScreen />;
+    // Men's gate: the 2D figure and the size stay out of sight (and out of the accessibility tree)
+    // until the required 3D view has settled. It is mounted meanwhile so the canvas has a size.
+    // The wrapper stays the same before and after, so the view is mounted once.
+    body = requires3d ? (
+      <div className="relative flex flex-1 flex-col" data-testid={view3dReady ? 'requires3d-shown' : 'requires3d-pending'}>
+        <div className={view3dReady ? undefined : 'invisible'} aria-hidden={!view3dReady} inert={!view3dReady}>
+          {result}
+        </div>
+        {view3dReady ? null : (
+          <div className="absolute inset-0 flex flex-col bg-cream">
+            <LoadingScreen />
+          </div>
+        )}
+      </div>
+    ) : (
+      result
+    );
+  } else body = <LoadingScreen />;
 
   return (
     <EmbedFrame>
-      <ProductHeader shop={data?.shop ?? null} garment={data?.garment ?? null} />
+      <ProductHeader shop={data?.shop ?? null} garment={flow.blocked === 'comingSoon' ? null : (data?.garment ?? null)} />
       <main ref={mainRef} className="flex flex-1 flex-col px-4 py-4" aria-live="off">
         {body}
       </main>

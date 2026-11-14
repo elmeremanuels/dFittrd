@@ -10,6 +10,17 @@ Checked again in this run (git metadata and file reads only):
 - In `tape-serverdrape`, `pom_rest.py`, `pom_measure.py` and `test_pom.py` are untracked, and three tracked files are modified.
 - `docs/LICENSES.md` does not exist.
 
+## Status: slice M0 built (14 Nov 2026, branch `claude/men-gate`)
+
+The gate exists and is **off by default** (`MEN_3D_GATE`, read in `apps/api/src/env.ts`). Merging it changes no response; the founder turns it on.
+
+- **Built:** the one helper (`apps/api/src/services/readiness.ts`) on `/v1/sdk/sessions`, `/v1/try/:token`, `/v1/try/:token/fit-shown`, `/v1/peek`, `/v1/shops/:shopId/products`, `/v1/products/:id`, `/v1/renders/hero` and `/v1/fit/cohort/:productId`; the modal line in English and Dutch; no 2D fallback when the 3D view of a men's product fails; a merchant badge in the web console and on `GET /v1/merchant/products`. Details: `apps/api/README.md` "Men's gate", `apps/web/README.md`.
+- **Conditions checked for a men's product to pass:** 2 (approved bundle on the male mannequin) and 4 (shop has 3D on). **Not checked yet:** 1 (supported garment types, section 2) and 3 (men's chart columns, M2a). Nothing can pass before M1 anyway: no bundle carries a mannequin family today.
+- **Assumed, for M1 to confirm:** the family is read from `qa.json` as `mannequin.family: 'male'` (the api keeps only `qa.json` of a bundle). If M1 writes it elsewhere, `assetMannequinFamily` in `apps/api/src/services/assets.ts` is the one place to change.
+- **Stricter than section 6 on one point:** a men's product with a live male bundle is shown in the overlay only. The size peek, the app's deck and product page, the hero render and app-mode try links draw the 2D figure only, so there it stays coming soon until the male 2D figure (photo-avatar slice 3) exists.
+- **Added, not in the plan:** a `men` that was read from a title or a collection only is not gated until the merchant sets the audience (`isWeakAudienceSource`; the source is stored in `products.audience_source`, filled by the Shopify sync). The WooCommerce plugin does not send the source yet, so there every `men` counts as confirmed.
+- **Not built, founder decisions still open:** the conflict case (men's and women's words both found: still `unisex`, not gated), the no-signal case (not gated), men's shoes and accessories (switch `MEN_3D_GATE_SHOES_ACCESSORIES`, default: not gated). Also not built: the badge in the Shopify admin and the WooCommerce product list, "waiting men's products do not count against the completeness score", and M0b (the line in place of the button).
+
 ## Bottom line
 
 - **First men's types:** the T-shirt family first, then trousers (chinos, jeans). Everything else for men shows "Men's clothing: coming soon".

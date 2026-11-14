@@ -24,7 +24,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { GarmentPayloadDraft, LedgerEntry, PairingSource, SdkSurface } from '@curtain/schema';
+import type { AudienceSource, GarmentPayloadDraft, LedgerEntry, PairingSource, SdkSurface } from '@curtain/schema';
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 const id = () => uuid('id').primaryKey().default(sql`gen_random_uuid()`);
@@ -193,6 +193,11 @@ export const products = pgTable(
     archivedAt: ts('archived_at'),
     /** The approved garment asset version shoppers see (D13); null = no 3D view. */
     activeAssetVersion: text('active_asset_version'),
+    /**
+     * Where the payload's `audience` was read from (`AUDIENCE_SOURCES` in @curtain/schema), when the
+     * sync knows it (Shopify today). Null: unknown, treated as a strong source by the men's gate.
+     */
+    audienceSource: text('audience_source').$type<AudienceSource>(),
   },
   (t) => [
     uniqueIndex('products_shop_external_uq').on(t.shopId, t.externalId),

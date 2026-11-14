@@ -348,6 +348,16 @@ export function MerchantProducts(): ReactNode {
                 <td className="px-4 py-3">{p.category ? titleCase(p.category) : '—'}</td>
                 <td className="px-4 py-3">
                   <span className={`chip ${p.status === 'active' ? 'border-ok/30 bg-ok/10 text-ok' : p.status === 'incomplete' ? 'border-bad/30 bg-bad/10 text-bad' : ''}`}>{p.status}</span>
+                  {/* The men's gate (D20 point 3): why shoppers do not get the fitting room for this product, and the next step. */}
+                  {p.menGate === 'coming_soon' ? (
+                    <span className="chip mt-1 block w-fit" data-testid="men-gate-badge" title="Shoppers see “Men’s clothing: coming soon” for this product. It opens once the shop has the 3D estimate on and an approved 3D bundle on the male body exists for it.">
+                      Men’s: coming soon
+                    </span>
+                  ) : p.menGate === 'audience_unconfirmed' ? (
+                    <span className="chip mt-1 block w-fit" data-testid="men-gate-badge" title="We read “men” from the title or a collection only. Set the audience on the product to confirm it; until then it is shown as before.">
+                      Men’s: confirm audience
+                    </span>
+                  ) : null}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">

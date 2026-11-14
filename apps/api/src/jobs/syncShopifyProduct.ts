@@ -1,5 +1,5 @@
 /** products/update → GraphQL product + metafields → @curtain/schema fromShopifyProduct → upsert (content_hash no-op). */
-import { fromShopifyProduct, shopifyExternalId, type MappingWarning } from '@curtain/schema';
+import { fromShopifyProduct, shopifyExternalId, type AudienceSource, type MappingWarning } from '@curtain/schema';
 import { DEFAULT_EUR_RATES } from '@curtain/shopify-app';
 import type { App } from '../app.js';
 import { JOB } from './queue.js';
@@ -28,12 +28,14 @@ export function makeSyncShopifyProductHandler(app: App) {
       return;
     }
     const warnings: MappingWarning[] = [];
-    const draft = fromShopifyProduct(node, undefined, { warnings, defaultBrand: shop.name, eurRates: DEFAULT_EUR_RATES });
+    // The men's gate (services/readiness.ts) needs to know when `men` is only a guess from a title or a collection.
+    const audience: { source: AudienceSource | null } = { source: null };
+    const draft = fromShopifyProduct(node, undefined, { warnings, defaultBrand: shop.name, eurRates: DEFAULT_EUR_RATES, onAudience: (d) => (audience.source = d?.source ?? null) });
     if (!draft.id || !draft.name) {
       app.log.warn({ shopId, productGid, warnings }, 'sync skipped: product node unusable');
       return;
     }
-    const r = await upsertProduct(db, shopId, draft.id, { ...draft, brand: draft.brand ?? shop.name }, { handle: node.handle ?? null });
+    const r = await upsertProduct(db, shopId, draft.id, { ...draft, brand: draft.brand ?? shop.name }, { handle: node.handle ?? null, audienceSource: audience.source });
     app.log.info({ shopId, externalId: r.product.externalId, status: r.status, changed: r.changed, warnings: warnings.length }, 'shopify product synced');
   };
 }
@@ -54,9 +56,10 @@ export function makeBackfillHandler(app: App) {
     const page = await shopify.fetchProductsPage(shop.domain, token, cursor);
     for (const node of page.nodes) {
       const warnings: MappingWarning[] = [];
-      const draft = fromShopifyProduct(node, undefined, { warnings, defaultBrand: shop.name, eurRates: DEFAULT_EUR_RATES });
+      const audience: { source: AudienceSource | null } = { source: null };
+      const draft = fromShopifyProduct(node, undefined, { warnings, defaultBrand: shop.name, eurRates: DEFAULT_EUR_RATES, onAudience: (d) => (audience.source = d?.source ?? null) });
       if (!draft.id || !draft.name) continue;
-      await upsertProduct(db, shopId, draft.id, { ...draft, brand: draft.brand ?? shop.name }, { handle: node.handle ?? null });
+      await upsertProduct(db, shopId, draft.id, { ...draft, brand: draft.brand ?? shop.name }, { handle: node.handle ?? null, audienceSource: audience.source });
     }
     if (page.pageInfo.hasNextPage && page.pageInfo.endCursor) {
       await queue.send(JOB.backfillShopify, { shopId, cursor: page.pageInfo.endCursor }, { startAfter: 1 });

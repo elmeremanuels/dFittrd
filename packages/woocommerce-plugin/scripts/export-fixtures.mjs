@@ -12,7 +12,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MOCK_GARMENTS, fromWooMeta, toWooMeta, ESTIMATE_DISCLAIMER, FABRIC_TEXT_FIELD, fabricFromProductText, resolveFabricText } from '@curtain/schema';
+import { MOCK_GARMENTS, MENS_FIXTURE_GARMENTS, AUDIENCE_CASES, inferAudienceDecision, fromWooMeta, toWooMeta, ESTIMATE_DISCLAIMER, FABRIC_TEXT_FIELD, fabricFromProductText, resolveFabricText } from '@curtain/schema';
 import { writeChartTemplatesAsset } from './chart-templates.mjs';
 import { writeEurRatesAsset } from './eur-rates.mjs';
 import { DEFAULT_EUR_RATES } from '@curtain/shopify-app';
@@ -46,6 +46,40 @@ console.log(`wrote tests/fixtures/garments.json (${cases.length} garments)`);
 writeFabricLibraryAsset(root);
 writeChartTemplatesAsset(root);
 writeEurRatesAsset(root);
+
+// Audience (women / men / unisex): the shared cases with what inferAudienceDecision answers now, and
+// WooCommerce products (the two men's fixtures as a shop would hold them, plus override and
+// false-positive products) with what fromWooMeta makes of them. Vocab::infer_audience and the PHP
+// builder must give the same.
+const audienceCases = AUDIENCE_CASES.map((c) => {
+  const d = inferAudienceDecision(c.hints);
+  return { name: c.name, hints: c.hints, audience: d?.audience ?? null, source: d?.source ?? null };
+});
+const wooProduct = (g, extra) => ({ id: g.id, name: g.name, price: String(g.priceEur), currency: 'EUR', images: [], categories: [], tags: [], brands: [], attributes: [], ...extra });
+const withoutAudience = (g) => toWooMeta(g).filter((row) => row.key !== '_curtain_audience');
+const [shirt, jeans] = MENS_FIXTURE_GARMENTS;
+const audienceProductInputs = [
+  { name: "men's shirt, audience stored in the meta box", product: wooProduct(shirt, {}), meta: toWooMeta(shirt) },
+  { name: "men's jeans, audience stored in the meta box", product: wooProduct(jeans, {}), meta: toWooMeta(jeans) },
+  { name: "men's shirt, audience read from the name", product: wooProduct(shirt, {}), meta: withoutAudience(shirt) },
+  { name: 'jeans, audience read from the category path', product: wooProduct(jeans, { name: 'Straight Jeans', categories: [{ name: 'Heren > Jeans', slug: 'jeans' }] }), meta: withoutAudience(jeans) },
+  { name: 'shirt, audience read from a tag', product: wooProduct(shirt, { name: 'Oxford Button-Down Shirt', tags: [{ name: 'mens', slug: 'mens' }] }), meta: withoutAudience(shirt) },
+  { name: 'shirt, audience read from a Geslacht attribute', product: wooProduct(shirt, { name: 'Oxford Button-Down Shirt', attributes: [{ name: 'Geslacht', slug: 'pa_geslacht', options: ['Heren'] }] }), meta: withoutAudience(shirt) },
+  { name: 'an attribute that is not about the audience is not read', product: wooProduct(shirt, { name: 'Oxford Button-Down Shirt', attributes: [{ name: 'Collectie', slug: 'pa_collectie', options: ['Heren'] }] }), meta: withoutAudience(shirt) },
+  { name: 'women contains men: a women\'s product stays women', product: wooProduct(jeans, { name: "Women's Slim Jeans", categories: [{ name: 'Women > Jeans' }], tags: [{ name: 'womens' }] }), meta: withoutAudience(jeans) },
+  { name: 'garment, element: no audience', product: wooProduct(shirt, { name: 'Garment-dyed Element Shirt' }), meta: withoutAudience(shirt) },
+  { name: 'both categories: unisex', product: wooProduct(shirt, { name: 'Oxford Shirt', categories: [{ name: 'Dames' }, { name: 'Heren' }] }), meta: withoutAudience(shirt) },
+  { name: 'merchant override beats the category', product: wooProduct(shirt, { name: 'Oxford Shirt', categories: [{ name: 'Heren' }] }), meta: [...withoutAudience(shirt), { key: '_curtain_audience', value: 'women' }] },
+  { name: 'override none: no audience, no inference', product: wooProduct(shirt, {}), meta: [...withoutAudience(shirt), { key: '_curtain_audience', value: 'none' }] },
+  { name: 'an override that is not understood warns and is ignored', product: wooProduct(shirt, {}), meta: [...withoutAudience(shirt), { key: '_curtain_audience', value: 'kids' }] },
+];
+const audienceProducts = audienceProductInputs.map(({ name, product, meta }) => {
+  const warnings = [];
+  const expected = fromWooMeta(product, meta, { warnings, defaultBrand: 'Fixture Shop' });
+  return { name, product, meta, expected, warnings };
+});
+writeFileSync(join(root, 'tests/fixtures/audience.json'), JSON.stringify({ cases: audienceCases, products: audienceProducts }, null, 1));
+console.log(`wrote tests/fixtures/audience.json (${audienceCases.length} cases, ${audienceProducts.length} products)`);
 
 // Shop prices in other currencies (the pilot sells in AUD): what fromWooMeta makes of them with the
 // api's EUR rate table. The PHP builder must give the same priceEur and the same warnings.

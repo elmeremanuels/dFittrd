@@ -154,6 +154,42 @@ final class Payload_Builder {
 			$out['subcategory'] = $sub;
 		}
 
+		// Audience: the merchant's meta box value, else a Gender attribute, categories, tags, the name.
+		$audience_raw = self::coerce_string( $get( '_curtain_audience' ) );
+		if ( null !== $audience_raw && null === Vocab::coerce_audience_override( $audience_raw ) ) {
+			$this->warn( '_curtain_audience', 'audience', "expected women, men, unisex or none, got '" . $audience_raw . "'" );
+		}
+		$audience_attr = array();
+		foreach ( (array) ( $product['attributes'] ?? array() ) as $attr ) {
+			if ( preg_match( Vocab::AUDIENCE_ATTRIBUTE_FIELD, (string) ( $attr['slug'] ?? '' ) ) || preg_match( Vocab::AUDIENCE_ATTRIBUTE_FIELD, trim( (string) ( $attr['name'] ?? '' ) ) ) ) {
+				foreach ( (array) ( $attr['options'] ?? array() ) as $opt ) {
+					$audience_attr[] = $opt;
+				}
+			}
+		}
+		$audience = Vocab::infer_audience(
+			array(
+				'override'  => $audience_raw,
+				'attribute' => $audience_attr,
+				'category'  => array_map(
+					static function ( $c ) {
+						return is_array( $c ) ? ( $c['name'] ?? null ) : null;
+					},
+					(array) ( $product['categories'] ?? array() )
+				),
+				'tags'      => array_map(
+					static function ( $t ) {
+						return is_array( $t ) ? ( $t['name'] ?? null ) : null;
+					},
+					(array) ( $product['tags'] ?? array() )
+				),
+				'title'     => $out['name'],
+			)
+		);
+		if ( null !== $audience ) {
+			$out['audience'] = $audience;
+		}
+
 		$currency = strtoupper( trim( (string) ( $product['currency'] ?? $opts['currency'] ?? 'EUR' ) ) );
 		$amount   = self::coerce_number( $product['price'] ?? null ) ?? self::coerce_number( $product['regular_price'] ?? null );
 		if ( null !== $amount ) {

@@ -37,6 +37,13 @@ final class Sanitizer {
 		}
 		$meta['_curtain_category']    = self::or_null( $category );
 		$meta['_curtain_subcategory'] = self::or_null( self::text( $in['subcategory'] ?? '', 64 ) );
+		// Audience override: women, men, unisex, or none (send no audience). Empty = read from the product.
+		$audience = strtolower( self::text( $in['audience'] ?? '' ) );
+		if ( '' !== $audience && ! in_array( $audience, Vocab::AUDIENCE_OPTIONS, true ) ) {
+			$errors[] = 'audience';
+			$audience = '';
+		}
+		$meta['_curtain_audience']    = self::or_null( $audience );
 		$meta['_curtain_brand']       = self::or_null( self::text( $in['brand'] ?? '', 120 ) );
 
 		// -- pattern block --------------------------------------------------------------------

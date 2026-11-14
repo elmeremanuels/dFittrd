@@ -3,6 +3,7 @@
 **Curtain for WooCommerce** — a dependency-free PHP 8.1+ WordPress/WooCommerce plugin (docs/DECISIONS.md D6/D7):
 
 - product-edit meta box for every GarmentPayload §3.1 field, with "Start from a template" (the size chart templates of `@curtain/schema`), saved as `_curtain_*` post meta in the exact formats `@curtain/schema`'s `fromWooMeta` reads;
+- optional **audience** (`_curtain_audience`: women, men, unisex, or `none`): the "Made for" select in the meta box is the merchant's override; left empty, `Vocab::infer_audience` (the PHP twin of `@curtain/schema`'s `inferAudience`, replayed against the same cases in `tests/audience.test.php`) reads a Gender/Geslacht attribute, the category paths, the product tags and the product name, as whole words ("women" is not read as "men"). Nothing is sent when nothing is found. The chest of a men's garment is stored in the `bust` column;
 - push-on-save sync to `PUT /v1/merchant/products/{id}` with **PK-HMAC** auth (retries via Action Scheduler, WP-Cron fallback), `DELETE` on trash/unpublish, "Sync all" backfill;
 - bundled `assets/sdk.v1.js` (copied from `@curtain/sdk` at build time — never loaded remotely) + "Try it on" button on single product pages (classic themes: `woocommerce_single_product_summary` at the configured priority; block themes: right after the add-to-cart form block);
 - Connect round-trip (`POST /v1/merchant/woo/connect` → Stripe Checkout → `/complete` → `PUT /v1/merchant/shops/self`), manual key paste, status, ads toggle;

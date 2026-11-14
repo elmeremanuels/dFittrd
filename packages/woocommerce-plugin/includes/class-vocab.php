@@ -19,6 +19,7 @@ final class Vocab {
 	public const META_PREFIX    = '_curtain_';
 
 	public const CATEGORIES = array( 'top', 'bottom', 'dress', 'outerwear', 'shoes', 'accessory' );
+	public const AUDIENCES  = array( 'women', 'men', 'unisex' );
 	public const FIT_POINTS = array( 'bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'foot' );
 	public const TASTE_AXES = array( 'bohemian', 'minimal', 'classic', 'avantGarde', 'sporty' );
 
@@ -105,6 +106,7 @@ final class Vocab {
 		'_curtain_primary_color_hex'   => array( 'primaryColorHex', 'color', false ),
 		'_curtain_colorways'           => array( 'colorways', 'json', false ),
 		'_curtain_subcategory'         => array( 'subcategory', 'string', false ),
+		'_curtain_audience'            => array( 'audience', 'enum', false ),
 		'_curtain_brand'               => array( 'brand', 'string', false ),
 	);
 
@@ -161,6 +163,170 @@ final class Vocab {
 			}
 		}
 		return null;
+	}
+
+	// ---- audience (women / men / unisex) -----------------------------------------------------
+	// PHP twin of @curtain/schema mappings/audience.ts. tests/audience.test.php replays the cases
+	// that file exports, so the word lists and the order below must stay in step with it.
+
+	/** Meta box values: the three audiences plus 'none' (send no audience, do not infer). */
+	public const AUDIENCE_OPTIONS = array( 'women', 'men', 'unisex', 'none' );
+
+	public const AUDIENCE_MEN_WORDS              = array( 'men', 'mens', 'menswear', 'male', 'males', 'gents', 'gentlemen', 'heren', 'mannen', 'herren', 'homme', 'hommes' );
+	public const AUDIENCE_WOMEN_WORDS            = array( 'women', 'womens', 'womenswear', 'female', 'females', 'ladies', 'dames', 'vrouwen', 'damen', 'femme', 'femmes' );
+	public const AUDIENCE_MEN_STRUCTURED_WORDS   = array( 'man', 'heer' );
+	public const AUDIENCE_WOMEN_STRUCTURED_WORDS = array( 'woman', 'lady', 'vrouw', 'dame' );
+	public const AUDIENCE_UNISEX_WORDS           = array( 'unisex', 'uniseks', 'genderneutral', 'genderneutraal', 'genderless' );
+	public const AUDIENCE_MEN_PREFIXES           = array( 'heren', 'herren', 'mannen' );
+	public const AUDIENCE_WOMEN_PREFIXES         = array( 'dames', 'damen', 'vrouwen' );
+	public const AUDIENCE_PREFIX_EXCEPTIONS      = array( 'herenhui', 'herenig' );
+	public const AUDIENCE_STYLE_WORDS            = array( 'inspired' );
+	public const AUDIENCE_GENDER_NEUTRAL_WORDS   = array( 'neutral', 'neutraal', 'neutrale', 'free' );
+	public const AUDIENCE_NONE_VALUES            = array( 'none', 'unspecified', 'not specified', 'n/a', '-' );
+
+	/** Attribute names that hold the audience (AUDIENCE_ATTRIBUTE_FIELD). */
+	public const AUDIENCE_ATTRIBUTE_FIELD = '/^(?:pa_)?(?:gender|geslacht|sex|doelgroep|audience|department|afdeling|geschlecht|zielgruppe|target[-_ ]?(?:group|gender|audience))$/i';
+
+	/**
+	 * Text → whole lower-case words; a possessive 's is joined to its word ("men's" → mens).
+	 * A word is compared as a whole, never as a substring: "women" does not contain the word "men".
+	 *
+	 * @return array<int, string>
+	 */
+	public static function audience_words( string $text ): array {
+		$t = function_exists( 'mb_strtolower' ) ? mb_strtolower( $text, 'UTF-8' ) : strtolower( $text );
+		$t = preg_replace( '/[\'’`´]s(?![\p{L}\p{N}])/u', 's', $t );
+		$t = null === $t ? null : preg_replace( '/[\'’`´]/u', ' ', $t );
+		if ( null === $t ) {
+			return array(); // The pattern could not run on this text: nothing is read from it.
+		}
+		$words = preg_split( '/[^\p{L}\p{N}]+/u', $t, -1, PREG_SPLIT_NO_EMPTY );
+		return false === $words ? array() : $words;
+	}
+
+	/** @param array<int, string> $prefixes */
+	private static function audience_compound( string $word, array $prefixes ): bool {
+		foreach ( self::AUDIENCE_PREFIX_EXCEPTIONS as $x ) {
+			if ( str_starts_with( $word, $x ) ) {
+				return false;
+			}
+		}
+		$len = function_exists( 'mb_strlen' ) ? mb_strlen( $word, 'UTF-8' ) : strlen( $word );
+		foreach ( $prefixes as $p ) {
+			if ( $len >= strlen( $p ) + 3 && str_starts_with( $word, $p ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * What the texts of one source say. $structured also reads the words that are too ambiguous
+	 * for a product name ("man", "woman", "lady").
+	 *
+	 * @param array<int, mixed> $texts
+	 */
+	public static function audience_of_texts( array $texts, bool $structured ): ?string {
+		$men   = false;
+		$women = false;
+		foreach ( $texts as $text ) {
+			if ( ! is_string( $text ) ) {
+				continue;
+			}
+			$words = self::audience_words( $text );
+			$n     = count( $words );
+			for ( $i = 0; $i < $n; $i++ ) {
+				$w    = $words[ $i ];
+				$next = $words[ $i + 1 ] ?? null;
+				if ( in_array( $w, self::AUDIENCE_UNISEX_WORDS, true ) ) {
+					return 'unisex';
+				}
+				if ( 'gender' === $w && null !== $next && in_array( $next, self::AUDIENCE_GENDER_NEUTRAL_WORDS, true ) ) {
+					return 'unisex';
+				}
+				if ( null !== $next && in_array( $next, self::AUDIENCE_STYLE_WORDS, true ) ) {
+					continue;
+				}
+				if ( in_array( $w, self::AUDIENCE_MEN_WORDS, true ) || ( $structured && in_array( $w, self::AUDIENCE_MEN_STRUCTURED_WORDS, true ) ) || self::audience_compound( $w, self::AUDIENCE_MEN_PREFIXES ) ) {
+					$men = true;
+				} elseif ( in_array( $w, self::AUDIENCE_WOMEN_WORDS, true ) || ( $structured && in_array( $w, self::AUDIENCE_WOMEN_STRUCTURED_WORDS, true ) ) || self::audience_compound( $w, self::AUDIENCE_WOMEN_PREFIXES ) ) {
+					$women = true;
+				}
+			}
+		}
+		if ( $men && $women ) {
+			return 'unisex';
+		}
+		if ( $men ) {
+			return 'men';
+		}
+		return $women ? 'women' : null;
+	}
+
+	/**
+	 * The merchant's own value: an audience, 'none' (send none, do not infer), or null when it is
+	 * empty or not understood (inference then runs as if there were no override).
+	 *
+	 * @param mixed $value
+	 */
+	public static function coerce_audience_override( $value ): ?string {
+		if ( ! is_string( $value ) ) {
+			return null;
+		}
+		$t = trim( $value );
+		$t = function_exists( 'mb_strtolower' ) ? mb_strtolower( $t, 'UTF-8' ) : strtolower( $t );
+		if ( '' === $t ) {
+			return null;
+		}
+		if ( in_array( $t, self::AUDIENCES, true ) ) {
+			return $t;
+		}
+		if ( in_array( $t, self::AUDIENCE_NONE_VALUES, true ) ) {
+			return 'none';
+		}
+		return self::audience_of_texts( array( $t ), true );
+	}
+
+	/**
+	 * The audience and the source that decided it, strongest source first: override, attribute,
+	 * productType, category, tags, title, collections. Null when nothing says anything; audience
+	 * is null only for the override 'none'.
+	 *
+	 * @param array<string, mixed> $hints override, attribute[], productType, category[], tags[], title, collections[].
+	 * @return array{audience:?string,source:string}|null
+	 */
+	public static function infer_audience_decision( array $hints ): ?array {
+		$override = self::coerce_audience_override( $hints['override'] ?? null );
+		if ( null !== $override ) {
+			return array(
+				'audience' => 'none' === $override ? null : $override,
+				'source'   => 'override',
+			);
+		}
+		$steps = array(
+			array( 'attribute', (array) ( $hints['attribute'] ?? array() ), true ),
+			array( 'productType', array( $hints['productType'] ?? null ), true ),
+			array( 'category', (array) ( $hints['category'] ?? array() ), true ),
+			array( 'tags', (array) ( $hints['tags'] ?? array() ), true ),
+			array( 'title', array( $hints['title'] ?? null ), false ),
+			array( 'collections', (array) ( $hints['collections'] ?? array() ), true ),
+		);
+		foreach ( $steps as $step ) {
+			$audience = self::audience_of_texts( $step[1], $step[2] );
+			if ( null !== $audience ) {
+				return array(
+					'audience' => $audience,
+					'source'   => $step[0],
+				);
+			}
+		}
+		return null;
+	}
+
+	/** The audience for the payload, or null (leave the field out). @param array<string, mixed> $hints */
+	public static function infer_audience( array $hints ): ?string {
+		$d = self::infer_audience_decision( $hints );
+		return null === $d ? null : $d['audience'];
 	}
 
 	/** Known values labels for the UI (translated lazily by the caller). */

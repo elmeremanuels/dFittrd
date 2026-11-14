@@ -46,6 +46,19 @@ final class Product_Snapshot {
 			}
 		}
 
+		// Product tags: read for the audience (a "mens" tag), never sent on.
+		$tags      = array();
+		$tag_terms = get_the_terms( $id, 'product_tag' );
+		if ( is_array( $tag_terms ) ) {
+			foreach ( $tag_terms as $term ) {
+				$tags[] = array(
+					'id'   => (int) $term->term_id,
+					'name' => (string) $term->name,
+					'slug' => (string) $term->slug,
+				);
+			}
+		}
+
 		$brands = array();
 		if ( taxonomy_exists( 'product_brand' ) ) {
 			$brand_terms = get_the_terms( $id, 'product_brand' );
@@ -95,6 +108,7 @@ final class Product_Snapshot {
 			'currency'      => get_woocommerce_currency(),
 			'images'        => $images,
 			'categories'    => $categories,
+			'tags'          => $tags,
 			'brands'        => $brands,
 			'attributes'    => $attributes,
 		);

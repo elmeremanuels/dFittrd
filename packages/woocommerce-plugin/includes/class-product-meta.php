@@ -294,6 +294,14 @@ final class Product_Meta {
 						<?php endforeach; ?>
 					</select></label>
 				<label><span><?php esc_html_e( 'Subcategory', 'curtain-woocommerce' ); ?></span><input type="text" name="curtain[subcategory]" value="<?php echo esc_attr( (string) $get( 'subcategory' ) ); ?>" placeholder="wrap-midi" maxlength="64"></label>
+				<label><span><?php esc_html_e( 'Made for', 'curtain-woocommerce' ); ?></span>
+					<select name="curtain[audience]">
+						<option value=""><?php esc_html_e( 'Read from categories, tags and name', 'curtain-woocommerce' ); ?></option>
+						<option value="women" <?php selected( $get( 'audience' ), 'women' ); ?>><?php esc_html_e( 'Women', 'curtain-woocommerce' ); ?></option>
+						<option value="men" <?php selected( $get( 'audience' ), 'men' ); ?>><?php esc_html_e( 'Men', 'curtain-woocommerce' ); ?></option>
+						<option value="unisex" <?php selected( $get( 'audience' ), 'unisex' ); ?>><?php esc_html_e( 'Unisex', 'curtain-woocommerce' ); ?></option>
+						<option value="none" <?php selected( $get( 'audience' ), 'none' ); ?>><?php esc_html_e( 'Leave out', 'curtain-woocommerce' ); ?></option>
+					</select></label>
 				<label><span><?php esc_html_e( 'Brand', 'curtain-woocommerce' ); ?></span><input type="text" name="curtain[brand]" value="<?php echo esc_attr( (string) $get( 'brand' ) ); ?>" placeholder="<?php echo esc_attr( (string) ( '' !== (string) Settings::get( 'default_brand' ) ? Settings::get( 'default_brand' ) : get_bloginfo( 'name' ) ) ); ?>" maxlength="120"></label>
 				<label><span><?php esc_html_e( 'Pattern block', 'curtain-woocommerce' ); ?></span>
 					<select name="curtain[pattern_block]" class="curtain-pattern-block">
@@ -561,6 +569,9 @@ final class Product_Meta {
 		switch ( $col ) {
 			case 'size':
 				return __( 'Size', 'curtain-woocommerce' );
+			case 'bust':
+				// The stored point is `bust` for every audience; on men's garments it holds the chest.
+				return __( 'bust / chest', 'curtain-woocommerce' );
 			case 'footEu':
 				return __( 'Foot EU', 'curtain-woocommerce' );
 			case 'footLengthCm':

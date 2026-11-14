@@ -21,6 +21,12 @@ export type GarmentCategory = (typeof GARMENT_CATEGORIES)[number];
  * means "not specified" and keeps the behaviour from before the field existed (the women's figure
  * and the "Bust" label). The mappings fill it from shop data with a merchant override
  * (`mappings/audience.ts`). It changes labels and which figure is drawn, never the fit maths.
+ *
+ * Decision D20 (13 Nov 2026): no men's product goes live with a 2D figure only. Until the male 3D
+ * pipeline works, the web layer shows "Men's clothing: coming soon" for `audience: 'men'` in place
+ * of the Try it on flow. So a wrong `men` (the inference reads text and can be wrong) now hides
+ * the flow for that product; the merchant override is the fix. This package only carries the
+ * value; the gate lives in the web layer.
  */
 export const GARMENT_AUDIENCES = ['women', 'men', 'unisex'] as const;
 export type GarmentAudience = (typeof GARMENT_AUDIENCES)[number];

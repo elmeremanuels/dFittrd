@@ -99,6 +99,30 @@ implements the validate dry-run. `API_ROUTES` lists the method + path per DTO.
   `warnings` sink; the result is a draft for `completenessScore` / `GarmentPayloadSchema`.
 - `mappings/common.ts` exports the coercers (`coerceSizeChart`, `coerceFabric`, `inferCategory`, …). `coerceUnit` (0..1 fields such as `trueToSizeScore`) accepts a fraction, an explicit percentage (`"92%"`) or a whole number 2..100 read as a percentage; a fraction above 1 such as `1.5` is rejected, not read as 1.5 %.
 
+### Audience and men's data (photo-avatar plan slice 3; decision D20)
+
+- `GarmentPayload.audience?: 'women' | 'men' | 'unisex'` (`GARMENT_AUDIENCES`). Optional: absent = not
+  specified = the behaviour from before the field. The JSON Schema carries it as a closed enum.
+  Under D20 the web layer shows "Men's clothing: coming soon" for `men` until the male 3D pipeline
+  works; this package only carries the value.
+- `audience.ts`: `bustLabelKey(audience)` → `'chest'` for men and unisex, else `'bust'`;
+  `fitPointLabelKey(point, audience)`, `fitPointLabel(point, audience)` (English). The stored fit
+  point stays `bust` everywhere; only the printed word changes. Pure, no DOM.
+- `mappings/audience.ts`: `inferAudience(hints)` / `inferAudienceDecision(hints)` read the override,
+  a gender attribute, product type, category, tags, title and collections, strongest first, as whole
+  words ("women" is not read as "men"). `coerceAudienceOverride`, the word lists and
+  `AUDIENCE_CASES` (`mappings/audienceCases.ts`, replayed by the WooCommerce plugin's PHP twin) are
+  exported. It is a guess from text: "Men in Black Tee" reads as men's. The merchant override
+  (Shopify metafield `audience`, Woo meta `_curtain_audience`, value `none` = send nothing) is the fix.
+- `chartTemplatesMen.ts`: generic men's **body** templates, not any brand's chart, each cell the
+  median of published charts read on 2026-11-13 with the source tables in the file:
+  `MENS_LETTER_BODY_TEMPLATE` (XS–3XL; chest, waist, seat), `MENS_EU_BODY_TEMPLATE` (44–58, German /
+  Dutch numbering; every size is marked weak, two sources per cell), `MENS_JEANS_WL_BODY_TEMPLATE`
+  (W/L grid; waist and inside leg only). `jeansSizeLabel`, `parseJeansSize`. No source page grants a
+  licence for its chart, the same open legal point as the women's templates.
+- `fixtures/mens.ts`: `MENS_OXFORD_SHIRT`, `MENS_STRAIGHT_JEANS`, `MENS_TEST_BODIES` (slim, medium,
+  broad; invented numbers). Kept out of `MOCK_GARMENTS`.
+
 ### `fixtures/`
 
 `MOCK_GARMENTS` (41 payloads, 6 categories, 12 brands), `MOCK_GARMENTS_BY_ID`,

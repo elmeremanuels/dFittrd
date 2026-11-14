@@ -78,6 +78,15 @@ const sub = await createAppSubscription(client, { name: CURTAIN_PLAN.name, retur
 `apps/api/src/shopify/client.ts` currently contains its own copy of the GraphQL documents and token
 exchange; it can be replaced by these helpers one function at a time (same shapes).
 
+### Audience (women / men / unisex)
+
+`fetchProduct` selects `tags` and `collections(first: 10)` next to the product type and category, and
+`fromShopifyProduct` (`@curtain/schema`) fills the optional `audience` from them, as whole words. The
+metafield `$app:curtain.audience` is the merchant's override (`women`, `men`, `unisex`, or `none` to
+send nothing). The bulk export selects `tags` but not collections (a further nested connection is
+not added to the bulk query), so a product whose only hint is its collection gets its audience on
+the next single-product sync, not in the bulk backfill. Not checked against a live store.
+
 ## The theme app extension
 
 `extensions/try-button/blocks/try-it-on.liquid` is an **app block** (`target: content`) limited
@@ -146,6 +155,10 @@ script; required for embedded apps) with `<meta name="shopify-api-key">`, then:
    type is always explicit: a radio "these numbers are the body each size fits / the finished
    garment". cm or inches (stored in cm), sizes can be ticked off or added, rows on fewer than three
    sources are marked "estimate". Picking a template saves it to the onboarding state.
+   Men's generic **body** templates (not a brand's chart; sources read on 2026-11-13, tables in
+   `@curtain/schema` `chartTemplatesMen.ts`): letter sizes XS–3XL and 44–58 with chest, waist and
+   seat, and jeans W/L with waist and inside leg. The builder shows a template's own points and
+   prints "Chest" for a men's template; the stored key stays `bust`.
 2. **Assign in bulk** (`POST /shopify/charts/preview`, `POST /shopify/charts/assign`): by collection
    (App Bridge `resourcePicker({ type: 'collection' })`), tag, product type, or picked products
    (`resourcePicker({ type: 'product', multiple: true })`, ≤ 250). Preview shows the count
@@ -176,7 +189,8 @@ AI "Find my size" quiz on its $19 plan. Where we stand after this round:
 | | SmartSize | Curtain |
 | --- | --- | --- |
 | Women's body chart templates | yes | AU, UK, EU (DE + FR labels), US, sourced |
-| Men / kids / lingerie / pets / shoes templates | yes | **no** |
+| Men's templates | yes | generic body charts: letter XS–3XL, 44–58, jeans W/L |
+| Kids / lingerie / pets / shoes templates | yes | **no** |
 | Garment charts per size | yes | yes, chart type explicit |
 | Unit conversion | yes | cm ↔ in in the builder; metric ↔ imperial for the shopper (inputs, table, fit text) |
 | Bulk assign (collection, tag, type, picker) | yes | yes |

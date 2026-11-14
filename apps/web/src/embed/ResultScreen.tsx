@@ -3,7 +3,7 @@
  * per-point fit for the size on screen, the avatar with the garment overlay, the confidence and
  * the estimate disclaimer, and the "Choose size X" action.
  */
-import { CheckCircle2, Pencil } from 'lucide-react';
+import { CheckCircle2, Pencil, Sparkles } from 'lucide-react';
 import { useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { BodyProfile, GarmentPayload } from '@curtain/schema';
 import { AvatarView } from '@/components/AvatarView';
@@ -52,6 +52,13 @@ export interface ResultScreenProps {
   avatarRef?: React.RefObject<HTMLDivElement | null>;
   units: Units;
   onUnits: (u: Units) => void;
+  /** The skin colour the shopper picked for the avatar (null: the standard colour). */
+  skinHex?: string | null;
+  /** Tapping the avatar opens the avatar prompt (D19). Without it the figure is not a control. */
+  onAvatar?: (() => void) | undefined;
+  /** The visible and spoken name of that control (the prompt's title, in the shopper's language). */
+  avatarLabel?: string;
+  avatarLang?: string;
 }
 
 export function ResultScreen({
@@ -72,6 +79,10 @@ export function ResultScreen({
   avatarRef,
   units,
   onUnits,
+  skinHex = null,
+  onAvatar,
+  avatarLabel = 'Make the avatar look like you',
+  avatarLang,
 }: ResultScreenProps): ReactNode {
   const { fit, userBody } = embedFit;
   const shown = useMemo(() => fitWithAdvice(fit, advice, garment.category, profile), [fit, advice, garment.category, profile]);
@@ -208,8 +219,27 @@ export function ResultScreen({
         <div role="tabpanel" id={`${tabsId}-panel-fit`} aria-labelledby={`${tabsId}-tab-fit`} hidden={tab !== 'fit'}>
         <div className="grid items-start gap-4 min-[500px]:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
           <div className="mx-auto w-full max-w-[15rem] space-y-1.5">
-            <div ref={avatarRef} className="mirror-frame aspect-[5/8] w-full border-[8px]">
-              <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} bodyLabel="Body from your answers" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} />
+            <div className={`relative ${onAvatar ? 'pb-10' : ''}`}>
+              <div ref={avatarRef} className="mirror-frame aspect-[5/8] w-full border-[8px]">
+                <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} skinHex={skinHex} bodyLabel="Body from your answers" labelsAt="bottom" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} />
+              </div>
+              {onAvatar ? (
+                // D19: the control sits where people look for it. The whole figure is the button;
+                // the chip under it says what it does.
+                <button
+                  type="button"
+                  onClick={onAvatar}
+                  aria-haspopup="dialog"
+                  lang={avatarLang}
+                  className="group absolute inset-0 flex items-end justify-center rounded-[2.5rem] focus-visible:ring-2 focus-visible:ring-coral focus-visible:ring-offset-2 focus-visible:ring-offset-cream focus-visible:outline-none"
+                  data-testid="avatar-open"
+                >
+                  <span className="chip min-h-8 max-w-full bg-white/90 px-3 py-1 text-xs leading-tight shadow group-hover:bg-white">
+                    <Sparkles className="h-3.5 w-3.5 shrink-0 text-coral" aria-hidden />
+                    {avatarLabel}
+                  </span>
+                </button>
+              ) : null}
             </div>
             {rings ? (
               <div className="space-y-1 text-[11px] leading-snug text-ink-mute" data-testid="size-rings-legend">

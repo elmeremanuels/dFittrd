@@ -3,7 +3,8 @@ import { useId, useMemo, type ReactNode } from 'react';
 import type { FitResult } from '@curtain/fit-engine';
 import { fitGapsForRender } from '@curtain/fit-engine';
 import { ESTIMATE_DISCLAIMER, type GarmentPayload, type UserBody } from '@curtain/schema';
-import { adjustColor, bodyGeometry, bodyPath, fabricLook, garmentGeometry, isHex, levelY, VIEW_H, VIEW_W, HEAD_TOP_Y } from '@/render/body';
+import { adjustColor, bodyGeometry, bodyPath, fabricLook, garmentGeometry, isHex, levelY, STANDARD_SKIN_HEX, VIEW_H, VIEW_W, HEAD_TOP_Y } from '@/render/body';
+import { faceInk, neutralFace } from '@/render/face';
 import { EstimateBadge } from './EstimateBadge';
 import { SizeRingsChips, SizeRingsLayer } from './SizeRings';
 import type { RingOverlay } from '@/render/rings';
@@ -41,19 +42,26 @@ export interface AvatarViewProps {
   rings?: RingOverlay | null;
   /** Skirt hem sweep of this size, cm (ring input): the drawn hem then matches the hem ring. */
   hemSweepCm?: number | null;
+  /**
+   * Where the estimate badge and the body chip sit on the full-size figure. `bottom` keeps them
+   * off the head in a narrow frame (the embed), where they would cover the face.
+   */
+  labelsAt?: 'top' | 'bottom';
 }
 
 const NO_MEDIA: AvatarMedia = { faceUrl: null, baseFrame: null };
+
 
 /**
  * The mirror (render path B v0), store-free: every input is a prop, so the standalone embed can
  * draw it from its own in-memory profile. `Avatar` (Avatar.tsx) wires it to the app store.
  * Layers: mirror backdrop → body (captured base frame when present, else parametric silhouette in
  * the user's skin tone) → shadow → garment overlay keyed by garment id (outline from the fit
- * engine's per-point slack, hem from lengthCm, look from fabric) → face tile at the head. Always
- * carries the estimate badge.
+ * engine's per-point slack, hem from lengthCm, look from fabric) → the neutral standard face on the
+ * head (D19: one generic drawing for everybody, never a likeness), or the face tile where the app
+ * has one. Always carries the estimate badge.
  */
-export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false, rings = null, hemSweepCm = null }: AvatarViewProps): ReactNode {
+export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false, rings = null, hemSweepCm = null, labelsAt = 'top' }: AvatarViewProps): ReactNode {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const reduce = useReducedMotion();
 
@@ -62,7 +70,9 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
   const geom = useMemo(() => (garment ? garmentGeometry({ garment, gaps, body, hemSweepCm }) : null), [garment, gaps, body, hemSweepCm]);
   const look = useMemo(() => (garment ? fabricLook(garment.fabric) : null), [garment]);
 
-  const skin = isHex(skinHex) ? skinHex! : '#DFC3A8';
+  const skin = isHex(skinHex) ? skinHex! : STANDARD_SKIN_HEX;
+  const face = useMemo(() => neutralFace(body), [body]);
+  const ink = faceInk(skin);
   const colour = garment && isHex(garment.primaryColorHex) ? garment.primaryColorHex : '#888888';
   const ids = {
     skinTex: `${uid}-skin`,
@@ -86,6 +96,7 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
         preserveAspectRatio="xMidYMid meet"
         className={`relative h-full w-auto max-w-full ${compact ? '' : 'drop-shadow-[0_20px_40px_rgba(26,22,18,0.18)]'}`}
         role="img"
+        data-skin={skin.toUpperCase()}
         aria-label={garment ? `Estimated look of ${garment.name}${size ? ` in size ${size}` : ''} ${onWhom} — not measured` : hasBody ? 'Your body outline (estimate)' : 'Reference body outline'}
       >
         <defs>
@@ -141,6 +152,20 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
             <rect width={VIEW_W} height={VIEW_H} filter={`url(#${ids.skinTex})`} clipPath={`url(#${ids.bodyClip})`} pointerEvents="none" style={{ mixBlendMode: 'overlay' }} />
           </g>
         )}
+
+        {/* Neutral standard face (D19): the same drawing for everybody, from the head's size only */}
+        {!media.faceUrl && !media.baseFrame ? (
+          <g data-testid="neutral-face" aria-hidden opacity={isLoading ? 0.4 : 1} fill="none" stroke={ink} strokeWidth={face.stroke} strokeLinecap="round" strokeLinejoin="round">
+            {face.eyes.map((e) => (
+              <ellipse key={e.cx} cx={e.cx} cy={e.cy} rx={e.rx} ry={e.ry} fill={ink} stroke="none" />
+            ))}
+            {face.brows.map((d) => (
+              <path key={d} d={d} opacity="0.75" />
+            ))}
+            <path d={face.nose} opacity="0.55" />
+            <path d={face.mouth} />
+          </g>
+        ) : null}
 
         {/* Face tile at the head — under the garment layer, so a hat or scarf sits on top of it */}
         {media.faceUrl && !media.baseFrame ? (
@@ -202,7 +227,7 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
         </span>
       ) : null}
       {!bare && !compact ? (
-        <div className="pointer-events-none absolute top-3 left-3 flex max-w-[calc(100%-1.5rem)] flex-col items-start gap-1">
+        <div className={`pointer-events-none absolute left-3 flex max-w-[calc(100%-1.5rem)] flex-col items-start gap-1 ${labelsAt === 'bottom' ? 'bottom-3' : 'top-3'}`} data-testid="avatar-labels">
           <EstimateBadge className="px-2 py-0.5 text-[10px] whitespace-nowrap" />
           {garment && !media.baseFrame ? <span className="chip bg-white/70 px-2 py-0.5 text-[10px] leading-tight">{bodyLabel ?? (hasBody ? 'Body from your measurements' : 'Reference body · add your measurements')}</span> : null}
           {media.baseFrame ? <span className="chip bg-white/70 px-2 py-0.5 text-[10px] leading-tight">Your capture · garment overlay</span> : null}

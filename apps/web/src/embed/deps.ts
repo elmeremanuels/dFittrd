@@ -27,6 +27,8 @@ export interface EmbedDeps {
   /** WebGL2 check and viewer chunk for the 3D view (tests inject these; default: the real ones). */
   webgl2?: () => boolean;
   loadViewer?: () => Promise<typeof GarmentViewer>;
+  /** The photo-based face row of the avatar prompt (default: the build flag, which is off). */
+  facePhoto?: boolean;
   /** Resolve `mock:` tokens (default: `mockTokensEnabled()`, i.e. dev builds or VITE_DEMO=1 only). */
   allowMock?: boolean;
 }

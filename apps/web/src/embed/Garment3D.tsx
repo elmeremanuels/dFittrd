@@ -7,6 +7,10 @@
  * - Nothing is fetched or imported before the click; then the viewer chunk is loaded with
  *   `import()` and the bundle files are GET from `asset.baseUrl`. Nothing about the body goes up (D3).
  * - The view takes the embed's own FitResult and size; it never computes a fit (rule 4, D15).
+ * - The skin colour the shopper picked in the avatar prompt goes to the viewer as an in-memory
+ *   value (`MountOptions.look.skinHex`, then `view.setLook`), and the body's family and height as
+ *   `MountOptions.body` (packages/mannequin README, `BodyInput`). A viewer that does not know these
+ *   options yet ignores them; `setLook` is called only when the mounted view has it.
  * - Always labelled an estimate (rule 3). On any error it closes and the 2D figure above stays.
  * - `required` (a men's product, D20 point 3: never a 2D figure only): the view opens by itself,
  *   cannot be closed and reports `settled` or `failed`; the embed shows nothing of the result until
@@ -25,7 +29,21 @@ import { ringOverlayFor } from '@/render/rings';
 import type { Units } from './units';
 
 type ViewerModule = typeof GarmentViewer;
-type View = Awaited<ReturnType<ViewerModule['mountGarmentView']>>;
+type BaseView = Awaited<ReturnType<ViewerModule['mountGarmentView']>>;
+type BaseMountOptions = Parameters<ViewerModule['mountGarmentView']>[1];
+
+/** The avatar's look as the viewer takes it (docs/research/photo-avatar-plan.md slice 1). In memory only. */
+export interface ViewerLook {
+  skinHex?: string | undefined;
+}
+/** The viewer contract of the avatar slices; optional, so this file builds against a viewer without it. */
+type View = BaseView & { setLook?: (look: ViewerLook) => void };
+type MountOptionsWithLook = BaseMountOptions & { look?: ViewerLook };
+
+/** The body family the viewer draws: the garment's audience decides (men → male), else today's figure. */
+export function bodyFamilyFor(garment: Pick<GarmentPayload, 'audience'>): 'female' | 'male' {
+  return garment.audience === 'men' ? 'male' : 'female';
+}
 
 /** WebGL2 on a throwaway canvas (the viewer chunk is not loaded for this check). */
 export function hasWebGL2(): boolean {
@@ -54,6 +72,8 @@ export interface Garment3DProps {
   heightCm?: number | undefined;
   /** Body girths estimated from height and weight (BodyProfile source 'prior'). */
   estimated?: readonly string[];
+  /** The skin colour picked in the avatar prompt (null: the viewer's standard body colour). */
+  skinHex?: string | null;
   onSelect: (size: string) => void;
   /** The product may only be shown with this view (see the file header). */
   required?: boolean;
@@ -71,7 +91,7 @@ export const REQUIRED_3D_TIMEOUT_MS = 30_000;
 
 type Phase = 'idle' | 'loading' | 'draping' | 'settled' | 'failed';
 
-export function Garment3D({ asset, paused, garment, fit, size, recommended, measurements, units = 'metric', heightCm, estimated = [], onSelect, required = false, onRequiredState, requiredTimeoutMs = REQUIRED_3D_TIMEOUT_MS, loadViewer = () => import('@curtain/garment-viewer'), webgl2 = hasWebGL2 }: Garment3DProps): ReactNode {
+export function Garment3D({ asset, paused, garment, fit, size, recommended, measurements, units = 'metric', heightCm, estimated = [], skinHex = null, onSelect, required = false, onRequiredState, requiredTimeoutMs = REQUIRED_3D_TIMEOUT_MS, loadViewer = () => import('@curtain/garment-viewer'), webgl2 = hasWebGL2 }: Garment3DProps): ReactNode {
   const [supported] = useState(() => !!asset && webgl2());
   const usable = !!asset && !paused && supported;
   const [open, setOpen] = useState(required && usable);
@@ -96,6 +116,7 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const viewRef = useRef<View | null>(null);
   const sizeRef = useRef(size);
+  const skinRef = useRef(skinHex);
   // The same size-ring numbers as the 2D figure (route R5), as text under the 3D view: the drape
   // can hide part of the graded difference, the rings say it in numbers.
   // The hem is left out: the 3D drape does not show the hem width yet (docs/REFINEMENT.md R3).
@@ -118,18 +139,31 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
           if (required) setPhase('failed');
           return;
         }
-        const view = await mod.mountGarmentView(canvasRef.current, {
+        const body = {
+          bust: measurements.bust,
+          waist: measurements.waist,
+          hip: measurements.hip,
+          family: bodyFamilyFor(garment),
+          ...(typeof heightCm === 'number' && Number.isFinite(heightCm) ? { heightCm } : {}),
+        };
+        const options: MountOptionsWithLook = {
           baseUrl: asset.baseUrl,
           garment,
           fit,
           size: sizeRef.current,
-          body: { bust: measurements.bust, waist: measurements.waist, hip: measurements.hip },
+          body,
+          ...(skinRef.current ? { look: { skinHex: skinRef.current } } : {}),
           onState: (s) => {
             if (!cancelled) setPhase((prev) => (required && prev === 'failed' ? prev : s === 'error' ? 'failed' : s));
           },
-        });
+        };
+        const view: View = await mod.mountGarmentView(canvasRef.current, options);
         if (cancelled) view.dispose();
-        else viewRef.current = view;
+        else {
+          viewRef.current = view;
+          // The colour may have changed while the bundle loaded.
+          if ((options.look?.skinHex ?? null) !== skinRef.current && typeof view.setLook === 'function') view.setLook({ skinHex: skinRef.current ?? undefined });
+        }
       } catch {
         if (!cancelled) setPhase('failed');
       }
@@ -147,6 +181,13 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
     sizeRef.current = size;
     viewRef.current?.setSize(size);
   }, [size]);
+
+  // A new colour reaches the mounted view without a remount, when the viewer can do that.
+  useEffect(() => {
+    skinRef.current = skinHex;
+    const view = viewRef.current;
+    if (view && typeof view.setLook === 'function') view.setLook({ skinHex: skinHex ?? undefined });
+  }, [skinHex]);
 
   if (!asset || paused || !supported) return null;
   const sizes = asset.sizes;

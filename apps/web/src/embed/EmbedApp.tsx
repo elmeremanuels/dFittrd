@@ -8,6 +8,12 @@
  * `{ intentToken, recommendedSize, confidence }`, `DELETE /v1/me` on "Forget me", and the opt-in
  * hero render of the avatar drawing. Never a measurement, a photo or a frame.
  *
+ * The avatar (D19, docs/research/photo-avatar-plan.md slices 1 and 2): tapping the 2D figure opens
+ * the avatar prompt. The shopper may pick a skin colour there; it colours the 2D figure, goes to the
+ * 3D view as an in-memory value and, with "Remember me" on, is stored encrypted in this browser for
+ * this shop. It is never in a request, a postMessage or the fit. The prompt makes no request at all.
+ * The opt-in hero render is drawn from a separate figure in the standard colour.
+ *
  * Men's gate (D20 point 3, docs/research/men-3d-plan.md slice M0): a men's product is shown with
  * the working 3D view or not at all. The server answers `men_coming_soon` for a product that is not
  * ready; a ready one arrives with `requires3d`. Then nothing of the result (no 2D figure, no size)
@@ -16,13 +22,17 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import type { BodyProfile, TryResolveResponse } from '@curtain/schema';
+import { AvatarView } from '@/components/AvatarView';
 import { ApiError } from '@/api/client';
 import { adviseSize, EMPTY_ABOUT, fitForProfile, mergeAboutIntoScan, normalizeAbout, priorKeys, profileFromAbout, sizeConfidence, switchUnits, validateAbout, type AboutField, type AboutForm } from './aboutYou';
+import { AVATAR_UI, type AvatarLang } from './avatarCopy';
+import { AvatarPrompt } from './AvatarPrompt';
 import { isMockToken, mockTokensEnabled, resolveMock, type EmbedApi, type EmbedDeps } from './deps';
-import { AboutScreen, BlockedScreen, EmbedFooter, EmbedFrame, LoadingScreen, ProductHeader } from './EmbedScreens';
+import { AboutScreen, BlockedScreen, EmbedFooter, EmbedFrame, isDutchLocale, LoadingScreen, ProductHeader } from './EmbedScreens';
 import { classifyError, flowReducer, INITIAL_FLOW } from './flow';
 import { Garment3D, hasWebGL2 } from './Garment3D';
 import { HeroRenderPanel, heroRendersEnabled } from './HeroRender';
+import { facePhotoEnabled, type SkinLook } from './look';
 import { createParentChannel, parseParentMessage, resolveTargetOrigin, type ParentContext } from './protocol';
 import { ResultScreen } from './ResultScreen';
 import { defaultUnits, type Units } from './units';
@@ -54,6 +64,10 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
   const [view3dReady, setView3dReady] = useState(false);
   /** Units the shopper picked (here or on an earlier visit to this shop); null follows the locale. */
   const [chosenUnits, setChosenUnits] = useState<Units | null>(null);
+  /** The skin colour the shopper picked for the avatar (null: the standard colour). Never sent. */
+  const [look, setLook] = useState<SkinLook | null>(null);
+  const [promptOpen, setPromptOpen] = useState(false);
+  const promptOpenRef = useRef(false);
   const shopperLocale = deps.locale === undefined ? browserLocale() : deps.locale;
   const units: Units = chosenUnits ?? defaultUnits(shopperLocale, context.locale);
   // The inputs follow the effective units (a stored choice, else the locale, which can arrive late
@@ -63,10 +77,13 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
   const fitShownFor = useRef<Set<string>>(new Set());
   const readySent = useRef(false);
   const avatarRef = useRef<HTMLDivElement | null>(null);
+  /** The figure the hero render is drawn from: standard colour, standard face, no rings. */
+  const heroAvatarRef = useRef<HTMLDivElement | null>(null);
   // SEC-5: `mock:` tokens are a development/demo aid only; a production build shows "expired".
   const mockToken = isMockToken(token);
   const mock = mockToken && (deps.allowMock ?? mockTokensEnabled());
-  const getAvatarSvg = useCallback((): SVGSVGElement | null => avatarRef.current?.querySelector('svg') ?? null, []);
+  const getAvatarSvg = useCallback((): SVGSVGElement | null => heroAvatarRef.current?.querySelector('svg') ?? null, []);
+  const avatarLang: AvatarLang = isDutchLocale(shopperLocale ?? context.locale) ? 'nl' : 'en';
 
   const api = useCallback((): EmbedApi => {
     if (!apiRef.current) apiRef.current = deps.makeApi(store);
@@ -91,7 +108,9 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         }
         const remembered = await store.loadProfile(resolved.shop.id);
         const storedUnits = await store.loadUnits();
+        const storedLook = await store.loadLook(resolved.shop.id);
         if (cancelled) return;
+        setLook(storedLook);
         setData(resolved);
         if (storedUnits) setChosenUnits(storedUnits);
         if (remembered) {
@@ -143,7 +162,8 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
   // Escape inside the iframe never reaches the parent page: ask the overlay to close.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') channel.post({ type: 'curtain:close' });
+      // With the avatar prompt open, Escape closes the prompt, not the overlay.
+      if (e.key === 'Escape' && !promptOpenRef.current) channel.post({ type: 'curtain:close' });
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -257,8 +277,31 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
     setChosen(null);
     setChooseFallback(null);
     setView3dReady(false);
+    setLook(null);
+    closePrompt(false);
     dispatch({ type: 'forgotten' });
     setForgetStatus(serverOk ? 'Forgotten. Nothing about you is stored here any more.' : 'Deleted from this browser. We could not reach Curtain to delete the anonymous device; try again later.');
+  };
+
+  // --- the avatar prompt (D19) ------------------------------------------------------------------
+  const openPrompt = (): void => {
+    promptOpenRef.current = true;
+    setPromptOpen(true);
+  };
+  const closePrompt = (refocus = true): void => {
+    if (!promptOpenRef.current) return;
+    promptOpenRef.current = false;
+    setPromptOpen(false);
+    // Focus goes back to the control that opened the prompt (it is inert until the next paint).
+    if (refocus) setTimeout(() => mainRef.current?.querySelector<HTMLElement>('[data-testid="avatar-open"]')?.focus({ preventScroll: true }), 0);
+  };
+  const pickLook = (next: SkinLook): void => {
+    setLook(next);
+    if (data) void store.saveLook(data.shop.id, next);
+  };
+  const clearLook = (): void => {
+    setLook(null);
+    if (data) void store.clearLook(data.shop.id);
   };
 
   const changeUnits = (u: Units): void => {
@@ -355,9 +398,22 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         avatarRef={avatarRef}
         units={units}
         onUnits={changeUnits}
+        skinHex={look?.hex ?? null}
+        onAvatar={openPrompt}
+        avatarLabel={AVATAR_UI[avatarLang].open}
+        avatarLang={avatarLang}
         extra={
           <>
-            {heroRendersEnabled(data) && !mock && !requires3d ? <HeroRenderPanel getApi={api} data={data} size={shownSize} getAvatarSvg={getAvatarSvg} /> : null}
+            {heroRendersEnabled(data) && !mock && !requires3d ? (
+              <>
+                {/* The hero render's person image: a separate figure in the standard colour, so the
+                    picked skin colour is never in that request (see HeroRender.tsx). */}
+                <div ref={heroAvatarRef} className="pointer-events-none absolute h-0 w-0 overflow-hidden" aria-hidden inert data-testid="hero-avatar">
+                  <AvatarView bare garment={data.garment} fit={embedFit.fit} size={shownSize} measurements={embedFit.userBody.measurements} heightCm={profile.measurements.height?.mean} />
+                </div>
+                <HeroRenderPanel getApi={api} data={data} size={shownSize} getAvatarSvg={getAvatarSvg} />
+              </>
+            ) : null}
             <Garment3D
               asset={data.asset}
               paused={data.shop.paused}
@@ -369,6 +425,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
               units={units}
               heightCm={profile.measurements.height?.mean}
               estimated={priorKeys(profile)}
+              skinHex={look?.hex ?? null}
               required={requires3d}
               onRequiredState={(state) => (state === 'settled' ? setView3dReady(true) : dispatch({ type: 'comingSoon' }))}
               {...(deps.webgl2 ? { webgl2: deps.webgl2 } : {})}
@@ -402,13 +459,33 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
     );
   } else body = <LoadingScreen />;
 
+  const showPrompt = promptOpen && flow.step === 'result' && !!data;
   return (
     <EmbedFrame>
-      <ProductHeader shop={data?.shop ?? null} garment={flow.blocked === 'comingSoon' ? null : (data?.garment ?? null)} />
-      <main ref={mainRef} className="flex flex-1 flex-col px-4 py-4" aria-live="off">
-        {body}
-      </main>
-      <EmbedFooter remember={remember} onRemember={(on) => void onRemember(on)} onForget={() => void forget()} forgetStatus={forgetStatus} appUrl={deps.appUrl} />
+      {/* Behind the open prompt the page is inert: no focus, no clicks, not read out. */}
+      <div className="contents" inert={showPrompt}>
+        <ProductHeader shop={data?.shop ?? null} garment={flow.blocked === 'comingSoon' ? null : (data?.garment ?? null)} />
+        <main ref={mainRef} className="flex flex-1 flex-col px-4 py-4" aria-live="off">
+          {body}
+        </main>
+        <EmbedFooter remember={remember} onRemember={(on) => void onRemember(on)} onForget={() => void forget()} forgetStatus={forgetStatus} appUrl={deps.appUrl} />
+      </div>
+      {showPrompt ? (
+        <AvatarPrompt
+          lang={avatarLang}
+          look={look}
+          onPick={pickLook}
+          onClear={clearLook}
+          onMeasurements={() => {
+            closePrompt(false);
+            setView3dReady(false);
+            dispatch({ type: 'edit' });
+          }}
+          onClose={() => closePrompt()}
+          termsUrl={`${deps.appUrl.replace(/\/+$/, '')}/privacy`}
+          face={deps.facePhoto ?? facePhotoEnabled()}
+        />
+      ) : null}
     </EmbedFrame>
   );
 }

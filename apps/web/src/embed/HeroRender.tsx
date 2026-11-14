@@ -3,11 +3,17 @@
  * has hero renders enabled. The person image is the AVATAR drawn in this page (rasterised SVG of
  * the parametric body + garment overlay) — never a photo or a camera frame (D3, AGENTS.md rule 1).
  * Explicit consent first; the result is labelled an estimate (rule 3).
+ *
+ * The person image is built from a separate figure in the standard colour with the standard face
+ * (docs/research/photo-avatar-plan.md §3), not from the figure on screen, and `assertNeutralPerson`
+ * refuses anything else: an `<image>`, a blob or data reference, or a skin colour the shopper
+ * picked. D20 point 1 allows the picked colour to go with this render; it stays out until the
+ * privacy policy says so (docs/legal/avatar-consent-copy.md, gap 8).
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { RENDER_CONSENT_TIER, type HeroRenderRequest, type HeroRenderStatus, type TryResolveResponse } from '@curtain/schema';
 import { EstimateBadge, EstimateDisclaimer } from '@/components/EstimateBadge';
-import { VIEW_H, VIEW_W } from '@/render/body';
+import { STANDARD_SKIN_HEX, VIEW_H, VIEW_W } from '@/render/body';
 import type { EmbedApi } from './deps';
 
 /**
@@ -23,8 +29,24 @@ const RENDER_H = Math.max(256, Math.round((RENDER_W * VIEW_H) / VIEW_W));
 const POLL_MS = 2000;
 const POLL_LIMIT = 45;
 
+/**
+ * The hero render's person image may only be the neutral figure. Throws on any embedded picture
+ * (`<image>`, `<foreignObject>`), any blob:, data: or http reference, and any skin colour other
+ * than the standard one.
+ */
+export function assertNeutralPerson(svg: SVGSVGElement): void {
+  if (svg.querySelector('image, foreignObject, use')) throw new Error('avatar render: only the neutral figure may be sent');
+  for (const el of [svg, ...Array.from(svg.querySelectorAll('*'))]) {
+    for (const attr of Array.from(el.attributes)) {
+      if (/^(xlink:)?href$/i.test(attr.name) || /\b(blob|data|https?):/i.test(attr.value)) throw new Error('avatar render: only the neutral figure may be sent');
+    }
+  }
+  if ((svg.getAttribute('data-skin') ?? '').toUpperCase() !== STANDARD_SKIN_HEX.toUpperCase()) throw new Error('avatar render: only the standard colour may be sent');
+}
+
 /** Rasterise the avatar SVG to a PNG (base64, no data: prefix). Browser only. */
 export async function rasterizeAvatar(svg: SVGSVGElement): Promise<{ base64: string; width: number; height: number }> {
+  assertNeutralPerson(svg);
   const clone = svg.cloneNode(true) as SVGSVGElement;
   // The size rings are a measuring aid on screen, never part of the person image sent for a render.
   clone.querySelectorAll('[data-testid="size-rings"]').forEach((n) => n.remove());

@@ -7,7 +7,8 @@
  *   mirrored to IndexedDB; with it off nothing is written and the database is wiped.
  * - Profiles are keyed by shop id as well, so even a browser without storage partitioning never
  *   shows one shop's remembered profile on another shop.
- * - Stored: the anonymous device token, and per shop the body profile + the About-you answers.
+ * - Stored: the anonymous device token, and per shop the body profile + the About-you answers and
+ *   the picked skin colour of the avatar.
  *   No photo, no frame, no scan media is ever stored here.
  * - Turning "Remember me" off is itself remembered (UX-1 / F2 / SEC-3): one non-personal row,
  *   `pref:remember = false`, read by `init()` before anything else, so the next visit starts with
@@ -15,13 +16,20 @@
  * - The shopper's choice of units (cm/kg or in/lb), `pref:units`, once they pick one. Like the
  *   profile it is only written with "Remember me" on, and "Forget me" clears it. Without a choice
  *   the embed follows the browser's locale.
+ * - The skin colour the shopper picked for the avatar (`look:<shop id>`, avatar prompt, D19): per
+ *   shop, only with "Remember me" on, encrypted with a non-extractable AES-GCM key that lives in
+ *   this database (`lookkey`). The key keeps other sites out, not another person on this device.
+ *   Switching the colour off, "Remember me" off and "Forget me" each delete it. Without WebCrypto
+ *   the colour stays in memory only. It is never sent anywhere.
  * - If IndexedDB is unavailable (blocked third-party storage, private mode) everything stays in
  *   memory and the page still works.
  */
 import Dexie, { type Table } from 'dexie';
 import type { BodyProfile, DeviceTokenResponse } from '@curtain/schema';
 import type { DeviceCredentials } from '@/api/client';
+import { decryptBytes, encryptBytes, generateFrameKey, type EncryptedBytes } from '@/features/capture/crypto';
 import type { AboutForm } from './aboutYou';
+import { parseLook, type SkinLook } from './look';
 import { isUnits, type Units } from './units';
 
 export const EMBED_DB_NAME = 'curtain-embed';
@@ -52,6 +60,10 @@ export const REMEMBER_PREF_KEY = 'pref:remember';
 /** The shopper's explicit choice of units. */
 export const UNITS_PREF_KEY = 'pref:units';
 const profileKey = (shopId: string): string => `profile:${shopId}`;
+const LOOK_PREFIX = 'look:';
+const lookKey = (shopId: string): string => `${LOOK_PREFIX}${shopId}`;
+/** The non-extractable AES-GCM key of the look rows. Exists only while a look is stored. */
+export const LOOK_CRYPTO_KEY = 'lookkey';
 
 const NO_DEVICE: DeviceCredentials = { deviceId: null, token: null, expiresAt: null };
 
@@ -74,6 +86,12 @@ export interface EmbedStore {
   /** The units the shopper chose on this shop (null: never chose, follow the locale). */
   loadUnits(): Promise<Units | null>;
   saveUnits(units: Units): Promise<void>;
+  /** The skin colour the shopper picked for the avatar on this shop (null: the standard colour). */
+  loadLook(shopId: string): Promise<SkinLook | null>;
+  /** Keeps the look in memory; with "Remember me" on it is also stored, encrypted, for this shop. */
+  saveLook(shopId: string, look: SkinLook): Promise<void>;
+  /** The colour is switched off: gone from memory and from this device. */
+  clearLook(shopId: string): Promise<void>;
   /** Off → wipe IndexedDB (memory keeps working); on → write what is in memory. */
   setRemember(on: boolean): Promise<void>;
   /** Forget me: wipe memory and IndexedDB. */
@@ -108,6 +126,7 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
   let device: DeviceCredentials = NO_DEVICE;
   const profiles = new Map<string, RememberedProfile>();
   let units: Units | null = null;
+  const looks = new Map<string, SkinLook>();
   /** Shared by every caller, so a second `init()` (StrictMode, retry) waits for the same read. */
   let loading: Promise<void> | null = null;
 
@@ -136,12 +155,44 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
     }
   };
 
+  /** The look rows' key; created on the first stored look. Null: no WebCrypto, or no database. */
+  const lookCryptoKey = async (create: boolean): Promise<CryptoKey | null> => {
+    const row = await safe((d) => d.kv.get(LOOK_CRYPTO_KEY));
+    const stored = row?.value;
+    if (stored && typeof stored === 'object' && (stored as CryptoKey).type === 'secret') return stored as CryptoKey;
+    if (!create) return null;
+    try {
+      const key = await generateFrameKey();
+      const ok = await safe(async (d) => {
+        await d.kv.put({ key: LOOK_CRYPTO_KEY, value: key });
+        return true;
+      });
+      return ok ? key : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const persistLook = async (shopId: string, look: SkinLook): Promise<void> => {
+    if (!remember) return;
+    const key = await lookCryptoKey(true);
+    if (!key) return;
+    let enc: EncryptedBytes;
+    try {
+      enc = await encryptBytes(key, new TextEncoder().encode(JSON.stringify(look)));
+    } catch {
+      return;
+    }
+    await safe((d) => d.kv.put({ key: lookKey(shopId), value: enc }));
+  };
+
   const writeAll = async (): Promise<void> => {
     const rows: KvRow[] = [];
     if (device.token) rows.push({ key: DEVICE_KEY, value: device });
     for (const p of profiles.values()) rows.push({ key: profileKey(p.shopId), value: p });
     if (units) rows.push({ key: UNITS_PREF_KEY, value: units });
     if (rows.length > 0) await safe((d) => d.kv.bulkPut(rows));
+    for (const [shopId, look] of looks) await persistLook(shopId, look);
   };
 
   return {
@@ -211,6 +262,33 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
       units = u;
       if (remember) await safe((d) => d.kv.put({ key: UNITS_PREF_KEY, value: u }));
     },
+    async loadLook(shopId) {
+      const mem = looks.get(shopId);
+      if (mem) return mem;
+      if (!remember) return null;
+      const row = await safe((d) => d.kv.get(lookKey(shopId)));
+      const enc = row?.value as EncryptedBytes | undefined;
+      if (!enc || enc.alg !== 'AES-GCM') return null;
+      const key = await lookCryptoKey(false);
+      if (!key) return null;
+      try {
+        const look = parseLook(JSON.parse(new TextDecoder().decode(await decryptBytes(key, enc))));
+        if (look) looks.set(shopId, look);
+        return look;
+      } catch {
+        return null;
+      }
+    },
+    async saveLook(shopId, look) {
+      looks.set(shopId, look);
+      await persistLook(shopId, look);
+    },
+    async clearLook(shopId) {
+      looks.delete(shopId);
+      await safe((d) => d.kv.delete(lookKey(shopId)));
+      const left = await safe((d) => d.kv.where('key').startsWith(LOOK_PREFIX).count());
+      if (left === 0) await safe((d) => d.kv.delete(LOOK_CRYPTO_KEY));
+    },
     async setRemember(on) {
       if (on === remember) return;
       remember = on;
@@ -226,6 +304,7 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
       device = NO_DEVICE;
       profiles.clear();
       units = null;
+      looks.clear();
       await safe((d) => d.kv.clear());
       // Forgetting the data keeps the shopper's choice not to be remembered.
       if (!remember) await safe((d) => d.kv.put({ key: REMEMBER_PREF_KEY, value: false }));

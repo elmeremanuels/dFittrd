@@ -50,7 +50,7 @@ export function PeekApp({ params, deps }: { params: PeekParams | null; deps: Pee
   }, [target, deps.parent]);
 
   if (state.kind !== 'shown') return null;
-  const { garment, remembered, embedFit, outcome, targetOrigin } = state.data;
+  const { garment, remembered, embedFit, outcome, targetOrigin, skinHex } = state.data;
   const open = (): void => deps.parent?.postMessage(envelope({ type: 'curtain:peek-open' }), targetOrigin);
   const size = outcome.kind === 'size' ? outcome.size : null;
 
@@ -63,7 +63,7 @@ export function PeekApp({ params, deps }: { params: PeekParams | null; deps: Pee
     >
       <div className="h-24 w-16 shrink-0 overflow-hidden rounded-xl bg-white/70" data-testid="peek-avatar">
         {embedFit ? (
-          <AvatarView compact garment={garment} fit={embedFit.fit} size={size} measurements={embedFit.userBody.measurements} heightCm={remembered.profile.measurements.height?.mean} />
+          <AvatarView compact garment={garment} fit={embedFit.fit} size={size} measurements={embedFit.userBody.measurements} heightCm={remembered.profile.measurements.height?.mean} skinHex={skinHex} />
         ) : null}
       </div>
       <div className="min-w-0 flex-1 overflow-hidden">

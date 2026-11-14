@@ -75,6 +75,8 @@ export interface PeekResult {
   garment: PeekResponse['garment'];
   remembered: RememberedProfile;
   embedFit: EmbedFit | null;
+  /** The skin colour the shopper picked for the avatar on this shop (null: the standard colour). Local only. */
+  skinHex: string | null;
   outcome: PeekOutcome;
   /** The one origin the non-zero height and the open request may go to. */
   targetOrigin: string;
@@ -124,5 +126,6 @@ export async function loadPeek(params: PeekParams, deps: PeekDeps): Promise<Peek
     embedFit = null;
     advice = null;
   }
-  return { garment: resolved.garment, remembered, embedFit, outcome: peekOutcome(resolved.garment, embedFit, advice, remembered), targetOrigin };
+  const look = await store.loadLook(resolved.shop.id);
+  return { garment: resolved.garment, remembered, embedFit, skinHex: look?.hex ?? null, outcome: peekOutcome(resolved.garment, embedFit, advice, remembered), targetOrigin };
 }

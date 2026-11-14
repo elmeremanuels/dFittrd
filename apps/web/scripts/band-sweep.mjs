@@ -38,7 +38,7 @@ try {
     ];
     const cell = (r) => {
       const pct = Math.round(r.waistStretch * 100);
-      const hips = r.hipClearanceCm >= 0 ? `+${r.hipClearanceCm} over hips` : `**${r.hipClearanceCm} at hips: will not pull on**`;
+      const hips = r.hipClearanceCm >= 0 ? `+${r.hipClearanceCm} over hips` : `**${r.hipClearanceCm} at hips: short at the comfortable stretch**`;
       return `${r.relaxedCm}-${r.stretchedCm}: waist ${pct}%${grip(pct)}, ${hips}`;
     };
     console.log(`| Scenario (size 12 relaxed / stretched) | ${cases.map(([b, s, why]) => `${b[0].toUpperCase()}${b.slice(1)} in AU ${s} (${why}; waist ${bodies[b].waist}, hip ${bodies[b].hip})`).join(' | ')} |`);
@@ -55,7 +55,7 @@ try {
     const names = Object.keys(bodies);
     const cell = (r, isRec) => {
       const pct = Math.round(r.waistStretch * 100);
-      const hips = r.hipClearanceCm >= 0 ? `+${r.hipClearanceCm} cm over hips` : `**${r.hipClearanceCm} cm at hips: will not pull on**`;
+      const hips = r.hipClearanceCm >= 0 ? `+${r.hipClearanceCm} cm over hips` : `**${r.hipClearanceCm} cm at hips: short at the comfortable stretch**`;
       const text = `waist ${pct}%${grip(pct)}, ${hips}`;
       return isRec ? `${text} *(engine's pick)*` : text;
     };

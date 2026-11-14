@@ -8,7 +8,8 @@
  * - `interpolated`: that size was not measured; the value lies on the straight line between the
  *   nearest measured size below and above it. Shoppers read "estimated".
  * - `extrapolated`: that size was not measured and lies outside the measured sizes; the value
- *   continues the straight line through the two nearest measured sizes. Shoppers read "estimated".
+ *   continues the straight line through the two nearest measured sizes. It is the weaker of the two,
+ *   so shoppers read "rough estimate".
  * - `assumed`: a placeholder we picked. It is NOT a measurement and the ring says so.
  *
  * These numbers only move the drawn rings and their labels. The size advice and every tight / good /
@@ -62,8 +63,11 @@ export function sourceAt(input: { source: PerSizeSource } | undefined, size: str
   return input?.source[size] ?? 'assumed';
 }
 
-/** The one word a chip prints: a shopper reads "estimated" for interpolated and extrapolated alike. */
-export const SOURCE_WORD: Record<RingSource, string> = { measured: 'measured', interpolated: 'estimated', extrapolated: 'estimated', assumed: 'assumed' };
+/**
+ * What a chip prints: "estimated" for a size between measured sizes (interpolated), "rough estimate"
+ * for a size beyond them (extrapolated: nothing measured on its far side holds the number in place).
+ */
+export const SOURCE_WORD: Record<RingSource, string> = { measured: 'measured', interpolated: 'estimated', extrapolated: 'rough estimate', assumed: 'assumed' };
 
 /** The full wording of a source, for the sentence under a ring and for screen readers. */
 export function sourceSentence(source: RingSource, measuredSizes: readonly string[] = []): string {

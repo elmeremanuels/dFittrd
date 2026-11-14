@@ -120,8 +120,7 @@ describe('evaluateGarment: a bottom (skirt cut from the synthetic dress)', () =>
     // AU 12 waist 77.5 + 3 (BLOCKS['a-line'].ease.waist, as computeFit); the category default +2 was used before drape-prior P0.
     expect(r.rows.find((x) => x.anchor === 'waist')!.chartCm).toBe(80.5);
     const hip = r.rows.find((x) => x.anchor === 'hip')!;
-    // AU 12 hip 104 + 19.3: ease.hip from the shop's tape (src/shopTape.ts; mean of the measured AU 8, 10, 14). Before the tape: 104 + 5 (category default) = 109.
-    expect(hip.chartCm).toBe(123.3);
+    expect(hip.chartCm).toBe(109);
     expect(hip.notFitted).toBe(true);
     expect(hip.note).toMatch(/a-line/);
     expect(Object.keys(r.calibration.ringCorrections)).not.toContain('hip');

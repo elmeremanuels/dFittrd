@@ -78,7 +78,8 @@
     "baseSize": "AU 12 (or the range that holds it) for every size-ranged item: our default, not stated by the shop. GarmentPayload v1 has no baseSize field, so it sits beside the payload.",
     "ease": "Only where the shop prints garment measurements: printed value at the base size minus the AU body chart at the base size.",
     "fabric": "The fabric sentence of the description (labels, percentages, \"crafted from\", never styling advice) through resolveFabricText/fabricFromText; the fabric library fills weight, stretch, drape, opacity and sheen. `blend` only when the text states the composition (\"100% rayon\", \"65% acrylic 35% wool\"); a bare fibre name (\"rayon\") gives no blend and a warning.",
-    "images": "images.json: every image looked at and classified by hand; sha256 of the file as downloaded."
+    "images": "images.json: every image looked at and classified by hand; sha256 of the file as downloaded.",
+    "tape": "Where the shop tape-measured the garment (tape/<handle>.json): lengthCm.waist_to_hem and ease.hip are the means over the MEASURED sizes; the elastic band, hem sweep and per-size values stay in the tape file (src/shopTape.ts says what GarmentPayload v1 cannot carry)."
   },
   "products": [
     {
@@ -967,29 +968,23 @@
         "stretchZones": [
           "waistband"
         ],
-        "sizingNotes": "Available in Australian sizes 8 to 16 True to size with comfortable stretch at the waist."
+        "sizingNotes": "Available in Australian sizes 8 to 16 True to size with comfortable stretch at the waist.",
+        "lengthCm": {
+          "waist_to_hem": 103.3
+        },
+        "ease": {
+          "hip": 19.3
+        }
       },
       "priceAud": 69,
       "completeness": {
-        "score": 0.559,
+        "score": 0.676,
         "missing": [
           {
             "field": "flatLayPhoto",
             "reason": "flatLayPhoto (garment laid flat on white, https URL) is the input of the on-device render; without it the item cannot be shown on the user.",
             "weight": 3,
             "severity": "heavy"
-          },
-          {
-            "field": "ease",
-            "reason": "ease (garment minus body per fit point, cm) makes the size recommendation precise; category defaults are used when absent.",
-            "weight": 2,
-            "severity": "medium"
-          },
-          {
-            "field": "lengthCm",
-            "reason": "lengthCm (e.g. shoulder_to_hem) places the hem and sleeves on the user; without it the render uses category averages.",
-            "weight": 2,
-            "severity": "medium"
           },
           {
             "field": "criticalFitPoints",
@@ -1067,7 +1062,9 @@
         "fabric": "\"Crafted from lightweight, breathable rayon , this flowing maxi skirt features a rich crimson base adorned with soft floral detailing and a contrasting border hem.\" → viscose (composition not stated: no blend; the library defaults treat it as a single fibre); weight/stretch/drape/opacity/sheen from the fabric library v1.0.0 (blend)",
         "sizeChart": "Size option [\"8\",\"10\",\"12\",\"14\",\"16\"] → AU_WOMENS_BODY_CHART rows",
         "baseSize": "AU 12, the default base size for size-ranged items (not stated by the shop)",
-        "stretchZones": "\"elasticated waistband\" in the text"
+        "stretchZones": "\"elasticated waistband\" in the text",
+        "lengthCm": "shop tape (tape/crimson-wildflower-maxi-skirt.json): band to hem 103 / 103 / 104 cm at AU 8, 10, 14; one number for all sizes, the mean 103.3 cm",
+        "ease": "shop tape (tape/crimson-wildflower-maxi-skirt.json): garment hip 112 / 122 / 126 cm minus the chart's body hip at AU 8, 10, 14 = 18 / 23 / 17 cm; one number for all sizes, the mean 19.3 cm. No waist ease: the band is elastic (relaxed 67 / 71 / 80, stretched 94 / 100 / 110 cm) and ease.waist is one number, not a range"
       },
       "warnings": [
         "fabric composition not stated (only \"viscose\" named): blend left out; weight/stretch/drape use the single-fibre library default",
@@ -1174,6 +1171,29 @@
           "front photo does not meet the contract (worn by a model, busy background, long edge 1200 px < 1600); add one on a hanger, flat-lay or ghost mannequin",
           "back photo does not meet the contract (worn by a model, busy background, long edge 1200 px < 1600); add one on a hanger, flat-lay or ghost mannequin",
           "base size 12 is our default, not confirmed by the shop"
+        ]
+      },
+      "tape": {
+        "file": "tape/crimson-wildflower-maxi-skirt.json",
+        "measuredSizes": [
+          "8",
+          "10",
+          "14"
+        ],
+        "notMeasuredSizes": [
+          "12",
+          "16"
+        ],
+        "inPayload": {
+          "lengthCm.waist_to_hem": "103.3 cm: mean of the tape lengths 103, 103, 104 cm (AU 8, 10, 14)",
+          "ease.hip": "19.3 cm: mean of garment hip minus chart body hip, 18, 23, 17 cm (AU 8, 10, 14); the steps are uneven and are not corrected"
+        },
+        "notInPayload": [
+          "waistband relaxed and stretched girth per size (GarmentPayload v1 has no field for an elastic range)",
+          "hem sweep per size (lengthCm holds lengths, not girths; no hem girth field)",
+          "garment hip per size (ease.hip is one number for all sizes; sizeChart is the body chart and sizeChartType allows only one chart)",
+          "length per size (lengthCm holds one number per key)",
+          "which sizes were measured and which are interpolated or extrapolated"
         ]
       }
     },

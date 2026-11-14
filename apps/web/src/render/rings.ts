@@ -316,19 +316,24 @@ export function ringOverlay(input: RingOverlayInput): RingOverlay | null {
   ];
   if ((input.estimated ?? []).some((k) => (POINTS_FOR[garment.category] ?? []).includes(k as RingKey)))
     notes.push('Body girths marked “about” are estimated from your height and weight; add your measurements for exact numbers.');
+  // The first tape note says in full where the numbers come from; the next ones use one word.
+  let explained = false;
+  const how = (source: RingSource): string => {
+    if (explained || source === 'assumed') return source === 'assumed' ? 'assumed, not measured yet' : SOURCE_WORD[source];
+    explained = true;
+    return sourceNote(source, size, inputs?.measuredSizes);
+  };
   const band = inputs?.band;
   if ((garment.stretchZones ?? []).includes('waistband'))
     notes.push(
       band
-        ? `Elastic waistband: ${sourceNote(sourceAt(band, size), size, inputs?.measuredSizes)}; the waist ring is the size chart plus designed ease, the bracket under it the band’s relaxed-to-stretched range.`
+        ? `Elastic waistband: ${sourceAt(band, size) === 'assumed' ? 'girth assumed, not measured yet' : how(sourceAt(band, size))}; the waist ring is the size chart plus designed ease, the bracket under it the band’s relaxed-to-stretched range.`
         : 'Elastic waistband: its girth is not measured.',
     );
   if (inputs?.hip?.girthCm[size] !== undefined && selected.rings.some((r) => r.key === 'hip' && r.source !== 'chart'))
-    notes.push(
-      `Hips: the ring is the garment’s own girth at its hip line, ${sourceNote(sourceAt(inputs.hip, size), size, inputs.measuredSizes)}${inputs.hip.belowBandCm == null ? ' (the shop did not say how far below the band)' : ''}. The size advice does not use it.`,
-    );
+    notes.push(`Hips: the garment’s own girth at its hip line, ${how(sourceAt(inputs.hip, size))}${inputs.hip.belowBandCm == null ? ' (the shop did not say how far below the band)' : ''}. The size advice does not use it.`);
   if (inputs?.hem?.sweepCm[size] !== undefined)
-    notes.push(`Hem: ${sourceNote(sourceAt(inputs.hem, size), size, inputs.measuredSizes)}${selected.rings.some((r) => r.key === 'hem' && r.clamped) ? '; it is wider than this picture can show, so the hem is drawn narrower than it is' : ''}.`);
+    notes.push(`Hem: ${how(sourceAt(inputs.hem, size))}${selected.rings.some((r) => r.key === 'hem' && r.clamped) ? '; wider than this picture can show, so it is drawn narrower than it is' : ''}.`);
   return { size, selected, ghosts, notes };
 }
 

@@ -67,14 +67,14 @@ export const SOURCE_WORD: Record<RingSource, string> = { measured: 'measured', i
 
 /** The full wording of a source, for the sentence under a ring and for screen readers. */
 export function sourceSentence(source: RingSource, measuredSizes: readonly string[] = []): string {
-  const list = measuredSizes.length ? ` (${joinSizes(measuredSizes)})` : '';
+  const list = measuredSizes.length ? ` ${joinSizes(measuredSizes)}` : '';
   switch (source) {
     case 'measured':
       return 'measured on the garment in this size';
     case 'interpolated':
-      return `estimated, not measured: this size lies between the measured sizes${list} (interpolated)`;
+      return `not measured in this size: estimated between the measured sizes${list}, interpolated`;
     case 'extrapolated':
-      return `estimated, not measured: this size lies outside the measured sizes${list} (extrapolated)`;
+      return `not measured in this size: estimated beyond the measured sizes${list}, extrapolated`;
     default:
       return 'assumed, not measured';
   }

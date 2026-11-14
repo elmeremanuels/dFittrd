@@ -242,7 +242,8 @@ describe('control proxy: lengths, sleeves and one-size', () => {
     expect(palazzo.lengthSource).toMatch(/outseam 99/);
     expect(palazzo.notes.join(' ')).toMatch(/wide leg/);
     const [skirt, s2] = product('crimson-wildflower-maxi-skirt');
-    expect(buildProxy(m, skirt, s2).spec.lengthSource).toMatch(/maxi/);
+    // the shop's tape length (src/shopTape.ts); before the tape the word "maxi" placed the hem just above the ankle
+    expect(buildProxy(m, skirt, s2).spec.lengthSource).toMatch(/waist_to_hem 103\.3 cm/);
     const [cardi, s3] = product('woodstock-wanderer-knit-cardi');
     expect(buildProxy(m, cardi, s3).spec.sleeveSource).toMatch(/outerwear default/);
   });

@@ -147,7 +147,7 @@ describe('ringOverlay', () => {
     expect(waist.stretch).toMatchObject({ source: 'interpolated', relaxedCm: 75.5, stretchedCm: 105 });
     expect(waist.basis).toBe('body-chart+ease');
     expect(waist.chipNote).toBe('band 76-105 cm estimated');
-    expect(waist.text).toMatch(/estimated, not measured: this size lies between the measured sizes \(8, 10 and 14\) \(interpolated\)/);
+    expect(waist.text).toMatch(/not measured in this size: estimated between the measured sizes 8, 10 and 14, interpolated/);
     expect(waist.text).toMatch(/size chart body girth plus designed ease: 81 cm/);
     expect(waist.text).not.toMatch(/garment \d+ cm from the size chart/);
     expect(waist.text).toMatch(/passes over hips of 102 cm with 3 cm to spare \(band girth estimated from the measured sizes, pull-on closure assumed\)/);
@@ -165,13 +165,13 @@ describe('ringOverlay', () => {
     expect(w8.chipNote).toBe('band 67-94 cm measured');
     expect(w8.text).toMatch(/stretched, it is 8 cm smaller than hips of 102 cm, so it may not pull on over them \(band measured, pull-on closure assumed\)/);
     expect(o16.selected.rings.find((r) => r.key === 'waist')!.chipNote).toBe('band 85-115 cm estimated');
-    expect(o16.selected.rings.find((r) => r.key === 'waist')!.text).toMatch(/lies outside the measured sizes \(8, 10 and 14\) \(extrapolated\)/);
+    expect(o16.selected.rings.find((r) => r.key === 'waist')!.text).toMatch(/estimated beyond the measured sizes 8, 10 and 14, extrapolated/);
     // a 2.3-2.7 m hem spread into a ring is wider than the picture: drawn at the edge, and it says so
     const hems = [o8, o12, o16].map((o) => o.selected.rings.find((r) => r.key === 'hem')!);
     expect(hems.map((h) => h.garmentCm)).toEqual([230, 254, 266]);
     expect(hems.map((h) => h.chip[1])).toEqual(['230 cm measured', '254 cm estimated', '266 cm estimated']);
     expect(hems.every((h) => h.clamped && h.chipNote === 'wider than drawn' && /drawn narrower than the real hem/.test(h.text))).toBe(true);
-    expect(o8.notes.join(' ')).toMatch(/Hem: measured on the garment on sizes 8, 10 and 14; it is wider than this picture can show/);
+    expect(o8.notes.join(' ')).toMatch(/Elastic waistband: measured on the garment on sizes 8, 10 and 14;.* Hem: measured; wider than this picture can show/);
     expect(o8.selected.rings.find((r) => r.key === 'waist')!.chip[0]).toBe('Tight');
     expect(o16.selected.rings.find((r) => r.key === 'waist')!.chip[0]).toBe('Loose');
     // first and last size have one ghost
@@ -200,8 +200,8 @@ describe('ringOverlay', () => {
     const hip16 = o16.selected.rings.find((r) => r.key === 'hip')!;
     expect(hip16).toMatchObject({ band: null, garmentCm: 128, source: 'extrapolated' });
     expect(hip16.chipNote).toBe('skirt 128 cm estimated');
-    expect(hip16.text).toMatch(/estimated, not measured: this size lies outside the measured sizes \(8, 10 and 14\) \(extrapolated\)/);
-    expect(o16.notes.join(' ')).toMatch(/Hips: the ring is the garment’s own girth at its hip line, .*size 16 was not measured.*\(the shop did not say how far below the band\)\. The size advice does not use it\./);
+    expect(hip16.text).toMatch(/not measured in this size: estimated beyond the measured sizes 8, 10 and 14, extrapolated/);
+    expect(o16.notes.join(' ')).toMatch(/size 16 was not measured and is estimated by continuing the step of the nearest measured sizes \(extrapolated\);.* Hips: the garment’s own girth at its hip line, estimated \(the shop did not say how far below the band\)\. The size advice does not use it\./);
     // the fit engine's result is the same object either way: the tape moves rings, never the advice
     expect(fit.skippedPoints.map((p) => p.point)).toContain('hip');
     // a garment the engine scores at the hip keeps the engine's chart ring and band; the tape is a remark
@@ -210,7 +210,7 @@ describe('ringOverlay', () => {
     const scored = ringOverlayFor({ garment: straight, fit: s.fit, size: '12', measurements: s.userBody.measurements, inputs: ringInputsFor(SKIRT) })!.selected.rings.find((r) => r.key === 'hip')!;
     expect(scored.band).not.toBeNull();
     expect(scored.source).toBe('chart');
-    expect(scored.text).toMatch(/the garment itself is 124 cm around at its hip line \(estimated, not measured/);
+    expect(scored.text).toMatch(/the garment itself is 124 cm around at its hip line \(not measured in this size: estimated between/);
   });
 
   it('a tight ring sits inside the body outline, a roomy one outside', () => {

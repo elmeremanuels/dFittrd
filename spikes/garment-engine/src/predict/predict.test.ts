@@ -60,7 +60,9 @@ describe('predict (P0)', () => {
     expect(r['rosewater-palazzo-pants']!.pattern.legs).toMatchObject({ thighOfHip: { value: 0.6 }, hemOfThigh: { value: 1.1 } });
     expect(r['azure-palm-baby-doll-dress']!.pattern.length.rule).toEqual({ from: 'printed', key: 'shoulder_to_hem', cm: 91, origin: 'hps', definition: 'hps_surface' });
     expect(r['rosewater-palazzo-pants']!.pattern.length.rule).toEqual({ from: 'printed', key: 'outseam', cm: 99, origin: 'waist', definition: 'drop' });
-    expect(r['crimson-wildflower-maxi-skirt']!.pattern.length).toMatchObject({ rule: { from: 'landmark', at: ['ankle'], plusCm: 3 }, source: 'subcategory/pattern "maxi": just above the ankle' });
+    // The skirt's length is the shop's tape now (src/shopTape.ts). Runs 15-17 were made BEFORE the tape, with the rule
+    // { from: 'landmark', at: ['ankle'], plusCm: 3 } ("maxi": just above the ankle).
+    expect(r['crimson-wildflower-maxi-skirt']!.pattern.length).toMatchObject({ rule: { from: 'printed', key: 'waist_to_hem', cm: 103.3 }, source: 'waist_to_hem 103.3 cm' });
     expect(r['rosewater-blouse']!.pattern.sleeve.rule).toMatchObject({ from: 'style', style: 'half' });
     expect(r['woodstock-wanderer-knit-cardi']!.pattern.sleeve.rule).toMatchObject({ from: 'kind-default' });
     expect(r['woodstock-wanderer-knit-cardi']!.pattern.front).toEqual({ front: 'buttoned', neckline: 'deep-v' });

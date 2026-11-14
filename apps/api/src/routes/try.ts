@@ -22,6 +22,11 @@
  * the k floor (C1) and never use the shop's SDK rate limit that real button clicks need (C2). Its own
  * per-IP limit (`peek-ip:`).
  *
+ * Men's gate (D20 point 3, services/readiness.ts): a men's product that is not ready answers 422
+ * `men_coming_soon` on GET /v1/try/:token before anything is paired or resolved, 404 on /v1/peek,
+ * and is never billed on fit-shown. A ready one carries `requires3d: true`, and is only sent to a
+ * client that asked with `?caps=requires3d` (it enforces "3D or nothing"); others get the 422.
+ *
  * The merchant views of the same data (GET /v1/merchant/usage/anomalies, GET
  * /v1/merchant/analytics/fit-sizes) live in routes/merchant.ts with the other merchant routes.
  */
@@ -32,7 +37,9 @@ import {
   FitShownResponseSchema,
   PeekQuerySchema,
   PeekResponseSchema,
+  TRY_CAP_REQUIRES_3D,
   TryResolveParamsSchema,
+  TryResolveQuerySchema,
   TryResolveResponseSchema,
   type PairingSource,
 } from '@curtain/schema';
@@ -44,6 +51,7 @@ import { embedAllowedOrigins, originOf } from '../services/embed.js';
 import { byteLength, fieldNames, writeLedger } from '../services/ledger.js';
 import { activeAssetRef } from '../services/assets.js';
 import { asTryGarment, findProduct, findProductById } from '../services/products.js';
+import { menComingSoon, shopperReadiness, surfaceOfSession } from '../services/readiness.js';
 import { findShopById, findShopByPrefix, isPaused, shopBranding } from '../services/shops.js';
 import { billFitSession } from '../services/usage.js';
 import { dayStart, utcDay } from '../lib/time.js';
@@ -60,7 +68,7 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
 
   app.get(
     '/v1/try/:token',
-    { schema: { params: TryResolveParamsSchema, response: { 200: TryResolveResponseSchema } }, preHandler: requireDevice, config: { rateLimit } },
+    { schema: { params: TryResolveParamsSchema, querystring: TryResolveQuerySchema, response: { 200: TryResolveResponseSchema } }, preHandler: requireDevice, config: { rateLimit } },
     async (req) => {
       const claims = await tokens.verifyTry(req.params.token);
       if (!claims) throw unauthorized('invalid or expired try token', 'invalid_try_token');
@@ -74,6 +82,12 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
       const shop = await findShopById(db, session.shopId);
       const product = await findProductById(db, session.productId);
       if (!shop || !product || product.status === 'archived') throw notFound('product');
+      // Men's gate: no garment, no pairing and no resolved session for a product that is coming soon.
+      // A product that needs the 3D view is only sent to a client that says it enforces "3D or
+      // nothing" (`?caps=requires3d`); an embed build from before the rule gets coming soon.
+      const enforces3dRule = (req.query.caps ?? '').split(',').includes(TRY_CAP_REQUIRES_3D);
+      const readiness = await shopperReadiness({ db, env }, product, { surface: surfaceOfSession(session.surface), shop, enforces3dRule });
+      if (readiness.state === 'coming_soon') throw menComingSoon();
       // Size advice needs category + chart type + chart; price, colour, block and fabric default.
       const garment = asTryGarment(product, { colorHex: shop.settings.brandColor ?? undefined });
       if (!garment) throw unprocessable('product_incomplete', 'the shop has not finished this product’s fit data');
@@ -99,7 +113,9 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
         pairing: { created, pairedAt: pairing.pairedAt.toISOString() },
         embed: { allowedOrigins: embedAllowedOrigins(shop, session.pageOrigin) },
         // D13/D16: only an approved bundle that still matches the live chart, only with the 3D estimate on.
-        asset: await activeAssetRef(db, env, shop, product, garment),
+        asset: readiness.requires3d ? readiness.asset : await activeAssetRef(db, env, shop, product, garment),
+        // Men's gate: this product may only be shown with the working 3D view (no 2D fallback).
+        ...(readiness.requires3d ? { requires3d: true as const } : {}),
       };
     },
   );
@@ -120,6 +136,8 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
       const product = await findProduct(db, shop.id, req.query.product);
       const garment = product && product.status === 'active' ? asTryGarment(product, { colorHex: shop.settings.brandColor ?? undefined }) : null;
       if (!garment) throw notFound('product');
+      // Men's gate: the peek draws a 2D figure and a size and has no 3D view (a flat surface).
+      if (product && (await shopperReadiness({ db, env }, product, { surface: 'flat', shop })).state === 'coming_soon') throw notFound('product');
       // Only a shopper who already used the fitting room on this shop (read, never created here).
       const paired = await db.query.pairings.findFirst({ where: and(eq(pairings.deviceId, req.device!.id), eq(pairings.shopId, shop.id)) });
       if (!paired) throw notFound('pairing');
@@ -153,6 +171,8 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
         if (!session.pageOrigin || !embedAllowedOrigins(shop, session.pageOrigin).includes(session.pageOrigin)) return false;
         const product = await findProductById(db, session.productId);
         if (!product || product.status === 'archived') return false;
+        // Men's gate: a product in the coming-soon state gave no size advice, so nothing is billed.
+        if ((await shopperReadiness({ db, env }, product, { surface: surfaceOfSession(session.surface), shop })).state === 'coming_soon') return false;
         const day = utcDay(at);
         const sameDay = await db
           .select({ id: usageEvents.id })

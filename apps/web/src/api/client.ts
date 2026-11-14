@@ -41,7 +41,7 @@ import type {
   WardrobeListResponse,
   WardrobePutRequest,
 } from '@curtain/schema';
-import { WARDROBE_SIZE_UNKNOWN } from '@curtain/schema';
+import { TRY_CAP_REQUIRES_3D, WARDROBE_SIZE_UNKNOWN } from '@curtain/schema';
 import type { ClientLedgerEntry } from '@/db/db';
 import { newId } from '@/lib/ids';
 
@@ -374,8 +374,13 @@ export class ApiClient {
   getLedger(cursor?: string): Promise<LedgerListResponse> {
     return this.request('GET', `/v1/me/ledger${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
   }
-  resolveTry(token: string): Promise<TryResolveResponse> {
-    return this.request('GET', `/v1/try/${encodeURIComponent(token)}`);
+  /**
+   * `enforces3dRule`: the caller shows a `requires3d` product only with the working 3D view and
+   * never with the 2D figure alone (the standalone embed; men's gate, D20 point 3). Only then the
+   * server sends such a product; any other caller gets 422 `men_coming_soon` for it.
+   */
+  resolveTry(token: string, opts: { enforces3dRule?: boolean } = {}): Promise<TryResolveResponse> {
+    return this.request('GET', `/v1/try/${encodeURIComponent(token)}${opts.enforces3dRule ? `?caps=${TRY_CAP_REQUIRES_3D}` : ''}`);
   }
   /** The size peek's read-only lookup: no try session, no pairing, nothing billed (apps/web/src/embed/peek.ts). */
   resolvePeek(q: PeekQuery): Promise<PeekResponse> {

@@ -17,6 +17,7 @@ import {
   MerchantLedgerResponseSchema,
   MerchantProductDeleteResponseSchema,
   MerchantProductParamsSchema,
+  MerchantProductUpsertQuerySchema,
   MerchantProductUpsertRequestSchema,
   MerchantProductUpsertResponseSchema,
   MerchantProductValidateRequestSchema,
@@ -38,6 +39,7 @@ import { periodFor, utcDay } from '../lib/time.js';
 import { abandonedAnalytics, fitSizeAnalytics, swipeAnalytics } from '../services/analytics.js';
 import { decodeCursor, encodeCursor } from '../services/ledger.js';
 import { archiveProduct, listMerchantProducts, upsertProduct } from '../services/products.js';
+import { merchantMenGate } from '../services/readiness.js';
 import { connectTokenHash, createShop, findShopByConnectToken, findShopByDomain, isPaused, issueMerchantKeys, planInfo, updateSettings } from '../services/shops.js';
 import { billingAnomalyReport, fitSessionsBetween, usageDays } from '../services/usage.js';
 
@@ -103,10 +105,12 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
   // ---- products ------------------------------------------------------------------------------
   app.put(
     '/v1/merchant/products/:externalId',
-    { schema: { params: MerchantProductParamsSchema, body: MerchantProductUpsertRequestSchema, response: { 200: MerchantProductUpsertResponseSchema } }, preHandler: requireMerchant },
+    { schema: { params: MerchantProductParamsSchema, querystring: MerchantProductUpsertQuerySchema, body: MerchantProductUpsertRequestSchema, response: { 200: MerchantProductUpsertResponseSchema } }, preHandler: requireMerchant },
     async (req) => {
       if (req.body.id !== req.params.externalId) throw badRequest('id_mismatch', 'payload.id must equal :externalId');
-      const r = await upsertProduct(db, req.shop!.id, req.params.externalId, req.body);
+      // `?audienceSource=`: where the caller read the audience from (men's gate, services/readiness.ts).
+      // Left out = unknown: the stored source is kept while the audience value is the same.
+      const r = await upsertProduct(db, req.shop!.id, req.params.externalId, req.body, req.query.audienceSource ? { audienceSource: req.query.audienceSource } : {});
       return {
         externalId: r.product.externalId,
         status: r.status,
@@ -136,7 +140,8 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
   );
 
   app.get('/v1/merchant/products', { schema: { querystring: MerchantProductsQuerySchema, response: { 200: MerchantProductsResponseSchema } }, preHandler: requireMerchant }, async (req) => {
-    return listMerchantProducts(db, req.shop!.id, req.query);
+    // Men's gate badge per product (services/readiness.ts); nothing is added while the gate is off.
+    return listMerchantProducts(db, req.shop!.id, req.query, (row) => merchantMenGate({ db, env }, row, req.shop!));
   });
 
   // ---- size charts ------------------------------------------------------------------------------

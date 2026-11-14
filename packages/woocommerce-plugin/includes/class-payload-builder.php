@@ -23,19 +23,27 @@ final class Payload_Builder {
 	private array $warnings = array();
 
 	/**
+	 * Where the payload's audience was read from (Vocab::infer_audience_decision's `source`), or
+	 * null when the product names none. Sent next to the payload, not in it: the API only hides a
+	 * men's product ("coming soon", decision D20) on a strong source, never on a guess from the name.
+	 */
+	private ?string $audience_source = null;
+
+	/**
 	 * @param array<string,mixed> $product Snapshot: id, name, permalink, price, regular_price, currency,
 	 *                                     images[{src,alt}], categories[{name,slug}], brands[{name}],
 	 *                                     attributes[{name,slug,options[]}].
 	 * @param array<string,mixed> $meta    `_curtain_*` meta (keys with or without the prefix; values as
 	 *                                     stored: JSON strings, scalars, or decoded arrays).
 	 * @param array<string,mixed> $opts    currency (fallback for the snapshot), default_brand.
-	 * @return array{payload: array<string,mixed>, warnings: array<int, array{source:string,path:string,message:string}>}
+	 * @return array{payload: array<string,mixed>, warnings: array<int, array{source:string,path:string,message:string}>, audience_source: ?string}
 	 */
 	public static function build( array $product, array $meta, array $opts = array() ): array {
 		$b = new self();
 		return array(
-			'payload'  => $b->run( $product, $meta, $opts ),
-			'warnings' => $b->warnings,
+			'payload'         => $b->run( $product, $meta, $opts ),
+			'warnings'        => $b->warnings,
+			'audience_source' => $b->audience_source,
 		);
 	}
 
@@ -167,7 +175,7 @@ final class Payload_Builder {
 				}
 			}
 		}
-		$audience = Vocab::infer_audience(
+		$audience_decision = Vocab::infer_audience_decision(
 			array(
 				'override'  => $audience_raw,
 				'attribute' => $audience_attr,
@@ -186,8 +194,10 @@ final class Payload_Builder {
 				'title'     => $out['name'],
 			)
 		);
+		$audience = null === $audience_decision ? null : $audience_decision['audience'];
 		if ( null !== $audience ) {
-			$out['audience'] = $audience;
+			$out['audience']       = $audience;
+			$this->audience_source = $audience_decision['source'];
 		}
 
 		$currency = strtoupper( trim( (string) ( $product['currency'] ?? $opts['currency'] ?? 'EUR' ) ) );

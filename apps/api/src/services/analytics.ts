@@ -114,9 +114,17 @@ export async function swipeAnalytics(db: Db, shopId: string, from: string, to: s
 }
 
 /** GET /v1/fit/cohort/:productId — aggregated wardrobe states only (never signatures, v1). */
-export async function fitCohort(db: Db, productId: string, shopId: string | undefined, k: number): Promise<FitCohortResponse> {
+export async function fitCohort(
+  db: Db,
+  productId: string,
+  shopId: string | undefined,
+  k: number,
+  /** Men's gate (`comingSoonShopIds`): rows of these shops are left out. */
+  withoutShopIds: readonly string[] = [],
+): Promise<FitCohortResponse> {
   const where = shopId ? and(eq(wardrobeItems.productId, productId), eq(wardrobeItems.shopId, shopId)) : eq(wardrobeItems.productId, productId);
-  const rows = await db.select({ deviceId: wardrobeItems.deviceId, size: wardrobeItems.size, state: wardrobeItems.state }).from(wardrobeItems).where(where);
+  const all = await db.select({ deviceId: wardrobeItems.deviceId, shopId: wardrobeItems.shopId, size: wardrobeItems.size, state: wardrobeItems.state }).from(wardrobeItems).where(where);
+  const rows = withoutShopIds.length ? all.filter((r) => !withoutShopIds.includes(r.shopId)) : all;
   const devices = new Set(rows.map((r) => r.deviceId));
   const n = devices.size;
   if (n < k) return { productId, n, kAnonymityFloor: k, sizeHistogram: {}, keptRate: null };

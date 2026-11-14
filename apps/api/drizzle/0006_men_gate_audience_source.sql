@@ -1,0 +1,1 @@
+ALTER TABLE "products" ADD COLUMN "audience_source" text;

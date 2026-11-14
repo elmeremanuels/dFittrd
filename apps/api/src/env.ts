@@ -72,6 +72,22 @@ export const EnvSchema = z.object({
   /** Serve /assets/* from this process (demo and dev). In production Caddy serves them. */
   SERVE_ASSETS: bool.default(false),
 
+  // ---- men's gate (D20 point 3, docs/research/men-3d-plan.md slice M0) ----------------------
+  /**
+   * `1`: a men's product (payload `audience: 'men'`) is shown to shoppers only with the full 3D
+   * experience; otherwise every route that serves product or fit data answers "Men's clothing:
+   * coming soon" with no garment, no 2D figure and no size advice (services/readiness.ts).
+   * Default off: nothing changes until the founder turns it on. Turning it on removes today's
+   * size advice for men's products in every shop.
+   */
+  MEN_3D_GATE: bool.default(false),
+  /**
+   * Open founder question (plan section 2): do men's shoes and accessories fall under the gate?
+   * They have no 3D for anyone and D20 says "men's garment". Default off: with the gate on they
+   * keep today's behaviour. `1` gates them like men's clothing. Ignored while MEN_3D_GATE is off.
+   */
+  MEN_3D_GATE_SHOES_ACCESSORIES: bool.default(false),
+
   // ---- renders ------------------------------------------------------------------------
   RENDERS_DIR: z.string().default('./data/renders'),
   RENDER_RETENTION_HOURS: z.coerce.number().min(1).max(24).default(24),

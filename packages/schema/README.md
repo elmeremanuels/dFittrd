@@ -113,6 +113,18 @@ implements the validate dry-run. `API_ROUTES` lists the method + path per DTO.
   words ("women" is not read as "men"). `coerceAudienceOverride`, the word lists and
   `AUDIENCE_CASES` (`mappings/audienceCases.ts`, replayed by the WooCommerce plugin's PHP twin) are
   exported.
+  - **The men's gate (D20 point 3, plan slice M0) reads these.** The rule itself lives in the api
+    (`apps/api/src/services/readiness.ts`, behind the server flag `MEN_3D_GATE`, default off). This
+    package carries the wire parts: `MEN_COMING_SOON_CODE` (`'men_coming_soon'`, the 422 code),
+    `SdkSessionResponse.productState?: 'coming_soon'`, `TryResolveResponse.requires3d?: true`,
+    `MerchantProductSummary.menGate?: 'coming_soon' | 'audience_unconfirmed'`, and
+    `FromShopifyOptions.onAudience(decision)`, which reports the source of the audience so the api
+    can keep it (`isWeakAudienceSource`: a title or a collection alone does not gate a product;
+    neither does an unknown source). `MerchantProductUpsertQuerySchema` (`?audienceSource=` on the
+    merchant PUT) lets a caller that inferred the audience itself report the source, and
+    `TryResolveQuerySchema` / `TRY_CAP_REQUIRES_3D` (`?caps=requires3d` on `GET /v1/try/:token`)
+    is how a client says it enforces `requires3d`.
+    All four fields are optional and absent for every product that is not a gated men's product.
   - **It runs for every product on its next sync**, also for products that predate the field: the
     field is optional in the schema, but a shop's payloads gain an audience wherever the product
     data names one. The merchant override (Shopify metafield `audience`, Woo meta

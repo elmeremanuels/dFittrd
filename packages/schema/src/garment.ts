@@ -26,7 +26,8 @@ export type GarmentCategory = (typeof GARMENT_CATEGORIES)[number];
  * pipeline works, the web layer shows "Men's clothing: coming soon" for `audience: 'men'` in place
  * of the Try it on flow. So a wrong `men` (the inference reads text and can be wrong) now hides
  * the flow for that product; the merchant override is the fix. This package only carries the
- * value; the gate lives in the web layer.
+ * value; the gate is one server helper (apps/api/src/services/readiness.ts, plan slice M0), behind
+ * a server flag that is off by default.
  */
 export const GARMENT_AUDIENCES = ['women', 'men', 'unisex'] as const;
 export type GarmentAudience = (typeof GARMENT_AUDIENCES)[number];

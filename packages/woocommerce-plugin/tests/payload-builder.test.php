@@ -180,3 +180,33 @@ test(
 		assert_same( array(), Payload_Builder::load_eur_rates( '/nonexistent/eur-rates.json' ) );
 	}
 );
+
+test(
+	'audience source: reported next to the payload, never in it (men\'s gate, decision D20)',
+	static function (): void {
+		$base = array( 'id' => 5, 'name' => 'Oxford shirt' );
+
+		// A men's word in the name only: a weak source ("Men in Black Tee" is a women's tee).
+		$built = Payload_Builder::build( array( 'id' => 5, 'name' => 'Men in Black Tee' ), array() );
+		assert_same( 'men', $built['payload']['audience'] ?? null );
+		assert_same( 'title', $built['audience_source'] );
+		assert_false( array_key_exists( 'audienceSource', $built['payload'] ), 'the source is not part of the payload' );
+
+		// The merchant's own value is the strongest source.
+		$built = Payload_Builder::build( $base, array( '_curtain_audience' => 'men' ) );
+		assert_same( 'override', $built['audience_source'] );
+
+		// A category is a strong source.
+		$built = Payload_Builder::build( $base + array( 'categories' => array( array( 'name' => 'Heren > Overhemden', 'slug' => 'heren' ) ) ), array() );
+		assert_same( 'men', $built['payload']['audience'] ?? null );
+		assert_same( 'category', $built['audience_source'] );
+
+		// Nothing names an audience, or the merchant chose "Leave out": no audience and no source.
+		$built = Payload_Builder::build( $base, array() );
+		assert_false( array_key_exists( 'audience', $built['payload'] ) );
+		assert_same( null, $built['audience_source'] );
+		$built = Payload_Builder::build( array( 'id' => 5, 'name' => 'Men in Black Tee' ), array( '_curtain_audience' => 'none' ) );
+		assert_false( array_key_exists( 'audience', $built['payload'] ) );
+		assert_same( null, $built['audience_source'] );
+	}
+);

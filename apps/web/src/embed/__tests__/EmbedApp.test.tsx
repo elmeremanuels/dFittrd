@@ -83,7 +83,7 @@ describe('EmbedApp', () => {
     expect(screen.getByTestId('embed-header')).toHaveTextContent('Your measurements stay on this device');
     await waitFor(() => expect(sentTypes(parent)).toContain('curtain:ready'));
     for (const call of parent.postMessage.mock.calls) expect(call[1]).toBe(SHOP_ORIGIN);
-    expect(api.resolveTry).toHaveBeenCalledWith(TOKEN);
+    expect(api.resolveTry).toHaveBeenCalledWith(TOKEN, { enforces3dRule: true });
 
     await fillAbout(user);
     expect(await screen.findByTestId('embed-result')).toBeInTheDocument();

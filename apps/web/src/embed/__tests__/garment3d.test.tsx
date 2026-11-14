@@ -101,4 +101,44 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     expect(await screen.findByTestId('garment3d-failed')).toHaveTextContent('isn’t available on this device');
     expect(screen.queryByRole('radiogroup', { name: 'Size in 3D' })).toBeNull();
   });
+
+  describe('required view (men\'s gate, D20 point 3): a view that never settles counts as failed', () => {
+    it('the viewer chunk never arrives: failed after the time limit', async () => {
+      const onRequiredState = vi.fn();
+      setup({ required: true, onRequiredState, requiredTimeoutMs: 30, loadViewer: vi.fn(() => new Promise<never>(() => {})) });
+      expect(onRequiredState).not.toHaveBeenCalled();
+      await waitFor(() => expect(onRequiredState).toHaveBeenCalledWith('failed'));
+      expect(onRequiredState).not.toHaveBeenCalledWith('settled');
+    });
+
+    it('the viewer never reports settled, then reports it too late: failed, and it stays failed', async () => {
+      const onRequiredState = vi.fn();
+      let late: (s: string) => void = () => {};
+      const mountGarmentView = vi.fn(async (_canvas: HTMLCanvasElement, opts: { onState?: (s: string) => void }) => {
+        opts.onState?.('draping');
+        late = (s) => opts.onState?.(s);
+        return { setSize: vi.fn(() => true), dispose: vi.fn(), sizes: asset.sizes };
+      });
+      setup({ required: true, onRequiredState, requiredTimeoutMs: 30, loadViewer: vi.fn(async () => ({ mountGarmentView }) as never) });
+      await waitFor(() => expect(onRequiredState).toHaveBeenCalledWith('failed'));
+      act(() => late('settled'));
+      expect(onRequiredState).not.toHaveBeenCalledWith('settled');
+    });
+
+    it('a view that settles in time is not failed by the timer afterwards', async () => {
+      const onRequiredState = vi.fn();
+      setup({ required: true, onRequiredState, requiredTimeoutMs: 30 });
+      await waitFor(() => expect(onRequiredState).toHaveBeenCalledWith('settled'));
+      await new Promise((r) => setTimeout(r, 60));
+      expect(onRequiredState).not.toHaveBeenCalledWith('failed');
+    });
+
+    it('an opt-in view (not required) has no time limit', async () => {
+      setup({ requiredTimeoutMs: 20, loadViewer: vi.fn(() => new Promise<never>(() => {})) });
+      fireEvent.click(screen.getByTestId('garment3d-open'));
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.queryByTestId('garment3d-failed')).toBeNull();
+      expect(screen.getByTestId('garment3d-canvas')).toBeInTheDocument();
+    });
+  });
 });

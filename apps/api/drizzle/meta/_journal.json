@@ -43,6 +43,13 @@
       "when": 1794122577661,
       "tag": "0005_garment_assets",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794691148492,
+      "tag": "0006_men_gate_audience_source",
+      "breakpoints": true
     }
   ]
 }

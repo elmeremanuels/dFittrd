@@ -147,7 +147,7 @@ script; required for embedded apps) with `<meta name="shopify-api-key">`, then:
 
 ### Size chart builder (standalone size advice, no 3D engine needed)
 
-1. **Templates** (`GET /v1/merchant/charts/templates`, from `@curtain/schema` `CHART_TEMPLATES`):
+1. **Templates** (`GET /v1/merchant/charts/templates`, from `@curtain/schema` `OFFERED_CHART_TEMPLATES`):
    women's **body** charts for AU 6–20 (8–20 preselected), UK 6–20, EU 32–46 (DE labels) and 34–48
    (FR labels), US 2–16, each the median of retailer charts read on 2026-11-06 with the sources
    linked in the page (write-up: `docs/research/size-chart-templates.md`); and **garment** templates
@@ -155,9 +155,13 @@ script; required for embedded apps) with `<meta name="shopify-api-key">`, then:
    type is always explicit: a radio "these numbers are the body each size fits / the finished
    garment". cm or inches (stored in cm), sizes can be ticked off or added, rows on fewer than three
    sources are marked "estimate". Picking a template saves it to the onboarding state.
+   Rows are marked "estimate" when they rest on fewer than three sources or on sources that
+   disagree by more than 10 cm.
    Men's generic **body** templates (not a brand's chart; sources read on 2026-11-13, tables in
    `@curtain/schema` `chartTemplatesMen.ts`): letter sizes XS–3XL and 44–58 with chest, waist and
-   seat, and jeans W/L with waist and inside leg. The builder shows a template's own points and
+   seat, and jeans W/L with waist and inside leg. **They are not offered yet**: none of their
+   sources allows commercial use, so `chartTemplatesDto()` leaves them out until the legal review
+   (`legalReview: 'pending'`). The builder is ready for them: it shows a template's own points and
    prints "Chest" for a men's template; the stored key stays `bust`.
 2. **Assign in bulk** (`POST /shopify/charts/preview`, `POST /shopify/charts/assign`): by collection
    (App Bridge `resourcePicker({ type: 'collection' })`), tag, product type, or picked products

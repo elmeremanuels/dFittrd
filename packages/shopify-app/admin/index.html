@@ -468,7 +468,7 @@
         if (t.sources && t.sources.length) {
           var used = t.sources.filter(function (x) { return x.inMedian; });
           src.appendChild(el('details', null, [
-            el('summary', { text: 'Sources: median of ' + used.length + ' published charts, read ' + used[0].accessed + (t.weakSizes && t.weakSizes.length ? ' · sizes ' + t.weakSizes.join(', ') + ' rest on fewer than three' : '') }),
+            el('summary', { text: 'Sources: median of ' + used.length + ' published charts, read ' + used[0].accessed + (t.weakSizes && t.weakSizes.length ? ' · sizes ' + t.weakSizes.join(', ') + ' are rough estimates (few sources, or sources that disagree)' : '') }),
             el('ul', { class: 'plain' }, t.sources.map(function (x) { return el('li', null, [el('a', { href: x.url, target: '_blank', rel: 'noopener noreferrer', text: x.publisher }), x.inMedian ? '' : ' (comparison only)', x.note ? ' — ' + x.note : '']); }))
           ]));
         }
@@ -497,7 +497,7 @@
         if (!charts.sizes.length) { body.appendChild(el('tr', null, [el('td', { colspan: String(charts.points.length + 1), class: 'empty', text: 'Tick at least one size.' })])); return; }
         charts.sizes.forEach(function (size) {
           var weak = charts.tpl && charts.tpl.weakSizes && charts.tpl.weakSizes.indexOf(size) >= 0 && charts.type === 'body' && !charts.edited;
-          var cells = [el('th', { scope: 'row' }, [size, weak ? el('span', { class: 'pill', title: 'Fewer than three sources', text: ' estimate' }) : ''])];
+          var cells = [el('th', { scope: 'row' }, [size, weak ? el('span', { class: 'pill', title: 'Few sources, or the sources disagree', text: ' estimate' }) : ''])];
           charts.points.forEach(function (p) {
             var v = charts.values[size] && charts.values[size][p];
             var input = el('input', { inputmode: 'decimal', 'aria-label': 'Size ' + size + ' ' + pointLabel(p) + ' in ' + u, value: toUnit(v) });

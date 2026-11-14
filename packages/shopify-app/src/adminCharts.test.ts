@@ -325,8 +325,16 @@ describe('admin page: the plan button (checklist B2)', () => {
 });
 
 describe('admin page: men\u2019s templates', () => {
-  it('prints Chest for a men\u2019s template and the waist and inseam columns of the jeans chart', async () => {
-    const calls = mountPage({});
+  it('are not offered while their sources wait for the legal review', async () => {
+    mountPage({});
+    await vi.waitFor(() => expect(document.querySelectorAll('input[name="tpl"]').length).toBeGreaterThan(5));
+    expect(chartTemplatesDto().templates.some((t) => t.audience === 'men')).toBe(false);
+    for (const id of ['mens-letter-body', 'eu-mens-body', 'mens-jeans-wl-body']) expect(document.getElementById('tpl-' + id), id).toBeNull();
+    expect(document.getElementById('tpl-uk-womens-body')).not.toBeNull();
+  });
+
+  it('once released: prints Chest for a men\u2019s template, marks XXL an estimate, and shows the waist and inseam columns of the jeans chart', async () => {
+    const calls = mountPage({ 'GET /v1/merchant/charts/templates': () => chartTemplatesDto({ includePendingLegalReview: true }) });
     await vi.waitFor(() => expect(document.querySelectorAll('input[name="tpl"]').length).toBeGreaterThan(5));
     expect($('chart-head').textContent).toContain('Bust');
     const letters = $('tpl-mens-letter-body');
@@ -335,6 +343,8 @@ describe('admin page: men\u2019s templates', () => {
     expect($('chart-head').textContent).toContain('Chest (cm)');
     expect($('chart-head').textContent).not.toContain('Bust');
     expect(($('chart-body').querySelectorAll('input')[0] as El).value).toBe('95');
+    // S, M, L, XL, XXL are preselected; the sources disagree by more than 10 cm at XXL only.
+    expect(Array.from($('chart-body').querySelectorAll('.pill')).map((p) => p.getAttribute('title'))).toEqual(['Few sources, or the sources disagree']);
     const jeans = $('tpl-mens-jeans-wl-body');
     jeans.checked = true;
     fire(jeans, 'change');

@@ -354,7 +354,7 @@ export function MerchantProducts(): ReactNode {
                       Men’s: coming soon
                     </span>
                   ) : p.menGate === 'audience_unconfirmed' ? (
-                    <span className="chip mt-1 block w-fit" data-testid="men-gate-badge" title="We read “men” from the title or a collection only. Set the audience on the product to confirm it; until then it is shown as before.">
+                    <span className="chip mt-1 block w-fit" data-testid="men-gate-badge" title="We read “men” from the title or a collection only, or the product has not been synced since we started asking where the audience comes from. Set the audience on the product to confirm it, or sync it again; until then it is shown as before.">
                       Men’s: confirm audience
                     </span>
                   ) : null}

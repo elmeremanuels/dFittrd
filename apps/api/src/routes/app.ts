@@ -40,7 +40,7 @@ import { devices, fitSignatures, ledgerEntries, pairings, renderJobs, swipeEvent
 import { forbidden, notFound, unauthorized, unprocessable } from '../lib/errors.js';
 import { HOUR, utcDay } from '../lib/time.js';
 import { fitCohort } from '../services/analytics.js';
-import { isComingSoonByExternalId, menComingSoon, shopperReadiness, withoutComingSoon } from '../services/readiness.js';
+import { comingSoonShopIds, menComingSoon, shopperReadiness, withoutComingSoon } from '../services/readiness.js';
 import { byteLength, fieldNames, listLedger, toDto, writeLedger } from '../services/ledger.js';
 import { asGarment, findProduct, findProductById, listActiveGarments } from '../services/products.js';
 import { findShopById, type ShopRow } from '../services/shops.js';
@@ -258,6 +258,18 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
       return false;
     });
     rejected.sort((a, b) => a.index - b.index);
+    // Men's gate, read before the transaction (PGlite in tests and the demo has one connection).
+    const comingSoonProductIds = new Set<string>();
+    if (env.MEN_3D_GATE) {
+      const seen = new Set<string>();
+      for (const { ev } of storable) {
+        const key = `${ev.shopId}:${ev.itemId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const product = await findProduct(db, ev.shopId, ev.itemId);
+        if (product && (await shopperReadiness({ db, env }, product, { surface: 'flat', shop: shopsById.get(ev.shopId)! })).state === 'coming_soon') comingSoonProductIds.add(product.id);
+      }
+    }
     const log = req.log;
     return db.transaction(async (tx) => {
       let accepted = 0;
@@ -266,6 +278,9 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
       const acceptedClientIds: string[] = [];
       for (const { ev } of storable) {
         const product = await findProduct(tx, ev.shopId, ev.itemId);
+        // Men's gate: the deck is a flat surface, so a product in the coming-soon state has no size
+        // advice. The swipe itself is kept (taste); its size and fit score are not, and it is not billed.
+        const comingSoon = comingSoonProductIds.has(product?.id ?? '');
         const inserted = await tx
           .insert(swipeEvents)
           .values({
@@ -275,9 +290,9 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
             itemId: ev.itemId,
             clientId: ev.clientId,
             action: ev.action,
-            sizeRecommended: ev.sizeAtSwipe,
-            fitScore: ev.fitScore,
-            reasons: ev.reasons ?? null,
+            sizeRecommended: comingSoon ? null : ev.sizeAtSwipe,
+            fitScore: comingSoon ? null : ev.fitScore,
+            reasons: comingSoon ? null : (ev.reasons ?? null),
             dealIndex: ev.dealIndex,
             at: new Date(ev.at),
           })
@@ -291,7 +306,7 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
         accepted++;
         // D7: the session is billable once a fit result exists; idempotent by intent token.
         const hasFit = ev.fitScore !== null || ev.sizeAtSwipe !== null;
-        if (!hasFit) continue;
+        if (!hasFit || comingSoon) continue;
         const shop = shopsById.get(ev.shopId)!;
         if (ev.intentToken) {
           const session = await tx.query.trySessions.findFirst({ where: eq(trySessions.intentToken, ev.intentToken) });
@@ -351,10 +366,10 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
     { schema: { params: z.object({ productId: z.string().min(1).max(128) }), querystring: z.object({ shopId: uuid.optional() }), response: { 200: FitCohortResponseSchema } }, preHandler: requireDevice },
     async (req) => {
       // Men's gate: no size histogram (it is size advice) for a product in the coming-soon state.
-      if (await isComingSoonByExternalId({ db, env }, req.params.productId, req.query.shopId)) {
-        return { productId: req.params.productId, n: 0, kAnonymityFloor: env.K_ANON, sizeHistogram: {}, keptRate: null };
-      }
-      return fitCohort(db, req.params.productId, req.query.shopId, env.K_ANON);
+      // Only the rows of the shops where it is coming soon are left out, so another shop's product
+      // with the same external id keeps its cohort.
+      const hidden = await comingSoonShopIds({ db, env }, req.params.productId, req.query.shopId);
+      return fitCohort(db, req.params.productId, req.query.shopId, env.K_ANON, hidden);
     },
   );
 };

@@ -119,7 +119,11 @@ implements the validate dry-run. `API_ROUTES` lists the method + path per DTO.
     `SdkSessionResponse.productState?: 'coming_soon'`, `TryResolveResponse.requires3d?: true`,
     `MerchantProductSummary.menGate?: 'coming_soon' | 'audience_unconfirmed'`, and
     `FromShopifyOptions.onAudience(decision)`, which reports the source of the audience so the api
-    can keep it (`isWeakAudienceSource`: a title or a collection alone does not gate a product).
+    can keep it (`isWeakAudienceSource`: a title or a collection alone does not gate a product;
+    neither does an unknown source). `MerchantProductUpsertQuerySchema` (`?audienceSource=` on the
+    merchant PUT) lets a caller that inferred the audience itself report the source, and
+    `TryResolveQuerySchema` / `TRY_CAP_REQUIRES_3D` (`?caps=requires3d` on `GET /v1/try/:token`)
+    is how a client says it enforces `requires3d`.
     All four fields are optional and absent for every product that is not a gated men's product.
   - **It runs for every product on its next sync**, also for products that predate the field: the
     field is optional in the schema, but a shop's payloads gain an audience wherever the product

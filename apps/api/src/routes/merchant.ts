@@ -17,6 +17,7 @@ import {
   MerchantLedgerResponseSchema,
   MerchantProductDeleteResponseSchema,
   MerchantProductParamsSchema,
+  MerchantProductUpsertQuerySchema,
   MerchantProductUpsertRequestSchema,
   MerchantProductUpsertResponseSchema,
   MerchantProductValidateRequestSchema,
@@ -104,10 +105,12 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
   // ---- products ------------------------------------------------------------------------------
   app.put(
     '/v1/merchant/products/:externalId',
-    { schema: { params: MerchantProductParamsSchema, body: MerchantProductUpsertRequestSchema, response: { 200: MerchantProductUpsertResponseSchema } }, preHandler: requireMerchant },
+    { schema: { params: MerchantProductParamsSchema, querystring: MerchantProductUpsertQuerySchema, body: MerchantProductUpsertRequestSchema, response: { 200: MerchantProductUpsertResponseSchema } }, preHandler: requireMerchant },
     async (req) => {
       if (req.body.id !== req.params.externalId) throw badRequest('id_mismatch', 'payload.id must equal :externalId');
-      const r = await upsertProduct(db, req.shop!.id, req.params.externalId, req.body);
+      // `?audienceSource=`: where the caller read the audience from (men's gate, services/readiness.ts).
+      // Left out = unknown: the stored source is kept while the audience value is the same.
+      const r = await upsertProduct(db, req.shop!.id, req.params.externalId, req.body, req.query.audienceSource ? { audienceSource: req.query.audienceSource } : {});
       return {
         externalId: r.product.externalId,
         status: r.status,

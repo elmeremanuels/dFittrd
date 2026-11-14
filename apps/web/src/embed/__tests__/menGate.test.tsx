@@ -138,6 +138,12 @@ describe("men's gate in the overlay", () => {
     expect(await screen.findByTestId('blocked-comingSoon')).toBeInTheDocument();
   });
 
+  it('the embed tells the server it enforces "3D or nothing" (the server sends a requires3d product to no other client)', async () => {
+    const { api } = setup({ resolveTry: async () => Promise.reject(comingSoonError()) });
+    await screen.findByTestId('blocked-comingSoon');
+    expect(api.resolveTry).toHaveBeenCalledWith(TOKEN, { enforces3dRule: true });
+  });
+
   it('a ready men’s product on a device without WebGL2 is coming soon before any form or figure', async () => {
     const { api } = setup({ resolveTry: async () => resolved({ requires3d: true, asset }), webgl2: () => false });
     expect(await screen.findByTestId('blocked-comingSoon')).toBeInTheDocument();

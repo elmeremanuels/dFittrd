@@ -10,12 +10,14 @@
  *
  *   GET  /v1/try/:token              422 `men_coming_soon`, before pairing or resolving
  *   POST /v1/try/:token/fit-shown    never billed
+ *   POST /v1/swipes                  stored without size and fit score, never billed    (flat)
  *   POST /v1/sdk/sessions            `productState: 'coming_soon'` next to the usual body
  *   GET  /v1/peek                    404, like any product the button cannot open       (flat)
  *   GET  /v1/shops/:shopId/products  left out of the list                               (flat)
  *   GET  /v1/products/:id            422 `men_coming_soon`                              (flat)
  *   POST /v1/renders/hero            422 `men_coming_soon`                              (flat)
- *   GET  /v1/fit/cohort/:productId   the empty cohort (no size histogram)               (flat)
+ *   GET  /v1/renders/:jobId[/:kind]  404 for a render queued before the gate            (flat)
+ *   GET  /v1/fit/cohort/:productId   the shop's rows left out (no size histogram)       (flat)
  *   GET  /v1/merchant/products       `menGate` per product (the merchant's badge)
  *
  * Surfaces. Only the standalone overlay has a 3D view (`surface: 'embed'` try sessions). The
@@ -31,7 +33,11 @@
  *    decisions and are not built);
  *  - the audience `men` was read from a title or a collection only (`isWeakAudienceSource`): a
  *    guess from free text must not hide a product before the merchant confirms it. The merchant
- *    list marks it `audience_unconfirmed`. An unknown source (null) counts as strong;
+ *    list marks it `audience_unconfirmed`;
+ *  - the source of the audience is unknown (null): a row stored before the column existed, or
+ *    written through the merchant API by a caller that did not say (`?audienceSource=`). The value
+ *    may be the same guess from a title (the WooCommerce plugin infers it itself), so it is not
+ *    gated either and is marked `audience_unconfirmed` until a sync reports a strong source;
  *  - men's shoes and accessories, unless `MEN_3D_GATE_SHOES_ACCESSORIES` is on (open founder
  *    question; they have no 3D for anyone).
  *
@@ -41,12 +47,17 @@
  *    chart (`activeAsset`, D13/D16);
  *  - the bundle was built on the male mannequin (`assetMannequinFamily`).
  * Then `GET /v1/try` sends the asset with `requires3d: true`, and the embed must end in the
- * coming-soon screen when the 3D view fails on the device (no 2D fallback).
+ * coming-soon screen when the 3D view fails on the device (no 2D fallback). The garment is only
+ * sent to a client that says it enforces that rule (`?caps=requires3d`, `TRY_CAP_REQUIRES_3D`); an
+ * embed build from before the rule gets the coming-soon answer.
+ *
+ * Not gated on purpose: `GET /v1/wardrobe` and `GET /v1/me/export` return what the device itself
+ * stored earlier (the shopper's own data, D3), not new advice.
  *
  * Not built in M0 (they need later slices and no bundle can pass before them): plan condition 1
  * (the supported men's garment types, section 2) and condition 3 (men's chart columns, M2a).
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { MEN_COMING_SOON_CODE, isWeakAudienceSource, type GarmentAssetRef, type GarmentPayload } from '@curtain/schema';
 import type { Db } from '../db/client.js';
 import { products } from '../db/schema.js';
@@ -57,7 +68,7 @@ import { asTryGarment, type ProductRow } from './products.js';
 import { findShopById, type ShopRow } from './shops.js';
 
 /** Why a gated men's product is not ready (for the merchant badge and the logs; never sent to shoppers). */
-export type ComingSoonReason = 'flat_surface' | 'product_incomplete' | 'shop_3d_off' | 'no_approved_bundle' | 'not_male_bundle';
+export type ComingSoonReason = 'flat_surface' | 'product_incomplete' | 'shop_3d_off' | 'no_approved_bundle' | 'not_male_bundle' | 'client_without_3d_rule';
 
 /** `overlay`: the standalone embed, which has the 3D view. `flat`: a surface that draws the 2D figure only. */
 export type ShopperSurface = 'overlay' | 'flat';
@@ -82,14 +93,15 @@ type GateProduct = Pick<ProductRow, 'payload' | 'category' | 'audienceSource'>;
 
 /**
  * Whether the gate applies to a product at all (no I/O). `unconfirmed`: a men's product whose
- * audience is a guess from a title or a collection, so it is not gated until the merchant confirms.
+ * audience is a guess from a title or a collection, or whose source is unknown (null), so it is
+ * not gated until a strong source confirms it. Only a known strong source gates.
  */
 export function menGateScope(env: GateEnv, product: GateProduct): 'none' | 'unconfirmed' | 'gated' {
   if (!env.MEN_3D_GATE) return 'none';
   if (product.payload.audience !== 'men') return 'none';
   const category = product.payload.category ?? product.category;
   if (!env.MEN_3D_GATE_SHOES_ACCESSORIES && category && MEN_GATE_OPEN_CATEGORIES.includes(category)) return 'none';
-  if (product.audienceSource && isWeakAudienceSource(product.audienceSource)) return 'unconfirmed';
+  if (!product.audienceSource || isWeakAudienceSource(product.audienceSource)) return 'unconfirmed';
   return 'gated';
 }
 
@@ -97,10 +109,18 @@ export function menGateScope(env: GateEnv, product: GateProduct): 'none' | 'unco
  * THE helper: the state of one product for shoppers on one surface. Pass the shop row when the
  * route has it; otherwise it is loaded, and only for a gated men's product (no extra query for
  * anything else).
+ *
+ * `enforces3dRule: false`: the client did not say it enforces "3D or nothing" (GET /v1/try without
+ * `caps=requires3d`), so a product that would be ready with `requires3d` is coming soon for it.
  */
-export async function shopperReadiness(ctx: { db: Db; env: Env }, product: ProductRow, on: { surface: ShopperSurface; shop?: ShopRow }): Promise<ShopperReadiness> {
+export async function shopperReadiness(
+  ctx: { db: Db; env: Env },
+  product: ProductRow,
+  on: { surface: ShopperSurface; shop?: ShopRow; enforces3dRule?: boolean },
+): Promise<ShopperReadiness> {
   if (menGateScope(ctx.env, product) !== 'gated') return UNGATED;
   if (on.surface === 'flat') return { state: 'coming_soon', reason: 'flat_surface' };
+  if (on.enforces3dRule === false) return { state: 'coming_soon', reason: 'client_without_3d_rule' };
   const owner = on.shop ?? (await findShopById(ctx.db, product.shopId));
   const garment = owner ? asTryGarment(product, { colorHex: owner.settings.brandColor ?? undefined }) : null;
   if (!owner || !garment) return { state: 'coming_soon', reason: 'product_incomplete' };
@@ -125,18 +145,23 @@ export async function withoutComingSoon(ctx: { db: Db; env: Env }, rows: Product
 }
 
 /**
- * For the (flat) route that only has a product's external id (the cohort): true when a product with that id
- * is in the coming-soon state. Without the gate it answers false and reads nothing.
+ * For the (flat) cohort route, which only has a product's external id: the shops whose product
+ * with that id is in the coming-soon state. Their wardrobe rows are left out of the cohort, so a
+ * gated men's product shows no size histogram, and a product of another shop that happens to share
+ * the id (WooCommerce ids are small integers) keeps its own rows. With `shopId` only that shop is
+ * read. Without the gate it answers [] and reads nothing.
  */
-export async function isComingSoonByExternalId(ctx: { db: Db; env: Env }, externalId: string, shopId?: string): Promise<boolean> {
-  if (!ctx.env.MEN_3D_GATE) return false;
+export async function comingSoonShopIds(ctx: { db: Db; env: Env }, externalId: string, shopId?: string): Promise<string[]> {
+  if (!ctx.env.MEN_3D_GATE) return [];
+  // Only men's rows can be gated; the filter keeps the read small and needs no limit.
+  const men = sql`${products.payload}->>'audience' = 'men'`;
   const rows = await ctx.db
     .select()
     .from(products)
-    .where(shopId ? and(eq(products.externalId, externalId), eq(products.shopId, shopId)) : eq(products.externalId, externalId))
-    .limit(20);
-  for (const row of rows) if ((await shopperReadiness(ctx, row, { surface: 'flat' })).state === 'coming_soon') return true;
-  return false;
+    .where(shopId ? and(eq(products.externalId, externalId), eq(products.shopId, shopId), men) : and(eq(products.externalId, externalId), men));
+  const ids: string[] = [];
+  for (const row of rows) if ((await shopperReadiness(ctx, row, { surface: 'flat' })).state === 'coming_soon') ids.push(row.shopId);
+  return ids;
 }
 
 /** The merchant's badge for a product (`MerchantProductSummary.menGate`), or undefined. */

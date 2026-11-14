@@ -16,7 +16,7 @@ import { renderJobs } from '../db/schema.js';
 import { JOB } from '../jobs/queue.js';
 import { badRequest, forbidden, notFound, tooLarge, unprocessable } from '../lib/errors.js';
 import { HOUR } from '../lib/time.js';
-import { asGarment, findProduct } from '../services/products.js';
+import { asGarment, findProduct, findProductById } from '../services/products.js';
 import { menComingSoon, shopperReadiness } from '../services/readiness.js';
 import { signedRenderUrl } from '../services/renders.js';
 import { findShopById } from '../services/shops.js';
@@ -25,6 +25,17 @@ const MAX_DECODED_BYTES = 7 * 1024 * 1024;
 
 export const renderRoutes: FastifyPluginAsyncZod = async (app) => {
   const { db, env, tokens, queue, now } = app.ctx;
+
+  /**
+   * Men's gate (services/readiness.ts): a render queued before the gate was turned on (or before
+   * the product became a men's product) is not served while its product is coming soon. Without
+   * the gate nothing is read.
+   */
+  const isComingSoonRender = async (productId: string | null): Promise<boolean> => {
+    if (!env.MEN_3D_GATE || !productId) return false;
+    const product = await findProductById(db, productId);
+    return !!product && (await shopperReadiness({ db, env }, product, { surface: 'flat' })).state === 'coming_soon';
+  };
 
   app.post(
     '/v1/renders/hero',
@@ -93,6 +104,7 @@ export const renderRoutes: FastifyPluginAsyncZod = async (app) => {
   app.get('/v1/renders/:jobId', { schema: { params: z.object({ jobId: z.uuid() }), response: { 200: HeroRenderStatusSchema } }, preHandler: requireDevice }, async (req) => {
     const job = await db.query.renderJobs.findFirst({ where: and(eq(renderJobs.id, req.params.jobId), eq(renderJobs.deviceId, req.device!.id)) });
     if (!job) throw notFound('render job');
+    if (await isComingSoonRender(job.productId)) throw notFound('render job');
     const expired = job.status === 'expired' || job.expiresAt < now();
     const status = expired && job.status === 'done' ? 'expired' : job.status;
     return {
@@ -119,6 +131,7 @@ export const renderRoutes: FastifyPluginAsyncZod = async (app) => {
       if (!tokens.verifyRender(jobId, kind, req.query.exp, req.query.sig, now().getTime())) throw forbidden('bad or expired signature', 'bad_signature');
       const job = await db.query.renderJobs.findFirst({ where: eq(renderJobs.id, jobId) });
       if (!job || job.status !== 'done' || job.expiresAt < now()) throw notFound('render');
+      if (await isComingSoonRender(job.productId)) throw notFound('render');
       const path = kind === 'image' ? job.resultPath : job.videoPath;
       const bytes = path ? await app.renders.read(path) : null;
       if (!bytes) throw notFound('render file');

@@ -156,22 +156,42 @@ covers the live chart and was built on the male mannequin (`assetMannequinFamily
 | `POST /v1/sdk/sessions` | the usual body plus `productState: 'coming_soon'`; the session is still minted |
 | `GET /v1/try/:token` | 422 `men_coming_soon`: no garment, no pairing, the session stays unresolved |
 | `POST /v1/try/:token/fit-shown` | `200 { billed: false }` |
+| `POST /v1/swipes` | the swipe is stored without its size, fit score and reasons; never billed |
 | `GET /v1/peek` | 404 |
 | `GET /v1/shops/:shopId/products` | left out of the list |
 | `GET /v1/products/:id` | 422 `men_coming_soon` |
 | `POST /v1/renders/hero` | 422 `men_coming_soon`, nothing queued |
-| `GET /v1/fit/cohort/:productId` | the empty cohort (`n: 0`, no size histogram) |
+| `GET /v1/renders/:jobId`, `GET /v1/renders/:jobId/:kind` | 404 (a render queued before the product was gated) |
+| `GET /v1/fit/cohort/:productId` | the rows of the shop(s) where it is coming soon are left out: with `shopId` the empty cohort (`n: 0`, no size histogram); without it only other shops' products that share the external id are counted |
 | `GET /v1/merchant/products` | `menGate: 'coming_soon'` on the product (the merchant's badge) |
 
 * A men's product that passes gets `requires3d: true` on `GET /v1/try/:token`, and only for an
-  overlay session (`surface: 'embed'`). The peek, the app's deck and product page, the hero render,
+  overlay session (`surface: 'embed'`) whose client asks with `?caps=requires3d`
+  (`TRY_CAP_REQUIRES_3D`): that is how the embed says it enforces "3D or nothing". A client that
+  does not say so (an embed bundle cached from before the rule, a third party) gets the 422, so it
+  can never draw the 2D figure for such a product. The peek, the app's deck and product page, the hero render,
   the cohort and app-mode try sessions draw the 2D figure only, so there it stays coming soon.
 * Not gated, so unchanged: `women`, `unisex`, no audience; a `men` that was read from a title or a
-  collection only (`isWeakAudienceSource`; the merchant list says `menGate: 'audience_unconfirmed'`);
-  men's shoes and accessories unless `MEN_3D_GATE_SHOES_ACCESSORIES=1` (open founder question).
-* The audience source is stored in `products.audience_source` (migration
-  `0006_men_gate_audience_source`). The Shopify sync fills it; the merchant API (the WooCommerce
-  plugin) does not send it, so there it is null and counts as a strong source.
+  collection only (`isWeakAudienceSource`), or whose source is unknown (null); the merchant list
+  says `menGate: 'audience_unconfirmed'` for both; men's shoes and accessories unless
+  `MEN_3D_GATE_SHOES_ACCESSORIES=1` (open founder question). `GET /v1/wardrobe` and
+  `GET /v1/me/export` are not gated either: they return what the device itself stored earlier
+  (the shopper's own data), not new advice.
+* **Only a known strong source gates.** The audience source is stored in `products.audience_source`
+  (migration `0006_men_gate_audience_source`). The Shopify sync fills it. The merchant API takes it
+  as `PUT /v1/merchant/products/:externalId?audienceSource=<source>` (the WooCommerce plugin sends
+  it from this version on; it infers the audience itself). A write that does not say the source
+  keeps the stored one while the payload's audience value is the same, and clears it when the
+  audience changes. A null source (a row from before the migration, an older plugin, a direct API
+  caller) is never gated: a women's "Men in Black Tee" keeps its size advice.
+* **Before turning the flag on:** a men's product is gated only once its row has a strong source,
+  so until then it is still shown with the 2D figure. Run the Shopify backfill job
+  (`JOB.backfillShopify`) for every Shopify shop, and for WooCommerce shops ship the plugin version
+  that sends the source and run "Sync all". `GET /v1/merchant/products` shows what is left as
+  `audience_unconfirmed`. No job does this automatically when the flag changes.
+* Cost with the flag on: `GET /v1/merchant/products` reads the readiness of each gated men's row of
+  the page in sequence (one asset query and one `qa.json` read per row, only in shops with the 3D
+  estimate on); `POST /v1/swipes` reads each distinct product of the batch once more.
 * Not checked yet: the supported men's garment types (plan section 2) and the men's chart columns
   (slice M2a). Tests: `src/men-gate.test.ts`.
 

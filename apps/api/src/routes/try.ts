@@ -24,7 +24,8 @@
  *
  * Men's gate (D20 point 3, services/readiness.ts): a men's product that is not ready answers 422
  * `men_coming_soon` on GET /v1/try/:token before anything is paired or resolved, 404 on /v1/peek,
- * and is never billed on fit-shown. A ready one carries `requires3d: true`.
+ * and is never billed on fit-shown. A ready one carries `requires3d: true`, and is only sent to a
+ * client that asked with `?caps=requires3d` (it enforces "3D or nothing"); others get the 422.
  *
  * The merchant views of the same data (GET /v1/merchant/usage/anomalies, GET
  * /v1/merchant/analytics/fit-sizes) live in routes/merchant.ts with the other merchant routes.
@@ -36,7 +37,9 @@ import {
   FitShownResponseSchema,
   PeekQuerySchema,
   PeekResponseSchema,
+  TRY_CAP_REQUIRES_3D,
   TryResolveParamsSchema,
+  TryResolveQuerySchema,
   TryResolveResponseSchema,
   type PairingSource,
 } from '@curtain/schema';
@@ -65,7 +68,7 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
 
   app.get(
     '/v1/try/:token',
-    { schema: { params: TryResolveParamsSchema, response: { 200: TryResolveResponseSchema } }, preHandler: requireDevice, config: { rateLimit } },
+    { schema: { params: TryResolveParamsSchema, querystring: TryResolveQuerySchema, response: { 200: TryResolveResponseSchema } }, preHandler: requireDevice, config: { rateLimit } },
     async (req) => {
       const claims = await tokens.verifyTry(req.params.token);
       if (!claims) throw unauthorized('invalid or expired try token', 'invalid_try_token');
@@ -80,7 +83,10 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
       const product = await findProductById(db, session.productId);
       if (!shop || !product || product.status === 'archived') throw notFound('product');
       // Men's gate: no garment, no pairing and no resolved session for a product that is coming soon.
-      const readiness = await shopperReadiness({ db, env }, product, { surface: surfaceOfSession(session.surface), shop });
+      // A product that needs the 3D view is only sent to a client that says it enforces "3D or
+      // nothing" (`?caps=requires3d`); an embed build from before the rule gets coming soon.
+      const enforces3dRule = (req.query.caps ?? '').split(',').includes(TRY_CAP_REQUIRES_3D);
+      const readiness = await shopperReadiness({ db, env }, product, { surface: surfaceOfSession(session.surface), shop, enforces3dRule });
       if (readiness.state === 'coming_soon') throw menComingSoon();
       // Size advice needs category + chart type + chart; price, colour, block and fabric default.
       const garment = asTryGarment(product, { colorHex: shop.settings.brandColor ?? undefined });

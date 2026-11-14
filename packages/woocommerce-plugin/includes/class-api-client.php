@@ -67,9 +67,20 @@ final class Api_Client {
 		return $this->request( 'PUT', '/v1/merchant/shops/self', $body, $auth, $bearer );
 	}
 
-	/** PUT /v1/merchant/products/{externalId} @param array<string,mixed> $payload @return array<string,mixed> */
-	public function upsert_product( string $external_id, array $payload ): array {
-		return $this->request( 'PUT', '/v1/merchant/products/' . rawurlencode( $external_id ), $payload );
+	/**
+	 * PUT /v1/merchant/products/{externalId}[?audienceSource=…]
+	 *
+	 * @param array<string,mixed> $payload
+	 * @param string|null         $audience_source Where the payload's audience was read from
+	 *                                             (Payload_Builder::build's `audience_source`).
+	 * @return array<string,mixed>
+	 */
+	public function upsert_product( string $external_id, array $payload, ?string $audience_source = null ): array {
+		$path = '/v1/merchant/products/' . rawurlencode( $external_id );
+		if ( null !== $audience_source && '' !== $audience_source ) {
+			$path .= '?audienceSource=' . rawurlencode( $audience_source );
+		}
+		return $this->request( 'PUT', $path, $payload );
 	}
 
 	/** POST /v1/merchant/products/validate (dry run) @param array<string,mixed> $payload @return array<string,mixed> */

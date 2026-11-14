@@ -10,7 +10,9 @@
  * - Always labelled an estimate (rule 3). On any error it closes and the 2D figure above stays.
  * - `required` (a men's product, D20 point 3: never a 2D figure only): the view opens by itself,
  *   cannot be closed and reports `settled` or `failed`; the embed shows nothing of the result until
- *   it has settled and replaces it by "Men's clothing: coming soon" when it fails.
+ *   it has settled and replaces it by "Men's clothing: coming soon" when it fails. A view that has
+ *   not settled within `REQUIRED_3D_TIMEOUT_MS` (a chunk or bundle that never arrives, a viewer
+ *   that never reports) counts as failed, so the shopper is never left on the loading screen.
  */
 import { Box, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -57,14 +59,19 @@ export interface Garment3DProps {
   required?: boolean;
   /** With `required`: the view has settled, or it failed (no WebGL2, bundle error, incompatible). */
   onRequiredState?: (state: 'settled' | 'failed') => void;
+  /** With `required`: the time the view gets to settle (default `REQUIRED_3D_TIMEOUT_MS`). */
+  requiredTimeoutMs?: number;
   /** Tests inject these; the app uses the real chunk and the real check. */
   loadViewer?: () => Promise<ViewerModule>;
   webgl2?: () => boolean;
 }
 
+/** How long a required 3D view may take to settle before it counts as failed (chunk + bundle + drape). */
+export const REQUIRED_3D_TIMEOUT_MS = 30_000;
+
 type Phase = 'idle' | 'loading' | 'draping' | 'settled' | 'failed';
 
-export function Garment3D({ asset, paused, garment, fit, size, recommended, measurements, units = 'metric', heightCm, estimated = [], onSelect, required = false, onRequiredState, loadViewer = () => import('@curtain/garment-viewer'), webgl2 = hasWebGL2 }: Garment3DProps): ReactNode {
+export function Garment3D({ asset, paused, garment, fit, size, recommended, measurements, units = 'metric', heightCm, estimated = [], onSelect, required = false, onRequiredState, requiredTimeoutMs = REQUIRED_3D_TIMEOUT_MS, loadViewer = () => import('@curtain/garment-viewer'), webgl2 = hasWebGL2 }: Garment3DProps): ReactNode {
   const [supported] = useState(() => !!asset && webgl2());
   const usable = !!asset && !paused && supported;
   const [open, setOpen] = useState(required && usable);
@@ -78,6 +85,14 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
     if (!usable || phase === 'failed') onRequiredRef.current?.('failed');
     else if (phase === 'settled') onRequiredRef.current?.('settled');
   }, [required, usable, phase]);
+  // Required view: no answer in time is a failure, and a failure is final (a late `settled` from
+  // the viewer must not bring the result back after the embed went to coming soon).
+  const waiting = required && open && (phase === 'loading' || phase === 'draping');
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setTimeout(() => setPhase('failed'), requiredTimeoutMs);
+    return () => clearTimeout(timer);
+  }, [waiting, requiredTimeoutMs]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const viewRef = useRef<View | null>(null);
   const sizeRef = useRef(size);
@@ -97,7 +112,12 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
     void (async () => {
       try {
         const mod = await loadViewer();
-        if (cancelled || !canvasRef.current) return;
+        if (cancelled) return;
+        if (!canvasRef.current) {
+          // No canvas to draw on: for a required view that is a failure, not a silent stop.
+          if (required) setPhase('failed');
+          return;
+        }
         const view = await mod.mountGarmentView(canvasRef.current, {
           baseUrl: asset.baseUrl,
           garment,
@@ -105,7 +125,7 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
           size: sizeRef.current,
           body: { bust: measurements.bust, waist: measurements.waist, hip: measurements.hip },
           onState: (s) => {
-            if (!cancelled) setPhase(s === 'error' ? 'failed' : s);
+            if (!cancelled) setPhase((prev) => (required && prev === 'failed' ? prev : s === 'error' ? 'failed' : s));
           },
         });
         if (cancelled) view.dispose();

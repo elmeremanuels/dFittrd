@@ -130,7 +130,7 @@ final class Sync {
 
 		$built  = self::build( $product );
 		$client = Api_Client::from_settings();
-		$res    = $client->upsert_product( (string) $product_id, $built['payload'] );
+		$res    = $client->upsert_product( (string) $product_id, $built['payload'], $built['audience_source'] ?? null );
 		$class  = self::classify( $res['status'], $res['error_code'], $res['transport_error'] );
 
 		if ( 'ok' === $class ) {
@@ -231,7 +231,7 @@ final class Sync {
 	/**
 	 * Build the payload for a product (snapshot + meta → draft).
 	 *
-	 * @return array{payload: array<string,mixed>, warnings: array<int, array{source:string,path:string,message:string}>}
+	 * @return array{payload: array<string,mixed>, warnings: array<int, array{source:string,path:string,message:string}>, audience_source: ?string}
 	 */
 	public static function build( \WC_Product $product ): array {
 		$snapshot = Product_Snapshot::from_product( $product );

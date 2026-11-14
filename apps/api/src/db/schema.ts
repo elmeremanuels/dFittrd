@@ -195,7 +195,8 @@ export const products = pgTable(
     activeAssetVersion: text('active_asset_version'),
     /**
      * Where the payload's `audience` was read from (`AUDIENCE_SOURCES` in @curtain/schema), when the
-     * sync knows it (Shopify today). Null: unknown, treated as a strong source by the men's gate.
+     * caller knows it (the Shopify sync, `?audienceSource=` on the merchant PUT). Null: unknown; the
+     * men's gate never gates on it (only a known strong source gates).
      */
     audienceSource: text('audience_source').$type<AudienceSource>(),
   },

@@ -15,6 +15,7 @@ import { FitSignatureWireSchema } from './fitSignature';
 import { SwipeEventSchema } from './swipe';
 import { completenessScore, type CompletenessResult } from './completeness';
 import { GarmentAssetRefSchema } from './garmentAsset';
+import { AUDIENCE_SOURCES } from './mappings/audience';
 
 // ---------------------------------------------------------------------------
 // Shared
@@ -38,7 +39,8 @@ export type ProductShopperState = z.infer<typeof ProductShopperStateSchema>;
  * The men's gate as the merchant sees it per product. `coming_soon`: shoppers see "Men's clothing:
  * coming soon" until the product has an approved 3D bundle on the male body and the shop has the 3D
  * estimate on. `audience_unconfirmed`: the audience `men` was guessed from a title or a collection
- * only, so the product is not gated until the merchant sets the audience.
+ * only, or its source is unknown (not synced since the gate, or sent without `audienceSource`), so
+ * the product is not gated until the merchant sets the audience or the next sync reports a strong source.
  */
 export const MERCHANT_MEN_GATE_STATES = ['coming_soon', 'audience_unconfirmed'] as const;
 
@@ -189,6 +191,16 @@ export type ShopBranding = z.infer<typeof ShopBrandingSchema>;
 
 /** GET /v1/try/:token */
 export const TryResolveParamsSchema = z.object({ token: z.string().min(16).max(4096) });
+/**
+ * Men's gate (D20 point 3): the capability a client names on `GET /v1/try/:token?caps=requires3d`
+ * to say it enforces `requires3d` (the result is shown only with the working 3D view, else the
+ * coming-soon screen). Without it a product that needs the rule answers 422 `men_coming_soon`, so
+ * an embed build from before the rule never draws the 2D figure for it.
+ */
+export const TRY_CAP_REQUIRES_3D = 'requires3d';
+/** `caps`: comma-separated capability names; unknown names are ignored. */
+export const TryResolveQuerySchema = z.object({ caps: z.string().max(128).optional() });
+export type TryResolveQuery = z.infer<typeof TryResolveQuerySchema>;
 export type TryResolveParams = z.infer<typeof TryResolveParamsSchema>;
 
 export const TryResolveResponseSchema = z.object({
@@ -507,6 +519,15 @@ export type SdkSessionResponse = z.infer<typeof SdkSessionResponseSchema>;
 // ---------------------------------------------------------------------------
 
 export const MerchantProductParamsSchema = z.object({ externalId: z.string().min(1).max(128) });
+
+/**
+ * PUT /v1/merchant/products/:externalId?audienceSource= — where the caller read the payload's
+ * `audience` from (`AUDIENCE_SOURCES`), when it knows (the WooCommerce plugin infers the audience
+ * itself). Kept next to the product, not in the payload. The men's gate only gates a men's
+ * product on a known strong source; without this the audience stays unconfirmed.
+ */
+export const MerchantProductUpsertQuerySchema = z.object({ audienceSource: z.enum(AUDIENCE_SOURCES).optional() });
+export type MerchantProductUpsertQuery = z.infer<typeof MerchantProductUpsertQuerySchema>;
 
 /** PUT /v1/merchant/products/:externalId — accepts a draft; the server computes completeness. */
 export const MerchantProductUpsertRequestSchema = GarmentPayloadDraftSchema;

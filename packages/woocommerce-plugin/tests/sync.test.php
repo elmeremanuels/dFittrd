@@ -72,6 +72,13 @@ test(
 		assert_contains( 'Curtain-WooCommerce/0.1.0', $req['args']['headers']['User-Agent'] );
 		assert_same( 15, $req['args']['timeout'] );
 
+		// The audience source goes in the query, inside the signed target, never in the body.
+		$res = $c->upsert_product( '42', array( 'schemaVersion' => 1, 'id' => '42', 'name' => 'X', 'brand' => 'Y', 'audience' => 'men' ), 'title' );
+		assert_true( $res['ok'], json_encode( $res ) );
+		$req = array_pop( Curtain_Test_State::$requests );
+		assert_same( 'https://api.test.curtain.fit/v1/merchant/products/42?audienceSource=title', $req['url'] );
+		assert_same( '{"schemaVersion":1,"id":"42","name":"X","brand":"Y","audience":"men"}', $req['args']['body'] );
+
 		// DELETE has no body: signed over sha256('').
 		$res = $c->delete_product( '42' );
 		assert_true( $res['ok'] );

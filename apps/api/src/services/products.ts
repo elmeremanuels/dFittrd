@@ -34,8 +34,10 @@ export async function upsertProduct(
   input: unknown,
   /**
    * `audienceSource`: where the payload's audience was read from, when the caller knows (the
-   * Shopify sync). Left out: unknown; a changed payload then clears the stored source, an
-   * unchanged one keeps it. The men's gate reads it (services/readiness.ts).
+   * Shopify sync, or `?audienceSource=` on the merchant PUT). Left out: unknown; the stored source
+   * is then kept as long as the payload's audience value is the same (a chart edit does not turn a
+   * confirmed or an unconfirmed audience into something else) and cleared when the audience
+   * changes. The men's gate reads it and never gates on an unknown source (services/readiness.ts).
    */
   opts: { handle?: string | null; audienceSource?: AudienceSource | null } = {},
 ): Promise<UpsertResult> {
@@ -70,7 +72,7 @@ export async function upsertProduct(
     contentHash: hash,
     updatedAt: new Date(),
     archivedAt: null,
-    audienceSource: opts.audienceSource ?? null,
+    audienceSource: opts.audienceSource !== undefined ? opts.audienceSource : existing && existing.payload.audience === draft.audience ? existing.audienceSource : null,
   };
   const [row] = await db
     .insert(products)

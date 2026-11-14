@@ -6,8 +6,12 @@
  *  - on: a men's product without the full 3D experience answers "coming soon" on every route that
  *    serves product or fit data, with no garment, no pairing, no size and no bill;
  *  - on: women's, unisex and audience-less products answer the same bodies as with the gate off;
- *  - a `men` read from a title or a collection only is not gated; men's shoes and accessories
- *    follow their own switch; a men's product with an approved male bundle passes, in the overlay only.
+ *  - a `men` read from a title or a collection only, or from an unknown source, is not gated; men's
+ *    shoes and accessories follow their own switch; a men's product with an approved male bundle
+ *    passes, in the overlay only and only for a client that enforces "3D or nothing".
+ *
+ * The men's fixtures are stored with a strong audience source (`productType`), as a Shopify sync
+ * would: only a known strong source gates.
  */
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -16,7 +20,7 @@ import { and, eq } from 'drizzle-orm';
 import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MENS_OXFORD_SHIRT, MENS_STRAIGHT_JEANS, MOCK_GARMENTS, MOCK_GARMENTS_BY_ID, fromShopifyProduct, type AudienceDecision, type GarmentPayload } from '@curtain/schema';
-import { garmentAssets, pairings, products, renderJobs, shops, trySessions, usageEvents, wardrobeItems } from './db/schema.js';
+import { garmentAssets, pairings, products, renderJobs, shops, swipeEvents, trySessions, usageEvents, wardrobeItems } from './db/schema.js';
 import { loadEnv } from './env.js';
 import { approveAsset, importBundle } from './services/assets.js';
 import { upsertProduct } from './services/products.js';
@@ -54,19 +58,32 @@ async function world(env: Record<string, string>): Promise<World> {
   const shop = await seedShop(t, { domain: 'noordman.example', name: 'Noordman', products: [] });
   await t.handle.db.update(shops).set({ settings: { ...shop.shop.settings, siteUrl: SITE } }).where(eq(shops.id, shop.shop.id));
   const ids: Record<string, string> = {};
-  for (const g of CATALOGUE) ids[g.id] = (await upsertProduct(t.handle.db, shop.shop.id, g.id, g)).product.id;
+  for (const g of CATALOGUE) ids[g.id] = (await upsertProduct(t.handle.db, shop.shop.id, g.id, g, g.audience === 'men' ? { audienceSource: 'productType' } : {})).product.id;
   return { t, shop, ids };
 }
 
 const mint = (w: World, product: string, surface: 'embed' | 'button' = 'embed') =>
   w.t.app.inject({ method: 'POST', url: '/v1/sdk/sessions', headers: { origin: SITE }, payload: { shopKeyPrefix: w.shop.publicKeyPrefix, productExternalId: product, pageUrl: PAGE, surface } });
 const tokenOf = (res: { json: <T>() => T }): string => res.json<{ embedUrl: string }>().embedUrl.split('/embed/')[1]!;
-const resolve = (w: World, token: string, auth: Record<string, string>) => w.t.app.inject({ method: 'GET', url: `/v1/try/${token}`, headers: auth });
+/** As the current embed asks: it enforces "3D or nothing" (`caps=requires3d`). `caps: false` is an embed build from before the rule. */
+const resolve = (w: World, token: string, auth: Record<string, string>, caps = true) => w.t.app.inject({ method: 'GET', url: `/v1/try/${token}${caps ? '?caps=requires3d' : ''}`, headers: auth });
 const peek = (w: World, product: string, auth: Record<string, string>) =>
   w.t.app.inject({ method: 'GET', url: `/v1/peek?${new URLSearchParams({ shop: w.shop.publicKeyPrefix, product, page: PAGE }).toString()}`, headers: auth });
 const deck = (w: World, auth: Record<string, string>) => w.t.app.inject({ method: 'GET', url: `/v1/shops/${w.shop.shop.id}/products?limit=50`, headers: auth });
 const productGet = (w: World, product: string, auth: Record<string, string>) => w.t.app.inject({ method: 'GET', url: `/v1/products/${product}?shopId=${w.shop.shop.id}`, headers: auth });
 const cohort = (w: World, product: string, auth: Record<string, string>) => w.t.app.inject({ method: 'GET', url: `/v1/fit/cohort/${product}?shopId=${w.shop.shop.id}`, headers: auth });
+const cohortAnyShop = (w: World, product: string, auth: Record<string, string>) => w.t.app.inject({ method: 'GET', url: `/v1/fit/cohort/${product}`, headers: auth });
+const fitShown = (w: World, token: string, auth: Record<string, string>, intentToken: string) =>
+  w.t.app.inject({ method: 'POST', url: `/v1/try/${token}/fit-shown`, headers: auth, payload: { intentToken, recommendedSize: 'M', confidence: 0.8 } });
+const swipe = (w: World, product: string, auth: Record<string, string>, clientId: string) =>
+  w.t.app.inject({
+    method: 'POST',
+    url: '/v1/swipes',
+    headers: auth,
+    payload: { events: [{ itemId: product, action: 'love', at: Date.now(), sizeAtSwipe: 'M', fitScore: 0.9, reasons: ['fit'], dealIndex: 0, shopId: w.shop.shop.id, clientId }] },
+  });
+const merchantPut = (w: World, g: GarmentPayload, source?: string) =>
+  w.t.app.inject({ method: 'PUT', url: `/v1/merchant/products/${g.id}${source ? `?audienceSource=${source}` : ''}`, headers: { authorization: `Bearer ${w.shop.apiKey}` }, payload: g });
 const merchantList = (w: World) => w.t.app.inject({ method: 'GET', url: '/v1/merchant/products?limit=50', headers: { authorization: `Bearer ${w.shop.apiKey}` } });
 
 let heroImage: string;
@@ -91,8 +108,8 @@ async function pairedDevice(w: World) {
 }
 
 /** One wardrobe row, so the cohort has something to show (K_ANON is 1 in these apps). */
-async function wear(w: World, product: string, deviceId: string) {
-  await w.t.handle.db.insert(wardrobeItems).values({ deviceId, shopId: w.shop.shop.id, productId: product, size: 'M', state: 'kept', updatedAt: new Date() });
+async function wear(w: World, product: string, deviceId: string, shopId = w.shop.shop.id) {
+  await w.t.handle.db.insert(wardrobeItems).values({ deviceId, shopId, productId: product, size: 'M', state: 'kept', updatedAt: new Date() });
 }
 
 /** A bundle directory for a product; `male` writes the mannequin family the gate reads (qa.json). */
@@ -235,6 +252,63 @@ describe("men's gate (D20 point 3, slice M0)", () => {
       expect((await cohort(on, MEN, d.auth)).json()).toEqual({ productId: MEN, n: 0, kAnonymityFloor: 1, sizeHistogram: {}, keptRate: null });
       expect((await on.t.app.inject({ method: 'GET', url: `/v1/fit/cohort/${MEN}`, headers: d.auth })).json<{ n: number }>().n).toBe(0);
       expect((await cohort(on, WOMEN, d.auth)).json()).toMatchObject({ n: 1, sizeHistogram: { M: 1 } });
+      await on.t.handle.db.delete(wardrobeItems).where(eq(wardrobeItems.deviceId, d.deviceId));
+    });
+
+    it('GET /v1/fit/cohort/:productId without a shop: another shop’s product with the same id keeps its cohort', async () => {
+      // WooCommerce ids are small integers: shop B's women's product shares the men's product's external id.
+      const other = await seedShop(on.t, { domain: 'atelier.example', name: 'Atelier', products: [] });
+      await upsertProduct(on.t.handle.db, other.shop.id, MEN, { ...base, id: MEN, audience: 'women' });
+      const d = await pairedDevice(on);
+      const e = await createDevice(on.t);
+      await wear(on, MEN, d.deviceId); // the gated men's product
+      await wear(on, MEN, e.deviceId, other.shop.id); // shop B's women's product
+      // Shop B's product is not gated: its own rows are served, the men's product's rows are not.
+      expect((await on.t.app.inject({ method: 'GET', url: `/v1/fit/cohort/${MEN}?shopId=${other.shop.id}`, headers: d.auth })).json()).toMatchObject({ n: 1, sizeHistogram: { M: 1 } });
+      expect((await cohortAnyShop(on, MEN, d.auth)).json()).toEqual({ productId: MEN, n: 1, kAnonymityFloor: 1, sizeHistogram: { M: 1 }, keptRate: 1 });
+      expect((await cohort(on, MEN, d.auth)).json()).toEqual({ productId: MEN, n: 0, kAnonymityFloor: 1, sizeHistogram: {}, keptRate: null });
+      // The gated row is found however many shops share the id (no row limit).
+      for (let i = 0; i < 22; i++) {
+        const s = await seedShop(on.t, { domain: `same-id-${i}.example`, products: [] });
+        await upsertProduct(on.t.handle.db, s.shop.id, MEN, { ...base, id: MEN, audience: 'women' });
+      }
+      expect((await cohortAnyShop(on, MEN, d.auth)).json<{ n: number }>().n).toBe(1);
+      await on.t.handle.db.delete(wardrobeItems).where(eq(wardrobeItems.productId, MEN));
+    });
+
+    it('POST /v1/swipes keeps the swipe but not its size or fit score, and bills nothing', async () => {
+      const d = await pairedDevice(on);
+      const men = await swipe(on, MEN, d.auth, `men-${d.deviceId}`);
+      expect(men.statusCode).toBe(200);
+      expect(men.json()).toMatchObject({ accepted: 1, usageEventsCreated: 0 });
+      const [stored] = await on.t.handle.db.select().from(swipeEvents).where(and(eq(swipeEvents.deviceId, d.deviceId), eq(swipeEvents.itemId, MEN)));
+      expect(stored).toMatchObject({ action: 'love', sizeRecommended: null, fitScore: null, reasons: null });
+      expect(await on.t.handle.db.select().from(usageEvents).where(eq(usageEvents.deviceId, d.deviceId))).toHaveLength(0);
+      // A women's product in the same shop is stored and billed as before.
+      const women = await swipe(on, WOMEN, d.auth, `women-${d.deviceId}`);
+      expect(women.json()).toMatchObject({ accepted: 1, usageEventsCreated: 1 });
+      const [kept] = await on.t.handle.db.select().from(swipeEvents).where(and(eq(swipeEvents.deviceId, d.deviceId), eq(swipeEvents.itemId, WOMEN)));
+      expect(kept).toMatchObject({ sizeRecommended: 'M', fitScore: 0.9 });
+      // With the gate off the men's product is billed like any other.
+      const o = await pairedDevice(off);
+      expect((await swipe(off, MEN, o.auth, `men-${o.deviceId}`)).json()).toMatchObject({ accepted: 1, usageEventsCreated: 1 });
+    });
+
+    it('GET /v1/renders/:jobId does not serve a render that was queued before the product was gated', async () => {
+      const d = await createDevice(on.t);
+      const db = on.t.handle.db;
+      // Queued while the audience was unconfirmed (as before the gate), then a sync confirms "men".
+      await upsertProduct(db, on.shop.shop.id, MEN, MENS_OXFORD_SHIRT, { audienceSource: 'title' });
+      try {
+        const queued = await hero(on, MEN, d.auth);
+        expect(queued.statusCode).toBe(202);
+        const jobId = queued.json<{ jobId: string }>().jobId;
+        expect((await on.t.app.inject({ method: 'GET', url: `/v1/renders/${jobId}`, headers: d.auth })).statusCode).toBe(200);
+        await upsertProduct(db, on.shop.shop.id, MEN, MENS_OXFORD_SHIRT, { audienceSource: 'productType' });
+        expect((await on.t.app.inject({ method: 'GET', url: `/v1/renders/${jobId}`, headers: d.auth })).statusCode).toBe(404);
+      } finally {
+        await upsertProduct(db, on.shop.shop.id, MEN, MENS_OXFORD_SHIRT, { audienceSource: 'productType' });
+      }
     });
 
     it('GET /v1/merchant/products marks it for the merchant, and only it', async () => {
@@ -258,7 +332,17 @@ describe("men's gate (D20 point 3, slice M0)", () => {
         const got = await productGet(w, product, d.auth);
         const rendered = await hero(w, product, d.auth);
         const listed = (await merchantList(w)).json<{ items: Array<{ externalId: string }> }>().items.find((i) => i.externalId === product);
+        const shown = await fitShown(w, tokenOf(session), d.auth, tried.json<{ trySession: { intentToken: string } }>().trySession.intentToken);
+        const decked = (await deck(w, d.auth)).json<{ items: Array<{ id: string }> }>().items.find((g) => g.id === product);
+        await wear(w, product, d.deviceId);
+        const cohorts = [(await cohort(w, product, d.auth)).json(), (await cohortAnyShop(w, product, d.auth)).json()];
+        const swiped = await swipe(w, product, d.auth, `same-${d.deviceId}`);
+        await w.t.handle.db.delete(wardrobeItems).where(eq(wardrobeItems.deviceId, d.deviceId));
         return stable({
+          shown: [shown.statusCode, shown.json()],
+          decked,
+          cohorts,
+          swiped: [swiped.statusCode, { ...swiped.json<object>(), acceptedClientIds: [], ledgerEntryId: '' }],
           session: [session.statusCode, session.json()],
           tried: [tried.statusCode, tried.json()],
           peeked: [peeked.statusCode, peeked.json()],
@@ -270,6 +354,8 @@ describe("men's gate (D20 point 3, slice M0)", () => {
       const a = await bodies(off);
       const b = await bodies(on);
       expect(b).toEqual(a);
+      expect((b as { decked?: unknown }).decked).toBeDefined();
+      expect((b as { shown: [number, unknown] }).shown).toEqual([200, { billed: true }]);
       expect(JSON.stringify(b)).not.toMatch(/productState|requires3d|menGate|men_coming_soon/);
     });
   });
@@ -284,16 +370,19 @@ describe("men's gate (D20 point 3, slice M0)", () => {
       expect(seen).toEqual([{ audience: 'men', source: 'title' }, { audience: 'men', source: 'productType' }, undefined]);
     });
 
-    it('a men’s product named so only in its title or a collection is not gated until the merchant confirms', async () => {
+    it('only a known strong source gates: a title, a collection or an unknown source does not', async () => {
       const row = (await on.t.handle.db.query.products.findFirst({ where: eq(products.id, on.ids[MEN]!) }))!;
-      expect(row.audienceSource).toBeNull(); // the merchant API does not say where the audience came from
-      expect(menGateScope(on.t.env, row)).toBe('gated'); // unknown counts as strong
-      for (const source of ['title', 'collections'] as const) expect(menGateScope(on.t.env, { ...row, audienceSource: source })).toBe('unconfirmed');
+      expect(row.audienceSource).toBe('productType');
+      expect(menGateScope(on.t.env, row)).toBe('gated');
+      for (const source of ['title', 'collections', null] as const) expect(menGateScope(on.t.env, { ...row, audienceSource: source })).toBe('unconfirmed');
       for (const source of ['override', 'attribute', 'productType', 'category', 'tags'] as const) expect(menGateScope(on.t.env, { ...row, audienceSource: source })).toBe('gated');
+    });
 
+    it.each(['title', null] as const)('a men’s product whose source is %s is served as before and marked for the merchant', async (source) => {
       // The sync stores the source; the same content keeps its hash and only the source changes.
-      const weak = await upsertProduct(on.t.handle.db, on.shop.shop.id, MEN, MENS_OXFORD_SHIRT, { audienceSource: 'title' });
-      expect(weak).toMatchObject({ changed: false, product: { audienceSource: 'title' } });
+      // null: a row from before the column existed, or a merchant API write that did not say.
+      const weak = await upsertProduct(on.t.handle.db, on.shop.shop.id, MEN, MENS_OXFORD_SHIRT, { audienceSource: source });
+      expect(weak).toMatchObject({ changed: false, product: { audienceSource: source } });
       try {
         const d = await pairedDevice(on);
         const session = await mint(on, MEN);
@@ -303,6 +392,8 @@ describe("men's gate (D20 point 3, slice M0)", () => {
         expect(tried.json()).not.toHaveProperty('requires3d');
         expect((await peek(on, MEN, d.auth)).statusCode).toBe(200);
         expect((await productGet(on, MEN, d.auth)).statusCode).toBe(200);
+        expect((await deck(on, d.auth)).json<{ items: Array<{ id: string }> }>().items.map((g) => g.id)).toContain(MEN);
+        expect((await swipe(on, MEN, d.auth, `weak-${d.deviceId}`)).json()).toMatchObject({ accepted: 1, usageEventsCreated: 1 });
         const listed = (await merchantList(on)).json<{ items: Array<{ externalId: string; menGate?: string }> }>().items.find((i) => i.externalId === MEN);
         expect(listed?.menGate).toBe('audience_unconfirmed');
 
@@ -310,17 +401,64 @@ describe("men's gate (D20 point 3, slice M0)", () => {
         await upsertProduct(on.t.handle.db, on.shop.shop.id, MEN, MENS_OXFORD_SHIRT, { audienceSource: 'override' });
         expect((await mint(on, MEN)).json<{ productState?: string }>().productState).toBe('coming_soon');
       } finally {
-        await upsertProduct(on.t.handle.db, on.shop.shop.id, MEN, MENS_OXFORD_SHIRT, { audienceSource: null });
+        await upsertProduct(on.t.handle.db, on.shop.shop.id, MEN, MENS_OXFORD_SHIRT, { audienceSource: 'productType' });
       }
     });
 
-    it('a write that does not know the source keeps it for the same content and clears it for new content', async () => {
+    it('the merchant API (WooCommerce plugin): a guess from the name never gates; the source the plugin sends decides', async () => {
+      // The plugin reads "men" from the name of a women's tee and sends the value only (an older plugin).
+      const tee: GarmentPayload = { ...base, id: 'woo-1042', name: 'Men in Black Tee', audience: 'men' };
+      const state = async () => (await mint(on, tee.id)).json<{ productState?: string }>().productState;
+      const source = async () => (await on.t.handle.db.query.products.findFirst({ where: and(eq(products.shopId, on.shop.shop.id), eq(products.externalId, tee.id)) }))!.audienceSource;
+      try {
+        expect((await merchantPut(on, tee)).statusCode).toBe(200);
+        expect(await source()).toBeNull();
+        expect(await state()).toBeUndefined();
+        const d = await pairedDevice(on);
+        expect((await resolve(on, tokenOf(await mint(on, tee.id)), d.auth)).statusCode).toBe(200);
+        expect((await peek(on, tee.id, d.auth)).statusCode).toBe(200);
+        const badge = async () => (await merchantList(on)).json<{ items: Array<{ externalId: string; menGate?: string }> }>().items.find((i) => i.externalId === tee.id)?.menGate;
+        expect(await badge()).toBe('audience_unconfirmed');
+
+        // The current plugin says where it read the audience: the name is a weak source.
+        expect((await merchantPut(on, tee, 'title')).json()).toMatchObject({ changed: false });
+        expect(await source()).toBe('title');
+        expect(await state()).toBeUndefined();
+        // A chart edit through the API that does not say the source keeps it: still not gated.
+        expect((await merchantPut(on, { ...tee, sizeChart: tee.sizeChart.slice(0, -1) })).json()).toMatchObject({ changed: true });
+        expect(await source()).toBe('title');
+        expect(await state()).toBeUndefined();
+        // The merchant sets "Made for: men" in the meta box: a strong source, gated.
+        expect((await merchantPut(on, tee, 'override')).statusCode).toBe(200);
+        expect(await state()).toBe('coming_soon');
+        expect(await badge()).toBe('coming_soon');
+        // ... and a later write without the source does not undo that.
+        expect((await merchantPut(on, { ...tee, name: 'Men in Black Tee, new name' })).json()).toMatchObject({ changed: true });
+        expect(await source()).toBe('override');
+        expect(await state()).toBe('coming_soon');
+        // An unknown source name is refused.
+        expect((await merchantPut(on, tee, 'guess')).statusCode).toBe(400);
+      } finally {
+        await on.t.handle.db.delete(products).where(and(eq(products.shopId, on.shop.shop.id), eq(products.externalId, tee.id)));
+      }
+    });
+
+    it('a write that does not know the source keeps it while the audience is the same and clears it when the audience changes', async () => {
       const id = 'noordman-source';
       const g = { ...MENS_OXFORD_SHIRT, id };
-      await upsertProduct(on.t.handle.db, on.shop.shop.id, id, g, { audienceSource: 'collections' });
-      expect((await upsertProduct(on.t.handle.db, on.shop.shop.id, id, g)).product.audienceSource).toBe('collections');
-      expect((await upsertProduct(on.t.handle.db, on.shop.shop.id, id, { ...g, name: 'Oxford shirt, new name' })).product.audienceSource).toBeNull();
-      await on.t.handle.db.delete(products).where(and(eq(products.shopId, on.shop.shop.id), eq(products.externalId, id)));
+      const db = on.t.handle.db;
+      await upsertProduct(db, on.shop.shop.id, id, g, { audienceSource: 'collections' });
+      expect((await upsertProduct(db, on.shop.shop.id, id, g)).product.audienceSource).toBe('collections');
+      expect((await upsertProduct(db, on.shop.shop.id, id, { ...g, name: 'Oxford shirt, new name' })).product.audienceSource).toBe('collections');
+      // The audience itself changed and nobody says where the new value comes from: unknown, so not gated.
+      expect((await upsertProduct(db, on.shop.shop.id, id, { ...g, audience: 'women' })).product.audienceSource).toBeNull();
+      const back = await upsertProduct(db, on.shop.shop.id, id, g);
+      expect(back.product.audienceSource).toBeNull();
+      expect(menGateScope(on.t.env, back.product)).toBe('unconfirmed');
+      // A sync that finds no audience source at all says so (null), also for changed content.
+      await upsertProduct(db, on.shop.shop.id, id, g, { audienceSource: 'tags' });
+      expect((await upsertProduct(db, on.shop.shop.id, id, { ...g, name: 'Oxford shirt, third name' }, { audienceSource: null })).product.audienceSource).toBeNull();
+      await db.delete(products).where(and(eq(products.shopId, on.shop.shop.id), eq(products.externalId, id)));
     });
   });
 
@@ -376,6 +514,15 @@ describe("men's gate (D20 point 3, slice M0)", () => {
       expect(body.requires3d).toBe(true);
       expect(body.asset?.version).toBe(male.asset.version);
       expect(body.garment.id).toBe(jeans);
+      // An embed build from before the rule (no `caps=requires3d`) would draw the 2D figure: it gets coming soon.
+      const old = await createDevice(on.t);
+      const oldTry = await resolve(on, tokenOf(await mint(on, jeans)), old.auth, false);
+      expect(oldTry.statusCode).toBe(422);
+      expect(oldTry.json<{ error: { code: string } }>().error.code).toBe('men_coming_soon');
+      expect(oldTry.body).not.toContain('sizeChart');
+      expect(await db.select().from(pairings).where(eq(pairings.deviceId, old.deviceId))).toHaveLength(0);
+      // Other products do not need the capability.
+      expect((await resolve(on, tokenOf(await mint(on, WOMEN)), old.auth, false)).statusCode).toBe(200);
 
       // Surfaces without a 3D view never show it: app-mode sessions, the peek, the deck, the product page, the hero render.
       expect((await mint(on, jeans, 'button')).json<{ productState?: string }>().productState).toBe('coming_soon');

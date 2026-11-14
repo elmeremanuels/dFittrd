@@ -82,7 +82,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         // The stored "Remember me" opt-out is only known after init (UX-1 / F2).
         if (!cancelled) setRememberState(store.remember);
         if (mockToken && !mock) throw new ApiError(410, 'gone', 'try link expired');
-        const resolved = mock ? resolveMock(token, deps.referrer) : await api().resolveTry(token);
+        const resolved = mock ? resolveMock(token, deps.referrer) : await api().resolveTry(token, { enforces3dRule: true });
         if (cancelled) return;
         // Men's gate: a product that needs the 3D view is not opened on a device that cannot show it.
         if (resolved.requires3d && !resolved.shop.paused && (!resolved.asset || !(deps.webgl2 ?? hasWebGL2)())) {

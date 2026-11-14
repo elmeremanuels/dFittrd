@@ -20,7 +20,8 @@
     "families:bohohippychic": "tsx scripts/families-bohohippychic.ts",
     "viewer": "vite --config viewer/vite.config.ts",
     "viewer:smoke": "node viewer/smoke.mjs",
-    "test": "vitest run && vitest run --config viewer/vitest.config.ts",
+    "test": "vitest run && vitest run --config viewer/vitest.config.ts && pnpm test:py",
+    "test:py": "cd serverdrape && python3 -m unittest discover -p \"test_*.py\"",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p viewer/tsconfig.json",
     "lint": "eslint ."
   },

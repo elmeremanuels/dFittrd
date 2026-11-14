@@ -285,12 +285,14 @@ async function threeDStep(page, base, t, log, shot) {
   await choose.waitFor();
   const size = (await choose.innerText()).trim().replace(/^choose size\s+/i, '').trim();
   if (t.rings === 'pilot-skirt') {
-    // The pilot skirt's 2D rings in the real embed: waist (with the ASSUMED band range), hip, hem.
+    // The pilot skirt's 2D rings in the real embed: waist (with the band range from the shop's tape), the
+    // tape-measured garment hip and the hem, each labelled measured or estimated for the size on screen.
     await frame.locator('[data-testid="size-rings"]').waitFor();
     for (const k of ['waist', 'hip', 'hem']) await frame.getByTestId(`size-ring-chip-${k}`).waitFor();
     const waistChip = (await frame.getByTestId('size-ring-chip-waist').innerText()).replace(/\s+/g, ' ');
-    if (!/band \d+-\d+ cm assumed/.test(waistChip)) throw new Error(`3D ${t.name}: the waist ring does not show the assumed band range: "${waistChip}"`);
-    if (!/assumed/.test(await frame.getByTestId('size-ring-chip-hem').innerText())) throw new Error(`3D ${t.name}: the hem ring is not labelled assumed`);
+    if (!/band \d+-\d+ cm (measured|estimated)/.test(waistChip)) throw new Error(`3D ${t.name}: the waist ring does not show the band range with its source: "${waistChip}"`);
+    if (!/skirt \d+ cm (measured|estimated)/.test(await frame.getByTestId('size-ring-chip-hip').innerText())) throw new Error(`3D ${t.name}: the hip ring does not show the tape-measured garment hip`);
+    if (!/\d+ cm (measured|estimated)/.test(await frame.getByTestId('size-ring-chip-hem').innerText())) throw new Error(`3D ${t.name}: the hem ring is not labelled measured or estimated`);
     await sizeRingsStep(frame, log, shot, `3b-size-rings-${t.name}`);
   }
   const open = frame.getByTestId('garment3d-open');

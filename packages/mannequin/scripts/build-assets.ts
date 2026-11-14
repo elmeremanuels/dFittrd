@@ -1,5 +1,6 @@
 /**
  * Writes the canonical mannequin assets to packages/mannequin/out/ (gitignored, deterministic):
+ * Female shapes keep their v0 paths (out/<shape>/…); male shapes are under out/male/<shape>/…
  *   out/<shape>/mannequin.glb    mesh in metres, mid-grey material
  *   out/<shape>/anchors.json     rings, length lines, morph heights, rig (cm)
  *   out/<shape>/camera-paths.json turntable at three heights
@@ -12,13 +13,14 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  BODY_SHAPE_IDS,
+  BODY_FAMILIES,
   MANNEQUIN_VERSION,
   MOTION_CLIP,
-  bodyShape,
   buildMannequin,
   buildMannequinMesh,
   clipFrameTimes,
+  familyShape,
+  familyShapeIds,
   mannequinAnchorsJson,
   topology,
   turntablePaths,
@@ -37,20 +39,23 @@ const write = (path: string, data: Uint8Array | string): void => {
 };
 const json = (x: unknown): string => `${JSON.stringify(x, null, 2)}\n`;
 
-for (const id of BODY_SHAPE_IDS) {
-  const mannequin = buildMannequin(bodyShape(id));
-  const mesh = buildMannequinMesh(mannequin);
-  const topo = topology(mesh);
-  if (!topo.watertight) throw new Error(`mannequin ${id} is not watertight: ${JSON.stringify(topo)}`);
-  const glb = writeGlb([{ name: `mannequin-${id}`, positions: mesh.positions, normals: vertexNormals(mesh), indices: mesh.indices, baseColor: [0.5, 0.5, 0.5, 1], roughness: 0.9 }], {
-    scale: 0.01,
-    generator: `@curtain/mannequin ${MANNEQUIN_VERSION}`,
-    extras: { shape: id, unit: 'm', axes: { up: '+Y', front: '+Z', left: '+X' } },
-  });
-  write(`${id}/mannequin.glb`, glb);
-  write(`${id}/anchors.json`, json(mannequinAnchorsJson(mannequin, mesh, { glbSha256: sha(glb) })));
-  write(`${id}/camera-paths.json`, json({ format: 'curtain.mannequin.camera-paths', formatVersion: 1, shape: id, unit: 'cm', paths: turntablePaths(mannequin) }));
-  console.log(`[mannequin] ${id}: ${topo.vertices} vertices, ${topo.triangles} triangles, ${topo.components} closed parts`);
+for (const family of BODY_FAMILIES) {
+  for (const id of familyShapeIds(family)) {
+    const dir = family === 'female' ? id : `${family}/${id}`;
+    const mannequin = buildMannequin(familyShape(family, id)!);
+    const mesh = buildMannequinMesh(mannequin);
+    const topo = topology(mesh);
+    if (!topo.watertight) throw new Error(`mannequin ${dir} is not watertight: ${JSON.stringify(topo)}`);
+    const glb = writeGlb([{ name: `mannequin-${family === 'female' ? id : `${family}-${id}`}`, positions: mesh.positions, normals: vertexNormals(mesh), indices: mesh.indices, baseColor: [0.5, 0.5, 0.5, 1], roughness: 0.9 }], {
+      scale: 0.01,
+      generator: `@curtain/mannequin ${MANNEQUIN_VERSION}`,
+      extras: { shape: id, ...(family === 'female' ? {} : { family }), unit: 'm', axes: { up: '+Y', front: '+Z', left: '+X' } },
+    });
+    write(`${dir}/mannequin.glb`, glb);
+    write(`${dir}/anchors.json`, json(mannequinAnchorsJson(mannequin, mesh, { glbSha256: sha(glb) })));
+    write(`${dir}/camera-paths.json`, json({ format: 'curtain.mannequin.camera-paths', formatVersion: 1, shape: id, ...(family === 'female' ? {} : { family }), unit: 'cm', paths: turntablePaths(mannequin) }));
+    console.log(`[mannequin] ${dir}: ${topo.vertices} vertices, ${topo.triangles} triangles, ${topo.components} closed parts`);
+  }
 }
 write('motion-clip.json', json({ format: 'curtain.mannequin.motion-clip', formatVersion: 1, clip: MOTION_CLIP, frameTimesS: clipFrameTimes(MOTION_CLIP) }));
 writeFileSync(join(out, 'manifest.json'), json({ mannequinVersion: MANNEQUIN_VERSION, files: manifest }));

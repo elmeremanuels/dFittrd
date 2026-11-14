@@ -12,7 +12,14 @@
  * men, evaluated at the chest girth of each size (the midpoint of the EN 13402-3 letter interval's
  * two 4 cm steps). Girths are rounded to 0.5 cm, levels to 0.001 of stature, aspects to 0.01.
  *
- * Run: pnpm --filter @curtain/mannequin exec tsx scripts/derive-male-table.ts <path to ANSUR_II_MALE_Public.csv>
+ * With a second path, `ANSUR_II_FEMALE_Public.csv` (1986 women, same page, sha256 read on 14 Nov 2026:
+ * ed7e800aa97a4d42f8286b988be2fe1883a2e789588169db959864b707d1757a), it also prints
+ * `FEMALE_SHOULDER_REFERENCE`: biacromial breadth on chest circumference at the female v0 chest girths.
+ *
+ * "EN 13402-3" below means the 2004 edition as reproduced in the Wikipedia article "Joint European
+ * standard for size labelling of clothes"; the standard itself was not read.
+ *
+ * Run: pnpm --filter @curtain/mannequin exec tsx scripts/derive-male-table.ts <path to ANSUR_II_MALE_Public.csv> [<path to ANSUR_II_FEMALE_Public.csv>]
  */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -107,3 +114,32 @@ console.log('levels', JSON.stringify({
   knee: frac('kneeheightmidpatella'),
 }));
 console.log('arm fractions of stature', JSON.stringify({ acromionRadiale: frac('acromionradialelength'), radialeStylion: frac('radialestylionlength'), hand: frac('handlength'), sleeveOutseam: frac('sleeveoutseam') }));
+
+// Female shoulder reference (biacromial breadth at the chest girths of the female v0 shapes).
+const femalePath = process.argv[3];
+if (femalePath) {
+  const FEMALE_SHA256 = 'ed7e800aa97a4d42f8286b988be2fe1883a2e789588169db959864b707d1757a';
+  const fBytes = readFileSync(femalePath);
+  const fSha = createHash('sha256').update(fBytes).digest('hex');
+  if (fSha !== FEMALE_SHA256) console.warn(`[derive] warning: female file sha256 ${fSha} differs from the one the reference was derived from`);
+  const fLines = fBytes.toString('latin1').split(/\r?\n/).filter((l) => l.length > 0);
+  const fHeader = fLines[0]!.split(',');
+  const fColumn = (name: string): number[] => {
+    const i = fHeader.indexOf(name);
+    if (i < 0) throw new Error(`no column ${name}`);
+    return fLines.slice(1).map((l) => Number(l.split(',')[i]) / 10);
+  };
+  const x = fColumn('chestcircumference');
+  const yb = fColumn('biacromialbreadth');
+  const fx = mean(x);
+  const fy = mean(yb);
+  let sxy = 0;
+  let fsxx = 0;
+  for (let i = 0; i < x.length; i++) {
+    sxy += (x[i]! - fx) * (yb[i]! - fy);
+    fsxx += (x[i]! - fx) ** 2;
+  }
+  const at = (c: number): number => half(fy + (sxy / fsxx) * (c - fx));
+  console.log(`female n = ${x.length}, mean chest ${fx.toFixed(2)} cm, mean biacromial breadth ${fy.toFixed(2)} cm`);
+  console.log('FEMALE_SHOULDER_REFERENCE', JSON.stringify({ XS: at(80), M: at(92), XXL: at(116) }));
+}

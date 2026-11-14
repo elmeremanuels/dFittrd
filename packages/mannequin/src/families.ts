@@ -5,18 +5,27 @@
  *
  * Source of the male numbers (read on 13 Nov 2026; nothing here is SMPL, Anny or another body model):
  *
- * - Chest, waist and neck girth per size: EN 13402-3 men's values (chest and waist in 4 cm steps
- *   at drop −12 cm, the neck girth the standard associates with each chest girth, and the letter
- *   codes S 86–94, M 94–102, L 102–110, XL 110–118, XXL 118–129). The standard itself is sold by
- *   CEN members and was not read; the values were read from the tables of the Wikipedia article
- *   "Joint European standard for size labelling of clothes" (text under CC BY-SA 4.0; the numbers
- *   are facts of the standard). Each letter size takes the midpoint of the two steps it combines.
+ * - Chest, waist and neck girth per size: the men's values of EN 13402-3:2004 as reproduced in the
+ *   Wikipedia article "Joint European standard for size labelling of clothes" (chest and waist in
+ *   4 cm steps at drop −12 cm, the neck girth associated with each chest girth, and the letter
+ *   codes S 86–94, M 94–102, L 102–110, XL 110–118, XXL 118–129). The standard itself (any
+ *   edition; the current one is 2017) is sold by CEN members and was NOT read, so "EN" in this
+ *   file always means that reproduction (`MALE_SOURCES.en`). Article text is CC BY-SA 4.0; only
+ *   numbers were taken. Each letter size takes the midpoint of the two steps it combines.
  * - Everything else (stature, seat girth, shoulder breadths, inseam, limb girths, depth / breadth
  *   of the chest, waist and hip, and the levels): ANSUR II, the 2012 Anthropometric Survey of U.S.
  *   Army Personnel (NATICK/TR-15/007, "Approved for public release; distribution is unlimited"; a
  *   U.S. Government work, public domain in the United States). The value per size is the
  *   least-squares line of the measure on chest girth over the 4082 men, at the size's chest girth,
  *   rounded to 0.5 cm. `scripts/derive-male-table.ts` reproduces the table from the public file.
+ *
+ * The ANSUR lines are evaluated at the EN chest girth, which treats ANSUR's chest circumference
+ * and EN's chest girth as one measurement. Both are the maximum horizontal girth of the chest; EN
+ * (as the article quotes EN 13402-1) passes the tape over the shoulder blades and under the armpits
+ * during normal breathing, ANSUR II (report measurement 24) measures at the level of the most
+ * forward point of the chest at the maximum of quiet breathing. The offset between the two is
+ * assumed to be zero; it was not measured. The depth / width of the waist ring is ANSUR's at the
+ * navel, used at the natural waist.
  *
  * ANSUR II is a military sample (young, fit, U.S.), not the civilian or the European population:
  * the male family is a referenced geometry fixture, like the female v0, not a fit standard.
@@ -37,13 +46,21 @@ import { BODY_SHAPES, BODY_SHAPE_IDS, FEMALE_ASPECT, type BodyFamily, type BodyL
 export const MALE_BODY_SHAPE_IDS = ['S', 'M', 'L', 'XL', 'XXL'] as const;
 export type MaleBodyShapeId = (typeof MALE_BODY_SHAPE_IDS)[number];
 
-/** One row of the male reference table, cm. `en` = EN 13402-3, `ansur` = ANSUR II line at this chest girth. */
+/** Where the two halves of the male table were read (see the file comment and the README). */
+export const MALE_SOURCES = {
+  /** Chest, waist, neck. Not the standard itself, and not its current (2017) edition. */
+  en: 'EN 13402-3:2004 as reproduced in the Wikipedia article "Joint European standard for size labelling of clothes" (read 13 and 14 Nov 2026)',
+  /** Everything else: least-squares lines on chest circumference. */
+  ansur: 'ANSUR II male working database (NATICK/TR-15/007, "Approved for public release; distribution is unlimited"), 4082 men',
+} as const;
+
+/** One row of the male reference table, cm. "EN" = `MALE_SOURCES.en`, "ANSUR" = the ANSUR II line at this chest girth. */
 export interface MaleReferenceRow {
-  /** Chest girth: midpoint of the size's two EN 13402-3 steps. */
+  /** Chest girth: midpoint of the size's two EN steps (`MALE_SOURCES.en`). */
   chest: number;
-  /** Waist girth, EN 13402-3 at drop −12 cm. */
+  /** Waist girth, EN at drop −12 cm (`MALE_SOURCES.en`). */
   waist: number;
-  /** Neck girth EN 13402-3 associates with the chest girth. */
+  /** Neck girth EN associates with the chest girth (`MALE_SOURCES.en`). */
   neck: number;
   /** Seat (hip) girth: ANSUR buttock circumference. */
   hip: number;
@@ -192,8 +209,9 @@ export interface ReferenceMeasurements {
   waistCm: number;
   hipCm: number;
   /**
-   * Shoulder width. Male: biacromial breadth (ANSUR). Female: the width of the v0 shoulder ring,
-   * a representative proportion, not a measured table value.
+   * Shoulder width: the straight distance between the shoulder points (biacromial breadth), for
+   * both families from ANSUR II at the shape's chest girth (`FEMALE_SHOULDER_REFERENCE` for the
+   * female family). It is not the width of the mesh's shoulder ring.
    */
   shoulderCm: number;
   /** Crotch to floor. */
@@ -206,8 +224,19 @@ function inseamOf(shape: BodyShape): number {
   return (shape.levels?.crotch ?? 0.455) * shape.statureCm;
 }
 
+/**
+ * Shoulder width (biacromial breadth, cm) of the female table sizes: the least-squares line of
+ * ANSUR II biacromial breadth on chest circumference over the 1986 women of
+ * `ANSUR_II_FEMALE_Public.csv`, at the size's chest girth, rounded to 0.5 cm
+ * (`scripts/derive-male-table.ts <male csv> <female csv>` prints it). It is the reference a typed
+ * `shoulderCm` is compared with, nothing else: the female v0 mesh is unchanged, and its shoulder
+ * ring (42.1 cm at M) is wider than this.
+ */
+export const FEMALE_SHOULDER_REFERENCE: Readonly<Record<BodyShapeId, number>> = { XS: 35.5, M: 36.5, XXL: 38 };
+
 function shoulderOf(shape: BodyShape): number {
   if (shape.family === 'male' && Object.hasOwn(MALE_REFERENCE, shape.id)) return MALE_REFERENCE[shape.id as MaleBodyShapeId].shoulderWidth;
+  if (shape.family === 'female' && Object.hasOwn(FEMALE_SHOULDER_REFERENCE, shape.id)) return FEMALE_SHOULDER_REFERENCE[shape.id as BodyShapeId];
   return ringWidth(shape, 'shoulder');
 }
 
@@ -235,6 +264,7 @@ export interface BodyInput {
 }
 
 const positive = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined);
+const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
 /** Piecewise linear through (xs[i], ys[i]) with xs rising; the end segments continue beyond the table. */
 function interpolate(xs: readonly number[], ys: readonly number[], x: number): number {
@@ -250,6 +280,38 @@ const LEG_RINGS = ['thigh', 'knee', 'calf', 'ankle'] as const;
 const SHOULDER_RATIO_LIMITS = [0.75, 1.35] as const;
 /** No secondary girth is extrapolated below this share of the family's smallest size. */
 const MIN_RATIO = 0.6;
+/**
+ * Bounds of what `shapeForBody` draws (exported so that an adopter can show the same limits). A
+ * typed chest, waist or hip girth is held between `girthRatio[0]` times the family's smallest size
+ * and `girthRatio[1]` times its largest; a typed height between `heightCm`. Outside the table's
+ * chest range the depth / width ratios, the stature (when no height is typed) and the crotch level
+ * stay at the nearest table size: they are not extrapolated.
+ */
+export const BODY_INPUT_LIMITS = { girthRatio: [0.7, 1.5], heightCm: [130, 220] } as const;
+/** The arms stay at least this far (cm, along x) outside the torso at the chest, underbust and waist rings. */
+const ARM_CLEARANCE_CM = 0.5;
+const ARM_CLEARANCE_RINGS = ['chest', 'underbust', 'waist'] as const;
+
+/**
+ * Smallest gap (cm, along x) between the inside of the left arm and the torso at the chest,
+ * underbust and waist rings of a shape, from the mannequin's own sections (no mesh).
+ */
+export function armClearanceCm(m: Mannequin): number {
+  const { joint, axis, u } = m.arms.left;
+  let gap = Infinity;
+  for (const id of ARM_CLEARANCE_RINGS) {
+    const ring = m.rings.find((r) => r.id === id)!;
+    // The inside edge of the arm at distance s is joint + s·axis − a(s)·u; find s where it is at the ring's height.
+    let s = 0;
+    for (let i = 0; i < 12; i++) {
+      const a = m.armAt(Math.max(0, s), 1)?.a ?? 0;
+      s = (ring.centre[1] - joint[1] + a * u[1]) / axis[1];
+    }
+    const a = m.armAt(Math.max(0, s), 1)?.a ?? 0;
+    gap = Math.min(gap, joint[0] + s * axis[0] - a * u[0] - ring.a);
+  }
+  return gap;
+}
 
 /**
  * The shape of a family for typed measurements. The control girths (chest, waist, hip) are the
@@ -258,6 +320,11 @@ const MIN_RATIO = 0.6;
  * ring moves by the difference between the typed shoulder width and the table's at that chest
  * girth; the levels scale with the height. With no measurement given it is exactly the family's
  * base shape; with the measurements of a table size it is exactly that size (id `custom`).
+ *
+ * Bounds (`BODY_INPUT_LIMITS`): typed girths and height are held inside a plausible range, the
+ * depth / width ratios and the default stature are never extrapolated beyond the table, and the
+ * shoulder ring is never narrower than what keeps the A-pose arms `ARM_CLEARANCE_CM` outside the
+ * chest, underbust and waist rings.
  */
 export function shapeForBody(input: BodyInput): BodyShape {
   const family = input.family === 'male' ? 'male' : 'female';
@@ -266,12 +333,17 @@ export function shapeForBody(input: BodyInput): BodyShape {
   const girths = (ring: AnchorRing): number[] => rows.map((s) => s.rings[ring].circumferenceCm);
   const chests = girths('chest');
   const hips = girths('hip');
-  const chest = positive(input.chest) ?? positive(input.bust) ?? base.rings.chest.circumferenceCm;
+  const [lo, hi] = BODY_INPUT_LIMITS.girthRatio;
+  const bounded = (ring: AnchorRing, v: number | undefined): number | undefined =>
+    v === undefined ? undefined : clamp(v, lo * rows[0]!.rings[ring].circumferenceCm, hi * rows[rows.length - 1]!.rings[ring].circumferenceCm);
+  const chest = bounded('chest', positive(input.chest) ?? positive(input.bust)) ?? base.rings.chest.circumferenceCm;
   const byChest = (ys: readonly number[]): number => interpolate(chests, ys, chest);
-  const waist = positive(input.waist) ?? byChest(girths('waist'));
-  const hip = positive(input.hip) ?? byChest(hips);
+  /** As `byChest`, but held at the smallest and the largest table size outside the table's chest range. */
+  const byChestInTable = (ys: readonly number[]): number => interpolate(chests, ys, clamp(chest, chests[0]!, chests[chests.length - 1]!));
+  const waist = bounded('waist', positive(input.waist)) ?? byChest(girths('waist'));
+  const hip = bounded('hip', positive(input.hip)) ?? byChest(hips);
   const floor = (ring: AnchorRing, v: number): number => Math.max(v, MIN_RATIO * rows[0]!.rings[ring].circumferenceCm);
-  const aspect = (ring: AnchorRing): number => byChest(rows.map((s) => s.rings[ring].aspect));
+  const aspect = (ring: AnchorRing): number => byChestInTable(rows.map((s) => s.rings[ring].aspect));
 
   const rings = {} as Record<AnchorRing, RingSpec>;
   rings.chest = { circumferenceCm: chest, aspect: aspect('chest') };
@@ -293,9 +365,15 @@ export function shapeForBody(input: BodyInput): BodyShape {
     rings.shoulder = ringOfWidth(Math.min(SHOULDER_RATIO_LIMITS[1] * tableWidth, Math.max(SHOULDER_RATIO_LIMITS[0] * tableWidth, width)), shoulderAspect);
   }
 
-  const statureCm = positive(input.heightCm) ?? byChest(rows.map((s) => s.statureCm));
-  const levels: BodyLevels | undefined = base.levels && { ...base.levels, crotch: byChest(rows.map((s) => s.levels?.crotch ?? 0.455)) };
-  return { id: 'custom', family, statureCm, rings, provenance: base.provenance, ...(levels ? { levels } : {}) };
+  const typedHeight = positive(input.heightCm);
+  const statureCm = typedHeight === undefined ? byChestInTable(rows.map((s) => s.statureCm)) : clamp(typedHeight, BODY_INPUT_LIMITS.heightCm[0], BODY_INPUT_LIMITS.heightCm[1]);
+  const levels: BodyLevels | undefined = base.levels && { ...base.levels, crotch: byChestInTable(rows.map((s) => s.levels?.crotch ?? 0.455)) };
+  const shape: BodyShape = { id: 'custom', family, statureCm, rings, provenance: base.provenance, ...(levels ? { levels } : {}) };
+  // Arms: the shoulder joint moves 1 cm for every 2 cm of shoulder ring width and nothing else moves with it,
+  // so a shoulder ring that is too narrow for this chest or waist is widened by exactly what the arms lack.
+  const lack = ARM_CLEARANCE_CM - armClearanceCm(buildMannequin(shape));
+  if (lack > 0) rings.shoulder = ringOfWidth(2 * (ellipseFromCircumference(rings.shoulder.circumferenceCm, shoulderAspect).a + lack), shoulderAspect);
+  return shape;
 }
 
 /** The mannequin for typed measurements: `buildMannequin(shapeForBody(input))`. */

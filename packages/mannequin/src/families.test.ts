@@ -3,15 +3,19 @@ import { ANCHOR_RINGS, NOMINAL_RING_HEIGHTS, ellipseCircumference } from '@curta
 import { describe, expect, it } from 'vitest';
 import {
   BODY_FAMILIES,
+  BODY_INPUT_LIMITS,
   BODY_SHAPE_IDS,
   FAMILY_BASE_SHAPE_ID,
+  FEMALE_SHOULDER_REFERENCE,
   MALE_ASSUMPTIONS,
   MALE_BODY_SHAPE_IDS,
   MALE_LEVELS,
   MALE_REFERENCE,
+  MALE_SOURCES,
   MOTION_CLIP,
   NOMINAL_LEVELS,
   TURNTABLE_HEIGHTS,
+  armClearanceCm,
   bodyShape,
   buildBody,
   buildMannequin,
@@ -52,7 +56,7 @@ const GIRTH_TOLERANCE = 0.005; // 0.5 % of the table girth, measured on the mesh
 const LENGTH_TOLERANCE_CM = 0.05;
 
 describe('female family is untouched by the family API', () => {
-  // sha256 of the .glb of each female shape as built before the male family was added (commit 0c7510f).
+  // sha256 of the .glb of each female shape as built before the male family was added (the parent of the commit that added it, 0c7510f, where packages/mannequin equals the base branch).
   const GLB_BEFORE = {
     XS: 'e2765fed8cb83151257be96be0130c3ca6e3c3696ca209edc8de2df8a8fd2f4f',
     M: 'f9019aa932cc823b2527a09d787e24cee881f5f530cb587632cfecbd81b7ead1',
@@ -198,7 +202,10 @@ describe('male family', () => {
     }
   });
 
-  it('has EN 13402-3 chest girths inside their letter intervals, waist at drop −12 and the associated neck girth', () => {
+  it('has the chest girths of the EN 13402-3:2004 reproduction inside their letter intervals, waist at drop −12 and the associated neck girth', () => {
+    // The values were read from Wikipedia's reproduction of the 2004 edition, not from the standard.
+    expect(MALE_SOURCES.en).toContain('as reproduced in the Wikipedia article');
+    expect(MALE_SOURCES.en).toContain('2004');
     const interval = { S: [86, 94], M: [94, 102], L: [102, 110], XL: [110, 118], XXL: [118, 129] } as const;
     for (const id of MALE_BODY_SHAPE_IDS) {
       const r = MALE_REFERENCE[id];
@@ -210,18 +217,34 @@ describe('male family', () => {
     expect(MALE_BODY_SHAPE_IDS.map((id) => MALE_REFERENCE[id].neck)).toEqual([37.5, 39.5, 41.5, 43.5, 45.75]);
   });
 
-  it('differs from the female family the way the table says: taller, longer legs, less waist, shoulders wider than hips', () => {
+  it('differs from the female family the way the table says: taller, longer legs, less waist, no bust', () => {
     const m = buildMannequin(familyShape('male')!);
     const f = buildMannequin(familyShape('female')!);
     const width = (x: typeof m, ring: 'hip' | 'waist' | 'shoulder' | 'chest') => 2 * x.rings.find((r) => r.id === ring)!.a;
     expect(m.statureCm).toBeGreaterThan(f.statureCm);
     expect(m.landmarks.crotch[1] / m.statureCm).toBeGreaterThan(f.landmarks.crotch[1] / f.statureCm);
-    expect(width(m, 'shoulder')).toBeGreaterThan(width(m, 'hip'));
-    expect(deltoidBreadthCm(m) / width(m, 'hip')).toBeGreaterThan(deltoidBreadthCm(f) / width(f, 'hip'));
-    expect(width(m, 'waist') / width(m, 'hip')).toBeGreaterThan(width(f, 'waist') / width(f, 'hip'));
+    // Clearly less waist: waist / hip width 0.89 against 0.73.
+    expect(width(m, 'waist') / width(m, 'hip')).toBeGreaterThan(width(f, 'waist') / width(f, 'hip') + 0.1);
     // No bust: from chest to underbust the male girth drops by under 6 cm, the female by over 10.
     expect(m.shape.rings.chest.circumferenceCm - m.shape.rings.underbust.circumferenceCm).toBeLessThan(6);
     expect(f.shape.rings.chest.circumferenceCm - f.shape.rings.underbust.circumferenceCm).toBeGreaterThan(10);
+  });
+
+  it('has a shoulder ring wider than the hip ring in every size, but is NOT broad-shouldered: over the deltoids it is no narrower against the hip than the female v0, no more', () => {
+    for (const id of MALE_BODY_SHAPE_IDS) {
+      const x = buildMannequin(familyShape('male', id)!);
+      const w = (ring: 'hip' | 'shoulder') => 2 * x.rings.find((r) => r.id === ring)!.a;
+      // 5 to 10 % wider: a box, not a V. This is the measured state of the figure, not a target.
+      expect(w('shoulder') / w('hip'), id).toBeGreaterThan(1.04);
+      expect(w('shoulder') / w('hip'), id).toBeLessThan(1.15);
+    }
+    const m = buildMannequin(familyShape('male')!);
+    const f = buildMannequin(familyShape('female')!);
+    const ratio = (x: typeof m) => deltoidBreadthCm(x) / (2 * x.rings.find((r) => r.id === 'hip')!.a);
+    // 1.35 against 1.34: the families are not told apart by shoulder against hip. The bound below only
+    // says "not smaller"; a V-shaped torso needs non-elliptical sections and then a real margin here.
+    expect(ratio(m)).toBeGreaterThanOrEqual(ratio(f));
+    expect(ratio(m) - ratio(f)).toBeLessThan(0.05);
   });
 
   it('builds the same bytes every time and different bytes per size and per family', () => {
@@ -335,7 +358,7 @@ describe('shapeForBody', () => {
     expect(shapeForBody({ family: 'female', bust: 88 }).rings.chest.circumferenceCm).toBe(88);
   });
 
-  it('ignores values that are not positive finite numbers and bounds a wild shoulder width', () => {
+  it('ignores values that are not positive finite numbers and bounds a wild shoulder width (0.75–1.35 of the table ring, never into the chest)', () => {
     const base = familyShape('male')!;
     const s = shapeForBody({ family: 'male', heightCm: Number.NaN, chest: -3, waist: Infinity, hip: 0, shoulderCm: Number.NaN });
     expect(s.rings).toEqual(base.rings);
@@ -343,19 +366,89 @@ describe('shapeForBody', () => {
     expect(shapeForBody({ family: 'nonsense' as 'male' }).family).toBe('female');
     const width = (shape: BodyShape) => 2 * buildMannequin(shape).rings.find((r) => r.id === 'shoulder')!.a;
     expect(width(shapeForBody({ family: 'male', shoulderCm: 500 })) / width(base)).toBeCloseTo(1.35, 9);
-    expect(width(shapeForBody({ family: 'male', shoulderCm: 1 })) / width(base)).toBeCloseTo(0.75, 9);
+    // Narrow: 0.75 of the table's ring, or wider when the arms would otherwise cut into the chest (male M: 0.87).
+    const narrow = shapeForBody({ family: 'male', shoulderCm: 1 });
+    expect(width(narrow) / width(base)).toBeGreaterThanOrEqual(0.75);
+    expect(width(narrow) / width(base)).toBeLessThan(0.9);
+    expect(armClearanceCm(buildMannequin(narrow))).toBeCloseTo(0.5, 6);
+    const narrowF = shapeForBody({ family: 'female', shoulderCm: 1 });
+    expect(width(narrowF) / width(familyShape('female')!)).toBeGreaterThanOrEqual(0.75);
+    expect(armClearanceCm(buildMannequin(narrowF))).toBeGreaterThanOrEqual(0.5 - 1e-9);
   });
 
-  it('builds a closed body with exact rings across the range a shopper can type', () => {
+  it('builds a closed body with exact rings across the range a shopper can type, arms outside the torso', () => {
+    const typed = [
+      [76, 60, 82, 150, undefined], [84, 70, 110, 160, undefined], [120, 124, 118, 172, undefined], [150, 140, 150, 205, undefined],
+      // Belly larger than chest, narrow typed shoulders, a 3XL / 4XL chest, a large seat.
+      [98, 120, undefined, undefined, undefined], [98, 130, 110, undefined, undefined], [98, 86, 96, 174, 30], [110, 125, 130, 165, 36], [140, 150, 150, 170, undefined], [100, 100, 140, 170, undefined],
+    ] as const;
     for (const family of BODY_FAMILIES) {
-      for (const [chest, waist, hip, heightCm] of [[76, 60, 82, 150], [84, 70, 110, 160], [120, 124, 118, 172], [150, 140, 150, 205]] as const) {
-        const m = buildBody({ family, chest, waist, hip, heightCm });
+      for (const [chest, waist, hip, heightCm, shoulderCm] of typed) {
+        const label = `${family} ${chest}/${waist}/${hip}/${heightCm}/${shoulderCm}`;
+        const m = buildBody({ family, chest, waist, hip, heightCm, shoulderCm });
         const mesh = buildMannequinMesh(m);
-        expect(topology(mesh).watertight, `${family} ${chest}`).toBe(true);
-        for (const ring of ANCHOR_RINGS) expect(m.shape.rings[ring].circumferenceCm, `${family} ${chest} ${ring}`).toBeGreaterThan(0);
-        for (const r of m.rings) expect(Math.abs(meshRingCircumference(mesh, r)! / r.circumferenceCm - 1), `${family} ${chest} ${r.id}`).toBeLessThan(GIRTH_TOLERANCE);
+        expect(topology(mesh).watertight, label).toBe(true);
+        for (const ring of ANCHOR_RINGS) expect(m.shape.rings[ring].circumferenceCm, `${label} ${ring}`).toBeGreaterThan(0);
+        for (const r of m.rings) expect(Math.abs(meshRingCircumference(mesh, r)! / r.circumferenceCm - 1), `${label} ${r.id}`).toBeLessThan(GIRTH_TOLERANCE);
+        // No torso section deeper than wide, and none outside the table's own range of depth / width.
+        const rows = familyShapeIds(family).map((id) => familyShape(family, id)!);
+        for (const ring of ['chest', 'underbust', 'waist', 'hip'] as const) {
+          const aspects = rows.map((s) => s.rings[ring].aspect);
+          expect(m.shape.rings[ring].aspect, `${label} ${ring}`).toBeGreaterThanOrEqual(Math.min(...aspects) - 1e-12);
+          expect(m.shape.rings[ring].aspect, `${label} ${ring}`).toBeLessThanOrEqual(Math.max(...aspects) + 1e-12);
+          expect(m.shape.rings[ring].aspect).toBeLessThan(1);
+        }
+        // Arms: outside the torso at the chest, underbust and waist rings, on the sections and on the mesh.
+        expect(armClearanceCm(m), label).toBeGreaterThanOrEqual(0.5 - 1e-9);
+        for (const ringId of ['chest', 'underbust', 'waist'] as const) {
+          const r = m.rings.find((x) => x.id === ringId)!;
+          const loops = slice(mesh.positions, mesh.indices, { origin: r.centre, normal: r.normal });
+          const torso = loopAround(loops, r.centre, r.u, r.v)!;
+          const maxX = Math.max(...torso.points.map((p) => Math.abs(p[0])));
+          for (const l of loops.filter((x) => x !== torso)) expect(Math.min(...l.points.map((p) => Math.abs(p[0]))), `${label} ${ringId}`).toBeGreaterThan(maxX);
+        }
       }
     }
+  });
+
+  it('holds typed girths and height inside BODY_INPUT_LIMITS and does not extrapolate stature or depth / width', () => {
+    for (const family of BODY_FAMILIES) {
+      const ids = familyShapeIds(family);
+      const small = familyShape(family, ids[0]!)!;
+      const large = familyShape(family, ids[ids.length - 1]!)!;
+      const [lo, hi] = BODY_INPUT_LIMITS.girthRatio;
+      const tiny = shapeForBody({ family, chest: 1, waist: 1, hip: 1, heightCm: 20 });
+      const huge = shapeForBody({ family, chest: 400, waist: 400, hip: 400, heightCm: 400 });
+      for (const ring of ['chest', 'waist', 'hip'] as const) {
+        expect(tiny.rings[ring].circumferenceCm).toBeCloseTo(lo * small.rings[ring].circumferenceCm, 9);
+        expect(huge.rings[ring].circumferenceCm).toBeCloseTo(hi * large.rings[ring].circumferenceCm, 9);
+        expect(tiny.rings[ring].aspect).toBe(small.rings[ring].aspect);
+        expect(huge.rings[ring].aspect).toBe(large.rings[ring].aspect);
+      }
+      expect(tiny.statureCm).toBe(BODY_INPUT_LIMITS.heightCm[0]);
+      expect(huge.statureCm).toBe(BODY_INPUT_LIMITS.heightCm[1]);
+      // Without a typed height the stature stays at the nearest table size beyond the table.
+      expect(shapeForBody({ family, chest: 400 }).statureCm).toBe(large.statureCm);
+      expect(shapeForBody({ family, chest: 1 }).statureCm).toBe(small.statureCm);
+      for (const s of [tiny, huge]) {
+        const m = buildMannequin(s);
+        expect(topology(buildMannequinMesh(m)).watertight).toBe(true);
+        for (const ring of ANCHOR_RINGS) expect(s.rings[ring].circumferenceCm).toBeGreaterThan(0);
+        expect(armClearanceCm(m)).toBeGreaterThanOrEqual(0.5 - 1e-9);
+      }
+    }
+  });
+
+  it('reads shoulderCm as biacromial breadth in both families: the measured width gives the default figure', () => {
+    expect(referenceMeasurements(familyShape('female')!).shoulderCm).toBe(FEMALE_SHOULDER_REFERENCE.M);
+    expect(FEMALE_SHOULDER_REFERENCE).toEqual({ XS: 35.5, M: 36.5, XXL: 38 });
+    for (const family of BODY_FAMILIES) {
+      const base = familyShape(family)!;
+      const typed = shapeForBody({ family, shoulderCm: referenceMeasurements(base).shoulderCm });
+      expect(typed.rings.shoulder.circumferenceCm).toBeCloseTo(base.rings.shoulder.circumferenceCm, 9);
+    }
+    // The reference is not the ring: the female v0 shoulder ring is 42.1 cm wide at M.
+    expect(2 * buildMannequin(familyShape('female')!).rings.find((r) => r.id === 'shoulder')!.a).toBeGreaterThan(FEMALE_SHOULDER_REFERENCE.M + 5);
   });
 });
 

@@ -14,6 +14,14 @@
  *   band:measured[:r]  the same with the band read from --band-file (refused while it holds no measurement); sizes the
  *                      file does not measure are interpolated or extrapolated (`bandFor`) and printed as such
  *   cling+band:…       any band mode with the cling pull left on (r = 0 switches the loops off: `band:measured:0`)
+ * What a band mode IMPOSES and what the drape predicts: the band's girth on the body is set by the placement rule
+ * (`fitElasticBand`: clamp(body girth at the band's height, relaxed, stretched), then the top of the mesh is scaled to it
+ * and blended back to the cut over `BAND_BLEND_CM` below). No cloth physics decides it. So "does the band slide" and every
+ * spread at a height inside that zone are consequences of the rule and of the band height the reconstructed mesh happens to
+ * have; they are printed with an [IMPOSED] tag. Heights below the zone are drape results. With per-size tape measurements
+ * the spread between the smallest and largest MEASURED size is printed first; the spread to an interpolated or
+ * extrapolated end size is printed after it and says so. `[band-height sensitivity]` repeats the rule with the band 2 and
+ * 4 cm higher and at the height the tape's length would put it (hem kept where it is).
  * With a band file that holds per-size tape measurements the script ends with the cut check: hip girth, hem girth and
  * length of the graded mesh per size next to the tape values (measured, interpolated or extrapolated, labelled).
  * `--bench <n>`: instead, time 90 frames (1.5 s of cloth) of the base size per mode, n rounds interleaved across the
@@ -29,7 +37,7 @@ import { bodyField, buildAvatar, mannequinMeasurements } from '../src/body';
 import { sample } from '../src/collide';
 import { isSettled, loopGirth, stepCloth, strainQuantile } from '../src/cloth';
 import { meshFromGlb, type SpikeBundle } from '../src/bundle';
-import { DEFAULT_DRAPE, LOOP_RINGS, LOOP_SLICE_CM, bandFor, gradedMesh, openSession, prepareFit, sizeLabels, viewerMaterial, waistbandFromFile, type BandFileEntry, type BandSource, type DrapeOptions, type WaistbandSpec } from '../src/engine';
+import { BAND_BLEND_CM, CLEARANCE_CM, DEFAULT_DRAPE, LOOP_RINGS, LOOP_SLICE_CM, WAISTBAND_CM, bandFor, fitElasticBand, gradedMesh, openSession, prepareFit, sizeLabels, viewerMaterial, waistbandFromFile, type BandFileEntry, type BandSource, type DrapeOptions, type ElasticBand, type WaistbandSpec } from '../src/engine';
 import { fitForBody } from '../src/fitting';
 
 const argv = process.argv.slice(2);
@@ -119,8 +127,12 @@ interface SizeRow { size: string; graded: number[]; start: number[]; draped: num
 /** A girth loop after the drape: active when the drape sits on its minimum (the loop, not the cloth, set that girth). */
 interface LoopState { ring: string; particles: number; minGirthCm: number; drapedCm: number; active: boolean }
 type Spread = { graded: number; draped: number; survivesPct: number };
-const results: { mode: string; options: DrapeOptions; rows: SizeRow[]; hipSpread: Spread; hemSpread: Spread; byHeight: (Spread & { y: number; loopRing: string | null })[]; ringsInstalled: string[]; ringsSkipped: string[]; ringsNeverActive: string[] }[] = [];
+type HeightSpread = Spread & { y: number; loopRing: string | null; bandImposed: boolean };
+const results: { mode: string; options: DrapeOptions; rows: SizeRow[]; hipSpread: Spread; hemSpread: Spread; byHeight: HeightSpread[]; measuredEnds: { from: string; to: string; byHeight: HeightSpread[] } | null; endSources: { from: BandSource; to: BandSource } | null; bandZoneAboveY: number | null; ringsInstalled: string[]; ringsSkipped: string[]; ringsNeverActive: string[] }[] = [];
 
+// The tape's per-size spec when a band file is given: labels every mode's rows (measured / interpolated / extrapolated).
+let tapeSpec: WaistbandSpec | null = null;
+if (bandFile) { try { tapeSpec = readBandFile(); } catch { tapeSpec = null; } }
 // Parse every mode (and read the band file) before any drape runs, so a bad mode fails fast instead of after minutes of draping.
 const modeList = (modesArg ?? 'base').split(',');
 const parsedModes = new Map(modeList.map((k) => [k, parseMode(k)] as const));
@@ -185,18 +197,40 @@ for (const mode of modeList) {
   for (let i = 1; i < g0.length; i += 3) restHem = Math.min(restHem, g0[i]!);
   const ringY: Record<string, number> = { waist: m.morphHeights.waist, hip: m.morphHeights.hip, hem: restHem + 2 };
   const ringAt = (y: number): string | null => installed.find((r) => Math.abs(ringY[r]! - y) <= LOOP_SLICE_CM + 0.5) ?? null;
-  const byHeight = ys.map((y, i) => ({ y, loopRing: ringAt(y), ...spreadOf({ graded: rows[0]!.graded[i]!, draped: rows[0]!.draped[i]! }, { graded: rows[rows.length - 1]!.graded[i]!, draped: rows[rows.length - 1]!.draped[i]! }) }));
-  const r = { mode, options, rows, hipSpread: spread('hip'), hemSpread: spread('hem'), byHeight, ringsInstalled: installed, ringsSkipped: skipped, ringsNeverActive: neverActive };
+  // The band rule scales the mesh top to the band's girth on the body and blends back to the cut over BAND_BLEND_CM
+  // below the band: a spread measured above that line is set by the rule (clamp(body, relaxed, stretched)), not by the drape.
+  let restTop = -Infinity;
+  for (let i = 1; i < g0.length; i += 3) restTop = Math.max(restTop, g0[i]!);
+  const maxDrop = Math.max(0, ...rows.map((row) => (row.band as { dropCm?: number } | null)?.dropCm ?? 0));
+  const bandZoneAboveY = options.waistband ? Math.round((restTop - maxDrop - WAISTBAND_CM - BAND_BLEND_CM) * 10) / 10 : null;
+  const heightSpread = (a: SizeRow, z: SizeRow): HeightSpread[] => ys.map((y, i) => ({ y, loopRing: ringAt(y), bandImposed: bandZoneAboveY !== null && y >= bandZoneAboveY, ...spreadOf({ graded: a.graded[i]!, draped: a.draped[i]! }, { graded: z.graded[i]!, draped: z.draped[i]! }) }));
+  const byHeight = heightSpread(rows[0]!, rows[rows.length - 1]!);
+  // With per-size tape measurements: the spread between the smallest and the largest MEASURED size is the primary result
+  // of every mode (so the modes compare on the same pair); the first-to-last spread may rest on an interpolated or
+  // extrapolated band.
+  const src = (size: string): BandSource | null => (tapeSpec ? bandFor(tapeSpec, bundle.grading, size).source : null);
+  const measuredRows = rows.filter((row) => src(row.size) === 'measured');
+  const measuredEnds = tapeSpec && measuredRows.length >= 2 ? { from: measuredRows[0]!.size, to: measuredRows[measuredRows.length - 1]!.size, byHeight: heightSpread(measuredRows[0]!, measuredRows[measuredRows.length - 1]!) } : null;
+  const endSources = tapeSpec ? { from: src(rows[0]!.size)!, to: src(rows[rows.length - 1]!.size)! } : null;
+  const r = { mode, options, rows, hipSpread: spread('hip'), hemSpread: spread('hem'), byHeight, measuredEnds, endSources, bandZoneAboveY, ringsInstalled: installed, ringsSkipped: skipped, ringsNeverActive: neverActive };
   results.push(r);
   const hipRing = ringAt(hipY);
   const hipTag = hipRing ? ` [AT THE ${hipRing.toUpperCase()} LOOP: imposed by the loop, not predicted]` : '';
   console.log(`\n== ${mode}: hip@${hipY.toFixed(1)} graded spread ${r.hipSpread.graded} -> draped ${r.hipSpread.draped} cm (${r.hipSpread.survivesPct} %)${hipTag}; hem@${hemY} graded ${r.hemSpread.graded} -> draped ${r.hemSpread.draped} cm (${r.hemSpread.survivesPct} %)`);
-  console.log(`   spread by height (AU ${rows[0]!.size}->${rows[rows.length - 1]!.size}, graded -> draped cm): ${byHeight.map((b) => `y${b.y} ${b.graded}->${b.draped} (${b.survivesPct}%)${b.loopRing ? `[${b.loopRing} loop]` : ''}`).join(' | ')}`);
-  const off = byHeight.filter((b) => !b.loopRing && Number.isFinite(b.survivesPct));
+  const fmt = (hs: HeightSpread[]): string => hs.map((b) => `y${b.y} ${b.graded}->${b.draped} (${b.survivesPct}%)${b.loopRing ? `[${b.loopRing} loop]` : ''}${b.bandImposed ? '[IMPOSED: band rule]' : ''}`).join(' | ');
+  if (measuredEnds) console.log(`   PRIMARY, measured sizes only: spread by height (AU ${measuredEnds.from}->${measuredEnds.to}, graded -> draped cm): ${fmt(measuredEnds.byHeight)}`);
+  const restsOn = endSources && options.waistband && (endSources.from !== 'measured' || endSources.to !== 'measured') ? ` [rests on a band that is ${endSources.from !== 'measured' ? `${endSources.from} (AU ${rows[0]!.size})` : ''}${endSources.from !== 'measured' && endSources.to !== 'measured' ? ' and ' : ''}${endSources.to !== 'measured' ? `${endSources.to} (AU ${rows[rows.length - 1]!.size})` : ''}, not measured]` : '';
+  console.log(`   spread by height (AU ${rows[0]!.size}->${rows[rows.length - 1]!.size}, graded -> draped cm)${restsOn}: ${fmt(byHeight)}`);
+  if (bandZoneAboveY !== null) console.log(`   band rule: the band's girth on the body is IMPOSED (clamp(body girth at the band's height, relaxed, stretched)), not simulated; the mesh is scaled to it down to y ${bandZoneAboveY}, so spreads at or above that height are set by the rule. Heights below are drape results.`);
+  const off = byHeight.filter((b) => !b.loopRing && !b.bandImposed && Number.isFinite(b.survivesPct));
   if (requested.length) console.log(`   loops: requested ${requested.join('+')}; installed ${installed.join('+') || 'none'}${skipped.length ? `; SKIPPED ${skipped.join('+')} (no free cloth particles at that ring, or pinned)` : ''}${neverActive.length ? `; NEVER ACTIVE ${neverActive.join('+')} (the drape never fell to the loop's minimum)` : ''}; off-ring heights: ${off.map((b) => `y${b.y} ${b.survivesPct}%`).join(', ')}`);
   for (const row of rows) {
     console.log(`${row.size}: hip ${row.hip.graded}->${row.hip.draped} hem ${row.hem.graded}->${row.hem.draped} | draped ${row.draped.join(' / ')} | lowest y ${row.hemYDraped}, settled ${row.settledS} s, residual ${row.residualCm} cm/1 s, p99 strain ${row.p99StrainPct} %, ${row.finite ? 'finite' : 'NaN!'}, ${row.solveMs} ms`);
-    if (row.band) console.log(`   band ${JSON.stringify(row.band)}`);
+    if (row.band) {
+      const b = row.band as Partial<ElasticBand>;
+      const margin = b.relaxedCm !== undefined && b.bodyAtBandCm !== undefined ? `; body at the band minus relaxed ${Math.round((b.bodyAtBandCm - b.relaxedCm) * 10) / 10} cm (holds while > -1; IMPOSED by the placement rule, not simulated)` : '';
+      console.log(`   band ${JSON.stringify(row.band)}${margin}`);
+    }
     if (row.loopState.length) console.log(`   loops ${row.loopState.map((l) => `${l.ring}(${l.particles}p) min ${l.minGirthCm} draped ${l.drapedCm}${l.active ? ' ACTIVE' : ''}`).join('; ')}`);
   }
   writeJson();
@@ -206,6 +240,7 @@ for (const mode of modeList) {
 // below the band is not on record; `hemSweepCm` the full hem; `lengthCm` band to hem). A size the tape does not hold is
 // interpolated or extrapolated by the rule of `bandFor` (a line on the grading step through the two measured sizes
 // around it, or the two nearest) and printed with that label, never as measured.
+const sensitivity: unknown[] = [];
 if (bandSpec && bandEntry) {
   const labels = sizeLabels(session);
   const tape = (key: 'hipCm' | 'hemSweepCm' | 'lengthCm', size: string): { v: number; source: BandSource } | null => {
@@ -237,5 +272,29 @@ if (bandSpec && bandEntry) {
     console.log(`   hem: tape ${show(tHem)}; mesh widest in the bottom 30 cm ${widest} (y=${at})${pct(widest, tHem)}; 1 cm above the mesh's lowest point ${hemLow}${pct(hemLow, tHem)}`);
     console.log(`   length: tape ${show(tLen)}; mesh top y=${top.toFixed(1)} to lowest y=${bottom.toFixed(1)}: ${length}${pct(length, tLen)}`);
   }
-  if (jsonOut) writeFileSync(jsonOut, JSON.stringify({ productId: bundle.productId, dir, heights: ys, hipY, hemY, torsoAtHip: torsoGirth(hipY), results, cutCheck: cut }, null, 1));
+  // Band-height sensitivity (the placement rule alone, no drape): the band's height comes from the reconstructed mesh,
+  // whose length is not the tape's. Lift the placed garment by 0, 2 and 4 cm, and by tape length minus mesh length (the
+  // band's height if the hem stayed where the mesh has it), and apply `fitElasticBand` again (to a ring at the band's
+  // height: the rule reads nothing else from the cloth).
+  console.log(`\n[band-height sensitivity] the placement rule (IMPOSED, not simulated) with the band higher on the M mannequin; "tape length" lifts the band by tape length minus mesh length (hem kept where it is)`);
+  for (const size of labels) {
+    const g = gradedMesh(session, size);
+    let top = -Infinity, bottom = Infinity;
+    for (let i = 1; i < g.positions.length; i += 3) { top = Math.max(top, g.positions[i]!); bottom = Math.min(bottom, g.positions[i]!); }
+    const tLen = tape('lengthCm', size);
+    const band = bandFor(bandSpec, bundle.grading, size);
+    const lifts: { label: string; cm: number }[] = [{ label: 'as reconstructed', cm: 0 }, { label: '+2 cm', cm: 2 }, { label: '+4 cm', cm: 4 }, ...(tLen ? [{ label: `tape length (${tLen.source})`, cm: Math.round((tLen.v - (top - bottom)) * 10) / 10 }] : [])];
+    const parts: string[] = [];
+    for (const lift of lifts) {
+      // The rule reads only the height of the band's top from the cloth: a ring of points at that height stands in for it.
+      const ring = new Float32Array(3 * 16);
+      for (let i = 0; i < 16; i++) { ring[3 * i] = 12 * Math.cos((i * Math.PI) / 8); ring[3 * i + 1] = top + lift.cm; ring[3 * i + 2] = 12 * Math.sin((i * Math.PI) / 8); }
+      const e = fitElasticBand(field, ring, new Uint8Array(16), CLEARANCE_CM, band, false);
+      const marginCm = Math.round((e.bodyAtBandCm - e.relaxedCm) * 10) / 10;
+      sensitivity.push({ size, source: band.source, lift: lift.label, liftCm: lift.cm, bodyAtBandCm: e.bodyAtBandCm, relaxedCm: e.relaxedCm, marginCm, dropCm: e.dropCm, onBodyCm: e.onBodyCm, pastHips: e.pastHips });
+      parts.push(`${lift.label}${lift.cm && lift.label.startsWith('tape') ? ` = +${lift.cm} cm` : ''}: body ${e.bodyAtBandCm}, margin ${marginCm >= 0 ? '+' : ''}${marginCm}, ${e.dropCm > 0 ? `SLIDES ${e.dropCm} cm to ${e.onBodyCm}` : `holds at ${e.onBodyCm}`}`);
+    }
+    console.log(`AU ${size} (band ${band.source}, relaxed ${Math.round(band.relaxedCm * 10) / 10}): ${parts.join(' | ')}`);
+  }
+  if (jsonOut) writeFileSync(jsonOut, JSON.stringify({ productId: bundle.productId, dir, heights: ys, hipY, hemY, torsoAtHip: torsoGirth(hipY), results, cutCheck: cut, bandHeightSensitivity: sensitivity }, null, 1));
 }

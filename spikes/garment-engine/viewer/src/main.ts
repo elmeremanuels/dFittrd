@@ -27,7 +27,7 @@ import { listBundles, loadBundle } from './bundle';
 import { stepCloth, isSettled } from './cloth';
 import { DrapePool } from './drapePool';
 import waistbandData from '../../data/bohohippychic/waistbands.json';
-import { FABRIC_PRESETS, drapeJobOf, drapeOptionsFrom, heatFor, necklineStrain, openSession, prepareFit, sizeLabels, viewerMaterial, waistbandFromFile, type BandFileEntry, type DrapeOptions, type FabricPreset, type FitInstance, type GarmentSession } from './engine';
+import { FABRIC_PRESETS, bandFor, drapeJobOf, drapeOptionsFrom, heatFor, necklineStrain, openSession, prepareFit, sizeLabels, viewerMaterial, waistbandFromFile, type BandFileEntry, type DrapeOptions, type FabricPreset, type FitInstance, type GarmentSession } from './engine';
 import { anchorLabels, fitForBody, frontAt, frontOutline, type AnchorLabel } from './fitting';
 import { Figure, Outlines, Stage, meshGeometry, type OutlineSpec } from './scene';
 
@@ -86,6 +86,23 @@ function drapeFor(s: GarmentSession): DrapeOptions {
   } catch (e) {
     throw new Error(`band=measured: ${s.bundle.productId}: ${(e as Error).message}`);
   }
+}
+/**
+ * `band=measured`: the on-model hip number is the grading's (the shop's chart, which the mesh is calibrated to), and the
+ * tape of the garment disagrees with it. The label then says which is which: "hip 97.2 chart · tape 112", with "≈" and
+ * "interpolated" / "extrapolated" for a size the shop did not measure (the rule of `bandFor`). The tape's hip height is
+ * not on record, so the two are not the same line on the garment.
+ */
+function hipLabelWithTape(s: GarmentSession, size: string, text: string): string {
+  if (params.get('band') !== 'measured') return text;
+  const entry = (waistbandData as { products: Record<string, BandFileEntry | undefined> }).products[s.bundle.productId.split('/').pop()!];
+  const labels = sizeLabels(s);
+  const sizes: Record<string, { relaxedCm: number; stretchedCm: number }> = {};
+  for (const [l, e] of Object.entries(entry?.sizes ?? {})) if (typeof e.hipCm === 'number' && labels.includes(l)) sizes[l] = { relaxedCm: e.hipCm, stretchedCm: e.hipCm };
+  if (Object.keys(sizes).length < 2 && !sizes[size]) return `${text} chart · tape: not measured`;
+  const t = sizes[size] ? { relaxedCm: sizes[size].relaxedCm, source: 'measured' } : bandFor({ relaxedCm: 0, stretchedCm: 0, sizes, assumed: false }, s.bundle.grading, size);
+  const v = Math.round(t.relaxedCm * 10) / 10;
+  return `${text} chart · tape ${t.source === 'measured' ? `${v}` : `≈${v} ${t.source}`}`;
 }
 const state = {
   productId: params.get('product') ?? '',
@@ -383,7 +400,7 @@ function updateLabels(): void {
       f.labels = [];
       for (const label of anchorLabels(s.bundle.grading, f.size, f.gaps, m.morphHeights)) {
         const at = frontAt(f.cloth.pos, f.chains, label.height);
-        if (at) f.labels.push({ label, at });
+        if (at) f.labels.push({ label: label.anchor === 'hip' ? { ...label, text: hipLabelWithTape(s, f.size, label.text) } : label, at });
       }
     }
     for (const { label, at } of f.labels) {

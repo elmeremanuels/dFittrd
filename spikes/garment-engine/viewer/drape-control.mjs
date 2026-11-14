@@ -11,7 +11,9 @@
  *   node spikes/garment-engine/viewer/drape-control.mjs eval/<id> --out <dir> [--throttle 4]
  *        [--set name=query ...]   e.g. --set base= --set best=cling=0&loops=1&rings=hip,waist
  *        --set measured=cling=0&band=measured   the shop's tape of the band (data/bohohippychic/waistbands.json)
- * Every shot carries an "ESTIMATE" tag with the setting's name.
+ * Every shot carries an "ESTIMATE" tag with the setting's name, and the viewport is tall enough (default 1820×1240 px,
+ * `--width` / `--height`; the width keeps the stage's shape so three figures fit) for the page's fit lines to be in the picture: with band=measured they say which sizes are measured,
+ * interpolated or extrapolated. The shot fails loudly when the last fit line is still below the fold.
  *
  * Uses the preinstalled Playwright (`require('playwright')`), not a dependency of the package.
  */
@@ -34,6 +36,8 @@ const take = (name) => {
 };
 const outDir = resolve(take('out')[0] ?? join(here, '..', 'out', 'drape-control'));
 const throttle = Number(take('throttle')[0] ?? 4);
+const shotHeight = Number(take('height')[0] ?? 1240);
+const shotWidth = Number(take('width')[0] ?? 1820);
 const sets = take('set').map((s) => [s.slice(0, s.indexOf('=')), s.slice(s.indexOf('=') + 1)]);
 if (sets.length === 0) sets.push(['base', ''], ['nocling', 'cling=0'], ['best', 'cling=0&loops=1&rings=hip,waist']);
 const id = argv[0];
@@ -59,7 +63,7 @@ try {
     const entry = { query: q, shots: [], problems: [] };
     result.sets[name] = entry;
     // Renders: desktop viewport, unthrottled.
-    const page = await browser.newPage({ viewport: { width: 1360, height: 860 } });
+    const page = await browser.newPage({ viewport: { width: shotWidth, height: shotHeight } });
     page.on('pageerror', (e) => entry.problems.push(`pageerror: ${e.message}`));
     for (const view of ['front', 'side']) {
       await page.goto(`${base}index.html?product=${encodeURIComponent(id)}&${sizesQ}&view=${view}${q ? `&${q}` : ''}`);
@@ -70,7 +74,12 @@ try {
         tag.textContent = text;
         tag.style.cssText = 'position:fixed;right:12px;top:12px;z-index:99;padding:6px 10px;border-radius:6px;background:#1A1612;color:#F5EFE7;font:600 13px/1.3 Inter,system-ui,sans-serif;max-width:560px';
         document.body.append(tag);
-      }, `ESTIMATE, not a measurement: simulated drape of a reconstructed mesh on a procedural mannequin. Setting "${name}"${q ? ` (${q})` : ' (viewer default)'}.`);
+      }, `ESTIMATE, not a measurement: simulated drape of a reconstructed mesh on a procedural mannequin. Setting "${name}"${q ? ` (${q})` : ' (viewer default)'}.${/(^|&)band=/.test(q) ? ' The band girth on the body is set by a placement rule (body girth at the mesh\'s band height, kept between relaxed and stretched), not simulated.' : ''}`);
+      const below = await page.evaluate(() => {
+        const last = document.querySelector('#lines li:last-child');
+        return last ? Math.round(last.getBoundingClientRect().bottom - document.documentElement.clientHeight) : null;
+      });
+      if (below === null || below > 0) entry.problems.push(`${view}: fit lines not fully in the shot (${below === null ? 'none found' : `${below} px below the fold`}); raise --height`);
       const file = join(outDir, `${id.replace(/\W+/g, '_')}-${name}-${view}.png`);
       await page.screenshot({ path: file });
       entry.shots.push(file);

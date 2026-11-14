@@ -2,18 +2,23 @@
  * Shop tape measurements of a garment (data/<shop>/tape/<handle>.json) and what of them a
  * GarmentPayload v1 can carry. The tape gives five numbers PER SIZE (band relaxed, band stretched,
  * garment hip, hem sweep, length); the payload has no per-size garment measurement next to a body
- * chart, so only two single numbers go in, both through existing fields and both the mean over the
- * MEASURED sizes (never an interpolated size):
+ * chart, so only ONE single number goes in, through an existing field, as the mean over the MEASURED
+ * sizes (never an interpolated size):
  *
- * - `lengthCm.waist_to_hem`: band to hem, flat;
- * - `ease.hip`: garment hip minus the chart's body hip (body charts only).
+ * - `lengthCm.waist_to_hem`: band to hem, flat (the measured lengths differ by 1 cm).
+ *
+ * `ease.hip` (garment hip minus the chart's body hip) could hold a mean too, but it is LEFT OUT: the
+ * measured values are uneven (the pilot skirt: 18 / 23 / 17 cm), so one number misstates the garment
+ * hip of single sizes by several cm and grades it with the body chart's step instead of the
+ * garment's. `hipEaseIfOneNumber` reports what the mean would do per size; the entry's `tape` note
+ * carries it. Per-size targets are read from the tape file itself.
  *
  * The elastic band (relaxed / stretched), the hem sweep and the per-size values stay in the tape
  * file, which the entry names beside the payload (`tape`), like `baseSize` and `features`.
  * The waist gets NO ease from the tape: the band is elastic, and the schema's `ease.waist` is one
  * garment-minus-body number, not a relaxed-to-stretched range.
  */
-import { completenessScore, type CompletenessResult, type Ease, type GarmentPayloadDraft, type LengthCm } from '@curtain/schema';
+import { completenessScore, type CompletenessResult, type GarmentPayloadDraft, type LengthCm, type SizeRow } from '@curtain/schema';
 
 export const TAPE_FORMAT = 'curtain.spike.tapeMeasurements';
 
@@ -58,6 +63,61 @@ export function parseTape(value: unknown): TapeFile {
 
 const mean1 = (xs: readonly number[]): number => Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10;
 
+/** One chart size under a single `ease.hip` number: what the payload would say against what the tape says. */
+export interface HipEaseRow {
+  size: string;
+  /** 'measured', or how the tape value of an unmeasured size was filled in. */
+  source: 'measured' | 'interpolated' | 'extrapolated';
+  /** Garment hip by the tape, cm (measured, or the straight line through the nearest measured sizes). */
+  tapeHipCm: number;
+  /** Chart body hip + the mean ease, cm. */
+  oneNumberHipCm: number;
+  /** oneNumberHipCm − tapeHipCm, cm. */
+  errorCm: number;
+}
+
+const round1 = (v: number): number => Math.round(v * 10) / 10;
+
+/**
+ * What ONE `ease.hip` (the mean of garment hip minus chart hip over the measured sizes) would make
+ * of every chart size, against the tape. Unmeasured sizes: on the straight line between the nearest
+ * measured sizes on either side (interpolated), or continuing the line through the two nearest
+ * measured sizes (extrapolated); position on the line = the chart's body hip. Same rule as
+ * apps/web/src/render/ringInputs.ts `fillSizes`. `null` when a measured size has no chart hip.
+ */
+export function hipEaseIfOneNumber(tape: TapeFile, chart: readonly SizeRow[]): { meanEaseCm: number; perSizeEaseCm: number[]; rows: HipEaseRow[] } | null {
+  const known = tape.measuredSizes.map((size) => ({ size, x: chart.find((c) => c.size === size)?.hip, v: tape.sizes[size]!.hipCm }));
+  if (known.length === 0 || !known.every((k): k is { size: string; x: number; v: number } => k.x !== undefined)) return null;
+  known.sort((a, b) => a.x - b.x);
+  const perSizeEaseCm = tape.measuredSizes.map((size) => round1(tape.sizes[size]!.hipCm - chart.find((c) => c.size === size)!.hip!));
+  const meanEaseCm = mean1(perSizeEaseCm);
+  const rows: HipEaseRow[] = [];
+  for (const row of chart) {
+    if (row.hip === undefined) continue;
+    const x = row.hip;
+    const own = known.find((k) => k.size === row.size);
+    let tapeHipCm: number;
+    let source: HipEaseRow['source'];
+    if (own) {
+      tapeHipCm = own.v;
+      source = 'measured';
+    } else if (known.length === 1) {
+      tapeHipCm = round1(known[0]!.v + (x - known[0]!.x));
+      source = 'extrapolated';
+    } else {
+      const below = known.filter((k) => k.x < x);
+      const above = known.filter((k) => k.x > x);
+      const between = below.length > 0 && above.length > 0;
+      const [a, b] = between ? [below[below.length - 1]!, above[0]!] : below.length > 0 ? [below[below.length - 2]!, below[below.length - 1]!] : [above[0]!, above[1]!];
+      tapeHipCm = round1(a.v + ((b.v - a.v) * (x - a.x)) / (b.x - a.x));
+      source = between ? 'interpolated' : 'extrapolated';
+    }
+    const oneNumberHipCm = round1(x + meanEaseCm);
+    rows.push({ size: row.size, source, tapeHipCm, oneNumberHipCm, errorCm: round1(oneNumberHipCm - tapeHipCm) });
+  }
+  return { meanEaseCm, perSizeEaseCm, rows };
+}
+
 export interface TapeEntryNote {
   /** Path of the tape file, relative to the shop's data directory. */
   file: string;
@@ -93,17 +153,12 @@ export function applyTape<T extends TapeApplicable>(entry: T, tape: TapeFile, fi
   inPayload['lengthCm.waist_to_hem'] = `${length} cm: mean of the tape lengths ${lengths.join(', ')} cm (${sizesText})`;
   evidence.lengthCm = `shop tape (${file}): band to hem ${lengths.join(' / ')} cm at ${sizesText}; one number for all sizes, the mean ${length} cm`;
 
-  const chart = payload.sizeChart ?? [];
-  const hipEases = rows.map((r) => {
-    const body = chart.find((c) => c.size === r.size)?.hip;
-    return body === undefined ? undefined : Math.round((r.hipCm - body) * 10) / 10;
-  });
-  if (payload.sizeChartType === 'body' && hipEases.every((e): e is number => e !== undefined)) {
-    const hip = mean1(hipEases);
-    payload.ease = { ...(payload.ease ?? {}), hip } as Ease;
-    inPayload['ease.hip'] = `${hip} cm: mean of garment hip minus chart body hip, ${hipEases.join(', ')} cm (${sizesText}); the steps are uneven and are not corrected`;
-    evidence.ease = `shop tape (${file}): garment hip ${rows.map((r) => r.hipCm).join(' / ')} cm minus the chart's body hip at ${sizesText} = ${hipEases.join(' / ')} cm; one number for all sizes, the mean ${hip} cm. No waist ease: the band is elastic (relaxed ${rows.map((r) => r.waistRelaxedCm).join(' / ')}, stretched ${rows.map((r) => r.waistStretchedCm).join(' / ')} cm) and ease.waist is one number, not a range`;
-  }
+  // ease.hip is NOT written (see the file header): say what one number would have done, per size.
+  const one = payload.sizeChartType === 'body' ? hipEaseIfOneNumber(tape, payload.sizeChart ?? []) : null;
+  const signed = (v: number): string => `${v > 0 ? '+' : ''}${v}`;
+  const hipNote = one
+    ? `garment hip per size. ease.hip (one garment-minus-body number for all sizes) is left out: garment hip minus chart hip is ${one.perSizeEaseCm.join(' / ')} cm at ${sizesText}, uneven and not corrected; their mean ${one.meanEaseCm} cm would put the garment hip at ${one.rows.map((r) => `${r.oneNumberHipCm} (AU ${r.size}: ${signed(r.errorCm)} cm against the tape's ${r.tapeHipCm}${r.source === 'measured' ? '' : `, ${r.source}`})`).join(', ')}; sizeChart is the body chart and sizeChartType allows only one chart`
+    : 'garment hip per size (ease.hip is one number for all sizes; sizeChart is the body chart and sizeChartType allows only one chart)';
 
   return {
     ...entry,
@@ -118,7 +173,7 @@ export function applyTape<T extends TapeApplicable>(entry: T, tape: TapeFile, fi
       notInPayload: [
         'waistband relaxed and stretched girth per size (GarmentPayload v1 has no field for an elastic range)',
         'hem sweep per size (lengthCm holds lengths, not girths; no hem girth field)',
-        'garment hip per size (ease.hip is one number for all sizes; sizeChart is the body chart and sizeChartType allows only one chart)',
+        hipNote,
         'length per size (lengthCm holds one number per key)',
         'which sizes were measured and which are interpolated or extrapolated',
       ],

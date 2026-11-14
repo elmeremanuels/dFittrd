@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { GarmentPayloadDraftSchema, type GarmentPayloadDraft } from '@curtain/schema';
 import { computeFit, type FitGarment } from '@curtain/fit-engine';
-import { applyTape, parseTape, type TapeApplicable } from './shopTape';
+import { applyTape, hipEaseIfOneNumber, parseTape, type TapeApplicable } from './shopTape';
 
 const dataDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'data', 'bohohippychic');
 const HANDLE = 'crimson-wildflower-maxi-skirt';
@@ -18,11 +18,20 @@ const raw = JSON.parse(readFileSync(join(dataDir, FILE), 'utf8')) as unknown;
 const products = (JSON.parse(readFileSync(join(dataDir, 'products.json'), 'utf8')) as { products: (TapeApplicable & { handle: string })[] }).products;
 const entry = products.find((p) => p.handle === HANDLE)!;
 
-/** The payload as it was before the tape: no length, no ease. */
+/** The payload as it was before the tape: no length (and no ease: the tape never sets one). */
 function withoutTape(payload: GarmentPayloadDraft): GarmentPayloadDraft {
   const bare = { ...payload };
   delete bare.lengthCm;
   delete bare.ease;
+  return bare;
+}
+
+/** The whole entry as the shop text alone gives it: payload, evidence and the tape note stripped. */
+function entryWithoutTape(e: TapeApplicable & { handle: string }): TapeApplicable & { handle: string } {
+  const evidence = { ...e.evidence };
+  delete evidence.lengthCm;
+  const bare = { ...e, payload: withoutTape(e.payload), evidence };
+  delete bare.tape;
   return bare;
 }
 
@@ -42,27 +51,45 @@ describe('shop tape measurements', () => {
     expect(() => parseTape({ format: 'other' })).toThrow();
   });
 
-  it('puts into the payload what v1 can carry: one length and one hip ease, both means of the measured sizes', () => {
+  it('puts into the payload what v1 can carry faithfully: one length, the mean of the measured sizes; no hip ease', () => {
     const bare = withoutTape(entry.payload);
     const applied = applyTape({ ...entry, payload: bare }, parseTape(raw), FILE);
     expect(applied.payload.lengthCm).toEqual({ waist_to_hem: 103.3 });
-    // garment hip 112 / 122 / 126 minus chart hip 94 / 99 / 109 = 18 / 23 / 17: uneven, not corrected
-    expect(applied.payload.ease).toEqual({ hip: 19.3 });
-    expect(applied.tape?.inPayload['ease.hip']).toMatch(/18, 23, 17/);
+    expect(applied.payload.ease).toBeUndefined();
+    expect(Object.keys(applied.tape!.inPayload)).toEqual(['lengthCm.waist_to_hem']);
     expect(applied.tape?.notInPayload.length).toBe(5);
+    // garment hip 112 / 122 / 126 minus chart hip 94 / 99 / 109 = 18 / 23 / 17: uneven, not corrected, and why no ease.hip
+    expect(applied.tape?.notInPayload.join(' ')).toMatch(/ease\.hip .* is left out: garment hip minus chart hip is 18 \/ 23 \/ 17 cm at AU 8, 10, 14/);
     expect(GarmentPayloadDraftSchema.safeParse(applied.payload).success).toBe(true);
     // idempotent
     expect(applyTape(applied, parseTape(raw), FILE)).toEqual(applied);
   });
 
-  it('the committed products.json entry is the tape applied', () => {
-    expect(applyTape(entry, parseTape(raw), FILE)).toEqual(entry);
-    expect(entry.tape?.file).toBe(FILE);
-    expect(entry.completeness.missing.map((m) => m.field)).not.toContain('lengthCm');
-    expect(entry.completeness.missing.map((m) => m.field)).not.toContain('ease');
+  it('one ease.hip number would misstate the garment hip by up to 5.3 cm (why it is left out)', () => {
+    const one = hipEaseIfOneNumber(parseTape(raw), entry.payload.sizeChart!)!;
+    expect(one.perSizeEaseCm).toEqual([18, 23, 17]);
+    expect(one.meanEaseCm).toBe(19.3);
+    expect(one.rows).toEqual([
+      { size: '8', source: 'measured', tapeHipCm: 112, oneNumberHipCm: 113.3, errorCm: 1.3 },
+      { size: '10', source: 'measured', tapeHipCm: 122, oneNumberHipCm: 118.3, errorCm: -3.7 },
+      { size: '12', source: 'interpolated', tapeHipCm: 124, oneNumberHipCm: 123.3, errorCm: -0.7 },
+      { size: '14', source: 'measured', tapeHipCm: 126, oneNumberHipCm: 128.3, errorCm: 2.3 },
+      { size: '16', source: 'extrapolated', tapeHipCm: 128, oneNumberHipCm: 133.3, errorCm: 5.3 },
+    ]);
   });
 
-  it('the fit engine gives the three test bodies the same size and waist band with and without the tape fields', () => {
+  it('the committed products.json entry is the shop-text entry with the tape applied', () => {
+    const bare = entryWithoutTape(entry);
+    expect(bare.payload.lengthCm).toBeUndefined();
+    expect(bare.tape).toBeUndefined();
+    expect(applyTape(bare, parseTape(raw), FILE)).toEqual(entry);
+    expect(entry.tape?.file).toBe(FILE);
+    expect(entry.payload.ease).toBeUndefined();
+    expect(entry.completeness.missing.map((m) => m.field)).not.toContain('lengthCm');
+    expect(entry.completeness.missing.map((m) => m.field)).toContain('ease');
+  });
+
+  it('the fit engine gives the three test bodies the same size and waist band with and without the tape length', () => {
     const bare = withoutTape(entry.payload);
     const bodies = { slim: { bust: 82, waist: 64, hip: 90 }, average: { bust: 93, waist: 76, hip: 102 }, curvy: { bust: 106, waist: 86, hip: 116 } };
     const picks: string[] = [];

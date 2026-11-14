@@ -79,7 +79,7 @@
     "ease": "Only where the shop prints garment measurements: printed value at the base size minus the AU body chart at the base size.",
     "fabric": "The fabric sentence of the description (labels, percentages, \"crafted from\", never styling advice) through resolveFabricText/fabricFromText; the fabric library fills weight, stretch, drape, opacity and sheen. `blend` only when the text states the composition (\"100% rayon\", \"65% acrylic 35% wool\"); a bare fibre name (\"rayon\") gives no blend and a warning.",
     "images": "images.json: every image looked at and classified by hand; sha256 of the file as downloaded.",
-    "tape": "Where the shop tape-measured the garment (tape/<handle>.json): lengthCm.waist_to_hem and ease.hip are the means over the MEASURED sizes; the elastic band, hem sweep and per-size values stay in the tape file (src/shopTape.ts says what GarmentPayload v1 cannot carry)."
+    "tape": "Where the shop tape-measured the garment (tape/<handle>.json): lengthCm.waist_to_hem is the mean over the MEASURED sizes; the elastic band, hem sweep, garment hip and per-size values stay in the tape file (no ease.hip: one number misstates the uneven measured hips) (src/shopTape.ts says what GarmentPayload v1 cannot carry)."
   },
   "products": [
     {
@@ -971,20 +971,23 @@
         "sizingNotes": "Available in Australian sizes 8 to 16 True to size with comfortable stretch at the waist.",
         "lengthCm": {
           "waist_to_hem": 103.3
-        },
-        "ease": {
-          "hip": 19.3
         }
       },
       "priceAud": 69,
       "completeness": {
-        "score": 0.676,
+        "score": 0.618,
         "missing": [
           {
             "field": "flatLayPhoto",
             "reason": "flatLayPhoto (garment laid flat on white, https URL) is the input of the on-device render; without it the item cannot be shown on the user.",
             "weight": 3,
             "severity": "heavy"
+          },
+          {
+            "field": "ease",
+            "reason": "ease (garment minus body per fit point, cm) makes the size recommendation precise; category defaults are used when absent.",
+            "weight": 2,
+            "severity": "medium"
           },
           {
             "field": "criticalFitPoints",
@@ -1063,8 +1066,7 @@
         "sizeChart": "Size option [\"8\",\"10\",\"12\",\"14\",\"16\"] → AU_WOMENS_BODY_CHART rows",
         "baseSize": "AU 12, the default base size for size-ranged items (not stated by the shop)",
         "stretchZones": "\"elasticated waistband\" in the text",
-        "lengthCm": "shop tape (tape/crimson-wildflower-maxi-skirt.json): band to hem 103 / 103 / 104 cm at AU 8, 10, 14; one number for all sizes, the mean 103.3 cm",
-        "ease": "shop tape (tape/crimson-wildflower-maxi-skirt.json): garment hip 112 / 122 / 126 cm minus the chart's body hip at AU 8, 10, 14 = 18 / 23 / 17 cm; one number for all sizes, the mean 19.3 cm. No waist ease: the band is elastic (relaxed 67 / 71 / 80, stretched 94 / 100 / 110 cm) and ease.waist is one number, not a range"
+        "lengthCm": "shop tape (tape/crimson-wildflower-maxi-skirt.json): band to hem 103 / 103 / 104 cm at AU 8, 10, 14; one number for all sizes, the mean 103.3 cm"
       },
       "warnings": [
         "fabric composition not stated (only \"viscose\" named): blend left out; weight/stretch/drape use the single-fibre library default",
@@ -1185,13 +1187,12 @@
           "16"
         ],
         "inPayload": {
-          "lengthCm.waist_to_hem": "103.3 cm: mean of the tape lengths 103, 103, 104 cm (AU 8, 10, 14)",
-          "ease.hip": "19.3 cm: mean of garment hip minus chart body hip, 18, 23, 17 cm (AU 8, 10, 14); the steps are uneven and are not corrected"
+          "lengthCm.waist_to_hem": "103.3 cm: mean of the tape lengths 103, 103, 104 cm (AU 8, 10, 14)"
         },
         "notInPayload": [
           "waistband relaxed and stretched girth per size (GarmentPayload v1 has no field for an elastic range)",
           "hem sweep per size (lengthCm holds lengths, not girths; no hem girth field)",
-          "garment hip per size (ease.hip is one number for all sizes; sizeChart is the body chart and sizeChartType allows only one chart)",
+          "garment hip per size. ease.hip (one garment-minus-body number for all sizes) is left out: garment hip minus chart hip is 18 / 23 / 17 cm at AU 8, 10, 14, uneven and not corrected; their mean 19.3 cm would put the garment hip at 113.3 (AU 8: +1.3 cm against the tape's 112), 118.3 (AU 10: -3.7 cm against the tape's 122), 123.3 (AU 12: -0.7 cm against the tape's 124, interpolated), 128.3 (AU 14: +2.3 cm against the tape's 126), 133.3 (AU 16: +5.3 cm against the tape's 128, extrapolated); sizeChart is the body chart and sizeChartType allows only one chart",
           "length per size (lengthCm holds one number per key)",
           "which sizes were measured and which are interpolated or extrapolated"
         ]

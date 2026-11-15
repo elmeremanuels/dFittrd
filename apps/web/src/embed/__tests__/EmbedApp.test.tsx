@@ -10,6 +10,7 @@ import { ApiError } from '@/api/client';
 import { mockTokensEnabled, type EmbedApi, type EmbedDeps } from '../deps';
 import { EmbedApp } from '../EmbedApp';
 import { createEmbedStore, EmbedDb, type EmbedStore } from '../storage';
+import { embedStrings } from '../strings';
 
 vi.stubGlobal('matchMedia', (q: string) => ({ matches: /prefers-reduced-motion/.test(q), media: q, onchange: null, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false }));
 
@@ -91,6 +92,23 @@ describe('EmbedApp', () => {
     expect(screen.getByTestId('estimate-disclaimer')).toBeInTheDocument();
     expect(screen.getByTestId('garment-layer')).toBeInTheDocument();
     expect(screen.getByTestId('fit-points')).toBeInTheDocument();
+  });
+
+  it('the figure of the result keeps its estimate label clear of the "Choose size" bar (rule 3)', async () => {
+    const user = userEvent.setup();
+    setup();
+    await screen.findByRole('heading', { name: 'About you' });
+    await fillAbout(user);
+    const result = await screen.findByTestId('embed-result');
+    // The bar's height reaches the figure as a CSS value, and the label is the catalogue's.
+    expect(result.style.getPropertyValue('--estimate-clear')).toMatch(/^\d+px$/);
+    expect(within(result).getByTestId('choose-bar')).toContainElement(screen.getByTestId('choose-size'));
+    const frame = result.querySelector('.mirror-frame')!;
+    // Not a scroll box of its own, or `sticky` would hold the label inside it.
+    expect(frame.className).toMatch(/\boverflow-clip\b/);
+    const label = within(frame as HTMLElement).getByTestId('estimate-label');
+    expect(label).toHaveTextContent(embedStrings().result.estimateLines.join(' '));
+    expect(label.className).toMatch(/\bsticky\b/);
   });
 
   it('shows validation errors and stays on About you', async () => {

@@ -138,6 +138,8 @@ export interface EmbedCatalogue {
     details: string;
     tabs: { fit: string; chart: string };
     bodyLabel: string;
+    /** The estimate label on the figure, on two short lines (a narrow badge beside the head). Read together: "Estimate · not measured". */
+    estimateLines: readonly [string, string];
     hideRings: string;
     showRings: string;
     ringsSolid: (size: string) => string;
@@ -355,6 +357,7 @@ export const EN: EmbedCatalogue = {
     details: 'Result details',
     tabs: { fit: 'How it fits', chart: 'Size chart' },
     bodyLabel: 'Body from your answers',
+    estimateLines: ['Estimate ·', 'not measured'],
     hideRings: 'Hide size rings',
     showRings: 'Show size rings',
     ringsSolid: (size) => `Solid rings: size ${size}.`,

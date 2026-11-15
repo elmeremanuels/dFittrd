@@ -55,7 +55,9 @@ and `sync.test.php`.
   estimate badge and disclaimer (`apps/web/src/components`), the notes and chips of the size rings
   (`apps/web/src/render/rings.ts`), the labels on the avatar figure, and the camera scan
   (`apps/web/src/features/capture`). They are English only, but a pack cannot reach them until
-  they read a catalogue.
+  they read a catalogue. Two labels on the result's figure already do: the body chip
+  (`result.bodyLabel`) and the estimate badge (`result.estimateLines`, two short lines). The
+  badge's tooltip (the full disclaimer) and the badge in the 3D view and the size peek do not.
 - The whole consumer app and merchant console in `apps/web` outside `embed/`: English, inline in
   the components.
 - `apps/site`, `apps/api` error messages, the Shopify admin page: English, inline.

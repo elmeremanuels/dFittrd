@@ -3,7 +3,12 @@
 python3 render_pom2.py <outPng> <view> <title> <item> [<item> ...] [--close] [--floor -0.4]
 <item> = root:set:body:size:label   (root = a serverdrape output directory; label may contain spaces, '|' = newline)
 label "auto" (optionally "auto|extra line") is built from the drape's JSON: size and provenance, the body, how the
-band holds by the wear rule, and the pull-on margin against the body's widest girth below the band.
+band holds by the wear rule (with a warning when that verdict changes class if the ASSUMED band level moves by at most
+wear_rule.PLACEMENT_UNCERTAINTY_CM), and the pull-on margins: stretched band minus the body's chart hip / minus the
+widest hull below the band. The pull-on line carries NO pass / fail word unless the hip margin is clearly outside what
+every size shows on its own chart body (0 to +2 on the hip, -0.4 to -2 on the hull): the check as defined (the shop's
+comfortable stretch against a rigid hull) says "at the limit" for a size on the body it is cut for, so a "FAILS" there
+was the check's miscalibration, not a property of the product (review finding, 15 Nov 2026).
 --close: a close-up of the band and the first 30 cm (the gathers).
 Every title must say ESTIMATE; every label must carry measured / INTERPOLATED / EXTRAPOLATED (the caller's job, checked).
 """
@@ -15,6 +20,8 @@ import tempfile
 
 BLENDER = os.environ.get("BLENDER", "/opt/tools/blender-4.2.23-linux-x64/blender")
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+PULL_ON_OWN_BODY_BAND_CM = 2.5  # hip margins within +-2.5 cm are what a size shows on its own chart body: no verdict
 
 
 PROV = {"measured": "measured", "interpolated": "INTERPOLATED", "extrapolated": "EXTRAPOLATED"}
@@ -24,11 +31,32 @@ def auto_label(root: str, dset: str, body: str, size: str) -> str:
     j = json.load(open(os.path.join(root, "drapes", dset, f"{body}__{size}.json")))
     prov = PROV[j["band"]["source"].split(" ")[0]]
     f, p = j["wear"]["fit"], j["wear"]["pullOn"]
+    return "|".join([f"AU {size} {prov}", f"on body {j['bodyLabel']}", band_line(root, body, j), pull_line(root, body, p)])
+
+
+def band_line(root: str, body: str, j: dict) -> str:
+    """How the band holds at the ASSUMED level, and whether that verdict survives moving the level."""
+    import numpy as np
+    import wear_rule
+    f = j["wear"]["fit"]
     how = {"stretched": f"band stretched +{f.get('stretchedByCm')} cm", "relaxed": "band holds relaxed", "loose": f"band LOOSE by {f.get('looseByCm')} cm",
-           "cannot be worn": f"CANNOT BE WORN: body {f.get('overLimitCm')} cm|over the stretched band. Not draped"}[f["status"]]
-    m = p["marginCm"]
-    pull = f"pull-on: passes by {m} cm" if m >= 2 else (f"pull-on: FAILS by {-m} cm" if m <= -2 else f"pull-on: marginal ({m:+.1f} cm)")
-    return f"AU {size} {prov}|on body {j['bodyLabel']}|{how}|{pull}"
+           "cannot be worn": f"band {f.get('overLimitCm')} cm short: not draped"}[f["status"]]
+    v, fc = wear_rule.read_obj(os.path.join(root, "bodies", body + ".obj"))
+    arm = np.fromfile(os.path.join(root, "bodies", "armmask.bin"), dtype=np.uint8).astype(bool)
+    s = wear_rule.placement_sensitivity(wear_rule.BodySections(v, fc, arm), j["wear"]["navelY"], f["relaxedCm"], f["stretchedCm"])
+    if s["insideUncertainty"]:
+        d = s["flipsAtShiftCm"]
+        how += f"|NOT A VERDICT (level ASSUMED):|'{s['flipsTo']}' if band {abs(d)} cm {'higher' if d > 0 else 'lower'}"
+    return how
+
+
+def pull_line(root: str, body: str, p: dict) -> str:
+    """Stretched band minus chart hip / minus widest hull. A word only when clearly outside the own-chart-body range."""
+    hip = next(b for b in json.load(open(os.path.join(root, "bodies", "bodies.json")))["bodies"] if b["id"] == body)["achieved"]["hipCm"]
+    m_hip, m_hull = p["stretchedCm"] - hip, p["marginCm"]
+    word = ("clear" if m_hip > PULL_ON_OWN_BODY_BAND_CM else
+            "short at the shop's stretch" if m_hip < -PULL_ON_OWN_BODY_BAND_CM else "as on its own chart body")
+    return f"pull-on hip/hull: {m_hip:+.1f} / {m_hull:+.1f} cm|({word})"
 
 
 def main() -> None:
@@ -55,12 +83,12 @@ def main() -> None:
         spec_items.append({"body": os.path.join(root, "bodies", body + ".obj"), "garment": garment,
                            "indices": os.path.join(root, "rest", "indices.bin"), "label": label.replace("|", "\n")})
     n = len(spec_items)
-    # Frame: 0.55 m below the soles (the plinth and the hem) to 2.55 m (four label lines above the heads), arms included.
-    width, height = 400 * max(n, 4) + 300, 1250  # at least four columns wide, so the title clears the labels
-    half_h = 1.55
+    # Frame: 0.6 m below the soles (the plinth and the hem) to 2.7 m (up to eight label lines above the heads), arms included.
+    width, height = 400 * max(n, 4) + 300, 1330  # at least four columns wide, so the title clears the labels
+    half_h = 1.65
     half_w = max(half_h * width / height, ((n - 1) * 0.75 + 1.7) / 2)
     spec = {"items": spec_items, "view": view, "title": title.replace("|", "\n"), "colour": "#A44B48", "floorM": floor, "labelSize": 0.042,
-            "width": width, "height": height, "samples": 24, "camDistanceM": half_w / 0.36 - 0.3, "labelZM": 2.22}
+            "width": width, "height": height, "samples": 24, "camDistanceM": half_w / 0.36 - 0.3, "labelZM": 2.29}
     if close:
         spec.update({"camZM": 0.86, "lensMm": 50, "gapM": 0.55, "camDistanceM": max(1.3, ((n - 1) * 0.55 + 0.55) * 1.25),
                      "height": 640, "width": max(520 * n, 1040), "labelSize": 0.016, "rake": True})

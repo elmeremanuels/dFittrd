@@ -38,6 +38,10 @@ Method (docs/research/step3-serverdrape-spike.md):
   with the top edge at the wear level, and the pinned particles are moved (an animated shape key, frames 1-24) onto the
   band rings, the seam ring laid in radial folds that take up the extra length (wear_rule.pleated_ring). What the
   cloth does below the seam is the simulation's output. `--massscale` multiplies the particle mass (fabric weight).
+  The four band rings above the seam are NOT a model of the band: they are the panel's mesh rings (rest length = the
+  fabric's 112-128 cm) pinned as smooth rings on the body (17-31 % shorter, no folds), the same for every size on one
+  body. Nothing simulated depends on them (pinned particles do not move); they are only what the render draws as the
+  band. `fabricStrain` below excludes them.
 - Output: settled positions (Float32 xyz, cm, mannequin frame) and a JSON with CPU seconds, settle trace and checks.
 """
 import json
@@ -89,7 +93,7 @@ CM = 0.01
 def args() -> dict:
     a = sys.argv[sys.argv.index("--") + 1:]
     out = {"frames": "96", "band": "W-6", "json": None, "quality": "10", "mass": "physical", "bending": None, "cloth": "default",
-           "pushout": "0.8", "restmode": "pushed", "model": None, "tensionfloor": "0.9", "floor": "0", "wear": "none", "massscale": "1"}
+           "pushout": "0.8", "restmode": "pushed", "model": None, "tensionfloor": "0.9", "floor": "0", "wear": "none", "massscale": "1", "clearance": None}
     for i in range(0, len(a), 2):
         out[a[i].lstrip("-")] = a[i + 1]
     return out
@@ -224,6 +228,11 @@ def main() -> None:
         overrides["rampStart"], overrides["rampEnd"] = preset["ramp"]
     if float(a["massscale"]) != 1.0:
         overrides["massScale"] = float(a["massscale"])
+    # --clearance (wear mode): the pinned rings' distance from the body in cm instead of wear_rule.CLEARANCE_CM. Only
+    # for the sensitivity run of section 9.5: how far the imposed seam ring carries into the "simulated" hip hull.
+    clearance = wear_rule.CLEARANCE_CM
+    if a["clearance"] is not None:
+        clearance = overrides["clearanceCm"] = float(a["clearance"])
     k = girth["relaxedCm"] / srow["bandGradedGirthCm"]
 
     # Start shape: pushed radially out of the body (torso and legs; arms ignored).
@@ -276,7 +285,7 @@ def main() -> None:
             sl = slice(rs[kk], rs[kk] + rn[kk])
             y = float(rest[sl, 1].mean())
             hull = sections.hull(y)
-            delta = wear_rule.CLEARANCE_CM + max(0.0, (relaxed - wear_rule.perimeter(hull)) / (2 * np.pi))
+            delta = clearance + max(0.0, (relaxed - wear_rule.perimeter(hull)) / (2 * np.pi))
             frac = pom_rest.ring_fractions(kk, rn[kk])
             if kk == band_rings[-1]:
                 fabric = wear_rule.ring_length(to_blender(rest[sl])[:, :2]) / CM
@@ -290,7 +299,7 @@ def main() -> None:
                 xz = wear_rule.smooth_ring(hull, delta, frac)
             target[sl, 0], target[sl, 2] = xz[:, 0], xz[:, 1]
         wear["seam"] = seam
-        wear["clearanceCm"] = wear_rule.CLEARANCE_CM
+        wear["clearanceCm"] = clearance
         garment.shape_key_add(name="Basis")
         worn = garment.shape_key_add(name="worn")
         tb = to_blender(target)

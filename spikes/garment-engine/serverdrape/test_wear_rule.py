@@ -54,6 +54,36 @@ class WearRule(unittest.TestCase):
         self.assertEqual(self.w.pull_on(100.0, 94.0)["marginCm"], -6.0)
         self.assertTrue(self.w.pull_on(100.0, 100.0)["passes"])
 
+    def test_placement_sensitivity_flags_a_verdict_that_moves_with_the_assumed_level(self):
+        # A body that narrows upwards by 2 cm of girth per cm of height (as Anny's does below the navel).
+        v, f, arm = cylinder(lambda y: (90.0 - 2.0 * (y - 99.0)) / (2 * np.pi), y0=80.0, y1=120.0, rows=41)
+        sec = self.w.BodySections(v, f, arm)
+        navel = 99.0 + self.w.BELOW_NAVEL_CM + self.w.BAND_CM / 2  # the band's mid height is y = 99: girth 90
+        over = self.w.placement_sensitivity(sec, navel, 67.0, 89.0)   # 1 cm over the stretched limit
+        self.assertEqual(self.w.band_fit(sec.girth(99.0), 67.0, 89.0)["status"], "cannot be worn")
+        self.assertAlmostEqual(over["girthPerCmUp"], -2.0, delta=0.05)
+        self.assertAlmostEqual(over["flipsAtShiftCm"], 0.5, delta=0.11)   # half a cm higher and it is wearable
+        self.assertEqual((over["flipsTo"], over["insideUncertainty"]), ("holds", True))
+        loose = self.w.placement_sensitivity(sec, navel, 93.0, 120.0)  # 3 cm loose: holds 1.5 cm lower
+        self.assertAlmostEqual(loose["flipsAtShiftCm"], -1.3, delta=0.11)  # 'loose' starts 0.5 cm under the relaxed girth
+        self.assertTrue(loose["insideUncertainty"])
+        firm = self.w.placement_sensitivity(sec, navel, 70.0, 110.0)   # 20 cm from either limit
+        self.assertEqual((firm["flipsAtShiftCm"], firm["insideUncertainty"]), (None, False))
+        self.assertEqual([a["shiftCm"] for a in firm["atShift"]], [-2.0, -1.0, 0.0, 1.0, 2.0])
+
+    def test_render_label_gives_no_pull_on_verdict_for_a_size_on_its_own_chart_body(self):
+        import render_pom2
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "bodies"))
+            json.dump({"bodies": [{"id": "b", "achieved": {"hipCm": 94.0}}]}, open(os.path.join(d, "bodies", "bodies.json"), "w"))
+            own = render_pom2.pull_line(d, "b", {"stretchedCm": 94.0, "marginCm": -2.0})   # AU 8 on the AU 8 chart body
+            self.assertIn("+0.0 / -2.0", own)
+            self.assertIn("as on its own chart body", own)
+            for word in ("FAIL", "fail", "pass"):
+                self.assertNotIn(word, own)
+            self.assertIn("short", render_pom2.pull_line(d, "b", {"stretchedCm": 88.0, "marginCm": -8.0}))
+            self.assertIn("clear", render_pom2.pull_line(d, "b", {"stretchedCm": 100.0, "marginCm": 4.0}))
+
     def test_body_sections_girth_and_widest(self):
         v, f, arm = cylinder(lambda y: 14.0 + 3.0 * np.exp(-((y - 88.0) / 6.0) ** 2))
         sec = self.w.BodySections(v, f, arm)

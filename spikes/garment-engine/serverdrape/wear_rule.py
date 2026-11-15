@@ -83,11 +83,44 @@ class BodySections:
         return float(gs[i]), float(ys[i])
 
 
-def wear_level(navel_y: float) -> dict:
+def wear_level(navel_y: float, below_navel_cm: float = BELOW_NAVEL_CM) -> dict:
     """Heights (cm) of the band on a body whose navel is at navel_y: the placement rule."""
-    top = navel_y - BELOW_NAVEL_CM
+    top = navel_y - below_navel_cm
     return {"navelY": round(navel_y, 2), "bandTopY": round(top, 2), "bandMidY": round(top - BAND_CM / 2, 2),
-            "seamY": round(top - BAND_CM, 2), "belowNavelCm": BELOW_NAVEL_CM, "bandCm": BAND_CM}
+            "seamY": round(top - BAND_CM, 2), "belowNavelCm": below_navel_cm, "bandCm": BAND_CM}
+
+
+PLACEMENT_SHIFTS_CM = (-2.0, -1.0, 0.0, 1.0, 2.0)  # band moved down (-) or up (+) from the ASSUMED level
+PLACEMENT_UNCERTAINTY_CM = 2.0  # stated, not measured: the offset and band height are ASSUMED and Anny's navel is
+                                # about 2 cm high against the usual 0.60 of stature (review, section 9.2)
+
+
+def placement_sensitivity(sections: "BodySections", navel_y: float, relaxed: float, stretched: float) -> dict:
+    """How the band-fit verdict depends on the ASSUMED placement (review finding, 15 Nov 2026). The body's girth changes
+    by about 2 cm per cm of height below the navel, so a verdict within a few cm of a limit is a statement about the
+    assumed offset, not about the garment. Returns the body's girth and the status with the band's mid height shifted
+    by PLACEMENT_SHIFTS_CM (+ = higher), the local slope (cm of girth per cm the band moves up; negative), and
+    `flipsAtShiftCm`: the smallest shift (to 0.1 cm, within +-4 cm) at which the status's class (loose / holds /
+    cannot be worn) changes, or None. `insideUncertainty` is True when that shift is within PLACEMENT_UNCERTAINTY_CM."""
+    mid = wear_level(navel_y)["bandMidY"]
+
+    def cls(shift: float) -> str:
+        s = band_fit(sections.girth(mid + shift), relaxed, stretched)["status"]
+        return s if s in ("loose", "cannot be worn") else "holds"
+
+    at = [{"shiftCm": d, "bodyGirthCm": round(sections.girth(mid + d), 1), "status": band_fit(sections.girth(mid + d), relaxed, stretched)["status"]}
+          for d in PLACEMENT_SHIFTS_CM]
+    base, flip = cls(0.0), None
+    for k in range(1, 41):
+        hits = [d for d in (k / 10, -k / 10) if cls(d) != base]
+        if hits:
+            flip = hits[0]
+            break
+    slope = (sections.girth(mid + 1.0) - sections.girth(mid - 1.0)) / 2.0
+    return {"atShift": at, "girthPerCmUp": round(slope, 2), "flipsAtShiftCm": flip,
+            "flipsTo": cls(flip) if flip is not None else None,
+            "insideUncertainty": bool(flip is not None and abs(flip) <= PLACEMENT_UNCERTAINTY_CM),
+            "uncertaintyCm": PLACEMENT_UNCERTAINTY_CM}
 
 
 def band_fit(body_girth: float, relaxed: float, stretched: float) -> dict:

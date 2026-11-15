@@ -92,4 +92,19 @@ family guard, the head default, the garment lift, the head point, out-of-range i
 frame for tall bodies (`cameraFrame`) and the projection behind `toScreen` (`projectToCanvas`).
 The mount itself needs WebGL2 and is not run by `pnpm check`: `setLook` on a live view, the state
 attributes and the real canvas are exercised only by `spikes/garment-engine/viewer/avatar-renders.mjs`
-(headless Chromium) and by hand.
+(headless Chromium), by `apps/web/e2e/avatar3d.spec.ts` (the embed's production build with the
+pilot skirt, where that bundle is present; not part of `pnpm check` either) and by hand.
+
+**A lost WebGL context.** A settled view stops drawing. When the browser takes the WebGL context
+away and gives it back (a tab put to sleep on a phone, a GPU reset), three.js rebuilds its state
+but nothing drew again, so the canvas stayed blank under its estimate label. The mount now listens
+for `webglcontextrestored` (`contextRestore.ts`) and draws the current size again. In `pnpm check`:
+`contextRestore.test.ts` tests that listener (it draws on every restore and stops on dispose) and
+reads `mount.ts` to see that the mount still uses it; that is a guard against the wiring being
+dropped, not a test of the picture. The picture is tested only by `avatar3d.spec.ts`, which is
+skipped where the bundle is absent (CI included): it loses and restores the context of the mounted
+view three times (with a picked skin colour, in the standard colour, after a switch to another
+size) and compares each picture with the one before (it was blank before this change: 197,882 of
+488,032 pixels differed, as reported by the first run and not repeated since; now none beyond the
+tolerance). Not handled: a
+context that is never restored; the canvas then stays blank and the state stays `settled`.

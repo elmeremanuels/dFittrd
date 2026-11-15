@@ -60,9 +60,9 @@ async function instrument(page: Page, origin: string): Promise<Seen[]> {
   return seen;
 }
 
-async function openResult(browser: Browser, baseURL: string, locale: string): Promise<{ page: Page; seen: Seen[]; close: () => Promise<void> }> {
+async function openResult(browser: Browser, baseURL: string, locale: string, viewport = VIEWPORT): Promise<{ page: Page; seen: Seen[]; close: () => Promise<void> }> {
   // No service worker: every request must pass the route handler above.
-  const context = await browser.newContext({ viewport: VIEWPORT, locale, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const context = await browser.newContext({ viewport, locale, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
   const page = await context.newPage();
   const seen = await instrument(page, new URL(baseURL).origin);
   await page.goto(`${baseURL}/embed/${TOKEN}`);
@@ -87,9 +87,9 @@ async function shot(page: Page, name: string, locator?: Locator): Promise<void> 
   else await page.screenshot({ path: join(SHOTS, name) });
 }
 
-async function expectNoOverflow(page: Page): Promise<void> {
+async function expectNoOverflow(page: Page, at = VIEWPORT.width): Promise<void> {
   const width = await page.evaluate(() => document.documentElement.scrollWidth);
-  expect(width, 'horizontal overflow at 360 px').toBeLessThanOrEqual(VIEWPORT.width);
+  expect(width, `horizontal overflow at ${at} px`).toBeLessThanOrEqual(at);
 }
 
 test('avatar prompt: picking a skin colour makes no request, at 360 px, and the figure stays an estimate', async ({ browser, baseURL }) => {
@@ -99,12 +99,15 @@ test('avatar prompt: picking a skin colour makes no request, at 360 px, and the 
   await expectNoOverflow(page);
   expect(await figureSkin(page)).toBe('#DFC3A8');
   await expect(page.getByTestId('embed-result').getByTestId('neutral-face')).toHaveCount(1);
-  // The labels sit in a strip under the figure: they cover neither the face nor the feet or a hem.
+  // With the whole figure on screen the labels sit in a strip under it: they cover neither the face nor the feet or a hem.
+  await page.getByTestId('avatar-open').evaluate((el) => el.scrollIntoView({ block: 'start' }));
   const head = (await page.getByTestId('embed-result').getByTestId('neutral-face').boundingBox())!;
-  const labels = (await page.getByTestId('embed-result').getByTestId('avatar-labels').boundingBox())!;
   const drawn = (await page.locator('[data-testid="embed-result"] svg[data-skin]').first().boundingBox())!;
-  expect(labels.y, 'the estimate label covers the face').toBeGreaterThan(head.y + head.height);
-  expect(labels.y, 'the estimate label covers the figure').toBeGreaterThanOrEqual(drawn.y + drawn.height - 1);
+  for (const id of ['estimate-label', 'avatar-body-chip']) {
+    const label = (await figure.getByTestId(id).boundingBox())!;
+    expect(label.y, `${id} covers the face`).toBeGreaterThan(head.y + head.height);
+    expect(label.y, `${id} covers the figure`).toBeGreaterThanOrEqual(drawn.y + drawn.height - 1);
+  }
   await expect(figure.getByText('Estimate · not measured')).toBeVisible();
   // At phone height the chip that says the figure can be tapped is on screen, above the sticky bar.
   await page.getByRole('tab', { name: 'How it fits' }).scrollIntoViewIfNeeded();
@@ -261,6 +264,189 @@ test('avatar prompt: picking a skin colour makes no request, at 360 px, and the 
   }
   await close();
 });
+
+/**
+ * AGENTS.md rule 3 at phone size: the sticky "Choose size" bar lies over the bottom of the window,
+ * and the figure's estimate label has its place under the figure's feet. Wherever the page is
+ * scrolled, as long as a strip of the figure is on screen, the label is on screen too: above the
+ * bar, inside the frame on all four sides, and never over the face. Nothing of the figure's labels
+ * is drawn over the bar. Run at 320, 360 and 600 px wide (the last is the two-column layout).
+ *
+ * What the riding label covers is measured, not hidden: it is as wide as its text, the figure fills
+ * the frame, so on its way up it crosses the left arm and a wide hem. The sweep samples the label's
+ * area against the drawn body and garment and holds the share to a limit; it never touches the feet.
+ */
+const SWEEP_SIZES = [
+  { width: 320, height: 658 },
+  { width: 360, height: 740 },
+  { width: 600, height: 740 },
+];
+/** At most this share of the riding label may lie over the drawn body or garment (measured: see apps/web/README.md). */
+const MAX_COVER = 0.45;
+
+for (const size of SWEEP_SIZES) {
+  test(`the figure's estimate label is on screen wherever the figure is, at ${size.width} x ${size.height}, without scrolling to it`, async ({ browser, baseURL }) => {
+    test.skip(FACE_FLAG, 'this build has the face flag on');
+    const { page, close } = await openResult(browser, baseURL!, 'en-AU', size);
+    const at360 = size.width === VIEWPORT.width;
+    const figure = page.locator('[data-testid="avatar-open"]').locator('..');
+    const label = figure.getByTestId('estimate-label');
+    await expect(label).toHaveText('Estimate · not measured');
+    interface Box {
+      top: number;
+      bottom: number;
+      left: number;
+      right: number;
+    }
+    interface Measured {
+      scrollY: number;
+      max: number;
+      windowHeight: number;
+      frame: Box;
+      track: Box;
+      label: Box;
+      chip: Box;
+      face: Box;
+      bar: Box;
+      /** Shares of the label's area (a 16 x 8 grid of points) over the drawn garment, the bare body, and the feet. */
+      cover: { garment: number; body: number; feet: number };
+    }
+    const measure = (): Promise<Measured> =>
+      page.evaluate(() => {
+        const box = (el: Element | null): { top: number; bottom: number; left: number; right: number } => {
+          const r = el!.getBoundingClientRect();
+          return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+        };
+        const root = document.querySelector('[data-testid="embed-result"]')!;
+        const frame = root.querySelector('.mirror-frame')!;
+        const labelEl = frame.querySelector('[data-testid="estimate-label"]')!;
+        const svg = frame.querySelector<SVGSVGElement>('svg[data-skin]')!;
+        const body = svg.querySelector<SVGPathElement>('[data-testid="figure-body"]')!;
+        const garment = Array.from(svg.querySelectorAll<SVGPathElement>('[data-testid="garment-layer"] > g:first-child path'));
+        const toSvg = svg.getScreenCTM()!.inverse();
+        const bb = body.getBBox();
+        const feetFrom = bb.y + bb.height * 0.93;
+        const r = labelEl.getBoundingClientRect();
+        const hits = { garment: 0, body: 0, feet: 0 };
+        const COLS = 16;
+        const ROWS = 8;
+        for (let i = 0; i < COLS; i++)
+          for (let j = 0; j < ROWS; j++) {
+            const pt = new DOMPoint(r.left + ((i + 0.5) / COLS) * r.width, r.top + ((j + 0.5) / ROWS) * r.height).matrixTransform(toSvg);
+            if (garment.some((g) => g.isPointInFill(pt))) hits.garment += 1;
+            else if (body.isPointInFill(pt)) {
+              hits.body += 1;
+              if (pt.y >= feetFrom) hits.feet += 1;
+            }
+          }
+        return {
+          scrollY: window.scrollY,
+          max: document.documentElement.scrollHeight - window.innerHeight,
+          windowHeight: window.innerHeight,
+          frame: box(frame),
+          track: box(frame.querySelector('[data-testid="avatar-labels"]')),
+          label: box(labelEl),
+          chip: box(frame.querySelector('[data-testid="avatar-body-chip"]')),
+          face: box(root.querySelector('[data-testid="neutral-face"]')),
+          bar: box(root.querySelector('[data-testid="choose-bar"]')),
+          cover: { garment: hits.garment / (COLS * ROWS), body: hits.body / (COLS * ROWS), feet: hits.feet / (COLS * ROWS) },
+        };
+      });
+    /**
+     * The label needs this much of the frame on screen: from the frame's top edge to the top of
+     * the label's track (the frame's border and inset), the label's own height, and its gap to the
+     * bar (0.375rem). With less of the frame on screen the label has no room inside it, so a strip
+     * of the figure narrower than this can be on screen without the label (the known gap).
+     */
+    const GAP = 6;
+    const start = await measure();
+    const NEEDS = Math.ceil(start.track.top - start.frame.top + (start.label.bottom - start.label.top) + GAP);
+    expect(NEEDS, 'the room the label needs grew').toBeLessThanOrEqual(58);
+    const worst = { cover: 0, at: '' };
+    const sweep = async (what: string): Promise<number> => {
+      let checked = 0;
+      const { max } = await measure();
+      for (let y = 0; y <= max + 16; y += 16) {
+        await page.evaluate((top) => window.scrollTo(0, top), Math.min(y, max));
+        const m = await measure();
+        const where = `${what}, scrolled to ${Math.round(m.scrollY)}`;
+        const windowBottom = Math.min(m.bar.top, m.windowHeight);
+        const onScreen = Math.min(m.frame.bottom, windowBottom) - Math.max(m.frame.top, 0);
+        if (onScreen < NEEDS || m.frame.top > windowBottom - NEEDS) continue;
+        checked += 1;
+        expect(m.label.bottom, `${where}: the estimate label is behind the "Choose size" bar or below the window`).toBeLessThanOrEqual(windowBottom);
+        expect(m.label.top, `${where}: the estimate label is above the window`).toBeGreaterThanOrEqual(0);
+        expect(m.label.top, `${where}: the estimate label left the frame (top)`).toBeGreaterThanOrEqual(m.frame.top);
+        expect(m.label.left, `${where}: the estimate label left the frame (left)`).toBeGreaterThanOrEqual(m.frame.left);
+        expect(m.label.right, `${where}: the estimate label left the frame (right)`).toBeLessThanOrEqual(m.frame.right);
+        expect(m.label.bottom, `${where}: the estimate label left the frame (bottom)`).toBeLessThanOrEqual(m.frame.bottom);
+        const overFace = m.label.left < m.face.right && m.label.right > m.face.left && m.label.top < m.face.bottom && m.label.bottom > m.face.top;
+        expect(overFace, `${where}: the estimate label covers the face`).toBe(false);
+        expect(m.cover.feet, `${where}: the estimate label lies over a foot`).toBe(0);
+        const cover = m.cover.garment + m.cover.body;
+        if (cover > worst.cover) Object.assign(worst, { cover, at: `${where} (garment ${m.cover.garment.toFixed(2)}, body ${m.cover.body.toFixed(2)})` });
+        expect(cover, `${where}: the estimate label covers too much of the figure`).toBeLessThanOrEqual(MAX_COVER);
+      }
+      return checked;
+    };
+
+    // As the result opens (nothing scrolled): where the head is on screen, so is the label, beside it.
+    expect(start.scrollY).toBe(0);
+    /** The "Choose size" button as it is drawn, without its round ends (what is behind them shows there). */
+    const buttonShot = async (): Promise<Buffer> => {
+      const b = (await page.getByTestId('choose-size').boundingBox())!;
+      return page.screenshot({ clip: { x: Math.ceil(b.x + b.height / 2), y: Math.ceil(b.y), width: Math.floor(b.width - b.height), height: Math.floor(b.height) } });
+    };
+    const buttonAlone = await buttonShot();
+    expect(start.chip.top >= start.bar.bottom || start.chip.bottom <= start.bar.top, 'the body chip is at the bar as the result opens: no clean picture of the button').toBe(true);
+    if (start.frame.top < start.bar.top - NEEDS) {
+      expect(start.label.bottom, 'as the result opens, the estimate label is behind the "Choose size" bar').toBeLessThanOrEqual(start.bar.top);
+      await expect(label).toBeInViewport({ ratio: 1 });
+    } else expect(at360, 'the figure is not on the first screen at all').toBe(false);
+    if (at360) await shot(page, 'result-360-as-opened-estimate-label.png');
+
+    expect(await sweep('result'), 'the sweep never saw the figure').toBeGreaterThan(20);
+
+    // The whole figure on screen: the label is in its own strip, under the feet.
+    await page.getByTestId('avatar-open').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    const drawn = (await page.locator('[data-testid="embed-result"] svg[data-skin]').first().boundingBox())!;
+    const whole = await measure();
+    if (whole.frame.bottom <= whole.bar.top) expect((await label.boundingBox())!.y).toBeGreaterThanOrEqual(drawn.y + drawn.height - 1);
+    await shot(page, `result-${size.width}-whole-figure-estimate-label.png`);
+
+    // The body chip does not ride: scrolled so that its strip is behind the bar, the bar covers it.
+    const chipAt = whole.scrollY + whole.chip.top;
+    await page.evaluate((top) => window.scrollTo(0, top), Math.max(0, chipAt - (whole.bar.top + (whole.bar.bottom - whole.bar.top) / 2)));
+    const behind = await measure();
+    const button = (await page.getByTestId('choose-size').boundingBox())!;
+    const lapsButton = behind.chip.bottom > button.y && behind.chip.top < button.y + button.height && behind.chip.right > button.x + button.height / 2 && behind.chip.left < button.x + button.width - button.height / 2;
+    if (lapsButton) {
+      // The button is opaque: its picture (without the round ends) is the one taken at the top of the page.
+      expect((await buttonShot()).equals(buttonAlone), 'the body chip is drawn over the "Choose size" button').toBe(true);
+      await shot(page, `result-${size.width}-body-chip-behind-the-bar.png`);
+    } else expect(at360, 'at 360 x 740 the body chip never got behind the button: the check above did not run').toBe(false);
+
+    // A darker figure, half scrolled: the label rides above the bar.
+    await page.getByTestId('avatar-open').click();
+    await page.getByTestId('avatar-skin-switch').click();
+    await page.getByTestId('skin-swatch-7').check({ force: true });
+    await page.getByTestId('avatar-prompt-done').click();
+    await page.evaluate(() => window.scrollTo(0, 150));
+    await shot(page, `result-${size.width}-half-scrolled-estimate-label.png`);
+
+    // The bar grows when it has something to say (here: the size could not be handed to a shop page).
+    const barBefore = (await measure()).bar;
+    await page.getByTestId('choose-size').click();
+    await expect(page.getByTestId('choose-fallback')).toBeVisible();
+    await expect.poll(async () => (await measure()).bar.top).toBeLessThan(barBefore.top);
+    expect(await sweep('with the taller bar'), 'the sweep never saw the figure').toBeGreaterThan(at360 ? 20 : 5);
+    await page.evaluate(() => window.scrollTo(0, 150));
+    await shot(page, `result-${size.width}-taller-bar-estimate-label.png`);
+    await expectNoOverflow(page, size.width);
+    console.log(`estimate label at ${size.width} x ${size.height}: needs ${NEEDS} px of frame; most of it over the figure: ${worst.cover.toFixed(2)} at ${worst.at}`);
+    await close();
+  });
+}
 
 test('D21: a Dutch browser (nl-NL) gets the avatar prompt in English, at 360 px', async ({ browser, baseURL }) => {
   test.skip(FACE_FLAG, 'this build has the face flag on');

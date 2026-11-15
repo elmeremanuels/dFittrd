@@ -11,6 +11,7 @@ import type { GarmentPayload } from '@curtain/schema';
 import { bodyFamilyOf, bodyField, buildAvatar, buildTypedAvatar, bundleFamilyOf, girthInput, isTypedBody, mannequinMeasurements, sanitiseMeasurements, type Avatar, type BodyField, type BodyMeasurements, type BodyOptions } from './body';
 import { loadBundleFrom, type FetchLike } from './bundle';
 import { checkBundle, gradingLabel } from './bundleCheck';
+import { redrawOnContextRestored } from './contextRestore';
 import { isSettled, stepCloth } from './cloth';
 import { DrapePool } from './drapePool';
 import { DEFAULT_DRAPE, drapeJobOf, openSession, prepareFit, viewerMaterial, type DrapeOptions, type FitInstance } from './engine';
@@ -255,6 +256,12 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
   stage.controls.addEventListener('start', onControls);
   const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => wake(100)) : null;
   resizeObserver?.observe(canvas);
+  // A lost WebGL context comes back empty and a settled view is idle: draw the size on screen again.
+  const stopContextRestore = redrawOnContextRestored(canvas, () => {
+    const live = fits.get(current);
+    if (live) live.dirty = true;
+    wake(300);
+  });
 
   function tick(): void {
     raf = 0;
@@ -307,6 +314,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
       cancelAnimationFrame(raf);
       raf = 0;
       resizeObserver?.disconnect();
+      stopContextRestore();
       stage.controls.removeEventListener('change', onControls);
       stage.controls.removeEventListener('start', onControls);
       pool?.terminate();

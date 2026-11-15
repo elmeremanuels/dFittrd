@@ -10,6 +10,7 @@ import { ApiError } from '@/api/client';
 import { mockTokensEnabled, type EmbedApi, type EmbedDeps } from '../deps';
 import { EmbedApp } from '../EmbedApp';
 import { createEmbedStore, EmbedDb, type EmbedStore } from '../storage';
+import { embedStrings } from '../strings';
 
 vi.stubGlobal('matchMedia', (q: string) => ({ matches: /prefers-reduced-motion/.test(q), media: q, onchange: null, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false }));
 
@@ -91,6 +92,58 @@ describe('EmbedApp', () => {
     expect(screen.getByTestId('estimate-disclaimer')).toBeInTheDocument();
     expect(screen.getByTestId('garment-layer')).toBeInTheDocument();
     expect(screen.getByTestId('fit-points')).toBeInTheDocument();
+  });
+
+  it('the figure of the result keeps its estimate label clear of the "Choose size" bar (rule 3)', async () => {
+    // jsdom lays nothing out (every box is 0 high), so the bar gets a height here, and a
+    // ResizeObserver that the test can fire: the bar's measured height must reach the figure.
+    let barHeight = 91.2;
+    const watchers: { cb: () => void; el: Element }[] = [];
+    class FakeResizeObserver {
+      constructor(private readonly cb: () => void) {}
+      observe(el: Element): void {
+        watchers.push({ cb: this.cb, el });
+      }
+      unobserve(): void {}
+      disconnect(): void {}
+    }
+    const had = (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
+    (globalThis as { ResizeObserver?: unknown }).ResizeObserver = FakeResizeObserver;
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const height = this.dataset.testid === 'choose-bar' ? barHeight : 0;
+      return { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: height, width: 0, height, toJSON: () => ({}) };
+    });
+    try {
+      const user = userEvent.setup();
+      setup();
+      await screen.findByRole('heading', { name: 'About you' });
+      await fillAbout(user);
+      const result = await screen.findByTestId('embed-result');
+      const bar = within(result).getByTestId('choose-bar');
+      expect(bar).toContainElement(screen.getByTestId('choose-size'));
+      // The bar's height, rounded up, is on the result, where the figure's label reads it.
+      await waitFor(() => expect(result.style.getPropertyValue('--estimate-clear')).toBe('92px'));
+      const frame = result.querySelector('.mirror-frame')!;
+      expect(result).toContainElement(frame as HTMLElement);
+      const label = within(frame as HTMLElement).getByTestId('estimate-label');
+      expect(label.style.bottom).toContain('var(--estimate-clear');
+      // The bar grows (it has something to say): the new height follows.
+      barHeight = 148;
+      const watcher = watchers.find((w) => w.el === bar);
+      expect(watcher, 'the bar is not watched for a change of height').toBeDefined();
+      act(() => watcher!.cb());
+      expect(result.style.getPropertyValue('--estimate-clear')).toBe('148px');
+      // The bar is stacked above the figure's label track, so the chip that does not ride passes behind it.
+      expect(bar.className).toMatch(/\bz-20\b/);
+      expect(within(frame as HTMLElement).getByTestId('avatar-labels').className).toMatch(/\bz-10\b/);
+      // Not a scroll box of its own, or `sticky` would hold the label inside it.
+      expect(frame.className).toMatch(/\boverflow-clip\b/);
+      expect(label).toHaveTextContent(embedStrings().result.estimateLines.join(' '));
+      expect(label.className).toMatch(/\bsticky\b/);
+    } finally {
+      rect.mockRestore();
+      (globalThis as { ResizeObserver?: unknown }).ResizeObserver = had;
+    }
   });
 
   it('shows validation errors and stays on About you', async () => {

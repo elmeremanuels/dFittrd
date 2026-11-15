@@ -4,7 +4,7 @@
  * the estimate disclaimer, and the "Choose size X" action.
  */
 import { CheckCircle2, Pencil, Sparkles } from 'lucide-react';
-import { useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import type { BodyProfile, GarmentPayload } from '@curtain/schema';
 import { AvatarView } from '@/components/AvatarView';
 import { EstimateDisclaimer } from '@/components/EstimateBadge';
@@ -92,6 +92,19 @@ export function ResultScreen({
     () => (advice.noPoints ? null : ringOverlayFor({ garment, fit, size: selected, measurements: userBody.measurements, heightCm, inputs: ringInputs, units, estimated: priorGirths })),
     [advice.noPoints, garment, fit, selected, userBody.measurements, heightCm, ringInputs, units, priorGirths],
   );
+  // The sticky "Choose size" bar lies over the bottom of the window. Its height goes to the figure
+  // as `--estimate-clear`, so the figure's estimate label stays above the bar (AGENTS.md rule 3).
+  const [bar, setBar] = useState<HTMLDivElement | null>(null);
+  const [barHeight, setBarHeight] = useState(0);
+  useEffect(() => {
+    if (!bar) return;
+    const measure = (): void => setBarHeight(Math.ceil(bar.getBoundingClientRect().height));
+    measure();
+    if (typeof ResizeObserver !== 'function') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, [bar]);
   const tabsId = useId();
   const tabRefs = useRef<Partial<Record<TabKey, HTMLButtonElement | null>>>({});
   // WAI-ARIA tabs: arrow keys, Home and End move between the tabs (automatic activation).
@@ -124,7 +137,7 @@ export function ResultScreen({
           <UnitToggle units={units} onChange={onUnits} />
         </div>
         <SizeChartTable garment={garment} recommended={null} units={units} />
-        <div className="sticky bottom-0 -mx-4 bg-gradient-to-t from-cream via-cream to-cream/0 px-4 pt-4 pb-2">
+        <div className="sticky bottom-0 z-20 -mx-4 bg-gradient-to-t from-cream via-cream to-cream/0 px-4 pt-4 pb-2">
           <button type="button" className="btn-coral w-full" onClick={onEdit} data-testid="edit-measurements">
             <Pencil className="h-4 w-4" aria-hidden /> {shoes ? t.addShoeSize : t.edit}
           </button>
@@ -141,7 +154,7 @@ export function ResultScreen({
   const onPageSize = currentVariantSize && fit.perSize.some((s) => s.size === currentVariantSize) ? currentVariantSize : null;
 
   return (
-    <div className="space-y-4 pb-2" data-testid="embed-result">
+    <div className="space-y-4 pb-2" data-testid="embed-result" style={{ '--estimate-clear': `${barHeight}px` } as CSSProperties}>
       <div>
         <p className="eyebrow text-coral-ink">{returning ? t.welcomeBack : t.eyebrow}</p>
         <h2 className="font-display text-3xl leading-tight" tabIndex={-1} data-step-heading>
@@ -216,8 +229,9 @@ export function ResultScreen({
             {/* The chip that says what tapping the figure does sits above it, so it is on screen
                 with the head at phone height (under the figure it was below the fold). */}
             <div className={`relative ${onAvatar ? 'pt-10' : ''}`}>
-              <div ref={avatarRef} className="mirror-frame aspect-[5/9] w-full border-[8px]">
-                <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} skinHex={skinHex} bodyLabel={t.bodyLabel} labelsAt="bottom" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} />
+              {/* overflow-clip, not hidden: the frame must not be a scroll box, or the estimate label could not ride above the bar. */}
+              <div ref={avatarRef} className="mirror-frame aspect-[5/9] w-full overflow-clip border-[8px]">
+                <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} skinHex={skinHex} bodyLabel={t.bodyLabel} estimateLines={t.estimateLines} labelsAt="bottom" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} />
               </div>
               {onAvatar ? (
                 // D19: the control sits where people look for it. The whole figure is the button;
@@ -287,7 +301,8 @@ export function ResultScreen({
 
       {extra}
 
-      <div className="sticky bottom-0 -mx-4 space-y-2 bg-gradient-to-t from-cream via-cream to-cream/0 px-4 pt-4 pb-2">
+      {/* z-20: above the figure's label track (z-10), whose body chip scrolls behind this bar. */}
+      <div ref={setBar} className="sticky bottom-0 z-20 -mx-4 space-y-2 bg-gradient-to-t from-cream via-cream to-cream/0 px-4 pt-4 pb-2" data-testid="choose-bar">
         {chosen ? (
           <p role="status" className="flex items-center justify-center gap-2 text-sm font-medium text-ok">
             <CheckCircle2 className="h-4 w-4" aria-hidden /> {t.chosen(chosen)}

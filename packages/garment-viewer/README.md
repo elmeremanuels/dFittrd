@@ -52,9 +52,20 @@ Nothing here takes, fetches, stores or sends a photo. A look is a colour value i
 
 **Neutral lighting, measured.** `classic` is ACES tone mapping with a warm ground bounce. `neutral` (`LIGHTING_RIGS`, `TRUE_TONE_GLSL`) is set so that a matt surface facing the camera gets irradiance π, which three.js renders as the surface's own colour (`frontIrradiance`, unit-tested), and its tone curve is the highlight roll-off of the Khronos PBR Neutral curve without that curve's offset in the darks (with the offset, three's `NeutralToneMapping`, the deep tone came out darker and yellower: Δb* +2.4 to +4.4). `spikes/garment-engine/viewer/avatar-renders.mjs` renders the pilot skirt and the azure dress through this package at Monk 2, 6 and 9 in both lightings and compares the median colour of 7 × 7 px patches of bare skin with the requested colour. Run of 14 Nov 2026, headless Chromium with SwiftShader (a software renderer, 390 × 760 CSS px at 2×; not a phone, not a calibrated display):
 
-MEASURED_TABLE
+ΔE2000 per patch, with (ΔL*, Δa*, Δb*), rendered minus requested, on the azure dress (the skirt gives the same forehead, neck and forearm values; it covers the shin):
 
-What the numbers say. In `classic` a light skin is rendered 5 to 9 L* darker and greyer (Δb* about −4) and a deep skin 6 to 10 L* darker; the hue of the medium tone moves about 3 b*. In `neutral` the hue and chroma stay within about 1 a*, b* of the request in every patch, and the patches that face the camera (forearm, shin) are within ΔE2000 1.1. The forehead and the neck are 2.5 to 5.5 L* lighter than asked in `neutral`: they tilt up towards the key light. That is shading, it is the same in `classic`, and it is why the mean is not zero. Not measured: garment colours against the shop photos (the bundle textures are baked from photos lit by the shop), any real phone, any display profile.
+| Tone | Lighting | Forehead | Neck | Forearm | Shin | Mean ΔE2000 | Mean ΔE76 | Max ΔE2000 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| light #f3e7db | classic | 5 (-4.7, -1.6, -4.4) | 5.5 (-6.1, -1.6, -4.3) | 6.8 (-9.2, -0.9, -4.1) | 6.6 (-8.8, -0.9, -4.1) | 6.0 | 8.5 | 6.8 |
+| light #f3e7db | neutral | 1.7 (+2.8, +0, +0) | 1.5 (+2.4, -0.2, +0.4) | 1.1 (-1.8, +0, +0) | 0.6 (-1.1, +0, +0) | 1.2 | 2.0 | 1.7 |
+| medium #a07e56 | classic | 5.1 (+5.4, -0.6, +2.8) | 3 (+2.7, -0.4, +3.1) | 2.7 (-2.6, +0.7, +2.7) | 2.2 (-1.8, +0.5, +3.2) | 3.2 | 4.4 | 5.1 |
+| medium #a07e56 | neutral | 5.1 (+5.6, +0.7, +1) | 3.3 (+3.5, +0.1, +0.3) | 1 (-0.8, -0.2, -1.2) | 0.6 (-0.5, -0.3, -0.7) | 2.5 | 2.9 | 5.1 |
+| deep #3a312a | classic | 3.8 (-5.6, +0.2, +0.3) | 4.8 (-7, +0.4, -0.3) | 6.8 (-10.2, -0.5, -0.5) | 6.7 (-10.1, +0, -0.3) | 5.5 | 8.2 | 6.8 |
+| deep #3a312a | neutral | 3.6 (+5, -0.1, -0.2) | 2.6 (+3.6, -0.1, -0.2) | 0.9 (+0.9, +0.2, -0.7) | 0.9 (+0.9, +0.2, -0.7) | 2.0 | 2.8 | 3.6 |
+| grey #8c8c8c | classic | 5.7 (+6.6, +0.4, +0.1) | 3.4 (+3.8, +0, +0) | 1.5 (-1.5, +0.2, +0.7) | 1.2 (-1.1, +0.2, +0.7) | 3.0 | 3.3 | 5.7 |
+| grey #8c8c8c | neutral | 5.6 (+6.5, +0, +0) | 3.7 (+4.2, +0, +0) | 0.3 (-0.4, +0, +0) | 0 (+0, +0, +0) | 2.4 | 2.8 | 5.6 |
+
+What the numbers say. In `classic` a light skin is rendered 5 to 9 L* darker and greyer (Δb* about −4) and a deep skin 6 to 10 L* darker; the hue of the medium tone moves about 3 b*. In `neutral` the hue and chroma stay within about 1 a*, b* of the request in every patch, and the patches that face the camera (forearm, shin) are within ΔE2000 1.1. The forehead and the neck are 2.4 to 5.6 L* lighter than asked in `neutral`: they tilt up towards the key light. That is shading, it is the same in `classic`, and it is why the mean is not zero. Not measured: garment colours against the shop photos (the bundle textures are baked from photos lit by the shop), any real phone, any display profile.
 
 ## Fork of the spike
 

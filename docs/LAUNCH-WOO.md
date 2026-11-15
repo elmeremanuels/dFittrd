@@ -119,8 +119,9 @@ they are cosmetic and not required by the WordPress.org review.
   file names and the build's zip folder then follow it (a mechanical rename, best done in one commit right
   before submission). The direct-zip install for a pilot is not affected.
 - `load_plugin_textdomain()` is "discouraged" for directory plugins (translate.wordpress.org loads translations).
-  Kept on purpose: the direct zip ships its own `nl_NL` translation, which needs it. Remove it once the plugin
-  is in the directory and its Dutch translation is on translate.wordpress.org.
+  Kept on purpose: it is what loads a translation pack shipped in the direct zip. Since D21 (English first) the
+  zip ships none; the `nl_NL` draft is in `packages/woocommerce-plugin/translation-packs/`. Remove the call once
+  the plugin is in the directory and translations come from translate.wordpress.org.
 
 ## Screenshots (per PHP version, in `test-results/woo-wp-e2e/php<XY>/`)
 
@@ -183,8 +184,8 @@ the rows as template values until the merchant edits them.
   classic form): the button is placed after it, but the SDK's size selection targets the classic
   `form.variations_form select`; with that block it would fall back to its "choose size X" message. Check when
   WooCommerce makes the block the default.
-- Uninstall with "delete data" **off** (keeps settings and meta; unit-level only), the Dutch admin translation on a Dutch
-  site, Disconnect from the settings page, the retry/backoff against a stopped api, clock skew. All are in the plugin
+- Uninstall with "delete data" **off** (keeps settings and meta; unit-level only), English on a Dutch site (D21),
+  Disconnect from the settings page, the retry/backoff against a stopped api, clock skew. All are in the plugin
   README's manual list.
 
 ## Remaining before the WooCommerce launch

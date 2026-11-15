@@ -141,7 +141,7 @@ can hook in.
   "Size option name" setting is rendered as `data-size-option`. Update the locales (en + nl).
 - **WooCommerce**: the same two settings on the Curtain settings page (`mode`, `size_attribute`
   with a dropdown of the product attributes, default `pa_size`). They are rendered on the button
-  and the shortcode. Update the `.pot` file and `nl_NL.po`.
+  and the shortcode. Update the `.pot` file (the `nl_NL.po` is a draft outside the build since D21).
 - The merchant console and the README files describe standalone as the default.
 
 ## 4. Local demo (needed for screenshots and for the founder)

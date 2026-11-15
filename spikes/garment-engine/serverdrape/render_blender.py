@@ -4,7 +4,8 @@ blender -b --factory-startup -P render_blender.py -- --spec SPEC.json --out OUT.
 SPEC: {"items": [{"body": "x.obj", "garment": "y.bin", "indices": "indices.bin", "label": "AU 8"}, ...],
        "view": "front" | "side" | "back", "title": "...", "colour": "#A44B48", "width": 1500, "height": 900}
 garment may be null (body only). Flat colour by default. Optional: an item's "view" overrides the spec's; an item's
-Optional "floorM": the floor's height in m (default 0).
+Optional "floorM": the floor's height in m (default 0). Optional "camZM" (camera height, default 1.0), "lensMm" (50)
+and "camDistanceM" for a close-up.
 "uvs" (Float32 uv per vertex, u around the garment) with the spec's "texture" (an image file outside the repo, e.g. the
 stage-4t bake) textures that garment; an item's "colour" overrides the cloth colour. Shop images stay out of the repo.
 """
@@ -104,14 +105,24 @@ def main():
     # Camera first, so the labels are placed inside its frame (a fixed z cropped the title off a wide, close shot).
     width = (n - 1) * gap + 0.9
     cam_d = spec.get("camDistanceM", max(4.6, width * 1.25))
-    lens = 50
+    lens = spec.get("lensMm", 50)
+    cam_z = spec.get("camZM", 1.0)  # camera height; with a longer lens and a lower camDistanceM: a close-up (e.g. the gathers)
     W, H = sc.render.resolution_x, sc.render.resolution_y
     # Blender's default sensor fit (AUTO): the 36 mm sensor spans the larger image side.
     half_w = (cam_d + 0.3) * 18 / lens * (1 if W >= H else W / H)
     half_h = half_w * H / W
-    frame_top = 1.0 + half_h
+    frame_top = cam_z + half_h
     title_z = frame_top - 0.06 * (cam_d + 0.3) / 4.6 - 0.04
-    label_z = min(1.86, title_z - 0.1 * (cam_d + 0.3) / 4.6)
+    label_z = min(1.86, title_z - 0.1 * (cam_d + 0.3) / 4.6) if cam_z == 1.0 else title_z - 0.06 * (cam_d + 0.3) / 4.6 * 50 / lens - 0.02
+    label_z = spec.get("labelZM", label_z)  # several label lines need to start above the heads
+    # A close-up (camZM set): the text is scaled with the frame and stands in front of the bodies.
+    text_scale = 1.0 if cam_z == 1.0 else half_w / 1.6
+    text_y = 0.3 if cam_z == 1.0 else -0.5
+    near = (cam_d - 0.5) / (cam_d + 0.3)  # the close-up's text plane is nearer the camera: its frame is smaller by this factor
+    if cam_z != 1.0:
+        text_scale *= near
+        title_z = cam_z + half_h * near - 0.17 * text_scale
+        label_z = title_z - 0.07 * text_scale
     for i, it in enumerate(items):
         dx = (i - (n - 1) / 2) * gap
         bv, bf = read_obj(it["body"])
@@ -128,29 +139,31 @@ def main():
             mat = tex_mat if uvs is not None else (material(f"cloth{i}", it["colour"], 0.8) if it.get("colour") else cloth)
             obj(f"skirt{i}", pg @ R.T, gi, mat, dx, uvs)
         # Label as text.
-        bpy.ops.object.text_add(location=(dx - 0.12, 0.3, label_z))
+        bpy.ops.object.text_add(location=((dx - 0.12) * (near if cam_z != 1.0 else 1.0), text_y, label_z))
         t = bpy.context.object
         t.data.body = it.get("label", "")
         t.data.size = spec.get("labelSize", 0.07)
         t.rotation_euler = (np.radians(90), 0, 0)
         t.data.materials.append(material(f"ink{i}", "#1A1612", 0.9))
     if spec.get("title"):
-        bpy.ops.object.text_add(location=(-half_w + 0.15, 0.3, title_z))
+        bpy.ops.object.text_add(location=((-half_w + 0.15 * text_scale) * (near if cam_z != 1.0 else 1.0), text_y, title_z))
         t = bpy.context.object
         t.data.body = spec["title"]
-        t.data.size = 0.055
+        t.data.size = 0.055 * text_scale
         t.rotation_euler = (np.radians(90), 0, 0)
         t.data.materials.append(material("inkt", "#1A1612", 0.9))
     cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam"))
     cam.data.lens = lens
-    cam.location = (0, -cam_d, 1.0)
+    cam.location = (0, -cam_d, cam_z)
     cam.rotation_euler = (np.radians(90), 0, 0)
     sc.collection.objects.link(cam)
     sc.camera = cam
-    for loc, e in (((-2.5, -3.5, 3.5), 900), ((3, -2, 2), 400), ((0, 3, 3), 300)):
+    # "rake": a low light from the side instead of the soft front fill, so shallow folds (the gathers) cast shade.
+    lights = (((-4.5, -1.2, 1.3), 1500), ((2, -4, 3), 150), ((0, 3, 3), 200)) if spec.get("rake") else (((-2.5, -3.5, 3.5), 900), ((3, -2, 2), 400), ((0, 3, 3), 300))
+    for loc, e in lights:
         L = bpy.data.objects.new("l", bpy.data.lights.new("l", "AREA"))
         L.data.energy = e
-        L.data.size = 3
+        L.data.size = 1.0 if spec.get("rake") else 3
         L.location = loc
         L.rotation_euler = (Vector((0, 0, 1.0)) - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
         sc.collection.objects.link(L)

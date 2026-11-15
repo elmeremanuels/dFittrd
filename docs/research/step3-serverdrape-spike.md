@@ -6,6 +6,8 @@ Date: 10 Nov 2026. Branch `claude/step3-serverdrape`. Plan: `docs/research/short
 
 **Update 14 Nov 2026:** the shop tape-measured the skirt. §8 has the measured band on this mesh, the finding that the reconstructed mesh has half the real hem, and variant POM (a rest geometry from tape measurements alone). §1-§7 are the 10 Nov state under assumed bands.
 
+**Update 15 Nov 2026:** §9 applies the founder's answers (worn just below the navel, pull-on, gathered into the band, on-model images AI-generated): POM v2. It withdraws §8.6 (the photo comparison) and the tier and slit readings of §8, and replaces §8.5's band model and §8.8's verdict.
+
 ## 1. Answer
 
 Revised after review (second pass, same day). The first pass called this "a marginal GO on the hip, a clear GO on the hem". That overclaimed: the hem number was a fixed-height measure that the assumed band moved around, and the hip number depends on a solver parameter (the push-out offset). The numbers below replace it.
@@ -409,3 +411,323 @@ Sizing decisions remain with `@curtain/fit-engine`; nothing here feeds it.
 6. No texture for the POM layout.
 7. Only 168 cm bodies, one shape axis, one held-out body; the hem measurements use a lowered floor.
 8. `--bandforce`, `--air`, `--floor` and `--ramp` are now part of the drape cache key (`band_model.drape_key`).
+
+## 9. POM v2: the founder's answers applied (15 Nov 2026)
+
+Branch `claude/pom-v2`. The founder answered the open questions of §8.9 (`founderAnswers` in `spikes/garment-engine/data/bohohippychic/tape/crimson-wildflower-maxi-skirt.json`; in chat, not yet confirmed with the shop). This section applies them and re-runs variant POM. Run: `serverdrape/pom2.sh` (from `spikes/garment-engine`). Everything below is still an **estimate** from a simulation; only the five tape numbers of AU 8, 10 and 14 are measurements. **AU 12 = INTERPOLATED, AU 16 = EXTRAPOLATED**, as in §8.
+
+**Answer in one paragraph** (corrected after review, §9.12). With the band pinned at a level set by rule and the panel gathered into it, "tape measurements in, 3D skirt out" runs without a tuned force and gives a picture that reads as a gathered maxi skirt: all 35 drapes that were started finished with no particle inside the body. **25 of the 32 free-hem drapes are at rest** after 144 frames by the stated threshold; seven still have a particle moving 0.25-0.35 cm per frame, among them AU 14 on the held-out body, and the two drapes with the floor in place do not settle at all. The band cannot fail because it is pinned: that is the rule, not a result. One combination is not draped because the band is 1.7 cm short at the **assumed** level; it would be drawn if the band sat 0.7 cm higher, so that refusal is a property of the assumed offset, not of the garment (§9.2). The verdict is a **conditional GO for this one garment on these bodies** (§9.10), not a route proven for elastic-waist skirts in general. It is **not** shown to be a likeness of this skirt: the only pictures it was ever compared with are AI-generated, the cut between the tape points is assumed, and the drape says little about size (on one body the five sizes differ by 1-4 cm in front width). The size information is in the band table (§9.2), which is arithmetic on the tape and an assumed level, and belongs to `@curtain/fit-engine`.
+
+### 9.1 What changed, and what is withdrawn from §8
+
+| Founder answer | Applied as | Status |
+|---|---|---|
+| Worn above the hip, just below the navel | The band is **pinned** on rings round the body at that level (`wear_rule.py`, `drape_blender.py --wear navel`). Band height and band girth are no longer simulated | **imposed by rule** |
+| Pull-on elastic, no zip, no drawstring | No closure is modelled. Reported: stretched band against the body's widest girth below the band (§9.2) | arithmetic on the tape; not a sizing decision |
+| On-model images are AI-generated | The images are no longer evidence of anything about the garment | see "withdrawn" below |
+| Gathered directly into the waistband | The panel's top edge is longer than the band and is laid onto it in folds (§9.3) | fold count at the seam **imposed**, top-edge girth **ASSUMED** |
+| Slit length unknown, estimate it | No slit is built (§9.4) | no non-AI evidence that there is one |
+| Garment weight unknown | Cloth preset still ASSUMED; weight sensitivity in §9.7 | open |
+| Hip depth not answered | 20 cm below the band's top edge, still ASSUMED | open |
+
+**Withdrawn from §8** (kept there as the record of that run, not as findings):
+
+- **§8.6, the comparison with the product photos**, entirely. The photos are AI-generated; neither "POM is within 3 cm of the back photo" nor "7-17 cm wider than the front photo" says anything about the real skirt. With it goes the review's worry that POM is too wide and the reply that the photos do not show it: there is no reference left either way.
+- **"A gathered tier seam at roughly 60 % of the length"** (§8.3, §8.8) and **"a side slit to mid-thigh"**: both were read off those images. The repo's product text has neither (§9.4). The request in §8.8 to measure tier seams is withdrawn for this product; whether it has tiers is now a yes/no question to the shop.
+- **"Elastic drawstring waist visible in every photo"** (`products.json` `selection.why`): from the same images; the founder says there is no drawstring.
+- **§8.5's band results** (band height per size, "slides off at 3-5 x", "cuts in at 8 x") describe a band model that is no longer used. In v2 those two failures **cannot occur, by construction**: the band's particles are pinned, so nothing slides and nothing is squeezed. That is the rule being imposed, not the simulation getting better. What v1 called the main visible size cue (the band dropping 13.5 cm from AU 8 to AU 16 on the held-out body) was an artefact of an assumed force and is gone.
+- **§8.8's request for "the pull needed to stretch the band"**: not needed any more; the band's force no longer enters.
+
+Still valid from §8: the tape table, §8.1 (the reconstruction has half the real hem), §8.4 (ring lengths equal the tape because they were built that way), the mesh and cloth-preset description in §8.3.
+
+### 9.2 The wear rule and the pull-on check (numbers only, no simulation)
+
+**Navel.** A landmark, not a proportion: Anny's mesh is MakeHuman's, and MakeHuman's own navel modifier (`stomach-navel-in`) moves exactly 19 vertices; the navel height is their mean height on the posed body (`anny_bodies.py`, `achieved.navelY`). On the six bodies it is 102.5-103.0 cm, 0.610-0.613 of the 168 cm stature (the usual anthropometric figure is about 0.60, so Anny's navel is about 2 cm high). The mean of the 19 vertices is 0.3 cm above the navel pit itself (the 9 vertices with the full displacement: 101.8-103.4 cm, centre about 102.7; review). **"A landmark, not a proportion" is untested**: all six bodies are 168 cm tall, and on them the landmark cannot be told from 0.613 x stature. Whether it follows the navel on a taller, shorter or long-waisted body has not been run.
+
+**Rule** (`wear_rule.py`): the band's top edge sits **2 cm under the navel (ASSUMED offset)**, the band is **4 cm high (ASSUMED)**, so the gather seam is 6 cm under the navel (about 97 cm above the floor). The band's girth is the body's girth at the band's mid height (convex hull of the torso section, as a tape lies), clamped to the tape's [relaxed, stretched]. The body widens quickly there: on the held-out body the hull is 82.7 cm at the band's top edge, 87.0 at its middle and 91.0 at the seam.
+
+How the band holds, every size on every body (cm the band is stretched beyond relaxed; AU 12 INTERPOLATED, AU 16 EXTRAPOLATED):
+
+| Body (hip / girth at the band / widest hull below it) | AU 8 (67-94) | AU 10 (71-100) | AU 12 (75.5-105) | AU 14 (80-110) | AU 16 (84.5-115) |
+|---|---|---|---|---|---|
+| chart AU 8 (94.0 / 80.8 / 96.0) | +13.8 | +9.8 | +5.3 | +0.8 | **loose by 3.7** |
+| chart AU 10 (99.0 / 86.0 / 100.9) | +19.0 | +15.0 | +10.5 | +6.0 | +1.5 |
+| held-out (100.0 / 87.0 / 101.9) | +20.0 | +16.0 | +11.5 | +7.0 | +2.5 |
+| chart AU 12 (104.0 / 89.8 / 106.0) | +22.8 | +18.8 | +14.3 | +9.8 | +5.3 |
+| chart AU 14 (109.0 / 92.8 / 111.1) | +25.8 | +21.8 | +17.3 | +12.8 | +8.3 |
+| chart AU 16 (113.2 / 95.7 / 115.4) | **cannot be worn** (body 1.7 over the stretched limit) | +24.7 | +20.2 | +15.7 | +11.2 |
+
+- No size holds relaxed on any of these bodies: below the navel every body is wider than every band's relaxed girth except AU 16 on the AU 8 body, which is **loose by 3.7 cm at the assumed level**. By the rule it is still drawn at that level and flagged; a real loose band would slip down to where the body is as wide as the band, which is not simulated.
+- AU 8 on the AU 16 body is **1.7 cm over the stretched limit at the assumed level** and is **not draped** (`pom2-edge-cases-front.png` shows the body alone with that label).
+- On its own chart body every size is stretched by 11-15 cm, about half its stretch range (27-30.5 cm).
+
+**Every cell depends on the assumed level; the two edge cases are inside its uncertainty** (review finding; `pom2_measure.py placement`, `wear_rule.placement_sensitivity`). Below the navel the body's girth changes by **2.1-2.4 cm per cm of height** (held-out body: 91.0 / 89.1 / 87.0 / 84.9 / 82.7 cm with the band 2 cm lower, 1 lower, as assumed, 1 higher, 2 higher). So moving the band 1 cm moves every number in the table above by about 2 cm. The level is uncertain by at least 2 cm: the 2 cm offset and the 4 cm band height are ASSUMED and Anny's navel is about 2 cm high. With a stated uncertainty of ±2 cm (not measured), **7 of the 30 cells change class**:
+
+| Size on body | At the assumed level | Changes to | when the band sits |
+|---|---|---|---|
+| AU 8 on chart AU 16 | cannot be worn (1.7 over) | holds | 0.7 cm higher |
+| AU 8 on chart AU 14 | stretched +25.8 (1.2 under the limit) | cannot be worn | 0.6 cm lower |
+| AU 10 on chart AU 16 | stretched +24.7 | cannot be worn | 1.9 cm lower |
+| AU 16 (EXTRAPOLATED) on chart AU 8 | loose by 3.7 | holds | 1.5 cm lower |
+| AU 14 on chart AU 8 | stretched +0.8 | loose | 0.6 cm higher |
+| AU 16 (EXTRAPOLATED) on chart AU 10 | stretched +1.5 | loose | 0.9 cm higher |
+| AU 16 (EXTRAPOLATED) on held-out | stretched +2.5 | loose | 1.5 cm higher |
+
+Two more change between 2 and 2.5 cm (AU 8 on chart AU 12: cannot be worn 2.1 cm lower; AU 12 on chart AU 8: loose 2.4 cm higher). The other 21 cells keep their class over ±2.5 cm, among them every size on its own chart body and one size either side of it. **What the table supports:** a size holds, stretched, on its own chart body and on the neighbouring ones. **What it does not support:** "AU 8 cannot be worn by the AU 16 body" or "AU 16 is loose on the AU 8 body" as findings about the garment. Those two are true only at 2 cm under an Anny navel; the refusal to drape is a consequence of that choice. A band three sizes too small or too large is still plainly a poor fit, but the tape and this rule cannot say on which side of the limit it falls.
+
+**Pull-on.** The band at its stretched limit against the body's girth it has to pass. Margin in cm, two readings: against the chart **hip** (hull at the fullest point of the seat) / against the **widest hull** between the band and the crotch, which is about 2 cm more and 4 cm lower (y = 85-86 cm). Negative = the band does not pass at the pull the shop called comfortable.
+
+| Body | AU 8 | AU 10 | AU 12 INTERPOLATED | AU 14 | AU 16 EXTRAPOLATED |
+|---|---|---|---|---|---|
+| chart AU 8 | +0.0 / −2.0 | +6.0 / +4.0 | +11.0 / +9.0 | +16.0 / +14.0 | +21.0 / +19.0 |
+| chart AU 10 | −5.0 / −6.9 | +1.0 / −0.9 | +6.0 / +4.1 | +11.0 / +9.1 | +16.0 / +14.1 |
+| held-out (hip 100) | −6.0 / −7.9 | +0.0 / −1.9 | +5.0 / +3.1 | +10.0 / +8.1 | +15.0 / +13.1 |
+| chart AU 12 | −10.0 / −12.0 | −4.0 / −6.0 | +1.0 / −1.0 | +6.0 / +4.0 | +11.0 / +9.0 |
+| chart AU 14 | −15.0 / −17.1 | −9.0 / −11.1 | −4.0 / −6.1 | +1.0 / −1.1 | +6.0 / +3.9 |
+| chart AU 16 | −19.2 / −21.4 | −13.2 / −15.4 | −8.2 / −10.4 | −3.2 / −5.4 | +1.8 / −0.4 |
+
+- **Every size passes its own chart body by 0-2 cm on the hip and misses by 0.4-2 cm on the widest hull.** The stretched band is cut to the chart hip with nothing to spare. One size down is 4-6 cm short on the hip; one size up clears it by 5-6 cm.
+- **The widest-hull reading is refuted by its own diagonal** (review finding). A shop's size 8 goes on a size 8 body; a check that says it misses by 2.0 cm is measuring something else: the shop's *comfortable* stretch against a rigid convex hull of a posed mesh, stepping in only (a real hip compresses, a band stretches past comfortable, a skirt can go on over the head). So the check has no absolute zero. It is usable only **relative to the diagonal**: "as on its own chart body" (hip margin within ±2.5 cm), "clear" (more), "short at the shop's stretch" (less). The renders now print both margins and one of those three phrases, and no longer print "FAILS" or "marginal" (v2's first renders labelled AU 8 on its own chart body "pull-on: FAILS by 2.0 cm").
+- On the held-out body (hip 100): AU 8 is short (−6 / −7.9), AU 10 is as on its own chart body (0 / −1.9), AU 12 and up are clear. The drapes of AU 8 and AU 10 on it are drawn anyway, with that on the label; whether a short band hides a size is `@curtain/fit-engine`'s decision.
+
+### 9.3 The gathered panel (`pom_rest.py --profile tube | cone`)
+
+The tape does not give the panel's top-edge girth. Two readings, both **ASSUMED**; the first is the default:
+
+| Profile | Top edge | Below | Tape hip at 20 cm |
+|---|---|---|---|
+| **tube** (default) | = the tape hip girth (112 / 122 / 124 / 126 / 128) | constant to the hip line 20 cm below the top, then linear to the hem | honoured |
+| **cone** (comparison) | = the tape hip girth | one cone to the hem | **not** honoured: 134.9 / 146.5 / ... there (it reads the tape "hip" as the girth of the gathered top edge, hip depth 0) |
+
+Not offered: one cone through the tape hip at 20 cm and the hem. Its top edge would be 83.6 / 91.6 / 94.1 cm (AU 8 / 10 / 14), shorter than the band's measured stretched girth (94 / 100 / 110), so the band could not stretch that far. The tape rules a plain cone out, if the hip was measured at 20 cm (`test_wear_rule.py`).
+
+How the gather is built (`wear_rule.pleated_ring`, `drape_blender.py`): the start shape is the developable rest shape with its top edge at the wear level; the band's particles are then moved over frames 1-24 onto their rings. The four band rings above the seam become smooth rings 0.6 cm off the body (a collision margin, not a garment property). The seam ring keeps the fabric's full length and is laid in radial folds, **one fold per 4 mesh particles (ASSUMED)**: 30 folds round the seam, 3.3 cm apart, 0.9-1.4 cm deep. Real gathers are finer (1-2 cm); the pitch here is set by the mesh (16,071 particles, 1.0 cm along a ring; §8's mesh had 1.3 cm). Because of the margin and the fold depth the simulated seam's centre line is 97.7-99.1 cm on the held-out body where the body is 91.0 cm: the fabric (112-128 cm) is gathered 1.15-1.29 : 1 in the simulation, against 1.29-1.47 : 1 on the real band at 87 cm. The band casing itself is drawn smooth; a real elastic casing is ruched.
+
+Imposed: the seam's fold count and depth, and with them the seam ring's stand-off from the body (§9.5). Simulated: what the folds do from about 5 cm below the seam (§9.5).
+
+**The drawn band is not a model of the band** (review finding). The four rings above the seam are the panel's own mesh rings, whose rest length is the fabric's 112-128 cm, pinned as smooth rings of 86.4 / 88.6 / 90.7 / 92.8 cm on the held-out body: 17-31 % shorter than their rest length, with no folds, and then a jump to the folded seam ring (hull 99.9-102.5 cm) within 1 cm of height. They are the same for every size on one body (the one exception: AU 16's top ring is 88.2 cm, because the body there, 82.7 cm, is smaller than AU 16's relaxed band). Nothing simulated depends on them, since pinned particles do not move and their springs to each other do nothing; they are only what the render shows as a band, and in the render the fabric under the band stands out from it like a ledge. A stretched elastic band does lie on the body at the body's girth whatever the size, so "the same for every size" is what the rule says; but the casing's ruching, its thickness and its height are not modelled.
+
+### 9.4 Slit, tiers, lining, fabric: what the repo's product text says
+
+Searched `spikes/garment-engine/data/bohohippychic/` for slit, tier, lining and fabric. The only shop text about this product is the sentence quoted in `products.json` `evidence`: *"Crafted from lightweight, breathable rayon, this flowing maxi skirt features a rich crimson base adorned with soft floral detailing and a contrasting border hem"*, plus *"elasticated waistband"* and the sizing note. **No slit, no tier, no lining is mentioned.** Every other mention of a slit or a tier in the data (`selection.why` "side with slit", `phase0-written.md`, `review.json`) describes the on-model images or frames generated from them.
+
+So: **v2 is built without a slit and without tiers**, and that is an assumption by absence, not a finding. A slit variant was not built (there is nothing to estimate its length from). The "contrasting border hem" is a print or a facing at the hem; it adds no geometry here. Rayon = viscose: consistent with the preset's fabric, no weight stated.
+
+### 9.5 Simulation outputs on the held-out body (hip 100, waist 73.5), profile tube
+
+16,071 particles, 144 frames, cloth preset `viscose-soft` (ASSUMED, §8.3), **floor lowered 40 cm** (the body on a plinth, as §8.5) so the hem hangs free. One drape per size; a repeat of AU 10 and AU 14 gives the run-to-run noise (Blender's solver is not deterministic across threads).
+
+**Imposed (read back, not results):** band top edge at 100.97 cm; the band's girth by rule is the body's at the band's mid height, 87.0 cm, on every size (the rings actually drawn are 86.4-92.8 cm, §9.3); the hip-line ring is 112.0 / 121.6 / 123.5 / 125.4 / 127.4 cm and the hem ring 230.0 / 248.1 / 254.0 / 260.0 / 266.1 cm long (the tape; fabric strain mean 0.04 %, p5-p95 −0.5 to +0.6 %, **over the mesh edges that touch no pinned particle**: the band rings, compressed 17-31 %, and the seam are left out).
+
+**Follows from what is imposed** (listed as simulated before the review; `followsFromImposed` in `pom2_measure.py`). These are not drape results:
+
+| | AU 8 (measured) | AU 10 (measured) | AU 12 (INTERPOLATED) | AU 14 (measured) | AU 16 (EXTRAPOLATED) |
+|---|---|---|---|---|---|
+| Hem height above the soles (cm): draped / band top minus tape length | −1.9 / −2.0 | −1.8 / −2.0 | −2.4 / −2.5 | −2.8 / −3.0 | −3.3 / −3.5 |
+| Pinned seam ring: hull (cm), over the body's 91.0 there | 99.9 | 101.6 | 101.9 | 102.2 | 102.5 |
+| Folds two mesh rings (2 cm) under the seam: count (30 imposed at the seam), ring length / hull | 33, 1.09 | 36, 1.16 | 38, 1.18 | 35, 1.18 | 35, 1.20 |
+| Particles inside the body in the band and seam rings | 0, by construction (pinned 0.6 cm off the body) | | | | |
+
+- The hem's height is the rule plus the tape: the drape changes it by 0.1-0.2 cm.
+- A count of 33-38 folds two rings under a pinned 30-fold sinusoid is the counter's noise on a shape the pins still dictate, not folds appearing.
+- The seam ring stands 8.9-11.5 cm of girth off the body (clearance plus fold depth), 7 cm above the body's hip.
+
+**Simulated:**
+
+| | AU 8 (measured) | AU 10 (measured) | AU 12 (INTERPOLATED) | AU 14 (measured) | AU 16 (EXTRAPOLATED) |
+|---|---|---|---|---|---|
+| Hem-edge hull, mean of the last 24 frames (min-max) (cm) | 140.4 (140.3-140.5) | 143.6 (143.2-143.7) | 146.3 (145.8-146.5) | 146.9 (146.2-147.3) | 148.2 (147.7-148.4) |
+| same, repeat run | | 143.1 | | 145.6 | |
+| Hem: front width / side depth (cm) | 49.7 / 34.8 | 51.0 / 35.8 | 52.6 / 36.0 | 52.6 / 35.7 | 53.7 / 35.6 |
+| At the knee (y = 47.5): hull, width / depth (cm) | 122.7, 44.7 / 30.5 | 125.8, 44.9 / 31.4 | 126.7, 44.9 / 31.9 | 128.0, 46.5 / 31.9 | 128.0, 46.9 / 31.5 |
+| At the body's hip (y = 89.8): hull, width / depth (cm) | 106.6, 38.2 / 27.4 | 108.6, 39.1 / 28.1 | 108.9, 39.0 / 28.2 | 109.6, 39.8 / 27.9 | 109.9, 40.0 / 28.1 |
+| Folds 5.5 cm below | 22 | 24 | 23 | 24 | 26 |
+| Folds 11 cm below: count, depth p95 (cm) | 14, 1.2 | 16, 1.9 | 16, 2.1 | 15, 2.3 | 17, 2.4 |
+| Folds at the tape's hip line (18 cm below): count, depth p95 (cm) | 15, 1.9 | 15, 2.7 | 16, 2.9 | 14, 3.1 | 16, 3.1 |
+| Particle movement, last 24 frames: mean / largest (cm per frame) | 0.006 / 0.22 | 0.008 / 0.11 | 0.009 / 0.10 | 0.011 / 0.26 | 0.013 / 0.23 |
+| At rest by the stated threshold | yes | yes | yes | **no** (largest 0.26) | yes |
+| Particles inside the body, below the seam | 0 | 0 | 0 | 0 | 0 |
+| Particles pushed out of the body in the start shape | 240 | 0 | 0 | 0 | 0 |
+
+Reading (outputs only):
+
+- **Most drapes are at rest at frame 144, not all.** By the stated threshold (mean < 0.02 and largest < 0.25 cm per frame over the last 24 frames) **25 of the 32 free-hem drapes of 144 frames are at rest**. The seven that are not all pass on the mean (0.010-0.015) and miss on the largest single particle (0.25-0.35 cm per frame): AU 14 on the held-out body (0.264; its repeat 0.254; at 200 gsm 0.324), AU 16 on the chart AU 8 body (0.347) and on the chart AU 12 body (0.292), and the cone's AU 10 (0.309) and AU 16 (0.277). Five of the seven are AU 14 or AU 16: the sizes with the most fabric settle last. Mean movement is 0.004-0.015 cm per frame over all 32 (§8.5: 0.03-0.17 and not decaying); the hem hull moves 0.1-1.1 cm over the last 24 frames (§8.5: 0.6-6 cm). The one 288-frame run (AU 10) decays to 0.001 cm per frame by frame 230 and its hem hull ends at 142.8 cm, **0.8 cm below its value at frame 144**: "at rest" at 144 frames still means the hem hull is within about 1 cm of where it ends. Whether AU 14 and AU 16 settle with more frames was not run. The two drapes with the floor in place are not at rest at all (below). That the cloth settles this far is a simulation result which the pinned band makes possible: nothing slides any more.
+- **0 particles inside the body in all 35 drapes** (free hem, floor, both profiles, three weights, the clearance run). Below the seam that is a result of the collision handling; in the five pinned rings it is by construction.
+- **The gathers carry down.** From the 30 imposed folds at the seam the cloth has 22-26 folds at 5.5 cm and 14-17 from 11 cm down, where they are 1.2-3.1 cm deep: the fine folds merge into about 15 broader ones that run on over the hip. That larger sizes have deeper folds (1.9 → 3.1 cm at the hip line) is what one expects from more fabric on the same band, but how much more fabric is the **assumed** top edge (= the tape hip girth, §9.3); it is not evidence about the real skirt's grading.
+- **Sizes differ little on one body.** Hem hull AU 8 → AU 14: +6.5 cm (30 cm on the flat garment); AU 8 → AU 16: +7.8 cm. Front width at the hem 49.7 → 53.7 cm, at the knee 44.7 → 46.9 cm, at the hip 38.2 → 40.0 cm. The single runs are in size order, but two repeats differ from their first run by 0.5 and 1.3 cm and the long run by 0.8 cm, so **only steps larger than about 1.5 cm are resolved**: AU 8 against AU 10 (3.2 cm) and AU 10 against AU 12 (2.7) are; AU 12 against AU 14 (146.3 against 146.9; the repeat of AU 14 is 145.6, which would put it *below* AU 12) and AU 14 against AU 16 (1.3) are not. "Monotone in all five sizes" is not shown; "AU 8 < AU 10 < the three larger sizes" is.
+- **The hull at the body's hip is not a clean drape output, and there is no hip signal in it.** It is 106.6-109.9 cm for every size (body 100), 6.6-9.9 cm more than the body. But the fabric is held off the body by the pinned seam ring 7 cm above, and keeps most of that distance on the way down (garment hull minus body hull, held-out body):
+
+  | cm below the seam | 0 (pinned) | 1 | 3 | 5 | 7 (body's hip) | 10 | 13 |
+  |---|---|---|---|---|---|---|---|
+  | AU 8 (measured) | 8.9 | 7.8 | 7.2 | 7.0 | 6.5 | 6.0 | 6.8 |
+  | AU 14 (measured) | 11.2 | 9.8 | 9.7 | 9.9 | 9.5 | 9.6 | 11.6 |
+
+  To see how much of the hip hull is the seam's, AU 8 and AU 14 were draped once more with the pinned rings 1.6 cm off the body instead of 0.6 (`--clearance 1.6`, set `clear16`; one run each):
+
+  | Held-out body | AU 8, 0.6 cm | AU 8, 1.6 cm | AU 14, 0.6 cm | AU 14, 1.6 cm |
+  |---|---|---|---|---|
+  | Pinned seam ring, hull (cm) | 99.9 | 105.0 (+5.1) | 102.2 | 107.7 (+5.5) |
+  | Hull at the body's hip (cm) | 106.6 | 108.2 (+1.6) | 109.6 | 111.8 (+2.2) |
+  | Hull at the knee (cm) | 122.7 | 122.7 (0.0) | 128.0 | 129.0 (+1.0) |
+  | Hem-edge hull (cm) | 140.4 | 140.4 (0.0) | 146.9 | 146.8 (−0.1) |
+
+  The hip hull moves by 30-40 % of what the seam ring moves (run-to-run noise there: 0.2 cm); the knee and the hem do not follow (within the 0.5-1.3 cm noise). So of the 6.6-9.9 cm by which the skirt stands off the hip, roughly 3-4 cm is the imposed seam (a linear extrapolation to a seam lying on the body, which cannot be run: the collision margin needs the 0.6 cm), and the rest is the fabric being wider than this body. Some stand-off is real (112-128 cm of fabric gathered onto about 90 cm does not lie flat), but its size here comes from the collision margin and the mesh-limited fold depth, not from the garment. The same goes for the "body's hip plus 6.6-8.7 cm" of the own-body table below. What survives: every size is wider than this body at the hip and hangs past it; the hip hull follows the body and the seam, not the size. The garment's hip line (20 cm below the band's top) lies at y = 81 cm with the wear rule, 9 cm below the body's hip and at crotch height; the tape's "hip" is not measured where the hip is when the skirt is worn below the navel.
+- **The hem is at or below the soles, by arithmetic.** Band top at 101 cm (rule, assumed level) minus 103-104.5 cm of tape length puts the hem 2.0-3.5 cm below the soles of a 168 cm body before any drape; the drape leaves it at 1.8-3.3 cm. This is not a simulation finding, and it moves cm for cm with the assumed band level and with the 2 cm by which Anny's navel is high. With the floor where it is (`floor0`, AU 10 and 14) the hem piles up, does **not** come to rest (mean 0.10 cm per frame, largest 1.0-1.2) and its hull is 146 and 161 cm, a measure of the pile. Either the real skirt is worn with heels or by taller women, or "length" was measured differently (from the band's lower edge the hem would be 4 cm lower still), or the wear level is higher than 2 cm under the navel. To ask.
+- AU 8 on this body: 240 start particles were pushed out of the body at the seat (ratio ≥ 0.94), so that zone starts up to 6 % larger than the tape; its hull at the hip may be overstated by up to that.
+
+**Each size on its own chart body** (band stretched 11-15 cm; AU 12 INTERPOLATED, AU 16 EXTRAPOLATED):
+
+| | AU 8 on AU 8 | AU 10 on AU 10 | AU 12 on AU 12 | AU 14 on AU 14 | AU 16 on AU 16 |
+|---|---|---|---|---|---|
+| Hem-edge hull (cm) | 140.5 | 143.2 | 146.1 | 149.0 | 150.0 |
+| Hem width / depth (cm) | 50.7 / 34.6 | 50.4 / 35.4 | 52.6 / 36.5 | 52.4 / 36.1 | 53.2 / 37.9 |
+| At the knee: hull (cm) | 119.3 | 125.0 | 128.7 | 132.4 | 135.2 |
+| At the body's hip: hull (cm), body hip | 101.4, 94.0 | 107.7, 99.0 | 111.8, 104.0 | 115.9, 109.0 | 119.8, 113.2 |
+| Pinned seam ring, hull (cm), body there (imposed) | 95.0, 85.2 | 100.7, 90.0 | 104.4, 93.9 | 107.7, 97.4 | 110.7, 100.4 |
+| Movement mean / largest (cm per frame); at rest | 0.006 / 0.08; yes | 0.007 / 0.19; yes | 0.009 / 0.14; yes | 0.012 / 0.14; yes | 0.011 / 0.09; yes |
+
+The hem hull is set by the size, not the body (140.5 against 140.4 for AU 8 on the two bodies; AU 14: 149.0 against 146.9; noise about 1.5 cm). The hull at the hip is the body's hip plus 6.6-8.7 cm in every case: it follows the body and the pinned seam ring (body + 9.8-10.5 there), not the garment's 112-128 cm.
+
+### 9.6 What moves the result besides size
+
+Held-out body, hem-edge hull (cm):
+
+| Change | AU 8 (measured) | AU 10 (measured) | AU 12 (INTERPOLATED) | AU 14 (measured) | AU 16 (EXTRAPOLATED) |
+|---|---|---|---|---|---|
+| tube (default) | 140.4 | 143.6 | 146.3 | 146.9 | 148.2 |
+| **cone** (top edge = hip, one cone) | 145.5 | 147.5 | 148.1 | 148.6 | 149.9 |
+| cone − tube | +5.1 | +3.9 | +1.8 | +1.7 | +1.7 |
+| mesh edge 1.3 cm instead of 1.0 (12,365 particles, 24 folds) | | 149.9 (+6.3) | | | |
+| repeat of the same drape | | 143.1 (−0.5) | | 145.6 (−1.3) | |
+| 288 frames instead of 144 | | 142.8 (−0.8) | | | |
+| pinned rings 1.6 cm off the body instead of 0.6 (§9.5) | 140.4 (0.0) | | | 146.8 (−0.1) | |
+
+- **Profile.** The cone is 1.7-5.1 cm wider at the hem and 3-5 cm wider at the knee (127.8-132.0 against 122.7-128.0), and its size spread is smaller (AU 8 → 14: 3.1 cm against 6.5). In the renders the two are hard to tell apart. Which the real skirt is, is not known.
+- **Mesh.** The same garment on the coarser mesh has a 6.3 cm larger hem hull. That is as large as the whole AU 8 → AU 14 difference. Absolute hull values are good to about ±6 cm; differences between sizes on one mesh are good to about ±1.5 cm (two repeats: 0.5 and 1.3 cm; 144 against 288 frames: 0.8 cm). That is two repeats and one long run, not a noise distribution.
+
+### 9.7 Fabric weight
+
+The band no longer depends on weight (v1's band force was a multiple of the skirt's weight; that is gone). Weight still enters in one way: in Blender's cloth gravity scales with the particle mass and the spring and bending forces do not, so a heavier fabric of the same stiffness sags more. The preset stands for 165 gsm (ASSUMED); two other plausible viscose weights, stiffness unchanged (`--massscale`):
+
+| Hem-edge hull (cm), held-out body | 120 gsm | 165 gsm (preset; two runs) | 200 gsm |
+|---|---|---|---|
+| AU 10 (measured) | 145.6 | 143.6, 143.1 | 144.2 |
+| AU 14 (measured) | 145.7 | 146.9, 145.6 | 145.7 |
+
+**Weight barely enters.** The hem hull moves by at most 2.5 cm between 120 and 200 gsm, not monotonically, against 0.5-1.3 cm between two runs of the same drape; at the hip and knee the differences are under 1.6 cm, and the renders look the same. So the unknown garment weight is not what limits this result. What "weight" cannot stand in for is the fabric's stiffness and bending, which are the preset's and uncalibrated.
+
+### 9.8 v1 against v2, and the device blend
+
+Held-out body:
+
+| | v1 (§8.5, band force 3 x, plain cone) | v2 (band placed, tube, gathered) |
+|---|---|---|
+| Band height AU 8 / 14 / 16 (EXTRAPOLATED) (cm) | 104.3 / 97.2 / 90.8 (**simulated**, followed the assumed force) | 99.0 for every size (**imposed by rule**) |
+| Hem height AU 8 / 14 / 16 (EXTRAPOLATED) (cm) | +5.7 / −2.9 / −10.3 | −1.9 / −2.8 / −3.3 (**imposed**: band top minus the tape length) |
+| Hem-edge hull AU 8 / 10 / 12 (INTERPOLATED) / 14 / 16 (EXTRAPOLATED) (cm) | 146.2 / 148.5 / 150.5 / 155.2 / 159.1 | 140.4 / 143.6 / 146.3 / 146.9 / 148.2 |
+| Hem hull AU 8 → AU 14 | +9.0 | +6.5 |
+| Hull at the body's hip (cm) | 107.4-109.6 | 106.6-109.9 (about 3-4 cm of it from the pinned seam ring, §9.5) |
+| Movement at frame 144, mean (cm per frame) | 0.03-0.15 | 0.006-0.013 |
+| At rest at frame 144 | none | 25 of 32 free-hem drapes; the floor drapes not |
+| Band failures | slides off (AU 16), cuts in at higher force (AU 8) | cannot occur (pinned); one combination not draped, 1.7 cm over at the assumed level |
+| Mesh | 12,197 particles, 1.3 cm | 16,071 particles, 1.0 cm (so the two hem hulls are not directly comparable: §9.6) |
+
+v1's larger hem spread came partly from the band sitting lower on the larger sizes (a wider part of the cone at the same height) and its hems were still moving.
+
+**Device blend** (`pom2_measure.py blend`): each size draped on the chart AU 8 and AU 12 bodies, blended linearly to the held-out body (weight 0.6 on AU 12), against the direct drape:
+
+| | AU 8 | AU 10 | AU 12 INTERPOLATED | AU 14 | AU 16 EXTRAPOLATED |
+|---|---|---|---|---|---|
+| Vertex error RMS / p95 / max (cm) | 1.5 / 3.2 / 4.8 | 1.4 / 2.9 / 4.6 | 1.2 / 2.4 / 4.3 | 1.6 / 3.4 / 6.3 | 1.6 / 3.2 / 6.2 |
+| of which the pinned band, RMS (cm) | 0.18 | 0.18 | 0.18 | 0.14 | 0.14 |
+| Hem hull, blend / direct (cm) | 137.1 / 140.5 | 139.3 / 143.7 | 140.8 / 146.5 | 142.2 / 147.3 | 143.9 / 148.3 |
+| Hem ring length, blend / direct (cm) | 190.8 / 230.0 | 203.6 / 248.1 | 208.9 / 254.0 | 209.9 / 260.0 | 227.8 / 266.1 |
+
+All five are clean cases now (§8.5 had one: 2.3 cm RMS). The error is 1.2-1.6 cm RMS. But the blend **flattens the folds**: the folds lie in different places on the two grid bodies, so the blended hem is 14-19 % shorter than the fabric and its hull 3.4-5.7 cm smaller. The size order survives (137.1 → 143.9). The morph bake and the device page were not re-run (`bake.ts` and `morph.html` expect a 3 × 3 grid; AU 8 has no drape on the AU 16 body by rule).
+
+Cost: 255 CPU-s median per drape (188-573; the first 33 drapes), measured at load average 4-14 next to another workflow.
+
+### 9.9 Renders
+
+In `/tmp/claude-0/-home-user/45896997-2c70-517e-89a4-f66870da365e/scratchpad/tape/pom-v2/`, not committed. All 13 were re-made after the review (the geometry of the first 12 is unchanged; the labels and titles changed). Every title says ESTIMATE; the ten with the standard title also say that the band level is ASSUMED (the v1-against-v2 pair and the close-up do not, the floor render does); every label carries measured / INTERPOLATED / EXTRAPOLATED, how the band holds at the assumed level, "NOT A VERDICT (level ASSUMED)" with the shift where that changes class within ±2 cm, and the pull-on margins hip / widest hull with one of "as on its own chart body", "clear", "short at the shop's stretch" (no pass or fail word). Flat colour (reads pink, not crimson); no texture. Bodies stand on a 40 cm plinth except in `pom2-floor-front.png`.
+
+| File | Honest read |
+|---|---|
+| `pom2-all-front.png` | AU 8-16 on the held-out body. Five plain, softly flared maxi skirts that look almost the same. The band is at the same height on all, a smooth collar under the navel; fine vertical folds start under it and fade towards the hip; a few broad folds lower down. The hem gets slightly wider and a little longer from left to right; without the labels one could not put them in order with confidence. AU 16's label carries the "not a verdict" lines (loose if the band is 1.5 cm higher) |
+| `pom2-all-side.png` | Same from the side. The skirts hang nearly straight at the front and swing back a little at the hem; the larger sizes have more folds at the back. **Directly under the band the skirt steps out past the band, most clearly at the back and on AU 14 and AU 16: the ledge of the pinned seam ring (§9.5), not a garment feature.** No clear size cue |
+| `pom2-own-front.png`, `-side.png` | Each size on its own chart body. The bodies differ more than the skirts; the skirt widens with the body at the hip. All five pull-on lines read "as on its own chart body" (hip +0.0 to +1.8, hull −0.4 to −2.0); nothing on the image says a size fails. The ledge under the band shows from the side here too |
+| `pom2-gathers-close.png` | Close-up, raking light, AU 8 / 10 / 14. Regular vertical folds 10-15 cm long under a smooth band, deeper on AU 14 than AU 8. They look like soft pleats, not like fine elastic gathering; a faint diamond pattern from the mesh triangles shows in the light. The band looks like a flat ribbon narrower than the fabric under it, which is what it is in the mesh (§9.3). The labels lie over the band and the top of the folds |
+| `pom2-seam-clearance-side.png` (new) | AU 8 and AU 14, the pinned rings 0.6 against 1.6 cm off the body. With 1.6 cm the band stands visibly off the back and the skirt under it starts further out; from the thigh down the pairs are the same by eye. It shows that the shape just under the band is set by the pinned ring |
+| `pom2-v1-vs-v2-front.png`, `-side.png` | v1 AU 8 / 14 / 16 beside v2. v1: smooth cones whose band slides from the waist (AU 8) to the hips (AU 16), hem 16 cm lower on AU 16. v2: the three bands level, folds from the band, skirts more alike. v2 reads as a gathered skirt; v1 as a cone. The v2 bands are level because they are pinned |
+| `pom2-tube-vs-cone-front.png`, `-side.png` | AU 8 and AU 14, tube beside cone. The cone is a touch fuller from the hip down; by eye the difference is marginal |
+| `pom2-weight-front.png` | AU 10 at 120 / 165 / 200 gsm. No visible difference beyond where individual folds fall |
+| `pom2-floor-front.png` | AU 10 and AU 14 with the floor at the soles: the hem crumples into a ruffle on the floor and covers the feet except the toes. This is band level (assumed) minus tape length on a 168 cm barefoot body; these two drapes are not at rest |
+| `pom2-edge-cases-front.png` | AU 8 on the AU 16 body: the bare body, labelled "band 1.7 cm short: not draped / NOT A VERDICT (level ASSUMED): 'holds' if band 0.7 cm higher". AU 16 on the AU 8 body: drawn at the wear level, "band LOOSE by 3.7 cm / NOT A VERDICT: 'holds' if band 1.5 cm lower" (drawn, not simulated: a loose band would slip). AU 16 on the AU 16 body for comparison |
+
+### 9.10 Verdict
+
+**Conditional GO, narrowed after review (§9.12): for this garment on these bodies, a pinned-band drape from the tape runs and reads as a gathered maxi skirt. That is all the outputs support. Do not present its output as how this skirt looks until it has been checked once against something real, and do not read it as a route proven for elastic-waist skirts.**
+
+What the outputs support:
+
+- **It runs.** 35 drapes started, 35 finished, no particle in the body. 25 of the 32 free-hem drapes are at rest at frame 144 by the stated threshold; the seven others (mostly AU 14 and AU 16) still have a particle moving 0.25-0.35 cm per frame, and the two drapes with the floor in place do not settle. The hem hull repeats to 0.5-1.3 cm (two repeats) and drifts 0.8 cm between frame 144 and 288 (one run). v1 needed a band force nobody measured and failed at both ends of it; v2's band cannot fail **because it is pinned**, which removes the failure from the simulation without showing that the real band holds.
+- **It reads as the right kind of garment**: a gathered, softly flared maxi skirt hanging from a band below the navel.
+- **Fabric weight is not a blocker** (§9.7).
+- **The band table is arithmetic** on two tape numbers per size, a body and an **assumed level**. On its own chart body and the neighbouring ones every size holds, stretched; that survives ±2.5 cm of band level. The two edge cases (cannot be worn, loose) do not survive ±1.5 cm (§9.2). The pull-on margin has no absolute zero: every size is "at the limit" on the body it is cut for.
+
+What they do not support:
+
+- **Scope.** One product, one stature (168 cm), one body-shape axis, a static A-pose, one cloth preset. No second skirt, no other elastic waist, no tall or short body was run. "Route for elastic-waist skirts" is a hypothesis this run is consistent with, not a result.
+- **What the drape adds over the arithmetic is small.** The band's height and girth, the hem's height, the seam's folds and the stand-off at the seam are imposed (§9.5). What the cloth itself contributes is the fold pattern from about 5 cm under the seam down and the hem's hull and extent, and those differ between sizes by 1-4 cm in front width, with steps under 1.5 cm unresolved; the mesh density alone moves the hem hull by 6.3 cm, as much as AU 8 to AU 14.
+- **The hull at the hip** is not a clean output: about 3-4 cm of the 6.6-9.9 cm stand-off there comes from the pinned seam ring (§9.5).
+- **A loose band is drawn, not simulated**: at the wear level, where a real one would slip.
+- **Likeness.** There is no non-AI picture of this skirt in the repo. Nothing in §9 has been compared with the real garment. The cut between the tape points (tube or cone, 2-5 cm at the hem), the cloth's stiffness, the gather pitch and the band's level are assumed.
+- **Size in the picture.** The 3D view will not show a shopper which size to take; it can show that the skirt is long, full and gathered. That may well be true of the real skirt (an elastic gathered skirt is forgiving), but it means the size message has to come from the band table, with the caveats above.
+- **Device blend** loses 3-6 cm of hem hull and 14-19 % of the hem's fold length (§9.8).
+
+Still missing, in order of what it would buy:
+
+1. **One real reference**: a photo of the actual skirt on a person (or a dress form) of known hip, waist and height in a known size, or failing that on a hanger, front and side. Without it this stays unvalidated.
+2. **The top-edge girth** (the panel's width just under the band, pulled flat), per size. It decides tube against cone and the fullness of the gathers; today it is assumed equal to the hip.
+3. **Hip depth and length reference**: hip at exactly 20 cm on every size (§8.9, still open), and whether the length runs from the band's top or bottom edge. With the rule the hem reaches the floor at 168 cm (§9.5).
+4. **Yes/no from the shop**: slit (and its length), tiers, lining. Built without all three.
+5. **The wear offset** ("just below the navel" = 2 cm, ASSUMED) and the band's height: a centimetre of level is two centimetres of girth, and decides the edge cases (§9.2). Ask the shop for "from the navel to the top of the band, on a person". And what to draw when the band is loose.
+6. A second garment and a second stature before "route" is claimed: another elastic-waist skirt from tape, and the same skirt on a 158 and a 178 cm body (which also tests the navel landmark, §9.2). More frames for AU 14 and AU 16.
+7. Engineering: a band that is a band (its own ring of mesh at the band's length, ruched); a texture for this layout; the bake and device page for a grid with refused combinations; folds that survive the blend (or more grid bodies); finer gathers (the mesh sets the pitch); a ruched band; other statures (only 168 cm), one shape axis, a static A-pose.
+8. Cloth calibration (stiffness and bending). Weight alone does not need the shop.
+
+Sizing decisions remain with `@curtain/fit-engine`; nothing here feeds it.
+
+### 9.11 Proposed changes to the merchant measuring list
+
+`docs/MERCHANT-MEASUREMENTS.md` is not edited on this branch. Proposed:
+
+- **Keep A-E** (band relaxed, band stretched, hip at 20 cm, hem, length). A and B are now used twice: the band's range at the wear level and the pull-on check.
+- **E, length: say from where.** "From the top edge of the waistband" is already the text; add "and tell us how high the band is" (one number per style).
+- **Add F, top edge of the skirt panel** (gathered styles only): "Just under the waistband, pull the gathers flat and measure straight across. x 2." If that is impractical: "Is the skirt gathered into the band? Roughly how much wider is the fabric than the band: a little, half as much again, double?"
+- **Replace** "How hard did you pull for B?" / "how far does it go beyond B" **with**: "B should be as far as you would pull it to step in. If it goes clearly further without strain, give that number too." The pull force itself is no longer needed.
+- **Drop** "Is there a drawstring?" as a standing worry for this product (answered: no); keep it as a yes/no in the once-per-garment list, with pull-on / zip.
+- **Add, once per garment, yes/no**: slit (which side, how long from the hem up), tiers (distance of each seam below the band), lining.
+- **Add, once per garment**: "Where is it meant to sit: at the waist, just below the navel, on the hip?" Default when unanswered: just below the navel (the founder's rule for skirts).
+- **Add, once per garment**: "Weigh one size on a kitchen scale and tell us which size." Low priority (§9.7).
+- **Add, once per garment, the one thing that would validate all of this**: "One real photo (not AI-generated) of the garment worn, front and side, with the size worn and the wearer's height, waist and hip; or the garment on a hanger."
+- **Worked example**: the note that the drawstring and the "pull-on or zip" question are open can be closed (pull-on, no drawstring, per the founder; to confirm with the shop). The remaining questions for this skirt: C at exactly 20 cm on all sizes, AU 12 and 16, F, slit / tiers / lining, band height, a real photo.
+
+### 9.12 Review of v2 and what was changed
+
+An independent review reproduced every number of §9.2 and §9.5 and found no code defect that changes one. It found that several sentences claimed more than the outputs show. Each finding, and what was done (no drape of the first run was re-run; two drapes were added; all renders were re-made because their labels changed):
+
+| # | Finding | Done |
+|---|---|---|
+| 1 (high) | "Came to rest" overstated: 7 of 30 free-hem drapes are not at rest, among them AU 14 on the held-out body | Answer paragraph, §9.5, §9.8 and §9.10 now say 25 of 32 (23 of the original 30) and name the seven; an "at rest" row per drape in the tables; `pom2_measure.py drapes` prints the count and the drapes still moving. Not done: more frames for AU 14 / AU 16 (listed as missing) |
+| 2 (high) | The edge-case verdicts are inside the uncertainty of the assumed band level | New `wear_rule.placement_sensitivity` and `pom2_measure.py placement`: girth per cm of level, the status with the band ±1 and ±2 cm, and the shift at which each cell changes class. §9.2 has the table (7 of 30 cells change within ±2 cm) and says what the band table does and does not support. The render labels of such cells now say "NOT A VERDICT (level ASSUMED)" with the shift; "cannot be worn" on the render became "band 1.7 cm short: not draped" |
+| 3 (medium) | Imposed numbers listed as simulated (hem height, folds 2 cm under the seam, 0 particles inside at the band, deeper folds on larger sizes) | `pom2_measure.py` has a third block, `followsFromImposed`; §9.5 has a separate table for it; the hem-height bullet is now "by arithmetic"; the deeper-folds sentence names the assumed top edge |
+| 4 (medium) | The hull at the hip is contaminated by the pinned seam ring; visible as a ledge under the band | Measured: the seam ring's hull and the stand-off profile from the seam to 13 cm below. Tested with two new drapes (`--clearance 1.6`): the hip hull moves 30-40 % of what the seam ring moves, the knee and hem do not. §9.5 no longer reads the hip hull as a pure output. Not fixed: the ledge itself (the collision margin and the mesh-limited fold depth set it) |
+| 5 (medium) | The drawn band is the panel mesh pinned smooth (17-31 % compressed), excluded from the reported strain, the same for every size | Stated in §9.3 and §9.5 and in `drape_blender.py`; `pom2_measure.py` reports the drawn rings, their rest length and compression. "Band girth 87.0 cm" now says it is the rule's girth, with the drawn 86.4-92.8. Not fixed: a real band mesh (listed under engineering); nothing simulated depends on those rings |
+| 6 (medium) | The pull-on label says "FAILS" for a size on its own chart body | Labels now print both margins (hip / widest hull) and one of "as on its own chart body", "clear", "short at the shop's stretch" (by the hip margin, ±2.5 cm); no "FAILS", "passes" or "marginal". The title says the check is not calibrated. §9.2 says the hull reading is refuted by its own diagonal. Test added |
+| 7 (medium) | Verdict scope wider than the evidence | §9.10 rewritten: GO for this garment on these bodies only; what the drape adds over the arithmetic; a second garment and stature listed as missing before "route" |
+| 8 (low) | Navel landmark sound; "a landmark, not a proportion" untested at one stature | Caveat and the pit-against-mean figure added to §9.2 |
+| 9 (low) | Gather model is real geometry; limits disclosed | No change |
+| 10 (low) | No AI image used as evidence in §9; residues (render colour, unused UV layout, `products.json` `selection.why`) | No change: `products.json` is outside this branch; the colour and UVs are not evidence |
+| 11 (low) | §9.6 and §9.8 tables lack INTERPOLATED / EXTRAPOLATED | Added |
+| 12 (low) | "Repeatable to about 1 cm"; monotone order within noise | §9.5 and §9.10: repeats 0.5 and 1.3 cm, long run 0.8 cm; only steps over about 1.5 cm are resolved; AU 12 / 14 / 16 are not ordered by these runs |

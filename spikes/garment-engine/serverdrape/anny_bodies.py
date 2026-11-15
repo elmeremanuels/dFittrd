@@ -16,6 +16,11 @@ Measurements (tape-like): girth = perimeter of the convex hull of the horizontal
 triangles removed). hip = girth at the height of the fullest point of the buttocks (largest back extent between 44 % and
 60 % of stature); waist = smallest girth between 59 % and 67 % of stature (natural waist; the mannequin ring is at 62 %).
 
+Navel (POM v2, the wear rule "just below the navel"): a LANDMARK, not a proportion. Anny's mesh is MakeHuman's; its
+own modifier `stomach-navel-in` (anny/data/mpfb2/targets/stomach) moves exactly the 19 vertices of the navel. navelY is
+the mean height of those vertices on the posed body (achieved.navelY, also as a fraction of stature: about 0.60, the
+usual anthropometric figure).
+
 Mannequin frame (packages/mannequin): Y up, cm, floor at y = 0, front +Z, torso centred on x = z = 0. Anny is Z up,
 metres, front -Y. Mapping: (x, y, z)_mannequin = 100 * (x, z - zmin, -y)_anny, then x and z shifted so the centre of the
 hip slice's bounding box is on the axis (as the mannequin's hip ellipse, cx = cz = 0). A proper rotation (no mirror).
@@ -23,7 +28,9 @@ hip slice's bounding box is on the axis (as the mannequin's hip ellipse, cx = cz
 Writes <out>/<id>.obj (triangles, mannequin frame), <out>/armmask.bin (uint8 per vertex) and <out>/bodies.json (parameters, achieved girths, ring heights).
 Usage: python anny_bodies.py <outDir> [t1,t2,...]   (default -1,0,1,-0.4; -0.4 is the held-out body: hip 100, waist 73.5)
 """
+import gzip
 import json
+import os
 import sys
 import time
 
@@ -87,6 +94,12 @@ class Body:
             rv = torch.zeros(3)
             rv[1] = sign * np.radians(ARM_RAISE_DEG)
             self.pose[0, m.bone_labels.index(f"upperarm01.{side}"), :3, :3] = roma.rotvec_to_rotmat(rv)
+        # Navel landmark: the vertices MakeHuman's own navel modifier moves (base-mesh indices -> Anny's).
+        target = os.path.join(os.path.dirname(anny.__file__), "data", "mpfb2", "targets", "stomach", "stomach-navel-in.target.gz")
+        with gzip.open(target, "rt") as fh:
+            base = {int(line.split()[0]) for line in fh if line.strip() and not line.startswith("#")}
+        self.navel = np.nonzero(np.isin(np.asarray(m.base_mesh_vertex_indices), list(base)))[0]
+        assert len(self.navel) >= 8, "navel landmark not found in this Anny topology"
         self.leg_bones = {l: i for i, l in enumerate(m.bone_labels) if l in ("upperleg01.L", "lowerleg01.L", "foot.L")}
 
     def vertices(self, params: dict) -> np.ndarray:
@@ -132,6 +145,8 @@ class Body:
             "hipY": (hip_z - zmin) * 100,
             "waistCm": gs[i] * 100,
             "waistY": (zs[i] - zmin) * 100,
+            "navelY": (v[self.navel, 2].mean() - zmin) * 100,
+            "navelOverStature": (v[self.navel, 2].mean() - zmin) / stature,
         }
 
 
@@ -216,7 +231,7 @@ def main() -> None:
             "heldOut": t not in (-1.0, 0.0, 1.0),
             "target": {"statureCm": STATURE_CM, "hipCm": hip_t, "waistCm": waist_t},
             "params": {"gender": 1.0, "age": 0.5, "muscle": 0.5, **{k: round(float(x), 5) for k, x in p.items()}},
-            "achieved": {k: round(float(x), 2) for k, x in meas.items()},
+            "achieved": {k: round(float(x), 4 if k == "navelOverStature" else 2) for k, x in meas.items()},
             "rings": {k: round(x, 2) for k, x in ring.items()},
             "cpuSeconds": round(time.process_time() - c0, 1),
         }

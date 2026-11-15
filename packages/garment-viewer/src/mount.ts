@@ -255,6 +255,15 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
   stage.controls.addEventListener('start', onControls);
   const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => wake(100)) : null;
   resizeObserver?.observe(canvas);
+  // A lost WebGL context (a phone that put the tab to sleep, a GPU reset) comes back empty. three.js
+  // rebuilds its own state when the context is restored; a settled view is idle by then, so it has
+  // to be told to draw again, or the canvas stays blank under its estimate label.
+  const onContextRestored = (): void => {
+    const live = fits.get(current);
+    if (live) live.dirty = true;
+    wake(300);
+  };
+  canvas.addEventListener('webglcontextrestored', onContextRestored);
 
   function tick(): void {
     raf = 0;
@@ -307,6 +316,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
       cancelAnimationFrame(raf);
       raf = 0;
       resizeObserver?.disconnect();
+      canvas.removeEventListener('webglcontextrestored', onContextRestored);
       stage.controls.removeEventListener('change', onControls);
       stage.controls.removeEventListener('start', onControls);
       pool?.terminate();

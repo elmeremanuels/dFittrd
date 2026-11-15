@@ -57,10 +57,14 @@ const setViewerState = (s: 'loading' | 'draping' | 'settled' | 'error'): void =>
 };
 
 const m = buildMannequin(bodyShape(BASE_SHAPE_ID));
-const canonical = buildMannequinMesh(m);
+const params = new URLSearchParams(location.search);
+// Avatar look (same options as the shipped viewer's MountOptions): `head=neutral` puts the neutral standard face on
+// the mannequin (the spike page keeps the egg by default, so its older renders stay comparable), `skin=rrggbb` colours
+// it, `lighting=neutral` switches the lights and the tone curve.
+const canonical = buildMannequinMesh(m, { head: params.get('head') === 'neutral' ? 'neutral' : 'egg' });
+const skinParam = /^[0-9a-fA-F]{6}$/.test(params.get('skin') ?? '') ? `#${params.get('skin')}` : null;
 const SPACING_CM = 78;
 
-const params = new URLSearchParams(location.search);
 const shapeParam = params.get('shape') ?? BASE_SHAPE_ID;
 const SHAPE: BodyShapeId = (BODY_SHAPE_IDS as readonly string[]).includes(shapeParam) ? (shapeParam as BodyShapeId) : BASE_SHAPE_ID;
 /** The canonical body: the M mannequin, or its avatar morphed to another canonical shape's chest, waist and hip girths. */
@@ -115,7 +119,7 @@ const state = {
   outlines: params.get('outlines') === '1',
 };
 
-const stage = new Stage($<HTMLCanvasElement>('stage'), { controls: true });
+const stage = new Stage($<HTMLCanvasElement>('stage'), { controls: true, lighting: params.get('lighting') === 'neutral' ? 'neutral' : 'classic' });
 const sessions = new Map<string, GarmentSession>();
 const avatars = new Map<string, { avatar: Avatar; field: BodyField; geometry: THREE.BufferGeometry }>();
 const fitResults = new Map<string, FitResult>();
@@ -244,6 +248,7 @@ async function refresh(): Promise<void> {
       figures.forEach((f, k) => {
         f.group.position.x = (k - (sizes.length - 1) / 2) * SPACING_CM;
         f.group.rotation.y = (viewYawDeg * Math.PI) / 180;
+        f.setSkin(skinParam);
         stage.scene.add(f.group);
       });
       figureProduct = state.productId;

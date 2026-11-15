@@ -11,11 +11,128 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import type { Mesh } from '@curtain/mannequin';
 import type { ViewerMaterial } from './engine';
 
+/**
+ * `classic`: the look every garment has had so far (ACES tone mapping, a warm ground bounce).
+ * `neutral`: white lights, a grey ground bounce and a tone curve that leaves colours alone below
+ * the highlights (`TRUE_TONE_GLSL`), set so that a matt surface facing the camera is rendered in
+ * its own colour (`frontIrradiance` = π), for skin and garment colours that are not shifted. It
+ * changes how every garment looks, so it is opt-in.
+ */
+export type Lighting = 'classic' | 'neutral';
+
+export interface LightingRig {
+  toneMapping: 'aces' | 'true-tone';
+  /** Hemisphere light: sky and ground colour (sRGB hex) and intensity. */
+  sky: number;
+  ground: number;
+  hemisphere: number;
+  /** Key light from the front, above and to the viewer's right; rim light from behind. */
+  key: number;
+  rim: number;
+  /** Colour of the floor disc (sRGB). */
+  floor: string;
+}
+
+export const KEY_POSITION = [150, 260, 320] as const;
+export const RIM_POSITION = [-220, 180, -260] as const;
+
+// The neutral floor is darker than the classic one: lit from above it gets more than π and is no longer greyed by
+// ACES, so the classic colour came out almost the background's and the figure lost its ground.
+export const LIGHTING_RIGS: Readonly<Record<Lighting, LightingRig>> = {
+  classic: { toneMapping: 'aces', sky: 0xffffff, ground: 0x8a8076, hemisphere: 1.4, key: 2.2, rim: 1.1, floor: '#E9E1D6' },
+  neutral: { toneMapping: 'true-tone', sky: 0xffffff, ground: 0x9a9a9a, hemisphere: 1.5, key: 2.9, rim: 1.1, floor: '#CEC7BC' },
+};
+
+/** Linear value where the `neutral` tone curve starts to compress highlights; below it a colour passes unchanged. */
+export const TRUE_TONE_START = 0.9;
+
+/**
+ * The tone curve of the `neutral` lighting, in the slot three.js keeps for a custom one: the
+ * highlight roll-off of the Khronos PBR Neutral curve (three's `NeutralToneMapping`) without its
+ * offset in the darks. That offset makes up for the reflection of a bright surround, which this
+ * scene does not have; with it, dark colours came out darker and more saturated than asked for
+ * (measured on the deep skin tone). `trueTone` below is the same function for the tests.
+ */
+export const TRUE_TONE_GLSL = `vec3 CustomToneMapping( vec3 color ) {
+	const float StartCompression = ${TRUE_TONE_START.toFixed(2)};
+	const float Desaturation = 0.15;
+	color *= toneMappingExposure;
+	float peak = max( color.r, max( color.g, color.b ) );
+	if ( peak < StartCompression ) return color;
+	float d = 1. - StartCompression;
+	float newPeak = 1. - d * d / ( peak + d - StartCompression );
+	color *= newPeak / peak;
+	float g = 1. - 1. / ( Desaturation * ( peak - newPeak ) + 1. );
+	return mix( color, vec3( newPeak ), g );
+}`;
+
+/** `TRUE_TONE_GLSL` on linear RGB. */
+export function trueTone(color: readonly [number, number, number]): [number, number, number] {
+  const peak = Math.max(...color);
+  if (peak < TRUE_TONE_START) return [color[0], color[1], color[2]];
+  const d = 1 - TRUE_TONE_START;
+  const newPeak = 1 - (d * d) / (peak + d - TRUE_TONE_START);
+  const g = 1 - 1 / (0.15 * (peak - newPeak) + 1);
+  return color.map((c) => (c * newPeak) / peak + (newPeak - (c * newPeak) / peak) * g) as [number, number, number];
+}
+
+const CUSTOM_SLOT = 'vec3 CustomToneMapping( vec3 color ) { return color; }';
+/**
+ * Put `TRUE_TONE_GLSL` in three's custom tone-mapping slot (once). The slot is global to the page's
+ * copy of three.js: any other renderer there that asks for `CustomToneMapping` gets this curve too
+ * (renderers with another tone mapping are not affected). False when the slot is not there (a
+ * three.js that renamed it) or holds someone else's curve: the stage then falls back to three's
+ * own `NeutralToneMapping`, which also rolls highlights off, with slightly darker darks.
+ */
+export function installTrueTone(): boolean {
+  const chunk = THREE.ShaderChunk.tonemapping_pars_fragment;
+  if (chunk.includes(TRUE_TONE_GLSL)) return true;
+  if (!chunk.includes(CUSTOM_SLOT)) return false;
+  THREE.ShaderChunk.tonemapping_pars_fragment = chunk.replace(CUSTOM_SLOT, TRUE_TONE_GLSL);
+  return true;
+}
+
+/** Where `Stage.frame` puts the camera and its target (cm) for a canvas of the given aspect and vertical field of view. */
+export function cameraFrame(widthCm: number, statureCm: number, aspect: number, fovDeg: number): { position: [number, number, number]; target: [number, number, number] } {
+  // Up to 175 cm the frame is the one every figure has had; a taller typed body moves the camera back and up with it.
+  const k = Math.max(1, statureCm / 175);
+  const vfov = (fovDeg * Math.PI) / 180;
+  const fitH = (205 * k) / 2 / Math.tan(vfov / 2);
+  const fitW = (widthCm + 20) / 2 / Math.tan(vfov / 2) / Math.max(0.3, aspect);
+  return { position: [0, 112 * k, Math.max(fitH, fitW)], target: [0, 98 * k, 0] };
+}
+
+/** Canvas position (CSS px from the top left of a `width` × `height` canvas) of a world point seen by `camera`. */
+export function projectToCanvas(camera: THREE.Camera, p: THREE.Vector3, width: number, height: number): { x: number; y: number } {
+  const v = p.clone().project(camera);
+  return { x: ((v.x + 1) / 2) * width, y: ((1 - v.y) / 2) * height };
+}
+
+const srgbToLinear = (c: number): number => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+
+/**
+ * Irradiance (linear RGB) a rig puts on a surface that faces the camera's rest position (+Z).
+ * three.js renders a matt surface as colour × irradiance / π before tone mapping, so π in every
+ * channel means "its own colour".
+ */
+export function frontIrradiance(rig: LightingRig): [number, number, number] {
+  const len = Math.hypot(...KEY_POSITION);
+  const keyCos = KEY_POSITION[2] / len;
+  return [16, 8, 0].map((shift) => {
+    const sky = srgbToLinear(((rig.sky >> shift) & 255) / 255);
+    const ground = srgbToLinear(((rig.ground >> shift) & 255) / 255);
+    // A hemisphere light on a vertical surface: half sky, half ground. The rim light is behind it.
+    return rig.hemisphere * 0.5 * (sky + ground) + rig.key * keyCos;
+  }) as [number, number, number];
+}
+
 export interface StageOptions {
   /** Drag to rotate and wheel or pinch to zoom. */
   controls?: boolean;
   /** Turn the camera slowly around the figures (blind test). */
   autoRotate?: boolean;
+  /** Lights and tone mapping; default `classic`, the look as before. */
+  lighting?: Lighting;
 }
 
 export class Stage {
@@ -23,22 +140,25 @@ export class Stage {
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(28, 1, 5, 5000);
   readonly controls: OrbitControls;
+  readonly lighting: Lighting;
   private readonly canvas: HTMLCanvasElement;
 
   constructor(canvas: HTMLCanvasElement, options: StageOptions = {}) {
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    const rig = LIGHTING_RIGS[options.lighting === 'neutral' ? 'neutral' : 'classic'];
+    this.lighting = options.lighting === 'neutral' ? 'neutral' : 'classic';
+    this.renderer.toneMapping = rig.toneMapping !== 'true-tone' ? THREE.ACESFilmicToneMapping : installTrueTone() ? THREE.CustomToneMapping : THREE.NeutralToneMapping;
     this.scene.background = new THREE.Color('#F5EFE7');
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8076, 1.4));
-    const key = new THREE.DirectionalLight(0xffffff, 2.2);
-    key.position.set(150, 260, 320);
+    this.scene.add(new THREE.HemisphereLight(rig.sky, rig.ground, rig.hemisphere));
+    const key = new THREE.DirectionalLight(0xffffff, rig.key);
+    key.position.set(...KEY_POSITION);
     this.scene.add(key);
-    const rim = new THREE.DirectionalLight(0xffffff, 1.1);
-    rim.position.set(-220, 180, -260);
+    const rim = new THREE.DirectionalLight(0xffffff, rig.rim);
+    rim.position.set(...RIM_POSITION);
     this.scene.add(rim);
-    const floor = new THREE.Mesh(new THREE.CircleGeometry(400, 64), new THREE.MeshStandardMaterial({ color: '#E9E1D6', roughness: 1 }));
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(400, 64), new THREE.MeshStandardMaterial({ color: rig.floor, roughness: 1 }));
     floor.rotation.x = -Math.PI / 2;
     this.scene.add(floor);
     this.controls = new OrbitControls(this.camera, canvas);
@@ -53,15 +173,11 @@ export class Stage {
     this.frame(60);
   }
 
-  /** Point the camera at figures spread over `widthCm` (front view). */
-  frame(widthCm: number): void {
-    const target = new THREE.Vector3(0, 98, 0);
-    const vfov = (this.camera.fov * Math.PI) / 180;
-    const aspect = Math.max(0.3, this.camera.aspect);
-    const fitH = 205 / 2 / Math.tan(vfov / 2);
-    const fitW = (widthCm + 20) / 2 / Math.tan(vfov / 2) / aspect;
-    this.camera.position.set(0, 112, Math.max(fitH, fitW));
-    this.controls.target.copy(target);
+  /** Point the camera at figures spread over `widthCm` (front view). `statureCm` only matters for a body taller than the canonical ones. */
+  frame(widthCm: number, statureCm = 0): void {
+    const f = cameraFrame(widthCm, statureCm, this.camera.aspect, this.camera.fov);
+    this.camera.position.set(...f.position);
+    this.controls.target.set(...f.target);
     this.controls.update();
   }
 
@@ -85,8 +201,7 @@ export class Stage {
 
   /** Screen position (CSS px within the canvas) of a world point, for labels. */
   toScreen(p: THREE.Vector3): { x: number; y: number } {
-    const v = p.clone().project(this.camera);
-    return { x: ((v.x + 1) / 2) * this.canvas.clientWidth, y: ((1 - v.y) / 2) * this.canvas.clientHeight };
+    return projectToCanvas(this.camera, p, this.canvas.clientWidth, this.canvas.clientHeight);
   }
 }
 
@@ -98,7 +213,17 @@ export function meshGeometry(mesh: Pick<Mesh, 'positions' | 'indices'>): THREE.B
   return g;
 }
 
-const BODY_MATERIAL = new THREE.MeshStandardMaterial({ color: '#8C8C8C', roughness: 0.75, metalness: 0 });
+/** The mannequin's colour when no skin tone is chosen: the mid-grey every figure has had. */
+export const DEFAULT_BODY_HEX = '#8C8C8C';
+const BODY_MATERIAL = new THREE.MeshStandardMaterial({ color: DEFAULT_BODY_HEX, roughness: 0.75, metalness: 0 });
+
+/** Strength of the white reflection on a skin-coloured body (1 = the grey mannequin's). */
+export const SKIN_SPECULAR = 0.3;
+
+/** A `#rrggbb` colour, lower-cased, or null for anything else (the figure then keeps the default grey). */
+export function parseSkinHex(value: unknown): string | null {
+  return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value.toLowerCase() : null;
+}
 
 /** A baked texture for a figure: render-mesh UVs and triangles, render vertex → particle, and the decoded image. */
 export interface FigureTexture {
@@ -164,6 +289,33 @@ export class Figure {
 
   setBody(geometry: THREE.BufferGeometry): void {
     this.body.geometry = geometry;
+  }
+
+  private skin: THREE.MeshPhysicalMaterial | null = null;
+
+  /**
+   * The skin colour of this figure's body (`#rrggbb`), or null (or anything that is not such a
+   * colour) for the default grey. A figure with a skin colour has a material of its own; the
+   * grey one is shared and never changed, so no other figure is affected.
+   */
+  setSkin(hex: string | null): void {
+    const colour = parseSkinHex(hex);
+    if (!colour) {
+      this.body.material = BODY_MATERIAL;
+      this.skin?.dispose();
+      this.skin = null;
+      return;
+    }
+    // A skin colour gets less white reflection than the grey mannequin (`SKIN_SPECULAR`): on a deep tone the grey
+    // material's reflection alone lifted the colour by 4 to 9 L* (measured, avatar-renders.mjs).
+    if (!this.skin) this.skin = new THREE.MeshPhysicalMaterial({ color: colour, roughness: 0.75, metalness: 0, specularIntensity: SKIN_SPECULAR });
+    else this.skin.color.set(colour);
+    this.body.material = this.skin;
+  }
+
+  /** The body colour shown now, `#rrggbb`. */
+  get skinHex(): string {
+    return `#${(this.body.material as THREE.MeshStandardMaterial).color.getHexString()}`;
   }
 
   setPositions(pos: Float32Array): void {
@@ -245,6 +397,8 @@ export class Figure {
   dispose(): void {
     this.garment.geometry.dispose();
     this.garment.material.dispose();
+    this.skin?.dispose();
+    this.skin = null;
   }
 }
 

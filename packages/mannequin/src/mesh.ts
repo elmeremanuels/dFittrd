@@ -3,7 +3,8 @@
  * checks the pipeline needs (watertight, consistently oriented, closed volume).
  */
 import { cross, sub, type Vec3 } from './math';
-import type { Mannequin, PartSpec } from './model';
+import { buildHeadPart, HEAD_LEVELS } from './head';
+import { levelWarp, type Mannequin, type PartSpec } from './model';
 
 export interface Mesh {
   /** xyz per vertex, cm. */
@@ -104,18 +105,55 @@ export function mergeParts(parts: { name: string; positions: number[]; indices: 
   return { positions, indices, vertexPart, partNames: parts.map((p) => p.name) };
 }
 
+export interface MeshOptions {
+  /**
+   * `egg` (default): the v0 head, part of the torso, bytes as before. `neutral`: the neutral
+   * standard face of `head.ts` as a sixth closed part `head`; the torso's neck runs straight up
+   * into it and the egg is gone.
+   */
+  head?: 'egg' | 'neutral';
+}
+
+/** The torso part with the egg head cut off: the neck continues as a column that ends inside the head part. */
+function torsoWithoutHead(mannequin: Mannequin, torso: PartSpec): PartSpec {
+  const warp = levelWarp(mannequin.shape.levels);
+  const level = (f: number): number => (warp ? warp(f) : f) * mannequin.statureCm;
+  const neckTop = level(HEAD_LEVELS.neckTop);
+  const neckEnd = level(HEAD_LEVELS.neckEnd);
+  const below = torso.sections.filter((s) => s.centre[1] <= neckTop + 1e-9);
+  const last = below[below.length - 1]!;
+  const column = torso.sections
+    .filter((s) => s.centre[1] > neckTop + 1e-9 && s.centre[1] <= neckEnd)
+    .map((s) => {
+      // Inside the head the column narrows and leans forward a little, so no edge of it shows behind the jaw.
+      const t = (s.centre[1] - neckTop) / (neckEnd - neckTop);
+      const k = 1 - 0.4 * t * t;
+      return { ...s, centre: [last.centre[0], s.centre[1], last.centre[2] + 0.012 * mannequin.statureCm * t] as [number, number, number], a: last.a * k, b: last.b * k };
+    });
+  const sections = [...below, ...column];
+  const end = sections[sections.length - 1]!;
+  return { ...torso, sections, endPole: [end.centre[0], end.centre[1] + 0.5, end.centre[2]] };
+}
+
 /**
  * The mannequin as one mesh (five closed parts; the limbs overlap the torso — v0 does no boolean
- * union, so each part is a separate closed surface).
+ * union, so each part is a separate closed surface). With `head: 'neutral'` a sixth closed part,
+ * the neutral standard head, replaces the egg.
  */
-export function buildMannequinMesh(mannequin: Mannequin): Mesh {
-  return mergeParts(
-    mannequin.parts.map((part) => {
-      const { positions, indices } = loftSections(part.sections, part.segments, { start: part.startPole, end: part.endPole });
-      if (signedVolume(positions, indices) < 0) flipWinding(indices);
-      return { name: part.id, positions, indices };
-    }),
-  );
+export function buildMannequinMesh(mannequin: Mannequin, options: MeshOptions = {}): Mesh {
+  const neutral = options.head === 'neutral';
+  const parts = mannequin.parts.map((part) => {
+    const spec = neutral && part.id === 'torso' ? torsoWithoutHead(mannequin, part) : part;
+    const { positions, indices } = loftSections(spec.sections, spec.segments, { start: spec.startPole, end: spec.endPole });
+    if (signedVolume(positions, indices) < 0) flipWinding(indices);
+    return { name: part.id as string, positions, indices };
+  });
+  if (neutral) {
+    const head = buildHeadPart(mannequin);
+    if (signedVolume(head.positions, head.indices) < 0) flipWinding(head.indices);
+    parts.push(head);
+  }
+  return mergeParts(parts);
 }
 
 /** Area-weighted vertex normals (unit length). */

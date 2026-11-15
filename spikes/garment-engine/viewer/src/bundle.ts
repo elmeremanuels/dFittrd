@@ -18,7 +18,8 @@ export interface GarmentAnchorsJson {
   baseSize: string;
   category: string;
   unit: 'cm';
-  mannequin: { version: string; shape: string };
+  /** `family` is absent in every bundle so far: read a missing family as `female` (`bundleFamilyOf`). */
+  mannequin: { version: string; shape: string; family?: 'female' | 'male' };
   synthetic: boolean;
   /** Set by evaluated bundles: the file holding the product payload. */
   payloadFile?: string;

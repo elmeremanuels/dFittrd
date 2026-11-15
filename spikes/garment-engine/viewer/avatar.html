@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Avatar look check (estimate)</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #f5efe7; font: 13px/1.3 system-ui, sans-serif; color: #1a1612; }
+      #stage { display: block; width: 100vw; height: 100vh; }
+      #tag { position: fixed; left: 8px; top: 8px; background: rgba(26, 22, 18, 0.82); color: #fff; padding: 4px 8px; border-radius: 4px; max-width: calc(100vw - 32px); }
+    </style>
+  </head>
+  <body>
+    <canvas id="stage" data-testid="stage"></canvas>
+    <div id="tag" data-testid="tag">ESTIMATE</div>
+    <script type="module" src="./src/avatarMain.ts"></script>
+  </body>
+</html>

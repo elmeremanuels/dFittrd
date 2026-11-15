@@ -57,3 +57,15 @@ Of all this, only `typecheck` and the pure-logic unit tests (`viewer/src/*.test.
 | Headless renders | `node viewer/render-eval.mjs [eval/<id> …] [--blind eval/<id>,… \| --no-blind]` (the report runs it with `--renders`): per product and body (M, XS, XXL) sizes 8, 12 and 16 side by side (the chart's sizes when it lacks those), on M also at three-quarter and side view, with and without the fit map, into `out/eval/<id>/renders/`; then the blind page with the products pre-selected (`out/eval/blind-*.png`) and `out/eval/renders.json` with the drape time per size. |
 
 On the synthetic dress (6 Nov 2026, this container, SwiftShader), the drape took 1.5–5.4 s per size on the M mannequin and 5.1–5.8 s on the XS and XXL shapes over three render runs, against 1.2–1.4 s in `viewer:smoke`. Each body is a fresh page load with three sizes draping at once, which likely explains part of it; not investigated, and not a phone measurement either way.
+
+## Avatar look check (`avatar.html`, `avatar-renders.mjs`)
+
+For plan slices 1 and 2 (`docs/research/photo-avatar-plan.md`): skin colour, neutral lighting, the neutral standard head and `MountOptions.body`. `avatar.html` mounts the **shipped** viewer (`packages/garment-viewer`, `mountGarmentView`) on an evaluated bundle, so the pictures are what the embed gets; `mode=head` shows a body alone. Parameters: `product=eval/<id>`, `size`, `skin=rrggbb`, `lighting=neutral`, `head=egg`, `family=male`, `height`, `shoulder`, `bust`, `waist`, `hip`; with `mode=head` also `yaw` and `frame=body`. Every picture carries an ESTIMATE tag. No photo is involved anywhere; the page only GETs bundle files from the dev server.
+
+```sh
+node spikes/garment-engine/viewer/avatar-renders.mjs <out dir> [eval/<id> …] [--match <text>]
+```
+
+Per product (default: the pilot skirt and the azure dress in `out/eval/`), in `classic` and `neutral` lighting, in the default grey and at Monk 2, 6 and 9: a phone-sized picture and the colour error of bare-skin patches (CIEDE2000 and CIE76 against the requested colour) in `measurements.json`. Then the head alone, both families, three angles, and two typed bodies. The measured table is in `packages/garment-viewer/README.md`.
+
+The spike's own page (`index.html`) takes the same three look parameters: `skin=rrggbb`, `lighting=neutral`, and `head=neutral` (the spike page keeps the egg head by default so its earlier renders stay comparable; the shipped viewer's default is the neutral head). `scene.ts` and `body.ts` here carry the same changes as the fork in `packages/garment-viewer` (checked by its `src/look.test.ts`).

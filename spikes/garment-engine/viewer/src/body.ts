@@ -8,7 +8,7 @@
  */
 import { gradingMorph, type AnchorRing, type AnchorValues, type GradingMorph } from '@curtain/anchors';
 import type { UserBody } from '@curtain/schema';
-import type { Mannequin, Mesh } from '@curtain/mannequin';
+import { buildBody, buildMannequinMesh, type BodyFamily, type Mannequin, type Mesh, type MeshOptions } from '@curtain/mannequin';
 import { armpitDistance, radialMorph, type ChainAssignment } from '../../src/garment';
 import { makeCollider, type BodyField, type Table } from './collide';
 
@@ -79,7 +79,124 @@ export function buildAvatar(m: Mannequin, canonical: Mesh, meas: BodyMeasurement
   const morph = gradingMorph(base, target, { heights: m.morphHeights });
   const rings = {} as Record<AnchorRing, number>;
   for (const r of m.rings) rings[r.id] = r.circumferenceCm * (r.part.startsWith('arm') ? 1 : morph.girthScaleAt(m.morphHeights[r.id], 'body'));
-  return { measurements: meas, morph, rings, mesh: radialMorph(m, canonical, mannequinChains(canonical), morph) };
+  return { measurements: meas, morph, rings, mesh: calmHead(m, canonical, radialMorph(m, canonical, mannequinChains(canonical), morph), morph) };
+}
+
+/** How much of the neck's girth scale the neutral head takes on: a head does not grow with the bust. */
+export const HEAD_SCALE_SHARE = 0.2;
+
+/**
+ * The neutral head (part `head` of a mesh built with `head: 'neutral'`) is not widened like the
+ * torso: it takes `HEAD_SCALE_SHARE` of the scale at the neck ring. A mesh without that part (the
+ * egg head, which belongs to the torso) is returned as it is.
+ */
+function calmHead(m: Mannequin, canonical: Mesh, morphed: Mesh, morph: Pick<GradingMorph, 'girthScaleAt'>): Mesh {
+  const head = canonical.partNames.indexOf('head');
+  if (head < 0) return morphed;
+  const s = 1 + HEAD_SCALE_SHARE * (morph.girthScaleAt(m.morphHeights.neck, 'body') - 1);
+  const out = Float64Array.from(morphed.positions);
+  for (let i = 0; i < canonical.vertexPart.length; i++) {
+    if (canonical.vertexPart[i] !== head) continue;
+    out[3 * i] = canonical.positions[3 * i]! * s;
+    out[3 * i + 2] = canonical.positions[3 * i + 2]! * s;
+  }
+  return { ...morphed, positions: out };
+}
+
+// ---------------------------------------------------------------------------
+// MountOptions.body: family, height and shoulder width (packages/mannequin README, "Families")
+// ---------------------------------------------------------------------------
+
+/**
+ * What the host may pass as `MountOptions.body`: the three girths as before, plus the fields of
+ * `BodyInput` in `@curtain/mannequin`. Everything is optional; with only girths (or nothing) the
+ * avatar is built exactly as before.
+ */
+export interface BodyOptions extends Partial<BodyMeasurements> {
+  /** `female` (default) or `male`. Anything else is read as `female`, today's figure. */
+  family?: BodyFamily;
+  /** Stature, cm. */
+  heightCm?: number;
+  /** Straight distance between the two shoulder points, cm (see the mannequin README). */
+  shoulderCm?: number;
+  /** The same measurement as `bust`; wins over it when both are given. */
+  chest?: number;
+}
+
+const positive = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined);
+
+export function bodyFamilyOf(body: { family?: unknown } | null | undefined): BodyFamily {
+  return body?.family === 'male' ? 'male' : 'female';
+}
+
+/** The family a bundle's garment was draped on. Bundles record none so far: a missing family is `female`. */
+export function bundleFamilyOf(anchors: { mannequin?: { family?: unknown } } | null | undefined): BodyFamily {
+  return anchors?.mannequin?.family === 'male' ? 'male' : 'female';
+}
+
+/** True when the body needs `buildBody` (a typed height or shoulder width); false keeps the morphed base mesh, as before. */
+export function isTypedBody(body: BodyOptions): boolean {
+  return positive(body.heightCm) !== undefined || positive(body.shoulderCm) !== undefined;
+}
+
+/** The girths of `body` with `chest` read as `bust`. */
+export function girthInput(body: BodyOptions): Partial<Record<keyof BodyMeasurements, unknown>> {
+  return { bust: positive(body.chest) ?? body.bust, waist: body.waist, hip: body.hip };
+}
+
+export interface TypedAvatar {
+  avatar: Avatar;
+  /** The drawn body's collision field in the garment's space: moved down by `garmentLiftCm`. */
+  field: BodyField;
+  /** The body as drawn (at the typed height), cm. */
+  statureCm: number;
+  /**
+   * How far the draped garment is drawn above where the bundle has it (cm; negative on a shorter
+   * body), so that it hangs from the drawn body's own shoulder ring (waist ring for a bottom).
+   */
+  garmentLiftCm: number;
+}
+
+/** A collision field moved up by `dyCm` (the tables are keyed by height, the arm frames by their joint). */
+export function liftField(field: BodyField, dyCm: number): BodyField {
+  const up = (t: Table): Table => ({ ...t, lo: t.lo + dyCm });
+  return {
+    torso: up(field.torso),
+    legs: [up(field.legs[0]), up(field.legs[1])],
+    arms: field.arms,
+    armFrames: field.armFrames.map((f) => ({ ...f, joint: [f.joint[0], f.joint[1] + dyCm, f.joint[2]] as [number, number, number] })),
+  };
+}
+
+/**
+ * The avatar for a body with a typed height or shoulder width, built with `buildBody` (the only
+ * path that honours them) in the family of `base`, the body the bundle was draped on.
+ *
+ * The garment keeps its own lengths and hangs from the shoulder ring (from the waist ring for a
+ * bottom). The bundle has it on a body of `base`'s stature, so the drape runs in the garment's
+ * space against the drawn body moved down by the difference of that support level
+ * (`garmentLiftCm`), and the viewer draws the draped garment that much higher. On a taller body
+ * the hem therefore ends higher on the leg, and the cloth collides with the body it is drawn on.
+ * Known limits: the floor of the drape stays where the bundle body stood (a hem that reaches the
+ * floor on a shorter body passes through it and is hidden by the floor), and the grading and the
+ * pins are still placed on `base`.
+ */
+export function buildTypedAvatar(base: Mannequin, body: BodyOptions, category: string, mesh: MeshOptions = {}): TypedAvatar {
+  const family = base.shape.family;
+  const meas = sanitiseMeasurements(girthInput(body), mannequinMeasurements(base));
+  const shoulderCm = positive(body.shoulderCm);
+  // Without a typed height the body keeps the stature of the bundle's body, as the morphed avatar does.
+  const shown = buildBody({ family, bust: meas.bust, waist: meas.waist, hip: meas.hip, heightCm: positive(body.heightCm) ?? base.statureCm, ...(shoulderCm === undefined ? {} : { shoulderCm }) });
+  const rings = {} as Record<AnchorRing, number>;
+  for (const r of shown.rings) rings[r.id] = r.circumferenceCm;
+  const support: AnchorRing = category === 'bottom' ? 'waist' : 'shoulder';
+  const garmentLiftCm = shown.morphHeights[support] - base.morphHeights[support];
+  return {
+    avatar: { measurements: meas, morph: IDENTITY_MORPH.morph, rings, mesh: buildMannequinMesh(shown, mesh) },
+    field: liftField(bodyField(shown, IDENTITY_MORPH), -garmentLiftCm),
+    statureCm: shown.statureCm,
+    garmentLiftCm,
+  };
 }
 
 // ---------------------------------------------------------------------------

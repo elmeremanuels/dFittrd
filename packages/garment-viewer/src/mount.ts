@@ -5,18 +5,33 @@
  * files under `baseUrl`. The size shown is the size the embed's own fit-engine result recommends
  * (AGENTS.md rule 4, D15): this module takes that FitResult and never computes a fit itself.
  */
-import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh } from '@curtain/mannequin';
+import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh, familyShape } from '@curtain/mannequin';
 import type { FitResult } from '@curtain/fit-engine';
 import type { GarmentPayload } from '@curtain/schema';
-import { bodyField, buildAvatar, mannequinMeasurements, sanitiseMeasurements, type BodyMeasurements } from './body';
+import { bodyFamilyOf, bodyField, buildAvatar, buildTypedAvatar, bundleFamilyOf, girthInput, isTypedBody, mannequinMeasurements, sanitiseMeasurements, type BodyMeasurements, type BodyOptions } from './body';
 import { loadBundleFrom, type FetchLike } from './bundle';
 import { checkBundle, gradingLabel } from './bundleCheck';
 import { isSettled, stepCloth } from './cloth';
 import { DrapePool } from './drapePool';
 import { DEFAULT_DRAPE, drapeJobOf, openSession, prepareFit, viewerMaterial, type DrapeOptions, type FitInstance } from './engine';
-import { Figure, Stage, meshGeometry } from './scene';
+import * as THREE from 'three';
+import { Figure, Stage, meshGeometry, parseSkinHex, type Lighting } from './scene';
 
 export type GarmentViewState = 'loading' | 'draping' | 'settled' | 'error';
+
+/**
+ * How the figure looks. A look is a display value only: it stays in memory on the device, is
+ * never fetched, stored or sent by this package, and is not part of the fit.
+ */
+export interface AvatarLook {
+  /** Skin colour of the mannequin, `#rrggbb`. Absent, null or not such a colour: the default mid-grey. */
+  skinHex?: string | null;
+  /**
+   * `neutral` (default): the neutral standard face of `@curtain/mannequin` (D19: no avatar looks
+   * unfinished). `egg`: the plain v0 head. Fixed at mount; `setLook` does not change it.
+   */
+  head?: 'neutral' | 'egg';
+}
 
 export interface MountOptions {
   /** Directory URL of the approved bundle (`asset.baseUrl` from `GET /v1/try`). */
@@ -27,8 +42,21 @@ export interface MountOptions {
   fit: FitResult;
   /** The size to show first (the recommended or the selected size). */
   size: string;
-  /** The shopper's girths, cm (local profile; never sent anywhere). */
-  body: Partial<BodyMeasurements>;
+  /**
+   * The shopper's body, cm (local profile; never sent anywhere): the girths `bust` (or `chest`),
+   * `waist`, `hip` as before, and optionally `family` (`female` by default), `heightCm` and
+   * `shoulderCm` (`BodyInput` of `@curtain/mannequin`). With girths only, the avatar is built as
+   * before. A family other than the one the bundle was draped on is `GarmentViewError('incompatible')`:
+   * a garment is never shown in 3D on a body of the other family (every bundle today is female M).
+   */
+  body: BodyOptions;
+  /** Skin colour and head of the figure; `setLook` changes the colour without a remount. */
+  look?: AvatarLook;
+  /**
+   * `classic` (default): lights and tone mapping as before. `neutral`: white lights and neutral
+   * tone mapping, so skin and garment colours are not shifted. It changes how every garment looks.
+   */
+  lighting?: Lighting;
   /** Called on every state change (the overlay shows a spinner, then the canvas). */
   onState?: (state: GarmentViewState) => void;
   fetch?: FetchLike;
@@ -41,6 +69,13 @@ export interface GarmentView {
   setSize(size: string): boolean;
   /** The sizes the bundle can show. */
   sizes: string[];
+  /** Change the figure's look in place (no remount, no new drape). Only `skinHex` can change after the mount. */
+  setLook(look: AvatarLook | null | undefined): void;
+  /**
+   * Where a point of the figure is on the canvas now (CSS px from its top left), for a tap target
+   * or a chip on the head. `head` is the middle of the face of the drawn body.
+   */
+  toScreen(point: 'head' | readonly [number, number, number]): { x: number; y: number };
   dispose(): void;
 }
 
@@ -89,19 +124,40 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
     throw new GarmentViewError('incompatible');
   }
 
-  const m = buildMannequin(bodyShape(BASE_SHAPE_ID));
-  const canonical = buildMannequinMesh(m);
+  // Drape guard: the drawn body is of the family the bundle's garment was draped on, or there is no 3D view.
+  const body: BodyOptions = opts.body ?? {};
+  const family = bundleFamilyOf(bundle.anchors);
+  if (bodyFamilyOf(body) !== family) {
+    state('error');
+    throw new GarmentViewError('incompatible');
+  }
+  const m = buildMannequin(family === 'male' ? familyShape('male')! : bodyShape(BASE_SHAPE_ID));
+  const head = opts.look?.head === 'egg' ? 'egg' : 'neutral';
   const session = openSession(m, bundle, opts.garment);
-  const avatar = buildAvatar(m, canonical, sanitiseMeasurements(opts.body, mannequinMeasurements(m)));
-  const field = bodyField(m, avatar);
+  let avatar, field, lift = 0, stature = 0;
+  if (isTypedBody(body)) {
+    // A typed height or shoulder width: the body is built from the measurements (`buildBody`).
+    const typed = buildTypedAvatar(m, body, bundle.anchors.category, { head });
+    ({ avatar, field } = typed);
+    lift = typed.garmentLiftCm;
+    stature = typed.statureCm;
+  } else {
+    avatar = buildAvatar(m, buildMannequinMesh(m, { head }), sanitiseMeasurements(girthInput(body), mannequinMeasurements(m)));
+    field = bodyField(m, avatar);
+  }
   const material = viewerMaterial('product', bundle.material);
-  const stage = new Stage(canvas, { controls: true });
+  const stage = new Stage(canvas, { controls: true, lighting: opts.lighting });
   const n = bundle.baseMesh.positions.length / 3;
   const tex = bundle.render && bundle.textureImage ? { ...bundle.render, image: bundle.textureImage } : null;
   const figure = new Figure(meshGeometry(avatar.mesh), bundle.baseMesh.indices, n, tex);
   figure.setMaterial(material);
+  figure.setSkin(parseSkinHex(opts.look?.skinHex));
+  figure.garment.position.y = lift;
+  // The middle of the face: 93.5 % of the drawn stature, at the front of the head.
+  const drawnStature = stature || m.statureCm;
+  const headPoint: readonly [number, number, number] = [0, 0.935 * drawnStature, 0.055 * drawnStature];
   stage.scene.add(figure.group);
-  stage.frame(60);
+  stage.frame(60, stature);
 
   interface Live {
     fit: FitInstance;
@@ -203,6 +259,17 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
   return {
     setSize,
     sizes: ok.sizes,
+    toScreen(point) {
+      const p = point === 'head' ? headPoint : point;
+      stage.resize();
+      stage.camera.updateMatrixWorld();
+      return stage.toScreen(new THREE.Vector3(p[0], p[1], p[2]));
+    },
+    setLook(look) {
+      if (disposed) return;
+      figure.setSkin(parseSkinHex(look?.skinHex));
+      wake(100);
+    },
     dispose() {
       disposed = true;
       cancelAnimationFrame(raf);
@@ -219,4 +286,4 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
   };
 }
 
-export type { BodyMeasurements };
+export type { BodyMeasurements, BodyOptions };

@@ -56,6 +56,8 @@ export interface Avatar {
   /** Body ring girths of the avatar, cm. */
   rings: Record<AnchorRing, number>;
   mesh: Mesh;
+  /** How the neck was narrowed to sit under the neutral head (`fitNeckToHead`); absent or null: not at all. */
+  neck?: NeckFit | null;
 }
 
 /** Chains of the mannequin mesh from its part labels: arms follow their arm, the rest the body. */
@@ -79,7 +81,9 @@ export function buildAvatar(m: Mannequin, canonical: Mesh, meas: BodyMeasurement
   const morph = gradingMorph(base, target, { heights: m.morphHeights });
   const rings = {} as Record<AnchorRing, number>;
   for (const r of m.rings) rings[r.id] = r.circumferenceCm * (r.part.startsWith('arm') ? 1 : morph.girthScaleAt(m.morphHeights[r.id], 'body'));
-  return { measurements: meas, morph, rings, mesh: calmHead(m, canonical, radialMorph(m, canonical, mannequinChains(canonical), morph), morph) };
+  const fitted = fitNeckToHead(calmHead(m, canonical, radialMorph(m, canonical, mannequinChains(canonical), morph), morph), m);
+  if (fitted.neck) rings.neck *= fitted.neck.scale;
+  return { measurements: meas, morph, rings, mesh: fitted.mesh, neck: fitted.neck };
 }
 
 /** How much of the neck's girth scale the neutral head takes on: a head does not grow with the bust. */
@@ -101,6 +105,83 @@ function calmHead(m: Mannequin, canonical: Mesh, morphed: Mesh, morph: Pick<Grad
     out[3 * i + 2] = canonical.positions[3 * i + 2]! * s;
   }
   return { ...morphed, positions: out };
+}
+
+/** The neck under the neutral head is at most this share of the head's half-width at the jaw (the base body: 0.88). */
+export const NECK_TO_HEAD = 0.9;
+/** The jaw band, as shares of the head's height above the chin (87.5 % to 90.5 % of stature on the base body). */
+const JAW_BAND = [0.074, 0.296] as const;
+
+/** A narrowing of the neck: full (`scale`) from height `to` (the neck ring) up, none at `from` (the shoulder ring) and below. */
+export interface NeckFit {
+  scale: number;
+  from: number;
+  to: number;
+}
+
+/** The share of its width the torso keeps at height `y` (1 without a fit). */
+export function neckScaleAt(fit: NeckFit | null | undefined, y: number): number {
+  if (!fit) return 1;
+  const t = Math.min(1, Math.max(0, (y - fit.from) / (fit.to - fit.from)));
+  return 1 - (1 - fit.scale) * t * t * (3 - 2 * t);
+}
+
+/**
+ * Keep the neck under the jaw of the neutral head. The head does not grow with the girths (and a
+ * short typed body has a small head), while the neck ring follows the bust, so on a large or a
+ * short body the neck column came out wider than the head and the chin sat inside a collar. When
+ * the neck is wider than `NECK_TO_HEAD` of the head at the jaw, the torso's sections are narrowed
+ * about their own centres, fully from the neck ring up and not at all at the shoulder ring. A mesh
+ * without the part `head` (the egg head), or with a neck that already fits (the base body), is
+ * returned as it is. `drawn` is the mannequin the mesh shows (its shoulder and neck ring heights).
+ */
+export function fitNeckToHead(mesh: Mesh, drawn: Pick<Mannequin, 'morphHeights'>): { mesh: Mesh; neck: NeckFit | null } {
+  const head = mesh.partNames.indexOf('head');
+  const torso = mesh.partNames.indexOf('torso');
+  if (head < 0 || torso < 0) return { mesh, neck: null };
+  const p = mesh.positions;
+  let chin = Infinity, top = -Infinity;
+  for (let i = 0; i < mesh.vertexPart.length; i++) {
+    if (mesh.vertexPart[i] !== head) continue;
+    chin = Math.min(chin, p[3 * i + 1]!);
+    top = Math.max(top, p[3 * i + 1]!);
+  }
+  const lo = chin + JAW_BAND[0] * (top - chin);
+  const hi = chin + JAW_BAND[1] * (top - chin);
+  // The torso's sections are horizontal rings: every vertex of one has the same height, and their mean is its centre.
+  const rings = new Map<number, number[]>();
+  let headHalf = 0;
+  for (let i = 0; i < mesh.vertexPart.length; i++) {
+    const y = p[3 * i + 1]!;
+    if (mesh.vertexPart[i] === head && y >= lo && y <= hi) headHalf = Math.max(headHalf, Math.abs(p[3 * i]!));
+    if (mesh.vertexPart[i] !== torso || y <= drawn.morphHeights.shoulder) continue;
+    const ring = rings.get(y);
+    if (ring) ring.push(i);
+    else rings.set(y, [i]);
+  }
+  const centres = new Map<number, [number, number]>();
+  let neckHalf = 0;
+  for (const [y, ring] of rings) {
+    let cx = 0, cz = 0;
+    for (const i of ring) {
+      cx += p[3 * i]! / ring.length;
+      cz += p[3 * i + 2]! / ring.length;
+    }
+    centres.set(y, [cx, cz]);
+    if (y >= lo && y <= hi) for (const i of ring) neckHalf = Math.max(neckHalf, Math.abs(p[3 * i]! - cx));
+  }
+  if (!(headHalf > 0) || neckHalf <= NECK_TO_HEAD * headHalf) return { mesh, neck: null };
+  const neck: NeckFit = { scale: (NECK_TO_HEAD * headHalf) / neckHalf, from: drawn.morphHeights.shoulder, to: drawn.morphHeights.neck };
+  const out = Float64Array.from(p);
+  for (const [y, ring] of rings) {
+    const k = neckScaleAt(neck, y);
+    const [cx, cz] = centres.get(y)!;
+    for (const i of ring) {
+      out[3 * i] = cx + (p[3 * i]! - cx) * k;
+      out[3 * i + 2] = cz + (p[3 * i + 2]! - cz) * k;
+    }
+  }
+  return { mesh: { ...mesh, positions: out }, neck };
 }
 
 // ---------------------------------------------------------------------------
@@ -191,9 +272,11 @@ export function buildTypedAvatar(base: Mannequin, body: BodyOptions, category: s
   for (const r of shown.rings) rings[r.id] = r.circumferenceCm;
   const support: AnchorRing = category === 'bottom' ? 'waist' : 'shoulder';
   const garmentLiftCm = shown.morphHeights[support] - base.morphHeights[support];
+  const fitted = fitNeckToHead(buildMannequinMesh(shown, mesh), shown);
+  if (fitted.neck) rings.neck *= fitted.neck.scale;
   return {
-    avatar: { measurements: meas, morph: IDENTITY_MORPH.morph, rings, mesh: buildMannequinMesh(shown, mesh) },
-    field: liftField(bodyField(shown, IDENTITY_MORPH), -garmentLiftCm),
+    avatar: { measurements: meas, morph: IDENTITY_MORPH.morph, rings, mesh: fitted.mesh, neck: fitted.neck },
+    field: liftField(bodyField(shown, { ...IDENTITY_MORPH, neck: fitted.neck }), -garmentLiftCm),
     statureCm: shown.statureCm,
     garmentLiftCm,
   };
@@ -217,12 +300,12 @@ function tabulate(lo: number, hi: number, stepCm: number, at: (x: number) => { c
 }
 
 /** Avatar cross-sections for collision. Body sections are scaled about the vertical axis like `radialMorph`. */
-export function bodyField(m: Mannequin, avatar: Pick<Avatar, 'morph'>, stepCm = 0.5): BodyField {
+export function bodyField(m: Mannequin, avatar: Pick<Avatar, 'morph' | 'neck'>, stepCm = 0.5): BodyField {
   const S = m.statureCm;
-  const scaled = (e: { cx: number; cz: number; a: number; b: number } | null, y: number) => {
+  const scaled = (e: { cx: number; cz: number; a: number; b: number } | null, y: number, narrow = 1) => {
     if (!e) return null;
     const s = avatar.morph.girthScaleAt(y, 'body');
-    return { cx: e.cx * s, cz: e.cz * s, a: e.a * s, b: e.b * s };
+    return { cx: e.cx * s, cz: e.cz * s, a: e.a * s * narrow, b: e.b * s * narrow };
   };
   const s0 = armpitDistance(m);
   const arms = [m.arms.left, m.arms.right].map((f) => {
@@ -236,7 +319,8 @@ export function bodyField(m: Mannequin, avatar: Pick<Avatar, 'morph'>, stepCm = 
     return { table, frame: { joint: [...f.joint] as [number, number, number], axis: [...f.axis] as [number, number, number], u: [...f.u] as [number, number, number], v: [...f.v] as [number, number, number], s0, s1 } };
   });
   return {
-    torso: tabulate(0, S, stepCm, (y) => scaled(m.torsoAt(y), y)),
+    // The neck is the drawn one: narrowed where `fitNeckToHead` narrowed the mesh.
+    torso: tabulate(0, S, stepCm, (y) => scaled(m.torsoAt(y), y, neckScaleAt(avatar.neck, y))),
     legs: [tabulate(0, S * 0.6, stepCm, (y) => scaled(m.legAt(y, 1), y)), tabulate(0, S * 0.6, stepCm, (y) => scaled(m.legAt(y, -1), y))],
     arms: [arms[0]!.table, arms[1]!.table],
     armFrames: [arms[0]!.frame, arms[1]!.frame],
@@ -244,7 +328,7 @@ export function bodyField(m: Mannequin, avatar: Pick<Avatar, 'morph'>, stepCm = 
 }
 
 /** Body morph of the canonical mannequin itself (every scale 1). */
-export const IDENTITY_MORPH: Pick<Avatar, 'morph'> = { morph: { scales: {}, missing: [], girthScaleAt: () => 1 } };
+export const IDENTITY_MORPH: Pick<Avatar, 'morph' | 'neck'> = { morph: { scales: {}, missing: [], girthScaleAt: () => 1 } };
 
 /**
  * Particles of the base-size garment that already sit inside the canonical mannequin (with the

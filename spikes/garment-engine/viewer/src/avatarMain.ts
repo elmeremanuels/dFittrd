@@ -16,6 +16,7 @@ import type { GarmentPayload } from '@curtain/schema';
 import { buildBody, buildMannequinMesh, type Mannequin } from '@curtain/mannequin';
 import { mountGarmentView, type GarmentView } from '../../../../packages/garment-viewer/src/index';
 import { fitForBody } from './fitting';
+import { fitNeckToHead } from './body';
 import { Figure, Stage, meshGeometry } from './scene';
 
 const params = new URLSearchParams(location.search);
@@ -103,7 +104,8 @@ async function garmentMode(): Promise<void> {
 function headMode(): void {
   const m = buildBody({ family, heightCm: body.heightCm, shoulderCm: body.shoulderCm, bust: body.bust, waist: body.waist, hip: body.hip });
   const stage = new Stage(canvas, { controls: true, lighting });
-  const figure = new Figure(meshGeometry(buildMannequinMesh(m, { head })), new Uint32Array(0), 0, null);
+  // The same neck fit as the mount's typed body (`buildTypedAvatar`).
+  const figure = new Figure(meshGeometry(fitNeckToHead(buildMannequinMesh(m, { head }), m).mesh), new Uint32Array(0), 0, null);
   figure.garment.visible = false;
   figure.setSkin(skin);
   figure.group.rotation.y = ((num('yaw') ?? 0) * Math.PI) / 180;

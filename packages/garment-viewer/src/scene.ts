@@ -74,10 +74,35 @@ export function trueTone(color: readonly [number, number, number]): [number, num
 }
 
 const CUSTOM_SLOT = 'vec3 CustomToneMapping( vec3 color ) { return color; }';
-/** Put `TRUE_TONE_GLSL` in three's custom tone-mapping slot (once; only renderers that ask for `CustomToneMapping` use it). */
-function installTrueTone(): void {
+/**
+ * Put `TRUE_TONE_GLSL` in three's custom tone-mapping slot (once). The slot is global to the page's
+ * copy of three.js: any other renderer there that asks for `CustomToneMapping` gets this curve too
+ * (renderers with another tone mapping are not affected). False when the slot is not there (a
+ * three.js that renamed it) or holds someone else's curve: the stage then falls back to three's
+ * own `NeutralToneMapping`, which also rolls highlights off, with slightly darker darks.
+ */
+export function installTrueTone(): boolean {
   const chunk = THREE.ShaderChunk.tonemapping_pars_fragment;
-  if (chunk.includes(CUSTOM_SLOT)) THREE.ShaderChunk.tonemapping_pars_fragment = chunk.replace(CUSTOM_SLOT, TRUE_TONE_GLSL);
+  if (chunk.includes(TRUE_TONE_GLSL)) return true;
+  if (!chunk.includes(CUSTOM_SLOT)) return false;
+  THREE.ShaderChunk.tonemapping_pars_fragment = chunk.replace(CUSTOM_SLOT, TRUE_TONE_GLSL);
+  return true;
+}
+
+/** Where `Stage.frame` puts the camera and its target (cm) for a canvas of the given aspect and vertical field of view. */
+export function cameraFrame(widthCm: number, statureCm: number, aspect: number, fovDeg: number): { position: [number, number, number]; target: [number, number, number] } {
+  // Up to 175 cm the frame is the one every figure has had; a taller typed body moves the camera back and up with it.
+  const k = Math.max(1, statureCm / 175);
+  const vfov = (fovDeg * Math.PI) / 180;
+  const fitH = (205 * k) / 2 / Math.tan(vfov / 2);
+  const fitW = (widthCm + 20) / 2 / Math.tan(vfov / 2) / Math.max(0.3, aspect);
+  return { position: [0, 112 * k, Math.max(fitH, fitW)], target: [0, 98 * k, 0] };
+}
+
+/** Canvas position (CSS px from the top left of a `width` × `height` canvas) of a world point seen by `camera`. */
+export function projectToCanvas(camera: THREE.Camera, p: THREE.Vector3, width: number, height: number): { x: number; y: number } {
+  const v = p.clone().project(camera);
+  return { x: ((v.x + 1) / 2) * width, y: ((1 - v.y) / 2) * height };
 }
 
 const srgbToLinear = (c: number): number => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
@@ -121,8 +146,7 @@ export class Stage {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     const rig = LIGHTING_RIGS[options.lighting === 'neutral' ? 'neutral' : 'classic'];
     this.lighting = options.lighting === 'neutral' ? 'neutral' : 'classic';
-    if (rig.toneMapping === 'true-tone') installTrueTone();
-    this.renderer.toneMapping = rig.toneMapping === 'true-tone' ? THREE.CustomToneMapping : THREE.ACESFilmicToneMapping;
+    this.renderer.toneMapping = rig.toneMapping !== 'true-tone' ? THREE.ACESFilmicToneMapping : installTrueTone() ? THREE.CustomToneMapping : THREE.NeutralToneMapping;
     this.scene.background = new THREE.Color('#F5EFE7');
     this.scene.add(new THREE.HemisphereLight(rig.sky, rig.ground, rig.hemisphere));
     const key = new THREE.DirectionalLight(0xffffff, rig.key);
@@ -148,15 +172,9 @@ export class Stage {
 
   /** Point the camera at figures spread over `widthCm` (front view). `statureCm` only matters for a body taller than the canonical ones. */
   frame(widthCm: number, statureCm = 0): void {
-    // Up to 175 cm the frame is the one every figure has had; a taller typed body moves the camera back and up with it.
-    const k = Math.max(1, statureCm / 175);
-    const target = new THREE.Vector3(0, 98 * k, 0);
-    const vfov = (this.camera.fov * Math.PI) / 180;
-    const aspect = Math.max(0.3, this.camera.aspect);
-    const fitH = (205 * k) / 2 / Math.tan(vfov / 2);
-    const fitW = (widthCm + 20) / 2 / Math.tan(vfov / 2) / aspect;
-    this.camera.position.set(0, 112 * k, Math.max(fitH, fitW));
-    this.controls.target.copy(target);
+    const f = cameraFrame(widthCm, statureCm, this.camera.aspect, this.camera.fov);
+    this.camera.position.set(...f.position);
+    this.controls.target.set(...f.target);
     this.controls.update();
   }
 
@@ -180,8 +198,7 @@ export class Stage {
 
   /** Screen position (CSS px within the canvas) of a world point, for labels. */
   toScreen(p: THREE.Vector3): { x: number; y: number } {
-    const v = p.clone().project(this.camera);
-    return { x: ((v.x + 1) / 2) * this.canvas.clientWidth, y: ((1 - v.y) / 2) * this.canvas.clientHeight };
+    return projectToCanvas(this.camera, p, this.canvas.clientWidth, this.canvas.clientHeight);
   }
 }
 

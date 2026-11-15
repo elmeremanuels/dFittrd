@@ -6,13 +6,15 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { BASE_SHAPE_ID, bodyShape, buildBody, buildMannequin, buildMannequinMesh, familyShape, topology } from '@curtain/mannequin';
-import { HEAD_SCALE_SHARE, IDENTITY_MORPH, bodyFamilyOf, bodyField, buildAvatar, buildTypedAvatar, bundleFamilyOf, girthInput, isTypedBody, liftField, makeCollider, mannequinMeasurements, sanitiseMeasurements } from './body';
+import { HEAD_SCALE_SHARE, IDENTITY_MORPH, NECK_TO_HEAD, fitNeckToHead, neckScaleAt, bodyFamilyOf, bodyField, buildAvatar, buildTypedAvatar, bundleFamilyOf, girthInput, isTypedBody, liftField, makeCollider, mannequinMeasurements, sanitiseMeasurements } from './body';
 import { meshFromGlb, type SpikeBundle } from './bundle';
 import { sample } from './collide';
 import { openSession, prepareFit, relax, viewerMaterial } from './engine';
 import { fitForBody } from './fitting';
 import { buildBundle } from '../../../spikes/garment-engine/src/bundle';
-import { DEFAULT_BODY_HEX, Figure, LIGHTING_RIGS, TRUE_TONE_GLSL, TRUE_TONE_START, frontIrradiance, meshGeometry, parseSkinHex, trueTone } from './scene';
+import { DEFAULT_BODY_HEX, Figure, LIGHTING_RIGS, TRUE_TONE_GLSL, TRUE_TONE_START, cameraFrame, frontIrradiance, installTrueTone, meshGeometry, parseSkinHex, projectToCanvas, trueTone } from './scene';
+import { GarmentViewError, planAvatar } from './mount';
+import type { Mesh } from '@curtain/mannequin';
 import * as spikeBody from '../../../spikes/garment-engine/viewer/src/body';
 import * as spikeScene from '../../../spikes/garment-engine/viewer/src/scene';
 
@@ -268,6 +270,214 @@ describe('MountOptions.body', () => {
   });
 });
 
+/**
+ * Largest half-width (cm) of the head and of the neck column in the jaw band: 7.4 % to 29.6 % of the head's height above
+ * the chin, which is 87.5 % to 90.5 % of stature on the female body (the male body's levels are warped, so the band
+ * is taken on the head itself).
+ */
+function jawBand(mesh: Mesh): { head: number; neck: number } {
+  const head = mesh.partNames.indexOf('head'), torso = mesh.partNames.indexOf('torso');
+  let top = 0, chin = Infinity;
+  for (let i = 0; i < mesh.vertexPart.length; i++) {
+    if (mesh.vertexPart[i] !== head) continue;
+    top = Math.max(top, mesh.positions[3 * i + 1]!);
+    chin = Math.min(chin, mesh.positions[3 * i + 1]!);
+  }
+  const out = { head: 0, neck: 0 };
+  for (let i = 0; i < mesh.vertexPart.length; i++) {
+    const t = (mesh.positions[3 * i + 1]! - chin) / (top - chin);
+    if (t < 0.074 || t > 0.296) continue;
+    const x = Math.abs(mesh.positions[3 * i]!);
+    if (mesh.vertexPart[i] === head) out.head = Math.max(out.head, x);
+    else if (mesh.vertexPart[i] === torso) out.neck = Math.max(out.neck, x);
+  }
+  return out;
+}
+
+describe('the neck under the neutral head', () => {
+  const canonical = buildMannequinMesh(m, { head: 'neutral' });
+  const morphed = (bust: number, waist: number, hip: number) => buildAvatar(m, canonical, { bust, waist, hip });
+
+  it('was wider than the head on a large body before the fit (the defect), and is not after it', () => {
+    // The widest body the viewer draws: without the fit the neck column is 9.6 cm against a 7.55 cm jaw.
+    const big = morphed(150, 140, 160);
+    expect(big.neck!.scale).toBeLessThan(0.75);
+    const band = jawBand(big.mesh);
+    expect(band.neck).toBeLessThanOrEqual(NECK_TO_HEAD * band.head + 1e-9);
+    expect(band.neck).toBeGreaterThan(0.85 * band.head);
+    expect(band.head).toBeCloseTo(7.55, 1);
+  });
+
+  it('holds for every body the viewer can draw: girth limits, typed heights from 130 to 220 cm, both families', () => {
+    const male = buildMannequin(familyShape('male')!);
+    const meshes: Mesh[] = [];
+    for (const g of [[60, 45, 65], [88, 70, 96], [116, 98, 122], [150, 140, 160], [160, 150, 170], [160, 45, 65]] as const) {
+      meshes.push(morphed(g[0], g[1], g[2]).mesh);
+      for (const heightCm of [130, 150, 168, 182, 220]) meshes.push(buildTypedAvatar(m, { heightCm, bust: g[0], waist: g[1], hip: g[2] }, 'dress', { head: 'neutral' }).avatar.mesh);
+    }
+    for (const heightCm of [130, 174, 220]) for (const chest of [70, 98, 150]) meshes.push(buildTypedAvatar(male, { family: 'male', heightCm, chest }, 'top', { head: 'neutral' }).avatar.mesh);
+    for (const mesh of meshes) {
+      const band = jawBand(mesh);
+      expect(band.head).toBeGreaterThan(4);
+      expect(band.neck).toBeLessThanOrEqual(NECK_TO_HEAD * band.head + 1e-9);
+      expect(topology(mesh).watertight).toBe(true);
+    }
+  });
+
+  it('leaves the base body, a slim body and the egg head alone', () => {
+    expect(morphed(88, 70, 96).neck ?? null).toBeNull();
+    expect(buildAvatar(m, canonical, mannequinMeasurements(m)).neck).toBeNull();
+    const egg = buildAvatar(m, buildMannequinMesh(m), { bust: 150, waist: 140, hip: 160 });
+    expect(egg.neck).toBeNull();
+    expect(fitNeckToHead(egg.mesh, m).mesh).toBe(egg.mesh);
+  });
+
+  it('narrows only above the shoulder ring, smoothly, and the collision field is the drawn neck', () => {
+    const big = morphed(150, 140, 160);
+    const fit = big.neck!;
+    expect(fit.from).toBe(m.morphHeights.shoulder);
+    expect(fit.to).toBe(m.morphHeights.neck);
+    expect(neckScaleAt(fit, fit.from - 5)).toBe(1);
+    expect(neckScaleAt(fit, fit.from)).toBe(1);
+    expect(neckScaleAt(fit, fit.to)).toBeCloseTo(fit.scale, 12);
+    expect(neckScaleAt(fit, fit.to + 20)).toBeCloseTo(fit.scale, 12);
+    expect(neckScaleAt(null, 150)).toBe(1);
+    // Everything but the torso above the shoulder ring is where the plain morph puts it.
+    const plain = spikeBody.buildAvatar(m, buildMannequinMesh(m), { bust: 150, waist: 140, hip: 160 });
+    const torso = canonical.partNames.indexOf('torso'), head = canonical.partNames.indexOf('head');
+    const eggMesh = buildMannequinMesh(m);
+    let moved = 0;
+    for (let i = 0; i < canonical.vertexPart.length; i++) {
+      const y = canonical.positions[3 * i + 1]!;
+      if (canonical.vertexPart[i] === head) continue;
+      if (canonical.vertexPart[i] === torso && y > fit.from) {
+        moved++;
+        continue;
+      }
+      const s = big.morph.girthScaleAt(y, 'body');
+      const arm = canonical.partNames[canonical.vertexPart[i]!]!.startsWith('arm');
+      if (!arm) expect(big.mesh.positions[3 * i]).toBe(canonical.positions[3 * i]! * s);
+    }
+    expect(moved).toBeGreaterThan(100);
+    expect(plain.neck ?? null).toBeNull();
+    expect(eggMesh.partNames).not.toContain('head');
+    // The field: as the plain morph's below the shoulder ring, narrowed by the fit above it.
+    const field = bodyField(m, big), wide = bodyField(m, { morph: big.morph });
+    const a = new Float32Array(4), b = new Float32Array(4);
+    sample(field.torso, 120, a);
+    sample(wide.torso, 120, b);
+    expect(Array.from(a)).toEqual(Array.from(b));
+    sample(field.torso, fit.to + 1, a);
+    sample(wide.torso, fit.to + 1, b);
+    expect(a[2]! / b[2]!).toBeCloseTo(fit.scale, 5);
+    expect(a[3]! / b[3]!).toBeCloseTo(fit.scale, 5);
+    expect(big.rings.neck).toBeCloseTo(m.shape.rings.neck.circumferenceCm * big.morph.girthScaleAt(m.morphHeights.neck, 'body') * fit.scale, 9);
+  });
+});
+
+describe('planAvatar: what mountGarmentView decides before any WebGL', () => {
+  // A bundle of today: its anchors name the mannequin's version and shape, and no family.
+  const female = { category: 'dress', mannequin: { version: '0.1.0', shape: 'M' } as { family?: unknown } };
+
+  it('a male body on a bundle draped on the female body is incompatible, and the reverse', () => {
+    for (const [anchors, body] of [[female, { family: 'male' }], [{ category: 'top', mannequin: { family: 'male' } }, {}], [{ category: 'top', mannequin: { family: 'male' } }, { family: 'female' }]] as const) {
+      let code = '';
+      try {
+        planAvatar(anchors, body as never);
+      } catch (e) {
+        code = e instanceof GarmentViewError ? e.code : 'other';
+      }
+      expect(code).toBe('incompatible');
+    }
+    expect(planAvatar({ category: 'top', mannequin: { family: 'male' } }, { family: 'male' }).m.shape.family).toBe('male');
+  });
+
+  it('girths only: the morphed base body, no lift, the camera frame of before; the neutral head unless the host asks for the egg', () => {
+    for (const body of [undefined, null, {}, { bust: 96, waist: 78, hip: 104 }]) {
+      const plan = planAvatar(female, body);
+      expect(plan.garmentLiftCm).toBe(0);
+      expect(plan.statureCm).toBe(0);
+      expect(plan.head).toBe('neutral');
+      expect(plan.avatar.mesh.partNames).toContain('head');
+      expect(plan.headPoint[1]).toBeCloseTo(0.935 * plan.m.statureCm, 9);
+    }
+    const egg = planAvatar(female, { bust: 96, waist: 78, hip: 104 }, { head: 'egg' });
+    expect(egg.avatar.mesh.partNames).not.toContain('head');
+    // The egg-head avatar is the one every 3D view had before the look options existed.
+    const before = buildAvatar(egg.m, buildMannequinMesh(egg.m), { bust: 96, waist: 78, hip: 104 });
+    expect(Array.from(egg.avatar.mesh.positions)).toEqual(Array.from(before.mesh.positions));
+    expect(Array.from(egg.field.torso.data)).toEqual(Array.from(bodyField(egg.m, before).torso.data));
+    for (const look of [null, {}, { head: 'other' }, { skinHex: '#a07e56' }]) expect(planAvatar(female, {}, look as never).head).toBe('neutral');
+  });
+
+  it('a typed height lifts the garment from the shoulder ring (a bottom: from the waist ring) and moves the head point', () => {
+    const tall = planAvatar(female, { heightCm: 182 });
+    expect(tall.statureCm).toBe(182);
+    expect(tall.garmentLiftCm).toBeCloseTo(buildBody({ family: 'female', heightCm: 182 }).morphHeights.shoulder - tall.m.morphHeights.shoulder, 9);
+    expect(tall.garmentLiftCm).toBeGreaterThan(8);
+    expect(tall.headPoint[1]).toBeCloseTo(0.935 * 182, 9);
+    const skirt = planAvatar({ category: 'bottom' }, { heightCm: 156 });
+    expect(skirt.garmentLiftCm).toBeCloseTo(buildBody({ family: 'female', heightCm: 156 }).morphHeights.waist - skirt.m.morphHeights.waist, 9);
+    expect(skirt.garmentLiftCm).toBeLessThan(-4);
+  });
+
+  it('out-of-range input is held at the limits: no NaN, no throw', () => {
+    for (const [heightCm, drawn] of [[1, 130], [120, 130], [260, 220], [1e6, 220]] as const) expect(planAvatar(female, { heightCm }).statureCm).toBe(drawn);
+    for (const heightCm of [NaN, -5, 0, Infinity, '170' as never]) expect(planAvatar(female, { heightCm }).statureCm).toBe(0);
+    const plan = planAvatar(female, { bust: 1e9, waist: -3, hip: NaN, heightCm: 1e6 });
+    expect(plan.avatar.measurements.bust).toBe(160);
+    expect(plan.avatar.mesh.positions.every((v) => Number.isFinite(v))).toBe(true);
+  });
+});
+
+describe('camera frame and toScreen', () => {
+  const view = (statureCm: number, w: number, h: number): THREE.PerspectiveCamera => {
+    const camera = new THREE.PerspectiveCamera(28, w / h, 5, 5000);
+    const f = cameraFrame(60, statureCm, w / h, 28);
+    camera.position.set(...f.position);
+    camera.lookAt(...f.target);
+    camera.updateMatrixWorld();
+    return camera;
+  };
+
+  it('is the frame of before up to 175 cm', () => {
+    const f = cameraFrame(60, 0, 390 / 760, 28);
+    expect(f.target).toEqual([0, 98, 0]);
+    expect(f.position[1]).toBe(112);
+    expect(f.position[2]).toBeCloseTo(205 / 2 / Math.tan((14 * Math.PI) / 180), 9);
+    expect(cameraFrame(60, 168, 390 / 760, 28)).toEqual(f);
+    expect(cameraFrame(60, 175, 390 / 760, 28)).toEqual(f);
+  });
+
+  it('keeps the whole of a tall typed body on a phone canvas, feet to crown', () => {
+    for (const heightCm of [130, 168, 182, 220]) {
+      const plan = planAvatar({ category: 'dress' }, { heightCm });
+      const camera = view(plan.statureCm, 390, 760);
+      for (const p of [[0, 0, 0], [0, heightCm, 0], [...plan.headPoint]] as const) {
+        const at = projectToCanvas(camera, new THREE.Vector3(...p), 390, 760);
+        expect(at.y).toBeGreaterThan(0);
+        expect(at.y).toBeLessThan(760);
+        expect(at.x).toBeCloseTo(195, 6);
+      }
+    }
+  });
+
+  it('toScreen("head") on the default body at phone size is in the upper part of the canvas, in the middle', () => {
+    const plan = planAvatar({ category: 'dress' }, {});
+    const at = projectToCanvas(view(0, 390, 760), new THREE.Vector3(...plan.headPoint), 390, 760);
+    // Measured in headless Chromium through the mount: (195, 156).
+    expect(at.x).toBeCloseTo(195, 6);
+    expect(Math.abs(at.y - 156)).toBeLessThan(2);
+  });
+
+  it('the neutral tone curve installs once and reports it', () => {
+    expect(installTrueTone()).toBe(true);
+    expect(installTrueTone()).toBe(true);
+    expect(THREE.ShaderChunk.tonemapping_pars_fragment.split('vec3 CustomToneMapping(').length).toBe(2);
+    expect(spikeScene.installTrueTone()).toBe(true);
+  });
+});
+
 describe('parity with the spike viewer', () => {
   it('has the same rigs, grey, colour parsing and body helpers', () => {
     expect(spikeScene.LIGHTING_RIGS).toEqual(LIGHTING_RIGS);
@@ -278,6 +488,8 @@ describe('parity with the spike viewer', () => {
     f.setSkin('#a07e56');
     expect(f.skinHex).toBe('#a07e56');
     expect(spikeBody.HEAD_SCALE_SHARE).toBe(HEAD_SCALE_SHARE);
+    expect(spikeBody.NECK_TO_HEAD).toBe(NECK_TO_HEAD);
+    expect(spikeScene.cameraFrame(60, 190, 0.5, 28)).toEqual(cameraFrame(60, 190, 0.5, 28));
     const a = buildTypedAvatar(m, { heightCm: 176, shoulderCm: 38, bust: 100 }, 'dress', { head: 'neutral' });
     const b = spikeBody.buildTypedAvatar(m, { heightCm: 176, shoulderCm: 38, bust: 100 }, 'dress', { head: 'neutral' });
     expect(b.garmentLiftCm).toBe(a.garmentLiftCm);

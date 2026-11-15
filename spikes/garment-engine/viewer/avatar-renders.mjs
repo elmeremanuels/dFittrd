@@ -92,7 +92,7 @@ const problems = [];
 const measurements = [];
 const files = [];
 
-async function shot(context, query, name, { measure = null } = {}) {
+async function shot(context, query, name, { measure = null, clipHead = false } = {}) {
   if (match && !name.includes(match)) return;
   const page = await context.newPage();
   page.on('pageerror', (e) => problems.push(`${name}: pageerror ${e.message}`));
@@ -105,7 +105,11 @@ async function shot(context, query, name, { measure = null } = {}) {
   if (state === 'error') problems.push(`${name}: ${await page.textContent('#tag')}`);
   await page.waitForTimeout(700);
   const file = join(outDir, `${name}.png`);
-  await page.screenshot({ path: file });
+  if (clipHead && state !== 'error') {
+    // Head and shoulders, cut out round the point the mount reports for the head (`view.toScreen('head')`).
+    const at = await page.evaluate(() => window.avatarCheck.view.toScreen('head'));
+    await page.screenshot({ path: file, clip: { x: Math.max(0, at.x - 95), y: Math.max(0, at.y - 60), width: 190, height: 170 } });
+  } else await page.screenshot({ path: file });
   files.push(file);
   if (measure && state !== 'error') {
     const patches = await page.evaluate(() => window.avatarCheck.patches());
@@ -140,6 +144,13 @@ try {
   }
   // A typed body through the mount: 182 cm tall with 40 cm shoulders, against the default body.
   await shot(phone, `product=${products[0]}&height=182&shoulder=40&skin=${TONES.medium}&lighting=neutral`, `typed-body--182cm--${products[0].replace(/^eval\//, '')}`);
+  // The neck under the neutral head on large and short bodies (head and shoulders at 4×), and the widest body whole.
+  const dress = products[1] ?? products[0];
+  const closeUp = await browser.newContext({ viewport: { width: 390, height: 760 }, deviceScaleFactor: 4 });
+  const BIG = 'bust=150&waist=140&hip=160';
+  for (const [name, q] of [['default', ''], ['girths-150-140-160', `&${BIG}`], ['girths-150-140-160--150cm', `&${BIG}&height=150`], ['130cm', '&height=130'], ['girths-150-140-160--220cm', `&${BIG}&height=220`]]) await shot(closeUp, `product=${dress}${q}`, `neck--${name}`, { clipHead: true });
+  await shot(phone, `product=${dress}&${BIG}`, `neck-body--girths-150-140-160`);
+  await shot(phone, `product=${dress}&${BIG}&height=150&skin=${TONES.medium}&lighting=neutral`, `neck-body--girths-150-140-160--150cm--medium--neutral`);
   if (products[1]) await shot(phone, `product=${products[1]}&height=156&skin=${TONES.medium}&lighting=neutral`, `typed-body--156cm--${products[1].replace(/^eval\//, '')}`);
 } finally {
   await browser.close();

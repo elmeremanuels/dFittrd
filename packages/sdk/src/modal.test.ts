@@ -104,10 +104,11 @@ describe('openModal — accessibility', () => {
     expect(m.dialog.querySelector('.pk-disclaimer')).not.toBeNull();
   });
 
-  it('speaks Dutch when given the nl table', () => {
-    const { dialog } = openModal({ strings: STRINGS.nl, content });
-    expect(dialog.querySelector('.pk-title')?.textContent).toBe('Pas het in Curtain');
-    expect(dialog.querySelector('.pk-close')?.getAttribute('aria-label')).toBe('Sluiten');
+  it('shows whatever string table it is given (the seam a translation pack uses)', () => {
+    const fake = { ...STRINGS.en, title: '[xx] title', close: '[xx] close' };
+    const { dialog } = openModal({ strings: fake, content });
+    expect(dialog.querySelector('.pk-title')?.textContent).toBe('[xx] title');
+    expect(dialog.querySelector('.pk-close')?.getAttribute('aria-label')).toBe('[xx] close');
   });
 });
 

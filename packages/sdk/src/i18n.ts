@@ -1,79 +1,54 @@
-/** UI strings. English is the default; Dutch follows the page language (`<html lang="nl">`) or `data-locale`. */
-export interface Strings {
-  button: string;
-  title: string;
-  scan: string;
-  openLink: string;
-  expires: (minutes: number) => string;
-  paused: string;
-  pausedShort: string;
-  error: string;
-  close: string;
-  qrAlt: string;
-  /** Overlay loading state. */
-  loading: string;
-  /** "Open in the Curtain app" link (`data-mode="auto"`). */
-  openApp: string;
-  /** Toast fallback when the size could not be selected on the page. */
-  yourSize: (size: string) => string;
-  /** Title of the size peek iframe. */
-  peek: string;
-  /** Must stay identical to ESTIMATE_DISCLAIMER in @curtain/schema (asserted in tests). */
-  disclaimer: string;
-}
+/**
+ * The SDK's single string lookup (DECISIONS.md D21: English first, translation packs later).
+ *
+ * Today there is one catalogue, English. `pickStrings` reads no page language and no browser
+ * language: `<html lang="nl">` and a Dutch browser both get English, and so does `data-locale`
+ * with a locale that has no catalogue.
+ *
+ * Adding a pack later is two steps and no other code change:
+ *   1. add `./strings/<locale>.ts` exporting a `Strings` table (TypeScript checks it is complete);
+ *   2. register it in `STRINGS` below.
+ */
+import { EN, type Strings } from './strings/en';
 
-/** Mirrors `ESTIMATE_DISCLAIMER` from @curtain/schema. Copied so the SDK stays dependency-free. */
-export const ESTIMATE_DISCLAIMER =
-  'Estimate — generated from your measurements and the shop’s garment data, not a photo of you.';
+export { ESTIMATE_DISCLAIMER } from './strings/en';
+export type { Strings } from './strings/en';
 
-const en: Strings = {
-  button: 'Try it on',
-  title: 'Try it on in Curtain',
-  scan: 'Scan with your phone to try it on in Curtain',
-  openLink: 'On this device instead? Open the link',
-  expires: (m) => `This code expires in ${m} min`,
-  paused: 'This shop’s fitting room is taking a short break. Please try again later.',
-  pausedShort: 'This shop’s fitting room is paused right now — the app will explain.',
-  error: 'We couldn’t open the fitting room right now. Please try again in a moment.',
-  close: 'Close',
-  qrAlt: 'QR code that opens this garment in Curtain',
-  loading: 'Loading…',
-  openApp: 'Open in the Curtain app',
-  yourSize: (z) => `Your size: ${z}`,
-  peek: 'Your size',
-  disclaimer: ESTIMATE_DISCLAIMER,
-};
+/** Registered catalogues, keyed by lower-case locale (`en`, later `nl`, `pt-br`, ...). */
+export const STRINGS = { en: EN } satisfies Record<string, Strings>;
 
-const nl: Strings = {
-  button: 'Try it on',
-  title: 'Pas het in Curtain',
-  scan: 'Scan met je telefoon om het te passen in Curtain',
-  openLink: 'Liever op dit apparaat? Open de link',
-  expires: (m) => `Deze code verloopt over ${m} min`,
-  paused: 'Curtain is in deze winkel even gesloten. Probeer het later opnieuw.',
-  pausedShort: 'Curtain is in deze winkel momenteel gepauzeerd — de app legt het uit.',
-  error: 'We konden Curtain nu niet openen. Probeer het zo nog eens.',
-  close: 'Sluiten',
-  qrAlt: 'QR-code die dit kledingstuk opent in Curtain',
-  loading: 'Laden…',
-  openApp: 'Open in de Curtain-app',
-  yourSize: (z) => `Jouw maat: ${z}`,
-  peek: 'Jouw maat',
-  disclaimer: 'Schatting — berekend uit je maten en de kledinggegevens van de winkel, niet uit een foto van jou.',
-};
-
-export const STRINGS: Record<'en' | 'nl', Strings> = { en, nl };
+/** The locales with a catalogue. Today: `'en'`. */
+export type SdkLocale = keyof typeof STRINGS;
 
 /**
- * Pick a string table from the shop page's own language: an explicit locale, else `<html lang>`.
- * Never the browser language, so an English shop page always shows English copy.
+ * A lookup over a set of catalogues: the exact locale, else its language (`nl-BE` to `nl`), else
+ * English. Exported so a test can prove the seam with a pack that is not shipped.
  */
-export function pickStrings(locale?: string | null): Strings {
-  const pageLocale = locale || (typeof document !== 'undefined' && document.documentElement.lang) || 'en';
-  return pageLocale.toLowerCase().startsWith('nl') ? nl : en;
+export function createLookup<C>(catalogues: { en: C } & Record<string, C>): (locale?: string | null) => C {
+  const has = (k: string): boolean => Object.prototype.hasOwnProperty.call(catalogues, k);
+  return (locale) => {
+    const tag = (locale || 'en').trim().toLowerCase().replace(/_/g, '-');
+    if (has(tag)) return catalogues[tag]!;
+    const language = tag.split('-')[0]!;
+    return has(language) ? catalogues[language]! : catalogues.en;
+  };
 }
 
-/** The effective locale tag: explicit, else `<html lang>`, else the browser language, else `en`. */
+const lookup = createLookup<Strings>(STRINGS);
+
+/**
+ * The SDK's strings for an explicitly configured locale (`data-locale` / `configure({ locale })`).
+ * A locale without a catalogue, or none, reads English.
+ */
+export function pickStrings(locale?: string | null): Strings {
+  return lookup(locale);
+}
+
+/**
+ * The locale tag sent to the embed in `curtain:context`: explicit, else `<html lang>`, else the
+ * browser language, else `en`. The embed uses its region for the default units (cm or in) only;
+ * it never changes the language of any text (D21).
+ */
 export function localeTag(locale?: string | null): string {
   return (
     locale ||

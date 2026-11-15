@@ -15,6 +15,7 @@ import { ringOverlayFor } from '@/render/rings';
 import { bandText, fitWithAdvice, gapText, neighbourSizes, pointLabel, priorKeys, usablePoints, type EmbedFit, type FitPreference, type SizeAdvice } from './aboutYou';
 import { UnitToggle } from './EmbedScreens';
 import { SizeChartTable } from './SizeChartTable';
+import { embedStrings } from './strings';
 import type { Units } from './units';
 
 const TABS = [
@@ -56,9 +57,8 @@ export interface ResultScreenProps {
   skinHex?: string | null;
   /** Tapping the avatar opens the avatar prompt (D19). Without it the figure is not a control. */
   onAvatar?: (() => void) | undefined;
-  /** The visible and spoken name of that control (the prompt's title, in the shopper's language). */
+  /** The visible and spoken name of that control (the prompt's title). */
   avatarLabel?: string;
-  avatarLang?: string;
 }
 
 export function ResultScreen({
@@ -81,8 +81,7 @@ export function ResultScreen({
   onUnits,
   skinHex = null,
   onAvatar,
-  avatarLabel = 'Make the avatar look like you',
-  avatarLang,
+  avatarLabel = embedStrings().avatar.ui.open,
 }: ResultScreenProps): ReactNode {
   const { fit, userBody } = embedFit;
   const shown = useMemo(() => fitWithAdvice(fit, advice, garment.category, profile), [fit, advice, garment.category, profile]);
@@ -232,7 +231,6 @@ export function ResultScreen({
                   type="button"
                   onClick={onAvatar}
                   aria-haspopup="dialog"
-                  lang={avatarLang}
                   className="group absolute inset-0 flex items-start justify-center rounded-[2.5rem] focus-visible:ring-2 focus-visible:ring-coral focus-visible:ring-offset-2 focus-visible:ring-offset-cream focus-visible:outline-none"
                   data-testid="avatar-open"
                 >

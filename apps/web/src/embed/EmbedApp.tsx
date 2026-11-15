@@ -27,10 +27,10 @@ import type { BodyProfile, TryResolveResponse } from '@curtain/schema';
 import { AvatarView } from '@/components/AvatarView';
 import { ApiError } from '@/api/client';
 import { adviseSize, EMPTY_ABOUT, fitForProfile, mergeAboutIntoScan, normalizeAbout, priorKeys, profileFromAbout, sizeConfidence, switchUnits, validateAbout, type AboutField, type AboutForm } from './aboutYou';
-import { AVATAR_UI, type AvatarLang } from './avatarCopy';
+import { embedStrings } from './strings';
 import { AvatarPrompt } from './AvatarPrompt';
 import { isMockToken, mockTokensEnabled, resolveMock, type EmbedApi, type EmbedDeps } from './deps';
-import { AboutScreen, BlockedScreen, EmbedFooter, EmbedFrame, isDutchLocale, LoadingScreen, ProductHeader } from './EmbedScreens';
+import { AboutScreen, BlockedScreen, EmbedFooter, EmbedFrame, LoadingScreen, ProductHeader } from './EmbedScreens';
 import { classifyError, flowReducer, INITIAL_FLOW } from './flow';
 import { Garment3D, hasWebGL2 } from './Garment3D';
 import { HeroRenderPanel, heroRendersEnabled } from './HeroRender';
@@ -44,7 +44,10 @@ const CaptureStep = lazy(() => import('@/features/capture/components/CaptureStep
 
 const NO_CONTEXT: ParentContext = { locale: null, currentVariantSize: null };
 
-/** The browser's own language: the shopper's choice, so it decides the default units first. */
+/**
+ * The browser's own locale. It decides the default units (cm or in) only; D21: it never changes
+ * the language of the interface, which is `EMBED_LOCALE` (`strings/index.ts`).
+ */
 function browserLocale(): string | null {
   return typeof navigator !== 'undefined' ? (navigator.language ?? null) : null;
 }
@@ -87,7 +90,6 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
   const mockToken = isMockToken(token);
   const mock = mockToken && (deps.allowMock ?? mockTokensEnabled());
   const getAvatarSvg = useCallback((): SVGSVGElement | null => heroAvatarRef.current?.querySelector('svg') ?? null, []);
-  const avatarLang: AvatarLang = isDutchLocale(shopperLocale ?? context.locale) ? 'nl' : 'en';
 
   const api = useCallback((): EmbedApi => {
     if (!apiRef.current) apiRef.current = deps.makeApi(store);
@@ -328,7 +330,6 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
             : null
         }
         onClose={close}
-        locale={shopperLocale ?? context.locale}
       />
     );
   else if (!data) body = <LoadingScreen />;
@@ -400,8 +401,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         onUnits={changeUnits}
         skinHex={look?.hex ?? null}
         onAvatar={openPrompt}
-        avatarLabel={AVATAR_UI[avatarLang].open}
-        avatarLang={avatarLang}
+        avatarLabel={embedStrings().avatar.ui.open}
         extra={
           <>
             {heroRendersEnabled(data) && !mock && !requires3d ? (
@@ -480,7 +480,6 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
       </div>
       {showPrompt ? (
         <AvatarPrompt
-          lang={avatarLang}
           look={look}
           onPick={pickLook}
           onClear={clearLook}

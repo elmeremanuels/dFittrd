@@ -8,6 +8,7 @@ import type { GarmentPayload, ShopBranding } from '@curtain/schema';
 import { readableTextColor } from '@/lib/contrast';
 import { ABOUT_LABELS, AGE_RANGES, FIT_PREFERENCES, isImperialField, measurementFieldsFor, rangeFor, requiredFieldsFor, setImperialEntry, unitFor, type AboutField, type AboutForm, type FitPreference } from './aboutYou';
 import type { BlockedKind } from './flow';
+import { embedStrings } from './strings';
 import { mediaProxyUrl } from './media';
 import { UNIT_SYSTEMS, type Units } from './units';
 
@@ -75,7 +76,7 @@ export function EmbedFooter({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <label htmlFor={id} className="flex cursor-pointer items-center gap-2">
           <input id={id} type="checkbox" role="switch" aria-checked={remember} checked={remember} onChange={(e) => onRemember(e.target.checked)} className="h-4 w-4" />
-          <span>Remember me on this shop</span>
+          <span>{embedStrings().rememberLabel}</span>
         </label>
         <button type="button" onClick={onForget} className="font-medium text-coral-ink underline-offset-2 hover:underline">
           Forget me
@@ -354,61 +355,24 @@ export function AboutScreen({
 // Blocked screens
 // ---------------------------------------------------------------------------
 
-const BLOCKED: Record<BlockedKind, { icon: ReactNode; title: string; text: string }> = {
-  paused: {
-    icon: <PauseCircle className="h-8 w-8" aria-hidden />,
-    title: 'Try-on is paused',
-    text: 'This shop has paused Curtain for now. You can still use the shop’s own size chart on the product page.',
-  },
-  expired: {
-    icon: <Clock className="h-8 w-8" aria-hidden />,
-    title: 'This try-on has expired',
-    text: 'For your privacy, a try-on link only works for a few minutes and in one window. Close this and tap “Try it on” again.',
-  },
-  incomplete: {
-    icon: <PackageX className="h-8 w-8" aria-hidden />,
-    title: 'Not ready for this product yet',
-    text: 'The shop has not finished the size data for this item, so we can’t give an honest recommendation.',
-  },
+/** The icons of the blocked screens; their text is in the catalogue (`strings/en.ts`). */
+const BLOCKED_ICON: Record<BlockedKind, ReactNode> = {
+  paused: <PauseCircle className="h-8 w-8" aria-hidden />,
+  expired: <Clock className="h-8 w-8" aria-hidden />,
+  incomplete: <PackageX className="h-8 w-8" aria-hidden />,
   // D20 point 3: no figure and no size for a men's product without the full 3D experience.
-  comingSoon: {
-    icon: <Hourglass className="h-8 w-8" aria-hidden />,
-    title: 'Men’s clothing: coming soon',
-    text: 'The fitting room is not ready for men’s clothing yet. For now, use the shop’s own size chart on the product page.',
-  },
-  offline: {
-    icon: <WifiOff className="h-8 w-8" aria-hidden />,
-    title: 'You seem to be offline',
-    text: 'We couldn’t reach Curtain. Check your connection and try again.',
-  },
-  busy: {
-    icon: <Clock className="h-8 w-8" aria-hidden />,
-    title: 'Busy right now',
-    text: 'A lot of people on your network are using fitting rooms at the moment. Wait a minute and try again.',
-  },
-  error: {
-    icon: <AlertTriangle className="h-8 w-8" aria-hidden />,
-    title: 'Something went wrong',
-    text: 'We couldn’t open the fitting room. Please try again.',
-  },
+  comingSoon: <Hourglass className="h-8 w-8" aria-hidden />,
+  offline: <WifiOff className="h-8 w-8" aria-hidden />,
+  busy: <Clock className="h-8 w-8" aria-hidden />,
+  error: <AlertTriangle className="h-8 w-8" aria-hidden />,
 };
 
-/** The coming-soon screen in Dutch (the rest of the overlay is English only so far). */
-const COMING_SOON_NL = {
-  title: 'Herenkleding: binnenkort beschikbaar',
-  text: 'De paskamer is nog niet klaar voor herenkleding. Gebruik voorlopig de maattabel van de winkel op de productpagina.',
-  close: 'Terug naar de winkel',
-} as const;
-
-/** Dutch for a Dutch browser or a Dutch shop page (`nl`, `nl-NL`, `nl_BE`). */
-export const isDutchLocale = (locale: string | null | undefined): boolean => /^nl(?:[-_]|$)/i.test(locale ?? '');
-
-export function BlockedScreen({ kind, onRetry, onClose, locale = null }: { kind: BlockedKind; onRetry: (() => void) | null; onClose: (() => void) | null; locale?: string | null }): ReactNode {
-  const dutch = kind === 'comingSoon' && isDutchLocale(locale);
-  const b = dutch ? { ...BLOCKED[kind], ...COMING_SOON_NL } : BLOCKED[kind];
+export function BlockedScreen({ kind, onRetry, onClose }: { kind: BlockedKind; onRetry: (() => void) | null; onClose: (() => void) | null }): ReactNode {
+  const s = embedStrings();
+  const b = s.blocked[kind];
   return (
-    <section className="flex flex-1 flex-col items-center justify-center gap-3 py-10 text-center" aria-labelledby="blocked-title" data-testid={`blocked-${kind}`} lang={dutch ? 'nl' : undefined}>
-      <span className="flex h-16 w-16 items-center justify-center rounded-full bg-white/80 text-coral-ink shadow">{b.icon}</span>
+    <section className="flex flex-1 flex-col items-center justify-center gap-3 py-10 text-center" aria-labelledby="blocked-title" data-testid={`blocked-${kind}`}>
+      <span className="flex h-16 w-16 items-center justify-center rounded-full bg-white/80 text-coral-ink shadow">{BLOCKED_ICON[kind]}</span>
       <h2 id="blocked-title" className="font-display text-2xl" tabIndex={-1} data-step-heading>
         {b.title}
       </h2>
@@ -416,12 +380,12 @@ export function BlockedScreen({ kind, onRetry, onClose, locale = null }: { kind:
       <div className="flex w-full max-w-xs flex-col gap-2 pt-2">
         {onRetry ? (
           <button type="button" className="btn-primary" onClick={onRetry}>
-            Try again
+            {s.actions.tryAgain}
           </button>
         ) : null}
         {onClose ? (
           <button type="button" className="btn-ghost" onClick={onClose}>
-            {dutch ? COMING_SOON_NL.close : 'Back to the shop'}
+            {s.actions.backToShop}
           </button>
         ) : null}
       </div>
@@ -433,7 +397,7 @@ export function LoadingScreen(): ReactNode {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16" role="status" aria-live="polite">
       <div className="h-10 w-10 rounded-full border-2 border-coral border-t-transparent motion-safe:animate-spin" aria-hidden />
-      <p className="text-sm text-ink-soft">Opening your fitting room…</p>
+      <p className="text-sm text-ink-soft">{embedStrings().loading}</p>
     </div>
   );
 }

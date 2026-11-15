@@ -57,7 +57,7 @@ must then set `data-api`).
 | `data-api`               | no       | API origin, e.g. `https://api.curtain.fit`. Defaults to the origin the script was loaded from. |
 | `data-mode`              | no       | `embed` (default): the standalone overlay on this page. `auto`: the same, plus an "Open in the Curtain app" link. `app`: the old QR / deep-link flow (mobile UA → redirect, desktop → QR modal). The legacy values `redirect` and `modal` still force app mode's deep link or QR modal. Anything else falls back to `embed`. |
 | `data-size-option`       | no       | The product option that holds the size. Default `Size`; `Maat`, `Taille` and `Größe` always match too (case-insensitive). |
-| `data-locale`            | no       | `en` or `nl`. Defaults to `<html lang>`, then `en`. The browser language never changes the button or overlay copy. |
+| `data-locale`            | no       | Locale of the SDK's text. Only `en` has a catalogue today (D21: English first, translation packs later), so every value shows English. Neither `<html lang>` nor the browser language changes the copy. The value is also passed to the embed, which uses its region for the default units. |
 | `data-label`             | no       | Text for buttons that are empty. Default "Try it on".                 |
 | `data-app`               | no       | The fitting room's origin, e.g. `https://app.curtain.fit`. Needed for the size peek (below); without it there is no peek. The Shopify block and the Woo plugin set it. |
 | `data-peek`              | no       | `on` (default) or `off`: the size peek next to each button. |
@@ -109,7 +109,7 @@ Every message is `{ source: 'curtain', v: 1, type, … }`; anything else is igno
 | Direction | `type` | Payload | What the SDK does |
 | --- | --- | --- | --- |
 | iframe → page | `curtain:ready` | `{}` | Clears the loading state and answers with `curtain:context`. |
-| page → iframe | `curtain:context` | `{ locale, currentVariantSize? }` | `locale` is `data-locale`, else `<html lang>`, else the browser language. `currentVariantSize` is the size selected on the page when a size control is found. |
+| page → iframe | `curtain:context` | `{ locale, currentVariantSize? }` | `locale` is `data-locale`, else `<html lang>`, else the browser language; the embed uses its region for the default units (cm or in) only, never for the language of its text (D21). `currentVariantSize` is the size selected on the page when a size control is found. |
 | iframe → page | `curtain:size-selected` | `{ productExternalId, size }` | Ignored unless `productExternalId` is the opened product and `size` is 1–64 characters. Closes the overlay, then selects the variant (below). |
 | iframe → page | `curtain:close` | `{}` | Closes the overlay. |
 | iframe → page | `curtain:resize` | `{ height }` | Ignored: the overlay is full-screen. |

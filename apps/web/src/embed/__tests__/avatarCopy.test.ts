@@ -1,64 +1,53 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { AVATAR_CLAIMS, AVATAR_UI, c30Parts, c30Text, REMEMBER_LABEL, type AvatarLang } from '../avatarCopy';
+import { c30Parts, c30Text } from '../avatarCopy';
 import { facePhotoEnabled, lookForMonk, MONK_CLASSES, parseLook } from '../look';
+import { embedStrings } from '../strings';
 
 const COPY = readFileSync(fileURLToPath(new URL('../../../../../docs/legal/avatar-consent-copy.md', import.meta.url)), 'utf8');
 const section = (from: string, to: string): string => COPY.slice(COPY.indexOf(from), COPY.indexOf(to));
-const DOC: Record<AvatarLang, string> = { en: section('## 2. English', '## 3. Nederlands'), nl: section('## 3. Nederlands', '## 4. Words this copy must not use') };
-/** The name the copy document gives the embed's "Remember me" switch, per language. */
-const DOC_REMEMBER: Record<AvatarLang, string> = { en: 'Remember me on this shop', nl: 'Onthoud mij bij deze winkel' };
+/** D21: only the English section is shipped. The Dutch section stays in the document as source material. */
+const DOC = section('## 2. English', '## 3. Nederlands');
+const { claims: CLAIMS, ui: UI } = embedStrings('en').avatar;
+const REMEMBER_LABEL = embedStrings('en').rememberLabel;
 
 describe('avatar prompt copy (docs/legal/avatar-consent-copy.md)', () => {
-  it.each(['en', 'nl'] as const)('every claim shown in %s is word for word in the consent copy', (lang) => {
-    expect(DOC[lang].length).toBeGreaterThan(1000);
-    for (const [key, text] of Object.entries(AVATAR_CLAIMS[lang])) {
-      // C30 names the "Remember me" switch; the document's name for it is a placeholder in Dutch.
-      const expected = key === 'c30' ? text.replace('{remember}', DOC_REMEMBER[lang]) : text;
-      expect(DOC[lang], `${lang}.${key}: ${expected}`).toContain(expected);
+  it('every claim shown is word for word in the English consent copy', () => {
+    expect(DOC.length).toBeGreaterThan(1000);
+    for (const [key, text] of Object.entries(CLAIMS)) {
+      // C30 names the "Remember me" switch by the label the footer shows.
+      const expected = key === 'c30' ? text.replace('{remember}', REMEMBER_LABEL) : text;
+      expect(DOC, `${key}: ${expected}`).toContain(expected);
     }
   });
 
-  it('C30 names the switch as the footer shows it', () => {
-    expect(c30Text('en')).toBe(`If "${REMEMBER_LABEL}" is on, your colour is saved on this device with your other answers.`);
-    expect(c30Text('nl')).toContain(`"${REMEMBER_LABEL}"`);
-    expect(c30Text('nl')).not.toContain('{remember}');
-  });
-
-  it.each(['en', 'nl'] as const)('C30 as shown in %s is the document\'s sentence with only the switch\'s name swapped for the footer\'s label', (lang) => {
-    // The sentence the shopper reads, not the template: taken from the document, then the name
-    // the document uses for the switch replaced by the label the footer really shows.
-    const row = DOC[lang].split('\n').find((l) => l.startsWith('| C30'))!;
-    const sentence = row.split('|')[2]!.trim();
-    expect(sentence).toContain(`"${DOC_REMEMBER[lang]}"`);
-    expect(c30Text(lang)).toBe(sentence.replace(DOC_REMEMBER[lang], REMEMBER_LABEL));
-    const parts = c30Parts(lang);
+  it('C30 names the switch as the footer shows it, and is the document\'s sentence', () => {
+    expect(REMEMBER_LABEL).toBe('Remember me on this shop');
+    expect(c30Text()).toBe(`If "${REMEMBER_LABEL}" is on, your colour is saved on this device with your other answers.`);
+    const row = DOC.split('\n').find((l) => l.startsWith('| C30'))!;
+    expect(c30Text()).toBe(row.split('|')[2]!.trim());
+    const parts = c30Parts();
     expect(parts.label).toBe(REMEMBER_LABEL);
-    expect(`${parts.before}${parts.label}${parts.after}`).toBe(c30Text(lang));
+    expect(`${parts.before}${parts.label}${parts.after}`).toBe(c30Text());
   });
 
-  it('credits the Monk Skin Tone Scale (CC BY 4.0) in both languages', () => {
-    for (const lang of ['en', 'nl'] as const) expect(AVATAR_UI[lang].swatchCredit).toMatch(/Monk Skin Tone Scale.*Ellis Monk.*CC BY 4\.0/);
+  it('credits the Monk Skin Tone Scale (CC BY 4.0)', () => {
+    expect(UI.swatchCredit).toMatch(/Monk Skin Tone Scale.*Ellis Monk.*CC BY 4\.0/);
   });
 
   it('uses none of the words the copy bans (section 4), in claims or labels', () => {
-    const banned = [/anonym/i, /100\s?%/, /\bsecure\b/i, /\bveilig/i, /nobody can/i, /never leaves/i, /may be sent/i, /biometr/i, /\bwe only\b/i, /\blocked\b/i, /\bsafe\b/i, /accura/i, /nauwkeurig/i];
-    for (const lang of ['en', 'nl'] as const) {
-      const ui = AVATAR_UI[lang];
-      const all = [...Object.values(AVATAR_CLAIMS[lang]), ...Object.values(ui).map((v) => (typeof v === 'function' ? v(3, 10) : v))].join('\n');
-      for (const re of banned) expect(all).not.toMatch(re);
-    }
+    const banned = [/anonym/i, /100\s?%/, /\bsecure\b/i, /nobody can/i, /never leaves/i, /may be sent/i, /biometr/i, /\bwe only\b/i, /\blocked\b/i, /\bsafe\b/i, /accura/i];
+    const all = [...Object.values(CLAIMS), ...Object.values(UI).map((v) => (typeof v === 'function' ? v(3, 10) : v))].join('\n');
+    for (const re of banned) expect(all).not.toMatch(re);
   });
 
   it('shows no sentence about reading a colour from a photo: that is not built', () => {
-    for (const lang of ['en', 'nl'] as const) {
-      const all = Object.entries(AVATAR_CLAIMS[lang])
-        .filter(([k]) => k !== 'c3' && k !== 'c4')
-        .map(([, v]) => v)
-        .join('\n');
-      expect(all).not.toMatch(/photo|foto|camera/i);
-    }
+    const all = Object.entries(CLAIMS)
+      .filter(([k]) => k !== 'c3' && k !== 'c4')
+      .map(([, v]) => v)
+      .join('\n');
+    expect(all).not.toMatch(/photo|camera/i);
   });
 });
 

@@ -74,7 +74,10 @@ export interface CurtainConfig {
   unstyled?: boolean;
   /** Text used for empty buttons. Defaults to "Try it on". */
   label?: string;
-  /** `en` | `nl`; defaults to `<html lang>`. */
+  /**
+   * The locale of the SDK's own text. Only `en` has a catalogue today (D21), so any other value
+   * shows English. Also sent to the embed, which uses its region for the default units.
+   */
   locale?: string;
   /** Request timeout in ms (default 8000). */
   timeoutMs?: number;

@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import { MOCK_GARMENTS_BY_ID } from '@curtain/schema';
-import { AVATAR_CLAIMS, c30Text } from '../avatarCopy';
+import { c30Text } from '../avatarCopy';
+import { embedStrings } from '../strings';
+
+const CLAIMS = embedStrings().avatar.claims;
 import type { EmbedApi, EmbedDeps } from '../deps';
 import { EmbedApp } from '../EmbedApp';
 import { assertNeutralPerson } from '../HeroRender';
@@ -150,9 +153,8 @@ describe('avatar prompt (D19)', () => {
     await toResult(user);
     await user.click(screen.getByTestId('avatar-open'));
     const dialog = await screen.findByRole('dialog');
-    const t = AVATAR_CLAIMS.en;
+    const t = CLAIMS;
     for (const text of [t.c1, t.c2, t.c3, t.c11Pick, t.skinOff, t.bodyOff]) expect(within(dialog).getByText(text)).toBeInTheDocument();
-    expect(dialog).toHaveAttribute('lang', 'en');
     expect(dialog).toHaveAttribute('aria-modal', 'true');
     const link = within(dialog).getByRole('link', { name: t.termsLink });
     expect(link).toHaveAttribute('href', 'https://app.curtain.example/privacy');
@@ -186,7 +188,7 @@ describe('avatar prompt (D19)', () => {
     let dialog = await screen.findByRole('dialog');
     expect(within(dialog).queryByTestId('avatar-item-face')).toBeNull();
     expect(dialog).not.toHaveTextContent(/Use my face|Coming soon|camera/i);
-    expect(dialog).not.toHaveTextContent(AVATAR_CLAIMS.en.c4);
+    expect(dialog).not.toHaveTextContent(CLAIMS.c4);
     cleanup();
 
     setup({ facePhoto: true });
@@ -196,7 +198,7 @@ describe('avatar prompt (D19)', () => {
     const row = within(dialog).getByTestId('avatar-item-face');
     expect(row).toHaveTextContent('Use my face');
     expect(row).toHaveTextContent('Coming soon');
-    expect(row).toHaveTextContent(AVATAR_CLAIMS.en.faceOff);
+    expect(row).toHaveTextContent(CLAIMS.faceOff);
     const sw = within(row).getByRole('switch', { name: 'Use my face' });
     // Not `disabled`: it stays in the Tab order so a keyboard user reaches it and hears "Coming soon".
     expect(sw).not.toBeDisabled();
@@ -211,27 +213,29 @@ describe('avatar prompt (D19)', () => {
     await user.keyboard('{Enter}');
     expect(sw).toHaveAttribute('aria-checked', 'false');
     expect(hasInput('input[type="file"]')).toBe(false);
-    expect(within(dialog).getByTestId('avatar-c4')).toHaveTextContent(AVATAR_CLAIMS.en.c4);
+    expect(within(dialog).getByTestId('avatar-c4')).toHaveTextContent(CLAIMS.c4);
   });
 
-  it('speaks Dutch to a Dutch shopper', async () => {
+  it('D21: English for a Dutch browser on a Dutch shop page, with no language tag of its own', async () => {
     const user = userEvent.setup();
-    setup({ locale: 'nl-NL' });
+    const { deps } = setup({ locale: 'nl-NL' });
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', { data: { source: 'curtain', v: 1, type: 'curtain:context', locale: 'nl-NL' }, origin: SHOP_ORIGIN, source: deps.parent as unknown as MessageEventSource }));
+    });
     await toResult(user);
     const open = screen.getByTestId('avatar-open');
-    expect(open).toHaveTextContent('Laat de avatar op jou lijken');
+    expect(open).toHaveTextContent('Make the avatar look like you');
+    expect(open).not.toHaveAttribute('lang');
     await user.click(open);
-    const dialog = await screen.findByRole('dialog', { name: 'Laat de avatar op jou lijken' });
-    expect(dialog).toHaveAttribute('lang', 'nl');
-    const t = AVATAR_CLAIMS.nl;
+    const dialog = await screen.findByRole('dialog', { name: 'Make the avatar look like you' });
+    expect(dialog).not.toHaveAttribute('lang');
+    const t = CLAIMS;
     for (const text of [t.c1, t.c2, t.c3, t.c11Pick, t.skinOff, t.bodyOff]) expect(within(dialog).getByText(text)).toBeInTheDocument();
-    // The published privacy page is English: the link says so, to people and to the browser.
-    const link = within(dialog).getByRole('link', { name: t.termsLink });
-    expect(link).toHaveAttribute('hreflang', 'en');
-    expect(within(dialog).getByTestId('avatar-terms-lang')).toHaveTextContent('(in het Engels)');
+    expect(within(dialog).getByRole('link', { name: 'Read the full privacy terms' })).toBeInTheDocument();
+    expect(within(dialog).queryByTestId('avatar-terms-lang')).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole('switch', { name: t.skinName }));
-    expect(within(dialog).getByText(t.skinOnYes)).toBeInTheDocument();
-    expect(within(dialog).getByRole('radio', { name: 'Kleur 10 van 10, donkerste' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('radio', { name: 'Colour 10 of 10, darkest' })).toBeInTheDocument();
+    expect(dialog).not.toHaveTextContent(/avatar op jou|Jij kiest|Kleur|Sluiten/);
   });
 
   it('keyboard: Enter opens it, focus moves in and stays in, arrows pick, Escape closes the prompt only and focus returns', async () => {
@@ -308,10 +312,10 @@ describe('avatar prompt (D19)', () => {
     await toResult(user);
     await user.click(screen.getByTestId('avatar-open'));
     await user.click(within(await screen.findByRole('dialog')).getByTestId('avatar-skin-switch'));
-    // The sentence as the shopper sees it, with the footer's English label tagged as English.
+    // The sentence as the shopper sees it, naming the switch as the footer shows it.
     const c30 = screen.getByTestId('avatar-c30');
-    expect(c30).toHaveTextContent(c30Text('nl'));
-    expect(c30.querySelector('span[lang="en"]')).toHaveTextContent(/^Remember me on this shop$/);
+    expect(c30).toHaveTextContent(c30Text());
+    expect(c30).toHaveTextContent('"Remember me on this shop"');
     await user.click(screen.getByTestId('skin-swatch-8'));
     cleanup();
 

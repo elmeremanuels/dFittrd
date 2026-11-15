@@ -492,7 +492,7 @@ describe('variant selection', () => {
     expect(radios[2]!.checked).toBe(true);
   });
 
-  it('falls back to the toast (in Dutch on a Dutch page) when no size control matches', async () => {
+  it('falls back to the toast (in English on a Dutch page too, D21) when no size control matches', async () => {
     mockFetch();
     document.documentElement.lang = 'nl';
     document.body.insertAdjacentHTML('beforeend', '<form action="/cart/add"><select name="options[Color]"><option>M</option></select></form>');
@@ -502,7 +502,7 @@ describe('variant selection', () => {
     await vi.advanceTimersByTimeAsync(0);
     await p;
     post(msg('curtain:size-selected', { productExternalId: 'p1', size: 'M' }));
-    expect(document.querySelector('.pk-toast')?.textContent).toBe('Jouw maat: M');
+    expect(document.querySelector('.pk-toast')?.textContent).toBe('Your size: M');
     await vi.advanceTimersByTimeAsync(6000);
     expect(document.querySelector('.pk-toast')).toBeNull();
   });

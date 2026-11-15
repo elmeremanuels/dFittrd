@@ -131,3 +131,5 @@ export {
   type Vec3,
   type Mat4,
 } from './math';
+export { buildHeadPart, faceRelief, HEAD_LEVELS, FACE_LEVELS, type HeadOptions } from './head';
+export type { MeshOptions } from './mesh';

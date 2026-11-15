@@ -96,7 +96,7 @@ const m = buildBody({ family: 'male', heightCm: 182, shoulderCm: 42, bust: 102, 
 const mesh = buildMannequinMesh(m);  // closed mesh, rings exact, same Mannequin interface as before
 ```
 
-`BodyInput` is the intended shape of `MountOptions.body` in `@curtain/garment-viewer` and of the 2D figure's props. Neither is wired yet; this package does not edit them. D20 point 3 stands above this contract: a male body from this package does not make a men's product ready. A men's garment goes live only with the male body, a 3D drape built on it and men's fit points together; until then the product shows "Men's clothing: coming soon", and the male 2D figure alone is never the men's experience.
+`BodyInput` is the shape of `MountOptions.body` in `@curtain/garment-viewer` (wired 14 Nov 2026: `family`, `heightCm`, `shoulderCm` and `chest` next to the three girths, see that package's README) and the intended shape of the 2D figure's props (not wired by this package). D20 point 3 stands above this contract: a male body from this package does not make a men's product ready. A men's garment goes live only with the male body, a 3D drape built on it and men's fit points together; until then the product shows "Men's clothing: coming soon", and the male 2D figure alone is never the men's experience.
 
 ```ts
 interface BodyInput {
@@ -140,6 +140,17 @@ What the adopters must do themselves:
 - Neither family has a bust or a chest as a shape: every section is an ellipse. The female chest ring is a band that is larger all the way round.
 - Large sizes look like a barrel from the side (chest depth 38 cm at XXL against about 30 cm measured), for the reason given under "What the ellipse cannot do".
 
+## The neutral standard head (`head.ts`, D19)
+
+`buildMannequinMesh(m, { head: 'neutral' })` replaces the egg with a sculpted head, for both families: a sixth closed part `head` that overlaps the neck (as the limbs overlap the torso), while the torso part loses the egg and its neck runs up into the head, narrowing. The default (`head: 'egg'` or no option) is the v0 mesh, byte for byte; the pinned .glb hashes and `anchors.json` do not change, and nothing in the garment pipeline (rings, collision sections, `torsoAt`) knows about the head.
+
+- **Own geometry only.** 76 rows × 104 columns of horizontal superellipse sections through three hand-written profile curves (front, back, half-width; a quarter ellipse for the dome), plus `faceRelief`: smooth bumps and hollows for the brow, eye sockets with a lidded eye, nose, cheekbones, lips, chin, and a lump for each ear. The proportions are the common drawing ones (eyes at half the head height, nose base at a third, mouth a third of the way from nose base to chin). No scan, photo, measurement of a person, SMPL, FLAME or other face or body model is used, and it is not derived from one. Licence: this repository's own code, nothing to record.
+- **Generic, not a likeness.** One face. The male head has a slightly heavier brow, chin and jaw and a slightly larger nose (the `male` flag of `faceRelief`); nothing else differs. No eyes are painted, there is no hair.
+- **Size.** Chin at 86.5 % of stature, top at 100 % (`HEAD_LEVELS`): 22.7 cm on the female M, 22.2 cm on the male M (the male levels put the shoulder line higher, and the head levels follow it). It follows `heightCm` like every other length. 15.8k triangles, so a mesh with the neutral head has about twice the triangles of the default one (30.0k against 14.9k on the female M).
+- **In the viewer** the head takes a fifth of the neck's girth scale (`HEAD_SCALE_SHARE` in `garment-viewer/src/body.ts`), where the egg was widened with the torso.
+
+**How it reads (looked at 14 Nov 2026, three.js renders from `spikes/garment-engine/viewer/avatar-renders.mjs`).** At phone size (the whole figure in a 390 px wide view, the head about 60 px high) it reads as a face: a shadow band at the eyes, the nose, a mouth. It no longer looks unfinished. Close up it is a shop-window mannequin with soft, slightly blurred features and closed-looking eyes; it is bald and has no eyebrows or lashes. It is not a person and nobody would take it for one. What is still off: the v0 neck is a long straight column, on the male body as wide as the jaw, which makes the male head look set in a collar from the side; and the head sits on a body with box shoulders. Uncanny it is not, in the sense of a face that is almost human; "plain dummy" is the fair description. Hair (plan slice 2's picker) is not built.
+
 ## What a shape contains
 
 - **Mesh:** five closed, consistently oriented parts (torso with head, two legs, two arms), 14.8–15.2k triangles. The girth of the mesh at every anchor ring equals the table value: every section is scaled so that its inscribed polygon has the ellipse's circumference. Limbs overlap the torso; there is no boolean union in v0.
@@ -157,7 +168,8 @@ What the adopters must do themselves:
 | `shapeForBody(input)`, `buildBody(input)`, `referenceMeasurements(shape)`, `deltoidBreadthCm(m)`, `armClearanceCm(m)`, `BODY_INPUT_LIMITS`, `FEMALE_SHOULDER_REFERENCE`, `MALE_SOURCES` | A shape or a mannequin from typed measurements; what a shopper would type for a shape |
 | `levelWarp(levels)`, `NOMINAL_LEVELS` | The level stretch behind `BodyShape.levels` |
 | `buildMannequin(shape)` | Parts, rings, length lines, joints, landmarks, plus `torsoAt(y)`, `legAt(y, side)`, `armAt(s, side)` |
-| `buildMannequinMesh(m)`, `topology(mesh)`, `vertexNormals(mesh)` | Mesh, watertight/manifold/orientation report, normals |
+| `buildMannequinMesh(m, { head? })`, `topology(mesh)`, `vertexNormals(mesh)` | Mesh (default: the v0 egg head; `head: 'neutral'`: the neutral standard head as a sixth part), watertight/manifold/orientation report, normals |
+| `buildHeadPart(m)`, `faceRelief(x, y, male?)`, `HEAD_LEVELS`, `FACE_LEVELS` | The neutral head alone, its relief function and its levels |
 | `slice(positions, indices, plane)`, `loopAround`, `loopLength`, `resampleLoop` | Plane sections, used for ring measurement and for stage 5 anchoring |
 | `mannequinAnchorsJson(m, mesh)`, `meshRingCircumference` | `anchors.json` |
 | `turntablePaths(m)`, `motionCamera(m)`, `cameraMatrices(frame, aspect)` | Camera paths |

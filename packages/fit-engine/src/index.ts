@@ -8,6 +8,7 @@ export { computeFit, recommendSize, easeTargetFor, footLengthFromEu } from './co
 export { bandFor, bandForWithSigma, type ProbabilisticBand } from './bands';
 export { parseSizingNotes, SIZE_UP_PATTERN, SIZE_DOWN_PATTERN, type SizingBias } from './sizingNotes';
 export { sigmaFromBodyProfile } from './sigma';
+export { TAPE_TUNING, pullOnCheck, elasticWaistReading, elasticCloseness, worseProvenance, type ElasticBand, type ReadTapeValue } from './pullOn';
 export { fitSummary, fitGapsForRender, anchorGaps, FIT_POINT_ANCHORS } from './summary';
 export {
   BLOCKS,
@@ -45,13 +46,18 @@ export {
   type FitAnchorId,
   type FitGarment,
   type FitResult,
+  type ElasticBandReading,
   type OmittedPoint,
   type Point,
   type PointFit,
   type PointSigma,
+  type PullOnCheck,
+  type PullOnStatus,
   type RenderGaps,
   type SizeFit,
   type SizeRecommendation,
   type SkippedPoint,
+  type TapeProvenance,
+  type TapeTuning,
   type TieBreak,
 } from './types';

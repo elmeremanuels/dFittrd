@@ -1,4 +1,5 @@
 export * from './garment';
+export * from './garmentTape';
 export * from './body';
 export * from './swipe';
 export * from './fitSignature';

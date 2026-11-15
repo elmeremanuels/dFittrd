@@ -7,6 +7,7 @@
  * all read this shape.
  */
 import { z } from 'zod';
+import { GarmentClosureSchema, GarmentTapeSchema } from './garmentTape';
 
 // ---------------------------------------------------------------------------
 // Closed vocabularies
@@ -320,6 +321,13 @@ export const GarmentPayloadSchema = z
     // Fit-engine hints
     criticalFitPoints: z.array(FitPointSchema).max(7).optional(),
     stretchZones: z.array(StretchZoneSchema).max(10).optional(),
+
+    // Garment tape measurements (docs/MERCHANT-MEASUREMENTS.md). Both optional: absent = the
+    // behaviour from before the fields existed.
+    closure: GarmentClosureSchema.optional().describe(
+      "How the garment is opened to put it on. 'pull-on' = not opened at all (elastic band, no zip, no drawstring): the stretched waistband has to pass the hips. Absent = not specified, no pull-on check.",
+    ),
+    garmentTape: GarmentTapeSchema.optional(),
 
     // Taste-engine hints
     styleTags: StyleTagsSchema.optional(),

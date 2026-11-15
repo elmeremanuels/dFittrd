@@ -401,7 +401,8 @@ export function sizeConfidence(fit: FitResult, size: string): number {
  * its "consider a size up" tail (the size peek shows that).
  */
 export interface EmbedNote {
-  kind: 'closest' | 'band' | 'add' | 'well';
+  /** `pullOn`: the waistband against the hips (pull-on garments); `estimate`: the size's tape numbers were not measured. */
+  kind: 'closest' | 'band' | 'add' | 'well' | 'pullOn' | 'estimate';
   text: string;
   short?: string;
 }
@@ -415,6 +416,12 @@ export function embedNotes(fit: FitResult, advice: SizeAdvice, category: Garment
  * Shopper-facing notes for the size on screen (COPY-2, F3): built from that size's own points, in
  * plain words (the catalogue's `fit.notes`), with hints only for measurements the About-you form
  * can actually collect.
+ *
+ * Garment tape (fit engine README, "Garment tape"): the embed never prints the engine's English
+ * `notes`; it says the same facts from the structured fields, in the catalogue's words. A size whose
+ * waistband only just passes the hips never reads "fits you well", a size whose tape numbers were
+ * not measured by the shop always carries that label, and a pull-on check that could not run for
+ * lack of a hips measurement is said. No margin in cm is printed.
  */
 export function embedNoteList(fit: FitResult, advice: SizeAdvice, category: GarmentCategory, profile: BodyProfile): EmbedNote[] {
   const t = embedStrings().fit.notes;
@@ -424,10 +431,16 @@ export function embedNoteList(fit: FitResult, advice: SizeAdvice, category: Garm
   if (!s) return [];
   const used = s.points.filter(isPointFit);
   const notes: EmbedNote[] = [];
-  if (!advice.size) {
+  if (!advice.size && s.pullOn?.status === 'blocked') {
+    // Nothing is recommended because no waistband passes the hips: that is the reason to give.
+    notes.push({ kind: 'pullOn', text: t.pullOnNone(s.size) });
+  } else if (!advice.size) {
     const worst = used.reduce<PointFit | undefined>((w, p) => (w === undefined || p.score < w.score ? p : w), undefined);
     if (worst) notes.push({ kind: 'closest', text: t.closest(s.size, bandText(worst.band), pointLabel(worst.point)) });
   }
+  // First, so the size peek (one note) shows it: the size goes on, but only just.
+  if (advice.size && s.pullOn?.status === 'marginal') notes.push({ kind: 'pullOn', text: t.pullOnTight({ short: s.pullOn.marginCm < 0 }) });
+  if (fit.pullOnUnchecked) notes.push({ kind: 'pullOn', text: t.pullOnUnchecked, short: t.pullOnUncheckedShort });
   // No "size up/down" advice after the preference already moved the size (it would contradict it).
   const suggest = !advice.adjusted;
   for (const p of used) {
@@ -447,9 +460,25 @@ export function embedNoteList(fit: FitResult, advice: SizeAdvice, category: Garm
     const weak = isPointFit(p) && (p.confidence < LOW_POINT_CONFIDENCE || profile.measurements[field as BodyMeasurementKey]?.source === 'prior');
     if ((missing || weak) && !add.includes(pointLabel(p.point))) add.push(pointLabel(p.point));
   }
+  // The shown size's waistband numbers (pull-on check, waist read from the band) when the shop did not measure them.
+  const tape = tapeProvenanceOf(s);
+  if (tape === 'interpolated' || tape === 'extrapolated') notes.push({ kind: 'estimate', text: t.tapeEstimated(s.size, { rough: tape === 'extrapolated' }) });
+  // The pull-on check reads the hips even where the hip is no fit point (an A-line skirt): a hip
+  // that is only our estimate is worth adding.
+  if (s.pullOn && collectable.has('hip') && profile.measurements.hip?.source === 'prior' && !add.includes(pointLabel('hip'))) add.push(pointLabel('hip'));
   if (add.length > 0) notes.push({ kind: 'add', text: t.add(add) });
   if (notes.length === 0) notes.push({ kind: 'well', text: t.fitsWell(s.size) });
   return notes;
+}
+
+const TAPE_ORDER = ['measured', 'interpolated', 'extrapolated'] as const;
+
+/** The worst provenance of the garment tape values one size's result rests on; undefined when it used none. */
+export function tapeProvenanceOf(size: SizeFit): (typeof TAPE_ORDER)[number] | undefined {
+  let worst = -1;
+  if (size.pullOn) worst = Math.max(worst, TAPE_ORDER.indexOf(size.pullOn.provenance));
+  for (const p of size.points) if (isPointFit(p) && p.elasticBand) worst = Math.max(worst, TAPE_ORDER.indexOf(p.elasticBand.provenance));
+  return worst < 0 ? undefined : TAPE_ORDER[worst];
 }
 
 /**

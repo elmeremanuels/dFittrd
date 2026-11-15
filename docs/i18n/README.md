@@ -58,6 +58,11 @@ and `sync.test.php`.
   they read a catalogue.
 - The whole consumer app and merchant console in `apps/web` outside `embed/`: English, inline in
   the components.
+- The fit engine's own sentences (`FitResult.notes`, `fitSummary` in `packages/fit-engine`,
+  including the pull-on and "not measured by the shop" sentences): English, written in the engine.
+  Only the consumer app prints them (`components/FitPanel.tsx`, `routes/TryRoute.tsx`). The embed
+  does not: it writes its notes from the result's structured fields with `fit.notes` of its
+  catalogue, so a pack reaches them there.
 - `apps/site`, `apps/api` error messages, the Shopify admin page: English, inline.
 
 ## What still follows the locale, and is not interface language

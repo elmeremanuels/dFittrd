@@ -99,6 +99,35 @@ implements the validate dry-run. `API_ROUTES` lists the method + path per DTO.
   `warnings` sink; the result is a draft for `completenessScore` / `GarmentPayloadSchema`.
 - `mappings/common.ts` exports the coercers (`coerceSizeChart`, `coerceFabric`, `inferCategory`, …). `coerceUnit` (0..1 fields such as `trueToSizeScore`) accepts a fraction, an explicit percentage (`"92%"`) or a whole number 2..100 read as a percentage; a fraction above 1 such as `1.5` is rejected, not read as 1.5 %.
 
+### Garment tape and closure (`garmentTape.ts`)
+
+Two optional fields on `GarmentPayload` (and the draft). Absent = the behaviour from before they existed.
+
+- `closure?: 'pull-on' | 'zip' | 'button' | 'drawstring' | 'wrap' | 'other'` (`GARMENT_CLOSURES`). Only `'pull-on'`
+  (no opening: the stretched waistband has to pass the hips) changes the fit engine's result.
+- `garmentTape?: GarmentTapeRow[]`: per size (matched to `sizeChart` by label, trimmed and case-insensitive) up to five
+  values of the garment lying flat, girths doubled: `waistRelaxed`, `waistStretched`, `hip` (with optional
+  `depthBelowBandCm`), `hemSweep`, `length`. Every value is `{ cm, provenance }` with
+  `provenance: 'measured' | 'interpolated' | 'extrapolated'`. A value without a provenance is rejected, so an
+  unmeasured size cannot be stored as measured. One row per size; `waistStretched` may not be smaller than `waistRelaxed`.
+- `fillGarmentTape(chart, measuredRows)` builds `garmentTape` for every chart size from the sizes the shop measured
+  (`MeasuredTapeRow`, plain cm). Rule: a measured size keeps its value; a size between two measured sizes lies on the
+  straight line between its nearest measured neighbours (`interpolated`); a size outside them continues the line
+  through the two nearest measured sizes (`extrapolated`); with one measured size only the two band fields
+  step with the chart's waist step (`extrapolated`); hip, hem sweep and length get no value on the other sizes,
+  because one sample says nothing about how they grade. Position on the line: the chart waist for the two band fields, the chart hip for the
+  others, the row index when the chart lacks the column. Each field is filled on its own. This is the rule of the
+  spike (`apps/web/src/render/ringInputs.ts` `fillSizes`) except for the one-sample case, where the spike steps
+  every field. The spike's copy still exists and feeds only the ring overlay; the two are not shared yet.
+  `fillGarmentTape` throws a `RangeError` naming the size when a measured size has a stretched band smaller than
+  its relaxed band (a typing mistake the row schema would refuse later without saying where it came from).
+- `worstTapeProvenance(values)`.
+- Fixtures: `PILOT_SKIRT_TAPE_MEASURED` (the shop's AU 8, 10, 14), `PILOT_SKIRT_CHART_ONLY` and
+  `PILOT_PULL_ON_SKIRT` (the same skirt with `closure` and the filled tape). Not in `MOCK_GARMENTS`.
+- Not checked by the schema: that every tape label exists in `sizeChart` (the draft schema is a `.partial()` of the
+  payload object, which rules out a cross-field refinement there). The fit engine ignores a row it cannot match.
+  `completenessScore` does not look at these fields.
+
 ### Audience and men's data (photo-avatar plan slice 3; decision D20)
 
 - `GarmentPayload.audience?: 'women' | 'men' | 'unisex'` (`GARMENT_AUDIENCES`). Optional: absent = not

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { FitResult } from '@curtain/fit-engine';
-import { MOCK_GARMENTS_BY_ID } from '@curtain/schema';
+import { peekNote } from '../peek';
+import { MOCK_GARMENTS_BY_ID, PILOT_PULL_ON_SKIRT, PILOT_SKIRT_CHART_ONLY } from '@curtain/schema';
 import { populationPrior } from '@/features/capture/prior';
-import { adviseSize, embedNotes, EMPTY_ABOUT, fitForProfile, fitWithAdvice, measurementFieldsFor, mergeAboutIntoScan, neighbourSizes, priorKeys, profileFromAbout, sizeConfidence, validateAbout, type AboutForm } from '../aboutYou';
+import { adviseSize, embedNoteList, embedNotes, EMPTY_ABOUT, fitForProfile, fitWithAdvice, measurementFieldsFor, mergeAboutIntoScan, neighbourSizes, priorKeys, profileFromAbout, sizeConfidence, validateAbout, type AboutForm } from '../aboutYou';
 import type { GarmentPayload } from '@curtain/schema';
 
 const dress = MOCK_GARMENTS_BY_ID['aalter-studio-1']!;
@@ -183,5 +184,93 @@ describe('camera scan keeps the typed inseam (F5)', () => {
     expect(merged.measurements.waist?.mean).toBe(74);
     expect(merged.measurements.height?.mean).toBe(169);
     expect(mergeAboutIntoScan(scan, form(), 'dress')).toBe(scan);
+  });
+});
+
+/**
+ * Garment tape (fit engine README "Garment tape"): the embed writes its own notes and never prints
+ * the engine's. These prove the pull-on warning and the "not measured by the shop" label reach the
+ * shopper in the embed, in the catalogue's words, for the size on screen.
+ */
+describe('pull-on garments: the warning and the estimate label reach the shopper', () => {
+  const skirtForm = (waist: string, hip: string): AboutForm => form({ knowsMeasurements: true, waist, hip });
+  const run = (waist: string, hip: string, preference: 'regular' | 'snug' | 'relaxed' = 'regular', garment = PILOT_PULL_ON_SKIRT) => {
+    const profile = profileFromAbout(skirtForm(waist, hip), 'bottom');
+    const { fit } = fitForProfile(garment, profile);
+    const advice = adviseSize(fit, preference);
+    return { fit, advice, profile, list: embedNoteList(fit, advice, 'bottom', profile), shown: fitWithAdvice(fit, advice, 'bottom', profile) };
+  };
+  const NOT_MEASURED = /not measured by the shop/;
+
+  it('a size whose waistband only just passes the hips is never "fits you well"', () => {
+    const { advice, list, shown } = run('73.5', '100');
+    expect(advice.size).toBe('10');
+    expect(list[0]).toEqual({ kind: 'pullOn', text: 'To pull it on, the waistband only just stretches over your hips' });
+    expect(shown.notes.join(' ')).not.toMatch(/fits you well/);
+    expect(shown.notes.join(' ')).not.toMatch(NOT_MEASURED); // AU 10 was measured
+    expect(peekNote(list, '10')).toBe('To pull it on, the waistband only just stretches over your hips');
+  });
+
+  it('an interpolated or extrapolated size always carries the label, and no margin in cm is printed', () => {
+    const twelve = run('77.5', '104');
+    expect(twelve.advice.size).toBe('12');
+    expect(twelve.shown.notes).toContain('Size 12 was not measured by the shop. Its waistband numbers are estimated from the sizes next to it');
+    const sixteen = run('87.5', '114');
+    expect(sixteen.advice.size).toBe('16');
+    expect(sixteen.shown.notes).toContain('Size 16 was not measured by the shop. Its waistband numbers are a rough estimate');
+    expect(sixteen.shown.notes).toContain('To pull it on, the waistband only just stretches over your hips');
+    for (const r of [twelve, sixteen]) expect(r.shown.notes.join(' ')).not.toMatch(/\d\s?cm/);
+  });
+
+  it('the label follows the size on screen after a preference moved it', () => {
+    // chart AU 14 body, relaxed: the size shown is 16, whose band was not measured
+    const relaxed = run('82.5', '109', 'relaxed');
+    if (relaxed.advice.adjusted === 'up') {
+      expect(relaxed.advice.size).toBe('16');
+      expect(relaxed.shown.notes.join(' ')).toMatch(NOT_MEASURED);
+    } else {
+      expect(relaxed.advice.size).toBe('14');
+      expect(relaxed.shown.notes.join(' ')).not.toMatch(NOT_MEASURED);
+    }
+    // a preference can never move the shopper to a size that does not go on
+    for (const [w, h] of [['73.5', '100'], ['77.5', '104'], ['82.5', '109'], ['87.5', '114']] as const) {
+      const snug = run(w, h, 'snug');
+      const s = snug.fit.perSize.find((p) => p.size === snug.advice.size)!;
+      expect(s.pullOn?.status).not.toBe('blocked');
+    }
+  });
+
+  it('no size goes on: the reason is the hips, not a fit point; an extrapolated band that is short is not offered', () => {
+    const { advice, list, shown } = run('93.5', '120');
+    expect(advice.size).toBeNull();
+    expect(shown.fits).toBe(false);
+    expect(list[0]).toEqual({ kind: 'pullOn', text: 'No size stretches over your hips to pull it on. The closest is 16' });
+    expect(shown.notes.join(' ')).toMatch(NOT_MEASURED);
+    expect(shown.notes.join(' ')).not.toMatch(/fits you well/);
+  });
+
+  it('no hips measurement: says the check did not run, also in the size peek', () => {
+    const profile = profileFromAbout(form({ knowsMeasurements: true, waist: '73.5' }), 'bottom');
+    const fit: FitResult = { ...fitForProfile(PILOT_PULL_ON_SKIRT, profile).fit, pullOnUnchecked: true };
+    const advice = adviseSize(fit, 'regular');
+    const list = embedNoteList(fit, advice, 'bottom', profile);
+    expect(list.map((n) => n.text)).toContain('Add your hips measurement under Edit my measurements so we can check that the waistband goes over your hips');
+    expect(peekNote(list, advice.size ?? '')).not.toMatch(/fits you well|Edit my measurements/);
+  });
+
+  it('hips that are only our estimate: the pull-on check ran on a guess, so the shopper is asked for the hips', () => {
+    const profile = profileFromAbout(form({ knowsMeasurements: true, waist: '73.5' }), 'bottom');
+    expect(profile.measurements.hip?.source).toBe('prior');
+    const { fit } = fitForProfile(PILOT_PULL_ON_SKIRT, profile);
+    const advice = adviseSize(fit, 'regular');
+    const size = fit.perSize.find((p) => p.size === (advice.size ?? advice.closest))!;
+    expect(size.pullOn).toBeDefined();
+    expect(embedNotes(fit, advice, 'bottom', profile).join(' ')).toMatch(/Add your (.* and )?hips? measurements? under Edit my measurements/i);
+  });
+
+  it('a garment without tape reads exactly as before', () => {
+    const { list, fit } = run('73.5', '100', 'regular', PILOT_SKIRT_CHART_ONLY);
+    expect(list.some((n) => n.kind === 'pullOn' || n.kind === 'estimate')).toBe(false);
+    expect(fit.pullOnUnchecked).toBeUndefined();
   });
 });

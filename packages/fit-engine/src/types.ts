@@ -5,7 +5,7 @@
  * never redeclared here. `FitResult` and its parts are NOT wire types: they are computed on-device
  * and never leave the device (AGENTS.md rule 4), so they are defined in this package.
  */
-import type { BodyProfile, Fabric, FitPoint, GarmentCategory, GarmentPayload, UserBody } from '@curtain/schema';
+import type { BodyProfile, Fabric, FitPoint, GarmentCategory, GarmentPayload, TapeProvenance, UserBody } from '@curtain/schema';
 
 /** The fit-engine spec calls the fit point `Point`. */
 export type Point = FitPoint;
@@ -23,8 +23,69 @@ export const BANDS: readonly Band[] = ['tight', 'snug', 'good', 'roomy', 'loose'
 export type FitGarment = Pick<GarmentPayload, 'id' | 'brand' | 'category' | 'patternBlock' | 'sizeChart'> & {
   fabric: Pick<Fabric, 'stretchPct'> & Partial<Fabric>;
 } & Partial<
-    Pick<GarmentPayload, 'ease' | 'sizeChartType' | 'sizingNotes' | 'trueToSizeScore' | 'criticalFitPoints' | 'stretchZones'>
+    Pick<
+      GarmentPayload,
+      'ease' | 'sizeChartType' | 'sizingNotes' | 'trueToSizeScore' | 'criticalFitPoints' | 'stretchZones' | 'closure' | 'garmentTape'
+    >
   >;
+
+/**
+ * The numbers behind the garment tape readings (`TAPE_TUNING` in pullOn.ts holds the defaults and
+ * README §Garment tape says where each comes from). All of them are choices, not measurements.
+ */
+export interface TapeTuning {
+  /** Shortfall of the stretched band against the hips that still goes on, cm. */
+  pullOnAllowanceCm: number;
+  /** A size that clears the hips by less than this (and is not blocked) is `marginal`, cm. */
+  pullOnMarginalBelowCm: number;
+  /**
+   * Shortfall tolerated when the stretched band is extrapolated, cm. Never applied wider than
+   * `pullOnAllowanceCm`: an unmeasured band is trusted less, not more.
+   */
+  pullOnExtrapolatedAllowanceCm: number;
+  /**
+   * Among sizes that fit equally well, one whose band passes the hips (margin ≥ 0) is preferred
+   * over one that is short within the allowance.
+   */
+  pullOnPreferPassing: boolean;
+  /** Share (0..1) of the band's stretch range that reads `good`; above it the waist reads `snug`. */
+  easyStretchShare: number;
+  /** Multiplier on `FitResult.confidence` by the worst provenance of the tape values used. */
+  provenanceConfidence: Record<TapeProvenance, number>;
+}
+
+export type PullOnStatus = 'clear' | 'marginal' | 'blocked';
+
+/**
+ * Pull-on check of one size: can the waistband, at the stretch the shop measured, pass the
+ * wearer's hips. Present only for a `closure: 'pull-on'` bottom whose size has a stretched band
+ * value, and only when the user gave a hip measurement.
+ */
+export interface PullOnCheck {
+  /**
+   * `blocked`: the band is short by more than `allowanceCm`; the size is never recommended.
+   * `marginal`: within the allowance, or clearing by less than the marginal margin; a warning.
+   * `clear`: no remark.
+   */
+  status: PullOnStatus;
+  /** `round1(stretched band − body hip)`, cm. Negative = short at the shop's comfortable stretch. */
+  marginCm: number;
+  bandStretchedCm: number;
+  /** The body girth the band has to pass: the user's hip measurement (fullest girth of the seat). */
+  bodyHipCm: number;
+  /** Shortfall tolerated for this size, cm (smaller, 0 by default, when the band value is extrapolated). */
+  allowanceCm: number;
+  /** Provenance of the stretched band value: never present an interpolated or extrapolated one as measured. */
+  provenance: TapeProvenance;
+}
+
+/** The measured band a waist point was read from (`PointFit.elasticBand`). */
+export interface ElasticBandReading {
+  relaxedCm: number;
+  stretchedCm: number;
+  /** The worse provenance of the two values. */
+  provenance: TapeProvenance;
+}
 
 /** Per-point measurement sigma in cm (decision D5), e.g. from `sigmaFromBodyProfile(profile)`. */
 export type PointSigma = Partial<Record<Point, number>>;
@@ -32,6 +93,11 @@ export type PointSigma = Partial<Record<Point, number>>;
 export interface ComputeFitOptions {
   /** Reserved by the spec signature; the engine is time-independent and ignores it. */
   now?: number;
+  /**
+   * Overrides for the garment tape readings, for sensitivity runs. Has no effect on a garment
+   * without `closure` / `garmentTape`. Production callers leave it out.
+   */
+  tapeTuning?: Partial<TapeTuning>;
   /**
    * Optional per-point standard deviation of the user's measurement (cm). When a point has a
    * sigma > 0 the hard band edges become probabilities P(gap ∈ band) under N(gap, σ²) and the
@@ -71,6 +137,13 @@ export interface PointFit {
   sigma?: number;
   /** Present only when a sigma > 0 was supplied for this point. */
   bandProbabilities?: BandProbabilities;
+  /**
+   * Present only on a waist point that was read from the garment's measured band range in place
+   * of chart waist + ease. Then `chartCm` is the relaxed band, `easeTarget` is 0, `gapCm` is
+   * `relaxed − body` (negative = the band is stretched by that much) and `tightLimit` is
+   * `−(stretched − relaxed)`.
+   */
+  elasticBand?: ElasticBandReading;
 }
 
 export interface OmittedPoint {
@@ -87,8 +160,10 @@ export interface SizeFit {
   size: string;
   /** 0..1, 3 dp; `null` when no point could be used for this size. */
   score: number | null;
-  /** No tight point and score ≥ 0.4. */
+  /** No tight point and score ≥ 0.4, and the pull-on check (when there is one) is not `blocked`. */
   wearable: boolean;
+  /** Pull-on check of this size; absent when the garment or the user lacks the data for it. */
+  pullOn?: PullOnCheck;
   /** FIT_POINTS order (bust, waist, hip, shoulder, thigh, inseam, foot). */
   points: (PointFit | OmittedPoint)[];
 }
@@ -124,6 +199,17 @@ export interface FitResult {
   tieBreak: TieBreak;
   /** Points removed by the pattern-block rules (merchant `criticalFitPoints` are never skipped). */
   skippedPoints: SkippedPoint[];
+  /**
+   * Worst provenance of the garment tape values the result for `closestSize` rests on. Absent when
+   * no tape value was used. `interpolated` and `extrapolated` have lowered `confidence`.
+   */
+  tapeProvenance?: TapeProvenance;
+  /**
+   * `true` when the garment has a pull-on check (pull-on bottom with stretched band values) that
+   * could not run because the user gave no hip measurement. Absent otherwise. The recommendation
+   * then says nothing about whether the band passes the hips; a surface should ask for the hips.
+   */
+  pullOnUnchecked?: true;
 }
 
 export type SizeRecommendation = Pick<
@@ -183,4 +269,4 @@ export interface AnchorGaps {
   slackCm: Partial<Record<FitAnchorId, number>>;
 }
 
-export type { BodyProfile, UserBody, GarmentPayload };
+export type { BodyProfile, UserBody, GarmentPayload, TapeProvenance };

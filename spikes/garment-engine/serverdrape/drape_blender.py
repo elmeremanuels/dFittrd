@@ -29,6 +29,15 @@ Method (docs/research/step3-serverdrape-spike.md):
   The band then contracts onto the body.
 - Solver: Blender cloth (implicit integration, mass-spring with angular bending), self-collision on, body collision,
   gravity, no pins and no cling: the band is held only by its own elastic tension and friction.
+- Wear mode (`--wear navel`, POM v2, write-up section 9; founder answer of 15 Nov 2026: every skirt is worn just below
+  the navel, pull-on elastic, gathered directly into the band). The band is then PLACED, not simulated: its particles
+  are pinned on rings round the body at the wear level (wear_rule.py: band top edge 2 cm under the body's navel
+  landmark, girth = the body's girth there clamped to the tape's [relaxed, stretched]); there is no band force and no
+  shrink. A body larger than the stretched limit is NOT draped (the JSON says "cannot be worn"). The rest geometry's
+  top edge (pom_rest.py --profile tube | cone) is longer than the band: the start shape is the developable rest shape
+  with the top edge at the wear level, and the pinned particles are moved (an animated shape key, frames 1-24) onto the
+  band rings, the seam ring laid in radial folds that take up the extra length (wear_rule.pleated_ring). What the
+  cloth does below the seam is the simulation's output. `--massscale` multiplies the particle mass (fabric weight).
 - Output: settled positions (Float32 xyz, cm, mannequin frame) and a JSON with CPU seconds, settle trace and checks.
 """
 import json
@@ -43,6 +52,9 @@ from mathutils.bvhtree import BVHTree
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import band_model  # noqa: E402
+import wear_rule  # noqa: E402
+
+PIN_FRAMES = (1, 24)  # wear mode: the pinned band moves from the start shape onto the body over these frames
 
 MANNEQUIN_HIP_Y = 87.36  # packages/mannequin morphHeights.hip, shape M
 TENSION_BELOW_HIP_CM = 12.0  # restmode graded: the tension zone reaches this far below the body's hip line
@@ -77,7 +89,7 @@ CM = 0.01
 def args() -> dict:
     a = sys.argv[sys.argv.index("--") + 1:]
     out = {"frames": "96", "band": "W-6", "json": None, "quality": "10", "mass": "physical", "bending": None, "cloth": "default",
-           "pushout": "0.8", "restmode": "pushed", "model": None, "tensionfloor": "0.9", "floor": "0"}
+           "pushout": "0.8", "restmode": "pushed", "model": None, "tensionfloor": "0.9", "floor": "0", "wear": "none", "massscale": "1"}
     for i in range(0, len(a), 2):
         out[a[i].lstrip("-")] = a[i + 1]
     return out
@@ -168,10 +180,31 @@ def main() -> None:
     rest = np.fromfile(os.path.join(a["rest"], srow["file"]), dtype=np.float32).reshape(-1, 3).astype(np.float64)
     idx = np.fromfile(os.path.join(a["rest"], "indices.bin"), dtype=np.uint32).reshape(-1, 3).astype(np.int64)
     band = np.fromfile(os.path.join(a["rest"], "band.bin"), dtype=np.uint8).astype(bool)
-    dy = body_meta["achieved"]["hipY"] - MANNEQUIN_HIP_Y
-    rest[:, 1] += dy
     bm = band_model.load(a["model"])
     girth = band_model.band_girth(bm, a["band"], size)
+    wear = None
+    if a["wear"] == "navel":
+        # Placement rule: the band's top edge sits just below the navel landmark; nothing about it is simulated.
+        sections = wear_rule.BodySections(bv, bf, arm)
+        wear = wear_rule.wear_level(body_meta["achieved"]["navelY"])
+        dy = wear["bandTopY"] - float(rest[:, 1].max())
+        wear["fit"] = wear_rule.band_fit(sections.girth(wear["bandMidY"]), girth["relaxedCm"], girth["stretchedCm"])
+        widest, widest_y = sections.widest(wear["seamY"], body_meta["rings"]["crotchY"])
+        wear["pullOn"] = {**wear_rule.pull_on(widest, girth["stretchedCm"]), "widestAtY": round(widest_y, 1),
+                          "range": "wear level down to the crotch (below it the legs' stance sets the hull, not the body)"}
+        wear["bodyHipY"] = body_meta["achieved"]["hipY"]
+        if not wear["fit"]["wearable"]:
+            res = {"body": body_id, "bodyLabel": body_meta["label"], "t": body_meta["t"], "size": size, "status": "cannot be worn",
+                   "wear": wear, "band": {**girth, "variant": a["band"]},
+                   "config": {**band_model.drape_key(girth, float(a["pushout"]), a["restmode"], 0.0, a["cloth"], {}), "wear": "navel",
+                              "profile": meta.get("profile", "v1")}}
+            if a.get("json"):
+                json.dump(res, open(a["json"], "w"), indent=1)
+            print("RESULT " + json.dumps(res))
+            return
+    else:
+        dy = body_meta["achieved"]["hipY"] - MANNEQUIN_HIP_Y
+    rest[:, 1] += dy
     pushout = float(a["pushout"]) * CM
     restmode = a["restmode"]
     assert restmode in ("pushed", "graded", "gradedall"), restmode
@@ -189,6 +222,8 @@ def main() -> None:
     if a.get("ramp"):  # gravity ramp frames "start,end": a later ramp lets the band contract onto the body first
         preset["ramp"] = [int(x) for x in a["ramp"].split(",")]
         overrides["rampStart"], overrides["rampEnd"] = preset["ramp"]
+    if float(a["massscale"]) != 1.0:
+        overrides["massScale"] = float(a["massscale"])
     k = girth["relaxedCm"] / srow["bandGradedGirthCm"]
 
     # Start shape: pushed radially out of the body (torso and legs; arms ignored).
@@ -226,6 +261,46 @@ def main() -> None:
     else:
         tens = np.ones(len(ratio))
     scale = np.where(band, k, 1.0) * tens
+    if wear:
+        scale = np.ones(len(rest))  # the band is pinned at its girth: no shrink
+        # Pin targets. Band rings above the seam: smooth rings CLEARANCE_CM off the body's section hull at their own
+        # height (further off when the body is smaller than the relaxed band: loose). Seam ring (the lowest band
+        # ring): the fabric's top edge, laid in folds that take up its extra length.
+        import pom_rest
+        rs, rn = meta["rings"]["start"], meta["rings"]["size"]
+        band_rings = [kk for kk in range(len(rs)) if band[rs[kk]]]
+        target = rest.copy()
+        relaxed = girth["relaxedCm"]
+        seam = None
+        for kk in band_rings:
+            sl = slice(rs[kk], rs[kk] + rn[kk])
+            y = float(rest[sl, 1].mean())
+            hull = sections.hull(y)
+            delta = wear_rule.CLEARANCE_CM + max(0.0, (relaxed - wear_rule.perimeter(hull)) / (2 * np.pi))
+            frac = pom_rest.ring_fractions(kk, rn[kk])
+            if kk == band_rings[-1]:
+                fabric = wear_rule.ring_length(to_blender(rest[sl])[:, :2]) / CM
+                seam = wear_rule.pleated_ring(hull, delta, frac, fabric, max(int(round(rn[kk] / wear_rule.PARTICLES_PER_FOLD)), 1))
+                xz = seam.pop("points")
+                seam.update({"fabricTopEdgeCm": round(fabric, 2), "bodyGirthAtSeamCm": round(wear_rule.perimeter(hull), 1),
+                             "particles": int(rn[kk]), "y": round(y, 2),
+                             "gatherRatioSimulated": round(fabric / seam["centreGirthCm"], 3),
+                             "gatherRatioOnBand": round(fabric / wear["fit"]["bandGirthCm"], 3)})
+            else:
+                xz = wear_rule.smooth_ring(hull, delta, frac)
+            target[sl, 0], target[sl, 2] = xz[:, 0], xz[:, 1]
+        wear["seam"] = seam
+        wear["clearanceCm"] = wear_rule.CLEARANCE_CM
+        garment.shape_key_add(name="Basis")
+        worn = garment.shape_key_add(name="worn")
+        tb = to_blender(target)
+        for i in np.nonzero(band)[0]:
+            worn.data[int(i)].co = tb[i].tolist()
+        for fr, v in ((PIN_FRAMES[0], 0.0), (PIN_FRAMES[1], 1.0)):
+            worn.value = v
+            worn.keyframe_insert("value", frame=fr)
+        pin = garment.vertex_groups.new(name="pin")
+        pin.add([int(i) for i in np.nonzero(band)[0]], 1.0, "REPLACE")
     shrink = garment.vertex_groups.new(name="shrink")
     for i in np.nonzero(scale < 1.0)[0]:
         shrink.add([int(i)], float(1.0 - scale[i]), "REPLACE")
@@ -244,14 +319,18 @@ def main() -> None:
     s.mass = preset["mass"] or (area * meta["weightGsm"] / 1000.0 / len(rest) if a["mass"] == "physical" else 0.15)
     if preset["mass"] and preset["massRefAreaCm2"]:  # the same simulated weight per unit area for every size and mesh
         s.mass = preset["mass"] * (area * 1e4 / len(rest)) / preset["massRefAreaCm2"]
+    s.mass *= float(a["massscale"])  # fabric weight relative to the preset's (stiffnesses unchanged)
     s.air_damping = preset["airDamping"]
-    s.vertex_group_shrink = "shrink"
+    if wear:
+        s.vertex_group_mass = "pin"
+    else:
+        s.vertex_group_shrink = "shrink"
     s.shrink_min = 0.0
     s.shrink_max = 1.0
     # Viscose challis (drape 0.85): between Blender's silk (5) and cotton (15) presets. ASSUMED mapping, not calibrated.
     fabric_tension = preset["tension"]
     elastic = fabric_tension * girth["elasticToFabricStiffness"]
-    if preset["bandLimitForceOverWeight"]:
+    if preset["bandLimitForceOverWeight"] and not wear:
         # Hoop tension of the band at strain e (Blender: spring force = stiffness / mean spring length x elongation;
         # gravity force = 0.001 x mass x g): T(e) = elastic x e x R, R = sum over band edges of L^2 cos^4(angle to the
         # horizontal) / (girth x mean spring length). Solve T(stretchRatio - 1) = factor x weight.
@@ -265,7 +344,11 @@ def main() -> None:
         weight = 0.001 * s.mass * len(rest) * 9.81
         elastic = preset["bandLimitForceOverWeight"] * weight / (r_band * (girth["stretchRatio"] - 1.0))
     comp = preset["compression"]
-    if elastic <= fabric_tension:
+    if wear:  # no band spring: every unpinned spring is fabric
+        elastic = fabric_tension
+        s.tension_stiffness = s.tension_stiffness_max = fabric_tension
+        s.compression_stiffness = s.compression_stiffness_max = comp
+    elif elastic <= fabric_tension:
         s.tension_stiffness = elastic
         s.tension_stiffness_max = fabric_tension
         s.compression_stiffness = min(elastic, comp)
@@ -279,9 +362,10 @@ def main() -> None:
         s.compression_stiffness = comp
         s.compression_stiffness_max = max(comp, elastic)
         s.vertex_group_structural_stiffness = "bandgroup"
-    s.shear_stiffness = min(1.0, preset["shear"])
+    s.shear_stiffness = preset["shear"] if wear else min(1.0, preset["shear"])
     s.shear_stiffness_max = preset["shear"]
-    s.vertex_group_shear_stiffness = "fabric"
+    if not wear:
+        s.vertex_group_shear_stiffness = "fabric"
     s.bending_stiffness = preset["bending"]
     if preset["damping"] is not None:
         s.tension_damping = s.compression_damping = s.shear_damping = preset["damping"]
@@ -355,7 +439,10 @@ def main() -> None:
         "size": size,
         "band": {**girth, "variant": a["band"], "gradedCm": srow["bandGradedGirthCm"], "restScale": round(k, 4), "settledGirthCm": round(band_girth, 1), "settledMeanY": round(band_y, 2), "startMeanY": round(float(rest[band][:, 1].mean()), 2), "strainVsRelaxed": round(band_girth / girth["relaxedCm"] - 1, 3), "pastStretched": band_girth > girth["stretchedCm"]},
         "dyCm": round(dy, 2),
-        "config": band_model.drape_key(girth, float(a["pushout"]), restmode, floor, a["cloth"], overrides),
+        "config": {**band_model.drape_key(girth, float(a["pushout"]), restmode, floor, a["cloth"], overrides),
+                   **({"wear": "navel", "profile": meta.get("profile", "v1")} if wear else {})},
+        "status": "draped",
+        "wear": wear,
         "cloth": {"preset": a["cloth"], **preset, "bandTension": round(float(elastic), 4),
                   "simulatedWeightUnits": round(0.001 * s.mass * len(rest) * 9.81, 4), "realWeightAt165GsmN": round(area * meta["weightGsm"] / 1000.0 * 9.81, 3)},
         "tensionParticles": int((tens < 1.0).sum()),

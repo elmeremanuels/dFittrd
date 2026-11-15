@@ -59,7 +59,28 @@ def ring_distances(length: float) -> np.ndarray:
     return np.concatenate([band, yoke, skirt])
 
 
+# Girth profiles (fabric girth against the distance s from the top edge). `v1` is section 8 of the write-up; `tube` and
+# `cone` are POM v2 (section 9, founder answer of 15 Nov 2026: the skirt is gathered directly into the waistband, so the
+# panel's top edge is LONGER than the band). Which one the real skirt has is NOT known: both are ASSUMED.
+# - v1:   top = the band's stretched girth, linear to the tape hip at HIP_BELOW_TOP_CM, linear to the hem.
+# - tube: top edge = the tape hip girth, constant down to the hip line (a straight tube gathered onto the band),
+#         then linear to the hem. Honours the tape hip at the assumed 20 cm. The v2 default.
+# - cone: top edge = the tape hip girth, ONE cone from there to the hem. This reads the tape's hip as the girth of the
+#         gathered top edge (hip depth 0), so at 20 cm it is wider than the tape hip. The comparison variant.
+# A single cone through the tape hip AT 20 cm and the hem is not offered: its top edge would be 83.6 / 91.6 / 94.1 cm
+# (AU 8 / 10 / 14), shorter than the band's measured stretched girth (94 / 100 / 110), which the tape rules out.
+PROFILES = ("v1", "tube", "cone")
+PROFILE = "v1"  # module default; main() sets it from --profile
+
+
+def top_girth(tv: dict) -> float:
+    """Girth of the fabric at the top edge for the current PROFILE."""
+    return tv["stretchedGirthCm"][0] if PROFILE == "v1" else tv["hipCm"][0]
+
+
 def girth_at(s: np.ndarray, top: float, hip: float, hem: float, length: float) -> np.ndarray:
+    if PROFILE == "cone":
+        return np.interp(s, [0, length], [top, hem])
     return np.interp(s, [0, HIP_BELOW_TOP_CM, length], [top, hip, hem])
 
 
@@ -79,7 +100,7 @@ def tape(size: str, model: dict) -> dict:
 def ring_counts(model: dict) -> np.ndarray:
     """Particles per ring, the same for every size (one topology): the COUNT_SIZE girth profile / EDGE_CM."""
     tv = tape(COUNT_SIZE, model)
-    top, hip, hem, length = (tv[f][0] for f in ("stretchedGirthCm", "hipCm", "hemSweepCm", "lengthCm"))
+    top, hip, hem, length = (top_girth(tv), *(tv[f][0] for f in ("hipCm", "hemSweepCm", "lengthCm")))
     return np.maximum(np.rint(girth_at(ring_distances(length), top, hip, hem, length) / EDGE_CM), 8).astype(int)
 
 
@@ -87,7 +108,7 @@ def build(size: str, model: dict) -> dict:
     counts = ring_counts(model)
     start = np.concatenate([[0], np.cumsum(counts)])
     tv = tape(size, model)
-    top, hip, hem, length = (tv[f][0] for f in ("stretchedGirthCm", "hipCm", "hemSweepCm", "lengthCm"))
+    top, hip, hem, length = (top_girth(tv), *(tv[f][0] for f in ("hipCm", "hemSweepCm", "lengthCm")))
     s = ring_distances(length)
     g = girth_at(s, top, hip, hem, length)
     delta = (g - top) / (2 * np.pi)                      # outward offset of the ring from the top ellipse
@@ -145,8 +166,19 @@ def triangles(counts: np.ndarray) -> np.ndarray:
 
 
 def main() -> None:
-    out = sys.argv[1]
-    sizes = (sys.argv[2] if len(sys.argv) > 2 else "8,10,12,14,16").split(",")
+    global PROFILE, EDGE_CM
+    argv = list(sys.argv[1:])
+    if "--edge" in argv:  # particle spacing along a ring (default 1.3; POM v2 uses 1.0 so the gathers have more particles)
+        i = argv.index("--edge")
+        EDGE_CM = float(argv[i + 1])
+        del argv[i:i + 2]
+    if "--profile" in argv:
+        i = argv.index("--profile")
+        PROFILE = argv[i + 1]
+        del argv[i:i + 2]
+        assert PROFILE in PROFILES, PROFILE
+    out = argv[0]
+    sizes = (argv[1] if len(argv) > 1 else "8,10,12,14,16").split(",")
     os.makedirs(out, exist_ok=True)
     model = band_model.load()
     idx = None
@@ -175,7 +207,8 @@ def main() -> None:
             "tape": r["tape"],
             "topY": float(r["y"][0]), "hemY": float(r["y"][-1]),
             # drape_blender.py shrinks the band particles by relaxed / this (the fabric's girth at the band).
-            "bandGradedGirthCm": r["tape"]["stretchedGirthCm"]["cm"],
+            # In wear mode (POM v2) nothing is shrunk: this is the top edge's girth, gathered onto the pinned band.
+            "bandGradedGirthCm": round(float(r["g"][0]), 2), "topEdgeGirthCm": round(float(r["g"][0]), 2),
             "hemEdgeGirthCm": round(float(r["g"][-1]), 1), "hemSweepMaxCm": round(float(r["g"][-1]), 1),
             "girths": {str(h): round(float(np.interp(h, r["y"][::-1], r["g"][::-1])), 1) for h in heights},
             "ringPolygonCm": {"top": round(float(r["ringLen"][0]), 2), "hip": round(float(r["ringLen"][r["hipRing"]]), 2), "hem": round(float(r["ringLen"][-1]), 2)},
@@ -184,11 +217,15 @@ def main() -> None:
             "areaM2": round(float(area) / 1e4, 3), "edgeCm": {"min": round(float(el.min()), 2), "mean": round(float(el.mean()), 2), "max": round(float(el.max()), 2)},
         })
     meta = {
-        "kind": "pom", "productId": "crimson-wildflower-maxi-skirt",
+        "kind": "pom", "profile": PROFILE, "productId": "crimson-wildflower-maxi-skirt",
         "source": "tape measurements only (serverdrape/pom_rest.py); no photo reconstruction",
-        "assumed": {"hipBelowTopCm": HIP_BELOW_TOP_CM, "bandCm": BAND_CM, "fabricGirthAtBand": "= the band's stretched girth",
-                    "startEllipseAspect": ASPECT, "startCentreZCm": Z0_CM, "profile": "piecewise linear girth: top - hip - hem",
-                    "construction": "one plain cone; the product photos show a gathered tier seam and a side slit, which this ignores"},
+        "assumed": {"hipBelowTopCm": HIP_BELOW_TOP_CM, "bandCm": BAND_CM,
+                    "fabricGirthAtBand": {"v1": "= the band's stretched girth", "tube": "= the tape hip girth (gathered onto the band)",
+                                          "cone": "= the tape hip girth (gathered onto the band)"}[PROFILE],
+                    "startEllipseAspect": ASPECT, "startCentreZCm": Z0_CM,
+                    "profile": {"v1": "piecewise linear girth: top - hip - hem", "tube": "constant hip girth from the top edge to the hip line, then linear to the hem",
+                                "cone": "one cone from the top edge (= tape hip girth) to the hem; the tape hip is NOT honoured at 20 cm"}[PROFILE],
+                    "construction": "no tier seam, no slit, no lining: no evidence for any of them other than AI-generated images"},
         "vertexCount": int(r["start"][-1]), "triangleCount": int(len(idx)),
         "rings": {"count": N_BAND + N_YOKE + N_SKIRT + 1, "hipRing": N_BAND + N_YOKE, "start": [int(x) for x in r["start"][:-1]],
                   "size": [int(x) for x in r["counts"]], "edgeCm": EDGE_CM, "countsFromSize": COUNT_SIZE},
@@ -197,7 +234,7 @@ def main() -> None:
     json.dump(meta, open(os.path.join(out, "rest.json"), "w"), indent=1)
     for r in rows:
         t = r["tape"]
-        print(f"AU {r['size']} [{r['provenance']}]: band {t['relaxedGirthCm']['cm']} -> fabric top {t['stretchedGirthCm']['cm']}, hip {t['hipCm']['cm']}, "
+        print(f"AU {r['size']} [{r['provenance']}]: band {t['relaxedGirthCm']['cm']} -> fabric top {r['topEdgeGirthCm']} ({PROFILE}), hip {t['hipCm']['cm']}, "
               f"hem {t['hemSweepCm']['cm']}, length {t['lengthCm']['cm']} cm; rest y {r['hemY']:.1f}..{r['topY']:.1f}; ring polygons {r['ringPolygonCm']}; "
               f"area {r['areaM2']} m2; edges {r['edgeCm']}")
 

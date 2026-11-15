@@ -137,7 +137,7 @@ export function ResultScreen({
           <UnitToggle units={units} onChange={onUnits} />
         </div>
         <SizeChartTable garment={garment} recommended={null} units={units} />
-        <div className="sticky bottom-0 -mx-4 bg-gradient-to-t from-cream via-cream to-cream/0 px-4 pt-4 pb-2">
+        <div className="sticky bottom-0 z-20 -mx-4 bg-gradient-to-t from-cream via-cream to-cream/0 px-4 pt-4 pb-2">
           <button type="button" className="btn-coral w-full" onClick={onEdit} data-testid="edit-measurements">
             <Pencil className="h-4 w-4" aria-hidden /> {shoes ? t.addShoeSize : t.edit}
           </button>
@@ -301,7 +301,8 @@ export function ResultScreen({
 
       {extra}
 
-      <div ref={setBar} className="sticky bottom-0 -mx-4 space-y-2 bg-gradient-to-t from-cream via-cream to-cream/0 px-4 pt-4 pb-2" data-testid="choose-bar">
+      {/* z-20: above the figure's label track (z-10), whose body chip scrolls behind this bar. */}
+      <div ref={setBar} className="sticky bottom-0 z-20 -mx-4 space-y-2 bg-gradient-to-t from-cream via-cream to-cream/0 px-4 pt-4 pb-2" data-testid="choose-bar">
         {chosen ? (
           <p role="status" className="flex items-center justify-center gap-2 text-sm font-medium text-ok">
             <CheckCircle2 className="h-4 w-4" aria-hidden /> {t.chosen(chosen)}

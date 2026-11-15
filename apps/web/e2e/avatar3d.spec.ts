@@ -12,7 +12,8 @@ import { deltaE2000, deltaEHex, diffShots, hexToRgb, labOf, rgbToHex, type Rgb, 
  *     state never leaves `settled`), and the page makes NO request for it;
  *   - it is the body that changes colour, the same area for every tone;
  *   - switching "Match my skin tone" off returns the mannequin to its standard colour;
- *   - a lost and restored WebGL context brings the same picture back (the settled view is idle);
+ *   - a lost and restored WebGL context brings the same picture back (the settled view is idle):
+ *     with a picked colour, in the standard colour, and after a size switch;
  *   - a view opened after the colour was picked starts in that colour;
  *   - the 3D view keeps its estimate label throughout (rule 3).
  * It also measures, without asserting a limit, how far the 2D figure and the 3D body (lighting
@@ -144,7 +145,7 @@ const row = (label: string, asked: string, d: ShotDiff): Record<string, unknown>
 
 test('a skin colour picked in the avatar prompt is on the 3D mannequin: no remount, no request, and off returns the standard colour', async ({ browser, baseURL }) => {
   test.skip(!existsSync(join(BUNDLE, 'base.glb')), `no skirt bundle at ${BUNDLE} (git-ignored; set E2E_SKIRT_BUNDLE)`);
-  test.setTimeout(300_000);
+  test.setTimeout(480_000);
   const origin = new URL(baseURL!).origin;
   const context = await browser.newContext({ viewport: VIEWPORT, locale: 'en-AU', deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
   const page = await context.newPage();
@@ -192,6 +193,23 @@ test('a skin colour picked in the avatar prompt is on the 3D mannequin: no remou
       const w = window as unknown as { __c3d: Element; __c3dStates: string[] };
       return { same: document.querySelector('[data-testid="garment3d-canvas"]') === w.__c3d && w.__c3d.isConnected, states: w.__c3dStates };
     });
+  /** Take the view's WebGL context away and give it back (a tab put to sleep, a GPU reset); the viewer must see it go. */
+  const loseAndRestore = async (): Promise<void> => {
+    const lossesBefore = contextLosses;
+    const lost = await canvas.evaluate(async (el) => {
+      const gl = (el as HTMLCanvasElement).getContext('webgl2');
+      const ext = gl?.getExtension('WEBGL_lose_context');
+      if (!gl || !ext) return false;
+      const restored = new Promise<void>((done) => el.addEventListener('webglcontextrestored', () => done(), { once: true }));
+      ext.loseContext();
+      await new Promise((r) => setTimeout(r, 200));
+      ext.restoreContext();
+      await restored;
+      return true;
+    });
+    expect(lost, 'could not lose the WebGL context of the 3D view').toBe(true);
+    expect(contextLosses, 'the viewer did not see its context go').toBe(lossesBefore + 1);
+  };
   const standard = await still(page, canvas, '3d-standard-colour.png');
   // The picture is still: a second one is the same, so a difference later is the colour's.
   const again = await diffShots(decoder, standard, await still(page, canvas));
@@ -233,6 +251,14 @@ test('a skin colour picked in the avatar prompt is on the 3D mannequin: no remou
   const sizes = bodies.map((b) => b.diff.changed);
   expect(Math.max(...sizes) / Math.min(...sizes), `the changed area differs between tones: ${sizes.join(', ')}`).toBeLessThan(1.25);
 
+  // A lost context while a colour is picked: the picture comes back in that colour (Monk 9, the last one set).
+  const picked = bodies.at(-1)!;
+  await loseAndRestore();
+  const backPicked = await diffShots(decoder, picked.png, await still(page, canvas, '3d-after-context-loss-tone-9.png'));
+  expect(backPicked.changed, 'after a lost and restored WebGL context the 3D view lost its picked colour or its picture').toBeLessThanOrEqual(Math.round(backPicked.total * 0.0005));
+  // And it is not the standard picture: the comparison above was against the coloured one.
+  expect((await diffShots(decoder, standard, picked.png)).changed).toBeGreaterThan(backPicked.total * 0.02);
+
   // Off again: the mannequin is back in its standard colour, pixel for pixel.
   await inPrompt(page, async (dialog) => {
     await dialog.getByTestId('avatar-skin-switch').click();
@@ -249,23 +275,35 @@ test('a skin colour picked in the avatar prompt is on the 3D mannequin: no remou
   expect(watched.states, 'the 3D view left the settled state (a new mount or drape)').toEqual([]);
 
   // ---- a lost WebGL context (a tab put to sleep, a GPU reset) comes back with the picture ----------
-  const lossesBefore = contextLosses;
-  const lost = await canvas.evaluate(async (el) => {
-    const gl = (el as HTMLCanvasElement).getContext('webgl2');
-    const ext = gl?.getExtension('WEBGL_lose_context');
-    if (!gl || !ext) return false;
-    const restored = new Promise<void>((done) => el.addEventListener('webglcontextrestored', () => done(), { once: true }));
-    ext.loseContext();
-    await new Promise((r) => setTimeout(r, 200));
-    ext.restoreContext();
-    await restored;
-    return true;
-  });
-  expect(lost, 'could not lose the WebGL context of the 3D view').toBe(true);
-  expect(contextLosses, 'the viewer did not see its context go').toBe(lossesBefore + 1);
+  await loseAndRestore();
   const back = await diffShots(decoder, standard, await still(page, canvas, '3d-after-context-loss.png'));
   expect(back.changed, 'after a lost and restored WebGL context the 3D view is not the picture it was').toBeLessThanOrEqual(Math.round(back.total * 0.0005));
   await expect(canvas).toHaveAttribute('data-state', 'settled');
+
+  // ---- and after a size switch: the size on screen is the one drawn again, not the first one -----
+  const sizes3d = await page.getByRole('radiogroup', { name: 'Compare sizes' }).getByRole('radio').all();
+  const startAt = await canvas.getAttribute('data-size');
+  let other: Locator | null = null;
+  let original: Locator | null = null;
+  for (const r of sizes3d) {
+    if ((await r.getAttribute('aria-checked')) === 'true') original = r;
+    else other ??= r;
+  }
+  expect(original, 'no size is selected').not.toBeNull();
+  expect(other, 'the skirt has one size only: no size switch to test').not.toBeNull();
+  await other!.click();
+  await expect(canvas).not.toHaveAttribute('data-size', startAt ?? '');
+  await expect(canvas).toHaveAttribute('data-state', 'settled', { timeout: 150_000 });
+  const otherSize = await still(page, canvas, '3d-other-size.png', standard);
+  expect((await diffShots(decoder, standard, otherSize)).changed, 'the other size looks the same as the first').toBeGreaterThan(0);
+  await loseAndRestore();
+  const backOther = await diffShots(decoder, otherSize, await still(page, canvas, '3d-after-context-loss-other-size.png'));
+  expect(backOther.changed, 'after a size switch, a lost and restored WebGL context did not bring back the size on screen').toBeLessThanOrEqual(Math.round(backOther.total * 0.0005));
+  await expect(canvas).toHaveAttribute('data-state', 'settled');
+  // Back to the first size for the rest of the test (its drape is kept, so this is quick).
+  await original!.click();
+  await expect(canvas).toHaveAttribute('data-size', startAt ?? '');
+  await expect(canvas).toHaveAttribute('data-state', 'settled', { timeout: 150_000 });
 
   // ---- a view opened after the colour was picked starts in that colour ---------------------------
   await view.getByRole('button', { name: 'Close the 3D view' }).click();

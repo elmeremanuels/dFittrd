@@ -98,7 +98,13 @@ pilot skirt, where that bundle is present; not part of `pnpm check` either) and 
 **A lost WebGL context.** A settled view stops drawing. When the browser takes the WebGL context
 away and gives it back (a tab put to sleep on a phone, a GPU reset), three.js rebuilds its state
 but nothing drew again, so the canvas stayed blank under its estimate label. The mount now listens
-for `webglcontextrestored` and draws the current size again. `avatar3d.spec.ts` loses and restores
-the context of the mounted view and compares the picture with the one before (it was blank before
-this change: 197,882 of 488,032 pixels differed; now none beyond the tolerance). Not handled: a
+for `webglcontextrestored` (`contextRestore.ts`) and draws the current size again. In `pnpm check`:
+`contextRestore.test.ts` tests that listener (it draws on every restore and stops on dispose) and
+reads `mount.ts` to see that the mount still uses it; that is a guard against the wiring being
+dropped, not a test of the picture. The picture is tested only by `avatar3d.spec.ts`, which is
+skipped where the bundle is absent (CI included): it loses and restores the context of the mounted
+view three times (with a picked skin colour, in the standard colour, after a switch to another
+size) and compares each picture with the one before (it was blank before this change: 197,882 of
+488,032 pixels differed, as reported by the first run and not repeated since; now none beyond the
+tolerance). Not handled: a
 context that is never restored; the canvas then stays blank and the state stays `settled`.

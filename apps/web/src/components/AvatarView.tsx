@@ -5,7 +5,7 @@ import { fitGapsForRender } from '@curtain/fit-engine';
 import { ESTIMATE_DISCLAIMER, type GarmentPayload, type UserBody } from '@curtain/schema';
 import { adjustColor, bodyGeometry, bodyPath, fabricLook, garmentGeometry, isHex, levelY, STANDARD_SKIN_HEX, VIEW_H, VIEW_W, HEAD_TOP_Y } from '@/render/body';
 import { faceInk, figureOutline, neutralFace, SKIN_SHADE } from '@/render/face';
-import { EstimateBadge } from './EstimateBadge';
+import { ESTIMATE_LABEL_LINES, EstimateBadge } from './EstimateBadge';
 import { SizeRingsChips, SizeRingsLayer } from './SizeRings';
 import type { RingOverlay } from '@/render/rings';
 
@@ -50,7 +50,9 @@ export interface AvatarViewProps {
    * or behind a bar at the bottom of the host's screen (`--estimate-clear`, that bar's height), the
    * badge rides up the left edge of the frame, beside the head and never over the face, so
    * whatever part of the figure is on screen is labelled an estimate (AGENTS.md rule 3). It needs
-   * a frame that does not make a scroll box of its own (`overflow: clip`, not `hidden`).
+   * a frame that does not make a scroll box of its own (`overflow: clip`, not `hidden`). The
+   * host's bar must be stacked above this track (`z-10`): the body chip does not ride, so it
+   * passes behind the bar.
    */
   labelsAt?: 'top' | 'bottom';
   /** The estimate badge's text on two short lines, for `labelsAt="bottom"` (defaults to the app's wording). */
@@ -64,8 +66,6 @@ export interface AvatarViewProps {
 }
 
 const NO_MEDIA: AvatarMedia = { faceUrl: null, baseFrame: null };
-const ESTIMATE_LINES = ['Estimate ·', 'not measured'] as const;
-
 
 /**
  * The mirror (render path B v0), store-free: every input is a prop, so the standalone embed can
@@ -76,7 +76,7 @@ const ESTIMATE_LINES = ['Estimate ·', 'not measured'] as const;
  * head (D19: one generic drawing for everybody, never a likeness), or the face tile where the app
  * has one. Always carries the estimate badge.
  */
-export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false, rings = null, hemSweepCm = null, labelsAt = 'top', plain = false, estimateLines = ESTIMATE_LINES }: AvatarViewProps): ReactNode {
+export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false, rings = null, hemSweepCm = null, labelsAt = 'top', plain = false, estimateLines = ESTIMATE_LABEL_LINES }: AvatarViewProps): ReactNode {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const reduce = useReducedMotion();
 
@@ -249,18 +249,20 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
       ) : null}
       {labelsBelow ? (
         // The track is the frame's inner height: the badge's own place is the strip at its foot,
-        // and `sticky` lifts it along the track while that strip is out of sight.
-        <div className="pointer-events-none absolute inset-x-3 top-3 bottom-4 z-10 flex items-end gap-1" data-testid="avatar-labels">
-          <EstimateBadge lines={estimateLines} className="sticky shrink-0 px-2 py-0.5 text-[10px] leading-tight" style={{ bottom: 'calc(var(--estimate-clear, 0px) + 0.375rem)' }} />
+        // and `sticky` lifts it along the track while that strip is out of sight. The track hugs
+        // the frame's edge and the badge is as narrow as its text allows, so a riding badge takes
+        // as little of the figure as it can (it still crosses the left arm and a wide hem).
+        <div className="pointer-events-none absolute inset-x-2 top-3 bottom-4 z-10 flex items-end gap-1" data-testid="avatar-labels">
+          <EstimateBadge lines={estimateLines} className="sticky shrink-0 px-1.5 py-0.5 text-[10px] leading-tight" style={{ bottom: 'calc(var(--estimate-clear, 0px) + 0.375rem)' }} />
           {garment && !media.baseFrame ? <span className="chip min-w-0 rounded-xl bg-white/70 px-2 py-0.5 text-[10px] leading-tight" data-testid="avatar-body-chip">{bodyLabel ?? (hasBody ? 'Body from your measurements' : 'Reference body · add your measurements')}</span> : null}
           {media.baseFrame ? <span className="chip min-w-0 rounded-xl bg-white/70 px-2 py-0.5 text-[10px] leading-tight">Your capture · garment overlay</span> : null}
         </div>
       ) : labelsAbove ? (
         // A strip of their own above the head: one row of narrow chips (two or three short lines).
         <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start gap-1" data-testid="avatar-labels">
-          <EstimateBadge lines={estimateLines} className="shrink-0 px-2 py-0.5 text-[10px] leading-tight" />
-          {garment && !media.baseFrame ? <span className="chip min-w-0 rounded-xl bg-white/70 px-2 py-0.5 text-[10px] leading-tight">{bodyLabel ?? (hasBody ? 'Body from your measurements' : 'Reference body · add your measurements')}</span> : null}
-          {media.baseFrame ? <span className="chip min-w-0 rounded-xl bg-white/70 px-2 py-0.5 text-[10px] leading-tight">Your capture · garment overlay</span> : null}
+          <EstimateBadge lines={estimateLines} className="shrink-0 px-1.5 py-0.5 text-[10px] leading-tight" />
+          {garment && !media.baseFrame ? <span className="chip min-w-0 rounded-xl bg-white/70 px-1.5 py-0.5 text-[10px] leading-tight">{bodyLabel ?? (hasBody ? 'Body from your measurements' : 'Reference body · add your measurements')}</span> : null}
+          {media.baseFrame ? <span className="chip min-w-0 rounded-xl bg-white/70 px-1.5 py-0.5 text-[10px] leading-tight">Your capture · garment overlay</span> : null}
         </div>
       ) : null}
       {isLoading ? (

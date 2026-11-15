@@ -5,12 +5,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { computeFit } from '@curtain/fit-engine';
 import { MOCK_GARMENTS_BY_ID, type GarmentAssetRef } from '@curtain/schema';
 import { AvatarView } from '@/components/AvatarView';
+import { ESTIMATE_LABEL, ESTIMATE_LABEL_LINES } from '@/components/EstimateBadge';
 import { bodyGeometry } from '@/render/body';
 import { contrastRatio, drawnHeadColour, faceInk, figureOutline, neutralFace, SKIN_SHADE } from '@/render/face';
 import { adjustColor } from '@/render/body';
 import { bodyFamilyFor, Garment3D, type Garment3DProps } from '../Garment3D';
 import { assertNeutralPerson } from '../HeroRender';
 import { lookForMonk, MONK_CLASSES, STANDARD_SKIN_HEX } from '../look';
+import { embedStrings } from '../strings';
 
 vi.stubGlobal('matchMedia', (q: string) => ({ matches: /prefers-reduced-motion/.test(q), media: q, onchange: null, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false }));
 afterEach(cleanup);
@@ -120,8 +122,21 @@ describe('2D figure: skin colour and the neutral standard face (D19)', () => {
     expect(contrastRatio(lookForMonk(1)!.hex, BACKDROP)).toBeLessThan(1.3);
   });
 
+  it('D21: the estimate label has one wording; the app\'s lines are cut from it and the embed catalogue\'s lines say the same', () => {
+    expect(ESTIMATE_LABEL_LINES.join(' ')).toBe(ESTIMATE_LABEL);
+    expect(ESTIMATE_LABEL_LINES.every((l) => l.length > 0 && l === l.trim())).toBe(true);
+    expect(embedStrings().result.estimateLines.join(' ')).toBe(ESTIMATE_LABEL);
+    // The app's figure (no lines passed) and the embed's (the catalogue's lines) read the same.
+    const app = render(<AvatarView garment={garment} fit={fit} size="M" measurements={measurements} />);
+    expect(app.getByTestId('estimate-label')).toHaveTextContent(ESTIMATE_LABEL);
+    app.unmount();
+    const embed = render(<AvatarView garment={garment} fit={fit} size="M" measurements={measurements} labelsAt="bottom" estimateLines={embedStrings().result.estimateLines} />);
+    expect(embed.getByTestId('estimate-label')).toHaveTextContent(ESTIMATE_LABEL);
+    embed.unmount();
+  });
+
   it('labels under the figure (the embed): the figure is drawn above the label strip, and the estimate badge can ride up the frame', () => {
-    const below = render(<AvatarView garment={garment} fit={fit} size="M" measurements={measurements} labelsAt="bottom" estimateLines={['Estimate ·', 'not measured']} />);
+    const below = render(<AvatarView garment={garment} fit={fit} size="M" measurements={measurements} labelsAt="bottom" estimateLines={embedStrings().result.estimateLines} />);
     expect(below.getByTestId('mirror').className).toMatch(/\bpb-16\b/);
     // The track runs the height of the frame and ends where the strip does.
     expect(below.getByTestId('avatar-labels').className).toMatch(/\btop-3\b.*\bbottom-4\b.*\bitems-end\b/);

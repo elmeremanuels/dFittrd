@@ -85,7 +85,8 @@ const CHIP_CLASS: Record<Band | 'none', string> = {
 };
 
 /** Short labels next to each ring, plus the full sentences for screen readers. */
-export function SizeRingsChips({ overlay }: { overlay: RingOverlay }): ReactNode {
+/** `bottomRem`: the mirror's bottom padding (0.75rem, or more when the labels sit under the figure). */
+export function SizeRingsChips({ overlay, bottomRem = 0.75 }: { overlay: RingOverlay; bottomRem?: number }): ReactNode {
   return (
     <>
       <div className="pointer-events-none absolute inset-0" aria-hidden data-testid="size-ring-chips">
@@ -94,7 +95,7 @@ export function SizeRingsChips({ overlay }: { overlay: RingOverlay }): ReactNode
             key={r.key}
             className={`absolute flex -translate-y-1/2 flex-col rounded-md border bg-white/90 px-1 py-px text-[9px] leading-[1.15] shadow-sm ${r.key === 'hem' ? 'left-1 items-start text-left' : 'right-1 items-end text-right'} ${CHIP_CLASS[r.band ?? 'none']}`}
             // the hem chip sits on the left, above the ring, so it never hides the ring's right end
-            style={{ top: `calc(0.75rem + (100% - 1.5rem) * ${((r.key === 'hem' ? r.y - r.ry - 14 : r.y) / VIEW_H).toFixed(4)})` }}
+            style={{ top: `calc(0.75rem + (100% - ${0.75 + bottomRem}rem) * ${((r.key === 'hem' ? r.y - r.ry - 14 : r.y) / VIEW_H).toFixed(4)})` }}
             data-testid={`size-ring-chip-${r.key}`}
           >
             <span className="font-semibold">{r.chip[0]}</span>

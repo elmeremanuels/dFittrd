@@ -7,7 +7,7 @@ import { MEN_COMING_SOON_CODE, MOCK_GARMENTS_BY_ID, type TryResolveResponse } fr
 import { ApiClient, ApiError, NetworkError, apiBaseUrl } from '@/api/client';
 import type { ClientLedgerEntry } from '@/db/db';
 import { originOf, type ParentWindowLike } from './protocol';
-import { createEmbedStore, type EmbedStore } from './storage';
+import { createEmbedStore, lookStorageEnabled, type EmbedStore } from './storage';
 
 export type EmbedApi = Pick<ApiClient, 'resolveTry' | 'resolvePeek' | 'fitShown' | 'deleteMe' | 'requestHeroRender' | 'heroRenderStatus'>;
 
@@ -27,6 +27,8 @@ export interface EmbedDeps {
   /** WebGL2 check and viewer chunk for the 3D view (tests inject these; default: the real ones). */
   webgl2?: () => boolean;
   loadViewer?: () => Promise<typeof GarmentViewer>;
+  /** The photo-based face row of the avatar prompt (default: the build flag, which is off). */
+  facePhoto?: boolean;
   /** Resolve `mock:` tokens (default: `mockTokensEnabled()`, i.e. dev builds or VITE_DEMO=1 only). */
   allowMock?: boolean;
 }
@@ -57,7 +59,8 @@ export function defaultDeps(): EmbedDeps {
     ancestorOrigins = null;
   }
   return {
-    store: createEmbedStore(),
+    // The picked skin colour is saved on the device only with the build flag (default: memory only).
+    store: createEmbedStore({ persistLooks: lookStorageEnabled() }),
     makeApi: makeEmbedApi,
     parent: framed ? window.parent : null,
     referrer: typeof document !== 'undefined' ? document.referrer : '',

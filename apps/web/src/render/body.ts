@@ -16,6 +16,8 @@ export const VIEW_H = 500;
 export const HEAD_TOP_Y = 20;
 export const FEET_Y = 480;
 export const CENTER_X = 100;
+/** The figure's colour when no skin colour was chosen. */
+export const STANDARD_SKIN_HEX = '#DFC3A8';
 
 /** Vertical landmarks of the silhouette, as fractions of the stature (head top → sole). */
 export const LEVEL_Y = {

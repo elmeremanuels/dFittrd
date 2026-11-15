@@ -4,6 +4,7 @@
  */
 import { NOTE_ORDER, POINT_LABELS } from './constants';
 import { round1 } from './math';
+import { TAPE_NOTES } from './pullOn';
 import { isPointFit, type AnchorGaps, type FitAnchorId, type FitResult, type Point, type PointFit, type RenderGaps, type SizeFit } from './types';
 
 /**
@@ -44,6 +45,7 @@ export function fitSummary(result: FitResult): string {
   const tail = `(estimate, ${pct(result.confidence)} confidence)`;
 
   if (result.recommendedSize === null) {
+    if (sizeFit(result, result.closestSize)?.pullOn?.status === 'blocked') return TAPE_NOTES.summaryNoneGoesOn(result.closestSize);
     const used = usedInNoteOrder(sizeFit(result, result.closestSize));
     let worst: PointFit | undefined;
     for (const p of used) if (worst === undefined || p.score < worst.score) worst = p;
@@ -54,6 +56,7 @@ export function fitSummary(result: FitResult): string {
   const size = result.recommendedSize;
   const used = usedInNoteOrder(sizeFit(result, size));
   const issues = used.filter((p) => p.band !== 'good').map((p) => `${p.band} at the ${POINT_LABELS[p.point]}`);
+  if (sizeFit(result, size)?.pullOn?.status === 'marginal') issues.push(TAPE_NOTES.summaryMarginal);
   if (!result.fits) {
     const tight = used.filter((p) => p.band === 'tight').map((p) => `tight at the ${POINT_LABELS[p.point]}`);
     const list = (tight.length > 0 ? tight : issues).join(', ');

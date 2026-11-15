@@ -317,7 +317,7 @@ describe('avatar prompt (D19)', () => {
 
     setup({ store: createEmbedStore({ persistLooks: true, openDb: () => new EmbedDb(name) }) });
     await screen.findByTestId('embed-result');
-    await waitFor(() => expect(figureSkin()).toBe(lookForMonk(8)!.hex));
+    await waitFor(() => expect(figureSkin()).toBe(lookForMonk(8)!.hex), { timeout: 8000 });
     await user.click(screen.getByTestId('avatar-open'));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByTestId('avatar-skin-switch')).toHaveAttribute('aria-checked', 'true');

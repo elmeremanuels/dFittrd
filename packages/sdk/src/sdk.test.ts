@@ -1,6 +1,6 @@
 import { ESTIMATE_DISCLAIMER as SCHEMA_DISCLAIMER } from '@curtain/schema';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ESTIMATE_DISCLAIMER, pickStrings, STRINGS } from './i18n';
+import { createLookup, ESTIMATE_DISCLAIMER, pickStrings, STRINGS, type Strings } from './i18n';
 import { closeModal } from './modal';
 import { configure, destroy, getConfig, init, isMobile, open, scan } from './sdk';
 import { VERSION } from './version';
@@ -78,10 +78,10 @@ describe('button discovery', () => {
     expect(div.textContent).toBe('Try it on');
   });
 
-  it('uses Dutch labels from <html lang="nl"> and a custom label from config', () => {
+  it('D21: English on a Dutch shop page, and a custom label from config', () => {
     document.documentElement.lang = 'nl-BE';
     const b = button();
-    init({ shop: SHOP, api: API });
+    init({ shop: SHOP, api: API, locale: 'nl' });
     expect(b.textContent).toBe('Try it on');
     destroy();
     const c = button();
@@ -89,17 +89,15 @@ describe('button discovery', () => {
     expect(c.textContent).toBe('Give it a go');
   });
 
-  it('follows the shop page language, never the browser language, and never says "paskamer"', () => {
+  it('D21: ships English only; the page language, the browser language and an unknown locale all read English', () => {
+    expect(Object.keys(STRINGS)).toEqual(['en']);
     const lang = Object.getOwnPropertyDescriptor(navigator, 'language');
     Object.defineProperty(navigator, 'language', { value: 'nl-NL', configurable: true });
     try {
-      document.documentElement.lang = '';
-      expect(pickStrings().close).toBe('Close');
-      document.documentElement.lang = 'en';
-      expect(pickStrings().yourSize('M')).toBe('Your size: M');
       document.documentElement.lang = 'nl';
-      expect(pickStrings().close).toBe('Sluiten');
-      expect(pickStrings('en-GB').close).toBe('Close');
+      expect(pickStrings()).toBe(STRINGS.en);
+      for (const locale of ['nl', 'nl-NL', 'nl_BE', 'fr', 'xx', '', null, undefined, 'toString', '__proto__']) expect(pickStrings(locale), String(locale)).toBe(STRINGS.en);
+      expect(pickStrings('en-GB').yourSize('M')).toBe('Your size: M');
     } finally {
       if (lang) Object.defineProperty(navigator, 'language', lang);
       else delete (navigator as unknown as Record<string, unknown>).language;
@@ -107,6 +105,17 @@ describe('button discovery', () => {
     for (const table of Object.values(STRINGS)) {
       expect(JSON.stringify({ ...table, expires: table.expires(1), yourSize: table.yourSize('M') })).not.toMatch(/paskamer/i);
     }
+  });
+
+  it('D21 seam: a registered pack is picked up (exact locale, then its language), else English', () => {
+    // A test-only pack. Registering a real one is one more entry in STRINGS (i18n.ts).
+    const fake: Strings = { ...STRINGS.en, close: '[xx] close', yourSize: (z) => `[xx] ${z}` };
+    const lookup = createLookup<Strings>({ en: STRINGS.en, xx: fake, 'xx-yy': { ...fake, close: '[xx-yy] close' } });
+    expect(lookup('xx')).toBe(fake);
+    expect(lookup('XX_zz').yourSize('M')).toBe('[xx] M');
+    expect(lookup('xx-YY').close).toBe('[xx-yy] close');
+    expect(lookup('zz')).toBe(STRINGS.en);
+    expect(lookup(null)).toBe(STRINGS.en);
   });
 
   it('skips the stylesheet entirely when configured unstyled', () => {

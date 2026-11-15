@@ -9,7 +9,7 @@
 - Connect round-trip (`POST /v1/merchant/woo/connect` → Stripe Checkout → `/complete` → `PUT /v1/merchant/shops/self`), manual key paste, status, ads toggle;
 - domain proof for every Connect (manual key and Stripe): `GET /wp-json/curtain/v1/verify` at the host root, only while a Connect is pending (the former signed backfill endpoint was removed, see below);
 - local validation against `assets/garment-draft.schema.json` (from `@curtain/schema`) and the backend dry-run `POST /v1/merchant/products/validate` for inline completeness feedback;
-- HPOS compatibility declaration, `uninstall.php`, `readme.txt` with the WP.org *External services* section, `languages/` with an nl_NL `.po`.
+- HPOS compatibility declaration, `uninstall.php`, `readme.txt` with the WP.org *External services* section, `languages/` with the `.pot` (English only, D21; the nl_NL `.po` draft is in `translation-packs/`, not in the zip).
 
 Nothing leaves the site until the merchant clicks **Connect**; the secret key is stored encrypted (libsodium, OpenSSL fallback) using the site salts.
 
@@ -37,7 +37,8 @@ includes/
   class-rest.php             Connect domain proof (verify route + meta tag)
 assets/admin/                meta-box.js (repeaters, media picker), meta-box.css
 assets/                      sdk.v1.js, garment.schema.json, garment-draft.schema.json (build output, git-ignored)
-languages/                   curtain-woocommerce.pot, curtain-woocommerce-nl_NL.po
+languages/                   curtain-woocommerce.pot (a .po added here is checked and compiled into the zip)
+translation-packs/           curtain-woocommerce-nl_NL.po: draft, not shipped, not reviewed (D21)
 scripts/                     build.mjs, lint.mjs, export-fixtures.mjs
 tests/                       run.php (runner), shims.php (WP/WC shims), *.test.php, fixtures/ (generated)
 ```
@@ -54,7 +55,7 @@ This package is an application (a plugin zip); no other package imports it. Its 
 
 **Post meta** — the 17 `_curtain_*` keys from `WOO_META_KEYS` (JSON strings for json/list kinds, plain strings otherwise, the flat-lay as an absolute URL) plus plugin-private keys `_curtain_flat_lay_photo_id`, `_curtain_sync_status` (`pending|retrying|active|incomplete|archived|error`), `_curtain_sync_error`, `_curtain_synced_at`, `_curtain_content_hash`, `_curtain_score`, `_curtain_missing_fields`, `_curtain_validation`, `_curtain_local_issues`.
 
-**Storefront** — `<script src="…/assets/sdk.v1.js" data-shop="pk_…" data-api="https://api.…" data-mode="embed|app" data-size-option="pa_size" data-locale="en|nl" data-label="…" data-peek="on|off" data-app="https://app.…">` and `<button type="button" class="button alt curtain-try-button" data-curtain-product="<postId>" data-curtain-mode="embed" data-curtain-size-option="pa_size" data-curtain-peek="on|off">`; shortcode `[curtain_button product_id="" label="" class="" peek=""]` (`peek="off"` hides the size peek next to that button).
+**Storefront** — `<script src="…/assets/sdk.v1.js" data-shop="pk_…" data-api="https://api.…" data-mode="embed|app" data-size-option="pa_size" data-locale="en" data-label="…" data-peek="on|off" data-app="https://app.…">` and `<button type="button" class="button alt curtain-try-button" data-curtain-product="<postId>" data-curtain-mode="embed" data-curtain-size-option="pa_size" data-curtain-peek="on|off">`; shortcode `[curtain_button product_id="" label="" class="" peek=""]` (`peek="off"` hides the size peek next to that button).
 
 **Size peek** — setting *Show the shopper's size on product pages* (`show_size`, default on; never in app mode). A shopper who found their size on this shop before sees "Your size: M" and a small drawing of their figure next to the button, in an iframe on the fitting room's origin that the shop page cannot read (`packages/sdk/README.md` "Size peek"). `data-app` is the API origin with `api.` replaced by `app.` (`Settings::app_origin()`); an API host without `api.` gets no peek.
 
@@ -121,4 +122,4 @@ and Twenty Twenty-Five (also with the add-to-cart form moved into a template par
 9. **Domain proof**: with the api's Stripe settings empty, click Connect on a site reachable from the internet → while the request runs, `GET https://shop/wp-json/curtain/v1/verify` answers `{"nonce":"cv_…"}` and the front page carries the meta tag; after "Connected" both are gone (404, no tag). A site on localhost gets the "could not confirm" notice.
 10. **Media picker**: pick a flat-lay from the media library → preview + attachment id saved; remove → meta deleted.
 11. **Uninstall**: with the deletion option off, delete the plugin → settings + `_curtain_*` meta remain, queue cleared; with it on → everything removed.
-12. **Translations**: set the site to Dutch → button label "Try it on" and the admin strings from `languages/curtain-woocommerce-nl_NL.po` (compile to `.mo` with `wp i18n make-mo languages/` before shipping — `.mo` files are not generated offline here).
+12. **Language (D21: English only)**: set the site to Dutch → the button label, the overlay and the admin page stay English; the script tag carries `data-locale="en"` (the language tag of the loaded translation, and none is shipped); the built zip has no `.po`/`.mo` (only `languages/curtain-woocommerce.pot`).

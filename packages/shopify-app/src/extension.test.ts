@@ -65,22 +65,17 @@ describe('theme app extension', () => {
     expect(snippet).toContain(`{%- if peek == 'off' %} data-curtain-peek="off"{% endif %}`);
     type S = { curtain: { settings: { show_size: Record<string, string> } } };
     const enS = JSON.parse(read('locales/en.default.schema.json')) as S;
-    const nlS = JSON.parse(read('locales/nl.schema.json')) as S;
     expect(enS.curtain.settings.show_size.label).toBe("Show the shopper's size on product pages");
     expect(enS.curtain.settings.show_size.info).toMatch(/cannot read/);
-    expect(nlS.curtain.settings.show_size.label).toMatch(/maat van de shopper/);
   });
 
-  it('locales: Experience + Size option name settings in en and nl', () => {
+  it('locales: Experience + Size option name settings', () => {
     type S = { curtain: { settings: { mode: Record<string, string>; size_option: Record<string, string> } } };
     const enS = JSON.parse(read('locales/en.default.schema.json')) as S;
-    const nlS = JSON.parse(read('locales/nl.schema.json')) as S;
     expect(enS.curtain.settings.mode.label).toBe('Experience');
     expect(enS.curtain.settings.mode.embed).toBe('On the product page (no app needed)');
     expect(enS.curtain.settings.mode.app).toBe('Curtain app');
     expect(enS.curtain.settings.size_option.label).toBe('Size option name');
-    expect(nlS.curtain.settings.mode.embed).toMatch(/geen app/i);
-    expect(nlS.curtain.settings.size_option.label).toMatch(/maat/i);
   });
 
   it('hint: standalone wording by default, app wording only in app mode', () => {
@@ -100,7 +95,13 @@ describe('theme app extension', () => {
     expect(block).toContain("{{ 'sdk.v1.js' | asset_url | json }}");
     expect(block).toContain("setAttribute('data-shop'");
     expect(block).toContain("setAttribute('data-api'");
-    expect(block).toContain("setAttribute('data-locale'");
+    // D21: the SDK and the embed are told the locale of the storefront locale file Shopify
+    // picked (its own `curtain.interface_locale`), so the hint, the modal and the overlay are
+    // always in one language. Only English is shipped, so that is "en" on every shop; the shop's
+    // language is never passed on as such.
+    expect(block).toContain("setAttribute('data-locale', {{ 'curtain.interface_locale' | t | json }})");
+    expect(block).not.toContain('request.locale');
+    expect(block).not.toContain('localization.');
     expect(block).toContain("document.querySelector('script[data-shop][data-curtain-sdk]')");
     expect(block).toContain('app.metafields.curtain.public_key');
     expect(block).toContain('app.metafields.curtain.api_url');
@@ -116,20 +117,21 @@ describe('theme app extension', () => {
     }
   });
 
-  it('locales: en.default + nl, same keys, estimate wording, D1 button copy', () => {
+  it('locales: English only is shipped (D21), estimate wording, D1 button copy', () => {
+    // Shopify deploys every file in locales/: a pack is added by putting its file here and in
+    // this list. The Dutch drafts wait in translation-packs/ (not shipped, not reviewed).
     const files = readdirSync(new URL('locales/', root)).sort();
-    expect(files).toEqual(['en.default.json', 'en.default.schema.json', 'nl.json', 'nl.schema.json']);
-    const en = JSON.parse(read('locales/en.default.json')) as { curtain: { try_button: Record<string, string> } };
-    const nl = JSON.parse(read('locales/nl.json')) as { curtain: { try_button: Record<string, string> } };
-    expect(flattenKeys(nl)).toEqual(flattenKeys(en));
+    expect(files).toEqual(['en.default.json', 'en.default.schema.json']);
+    const en = JSON.parse(read('locales/en.default.json')) as { curtain: { interface_locale: string; try_button: Record<string, string> } };
     expect(en.curtain.try_button.label).toBe('Try it on');
-    expect(nl.curtain.try_button.label).toBe('Try it on');
     expect(en.curtain.try_button.hint).toMatch(/estimate/i);
-    expect(nl.curtain.try_button.hint).toMatch(/schatting/i);
+    // Every storefront locale file names its own locale, and that is the locale of its file name.
+    for (const f of files.filter((n) => !n.endsWith('.schema.json'))) {
+      const pack = JSON.parse(read(`locales/${f}`)) as { curtain: { interface_locale?: string } };
+      expect(pack.curtain.interface_locale, f).toBe(f.replace(/(\.default)?\.json$/, ''));
+    }
 
     const enS = JSON.parse(read('locales/en.default.schema.json'));
-    const nlS = JSON.parse(read('locales/nl.schema.json'));
-    expect(flattenKeys(nlS)).toEqual(flattenKeys(enS));
     // every t: key used by the schema exists in the schema locale
     const keys = flattenKeys(enS);
     for (const m of block.matchAll(/"t:([a-z0-9_.]+)"/g)) expect(keys).toContain(m[1]!);

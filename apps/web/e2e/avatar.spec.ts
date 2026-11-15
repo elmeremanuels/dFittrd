@@ -11,8 +11,8 @@ import { MOCK_GARMENTS_BY_ID } from '@curtain/schema';
  *   - the picked colour is on the figure, the figure keeps its estimate label and its neutral face;
  *   - keyboard: the prompt takes the focus, keeps it, and gives it back;
  *   - nothing overflows 360 px.
- * With AVATAR_SHOTS=<dir> it also writes the screenshots of the picker, the prompt in English and
- * Dutch, and the figure at all ten tones.
+ * With AVATAR_SHOTS=<dir> it also writes the screenshots of the picker, the prompt and the men's
+ * "coming soon" screen as a Dutch browser sees them (English, D21), and the figure at all ten tones.
  * A build made with VITE_AVATAR_FACE_PHOTO=1 and run with AVATAR_FACE_FLAG=1 runs the flag-on test
  * instead (the "coming soon" row can be reached by keyboard and does nothing).
  */
@@ -262,30 +262,51 @@ test('avatar prompt: picking a skin colour makes no request, at 360 px, and the 
   await close();
 });
 
-test('avatar prompt in Dutch at 360 px', async ({ browser, baseURL }) => {
+test('D21: a Dutch browser (nl-NL) gets the avatar prompt in English, at 360 px', async ({ browser, baseURL }) => {
   test.skip(FACE_FLAG, 'this build has the face flag on');
   const { page, seen, close } = await openResult(browser, baseURL!, 'nl-NL');
+  expect(await page.evaluate(() => navigator.language)).toBe('nl-NL');
   const before = seen.length;
-  await expect(page.getByTestId('avatar-open')).toHaveText('Laat de avatar op jou lijken');
+  await expect(page.getByTestId('avatar-open')).toHaveText('Make the avatar look like you');
   await page.getByTestId('avatar-open').click();
-  const dialog = page.getByRole('dialog', { name: 'Laat de avatar op jou lijken' });
-  await expect(dialog).toHaveAttribute('lang', 'nl');
-  await expect(dialog.getByText('Jij kiest. Alles staat uit tot jij het aanzet.')).toBeVisible();
-  await expect(dialog.getByText('De winkel ziet je foto, je gezicht en je lichaamsmaten nooit.')).toBeVisible();
-  await expect(dialog.getByRole('link', { name: 'Lees de volledige privacyvoorwaarden' })).toBeVisible();
-  // The page behind the link is English, and the prompt says so.
-  await expect(dialog.getByRole('link', { name: 'Lees de volledige privacyvoorwaarden' })).toHaveAttribute('hreflang', 'en');
-  await expect(dialog.getByTestId('avatar-terms-lang')).toHaveText('(in het Engels)');
+  const dialog = page.getByRole('dialog', { name: 'Make the avatar look like you' });
+  await expect(dialog).not.toHaveAttribute('lang', /.*/);
+  await expect(dialog.getByText('You choose. Everything here is off until you switch it on.')).toBeVisible();
+  await expect(dialog.getByText('The shop never sees your photo, your face or your body measurements.')).toBeVisible();
+  await expect(dialog.getByRole('link', { name: 'Read the full privacy terms' })).toBeVisible();
+  await expect(dialog.getByTestId('avatar-terms-lang')).toHaveCount(0);
+  await expect(dialog).not.toContainText(/Jij kiest|avatar op jou|Sluiten|Klaar/);
   await expectNoOverflow(page);
-  await shot(page, 'prompt-nl.png');
-  await dialog.getByRole('switch', { name: 'Mijn huidskleur' }).click();
-  await expect(dialog.getByText('Kies een kleur uit de rij.')).toBeVisible();
-  await dialog.getByRole('radio', { name: 'Kleur 8 van 10' }).check({ force: true });
+  await shot(page, 'prompt-browser-nl-NL-shows-english.png');
+  await dialog.getByRole('switch', { name: 'Match my skin tone' }).click();
+  await expect(dialog.getByText('Pick a colour from the row.')).toBeVisible();
+  await dialog.getByRole('radio', { name: 'Colour 8 of 10' }).check({ force: true });
   await expectNoOverflow(page);
-  await shot(page, 'picker-nl-colour-8-picked.png');
+  await shot(page, 'picker-browser-nl-NL-shows-english.png');
   await dialog.getByTestId('avatar-prompt-done').click();
   expect(seen.slice(before)).toEqual([]);
   await close();
+});
+
+test('D21: a Dutch browser (nl-NL) gets the men\'s "coming soon" screen in English, at 360 px', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ viewport: VIEWPORT, locale: 'nl-NL', deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await instrument(page, new URL(baseURL!).origin);
+  // Registered after instrument(), so it wins for this one path: the api's men's gate answer (D20 point 3).
+  await page.route(`**/v1/try/${TOKEN}*`, (route) =>
+    route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ error: { code: 'men_coming_soon', message: 'Men’s clothing: coming soon' } }) }),
+  );
+  await page.goto(`${baseURL}/embed/${TOKEN}`);
+  expect(await page.evaluate(() => navigator.language)).toBe('nl-NL');
+  const blocked = page.getByTestId('blocked-comingSoon');
+  await expect(blocked).toBeVisible();
+  await expect(blocked.getByRole('heading', { name: 'Men’s clothing: coming soon' })).toBeVisible();
+  await expect(blocked).toContainText('use the shop’s own size chart');
+  await expect(blocked).not.toHaveAttribute('lang', /.*/);
+  await expect(page.locator('body')).not.toContainText(/Herenkleding|binnenkort|maattabel|Terug naar/);
+  await expectNoOverflow(page);
+  await shot(page, 'coming-soon-browser-nl-NL-shows-english.png');
+  await context.close();
 });
 
 test('face flag on: "Use my face" is a coming-soon row a keyboard reaches, and it does nothing', async ({ browser, baseURL }) => {

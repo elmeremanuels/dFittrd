@@ -55,7 +55,7 @@ Notes for the founder:
 ## Listing settings
 
 - **Category:** [FOUNDER: primary category; SmartSize uses "Product comparison" with tag "Product variants"; Curtain fits the same area].
-- **Languages (4.3.2):** English only. The storefront strings also exist in Dutch (`extensions/try-button/locales/nl.json`) but the admin and the fit tool are English, so only English may be listed. Dutch can be mentioned in the details text as a storefront translation.
+- **Languages (4.3.2):** English only. The storefront strings, the admin and the fit tool are English and nothing else is shipped (DECISIONS.md D21), so only English may be listed and no other language may be mentioned in the listing. A Dutch draft of the storefront strings waits in `packages/shopify-app/translation-packs/` (not shipped, not reviewed).
 - **Sales channel requirement (4.3.1):** "Merchant must have online store" (the button is a theme app block).
 - **Geographic requirements (4.3.8):** none. Size chart templates cover AU, UK, EU and US women's sizes; men's, kids' and other categories need a merchant's own chart.
 - **Works with:** [none at launch].
@@ -105,7 +105,7 @@ SmartSize ("Smart Size Chart & Size Guide", https://apps.shopify.com/smartsize):
 | Chart import | AI from screenshot | text import from the product description (one size) | screenshot import (after launch, optional) |
 | Unit conversion | yes | cm / in in the builder and for shoppers | none |
 | Button placement | automatic | theme app block, merchant adds it once (deep link) | an app embed block that places itself is optional; the deep link meets 5.1.3 |
-| Languages | 10 listed | English (Dutch storefront strings) | more storefront locales; list English only |
+| Languages | 10 listed | English only (D21) | translation packs later; list English only |
 | Free plan | yes | open (D17 is one paid plan) | founder decision |
 | Reviews / Built for Shopify | 152 / yes | none / not yet | after launch; BFS needs installs and reviews |
 | Privacy | not a selling point | measurements never leave the device | our differentiator |

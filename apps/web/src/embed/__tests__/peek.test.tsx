@@ -97,8 +97,16 @@ describe('parsePeekParams', () => {
 
 describe('peekNote', () => {
   it('a band note without the size-up/down advice, never the "Edit my measurements" hint', () => {
-    expect(peekNote(['Tight at the hip — consider a size up', 'Snug at the waist'], 'M')).toBe('Tight at the hip');
-    expect(peekNote(['Add your bust measurement under Edit my measurements for a more confident result'], 'M')).toBe('Size M fits you well');
+    expect(
+      peekNote(
+        [
+          { kind: 'band', text: 'Tight at the hip — consider a size up', short: 'Tight at the hip' },
+          { kind: 'band', text: 'Snug at the waist', short: 'Snug at the waist' },
+        ],
+        'M',
+      ),
+    ).toBe('Tight at the hip');
+    expect(peekNote([{ kind: 'add', text: 'Add your bust measurement under Edit my measurements for a more confident result' }], 'M')).toBe('Size M fits you well');
     expect(peekNote([], 'L')).toBe('Size L fits you well');
   });
 });

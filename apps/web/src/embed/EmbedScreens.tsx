@@ -6,8 +6,9 @@ import { AlertTriangle, Camera, Clock, Hourglass, PackageX, PauseCircle, Ruler, 
 import { useId, useState, type ReactNode } from 'react';
 import type { GarmentPayload, ShopBranding } from '@curtain/schema';
 import { readableTextColor } from '@/lib/contrast';
-import { ABOUT_LABELS, AGE_RANGES, FIT_PREFERENCES, isImperialField, measurementFieldsFor, rangeFor, requiredFieldsFor, setImperialEntry, unitFor, type AboutField, type AboutForm, type FitPreference } from './aboutYou';
+import { AGE_RANGES, FIT_PREFERENCES, isImperialField, measurementFieldsFor, rangeFor, requiredFieldsFor, setImperialEntry, unitFor, type AboutField, type AboutForm } from './aboutYou';
 import type { BlockedKind } from './flow';
+import { embedStrings, parts } from './strings';
 import { mediaProxyUrl } from './media';
 import { UNIT_SYSTEMS, type Units } from './units';
 
@@ -32,6 +33,7 @@ export function ProductHeader({ shop, garment }: { shop: ShopBranding | null; ga
   const [photoFailed, setPhotoFailed] = useState<string | null>(null);
   // A11Y-2: the brand colour is decoration (top border); as text only when it reaches 4.5:1.
   const nameColor = readableTextColor(shop?.brandColor, HEADER_BG);
+  const t = embedStrings().header;
   return (
     <header className="border-b border-ink/10 bg-white/60 px-4 pt-4 pb-3" style={shop?.brandColor ? { borderTop: `4px solid ${shop.brandColor}` } : undefined} data-testid="embed-header">
       <div className="flex items-center gap-3">
@@ -46,9 +48,9 @@ export function ProductHeader({ shop, garment }: { shop: ShopBranding | null; ga
           <p className="eyebrow truncate" style={nameColor ? { color: nameColor } : undefined} data-testid="embed-shop-name">
             {shop?.name ?? 'Curtain'}
           </p>
-          <h1 className="truncate font-display text-xl leading-tight">{garment?.name ?? 'Find your size'}</h1>
+          <h1 className="truncate font-display text-xl leading-tight">{garment?.name ?? t.title}</h1>
           <p className="mt-0.5 flex items-center gap-1 text-xs text-ink-mute">
-            <ShieldCheck className="h-3.5 w-3.5 text-ok" aria-hidden /> Your measurements stay on this device
+            <ShieldCheck className="h-3.5 w-3.5 text-ok" aria-hidden /> {t.privacy}
           </p>
         </div>
       </div>
@@ -70,15 +72,18 @@ export function EmbedFooter({
   appUrl: string;
 }): ReactNode {
   const id = useId();
+  const s = embedStrings();
+  const t = s.footer;
+  const [beforeBrand, afterBrand] = parts(t.fitBy, 'brand');
   return (
     <footer className="mt-auto space-y-2 border-t border-ink/10 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-xs text-ink-soft" data-testid="embed-footer">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <label htmlFor={id} className="flex cursor-pointer items-center gap-2">
           <input id={id} type="checkbox" role="switch" aria-checked={remember} checked={remember} onChange={(e) => onRemember(e.target.checked)} className="h-4 w-4" />
-          <span>Remember me on this shop</span>
+          <span>{s.rememberLabel}</span>
         </label>
         <button type="button" onClick={onForget} className="font-medium text-coral-ink underline-offset-2 hover:underline">
-          Forget me
+          {t.forget}
         </button>
       </div>
       {forgetStatus ? (
@@ -86,14 +91,16 @@ export function EmbedFooter({
           {forgetStatus}
         </p>
       ) : (
-        <p className="text-ink-mute">{remember ? 'Saved only in this browser, for this shop.' : 'Nothing is saved; closing this window clears it.'}</p>
+        <p className="text-ink-mute">{remember ? t.saved : t.notSaved}</p>
       )}
       <p className="flex items-center justify-between gap-2 text-ink-mute">
         <span>
-          Fit by <span className="font-display text-sm text-ink">Curtain</span>
+          {beforeBrand}
+          <span className="font-display text-sm text-ink">Curtain</span>
+          {afterBrand}
         </span>
         <a href={appUrl} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
-          Get the Curtain app
+          {t.getApp}
         </a>
       </p>
     </footer>
@@ -104,17 +111,13 @@ export function EmbedFooter({
 // About you
 // ---------------------------------------------------------------------------
 
-const UNIT_TEXT: Record<Units, { name: string; short: string }> = {
-  metric: { name: 'Metric', short: 'cm · kg' },
-  imperial: { name: 'Imperial', short: 'in · lb' },
-};
-
 /** cm/kg or in/lb, for every input and every number in the embed. Remembered per shopper. */
 export function UnitToggle({ units, onChange }: { units: Units; onChange: (u: Units) => void }): ReactNode {
   const name = useId();
+  const t = embedStrings().units;
   return (
     <fieldset className="shrink-0" data-testid="unit-toggle">
-      <legend className="sr-only">Units</legend>
+      <legend className="sr-only">{t.legend}</legend>
       <div className="inline-grid grid-cols-2 gap-1 rounded-full border border-ink/10 bg-white/60 p-1">
         {UNIT_SYSTEMS.map((u) => (
           <label
@@ -122,8 +125,8 @@ export function UnitToggle({ units, onChange }: { units: Units; onChange: (u: Un
             className={`flex min-h-9 cursor-pointer items-center justify-center rounded-full px-3 text-xs font-medium whitespace-nowrap transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-coral ${units === u ? 'bg-ink text-white' : 'text-ink-soft hover:bg-white'}`}
           >
             <input type="radio" name={name} value={u} checked={units === u} onChange={() => onChange(u)} className="sr-only" />
-            <span className="sr-only">{UNIT_TEXT[u].name}, </span>
-            {UNIT_TEXT[u].short}
+            <span className="sr-only">{t.name[u]}, </span>
+            {t.short[u]}
           </label>
         ))}
       </div>
@@ -178,7 +181,8 @@ function AboutNumber({ field, form, error, optional, onChange }: { field: AboutF
   const errId = error ? `${id}-err` : undefined;
   const imperial = form.units === 'imperial' && isImperialField(field);
   const [lo, hi] = rangeFor(field, form.units);
-  const optionalText = optional ? <span className="font-normal normal-case tracking-normal">(optional)</span> : null;
+  const t = embedStrings().about;
+  const optionalText = optional ? <span className="font-normal normal-case tracking-normal">{t.optional}</span> : null;
   const errorText = error ? (
     <p id={errId} role="alert" className={ERROR_CLASS}>
       {error}
@@ -190,11 +194,11 @@ function AboutNumber({ field, form, error, optional, onChange }: { field: AboutF
     return (
       <div className="min-w-0 space-y-1" role="group" aria-labelledby={`${id}-label`}>
         <span id={`${id}-label`} className="eyebrow block">
-          {ABOUT_LABELS[field]} {optionalText}
+          {t.labels[field]} {optionalText}
         </span>
         <div className="flex gap-2">
-          <NumberInput id={`${id}-ft`} label="Height, feet" unit="ft" value={form.imperial.heightFt} placeholder={`${Math.floor(lo / 12)}–${Math.floor(hi / 12)}`} error={!!error} describedBy={errId} onChange={set('heightFt')} />
-          <NumberInput id={`${id}-in`} label="Height, inches" unit="in" value={form.imperial.heightIn} placeholder="0–11" error={!!error} describedBy={errId} onChange={set('heightIn')} />
+          <NumberInput id={`${id}-ft`} label={t.heightFeet} unit="ft" value={form.imperial.heightFt} placeholder={`${Math.floor(lo / 12)}–${Math.floor(hi / 12)}`} error={!!error} describedBy={errId} onChange={set('heightFt')} />
+          <NumberInput id={`${id}-in`} label={t.heightInches} unit="in" value={form.imperial.heightIn} placeholder="0–11" error={!!error} describedBy={errId} onChange={set('heightIn')} />
         </div>
         {errorText}
       </div>
@@ -206,15 +210,13 @@ function AboutNumber({ field, form, error, optional, onChange }: { field: AboutF
   return (
     <div className="min-w-0 space-y-1">
       <label htmlFor={id} className="eyebrow block">
-        {ABOUT_LABELS[field]} {optionalText}
+        {t.labels[field]} {optionalText}
       </label>
       <NumberInput id={id} unit={unitFor(field, form.units)} value={value} placeholder={`${lo}–${hi}`} error={!!error} describedBy={errId} onChange={change} />
       {errorText}
     </div>
   );
 }
-
-const PREF_TEXT: Record<FitPreference, string> = { snug: 'Snug', regular: 'Regular', relaxed: 'Relaxed' };
 
 export function AboutScreen({
   form,
@@ -240,6 +242,8 @@ export function AboutScreen({
   const required = requiredFieldsFor(category);
   const ageId = useId();
   const sexId = useId();
+  const t = embedStrings().about;
+  const optional = <span className="font-normal normal-case tracking-normal">{t.optional}</span>;
   return (
     <form
       className="space-y-5"
@@ -252,13 +256,13 @@ export function AboutScreen({
     >
       <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
         <div className="min-w-0">
-          <p className="eyebrow text-coral-ink">{editing ? 'Edit my measurements' : 'Step 1 of 2'}</p>
+          <p className="eyebrow text-coral-ink">{editing ? t.editing : t.step}</p>
           <h2 id="about-title" className="font-display text-3xl leading-tight" tabIndex={-1} data-step-heading>
-            About you
+            {t.title}
           </h2>
         </div>
         <UnitToggle units={form.units} onChange={onUnits} />
-        <p className="w-full text-sm text-ink-soft">{required.length > 0 ? 'Three numbers' : 'Two numbers'} and you’ll see your size. Takes under 30 seconds.</p>
+        <p className="w-full text-sm text-ink-soft">{t.intro(required.length > 0 ? 3 : 2)}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -270,12 +274,12 @@ export function AboutScreen({
       </div>
 
       <fieldset className="space-y-1.5">
-        <legend className="eyebrow">How do you like it to fit?</legend>
+        <legend className="eyebrow">{t.preference}</legend>
         <div className="grid grid-cols-3 gap-1 rounded-full border border-ink/10 bg-white/60 p-1">
           {FIT_PREFERENCES.map((p) => (
             <label key={p} className={`flex min-h-10 cursor-pointer items-center justify-center rounded-full text-sm font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-coral ${form.preference === p ? 'bg-ink text-white' : 'text-ink-soft hover:bg-white'}`}>
               <input type="radio" name="preference" value={p} checked={form.preference === p} onChange={() => set('preference', p)} className="sr-only" />
-              {PREF_TEXT[p]}
+              {t.preferences[p]}
             </label>
           ))}
         </div>
@@ -284,24 +288,24 @@ export function AboutScreen({
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
           <label htmlFor={ageId} className="eyebrow block">
-            Age range <span className="font-normal normal-case tracking-normal">(optional)</span>
+            {t.ageRange} {optional}
           </label>
           <select id={ageId} className="field-input text-base" value={form.ageRange} onChange={(e) => set('ageRange', e.target.value as AboutForm['ageRange'])}>
             {AGE_RANGES.map((a) => (
               <option key={a} value={a}>
-                {a === '' ? 'Prefer not to say' : a}
+                {a === '' ? t.ageUnset : a}
               </option>
             ))}
           </select>
         </div>
         <div className="space-y-1">
           <label htmlFor={sexId} className="eyebrow block">
-            Body type <span className="font-normal normal-case tracking-normal">(optional)</span>
+            {t.bodyType} {optional}
           </label>
           <select id={sexId} className="field-input text-base" value={form.sex} onChange={(e) => set('sex', e.target.value as AboutForm['sex'])}>
-            <option value="unspecified">Not specified</option>
-            <option value="female">Women’s sizing</option>
-            <option value="male">Men’s sizing</option>
+            <option value="unspecified">{t.sex.unspecified}</option>
+            <option value="female">{t.sex.female}</option>
+            <option value="male">{t.sex.male}</option>
           </select>
         </div>
       </div>
@@ -310,7 +314,7 @@ export function AboutScreen({
       <div className="card space-y-3 p-3">
         <button type="button" className="flex w-full items-center justify-between gap-2 text-left text-sm font-medium" aria-expanded={form.knowsMeasurements} aria-controls="known-measurements" onClick={() => set('knowsMeasurements', !form.knowsMeasurements)}>
           <span className="flex items-center gap-2">
-            <Ruler className="h-4 w-4 text-coral" aria-hidden /> I know my measurements
+            <Ruler className="h-4 w-4 text-coral" aria-hidden /> {t.knowsMeasurements}
           </span>
           <span aria-hidden className="text-ink-mute">
             {form.knowsMeasurements ? '−' : '+'}
@@ -325,26 +329,26 @@ export function AboutScreen({
             </div>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" role="switch" aria-checked={form.tape} checked={form.tape} onChange={(e) => set('tape', e.target.checked)} className="h-4 w-4" />
-              Measured with a tape
+              {t.tape}
             </label>
-            <p className="text-xs text-ink-mute">Anything you leave empty is estimated from your height and weight, with a lower confidence.</p>
+            <p className="text-xs text-ink-mute">{t.emptyEstimated}</p>
           </div>
         ) : (
-          <p className="text-xs text-ink-mute">Optional. Without them we estimate {category === 'bottom' ? 'waist and hip' : 'bust, waist and hip'} from your height and weight.</p>
+          <p className="text-xs text-ink-mute">{t.withoutThem(category === 'bottom')}</p>
         )}
       </div>
       ) : null}
 
       <div className="space-y-2">
         <button type="submit" className="btn-coral w-full" data-testid="see-my-size">
-          See my size
+          {t.submit}
         </button>
         {canScan ? (
           <button type="button" className="btn-ghost w-full" onClick={() => onSubmit(true)}>
-            <Camera className="h-4 w-4" aria-hidden /> More accurate: 30-second scan
+            <Camera className="h-4 w-4" aria-hidden /> {t.scan}
           </button>
         ) : null}
-        {canScan ? <p className="text-center text-xs text-ink-mute">The scan runs in this browser. No photo or video leaves your device.</p> : null}
+        {canScan ? <p className="text-center text-xs text-ink-mute">{t.scanNote}</p> : null}
       </div>
     </form>
   );
@@ -354,61 +358,24 @@ export function AboutScreen({
 // Blocked screens
 // ---------------------------------------------------------------------------
 
-const BLOCKED: Record<BlockedKind, { icon: ReactNode; title: string; text: string }> = {
-  paused: {
-    icon: <PauseCircle className="h-8 w-8" aria-hidden />,
-    title: 'Try-on is paused',
-    text: 'This shop has paused Curtain for now. You can still use the shop’s own size chart on the product page.',
-  },
-  expired: {
-    icon: <Clock className="h-8 w-8" aria-hidden />,
-    title: 'This try-on has expired',
-    text: 'For your privacy, a try-on link only works for a few minutes and in one window. Close this and tap “Try it on” again.',
-  },
-  incomplete: {
-    icon: <PackageX className="h-8 w-8" aria-hidden />,
-    title: 'Not ready for this product yet',
-    text: 'The shop has not finished the size data for this item, so we can’t give an honest recommendation.',
-  },
+/** The icons of the blocked screens; their text is in the catalogue (`strings/en.ts`). */
+const BLOCKED_ICON: Record<BlockedKind, ReactNode> = {
+  paused: <PauseCircle className="h-8 w-8" aria-hidden />,
+  expired: <Clock className="h-8 w-8" aria-hidden />,
+  incomplete: <PackageX className="h-8 w-8" aria-hidden />,
   // D20 point 3: no figure and no size for a men's product without the full 3D experience.
-  comingSoon: {
-    icon: <Hourglass className="h-8 w-8" aria-hidden />,
-    title: 'Men’s clothing: coming soon',
-    text: 'The fitting room is not ready for men’s clothing yet. For now, use the shop’s own size chart on the product page.',
-  },
-  offline: {
-    icon: <WifiOff className="h-8 w-8" aria-hidden />,
-    title: 'You seem to be offline',
-    text: 'We couldn’t reach Curtain. Check your connection and try again.',
-  },
-  busy: {
-    icon: <Clock className="h-8 w-8" aria-hidden />,
-    title: 'Busy right now',
-    text: 'A lot of people on your network are using fitting rooms at the moment. Wait a minute and try again.',
-  },
-  error: {
-    icon: <AlertTriangle className="h-8 w-8" aria-hidden />,
-    title: 'Something went wrong',
-    text: 'We couldn’t open the fitting room. Please try again.',
-  },
+  comingSoon: <Hourglass className="h-8 w-8" aria-hidden />,
+  offline: <WifiOff className="h-8 w-8" aria-hidden />,
+  busy: <Clock className="h-8 w-8" aria-hidden />,
+  error: <AlertTriangle className="h-8 w-8" aria-hidden />,
 };
 
-/** The coming-soon screen in Dutch (the rest of the overlay is English only so far). */
-const COMING_SOON_NL = {
-  title: 'Herenkleding: binnenkort beschikbaar',
-  text: 'De paskamer is nog niet klaar voor herenkleding. Gebruik voorlopig de maattabel van de winkel op de productpagina.',
-  close: 'Terug naar de winkel',
-} as const;
-
-/** Dutch for a Dutch browser or a Dutch shop page (`nl`, `nl-NL`, `nl_BE`). */
-export const isDutchLocale = (locale: string | null | undefined): boolean => /^nl(?:[-_]|$)/i.test(locale ?? '');
-
-export function BlockedScreen({ kind, onRetry, onClose, locale = null }: { kind: BlockedKind; onRetry: (() => void) | null; onClose: (() => void) | null; locale?: string | null }): ReactNode {
-  const dutch = kind === 'comingSoon' && isDutchLocale(locale);
-  const b = dutch ? { ...BLOCKED[kind], ...COMING_SOON_NL } : BLOCKED[kind];
+export function BlockedScreen({ kind, onRetry, onClose }: { kind: BlockedKind; onRetry: (() => void) | null; onClose: (() => void) | null }): ReactNode {
+  const s = embedStrings();
+  const b = s.blocked[kind];
   return (
-    <section className="flex flex-1 flex-col items-center justify-center gap-3 py-10 text-center" aria-labelledby="blocked-title" data-testid={`blocked-${kind}`} lang={dutch ? 'nl' : undefined}>
-      <span className="flex h-16 w-16 items-center justify-center rounded-full bg-white/80 text-coral-ink shadow">{b.icon}</span>
+    <section className="flex flex-1 flex-col items-center justify-center gap-3 py-10 text-center" aria-labelledby="blocked-title" data-testid={`blocked-${kind}`}>
+      <span className="flex h-16 w-16 items-center justify-center rounded-full bg-white/80 text-coral-ink shadow">{BLOCKED_ICON[kind]}</span>
       <h2 id="blocked-title" className="font-display text-2xl" tabIndex={-1} data-step-heading>
         {b.title}
       </h2>
@@ -416,12 +383,12 @@ export function BlockedScreen({ kind, onRetry, onClose, locale = null }: { kind:
       <div className="flex w-full max-w-xs flex-col gap-2 pt-2">
         {onRetry ? (
           <button type="button" className="btn-primary" onClick={onRetry}>
-            Try again
+            {s.actions.tryAgain}
           </button>
         ) : null}
         {onClose ? (
           <button type="button" className="btn-ghost" onClick={onClose}>
-            {dutch ? COMING_SOON_NL.close : 'Back to the shop'}
+            {s.actions.backToShop}
           </button>
         ) : null}
       </div>
@@ -433,7 +400,7 @@ export function LoadingScreen(): ReactNode {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16" role="status" aria-live="polite">
       <div className="h-10 w-10 rounded-full border-2 border-coral border-t-transparent motion-safe:animate-spin" aria-hidden />
-      <p className="text-sm text-ink-soft">Opening your fitting room…</p>
+      <p className="text-sm text-ink-soft">{embedStrings().loading}</p>
     </div>
   );
 }

@@ -18,11 +18,11 @@
 import { Check, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { luminance } from '@/render/face';
-import { AVATAR_CLAIMS, AVATAR_UI, c30Parts, REMEMBER_LABEL_LANG, TERMS_PAGE_LANG, type AvatarLang } from './avatarCopy';
+import { c30Parts } from './avatarCopy';
+import { embedStrings } from './strings';
 import { lookForMonk, MONK_CLASSES, type SkinLook } from './look';
 
 export interface AvatarPromptProps {
-  lang: AvatarLang;
   /** The colour on the avatar now (null: the standard colour). */
   look: SkinLook | null;
   /** The shopper picked a swatch. */
@@ -71,9 +71,8 @@ function Switch({ checked, onChange, labelledBy, describedBy, unavailable = fals
   );
 }
 
-export function AvatarPrompt({ lang, look, onPick, onClear, onMeasurements, onClose, termsUrl, face = false, saved = false }: AvatarPromptProps): ReactNode {
-  const t = AVATAR_CLAIMS[lang];
-  const ui = AVATAR_UI[lang];
+export function AvatarPrompt({ look, onPick, onClear, onMeasurements, onClose, termsUrl, face = false, saved = false }: AvatarPromptProps): ReactNode {
+  const { claims: t, ui } = embedStrings().avatar;
   const id = useId();
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLHeadingElement | null>(null);
@@ -81,7 +80,7 @@ export function AvatarPrompt({ lang, look, onPick, onClear, onMeasurements, onCl
   const [skinOn, setSkinOn] = useState(look !== null);
   const [cleared, setCleared] = useState(false);
   const total = MONK_CLASSES.length;
-  const c30 = c30Parts(lang);
+  const c30 = c30Parts();
 
   useEffect(() => {
     titleRef.current?.focus({ preventScroll: true });
@@ -137,7 +136,6 @@ export function AvatarPrompt({ lang, look, onPick, onClear, onMeasurements, onCl
         aria-modal="true"
         aria-labelledby={`${id}-title`}
         aria-describedby={`${id}-intro`}
-        lang={lang}
         className="relative max-h-[92dvh] w-full max-w-[560px] space-y-4 overflow-y-auto overscroll-contain rounded-t-3xl bg-cream px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-ink shadow-2xl"
         data-testid="avatar-prompt"
       >
@@ -213,7 +211,7 @@ export function AvatarPrompt({ lang, look, onPick, onClear, onMeasurements, onCl
                 {saved ? (
                   <p className="text-xs text-ink-mute" data-testid="avatar-c30">
                     {c30.before}
-                    <span lang={REMEMBER_LABEL_LANG}>{c30.label}</span>
+                    {c30.label}
                     {c30.after}
                   </p>
                 ) : null}
@@ -247,7 +245,7 @@ export function AvatarPrompt({ lang, look, onPick, onClear, onMeasurements, onCl
         ) : null}
 
         <p className="text-sm">
-          <a href={termsUrl} hrefLang={TERMS_PAGE_LANG} target="_blank" rel="noopener noreferrer" className="font-medium text-coral-ink underline underline-offset-2" data-testid="avatar-terms-link">
+          <a href={termsUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-coral-ink underline underline-offset-2" data-testid="avatar-terms-link">
             {t.termsLink}
           </a>
           {ui.termsLanguageNote ? (

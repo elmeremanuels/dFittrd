@@ -13,8 +13,8 @@ export type { ModalContent, ModalHandle, ModalOptions } from './modal';
 export { openEmbed, toast } from './embed';
 export type { EmbedOptions } from './embed';
 export { selectSize, currentSize, SIZE_OPTION_NAMES } from './variant';
-export { pickStrings, localeTag, STRINGS, ESTIMATE_DISCLAIMER } from './i18n';
-export type { Strings } from './i18n';
+export { pickStrings, createLookup, localeTag, STRINGS, ESTIMATE_DISCLAIMER } from './i18n';
+export type { SdkLocale, Strings } from './i18n';
 export { CSS, STYLE_ID, injectStyles } from './styles';
 export { VERSION } from './version';
 export type {

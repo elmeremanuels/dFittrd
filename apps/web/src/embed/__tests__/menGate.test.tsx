@@ -14,7 +14,7 @@ import { MEN_COMING_SOON_CODE, MENS_OXFORD_SHIRT, MOCK_GARMENTS_BY_ID, type Garm
 import { ApiError } from '@/api/client';
 import type { EmbedApi, EmbedDeps } from '../deps';
 import { EmbedApp } from '../EmbedApp';
-import { BlockedScreen, isDutchLocale } from '../EmbedScreens';
+import { BlockedScreen } from '../EmbedScreens';
 import { classifyError, flowReducer, INITIAL_FLOW } from '../flow';
 import { createEmbedStore, EmbedDb } from '../storage';
 
@@ -109,28 +109,21 @@ describe("men's gate in the overlay", () => {
     expect(api.fitShown).not.toHaveBeenCalled();
   });
 
-  it.each(['nl', 'nl-NL', 'nl-BE'])('Dutch for a %s browser: "Herenkleding: binnenkort beschikbaar"', async (locale) => {
+  it.each(['nl', 'nl-NL', 'nl-BE'])('D21: English for a %s browser too', async (locale) => {
     setup({ resolveTry: async () => Promise.reject(comingSoonError()), locale });
     const screenEl = await screen.findByTestId('blocked-comingSoon');
-    expect(screen.getByRole('heading', { name: 'Herenkleding: binnenkort beschikbaar' })).toBeInTheDocument();
-    expect(screenEl).toHaveAttribute('lang', 'nl');
-    expect(screenEl).toHaveTextContent('maattabel van de winkel');
-    expect(screenEl).not.toHaveTextContent('coming soon');
+    expect(screen.getByRole('heading', { name: 'Men’s clothing: coming soon' })).toBeInTheDocument();
+    expect(screenEl).not.toHaveAttribute('lang');
+    expect(screenEl).toHaveTextContent('use the shop’s own size chart');
+    expect(screenEl).not.toHaveTextContent(/Herenkleding|binnenkort|maattabel/);
     expectNoFigureAndNoSize();
   });
 
-  it('Dutch only for the coming-soon screen and only for Dutch locales', () => {
-    expect(isDutchLocale('nl')).toBe(true);
-    expect(isDutchLocale('NL_be')).toBe(true);
-    expect(isDutchLocale('en-NL')).toBe(false);
-    expect(isDutchLocale('nlx')).toBe(false);
-    expect(isDutchLocale(null)).toBe(false);
-    render(<BlockedScreen kind="comingSoon" onRetry={null} onClose={() => {}} locale="nl-NL" />);
-    expect(screen.getByRole('button', { name: 'Terug naar de winkel' })).toBeInTheDocument();
-    cleanup();
-    render(<BlockedScreen kind="expired" onRetry={null} onClose={() => {}} locale="nl-NL" />);
-    expect(screen.getByRole('button', { name: 'Back to the shop' })).toBeInTheDocument();
+  it('the blocked screens read their text from the catalogue', () => {
+    render(<BlockedScreen kind="expired" onRetry={() => {}} onClose={() => {}} />);
     expect(screen.getByRole('heading', { name: 'This try-on has expired' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back to the shop' })).toBeInTheDocument();
   });
 
   it('the demo token mock:comingsoon shows the same screen', async () => {

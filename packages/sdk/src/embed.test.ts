@@ -130,6 +130,23 @@ describe('mode', () => {
     expect(b.getAttribute('aria-busy')).toBeNull();
   });
 
+  it('D21: the embed is asked for the configured interface locale only, never the page or browser language', async () => {
+    mockFetch();
+    document.documentElement.lang = 'nl';
+    await openOverlay();
+    expect(frame().getAttribute('src')).toBe(session.embedUrl);
+    closeModal();
+    destroy();
+    await openOverlay({ locale: 'nl-BE' });
+    const url = new URL(frame().getAttribute('src')!);
+    expect(url.origin + url.pathname).toBe(session.embedUrl);
+    expect(Object.fromEntries(url.searchParams)).toEqual({ ui: 'nl-BE' });
+    closeModal();
+    destroy();
+    await openOverlay({ locale: 'not a locale&x=1' });
+    expect(Object.fromEntries(new URL(frame().getAttribute('src')!).searchParams)).toEqual({ ui: 'not a locale&x=1' });
+  });
+
   it('opens the overlay on mobile too (no deep link, no QR)', async () => {
     mockFetch();
     Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148', configurable: true });
@@ -492,7 +509,7 @@ describe('variant selection', () => {
     expect(radios[2]!.checked).toBe(true);
   });
 
-  it('falls back to the toast (in Dutch on a Dutch page) when no size control matches', async () => {
+  it('falls back to the toast (in English on a Dutch page too, D21) when no size control matches', async () => {
     mockFetch();
     document.documentElement.lang = 'nl';
     document.body.insertAdjacentHTML('beforeend', '<form action="/cart/add"><select name="options[Color]"><option>M</option></select></form>');
@@ -502,7 +519,7 @@ describe('variant selection', () => {
     await vi.advanceTimersByTimeAsync(0);
     await p;
     post(msg('curtain:size-selected', { productExternalId: 'p1', size: 'M' }));
-    expect(document.querySelector('.pk-toast')?.textContent).toBe('Jouw maat: M');
+    expect(document.querySelector('.pk-toast')?.textContent).toBe('Your size: M');
     await vi.advanceTimersByTimeAsync(6000);
     expect(document.querySelector('.pk-toast')).toBeNull();
   });

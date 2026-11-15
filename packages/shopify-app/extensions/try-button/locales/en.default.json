@@ -1,5 +1,6 @@
 {
   "curtain": {
+    "interface_locale": "en",
     "try_button": {
       "label": "Try it on",
       "hint": "See how it fits on you, privately, right on this page. Your measurements stay on this device. Every render is an estimate.",

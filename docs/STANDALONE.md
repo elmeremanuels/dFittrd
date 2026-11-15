@@ -85,7 +85,9 @@ All messages are objects `{ source: 'curtain', v: 1, type, ... }`.
 | iframe → parent | `curtain:resize` | `{ height }`, optional; the overlay is full-screen anyway |
 | iframe → parent | `curtain:size-selected` | `{ productExternalId, size }`, where `size` is the size label from the size chart |
 | iframe → parent | `curtain:close` | `{}` |
-| parent → iframe | `curtain:context` | `{ locale, currentVariantSize? }`, sent after `curtain:ready` |
+| parent → iframe | `curtain:context` | `{ locale, currentVariantSize? }`, sent after `curtain:ready`; `locale` decides the default units only |
+
+The interface language is not part of the protocol. The SDK adds `?ui=<locale>` to the iframe URL (the overlay and the size peek) when the shop's integration names a locale (`data-locale`), and the embed shows its pack for that locale when it has one, else English (D21, `docs/i18n/README.md`).
 
 - The parent (SDK) accepts messages only when `event.origin` equals the origin of `embedUrl` and
   `event.source` is the iframe's `contentWindow`.
@@ -138,10 +140,10 @@ can hook in.
 
 - **Shopify theme block** ("Try it on"): a new setting "Experience" with choices *On the product
   page (no app needed)*, the default, and *Curtain app*. It is rendered as `data-mode`. A new
-  "Size option name" setting is rendered as `data-size-option`. Update the locales (en + nl).
+  "Size option name" setting is rendered as `data-size-option`. Update the English locale files (the only ones shipped since D21; the Dutch files are drafts in `translation-packs/`).
 - **WooCommerce**: the same two settings on the Curtain settings page (`mode`, `size_attribute`
   with a dropdown of the product attributes, default `pa_size`). They are rendered on the button
-  and the shortcode. Update the `.pot` file and `nl_NL.po`.
+  and the shortcode. Update the `.pot` file (the `nl_NL.po` is a draft outside the build since D21).
 - The merchant console and the README files describe standalone as the default.
 
 ## 4. Local demo (needed for screenshots and for the founder)

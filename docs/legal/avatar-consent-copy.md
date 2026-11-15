@@ -3,6 +3,9 @@
 > **DRAFT for Naomi's review (D20.4). Not in force, not built.** Written 14 November 2026 by an AI agent,
 > not a lawyer. The photo-based face stays behind its flag until she has answered.
 
+> **D21 (15 Nov 2026): only the English (section 2) is shipped for now.** The Dutch (section 3) stays here
+> as source material for a later translation pack; it is not in the code. See `docs/i18n/README.md`.
+
 This is the exact text for the prompt that opens when a shopper taps the avatar (decision D19). The full
 legal text is one tap away: `avatar-privacy-terms-DRAFT.md`.
 

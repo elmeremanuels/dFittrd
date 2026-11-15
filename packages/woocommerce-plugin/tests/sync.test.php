@@ -44,7 +44,10 @@ test(
 		assert_false( Settings::is_connected(), 'needs the pk_ prefix too' );
 		Settings::update( array( 'public_key_prefix' => CURTAIN_T_PK ) );
 		assert_true( Settings::is_connected() );
-		assert_same( 'nl', Settings::effective_locale(), 'auto follows nl_NL' );
+		// D21: English only. The shim's site language is nl_NL and a stale 'nl' setting is ignored.
+		assert_same( 'en', Settings::effective_locale(), 'the site language does not choose the text' );
+		Settings::update( array( 'locale' => 'nl' ) );
+		assert_same( 'en', Settings::effective_locale(), 'a setting saved by an earlier version is ignored' );
 		assert_same( 'Try it on', Settings::button_label() );
 	}
 );

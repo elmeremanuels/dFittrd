@@ -12,6 +12,7 @@ The Node process behind it is `apps/api` (D2: one backend). This package contrib
 packages/shopify-app/
 ├─ shopify.app.toml            app config TEMPLATE ({{VAR}} placeholders → pnpm configure)
 ├─ extensions/try-button/      theme app extension (block, snippet, CSS, locales; sdk.v1.js copied at build)
+├─ translation-packs/          Dutch locale drafts, not shipped (D21)
 ├─ admin/index.html            embedded admin page (App Bridge + session-token fetches to the api)
 ├─ scripts/configure.mjs       renders shopify.app.<env>.toml from env and validates it
 ├─ scripts/copy-sdk.mjs        copies packages/sdk/dist/sdk.v1.js into the extension assets
@@ -107,7 +108,7 @@ Where the values come from: on install the api writes **app-data metafields** on
 `app.metafields.curtain.api_url`. The block settings `shop_key` / `api_url` override them for dev
 stores. The secret `sk_…` key never appears anywhere in the extension (tested).
 
-Settings (merchant-facing, translated via `locales/*.schema.json`): button label, position
+Settings (merchant-facing, text in `locales/en.default.schema.json`): button label, position
 (left / centered / full width), **Experience** (`data-mode`), **Size option name**
 (`data-size-option`, default `Size`), privacy hint toggle, "use my theme's button styling", and the
 two advanced overrides.
@@ -119,9 +120,14 @@ shopper's measurements stay in their browser. When they choose a size, the SDK s
 variant in the theme's product form (the option named by *Size option name*; `Maat`, `Taille` and
 `Größe` also match) and the shopper adds to cart with the theme's own button. The shopper never
 needs the Curtain app. *Curtain app* (`app`) is the opt-in alternative: phones open the app, desktops
-show a QR code. Storefront strings (`locales/en.default.json`,
-`nl.json`): label "Try it on", the hint (which says *estimate* /
-*schatting*), theme-editor-only setup notices.
+show a QR code. Storefront strings (`locales/en.default.json`): label "Try it on", the hint (which says *estimate*),
+theme-editor-only setup notices.
+
+**English only (D21).** The extension ships the English locale files and nothing else, and the block
+sends `data-locale="en"` whatever the shop's language is. The Dutch locale files written earlier are
+in `translation-packs/try-button/` (draft, not shipped, not reviewed). Shopify deploys every file in
+`locales/`, so a later pack is added by moving its two files there and adding it to the list in
+`src/extension.test.ts`; see `translation-packs/README.md` and `docs/i18n/README.md`.
 
 Themes without app-block support can `{% render 'curtain-try-button', product: product, label: 'Try it on', show_hint: true %}`
 and add the script tag from `packages/sdk/README.md` with `data-api` set.
@@ -202,7 +208,7 @@ AI "Find my size" quiz on its $19 plan. Where we stand after this round:
 | Size chart *table* shown to shoppers | yes (the core product) | yes, in the overlay, recommended size highlighted, body/garment said in the caption |
 | Fit quiz / size recommendation | AI quiz, Pro plan | fit engine on-device, every plan, body or garment charts; a product is try-able with only a chart assigned (no fabric or photos needed) |
 | Button placement | automatic, any theme | theme app block (merchant adds it once) |
-| Languages | 10+ | admin en; storefront en + nl |
+| Languages | 10+ | English only (D21); translation packs later |
 | Built for Shopify / reviews | yes / 152 | not listed yet |
 
 The api must serve it at `GET /shopify/admin` with
@@ -278,7 +284,7 @@ https://shopify.dev/docs/apps/launch/distribution before choosing (2026-11-09):
 - [ ] Embedded app loads with App Bridge, works in the new admin (`admin.shopify.com`), no
       third-party cookies, CSP `frame-ancestors` set, session tokens verified server-side.
 - [ ] Theme app extension: passes `shopify app build` (Theme Check), Liquid < 100 KB, JS < 10 KB
-      compressed (sdk.v1.js is < 8 KB gz), storefront strings translated (en, nl), no external requests.
+      compressed (sdk.v1.js is < 8 KB gz), storefront strings in the locale file (en; D21), no external requests.
 - [ ] Uninstall: `app/uninstalled` deletes sessions, pauses the shop, schedules purge; reinstall
       restores from metafields (shop is source of truth).
 - [ ] Listing assets: icon, screenshots of the admin page and the block in a theme, support email,

@@ -52,7 +52,6 @@ final class Settings {
 			'mode'                 => self::MODE_EMBED,
 			'size_attribute'       => self::DEFAULT_SIZE_ATTRIBUTE,
 			'show_size'            => true,
-			'locale'               => 'auto',
 			'default_brand'        => '',
 			'share_admin_email'    => true,
 			'delete_on_uninstall'  => false,
@@ -125,13 +124,13 @@ final class Settings {
 		return add_query_arg( array_merge( array( 'page' => self::PAGE ), $args ), admin_url( 'admin.php' ) );
 	}
 
-	/** Button label with the locale default. */
+	/** Button label: the merchant's own, else the default. */
 	public static function button_label(): string {
 		$label = trim( (string) self::get( 'button_label' ) );
 		if ( '' !== $label ) {
 			return $label;
 		}
-		return 'nl' === self::effective_locale() ? 'Try it on' : __( 'Try it on', 'curtain-woocommerce' );
+		return __( 'Try it on', 'curtain-woocommerce' );
 	}
 
 	/** Shopper experience for the SDK's data-mode: 'embed' (default, standalone) or 'app'. Unknown values fall back to 'embed'. */
@@ -215,13 +214,13 @@ final class Settings {
 		return $out;
 	}
 
-	/** 'en' | 'nl' for the SDK's data-locale. */
+	/**
+	 * The SDK's data-locale. English only for now (DECISIONS.md D21: translation packs come later):
+	 * neither the site language nor a setting changes it. A 'locale' value saved by an earlier
+	 * version of the plugin is ignored.
+	 */
 	public static function effective_locale(): string {
-		$setting = (string) self::get( 'locale' );
-		if ( 'en' === $setting || 'nl' === $setting ) {
-			return $setting;
-		}
-		return str_starts_with( (string) get_locale(), 'nl' ) ? 'nl' : 'en';
+		return 'en';
 	}
 
 	// ---- admin page ------------------------------------------------------------------------
@@ -330,7 +329,6 @@ final class Settings {
 		$api_base = self::sanitize_api_base( (string) ( $in['api_base'] ?? '' ) );
 		$priority = absint( $in['button_priority'] ?? 35 );
 		$label    = sanitize_text_field( (string) ( $in['button_label'] ?? '' ) );
-		$locale   = in_array( $in['locale'] ?? 'auto', array( 'auto', 'en', 'nl' ), true ) ? (string) $in['locale'] : 'auto';
 		$scope    = in_array( $in['button_scope'] ?? 'active', array( 'active', 'all' ), true ) ? (string) $in['button_scope'] : 'active';
 		$ads      = ! empty( $in['ads_enabled'] );
 		$mode     = self::sanitize_mode( $in['mode'] ?? self::MODE_EMBED );
@@ -346,7 +344,6 @@ final class Settings {
 				'mode'                => $mode,
 				'size_attribute'      => $size_att,
 				'show_size'           => ! empty( $in['show_size'] ),
-				'locale'              => $locale,
 				'default_brand'       => mb_substr( sanitize_text_field( (string) ( $in['default_brand'] ?? '' ) ), 0, 120 ),
 				'share_admin_email'   => ! empty( $in['share_admin_email'] ),
 				'ads_enabled'         => $ads,
@@ -683,14 +680,6 @@ final class Settings {
 					<tr>
 						<th scope="row"><label for="curtain_button_label"><?php esc_html_e( 'Label', 'curtain-woocommerce' ); ?></label></th>
 						<td><input type="text" id="curtain_button_label" name="curtain[button_label]" value="<?php echo esc_attr( (string) $s['button_label'] ); ?>" class="regular-text" placeholder="<?php echo esc_attr( self::button_label() ); ?>"></td>
-					</tr>
-					<tr>
-						<th scope="row"><label for="curtain_locale"><?php esc_html_e( 'Language', 'curtain-woocommerce' ); ?></label></th>
-						<td><select id="curtain_locale" name="curtain[locale]">
-							<option value="auto" <?php selected( $s['locale'], 'auto' ); ?>><?php esc_html_e( 'Follow the site language', 'curtain-woocommerce' ); ?></option>
-							<option value="en" <?php selected( $s['locale'], 'en' ); ?>>English</option>
-							<option value="nl" <?php selected( $s['locale'], 'nl' ); ?>>Nederlands</option>
-						</select></td>
 					</tr>
 				</table>
 

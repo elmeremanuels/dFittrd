@@ -21,6 +21,9 @@
  * the drape, checks the estimate label names the recommended size, and that after the click the
  * iframe only GETs code from the app origin and the five bundle files under /assets/ (no POST, no
  * body, no third party), and that the merchant page shows nothing of it.
+ * Avatar and 3D together (D19): once a 3D view has settled, a skin tone picked in the avatar prompt
+ * is on the 3D mannequin in the mounted view, the iframe requests nothing for it, and switching it
+ * off brings the standard mannequin back.
  * Size rings (route R5 mock): the result shows the recommended size's rings with an estimate note, and
  * switching to a neighbouring size in "Compare sizes" redraws them; the 3D view lists the same rings.
  * Console errors and uncaught exceptions in the page or the iframe fail the flow.
@@ -346,6 +349,91 @@ async function threeDStep(page, base, t, log, shot) {
   const leak = await page.evaluate(() => /3D estimate|picked by the size advice/i.test(document.body.innerText) || /garment3d/.test(document.documentElement.outerHTML));
   if (leak) throw new Error('the merchant page DOM shows the 3D estimate outside the iframe');
   log(`ok: 3D ${t.name}: estimate of size ${size}, labelled an estimate; ${files.length} asset GETs and nothing else went to the api`);
+  if (settled) await skinToneStep(page, frame, t, log, shot);
+  else log(`3D ${t.name}: skin tone step SKIPPED (the drape had not settled, so two pictures differ anyway)`);
+}
+
+/**
+ * The avatar prompt and the 3D view together (D19): with the 3D view open and settled, the shopper
+ * picks a skin tone in the prompt (opened from the 2D figure). The 3D mannequin takes the colour in
+ * the mounted view (same canvas, still `settled`, another picture) and the iframe asks the network
+ * for nothing. Switching it off brings the first picture back. The pixel-level check (which pixels,
+ * which colour) is apps/web/e2e/avatar3d.spec.ts; here the two halves meet in the full demo.
+ */
+async function skinToneStep(page, frame, t, log, shot) {
+  const canvas = frame.locator('canvas[data-testid="garment3d-canvas"]');
+  // A still picture: two in a row are the same (the viewer draws a new colour on its next frames); with `not`, also another picture than that one.
+  const picture = async (not) => {
+    await canvas.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    let last = await canvas.screenshot();
+    for (const until = Date.now() + 15_000; Date.now() < until; ) {
+      await page.waitForTimeout(300);
+      const next = await canvas.screenshot();
+      if (next.equals(last) && !(not && next.equals(not))) return next;
+      last = next;
+    }
+    return last;
+  };
+  const inPrompt = async (act) => {
+    await frame.getByTestId('avatar-open').click();
+    await frame.getByTestId('avatar-prompt').waitFor();
+    await act();
+    await frame.getByTestId('avatar-prompt-done').click();
+    await frame.getByTestId('avatar-prompt').waitFor({ state: 'detached' });
+  };
+  // The share of pixels that differ clearly between two pictures, counted in a blank page (no PNG decoder here).
+  const decoder = await page.context().newPage();
+  const differing = (a, b) =>
+    decoder.evaluate(
+      async ([x, y]) => {
+        const load = async (b64) => {
+          const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
+          const ctx = new OffscreenCanvas(bitmap.width, bitmap.height).getContext('2d');
+          ctx.drawImage(bitmap, 0, 0);
+          return ctx.getImageData(0, 0, bitmap.width, bitmap.height).data;
+        };
+        const [p, q] = [await load(x), await load(y)];
+        if (p.length !== q.length) return 1;
+        let n = 0;
+        for (let i = 0; i < p.length; i += 4) if (Math.max(Math.abs(p[i] - q[i]), Math.abs(p[i + 1] - q[i + 1]), Math.abs(p[i + 2] - q[i + 2])) > 10) n++;
+        return n / (p.length / 4);
+      },
+      [a.toString('base64'), b.toString('base64')],
+    );
+  const skin2d = () => frame.locator('[data-testid="embed-result"] svg[data-skin]').first().getAttribute('data-skin');
+  const standard2d = await skin2d();
+  await canvas.evaluate((el) => (el.dataset.e2eMark = 'same'));
+  const before = await picture();
+
+  const during = [];
+  const onRequest = (r) => {
+    if (r.frame()?.url().includes('/embed')) during.push(`${r.method()} ${r.url()}`);
+  };
+  page.on('request', onRequest);
+  try {
+    log(`3D ${t.name}: pick skin tone 6 in the avatar prompt`);
+    await inPrompt(async () => {
+      await frame.getByTestId('avatar-skin-switch').click();
+      await frame.getByTestId('skin-swatch-6').check({ force: true });
+    });
+    if ((await skin2d()) !== '#A07E56') throw new Error(`3D ${t.name}: the 2D figure did not take the picked colour (${await skin2d()})`);
+    const toned = await picture(before);
+    await shot(`8-3d-skin-tone-${t.name}`);
+    const changed = await differing(before, toned);
+    if (changed < 0.02) throw new Error(`3D ${t.name}: the 3D mannequin did not change with the picked skin tone (${(changed * 100).toFixed(2)} % of the picture changed)`);
+    await inPrompt(() => frame.getByTestId('avatar-skin-switch').click());
+    const off = await picture(toned);
+    if ((await skin2d()) !== standard2d) throw new Error(`3D ${t.name}: the 2D figure did not return to the standard colour`);
+    const left = await differing(before, off);
+    // Not pixel for pixel here: the overlay can come to rest a fraction of a pixel off, which moves the edges of the print.
+    if (left > changed / 10) throw new Error(`3D ${t.name}: switching the skin tone off did not bring the standard 3D mannequin back (${(left * 100).toFixed(2)} % of the picture differs)`);
+    if ((await canvas.getAttribute('data-e2e-mark')) !== 'same' || (await canvas.getAttribute('data-state')) !== 'settled') throw new Error(`3D ${t.name}: the 3D view was remounted or draped again by the look change`);
+    if (during.length) throw new Error(`3D ${t.name}: the look change made requests: ${during.slice(0, 5).join(', ')}`);
+    log(`ok: 3D ${t.name}: the picked skin tone is on the 3D mannequin (${(changed * 100).toFixed(1)} % of the picture) without a remount or a request, and off brings the standard colour back (${(left * 100).toFixed(2)} % left)`);
+  } finally {
+    page.off('request', onRequest);
+    await decoder.close();
+  }
 }
 
 async function main() {

@@ -144,3 +144,7 @@ Founder decisions (13 Nov 2026), answering the open questions of `docs/research/
 2. **The embed may remember the photo for the next visit.** Rule: the face photo result (face tile, face texture, skin tone) may be kept on the device, encrypted, per shop site, so a returning shopper sees themselves at once. The avatar prompt says so in plain language, "Delete my photo" and "Forget me" remove it, and it is never kept on a server.
 3. **No men's product goes live with a 2D figure only.** A men's garment is shown with the full experience (male body, 3D drape, men's fit points) or not at all. Until that works, men's products show "Men's clothing: coming soon" in place of the Try it on flow. So the male 3D pipeline (plan slice 8) is part of the scope, not an optional later step.
 4. **Naomi reviews the legal text.** The consent copy, the privacy terms draft and the counsel brief go to her; the photo-based face stays behind its flag until she has answered.
+
+## D21 — English first; translation packs later
+
+Founder decision (15 Nov 2026). The shopper and merchant interface is built in English only for now. Other languages come later as translation packs, added without code changes. Until then: no interface text switches on the browser or shop language, and no second language is written in the code. Every interface string lives in one English catalogue per surface, read through a single lookup, so a pack is one more catalogue. The Dutch drafts written so far (avatar prompt, men's "coming soon" line) are kept as source material under `docs/`, not shipped.

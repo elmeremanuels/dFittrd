@@ -38,8 +38,11 @@ export interface TapeTuning {
   pullOnAllowanceCm: number;
   /** A size that clears the hips by less than this (and is not blocked) is `marginal`, cm. */
   pullOnMarginalBelowCm: number;
-  /** Extra shortfall tolerated when the stretched band is extrapolated, cm. */
-  pullOnExtrapolatedExtraCm: number;
+  /**
+   * Shortfall tolerated when the stretched band is extrapolated, cm. Never applied wider than
+   * `pullOnAllowanceCm`: an unmeasured band is trusted less, not more.
+   */
+  pullOnExtrapolatedAllowanceCm: number;
   /**
    * Among sizes that fit equally well, one whose band passes the hips (margin ≥ 0) is preferred
    * over one that is short within the allowance.
@@ -70,7 +73,7 @@ export interface PullOnCheck {
   bandStretchedCm: number;
   /** The body girth the band has to pass: the user's hip measurement (fullest girth of the seat). */
   bodyHipCm: number;
-  /** Shortfall tolerated for this size, cm (larger when the band value is extrapolated). */
+  /** Shortfall tolerated for this size, cm (smaller, 0 by default, when the band value is extrapolated). */
   allowanceCm: number;
   /** Provenance of the stretched band value: never present an interpolated or extrapolated one as measured. */
   provenance: TapeProvenance;
@@ -201,6 +204,12 @@ export interface FitResult {
    * no tape value was used. `interpolated` and `extrapolated` have lowered `confidence`.
    */
   tapeProvenance?: TapeProvenance;
+  /**
+   * `true` when the garment has a pull-on check (pull-on bottom with stretched band values) that
+   * could not run because the user gave no hip measurement. Absent otherwise. The recommendation
+   * then says nothing about whether the band passes the hips; a surface should ask for the hips.
+   */
+  pullOnUnchecked?: true;
 }
 
 export type SizeRecommendation = Pick<

@@ -208,7 +208,6 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
           tuning: resolveTuning(opts.tapeTuning),
           // The pull-on check: bottoms only (a dress or top goes on over the head and shoulders).
           pullOnHipCm: garment.closure === 'pull-on' && garment.category === 'bottom' ? positive(measurements.hip) : undefined,
-          hipCm: positive(measurements.hip),
         };
   const pullOnApplies =
     bandTape !== null && garment.closure === 'pull-on' && garment.category === 'bottom' && bandTape.some((b) => b?.stretched !== undefined);
@@ -253,7 +252,8 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
         notes.push(TAPE_NOTES.noneGoesOn(perSize[index]!.size, perSize[index]!.pullOn!));
       }
     }
-    if (tape !== null && pullOnApplies && tape.pullOnHipCm === undefined) notes.push(TAPE_NOTES.hipMissing);
+    const unchecked = tape !== null && pullOnApplies && tape.pullOnHipCm === undefined;
+    if (unchecked) notes.push(TAPE_NOTES.hipMissing);
     const size = sizes[index] ?? null;
     return {
       recommendedSize: offered ? size : null,
@@ -266,6 +266,7 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
       notes,
       tieBreak: null,
       skippedPoints,
+      ...(unchecked ? { pullOnUnchecked: true as const } : {}),
     };
   }
 
@@ -342,9 +343,8 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
       : round3(meanConf * (0.6 + 0.4 * tts) * (used.length / applicableAfterSkips) * tapeFactor);
 
   const notes = buildNotes(chosen, chosenIndex, rows.length, recommended, skippedPoints, noneGoesOn);
-  if (tape !== null) {
-    addTapeNotes(notes, perSize, chosenIndex, noneGoesOn, tapeProvenance, pullOnApplies && tape.pullOnHipCm === undefined);
-  }
+  const pullOnUnchecked = tape !== null && pullOnApplies && tape.pullOnHipCm === undefined;
+  if (tape !== null) addTapeNotes(notes, perSize, chosenIndex, noneGoesOn, tapeProvenance, pullOnUnchecked);
 
   return {
     recommendedSize: recommended ? chosen.size : null,
@@ -358,6 +358,7 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
     tieBreak,
     skippedPoints,
     ...(tapeProvenance !== undefined ? { tapeProvenance } : {}),
+    ...(pullOnUnchecked ? { pullOnUnchecked: true as const } : {}),
   };
 }
 
@@ -365,8 +366,6 @@ interface TapeContext {
   tuning: TapeTuning;
   /** The user's hip when the pull-on check applies and the hip is known. */
   pullOnHipCm: number | undefined;
-  /** The user's hip, when known (the elastic waist reading's loose edge). */
-  hipCm: number | undefined;
 }
 
 /** Internal per-size result: the public `SizeFit` plus what the closest-ease tie-break compares. */
@@ -451,7 +450,7 @@ function scoreSize(
     let classEdges: BandEdges = c.edges;
     if (fromBand !== undefined) {
       const t = tape as TapeContext;
-      const reading = elasticWaistReading(fromBand, c.userVal, c.edges, t.tuning, t.hipCm);
+      const reading = elasticWaistReading(fromBand, c.userVal, c.edges, t.tuning);
       closeness.push(reading.closenessCm);
       chartCm = fromBand.relaxedCm;
       gapCm = reading.gapCm;

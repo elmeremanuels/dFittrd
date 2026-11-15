@@ -135,6 +135,9 @@ const POSITION_POINT: Record<GarmentTapeField, 'waist' | 'hip'> = {
   length: 'hip',
 };
 
+/** The fields a single measured size may be stepped from (see `fillField`): the band only. */
+const ONE_SAMPLE_FIELDS: ReadonlySet<GarmentTapeField> = new Set(['waistRelaxed', 'waistStretched']);
+
 const round1 = (v: number): number => Math.round(v * 10) / 10;
 const isPositive = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;
 
@@ -147,7 +150,11 @@ const isPositive = (v: unknown): v is number => typeof v === 'number' && Number.
  *   below and the nearest above it (`interpolated`);
  * - a size outside the measured sizes continues the straight line through the TWO NEAREST measured
  *   sizes (`extrapolated`), e.g. AU 16 = AU 14 + (AU 14 − AU 10) / 2;
- * - with one measured size only, the other sizes step with the chart's own step (`extrapolated`).
+ * - with one measured size only: the two BAND fields step with the chart's own waist step
+ *   (`extrapolated`); on the pilot skirt the band grows 0.8 to 1.2 cm per cm of chart waist, so
+ *   1:1 is a fair guess. The hip, hem sweep and length get NO value on the other sizes: one sample
+ *   says nothing about how they grade (the pilot's length grows 1 cm over three sizes, its hem
+ *   3.6 and then 1.2 cm per cm of chart hip), and a chart step would be a made-up number.
  *
  * The position of a size on the line is its chart value (waist for the two band fields, hip for
  * the others); the row index when any chart row lacks that value. Nothing is smoothed or corrected.
@@ -172,6 +179,7 @@ function fillField(
     let cm: number;
     let provenance: TapeProvenance;
     if (known.length === 1) {
+      if (!ONE_SAMPLE_FIELDS.has(field)) return undefined;
       const k = known[0]!;
       cm = round1(k.v + (byChart ? x(i) - x(k.i) : 0));
       provenance = 'extrapolated';
@@ -204,10 +212,23 @@ function fillField(
  * The hip depth is copied to a filled size only when every measured size states the same depth.
  * A filled size whose stretched band would come out smaller than its relaxed band loses both
  * (the line is not trusted there). Pure: the inputs are not changed.
+ *
+ * Throws a `RangeError` naming the size when a MEASURED size has a stretched band smaller than its
+ * relaxed band: that is a typing or measuring mistake, `GarmentTapeRowSchema` would refuse the row
+ * later without saying where it came from, and every size filled from it would be wrong too.
  */
 export function fillGarmentTape(chart: readonly TapeChartRow[], measured: readonly MeasuredTapeRow[]): GarmentTape {
   const bySize = new Map<string, MeasuredTapeRow>();
   for (const row of measured) if (row && typeof row.size === 'string') bySize.set(labelKey(row.size), row);
+
+  for (const chartRow of chart) {
+    const m = bySize.get(labelKey(chartRow.size));
+    if (m && isPositive(m.waistRelaxedCm) && isPositive(m.waistStretchedCm) && m.waistStretchedCm < m.waistRelaxedCm) {
+      throw new RangeError(
+        `Size ${chartRow.size}: the stretched waistband (${m.waistStretchedCm} cm) is smaller than the relaxed waistband (${m.waistRelaxedCm} cm). Check the two measurements.`,
+      );
+    }
+  }
 
   const columns = Object.fromEntries(GARMENT_TAPE_FIELDS.map((f) => [f, fillField(chart, bySize, f)])) as Record<
     GarmentTapeField,
@@ -226,7 +247,8 @@ export function fillGarmentTape(chart: readonly TapeChartRow[], measured: readon
     const row: GarmentTapeRow = { size: chartRow.size };
     let relaxed = columns.waistRelaxed[i];
     let stretched = columns.waistStretched[i];
-    if (relaxed && stretched && stretched.cm < relaxed.cm && (relaxed.provenance !== 'measured' || stretched.provenance !== 'measured')) {
+    // Both measured and stretched < relaxed was refused above, so one of the two is filled here.
+    if (relaxed && stretched && stretched.cm < relaxed.cm) {
       relaxed = undefined;
       stretched = undefined;
     }

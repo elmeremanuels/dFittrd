@@ -78,7 +78,7 @@ What we do with it:
 - Because the skirt is pull-on, a shopper with 100 cm hips and a 73.5 cm waist is never offered AU 8 (the band is 6 cm short), even though the band would hold at her waist. She is offered AU 10 with the remark that the band only just goes over her hips. With 104 cm hips and a 77.5 cm waist she is offered AU 12, and AU 10 is ruled out (4 cm short).
 - "Too small" here means more than 2.5 cm short at the pull the shop called comfortable. A band can be pulled further than is comfortable, so this is our caution, not a hard limit. If your B was a gentle pull and the band goes clearly further, tell us that number: it changes the advice.
 - The hem is 2.3 to 2.6 metres around: a real, wide A-line. Our earlier guess was 2 metres.
-- AU 12 and AU 16 were not measured. AU 12 lies between two measured sizes, so we estimate it (band 75.5 relaxed, 105 stretched) and label it "estimated". AU 16 lies beyond the largest measured size, so its numbers (84.5 and 115) are a "rough estimate" and our advice for that size is less sure: please measure AU 16.
+- AU 12 and AU 16 were not measured. AU 12 lies between two measured sizes, so we estimate it (band 75.5 relaxed, 105 stretched) and label it "estimated". AU 16 lies beyond the largest measured size, so its numbers (84.5 and 115) are a "rough estimate". Where we can check this kind of estimate against your tape it comes out 1 to 2 cm too long, so we only offer AU 16 to a shopper whose hips are no larger than that 115 cm; above it we say that no size goes on. Measuring AU 16 lifts that limit: please measure AU 16.
 
 What we still need to ask for this skirt:
 

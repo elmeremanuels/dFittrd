@@ -80,11 +80,11 @@ const row = (label, tuning) => {
   const c = count(tuning);
   console.log(`| ${label} | ${c.changed} | ${c.differs} | ${c.none} | ${c.marginal} |`);
 };
-row('default (allowance 2.5, marginal below 2.5, extrapolated +2.5, prefer passing, easy share 0.5)', {});
+row('default (allowance 2.5, marginal below 2.5, extrapolated allowance 0, prefer passing, easy share 0.5)', {});
 row('no preference for a passing band among equal fits', { pullOnPreferPassing: false });
 for (const a of [0, 1, 2.5, 4, 5, 7.5]) row(`allowance ${a} cm`, { pullOnAllowanceCm: a });
 for (const m of [0, 1, 2.5, 5]) row(`marginal below ${m} cm`, { pullOnMarginalBelowCm: m });
-for (const e of [0, 2.5, 5]) row(`extrapolated extra ${e} cm`, { pullOnExtrapolatedExtraCm: e });
+for (const e of [0, 1, 2.5]) row(`extrapolated allowance ${e} cm`, { pullOnExtrapolatedAllowanceCm: e });
 for (const k of [0.25, 0.5, 0.75, 1]) row(`easy stretch share ${k}`, { easyStretchShare: k });
 
 console.log('\n## Sentences (after)\n');

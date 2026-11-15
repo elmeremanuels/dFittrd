@@ -23,8 +23,12 @@ export const TAPE_TUNING: Readonly<TapeTuning> = {
   pullOnAllowanceCm: 2.5,
   /** Below this margin (and not blocked) a size carries the warning "only just passes". */
   pullOnMarginalBelowCm: 2.5,
-  /** Extra shortfall tolerated when the stretched band was extrapolated, not measured. */
-  pullOnExtrapolatedExtraCm: 2.5,
+  /**
+   * Shortfall tolerated when the stretched band was extrapolated, not measured: none. Where it can
+   * be checked, the extrapolation rule OVERSTATES the band (AU 14 by 2 cm, AU 8 by 1 cm), so a
+   * guessed band has to reach the hips on paper before the size is offered.
+   */
+  pullOnExtrapolatedAllowanceCm: 0,
   /** Equal fit: the size whose band reaches the hips wins over one that is short within the allowance. */
   pullOnPreferPassing: true,
   /** Share of the band's stretch range that counts as easy; above it the waist reads snug. */
@@ -50,7 +54,7 @@ export function resolveTuning(override: Partial<TapeTuning> | undefined): TapeTu
   return {
     pullOnAllowanceCm: num(override.pullOnAllowanceCm, TAPE_TUNING.pullOnAllowanceCm, 0, 50),
     pullOnMarginalBelowCm: num(override.pullOnMarginalBelowCm, TAPE_TUNING.pullOnMarginalBelowCm, -50, 50),
-    pullOnExtrapolatedExtraCm: num(override.pullOnExtrapolatedExtraCm, TAPE_TUNING.pullOnExtrapolatedExtraCm, 0, 50),
+    pullOnExtrapolatedAllowanceCm: num(override.pullOnExtrapolatedAllowanceCm, TAPE_TUNING.pullOnExtrapolatedAllowanceCm, 0, 50),
     pullOnPreferPassing: typeof override.pullOnPreferPassing === 'boolean' ? override.pullOnPreferPassing : TAPE_TUNING.pullOnPreferPassing,
     easyStretchShare: num(override.easyStretchShare, TAPE_TUNING.easyStretchShare, 0, 1),
     provenanceConfidence: {
@@ -120,12 +124,15 @@ export function bandTapePerSize(garmentTape: unknown, sizes: readonly string[]):
  * hip girth.
  *
  * `marginCm = stretched band − body hip`. `blocked` when the band is short by more than the
- * allowance (plus the extra when the band value is extrapolated), `marginal` when it is within
- * the allowance or clears by less than `pullOnMarginalBelowCm`, `clear` otherwise.
+ * allowance, `marginal` when it is within the allowance or clears by less than
+ * `pullOnMarginalBelowCm`, `clear` otherwise. An extrapolated band value has its own, smaller
+ * allowance (`pullOnExtrapolatedAllowanceCm`, 0 by default): uncertainty narrows what is offered.
  */
 export function pullOnCheck(stretched: ReadTapeValue, bodyHipCm: number, tuning: TapeTuning = TAPE_TUNING): PullOnCheck {
   const marginCm = round1(stretched.cm - bodyHipCm);
-  const allowanceCm = tuning.pullOnAllowanceCm + (stretched.provenance === 'extrapolated' ? tuning.pullOnExtrapolatedExtraCm : 0);
+  // Never wider than the allowance of a measured band, whatever the tuning says.
+  const allowanceCm =
+    stretched.provenance === 'extrapolated' ? Math.min(tuning.pullOnAllowanceCm, tuning.pullOnExtrapolatedAllowanceCm) : tuning.pullOnAllowanceCm;
   const status: PullOnStatus = marginCm < -allowanceCm ? 'blocked' : marginCm < tuning.pullOnMarginalBelowCm ? 'marginal' : 'clear';
   return {
     status,
@@ -169,10 +176,9 @@ export function elasticBandOf(band: BandTape | undefined): ElasticBand | undefin
  * | down to relaxed − loose                 | roomy |
  * | below that                              | loose |
  *
- * `good` and `loose` are the slacks the point already had (2 and 4 cm, +4 in a stretch zone).
- * When the body's hip is known, `loose` is at least `hip − waist`: a band longer than the natural
- * waist is not loose until it is as long as the hips; until then it settles lower, where the body
- * is as wide as the band, and reads roomy.
+ * `good` and `loose` are the slacks the point already had (2 and 4 cm, +4 in a stretch zone). A
+ * relaxed band longer than the waist by more than that is loose, as on any other point: the engine
+ * does not know where such a band would come to rest, so it does not call it wearable.
  *
  * The classification is `bandFor` on the shifted gap `gap + kR` with these edges, so the
  * sigma-aware variant works on it unchanged.
@@ -182,12 +188,10 @@ export function elasticWaistReading(
   bodyWaistCm: number,
   pointEdges: BandEdges,
   tuning: TapeTuning = TAPE_TUNING,
-  bodyHipCm?: number,
 ): { gapCm: number; shiftedGap: number; edges: BandEdges; tightLimit: number; closenessCm: number } {
   const range = band.stretchedCm - band.relaxedCm;
   const easy = tuning.easyStretchShare * range;
   const gapCm = round1(band.relaxedCm - bodyWaistCm);
-  const looseSlack = bodyHipCm === undefined ? pointEdges.looseSlack : Math.max(pointEdges.looseSlack, bodyHipCm - bodyWaistCm);
   return {
     gapCm,
     shiftedGap: gapCm + easy,
@@ -195,7 +199,7 @@ export function elasticWaistReading(
       tightLimit: -(range - easy),
       easeTarget: easy,
       goodSlack: pointEdges.goodSlack,
-      looseSlack,
+      looseSlack: pointEdges.looseSlack,
       snugOk: pointEdges.snugOk,
     },
     tightLimit: round1(-range),
@@ -218,22 +222,27 @@ export function elasticCloseness(gapCm: number, easyCm: number, goodSlack: numbe
 const cm = (x: number): string => String(round1(Math.abs(x)));
 
 /**
- * The English notes of the tape readings, in one place (the engine's notes are English, like the
- * rest of `FitResult.notes`). A surface with its own catalogue (D21) phrases the same facts from
- * `SizeFit.pullOn`, `PointFit.elasticBand` and `FitResult.tapeProvenance`.
+ * The English sentences of the tape readings for `FitResult.notes` and `fitSummary`, which are
+ * English like every other engine note. NOT part of the package's public API: a surface with a
+ * catalogue (DECISIONS.md D21; the embed's `fit.notes`) writes its own text from the structured
+ * fields `SizeFit.pullOn`, `PointFit.elasticBand`, `FitResult.tapeProvenance` and
+ * `FitResult.pullOnUnchecked`, and must not print these.
+ *
+ * Each sentence says "pull it on", so it does not read as a contradiction of the note that the
+ * hips of the garment itself are not a fit point ("Hips not checked: A-line hem flares freely").
  */
 export const TAPE_NOTES = {
   marginal: (c: PullOnCheck): string =>
     c.marginCm === 0
-      ? 'The waistband only just stretches over your hips (nothing to spare)'
+      ? 'To pull it on, the waistband only just stretches over your hips (nothing to spare)'
       : c.marginCm > 0
-        ? `The waistband only just stretches over your hips (about ${cm(c.marginCm)} cm to spare)`
-      : `The waistband only just stretches over your hips (about ${cm(c.marginCm)} cm short at a comfortable stretch)`,
+        ? `To pull it on, the waistband only just stretches over your hips (about ${cm(c.marginCm)} cm to spare)`
+        : `To pull it on, the waistband has to stretch over your hips (about ${cm(c.marginCm)} cm more than a comfortable stretch)`,
   smallerBlocked: (size: string, c: PullOnCheck): string =>
-    `Size ${size} is not recommended: its waistband does not stretch over your hips (about ${cm(c.marginCm)} cm short)`,
+    `Size ${size} is not recommended: its waistband does not stretch over your hips to pull it on (about ${cm(c.marginCm)} cm short)`,
   noneGoesOn: (size: string, c: PullOnCheck): string =>
-    `No size stretches over your hips — the closest is ${size}, about ${cm(c.marginCm)} cm short at a comfortable stretch`,
-  hipMissing: "We don't have your hips measurement yet — we can't check that the waistband goes over your hips",
+    `No size stretches over your hips to pull it on — the closest is ${size}, about ${cm(c.marginCm)} cm short at a comfortable stretch`,
+  hipMissing: "We don't have your hips measurement yet — we can't check that the waistband goes over your hips when you pull it on",
   provenance: (size: string, p: TapeProvenance): string | null =>
     p === 'extrapolated'
       ? `Size ${size} was not measured by the shop — its waistband numbers are a rough estimate`

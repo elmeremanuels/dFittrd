@@ -104,7 +104,7 @@ describe('pull-on check: the three measured sizes of the pilot skirt', () => {
     // measured values: confidence is what it was without the tape
     expect(r.tapeProvenance).toBe('measured');
     expect(r.confidence).toBe(computeFit(BEFORE, body(waistCm, hipCm)).confidence);
-    expect(r.notes.some((n) => n.startsWith('The waistband only just stretches over your hips'))).toBe(true);
+    expect(r.notes.some((n) => n.startsWith('To pull it on, the waistband only just stretches over your hips'))).toBe(true);
     expect(r.notes.some((n) => n.includes('not measured'))).toBe(false);
   });
 
@@ -130,7 +130,7 @@ describe('pull-on check: the held-out body (waist 73.5, hip 100)', () => {
     expect(waist(s).band).toBe('good');
     expect(s.score).toBe(1);
     expect(r.recommendedSize).not.toBe('8');
-    expect(r.notes).toContain('Size 8 is not recommended: its waistband does not stretch over your hips (about 6 cm short)');
+    expect(r.notes).toContain('Size 8 is not recommended: its waistband does not stretch over your hips to pull it on (about 6 cm short)');
   });
 
   it('AU 10 is on the edge: margin 0, marginal, recommended with a warning', () => {
@@ -139,7 +139,7 @@ describe('pull-on check: the held-out body (waist 73.5, hip 100)', () => {
     expect(s.wearable).toBe(true);
     expect(r.recommendedSize).toBe('10');
     expect(r.fits).toBe(true);
-    expect(r.notes).toContain('The waistband only just stretches over your hips (nothing to spare)');
+    expect(r.notes).toContain('To pull it on, the waistband only just stretches over your hips (nothing to spare)');
     expect(fitSummary(r)).toBe('Size 10 should fit — the waistband only just passes your hips (estimate, 25% confidence).');
   });
 
@@ -157,7 +157,7 @@ describe('pull-on check: the held-out body (waist 73.5, hip 100)', () => {
     // Without that preference the closest waist wins and the warning says the band is short.
     const noPref = computeFit(SKIRT, body(73.5, 100.1), { tapeTuning: { pullOnPreferPassing: false } });
     expect(noPref.recommendedSize).toBe('10');
-    expect(noPref.notes).toContain('The waistband only just stretches over your hips (about 0.1 cm short at a comfortable stretch)');
+    expect(noPref.notes).toContain('To pull it on, the waistband has to stretch over your hips (about 0.1 cm more than a comfortable stretch)');
   });
 
   it('before the tape the engine recommended AU 12 and knew nothing about the hips', () => {
@@ -180,14 +180,33 @@ describe('margins', () => {
     expect(pullOnCheck(m, 100).status).toBe('marginal');
     expect(pullOnCheck(m, 97.6).status).toBe('marginal');
     expect(pullOnCheck(m, 97.5).status).toBe('clear');
-    expect(TAPE_TUNING).toMatchObject({ pullOnAllowanceCm: 2.5, pullOnMarginalBelowCm: 2.5, pullOnExtrapolatedExtraCm: 2.5, easyStretchShare: 0.5 });
+    expect(TAPE_TUNING).toMatchObject({ pullOnAllowanceCm: 2.5, pullOnMarginalBelowCm: 2.5, pullOnExtrapolatedAllowanceCm: 0, easyStretchShare: 0.5 });
   });
 
-  it('an extrapolated band blocks only beyond 5 cm and says so', () => {
+  it('an extrapolated band gets no allowance: it has to reach the hips on paper, and says so', () => {
     const e = { cm: 115, provenance: 'extrapolated' as const };
-    expect(pullOnCheck(e, 119)).toMatchObject({ status: 'marginal', marginCm: -4, allowanceCm: 5, provenance: 'extrapolated' });
-    expect(pullOnCheck(e, 120.1)).toMatchObject({ status: 'blocked', allowanceCm: 5 });
+    expect(pullOnCheck(e, 115)).toMatchObject({ status: 'marginal', marginCm: 0, allowanceCm: 0, provenance: 'extrapolated' });
+    expect(pullOnCheck(e, 115.1)).toMatchObject({ status: 'blocked', marginCm: -0.1, allowanceCm: 0 });
+    expect(pullOnCheck(e, 112.5).status).toBe('clear');
+    // interpolated and measured keep the 2.5 cm
+    expect(pullOnCheck({ cm: 115, provenance: 'interpolated' }, 117)).toMatchObject({ status: 'marginal', allowanceCm: 2.5 });
     expect(pullOnCheck({ cm: 115, provenance: 'interpolated' }, 119)).toMatchObject({ status: 'blocked', allowanceCm: 2.5 });
+    // tuning can never make an unmeasured band more tolerant than a measured one
+    const wide = { ...TAPE_TUNING, pullOnExtrapolatedAllowanceCm: 10 };
+    expect(pullOnCheck(e, 118, wide)).toMatchObject({ status: 'blocked', allowanceCm: 2.5 });
+  });
+
+  it('the largest size is not offered on a guessed band that is short of the hips (review finding)', () => {
+    // waist 93.5 / hip 120: AU 16's band (115, extrapolated) is 5 cm short. Before this rule: "Size 16 should fit".
+    const r = computeFit(SKIRT, body(93.5, 120));
+    expect(size(r, '16').pullOn).toMatchObject({ status: 'blocked', marginCm: -5, provenance: 'extrapolated', allowanceCm: 0 });
+    expect(size(r, '16').wearable).toBe(false);
+    expect(r.recommendedSize).toBeNull();
+    expect(r.fits).toBe(false);
+    expect(fitSummary(r)).toBe('No size stretches over your hips — the closest is 16 (estimate).');
+    // one millimetre over the guessed band is already not offered
+    expect(computeFit(SKIRT, body(88, 115.1)).recommendedSize).toBeNull();
+    expect(computeFit(SKIRT, body(88, 115)).recommendedSize).toBe('16');
   });
 
   it('sensitivity: the allowance moves the block line and nothing else', () => {
@@ -255,7 +274,7 @@ describe('no size goes on', () => {
     expect(r.recommendedSize).toBeNull();
     expect(r.fits).toBe(false);
     expect(r.closestSize).toBe('16');
-    expect(r.notes[0]).toBe('No size stretches over your hips — the closest is 16, about 7 cm short at a comfortable stretch');
+    expect(r.notes[0]).toBe('No size stretches over your hips to pull it on — the closest is 16, about 7 cm short at a comfortable stretch');
     expect(fitSummary(r)).toBe('No size stretches over your hips — the closest is 16 (estimate).');
   });
 
@@ -277,7 +296,10 @@ describe('missing measurements', () => {
   it('no hip: no check, and the notes say what is missing', () => {
     const r = computeFit(SKIRT, body(73.5, undefined));
     expect(r.perSize.every((s) => s.pullOn === undefined)).toBe(true);
-    expect(r.notes).toContain("We don't have your hips measurement yet — we can't check that the waistband goes over your hips");
+    expect(r.notes).toContain("We don't have your hips measurement yet — we can't check that the waistband goes over your hips when you pull it on");
+    expect(r.pullOnUnchecked).toBe(true);
+    expect(computeFit(SKIRT, body(73.5, 100)).pullOnUnchecked).toBeUndefined();
+    expect(computeFit({ ...SKIRT, closure: 'zip' }, body(73.5, undefined)).pullOnUnchecked).toBeUndefined();
     expect(r.recommendedSize).toBe('10');
   });
 
@@ -291,7 +313,7 @@ describe('missing measurements', () => {
     const none = computeFit(SKIRT, body(undefined, 130));
     expect(none.recommendedSize).toBeNull();
     expect(none.closestSize).toBe('16');
-    expect(none.notes).toEqual(['No fit points for this item', 'No size stretches over your hips — the closest is 16, about 15 cm short at a comfortable stretch']);
+    expect(none.notes).toEqual(['No fit points for this item', 'No size stretches over your hips to pull it on — the closest is 16, about 15 cm short at a comfortable stretch']);
     // before: the first chart size, whatever the hips
     expect(computeFit(BEFORE, body(undefined, 130)).recommendedSize).toBe('8');
   });
@@ -375,10 +397,19 @@ describe('waist read from the measured band', () => {
     expect(p.gapCm).toBeCloseTo(70 - waistCm, 5);
   });
 
-  it('with a known hip the band is loose only when it is as long as the hips', () => {
-    expect(read(60).band).toBe('loose'); // no hip: 10 cm longer than the waist is beyond the slack
-    expect(read(60, 95).band).toBe('roomy'); // 70 < hip 95: it settles lower
-    expect(read(60, 69.9).band).toBe('loose'); // 70 > hip: nothing holds it
+  it('a band much longer than the waist is loose, whatever the hip (review finding)', () => {
+    expect(read(60).band).toBe('loose'); // 10 cm longer than the waist is beyond the slack
+    expect(read(60, 95).band).toBe('loose'); // a known hip does not turn slack into "roomy"
+    expect(read(60, 95)).toEqual(read(60));
+    // waist 60 / hip 100 on the pilot skirt: only the smallest band is near the waist; none is offered as an oversize "roomy"
+    const r = computeFit(SKIRT, body(60, 100));
+    expect(r.perSize.map((s) => waist(s).band)).toEqual(['roomy', 'loose', 'loose', 'loose', 'loose']);
+    expect(r.perSize.filter((s) => s.wearable).map((s) => s.size)).toEqual([]);
+    // the chart AU 8 body: AU 14 and 16 are loose again, as the chart reading said
+    const small = computeFit(SKIRT, body(67.5, 94));
+    expect(waist(size(small, '14')).band).toBe('loose');
+    expect(size(small, '14').wearable).toBe(false);
+    expect(size(small, '16').wearable).toBe(false);
   });
 
   it('the easy share moves the snug line only', () => {
@@ -409,10 +440,11 @@ describe('waist read from the measured band', () => {
       expect(sum).toBeCloseTo(1, 6);
       expect(p.gapCm).toBe(waist(size(det, s.size)).gapCm);
     }
-    // AU 14 (80 relaxed) on waist 73.5: gap +6.5, right at the roomy edge (6): mass on both sides
+    // AU 14 (80 relaxed) on waist 73.5: gap +6.5, between the roomy edge (6) and the loose edge (8): mass on all three
     const p14 = waist(size(soft, '14')).bandProbabilities!;
     expect(p14.good).toBeGreaterThan(0.3);
-    expect(p14.roomy).toBeGreaterThan(0.3);
+    expect(p14.roomy).toBeGreaterThan(0.2);
+    expect(p14.loose).toBeGreaterThan(0.2);
   });
 });
 

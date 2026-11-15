@@ -113,12 +113,24 @@ describe('fillGarmentTape', () => {
     }
   });
 
-  it('leave-one-out on the pilot band: how far the rule is off where we can check it', () => {
+  it('leave-one-out on the pilot band: how far the rule is off, and in which direction, where we can check it', () => {
     // AU 10 left out and interpolated from 8 and 14; AU 14 and AU 8 left out and extrapolated.
     const without = (size: string) => fillGarmentTape(CHART, PILOT_SKIRT_TAPE_MEASURED.filter((m) => m.size !== size));
-    expect(row(without('10'), '10').waistStretched).toEqual({ cm: 99.3, provenance: 'interpolated' }); // measured 100: 0.7 off
-    expect(row(without('14'), '14').waistStretched).toEqual({ cm: 112, provenance: 'extrapolated' }); // measured 110: 2 off
-    expect(row(without('8'), '8').waistStretched).toEqual({ cm: 95, provenance: 'extrapolated' }); // measured 94: 1 off
+    const measured = (size: string) => PILOT_SKIRT_TAPE_MEASURED.find((m) => m.size === size)!.waistStretchedCm!;
+    const error = (size: string) => Math.round((row(without(size), size).waistStretched!.cm - measured(size)) * 10) / 10;
+    expect(row(without('10'), '10').waistStretched).toEqual({ cm: 99.3, provenance: 'interpolated' });
+    expect(row(without('14'), '14').waistStretched).toEqual({ cm: 112, provenance: 'extrapolated' });
+    expect(row(without('8'), '8').waistStretched).toEqual({ cm: 95, provenance: 'extrapolated' });
+    // Signed: filled minus measured. Positive = the rule says the band is LONGER than it is, the
+    // unsafe side for a pull-on check. Both extrapolations are on that side; the interpolation is not.
+    expect(error('10')).toBe(-0.7);
+    expect(error('14')).toBe(2);
+    expect(error('8')).toBe(1);
+    // The measured slope falls from 1.2 (8 to 10) to 1.0 (10 to 14) cm of band per cm of chart
+    // waist, and AU 16 continues the 1.0: 115 is more likely too long than too short.
+    expect((100 - 94) / (72.5 - 67.5)).toBeCloseTo(1.2, 5);
+    expect((110 - 100) / (82.5 - 72.5)).toBeCloseTo(1.0, 5);
+    expect(row(tape, '16').waistStretched).toEqual({ cm: 115, provenance: 'extrapolated' });
   });
 
   it('fills each field from its own samples, ignores unknown sizes and matches labels like the chart', () => {
@@ -130,11 +142,40 @@ describe('fillGarmentTape', () => {
     const t = fillGarmentTape(CHART, measured);
     expect(row(t, '8').waistRelaxed).toEqual({ cm: 67, provenance: 'measured' });
     expect(row(t, '10').waistStretched).toEqual({ cm: 99.3, provenance: 'interpolated' });
-    // one hem sample: the other sizes step with the chart's hip step, labelled extrapolated
-    expect(row(t, '8').hemSweep).toEqual({ cm: 245, provenance: 'extrapolated' });
+    // one hem sample: it stays on its own size; nothing is made up for the others
+    expect(row(t, '8').hemSweep).toBeUndefined();
+    expect(row(t, '16').hemSweep).toBeUndefined();
     expect(row(t, '14').hemSweep).toEqual({ cm: 260, provenance: 'measured' });
     expect(row(t, '8').hip).toBeUndefined();
     expect(t.some((r) => r.size === 'XL')).toBe(false);
+  });
+
+  it('one measured size: only the band is stepped with the chart; hip, hem and length get no value elsewhere', () => {
+    const t = fillGarmentTape(CHART, [PILOT_SKIRT_TAPE_MEASURED[1]!]); // AU 10 only
+    expect(row(t, '10')).toMatchObject({ hip: { cm: 122, provenance: 'measured' }, hemSweep: { cm: 248, provenance: 'measured' }, length: { cm: 103, provenance: 'measured' } });
+    for (const size of ['8', '12', '14', '16']) {
+      const r = row(t, size);
+      expect(r.hip).toBeUndefined();
+      expect(r.hemSweep).toBeUndefined();
+      expect(r.length).toBeUndefined(); // was 98 / 108 / 113 / 118: a skirt does not grow 5 cm per size
+      expect(r.waistRelaxed?.provenance).toBe('extrapolated');
+      expect(r.waistStretched?.provenance).toBe('extrapolated');
+    }
+    expect(t.map((r) => r.waistStretched!.cm)).toEqual([95, 100, 105, 110, 115]);
+    expect(GarmentTapeSchema.safeParse(t).success).toBe(true);
+  });
+
+  it('refuses a measured size whose stretched band is smaller than its relaxed band, naming the size', () => {
+    const typo = PILOT_SKIRT_TAPE_MEASURED.map((m) => (m.size === '10' ? { ...m, waistStretchedCm: 60 } : m));
+    expect(() => fillGarmentTape(CHART, typo)).toThrow(RangeError);
+    expect(() => fillGarmentTape(CHART, typo)).toThrow('Size 10: the stretched waistband (60 cm) is smaller than the relaxed waistband (71 cm)');
+    // equal is allowed (a band that does not stretch), and a size outside the chart is ignored as before
+    expect(() => fillGarmentTape(CHART, [{ size: '10', waistRelaxedCm: 71, waistStretchedCm: 71 }])).not.toThrow();
+    expect(() => fillGarmentTape(CHART, [{ size: 'XL', waistRelaxedCm: 71, waistStretchedCm: 60 }])).not.toThrow();
+    // crossing lines from different sizes (not a typo on one size): the band values are dropped, the rest is kept and valid
+    const crossed = fillGarmentTape(CHART, [{ size: '8', waistRelaxedCm: 90, lengthCm: 103 }, { size: '14', waistStretchedCm: 80, lengthCm: 104 }]);
+    expect(crossed.every((r) => r.waistRelaxed === undefined && r.waistStretched === undefined)).toBe(true);
+    expect(GarmentTapeSchema.safeParse(crossed).success).toBe(true);
   });
 
   it('uses the row index when the chart lacks the column, and returns nothing without samples', () => {

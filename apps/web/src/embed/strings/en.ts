@@ -172,6 +172,18 @@ export interface EmbedCatalogue {
       band: (band: string, point: string, o: { stretch: boolean; suggest: 'up' | 'down' | null }) => string;
       add: (points: string[]) => string;
       fitsWell: (size: string) => string;
+      /**
+       * Pull-on garments (fit engine `SizeFit.pullOn`). `short`: the band is short of the hips at
+       * the stretch the shop measured, within the allowance; otherwise it only just reaches.
+       */
+      pullOnTight: (o: { short: boolean }) => string;
+      /** No size's waistband passes the hips; `size` is the least short one. */
+      pullOnNone: (size: string) => string;
+      /** The pull-on check could not run: no hips measurement. `pullOnUncheckedShort` is the size peek's line. */
+      pullOnUnchecked: string;
+      pullOnUncheckedShort: string;
+      /** The size's waistband numbers were not measured by the shop; `rough`: extrapolated beyond the measured sizes. */
+      tapeEstimated: (size: string, o: { rough: boolean }) => string;
     };
   };
   peek: {
@@ -391,6 +403,17 @@ export const EN: EmbedCatalogue = {
         `${band} at the ${lower(point)}${o.stretch ? ' (stretch fabric there)' : ''}${o.suggest === 'up' ? ' — consider a size up' : o.suggest === 'down' ? ' — consider a size down' : ''}`,
       add: (points) => `Add your ${list(points.map(lower))} ${points.length > 1 ? 'measurements' : 'measurement'} under Edit my measurements for a more confident result`,
       fitsWell: (size) => `Size ${size} fits you well`,
+      pullOnTight: (o) =>
+        o.short
+          ? 'To pull it on, the waistband has to stretch over your hips a little more than is comfortable'
+          : 'To pull it on, the waistband only just stretches over your hips',
+      pullOnNone: (size) => `No size stretches over your hips to pull it on. The closest is ${size}`,
+      pullOnUnchecked: 'Add your hips measurement under Edit my measurements so we can check that the waistband goes over your hips',
+      pullOnUncheckedShort: 'We have not checked that the waistband goes over your hips',
+      tapeEstimated: (size, o) =>
+        o.rough
+          ? `Size ${size} was not measured by the shop. Its waistband numbers are a rough estimate`
+          : `Size ${size} was not measured by the shop. Its waistband numbers are estimated from the sizes next to it`,
     },
   },
   peek: {

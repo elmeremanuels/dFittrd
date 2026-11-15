@@ -113,10 +113,14 @@ Two optional fields on `GarmentPayload` (and the draft). Absent = the behaviour 
 - `fillGarmentTape(chart, measuredRows)` builds `garmentTape` for every chart size from the sizes the shop measured
   (`MeasuredTapeRow`, plain cm). Rule: a measured size keeps its value; a size between two measured sizes lies on the
   straight line between its nearest measured neighbours (`interpolated`); a size outside them continues the line
-  through the two nearest measured sizes (`extrapolated`); with one measured size the others step with the chart's
-  own step (`extrapolated`). Position on the line: the chart waist for the two band fields, the chart hip for the
+  through the two nearest measured sizes (`extrapolated`); with one measured size only the two band fields
+  step with the chart's waist step (`extrapolated`); hip, hem sweep and length get no value on the other sizes,
+  because one sample says nothing about how they grade. Position on the line: the chart waist for the two band fields, the chart hip for the
   others, the row index when the chart lacks the column. Each field is filled on its own. This is the rule of the
-  spike (`apps/web/src/render/ringInputs.ts` `fillSizes`), moved here unchanged.
+  spike (`apps/web/src/render/ringInputs.ts` `fillSizes`) except for the one-sample case, where the spike steps
+  every field. The spike's copy still exists and feeds only the ring overlay; the two are not shared yet.
+  `fillGarmentTape` throws a `RangeError` naming the size when a measured size has a stretched band smaller than
+  its relaxed band (a typing mistake the row schema would refuse later without saying where it came from).
 - `worstTapeProvenance(values)`.
 - Fixtures: `PILOT_SKIRT_TAPE_MEASURED` (the shop's AU 8, 10, 14), `PILOT_SKIRT_CHART_ONLY` and
   `PILOT_PULL_ON_SKIRT` (the same skirt with `closure` and the filled tape). Not in `MOCK_GARMENTS`.

@@ -11,6 +11,12 @@ why the drafts live here. To ship a language later:
 
 1. bring the pack up to date with the English keys and have it reviewed;
 2. move it to `extensions/try-button/locales/<locale>.json` (and `<locale>.schema.json`);
-3. add the locale to the list in `src/extension.test.ts`.
+3. add the locale to the list in `src/extension.test.ts`;
+4. ship the SDK and embed catalogues for the same language in the same change
+   (`docs/i18n/README.md`); `node scripts/check-language-packs.mjs` (part of `pnpm check`) fails
+   while one is missing.
 
-No code changes: Shopify picks the storefront locale file by the shop's language itself.
+No code changes: Shopify picks the storefront locale file by the shop's language itself, and the
+block passes that file's `curtain.interface_locale` (`"nl"` in the draft) to the SDK as
+`data-locale`, which also asks the embed for that language. So the hint, the modal and the overlay
+change together, and only on shops whose language has a pack.

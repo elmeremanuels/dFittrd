@@ -17,6 +17,7 @@ import { RENDER_CONSENT_TIER, type HeroRenderRequest, type HeroRenderStatus, typ
 import { EstimateBadge, EstimateDisclaimer } from '@/components/EstimateBadge';
 import { STANDARD_SKIN_HEX, VIEW_H, VIEW_W } from '@/render/body';
 import type { EmbedApi } from './deps';
+import { embedStrings } from './strings';
 
 /**
  * The shop's hero-render switch. `ShopBranding` has no such field yet, so this reads an optional
@@ -127,22 +128,23 @@ export function HeroRenderPanel({
           if (alive.current) setState({ status: 'done', job });
           return;
         }
-        if (job.status === 'failed' || job.status === 'expired') throw new Error(job.error ?? 'The render did not finish.');
+        if (job.status === 'failed' || job.status === 'expired') throw new Error(job.error ?? embedStrings().hero.failed);
       }
-      if (alive.current) setState({ status: 'failed', message: 'The render is taking too long. Try again later.' });
+      if (alive.current) setState({ status: 'failed', message: embedStrings().hero.slow });
     } catch (e) {
-      if (alive.current) setState({ status: 'failed', message: e instanceof Error ? e.message : 'The render did not finish.' });
+      if (alive.current) setState({ status: 'failed', message: e instanceof Error ? e.message : embedStrings().hero.failed });
     }
   };
 
+  const t = embedStrings().hero;
   return (
     <section className="card space-y-3" aria-labelledby="hero-title">
       <h2 id="hero-title" className="font-display text-xl">
-        See it on me
+        {t.title}
       </h2>
       {state.status === 'done' && state.job.imageUrl ? (
         <figure className="relative overflow-hidden rounded-2xl">
-          <img src={state.job.imageUrl} alt={`Generated estimate of ${data.garment.name} in size ${size} on your avatar`} className="w-full" referrerPolicy="no-referrer" />
+          <img src={state.job.imageUrl} alt={t.alt(data.garment.name, size)} className="w-full" referrerPolicy="no-referrer" />
           <EstimateBadge className="absolute top-3 left-3" />
           <figcaption>
             <EstimateDisclaimer className="mt-2" />
@@ -150,15 +152,13 @@ export function HeroRenderPanel({
         </figure>
       ) : (
         <>
-          <p className="text-sm text-ink-soft">
-            We send your avatar (the drawing above, not a photo) and the product image to our render partner for one picture. It is deleted within 24 hours.
-          </p>
+          <p className="text-sm text-ink-soft">{t.explain}</p>
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" className="mt-1" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-            <span>I agree to send my avatar for this one render.</span>
+            <span>{t.consent}</span>
           </label>
           <button type="button" className="btn-ghost w-full" disabled={!consent || state.status === 'working'} onClick={() => void start()}>
-            {state.status === 'working' ? 'Rendering…' : `See size ${size} on me`}
+            {state.status === 'working' ? t.working : t.start(size)}
           </button>
           {state.status === 'failed' ? (
             <p role="alert" className="text-xs text-coral-ink">

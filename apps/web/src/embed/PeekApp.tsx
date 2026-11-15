@@ -14,6 +14,7 @@ import { AvatarView } from '@/components/AvatarView';
 import { loadPeek, PEEK_HEIGHT, type PeekDeps, type PeekParams, type PeekResult } from './peek';
 import { postCollapse } from './peekGate';
 import { envelope } from './protocol';
+import { embedStrings, parts } from './strings';
 
 type PeekState = { kind: 'loading' } | { kind: 'none' } | { kind: 'shown'; data: PeekResult };
 
@@ -53,6 +54,8 @@ export function PeekApp({ params, deps }: { params: PeekParams | null; deps: Pee
   const { garment, remembered, embedFit, outcome, targetOrigin, skinHex } = state.data;
   const open = (): void => deps.parent?.postMessage(envelope({ type: 'curtain:peek-open' }), targetOrigin);
   const size = outcome.kind === 'size' ? outcome.size : null;
+  const t = embedStrings().peek;
+  const [beforeSize, afterSize] = parts(t.yourSize, 'size');
 
   return (
     <div
@@ -70,21 +73,23 @@ export function PeekApp({ params, deps }: { params: PeekParams | null; deps: Pee
         <p className="truncate text-sm leading-6" data-testid="peek-size">
           {size ? (
             <>
-              Your size: <strong className="font-display text-xl leading-6">{size}</strong>
+              {beforeSize}
+              <strong className="font-display text-xl leading-6">{size}</strong>
+              {afterSize}
             </>
           ) : outcome.kind === 'none' ? (
-            'No size fits well'
+            t.noneFits
           ) : (
-            'Can’t recommend a size yet'
+            t.unknown
           )}
         </p>
         <p className="truncate text-xs leading-5 text-ink-soft" data-testid="peek-note">
           {outcome.note}
         </p>
         <button type="button" onClick={open} className="block max-w-full truncate rounded text-left text-sm font-semibold leading-6 text-coral-ink underline underline-offset-2" data-testid="peek-open">
-          {size ? `See how size ${size} fits you` : 'Open the fitting room'}
+          {size ? t.see(size) : t.open}
         </button>
-        <p className="truncate text-[11px] leading-4 text-ink-mute">Only you can see this. The shop can’t.</p>
+        <p className="truncate text-[11px] leading-4 text-ink-mute">{t.onlyYou}</p>
       </div>
     </div>
   );

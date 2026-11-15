@@ -75,8 +75,9 @@ export interface CurtainConfig {
   /** Text used for empty buttons. Defaults to "Try it on". */
   label?: string;
   /**
-   * The locale of the SDK's own text. Only `en` has a catalogue today (D21), so any other value
-   * shows English. Also sent to the embed, which uses its region for the default units.
+   * The interface locale of the shop's integration: the SDK's own text and, through `?ui=` on its
+   * URL, the embed's. Only `en` has a catalogue today (D21), so any other value shows English.
+   * Also sent to the embed in `curtain:context`, which uses its region for the default units.
    */
   locale?: string;
   /** Request timeout in ms (default 8000). */

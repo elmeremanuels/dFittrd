@@ -123,11 +123,15 @@ needs the Curtain app. *Curtain app* (`app`) is the opt-in alternative: phones o
 show a QR code. Storefront strings (`locales/en.default.json`): label "Try it on", the hint (which says *estimate*),
 theme-editor-only setup notices.
 
-**English only (D21).** The extension ships the English locale files and nothing else, and the block
-sends `data-locale="en"` whatever the shop's language is. The Dutch locale files written earlier are
-in `translation-packs/try-button/` (draft, not shipped, not reviewed). Shopify deploys every file in
-`locales/`, so a later pack is added by moving its two files there and adding it to the list in
-`src/extension.test.ts`; see `translation-packs/README.md` and `docs/i18n/README.md`.
+**English only (D21).** The extension ships the English locale files and nothing else. The block
+sends `data-locale` from the storefront locale file Shopify picked (its `curtain.interface_locale`
+key), so the hint, the SDK's modal and the overlay are always in one language; with English only
+shipped that is `en` on every shop, whatever its language. The Dutch locale files written earlier
+are in `translation-packs/try-button/` (draft, not shipped, not reviewed). Shopify deploys every
+file in `locales/`, so a later pack is added by moving its two files there and adding it to the
+list in `src/extension.test.ts`, together with the SDK and embed catalogues for that language (the
+root check `scripts/check-language-packs.mjs` fails otherwise); see `translation-packs/README.md`
+and `docs/i18n/README.md`.
 
 Themes without app-block support can `{% render 'curtain-try-button', product: product, label: 'Try it on', show_hint: true %}`
 and add the script tag from `packages/sdk/README.md` with `data-api` set.

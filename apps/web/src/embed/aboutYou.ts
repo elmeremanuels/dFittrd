@@ -11,6 +11,7 @@ import { computeFit, isPointFit, sigmaFromBodyProfile, type FitResult, type Poin
 import { toUserBody, type BodyMeasurementKey, type BodyProfile, type GarmentCategory, type GarmentPayload, type UserBody } from '@curtain/schema';
 import { fuseProfile, type ManualEntries } from '@/features/capture/fuse';
 import type { Sex } from '@/features/capture/types';
+import { embedStrings } from './strings';
 import { cmToFtIn, cmToIn, ftInToCm, inToCm, IN_PER_FT, isUnits, kgToLb, lbToKg, lengthText, metricText, numberText, round1, type Units } from './units';
 
 export const FIT_PREFERENCES = ['snug', 'regular', 'relaxed'] as const;
@@ -92,16 +93,6 @@ export const ABOUT_RANGES: Record<AboutField, readonly [number, number]> = {
   footEu: [30, 52],
 };
 
-export const ABOUT_LABELS: Record<AboutField, string> = {
-  height: 'Height',
-  weight: 'Weight',
-  bust: 'Bust / chest',
-  waist: 'Waist',
-  hip: 'Hip',
-  inseam: 'Inseam',
-  footEu: 'Shoe size (EU)',
-};
-
 /** Metric units of each field (the canonical values). For the shopper's own units use `unitFor`. */
 export const ABOUT_UNITS: Record<AboutField, string> = { height: 'cm', weight: 'kg', bust: 'cm', waist: 'cm', hip: 'cm', inseam: 'cm', footEu: 'EU' };
 
@@ -122,11 +113,6 @@ export function measurementFieldsFor(category: GarmentCategory): AboutField[] {
 export function requiredFieldsFor(category: GarmentCategory): AboutField[] {
   return category === 'shoes' ? ['footEu'] : [];
 }
-
-const REQUIRED_TEXT: Record<Units, Partial<Record<AboutField, string>>> = {
-  metric: { height: 'Enter your height in cm', weight: 'Enter your weight in kg', footEu: 'Enter your EU shoe size' },
-  imperial: { height: 'Enter your height in feet and inches', weight: 'Enter your weight in lb', footEu: 'Enter your EU shoe size' },
-};
 
 /** Fields typed in imperial units when `units` is imperial (the EU shoe size never is). */
 export function isImperialField(f: AboutField): f is Exclude<AboutField, 'footEu'> {
@@ -157,8 +143,9 @@ const ftIn = (totalIn: number): string => `${Math.floor(totalIn / IN_PER_FT)} ft
 /** "Between 120 and 230 cm" / "Between 4 ft 0 in and 7 ft 6 in" / "Between 67 and 551 lb". */
 export function rangeText(field: AboutField, units: Units): string {
   const [lo, hi] = rangeFor(field, units);
-  if (units === 'imperial' && field === 'height') return `Between ${ftIn(lo)} and ${ftIn(hi)}`;
-  return `Between ${lo} and ${hi} ${unitFor(field, units)}`;
+  const between = embedStrings().about.errors.between;
+  if (units === 'imperial' && field === 'height') return between(ftIn(lo), ftIn(hi));
+  return between(lo, hi, unitFor(field, units));
 }
 
 type FieldRead = { state: 'empty' } | { state: 'invalid'; message: string } | { state: 'ok'; metric: number };
@@ -166,16 +153,16 @@ type FieldRead = { state: 'empty' } | { state: 'invalid'; message: string } | { 
 const readNumber = (raw: string, toMetric: (n: number) => number): FieldRead => {
   if (raw.trim() === '') return { state: 'empty' };
   const n = parseDecimal(raw);
-  return n === null ? { state: 'invalid', message: 'Enter a number' } : { state: 'ok', metric: toMetric(n) };
+  return n === null ? { state: 'invalid', message: embedStrings().about.errors.number } : { state: 'ok', metric: toMetric(n) };
 };
 
 function readHeightFtIn(ftRaw: string, inRaw: string): FieldRead {
   if (ftRaw.trim() === '' && inRaw.trim() === '') return { state: 'empty' };
   const ft = ftRaw.trim() === '' ? 0 : parseDecimal(ftRaw);
   const inches = inRaw.trim() === '' ? 0 : parseDecimal(inRaw);
-  if (ft === null || inches === null) return { state: 'invalid', message: 'Enter a number' };
-  if (ft < 0 || !Number.isInteger(ft)) return { state: 'invalid', message: 'Enter whole feet, e.g. 5 ft 7 in' };
-  if (inches < 0 || inches >= IN_PER_FT) return { state: 'invalid', message: 'Inches go from 0 to 11.9' };
+  if (ft === null || inches === null) return { state: 'invalid', message: embedStrings().about.errors.number };
+  if (ft < 0 || !Number.isInteger(ft)) return { state: 'invalid', message: embedStrings().about.errors.wholeFeet };
+  if (inches < 0 || inches >= IN_PER_FT) return { state: 'invalid', message: embedStrings().about.errors.inches };
   return { state: 'ok', metric: ftInToCm(ft, inches) };
 }
 
@@ -259,7 +246,7 @@ export function validateAbout(form: AboutForm, category: GarmentCategory): Parti
   for (const f of fields) {
     const read = readField(form, f);
     if (read.state === 'empty') {
-      const text = required.includes(f) ? REQUIRED_TEXT[form.units][f] : undefined;
+      const text = required.includes(f) ? (embedStrings().about.errors.required[form.units] as Partial<Record<AboutField, string>>)[f] : undefined;
       if (text) errors[f] = text;
       continue;
     }
@@ -409,37 +396,46 @@ export function sizeConfidence(fit: FitResult, size: string): number {
   return Math.max(0, Math.min(1, Math.round(target.mean * target.used * factor * 1000) / 1000));
 }
 
-const lower = (point: string): string => pointLabel(point).toLowerCase();
+/**
+ * One shopper-facing note. `add` is the hint to add a measurement; `short` is a band note without
+ * its "consider a size up" tail (the size peek shows that).
+ */
+export interface EmbedNote {
+  kind: 'closest' | 'band' | 'add' | 'well';
+  text: string;
+  short?: string;
+}
 
-function joinWords(words: string[]): string {
-  if (words.length <= 1) return words.join('');
-  return `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
+/** The notes as plain sentences (what FitPanel shows). */
+export function embedNotes(fit: FitResult, advice: SizeAdvice, category: GarmentCategory, profile: BodyProfile): string[] {
+  return embedNoteList(fit, advice, category, profile).map((n) => n.text);
 }
 
 /**
  * Shopper-facing notes for the size on screen (COPY-2, F3): built from that size's own points, in
- * plain words, with hints only for measurements the About-you form can actually collect.
+ * plain words (the catalogue's `fit.notes`), with hints only for measurements the About-you form
+ * can actually collect.
  */
-export function embedNotes(fit: FitResult, advice: SizeAdvice, category: GarmentCategory, profile: BodyProfile): string[] {
+export function embedNoteList(fit: FitResult, advice: SizeAdvice, category: GarmentCategory, profile: BodyProfile): EmbedNote[] {
+  const t = embedStrings().fit.notes;
   const size = advice.size ?? advice.closest;
   const idx = fit.perSize.findIndex((p) => p.size === size);
   const s = fit.perSize[idx];
   if (!s) return [];
   const used = s.points.filter(isPointFit);
-  const notes: string[] = [];
+  const notes: EmbedNote[] = [];
   if (!advice.size) {
     const worst = used.reduce<PointFit | undefined>((w, p) => (w === undefined || p.score < w.score ? p : w), undefined);
-    if (worst) notes.push(`Closest is ${s.size}, ${bandText(worst.band).toLowerCase()} at the ${lower(worst.point)}`);
+    if (worst) notes.push({ kind: 'closest', text: t.closest(s.size, bandText(worst.band), pointLabel(worst.point)) });
   }
   // No "size up/down" advice after the preference already moved the size (it would contradict it).
   const suggest = !advice.adjusted;
   for (const p of used) {
-    const where = `at the ${lower(p.point)}`;
-    const extra = p.inZone ? ' (stretch fabric there)' : '';
-    if (p.band === 'tight') notes.push(`Tight ${where}${extra}${suggest && idx + 1 < fit.perSize.length ? ' — consider a size up' : ''}`);
-    else if (p.band === 'snug') notes.push(`Snug ${where}${extra}`);
-    else if (p.band === 'roomy') notes.push(`Roomy ${where}${extra}`);
-    else if (p.band === 'loose') notes.push(`Loose ${where}${extra}${suggest && idx > 0 ? ' — consider a size down' : ''}`);
+    if (p.band === 'good') continue;
+    const up = p.band === 'tight' && suggest && idx + 1 < fit.perSize.length;
+    const down = p.band === 'loose' && suggest && idx > 0;
+    const say = (to: 'up' | 'down' | null): string => t.band(bandText(p.band), pointLabel(p.point), { stretch: !!p.inZone, suggest: to });
+    notes.push({ kind: 'band', text: say(up ? 'up' : down ? 'down' : null), short: say(null) });
   }
   // Measurements worth adding: points we skipped for lack of a value, or that rest on an estimate.
   const collectable = new Set<AboutField>([...measurementFieldsFor(category), ...requiredFieldsFor(category)]);
@@ -449,10 +445,10 @@ export function embedNotes(fit: FitResult, advice: SizeAdvice, category: Garment
     if (!field || !collectable.has(field)) continue;
     const missing = !isPointFit(p) && p.omitted === 'user';
     const weak = isPointFit(p) && (p.confidence < LOW_POINT_CONFIDENCE || profile.measurements[field as BodyMeasurementKey]?.source === 'prior');
-    if ((missing || weak) && !add.includes(lower(p.point))) add.push(lower(p.point));
+    if ((missing || weak) && !add.includes(pointLabel(p.point))) add.push(pointLabel(p.point));
   }
-  if (add.length > 0) notes.push(`Add your ${joinWords(add)} ${add.length > 1 ? 'measurements' : 'measurement'} under Edit my measurements for a more confident result`);
-  if (notes.length === 0) notes.push(`Size ${s.size} fits you well`);
+  if (add.length > 0) notes.push({ kind: 'add', text: t.add(add) });
+  if (notes.length === 0) notes.push({ kind: 'well', text: t.fitsWell(s.size) });
   return notes;
 }
 
@@ -481,21 +477,19 @@ export function usablePoints(size: SizeFit | undefined): PointFit[] {
   return size ? size.points.filter(isPointFit) : [];
 }
 
-const POINT_LABEL: Record<string, string> = { bust: 'Bust', waist: 'Waist', hip: 'Hip', shoulder: 'Shoulders', thigh: 'Thigh', inseam: 'Leg length', foot: 'Foot' };
-
 export function pointLabel(point: string): string {
-  return POINT_LABEL[point] ?? point;
+  const points = embedStrings().fit.points;
+  return Object.prototype.hasOwnProperty.call(points, point) ? points[point]! : point;
 }
 
-const BAND_TEXT: Record<PointFit['band'], string> = { tight: 'Tight', snug: 'Snug', good: 'Good fit', roomy: 'Roomy', loose: 'Loose' };
-
 export function bandText(band: PointFit['band']): string {
-  return BAND_TEXT[band];
+  return embedStrings().fit.bands[band];
 }
 
 /** "2.0 cm more room than designed" / "0.6 in less room …", relative to the ease the garment is designed for. */
 export function gapText(p: PointFit, units: Units = 'metric'): string {
   const d = Math.round(p.gapCm * 10) / 10;
-  if (Math.abs(d) < 0.5) return 'as designed';
-  return d > 0 ? `${lengthText(d, units)} more room than designed` : `${lengthText(Math.abs(d), units)} less room than designed`;
+  const t = embedStrings().fit;
+  if (Math.abs(d) < 0.5) return t.asDesigned;
+  return d > 0 ? t.moreRoom(lengthText(d, units)) : t.lessRoom(lengthText(Math.abs(d), units));
 }

@@ -48,6 +48,12 @@ test(
 		assert_same( 'en', Settings::effective_locale(), 'the site language does not choose the text' );
 		Settings::update( array( 'locale' => 'nl' ) );
 		assert_same( 'en', Settings::effective_locale(), 'a setting saved by an earlier version is ignored' );
+		// A loaded pack names its own language tag: the SDK and the overlay follow the pack.
+		$GLOBALS['curtain_test_x'] = array( 'language tag of this translation' => 'xx-YY' );
+		assert_same( 'xx-YY', Settings::effective_locale(), 'the tag of the loaded pack' );
+		$GLOBALS['curtain_test_x'] = array( 'language tag of this translation' => '"><script>' );
+		assert_same( 'en', Settings::effective_locale(), 'only a language tag is taken' );
+		unset( $GLOBALS['curtain_test_x'] );
 		assert_same( 'Try it on', Settings::button_label() );
 	}
 );

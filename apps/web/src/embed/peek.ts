@@ -31,7 +31,8 @@
  */
 import type { PeekResponse } from '@curtain/schema';
 import type { ApiClient } from '@/api/client';
-import { adviseSize, embedNotes, fitForProfile, normalizeAbout, type EmbedFit, type SizeAdvice } from './aboutYou';
+import { adviseSize, embedNoteList, fitForProfile, normalizeAbout, type EmbedFit, type EmbedNote, type SizeAdvice } from './aboutYou';
+import { embedStrings } from './strings';
 import { browserParentOrigin } from './peekGate';
 import { resolveTargetOrigin, type ParentWindowLike } from './protocol';
 import type { EmbedStore, RememberedProfile } from './storage';
@@ -83,16 +84,16 @@ export interface PeekResult {
 }
 
 /** One short fit note for the peek: a band note when there is one, never the "Edit my measurements" hint (that screen is not here). */
-export function peekNote(notes: readonly string[], size: string): string {
-  const note = notes.find((n) => !n.startsWith('Add your'));
-  return (note ?? `Size ${size} fits you well`).replace(/ — consider a size (up|down)$/, '');
+export function peekNote(notes: readonly EmbedNote[], size: string): string {
+  const note = notes.find((n) => n.kind !== 'add');
+  return note ? (note.short ?? note.text) : embedStrings().fit.notes.fitsWell(size);
 }
 
 /** The peek's text for a fit. Every outcome is shown in the same fixed box (see the file header). */
 export function peekOutcome(garment: PeekResponse['garment'], embedFit: EmbedFit | null, advice: SizeAdvice | null, remembered: RememberedProfile): PeekOutcome {
-  if (!embedFit || !advice || advice.noPoints) return { kind: 'unknown', note: 'Open the fitting room to add what this item needs.' };
-  if (!advice.size) return { kind: 'none', note: 'None of the sizes fits you well. Open the fitting room to compare.' };
-  return { kind: 'size', size: advice.size, note: peekNote(embedNotes(embedFit.fit, advice, garment.category, remembered.profile), advice.size) };
+  if (!embedFit || !advice || advice.noPoints) return { kind: 'unknown', note: embedStrings().peek.unknownNote };
+  if (!advice.size) return { kind: 'none', note: embedStrings().peek.noneNote };
+  return { kind: 'size', size: advice.size, note: peekNote(embedNoteList(embedFit.fit, advice, garment.category, remembered.profile), advice.size) };
 }
 
 /**

@@ -63,6 +63,8 @@ function curtain_test_fake_pack_root(): string {
 		$entries[ $k ]['str']         = '[xx] ' . $e['msgid'];
 		$entries[ $k ]['plural_strs'] = null === $e['plural'] ? array() : array( '[xx] ' . $e['msgid'], '[xx] ' . $e['plural'] );
 	}
+	// The pack names its own language tag; the SDK and the overlay are asked for it.
+	$entries[ "language tag of this translation\x04en" ]['str'] = 'xx-XX';
 	$header = implode( "\n", array( 'msgid ""', 'msgstr ""', '"Content-Type: text/plain; charset=UTF-8\n"', '"Language: xx_XX\n"', '"Plural-Forms: nplurals=2; plural=(n != 1);\n"' ) );
 	file_put_contents( $root . '/languages/curtain-woocommerce-xx_XX.po', curtain_i18n_render( $header, $entries, $entries ) );
 	return $root;
@@ -88,6 +90,12 @@ test(
 		$problems = curtain_i18n_check( $root );
 		curtain_test_remove_pack_root( $root );
 		assert_same( array( 'curtain-woocommerce-xx_XX.po has no translation for: Finish connection' ), $problems );
+		$root = curtain_test_fake_pack_root();
+		$po   = $root . '/languages/curtain-woocommerce-xx_XX.po';
+		file_put_contents( $po, str_replace( 'msgstr "xx-XX"', 'msgstr "nl"', (string) file_get_contents( $po ) ) );
+		$problems = curtain_i18n_check( $root );
+		curtain_test_remove_pack_root( $root );
+		assert_same( array( 'curtain-woocommerce-xx_XX.po names the language tag "nl", which is not the language of the file' ), $problems );
 	}
 );
 

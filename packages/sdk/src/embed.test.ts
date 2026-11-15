@@ -130,6 +130,23 @@ describe('mode', () => {
     expect(b.getAttribute('aria-busy')).toBeNull();
   });
 
+  it('D21: the embed is asked for the configured interface locale only, never the page or browser language', async () => {
+    mockFetch();
+    document.documentElement.lang = 'nl';
+    await openOverlay();
+    expect(frame().getAttribute('src')).toBe(session.embedUrl);
+    closeModal();
+    destroy();
+    await openOverlay({ locale: 'nl-BE' });
+    const url = new URL(frame().getAttribute('src')!);
+    expect(url.origin + url.pathname).toBe(session.embedUrl);
+    expect(Object.fromEntries(url.searchParams)).toEqual({ ui: 'nl-BE' });
+    closeModal();
+    destroy();
+    await openOverlay({ locale: 'not a locale&x=1' });
+    expect(Object.fromEntries(new URL(frame().getAttribute('src')!).searchParams)).toEqual({ ui: 'not a locale&x=1' });
+  });
+
   it('opens the overlay on mobile too (no deep link, no QR)', async () => {
     mockFetch();
     Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148', configurable: true });

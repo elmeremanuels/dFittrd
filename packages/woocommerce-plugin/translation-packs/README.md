@@ -15,5 +15,10 @@ language later:
 3. `pnpm build` (fails while a string is untranslated or a placeholder differs, then compiles the `.mo`).
 
 No code changes: WordPress loads `languages/curtain-woocommerce-<locale>.mo` by the site language
-through `load_plugin_textdomain`. The SDK's own text (overlay, toast) is a separate pack: see
-`packages/sdk/src/i18n.ts`.
+through `load_plugin_textdomain`. One string of the catalogue is not text but the pack's own
+language tag (msgid `en`, context "language tag of this translation"; translate it to `nl`, the
+build refuses a tag that is not the file's language). The plugin sends it to the SDK as
+`data-locale`, which also asks the embed for that language, so the admin, the button, the modal
+and the overlay change together. The SDK and embed catalogues for the language must ship in the
+same change (`docs/i18n/README.md`); `node scripts/check-language-packs.mjs` (part of `pnpm check`)
+fails while one is missing. The draft here predates that string.

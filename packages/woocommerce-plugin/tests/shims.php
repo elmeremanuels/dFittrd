@@ -50,6 +50,8 @@ final class Curtain_Test_State {
 
 // ---- i18n / escaping ------------------------------------------------------------------------
 function __( string $text, string $domain = 'default' ): string { return $text; }
+/** A test can stand in for a loaded translation pack: $GLOBALS['curtain_test_x'][ context ] = translation. */
+function _x( string $text, string $context, string $domain = 'default' ): string { return $GLOBALS['curtain_test_x'][ $context ] ?? $text; }
 function _e( string $text, string $domain = 'default' ): void { echo $text; }
 function _n( string $single, string $plural, int $number, string $domain = 'default' ): string { return 1 === $number ? $single : $plural; }
 function esc_html__( string $text, string $domain = 'default' ): string { return htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' ); }

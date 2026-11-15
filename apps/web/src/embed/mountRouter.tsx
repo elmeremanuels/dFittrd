@@ -5,6 +5,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider, type RouteObject } from 'react-router';
+import { setEmbedLocale, uiLocaleOf } from './strings';
 
 const Blank = (): null => null;
 
@@ -15,6 +16,8 @@ export const embedRoutes: RouteObject[] = [
 ];
 
 export function mountRouter(root: HTMLElement): void {
+  // D21: the interface locale is the one the shop's integration names on the URL, never the browser's.
+  setEmbedLocale(uiLocaleOf(location.search));
   createRoot(root).render(
     <StrictMode>
       <RouterProvider router={createBrowserRouter(embedRoutes)} />

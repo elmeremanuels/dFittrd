@@ -367,6 +367,13 @@ function curtain_i18n_check( string $root ): array {
 				}
 			}
 		}
+		// The pack names its own language tag (Settings::effective_locale): the SDK and the overlay
+		// are asked for that language, so it has to be the language of the file.
+		$tag  = $po['entries'][ "language tag of this translation\x04en" ]['str'] ?? '';
+		$file = preg_match( '/^curtain-woocommerce-([A-Za-z]{2,3})(?:[_-][A-Za-z0-9_-]+)?\.po$/', $name, $m ) ? strtolower( $m[1] ) : '';
+		if ( '' !== $tag && ( 1 !== preg_match( '/^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,8}){0,3}$/', $tag ) || strtolower( (string) preg_split( '/[-_]/', $tag )[0] ) !== $file ) ) {
+			$problems[] = "$name names the language tag \"$tag\", which is not the language of the file";
+		}
 		foreach ( array_diff( array_keys( $po['entries'] ), array_keys( $entries ) ) as $k ) {
 			$problems[] = "$name has an obsolete entry: " . str_replace( "\x04", ' | ', $k );
 		}

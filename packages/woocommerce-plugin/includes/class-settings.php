@@ -215,12 +215,19 @@ final class Settings {
 	}
 
 	/**
-	 * The SDK's data-locale. English only for now (DECISIONS.md D21: translation packs come later):
-	 * neither the site language nor a setting changes it. A 'locale' value saved by an earlier
+	 * The SDK's data-locale: the language tag of the translation WordPress loaded for this plugin.
+	 * A pack (languages/curtain-woocommerce-<locale>.po) names its own tag in the string below, so
+	 * the button label, the SDK's text and the overlay are always in one language. English only
+	 * for now (DECISIONS.md D21: packs come later): no pack is shipped, so this is 'en' on every
+	 * site. The site language is never passed on as such, and a 'locale' value saved by an earlier
 	 * version of the plugin is ignored.
 	 */
 	public static function effective_locale(): string {
-		return 'en';
+		$tag = trim(
+			/* translators: the language tag of this translation, for example nl or pt-BR. Not shown to anybody. */
+			_x( 'en', 'language tag of this translation', 'curtain-woocommerce' )
+		);
+		return 1 === preg_match( '/^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,8}){0,3}$/', $tag ) ? $tag : 'en';
 	}
 
 	// ---- admin page ------------------------------------------------------------------------

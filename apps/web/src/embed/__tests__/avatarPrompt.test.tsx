@@ -308,7 +308,8 @@ describe('avatar prompt (D19)', () => {
   it('with the storage flag on: C30 is shown as written, and a returning shopper sees the colour they picked', async () => {
     const user = userEvent.setup();
     const name = `curtain-embed-avatar-${++dbN}`;
-    setup({ locale: 'nl-NL', store: createEmbedStore({ persistLooks: true, openDb: () => new EmbedDb(name) }) });
+    const first = createEmbedStore({ persistLooks: true, openDb: () => new EmbedDb(name) });
+    setup({ locale: 'nl-NL', store: first });
     await toResult(user);
     await user.click(screen.getByTestId('avatar-open'));
     await user.click(within(await screen.findByRole('dialog')).getByTestId('avatar-skin-switch'));
@@ -317,6 +318,8 @@ describe('avatar prompt (D19)', () => {
     expect(c30).toHaveTextContent(c30Text());
     expect(c30).toHaveTextContent('"Remember me on this shop"');
     await user.click(screen.getByTestId('skin-swatch-8'));
+    // The save is not awaited by the screen: wait for it, so the next visit cannot read before it lands.
+    await waitFor(async () => expect((await first.loadLook(SHOP_ID))?.hex).toBe(lookForMonk(8)!.hex), { timeout: 8000 });
     cleanup();
 
     setup({ store: createEmbedStore({ persistLooks: true, openDb: () => new EmbedDb(name) }) });

@@ -46,7 +46,7 @@ const NO_CONTEXT: ParentContext = { locale: null, currentVariantSize: null };
 
 /**
  * The browser's own locale. It decides the default units (cm or in) only; D21: it never changes
- * the language of the interface, which is `EMBED_LOCALE` (`strings/index.ts`).
+ * the language of the interface, which the shop's integration names (`strings/index.ts`).
  */
 function browserLocale(): string | null {
   return typeof navigator !== 'undefined' ? (navigator.language ?? null) : null;
@@ -286,7 +286,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
     setLook(null);
     closePrompt(false);
     dispatch({ type: 'forgotten' });
-    setForgetStatus(serverOk ? 'Forgotten. Nothing about you is stored here any more.' : 'Deleted from this browser. We could not reach Curtain to delete the anonymous device; try again later.');
+    setForgetStatus(serverOk ? embedStrings().footer.forgotten : embedStrings().footer.forgottenLocalOnly);
   };
 
   // --- the avatar prompt (D19) ------------------------------------------------------------------

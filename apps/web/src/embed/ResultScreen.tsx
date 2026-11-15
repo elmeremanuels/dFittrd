@@ -15,14 +15,11 @@ import { ringOverlayFor } from '@/render/rings';
 import { bandText, fitWithAdvice, gapText, neighbourSizes, pointLabel, priorKeys, usablePoints, type EmbedFit, type FitPreference, type SizeAdvice } from './aboutYou';
 import { UnitToggle } from './EmbedScreens';
 import { SizeChartTable } from './SizeChartTable';
-import { embedStrings } from './strings';
+import { embedStrings, parts } from './strings';
 import type { Units } from './units';
 
-const TABS = [
-  { key: 'fit', label: 'How it fits' },
-  { key: 'chart', label: 'Size chart' },
-] as const;
-type TabKey = (typeof TABS)[number]['key'];
+const TABS = ['fit', 'chart'] as const;
+type TabKey = (typeof TABS)[number];
 
 const BAND_CLASS: Record<string, string> = {
   tight: 'bg-bad/10 text-bad',
@@ -81,9 +78,10 @@ export function ResultScreen({
   onUnits,
   skinHex = null,
   onAvatar,
-  avatarLabel = embedStrings().avatar.ui.open,
+  avatarLabel,
 }: ResultScreenProps): ReactNode {
   const { fit, userBody } = embedFit;
+  const t = embedStrings().result;
   const shown = useMemo(() => fitWithAdvice(fit, advice, garment.category, profile), [fit, advice, garment.category, profile]);
   const [tab, setTab] = useState<TabKey>('fit');
   const [showRings, setShowRings] = useState(true);
@@ -98,13 +96,13 @@ export function ResultScreen({
   const tabRefs = useRef<Partial<Record<TabKey, HTMLButtonElement | null>>>({});
   // WAI-ARIA tabs: arrow keys, Home and End move between the tabs (automatic activation).
   const onTabKey = (e: KeyboardEvent<HTMLButtonElement>): void => {
-    const i = TABS.findIndex((t) => t.key === tab);
+    const i = TABS.indexOf(tab);
     const next = e.key === 'ArrowRight' ? (i + 1) % TABS.length : e.key === 'ArrowLeft' ? (i - 1 + TABS.length) % TABS.length : e.key === 'Home' ? 0 : e.key === 'End' ? TABS.length - 1 : -1;
     const target = TABS[next];
     if (!target) return;
     e.preventDefault();
-    setTab(target.key);
-    tabRefs.current[target.key]?.focus();
+    setTab(target);
+    tabRefs.current[target]?.focus();
   };
 
   // F1: no size could be scored (e.g. a shoe without a shoe size): ask for what is missing instead
@@ -114,14 +112,12 @@ export function ResultScreen({
     return (
       <div className="space-y-4 pb-2" data-testid="embed-result">
         <div>
-          <p className="eyebrow text-coral-ink">{returning ? 'Welcome back' : 'Your fit'}</p>
+          <p className="eyebrow text-coral-ink">{returning ? t.welcomeBack : t.eyebrow}</p>
           <h2 className="font-display text-3xl leading-tight" tabIndex={-1} data-step-heading data-testid="no-points-title">
-            We can’t recommend a size yet
+            {t.noPointsTitle}
           </h2>
           <p className="mt-1 text-sm text-ink-soft" data-testid="no-points-text">
-            {shoes
-              ? 'Shoes are sized by your foot. Add your EU shoe size and we’ll check the fit.'
-              : 'This item is sized by measurements we don’t have for you yet. Add your measurements, or use the size chart below.'}
+            {shoes ? t.noPointsShoes : t.noPointsOther}
           </p>
         </div>
         <div className="flex justify-end">
@@ -130,7 +126,7 @@ export function ResultScreen({
         <SizeChartTable garment={garment} recommended={null} units={units} />
         <div className="sticky bottom-0 -mx-4 bg-gradient-to-t from-cream via-cream to-cream/0 px-4 pt-4 pb-2">
           <button type="button" className="btn-coral w-full" onClick={onEdit} data-testid="edit-measurements">
-            <Pencil className="h-4 w-4" aria-hidden /> {shoes ? 'Add my shoe size' : 'Edit my measurements'}
+            <Pencil className="h-4 w-4" aria-hidden /> {shoes ? t.addShoeSize : t.edit}
           </button>
         </div>
       </div>
@@ -141,23 +137,22 @@ export function ResultScreen({
   const selectedFit = fit.perSize.find((s) => s.size === selected);
   const points = usablePoints(selectedFit);
   const estimated = priorKeys(profile).filter((k) => points.some((p) => p.point === k));
+  const [chooseBefore, chooseAfter] = parts(t.chooseOnPage, 'size');
   const onPageSize = currentVariantSize && fit.perSize.some((s) => s.size === currentVariantSize) ? currentVariantSize : null;
 
   return (
     <div className="space-y-4 pb-2" data-testid="embed-result">
       <div>
-        <p className="eyebrow text-coral-ink">{returning ? 'Welcome back' : 'Your fit'}</p>
+        <p className="eyebrow text-coral-ink">{returning ? t.welcomeBack : t.eyebrow}</p>
         <h2 className="font-display text-3xl leading-tight" tabIndex={-1} data-step-heading>
-          {advice.size ? `We recommend ${advice.size}` : 'No size fits well'}
+          {advice.size ? t.recommend(advice.size) : t.noneFits}
         </h2>
         {advice.adjusted ? (
-          <p className="text-xs text-ink-soft">
-            One size {advice.adjusted} from {advice.engineSize} for your {preference} preference.
-          </p>
+          <p className="text-xs text-ink-soft">{t.adjusted(advice.adjusted, advice.engineSize ?? '', preference)}</p>
         ) : null}
         {advice.size ? (
           <button type="button" onClick={onEdit} className="chip mt-2 hover:bg-white" data-testid="edit-measurements">
-            <Pencil className="h-3.5 w-3.5" aria-hidden /> Edit my measurements
+            <Pencil className="h-3.5 w-3.5" aria-hidden /> {t.edit}
           </button>
         ) : null}
       </div>
@@ -167,7 +162,7 @@ export function ResultScreen({
       {sizes.length > 1 ? (
         <div className="space-y-1.5">
           <p className="eyebrow" id="compare-label">
-            Compare sizes
+            {t.compare}
           </p>
           <div className="flex flex-wrap gap-2" role="radiogroup" aria-labelledby="compare-label">
             {sizes.map((s) => (
@@ -181,35 +176,35 @@ export function ResultScreen({
               >
                 {s.size}
                 {s.score !== null ? <span className="text-xs opacity-75">{pct(s.score)}</span> : null}
-                {s.size === advice.size ? <span className="sr-only">(recommended)</span> : null}
+                {s.size === advice.size ? <span className="sr-only">{t.recommendedMark}</span> : null}
               </button>
             ))}
           </div>
-          {onPageSize && onPageSize !== advice.size ? <p className="text-xs text-ink-mute">Selected on the shop page: {onPageSize}</p> : null}
+          {onPageSize && onPageSize !== advice.size ? <p className="text-xs text-ink-mute">{t.onPage(onPageSize)}</p> : null}
         </div>
       ) : null}
 
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="inline-grid grid-cols-2 gap-1 rounded-full border border-ink/10 bg-white/60 p-1" role="tablist" aria-label="Result details">
-            {TABS.map((t) => (
+          <div className="inline-grid grid-cols-2 gap-1 rounded-full border border-ink/10 bg-white/60 p-1" role="tablist" aria-label={t.details}>
+            {TABS.map((key) => (
               <button
-                key={t.key}
+                key={key}
                 ref={(el) => {
-                  tabRefs.current[t.key] = el;
+                  tabRefs.current[key] = el;
                 }}
                 type="button"
                 role="tab"
-                id={`${tabsId}-tab-${t.key}`}
-                aria-selected={tab === t.key}
-                aria-controls={`${tabsId}-panel-${t.key}`}
-                tabIndex={tab === t.key ? 0 : -1}
-                onClick={() => setTab(t.key)}
+                id={`${tabsId}-tab-${key}`}
+                aria-selected={tab === key}
+                aria-controls={`${tabsId}-panel-${key}`}
+                tabIndex={tab === key ? 0 : -1}
+                onClick={() => setTab(key)}
                 onKeyDown={onTabKey}
-                className={`min-h-9 rounded-full px-3.5 text-sm font-medium whitespace-nowrap transition-colors ${tab === t.key ? 'bg-ink text-white' : 'text-ink-soft hover:bg-white'}`}
-                data-testid={`tab-${t.key}`}
+                className={`min-h-9 rounded-full px-3.5 text-sm font-medium whitespace-nowrap transition-colors ${tab === key ? 'bg-ink text-white' : 'text-ink-soft hover:bg-white'}`}
+                data-testid={`tab-${key}`}
               >
-                {t.label}
+                {t.tabs[key]}
               </button>
             ))}
           </div>
@@ -222,7 +217,7 @@ export function ResultScreen({
                 with the head at phone height (under the figure it was below the fold). */}
             <div className={`relative ${onAvatar ? 'pt-10' : ''}`}>
               <div ref={avatarRef} className="mirror-frame aspect-[5/9] w-full border-[8px]">
-                <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} skinHex={skinHex} bodyLabel="Body from your answers" labelsAt="bottom" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} />
+                <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} skinHex={skinHex} bodyLabel={t.bodyLabel} labelsAt="bottom" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} />
               </div>
               {onAvatar ? (
                 // D19: the control sits where people look for it. The whole figure is the button;
@@ -236,7 +231,7 @@ export function ResultScreen({
                 >
                   <span className="chip min-h-8 max-w-full bg-white/90 px-3 py-1 text-xs leading-tight shadow group-hover:bg-white">
                     <Sparkles className="h-3.5 w-3.5 shrink-0 text-coral" aria-hidden />
-                    {avatarLabel}
+                    {avatarLabel ?? embedStrings().avatar.ui.open}
                   </span>
                 </button>
               ) : null}
@@ -244,13 +239,13 @@ export function ResultScreen({
             {rings ? (
               <div className="space-y-1 text-[11px] leading-snug text-ink-mute" data-testid="size-rings-legend">
                 <button type="button" className="chip min-h-8 px-2.5 text-xs" aria-pressed={showRings} onClick={() => setShowRings((v) => !v)} data-testid="size-rings-toggle">
-                  {showRings ? 'Hide size rings' : 'Show size rings'}
+                  {showRings ? t.hideRings : t.showRings}
                 </button>
                 {showRings ? (
                   <>
                     <p>
-                      <span className="font-semibold text-ink">Solid rings: size {rings.size}.</span>
-                      {rings.ghosts.length > 0 ? ` Faint dashed rings: size ${rings.ghosts.map((g) => g.size).join(' and ')}.` : ''} Dashed coloured rings are estimates.
+                      <span className="font-semibold text-ink">{t.ringsSolid(rings.size)}</span>
+                      {rings.ghosts.length > 0 ? ` ${t.ringsGhost(rings.ghosts.map((g) => g.size))}` : ''} {t.ringsEstimates}
                     </p>
                     {rings.notes.map((n) => (
                       <p key={n}>{n}</p>
@@ -263,7 +258,7 @@ export function ResultScreen({
           {points.length > 0 ? (
             <section className="card space-y-2 p-3" aria-labelledby="points-title">
               <h3 id="points-title" className="eyebrow">
-                How size {selected} fits you
+                {t.pointsTitle(selected)}
               </h3>
               <ul className="divide-y divide-ink/5" data-testid="fit-points">
                 {points.map((p) => (
@@ -277,9 +272,7 @@ export function ResultScreen({
                 ))}
               </ul>
               {estimated.length > 0 ? (
-                <p className="text-xs text-ink-mute">
-                  {estimated.map(pointLabel).join(', ')} estimated from your height and weight. Add your own measurements for a higher confidence.
-                </p>
+                <p className="text-xs text-ink-mute">{t.estimated(estimated.map(pointLabel))}</p>
               ) : null}
             </section>
           ) : null}
@@ -297,27 +290,29 @@ export function ResultScreen({
       <div className="sticky bottom-0 -mx-4 space-y-2 bg-gradient-to-t from-cream via-cream to-cream/0 px-4 pt-4 pb-2">
         {chosen ? (
           <p role="status" className="flex items-center justify-center gap-2 text-sm font-medium text-ok">
-            <CheckCircle2 className="h-4 w-4" aria-hidden /> Size {chosen} selected on the shop page
+            <CheckCircle2 className="h-4 w-4" aria-hidden /> {t.chosen(chosen)}
           </p>
         ) : null}
         {chooseFallback ? (
           <p role="status" className="rounded-2xl bg-white/80 p-3 text-center text-sm" data-testid="choose-fallback">
-            Choose size <span className="font-display text-lg">{chooseFallback}</span> on the shop page.
+            {chooseBefore}
+            <span className="font-display text-lg">{chooseFallback}</span>
+            {chooseAfter}
           </p>
         ) : null}
         {advice.size ? (
           <button type="button" className="btn-coral w-full" onClick={onChoose} data-testid="choose-size">
-            Choose size {selected}
+            {t.choose(selected)}
           </button>
         ) : (
           // UX-2: nothing fits well, so the primary action is to check the measurements; picking the
           // closest size stays possible, but as a deliberate, secondary choice.
           <>
             <button type="button" className="btn-coral w-full" onClick={onEdit} data-testid="edit-measurements">
-              <Pencil className="h-4 w-4" aria-hidden /> Edit my measurements
+              <Pencil className="h-4 w-4" aria-hidden /> {t.edit}
             </button>
             <button type="button" className="btn-ghost w-full" onClick={onChoose} data-testid="choose-size">
-              Select size {selected} anyway
+              {t.chooseAnyway(selected)}
             </button>
           </>
         )}

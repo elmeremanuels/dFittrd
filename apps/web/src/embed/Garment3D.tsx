@@ -31,6 +31,7 @@ import type { GarmentAssetRef, GarmentPayload, UserBody } from '@curtain/schema'
 import { EstimateBadge } from '@/components/EstimateBadge';
 import { ringInputsFor } from '@/render/ringInputs';
 import { ringOverlayFor } from '@/render/rings';
+import { embedStrings } from './strings';
 import type { Units } from './units';
 
 type ViewerModule = typeof GarmentViewer;
@@ -196,48 +197,49 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
 
   if (!asset || paused || !supported) return null;
   const sizes = asset.sizes;
+  const t = embedStrings().view3d;
 
   if (!open)
     return (
-      <section className="mt-4" aria-label="3D estimate">
+      <section className="mt-4" aria-label={t.label}>
         <button type="button" className="chip w-full justify-center py-2.5 text-sm hover:bg-white" onClick={() => {
             setPhase('loading');
             setOpen(true);
           }}
           data-testid="garment3d-open"
         >
-          <Box className="h-4 w-4" aria-hidden /> See it in 3D (estimate)
+          <Box className="h-4 w-4" aria-hidden /> {t.open}
         </button>
       </section>
     );
 
   return (
-    <section className="mt-4 rounded-2xl border border-line bg-white/60 p-3" aria-label="3D estimate" data-testid="garment3d">
+    <section className="mt-4 rounded-2xl border border-line bg-white/60 p-3" aria-label={t.label} data-testid="garment3d">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">3D estimate · size {size}</h3>
+        <h3 className="text-sm font-semibold">{t.heading(size)}</h3>
         {required ? null : (
-          <button type="button" className="chip px-2 py-1 text-xs" onClick={() => setOpen(false)} aria-label="Close the 3D view">
+          <button type="button" className="chip px-2 py-1 text-xs" onClick={() => setOpen(false)} aria-label={t.close}>
             <X className="h-3.5 w-3.5" aria-hidden />
           </button>
         )}
       </div>
       {phase === 'failed' ? (
         <p className="mt-2 text-sm text-ink-soft" role="status" data-testid="garment3d-failed">
-          The 3D view isn’t available on this device. The figure above shows how size {size} fits.
+          {t.unavailable(size)}
         </p>
       ) : (
         <div className="relative mt-2 aspect-[3/4] w-full overflow-hidden rounded-xl bg-cream">
-          <canvas ref={canvasRef} className="h-full w-full touch-none" data-testid="garment3d-canvas" aria-label={`3D estimate of size ${size} on a model with your measurements`} />
+          <canvas ref={canvasRef} className="h-full w-full touch-none" data-testid="garment3d-canvas" aria-label={t.canvas(size)} />
           {phase === 'loading' || phase === 'draping' ? (
             <span className="chip pointer-events-none absolute top-2 left-2 bg-white/90 text-xs" role="status">
-              {phase === 'loading' ? 'Loading…' : 'Draping…'}
+              {phase === 'loading' ? t.loading : t.draping}
             </span>
           ) : null}
           <EstimateBadge className="pointer-events-none absolute bottom-2 left-2 text-[10px]" />
         </div>
       )}
       {sizes.length > 1 && phase !== 'failed' ? (
-        <div className="mt-2 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Size in 3D">
+        <div className="mt-2 flex flex-wrap gap-1.5" role="radiogroup" aria-label={t.sizes}>
           {sizes.map((s) => (
             <button key={s} type="button" role="radio" aria-checked={s === size} className={`chip min-h-8 px-2.5 text-xs ${s === size ? 'border-ink bg-ink text-white' : ''}`} onClick={() => onSelect(s)}>
               {s}
@@ -246,22 +248,21 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
         </div>
       ) : null}
       <p className="mt-2 text-xs leading-snug text-ink-mute" data-testid="garment3d-label">
-        3D estimate on a model with your measurements, not a photo.{' '}
-        {recommended ? `Size ${recommended} was picked by the size advice.` : 'No size fits well; the size advice decides, not this picture.'}
-        {recommended && recommended !== size ? ` You are looking at size ${size}.` : ''}
+        {t.notPhoto} {recommended ? t.picked(recommended) : t.noneFits}
+        {recommended && recommended !== size ? ` ${t.looking(size)}` : ''}
       </p>
       {ringList.length > 0 ? (
-        <ul className="mt-1.5 flex flex-wrap gap-1 text-[11px]" aria-label={`Size rings of size ${size} (estimate)`} data-testid="garment3d-rings">
+        <ul className="mt-1.5 flex flex-wrap gap-1 text-[11px]" aria-label={t.rings(size)} data-testid="garment3d-rings">
           {ringList.map((r) => (
             <li key={r.key} className="chip px-2 py-0.5" title={r.text}>
-              <span className="font-semibold">{r.key === 'hip' ? 'Hips' : r.key[0]!.toUpperCase() + r.key.slice(1)}</span> {`${r.chip[0].toLowerCase()}, ${r.chip[1]}`}
+              <span className="font-semibold">{t.ringName(r.key)}</span> {`${r.chip[0].toLowerCase()}, ${r.chip[1]}`}
             </li>
           ))}
         </ul>
       ) : null}
       {hemLeftOut ? (
         <p className="mt-1 text-[11px] leading-snug text-ink-mute" data-testid="garment3d-hem-note">
-          The 3D drape does not show the hem width yet; see the hem ring on the figure above.
+          {t.hemNote}
         </p>
       ) : null}
     </section>

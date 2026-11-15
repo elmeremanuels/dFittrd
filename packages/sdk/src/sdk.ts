@@ -110,6 +110,14 @@ function pageUrlOf(href: string): string {
   }
 }
 
+/**
+ * The interface locale the embed is asked for, as `ui=<locale>` on its URL: the explicitly
+ * configured locale only (`data-locale` / `configure({ locale })`), never the page or browser
+ * language (D21). The embed shows its pack for that locale when it has one, else English, so the
+ * overlay and the SDK's own text follow the same setting. Empty when none is configured.
+ */
+const uiParam = (): string => (cfg.locale ? `ui=${encodeURIComponent(cfg.locale)}` : '');
+
 function setState(elm: Element | null | undefined, loading: boolean): void {
   if (!elm) return;
   if (loading) {
@@ -170,7 +178,7 @@ export async function open(productId: string, opts: OpenOptions = {}): Promise<O
     if (!app && isHttpUrl(session.embedUrl)) {
       injectStyles();
       openEmbed({
-        embedUrl: session.embedUrl,
+        embedUrl: session.embedUrl + (uiParam() && (session.embedUrl.includes('?') ? '&' : '?') + uiParam()),
         appUrl: mode === 'auto' ? session.tryUrl : undefined,
         productExternalId: productId,
         trigger,
@@ -221,7 +229,7 @@ function bind(elm: Element): void {
   // The size peek: needs data-app; data-peek="off" on the script tag or data-curtain-peek="off" on the button turns it off.
   const product = elm.getAttribute(PRODUCT_ATTR);
   if (cfg.app && product && cfg.shop && cfg.peek !== false && elm.getAttribute('data-curtain-peek') !== 'off')
-    watchPeek(elm as HTMLElement, cfg.app, cfg.shop, product, pickStrings(cfg.locale).peek);
+    watchPeek(elm as HTMLElement, cfg.app, cfg.shop, product, pickStrings(cfg.locale).peek, uiParam());
 
   const click = (e: Event): void => {
     e.preventDefault();

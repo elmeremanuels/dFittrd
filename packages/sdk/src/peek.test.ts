@@ -82,6 +82,13 @@ describe('size peek: insertion', () => {
     expect(configFromScript(s).peek).toBeUndefined();
   });
 
+  it('D21: the peek is asked for the configured interface locale', () => {
+    button('linen-1');
+    init({ shop: SHOP, api: API, app: APP, locale: 'pt_BR' });
+    FakeIO.intersect();
+    expect(Object.fromEntries(new URL(peeks()[0]!.src).searchParams)).toEqual({ shop: SHOP, product: 'linen-1', ui: 'pt_BR' });
+  });
+
   it('is lazy: nothing until the button nears the viewport, then one iframe right after it', () => {
     const b = button('linen-1');
     init({ shop: SHOP, api: API, app: `${APP}/` });

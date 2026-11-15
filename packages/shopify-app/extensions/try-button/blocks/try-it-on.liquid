@@ -74,7 +74,7 @@
         s.setAttribute('data-api', {{ pk_api_url | json }});
         s.setAttribute('data-mode', {{ pk_mode | json }});
         s.setAttribute('data-size-option', {{ pk_size_option | json }});
-        s.setAttribute('data-locale', 'en');
+        s.setAttribute('data-locale', {{ 'curtain.interface_locale' | t | json }});
         s.setAttribute('data-label', {{ pk_label | json }});
         s.setAttribute('data-peek', {{ pk_peek | json }});
         {%- if pk_app_url != blank %}s.setAttribute('data-app', {{ pk_app_url | json }});{% endif %}

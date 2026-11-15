@@ -38,7 +38,7 @@ function onMessage(e: MessageEvent): void {
  * Watch a button; its peek iframe is inserted next to it once it is near the viewport. `appUrl` is
  * the fitting room's origin (`data-app`), compared exactly with `event.origin`.
  */
-export function watchPeek(b: HTMLElement, appUrl: string, shop: string, product: string, title: string): void {
+export function watchPeek(b: HTMLElement, appUrl: string, shop: string, product: string, title: string, ui = ''): void {
   if (typeof IntersectionObserver === 'undefined') return;
   if (!observers.length) addEventListener('message', onMessage);
   app = appUrl;
@@ -48,7 +48,7 @@ export function watchPeek(b: HTMLElement, appUrl: string, shop: string, product:
       o.disconnect();
       const f = document.createElement('iframe');
       f.title = title;
-      f.src = `${appUrl}/embed/peek?shop=${encodeURIComponent(shop)}&product=${encodeURIComponent(product)}`;
+      f.src = `${appUrl}/embed/peek?shop=${encodeURIComponent(shop)}&product=${encodeURIComponent(product)}${ui && '&' + ui}`;
       // The page origin only, also on a `no-referrer` page: the peek needs it to pick its target.
       f.referrerPolicy = 'origin';
       // Height 0 and hidden (so out of the tab order) until the peek reports something to show.

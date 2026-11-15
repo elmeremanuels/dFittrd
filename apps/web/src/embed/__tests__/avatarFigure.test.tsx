@@ -6,7 +6,8 @@ import { computeFit } from '@curtain/fit-engine';
 import { MOCK_GARMENTS_BY_ID, type GarmentAssetRef } from '@curtain/schema';
 import { AvatarView } from '@/components/AvatarView';
 import { bodyGeometry } from '@/render/body';
-import { contrastRatio, faceInk, neutralFace } from '@/render/face';
+import { contrastRatio, drawnHeadColour, faceInk, figureOutline, neutralFace, SKIN_SHADE } from '@/render/face';
+import { adjustColor } from '@/render/body';
 import { bodyFamilyFor, Garment3D, type Garment3DProps } from '../Garment3D';
 import { assertNeutralPerson } from '../HeroRender';
 import { lookForMonk, MONK_CLASSES, STANDARD_SKIN_HEX } from '../look';
@@ -78,21 +79,77 @@ describe('2D figure: skin colour and the neutral standard face (D19)', () => {
     }
   });
 
-  it('the face ink is readable on all ten swatches (contrast of the lines against the skin at least 3:1)', () => {
-    const contrast = contrastRatio;
+  it('the face ink reaches 3:1 against the skin AS DRAWN (shaded, not the flat swatch), on all ten swatches', () => {
+    // The figure is drawn between the gradient's light and dark stop, darkened a little more by the
+    // side shading and the grain. The ink must hold over that whole range, not on the swatch only.
+    for (const hex of [...MONK_CLASSES.map((n) => lookForMonk(n)!.hex), STANDARD_SKIN_HEX]) {
+      const ink = faceInk(hex);
+      expect(contrastRatio(ink, drawnHeadColour(hex)), `${hex} head`).toBeGreaterThanOrEqual(3.8);
+      for (let amt = SKIN_SHADE.darkest; amt <= SKIN_SHADE.light; amt += 2) expect(contrastRatio(ink, adjustColor(hex, amt)), `${hex} shaded ${amt}`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('every line of the face is drawn in that ink at full opacity (a faint line would not reach 3:1)', () => {
     for (const n of MONK_CLASSES) {
       const hex = lookForMonk(n)!.hex;
-      expect(contrast(faceInk(hex), hex), `Monk ${n}`).toBeGreaterThanOrEqual(3);
+      const r = render(<AvatarView garment={null} fit={null} measurements={measurements} skinHex={hex} />);
+      const face = r.getByTestId('neutral-face');
+      expect(face).toHaveAttribute('stroke', faceInk(hex));
+      expect(face).not.toHaveAttribute('opacity', expect.stringMatching(/^0\./));
+      for (const el of Array.from(face.querySelectorAll('*'))) {
+        for (const a of ['opacity', 'stroke-opacity', 'fill-opacity']) expect(el.getAttribute(a), `Monk ${n} ${el.tagName} ${a}`).toBeNull();
+      }
+      // The gradient the test above assumes is the one that is drawn.
+      const stops = Array.from(r.container.querySelectorAll('[id$="skingrad"] stop')).map((s) => s.getAttribute('stop-color'));
+      expect(stops).toEqual([adjustColor(hex, SKIN_SHADE.light), adjustColor(hex, SKIN_SHADE.dark)]);
+      r.unmount();
     }
-    expect(contrast(faceInk(STANDARD_SKIN_HEX), STANDARD_SKIN_HEX)).toBeGreaterThanOrEqual(3);
+  });
+
+  it('the figure has an outline that stands out 3:1 from the light backdrop, so a light skin does not vanish', () => {
+    const BACKDROP = '#F1ECE6';
+    for (const hex of [...MONK_CLASSES.map((n) => lookForMonk(n)!.hex), STANDARD_SKIN_HEX]) {
+      expect(contrastRatio(figureOutline(hex), BACKDROP), hex).toBeGreaterThanOrEqual(3);
+      const r = render(<AvatarView garment={garment} fit={fit} size="M" measurements={measurements} skinHex={hex} />);
+      const body = r.getByTestId('figure-body');
+      expect(body).toHaveAttribute('stroke', figureOutline(hex));
+      expect(Number(body.getAttribute('stroke-width'))).toBeGreaterThan(1);
+      r.unmount();
+    }
+    // Without it the lightest swatch is 1.1:1 on that backdrop: the reason the outline exists.
+    expect(contrastRatio(lookForMonk(1)!.hex, BACKDROP)).toBeLessThan(1.3);
+  });
+
+  it('labels under the figure (the embed): the figure is drawn above the label strip', () => {
+    const below = render(<AvatarView garment={garment} fit={fit} size="M" measurements={measurements} labelsAt="bottom" />);
+    expect(below.getByTestId('mirror').className).toMatch(/\bpb-16\b/);
+    expect(below.getByTestId('avatar-labels').className).toMatch(/\bbottom-4\b/);
+    expect(below.getByTestId('avatar-labels')).toHaveTextContent('Estimate · not measured');
+    below.unmount();
+    const top = render(<AvatarView garment={garment} fit={fit} size="M" measurements={measurements} />);
+    expect(top.getByTestId('mirror').className).toMatch(/\bp-3\b/);
+    expect(top.getByTestId('avatar-labels').className).toMatch(/\btop-3\b/);
   });
 });
 
 describe('hero render input: only the neutral figure (plan §3, consent copy C29)', () => {
   const figure = (props: Partial<Parameters<typeof AvatarView>[0]> = {}): SVGSVGElement => svgOf(render(<AvatarView bare garment={garment} fit={fit} size="M" measurements={measurements} {...props} />).container);
 
-  it('accepts the figure in the standard colour with the standard face', () => {
+  it('accepts the figure in the standard colour, with the standard face or plain', () => {
     expect(() => assertNeutralPerson(figure())).not.toThrow();
+    expect(() => assertNeutralPerson(figure({ plain: true }))).not.toThrow();
+  });
+
+  it('the plain figure (what the render is made from) has no drawn face and no outline', () => {
+    const svg = figure({ plain: true });
+    expect(svg.querySelector('[data-testid="neutral-face"]')).toBeNull();
+    expect(svg.querySelector('[data-testid="figure-body"]')).not.toHaveAttribute('stroke');
+    expect(svg).toHaveAttribute('data-skin', STANDARD_SKIN_HEX);
+  });
+
+  it('a product name that looks like a reference does not fail the guard (labels are text, not links)', () => {
+    const named = { ...garment, name: 'Big data: tee https://x' };
+    expect(() => assertNeutralPerson(figure({ garment: named, plain: true }))).not.toThrow();
   });
 
   it('refuses a picked skin colour', () => {
@@ -133,7 +190,8 @@ describe('3D view: the look and the body go to the viewer as in-memory options',
     fireEvent.click(screen.getByTestId('garment3d-open'));
     await waitFor(() => expect(a.mountGarmentView).toHaveBeenCalledTimes(1));
     expect(mountOptions(a.mountGarmentView).look).toEqual({ skinHex: hex });
-    expect(mountOptions(a.mountGarmentView).body).toEqual({ bust: 90, waist: 72, hip: 98, family: 'female', heightCm: 171 });
+    // A women's garment: the body option is the three girths, exactly as before the avatar slices.
+    expect(mountOptions(a.mountGarmentView).body).toEqual({ bust: 90, waist: 72, hip: 98 });
     expect(a.setLook).not.toHaveBeenCalled();
     cleanup();
 
@@ -141,7 +199,14 @@ describe('3D view: the look and the body go to the viewer as in-memory options',
     fireEvent.click(screen.getByTestId('garment3d-open'));
     await waitFor(() => expect(b.mountGarmentView).toHaveBeenCalledTimes(1));
     expect('look' in mountOptions(b.mountGarmentView)).toBe(false);
-    expect(mountOptions(b.mountGarmentView).body).toEqual({ bust: 90, waist: 72, hip: 98, family: 'female' });
+    expect(mountOptions(b.mountGarmentView).body).toEqual({ bust: 90, waist: 72, hip: 98 });
+    b.unmount();
+
+    // Only a men's garment asks for the male family and passes the height.
+    const men = setup({ garment: { ...garment, audience: 'men' } });
+    fireEvent.click(screen.getByTestId('garment3d-open'));
+    await waitFor(() => expect(men.mountGarmentView).toHaveBeenCalledTimes(1));
+    expect(mountOptions(men.mountGarmentView).body).toEqual({ bust: 90, waist: 72, hip: 98, family: 'male', heightCm: 171 });
   });
 
   it('a new colour reaches the mounted view through setLook, without a remount', async () => {

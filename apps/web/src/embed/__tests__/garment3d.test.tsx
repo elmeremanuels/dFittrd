@@ -67,8 +67,8 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     expect(opts.fit).toBe(fit);
     expect(opts.size).toBe('M');
     expect(opts.baseUrl).toBe(asset.baseUrl);
-    // The girths, plus the body family of the mannequin contract (no height was given here).
-    expect(opts.body).toEqual({ ...measurements, family: 'female' });
+    // The three girths and nothing else, as before the avatar slices (this is a women's garment).
+    expect(opts.body).toEqual(measurements);
     expect(Object.keys(opts).sort()).toEqual(['baseUrl', 'body', 'fit', 'garment', 'onState', 'size']);
   });
 

@@ -6,7 +6,8 @@
  * line here is not in it, so the prompt cannot drift from the text counsel reviews. The plain text
  * must never promise more than the legal text (D19): where a sentence of the copy describes
  * something this build does not do (reading the colour from a photo, C11's second sentence, C12,
- * C26), that sentence is left out rather than shown.
+ * C26), that sentence is left out rather than shown. The same goes for C30: it is shown only in a
+ * build that does save the colour (`store.persistsLooks`); by default the colour is in memory only.
  *
  * `ui` holds the small labels the copy document does not give (close, coming soon, the names of
  * the swatches). They state nothing about what happens to anybody's data.
@@ -49,6 +50,10 @@ export interface AvatarUi {
   picked: (n: number, total: number) => string;
   /** The button on the avatar itself: the prompt's title. */
   open: string;
+  /** Credit of the swatches (the Monk Skin Tone Scale is CC BY 4.0: the credit is the licence's condition). */
+  swatchCredit: string;
+  /** Shown after the terms link when the page behind it is not in the prompt's language (else empty). */
+  termsLanguageNote: string;
 }
 
 /** The label of the footer's switch, which is English in every locale so far. */
@@ -103,6 +108,8 @@ const UI_EN: AvatarUi = {
   darkest: 'darkest',
   picked: (n, total) => `Colour ${n} of ${total} is on the avatar.`,
   open: EN.title,
+  swatchCredit: 'Colours: Monk Skin Tone Scale by Dr. Ellis Monk, CC BY 4.0.',
+  termsLanguageNote: '',
 };
 
 const UI_NL: AvatarUi = {
@@ -118,12 +125,28 @@ const UI_NL: AvatarUi = {
   darkest: 'donkerste',
   picked: (n, total) => `Kleur ${n} van ${total} staat op de avatar.`,
   open: NL.title,
+  swatchCredit: 'Kleuren: Monk Skin Tone Scale van dr. Ellis Monk, CC BY 4.0.',
+  termsLanguageNote: '(in het Engels)',
 };
 
 export const AVATAR_CLAIMS: Record<AvatarLang, AvatarClaims> = { en: EN, nl: NL };
 export const AVATAR_UI: Record<AvatarLang, AvatarUi> = { en: UI_EN, nl: UI_NL };
 
-/** C30 with the name of the switch as the shopper sees it in the footer. */
+/** The language the footer's "Remember me" label and the published privacy page are written in. */
+export const REMEMBER_LABEL_LANG = 'en';
+export const TERMS_PAGE_LANG = 'en';
+
+/**
+ * C30 around the name of the switch as the shopper sees it in the footer: the text before the
+ * label, the label, the text after. The prompt draws the label in its own language tag.
+ */
+export function c30Parts(lang: AvatarLang): { before: string; label: string; after: string } {
+  const [before = '', after = ''] = AVATAR_CLAIMS[lang].c30.split('{remember}');
+  return { before, label: REMEMBER_LABEL, after };
+}
+
+/** C30 as one sentence, exactly as shown. */
 export function c30Text(lang: AvatarLang): string {
-  return AVATAR_CLAIMS[lang].c30.replace('{remember}', REMEMBER_LABEL);
+  const p = c30Parts(lang);
+  return `${p.before}${p.label}${p.after}`;
 }

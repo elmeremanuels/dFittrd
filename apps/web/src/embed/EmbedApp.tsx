@@ -9,10 +9,12 @@
  * hero render of the avatar drawing. Never a measurement, a photo or a frame.
  *
  * The avatar (D19, docs/research/photo-avatar-plan.md slices 1 and 2): tapping the 2D figure opens
- * the avatar prompt. The shopper may pick a skin colour there; it colours the 2D figure, goes to the
- * 3D view as an in-memory value and, with "Remember me" on, is stored encrypted in this browser for
- * this shop. It is never in a request, a postMessage or the fit. The prompt makes no request at all.
- * The opt-in hero render is drawn from a separate figure in the standard colour.
+ * the avatar prompt. The shopper may pick a skin colour there; it colours the 2D figure and goes to
+ * the 3D view as an in-memory value. By default it lives in memory only and is gone when the window
+ * closes; saving it under "Remember me" is behind a build flag until the founder and counsel have
+ * decided (storage.ts). It is never in a request, a postMessage or the fit. The prompt makes no
+ * request at all. The opt-in hero render is drawn from a separate figure: the standard colour, no
+ * face, as it was before the avatar prompt existed.
  *
  * Men's gate (D20 point 3, docs/research/men-3d-plan.md slice M0): a men's product is shown with
  * the working 3D view or not at all. The server answers `men_coming_soon` for a product that is not
@@ -34,6 +36,7 @@ import { Garment3D, hasWebGL2 } from './Garment3D';
 import { HeroRenderPanel, heroRendersEnabled } from './HeroRender';
 import { facePhotoEnabled, type SkinLook } from './look';
 import { createParentChannel, parseParentMessage, resolveTargetOrigin, type ParentContext } from './protocol';
+import { ringInputsFor } from '@/render/ringInputs';
 import { ResultScreen } from './ResultScreen';
 import { defaultUnits, type Units } from './units';
 
@@ -67,7 +70,8 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
   /** The skin colour the shopper picked for the avatar (null: the standard colour). Never sent. */
   const [look, setLook] = useState<SkinLook | null>(null);
   const [promptOpen, setPromptOpen] = useState(false);
-  const promptOpenRef = useRef(false);
+  /** The prompt is on screen now (see `showPrompt`): the window's Escape handler stands down. */
+  const promptShownRef = useRef(false);
   const shopperLocale = deps.locale === undefined ? browserLocale() : deps.locale;
   const units: Units = chosenUnits ?? defaultUnits(shopperLocale, context.locale);
   // The inputs follow the effective units (a stored choice, else the locale, which can arrive late
@@ -77,7 +81,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
   const fitShownFor = useRef<Set<string>>(new Set());
   const readySent = useRef(false);
   const avatarRef = useRef<HTMLDivElement | null>(null);
-  /** The figure the hero render is drawn from: standard colour, standard face, no rings. */
+  /** The figure the hero render is drawn from: standard colour, no face, no rings. */
   const heroAvatarRef = useRef<HTMLDivElement | null>(null);
   // SEC-5: `mock:` tokens are a development/demo aid only; a production build shows "expired".
   const mockToken = isMockToken(token);
@@ -163,7 +167,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       // With the avatar prompt open, Escape closes the prompt, not the overlay.
-      if (e.key === 'Escape' && !promptOpenRef.current) channel.post({ type: 'curtain:close' });
+      if (e.key === 'Escape' && !promptShownRef.current) channel.post({ type: 'curtain:close' });
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -284,13 +288,9 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
   };
 
   // --- the avatar prompt (D19) ------------------------------------------------------------------
-  const openPrompt = (): void => {
-    promptOpenRef.current = true;
-    setPromptOpen(true);
-  };
+  const openPrompt = (): void => setPromptOpen(true);
   const closePrompt = (refocus = true): void => {
-    if (!promptOpenRef.current) return;
-    promptOpenRef.current = false;
+    if (!promptOpen) return;
     setPromptOpen(false);
     // Focus goes back to the control that opened the prompt (it is inert until the next paint).
     if (refocus) setTimeout(() => mainRef.current?.querySelector<HTMLElement>('[data-testid="avatar-open"]')?.focus({ preventScroll: true }), 0);
@@ -407,9 +407,10 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
             {heroRendersEnabled(data) && !mock && !requires3d ? (
               <>
                 {/* The hero render's person image: a separate figure in the standard colour, so the
-                    picked skin colour is never in that request (see HeroRender.tsx). */}
+                    picked skin colour is never in that request (see HeroRender.tsx). It is the figure
+                    as it was on screen before the avatar prompt: no face, the same hem width. */}
                 <div ref={heroAvatarRef} className="pointer-events-none absolute h-0 w-0 overflow-hidden" aria-hidden inert data-testid="hero-avatar">
-                  <AvatarView bare garment={data.garment} fit={embedFit.fit} size={shownSize} measurements={embedFit.userBody.measurements} heightCm={profile.measurements.height?.mean} />
+                  <AvatarView bare plain garment={data.garment} fit={embedFit.fit} size={shownSize} measurements={embedFit.userBody.measurements} heightCm={profile.measurements.height?.mean} hemSweepCm={ringInputsFor(data.garment)?.hem?.sweepCm[shownSize] ?? null} />
                 </div>
                 <HeroRenderPanel getApi={api} data={data} size={shownSize} getAvatarSvg={getAvatarSvg} />
               </>
@@ -460,6 +461,13 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
   } else body = <LoadingScreen />;
 
   const showPrompt = promptOpen && flow.step === 'result' && !!data;
+  // Derived from what is drawn, not from "was opened": if the flow ever leaves the result while
+  // the prompt is open, Escape closes the overlay again instead of going dead.
+  useEffect(() => {
+    promptShownRef.current = showPrompt;
+  }, [showPrompt]);
+  // And "open" does not outlive the screen it was opened on (it would reopen on the way back).
+  if (promptOpen && !showPrompt) setPromptOpen(false);
   return (
     <EmbedFrame>
       {/* Behind the open prompt the page is inert: no focus, no clicks, not read out. */}
@@ -484,6 +492,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
           onClose={() => closePrompt()}
           termsUrl={`${deps.appUrl.replace(/\/+$/, '')}/privacy`}
           face={deps.facePhoto ?? facePhotoEnabled()}
+          saved={store.persistsLooks}
         />
       ) : null}
     </EmbedFrame>

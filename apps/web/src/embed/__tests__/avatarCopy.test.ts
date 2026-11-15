@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { AVATAR_CLAIMS, AVATAR_UI, c30Text, REMEMBER_LABEL, type AvatarLang } from '../avatarCopy';
+import { AVATAR_CLAIMS, AVATAR_UI, c30Parts, c30Text, REMEMBER_LABEL, type AvatarLang } from '../avatarCopy';
 import { facePhotoEnabled, lookForMonk, MONK_CLASSES, parseLook } from '../look';
 
 const COPY = readFileSync(fileURLToPath(new URL('../../../../../docs/legal/avatar-consent-copy.md', import.meta.url)), 'utf8');
@@ -24,6 +24,22 @@ describe('avatar prompt copy (docs/legal/avatar-consent-copy.md)', () => {
     expect(c30Text('en')).toBe(`If "${REMEMBER_LABEL}" is on, your colour is saved on this device with your other answers.`);
     expect(c30Text('nl')).toContain(`"${REMEMBER_LABEL}"`);
     expect(c30Text('nl')).not.toContain('{remember}');
+  });
+
+  it.each(['en', 'nl'] as const)('C30 as shown in %s is the document\'s sentence with only the switch\'s name swapped for the footer\'s label', (lang) => {
+    // The sentence the shopper reads, not the template: taken from the document, then the name
+    // the document uses for the switch replaced by the label the footer really shows.
+    const row = DOC[lang].split('\n').find((l) => l.startsWith('| C30'))!;
+    const sentence = row.split('|')[2]!.trim();
+    expect(sentence).toContain(`"${DOC_REMEMBER[lang]}"`);
+    expect(c30Text(lang)).toBe(sentence.replace(DOC_REMEMBER[lang], REMEMBER_LABEL));
+    const parts = c30Parts(lang);
+    expect(parts.label).toBe(REMEMBER_LABEL);
+    expect(`${parts.before}${parts.label}${parts.after}`).toBe(c30Text(lang));
+  });
+
+  it('credits the Monk Skin Tone Scale (CC BY 4.0) in both languages', () => {
+    for (const lang of ['en', 'nl'] as const) expect(AVATAR_UI[lang].swatchCredit).toMatch(/Monk Skin Tone Scale.*Ellis Monk.*CC BY 4\.0/);
   });
 
   it('uses none of the words the copy bans (section 4), in claims or labels', () => {

@@ -219,19 +219,21 @@ export function ResultScreen({
         <div role="tabpanel" id={`${tabsId}-panel-fit`} aria-labelledby={`${tabsId}-tab-fit`} hidden={tab !== 'fit'}>
         <div className="grid items-start gap-4 min-[500px]:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
           <div className="mx-auto w-full max-w-[15rem] space-y-1.5">
-            <div className={`relative ${onAvatar ? 'pb-10' : ''}`}>
-              <div ref={avatarRef} className="mirror-frame aspect-[5/8] w-full border-[8px]">
+            {/* The chip that says what tapping the figure does sits above it, so it is on screen
+                with the head at phone height (under the figure it was below the fold). */}
+            <div className={`relative ${onAvatar ? 'pt-10' : ''}`}>
+              <div ref={avatarRef} className="mirror-frame aspect-[5/9] w-full border-[8px]">
                 <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} skinHex={skinHex} bodyLabel="Body from your answers" labelsAt="bottom" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} />
               </div>
               {onAvatar ? (
                 // D19: the control sits where people look for it. The whole figure is the button;
-                // the chip under it says what it does.
+                // the chip above it says what it does.
                 <button
                   type="button"
                   onClick={onAvatar}
                   aria-haspopup="dialog"
                   lang={avatarLang}
-                  className="group absolute inset-0 flex items-end justify-center rounded-[2.5rem] focus-visible:ring-2 focus-visible:ring-coral focus-visible:ring-offset-2 focus-visible:ring-offset-cream focus-visible:outline-none"
+                  className="group absolute inset-0 flex items-start justify-center rounded-[2.5rem] focus-visible:ring-2 focus-visible:ring-coral focus-visible:ring-offset-2 focus-visible:ring-offset-cream focus-visible:outline-none"
                   data-testid="avatar-open"
                 >
                   <span className="chip min-h-8 max-w-full bg-white/90 px-3 py-1 text-xs leading-tight shadow group-hover:bg-white">

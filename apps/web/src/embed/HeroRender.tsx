@@ -4,8 +4,10 @@
  * the parametric body + garment overlay) — never a photo or a camera frame (D3, AGENTS.md rule 1).
  * Explicit consent first; the result is labelled an estimate (rule 3).
  *
- * The person image is built from a separate figure in the standard colour with the standard face
- * (docs/research/photo-avatar-plan.md §3), not from the figure on screen, and `assertNeutralPerson`
+ * The person image is built from a separate figure in the standard colour (AvatarView `plain`: no
+ * face and no outline, the figure this render got before the avatar prompt existed; what a drawn
+ * face does to the provider's output is untested), not from the figure on screen
+ * (docs/research/photo-avatar-plan.md §3), and `assertNeutralPerson`
  * refuses anything else: an `<image>`, a blob or data reference, or a skin colour the shopper
  * picked. D20 point 1 allows the picked colour to go with this render; it stays out until the
  * privacy policy says so (docs/legal/avatar-consent-copy.md, gap 8).
@@ -38,6 +40,9 @@ export function assertNeutralPerson(svg: SVGSVGElement): void {
   if (svg.querySelector('image, foreignObject, use')) throw new Error('avatar render: only the neutral figure may be sent');
   for (const el of [svg, ...Array.from(svg.querySelectorAll('*'))]) {
     for (const attr of Array.from(el.attributes)) {
+      // Spoken labels and test ids are text, never a reference: a product called "Big data: tee"
+      // must not make the render fail.
+      if (/^(aria-|data-testid$)/i.test(attr.name)) continue;
       if (/^(xlink:)?href$/i.test(attr.name) || /\b(blob|data|https?):/i.test(attr.value)) throw new Error('avatar render: only the neutral figure may be sent');
     }
   }

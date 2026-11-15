@@ -164,7 +164,11 @@ describe('avatar prompt (D19)', () => {
     await user.click(sw);
     expect(sw).toHaveAttribute('aria-checked', 'true');
     expect(within(dialog).getByText(t.skinOnYes)).toBeInTheDocument();
-    expect(within(dialog).getByTestId('avatar-c30')).toHaveTextContent(c30Text('en'));
+    // Memory only by default: no sentence about saving the colour is shown.
+    expect(within(dialog).queryByTestId('avatar-c30')).toBeNull();
+    expect(dialog).not.toHaveTextContent(/saved on this device/);
+    // The swatches are the Monk Skin Tone Scale (CC BY 4.0): credited where they are shown.
+    expect(within(dialog).getByTestId('avatar-swatch-credit')).toHaveTextContent('Monk Skin Tone Scale by Dr. Ellis Monk, CC BY 4.0');
     expect(within(dialog).getAllByRole('radio')).toHaveLength(10);
     // no swatch is chosen for the shopper
     expect(within(dialog).queryByRole('radio', { checked: true })).toBeNull();
@@ -194,9 +198,17 @@ describe('avatar prompt (D19)', () => {
     expect(row).toHaveTextContent('Coming soon');
     expect(row).toHaveTextContent(AVATAR_CLAIMS.en.faceOff);
     const sw = within(row).getByRole('switch', { name: 'Use my face' });
-    expect(sw).toBeDisabled();
+    // Not `disabled`: it stays in the Tab order so a keyboard user reaches it and hears "Coming soon".
+    expect(sw).not.toBeDisabled();
+    expect(sw).toHaveAttribute('aria-disabled', 'true');
+    expect(sw).toHaveAccessibleDescription(/Coming soon/);
     expect(sw).toHaveAttribute('aria-checked', 'false');
     await user.click(sw);
+    expect(sw).toHaveAttribute('aria-checked', 'false');
+    sw.focus();
+    expect(sw).toHaveFocus();
+    await user.keyboard(' ');
+    await user.keyboard('{Enter}');
     expect(sw).toHaveAttribute('aria-checked', 'false');
     expect(hasInput('input[type="file"]')).toBe(false);
     expect(within(dialog).getByTestId('avatar-c4')).toHaveTextContent(AVATAR_CLAIMS.en.c4);
@@ -213,7 +225,10 @@ describe('avatar prompt (D19)', () => {
     expect(dialog).toHaveAttribute('lang', 'nl');
     const t = AVATAR_CLAIMS.nl;
     for (const text of [t.c1, t.c2, t.c3, t.c11Pick, t.skinOff, t.bodyOff]) expect(within(dialog).getByText(text)).toBeInTheDocument();
-    expect(within(dialog).getByRole('link', { name: t.termsLink })).toBeInTheDocument();
+    // The published privacy page is English: the link says so, to people and to the browser.
+    const link = within(dialog).getByRole('link', { name: t.termsLink });
+    expect(link).toHaveAttribute('hreflang', 'en');
+    expect(within(dialog).getByTestId('avatar-terms-lang')).toHaveTextContent('(in het Engels)');
     await user.click(within(dialog).getByRole('switch', { name: t.skinName }));
     expect(within(dialog).getByText(t.skinOnYes)).toBeInTheDocument();
     expect(within(dialog).getByRole('radio', { name: 'Kleur 10 van 10, donkerste' })).toBeInTheDocument();
@@ -262,16 +277,45 @@ describe('avatar prompt (D19)', () => {
     expect(parent.postMessage.mock.calls.map((c) => (c[0] as { type: string }).type)).toContain('curtain:close');
   });
 
-  it('a returning shopper sees the colour they picked, and the switch as they left it', async () => {
+  it('by default the colour is in memory only: nothing about it is stored, and a new visit starts with the standard colour', async () => {
     const user = userEvent.setup();
-    const { store } = setup();
+    const name = `curtain-embed-avatar-${++dbN}`;
+    const { store } = setup({ store: createEmbedStore({ openDb: () => new EmbedDb(name) }) });
+    expect(store.persistsLooks).toBe(false);
     await toResult(user);
     await user.click(screen.getByTestId('avatar-open'));
     await user.click(within(await screen.findByRole('dialog')).getByTestId('avatar-skin-switch'));
     await user.click(screen.getByTestId('skin-swatch-8'));
+    await user.click(screen.getByTestId('avatar-prompt-done'));
+    expect(figureSkin()).toBe(lookForMonk(8)!.hex);
+    // "Remember me" is on and the profile is stored, but no row holds the colour.
+    await waitFor(async () => expect(await store.persistedKeys()).toContain(`profile:${SHOP_ID}`));
+    expect((await store.persistedKeys()).filter((k) => /look/.test(k))).toEqual([]);
     cleanup();
 
-    setup({ store });
+    // The next visit: a new store on the same database.
+    setup({ store: createEmbedStore({ openDb: () => new EmbedDb(name) }) });
+    await screen.findByTestId('embed-result');
+    expect(figureSkin()).toBe(STANDARD_SKIN_HEX);
+    await user.click(screen.getByTestId('avatar-open'));
+    expect(within(await screen.findByRole('dialog')).getByTestId('avatar-skin-switch')).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('with the storage flag on: C30 is shown as written, and a returning shopper sees the colour they picked', async () => {
+    const user = userEvent.setup();
+    const name = `curtain-embed-avatar-${++dbN}`;
+    setup({ locale: 'nl-NL', store: createEmbedStore({ persistLooks: true, openDb: () => new EmbedDb(name) }) });
+    await toResult(user);
+    await user.click(screen.getByTestId('avatar-open'));
+    await user.click(within(await screen.findByRole('dialog')).getByTestId('avatar-skin-switch'));
+    // The sentence as the shopper sees it, with the footer's English label tagged as English.
+    const c30 = screen.getByTestId('avatar-c30');
+    expect(c30).toHaveTextContent(c30Text('nl'));
+    expect(c30.querySelector('span[lang="en"]')).toHaveTextContent(/^Remember me on this shop$/);
+    await user.click(screen.getByTestId('skin-swatch-8'));
+    cleanup();
+
+    setup({ store: createEmbedStore({ persistLooks: true, openDb: () => new EmbedDb(name) }) });
     await screen.findByTestId('embed-result');
     await waitFor(() => expect(figureSkin()).toBe(lookForMonk(8)!.hex));
     await user.click(screen.getByTestId('avatar-open'));
@@ -310,6 +354,13 @@ describe('avatar prompt (D19)', () => {
     expect(hero).toHaveAttribute('data-skin', STANDARD_SKIN_HEX);
     expect(hero.querySelector('[data-testid="size-rings"]')).toBeNull();
     expect(() => assertNeutralPerson(hero)).not.toThrow();
+    // That figure is what the render got before the avatar prompt: no drawn face, no outline, and
+    // the same garment outline (hem width included) as the figure on screen.
+    expect(hero.querySelector('[data-testid="neutral-face"]')).toBeNull();
+    expect(hero.querySelector('[data-testid="figure-body"]')).not.toHaveAttribute('stroke');
+    expect(onScreen.querySelector('[data-testid="neutral-face"]')).not.toBeNull();
+    const garmentPath = (svg: Element): string | null => svg.querySelector('[data-testid="garment-layer"] path')!.getAttribute('d');
+    expect(garmentPath(hero)).toBe(garmentPath(onScreen));
     expect(() => assertNeutralPerson(onScreen as SVGSVGElement)).toThrow(/standard colour/);
     // The fit-shown event carries the size and the confidence, nothing of the look.
     expect(JSON.stringify((api.fitShown as ReturnType<typeof vi.fn>).mock.calls)).not.toMatch(/skin|look|monk|#[0-9a-f]{6}/i);

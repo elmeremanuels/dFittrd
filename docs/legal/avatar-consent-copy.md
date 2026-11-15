@@ -292,6 +292,10 @@ Known gaps between copy and build, to close before the flag is switched on:
    founder prefers one rule (nothing about looks is saved without an explicit yes), delete C30, change
    T3.9, and the hand-picked colour lives in memory only. Engineering must pick one before slice 1 ships,
    because slice 1 (hand-picked tone) is the first thing live.
+   **Build status, 15 November 2026 (not a decision):** until the founder and Naomi choose, the embed
+   keeps the hand-picked colour in memory only and does not show C30. The saved variant described by
+   C30 and T3.9 exists behind a build flag that is off (`VITE_AVATAR_REMEMBER_LOOK`). C30 and T3.9 are
+   left as written, so either choice can still be made.
 7. **C29 is a build condition.** If the hero render is ever made from the on-screen avatar while Use my
    face is on, C7 A, C13 and C29 all become false. The plan already builds the hero input from a
    separate neutral figure (plan line 138); D20 changes only the fill colour.

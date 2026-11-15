@@ -12,7 +12,9 @@ import { MOCK_GARMENTS_BY_ID } from '@curtain/schema';
  *   - keyboard: the prompt takes the focus, keeps it, and gives it back;
  *   - nothing overflows 360 px.
  * With AVATAR_SHOTS=<dir> it also writes the screenshots of the picker, the prompt in English and
- * Dutch, and the figure at three tones.
+ * Dutch, and the figure at all ten tones.
+ * A build made with VITE_AVATAR_FACE_PHOTO=1 and run with AVATAR_FACE_FLAG=1 runs the flag-on test
+ * instead (the "coming soon" row can be reached by keyboard and does nothing).
  */
 
 const TOKEN = 'e2e-try-token-0123456789abcdef';
@@ -20,6 +22,7 @@ const SHOP_ID = '00000000-0000-4000-8000-0000000000e1';
 const DEVICE = { deviceId: '11111111-1111-4111-8111-111111111111', token: 'e2e.device.token', expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(), tokenVersion: 1 };
 const SHOTS = process.env.AVATAR_SHOTS ?? null;
 const VIEWPORT = { width: 360, height: 740 };
+const FACE_FLAG = process.env.AVATAR_FACE_FLAG === '1';
 
 interface Seen {
   url: string;
@@ -90,15 +93,25 @@ async function expectNoOverflow(page: Page): Promise<void> {
 }
 
 test('avatar prompt: picking a skin colour makes no request, at 360 px, and the figure stays an estimate', async ({ browser, baseURL }) => {
+  test.skip(FACE_FLAG, 'this build has the face flag on');
   const { page, seen, close } = await openResult(browser, baseURL!, 'en-AU');
   const figure = page.locator('[data-testid="avatar-open"]').locator('..');
   await expectNoOverflow(page);
   expect(await figureSkin(page)).toBe('#DFC3A8');
   await expect(page.getByTestId('embed-result').getByTestId('neutral-face')).toHaveCount(1);
-  // The labels sit at the figure's foot, so the face is not covered.
+  // The labels sit in a strip under the figure: they cover neither the face nor the feet or a hem.
   const head = (await page.getByTestId('embed-result').getByTestId('neutral-face').boundingBox())!;
   const labels = (await page.getByTestId('embed-result').getByTestId('avatar-labels').boundingBox())!;
+  const drawn = (await page.locator('[data-testid="embed-result"] svg[data-skin]').first().boundingBox())!;
   expect(labels.y, 'the estimate label covers the face').toBeGreaterThan(head.y + head.height);
+  expect(labels.y, 'the estimate label covers the figure').toBeGreaterThanOrEqual(drawn.y + drawn.height - 1);
+  await expect(figure.getByText('Estimate · not measured')).toBeVisible();
+  // At phone height the chip that says the figure can be tapped is on screen, above the sticky bar.
+  await page.getByRole('tab', { name: 'How it fits' }).scrollIntoViewIfNeeded();
+  const chip = (await page.locator('[data-testid="avatar-open"] .chip').boundingBox())!;
+  const bar = (await page.getByTestId('choose-size').boundingBox())!;
+  expect(chip.y, 'the avatar chip is above the window').toBeGreaterThanOrEqual(0);
+  expect(chip.y + chip.height, 'the avatar chip is under the sticky bar or below the fold').toBeLessThanOrEqual(Math.min(bar.y, VIEWPORT.height));
   await shot(page, 'result-360.png');
   // A taller window for the figure pictures, so the sticky "Choose size" bar is not across them.
   await page.setViewportSize({ width: VIEWPORT.width, height: 1100 });
@@ -141,6 +154,10 @@ test('avatar prompt: picking a skin colour makes no request, at 360 px, and the 
   await expect(dialog.getByRole('radio')).toHaveCount(10);
   await expect(dialog.getByRole('radio', { checked: true })).toHaveCount(0);
   expect(await figureSkin(page)).toBe('#DFC3A8');
+  // Memory only in this build: no sentence about saving the colour. The swatches are credited.
+  await expect(dialog.getByTestId('avatar-c30')).toHaveCount(0);
+  await expect(dialog.getByText(/saved on this device/)).toHaveCount(0);
+  await expect(dialog.getByTestId('avatar-swatch-credit')).toHaveText('Colours: Monk Skin Tone Scale by Dr. Ellis Monk, CC BY 4.0.');
   // Every swatch is a finger-sized target.
   for (const b of await dialog.locator('[data-testid="skin-swatches"] label').all()) {
     const r = (await b.boundingBox())!;
@@ -167,8 +184,8 @@ test('avatar prompt: picking a skin colour makes no request, at 360 px, and the 
   await expect(page.getByTestId('avatar-open')).toBeFocused();
   expect(await figureSkin(page)).toBe('#825C43');
 
-  // The figure: three tones, each with the face and the estimate label.
-  for (const n of [2, 6, 9]) {
+  // The figure: all ten tones, each with the face, the outline and the estimate label.
+  for (const n of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
     await page.setViewportSize(VIEWPORT);
     await page.getByTestId('avatar-open').click();
     await page.getByTestId(`skin-swatch-${n}`).check({ force: true });
@@ -177,6 +194,7 @@ test('avatar prompt: picking a skin colour makes no request, at 360 px, and the 
     await expect(figure.getByText('Estimate · not measured')).toBeVisible();
     await expect(figure.getByTestId('neutral-face')).toHaveCount(1);
     await expect(figure.locator('svg image')).toHaveCount(0);
+    await expect(figure.getByTestId('figure-body')).toHaveAttribute('stroke', /^#[0-9a-f]{6}$/i);
     await page.setViewportSize({ width: VIEWPORT.width, height: 1100 });
     await page.getByTestId('avatar-open').scrollIntoViewIfNeeded();
     await shot(page, `figure-tone-${n}.png`, figure);
@@ -199,7 +217,7 @@ test('avatar prompt: picking a skin colour makes no request, at 360 px, and the 
   expect(await page.evaluate(() => (window as unknown as { __cameraAsked: number }).__cameraAsked)).toBe(0);
   expect(await page.locator('input[type="file"], video').count()).toBe(0);
 
-  // ---- the colour is stored encrypted on the device and "Forget me" removes it -----------------
+  // ---- the colour is in memory only: the device stores the profile, and nothing about the colour ----
   const rows = (): Promise<{ key: string; json: string }[]> =>
     page.evaluate(
       () =>
@@ -216,11 +234,14 @@ test('avatar prompt: picking a skin colour makes no request, at 360 px, and the 
           };
         }),
     );
-  await expect.poll(async () => (await rows()).map((r) => r.key).sort()).toContain(`look:${SHOP_ID}`);
+  // "Remember me" is on (the default): the profile row is there, so the store does write.
+  await expect.poll(async () => (await rows()).map((r) => r.key)).toContain(`profile:${SHOP_ID}`);
+  // Give a late write the time to land, then look: no look row, no key, no swatch in any row.
+  await page.waitForTimeout(500);
   const stored = await rows();
-  // Neither the swatch nor its class is readable in any stored row.
-  for (const r of stored) expect(r.json.toUpperCase(), `row ${r.key}`).not.toContain('EADABA');
-  expect(stored.find((r) => r.key === `look:${SHOP_ID}`)!.json).not.toMatch(/monk|picked/);
+  expect(stored.map((r) => r.key).filter((k) => /look/.test(k))).toEqual([]);
+  for (const r of stored) expect(r.json, `row ${r.key}`).not.toMatch(/monk|picked|skin|F6EDE4|F3E7DB|F7EAD0|EADABA|D7BD96|A07E56|825C43|604134|3A312A|292420/i);
+  expect(await page.evaluate(() => `${JSON.stringify({ ...localStorage })} ${JSON.stringify({ ...sessionStorage })} ${document.cookie}`)).not.toMatch(/monk|EADABA/i);
 
   await page.getByRole('button', { name: 'Forget me' }).click();
   await expect(page.getByRole('heading', { name: 'About you' })).toBeVisible();
@@ -242,6 +263,7 @@ test('avatar prompt: picking a skin colour makes no request, at 360 px, and the 
 });
 
 test('avatar prompt in Dutch at 360 px', async ({ browser, baseURL }) => {
+  test.skip(FACE_FLAG, 'this build has the face flag on');
   const { page, seen, close } = await openResult(browser, baseURL!, 'nl-NL');
   const before = seen.length;
   await expect(page.getByTestId('avatar-open')).toHaveText('Laat de avatar op jou lijken');
@@ -251,6 +273,9 @@ test('avatar prompt in Dutch at 360 px', async ({ browser, baseURL }) => {
   await expect(dialog.getByText('Jij kiest. Alles staat uit tot jij het aanzet.')).toBeVisible();
   await expect(dialog.getByText('De winkel ziet je foto, je gezicht en je lichaamsmaten nooit.')).toBeVisible();
   await expect(dialog.getByRole('link', { name: 'Lees de volledige privacyvoorwaarden' })).toBeVisible();
+  // The page behind the link is English, and the prompt says so.
+  await expect(dialog.getByRole('link', { name: 'Lees de volledige privacyvoorwaarden' })).toHaveAttribute('hreflang', 'en');
+  await expect(dialog.getByTestId('avatar-terms-lang')).toHaveText('(in het Engels)');
   await expectNoOverflow(page);
   await shot(page, 'prompt-nl.png');
   await dialog.getByRole('switch', { name: 'Mijn huidskleur' }).click();
@@ -261,4 +286,34 @@ test('avatar prompt in Dutch at 360 px', async ({ browser, baseURL }) => {
   await dialog.getByTestId('avatar-prompt-done').click();
   expect(seen.slice(before)).toEqual([]);
   await close();
+});
+
+test('face flag on: "Use my face" is a coming-soon row a keyboard reaches, and it does nothing', async ({ browser, baseURL }) => {
+  test.skip(!FACE_FLAG, 'needs a build with VITE_AVATAR_FACE_PHOTO=1');
+  for (const locale of ['en-AU', 'nl-NL']) {
+    const { page, seen, close } = await openResult(browser, baseURL!, locale);
+    const before = seen.length;
+    await page.getByTestId('avatar-open').click();
+    const dialog = page.getByRole('dialog');
+    const sw = dialog.getByTestId('avatar-face-switch');
+    await expect(sw).toHaveAttribute('aria-disabled', 'true');
+    await expect(sw).toHaveAttribute('aria-checked', 'false');
+    // Tab reaches it (a disabled button would be skipped).
+    let reached = false;
+    for (let i = 0; i < 4 && !reached; i++) {
+      await page.keyboard.press('Tab');
+      reached = await sw.evaluate((el) => el === document.activeElement);
+    }
+    expect(reached, 'Tab never reached the "Use my face" switch').toBe(true);
+    await page.keyboard.press('Space');
+    await page.keyboard.press('Enter');
+    // Playwright waits for an aria-disabled control to become enabled: tap it regardless.
+    await sw.click({ force: true });
+    await expect(sw).toHaveAttribute('aria-checked', 'false');
+    expect(await page.locator('input[type="file"], video').count()).toBe(0);
+    await expectNoOverflow(page);
+    await shot(page, `prompt-face-flag-on-${locale.slice(0, 2)}.png`);
+    expect(seen.slice(before)).toEqual([]);
+    await close();
+  }
 });

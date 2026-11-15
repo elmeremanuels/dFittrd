@@ -18,6 +18,8 @@ export interface NeutralFace {
   mouth: string;
   /** Stroke width of the lines, px. */
   stroke: number;
+  /** The nose is a thinner line (not a fainter one: every line is drawn at full opacity). */
+  noseStroke: number;
 }
 
 const f = (v: number): string => v.toFixed(1);
@@ -45,6 +47,7 @@ export function neutralFace(body: Pick<BodyGeometry, 'headR' | 'headRy'>): Neutr
     nose: `M ${f(CENTER_X)},${f(noseTop)} L ${f(CENTER_X - rx * 0.07)},${f(noseEnd)} L ${f(CENTER_X + rx * 0.1)},${f(noseEnd)}`,
     mouth: `M ${f(CENTER_X - mouthHalf)},${f(mouthY)} Q ${f(CENTER_X)},${f(mouthY + ry * 0.07)} ${f(CENTER_X + mouthHalf)},${f(mouthY)}`,
     stroke: Math.max(0.9, rx * 0.06),
+    noseStroke: Math.max(0.7, rx * 0.045),
   };
 }
 
@@ -71,10 +74,48 @@ export function contrastRatio(a: string, b: string): number {
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 
+const shift = (hex: string, amt: number): string => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1]!, 16);
+  const c = (v: number): number => Math.max(0, Math.min(255, v + amt));
+  return `#${((c(n >> 16) << 16) | (c((n >> 8) & 0xff) << 8) | c(n & 0xff)).toString(16).padStart(6, '0')}`;
+};
+
 /**
- * The ink of the face lines on a skin colour: a dark brown wherever it stands out enough (3:1), a
- * light warm tone on darker skin, where a dark line would disappear.
+ * The figure is not drawn in the flat skin colour: AvatarView shades it from `SKIN_SHADE.light`
+ * to `SKIN_SHADE.dark` (channel steps), and its side shading and grain darken it a little more.
+ * `SKIN_SHADE.head` is about where the head ends up (measured on screenshots: 11 to 14 below the
+ * swatch at tone 6). The ink is chosen for that colour, and the test checks it over the whole range.
+ */
+export const SKIN_SHADE = { light: 10, dark: -22, head: -13, darkest: -32 } as const;
+
+/** The skin colour about as it is drawn on the head (the swatch, shaded). */
+export function drawnHeadColour(skinHex: string): string {
+  return shift(skinHex, SKIN_SHADE.head);
+}
+
+/**
+ * The ink of the face lines on a skin colour: whichever of a dark brown and a light warm tone
+ * stands out more from the head as it is drawn. Between those two inks that is at least 3.8:1 on
+ * any colour, so every line can be drawn at full opacity and still reach 3:1 after the shading.
  */
 export function faceInk(skinHex: string): string {
-  return contrastRatio(DARK_INK, skinHex) >= 3 ? DARK_INK : LIGHT_INK;
+  const head = drawnHeadColour(skinHex);
+  return contrastRatio(DARK_INK, head) >= contrastRatio(LIGHT_INK, head) ? DARK_INK : LIGHT_INK;
+}
+
+const FIGURE_BACKDROP = '#F1ECE6';
+
+/**
+ * The outline of the figure: the skin colour, darkened until it stands out 3:1 from the light
+ * backdrop of the mirror. On a light skin the fill alone is almost the backdrop's colour (1.1:1 at
+ * the lightest swatch), and the head and arms would disappear. On a dark skin it is the fill itself.
+ */
+export function figureOutline(skinHex: string, backdrop: string = FIGURE_BACKDROP): string {
+  for (let amt = 0; amt >= -255; amt -= 4) {
+    const c = shift(skinHex, amt);
+    if (contrastRatio(c, backdrop) >= 3.2) return c;
+  }
+  return DARK_INK;
 }

@@ -5,11 +5,12 @@
  *
  * What is live in this build:
  *   - "Match my skin tone": a switch (off at first) and, once on, the ten swatches of the Monk Skin
- *     Tone scale. The shopper picks; nothing is read from a photo and no tone is guessed.
+ *     Tone scale (CC BY 4.0, credited under the row). The shopper picks; nothing is read from a
+ *     photo and no tone is guessed. The colour is in memory only unless the build saves it (`saved`).
  *   - "My measurements": typed in, which is the default (D19). The button opens the About-you form.
  * What is not:
  *   - "Use my face" is drawn only when `face` is true (the build flag, default off) and is then a
- *     disabled "coming soon" row. No camera, no file picker and no upload exists behind it.
+ *     "coming soon" row whose switch does nothing. No camera, file picker or upload exists behind it.
  *
  * This component makes no request and opens no camera or file input. It is a modal dialog: focus
  * moves into it, Tab stays inside, Escape and the backdrop close it.
@@ -17,7 +18,7 @@
 import { Check, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { luminance } from '@/render/face';
-import { AVATAR_CLAIMS, AVATAR_UI, c30Text, type AvatarLang } from './avatarCopy';
+import { AVATAR_CLAIMS, AVATAR_UI, c30Parts, REMEMBER_LABEL_LANG, TERMS_PAGE_LANG, type AvatarLang } from './avatarCopy';
 import { lookForMonk, MONK_CLASSES, type SkinLook } from './look';
 
 export interface AvatarPromptProps {
@@ -35,11 +36,17 @@ export interface AvatarPromptProps {
   termsUrl: string;
   /** The photo-based face row (disabled, "coming soon"). Default: not drawn at all. */
   face?: boolean;
+  /**
+   * This build saves the picked colour on the device under "Remember me" (C30 is then shown).
+   * Default false: the colour is in memory only, and no sentence about saving it is shown.
+   */
+  saved?: boolean;
 }
 
 const FOCUSABLE = 'a[href], button:not([disabled]):not([tabindex="-1"]), input:not([disabled])';
 
-function Switch({ checked, onChange, labelledBy, describedBy, disabled = false, onText, offText, testId }: { checked: boolean; onChange?: (on: boolean) => void; labelledBy: string; describedBy?: string; disabled?: boolean; onText: string; offText: string; testId: string }): ReactNode {
+
+function Switch({ checked, onChange, labelledBy, describedBy, unavailable = false, onText, offText, testId }: { checked: boolean; onChange?: (on: boolean) => void; labelledBy: string; describedBy?: string; unavailable?: boolean; onText: string; offText: string; testId: string }): ReactNode {
   return (
     <button
       type="button"
@@ -47,9 +54,13 @@ function Switch({ checked, onChange, labelledBy, describedBy, disabled = false, 
       aria-checked={checked}
       aria-labelledby={labelledBy}
       aria-describedby={describedBy}
-      disabled={disabled}
-      onClick={() => onChange?.(!checked)}
-      className="flex min-h-11 shrink-0 items-center gap-2 rounded-full pl-2 text-xs font-medium text-ink-soft focus-visible:ring-2 focus-visible:ring-coral focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+      // Not `disabled`: a disabled button is skipped by Tab, so a keyboard or screen-reader user
+      // would never reach the row and hear why it does nothing ("Coming soon", via describedBy).
+      aria-disabled={unavailable || undefined}
+      onClick={() => {
+        if (!unavailable) onChange?.(!checked);
+      }}
+      className="flex min-h-11 shrink-0 items-center gap-2 rounded-full pl-2 text-xs font-medium text-ink-soft focus-visible:ring-2 focus-visible:ring-coral focus-visible:outline-none aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
       data-testid={testId}
     >
       <span aria-hidden>{checked ? onText : offText}</span>
@@ -60,7 +71,7 @@ function Switch({ checked, onChange, labelledBy, describedBy, disabled = false, 
   );
 }
 
-export function AvatarPrompt({ lang, look, onPick, onClear, onMeasurements, onClose, termsUrl, face = false }: AvatarPromptProps): ReactNode {
+export function AvatarPrompt({ lang, look, onPick, onClear, onMeasurements, onClose, termsUrl, face = false, saved = false }: AvatarPromptProps): ReactNode {
   const t = AVATAR_CLAIMS[lang];
   const ui = AVATAR_UI[lang];
   const id = useId();
@@ -70,6 +81,7 @@ export function AvatarPrompt({ lang, look, onPick, onClear, onMeasurements, onCl
   const [skinOn, setSkinOn] = useState(look !== null);
   const [cleared, setCleared] = useState(false);
   const total = MONK_CLASSES.length;
+  const c30 = c30Parts(lang);
 
   useEffect(() => {
     titleRef.current?.focus({ preventScroll: true });
@@ -156,7 +168,7 @@ export function AvatarPrompt({ lang, look, onPick, onClear, onMeasurements, onCl
                     {ui.comingSoon}
                   </span>
                 </span>
-                <Switch checked={false} disabled labelledBy={`${id}-face`} describedBy={`${id}-face-soon ${id}-face-text`} onText={ui.on} offText={ui.off} testId="avatar-face-switch" />
+                <Switch checked={false} unavailable labelledBy={`${id}-face`} describedBy={`${id}-face-soon ${id}-face-text`} onText={ui.on} offText={ui.off} testId="avatar-face-switch" />
               </div>
               <p id={`${id}-face-text`} className="text-sm text-ink-soft">
                 {t.faceOff}
@@ -187,7 +199,7 @@ export function AvatarPrompt({ lang, look, onPick, onClear, onMeasurements, onCl
                         <label key={n} className="flex cursor-pointer flex-col items-center gap-0.5 text-[10px] text-ink-mute">
                           <input type="radio" name={`${id}-monk`} value={n} checked={checked} onChange={() => onPick(swatch)} className="peer sr-only" aria-label={`${ui.swatch(n, total)}${edge}`} data-testid={`skin-swatch-${n}`} />
                           <span
-                            className={`flex h-12 w-full items-center justify-center rounded-xl border peer-focus-visible:ring-2 peer-focus-visible:ring-coral peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-cream ${checked ? 'border-ink outline outline-2 outline-offset-2 outline-ink' : 'border-ink/25'}`}
+                            className={`flex h-12 w-full items-center justify-center rounded-xl border peer-focus-visible:ring-2 peer-focus-visible:ring-coral peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-cream ${checked ? 'border-ink outline outline-2 outline-offset-2 outline-ink' : 'border-ink/60'}`}
                             style={{ background: swatch.hex }}
                           >
                             {checked ? <Check className="h-5 w-5" style={{ color: luminance(swatch.hex) < 0.25 ? '#FFFFFF' : '#1A1612' }} aria-hidden /> : null}
@@ -198,8 +210,15 @@ export function AvatarPrompt({ lang, look, onPick, onClear, onMeasurements, onCl
                     })}
                   </div>
                 </fieldset>
-                <p className="text-xs text-ink-mute" data-testid="avatar-c30">
-                  {c30Text(lang)}
+                {saved ? (
+                  <p className="text-xs text-ink-mute" data-testid="avatar-c30">
+                    {c30.before}
+                    <span lang={REMEMBER_LABEL_LANG}>{c30.label}</span>
+                    {c30.after}
+                  </p>
+                ) : null}
+                <p className="text-[10px] leading-snug text-ink-mute" data-testid="avatar-swatch-credit">
+                  {ui.swatchCredit}
                 </p>
               </>
             ) : (
@@ -228,9 +247,15 @@ export function AvatarPrompt({ lang, look, onPick, onClear, onMeasurements, onCl
         ) : null}
 
         <p className="text-sm">
-          <a href={termsUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-coral-ink underline underline-offset-2" data-testid="avatar-terms-link">
+          <a href={termsUrl} hrefLang={TERMS_PAGE_LANG} target="_blank" rel="noopener noreferrer" className="font-medium text-coral-ink underline underline-offset-2" data-testid="avatar-terms-link">
             {t.termsLink}
           </a>
+          {ui.termsLanguageNote ? (
+            <span className="text-xs text-ink-mute" data-testid="avatar-terms-lang">
+              {' '}
+              {ui.termsLanguageNote}
+            </span>
+          ) : null}
         </p>
 
         <button type="button" className="btn-coral w-full" onClick={onClose} data-testid="avatar-prompt-done">

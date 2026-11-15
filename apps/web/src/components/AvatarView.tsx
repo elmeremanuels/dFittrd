@@ -4,7 +4,7 @@ import type { FitResult } from '@curtain/fit-engine';
 import { fitGapsForRender } from '@curtain/fit-engine';
 import { ESTIMATE_DISCLAIMER, type GarmentPayload, type UserBody } from '@curtain/schema';
 import { adjustColor, bodyGeometry, bodyPath, fabricLook, garmentGeometry, isHex, levelY, STANDARD_SKIN_HEX, VIEW_H, VIEW_W, HEAD_TOP_Y } from '@/render/body';
-import { faceInk, neutralFace } from '@/render/face';
+import { faceInk, figureOutline, neutralFace, SKIN_SHADE } from '@/render/face';
 import { EstimateBadge } from './EstimateBadge';
 import { SizeRingsChips, SizeRingsLayer } from './SizeRings';
 import type { RingOverlay } from '@/render/rings';
@@ -43,10 +43,17 @@ export interface AvatarViewProps {
   /** Skirt hem sweep of this size, cm (ring input): the drawn hem then matches the hem ring. */
   hemSweepCm?: number | null;
   /**
-   * Where the estimate badge and the body chip sit on the full-size figure. `bottom` keeps them
-   * off the head in a narrow frame (the embed), where they would cover the face.
+   * Where the estimate badge and the body chip sit on the full-size figure. `bottom` (the embed's
+   * narrow frame, where they would cover the face at the top) puts them in a strip of their own
+   * under the figure: the figure is drawn above it, so they cover neither the feet nor a long hem.
    */
   labelsAt?: 'top' | 'bottom';
+  /**
+   * The figure as it was before the neutral face: no face and no outline. Only for the hero
+   * render's person image, which goes to a render provider: what a line-drawn face does to that
+   * render is not tested, so that input stays what it was.
+   */
+  plain?: boolean;
 }
 
 const NO_MEDIA: AvatarMedia = { faceUrl: null, baseFrame: null };
@@ -61,7 +68,7 @@ const NO_MEDIA: AvatarMedia = { faceUrl: null, baseFrame: null };
  * head (D19: one generic drawing for everybody, never a likeness), or the face tile where the app
  * has one. Always carries the estimate badge.
  */
-export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false, rings = null, hemSweepCm = null, labelsAt = 'top' }: AvatarViewProps): ReactNode {
+export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false, rings = null, hemSweepCm = null, labelsAt = 'top', plain = false }: AvatarViewProps): ReactNode {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const reduce = useReducedMotion();
 
@@ -73,6 +80,9 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
   const skin = isHex(skinHex) ? skinHex! : STANDARD_SKIN_HEX;
   const face = useMemo(() => neutralFace(body), [body]);
   const ink = faceInk(skin);
+  const outline = figureOutline(skin);
+  // In the embed's narrow frame the labels get their own strip under the figure's feet.
+  const labelsBelow = labelsAt === 'bottom' && !bare && !compact;
   const colour = garment && isHex(garment.primaryColorHex) ? garment.primaryColorHex : '#888888';
   const ids = {
     skinTex: `${uid}-skin`,
@@ -89,7 +99,7 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
   const onWhom = media.baseFrame ? 'over your capture' : hasBody ? 'on a body drawn from your measurements' : 'on a reference body';
 
   return (
-    <div className={`relative flex h-full w-full items-center justify-center ${compact ? 'p-0' : 'p-3'}`} data-testid="mirror">
+    <div className={`relative flex h-full w-full items-center justify-center ${compact ? 'p-0' : labelsBelow ? 'px-3 pt-3 pb-16' : 'p-3'}`} data-testid="mirror">
       {compact ? null : <div className="absolute inset-3 rounded-[2.2rem] border border-white/40 bg-gradient-to-br from-white/35 to-white/5 shadow-inner" aria-hidden />}
       <svg
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
@@ -133,8 +143,8 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
             <stop offset="100%" stopColor="rgba(0,0,0,0.16)" />
           </linearGradient>
           <radialGradient id={ids.skinGrad} cx="50%" cy="35%" r="65%">
-            <stop offset="0%" stopColor={adjustColor(skin, 10)} />
-            <stop offset="100%" stopColor={adjustColor(skin, -22)} />
+            <stop offset="0%" stopColor={adjustColor(skin, SKIN_SHADE.light)} />
+            <stop offset="100%" stopColor={adjustColor(skin, SKIN_SHADE.dark)} />
           </radialGradient>
           <radialGradient id={ids.strain} cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="rgba(255,255,255,0.55)" />
@@ -147,22 +157,23 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
           <image href={media.baseFrame.url} x="0" y="0" width={VIEW_W} height={VIEW_H} preserveAspectRatio="xMidYMid slice" opacity={isLoading ? 0.4 : 1} data-testid="base-frame" />
         ) : (
           <g opacity={isLoading ? 0.4 : 1}>
-            <path d={bodyD} fill={`url(#${ids.skinGrad})`} />
+            {/* The outline keeps a light figure visible on the light backdrop (1.1:1 without it at the lightest swatch). */}
+            <path d={bodyD} fill={`url(#${ids.skinGrad})`} {...(plain ? {} : { stroke: outline, strokeWidth: 1.6, strokeLinejoin: 'round' as const, 'data-outline': outline.toUpperCase() })} data-testid="figure-body" />
             <path d={bodyD} fill={`url(#${ids.shade})`} opacity="0.5" />
             <rect width={VIEW_W} height={VIEW_H} filter={`url(#${ids.skinTex})`} clipPath={`url(#${ids.bodyClip})`} pointerEvents="none" style={{ mixBlendMode: 'overlay' }} />
           </g>
         )}
 
         {/* Neutral standard face (D19): the same drawing for everybody, from the head's size only */}
-        {!media.faceUrl && !media.baseFrame ? (
-          <g data-testid="neutral-face" aria-hidden opacity={isLoading ? 0.4 : 1} fill="none" stroke={ink} strokeWidth={face.stroke} strokeLinecap="round" strokeLinejoin="round">
+        {!plain && !media.faceUrl && !media.baseFrame ? (
+          <g data-testid="neutral-face" data-ink={ink} aria-hidden opacity={isLoading ? 0.4 : 1} fill="none" stroke={ink} strokeWidth={face.stroke} strokeLinecap="round" strokeLinejoin="round">
             {face.eyes.map((e) => (
               <ellipse key={e.cx} cx={e.cx} cy={e.cy} rx={e.rx} ry={e.ry} fill={ink} stroke="none" />
             ))}
             {face.brows.map((d) => (
-              <path key={d} d={d} opacity="0.75" />
+              <path key={d} d={d} />
             ))}
-            <path d={face.nose} opacity="0.55" />
+            <path d={face.nose} strokeWidth={face.noseStroke} />
             <path d={face.mouth} />
           </g>
         ) : null}
@@ -220,14 +231,14 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
         <ellipse cx={VIEW_W / 2} cy={levelY('sole') + 6} rx={body.hipHalf + 18} ry={5} fill="rgba(26,22,18,0.12)" />
       </svg>
 
-      {rings && !compact ? <SizeRingsChips overlay={rings} /> : null}
+      {rings && !compact ? <SizeRingsChips overlay={rings} bottomRem={labelsBelow ? 4 : 0.75} /> : null}
       {!bare && compact ? (
         <span className="chip pointer-events-none absolute bottom-0.5 left-1/2 -translate-x-1/2 bg-ink/85 px-1.5 py-0 text-[9px] whitespace-nowrap text-cream shadow" title={ESTIMATE_DISCLAIMER} data-testid="estimate-badge">
           Estimate
         </span>
       ) : null}
       {!bare && !compact ? (
-        <div className={`pointer-events-none absolute left-3 flex max-w-[calc(100%-1.5rem)] flex-col items-start gap-1 ${labelsAt === 'bottom' ? 'bottom-3' : 'top-3'}`} data-testid="avatar-labels">
+        <div className={`pointer-events-none absolute left-3 flex max-w-[calc(100%-1.5rem)] flex-col items-start gap-1 ${labelsAt === 'bottom' ? 'bottom-4' : 'top-3'}`} data-testid="avatar-labels">
           <EstimateBadge className="px-2 py-0.5 text-[10px] whitespace-nowrap" />
           {garment && !media.baseFrame ? <span className="chip bg-white/70 px-2 py-0.5 text-[10px] leading-tight">{bodyLabel ?? (hasBody ? 'Body from your measurements' : 'Reference body · add your measurements')}</span> : null}
           {media.baseFrame ? <span className="chip bg-white/70 px-2 py-0.5 text-[10px] leading-tight">Your capture · garment overlay</span> : null}

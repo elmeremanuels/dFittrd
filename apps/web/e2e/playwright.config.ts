@@ -5,7 +5,8 @@ import { defineConfig, devices } from '@playwright/test';
  * Chromium gets a fake camera so the capture step exercises its camera path.
  * `pnpm --filter @curtain/web e2e` builds first. Browsers come from PLAYWRIGHT_BROWSERS_PATH.
  */
-const PORT = 4173;
+// E2E_PORT: another port, when 4173 is taken by somebody else's preview (it would be reused as is).
+const PORT = Number(process.env.E2E_PORT ?? 4173);
 
 export default defineConfig({
   testDir: '.',

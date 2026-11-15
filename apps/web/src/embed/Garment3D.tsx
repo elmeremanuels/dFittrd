@@ -8,9 +8,14 @@
  *   `import()` and the bundle files are GET from `asset.baseUrl`. Nothing about the body goes up (D3).
  * - The view takes the embed's own FitResult and size; it never computes a fit (rule 4, D15).
  * - The skin colour the shopper picked in the avatar prompt goes to the viewer as an in-memory
- *   value (`MountOptions.look.skinHex`, then `view.setLook`), and the body's family and height as
- *   `MountOptions.body` (packages/mannequin README, `BodyInput`). A viewer that does not know these
+ *   value (`MountOptions.look.skinHex`, then `view.setLook`). A viewer that does not know these
  *   options yet ignores them; `setLook` is called only when the mounted view has it.
+ * - `MountOptions.body` is the three girths, as before, for every product that is not a men's
+ *   product: the 3D view of a women's garment is the same with or without the avatar slices. Only
+ *   a men's garment adds `family: 'male'` and `heightCm` (packages/mannequin README, `BodyInput`):
+ *   the typed body of the viewer moves the garment and has known limits, so it is not switched on
+ *   for everybody by a side door. A men's garment on a bundle draped on the female body is refused
+ *   by the viewer (`incompatible`), which a `required` view turns into "coming soon" (D20 point 3).
  * - Always labelled an estimate (rule 3). On any error it closes and the 2D figure above stays.
  * - `required` (a men's product, D20 point 3: never a 2D figure only): the view opens by itself,
  *   cannot be closed and reports `settled` or `failed`; the embed shows nothing of the result until
@@ -139,12 +144,12 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
           if (required) setPhase('failed');
           return;
         }
+        const family = bodyFamilyFor(garment);
         const body = {
           bust: measurements.bust,
           waist: measurements.waist,
           hip: measurements.hip,
-          family: bodyFamilyFor(garment),
-          ...(typeof heightCm === 'number' && Number.isFinite(heightCm) ? { heightCm } : {}),
+          ...(family === 'male' ? { family, ...(typeof heightCm === 'number' && Number.isFinite(heightCm) && heightCm > 0 ? { heightCm } : {}) } : {}),
         };
         const options: MountOptionsWithLook = {
           baseUrl: asset.baseUrl,

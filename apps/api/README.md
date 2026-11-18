@@ -149,7 +149,20 @@ No men's product goes live with a 2D figure only. One helper decides it, `shoppe
 With `MEN_3D_GATE=1`, a product whose payload says `audience: 'men'` is **coming soon** unless the
 shop has the 3D estimate on (`settings.garment3d`) and the product has an approved bundle that still
 covers the live chart and was built on the male mannequin (`assetMannequinFamily`: `qa.json`
-`mannequin.family: 'male'`; absent = female, so no bundle that exists today passes).
+`mannequin.family: 'male'`; absent = female).
+
+Body family of a bundle (slice M1). A bundle built on the male mannequin names it in both
+`anchors.json` and `qa.json` (`mannequin: { version, shape, family: 'male' }`); a female bundle
+names none, so every bundle built before M1 is unchanged and reads as female. The two files must
+agree, or the import refuses the bundle (`format`). The api keeps only `qa.json`, so that is where
+the gate reads it (the place M0 assumed, now confirmed). The family must match the product:
+`garmentBodyFamily` of `@curtain/schema` (`audience: 'men'` → male, anything else → female) is
+checked on import (`asset:import` and the demo seed refuse with `family_mismatch`, before the size
+check), on `GET /v1/try` (`activeAssetRef` hands out no ref when the live bundle no longer matches,
+e.g. the audience was changed after the import), and in the viewer (`garmentBundleFor` and the
+mount's body check). The only male bundle today is the SYNTHETIC men's test tee
+(`SYNTHETIC_MENS_TEE`, not a product; `pnpm --filter @curtain/garment-spike build:bundle`),
+used by `src/men-m1.test.ts` and `scripts/demo-men.mjs` to prove the path end to end.
 
 | Route | A men's product that is coming soon |
 |---|---|

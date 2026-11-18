@@ -154,4 +154,18 @@
 		$box.find('.curtain-flatlay-preview').empty();
 		$(this).hide();
 	});
+
+	// Garment measurements: a ticked size is typed in and starts empty (an estimate is never turned
+	// into a "measured" number); an unticked size goes back to read-only and is not saved.
+	$(document).on('change', '.curtain-tape-measured', function () {
+		var $row = $(this).closest('tr');
+		var on = this.checked;
+		$row.toggleClass('curtain-tape-est', !on);
+		$row.find('.curtain-tape-cm').each(function () {
+			if (on && this.getAttribute('data-estimate') === '1') { this.value = ''; this.setAttribute('data-estimate', ''); }
+			this.readOnly = !on;
+		});
+		$row.find('.curtain-tape-prov').toggle(!on);
+		if (on) $row.find('.curtain-tape-cm').first().trigger('focus');
+	});
 })(jQuery);

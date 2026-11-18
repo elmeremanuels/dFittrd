@@ -29,7 +29,7 @@ in `apps/api/src/env.ts`) and nothing touches a database.
 | `types` | `FetchLike`, `DEFAULT_API_VERSION` (`2026-10`, the one pinned Admin API version; api env, toml and tests re-use it), `isShopifyDomain`, `normaliseShopDomain`, `SleepFn` |
 | `graphql/client` | `createAdminClient({ shopDomain, accessToken, apiVersion?, fetch?, maxRetries?, sleep?, adminUrlTemplate? })` → `{ request<T>(query, variables) }` with cost-aware retry on `THROTTLED`/429/5xx; `ShopifyGraphqlError` (`code`: http, graphql, non_json, empty, user_errors, unauthorized, invalid_domain); `assertNoUserErrors`; `adminGraphqlUrl`; `throttleDelaySeconds` |
 | `graphql/products` | `PRODUCT_QUERY`, `PRODUCTS_PAGE_QUERY`, `fetchProduct(client, gidOrId)`, `fetchProductsPage(client, cursor, query?)`, `iterateProducts(client)`, `productGid`, `productExternalId` — selections match `ShopifyProductNodeSchema` in `@curtain/schema` |
-| `graphql/metafields` | `METAFIELD_DEFINITION_CREATE`, `METAFIELD_DEFINITIONS_QUERY`, `METAFIELDS_SET`, `metafieldsSet` (auto-batches 25), `setProductMetafields(client, gid, payload)` (write-back via `toShopifyMetafields`), `getCurrentAppInstallationId`, `setAppDataMetafields(client, { publicKeyPrefix, apiUrl, appUrl? })` + `APP_DATA_NAMESPACE`/`APP_DATA_KEYS` (what the theme block reads) |
+| `graphql/metafields` | `METAFIELD_DEFINITION_CREATE`, `METAFIELD_DEFINITIONS_QUERY`, `METAFIELDS_SET`, `metafieldsSet` (auto-batches 25), `setProductMetafields(client, gid, payload)` (write-back via `toShopifyMetafields`), `deleteProductMetafields(client, gid, keys)` (`metafieldsDelete`, a value the merchant cleared), `getCurrentAppInstallationId`, `setAppDataMetafields(client, { publicKeyPrefix, apiUrl, appUrl? })` + `APP_DATA_NAMESPACE`/`APP_DATA_KEYS` (what the theme block reads) |
 | `metafieldDefinitions` | re-exports `SHOPIFY_METAFIELD_DEFINITIONS`/`SHOPIFY_METAFIELD_NAMESPACE`; `METAFIELD_KEYS`, `HEAVY_METAFIELD_KEYS`, `metafieldDefinitionInput(def)`, `METAFIELD_DEFINITION_INPUTS`, `ensureMetafieldDefinitions(client)` (TAKEN = existing), `listMetafieldDefinitions`, `missingDefinitionKeys` |
 | `graphql/bulk` | `bulkProductsQuery()`, `startBulkProductExport`, `getBulkOperation` (via `node(id:)`), `waitForBulkOperation`, `cancelBulkOperation`, `downloadBulkResult`, `parseBulkJsonl(text)` (folds `__parentId` children back into product nodes, in any line order: 2026-01+ exports are ungrouped by default), `runProductBackfill(client)`, `BulkOperationError` |
 | `graphql/shop` | `fetchPrimaryDomainHost(client)`, `fetchBillingCurrency(client)` → `{ billingCurrency, shopCurrency }` (`shopBillingPreferences { currency }`) |
@@ -154,6 +154,23 @@ script; required for embedded apps) with `<meta name="shopify-api-key">`, then:
    panel, plan/usage with the period meter, the plan button (`POST /shopify/billing/subscribe` →
    `open(confirmationUrl, '_top')`) and a 30-day bar strip, and the privacy ledger (hero renders
    only, with the `ESTIMATE_DISCLAIMER`).
+
+### Garment measurements (per product)
+
+The product panel (opened from the products table) has a **Garment measurements** form
+(`GET` / `PUT /shopify/products/:id/garment-tape`): how the garment closes (pull-on, zip, buttons,
+drawstring, wrap, something else), the depth below the band at which the hip was measured, and a
+table of the product's chart sizes with the five numbers A to E (`docs/MERCHANT-MEASUREMENTS.md`).
+The merchant ticks the sizes they measured; the other sizes show the estimate, labelled "estimated"
+(between two measured sizes) or "rough estimate" (beyond them), never as an editable number. Every
+change is checked by the api (`dryRun`, `checkGarmentTapeInput` from `@curtain/schema`): errors in
+red block the save and mark the input, warnings in yellow do not. Saving writes the `closure` and
+`garment_tape` metafields (a cleared value is deleted) and queues the product sync. All words come
+from `GARMENT_TAPE_ADMIN_CONFIG` (`@curtain/schema` `GARMENT_TAPE_FORM_TEXT`, field, closure and
+provenance labels) in the page's config JSON: one English catalogue (D21). On a phone the table
+becomes one block per size. `node packages/shopify-app/scripts/tape-form-shots.mjs [outDir]` drives the
+form in Chromium against an in-process api that runs the real check (Shopify itself is stubbed) and
+saves phone and desktop screenshots.
 
 ### Size chart builder (standalone size advice, no 3D engine needed)
 

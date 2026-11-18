@@ -31,6 +31,8 @@ import {
   type EurRateTable,
   type WarningSink,
 } from './common';
+import { GARMENT_CLOSURES } from '../garmentTape';
+import { coerceClosure, coerceGarmentTape } from './tape';
 import { AUDIENCE_ATTRIBUTE_FIELD, coerceAudienceOverride, inferAudience } from './audience';
 
 export const WOO_META_PREFIX = '_curtain_' as const;
@@ -44,6 +46,8 @@ export type WooMetaPath =
   | 'brand'
   | 'sizeChartType'
   | 'sizeChart'
+  | 'closure'
+  | 'garmentTape'
   | 'fabric'
   | 'patternBlock'
   | 'ease'
@@ -73,6 +77,8 @@ export const WOO_META_KEYS: readonly WooMetaKey[] = [
   { key: '_curtain_category', path: 'category', kind: 'enum', label: 'Category', description: 'Inferred from the WooCommerce product categories when empty.', heavy: true, options: ['top', 'bottom', 'dress', 'outerwear', 'shoes', 'accessory'] },
   { key: '_curtain_size_chart_type', path: 'sizeChartType', kind: 'enum', label: 'Size chart type', description: "'garment' = rows measured on the flat garment, 'body' = body the size is cut for.", heavy: true, options: ['garment', 'body'] },
   { key: '_curtain_size_chart', path: 'sizeChart', kind: 'json', label: 'Size chart (cm)', description: 'JSON array of rows, ascending.', heavy: true },
+  { key: '_curtain_closure', path: 'closure', kind: 'enum', label: 'Closure', description: 'How the garment opens. Pull-on: the stretched waistband has to go over the hips.', heavy: false, options: GARMENT_CLOSURES },
+  { key: '_curtain_garment_tape', path: 'garmentTape', kind: 'json', label: 'Garment measurements (cm)', description: 'Written by the Garment measurements table: per size, measured or estimated.', heavy: false },
   { key: '_curtain_fabric', path: 'fabric', kind: 'json', label: 'Fabric', description: 'primary, blend, weightGsm, stretchPct, drape, opacity, sheen', heavy: true },
   { key: '_curtain_flat_lay_photo', path: 'flatLayPhoto', kind: 'url', label: 'Flat-lay photo', description: 'Media-library image of the garment laid flat on white.', heavy: true },
   { key: '_curtain_pattern_block', path: 'patternBlock', kind: 'string', label: 'Pattern block', description: 'wrap, a-line, sheath, …', heavy: false },
@@ -217,6 +223,11 @@ export function fromWooMeta(product: WooProduct, meta?: WooMetaInput, options: F
 
   const sizeChart = coerceSizeChart(get('_curtain_size_chart'), sink, '_curtain_size_chart');
   if (sizeChart) out.sizeChart = sizeChart;
+
+  const closure = coerceClosure(get('_curtain_closure'), sink, '_curtain_closure');
+  if (closure) out.closure = closure;
+  const garmentTape = coerceGarmentTape(get('_curtain_garment_tape'), sizeChart, sink, '_curtain_garment_tape');
+  if (garmentTape) out.garmentTape = garmentTape;
 
   // Names resolve to fabric library ids ("Katoen" → cotton); the numbers stay the merchant's.
   const fabric = coerceFabric(get('_curtain_fabric'), sink, '_curtain_fabric');

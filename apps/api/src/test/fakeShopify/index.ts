@@ -827,6 +827,18 @@ export class FakeShopify {
         if (errs.length) return { metafields: [], userErrors: errs };
         return { metafields: out, userErrors: [] };
       },
+      metafieldsDelete: (a: { metafields: Array<{ ownerId: string; namespace: string; key: string }> }) => {
+        // ASSUMPTION: deleting a metafield that does not exist is not an error; it comes back as null.
+        const deleted = a.metafields.map((m) => {
+          const ns = this.resolveNamespace(m.namespace);
+          const p = store.products.get(m.ownerId);
+          const at = p ? p.metafields.findIndex((x) => x.namespace === ns && x.key === m.key) : -1;
+          if (!p || at < 0) return null;
+          p.metafields.splice(at, 1);
+          return { ownerId: m.ownerId, namespace: m.namespace, key: m.key };
+        });
+        return { deletedMetafields: deleted, userErrors: [] };
+      },
       appSubscriptionCreate: (a: { name: string; lineItems: Array<{ plan: { appRecurringPricingDetails?: { price: { amount: string | number; currencyCode: string }; interval?: string } } }>; returnUrl: string; test?: boolean; trialDays?: number }) => {
         // https://shopify.dev/docs/apps/launch/distribution: custom distribution "Can't charge merchants
         // through Shopify's app billing system". The message is the one developers report.

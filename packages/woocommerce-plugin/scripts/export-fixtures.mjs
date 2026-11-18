@@ -12,7 +12,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MOCK_GARMENTS, MENS_FIXTURE_GARMENTS, AUDIENCE_CASES, inferAudienceDecision, fromWooMeta, toWooMeta, ESTIMATE_DISCLAIMER, FABRIC_TEXT_FIELD, fabricFromProductText, resolveFabricText } from '@curtain/schema';
+import { GARMENT_TAPE_FORM_CASES, GARMENT_TAPE_FORM_TEXT, PILOT_PULL_ON_SKIRT, checkGarmentTapeInput, refillGarmentTape, measuredFromGarmentTape, MOCK_GARMENTS, MENS_FIXTURE_GARMENTS, AUDIENCE_CASES, inferAudienceDecision, fromWooMeta, toWooMeta, ESTIMATE_DISCLAIMER, FABRIC_TEXT_FIELD, fabricFromProductText, resolveFabricText } from '@curtain/schema';
 import { writeChartTemplatesAsset } from './chart-templates.mjs';
 import { writeEurRatesAsset } from './eur-rates.mjs';
 import { DEFAULT_EUR_RATES } from '@curtain/shopify-app';
@@ -135,3 +135,36 @@ const fabricMetas = metas.map((fabric) => {
 
 writeFileSync(join(root, 'tests/fixtures/fabric-text.json'), JSON.stringify({ texts: fabricTexts, prefills, metas: fabricMetas }, null, 1));
 console.log(`wrote tests/fixtures/fabric-text.json (${fabricTexts.length} texts, ${prefills.length} attribute sets, ${fabricMetas.length} meta values) and assets/fabric-library.json`);
+
+// Garment measurements (the meta box table): every shared form case with what the TypeScript check
+// answers, the pilot skirt's stored tape read back through fromWooMeta (as stored, against a chart
+// that lost a size, with a broken tape, with an unknown closure), and the form's own words.
+// Garment_Tape and Payload_Builder must give the same.
+const tapeCases = GARMENT_TAPE_FORM_CASES.map((c) => ({ name: c.name, input: c.input, expected: checkGarmentTapeInput(c.input) }));
+const skirtProduct = { id: 4512, name: PILOT_PULL_ON_SKIRT.name, price: '89.95', currency: 'EUR', images: [], categories: [], tags: [], brands: [], attributes: [] };
+const skirtMeta = toWooMeta(PILOT_PULL_ON_SKIRT);
+const replace = (meta, key, value) => meta.map((m) => (m.key === key ? { ...m, value } : m));
+const tapeProductInputs = [
+  { name: 'the pilot skirt as stored', meta: skirtMeta },
+  { name: 'the chart lost AU 16 after the tape was saved', meta: replace(skirtMeta, '_curtain_size_chart', JSON.stringify(PILOT_PULL_ON_SKIRT.sizeChart.slice(0, 4))) },
+  { name: 'the chart lost AU 8 and AU 16', meta: replace(skirtMeta, '_curtain_size_chart', JSON.stringify(PILOT_PULL_ON_SKIRT.sizeChart.slice(1, 4))) },
+  { name: 'a tape value without provenance', meta: replace(skirtMeta, '_curtain_garment_tape', JSON.stringify([{ size: '8', waistRelaxed: { cm: 67 } }])) },
+  { name: 'an unknown closure', meta: replace(skirtMeta, '_curtain_closure', 'velcro') },
+  { name: 'closure in capitals', meta: replace(skirtMeta, '_curtain_closure', 'Pull-On') },
+  { name: 'a stored tape and no size chart', meta: skirtMeta.filter((m) => m.key !== '_curtain_size_chart') },
+];
+const tapeProducts = tapeProductInputs.map(({ name, meta }) => {
+  const warnings = [];
+  const expected = fromWooMeta(skirtProduct, meta, { warnings, defaultBrand: 'Fixture Shop' });
+  return { name, product: skirtProduct, meta, expected, warnings };
+});
+const refills = [PILOT_PULL_ON_SKIRT.sizeChart, PILOT_PULL_ON_SKIRT.sizeChart.slice(0, 4), PILOT_PULL_ON_SKIRT.sizeChart.map((r) => (r.size === '12' ? { ...r, waist: 80 } : r))].map((chart) => ({
+  chart,
+  tape: PILOT_PULL_ON_SKIRT.garmentTape,
+  expected: refillGarmentTape(chart, PILOT_PULL_ON_SKIRT.garmentTape),
+}));
+writeFileSync(
+  join(root, 'tests/fixtures/garment-tape.json'),
+  JSON.stringify({ cases: tapeCases, products: tapeProducts, refills, measured: measuredFromGarmentTape(PILOT_PULL_ON_SKIRT.garmentTape), text: GARMENT_TAPE_FORM_TEXT }, null, 1),
+);
+console.log(`wrote tests/fixtures/garment-tape.json (${tapeCases.length} form cases, ${tapeProducts.length} products, ${refills.length} refills)`);

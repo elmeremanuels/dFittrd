@@ -66,7 +66,7 @@
     .filters .btn.active { background: var(--p-text); color: #fff; border-color: var(--p-text); }
     .privacy { background: var(--cream); color: var(--ink); border-radius: 8px; padding: 10px 12px; margin-top: 12px; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-    .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .sr { position: absolute; left: 0; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     .skeleton { height: 12px; border-radius: 6px; background: linear-gradient(90deg, #eee, #f7f7f7, #eee); background-size: 200% 100%; animation: sk 1.2s infinite; }
     @keyframes sk { to { background-position: -200% 0; } }
     fieldset { border: 0; margin: 0 0 12px; padding: 0; min-width: 0; }
@@ -93,6 +93,30 @@
     details summary { cursor: pointer; color: var(--p-text-subdued); }
     ul.plain { margin: 4px 0 0; padding-left: 18px; }
     .pill { display: inline-block; border-radius: 6px; padding: 0 6px; font-size: 11px; font-weight: 600; background: #ebebeb; }
+    .tape-head { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 8px 0 10px; }
+    @media (min-width: 720px) { .tape-head { grid-template-columns: 1fr 1fr; } }
+    .tape-head label { display: flex; flex-direction: column; gap: 4px; font-weight: 550; }
+    .tape-head select, .tape-head input { max-width: 320px; }
+    .tape-table td, .tape-table th { padding: 4px 6px; vertical-align: middle; }
+    .tape-table input.cm { box-sizing: border-box; width: 68px; font: inherit; border: 1px solid #b5b5b5; border-radius: 6px; padding: 3px 6px; text-align: right; }
+    .tape-table input.cm[aria-invalid="true"] { border-color: var(--p-critical-fg); background: var(--p-critical-bg); }
+    .tape-table tr.est input.cm { border-style: dashed; background: #fafafa; color: var(--p-text-subdued); }
+    .tape-table.stale tr.est input.cm, .tape-table.stale tr.est .prov { opacity: .45; }
+    #tape-depth[aria-invalid="true"] { border-color: var(--p-critical-fg); background: var(--p-critical-bg); }
+    .tape-table .prov { display: block; font-size: 11px; line-height: 1.2; color: var(--p-text-subdued); }
+    .tape-table .prov-extrapolated { color: var(--p-warning-fg); font-weight: 600; }
+    .tape-table th.size, .tape-table td.size { font-weight: 650; white-space: nowrap; }
+    @media (max-width: 640px) {
+      .tape-table thead { display: none; }
+      .tape-table tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 10px; padding: 10px 0; border-top: 1px solid var(--p-border); }
+      .tape-table td { border: 0; padding: 0; }
+      .tape-table td.size { grid-column: span 2; font-size: 15px; align-self: center; }
+      .tape-table td.measured { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+      .tape-table td.measured::before { content: attr(data-label); font-size: 12px; color: var(--p-text-subdued); }
+      .tape-table td.num { text-align: left; display: flex; flex-direction: column; justify-content: flex-end; }
+      .tape-table td.num::before { content: attr(data-label); display: block; font-size: 11px; line-height: 1.25; color: var(--p-text-subdued); }
+      .tape-table input.cm { width: 100%; min-width: 0; }
+    }
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
   </style>
 </head>
@@ -205,6 +229,30 @@
           <button class="btn" type="button" id="btn-import">Read the description</button>
           <div id="import-result" role="status" aria-live="polite"></div>
         </div>
+      </div>
+      <div id="tape-panel" class="hidden" style="margin-top:16px;border-top:1px solid var(--p-border);padding-top:12px">
+        <h3 id="h-tape" style="font-size:13px;margin:0 0 4px"></h3>
+        <p class="subdued" id="tape-intro" style="margin:0"></p>
+        <details style="margin-top:6px"><summary id="tape-howto"></summary><ul class="plain" id="tape-howto-lines"></ul></details>
+        <form id="tape-form" novalidate>
+          <div class="tape-head">
+            <label for="tape-closure"><span id="tape-closure-label"></span><select class="input" id="tape-closure"></select></label>
+            <label for="tape-depth"><span id="tape-depth-label"></span><input class="input" id="tape-depth" inputmode="decimal" size="6" maxlength="8" /></label>
+          </div>
+          <p class="subdued" id="tape-measured-hint" style="margin:0 0 6px"></p>
+          <div style="overflow:auto">
+            <p class="note note-info hidden" id="tape-stale" style="margin:0 0 6px"></p>
+            <table class="tape-table" id="tape-table" aria-labelledby="h-tape">
+              <thead id="tape-head"></thead>
+              <tbody id="tape-body"></tbody>
+            </table>
+          </div>
+          <p class="subdued" id="tape-legend" style="margin:6px 0 0"></p>
+          <div id="tape-issues" role="status" aria-live="polite"></div>
+          <div class="row" style="margin-top:10px"><button class="btn btn-primary" type="submit" id="tape-save"></button><span class="subdued" id="tape-status" role="status" aria-live="polite"></span></div>
+          <p class="subdued" id="tape-privacy" style="margin:8px 0 0"></p>
+        </form>
+        <div id="tape-nochart" class="note note-info hidden"></div>
       </div>
     </section>
 
@@ -608,6 +656,7 @@
           var prev = $('lnk-preview');
           if (c.previewUrl) { prev.href = c.previewUrl; prev.classList.remove('hidden'); } else prev.classList.add('hidden');
           $('lnk-admin').href = c.adminUrl;
+          loadTape(id);
         } catch (err) { $('product-checklist').textContent = ''; note('import-result', 'critical', ['Could not load the product: ' + err.message]); }
       }
 
@@ -662,6 +711,156 @@
         });
         box.appendChild(form);
       }
+
+      // ---- one product: garment measurements (closure + five tape numbers per size) ------------------
+      // Garment data only. Every word comes from cfg.tape (the @curtain/schema catalogue, D21); the
+      // checks and the estimates come from the api (dryRun), so the page holds no rule of its own.
+      var TT = cfg.tape;
+      var tape = { id: null, sizes: [], measured: {}, filled: [], timer: null, seq: 0 };
+      function tapeValue(v) { v = String(v == null ? '' : v).trim().replace(',', '.'); if (!v) return null; var n = Number(v); return isFinite(n) ? n : v; }
+      function tapeStaticText() {
+        text('h-tape', TT.text.heading); text('tape-intro', TT.text.intro); text('tape-howto', TT.text.howTo);
+        var ul = $('tape-howto-lines'); ul.textContent = ''; TT.text.howToLines.forEach(function (l) { ul.appendChild(el('li', { text: l })); });
+        text('tape-closure-label', TT.text.closureLabel); text('tape-depth-label', TT.text.hipDepthLabel);
+        $('tape-depth').placeholder = TT.text.hipDepthPlaceholder;
+        var sel = $('tape-closure'); sel.textContent = '';
+        sel.appendChild(el('option', { value: '', text: TT.text.closureNone }));
+        TT.closures.forEach(function (c) { sel.appendChild(el('option', { value: c.value, text: c.label })); });
+        text('tape-stale', TT.text.estimatesStale);
+        text('tape-measured-hint', TT.text.measuredHint); text('tape-legend', TT.text.legend); text('tape-save', TT.text.save); text('tape-privacy', TT.text.privacy);
+        var head = $('tape-head'); head.textContent = '';
+        head.appendChild(el('tr', null, [el('th', { class: 'size', text: TT.text.sizeColumn }), el('th', { text: TT.text.measuredColumn })].concat(TT.fields.map(function (f) { return el('th', { class: 'num', text: TT.fieldLabels[f] }); }))));
+      }
+      function tapeFilledRow(size) { var k = size.trim().toUpperCase(); return (tape.filled || []).find(function (r) { return r.size.trim().toUpperCase() === k; }) || null; }
+      function renderTapeRows() {
+        var body = $('tape-body'); body.textContent = '';
+        tape.sizes.forEach(function (size, i) {
+          var m = tape.measured[size];
+          var tr = el('tr', { 'data-size': size, class: m ? '' : 'est' });
+          var box = el('input', { type: 'checkbox', id: 'tape-m-' + i, 'aria-label': TT.text.measuredColumn + ' ' + size });
+          box.checked = !!m;
+          box.addEventListener('change', function () {
+            // Never turn an estimate into a "measured" number: a newly ticked size starts empty.
+            tape.measured[size] = box.checked ? {} : undefined;
+            if (!box.checked) delete tape.measured[size];
+            renderTapeRows(); tapeChanged();
+            if (box.checked) { var first = $('tape-body').querySelector('tr[data-size="' + CSS.escape(size) + '"] input.cm'); if (first) first.focus(); }
+          });
+          tr.appendChild(el('td', { class: 'size', text: size }));
+          tr.appendChild(el('td', { class: 'measured', 'data-label': TT.text.measuredColumn }, [box]));
+          var filled = tapeFilledRow(size);
+          TT.fields.forEach(function (f) {
+            var key = TT.inputKeys[f];
+            var input = el('input', { class: 'cm', inputmode: 'decimal', maxlength: '8', 'data-field': f, 'aria-label': size + ', ' + TT.fieldLabels[f] + ' (cm)' });
+            var cell = el('td', { class: 'num', 'data-label': TT.fieldLabels[f] }, [input]);
+            if (m) {
+              input.value = m[key] != null ? String(m[key]) : '';
+              input.addEventListener('input', function () { tape.measured[size][key] = input.value; tapeChanged(); });
+            } else {
+              var v = filled && filled[f];
+              input.disabled = true;
+              input.value = v ? String(v.cm) : '';
+              input.placeholder = v ? '' : '–';
+              cell.appendChild(el('span', { class: 'prov' + (v ? ' prov-' + v.provenance : ''), text: v ? TT.provenance[v.provenance] : TT.text.notMeasured }));
+            }
+            tr.appendChild(cell);
+          });
+          body.appendChild(tr);
+        });
+      }
+      function tapeRequest(dryRun) {
+        var depth = tapeValue($('tape-depth').value);
+        var measured = tape.sizes.filter(function (s) { return tape.measured[s]; }).map(function (s) {
+          var m = tape.measured[s]; var row = { size: s };
+          TT.fields.forEach(function (f) { var v = tapeValue(m[TT.inputKeys[f]]); if (v !== null) row[TT.inputKeys[f]] = v; });
+          if (row.hipCm != null && depth !== null) row.hipDepthBelowBandCm = depth;
+          return row;
+        });
+        return { closure: $('tape-closure').value || null, measured: measured, dryRun: !!dryRun };
+      }
+      function showTapeIssues(r) {
+        var box = $('tape-issues'); box.textContent = '';
+        $('tape-body').querySelectorAll('input.cm').forEach(function (i) { i.removeAttribute('aria-invalid'); });
+        $('tape-depth').removeAttribute('aria-invalid');
+        var hasErrors = !!(r.errors && r.errors.length);
+        // With an error the estimates are from the last numbers that passed: say so and grey them.
+        $('tape-table').classList.toggle('stale', hasErrors);
+        $('tape-stale').classList.toggle('hidden', !hasErrors);
+        (r.errors || []).forEach(function (e) {
+          // The depth is one input for every size (the api says it once, without a size).
+          if (e.field === 'hipDepth') { $('tape-depth').setAttribute('aria-invalid', 'true'); return; }
+          if (!e.size || !e.field) return;
+          var row = $('tape-body').querySelector('tr[data-size="' + CSS.escape(e.size) + '"]');
+          var input = row && row.querySelector('input[data-field="' + e.field + '"]');
+          if (input) input.setAttribute('aria-invalid', 'true');
+        });
+        [[r.errors, 'critical', TT.text.errorsTitle], [r.warnings, 'warning', TT.text.warningsTitle]].forEach(function (g) {
+          if (!g[0] || !g[0].length) return;
+          box.appendChild(el('div', { class: 'note note-' + g[1] }, [el('b', { text: g[2] }), el('ul', { class: 'plain' }, g[0].map(function (i) { return el('li', { text: i.message }); }))]));
+        });
+        $('tape-save').disabled = !!(r.errors && r.errors.length);
+      }
+      function tapeChanged() {
+        clearTimeout(tape.timer);
+        text('tape-status', TT.text.checking);
+        tape.timer = setTimeout(async function () {
+          var seq = ++tape.seq; var id = tape.id;
+          try {
+            var r = await api('PUT', '/shopify/products/' + encodeURIComponent(id) + '/garment-tape', tapeRequest(true));
+            if (seq !== tape.seq || id !== tape.id) return;
+            // With an error nothing is filled: keep showing the last estimates rather than blanking them.
+            if (r.garmentTape || !(r.errors && r.errors.length)) tape.filled = r.garmentTape || [];
+            // Refresh the estimates in place; the rows the merchant types in stay as they are.
+            tape.sizes.forEach(function (size) {
+              if (tape.measured[size]) return;
+              var row = $('tape-body').querySelector('tr[data-size="' + CSS.escape(size) + '"]'); if (!row) return;
+              var filled = tapeFilledRow(size);
+              TT.fields.forEach(function (f) {
+                var input = row.querySelector('input[data-field="' + f + '"]'); var v = filled && filled[f];
+                input.value = v ? String(v.cm) : ''; input.placeholder = v ? '' : '–';
+                var p = input.parentNode.querySelector('.prov'); p.className = 'prov' + (v ? ' prov-' + v.provenance : ''); p.textContent = v ? TT.provenance[v.provenance] : TT.text.notMeasured;
+              });
+            });
+            showTapeIssues(r); text('tape-status', '');
+          } catch (err) { if (seq === tape.seq) { text('tape-status', ''); note('tape-issues', 'critical', [err.message]); } }
+        }, 350);
+      }
+      async function loadTape(id) {
+        tape.id = id; tape.seq++; clearTimeout(tape.timer);
+        $('tape-panel').classList.remove('hidden'); $('tape-issues').textContent = ''; text('tape-status', '');
+        var r;
+        try { r = await api('GET', '/shopify/products/' + encodeURIComponent(id) + '/garment-tape'); }
+        catch (err) { $('tape-form').classList.add('hidden'); $('tape-nochart').classList.remove('hidden'); text('tape-nochart', err.message); return; }
+        if (tape.id !== id) return;
+        var empty = !r.sizes.length;
+        $('tape-form').classList.toggle('hidden', empty); $('tape-nochart').classList.toggle('hidden', !empty);
+        if (empty) { text('tape-nochart', TT.text.noChart); return; }
+        tape.sizes = r.sizes; tape.filled = r.garmentTape || []; tape.measured = {};
+        var depth = null;
+        r.measured.forEach(function (m) { tape.measured[m.size] = m; if (m.hipDepthBelowBandCm != null) depth = m.hipDepthBelowBandCm; });
+        $('tape-closure').value = r.closure || '';
+        $('tape-depth').value = depth != null ? String(depth) : '';
+        renderTapeRows(); showTapeIssues(r);
+      }
+      $('tape-closure').addEventListener('change', tapeChanged);
+      $('tape-depth').addEventListener('input', tapeChanged);
+      $('tape-form').addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        var btn = $('tape-save'); btn.disabled = true; text('tape-status', TT.text.saving); clearTimeout(tape.timer); tape.seq++;
+        var id = tape.id;
+        try {
+          var r = await api('PUT', '/shopify/products/' + encodeURIComponent(id) + '/garment-tape', tapeRequest(false));
+          tape.filled = r.garmentTape || [];
+          showTapeIssues(r);
+          text('tape-status', r.written.length ? TT.text.saved : (r.measured.length ? TT.text.saved : TT.text.nothingToSave));
+          renderTapeRows();
+          setTimeout(function () { loadProducts().catch(function () {}); }, 2500);
+        } catch (err) {
+          text('tape-status', '');
+          showTapeIssues({ errors: (err.details && err.details.errors) || [{ message: err.message }], warnings: (err.details && err.details.warnings) || [] });
+        } finally { btn.disabled = !!$('tape-issues').querySelector('.note-critical'); }
+      });
+      tapeStaticText();
 
       document.querySelectorAll('input[name="chart-type"]').forEach(function (r) {
         r.addEventListener('change', function () {

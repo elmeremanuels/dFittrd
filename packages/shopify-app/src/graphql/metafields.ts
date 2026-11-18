@@ -33,6 +33,15 @@ export const METAFIELDS_SET = /* GraphQL */ `
   }
 `;
 
+export const METAFIELDS_DELETE = /* GraphQL */ `
+  mutation CurtainMetafieldsDelete($metafields: [MetafieldIdentifierInput!]!) {
+    metafieldsDelete(metafields: $metafields) {
+      deletedMetafields { key namespace ownerId }
+      userErrors { field message }
+    }
+  }
+`;
+
 export const CURRENT_APP_INSTALLATION_QUERY = /* GraphQL */ `
   query CurtainInstallation { currentAppInstallation { id } }
 `;
@@ -68,6 +77,20 @@ export async function setProductMetafields(client: AdminGraphqlClient, gidOrExte
   const inputs = toShopifyMetafields(payload, productGid(gidOrExternalId));
   if (inputs.length === 0) return { metafields: [] };
   return metafieldsSet(client, inputs);
+}
+
+/**
+ * Remove `$app:curtain` metafields from a product (a value the merchant cleared: Shopify has no
+ * empty metafield). Returns the keys that existed and were deleted; a key that was not set is not an error.
+ */
+export async function deleteProductMetafields(client: AdminGraphqlClient, gidOrExternalId: string, keys: readonly string[]): Promise<string[]> {
+  if (keys.length === 0) return [];
+  const ownerId = productGid(gidOrExternalId);
+  const data = await client.request<{ metafieldsDelete: { deletedMetafields: Array<{ key: string } | null> | null; userErrors: UserError[] } }>(METAFIELDS_DELETE, {
+    metafields: keys.map((key) => ({ ownerId, namespace: SHOPIFY_METAFIELD_NAMESPACE, key })),
+  });
+  assertNoUserErrors(data.metafieldsDelete.userErrors, 'metafieldsDelete');
+  return (data.metafieldsDelete.deletedMetafields ?? []).filter((m): m is { key: string } => m !== null).map((m) => m.key);
 }
 
 export async function getCurrentAppInstallationId(client: AdminGraphqlClient): Promise<string> {

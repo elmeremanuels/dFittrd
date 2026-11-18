@@ -88,6 +88,14 @@ What we still need to ask for this skirt:
 4. **Does the band go clearly further than B without strain?** If so, how far.
 5. Helpful: where the skirt is meant to sit, how high the band is, whether there is a slit or a lining. Optional: the weight of one size.
 
+## Enter it yourself
+
+In the Shopify app: open the product from the products table; under **Garment measurements** pick how it closes,
+write the hip distance once, tick the sizes you measured and type their five numbers. The other sizes fill in as
+"estimated" (between two measured sizes) or "rough estimate" (beyond them) while you type; mistakes are shown in red
+and stop the save. In WooCommerce: the same table sits in the product's Curtain box, below the size chart; the
+estimates appear after you update the product. Never type a number into a size you did not measure: leave it unticked.
+
 ## Send it to us
 
 A photo of your notebook page is fine, as long as each row says the size and each number says which letter (A to E) it is, C says its distance, and the page says how the garment closes. Cross out mistakes clearly and write the right number next to them.

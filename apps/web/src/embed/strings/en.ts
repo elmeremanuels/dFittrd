@@ -133,6 +133,14 @@ export interface EmbedCatalogue {
     noneFits: string;
     adjusted: (direction: 'up' | 'down', from: string, preference: FitPreference) => string;
     compare: string;
+    /** A "Compare sizes" chip for a pull-on size whose waistband does not stretch over the hips (no score shown). */
+    compareNoPullOn: string;
+    /** In place of the fit score when the recommended pull-on size's band only just passes the hips (the engine's score ignores that). */
+    scorePullOnTight: string;
+    /** A "Compare sizes" chip for a pull-on size whose band only just passes the hips (no score shown, as for the recommendation). */
+    compareJustPullsOn: string;
+    /** "Selected on the shop page" when that size's band does not stretch over the hips. */
+    onPageNoPullOn: (size: string) => string;
     recommendedMark: string;
     onPage: (size: string) => string;
     details: string;
@@ -364,6 +372,10 @@ export const EN: EmbedCatalogue = {
     noneFits: 'No size fits well',
     adjusted: (direction, from, preference) => `One size ${direction} from ${from} for your ${preference} preference.`,
     compare: 'Compare sizes',
+    compareNoPullOn: 'too small to pull on',
+    scorePullOnTight: 'Only just pulls on',
+    compareJustPullsOn: 'only just pulls on',
+    onPageNoPullOn: (size) => `Selected on the shop page: ${size}. Its waistband does not stretch over your hips.`,
     recommendedMark: '(recommended)',
     onPage: (size) => `Selected on the shop page: ${size}`,
     details: 'Result details',

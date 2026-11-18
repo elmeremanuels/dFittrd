@@ -152,6 +152,11 @@ export function ResultScreen({
   const estimated = priorKeys(profile).filter((k) => points.some((p) => p.point === k));
   const [chooseBefore, chooseAfter] = parts(t.chooseOnPage, 'size');
   const onPageSize = currentVariantSize && fit.perSize.some((s) => s.size === currentVariantSize) ? currentVariantSize : null;
+  const onPageBlocked = onPageSize !== null && fit.perSize.find((s) => s.size === onPageSize)?.pullOn?.status === 'blocked';
+  // The engine scores the chart, not the band over the hips: a 100% next to "only just stretches over
+  // your hips" contradicts itself, so a marginal pull-on size shows the check instead of the number.
+  const advisedPullOn = fit.perSize.find((s) => s.size === (advice.size ?? advice.closest))?.pullOn;
+  const scoreNote = advice.size && advisedPullOn?.status === 'marginal' ? t.scorePullOnTight : undefined;
 
   return (
     <div className="space-y-4 pb-2" data-testid="embed-result" style={{ '--estimate-clear': `${barHeight}px` } as CSSProperties}>
@@ -170,7 +175,7 @@ export function ResultScreen({
         ) : null}
       </div>
 
-      <FitPanel fit={shown} hasMeasurements />
+      <FitPanel fit={shown} hasMeasurements scoreNote={scoreNote} />
 
       {sizes.length > 1 ? (
         <div className="space-y-1.5">
@@ -188,12 +193,27 @@ export function ResultScreen({
                 className={`chip min-h-10 px-3.5 text-sm ${selected === s.size ? 'border-ink bg-ink text-white' : ''}`}
               >
                 {s.size}
-                {s.score !== null ? <span className="text-xs opacity-75">{pct(s.score)}</span> : null}
+                {/* A pull-on size whose band does not pass (or only just passes) the hips: the pull-on check, not the chart score. */}
+                {s.pullOn?.status === 'blocked' ? (
+                  <span className="text-xs opacity-75" data-testid={`compare-no-pull-on-${s.size}`}>{t.compareNoPullOn}</span>
+                ) : s.pullOn?.status === 'marginal' ? (
+                  <span className="text-xs opacity-75" data-testid={`compare-just-pulls-on-${s.size}`}>{t.compareJustPullsOn}</span>
+                ) : s.score !== null ? (
+                  <span className="text-xs opacity-75">{pct(s.score)}</span>
+                ) : null}
                 {s.size === advice.size ? <span className="sr-only">{t.recommendedMark}</span> : null}
               </button>
             ))}
           </div>
-          {onPageSize && onPageSize !== advice.size ? <p className="text-xs text-ink-mute">{t.onPage(onPageSize)}</p> : null}
+          {onPageSize && onPageSize !== advice.size ? (
+            onPageBlocked ? (
+              <p className="text-xs font-medium text-bad" data-testid="on-page-no-pull-on">
+                {t.onPageNoPullOn(onPageSize)}
+              </p>
+            ) : (
+              <p className="text-xs text-ink-mute">{t.onPage(onPageSize)}</p>
+            )
+          ) : null}
         </div>
       ) : null}
 

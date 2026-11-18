@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Curtain for WooCommerce 0.1.0\n"
 "Report-Msgid-Bugs-To: https://curtain.fit/woocommerce\n"
-"POT-Creation-Date: 2026-11-15 03:51+0000\n"
+"POT-Creation-Date: 2026-11-18 17:34+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -30,6 +30,270 @@ msgstr ""
 
 #: includes/class-frontend.php
 msgid "Find your size on this page. Your measurements stay on this device. Fit results are estimates."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "A (waistband, relaxed)"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "B (waistband, stretched)"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "C (hip)"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "D (hem)"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "E (length)"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Pull-on (elastic band, nothing to open)"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Zip"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Buttons"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Drawstring (opens wider when loosened)"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Wrap"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Something else"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "measured"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "estimated"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "rough estimate"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Add a size chart first: the garment measurements are entered per size of the chart."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Size %s is not in this product's size chart. Use the size labels of the chart."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Size %s is entered twice. Keep one row per size."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Size %1$s is marked as measured but has no numbers. Enter its numbers, or untick \"measured\"."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Size %1$s, %2$s: this is not a number. Write centimetres, for example 94 or 94.5."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "hip depth below the band"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Size %1$s, %2$s: %3$s cm is not a garment measurement. Enter a number above 0 and at most %4$s cm."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Size %1$s: the hip depth below the band (%2$s cm) must be between 0 and %3$s cm. We ask for %4$s cm."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "The hip depth below the band is not a number. Write centimetres, for example %s."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "The hip depth below the band (%1$s cm) must be between 0 and %2$s cm. We ask for %3$s cm."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Size %1$s: the stretched waistband (%2$s cm) is smaller than the relaxed waistband (%3$s cm). Check the two measurements."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Choose how the garment closes from the list."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Size %1$s, %2$s: %3$s cm looks like the flat width. Widths are measured flat and then doubled: write the width x 2."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "The hip (C) of size %1$s has no distance below the band. A hip number without its distance cannot be compared: write the distance (we ask for %2$s cm)."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "The hip (C) was measured at different distances below the band. The estimated sizes get no hip distance; measure every size at the same distance."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "These five numbers are for skirts and trousers with a waistband. This product's category is \"%s\": they are stored, but the size advice uses them only for bottoms."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Say how the garment closes. For a pull-on garment the stretched waistband (B) has to go over the hips, and the size advice checks that."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "This garment is pull-on, but no size has a stretched waistband (B). Without it the size advice cannot check that the garment goes over the hips."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Only 1 size is"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Only %d sizes are"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "%1$s measured. Measure at least %2$d: the smallest, the largest and one in between. Every other size is estimated from the measured ones."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Size %1$s lies outside the measured sizes: its numbers are a rough estimate, and the size advice is more careful with it. Measuring size %1$s makes them exact."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "%1$s: size %2$s (%3$s cm) is smaller than size %4$s (%5$s cm). Larger sizes are usually larger; check the numbers."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Garment measurements"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Five numbers per size, measured on the garment lying flat. Widths are doubled, all in cm. Measure at least the smallest size, the largest and one in between: we estimate the other sizes and label them for the shopper."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "How to measure"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "A: across the top of the waistband as it lies, x 2."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "B: the same, pulled as far as you would pull it to step in, x 2. A band that does not stretch: the same number as A."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "C: straight across at the distance below the band given above (we ask for 20 cm), x 2."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "D: across the hem, spread flat, x 2."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "E: from the top of the band straight down to the hem, at the centre front. Not doubled."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "How does it close?"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Choose…"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Hip (C) measured at this distance below the top of the band (cm)"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "e.g. 20"
+msgstr ""
+
+#: includes/class-garment-tape.php includes/class-product-meta.php includes/class-settings.php
+msgid "Size"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Measured"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Tick the sizes you measured. Leave the others: we estimate them."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "not measured"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Add a size chart to this product first: the measurements are entered per size of the chart."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Save measurements"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Saving…"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Checking…"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Saved. Curtain is re-reading the product."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Nothing measured yet."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Fix these before saving:"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "The garment measurements were not saved. Fix these and update the product again:"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Worth a look (you can still save):"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "measured = your number · estimated = between two measured sizes · rough estimate = beyond the measured sizes"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "The estimates below are from your last valid numbers. They update once the errors are fixed."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Not in the size chart any more. Type the size it now has, or untick it."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "These numbers describe the garment, not a shopper. Shoppers’ measurements never reach you."
 msgstr ""
 
 #: includes/class-plugin.php
@@ -369,10 +633,6 @@ msgstr ""
 
 #: includes/class-product-meta.php
 msgid "Required before the product can be active:"
-msgstr ""
-
-#: includes/class-product-meta.php includes/class-settings.php
-msgid "Size"
 msgstr ""
 
 #: includes/class-product-meta.php

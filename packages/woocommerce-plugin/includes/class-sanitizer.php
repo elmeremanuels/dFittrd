@@ -162,6 +162,15 @@ final class Sanitizer {
 		}
 		$meta['_curtain_size_chart_type'] = self::or_null( $sct );
 
+		// -- garment measurements (closure + the table) ----------------------------------------
+		$tape = null;
+		if ( array_key_exists( 'closure', $in ) || array_key_exists( 'tape', $in ) ) {
+			$tape = self::garment_tape( $in, $rows, $category );
+			foreach ( $tape['meta'] as $k => $v ) {
+				$meta[ $k ] = $v;
+			}
+		}
+
 		// -- notes / score --------------------------------------------------------------------
 		$meta['_curtain_sizing_notes'] = self::or_null( self::textarea( $in['sizing_notes'] ?? '', 500 ) );
 		$tts                           = self::number( $in['true_to_size_score'] ?? '' );
@@ -249,7 +258,95 @@ final class Sanitizer {
 		return array(
 			'meta'   => $meta,
 			'errors' => array_values( array_unique( $errors ) ),
+			'tape'   => null === $tape ? null : array(
+				'errors'   => $tape['errors'],
+				'warnings' => $tape['warnings'],
+			),
 		);
+	}
+
+	/**
+	 * The "Garment measurements" table → `_curtain_closure` + `_curtain_garment_tape` (the filled
+	 * tape, every value with its provenance). Only ticked rows count as measured; an unticked row's
+	 * numbers are the estimates shown to the merchant and are never read. With an error nothing of the
+	 * table is stored (the saved tape and closure stay as they were) and what was typed is kept in
+	 * `_curtain_tape_input` so the box shows it again with the messages.
+	 *
+	 * @param array<string,mixed>            $in
+	 * @param array<int,array<string,mixed>> $chart
+	 * @return array{meta: array<string, string|null>, errors: array<int,array<string,mixed>>, warnings: array<int,array<string,mixed>>}
+	 */
+	private static function garment_tape( array $in, array $chart, string $category ): array {
+		$closure  = strtolower( self::text( $in['closure'] ?? '', 32 ) );
+		$depth    = self::tape_value( $in['tape_depth'] ?? '' );
+		$measured = array();
+		// The table was drawn from the chart as it was stored. When this save leaves the chart empty,
+		// its rows name sizes that no longer exist: they are not read, and the stored tape is removed
+		// below (a tape without a chart cannot be read, and the backend refuses it).
+		$rows_in = array() === $chart ? array() : array_slice( (array) ( $in['tape'] ?? array() ), 0, 60 ); // 30 chart rows + rows of sizes no longer in it.
+		foreach ( $rows_in as $row ) {
+			if ( ! is_array( $row ) || empty( $row['measured'] ) ) {
+				continue;
+			}
+			$m = array( 'size' => self::text( $row['size'] ?? '', 16 ) );
+			foreach ( Garment_Tape::INPUT_KEYS as $field => $key ) {
+				$v = self::tape_value( $row[ $field ] ?? '' );
+				if ( null !== $v ) {
+					$m[ $key ] = $v;
+				}
+			}
+			if ( isset( $m['hipCm'] ) && null !== $depth ) {
+				$m['hipDepthBelowBandCm'] = $depth;
+			}
+			$measured[] = $m;
+		}
+		$check = Garment_Tape::check(
+			array(
+				'category' => '' === $category ? null : $category,
+				'chart'    => $chart,
+				'closure'  => '' === $closure ? null : $closure,
+				'measured' => $measured,
+			)
+		);
+		$meta = array();
+		if ( $check['ok'] ) {
+			$meta['_curtain_closure']       = $check['closure'] ?? null;
+			$meta['_curtain_garment_tape']  = isset( $check['garmentTape'] ) ? self::json( $check['garmentTape'] ) : null;
+			$meta[ Garment_Tape::META_INPUT ] = null;
+		} elseif ( array() === $chart ) {
+			// Only the closure can be wrong here; the tape still goes, so it never outlives the chart.
+			$meta['_curtain_garment_tape']    = null;
+			$meta[ Garment_Tape::META_INPUT ] = null;
+		} else {
+			$meta[ Garment_Tape::META_INPUT ] = self::json(
+				array(
+					'closure'  => $closure,
+					'depth'    => $depth,
+					'measured' => $measured,
+				)
+			);
+		}
+		return array(
+			'meta'     => $meta,
+			'errors'   => Garment_Tape::collapse_shared_depth( $check['errors'], $depth ),
+			'warnings' => $check['warnings'],
+		);
+	}
+
+	/**
+	 * A table cell: empty → null, a number (decimal comma allowed) → int|float, anything else → the text
+	 * (Garment_Tape answers "not a number" for it).
+	 *
+	 * @param mixed $v
+	 * @return int|float|string|null
+	 */
+	private static function tape_value( $v ) {
+		$t = self::text( $v, 24 );
+		if ( '' === $t ) {
+			return null;
+		}
+		$n = self::number( $t );
+		return null === $n ? $t : $n;
 	}
 
 	/** @param mixed $v */

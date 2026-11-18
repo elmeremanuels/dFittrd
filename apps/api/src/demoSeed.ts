@@ -6,7 +6,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { garmentQaFlags, MOCK_GARMENTS_BY_ID, type GarmentPayload, type GarmentQaFlag } from '@curtain/schema';
+import { checkGarmentTapeInput, garmentQaFlags, MOCK_GARMENTS_BY_ID, type GarmentPayload, type GarmentQaFlag, type MeasuredTapeInputRow } from '@curtain/schema';
 import type { Db } from './db/client.js';
 import { shops, type ShopSettings } from './db/schema.js';
 import type { Env } from './env.js';
@@ -81,6 +81,24 @@ export interface DemoGarmentBundle {
    * and any other outcome (refused, or passed with other flags) leaves the product without 3D instead of approving it.
    */
   qaFlags?: GarmentQaFlag[];
+  /**
+   * The product itself when the bundle folder (git-ignored) is missing: the product is then seeded
+   * without 3D instead of being left out, so the size advice can be shown on every checkout.
+   */
+  fallbackPayload?: GarmentPayload;
+  /**
+   * What the shop typed in its "Garment measurements" form (closure, the sizes it measured). Run
+   * through the same check and fill as the merchant admins (`checkGarmentTapeInput`); a check with
+   * an error stops the seed.
+   */
+  tape?: { closure: string | null; measured: readonly MeasuredTapeInputRow[] };
+}
+
+/** The closure and filled tape a merchant's form would store for this product. */
+export function demoTapeFields(g: Pick<GarmentPayload, 'category' | 'sizeChart'>, tape: NonNullable<DemoGarmentBundle['tape']>): Pick<GarmentPayload, 'closure' | 'garmentTape'> {
+  const check = checkGarmentTapeInput({ category: g.category, chart: g.sizeChart, closure: tape.closure, measured: tape.measured });
+  if (!check.ok) throw new Error(`demo seed: garment tape refused: ${check.errors.map((e) => e.message).join(' ')}`);
+  return { ...(check.closure ? { closure: check.closure } : {}), ...(check.garmentTape ? { garmentTape: check.garmentTape } : {}) };
 }
 
 /** Storefront details of a product that is not a schema fixture (the demo storefront draws it from these). */
@@ -182,12 +200,16 @@ export async function seedDemo(
         asset3d: null,
       });
     }
-    const bundles = (opts.bundles ?? []).filter((b) => b.shop === spec.key && existsSync(join(b.dir, 'base.glb')));
+    const hasBundle = (b: DemoGarmentBundle) => existsSync(join(b.dir, 'base.glb'));
+    const bundles = (opts.bundles ?? []).filter((b) => b.shop === spec.key && (hasBundle(b) || (b.payload && b.fallbackPayload)));
     // Products from payload.json go first, in the order the bundles are listed.
     let payloadAt = 0;
     for (const b of bundles) {
       if (b.payload) {
-        const raw = JSON.parse(readFileSync(join(b.dir, 'payload.json'), 'utf8')) as GarmentPayload;
+        const fromBundle = existsSync(join(b.dir, 'payload.json'));
+        const raw0 = fromBundle ? (JSON.parse(readFileSync(join(b.dir, 'payload.json'), 'utf8')) as GarmentPayload) : b.fallbackPayload!;
+        // The shop's garment measurements, as its admin form would have stored them.
+        const raw: GarmentPayload = b.tape ? { ...raw0, ...demoTapeFields(raw0, b.tape) } : raw0;
         const photo = `${storefront}/img/${encodeURIComponent(b.externalId)}.svg`;
         const color = b.colorHex ?? '#4F8FC0';
         const colorName = b.colorName ?? 'Azure';
@@ -211,7 +233,7 @@ export async function seedDemo(
         else products.splice(payloadAt++, 0, info);
       }
       const product = products.find((p) => p.externalId === b.externalId);
-      if (!product) continue;
+      if (!product || !hasBundle(b)) continue;
       let asset;
       try {
         ({ asset } = await importBundle(db, env, fresh.id, b.externalId, b.dir));
@@ -234,7 +256,7 @@ export async function seedDemo(
       product.asset3d = asset.version;
       if (flags.length) product.asset3dFlags = flags;
     }
-    if (bundles.length) {
+    if (bundles.some(hasBundle)) {
       await db
         .update(shops)
         .set({ settings: { ...fresh.settings, garment3d: true } })

@@ -5,7 +5,17 @@
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { ESTIMATE_DISCLAIMER } from '@curtain/schema';
+import {
+  ESTIMATE_DISCLAIMER,
+  GARMENT_CLOSURES,
+  GARMENT_TAPE_FIELDS,
+  GARMENT_TAPE_FORM_TEXT,
+  TAPE_CLOSURE_LABELS,
+  TAPE_FIELD_LABELS,
+  TAPE_HIP_DEPTH_CM,
+  TAPE_INPUT_KEYS,
+  TAPE_PROVENANCE_LABELS,
+} from '@curtain/schema';
 import { BLOCK_HANDLE } from './deepLinks';
 
 export const ADMIN_PAGE_PATH = '/shopify/admin' as const;
@@ -29,6 +39,17 @@ export interface AdminPageConfig {
   /** Override the HTML template (tests). */
   template?: string;
 }
+
+/** What the admin page's "Garment measurements" form reads: every word it shows comes from here. */
+export const GARMENT_TAPE_ADMIN_CONFIG = Object.freeze({
+  text: GARMENT_TAPE_FORM_TEXT,
+  fields: GARMENT_TAPE_FIELDS,
+  fieldLabels: TAPE_FIELD_LABELS,
+  inputKeys: TAPE_INPUT_KEYS,
+  closures: GARMENT_CLOSURES.map((value) => ({ value, label: TAPE_CLOSURE_LABELS[value] })),
+  provenance: TAPE_PROVENANCE_LABELS,
+  hipDepthCm: TAPE_HIP_DEPTH_CM,
+});
 
 /** Only the embedding admin may frame the page: the shop's own domain and admin.shopify.com. */
 export function adminContentSecurityPolicy(shopDomain: string | null | undefined): string {
@@ -74,6 +95,8 @@ export function renderAdminPage(cfg: AdminPageConfig): string {
     billing: cfg.billing ?? 'shopify',
     /** Hard rule 3: every render is labelled an estimate — the page shows this next to the ledger. */
     disclaimer: ESTIMATE_DISCLAIMER,
+    /** The "Garment measurements" form: its English catalogue (D21) and vocabularies, from @curtain/schema. */
+    tape: GARMENT_TAPE_ADMIN_CONFIG,
   };
   const html = cfg.template ?? adminPageTemplate();
   // Function replacers: a string replacement would interpret `$&`, `$'`, `` $` `` inside the values.

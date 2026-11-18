@@ -11,6 +11,8 @@
  *  - GET  /shopify/products/:id/chart-import    a garment chart + fabric proposed from the description (no write)
  *  - PUT  /shopify/products/:id/chart           write one product's chart (and confirmed fabric/lengths)
  *  - GET  /shopify/products/:id/checklist       completeness checklist + "Try it on" preview link
+ *  - GET  /shopify/products/:id/garment-tape    the "Garment measurements" form: closure, measured sizes, filled tape
+ *  - PUT  /shopify/products/:id/garment-tape    check + fill (`dryRun`: no write) and write `closure` / `garment_tape`
  *
  * D3: nothing here touches shopper data; the onboarding "tested" fact is the shop's own fit-session
  * count, never a device or a measurement.
@@ -23,6 +25,8 @@ import {
   ChartPreviewRequestSchema,
   ChartPreviewResponseSchema,
   ChartSpecError,
+  GarmentTapeFormResponseSchema,
+  GarmentTapeWriteRequestSchema,
   OnboardingResponseSchema,
   OnboardingUpdateRequestSchema,
   ProductChartImportResponseSchema,
@@ -31,14 +35,20 @@ import {
   ProductChecklistResponseSchema,
   chartTemplateById,
   checkChart,
+  checkGarmentTapeInput,
+  collapseSharedDepthIssues,
   convertChart,
+  fromShopifyProduct,
+  measuredFromGarmentTape,
   resolveChartSpec,
   shopifyExternalId,
   type GarmentPayload,
+  type GarmentTapeFormResponse,
 } from '@curtain/schema';
 import {
   assignChartToTargets,
   countSelection,
+  deleteProductMetafields,
   fetchProductDetail,
   fetchSelectionPage,
   onboardingSteps,
@@ -188,6 +198,82 @@ export const shopifyChartRoutes: FastifyPluginAsyncZod = async (app) => {
       const r = await setProductMetafields(client, gid, payload).catch(upstream);
       await queueSync(shop.id, [gid]);
       return { productId: req.params.id, written: r.metafields.map((m) => m.key), syncQueued: true, warnings: check.warnings };
+    },
+  );
+
+  /**
+   * The product as the form sees it: chart sizes, category, and the stored closure and tape read
+   * back against the current chart. Garment data only; no shopper data exists on this path.
+   */
+  async function tapeContext(client: AdminGraphqlClient, id: string) {
+    const node = await fetchProductDetail(client, id).catch(upstream);
+    if (!node) throw notFound('product');
+    const draft = fromShopifyProduct(node);
+    const chart = draft.sizeChart ?? [];
+    const category = typeof draft.category === 'string' ? draft.category : null;
+    return { draft, chart, category };
+  }
+
+  app.get(
+    '/shopify/products/:id/garment-tape',
+    { schema: { params: ProductIdParams, response: { 200: GarmentTapeFormResponseSchema } }, preHandler: requireMerchant },
+    async (req): Promise<GarmentTapeFormResponse> => {
+      const { client } = await adminFor(req.shop);
+      const { draft, chart, category } = await tapeContext(client, req.params.id);
+      const measured = measuredFromGarmentTape(draft.garmentTape);
+      const check = checkGarmentTapeInput({ category, chart, closure: draft.closure ?? null, measured });
+      return {
+        productId: req.params.id,
+        category,
+        sizes: chart.map((r) => r.size),
+        closure: draft.closure ?? null,
+        measured,
+        garmentTape: draft.garmentTape ?? null,
+        errors: check.errors,
+        warnings: check.warnings,
+        written: [],
+        syncQueued: false,
+      };
+    },
+  );
+
+  app.put(
+    '/shopify/products/:id/garment-tape',
+    {
+      schema: { params: ProductIdParams, body: GarmentTapeWriteRequestSchema, response: { 200: GarmentTapeFormResponseSchema } },
+      preHandler: requireMerchant,
+      config: { rateLimit: { max: 120, timeWindow: '1 minute' } },
+    },
+    async (req): Promise<GarmentTapeFormResponse> => {
+      const { shop, client } = await adminFor(req.shop);
+      const { chart, category } = await tapeContext(client, req.params.id);
+      const check = checkGarmentTapeInput({ category, chart, closure: req.body.closure, measured: req.body.measured });
+      // The form has one depth input: a bad depth is one error on that input, not one per size.
+      const depth = req.body.measured.find((m) => m.hipDepthBelowBandCm !== undefined && m.hipDepthBelowBandCm !== null)?.hipDepthBelowBandCm;
+      check.errors = collapseSharedDepthIssues(check.errors, depth);
+      const base = {
+        productId: req.params.id,
+        category,
+        sizes: chart.map((r) => r.size),
+        closure: check.closure ?? null,
+        measured: check.ok && check.garmentTape ? measuredFromGarmentTape(check.garmentTape) : req.body.measured,
+        garmentTape: check.garmentTape ?? null,
+        errors: check.errors,
+        warnings: check.warnings,
+      };
+      if (req.body.dryRun) return { ...base, written: [], syncQueued: false };
+      if (!check.ok) throw unprocessable('invalid_garment_tape', check.errors.map((e) => e.message).join(' '), { errors: check.errors, warnings: check.warnings });
+      const gid = productGid(req.params.id);
+      const payload: Partial<GarmentPayload> = {};
+      if (check.closure) payload.closure = check.closure;
+      if (check.garmentTape) payload.garmentTape = check.garmentTape;
+      const r = await setProductMetafields(client, gid, payload).catch(upstream);
+      const cleared = [...(check.closure ? [] : ['closure']), ...(check.garmentTape ? [] : ['garment_tape'])];
+      const deleted = await deleteProductMetafields(client, gid, cleared).catch(upstream);
+      const written = [...r.metafields.map((m) => m.key), ...deleted];
+      if (written.length > 0) await queueSync(shop.id, [gid]);
+      req.log.info({ shopId: shop.id, measuredSizes: check.measuredSizes.length, closure: check.closure ?? null }, 'garment tape written');
+      return { ...base, written, syncQueued: written.length > 0 };
     },
   );
 

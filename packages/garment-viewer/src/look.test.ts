@@ -12,8 +12,9 @@ import { sample } from './collide';
 import { openSession, prepareFit, relax, viewerMaterial } from './engine';
 import { fitForBody } from './fitting';
 import { buildBundle } from '../../../spikes/garment-engine/src/bundle';
-import { DEFAULT_BODY_HEX, Figure, LIGHTING_RIGS, TRUE_TONE_GLSL, TRUE_TONE_START, cameraFrame, frontIrradiance, installTrueTone, meshGeometry, parseSkinHex, projectToCanvas, trueTone } from './scene';
-import { GarmentViewError, planAvatar } from './mount';
+import { BACKDROP_HEX, CONTRAST_TARGET, DEFAULT_BODY_HEX, FLOOR_SEEN_HEX, Figure, LIGHTING_RIGS, LOOK_EXTRAS, TRUE_TONE_GLSL, TRUE_TONE_START, adaptiveBackdrop, cameraFrame, contrastOf, frontIrradiance, installTrueTone, lightingOf, meshGeometry, outlineColour, parseSkinHex, projectToCanvas, trueTone } from './scene';
+import { GarmentViewError, headOf, planAvatar } from './mount';
+import { tubeWeight } from './body';
 import type { Mesh } from '@curtain/mannequin';
 import * as spikeBody from '../../../spikes/garment-engine/viewer/src/body';
 import * as spikeScene from '../../../spikes/garment-engine/viewer/src/scene';
@@ -89,6 +90,126 @@ describe('lighting', () => {
     expect(c[0] / Math.PI).toBeLessThan(0.9);
   });
 });
+
+/** The ten Monk Skin Tone swatches (`MONK_SWATCHES` in apps/web capture). */
+const MONK = ['#f6ede4', '#f3e7db', '#f7ead0', '#eadaba', '#d7bd96', '#a07e56', '#825c43', '#604134', '#3a312a', '#292420'];
+
+describe('lighting neutral-v2', () => {
+  it('has the lights of neutral (skin and garment colours as neutral) and adds an outline and a contact shadow; classic and neutral add nothing', () => {
+    expect(LIGHTING_RIGS['neutral-v2']).toEqual(LIGHTING_RIGS.neutral);
+    expect(LOOK_EXTRAS.classic).toEqual({ outline: 0, contactShadow: 0, backdrop: 'cream', rim: 0 });
+    expect(LOOK_EXTRAS.neutral).toEqual(LOOK_EXTRAS.classic);
+    expect(LOOK_EXTRAS['neutral-v2'].outline).toBeGreaterThan(0);
+    expect(LOOK_EXTRAS['neutral-v2'].outline).toBeLessThanOrEqual(1.5);
+    expect(LOOK_EXTRAS['neutral-v2'].contactShadow).toBeGreaterThan(0);
+    expect(LOOK_EXTRAS['neutral-v2'].backdrop).toBe('cream');
+    expect(LOOK_EXTRAS['neutral-v2'].rim).toBe(0);
+  });
+
+  it('reads the host\'s lighting and head: only the names, anything else is today\'s look', () => {
+    for (const v of ['classic', 'neutral', 'neutral-v2'] as const) expect(lightingOf(v)).toBe(v);
+    for (const v of [undefined, null, '', 'Neutral', 'v2', 1, {}]) expect(lightingOf(v)).toBe('classic');
+    for (const v of ['neutral', 'egg', 'neutral-v2'] as const) expect(headOf(v)).toBe(v);
+    for (const v of [undefined, null, '', 'v2', 'NEUTRAL-V2', 2]) expect(headOf(v)).toBe('neutral');
+  });
+
+  it('the outline: none on a skin that stands out 3:1 by itself; else the skin darkened (same hue) until it stands out from the cream and the floor', () => {
+    const needs: number[] = [];
+    for (const [i, hex] of [...MONK, DEFAULT_BODY_HEX.toLowerCase()].entries()) {
+      const line = outlineColour(hex);
+      const alone = Math.min(contrastOf(hex, BACKDROP_HEX), contrastOf(hex, FLOOR_SEEN_HEX));
+      if (alone >= CONTRAST_TARGET) {
+        expect(line).toBeNull();
+        continue;
+      }
+      needs.push(i + 1);
+      expect(line).not.toBeNull();
+      expect(contrastOf(line!, BACKDROP_HEX)).toBeGreaterThanOrEqual(CONTRAST_TARGET);
+      expect(contrastOf(line!, FLOOR_SEEN_HEX)).toBeGreaterThanOrEqual(CONTRAST_TARGET);
+      // Darker, same hue: every channel scaled by about the same factor.
+      const ch = (h: string) => [1, 3, 5].map((k) => parseInt(h.slice(k, k + 2), 16));
+      const [a, b] = [ch(hex), ch(line!)];
+      const ks = a.map((v, k) => b[k]! / v);
+      expect(Math.max(...ks) - Math.min(...ks)).toBeLessThan(0.03);
+      expect(ks[0]).toBeLessThan(1);
+    }
+    // Monk 1 to 6 and the default grey need one; Monk 7 to 10 stand out from the cream on their own.
+    expect(needs).toEqual([1, 2, 3, 4, 5, 6, 11]);
+  });
+
+  it('the adaptive backdrop (tried, not used): the cream darkened until the skin stands out from it', () => {
+    for (const hex of MONK) {
+      const b = adaptiveBackdrop(hex);
+      expect(contrastOf(b, hex)).toBeGreaterThanOrEqual(CONTRAST_TARGET);
+      if (contrastOf(hex, BACKDROP_HEX) >= CONTRAST_TARGET) expect(b.toLowerCase()).toBe(BACKDROP_HEX.toLowerCase());
+    }
+    // Monk 1 needs a mid grey behind it: that is why it is not the default.
+    expect(contrastOf(adaptiveBackdrop(MONK[0]!), BACKDROP_HEX)).toBeGreaterThan(2.5);
+  });
+});
+
+describe('head v2 on the avatar', () => {
+  const canonical = buildMannequinMesh(m, { head: 'neutral-v2' });
+  const female = { category: 'dress', mannequin: { version: '0.1.0', shape: 'M' } as { family?: unknown } };
+
+  it('planAvatar builds it only when asked; the shade reaches the geometry as a vertex colour', () => {
+    expect(planAvatar(female, {}, { head: 'neutral-v2' }).avatar.mesh.shade).toBeDefined();
+    expect(planAvatar(female, {}).avatar.mesh.shade).toBeUndefined();
+    const g = meshGeometry(canonical);
+    expect(g.getAttribute('color').count).toBe(canonical.positions.length / 3);
+    expect(meshGeometry(buildMannequinMesh(m, { head: 'neutral' })).getAttribute('color')).toBeUndefined();
+    const f = new Figure(g, Uint32Array.from([0, 1, 2]), 3, null);
+    expect((f.body.material as THREE.MeshStandardMaterial).vertexColors).toBe(true);
+    f.setSkin('#a07e56');
+    expect((f.body.material as THREE.MeshStandardMaterial).vertexColors).toBe(true);
+    f.setBody(tri());
+    expect((f.body.material as THREE.MeshStandardMaterial).vertexColors).toBe(false);
+    f.setSkin(null);
+    expect((f.body.material as THREE.MeshStandardMaterial).vertexColors).toBe(false);
+    // The shared grey of every figure without the v2 head stays without vertex colours.
+    expect((figure().body.material as THREE.MeshStandardMaterial).vertexColors).toBe(false);
+  });
+
+  it('the tube on the neck follows the neck on every body the viewer draws; the head above it keeps its calm scale; the mesh stays closed', () => {
+    const { chinY, topY } = canonical.headLevels!;
+    expect(tubeWeight({ chinY, topY }, chinY - 1)).toBe(1);
+    expect(tubeWeight({ chinY, topY }, chinY + 0.2 * (topY - chinY))).toBe(0);
+    const head = canonical.partNames.indexOf('head'), torso = canonical.partNames.indexOf('torso');
+    for (const g of [[60, 45, 65], [88, 70, 96], [116, 98, 122], [150, 140, 160]] as const) {
+      const avatar = buildAvatar(m, canonical, { bust: g[0], waist: g[1], hip: g[2] });
+      expect(topology(avatar.mesh).watertight).toBe(true);
+      // Between the neck ring and the chin the head's tube is outside the torso's neck, by less than 6 mm.
+      let tube = 0, neck = 0;
+      for (let i = 0; i < canonical.vertexPart.length; i++) {
+        const y = avatar.mesh.positions[3 * i + 1]!;
+        if (y < m.morphHeights.neck + 1 || y > chinY - 1) continue;
+        const x = Math.abs(avatar.mesh.positions[3 * i]!);
+        if (canonical.vertexPart[i] === head) tube = Math.max(tube, x);
+        else if (canonical.vertexPart[i] === torso) neck = Math.max(neck, x);
+      }
+      expect(tube).toBeGreaterThan(neck);
+      expect(tube - neck).toBeLessThan(0.6);
+      // The jaw band rule of the neck fit holds for this head too.
+      const band = jawBandOf(avatar.mesh, chinY, topY);
+      expect(band.neck).toBeLessThanOrEqual(NECK_TO_HEAD * band.head + 1e-9);
+    }
+    for (const heightCm of [130, 182, 220]) expect(topology(buildTypedAvatar(m, { heightCm }, 'dress', { head: 'neutral-v2' }).avatar.mesh).watertight).toBe(true);
+  });
+});
+
+/** The jaw band of `jawBand` below on a head whose chin is not its lowest point (head v2): the head above its tube only. */
+function jawBandOf(mesh: Mesh, chin: number, top: number): { head: number; neck: number } {
+  const head = mesh.partNames.indexOf('head'), torso = mesh.partNames.indexOf('torso');
+  const out = { head: 0, neck: 0 };
+  for (let i = 0; i < mesh.vertexPart.length; i++) {
+    const t = (mesh.positions[3 * i + 1]! - chin) / (top - chin);
+    if (t < 0.074 || t > 0.296) continue;
+    const x = Math.abs(mesh.positions[3 * i]!);
+    if (mesh.vertexPart[i] === head && t >= 0.2) out.head = Math.max(out.head, x);
+    else if (mesh.vertexPart[i] === torso) out.neck = Math.max(out.neck, x);
+  }
+  return out;
+}
 
 describe('tone curve of the neutral lighting', () => {
   const lin = (hex: string): [number, number, number] => {

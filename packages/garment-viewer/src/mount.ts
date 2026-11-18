@@ -19,7 +19,7 @@ import { bakeAxis, bakePlace, blendBakedSize, settleOnBody, type BakePlace, type
 import { DrapePool } from './drapePool';
 import { DEFAULT_DRAPE, drapeJobOf, openSession, prepareFit, viewerMaterial, type DrapeOptions, type FitInstance } from './engine';
 import * as THREE from 'three';
-import { Figure, Stage, meshGeometry, parseSkinHex, type Lighting } from './scene';
+import { Figure, Stage, lightingOf, meshGeometry, parseSkinHex, type Lighting, type LookExtras } from './scene';
 
 export type GarmentViewState = 'loading' | 'draping' | 'settled' | 'error';
 
@@ -32,9 +32,18 @@ export interface AvatarLook {
   skinHex?: string | null;
   /**
    * `neutral` (default): the neutral standard face of `@curtain/mannequin` (D19: no avatar looks
-   * unfinished). `egg`: the plain v0 head. Fixed at mount; `setLook` does not change it.
+   * unfinished). `egg`: the plain v0 head. `neutral-v2` (opt-in, for the look review): head v2 of
+   * `@curtain/mannequin` (open eyes, brows, ears, a jaw and brow per family, no neck seam). Fixed at
+   * mount; `setLook` does not change it.
    */
-  head?: 'neutral' | 'egg';
+  head?: HeadKind;
+}
+
+export type HeadKind = 'neutral' | 'egg' | 'neutral-v2';
+
+/** The head a host asked for: `egg` and `neutral-v2` when asked by name, else `neutral`. */
+export function headOf(value: unknown): HeadKind {
+  return value === 'egg' || value === 'neutral-v2' ? value : 'neutral';
 }
 
 export interface MountOptions {
@@ -63,8 +72,13 @@ export interface MountOptions {
   /**
    * `classic` (default): lights and tone mapping as before. `neutral`: white lights and neutral
    * tone mapping, so skin and garment colours are not shifted. It changes how every garment looks.
+   * `neutral-v2` (opt-in): `neutral` plus a thin outline where bare skin meets the backdrop and a
+   * contact shadow, so a light skin does not vanish against the cream (`LOOK_EXTRAS` in scene.ts).
+   * Anything else is `classic`.
    */
   lighting?: Lighting;
+  /** Overrides of the lighting's outline, contact shadow, backdrop and rim: for the look comparison pages only, not for hosts. */
+  lookExtras?: Partial<LookExtras>;
   /** Called on every state change (the overlay shows a spinner, then the canvas). */
   onState?: (state: GarmentViewState) => void;
   fetch?: FetchLike;
@@ -153,7 +167,7 @@ export function supportsWebGL2(doc: Document = document): boolean {
 export interface AvatarPlan {
   /** The body the bundle's garment was draped on. */
   m: Mannequin;
-  head: 'neutral' | 'egg';
+  head: HeadKind;
   avatar: Avatar;
   field: BodyField;
   /** How far the garment is drawn above where the bundle has it, cm (0 without a typed height). */
@@ -174,7 +188,7 @@ export function planAvatar(anchors: { category: string; mannequin?: { family?: u
   const family = bundleFamilyOf(anchors);
   if (bodyFamilyOf(body) !== family) throw new GarmentViewError('incompatible');
   const m = buildMannequin(family === 'male' ? familyShape('male')! : bodyShape(BASE_SHAPE_ID));
-  const head = look?.head === 'egg' ? 'egg' : 'neutral';
+  const head = headOf(look?.head);
   let avatar: Avatar, field: BodyField, garmentLiftCm = 0, statureCm = 0;
   if (isTypedBody(body)) {
     // A typed height or shoulder width: the body is built from the measurements (`buildBody`).
@@ -234,12 +248,13 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
   }
   const session = openSession(m, bundle, opts.garment);
   const material = viewerMaterial('product', bundle.material);
-  const stage = new Stage(canvas, { controls: true, lighting: opts.lighting });
+  const stage = new Stage(canvas, { controls: true, lighting: lightingOf(opts.lighting), ...(opts.lookExtras ? { extras: opts.lookExtras } : {}) });
   const n = bundle.baseMesh.positions.length / 3;
   const tex = bundle.render && bundle.textureImage ? { ...bundle.render, image: bundle.textureImage } : null;
   const figure = new Figure(meshGeometry(avatar.mesh), bundle.baseMesh.indices, n, tex);
   figure.setMaterial(material);
   figure.setSkin(parseSkinHex(opts.look?.skinHex));
+  stage.setSkinTone(parseSkinHex(opts.look?.skinHex));
   figure.garment.position.y = lift;
   stage.scene.add(figure.group);
   stage.frame(60, stature);
@@ -360,6 +375,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
     setLook(look) {
       if (disposed) return;
       figure.setSkin(parseSkinHex(look?.skinHex));
+      stage.setSkinTone(parseSkinHex(look?.skinHex));
       wake(100);
     },
     dispose() {
@@ -386,10 +402,11 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
 function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBake, bundleMaterial: MaterialJson, ok: { sizes: string[]; baseSize: string }, plan: AvatarPlan, state: (s: GarmentViewState) => void): GarmentView {
   const { avatar, field, garmentLiftCm: lift, statureCm: stature, headPoint } = plan;
   const material = { ...viewerMaterial('product', bundleMaterial), baseColorHex: bake.meta.plainColourHex };
-  const stage = new Stage(canvas, { controls: true, lighting: opts.lighting });
+  const stage = new Stage(canvas, { controls: true, lighting: lightingOf(opts.lighting), ...(opts.lookExtras ? { extras: opts.lookExtras } : {}) });
   const figure = new Figure(meshGeometry(avatar.mesh), bake.indices, bake.vertexCount, null);
   figure.setMaterial(material);
   figure.setSkin(parseSkinHex(opts.look?.skinHex));
+  stage.setSkinTone(parseSkinHex(opts.look?.skinHex));
   figure.garment.position.y = lift;
   stage.scene.add(figure.group);
   stage.frame(60, stature);
@@ -451,6 +468,7 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
     setLook(look) {
       if (disposed) return;
       figure.setSkin(parseSkinHex(look?.skinHex));
+      stage.setSkinTone(parseSkinHex(look?.skinHex));
       wake(100);
     },
     dispose() {

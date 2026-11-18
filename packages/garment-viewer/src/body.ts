@@ -99,12 +99,26 @@ function calmHead(m: Mannequin, canonical: Mesh, morphed: Mesh, morph: Pick<Grad
   if (head < 0) return morphed;
   const s = 1 + HEAD_SCALE_SHARE * (morph.girthScaleAt(m.morphHeights.neck, 'body') - 1);
   const out = Float64Array.from(morphed.positions);
+  const levels = canonical.headLevels;
   for (let i = 0; i < canonical.vertexPart.length; i++) {
     if (canonical.vertexPart[i] !== head) continue;
-    out[3 * i] = canonical.positions[3 * i]! * s;
-    out[3 * i + 2] = canonical.positions[3 * i + 2]! * s;
+    // The v2 head's tube on the neck follows the neck's scale, so it stays just on the neck's surface.
+    const w = levels ? tubeWeight(levels, canonical.positions[3 * i + 1]!) : 0;
+    const k = w > 0 ? s + (morph.girthScaleAt(canonical.positions[3 * i + 1]!, 'body') - s) * w : s;
+    out[3 * i] = canonical.positions[3 * i]! * k;
+    out[3 * i + 2] = canonical.positions[3 * i + 2]! * k;
   }
   return { ...morphed, positions: out };
+}
+
+/**
+ * How much a vertex of the v2 head at height `y` belongs to its tube on the neck (1) rather than to
+ * the head (0): all of it below the chin, none from a fifth of the head's height up.
+ */
+export function tubeWeight(levels: { chinY: number; topY: number }, y: number): number {
+  const hi = levels.chinY + 0.2 * (levels.topY - levels.chinY);
+  const t = Math.min(1, Math.max(0, (hi - y) / (hi - levels.chinY)));
+  return t * t * (3 - 2 * t);
 }
 
 /** The neck under the neutral head is at most this share of the head's half-width at the jaw (the base body: 0.88). */
@@ -146,6 +160,8 @@ export function fitNeckToHead(mesh: Mesh, drawn: Pick<Mannequin, 'morphHeights'>
     chin = Math.min(chin, p[3 * i + 1]!);
     top = Math.max(top, p[3 * i + 1]!);
   }
+  // The v2 head reaches below its chin (its tube on the neck): its own levels say where the chin is.
+  if (mesh.headLevels) ({ chinY: chin, topY: top } = mesh.headLevels);
   const lo = chin + JAW_BAND[0] * (top - chin);
   const hi = chin + JAW_BAND[1] * (top - chin);
   // The torso's sections are horizontal rings: every vertex of one has the same height, and their mean is its centre.
@@ -153,7 +169,8 @@ export function fitNeckToHead(mesh: Mesh, drawn: Pick<Mannequin, 'morphHeights'>
   let headHalf = 0;
   for (let i = 0; i < mesh.vertexPart.length; i++) {
     const y = p[3 * i + 1]!;
-    if (mesh.vertexPart[i] === head && y >= lo && y <= hi) headHalf = Math.max(headHalf, Math.abs(p[3 * i]!));
+    // On the v2 head only the part above its tube counts as the jaw (the tube is the neck, widened with it).
+    if (mesh.vertexPart[i] === head && y >= lo && y <= hi && (!mesh.headLevels || tubeWeight(mesh.headLevels, y) === 0)) headHalf = Math.max(headHalf, Math.abs(p[3 * i]!));
     if (mesh.vertexPart[i] !== torso || y <= drawn.morphHeights.shoulder) continue;
     const ring = rings.get(y);
     if (ring) ring.push(i);
@@ -177,6 +194,25 @@ export function fitNeckToHead(mesh: Mesh, drawn: Pick<Mannequin, 'morphHeights'>
     const k = neckScaleAt(neck, y);
     const [cx, cz] = centres.get(y)!;
     for (const i of ring) {
+      out[3 * i] = cx + (p[3 * i]! - cx) * k;
+      out[3 * i + 2] = cz + (p[3 * i + 2]! - cz) * k;
+    }
+  }
+  if (mesh.headLevels) {
+    // The v2 head's tube is narrowed with the neck it sits on, about the neck's centre at its height.
+    const ys = [...centres.keys()].sort((a, b) => a - b);
+    const centreAt = (y: number): [number, number] => {
+      let best = ys[0]!;
+      for (const v of ys) if (Math.abs(v - y) < Math.abs(best - y)) best = v;
+      return centres.get(best)!;
+    };
+    for (let i = 0; i < mesh.vertexPart.length; i++) {
+      if (mesh.vertexPart[i] !== head) continue;
+      const y = p[3 * i + 1]!;
+      const w = tubeWeight(mesh.headLevels, y);
+      if (w <= 0) continue;
+      const k = 1 + (neckScaleAt(neck, y) - 1) * w;
+      const [cx, cz] = centreAt(y);
       out[3 * i] = cx + (p[3 * i]! - cx) * k;
       out[3 * i + 2] = cz + (p[3 * i + 2]! - cz) * k;
     }

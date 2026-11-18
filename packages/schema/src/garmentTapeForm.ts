@@ -343,6 +343,20 @@ export function refillGarmentTape(chart: readonly TapeChartRow[], tape: GarmentT
   return { garmentTape: filled.length > 0 ? filled : undefined, droppedSizes };
 }
 
+/**
+ * The one cross-field rule the payload schema cannot state (the draft is a `.partial()`): every
+ * tape row names a size of `sizeChart`. Empty = fine. English sentences, for a 422 on the merchant PUT.
+ */
+export function garmentTapeChartIssues(draft: { sizeChart?: readonly { size: string }[] | undefined; garmentTape?: GarmentTape | undefined }): string[] {
+  const tape = draft.garmentTape;
+  if (!tape || tape.length === 0) return [];
+  const chart = draft.sizeChart ?? [];
+  if (chart.length === 0) return ['garmentTape is set but sizeChart is empty: the garment measurements are per size of the chart.'];
+  const labels = new Set(chart.map((r) => key(r.size)));
+  const missing = tape.filter((r) => !labels.has(key(r.size))).map((r) => r.size);
+  return missing.length === 0 ? [] : [`garmentTape names size ${list(missing)}, which sizeChart does not have.`];
+}
+
 // ---------------------------------------------------------------------------
 // Wire shapes (the Shopify admin's form route)
 // ---------------------------------------------------------------------------

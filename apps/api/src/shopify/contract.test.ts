@@ -182,6 +182,32 @@ describe('contract: public-distribution app on an AUD development store', () => 
     expect((row?.payload as { sizeChartType?: string }).sizeChartType).toBe('body');
   });
 
+  it('7b. garment measurements: the form writes closure + garment_tape, the sync carries them into the payload; clearing deletes them', async () => {
+    const id = skirt.split('/').pop()!;
+    const get = await h.t.app.inject({ method: 'GET', url: `/shopify/products/${id}/garment-tape`, headers: auth(h.fake, SHOP) });
+    expect(get.statusCode).toBe(200);
+    const sizes = get.json().sizes as string[];
+    expect(sizes.length).toBeGreaterThanOrEqual(3);
+    const [first, mid, last] = [sizes[0]!, sizes[Math.floor(sizes.length / 2)]!, sizes[sizes.length - 1]!];
+    const row = (size: string, k: number) => ({ size, waistRelaxedCm: 66 + 5 * k, waistStretchedCm: 92 + 5 * k, hipCm: 110 + 5 * k, hipDepthBelowBandCm: 20, hemSweepCm: 230 + 5 * k, lengthCm: 103 });
+    const measured = [row(first, 0), row(mid, sizes.indexOf(mid)), row(last, sizes.length - 1)];
+    const put = await h.t.app.inject({ method: 'PUT', url: `/shopify/products/${id}/garment-tape`, headers: auth(h.fake, SHOP), payload: { closure: 'pull-on', measured } });
+    expect(put.statusCode).toBe(200);
+    expect(put.json().written).toEqual(['closure', 'garment_tape']);
+    await drainAll(h.t);
+    let stored = await h.t.handle.db.query.products.findFirst({ where: eq(products.externalId, id) });
+    expect(stored?.payload.closure).toBe('pull-on');
+    expect(stored?.payload.garmentTape).toHaveLength(sizes.length);
+    expect(stored?.payload.garmentTape?.filter((r) => r.waistStretched?.provenance === 'measured').map((r) => r.size)).toEqual([first, mid, last]);
+    const clear = await h.t.app.inject({ method: 'PUT', url: `/shopify/products/${id}/garment-tape`, headers: auth(h.fake, SHOP), payload: { closure: null, measured: [] } });
+    expect(clear.json().written).toEqual(['closure', 'garment_tape']);
+    expect(h.fake.store(SHOP).products.get(skirt)!.metafields.map((m) => m.key)).not.toContain('garment_tape');
+    await drainAll(h.t);
+    stored = await h.t.handle.db.query.products.findFirst({ where: eq(products.externalId, id) });
+    expect(stored?.payload.closure).toBeUndefined();
+    expect(stored?.payload.garmentTape).toBeUndefined();
+  });
+
   it('8. billing, decline: a test charge in AUD on the development store; DECLINED keeps the shop free and the trial unused', async () => {
     const res = await h.t.app.inject({ method: 'POST', url: '/shopify/billing/subscribe', headers: auth(h.fake, SHOP), payload: {} });
     expect(res.statusCode).toBe(200);

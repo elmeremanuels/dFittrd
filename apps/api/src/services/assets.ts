@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 import { copyFile, mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { and, desc, eq, ne } from 'drizzle-orm';
-import { checkGarmentBundle, GARMENT_BUNDLE_FILES, garmentBodyFamily, type GarmentBodyFamily, type GarmentBundleMannequinMeta, garmentQaFlagNote, garmentQaFlags, type GarmentAssetRef, type GarmentBundleMeta, type GarmentBundleProblem, type GarmentPayload, type MerchantGarmentAsset } from '@curtain/schema';
+import { checkGarmentBundle, GARMENT_BUNDLE_FILES, garmentBodyFamily, isWeakAudienceSource, type GarmentBodyFamily, type GarmentBundleMannequinMeta, garmentQaFlagNote, garmentQaFlags, type GarmentAssetRef, type GarmentBundleMeta, type GarmentBundleProblem, type GarmentPayload, type MerchantGarmentAsset } from '@curtain/schema';
 import type { Db } from '../db/client.js';
 import { garmentAssets, products, type ShopSettings } from '../db/schema.js';
 import type { Env } from '../env.js';
@@ -25,8 +25,12 @@ type AssetRow = typeof garmentAssets.$inferSelect;
 type ProductRow = typeof products.$inferSelect;
 
 export class AssetImportError extends Error {
-  constructor(readonly problem: GarmentBundleProblem | 'missing_file') {
-    super(`bundle rejected: ${problem}`);
+  /** `hint`: the next step for the operator, when there is one (printed by `asset:import`). */
+  constructor(
+    readonly problem: GarmentBundleProblem | 'missing_file',
+    readonly hint?: string,
+  ) {
+    super(hint ? `bundle rejected: ${problem} (${hint})` : `bundle rejected: ${problem}`);
   }
 }
 
@@ -81,11 +85,29 @@ export function assetDir(env: Env, shopId: string, productId: string, version: s
  * Import a bundle for a product of the shop. Idempotent per version; always `awaiting_approval` when new.
  * A men's product takes only a bundle built on the male mannequin, every other product only a
  * female-built one (`garmentBodyFamily` of the stored payload; `AssetImportError('family_mismatch')`).
+ *
+ * The family follows `audience` alone, whatever `MEN_3D_GATE` says and whatever the audience's
+ * source: it is the body the embed draws for the product (male for `men` since slice M0), and a
+ * bundle is only usable on the body it was draped on (D20 point 3). The men's gate reads the source
+ * too, for a different question, whether a guessed `men` may HIDE the product (`menGateScope`: a
+ * weak or unknown source is `unconfirmed`, not gated). So a product whose `men` is only a guess is
+ * drawn on the male body and takes a male bundle; if the guess is wrong, the fix is the audience,
+ * after which the female bundle imports. The refusal says so (`hint`).
+ *
+ * Changed by M1 with the gate off too: before M1 a female-built bundle imported for a men's product
+ * and was then refused by the viewer; now the import refuses it.
  */
 export async function importBundle(db: Db, env: Env, shopId: string, productExternalId: string, dir: string): Promise<{ asset: AssetRow; created: boolean }> {
   const product = await db.query.products.findFirst({ where: and(eq(products.shopId, shopId), eq(products.externalId, productExternalId)) });
   if (!product) throw notFound('product');
-  const bundle = await readBundleDir(dir, chartSizesOf(product), garmentBodyFamily(product.payload));
+  const family = garmentBodyFamily(product.payload);
+  let bundle: BundleOnDisk;
+  try {
+    bundle = await readBundleDir(dir, chartSizesOf(product), family);
+  } catch (err) {
+    if (err instanceof AssetImportError && err.problem === 'family_mismatch') throw new AssetImportError('family_mismatch', familyHint(product, family));
+    throw err;
+  }
   const existing = await db.query.garmentAssets.findFirst({ where: and(eq(garmentAssets.productId, product.id), eq(garmentAssets.version, bundle.version)) });
   if (existing) {
     // Re-importing the same bytes after a merchant rejection puts that version back up for review.
@@ -105,6 +127,15 @@ export async function importBundle(db: Db, env: Env, shopId: string, productExte
     .values({ shopId, productId: product.id, version: bundle.version, status: 'awaiting_approval', qa: bundle.qa, baseSize: bundle.baseSize, sizes: bundle.sizes, bundlePath: target, bytes: bundle.bytes, inputHash: bundle.inputHash })
     .returning();
   return { asset: asset!, created: true };
+}
+
+/** The operator's next step after a `family_mismatch`. */
+function familyHint(product: ProductRow, family: GarmentBodyFamily): string {
+  if (family === 'female') return 'the bundle was built on the male mannequin; this product is not men’s (audience), so it is shown on the female body';
+  const guessed = !product.audienceSource || isWeakAudienceSource(product.audienceSource);
+  return guessed
+    ? `this product’s audience “men” is ${product.audienceSource ? `a guess (from the ${product.audienceSource})` : 'of unknown source'}, and it is drawn on the male body: build the bundle on the male mannequin, or correct the audience if it is not a men’s product`
+    : 'this is a men’s product, shown on the male body: build the bundle on the male mannequin';
 }
 
 async function ownAsset(db: Db, shopId: string, assetId: string): Promise<AssetRow> {
@@ -213,7 +244,9 @@ export async function activeAsset(db: Db, env: Env, shop: { id: string; settings
 /**
  * The asset ref for `GET /v1/try`, or null (see `activeAsset`). Also null when the live bundle was
  * built on the other body family than the product is shown on now (`garmentBodyFamily`; the
- * audience changed after the import): the viewer would refuse it, so no 3D button is offered.
+ * audience changed after the import, or a female asset stored before M1 on a men's product): the
+ * viewer would refuse it, so no 3D button is offered. This holds with the gate off too (before M1
+ * the button was offered and the viewer then failed).
  */
 export async function activeAssetRef(db: Db, env: Env, shop: { id: string; settings: ShopSettings }, product: ProductRow, garment: GarmentPayload): Promise<GarmentAssetRef | null> {
   const active = await activeAsset(db, env, shop, product, garment);

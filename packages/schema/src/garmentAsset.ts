@@ -108,6 +108,8 @@ function familyOf(m: GarmentBundleMannequinMeta | undefined): GarmentBodyFamily 
  * The body family a bundle was built on (slice M1): anchors.json and qa.json both carry
  * `mannequin.family`, and they must agree. Absent in both is `female` (every bundle before M1).
  * `null` when a value is not a family or the two files disagree (the bundle is refused, `format`).
+ * Since absent reads as female, the check is strict for `male` only: `male` in one file and nothing
+ * in the other disagree, `female` in one file and nothing in the other agree (both female).
  */
 export function bundleMannequinFamily(meta: Pick<GarmentBundleMeta, 'anchors' | 'qa'>): GarmentBodyFamily | null {
   const a = familyOf(meta.anchors.mannequin);

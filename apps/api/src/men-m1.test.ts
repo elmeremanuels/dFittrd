@@ -7,7 +7,8 @@
  *   with MEN_3D_GATE=1 → `GET /v1/try?caps=requires3d` hands out the asset with `requires3d` → the
  *   five files are served under the asset ref and are the bundle's bytes.
  * The family check is strict: the male bundle is refused for a women's product, and a female-built
- * bundle (the spike's synthetic dress) is refused for the men's product, on import.
+ * bundle (the spike's synthetic dress) is refused for the men's product, on import. The family
+ * follows the audience even when the `men` is only a guess (weak source, not gated): see the last block.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, readFile } from 'node:fs/promises';
@@ -136,6 +137,43 @@ describe('gate on (MEN_3D_GATE=1): the men’s tee goes live only with its appro
       expect(Buffer.compare(res.rawPayload, await readFile(join(maleDir, name)))).toBe(0);
     }
     expect((await on.t.app.inject({ method: 'GET', url: `${path}/payload.json` })).statusCode).toBeGreaterThanOrEqual(400);
+  });
+});
+
+describe('a men’s audience that is only a guess (title or collection; the gate leaves it ungated)', () => {
+  // The gate and the body family answer different questions: may a guessed `men` hide the product
+  // (no: `unconfirmed`), and which body does the embed draw (the male one, since M0). The bundle
+  // must match the drawn body, so the family follows the audience whatever its source.
+  const GUESSED_TEE = 'guessed-tee';
+  const GUESSED_DRESS = 'guessed-dress';
+
+  it('is not gated, takes a male bundle and gets the optional 3D view on the male body', async () => {
+    const db = on.t.handle.db;
+    await upsertProduct(db, on.shop.shop.id, GUESSED_TEE, { ...SYNTHETIC_MENS_TEE, id: GUESSED_TEE }, { audienceSource: 'title' });
+    expect((await mint(on, GUESSED_TEE)).json<{ productState?: string }>().productState).toBeUndefined();
+    const male = await importBundle(db, on.t.env, on.shop.shop.id, GUESSED_TEE, maleDir);
+    await approveAsset(db, on.shop.shop.id, male.asset.id, 'test');
+    const d = await pairedDevice(on);
+    const res = await on.t.app.inject({ method: 'GET', url: `/v1/try/${tokenOf(await mint(on, GUESSED_TEE))}?caps=requires3d`, headers: d.auth });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ requires3d?: boolean; asset: { version: string } | null; garment: { audience?: string } }>();
+    expect(body.requires3d).not.toBe(true); // not gated: 3D is optional, the 2D flow stays
+    expect(body.asset?.version).toBe(male.asset.version);
+    expect(body.garment.audience).toBe('men');
+  });
+
+  it('refuses a female-built bundle with a hint to build it on the male body or correct the audience; once corrected, it imports', async () => {
+    const db = on.t.handle.db;
+    // A women's dress whose title read as men's: the guess, not gated, drawn on the male body.
+    await upsertProduct(db, on.shop.shop.id, GUESSED_DRESS, { ...MOCK_GARMENTS_BY_ID[WOMEN]!, id: GUESSED_DRESS, audience: 'men' }, { audienceSource: 'title' });
+    expect((await mint(on, GUESSED_DRESS)).json<{ productState?: string }>().productState).toBeUndefined();
+    const refused = await importBundle(db, on.t.env, on.shop.shop.id, GUESSED_DRESS, femaleDir).catch((e: unknown) => e);
+    expect(refused).toMatchObject({ problem: 'family_mismatch' });
+    expect((refused as Error).message).toMatch(/a guess \(from the title\).*correct the audience/);
+    // The merchant corrects the audience: the same bundle now imports, on the female body.
+    await upsertProduct(db, on.shop.shop.id, GUESSED_DRESS, { ...MOCK_GARMENTS_BY_ID[WOMEN]!, id: GUESSED_DRESS, audience: 'women' }, { audienceSource: 'override' });
+    const female = await importBundle(db, on.t.env, on.shop.shop.id, GUESSED_DRESS, femaleDir);
+    expect(assetMannequinFamily(female.asset)).toBe('female');
   });
 });
 

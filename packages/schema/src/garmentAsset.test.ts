@@ -35,7 +35,10 @@ describe('the body family a bundle was built on (men-3d-plan slice M1)', () => {
     expect(bundleMannequinFamily(fam({ version: '0.1.0', shape: 'M' }, undefined))).toBe('female');
     expect(bundleMannequinFamily(fam(male, { family: 'male' }))).toBe('male');
     expect(bundleMannequinFamily(fam({ family: 'female' }, { family: 'female' }))).toBe('female');
-    // Disagreeing files, a family named in one file only, or an unknown family: malformed.
+    // Absent means female, so `female` named in one file only agrees with the other: female.
+    expect(bundleMannequinFamily(fam({ family: 'female' }, undefined))).toBe('female');
+    expect(bundleMannequinFamily(fam(undefined, { family: 'female' }))).toBe('female');
+    // Disagreeing files (so `male` named in one file only), or an unknown family: malformed.
     expect(bundleMannequinFamily(fam(male, undefined))).toBeNull();
     expect(bundleMannequinFamily(fam(undefined, { family: 'male' }))).toBeNull();
     expect(bundleMannequinFamily(fam({ family: 'Male' }, { family: 'Male' }))).toBeNull();

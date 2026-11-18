@@ -27,7 +27,7 @@ try {
   console.log(`${created ? 'imported' : 'already imported'}: version ${asset.version}, ${asset.bytes} bytes, sizes ${asset.sizes.join(', ')}, status ${asset.status}`);
   console.log('Nothing is shown to shoppers until the merchant approves it and settings.garment3d is on.');
 } catch (err) {
-  console.error(err instanceof AssetImportError ? `bundle rejected: ${err.problem}` : String(err instanceof Error ? err.message : err));
+  console.error(err instanceof AssetImportError ? err.message : String(err instanceof Error ? err.message : err));
   process.exitCode = 1;
 } finally {
   await handle.close();

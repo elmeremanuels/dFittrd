@@ -56,8 +56,12 @@ describe.each(SPIKE_PRODUCT_IDS)('bundle %s', (id) => {
 });
 
 describe('the body family in the bundle (men-3d-plan slice M1)', () => {
-  // sha256 (first 16 hex) of the female bundles as built before M1 (`out/` of 18 Nov 2026, the same bytes):
-  // writing the family only for the male body leaves every female file, and so every female asset version, unchanged.
+  // sha256 (first 16 hex) of the female bundles built with `skipSeparation` by the base branch's
+  // builder (claude/garment-engine, before M1) on 18 Nov 2026; this builder gives the same bytes.
+  // Not the out/ files: a full build adds the separation results to qa.json, so out/ qa.json differs
+  // (the other four files match out/; the full out/ of 6 Nov, pre-M1 builder, also equals a full
+  // rebuild with this builder in all five files). Writing the family only for the male body leaves
+  // every female file, and so every female asset version, unchanged.
   const BEFORE_M1: Record<string, Record<string, string>> = {
     'aalter-studio-2': { 'base.glb': '37c0822cb7524f0e', 'anchors.json': '450075f158ed56bb', 'grading.json': '7f8cf2e48a33e2d7', 'material.json': 'ddf478e551cfcc3b', 'qa.json': '36c519bafdd86b88' },
     'monochrome-03': { 'base.glb': '5b0a7eec72c7e733', 'anchors.json': '7a516a8271fa7328', 'grading.json': '6206acfd362f065d', 'material.json': '4301c8bb072a6034', 'qa.json': '20cd0128fc220a63' },

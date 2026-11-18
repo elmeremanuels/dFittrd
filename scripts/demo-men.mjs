@@ -183,8 +183,16 @@ try {
     // The 2D figure the result draws above the 3D view (the male 2D figure is slice M1b, not built).
     const mirror = frame.locator('[data-testid="embed-result"] [data-testid="mirror"]').first();
     if (await mirror.count()) {
-      await mirror.scrollIntoViewIfNeeded();
+      // The sticky "Choose size" bar covers the lower edge of whatever is at the bottom of the
+      // overlay; scroll the figure to the top, so its own labels (estimate, "Body from your
+      // answers") are not under the bar, and check both labels are there.
+      await mirror.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+      await page.waitForTimeout(300);
       await shot(page, `tee-body-${body.name}--3b-2d-figure`, mirror);
+      for (const label of [/Body from your answers/, /Estimate/]) {
+        if (!(await mirror.getByText(label).count())) throw new Error(`tee, body ${body.name}: the 2D figure has no label ${label}`);
+      }
+      log(`tee, body ${body.name}: 2D figure labels present (estimate, body from your answers)`);
     }
     await canvas.scrollIntoViewIfNeeded();
     await shot(page, `tee-body-${body.name}--4-3d-close-size-${size}`, frame.getByTestId('garment3d'));

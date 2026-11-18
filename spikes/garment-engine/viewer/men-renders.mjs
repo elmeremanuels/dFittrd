@@ -53,6 +53,8 @@ const SIZES = {
   XL: { height: 177, bust: 114, waist: 102, hip: 108, shoulder: 42.5 },
   XXL: { height: 179, bust: 123, waist: 111, hip: 114.5, shoulder: 43.5 },
 };
+/** Wheel ticks out for the full-body pictures (see `shot`). */
+const ZOOM = 8;
 const q = (o) => new URLSearchParams(Object.entries(o).map(([k, v]) => [k, String(v)])).toString();
 
 const server = await createServer({ configFile: join(here, 'vite.config.ts'), logLevel: 'warn', server: { port: 5184, strictPort: false } });
@@ -62,11 +64,51 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 const problems = [];
 const renders = [];
 
+/** A small grey thumbnail of the WebGL canvas (as avatarMain's `patchAt` reads it). */
+const thumb = (page) =>
+  page.evaluate(() => {
+    const src = document.getElementById('stage');
+    const c = document.createElement('canvas');
+    c.width = 78;
+    c.height = 152;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(src, 0, 0, c.width, c.height);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    const out = [];
+    for (let i = 0; i < d.length; i += 4) out.push((d[i] + d[i + 1] + d[i + 2]) / 3);
+    return out;
+  });
+
+/**
+ * Wait until the canvas is still: two thumbnails 800 ms apart differ by under 0.2 grey levels on
+ * average (the orbit damping and the drape at rest; exact equality is never reached while the
+ * damping decays), at most `maxMs`.
+ */
+async function still(page, maxMs = 40_000) {
+  const t0 = Date.now();
+  let prev = await thumb(page);
+  while (Date.now() - t0 < maxMs) {
+    await page.waitForTimeout(800);
+    const next = await thumb(page);
+    let diff = 0;
+    for (let i = 0; i < next.length; i++) diff += Math.abs(next[i] - prev[i]);
+    if (diff / next.length < 0.2) return true;
+    prev = next;
+  }
+  return false;
+}
+
 /**
  * One picture. `turn`: drag the orbit controls this share of a quarter turn (1 = side view; the
- * garment page has no yaw parameter, the viewer's own controls turn it). `clip`: a CSS-px box.
+ * garment page has no yaw parameter, the viewer's own controls turn it). The body-alone pages are
+ * turned the same way (not with `yaw`), so body and tee pictures are taken at the same angle: the
+ * controls damp the turn out over many frames, and the picture waits until the canvas is still, so
+ * a quarter of the canvas height of drag is a full 90°. `zoomOut`: wheel ticks of 100 away from the
+ * figure first, so the A-pose hands are in the picture at phone width (the shipped mount frames 60 cm
+ * across, `stage.frame(60, stature)`, unchanged; the embed's wider 3D panel shows the hands).
+ * `clip`: a CSS-px box.
  */
-async function shot(context, query, name, { turn = 0, clip = null, expect = 'settled' } = {}) {
+async function shot(context, query, name, { turn = 0, zoomOut = 0, clip = null, expect = 'settled' } = {}) {
   if (match && !name.includes(match)) return;
   const page = await context.newPage();
   page.on('pageerror', (e) => problems.push(`${name}: pageerror ${e.message}`));
@@ -78,8 +120,15 @@ async function shot(context, query, name, { turn = 0, clip = null, expect = 'set
   const state = await page.evaluate(() => document.documentElement.dataset.viewerState);
   const tag = await page.textContent('#tag');
   if (state !== expect) problems.push(`${name}: state ${state}, expected ${expect} (${tag})`);
+  const box = await page.locator('#stage').boundingBox();
+  if (zoomOut) {
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.55);
+    for (let i = 0; i < zoomOut; i++) {
+      await page.mouse.wheel(0, 100);
+      await page.waitForTimeout(60);
+    }
+  }
   if (turn) {
-    const box = await page.locator('#stage').boundingBox();
     // OrbitControls turns 2π per canvas height of drag: a quarter of the height is a quarter turn.
     const dx = (box.height / 4) * turn;
     const y = box.y + box.height * 0.55;
@@ -89,11 +138,12 @@ async function shot(context, query, name, { turn = 0, clip = null, expect = 'set
     for (let i = 1; i <= 20; i++) await page.mouse.move(x0 + (dx * i) / 20, y);
     await page.mouse.up();
   }
-  await page.waitForTimeout(turn ? 1500 : 700);
+  await page.waitForTimeout(700);
+  if (!(await still(page))) problems.push(`${name}: the canvas did not come to rest in 40 s`);
   const file = join(outDir, `${name}.png`);
   try {
     await page.screenshot({ path: file, timeout: 180_000, ...(clip ? { clip } : {}) });
-    renders.push({ name, query, state, tag });
+    renders.push({ name, query, state, tag, turn, zoomOut });
   } catch (e) {
     problems.push(`${name}: screenshot ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`);
   }
@@ -104,10 +154,11 @@ try {
   const phone = await browser.newContext({ viewport: { width: 390, height: 760 }, deviceScaleFactor: 2 });
   for (const [size, b] of Object.entries(SIZES)) {
     const body = { family: 'male', ...b };
-    await shot(phone, q({ mode: 'head', frame: 'body', ...body, yaw: 0 }), `body-${size}--front`);
-    await shot(phone, q({ mode: 'head', frame: 'body', ...body, yaw: 90 }), `body-${size}--side`);
-    await shot(phone, q({ product: TEE, size, ...body }), `tee-${size}--front`);
-    await shot(phone, q({ product: TEE, size, ...body }), `tee-${size}--side`, { turn: 1 });
+    await shot(phone, q({ mode: 'head', frame: 'body', ...body, yaw: 0 }), `body-${size}--front`, { zoomOut: ZOOM });
+    await shot(phone, q({ mode: 'head', frame: 'body', ...body, yaw: 0 }), `body-${size}--side`, { zoomOut: ZOOM, turn: 1 });
+    await shot(phone, q({ product: TEE, size, ...body }), `tee-${size}--front`, { zoomOut: ZOOM });
+    await shot(phone, q({ product: TEE, size, ...body }), `tee-${size}--side`, { zoomOut: ZOOM, turn: 1 });
+    await shot(phone, q({ product: TEE, size, ...body }), `tee-${size}--back`, { zoomOut: ZOOM, turn: 2 });
   }
   // Close-ups at 3×: head and shoulders, and the torso (where the earlier report saw a boxy torso and a ledge).
   const close = await browser.newContext({ viewport: { width: 390, height: 760 }, deviceScaleFactor: 3 });
@@ -115,16 +166,21 @@ try {
   for (const size of ['S', 'M', 'XXL']) {
     const body = { family: 'male', ...SIZES[size] };
     await shot(close, q({ mode: 'head', frame: 'body', ...body, yaw: 0 }), `close-body-${size}--torso-front`, { clip: torso });
-    await shot(close, q({ mode: 'head', frame: 'body', ...body, yaw: 90 }), `close-body-${size}--torso-side`, { clip: torso });
+    await shot(close, q({ mode: 'head', frame: 'body', ...body, yaw: 0 }), `close-body-${size}--torso-side`, { clip: torso, turn: 1 });
     await shot(close, q({ mode: 'head', frame: 'body', ...body, yaw: 35 }), `close-body-${size}--torso-three-quarter`, { clip: torso });
+  }
+  // The tee in every size, where the review saw holes: torso front, side and three-quarter.
+  for (const size of Object.keys(SIZES)) {
+    const body = { family: 'male', ...SIZES[size] };
     await shot(close, q({ product: TEE, size, ...body }), `close-tee-${size}--torso-front`, { clip: torso });
     await shot(close, q({ product: TEE, size, ...body }), `close-tee-${size}--torso-side`, { clip: torso, turn: 1 });
+    await shot(close, q({ product: TEE, size, ...body }), `close-tee-${size}--torso-three-quarter`, { clip: torso, turn: 0.5 });
   }
   await shot(close, q({ mode: 'head', family: 'male', yaw: 0 }), `close-head-M--front`);
   await shot(close, q({ mode: 'head', family: 'male', yaw: 90 }), `close-head-M--side`);
   // The female body next to the male M, same page and camera, for comparison.
-  await shot(phone, q({ mode: 'head', frame: 'body', family: 'female', yaw: 0 }), `compare-female-M--front`);
-  await shot(phone, q({ mode: 'head', frame: 'body', family: 'female', yaw: 90 }), `compare-female-M--side`);
+  await shot(phone, q({ mode: 'head', frame: 'body', family: 'female', yaw: 0 }), `compare-female-M--front`, { zoomOut: ZOOM });
+  await shot(phone, q({ mode: 'head', frame: 'body', family: 'female', yaw: 0 }), `compare-female-M--side`, { zoomOut: ZOOM, turn: 1 });
   // Strict family check: a female-built bundle on the male body, and the male tee on the female body, are refused.
   if (existsSync(join(bundles, 'eval', 'azure-palm-baby-doll-dress', 'payload.json'))) {
     await shot(phone, q({ product: 'eval/azure-palm-baby-doll-dress', family: 'male', ...SIZES.M }), `refused--female-dress-on-male-body`, { expect: 'error' });

@@ -164,6 +164,17 @@ mount's body check). The only male bundle today is the SYNTHETIC men's test tee
 (`SYNTHETIC_MENS_TEE`, not a product; `pnpm --filter @curtain/garment-spike build:bundle`),
 used by `src/men-m1.test.ts` and `scripts/demo-men.mjs` to prove the path end to end.
 
+Two consequences of the family check, both on purpose (D20 point 3), both with the gate **off** too:
+- A men's product no longer imports a female-built bundle, and a female asset stored for it before
+  M1 is no longer handed out by `GET /v1/try` (no 3D button). Before M1 the bundle was imported and
+  the viewer then refused it. With a male bundle, a men's product gets the optional 3D view on the
+  male body (`src/men-m1.test.ts`).
+- The family follows `audience` alone, not its source. The gate treats a `men` read from a title or
+  a collection (or of unknown source) as `audience_unconfirmed` and does not hide the product, but
+  the embed still draws it on the male body (since M0), so it takes a male bundle only. The refusal
+  says so (`family_mismatch (... a guess (from the title) ... correct the audience ...)`): if the
+  guess is wrong, correct the audience and the female bundle imports.
+
 | Route | A men's product that is coming soon |
 |---|---|
 | `POST /v1/sdk/sessions` | the usual body plus `productState: 'coming_soon'`; the session is still minted |

@@ -20,7 +20,7 @@
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
-import { checkGarmentTapeInput, measuredFromGarmentTape, PILOT_SKIRT_CHART_ONLY, PILOT_SKIRT_TAPE_MEASURED } from '@curtain/schema';
+import { checkGarmentTapeInput, collapseSharedDepthIssues, measuredFromGarmentTape, PILOT_SKIRT_CHART_ONLY, PILOT_SKIRT_TAPE_MEASURED } from '@curtain/schema';
 import { renderAdminPage, APP_BRIDGE_SCRIPT_URL } from '../dist/index.js';
 
 const require = createRequire(import.meta.url);
@@ -39,6 +39,8 @@ const respond = (route, status, body) => route.fulfill({ status, contentType: 'a
 
 function tapeAnswer(closure, measured, written = []) {
   const check = checkGarmentTapeInput({ category: 'bottom', chart, closure, measured });
+  check.errors = collapseSharedDepthIssues(check.errors, measured.find((m) => m.hipDepthBelowBandCm != null)?.hipDepthBelowBandCm);
+  check.ok = check.errors.length === 0;
   return {
     check,
     body: {
@@ -135,7 +137,19 @@ for (const vp of [
   await page.waitForFunction(() => document.querySelector('#tape-issues .note-critical') !== null);
   expect(await page.locator('#tape-save').isDisabled(), `${vp.name}: save stays enabled with an error`);
   expect((await page.locator('#tape-body tr[data-size="14"] input[data-field="waistStretched"]').getAttribute('aria-invalid')) === 'true', `${vp.name}: the wrong input is not marked`);
+  expect(await page.locator('#tape-table.stale').count() === 1 && (await page.locator('#tape-stale').isVisible()), `${vp.name}: the estimates are not marked as from the last valid numbers`);
   await page.locator('#tape-panel').screenshot({ path: join(out, `shopify-${vp.name}-3-error.png`) });
+
+  // A hip depth out of range: one message, on the depth input, not once per size with a hip.
+  await page.locator('#tape-body tr[data-size="14"] input[data-field="waistStretched"]').fill('110');
+  await page.fill('#tape-depth', '90');
+  await page.waitForFunction(() => /\(90 cm\)/.test(document.querySelector('#tape-issues')?.textContent ?? ''));
+  const depthMsgs = (await page.locator('#tape-issues').innerText()).match(/hip depth below the band/g) ?? [];
+  expect(depthMsgs.length === 1, `${vp.name}: the depth error is said ${depthMsgs.length} times`);
+  expect((await page.locator('#tape-depth').getAttribute('aria-invalid')) === 'true', `${vp.name}: the depth input is not marked`);
+  await page.locator('#tape-panel').screenshot({ path: join(out, `shopify-${vp.name}-4-depth-error.png`) });
+  const clipped = await page.evaluate(() => { const p = document.querySelector('#tape-panel').getBoundingClientRect(); return [...document.querySelectorAll('#tape-panel input')].filter((e) => e.getBoundingClientRect().right > p.right + 0.5).length; });
+  expect(clipped === 0, `${vp.name}: ${clipped} inputs reach past the panel's right edge`);
   const scrollW = await page.evaluate(() => document.documentElement.scrollWidth);
   const wide = await page.evaluate((w) => [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > w + 1).slice(0, 5).map((e) => `${e.tagName.toLowerCase()}#${e.id}.${e.className}`), vp.width);
   expect(scrollW <= vp.width, `${vp.name}: the page scrolls sideways (${scrollW} px): ${wide.join(', ')}`);

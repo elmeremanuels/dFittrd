@@ -98,9 +98,11 @@
     .tape-head label { display: flex; flex-direction: column; gap: 4px; font-weight: 550; }
     .tape-head select, .tape-head input { max-width: 320px; }
     .tape-table td, .tape-table th { padding: 4px 6px; vertical-align: middle; }
-    .tape-table input.cm { width: 68px; font: inherit; border: 1px solid #b5b5b5; border-radius: 6px; padding: 3px 6px; text-align: right; }
+    .tape-table input.cm { box-sizing: border-box; width: 68px; font: inherit; border: 1px solid #b5b5b5; border-radius: 6px; padding: 3px 6px; text-align: right; }
     .tape-table input.cm[aria-invalid="true"] { border-color: var(--p-critical-fg); background: var(--p-critical-bg); }
     .tape-table tr.est input.cm { border-style: dashed; background: #fafafa; color: var(--p-text-subdued); }
+    .tape-table.stale tr.est input.cm, .tape-table.stale tr.est .prov { opacity: .45; }
+    #tape-depth[aria-invalid="true"] { border-color: var(--p-critical-fg); background: var(--p-critical-bg); }
     .tape-table .prov { display: block; font-size: 11px; line-height: 1.2; color: var(--p-text-subdued); }
     .tape-table .prov-extrapolated { color: var(--p-warning-fg); font-weight: 600; }
     .tape-table th.size, .tape-table td.size { font-weight: 650; white-space: nowrap; }
@@ -113,7 +115,7 @@
       .tape-table td.measured::before { content: attr(data-label); font-size: 12px; color: var(--p-text-subdued); }
       .tape-table td.num { text-align: left; display: flex; flex-direction: column; justify-content: flex-end; }
       .tape-table td.num::before { content: attr(data-label); display: block; font-size: 11px; line-height: 1.25; color: var(--p-text-subdued); }
-      .tape-table input.cm { width: 100%; }
+      .tape-table input.cm { width: 100%; min-width: 0; }
     }
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
   </style>
@@ -239,7 +241,8 @@
           </div>
           <p class="subdued" id="tape-measured-hint" style="margin:0 0 6px"></p>
           <div style="overflow:auto">
-            <table class="tape-table" aria-labelledby="h-tape">
+            <p class="note note-info hidden" id="tape-stale" style="margin:0 0 6px"></p>
+            <table class="tape-table" id="tape-table" aria-labelledby="h-tape">
               <thead id="tape-head"></thead>
               <tbody id="tape-body"></tbody>
             </table>
@@ -723,6 +726,7 @@
         var sel = $('tape-closure'); sel.textContent = '';
         sel.appendChild(el('option', { value: '', text: TT.text.closureNone }));
         TT.closures.forEach(function (c) { sel.appendChild(el('option', { value: c.value, text: c.label })); });
+        text('tape-stale', TT.text.estimatesStale);
         text('tape-measured-hint', TT.text.measuredHint); text('tape-legend', TT.text.legend); text('tape-save', TT.text.save); text('tape-privacy', TT.text.privacy);
         var head = $('tape-head'); head.textContent = '';
         head.appendChild(el('tr', null, [el('th', { class: 'size', text: TT.text.sizeColumn }), el('th', { text: TT.text.measuredColumn })].concat(TT.fields.map(function (f) { return el('th', { class: 'num', text: TT.fieldLabels[f] }); }))));
@@ -777,7 +781,14 @@
       function showTapeIssues(r) {
         var box = $('tape-issues'); box.textContent = '';
         $('tape-body').querySelectorAll('input.cm').forEach(function (i) { i.removeAttribute('aria-invalid'); });
+        $('tape-depth').removeAttribute('aria-invalid');
+        var hasErrors = !!(r.errors && r.errors.length);
+        // With an error the estimates are from the last numbers that passed: say so and grey them.
+        $('tape-table').classList.toggle('stale', hasErrors);
+        $('tape-stale').classList.toggle('hidden', !hasErrors);
         (r.errors || []).forEach(function (e) {
+          // The depth is one input for every size (the api says it once, without a size).
+          if (e.field === 'hipDepth') { $('tape-depth').setAttribute('aria-invalid', 'true'); return; }
           if (!e.size || !e.field) return;
           var row = $('tape-body').querySelector('tr[data-size="' + CSS.escape(e.size) + '"]');
           var input = row && row.querySelector('input[data-field="' + e.field + '"]');

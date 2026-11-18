@@ -42,7 +42,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEMO_BUNDLES, URLS, startDemo } from './demo.mjs';
+import { DEMO_BUNDLES, DEMO_SKIRT_POM, URLS, startDemo } from './demo.mjs';
 
 const require = createRequire(import.meta.url);
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -66,7 +66,7 @@ const PAGES = [
     threeD: [
       { name: 'azure', externalId: 'azure-palm-baby-doll-dress', path: '/products/azure-palm-baby-doll-dress', bundle: DEMO_BUNDLES.azure, qaFlags: [] },
       // Live only under the founder's low-rise waist reading, flagged: the import gate refuses it otherwise (qa_failed).
-      { name: 'skirt', externalId: 'crimson-wildflower-maxi-skirt', path: '/products/crimson-wildflower-maxi-skirt', bundle: DEMO_BUNDLES.skirt, qaFlags: ['low_rise_waist', 'precalibration_outside_tolerance'], rings: 'pilot-skirt' },
+      { name: 'skirt', externalId: 'crimson-wildflower-maxi-skirt', path: '/products/crimson-wildflower-maxi-skirt', bundle: DEMO_BUNDLES.skirt, qaFlags: DEMO_SKIRT_POM ? [] : ['low_rise_waist', 'precalibration_outside_tolerance'], rings: 'pilot-skirt' },
     ],
   },
 ];

@@ -81,17 +81,25 @@ await queue.start({ work: true });
  * or it gets no 3D view (demoSeed `qaFlags`).
  */
 const spikeOut = join(repoRoot, 'spikes', 'garment-engine', 'out');
+/**
+ * DEMO_SKIRT picks which skirt bundle the demo serves: `photo` (default) the run-17d photo reconstruction above;
+ * `pom` the POM v2 server drape bake (docs/research/step3-serverdrape-spike.md §10: built from the shop's tape,
+ * draped on the server, blended on the device, one plain colour), which imports without QA flags. DEMO_SKIRT_BUNDLE
+ * still overrides the folder.
+ */
+const pomSkirt = source.DEMO_SKIRT === 'pom';
+const skirtDir = resolve(source.DEMO_SKIRT_BUNDLE ?? (pomSkirt ? join(spikeOut, 'pom2-bundle', 'crimson-wildflower-maxi-skirt') : join(spikeOut, 'eval', 'crimson-wildflower-maxi-skirt')));
 const bundles: DemoGarmentBundle[] = [
   { shop: 'woocommerce', externalId: 'aalter-studio-2', dir: join(spikeOut, 'aalter-studio-2') },
   { shop: 'shopify', externalId: 'azure-palm-baby-doll-dress', dir: resolve(source.DEMO_AZURE_BUNDLE ?? join(spikeOut, 'eval', 'azure-palm-baby-doll-dress')), payload: true, colorHex: '#4F8FC0', colorName: 'Azure' },
   {
     shop: 'shopify',
     externalId: 'crimson-wildflower-maxi-skirt',
-    dir: resolve(source.DEMO_SKIRT_BUNDLE ?? join(spikeOut, 'eval', 'crimson-wildflower-maxi-skirt')),
+    dir: skirtDir,
     payload: true,
     colorHex: '#A3243B',
     colorName: 'Crimson',
-    qaFlags: ['low_rise_waist', 'precalibration_outside_tolerance'],
+    qaFlags: pomSkirt ? [] : ['low_rise_waist', 'precalibration_outside_tolerance'],
   },
 ];
 const manifest = await seedDemo(handle.db, env, { storefrontOrigin, appOrigin: env.PUBLIC_APP_URL, bundles });

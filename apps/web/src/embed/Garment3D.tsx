@@ -42,8 +42,10 @@ type BaseMountOptions = Parameters<ViewerModule['mountGarmentView']>[1];
 export interface ViewerLook {
   skinHex?: string | undefined;
 }
+/** What a baked view rests on (`GarmentView.source` of the viewer); optional, so this file builds against a viewer without it. */
+export type ViewerSource = { kind: 'device' } | { kind: 'bake'; plainColour: boolean; sizes: Record<string, { provenance: 'measured' | 'interpolated' | 'extrapolated'; held: boolean }> };
 /** The viewer contract of the avatar slices; optional, so this file builds against a viewer without it. */
-type View = BaseView & { setLook?: (look: ViewerLook) => void };
+type View = Omit<BaseView, 'source'> & { setLook?: (look: ViewerLook) => void; source?: ViewerSource };
 type MountOptionsWithLook = BaseMountOptions & { look?: ViewerLook };
 
 /** The body family the viewer draws: the garment's audience decides (men → male), else today's figure. */
@@ -102,6 +104,7 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
   const usable = !!asset && !paused && supported;
   const [open, setOpen] = useState(required && usable);
   const [phase, setPhase] = useState<Phase>(required && usable ? 'loading' : 'idle');
+  const [source, setSource] = useState<ViewerSource | null>(null);
   const onRequiredRef = useRef(onRequiredState);
   useEffect(() => {
     onRequiredRef.current = onRequiredState;
@@ -167,6 +170,7 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
         if (cancelled) view.dispose();
         else {
           viewRef.current = view;
+          setSource(view.source ?? null);
           // The colour may have changed while the bundle loaded.
           if ((options.look?.skinHex ?? null) !== skinRef.current && typeof view.setLook === 'function') view.setLook({ skinHex: skinRef.current ?? undefined });
         }
@@ -178,6 +182,7 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
       cancelled = true;
       viewRef.current?.dispose();
       viewRef.current = null;
+      setSource(null);
     };
     // The bundle, garment, fit and body are fixed for one open; size changes go through setSize.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -251,6 +256,13 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
         {t.notPhoto} {recommended ? t.picked(recommended) : t.noneFits}
         {recommended && recommended !== size ? ` ${t.looking(size)}` : ''}
       </p>
+      {source?.kind === 'bake' ? (
+        <p className="mt-1 text-[11px] leading-snug text-ink-mute" data-testid="garment3d-bake-note">
+          {source.plainColour ? `${t.plainColour} ` : ''}
+          {source.sizes[size] ? t.provenance(size, source.sizes[size].provenance) : ''}
+          {source.sizes[size]?.held ? ` ${t.held(size)}` : ''}
+        </p>
+      ) : null}
       {ringList.length > 0 ? (
         <ul className="mt-1.5 flex flex-wrap gap-1 text-[11px]" aria-label={t.rings(size)} data-testid="garment3d-rings">
           {ringList.map((r) => (
@@ -260,7 +272,7 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
           ))}
         </ul>
       ) : null}
-      {hemLeftOut ? (
+      {hemLeftOut && source?.kind !== 'bake' ? (
         <p className="mt-1 text-[11px] leading-snug text-ink-mute" data-testid="garment3d-hem-note">
           {t.hemNote}
         </p>

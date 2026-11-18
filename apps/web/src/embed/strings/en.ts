@@ -226,6 +226,12 @@ export interface EmbedCatalogue {
     rings: (size: string) => string;
     ringName: (key: string) => string;
     hemNote: string;
+    /** A server drape bake: drawn in one plain colour. */
+    plainColour: string;
+    /** A server drape bake: where the size's garment measurements come from. */
+    provenance: (size: string, provenance: 'measured' | 'interpolated' | 'extrapolated') => string;
+    /** A server drape bake: the shopper lies beyond the bodies the size was draped on. */
+    held: (size: string) => string;
   };
 }
 
@@ -456,5 +462,11 @@ export const EN: EmbedCatalogue = {
     rings: (size) => `Size rings of size ${size} (estimate)`,
     ringName: (key) => (key === 'hip' ? 'Hips' : key.charAt(0).toUpperCase() + key.slice(1)),
     hemNote: 'The 3D drape does not show the hem width yet; see the hem ring on the figure above.',
+    plainColour: 'Shown in one plain colour; the print is not drawn.',
+    provenance: (size, p) =>
+      p === 'measured'
+        ? `Size ${size} is built from the shop’s tape measurements.`
+        : `Size ${size} was not measured by the shop; it is ${p} from the sizes that were.`,
+    held: (size) => `Your measurements are outside the bodies size ${size} was draped on, so it is shown on the nearest one.`,
   },
 };

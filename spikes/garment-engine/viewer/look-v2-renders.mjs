@@ -21,7 +21,7 @@
  * - frames: frame cost in the throttled phone page (412 x 915 at 2x, DevTools CPU throttle 4x), body
  *   alone (ms per frame, 40 frames turning) and in the mount with the dress (frames per second
  *   while dragging), for both heads and the three lightings.
- * Writes PNGs and `look-v2.json` to the out dir.
+ * Writes PNGs and `look-v2[-<sections>].json` (after every measurement) to the out dir.
  *
  * Bundles: `out/eval/azure-palm-baby-doll-dress`, `out/pom2-bundle/crimson-wildflower-maxi-skirt`,
  * `out/eval/crimson-wildflower-maxi-skirt` (git-ignored). Uses the preinstalled Playwright.
@@ -76,6 +76,7 @@ await server.listen();
 const base = server.resolvedUrls.local[0];
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const problems = [];
+const save = () => writeFileSync(join(outDir, `look-v2${only ? `-${[...only].join('-')}` : ''}.json`), `${JSON.stringify({ ...report, problems }, null, 2)}\n`);
 const report = { renderer: 'headless Chromium, SwiftShader (software); not a phone', monk: MONK, contrast: [], garments: [], frames: [], files: [] };
 
 async function open(context, query, name) {
@@ -87,6 +88,8 @@ async function open(context, query, name) {
   await page.goto(`${base}avatar.html?${query}`);
   await page.waitForFunction(() => ['settled', 'error'].includes(document.documentElement.dataset.viewerState ?? ''), null, { timeout: 600_000 });
   const state = await page.evaluate(() => document.documentElement.dataset.viewerState);
+  // The mount reports `settled` before it returns the view: wait for the page's hook as well.
+  if (state !== 'error') await page.waitForFunction(() => !!window.avatarCheck && (window.avatarCheck.view !== undefined), null, { timeout: 60_000 });
   if (state === 'error') problems.push(`${name}: ${await page.textContent('#tag')}`);
   await page.waitForTimeout(600);
   return { page, ok: state !== 'error' };
@@ -119,6 +122,7 @@ try {
             await snap(page, name);
           }
           await page.close();
+          save();
         }
       }
     }
@@ -145,6 +149,7 @@ try {
           await snap(page, `${name}--monk${n}`);
         }
         await page.close();
+        save();
       }
     }
   }
@@ -217,6 +222,7 @@ try {
         const ms = [];
         for (let k = 0; k < 3; k++) ms.push(await page.evaluate(() => window.avatarCheck.frameMs(40)));
         report.frames.push({ page: 'body alone, 412x915@2x, CPU 4x', head, lighting, msPerFrame: ms.map(r1) });
+        save();
         await page.close();
       }
     }
@@ -257,10 +263,10 @@ try {
     }
   }
 } finally {
+  save();
   await browser.close();
   await server.close();
 }
-writeFileSync(join(outDir, 'look-v2.json'), `${JSON.stringify({ ...report, problems }, null, 2)}\n`);
 console.log(`${report.files.length} pictures and look-v2.json in ${outDir}`);
 for (const p of problems) console.error(`problem: ${p}`);
 process.exit(problems.length ? 1 : 0);

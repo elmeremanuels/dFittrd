@@ -53,9 +53,11 @@ export interface MountOptions {
    * before. Values outside the drawn range are held at its ends without an error: bust 60 to 160,
    * waist 45 to 150, hip 65 to 170, height 130 to 220 cm (`MEASUREMENT_LIMITS`,
    * `BODY_INPUT_LIMITS`); the host validates what the shopper types. A family other than the one the bundle was draped on is `GarmentViewError('incompatible')`:
-   * a garment is never shown in 3D on a body of the other family (every bundle today is female M).
-   * That check reads the bundle, so it comes after the bundle's GETs: the host does not mount for
-   * a men's product at all (D20 point 3).
+   * a garment is never shown in 3D on a body of the other family. A bundle names its family in
+   * anchors.json and qa.json (`mannequin.family`, absent = female; slice M1); a men's garment
+   * (`audience: 'men'`) needs a male-built bundle and every other garment a female-built one
+   * (`garmentBundleFor` of @curtain/schema), so the host passes `family: 'male'` for a men's
+   * garment. That check reads the bundle, so it comes after the bundle's GETs.
    */
   body: BodyOptions;
   /** Skin colour and head of the figure; `setLook` changes the colour without a remount. */

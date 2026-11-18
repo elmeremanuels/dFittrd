@@ -210,7 +210,7 @@ export function bodyFamilyOf(body: { family?: unknown } | null | undefined): Bod
   return body?.family === 'male' ? 'male' : 'female';
 }
 
-/** The family a bundle's garment was draped on. Bundles record none so far: a missing family is `female`. */
+/** The family a bundle's garment was draped on (anchors.json `mannequin.family`, slice M1): a missing family is `female`. */
 export function bundleFamilyOf(anchors: { mannequin?: { family?: unknown } } | null | undefined): BodyFamily {
   return anchors?.mannequin?.family === 'male' ? 'male' : 'female';
 }

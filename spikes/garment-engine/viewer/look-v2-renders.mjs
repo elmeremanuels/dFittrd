@@ -141,7 +141,12 @@ try {
         }
         for (const n of TONES) {
           const hex = MONK[n - 1];
-          await page.evaluate((h) => window.avatarCheck.view.setLook({ skinHex: `#${h}` }), hex);
+          await page.evaluate((h) => {
+            window.avatarCheck.view.setLook({ skinHex: `#${h}` });
+            // The page's tag names the colour of the mount: name the one shown now.
+            const tag = document.getElementById('tag');
+            tag.textContent = tag.textContent.replace(/skin (#[0-9a-f]{6}|default grey)/, `skin #${h}`);
+          }, hex);
           await page.waitForTimeout(500);
           const patches = await page.evaluate(() => window.avatarCheck.patches());
           const cloth = await page.evaluate(() => window.avatarCheck.garmentPatches());

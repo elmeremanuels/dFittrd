@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Curtain for WooCommerce 0.1.0\n"
 "Report-Msgid-Bugs-To: https://curtain.fit/woocommerce\n"
-"POT-Creation-Date: 2026-11-18 17:05+0000\n"
+"POT-Creation-Date: 2026-11-18 17:34+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -118,6 +118,14 @@ msgstr ""
 
 #: includes/class-garment-tape.php
 msgid "Size %1$s: the hip depth below the band (%2$s cm) must be between 0 and %3$s cm. We ask for %4$s cm."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "The hip depth below the band is not a number. Write centimetres, for example %s."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "The hip depth below the band (%1$s cm) must be between 0 and %2$s cm. We ask for %3$s cm."
 msgstr ""
 
 #: includes/class-garment-tape.php
@@ -274,6 +282,14 @@ msgstr ""
 
 #: includes/class-garment-tape.php
 msgid "measured = your number · estimated = between two measured sizes · rough estimate = beyond the measured sizes"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "The estimates below are from your last valid numbers. They update once the errors are fixed."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Not in the size chart any more. Type the size it now has, or untick it."
 msgstr ""
 
 #: includes/class-garment-tape.php

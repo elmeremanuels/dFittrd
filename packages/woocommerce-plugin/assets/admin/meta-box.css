@@ -49,7 +49,8 @@
 .curtain-tape-table td { vertical-align: top; padding-bottom: 6px; }
 .curtain-tape-size { font-size: 14px; padding-top: 6px !important; }
 .curtain-tape-table input.curtain-tape-cm { text-align: right; }
-.curtain-tape-table input[aria-invalid="true"] { border-color: #b32d2e; background: #fcf0f1; }
+.curtain-tape-table input[aria-invalid="true"], .curtain-tape input.curtain-tape-depth[aria-invalid="true"] { border-color: #b32d2e; background: #fcf0f1; }
+.curtain-tape-orphan input.curtain-tape-size-input { width: 7em; }
 .curtain-tape-est input.curtain-tape-cm { border-style: dashed; background: #f6f7f7; color: #646970; }
 .curtain-tape-prov { display: block; font-size: 11px; color: #646970; }
 .curtain-tape-prov--extrapolated { color: #8a4b00; font-weight: 600; }

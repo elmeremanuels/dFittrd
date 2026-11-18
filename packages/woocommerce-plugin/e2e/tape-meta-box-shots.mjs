@@ -26,7 +26,7 @@ input[type=text],input[type=number],select,textarea{border:1px solid #8c8f94;bor
 
 const failures = [];
 const browser = await chromium.launch();
-for (const state of ['measured', 'error']) {
+for (const state of ['measured', 'error', 'rename']) {
   const html = execFileSync('php', [join(root, 'e2e/render-meta-box.php'), state], { encoding: 'utf8' });
   const page_ = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${base}\n${css}</style></head><body><div class="postbox"><h2>Curtain fit data</h2>${html}</div></body></html>`;
   for (const vp of [
@@ -39,6 +39,9 @@ for (const state of ['measured', 'error']) {
     const text = await page.locator('#curtain-tape').innerText();
     if (state === 'measured' && !/rough estimate/.test(text)) failures.push(`${vp.name}: no rough estimate label`);
     if (state === 'error' && !/were not saved/.test(text)) failures.push(`${vp.name}: no "not saved" message`);
+    if (state === 'error' && (text.match(/hip depth below the band \(90 cm\)/g) ?? []).length !== 1) failures.push(`${vp.name}: the depth error is not said exactly once`);
+    if (state === 'error' && !(await page.locator('input.curtain-tape-depth[aria-invalid="true"]').count())) failures.push(`${vp.name}: the depth input is not marked`);
+    if (state === 'rename' && (await page.locator('input.curtain-tape-size-input').inputValue()) !== '8') failures.push(`${vp.name}: the renamed row's typed numbers are gone`);
     // Only this section is checked: other parts of the box (the size chart repeater) are wider than a phone already.
     const wide = await page.evaluate((w) => [...document.querySelectorAll('#curtain-tape *')].filter((e) => e.getBoundingClientRect().right > w + 1).map((e) => e.tagName.toLowerCase() + '.' + e.className).slice(0, 5), vp.width);
     if (wide.length) failures.push(`${vp.name} ${state}: wider than the screen: ${wide.join(', ')}`);

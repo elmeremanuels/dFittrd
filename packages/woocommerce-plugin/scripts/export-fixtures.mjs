@@ -151,6 +151,7 @@ const tapeProductInputs = [
   { name: 'a tape value without provenance', meta: replace(skirtMeta, '_curtain_garment_tape', JSON.stringify([{ size: '8', waistRelaxed: { cm: 67 } }])) },
   { name: 'an unknown closure', meta: replace(skirtMeta, '_curtain_closure', 'velcro') },
   { name: 'closure in capitals', meta: replace(skirtMeta, '_curtain_closure', 'Pull-On') },
+  { name: 'a stored tape and no size chart', meta: skirtMeta.filter((m) => m.key !== '_curtain_size_chart') },
 ];
 const tapeProducts = tapeProductInputs.map(({ name, meta }) => {
   const warnings = [];

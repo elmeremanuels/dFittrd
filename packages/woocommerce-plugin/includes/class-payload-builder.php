@@ -273,8 +273,9 @@ final class Payload_Builder {
 			$tape = Garment_Tape::parse_stored( $tape_raw );
 			if ( null === $tape ) {
 				$this->warn( '_curtain_garment_tape', 'garmentTape', Garment_Tape::INVALID_STORE );
-			} elseif ( null === $chart ) {
-				$out['garmentTape'] = $tape;
+			} elseif ( null === $chart || array() === $chart ) {
+				// Rows name chart sizes; without a chart the backend refuses the payload (422). Left out.
+				$this->warn( '_curtain_garment_tape', 'garmentTape', Garment_Tape::NO_CHART_STORE );
 			} else {
 				$r = Garment_Tape::refill( $chart, $tape );
 				if ( $r['droppedSizes'] ) {

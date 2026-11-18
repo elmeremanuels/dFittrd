@@ -171,6 +171,133 @@ test(
 );
 
 test(
+	'meta box: a chart emptied in the same save takes the stored tape with it; the stale table rows are not read',
+	static function (): void {
+		$r = Sanitizer::from_post(
+			array(
+				'size_chart_type' => 'body',
+				'closure'         => 'pull-on',
+				'tape'            => array( array( 'size' => '8', 'measured' => '1', 'waistRelaxed' => '67' ) ),
+			)
+		);
+		assert_same( null, $r['meta']['_curtain_size_chart'] );
+		assert_same( null, $r['meta']['_curtain_garment_tape'], 'the tape goes with the chart' );
+		assert_same( 'pull-on', $r['meta']['_curtain_closure'] );
+		assert_same( array(), $r['tape']['errors'], 'no no_chart error that would keep the old tape' );
+		$bad = Sanitizer::from_post( array( 'closure' => 'velcro', 'tape' => array( array( 'size' => '8', 'measured' => '1', 'waistRelaxed' => '67' ) ) ) );
+		assert_same( null, $bad['meta']['_curtain_garment_tape'], 'even with a closure error' );
+		assert_same( array( 'unknown_closure' ), array_column( $bad['tape']['errors'], 'code' ) );
+	}
+);
+
+test(
+	'meta box: one depth input, so a bad depth is one error without a size (twin of collapseSharedDepthIssues)',
+	static function (): void {
+		$row = static function ( string $size, string $a ): array {
+			return array( 'size' => $size, 'measured' => '1', 'waistRelaxed' => $a, 'hip' => '120' );
+		};
+		$r   = Sanitizer::from_post(
+			array(
+				'size_chart_type' => 'body',
+				'size_chart'      => curtain_tape_chart(),
+				'tape_depth'      => '90',
+				'tape'            => array( $row( '8', '67' ), $row( '10', 'x' ), $row( '14', '80' ) ),
+			)
+		);
+		assert_json_equal(
+			array(
+				array( 'code' => 'depth_out_of_range', 'field' => 'hipDepth', 'message' => 'The hip depth below the band (90 cm) must be between 0 and 80 cm. We ask for 20 cm.' ),
+				array( 'code' => 'not_a_number', 'size' => '10', 'field' => 'waistRelaxed', 'message' => 'Size 10, A (waistband, relaxed): this is not a number. Write centimetres, for example 94 or 94.5.' ),
+			),
+			$r['tape']['errors']
+		);
+		$text = Garment_Tape::collapse_shared_depth( Garment_Tape::check( array( 'chart' => curtain_tape_chart(), 'measured' => array( array( 'size' => '8', 'hipCm' => 110, 'hipDepthBelowBandCm' => 'twenty' ), array( 'size' => '10', 'hipCm' => 115, 'hipDepthBelowBandCm' => 'twenty' ) ) ) )['errors'], 'twenty' );
+		assert_json_equal( array( array( 'code' => 'not_a_number', 'field' => 'hipDepth', 'message' => 'The hip depth below the band is not a number. Write centimetres, for example 20.' ) ), $text );
+	}
+);
+
+/** Saves the box as Product_Meta::save does (minus nonce and WordPress), then renders it. */
+function curtain_tape_save_and_render( int $id, array $in ): string {
+	$r = Sanitizer::from_post( $in );
+	foreach ( $r['meta'] as $k => $v ) {
+		if ( null === $v ) {
+			delete_post_meta( $id, $k );
+		} else {
+			update_post_meta( $id, $k, wp_slash( $v ) );
+		}
+	}
+	if ( null !== $r['tape'] ) {
+		Curtain\Product_Meta::store_tape_issues( $id, $r['tape'] );
+	}
+	return curtain_tape_render( $id );
+}
+
+function curtain_tape_render( int $id ): string {
+	$m = new ReflectionMethod( Curtain\Product_Meta::class, 'render_tape' );
+	$m->setAccessible( true );
+	$chart = json_decode( (string) get_post_meta( $id, '_curtain_size_chart', true ), true );
+	ob_start();
+	$m->invoke( null, $id, is_array( $chart ) ? $chart : array(), (string) get_post_meta( $id, '_curtain_closure', true ), json_decode( (string) get_post_meta( $id, '_curtain_garment_tape', true ), true ) );
+	return (string) ob_get_clean();
+}
+
+test(
+	'meta box: a size renamed in the chart in the same save keeps its typed numbers, under an editable label',
+	static function (): void {
+		$id    = 9101;
+		$base  = array(
+			'size_chart_type' => 'body',
+			'size_chart'      => curtain_tape_chart(),
+			'closure'         => 'pull-on',
+			'tape'            => array(
+				array( 'size' => '8', 'measured' => '1', 'waistRelaxed' => '67', 'waistStretched' => '94' ),
+				array( 'size' => '14', 'measured' => '1', 'waistRelaxed' => '80', 'waistStretched' => '110' ),
+			),
+		);
+		curtain_tape_save_and_render( $id, $base );
+		$renamed                          = $base;
+		$renamed['size_chart'][0]['size'] = 'XS';
+		$renamed['tape'][0]['waistRelaxed'] = '68';
+		$html = curtain_tape_save_and_render( $id, $renamed );
+		assert_true( str_contains( $html, 'Size 8 is not in this product' ), 'the unknown size is said' );
+		assert_true( 1 === preg_match( '/curtain-tape-size-input" name="curtain\[tape\]\[5\]\[size\]" value="8"/', $html ), 'the old label is an input' );
+		assert_true( str_contains( $html, 'name="curtain[tape][5][waistRelaxed]" value="68"' ), 'the number typed in this save is kept' );
+		// The merchant types the new label: it saves.
+		$fixed         = $renamed;
+		$fixed['tape'] = array(
+			array( 'size' => 'XS', 'measured' => '1', 'waistRelaxed' => '68', 'waistStretched' => '94' ),
+			array( 'size' => '14', 'measured' => '1', 'waistRelaxed' => '80', 'waistStretched' => '110' ),
+		);
+		$html = curtain_tape_save_and_render( $id, $fixed );
+		assert_false( str_contains( $html, 'curtain-tape-size-input' ), 'no row left over' );
+		$tape = json_decode( (string) get_post_meta( $id, '_curtain_garment_tape', true ), true );
+		assert_same( 68, $tape[0]['waistRelaxed']['cm'] );
+		assert_same( 'XS', $tape[0]['size'] );
+	}
+);
+
+test(
+	'meta box: a draft and its messages are dropped once the product changed elsewhere (sync, REST)',
+	static function (): void {
+		$id = 9102;
+		curtain_tape_save_and_render(
+			$id,
+			array(
+				'size_chart_type' => 'body',
+				'size_chart'      => curtain_tape_chart(),
+				'tape'            => array( array( 'size' => '8', 'measured' => '1', 'waistRelaxed' => 'sixty' ) ),
+			)
+		);
+		assert_true( str_contains( curtain_tape_render( $id ), 'value="sixty"' ), 'the draft shows right after the save' );
+		update_post_meta( $id, '_curtain_garment_tape', wp_slash( (string) wp_json_encode( array( array( 'size' => '8', 'waistRelaxed' => array( 'cm' => 66, 'provenance' => 'measured' ) ) ) ) ) );
+		$html = curtain_tape_render( $id );
+		assert_false( str_contains( $html, 'value="sixty"' ), 'the old draft is gone' );
+		assert_false( str_contains( $html, 'were not saved' ), 'and so are its messages' );
+		assert_true( str_contains( $html, 'value="66"' ), 'the box shows what is stored now' );
+	}
+);
+
+test(
 	'a merchant never receives a shopper measurement: the table only holds garment numbers',
 	static function (): void {
 		$src = (string) file_get_contents( dirname( __DIR__ ) . '/includes/class-garment-tape.php' );

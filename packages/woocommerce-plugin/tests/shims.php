@@ -221,3 +221,11 @@ function wc_get_product( $id ) {
 	return isset( Curtain_Test_State::$posts[ $id ]['product'] ) ? Curtain_Test_State::$posts[ $id ]['product'] : false;
 }
 function wc_get_products( array $args ) { return Curtain_Test_State::$options['_product_ids'] ?? array(); }
+
+// The meta box's form helpers (only what the render tests need).
+if ( ! function_exists( 'selected' ) ) {
+	function selected( $a, $b = true, $echo = true ) { $r = (string) $a === (string) $b ? ' selected="selected"' : ''; if ( $echo ) { echo $r; } return $r; }
+}
+if ( ! function_exists( 'checked' ) ) {
+	function checked( $a, $b = true, $echo = true ) { $r = (string) $a === (string) $b ? ' checked="checked"' : ''; if ( $echo ) { echo $r; } return $r; }
+}

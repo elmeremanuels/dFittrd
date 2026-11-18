@@ -171,7 +171,7 @@ final class Product_Meta {
 		}
 
 		if ( null !== $result['tape'] ) {
-			update_post_meta( $post_id, Garment_Tape::META_ISSUES, wp_slash( (string) wp_json_encode( $result['tape'] ) ) );
+			self::store_tape_issues( $post_id, $result['tape'] );
 		}
 
 		self::validate_and_store( $post_id, $result['errors'] );
@@ -518,6 +518,26 @@ final class Product_Meta {
 	}
 
 	/**
+	 * The table's messages (and, through the basis, its draft) as of this save. The basis is the
+	 * stored chart, tape and closure after the save: when sync, REST or anything else changes one of
+	 * them later, the draft and messages are out of date and the box no longer shows them.
+	 *
+	 * @param array{errors: array<int,mixed>, warnings: array<int,mixed>} $tape
+	 */
+	public static function store_tape_issues( int $post_id, array $tape ): void {
+		$tape['basis'] = self::tape_basis( $post_id );
+		update_post_meta( $post_id, Garment_Tape::META_ISSUES, wp_slash( (string) wp_json_encode( $tape ) ) );
+	}
+
+	private static function tape_basis( int $post_id ): string {
+		$parts = array();
+		foreach ( array( '_curtain_size_chart', '_curtain_garment_tape', '_curtain_closure' ) as $k ) {
+			$parts[] = (string) get_post_meta( $post_id, $k, true );
+		}
+		return md5( implode( "\n", $parts ) );
+	}
+
+	/**
 	 * "Garment measurements": closure, hip depth and one row per chart size (Garment_Tape). A ticked
 	 * row is typed in; an unticked row shows the stored estimate, labelled, read-only. After a save
 	 * with an error, what was typed comes back from `_curtain_tape_input` with the messages.
@@ -538,6 +558,11 @@ final class Product_Meta {
 		}
 		$draft  = json_decode( (string) get_post_meta( $id, Garment_Tape::META_INPUT, true ), true );
 		$issues = json_decode( (string) get_post_meta( $id, Garment_Tape::META_ISSUES, true ), true );
+		if ( ! is_array( $issues ) || ( $issues['basis'] ?? null ) !== self::tape_basis( $id ) ) {
+			// Written before the product changed elsewhere (sync, REST): what it says is about another product state.
+			$issues = null;
+			$draft  = null;
+		}
 		if ( is_array( $draft ) ) {
 			$typed   = (array) ( $draft['measured'] ?? array() );
 			$closure = (string) ( $draft['closure'] ?? $closure );
@@ -551,12 +576,31 @@ final class Product_Meta {
 		foreach ( (array) $filled as $row ) {
 			$filled_by[ Garment_Tape::key( (string) $row['size'] ) ] = $row;
 		}
-		$bad = array();
+		$bad       = array();
+		$depth_bad = false;
 		foreach ( (array) ( $issues['errors'] ?? array() ) as $e ) {
-			if ( isset( $e['size'], $e['field'] ) ) {
+			if ( 'hipDepth' === ( $e['field'] ?? null ) ) {
+				$depth_bad = true; // One input for every size.
+			} elseif ( isset( $e['size'], $e['field'] ) ) {
 				$bad[ Garment_Tape::key( (string) $e['size'] ) . '|' . $e['field'] ] = true;
 			}
 		}
+		// Typed rows whose size the chart no longer has (renamed or removed in the same save): shown
+		// after the chart rows with the label editable, so the numbers typed are not lost.
+		$chart_keys = array();
+		foreach ( array_slice( $chart, 0, 30 ) as $c ) {
+			$chart_keys[ Garment_Tape::key( (string) ( $c['size'] ?? '' ) ) ] = true;
+		}
+		$orphans = array();
+		if ( is_array( $draft ) ) {
+			foreach ( $typed as $m ) {
+				$size = (string) ( $m['size'] ?? '' );
+				if ( '' !== trim( $size ) && ! isset( $chart_keys[ Garment_Tape::key( $size ) ] ) ) {
+					$orphans[] = $m;
+				}
+			}
+		}
+		$has_errors = ! empty( $issues['errors'] );
 		?>
 		<div class="curtain-tape" id="curtain-tape">
 			<h4><?php echo esc_html( $t['heading'] ); ?></h4>
@@ -574,12 +618,15 @@ final class Product_Meta {
 							<option value="<?php echo esc_attr( $c ); ?>" <?php selected( $closure, $c ); ?>><?php echo esc_html( Garment_Tape::closure_label( $c ) ); ?></option>
 						<?php endforeach; ?>
 					</select></label>
-				<label><span><?php echo esc_html( $t['hipDepthLabel'] ); ?></span><input type="text" inputmode="decimal" name="curtain[tape_depth]" value="<?php echo esc_attr( null === $depth ? '' : (string) $depth ); ?>" placeholder="<?php echo esc_attr( $t['hipDepthPlaceholder'] ); ?>" maxlength="8" class="curtain-narrow"></label>
+				<label><span><?php echo esc_html( $t['hipDepthLabel'] ); ?></span><input type="text" inputmode="decimal" name="curtain[tape_depth]" value="<?php echo esc_attr( null === $depth ? '' : (string) $depth ); ?>" placeholder="<?php echo esc_attr( $t['hipDepthPlaceholder'] ); ?>" maxlength="8" class="curtain-narrow curtain-tape-depth" <?php echo $depth_bad ? 'aria-invalid="true"' : ''; ?>></label>
 			</div>
 			<?php if ( array() === $chart ) : ?>
 				<p class="curtain-tape-note"><?php echo esc_html( $t['noChart'] ); ?></p>
 			<?php else : ?>
 				<p class="description"><?php echo esc_html( $t['measuredHint'] ); ?></p>
+				<?php if ( $has_errors && null !== $filled ) : ?>
+					<p class="curtain-tape-note"><?php echo esc_html( $t['estimatesStale'] ); ?></p>
+				<?php endif; ?>
 				<table class="curtain-table curtain-tape-table">
 					<thead><tr><th><?php echo esc_html( $t['sizeColumn'] ); ?></th><th><?php echo esc_html( $t['measuredColumn'] ); ?></th>
 						<?php
@@ -609,6 +656,22 @@ final class Product_Meta {
 											<span class="curtain-tape-prov curtain-tape-prov--<?php echo esc_attr( '' === $prov ? 'none' : $prov ); ?>"><?php echo esc_html( '' === $prov ? $t['notMeasured'] : Garment_Tape::provenance_label( $prov ) ); ?></span>
 										<?php endif; ?>
 									</td>
+								<?php endforeach; ?>
+							</tr>
+						<?php endforeach; ?>
+						<?php
+						foreach ( $orphans as $j => $m ) :
+							$i    = min( count( $chart ), 30 ) + $j;
+							$size = (string) $m['size'];
+							?>
+							<tr class="curtain-tape-orphan">
+								<td class="curtain-tape-size"><input type="text" class="curtain-narrow curtain-tape-size-input" name="curtain[tape][<?php echo (int) $i; ?>][size]" value="<?php echo esc_attr( $size ); ?>" maxlength="16" aria-invalid="true" aria-label="<?php echo esc_attr( $t['sizeColumn'] ); ?>"><span class="curtain-tape-prov curtain-tape-prov--extrapolated"><?php echo esc_html( $t['orphanSize'] ); ?></span></td>
+								<td class="curtain-tape-flag" data-label="<?php echo esc_attr( $t['measuredColumn'] ); ?>"><input type="checkbox" class="curtain-tape-measured" name="curtain[tape][<?php echo (int) $i; ?>][measured]" value="1" checked="checked" aria-label="<?php echo esc_attr( $t['measuredColumn'] . ' ' . $size ); ?>"></td>
+								<?php
+								foreach ( Garment_Tape::FIELDS as $f ) :
+									$value = $m[ Garment_Tape::INPUT_KEYS[ $f ] ] ?? '';
+									?>
+									<td class="curtain-tape-num" data-label="<?php echo esc_attr( Garment_Tape::field_label( $f ) ); ?>"><input type="text" inputmode="decimal" maxlength="8" class="curtain-narrow curtain-tape-cm" name="curtain[tape][<?php echo (int) $i; ?>][<?php echo esc_attr( $f ); ?>]" value="<?php echo esc_attr( is_array( $value ) ? '' : (string) $value ); ?>" aria-label="<?php echo esc_attr( $size . ', ' . Garment_Tape::field_label( $f ) . ' (cm)' ); ?>" data-estimate=""></td>
 								<?php endforeach; ?>
 							</tr>
 						<?php endforeach; ?>

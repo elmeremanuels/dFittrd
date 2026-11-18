@@ -280,7 +280,11 @@ final class Sanitizer {
 		$closure  = strtolower( self::text( $in['closure'] ?? '', 32 ) );
 		$depth    = self::tape_value( $in['tape_depth'] ?? '' );
 		$measured = array();
-		foreach ( array_slice( (array) ( $in['tape'] ?? array() ), 0, 30 ) as $row ) {
+		// The table was drawn from the chart as it was stored. When this save leaves the chart empty,
+		// its rows name sizes that no longer exist: they are not read, and the stored tape is removed
+		// below (a tape without a chart cannot be read, and the backend refuses it).
+		$rows_in = array() === $chart ? array() : array_slice( (array) ( $in['tape'] ?? array() ), 0, 60 ); // 30 chart rows + rows of sizes no longer in it.
+		foreach ( $rows_in as $row ) {
 			if ( ! is_array( $row ) || empty( $row['measured'] ) ) {
 				continue;
 			}
@@ -309,6 +313,10 @@ final class Sanitizer {
 			$meta['_curtain_closure']       = $check['closure'] ?? null;
 			$meta['_curtain_garment_tape']  = isset( $check['garmentTape'] ) ? self::json( $check['garmentTape'] ) : null;
 			$meta[ Garment_Tape::META_INPUT ] = null;
+		} elseif ( array() === $chart ) {
+			// Only the closure can be wrong here; the tape still goes, so it never outlives the chart.
+			$meta['_curtain_garment_tape']    = null;
+			$meta[ Garment_Tape::META_INPUT ] = null;
 		} else {
 			$meta[ Garment_Tape::META_INPUT ] = self::json(
 				array(
@@ -320,7 +328,7 @@ final class Sanitizer {
 		}
 		return array(
 			'meta'     => $meta,
-			'errors'   => $check['errors'],
+			'errors'   => Garment_Tape::collapse_shared_depth( $check['errors'], $depth ),
 			'warnings' => $check['warnings'],
 		);
 	}

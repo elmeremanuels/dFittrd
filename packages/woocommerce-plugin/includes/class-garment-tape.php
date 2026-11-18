@@ -45,6 +45,8 @@ final class Garment_Tape {
 	public const META_INPUT    = '_curtain_tape_input';
 	public const META_ISSUES   = '_curtain_tape_issues';
 	public const INVALID_STORE = 'not a valid garment tape: every value needs cm and a provenance, and every size one row';
+	/** Twin of GARMENT_TAPE_NO_CHART_WARNING (mappings/tape.ts). */
+	public const NO_CHART_STORE = 'the product has no size chart, so its garment measurements were left out';
 
 	/** Chart column that places a size on the line. */
 	private const POSITION = array(
@@ -127,6 +129,12 @@ final class Garment_Tape {
 			case 'depth_out_of_range':
 				/* translators: %1$s: size label, %2$s: the depth typed, %3$s: the largest depth allowed, %4$s: the depth we ask for */
 				return sprintf( __( 'Size %1$s: the hip depth below the band (%2$s cm) must be between 0 and %3$s cm. We ask for %4$s cm.', 'curtain-woocommerce' ), $a[0], self::fmt( $a[1] ), (string) self::MAX_DEPTH_CM, (string) self::HIP_DEPTH_CM );
+			case 'shared_depth_not_a_number':
+				/* translators: %s: the depth we ask for */
+				return sprintf( __( 'The hip depth below the band is not a number. Write centimetres, for example %s.', 'curtain-woocommerce' ), (string) self::HIP_DEPTH_CM );
+			case 'shared_depth_out_of_range':
+				/* translators: %1$s: the depth typed, %2$s: the largest depth allowed, %3$s: the depth we ask for */
+				return sprintf( __( 'The hip depth below the band (%1$s cm) must be between 0 and %2$s cm. We ask for %3$s cm.', 'curtain-woocommerce' ), self::fmt( $a[0] ), (string) self::MAX_DEPTH_CM, (string) self::HIP_DEPTH_CM );
 			case 'stretched_below_relaxed':
 				/* translators: %1$s: size label, %2$s: stretched band cm, %3$s: relaxed band cm */
 				return sprintf( __( 'Size %1$s: the stretched waistband (%2$s cm) is smaller than the relaxed waistband (%3$s cm). Check the two measurements.', 'curtain-woocommerce' ), $a[0], self::fmt( $a[1] ), self::fmt( $a[2] ) );
@@ -198,6 +206,8 @@ final class Garment_Tape {
 			'notSaved'            => __( 'The garment measurements were not saved. Fix these and update the product again:', 'curtain-woocommerce' ),
 			'warningsTitle'       => __( 'Worth a look (you can still save):', 'curtain-woocommerce' ),
 			'legend'              => __( 'measured = your number · estimated = between two measured sizes · rough estimate = beyond the measured sizes', 'curtain-woocommerce' ),
+			'estimatesStale'      => __( 'The estimates below are from your last valid numbers. They update once the errors are fixed.', 'curtain-woocommerce' ),
+			'orphanSize'          => __( 'Not in the size chart any more. Type the size it now has, or untick it.', 'curtain-woocommerce' ),
 			'privacy'             => __( 'These numbers describe the garment, not a shopper. Shoppers’ measurements never reach you.', 'curtain-woocommerce' ),
 		);
 	}
@@ -748,6 +758,42 @@ final class Garment_Tape {
 			$out['field'] = $field;
 		}
 		$out['message'] = self::message( $code, ...$args );
+		return $out;
+	}
+
+	/**
+	 * Twin of `collapseSharedDepthIssues` (garmentTapeForm.ts): the meta box has one depth input,
+	 * copied into every measured row with a hip, so a bad depth is said once, without a size.
+	 *
+	 * @param array<int,array<string,mixed>> $errors
+	 * @param mixed                          $depth
+	 * @return array<int,array<string,mixed>>
+	 */
+	public static function collapse_shared_depth( array $errors, $depth ): array {
+		$out  = array();
+		$done = false;
+		foreach ( $errors as $e ) {
+			$is_depth = 'hipDepth' === ( $e['field'] ?? null ) && in_array( $e['code'] ?? '', array( 'not_a_number', 'depth_out_of_range' ), true );
+			if ( ! $is_depth ) {
+				$out[] = $e;
+				continue;
+			}
+			if ( $done ) {
+				continue;
+			}
+			$done  = true;
+			$out[] = 'depth_out_of_range' === $e['code'] && self::is_num( $depth )
+				? array(
+					'code'    => 'depth_out_of_range',
+					'field'   => 'hipDepth',
+					'message' => self::message( 'shared_depth_out_of_range', $depth ),
+				)
+				: array(
+					'code'    => 'not_a_number',
+					'field'   => 'hipDepth',
+					'message' => self::message( 'shared_depth_not_a_number' ),
+				);
+		}
 		return $out;
 	}
 

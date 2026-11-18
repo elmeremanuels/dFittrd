@@ -6,7 +6,8 @@
  * no WordPress admin styles, no list table, no jQuery behaviour.
  *
  * States: `measured` (the pilot skirt's AU 8, 10, 14 ticked, pull-on, no hip depth),
- *         `error` (AU 14's stretched band below its relaxed band, AU 8 with text: nothing saved).
+ *         `error` (AU 14's stretched band below its relaxed band, AU 8 with text, a hip depth of 90 cm:
+ *         nothing saved), `rename` (size 8 renamed XS in the chart while its numbers were edited).
  *
  * @package Curtain\E2E
  */
@@ -66,15 +67,22 @@ $save = static function ( array $in ) use ( $id ): void {
 		}
 	}
 	if ( null !== $r['tape'] ) {
-		update_post_meta( $id, Curtain\Garment_Tape::META_ISSUES, wp_slash( (string) wp_json_encode( $r['tape'] ) ) );
+		Curtain\Product_Meta::store_tape_issues( $id, $r['tape'] );
 	}
 };
 $save( $first );
 if ( 'error' === $state ) {
 	$second                    = $first;
-	$second['tape_depth']      = '20';
+	$second['tape_depth']      = '90';
 	$second['tape'][3]['waistStretched'] = '78';
 	$second['tape'][0]['waistRelaxed']   = 'sixty-seven';
+	$save( $second );
+}
+if ( 'rename' === $state ) {
+	// The merchant renames size 8 to "XS" in the chart and edits size 8's numbers in the same update.
+	$second                            = $first;
+	$second['size_chart'][0]['size']   = 'XS';
+	$second['tape'][0]['waistRelaxed'] = '68';
 	$save( $second );
 }
 

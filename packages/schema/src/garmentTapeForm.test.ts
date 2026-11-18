@@ -6,6 +6,8 @@ import {
   GarmentTapeWriteRequestSchema,
   TAPE_ISSUE_CODES,
   checkGarmentTapeInput,
+  collapseSharedDepthIssues,
+  garmentTapeChartIssues,
   measuredFromGarmentTape,
   refillGarmentTape,
 } from './garmentTapeForm';
@@ -13,6 +15,8 @@ import { GARMENT_TAPE_FORM_CASES } from './garmentTapeFormCases';
 import { PILOT_PULL_ON_SKIRT, PILOT_SKIRT_CHART_ONLY, PILOT_SKIRT_TAPE_MEASURED } from './fixtures/pilotSkirt';
 import { fromShopifyProduct, toShopifyMetafields, type MappingWarning, type ShopifyProductNode } from './mappings/shopify';
 import { fromWooMeta, toWooMeta } from './mappings/woo';
+import { GARMENT_TAPE_NO_CHART_WARNING } from './mappings/tape';
+import { validateGarmentDraft } from './api';
 
 const chart = PILOT_SKIRT_CHART_ONLY.sizeChart;
 const run = (name: string) => {
@@ -104,6 +108,31 @@ describe('checkGarmentTapeInput', () => {
   });
 });
 
+describe('one depth input for every size (collapseSharedDepthIssues)', () => {
+  const rows = (depth: number | string) => [
+    { size: '8', waistRelaxedCm: 67, hipCm: 112, hipDepthBelowBandCm: depth },
+    { size: '10', waistRelaxedCm: 'x', hipCm: 122, hipDepthBelowBandCm: depth },
+    { size: '14', waistRelaxedCm: 80, hipCm: 126, hipDepthBelowBandCm: depth },
+  ];
+  it('a depth out of range is said once, without a size, at the place of the first', () => {
+    const check = checkGarmentTapeInput({ chart, closure: 'pull-on', measured: rows(90) });
+    expect(check.errors.filter((e) => e.field === 'hipDepth')).toHaveLength(3);
+    const out = collapseSharedDepthIssues(check.errors, 90);
+    expect(out).toEqual([
+      { code: 'depth_out_of_range', field: 'hipDepth', message: GARMENT_TAPE_MESSAGES.sharedDepthOutOfRange(90) },
+      { code: 'not_a_number', size: '10', field: 'waistRelaxed', message: GARMENT_TAPE_MESSAGES.notANumber('10', 'waistRelaxed') },
+    ]);
+  });
+  it('a depth typed as text is said once', () => {
+    const out = collapseSharedDepthIssues(checkGarmentTapeInput({ chart, closure: null, measured: rows('twenty') }).errors, 'twenty');
+    expect(out.filter((e) => e.field === 'hipDepth')).toEqual([{ code: 'not_a_number', field: 'hipDepth', message: GARMENT_TAPE_MESSAGES.sharedDepthNotANumber() }]);
+  });
+  it('leaves issues without a depth problem as they are', () => {
+    const errors = checkGarmentTapeInput({ chart, closure: null, measured: rows(20) }).errors;
+    expect(collapseSharedDepthIssues(errors, 20)).toEqual(errors);
+  });
+});
+
 describe('stored tape against the current chart', () => {
   it('reads back exactly what the shop typed', () => {
     expect(measuredFromGarmentTape(PILOT_PULL_ON_SKIRT.garmentTape)).toEqual(PILOT_SKIRT_TAPE_MEASURED);
@@ -163,6 +192,39 @@ describe('platform mappings carry the closure and the tape', () => {
     const cut = fromWooMeta(product, shorter, { warnings });
     expect(cut.garmentTape?.map((x) => x.size)).toEqual(['8', '10', '12', '14']);
     expect(warnings.find((w) => w.source === '_curtain_garment_tape')?.message).toMatch(/size 16 is not in the size chart/);
+  });
+
+  it('a stored tape on a product with no size chart is left out with a warning (Shopify and WooCommerce)', () => {
+    const product = { id: 1, name: PILOT_PULL_ON_SKIRT.name, price: '89' };
+    const noChart = toWooMeta(PILOT_PULL_ON_SKIRT).filter((m) => m.key !== '_curtain_size_chart');
+    const warnings: MappingWarning[] = [];
+    const woo = fromWooMeta(product, noChart, { warnings });
+    expect(woo.sizeChart).toBeUndefined();
+    expect(woo.garmentTape).toBeUndefined();
+    expect(woo.closure).toBe('pull-on');
+    expect(warnings.find((w) => w.source === '_curtain_garment_tape')?.message).toBe(GARMENT_TAPE_NO_CHART_WARNING);
+    // What the read gives, the merchant PUT accepts: the sync no longer fails on it.
+    expect(garmentTapeChartIssues(woo)).toEqual([]);
+    const emptyChart = toWooMeta(PILOT_PULL_ON_SKIRT).map((m) => (m.key === '_curtain_size_chart' ? { ...m, value: '[]' } : m));
+    expect(fromWooMeta(product, emptyChart).garmentTape).toBeUndefined();
+
+    const metafields = toShopifyMetafields(PILOT_PULL_ON_SKIRT, node.id)
+      .filter((m) => m.key !== 'size_chart')
+      .map(({ key, type, value, namespace }) => ({ key, type, value, namespace }));
+    const shopWarnings: MappingWarning[] = [];
+    const shop = fromShopifyProduct(node, metafields, { warnings: shopWarnings });
+    expect(shop.garmentTape).toBeUndefined();
+    expect(shopWarnings.find((w) => w.source === 'garment_tape')?.message).toBe(GARMENT_TAPE_NO_CHART_WARNING);
+  });
+
+  it('the validate dry run reports what the merchant PUT refuses', () => {
+    const { sizeChart: _chart, ...noChart } = PILOT_PULL_ON_SKIRT;
+    const bad = validateGarmentDraft(noChart);
+    expect(bad.valid).toBe(false);
+    expect(bad.issues).toContainEqual({ path: 'garmentTape', message: GARMENT_TAPE_MESSAGES.tapeWithoutChart() });
+    const renamed = validateGarmentDraft({ ...PILOT_PULL_ON_SKIRT, sizeChart: PILOT_PULL_ON_SKIRT.sizeChart!.map((r) => (r.size === '8' ? { ...r, size: 'XS' } : r)) });
+    expect(renamed.issues).toContainEqual({ path: 'garmentTape', message: GARMENT_TAPE_MESSAGES.tapeSizeNotInChart(['8']) });
+    expect(validateGarmentDraft(PILOT_PULL_ON_SKIRT)).toMatchObject({ valid: true, issues: [] });
   });
 
   it('the payload with tape and closure is a valid GarmentPayload', () => {

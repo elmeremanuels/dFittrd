@@ -13,8 +13,10 @@
 #   https://shopify.dev/docs/api/admin-graphql/latest/objects/Product (featuredImage, images deprecated)
 #   Product.tags, Product.collections and https://shopify.dev/docs/api/admin-graphql/latest/objects/Collection
 #   (title, handle), read 2026-11-14 for the garment audience. `query` and `sortKey` of collections are left out.
-#   metafieldsDelete (MetafieldIdentifierInput / MetafieldIdentifier, written 2026-11-18 from the reference as
-#   remembered, NOT re-read: no network to shopify.dev from this session; check it on the dev store, step D2).
+#   https://shopify.dev/docs/api/admin-graphql/latest/mutations/metafieldsDelete, read 2026-11-18: argument
+#   `metafields: [MetafieldIdentifierInput!]!`, payload `deletedMetafields: [MetafieldIdentifier]` (null entry =
+#   not found) and `userErrors: [UserError!]!`. That page does not list the identifier's fields; ownerId,
+#   namespace and key are from its example. Whether `$app:curtain` resolves in a delete is still for step D2.
 # It is NOT the real schema: a field that exists here may differ in a way this excerpt does not
 # model (nullability details, extra required arguments added later). The real check is running the
 # same documents against a development store (docs/LAUNCH-SHOPIFY.md, step D2: the Shopify GraphiQL

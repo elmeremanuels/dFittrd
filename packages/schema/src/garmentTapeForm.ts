@@ -93,6 +93,9 @@ export const GARMENT_TAPE_MESSAGES = {
   outOfRange: (size: string, field: GarmentTapeField, v: number) =>
     `Size ${size}, ${TAPE_FIELD_LABELS[field]}: ${formatTapeCm(v)} cm is not a garment measurement. Enter a number above 0 and at most ${TAPE_MAX_CM} cm.`,
   depthOutOfRange: (size: string, v: number) => `Size ${size}: the hip depth below the band (${formatTapeCm(v)} cm) must be between 0 and ${TAPE_MAX_DEPTH_CM} cm. We ask for ${TAPE_HIP_DEPTH_CM} cm.`,
+  /** The forms have one depth input for every size (`collapseSharedDepthIssues`): said once, without a size. */
+  sharedDepthNotANumber: () => `The hip depth below the band is not a number. Write centimetres, for example ${TAPE_HIP_DEPTH_CM}.`,
+  sharedDepthOutOfRange: (v: number) => `The hip depth below the band (${formatTapeCm(v)} cm) must be between 0 and ${TAPE_MAX_DEPTH_CM} cm. We ask for ${TAPE_HIP_DEPTH_CM} cm.`,
   stretchedBelowRelaxed: (size: string, stretched: number, relaxed: number) =>
     `Size ${size}: the stretched waistband (${formatTapeCm(stretched)} cm) is smaller than the relaxed waistband (${formatTapeCm(relaxed)} cm). Check the two measurements.`,
   unknownClosure: () => 'Choose how the garment closes from the list.',
@@ -111,6 +114,9 @@ export const GARMENT_TAPE_MESSAGES = {
     `Size ${size} lies outside the measured sizes: its numbers are a rough estimate, and the size advice is more careful with it. Measuring size ${size} makes them exact.`,
   notIncreasing: (field: GarmentTapeField, larger: string, v: number, smaller: string, u: number) =>
     `${TAPE_FIELD_LABELS[field]}: size ${larger} (${formatTapeCm(v)} cm) is smaller than size ${smaller} (${formatTapeCm(u)} cm). Larger sizes are usually larger; check the numbers.`,
+  /** The merchant PUT (422) and the validate dry run: a payload whose tape cannot be read against its chart. */
+  tapeWithoutChart: () => 'garmentTape is set but sizeChart is empty: the garment measurements are per size of the chart.',
+  tapeSizeNotInChart: (sizes: readonly string[]) => `garmentTape names size ${list(sizes)}, which sizeChart does not have.`,
 } as const;
 
 /**
@@ -148,6 +154,10 @@ export const GARMENT_TAPE_FORM_TEXT = Object.freeze({
   notSaved: 'The garment measurements were not saved. Fix these and update the product again:',
   warningsTitle: 'Worth a look (you can still save):',
   legend: 'measured = your number · estimated = between two measured sizes · rough estimate = beyond the measured sizes',
+  /** Over the estimates while an error stands: they are from the last numbers that passed, not from what is typed now. */
+  estimatesStale: 'The estimates below are from your last valid numbers. They update once the errors are fixed.',
+  /** A typed row whose size the chart no longer has (renamed or removed in the same save): kept, with its label editable. */
+  orphanSize: 'Not in the size chart any more. Type the size it now has, or untick it.',
   privacy: 'These numbers describe the garment, not a shopper. Shoppers’ measurements never reach you.',
 } as const);
 export type GarmentTapeFormText = typeof GARMENT_TAPE_FORM_TEXT;
@@ -338,6 +348,32 @@ export function checkGarmentTapeInput(input: GarmentTapeFormInput): GarmentTapeC
   return out;
 }
 
+/**
+ * Both admin forms have ONE depth input, copied into every measured row that has a hip. A bad depth
+ * then gives the same error once per such size, each naming a size. This folds those into one
+ * issue without a size (field `hipDepth`, so the form marks the depth input), at the place of the
+ * first. Other issues are kept as they are, in order. The PHP twin is `Garment_Tape::collapse_shared_depth`.
+ */
+export function collapseSharedDepthIssues(errors: readonly TapeIssue[], depth: number | string | null | undefined): TapeIssue[] {
+  const out: TapeIssue[] = [];
+  let done = false;
+  for (const e of errors) {
+    const isDepth = e.field === 'hipDepth' && (e.code === 'not_a_number' || e.code === 'depth_out_of_range');
+    if (!isDepth) {
+      out.push(e);
+      continue;
+    }
+    if (done) continue;
+    done = true;
+    out.push(
+      e.code === 'depth_out_of_range' && isNum(depth)
+        ? { code: e.code, field: 'hipDepth', message: GARMENT_TAPE_MESSAGES.sharedDepthOutOfRange(depth) }
+        : { code: 'not_a_number', field: 'hipDepth', message: GARMENT_TAPE_MESSAGES.sharedDepthNotANumber() },
+    );
+  }
+  return out;
+}
+
 /** Only the numeric fields that are set (no `null`s), in a fixed key order. */
 function cleanRow(row: MeasuredTapeInputRow): MeasuredTapeRow {
   const out: MeasuredTapeRow = { size: row.size };
@@ -386,16 +422,17 @@ export function refillGarmentTape(chart: readonly TapeChartRow[], tape: GarmentT
 
 /**
  * The one cross-field rule the payload schema cannot state (the draft is a `.partial()`): every
- * tape row names a size of `sizeChart`. Empty = fine. English sentences, for a 422 on the merchant PUT.
+ * tape row names a size of `sizeChart`. Empty = fine. Sentences from `GARMENT_TAPE_MESSAGES`, for a 422 on the
+ * merchant PUT and as issues of the validate dry run (`validateGarmentDraft`).
  */
 export function garmentTapeChartIssues(draft: { sizeChart?: readonly { size: string }[] | undefined; garmentTape?: GarmentTape | undefined }): string[] {
   const tape = draft.garmentTape;
   if (!tape || tape.length === 0) return [];
   const chart = draft.sizeChart ?? [];
-  if (chart.length === 0) return ['garmentTape is set but sizeChart is empty: the garment measurements are per size of the chart.'];
+  if (chart.length === 0) return [GARMENT_TAPE_MESSAGES.tapeWithoutChart()];
   const labels = new Set(chart.map((r) => key(r.size)));
   const missing = tape.filter((r) => !labels.has(key(r.size))).map((r) => r.size);
-  return missing.length === 0 ? [] : [`garmentTape names size ${list(missing)}, which sizeChart does not have.`];
+  return missing.length === 0 ? [] : [GARMENT_TAPE_MESSAGES.tapeSizeNotInChart(missing)];
 }
 
 // ---------------------------------------------------------------------------

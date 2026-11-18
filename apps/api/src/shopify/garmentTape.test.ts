@@ -142,6 +142,12 @@ describe('Shopify garment measurements form', () => {
     expect(sets()).toHaveLength(0);
   });
 
+  it('a bad hip depth (one input in the form) is one error without a size', async () => {
+    const measured = PILOT_SKIRT_TAPE_MEASURED.map((m) => ({ ...m, hipDepthBelowBandCm: 90 }));
+    const res = await t.app.inject({ method: 'PUT', url: '/shopify/products/10894387020081/garment-tape', headers: await auth(), payload: { closure: 'pull-on', measured, dryRun: true } });
+    expect(res.json().errors).toEqual([{ code: 'depth_out_of_range', field: 'hipDepth', message: 'The hip depth below the band (90 cm) must be between 0 and 80 cm. We ask for 20 cm.' }]);
+  });
+
   it('clearing every measured size and the closure deletes the two metafields', async () => {
     metafields.push(mf('closure', 'zip', 'single_line_text_field'), mf('garment_tape', JSON.stringify(PILOT_PULL_ON_SKIRT.garmentTape)));
     const res = await t.app.inject({ method: 'PUT', url: '/shopify/products/10894387020081/garment-tape', headers: await auth(), payload: { closure: null, measured: [] } });
@@ -184,5 +190,13 @@ describe('Shopify garment measurements form', () => {
       payload: { ...PILOT_PULL_ON_SKIRT, id: 'pilot-skirt', garmentTape: [{ size: '8', waistRelaxed: { cm: 67 } }] },
     });
     expect(noProvenance.statusCode).toBe(400);
+    // The dry run says what the PUT refuses (it used to call this payload fine).
+    const { sizeChart: _c, ...noChart } = PILOT_PULL_ON_SKIRT;
+    const refused = await t.app.inject({ method: 'PUT', url: '/v1/merchant/products/pilot-skirt', headers, payload: { ...noChart, id: 'pilot-skirt' } });
+    expect(refused.statusCode).toBe(422);
+    const dry = await t.app.inject({ method: 'POST', url: '/v1/merchant/products/validate', headers, payload: { payload: { ...noChart, id: 'pilot-skirt' } } });
+    expect(dry.statusCode).toBe(200);
+    expect(dry.json().valid).toBe(false);
+    expect(dry.json().issues).toContainEqual({ path: 'garmentTape', message: 'garmentTape is set but sizeChart is empty: the garment measurements are per size of the chart.' });
   });
 });

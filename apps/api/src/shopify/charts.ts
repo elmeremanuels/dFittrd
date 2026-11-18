@@ -36,6 +36,7 @@ import {
   chartTemplateById,
   checkChart,
   checkGarmentTapeInput,
+  collapseSharedDepthIssues,
   convertChart,
   fromShopifyProduct,
   measuredFromGarmentTape,
@@ -247,6 +248,9 @@ export const shopifyChartRoutes: FastifyPluginAsyncZod = async (app) => {
       const { shop, client } = await adminFor(req.shop);
       const { chart, category } = await tapeContext(client, req.params.id);
       const check = checkGarmentTapeInput({ category, chart, closure: req.body.closure, measured: req.body.measured });
+      // The form has one depth input: a bad depth is one error on that input, not one per size.
+      const depth = req.body.measured.find((m) => m.hipDepthBelowBandCm !== undefined && m.hipDepthBelowBandCm !== null)?.hipDepthBelowBandCm;
+      check.errors = collapseSharedDepthIssues(check.errors, depth);
       const base = {
         productId: req.params.id,
         category,

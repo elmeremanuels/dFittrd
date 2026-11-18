@@ -16,6 +16,7 @@ import { SwipeEventSchema } from './swipe';
 import { completenessScore, type CompletenessResult } from './completeness';
 import { GarmentAssetRefSchema } from './garmentAsset';
 import { AUDIENCE_SOURCES } from './mappings/audience';
+import { garmentTapeChartIssues } from './garmentTapeForm';
 
 // ---------------------------------------------------------------------------
 // Shared
@@ -563,7 +564,11 @@ export function validateGarmentDraft(payload: unknown): MerchantProductValidateR
   const issues: ValidationIssue[] = parsed.success
     ? []
     : parsed.error.issues.map((i) => ({ path: i.path.map(String).join('.'), message: i.message }));
-  return { valid: parsed.success, issues, completeness: completenessScore(payload) };
+  // The merchant PUT refuses these with 422 invalid_garment_tape; the dry run must not call them fine.
+  // Checked on the draft shape, as the PUT does (it takes a draft): a missing chart is both a schema issue and this one.
+  const draft = GarmentPayloadDraftSchema.safeParse(payload);
+  if (draft.success) for (const message of garmentTapeChartIssues(draft.data)) issues.push({ path: 'garmentTape', message });
+  return { valid: parsed.success && issues.length === 0, issues, completeness: completenessScore(payload) };
 }
 
 export const PRODUCT_STATUSES = ['active', 'incomplete', 'archived'] as const;

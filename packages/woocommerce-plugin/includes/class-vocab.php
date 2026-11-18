@@ -93,6 +93,8 @@ final class Vocab {
 		'_curtain_category'            => array( 'category', 'enum', 'whole' ),
 		'_curtain_size_chart_type'     => array( 'sizeChartType', 'enum', true ),
 		'_curtain_size_chart'          => array( 'sizeChart', 'json', true ),
+		'_curtain_closure'             => array( 'closure', 'enum', false ),
+		'_curtain_garment_tape'        => array( 'garmentTape', 'json', false ),
 		'_curtain_fabric'              => array( 'fabric', 'json', true ),
 		'_curtain_flat_lay_photo'      => array( 'flatLayPhoto', 'url', true ),
 		'_curtain_pattern_block'       => array( 'patternBlock', 'string', false ),

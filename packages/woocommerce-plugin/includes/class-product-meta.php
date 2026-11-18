@@ -170,6 +170,10 @@ final class Product_Meta {
 			}
 		}
 
+		if ( null !== $result['tape'] ) {
+			update_post_meta( $post_id, Garment_Tape::META_ISSUES, wp_slash( (string) wp_json_encode( $result['tape'] ) ) );
+		}
+
 		self::validate_and_store( $post_id, $result['errors'] );
 	}
 
@@ -428,6 +432,8 @@ final class Product_Meta {
 				<tfoot><tr><td colspan="<?php echo count( Vocab::SIZE_ROW_COLUMNS ) + 1; ?>"><button type="button" class="button curtain-row-add"><?php esc_html_e( 'Add size', 'curtain-woocommerce' ); ?></button> <span class="description"><?php esc_html_e( 'Ascending order. Leave a cell empty (or 0) when the shop does not publish that measurement.', 'curtain-woocommerce' ); ?></span></td></tr></tfoot>
 			</table>
 
+			<?php self::render_tape( $id, array_values( array_filter( $chart, 'is_array' ) ), (string) $get( 'closure' ), $json( 'garment_tape' ) ); ?>
+
 			<h4><?php esc_html_e( 'Designed ease (garment minus body, cm)', 'curtain-woocommerce' ); ?></h4>
 			<div class="curtain-inline">
 				<?php foreach ( Vocab::FIT_POINTS as $p ) : ?>
@@ -507,6 +513,124 @@ final class Product_Meta {
 				</tbody>
 				<tfoot><tr><td colspan="4"><button type="button" class="button curtain-row-add"><?php esc_html_e( 'Add colorway', 'curtain-woocommerce' ); ?></button></td></tr></tfoot>
 			</table>
+		</div>
+		<?php
+	}
+
+	/**
+	 * "Garment measurements": closure, hip depth and one row per chart size (Garment_Tape). A ticked
+	 * row is typed in; an unticked row shows the stored estimate, labelled, read-only. After a save
+	 * with an error, what was typed comes back from `_curtain_tape_input` with the messages.
+	 *
+	 * @param array<int,array<string,mixed>> $chart  The stored size chart.
+	 * @param mixed                          $stored The stored `_curtain_garment_tape`.
+	 */
+	private static function render_tape( int $id, array $chart, string $closure, $stored ): void {
+		$t      = Garment_Tape::form_text();
+		$tape   = Garment_Tape::parse_stored( $stored );
+		$filled = null !== $tape && $chart ? Garment_Tape::refill( $chart, $tape )['garmentTape'] : $tape;
+		$typed  = Garment_Tape::measured_from_tape( $filled );
+		$depth  = null;
+		foreach ( $typed as $m ) {
+			if ( isset( $m['hipDepthBelowBandCm'] ) ) {
+				$depth = $m['hipDepthBelowBandCm'];
+			}
+		}
+		$draft  = json_decode( (string) get_post_meta( $id, Garment_Tape::META_INPUT, true ), true );
+		$issues = json_decode( (string) get_post_meta( $id, Garment_Tape::META_ISSUES, true ), true );
+		if ( is_array( $draft ) ) {
+			$typed   = (array) ( $draft['measured'] ?? array() );
+			$closure = (string) ( $draft['closure'] ?? $closure );
+			$depth   = $draft['depth'] ?? $depth;
+		}
+		$by_size = array();
+		foreach ( $typed as $m ) {
+			$by_size[ Garment_Tape::key( (string) ( $m['size'] ?? '' ) ) ] = $m;
+		}
+		$filled_by = array();
+		foreach ( (array) $filled as $row ) {
+			$filled_by[ Garment_Tape::key( (string) $row['size'] ) ] = $row;
+		}
+		$bad = array();
+		foreach ( (array) ( $issues['errors'] ?? array() ) as $e ) {
+			if ( isset( $e['size'], $e['field'] ) ) {
+				$bad[ Garment_Tape::key( (string) $e['size'] ) . '|' . $e['field'] ] = true;
+			}
+		}
+		?>
+		<div class="curtain-tape" id="curtain-tape">
+			<h4><?php echo esc_html( $t['heading'] ); ?></h4>
+			<p class="description"><?php echo esc_html( $t['intro'] ); ?></p>
+			<details><summary><?php echo esc_html( $t['howTo'] ); ?></summary><ul class="curtain-tape-howto">
+				<?php
+				foreach ( $t['howToLines'] as $line ) :
+					?>
+					<li><?php echo esc_html( $line ); ?></li><?php endforeach; ?></ul></details>
+			<div class="curtain-grid">
+				<label><span><?php echo esc_html( $t['closureLabel'] ); ?></span>
+					<select name="curtain[closure]">
+						<option value=""><?php echo esc_html( $t['closureNone'] ); ?></option>
+						<?php foreach ( Garment_Tape::CLOSURES as $c ) : ?>
+							<option value="<?php echo esc_attr( $c ); ?>" <?php selected( $closure, $c ); ?>><?php echo esc_html( Garment_Tape::closure_label( $c ) ); ?></option>
+						<?php endforeach; ?>
+					</select></label>
+				<label><span><?php echo esc_html( $t['hipDepthLabel'] ); ?></span><input type="text" inputmode="decimal" name="curtain[tape_depth]" value="<?php echo esc_attr( null === $depth ? '' : (string) $depth ); ?>" placeholder="<?php echo esc_attr( $t['hipDepthPlaceholder'] ); ?>" maxlength="8" class="curtain-narrow"></label>
+			</div>
+			<?php if ( array() === $chart ) : ?>
+				<p class="curtain-tape-note"><?php echo esc_html( $t['noChart'] ); ?></p>
+			<?php else : ?>
+				<p class="description"><?php echo esc_html( $t['measuredHint'] ); ?></p>
+				<table class="curtain-table curtain-tape-table">
+					<thead><tr><th><?php echo esc_html( $t['sizeColumn'] ); ?></th><th><?php echo esc_html( $t['measuredColumn'] ); ?></th>
+						<?php
+						foreach ( Garment_Tape::FIELDS as $f ) :
+							?>
+							<th><?php echo esc_html( Garment_Tape::field_label( $f ) ); ?></th><?php endforeach; ?></tr></thead>
+					<tbody>
+						<?php
+						foreach ( array_slice( $chart, 0, 30 ) as $i => $c ) :
+							$size     = (string) ( $c['size'] ?? '' );
+							$k        = Garment_Tape::key( $size );
+							$m        = $by_size[ $k ] ?? null;
+							$estimate = $filled_by[ $k ] ?? null;
+							?>
+							<tr class="<?php echo null === $m ? 'curtain-tape-est' : ''; ?>">
+								<td class="curtain-tape-size"><strong><?php echo esc_html( $size ); ?></strong><input type="hidden" name="curtain[tape][<?php echo (int) $i; ?>][size]" value="<?php echo esc_attr( $size ); ?>"></td>
+								<td class="curtain-tape-flag" data-label="<?php echo esc_attr( $t['measuredColumn'] ); ?>"><input type="checkbox" class="curtain-tape-measured" name="curtain[tape][<?php echo (int) $i; ?>][measured]" value="1" <?php checked( null !== $m ); ?> aria-label="<?php echo esc_attr( $t['measuredColumn'] . ' ' . $size ); ?>"></td>
+								<?php
+								foreach ( Garment_Tape::FIELDS as $f ) :
+									$key   = Garment_Tape::INPUT_KEYS[ $f ];
+									$value = null === $m ? ( $estimate[ $f ]['cm'] ?? '' ) : ( $m[ $key ] ?? '' );
+									$prov  = null === $m ? ( $estimate[ $f ]['provenance'] ?? '' ) : '';
+									?>
+									<td class="curtain-tape-num" data-label="<?php echo esc_attr( Garment_Tape::field_label( $f ) ); ?>">
+										<input type="text" inputmode="decimal" maxlength="8" class="curtain-narrow curtain-tape-cm" name="curtain[tape][<?php echo (int) $i; ?>][<?php echo esc_attr( $f ); ?>]" value="<?php echo esc_attr( (string) $value ); ?>" aria-label="<?php echo esc_attr( $size . ', ' . Garment_Tape::field_label( $f ) . ' (cm)' ); ?>" <?php echo null === $m ? 'readonly' : ''; ?> <?php echo isset( $bad[ $k . '|' . $f ] ) ? 'aria-invalid="true"' : ''; ?> data-estimate="<?php echo esc_attr( null === $m ? '1' : '' ); ?>">
+										<?php if ( null === $m ) : ?>
+											<span class="curtain-tape-prov curtain-tape-prov--<?php echo esc_attr( '' === $prov ? 'none' : $prov ); ?>"><?php echo esc_html( '' === $prov ? $t['notMeasured'] : Garment_Tape::provenance_label( $prov ) ); ?></span>
+										<?php endif; ?>
+									</td>
+								<?php endforeach; ?>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+				<p class="description"><?php echo esc_html( $t['legend'] ); ?></p>
+			<?php endif; ?>
+			<?php if ( ! empty( $issues['errors'] ) ) : ?>
+				<div class="curtain-tape-issues curtain-tape-issues--error" role="alert"><strong><?php echo esc_html( $t['notSaved'] ); ?></strong><ul>
+					<?php
+					foreach ( (array) $issues['errors'] as $e ) :
+						?>
+						<li><?php echo esc_html( (string) ( $e['message'] ?? '' ) ); ?></li><?php endforeach; ?></ul></div>
+			<?php endif; ?>
+			<?php if ( ! empty( $issues['warnings'] ) ) : ?>
+				<div class="curtain-tape-issues curtain-tape-issues--warning"><strong><?php echo esc_html( $t['warningsTitle'] ); ?></strong><ul>
+					<?php
+					foreach ( (array) $issues['warnings'] as $w ) :
+						?>
+						<li><?php echo esc_html( (string) ( $w['message'] ?? '' ) ); ?></li><?php endforeach; ?></ul></div>
+			<?php endif; ?>
+			<p class="description"><?php echo esc_html( $t['privacy'] ); ?></p>
 		</div>
 		<?php
 	}

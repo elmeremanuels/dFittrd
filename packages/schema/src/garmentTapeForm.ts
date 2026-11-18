@@ -145,6 +145,7 @@ export const GARMENT_TAPE_FORM_TEXT = Object.freeze({
   saved: 'Saved. Curtain is re-reading the product.',
   nothingToSave: 'Nothing measured yet.',
   errorsTitle: 'Fix these before saving:',
+  notSaved: 'The garment measurements were not saved. Fix these and update the product again:',
   warningsTitle: 'Worth a look (you can still save):',
   legend: 'measured = your number · estimated = between two measured sizes · rough estimate = beyond the measured sizes',
   privacy: 'These numbers describe the garment, not a shopper. Shoppers’ measurements never reach you.',

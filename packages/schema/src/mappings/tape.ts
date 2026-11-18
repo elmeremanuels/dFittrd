@@ -13,6 +13,8 @@ import { GARMENT_CLOSURES, GarmentTapeSchema, type GarmentClosure, type GarmentT
 import { refillGarmentTape } from '../garmentTapeForm';
 import { coerceString, parseJsonish, warn, type WarningSink } from './common';
 
+export const GARMENT_TAPE_INVALID_WARNING = 'not a valid garment tape: every value needs cm and a provenance, and every size one row';
+
 export function coerceClosure(value: unknown, sink: WarningSink, source: string): GarmentClosure | undefined {
   const s = coerceString(value)?.toLowerCase();
   if (!s) return undefined;
@@ -26,8 +28,8 @@ export function coerceGarmentTape(value: unknown, chart: readonly TapeChartRow[]
   if (v === undefined || v === null || v === '') return undefined;
   const parsed = GarmentTapeSchema.safeParse(v);
   if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    warn(sink, { source, path: 'garmentTape', message: `not a valid garment tape${first ? ` (${[...first.path].join('.') || 'value'}: ${first.message})` : ''}` });
+    // One fixed sentence (the WooCommerce PHP twin gives the same): the tape is written by our own form.
+    warn(sink, { source, path: 'garmentTape', message: GARMENT_TAPE_INVALID_WARNING });
     return undefined;
   }
   if (!chart || chart.length === 0) return parsed.data;

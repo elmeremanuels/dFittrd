@@ -41,3 +41,32 @@
 .curtain-template .description { flex-basis: 100%; margin: 0; }
 /* Checkbox lists inside the grid: box and label on one line (the grid's labels are columns). */
 .curtain-grid label.curtain-check { display: inline-flex; flex-direction: row; align-items: center; gap: 4px; }
+/* Garment measurements table */
+.curtain-tape details { margin: 4px 0 8px; }
+.curtain-tape .curtain-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.curtain-tape-howto { margin: 4px 0 0 1.2em; list-style: disc; }
+.curtain-tape-table th { white-space: nowrap; }
+.curtain-tape-table td { vertical-align: top; padding-bottom: 6px; }
+.curtain-tape-size { font-size: 14px; padding-top: 6px !important; }
+.curtain-tape-table input.curtain-tape-cm { text-align: right; }
+.curtain-tape-table input[aria-invalid="true"] { border-color: #b32d2e; background: #fcf0f1; }
+.curtain-tape-est input.curtain-tape-cm { border-style: dashed; background: #f6f7f7; color: #646970; }
+.curtain-tape-prov { display: block; font-size: 11px; color: #646970; }
+.curtain-tape-prov--extrapolated { color: #8a4b00; font-weight: 600; }
+.curtain-tape-note { background: #f0f6fc; border-left: 4px solid #72aee6; padding: 6px 10px; }
+.curtain-tape-issues { padding: 6px 10px; margin: 8px 0; border-left: 4px solid; }
+.curtain-tape-issues ul { margin: 4px 0 0 1.2em; list-style: disc; }
+.curtain-tape-issues--error { background: #fcf0f1; border-color: #b32d2e; color: #8a2424; }
+.curtain-tape-issues--warning { background: #fcf9e8; border-color: #dba617; }
+@media (max-width: 782px) {
+	.curtain-tape-table thead { display: none; }
+	.curtain-tape-table, .curtain-tape-table tbody { display: block; width: 100%; }
+	.curtain-tape-table tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 10px; padding: 10px 0; border-top: 1px solid #dcdcde; }
+	.curtain-tape-table td { padding: 0; }
+	.curtain-tape-table td.curtain-tape-size { grid-column: span 2; align-self: center; }
+	.curtain-tape-table td.curtain-tape-flag { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+	.curtain-tape-table td.curtain-tape-flag::before { content: attr(data-label); font-size: 12px; color: #646970; }
+	.curtain-tape-table td.curtain-tape-num { display: flex; flex-direction: column; justify-content: flex-end; }
+	.curtain-tape-table td.curtain-tape-num::before { content: attr(data-label); display: block; font-size: 11px; line-height: 1.25; color: #646970; }
+	.curtain-tape-table input.curtain-tape-cm { width: 100% !important; }
+}

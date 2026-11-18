@@ -13,6 +13,24 @@
 
 Nothing leaves the site until the merchant clicks **Connect**; the secret key is stored encrypted (libsodium, OpenSSL fallback) using the site salts.
 
+## Garment measurements (closure + tape)
+
+Below the size chart, the meta box has a **Garment measurements** table (`docs/MERCHANT-MEASUREMENTS.md`):
+how the garment closes, the depth below the band at which the hip was measured, and one row per size of
+the saved chart with the five numbers A to E. The merchant ticks the sizes they measured; the other rows
+show the stored estimate, read-only, labelled "estimated" or "rough estimate", and are never saved as typed.
+On save `Sanitizer` runs `Garment_Tape::check` (the PHP twin of `@curtain/schema`'s
+`checkGarmentTapeInput` and `fillGarmentTape`; `tests/garment-tape.test.php` replays the shared
+`GARMENT_TAPE_FORM_CASES` and must give the same errors, warnings and filled tape) and stores
+`_curtain_closure` and `_curtain_garment_tape` (the filled tape, every value with its provenance). With an
+error nothing of the table is stored, what was typed comes back with the English messages, and the
+input that is wrong is marked. `Payload_Builder` reads the stored tape against the current chart (twin
+of `mappings/tape.ts`) and pushes it with the product; no fit is computed here or on the api.
+The rows follow the chart as saved: after changing the chart, update the product once to see its sizes.
+There is no live preview of the estimates (the Shopify admin has one through the api's dry run): they
+appear after the update. `node e2e/tape-meta-box-shots.mjs [outDir]` renders the box outside WordPress
+(test shims, `e2e/render-meta-box.php`) for phone and desktop screenshots.
+
 ## Layout
 
 ```
@@ -53,7 +71,7 @@ This package is an application (a plugin zip); no other package imports it. Its 
 
 **Removed: signed backfill endpoint (carry-over #13)** — `GET /wp-json/curtain/v1/products…` existed for an api-side pull that was never built: the api has no signer for it (Bearer auth stores only a hash of the key). The plugin pushes every product on save and "Sync all" re-pushes the catalogue, so the endpoint was removed rather than kept as an unused, publicly reachable surface. If a pull is ever needed, build the signer in the api first (it can decrypt `apiKeyEnc`), then reintroduce the route.
 
-**Post meta** — the 17 `_curtain_*` keys from `WOO_META_KEYS` (JSON strings for json/list kinds, plain strings otherwise, the flat-lay as an absolute URL) plus plugin-private keys `_curtain_flat_lay_photo_id`, `_curtain_sync_status` (`pending|retrying|active|incomplete|archived|error`), `_curtain_sync_error`, `_curtain_synced_at`, `_curtain_content_hash`, `_curtain_score`, `_curtain_missing_fields`, `_curtain_validation`, `_curtain_local_issues`.
+**Post meta** — the 20 `_curtain_*` keys from `WOO_META_KEYS` (with `_curtain_closure` and `_curtain_garment_tape`) (JSON strings for json/list kinds, plain strings otherwise, the flat-lay as an absolute URL) plus plugin-private keys `_curtain_flat_lay_photo_id`, `_curtain_sync_status` (`pending|retrying|active|incomplete|archived|error`), `_curtain_sync_error`, `_curtain_synced_at`, `_curtain_content_hash`, `_curtain_score`, `_curtain_missing_fields`, `_curtain_validation`, `_curtain_local_issues`, `_curtain_tape_input` (what was typed in the garment measurements table when the save found an error), `_curtain_tape_issues` (that table's last errors and warnings).
 
 **Storefront** — `<script src="…/assets/sdk.v1.js" data-shop="pk_…" data-api="https://api.…" data-mode="embed|app" data-size-option="pa_size" data-locale="en" data-label="…" data-peek="on|off" data-app="https://app.…">` and `<button type="button" class="button alt curtain-try-button" data-curtain-product="<postId>" data-curtain-mode="embed" data-curtain-size-option="pa_size" data-curtain-peek="on|off">`; shortcode `[curtain_button product_id="" label="" class="" peek=""]` (`peek="off"` hides the size peek next to that button).
 

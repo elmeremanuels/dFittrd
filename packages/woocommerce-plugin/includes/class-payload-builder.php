@@ -257,6 +257,36 @@ final class Payload_Builder {
 			$out['sizeChart'] = $chart;
 		}
 
+		// Closure and garment measurements (twin of mappings/tape.ts): the tape is read against the
+		// current chart; sizes it no longer has are dropped with a warning, estimates filled again.
+		$closure = self::coerce_string( $get( '_curtain_closure' ) );
+		if ( null !== $closure ) {
+			$closure = strtolower( $closure );
+			if ( in_array( $closure, Garment_Tape::CLOSURES, true ) ) {
+				$out['closure'] = $closure;
+			} else {
+				$this->warn( '_curtain_closure', 'closure', 'expected one of ' . implode( ', ', Garment_Tape::CLOSURES ) . ", got '" . $closure . "'" );
+			}
+		}
+		$tape_raw = self::parse_jsonish( $get( '_curtain_garment_tape' ) );
+		if ( null !== $tape_raw && '' !== $tape_raw ) {
+			$tape = Garment_Tape::parse_stored( $tape_raw );
+			if ( null === $tape ) {
+				$this->warn( '_curtain_garment_tape', 'garmentTape', Garment_Tape::INVALID_STORE );
+			} elseif ( null === $chart ) {
+				$out['garmentTape'] = $tape;
+			} else {
+				$r = Garment_Tape::refill( $chart, $tape );
+				if ( $r['droppedSizes'] ) {
+					$n = count( $r['droppedSizes'] );
+					$this->warn( '_curtain_garment_tape', 'garmentTape', 1 === $n ? 'size ' . $r['droppedSizes'][0] . ' is not in the size chart; its measurements were left out' : 'sizes ' . implode( ', ', $r['droppedSizes'] ) . ' are not in the size chart; their measurements were left out' );
+				}
+				if ( null !== $r['garmentTape'] ) {
+					$out['garmentTape'] = $r['garmentTape'];
+				}
+			}
+		}
+
 		$fabric = $this->coerce_fabric( $get( '_curtain_fabric' ) );
 		if ( null !== $fabric ) {
 			$out['fabric'] = $fabric;

@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
-import { glbFloatAccessor, readGlb } from '@curtain/mannequin';
+import { MALE_REFERENCE, glbFloatAccessor, readGlb } from '@curtain/mannequin';
+import { SYNTHETIC_MENS_TEE, bundleMannequinFamily, checkGarmentBundle } from '@curtain/schema';
 import { describe, expect, it } from 'vitest';
-import { buildBundle } from './bundle';
-import { SPIKE_PRODUCT_IDS } from './product';
+import { buildBundle, mannequinFor } from './bundle';
+import { SPIKE_PRODUCT_IDS, spikeProduct } from './product';
 
 const sha = (d: Uint8Array | string) => createHash('sha256').update(d).digest('hex');
 
@@ -53,3 +54,46 @@ describe.each(SPIKE_PRODUCT_IDS)('bundle %s', (id) => {
     expect(JSON.parse(other.files['anchors.json']).inputHash).not.toBe(JSON.parse(a.files['anchors.json']).inputHash);
   });
 });
+
+describe('the body family in the bundle (men-3d-plan slice M1)', () => {
+  // sha256 (first 16 hex) of the female bundles as built before M1 (`out/` of 18 Nov 2026, the same bytes):
+  // writing the family only for the male body leaves every female file, and so every female asset version, unchanged.
+  const BEFORE_M1: Record<string, Record<string, string>> = {
+    'aalter-studio-2': { 'base.glb': '37c0822cb7524f0e', 'anchors.json': '450075f158ed56bb', 'grading.json': '7f8cf2e48a33e2d7', 'material.json': 'ddf478e551cfcc3b', 'qa.json': '36c519bafdd86b88' },
+    'monochrome-03': { 'base.glb': '5b0a7eec72c7e733', 'anchors.json': '7a516a8271fa7328', 'grading.json': '6206acfd362f065d', 'material.json': '4301c8bb072a6034', 'qa.json': '20cd0128fc220a63' },
+  };
+  it.each(SPIKE_PRODUCT_IDS)('a female bundle (%s) is byte for byte what it was before M1 and names no family', (id) => {
+    const b = buildBundle(id, { skipSeparation: true });
+    for (const [name, want] of Object.entries(BEFORE_M1[id]!)) expect(sha(b.files[name as keyof typeof b.files]).slice(0, 16), `${id} ${name}`).toBe(want);
+    expect(JSON.parse(b.files['anchors.json']).mannequin).toEqual({ version: '0.1.0', shape: 'M' });
+    expect(JSON.parse(b.files['qa.json'])).not.toHaveProperty('mannequin');
+    expect(bundleFamilyOfMeta(b)).toBe('female');
+    expect(mannequinFor(spikeProduct(id)).shape.family).toBe('female');
+  });
+
+  it('the SYNTHETIC men’s tee is built on the male M, names the family in anchors.json and qa.json, and passes the shared check for a men’s product only', () => {
+    const b = buildBundle('synthetic-men-tee', { skipSeparation: true });
+    expect(b.mannequin.shape.family).toBe('male');
+    expect(b.mannequin.statureCm).toBe(MALE_REFERENCE.M.stature);
+    const anchors = JSON.parse(b.files['anchors.json']);
+    const qa = JSON.parse(b.files['qa.json']);
+    expect(anchors.mannequin).toEqual({ version: '0.1.0', shape: 'M', family: 'male' });
+    expect(qa.mannequin).toEqual(anchors.mannequin);
+    expect(anchors.synthetic).toBe(true);
+    expect(qa.chartAgreement.pass).toBe(true);
+    expect(qa.meshHealth.nonManifoldEdges).toBe(0);
+    expect(bundleFamilyOfMeta(b)).toBe('male');
+    const meta = { anchors, grading: JSON.parse(b.files['grading.json']), material: JSON.parse(b.files['material.json']), qa };
+    const sizes = SYNTHETIC_MENS_TEE.sizeChart.map((r) => r.size);
+    expect(checkGarmentBundle(meta, sizes, { family: 'male' })).toMatchObject({ ok: true, info: { family: 'male', sizes } });
+    expect(checkGarmentBundle(meta, sizes, { family: 'female' })).toEqual({ ok: false, problem: 'family_mismatch' });
+    // The family enters the input hash for the male body only.
+    expect(anchors.inputHash).not.toBe(JSON.parse(buildBundle('monochrome-03', { skipSeparation: true }).files['anchors.json']).inputHash);
+    expect(mannequinFor(SYNTHETIC_MENS_TEE).shape.family).toBe('male');
+    expect(mannequinFor({ audience: 'unisex' }).shape.family).toBe('female');
+  });
+});
+
+function bundleFamilyOfMeta(b: { files: { 'anchors.json': string; 'qa.json': string } }): string | null {
+  return bundleMannequinFamily({ anchors: JSON.parse(b.files['anchors.json']), qa: JSON.parse(b.files['qa.json']) });
+}

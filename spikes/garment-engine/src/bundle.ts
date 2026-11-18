@@ -8,10 +8,13 @@
  */
 import { createHash } from 'node:crypto';
 import { type AnchorRing } from '@curtain/anchors';
+import { garmentBodyFamily } from '@curtain/schema';
 import {
   BASE_SHAPE_ID,
+  FAMILY_BASE_SHAPE_ID,
   MANNEQUIN_VERSION,
   bodyShape,
+  familyShape,
   buildMannequin,
   buildMannequinMesh,
   round,
@@ -20,13 +23,14 @@ import {
   turntablePaths,
   vertexNormals,
   writeGlb,
+  type BodyFamily,
   type Mannequin,
   type Mesh,
 } from '@curtain/mannequin';
 import { applyCalibration, calibrate, chartAgreement, measureGarment, ringGirths, type AnchorMeasurements, type Calibration, type ChartAgreement } from './anchoring';
 import { assignChains, distortGarment, generateGarment, shoulderSeams, type Distortion } from './garment';
 import { gradeGarment, type GradingJson } from './grading';
-import { chartRow, garmentChart, garmentSpec, materialJson, spikeProduct, type MaterialJson, type SPIKE_PRODUCT_IDS } from './product';
+import { chartRow, garmentChart, garmentSpec, materialJson, spikeProduct, type MaterialJson, type SpikeBundleProductId } from './product';
 import { hexToRgb } from './raster';
 import { separate, type SeparationOptions, type SeparationReport } from './separation';
 
@@ -60,12 +64,32 @@ export interface Bundle {
 
 const json = (x: unknown): string => `${JSON.stringify(x, null, 2)}\n`;
 
-export function buildBundle(productId: (typeof SPIKE_PRODUCT_IDS)[number], options: BundleOptions = {}): Bundle {
+/**
+ * The canonical body a product's bundle is built on (men-3d-plan slice M1, `mannequinFor`): the base
+ * shape of the family the product is shown on (`garmentBodyFamily`: men's → male M, else female M).
+ */
+export function mannequinFor(payload: { audience?: string | undefined }): Mannequin {
+  const family: BodyFamily = garmentBodyFamily(payload as { audience?: 'men' | 'women' | 'unisex' });
+  return buildMannequin(family === 'male' ? familyShape('male', FAMILY_BASE_SHAPE_ID.male)! : bodyShape(BASE_SHAPE_ID));
+}
+
+/**
+ * The `mannequin` block of anchors.json (and, for a male bundle, of qa.json): the family is written
+ * only for the male family, so every female bundle stays byte for byte what it was before M1
+ * (absent = female, `bundleMannequinFamily` of @curtain/schema).
+ */
+export function bundleMannequin(m: Mannequin): { version: string; shape: string; family?: 'male' } {
+  return { version: MANNEQUIN_VERSION, shape: m.shape.id, ...(m.shape.family === 'male' ? { family: 'male' as const } : {}) };
+}
+
+export function buildBundle(productId: SpikeBundleProductId, options: BundleOptions = {}): Bundle {
   const baseSize = options.baseSize ?? 'M';
   const payload = spikeProduct(productId);
   const chart = garmentChart(payload);
   const spec = garmentSpec(payload, baseSize);
-  const mannequin = buildMannequin(bodyShape(BASE_SHAPE_ID));
+  const mannequin = mannequinFor(payload);
+  const mannequinMeta = bundleMannequin(mannequin);
+  const male = mannequinMeta.family === 'male';
 
   // Stand-in for stages 2 + 4: the true garment and what a reconstruction would return.
   const truth = generateGarment(mannequin, spec);
@@ -95,7 +119,8 @@ export function buildBundle(productId: (typeof SPIKE_PRODUCT_IDS)[number], optio
 
   const material = materialJson(payload);
   const health = topology(baseMesh);
-  const inputHash = createHash('sha256').update(JSON.stringify({ payload, baseSize, distortion: options.distortion ?? DEFAULT_DISTORTION, sample: options.sample ?? null, mannequin: MANNEQUIN_VERSION, pipeline: PIPELINE_VERSION })).digest('hex');
+  // The family enters the hash only for a male body, so female input hashes stay the same.
+  const inputHash = createHash('sha256').update(JSON.stringify({ payload, baseSize, distortion: options.distortion ?? DEFAULT_DISTORTION, sample: options.sample ?? null, mannequin: MANNEQUIN_VERSION, pipeline: PIPELINE_VERSION, ...(male ? { family: 'male' } : {}) })).digest('hex');
 
   const anchors = {
     format: 'curtain.garment.anchors',
@@ -104,7 +129,7 @@ export function buildBundle(productId: (typeof SPIKE_PRODUCT_IDS)[number], optio
     baseSize,
     category: spec.category,
     unit: 'cm',
-    mannequin: { version: MANNEQUIN_VERSION, shape: BASE_SHAPE_ID },
+    mannequin: mannequinMeta,
     pipelineVersion: PIPELINE_VERSION,
     inputHash,
     synthetic: true,
@@ -141,6 +166,8 @@ export function buildBundle(productId: (typeof SPIKE_PRODUCT_IDS)[number], optio
     productId,
     synthetic: true,
     inputHash,
+    // The api keeps only qa.json of a bundle, so the family the men's gate reads is repeated here.
+    ...(male ? { mannequin: mannequinMeta } : {}),
     chartAgreement: { ...agreement, perRingCm: Object.fromEntries(Object.entries(agreement.perRingCm).map(([k, v]) => [k, round(v!, 3)])), maxAbsCm: round(agreement.maxAbsCm, 3) },
     calibration: {
       globalScale: round(calibration.globalScale, 6),

@@ -4,6 +4,7 @@
  */
 import { cross, sub, type Vec3 } from './math';
 import { buildHeadPart, HEAD_LEVELS } from './head';
+import { buildHeadPartV2 } from './headV2';
 import { levelWarp, type Mannequin, type PartSpec } from './model';
 
 export interface Mesh {
@@ -14,6 +15,13 @@ export interface Mesh {
   /** Index into `partNames` per vertex. */
   vertexPart: Uint8Array;
   partNames: string[];
+  /**
+   * Only on a mesh with the v2 head (`head: 'neutral-v2'`): a multiplier on the skin colour per
+   * vertex (1 = the skin colour; less on the brows, the lash line and the iris). Absent otherwise.
+   */
+  shade?: Float32Array;
+  /** Only with the v2 head: the heights of its chin and top (its tube reaches below the chin, into the neck). */
+  headLevels?: { chinY: number; topY: number };
 }
 
 export const vertexCount = (mesh: Mesh): number => mesh.positions.length / 3;
@@ -109,18 +117,25 @@ export interface MeshOptions {
   /**
    * `egg` (default): the v0 head, part of the torso, bytes as before. `neutral`: the neutral
    * standard face of `head.ts` as a sixth closed part `head`; the torso's neck runs straight up
-   * into it and the egg is gone.
+   * into it and the egg is gone. `neutral-v2`: the head v2 of `headV2.ts` (open eyes, brows, ears,
+   * a jaw and brow per family, no neck seam), with a `shade` per vertex; the neck has no flare
+   * towards the egg. The `neutral` and `egg` meshes are not changed by it.
    */
-  head?: 'egg' | 'neutral';
+  head?: 'egg' | 'neutral' | 'neutral-v2';
 }
 
 /** The torso part with the egg head cut off: the neck continues as a column that ends inside the head part. */
-function torsoWithoutHead(mannequin: Mannequin, torso: PartSpec): PartSpec {
+function torsoWithoutHead(mannequin: Mannequin, torso: PartSpec, straightNeck = false): PartSpec {
   const warp = levelWarp(mannequin.shape.levels);
   const level = (f: number): number => (warp ? warp(f) : f) * mannequin.statureCm;
   const neckTop = level(HEAD_LEVELS.neckTop);
   const neckEnd = level(HEAD_LEVELS.neckEnd);
-  const below = torso.sections.filter((s) => s.centre[1] <= neckTop + 1e-9);
+  let below = torso.sections.filter((s) => s.centre[1] <= neckTop + 1e-9);
+  if (straightNeck) {
+    // Head v2: from the neck ring up the visible neck is the head's own tube; the torso's neck stays just inside it.
+    const ring = neckSection(mannequin, torso);
+    below = below.map((s) => (s.centre[1] > ring.y ? { ...s, a: 0.95 * ring.a, b: 0.95 * ring.b } : s));
+  }
   const last = below[below.length - 1]!;
   const column = torso.sections
     .filter((s) => s.centre[1] > neckTop + 1e-9 && s.centre[1] <= neckEnd)
@@ -135,19 +150,46 @@ function torsoWithoutHead(mannequin: Mannequin, torso: PartSpec): PartSpec {
   return { ...torso, sections, endPole: [end.centre[0], end.centre[1] + 0.5, end.centre[2]] };
 }
 
+/** The torso's lofted section at height y (the mesh's own, interpolated linearly between its two nearest sections, as the loft is). */
+function torsoSectionAt(torso: PartSpec, y: number): { a: number; b: number; cz: number } {
+  const s = torso.sections;
+  let i = 1;
+  while (i < s.length - 1 && s[i]!.centre[1] < y) i++;
+  const p = s[i - 1]!, q = s[i]!;
+  const t = Math.min(1, Math.max(0, (y - p.centre[1]) / (q.centre[1] - p.centre[1] || 1)));
+  return { a: p.a + (q.a - p.a) * t, b: p.b + (q.b - p.b) * t, cz: p.centre[2] + (q.centre[2] - p.centre[2]) * t };
+}
+
+/** The torso's section at the neck ring. */
+function neckSection(mannequin: Mannequin, torso: PartSpec): { y: number; a: number; b: number; cz: number } {
+  const y = mannequin.morphHeights.neck;
+  return { y, ...torsoSectionAt(torso, y) };
+}
+
 /**
  * The mannequin as one mesh (five closed parts; the limbs overlap the torso — v0 does no boolean
  * union, so each part is a separate closed surface). With `head: 'neutral'` a sixth closed part,
  * the neutral standard head, replaces the egg.
  */
 export function buildMannequinMesh(mannequin: Mannequin, options: MeshOptions = {}): Mesh {
-  const neutral = options.head === 'neutral';
+  const v2 = options.head === 'neutral-v2';
+  const neutral = options.head === 'neutral' || v2;
   const parts = mannequin.parts.map((part) => {
-    const spec = neutral && part.id === 'torso' ? torsoWithoutHead(mannequin, part) : part;
+    const spec = neutral && part.id === 'torso' ? torsoWithoutHead(mannequin, part, v2) : part;
     const { positions, indices } = loftSections(spec.sections, spec.segments, { start: spec.startPole, end: spec.endPole });
     if (signedVolume(positions, indices) < 0) flipWinding(indices);
     return { name: part.id as string, positions, indices };
   });
+  if (v2) {
+    const torso = mannequin.parts.find((p) => p.id === 'torso')!;
+    const head = buildHeadPartV2(mannequin, { ...neckSection(mannequin, torso), at: (y) => torsoSectionAt(torso, y) });
+    if (signedVolume(head.positions, head.indices) < 0) flipWinding(head.indices);
+    parts.push(head);
+    const mesh = mergeParts(parts);
+    const shade = new Float32Array(mesh.vertexPart.length).fill(1);
+    shade.set(head.shade, mesh.vertexPart.length - head.shade.length);
+    return { ...mesh, shade, headLevels: { chinY: head.chinY, topY: head.topY } };
+  }
   if (neutral) {
     const head = buildHeadPart(mannequin);
     if (signedVolume(head.positions, head.indices) < 0) flipWinding(head.indices);

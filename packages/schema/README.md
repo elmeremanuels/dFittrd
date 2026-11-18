@@ -135,7 +135,7 @@ What both merchant admins (Shopify app, WooCommerce meta box) send and check. No
 - `checkGarmentTapeInput({ category, chart, closure, measured })` → `{ ok, errors, warnings, measuredSizes, garmentTape?, closure? }`.
   `measured` holds only the sizes the shop ticked as measured (plain cm, `MeasuredTapeInputRow`, an empty input is
   `null`). Errors stop a save (`unknown_size`, `duplicate_size`, `empty_measured`, `not_a_number`, `out_of_range`,
-  `depth_out_of_range`, `stretched_below_relaxed`, `unknown_closure`, `no_chart`); warnings do not (`looks_flat`,
+  `depth_out_of_range`, `stretched_below_relaxed`, `unknown_closure`, `no_chart`); warnings do not, and come only once there is no error (`looks_flat`,
   `hip_no_depth`, `hip_depth_mixed`, `not_bottom`, `no_closure`, `pull_on_no_stretch`, `few_sizes`,
   `edge_unmeasured`, `not_increasing`). The other sizes are filled by `fillGarmentTape` and labelled
   `TAPE_PROVENANCE_LABELS` ("estimated" / "rough estimate"). Every sentence is in `GARMENT_TAPE_MESSAGES`, the one

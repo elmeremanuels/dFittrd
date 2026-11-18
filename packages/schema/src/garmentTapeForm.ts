@@ -10,7 +10,7 @@
  * The shop types five numbers per size it measured (A to E, girths doubled, cm), marks which sizes
  * those are, states once at which depth below the band the hip was measured, and picks the closure.
  * The other sizes are filled by `fillGarmentTape` and labelled `interpolated` ("estimated") or
- * `extrapolated` ("rough estimate"). Errors stop a save; warnings do not.
+ * `extrapolated` ("rough estimate"). Errors stop a save; warnings do not, and are given only when there is no error.
  *
  * Every sentence a merchant reads is in `GARMENT_TAPE_MESSAGES` (D21: one English catalogue).
  * Nothing here concerns a shopper: no body measurement goes in or comes out (AGENTS.md rule 4).
@@ -113,6 +113,44 @@ export const GARMENT_TAPE_MESSAGES = {
     `${TAPE_FIELD_LABELS[field]}: size ${larger} (${formatTapeCm(v)} cm) is smaller than size ${smaller} (${formatTapeCm(u)} cm). Larger sizes are usually larger; check the numbers.`,
 } as const;
 
+/**
+ * The form's own words (headings, help, buttons), the same catalogue for both admins: the Shopify
+ * admin page gets it in its config JSON, the WooCommerce meta box has the same sentences in PHP
+ * (`__()` for its .pot; `tests/garment-tape.test.php` checks they match).
+ */
+export const GARMENT_TAPE_FORM_TEXT = Object.freeze({
+  heading: 'Garment measurements',
+  intro:
+    'Five numbers per size, measured on the garment lying flat. Widths are doubled, all in cm. Measure at least the smallest size, the largest and one in between: we estimate the other sizes and label them for the shopper.',
+  howTo: 'How to measure',
+  howToLines: [
+    'A: across the top of the waistband as it lies, x 2.',
+    'B: the same, pulled as far as you would pull it to step in, x 2. A band that does not stretch: the same number as A.',
+    'C: straight across at the distance below the band given above (we ask for 20 cm), x 2.',
+    'D: across the hem, spread flat, x 2.',
+    'E: from the top of the band straight down to the hem, at the centre front. Not doubled.',
+  ],
+  closureLabel: 'How does it close?',
+  closureNone: 'Choose…',
+  hipDepthLabel: 'Hip (C) measured at this distance below the top of the band (cm)',
+  hipDepthPlaceholder: 'e.g. 20',
+  sizeColumn: 'Size',
+  measuredColumn: 'Measured',
+  measuredHint: 'Tick the sizes you measured. Leave the others: we estimate them.',
+  notMeasured: 'not measured',
+  noChart: 'Add a size chart to this product first: the measurements are entered per size of the chart.',
+  save: 'Save measurements',
+  saving: 'Saving…',
+  checking: 'Checking…',
+  saved: 'Saved. Curtain is re-reading the product.',
+  nothingToSave: 'Nothing measured yet.',
+  errorsTitle: 'Fix these before saving:',
+  warningsTitle: 'Worth a look (you can still save):',
+  legend: 'measured = your number · estimated = between two measured sizes · rough estimate = beyond the measured sizes',
+  privacy: 'These numbers describe the garment, not a shopper. Shoppers’ measurements never reach you.',
+} as const);
+export type GarmentTapeFormText = typeof GARMENT_TAPE_FORM_TEXT;
+
 // ---------------------------------------------------------------------------
 // Check and fill
 // ---------------------------------------------------------------------------
@@ -147,8 +185,8 @@ export const TapeIssueSchema = z.object({
 });
 export type TapeIssue = z.infer<typeof TapeIssueSchema>;
 
-/** A measured row as a form sends it: an empty input is `null` or left out. */
-export type MeasuredTapeInputRow = { size: string } & { [K in Exclude<keyof MeasuredTapeRow, 'size'>]?: number | null | undefined };
+/** A measured row as a form sends it: an empty input is `null` or left out; text that is not a number is kept as text (`not_a_number`). */
+export type MeasuredTapeInputRow = { size: string } & { [K in Exclude<keyof MeasuredTapeRow, 'size'>]?: number | string | null | undefined };
 
 export interface GarmentTapeFormInput {
   /** The product's category; a non-bottom gets a warning (the engine reads the tape for bottoms only). */
@@ -288,7 +326,9 @@ export function checkGarmentTapeInput(input: GarmentTapeFormInput): GarmentTapeC
   }
 
   const ok = errors.length === 0;
-  const out: GarmentTapeCheck = { ok, errors, warnings, measuredSizes: kept.map(({ row }) => row.size) };
+  // Warnings are about the rows that passed; with an error some rows did not, and "only 2 sizes are
+  // measured" next to "size 14 has a mistake" says the wrong thing. They come once the errors are fixed.
+  const out: GarmentTapeCheck = { ok, errors, warnings: ok ? warnings : [], measuredSizes: kept.map(({ row }) => row.size) };
   if (closure !== undefined) out.closure = closure;
   if (ok && anyMeasured && chart.length > 0) {
     const tape = fillGarmentTape(chart, kept.map(({ row }) => cleanRow(row)));
@@ -361,7 +401,8 @@ export function garmentTapeChartIssues(draft: { sizeChart?: readonly { size: str
 // Wire shapes (the Shopify admin's form route)
 // ---------------------------------------------------------------------------
 
-const tapeNumber = z.number().nullable().optional();
+/** A number, or the text the merchant typed when it is not one (the check answers `not_a_number`). */
+const tapeNumber = z.union([z.number(), z.string().max(24)]).nullable().optional();
 
 export const MeasuredTapeRowSchema = z.object({
   size: z.string().min(1).max(16),

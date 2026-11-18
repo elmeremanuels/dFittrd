@@ -155,6 +155,23 @@ script; required for embedded apps) with `<meta name="shopify-api-key">`, then:
    `open(confirmationUrl, '_top')`) and a 30-day bar strip, and the privacy ledger (hero renders
    only, with the `ESTIMATE_DISCLAIMER`).
 
+### Garment measurements (per product)
+
+The product panel (opened from the products table) has a **Garment measurements** form
+(`GET` / `PUT /shopify/products/:id/garment-tape`): how the garment closes (pull-on, zip, buttons,
+drawstring, wrap, something else), the depth below the band at which the hip was measured, and a
+table of the product's chart sizes with the five numbers A to E (`docs/MERCHANT-MEASUREMENTS.md`).
+The merchant ticks the sizes they measured; the other sizes show the estimate, labelled "estimated"
+(between two measured sizes) or "rough estimate" (beyond them), never as an editable number. Every
+change is checked by the api (`dryRun`, `checkGarmentTapeInput` from `@curtain/schema`): errors in
+red block the save and mark the input, warnings in yellow do not. Saving writes the `closure` and
+`garment_tape` metafields (a cleared value is deleted) and queues the product sync. All words come
+from `GARMENT_TAPE_ADMIN_CONFIG` (`@curtain/schema` `GARMENT_TAPE_FORM_TEXT`, field, closure and
+provenance labels) in the page's config JSON: one English catalogue (D21). On a phone the table
+becomes one block per size. `node packages/shopify-app/scripts/tape-form-shots.mjs [outDir]` drives the
+form in Chromium against an in-process api that runs the real check (Shopify itself is stubbed) and
+saves phone and desktop screenshots.
+
 ### Size chart builder (standalone size advice, no 3D engine needed)
 
 1. **Templates** (`GET /v1/merchant/charts/templates`, from `@curtain/schema` `OFFERED_CHART_TEMPLATES`):

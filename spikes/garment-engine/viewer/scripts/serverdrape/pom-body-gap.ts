@@ -21,7 +21,6 @@ const [root, set = 'wear'] = [process.argv[2]!, process.argv[3]];
 interface BodyMeta { id: string; label: string; achieved: { hipCm: number; waistCm: number; hipY: number; waistY: number; navelY: number } }
 const bodies = (JSON.parse(readFileSync(join(root, 'bodies', 'bodies.json'), 'utf8')) as { bodies: BodyMeta[] }).bodies;
 const arm = new Uint8Array(readFileSync(join(root, 'bodies', 'armmask.bin')));
-const indices = new Uint32Array(readFileSync(join(root, 'rest', 'indices.bin')).buffer.slice(0));
 const f32 = (p: string): Float32Array => { const b = readFileSync(p); return new Float32Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)); };
 const r1 = (x: number): number => Math.round(x * 10) / 10;
 

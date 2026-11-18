@@ -492,6 +492,15 @@ async function pullOnFlow(browser, base, log) {
       // AU 8's band is 6 cm short of these hips: no fit score next to it in "Compare sizes".
       const chip8 = (await frame.getByRole('radiogroup', { name: /compare sizes/i }).getByRole('radio', { name: /^8/ }).innerText()).replace(/\s+/g, ' ');
       if (!/too small to pull on/.test(chip8) || /%/.test(chip8)) throw new Error(`the AU 8 chip reads "${chip8}", expected "too small to pull on" and no score`);
+      const chip10 = (await frame.getByRole('radiogroup', { name: /compare sizes/i }).getByRole('radio', { name: /^10/ }).innerText()).replace(/\s+/g, ' ');
+      if (!/only just pulls on/.test(chip10) || /%/.test(chip10)) throw new Error(`the AU 10 chip reads "${chip10}", expected "only just pulls on" and no score`);
+      // The recommended AU 10 only just pulls on: no "Fit score 100%" next to that warning.
+      const scoreNote = (await frame.getByTestId('fit-score-note').innerText()).trim();
+      if (scoreNote !== 'Only just pulls on' || (await frame.getByTestId('fit-score').count()) > 0) throw new Error(`the fit score reads "${scoreNote}", expected "Only just pulls on" and no percentage`);
+      // The shop page starts on AU 8: the result says that size does not go on.
+      const onPage = frame.getByTestId('on-page-no-pull-on');
+      if ((await onPage.count()) > 0 && !/does not stretch over your hips/.test(await onPage.innerText())) throw new Error('the shop page size warning reads wrong');
+      log(`${vp.name}: shop page size line: ${(await onPage.count()) > 0 ? (await onPage.innerText()).trim() : '(the shop page size is not AU 8 here)'}`);
       if (errors.length) throw new Error(`errors in the page or the iframe:\n  ${errors.join('\n  ')}`);
       log(`ok (${vp.name}): Size ${size} with "${PULL_ON.warning}"`);
     } catch (err) {

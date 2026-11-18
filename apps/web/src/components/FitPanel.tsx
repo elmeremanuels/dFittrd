@@ -8,7 +8,18 @@ import { pct } from '@/lib/format';
  * confidence and the engine's per-point notes. Lives in an aria-live region so a new card's result
  * is announced. Keyed by garment id by the parent so stale values never show on a new garment.
  */
-export function FitPanel({ fit, hasMeasurements, compact = false }: { fit: FitResult | null; hasMeasurements: boolean; compact?: boolean }): ReactNode {
+export function FitPanel({
+  fit,
+  hasMeasurements,
+  compact = false,
+  scoreNote,
+}: {
+  fit: FitResult | null;
+  hasMeasurements: boolean;
+  compact?: boolean;
+  /** Shown in place of the fit score when a percentage would mislead (the embed: a pull-on band that only just passes the hips). */
+  scoreNote?: string | undefined;
+}): ReactNode {
   return (
     <div className={`glass-panel rounded-2xl text-ink ${compact ? 'px-3 py-2' : 'p-3'}`} aria-live="polite" aria-atomic="true" data-testid="fit-panel">
       {!hasMeasurements ? (
@@ -60,9 +71,15 @@ export function FitPanel({ fit, hasMeasurements, compact = false }: { fit: FitRe
             </div>
             <div className="text-right">
               <p className="eyebrow">Fit score</p>
-              <p className="font-display text-2xl leading-none" data-testid="fit-score">
-                {pct(fit.score)}
-              </p>
+              {scoreNote ? (
+                <p className="text-sm leading-tight font-semibold text-warn" data-testid="fit-score-note">
+                  {scoreNote}
+                </p>
+              ) : (
+                <p className="font-display text-2xl leading-none" data-testid="fit-score">
+                  {pct(fit.score)}
+                </p>
+              )}
             </div>
           </div>
           <p className="text-xs text-ink-mute">

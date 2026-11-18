@@ -215,7 +215,7 @@ try {
         for (const yaw of [0, 90, 160]) {
           const name = `neck--${family}--${head === 'neutral' ? 'v1' : 'v2'}--yaw${yaw}`;
           const { page } = await open(closeUp, `mode=head&family=${family}&head=${head}&yaw=${yaw}&lighting=neutral-v2&skin=${MONK[5]}`, name);
-          await snap(page, name, { x: 95, y: 150, width: 200, height: 260 });
+          await snap(page, name, { x: 95, y: 300, width: 200, height: 340 });
           await page.close();
         }
       }

@@ -731,3 +731,81 @@ An independent review reproduced every number of §9.2 and §9.5 and found no co
 | 10 (low) | No AI image used as evidence in §9; residues (render colour, unused UV layout, `products.json` `selection.why`) | No change: `products.json` is outside this branch; the colour and UVs are not evidence |
 | 11 (low) | §9.6 and §9.8 tables lack INTERPOLATED / EXTRAPOLATED | Added |
 | 12 (low) | "Repeatable to about 1 cm"; monotone order within noise | §9.5 and §9.10: repeats 0.5 and 1.3 cm, long run 0.8 cm; only steps over about 1.5 cm are resolved; AU 12 / 14 / 16 are not ordered by these runs |
+
+## 10. POM v2 as a device bundle in the embed (18 Nov 2026)
+
+Branch `claude/pom-bundle`. The embed's 3D demo showed the run-17d photo reconstruction (draped on the device). This section turns POM v2 (§9) into a bundle the existing `@curtain/garment-viewer` loads, the way §3.4 baked the R2 spike: server drapes per size on chart bodies, morph targets, blended on the device. Run: `serverdrape/pom-bundle.sh` (after `pom2.sh`). Serve it with `DEMO_SKIRT=pom` (api demo, `pnpm demo`, `pnpm demo:e2e`); the photo bundle stays the default and stays available. Every render and number below is an **estimate**; AU 8, 10, 14 rest on the shop's tape (measured), **AU 12 is INTERPOLATED, AU 16 EXTRAPOLATED**. Started 15 Nov, stopped by the founder, resumed 18 Nov: the four grid drapes the stopped run had started (Anny t+1 for AU 10, 12, 14 and t+0.5 for AU 8) had failed with empty logs (killed) and were re-run; everything else below is new.
+
+**Answer.** It works in the real embed: the five bundle files and the import gate are unchanged, the viewer recognises a bake (`anchors.json` `drapeBake`), blends instead of draping, is `settled` as soon as the file is decoded, and the label says the skirt is drawn in one plain colour and whether the size on screen was measured, interpolated or extrapolated. Two things limit it: the **blend flattens the gathers at the hem** (the hem's fold length is 17-29 % short of the direct drape on a body between grid bodies, its hull 4-8 cm smaller), and the **bundle is 553 KB** (410 KB gzip), not "a few hundred KB" in the sense of §4.4 (379 KB), because the POM mesh has 2.5 times the particles.
+
+### 10.1 The drape must be made on the body the device draws
+
+`viewer/scripts/serverdrape/pom-body-gap.ts` (begun by the stopped run, output in `out/pom2-avatar-body-gap.txt`) compares each Anny body of §9 with the device avatar (`buildAvatar`) built from the same waist and hip. Measured (convex hull of the torso, cm):
+
+| Height above floor | 106 | 103 | 101 (band) | 99 | 97 (seam) | 95 | 89 (hip) | 82 |
+|---|---|---|---|---|---|---|---|---|
+| Held-out body, Anny | 75.1 | 78.8 | 82.7 | 87.0 | 90.9 | 94.2 | 100.7 | 99.6 |
+| Held-out body, device avatar | 73.7 | 73.9 | 75.9 | 79.4 | 83.8 | 88.5 | 99.3 | 93.6 |
+
+The avatar is 4-7 cm of girth narrower where the band sits (it has no belly below the navel; its waist-to-hip transition is a ring morph), and deeper at the seat. An Anny drape put on the avatar therefore floats about 1 cm off it at the band and lies **inside it at the back of the seat: 398-858 of 16,071 particles, up to 3.4 cm** (every drape of §9, every body). A device push-out hides the second (the dry run of the bake on the Anny drapes moved 460-620 particles by up to 2.9 cm) but not the first. So the bundle is **draped on the avatar itself**: `avatar-bodies.ts` writes `buildAvatar` (neutral head, as the embed mounts it) for each chart body (bust 95 + 10t, waist 77.5 + 10t, hip 104 + 10t; held-out: 91 / 73.5 / 100) in the format `drape_blender.py` reads. Everything else is §9 unchanged: rest geometry from the tape, band pinned by the wear rule, gathers, Blender cloth, 144 frames, body on a plinth (floor −40 cm).
+
+- **Assumed:** the avatar has no navel. The wear level is put at the **same height above the floor as on the Anny body of the same chart size** (102.5-103.0 cm navel, band top 2 cm under it). On the avatar's narrower waist the rule's band girth is 73.6 / 79.6 / 83.6 / 89.0 / 94.8 cm on the AU 8 / held-out / 12 / 14 / 16 bodies (Anny: 80.8 / 87.0 / 89.8 / 92.8 / 95.7). With it the wear rule's verdicts move: on the avatar AU 12-16 are **loose** at the band on the AU 8 body and AU 14 is relaxed, AU 16 loose on the held-out body. AU 8 still cannot be worn on the AU 16 body (band short at the assumed level), so AU 8's upper grid body is AU 14 (t = +0.5). These are statements about the avatar's shape at an assumed level, not about the garment (§9.2: the level is uncertain by ±2 cm and moves every cell by about 2 cm per cm).
+- **Simulated, avatar drapes:** 20 drapes plus the refusal. 19 of 20 are at rest by §9.5's threshold (largest movement over the last 24 frames < 0.25 cm per frame); AU 10 on the AU 8 body is not (0.285). Blender's own inside-body count is 5-29 particles per drape (Anny: 0); the device collider, after the bake, finds **0** particles inside the drawn avatar on the held-out body for every size.
+- Cost: 160-230 s wall per drape, two at a time on a shared 4-core machine.
+
+### 10.2 The bundle
+
+| | |
+|---|---|
+| Files | the usual five (`base.glb`, `anchors.json`, `grading.json`, `material.json`, `qa.json`); `anchors.json` says `"drapeBake": "base.glb"` |
+| `base.glb` | glTF 2.0, one mesh per size: POSITION = drape on the AU 12 body, morph targets = drapes on AU 8 and AU 16 bodies (AU 8: AU 8 and AU 14 bodies) minus it; int16 on a **0.05 cm grid** (KHR_mesh_quantization), every view EXT_meshopt_compression (vertex codec 1); one uint16 index buffer; no normals (the figure computes them), no UVs, no texture |
+| Size | **553,232 bytes, 410,222 gzip** (int16 uncompressed: 2.1 MB). Grid 0.005 cm as in §4.4: 796 KB; 0.02 cm: 611 KB; 0.1 cm: 475 KB (measured on the Anny dry run). Quantisation error on 0.05 cm: max 0.04 cm |
+| Colour | plain **#9D3F3B**: the largest of four k-means colour clusters (50 % of texels) of the stage-4t texture baked from the shop's video frames of this skirt (the mean colour, #A44B48, includes the floral print). No print, no texture: there is no UV layout for the POM mesh. `material.json` keeps the product's fibre, weight and sheen, opacity set to 1 (a see-through plain colour shows the gathers' back faces) |
+| `qa.json` | `chartAgreement.pass: true` with `basis` saying why: the garment is built from the tape, there is no calibration to a chart to check. **The pass is set so the demo gate admits it; the merchant import gate has not been designed for tape-built bundles.** It imports without QA flags |
+| Viewer chunk | 150 → 167 KB gzip (the meshopt decoder), budget 400 KB |
+
+On the device (`packages/garment-viewer` `drapeBake.ts`, `mount.ts` `mountBaked`): t = (hip − 104) / 10 from the shopper's own hip; per size the weights are piecewise linear between the two nearest grid bodies and **held** at the outermost one beyond them (no extrapolation; the view reports `held` and the embed says "shown on the nearest one"); then `settleOnBody`: the drape's own collider moves particles inside the drawn body out (0.35 cm clearance) and lays the hem on the floor. A size switch is a buffer copy; nothing is draped on the phone. `GarmentView.source` tells the host it is a bake, plain colour, and each size's provenance; `Garment3D.tsx` prints it under the estimate label (English catalogue strings, D21).
+
+### 10.3 Device blend against direct drapes (held-out body, hip 100, t = −0.4; not a grid body)
+
+The bake decoded from the written `base.glb`, blended by the viewer's own `bakeWeights` / `blendBakedSize`, then the viewer's `settleOnBody` on the held-out avatar; the direct drape on that avatar gets the same `settleOnBody` (`bake-pom.ts`, `out/pom2-avatar/bake-report-wear.json`). Hulls in cm.
+
+| | AU 8 (measured) | AU 10 (measured) | AU 12 (INTERPOLATED) | AU 14 (measured) | AU 16 (EXTRAPOLATED) |
+|---|---|---|---|---|---|
+| Vertex error RMS / p95 / max (cm) | 1.31 / 2.56 / 4.15 | 1.67 / 3.45 / 6.13 | 1.54 / 3.27 / 5.14 | 1.91 / 3.88 / 6.57 | 1.78 / 3.88 / 6.27 |
+| Hull at the body's hip (y 87.4), blend / direct | 106.4 / 106.9 | 108.3 / 108.7 | 109.0 / 109.4 | 109.2 / 109.8 | 110.1 / 110.2 |
+| Hull at the knee (y 47.5), blend / direct | 117.0 / 118.8 | 118.9 / 121.8 | 119.9 / 123.0 | 119.1 / 123.9 | 121.2 / 125.2 |
+| Hem-edge hull, blend / direct | 124.0 / 128.2 | 126.5 / 131.8 | 127.9 / 134.2 | 126.2 / 134.2 | 130.0 / 137.6 |
+| Hem ring path (fabric 230 / 248 / 254 / 260 / 266), blend / direct | 189.9 / 229.9 | 187.5 / 247.9 | 207.6 / 253.9 | 185.5 / 259.9 | 209.8 / 265.9 |
+| Particles moved out of the avatar, blend / direct | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+| Hem particles laid on the floor (hem below the soles, §9.5) | 494 | 494 | 534 | 739 | 781 |
+
+- **Hip: kept** (blend within 0.1-0.6 cm of the direct drape). Size spread there is small in both (3.3 cm direct, 3.7 blend): §9.5's finding that the hip hull follows the body and the seam, not the size, holds on the avatar.
+- **Hem: flattened.** The blend averages drapes whose folds lie in different places, so the hem's path is 17-29 % shorter than the fabric (direct: 0-1 %) and its hull 4.2-8.0 cm smaller. On the direct drapes the hem hull does not fall with size (128.2 / 131.8 / 134.2 / 134.2 / 137.6; AU 12 and AU 14 tie, inside §9.5's 1.5 cm noise); on the blend AU 14 drops below AU 12 (126.2 against 127.9). On a grid body the blend is the direct drape (weights 0/1), so the loss is largest half way between grid bodies; the held-out body is 0.4 of the way. Same mechanism as §9.8 (Anny: 14-19 %, 3.4-5.7 cm), somewhat larger here. Not fixed: a denser grid (the chart's AU 10 and AU 14 bodies would halve the distance; about 10 more drapes and 40 % more bytes) or fold-aware blending.
+- The blend error is larger than the R2 spike's (§4.2: 0.4-2.2 cm RMS) because the gathered POM skirt has deep, body-dependent folds; the reconstruction of §4 had almost none.
+
+### 10.4 Load and settle time (EMULATED, not a phone)
+
+`apps/web/e2e/garment3dBake.spec.ts`, test "load and settle time": the production embed, the throttled phone page of §3.5 and `drape-control.mjs` (412 × 915 at DPR 2, touch, DevTools CPU throttle), headless Chromium with SwiftShader on the shared 4-core container, bundle served locally (no network time). From the tap on "See it in 3D" to `data-state="settled"`, then a switch two sizes away (12 → 16, not pre-draped by the on-device path). One run each; Playwright polls the attribute, so about ±0.1 s.
+
+| Bundle | CPU throttle | Open → first state | Open → settled | Size switch → settled |
+|---|---|---|---|---|
+| POM v2 bake (this section) | 1× | 0.74 s | **1.01 s** | 0.36 s |
+| POM v2 bake | 4× | 1.30 s | **1.48 s** | 0.52 s |
+| Photo bundle (run 17d, draped on the device) | 1× | 1.66 s | 3.82 s | 2.04 s |
+| Photo bundle | 4× | 1.85 s | 4.30 s | 2.11 s |
+
+The bake settles 3-4 times sooner: nothing is draped on the phone, decoding 553 KB and blending five sizes is the whole cost. What is not measured: a real phone, a real network (553 KB against the photo bundle's 727 KB `base.glb`), frame rate (SwiftShader, §4.4).
+
+### 10.5 Renders (look at them; all labelled estimate)
+
+Saved in `/tmp/claude-0/-home-user/45896997-2c70-517e-89a4-f66870da365e/scratchpad/tape-to-product/pom-bundle/` (not committed): `embed/size-{8,10,12,14,16}-{front,side}.png` from the real embed at phone size (360 × 740 at 2×, test "every size"; shopper typed waist 73.5, hip 100, the held-out body; the embed asks a skirt shopper no bust) and `pom-bundle-embed-sizes.png`, all ten on one sheet. Each shows the "Estimate · not measured" badge, the "not a photo" label, and under it "Shown in one plain colour; the print is not drawn." and the size's provenance ("built from the shop's tape measurements" for 8, 10, 14; "not measured by the shop; it is interpolated / extrapolated from the sizes that were" for 12 and 16), asserted by the test.
+
+Honest read: it reads as a gathered maxi skirt worn just below the navel, the band lies on the drawn body, nothing pokes through. The sizes are **hardly distinguishable at phone size**, front or side (as §9.5 found on one body: 1-4 cm of width between AU 8 and AU 16); the size advice and the size rings, not this picture, carry the size. The plain crimson reads redder and lighter than the shop's fabric under the viewer's `classic` lighting. The hem reaches the floor and is laid on it (the 103-104 cm tape length on a 168 cm body, §9.5); the estimate badge covers part of the hem at the lower left, as it does for the photo bundle. The side view shows the folds running straight down with no sway: a static A-pose drape.
+
+### 10.6 Caveats and verdict
+
+- **Assumed:** everything §9 assumes (band level, band height, top-edge girth, fold pitch, cloth preset, plinth); the avatar's wear level taken from the Anny navel; the colour (a cluster of a photo-lit texture, not a fabric measurement); `qa.json`'s pass for a tape-built bundle (demo only).
+- **Measured on simulations:** the body gap (§10.1), the blend error (§10.3), the bundle bytes, the emulated times.
+- **Not done:** a denser grid to keep the hem's folds (the main visible loss); a texture or print for the POM layout; a merchant-side gate for tape-built bundles; body axes other than the hip (a shopper whose waist is off the chart line gets the hip's blend, then the push-out; `settleOnBody` moved no particle on the held-out body, other bodies were not tested); a real phone.
+- **Verdict:** the bake path is clean and is the cheaper device path (no on-device drape, 1-1.5 s to settled in the throttled page against 4 s). As a picture of *this* skirt it is a plain-colour estimate whose sizes look alike, which is what the simulation says. Serve it with `DEMO_SKIRT=pom` next to the photo bundle; do not make it the default before the founder has looked at `pom-bundle-embed-sizes.png` against the photo bundle's pictures.

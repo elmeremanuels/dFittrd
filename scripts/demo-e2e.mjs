@@ -35,6 +35,7 @@
  * Env:   DEMO_E2E_SHOTS  screenshot folder (default test-results/demo-e2e)
  *        DEMO_AZURE_BUNDLE  the azure babydoll bundle folder (default spikes/garment-engine/out/eval/…)
  *        DEMO_SKIRT_BUNDLE  the crimson maxi skirt bundle folder (default spikes/garment-engine/out/eval/…)
+ *        DEMO_SKIRT=pom     the POM v2 server drape bake of the skirt (out/pom2-bundle/…; imports without QA flags) instead of the photo bundle
  * Flags: --skip-build   do not build the packages first
  *        --headed       show the browser
  */

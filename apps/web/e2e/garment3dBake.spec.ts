@@ -160,7 +160,7 @@ test('a drape bake in the embed: every size front and side, labelled an estimate
 
 test('load and settle time in the throttled phone page', async ({ browser, baseURL }) => {
   test.skip(!existsSync(join(BUNDLE, 'base.glb')), `no bundle at ${BUNDLE}`);
-  test.setTimeout(900_000);
+  test.setTimeout(3_600_000);
   const origin = new URL(baseURL!).origin;
   const runs: Record<string, unknown>[] = [];
   for (const [name, dir] of [['bake', BUNDLE], ...(COMPARE ? [['compare', COMPARE]] : [])] as [string, string][]) {

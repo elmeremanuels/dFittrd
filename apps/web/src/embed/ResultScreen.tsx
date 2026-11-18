@@ -188,7 +188,12 @@ export function ResultScreen({
                 className={`chip min-h-10 px-3.5 text-sm ${selected === s.size ? 'border-ink bg-ink text-white' : ''}`}
               >
                 {s.size}
-                {s.score !== null ? <span className="text-xs opacity-75">{pct(s.score)}</span> : null}
+                {/* A pull-on size whose band does not pass the hips is not offered: no fit score next to it. */}
+                {s.pullOn?.status === 'blocked' ? (
+                  <span className="text-xs opacity-75" data-testid={`compare-no-pull-on-${s.size}`}>{t.compareNoPullOn}</span>
+                ) : s.score !== null ? (
+                  <span className="text-xs opacity-75">{pct(s.score)}</span>
+                ) : null}
                 {s.size === advice.size ? <span className="sr-only">{t.recommendedMark}</span> : null}
               </button>
             ))}

@@ -14,6 +14,7 @@ import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MockProvider, TryOnRouter } from '@curtain/tryon-providers';
+import { PILOT_SKIRT_CHART_ONLY, PILOT_SKIRT_TAPE_MEASURED } from '@curtain/schema';
 import { build } from './app.js';
 import { connectPglite } from './db/client.js';
 import { DEMO_APP_ORIGIN, DEMO_STOREFRONT_ORIGIN, seedDemo, type DemoGarmentBundle } from './demoSeed.js';
@@ -92,6 +93,11 @@ const bundles: DemoGarmentBundle[] = [
     colorHex: '#A3243B',
     colorName: 'Crimson',
     qaFlags: ['low_rise_waist', 'precalibration_outside_tolerance'],
+    // Seeded without 3D when the bundle is absent, so the pull-on advice is always in the demo.
+    fallbackPayload: PILOT_SKIRT_CHART_ONLY,
+    // The shop's tape of 13 Nov 2026 (AU 8, 10, 14; hip depth not stated) and the founder's closure
+    // answer of 15 Nov 2026 (pull-on, not yet confirmed with the shop), through the merchant form's check.
+    tape: { closure: 'pull-on', measured: PILOT_SKIRT_TAPE_MEASURED },
   },
 ];
 const manifest = await seedDemo(handle.db, env, { storefrontOrigin, appOrigin: env.PUBLIC_APP_URL, bundles });

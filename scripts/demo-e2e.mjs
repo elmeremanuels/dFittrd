@@ -35,7 +35,11 @@
  * Env:   DEMO_E2E_SHOTS  screenshot folder (default test-results/demo-e2e)
  *        DEMO_AZURE_BUNDLE  the azure babydoll bundle folder (default spikes/garment-engine/out/eval/…)
  *        DEMO_SKIRT_BUNDLE  the crimson maxi skirt bundle folder (default spikes/garment-engine/out/eval/…)
+ * Pull-on skirt (merchant tape): the crimson skirt is seeded with the shop's tape (AU 8, 10, 14) and
+ * closure pull-on; the held-out body (waist 73.5, hip 100, typed in) gets Size 10 with the pull-on
+ * warning, on desktop and phone.
  * Flags: --skip-build   do not build the packages first
+ *        --only=<name>  run one flow (woocommerce, shopify-dawn, pull-on-skirt)
  *        --headed       show the browser
  */
 import { existsSync, mkdirSync } from 'node:fs';
@@ -436,6 +440,69 @@ async function skinToneStep(page, frame, t, log, shot) {
   }
 }
 
+/**
+ * Pull-on skirt with the shop's tape (demo seed: AU 8, 10, 14 measured, closure pull-on). The
+ * held-out body of the fit-engine README (waist 73.5, hip 100, typed in under "I know my
+ * measurements") must get AU 10 with the pull-on warning, never "fits you well", and no margin in cm.
+ * Phone and desktop. The skirt is seeded without 3D when its bundle is absent, so this always runs.
+ */
+const PULL_ON = { name: 'pull-on-skirt', path: '/products/crimson-wildflower-maxi-skirt', waist: '73.5', hip: '100', size: '10', warning: 'To pull it on, the waistband only just stretches over your hips' };
+
+async function pullOnFlow(browser, base, log) {
+  for (const vp of [
+    { name: 'desktop', viewport: { width: 1280, height: 860 } },
+    { name: 'phone', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 },
+  ]) {
+    const context = await browser.newContext({ viewport: vp.viewport, isMobile: vp.isMobile ?? false, hasTouch: vp.hasTouch ?? false, deviceScaleFactor: vp.deviceScaleFactor ?? 1, locale: 'en-GB' });
+    const page = await context.newPage();
+    page.setDefaultTimeout(STEP_TIMEOUT);
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(`uncaught: ${String(e)}`));
+    page.on('console', (m) => {
+      if (m.type() === 'error') errors.push(`console (${m.location().url || 'page'}): ${m.text()}`);
+    });
+    const shot = (step) => page.screenshot({ path: join(shots, `${PULL_ON.name}-${vp.name}-${step}.png`) });
+    try {
+      log(`${vp.name}: open ${base}${PULL_ON.path}`);
+      await page.goto(base + PULL_ON.path);
+      await page.waitForSelector('[data-curtain-product][data-curtain-bound]');
+      await page.getByRole('button', { name: /try it on/i }).first().click();
+      await page.getByRole('dialog').waitFor();
+      const frame = page.frameLocator('[role="dialog"] iframe');
+      await frame.getByRole('heading', { name: /about you/i }).waitFor();
+      await frame.getByLabel(/height/i).first().fill('170');
+      await frame.getByLabel(/weight/i).first().fill('64');
+      await frame.getByRole('button', { name: /i know my measurements/i }).click();
+      await frame.getByLabel(/^waist/i).first().fill(PULL_ON.waist);
+      await frame.getByLabel(/^hip/i).first().fill(PULL_ON.hip);
+      await shot('1-about-you');
+      await frame.getByTestId('see-my-size').click();
+      const choose = frame.getByRole('button', { name: /^choose size\s+\S+/i }).first();
+      await choose.waitFor();
+      const size = (await choose.innerText()).trim().replace(/^choose size\s+/i, '').trim();
+      if (norm(size) !== norm(PULL_ON.size)) throw new Error(`waist ${PULL_ON.waist}, hip ${PULL_ON.hip}: recommended "${size}", expected "${PULL_ON.size}"`);
+      const warning = frame.getByText(PULL_ON.warning).first();
+      await warning.waitFor();
+      await warning.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(300);
+      await shot('2-result-pull-on-warning');
+      const text = await frame.locator('body').innerText();
+      if (/fits you well/i.test(text)) throw new Error('the result says "fits you well" for a band that only just passes the hips');
+      if (/not measured by the shop/i.test(text)) throw new Error('AU 10 was measured by the shop, but the result says it was not');
+      // AU 8's band is 6 cm short of these hips: no fit score next to it in "Compare sizes".
+      const chip8 = (await frame.getByRole('radiogroup', { name: /compare sizes/i }).getByRole('radio', { name: /^8/ }).innerText()).replace(/\s+/g, ' ');
+      if (!/too small to pull on/.test(chip8) || /%/.test(chip8)) throw new Error(`the AU 8 chip reads "${chip8}", expected "too small to pull on" and no score`);
+      if (errors.length) throw new Error(`errors in the page or the iframe:\n  ${errors.join('\n  ')}`);
+      log(`ok (${vp.name}): Size ${size} with "${PULL_ON.warning}"`);
+    } catch (err) {
+      await shot('failure').catch(() => {});
+      throw err;
+    } finally {
+      await context.close();
+    }
+  }
+}
+
 async function main() {
   mkdirSync(shots, { recursive: true });
   const { chromium } = require('playwright');
@@ -445,9 +512,13 @@ async function main() {
   process.on('SIGTERM', stopAll);
   let browser;
   let failed = 0;
+  let ran = 0;
   try {
     browser = process.argv.includes('--headed') ? await chromium.launch({ headless: false }) : await chromium.launch();
+    const only = process.argv.find((a) => a.startsWith('--only='))?.slice('--only='.length);
     for (const spec of PAGES) {
+      if (only && only !== spec.name) continue;
+      ran++;
       const log = (m) => console.log(`[${spec.name}] ${m}`);
       try {
         await flow(browser, demo.urls.storefront, spec, log);
@@ -456,11 +527,22 @@ async function main() {
         console.error(`[${spec.name}] FAILED: ${err.message.split('\n')[0]}`);
       }
     }
+    if (!only || only === PULL_ON.name) {
+      ran++;
+      const log = (m) => console.log(`[${PULL_ON.name}] ${m}`);
+      try {
+        await pullOnFlow(browser, demo.urls.storefront, log);
+      } catch (err) {
+        failed++;
+        console.error(`[${PULL_ON.name}] FAILED: ${err.message.split('\n')[0]}`);
+      }
+    }
   } finally {
     await browser?.close();
     await demo.stop();
   }
-  console.log(failed ? `\ndemo:e2e: ${failed} of ${PAGES.length} flows failed (screenshots in ${shots})` : `\ndemo:e2e: ${PAGES.length} flows passed (screenshots in ${shots})`);
+  const total = ran;
+  console.log(failed ? `\ndemo:e2e: ${failed} of ${total} flows failed (screenshots in ${shots})` : `\ndemo:e2e: ${total} flows passed (screenshots in ${shots})`);
   process.exit(failed ? 1 : 0);
 }
 

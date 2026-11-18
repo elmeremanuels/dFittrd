@@ -2,9 +2,9 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { MOCK_GARMENTS_BY_ID } from '@curtain/schema';
+import { MOCK_GARMENTS_BY_ID, PILOT_PULL_ON_SKIRT, PILOT_SKIRT_CHART_ONLY, PILOT_SKIRT_TAPE_MEASURED } from '@curtain/schema';
 import { seedDemo } from './demoSeed.js';
-import { makeApp, type TestApp } from './test/helpers.js';
+import { createDevice, makeApp, type TestApp } from './test/helpers.js';
 
 describe('local demo seed (docs/STANDALONE.md §4)', () => {
   let t: TestApp;
@@ -92,5 +92,48 @@ describe('demo seed 3D bundles (D16): the import gate decides, the expected QA f
     expect(warnings.join('\n')).toMatch(/demo-unexpected-flag: .*QA flags \[low_rise_waist\], expected \[\]/);
     expect(warnings.join('\n')).toMatch(/demo-flag-missing: .*QA flags \[\], expected \[low_rise_waist\]/);
     expect(warnings.join('\n')).toMatch(/demo-qa-failed: bundle rejected: qa_failed/);
+  });
+});
+
+describe('demo seed: the pilot skirt with the shop tape and a pull-on closure', () => {
+  let t: TestApp;
+  beforeAll(async () => {
+    t = await makeApp();
+  });
+  afterAll(async () => {
+    await t.close();
+  });
+
+  it('is seeded without its bundle (fallback payload), with the filled tape the merchant form would store, and the embed receives it', async () => {
+    const m = await seedDemo(t.handle.db, t.env, {
+      bundles: [
+        {
+          shop: 'shopify',
+          externalId: 'crimson-wildflower-maxi-skirt',
+          dir: join(tmpdir(), 'no-such-bundle-for-the-skirt'),
+          payload: true,
+          fallbackPayload: PILOT_SKIRT_CHART_ONLY,
+          tape: { closure: 'pull-on', measured: PILOT_SKIRT_TAPE_MEASURED },
+        },
+      ],
+    });
+    const shop = m.shops.find((s) => s.key === 'shopify')!;
+    expect(shop.products[0]).toMatchObject({ externalId: 'crimson-wildflower-maxi-skirt', status: 'active', asset3d: null });
+    const row = await t.handle.db.query.products.findFirst({ where: (p, { eq }) => eq(p.externalId, 'crimson-wildflower-maxi-skirt') });
+    expect(row?.payload.closure).toBe('pull-on');
+    expect(row?.payload.garmentTape).toEqual(PILOT_PULL_ON_SKIRT.garmentTape);
+
+    const session = await t.app.inject({
+      method: 'POST',
+      url: '/v1/sdk/sessions',
+      payload: { shopKeyPrefix: shop.publicKey, productExternalId: 'crimson-wildflower-maxi-skirt', pageUrl: 'http://localhost:5180/dawn/', surface: 'embed' },
+    });
+    expect(session.statusCode).toBe(200);
+    const token = String(session.json().embedUrl).split('/embed/')[1]!.split(/[?#]/)[0]!;
+    const d = await createDevice(t);
+    const resolved = await t.app.inject({ method: 'GET', url: `/v1/try/${token}`, headers: d.auth });
+    expect(resolved.statusCode).toBe(200);
+    // Garment data only: the closure and the tape go to the shopper's device, where computeFit runs (rule 4).
+    expect(resolved.json().garment).toMatchObject({ closure: 'pull-on', garmentTape: PILOT_PULL_ON_SKIRT.garmentTape });
   });
 });

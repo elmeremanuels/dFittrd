@@ -264,7 +264,8 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
         <ul className="mt-1.5 flex flex-wrap gap-1 text-[11px]" aria-label={t.rings(size)} data-testid="garment3d-rings">
           {ringList.map((r) => (
             <li key={r.key} className="chip px-2 py-0.5" title={r.text}>
-              <span className="font-semibold">{t.ringName(r.key)}</span> {`${r.chip[0].toLowerCase()}, ${r.chip[1]}`}
+              <span className="font-semibold">{t.ringName(r.key)}</span>{' '}
+              {r.chip[0].toLowerCase() === t.ringName(r.key).toLowerCase() ? r.chip[1] : `${r.chip[0].toLowerCase()}, ${r.chip[1]}`}
             </li>
           ))}
         </ul>

@@ -47,6 +47,9 @@ if (!argv[0] || argv[0].startsWith('--')) {
 }
 mkdirSync(outDir, { recursive: true });
 const want = (k) => !only || only.has(k);
+/** LOOK_LIGHTING=<label>: only the options and lightings whose label starts with it (a re-run after a change to one lighting). */
+const onlyLighting = process.env.LOOK_LIGHTING ?? '';
+const lit = (label) => label.startsWith(onlyLighting);
 
 /** Monk Skin Tone scale swatches 1 to 10 (`MONK_SWATCHES` in apps/web capture). */
 export const MONK = ['f6ede4', 'f3e7db', 'f7ead0', 'eadaba', 'd7bd96', 'a07e56', '825c43', '604134', '3a312a', '292420'];
@@ -76,7 +79,7 @@ await server.listen();
 const base = server.resolvedUrls.local[0];
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const problems = [];
-const save = () => writeFileSync(join(outDir, `look-v2${only ? `-${[...only].join('-')}` : ''}.json`), `${JSON.stringify({ ...report, problems }, null, 2)}\n`);
+const save = () => writeFileSync(join(outDir, `look-v2${only ? `-${[...only].join('-')}` : ''}${onlyLighting ? `-${onlyLighting}` : ''}.json`), `${JSON.stringify({ ...report, problems }, null, 2)}\n`);
 const report = { renderer: 'headless Chromium, SwiftShader (software); not a phone', monk: MONK, contrast: [], garments: [], frames: [], files: [] };
 
 async function open(context, query, name) {
@@ -110,6 +113,7 @@ try {
     for (const family of ['female', 'male']) {
       const tones = family === 'female' ? [...MONK.map((h, i) => [`monk${i + 1}`, h]), ['grey', GREY]] : [['monk1', MONK[0]], ['monk3', MONK[2]], ['monk6', MONK[5]], ['monk10', MONK[9]]];
       for (const [q, label] of OPTIONS) {
+        if (!lit(label)) continue;
         if (family === 'male' && !['classic', 'neutral', 'neutral-v2'].includes(label)) continue;
         for (const [tone, hex] of tones) {
           const name = `contrast--${family}--${label}--${tone}`;
@@ -133,6 +137,7 @@ try {
     const TONES = [1, 3, 6, 9, 10];
     for (const p of PRODUCTS) {
       for (const [q, label] of LIGHTS) {
+        if (!lit(label)) continue;
         const name = `grid--${p.id}--${label}`;
         const { page, ok } = await open(phone, `product=${p.dir}&${q}&skin=${MONK[0]}`, name);
         if (!ok) {

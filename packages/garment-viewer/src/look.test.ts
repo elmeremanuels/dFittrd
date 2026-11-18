@@ -97,7 +97,8 @@ const MONK = ['#f6ede4', '#f3e7db', '#f7ead0', '#eadaba', '#d7bd96', '#a07e56', 
 describe('lighting neutral-v2', () => {
   it('has the lights of neutral (skin and garment colours as neutral) and adds an outline and a contact shadow; classic and neutral add nothing', () => {
     expect(LIGHTING_RIGS['neutral-v2']).toEqual(LIGHTING_RIGS.neutral);
-    expect(LOOK_EXTRAS.classic).toEqual({ outline: 0, contactShadow: 0, backdrop: 'cream', rim: 0 });
+    expect(LOOK_EXTRAS.classic).toEqual({ outline: 0, outlineContrast: 3.2, contactShadow: 0, backdrop: 'cream', rim: 0 });
+    expect(LOOK_EXTRAS['neutral-v2'].outlineContrast).toBe(4.5);
     expect(LOOK_EXTRAS.neutral).toEqual(LOOK_EXTRAS.classic);
     expect(LOOK_EXTRAS['neutral-v2'].outline).toBeGreaterThan(0);
     expect(LOOK_EXTRAS['neutral-v2'].outline).toBeLessThanOrEqual(1.5);
@@ -135,6 +136,11 @@ describe('lighting neutral-v2', () => {
     }
     // Monk 1 to 6 and the default grey need one; Monk 7 to 10 stand out from the cream on their own.
     expect(needs).toEqual([1, 2, 3, 4, 5, 6, 11]);
+    // At the contrast neutral-v2 asks for (4.5), Monk 7 gets a line as well; Monk 8 to 10 do not.
+    const t = LOOK_EXTRAS['neutral-v2'].outlineContrast;
+    const lined = [...MONK, DEFAULT_BODY_HEX.toLowerCase()].map((h) => outlineColour(h, undefined, t));
+    expect(lined.map((l, i) => (l ? i + 1 : 0)).filter(Boolean)).toEqual([1, 2, 3, 4, 5, 6, 7, 11]);
+    for (const l of lined) if (l) expect(Math.min(contrastOf(l, BACKDROP_HEX), contrastOf(l, FLOOR_SEEN_HEX))).toBeGreaterThanOrEqual(t);
   });
 
   it('the adaptive backdrop (tried, not used): the cream darkened until the skin stands out from it', () => {

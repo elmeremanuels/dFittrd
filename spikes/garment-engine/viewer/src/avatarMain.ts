@@ -39,6 +39,7 @@ if (params.get('outline') !== null) extras.outline = Number(params.get('outline'
 if (params.get('shadow') !== null) extras.contactShadow = Number(params.get('shadow'));
 if (params.get('backdrop') === 'adaptive' || params.get('backdrop') === 'cream') extras.backdrop = params.get('backdrop') as LookExtras['backdrop'];
 if (params.get('rim') !== null) extras.rim = Number(params.get('rim'));
+if (params.get('outlineContrast') !== null) extras.outlineContrast = Number(params.get('outlineContrast'));
 const extrasTag = Object.entries(extras).map(([k, v]) => `${k} ${String(v)}`).join(' · ');
 const family = params.get('family') === 'male' ? 'male' : 'female';
 const body = { family, heightCm: num('height'), shoulderCm: num('shoulder'), bust: num('bust'), waist: num('waist'), hip: num('hip') } as const;
@@ -187,11 +188,14 @@ function headMode(): void {
     contrast: () => silhouetteContrast(stage, figure),
     frameMs(n: number) {
       const t0 = performance.now();
+      // Each frame is read back (one pixel), so its time includes the GPU's work (SwiftShader: the CPU's).
+      const gl = stage.renderer.getContext();
+      const px = new Uint8Array(4);
       for (let i = 0; i < n; i++) {
         stage.camera.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), 0.01);
         stage.render();
+        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
       }
-      stage.renderer.getContext().finish();
       return (performance.now() - t0) / n;
     },
   };

@@ -57,7 +57,7 @@ export const BACKDROP_HEX = '#F5EFE7';
 /**
  * What a lighting adds to the lights, for the contrast of the figure against the backdrop.
  * - `outline`: width in CSS px of a line drawn where bare skin meets the backdrop or the floor
- *   (not where it meets the garment), in `outlineColour(skin)`; 0 = none.
+ *   (not where it meets the garment), in `outlineColour(skin, …, outlineContrast)`; 0 = none.
  * - `contactShadow`: opacity of a soft shadow on the floor under the feet; 0 = none.
  * - `backdrop`: `cream`, or `adaptive`: a soft panel behind the figure, darkened from the cream until
  *   it stands out `CONTRAST_TARGET` from the skin colour (only for skins that need it).
@@ -67,15 +67,19 @@ export const BACKDROP_HEX = '#F5EFE7';
  */
 export interface LookExtras {
   outline: number;
+  /** The contrast the outline colour is chosen for, against the cream and the floor. */
+  outlineContrast: number;
   contactShadow: number;
   backdrop: 'cream' | 'adaptive';
   rim: number;
 }
-const NONE: LookExtras = { outline: 0, contactShadow: 0, backdrop: 'cream', rim: 0 };
+const NONE: LookExtras = { outline: 0, outlineContrast: 3.2, contactShadow: 0, backdrop: 'cream', rim: 0 };
 export const LOOK_EXTRAS: Readonly<Record<Lighting, LookExtras>> = {
   classic: NONE,
   neutral: NONE,
-  'neutral-v2': { outline: 1.25, contactShadow: 0.32, backdrop: 'cream', rim: 0 },
+  // 4.5, not 3.2: the line is anti-aliased and the skin at the silhouette is shaded darker than its swatch, so a line
+  // chosen for 3.2 left 28 to 36 % of the edge under 3:1 (measured, look-v2-renders.mjs); at 4.5, 5 to 7 %.
+  'neutral-v2': { outline: 1.25, outlineContrast: 4.5, contactShadow: 0.32, backdrop: 'cream', rim: 0 },
 };
 
 /** The contrast the outline (and the adaptive backdrop) is chosen for: 3:1 and a little margin, as the 2D figure. */
@@ -115,8 +119,8 @@ export const FLOOR_SEEN_HEX = '#DDD6CA';
  * keeping its hue, until it does. On the lightest swatches that is a mid brown-grey: the line, not
  * the skin, stands out from the cream, and the skin stands out from the line.
  */
-export function outlineColour(skinHex: string, backdrops: readonly string[] = [BACKDROP_HEX, FLOOR_SEEN_HEX]): string | null {
-  const enough = (c: string): boolean => backdrops.every((b) => contrastOf(c, b) >= CONTRAST_TARGET);
+export function outlineColour(skinHex: string, backdrops: readonly string[] = [BACKDROP_HEX, FLOOR_SEEN_HEX], target: number = CONTRAST_TARGET): string | null {
+  const enough = (c: string): boolean => backdrops.every((b) => contrastOf(c, b) >= target);
   if (enough(skinHex)) return null;
   for (let k = 0.99; k > 0.02; k -= 0.01) {
     const c = scaleHex(skinHex, k);
@@ -380,7 +384,7 @@ export class Stage {
       this.backdropPanel.material.color.set(c);
       this.backdropPanel.visible = c.toLowerCase() !== BACKDROP_HEX.toLowerCase();
     }
-    this.outlineHex = this.extras.outline > 0 ? outlineColour(this.skinHex) : null;
+    this.outlineHex = this.extras.outline > 0 ? outlineColour(this.skinHex, undefined, this.extras.outlineContrast) : null;
     if (this.outlinePass && this.outlineHex) this.outlinePass.quad.material.uniforms.colour!.value = new THREE.Color().setRGB(...hexRgb(this.outlineHex));
   }
 

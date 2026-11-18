@@ -75,6 +75,31 @@ What the numbers say. In `classic` a light skin is rendered 5 to 9 L* darker and
 
 Not measured: garment colours against the shop photos (the bundle textures are baked from photos lit by the shop), any real phone, any display profile.
 
+## A drape bake (server drapes, blended on the device)
+
+A bundle whose anchors.json says `"drapeBake": "base.glb"` is not draped on the device
+(docs/research/step3-serverdrape-spike.md §10). Its base.glb holds, per size, the garment draped on the server on a
+few chart bodies of one size-chart axis (the hip line), as int16 morph targets (KHR_mesh_quantization,
+EXT_meshopt_compression; `drapeBakeRead.ts` reads it, loaded by `import()` only for a bake; `drapeBakeWrite.ts` writes
+it and is never imported by the embed; `drapeBake.ts` holds the format and the pure blend). On mount the view blends every size to the shopper's hip (`bakeWeights`: piecewise linear between the two
+nearest bodies, held at the outermost one beyond them, no extrapolation), lays the particles the blend leaves inside
+the drawn avatar back out of it and the hem on the floor (`settleOnBody`, the drape's collider), and is `settled` at
+once; a size switch is a buffer copy. The five bundle files and the gate are unchanged.
+
+- The bake must be draped on the body the device draws: the POM bake is draped on `buildAvatar` of each chart body
+  (`spikes/garment-engine/viewer/scripts/serverdrape/avatar-bodies.ts`), not on the Anny bodies of §9 (§10 says why).
+- There is no texture: the garment is drawn in the bake's `plainColourHex`. `GarmentView.source` says so
+  (`{ kind: 'bake', plainColour: true, sizes }`, per size `provenance` measured / interpolated / extrapolated and
+  `place` (`bakePlace`): `within` the draped bodies, `held` on the nearest one, `between` the last draped body and one
+  the simulation could not dress in that size, or `refused` at or past such a body (`notDraped`): the size is then
+  not drawn on the shopper, and `refusedHipCm` names that body's hip). The host prints it under the estimate label
+  (`apps/web` `Garment3D.tsx`). An on-device view says `{ kind: 'device' }`.
+- A bake is draped on the girth avatar: with a typed body (height, shoulders) it is `GarmentViewError('incompatible')`.
+- The import gate admits a bake only flagged `tape_built_no_chart_check` (`qa.json` `chartAgreement.kind: 'tape-built'`):
+  its QA pass is not a measured chart agreement.
+- The reader and its meshopt decoder are a separate lazy chunk (`drapeBakeRead`, 8.3 KB gzip), not in the viewer chunk
+  (159.6 KB gzip of the 400 KB budget) and not precached.
+
 ## Fork of the spike
 
 `src/core/*` (`garment`, `grading`, `waistband`, `tape`, `weld`, `types`) and the device modules

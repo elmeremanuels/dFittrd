@@ -65,8 +65,14 @@ export const DEMO_BUNDLES = {
   synthetic: join(root, 'spikes', 'garment-engine', 'out', 'aalter-studio-2'),
   azure: process.env.DEMO_AZURE_BUNDLE ? resolve(process.env.DEMO_AZURE_BUNDLE) : join(root, 'spikes', 'garment-engine', 'out', 'eval', 'azure-palm-baby-doll-dress'),
   /** The crimson maxi skirt (run 17d), accepted as low-rise by the founder: imported only flagged `low_rise_waist` and `precalibration_outside_tolerance`. */
-  skirt: process.env.DEMO_SKIRT_BUNDLE ? resolve(process.env.DEMO_SKIRT_BUNDLE) : join(root, 'spikes', 'garment-engine', 'out', 'eval', 'crimson-wildflower-maxi-skirt'),
+  skirt: process.env.DEMO_SKIRT_BUNDLE
+    ? resolve(process.env.DEMO_SKIRT_BUNDLE)
+    : process.env.DEMO_SKIRT === 'pom'
+      ? join(root, 'spikes', 'garment-engine', 'out', 'pom2-bundle', 'crimson-wildflower-maxi-skirt')
+      : join(root, 'spikes', 'garment-engine', 'out', 'eval', 'crimson-wildflower-maxi-skirt'),
 };
+/** DEMO_SKIRT=pom: the POM v2 server drape bake instead of the photo reconstruction (apps/api/src/demo.ts); it imports flagged exactly `tape_built_no_chart_check`. */
+export const DEMO_SKIRT_POM = process.env.DEMO_SKIRT === 'pom';
 
 export function buildForDemo() {
   const needed = ['schema', 'fit-engine', 'taste-engine', 'tryon-providers', 'sdk', 'anchors', 'mannequin'].filter((p) => !existsSync(join(root, 'packages', p, 'dist')));

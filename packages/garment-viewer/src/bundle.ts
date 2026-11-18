@@ -9,6 +9,7 @@
 import { glbFloatAccessor, glbIndexAccessor, readGlb, type Mesh } from '@curtain/mannequin';
 import type { GarmentPayload } from '@curtain/schema';
 import { weldWithRemap } from './core/weld';
+import type { DrapeBake } from './drapeBake';
 import type { GradingJson } from './core/grading';
 import type { MaterialJson } from './core/types';
 
@@ -23,6 +24,8 @@ export interface GarmentAnchorsJson {
   synthetic: boolean;
   /** Set by evaluated bundles: the file holding the product payload. */
   payloadFile?: string;
+  /** Set by a server drape bake (`drapeBake.ts`): base.glb holds the drapes per size; the device blends, it does not drape. */
+  drapeBake?: 'base.glb';
   rings: Record<string, { circumferenceCm: number; chartCm: number | null; spansBothLegs: boolean }>;
 }
 
@@ -50,6 +53,8 @@ export interface SpikeBundle {
   textureImage?: ImageBitmap;
   /** payload.json when the bundle has one (evaluated shop products). */
   payload?: GarmentPayload;
+  /** A server drape bake (anchors.json `drapeBake`): `baseMesh` is then the base size's drape on the base body. */
+  bake?: DrapeBake;
 }
 
 /** The render side of a textured base.glb: UVs per render vertex, its triangles, and render vertex → welded vertex. */
@@ -133,6 +138,16 @@ export async function loadBundleFrom(fetchFn: FetchLike, dir: string, productId:
   if (g.format !== 'curtain.garment.grading') throw new Error(`${productId}: grading.json has format ${String(g.format)}`);
   const a = anchors as GarmentAnchorsJson;
   const payload = opts.withPayload !== false && a.payloadFile === 'payload.json' ? ((await (await get(fetchFn, `${dir}/payload.json`)).json()) as GarmentPayload) : undefined;
+  if (a.drapeBake !== undefined) {
+    if (a.drapeBake !== 'base.glb') throw new Error(`${productId}: anchors.json drapeBake ${String(a.drapeBake)}`);
+    // The reader and its meshopt decoder load only for a bake (a separate chunk), so other products do not pay for it.
+    const { readDrapeBake } = await import('./drapeBakeRead');
+    const bake = await readDrapeBake(new Uint8Array(glb));
+    const base = bake.sizes.get(g.baseSize);
+    if (!base) throw new Error(`${productId}: the drape bake has no base size ${g.baseSize}`);
+    const baseMesh: Mesh = { positions: Float64Array.from(base.base), indices: bake.indices, vertexPart: new Uint8Array(bake.vertexCount), partNames: ['garment'] };
+    return { productId, anchors: a, grading: g, material: material as MaterialJson, qa: qa as QaJson, baseMesh, bake, ...(payload ? { payload } : {}) };
+  }
   const garment = garmentFromGlb(new Uint8Array(glb));
   let textureImage: ImageBitmap | undefined;
   if (garment.render && typeof createImageBitmap === 'function') {

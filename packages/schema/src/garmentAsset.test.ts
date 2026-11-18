@@ -56,6 +56,17 @@ describe('a pass after calibration over a miss outside tolerance (never looks cl
   });
 });
 
+describe('a tape-built drape bake (no chart agreement was measured)', () => {
+  const bake = (kind: unknown) => ({ ...meta(), anchors: { format: 'curtain.garment.anchors', drapeBake: 'base.glb' }, qa: { format: 'curtain.garment.qa', chartAgreement: { pass: true, ...(kind === undefined ? {} : { kind }) } } });
+  it('is admitted only flagged, and only when qa.json says it is tape-built', () => {
+    expect(checkGarmentBundle(bake('tape-built'), ['8', '10', '12', '14', '16'])).toEqual({ ok: true, info: { baseSize: '12', sizes: ['8', '10', '12', '14', '16'], qaFlags: ['tape_built_no_chart_check'] } });
+    expect(checkGarmentBundle(bake(undefined), ['12'])).toEqual({ ok: false, problem: 'qa_failed' });
+    expect(checkGarmentBundle(bake('calibrated'), ['12'])).toEqual({ ok: false, problem: 'qa_failed' });
+    expect(garmentQaFlags({ chartAgreement: { pass: true, kind: 'tape-built' } })).toEqual(['tape_built_no_chart_check']);
+    expect(garmentQaFlagNote('tape_built_no_chart_check', {})).toMatch(/no agreement with the size chart was measured/);
+  });
+});
+
 describe('GarmentAssetRefSchema', () => {
   const ref = { version: '0123456789abcdef', baseUrl: 'https://api.example.com/assets/a/b/0123456789abcdef', baseSize: '12', sizes: ['12'], label: 'estimate' };
   it('is always labelled an estimate', () => {

@@ -234,6 +234,18 @@ export interface EmbedCatalogue {
     rings: (size: string) => string;
     ringName: (key: string) => string;
     hemNote: string;
+    /** A server drape bake: drawn in one plain colour. */
+    plainColour: string;
+    /** A server drape bake: where the size's garment measurements come from. */
+    provenance: (size: string, provenance: 'measured' | 'interpolated' | 'extrapolated') => string;
+    /** A server drape bake: the shopper lies beyond the bodies the size was draped on. */
+    held: (size: string) => string;
+    /** A server drape bake: beyond the last body the size was draped on, short of a body it could not be put on (that body's hip, with its unit). */
+    between: (size: string, refusedHip: string) => string;
+    /** A server drape bake: at or beyond a body the simulation could not dress in this size; the size is not drawn. */
+    refused: (size: string, refusedHip: string) => string;
+    /** A server drape bake: the sizes differ little in the picture; the room is in the size rings. */
+    sizesAlike: string;
   };
 }
 
@@ -468,5 +480,11 @@ export const EN: EmbedCatalogue = {
     rings: (size) => `Size rings of size ${size} (estimate)`,
     ringName: (key) => (key === 'hip' ? 'Hips' : key.charAt(0).toUpperCase() + key.slice(1)),
     hemNote: 'The 3D drape does not show the hem width yet; see the hem ring on the figure above.',
+    plainColour: 'Shown in one plain colour; the print is not drawn.',
+    provenance: (size, p) => (p === 'measured' ? `Size ${size} is built from the shop’s tape.` : `Size ${size} is not on the shop’s tape; it is ${p} from the sizes that are.`),
+    held: (size) => `Your hips are outside the bodies size ${size} was draped on, so it is shown on the nearest one.`,
+    between: (size, hip) => `Your hips are past the largest body size ${size} was draped on, so it is shown on that body; the simulation could not put size ${size} on a body with ${hip} hips.`,
+    refused: (size, hip) => `Size ${size} is not drawn: the simulation could not put it on a body with ${hip} hips, and yours are at least that.`,
+    sizesAlike: 'In 3D the sizes look much alike; how much room each size gives is in the size rings.',
   },
 };

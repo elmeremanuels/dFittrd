@@ -13,6 +13,9 @@ import { loadBundleFrom, type FetchLike } from './bundle';
 import { checkBundle, gradingLabel } from './bundleCheck';
 import { redrawOnContextRestored } from './contextRestore';
 import { isSettled, stepCloth } from './cloth';
+import { makeCollider } from './collide';
+import type { MaterialJson } from './core/types';
+import { bakeAxis, bakePlace, blendBakedSize, settleOnBody, type BakePlace, type DrapeBake, type SizeProvenance } from './drapeBake';
 import { DrapePool } from './drapePool';
 import { DEFAULT_DRAPE, drapeJobOf, openSession, prepareFit, viewerMaterial, type DrapeOptions, type FitInstance } from './engine';
 import * as THREE from 'three';
@@ -85,7 +88,47 @@ export interface GarmentView {
    * the shopper turns or zooms the view. Reads the canvas size first, like a rendered frame does.
    */
   toScreen(point: 'head' | readonly [number, number, number]): { x: number; y: number };
+  /**
+   * What the picture rests on, for the host's estimate label. `device`: the garment is draped on this device (the
+   * bundle's texture when it has one). `bake`: drapes made on the server per size and blended here (`drapeBake.ts`); the
+   * garment is drawn in one plain colour (`plainColour`), and per size whether its measurements were measured on the
+   * shop's tape or interpolated / extrapolated from it, and where the shopper lies against the bodies it was draped on
+   * (`place`, `BakePlace` of `drapeBake.ts`: `held` and `between` are shown on the nearest draped body; `refused` is a
+   * body the simulation could not dress in that size, so the size is not drawn and `refusedHipCm` is that body's hip).
+   */
+  source: GarmentViewSource;
   dispose(): void;
+}
+
+export type GarmentViewSource =
+  | { kind: 'device' }
+  | { kind: 'bake'; plainColour: true; sizes: Record<string, BakedSizeView> };
+
+/** One size of a baked view, for the host's label. */
+export interface BakedSizeView {
+  provenance: SizeProvenance;
+  place: BakePlace;
+  /** Hip of the nearest body beyond the shopper's side that the size could not be put on, cm; null when there is none. */
+  refusedHipCm: number | null;
+}
+
+/** Clearance of the drawn body for a baked drape, cm: the on-device drape's (`prepareFit`). */
+const BAKE_CLEARANCE_CM = 0.35;
+
+/** The baked drape of every size at the shopper's place on the axis, laid out of the drawn body. Pure (no WebGL). */
+export function bakedDrapes(bake: DrapeBake, field: BodyField, hipCm: number): Map<string, { pos: Float32Array; place: BakePlace; refusedHipCm: number | null; pushed: number; floored: number }> {
+  const t = bakeAxis(bake.meta, hipCm);
+  const out = new Map<string, { pos: Float32Array; place: BakePlace; refusedHipCm: number | null; pushed: number; floored: number }>();
+  const collide = makeCollider(field, BAKE_CLEARANCE_CM);
+  const { hipAtZero, hipPerUnit } = bake.meta.axis;
+  for (const [label, size] of bake.sizes) {
+    const { weights, place, refusedT } = bakePlace(size, t);
+    const pos = blendBakedSize(size, weights);
+    const r = settleOnBody(pos, collide);
+    const refusedHipCm = refusedT === null ? null : Math.round((hipAtZero + hipPerUnit * refusedT) * 10) / 10;
+    out.set(label, { pos, place, refusedHipCm, pushed: r.body, floored: r.floor });
+  }
+  return out;
 }
 
 export class GarmentViewError extends Error {
@@ -180,6 +223,15 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
     throw e;
   }
   const { m, avatar, field, garmentLiftCm: lift, statureCm: stature, headPoint } = plan;
+  if (bundle.bake) {
+    // A bake was draped on the girth avatar (`buildAvatar`); a typed body (height, shoulders) is another body, on which
+    // the drapes would float or cut in. No 3D view rather than a garment drawn on a body it was not draped on.
+    if (isTypedBody(opts.body ?? {})) {
+      state('error');
+      throw new GarmentViewError('incompatible');
+    }
+    return mountBaked(canvas, opts, bundle.bake, bundle.material, ok, plan, state);
+  }
   const session = openSession(m, bundle, opts.garment);
   const material = viewerMaterial('product', bundle.material);
   const stage = new Stage(canvas, { controls: true, lighting: opts.lighting });
@@ -304,6 +356,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
       stage.camera.updateMatrixWorld();
       return stage.toScreen(new THREE.Vector3(p[0], p[1], p[2]));
     },
+    source: { kind: 'device' },
     setLook(look) {
       if (disposed) return;
       figure.setSkin(parseSkinHex(look?.skinHex));
@@ -319,6 +372,95 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
       stage.controls.removeEventListener('start', onControls);
       pool?.terminate();
       pool = null;
+      figure.dispose();
+      stage.controls.dispose();
+      stage.renderer.dispose();
+    },
+  };
+}
+
+/**
+ * The drape bake path of `mountGarmentView`: no drape on the device. Every size is the server's drapes blended to the
+ * shopper's hip on the chart axis and laid out of the drawn avatar (`bakedDrapes`), in the bake's one plain colour.
+ */
+function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBake, bundleMaterial: MaterialJson, ok: { sizes: string[]; baseSize: string }, plan: AvatarPlan, state: (s: GarmentViewState) => void): GarmentView {
+  const { avatar, field, garmentLiftCm: lift, statureCm: stature, headPoint } = plan;
+  const material = { ...viewerMaterial('product', bundleMaterial), baseColorHex: bake.meta.plainColourHex };
+  const stage = new Stage(canvas, { controls: true, lighting: opts.lighting });
+  const figure = new Figure(meshGeometry(avatar.mesh), bake.indices, bake.vertexCount, null);
+  figure.setMaterial(material);
+  figure.setSkin(parseSkinHex(opts.look?.skinHex));
+  figure.garment.position.y = lift;
+  stage.scene.add(figure.group);
+  stage.frame(60, stature);
+  const drapes = bakedDrapes(bake, field, avatar.measurements.hip);
+  const sizes: Record<string, BakedSizeView> = {};
+  for (const [label, s] of bake.sizes) {
+    const d = drapes.get(label)!;
+    sizes[label] = { provenance: s.provenance, place: d.place, refusedHipCm: d.refusedHipCm };
+  }
+  let disposed = false;
+  let raf = 0;
+  let awakeUntil = 0;
+  function tick(): void {
+    raf = 0;
+    if (disposed) return;
+    stage.render();
+    if (performance.now() < awakeUntil) raf = requestAnimationFrame(tick);
+  }
+  function wake(ms = 0): void {
+    awakeUntil = Math.max(awakeUntil, performance.now() + ms);
+    if (!raf && !disposed) raf = requestAnimationFrame(tick);
+  }
+  const onControls = (): void => wake(600);
+  stage.controls.addEventListener('change', onControls);
+  stage.controls.addEventListener('start', onControls);
+  const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => wake(100)) : null;
+  resizeObserver?.observe(canvas);
+  const stopContextRestore = redrawOnContextRestored(canvas, () => wake(300));
+  const setSize = (size: string): boolean => {
+    const label = gradingLabel(ok.sizes, size);
+    const d = label ? drapes.get(label) : undefined;
+    if (!label || !d) return false;
+    canvas.dataset.size = label;
+    figure.setPositions(d.pos);
+    // The simulation could not put this size on a body like the shopper's: the body is drawn without it.
+    figure.garment.visible = d.place !== 'refused';
+    canvas.dataset.garment = d.place === 'refused' ? 'not-drawn' : 'drawn';
+    state('settled');
+    wake(100);
+    return true;
+  };
+  if (!setSize(opts.size) && !setSize(ok.baseSize)) {
+    state('error');
+    figure.dispose();
+    stage.renderer.dispose();
+    throw new GarmentViewError('incompatible');
+  }
+  wake(500);
+  return {
+    setSize,
+    sizes: ok.sizes.filter((s) => drapes.has(s)),
+    source: { kind: 'bake', plainColour: true, sizes },
+    toScreen(point) {
+      const p = point === 'head' ? headPoint : point;
+      stage.resize();
+      stage.camera.updateMatrixWorld();
+      return stage.toScreen(new THREE.Vector3(p[0], p[1], p[2]));
+    },
+    setLook(look) {
+      if (disposed) return;
+      figure.setSkin(parseSkinHex(look?.skinHex));
+      wake(100);
+    },
+    dispose() {
+      disposed = true;
+      cancelAnimationFrame(raf);
+      raf = 0;
+      resizeObserver?.disconnect();
+      stopContextRestore();
+      stage.controls.removeEventListener('change', onControls);
+      stage.controls.removeEventListener('start', onControls);
       figure.dispose();
       stage.controls.dispose();
       stage.renderer.dispose();

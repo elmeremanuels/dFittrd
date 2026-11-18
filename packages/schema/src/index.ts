@@ -1,5 +1,7 @@
 export * from './garment';
 export * from './garmentTape';
+export * from './garmentTapeForm';
+export * from './garmentTapeFormCases';
 export * from './body';
 export * from './swipe';
 export * from './fitSignature';
@@ -10,6 +12,7 @@ export * from './fabrics';
 export * from './mappings/common';
 export * from './mappings/shopify';
 export * from './mappings/woo';
+export * from './mappings/tape';
 export * from './mappings/fabricText';
 export * from './mappings/audience';
 export * from './mappings/audienceCases';

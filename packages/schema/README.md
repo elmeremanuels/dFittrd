@@ -128,6 +128,28 @@ Two optional fields on `GarmentPayload` (and the draft). Absent = the behaviour 
   payload object, which rules out a cross-field refinement there). The fit engine ignores a row it cannot match.
   `completenessScore` does not look at these fields.
 
+### The "Garment measurements" form (`garmentTapeForm.ts`, `garmentTapeFormCases.ts`, `mappings/tape.ts`)
+
+What both merchant admins (Shopify app, WooCommerce meta box) send and check. Nothing here concerns a shopper.
+
+- `checkGarmentTapeInput({ category, chart, closure, measured })` → `{ ok, errors, warnings, measuredSizes, garmentTape?, closure? }`.
+  `measured` holds only the sizes the shop ticked as measured (plain cm, `MeasuredTapeInputRow`, an empty input is
+  `null`). Errors stop a save (`unknown_size`, `duplicate_size`, `empty_measured`, `not_a_number`, `out_of_range`,
+  `depth_out_of_range`, `stretched_below_relaxed`, `unknown_closure`, `no_chart`); warnings do not (`looks_flat`,
+  `hip_no_depth`, `hip_depth_mixed`, `not_bottom`, `no_closure`, `pull_on_no_stretch`, `few_sizes`,
+  `edge_unmeasured`, `not_increasing`). The other sizes are filled by `fillGarmentTape` and labelled
+  `TAPE_PROVENANCE_LABELS` ("estimated" / "rough estimate"). Every sentence is in `GARMENT_TAPE_MESSAGES`, the one
+  English catalogue (D21). The order of the issues is part of the contract: the PHP twin gives the same list.
+- `GARMENT_TAPE_FORM_CASES`: shared cases (every issue code at least once). The WooCommerce plugin exports them with
+  the TypeScript answers to `tests/fixtures/garment-tape.json` and its PHP twin must give the same.
+- Wire: `GarmentTapeWriteRequestSchema` (`PUT /shopify/products/:id/garment-tape`, `dryRun` checks and fills without
+  writing) and `GarmentTapeFormResponseSchema` (also the `GET`).
+- Stored as the filled tape: Shopify metafields `closure` (single line) and `garment_tape` (json), WooCommerce meta
+  `_curtain_closure` and `_curtain_garment_tape`. `coerceClosure` / `coerceGarmentTape` read them back leniently and
+  match the tape to the CURRENT chart (`refillGarmentTape`): sizes the chart no longer has are dropped with a warning,
+  the estimates are filled again from the measured values, measured values are never changed.
+  `measuredFromGarmentTape(tape)` gives the form back what the shop typed.
+
 ### Audience and men's data (photo-avatar plan slice 3; decision D20)
 
 - `GarmentPayload.audience?: 'women' | 'men' | 'unisex'` (`GARMENT_AUDIENCES`). Optional: absent = not

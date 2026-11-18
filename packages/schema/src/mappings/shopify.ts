@@ -31,6 +31,7 @@ import {
   type EurRateTable,
   type WarningSink,
 } from './common';
+import { coerceClosure, coerceGarmentTape } from './tape';
 import { coerceAudienceOverride, inferAudienceDecision, type AudienceDecision } from './audience';
 
 export const SHOPIFY_METAFIELD_NAMESPACE = '$app:curtain' as const;
@@ -65,6 +66,8 @@ export type ShopifyMetafieldPath =
   | 'audience'
   | 'sizeChartType'
   | 'sizeChart'
+  | 'closure'
+  | 'garmentTape'
   | 'fabric'
   | 'patternBlock'
   | 'ease'
@@ -111,6 +114,24 @@ export const SHOPIFY_METAFIELD_DEFINITIONS: readonly ShopifyMetafieldDefinition[
     description: 'JSON array of rows: [{"size":"S","bust":88,"waist":68,"hip":96,"shoulder":37}]',
     heavy: true,
     pin: true,
+  },
+  {
+    key: 'closure',
+    name: 'Closure',
+    type: 'single_line_text_field',
+    path: 'closure',
+    description: 'How the garment opens: pull-on, zip, button, drawstring, wrap or other. Set in the app\'s Garment measurements form.',
+    heavy: false,
+    pin: false,
+  },
+  {
+    key: 'garment_tape',
+    name: 'Garment measurements (cm)',
+    type: 'json',
+    path: 'garmentTape',
+    description: 'Written by the app\'s Garment measurements form: per size the flat garment (girths doubled), each value measured or estimated. Edit it in the app, not here.',
+    heavy: false,
+    pin: false,
   },
   {
     key: 'fabric',
@@ -460,6 +481,11 @@ export function fromShopifyProduct(
 
   const sizeChart = coerceSizeChart(get('size_chart'), sink, 'size_chart');
   if (sizeChart) out.sizeChart = sizeChart;
+
+  const closure = coerceClosure(get('closure'), sink, 'closure');
+  if (closure) out.closure = closure;
+  const garmentTape = coerceGarmentTape(get('garment_tape'), sizeChart, sink, 'garment_tape');
+  if (garmentTape) out.garmentTape = garmentTape;
 
   // Names resolve to fabric library ids ("Katoen" → cotton); the numbers stay the merchant's.
   const fabric = coerceFabric(get('fabric'), sink, 'fabric');

@@ -285,6 +285,9 @@ function radialTexture(size: number, falloff: (r: number) => number): THREE.Data
     }
   }
   const t = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearFilter;
+  t.generateMipmaps = false;
   t.needsUpdate = true;
   return t;
 }
@@ -333,7 +336,7 @@ export class Stage {
     if (this.extras.contactShadow > 0) {
       const shadow = new THREE.Mesh(
         new THREE.PlaneGeometry(70, 46),
-        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: this.extras.contactShadow, depthWrite: false, alphaMap: radialTexture(64, (r) => (1 - r * r) ** 2), toneMapped: false }),
+        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: this.extras.contactShadow, depthWrite: false, alphaMap: radialTexture(64, (r) => Math.max(0, 1 - (r / 0.9) ** 2) ** 2), toneMapped: false }),
       );
       shadow.rotation.x = -Math.PI / 2;
       shadow.position.y = 0.05;

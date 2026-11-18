@@ -352,8 +352,10 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
       }
       busy = live.jobId !== null || !isSettled(live.fit.cloth, live.fit.params) || live.dirty;
     }
-    stage.render();
-    if (!raf && !disposed && (busy || performance.now() < awakeUntil)) raf = requestAnimationFrame(tick);
+    const more = busy || performance.now() < awakeUntil;
+    // The frame the loop stops on is the one that stays on screen: it is drawn with everything (the outline of neutral-v2).
+    stage.render(!more);
+    if (!raf && !disposed && more) raf = requestAnimationFrame(tick);
   }
 
   if (!setSize(opts.size) && !setSize(ok.baseSize)) {
@@ -422,8 +424,9 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
   function tick(): void {
     raf = 0;
     if (disposed) return;
-    stage.render();
-    if (performance.now() < awakeUntil) raf = requestAnimationFrame(tick);
+    const more = performance.now() < awakeUntil;
+    stage.render(!more);
+    if (more) raf = requestAnimationFrame(tick);
   }
   function wake(ms = 0): void {
     awakeUntil = Math.max(awakeUntil, performance.now() + ms);

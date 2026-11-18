@@ -367,6 +367,12 @@ export class Stage {
     this.controls.maxPolarAngle = Math.PI * 0.62;
     this.controls.autoRotate = options.autoRotate === true;
     this.controls.autoRotateSpeed = 1.2;
+    this.controls.addEventListener('start', () => {
+      this.dragging = true;
+    });
+    this.controls.addEventListener('end', () => {
+      this.dragging = false;
+    });
     this.frame(60);
     this.setSkinTone(null);
   }
@@ -427,6 +433,10 @@ export class Stage {
     const o = this.ensureOutline();
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     if (o.target.width !== size.x || o.target.height !== size.y) o.target.setSize(size.x, size.y);
+    // Both passes only cover the screen box of the bare skin (and the line's width round it): on a software renderer
+    // the full-screen pass made a frame about five times as slow.
+    const box = this.skinBox(size, this.extras.outline * this.renderer.getPixelRatio() + 3);
+    if (!box) return;
     const swapped: [THREE.Mesh, THREE.Material | THREE.Material[], boolean][] = [];
     this.scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
@@ -441,6 +451,9 @@ export class Stage {
     this.scene.background = null;
     const toneMapping = this.renderer.toneMapping;
     this.renderer.toneMapping = THREE.NoToneMapping;
+    o.target.scissor.set(box.x, box.y, box.w, box.h);
+    o.target.scissorTest = true;
+    o.target.viewport.set(0, 0, size.x, size.y);
     this.renderer.setRenderTarget(o.target);
     this.renderer.setClearColor(0x000000, 1);
     this.renderer.clear();
@@ -457,8 +470,37 @@ export class Stage {
     u.radius!.value = this.extras.outline * this.renderer.getPixelRatio();
     const autoClear = this.renderer.autoClear;
     this.renderer.autoClear = false;
+    const pr = this.renderer.getPixelRatio();
+    this.renderer.setScissor(box.x / pr, box.y / pr, box.w / pr, box.h / pr);
+    this.renderer.setScissorTest(true);
     this.renderer.render(o.quad, o.camera);
+    this.renderer.setScissorTest(false);
     this.renderer.autoClear = autoClear;
+  }
+
+  /** The bare skin's box on the drawing buffer (device px, origin bottom left), grown by `pad`; null when none is in view. */
+  private skinBox(size: THREE.Vector2, pad: number): { x: number; y: number; w: number; h: number } | null {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const v = new THREE.Vector3();
+    this.scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh || mesh.userData[ROLE] !== 'skin' || !mesh.visible) return;
+      const g = mesh.geometry;
+      if (!g.boundingBox) g.computeBoundingBox();
+      const b = g.boundingBox!;
+      mesh.updateWorldMatrix(true, false);
+      for (let k = 0; k < 8; k++) {
+        v.set(k & 1 ? b.max.x : b.min.x, k & 2 ? b.max.y : b.min.y, k & 4 ? b.max.z : b.min.z).applyMatrix4(mesh.matrixWorld).project(this.camera);
+        const px = ((v.x + 1) / 2) * size.x, py = ((v.y + 1) / 2) * size.y;
+        x0 = Math.min(x0, px);
+        x1 = Math.max(x1, px);
+        y0 = Math.min(y0, py);
+        y1 = Math.max(y1, py);
+      }
+    });
+    const x = Math.max(0, Math.floor(x0 - pad)), y = Math.max(0, Math.floor(y0 - pad));
+    const w = Math.min(size.x, Math.ceil(x1 + pad)) - x, h = Math.min(size.y, Math.ceil(y1 + pad)) - y;
+    return w > 0 && h > 0 ? { x, y, w, h } : null;
   }
 
   /** Point the camera at figures spread over `widthCm` (front view). `statureCm` only matters for a body taller than the canonical ones. */
@@ -481,12 +523,19 @@ export class Stage {
     return true;
   }
 
-  render(): void {
+  /** Draw a frame. `final`: the last frame before the view goes still, always with the outline. */
+  render(final = false): void {
     this.resize();
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
-    if (this.outlineHex) this.drawOutline();
+    // The outline is left out while the shopper's finger or mouse is turning the view (on a software renderer it made
+    // such a frame four to five times as slow) and drawn on every other frame: as soon as the drag ends, during the
+    // damping that follows, and on the frame a view stops on.
+    if (this.outlineHex && (!this.dragging || final)) this.drawOutline();
   }
+
+  /** Between the orbit controls' `start` and `end`: the shopper is turning the view. */
+  private dragging = false;
 
   /** Screen position (CSS px within the canvas) of a world point, for labels. */
   toScreen(p: THREE.Vector3): { x: number; y: number } {

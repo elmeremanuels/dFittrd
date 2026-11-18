@@ -229,9 +229,11 @@ try {
         const { page } = await open(throttled, `mode=head&frame=body&head=${head}&lighting=${lighting}&skin=${MONK[2]}`, `frames-${head}-${lighting}`);
         const cdp = await throttled.newCDPSession(page);
         await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
-        const ms = [];
-        for (let k = 0; k < 3; k++) ms.push(await page.evaluate(() => window.avatarCheck.frameMs(40)));
-        report.frames.push({ page: 'body alone, 412x915@2x, CPU 4x', head, lighting, msPerFrame: ms.map(r1) });
+        const ms = [], still = [];
+        for (let k = 0; k < 3; k++) ms.push(await page.evaluate(() => window.avatarCheck.frameMs(30)));
+        // A frame with the outline (what a still view draws once a turn has stopped).
+        if (lighting === 'neutral-v2') for (let k = 0; k < 3; k++) still.push(await page.evaluate(() => window.avatarCheck.frameMs(15, true)));
+        report.frames.push({ page: 'body alone, 412x915@2x, CPU 4x, turning as a drag does (no outline while dragging)', head, lighting, msPerFrame: ms.map(r1), ...(still.length ? { msPerFrameWithOutline: still.map(r1) } : {}) });
         save();
         await page.close();
       }
@@ -266,6 +268,9 @@ try {
             await page.mouse.up();
             const f1 = await page.evaluate(() => window.__frames);
             report.frames.push({ page: 'mount, azure dress, 412x915@2x, CPU 4x, dragging', head, lighting, fps: r1(((f1 - f0) * 1000) / (Date.now() - t0)) });
+            // After the drag: the still view draws the outline again.
+            await page.waitForTimeout(2500);
+            await snap(page, `frames--after-drag--${head}--${lighting}`);
           }
           await page.close();
         }

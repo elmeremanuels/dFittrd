@@ -87,7 +87,7 @@ declare global {
       patches(): Record<string, { rgb: [number, number, number]; x: number; y: number }>;
       garmentPatches?(): Record<string, { rgb: [number, number, number]; x: number; y: number }>;
       contrast?(): ContrastReport;
-      frameMs?(frames: number): number;
+      frameMs?(frames: number, withOutline?: boolean): number;
       look?: unknown;
       view: GarmentView | null;
     };
@@ -186,7 +186,9 @@ function headMode(): void {
       return out;
     },
     contrast: () => silhouetteContrast(stage, figure),
-    frameMs(n: number) {
+    frameMs(n: number, withOutline = false) {
+      // As while a finger turns the view (the orbit controls' start and end), unless the frames are asked with the outline.
+      if (!withOutline) stage.controls.dispatchEvent({ type: 'start' });
       const t0 = performance.now();
       // Each frame is read back (one pixel), so its time includes the GPU's work (SwiftShader: the CPU's).
       const gl = stage.renderer.getContext();
@@ -196,6 +198,7 @@ function headMode(): void {
         stage.render();
         gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
       }
+      if (!withOutline) stage.controls.dispatchEvent({ type: 'end' });
       return (performance.now() - t0) / n;
     },
   };

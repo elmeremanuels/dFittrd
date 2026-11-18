@@ -151,6 +151,18 @@ What the adopters must do themselves:
 
 **How it reads (looked at 14 Nov 2026, three.js renders from `spikes/garment-engine/viewer/avatar-renders.mjs`).** At phone size (the whole figure in a 390 px wide view, the head about 60 px high) it reads as a face: a shadow band at the eyes, the nose, a mouth. It no longer looks unfinished. Close up it is a shop-window mannequin with soft, slightly blurred features and closed-looking eyes; it is bald and has no eyebrows or lashes. It is not a person and nobody would take it for one. What is still off: the v0 neck is a long straight column, on the male body as wide as the jaw, which makes the male head look set in a collar from the side; and the head sits on a body with box shoulders. Uncanny it is not, in the sense of a face that is almost human; "plain dummy" is the fair description. Hair (plan slice 2's picker) is not built.
 
+## Head v2 (`headV2.ts`, opt-in: `head: 'neutral-v2'`)
+
+For the look review of 18 Nov 2026. `buildMannequinMesh(m, { head: 'neutral-v2' })`; the `neutral` head and the default `egg` mesh are byte for byte as before (`headV2.test.ts` pins the `neutral` hashes of 41c1c16).
+
+- **Own geometry only**, as v1: hand-written profile curves (front, back, half-width per family) and smooth bumps along the surface normal. No scan, photo, measurement of a person, SMPL, FLAME or other face or body model, and nothing derived from one. One generic face per family, not a likeness of anyone. No hair.
+- **Features**: open eyes (an eyeball in each socket, an upper and a lower lid with a margin step, a lid crease, a sculpted iris ring and pupil looking straight ahead); brows (a raised band over each eye, and a shade on the skin colour there); a defined nose whose underside slopes into a filled upper lip (the steepest slope under the nose is 0.9 to 1.0 cm per cm against v1's 2.1 to 2.4: no shelf, so no dark patch that reads as a moustache); lips with a line and corners; ears with a rim, a hollow and a lobe.
+- **Shade** (`mesh.shade`, one value per vertex, 1 elsewhere): brows ×0.68, lash line ×0.62, iris ×0.70 of the skin colour at the darkest. The viewer draws it as a vertex colour. It is a darker tint of whatever skin colour is chosen, never a colour of its own.
+- **Families differ in jaw and brow**: the male jaw is about 0.9 cm wider at the gonion (unit head) and squarer, the chin wider and further forward, the brow ridge heavier and lower, the brows flatter and lower; the female jaw is narrower with a rounder chin, the brows higher and arched, the lips a little fuller.
+- **No neck seam**: the head continues down as a tube that is the visible neck from the neck ring up (0.04 unit cm outside the torso's neck, which for this head has no flare towards the old egg and stays inside the tube), and below the ring follows the torso's flare into the shoulders and sinks into it at a shallow angle. There is no collar edge under the chin or at the nape (v1 had one at the back). `mesh.headLevels` gives the chin and top, since the tube reaches below the chin.
+- **Size**: 132 rows × 176 columns, more of them in the face band and at the ears: **46,464 triangles** for the head (v1: 15,808); the whole female M mesh 60,672 (v1 30,016, egg 14,880), male 61,088.
+- **How it reads** (looked at 18 Nov 2026, renders in the look review): close up it is clearly a shop-window mannequin with open eyes, brows, ears and a jaw; the moustache shadow is gone from the front; the male and female heads are told apart at a glance (jaw, brow). What is still off: the lid margins show small steps close up (the grid); the eyes, with their incised iris, are a little doll-like; from below, the male jaw's underside is a dark band that can read as a chin strap; the ears from behind are flat plates; still bald.
+
 ## What a shape contains
 
 - **Mesh:** five closed, consistently oriented parts (torso with head, two legs, two arms), 14.8–15.2k triangles. The girth of the mesh at every anchor ring equals the table value: every section is scaled so that its inscribed polygon has the ellipse's circumference. Limbs overlap the torso; there is no boolean union in v0.
@@ -168,8 +180,9 @@ What the adopters must do themselves:
 | `shapeForBody(input)`, `buildBody(input)`, `referenceMeasurements(shape)`, `deltoidBreadthCm(m)`, `armClearanceCm(m)`, `BODY_INPUT_LIMITS`, `FEMALE_SHOULDER_REFERENCE`, `MALE_SOURCES` | A shape or a mannequin from typed measurements; what a shopper would type for a shape |
 | `levelWarp(levels)`, `NOMINAL_LEVELS` | The level stretch behind `BodyShape.levels` |
 | `buildMannequin(shape)` | Parts, rings, length lines, joints, landmarks, plus `torsoAt(y)`, `legAt(y, side)`, `armAt(s, side)` |
-| `buildMannequinMesh(m, { head? })`, `topology(mesh)`, `vertexNormals(mesh)` | Mesh (default: the v0 egg head; `head: 'neutral'`: the neutral standard head as a sixth part), watertight/manifold/orientation report, normals |
+| `buildMannequinMesh(m, { head? })`, `topology(mesh)`, `vertexNormals(mesh)` | Mesh (default: the v0 egg head; `head: 'neutral'`: the neutral standard head as a sixth part; `head: 'neutral-v2'`: head v2, with `shade` and `headLevels`), watertight/manifold/orientation report, normals |
 | `buildHeadPart(m)`, `faceRelief(x, y, male?)`, `HEAD_LEVELS`, `FACE_LEVELS` | The neutral head alone, its relief function and its levels |
+| `buildHeadPartV2(m, neck)`, `faceReliefV2`, `faceShadeV2`, `earRelief`, `FACE_LEVELS_V2` | Head v2 alone (`head: 'neutral-v2'`), its relief and shade functions and its levels |
 | `slice(positions, indices, plane)`, `loopAround`, `loopLength`, `resampleLoop` | Plane sections, used for ring measurement and for stage 5 anchoring |
 | `mannequinAnchorsJson(m, mesh)`, `meshRingCircumference` | `anchors.json` |
 | `turntablePaths(m)`, `motionCamera(m)`, `cameraMatrices(frame, aspect)` | Camera paths |

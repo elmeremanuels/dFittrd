@@ -7,7 +7,8 @@ import { describe, expect, it } from 'vitest';
 import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh } from '@curtain/mannequin';
 import { bodyField, buildAvatar, makeCollider, mannequinMeasurements } from './body';
 import { loadBundleFrom, type FetchLike } from './bundle';
-import { DRAPE_BAKE_FORMAT, bakeAxis, bakeWeights, blendBakedSize, drapeBakeMetaOf, readDrapeBake, settleOnBody, type DrapeBakeMeta } from './drapeBake';
+import { DRAPE_BAKE_FORMAT, bakeAxis, bakePlace, bakeWeights, blendBakedSize, drapeBakeMetaOf, settleOnBody, type DrapeBakeMeta } from './drapeBake';
+import { readDrapeBake } from './drapeBakeRead';
 import { writeDrapeBake } from './drapeBakeWrite';
 import { bakedDrapes } from './mount';
 
@@ -59,6 +60,21 @@ describe('bakeWeights', () => {
     expect(bakeWeights(s, -0.5).weights).toEqual([0.5, 0]);
   });
 
+  it('says where the shopper lies against the bodies a size was and was not draped on (AU 8: refused on t = 1)', () => {
+    const s8 = { baseT: 0, targetT: [-1, 0.5], notDraped: [{ t: 1, reason: 'cannot be worn' }] };
+    expect(bakePlace(s8, 0.2)).toMatchObject({ place: 'within', refusedT: null });
+    expect(bakePlace(s8, 0.8)).toMatchObject({ place: 'between', refusedT: 1, weights: [0, 1] });
+    expect(bakePlace(s8, 1)).toMatchObject({ place: 'refused', refusedT: 1 });
+    expect(bakePlace(s8, 1.7)).toMatchObject({ place: 'refused', refusedT: 1 });
+    // The refused body is above: below the range the size is only held.
+    expect(bakePlace(s8, -1.5)).toMatchObject({ place: 'held', refusedT: null });
+    expect(bakePlace({ baseT: 0, targetT: [-1, 1] }, 1.5)).toMatchObject({ place: 'held', refusedT: null });
+  });
+
+  it('refuses an axis value that is not a number instead of showing the base drape as the shopper’s', () => {
+    expect(() => bakeWeights({ baseT: 0, targetT: [-1, 1] }, Number.NaN)).toThrow(RangeError);
+  });
+
   it('places the shopper on the chart by the hip', () => {
     expect(bakeAxis(meta(), 100)).toBeCloseTo(-0.4, 9);
     expect(bakeAxis(meta(), 114)).toBeCloseTo(1, 9);
@@ -100,6 +116,47 @@ describe('base.glb round trip', () => {
     expect(drapeBakeMetaOf({ asset: {} })).toBeNull();
     expect(() => drapeBakeMetaOf({ asset: { extras: { curtainBake: { format: 'other' } } } })).toThrow();
     await expect(writeDrapeBake({ meta: meta(), indices: t.idx, drapes: drapes.slice(0, 1) })).rejects.toThrow(/size 12/);
+  });
+
+  it('refuses metadata that would place the shopper at no number or on bodies it cannot name', () => {
+    const bad = (over: Partial<DrapeBakeMeta>): (() => unknown) => () => drapeBakeMetaOf({ asset: { extras: { curtainBake: meta(over) } } });
+    expect(bad({})).not.toThrow();
+    expect(bad({ axis: { measure: 'hip', hipAtZero: 104, hipPerUnit: 0, label: '' } })).toThrow(/axis/);
+    expect(bad({ axis: { measure: 'hip', hipAtZero: Number.NaN, hipPerUnit: 10, label: '' } })).toThrow(/axis/);
+    expect(bad({ sizes: [{ size: '8', baseT: 0, targetT: [Number.POSITIVE_INFINITY], provenance: 'measured' }] })).toThrow(/finite/);
+    expect(bad({ sizes: [{ size: '8', baseT: Number.NaN, targetT: [1], provenance: 'measured' }] })).toThrow(/finite/);
+    expect(bad({ sizes: [{ size: '8', baseT: 0, targetT: [0], provenance: 'measured' }] })).toThrow(/twice/);
+    expect(bad({ sizes: [{ size: '8', baseT: 0, targetT: [1], provenance: 'guessed' as never }] })).toThrow(/provenance/);
+    expect(bad({ sizes: [{ size: '8', baseT: 0, targetT: [1], provenance: 'measured', notDraped: [{ t: Number.NaN, reason: 'x' }] }] })).toThrow(/notDraped/);
+  });
+
+  it('refuses a morph target of another vertex count, and sizes with other triangles', async () => {
+    expect(() => blendBakedSize({ base: new Float32Array(9), targets: [new Float32Array(6)] }, [1])).toThrow(/vertex count/);
+    const glb = await writeDrapeBake({ meta: meta(), indices: t.idx, drapes });
+    // Rewrite the JSON chunk: the second size's mesh gets a copy of an accessor with three fewer elements.
+    const shorten = (pick: (prim: { indices: number; targets?: { POSITION: number }[] }) => { get: () => number; set: (i: number) => void }): Uint8Array => {
+      const dv = new DataView(glb.buffer, glb.byteOffset, glb.byteLength);
+      const jsonLen = dv.getUint32(12, true);
+      const json = JSON.parse(new TextDecoder().decode(glb.subarray(20, 20 + jsonLen))) as { accessors: { count: number }[]; meshes: { primitives: { indices: number; targets?: { POSITION: number }[] }[] }[] };
+      const slot = pick(json.meshes[1]!.primitives[0]!);
+      json.accessors.push({ ...json.accessors[slot.get()]!, count: json.accessors[slot.get()]!.count - 3 });
+      slot.set(json.accessors.length - 1);
+      let text = JSON.stringify(json);
+      while (text.length % 4) text += ' ';
+      const head = new TextEncoder().encode(text);
+      const rest = glb.subarray(20 + jsonLen);
+      const out = new Uint8Array(20 + head.length + rest.length);
+      const o = new DataView(out.buffer);
+      out.set(glb.subarray(0, 12));
+      o.setUint32(8, out.length, true);
+      o.setUint32(12, head.length, true);
+      o.setUint32(16, 0x4e4f534a, true);
+      out.set(head, 20);
+      out.set(rest, 20 + head.length);
+      return out;
+    };
+    await expect(readDrapeBake(shorten((p) => ({ get: () => p.indices, set: (i) => (p.indices = i) })))).rejects.toThrow(/other triangles/);
+    await expect(readDrapeBake(shorten((p) => ({ get: () => p.targets![0]!.POSITION, set: (i) => (p.targets![0]!.POSITION = i) })))).rejects.toThrow(/another vertex count/);
   });
 
   it('loads as a bundle whose anchors name the bake: no grading of a base mesh, the base size as baseMesh', async () => {
@@ -148,10 +205,13 @@ describe('on the drawn body', () => {
     const bake = await readDrapeBake(await writeDrapeBake({ meta: meta(), indices: t.idx, drapes }));
     const atHeld = bakedDrapes(bake, field, 100);
     expect([...atHeld.keys()]).toEqual(['8', '12']);
-    expect(atHeld.get('8')!.held).toBe(false);
+    expect(atHeld.get('8')!.place).toBe('within');
     expect(atHeld.get('8')!.pushed).toBe(0);
     const big = bakedDrapes(bake, field, 112);
-    expect(big.get('8')!.held).toBe(true); // t = 0.8 > 0.5, AU 8's last body
-    expect(big.get('12')!.held).toBe(false);
+    expect(big.get('8')).toMatchObject({ place: 'between', refusedHipCm: 114 }); // t = 0.8: past AU 8's last body (0.5), short of the refused one (1)
+    expect(big.get('12')!.place).toBe('within');
+    const bigger = bakedDrapes(bake, field, 116);
+    expect(bigger.get('8')).toMatchObject({ place: 'refused', refusedHipCm: 114 });
+    expect(bigger.get('12')).toMatchObject({ place: 'held', refusedHipCm: null });
   });
 });

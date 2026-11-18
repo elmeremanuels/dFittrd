@@ -9,7 +9,8 @@
  * (KHR_mesh_quantization), every view meshopt-compressed; no normals (the figure computes them), no texture: one plain
  * colour, the largest colour cluster of the photo texture (`--colour`).
  *
- * Measured here, on the held-out body (t = -0.4, hip 100, waist 73.5; not a grid body):
+ * Measured here, on held-out bodies (t = -0.4, hip 100, waist 73.5, for every size; t = +0.5, hip 109, for AU 10-16,
+ * where it lies between the AU 12 and AU 16 grid bodies; not measured: AU 8 between t = 0 and its last body t = 0.5):
  *   - the device blend (decoded from the written base.glb, `bakeWeights` + `blendBakedSize` of the viewer, then the
  *     viewer's push-out out of the drawn avatar) against the direct drape on that body: per-vertex RMS / p95 / max,
  *     and hulls at the body's hip, the knee and the hem edge, and the hem ring's path length (the folds);
@@ -23,7 +24,8 @@ import { gzipSync } from 'node:zlib';
 import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh } from '@curtain/mannequin';
 import { bodyField, buildAvatar } from '../../../../../packages/garment-viewer/src/body';
 import { makeCollider } from '../../../../../packages/garment-viewer/src/collide';
-import { DRAPE_BAKE_FORMAT, bakeAxis, bakeWeights, blendBakedSize, readDrapeBake, settleOnBody, type DrapeBakeMeta, type DrapeBakeSizeMeta, type SizeProvenance } from '../../../../../packages/garment-viewer/src/drapeBake';
+import { DRAPE_BAKE_FORMAT, bakeAxis, bakeWeights, blendBakedSize, settleOnBody, type DrapeBakeMeta, type DrapeBakeSizeMeta, type SizeProvenance } from '../../../../../packages/garment-viewer/src/drapeBake';
+import { readDrapeBake } from '../../../../../packages/garment-viewer/src/drapeBakeRead';
 import { writeDrapeBake } from '../../../../../packages/garment-viewer/src/drapeBakeWrite';
 import { girthAt } from './girth';
 
@@ -134,7 +136,9 @@ writeFileSync(join(outDir, 'qa.json'), JSON.stringify({
   label: 'tape-built and server-draped geometry: an estimate, not a measurement (AGENTS.md rule 3)',
   chartAgreement: {
     pass: true,
-    basis: 'not a reconstruction: the garment is built from the shop tape (AU 8, 10, 14 measured; 12 interpolated; 16 extrapolated), so there is no calibration to a chart to check. pass is set for the demo gate; the merchant import gate has not been designed for tape-built bundles',
+    // The import gate flags this (`tape_built_no_chart_check`) and refuses a bake without it: pass is not a measurement.
+    kind: 'tape-built',
+    basis: 'not a reconstruction: the garment is built from the shop tape (AU 8, 10, 14 measured; 12 interpolated; 16 extrapolated), so there is no calibration to a chart to check. pass is the builder\'s statement; the import gate flags kind tape-built for a person to look at before approving',
     toleranceCm: 2,
     maxAbsCm: null,
   },
@@ -143,16 +147,16 @@ writeFileSync(join(outDir, 'qa.json'), JSON.stringify({
   sizes: plan.map(({ bodies: _b, ...m }) => m),
 }, null, 1));
 
-// ---- 4. Measure the device path on the held-out body. ----
+// ---- 4. Measure the device path on held-out bodies (direct drapes the bake does not contain). ----
+// The axis must be the bodies the drapes were made on: each grid body's typed hip is hipAtZero + hipPerUnit · t.
+for (const g of GRID) {
+  const b = bodyOf(g.id);
+  const want = meta.axis.hipAtZero + meta.axis.hipPerUnit * g.t;
+  if (!b || Math.abs((b.target.hip ?? b.achieved.hipCm) - want) > 0.05 || Math.abs(b.achieved.hipCm - want) > 0.05) throw new Error(`grid body ${g.id}: hip ${b?.target.hip}/${b?.achieved.hipCm}, the axis says ${want}`);
+}
 const bake = await readDrapeBake(new Uint8Array(glb));
-const H0 = bodyOf(HELD);
-// Anny bodies (§9) carry no bust: the chart line's.
-const H = { ...H0, target: { bust: H0.target.bust ?? 95 + 10 * H0.t, waist: H0.target.waist ?? H0.achieved.waistCm, hip: H0.target.hip ?? H0.achieved.hipCm } };
 const m = buildMannequin(bodyShape(BASE_SHAPE_ID));
 const canon = buildMannequinMesh(m, { head: 'neutral' });
-const av = buildAvatar(m, canon, { bust: H.target.bust, waist: H.target.waist, hip: H.target.hip });
-const field = bodyField(m, av);
-const tH = bakeAxis(bake.meta, H.target.hip);
 const hemStart = rest.rings.start[rest.rings.start.length - 1]!, hemN = rest.rings.size[rest.rings.size.length - 1]!;
 const hemIds = Array.from({ length: hemN }, (_, k) => hemStart + k);
 function hull2(pts: [number, number][]): number {
@@ -168,49 +172,66 @@ function hull2(pts: [number, number][]): number {
 }
 const hemHull = (p: Float32Array): number => hull2(hemIds.map((i) => [p[3 * i]!, p[3 * i + 2]!]));
 const hemPath = (p: Float32Array): number => { let s = 0; for (let k = 0; k < hemN; k++) { const a = hemIds[k]!, b = hemIds[(k + 1) % hemN]!; s += Math.hypot(p[3 * a]! - p[3 * b]!, p[3 * a + 1]! - p[3 * b + 1]!, p[3 * a + 2]! - p[3 * b + 2]!); } return r1(s); };
-const measures = (p: Float32Array): Record<string, number> => ({ hipHull: girthAt(p, indices, H.achieved.hipY), kneeHull: girthAt(p, indices, 47.5), hemHull: hemHull(p), hemPath: hemPath(p) });
 function dist(a: Float32Array, b: Float32Array): { rms: number; p95: number; max: number } {
   const d: number[] = [];
   for (let i = 0; i < a.length; i += 3) d.push(Math.hypot(a[i]! - b[i]!, a[i + 1]! - b[i + 1]!, a[i + 2]! - b[i + 2]!));
   d.sort((x, y) => x - y);
   return { rms: r2(Math.sqrt(d.reduce((s, x) => s + x * x, 0) / d.length)), p95: r2(d[Math.floor(0.95 * d.length)]!), max: r2(d[d.length - 1]!) };
 }
-/** The viewer's push-out (mount.ts, drape bake path): `settleOnBody` with the device collider of the held-out avatar. */
-function pushOut(p: Float32Array): { pos: Float32Array; moved: number; maxCm: number; floored: number } {
-  const out = Float32Array.from(p);
-  const r = settleOnBody(out, makeCollider(field, CLEARANCE_CM));
-  return { pos: out, moved: r.body, maxCm: r2(r.maxBodyCm), floored: r.floor };
-}
-const perSize: Record<string, unknown> = {};
-for (const s of SIZES) {
-  const bs = bake.sizes.get(s)!;
-  const { weights, clamped } = bakeWeights(bs, tH);
-  const blended = blendBakedSize(bs, weights);
-  const polished = pushOut(blended);
-  const directPushed = has(HELD, s) ? pushOut(drape(HELD, s)) : null;
-  // The direct drape as the device would show it (same push-out and floor), so the two compare like for like.
-  const direct = directPushed?.pos ?? null;
-  const quantErr = dist(bs.base, drape('t+0.00', s));
-  perSize[s] = {
-    provenance: bs.provenance,
-    bodies: { base: 0, targets: bs.targetT, weights: weights.map(r2), clamped, notDraped: bs.notDraped ?? [] },
-    quantisationErrorCm: quantErr,
-    devicePushOut: { particles: polished.moved, maxCm: polished.maxCm, laidOnFloor: polished.floored },
-    blend: measures(polished.pos),
-    direct: direct ? measures(direct) : null,
-    directPushOut: directPushed ? { particles: directPushed.moved, maxCm: directPushed.maxCm, laidOnFloor: directPushed.floored } : null,
-    vertexErrorCm: direct ? dist(polished.pos, direct) : null,
-    vertexErrorBeforePushOutCm: direct ? dist(blended, direct) : null,
+
+/** The device path on one held-out body, for every size draped there directly that does not have that body in the bake. */
+function measureOn(heldId: string, writeBlends: boolean): { body: Record<string, unknown>; perSize: Record<string, unknown> } {
+  const H0 = bodyOf(heldId);
+  // Anny bodies (§9) carry no bust: the chart line's.
+  const H = { ...H0, target: { bust: H0.target.bust ?? 95 + 10 * H0.t, waist: H0.target.waist ?? H0.achieved.waistCm, hip: H0.target.hip ?? H0.achieved.hipCm } };
+  const av = buildAvatar(m, canon, { bust: H.target.bust, waist: H.target.waist, hip: H.target.hip });
+  const field = bodyField(m, av);
+  const tH = bakeAxis(bake.meta, H.target.hip);
+  const measures = (p: Float32Array): Record<string, number> => ({ hipHull: girthAt(p, indices, H.achieved.hipY), kneeHull: girthAt(p, indices, 47.5), hemHull: hemHull(p), hemPath: hemPath(p) });
+  /** The viewer's push-out (mount.ts, drape bake path): `settleOnBody` with the device collider of the held-out avatar. */
+  const pushOut = (p: Float32Array): { pos: Float32Array; moved: number; maxCm: number; floored: number } => {
+    const out = Float32Array.from(p);
+    const r = settleOnBody(out, makeCollider(field, CLEARANCE_CM));
+    return { pos: out, moved: r.body, maxCm: r2(r.maxBodyCm), floored: r.floor };
   };
-  if (direct) writeFileSync(join(root, 'drapes', set, `${HELD}__${s}__devblend.bin`), Buffer.from(polished.pos.buffer));
+  const perSize: Record<string, unknown> = {};
+  for (const s of SIZES) {
+    const bs = bake.sizes.get(s)!;
+    // A body that is one of this size's own drapes is not held out.
+    if ([bs.baseT, ...bs.targetT].some((t) => Math.abs(t - tH) < 1e-6)) continue;
+    if (!has(heldId, s)) continue;
+    const { weights, clamped } = bakeWeights(bs, tH);
+    const blended = blendBakedSize(bs, weights);
+    const polished = pushOut(blended);
+    // The direct drape as the device would show it (same push-out and floor), so the two compare like for like.
+    const directPushed = pushOut(drape(heldId, s));
+    const direct = directPushed.pos;
+    perSize[s] = {
+      provenance: bs.provenance,
+      bodies: { base: 0, targets: bs.targetT, weights: weights.map(r2), clamped, notDraped: bs.notDraped ?? [] },
+      quantisationErrorCm: dist(bs.base, drape('t+0.00', s)),
+      devicePushOut: { particles: polished.moved, maxCm: polished.maxCm, laidOnFloor: polished.floored },
+      blend: measures(polished.pos),
+      direct: measures(direct),
+      directPushOut: { particles: directPushed.moved, maxCm: directPushed.maxCm, laidOnFloor: directPushed.floored },
+      vertexErrorCm: dist(polished.pos, direct),
+      vertexErrorBeforePushOutCm: dist(blended, direct),
+    };
+    if (writeBlends) writeFileSync(join(root, 'drapes', set, `${heldId}__${s}__devblend.bin`), Buffer.from(polished.pos.buffer));
+  }
+  return { body: { id: heldId, t: r2(tH), ...H.target }, perSize };
 }
-// Direct drapes on the grid bodies, pushed out the same way on their own avatar (how the device shows a grid body).
+const main = measureOn(HELD, true);
+// More held-out bodies where direct drapes exist (t = +0.5: between the AU 12 and AU 16 grid bodies for AU 10-16;
+// for AU 8 it is a grid body and is skipped).
+const more = ['t+0.50'].filter((id) => bodies.some((b) => b.id === id)).map((id) => measureOn(id, false)).filter((r) => Object.keys(r.perSize).length > 0);
 const report = {
   bundle: outDir,
-  heldOut: { id: HELD, t: r2(tH), ...H.target },
+  heldOut: main.body,
   bytes: { 'base.glb': glb.byteLength, 'base.glb.gz': gzipSync(glb, { level: 9 }).byteLength, uncompressedInt16: bake.vertexCount * 8 * plan.reduce((n, p) => n + 1 + p.bodies.length, 0) + indices.length * 2 },
   colour: { hex: COLOUR, source: COLOUR_SOURCE },
-  perSize,
+  perSize: main.perSize,
+  moreHeldOut: more,
 };
 writeFileSync(join(root, `bake-report-${set}.json`), JSON.stringify(report, null, 1));
 console.log(JSON.stringify(report, null, 1));

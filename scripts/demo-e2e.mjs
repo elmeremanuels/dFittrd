@@ -35,7 +35,7 @@
  * Env:   DEMO_E2E_SHOTS  screenshot folder (default test-results/demo-e2e)
  *        DEMO_AZURE_BUNDLE  the azure babydoll bundle folder (default spikes/garment-engine/out/eval/…)
  *        DEMO_SKIRT_BUNDLE  the crimson maxi skirt bundle folder (default spikes/garment-engine/out/eval/…)
- *        DEMO_SKIRT=pom     the POM v2 server drape bake of the skirt (out/pom2-bundle/…; imports without QA flags) instead of the photo bundle
+ *        DEMO_SKIRT=pom     the POM v2 server drape bake of the skirt (out/pom2-bundle/…; imports flagged exactly `tape_built_no_chart_check`) instead of the photo bundle
  * Flags: --skip-build   do not build the packages first
  *        --headed       show the browser
  */
@@ -67,7 +67,7 @@ const PAGES = [
     threeD: [
       { name: 'azure', externalId: 'azure-palm-baby-doll-dress', path: '/products/azure-palm-baby-doll-dress', bundle: DEMO_BUNDLES.azure, qaFlags: [] },
       // Live only under the founder's low-rise waist reading, flagged: the import gate refuses it otherwise (qa_failed).
-      { name: 'skirt', externalId: 'crimson-wildflower-maxi-skirt', path: '/products/crimson-wildflower-maxi-skirt', bundle: DEMO_BUNDLES.skirt, qaFlags: DEMO_SKIRT_POM ? [] : ['low_rise_waist', 'precalibration_outside_tolerance'], rings: 'pilot-skirt' },
+      { name: 'skirt', externalId: 'crimson-wildflower-maxi-skirt', path: '/products/crimson-wildflower-maxi-skirt', bundle: DEMO_BUNDLES.skirt, qaFlags: DEMO_SKIRT_POM ? ['tape_built_no_chart_check'] : ['low_rise_waist', 'precalibration_outside_tolerance'], rings: 'pilot-skirt', bake: DEMO_SKIRT_POM },
     ],
   },
 ];
@@ -334,7 +334,14 @@ async function threeDStep(page, base, t, log, shot) {
   if (t.rings === 'pilot-skirt') {
     // the clinging 3D drape does not show the hem width (REFINEMENT R3): no hem number under it
     if (/hem/i.test(await frame.getByTestId('garment3d-rings').innerText())) throw new Error(`3D ${t.name}: the 3D ring summary lists the hem the drape does not show`);
-    await frame.getByTestId('garment3d-hem-note').waitFor();
+    if (t.bake) {
+      // A server drape bake (DEMO_SKIRT=pom): drawn in one plain colour with the size's provenance; the server drape
+      // shows the hem, so the hem note of the on-device drape is not there.
+      const note = (await frame.getByTestId('garment3d-bake-note').innerText()).replace(/\s+/g, ' ');
+      if (!/one plain colour/.test(note) || !/shop’s tape/.test(note)) throw new Error(`3D ${t.name}: the bake note does not say plain colour and where the size comes from: "${note}"`);
+      if (await frame.getByTestId('garment3d-hem-note').count()) throw new Error(`3D ${t.name}: the hem note of the on-device drape is shown on a bake`);
+      log(`ok: 3D ${t.name}: drape bake, note "${note}"`);
+    } else await frame.getByTestId('garment3d-hem-note').waitFor();
   }
   if (!label.includes(`Size ${size} was picked by the size advice`)) throw new Error(`3D label does not name the recommended size ${size}: "${label}"`);
   if ((await canvas.getAttribute('data-size'))?.toLowerCase() !== size.toLowerCase()) throw new Error(`3D view shows size ${await canvas.getAttribute('data-size')}, the advice picked ${size}`);

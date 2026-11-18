@@ -31,8 +31,8 @@ import type { GarmentAssetRef, GarmentPayload, UserBody } from '@curtain/schema'
 import { EstimateBadge } from '@/components/EstimateBadge';
 import { ringInputsFor } from '@/render/ringInputs';
 import { ringOverlayFor } from '@/render/rings';
-import { embedStrings } from './strings';
-import type { Units } from './units';
+import { embedStrings, type EmbedCatalogue } from './strings';
+import { lengthText, type Units } from './units';
 
 type ViewerModule = typeof GarmentViewer;
 type BaseView = Awaited<ReturnType<ViewerModule['mountGarmentView']>>;
@@ -43,7 +43,9 @@ export interface ViewerLook {
   skinHex?: string | undefined;
 }
 /** What a baked view rests on (`GarmentView.source` of the viewer); optional, so this file builds against a viewer without it. */
-export type ViewerSource = { kind: 'device' } | { kind: 'bake'; plainColour: boolean; sizes: Record<string, { provenance: 'measured' | 'interpolated' | 'extrapolated'; held: boolean }> };
+export type ViewerSource =
+  | { kind: 'device' }
+  | { kind: 'bake'; plainColour: boolean; sizes: Record<string, { provenance: 'measured' | 'interpolated' | 'extrapolated'; place: 'within' | 'held' | 'between' | 'refused'; refusedHipCm: number | null }> };
 /** The viewer contract of the avatar slices; optional, so this file builds against a viewer without it. */
 type View = Omit<BaseView, 'source'> & { setLook?: (look: ViewerLook) => void; source?: ViewerSource };
 type MountOptionsWithLook = BaseMountOptions & { look?: ViewerLook };
@@ -240,7 +242,8 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
               {phase === 'loading' ? t.loading : t.draping}
             </span>
           ) : null}
-          <EstimateBadge className="pointer-events-none absolute bottom-2 left-2 text-[10px]" />
+          {/* Top right: at the bottom it covered the hem of a floor-length skirt; the loading chip is top left. */}
+          <EstimateBadge className="pointer-events-none absolute top-2 right-2 text-[10px]" />
         </div>
       )}
       {sizes.length > 1 && phase !== 'failed' ? (
@@ -256,13 +259,7 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
         {t.notPhoto} {recommended ? t.picked(recommended) : t.noneFits}
         {recommended && recommended !== size ? ` ${t.looking(size)}` : ''}
       </p>
-      {source?.kind === 'bake' ? (
-        <p className="mt-1 text-[11px] leading-snug text-ink-mute" data-testid="garment3d-bake-note">
-          {source.plainColour ? `${t.plainColour} ` : ''}
-          {source.sizes[size] ? t.provenance(size, source.sizes[size].provenance) : ''}
-          {source.sizes[size]?.held ? ` ${t.held(size)}` : ''}
-        </p>
-      ) : null}
+      {source?.kind === 'bake' ? <BakeNote t={t} size={size} source={source} units={units} /> : null}
       {ringList.length > 0 ? (
         <ul className="mt-1.5 flex flex-wrap gap-1 text-[11px]" aria-label={t.rings(size)} data-testid="garment3d-rings">
           {ringList.map((r) => (
@@ -278,5 +275,21 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
         </p>
       ) : null}
     </section>
+  );
+}
+
+/** Under the label of a server drape bake: plain colour, where the size comes from, and where the shopper lies against the bodies it was draped on. */
+function BakeNote({ t, size, source, units }: { t: EmbedCatalogue['view3d']; size: string; source: Extract<ViewerSource, { kind: 'bake' }>; units: Units }): ReactNode {
+  const s = source.sizes[size];
+  const place = s?.place ?? 'within';
+  return (
+    <p className="mt-1 text-[11px] leading-snug text-ink-mute" data-testid="garment3d-bake-note" data-place={place}>
+      {source.plainColour ? `${t.plainColour} ` : ''}
+      {s ? t.provenance(size, s.provenance) : ''}
+      {place === 'held' ? ` ${t.held(size)}` : ''}
+      {place === 'between' && s?.refusedHipCm != null ? ` ${t.between(size, lengthText(s.refusedHipCm, units))}` : ''}
+      {place === 'refused' && s?.refusedHipCm != null ? ` ${t.refused(size, lengthText(s.refusedHipCm, units))}` : ''}
+      {` ${t.sizesAlike}`}
+    </p>
   );
 }

@@ -38,7 +38,7 @@ export const MerchantGarmentAssetSchema = z.object({
   sizes: z.array(z.string()).max(32),
   qaPass: z.boolean(),
   /** QA readings the merchant must see before approving (`garmentQaFlags`), e.g. `low_rise_waist`. */
-  qaFlags: z.array(z.enum(['low_rise_waist', 'precalibration_outside_tolerance'])).max(8).optional(),
+  qaFlags: z.array(z.enum(['low_rise_waist', 'precalibration_outside_tolerance', 'tape_built_no_chart_check'])).max(8).optional(),
   /** One plain sentence per flag, in `qaFlags` order (`garmentQaFlagNote`), for the approval screen. */
   qaNotes: z.array(z.string().max(500)).max(8).optional(),
   createdAt: z.iso.datetime({ offset: true }),
@@ -62,7 +62,8 @@ export const MAX_GARMENT_BUNDLE_BYTES = 3 * 1024 * 1024;
 export const GARMENT_BUNDLE_FILES = ['base.glb', 'anchors.json', 'grading.json', 'material.json', 'qa.json'] as const;
 
 export interface GarmentBundleMeta {
-  anchors: { format?: unknown };
+  /** `drapeBake`: set by a server drape bake (@curtain/garment-viewer `drapeBake.ts`), which must declare itself in qa.json. */
+  anchors: { format?: unknown; drapeBake?: unknown };
   grading: { format?: unknown; baseSize?: unknown; sizes?: unknown };
   material: { format?: unknown };
   qa: { format?: unknown; chartAgreement?: GarmentChartAgreementMeta };
@@ -76,6 +77,8 @@ export interface GarmentChartAgreementMeta {
   waistReading?: unknown;
   toleranceCm?: unknown;
   beforeCalibrationMaxAbsCm?: unknown;
+  /** `tape-built`: the garment was built from the shop's tape, not reconstructed, so no chart agreement was measured. */
+  kind?: unknown;
 }
 
 export interface GarmentBundleInfo {
@@ -85,12 +88,14 @@ export interface GarmentBundleInfo {
   /**
    * QA readings the bundle passed under that a person must see before approving it (`garmentQaFlags`): `low_rise_waist` when
    * its chart waist was read at a band below the waist ring by a recorded decision; `precalibration_outside_tolerance` when
-   * the chart passed only after calibration and missed by more than the tolerance before it. Empty for an ordinary pass.
+   * the chart passed only after calibration and missed by more than the tolerance before it; `tape_built_no_chart_check`
+   * when the garment was built from the shop's tape (a server drape bake), so no agreement with the chart was measured
+   * and `pass` is the builder's own word. Empty for an ordinary pass.
    */
   qaFlags: GarmentQaFlag[];
 }
 
-export type GarmentQaFlag = 'low_rise_waist' | 'precalibration_outside_tolerance';
+export type GarmentQaFlag = 'low_rise_waist' | 'precalibration_outside_tolerance' | 'tape_built_no_chart_check';
 
 /** A plain sentence for a flag, for the merchant to read before approving (never only the code). */
 export function garmentQaFlagNote(flag: GarmentQaFlag, qa: GarmentBundleMeta['qa']): string {
@@ -100,6 +105,8 @@ export function garmentQaFlagNote(flag: GarmentQaFlag, qa: GarmentBundleMeta['qa
     const drop = typeof wr.dropCm === 'number' ? ` ${wr.dropCm} cm` : '';
     return `Waist read at the garment's own band,${drop} below the body's natural waist, by a recorded decision (${String(wr.decision)}), against the chart's waist plus a stated body offset of ${String(wr.offsetCm)} cm (target ${String(wr.targetCm)} cm); the chart does not say where this band sits.`;
   }
+  if (flag === 'tape_built_no_chart_check')
+    return "Built from the shop's tape measurements and draped on a server, not reconstructed from photos: no agreement with the size chart was measured, so the QA pass is the builder's own statement and the import checked only the files' format and sizes. Look at every size before approving.";
   return `Before calibration the garment missed the size chart by ${String(ca.beforeCalibrationMaxAbsCm)} cm, outside the ±${String(ca.toleranceCm)} cm tolerance; it passes only after calibration rescaled it, which is not evidence of fit.`;
 }
 
@@ -109,6 +116,8 @@ export function garmentQaFlagNote(flag: GarmentQaFlag, qa: GarmentBundleMeta['qa
  * read at the band against the chart's waist plus a stated body offset, by a founder's recorded decision. It is accepted
  * only as `{ kind: 'low-rise', decision: <non-empty>, offsetCm: <finite>, targetCm: <finite> }`, and always flagged.
  * `chartAgreement.beforeCalibrationMaxAbsCm` above `toleranceCm` is flagged `precalibration_outside_tolerance`.
+ * `chartAgreement.kind` `tape-built` (a server drape bake) is always flagged `tape_built_no_chart_check`; any other declared
+ * kind is malformed.
  */
 export function garmentQaFlags(qa: GarmentBundleMeta['qa']): GarmentQaFlag[] | null {
   const flags: GarmentQaFlag[] = [];
@@ -119,6 +128,11 @@ export function garmentQaFlags(qa: GarmentBundleMeta['qa']): GarmentQaFlag[] | n
     if (o.kind !== 'low-rise' || typeof o.decision !== 'string' || o.decision.trim() === '') return null;
     if (typeof o.offsetCm !== 'number' || !Number.isFinite(o.offsetCm) || typeof o.targetCm !== 'number' || !Number.isFinite(o.targetCm)) return null;
     flags.push('low_rise_waist');
+  }
+  const kind = qa.chartAgreement?.kind;
+  if (kind !== undefined && kind !== null) {
+    if (kind !== 'tape-built') return null;
+    flags.push('tape_built_no_chart_check');
   }
   // A pass after calibration over a miss outside tolerance before it: flagged, so a single-anchor automatic pass never looks clean.
   const before = qa.chartAgreement?.beforeCalibrationMaxAbsCm;
@@ -138,6 +152,8 @@ export function checkGarmentBundle(meta: GarmentBundleMeta, chartSizes: readonly
   if (meta.qa.chartAgreement?.pass !== true) return { ok: false, problem: 'qa_failed' };
   const qaFlags = garmentQaFlags(meta.qa);
   if (!qaFlags) return { ok: false, problem: 'qa_failed' };
+  // A drape bake's pass is not a measured chart agreement: it must say so in qa.json, where the flag follows the asset.
+  if (meta.anchors.drapeBake !== undefined && !qaFlags.includes('tape_built_no_chart_check')) return { ok: false, problem: 'qa_failed' };
   const { baseSize, sizes: rows } = meta.grading;
   if (typeof baseSize !== 'string' || !Array.isArray(rows) || rows.length === 0 || rows.length > 32) return { ok: false, problem: 'format' };
   const sizes: string[] = [];

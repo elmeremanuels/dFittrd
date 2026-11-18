@@ -84,7 +84,8 @@ const spikeOut = join(repoRoot, 'spikes', 'garment-engine', 'out');
 /**
  * DEMO_SKIRT picks which skirt bundle the demo serves: `photo` (default) the run-17d photo reconstruction above;
  * `pom` the POM v2 server drape bake (docs/research/step3-serverdrape-spike.md §10: built from the shop's tape,
- * draped on the server, blended on the device, one plain colour), which imports without QA flags. DEMO_SKIRT_BUNDLE
+ * draped on the server, blended on the device, one plain colour), which imports flagged exactly `tape_built_no_chart_check`
+ * (no chart agreement was measured; a person looks before approving). DEMO_SKIRT_BUNDLE
  * still overrides the folder.
  */
 const pomSkirt = source.DEMO_SKIRT === 'pom';
@@ -99,7 +100,7 @@ const bundles: DemoGarmentBundle[] = [
     payload: true,
     colorHex: '#A3243B',
     colorName: 'Crimson',
-    qaFlags: pomSkirt ? [] : ['low_rise_waist', 'precalibration_outside_tolerance'],
+    qaFlags: pomSkirt ? ['tape_built_no_chart_check'] : ['low_rise_waist', 'precalibration_outside_tolerance'],
   },
 ];
 const manifest = await seedDemo(handle.db, env, { storefrontOrigin, appOrigin: env.PUBLIC_APP_URL, bundles });

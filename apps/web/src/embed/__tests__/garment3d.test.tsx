@@ -37,6 +37,33 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     expect(screen.queryByTestId('garment3d-hem-note')).toBeNull(); // no hem input for this product
   });
 
+  it('a server drape bake says where the shopper lies: held on the nearest body, or not drawn where the simulation could not put the size on', async () => {
+    const source = {
+      kind: 'bake',
+      plainColour: true,
+      sizes: {
+        S: { provenance: 'measured', place: 'refused', refusedHipCm: 114 },
+        M: { provenance: 'interpolated', place: 'between', refusedHipCm: 114 },
+        L: { provenance: 'extrapolated', place: 'held', refusedHipCm: null },
+      },
+    };
+    const mountGarmentView = vi.fn(async (_c: HTMLCanvasElement, opts: { onState?: (s: string) => void }) => {
+      opts.onState?.('settled');
+      return { setSize: () => true, dispose: () => {}, sizes: asset.sizes, source };
+    });
+    const loadViewer = vi.fn(async () => ({ mountGarmentView }) as never);
+    const r = setup({ loadViewer, size: 'S' });
+    fireEvent.click(screen.getByTestId('garment3d-open'));
+    const note = await screen.findByTestId('garment3d-bake-note');
+    expect(note).toHaveAttribute('data-place', 'refused');
+    expect(note).toHaveTextContent('Shown in one plain colour; the print is not drawn. Size S is built from the shop’s tape. Size S is not drawn: the simulation could not put it on a body with 114.0 cm hips, and yours are at least that.');
+    r.rerender(<Garment3D {...r.props} size="M" />);
+    expect(screen.getByTestId('garment3d-bake-note')).toHaveTextContent('Size M is not on the shop’s tape; it is interpolated from the sizes that are. Your hips are past the largest body size M was draped on, so it is shown on that body; the simulation could not put size M on a body with 114.0 cm hips.');
+    r.rerender(<Garment3D {...r.props} size="L" units="imperial" />);
+    expect(screen.getByTestId('garment3d-bake-note')).toHaveTextContent('Your hips are outside the bodies size L was draped on, so it is shown on the nearest one.');
+    expect(screen.getByTestId('garment3d-bake-note')).toHaveTextContent('In 3D the sizes look much alike');
+  });
+
   it('renders nothing without an asset (a product without a bundle behaves exactly as today)', () => {
     const { container, loadViewer } = setup({ asset: null });
     expect(container).toBeEmptyDOMElement();

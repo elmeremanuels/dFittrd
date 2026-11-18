@@ -10,10 +10,9 @@
  * `asset.extras.curtainBake` (`DrapeBakeMeta`) names the bodies, the axis, the colour and what each size rests on.
  * There are no normals (the figure computes them) and no texture: the garment is drawn in one plain colour.
  *
- * Everything here runs on the device; nothing is sent (D3). Pure apart from the meshopt decoder (WebAssembly).
+ * Everything here runs on the device; nothing is sent (D3). Pure: the file reader, with the meshopt decoder
+ * (WebAssembly, about 17 KB gzip), is `drapeBakeRead.ts`, which `bundle.ts` loads by `import()` only for a bake.
  */
-import { readGlb } from '@curtain/mannequin';
-import { MeshoptDecoder } from 'meshoptimizer/decoder';
 
 export const DRAPE_BAKE_FORMAT = 'curtain.garment.drapeBake';
 
@@ -59,87 +58,23 @@ export interface DrapeBake {
   sizes: Map<string, BakedSize>;
 }
 
-interface Accessor { bufferView: number; componentType: number; count: number; type: string; byteOffset?: number }
-interface BufferView { buffer: number; byteOffset?: number; byteLength: number; byteStride?: number; extensions?: { EXT_meshopt_compression?: { buffer: number; byteOffset?: number; byteLength: number; byteStride: number; mode: 'ATTRIBUTES' | 'TRIANGLES' | 'INDICES'; filter?: string; count: number } } }
-interface BakeGltf {
-  asset: { extras?: { curtainBake?: unknown } };
-  accessors: Accessor[];
-  bufferViews: BufferView[];
-  meshes: { name?: string; primitives: { attributes: { POSITION: number }; indices: number; targets?: { POSITION: number }[] }[]; extras?: { size?: string } }[];
-  nodes: { mesh?: number; translation?: number[]; scale?: number[] }[];
-}
-
 /** The bake's metadata, or null when base.glb is an ordinary garment file. Throws on a bake it cannot read. */
 export function drapeBakeMetaOf(json: { asset?: { extras?: { curtainBake?: unknown } } }): DrapeBakeMeta | null {
   const m = json.asset?.extras?.curtainBake as Partial<DrapeBakeMeta> | undefined;
   if (!m) return null;
   if (m.format !== DRAPE_BAKE_FORMAT || m.formatVersion !== 1) throw new Error(`drape bake: unsupported format ${String(m.format)} ${String(m.formatVersion)}`);
   if (!Array.isArray(m.sizes) || m.sizes.length === 0 || !m.axis || !(Number(m.quantStepCm) > 0) || typeof m.plainColourHex !== 'string') throw new Error('drape bake: incomplete metadata');
-  return m as DrapeBakeMeta;
-}
-
-/** Decode a drape bake from base.glb bytes. Waits for the meshopt decoder (WebAssembly) once. */
-export async function readDrapeBake(bytes: Uint8Array): Promise<DrapeBake> {
-  const glb = readGlb(bytes);
-  const json = glb.json as unknown as BakeGltf;
-  const meta = drapeBakeMetaOf(json);
-  if (!meta) throw new Error('base.glb holds no drape bake');
-  await MeshoptDecoder.ready;
-  const views = new Map<number, Uint8Array>();
-  const viewBytes = (i: number): Uint8Array => {
-    const hit = views.get(i);
-    if (hit) return hit;
-    const v = json.bufferViews[i]!;
-    const ext = v.extensions?.EXT_meshopt_compression;
-    let out: Uint8Array;
-    if (ext) {
-      out = new Uint8Array(ext.count * ext.byteStride);
-      const src = glb.bin.subarray(ext.byteOffset ?? 0, (ext.byteOffset ?? 0) + ext.byteLength);
-      MeshoptDecoder.decodeGltfBuffer(out, ext.count, ext.byteStride, src, ext.mode, (ext.filter ?? 'NONE') as 'NONE');
-    } else {
-      out = glb.bin.slice(v.byteOffset ?? 0, (v.byteOffset ?? 0) + v.byteLength);
-    }
-    views.set(i, out);
-    return out;
-  };
-  const short3 = (acc: number, scale: number, offset: readonly number[] | null): Float32Array => {
-    const a = json.accessors[acc]!;
-    if (a.componentType !== 5122 || a.type !== 'VEC3') throw new Error('drape bake: positions must be int16 VEC3');
-    const raw = viewBytes(a.bufferView);
-    const stride = json.bufferViews[a.bufferView]!.byteStride ?? 6;
-    const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
-    const out = new Float32Array(a.count * 3);
-    for (let i = 0; i < a.count; i++) for (let k = 0; k < 3; k++) out[3 * i + k] = dv.getInt16((a.byteOffset ?? 0) + i * stride + 2 * k, true) * scale + (offset ? offset[k]! : 0);
-    return out;
-  };
-  const indexOf = (acc: number): Uint32Array => {
-    const a = json.accessors[acc]!;
-    const raw = viewBytes(a.bufferView);
-    if (a.componentType === 5123) return Uint32Array.from(new Uint16Array(raw.buffer, raw.byteOffset + (a.byteOffset ?? 0), a.count));
-    if (a.componentType === 5125) return new Uint32Array(raw.buffer.slice(raw.byteOffset + (a.byteOffset ?? 0), raw.byteOffset + (a.byteOffset ?? 0) + 4 * a.count));
-    throw new Error('drape bake: indices must be uint16 or uint32');
-  };
-  const sizes = new Map<string, BakedSize>();
-  let indices: Uint32Array | null = null;
-  let vertexCount = -1;
-  for (const node of json.nodes) {
-    if (node.mesh === undefined) continue;
-    const mesh = json.meshes[node.mesh]!;
-    const sm = meta.sizes.find((s) => s.size === mesh.extras?.size);
-    if (!sm) continue;
-    const prim = mesh.primitives[0]!;
-    const scale = node.scale?.[0] ?? 1;
-    if (node.scale && (node.scale[1] !== scale || node.scale[2] !== scale)) throw new Error('drape bake: the grid must be uniform');
-    const base = short3(prim.attributes.POSITION, scale, node.translation ?? [0, 0, 0]);
-    const targets = (prim.targets ?? []).map((t) => short3(t.POSITION, scale, null));
-    if (targets.length !== sm.targetT.length) throw new Error(`drape bake: size ${sm.size} has ${targets.length} targets for ${sm.targetT.length} bodies`);
-    if (vertexCount >= 0 && base.length / 3 !== vertexCount) throw new Error('drape bake: sizes differ in vertex count');
-    vertexCount = base.length / 3;
-    indices ??= indexOf(prim.indices);
-    sizes.set(sm.size, { ...sm, base, targets });
+  // A zero or non-finite axis would put every shopper at t = NaN: no weights, and the base drape shown as if it were theirs.
+  const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+  if (m.axis.measure !== 'hip' || !finite(m.axis.hipAtZero) || !finite(m.axis.hipPerUnit) || m.axis.hipPerUnit === 0) throw new Error('drape bake: the axis must be hip with a finite, non-zero step');
+  for (const s of m.sizes as unknown[]) {
+    const z = (s ?? {}) as Partial<DrapeBakeSizeMeta>;
+    if (typeof z.size !== 'string' || !finite(z.baseT) || !Array.isArray(z.targetT) || !z.targetT.every(finite)) throw new Error('drape bake: a size has no finite body axis values');
+    if (new Set([z.baseT, ...z.targetT]).size !== z.targetT.length + 1) throw new Error(`drape bake: size ${z.size} lists a body twice`);
+    if (z.provenance !== 'measured' && z.provenance !== 'interpolated' && z.provenance !== 'extrapolated') throw new Error(`drape bake: size ${z.size} has no provenance`);
+    if (z.notDraped !== undefined && (!Array.isArray(z.notDraped) || !z.notDraped.every((n) => !!n && finite(n.t) && typeof n.reason === 'string'))) throw new Error(`drape bake: size ${z.size} has a malformed notDraped`);
   }
-  if (!indices || sizes.size !== meta.sizes.length) throw new Error('drape bake: a size listed in the metadata has no mesh');
-  return { meta, indices, vertexCount, sizes };
+  return m as DrapeBakeMeta;
 }
 
 /** The shopper's axis value from the hip girth (cm), not clamped. */
@@ -153,6 +88,7 @@ export function bakeAxis(meta: Pick<DrapeBakeMeta, 'axis'>, hipCm: number): numb
  * gets 1 − Σ.
  */
 export function bakeWeights(size: Pick<DrapeBakeSizeMeta, 'baseT' | 'targetT'>, t: number): { weights: number[]; clamped: boolean } {
+  if (!Number.isFinite(t)) throw new RangeError('drape bake: the axis value is not a number');
   const nodes = [size.baseT, ...size.targetT];
   const order = nodes.map((v, i) => [v, i] as const).sort((a, b) => a[0] - b[0]);
   const lo = order[0]![0], hi = order[order.length - 1]![0];
@@ -172,9 +108,34 @@ export function bakeWeights(size: Pick<DrapeBakeSizeMeta, 'baseT' | 'targetT'>, 
   return { weights: w.slice(1), clamped: t < lo - 1e-9 || t > hi + 1e-9 };
 }
 
+/**
+ * Where the shopper lies for one size, against the bodies it was draped on and the ones it was not (`notDraped`):
+ * - `within`: between two draped bodies (blended);
+ * - `held`: beyond the outermost draped body, with no refused body further out (shown on the outermost one);
+ * - `between`: beyond the outermost draped body but short of a body the size could not be put on (shown on the
+ *   outermost one; the simulation could not dress the next body out);
+ * - `refused`: at or beyond a body the size could not be put on. The simulation's verdict is that it cannot be worn
+ *   there, so the device does not draw it on the shopper (`refusedT`: that body).
+ */
+export type BakePlace = 'within' | 'held' | 'between' | 'refused';
+
+export function bakePlace(size: Pick<DrapeBakeSizeMeta, 'baseT' | 'targetT' | 'notDraped'>, t: number): { weights: number[]; place: BakePlace; refusedT: number | null } {
+  const { weights, clamped } = bakeWeights(size, t);
+  if (!clamped) return { weights, place: 'within', refusedT: null };
+  const nodes = [size.baseT, ...size.targetT];
+  const above = t > Math.max(...nodes);
+  const edge = above ? Math.max(...nodes) : Math.min(...nodes);
+  const out = (size.notDraped ?? []).map((n) => n.t).filter((nt) => (above ? nt > edge : nt < edge));
+  if (out.length === 0) return { weights, place: 'held', refusedT: null };
+  const nearest = above ? Math.min(...out) : Math.max(...out);
+  const reached = above ? t >= nearest - 1e-9 : t <= nearest + 1e-9;
+  return { weights, place: reached ? 'refused' : 'between', refusedT: nearest };
+}
+
 /** base + Σ w_k · target_k: the blended drape, cm. */
 export function blendBakedSize(size: Pick<BakedSize, 'base' | 'targets'>, weights: readonly number[]): Float32Array {
   const out = Float32Array.from(size.base);
+  if (size.targets.some((tg) => tg.length !== out.length)) throw new Error('drape bake: a morph target differs in vertex count from its base');
   size.targets.forEach((tg, k) => {
     const w = weights[k] ?? 0;
     if (w === 0) return;

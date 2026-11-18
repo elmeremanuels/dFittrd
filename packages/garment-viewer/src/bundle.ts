@@ -9,7 +9,7 @@
 import { glbFloatAccessor, glbIndexAccessor, readGlb, type Mesh } from '@curtain/mannequin';
 import type { GarmentPayload } from '@curtain/schema';
 import { weldWithRemap } from './core/weld';
-import { readDrapeBake, type DrapeBake } from './drapeBake';
+import type { DrapeBake } from './drapeBake';
 import type { GradingJson } from './core/grading';
 import type { MaterialJson } from './core/types';
 
@@ -140,6 +140,8 @@ export async function loadBundleFrom(fetchFn: FetchLike, dir: string, productId:
   const payload = opts.withPayload !== false && a.payloadFile === 'payload.json' ? ((await (await get(fetchFn, `${dir}/payload.json`)).json()) as GarmentPayload) : undefined;
   if (a.drapeBake !== undefined) {
     if (a.drapeBake !== 'base.glb') throw new Error(`${productId}: anchors.json drapeBake ${String(a.drapeBake)}`);
+    // The reader and its meshopt decoder load only for a bake (a separate chunk), so other products do not pay for it.
+    const { readDrapeBake } = await import('./drapeBakeRead');
     const bake = await readDrapeBake(new Uint8Array(glb));
     const base = bake.sizes.get(g.baseSize);
     if (!base) throw new Error(`${productId}: the drape bake has no base size ${g.baseSize}`);

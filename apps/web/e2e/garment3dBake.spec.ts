@@ -8,7 +8,9 @@ import { expect, test, type Locator, type Page, type Request } from '@playwright
  * api and a bundle folder whose anchors.json names a `drapeBake` (the POM v2 skirt, git-ignored; the test is skipped
  * with a note when it is absent).
  *   - every size at phone size (360 x 740 at 2x), front and side, with the estimate label, the plain-colour note and
- *     the size's provenance (measured on the shop's tape / interpolated / extrapolated) on screen;
+ *     the size's provenance (on the shop's tape / interpolated / extrapolated) on screen;
+ *   - shoppers past the draped bodies (hip 112 and 118 on the chart line): the size held on its nearest body says so,
+ *     and AU 8, which the simulation could not put on the AU 16 body (hip 114), is not drawn at hip 118;
  *   - load-to-settled and size-switch times in the throttled phone page of the step-3 spike (412 x 915 at 2x, DevTools
  *     CPU throttle, default 4x), for this bundle and, with BAKE_COMPARE_BUNDLE, for another one (the photo bundle,
  *     draped on the device).
@@ -70,16 +72,16 @@ async function instrument(page: Page, origin: string, bundle: string): Promise<R
 }
 
 /** To the result screen with the typed girths. */
-async function toResult(page: Page, baseURL: string): Promise<void> {
+async function toResult(page: Page, baseURL: string, body: { bust: string; waist: string; hip: string } = { bust: BUST!, waist: WAIST!, hip: HIP! }): Promise<void> {
   await page.goto(`${baseURL}/embed/${TOKEN}`);
   await page.getByLabel(/^Height/).fill('168');
   await page.getByLabel(/^Weight/).fill('62');
   await page.getByText('I know my measurements').click();
   // A bottom asks no bust: the embed estimates it from height and weight.
   await expect(page.getByLabel(/^Hip/)).toBeVisible();
-  if (await page.getByLabel(/^Bust/).count()) await page.getByLabel(/^Bust/).fill(BUST!);
-  await page.getByLabel(/^Waist/).fill(WAIST!);
-  await page.getByLabel(/^Hip/).fill(HIP!);
+  if (await page.getByLabel(/^Bust/).count()) await page.getByLabel(/^Bust/).fill(body.bust);
+  await page.getByLabel(/^Waist/).fill(body.waist);
+  await page.getByLabel(/^Hip/).fill(body.hip);
   await page.getByTestId('see-my-size').click();
   await expect(page.getByTestId('embed-result')).toBeVisible();
 }
@@ -145,7 +147,9 @@ test('a drape bake in the embed: every size front and side, labelled an estimate
     await expect(page.getByTestId('garment3d-label')).toContainText('estimate');
     const note = page.getByTestId('garment3d-bake-note');
     await expect(note).toContainText('one plain colour');
-    await expect(note).toContainText(s.provenance === 'measured' ? `Size ${s.size} is built from the shop’s tape measurements.` : `it is ${String(s.provenance)} from the sizes that were`);
+    await expect(note).toContainText(s.provenance === 'measured' ? `Size ${s.size} is built from the shop’s tape.` : `it is ${String(s.provenance)} from the sizes that are`);
+    await expect(note).toHaveAttribute('data-place', 'within');
+    await expect(canvas).toHaveAttribute('data-garment', 'drawn');
     notes[s.size] = await note.innerText();
     await still(page, view, `size-${s.size}-front.png`);
     await turn(page, canvas, 90);
@@ -156,6 +160,47 @@ test('a drape bake in the embed: every size front and side, labelled an estimate
   if (SHOTS) writeFileSync(join(SHOTS, 'notes.json'), `${JSON.stringify({ body: { bust: BUST, waist: WAIST, hip: HIP }, notes }, null, 2)}\n`);
   expect(errors).toEqual([]);
   await context.close();
+});
+
+test('past the draped bodies: held on the nearest one, or not drawn where the simulation could not put the size on', async ({ browser, baseURL }) => {
+  test.skip(!existsSync(join(BUNDLE, 'base.glb')) || !isBake(BUNDLE), `no drape bake bundle at ${BUNDLE} (git-ignored; set E2E_SKIRT_BUNDLE)`);
+  test.setTimeout(1_800_000);
+  const origin = new URL(baseURL!).origin;
+  const sizes = (JSON.parse(readFileSync(join(BUNDLE, 'qa.json'), 'utf8')) as { sizes: { size: string; baseT: number; targetT: number[]; notDraped?: { t: number }[] }[] }).sizes;
+  const s8 = sizes.find((s) => s.size === '8');
+  test.skip(!s8?.notDraped?.some((n) => n.t === 1), 'this bake has no refused AU 8 on the AU 16 body');
+  // The chart line of the bake's axis (bust 95 + 10 t, waist 77.5 + 10 t, hip 104 + 10 t): t = 0.8 and t = 1.4.
+  const cases = [
+    { hip: '112', bust: '103', waist: '85.5', checks: [{ size: '8', place: 'between', text: 'could not put size 8 on a body with 114.0 cm hips', garment: 'drawn' }, { size: '16', place: 'within', text: '', garment: 'drawn' }] },
+    { hip: '118', bust: '109', waist: '91.5', checks: [{ size: '8', place: 'refused', text: 'Size 8 is not drawn: the simulation could not put it on a body with 114.0 cm hips', garment: 'not-drawn' }, { size: '12', place: 'held', text: 'Your hips are outside the bodies size 12 was draped on, so it is shown on the nearest one.', garment: 'drawn' }] },
+  ];
+  for (const c of cases) {
+    const context = await browser.newContext({ viewport: { width: 360, height: 740 }, locale: 'en-AU', deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(`uncaught: ${String(e)}`));
+    page.on('console', (m) => {
+      if (m.type() === 'error') errors.push(`console: ${m.text()}`);
+    });
+    await instrument(page, origin, BUNDLE);
+    await toResult(page, baseURL!, c);
+    await page.getByTestId('garment3d-open').click();
+    const canvas = page.getByTestId('garment3d-canvas');
+    await expect(canvas).toHaveAttribute('data-state', 'settled', { timeout: 150_000 });
+    const view = page.getByTestId('garment3d');
+    for (const k of c.checks) {
+      await view.getByRole('radio', { name: k.size, exact: true }).click();
+      await expect(canvas).toHaveAttribute('data-size', k.size);
+      await expect(canvas).toHaveAttribute('data-garment', k.garment);
+      const note = page.getByTestId('garment3d-bake-note');
+      await expect(note).toHaveAttribute('data-place', k.place);
+      if (k.text) await expect(note).toContainText(k.text);
+      await expect(view.getByText('Estimate · not measured')).toBeVisible();
+      await still(page, view, `hip-${c.hip}-size-${k.size}-front.png`);
+    }
+    expect(errors).toEqual([]);
+    await context.close();
+  }
 });
 
 test('load and settle time in the throttled phone page', async ({ browser, baseURL }) => {

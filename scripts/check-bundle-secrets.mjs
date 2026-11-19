@@ -3,7 +3,11 @@
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-const roots = ['apps/web/dist', 'apps/site/dist', 'packages/sdk/dist', 'packages/shopify-app/extensions', 'packages/woocommerce-plugin/assets'];
+// AGENTS.md rule 2 names the whole of packages/woocommerce-plugin: its PHP ships to the merchant's
+// server, so the plugin's own source (curtain.php, includes/, uninstall.php, …) is scanned too, not
+// only assets/. Its dev-only folders (tests, the WordPress e2e, the build output) are skipped.
+const roots = ['apps/web/dist', 'apps/site/dist', 'packages/sdk/dist', 'packages/shopify-app/extensions', 'packages/woocommerce-plugin'];
+const SKIP_DIRS = new Set(['node_modules', 'tests', 'e2e', 'dist', 'test-results', 'vendor']);
 const patterns = [
   /sk_(live|test)_[A-Za-z0-9]{8,}/, // Stripe secret keys
   /whsec_[A-Za-z0-9]{8,}/, // Stripe webhook secrets
@@ -17,8 +21,9 @@ function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
     const s = statSync(p);
-    if (s.isDirectory()) walk(p, out);
-    else if (/\.(js|mjs|cjs|html|css|json|liquid)$/.test(name)) out.push(p);
+    if (s.isDirectory()) {
+      if (!SKIP_DIRS.has(name)) walk(p, out);
+    } else if (/\.(js|mjs|cjs|html|css|json|liquid|php|txt)$/.test(name)) out.push(p);
   }
   return out;
 }

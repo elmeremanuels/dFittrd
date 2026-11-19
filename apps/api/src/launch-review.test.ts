@@ -3,10 +3,11 @@
  * Each block pins a finding of docs/reports/claude/launch-readiness.md:
  *  - L1: the request log held capability tokens (try tokens, signed render URLs, Shopify id_tokens).
  *  - L2: production accepted a k-anonymity floor below the documented 5 (the api and the deploy now refuse it).
+ *  - L3: the bundle secret scan skipped the WooCommerce plugin's PHP source.
  */
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -134,5 +135,36 @@ describe('L2: the deploy stops before the swap when K_ANON is below 5 (infra/scr
       expect(r.status).toBe(1);
       expect(r.stderr).toMatch(/K_ANON must be a whole number of at least 5/);
     }
+  });
+});
+
+describe('L3: the bundle secret scan reads the WooCommerce plugin PHP (AGENTS.md rule 2)', () => {
+  const SCAN = resolve(dirname(fileURLToPath(import.meta.url)), '../../../scripts/check-bundle-secrets.mjs');
+  const scanTree = (files: Record<string, string>) => {
+    const dir = mkdtempSync(join(tmpdir(), 'curtain-scan-'));
+    for (const [rel, text] of Object.entries(files)) {
+      mkdirSync(dirname(join(dir, rel)), { recursive: true });
+      writeFileSync(join(dir, rel), text);
+    }
+    const r = spawnSync(process.execPath, [SCAN], { cwd: dir, encoding: 'utf8' });
+    rmSync(dir, { recursive: true, force: true });
+    return r;
+  };
+  // Built by concatenation: a literal in real token format would be refused by push protection.
+  const fakeStripe = 'sk_' + 'live_' + 'abcdefgh12345678';
+
+  it('a key in includes/*.php fails the scan', () => {
+    const r = scanTree({ 'packages/woocommerce-plugin/includes/class-x.php': `<?php $k = '${fakeStripe}';` });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('includes/class-x.php');
+  });
+
+  it('the plugin tests and e2e folders are not part of what ships, so they are skipped', () => {
+    const r = scanTree({
+      'packages/woocommerce-plugin/tests/fixture.php': `<?php $k = '${fakeStripe}';`,
+      'packages/woocommerce-plugin/e2e/run.mjs': `const k = '${fakeStripe}';`,
+      'packages/woocommerce-plugin/curtain.php': '<?php // clean',
+    });
+    expect(r.status).toBe(0);
   });
 });

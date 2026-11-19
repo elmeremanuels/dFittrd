@@ -13,6 +13,10 @@
  *      must settle on the male body, and the result is shown only then; for the male table's five
  *      bodies S to XXL; then the tee in each body's own size (the compare buttons) is turned front,
  *      side and back (`--5-3d-size-<size>--{front,side,back}`);
+ *      With --close, the front view is also taken zoomed in on the shoulders and chest (`--close-front`, and turned
+ *      a quarter, `--close-side`). With --off-size, the XXL body then picks S and XL: the tee is too small for it
+ *      (the fit engine says it does not close at the chest), so the 3D view draws the body alone and says why
+ *      (`--6-size-<size>-not-drawn`, canvas `data-garment="not-drawn"`);
  *   2. the men's Oxford shirt with no bundle: "Men's clothing: coming soon", no figure, no size.
  * Screenshots of every step go to the shots dir (default test-results/demo-men). Exits non-zero on
  * the first failure. Needs `out/synthetic-men-tee/` (`pnpm --filter @curtain/garment-spike
@@ -41,6 +45,8 @@ const args = process.argv.slice(2);
 const gateOff = args.includes('--gate-off');
 const allSizes = args.includes('--all-sizes');
 const withSkins = args.includes('--skins');
+const withClose = args.includes('--close');
+const offSize = args.includes('--off-size');
 const width = Number((args.find((a) => a.startsWith('--width=')) ?? '--width=390').slice('--width='.length));
 const shots = resolve(args.find((a) => !a.startsWith('--')) ?? join(root, 'test-results', 'demo-men'));
 mkdirSync(shots, { recursive: true });
@@ -183,7 +189,7 @@ try {
     await canvas.scrollIntoViewIfNeeded();
     await page.waitForTimeout(800);
     await shot(page, `${label}--front`, panel);
-    for (const view of ['side', 'back']) {
+    const quarter = async () => {
       const box = await canvas.boundingBox();
       const dx = box.height / 4;
       const y = box.y + box.height * 0.55;
@@ -193,8 +199,30 @@ try {
       for (let i = 1; i <= 20; i++) await page.mouse.move(x0 + (dx * i) / 20, y);
       await page.mouse.up();
       await page.waitForTimeout(2500);
-      await shot(page, `${label}--${view}`, panel);
+    };
+    const zoom = async (deltaY) => {
+      const box = await canvas.boundingBox();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      for (let i = 0; i < 6; i++) {
+        await page.mouse.wheel(0, deltaY / 6);
+        await page.waitForTimeout(120);
+      }
+      await page.waitForTimeout(2000);
+    };
+    if (withClose) {
+      // Zoomed in on the shoulders and chest (OrbitControls dolly towards the target, mid torso), front and a quarter turn.
+      await zoom(-900);
+      await shot(page, `${label}--close-front`, canvas);
+      await quarter();
+      await shot(page, `${label}--close-side`, canvas);
+      await zoom(900);
+      await shot(page, `${label}--side`, panel);
+    } else {
+      await quarter();
+      await shot(page, `${label}--side`, panel);
     }
+    await quarter();
+    await shot(page, `${label}--back`, panel);
   };
   for (const body of BODIES) {
     const page = await newPage();
@@ -273,6 +301,18 @@ try {
     const shown = await canvas.getAttribute('data-size');
     await turnShots(page, frame, `tee-body-${body.name}--5-3d-size-${shown}`);
     if (await frame.getByText(/coming soon/i).count()) throw new Error(`tee, body ${body.name}: coming soon after the view settled`);
+    if (offSize && body.name === 'XXL') {
+      for (const small of ['S', 'XL']) {
+        const btn = frame.getByRole('radio', { name: new RegExp(`^${small}\\b`) }).first();
+        if (!(await btn.count())) throw new Error(`tee, body XXL: no size button ${small}`);
+        await btn.click();
+        await frame.locator(`canvas[data-testid="garment3d-canvas"][data-size="${small}"][data-garment="not-drawn"]`).waitFor({ timeout: 60_000 });
+        const note = frame.getByTestId('garment3d-not-drawn');
+        await note.waitFor({ timeout: 10_000 });
+        log(`tee, body XXL in ${small}: not drawn — ${await note.textContent()}`);
+        await shot(page, `tee-body-XXL--6-size-${small}-not-drawn`, frame.getByTestId('garment3d'));
+      }
+    }
     await page.context().close();
   }
 

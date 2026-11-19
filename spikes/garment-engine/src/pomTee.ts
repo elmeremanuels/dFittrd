@@ -41,6 +41,9 @@
 import { dot, polygonCompensation, sub, topology, type Mannequin, type Mesh, type Vec3 } from '@curtain/mannequin';
 import { armpitDistance, ellipseRadius } from './garment';
 
+/** The pattern pieces of the tee, the panels its UV layout keeps apart. */
+export const POM_PANELS = ['front', 'back', 'sleeve_l', 'sleeve_r'] as const;
+
 /** A tee's flat measurements of one size, cm (widths are half girths, the garment laid flat). */
 export interface PomTeeRow {
   size: string;
@@ -80,6 +83,13 @@ export const POM_TEE_ASSUMPTIONS = {
   sleeveHemEaseCm: 0.35,
   /** Least distance of the torso off the body anywhere (a tighter chart value is flagged). */
   minEaseCm: 0.5,
+  /**
+   * The yoke (from this far above the armhole up, blended in over 4 cm) is smoothed and held off the body by at least its
+   * own distance (at most `capEaseCm`): cloth bridges the bumps of the body under it (the arm's closing cone stands about
+   * 1 cm above the shoulder line) instead of following them with 0.9 cm of ease.
+   */
+  yokeSmoothFromCm: 3,
+  yokeSmoothIterations: 40,
 } as const;
 
 export interface PomTeeOptions {
@@ -100,6 +110,12 @@ export interface PomTeeBuild {
   sleeveTop: [number[], number[]];
   shoulderPoint: [number, number];
   hps: [number, number];
+  /** The shoulder seams, shoulder point to HPS (left, right). */
+  shoulderSeam: [number[], number[]];
+  /** Panel of every triangle (`POM_PANELS` index), in the order of `mesh.indices`. */
+  triPanel: Uint8Array;
+  /** Each sleeve's rings, armhole (ring 0, the body's vertices) to hem; column 0 is the underarm, where the sleeve's UV is cut. */
+  sleeveRings: [number[][], number[][]];
   /** Heights used: armhole, chest line, hem; and the sleeve's end along each arm axis. */
   levels: { armholeY: number; chestLineY: number; hemY: number; shoulderPointY: number; hpsY: number; sleeveEndS: number };
   /** Places where the chart is tighter than `minEaseCm` off the base body (height, girth asked, girth built). */
@@ -518,10 +534,17 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
     // side over the armhole and the shoulder seam 40), sewn to its neighbour by a zipper of triangles.
     const mirror = (p: Vec3): Vec3 => [-p[0], p[1], p[2]];
     const tris: number[] = [];
+    // Panel of every triangle (`POM_PANELS`): front, back, left sleeve, right sleeve; the UV layout cuts the seams between them.
+    const triPanel: number[] = [];
+    let panel = 0;
     const quad = (a: number, b: number, c: number, d: number): void => {
       tris.push(a, b, c, a, c, d);
+      triPanel.push(panel, panel);
     };
-    for (const grid of [front, back]) for (let r = 0; r + 1 < nTube; r++) for (let c = 0; c < N; c++) quad(grid[r]![c]!, grid[r]![c + 1]!, grid[r + 1]![c + 1]!, grid[r + 1]![c]!);
+    for (const [g, grid] of [front, back].entries()) {
+      panel = g;
+      for (let r = 0; r + 1 < nTube; r++) for (let c = 0; c < N; c++) quad(grid[r]![c]!, grid[r]![c + 1]!, grid[r + 1]![c + 1]!, grid[r + 1]![c]!);
+    }
     const lenFrac = (pts: Vec3[]): number[] => {
       const out = [0];
       for (let k = 1; k < pts.length; k++) out.push(out[k - 1]! + Math.hypot(pts[k]![0] - pts[k - 1]![0], pts[k]![1] - pts[k - 1]![1], pts[k]![2] - pts[k - 1]![2]));
@@ -595,13 +618,18 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
         const advanceA = j === B.ids.length - 1 || (i < A.ids.length - 1 && A.f[i + 1]! <= B.f[j + 1]!);
         if (advanceA) { tris.push(A.ids[i]!, B.ids[j]!, A.ids[i + 1]!); i++; }
         else { tris.push(A.ids[i]!, B.ids[j]!, B.ids[j + 1]!); j++; }
+        triPanel.push(panel);
       }
     };
-    for (const cols of [colsF, colsB]) for (let c = 0; c < N; c++) zipper(cols[c]!, cols[c + 1]!);
+    for (const [g, cols] of [colsF, colsB].entries()) {
+      panel = g;
+      for (let c = 0; c < N; c++) zipper(cols[c]!, cols[c + 1]!);
+    }
 
     // Sleeves: ring 0 is the armhole (front edge up, back edge down).
     const sleeveHem: [number[], number[]] = [[], []];
     const sleeveTop: [number[], number[]] = [[], []];
+    const sleeveRings: [number[][], number[][]] = [[], []];
     let sleeveEndS = 0;
     for (const [k, f] of [[0, L], [1, R]] as const) {
       const col = k === 0 ? 0 : N;
@@ -683,13 +711,38 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
       const { pts } = ringAt(sEnd);
       let prevRing = loop;
       sleeveTop[k] = [loop[topK]!];
+      sleeveRings[k].push(loop);
+      panel = 2 + k;
       for (const ring of pts) {
         const ids = ring.map((p) => add(p, k + 1));
         sleeveTop[k].push(ids[topK]!);
         for (let j = 0; j < K; j++) quad(prevRing[j]!, prevRing[(j + 1) % K]!, ids[(j + 1) % K]!, ids[j]!);
+        sleeveRings[k].push(ids);
         prevRing = ids;
       }
       sleeveHem[k] = prevRing;
+    }
+    const fixedIds = [colsF[0]!.ids[iSp]!, colsF[N]!.ids[iSp]!, colsF[0]!.ids[fanRows.length - 1]!, colsF[N]!.ids[fanRows.length - 1]!];
+    if (A.yokeSmoothIterations > 0) {
+      smoothYoke(pos, tris, fixedIds, fullDistance, (y) => smooth((y - yAh - A.yokeSmoothFromCm) / 4), A.capEaseCm, A.yokeSmoothIterations);
+      // The smoothing shortens the sleeve's top line over the cap: stretch each sleeve along its arm (nothing at the joint,
+      // all of it at the hem) until the top line is the tape's sleeve length again.
+      for (const [k, f] of [[0, L], [1, R]] as const) {
+        const top = sleeveTop[k];
+        const along = (i: number): number => (pos[3 * i]! - f.joint[0]) * f.axis[0] + (pos[3 * i + 1]! - f.joint[1]) * f.axis[1] + (pos[3 * i + 2]! - f.joint[2]) * f.axis[2];
+        for (let it = 0; it < 3; it++) {
+          let len = 0;
+          for (let j = 1; j < top.length; j++) len += Math.hypot(pos[3 * top[j]!]! - pos[3 * top[j - 1]!]!, pos[3 * top[j]! + 1]! - pos[3 * top[j - 1]! + 1]!, pos[3 * top[j]! + 2]! - pos[3 * top[j - 1]! + 2]!);
+          const d = row.sleeveLengthCm - len;
+          if (Math.abs(d) < 0.01) break;
+          const sEnd = along(top[top.length - 1]!);
+          for (let i = 0; i < part.length; i++) {
+            if (part[i] !== k + 1) continue;
+            const w = clamp01(along(i) / sEnd);
+            for (let c = 0; c < 3; c++) pos[3 * i + c] = pos[3 * i + c]! + f.axis[c]! * d * w;
+          }
+        }
+      }
     }
     const mesh: Mesh = { positions: Float64Array.from(pos), indices: Uint32Array.from(orientOutward(Float64Array.from(pos), tris, m)), vertexPart: Uint8Array.from(part), partNames: ['body', 'sleeve_l', 'sleeve_r'] };
     return {
@@ -697,6 +750,9 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
       sleeveEndS,
       meta: {
         hem: [...front[0]!, ...back[0]!.slice(1, N)],
+        triPanel: Uint8Array.from(triPanel),
+        shoulderSeam: [colsF[0]!.ids.slice(iSp), colsF[N]!.ids.slice(iSp)],
+        sleeveRings,
         sleeveHem,
         sleeveTop,
         shoulderPoint: [colsF[0]!.ids[iSp]!, colsF[N]!.ids[iSp]!],
@@ -713,6 +769,65 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
     levels: { armholeY: yAh, chestLineY: yChest, hemY: yHem, shoulderPointY: sp[1], hpsY: yHps, sleeveEndS: b.sleeveEndS },
     tight: dedupeTight(tight),
   };
+}
+
+/**
+ * Shrink-wrap smoothing round the shoulder points (`shoulderRoundCm`): every vertex within `radius` of a shoulder point
+ * (the shoulder points themselves kept, so the shoulder measurement holds) moves towards the mean of its neighbours,
+ * weighted down to 0 at the radius, then out along the body's distance gradient until it is at least as far off the body
+ * as it was (at most `easeCap`). A crease moves out, a ridge moves in until the body stops it: the cloth bridges the
+ * pinch where the armhole seam meets the sleeve cap. Mutates `pos`.
+ */
+function smoothYoke(pos: number[], tris: readonly number[], fixed: readonly number[], dist: (p: Vec3) => number, weight: (y: number) => number, easeCap: number, iterations: number): void {
+  const n = pos.length / 3;
+  const P = (i: number): Vec3 => [pos[3 * i]!, pos[3 * i + 1]!, pos[3 * i + 2]!];
+  const w = new Float64Array(n);
+  for (let i = 0; i < n; i++) w[i] = weight(pos[3 * i + 1]!);
+  for (const f of fixed) w[f] = 0;
+  const adj: Set<number>[] = Array.from({ length: n }, () => new Set<number>());
+  for (let t = 0; t < tris.length; t += 3) for (let e = 0; e < 3; e++) {
+    const a = tris[t + e]!, b = tris[t + ((e + 1) % 3)]!;
+    adj[a]!.add(b);
+    adj[b]!.add(a);
+  }
+  // Rim vertices (hem, neckline, sleeve hems) stay where the lengths were solved.
+  const uses = new Map<string, number>();
+  for (let t = 0; t < tris.length; t += 3) for (let e = 0; e < 3; e++) {
+    const a = tris[t + e]!, b = tris[t + ((e + 1) % 3)]!;
+    const k = a < b ? `${a},${b}` : `${b},${a}`;
+    uses.set(k, (uses.get(k) ?? 0) + 1);
+  }
+  for (const [k, c] of uses) if (c === 1) for (const v of k.split(',')) w[Number(v)] = 0;
+  const ids = [...w.keys()].filter((i) => w[i]! > 0);
+  const want = new Float64Array(n);
+  for (const i of ids) want[i] = Math.min(easeCap, dist(P(i)));
+  const next = new Float64Array(3 * n);
+  for (let it = 0; it < iterations; it++) {
+    for (const i of ids) {
+      let sx = 0, sy = 0, sz = 0;
+      for (const j of adj[i]!) { sx += pos[3 * j]!; sy += pos[3 * j + 1]!; sz += pos[3 * j + 2]!; }
+      const k = adj[i]!.size;
+      const l = 0.5 * w[i]!;
+      next[3 * i] = pos[3 * i]! + l * (sx / k - pos[3 * i]!);
+      next[3 * i + 1] = pos[3 * i + 1]! + l * (sy / k - pos[3 * i + 1]!);
+      next[3 * i + 2] = pos[3 * i + 2]! + l * (sz / k - pos[3 * i + 2]!);
+    }
+    for (const i of ids) {
+      let p: Vec3 = [next[3 * i]!, next[3 * i + 1]!, next[3 * i + 2]!];
+      for (let k = 0; k < 6; k++) {
+        const d = dist(p);
+        if (d >= want[i]! - 1e-3) break;
+        const h = 0.05;
+        const g: Vec3 = [dist([p[0] + h, p[1], p[2]]) - dist([p[0] - h, p[1], p[2]]), dist([p[0], p[1] + h, p[2]]) - dist([p[0], p[1] - h, p[2]]), dist([p[0], p[1], p[2] + h]) - dist([p[0], p[1], p[2] - h])];
+        const gl = Math.hypot(g[0], g[1], g[2]) || 1;
+        const step = want[i]! - d;
+        p = [p[0] + (g[0] / gl) * step, p[1] + (g[1] / gl) * step, p[2] + (g[2] / gl) * step];
+      }
+      pos[3 * i] = p[0];
+      pos[3 * i + 1] = p[1];
+      pos[3 * i + 2] = p[2];
+    }
+  }
 }
 
 function dedupeTight(t: PomTeeBuild['tight']): PomTeeBuild['tight'] {
@@ -885,6 +1000,24 @@ export function measurePomTee(m: Mannequin, b: Omit<PomTeeBuild, 'row'>, tapeGir
     sleeveLengthCm: sleeveLength,
     sleeveOpeningCm: opening,
   };
+}
+
+/**
+ * The largest bump on a shoulder seam, cm: walking from the HPS out to the shoulder point, how far the seam rises above
+ * the lowest point it already passed. A seam that only falls gives 0. Defect 4 of the M3 report (the peaks at the shoulder
+ * points): the M3 seam rose 1.1 cm over the arm's closing cone, 2 to 3 cm inside the shoulder point.
+ */
+export function shoulderSeamBumpCm(b: Pick<PomTeeBuild, 'mesh' | 'shoulderSeam'>): number {
+  let worst = 0;
+  for (const seam of b.shoulderSeam) {
+    let low = Infinity;
+    for (const i of [...seam].reverse()) {
+      const y = b.mesh.positions[3 * i + 1]!;
+      worst = Math.max(worst, y - low);
+      low = Math.min(low, y);
+    }
+  }
+  return worst;
 }
 
 export { polygonCompensation, topology };

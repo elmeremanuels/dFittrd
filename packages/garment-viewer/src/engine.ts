@@ -137,6 +137,8 @@ export interface FitInstance {
   loops: { ring: string; minGirthCm: number; particles: number }[];
   /** The session's `sewn`: the collider lets torso and sleeve cloth meet both body parts. */
   sewn: boolean;
+  /** A sewn top: how far it was lifted to rest on this body (`seatSewnTop`); null for every other garment. */
+  seat: SewnSeat | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -280,6 +282,12 @@ export function anchorLoops(m: Mannequin, rest: ArrayLike<number>, indices: Arra
   let hemY = Infinity;
   for (let i = 0; i < n; i++) if (chains[i] === 0) hemY = Math.min(hemY, rest[3 * i + 1]!);
   const rings = ([['waist', m.morphHeights.waist], ['hip', m.morphHeights.hip], ['hem', hemY + 2]] as [LoopRing, number][]).filter(([r]) => only.includes(r));
+  return girthLoopsAt(rest, indices, chains, pinned, retain, rings);
+}
+
+/** `anchorLoops` at the given (ring name, height) pairs. */
+export function girthLoopsAt(rest: ArrayLike<number>, indices: ArrayLike<number>, chains: ChainAssignment, pinned: Uint8Array, retain: number, rings: readonly (readonly [string, number])[], sliceCm = LOOP_SLICE_CM): (GirthLoop & { ring: string })[] {
+  const n = chains.length;
   const out: (GirthLoop & { ring: string })[] = [];
   const adj = new Map<number, number[]>();
   for (let t = 0; t < indices.length; t += 3) for (let k = 0; k < 3; k++) {
@@ -292,7 +300,7 @@ export function anchorLoops(m: Mannequin, rest: ArrayLike<number>, indices: Arra
     const sel = new Uint8Array(n);
     let pinnedHere = false;
     for (let i = 0; i < n; i++) {
-      if (chains[i] !== 0 || Math.abs(rest[3 * i + 1]! - y) > LOOP_SLICE_CM) continue;
+      if (chains[i] !== 0 || Math.abs(rest[3 * i + 1]! - y) > sliceCm) continue;
       if (pinned[i]) pinnedHere = true;
       else sel[i] = 1;
     }
@@ -346,6 +354,32 @@ export function bandFor(spec: WaistbandSpec, grading: SpikeBundle['grading'], si
   }
   const relaxedCm = spec.relaxedCm + (step - step0) * grade;
   return { relaxedCm, stretchedCm: relaxedCm * (spec.stretchedCm / spec.relaxedCm), source: spec.assumed ? 'assumed' : step === step0 ? 'measured' : 'graded' };
+}
+
+/** A sewn top's chest loops (`sewnTorsoLoops`): one per row of the torso, this half-height, cm. */
+export const SEWN_LOOP_SLICE_CM = 0.5;
+/** … from the body's armpit down this far, cm (the POM chest line is 4.5 cm under the armpit, the underbust about 10). */
+export const SEWN_LOOP_DEPTH_CM = 14;
+
+/**
+ * Chest ease kept through the drape of a sewn top (the POM tee of slice M3): a girth loop (`setLoops`) per row of the torso
+ * from the body's armpit down `SEWN_LOOP_DEPTH_CM`, each held at no less than its graded girth (retain 1). Without them the
+ * cloth keeps its own length round the chest (106.0 cm before and after the drape on the M body in M) but folds in under
+ * the arms, and a tape round it read 1.4 to 4.5 cm under the chart (M3 report, defect 2). Loops `±SEWN_LOOP_SLICE_CM` thick
+ * (one row each): the 3 cm bands of the step-3 control held only their widest row, and 1.6 cm bands burst at XXL (a loop
+ * spanning two rows of a size built on the M body). Rows with pinned particles are skipped, as for `anchorLoops`.
+ */
+export function sewnTorsoLoops(m: Mannequin, rest: ArrayLike<number>, indices: ArrayLike<number>, chains: ChainAssignment, pinned: Uint8Array): (GirthLoop & { ring: string })[] {
+  const arm = m.arms.left;
+  const s0 = armpitDistance(m);
+  const e0 = m.armAt(s0, 1)!;
+  const armpitY = arm.joint[1] + arm.axis[1] * s0 - e0.a * arm.u[1];
+  let hemY = Infinity;
+  for (let i = 0; i < chains.length; i++) if (chains[i] === 0) hemY = Math.min(hemY, rest[3 * i + 1]!);
+  const rings: [string, number][] = [];
+  const sl = SEWN_LOOP_SLICE_CM;
+  for (let y = armpitY - sl; y > Math.max(hemY + sl, armpitY - SEWN_LOOP_DEPTH_CM); y -= 2 * sl) rings.push([`torso@${Math.round(y * 10) / 10}`, y]);
+  return girthLoopsAt(rest, indices, chains, pinned, 1, rings, sl);
 }
 
 /** Extra particles under the band whose girth is blended from the band's to their own, cm. */
@@ -593,13 +627,16 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   // points was measured and rejected: on the v0 mannequin the freed cloth lands in the arm junction
   // and sags (p99 strain 26–35 % instead of 11–24 % on the tee).
   const pinned = session.bundle.anchors.category === 'bottom' ? waistbandPins(start, graded.indices, chains) : new Uint8Array(chains.length);
+  // A sewn top sits where its yoke fits the body (`seatSewnTop`), not where grading put it: lifted before the pins are chosen.
+  const seat = session.sewn ? seatSewnTop(start, chains, noCollide, makeCollider(field, CLEARANCE_CM, chains, noCollide, true), yoke) : null;
   if (session.bundle.anchors.category !== 'bottom') for (let i = 0; i < chains.length; i++) if (chains[i] === 0 && start[3 * i + 1]! >= yoke) pinned[i] = 1;
   const cuff = new Uint8Array(chains.length);
   pinLoosePieces(m, start, graded.indices, pinned, session.bundle.baseMesh.positions, cuff, session.bundle.anchors.category === 'bottom');
   const lift = armCapLifter(m, CLEARANCE_CM, session.noLift);
   for (let i = 0; i < chains.length; i++) lift(start, i);
   const cloth = createCloth(start, graded.positions, graded.indices, (i) => pinned[i] === 1, (i) => chains[i] === 0);
-  const loops = options.loopRetain > 0 ? anchorLoops(m, graded.positions, graded.indices, chains, pinned, options.loopRetain, options.loopRings) : [];
+  // A sewn top keeps its chest ease (`sewnTorsoLoops`); the step-3 loop option still replaces them when set.
+  const loops = options.loopRetain > 0 ? anchorLoops(m, graded.positions, graded.indices, chains, pinned, options.loopRetain, options.loopRings) : session.sewn ? sewnTorsoLoops(m, graded.positions, graded.indices, chains, pinned) : [];
   setLoops(cloth, loops);
   for (let i = 0; i < chains.length; i++) if (cuff[i] && !pinned[i]) cloth.leash[i] = CUFF_LEASH_CM;
   const collide = makeCollider(field, CLEARANCE_CM, chains, noCollide, session.sewn);
@@ -632,7 +669,80 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
     field,
     shoulderWidthCm: sizeEntry(session.bundle.grading, size).targets.shoulder_width,
     sewn: session.sewn,
+    seat,
   };
+}
+
+/** How far a sewn top may ride up on a body whose neck and shoulders are fuller than the graded yoke, cm. */
+export const SEAT_MAX_LIFT_CM = 3;
+/** Search step of the seat lift, cm. */
+export const SEAT_STEP_CM = 0.25;
+/** The yoke counts as seated when no particle of it lies more than this inside the body (plus the clearance), cm. */
+export const SEAT_TOLERANCE_CM = 0.3;
+
+export interface SewnSeat {
+  /** How far the garment was lifted, cm (0: it fits where grading put it). */
+  liftCm: number;
+  /** Deepest yoke particle inside the drawn body before and after the lift, cm. */
+  depthBeforeCm: number;
+  depthAfterCm: number;
+}
+
+/**
+ * Where a sewn top's yoke rests (slice M3, defect 3). Grading scales the shoulders by the shoulder width ratio (XXL +6.8 %
+ * on the M base), but the male table's XXL neck is 16 % fuller than M's: the graded yoke lay inside the body round the
+ * neck and over the arm's cap, the pin settle pushed it out and the pinned cloth stretched up to 37 % in its own size
+ * (122 % once the yoke was smoothed). A tee does not stretch round a fuller neck, it rides up on it until it rests: the
+ * whole garment is lifted by the least multiple of `SEAT_STEP_CM` up to `SEAT_MAX_LIFT_CM` at which no particle of the
+ * yoke (body chain above `yoke`, not exempt from collision) is more than `SEAT_TOLERANCE_CM` inside the body; when none
+ * is, by the one with the shallowest. Mutates `start`.
+ */
+export function seatSewnTop(start: Float32Array, chains: ChainAssignment, noCollide: Uint8Array, collide: (pos: Float32Array, i: number) => boolean, yoke: number): SewnSeat {
+  const n = chains.length;
+  const probe = new Float32Array(start.length);
+  const depth = (dy: number): number => {
+    let worst = 0;
+    for (let i = 0; i < n; i++) {
+      if (chains[i] !== 0 || noCollide[i] || start[3 * i + 1]! + dy < yoke) continue;
+      probe[3 * i] = start[3 * i]!;
+      probe[3 * i + 1] = start[3 * i + 1]! + dy;
+      probe[3 * i + 2] = start[3 * i + 2]!;
+      if (!collide(probe, i)) continue;
+      worst = Math.max(worst, Math.hypot(probe[3 * i]! - start[3 * i]!, probe[3 * i + 1]! - start[3 * i + 1]! - dy, probe[3 * i + 2]! - start[3 * i + 2]!));
+    }
+    return worst;
+  };
+  const before = depth(0);
+  let best = 0, bestDepth = before;
+  for (let dy = 0; dy <= SEAT_MAX_LIFT_CM + 1e-9 && bestDepth > SEAT_TOLERANCE_CM; dy += SEAT_STEP_CM) {
+    const d = dy === 0 ? before : depth(dy);
+    if (d < bestDepth - 1e-6 || d <= SEAT_TOLERANCE_CM) { best = dy; bestDepth = d; }
+  }
+  if (best > 0) for (let i = 1; i < start.length; i += 3) start[i] = start[i]! + best;
+  const r2 = (x: number): number => Math.round(x * 100) / 100;
+  return { liftCm: r2(best), depthBeforeCm: r2(before), depthAfterCm: r2(bestDepth) };
+}
+
+/** Why a size is not draped on this body (`sewnNotDrawn`): the anchor where it does not close and by how much the body is larger, cm. */
+export interface NotDrawn {
+  anchor: string;
+  bodyLargerCm: number;
+}
+
+/**
+ * A sewn top (the POM tee of slice M3) in a size too small for the body is not draped and not drawn (the skirt's pattern of
+ * the server drape bake: a body a size was not draped on is declared, with a reason, instead of a stretched garment). The
+ * rule is the fit engine's (rule 4): an anchor whose placed loop is `open` (`placeGarment`: the body is larger than the
+ * garment by more than its fabric gives, band `tight`). Before this the drape stretched the tee to the body: the XXL body in
+ * S showed the cloth over the shoulders stretched 115 % and the chest placed 22 cm wider than the tee. Returns the anchor
+ * with the largest shortfall, or null when the size closes (and for every garment that is not sewn: drawn as before).
+ */
+export function sewnNotDrawn(session: GarmentSession, avatar: Pick<Avatar, 'rings'>, fit: FitResult, size: string): NotDrawn | null {
+  if (!session.sewn) return null;
+  const placement = placeGarment(session.bundle.grading, size, gapsForSize(fit, size), avatar.rings);
+  let worst: (typeof placement.anchors)[number] | null = null;
+  for (const a of placement.anchors) if (a.state === 'open' && (!worst || a.slackCm < worst.slackCm)) worst = a;
+  return worst ? { anchor: worst.anchor, bodyLargerCm: Math.round(-worst.slackCm * 10) / 10 } : null;
 }
 
 /** A sleeve piece's head: at least this many cm along the arm from its point nearest the shoulder joint is pinned. */

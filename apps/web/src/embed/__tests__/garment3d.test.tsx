@@ -72,6 +72,22 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     expect(xl).not.toHaveTextContent('shown on that body');
   });
 
+  it('a size too small for the body (a sewn tee on the device) says it is not drawn and why; a size that fits says nothing', async () => {
+    const source = { kind: 'device', notDrawn: { S: { anchor: 'chest', bodyLargerCm: 25 } } };
+    const mountGarmentView = vi.fn(async (_c: HTMLCanvasElement, opts: { onState?: (s: string) => void }) => {
+      opts.onState?.('settled');
+      return { setSize: () => true, dispose: () => {}, sizes: asset.sizes, source };
+    });
+    const r = setup({ loadViewer: vi.fn(async () => ({ mountGarmentView }) as never), size: 'S' });
+    fireEvent.click(screen.getByTestId('garment3d-open'));
+    const note = await screen.findByTestId('garment3d-not-drawn');
+    expect(note).toHaveAttribute('data-anchor', 'chest');
+    expect(note).toHaveTextContent('Size S is not drawn: it does not close at the chest on a body like yours (the body is 25.0 cm larger than the garment, more than its fabric gives). The size advice says how it fits.');
+    r.rerender(<Garment3D {...r.props} size="M" />);
+    expect(screen.queryByTestId('garment3d-not-drawn')).toBeNull();
+    expect(screen.queryByTestId('garment3d-bake-note')).toBeNull();
+  });
+
   it('renders nothing without an asset (a product without a bundle behaves exactly as today)', () => {
     const { container, loadViewer } = setup({ asset: null });
     expect(container).toBeEmptyDOMElement();

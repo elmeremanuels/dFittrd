@@ -14,17 +14,18 @@ import type { Mesh } from '@curtain/mannequin';
 import { measureRing } from '../../../spikes/garment-engine/src/anchoring';
 import { buildBundle } from '../../../spikes/garment-engine/src/bundle';
 import { pokes } from '../../../spikes/garment-engine/src/pokeThrough';
-import { buildPomBundle, torsoTapeAt } from '../../../spikes/garment-engine/src/pomBundle';
+import { buildPomBundle } from '../../../spikes/garment-engine/src/pomBundle';
 import { SYNTHETIC_TEE_POM } from '../../../spikes/garment-engine/src/pomTeeSynthetic';
+import { tapeGirth } from '../../../spikes/garment-engine/src/tape';
 import { makeCollider } from './body';
 import { loadBundleFrom, type FetchLike } from './bundle';
 import { checkBundle } from './bundleCheck';
 import { isSettled, strainQuantile } from './cloth';
-import { openSession, prepareFit, relax, viewerMaterial } from './engine';
+import { gradedMesh, hullPerimeter, necklineStrain, openSession, prepareFit, relax, SEAT_MAX_LIFT_CM, sewnNotDrawn, viewerMaterial, type FitInstance, type GarmentSession } from './engine';
 import { fitForBody } from './fitting';
 import { GarmentViewError, planAvatar } from './mount';
 
-const pom = buildPomBundle('synthetic-men-tee', SYNTHETIC_MENS_TEE, SYNTHETIC_TEE_POM);
+const pom = buildPomBundle('synthetic-men-tee', SYNTHETIC_MENS_TEE, SYNTHETIC_TEE_POM, 'M', { texture: 'synthetic-print' });
 const tee = pom;
 /** The M1 lofted test garment (the tee before M3), kept to measure against. */
 const m1 = buildBundle('synthetic-men-tee', { skipSeparation: true, generator: 'm1' });
@@ -98,6 +99,25 @@ function showThrough(pos: Float32Array, indices: Uint32Array, body: Mesh, liftCm
   return { cap: share(seen.cap), mid: share(seen.mid), hem: share(seen.hem) };
 }
 
+/**
+ * The chest line's own row of cloth (the graded mesh's torso row nearest the POM chest line), after the drape: its hull
+ * in x–z (a tape laid round the outside, over the folds) and the M3 tape (median radius per angular bin, which drops into
+ * folds). Taken on the row, not at a fixed height, because a sewn tee may be lifted to rest on the body (`seatSewnTop`).
+ */
+function chestRow(session: GarmentSession, f: FitInstance, pos: Float32Array, size: string, chestLineY: number): { hull: number; tape: number } {
+  const g = gradedMesh(session, size).positions;
+  let best = Infinity;
+  for (let i = 0; i < g.length / 3; i++) if (f.chains[i] === 0) best = Math.min(best, Math.abs(g[3 * i + 1]! - chestLineY));
+  const ids: number[] = [];
+  for (let i = 0; i < g.length / 3; i++) if (f.chains[i] === 0 && Math.abs(Math.abs(g[3 * i + 1]! - chestLineY) - best) < 1e-3) ids.push(i);
+  let cy = 0;
+  for (const i of ids) cy += pos[3 * i + 1]!;
+  cy /= ids.length;
+  const hull = hullPerimeter(ids.map((i) => [pos[3 * i]!, pos[3 * i + 2]!] as [number, number]));
+  const tape = tapeGirth(ids.map((i) => [pos[3 * i]!, cy, pos[3 * i + 2]!] as [number, number, number]), [0, cy, 0], [1, 0, 0], [0, 0, 1])?.girthCm ?? NaN;
+  return { hull, tape };
+}
+
 const incompatible = (f: () => unknown): string | undefined => {
   try {
     f();
@@ -157,17 +177,23 @@ describe('a bundle built on the male mannequin', () => {
     return { session, plan, f, pos, pixels, through: showThrough(pos, f.indices, plan.avatar.mesh, plan.garmentLiftCm, plan.m.morphHeights.shoulder, plan.m.morphHeights.hip) };
   }
 
-  it('the POM tee drapes on the male bodies S to XXL in their own size: settled, sewn, no body through the cloth, the chest girth after the drape measured', async () => {
+  it('the POM tee drapes on the male bodies S to XXL in their own size: settled, sewn, seated, no body through the cloth, chest ease kept, shoulder line unstrained', async () => {
     const chestLine = pom.base.levels.chestLineY;
-    const girths: number[] = [];
+    const chest: { hull: number; tape: number }[] = [];
     const through: Record<string, Record<'cap' | 'mid' | 'hem', number>> = {};
     const pixels: Record<string, number> = {};
+    const shoulderLine: Record<string, number> = {};
     for (const id of MALE_BODY_SHAPE_IDS) {
       const { session, plan, f, pos, pixels: px, through: st } = await drapeOn(tee.files, id, id);
       expect(session.sewn).toBe(true);
       expect(isSettled(f.cloth, f.params)).toBe(true);
       expect(pos.every(Number.isFinite)).toBe(true);
-      expect(strainQuantile(f.cloth, 0.99)).toBeLessThan(0.16);
+      // p99 edge strain, measured 11.9 / 12.1 / 11.7 / 16.8 / 14.8 %: the seat lift (below) brings the armhole up against
+      // the arm at XL and XXL, and the underarm takes the strain the shoulder line no longer does (M3: 11.5 … 14.9 %).
+      expect(strainQuantile(f.cloth, 0.99)).toBeLessThan(0.18);
+      expect(f.seat).not.toBeNull();
+      expect(f.seat!.liftCm).toBeLessThanOrEqual(SEAT_MAX_LIFT_CM);
+      expect(f.loops.length).toBeGreaterThan(5);
       const collide = makeCollider(plan.field, 0, session.chains, f.noCollide);
       const probe = Float32Array.from(pos);
       let inside = 0;
@@ -175,32 +201,64 @@ describe('a bundle built on the male mannequin', () => {
       expect(inside).toBe(0);
       through[id] = st;
       pixels[id] = px;
-      girths.push(torsoTapeAt({ positions: Float64Array.from(pos), indices: f.indices }, chestLine)!);
+      shoulderLine[id] = necklineStrain(f, plan.m);
+      chest.push(chestRow(session, f, pos, id, chestLine));
     }
-    // Measured 19 Nov 2026 (share of covered body vertices showing through, vertex proxy):
-    //        cap   mid    hem          pixels (4 views, 3 px/cm)
-    //   S    0     0      0            0
-    //   M    0     0      0            0
-    //   L    0     3.0 %  0            0
-    //   XL   0     0.2 %  0            0
-    //   XXL  0     1.0 %  0            1
-    // `mid` is the armpit, under the arm (no pixel sees it). M1's lofted tee: cap 4.5 to 20.9 %,
-    // hem up to 1.5 %, and 2,900 pixels at XXL (test below).
+    // S and M fit where grading put them; L, XL and XXL ride up 1.25, 2 and 2.75 cm on their fuller necks (seatSewnTop).
+    // Shoulder line (`necklineStrain`, the pinned yoke), measured 0 / 1.3 / 0.1 / 1.7 / 4.9 %; M3: 0 / 0 / 6.8 / 26.2 / 37.1 %.
+    for (const id of MALE_BODY_SHAPE_IDS) expect(shoulderLine[id], `${id} shoulder line`).toBeLessThan(0.06);
     for (const id of MALE_BODY_SHAPE_IDS) {
       expect(through[id]!.cap, `${id} cap`).toBeLessThan(0.005);
-      expect(through[id]!.mid, `${id} mid`).toBeLessThan(0.04);
+      // `mid` is under the arm (no view sees it: 0 pixels). Measured 0 / 0.1 / 0 / 4.1 / 2.6 %: the seat lift brings the
+      // armhole up into the armpit at XL and XXL (M3: 0 / 0 / 3.0 / 0.2 / 1.0 %).
+      expect(through[id]!.mid, `${id} mid`).toBeLessThan(0.05);
       expect(through[id]!.hem, `${id} hem`).toBeLessThan(0.005);
       expect(pixels[id], `${id} pixels`).toBeLessThan(10);
     }
-    // Chest girth at the POM chest line after the drape, against the tape (98 … 131): measured 96.3,
-    // 103.6, 111.1, 117.5, 126.7 cm. The drape folds 1.4 to 4.5 cm away under the arms (the placed tee
-    // is within 0.2 cm before it); not the cling (off, it is the same within 0.4 cm).
+    // The chest line's own row of cloth after the drape, against the tape (98 … 131 cm). Hull (a tape laid round the
+    // outside): measured 97.8 / 105.9 / 114.0 / 122.1 / 131.3, within 0.3 (M3: 97.4 … 128.8, up to 2.5 under). The bin-median
+    // tape of M3 drops into the folds under the arms: 96.7 … 128.9, 1.1 to 2.3 under (M3: 1.6 to 4.7).
     SYNTHETIC_TEE_POM.forEach((row, i) => {
-      expect(girths[i]!).toBeLessThan(2 * row.chestWidthCm);
-      expect(girths[i]!).toBeGreaterThan(2 * row.chestWidthCm - 5.5);
+      expect(Math.abs(chest[i]!.hull - 2 * row.chestWidthCm), `${row.size} hull`).toBeLessThan(0.5);
+      expect(chest[i]!.tape).toBeGreaterThan(2 * row.chestWidthCm - 2.8);
     });
-    for (let i = 1; i < girths.length; i++) expect(girths[i]!).toBeGreaterThan(girths[i - 1]!);
+    for (let i = 1; i < chest.length; i++) expect(chest[i]!.hull).toBeGreaterThan(chest[i - 1]!.hull);
   }, 240_000);
+
+  it('a size too small for the body is not draped: the XXL body in S to XL (the fit engine: does not close at the chest), its own size and the M body in every size are', async () => {
+    const bundle = await loadBundleFrom(serve(tee.files), '/b', SYNTHETIC_MENS_TEE.id, { withPayload: false });
+    const on = (id: (typeof MALE_BODY_SHAPE_IDS)[number]) => {
+      const r = MALE_REFERENCE[id];
+      const plan = planAvatar(bundle.anchors, { family: 'male', heightCm: r.stature, bust: r.chest, waist: r.waist, hip: r.hip, shoulderCm: r.shoulderWidth });
+      const session = openSession(plan.m, bundle, SYNTHETIC_MENS_TEE);
+      return { plan, session, fit: fitForBody(SYNTHETIC_MENS_TEE, plan.avatar.measurements) };
+    };
+    const xxl = on('XXL');
+    // Measured: the body is 25, 17, 9 and 1 cm larger than S, M, L and XL at the chest (and waist), past what jersey gives.
+    expect(sewnNotDrawn(xxl.session, xxl.plan.avatar, xxl.fit, 'S')).toEqual({ anchor: 'chest', bodyLargerCm: 25 });
+    for (const size of ['M', 'L', 'XL']) expect(sewnNotDrawn(xxl.session, xxl.plan.avatar, xxl.fit, size)?.anchor).toBe('chest');
+    expect(sewnNotDrawn(xxl.session, xxl.plan.avatar, xxl.fit, 'XXL')).toBeNull();
+    const m = on('M');
+    for (const size of MALE_BODY_SHAPE_IDS) expect(sewnNotDrawn(m.session, m.plan.avatar, m.fit, size), `M body in ${size}`).toBeNull();
+    // A garment that is not sewn (every bundle before M3) is drawn as before, whatever the fit.
+    const dressBundle = await loadBundleFrom(serve(dress.files), '/b', 'aalter-studio-2', { withPayload: false });
+    const dressPlan = planAvatar(dressBundle.anchors, { bust: 120, waist: 110, hip: 125 });
+    const dressSession = openSession(dressPlan.m, dressBundle, MOCK_GARMENTS_BY_ID['aalter-studio-2']!);
+    expect(dressSession.sewn).toBe(false);
+    for (const size of dressSession.bundle.grading.sizes.map((x) => x.size)) expect(sewnNotDrawn(dressSession, dressPlan.avatar, fitForBody(MOCK_GARMENTS_BY_ID['aalter-studio-2']!, dressPlan.avatar.measurements), size)).toBeNull();
+  }, 120_000);
+
+  it('the printed tee: base.glb carries UVs and the synthetic print, and welds back to the mesh the bundle grades and drapes', async () => {
+    const bundle = await loadBundleFrom(serve(tee.files), '/b', SYNTHETIC_MENS_TEE.id, { withPayload: false });
+    expect(bundle.render).toBeDefined();
+    expect(bundle.render!.image.mimeType).toBe('image/png');
+    expect(bundle.baseMesh.positions.length).toBe(pom.baseMesh.positions.length);
+    for (let i = 0; i < pom.baseMesh.positions.length; i++) expect(Math.abs(bundle.baseMesh.positions[i]! - pom.baseMesh.positions[i]!)).toBeLessThan(1e-3);
+    expect(Array.from(bundle.baseMesh.indices)).toEqual(Array.from(pom.baseMesh.indices));
+    expect(bundle.render!.remap.length).toBeGreaterThan(bundle.baseMesh.positions.length / 3);
+    const qa = JSON.parse(tee.files['qa.json']) as { texture: { kind: string; licence: string } };
+    expect(qa.texture).toMatchObject({ kind: 'synthetic-print', licence: 'CC0-1.0' });
+  });
 
   it('against the M1 lofted test garment on the XXL body: the POM tee shows hundreds of times fewer body pixels', async () => {
     const before = await drapeOn(m1.files, 'XXL', 'XXL');
@@ -212,9 +270,51 @@ describe('a bundle built on the male mannequin', () => {
     expect(after.pixels * 100).toBeLessThan(before.pixels);
   }, 240_000);
 
+  it('the POM tee on the male shape v2 bodies S to XXL (a preview): settled, no body through the cloth, chest kept on its own row; the armholes strained (built on v1)', async () => {
+    // A fixed-height tape at the POM chest line read 133 and 158 cm at XL and XXL on v2 (merge check, 19 Nov): the slice
+    // there runs through the underarm, where sleeve and torso cloth touch and merge into one loop (also on v1 once the
+    // tee is lifted: 161 cm at XXL). The chest line's own row of cloth is measured instead (`chestRow`).
+    const rows: Record<string, { chest: { hull: number; tape: number }; shoulderLine: number; pixels: number; inside: number; p99: number }> = {};
+    for (const id of MALE_BODY_SHAPE_IDS) {
+      const bundle = await loadBundleFrom(serve(tee.files), '/b', SYNTHETIC_MENS_TEE.id, { withPayload: false });
+      const r = MALE_REFERENCE[id];
+      const plan = planAvatar(bundle.anchors, { family: 'male', heightCm: r.stature, bust: r.chest, waist: r.waist, hip: r.hip, shoulderCm: r.shoulderWidth }, null, 'v2');
+      expect(plan.m.maleShape).toBe('v2');
+      const session = openSession(plan.m, bundle, SYNTHETIC_MENS_TEE);
+      const f = prepareFit(session, plan.avatar, plan.field, fitForBody(SYNTHETIC_MENS_TEE, plan.avatar.measurements), id, viewerMaterial('product', bundle.material));
+      const pos = relax(f);
+      expect(isSettled(f.cloth, f.params)).toBe(true);
+      expect(pos.every(Number.isFinite)).toBe(true);
+      const lifted = Float64Array.from(pos);
+      for (let i = 1; i < lifted.length; i += 3) lifted[i] = lifted[i]! + plan.garmentLiftCm;
+      let pixels = 0;
+      for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) for (const v of Object.values(pokes(plan.avatar.mesh, { positions: lifted, indices: f.indices }, yaw, () => 'all'))) pixels += v;
+      const collide = makeCollider(plan.field, 0, session.chains, f.noCollide);
+      const probe = Float32Array.from(pos);
+      let inside = 0;
+      for (let i = 0; i < probe.length / 3; i++) if (collide(probe, i)) inside++;
+      rows[id] = { chest: chestRow(session, f, pos, id, pom.base.levels.chestLineY), shoulderLine: necklineStrain(f, plan.m), pixels, inside: inside / (probe.length / 3), p99: strainQuantile(f.cloth, 0.99) };
+    }
+    // Measured 19 Nov 2026 on v2, S … XXL: chest row hull 98.2 / 106.0 / 114.3 / 122.5 / 131.8, tape 97.7 … 130.3; pixels
+    // 0 / 6 / 0 / 0 / 0; shoulder line 0 / 1.9 / 10.6 / 17.1 / 20.4 % (v1: 0 … 4.9), p99 13.1 … 14.2 %. v2's upper torso is
+    // about 2.5 cm wider each side than the v1 body the tee was built on: the cloth round the armholes is stretched, and
+    // the seat lift cannot help (the push is sideways). The fix is building the tee on v2 (open: the builder misses its
+    // tape by up to 3.3 cm there). Judging the chains or the grading on the v1 twin was tried: no better for the POM tee
+    // (shoulder line 11 … 24 %) and worse for the M1 tee's underarm, so not kept. Bounds only stop it getting worse.
+    SYNTHETIC_TEE_POM.forEach((row) => {
+      const x = rows[row.size]!;
+      expect(Math.abs(x.chest.hull - 2 * row.chestWidthCm), `${row.size} hull`).toBeLessThan(1.5);
+      expect(x.chest.tape, `${row.size} tape`).toBeGreaterThan(2 * row.chestWidthCm - 2.8);
+      expect(x.pixels, `${row.size} pixels`).toBeLessThan(10);
+      expect(x.inside, `${row.size} inside`).toBeLessThan(0.02);
+      expect(x.shoulderLine, `${row.size} shoulder line`).toBeLessThan(0.3);
+      expect(x.p99, `${row.size} p99`).toBeLessThan(0.17);
+    });
+  }, 240_000);
+
   it('drapes on the male shape v2 bodies S to XXL too (maleShape v2, a preview): settled, the graded chest girth kept, show-through measured against v1', async () => {
     // On the M1 lofted test garment, the one these bounds were measured on (male-shape-v2 branched
-    // before M3). The POM tee on the v2 bodies is not bounded here yet.
+    // before M3). The POM tee on the v2 bodies: next test.
     const bundle = await loadBundleFrom(serve(m1.files), '/b', SYNTHETIC_MENS_TEE.id, { withPayload: false });
     const rows: Record<string, { v1: Record<'cap' | 'mid' | 'hem', number>; v2: Record<'cap' | 'mid' | 'hem', number>; chest: number; inside: number }> = {};
     for (const id of MALE_BODY_SHAPE_IDS) {

@@ -17,7 +17,7 @@ import { makeCollider } from './collide';
 import type { MaterialJson } from './core/types';
 import { bakeAxis, bakePlace, blendBakedSize, settleOnBody, type BakePlace, type DrapeBake, type SizeProvenance } from './drapeBake';
 import { DrapePool } from './drapePool';
-import { DEFAULT_DRAPE, drapeJobOf, openSession, prepareFit, viewerMaterial, type DrapeOptions, type FitInstance } from './engine';
+import { DEFAULT_DRAPE, drapeJobOf, openSession, prepareFit, sewnNotDrawn, viewerMaterial, type DrapeOptions, type FitInstance, type NotDrawn } from './engine';
 import * as THREE from 'three';
 import { faceUvOf } from '@curtain/mannequin';
 import type { FaceTexture } from './faceOverlay';
@@ -154,7 +154,8 @@ export interface GarmentView {
 }
 
 export type GarmentViewSource =
-  | { kind: 'device' }
+  /** `notDrawn`: the sizes not draped on this body, and why (`sewnNotDrawn`; only a sewn top has any): the body is drawn without the garment. */
+  | { kind: 'device'; notDrawn: Record<string, NotDrawn> }
   | { kind: 'bake'; plainColour: true; sizes: Record<string, BakedSizeView> };
 
 /** One size of a baked view, for the host's label. */
@@ -325,6 +326,13 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
   let current = '';
   let disposed = false;
 
+  // A size too small for this body (a sewn top only): not draped, not drawn (`sewnNotDrawn`).
+  const notDrawn: Record<string, NotDrawn> = {};
+  for (const label of ok.sizes) {
+    const r = sewnNotDrawn(session, avatar, opts.fit, label);
+    if (r) notDrawn[label] = r;
+  }
+
   const ensure = (label: string): Live => {
     let live = fits.get(label);
     if (live) return live;
@@ -347,7 +355,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
 
   const neighbours = (label: string): string[] => {
     const i = ok.sizes.indexOf(label);
-    return [ok.sizes[i - 1], ok.sizes[i + 1]].filter((s): s is string => !!s);
+    return [ok.sizes[i - 1], ok.sizes[i + 1]].filter((s): s is string => !!s && !notDrawn[s]);
   };
 
   const setSize = (size: string): boolean => {
@@ -355,6 +363,14 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
     if (!label) return false;
     current = label;
     canvas.dataset.size = label;
+    const refused = !!notDrawn[label];
+    figure.garment.visible = !refused;
+    canvas.dataset.garment = refused ? 'not-drawn' : 'drawn';
+    if (refused) {
+      state('settled');
+      wake(100);
+      return true;
+    }
     const live = ensure(label);
     live.dirty = true;
     state(live.jobId === null && isSettled(live.fit.cloth, live.fit.params) ? 'settled' : 'draping');
@@ -425,7 +441,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
       stage.camera.updateMatrixWorld();
       return stage.toScreen(new THREE.Vector3(p[0], p[1], p[2]));
     },
-    source: { kind: 'device' },
+    source: { kind: 'device', notDrawn },
     exportPasses(o) {
       if (disposed) return null;
       const pos = settledPos(current);

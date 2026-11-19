@@ -46,6 +46,34 @@ The flat figure shades the swatch by adding and taking away the same number on e
   - `packages/garment-viewer/src/skin.test.ts` (10 tests): the table, the per-tone care, the tone stage on the CPU (the shader's twin), the patch against three's chunks, and the figure's default material.
   - `apps/web/src/embed/__tests__/skinV2.test.tsx` (11 tests): the 2D shades, the outline, the face ink, the prop, the flag, and the viewer option.
 
+### Head v3's hair under skin-v2 (fixed after the first review)
+
+Head v3's hair is a cover per vertex on the body mesh (`Mesh.hair`), not separate triangles, so it is drawn by the body's material. In the first version it took the skin's terms: the skin's tighter highlight, its sheen and its tone stage (which lifts deep tones). On Monk 8 to 10 that made the hair shiny dark grey, with a thin light line along the hairline.
+
+Now, weighted by the cover, the hair gets the flat material's own terms:
+- plain Lambert (no scattering);
+- roughness 0.75 and specular 0.3, as the flat skin;
+- no sheen;
+- the rig's own tone curve.
+
+The vertex shader reads the `hair` attribute only on a body that has it (`#define SKIN_HAIR`), and `Figure.setBody` rebuilds the material when a body swap changes that.
+
+Measured on the 2× three-quarter close-ups: lightness of the hair area (backdrop left out), median / 99th percentile L*.
+
+| | flat | skin-v2, hair with the skin's terms | **skin-v2, hair with its own terms** |
+| --- | --- | --- | --- |
+| female classic, Monk 8 / 9 / 10 | 10.2/19.4 · 4.5/14.9 · 2.5/12.8 | 22.0/60.2 · 16.6/61.3 · 13.0/60.9 | **10.2/19.4 · 4.5/14.9 · 2.5/12.8** |
+| female neutral-v2, Monk 8 / 9 / 10 | 21.2/26.9 · 15.1/23.3 · 11.5/21.3 | 22.5/55.2 · 16.5/56.4 · 12.9/55.9 | **21.2/26.9 · 15.1/23.3 · 11.5/21.3** |
+| male classic, Monk 8 / 9 / 10 | 9.7/19.2 · 4.2/14.9 · 2.3/12.8 | 21.3/59.4 · 16.2/60.6 · 12.9/60.2 | **10.0/19.2 · 4.2/14.9 · 2.3/12.8** |
+| male neutral-v2, Monk 8 / 9 / 10 | 20.7/26.7 · 14.7/23.0 · 11.0/21.3 | 21.9/54.4 · 16.0/55.6 · 12.5/55.1 | **20.8/26.7 · 14.7/23.0 · 11.0/21.3** |
+
+- **The hair is the flat hair again,** within 0.3 L*, on every tone, both families and both lightings (Monk 6 too).
+- **The shiny highlight is gone:** before the fix it reached L* 54 to 61.
+- **The hairline line on Monk 8 is gone** in the close-up.
+- **Side effect under `classic`:** on Monk 9 and 10 the hair is as dark as in flat (L* 2 to 5), while the skin around it is now at its true lightness (L* 16 to 21). For the first time the hair separates from deep skin at all; on flat both were near black.
+- **Pictures:** `hair-faces-*` and `hair-phone-*` in `docs/screens/claude/skin-v2/`. Rows: flat, skin-v2 with the hair sharing the skin's terms (the pictures of the first round), and skin-v2 with the hair's own terms.
+- **What did not change:** the skin pixels (the hair cover is 0 there), and so every skin and garment number above.
+
 ## The Monk swatches and their licence
 
 - **Values.** The ten values in `MONK_SWATCHES` (`#F6EDE4 #F3E7DB #F7EAD0 #EADABA #D7BD96 #A07E56 #825C43 #604134 #3A312A #292420`) match the published list in the Wikipedia article on the scale, which cites Google's skintone.google "Get Started" page. **Nothing was changed.**
@@ -240,13 +268,14 @@ More from the pictures:
 ## Open issues
 
 1. **Light tones under `classic` still look grey-white.** skin-v2 restores their hue but keeps ACES's lightness for contrast. Fixing both needs `neutral-v2` (its outline) or a decision to accept less contrast. With `neutral-v2`, Monk 1 to 5 are within 1.1 to 1.4 ΔE, flat or skin-v2.
-2. **Head v3's hair shares the skin material.** On deep tones it gets the skin's highlight, reads dark grey, and shows a thin light line at the hairline on Monk 8. The hair should get its own roughness (a vertex attribute is already there: `hair`).
+2. ~~Head v3's hair shares the skin material.~~ **Fixed** (section "Head v3's hair under skin-v2"). What remains is head v3's own issue: on Monk 9 and 10 the hair is still a very dark shade of the skin, as in flat.
 3. **Frame cost** is +17 to 25 % on SwiftShader, body alone. Not measured on a phone GPU or in the mount.
 4. **The red terminator is subtle** at phone size; the exaggeration is a guess made by eye.
 5. **The dress lets 15 % of the body through**, so a garment patch over skin changes by up to 1.2 ΔE with skin-v2 under `classic`. That is expected for a see-through cloth, but it is above "near 0".
 6. **The 2D figure** is still 4 to 5 L* below the swatch on Monk 1 to 6 (it is shaded, and the swatch is its lit stop); Monk 6 is the furthest from its swatch at 5 ΔE.
 7. **Primary source.** The Monk values and licence were checked against Wikipedia's citation of skintone.google, not against Google's page itself (it would not render here).
 8. **Not tested:** the drape-bake mount, the production embed build with `VITE_AVATAR_SKIN=skin-v2`, and a real phone.
+9. **A bug found in passing, not mine and not fixed:** `Figure.setBody` puts the shared grey material back on a figure that has a skin colour when the new geometry has the same vertex-colour setting (its final `else`). Only the spike's `main.ts` calls it. The skin-v2 rebuild in `setBody` returns before that branch.
 
 ## Verdict
 
@@ -259,10 +288,22 @@ More from the pictures:
   - The garment is untouched (0.0 on the opaque tee).
 - **Against it:**
   - Monk 1 hardly changes under `classic`.
-  - The hair on deep tones needs its own material.
   - It costs about a fifth more per frame on the software renderer.
   - Under `neutral-v2` the gain is small, because that lighting was already accurate.
-- **My recommendation:** review it together with `neutral-v2` lighting, fix the hair material (open issue 2), measure one real phone, and then decide.
+- **My recommendation:** review it together with `neutral-v2` lighting, measure one real phone, and then decide. The hair material (open issue 2) is fixed.
+
+## Merged with claude/garment-engine
+
+`claude/garment-engine` (AI realism export passes, head v3 as the default, male shape v2, men's fit) is merged into this branch. Both sides' behaviour is kept:
+
+- **Garment3D** takes both `aiRealism` and `skinShading`.
+- **2D figure on the result** keeps the face tile `media` and gets `skinShading`.
+- **Viewer index** exports both the passes and the skin helpers.
+- **Spike look page** takes `maleShape` and `shading`.
+- **AI realism passes:** `renderPasses` draws the body in the shared grey material, so neither a picked colour nor skin-v2 reaches them.
+- **Head default:** `neutral-v3` stays the default.
+
+The pictures above were taken before the merge, on the female body and male shape v1; the merged branch was not re-rendered, apart from the hair shots.
 
 ## Reproduce
 
@@ -278,6 +319,8 @@ node spikes/garment-engine/viewer/skin-v2-renders.mjs /tmp/skin --only frames
 node apps/web/scripts/skin-2d-shots.mjs /tmp/skin
 # Grids
 node spikes/garment-engine/viewer/skin-v2-grid.mjs /tmp/skin docs/screens/claude/skin-v2
+# Hair before/after: render the faces (and phone) once with the earlier build into /tmp/skin-before, once now into /tmp/skin
+node spikes/garment-engine/viewer/skin-v2-hair-grid.mjs /tmp/skin-before /tmp/skin docs/screens/claude/skin-v2
 # Unit tests
 pnpm --filter @curtain/garment-viewer test && pnpm --filter @curtain/web test
 # A build of the embed with skin-v2 (for the look review only)

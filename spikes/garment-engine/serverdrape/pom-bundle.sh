@@ -3,7 +3,7 @@
 #   serverdrape/pom-bundle.sh      the device avatar of each chart body, the drapes on them, the bake into a garment
 #                                  bundle the embed loads (out/pom2-bundle/crimson-wildflower-maxi-skirt), its report
 # Serve it in the demo with DEMO_SKIRT=pom (apps/api/src/demo.ts); the photo bundle stays the default.
-# Needs Blender 4.2 LTS (BLENDER). At most two drapes run at a time (run_pom2.py). About 20 drapes, 3-4 CPU-min each.
+# Needs Blender 4.2 LTS (BLENDER). At most two drapes run at a time (run_pom2.py). About 16 drapes, 3-4 CPU-min each.
 set -euo pipefail
 R=out/pom2              # section 9: Anny bodies, rest geometry from the tape
 A=out/pom2-avatar       # the same rest geometry, draped on the device avatar of each chart body
@@ -15,7 +15,10 @@ tsx viewer/scripts/serverdrape/pom-body-gap.ts "$R" wear > "$A-body-gap.txt" || 
 [ -f "$A/bodies/bodies.json" ] || tsx viewer/scripts/serverdrape/avatar-bodies.ts "$A/bodies" "$R/bodies"
 [ -e "$A/rest" ] || ln -s ../pom2/rest "$A/rest"
 H=t-0.40   # the held-out body (hip 100, waist 73.5): direct drapes only to measure the device blend against
-GRID="t+0.00:12,t-1.00:12,t+1.00:12,t+0.00:8,t-1.00:8,t+1.00:8,t+0.50:8,t+0.00:10,t-1.00:10,t+1.00:10,t+0.00:14,t-1.00:14,t+1.00:14,t+0.00:16,t-1.00:16,t+1.00:16"
-python3 serverdrape/run_pom2.py "$A" wear "$GRID,$H:8,$H:10,$H:12,$H:14,$H:16"   # t+1.00:8 is refused by the wear rule; t+0.50:8 stands in
+# Each size on the chart bodies t = -1, 0, +1 where its band can be pulled over the hips (the fit engine's pullOnCheck;
+# bake-pom.ts declares the others not draped, §10.9), and on its own chart body where the next one up is refused
+# (t-0.50 for AU 10, t+0.50 for AU 14). body:size:frames re-runs a drape that had not come to rest at 144 frames.
+GRID="t-1.00:8,t-1.00:10:288,t-0.50:10,t-1.00:12,t+0.00:12,t-1.00:14,t+0.00:14,t+0.50:14:288,t-1.00:16,t+0.00:16,t+1.00:16"
+python3 serverdrape/run_pom2.py "$A" wear "$GRID,$H:10,$H:12,$H:14,$H:16,t+0.50:16"   # AU 8 cannot be pulled over the held-out body's 100 cm hips
 tsx viewer/scripts/serverdrape/bake-pom.ts "$A" wear "$B" --payload "$PHOTO"
 echo "bundle in $B; report in $A/bake-report-wear.json"

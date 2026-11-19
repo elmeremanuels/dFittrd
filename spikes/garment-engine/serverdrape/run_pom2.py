@@ -1,7 +1,8 @@
 """POM v2 driver (write-up section 9): wear-rule drapes, at most two Blender processes at a time.
 
-python3 run_pom2.py <root> <set> <body:size,body:size,...> [frames] [-- extra drape_blender.py flags]
-Writes <root>/drapes/<set>/<body>__<size>.bin/.json/.log. A finished drape is reused when its JSON exists and was
+python3 run_pom2.py <root> <set> <body:size[:frames],body:size[:frames],...> [frames] [-- extra drape_blender.py flags]
+A job's own frame count (body:size:frames) overrides the run's (default 144): a drape that did not come to rest is
+re-run longer without re-running the others. Writes <root>/drapes/<set>/<body>__<size>.bin/.json/.log. A finished drape is reused when its JSON exists and was
 made with the same extra flags and frame count; a combination the wear rule refuses ("cannot be worn") leaves a
 JSON without a .bin. Env: BLENDER, JOBS (default 2; the machine is shared: never more than 2), FLOOR_CM (default -40:
 the body on a plinth so the hem hangs free; the 103-104 cm skirt worn below the navel reaches the floor at 168 cm).
@@ -52,7 +53,7 @@ def main() -> None:
     root, dset, jobs = argv[0], argv[1], [j.split(":") for j in argv[2].split(",")]
     frames = int(argv[3]) if len(argv) > 3 else 144
     with ThreadPoolExecutor(min(int(os.environ.get("JOBS", "2")), 2)) as ex:
-        for line in ex.map(lambda j: job(root, dset, j[0], j[1], frames, extra), jobs):
+        for line in ex.map(lambda j: job(root, dset, j[0], j[1], int(j[2]) if len(j) > 2 else frames, extra), jobs):
             print(line, flush=True)
 
 

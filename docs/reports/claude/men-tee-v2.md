@@ -79,6 +79,10 @@ Why the yoke was strained: grading scales the shoulders by the shoulder-width ra
 
 **Assumed [A], new on this branch.** The yoke smoothing's reach (3 cm above the armhole) and steps (40). The seat lift's step, cap and tolerance (0.25 / 3 / 0.3 cm). The loop depth (14 cm under the armpit). That a tee rides up on a fuller neck rather than stretching round it. That "too small" means the fit engine's `open` and nothing else. The print and both "photos" are synthetic.
 
+**On the male shape v2 bodies** (merged from `claude/garment-engine`, `maleShape: 'v2'`, a preview, off by default). A merge check read the POM tee 133 cm (XL) and 158 cm (XXL) round the chest on v2, against 117.5 and 126.7 cm on v1. That reading is a **measuring artefact**. The fixed-height tape at the POM chest line runs through the underarm, where sleeve and torso cloth touch, and the slice merges them into one loop. The same tape reads 161 cm on v1 XXL once the tee is lifted. On the chest line's own row of cloth the drape is right on v2: hull 98.2 / 106.0 / 114.3 / 122.5 / 131.8 cm, tape 97.7 … 130.3 cm. 0 to 6 pixels show, and no particle is inside the body.
+
+What is real on v2 is the **armholes**. v2 keeps the heights and arms but its upper torso is about 2.5 cm wider each side, so the v1-built cloth round the armholes is stretched. The shoulder line reads 0 / 1.9 / 10.6 / 17.1 / 20.4 % (v1: 0 … 4.9 %) and p99 13.1 to 14.2 %. The seat lift cannot help, because that push is sideways. I tried judging chains and grading on the v1 twin: no better for the POM tee (11 to 24 %) and worse for the M1 tee's underarm (L 3.0 → 5.3 %), so it is not kept. The fix is building the tee on v2. Built directly on v2 bodies, the builder misses its tape by up to 3.3 cm, which is not investigated here. These numbers are bounded in `male.test.ts` ("the POM tee on the male shape v2 bodies").
+
 ## The pictures (`docs/screens/claude/men-tee-v2/`)
 
 Embed (real stack, `node scripts/demo-men.mjs <dir> --all-sizes --close --off-size`, gate on, 390 × 760 at deviceScaleFactor 2, SwiftShader):
@@ -106,6 +110,7 @@ UV: `uv-atlas-wireframe.png` (the four pieces with their triangles over the pain
 - The not-drawn rule covers sewn tops only. Every other bundle still draws a stretched garment on a body it does not close on. The rule is general, but applying it changes the women's views, so it needs its own review.
 - The print: stripes match neither across the armhole nor exactly at the side seams. A merchant photo needs its two calibration numbers (px per cm, HPS centre) from the import, which is not built. Photo projection for the sleeves is not done (they take the print or a colour).
 - The flattening is not conformal at the sleeve cap (29 % at p99). For a print with text, a seam in the cap or a conformal parameterisation would be better.
+- Male shape v2: build the tee on v2 (the builder misses its tape by up to 3.3 cm there; the armholes of the v1-built tee strain 11 to 20 % from L up on v2).
 - `qa.json` `meshHealth.triangleBudget` says [8000, 15000] and the tee has 7,618 (as in M3).
 
 ## Reproduce

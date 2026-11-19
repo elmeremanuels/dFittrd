@@ -49,6 +49,7 @@ async function instrument(page: Page, origin: string): Promise<Seen[]> {
 
 test('onboarding with a camera never lets a photo, a frame or a third-party request leave the page', async ({ page, baseURL }) => {
   const origin = new URL(baseURL!).origin;
+  await page.request.get('/__csp-report'); // clear what earlier specs left
   const seen = await instrument(page, origin);
 
   await page.goto('/onboarding');
@@ -102,10 +103,14 @@ test('onboarding with a camera never lets a photo, a frame or a third-party requ
 
   // ---- assertions on everything that tried to leave the page -------------------------------
   expect(seen.length).toBeGreaterThan(0);
+  // The production CSP (config/csp.ts, sent by the preview): nothing in onboarding and the deck breaks it.
+  const reports = (await (await page.request.get('/__csp-report')).json()) as { 'csp-report'?: Record<string, string> }[];
+  expect(reports.map((r) => `${r['csp-report']?.['effective-directive']} ${r['csp-report']?.['blocked-uri']} in ${r['csp-report']?.['source-file'] ?? r['csp-report']?.['document-uri']}`), 'CSP violations').toEqual([]);
   const thirdParty = seen.filter((r) => new URL(r.url).origin !== origin);
   expect(thirdParty, `third-party requests: ${thirdParty.map((r) => r.url).join(', ')}`).toEqual([]);
 
-  for (const r of seen) {
+  // The preview's own CSP violation reports (vite.config.ts) are the browser's, not the app's: privacyModels.spec reads them.
+  for (const r of seen.filter((x) => new URL(x.url).pathname !== '/__csp-report')) {
     const path = new URL(r.url).pathname;
     const allowed = path.startsWith('/v1/') || path.startsWith('/models/') || path.startsWith('/assets/') || path.startsWith('/icons/') || path === '/' || path.startsWith('/onboarding') || path.startsWith('/deck') || /\.(js|css|webmanifest|svg|png|woff2|html)$/.test(path) || path === '/sw.js';
     expect(allowed, `unexpected request ${r.method} ${r.url}`).toBe(true);
@@ -132,12 +137,15 @@ test('onboarding with a camera never lets a photo, a frame or a third-party requ
   expect(wire.vector[78]).toBe(1);
   expect(Object.keys(wire).sort()).toEqual(['quality', 'vector', 'version']);
 
-  // swipes carry size/score, never body data
-  const swipes = seen.find((r) => new URL(r.url).pathname === '/v1/swipes');
-  expect(swipes, 'swipe batch happened').toBeTruthy();
-  const batch = JSON.parse(swipes!.body!) as { events: Record<string, unknown>[] };
-  expect(batch.events.length).toBeGreaterThan(0);
-  for (const e of batch.events) expect(Object.keys(e).sort()).toEqual(['action', 'at', 'clientId', 'dealIndex', 'fitScore', 'itemId', 'shopId', 'sizeAtSwipe'].filter((k) => k in e).sort());
+  // The deck here is the bundled demo rail, which is not a shop on the server: its swipes stay on the
+  // device (store.ts, MOCK_SHOP_ID), so none may go out. A batch for a real shop would carry
+  // size/score only, never body data (the field check stays for that case).
+  const swipes = seen.filter((r) => new URL(r.url).pathname === '/v1/swipes');
+  expect(swipes, 'demo-rail swipes stay on the device').toEqual([]);
+  for (const s of swipes) {
+    const batch = JSON.parse(s.body!) as { events: Record<string, unknown>[] };
+    for (const e of batch.events) expect(Object.keys(e).sort()).toEqual(['action', 'at', 'clientId', 'dealIndex', 'fitScore', 'itemId', 'shopId', 'sizeAtSwipe'].filter((k) => k in e).sort());
+  }
 });
 
 test('merchant console never loads inside the phone frame and needs a key', async ({ page, baseURL }) => {

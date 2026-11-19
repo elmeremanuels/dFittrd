@@ -26,7 +26,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, us
 import type { BodyProfile, TryResolveResponse } from '@curtain/schema';
 import { AvatarView } from '@/components/AvatarView';
 import { ApiError } from '@/api/client';
-import { adviseSize, EMPTY_ABOUT, fitForProfile, mergeAboutIntoScan, normalizeAbout, priorKeys, profileFromAbout, sizeConfidence, switchUnits, validateAbout, type AboutField, type AboutForm } from './aboutYou';
+import { adviseSize, EMPTY_ABOUT, fitForProfile, mergeAboutIntoScan, normalizeAbout, priorKeys, profileFromAbout, sizeConfidence, switchUnits, validateAbout, waistOnlyOf, type AboutField, type AboutForm } from './aboutYou';
 import { embedStrings } from './strings';
 import { AvatarPrompt } from './AvatarPrompt';
 import { isMockToken, mockTokensEnabled, resolveMock, type EmbedApi, type EmbedDeps } from './deps';
@@ -586,6 +586,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
               fit={embedFit.fit}
               size={shownSize}
               recommended={advice.size}
+              waistOnly={waistOnlyOf(embedFit.fit, advice)}
               measurements={embedFit.userBody.measurements}
               units={units}
               heightCm={profile.measurements.height?.mean}

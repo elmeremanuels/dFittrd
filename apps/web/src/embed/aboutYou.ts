@@ -411,6 +411,15 @@ export function hasNoFitPoints(fit: FitResult): boolean {
  * the next larger one, but only when that size is wearable (no tight point) and scores within
  * PREFERENCE_SCORE_SLACK of the engine's pick. Otherwise the engine's size stands.
  */
+/**
+ * The waist of a men's W/L chart whose leg could not be checked (slice M2b), or null: no full size is advised, but
+ * the waist is known. Every place that would say "no size fits" names the waist instead (result heading, fit
+ * panel, 3D label, size peek).
+ */
+export function waistOnlyOf(fit: FitResult, advice: Pick<SizeAdvice, 'size'>): string | null {
+  return !advice.size && fit.sizeAxes?.waist !== undefined && fit.sizeAxes.leg === undefined ? fit.sizeAxes.waist : null;
+}
+
 export function adviseSize(fit: FitResult, preference: FitPreference): SizeAdvice {
   if (hasNoFitPoints(fit)) return { size: null, closest: null, engineSize: null, adjusted: null, noPoints: true };
   const engineSize = fit.recommendedSize;

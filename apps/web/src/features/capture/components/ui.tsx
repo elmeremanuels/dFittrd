@@ -1,5 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
+import { appStrings } from '../../../strings';
 
 /**
  * Which product the capture runs in (COPY-1). `app`: the Curtain app (face tile, signature sync).
@@ -85,7 +86,7 @@ export function Panel({ children, className = '' }: { children: ReactNode; class
   );
 }
 
-export function EstimateBadge({ children = 'estimate' }: { children?: ReactNode }): ReactNode {
+export function EstimateBadge({ children = appStrings().capture.ui.estimate }: { children?: ReactNode }): ReactNode {
   return (
     <span className="inline-flex items-center rounded-full border border-ink/10 bg-white/60 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-ink/50">
       {children}
@@ -108,16 +109,12 @@ export function ConfidenceBar({ value, label }: { value: number; label: string }
 
 export function PrivacyNote(): ReactNode {
   const variant = useCaptureVariant();
+  const t = appStrings().capture.ui.privacy;
   if (variant === 'embed')
     return (
       <p className="text-xs leading-relaxed text-ink/50" data-testid="privacy-note">
-        Video stays on this device. It is processed in this browser and never uploaded, and no measurement is sent to Curtain or the shop.
+        {t.embed}
       </p>
     );
-  return (
-    <p className="text-xs leading-relaxed text-ink/50">
-      Photos and video stay on this device. They are processed in a background worker, never uploaded, and only an
-      anonymised fit signature (about 80 numbers, no face or skin data) ever syncs.
-    </p>
-  );
+  return <p className="text-xs leading-relaxed text-ink/50">{t.app}</p>;
 }

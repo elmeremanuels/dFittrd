@@ -12,6 +12,7 @@
  *   2. register it in `CATALOGUES` below.
  * A shop whose integration then asks for that locale gets it; every other shop stays English.
  */
+import { setUiLocale } from '@/strings';
 import { EN, type EmbedCatalogue } from './en';
 
 export type { AvatarClaims, AvatarUi, EmbedCatalogue } from './en';
@@ -58,6 +59,8 @@ let embed = createEmbedStrings(CATALOGUES);
 /** The interface locale named by the integration. Called once, by the embed's entry (`mountRouter`). */
 export function setEmbedLocale(locale: string | null | undefined): void {
   embed.set(locale);
+  // The components the embed shares with the app read `@/strings`: one locale for the whole page.
+  setUiLocale(locale);
 }
 
 /** The embed's strings in the interface locale (or the one given). A locale without a pack reads English. */

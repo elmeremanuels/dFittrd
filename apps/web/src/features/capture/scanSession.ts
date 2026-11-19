@@ -5,7 +5,20 @@
  */
 import { choosePoseVariant, type PoseVariant } from './models';
 import type { Sex } from './types';
-import type { FaceLookMessage, FaceResultMessage, FaceTextureMessage, GateMessage, ProgressMessage, ReadyMessage, ScanResultMessage, WorkerInbound, WorkerOutbound } from './workerProtocol';
+import type { FaceLookMessage, FaceResultMessage, FaceTextureMessage, GateMessage, ProgressMessage, ReadyMessage, ScanErrorCode, ScanResultMessage, WorkerInbound, WorkerOutbound } from './workerProtocol';
+
+/**
+ * A failure of the scan. `message` is an English diagnostic; when the worker named a `code`, the
+ * interface shows the catalogue's text for it instead (`scanErrorText` in `./components/text`).
+ */
+export class ScanError extends Error {
+  constructor(
+    message: string,
+    readonly code: ScanErrorCode | null = null,
+  ) {
+    super(message);
+  }
+}
 
 export interface ScanSessionOptions {
   variant?: PoseVariant | undefined;
@@ -220,7 +233,7 @@ export class ScanSession {
         this.pendingLook = null;
         break;
       case 'error': {
-        const e = new Error(msg.message);
+        const e = new ScanError(msg.message, msg.code ?? null);
         if (msg.stage === 'init') {
           this.pendingReady?.reject(e);
           this.pendingReady = null;

@@ -6,6 +6,7 @@
  * WRITE appends a client-side ledger entry `{ at, path, bytes, fields }` (field names, never
  * values) through `onLedger`, mirroring the server's ledger.
  */
+import { appStrings } from '@/strings';
 import type {
   MerchantGarmentAsset,
   AnalyticsAbandonedResponse,
@@ -189,7 +190,7 @@ export class ApiClient {
       res = await fetchImpl(`${this.opts.baseUrl}${path}`, { method, headers, body: json, signal: controller?.signal });
     } catch (e) {
       if (isWrite && init.ledger !== false) await this.appendLedger(method, path, json, body, 'failed');
-      throw new NetworkError(`network error on ${method} ${path}`, e);
+      throw new NetworkError(appStrings().app.api.networkError(method, path), e);
     } finally {
       if (timer) clearTimeout(timer);
     }
@@ -220,7 +221,7 @@ export class ApiClient {
     }
     if (!res.ok) {
       let code = `http_${res.status}`;
-      let message = res.statusText || `HTTP ${res.status}`;
+      let message = res.statusText || appStrings().app.api.httpStatus(res.status);
       let details: unknown;
       try {
         const err = (await res.json()) as { error?: { code?: string; message?: string; details?: unknown } };

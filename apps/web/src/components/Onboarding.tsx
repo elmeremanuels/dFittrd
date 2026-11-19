@@ -8,6 +8,8 @@ import { CaptureStep, MANUAL_RANGES, MEASUREMENT_LABELS, validateManual, type Ca
 import { METHOD_LABELS } from '@/features/capture/captureMachine';
 import type { ManualMethod } from '@curtain/schema';
 import { useApp } from '@/store';
+import { parts } from '@/embed/strings';
+import { appStrings } from '@/strings';
 import { NumberField } from './NumberField';
 
 /**
@@ -18,13 +20,13 @@ import { NumberField } from './NumberField';
 export type OnboardingStep = 'welcome' | 'measurements' | 'vibes' | 'capture' | 'done';
 export const ONBOARDING_STEPS: readonly OnboardingStep[] = ['welcome', 'measurements', 'vibes', 'capture', 'done'];
 
-const FIELDS: { key: keyof typeof MANUAL_RANGES; unit: string; optional: boolean; hint?: string }[] = [
+const FIELDS: { key: keyof typeof MANUAL_RANGES; unit: 'cm' | 'kg' | 'eu'; optional: boolean; hint?: 'bust' | 'waist' | 'hip' | 'footEu' }[] = [
   { key: 'height', unit: 'cm', optional: false },
   { key: 'weight', unit: 'kg', optional: true },
-  { key: 'bust', unit: 'cm', optional: true, hint: 'Around the fullest part, tape level.' },
-  { key: 'waist', unit: 'cm', optional: true, hint: 'Narrowest point, relaxed.' },
-  { key: 'hip', unit: 'cm', optional: true, hint: 'Fullest part of the hips.' },
-  { key: 'footEu', unit: 'EU', optional: true, hint: 'Your usual EU shoe size.' },
+  { key: 'bust', unit: 'cm', optional: true, hint: 'bust' },
+  { key: 'waist', unit: 'cm', optional: true, hint: 'waist' },
+  { key: 'hip', unit: 'cm', optional: true, hint: 'hip' },
+  { key: 'footEu', unit: 'eu', optional: true, hint: 'footEu' },
 ];
 
 export function Onboarding({ initialStep = 'welcome', onFinished }: { initialStep?: OnboardingStep; onFinished?: () => void }): ReactNode {
@@ -71,12 +73,15 @@ export function Onboarding({ initialStep = 'welcome', onFinished }: { initialSte
     setStep('done');
   };
 
+  const t = appStrings().app.onboarding;
+  const units = appStrings().app.common.units;
+  const [fitsBefore, fitsAfter] = parts(t.fitsYou, 'you');
   const titles: Record<OnboardingStep, { title: string; subtitle: string }> = {
-    welcome: { title: 'Welcome to Curtain', subtitle: 'Your private fitting room. Realistic fit, your taste, nothing leaves your phone.' },
-    measurements: { title: 'Your measurements', subtitle: 'They drive the fit directly, and keep the scan honest.' },
-    vibes: { title: 'Your style vibe', subtitle: 'Pick what resonates. The deck learns the rest from your swipes.' },
-    capture: { title: 'Capture', subtitle: 'A face photo and an 8-second video, measured on this device.' },
-    done: { title: 'You are set', subtitle: captured === 'done' ? 'Your capture is stored encrypted on this phone.' : 'You can add a scan later from your profile.' },
+    welcome: t.steps.welcome,
+    measurements: t.steps.measurements,
+    vibes: t.steps.vibes,
+    capture: t.steps.capture,
+    done: { title: t.steps.done.title, subtitle: captured === 'done' ? t.steps.done.subtitleCaptured : t.steps.done.subtitleLater },
   };
 
   return (
@@ -98,9 +103,13 @@ export function Onboarding({ initialStep = 'welcome', onFinished }: { initialSte
                   <Sparkles className="h-10 w-10 text-white" aria-hidden />
                 </div>
                 <ul className="max-w-xs space-y-2 text-center text-sm text-ink-soft">
-                  <li>See how a size M really fits <em>you</em>.</li>
-                  <li>Swipe a rail that learns your taste.</li>
-                  <li>Photos and video never leave this device.</li>
+                  <li>
+                    {fitsBefore}
+                    <em>{t.fitsYouEmphasis}</em>
+                    {fitsAfter}
+                  </li>
+                  <li>{t.learnsTaste}</li>
+                  <li>{t.staysOnDevice}</li>
                 </ul>
               </div>
             ) : null}
@@ -119,20 +128,20 @@ export function Onboarding({ initialStep = 'welcome', onFinished }: { initialSte
                   <NumberField
                     key={f.key}
                     label={MEASUREMENT_LABELS[f.key]}
-                    unit={f.unit}
+                    unit={units[f.unit]}
                     value={form[f.key]}
                     min={MANUAL_RANGES[f.key][0]}
                     max={MANUAL_RANGES[f.key][1]}
                     step={f.key === 'footEu' ? 0.5 : 0.5}
                     optional={f.optional}
-                    hint={f.hint}
+                    hint={f.hint ? t.hints[f.hint] : undefined}
                     error={submitted ? errors[f.key] : undefined}
                     onChange={(v) => setForm((prev) => ({ ...prev, [f.key]: v }))}
                   />
                 ))}
                 <fieldset className="space-y-2">
-                  <legend className="eyebrow">How did you measure?</legend>
-                  <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="How did you measure">
+                  <legend className="eyebrow">{t.howMeasuredLegend}</legend>
+                  <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={t.howMeasuredLabel}>
                     {(Object.keys(METHOD_LABELS) as ManualMethod[]).map((m) => {
                       const on = form.method === m;
                       return (
@@ -148,7 +157,7 @@ export function Onboarding({ initialStep = 'welcome', onFinished }: { initialSte
             ) : null}
 
             {step === 'vibes' ? (
-              <div className="mx-auto grid max-w-md grid-cols-2 gap-3 py-2" role="group" aria-label="Style vibes">
+              <div className="mx-auto grid max-w-md grid-cols-2 gap-3 py-2" role="group" aria-label={t.vibesLabel}>
                 {ONBOARDING_VIBES.map((v) => {
                   const on = vibes.includes(v);
                   return (
@@ -178,7 +187,7 @@ export function Onboarding({ initialStep = 'welcome', onFinished }: { initialSte
                   <Camera className="h-8 w-8" aria-hidden />
                 </div>
                 <p className="max-w-xs text-sm text-ink-soft">
-                  {captured === 'done' ? 'Only an 80-number fit signature can sync — no photo, no face or skin data. You will see it in your privacy ledger.' : 'Your typed measurements are stored on this device only.'}
+                  {captured === 'done' ? t.doneCaptured : t.doneTyped}
                 </p>
               </div>
             ) : null}
@@ -187,7 +196,7 @@ export function Onboarding({ initialStep = 'welcome', onFinished }: { initialSte
       </div>
 
       <div className="space-y-4">
-        <ol className="flex justify-center gap-2" aria-label="Progress">
+        <ol className="flex justify-center gap-2" aria-label={t.progress}>
           {ONBOARDING_STEPS.map((s, i) => (
             <li key={s} aria-current={i === idx ? 'step' : undefined} className={`h-1 rounded-full transition-all ${i === idx ? 'w-8 bg-coral' : 'w-2 bg-ink/15'}`} />
           ))}
@@ -207,12 +216,12 @@ export function Onboarding({ initialStep = 'welcome', onFinished }: { initialSte
             disabled={step === 'measurements' && submitted && !measurementsValid}
             className="btn-primary w-full"
           >
-            <span>{step === 'done' ? 'Enter the fitting room' : 'Next'}</span>
+            <span>{step === 'done' ? t.enter : t.next}</span>
             <ChevronRight className="h-4 w-4" aria-hidden />
           </button>
         )}
         {step === 'measurements' ? (
-          <p className="text-center text-xs text-ink-mute">Stored on this device only. Height is required; everything else is optional.</p>
+          <p className="text-center text-xs text-ink-mute">{t.measurementsNote}</p>
         ) : null}
       </div>
     </div>

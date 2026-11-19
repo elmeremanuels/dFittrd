@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from 'react';
+import { appStrings } from '@/strings';
 
 /** Number input + slider pair sharing one label (audit: htmlFor/id, per-field ranges, half-centimetres). */
 export function NumberField({
@@ -25,13 +26,14 @@ export function NumberField({
   onChange: (v: string) => void;
 }): ReactNode {
   const id = useId();
+  const t = appStrings().shared.numberField;
   const num = Number.parseFloat(value);
   const sliderValue = Number.isFinite(num) ? Math.max(min, Math.min(max, num)) : (min + max) / 2;
   return (
     <div className="space-y-1">
       <div className="flex items-baseline justify-between">
         <label htmlFor={id} className="eyebrow">
-          {label} {optional ? <span className="font-normal normal-case tracking-normal text-ink-mute">(optional)</span> : null}
+          {label} {optional ? <span className="font-normal normal-case tracking-normal text-ink-mute">{t.optional}</span> : null}
         </label>
         <span className="text-xs text-ink-mute">
           {min}–{max} {unit}
@@ -53,7 +55,7 @@ export function NumberField({
         />
         <input
           type="range"
-          aria-label={`${label} slider`}
+          aria-label={t.sliderLabel(label)}
           min={min}
           max={max}
           step={step}

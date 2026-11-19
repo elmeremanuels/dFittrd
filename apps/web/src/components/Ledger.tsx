@@ -1,6 +1,7 @@
 import { ShieldCheck } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { shortDate } from '@/lib/format';
+import { appStrings } from '@/strings';
 
 /**
  * Privacy ledger (handoff §2.2): what left the device, when, and which field names — never values.
@@ -16,17 +17,18 @@ export interface LedgerLine {
   status?: string;
 }
 
-export function Ledger({ lines, emptyText = 'Nothing has left this device yet.', title = 'Privacy ledger', compact = false }: { lines: LedgerLine[]; emptyText?: string; title?: string; compact?: boolean }): ReactNode {
+export function Ledger({ lines, emptyText, title, compact = false }: { lines: LedgerLine[]; emptyText?: string; title?: string; compact?: boolean }): ReactNode {
+  const t = appStrings().app.ledger;
   return (
     <section className="card space-y-3" aria-labelledby="ledger-title">
       <header className="flex items-center gap-2">
         <ShieldCheck className="h-5 w-5 text-coral" aria-hidden />
         <h2 id="ledger-title" className="font-display text-xl text-ink">
-          {title}
+          {title ?? t.title}
         </h2>
       </header>
       {lines.length === 0 ? (
-        <p className="text-sm text-ink-mute">{emptyText}</p>
+        <p className="text-sm text-ink-mute">{emptyText ?? t.empty}</p>
       ) : (
         <ol className={`divide-y divide-ink/10 ${compact ? 'max-h-64 overflow-y-auto' : ''}`}>
           {lines.map((l) => (
@@ -39,7 +41,7 @@ export function Ledger({ lines, emptyText = 'Nothing has left this device yet.',
               </div>
               <p className="text-xs text-ink-soft">{l.detail}</p>
               {l.fields.length > 0 ? (
-                <p className="mt-1 flex flex-wrap gap-1" aria-label="Fields sent">
+                <p className="mt-1 flex flex-wrap gap-1" aria-label={t.fieldsSent}>
                   {l.fields.map((f) => (
                     <span key={f} className="chip px-2 py-0.5 text-xs">
                       {f}
@@ -48,7 +50,7 @@ export function Ledger({ lines, emptyText = 'Nothing has left this device yet.',
                 </p>
               ) : null}
               <p className="mt-1 text-xs text-ink-mute">
-                {l.bytes !== undefined ? `${l.bytes} bytes` : ''}
+                {l.bytes !== undefined ? t.bytes(l.bytes) : ''}
                 {l.status ? ` · ${l.status}` : ''}
               </p>
             </li>

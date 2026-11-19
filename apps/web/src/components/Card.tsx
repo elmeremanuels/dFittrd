@@ -2,6 +2,7 @@ import { animate, motion, useMotionValue, useReducedMotion, useTransform, type P
 import { Bookmark, Heart, ThumbsDown, X } from 'lucide-react';
 import { useRef, useState, type ReactNode } from 'react';
 import type { SwipeAction } from '@curtain/schema';
+import { appStrings } from '@/strings';
 
 export const SWIPE_THRESHOLD_PX = 90;
 
@@ -40,6 +41,7 @@ export function Card({ id, disabled = false, onSwipe, children }: CardProps): Re
   const lessOpacity = useTransform(y, [20, SWIPE_THRESHOLD_PX], [0, 1]);
   const [busy, setBusy] = useState(false);
   const committed = useRef(false);
+  const t = appStrings().app.card;
 
   const commit = async (action: SwipeAction): Promise<void> => {
     if (committed.current) return;
@@ -77,10 +79,10 @@ export function Card({ id, disabled = false, onSwipe, children }: CardProps): Re
       className="mirror-frame mx-auto h-full w-auto max-w-full cursor-grab touch-none select-none"
     >
       {children}
-      <Overlay opacity={loveOpacity} className="right-5 top-5 border-coral text-coral-ink" icon={<Heart className="h-5 w-5" aria-hidden />} label="Love" />
-      <Overlay opacity={passOpacity} className="left-5 top-5 border-ink text-ink" icon={<X className="h-5 w-5" aria-hidden />} label="Pass" />
-      <Overlay opacity={saveOpacity} className="left-1/2 top-5 -translate-x-1/2 border-ink text-ink" icon={<Bookmark className="h-5 w-5" aria-hidden />} label="Save" />
-      <Overlay opacity={lessOpacity} className="bottom-24 left-1/2 -translate-x-1/2 border-ink text-ink" icon={<ThumbsDown className="h-5 w-5" aria-hidden />} label="Less like this" />
+      <Overlay opacity={loveOpacity} className="right-5 top-5 border-coral text-coral-ink" icon={<Heart className="h-5 w-5" aria-hidden />} label={t.love} />
+      <Overlay opacity={passOpacity} className="left-5 top-5 border-ink text-ink" icon={<X className="h-5 w-5" aria-hidden />} label={t.pass} />
+      <Overlay opacity={saveOpacity} className="left-1/2 top-5 -translate-x-1/2 border-ink text-ink" icon={<Bookmark className="h-5 w-5" aria-hidden />} label={t.save} />
+      <Overlay opacity={lessOpacity} className="bottom-24 left-1/2 -translate-x-1/2 border-ink text-ink" icon={<ThumbsDown className="h-5 w-5" aria-hidden />} label={t.less} />
     </motion.div>
   );
 }

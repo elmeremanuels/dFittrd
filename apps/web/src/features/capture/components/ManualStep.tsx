@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { ChevronRight, Ruler } from 'lucide-react';
 import type { ManualMethod } from '@curtain/schema';
+import { appStrings } from '../../../strings';
 import { MANUAL_FIELDS, MANUAL_RANGES, MEASUREMENT_LABELS, MEASUREMENT_UNITS, METHOD_LABELS, TAPE_INSTRUCTIONS, validateManual, type ManualField, type ManualForm } from '../captureMachine';
 import type { Sex } from '../types';
 import { Panel, PrimaryButton, StepHeader } from './ui';
@@ -12,16 +13,13 @@ interface Props {
   onDone: () => void;
 }
 
-const SEX_OPTIONS: { value: Sex; label: string }[] = [
-  { value: 'female', label: "Women's charts" },
-  { value: 'male', label: "Men's charts" },
-  { value: 'unspecified', label: 'Prefer not to say' },
-];
+const SEX_OPTIONS: readonly Sex[] = ['female', 'male', 'unspecified'];
 
 export function ManualStep({ form, hasScan, onChange, onDone }: Props): ReactNode {
   const [touched, setTouched] = useState<Partial<Record<ManualField, boolean>>>({});
   const [submitted, setSubmitted] = useState(false);
   const errors = validateManual(form);
+  const t = appStrings().capture.manual;
   const set = (k: keyof ManualForm, v: string): void => onChange({ ...form, [k]: v });
 
   const submit = (): void => {
@@ -32,9 +30,9 @@ export function ManualStep({ form, hasScan, onChange, onDone }: Props): ReactNod
   return (
     <Panel className="space-y-5">
       <StepHeader
-        eyebrow="Step 3 of 3"
-        title="Your measurements"
-        subtitle={hasScan ? 'The scan keeps these honest; they sharpen the scan. Leave blank what you do not know.' : 'No scan this time — these drive the fit directly.'}
+        eyebrow={t.eyebrow}
+        title={t.title}
+        subtitle={hasScan ? t.subtitleScan : t.subtitleNoScan}
       />
       <form
         className="space-y-4"
@@ -45,8 +43,8 @@ export function ManualStep({ form, hasScan, onChange, onDone }: Props): ReactNod
         noValidate
       >
         <fieldset className="space-y-2">
-          <legend className="text-xs uppercase tracking-wider text-ink/40">How did you measure?</legend>
-          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="How did you measure">
+          <legend className="text-xs uppercase tracking-wider text-ink/40">{t.methodLegend}</legend>
+          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={t.methodGroup}>
             {(Object.keys(METHOD_LABELS) as ManualMethod[]).map((m) => {
               const on = form.method === m;
               return (
@@ -75,7 +73,7 @@ export function ManualStep({ form, hasScan, onChange, onDone }: Props): ReactNod
               <div key={f} className="space-y-1">
                 <label htmlFor={`manual-${f}`} className="flex items-center justify-between text-sm">
                   <span className="text-xs uppercase tracking-wider text-ink/40">
-                    {MEASUREMENT_LABELS[f]} {f === 'height' ? '' : <span className="normal-case tracking-normal">(optional)</span>}
+                    {MEASUREMENT_LABELS[f]} {f === 'height' ? '' : <span className="normal-case tracking-normal">{t.optional}</span>}
                   </span>
                   <span className="text-xs text-ink/40">{MEASUREMENT_UNITS[f]}</span>
                 </label>
@@ -109,29 +107,29 @@ export function ManualStep({ form, hasScan, onChange, onDone }: Props): ReactNod
         </div>
 
         <fieldset className="space-y-2">
-          <legend className="text-xs uppercase tracking-wider text-ink/40">Which size charts do you usually use?</legend>
-          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Size chart type">
-            {SEX_OPTIONS.map((o) => {
-              const on = form.sex === o.value;
+          <legend className="text-xs uppercase tracking-wider text-ink/40">{t.chartsLegend}</legend>
+          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={t.chartsGroup}>
+            {SEX_OPTIONS.map((value) => {
+              const on = form.sex === value;
               return (
                 <button
-                  key={o.value}
+                  key={value}
                   type="button"
                   role="radio"
                   aria-checked={on}
-                  onClick={() => onChange({ ...form, sex: o.value })}
+                  onClick={() => onChange({ ...form, sex: value })}
                   className={`rounded-2xl border px-2 py-2 text-xs font-medium transition-colors ${on ? 'border-coral bg-coral/10 text-ink' : 'border-ink/10 bg-white/40 text-ink/70'}`}
                 >
-                  {o.label}
+                  {t.charts[value]}
                 </button>
               );
             })}
           </div>
-          <p className="text-xs text-ink/40">Only used to pick the population prior for missing measurements. Stays on this device.</p>
+          <p className="text-xs text-ink/40">{t.chartsNote}</p>
         </fieldset>
 
         <PrimaryButton type="submit">
-          <Ruler className="h-5 w-5" aria-hidden /> Combine with the scan <ChevronRight className="h-4 w-4" aria-hidden />
+          <Ruler className="h-5 w-5" aria-hidden /> {t.submit} <ChevronRight className="h-4 w-4" aria-hidden />
         </PrimaryButton>
       </form>
     </Panel>

@@ -37,6 +37,17 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     expect(screen.queryByTestId('garment3d-hem-note')).toBeNull(); // no hem input for this product
   });
 
+  it('a W/L result whose leg was not checked names the waist under the 3D view, never "No size fits well"', async () => {
+    setup({ recommended: null, waistOnly: '34' });
+    fireEvent.click(screen.getByTestId('garment3d-open'));
+    expect(await screen.findByTestId('garment3d-label')).toHaveTextContent('The size advice picked waist 34; the leg length was not checked. You are looking at size');
+    expect(screen.getByTestId('garment3d-label')).not.toHaveTextContent('No size fits well');
+    cleanup();
+    setup({ recommended: null });
+    fireEvent.click(screen.getByTestId('garment3d-open'));
+    expect(await screen.findByTestId('garment3d-label')).toHaveTextContent('No size fits well; the size advice decides, not this picture.');
+  });
+
   it('a server drape bake says where the shopper lies, and names the band when that is why a size is not drawn', async () => {
     const source = {
       kind: 'bake',

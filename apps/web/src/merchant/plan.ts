@@ -1,5 +1,6 @@
 /** Plan display for the merchant console (D17: one plan, "Curtain", USD 8.99 per month, flat). */
 import type { UsageResponse } from '@curtain/schema';
+import { merchantStrings } from './strings';
 
 /** D17 list price, used when an older api does not send `priceUsdPerMonth`. */
 export const CURTAIN_PRICE_USD = 8.99;
@@ -14,9 +15,10 @@ function money(amount: number, currency: string): string {
 
 /** "$8.99 per month", or "A$13.80 per month ($8.99)" when Shopify charges the shop in its billing currency. */
 export function planPriceText(plan: Pick<UsageResponse['plan'], 'priceUsdPerMonth' | 'chargePrice' | 'chargeCurrency'>): string {
+  const t = merchantStrings().plan;
   const usd = money(plan.priceUsdPerMonth || CURTAIN_PRICE_USD, 'USD');
-  if (plan.chargeCurrency && plan.chargeCurrency !== 'USD' && typeof plan.chargePrice === 'number') return `${money(plan.chargePrice, plan.chargeCurrency)} per month (${usd})`;
-  return `${usd} per month`;
+  if (plan.chargeCurrency && plan.chargeCurrency !== 'USD' && typeof plan.chargePrice === 'number') return t.perMonthCharged(money(plan.chargePrice, plan.chargeCurrency), usd);
+  return t.perMonth(usd);
 }
 
 export type PlanState = 'legacy' | 'active' | 'paused' | 'none';
@@ -33,16 +35,15 @@ export function planState(plan: Pick<UsageResponse['plan'], 'name' | 'paused' | 
 
 /** The status line under the plan card. */
 export function planStatusText(plan: Pick<UsageResponse['plan'], 'name' | 'paused' | 'legacyPlan' | 'switchVia'>): string {
+  const t = merchantStrings().plan;
   switch (planState(plan)) {
     case 'paused':
-      return 'Paused: shoppers see a short “taking a break” note instead of a size until the plan is active again.';
+      return t.paused;
     case 'none':
-      return 'Not started yet.';
+      return t.none;
     case 'active':
-      return 'Active.';
+      return t.active;
     case 'legacy':
-      return `Still billed on the retired “${plan.legacyPlan}” plan at its old price. ${
-        plan.switchVia === 'shopify' ? 'Open Curtain in your Shopify admin and approve the Curtain plan to switch.' : 'Switch to the Curtain plan below; the old subscription is cancelled when the new one starts.'
-      }`;
+      return t.legacy(String(plan.legacyPlan), plan.switchVia === 'shopify');
   }
 }

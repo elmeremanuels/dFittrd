@@ -3,6 +3,7 @@
  * so it can be unit-tested without a DOM. The React components only render this state.
  */
 import type { BodyMeasurementKey, ManualMethod } from '@curtain/schema';
+import { appStrings } from '../../strings';
 import type { ManualEntries } from './fuse';
 import type { Sex } from './types';
 
@@ -87,15 +88,15 @@ export function validateManual(form: ManualForm): Partial<Record<ManualField, st
     const raw = form[f];
     const n = parseNumber(raw);
     if (raw.trim() === '') {
-      if (f === 'height') errors[f] = 'Your height is needed to scale everything else';
+      if (f === 'height') errors[f] = appStrings().capture.measurements.errors.heightNeeded;
       continue;
     }
     if (n === null) {
-      errors[f] = 'Enter a number';
+      errors[f] = appStrings().capture.measurements.errors.notANumber;
       continue;
     }
     const [lo, hi] = MANUAL_RANGES[f];
-    if (n < lo || n > hi) errors[f] = `Expected between ${lo} and ${hi}`;
+    if (n < lo || n > hi) errors[f] = appStrings().capture.measurements.errors.range(lo, hi);
   }
   return errors;
 }
@@ -113,53 +114,28 @@ export function manualEntries(form: ManualForm, remeasures: Partial<Record<BodyM
   return out;
 }
 
-export const MEASUREMENT_LABELS: Record<BodyMeasurementKey, string> = {
-  height: 'Height',
-  weight: 'Weight',
-  bust: 'Bust / chest',
-  waist: 'Waist',
-  hip: 'Hip',
-  shoulder: 'Shoulder',
-  thigh: 'Thigh',
-  inseam: 'Inseam',
-  foot: 'Foot length',
-  footLengthCm: 'Foot length',
-  footEu: 'Shoe size (EU)',
-  neck: 'Neck',
-  sleeve: 'Arm length',
-};
+const MEASUREMENT_KEYS: readonly BodyMeasurementKey[] = ['height', 'weight', 'bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'foot', 'footLengthCm', 'footEu', 'neck', 'sleeve'];
+const TAPE_KEYS = ['bust', 'waist', 'hip', 'thigh', 'shoulder', 'inseam'] as const;
+const METHOD_KEYS: readonly ManualMethod[] = ['tape', 'memory', 'guess'];
 
-export const MEASUREMENT_UNITS: Record<BodyMeasurementKey, string> = {
-  height: 'cm',
-  weight: 'kg',
-  bust: 'cm',
-  waist: 'cm',
-  hip: 'cm',
-  shoulder: 'cm',
-  thigh: 'cm',
-  inseam: 'cm',
-  foot: 'cm',
-  footLengthCm: 'cm',
-  footEu: 'EU',
-  neck: 'cm',
-  sleeve: 'cm',
-};
+/**
+ * A record whose values are read from the catalogue each time one is looked up, so the tables
+ * below hold no text of their own and follow the interface locale (DECISIONS.md D21).
+ */
+function fromCatalogue<K extends string, V>(keys: readonly K[], read: (key: K) => V): Record<K, V> {
+  const out = {} as Record<K, V>;
+  for (const key of keys) Object.defineProperty(out, key, { enumerable: true, get: () => read(key) });
+  return out;
+}
+
+export const MEASUREMENT_LABELS: Record<BodyMeasurementKey, string> = fromCatalogue(MEASUREMENT_KEYS, (k) => appStrings().capture.measurements.labels[k]);
+
+export const MEASUREMENT_UNITS: Record<BodyMeasurementKey, string> = fromCatalogue(MEASUREMENT_KEYS, (k) => appStrings().capture.measurements.units[k]);
 
 /** ISO 8559-1 tape instructions shown in the remeasure UI. */
-export const TAPE_INSTRUCTIONS: Partial<Record<BodyMeasurementKey, string>> = {
-  bust: 'Tape horizontal around the fullest part of the bust, at bust-point level, breathing normally, tape snug but not tight.',
-  waist: 'Tape around the natural waist, midway between the lowest rib and the top of the hip bone (iliac crest).',
-  hip: 'Tape horizontal around the fullest part of the buttocks, feet together.',
-  thigh: 'Tape horizontal around the thigh just below the crotch, at the fullest part.',
-  shoulder: 'Measure across the back from the tip of one shoulder bone to the other.',
-  inseam: 'From the crotch down the inside of the leg to the floor, standing straight without shoes.',
-};
+export const TAPE_INSTRUCTIONS: Partial<Record<BodyMeasurementKey, string>> = fromCatalogue(TAPE_KEYS, (k) => appStrings().capture.measurements.tape[k]);
 
-export const METHOD_LABELS: Record<ManualMethod, { label: string; hint: string }> = {
-  tape: { label: 'Tape, just now', hint: '±1.5 cm' },
-  memory: { label: 'From memory', hint: '±2.5 cm' },
-  guess: { label: 'A guess', hint: '±4 cm' },
-};
+export const METHOD_LABELS: Record<ManualMethod, { label: string; hint: string }> = fromCatalogue(METHOD_KEYS, (k) => appStrings().capture.measurements.methods[k]);
 
 /** Body-scan protocol timing: 8 s total, front first then the side turn. */
 export const SCAN_PROTOCOL = { totalMs: 8000, turnAtMs: 4000, minFramesFront: 6 } as const;

@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import type { FitResult } from '@curtain/fit-engine';
 import { shownFitScore, scoredSizeBlocked } from '@/lib/fitScore';
 import { pct } from '@/lib/format';
+import { appStrings } from '@/strings';
 
 /**
  * Fit indicator: recommended size (or the 'no size fits' state with the closest size), score,
@@ -14,54 +15,71 @@ export function FitPanel({
   hasMeasurements,
   compact = false,
   scoreNote,
+  waistOnly = null,
 }: {
   fit: FitResult | null;
   hasMeasurements: boolean;
   compact?: boolean;
   /** Shown in place of the fit score when a percentage would mislead (the embed: a pull-on band that only just passes the hips). */
   scoreNote?: string | undefined;
+  /** The embed: the waist of a W/L chart whose leg could not be checked. Named in place of "No size fits". */
+  waistOnly?: string | null;
 }): ReactNode {
+  const shared = appStrings().shared;
+  const t = shared.fitPanel;
   return (
     <div className={`glass-panel rounded-2xl text-ink ${compact ? 'px-3 py-2' : 'p-3'}`} aria-live="polite" aria-atomic="true" data-testid="fit-panel">
       {!hasMeasurements ? (
         <p className="text-sm">
           <Link to="/onboarding" className="font-medium text-coral-ink underline-offset-2 hover:underline">
-            Add your measurements
-          </Link>{' '}
-          to see how this fits.
+            {t.addMeasurementsLink}
+          </Link>
+          {t.addMeasurementsAfter}
         </p>
       ) : !fit ? (
-        <p className="text-sm text-ink-soft">Working out the fit…</p>
+        <p className="text-sm text-ink-soft">{t.working}</p>
+      ) : fit.recommendedSize === null && waistOnly !== null ? (
+        <div className="space-y-1" data-testid="fit-panel-waist-only">
+          <p className="eyebrow">{t.waistOnly(waistOnly)}</p>
+          <p className="text-sm">{t.waistOnlyText(fit.closestSize ?? shared.format.none)}</p>
+          {!compact ? <Notes notes={fit.notes} label={t.notesLabel} /> : null}
+        </div>
       ) : fit.recommendedSize === null ? (
         <div className="space-y-1">
-          <p className="eyebrow text-bad">No size fits</p>
+          <p className="eyebrow text-bad">{t.noSizeFits}</p>
           <p className="text-sm">
             {/* A size whose waistband does not pull on over the hips gets no percentage (its chart score can be 99%). */}
             {scoredSizeBlocked(fit) ? (
               <>
-                Closest is <span className="font-display text-lg">{fit.closestSize ?? '—'}</span>, but its waistband does not stretch over your hips — we would not recommend it.
+                {t.closestBefore}
+                <span className="font-display text-lg">{fit.closestSize ?? shared.format.none}</span>
+                {t.closestBlockedAfter}
               </>
             ) : (
               <>
-                Closest is <span className="font-display text-lg">{fit.closestSize ?? '—'}</span> at {pct(fit.score)} — we would not recommend it.
+                {t.closestBefore}
+                <span className="font-display text-lg">{fit.closestSize ?? shared.format.none}</span>
+                {t.closestScoredAfter(pct(fit.score))}
               </>
             )}
           </p>
-          {!compact ? <Notes notes={fit.notes} /> : null}
+          {!compact ? <Notes notes={fit.notes} label={t.notesLabel} /> : null}
         </div>
       ) : compact ? (
         <div>
           <p className="flex items-baseline gap-1.5">
-            <span className="eyebrow">Size</span>
+            <span className="eyebrow">{t.size}</span>
             <span className="font-display text-xl leading-none text-coral-ink" data-testid="recommended-size">
               {fit.recommendedSize}
             </span>
           </p>
           <p className="text-[11px] leading-tight text-ink-mute">
-            fit <span className="font-semibold text-ink" data-testid="fit-score">{pct(shownFitScore(fit))}</span> · {pct(fit.confidence)} sure
+            {t.compactFitBefore}
+            <span className="font-semibold text-ink" data-testid="fit-score">{pct(shownFitScore(fit))}</span>
+            {t.compactFitAfter(pct(fit.confidence))}
           </p>
           {fit.notes.length > 0 ? (
-            <ul className="mt-0.5 text-[11px] leading-tight text-ink-soft" aria-label="Fit notes" data-testid="fit-notes">
+            <ul className="mt-0.5 text-[11px] leading-tight text-ink-soft" aria-label={t.notesLabel} data-testid="fit-notes">
               {fit.notes.slice(0, 4).map((n, i) => (
                 <li key={n} className={i > 0 ? 'sr-only' : 'truncate'}>
                   • {n}
@@ -74,13 +92,13 @@ export function FitPanel({
         <div className="space-y-1">
           <div className="flex items-end justify-between gap-3">
             <div>
-              <p className="eyebrow">Recommended size</p>
+              <p className="eyebrow">{t.recommendedSize}</p>
               <p className="font-display text-2xl leading-none text-coral-ink" data-testid="recommended-size">
                 {fit.recommendedSize}
               </p>
             </div>
             <div className="text-right">
-              <p className="eyebrow">Fit score</p>
+              <p className="eyebrow">{t.fitScore}</p>
               {scoreNote ? (
                 <p className="text-sm leading-tight font-semibold text-warn" data-testid="fit-score-note">
                   {scoreNote}
@@ -92,20 +110,18 @@ export function FitPanel({
               )}
             </div>
           </div>
-          <p className="text-xs text-ink-mute">
-            Confidence {pct(fit.confidence)} · estimate{fit.tieBreak ? ` · tie broken by ${fit.tieBreak.replace('-', ' ')}` : ''}
-          </p>
-          {!compact ? <Notes notes={fit.notes} /> : null}
+          <p className="text-xs text-ink-mute">{t.confidenceLine(pct(fit.confidence), fit.tieBreak ? fit.tieBreak.replace('-', ' ') : null)}</p>
+          {!compact ? <Notes notes={fit.notes} label={t.notesLabel} /> : null}
         </div>
       )}
     </div>
   );
 }
 
-function Notes({ notes }: { notes: string[] }): ReactNode {
+function Notes({ notes, label }: { notes: string[]; label: string }): ReactNode {
   if (notes.length === 0) return null;
   return (
-    <ul className="mt-1 space-y-0.5 text-xs text-ink-soft" aria-label="Fit notes" data-testid="fit-notes">
+    <ul className="mt-1 space-y-0.5 text-xs text-ink-soft" aria-label={label} data-testid="fit-notes">
       {notes.slice(0, 4).map((n, i) => (
         // short viewports: only the first note is drawn over the mirror; the rest stay for screen readers
         <li key={n} className={i > 0 ? '[@media(max-height:740px)]:sr-only' : undefined}>

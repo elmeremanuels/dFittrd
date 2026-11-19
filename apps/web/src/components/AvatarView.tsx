@@ -6,7 +6,8 @@ import { ESTIMATE_DISCLAIMER, type GarmentPayload, type UserBody } from '@curtai
 import { adjustColor, bodyGeometry, bodyPath, fabricLook, garmentGeometry, isHex, levelY, STANDARD_SKIN_HEX, VIEW_H, VIEW_W, HEAD_TOP_Y, type FigureFamily, type MaleShape } from '@/render/body';
 import { faceInk, figureOutline, neutralFace, SKIN_SHADE } from '@/render/face';
 import { skin2d, type Skin2dShading } from '@/render/skin2d';
-import { ESTIMATE_LABEL_LINES, EstimateBadge } from './EstimateBadge';
+import { appStrings } from '@/strings';
+import { EstimateBadge, estimateLabelLines } from './EstimateBadge';
 import { SizeRingsChips, SizeRingsLayer } from './SizeRings';
 import type { RingOverlay } from '@/render/rings';
 
@@ -102,8 +103,10 @@ const NO_MEDIA: AvatarMedia = { faceUrl: null, baseFrame: null };
  * head (D19: one generic drawing for everybody, never a likeness), or the face tile where the app
  * has one. Always carries the estimate badge.
  */
-export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false, rings = null, hemSweepCm = null, labelsAt = 'top', plain = false, estimateLines = ESTIMATE_LABEL_LINES, family = 'female', maleShape = 'v1', skinShading = 'flat' }: AvatarViewProps): ReactNode {
+export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false, rings = null, hemSweepCm = null, labelsAt = 'top', plain = false, estimateLines: estimateLinesProp, family = 'female', maleShape = 'v1', skinShading = 'flat' }: AvatarViewProps): ReactNode {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
+  const t = appStrings().shared.avatar;
+  const estimateLines = estimateLinesProp ?? estimateLabelLines();
   const reduce = useReducedMotion();
 
   const body = useMemo(() => bodyGeometry(measurements, heightCm, family, maleShape === 'v2' ? { maleShape } : {}), [measurements, heightCm, family, maleShape]);
@@ -135,7 +138,7 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
   const bodyD = bodyPath(body);
   const headCy = HEAD_TOP_Y + body.headRy;
   const hasBody = !!measurements && Object.keys(measurements).length > 0;
-  const onWhom = media.baseFrame ? 'over your capture' : hasBody ? 'on a body drawn from your measurements' : 'on a reference body';
+  const onWhom = media.baseFrame ? t.onCapture : hasBody ? t.onMeasuredBody : t.onReferenceBody;
 
   return (
     <div className={`relative flex h-full w-full items-center justify-center ${compact ? 'p-0' : labelsBelow ? 'px-3 pt-3 pb-16' : labelsAbove ? 'px-3 pt-11 pb-3' : 'p-3'}`} data-testid="mirror">
@@ -149,7 +152,7 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
         {...(family === 'male' ? { 'data-figure': 'male' } : {})}
         {...(body.maleShape === 'v2' ? { 'data-male-shape': 'v2' } : {})}
         {...(v2 ? { 'data-skin-shading': 'skin-v2' } : {})}
-        aria-label={garment ? `Estimated look of ${garment.name}${size ? ` in size ${size}` : ''} ${onWhom} — not measured` : hasBody ? 'Your body outline (estimate)' : 'Reference body outline'}
+        aria-label={garment ? t.garmentLabel(garment.name, size || null, onWhom) : hasBody ? t.bodyOutline : t.referenceOutline}
       >
         <defs>
           <filter id={ids.skinTex} x="0" y="0" width="100%" height="100%">
@@ -309,7 +312,7 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
       {rings && !compact ? <SizeRingsChips overlay={rings} topRem={labelsAbove ? 2.75 : 0.75} bottomRem={labelsBelow ? 4 : 0.75} /> : null}
       {!bare && compact ? (
         <span className="chip pointer-events-none absolute bottom-0.5 left-1/2 -translate-x-1/2 bg-ink/85 px-1.5 py-0 text-[9px] whitespace-nowrap text-cream shadow" title={ESTIMATE_DISCLAIMER} data-testid="estimate-badge">
-          Estimate
+          {t.estimateShort}
         </span>
       ) : null}
       {labelsBelow ? (
@@ -319,21 +322,21 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
         // as little of the figure as it can (it still crosses the left arm and a wide hem).
         <div className="pointer-events-none absolute inset-x-2 top-3 bottom-4 z-10 flex items-end gap-1" data-testid="avatar-labels">
           <EstimateBadge lines={estimateLines} className="sticky shrink-0 px-1.5 py-0.5 text-[10px] leading-tight" style={{ bottom: 'calc(var(--estimate-clear, 0px) + 0.375rem)' }} />
-          {garment && !media.baseFrame ? <span className="chip min-w-0 rounded-xl bg-white/70 px-2 py-0.5 text-[10px] leading-tight" data-testid="avatar-body-chip">{bodyLabel ?? (hasBody ? 'Body from your measurements' : 'Reference body · add your measurements')}</span> : null}
-          {media.baseFrame ? <span className="chip min-w-0 rounded-xl bg-white/70 px-2 py-0.5 text-[10px] leading-tight">Your capture · garment overlay</span> : null}
+          {garment && !media.baseFrame ? <span className="chip min-w-0 rounded-xl bg-white/70 px-2 py-0.5 text-[10px] leading-tight" data-testid="avatar-body-chip">{bodyLabel ?? (hasBody ? t.bodyFromMeasurements : t.referenceBody)}</span> : null}
+          {media.baseFrame ? <span className="chip min-w-0 rounded-xl bg-white/70 px-2 py-0.5 text-[10px] leading-tight">{t.captureOverlay}</span> : null}
         </div>
       ) : labelsAbove ? (
         // A strip of their own above the head: one row of narrow chips (two or three short lines).
         <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start gap-1" data-testid="avatar-labels">
           <EstimateBadge lines={estimateLines} className="shrink-0 px-1.5 py-0.5 text-[10px] leading-tight" />
-          {garment && !media.baseFrame ? <span className="chip min-w-0 rounded-xl bg-white/70 px-1.5 py-0.5 text-[10px] leading-tight">{bodyLabel ?? (hasBody ? 'Body from your measurements' : 'Reference body · add your measurements')}</span> : null}
-          {media.baseFrame ? <span className="chip min-w-0 rounded-xl bg-white/70 px-1.5 py-0.5 text-[10px] leading-tight">Your capture · garment overlay</span> : null}
+          {garment && !media.baseFrame ? <span className="chip min-w-0 rounded-xl bg-white/70 px-1.5 py-0.5 text-[10px] leading-tight">{bodyLabel ?? (hasBody ? t.bodyFromMeasurements : t.referenceBody)}</span> : null}
+          {media.baseFrame ? <span className="chip min-w-0 rounded-xl bg-white/70 px-1.5 py-0.5 text-[10px] leading-tight">{t.captureOverlay}</span> : null}
         </div>
       ) : null}
       {isLoading ? (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center" role="status" aria-live="polite">
           <div className="h-10 w-10 rounded-full border-2 border-coral border-t-transparent motion-safe:animate-spin" aria-hidden />
-          <p className="mt-3 rounded-full bg-cream/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-ink-soft">Rendering estimate</p>
+          <p className="mt-3 rounded-full bg-cream/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-ink-soft">{t.rendering}</p>
         </div>
       ) : null}
     </div>

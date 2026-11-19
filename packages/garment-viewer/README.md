@@ -149,7 +149,7 @@ once; a size switch is a buffer copy. The five bundle files and the gate are unc
 - There is no texture: the garment is drawn in the bake's `plainColourHex`. `GarmentView.source` says so
   (`{ kind: 'bake', plainColour: true, sizes }`, per size `provenance` measured / interpolated / extrapolated and
   `place` (`bakePlace`): `within` the draped bodies, `held` on the nearest one, `between` the last draped body and one
-  the simulation could not dress in that size, or `refused` at or past such a body (`notDraped`): the size is then
+  the size was not draped on (its band cannot be pulled over that body, `refusedRule: 'pull-on'`), or `refused` at or past such a body (`notDraped`): the size is then
   not drawn on the shopper, and `refusedHipCm` names that body's hip). The host prints it under the estimate label
   (`apps/web` `Garment3D.tsx`). An on-device view says `{ kind: 'device' }`.
 - A bake is draped on the girth avatar: with a typed body (height, shoulders) it is `GarmentViewError('incompatible')`.

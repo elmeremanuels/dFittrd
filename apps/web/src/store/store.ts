@@ -21,6 +21,7 @@ import type { SkinEstimate } from '@/features/capture/types';
 import { clearAppTables, type AppDb, type ClientLedgerEntry, type ConsentTier, type OutboxRow, type PendingIntentRow, type SettingsRow, SINGLETON_ID, wardrobeClientId, type WardrobeRow } from '@/db/db';
 import type { ApiClient, DeviceCredentials } from '@/api/client';
 import { newId } from '@/lib/ids';
+import { appStrings } from '@/strings';
 import { seasonKey } from '@/lib/season';
 import { fitContextFromProfile, fitFor, hasMeasurements, type FitContext } from './fit';
 import { defaultSettings, loadSnapshot, normaliseTaste, saveLedgerEntry, saveSettings, saveTaste, LEDGER_KEEP } from './persist';
@@ -28,7 +29,15 @@ import { OutboxSyncer } from '@/sync/outbox';
 
 /** Shop id used for the bundled fixtures until a real shop is paired (valid uuid, never a real shop). */
 export const MOCK_SHOP_ID = '00000000-0000-4000-8000-000000000001';
-export const MOCK_SHOP: ShopBranding = { id: MOCK_SHOP_ID, name: 'Curtain demo rail', platform: 'shopify', paused: false };
+/** The bundled demo shop. Its name is interface text, read from the catalogue each time it is shown. */
+export const MOCK_SHOP: ShopBranding = {
+  id: MOCK_SHOP_ID,
+  get name(): string {
+    return appStrings().app.store.demoShopName;
+  },
+  platform: 'shopify',
+  paused: false,
+};
 
 /** Outbox idempotency key of the pending "Delete my scan" on the server (PRIV-1). */
 const SIGNATURE_DELETE_ID = 'signature:delete';

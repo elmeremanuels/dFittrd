@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { c30Parts, c30Text } from '../avatarCopy';
-import { facePhotoEnabled, lookForMonk, MONK_CLASSES, parseLook } from '../look';
+import { faceOnHeadEnabled, facePhotoEnabled, lookForMonk, MONK_CLASSES, parseLook } from '../look';
 import { embedStrings } from '../strings';
 
 const COPY = readFileSync(fileURLToPath(new URL('../../../../../docs/legal/avatar-consent-copy.md', import.meta.url)), 'utf8');
@@ -32,13 +32,21 @@ describe('avatar prompt copy (docs/legal/avatar-consent-copy.md)', () => {
     expect(`${parts.before}${parts.label}${parts.after}`).toBe(c30Text());
   });
 
+  it('the face-on-head spike row says variant A of the copy word for word (the photo stays on the device)', () => {
+    const f = embedStrings('en').avatar.faceSpike;
+    for (const key of ['c6', 'c7', 'c9', 'yes', 'no', 'c27'] as const) expect(DOC, `${key}: ${f[key]}`).toContain(f[key]);
+    // Variant B (the D19 server route) is never shown by this build.
+    for (const v of Object.values(f)) expect(v).not.toMatch(/\bsend\b|deleted right after/i);
+    expect(f.c7).toBe('The photo stays on your device. It is never sent to us.');
+  });
+
   it('credits the Monk Skin Tone Scale (CC BY 4.0)', () => {
     expect(UI.swatchCredit).toMatch(/Monk Skin Tone Scale.*Ellis Monk.*CC BY 4\.0/);
   });
 
   it('uses none of the words the copy bans (section 4), in claims or labels', () => {
     const banned = [/anonym/i, /100\s?%/, /\bsecure\b/i, /nobody can/i, /never leaves/i, /may be sent/i, /biometr/i, /\bwe only\b/i, /\blocked\b/i, /\bsafe\b/i, /accura/i];
-    const all = [...Object.values(CLAIMS), ...Object.values(UI).map((v) => (typeof v === 'function' ? v(3, 10) : v))].join('\n');
+    const all = [...Object.values(CLAIMS), ...Object.values(embedStrings('en').avatar.faceSpike), ...Object.values(UI).map((v) => (typeof v === 'function' ? v(3, 10) : v))].join('\n');
     for (const re of banned) expect(all).not.toMatch(re);
   });
 
@@ -77,5 +85,12 @@ describe('skin look', () => {
     expect(facePhotoEnabled({ VITE_AVATAR_FACE_PHOTO: 'true' })).toBe(false);
     expect(facePhotoEnabled({ VITE_AVATAR_FACE_PHOTO: '1' })).toBe(true);
     expect(facePhotoEnabled()).toBe(false);
+  });
+
+  it('the face-on-head spike flag is off unless the build sets it to 1', () => {
+    expect(faceOnHeadEnabled({})).toBe(false);
+    expect(faceOnHeadEnabled({ VITE_AVATAR_FACE_ON_HEAD: 'true' })).toBe(false);
+    expect(faceOnHeadEnabled({ VITE_AVATAR_FACE_ON_HEAD: '1' })).toBe(true);
+    expect(faceOnHeadEnabled()).toBe(false);
   });
 });

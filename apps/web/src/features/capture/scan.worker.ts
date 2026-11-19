@@ -8,17 +8,22 @@
  */
 import { FaceLandmarker, FilesetResolver, ImageSegmenter, PoseLandmarker } from '@mediapipe/tasks-vision';
 import { placeLevels } from './crossSections';
+import { bakeFaceTexture, MAX_FRONT_YAW_DEG, type FaceTopology } from './faceBake';
+import faceMeshUv from './faceMeshUv.json';
 import { estimateSkin, sampleClassLab, sampleSkinLab, SKIN_SAMPLE_INDICES } from './faceSkin';
 import { neighbourhood, retainedIndices } from './frameRetainer';
 import { SEG } from './landmarks';
 import { headTopWithoutHair, medianMask, sampleLevels, samplesToFramePx, shoulderSlopeFromMask, type CategoryMask } from './maskGeometry';
 import { measureScan } from './measure';
+import { installSameOriginOnly } from './sameOriginOnly';
 import { MODEL_BASE, MODEL_FILES, VISION_WASM_ES_MODULE, resolveModelBase, type PoseVariant } from './models';
 import { gateFrame, selectFrames } from './poseGate';
 import type { FrameFeatures, GateResult, Landmark, Sex, ViewMeasurement } from './types';
 import type { WorkerInbound, WorkerOutbound } from './workerProtocol';
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
+// Before any MediaPipe task exists: refuse every request off this origin (MediaPipe's usage logger, see sameOriginOnly.ts).
+installSameOriginOnly(ctx as unknown as Parameters<typeof installSameOriginOnly>[0]);
 const post = (msg: WorkerOutbound, transfer: Transferable[] = []): void => ctx.postMessage(msg, transfer);
 
 /** Cream #F5EFE7 — the design-system backdrop used to replace the background. */
@@ -54,7 +59,7 @@ function resetRecording(): void {
   passed = 0;
 }
 
-async function init(variant: PoseVariant, needPose: boolean, needFace: boolean): Promise<void> {
+async function init(variant: PoseVariant, needPose: boolean, needFace: boolean, needSegmenter = true, force?: 'GPU' | 'CPU'): Promise<void> {
   const t0 = performance.now();
   // module worker: the ES-module WASM loader is the only one that works here (see models.ts)
   const fileset = await FilesetResolver.forVisionTasks(`${modelBase}/wasm`, VISION_WASM_ES_MODULE);
@@ -63,12 +68,14 @@ async function init(variant: PoseVariant, needPose: boolean, needFace: boolean):
   const rebase = (p: string): string => p.replace(MODEL_BASE, modelBase);
 
   const make = async (d: 'GPU' | 'CPU'): Promise<void> => {
-    segmenter = await ImageSegmenter.createFromOptions(fileset, {
-      baseOptions: { modelAssetPath: rebase(MODEL_FILES.segmenter), delegate: d },
-      runningMode: 'IMAGE',
-      outputCategoryMask: true,
-      outputConfidenceMasks: false,
-    });
+    if (needSegmenter) {
+      segmenter = await ImageSegmenter.createFromOptions(fileset, {
+        baseOptions: { modelAssetPath: rebase(MODEL_FILES.segmenter), delegate: d },
+        runningMode: 'IMAGE',
+        outputCategoryMask: true,
+        outputConfidenceMasks: false,
+      });
+    }
     if (needPose) {
       pose = await PoseLandmarker.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: rebase(poseModel), delegate: d },
@@ -91,6 +98,7 @@ async function init(variant: PoseVariant, needPose: boolean, needFace: boolean):
     }
   };
   try {
+    if (force === 'CPU') throw new Error('CPU asked for');
     await make('GPU');
   } catch {
     disposeTasks();
@@ -333,6 +341,44 @@ async function analyseFace(bitmap: ImageBitmap): Promise<void> {
   }
 }
 
+/**
+ * Slice 6 spike: one face photo → a face texture in the head v2 face frame. The landmarks live only
+ * in this function and are dropped when it returns; the photo's pixels and the bitmap too.
+ */
+async function bakeFace(bitmap: ImageBitmap, targetSkinHex: string | null): Promise<void> {
+  try {
+    if (!face) throw new Error('face landmarker not ready');
+    const t0 = performance.now();
+    const res = face.detect(bitmap);
+    const t1 = performance.now();
+    const lm = res.faceLandmarks[0] ?? [];
+    if (lm.length < 468) {
+      post({ type: 'faceTextureResult', faceFound: false, texture: null, stats: null, warnings: [], timings: { pixelsMs: 0, detectMs: Math.round(t1 - t0), bakeMs: 0 } });
+      return;
+    }
+    if (typeof OffscreenCanvas === 'undefined') throw new Error('OffscreenCanvas unavailable');
+    const { width, height } = bitmap;
+    const canvas = new OffscreenCanvas(width, height);
+    const g = canvas.getContext('2d', { willReadFrequently: true });
+    if (!g) throw new Error('2d context unavailable');
+    g.drawImage(bitmap, 0, 0);
+    const img = g.getImageData(0, 0, width, height);
+    const t2 = performance.now();
+    const bake = bakeFaceTexture(img, lm, faceMeshUv as unknown as FaceTopology, { targetSkinHex });
+    const t3 = performance.now();
+    const warnings: ('turned' | 'small')[] = [];
+    if (Math.abs(bake.stats.yawDeg) > MAX_FRONT_YAW_DEG) warnings.push('turned');
+    if (bake.stats.facePx < 160) warnings.push('small');
+    const rgba = bake.rgba.buffer as ArrayBuffer;
+    post(
+      { type: 'faceTextureResult', faceFound: true, texture: { rgba, size: bake.size }, stats: bake.stats, warnings, timings: { pixelsMs: Math.round(t2 - t1), detectMs: Math.round(t1 - t0), bakeMs: Math.round(t3 - t2) } },
+      [rgba],
+    );
+  } finally {
+    bitmap.close();
+  }
+}
+
 ctx.onmessage = (ev: MessageEvent<WorkerInbound>): void => {
   const msg = ev.data;
   switch (msg.type) {
@@ -341,7 +387,7 @@ ctx.onmessage = (ev: MessageEvent<WorkerInbound>): void => {
         .then(() => {
           // same-origin only (D3: zero third-party requests); throws for any other origin
           modelBase = resolveModelBase(msg.modelBase, ctx.location.href);
-          return init(msg.variant, msg.needPose, msg.needFace);
+          return init(msg.variant, msg.needPose, msg.needFace, msg.needSegmenter ?? true, msg.delegate);
         })
         .catch((e: unknown) => post({ type: 'error', stage: 'init', message: errMsg(e) }));
       break;
@@ -361,6 +407,9 @@ ctx.onmessage = (ev: MessageEvent<WorkerInbound>): void => {
       break;
     case 'face':
       analyseFace(msg.bitmap).catch((e: unknown) => post({ type: 'error', stage: 'face', message: errMsg(e) }));
+      break;
+    case 'faceTexture':
+      bakeFace(msg.bitmap, msg.targetSkinHex).catch((e: unknown) => post({ type: 'error', stage: 'faceTexture', message: errMsg(e) }));
       break;
     case 'reset':
       resetRecording();

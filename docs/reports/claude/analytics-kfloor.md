@@ -141,3 +141,13 @@ pnpm install --frozen-lockfile
 pnpm --filter @curtain/api exec vitest run src/kfloor.property.test.ts src/analytics.test.ts
 npm_config_workspace_concurrency=1 pnpm check
 ```
+
+## Final check
+
+`npm_config_workspace_concurrency=1 pnpm check` passed on the final tree:
+- api: 334 passed, 2 skipped (was 319 + 1 skipped);
+- web: 492 (was 447);
+- schema: 539;
+- the secret scan is clean, and the language packs are English on all 4 surfaces.
+
+One earlier full run failed on a 5 s timeout in `apps/web/src/embed/__tests__/avatarPrompt.test.tsx` ("returning shopper sees the colour they picked"). That test is untouched by this branch: it takes about 1 s on its own and passes on reruns, so it is flaky when the machine is busy. Worth giving it a longer timeout.

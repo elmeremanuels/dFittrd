@@ -7,7 +7,7 @@
  *
  * URL parameters: `product=<bundle dir under out/>` and `size`; `skin=rrggbb`;
  * `lighting=neutral|neutral-v2`; `head=egg|neutral-v2`; the look comparison's overrides of the
- * lighting's extras `outline` (CSS px), `shadow` (opacity), `backdrop=adaptive`, `rim`; `family=male`,
+ * lighting's extras `outline` (CSS px), `shadow` (opacity), `backdrop=adaptive`, `rim`, `bounce`; `family=male`,
  * `height`, `shoulder`, `bust`, `waist`, `hip` (cm). `mode=head` shows the body alone (no bundle),
  * through the shipped viewer's `Stage` and `Figure`: `family`, `yaw` (degrees), `pitch`, `frame=head|body|face`.
  *
@@ -39,6 +39,7 @@ if (params.get('outline') !== null) extras.outline = Number(params.get('outline'
 if (params.get('shadow') !== null) extras.contactShadow = Number(params.get('shadow'));
 if (params.get('backdrop') === 'adaptive' || params.get('backdrop') === 'cream') extras.backdrop = params.get('backdrop') as LookExtras['backdrop'];
 if (params.get('rim') !== null) extras.rim = Number(params.get('rim'));
+if (params.get('bounce') !== null) extras.bounce = Number(params.get('bounce'));
 if (params.get('outlineContrast') !== null) extras.outlineContrast = Number(params.get('outlineContrast'));
 const extrasTag = Object.entries(extras).map(([k, v]) => `${k} ${String(v)}`).join(' · ');
 const family = params.get('family') === 'male' ? 'male' : 'female';
@@ -195,7 +196,8 @@ function headMode(): void {
       const px = new Uint8Array(4);
       for (let i = 0; i < n; i++) {
         stage.camera.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), 0.01);
-        stage.render();
+        // The view turns, so the outline is drawn only when asked for (as on the frame a view stops on).
+        stage.render(withOutline);
         gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
       }
       if (!withOutline) stage.controls.dispatchEvent({ type: 'end' });

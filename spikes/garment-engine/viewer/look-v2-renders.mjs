@@ -1,4 +1,4 @@
-/* global process, console, document, window, URL, requestAnimationFrame */
+/* global process, console, document, window, URL, requestAnimationFrame, performance */
 /**
  * The look review of 18 Nov 2026 (lighting `neutral-v2`, head `neutral-v2`): pictures and
  * measurements through `avatar.html`, which mounts the shipped viewer (`packages/garment-viewer`).
@@ -19,9 +19,12 @@
  * - heads: head v1 against head v2, both families, close up and at phone size.
  * - neck: the neck under both heads on large, short and tall bodies (4x).
  * - frames: frame cost in the throttled phone page (412 x 915 at 2x, DevTools CPU throttle 4x), body
- *   alone (ms per frame, 40 frames turning) and in the mount with the dress (frames per second
- *   while dragging), for both heads and the three lightings.
- * Writes PNGs and `look-v2[-<sections>].json` (after every measurement) to the out dir.
+ *   alone (ms per frame, 30 frames turning, LOOK_SAMPLES runs, the first a warm-up left out of the
+ *   median) and in the mount with the dress (frames per second while dragging, and the frames drawn
+ *   in the 1.5 s after the release, while the view damps out), for both heads and the lightings.
+ * Writes PNGs and `look-v2[-<sections>].json` (after every measurement) to the out dir. Exits 1 on a
+ * page error or when a measurement misses the review's gates (`gates`: edge contrast, skin and garment
+ * colour against `neutral`). Not part of `pnpm check`, which has no WebGL.
  *
  * Bundles: `out/eval/azure-palm-baby-doll-dress`, `out/pom2-bundle/crimson-wildflower-maxi-skirt`,
  * `out/eval/crimson-wildflower-maxi-skirt` (git-ignored). Uses the preinstalled Playwright.
@@ -40,11 +43,13 @@ const bundles = resolve(here, '..', 'out');
 const argv = process.argv.slice(2);
 const onlyAt = argv.indexOf('--only');
 const only = onlyAt >= 0 ? new Set((argv[onlyAt + 1] ?? '').split(',')) : null;
-const outDir = resolve(argv.find((a, i) => !a.startsWith('--') && i !== onlyAt + 1) ?? '');
-if (!argv[0] || argv[0].startsWith('--')) {
+const dirArg = argv.find((a, i) => !a.startsWith('--') && i !== onlyAt + 1);
+// No default: without a folder the pictures would land in the working directory (a checkout).
+if (!dirArg) {
   console.error('usage: node look-v2-renders.mjs <out dir> [--only contrast,garments,heads,neck,frames]');
   process.exit(1);
 }
+const outDir = resolve(dirArg);
 mkdirSync(outDir, { recursive: true });
 const want = (k) => !only || only.has(k);
 /** LOOK_LIGHTING=<label>: only the options and lightings whose label starts with it (a re-run after a change to one lighting). */
@@ -73,6 +78,12 @@ const OPTIONS = [
 const rgbOfHex = (hex) => [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
 const hexOfRgb = (rgb) => rgb.map((v) => v.toString(16).padStart(2, '0')).join('');
 const r1 = (v) => Math.round(v * 10) / 10;
+const median = (xs) => {
+  const s = [...xs].sort((a, b) => a - b);
+  return r1(s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2);
+};
+/** Runs per frame-cost figure (LOOK_SAMPLES; default 8). */
+const SAMPLES = Number(process.env.LOOK_SAMPLES ?? 8);
 
 const server = await createServer({ configFile: join(here, 'vite.config.ts'), logLevel: 'warn', server: { port: 5185, strictPort: false } });
 await server.listen();
@@ -81,6 +92,36 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 const problems = [];
 const save = () => writeFileSync(join(outDir, `look-v2${only ? `-${[...only].join('-')}` : ''}${onlyLighting ? `-${onlyLighting}` : ''}.json`), `${JSON.stringify({ ...report, problems }, null, 2)}\n`);
 const report = { renderer: 'headless Chromium, SwiftShader (software); not a phone', monk: MONK, contrast: [], garments: [], frames: [], files: [] };
+
+/**
+ * The look review's claims, checked on what this run measured (each one a problem, so the run fails):
+ * - contrast, neutral-v2: at most GATE_UNDER3 % of the silhouette's edge pixels under 3:1, for every tone;
+ * - garments, neutral-v2 (and with head v2) against neutral in the same run: every garment patch and
+ *   the skin patches that face the camera (forehead, neck) within GATE_DE (CIEDE2000).
+ * Only rows this run rendered are compared (`--only`, LOOK_LIGHTING). Pixels of a software renderer.
+ */
+const GATE_UNDER3 = 8;
+const GATE_DE = 2;
+function gates() {
+  for (const c of report.contrast) {
+    if (c.option === 'neutral-v2' && c.edge.under3 > GATE_UNDER3) problems.push(`contrast ${c.family} ${c.tone}: ${c.edge.under3} % of the edge under 3:1 (gate ${GATE_UNDER3} %)`);
+  }
+  for (const g of report.garments) {
+    if (!g.lighting.startsWith('neutral-v2')) continue;
+    const ref = report.garments.find((o) => o.product === g.product && o.lighting === 'neutral' && o.tone === g.tone);
+    if (!ref) continue;
+    for (const [k, hex] of Object.entries(g.garment)) {
+      if (!ref.garment[k]) continue;
+      const d = deltaE2000(labOf(rgbOfHex(hex.slice(1))), labOf(rgbOfHex(ref.garment[k].slice(1))));
+      if (d > GATE_DE) problems.push(`garment ${g.product} ${g.lighting} ${g.tone} ${k}: dE ${r1(d)} from neutral (gate ${GATE_DE})`);
+    }
+    for (const k of ['forehead', 'neck']) {
+      if (!g.skin[k] || !ref.skin[k]) continue;
+      const d = deltaE2000(labOf(rgbOfHex(g.skin[k].rendered.slice(1))), labOf(rgbOfHex(ref.skin[k].rendered.slice(1))));
+      if (d > GATE_DE) problems.push(`skin ${g.product} ${g.lighting} ${g.tone} ${k}: dE ${r1(d)} from neutral (gate ${GATE_DE})`);
+    }
+  }
+}
 
 async function open(context, query, name) {
   const page = await context.newPage();
@@ -230,10 +271,11 @@ try {
         const cdp = await throttled.newCDPSession(page);
         await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
         const ms = [], still = [];
-        for (let k = 0; k < 3; k++) ms.push(await page.evaluate(() => window.avatarCheck.frameMs(30)));
+        // SAMPLES runs of 30 frames; the first is a warm-up (shader compiles, caches) and is reported but not in the median.
+        for (let k = 0; k < SAMPLES; k++) ms.push(await page.evaluate(() => window.avatarCheck.frameMs(30)));
         // A frame with the outline (what a still view draws once a turn has stopped).
-        if (lighting === 'neutral-v2') for (let k = 0; k < 3; k++) still.push(await page.evaluate(() => window.avatarCheck.frameMs(15, true)));
-        report.frames.push({ page: 'body alone, 412x915@2x, CPU 4x, turning as a drag does (no outline while dragging)', head, lighting, msPerFrame: ms.map(r1), ...(still.length ? { msPerFrameWithOutline: still.map(r1) } : {}) });
+        if (lighting === 'neutral-v2') for (let k = 0; k < SAMPLES; k++) still.push(await page.evaluate(() => window.avatarCheck.frameMs(15, true)));
+        report.frames.push({ page: 'body alone, 412x915@2x, CPU 4x, turning as a drag does (no outline while dragging)', head, lighting, msPerFrame: ms.map(r1), median: median(ms.slice(1)), ...(still.length ? { msPerFrameWithOutline: still.map(r1), medianWithOutline: median(still.slice(1)) } : {}) });
         save();
         await page.close();
       }
@@ -248,26 +290,45 @@ try {
             await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
             await page.evaluate(() => {
               window.__frames = 0;
-              const count = () => {
+              window.__times = [];
+              const count = (t) => {
                 window.__frames++;
+                window.__times.push(t);
                 requestAnimationFrame(count);
               };
               requestAnimationFrame(count);
             });
-            // Drag across the canvas for 6 s: the view renders a frame for every move.
-            const t0 = Date.now();
-            const f0 = await page.evaluate(() => window.__frames);
-            await page.mouse.move(150, 450);
-            await page.mouse.down();
-            let x = 150, dir = 1;
-            while (Date.now() - t0 < 6000) {
-              x += dir * 6;
-              if (x > 300 || x < 100) dir = -dir;
-              await page.mouse.move(x, 450);
+            const fps = [], released = [];
+            for (let k = 0; k < Math.max(3, SAMPLES / 2); k++) {
+              // Drag across the canvas for 4 s: the view renders a frame for every move.
+              const t0 = Date.now();
+              const f0 = await page.evaluate(() => window.__frames);
+              await page.mouse.move(150, 450);
+              await page.mouse.down();
+              let x = 150, dir = 1;
+              while (Date.now() - t0 < 4000) {
+                x += dir * 6;
+                if (x > 300 || x < 100) dir = -dir;
+                await page.mouse.move(x, 450);
+              }
+              // The last moves are fast, so the view damps out after the release (OrbitControls' damping).
+              for (let j = 0; j < 4; j++) await page.mouse.move((x += 30), 450);
+              const f1 = await page.evaluate(() => window.__frames);
+              fps.push(((f1 - f0) * 1000) / (Date.now() - t0));
+              await page.mouse.up();
+              // The 1.5 s after the finger lifts: the damping, then the frame the view stops on.
+              const p1 = await page.evaluate(() => performance.now());
+              await page.waitForTimeout(1500);
+              // Frame gaps in that window: a gap over 50 ms is a frame the view drew (the counter alone takes ~16 ms).
+              const gaps = await page.evaluate((from) => {
+                const t = window.__times.filter((v) => v >= from);
+                return t.slice(1).map((v, i) => v - t[i]);
+              }, p1);
+              const slow = gaps.filter((g) => g > 50);
+              released.push({ slowFrames: slow.length, medianSlowMs: slow.length ? median(slow) : 0, longestMs: r1(Math.max(0, ...gaps)) });
+              await page.waitForTimeout(1500);
             }
-            await page.mouse.up();
-            const f1 = await page.evaluate(() => window.__frames);
-            report.frames.push({ page: 'mount, azure dress, 412x915@2x, CPU 4x, dragging', head, lighting, fps: r1(((f1 - f0) * 1000) / (Date.now() - t0)) });
+            report.frames.push({ page: 'mount, azure dress, 412x915@2x, CPU 4x, dragging; then the 1.5 s after the release (damping)', head, lighting, fps: fps.map(r1), medianFps: median(fps), afterRelease: released });
             // After the drag: the still view draws the outline again.
             await page.waitForTimeout(2500);
             await snap(page, `frames--after-drag--${head}--${lighting}`);
@@ -277,6 +338,7 @@ try {
       }
     }
   }
+  gates();
 } finally {
   save();
   await browser.close();

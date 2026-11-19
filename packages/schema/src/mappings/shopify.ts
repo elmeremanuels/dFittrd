@@ -18,6 +18,7 @@ import {
   coerceLengthCm,
   coerceNumber,
   coerceSizeChart,
+  coerceSleeveConvention,
   coerceString,
   coerceStringList,
   coerceStyleTags,
@@ -66,6 +67,7 @@ export type ShopifyMetafieldPath =
   | 'audience'
   | 'sizeChartType'
   | 'sizeChart'
+  | 'sleeveConvention'
   | 'closure'
   | 'garmentTape'
   | 'fabric'
@@ -114,6 +116,15 @@ export const SHOPIFY_METAFIELD_DEFINITIONS: readonly ShopifyMetafieldDefinition[
     description: 'JSON array of rows: [{"size":"S","bust":88,"waist":68,"hip":96,"shoulder":37}]',
     heavy: true,
     pin: true,
+  },
+  {
+    key: 'sleeve_convention',
+    name: 'Sleeve measured from',
+    type: 'single_line_text_field',
+    path: 'sleeveConvention',
+    description: "Men's charts with a sleeve column: 'shoulder_point' (shoulder seam to cuff) or 'centre_back' (centre back neck to cuff). Set in the app's size chart builder.",
+    heavy: false,
+    pin: false,
   },
   {
     key: 'closure',
@@ -481,6 +492,8 @@ export function fromShopifyProduct(
 
   const sizeChart = coerceSizeChart(get('size_chart'), sink, 'size_chart');
   if (sizeChart) out.sizeChart = sizeChart;
+  const sleeveConvention = coerceSleeveConvention(get('sleeve_convention'), sink, 'sleeve_convention');
+  if (sleeveConvention) out.sleeveConvention = sleeveConvention;
 
   const closure = coerceClosure(get('closure'), sink, 'closure');
   if (closure) out.closure = closure;

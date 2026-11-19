@@ -184,7 +184,7 @@
         </fieldset>
         <span class="subdued" id="sizes-label">Sizes:</span>
         <span class="row" id="size-boxes" role="group" aria-labelledby="sizes-label"></span>
-        <span class="row"><label for="custom-size" class="sr">Add a size</label><input class="input" id="custom-size" maxlength="16" size="6" placeholder="Add size" /><button class="btn" type="button" id="btn-add-size">Add</button></span>
+        <span class="row"><label for="custom-size" class="sr">Add a size</label><input class="input" id="custom-size" maxlength="24" size="6" placeholder="Add size" /><button class="btn" type="button" id="btn-add-size">Add</button></span>
       </div>
       <div style="overflow:auto">
         <table class="chart-table" aria-describedby="chart-help">
@@ -193,6 +193,12 @@
         </table>
       </div>
       <p class="subdued" id="chart-help" style="margin:6px 0 0">Bust, waist and hip all round. If you measured a garment laid flat, double the width. Values are stored in cm.</p>
+      <p class="subdued hidden" id="chart-wl-hint" style="margin:6px 0 0"></p>
+      <fieldset class="row hidden" id="sleeve-convention" style="margin-top:8px">
+        <legend id="sleeve-convention-legend"></legend>
+        <label><input type="radio" name="sleeve-convention" value="shoulder_point" /> <span id="sleeve-convention-shoulder_point"></span></label>
+        <label><input type="radio" name="sleeve-convention" value="centre_back" /> <span id="sleeve-convention-centre_back"></span></label>
+      </fieldset>
       <div id="chart-check" role="status" aria-live="polite"></div>
 
       <h3 class="step-h" id="assign">Assign to products</h3>
@@ -448,10 +454,28 @@
 
       // ---- size chart builder ---------------------------------------------------------------------
       var CM_PER_IN = 2.54;
-      var POINT_LABELS = { bust: 'Bust', waist: 'Waist', hip: 'Hip', shoulder: 'Shoulder', thigh: 'Thigh', inseam: 'Inseam' };
+      // The men's columns and words come from @curtain/schema CHART_COLUMN_TEXT (D21).
+      var CT = cfg.chartColumns;
+      var POINT_LABELS = { bust: 'Bust', waist: 'Waist', hip: 'Hip', shoulder: 'Shoulder', thigh: 'Thigh', inseam: 'Inseam', neck: CT.columns.neck, sleeve: CT.columns.sleeve, length: CT.columns.length, rise: CT.columns.rise };
       // The stored point stays `bust`; a men's or unisex template prints it as "Chest" (bustLabelKey in @curtain/schema).
-      function pointLabel(p) { var a = charts.tpl && charts.tpl.audience; return p === 'bust' && (a === 'men' || a === 'unisex') ? 'Chest' : POINT_LABELS[p]; }
-      var charts = { templates: [], tpl: null, type: 'body', unit: 'cm', allSizes: [], sizes: [], values: {}, points: ['bust', 'waist', 'hip'], edited: false };
+      // On a men's template the stored `hip` is the seat.
+      function pointLabel(p) { var a = charts.tpl && charts.tpl.audience; if (p === 'hip' && a === 'men') return CT.columns.seat; return p === 'bust' && (a === 'men' || a === 'unisex') ? 'Chest' : POINT_LABELS[p]; }
+      var charts = { templates: [], tpl: null, type: 'body', unit: 'cm', allSizes: [], sizes: [], values: {}, points: ['bust', 'waist', 'hip'], edited: false, wl: false };
+      var DEFAULT_CHART_HELP = null;
+      // Men's columns: the W/L hint, the sleeve measuring point (only with a sleeve column) and the help line.
+      function mensControls() {
+        var t = charts.tpl;
+        if (DEFAULT_CHART_HELP === null) DEFAULT_CHART_HELP = $('chart-help').textContent;
+        var mens = !!(t && t.audience === 'men' && t.kind === 'garment');
+        $('chart-help').textContent = mens ? (charts.points.indexOf('rise') >= 0 || charts.points.indexOf('inseam') >= 0 ? CT.help.bottom : CT.help.top) : DEFAULT_CHART_HELP;
+        $('chart-wl-hint').textContent = CT.wlHint;
+        $('chart-wl-hint').classList.toggle('hidden', !charts.wl);
+        $('sleeve-convention').classList.toggle('hidden', charts.points.indexOf('sleeve') < 0);
+      }
+      function mensStaticText() {
+        $('sleeve-convention-legend').textContent = CT.sleeveConventionLegend;
+        Object.keys(CT.sleeveConventions).forEach(function (k) { $('sleeve-convention-' + k).textContent = CT.sleeveConventions[k]; });
+      }
       var sel = { collection: null, products: [] };
       var STEP_CHECK = { connect: 'chk-install', template: 'chk-template', assign: 'chk-assign', themeBlock: 'chk-theme', test: 'chk-test' };
       var STEP_TEXT = { template: 'txt-template', assign: 'txt-assign', test: 'txt-test' };
@@ -509,6 +533,8 @@
         if (!t) return;
         charts.tpl = t; charts.type = t.kind; charts.edited = false;
         charts.points = t.kind === 'body' ? (t.points || ['bust', 'waist', 'hip']).slice() : t.points.slice();
+        charts.wl = t.axes === 'wl';
+        setRadio('sleeve-convention', null);
         charts.allSizes = t.sizes.slice(); charts.sizes = t.defaultSizes.slice(); charts.values = {};
         (t.rows || []).forEach(function (r) { var v = {}; charts.points.forEach(function (p) { v[p] = r[p]; }); charts.values[r.size] = v; });
         setRadio('tpl', id); setRadio('chart-type', charts.type);
@@ -520,7 +546,7 @@
             el('ul', { class: 'plain' }, t.sources.map(function (x) { return el('li', null, [el('a', { href: x.url, target: '_blank', rel: 'noopener noreferrer', text: x.publisher }), x.inMedian ? '' : ' (comparison only)', x.note ? ' — ' + x.note : '']); }))
           ]));
         }
-        renderSizes(); renderChart(); note('chart-check', 'info', []);
+        renderSizes(); renderChart(); mensControls(); note('chart-check', 'info', []);
         if (save) saveOnboarding({ templateId: id });
       }
 
@@ -563,7 +589,7 @@
       function chartSpec() {
         var t = charts.tpl;
         if (t && t.kind === 'body' && charts.type === 'body' && !charts.edited) return { templateId: t.id, sizes: charts.sizes.slice() };
-        return {
+        var spec = {
           sizeChartType: charts.type,
           unit: 'cm',
           sizeChart: charts.sizes.map(function (size) {
@@ -572,6 +598,11 @@
             return row;
           })
         };
+        // Men's charts: W/L sizes (the api reads the axes from the labels) and the sleeve measuring point.
+        if (charts.wl) spec.sizeAxes = 'wl';
+        var conv = charts.points.indexOf('sleeve') >= 0 ? radioValue('sleeve-convention') : null;
+        if (conv) spec.sleeveConvention = conv;
+        return spec;
       }
       function localCheck() {
         var errs = [];
@@ -630,6 +661,8 @@
           setTimeout(function () { loadProducts().catch(function () {}); loadOnboarding().catch(function () {}); }, 2500);
         } catch (err) {
           var details = err.details && err.details.errors ? err.details.errors : [err.message];
+          // A chart the api refuses before writing anything: its plain-English reasons go next to the chart.
+          if (err.code === 'invalid_chart' && !total.written) { note('assign-status', 'info', []); note('chart-check', 'critical', details); var hc = $('h-edit'); if (hc.scrollIntoView) hc.scrollIntoView({ block: 'start' }); return; }
           note('assign-status', 'critical', ['Nothing more was written. ' + (total.written ? total.written + ' product(s) were done before the error.' : '')].concat(details));
         } finally { btn.disabled = false; }
       }
@@ -861,6 +894,7 @@
         } finally { btn.disabled = !!$('tape-issues').querySelector('.note-critical'); }
       });
       tapeStaticText();
+      mensStaticText();
 
       document.querySelectorAll('input[name="chart-type"]').forEach(function (r) {
         r.addEventListener('change', function () {
@@ -879,7 +913,7 @@
       });
       document.querySelectorAll('input[name="chart-unit"]').forEach(function (r) { r.addEventListener('change', function () { charts.unit = r.value; renderChart(); }); });
       $('btn-add-size').addEventListener('click', function () {
-        var v = $('custom-size').value.trim().slice(0, 16);
+        var v = $('custom-size').value.trim().slice(0, 24);
         if (!v || charts.allSizes.some(function (s) { return s.toUpperCase() === v.toUpperCase(); })) return;
         charts.allSizes.push(v); charts.sizes.push(v); charts.edited = true; $('custom-size').value = '';
         renderSizes(); renderChart();

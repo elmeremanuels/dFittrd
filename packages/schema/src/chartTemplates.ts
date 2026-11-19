@@ -14,7 +14,8 @@
  * Unit conversion is here too: the builder accepts inches and stores centimetres.
  */
 import { z } from 'zod';
-import { FabricSchema, GarmentAudienceSchema, LengthCmSchema, SizeChartSchema, SizeRowSchema, duplicateSizeLabels, type GarmentAudience, type GarmentPayload, type SizeRow } from './garment';
+import { FabricSchema, GarmentAudienceSchema, LengthCmSchema, SIZE_CHART_MAX_ROWS, SIZE_LABEL_MAX, SLEEVE_CONVENTIONS, SizeChartSchema, SizeRowSchema, duplicateSizeLabels, type GarmentAudience, type GarmentPayload, type SizeRow, type SleeveConvention } from './garment';
+import { checkChartColumns, withWlAxes } from './chartColumns';
 import { AU_WOMENS_BODY_CHART, AU_WOMENS_CHART_SOURCES } from './fixtures/charts';
 import { MENS_BODY_CHART_TEMPLATES } from './chartTemplatesMen';
 
@@ -23,7 +24,11 @@ export type ChartRegion = 'AU' | 'UK' | 'EU' | 'US' | 'INT';
 export type ChartKind = 'body' | 'garment';
 export type ChartUnit = 'cm' | 'in';
 /** Points a chart row can carry (SizeRow keys measured in cm). */
-export const CHART_POINTS = ['bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam'] as const;
+/**
+ * Columns a builder may show. The first six are the women's (unchanged order); `neck`, `sleeve`,
+ * `length` and `rise` are the men's columns (men-3d-plan slice M2, `chartColumns.ts`).
+ */
+export const CHART_POINTS = ['bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'neck', 'sleeve', 'length', 'rise'] as const;
 export type ChartPoint = (typeof CHART_POINTS)[number];
 export type BodyChartPoint = 'bust' | 'waist' | 'hip';
 const BODY_POINTS: readonly BodyChartPoint[] = ['bust', 'waist', 'hip'];
@@ -114,6 +119,10 @@ export interface GarmentChartTemplate extends TemplateBase {
   kind: 'garment';
   /** Points the merchant measures on the finished garment (circumferences in cm). */
   points: readonly ChartPoint[];
+  /** Who the template is for. Absent on the women's and general templates (they predate the field). */
+  audience?: GarmentAudience;
+  /** `wl`: every size is waist/leg ("32/34"); the builder writes `axes` from the label. */
+  axes?: 'wl';
 }
 
 export type ChartTemplate = BodyChartTemplate | GarmentChartTemplate;
@@ -470,6 +479,29 @@ export const GARMENT_CHART_TEMPLATES: readonly GarmentChartTemplate[] = [
     defaultSizes: ['ONE'],
     points: ['bust', 'waist', 'hip'],
   },
+  // Men's garment templates (men-3d-plan slice M2): blank forms, no numbers and no sources, so no
+  // legal review is needed (the men's BODY templates in chartTemplatesMen.ts still wait for it).
+  {
+    id: 'garment-mens-tee',
+    kind: 'garment',
+    audience: 'men',
+    label: 'Garment measurements — men’s T-shirts & tops, S–XXL',
+    description: 'Chest and waist all round, shoulder seam to seam, body length, sleeve length (say where it is measured from) and the neck, per letter size.',
+    sizes: ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'],
+    defaultSizes: ['S', 'M', 'L', 'XL', 'XXL'],
+    points: ['bust', 'waist', 'shoulder', 'length', 'sleeve', 'neck'],
+  },
+  {
+    id: 'garment-mens-chino-wl',
+    kind: 'garment',
+    audience: 'men',
+    axes: 'wl',
+    label: 'Garment measurements — men’s trousers & chinos, waist/leg (W/L)',
+    description: 'One row per waist/leg size (32/34): waist and seat all round, thigh, front rise and inseam.',
+    sizes: ['28', '29', '30', '31', '32', '33', '34', '36', '38', '40'].flatMap((w) => ['30', '32', '34', '36'].map((l) => `${w}/${l}`)),
+    defaultSizes: ['30', '32', '34', '36', '38'].flatMap((w) => ['30', '32', '34'].map((l) => `${w}/${l}`)),
+    points: ['waist', 'hip', 'thigh', 'rise', 'inseam'],
+  },
 ];
 
 export const CHART_TEMPLATES: readonly ChartTemplate[] = [...BODY_CHART_TEMPLATES, ...GARMENT_CHART_TEMPLATES];
@@ -520,6 +552,10 @@ export function convertChart(rows: readonly SizeRow[], from: ChartUnit, to: Char
 export interface ChartInput {
   sizeChartType: ChartKind;
   sizeChart: SizeRow[];
+  /** Where the sleeve column is measured from (men's charts); written only with a sleeve column. */
+  sleeveConvention?: SleeveConvention;
+  /** W/L mode: every label must be waist/leg (checked by `checkChart`). */
+  wl?: boolean;
 }
 
 /**
@@ -555,7 +591,7 @@ export function chartFromGarmentTemplate(
     }
     if (any) rows.push(row);
   }
-  return { sizeChartType: 'garment', sizeChart: rows };
+  return t.axes === 'wl' ? { sizeChartType: 'garment', sizeChart: withWlAxes(rows), wl: true } : { sizeChartType: 'garment', sizeChart: rows };
 }
 
 export interface ChartCheck {
@@ -566,8 +602,8 @@ export interface ChartCheck {
   warnings: string[];
 }
 
-/** Plausible ranges in cm (circumferences, except shoulder width and inseam length). */
-const PLAUSIBLE: Record<ChartPoint, [number, number]> = {
+/** Plausible ranges in cm (circumferences, except shoulder width and inseam length). The men's columns: `MENS_COLUMN_RANGES`. */
+const PLAUSIBLE: Record<'bust' | 'waist' | 'hip' | 'shoulder' | 'thigh' | 'inseam', [number, number]> = {
   bust: [60, 200],
   waist: [45, 200],
   hip: [65, 210],
@@ -581,7 +617,7 @@ const PLAUSIBLE: Record<ChartPoint, [number, number]> = {
  * measurement per row, plausible ranges (a number that looks like a flat half-width is called out),
  * and points that shrink from one size to the next.
  */
-export function checkChart(input: { sizeChartType?: string; sizeChart?: readonly SizeRow[] }): ChartCheck {
+export function checkChart(input: { sizeChartType?: string; sizeChart?: readonly SizeRow[]; sleeveConvention?: unknown; wl?: boolean }): ChartCheck {
   const errors: string[] = [];
   const warnings: string[] = [];
   if (input.sizeChartType !== 'body' && input.sizeChartType !== 'garment') errors.push("Choose whether the chart is body measurements or garment measurements.");
@@ -589,16 +625,20 @@ export function checkChart(input: { sizeChartType?: string; sizeChart?: readonly
   if (!rows.length) errors.push('The chart has no sizes.');
   const dups = duplicateSizeLabels(rows);
   if (dups.length) errors.push(`Size labels appear twice: ${dups.join(', ')}.`);
+  // The men's columns (W/L labels and pairs, the sleeve measuring point): their own plain words.
+  const columns = checkChartColumns(input);
+  errors.push(...columns.errors);
   if (rows.length) {
     const parsed = SizeChartSchema.safeParse(rows);
-    if (!parsed.success && !dups.length) errors.push(`The chart is not valid: ${parsed.error.issues[0]?.message ?? 'invalid'}.`);
+    if (!parsed.success && !dups.length && !columns.errors.length) errors.push(`The chart is not valid: ${parsed.error.issues[0]?.message ?? 'invalid'}.`);
   }
   for (const r of rows) {
     const measured = CHART_POINTS.filter((p) => typeof r[p] === 'number');
     if (!measured.length) errors.push(`Size ${r.size} has no measurements.`);
     for (const p of measured) {
+      if (!(p in PLAUSIBLE)) continue;
       const v = r[p] as number;
-      const [lo, hi] = PLAUSIBLE[p];
+      const [lo, hi] = PLAUSIBLE[p as keyof typeof PLAUSIBLE];
       if (v < lo && (p === 'bust' || p === 'waist' || p === 'hip') && v * 2 >= PLAUSIBLE[p][0]) {
         warnings.push(`Size ${r.size}: ${p} ${v} cm looks like a flat width. Enter the measurement all round (2 × ${v} = ${v * 2} cm).`);
       } else if (v < lo || v > hi) warnings.push(`Size ${r.size}: ${p} ${v} cm is outside the usual ${lo}–${hi} cm.`);
@@ -616,6 +656,7 @@ export function checkChart(input: { sizeChartType?: string; sizeChart?: readonly
       prev = { size: r.size, v, row: r };
     }
   }
+  warnings.push(...columns.warnings);
   if (input.sizeChartType === 'garment' && rows.length) {
     const body = bodyTemplateMatching(rows);
     if (body) {
@@ -654,8 +695,10 @@ export function bodyTemplateMatching(rows: readonly SizeRow[]): BodyChartTemplat
 }
 
 /** The payload fields a chart writes (the `$app:curtain` `size_chart_type` + `size_chart` metafields). */
-export function chartPayload(input: ChartInput): Pick<GarmentPayload, 'sizeChartType' | 'sizeChart'> {
-  return { sizeChartType: input.sizeChartType, sizeChart: input.sizeChart.map((r) => ({ ...r })) };
+export function chartPayload(input: ChartInput): Pick<GarmentPayload, 'sizeChartType' | 'sizeChart' | 'sleeveConvention'> {
+  const out: Pick<GarmentPayload, 'sizeChartType' | 'sizeChart' | 'sleeveConvention'> = { sizeChartType: input.sizeChartType, sizeChart: input.sizeChart.map((r) => ({ ...r })) };
+  if (input.sleeveConvention && input.sizeChart.some((r) => typeof r.sleeve === 'number')) out.sleeveConvention = input.sleeveConvention;
+  return out;
 }
 
 /**
@@ -664,12 +707,16 @@ export function chartPayload(input: ChartInput): Pick<GarmentPayload, 'sizeChart
  */
 export const ChartUnitSchema = z.enum(['cm', 'in']);
 export const ChartSpecSchema = z.union([
-  z.object({ templateId: z.string().min(1).max(64), sizes: z.array(z.string().min(1).max(16)).min(1).max(30).optional() }).strict(),
+  z.object({ templateId: z.string().min(1).max(64), sizes: z.array(z.string().min(1).max(SIZE_LABEL_MAX)).min(1).max(SIZE_CHART_MAX_ROWS).optional() }).strict(),
   z
     .object({
       sizeChartType: z.enum(['body', 'garment']),
-      sizeChart: z.array(SizeRowSchema).min(1).max(30),
+      sizeChart: z.array(SizeRowSchema).min(1).max(SIZE_CHART_MAX_ROWS),
       unit: ChartUnitSchema.optional(),
+      /** Men's charts: where the sleeve column is measured from. */
+      sleeveConvention: z.enum(SLEEVE_CONVENTIONS).optional(),
+      /** `wl`: every label is waist/leg; the axes are read from the labels. */
+      sizeAxes: z.literal('wl').optional(),
     })
     .strict(),
 ]);
@@ -685,7 +732,11 @@ export function resolveChartSpec(spec: ChartSpec): ChartInput {
     if (t.kind === 'garment') throw new ChartSpecError(`'${t.id}' is a garment template: send the measured rows (sizeChartType 'garment') instead`);
     return chartFromBodyTemplate(t, spec.sizes ?? t.defaultSizes);
   }
-  return { sizeChartType: spec.sizeChartType, sizeChart: convertChart(spec.sizeChart, spec.unit ?? 'cm', 'cm') };
+  const rows = convertChart(spec.sizeChart, spec.unit ?? 'cm', 'cm');
+  const out: ChartInput = { sizeChartType: spec.sizeChartType, sizeChart: spec.sizeAxes === 'wl' ? withWlAxes(rows) : rows };
+  if (spec.sizeAxes === 'wl') out.wl = true;
+  if (spec.sleeveConvention) out.sleeveConvention = spec.sleeveConvention;
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -732,7 +783,7 @@ export const ChartAssignResponseSchema = z.object({
   /** Product sync jobs queued for the written products (the shop stays the source of truth). */
   syncQueued: z.number().int().min(0),
   nextCursor: z.string().nullable(),
-  chart: z.object({ sizeChartType: z.enum(['body', 'garment']), sizeChart: z.array(SizeRowSchema) }),
+  chart: z.object({ sizeChartType: z.enum(['body', 'garment']), sizeChart: z.array(SizeRowSchema), sleeveConvention: z.enum(SLEEVE_CONVENTIONS).optional() }),
   warnings: z.array(z.string()),
 });
 export type ChartAssignResponse = z.infer<typeof ChartAssignResponseSchema>;
@@ -764,6 +815,7 @@ export const ChartTemplateDtoSchema = z.object({
   sources: z.array(TemplateSourceSchema).optional(),
   weakSizes: z.array(z.string()).optional(),
   points: z.array(z.enum(CHART_POINTS)).optional(),
+  axes: z.literal('wl').optional(),
 });
 export const ChartTemplatesResponseSchema = z.object({ templates: z.array(ChartTemplateDtoSchema) });
 
@@ -794,7 +846,7 @@ export const ProductChartImportResponseSchema = z.object({
 
 export const ProductChartWriteRequestSchema = z.object({
   sizeChartType: z.enum(['body', 'garment']),
-  sizeChart: z.array(SizeRowSchema).min(1).max(30),
+  sizeChart: z.array(SizeRowSchema).min(1).max(SIZE_CHART_MAX_ROWS),
   unit: ChartUnitSchema.optional(),
   fabric: FabricSchema.optional(),
   lengthCm: LengthCmSchema.optional(),

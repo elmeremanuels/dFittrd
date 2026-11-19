@@ -18,6 +18,7 @@ export * from './mappings/audience';
 export * from './mappings/audienceCases';
 export * from './audience';
 export * from './chartTemplates';
+export * from './chartColumns';
 export * from './chartTemplatesMen';
 export * from './fixtures';
 export * from './sizeAdvice';

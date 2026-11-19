@@ -23,6 +23,7 @@ import {
 import { along, lerp, normalize, type Vec3 } from './math';
 import type { BodyLevels, BodyShape } from './shapes';
 import { maleShapeV2 } from './maleV2';
+import type { MannequinOutlines } from './outlines';
 
 export const MANNEQUIN_VERSION = '0.1.0';
 
@@ -153,6 +154,11 @@ export interface Mannequin {
   armAt(s: number, side: Side): (Ellipse & { centre: Vec3 }) | null;
   /** `v2` when built with the male shape v2 (`BuildOptions.maleShape`); absent otherwise. */
   maleShape?: 'v2';
+  /**
+   * The drawn cross-sections as polar outlines (`outlines.ts`), on a body whose sections are not ellipses (the male shape
+   * v2: there `torsoAt`, `legAt` and `armAt` return an ellipse that contains the section). Absent on every other body.
+   */
+  outlines?: MannequinOutlines;
   /** Ring heights for `gradingMorph(…, { heights })`: y for the body chain, distance along the arm for the arm chain. */
   morphHeights: Record<AnchorRing, number>;
 }

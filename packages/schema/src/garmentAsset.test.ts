@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TryResolveResponseSchema } from './api';
-import { BAKE_CHECK_IDS, bakeCheckRefusal, bakeRingToleranceCm, bundleMannequinFamily, checkGarmentBundle, passedBakeCheck, garmentBodyFamily, garmentBundleFor, garmentQaFlagNote, garmentQaFlags, GarmentAssetRefSchema, MAX_GARMENT_BUNDLE_BYTES } from './garmentAsset';
+import { BAKE_CHECK_IDS, bakeCheckRefusal, bakeRingToleranceCm, bundleMaleShape, bundleMannequinFamily, maleShapeOf, checkGarmentBundle, passedBakeCheck, garmentBodyFamily, garmentBundleFor, garmentQaFlagNote, garmentQaFlags, GarmentAssetRefSchema, MAX_GARMENT_BUNDLE_BYTES } from './garmentAsset';
 
 const meta = (over: Partial<{ sizes: string[]; pass: boolean; bytes: number; format: string; waistReading: unknown }> = {}) => ({
   anchors: { format: 'curtain.garment.anchors' },
@@ -22,6 +22,45 @@ describe('checkGarmentBundle', () => {
     expect(checkGarmentBundle(meta({ pass: false }), ['12'])).toEqual({ ok: false, problem: 'qa_failed' });
     expect(checkGarmentBundle(meta({ format: 'x' }), ['12'])).toEqual({ ok: false, problem: 'format' });
     expect(checkGarmentBundle(meta({ bytes: MAX_GARMENT_BUNDLE_BYTES + 1 }), ['12'])).toEqual({ ok: false, problem: 'too_large' });
+  });
+});
+
+describe('the male body shape a bundle was built on', () => {
+  const sized = ['S', 'M', 'L'];
+  const shaped = (anchors: unknown, qa: unknown) => ({ ...meta(), grading: { format: 'curtain.garment.grading', baseSize: 'M', sizes: sized.map((size) => ({ size })) }, anchors: { format: 'curtain.garment.anchors', mannequin: anchors }, qa: { format: 'curtain.garment.qa', chartAgreement: { pass: true }, mannequin: qa } }) as never;
+  const v1 = { version: '0.1.0', shape: 'M', family: 'male' };
+  const v2 = { ...v1, maleShape: 'v2' };
+  it('reads the shape from anchors.json and qa.json, which must agree; absent in both is v1; only a male bundle may name v2', () => {
+    expect(bundleMaleShape(shaped(v1, v1))).toBe('v1');
+    expect(bundleMaleShape(shaped(v2, v2))).toBe('v2');
+    expect(bundleMaleShape(shaped({ ...v1, maleShape: 'v1' }, v1))).toBe('v1');
+    expect(bundleMaleShape(shaped(v2, v1))).toBeNull();
+    expect(bundleMaleShape(shaped(v1, v2))).toBeNull();
+    expect(bundleMaleShape(shaped({ ...v1, maleShape: 'v3' }, { ...v1, maleShape: 'v3' }))).toBeNull();
+    expect(bundleMaleShape(shaped({ ...v1, maleShape: 2 }, { ...v1, maleShape: 2 }))).toBeNull();
+    // A female bundle (no family) cannot be built on a male shape.
+    expect(bundleMaleShape(shaped({ maleShape: 'v2' }, { maleShape: 'v2' }))).toBeNull();
+    expect(bundleMaleShape(shaped({}, {}))).toBe('v1');
+    expect(checkGarmentBundle(shaped(v2, v1), sized)).toEqual({ ok: false, problem: 'format' });
+    expect(checkGarmentBundle(shaped({ maleShape: 'v2' }, { maleShape: 'v2' }), sized)).toEqual({ ok: false, problem: 'format' });
+  });
+  it('reports the shape, and refuses a male bundle built on the other shape than the one that is drawn (strict both ways); a female bundle is not affected', () => {
+    expect(checkGarmentBundle(shaped(v2, v2), sized)).toEqual({ ok: true, info: { baseSize: 'M', sizes: sized, qaFlags: [], family: 'male', maleShape: 'v2' } });
+    expect(checkGarmentBundle(shaped(v1, v1), sized)).toEqual({ ok: true, info: { baseSize: 'M', sizes: sized, qaFlags: [], family: 'male' } });
+    expect(checkGarmentBundle(shaped(v2, v2), sized, { family: 'male', maleShape: 'v2' })).toMatchObject({ ok: true });
+    expect(checkGarmentBundle(shaped(v1, v1), sized, { family: 'male', maleShape: 'v1' })).toMatchObject({ ok: true });
+    expect(checkGarmentBundle(shaped(v2, v2), sized, { family: 'male', maleShape: 'v1' })).toEqual({ ok: false, problem: 'shape_mismatch' });
+    expect(checkGarmentBundle(shaped(v1, v1), sized, { family: 'male', maleShape: 'v2' })).toEqual({ ok: false, problem: 'shape_mismatch' });
+    // The family comes first: a male v2 bundle for a product shown on the female body is the wrong family.
+    expect(checkGarmentBundle(shaped(v2, v2), sized, { family: 'female', maleShape: 'v2' })).toEqual({ ok: false, problem: 'family_mismatch' });
+    expect(checkGarmentBundle(shaped({}, {}), sized, { family: 'female', maleShape: 'v2' })).toMatchObject({ ok: true, info: { family: 'female' } });
+    const men = { audience: 'men' as const, sizeChart: sized.map((size) => ({ size, measurements: {} })) } as never;
+    expect(garmentBundleFor(shaped(v2, v2), men, 'v2')).toMatchObject({ maleShape: 'v2' });
+    expect(garmentBundleFor(shaped(v2, v2), men, 'v1')).toBeNull();
+    expect(garmentBundleFor(shaped(v1, v1), men, 'v2')).toBeNull();
+    expect(garmentBundleFor(shaped(v1, v1), men)).not.toBeNull();
+    expect(maleShapeOf('v2')).toBe('v2');
+    for (const x of [undefined, null, '', 'v1', 'V2', 'v3', 2, true]) expect(maleShapeOf(x)).toBe('v1');
   });
 });
 

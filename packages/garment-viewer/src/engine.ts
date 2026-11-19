@@ -7,11 +7,11 @@ import { resolveFabric, mockGarment, type GarmentPayload } from '@curtain/schema
 import type { FitResult, AnchorGaps } from '@curtain/fit-engine';
 import { buildMannequin, type Mannequin, type Mesh } from '@curtain/mannequin';
 import { armpitDistance, assignChains, radialMorph, type ChainAssignment } from './core/garment';
-import { applyGrading } from './core/grading';
+import { applyGrading, builtOffsets } from './core/grading';
 import { topEdgePlane } from './core/waistband';
 import type { MaterialJson } from './core/types';
-import { insideCanonical, makeCollider, type Avatar, type BodyField } from './body';
-import { sample } from './collide';
+import { bundleMaleShapeOf, insideCanonical, makeCollider, type Avatar, type BodyField } from './body';
+import { polarGirth, sample } from './collide';
 import type { SpikeBundle } from './bundle';
 import type { DrapeJob } from './drapeJob';
 import { clothParams, createCloth, isSettled, loopGirth, setLoops, settlePins, stepCloth, type Cloth, type ClothMaterial, type ClothParams, type GirthLoop } from './cloth';
@@ -80,9 +80,10 @@ export function openSession(m: Mannequin, bundle: SpikeBundle, payload: GarmentP
   const noLift = new Uint8Array(chains.length);
   for (let i = 0; i < noLift.length; i++) noLift[i] = !capped[i] || lift(probe, i) ? 1 : 0;
   const sewn = bundle.anchors.category !== 'bottom' && chains.some((c) => c !== 0) && meshPieces(bundle.baseMesh.indices, chains.length).length === 1;
-  // The exemption is judged on the body the bundle was draped on: every bundle is draped on the v1
-  // body, so a male shape v2 body (`maleShape: 'v2'`) asks its v1 twin of the same shape.
-  const drapedOn = m.maleShape === 'v2' ? buildMannequin(m.shape) : m;
+  // The exemption is judged on the body the bundle was built on: a bundle built on the male shape v2
+  // (`mannequin.maleShape`) on that body itself; a v1-built bundle on a v2 body asks the v1 twin of the
+  // same shape (a preview only: the mount refuses that pair, `planAvatar`).
+  const drapedOn = m.maleShape === 'v2' && bundleMaleShapeOf(bundle.anchors) !== 'v2' ? buildMannequin(m.shape) : m;
   return { m, bundle, payload, chains, noCollide: insideCanonical(drapedOn, bundle.baseMesh.positions, chains), noLift, graded: new Map(), sewn };
 }
 
@@ -410,7 +411,7 @@ export function fitElasticBand(field: BodyField, start: Float32Array, chains: Ch
   for (let i = 0; i < chains.length; i++) if (chains[i] === 0) top = Math.max(top, start[3 * i + 1]!);
   const yb = top - 2;
   const e = new Float32Array(4);
-  const body = (y: number): number => (sample(field.torso, y, e) ? ellipsePerimeter(e[2]! + clearanceCm, e[3]! + clearanceCm) : NaN);
+  const body = (y: number): number => torsoGirth(field, y, clearanceCm, e);
   const R = band.relaxedCm, S = band.stretchedCm;
   const at = body(yb);
   let drop = 0, rest = at, pastHips = false;
@@ -545,6 +546,11 @@ export interface BandSlide {
 }
 
 const ellipsePerimeter = (a: number, b: number): number => Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)));
+/** Girth of the avatar's torso at height y, grown by the clearance, cm: the drawn outline where the body has one (male shape v2), else the ellipse. */
+function torsoGirth(field: BodyField, y: number, clearanceCm: number, e: Float32Array): number {
+  if (field.torso.polar) return polarGirth(field.torso.polar, y, clearanceCm);
+  return sample(field.torso, y, e) ? ellipsePerimeter(e[2]! + clearanceCm, e[3]! + clearanceCm) : NaN;
+}
 
 /**
  * A bottom without a stretch waistband hangs from its band, and the band is graded with the chart (`hip-delta` for a skirt worn below the waist
@@ -564,7 +570,7 @@ export function slideWaistband(field: BodyField, start: Float32Array, chains: Ch
   for (let i = 0; i < chains.length; i++) if (chains[i] === 0 && start[3 * i + 1]! >= yb) pts.push([start[3 * i]!, start[3 * i + 2]!]);
   const band = hullPerimeter(pts);
   const e = new Float32Array(4);
-  const body = (y: number): number => (sample(field.torso, y, e) ? ellipsePerimeter(e[2]! + clearanceCm, e[3]! + clearanceCm) : NaN);
+  const body = (y: number): number => torsoGirth(field, y, clearanceCm, e);
   const at = body(yb);
   let drop = 0, rest = at, pastHips = false;
   if (Number.isFinite(at) && band > at + BAND_HOLD_CM) {
@@ -611,8 +617,13 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   // Above the chest the v0 mannequin's torso widens into the arm junction, and a smaller size can
   // sit inside it there; those particles are exempt too (the shoulders carry that part anyway).
   const noCollide = Uint8Array.from(session.noCollide);
-  const inside = insideCanonical(m, graded.positions, chains);
-  for (let i = 0; i < noCollide.length; i++) if (inside[i] === 1 && graded.positions[3 * i + 1]! > m.morphHeights.chest) noCollide[i] = 1;
+  // Not for a size that was built on its own reference body (`GradingJson.built`): it was never inside that body, and
+  // judged on the base body a smaller size's sleeves are (the S sleeve lies inside the M arm), which left them without
+  // a collider on the shopper's own arm (the arm showed through the sleeve, 330 pixels on the S body in S).
+  if (!builtOffsets(session.bundle.grading.built, size, chains.length)) {
+    const inside = insideCanonical(m, graded.positions, chains);
+    for (let i = 0; i < noCollide.length; i++) if (inside[i] === 1 && graded.positions[3 * i + 1]! > m.morphHeights.chest) noCollide[i] = 1;
+  }
   const start = Float32Array.from(placed.positions);
   const bottom = session.bundle.anchors.category === 'bottom';
   // A stretch waistband (the payload's stretch zones) is held by its elastic: how far it gathers depends on its relaxed

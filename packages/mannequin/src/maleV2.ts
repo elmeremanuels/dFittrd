@@ -35,6 +35,7 @@
  */
 import { monotoneProfile, type AnchorRing } from '@curtain/anchors';
 import { along, lerp } from './math';
+import { polarStack, sectionCentroid, sectionPolar, verticalOutlines, type PolarSection } from './outlines';
 import { polygonCompensation, stations, type ArmFrame, type BuildOptions, type Mannequin, type PartSpec, type RingFrame, type Section, type Side } from './model';
 
 /**
@@ -618,6 +619,27 @@ export function maleShapeV2(m: Mannequin, options: BuildOptions = {}): Mannequin
     return { a: e.a, b: e.b };
   };
 
+  // The drawn sections as polar outlines (`outlines.ts`), built on first use.
+  const torsoOutlineAt = verticalOutlines(torso);
+  const legOutlineAt = [verticalOutlines(parts[1]!), verticalOutlines(parts[2]!)];
+  const armStacks: Partial<Record<Side, (s: number) => PolarSection | null>> = {};
+  const armOutlineAt = (side: Side): ((s: number) => PolarSection | null) => {
+    let stack = armStacks[side];
+    if (!stack) {
+      const part = parts[side === 1 ? 3 : 4]!;
+      const f = side === 1 ? m.arms.left : m.arms.right;
+      const keys = part.sections.map((sec) => (sec.centre[0] - f.joint[0]) * f.axis[0] + (sec.centre[1] - f.joint[1]) * f.axis[1] + (sec.centre[2] - f.joint[2]) * f.axis[2]);
+      const polar = part.sections.map((sec) => {
+        const [cu, cv] = sectionCentroid(sec, part.segments);
+        return sectionPolar(sec, part.segments, cu, cv);
+      });
+      // The cap closes to its pole a little above the first section.
+      const first = polar[0]!;
+      stack = armStacks[side] = polarStack([keys[0]! - 0.12 * rootA, ...keys], [{ cu: first.cu, cv: first.cv, r: first.r.map((x) => 0.02 * x) }, ...polar]);
+    }
+    return stack;
+  };
+
   return {
     ...m,
     maleShape: 'v2',
@@ -641,6 +663,11 @@ export function maleShapeV2(m: Mannequin, options: BuildOptions = {}): Mannequin
       const env = armEnvelopeAt(s);
       if (!base || !env) return base;
       return { ...base, a: Math.max(base.a, env.a), b: Math.max(base.b, env.b) };
+    },
+    outlines: {
+      torso: (yy) => (yy >= torsoLo && yy <= torsoHi && (yy <= yn || m.torsoAt(yy)) ? torsoOutlineAt(yy) : null),
+      leg: (yy, side) => legOutlineAt[side === 1 ? 0 : 1]!(yy),
+      arm: (s, side) => armOutlineAt(side)(s),
     },
   };
 }

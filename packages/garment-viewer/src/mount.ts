@@ -8,7 +8,7 @@
 import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh, familyShape, type Mannequin } from '@curtain/mannequin';
 import type { FitResult } from '@curtain/fit-engine';
 import type { GarmentPayload } from '@curtain/schema';
-import { bodyFamilyOf, bodyField, buildAvatar, buildTypedAvatar, bundleFamilyOf, girthInput, isTypedBody, mannequinMeasurements, sanitiseMeasurements, type Avatar, type BodyField, type BodyMeasurements, type BodyOptions } from './body';
+import { bodyFamilyOf, bodyField, buildAvatar, buildTypedAvatar, bundleFamilyOf, bundleMaleShapeOf, girthInput, isTypedBody, mannequinMeasurements, sanitiseMeasurements, type Avatar, type BodyField, type BodyMeasurements, type BodyOptions } from './body';
 import { loadBundleFrom, type FetchLike } from './bundle';
 import { checkBundle, gradingLabel } from './bundleCheck';
 import { redrawOnContextRestored } from './contextRestore';
@@ -72,6 +72,8 @@ export interface MountOptions {
    * The male body's shape (`BuildOptions.maleShape` of `@curtain/mannequin`): `v1` (the default,
    * every section an ellipse) or `v2` (non-elliptical sections, chest, back, deltoids, seat and a
    * joined crotch). Read only for a male body; a female body is built exactly as without it.
+   * A male bundle is shown only on the shape it was built on (anchors.json and qa.json
+   * `mannequin.maleShape`, absent = v1): with the other shape the mount is `GarmentViewError('incompatible')`.
    */
   maleShape?: 'v1' | 'v2';
   /** The product's garment as the embed got it (its size chart is the shop's live chart). */
@@ -225,12 +227,15 @@ export interface AvatarPlan {
 /**
  * The avatar for a bundle and the host's `body` and `look`. Pure (no WebGL, no I/O), so the rules
  * of the mount are unit-tested here. Drape guard: the drawn body is of the family the bundle's
- * garment was draped on, or this throws `GarmentViewError('incompatible')` and there is no 3D view.
+ * garment was draped on, and for a male bundle of the male shape it was built on (`maleShape`,
+ * `v1` when absent, against anchors.json `mannequin.maleShape`), or this throws
+ * `GarmentViewError('incompatible')` and there is no 3D view.
  */
-export function planAvatar(anchors: { category: string; mannequin?: { family?: unknown } }, bodyOptions: BodyOptions | null | undefined, look?: AvatarLook | null, maleShape?: 'v1' | 'v2'): AvatarPlan {
+export function planAvatar(anchors: { category: string; mannequin?: { family?: unknown; maleShape?: unknown } }, bodyOptions: BodyOptions | null | undefined, look?: AvatarLook | null, maleShape?: 'v1' | 'v2'): AvatarPlan {
   const body: BodyOptions = bodyOptions ?? {};
   const family = bundleFamilyOf(anchors);
   if (bodyFamilyOf(body) !== family) throw new GarmentViewError('incompatible');
+  if (family === 'male' && bundleMaleShapeOf(anchors) !== (maleShape === 'v2' ? 'v2' : 'v1')) throw new GarmentViewError('incompatible');
   const build = family === 'male' && maleShape === 'v2' ? ({ maleShape: 'v2' } as const) : {};
   const m = buildMannequin(family === 'male' ? familyShape('male')! : bodyShape(BASE_SHAPE_ID), build);
   const head = headOf(look?.head);
@@ -268,7 +273,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
     state('error');
     throw new GarmentViewError('load_failed');
   }
-  const ok = checkBundle({ anchors: bundle.anchors, grading: bundle.grading, material: bundle.material, qa: bundle.qa }, opts.garment);
+  const ok = checkBundle({ anchors: bundle.anchors, grading: bundle.grading, material: bundle.material, qa: bundle.qa }, opts.garment, opts.maleShape === 'v2' ? 'v2' : 'v1');
   if (!ok) {
     state('error');
     throw new GarmentViewError('incompatible');

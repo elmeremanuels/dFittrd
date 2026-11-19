@@ -57,7 +57,7 @@
   - The new v1 male golden and the existing female golden pass.
   - Pixel comparison: 379 figures were rendered once with the base code (8a03583) and once with this branch. They are all 164 female figures (every mock garment, four bodies, with fit) and 215 v1 male figures (S to XXL in every mock garment, the tee and the chino). The markup is identical in 379 of 379. The 2× screenshots (10 sheets of 4000 × 2000 px, 152,000,000 pixels in all) differ in **0** pixels.
   - Sample: `offline/05-pixel-identity-sample-branch.png`.
-- **Real stack with the switch on:** results are under "Real stack" below.
+- **Real stack:** `demo-men.mjs --all-sizes` ran in headless Chromium with SwiftShader at 390 × 760 CSS px, 2×. That is a software renderer, not a phone. The results are under "Real stack" below.
 
 **Assumed (not measured):**
 
@@ -90,7 +90,23 @@
 
 ## Real stack
 
-_Filled in below after the run._
+`node scripts/demo-men.mjs --all-sizes --male-shape=v2`, then the same without the flag. Both ran the M3 synthetic men's tee bundle, gate on, and both exited 0.
+
+- **Switch on:**
+  - The tee settled on the male 3D body for all five bodies, in S, M, L, XL and XXL.
+  - In every one, the figure beside the 3D view was `data-figure="male"` and `data-male-shape="v2"`, and carried "Estimate · not measured" and "Body from your answers".
+  - The men's shirt without a bundle still shows coming soon.
+- **Switch off:** the same five, with figures that carry no `data-male-shape`, as before this branch.
+- **Pictures:**
+  - `stack/20-<size>-2d-next-to-3d-v2.png`: the 2D figure next to the 3D front, with side and back under it.
+  - `stack/21-S-to-XXL-2d-next-to-3d-v2.png`: all five, the 2D figure over the 3D front and side.
+  - `stack/30-<size>-v1-vs-v2-2d-and-3d.png`: switch off against switch on, 2D and 3D.
+  - `stack/40-…`: the 2D figure alone. `41-M-page-v2.png`: the settled page.
+- **How it looks:**
+  - With the switch on, both views narrow at the seat together. The tee's hem and the legs line up between 2D and 3D, where v1 2D against v2 3D did not.
+  - In 3D the v2 body's straighter hips and the legs under the seat are clear at XL and XXL.
+  - Inside the phone frame the 2D change under the tee is modest: shoulders, seat and leg spacing show it.
+  - The 3D tee is still the M3 synthetic tee draped on the v1 body (see open issues), so its hem on v2 is the one the male-shape-v2 report describes.
 
 ## Open issues
 

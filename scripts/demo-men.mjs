@@ -28,6 +28,11 @@
  *        --all-sizes all five bodies of the male table (S, M, L, XL, XXL) instead of S, M, XL.
  *        --skins     on every body, pick three skin tones in the avatar prompt (Monk 2, 5 and 9)
  *                    and take a close-up of the 2D figure in each.
+ *        --male-shape=v2  build the web app with VITE_MALE_SHAPE=v2 (branch claude/male-2d-v2): the
+ *                    one switch that puts the male body v2 in the 3D view and the male 2D figure
+ *                    together. The figure must then carry data-male-shape="v2"; without the flag it
+ *                    must not. Each body also gets `--6-2d-own-size-<size>`: the 2D figure in the
+ *                    body's own size, next to `--5-3d-size-<size>--front`.
  *
  * Slice M1b: with the gate on, the 2D figure beside the 3D view must be the male figure
  * (`data-figure="male"`) and carry its estimate label; with the gate off it is today's figure.
@@ -47,6 +52,7 @@ const allSizes = args.includes('--all-sizes');
 const withSkins = args.includes('--skins');
 const withClose = args.includes('--close');
 const offSize = args.includes('--off-size');
+const maleShape = args.includes('--male-shape=v2') ? 'v2' : 'v1';
 const width = Number((args.find((a) => a.startsWith('--width=')) ?? '--width=390').slice('--width='.length));
 const shots = resolve(args.find((a) => !a.startsWith('--')) ?? join(root, 'test-results', 'demo-men'));
 mkdirSync(shots, { recursive: true });
@@ -120,7 +126,7 @@ try {
     LOG_LEVEL: 'warn',
   });
   await waitFor(`${URLS.api}/healthz`, 'api', 180_000);
-  start('web', pnpm, ['--filter', '@curtain/web', 'exec', 'vite', '--port', String(PORTS.web), '--strictPort', '--host', 'localhost'], { VITE_API_URL: URLS.api });
+  start('web', pnpm, ['--filter', '@curtain/web', 'exec', 'vite', '--port', String(PORTS.web), '--strictPort', '--host', 'localhost'], { VITE_API_URL: URLS.api, ...(maleShape === 'v2' ? { VITE_MALE_SHAPE: 'v2' } : {}) });
   start('shop', process.execPath, [join(root, 'apps', 'demo-shop', 'server.mjs')], { PORT: String(PORTS.shop), DEMO_JSON: join(db, 'demo.json') });
   await waitFor(`${URLS.web}/`, 'web');
   await waitFor(`${URLS.shop}/`, 'shop');
@@ -131,7 +137,7 @@ try {
   log(`seeded: synthetic-men-tee with bundle ${tee.asset3d}; gate ${gateOff ? 'off' : 'on'}`);
 
   browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-  const tag = `${gateOff ? 'gate-off' : 'gate-on'}${width !== 390 ? `-${width}` : ''}`;
+  const tag = `${gateOff ? 'gate-off' : 'gate-on'}${maleShape === 'v2' ? '-male-v2' : ''}${width !== 390 ? `-${width}` : ''}`;
   const shot = async (page, name, locator) => {
     const path = join(shots, `${tag}--${name}.png`);
     await page.waitForTimeout(500);
@@ -263,6 +269,10 @@ try {
       if (!gateOff && figure !== 'male') throw new Error(`tee, body ${body.name}: the 2D figure beside the male 3D body is not the male figure (data-figure=${figure})`);
       if (gateOff && figure !== null) throw new Error(`tee, body ${body.name}: gate off, but the 2D figure is marked ${figure}`);
       log(`tee, body ${body.name}: 2D figure is ${figure ?? 'female (today\'s figure)'}`);
+      const shape = await mirror.locator('svg').first().getAttribute('data-male-shape');
+      if (!gateOff && maleShape === 'v2' && shape !== 'v2') throw new Error(`tee, body ${body.name}: VITE_MALE_SHAPE=v2, but the 2D figure is not v2 (data-male-shape=${shape})`);
+      if (maleShape !== 'v2' && shape !== null) throw new Error(`tee, body ${body.name}: v2 is off, but the 2D figure is marked ${shape}`);
+      log(`tee, body ${body.name}: male shape ${shape ?? 'v1'}`);
       if (withSkins) {
         for (const n of SKINS) {
           await frame.getByTestId('avatar-open').click();
@@ -300,6 +310,11 @@ try {
     }
     const shown = await canvas.getAttribute('data-size');
     await turnShots(page, frame, `tee-body-${body.name}--5-3d-size-${shown}`);
+    if (await mirror.count()) {
+      await mirror.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+      await page.waitForTimeout(300);
+      await shot(page, `tee-body-${body.name}--6-2d-own-size-${shown}`, mirror);
+    }
     if (await frame.getByText(/coming soon/i).count()) throw new Error(`tee, body ${body.name}: coming soon after the view settled`);
     if (offSize && body.name === 'XXL') {
       for (const small of ['S', 'XL']) {

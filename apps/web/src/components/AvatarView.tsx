@@ -3,7 +3,7 @@ import { useId, useMemo, type ReactNode } from 'react';
 import type { FitResult } from '@curtain/fit-engine';
 import { fitGapsForRender } from '@curtain/fit-engine';
 import { ESTIMATE_DISCLAIMER, type GarmentPayload, type UserBody } from '@curtain/schema';
-import { adjustColor, bodyGeometry, bodyPath, fabricLook, garmentGeometry, isHex, levelY, STANDARD_SKIN_HEX, VIEW_H, VIEW_W, HEAD_TOP_Y, type FigureFamily } from '@/render/body';
+import { adjustColor, bodyGeometry, bodyPath, fabricLook, garmentGeometry, isHex, levelY, STANDARD_SKIN_HEX, VIEW_H, VIEW_W, HEAD_TOP_Y, type FigureFamily, type MaleShape } from '@/render/body';
 import { faceInk, figureOutline, neutralFace, SKIN_SHADE } from '@/render/face';
 import { skin2d, type Skin2dShading } from '@/render/skin2d';
 import { ESTIMATE_LABEL_LINES, EstimateBadge } from './EstimateBadge';
@@ -79,6 +79,11 @@ export interface AvatarViewProps {
    */
   family?: FigureFamily;
   /**
+   * The male figure's shape (`v1` default; `v2` follows the 3D male body v2). Set from the same
+   * switch as the 3D view (`maleShapeFlag`), so the two always show the same body. The female figure ignores it.
+   */
+  maleShape?: MaleShape;
+  /**
    * How the skin is shaded. `flat` (default): today's figure, unchanged. `skin-v2` (opt-in, D22
    * point 3, for the look review): shades in linear light that keep the skin's hue, a warm shadow
    * edge, a faint sheen and an outline that reads on every tone (`render/skin2d.ts`).
@@ -97,11 +102,11 @@ const NO_MEDIA: AvatarMedia = { faceUrl: null, baseFrame: null };
  * head (D19: one generic drawing for everybody, never a likeness), or the face tile where the app
  * has one. Always carries the estimate badge.
  */
-export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false, rings = null, hemSweepCm = null, labelsAt = 'top', plain = false, estimateLines = ESTIMATE_LABEL_LINES, family = 'female', skinShading = 'flat' }: AvatarViewProps): ReactNode {
+export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false, rings = null, hemSweepCm = null, labelsAt = 'top', plain = false, estimateLines = ESTIMATE_LABEL_LINES, family = 'female', maleShape = 'v1', skinShading = 'flat' }: AvatarViewProps): ReactNode {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const reduce = useReducedMotion();
 
-  const body = useMemo(() => bodyGeometry(measurements, heightCm, family), [measurements, heightCm, family]);
+  const body = useMemo(() => bodyGeometry(measurements, heightCm, family, maleShape === 'v2' ? { maleShape } : {}), [measurements, heightCm, family, maleShape]);
   const gaps = useMemo(() => (fit ? fitGapsForRender(fit, size ?? undefined) : null), [fit, size]);
   const geom = useMemo(() => (garment ? garmentGeometry({ garment, gaps, body, hemSweepCm }) : null), [garment, gaps, body, hemSweepCm]);
   const look = useMemo(() => (garment ? fabricLook(garment.fabric) : null), [garment]);
@@ -142,6 +147,7 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
         role="img"
         data-skin={skin.toUpperCase()}
         {...(family === 'male' ? { 'data-figure': 'male' } : {})}
+        {...(body.maleShape === 'v2' ? { 'data-male-shape': 'v2' } : {})}
         {...(v2 ? { 'data-skin-shading': 'skin-v2' } : {})}
         aria-label={garment ? `Estimated look of ${garment.name}${size ? ` in size ${size}` : ''} ${onWhom} — not measured` : hasBody ? 'Your body outline (estimate)' : 'Reference body outline'}
       >

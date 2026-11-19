@@ -40,7 +40,7 @@ import { AiRealismPanel, type AiRealismProps } from './AiRealism';
 import type { ExportedPasses } from './realism';
 import { embedStrings, type EmbedCatalogue } from './strings';
 import { lengthText, type Units } from './units';
-import { avatarSkinFlag } from './look';
+import { avatarSkinFlag, maleShapeFlag } from './look';
 
 type ViewerModule = typeof GarmentViewer;
 type BaseView = Awaited<ReturnType<ViewerModule['mountGarmentView']>>;
@@ -133,6 +133,8 @@ export interface Garment3DProps {
   head?: ViewerHead | null;
   /** Skin shading of the 3D view (default: the build flag `VITE_AVATAR_SKIN`, else today's flat skin). */
   skinShading?: 'flat' | 'skin-v2';
+  /** The male body's shape in the 3D view (default: the build flag `VITE_MALE_SHAPE`, else v1). Only sent for a male body, only when v2. */
+  maleShape?: 'v1' | 'v2';
   /**
    * D22: the "AI-enhanced estimate" next to the 3D view, only when the server flag is on (`aiRealism`
    * from GET /v1/try) and the api client can send it. Absent or null: nothing changes.
@@ -148,7 +150,7 @@ export const REQUIRED_3D_TIMEOUT_MS = 30_000;
 
 type Phase = 'idle' | 'loading' | 'draping' | 'settled' | 'failed';
 
-export function Garment3D({ asset, paused, garment, fit, size, recommended, measurements, units = 'metric', heightCm, estimated = [], skinHex = null, onSelect, required = false, onRequiredState, requiredTimeoutMs = REQUIRED_3D_TIMEOUT_MS, lighting = viewerLightingFlag(), head = viewerHeadFlag(), skinShading = avatarSkinFlag(), aiRealism = null, loadViewer = () => import('@curtain/garment-viewer'), webgl2 = hasWebGL2 }: Garment3DProps): ReactNode {
+export function Garment3D({ asset, paused, garment, fit, size, recommended, measurements, units = 'metric', heightCm, estimated = [], skinHex = null, onSelect, required = false, onRequiredState, requiredTimeoutMs = REQUIRED_3D_TIMEOUT_MS, lighting = viewerLightingFlag(), head = viewerHeadFlag(), skinShading = avatarSkinFlag(), maleShape = maleShapeFlag(), aiRealism = null, loadViewer = () => import('@curtain/garment-viewer'), webgl2 = hasWebGL2 }: Garment3DProps): ReactNode {
   const [supported] = useState(() => !!asset && webgl2());
   const usable = !!asset && !paused && supported;
   const [open, setOpen] = useState(required && usable);
@@ -213,6 +215,7 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
           body,
           ...(skinRef.current || head || skinShading === 'skin-v2' ? { look: { ...(skinRef.current ? { skinHex: skinRef.current } : {}), ...(head ? { head } : {}), ...(skinShading === 'skin-v2' ? { shading: 'skin-v2' as const } : {}) } } : {}),
           ...(lighting !== 'classic' ? { lighting } : {}),
+          ...(family === 'male' && maleShape === 'v2' ? { maleShape: 'v2' as const } : {}),
           onState: (s) => {
             if (!cancelled) setPhase((prev) => (required && prev === 'failed' ? prev : s === 'error' ? 'failed' : s));
           },

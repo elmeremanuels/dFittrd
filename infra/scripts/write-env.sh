@@ -102,6 +102,13 @@ if [ -n "$(value SHOPIFY_API_KEY)" ]; then
   esac
 fi
 
+# The api refuses a k-anonymity floor below 5 in production (apps/api/src/env.ts, D3); stop here
+# with the reason instead of a crash-looping container.
+KANON="$(value K_ANON)"
+if [ -n "$KANON" ]; then
+  [[ "$KANON" =~ ^[0-9]+$ ]] && [ "$KANON" -ge 5 ] || { echo "write-env: K_ANON must be a whole number of at least 5 (got '$KANON')" >&2; exit 1; }
+fi
+
 # Optional, but the pilot needs them: say so without failing the deploy.
 for key in SHOPIFY_API_KEY SHOPIFY_API_SECRET BACKUP_AGE_RECIPIENT; do
   [ -n "$(value "$key")" ] || echo "write-env: note: $key is empty" >&2

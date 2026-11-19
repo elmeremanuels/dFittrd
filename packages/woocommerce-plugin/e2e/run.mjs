@@ -262,9 +262,12 @@ async function merchantAndShopper(browser, zip, productId, api) {
   check(listed.status === 200 && row && /active/.test(JSON.stringify(row)), 'signed GET /v1/merchant/products returns the pushed product as active', JSON.stringify(list).slice(0, 400));
   const forged = await fetch(API + target, { headers: { authorization: pkHmac(pk, sk.slice(0, -1) + (sk.endsWith('a') ? 'b' : 'a'), 'GET', target) } });
   check(forged.status === 401, 'a forged PK-HMAC signature is refused (401)', String(forged.status));
-  // pino pretty-prints the request over several lines: "method": "PUT" right above its "url".
-  const putLines = api.lines.filter((l, i) => l.includes(`"url": "/v1/merchant/products/${productId}"`) && /"method": "PUT"/.test(api.lines[i - 1] ?? ''));
-  check(putLines.length > 0, 'api log shows the plugin\'s PUT', `no PUT line for /v1/merchant/products/${productId} in ${api.lines.length} api log line(s)`);
+  // pino pretty-prints the request over several lines: "method": "PUT" right above its "url". The api logs
+  // the route pattern, never the concrete id or query values (apps/api/src/lib/logUrl.ts); the signed GET
+  // above proves it was this product.
+  const putLines = api.lines.filter((l, i) => l.includes('"url": "/v1/merchant/products/:externalId') && /"method": "PUT"/.test(api.lines[i - 1] ?? ''));
+  check(putLines.length > 0, 'api log shows the plugin\'s PUT', `no PUT line for /v1/merchant/products/:externalId in ${api.lines.length} api log line(s)`);
+  check(!api.lines.some((l) => l.includes(`/v1/merchant/products/${productId}`)), 'the api log holds route patterns, not the product id', 'a concrete product URL was logged');
 
   // ---- garment measurements table (a skirt: the tape is for bottoms) ---------------------------------
   await garmentTapeFlow(page, api, pk, sk, browser);

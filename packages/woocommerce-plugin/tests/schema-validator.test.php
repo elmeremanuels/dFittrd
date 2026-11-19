@@ -66,12 +66,12 @@ test(
 		$g['sizeChart']       = array();
 		$g['fabric']['drape'] = 1.5;
 		$g['fabric']['blend'] = array( array( 'linen' ) );
-		$g['ease']['neck']    = 3;
+		$g['ease']['knee']    = 3; // not a fit point (neck is one since men-3d-plan M2)
 		$g['styleTags']['minimal'] = 2;
 		$g['flatLayPhoto']    = 'wp-content/uploads/not-absolute.png';
 		$issues = $v->validate( $g );
 		$paths  = array_column( $issues, 'path' );
-		foreach ( array( 'primaryColorHex', 'schemaVersion', 'category', 'sizeChart', 'fabric.drape', 'fabric.blend.0', 'ease.neck', 'styleTags.minimal', 'flatLayPhoto' ) as $p ) {
+		foreach ( array( 'primaryColorHex', 'schemaVersion', 'category', 'sizeChart', 'fabric.drape', 'fabric.blend.0', 'ease.knee', 'styleTags.minimal', 'flatLayPhoto' ) as $p ) {
 			assert_true( in_array( $p, $paths, true ), "expected an issue at $p, got: " . implode( ', ', $paths ) );
 		}
 	}

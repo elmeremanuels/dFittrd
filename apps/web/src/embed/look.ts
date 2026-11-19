@@ -101,6 +101,16 @@ export function maleShapeFlag(env: { VITE_MALE_SHAPE?: string } = import.meta.en
   return env.VITE_MALE_SHAPE === 'v2' ? 'v2' : 'v1';
 }
 
+/**
+ * A typed height for the 3D body of a women's product, for a build: `VITE_WOMEN_3D_HEIGHT=1` (branch
+ * claude/dress-from-tape, the second-stature renders of docs/reports/claude/dress-from-tape.md). Anything else, and
+ * every normal build: off, the women's 3D body keeps the bundle body's stature as before. A preview switch, not a
+ * product decision: the typed body of the viewer moves the garment and has known limits (`buildTypedAvatar`).
+ */
+export function womenHeightFlag(env: { VITE_WOMEN_3D_HEIGHT?: string } = import.meta.env): boolean {
+  return env.VITE_WOMEN_3D_HEIGHT === '1';
+}
+
 export function avatarSkinFlag(env: { VITE_AVATAR_SKIN?: string } = import.meta.env): 'flat' | 'skin-v2' {
   return env.VITE_AVATAR_SKIN === 'skin-v2' ? 'skin-v2' : 'flat';
 }

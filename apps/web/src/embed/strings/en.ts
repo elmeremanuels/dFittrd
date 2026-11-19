@@ -357,6 +357,8 @@ export interface EmbedCatalogue {
     refused: (size: string, refusedHip: string) => string;
     /** A server drape bake: the sizes differ little in the picture; the room is in the size rings. */
     sizesAlike: string;
+    /** A size too small for this body (the fit engine says it does not close at `where`, the body `larger` larger): not draped, not drawn. */
+    notDrawn: (size: string, where: string, larger: string) => string;
   };
 }
 
@@ -704,5 +706,6 @@ export const EN: EmbedCatalogue = {
     between: (size, hip) => `Your hips are past the largest body size ${size} was draped on, so it is shown on that body; the simulation could not put size ${size} on a body with ${hip} hips.`,
     refused: (size, hip) => `Size ${size} is not drawn: the simulation could not put it on a body with ${hip} hips, and yours are at least that.`,
     sizesAlike: 'In 3D the sizes look much alike; how much room each size gives is in the size rings.',
+    notDrawn: (size, where, larger) => `Size ${size} is not drawn: it does not close at the ${where} on a body like yours (the body is ${larger} larger than the garment, more than its fabric gives). The size advice says how it fits.`,
   },
 };

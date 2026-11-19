@@ -71,7 +71,8 @@ export function viewerHeadFlag(env: { VITE_VIEWER_HEAD?: string } = import.meta.
 }
 /** What a baked view rests on (`GarmentView.source` of the viewer); optional, so this file builds against a viewer without it. */
 export type ViewerSource =
-  | { kind: 'device' }
+  /** `notDrawn`: sizes of a sewn top too small for this body (the fit engine's `open`), not draped and not drawn. */
+  | { kind: 'device'; notDrawn?: Record<string, { anchor: string; bodyLargerCm: number }> }
   | { kind: 'bake'; plainColour: boolean; sizes: Record<string, { provenance: 'measured' | 'interpolated' | 'extrapolated'; place: 'within' | 'held' | 'between' | 'refused'; refusedHipCm: number | null }> };
 /** The viewer contract of the avatar slices; optional, so this file builds against a viewer without it. */
 type View = Omit<BaseView, 'source'> & { setLook?: (look: ViewerLook) => void; source?: ViewerSource };
@@ -295,6 +296,11 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
         {recommended && recommended !== size ? ` ${t.looking(size)}` : ''}
       </p>
       {source?.kind === 'bake' ? <BakeNote t={t} size={size} source={source} units={units} /> : null}
+      {source?.kind === 'device' && source.notDrawn?.[size] ? (
+        <p className="mt-1 text-[11px] leading-snug text-ink-mute" data-testid="garment3d-not-drawn" data-anchor={source.notDrawn[size]!.anchor}>
+          {t.notDrawn(size, t.ringName(source.notDrawn[size]!.anchor).toLowerCase(), lengthText(source.notDrawn[size]!.bodyLargerCm, units))}
+        </p>
+      ) : null}
       {ringList.length > 0 ? (
         <ul className="mt-1.5 flex flex-wrap gap-1 text-[11px]" aria-label={t.rings(size)} data-testid="garment3d-rings">
           {ringList.map((r) => (

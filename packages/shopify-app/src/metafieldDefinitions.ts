@@ -82,6 +82,14 @@ export const METAFIELD_DEFINITION_INPUTS: readonly MetafieldDefinitionInput[] = 
 export interface EnsureDefinitionsResult {
   created: string[];
   existing: string[];
+  /**
+   * Keys the shop already holds as metafields without a definition (`UNSTRUCTURED_ALREADY_EXISTS`,
+   * https://shopify.dev/docs/api/admin-graphql/2026-10/enums/MetafieldDefinitionCreateUserErrorCode,
+   * read 2026-11-19). The values still read and write; only the admin's typed editor is missing. Not
+   * an install failure: before this, the first such key aborted the loop and the remaining
+   * definitions were never created.
+   */
+  unstructured: string[];
 }
 
 interface CreatePayload {
@@ -89,20 +97,23 @@ interface CreatePayload {
 }
 
 /**
- * Create every definition; `TAKEN` (already exists) counts as existing. Any other userError
+ * Create every definition; `TAKEN` (already exists) counts as existing, `UNSTRUCTURED_ALREADY_EXISTS`
+ * (metafields without a definition) is reported and skipped. Any other userError
  * aborts with a ShopifyGraphqlError naming the key, so install logs are actionable.
  */
 export async function ensureMetafieldDefinitions(client: AdminGraphqlClient, opts: DefinitionOptions = {}): Promise<EnsureDefinitionsResult> {
   const created: string[] = [];
   const existing: string[] = [];
+  const unstructured: string[] = [];
   for (const def of SHOPIFY_METAFIELD_DEFINITIONS) {
     const data = await client.request<CreatePayload>(METAFIELD_DEFINITION_CREATE, { definition: metafieldDefinitionInput(def, opts) });
     const r = data.metafieldDefinitionCreate;
     if (r.createdDefinition) created.push(def.key);
     else if (r.userErrors.some((e) => e.code === 'TAKEN')) existing.push(def.key);
+    else if (r.userErrors.length > 0 && r.userErrors.every((e) => e.code === 'UNSTRUCTURED_ALREADY_EXISTS')) unstructured.push(def.key);
     else throw new ShopifyGraphqlError(`metafield definition ${def.key}: ${r.userErrors.map((e) => e.message).join('; ') || 'unknown error'}`, 'user_errors', undefined, r.userErrors);
   }
-  return { created, existing };
+  return { created, existing, unstructured };
 }
 
 export interface ExistingDefinition {

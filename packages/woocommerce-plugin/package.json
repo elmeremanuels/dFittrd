@@ -14,7 +14,7 @@
     "typecheck": "node scripts/lint.mjs",
     "lint": "node scripts/lint.mjs",
     "e2e:wp": "node e2e/run.mjs",
-    "e2e:wp:matrix": "node e2e/run.mjs --php=8.3 && node e2e/run.mjs --php=8.2 --skip-build && node e2e/run.mjs --php=8.1 --skip-build"
+    "e2e:wp:matrix": "node e2e/run.mjs --php=8.5 && node e2e/run.mjs --php=8.3 --skip-build && node e2e/run.mjs --php=8.1 --skip-build"
   },
   "devDependencies": {
     "@curtain/schema": "workspace:*",

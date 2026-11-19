@@ -71,3 +71,6 @@
 	.curtain-tape-table td.curtain-tape-num::before { content: attr(data-label); display: block; font-size: 11px; line-height: 1.25; color: #646970; }
 	.curtain-tape-table input.curtain-tape-cm { width: 100% !important; }
 }
+/* The size chart has a column per measurement: wider than a phone. It scrolls sideways inside the
+   box instead of being cut off by the postbox (seen on a 390 px screen, WordPress 7.1). */
+.curtain-scroll { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }

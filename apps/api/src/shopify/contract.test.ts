@@ -16,12 +16,12 @@
  */
 import { readFileSync } from 'node:fs';
 import { eq } from 'drizzle-orm';
-import { buildClientSchema, getVariableValues, Kind, NoDeprecatedCustomRule, parse, specifiedRules, validate, type IntrospectionQuery, type OperationDefinitionNode } from 'graphql';
+import { buildClientSchema, getVariableValues, isEnumType, isInputObjectType, isObjectType, Kind, NoDeprecatedCustomRule, parse, specifiedRules, validate, type IntrospectionQuery, type OperationDefinitionNode } from 'graphql';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { CHART_TEMPLATES } from '@curtain/schema';
 import { createAdminClient, METAFIELD_DEFINITION_INPUTS, runProductBackfill, syncProductNode } from '@curtain/shopify-app';
 import { products, shopifySessions, shops, webhookLog } from '../db/schema.js';
-import { FakeShopify } from '../test/fakeShopify/index.js';
+import { FakeShopify, fakeAdminSchema } from '../test/fakeShopify/index.js';
 import { makeApp, type TestApp } from '../test/helpers.js';
 
 const API_KEY = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
@@ -483,5 +483,43 @@ describe.skipIf(!INTROSPECTION)('contract: every document against the real Admin
     expect(coerced).toBeGreaterThan(20);
     // Recorded so a newly deprecated field shows up as a diff here.
     expect([...deprecated].sort()).toEqual(KNOWN_DEPRECATED);
+  });
+
+  // The fake's excerpt must not accept what the real schema refuses: every type, field, argument and
+  // enum value it declares exists in the real schema with the same type, and it leaves out no
+  // required argument or input field. (Found on 2026-11-19: AppRecurringPricingInput.planHandle,
+  // which exists only on the AppRecurringPricing output.)
+  it('the fake excerpt is a faithful subset of the real schema', () => {
+    const real = buildClientSchema((JSON.parse(readFileSync(INTROSPECTION!, 'utf8')) as { data: IntrospectionQuery }).data);
+    const diffs: string[] = [];
+    for (const [name, t] of Object.entries(fakeAdminSchema().getTypeMap())) {
+      if (name.startsWith('__')) continue;
+      const r = real.getType(name);
+      if (!r) {
+        diffs.push(`type ${name} is not in the real schema`);
+        continue;
+      }
+      if ((isObjectType(t) && isObjectType(r)) || (isInputObjectType(t) && isInputObjectType(r))) {
+        const rf = r.getFields() as Record<string, { type: unknown; args?: ReadonlyArray<{ name: string; type: unknown; defaultValue?: unknown }>; defaultValue?: unknown }>;
+        const tf = t.getFields() as Record<string, { type: unknown; args?: ReadonlyArray<{ name: string; type: unknown }> }>;
+        for (const [fn, f] of Object.entries(tf)) {
+          const g = rf[fn];
+          if (!g) {
+            diffs.push(`${name}.${fn} is not in the real schema`);
+            continue;
+          }
+          if (String(f.type) !== String(g.type)) diffs.push(`${name}.${fn}: fake ${String(f.type)}, real ${String(g.type)}`);
+          for (const a of f.args ?? []) {
+            const b = g.args?.find((x) => x.name === a.name);
+            if (!b) diffs.push(`${name}.${fn}(${a.name}) is not in the real schema`);
+            else if (String(a.type) !== String(b.type)) diffs.push(`${name}.${fn}(${a.name}): fake ${String(a.type)}, real ${String(b.type)}`);
+          }
+          for (const b of g.args ?? []) if (String(b.type).endsWith('!') && b.defaultValue === undefined && !f.args?.some((x) => x.name === b.name)) diffs.push(`${name}.${fn}: real requires ${b.name}`);
+        }
+        if (isInputObjectType(t)) for (const [gn, g] of Object.entries(rf)) if (String(g.type).endsWith('!') && g.defaultValue === undefined && !tf[gn]) diffs.push(`${name}: real requires input field ${gn}`);
+      }
+      if (isEnumType(t) && isEnumType(r)) for (const v of t.getValues()) if (!r.getValue(v.name)) diffs.push(`${name}.${v.name} is not in the real enum`);
+    }
+    expect(diffs).toEqual([]);
   });
 });

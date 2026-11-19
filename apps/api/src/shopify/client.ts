@@ -451,7 +451,7 @@ export class ShopifyClient {
   }
 
   /** Creates the $app:curtain metafield definitions (idempotent: TAKEN errors are ignored). */
-  async ensureMetafieldDefinitions(shopDomain: string, accessToken: string): Promise<{ created: string[]; existing: string[] }> {
+  async ensureMetafieldDefinitions(shopDomain: string, accessToken: string): Promise<{ created: string[]; existing: string[]; unstructured: string[] }> {
     return ensureMetafieldDefinitions(this.admin(shopDomain, accessToken));
   }
 }

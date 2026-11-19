@@ -171,6 +171,19 @@ final class Api_Client {
 
 		$code    = isset( $data['error']['code'] ) ? (string) $data['error']['code'] : 'http_' . $status;
 		$message = isset( $data['error']['message'] ) ? (string) $data['error']['message'] : 'HTTP ' . $status;
+		// A 400 from the api's request validation names the fields in `details` ([{path, message}]):
+		// without them the merchant only reads "request validation failed" and cannot tell what to fix.
+		$details = isset( $data['error']['details'] ) && is_array( $data['error']['details'] ) ? $data['error']['details'] : array();
+		$named   = array();
+		foreach ( array_slice( $details, 0, 3 ) as $d ) {
+			if ( is_array( $d ) && isset( $d['message'] ) && is_scalar( $d['message'] ) ) {
+				$path    = isset( $d['path'] ) && is_scalar( $d['path'] ) ? trim( str_replace( '/', '.', (string) $d['path'] ), '.' ) : '';
+				$named[] = ( '' !== $path ? $path . ': ' : '' ) . (string) $d['message'];
+			}
+		}
+		if ( $named ) {
+			$message .= ' — ' . implode( '; ', $named ) . ( count( $details ) > 3 ? '; …' : '' );
+		}
 		return array(
 			'ok'              => false,
 			'status'          => $status,

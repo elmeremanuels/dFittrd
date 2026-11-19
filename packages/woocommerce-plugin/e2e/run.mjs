@@ -18,7 +18,7 @@
  * "delete all data" ticked (settings, meta and transients gone). Then Plugin Check (the official
  * plugin-check plugin) on a fresh copy of the zip.
  *
- * `--php=8.1|8.2|8.3` picks the official `wordpress:php<X.Y>-apache` image; a core older than the
+ * `--php=8.1|8.2|8.3|8.4|8.5` picks the official `wordpress:php<X.Y>-apache` image; a core older than the
  * pinned 7.1.4 (the 8.1 image ships 6.9) is updated from the pinned zip first.
  *
  * Screenshots and report.json: test-results/woo-wp-e2e/php<XY>/ (git-ignored).
@@ -266,11 +266,15 @@ async function merchantAndShopper(browser, zip, productId, api) {
   const putLines = api.lines.filter((l, i) => l.includes(`"url": "/v1/merchant/products/${productId}"`) && /"method": "PUT"/.test(api.lines[i - 1] ?? ''));
   check(putLines.length > 0, 'api log shows the plugin\'s PUT', `no PUT line for /v1/merchant/products/${productId} in ${api.lines.length} api log line(s)`);
 
+  // ---- garment measurements table (a skirt: the tape is for bottoms) ---------------------------------
+  await garmentTapeFlow(page, api, pk, sk, browser);
+
   // ---- storefront, per theme ----------------------------------------------------------------------
   const permalink = wp(cfg, ['eval', `echo get_permalink(${productId});`]);
   for (const theme of THEMES) {
     wp(cfg, ['theme', 'activate', theme]);
     await shopperFlow(browser, theme, permalink);
+    if (theme !== 'twentytwentyfour') await phoneShopper(browser, theme, permalink, wp(cfg, ['eval', 'echo wc_get_page_permalink("shop");']));
   }
   // A merchant who moved the add-to-cart form into a template part in the Site Editor (TT5 still
   // active): the button must still sit under the form, not fall back above the excerpt.
@@ -318,6 +322,259 @@ async function merchantAndShopper(browser, zip, productId, api) {
   check(opt.status !== 0 && metaLeft === '0' && transLeft === '0' && files.status !== 0, 'uninstall (delete data ticked): plugin files, curtain_settings, _curtain_* meta and curtain transients all gone', JSON.stringify({ opt: opt.status, metaLeft, transLeft, files: files.status }));
 
   if (pageErrors.length) report.warnings.push(...pageErrors);
+  await ctx.close();
+}
+
+// ---------------------------------------------------------------------------------------------
+// Garment measurements table (docs/MERCHANT-MEASUREMENTS.md) on a real product edit screen: save,
+// error, renamed size, emptied chart, and the push of the tape to the api.
+
+/** A published simple skirt (category bottom): the five tape numbers are for bottoms. */
+function createSkirt() {
+  return Number(
+    wp(cfg, [
+      'eval',
+      '$p = new WC_Product_Simple(); $p->set_name("Pull-on Midi Skirt"); $p->set_sku("CURTAIN-E2E-SKIRT"); $p->set_regular_price("89"); $p->set_status("publish"); $p->set_description("Viscose pull-on midi skirt. Test fixture for the Curtain e2e."); echo $p->save();',
+    ]).split('\n').pop(),
+  );
+}
+
+const metaJson = (id, key) => {
+  const r = wp(cfg, ['post', 'meta', 'get', String(id), key], { allowFail: true });
+  return r.status === 0 && r.stdout ? JSON.parse(r.stdout) : null;
+};
+const tapeRow = (box, i) => ({
+  measured: box.locator(`input[name="curtain[tape][${i}][measured]"]`),
+  cell: (f) => box.locator(`input[name="curtain[tape][${i}][${f}]"]`),
+});
+const TAPE_FIELDS = ['waistRelaxed', 'waistStretched', 'hip', 'hemSweep', 'length'];
+/** AU 8, 12 and 16 of the skirt, measured flat (cm, widths doubled). */
+const SKIRT_TAPE = { 0: [67, 94, 112, 230, 103], 2: [75, 104, 121, 248, 103], 4: [84, 116, 131, 268, 104] };
+
+async function updateProduct(page) {
+  await page.locator('#publish').click();
+  await page.waitForURL(/message=1/);
+  await page.waitForLoadState('domcontentloaded');
+}
+
+async function pushNow(productId) {
+  let status = '';
+  for (let i = 0; i < 20; i++) {
+    wp(cfg, ['action-scheduler', 'run', '--hooks=curtain_push_product'], { allowFail: true });
+    const pending = wp(cfg, ['eval', `echo count(as_get_scheduled_actions(array("hook" => "curtain_push_product", "args" => array(${productId}), "status" => "pending"), "ids")) + count(as_get_scheduled_actions(array("hook" => "curtain_push_product", "status" => "pending"), "ids"));`], { allowFail: true }).stdout;
+    status = wp(cfg, ['post', 'meta', 'get', String(productId), '_curtain_sync_status'], { allowFail: true }).stdout;
+    if (pending === '0' && status) return status;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return status;
+}
+
+/** What the plugin pushes now (Sync::build on the live product), parsed. */
+const builtPayload = (productId) => JSON.parse(wp(cfg, ['eval', `echo wp_json_encode(\\Curtain\\Sync::build(wc_get_product(${productId}))['payload']);`]));
+
+async function garmentTapeFlow(page, api, pk, sk, browser) {
+  const skirtId = createSkirt();
+  const edit = `${WP}/wp-admin/post.php?post=${skirtId}&action=edit`;
+  await page.goto(edit);
+  const box = page.locator('#curtain-garment');
+  await box.locator('select[name="curtain[category]"]').selectOption('bottom');
+  await box.locator('select[name="curtain[pattern_block]"]').selectOption('a-line');
+  await box.locator('.curtain-template-select').selectOption('au-womens-body');
+  await box.locator('.curtain-template-apply').click();
+  await box.locator('input[name="curtain[fabric_primary]"]').fill('viscose');
+  await box.locator('input[name="curtain[fabric_stretch_pct]"]').fill('0');
+  await box.locator('input[name="curtain[primary_color_hex]"]').fill('#2F3A4B');
+  const before = await box.locator('#curtain-tape').innerText();
+  check(/Add a size chart to this product first/.test(before), 'tape: before the chart is saved the table asks for a size chart first', before.slice(0, 300));
+  await updateProduct(page);
+  // A fabric without its drape: the api refuses the product (400 validation); the merchant must read which field.
+  check((await pushNow(skirtId)) === 'error', 'fabric without drape: the api refuses the push (sync status error)', 'not refused');
+  await page.reload();
+  const syncErr = wp(cfg, ['post', 'meta', 'get', String(skirtId), '_curtain_sync_error']);
+  const statusText = await box.locator('.curtain-status').innerText();
+  check(/fabric\.drape/.test(syncErr) && /fabric\.drape/.test(statusText), 'fabric without drape: the error the merchant sees names fabric.drape (api validation details)', `${syncErr} / ${statusText}`);
+  await box.locator('.curtain-status').scrollIntoViewIfNeeded();
+  await shot(page, 'sync-error-names-field', { clip: await box.locator('.curtain-status').boundingBox() });
+  await box.locator('input[name="curtain[fabric_drape]"]').fill('0.7');
+  await updateProduct(page);
+
+  // 1. save: three sizes measured, the others estimated.
+  const sizes = await box.locator('.curtain-tape-table td.curtain-tape-size strong').allInnerTexts();
+  check(sizes.join(',') === '8,10,12,14,16,18,20', 'tape: after the chart is saved the table has one row per chart size (8–20)', sizes.join(','));
+  await box.locator('select[name="curtain[closure]"]').selectOption('pull-on');
+  await box.locator('input[name="curtain[tape_depth]"]').fill('20');
+  for (const [i, vals] of Object.entries(SKIRT_TAPE)) {
+    const r = tapeRow(box, i);
+    await r.measured.check();
+    for (const [j, f] of TAPE_FIELDS.entries()) await r.cell(f).fill(String(vals[j]));
+  }
+  check(await tapeRow(box, 1).cell('hip').evaluate((e) => e.readOnly), 'tape: an unticked size stays read-only', 'size 10 editable');
+  await box.locator('#curtain-tape').scrollIntoViewIfNeeded();
+  await shot(page, 'tape-1-typed');
+  await updateProduct(page);
+  const tape = metaJson(skirtId, '_curtain_garment_tape');
+  const prov = tape?.map((r) => `${r.size}:${r.hip?.provenance?.[0]}`).join(',');
+  check(
+    tape?.length === 7 && prov === '8:m,10:i,12:m,14:i,16:m,18:e,20:e' && tape[0].hip.depthBelowBandCm === 20 && tape[0].waistRelaxed.cm === 67,
+    'tape: Update stores _curtain_garment_tape with 7 rows (8/12/16 measured, 10/14 interpolated, 18/20 extrapolated, hip depth 20)',
+    JSON.stringify(tape),
+  );
+  check(wp(cfg, ['post', 'meta', 'get', String(skirtId), '_curtain_closure']) === 'pull-on', 'tape: closure stored (pull-on)', 'closure missing');
+  const labels = await box.locator('.curtain-tape-table tbody tr').evaluateAll((rows) => rows.map((r) => r.querySelector('.curtain-tape-prov')?.textContent.trim() ?? ''));
+  check(/estimated/.test(labels[1]) && /rough estimate/.test(labels[5]) && (await tapeRow(box, 0).measured.isChecked()), 'tape: after the save the estimated rows are labelled "estimated" / "rough estimate", the measured ones stay ticked', JSON.stringify(labels));
+  await box.locator('#curtain-tape').scrollIntoViewIfNeeded();
+  await shot(page, 'tape-2-saved');
+  await shot(page, 'tape-2-saved-table', { clip: await box.locator('#curtain-tape').boundingBox() });
+
+  // the push carries the tape; the api stores exactly it.
+  const status = await pushNow(skirtId);
+  check(status !== 'error' && status !== '', `tape: push accepted by the api (sync status ${status})`, status);
+  const built = builtPayload(skirtId);
+  check(built.closure === 'pull-on' && built.garmentTape?.length === 7, 'tape: the payload the plugin pushes carries closure and the 7-row garmentTape', JSON.stringify(built).slice(0, 300));
+  const target = `/v1/merchant/products/${skirtId}`;
+  const replay = await fetch(API + target, { method: 'PUT', headers: { 'content-type': 'application/json', authorization: pkHmac(pk, sk, 'PUT', target, JSON.stringify(built)) }, body: JSON.stringify(built) });
+  const replayBody = await replay.json();
+  check(replay.status === 200 && replayBody.changed === false && replayBody.contentHash === wp(cfg, ['post', 'meta', 'get', String(skirtId), '_curtain_content_hash']), 'tape: the same payload PUT again (signed) is "changed: false" with the content hash the plugin stored: the api holds the tape the plugin sent', JSON.stringify(replayBody));
+  const bad = { ...built, garmentTape: [...built.garmentTape, { size: 'XXL', hip: { cm: 140, provenance: 'measured' } }] };
+  const refused = await fetch(API + target, { method: 'PUT', headers: { 'content-type': 'application/json', authorization: pkHmac(pk, sk, 'PUT', target, JSON.stringify(bad)) }, body: JSON.stringify(bad) });
+  const refusedBody = await refused.json();
+  check(refused.status === 422 && /invalid_garment_tape/.test(JSON.stringify(refusedBody)), 'tape: the api refuses a tape row for a size not in the chart (422 invalid_garment_tape)', `${refused.status} ${JSON.stringify(refusedBody)}`);
+
+  // 2. error: nothing of the table is stored, what was typed comes back, the wrong inputs are marked.
+  await tapeRow(box, 2).cell('waistStretched').fill('70');
+  await tapeRow(box, 0).cell('waistRelaxed').fill('6O');
+  await updateProduct(page);
+  const errBox = box.locator('.curtain-tape-issues--error');
+  const errText = (await errBox.count()) ? await errBox.innerText() : '';
+  const invalid = await box.locator('.curtain-tape-table input[aria-invalid="true"]').evaluateAll((els) => els.map((e) => e.name));
+  check(
+    /were not saved/.test(errText) && /Size 12: the stretched waistband \(70 cm\) is smaller than the relaxed waistband \(75 cm\)/.test(errText) && invalid.includes('curtain[tape][0][waistRelaxed]') && invalid.includes('curtain[tape][2][waistStretched]'),
+    'tape error: the English messages show, and the two wrong inputs are marked aria-invalid',
+    `${errText} / ${invalid}`,
+  );
+  check((await tapeRow(box, 0).cell('waistRelaxed').inputValue()) === '6O' && (await tapeRow(box, 2).cell('waistStretched').inputValue()) === '70', 'tape error: what was typed comes back in the inputs', 'typed values lost');
+  check(JSON.stringify(metaJson(skirtId, '_curtain_garment_tape')) === JSON.stringify(tape), 'tape error: the stored tape is unchanged', 'stored tape changed');
+  await box.locator('#curtain-tape').scrollIntoViewIfNeeded();
+  await shot(page, 'tape-3-error');
+  await shot(page, 'tape-3-error-table', { clip: await box.locator('#curtain-tape').boundingBox() });
+  await tapeRow(box, 2).cell('waistStretched').fill('104');
+  await tapeRow(box, 0).cell('waistRelaxed').fill('67');
+  await updateProduct(page);
+  check((await box.locator('.curtain-tape-issues--error').count()) === 0 && JSON.stringify(metaJson(skirtId, '_curtain_garment_tape')) === JSON.stringify(tape), 'tape error fixed: the messages go and the same tape is stored', 'still an error or another tape');
+
+  // 3. renamed size: 8 → 6 in the chart while size 8's numbers are edited in the same update.
+  await box.locator('input[name="curtain[size_chart][0][size]"]').fill('6');
+  await tapeRow(box, 0).cell('waistRelaxed').fill('66');
+  await updateProduct(page);
+  const orphan = box.locator('tr.curtain-tape-orphan');
+  const renameErr = (await box.locator('.curtain-tape-issues--error').count()) ? await box.locator('.curtain-tape-issues--error').innerText() : '';
+  const chartSizes = (metaJson(skirtId, '_curtain_size_chart') ?? []).map((r) => r.size).join(',');
+  report.tapeRename = { orphanRows: await orphan.count(), error: renameErr, chartSizes, storedTape: metaJson(skirtId, '_curtain_garment_tape')?.map((r) => r.size) };
+  check(chartSizes.startsWith('6,10') && (await orphan.count()) === 1 && (await orphan.locator('input.curtain-tape-size-input').inputValue()) === '8' && /Size 8 is not in this product's size chart/.test(renameErr), 'tape rename: the chart saves as 6, 10…; the typed size-8 row comes back as an editable orphan row with the error', JSON.stringify(report.tapeRename));
+  await box.locator('#curtain-tape').scrollIntoViewIfNeeded();
+  await shot(page, 'tape-4-renamed-orphan', { clip: await box.locator('#curtain-tape').boundingBox() });
+  await orphan.locator('input.curtain-tape-size-input').fill('6');
+  await updateProduct(page);
+  const renamed = metaJson(skirtId, '_curtain_garment_tape');
+  check(
+    (await box.locator('tr.curtain-tape-orphan').count()) === 0 && renamed?.[0]?.size === '6' && renamed[0].waistRelaxed.cm === 66 && renamed[0].waistRelaxed.provenance === 'measured' && renamed.length === 7,
+    'tape rename: typing the new label in the orphan row stores the numbers under size 6',
+    JSON.stringify(renamed?.slice(0, 2)),
+  );
+  check((await pushNow(skirtId)) !== 'error', 'tape rename: the push with the renamed size is accepted', 'error');
+
+  await phoneAdminShots(browser, skirtId);
+
+  // 4. empty the chart: the tape goes, the table asks for a chart, the push is accepted.
+  const removes = box.locator('.curtain-repeater[data-repeater="size_chart"] .curtain-row-remove');
+  for (let n = await removes.count(); n > 0; n--) await removes.first().click();
+  const left = await box.locator('[data-repeater="size_chart"] tbody input[name$="[size]"]').evaluateAll((els) => els.map((e) => e.value).filter(Boolean));
+  check(left.length === 0, 'empty chart: every chart row removed in the meta box', left.join(','));
+  await updateProduct(page);
+  const afterEmpty = { chart: metaJson(skirtId, '_curtain_size_chart'), tape: metaJson(skirtId, '_curtain_garment_tape'), input: metaJson(skirtId, '_curtain_tape_input'), closure: wp(cfg, ['post', 'meta', 'get', String(skirtId), '_curtain_closure'], { allowFail: true }).stdout };
+  report.tapeEmptyChart = afterEmpty;
+  const note = await box.locator('#curtain-tape').innerText();
+  check(afterEmpty.chart === null && afterEmpty.tape === null && afterEmpty.input === null && /Add a size chart to this product first/.test(note) && (await box.locator('.curtain-tape-issues--error').count()) === 0, 'empty chart: chart and tape removed, no error, the table asks for a size chart', JSON.stringify(afterEmpty));
+  await box.locator('#curtain-tape').scrollIntoViewIfNeeded();
+  await shot(page, 'tape-5-chart-emptied');
+  const emptyStatus = await pushNow(skirtId);
+  const emptyBuilt = builtPayload(skirtId);
+  check(emptyStatus !== 'error' && !('garmentTape' in emptyBuilt) && !('sizeChart' in emptyBuilt && emptyBuilt.sizeChart?.length), `empty chart: the push carries no tape and no chart and the api accepts it (sync status ${emptyStatus})`, `${emptyStatus} ${JSON.stringify(emptyBuilt).slice(0, 300)}`);
+  return skirtId;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Phone-size screenshots of the real admin and shop (390 × 844, deviceScaleFactor 2, touch).
+const PHONE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'en-GB' };
+
+async function phoneAdminShots(browser, skirtId) {
+  const ctx = await browser.newContext(PHONE);
+  const page = await ctx.newPage();
+  page.setDefaultTimeout(STEP_TIMEOUT);
+  await page.goto(`${WP}/wp-login.php`);
+  await page.fill('#user_login', ADMIN.user);
+  await page.fill('#user_pass', ADMIN.pass);
+  await page.click('#wp-submit');
+  await page.waitForURL(/wp-admin/);
+  await page.goto(`${WP}/wp-admin/admin.php?page=curtain`);
+  await shot(page, 'phone-admin-settings');
+  await page.goto(`${WP}/wp-admin/post.php?post=${skirtId}&action=edit`);
+  // The size chart (a column per measurement) is wider than a phone: it must scroll inside the box,
+  // not be cut off by it.
+  const chart = page.locator('.curtain-repeater[data-repeater="size_chart"]');
+  await chart.evaluate((e) => { e.scrollIntoView({ block: 'start' }); window.scrollBy(0, -80); });
+  await shot(page, 'phone-admin-size-chart');
+  const reach = await page.evaluate(() => {
+    const box = document.querySelector('#curtain-garment').getBoundingClientRect();
+    const table = document.querySelector('.curtain-repeater[data-repeater="size_chart"]');
+    const sc = table.parentElement;
+    const scrollable = getComputedStyle(sc).overflowX === 'auto' || getComputedStyle(sc).overflowX === 'scroll';
+    sc.scrollLeft = sc.scrollWidth;
+    const inputs = table.querySelectorAll('tbody tr:first-child input');
+    const last = inputs[inputs.length - 1].getBoundingClientRect();
+    return { boxRight: Math.round(box.right), tableWidth: Math.round(table.getBoundingClientRect().width), scrollable, lastRight: Math.round(last.right), scRight: Math.round(sc.getBoundingClientRect().right) };
+  });
+  report.phoneAdminSizeChart = reach;
+  await shot(page, 'phone-admin-size-chart-scrolled');
+  check(reach.scrollable && reach.lastRight <= reach.scRight + 1 && reach.scRight <= reach.boxRight + 1, 'phone admin: the size chart scrolls sideways inside the meta box and its last column can be reached', JSON.stringify(reach));
+  await page.locator('#curtain-tape').evaluate((e) => { e.scrollIntoView({ block: 'start' }); window.scrollBy(0, -60); });
+  await shot(page, 'phone-admin-tape');
+  const table = page.locator('.curtain-tape-table');
+  await table.scrollIntoViewIfNeeded();
+  const overflow = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, vw: window.innerWidth, table: document.querySelector('.curtain-tape-table')?.getBoundingClientRect().width ?? 0, box: document.querySelector('#curtain-garment')?.getBoundingClientRect().width ?? 0 }));
+  report.phoneAdminTape = overflow;
+  await shot(page, 'phone-admin-tape-table');
+  await ctx.close();
+}
+
+async function phoneShopper(browser, theme, permalink, shopUrl) {
+  const ctx = await browser.newContext(PHONE);
+  const page = await ctx.newPage();
+  page.setDefaultTimeout(STEP_TIMEOUT);
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(`uncaught: ${e}`));
+  page.on('console', (m) => m.type() === 'error' && errors.push(`console: ${m.text()}`));
+  await page.goto(shopUrl);
+  await shot(page, `phone-${theme}-shop`);
+  await page.goto(permalink);
+  await page.waitForSelector('[data-curtain-product][data-curtain-bound]');
+  const btn = page.locator('.curtain-try-button');
+  await btn.scrollIntoViewIfNeeded();
+  const b = await btn.boundingBox();
+  await shot(page, `phone-${theme}-product`);
+  await btn.tap();
+  const frame = page.frameLocator('[role="dialog"] iframe');
+  await frame.getByRole('heading', { name: /about you/i }).waitFor();
+  await shot(page, `phone-${theme}-overlay-about-you`);
+  await frame.getByLabel(/height/i).first().fill('168');
+  await frame.getByLabel(/weight/i).first().fill('62');
+  await frame.getByRole('button', { name: /see my size|show my size|continue/i }).first().click();
+  await frame.getByRole('button', { name: /^choose size\s+\S+/i }).first().waitFor();
+  await shot(page, `phone-${theme}-overlay-advice`);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const curtainErrors = errors.filter((e) => /curtain|sdk\.v1|localhost:(3010|8797)|embed/i.test(e));
+  check(b && b.width >= 44 && b.height >= 40 && b.x >= 0 && b.x + b.width <= 390 && curtainErrors.length === 0, `${theme} on a phone: the "Try it on" button fits the screen and is a tap target (${Math.round(b?.width)}×${Math.round(b?.height)}), the overlay opens to the size advice, no SDK errors`, JSON.stringify({ b, curtainErrors, overflow }));
+  report[`phone-${theme}`] = { button: b, pageOverflowPx: overflow };
   await ctx.close();
 }
 

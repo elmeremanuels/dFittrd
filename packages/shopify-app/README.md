@@ -353,6 +353,15 @@ equivalent at all. The dev-store script with expected results is `docs/LAUNCH-SH
    `products/update` (the api queues its own sync either way).
 10. Universal-link redirect from the storefront button on iOS Safari / Android Chrome (SDK contract).
 
+**Checked on 2026-11-19 against Shopify's real 2026-10 Admin schema** (public introspection from
+`https://shopify.dev/admin-graphql-direct-proxy/2026-10`, 3716 types, `pnpm --filter @curtain/api shopify:schema`):
+every document the api and this package send validates, the variables they really sent coerce, and the fake's
+excerpt is a faithful subset (new opt-in test in `contract.test.ts`; it found `AppRecurringPricingInput.planHandle`,
+which only the output type has, and String-typed BulkOperation counts). The only deprecations in use are
+`Product.featuredImage` and `Product.images` (to move to `featuredMedia` / `media`). Per-row record:
+`docs/reports/claude-platform-checks.md`. What the schema cannot show (metafield validation rules, Liquid
+paths, live behaviour) still needs the dev store.
+
 ## Assumptions stated
 
 - Admin API version `2026-10` (`DEFAULT_API_VERSION`, latest stable as of Nov 2026, supported until

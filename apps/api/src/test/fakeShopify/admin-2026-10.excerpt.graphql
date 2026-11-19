@@ -17,6 +17,11 @@
 #   `metafields: [MetafieldIdentifierInput!]!`, payload `deletedMetafields: [MetafieldIdentifier]` (null entry =
 #   not found) and `userErrors: [UserError!]!`. That page does not list the identifier's fields; ownerId,
 #   namespace and key are from its example. Whether `$app:curtain` resolves in a delete is still for step D2.
+# Re-checked against the version-pinned 2026-10 pages on 2026-11-19 (docs/reports/claude-platform-checks.md):
+#   AppRecurringPricingInput has price, interval, discount (no planHandle; that is on the AppRecurringPricing
+#   output); MetafieldDefinitionCreateUserError has elementIndex/elementKey and the full code list below;
+#   MetafieldsSetUserErrorCode gained CAPABILITY_VIOLATION and INTERNAL_ERROR; AppSubscriptionStatus.ACCEPTED is
+#   deprecated; BulkOperation counts are UnsignedInt64 (serialised as strings).
 # It is NOT the real schema: a field that exists here may differ in a way this excerpt does not
 # model (nullability details, extra required arguments added later). The real check is running the
 # same documents against a development store (docs/LAUNCH-SHOPIFY.md, step D2: the Shopify GraphiQL
@@ -28,6 +33,7 @@ scalar Decimal
 scalar Money
 scalar JSON
 scalar HTML
+scalar UnsignedInt64
 
 interface Node {
   id: ID!
@@ -239,12 +245,14 @@ type MetafieldDefinition implements Node {
 type MetafieldDefinitionEdge { cursor: String! node: MetafieldDefinition! }
 type MetafieldDefinitionConnection { edges: [MetafieldDefinitionEdge!]! nodes: [MetafieldDefinition!]! pageInfo: PageInfo! }
 
-enum MetafieldDefinitionCreateUserErrorCode { INVALID TAKEN BLANK TOO_LONG TOO_SHORT INCLUSION PRESENT RESOURCE_TYPE_LIMIT_EXCEEDED LIMIT_EXCEEDED INVALID_OPTION DUPLICATE_OPTION UNSTRUCTURED_ALREADY_EXISTS INVALID_INPUT_COMBINATION }
+enum MetafieldDefinitionCreateUserErrorCode { INVALID TAKEN BLANK TOO_LONG TOO_SHORT INCLUSION PRESENT RESOURCE_TYPE_LIMIT_EXCEEDED LIMIT_EXCEEDED INVALID_OPTION DUPLICATE_OPTION UNSTRUCTURED_ALREADY_EXISTS INVALID_INPUT_COMBINATION ADMIN_ACCESS_INPUT_NOT_ALLOWED CAPABILITY_REQUIRED_BUT_DISABLED INVALID_CAPABILITY INVALID_CHARACTER INVALID_CONSTRAINTS OWNER_TYPE_LIMIT_EXCEEDED_FOR_AUTOMATED_COLLECTIONS OWNER_TYPE_LIMIT_EXCEEDED_FOR_USE_AS_ADMIN_FILTERS PINNED_LIMIT_REACHED RESERVED_NAMESPACE_KEY RESOURCE_TYPE_LIMIT_EXCEEDED_BY_APP TYPE_NOT_ALLOWED_FOR_CONDITIONS UNSUPPORTED_PINNING }
 
 type MetafieldDefinitionCreateUserError {
   field: [String!]
   message: String!
   code: MetafieldDefinitionCreateUserErrorCode
+  elementIndex: Int
+  elementKey: String
 }
 
 type MetafieldDefinitionCreatePayload {
@@ -261,7 +269,7 @@ input MetafieldsSetInput {
   compareDigest: String
 }
 
-enum MetafieldsSetUserErrorCode { BLANK INCLUSION INVALID INVALID_TYPE INVALID_VALUE LESS_THAN_OR_EQUAL_TO PRESENT TAKEN TOO_LONG TOO_SHORT APP_NOT_AUTHORIZED STALE_OBJECT INVALID_COMPARE_DIGEST }
+enum MetafieldsSetUserErrorCode { BLANK INCLUSION INVALID INVALID_TYPE INVALID_VALUE LESS_THAN_OR_EQUAL_TO PRESENT TAKEN TOO_LONG TOO_SHORT APP_NOT_AUTHORIZED STALE_OBJECT INVALID_COMPARE_DIGEST CAPABILITY_VIOLATION INTERNAL_ERROR }
 
 type MetafieldsSetUserError {
   field: [String!]
@@ -294,7 +302,7 @@ type MetafieldsDeletePayload {
 
 # ---- app installation and billing ---------------------------------------------------------------
 
-enum AppSubscriptionStatus { ACTIVE CANCELLED DECLINED EXPIRED FROZEN PENDING ACCEPTED }
+enum AppSubscriptionStatus { ACTIVE CANCELLED DECLINED EXPIRED FROZEN PENDING ACCEPTED @deprecated(reason: "Deprecated in the 2026-10 reference.") }
 enum AppPricingInterval { ANNUAL EVERY_30_DAYS }
 enum AppSubscriptionReplacementBehavior { APPLY_IMMEDIATELY APPLY_ON_NEXT_BILLING_CYCLE STANDARD }
 
@@ -340,10 +348,20 @@ type AppInstallation implements Node {
   metafield(namespace: String, key: String!): Metafield
 }
 
+input AppSubscriptionDiscountValueInput {
+  amount: Decimal
+  percentage: Float
+}
+
+input AppSubscriptionDiscountInput {
+  value: AppSubscriptionDiscountValueInput
+  durationLimitInIntervals: Int
+}
+
 input AppRecurringPricingInput {
   price: MoneyInput!
   interval: AppPricingInterval = EVERY_30_DAYS
-  planHandle: String
+  discount: AppSubscriptionDiscountInput
 }
 
 input AppUsagePricingInput {
@@ -392,9 +410,9 @@ type BulkOperation implements Node {
   errorCode: BulkOperationErrorCode
   createdAt: DateTime!
   completedAt: DateTime
-  objectCount: String!
-  rootObjectCount: String!
-  fileSize: String
+  objectCount: UnsignedInt64!
+  rootObjectCount: UnsignedInt64!
+  fileSize: UnsignedInt64
   url: URL
   partialDataUrl: URL
   query: String!

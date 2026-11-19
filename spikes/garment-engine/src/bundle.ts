@@ -55,6 +55,8 @@ export interface BundleOptions {
    * compare against). Other products ignore it.
    */
   generator?: 'pom' | 'm1';
+  /** The POM tee's texture (`PomBundleOptions.texture`); the SYNTHETIC men's tee is printed unless `plain`. */
+  texture?: 'synthetic-print' | 'plain';
 }
 
 export interface Bundle {
@@ -92,7 +94,7 @@ export function bundleMannequin(m: Mannequin): { version: string; shape: string;
 
 export function buildBundle(productId: SpikeBundleProductId, options: BundleOptions = {}): Bundle {
   if (productId === 'synthetic-men-tee' && options.generator !== 'm1') {
-    const pom = buildPomBundle(productId, spikeProduct(productId), SYNTHETIC_TEE_POM, options.baseSize ?? 'M');
+    const pom = buildPomBundle(productId, spikeProduct(productId), SYNTHETIC_TEE_POM, options.baseSize ?? 'M', { texture: options.texture ?? 'synthetic-print' });
     const worst = Math.max(...pom.tape.map((t) => t.maxAbsCm));
     return {
       ...pom,

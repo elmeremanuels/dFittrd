@@ -27,10 +27,25 @@ import { assignChains } from './garment';
 import { applyGrading, type GradingJson, type SizeGrading } from './grading';
 import { materialJson } from './product';
 import { POM_TEE_ASSUMPTIONS, buildPomTee, measurePomTee, type PomTeeBuild, type PomTeeRow } from './pomTee';
+import { writeTexturedGlb } from './glbTextured';
+import { encodePng } from './exportPng';
+import { PRINT_BACKGROUND, PRINT_LICENCE, PRINT_SOURCE, STRIPE_PERIOD_CM, STRIPE_WIDTH_CM, stripePrint, syntheticFlatLay } from './pomPrint';
+import { FLATTEN_ITERATIONS, flatLayPainter, paintAtlas, teeUvLayout, type TeeUvLayout } from './pomUv';
 import { hexToRgb } from './raster';
 import { densifyLoop, tapeGirth } from './tape';
 
-export const POM_BUILDER_VERSION = 'pom-tee-0.1.0';
+export const POM_BUILDER_VERSION = 'pom-tee-0.2.0';
+/** Atlas size of a printed POM tee, px (square). */
+export const POM_ATLAS_PX = 1024;
+
+export interface PomBundleOptions {
+  /**
+   * `synthetic-print`: base.glb carries UVs per panel (`pomUv.ts`) and an atlas painted with the SYNTHETIC print
+   * (`pomPrint.ts`, CC0; front and back through the flat-lay photo projection, sleeves by the repeating print).
+   * `plain`: one colour, no UVs (the M3 tee).
+   */
+  texture?: 'synthetic-print' | 'plain';
+}
 /** The M3 gate: every input measurement on the built mesh within this of the tape, cm. */
 export const POM_TAPE_TOLERANCE_CM = 0.5;
 
@@ -91,7 +106,8 @@ export interface GradingCheck {
   errorCm: Partial<Record<PomKey, number>>;
 }
 
-export function buildPomBundle(productId: string, payload: GarmentPayload, rows: readonly PomTeeRow[], baseSize = 'M'): PomBundle {
+export function buildPomBundle(productId: string, payload: GarmentPayload, rows: readonly PomTeeRow[], baseSize = 'M', options: PomBundleOptions = {}): PomBundle {
+  const texture = options.texture ?? 'plain';
   const m = mannequinFor(payload);
   const meta = bundleMannequin(m);
   const family = m.shape.family === 'male' ? 'male' : 'female';
@@ -135,7 +151,7 @@ export function buildPomBundle(productId: string, payload: GarmentPayload, rows:
 
   const material = materialJson(payload);
   const health = topology(base.mesh);
-  const inputHash = createHash('sha256').update(JSON.stringify({ payload, rows, baseSize, builder: POM_BUILDER_VERSION, assumptions: POM_TEE_ASSUMPTIONS, mannequin: MANNEQUIN_VERSION, pipeline: PIPELINE_VERSION, ...(meta.family ? { family: meta.family } : {}) })).digest('hex');
+  const inputHash = createHash('sha256').update(JSON.stringify({ payload, rows, baseSize, texture, builder: POM_BUILDER_VERSION, assumptions: POM_TEE_ASSUMPTIONS, mannequin: MANNEQUIN_VERSION, pipeline: PIPELINE_VERSION, ...(meta.family ? { family: meta.family } : {}) })).digest('hex');
   const chartBase: Partial<Record<AnchorRing, number>> = {};
   const chartRow = payload.sizeChart.find((r) => r.size === baseSize);
   if (chartRow?.bust !== undefined) chartBase.chest = chartRow.bust;
@@ -175,7 +191,7 @@ export function buildPomBundle(productId: string, payload: GarmentPayload, rows:
   };
 
   const worst = Math.max(...tape.map((t) => t.maxAbsCm));
-  const qa = {
+  const qa: Record<string, unknown> = {
     format: 'curtain.garment.qa',
     formatVersion: 1,
     productId,
@@ -203,12 +219,9 @@ export function buildPomBundle(productId: string, payload: GarmentPayload, rows:
     gradingEstimates: grading.estimates,
   };
 
-  const color = hexToRgb(payload.primaryColorHex ?? '#888888');
-  const glb = writeGlb([{ name: productId, positions: base.mesh.positions, normals: vertexNormals(base.mesh), indices: base.mesh.indices, baseColor: [color[0], color[1], color[2], 1], roughness: 0.85, doubleSided: true }], {
-    scale: 0.01,
-    generator: `@curtain/garment-spike ${PIPELINE_VERSION} ${POM_BUILDER_VERSION}`,
-    extras: { productId, baseSize, unit: 'm', synthetic: true, inputHash },
-  });
+  const layout = texture === 'synthetic-print' ? teeUvLayout(base, POM_ATLAS_PX) : null;
+  const glb = layout ? printedGlb(productId, base, layout, { baseSize, inputHash }) : plainGlb(productId, base, payload, { baseSize, inputHash });
+  if (layout) qa.texture = textureQa(layout);
 
   return {
     productId,
@@ -221,6 +234,54 @@ export function buildPomBundle(productId: string, payload: GarmentPayload, rows:
     tape,
     grading,
     gradingCheck,
+  };
+}
+
+function plainGlb(productId: string, base: PomTeeBuild, payload: GarmentPayload, extras: { baseSize: string; inputHash: string }): Uint8Array {
+  const color = hexToRgb(payload.primaryColorHex ?? '#888888');
+  return writeGlb([{ name: productId, positions: base.mesh.positions, normals: vertexNormals(base.mesh), indices: base.mesh.indices, baseColor: [color[0], color[1], color[2], 1], roughness: 0.85, doubleSided: true }], {
+    scale: 0.01,
+    generator: `@curtain/garment-spike ${PIPELINE_VERSION} ${POM_BUILDER_VERSION}`,
+    extras: { productId, ...extras, unit: 'm', synthetic: true },
+  });
+}
+
+/**
+ * base.glb with the UV layout: one render vertex per (welded vertex, panel) so the seams cut the atlas, the welded
+ * vertices first in their own order (the viewer welds by position and gets the base mesh back unchanged), normals of the
+ * welded mesh (no shading seam at a UV seam), and the atlas as an embedded PNG.
+ */
+function printedGlb(productId: string, base: PomTeeBuild, layout: TeeUvLayout, extras: { baseSize: string; inputHash: string }): Uint8Array {
+  const R = layout.remap.length;
+  const welded = vertexNormals(base.mesh);
+  const positions = new Float64Array(3 * R), normals = new Float32Array(3 * R);
+  for (let r = 0; r < R; r++) for (let d = 0; d < 3; d++) {
+    positions[3 * r + d] = base.mesh.positions[3 * layout.remap[r]! + d]!;
+    normals[3 * r + d] = welded[3 * layout.remap[r]! + d]!;
+  }
+  const flat = syntheticFlatLay();
+  const atlas = paintAtlas(layout, flatLayPainter(flat.front, flat.back, stripePrint(1 / layout.pxPerCm)), PRINT_BACKGROUND);
+  const image = encodePng({ width: layout.sizePx, height: layout.sizePx, channels: 3, bitDepth: 8, data: atlas });
+  return writeTexturedGlb({ name: productId, positions, normals, uvs: layout.uvs, indices: layout.indices, image, mimeType: 'image/png', roughness: 0.85, doubleSided: true }, {
+    scale: 0.01,
+    generator: `@curtain/garment-spike ${PIPELINE_VERSION} ${POM_BUILDER_VERSION}`,
+    extras: { productId, ...extras, unit: 'm', synthetic: true },
+  });
+}
+
+/** What qa.json says about the texture: where it comes from, its licence, the layout and how much the flattening stretches. */
+function textureQa(layout: TeeUvLayout): Record<string, unknown> {
+  return {
+    kind: 'synthetic-print',
+    source: PRINT_SOURCE,
+    licence: PRINT_LICENCE,
+    print: { stripePeriodCm: STRIPE_PERIOD_CM, stripeWidthCm: STRIPE_WIDTH_CM, front: 'flat-lay projection (synthetic photo)', back: 'flat-lay projection (synthetic photo)', sleeves: 'repeating print' },
+    atlasPx: layout.sizePx,
+    pxPerCm: round(layout.pxPerCm, 3),
+    flattenIterations: FLATTEN_ITERATIONS,
+    renderVertices: layout.remap.length,
+    islands: layout.islands.map((i) => ({ panel: i.panel, widthCm: round(i.max[0] - i.min[0], 1), heightCm: round(i.max[1] - i.min[1], 1) })),
+    edgeRatioFlatToGarment: layout.distortion,
   };
 }
 

@@ -51,7 +51,7 @@ describe('the pre-integrated table', () => {
 
   it('is monotone in the light angle and within 0..1', () => {
     for (let j = 0; j < curvature; j++) {
-      for (let i = 1; i < cos; i++) for (let c = 0; c < 3; c++) expect(at(j, i)[c]).toBeGreaterThanOrEqual(at(j, i - 1)[c] - 1e-6);
+      for (let i = 1; i < cos; i++) for (let c = 0; c < 3; c++) expect(at(j, i)[c]).toBeGreaterThanOrEqual(at(j, i - 1)[c]! - 1e-6);
     }
     for (const v of lut) {
       expect(v).toBeGreaterThanOrEqual(0);

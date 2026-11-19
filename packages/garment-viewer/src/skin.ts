@@ -2,7 +2,7 @@
  * Skin shading `skin-v2` (D22 point 3: skin tones must look better than flat shading). Opt-in per
  * mount (`look.shading: 'skin-v2'`); without it the figure keeps the material of before, byte for
  * byte. Only the body's own material changes: the garment, floor, backdrop and outline keep theirs,
- * so garment pixels are the same with and without it (measured, docs/reports/claude-skin-v2.md).
+ * so garment pixels are the same with and without it (measured, docs/reports/claude/skin-v2.md).
  *
  * What it adds to the plain three.js physical material:
  * 1. **Pre-integrated diffuse** (Penner 2011): the light that reaches the skin is spread by a

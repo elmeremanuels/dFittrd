@@ -1,0 +1,1329 @@
+{
+ "renderer": "headless Chromium, SwiftShader (software); not a phone",
+ "head": "neutral-v3",
+ "patches": [],
+ "garment": [
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "classic",
+   "monk": 1,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#d6d3ce",
+     "skinV2": "#d7d3cd",
+     "dE": 0.6
+    },
+    {
+     "patch": "thigh",
+     "flat": "#cac6bf",
+     "skinV2": "#cac6be",
+     "dE": 0.5
+    },
+    {
+     "patch": "bust",
+     "flat": "#cfccc5",
+     "skinV2": "#d0ccc5",
+     "dE": 0.5
+    },
+    {
+     "patch": "waist",
+     "flat": "#d6d3ce",
+     "skinV2": "#d7d3cd",
+     "dE": 0.6
+    }
+   ],
+   "max": 0.6
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "classic",
+   "monk": 2,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#d6d3cd",
+     "skinV2": "#d7d3cc",
+     "dE": 0.6
+    },
+    {
+     "patch": "thigh",
+     "flat": "#cac5be",
+     "skinV2": "#cac5bd",
+     "dE": 0.5
+    },
+    {
+     "patch": "bust",
+     "flat": "#cfcbc5",
+     "skinV2": "#d0cbc4",
+     "dE": 0.6
+    },
+    {
+     "patch": "waist",
+     "flat": "#d6d3cd",
+     "skinV2": "#d7d3cc",
+     "dE": 0.6
+    }
+   ],
+   "max": 0.6
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "classic",
+   "monk": 3,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#d6d3cc",
+     "skinV2": "#d7d3ca",
+     "dE": 0.9
+    },
+    {
+     "patch": "thigh",
+     "flat": "#cac5bd",
+     "skinV2": "#cbc5bb",
+     "dE": 0.9
+    },
+    {
+     "patch": "bust",
+     "flat": "#d0ccc4",
+     "skinV2": "#d0cbc2",
+     "dE": 0.6
+    },
+    {
+     "patch": "waist",
+     "flat": "#d6d3cc",
+     "skinV2": "#d7d3ca",
+     "dE": 0.9
+    }
+   ],
+   "max": 0.9
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "classic",
+   "monk": 4,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#d6d2ca",
+     "skinV2": "#d7d2c8",
+     "dE": 0.9
+    },
+    {
+     "patch": "thigh",
+     "flat": "#c9c4bb",
+     "skinV2": "#cac4b9",
+     "dE": 0.9
+    },
+    {
+     "patch": "bust",
+     "flat": "#cfcac1",
+     "skinV2": "#cfcac0",
+     "dE": 0.5
+    },
+    {
+     "patch": "waist",
+     "flat": "#d6d2ca",
+     "skinV2": "#d7d2c8",
+     "dE": 0.9
+    }
+   ],
+   "max": 0.9
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "classic",
+   "monk": 5,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#d4cfc6",
+     "skinV2": "#d5cfc4",
+     "dE": 0.9
+    },
+    {
+     "patch": "thigh",
+     "flat": "#c8c1b6",
+     "skinV2": "#c8c1b5",
+     "dE": 0.5
+    },
+    {
+     "patch": "bust",
+     "flat": "#cdc7bd",
+     "skinV2": "#cec7bc",
+     "dE": 0.6
+    },
+    {
+     "patch": "waist",
+     "flat": "#d4cfc6",
+     "skinV2": "#d5cfc4",
+     "dE": 0.9
+    }
+   ],
+   "max": 0.9
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "classic",
+   "monk": 6,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#cec6ba",
+     "skinV2": "#cec6bc",
+     "dE": 0.9
+    },
+    {
+     "patch": "thigh",
+     "flat": "#c1b8ab",
+     "skinV2": "#c0b8ac",
+     "dE": 0.5
+    },
+    {
+     "patch": "bust",
+     "flat": "#c6beb2",
+     "skinV2": "#c5beb3",
+     "dE": 0.5
+    },
+    {
+     "patch": "waist",
+     "flat": "#cec6ba",
+     "skinV2": "#cec6bc",
+     "dE": 0.9
+    }
+   ],
+   "max": 0.9
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "classic",
+   "monk": 7,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#c9c0b6",
+     "skinV2": "#c9c1b8",
+     "dE": 0.6
+    },
+    {
+     "patch": "thigh",
+     "flat": "#bcb2a7",
+     "skinV2": "#bbb3a9",
+     "dE": 0.9
+    },
+    {
+     "patch": "bust",
+     "flat": "#c1b8ae",
+     "skinV2": "#c1b9b0",
+     "dE": 0.6
+    },
+    {
+     "patch": "waist",
+     "flat": "#c9c0b6",
+     "skinV2": "#c9c1b8",
+     "dE": 0.6
+    }
+   ],
+   "max": 0.9
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "classic",
+   "monk": 8,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#c2bbb4",
+     "skinV2": "#c5beb7",
+     "dE": 0.8
+    },
+    {
+     "patch": "thigh",
+     "flat": "#b5ada5",
+     "skinV2": "#b8b0a8",
+     "dE": 0.8
+    },
+    {
+     "patch": "bust",
+     "flat": "#bbb3ac",
+     "skinV2": "#beb6af",
+     "dE": 0.8
+    },
+    {
+     "patch": "waist",
+     "flat": "#c2bbb4",
+     "skinV2": "#c5beb7",
+     "dE": 0.8
+    }
+   ],
+   "max": 0.8
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "classic",
+   "monk": 9,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#bcb8b2",
+     "skinV2": "#bfbcb6",
+     "dE": 1.1
+    },
+    {
+     "patch": "thigh",
+     "flat": "#afaaa3",
+     "skinV2": "#b3aea7",
+     "dE": 1.1
+    },
+    {
+     "patch": "bust",
+     "flat": "#b5b1ab",
+     "skinV2": "#b9b5ae",
+     "dE": 1.2
+    },
+    {
+     "patch": "waist",
+     "flat": "#bcb8b2",
+     "skinV2": "#bfbcb6",
+     "dE": 1.1
+    }
+   ],
+   "max": 1.2
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "classic",
+   "monk": 10,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#b9b6b1",
+     "skinV2": "#bdbab4",
+     "dE": 1.2
+    },
+    {
+     "patch": "thigh",
+     "flat": "#ada9a2",
+     "skinV2": "#b0aca5",
+     "dE": 0.9
+    },
+    {
+     "patch": "bust",
+     "flat": "#b3b0a9",
+     "skinV2": "#b7b3ad",
+     "dE": 1.2
+    },
+    {
+     "patch": "waist",
+     "flat": "#b9b6b1",
+     "skinV2": "#bdbab4",
+     "dE": 1.2
+    }
+   ],
+   "max": 1.2
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "neutral-v2",
+   "monk": 1,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#f4ede0",
+     "skinV2": "#f4ede0",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#dfd8cc",
+     "skinV2": "#dfd8cc",
+     "dE": 0
+    },
+    {
+     "patch": "bust",
+     "flat": "#ebe4d8",
+     "skinV2": "#ebe4d8",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#f4ede0",
+     "skinV2": "#f4ede0",
+     "dE": 0
+    }
+   ],
+   "max": 0
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "neutral-v2",
+   "monk": 2,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#f4ecdf",
+     "skinV2": "#f4ecdf",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#ded7cb",
+     "skinV2": "#ded7cb",
+     "dE": 0
+    },
+    {
+     "patch": "bust",
+     "flat": "#ebe3d7",
+     "skinV2": "#ebe4d7",
+     "dE": 0.8
+    },
+    {
+     "patch": "waist",
+     "flat": "#f3ecde",
+     "skinV2": "#f3ecde",
+     "dE": 0
+    }
+   ],
+   "max": 0.8
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "neutral-v2",
+   "monk": 3,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#f4ecdd",
+     "skinV2": "#f4eddd",
+     "dE": 0.8
+    },
+    {
+     "patch": "thigh",
+     "flat": "#dfd8c9",
+     "skinV2": "#dfd8c9",
+     "dE": 0
+    },
+    {
+     "patch": "bust",
+     "flat": "#ebe4d5",
+     "skinV2": "#ece4d5",
+     "dE": 0.5
+    },
+    {
+     "patch": "waist",
+     "flat": "#f4ecdd",
+     "skinV2": "#f4ecdd",
+     "dE": 0
+    }
+   ],
+   "max": 0.8
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "neutral-v2",
+   "monk": 4,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#f2eada",
+     "skinV2": "#f2eada",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#ddd5c6",
+     "skinV2": "#ddd5c6",
+     "dE": 0
+    },
+    {
+     "patch": "bust",
+     "flat": "#eae2d2",
+     "skinV2": "#eae2d2",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#f2ead9",
+     "skinV2": "#f2eada",
+     "dE": 0.4
+    }
+   ],
+   "max": 0.4
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "neutral-v2",
+   "monk": 5,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#efe6d4",
+     "skinV2": "#f0e6d4",
+     "dE": 0.5
+    },
+    {
+     "patch": "thigh",
+     "flat": "#dad1c1",
+     "skinV2": "#dad1c1",
+     "dE": 0
+    },
+    {
+     "patch": "bust",
+     "flat": "#e7ddcd",
+     "skinV2": "#e7decd",
+     "dE": 0.8
+    },
+    {
+     "patch": "waist",
+     "flat": "#efe6d4",
+     "skinV2": "#efe6d4",
+     "dE": 0
+    }
+   ],
+   "max": 0.8
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "neutral-v2",
+   "monk": 6,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#e7dccb",
+     "skinV2": "#e7dccb",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#d2c8b8",
+     "skinV2": "#d2c8b8",
+     "dE": 0
+    },
+    {
+     "patch": "bust",
+     "flat": "#dfd4c4",
+     "skinV2": "#dfd5c4",
+     "dE": 0.8
+    },
+    {
+     "patch": "waist",
+     "flat": "#e7dccb",
+     "skinV2": "#e7dccb",
+     "dE": 0
+    }
+   ],
+   "max": 0.8
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "neutral-v2",
+   "monk": 7,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#e3d7c8",
+     "skinV2": "#e3d7c8",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#cec3b5",
+     "skinV2": "#cec3b5",
+     "dE": 0
+    },
+    {
+     "patch": "bust",
+     "flat": "#dbd0c1",
+     "skinV2": "#dbd0c1",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#e3d7c8",
+     "skinV2": "#e3d7c8",
+     "dE": 0
+    }
+   ],
+   "max": 0
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "neutral-v2",
+   "monk": 8,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#ded3c6",
+     "skinV2": "#ded3c6",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#c9bfb3",
+     "skinV2": "#c9bfb3",
+     "dE": 0
+    },
+    {
+     "patch": "bust",
+     "flat": "#d6ccbf",
+     "skinV2": "#d6ccbf",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#ded3c6",
+     "skinV2": "#ded3c6",
+     "dE": 0
+    }
+   ],
+   "max": 0
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "neutral-v2",
+   "monk": 9,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#d8d1c4",
+     "skinV2": "#d8d1c5",
+     "dE": 0.4
+    },
+    {
+     "patch": "thigh",
+     "flat": "#c3bdb2",
+     "skinV2": "#c3bdb2",
+     "dE": 0
+    },
+    {
+     "patch": "bust",
+     "flat": "#d1cabe",
+     "skinV2": "#d1cabe",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#d8d1c4",
+     "skinV2": "#d8d1c4",
+     "dE": 0
+    }
+   ],
+   "max": 0.4
+  },
+  {
+   "family": "female",
+   "product": "aalter-studio-2",
+   "lighting": "neutral-v2",
+   "monk": 10,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#d6cfc3",
+     "skinV2": "#d6cfc3",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#c1bbb0",
+     "skinV2": "#c1bbb0",
+     "dE": 0
+    },
+    {
+     "patch": "bust",
+     "flat": "#cec8bc",
+     "skinV2": "#cec8bc",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#d6cfc3",
+     "skinV2": "#d6cfc3",
+     "dE": 0
+    }
+   ],
+   "max": 0
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "classic",
+   "monk": 1,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#30688b",
+     "skinV2": "#30688b",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#d1cdc8",
+     "skinV2": "#d4ccc4",
+     "dE": 2
+    },
+    {
+     "patch": "bust",
+     "flat": "#2b6082",
+     "skinV2": "#2b6082",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#2c6284",
+     "skinV2": "#2c6284",
+     "dE": 0
+    }
+   ],
+   "max": 2
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "classic",
+   "monk": 2,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#30688b",
+     "skinV2": "#30688b",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#d0cac4",
+     "skinV2": "#d4c9be",
+     "dE": 2.7
+    },
+    {
+     "patch": "bust",
+     "flat": "#2b6082",
+     "skinV2": "#2b6082",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#2c6284",
+     "skinV2": "#2c6284",
+     "dE": 0
+    }
+   ],
+   "max": 2.7
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "classic",
+   "monk": 3,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#30688b",
+     "skinV2": "#30688b",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#d1cbbe",
+     "skinV2": "#d6cbb4",
+     "dE": 3.9
+    },
+    {
+     "patch": "bust",
+     "flat": "#2b6082",
+     "skinV2": "#2b6082",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#2c6284",
+     "skinV2": "#2c6284",
+     "dE": 0
+    }
+   ],
+   "max": 3.9
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "classic",
+   "monk": 4,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#30688b",
+     "skinV2": "#30688b",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#ccc3af",
+     "skinV2": "#d1c2a5",
+     "dE": 3.4
+    },
+    {
+     "patch": "bust",
+     "flat": "#2b6082",
+     "skinV2": "#2b6082",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#2c6284",
+     "skinV2": "#2c6284",
+     "dE": 0
+    }
+   ],
+   "max": 3.4
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "classic",
+   "monk": 5,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#30688b",
+     "skinV2": "#30688b",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#c2af90",
+     "skinV2": "#c6ae8a",
+     "dE": 2.1
+    },
+    {
+     "patch": "bust",
+     "flat": "#2b6082",
+     "skinV2": "#2b6082",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#2c6284",
+     "skinV2": "#2c6284",
+     "dE": 0
+    }
+   ],
+   "max": 2.1
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "classic",
+   "monk": 6,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#30688b",
+     "skinV2": "#30688b",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#947045",
+     "skinV2": "#90724e",
+     "dE": 2.4
+    },
+    {
+     "patch": "bust",
+     "flat": "#2b6082",
+     "skinV2": "#2b6082",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#2c6284",
+     "skinV2": "#2c6284",
+     "dE": 0
+    }
+   ],
+   "max": 2.4
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "classic",
+   "monk": 7,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#30688b",
+     "skinV2": "#30688b",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#71472d",
+     "skinV2": "#70503b",
+     "dE": 4.1
+    },
+    {
+     "patch": "bust",
+     "flat": "#2b6082",
+     "skinV2": "#2b6082",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#2c6284",
+     "skinV2": "#2c6284",
+     "dE": 0
+    }
+   ],
+   "max": 4.1
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "classic",
+   "monk": 8,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#30688b",
+     "skinV2": "#30688b",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#47281d",
+     "skinV2": "#593d32",
+     "dE": 6.7
+    },
+    {
+     "patch": "bust",
+     "flat": "#2b6082",
+     "skinV2": "#2b6082",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#2c6284",
+     "skinV2": "#2c6284",
+     "dE": 0
+    }
+   ],
+   "max": 6.7
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "classic",
+   "monk": 9,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#30688b",
+     "skinV2": "#30688b",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#201813",
+     "skinV2": "#38302a",
+     "dE": 7.6
+    },
+    {
+     "patch": "bust",
+     "flat": "#2b6082",
+     "skinV2": "#2b6082",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#2c6284",
+     "skinV2": "#2c6284",
+     "dE": 0
+    }
+   ],
+   "max": 7.6
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "classic",
+   "monk": 10,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#30688b",
+     "skinV2": "#30688b",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#120e0b",
+     "skinV2": "#292521",
+     "dE": 6.9
+    },
+    {
+     "patch": "bust",
+     "flat": "#2b6082",
+     "skinV2": "#2b6082",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#2c6284",
+     "skinV2": "#2c6284",
+     "dE": 0
+    }
+   ],
+   "max": 6.9
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "neutral-v2",
+   "monk": 1,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#457291",
+     "skinV2": "#457291",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#ede4dc",
+     "skinV2": "#eee5dd",
+     "dE": 0.2
+    },
+    {
+     "patch": "bust",
+     "flat": "#436f8d",
+     "skinV2": "#436f8d",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#436e8d",
+     "skinV2": "#436e8d",
+     "dE": 0
+    }
+   ],
+   "max": 0.2
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "neutral-v2",
+   "monk": 2,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#457291",
+     "skinV2": "#457291",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#eadfd3",
+     "skinV2": "#ebe0d4",
+     "dE": 0.2
+    },
+    {
+     "patch": "bust",
+     "flat": "#436f8d",
+     "skinV2": "#436f8d",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#436e8d",
+     "skinV2": "#436e8d",
+     "dE": 0
+    }
+   ],
+   "max": 0.2
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "neutral-v2",
+   "monk": 3,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#457291",
+     "skinV2": "#457291",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#eee2c9",
+     "skinV2": "#efe2c9",
+     "dE": 0.5
+    },
+    {
+     "patch": "bust",
+     "flat": "#436f8d",
+     "skinV2": "#436f8d",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#436e8d",
+     "skinV2": "#436e8d",
+     "dE": 0
+    }
+   ],
+   "max": 0.5
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "neutral-v2",
+   "monk": 4,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#457291",
+     "skinV2": "#457291",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#e2d2b3",
+     "skinV2": "#e2d3b4",
+     "dE": 0.5
+    },
+    {
+     "patch": "bust",
+     "flat": "#436f8d",
+     "skinV2": "#436f8d",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#436e8d",
+     "skinV2": "#436e8d",
+     "dE": 0
+    }
+   ],
+   "max": 0.5
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "neutral-v2",
+   "monk": 5,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#457291",
+     "skinV2": "#457291",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#cfb691",
+     "skinV2": "#d0b792",
+     "dE": 0.3
+    },
+    {
+     "patch": "bust",
+     "flat": "#436f8d",
+     "skinV2": "#436f8d",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#436e8d",
+     "skinV2": "#436e8d",
+     "dE": 0
+    }
+   ],
+   "max": 0.3
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "neutral-v2",
+   "monk": 6,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#457291",
+     "skinV2": "#457291",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#9b7a54",
+     "skinV2": "#9b7b55",
+     "dE": 0.5
+    },
+    {
+     "patch": "bust",
+     "flat": "#436f8d",
+     "skinV2": "#436f8d",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#436e8d",
+     "skinV2": "#436e8d",
+     "dE": 0
+    }
+   ],
+   "max": 0.5
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "neutral-v2",
+   "monk": 7,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#457291",
+     "skinV2": "#457291",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#7e5a42",
+     "skinV2": "#7f5b43",
+     "dE": 0.4
+    },
+    {
+     "patch": "bust",
+     "flat": "#436f8d",
+     "skinV2": "#436f8d",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#436e8d",
+     "skinV2": "#436e8d",
+     "dE": 0
+    }
+   ],
+   "max": 0.4
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "neutral-v2",
+   "monk": 8,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#457291",
+     "skinV2": "#457291",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#5e4135",
+     "skinV2": "#5e4135",
+     "dE": 0
+    },
+    {
+     "patch": "bust",
+     "flat": "#436f8d",
+     "skinV2": "#436f8d",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#436e8d",
+     "skinV2": "#436e8d",
+     "dE": 0
+    }
+   ],
+   "max": 0
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "neutral-v2",
+   "monk": 9,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#457291",
+     "skinV2": "#457291",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#3a322c",
+     "skinV2": "#3a322c",
+     "dE": 0
+    },
+    {
+     "patch": "bust",
+     "flat": "#436f8d",
+     "skinV2": "#436f8d",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#436e8d",
+     "skinV2": "#436e8d",
+     "dE": 0
+    }
+   ],
+   "max": 0
+  },
+  {
+   "family": "male",
+   "product": "synthetic-men-tee",
+   "lighting": "neutral-v2",
+   "monk": 10,
+   "rows": [
+    {
+     "patch": "hip",
+     "flat": "#457291",
+     "skinV2": "#457291",
+     "dE": 0
+    },
+    {
+     "patch": "thigh",
+     "flat": "#2b2723",
+     "skinV2": "#2b2623",
+     "dE": 1.1
+    },
+    {
+     "patch": "bust",
+     "flat": "#436f8d",
+     "skinV2": "#436f8d",
+     "dE": 0
+    },
+    {
+     "patch": "waist",
+     "flat": "#436e8d",
+     "skinV2": "#436e8d",
+     "dE": 0
+    }
+   ],
+   "max": 1.1
+  }
+ ],
+ "frames": [],
+ "problems": []
+}

@@ -24,7 +24,7 @@ import { MALE_REFERENCE, MANNEQUIN_VERSION, buildBody, loopAround, round, roundV
 import { measureGarment, ringGirths, type AnchorMeasurements } from './anchoring';
 import { bundleMannequin, mannequinFor, PIPELINE_VERSION, type Bundle } from './bundle';
 import { assignChains } from './garment';
-import { applyGrading, type GradingJson, type SizeGrading } from './grading';
+import { applyGrading, encodeBuiltOffsets, type GradingJson, type SizeGrading } from './grading';
 import { materialJson } from './product';
 import { POM_TEE_ASSUMPTIONS, buildPomTee, measurePomTee, type PomTeeBuild, type PomTeeRow } from './pomTee';
 import { writeTexturedGlb } from './glbTextured';
@@ -45,7 +45,25 @@ export interface PomBundleOptions {
    * `plain`: one colour, no UVs (the M3 tee).
    */
   texture?: 'synthetic-print' | 'plain';
+  /**
+   * The male body shape the tee is built on: `v1` (default) or `v2`. With `v2` the base, every size's tape check and the
+   * grading are built on the male shape v2 bodies (their drawn outlines, `pomBody.ts`), and the bundle says so in
+   * anchors.json and qa.json (`mannequin.maleShape`): the viewer and the import show it on a v2 body only.
+   */
+  maleShape?: 'v1' | 'v2';
+  /**
+   * How the device gets the other sizes. `morph`: `gradingMorph` of the base mesh (radial about the body axis and the arm
+   * axes), as every bundle before. `built`: every size is built on its own table body with the base mesh's vertices and
+   * shipped as offsets (`GradingJson.built`), so the device shows the size as built. The morph grows the armhole with the
+   * torso (XXL: 18 % front to back) where the size built on its body has it 29 % deeper and 22 % longer, and it leaves the
+   * yoke on the base body's shoulders: on its own body the morphed XL and XXL sat 1.2 and 1.6 cm inside the shoulder caps
+   * and were lifted 1.25 and 2 cm to clear
+   * them. Default: `built` on the male shape v2, `morph` otherwise (the v1 bundle stays byte for byte what it was).
+   */
+  grading?: 'morph' | 'built';
 }
+/** Vertex offsets of a built size are stored in units of this, cm. */
+export const BUILT_QUANTUM_CM = 0.01;
 /** The M3 gate: every input measurement on the built mesh within this of the tape, cm. */
 export const POM_TAPE_TOLERANCE_CM = 0.5;
 
@@ -84,10 +102,10 @@ export interface PomSizeCheck {
 }
 
 /** The table body of a family size (male S…XXL), or null. */
-function tableBody(family: 'male' | 'female', size: string): Mannequin | null {
+function tableBody(family: 'male' | 'female', size: string, maleShape: 'v1' | 'v2'): Mannequin | null {
   if (family !== 'male') return null;
   const t = MALE_TABLE[size];
-  return t ? buildBody({ family: 'male', bust: t.chest, waist: t.waist, hip: t.hip, heightCm: t.stature, shoulderCm: t.shoulderWidth }) : null;
+  return t ? buildBody({ family: 'male', bust: t.chest, waist: t.waist, hip: t.hip, heightCm: t.stature, shoulderCm: t.shoulderWidth }, maleShape === 'v2' ? { maleShape: 'v2' } : {}) : null;
 }
 const MALE_TABLE = MALE_REFERENCE as Readonly<Record<string, { chest: number; waist: number; hip: number; stature: number; shoulderWidth: number }>>;
 
@@ -108,31 +126,52 @@ export interface GradingCheck {
 
 export function buildPomBundle(productId: string, payload: GarmentPayload, rows: readonly PomTeeRow[], baseSize = 'M', options: PomBundleOptions = {}): PomBundle {
   const texture = options.texture ?? 'plain';
-  const m = mannequinFor(payload);
+  const maleShape = options.maleShape === 'v2' ? 'v2' : 'v1';
+  const m = mannequinFor(payload, { maleShape });
   const meta = bundleMannequin(m);
   const family = m.shape.family === 'male' ? 'male' : 'female';
   const baseIdx = rows.findIndex((r) => r.size === baseSize);
   if (baseIdx < 0) throw new Error(`base size ${baseSize} not in the measurements`);
   const step = (i: number): number => i - baseIdx;
 
-  const base = buildPomTee(m, rows[baseIdx]!, { sizeStep: 0 });
+  const builtSizes = (options.grading ?? (maleShape === 'v2' ? 'built' : 'morph')) === 'built' && family === 'male';
+  const base = buildPomTee(m, rows[baseIdx]!, { sizeStep: 0, ...(builtSizes ? { uniformRows: true } : {}) });
   const chains = assignChains(m, base.mesh);
   const measurements = pomMeasurements(m, base);
 
   // The tape on every size, on its own table body (a small size cannot be built on a bigger body: it is tighter than the body).
+  const builds: { body: Mannequin; build: PomTeeBuild }[] = [];
   const tape: PomSizeCheck[] = rows.map((row, i) => {
-    const body = tableBody(family, row.size);
-    const b = body ? buildPomTee(body, row, { sizeStep: step(i) }) : i === baseIdx ? base : buildPomTee(m, row, { sizeStep: step(i) });
+    const body = tableBody(family, row.size, maleShape);
+    const b = body ? buildPomTee(body, row, { sizeStep: step(i), ...(builtSizes ? { counts: base.counts } : {}) }) : i === baseIdx ? base : buildPomTee(m, row, { sizeStep: step(i) });
+    builds.push({ body: body ?? m, build: b });
     const measured = { ...measurePomTee(body ?? m, b, torsoTapeAt), size: row.size };
     const errorCm = pomErrors(row, measured);
-    return { size: row.size, body: body ? `${family} ${row.size}` : `${family} ${baseSize}`, measured, errorCm, maxAbsCm: Math.max(...Object.values(errorCm).map(Math.abs)), tight: b.tight };
+    return { size: row.size, body: `${family} ${body ? row.size : baseSize}${meta.maleShape ? ` (shape ${meta.maleShape})` : ''}`, measured, errorCm, maxAbsCm: Math.max(...Object.values(errorCm).map(Math.abs)), tight: b.tight };
   });
 
   const grading = gradePom(m, productId, rows, baseIdx, base, measurements);
   // The two length targets are solved against the device's own morph (it stretches the body only
   // below the hip and the sleeve only past the upper-arm ring), so the graded mesh's tape is the tape.
+  if (builtSizes) {
+    // Every size as built on its own table body, in the base body's space: moved down by the difference of the shoulder
+    // ring's height (the lift the viewer adds back on a body of that height, `buildTypedAvatar`).
+    const offsets: Record<string, string> = {};
+    const bodies: Record<string, string> = {};
+    rows.forEach((row, i) => {
+      if (i === baseIdx) return;
+      const { body, build } = builds[i]!;
+      if (body === m || build.mesh.positions.length !== base.mesh.positions.length) throw new Error(`size ${row.size}: no table body, or not the base mesh's vertices`);
+      const lift = body.morphHeights.shoulder - m.morphHeights.shoulder;
+      const moved = Float64Array.from(build.mesh.positions);
+      for (let k = 1; k < moved.length; k += 3) moved[k] = moved[k]! - lift;
+      offsets[row.size] = encodeBuiltOffsets(base.mesh.positions, moved, BUILT_QUANTUM_CM);
+      bodies[row.size] = tape[i]!.body;
+    });
+    grading.built = { encoding: 'int16le-base64', quantumCm: BUILT_QUANTUM_CM, vertices: base.mesh.positions.length / 3, bodies, offsets };
+  }
   for (const [i, row] of rows.entries()) {
-    if (i === baseIdx) continue;
+    if (i === baseIdx || builtSizes) continue;
     const entry = grading.sizes[i]!;
     for (let it = 0; it < 4; it++) {
       const got = measurePomTee(m, { ...base, mesh: applyGrading(m, base.mesh, chains, grading, row.size) }, torsoTapeAt);
@@ -142,8 +181,16 @@ export function buildPomBundle(productId: string, payload: GarmentPayload, rows:
       if (entry.targets.sleeve !== undefined) entry.targets.sleeve = r2(entry.targets.sleeve + dS);
     }
   }
-  const gradingCheck: GradingCheck[] = rows.map((row) => {
+  const gradingCheck: GradingCheck[] = rows.map((row, i) => {
     const graded = applyGrading(m, base.mesh, chains, grading, row.size);
+    if (builtSizes && i !== baseIdx) {
+      // What the device shows is the built size (decoded from grading.json): taped on its own body, where it was built.
+      const { body, build } = builds[i]!;
+      const lift = body.morphHeights.shoulder - m.morphHeights.shoulder;
+      const back = Float64Array.from(graded.positions);
+      for (let k = 1; k < back.length; k += 3) back[k] = back[k]! + lift;
+      return { size: row.size, errorCm: pomErrors(row, measurePomTee(body, { ...build, mesh: { ...build.mesh, positions: back } }, torsoTapeAt)) };
+    }
     const viaGrading = measurePomTee(m, { ...base, mesh: graded }, torsoTapeAt);
     const errorCm = pomErrors(row, viaGrading);
     return { size: row.size, errorCm };
@@ -151,7 +198,7 @@ export function buildPomBundle(productId: string, payload: GarmentPayload, rows:
 
   const material = materialJson(payload);
   const health = topology(base.mesh);
-  const inputHash = createHash('sha256').update(JSON.stringify({ payload, rows, baseSize, texture, builder: POM_BUILDER_VERSION, assumptions: POM_TEE_ASSUMPTIONS, mannequin: MANNEQUIN_VERSION, pipeline: PIPELINE_VERSION, ...(meta.family ? { family: meta.family } : {}) })).digest('hex');
+  const inputHash = createHash('sha256').update(JSON.stringify({ payload, rows, baseSize, texture, builder: POM_BUILDER_VERSION, assumptions: POM_TEE_ASSUMPTIONS, mannequin: MANNEQUIN_VERSION, pipeline: PIPELINE_VERSION, ...(meta.family ? { family: meta.family } : {}), ...(meta.maleShape ? { maleShape: meta.maleShape } : {}) })).digest('hex');
   const chartBase: Partial<Record<AnchorRing, number>> = {};
   const chartRow = payload.sizeChart.find((r) => r.size === baseSize);
   if (chartRow?.bust !== undefined) chartBase.chest = chartRow.bust;

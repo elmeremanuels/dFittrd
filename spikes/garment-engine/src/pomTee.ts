@@ -40,6 +40,7 @@
  */
 import { dot, polygonCompensation, sub, topology, type Mannequin, type Mesh, type Vec3 } from '@curtain/mannequin';
 import { armpitDistance, ellipseRadius } from './garment';
+import { pomBody } from './pomBody';
 
 /** The pattern pieces of the tee, the panels its UV layout keeps apart. */
 export const POM_PANELS = ['front', 'back', 'sleeve_l', 'sleeve_r'] as const;
@@ -98,6 +99,27 @@ export interface PomTeeOptions {
   /** Columns per panel (front and back each), rows spacing, cm. */
   panelColumns?: number;
   rowStepCm?: number;
+  /**
+   * Build with the vertex counts of another build (its `counts`), so the two meshes have the same vertices and triangles
+   * in the same order: a size built on its own body is then a set of vertex positions for the base size's mesh
+   * (`pomBundle.ts`, grading by built sizes). Without it every count follows from the row spacing.
+   */
+  counts?: PomTeeCounts;
+  /** With `counts` absent: lay the tube's rows out the way a build with `counts` does (stations at the hem, waist, chest line and armhole only), so its own counts can be reused. */
+  uniformRows?: boolean;
+}
+
+/** The vertex counts of a build that another build can reuse (`PomTeeOptions.counts`). */
+export interface PomTeeCounts {
+  eyeRows: number;
+  seamRows: number;
+  /** Rows per tube segment: hem to waist, waist to chest line, chest line to armhole. */
+  tube: number[];
+  /** Vertices above the tube's top row per fan column (`f3`, `b12`, …). */
+  columns: Record<string, number>;
+  sleeveRings: number;
+  /** How neighbouring fan columns were sewn (`f3`: front columns 3 and 4): per triangle, whether the first column advanced. */
+  zip: Record<string, boolean[]>;
 }
 
 export interface PomTeeBuild {
@@ -120,6 +142,8 @@ export interface PomTeeBuild {
   levels: { armholeY: number; chestLineY: number; hemY: number; shoulderPointY: number; hpsY: number; sleeveEndS: number };
   /** Places where the chart is tighter than `minEaseCm` off the base body (height, girth asked, girth built). */
   tight: { y: number; askedCm: number; builtCm: number }[];
+  /** The vertex counts this build used (`PomTeeOptions.counts`). */
+  counts: PomTeeCounts;
 }
 
 type Arm = Mannequin['arms']['left'];
@@ -148,6 +172,8 @@ function sectionGap(dx: number, dz: number, a: number, b: number): number {
 }
 
 function torsoDistance(m: Mannequin, p: Vec3): number {
+  const drawn = pomBody(m);
+  if (drawn) return drawn.torsoDistance(p);
   const e = m.torsoAt(p[1]);
   if (!e) return Infinity;
   const g = sectionGap(p[0] - e.cx, p[2] - e.cz, e.a, e.b);
@@ -162,6 +188,8 @@ function torsoDistance(m: Mannequin, p: Vec3): number {
 const ARM_REACH_CM = 45;
 
 function armDistance(m: Mannequin, f: Arm, p: Vec3): number {
+  const drawn = pomBody(m);
+  if (drawn) return drawn.armDistance(f, p);
   const r = sub(p, f.joint);
   const s = dot(r, f.axis);
   const ru = dot(r, f.u), rv = dot(r, f.v);
@@ -207,6 +235,8 @@ const perimeter = (h: [number, number][]): number => h.reduce((s, a, i) => s + M
 
 /** Convex hull (x, z) of the body at height y: torso and, where there are legs, both legs. */
 function bodyHull(m: Mannequin, y: number): [number, number][] {
+  const drawn = pomBody(m);
+  if (drawn) return hull2(drawn.sectionPoints(y));
   const pts: [number, number][] = [];
   const add = (e: { cx: number; cz: number; a: number; b: number } | null): void => {
     if (!e) return;
@@ -260,9 +290,11 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
   const tight: PomTeeBuild['tight'] = [];
 
   // Armpit (the body's: where the arm's inner side leaves the torso) and the armhole's bottom.
-  const s0 = armpitDistance(m);
+  // On a body with drawn outlines (male shape v2) every question below is asked of the outline, not of the ellipse round it.
+  const drawn = pomBody(m);
+  const s0 = drawn ? drawn.armpitS : armpitDistance(m);
   const e0 = m.armAt(s0, 1)!;
-  const bodyArmpitY = L.joint[1] + L.axis[1] * s0 - e0.a * L.u[1];
+  const bodyArmpitY = drawn ? drawn.armpitY : L.joint[1] + L.axis[1] * s0 - e0.a * L.u[1];
   const yAh = bodyArmpitY - A.armholeDropCm;
   const yChest = yAh - A.chestLineBelowArmholeCm;
   const gChest = 2 * row.chestWidthCm;
@@ -413,14 +445,21 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
   let zMax = 0;
   {
     const a0 = m.armAt(0, 1)!;
-    const pole = (0.9 / 1.18) * a0.a;
+    const pole = drawn ? -drawn.armTopS : (0.9 / 1.18) * a0.a;
     for (let s = -pole; s < 25; s += 0.1) {
-      const e = s >= 0 ? m.armAt(s, 1)! : { a: a0.a * (1 + s / pole), b: a0.b * (1 + s / pole) };
-      if (!(e.a > 1e-3)) continue;
+      const e = drawn ? null : s >= 0 ? m.armAt(s, 1)! : { a: a0.a * (1 + s / pole), b: a0.b * (1 + s / pole) };
+      if (e && !(e.a > 1e-3)) continue;
       for (let k = 0; k < 180; k++) {
         const phi = (2 * Math.PI * k) / 180;
-        const rr = ellipseRadius(e.a, e.b, phi);
-        const pt: Vec3 = [0, 1, 2].map((d) => L.joint[d]! + L.axis[d]! * s + rr * (Math.cos(phi) * L.u[d]! + Math.sin(phi) * L.v[d]!)) as Vec3;
+        let pt: Vec3;
+        if (e) {
+          const rr = ellipseRadius(e.a, e.b, phi);
+          pt = [0, 1, 2].map((d) => L.joint[d]! + L.axis[d]! * s + rr * (Math.cos(phi) * L.u[d]! + Math.sin(phi) * L.v[d]!)) as Vec3;
+        } else {
+          const q = drawn!.armPoint(L, s, phi);
+          if (!q) continue;
+          pt = q;
+        }
         if (!(Math.abs(planeDist(plane, pt)) <= 0.12)) continue;
         const q = (pt[0] - xAh) * lineDir[0] + (pt[1] - yAh) * lineDir[1];
         const u = (2 * q) / Lq - 1;
@@ -435,7 +474,8 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
     return [xAh + lineDir[0] * q, yAh + lineDir[1] * q, (front ? 1 : -1) * zMax * Math.sin(beta)];
   };
   const eyeCirc = Math.PI * (3 * (Lq / 2 + zMax) - Math.sqrt((3 * (Lq / 2) + zMax) * (Lq / 2 + 3 * zMax)));
-  const eyeRows = Math.max(6, Math.round(eyeCirc / 2 / rowStep));
+  const forced = options.counts;
+  const eyeRows = forced ? forced.eyeRows : Math.max(6, Math.round(eyeCirc / 2 / rowStep));
   const SAMPLES = 120;
   const byLength = (len: number[], as: number[], n: number): number[] => {
     const out: number[] = [];
@@ -467,7 +507,8 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
       seamLen.push(seamLen[k - 1]! + Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]));
     }
   }
-  const seamRows = Math.max(3, Math.round(seamLen[SAMPLES]! / rowStep));
+  const seamRows = forced ? forced.seamRows : Math.max(3, Math.round(seamLen[SAMPLES]! / rowStep));
+  const counts: PomTeeCounts = { eyeRows, seamRows, tube: [], columns: {}, sleeveRings: 0, zip: {} };
   const seamAlphas = byLength(seamLen, seamA, seamRows).slice(1);
   /** Fan rows: left-side edge vertex front and back (equal outside the armhole) and its elevation; row 0 is the armpit. */
   const fanRows: { front: Vec3; back: Vec3; alpha: number }[] = [];
@@ -488,7 +529,7 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
   // ---- solve the hem height for the length, build the tube rows ------------------------------------
   const lengthOf = (mesh: Mesh): number => frontLength(mesh, neckHalf, hpsPoint);
   let yHem = yHps - row.lengthCm;
-  let build: { mesh: Mesh; meta: Omit<PomTeeBuild, 'mesh' | 'row' | 'tight' | 'levels'>; sleeveEndS: number } | null = null;
+  let build: { mesh: Mesh; meta: Omit<PomTeeBuild, 'mesh' | 'row' | 'tight' | 'levels' | 'counts'>; sleeveEndS: number } | null = null;
   for (let it = 0; it < 4; it++) {
     tight.length = 0;
     build = assemble(yHem);
@@ -498,9 +539,10 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
   }
 
   function assemble(yHemNow: number): NonNullable<typeof build> {
-    const required = [yChest, yWaist, m.morphHeights.hip, m.morphHeights.chest].filter((y) => y > yHemNow + 0.5 && y < yAh - 0.5);
+    const uniform = forced !== undefined || options.uniformRows === true;
+    const required = (uniform ? [yWaist, yChest] : [yChest, yWaist, m.morphHeights.hip, m.morphHeights.chest]).filter((y) => uniform || (y > yHemNow + 0.5 && y < yAh - 0.5));
     // Ascending heights from the hem to the armhole (inclusive).
-    const ys = rowsBetween(yHemNow, yAh, rowStep, required);
+    const ys = rowsBetween(yHemNow, yAh, rowStep, required, forced?.tube, counts.tube);
     const pos: number[] = [];
     const part: number[] = [];
     const add = (p: Vec3, pt: number): number => {
@@ -570,6 +612,10 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
           const ids: number[] = [tubeTop[c]!];
           for (let i = 1; i < fanRows.length; i++) {
             const inEye = i < iSp;
+            // The armhole's first row lies a row step along the armhole from the armpit, which is where the tube's
+            // top row has its next vertex (0.1 to 0.3 cm apart: an edge that reads 100 % strain when it moves a
+            // millimetre). On a body with drawn outlines the two are one vertex.
+            if (drawn && i === 1) { ids.push(tubeTop[c === 0 ? 1 : N - 1]!); continue; }
             if (shared && !inEye) { ids.push(shared[c]![i]!); continue; }
             const e = frontPanel || !inEye ? fanRows[i]!.front : fanRows[i]!.back;
             ids.push(add(c === 0 ? e : mirror(e), 0));
@@ -594,7 +640,8 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
         const lf = lenFrac(pts);
         let total = 0;
         for (let k = 1; k <= S; k++) total += Math.hypot(pts[k]![0] - pts[k - 1]![0], pts[k]![1] - pts[k - 1]![1], pts[k]![2] - pts[k - 1]![2]);
-        const n = Math.max(2, Math.round(total / rowStep));
+        const n = forced ? forced.columns[key]! : Math.max(2, Math.round(total / rowStep));
+        counts.columns[key] = n;
         const f: number[] = [0];
         const placed: Vec3[] = [];
         let j = 0;
@@ -612,10 +659,13 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
     };
     const colsF = columns(true, null);
     const colsB = columns(false, colsF.map((c) => c.ids));
-    const zipper = (A: { ids: number[]; f: number[] }, B: { ids: number[]; f: number[] }): void => {
+    const zipper = (A: { ids: number[]; f: number[] }, B: { ids: number[]; f: number[] }, key: string): void => {
       let i = 0, j = 0;
+      const given = forced?.zip[key];
+      const steps: boolean[] = (counts.zip[key] = []);
       while (i < A.ids.length - 1 || j < B.ids.length - 1) {
-        const advanceA = j === B.ids.length - 1 || (i < A.ids.length - 1 && A.f[i + 1]! <= B.f[j + 1]!);
+        const advanceA = given ? given[steps.length]! : j === B.ids.length - 1 || (i < A.ids.length - 1 && A.f[i + 1]! <= B.f[j + 1]!);
+        steps.push(advanceA);
         if (advanceA) { tris.push(A.ids[i]!, B.ids[j]!, A.ids[i + 1]!); i++; }
         else { tris.push(A.ids[i]!, B.ids[j]!, B.ids[j + 1]!); j++; }
         triPanel.push(panel);
@@ -623,7 +673,7 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
     };
     for (const [g, cols] of [colsF, colsB].entries()) {
       panel = g;
-      for (let c = 0; c < N; c++) zipper(cols[c]!, cols[c + 1]!);
+      for (let c = 0; c < N; c++) zipper(cols[c]!, cols[c + 1]!, `${g === 0 ? 'f' : 'b'}${c}`);
     }
 
     // Sleeves: ring 0 is the armhole (front edge up, back edge down).
@@ -648,6 +698,7 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
       const a0 = m.armAt(0, f.side)!;
       const pole = (0.9 / 1.18) * a0.a;
       const armR = (s: number, phi: number): number => {
+        if (drawn) return drawn.armRadius(f, Math.min(s, ARM_REACH_CM), phi);
         if (s >= 0) {
           const e = m.armAt(Math.min(s, ARM_REACH_CM), f.side)!;
           return ellipseRadius(e.a, e.b, phi);
@@ -666,7 +717,8 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
           per += Math.hypot(raw[j]! * Math.cos(p.phi) - raw[(j + 1) % K]! * Math.cos(q.phi), raw[j]! * Math.sin(p.phi) - raw[(j + 1) % K]! * Math.sin(q.phi));
         }
         const hemR = raw.map((x) => (x * want) / per);
-        const J = Math.max(6, Math.ceil((sEnd - frame[topK]!.s) / rowStep));
+        const J = forced ? forced.sleeveRings : Math.max(6, Math.ceil((sEnd - frame[topK]!.s) / rowStep));
+        counts.sleeveRings = J;
         const pts: Vec3[][] = [];
         for (let j = 1; j <= J; j++) {
           const t = j / J;
@@ -722,6 +774,12 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
       }
       sleeveHem[k] = prevRing;
     }
+    // Triangles that lost a corner to the weld at the armpit.
+    for (let t = tris.length - 3; t >= 0; t -= 3) {
+      if (tris[t] !== tris[t + 1] && tris[t + 1] !== tris[t + 2] && tris[t] !== tris[t + 2]) continue;
+      tris.splice(t, 3);
+      triPanel.splice(t / 3, 1);
+    }
     const fixedIds = [colsF[0]!.ids[iSp]!, colsF[N]!.ids[iSp]!, colsF[0]!.ids[fanRows.length - 1]!, colsF[N]!.ids[fanRows.length - 1]!];
     if (A.yokeSmoothIterations > 0) {
       smoothYoke(pos, tris, fixedIds, fullDistance, (y) => smooth((y - yAh - A.yokeSmoothFromCm) / 4), A.capEaseCm, A.yokeSmoothIterations);
@@ -768,6 +826,7 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
     ...b.meta,
     levels: { armholeY: yAh, chestLineY: yChest, hemY: yHem, shoulderPointY: sp[1], hpsY: yHps, sleeveEndS: b.sleeveEndS },
     tight: dedupeTight(tight),
+    counts,
   };
 }
 
@@ -836,12 +895,14 @@ function dedupeTight(t: PomTeeBuild['tight']): PomTeeBuild['tight'] {
 }
 
 /** Ascending stations from `from` to `to` (both included) about `step` apart, through every `required` height. */
-function rowsBetween(from: number, to: number, step: number, required: readonly number[]): number[] {
+function rowsBetween(from: number, to: number, step: number, required: readonly number[], forced?: readonly number[], used?: number[]): number[] {
   const knots = [from, ...[...required].sort((a, b) => a - b), to];
   const out: number[] = [from];
+  if (used) used.length = 0;
   for (let k = 1; k < knots.length; k++) {
     const a = knots[k - 1]!, b = knots[k]!;
-    const n = Math.max(1, Math.round((b - a) / step));
+    const n = forced ? forced[k - 1]! : Math.max(1, Math.round((b - a) / step));
+    used?.push(n);
     for (let i = 1; i <= n; i++) out.push(a + ((b - a) * i) / n);
   }
   return out;

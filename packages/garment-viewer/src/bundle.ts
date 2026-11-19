@@ -19,8 +19,11 @@ export interface GarmentAnchorsJson {
   baseSize: string;
   category: string;
   unit: 'cm';
-  /** `family`: `male` for a bundle built on the male mannequin (slice M1); absent is `female` (`bundleFamilyOf`). */
-  mannequin: { version: string; shape: string; family?: 'female' | 'male' };
+  /**
+   * `family`: `male` for a bundle built on the male mannequin (slice M1); absent is `female` (`bundleFamilyOf`).
+   * `maleShape`: `v2` for a male bundle built on the male shape v2; absent is `v1` (`bundleMaleShapeOf`).
+   */
+  mannequin: { version: string; shape: string; family?: 'female' | 'male'; maleShape?: 'v1' | 'v2' };
   synthetic: boolean;
   /** Set by evaluated bundles: the file holding the product payload. */
   payloadFile?: string;
@@ -47,7 +50,7 @@ export interface QaJson {
   calibration: { residualBeforeCm: { maxAbs: number }; residualAfterGlobalCm: { maxAbs: number } };
   meshHealth: { triangles: number };
   /** Set by a male bundle (slice M1), the same as anchors.json `mannequin`: the api keeps only qa.json, the men's gate reads it here. */
-  mannequin?: { version: string; shape: string; family?: 'female' | 'male' };
+  mannequin?: { version: string; shape: string; family?: 'female' | 'male'; maleShape?: 'v1' | 'v2' };
 }
 
 export interface SpikeBundle {

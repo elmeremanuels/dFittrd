@@ -164,7 +164,7 @@ Measured on the mesh (breadth × depth of the torso loop, cm; v1 → v2):
 | XL | 38.0 × 34.6 → 39.2 × 27.6 | 36.9 × 27.7 → 35.4 × 26.4 | 39.5 × 28.9 → 35.5 × 26.6 | 38.6 → 41.2 | 1.35 → 1.51 |
 | XXL | 40.2 × 38.2 → 42.0 × 30.1 | 40.0 × 30.4 → 38.3 × 29.3 | 41.3 × 31.4 → 37.2 × 28.8 | 40.7 → 44.2 | 1.37 → 1.52 |
 
-ANSUR II (scaled to the table girth) for comparison at M: chest depth 23.2, waist 30.2 × 21.4, seat 32.8 × 22.6. Pictures: `docs/screens/claude/male-shape-v2/` (`scripts/render-male-v2.ts` and `scripts/compose-male-v2.mjs`). In the viewer the option is `MountOptions.maleShape` (and `maleShape=v2` on the spike's `avatar.html`); a bundle is still draped on the v1 body.
+ANSUR II (scaled to the table girth) for comparison at M: chest depth 23.2, waist 30.2 × 21.4, seat 32.8 × 22.6. Pictures: `docs/screens/claude/male-shape-v2/` (`scripts/render-male-v2.ts` and `scripts/compose-male-v2.mjs`). In the viewer the option is `MountOptions.maleShape` (and `maleShape=v2` on the spike's `avatar.html`). A v2 body also carries `outlines` (`outlines.ts`): its drawn sections as polar outlines, which the cloth collider and the POM tee builder read, because the ellipses `torsoAt` / `legAt` / `armAt` return on v2 only contain the section (2.5 to 13 cm more girth). A men's bundle names the shape it was built on, and is shown only on that shape.
 
 ## The neutral standard head (`head.ts`, D19)
 

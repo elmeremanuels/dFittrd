@@ -76,6 +76,53 @@ export interface GradingJson {
   sizes: SizeGrading[];
   /** Anchors whose targets are estimates (no chart column), with the rule used. */
   estimates: Partial<Record<AnchorId, TargetSource>>;
+  /**
+   * Sizes that were BUILT, not morphed (a tape-built garment whose builder gives every size the base mesh's vertices,
+   * the POM tee on the male shape v2): per size label the offset of every vertex of the base mesh, cm, so the device
+   * shows the size as it was built on its own reference body. Where present for a size, `applyGrading` uses it instead
+   * of the morph; `targets` still carry the size's girths for the fit lines and the placement.
+   */
+  built?: BuiltSizes;
+}
+
+/**
+ * Offsets from the base mesh per size: base64 of little-endian int16, three per welded vertex (x, y, z) in the base
+ * mesh's vertex order, in units of `quantumCm`. Each size was built on the reference body named in `bodies` and moved
+ * down by that body's support-ring height less the base body's (the lift the viewer adds back for a body of that height).
+ */
+export interface BuiltSizes {
+  encoding: 'int16le-base64';
+  quantumCm: number;
+  vertices: number;
+  bodies: Record<string, string>;
+  offsets: Record<string, string>;
+}
+
+/** Offsets of one built size, cm (3 per vertex), or null when the size has none or they do not fit the mesh. */
+export function builtOffsets(built: BuiltSizes | undefined, size: string, vertices: number): Float64Array | null {
+  if (!built || built.encoding !== 'int16le-base64' || built.vertices !== vertices || !(built.quantumCm > 0)) return null;
+  const key = Object.keys(built.offsets).find((s) => sizeLabelKey(s) === sizeLabelKey(size));
+  if (key === undefined) return null;
+  const bin = atob(built.offsets[key]!);
+  if (bin.length !== 6 * vertices) return null;
+  const out = new Float64Array(3 * vertices);
+  for (let i = 0; i < out.length; i++) {
+    const v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8);
+    out[i] = (v >= 0x8000 ? v - 0x10000 : v) * built.quantumCm;
+  }
+  return out;
+}
+
+/** `BuiltSizes.offsets` entry for positions against the base mesh's (both cm, 3 per vertex). */
+export function encodeBuiltOffsets(base: ArrayLike<number>, positions: ArrayLike<number>, quantumCm: number): string {
+  let bin = '';
+  for (let i = 0; i < base.length; i++) {
+    const q = Math.round((positions[i]! - base[i]!) / quantumCm);
+    if (q < -0x8000 || q > 0x7fff) throw new RangeError('built size: an offset does not fit 16 bits');
+    const v = q < 0 ? q + 0x10000 : q;
+    bin += String.fromCharCode(v & 0xff, v >> 8);
+  }
+  return btoa(bin);
 }
 
 const round2 = (x: number): number => Math.round(x * 100) / 100;
@@ -158,6 +205,13 @@ export function gradeGarment(m: Mannequin, chart: GarmentChart, baseSize: string
 export function applyGrading(m: Mannequin, baseMesh: Mesh, chains: ChainAssignment, grading: GradingJson, size: string): Mesh {
   const entry = grading.sizes.find((s) => sizeLabelKey(s.size) === sizeLabelKey(size));
   if (!entry) throw new Error(`size ${size} not graded`);
+  // A size that was built (`GradingJson.built`): the base mesh's vertices where the builder put them for this size.
+  const offsets = builtOffsets(grading.built, entry.size, baseMesh.positions.length / 3);
+  if (offsets) {
+    const positions = Float64Array.from(baseMesh.positions);
+    for (let i = 0; i < positions.length; i++) positions[i] = positions[i]! + offsets[i]!;
+    return { ...baseMesh, positions };
+  }
   const [morph] = gradeSizes(grading.base, [{ size: entry.size, target: entry.targets }], { heights: m.morphHeights });
   const girths = radialMorph(m, baseMesh, chains, morph!);
   return lengthMorph(

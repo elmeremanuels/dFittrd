@@ -30,7 +30,8 @@
  *                    and take a close-up of the 2D figure in each.
  *        --male-shape=v2  build the web app with VITE_MALE_SHAPE=v2 (branch claude/male-2d-v2): the
  *                    one switch that puts the male body v2 in the 3D view and the male 2D figure
- *                    together. The figure must then carry data-male-shape="v2"; without the flag it
+ *                    together, and the api with MALE_SHAPE=v2. The tee bundle must then be built on v2
+ *                    (`build-bundle.ts --male-shape=v2`; the script stops if it is not). The figure must then carry data-male-shape="v2"; without the flag it
  *                    must not. Each body also gets `--6-2d-own-size-<size>`: the 2D figure in the
  *                    body's own size, next to `--5-3d-size-<size>--front`.
  *
@@ -38,7 +39,7 @@
  * (`data-figure="male"`) and carry its estimate label; with the gate off it is today's figure.
  */
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -59,6 +60,12 @@ mkdirSync(shots, { recursive: true });
 const TEE_BUNDLE = join(root, 'spikes', 'garment-engine', 'out', 'synthetic-men-tee', 'base.glb');
 if (!existsSync(TEE_BUNDLE)) {
   console.error(`no synthetic men's tee bundle at ${TEE_BUNDLE}: run pnpm --filter @curtain/garment-spike build:bundle`);
+  process.exit(1);
+}
+// A men's bundle is shown only on the male body shape it was built on (anchors.json `mannequin.maleShape`, absent = v1).
+const builtOn = JSON.parse(readFileSync(join(TEE_BUNDLE, '..', 'anchors.json'), 'utf8')).mannequin?.maleShape === 'v2' ? 'v2' : 'v1';
+if (builtOn !== maleShape) {
+  console.error(`the tee bundle is built on the male shape ${builtOn}, this run draws ${maleShape}: run pnpm --filter @curtain/garment-spike exec tsx scripts/build-bundle.ts --only synthetic-men-tee --skip-separation${maleShape === 'v2' ? ' --male-shape=v2' : ''}`);
   process.exit(1);
 }
 
@@ -119,6 +126,7 @@ try {
     DEMO_DB_DIR: db,
     DEMO_MEN: '1',
     MEN_3D_GATE: gateOff ? '0' : '1',
+    ...(maleShape === 'v2' ? { MALE_SHAPE: 'v2' } : {}),
     DEMO_STOREFRONT_ORIGIN: URLS.shop,
     PUBLIC_APP_URL: URLS.web,
     PUBLIC_API_URL: URLS.api,

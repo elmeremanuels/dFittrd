@@ -21,7 +21,7 @@ import { copyFile, mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { and, desc, eq, ne } from 'drizzle-orm';
 import { checkDrapeBake } from '@curtain/garment-viewer/bakeGate';
-import { bakeCheckRefusal, BakeCheckReportSchema, checkGarmentBundle, GARMENT_BUNDLE_FILES, garmentBodyFamily, isWeakAudienceSource, type GarmentBodyFamily, type GarmentBundleMannequinMeta, garmentQaFlagNote, garmentQaFlags, type BakeCheckReport, type GarmentAssetRef, type GarmentBundleMeta, type GarmentBundleProblem, type GarmentPayload, type MerchantGarmentAsset } from '@curtain/schema';
+import { bakeCheckRefusal, BakeCheckReportSchema, checkGarmentBundle, GARMENT_BUNDLE_FILES, garmentBodyFamily, isWeakAudienceSource, maleShapeOf, type GarmentBodyFamily, type GarmentMaleShape, type GarmentBundleMannequinMeta, garmentQaFlagNote, garmentQaFlags, type BakeCheckReport, type GarmentAssetRef, type GarmentBundleMeta, type GarmentBundleProblem, type GarmentPayload, type MerchantGarmentAsset } from '@curtain/schema';
 import type { Db } from '../db/client.js';
 import { garmentAssets, products, type ShopSettings } from '../db/schema.js';
 import type { Env } from '../env.js';
@@ -60,8 +60,10 @@ export interface BundleOnDisk {
  * Read and check a bundle directory against the product's chart sizes and, when given, the body
  * family the product is shown on (`garmentBodyFamily`): a bundle built on the other family is
  * refused (`family_mismatch`), and anchors.json and qa.json must name the same family (`format`).
+ * With `maleShape` (the male body shape the embed draws, env `MALE_SHAPE`), a male bundle built on
+ * the other shape is refused the same way (`shape_mismatch`).
  */
-export async function readBundleDir(dir: string, chartSizes: readonly string[], family?: GarmentBodyFamily, now: Date = new Date()): Promise<BundleOnDisk> {
+export async function readBundleDir(dir: string, chartSizes: readonly string[], family?: GarmentBodyFamily, now: Date = new Date(), maleShape?: GarmentMaleShape): Promise<BundleOnDisk> {
   const hash = createHash('sha256');
   const json: Record<string, Record<string, unknown>> = {};
   let glb: Buffer | null = null;
@@ -85,7 +87,7 @@ export async function readBundleDir(dir: string, chartSizes: readonly string[], 
     }
   }
   if (json['qa.json']!.bakeCheck !== undefined) throw new AssetImportError('format', 'qa.json carries a bakeCheck; only the import writes it, so a bundle cannot pass the check on its own word');
-  const r = checkGarmentBundle({ anchors: json['anchors.json']!, grading: json['grading.json']!, material: json['material.json']!, qa: json['qa.json']!, bytes }, chartSizes, family === undefined ? {} : { family });
+  const r = checkGarmentBundle({ anchors: json['anchors.json']!, grading: json['grading.json']!, material: json['material.json']!, qa: json['qa.json']!, bytes }, chartSizes, { ...(family === undefined ? {} : { family }), ...(maleShape === undefined ? {} : { maleShape }) });
   if (!r.ok) throw new AssetImportError(r.problem);
   const qa = json['qa.json']!;
   const version = hash.digest('hex').slice(0, 16);
@@ -126,9 +128,11 @@ export async function importBundle(db: Db, env: Env, shopId: string, productExte
   const family = garmentBodyFamily(product.payload);
   let bundle: BundleOnDisk;
   try {
-    bundle = await readBundleDir(dir, chartSizesOf(product), family, now);
+    bundle = await readBundleDir(dir, chartSizesOf(product), family, now, env.MALE_SHAPE);
   } catch (err) {
     if (err instanceof AssetImportError && err.problem === 'family_mismatch') throw new AssetImportError('family_mismatch', familyHint(product, family));
+    if (err instanceof AssetImportError && err.problem === 'shape_mismatch')
+      throw new AssetImportError('shape_mismatch', `this deployment draws the male body ${env.MALE_SHAPE} (MALE_SHAPE): build the bundle on that shape (the spike: build:bundle${env.MALE_SHAPE === 'v2' ? ' --male-shape=v2' : ' without --male-shape'})`);
     if (err instanceof AssetImportError && err.problem === 'bake_check_failed' && err.bundle) {
       await recordRefusal(db, shopId, product, err.bundle, err.hint ?? 'the bake check failed', now);
     }
@@ -281,6 +285,11 @@ export function assetMannequinFamily(a: Pick<AssetRow, 'qa'>): 'female' | 'male'
   return mannequin?.family === 'male' ? 'male' : 'female';
 }
 
+/** The male body shape a bundle was built on (`qa.mannequin.maleShape`, absent = v1), read where the family is. */
+export function assetMaleShape(a: Pick<AssetRow, 'qa'>): GarmentMaleShape {
+  return maleShapeOf((a.qa as { mannequin?: { maleShape?: unknown } } | null)?.mannequin?.maleShape);
+}
+
 /**
  * The live asset of a product, as the ref `GET /v1/try` hands out plus its row, or null: the shop
  * has the 3D estimate on, the product's active version is approved, and the bundle grades every
@@ -321,5 +330,7 @@ export async function activeAsset(db: Db, env: Env, shop: { id: string; settings
 export async function activeAssetRef(db: Db, env: Env, shop: { id: string; settings: ShopSettings }, product: ProductRow, garment: GarmentPayload): Promise<GarmentAssetRef | null> {
   const active = await activeAsset(db, env, shop, product, garment);
   if (!active || assetMannequinFamily(active.row) !== garmentBodyFamily(garment)) return null;
+  // Likewise a male bundle built on the other male body shape than the one this deployment draws (`MALE_SHAPE`).
+  if (assetMannequinFamily(active.row) === 'male' && assetMaleShape(active.row) !== env.MALE_SHAPE) return null;
   return active.ref;
 }

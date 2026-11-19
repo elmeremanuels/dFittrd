@@ -187,9 +187,14 @@ export interface GarmentBundleMeta {
   bytes?: number;
 }
 
-/** `mannequin` of anchors.json and qa.json: `family` is `female`, `male` or absent (absent = female, every bundle before slice M1). */
+/**
+ * `mannequin` of anchors.json and qa.json: `family` is `female`, `male` or absent (absent = female, every bundle before slice M1).
+ * `maleShape` is the shape of the male body the garment was built and draped on: `v2`, or `v1` or absent (absent = v1, every
+ * male bundle before the tee was built on v2); only a male bundle may carry it (`bundleMaleShape`).
+ */
 export interface GarmentBundleMannequinMeta {
   family?: unknown;
+  maleShape?: unknown;
   version?: unknown;
   shape?: unknown;
 }
@@ -229,6 +234,38 @@ export function bundleMannequinFamily(meta: Pick<GarmentBundleMeta, 'anchors' | 
   return a !== null && a === q ? a : null;
 }
 
+/** The shapes of the male body (`BuildOptions.maleShape` of `@curtain/mannequin`): `v1`, and `v2` behind the embed's `VITE_MALE_SHAPE` switch. */
+export const GARMENT_MALE_SHAPES = ['v1', 'v2'] as const;
+export type GarmentMaleShape = (typeof GARMENT_MALE_SHAPES)[number];
+
+/** A build or deploy setting as a male shape: `v2` only for exactly `v2`, anything else (absent included) is `v1`. */
+export function maleShapeOf(value: unknown): GarmentMaleShape {
+  return value === 'v2' ? 'v2' : 'v1';
+}
+
+/** One file's `mannequin.maleShape`: absent (or null) is `v1`; any other value than the two shapes is `null` (malformed). */
+function shapeOf(m: GarmentBundleMannequinMeta | undefined): GarmentMaleShape | null {
+  if (m === undefined || m === null || typeof m !== 'object') return 'v1';
+  const v = m.maleShape;
+  if (v === undefined || v === null) return 'v1';
+  return v === 'v1' || v === 'v2' ? v : null;
+}
+
+/**
+ * The male body shape a bundle was built on: anchors.json and qa.json both carry `mannequin.maleShape`, and they must
+ * agree, exactly as for the family. Absent in both is `v1` (every male bundle before the tee was built on v2). `null`
+ * when a value is not a shape, the two files disagree, or a bundle that is not male names a shape other than `v1`
+ * (the bundle is refused, `format`). A garment built on one shape is strained or stands off the other (the v1-built
+ * tee's armholes strain 11 to 20 % on v2 from L up), so a bundle is shown only on the shape it was built on.
+ */
+export function bundleMaleShape(meta: Pick<GarmentBundleMeta, 'anchors' | 'qa'>): GarmentMaleShape | null {
+  const a = shapeOf(meta.anchors.mannequin);
+  const q = shapeOf(meta.qa.mannequin);
+  if (a === null || a !== q) return null;
+  if (a !== 'v1' && bundleMannequinFamily(meta) !== 'male') return null;
+  return a;
+}
+
 /** The parts of qa.json `chartAgreement` the gate reads. */
 export interface GarmentChartAgreementMeta {
   pass?: unknown;
@@ -253,6 +290,8 @@ export interface GarmentBundleInfo {
   qaFlags: GarmentQaFlag[];
   /** The body family the bundle was built on (`bundleMannequinFamily`). */
   family: GarmentBodyFamily;
+  /** The male body shape a male bundle was built on (`bundleMaleShape`) when it is not `v1`: absent is `v1`, as in the files. */
+  maleShape?: 'v2';
 }
 
 export type GarmentQaFlag = 'low_rise_waist' | 'precalibration_outside_tolerance' | 'tape_built_no_chart_check';
@@ -303,20 +342,27 @@ export function garmentQaFlags(qa: GarmentBundleMeta['qa']): GarmentQaFlag[] | n
   return flags;
 }
 
-/** `family_mismatch`: the bundle was built on the other body family than the product is shown on (`garmentBodyFamily`). */
-export type GarmentBundleProblem = 'format' | 'too_large' | 'qa_failed' | 'chart_mismatch' | 'family_mismatch';
+/**
+ * `family_mismatch`: the bundle was built on the other body family than the product is shown on (`garmentBodyFamily`).
+ * `shape_mismatch`: a male bundle built on the other male body shape than the one that is drawn (`bundleMaleShape`).
+ */
+export type GarmentBundleProblem = 'format' | 'too_large' | 'qa_failed' | 'chart_mismatch' | 'family_mismatch' | 'shape_mismatch';
 
 /**
  * Format, size, QA, body family and size coverage of a bundle; `chartSizes` are the product's live
  * size labels. With `family` (the family the product is shown on, `garmentBodyFamily`), a bundle of
  * the other family is `family_mismatch`: no female-built garment on a male body, nor the reverse.
+ * With `maleShape` (the male body shape that is drawn), a male bundle built on the other shape is
+ * `shape_mismatch`, checked the same way; a bundle that is not male is not affected.
  */
-export function checkGarmentBundle(meta: GarmentBundleMeta, chartSizes: readonly string[], opts: { family?: GarmentBodyFamily } = {}): { ok: true; info: GarmentBundleInfo } | { ok: false; problem: GarmentBundleProblem } {
+export function checkGarmentBundle(meta: GarmentBundleMeta, chartSizes: readonly string[], opts: { family?: GarmentBodyFamily; maleShape?: GarmentMaleShape } = {}): { ok: true; info: GarmentBundleInfo } | { ok: false; problem: GarmentBundleProblem } {
   if (meta.anchors.format !== 'curtain.garment.anchors' || meta.grading.format !== 'curtain.garment.grading' || meta.material.format !== 'curtain.garment.material' || meta.qa.format !== 'curtain.garment.qa') {
     return { ok: false, problem: 'format' };
   }
   const family = bundleMannequinFamily(meta);
   if (family === null) return { ok: false, problem: 'format' };
+  const maleShape = bundleMaleShape(meta);
+  if (maleShape === null) return { ok: false, problem: 'format' };
   if (meta.bytes !== undefined && (!Number.isFinite(meta.bytes) || meta.bytes > MAX_GARMENT_BUNDLE_BYTES)) return { ok: false, problem: 'too_large' };
   if (meta.qa.chartAgreement?.pass !== true) return { ok: false, problem: 'qa_failed' };
   const qaFlags = garmentQaFlags(meta.qa);
@@ -337,16 +383,19 @@ export function checkGarmentBundle(meta: GarmentBundleMeta, chartSizes: readonly
   // Every size the shop sells must be graded, or the advice could name a size the picture cannot show.
   // The family before the sizes: a bundle of the other body family is wrong for the product whatever its sizes.
   if (opts.family !== undefined && opts.family !== family) return { ok: false, problem: 'family_mismatch' };
+  // Then the male body shape, for the same reason.
+  if (family === 'male' && opts.maleShape !== undefined && opts.maleShape !== maleShape) return { ok: false, problem: 'shape_mismatch' };
   if (chartSizes.length === 0 || !chartSizes.every((s) => graded.has(sizeLabelKey(s)))) return { ok: false, problem: 'chart_mismatch' };
-  return { ok: true, info: { baseSize, sizes, qaFlags, family } };
+  return { ok: true, info: { baseSize, sizes, qaFlags, family, ...(maleShape === 'v2' ? { maleShape } : {}) } };
 }
 
 /**
  * The bundle check against a garment's live chart and its body family (`garmentBodyFamily`: a men's
  * garment needs a male-built bundle, every other garment a female-built one): the info, or `null`
- * (fall back to today's flow).
+ * (fall back to today's flow). With `maleShape` (the male body shape the caller draws), a male bundle
+ * built on the other shape is `null` too.
  */
-export function garmentBundleFor(meta: GarmentBundleMeta, garment: Pick<GarmentPayload, 'sizeChart' | 'audience'>): GarmentBundleInfo | null {
-  const r = checkGarmentBundle(meta, garment.sizeChart.map((row) => row.size), { family: garmentBodyFamily(garment) });
+export function garmentBundleFor(meta: GarmentBundleMeta, garment: Pick<GarmentPayload, 'sizeChart' | 'audience'>, maleShape?: GarmentMaleShape): GarmentBundleInfo | null {
+  const r = checkGarmentBundle(meta, garment.sizeChart.map((row) => row.size), { family: garmentBodyFamily(garment), ...(maleShape === undefined ? {} : { maleShape }) });
   return r.ok ? r.info : null;
 }

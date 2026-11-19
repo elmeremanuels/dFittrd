@@ -57,6 +57,11 @@ export interface BundleOptions {
   generator?: 'pom' | 'm1';
   /** The POM tee's texture (`PomBundleOptions.texture`); the SYNTHETIC men's tee is printed unless `plain`. */
   texture?: 'synthetic-print' | 'plain';
+  /**
+   * The male body shape a men's bundle is built on (`BuildOptions.maleShape` of @curtain/mannequin): `v1` (default) or
+   * `v2`. The bundle states it (`bundleMannequin`); the POM tee is then built, taped and graded on the v2 bodies.
+   */
+  maleShape?: 'v1' | 'v2';
 }
 
 export interface Bundle {
@@ -78,23 +83,27 @@ const json = (x: unknown): string => `${JSON.stringify(x, null, 2)}\n`;
  * The canonical body a product's bundle is built on (men-3d-plan slice M1, `mannequinFor`): the base
  * shape of the family the product is shown on (`garmentBodyFamily`: men's → male M, else female M).
  */
-export function mannequinFor(payload: { audience?: string | undefined }): Mannequin {
+export function mannequinFor(payload: { audience?: string | undefined }, options: { maleShape?: 'v1' | 'v2' } = {}): Mannequin {
   const family: BodyFamily = garmentBodyFamily(payload as { audience?: 'men' | 'women' | 'unisex' });
-  return buildMannequin(family === 'male' ? familyShape('male', FAMILY_BASE_SHAPE_ID.male)! : bodyShape(BASE_SHAPE_ID));
+  // `maleShape: 'v2'` builds a men's bundle on the male shape v2; it is read for the male family only.
+  return family === 'male' ? buildMannequin(familyShape('male', FAMILY_BASE_SHAPE_ID.male)!, options.maleShape === 'v2' ? { maleShape: 'v2' } : {}) : buildMannequin(bodyShape(BASE_SHAPE_ID));
 }
 
 /**
  * The `mannequin` block of anchors.json (and, for a male bundle, of qa.json): the family is written
  * only for the male family, so every female bundle stays byte for byte what it was before M1
- * (absent = female, `bundleMannequinFamily` of @curtain/schema).
+ * (absent = female, `bundleMannequinFamily` of @curtain/schema). Likewise `maleShape` is written
+ * only for a body built with the male shape v2 (absent = v1, `bundleMaleShape`), so every bundle
+ * built on v1 stays byte for byte what it was; the viewer and the import show a male bundle only on
+ * the shape it names.
  */
-export function bundleMannequin(m: Mannequin): { version: string; shape: string; family?: 'male' } {
-  return { version: MANNEQUIN_VERSION, shape: m.shape.id, ...(m.shape.family === 'male' ? { family: 'male' as const } : {}) };
+export function bundleMannequin(m: Mannequin): { version: string; shape: string; family?: 'male'; maleShape?: 'v2' } {
+  return { version: MANNEQUIN_VERSION, shape: m.shape.id, ...(m.shape.family === 'male' ? { family: 'male' as const } : {}), ...(m.maleShape === 'v2' ? { maleShape: 'v2' as const } : {}) };
 }
 
 export function buildBundle(productId: SpikeBundleProductId, options: BundleOptions = {}): Bundle {
   if (productId === 'synthetic-men-tee' && options.generator !== 'm1') {
-    const pom = buildPomBundle(productId, spikeProduct(productId), SYNTHETIC_TEE_POM, options.baseSize ?? 'M', { texture: options.texture ?? 'synthetic-print' });
+    const pom = buildPomBundle(productId, spikeProduct(productId), SYNTHETIC_TEE_POM, options.baseSize ?? 'M', { texture: options.texture ?? 'synthetic-print', ...(options.maleShape === 'v2' ? { maleShape: 'v2' as const } : {}) });
     const worst = Math.max(...pom.tape.map((t) => t.maxAbsCm));
     return {
       ...pom,
@@ -108,7 +117,7 @@ export function buildBundle(productId: SpikeBundleProductId, options: BundleOpti
   const payload = spikeProduct(productId);
   const chart = garmentChart(payload);
   const spec = garmentSpec(payload, baseSize);
-  const mannequin = mannequinFor(payload);
+  const mannequin = mannequinFor(payload, options.maleShape === 'v2' ? { maleShape: 'v2' } : {});
   const mannequinMeta = bundleMannequin(mannequin);
   const male = mannequinMeta.family === 'male';
 
@@ -141,7 +150,7 @@ export function buildBundle(productId: SpikeBundleProductId, options: BundleOpti
   const material = materialJson(payload);
   const health = topology(baseMesh);
   // The family enters the hash only for a male body, so female input hashes stay the same.
-  const inputHash = createHash('sha256').update(JSON.stringify({ payload, baseSize, distortion: options.distortion ?? DEFAULT_DISTORTION, sample: options.sample ?? null, mannequin: MANNEQUIN_VERSION, pipeline: PIPELINE_VERSION, ...(male ? { family: 'male' } : {}) })).digest('hex');
+  const inputHash = createHash('sha256').update(JSON.stringify({ payload, baseSize, distortion: options.distortion ?? DEFAULT_DISTORTION, sample: options.sample ?? null, mannequin: MANNEQUIN_VERSION, pipeline: PIPELINE_VERSION, ...(male ? { family: 'male' } : {}), ...(mannequinMeta.maleShape ? { maleShape: mannequinMeta.maleShape } : {}) })).digest('hex');
 
   const anchors = {
     format: 'curtain.garment.anchors',

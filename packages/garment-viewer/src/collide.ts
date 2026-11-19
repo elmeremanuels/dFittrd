@@ -8,6 +8,70 @@ export interface Table {
   lo: number;
   stepCm: number;
   data: Float32Array;
+  /**
+   * The drawn outline where the body's sections are not ellipses (the male shape v2, `Mannequin.outlines`): when present
+   * the collider pushes out of it and the ellipses above only say where the table is valid. Absent on every other body.
+   */
+  polar?: PolarTable;
+}
+
+/**
+ * Polar outlines tabulated every `stepCm` from `lo`: `n + 3` floats per sample (valid, centre x, centre z, then the
+ * radius at the angles 2πj / n, the angle being atan2(z, x) about the centre; in an arm's (u, v) frame for an arm).
+ */
+export interface PolarTable {
+  lo: number;
+  stepCm: number;
+  n: number;
+  data: Float32Array;
+}
+
+const TWO_PI = 2 * Math.PI;
+
+/**
+ * The polar outline at coordinate `x` towards the point (px, pz): its centre into `out[0..1]` and the radius along that
+ * direction into `out[2]`. False outside the table.
+ */
+export function samplePolar(t: PolarTable, x: number, px: number, pz: number, out: Float32Array): boolean {
+  const stride = t.n + 3;
+  const f = (x - t.lo) / t.stepCm;
+  const k = Math.floor(f);
+  const rows = t.data.length / stride;
+  if (k < 0 || k >= rows - 1) return false;
+  const i0 = k * stride;
+  const i1 = i0 + stride;
+  if (t.data[i0] === 0 || t.data[i1] === 0) return false;
+  const w = f - k;
+  const cx = t.data[i0 + 1]! * (1 - w) + t.data[i1 + 1]! * w;
+  const cz = t.data[i0 + 2]! * (1 - w) + t.data[i1 + 2]! * w;
+  let a = (Math.atan2(pz - cz, px - cx) / TWO_PI) * t.n;
+  if (a < 0) a += t.n;
+  const j = Math.floor(a) % t.n;
+  const j1 = (j + 1) % t.n;
+  const wa = a - Math.floor(a);
+  const r0 = t.data[i0 + 3 + j]! * (1 - wa) + t.data[i0 + 3 + j1]! * wa;
+  const r1 = t.data[i1 + 3 + j]! * (1 - wa) + t.data[i1 + 3 + j1]! * wa;
+  out[0] = cx;
+  out[1] = cz;
+  out[2] = r0 * (1 - w) + r1 * w;
+  return true;
+}
+
+/**
+ * Push the point (px, pz) out of the polar outline at coordinate `x`, grown by `clearance` and scaled by `scale` about
+ * its centre: the centre into `out[0..1]` and the new offset from it returned, or null when the point is outside (or the
+ * table has no outline there).
+ */
+export function pushOutOfPolar(t: PolarTable, x: number, px: number, pz: number, clearance: number, out: Float32Array, scale = 1): [number, number] | null {
+  if (!samplePolar(t, x, px, pz, out)) return null;
+  const R = out[2]! * scale + clearance;
+  const dx = px - out[0]!;
+  const dz = pz - out[1]!;
+  const d2 = dx * dx + dz * dz;
+  if (d2 >= R * R) return null;
+  if (d2 < 1e-12) return [R, 0];
+  const k = R / Math.sqrt(d2);
+  return [dx * k, dz * k];
 }
 
 export interface BodyField {
@@ -41,6 +105,25 @@ export function pushOutOfEllipse(dx: number, dz: number, a: number, b: number, c
   if (q >= 1) return null;
   const k = 1 / Math.sqrt(q);
   return [dx * k, dz * k];
+}
+
+/** Length round the polar outline at coordinate `x`, grown by `clearance`, cm; NaN outside the table. */
+export function polarGirth(t: PolarTable, x: number, clearance = 0): number {
+  const stride = t.n + 3;
+  const f = (x - t.lo) / t.stepCm;
+  const k = Math.floor(f);
+  if (k < 0 || k >= t.data.length / stride - 1) return NaN;
+  const i0 = k * stride, i1 = i0 + stride;
+  if (t.data[i0] === 0 || t.data[i1] === 0) return NaN;
+  const w = f - k;
+  const r = (j: number): number => t.data[i0 + 3 + (j % t.n)]! * (1 - w) + t.data[i1 + 3 + (j % t.n)]! * w + clearance;
+  const c = Math.cos(TWO_PI / t.n);
+  let len = 0;
+  for (let j = 0; j < t.n; j++) {
+    const a = r(j), b = r(j + 1);
+    len += Math.sqrt(Math.max(0, a * a + b * b - 2 * a * b * c));
+  }
+  return len;
 }
 
 /** Height of the floor, cm: no particle goes below it. */
@@ -80,8 +163,13 @@ export function makeCollider(field: BodyField, clearanceCm = 0.35, chains?: Uint
     let moved = floored;
     const chain = chains ? chains[i]! : -1;
     if (chain <= 0) for (const t of vertical) {
-      if (!(sewn && t !== field.torso ? legSection(t, y, e) : sample(t, y, e))) continue;
-      const p = pushOutOfEllipse(x - e[0]!, z - e[1]!, e[2]!, e[3]!, clearanceCm);
+      let p: [number, number] | null;
+      // A body with drawn outlines (male shape v2): out of the outline itself; its legs have no ledge to round off.
+      if (t.polar) p = pushOutOfPolar(t.polar, y, x, z, clearanceCm, e);
+      else {
+        if (!(sewn && t !== field.torso ? legSection(t, y, e) : sample(t, y, e))) continue;
+        p = pushOutOfEllipse(x - e[0]!, z - e[1]!, e[2]!, e[3]!, clearanceCm);
+      }
       if (p && sewn && t === field.torso) {
         // Along the slanted surface: where the torso narrows steeply (the top of the shoulders) a level
         // push slides the cloth sideways under its neighbours; this lifts it off the slope instead.
@@ -119,8 +207,8 @@ export function makeCollider(field: BodyField, clearanceCm = 0.35, chains?: Uint
           pos[3 * i + 2] = q[2];
           moved = hit = true;
         }
-        if (!hit || !sample(field.torso, pos[3 * i + 1]!, e)) break;
-        const p = pushOutOfEllipse(pos[3 * i]! - e[0]!, pos[3 * i + 2]! - e[1]!, e[2]!, e[3]!, clearanceCm);
+        if (!hit) break;
+        const p = outOfTorso(field.torso, pos[3 * i]!, pos[3 * i + 1]!, pos[3 * i + 2]!, clearanceCm, e);
         if (!p) break;
         pos[3 * i] = e[0]! + p[0];
         pos[3 * i + 2] = e[1]! + p[1];
@@ -134,12 +222,24 @@ export function makeCollider(field: BodyField, clearanceCm = 0.35, chains?: Uint
       const ry = yy - f.joint[1];
       const rz = z - f.joint[2];
       const s = rx * f.axis[0] + ry * f.axis[1] + rz * f.axis[2];
-      if (sewn) {
-        if (s >= f.s1 || !armSection(field, side, s, e)) continue;
-      } else if (s <= f.s0 || s >= f.s1 || !sample(field.arms[side]!, s, e)) continue;
       const ru = rx * f.u[0] + ry * f.u[1] + rz * f.u[2];
       const rv = rx * f.v[0] + ry * f.v[1] + rz * f.v[2];
-      const p = pushOutOfEllipse(ru, rv, e[2]!, e[3]!, clearanceCm);
+      const polar = field.arms[side]!.polar;
+      let p: [number, number] | null;
+      if (polar) {
+        // The drawn arm (male shape v2), its cap above the joint included for a sewn sleeve.
+        if (s >= f.s1 || (!sewn && s <= f.s0)) continue;
+        p = pushOutOfPolar(polar, s, ru, rv, clearanceCm + (sewn ? SEWN_SLEEVE_EXTRA_CM : 0), e);
+        if (p) {
+          p[0] += e[0]!;
+          p[1] += e[1]!;
+        }
+      } else {
+        if (sewn) {
+          if (s >= f.s1 || !armSection(field, side, s, e)) continue;
+        } else if (s <= f.s0 || s >= f.s1 || !sample(field.arms[side]!, s, e)) continue;
+        p = pushOutOfEllipse(ru, rv, e[2]!, e[3]!, clearanceCm);
+      }
       if (!p) continue;
       const du = p[0] - ru;
       const dv = p[1] - rv;
@@ -151,8 +251,8 @@ export function makeCollider(field: BodyField, clearanceCm = 0.35, chains?: Uint
       pos[3 * i + 2] = z;
       moved = true;
     }
-    if (sewn && chain > 0 && sample(field.torso, pos[3 * i + 1]!, e)) {
-      const p = pushOutOfEllipse(pos[3 * i]! - e[0]!, pos[3 * i + 2]! - e[1]!, e[2]!, e[3]!, clearanceCm);
+    if (sewn && chain > 0) {
+      const p = outOfTorso(field.torso, pos[3 * i]!, pos[3 * i + 1]!, pos[3 * i + 2]!, clearanceCm, e);
       if (p) {
         const nx = e[0]! + p[0], nz = e[1]! + p[1], ny = pos[3 * i + 1]!;
         if (!outOfArm(field, 0, nx, ny, nz, 0, e) && !outOfArm(field, 1, nx, ny, nz, 0, e)) {
@@ -173,6 +273,14 @@ export function makeCollider(field: BodyField, clearanceCm = 0.35, chains?: Uint
  */
 export const SEWN_CAP_EXTRA_CM = 0.5;
 
+/**
+ * Extra clearance of a sewn sleeve over a drawn arm (male shape v2), cm: the armhole of a size built on a large body is
+ * deep front to back, so the sleeve's top has its particles 3 to 4 cm apart round the arm, and a flat facet between two
+ * of them at the plain clearance dips 0.3 cm towards a 6 cm arm: facets of the arm showed above the sleeve hem (110 pixels
+ * on the XXL body in XXL).
+ */
+export const SEWN_SLEEVE_EXTRA_CM = 0.25;
+
 /** The arm's cross-section at distance s along its axis (cm), into `out` as (_, _, a, b): the tabulated arm, and above the joint the cone the mannequin closes it with (to a pole 0.9/1.18 of the joint's radius above it). */
 function armSection(field: BodyField, side: number, s: number, out: Float32Array): boolean {
   const t = field.arms[side]!;
@@ -189,15 +297,33 @@ function armSection(field: BodyField, side: number, s: number, out: Float32Array
   return true;
 }
 
+/** The offset from the torso's centre (into `e[0..1]`) a point inside the torso at its height is pushed to, or null when it is outside. */
+function outOfTorso(t: Table, x: number, y: number, z: number, clearanceCm: number, e: Float32Array): [number, number] | null {
+  if (t.polar) return pushOutOfPolar(t.polar, y, x, z, clearanceCm, e);
+  if (!sample(t, y, e)) return null;
+  return pushOutOfEllipse(x - e[0]!, z - e[1]!, e[2]!, e[3]!, clearanceCm);
+}
+
 /** Where a point inside arm `side` (grown by the clearance) is pushed to across the arm's axis, or null when it is outside. */
 function outOfArm(field: BodyField, side: number, x: number, y: number, z: number, clearanceCm: number, e: Float32Array): [number, number, number] | null {
   const f = field.armFrames[side]!;
   const rx = x - f.joint[0], ry = y - f.joint[1], rz = z - f.joint[2];
   const s = rx * f.axis[0] + ry * f.axis[1] + rz * f.axis[2];
-  if (s >= f.s1 || !armSection(field, side, s, e)) return null;
   const ru = rx * f.u[0] + ry * f.u[1] + rz * f.u[2];
   const rv = rx * f.v[0] + ry * f.v[1] + rz * f.v[2];
-  const p = pushOutOfEllipse(ru, rv, e[2]!, e[3]!, clearanceCm);
+  const polar = field.arms[side]!.polar;
+  let p: [number, number] | null;
+  if (polar) {
+    if (s >= f.s1) return null;
+    p = pushOutOfPolar(polar, s, ru, rv, clearanceCm, e);
+    if (p) {
+      p[0] += e[0]!;
+      p[1] += e[1]!;
+    }
+  } else {
+    if (s >= f.s1 || !armSection(field, side, s, e)) return null;
+    p = pushOutOfEllipse(ru, rv, e[2]!, e[3]!, clearanceCm);
+  }
   if (!p) return null;
   const du = p[0] - ru, dv = p[1] - rv;
   return [x + f.u[0] * du + f.v[0] * dv, y + f.u[1] * du + f.v[1] * dv, z + f.u[2] * du + f.v[2] * dv];
@@ -239,6 +365,13 @@ function legSection(t: Table, y: number, out: Float32Array): boolean {
 /** d(radius)/d(height) of the torso along the horizontal direction (dx, dz) from its centre at height y (0 where it cannot tell). */
 function torsoSlope(t: Table, dx: number, dz: number, y: number): number {
   const lo = new Float32Array(4), hi = new Float32Array(4);
+  if (t.polar) {
+    // The centre is the same at both heights within half a centimetre: the direction is taken from the lower one.
+    if (!samplePolar(t.polar, y - 0.5, 0, 0, lo)) return 0;
+    const cx = lo[0]!, cz = lo[1]!;
+    if (!samplePolar(t.polar, y - 0.5, cx + dx, cz + dz, lo) || !samplePolar(t.polar, y + 0.5, cx + dx, cz + dz, hi)) return 0;
+    return hi[2]! - lo[2]!;
+  }
   if (!sample(t, y - 0.5, lo) || !sample(t, y + 0.5, hi)) return 0;
   const r = Math.hypot(dx, dz);
   if (r < 1e-9) return 0;

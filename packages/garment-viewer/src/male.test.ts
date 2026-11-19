@@ -118,6 +118,12 @@ function chestRow(session: GarmentSession, f: FitInstance, pos: Float32Array, si
   return { hull, tape };
 }
 
+/**
+ * A v1-built bundle's anchors as if it named the male shape v2: the mount refuses a v1-built bundle on the v2 body
+ * (`planAvatar`, like the other family), so the two previews below, which measure exactly that pair, plan the body this way.
+ */
+const onV2 = <T extends { mannequin: object }>(anchors: T): T => ({ ...anchors, mannequin: { ...anchors.mannequin, maleShape: 'v2' } });
+
 const incompatible = (f: () => unknown): string | undefined => {
   try {
     f();
@@ -278,7 +284,7 @@ describe('a bundle built on the male mannequin', () => {
     for (const id of MALE_BODY_SHAPE_IDS) {
       const bundle = await loadBundleFrom(serve(tee.files), '/b', SYNTHETIC_MENS_TEE.id, { withPayload: false });
       const r = MALE_REFERENCE[id];
-      const plan = planAvatar(bundle.anchors, { family: 'male', heightCm: r.stature, bust: r.chest, waist: r.waist, hip: r.hip, shoulderCm: r.shoulderWidth }, null, 'v2');
+      const plan = planAvatar(onV2(bundle.anchors), { family: 'male', heightCm: r.stature, bust: r.chest, waist: r.waist, hip: r.hip, shoulderCm: r.shoulderWidth }, null, 'v2');
       expect(plan.m.maleShape).toBe('v2');
       const session = openSession(plan.m, bundle, SYNTHETIC_MENS_TEE);
       const f = prepareFit(session, plan.avatar, plan.field, fitForBody(SYNTHETIC_MENS_TEE, plan.avatar.measurements), id, viewerMaterial('product', bundle.material));
@@ -305,7 +311,9 @@ describe('a bundle built on the male mannequin', () => {
       const x = rows[row.size]!;
       expect(Math.abs(x.chest.hull - 2 * row.chestWidthCm), `${row.size} hull`).toBeLessThan(1.5);
       expect(x.chest.tape, `${row.size} tape`).toBeGreaterThan(2 * row.chestWidthCm - 2.8);
-      expect(x.pixels, `${row.size} pixels`).toBeLessThan(10);
+      // 40, not 10: since the tee is built on v2 (`maleV2Tee.test.ts`) the collider meets the drawn v2 body, not the
+      // ellipse round it, and this v1-built cloth lies closer to it (M: 10 pixels). The mount refuses this pair.
+      expect(x.pixels, `${row.size} pixels`).toBeLessThan(40);
       expect(x.inside, `${row.size} inside`).toBeLessThan(0.02);
       expect(x.shoulderLine, `${row.size} shoulder line`).toBeLessThan(0.3);
       expect(x.p99, `${row.size} p99`).toBeLessThan(0.17);
@@ -324,7 +332,7 @@ describe('a bundle built on the male mannequin', () => {
       let chest = 0;
       let inside = 0;
       for (const shape of ['v1', 'v2'] as const) {
-        const plan = planAvatar(bundle.anchors, body, null, shape);
+        const plan = planAvatar(shape === 'v2' ? onV2(bundle.anchors) : bundle.anchors, body, null, shape);
         expect(plan.m.maleShape).toBe(shape === 'v2' ? 'v2' : undefined);
         const session = openSession(plan.m, bundle, SYNTHETIC_MENS_TEE);
         const fit = fitForBody(SYNTHETIC_MENS_TEE, plan.avatar.measurements);

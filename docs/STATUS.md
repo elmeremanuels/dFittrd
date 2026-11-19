@@ -65,7 +65,7 @@ shoppers see.
 |---|---|---|---|
 | `settings.garment3d` (per shop) | api, merchant | The 3D estimate in the embed for approved bundles | The merchant approving bundles; D17 pricing of 3D (founder) |
 | `MEN_3D_GATE` (`_SHOES_ACCESSORIES`) | api env | A men's product opens only with an approved bundle on the male mannequin, never a 2D figure alone (D20.3) | Founder decision 6 |
-| `VITE_MALE_SHAPE=v2` | web build | Male body v2 in 3D and the male 2D figure v2 together | Founder look review; the male bundles re-draped on v2 (engineering, needs the drape pipeline) |
+| `VITE_MALE_SHAPE=v2` with `MALE_SHAPE=v2` | web build, api env (set both) | Male body v2 in 3D and the male 2D figure v2 together; the api then takes and hands out only men's bundles built on v2 | Founder look review. The synthetic men's tee is built on v2 (`build:bundle --male-shape=v2`, `docs/reports/claude/men-tee-on-v2.md`); every other men's bundle must be built on v2 too, or it shows "coming soon" while the switch is on |
 | `VITE_VIEWER_HEAD` | web build | `neutral` gives the old head back; default is `neutral-v3` (D22) | Nothing: decided |
 | `VITE_VIEWER_LIGHTING` (`neutral`, `neutral-v2`) | web build | Other lighting rigs; default stays `classic` | Founder approval of a lighting change (D22.1) |
 | `VITE_AVATAR_SKIN=skin-v2` | web build | Skin shading v2 on the 3D body and the 2D figure (D22.3) | Founder look review; untested on the bake mount and in a production build |

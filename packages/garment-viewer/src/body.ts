@@ -8,9 +8,9 @@
  */
 import { gradingMorph, type AnchorRing, type AnchorValues, type GradingMorph } from '@curtain/anchors';
 import type { UserBody } from '@curtain/schema';
-import { buildBody, buildMannequinMesh, type BodyFamily, type BuildOptions, type Mannequin, type Mesh, type MeshOptions } from '@curtain/mannequin';
+import { POLAR_N, buildBody, buildMannequinMesh, type PolarSection, type BodyFamily, type BuildOptions, type Mannequin, type Mesh, type MeshOptions } from '@curtain/mannequin';
 import { armpitDistance, radialMorph, type ChainAssignment } from './core/garment';
-import { makeCollider, type BodyField, type Table } from './collide';
+import { makeCollider, type BodyField, type PolarTable, type Table } from './collide';
 
 /** The girths a shopper types (cm). They are the fit-engine points `bust`, `waist`, `hip`. */
 export interface BodyMeasurements {
@@ -246,6 +246,14 @@ export function bodyFamilyOf(body: { family?: unknown } | null | undefined): Bod
   return body?.family === 'male' ? 'male' : 'female';
 }
 
+/**
+ * The male body shape a bundle's garment was built and draped on (anchors.json `mannequin.maleShape`): `v2` only when it
+ * says so, a missing shape is `v1` (every male bundle before the tee was built on v2). Read for a male bundle only.
+ */
+export function bundleMaleShapeOf(anchors: { mannequin?: { maleShape?: unknown } } | null | undefined): 'v1' | 'v2' {
+  return anchors?.mannequin?.maleShape === 'v2' ? 'v2' : 'v1';
+}
+
 /** The family a bundle's garment was draped on (anchors.json `mannequin.family`, slice M1): a missing family is `female`. */
 export function bundleFamilyOf(anchors: { mannequin?: { family?: unknown } } | null | undefined): BodyFamily {
   return anchors?.mannequin?.family === 'male' ? 'male' : 'female';
@@ -276,7 +284,7 @@ export interface TypedAvatar {
 
 /** A collision field moved up by `dyCm` (the tables are keyed by height, the arm frames by their joint). */
 export function liftField(field: BodyField, dyCm: number): BodyField {
-  const up = (t: Table): Table => ({ ...t, lo: t.lo + dyCm });
+  const up = (t: Table): Table => ({ ...t, lo: t.lo + dyCm, ...(t.polar ? { polar: { ...t.polar, lo: t.polar.lo + dyCm } } : {}) });
   return {
     torso: up(field.torso),
     legs: [up(field.legs[0]), up(field.legs[1])],
@@ -335,7 +343,29 @@ function tabulate(lo: number, hi: number, stepCm: number, at: (x: number) => { c
   return { lo, stepCm, data };
 }
 
-/** Avatar cross-sections for collision. Body sections are scaled about the vertical axis like `radialMorph`. */
+/** Polar outlines (`Mannequin.outlines`) tabulated for the collider; radii and centres scaled by `scale(x)`. */
+function tabulatePolar(lo: number, hi: number, stepCm: number, at: (x: number) => PolarSection | null, scale: (x: number) => number = () => 1): PolarTable {
+  const rows = Math.max(2, Math.ceil((hi - lo) / stepCm) + 1);
+  const stride = POLAR_N + 3;
+  const data = new Float32Array(rows * stride);
+  for (let k = 0; k < rows; k++) {
+    const x = lo + k * stepCm;
+    const o = at(x);
+    if (!o) continue;
+    const s = scale(x);
+    data[k * stride] = 1;
+    data[k * stride + 1] = o.cx * s;
+    data[k * stride + 2] = o.cz * s;
+    for (let j = 0; j < POLAR_N; j++) data[k * stride + 3 + j] = o.r[j]! * s;
+  }
+  return { lo, stepCm, n: POLAR_N, data };
+}
+
+/**
+ * Avatar cross-sections for collision. Body sections are scaled about the vertical axis like `radialMorph`. A body with
+ * drawn outlines (the male shape v2) also carries them (`Table.polar`): the collider then meets the drawn body, not the
+ * ellipse that contains it.
+ */
 export function bodyField(m: Mannequin, avatar: Pick<Avatar, 'morph' | 'neck'>, stepCm = 0.5): BodyField {
   const S = m.statureCm;
   const scaled = (e: { cx: number; cz: number; a: number; b: number } | null, y: number, narrow = 1) => {
@@ -343,6 +373,8 @@ export function bodyField(m: Mannequin, avatar: Pick<Avatar, 'morph' | 'neck'>, 
     const s = avatar.morph.girthScaleAt(y, 'body');
     return { cx: e.cx * s, cz: e.cz * s, a: e.a * s * narrow, b: e.b * s * narrow };
   };
+  const o = m.outlines;
+  const bodyScale = (y: number): number => avatar.morph.girthScaleAt(y, 'body');
   const s0 = armpitDistance(m);
   const arms = [m.arms.left, m.arms.right].map((f) => {
     const side = f.side;
@@ -352,16 +384,23 @@ export function bodyField(m: Mannequin, avatar: Pick<Avatar, 'morph' | 'neck'>, 
       const e = m.armAt(s, side);
       return e ? { cx: 0, cz: 0, a: e.a, b: e.b } : null;
     });
+    // The drawn arm from its cap above the joint (the outline's own first station) down.
+    if (o) table.polar = tabulatePolar(-ARM_CAP_REACH_CM, s1, stepCm / 2, (s) => o.arm(s, side));
     return { table, frame: { joint: [...f.joint] as [number, number, number], axis: [...f.axis] as [number, number, number], u: [...f.u] as [number, number, number], v: [...f.v] as [number, number, number], s0, s1 } };
   });
-  return {
-    // The neck is the drawn one: narrowed where `fitNeckToHead` narrowed the mesh.
-    torso: tabulate(0, S, stepCm, (y) => scaled(m.torsoAt(y), y, neckScaleAt(avatar.neck, y))),
-    legs: [tabulate(0, S * 0.6, stepCm, (y) => scaled(m.legAt(y, 1), y)), tabulate(0, S * 0.6, stepCm, (y) => scaled(m.legAt(y, -1), y))],
-    arms: [arms[0]!.table, arms[1]!.table],
-    armFrames: [arms[0]!.frame, arms[1]!.frame],
-  };
+  // The neck is the drawn one: narrowed where `fitNeckToHead` narrowed the mesh.
+  const torso = tabulate(0, S, stepCm, (y) => scaled(m.torsoAt(y), y, neckScaleAt(avatar.neck, y)));
+  const legs: [Table, Table] = [tabulate(0, S * 0.6, stepCm, (y) => scaled(m.legAt(y, 1), y)), tabulate(0, S * 0.6, stepCm, (y) => scaled(m.legAt(y, -1), y))];
+  if (o) {
+    torso.polar = tabulatePolar(0, S, stepCm, (y) => o.torso(y), (y) => bodyScale(y) * neckScaleAt(avatar.neck, y));
+    legs[0].polar = tabulatePolar(0, S * 0.6, stepCm, (y) => o.leg(y, 1), bodyScale);
+    legs[1].polar = tabulatePolar(0, S * 0.6, stepCm, (y) => o.leg(y, -1), bodyScale);
+  }
+  return { torso, legs, arms: [arms[0]!.table, arms[1]!.table], armFrames: [arms[0]!.frame, arms[1]!.frame] };
 }
+
+/** How far above the shoulder joint an arm's outline table starts, cm (the v2 cap is 0.55 + 0.12 joint radii high: under 5 cm at XXL). */
+const ARM_CAP_REACH_CM = 8;
 
 /** Body morph of the canonical mannequin itself (every scale 1). */
 export const IDENTITY_MORPH: Pick<Avatar, 'morph' | 'neck'> = { morph: { scales: {}, missing: [], girthScaleAt: () => 1 } };

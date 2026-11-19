@@ -6,6 +6,7 @@
  * quality features, ONE base frame (front view, background replaced with cream) and ONE face tile.
  */
 import type { FaceBakeStats } from './faceBake';
+import type { PhotoNotice, SkinSuggestion } from './faceTile';
 import type { PoseVariant } from './models';
 import type { GateResult, Landmark, ScanMeasurements, Sex, SkinEstimate } from './types';
 import type { SilhouetteMask } from './storage';
@@ -53,7 +54,21 @@ export interface WorkerFaceTexture {
   targetSkinHex: string | null;
 }
 
-export type WorkerInbound = WorkerInit | WorkerFrame | WorkerFinish | WorkerFace | WorkerFaceTexture | { type: 'reset' } | { type: 'dispose' };
+/**
+ * Slices 4 and 5 (face photo → skin tone suggestion and a stylised 2D face tile, behind
+ * VITE_AVATAR_FACE_PHOTO=live): ONE photo, transferred in and closed here. Only what the shopper said
+ * yes to is made: the tile (`tile`, "Use my face") and/or the suggestion (`skin`, "read it from my photo").
+ */
+export interface WorkerFaceLook {
+  type: 'faceLook';
+  bitmap: ImageBitmap;
+  tile: boolean;
+  skin: boolean;
+  /** Height over width of the tile (the 2D head). */
+  aspect?: number;
+}
+
+export type WorkerInbound = WorkerInit | WorkerFrame | WorkerFinish | WorkerFace | WorkerFaceTexture | WorkerFaceLook | { type: 'reset' } | { type: 'dispose' };
 
 export interface ReadyMessage {
   type: 'ready';
@@ -64,7 +79,7 @@ export interface ReadyMessage {
 
 export interface ErrorMessage {
   type: 'error';
-  stage: 'init' | 'frame' | 'finish' | 'face' | 'faceTexture';
+  stage: 'init' | 'frame' | 'finish' | 'face' | 'faceTexture' | 'faceLook';
   message: string;
 }
 
@@ -114,4 +129,15 @@ export interface FaceTextureMessage {
   timings: { pixelsMs: number; detectMs: number; bakeMs: number };
 }
 
-export type WorkerOutbound = ReadyMessage | ErrorMessage | GateMessage | ProgressMessage | ScanResultMessage | FaceResultMessage | FaceTextureMessage;
+/** What the face-look step returns: a tile (RGBA, transferred), a suggestion and light notices. No landmark, no photo. */
+export interface FaceLookMessage {
+  type: 'faceLookResult';
+  faceFound: boolean;
+  tile: { width: number; height: number; rgba: ArrayBuffer; skinLab: { L: number; a: number; b: number } } | null;
+  suggestion: SkinSuggestion | null;
+  notices: PhotoNotice[];
+  /** ms per step in the worker. */
+  timings: { pixelsMs: number; detectMs: number; tileMs: number; skinMs: number };
+}
+
+export type WorkerOutbound = ReadyMessage | ErrorMessage | GateMessage | ProgressMessage | ScanResultMessage | FaceResultMessage | FaceTextureMessage | FaceLookMessage;

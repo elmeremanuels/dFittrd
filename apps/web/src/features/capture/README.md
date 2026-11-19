@@ -134,3 +134,18 @@ texture, a few numbers (coverage, yaw, roll, median colour, gain spread, face wi
 never leave it. The worker is disposed after each bake. Nothing is stored; nothing is sent (`e2e/faceOnHead.spec.ts`
 traps fetch, XHR, WebSocket, sendBeacon, EventSource and RTCPeerConnection over the whole flow). The viewer lays it
 over the head (`packages/garment-viewer/src/faceOverlay.ts`). Report: `docs/reports/claude/face-on-head-spike.md`.
+
+## Skin tone from a face photo and the own face in 2D (slices 4 and 5, flag `VITE_AVATAR_FACE_PHOTO=live`, off by default)
+
+`faceLook.ts` → `ScanSession.faceLook` → `scan.worker.ts` (`faceLook` message) → `faceTile.ts`. One picture, chosen
+only after the age box and "Yes, use my photo" in the embed's avatar prompt, is decoded on the main thread and
+transferred to a worker that loads only the Face Landmarker (no pose model, no segmenter). The worker makes only what
+the shopper said yes to: the **face tile** (eye line levelled, the face oval scaled with one scale into the 2D head's
+aspect, soft-edged, a plane of side light taken out, an edge-keeping blur, soft steps in lightness and a little local
+contrast so the eyes, brows and mouth read on a 30 px head) and/or the **skin tone suggestion** (cheeks, forehead and
+nose bridge → Lab → k-means → ITA → Monk class) with light notices (turned, small, bright, dark, side light, colour
+cast) that warn and never block. Out come the tile's pixels and its skin colour, the suggested class and the notices;
+the landmarks never leave the worker, and the worker is disposed after each photo. The suggestion only marks a swatch:
+the colour changes when the shopper taps one (plan gate G4). `matchTileToSkin` recolours the tile to the drawn head
+on the main thread when the swatch changes, without the photo. Nothing is sent (`e2e/facePhoto2d.spec.ts`,
+`src/embed/__tests__/facePhotoFlow.test.tsx`). Report: `docs/reports/claude/face-2d-slice5.md`.

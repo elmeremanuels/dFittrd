@@ -34,13 +34,33 @@ import { AboutScreen, BlockedScreen, EmbedFooter, EmbedFrame, LoadingScreen, Pro
 import { classifyError, flowReducer, INITIAL_FLOW } from './flow';
 import { bodyFamilyFor, Garment3D, hasWebGL2 } from './Garment3D';
 import { HeroRenderPanel, heroRendersEnabled } from './HeroRender';
-import { facePhotoEnabled, type SkinLook } from './look';
+import { facePhotoEnabled, facePhotoMode, type SkinLook } from './look';
+import type { FaceLookResultLike } from './deps';
+import type { FacePhotoNotice, FacePhotoState } from './FacePhotoRows';
+import type { StoredFace } from './storage';
+import { bodyGeometry } from '@/render/body';
+import { drawnHeadColour } from '@/render/face';
 import { createParentChannel, parseParentMessage, resolveTargetOrigin, type ParentContext } from './protocol';
 import { ringInputsFor } from '@/render/ringInputs';
 import { ResultScreen } from './ResultScreen';
 import { defaultUnits, type Units } from './units';
 
 const CaptureStep = lazy(() => import('@/features/capture/components/CaptureStep'));
+
+/** Height over width of the 2D figure's head (reference body): the face tile is made in that shape. */
+const HEAD_ASPECT = (() => {
+  const g = bodyGeometry(null);
+  return Math.round((g.headRy / g.headR) * 100) / 100;
+})();
+
+/** The on-device face step and the tile URL, loaded on first use (the worker code is not in the embed's first chunk). */
+const defaultFaceLook = async (photo: Blob, opts: { tile: boolean; skin: boolean; aspect?: number }): Promise<FaceLookResultLike> => (await import('@/features/capture/faceLook')).faceLookFromPhoto(photo, opts);
+const defaultTileUrl = async (tile: { width: number; height: number; rgba: Uint8ClampedArray }): Promise<string> => (await import('@/features/capture/faceLook')).tileObjectUrl(tile);
+/** Frees a tile URL (jsdom has no `revokeObjectURL`; there is nothing to free there). */
+const revokeUrl = (url: string): void => {
+  if (typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(url);
+};
+const matchTile = async (tile: StoredFace['tile'], hex: string): Promise<Uint8ClampedArray> => (await import('@/features/capture/faceTile')).matchTileToSkin(tile, hex);
 
 const NO_CONTEXT: ParentContext = { locale: null, currentVariantSize: null };
 
@@ -73,6 +93,18 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
   /** The skin colour the shopper picked for the avatar (null: the standard colour). Never sent. */
   const [look, setLook] = useState<SkinLook | null>(null);
   const [promptOpen, setPromptOpen] = useState(false);
+  // Slices 4 and 5 (VITE_AVATAR_FACE_PHOTO=live only): the face tile drawn from the shopper's photo,
+  // the URL of it as drawn (matched to the colour on the body), and the state of the photo steps.
+  // All in memory; stored only with "Remember my photo" (C19). The photo itself is never kept.
+  const faceLive = deps.facePhotoLive ?? facePhotoMode() === 'live';
+  const [faceTile, setFaceTile] = useState<StoredFace['tile'] | null>(null);
+  /** The drawn tile's URL, with the tile and the look it was made for (a stale one is never shown). */
+  const [faceDrawn, setFaceDrawn] = useState<{ tile: StoredFace['tile']; url: string } | null>(null);
+  const [faceBusy, setFaceBusy] = useState<'face' | 'skin' | null>(null);
+  const [faceError, setFaceError] = useState<FacePhotoState['error']>(null);
+  const [faceNotices, setFaceNotices] = useState<FacePhotoState['notices']>(null);
+  const [suggestion, setSuggestion] = useState<number | null>(null);
+  const [rememberPhoto, setRememberPhoto] = useState(false);
   /** The prompt is on screen now (see `showPrompt`): the window's Escape handler stands down. */
   const promptShownRef = useRef(false);
   const shopperLocale = deps.locale === undefined ? browserLocale() : deps.locale;
@@ -115,8 +147,14 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         const remembered = await store.loadProfile(resolved.shop.id);
         const storedUnits = await store.loadUnits();
         const storedLook = await store.loadLook(resolved.shop.id);
+        // D20.2: the face is back at once for a returning shopper who said "Remember my photo".
+        const storedFace = faceLive ? await store.loadFace(resolved.shop.id) : null;
         if (cancelled) return;
-        setLook(storedLook);
+        setLook(storedLook ?? storedFace?.look ?? null);
+        if (storedFace) {
+          setFaceTile(storedFace.tile);
+          setRememberPhoto(true);
+        }
         setData(resolved);
         if (storedUnits) setChosenUnits(storedUnits);
         if (remembered) {
@@ -131,7 +169,41 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
     return () => {
       cancelled = true;
     };
-  }, [token, attempt, mock, mockToken, deps.referrer, deps.webgl2, store, api]);
+  }, [token, attempt, mock, mockToken, deps.referrer, deps.webgl2, store, api, faceLive]);
+
+  // The face as drawn: the tile matched to the colour of the drawn head (the confirmed swatch);
+  // without a confirmed colour the tile keeps the photo's own (de-lit) colour. The previous URL is
+  // shown until the new one is ready, then freed; "face off" frees it at once (`dropFace`).
+  useEffect(() => {
+    if (!faceTile) return;
+    let cancelled = false;
+    (async () => {
+      const rgba = look ? await matchTile(faceTile, drawnHeadColour(look.hex)) : faceTile.rgba;
+      const url = await (deps.tileUrl ?? defaultTileUrl)({ width: faceTile.width, height: faceTile.height, rgba });
+      if (cancelled) {
+        revokeUrl(url);
+        return;
+      }
+      setFaceDrawn((prev) => {
+        if (prev) revokeUrl(prev.url);
+        return { tile: faceTile, url };
+      });
+    })().catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [faceTile, look, deps.tileUrl]);
+  // The page is closed or the embed unmounted: free the last URL.
+  const faceDrawnRef = useRef<{ url: string } | null>(null);
+  useEffect(() => {
+    faceDrawnRef.current = faceDrawn;
+  }, [faceDrawn]);
+  useEffect(
+    () => () => {
+      if (faceDrawnRef.current) revokeUrl(faceDrawnRef.current.url);
+    },
+    [],
+  );
 
   // --- parent channel ---------------------------------------------------------------------------
   const targetOrigin = useMemo(
@@ -260,6 +332,8 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
 
   const onRemember = async (on: boolean): Promise<void> => {
     setRememberState(on);
+    // Off wipes the device: the face is no longer remembered there (it stays in this window).
+    if (!on) setRememberPhoto(false);
     await store.setRemember(on);
     if (on && data && profile) await store.saveProfile({ shopId: data.shop.id, profile, about, savedAt: Date.now() });
     setForgetStatus(null);
@@ -284,6 +358,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
     setChooseFallback(null);
     setView3dReady(false);
     setLook(null);
+    dropFace();
     closePrompt(false);
     dispatch({ type: 'forgotten' });
     setForgetStatus(serverOk ? embedStrings().footer.forgotten : embedStrings().footer.forgottenLocalOnly);
@@ -297,14 +372,98 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
     // Focus goes back to the control that opened the prompt (it is inert until the next paint).
     if (refocus) setTimeout(() => mainRef.current?.querySelector<HTMLElement>('[data-testid="avatar-open"]')?.focus({ preventScroll: true }), 0);
   };
-  const pickLook = (next: SkinLook): void => {
+  const faceRecord = (tile: StoredFace['tile'], l: SkinLook | null): StoredFace => ({ tile, look: l?.source === 'photo' ? l : null, savedAt: Date.now() });
+  const pickLook = (picked: SkinLook): void => {
+    // A swatch tapped while a suggestion from the photo is on screen counts as read from the photo (C20 deletes it).
+    const next: SkinLook = suggestion !== null ? { ...picked, source: 'photo' } : picked;
     setLook(next);
-    if (data) void store.saveLook(data.shop.id, next);
+    if (data) {
+      void store.saveLook(data.shop.id, next);
+      if (faceTile) void store.saveFace(data.shop.id, faceRecord(faceTile, next), rememberPhoto);
+    }
   };
   const clearLook = (): void => {
     setLook(null);
-    if (data) void store.clearLook(data.shop.id);
+    setSuggestion(null);
+    if (data) {
+      void store.clearLook(data.shop.id);
+      if (faceTile) void store.saveFace(data.shop.id, faceRecord(faceTile, null), rememberPhoto);
+    }
   };
+  /** The face is gone from the avatar and from this window (the caller deletes it from the device). */
+  function dropFace(): void {
+    if (faceDrawn) revokeUrl(faceDrawn.url);
+    setFaceDrawn(null);
+    setFaceTile(null);
+    setFaceBusy(null);
+    setFaceError(null);
+    setFaceNotices(null);
+    setSuggestion(null);
+    setRememberPhoto(false);
+  }
+  const facePhotoRun = useRef(0);
+  const onFacePhoto = async (purpose: 'face' | 'skin', file: File): Promise<void> => {
+    const run = ++facePhotoRun.current;
+    setFaceBusy(purpose);
+    setFaceError(null);
+    setFaceNotices(null);
+    if (purpose === 'skin') setSuggestion(null);
+    try {
+      const res = await (deps.faceLook ?? defaultFaceLook)(file, { tile: purpose === 'face', skin: purpose === 'skin', aspect: HEAD_ASPECT });
+      if (run !== facePhotoRun.current) return;
+      if (!res.faceFound) {
+        setFaceError({ for: purpose, kind: 'notFound' });
+        return;
+      }
+      if (res.notices.length > 0) setFaceNotices({ for: purpose, list: res.notices as FacePhotoNotice[] });
+      if (purpose === 'face') {
+        if (!res.tile) throw new Error('no tile');
+        setFaceTile(res.tile);
+        if (data) void store.saveFace(data.shop.id, faceRecord(res.tile, look), rememberPhoto);
+      } else {
+        if (!res.suggestion) throw new Error('no suggestion');
+        setSuggestion(res.suggestion.monk);
+      }
+    } catch {
+      if (run === facePhotoRun.current) setFaceError({ for: purpose, kind: 'failed' });
+    } finally {
+      if (run === facePhotoRun.current) setFaceBusy(null);
+    }
+  };
+  const faceOff = (): void => {
+    facePhotoRun.current++;
+    dropFace();
+    if (data) void store.clearFace(data.shop.id);
+  };
+  const deletePhoto = (): void => {
+    faceOff();
+    // C20: and the colour read from the photo.
+    if (look?.source === 'photo') {
+      setLook(null);
+      if (data) void store.clearLook(data.shop.id);
+    }
+  };
+  const onRememberPhoto = (on: boolean): void => {
+    if (!remember) return;
+    setRememberPhoto(on);
+    if (data && faceTile) void store.saveFace(data.shop.id, faceRecord(faceTile, look), on);
+  };
+  const faceUrl = faceTile && faceDrawn && faceDrawn.tile === faceTile ? faceDrawn.url : null;
+  const facePhotoState: FacePhotoState | undefined = faceLive
+    ? {
+        tileUrl: faceTile ? faceUrl : null,
+        busy: faceBusy,
+        error: faceError,
+        notices: faceNotices,
+        suggestion,
+        rememberPhoto,
+        canRemember: remember,
+        onPhoto: (p, f) => void onFacePhoto(p, f),
+        onFaceOff: faceOff,
+        onDeletePhoto: deletePhoto,
+        onRememberPhoto,
+      }
+    : undefined;
 
   const changeUnits = (u: Units): void => {
     setChosenUnits(u);
@@ -401,6 +560,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         units={units}
         onUnits={changeUnits}
         skinHex={look?.hex ?? null}
+        face={faceLive && faceTile && faceUrl ? { url: faceUrl, label: embedStrings().avatar.facePhoto.claims.c27 } : null}
         onAvatar={openPrompt}
         avatarLabel={embedStrings().avatar.ui.open}
         // Slice M1b: the male 2D figure only beside the required 3D view on the male body, which
@@ -496,6 +656,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
           termsUrl={`${deps.appUrl.replace(/\/+$/, '')}/privacy`}
           face={deps.facePhoto ?? facePhotoEnabled()}
           saved={store.persistsLooks}
+          {...(facePhotoState ? { facePhoto: facePhotoState } : {})}
         />
       ) : null}
     </EmbedFrame>

@@ -25,6 +25,7 @@ import { luminance } from '@/render/face';
 import { c30Parts } from './avatarCopy';
 import { embedStrings } from './strings';
 import { lookForMonk, MONK_CLASSES, type SkinLook } from './look';
+import { FaceRowLive, SkinPhotoOffer, type FacePhotoState } from './FacePhotoRows';
 
 export interface AvatarPromptProps {
   /** The colour on the avatar now (null: the standard colour). */
@@ -45,6 +46,11 @@ export interface AvatarPromptProps {
    * Default false: the colour is in memory only, and no sentence about saving it is shown.
    */
   saved?: boolean;
+  /**
+   * Slices 4 and 5, live (`VITE_AVATAR_FACE_PHOTO=live` only, never a normal build): the face row
+   * with consent, photo and tile; the skin row with the offer to read the colour from a photo.
+   */
+  facePhoto?: FacePhotoState;
   /** Slice 6 spike: the live face row. Absent (every normal build): the row is the `face` "coming soon" line or not drawn. */
   faceOnHead?: FaceOnHeadRow;
 }
@@ -90,7 +96,7 @@ function Switch({ checked, onChange, labelledBy, describedBy, unavailable = fals
   );
 }
 
-export function AvatarPrompt({ look, onPick, onClear, onMeasurements, onClose, termsUrl, face = false, saved = false, faceOnHead }: AvatarPromptProps): ReactNode {
+export function AvatarPrompt({ look, onPick, onClear, onMeasurements, onClose, termsUrl, face = false, saved = false, faceOnHead, facePhoto }: AvatarPromptProps): ReactNode {
   const { claims: t, ui, faceSpike: fs } = embedStrings().avatar;
   const id = useId();
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -195,7 +201,15 @@ export function AvatarPrompt({ look, onPick, onClear, onMeasurements, onClose, t
         </div>
 
         <ul className="space-y-3">
-          {faceOnHead ? (
+          {facePhoto ? (
+            <FaceRowLive
+              state={facePhoto}
+              labelledBy={`${id}-face`}
+              hasLook={look !== null}
+              rememberLabel={embedStrings().rememberLabel}
+              renderSwitch={(checked, onChange) => <Switch checked={checked} onChange={onChange} labelledBy={`${id}-face`} describedBy={`${id}-face-text`} onText={ui.on} offText={ui.off} testId="avatar-face-switch" />}
+            />
+          ) : faceOnHead ? (
             <li className="card space-y-2 p-3" data-testid="avatar-item-face">
               <div className="flex items-center justify-between gap-3">
                 <span id={`${id}-face`} className="text-base font-semibold">
@@ -273,9 +287,16 @@ export function AvatarPrompt({ look, onPick, onClear, onMeasurements, onClose, t
               </span>
               <Switch checked={skinOn} onChange={toggleSkin} labelledBy={`${id}-skin`} describedBy={`${id}-skin-text`} onText={ui.on} offText={ui.off} testId="avatar-skin-switch" />
             </div>
-            <p id={`${id}-skin-text`} className="text-sm text-ink-soft">
-              {t.c11Pick}
-            </p>
+            {facePhoto ? (
+              <div id={`${id}-skin-text`} className="space-y-1 text-sm text-ink-soft">
+                <p>{embedStrings().avatar.facePhoto.claims.c11}</p>
+                <p>{embedStrings().avatar.facePhoto.claims.c12}</p>
+              </div>
+            ) : (
+              <p id={`${id}-skin-text`} className="text-sm text-ink-soft">
+                {t.c11Pick}
+              </p>
+            )}
             {skinOn ? (
               <>
                 <fieldset data-testid="skin-swatches">
@@ -284,17 +305,26 @@ export function AvatarPrompt({ look, onPick, onClear, onMeasurements, onClose, t
                     {MONK_CLASSES.map((n) => {
                       const swatch = lookForMonk(n)!;
                       const checked = look?.monk === n;
+                      const suggested = facePhoto?.suggestion ?? null;
+                      const near = suggested !== null && Math.abs(suggested - n) === 1;
                       const edge = n === 1 ? `, ${ui.lightest}` : n === total ? `, ${ui.darkest}` : '';
                       return (
                         <label key={n} className="flex cursor-pointer flex-col items-center gap-0.5 text-[10px] text-ink-mute">
-                          <input type="radio" name={`${id}-monk`} value={n} checked={checked} onChange={() => onPick(swatch)} className="peer sr-only" aria-label={`${ui.swatch(n, total)}${edge}`} data-testid={`skin-swatch-${n}`} />
+                          <input type="radio" name={`${id}-monk`} value={n} checked={checked} onChange={() => onPick(swatch)} className="peer sr-only" aria-label={`${ui.swatch(n, total)}${edge}${suggested === n ? `, ${embedStrings().avatar.facePhoto.ui.suggested.toLowerCase()}` : ''}`} data-testid={`skin-swatch-${n}`} />
                           <span
-                            className={`flex h-12 w-full items-center justify-center rounded-xl border peer-focus-visible:ring-2 peer-focus-visible:ring-coral peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-cream ${checked ? 'border-ink outline outline-2 outline-offset-2 outline-ink' : 'border-ink/60'}`}
+                            className={`flex h-12 w-full items-center justify-center rounded-xl border peer-focus-visible:ring-2 peer-focus-visible:ring-coral peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-cream ${checked ? 'border-ink outline outline-2 outline-offset-2 outline-ink' : suggested === n ? 'border-coral outline outline-2 outline-offset-2 outline-coral' : near ? 'border-coral/70 border-dashed border-2' : 'border-ink/60'}`}
                             style={{ background: swatch.hex }}
                           >
                             {checked ? <Check className="h-5 w-5" style={{ color: luminance(swatch.hex) < 0.25 ? '#FFFFFF' : '#1A1612' }} aria-hidden /> : null}
                           </span>
-                          <span aria-hidden>{n}</span>
+                          <span aria-hidden className={suggested === n ? 'font-semibold text-ink' : undefined}>
+                            {n}
+                          </span>
+                          {suggested === n ? (
+                            <span aria-hidden className="text-[9px] leading-none font-semibold text-coral-ink" data-testid="skin-swatch-suggested">
+                              {embedStrings().avatar.facePhoto.ui.suggested}
+                            </span>
+                          ) : null}
                         </label>
                       );
                     })}
@@ -307,6 +337,7 @@ export function AvatarPrompt({ look, onPick, onClear, onMeasurements, onClose, t
                     {c30.after}
                   </p>
                 ) : null}
+                {facePhoto ? <SkinPhotoOffer state={facePhoto} total={total} /> : null}
                 <p className="text-[10px] leading-snug text-ink-mute" data-testid="avatar-swatch-credit">
                   {ui.swatchCredit}
                 </p>
@@ -330,7 +361,7 @@ export function AvatarPrompt({ look, onPick, onClear, onMeasurements, onClose, t
           </li>
         </ul>
 
-        {face || faceOnHead ? (
+        {face || faceOnHead || facePhoto ? (
           <p className="text-xs text-ink-mute" data-testid="avatar-c4">
             {t.c4}
           </p>

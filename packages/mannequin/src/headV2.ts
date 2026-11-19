@@ -16,6 +16,7 @@
  * - **No neck seam**: the head runs down into a short tube that follows the neck and enters it at a
  *   shallow angle below the chin, so there is no collar edge where the head meets the neck. The
  *   torso's neck has no flare towards the old egg for this head (`mesh.ts`).
+ *   (No seam in the geometry; the shading under the chin is a separate matter, see `CHIN_TURN_FROM`.)
  * - **More rows and columns where the features are** (the face band and the ears), so the features
  *   are not blurred by the grid.
  *
@@ -51,6 +52,12 @@ interface Family {
 }
 
 const DOME_FROM = 14;
+/**
+ * Where (unit cm under the chin) the front of the tube starts to turn into the underside of the chin.
+ * At -0.6 the underside was nearly level and, seen from the phone's camera below the head, read as a
+ * dark band, a chin strap (review of 18 Nov 2026); from lower down it slopes and catches the key light.
+ */
+export const CHIN_TURN_FROM = -2.8;
 const DOME = [9.4, -9.6, 7.6] as const;
 
 /** Female: narrower jaw (gonion half-width 5.7), rounder chin. */
@@ -302,10 +309,10 @@ export function buildHeadPartV2(m: Mannequin, neck: NeckInput, options: HeadV2Op
     const t = y < ring && neck.at ? neck.at(chinY + y * k) : null;
     const ta = t ? t.a / k : na, tb = t ? t.b / k : nb, tz = t ? t.cz / k : nz;
     const tube = { zf: tz + tb + d, zb: tz - tb - d, w: ta + d, z0: tz, e: 2 };
-    if (y <= -0.6) return tube;
+    if (y <= CHIN_TURN_FROM) return tube;
     const head = { zf: front(Math.max(y, first[0])), zb: back(Math.max(y, first[0])), w: half(Math.max(y, first[0])) };
     // From the tube to the head: the front (under the chin) turns quickly, the back and sides slowly, so the nape has no edge.
-    const tf = smooth(-0.6, first[0] + 1.3, y);
+    const tf = smooth(CHIN_TURN_FROM, first[0] + 1.3, y);
     const ts = smooth(-0.6, 5.5, y);
     const zf = tube.zf + (head.zf - tube.zf) * tf;
     // Low on the head the back and sides never come inside the tube (the nape and the jaw stay on the neck).

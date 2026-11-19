@@ -11,6 +11,9 @@ import {
   AnalyticsSwipesResponseSchema,
   BillingAnomaliesResponseSchema,
   ChartTemplatesResponseSchema,
+  ANALYTICS_PERIOD_GRANULARITY,
+  AnalyticsPeriodQuerySchema,
+  AnalyticsPeriodsResponseSchema,
   DateRangeQuerySchema,
   HexColorSchema,
   MerchantKeyRotateResponseSchema,
@@ -38,6 +41,7 @@ import { badRequest, conflict, forbidden, notFound, serviceUnavailable, unproces
 import { safeFetch, type LookupLike, type PinnedTransport } from '../lib/safeFetch.js';
 import { periodFor, utcDay } from '../lib/time.js';
 import { abandonedAnalytics, fitSizeAnalytics, swipeAnalytics } from '../services/analytics.js';
+import { addMonths, availableAt, closedMonthsSince, isClosed, lastClosedMonth } from '../services/kfloor.js';
 import { decodeCursor, encodeCursor } from '../services/ledger.js';
 import { archiveProduct, listMerchantProducts, upsertProduct } from '../services/products.js';
 import { merchantMenGate } from '../services/readiness.js';
@@ -235,12 +239,34 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
     },
   );
 
-  app.get('/v1/merchant/analytics/swipes', { schema: { querystring: DateRangeQuerySchema, response: { 200: AnalyticsSwipesResponseSchema } }, preHandler: requireMerchant }, async (req) => {
-    return swipeAnalytics(db, req.shop!.id, req.query.from, req.query.to, env.K_ANON);
+  // Analytics (launch-readiness finding 1): one closed calendar month per answer, never an arbitrary from/to, and the
+  // first answer for a month is frozen. See services/kfloor.ts for why each rule is needed.
+  const closedPeriod = (period: string): string => {
+    if (!isClosed(period, now())) {
+      throw badRequest('period_not_closed', `analytics for ${period} are available from ${availableAt(period).toISOString()}, once the month is over`);
+    }
+    return period;
+  };
+
+  app.get('/v1/merchant/analytics/periods', { schema: { response: { 200: AnalyticsPeriodsResponseSchema } }, preHandler: requireMerchant }, async (req) => {
+    const t = now();
+    // The next month to become available (during the grace day this is the month that just ended).
+    const openPeriod = addMonths(lastClosedMonth(t), 1);
+    return {
+      granularity: ANALYTICS_PERIOD_GRANULARITY,
+      kAnonymityFloor: env.K_ANON,
+      periods: closedMonthsSince(req.shop!.createdAt, t),
+      openPeriod,
+      openPeriodAvailableAt: availableAt(openPeriod).toISOString(),
+    };
   });
 
-  app.get('/v1/merchant/analytics/abandoned', { schema: { querystring: DateRangeQuerySchema, response: { 200: AnalyticsAbandonedResponseSchema } }, preHandler: requireMerchant }, async (req) => {
-    return abandonedAnalytics(db, req.shop!.id, req.query.from, req.query.to, env.K_ANON);
+  app.get('/v1/merchant/analytics/swipes', { schema: { querystring: AnalyticsPeriodQuerySchema, response: { 200: AnalyticsSwipesResponseSchema } }, preHandler: requireMerchant }, async (req) => {
+    return swipeAnalytics(db, req.shop!.id, closedPeriod(req.query.period), env.K_ANON);
+  });
+
+  app.get('/v1/merchant/analytics/abandoned', { schema: { querystring: AnalyticsPeriodQuerySchema, response: { 200: AnalyticsAbandonedResponseSchema } }, preHandler: requireMerchant }, async (req) => {
+    return abandonedAnalytics(db, req.shop!.id, closedPeriod(req.query.period), env.K_ANON);
   });
 
   // Billing integrity (carry-over #7): today's cap/spike flags and the recorded billing anomalies.
@@ -253,8 +279,8 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
   // Sizes recommended in standalone sessions (carry-over #18), k floor on distinct shoppers.
   app.get(
     '/v1/merchant/analytics/fit-sizes',
-    { schema: { querystring: DateRangeQuerySchema, response: { 200: AnalyticsFitSizesResponseSchema } }, preHandler: requireMerchant },
-    async (req) => fitSizeAnalytics(db, req.shop!.id, req.query.from, req.query.to, env.K_ANON),
+    { schema: { querystring: AnalyticsPeriodQuerySchema, response: { 200: AnalyticsFitSizesResponseSchema } }, preHandler: requireMerchant },
+    async (req) => fitSizeAnalytics(db, req.shop!.id, closedPeriod(req.query.period), env.K_ANON),
   );
 
   // ---- keys ------------------------------------------------------------------------------------

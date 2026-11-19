@@ -51,7 +51,53 @@ export interface AssetReviewCatalogue {
   rejected: (reason: string) => string;
 }
 
-export const MERCHANT_EN: { assets: AssetReviewCatalogue } = {
+/** Why analytics come in whole months and why a row is hidden (launch-readiness finding 1, D3). */
+export interface AnalyticsCatalogue {
+  monthLabel: string;
+  monthName: (period: string) => string;
+  noMonthYet: (availableOn: string) => string;
+  noMonthLive: string;
+  monthNote: (month: string, nextMonth: string, availableOn: string) => string;
+  whyMonths: string;
+  hidden: (s: { belowFloor: number; complementary: number }, k: number, noun: { one: string; many: string }) => string;
+  derivedNote: string;
+  sizeHiddenNote: (k: number) => string;
+  neverSends: (k: number) => string;
+  abandonedHint: (k: number) => string;
+}
+
+const plural = (n: number, noun: { one: string; many: string }) => `${n} ${n === 1 ? noun.one : noun.many}`;
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+export const ANALYTICS_EN: AnalyticsCatalogue = {
+  monthLabel: 'Month',
+  monthName: (period) => {
+    const [y, m] = period.split('-');
+    return `${MONTHS[Number(m) - 1] ?? m} ${y}`;
+  },
+  noMonthYet: (availableOn) => `Your first month of shopper analytics appears on ${availableOn}, once the month is over.`,
+  noMonthLive: 'Shopper analytics are not available from this server yet.',
+  monthNote: (month, nextMonth, availableOn) => `Figures for ${month}. A finished month never changes. ${nextMonth} appears on ${availableOn}.`,
+  whyMonths:
+    'Analytics come in whole calendar months, never from any day to any day. With free dates, comparing two ranges that differ by one day would show what a handful of shoppers did that day.',
+  hidden: (s, k, noun) => {
+    if (s.belowFloor === 0 && s.complementary === 0) return `Nothing is hidden this month: every ${noun.one} had at least ${k} shoppers.`;
+    const parts: string[] = [];
+    if (s.belowFloor > 0) parts.push(`${plural(s.belowFloor, noun)} ${s.belowFloor === 1 ? 'is' : 'are'} hidden because fewer than ${k} shoppers were in ${s.belowFloor === 1 ? 'it' : 'each'}.`);
+    if (s.complementary > 0)
+      parts.push(
+        `${plural(s.complementary, noun)} ${s.complementary === 1 ? 'is' : 'are'} hidden as well, although ${s.complementary === 1 ? 'it' : 'each'} had enough shoppers, so the small hidden ${s.belowFloor === 1 ? noun.one : noun.many} cannot be worked out by subtracting the rows shown from a total.`,
+      );
+    return parts.join(' ');
+  },
+  derivedNote: 'Colour, fabric and size count only the products and sizes shown above, so they never include a hidden product.',
+  sizeHiddenNote: (k) => `Sizes seen by fewer than ${k} shoppers are hidden, and sometimes one more size with them, so a hidden size cannot be worked out from the totals.`,
+  neverSends: (k) => `Shopper aggregates only for groups of at least ${k} people, in whole calendar months.`,
+  abandonedHint: (k) => `shown once ${k} shoppers opened a product in a month`,
+};
+
+export const MERCHANT_EN: { assets: AssetReviewCatalogue; analytics: AnalyticsCatalogue } = {
+  analytics: ANALYTICS_EN,
   assets: {
     title: (product) => `3D estimate · ${product}`,
     back: 'Back to products',

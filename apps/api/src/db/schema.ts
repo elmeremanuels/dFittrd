@@ -542,6 +542,28 @@ export const orderOutcomes = pgTable(
   (t) => [uniqueIndex('order_outcomes_uq').on(t.shopId, t.orderIdHmac, t.productId)],
 );
 
+/**
+ * Frozen merchant analytics and cohort cells (launch-readiness finding 1): the first answer for a closed calendar
+ * month, served from then on so the same question never has two answers. Aggregates only (each cell cleared the k
+ * floor or is empty); no device id, no signature, no row-level data.
+ */
+export const analyticsSnapshots = pgTable(
+  'analytics_snapshots',
+  {
+    shopId: uuid('shop_id')
+      .notNull()
+      .references(() => shops.id, { onDelete: 'cascade' }),
+    kind: text('kind').$type<'swipes' | 'fit_sizes' | 'abandoned' | 'cohort'>().notNull(),
+    /** '' for the merchant tables; the product id for cohort cells. */
+    scope: text('scope').notNull().default(''),
+    /** Calendar month, YYYY-MM (UTC). */
+    period: text('period').notNull(),
+    payload: jsonb('payload').$type<unknown>().notNull(),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.shopId, t.kind, t.scope, t.period] }), index('analytics_snapshots_kind_scope_idx').on(t.kind, t.scope)],
+);
+
 export const schema = {
   shops,
   shopifySessions,
@@ -561,5 +583,6 @@ export const schema = {
   ledgerEntries,
   webhookLog,
   orderOutcomes,
+  analyticsSnapshots,
 };
 export type Schema = typeof schema;

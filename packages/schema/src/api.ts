@@ -48,6 +48,8 @@ export const MERCHANT_MEN_GATE_STATES = ['coming_soon', 'audience_unconfirmed'] 
 const uuid = z.uuid();
 const isoDate = z.iso.datetime({ offset: true });
 const dateOnly = z.iso.date();
+/** A calendar month in UTC, `YYYY-MM` (merchant analytics periods, cohort months). */
+export const analyticsMonth = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'a calendar month, YYYY-MM');
 const httpUrl = z.url({ protocol: /^https?$/ });
 const cursor = z.string().min(1).max(512);
 
@@ -468,11 +470,18 @@ export type HeroRenderStatus = z.infer<typeof HeroRenderStatusSchema>;
 /** GET /v1/fit/cohort/:productId — aggregated wardrobe states, never signatures (v1). */
 export const FitCohortResponseSchema = z.object({
   productId: z.string(),
+  /** People counted in the months shown (a month below the floor is left out entirely). */
   n: z.number().int().nonnegative(),
   kAnonymityFloor: z.number().int().min(1),
-  /** Empty when n < kAnonymityFloor. */
+  /** Sizes that clear the floor; empty when no month clears it. */
   sizeHistogram: z.record(z.string(), z.number().int().nonnegative()),
   keptRate: z.number().min(0).max(1).nullable(),
+  /**
+   * Last calendar month counted (UTC). The cohort is a sum of whole closed months, each frozen once counted and each
+   * shown only when it clears the floor, so it never changes by fewer than `kAnonymityFloor` people. Null when no
+   * month is closed yet. Optional for older servers.
+   */
+  through: analyticsMonth.nullable().optional(),
 });
 export type FitCohortResponse = z.infer<typeof FitCohortResponseSchema>;
 
@@ -615,6 +624,50 @@ export const DateRangeQuerySchema = z
   .refine((r) => r.from <= r.to, { message: 'from must be <= to', path: ['to'] });
 export type DateRangeQuery = z.infer<typeof DateRangeQuerySchema>;
 
+/**
+ * Merchant analytics periods (launch-readiness finding 1): one calendar month in UTC, `YYYY-MM`. Analytics never take
+ * an arbitrary from/to. Months are disjoint, so no two allowed queries overlap; a month is served only once it is over
+ * (plus `ANALYTICS_PERIOD_GRACE_HOURS`), and the first answer for a closed month is frozen, so asking again later can
+ * never show a difference of a few shoppers.
+ */
+export const ANALYTICS_PERIOD_GRANULARITY = 'month' as const;
+export const ANALYTICS_PERIOD_GRACE_HOURS = 24;
+export const AnalyticsPeriodQuerySchema = z.object({ period: analyticsMonth }).strict();
+export type AnalyticsPeriodQuery = z.infer<typeof AnalyticsPeriodQuerySchema>;
+
+/**
+ * Why groups are hidden. `belowFloor`: fewer than `kAnonymityFloor` distinct shoppers. `complementary`: enough
+ * shoppers, but hidden as well so the small hidden groups cannot be worked out by subtracting the shown rows from a
+ * total (the hidden rows together always hold at least `kAnonymityFloor` shoppers, or there are none).
+ */
+export const AnalyticsSuppressionSchema = z.object({ belowFloor: z.number().int().nonnegative(), complementary: z.number().int().nonnegative() });
+export type AnalyticsSuppression = z.infer<typeof AnalyticsSuppressionSchema>;
+
+const analyticsPeriodFields = {
+  /** The calendar month (UTC) these aggregates cover. */
+  period: analyticsMonth,
+  /** First and last day of `period`, for display. */
+  from: dateOnly,
+  to: dateOnly,
+  kAnonymityFloor: z.number().int().min(1),
+  /** Hidden groups (rows and size buckets), `suppression.belowFloor + suppression.complementary`. */
+  suppressedGroups: z.number().int().nonnegative(),
+  suppression: AnalyticsSuppressionSchema,
+};
+
+/** GET /v1/merchant/analytics/periods — the closed months a merchant can ask for, newest first. */
+export const AnalyticsPeriodsResponseSchema = z.object({
+  granularity: z.literal(ANALYTICS_PERIOD_GRANULARITY),
+  kAnonymityFloor: z.number().int().min(1),
+  /** Closed months, newest first (at most 24). Empty until the shop's first month is over. */
+  periods: z.array(analyticsMonth),
+  /** The month in progress: never served, it is still changing. */
+  openPeriod: analyticsMonth,
+  /** When `openPeriod` becomes available. */
+  openPeriodAvailableAt: isoDate,
+});
+export type AnalyticsPeriodsResponse = z.infer<typeof AnalyticsPeriodsResponseSchema>;
+
 /** D17: one paid plan, `curtain` (USD 8.99 per month, flat). `free` = no active subscription. */
 export const PLAN_NAMES = ['free', 'curtain'] as const;
 
@@ -680,7 +733,11 @@ export const MerchantLedgerResponseSchema = z.object({
 });
 export type MerchantLedgerResponse = z.infer<typeof MerchantLedgerResponseSchema>;
 
-/** GET /v1/merchant/analytics/swipes?from&to — aggregates only, k-anonymity floor applied. */
+/**
+ * GET /v1/merchant/analytics/swipes?period=YYYY-MM — aggregates only, k-anonymity floor applied with complementary
+ * suppression. Products are the base table (each product's size histogram nested in it); colour, fabric and size
+ * are sums of the shown products and shown size buckets only, so they never contain a hidden product.
+ */
 const swipeCounts = z.object({
   love: z.number().int().nonnegative(),
   pass: z.number().int().nonnegative(),
@@ -688,11 +745,7 @@ const swipeCounts = z.object({
   less: z.number().int().nonnegative(),
 });
 export const AnalyticsSwipesResponseSchema = z.object({
-  from: dateOnly,
-  to: dateOnly,
-  kAnonymityFloor: z.number().int().min(1),
-  /** Groups below the floor are dropped and counted here. */
-  suppressedGroups: z.number().int().nonnegative(),
+  ...analyticsPeriodFields,
   byProduct: z.array(
     swipeCounts.extend({
       externalId: z.string(),
@@ -751,6 +804,7 @@ export const API_ROUTES = {
   merchantUsageAnomalies: 'GET /v1/merchant/usage/anomalies',
   merchantAnalyticsFitSizes: 'GET /v1/merchant/analytics/fit-sizes',
   merchantAnalyticsAbandoned: 'GET /v1/merchant/analytics/abandoned',
+  merchantAnalyticsPeriods: 'GET /v1/merchant/analytics/periods',
   sdkMedia: 'GET /v1/sdk/media',
 } as const;
 export type ApiRouteKey = keyof typeof API_ROUTES;
@@ -804,26 +858,25 @@ export const BillingAnomaliesResponseSchema = z.object({
 export type BillingAnomaliesResponse = z.infer<typeof BillingAnomaliesResponseSchema>;
 
 /**
- * GET /v1/merchant/analytics/fit-sizes?from&to — sizes recommended in standalone (on-page) fit
- * sessions. A size is reported only when at least `kAnonymityFloor` distinct shoppers got it;
- * `totals` cover the reported sizes only, so suppressed sizes cannot be derived by subtraction.
+ * GET /v1/merchant/analytics/fit-sizes?period=YYYY-MM — sizes recommended in standalone (on-page) fit
+ * sessions. A size is reported only when at least `kAnonymityFloor` distinct shoppers got it, and the
+ * hidden sizes together hold at least that many shoppers (complementary suppression), so a total from
+ * elsewhere (the usage page) minus the shown sizes is never a group below the floor. `totals` cover the
+ * reported sizes only.
  */
 export const AnalyticsFitSizesResponseSchema = z.object({
-  from: dateOnly,
-  to: dateOnly,
-  kAnonymityFloor: z.number().int().min(1),
-  suppressedGroups: z.number().int().nonnegative(),
+  ...analyticsPeriodFields,
   bySize: z.array(z.object({ size: z.string(), sessions: z.number().int().nonnegative() })),
   totals: z.object({ sessions: z.number().int().nonnegative() }),
 });
 export type AnalyticsFitSizesResponse = z.infer<typeof AnalyticsFitSizesResponseSchema>;
 
-/** GET /v1/merchant/analytics/abandoned?from&to — opens that never got a fit, k floor on distinct shoppers. */
+/**
+ * GET /v1/merchant/analytics/abandoned?period=YYYY-MM — opens that never got a fit, k floor on distinct shoppers
+ * with complementary suppression; `totals` cover the reported products only.
+ */
 export const AnalyticsAbandonedResponseSchema = z.object({
-  from: dateOnly,
-  to: dateOnly,
-  kAnonymityFloor: z.number().int().min(1),
-  suppressedGroups: z.number().int().nonnegative(),
+  ...analyticsPeriodFields,
   totals: z.object({ sessions: z.number().int().nonnegative(), resolved: z.number().int().nonnegative(), withFit: z.number().int().nonnegative() }),
   byProduct: z.array(
     z.object({

@@ -95,9 +95,10 @@ describe('lighting', () => {
 const MONK = ['#f6ede4', '#f3e7db', '#f7ead0', '#eadaba', '#d7bd96', '#a07e56', '#825c43', '#604134', '#3a312a', '#292420'];
 
 describe('lighting neutral-v2', () => {
-  it('has the lights of neutral (skin and garment colours as neutral) and adds an outline and a contact shadow; classic and neutral add nothing', () => {
+  it('has the lights of neutral (skin and garment colours as neutral) and adds an outline, a contact shadow and a floor bounce; classic and neutral add nothing', () => {
     expect(LIGHTING_RIGS['neutral-v2']).toEqual(LIGHTING_RIGS.neutral);
-    expect(LOOK_EXTRAS.classic).toEqual({ outline: 0, outlineContrast: 3.2, contactShadow: 0, backdrop: 'cream', rim: 0 });
+    expect(LOOK_EXTRAS.classic).toEqual({ outline: 0, outlineContrast: 3.2, contactShadow: 0, backdrop: 'cream', rim: 0, bounce: 0 });
+    expect(LOOK_EXTRAS['neutral-v2'].bounce).toBeGreaterThan(0);
     expect(LOOK_EXTRAS['neutral-v2'].outlineContrast).toBe(4.5);
     expect(LOOK_EXTRAS.neutral).toEqual(LOOK_EXTRAS.classic);
     expect(LOOK_EXTRAS['neutral-v2'].outline).toBeGreaterThan(0);
@@ -167,9 +168,17 @@ describe('head v2 on the avatar', () => {
     const f = new Figure(g, Uint32Array.from([0, 1, 2]), 3, null);
     expect((f.body.material as THREE.MeshStandardMaterial).vertexColors).toBe(true);
     f.setSkin('#a07e56');
-    expect((f.body.material as THREE.MeshStandardMaterial).vertexColors).toBe(true);
+    const skin = f.body.material as THREE.MeshStandardMaterial;
+    expect(skin.vertexColors).toBe(true);
+    // A body without the shade under a skin material: the flag flips and the shader is rebuilt (needsUpdate bumps the version).
+    const version = skin.version;
     f.setBody(tri());
-    expect((f.body.material as THREE.MeshStandardMaterial).vertexColors).toBe(false);
+    expect(skin.vertexColors).toBe(false);
+    expect(skin.version).toBeGreaterThan(version);
+    // The same kind of body again: no rebuild.
+    const again = skin.version;
+    f.setBody(tri());
+    expect(skin.version).toBe(again);
     f.setSkin(null);
     expect((f.body.material as THREE.MeshStandardMaterial).vertexColors).toBe(false);
     // The shared grey of every figure without the v2 head stays without vertex colours.

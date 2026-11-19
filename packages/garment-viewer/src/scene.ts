@@ -16,9 +16,11 @@ import type { ViewerMaterial } from './engine';
  * changes how every garment looks, so it is opt-in.
  * `neutral-v2`: the `neutral` lights and tone curve, plus what keeps a light skin from vanishing
  * against the cream backdrop (`LOOK_EXTRAS`): a thin outline where bare skin meets the backdrop or
- * the floor, in the skin colour darkened until it stands out 3:1 from the backdrop (the rule of the
- * 2D figure's `figureOutline`), and a soft contact shadow under the feet. Skin and garment pixels are
- * the `neutral` ones; only the backdrop next to the skin changes. Opt-in, like `neutral`.
+ * the floor, in the skin colour darkened until it stands out `outlineContrast` (4.5:1) from the
+ * backdrop and the floor (the rule of the 2D figure's `figureOutline`, with more margin), a soft
+ * contact shadow under the feet, and a weak light from the floor (`bounce`) that reaches only
+ * surfaces facing down (under the jaw, the chin, the arms). Pixels of skin and garment that face the
+ * camera are the `neutral` ones. Opt-in, like `neutral`.
  */
 export type Lighting = 'classic' | 'neutral' | 'neutral-v2';
 
@@ -62,7 +64,11 @@ export const BACKDROP_HEX = '#F5EFE7';
  * - `backdrop`: `cream`, or `adaptive`: a soft panel behind the figure, darkened from the cream until
  *   it stands out `CONTRAST_TARGET` from the skin colour (only for skins that need it).
  * - `rim`: intensity of an extra light from behind each side, which lights the edges of the figure.
- * Only `outline` and `contactShadow` are on in `neutral-v2`; the other two were tried for the look
+ * - `bounce`: intensity of a light straight up from the floor, the cream floor's bounce. It adds
+ *   nothing to a surface facing the camera (its normal is level), so the colour patches stay the
+ *   `neutral` ones; it lifts the underside of the jaw, which under the lights alone read as a dark
+ *   band, a chin strap, at phone size (review of 18 Nov 2026).
+ * `outline`, `contactShadow` and `bounce` are on in `neutral-v2`; the other two were tried for the look
  * review (spikes/garment-engine/viewer/look-v2-renders.mjs) and are kept for that comparison.
  */
 export interface LookExtras {
@@ -72,14 +78,18 @@ export interface LookExtras {
   contactShadow: number;
   backdrop: 'cream' | 'adaptive';
   rim: number;
+  bounce: number;
 }
-const NONE: LookExtras = { outline: 0, outlineContrast: 3.2, contactShadow: 0, backdrop: 'cream', rim: 0 };
+/** `neutral-v2`'s floor bounce (see `LookExtras.bounce`; measured in look-v2-renders.mjs, section neck). */
+const BOUNCE_V2 = 1.0;
+const NONE: LookExtras = { outline: 0, outlineContrast: 3.2, contactShadow: 0, backdrop: 'cream', rim: 0, bounce: 0 };
 export const LOOK_EXTRAS: Readonly<Record<Lighting, LookExtras>> = {
   classic: NONE,
   neutral: NONE,
   // 4.5, not 3.2: the line is anti-aliased and the skin at the silhouette is shaded darker than its swatch, so a line
-  // chosen for 3.2 left 28 to 36 % of the edge under 3:1 (measured, look-v2-renders.mjs); at 4.5, 5 to 7 %.
-  'neutral-v2': { outline: 1.25, outlineContrast: 4.5, contactShadow: 0.32, backdrop: 'cream', rim: 0 },
+  // chosen for 3.2 left 28 to 36 % of the edge under 3:1 (measured, look-v2-renders.mjs); at 4.5, 3 to 5 % (with the
+  // multisampled mask; 5 to 7 % before it).
+  'neutral-v2': { outline: 1.25, outlineContrast: 4.5, contactShadow: 0.32, backdrop: 'cream', rim: 0, bounce: BOUNCE_V2 },
 };
 
 /** The contrast the outline (and the adaptive backdrop) is chosen for: 3:1 and a little margin, as the 2D figure. */
@@ -247,23 +257,28 @@ const ROLE = 'curtainRole';
 
 const OUTLINE_VERTEX = `varying vec2 vUv;
 void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
-// The mask: red 1 = skin, 0.5 = something else of the figure (the garment), 0 = backdrop and floor. A backdrop pixel within
-// \`radius\` px of skin gets the outline colour, its alpha falling off over the last pixel (no hard steps).
+// The mask, drawn with the same multisampling as the frame: red = how much of the pixel is bare skin, green = how much is
+// something else of the figure (the garment), the rest is backdrop and floor. A pixel within `radius` px of skin gets the
+// outline colour over the part of it that is not skin or garment, its alpha falling off over the last pixel (no hard
+// steps). The skin's own edge pixels, which the frame blends with the cream, are covered too: with a mask drawn without
+// multisampling they counted as skin and showed a light, dotted gap between the skin and the line (review, 18 Nov 2026).
 const OUTLINE_FRAGMENT = `uniform sampler2D mask;
 uniform vec2 texel;
 uniform float radius;
 uniform vec3 colour;
 varying vec2 vUv;
-float skinAt(vec2 o) { return step(0.75, texture2D(mask, vUv + o * texel).r); }
+float skinAt(vec2 o) { return step(0.5, texture2D(mask, vUv + o * texel).r); }
 void main() {
-  if (texture2D(mask, vUv).r > 0.25) discard;
+  vec4 here = texture2D(mask, vUv);
+  float open = clamp(1.0 - here.r - here.g, 0.0, 1.0);
+  if (open < 0.02) discard;
   float near = 0.0;
   for (int i = 0; i < 8; i++) {
     float a = float(i) * 0.785398;
     near = max(near, skinAt(vec2(cos(a), sin(a)) * radius));
   }
-  if (near < 0.5) discard;
-  float d = radius + 1.0;
+  if (near < 0.5 && here.r < 0.02) discard;
+  float d = here.r >= 0.02 ? 0.0 : radius + 1.0;
   for (int i = 0; i < 16; i++) {
     float a = float(i) * 0.392699;
     vec2 dir = vec2(cos(a), sin(a));
@@ -272,7 +287,9 @@ void main() {
       if (skinAt(dir * r) > 0.5) { d = min(d, r); break; }
     }
   }
-  float alpha = 1.0 - smoothstep(radius - 0.75, radius + 0.5, d);
+  // Over a pixel that is partly skin the line takes four times the open share: the cream the frame blended in is
+  // covered (what is left of it is at most a sixteenth of the pixel) at the cost of a sliver of the skin's edge.
+  float alpha = (1.0 - smoothstep(radius - 0.75, radius + 0.5, d)) * min(1.0, 4.0 * open);
   if (alpha <= 0.0) discard;
   gl_FragColor = vec4(colour, alpha);
 }`;
@@ -332,6 +349,12 @@ export class Stage {
         edge.position.set(side * 300, 160, -120);
         this.scene.add(edge);
       }
+    }
+    if (this.extras.bounce > 0) {
+      // Straight up: a level normal (a surface facing the camera) gets none of it.
+      const bounce = new THREE.DirectionalLight(0xffffff, this.extras.bounce);
+      bounce.position.set(0, -100, 0);
+      this.scene.add(bounce);
     }
     const floor = new THREE.Mesh(new THREE.CircleGeometry(400, 64), new THREE.MeshStandardMaterial({ color: rig.floor, roughness: 1 }));
     floor.rotation.x = -Math.PI / 2;
@@ -406,7 +429,8 @@ export class Stage {
 
   private ensureOutline(): NonNullable<Stage['outlinePass']> {
     if (this.outlinePass) return this.outlinePass;
-    const target = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: true, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+    // Multisampled as the frame (`antialias: true`), so the mask's edge pixels carry the share of skin the frame blended.
+    const target = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: true, samples: 4, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
     const quad = new THREE.Mesh(
       new THREE.PlaneGeometry(2, 2),
       new THREE.ShaderMaterial({
@@ -419,12 +443,12 @@ export class Stage {
       }),
     );
     quad.frustumCulled = false;
-    const flat = (v: number, side: THREE.Side = THREE.FrontSide): THREE.MeshBasicMaterial => {
+    const flat = (r: number, g: number, side: THREE.Side = THREE.FrontSide): THREE.MeshBasicMaterial => {
       const m = new THREE.MeshBasicMaterial({ toneMapped: false, side });
-      m.color.setRGB(v, v, v, THREE.LinearSRGBColorSpace);
+      m.color.setRGB(r, g, 0, THREE.LinearSRGBColorSpace);
       return m;
     };
-    this.outlinePass = { target, quad, camera: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), skin: flat(1), other: flat(0.5), otherDouble: flat(0.5, THREE.DoubleSide) };
+    this.outlinePass = { target, quad, camera: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), skin: flat(1, 0), other: flat(0, 1), otherDouble: flat(0, 1, THREE.DoubleSide) };
     return this.outlinePass;
   }
 
@@ -528,14 +552,20 @@ export class Stage {
     this.resize();
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
-    // The outline is left out while the shopper's finger or mouse is turning the view (on a software renderer it made
-    // such a frame four to five times as slow) and drawn on every other frame: as soon as the drag ends, during the
-    // damping that follows, and on the frame a view stops on.
-    if (this.outlineHex && (!this.dragging || final)) this.drawOutline();
+    // The outline is left out while the view turns: while the shopper's finger or mouse drags it and while it damps
+    // out after the release (on a software renderer such a frame was four to five times as slow). It is drawn on every
+    // frame the camera is still (a drape settling, a size switch) and always on the frame a view stops on.
+    const e = this.camera.matrixWorld.elements;
+    let moved = false;
+    for (let i = 0; i < 16; i++) if (Math.abs(e[i]! - this.lastView[i]!) > 1e-6) moved = true;
+    this.lastView.splice(0, 16, ...e);
+    if (this.outlineHex && (final || (!this.dragging && !moved))) this.drawOutline();
   }
 
   /** Between the orbit controls' `start` and `end`: the shopper is turning the view. */
   private dragging = false;
+  /** The camera of the last frame drawn (its world matrix), to tell a turning view from a still one. */
+  private readonly lastView: number[] = new Array<number>(16).fill(Number.NaN);
 
   /** Screen position (CSS px within the canvas) of a world point, for labels. */
   toScreen(p: THREE.Vector3): { x: number; y: number } {
@@ -641,7 +671,11 @@ export class Figure {
 
   setBody(geometry: THREE.BufferGeometry): void {
     this.body.geometry = geometry;
-    if (this.skin) this.skin.vertexColors = shaded(geometry);
+    if (this.skin && this.skin.vertexColors !== shaded(geometry)) {
+      // A material's shader is built for vertex colours or without: switching needs a rebuild.
+      this.skin.vertexColors = shaded(geometry);
+      this.skin.needsUpdate = true;
+    }
     else this.body.material = shaded(geometry) ? BODY_MATERIAL_SHADED : BODY_MATERIAL;
   }
 

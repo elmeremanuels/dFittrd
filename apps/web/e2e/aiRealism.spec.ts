@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { PILOT_PULL_ON_SKIRT } from '@curtain/schema';
+import type * as TryonProviders from '../../../packages/tryon-providers/dist/index.js';
 
 /**
  * The AI realism layer (D22) in the real embed: the production build, a mocked api and the POM v2 rest fixture
@@ -22,7 +23,7 @@ const BUNDLE = join(ROOT, 'packages', 'garment-viewer', 'fixtures', 'pom-v2-rest
 const SHOTS = process.env.REALISM_SHOTS ?? null;
 const ASSET_PATH = `/assets/${SHOP_ID}/skirt/0123456789abcdef`;
 const BUNDLE_FILES = ['anchors.json', 'grading.json', 'material.json', 'qa.json', 'base.glb'];
-type Tp = typeof import('../../../packages/tryon-providers/dist/index.js');
+type Tp = typeof TryonProviders;
 
 const save = (name: string, data: Buffer | string): void => {
   if (!SHOTS) return;

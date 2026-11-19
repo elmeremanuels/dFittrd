@@ -28,6 +28,25 @@ export interface DrapeBakeSizeMeta {
   provenance: SizeProvenance;
   /** Chart bodies this size was not draped on, and why (e.g. the wear rule says the band cannot be worn there). */
   notDraped?: { t: number; reason: string }[];
+  /**
+   * Whether each drape of this size came to rest, one per body (`baseT` and `targetT`), from the simulation's own
+   * movement trace. Read by the import's bake check (`bakeGate.ts`), not by the viewer.
+   */
+  drapes?: { t: number; atRest: boolean; maxMoveCmPerFrame: number; meanMoveCmPerFrame: number }[];
+}
+
+/** The drawn body (`buildAvatar` girths, cm) a set of drapes was made on, at axis value `t`. */
+export interface DrapeBakeBody {
+  t: number;
+  bust: number;
+  waist: number;
+  hip: number;
+}
+
+/** A ring of particles of the shared garment mesh: `count` vertices from `start`, in order around the garment. */
+export interface DrapeBakeRing {
+  start: number;
+  count: number;
 }
 
 export interface DrapeBakeMeta {
@@ -42,6 +61,10 @@ export interface DrapeBakeMeta {
   sizes: DrapeBakeSizeMeta[];
   /** Free text: how the drapes were made (shown to developers, not to shoppers). */
   source: string;
+  /** The drawn bodies of the axis (read by the import's bake check: it rebuilds them to look for fabric inside). */
+  bodies?: DrapeBakeBody[];
+  /** The garment's hip-line ring (the tape's hip, C) and its hem ring (D), for the bake check's ring lengths. */
+  tapeRings?: { hip: DrapeBakeRing; hem: DrapeBakeRing };
 }
 
 export interface BakedSize extends DrapeBakeSizeMeta {

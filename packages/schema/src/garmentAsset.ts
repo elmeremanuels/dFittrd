@@ -8,6 +8,7 @@
  */
 import { z } from 'zod';
 import { sizeLabelKey, type GarmentPayload } from './garment';
+import { TapeProvenanceSchema } from './garmentTape';
 
 /** First 16 hex chars of the sha256 of the bundle files: the immutable asset version. */
 export const GarmentAssetVersionSchema = z.string().regex(/^[0-9a-f]{16}$/);
@@ -23,8 +24,117 @@ export const GarmentAssetRefSchema = z.object({
 });
 export type GarmentAssetRef = z.infer<typeof GarmentAssetRefSchema>;
 
-export const GarmentAssetStatusSchema = z.enum(['awaiting_approval', 'approved', 'rejected', 'superseded']);
+/**
+ * `refused`: the import's automatic check of a server drape bake failed (`bakeCheck`); the files are not stored and the
+ * merchant cannot approve it. `rejected` is the merchant's own no.
+ */
+export const GarmentAssetStatusSchema = z.enum(['awaiting_approval', 'approved', 'rejected', 'superseded', 'refused']);
 export type GarmentAssetStatus = z.infer<typeof GarmentAssetStatusSchema>;
+
+// ---------------------------------------------------------------------------
+// Bake check (the import's automatic quality gate for a server drape bake)
+// ---------------------------------------------------------------------------
+
+/**
+ * The checks of `checkDrapeBake` (@curtain/garment-viewer `bakeGate.ts`), in the order they run. Each one needs no
+ * person: it reads the bundle's own files and the bodies it names, and either passes or gives English reasons.
+ */
+export const BAKE_CHECK_IDS = ['readable', 'file_size', 'sizes_have_geometry', 'refusals_declared', 'provenance', 'at_rest', 'tape_rings', 'inside_body', 'size_order'] as const;
+export type BakeCheckId = (typeof BAKE_CHECK_IDS)[number];
+
+/** One plain title per check, for the merchant console and the import log. */
+export const BAKE_CHECK_TITLES: Readonly<Record<BakeCheckId, string>> = {
+  readable: 'The bake can be read and names its tape, rings and bodies',
+  file_size: 'Within the phone download budget',
+  sizes_have_geometry: 'Every size it claims has a draped garment',
+  refusals_declared: 'Every body a size was not draped on is declared, with a reason',
+  provenance: 'Measured / interpolated / extrapolated per size matches the tape',
+  at_rest: 'Every drape says it came to rest',
+  tape_rings: 'Hip line and hem agree with the tape',
+  inside_body: 'No fabric inside the drawn body',
+  size_order: 'Sizes grow where the tape grows',
+};
+
+/** The gate's fixed limits (the builder cannot loosen them). */
+export const BAKE_CHECK_LIMITS = Object.freeze({
+  /** A draped ring may differ from its tape girth by this share or these cm, whichever is larger. */
+  ringTolerancePct: 2,
+  ringToleranceMinCm: 2,
+  /** Deeper than this inside the drawn body counts as inside (the 0.05 cm position grid rounds by up to 0.04 cm). */
+  insideToleranceCm: 0.1,
+  /** At rest: the largest particle movement over the last 24 frames, cm per frame (§9.5 of the server drape spike). */
+  restMaxCmPerFrame: 0.25,
+  restMeanCmPerFrame: 0.02,
+  /** Where the tape grows from one size to the next, the draped ring may shrink by at most this (drape noise). */
+  orderNoiseCm: 1,
+  /** A drawn body's hip may differ from the bake's axis by this. */
+  bodyAxisCm: 0.05,
+});
+
+/** The ring tolerance for one tape girth, cm. */
+export function bakeRingToleranceCm(tapeCm: number): number {
+  return Math.max(BAKE_CHECK_LIMITS.ringToleranceMinCm, (BAKE_CHECK_LIMITS.ringTolerancePct / 100) * tapeCm);
+}
+
+export const BakeCheckResultSchema = z.object({
+  id: z.enum(BAKE_CHECK_IDS),
+  /** `null`: not run, because an earlier check it needs failed. */
+  pass: z.boolean().nullable(),
+  reasons: z.array(z.string().max(400)).max(12),
+});
+export type BakeCheckResult = z.infer<typeof BakeCheckResultSchema>;
+
+/** One drape of the bake as the gate measured it (on the drawn body with hip `bodyHipCm`). */
+export const BakeDrapeReadingSchema = z.object({
+  size: z.string().max(32),
+  t: z.number(),
+  bodyHipCm: z.number(),
+  hipRingCm: z.number(),
+  hemRingCm: z.number(),
+  insideParticles: z.number().int().nonnegative(),
+  insideMaxCm: z.number().nonnegative(),
+  atRest: z.boolean().nullable(),
+  maxMoveCmPerFrame: z.number().nullable(),
+});
+export type BakeDrapeReading = z.infer<typeof BakeDrapeReadingSchema>;
+
+/** One size of the tape as the bundle states it, for the merchant console. */
+export const BakeTapeSizeSchema = z.object({
+  size: z.string().max(32),
+  provenance: TapeProvenanceSchema,
+  hipCm: z.number(),
+  hemSweepCm: z.number(),
+  stretchedGirthCm: z.number().nullable(),
+  /** Bodies the size could not be draped on, as the bake declares them (axis value and reason). */
+  notDraped: z.array(z.object({ bodyHipCm: z.number(), reason: z.string().max(200) })).max(16),
+});
+export type BakeTapeSize = z.infer<typeof BakeTapeSizeSchema>;
+
+/** The report the import stores with the asset (`qa.bakeCheck`), written by the importer, never by the builder. */
+export const BakeCheckReportSchema = z.object({
+  format: z.literal('curtain.garment.bakeCheck'),
+  version: z.literal(1),
+  pass: z.boolean(),
+  checks: z.array(BakeCheckResultSchema).max(16),
+  /** The tape the bundle states, per size in chart order, and where the hip line was measured (cm below the band; null: not stated). */
+  tape: z.object({ hipBelowBandCm: z.number().nullable(), sizes: z.array(BakeTapeSizeSchema).max(32) }).nullable(),
+  drapes: z.array(BakeDrapeReadingSchema).max(256),
+  checkedAt: z.iso.datetime({ offset: true }),
+});
+export type BakeCheckReport = z.infer<typeof BakeCheckReportSchema>;
+
+/** The English reason a refused bake gives: every failed check's first reason, at most 500 characters. */
+export function bakeCheckRefusal(report: Pick<BakeCheckReport, 'checks'>): string {
+  const failed = report.checks.filter((c) => c.pass === false);
+  const text = failed.map((c) => `${BAKE_CHECK_TITLES[c.id]}: no. ${c.reasons[0] ?? ''}`.trim()).join(' ');
+  return text.length > 500 ? `${text.slice(0, 497)}...` : text;
+}
+
+/** A stored bake check that passed (`qa.bakeCheck`, set by the importer), or null. */
+export function passedBakeCheck(qa: { bakeCheck?: unknown } | null | undefined): BakeCheckReport | null {
+  const r = BakeCheckReportSchema.safeParse(qa?.bakeCheck);
+  return r.success && r.data.pass && BAKE_CHECK_IDS.every((id) => r.data.checks.some((c) => c.id === id && c.pass === true)) ? r.data : null;
+}
 
 /** One asset version in the merchant console (no shopper data, ever). */
 export const MerchantGarmentAssetSchema = z.object({
@@ -44,6 +154,8 @@ export const MerchantGarmentAssetSchema = z.object({
   createdAt: z.iso.datetime({ offset: true }),
   approvedAt: z.iso.datetime({ offset: true }).nullable(),
   rejectReason: z.string().max(500).nullable(),
+  /** A server drape bake: the import's automatic check (its tape, every check and every drape it measured). */
+  bakeCheck: BakeCheckReportSchema.optional(),
 });
 export type MerchantGarmentAsset = z.infer<typeof MerchantGarmentAssetSchema>;
 
@@ -70,7 +182,7 @@ export interface GarmentBundleMeta {
   grading: { format?: unknown; baseSize?: unknown; sizes?: unknown };
   material: { format?: unknown };
   /** `mannequin.family`: the same family as anchors.json; the api keeps only qa.json of a bundle, so the gate reads it here. */
-  qa: { format?: unknown; chartAgreement?: GarmentChartAgreementMeta; mannequin?: GarmentBundleMannequinMeta };
+  qa: { format?: unknown; chartAgreement?: GarmentChartAgreementMeta; mannequin?: GarmentBundleMannequinMeta; bakeCheck?: unknown };
   /** Total size of the bundle files, bytes, when known. */
   bytes?: number;
 }
@@ -154,7 +266,7 @@ export function garmentQaFlagNote(flag: GarmentQaFlag, qa: GarmentBundleMeta['qa
     return `Waist read at the garment's own band,${drop} below the body's natural waist, by a recorded decision (${String(wr.decision)}), against the chart's waist plus a stated body offset of ${String(wr.offsetCm)} cm (target ${String(wr.targetCm)} cm); the chart does not say where this band sits.`;
   }
   if (flag === 'tape_built_no_chart_check')
-    return "Built from the shop's tape measurements and draped on a server, not reconstructed from photos: no agreement with the size chart was measured, so the QA pass is the builder's own statement and the import checked only the files' format and sizes. Look at every size before approving.";
+    return "Built from the shop's tape measurements and draped on a server, not reconstructed from photos, and imported before the automatic bake check existed: no agreement with the size chart or the tape was measured, so the QA pass is the builder's own statement. Import the bundle again to run the check, or look at every size before approving.";
   return `Before calibration the garment missed the size chart by ${String(ca.beforeCalibrationMaxAbsCm)} cm, outside the ±${String(ca.toleranceCm)} cm tolerance; it passes only after calibration rescaled it, which is not evidence of fit.`;
 }
 
@@ -180,7 +292,9 @@ export function garmentQaFlags(qa: GarmentBundleMeta['qa']): GarmentQaFlag[] | n
   const kind = qa.chartAgreement?.kind;
   if (kind !== undefined && kind !== null) {
     if (kind !== 'tape-built') return null;
-    flags.push('tape_built_no_chart_check');
+    // A bake the import's automatic check passed (`qa.bakeCheck`, written by the importer) is an ordinary pass: its
+    // geometry was tested against its own tape. Without that check the pass is still the builder's word.
+    if (!passedBakeCheck(qa)) flags.push('tape_built_no_chart_check');
   }
   // A pass after calibration over a miss outside tolerance before it: flagged, so a single-anchor automatic pass never looks clean.
   const before = qa.chartAgreement?.beforeCalibrationMaxAbsCm;
@@ -207,8 +321,9 @@ export function checkGarmentBundle(meta: GarmentBundleMeta, chartSizes: readonly
   if (meta.qa.chartAgreement?.pass !== true) return { ok: false, problem: 'qa_failed' };
   const qaFlags = garmentQaFlags(meta.qa);
   if (!qaFlags) return { ok: false, problem: 'qa_failed' };
-  // A drape bake's pass is not a measured chart agreement: it must say so in qa.json, where the flag follows the asset.
-  if (meta.anchors.drapeBake !== undefined && !qaFlags.includes('tape_built_no_chart_check')) return { ok: false, problem: 'qa_failed' };
+  // A drape bake's pass is not a measured chart agreement: it must say so in qa.json (`kind: 'tape-built'`), where the
+  // flag follows the asset until the import's bake check has passed (`qa.bakeCheck`).
+  if (meta.anchors.drapeBake !== undefined && meta.qa.chartAgreement?.kind !== 'tape-built') return { ok: false, problem: 'qa_failed' };
   const { baseSize, sizes: rows } = meta.grading;
   if (typeof baseSize !== 'string' || !Array.isArray(rows) || rows.length === 0 || rows.length > 32) return { ok: false, problem: 'format' };
   const sizes: string[] = [];

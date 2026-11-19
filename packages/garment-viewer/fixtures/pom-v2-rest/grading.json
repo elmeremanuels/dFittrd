@@ -1,0 +1,32 @@
+{
+ "format": "curtain.garment.grading",
+ "formatVersion": 1,
+ "productId": "crimson-wildflower-maxi-skirt",
+ "baseSize": "12",
+ "unit": "cm",
+ "morph": {
+  "method": "none: every size is its own drape (drapeBake in base.glb)"
+ },
+ "sizes": [
+  {
+   "size": "8",
+   "provenance": "measured"
+  },
+  {
+   "size": "10",
+   "provenance": "measured"
+  },
+  {
+   "size": "12",
+   "provenance": "interpolated"
+  },
+  {
+   "size": "14",
+   "provenance": "measured"
+  },
+  {
+   "size": "16",
+   "provenance": "extrapolated"
+  }
+ ]
+}

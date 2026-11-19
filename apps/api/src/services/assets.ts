@@ -5,6 +5,11 @@
  * - Import copies the five bundle files (never payload.json, renders or photos) to
  *   ASSET_DIR/<shopId>/<productId>/<version>/, version = the first 16 hex of their sha256. It is
  *   idempotent per version, and every import starts as `awaiting_approval`.
+ * - A server drape bake (anchors.json `drapeBake`) is tested first by the automatic bake check
+ *   (@curtain/garment-viewer `bakeGate.ts`: its geometry against its own stated tape and the drawn
+ *   body). The report is stored with the asset (`qa.bakeCheck`, written here, never by the builder).
+ *   A bake that fails is recorded as `refused` with the check's English reason, its files are not
+ *   stored and it cannot be approved; one that passes is an ordinary awaiting-approval asset.
  * - Approval (the merchant, D13) sets `products.active_asset_version` and supersedes the previous one.
  * - `activeAssetRef` is null unless the shop has the 3D estimate switched on (`settings.garment3d`,
  *   until D17 prices it), the active version is approved, and the bundle still covers the live chart.
@@ -15,7 +20,8 @@ import { createHash } from 'node:crypto';
 import { copyFile, mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { and, desc, eq, ne } from 'drizzle-orm';
-import { checkGarmentBundle, GARMENT_BUNDLE_FILES, garmentBodyFamily, isWeakAudienceSource, type GarmentBodyFamily, type GarmentBundleMannequinMeta, garmentQaFlagNote, garmentQaFlags, type GarmentAssetRef, type GarmentBundleMeta, type GarmentBundleProblem, type GarmentPayload, type MerchantGarmentAsset } from '@curtain/schema';
+import { checkDrapeBake } from '@curtain/garment-viewer/bakeGate';
+import { bakeCheckRefusal, BakeCheckReportSchema, checkGarmentBundle, GARMENT_BUNDLE_FILES, garmentBodyFamily, isWeakAudienceSource, type GarmentBodyFamily, type GarmentBundleMannequinMeta, garmentQaFlagNote, garmentQaFlags, type BakeCheckReport, type GarmentAssetRef, type GarmentBundleMeta, type GarmentBundleProblem, type GarmentPayload, type MerchantGarmentAsset } from '@curtain/schema';
 import type { Db } from '../db/client.js';
 import { garmentAssets, products, type ShopSettings } from '../db/schema.js';
 import type { Env } from '../env.js';
@@ -25,10 +31,15 @@ type AssetRow = typeof garmentAssets.$inferSelect;
 type ProductRow = typeof products.$inferSelect;
 
 export class AssetImportError extends Error {
-  /** `hint`: the next step for the operator, when there is one (printed by `asset:import`). */
+  /**
+   * `hint`: the next step for the operator, when there is one (printed by `asset:import`); for `bake_check_failed`
+   * the bake check's English reason. `bundle`: the refused bake as read (version and the check's report), so the
+   * import can record the refusal for the merchant.
+   */
   constructor(
-    readonly problem: GarmentBundleProblem | 'missing_file',
+    readonly problem: GarmentBundleProblem | 'missing_file' | 'bake_check_failed',
     readonly hint?: string,
+    readonly bundle?: BundleOnDisk,
   ) {
     super(hint ? `bundle rejected: ${problem} (${hint})` : `bundle rejected: ${problem}`);
   }
@@ -41,6 +52,8 @@ export interface BundleOnDisk {
   sizes: string[];
   qa: Record<string, unknown>;
   inputHash: string | null;
+  /** A server drape bake's automatic check (also in `qa.bakeCheck`). */
+  bakeCheck: BakeCheckReport | null;
 }
 
 /**
@@ -48,9 +61,10 @@ export interface BundleOnDisk {
  * family the product is shown on (`garmentBodyFamily`): a bundle built on the other family is
  * refused (`family_mismatch`), and anchors.json and qa.json must name the same family (`format`).
  */
-export async function readBundleDir(dir: string, chartSizes: readonly string[], family?: GarmentBodyFamily): Promise<BundleOnDisk> {
+export async function readBundleDir(dir: string, chartSizes: readonly string[], family?: GarmentBodyFamily, now: Date = new Date()): Promise<BundleOnDisk> {
   const hash = createHash('sha256');
   const json: Record<string, Record<string, unknown>> = {};
+  let glb: Buffer | null = null;
   let bytes = 0;
   for (const name of GARMENT_BUNDLE_FILES) {
     let buf: Buffer;
@@ -60,6 +74,7 @@ export async function readBundleDir(dir: string, chartSizes: readonly string[], 
       throw new AssetImportError('missing_file');
     }
     bytes += buf.length;
+    if (name === 'base.glb') glb = buf;
     hash.update(`${name}\0${buf.length}\0`).update(buf);
     if (name.endsWith('.json')) {
       try {
@@ -69,10 +84,18 @@ export async function readBundleDir(dir: string, chartSizes: readonly string[], 
       }
     }
   }
+  if (json['qa.json']!.bakeCheck !== undefined) throw new AssetImportError('format', 'qa.json carries a bakeCheck; only the import writes it, so a bundle cannot pass the check on its own word');
   const r = checkGarmentBundle({ anchors: json['anchors.json']!, grading: json['grading.json']!, material: json['material.json']!, qa: json['qa.json']!, bytes }, chartSizes, family === undefined ? {} : { family });
   if (!r.ok) throw new AssetImportError(r.problem);
   const qa = json['qa.json']!;
-  return { version: hash.digest('hex').slice(0, 16), bytes, baseSize: r.info.baseSize, sizes: r.info.sizes, qa, inputHash: typeof qa.inputHash === 'string' ? qa.inputHash : null };
+  const version = hash.digest('hex').slice(0, 16);
+  const inputHash = typeof qa.inputHash === 'string' ? qa.inputHash : null;
+  if (json['anchors.json']!.drapeBake === undefined) return { version, bytes, baseSize: r.info.baseSize, sizes: r.info.sizes, qa, inputHash, bakeCheck: null };
+  // A server drape bake: the automatic check runs here, and only the importer writes its result (refused above if present).
+  const report = await checkDrapeBake({ glb: new Uint8Array(glb!), anchors: json['anchors.json']!, grading: json['grading.json']!, qa, bytes, now });
+  const bundle: BundleOnDisk = { version, bytes, baseSize: r.info.baseSize, sizes: r.info.sizes, qa: { ...qa, bakeCheck: report }, inputHash, bakeCheck: report };
+  if (!report.pass) throw new AssetImportError('bake_check_failed', bakeCheckRefusal(report), bundle);
+  return bundle;
 }
 
 const chartSizesOf = (p: ProductRow): string[] => (Array.isArray(p.payload.sizeChart) ? p.payload.sizeChart.map((r) => String((r as { size?: unknown }).size ?? '')) : []);
@@ -97,36 +120,75 @@ export function assetDir(env: Env, shopId: string, productId: string, version: s
  * Changed by M1 with the gate off too: before M1 a female-built bundle imported for a men's product
  * and was then refused by the viewer; now the import refuses it.
  */
-export async function importBundle(db: Db, env: Env, shopId: string, productExternalId: string, dir: string): Promise<{ asset: AssetRow; created: boolean }> {
+export async function importBundle(db: Db, env: Env, shopId: string, productExternalId: string, dir: string, now: Date = new Date()): Promise<{ asset: AssetRow; created: boolean }> {
   const product = await db.query.products.findFirst({ where: and(eq(products.shopId, shopId), eq(products.externalId, productExternalId)) });
   if (!product) throw notFound('product');
   const family = garmentBodyFamily(product.payload);
   let bundle: BundleOnDisk;
   try {
-    bundle = await readBundleDir(dir, chartSizesOf(product), family);
+    bundle = await readBundleDir(dir, chartSizesOf(product), family, now);
   } catch (err) {
     if (err instanceof AssetImportError && err.problem === 'family_mismatch') throw new AssetImportError('family_mismatch', familyHint(product, family));
+    if (err instanceof AssetImportError && err.problem === 'bake_check_failed' && err.bundle) {
+      await recordRefusal(db, shopId, product, err.bundle, err.hint ?? 'the bake check failed', now);
+    }
     throw err;
   }
   const existing = await db.query.garmentAssets.findFirst({ where: and(eq(garmentAssets.productId, product.id), eq(garmentAssets.version, bundle.version)) });
+  if (existing && bundle.bakeCheck && existing.status !== 'refused' && existing.status !== 'rejected') {
+    // The same bake imported before the check existed (or under an older check): the new report replaces the old one.
+    const [rechecked] = await db.update(garmentAssets).set({ qa: bundle.qa }).where(eq(garmentAssets.id, existing.id)).returning();
+    return { asset: rechecked!, created: false };
+  }
   if (existing) {
-    // Re-importing the same bytes after a merchant rejection puts that version back up for review.
-    if (existing.status !== 'rejected') return { asset: existing, created: false };
+    // Re-importing the same bytes after a merchant rejection (or a refusal the check no longer makes) puts that
+    // version back up for review; a refused version has no files yet, so it is stored below like a new one.
+    if (existing.status !== 'rejected' && existing.status !== 'refused') return { asset: existing, created: false };
+    if (existing.status === 'refused') {
+      const target = await storeFiles(env, shopId, product.id, bundle.version, dir);
+      const [reopened] = await db.update(garmentAssets).set({ status: 'awaiting_approval', rejectReason: null, qa: bundle.qa, bundlePath: target }).where(eq(garmentAssets.id, existing.id)).returning();
+      return { asset: reopened!, created: false };
+    }
     const [reopened] = await db.update(garmentAssets).set({ status: 'awaiting_approval', rejectReason: null }).where(eq(garmentAssets.id, existing.id)).returning();
     return { asset: reopened!, created: false };
   }
-  const target = assetDir(env, shopId, product.id, bundle.version);
+  const target = await storeFiles(env, shopId, product.id, bundle.version, dir);
+  const [asset] = await db
+    .insert(garmentAssets)
+    .values({ shopId, productId: product.id, version: bundle.version, status: 'awaiting_approval', qa: bundle.qa, baseSize: bundle.baseSize, sizes: bundle.sizes, bundlePath: target, bytes: bundle.bytes, inputHash: bundle.inputHash })
+    .returning();
+  return { asset: asset!, created: true };
+}
+
+/** Copy the five bundle files into the asset volume (atomically per version); the version's directory. */
+async function storeFiles(env: Env, shopId: string, productId: string, version: string, dir: string): Promise<string> {
+  const target = assetDir(env, shopId, productId, version);
   const tmp = `${target}.tmp-${process.pid}`;
   await rm(tmp, { recursive: true, force: true });
   await mkdir(tmp, { recursive: true });
   for (const name of GARMENT_BUNDLE_FILES) await copyFile(join(dir, name), join(tmp, name));
   await rm(target, { recursive: true, force: true });
   await rename(tmp, target);
-  const [asset] = await db
+  return target;
+}
+
+/**
+ * A bake the automatic check refused: recorded (status `refused`, the check's reason and report) so the merchant sees
+ * why the product has no 3D view, with no files stored. A version already approved is taken off the storefront.
+ */
+async function recordRefusal(db: Db, shopId: string, product: ProductRow, bundle: BundleOnDisk, reason: string, now: Date): Promise<AssetRow> {
+  const existing = await db.query.garmentAssets.findFirst({ where: and(eq(garmentAssets.productId, product.id), eq(garmentAssets.version, bundle.version)) });
+  const values = { status: 'refused' as const, qa: bundle.qa, rejectReason: reason.slice(0, 500), approvedAt: null, approvedBy: null };
+  if (existing) {
+    const [row] = await db.update(garmentAssets).set(values).where(eq(garmentAssets.id, existing.id)).returning();
+    if (product.activeAssetVersion === bundle.version) await db.update(products).set({ activeAssetVersion: null, updatedAt: now }).where(eq(products.id, product.id));
+    return row!;
+  }
+  const [row] = await db
     .insert(garmentAssets)
-    .values({ shopId, productId: product.id, version: bundle.version, status: 'awaiting_approval', qa: bundle.qa, baseSize: bundle.baseSize, sizes: bundle.sizes, bundlePath: target, bytes: bundle.bytes, inputHash: bundle.inputHash })
+    .values({ shopId, productId: product.id, version: bundle.version, ...values, baseSize: bundle.baseSize, sizes: bundle.sizes, bundlePath: '', bytes: bundle.bytes, inputHash: bundle.inputHash })
     .returning();
-  return { asset: asset!, created: true };
+  return row!;
 }
 
 /** The operator's next step after a `family_mismatch`. */
@@ -148,6 +210,7 @@ async function ownAsset(db: Db, shopId: string, assetId: string): Promise<AssetR
 export async function approveAsset(db: Db, shopId: string, assetId: string, by: string, now: Date = new Date()): Promise<AssetRow> {
   const a = await ownAsset(db, shopId, assetId);
   if (a.status === 'rejected') throw badRequest('asset_rejected', 'a rejected asset cannot be approved; import the bundle again to put it back up for review');
+  if (a.status === 'refused') throw badRequest('asset_refused', `the automatic bake check refused this version, so it cannot be approved: ${a.rejectReason ?? 'see its report'}`);
   await db
     .update(garmentAssets)
     .set({ status: 'superseded' })
@@ -192,7 +255,14 @@ export function assetDto(r: AssetRow, product: Pick<ProductRow, 'externalId' | '
     createdAt: r.createdAt.toISOString(),
     approvedAt: r.approvedAt?.toISOString() ?? null,
     rejectReason: r.rejectReason,
+    ...bakeCheckOf(qa),
   };
+}
+
+/** The stored bake check of an asset (`qa.bakeCheck`), when it is one. */
+function bakeCheckOf(qa: GarmentBundleMeta['qa']): { bakeCheck?: BakeCheckReport } {
+  const r = BakeCheckReportSchema.safeParse(qa.bakeCheck);
+  return r.success ? { bakeCheck: r.data } : {};
 }
 
 export function assetBaseUrl(env: Env): string {

@@ -35,7 +35,7 @@
  * Env:   DEMO_E2E_SHOTS  screenshot folder (default test-results/demo-e2e)
  *        DEMO_AZURE_BUNDLE  the azure babydoll bundle folder (default spikes/garment-engine/out/eval/…)
  *        DEMO_SKIRT_BUNDLE  the crimson maxi skirt bundle folder (default spikes/garment-engine/out/eval/…)
- *        DEMO_SKIRT=pom     the POM v2 server drape bake of the skirt (out/pom2-bundle/…; imports flagged exactly `tape_built_no_chart_check`) instead of the photo bundle
+ *        DEMO_SKIRT=pom     the POM v2 server drape bake of the skirt (out/pom2-bundle/…; must pass the import's bake check, then imports with no flag) instead of the photo bundle
  * Pull-on skirt (merchant tape): the crimson skirt is seeded with the shop's tape (AU 8, 10, 14) and
  * closure pull-on; the held-out body (waist 73.5, hip 100, typed in) gets Size 10 with the pull-on
  * warning, on desktop and phone.
@@ -71,7 +71,7 @@ const PAGES = [
     threeD: [
       { name: 'azure', externalId: 'azure-palm-baby-doll-dress', path: '/products/azure-palm-baby-doll-dress', bundle: DEMO_BUNDLES.azure, qaFlags: [] },
       // Live only under the founder's low-rise waist reading, flagged: the import gate refuses it otherwise (qa_failed).
-      { name: 'skirt', externalId: 'crimson-wildflower-maxi-skirt', path: '/products/crimson-wildflower-maxi-skirt', bundle: DEMO_BUNDLES.skirt, qaFlags: DEMO_SKIRT_POM ? ['tape_built_no_chart_check'] : ['low_rise_waist', 'precalibration_outside_tolerance'], rings: 'pilot-skirt', bake: DEMO_SKIRT_POM },
+      { name: 'skirt', externalId: 'crimson-wildflower-maxi-skirt', path: '/products/crimson-wildflower-maxi-skirt', bundle: DEMO_BUNDLES.skirt, qaFlags: DEMO_SKIRT_POM ? [] : ['low_rise_waist', 'precalibration_outside_tolerance'], rings: 'pilot-skirt', bake: DEMO_SKIRT_POM },
     ],
   },
 ];

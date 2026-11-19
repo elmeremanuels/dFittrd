@@ -23,13 +23,15 @@ import { MALE_REFERENCE, MANNEQUIN_VERSION, buildBody, round, roundVec, topology
 import { bundleMannequin, mannequinFor, PIPELINE_VERSION, type Bundle } from './bundle';
 import { encodePng } from './exportPng';
 import { writeTexturedGlb } from './glbTextured';
-import { applyGrading, type GradingJson, type SizeGrading } from './grading';
+import { applyGrading, encodeBuiltOffsets, type GradingJson, type SizeGrading } from './grading';
 import { POM_CHINO_ASSUMPTIONS, buildPomChino, measurePomChino, sliceChinoGirths, type PomChinoBuild, type PomChinoLevels, type PomChinoRow } from './pomChino';
 import { CHINO_DETAILS, CHINO_PRINT_LICENCE, CHINO_PRINT_SOURCE, chinoPainter, chinoUvLayout, paintChinoAtlas, type ChinoUvLayout } from './pomChinoUv';
 import { materialJson } from './product';
 import { hexToRgb } from './raster';
 
-export const POM_CHINO_BUILDER_VERSION = 'pom-chino-0.1.0';
+export const POM_CHINO_BUILDER_VERSION = 'pom-chino-0.2.0';
+/** Resolution of a built size's offsets from the base mesh, cm. */
+const BUILT_QUANTUM_CM = 0.01;
 export const POM_CHINO_ATLAS_PX = 1024;
 /** The gate: every input measurement but the outseam on the built mesh within this of the tape, cm. */
 export const POM_CHINO_TAPE_TOLERANCE_CM = 0.5;
@@ -44,6 +46,14 @@ export interface PomChinoBundleOptions {
   texture?: 'synthetic-detail' | 'plain';
   /** The male table body each waist label is taped on (`SYNTHETIC_CHINO_BODY`); a waist without one is taped on the base body. */
   bodyOfWaist?: Readonly<Record<string, string>>;
+  /** The male body shape the chino is built, taped and graded on: `v1` (default) or `v2`. The bundle states it (`mannequin.maleShape`). */
+  maleShape?: 'v1' | 'v2';
+  /**
+   * `built` (default): every size is the builder's own mesh of that size on its table body, shipped as offsets from the
+   * base mesh (`GradingJson.built`), so the rises and the crotch depth are the size's. `morph`: the device's morph only
+   * (girths and inseam; the rises stay the base size's).
+   */
+  grading?: 'built' | 'morph';
 }
 
 const json = (x: unknown): string => `${JSON.stringify(x, null, 2)}\n`;
@@ -80,15 +90,17 @@ export interface PomChinoBundle extends Omit<Bundle, 'calibration' | 'agreement'
 }
 
 const MALE_TABLE = MALE_REFERENCE as Readonly<Record<string, { chest: number; waist: number; hip: number; stature: number; shoulderWidth: number }>>;
-function tableBody(id: string | undefined): Mannequin | null {
+function tableBody(id: string | undefined, maleShape: 'v1' | 'v2'): Mannequin | null {
   const t = id === undefined ? undefined : MALE_TABLE[id];
-  return t ? buildBody({ family: 'male', bust: t.chest, waist: t.waist, hip: t.hip, heightCm: t.stature, shoulderCm: t.shoulderWidth }) : null;
+  return t ? buildBody({ family: 'male', bust: t.chest, waist: t.waist, hip: t.hip, heightCm: t.stature, shoulderCm: t.shoulderWidth }, maleShape === 'v2' ? { maleShape: 'v2' } : {}) : null;
 }
 const waistOf = (size: string): string => size.split('/')[0]!;
 
 export function buildPomChinoBundle(productId: string, payload: GarmentPayload, rows: readonly PomChinoRow[], baseSize: string, options: PomChinoBundleOptions = {}): PomChinoBundle {
   const texture = options.texture ?? 'synthetic-detail';
-  const m = mannequinFor(payload);
+  const maleShape = options.maleShape === 'v2' ? 'v2' : 'v1';
+  const builtSizes = (options.grading ?? 'built') === 'built';
+  const m = mannequinFor(payload, { maleShape });
   const meta = bundleMannequin(m);
   if (m.shape.family !== 'male') throw new Error('the POM chino is built on the male mannequin only');
   const baseIdx = rows.findIndex((r) => r.size === baseSize);
@@ -97,17 +109,37 @@ export function buildPomChinoBundle(productId: string, payload: GarmentPayload, 
   const base = buildPomChino(m, baseRow);
   const chains = new Uint8Array(base.mesh.positions.length / 3);
 
-  // The tape on every size, built directly on the table body its waist belongs to.
+  // The tape on every size, built directly on the table body its waist belongs to, with the base mesh's rows.
+  const builds: { body: Mannequin; build: PomChinoBuild }[] = [];
   const tape: ChinoSizeCheck[] = rows.map((row) => {
     const id = options.bodyOfWaist?.[waistOf(row.size)];
-    const body = tableBody(id);
-    const b = row.size === baseSize && !body ? base : buildPomChino(body ?? m, row);
+    const body = tableBody(id, maleShape);
+    const b = row.size === baseSize && !body ? base : buildPomChino(body ?? m, row, { counts: base.counts });
+    builds.push({ body: body ?? m, build: b });
     const measured = { ...measurePomChino(b, b.mesh.positions, row.size), ...sliceChinoGirths(b) };
     const errorCm = chinoErrors(row, measured);
-    return { size: row.size, body: body ? `male ${id}` : `male ${m.shape.id}`, errorCm, maxAbsCm: Math.max(...CHINO_GATED_KEYS.map((k) => Math.abs(errorCm[k]))), levels: b.levels, tight: b.tight };
+    return { size: row.size, body: `male ${body ? id : m.shape.id}${meta.maleShape ? ` (shape ${meta.maleShape})` : ''}`, errorCm, maxAbsCm: Math.max(...CHINO_GATED_KEYS.map((k) => Math.abs(errorCm[k]))), levels: b.levels, tight: b.tight };
   });
 
-  const grading = gradeChino(m, productId, rows, baseIdx, base, chains);
+  const grading = gradeChino(m, productId, rows, baseIdx, base, chains, !builtSizes);
+  if (builtSizes) {
+    // Every size as built on its own table body, in the base body's space: moved down by the difference of the waist
+    // ring's height, the lift the viewer adds back for a bottom on a body of that height (`buildTypedAvatar`).
+    const offsets: Record<string, string> = {};
+    const bodies: Record<string, string> = {};
+    rows.forEach((row, i) => {
+      if (i === baseIdx) return;
+      const { body, build } = builds[i]!;
+      if (build.mesh.positions.length !== base.mesh.positions.length) throw new Error(`size ${row.size}: not the base mesh's vertices`);
+      const lift = body.morphHeights.waist - m.morphHeights.waist;
+      const moved = Float64Array.from(build.mesh.positions);
+      for (let k = 1; k < moved.length; k += 3) moved[k] = moved[k]! - lift;
+      offsets[row.size] = encodeBuiltOffsets(base.mesh.positions, moved, BUILT_QUANTUM_CM);
+      bodies[row.size] = tape[i]!.body;
+    });
+    grading.built = { encoding: 'int16le-base64', quantumCm: BUILT_QUANTUM_CM, vertices: base.mesh.positions.length / 3, bodies, offsets };
+  }
+  // What the device shows for a size (the built size decoded from grading.json, or the morph), taped along its own rows and seams.
   const gradingCheck: ChinoGradingCheck[] = rows.map((row) => {
     const graded = applyGrading(m, base.mesh, chains, grading, row.size);
     return { size: row.size, errorCm: chinoErrors(row, measurePomChino(base, graded.positions, row.size)) };
@@ -115,7 +147,7 @@ export function buildPomChinoBundle(productId: string, payload: GarmentPayload, 
 
   const material = materialJson(payload);
   const health = topology(base.mesh);
-  const inputHash = createHash('sha256').update(JSON.stringify({ payload, rows, baseSize, texture, builder: POM_CHINO_BUILDER_VERSION, assumptions: POM_CHINO_ASSUMPTIONS, details: CHINO_DETAILS, mannequin: MANNEQUIN_VERSION, pipeline: PIPELINE_VERSION, family: meta.family })).digest('hex');
+  const inputHash = createHash('sha256').update(JSON.stringify({ payload, rows, baseSize, texture, builder: POM_CHINO_BUILDER_VERSION, assumptions: POM_CHINO_ASSUMPTIONS, details: CHINO_DETAILS, mannequin: MANNEQUIN_VERSION, pipeline: PIPELINE_VERSION, family: meta.family, grading: builtSizes ? 'built' : 'morph', ...(meta.maleShape ? { maleShape: meta.maleShape } : {}) })).digest('hex');
   const P = (i: number): Vec3 => [base.mesh.positions[3 * i]!, base.mesh.positions[3 * i + 1]!, base.mesh.positions[3 * i + 2]!];
   const chartRow = payload.sizeChart.find((r) => r.size === baseSize);
   const ringOf = (ids: readonly number[], girth: number, chart: number | undefined, y: number, both: boolean) => ({
@@ -154,6 +186,7 @@ export function buildPomChinoBundle(productId: string, payload: GarmentPayload, 
       rise: { lengthCm: round(baseRow.frontRiseCm, 2), start: roundVec(P(base.crotchPoint), 2), end: roundVec(P(base.frontRise[base.frontRise.length - 1]!), 2), fromMannequin: false },
     },
     worn: base.levels,
+    seams: { stretchPct: POM_CHINO_ASSUMPTIONS.seamStretchPct, paths: base.seams.map((x) => x.path), grain: { stretchPct: POM_CHINO_ASSUMPTIONS.grainStretchPct, shortenPct: POM_CHINO_ASSUMPTIONS.grainShortenPct, paths: base.grain } },
     calibration: { globalScale: 1, ringCorrections: {}, sources: {}, residualAfterGlobalCm: { rms: 0, maxAbs: 0 } },
   };
 
@@ -182,7 +215,7 @@ export function buildPomChinoBundle(productId: string, payload: GarmentPayload, 
       maxAbsCm: r2(worst),
       sizes: tape.map((t) => ({ size: t.size, body: t.body, maxAbsCm: r2(t.maxAbsCm), errorCm: roundErr(t.errorCm), levels: t.levels, ...(t.tight.length ? { tighterThanBody: t.tight } : {}) })),
     },
-    gradingCheck: { note: 'The device morph does not grade the rises (no vertical stretch above the hip ring): every size keeps the base size band height and crotch depth.', sizes: gradingCheck.map((g) => ({ size: g.size, errorCm: roundErr(g.errorCm) })) },
+    gradingCheck: { note: builtSizes ? 'Every size is the builder\'s own mesh of that size on its table body, decoded from grading.json (built): rises and crotch depth are the size\'s.' : 'The device morph does not grade the rises (no vertical stretch above the hip ring): every size keeps the base size band height and crotch depth.', sizes: gradingCheck.map((g) => ({ size: g.size, errorCm: roundErr(g.errorCm) })) },
     assumptions: POM_CHINO_ASSUMPTIONS,
     calibration: { globalScale: 1, residualBeforeCm: { rms: 0, maxAbs: 0 }, residualAfterGlobalCm: { rms: 0, maxAbs: 0 } },
     meshHealth: { triangles: health.triangles, vertices: health.vertices, boundaryEdges: health.boundaryEdges, nonManifoldEdges: health.nonManifoldEdges, inconsistentEdges: health.inconsistentEdges, pieces: health.components, triangleBudget: [8000, 15000], withinBudget: health.triangles <= 15000 },
@@ -240,7 +273,7 @@ export function buildPomChinoBundle(productId: string, payload: GarmentPayload, 
 /** The ring each girth measurement is graded through, and the length the inseam is. */
 const RING_OF: readonly (readonly [AnchorRing, 'waistWidthCm' | 'seatWidthCm' | 'thighWidthCm' | 'kneeWidthCm' | 'legOpeningWidthCm'])[] = [['waist', 'waistWidthCm'], ['hip', 'seatWidthCm'], ['thigh', 'thighWidthCm'], ['knee', 'kneeWidthCm'], ['ankle', 'legOpeningWidthCm']];
 
-function gradeChino(m: Mannequin, productId: string, rows: readonly PomChinoRow[], baseIdx: number, base: PomChinoBuild, chains: Uint8Array): GradingJson {
+function gradeChino(m: Mannequin, productId: string, rows: readonly PomChinoRow[], baseIdx: number, base: PomChinoBuild, chains: Uint8Array, solveMorph: boolean): GradingJson {
   const baseRow = rows[baseIdx]!;
   const baseValues: AnchorValues = {};
   for (const [ring, key] of RING_OF) baseValues[ring] = r2(2 * baseRow[key]);
@@ -268,7 +301,7 @@ function gradeChino(m: Mannequin, productId: string, rows: readonly PomChinoRow[
   };
   // Solve each size's targets against the device's own morph: the graded mesh's tape is then the size's tape.
   for (const [i, row] of rows.entries()) {
-    if (i === baseIdx) continue;
+    if (i === baseIdx || !solveMorph) continue;
     const t = grading.sizes[i]!.targets;
     for (let it = 0; it < 8; it++) {
       const got = measurePomChino(base, applyGrading(m, base.mesh, chains, grading, row.size).positions);

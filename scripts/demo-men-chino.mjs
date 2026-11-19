@@ -21,9 +21,16 @@
  *
  * Flags: --width=N  phone width in CSS px (default 390).
  *        --bodies=S,M  only these bodies.
+ *        --male-shape=v2  the male shape switch on: the web app with VITE_MALE_SHAPE=v2 and the api with MALE_SHAPE=v2,
+ *                    always together. The chino bundle must then be built on v2 (`build-chino-bundle.ts
+ *                    --male-shape=v2`; the script stops if it is not), and the 2D figure must be marked v2.
+ *        --thigh     also type the table's thigh into the optional thigh field and tick "Measured with a tape": the
+ *                    embed then opens in the size a body with a taped thigh gets (the M body: 34/32, not 36/32).
+ *                    The thigh alone does not move it; the tape switch does (men-chino-v2 report).
+ *        --only-own  stop after each body's own size (no other legs, no too-large, no not-drawn picks).
  */
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -34,10 +41,20 @@ const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const args = process.argv.slice(2);
 const width = Number((args.find((a) => a.startsWith('--width=')) ?? '--width=390').slice('--width='.length));
 const shots = resolve(args.find((a) => !a.startsWith('--')) ?? join(root, 'test-results', 'demo-men-chino'));
+const maleShape = args.includes('--male-shape=v2') ? 'v2' : 'v1';
+const withThigh = args.includes('--thigh');
+const onlyOwn = args.includes('--only-own');
 mkdirSync(shots, { recursive: true });
 const CHINO_BUNDLE = join(root, 'spikes', 'garment-engine', 'out', 'synthetic-men-chino-wl', 'base.glb');
 if (!existsSync(CHINO_BUNDLE)) {
   console.error(`no synthetic men's chino bundle at ${CHINO_BUNDLE}: run pnpm --filter @curtain/garment-spike exec tsx scripts/build-chino-bundle.ts`);
+  process.exit(1);
+}
+
+// A men's bundle is shown only on the male body shape it was built on (anchors.json `mannequin.maleShape`, absent = v1).
+const builtOn = JSON.parse(readFileSync(join(CHINO_BUNDLE, '..', 'anchors.json'), 'utf8')).mannequin?.maleShape === 'v2' ? 'v2' : 'v1';
+if (builtOn !== maleShape) {
+  console.error(`the chino bundle is built on the male shape ${builtOn}, this run draws ${maleShape}: run pnpm --filter @curtain/garment-spike exec tsx scripts/build-chino-bundle.ts${maleShape === 'v2' ? ' --male-shape=v2' : ''}`);
   process.exit(1);
 }
 
@@ -98,6 +115,7 @@ try {
     DEMO_DB_DIR: db,
     DEMO_MEN: '1',
     MEN_3D_GATE: '1',
+    ...(maleShape === 'v2' ? { MALE_SHAPE: 'v2' } : {}),
     DEMO_STOREFRONT_ORIGIN: URLS.shop,
     PUBLIC_APP_URL: URLS.web,
     PUBLIC_API_URL: URLS.api,
@@ -105,7 +123,7 @@ try {
     LOG_LEVEL: 'warn',
   });
   await waitFor(`${URLS.api}/healthz`, 'api', 180_000);
-  start('web', pnpm, ['--filter', '@curtain/web', 'exec', 'vite', '--port', String(PORTS.web), '--strictPort', '--host', 'localhost'], { VITE_API_URL: URLS.api });
+  start('web', pnpm, ['--filter', '@curtain/web', 'exec', 'vite', '--port', String(PORTS.web), '--strictPort', '--host', 'localhost'], { VITE_API_URL: URLS.api, ...(maleShape === 'v2' ? { VITE_MALE_SHAPE: 'v2' } : {}) });
   start('shop', process.execPath, [join(root, 'apps', 'demo-shop', 'server.mjs')], { PORT: String(PORTS.shop), DEMO_JSON: join(db, 'demo.json') });
   await waitFor(`${URLS.web}/`, 'web');
   await waitFor(`${URLS.shop}/`, 'shop');
@@ -116,7 +134,7 @@ try {
   log(`seeded: synthetic-men-chino-wl with bundle ${chino.asset3d}`);
 
   browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-  const tag = `chino${width !== 390 ? `-${width}` : ''}`;
+  const tag = `chino${maleShape === 'v2' ? '-v2' : ''}${withThigh ? '-thigh' : ''}${width !== 390 ? `-${width}` : ''}`;
   const shot = async (page, name, locator) => {
     const path = join(shots, `${tag}--${name}.png`);
     await page.waitForTimeout(500);
@@ -149,20 +167,23 @@ try {
     // The girths sit behind "I know my measurements" (collapsed by default).
     const known = frame.getByText(/I know my measurements/i).first();
     if (await known.count()) await known.click();
-    for (const [re, v] of [[/^(chest|bust)/i, body.chest], [/^waist/i, body.waist], [/^(hip|seat)/i, body.hip], [/^(inside leg|inseam)/i, body.inseam]]) {
+    for (const [re, v] of [[/^(chest|bust)/i, body.chest], [/^waist/i, body.waist], [/^(hip|seat)/i, body.hip], [/^(inside leg|inseam)/i, body.inseam], ...(withThigh ? [[/^thigh/i, body.thigh]] : [])]) {
       const field = frame.getByLabel(re).first();
       if (v && (await field.count())) await field.fill(String(v));
     }
+    // The optional thigh field is asked of a men's bottom whose chart has a thigh column: it must be there.
+    if (!(await frame.getByLabel(/^thigh/i).count())) throw new Error('About you has no thigh field for the men’s chino');
+    if (withThigh) await frame.getByRole('switch', { name: /measured with a tape/i }).check();
   };
 
   // ---- the synthetic men's chino on the male bodies -----------------------------------------------
   // The male table's S to XXL (MALE_REFERENCE of @curtain/mannequin: stature, chest, waist, seat, inside leg); weights are round guesses that only feed the prior.
   const ALL_BODIES = [
-    { name: 'S', height: 172.5, weight: 64, chest: 90, waist: 78, hip: 90.5, inseam: 83.5, expect: '32/32' },
-    { name: 'M', height: 174, weight: 74, chest: 98, waist: 86, hip: 96, inseam: 84, expect: '34/32' },
-    { name: 'L', height: 175.5, weight: 83, chest: 106, waist: 94, hip: 102, inseam: 84.5, expect: '38/32' },
-    { name: 'XL', height: 177, weight: 92, chest: 114, waist: 102, hip: 108, inseam: 85, expect: '40/32' },
-    { name: 'XXL', height: 179, weight: 103, chest: 123, waist: 111, hip: 114.5, inseam: 85.5, expect: '44/32' },
+    { name: 'S', height: 172.5, weight: 64, chest: 90, waist: 78, hip: 90.5, inseam: 83.5, thigh: 54, expect: '32/32' },
+    { name: 'M', height: 174, weight: 74, chest: 98, waist: 86, hip: 96, inseam: 84, thigh: 58.5, expect: '34/32' },
+    { name: 'L', height: 175.5, weight: 83, chest: 106, waist: 94, hip: 102, inseam: 84.5, thigh: 62.5, expect: '38/32' },
+    { name: 'XL', height: 177, weight: 92, chest: 114, waist: 102, hip: 108, inseam: 85, thigh: 67, expect: '40/32' },
+    { name: 'XXL', height: 179, weight: 103, chest: 123, waist: 111, hip: 114.5, inseam: 85.5, thigh: 71.5, expect: '44/32' },
   ];
   const only = (args.find((a) => a.startsWith('--bodies=')) ?? '').slice('--bodies='.length).split(',').filter(Boolean);
   const BODIES = only.length ? ALL_BODIES.filter((b) => only.includes(b.name)) : ALL_BODIES;
@@ -226,6 +247,7 @@ try {
     await frame.getByTestId('requires3d-shown').waitFor({ timeout: 30_000 });
     const size = await canvas.getAttribute('data-size');
     log(`chino, body ${body.name}: settled in size ${size}`);
+    if (withThigh && size !== body.expect) throw new Error(`chino, body ${body.name}: with the thigh taped the embed opened in ${size}, not ${body.expect}`);
     // The embed asks no thigh, so its fit can pick the next waist from the one a body with a taped thigh gets (`expect`): logged, not required.
     if ((await canvas.getAttribute('data-garment')) === 'not-drawn') throw new Error(`chino, body ${body.name}: the size the view opened in (${size}) is not drawn`);
     await shot(page, `body-${body.name}--3-settled-size-${file(size)}`);
@@ -235,6 +257,9 @@ try {
       await page.waitForTimeout(300);
       await shot(page, `body-${body.name}--3b-2d-figure`, mirror);
       if (!(await mirror.getByText(/Estimate/).count())) throw new Error(`chino, body ${body.name}: the 2D figure has no estimate label`);
+      const drawnShape = await mirror.locator('svg').first().getAttribute('data-male-shape');
+      if (maleShape === 'v2' && drawnShape !== 'v2') throw new Error(`chino, body ${body.name}: VITE_MALE_SHAPE=v2, but the 2D figure is not v2 (data-male-shape=${drawnShape})`);
+      if (maleShape !== 'v2' && drawnShape !== null) throw new Error(`chino, body ${body.name}: v2 is off, but the 2D figure is marked ${drawnShape}`);
     }
     const panel = frame.getByTestId('garment3d');
     if (!(await panel.getByText(/estimate/i).count())) throw new Error(`chino, body ${body.name}: the 3D view has no estimate label`);
@@ -274,13 +299,13 @@ try {
       await canvas.scrollIntoViewIfNeeded();
       await shot(page, `body-${body.name}--6-size-${file(small)}-not-drawn`, panel);
     };
-    if (body.name === 'M') {
+    if (body.name === 'M' && !onlyOwn) {
       await drawn('34/30', 'short-leg');
       await drawn('34/34', 'long-leg');
       await drawn('38/32', 'too-large');
       await notDrawn('30/32');
     }
-    if (body.name === 'XXL') await notDrawn('38/32');
+    if (body.name === 'XXL' && !onlyOwn) await notDrawn('38/32');
     await page.context().close();
   }
 } catch (err) {

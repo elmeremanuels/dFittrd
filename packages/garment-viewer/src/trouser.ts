@@ -15,6 +15,10 @@
  *   (`trouserNoCollide`).
  * - **The band is tilted** (lower at the front), and `slideWaistband` reads a band as the cloth within 2 cm of the highest
  *   point: on a tilted band that is the back only. `slideTrouserBand` is the same rule read on the band's own plane.
+ * - **The seams do not stretch.** A trouser hangs from its band by its seams: the rises carry the two legs at the crotch
+ *   point. As plain cloth edges they stretched 0.6 to 3.4 cm in the drape and the crotch seam hung 3.8 to 4.6 cm under the
+ *   body, with edges on it stretched 37 to 59 %. `trouserSeams` hands the drape the seams the bundle names
+ *   (`anchors.seams`), which may then stretch by its `stretchPct` at most.
  * - **A size too small is not drawn.** As for the sewn tee (`sewnNotDrawn`): when the fit engine bands the waist or the
  *   seat `tight` with the body larger than the garment (the placed loop is `open`), or the thigh, the size is not draped
  *   and not drawn, and the reason is handed up. Before this a bottom's band was laid on the body whatever its size.
@@ -23,7 +27,7 @@ import type { AnchorRing } from '@curtain/anchors';
 import type { AnchorGaps, FitResult } from '@curtain/fit-engine';
 import type { Mannequin, Mesh } from '@curtain/mannequin';
 import type { GarmentAnchorsJson } from './bundle';
-import { sample, type BodyField } from './collide';
+import { polarGirth, sample, type BodyField } from './collide';
 import type { GradingJson } from './core/grading';
 import { topEdgePlane } from './core/waistband';
 import { BAND_HOLD_CM, BAND_SEARCH_CM, hullPerimeter, type BandSlide } from './engine';
@@ -84,7 +88,9 @@ export function slideTrouserBand(field: BodyField, start: Float32Array, indices:
   const band = hullPerimeter(pts);
   const yb = plane.a - 2;
   const e = new Float32Array(4);
-  const body = (y: number): number => (sample(field.torso, y, e) ? ellipsePerimeter(e[2]! + clearanceCm, e[3]! + clearanceCm) : NaN);
+  // The drawn outline where the body has one (male shape v2), else the ellipse.
+  const polar = field.torso.polar;
+  const body = (y: number): number => (polar ? polarGirth(polar, y, clearanceCm) : sample(field.torso, y, e) ? ellipsePerimeter(e[2]! + clearanceCm, e[3]! + clearanceCm) : NaN);
   const at = body(yb);
   let drop = 0, rest = at, pastHips = false;
   if (Number.isFinite(at) && band > at + BAND_HOLD_CM) {
@@ -99,4 +105,25 @@ export function slideTrouserBand(field: BodyField, start: Float32Array, indices:
     for (let i = 0; i < n; i++) start[3 * i + 1] = start[3 * i + 1]! - drop;
   }
   return { bandGirthCm: r1(band), bodyAtBandCm: r1(at), bodyAtRestCm: r1(rest), dropCm: r1(drop), pastHips };
+}
+
+export interface TrouserSeams {
+  paths: number[][];
+  /** Shares, not percent. */
+  stretch: number;
+  grain?: { paths: number[][]; stretch: number; shorten?: number };
+}
+
+/** The seams a tape-built trouser names (anchors.json `seams`), or null: paths of welded vertex ids and the stretch they are allowed, as a share. */
+export function trouserSeams(anchors: Pick<GarmentAnchorsJson, 'category' | 'builder' | 'seams'>, vertices: number): TrouserSeams | null {
+  if (!isTapeTrouser(anchors)) return null;
+  const s = anchors.seams;
+  if (!s || !Array.isArray(s.paths) || !(s.stretchPct >= 0)) return null;
+  const valid = (list: unknown): number[][] => (Array.isArray(list) ? (list as unknown[]).filter((p): p is number[] => Array.isArray(p) && p.length >= 2 && p.every((i) => Number.isInteger(i) && i >= 0 && i < vertices)) : []);
+  const paths = valid(s.paths);
+  if (!paths.length) return null;
+  const share = (pct: number): number => Math.min(pct, 20) / 100;
+  const g = s.grain;
+  const grainPaths = g && g.stretchPct >= 0 ? valid(g.paths) : [];
+  return { paths, stretch: share(s.stretchPct), ...(g && grainPaths.length ? { grain: { paths: grainPaths, stretch: share(g.stretchPct), ...(typeof g.shortenPct === 'number' && g.shortenPct >= 0 ? { shorten: share(g.shortenPct) } : {}) } } : {}) };
 }

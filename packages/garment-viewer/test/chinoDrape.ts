@@ -11,7 +11,7 @@ import { pokes } from '../../../spikes/garment-engine/src/pokeThrough';
 import { SYNTHETIC_CHINO_PAYLOAD, SYNTHETIC_CHINO_POM } from '../../../spikes/garment-engine/src/pomChinoSynthetic';
 import { loadBundleFrom, type FetchLike, type SpikeBundle } from '../src/bundle';
 import { strainQuantile, type Cloth } from '../src/cloth';
-import { gradedMesh, hullPerimeter, openSession, prepareFit, relax, sewnNotDrawn, viewerMaterial } from '../src/engine';
+import { DEFAULT_DRAPE, gradedMesh, hullPerimeter, type DrapeOptions, openSession, prepareFit, relax, sewnNotDrawn, viewerMaterial } from '../src/engine';
 import { planAvatar } from '../src/mount';
 
 /** The bundle files as the dev server or the asset route would serve them. */
@@ -64,9 +64,9 @@ export interface ChinoDrapeResult {
 }
 
 /** Drape `size` (null: the size the fit engine recommends, else its closest) on the male table body `id`. */
-export function chinoDrape(built: PomChinoBundle, bundle: SpikeBundle, id: keyof typeof MALE_REFERENCE, size: string | null): ChinoDrapeResult {
+export function chinoDrape(built: PomChinoBundle, bundle: SpikeBundle, id: keyof typeof MALE_REFERENCE, size: string | null, options: DrapeOptions = DEFAULT_DRAPE): ChinoDrapeResult {
   const t = MALE_REFERENCE[id];
-  const plan = planAvatar(bundle.anchors, { family: 'male', heightCm: t.stature, bust: t.chest, waist: t.waist, hip: t.hip, shoulderCm: t.shoulderWidth });
+  const plan = planAvatar(bundle.anchors, { family: 'male', heightCm: t.stature, bust: t.chest, waist: t.waist, hip: t.hip, shoulderCm: t.shoulderWidth }, undefined, built.mannequin.maleShape === 'v2' ? 'v2' : 'v1');
   const session = openSession(plan.m, bundle, SYNTHETIC_CHINO_PAYLOAD);
   // The fit as the embed computes it for a shopper who also gave thigh and inside leg (the table's): without an inside leg
   // the fit engine picks no leg length, so no full W/L size is recommended.
@@ -75,7 +75,7 @@ export function chinoDrape(built: PomChinoBundle, bundle: SpikeBundle, id: keyof
   const row = SYNTHETIC_CHINO_POM.find((r) => r.size === label)!;
   const notDrawn = sewnNotDrawn(session, plan.avatar, fit, label);
   if (notDrawn) return { metrics: { body: id, size: label, recommended: fit.recommendedSize, notDrawn } };
-  const f = prepareFit(session, plan.avatar, plan.field, fit, label, viewerMaterial('product', bundle.material));
+  const f = prepareFit(session, plan.avatar, plan.field, fit, label, viewerMaterial('product', bundle.material), 1.5, options);
   const base = built.base;
   const graded = measurePomChino(base, gradedMesh(session, label).positions);
   const t0 = Date.now();

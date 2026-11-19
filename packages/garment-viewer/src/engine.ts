@@ -14,8 +14,8 @@ import { bundleMaleShapeOf, insideCanonical, makeCollider, type Avatar, type Bod
 import { polarGirth, sample } from './collide';
 import type { SpikeBundle } from './bundle';
 import type { DrapeJob } from './drapeJob';
-import { clothParams, createCloth, isSettled, loopGirth, setLoops, settlePins, stepCloth, type Cloth, type ClothMaterial, type ClothParams, type GirthLoop } from './cloth';
-import { isTapeTrouser, slideTrouserBand, trouserNoCollide, trouserNotDrawn, wornBodyRings } from './trouser';
+import { clothParams, createCloth, isSettled, loopGirth, addSeams, setLoops, settlePins, stepCloth, type Cloth, type ClothMaterial, type ClothParams, type GirthLoop } from './cloth';
+import { isTapeTrouser, slideTrouserBand, trouserNoCollide, trouserNotDrawn, trouserSeams, wornBodyRings } from './trouser';
 import { fitLines, gapsForSize, heatColors, heatField, placeGarment, placementMorph, sizeEntry, type FitLine, type HeatField, type Placement } from './fitting';
 
 // ---------------------------------------------------------------------------
@@ -673,6 +673,12 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   // Seams that do not stretch (`GarmentAnchorsJson.support.seamsAtCm`): the row at each height keeps its graded girth.
   if (support?.seamsAtCm?.length) loops.push(...seamLoops(graded.positions, graded.indices, chains, pinned, support.seamsAtCm, support.seamStretchPct ?? 0));
   setLoops(cloth, loops);
+  // A tape-built trouser's seams (rises, inseams, outseams) do not stretch, nor does its cloth along the grain (`trouser.ts`).
+  const seams = trouserSeams(session.bundle.anchors, chains.length);
+  if (seams) {
+    addSeams(cloth, seams.paths, graded.positions, { stretch: seams.stretch, longRange: true });
+    if (seams.grain) addSeams(cloth, seams.grain.paths, graded.positions, { stretch: seams.grain.stretch, ...(seams.grain.shorten === undefined ? {} : { shorten: seams.grain.shorten }) });
+  }
   for (let i = 0; i < chains.length; i++) if (cuff[i] && !pinned[i]) cloth.leash[i] = CUFF_LEASH_CM;
   const collide = makeCollider(field, CLEARANCE_CM, chains, noCollide, session.sewn);
   // Settle the yoke onto the avatar before pinning it: a small size sits a few mm inside the neck

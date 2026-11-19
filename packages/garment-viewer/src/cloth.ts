@@ -105,6 +105,10 @@ export interface Cloth {
   loopMin: Float32Array;
   /** Per loop, the girth it is pulled back to when its hull grows past it, cm (`GirthLoop.maxGirthCm`); absent: no loop has one. */
   loopMax?: Float32Array;
+  /** Lines that keep their length (`addSeams`: sewn seams, the grain of a woven cloth): pairs of particles, the most each pair may be apart and the least (0: no least), cm. Absent: none. */
+  seams?: Uint32Array;
+  seamMax?: Float32Array;
+  seamMin?: Float32Array;
   /** Simulated time so far, s. */
   time: number;
   /** Frames in a row whose largest particle move stayed under `ClothParams.calmCm`. */
@@ -378,6 +382,64 @@ function projectTethers(pos: Float32Array, w: Float32Array, tether: Int32Array, 
   }
 }
 
+/**
+ * Lines of the cloth that keep their length (`Cloth.seams`): along each path of particles (in order) no two particles may
+ * be farther apart than the path is long between them on `rest`, plus `stretch` (a share). The limit is one way (closer
+ * is allowed, so the line bends and folds freely) unless `shorten` is given: then two neighbours may not come closer than
+ * their rest distance less that share either.
+ * - `longRange` (a sewn seam: felled or taped, it carries load along its length): pairs 1, 2, 4, 8 … steps apart, so a
+ *   long seam holds within a few iterations, as a long-range attachment does.
+ * - without it (the grain of a woven cloth: its threads do not stretch): neighbours only.
+ * Adds to the lines the cloth already has.
+ */
+export function addSeams(cloth: Cloth, paths: readonly (readonly number[])[], rest: ArrayLike<number>, opts: { stretch: number; shorten?: number; longRange?: boolean }): void {
+  const pairs: number[] = Array.from(cloth.seams ?? []), max: number[] = Array.from(cloth.seamMax ?? []), min: number[] = Array.from(cloth.seamMin ?? []);
+  const n = cloth.invMass.length;
+  for (const path of paths) {
+    if (path.some((i) => !(i >= 0 && i < n))) continue;
+    const acc = [0];
+    for (let i = 1; i < path.length; i++) acc.push(acc[i - 1]! + dist(rest, path[i - 1]!, path[i]!));
+    for (let stride = 1; stride < path.length; stride *= 2) {
+      for (let i = 0; i + stride < path.length; i++) {
+        const L = acc[i + stride]! - acc[i]!;
+        pairs.push(path[i]!, path[i + stride]!);
+        max.push(L * (1 + opts.stretch));
+        min.push(stride === 1 && opts.shorten !== undefined ? L * (1 - opts.shorten) : 0);
+      }
+      if (!opts.longRange) break;
+    }
+  }
+  if (pairs.length === 0) return;
+  cloth.seams = Uint32Array.from(pairs);
+  cloth.seamMax = Float32Array.from(max);
+  cloth.seamMin = Float32Array.from(min);
+}
+
+/** Bring the two particles of every seam pair that is too far apart (or too close) back to its limit, by their inverse masses. */
+function projectSeams(pos: Float32Array, w: Float32Array, pairs: Uint32Array, max: Float32Array, min: Float32Array | undefined): void {
+  for (let e = 0; e < max.length; e++) {
+    const a = pairs[2 * e]!, b = pairs[2 * e + 1]!;
+    const wa = w[a]!, wb = w[b]!;
+    const ws = wa + wb;
+    if (ws === 0) continue;
+    const dx = pos[3 * b]! - pos[3 * a]!, dy = pos[3 * b + 1]! - pos[3 * a + 1]!, dz = pos[3 * b + 2]! - pos[3 * a + 2]!;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    const hi = max[e]!, lo = min ? min[e]! : 0;
+    let r: number;
+    if (d2 > hi * hi) r = hi;
+    else if (d2 < lo * lo && d2 > 1e-12) r = lo;
+    else continue;
+    const d = Math.sqrt(d2);
+    const c = (d - r) / (d * ws);
+    pos[3 * a] = pos[3 * a]! + wa * c * dx;
+    pos[3 * a + 1] = pos[3 * a + 1]! + wa * c * dy;
+    pos[3 * a + 2] = pos[3 * a + 2]! + wa * c * dz;
+    pos[3 * b] = pos[3 * b]! - wb * c * dx;
+    pos[3 * b + 1] = pos[3 * b + 1]! - wb * c * dy;
+    pos[3 * b + 2] = pos[3 * b + 2]! - wb * c * dz;
+  }
+}
+
 /** Pull every leashed free particle back inside the sphere of its leash round its anchor. */
 function projectLeashes(pos: Float32Array, w: Float32Array, anchor: Float32Array, leash: Float32Array): void {
   for (let i = 0; i < leash.length; i++) {
@@ -461,6 +523,7 @@ export function stepCloth(cloth: Cloth, params: ClothParams, collide: Collide | 
         projectTethers(pos, invMass, cloth.tether, cloth.tetherRest);
         project(pos, invMass, cloth.edges, cloth.edgeRest, kS);
         project(pos, invMass, cloth.bends, cloth.bendRest, kB);
+        if (cloth.seams && cloth.seamMax) projectSeams(pos, invMass, cloth.seams, cloth.seamMax, cloth.seamMin);
         // After the edges, so a leash holds as a constraint and not only as a start point (collision still wins).
         projectLeashes(pos, invMass, cloth.anchor, cloth.leash);
         const mid = it === params.iterations - 1 || it === params.iterations >> 1;

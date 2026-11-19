@@ -10,6 +10,7 @@ import { MALE_REFERENCE, buildMannequin, familyShape, topology } from '@curtain/
 import { SYNTHETIC_MENS_CHINO_WL, checkGarmentBundle, garmentQaFlags } from '@curtain/schema';
 import { readTexturedGlb } from './glbTextured';
 import { POM_CHINO_ASSUMPTIONS, bodyGirthAt, buildPomChino, measurePomChino, sliceChinoGirths, wornWaistHeight } from './pomChino';
+import { chinoBody } from './pomChinoBody';
 import { CHINO_GATED_KEYS, POM_CHINO_TAPE_TOLERANCE_CM, buildPomChinoBundle } from './pomChinoBundle';
 import { SYNTHETIC_CHINO_BASE_SIZE, SYNTHETIC_CHINO_BODY, SYNTHETIC_CHINO_PAYLOAD, SYNTHETIC_CHINO_POM } from './pomChinoSynthetic';
 
@@ -112,18 +113,33 @@ describe('the POM chino bundle', () => {
     expect(below['44/32']).toBeGreaterThan(4);
   });
 
-  it('is graded by the device to every girth and the inseam within 0.05 cm; the rises are not graded and say by how much', () => {
-    for (const g of bundle.gradingCheck) {
-      for (const k of ['waistWidthCm', 'seatWidthCm', 'thighWidthCm', 'kneeWidthCm', 'legOpeningWidthCm', 'inseamCm'] as const) expect(Math.abs(g.errorCm[k]), `${g.size} ${k}`).toBeLessThan(0.05);
-      expect(Math.abs(g.errorCm.frontRiseCm), g.size).toBeLessThan(0.5);
-      expect(Math.abs(g.errorCm.backRiseCm), g.size).toBeLessThan(1.5);
-    }
+  it('ships every size as built: what the device shows has the size’s own rises, girths and inseam within 0.05 cm', () => {
+    const grading = JSON.parse(bundle.files['grading.json']);
+    expect(Object.keys(grading.built.offsets).sort()).toEqual(SYNTHETIC_CHINO_POM.map((r) => r.size).filter((x) => x !== SYNTHETIC_CHINO_BASE_SIZE).sort());
+    expect(grading.built.vertices).toBe(bundle.base.mesh.positions.length / 3);
+    for (const g of bundle.gradingCheck) for (const k of CHINO_GATED_KEYS) expect(Math.abs(g.errorCm[k]), `${g.size} ${k}`).toBeLessThan(0.05);
+    // The morph alone (the first builder's bundle) does not grade the rises: up to 0.9 cm at the back on this chart.
+    const morphed = buildPomChinoBundle(SYNTHETIC_CHINO_PAYLOAD.id, SYNTHETIC_CHINO_PAYLOAD, SYNTHETIC_CHINO_POM, SYNTHETIC_CHINO_BASE_SIZE, { bodyOfWaist: SYNTHETIC_CHINO_BODY, grading: 'morph', texture: 'plain' });
+    expect(JSON.parse(morphed.files['grading.json']).built).toBeUndefined();
+    expect(Math.max(...morphed.gradingCheck.map((g) => Math.abs(g.errorCm.backRiseCm)))).toBeGreaterThan(0.5);
+    for (const g of morphed.gradingCheck) for (const k of ['waistWidthCm', 'seatWidthCm', 'thighWidthCm', 'kneeWidthCm', 'legOpeningWidthCm', 'inseamCm'] as const) expect(Math.abs(g.errorCm[k]), `${g.size} ${k}`).toBeLessThan(0.05);
+  });
+
+  it('names its seams and its grain for the drape: six seams from the crotch point, band and hems; every row and column', () => {
+    const a = JSON.parse(bundle.files['anchors.json']);
+    expect(a.seams.stretchPct).toBe(POM_CHINO_ASSUMPTIONS.seamStretchPct);
+    expect(a.seams.paths).toHaveLength(6);
+    for (const p of a.seams.paths.slice(0, 4)) expect(p[0]).toBe(bundle.base.crotchPoint);
+    expect(a.seams.grain).toMatchObject({ stretchPct: POM_CHINO_ASSUMPTIONS.grainStretchPct, shortenPct: POM_CHINO_ASSUMPTIONS.grainShortenPct });
+    const n = bundle.base.mesh.positions.length / 3;
+    for (const p of [...a.seams.paths, ...a.seams.grain.paths]) for (const i of p) expect(i >= 0 && i < n).toBe(true);
   });
 
   it('passes the shared gate for the men’s product only, flagged as built from the tape', () => {
     const sizes = SYNTHETIC_CHINO_PAYLOAD.sizeChart.map((r) => r.size);
     const m = meta();
-    expect(m.bytes).toBeLessThan(600_000);
+    // 24 sizes as built (grading.json) and the grain (anchors.json): 1.2 MB, under the 3 MB import limit.
+    expect(m.bytes).toBeLessThan(1_500_000);
     const ok = checkGarmentBundle(m, sizes, { family: 'male' });
     expect(ok).toMatchObject({ ok: true, info: { baseSize: '34/32', family: 'male', qaFlags: ['tape_built_no_chart_check'] } });
     expect(checkGarmentBundle(m, sizes, { family: 'female' })).toEqual({ ok: false, problem: 'family_mismatch' });
@@ -165,9 +181,66 @@ describe('the POM chino bundle', () => {
     expect(JSON.parse(bundle.files['qa.json']).texture).toMatchObject({ kind: 'synthetic-detail', licence: 'CC0-1.0' });
   });
 
+  it('the crotch seam is built the way it hangs: the crotch point is its lowest point, and it rises from there to the front and to the back', () => {
+    const b = bundle.base;
+    const y = (i: number): number => b.mesh.positions[3 * i + 1]!;
+    for (const path of [b.frontRise, b.backRise]) for (let k = 1; k < path.length; k++) expect(y(path[k]!), `step ${k}`).toBeGreaterThanOrEqual(y(path[k - 1]!) - 1e-9);
+    expect(y(b.frontRise[1]!)).toBeGreaterThan(y(b.crotchPoint));
+    expect(y(b.backRise[1]!)).toBeGreaterThan(y(b.crotchPoint));
+  });
+
   it('is deterministic', () => {
     const again = buildPomChinoBundle(SYNTHETIC_CHINO_PAYLOAD.id, SYNTHETIC_CHINO_PAYLOAD, SYNTHETIC_CHINO_POM, SYNTHETIC_CHINO_BASE_SIZE, { bodyOfWaist: SYNTHETIC_CHINO_BODY });
     expect(again.files['qa.json']).toBe(bundle.files['qa.json']);
     expect(Buffer.from(again.files['base.glb']).equals(Buffer.from(bundle.files['base.glb']))).toBe(true);
+  });
+});
+
+describe('the POM chino built on the male shape v2', () => {
+  const v2 = buildPomChinoBundle(SYNTHETIC_CHINO_PAYLOAD.id, SYNTHETIC_CHINO_PAYLOAD, SYNTHETIC_CHINO_POM, SYNTHETIC_CHINO_BASE_SIZE, { bodyOfWaist: SYNTHETIC_CHINO_BODY, maleShape: 'v2' });
+  const files = () => ({ anchors: JSON.parse(v2.files['anchors.json']), grading: JSON.parse(v2.files['grading.json']), material: JSON.parse(v2.files['material.json']), qa: JSON.parse(v2.files['qa.json']), bytes: Object.values(v2.files).reduce((n, f) => n + f.length, 0) });
+
+  it('reads the drawn outlines: the body girth at the worn waist is the drawn body’s, not the containing ellipse’s', () => {
+    const body = buildMannequin(familyShape('male', 'M')!, { maleShape: 'v2' });
+    expect(chinoBody(body).source).toBe('drawn outlines');
+    expect(chinoBody(male).source).toBe('ellipses');
+    const y = wornWaistHeight(body, 27);
+    const e = body.torsoAt(y)!;
+    const ellipse = Math.PI * (3 * (e.a + e.b) - Math.sqrt((3 * e.a + e.b) * (e.a + 3 * e.b)));
+    const drawn = bodyGirthAt(body, y)!;
+    // The ellipse is centimetres longer round than the drawn body; the fit engine's body girth there (waistband less slack) is the drawn one's.
+    expect(ellipse - drawn).toBeGreaterThan(2);
+    const t = MALE_REFERENCE.M;
+    const fit = computeFit(SYNTHETIC_CHINO_PAYLOAD, { measurements: { bust: t.chest, waist: t.waist, hip: t.hip, thigh: t.thigh, inseam: t.inseam }, heightCm: t.stature });
+    expect(Math.abs(drawn - (baseRow.waistWidthCm * 2 - anchorGaps(fit, '34/32')!.slackCm.waist!))).toBeLessThan(1.6);
+  });
+
+  it('passes the tape gate on every size on its v2 table body, with the band at the worn waist on the base size', () => {
+    for (const t of v2.tape) expect(t.maxAbsCm, t.size).toBeLessThanOrEqual(POM_CHINO_TAPE_TOLERANCE_CM);
+    expect(Math.max(...v2.tape.map((t) => t.maxAbsCm))).toBeLessThan(0.1);
+    expect(v2.tape.every((t) => t.body.endsWith('(shape v2)'))).toBe(true);
+    const L = v2.base.levels;
+    expect(L.bandBelowWornCm).toBe(0);
+    expect(L.bandCentreY).toBeCloseTo(L.wornWaistY, 1);
+    // The waistband is not tighter than the drawn body on the base size (on the ellipses it read 6.9 cm tighter).
+    expect(v2.base.tight.map((t) => t.where)).not.toContain('waist');
+    for (const t of v2.tape) expect(t.levels.crotchEaseCm, t.size).toBeGreaterThanOrEqual(POM_CHINO_ASSUMPTIONS.minCrotchEaseCm - 1e-6);
+    for (const g of v2.gradingCheck) for (const k of CHINO_GATED_KEYS) expect(Math.abs(g.errorCm[k]), `${g.size} ${k}`).toBeLessThan(0.05);
+  });
+
+  it('is one welded piece with the v1 build’s rows, and states its body shape; the gate refuses it on the other shape, both ways', () => {
+    const t = topology(v2.base.mesh);
+    expect(t).toMatchObject({ components: 1, nonManifoldEdges: 0, inconsistentEdges: 0, degenerateTriangles: 0 });
+    expect(v2.base.mesh.indices.length).toBe(bundle.base.mesh.indices.length);
+    const sizes = SYNTHETIC_CHINO_PAYLOAD.sizeChart.map((r) => r.size);
+    const m = files();
+    expect(m.anchors.mannequin.maleShape).toBe('v2');
+    expect(m.qa.mannequin.maleShape).toBe('v2');
+    expect(meta().anchors.mannequin.maleShape).toBeUndefined();
+    expect(checkGarmentBundle(m, sizes, { family: 'male', maleShape: 'v2' }).ok).toBe(true);
+    expect(checkGarmentBundle(m, sizes, { family: 'male', maleShape: 'v1' })).toEqual({ ok: false, problem: 'shape_mismatch' });
+    expect(checkGarmentBundle(meta(), sizes, { family: 'male', maleShape: 'v2' })).toEqual({ ok: false, problem: 'shape_mismatch' });
+    expect(checkGarmentBundle(meta(), sizes, { family: 'male', maleShape: 'v1' }).ok).toBe(true);
+    expect(m.bytes).toBeLessThan(1_500_000);
   });
 });

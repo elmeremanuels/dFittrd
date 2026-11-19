@@ -129,8 +129,8 @@ number on screen is a real api answer.
 
 | File | Shows |
 |---|---|
-| `phone-1-overview-month.png` | Overview: month picker (October 2026), the month note, "why whole months", sizes recommended with the hidden-size note |
-| `phone-2-swipes-hidden-note.png` | Swipes: the plain-English hidden note (2 below the floor, 2 hidden with them), the product table with only aalter-studio-1 |
+| `phone-1-overview-month.png` | Overview, scrolled to "Sizes recommended" for October 2026: M and S on the product page, M in swipes. Below it, the note "1 size is hidden because fewer than 5 shoppers were in it. 1 size is hidden as well…" (XL had 1 shopper, so L was hidden with it) |
+| `phone-2-swipes-hidden-note.png` | Swipes: the month picker (October, September, August 2026), the month note, why whole months, the plain-English hidden note (2 below the floor, 2 hidden with them), and the product table with only aalter-studio-1 (monochrome-02 hidden with raw-denim-01; inside aalter, L hidden with XS) |
 | `phone-3-swipes-tables.png` | The colour / fabric / size tables, sums of shown cells only |
 | `phone-4-new-shop.png` | A shop with no closed month: "Your first month of shopper analytics appears on 2 December 2026" |
 

@@ -9,6 +9,7 @@ import { HAIR_SHADE, type Mesh } from '@curtain/mannequin';
 import type { ViewerMaterial } from './engine';
 import { faceOverlayGeometry, faceTextureOf, isFaceTexture, type FaceTexture } from './faceOverlay';
 import { patchSkinV2, updateSkinV2, type SkinShading, type SkinV2Uniforms } from './skin';
+import { binarise, cleanDepth, cleanNormals, flipRows, hexOf, rowOf, type ViewerPasses } from './passes';
 
 /**
  * `classic`: the look every garment has had so far (ACES tone mapping, a warm ground bounce).
@@ -643,6 +644,7 @@ const BODY_MATERIAL = new THREE.MeshStandardMaterial({ color: DEFAULT_BODY_HEX, 
 /** The same grey for a body with a shade per vertex (the v2 head). */
 const BODY_MATERIAL_SHADED = new THREE.MeshStandardMaterial({ color: DEFAULT_BODY_HEX, roughness: 0.75, metalness: 0, vertexColors: true });
 const shaded = (g: THREE.BufferGeometry): boolean => g.getAttribute('color') !== undefined;
+const hasHair = (g: THREE.BufferGeometry): boolean => g.getAttribute('hair') !== undefined;
 
 /** Strength of the white reflection on a skin-coloured body (1 = the grey mannequin's). */
 export const SKIN_SPECULAR = 0.3;
@@ -717,6 +719,14 @@ export class Figure {
 
   setBody(geometry: THREE.BufferGeometry): void {
     this.body.geometry = geometry;
+    if (this.skinV2 && this.skinV2Hair !== hasHair(geometry)) {
+      // The skin-v2 shader reads the hair cover only when it was built with it: rebuild for the new body.
+      this.skin?.dispose();
+      this.skin = null;
+      this.skinV2 = null;
+      this.setSkin(this.skinColour);
+      return;
+    }
     tintHair(geometry, this.skin ? this.skinColour : null);
     if (this.skin && this.skin.vertexColors !== shaded(geometry)) {
       // A material's shader is built for vertex colours or without: switching needs a rebuild.
@@ -732,6 +742,8 @@ export class Figure {
   /** `skin-v2` (opt-in, `skin.ts`) or the flat skin of before; with the lighting it is drawn under. */
   private shading: { kind: SkinShading; lighting: Lighting } = { kind: 'flat', lighting: 'classic' };
   private skinV2: SkinV2Uniforms | null = null;
+  /** Whether the skin-v2 material was built for a geometry with head v3's hair cover. */
+  private skinV2Hair = false;
 
   /**
    * How a skin colour is shaded: `flat` (default, the material of before) or `skin-v2` (`skin.ts`),
@@ -772,7 +784,8 @@ export class Figure {
       if (this.shading.kind === 'skin-v2') {
         const rig = LIGHTING_RIGS[this.shading.lighting];
         const e = frontIrradiance(rig);
-        this.skinV2 = patchSkinV2(this.skin, colour, rig.toneMapping, [Math.PI / e[0], Math.PI / e[1], Math.PI / e[2]]);
+        this.skinV2Hair = hasHair(this.body.geometry);
+        this.skinV2 = patchSkinV2(this.skin, colour, rig.toneMapping, [Math.PI / e[0], Math.PI / e[1], Math.PI / e[2]], this.skinV2Hair);
       }
     } else this.skin.color.set(colour);
     if (this.skinV2) updateSkinV2(this.skin, this.skinV2, colour);
@@ -905,5 +918,174 @@ export class Figure {
     this.garment.material.dispose();
     this.skin?.dispose();
     this.skin = null;
+  }
+}
+
+/** Share of the stature added as room in a render pass's frame (split over head and feet). */
+export const PASS_FRAME_MARGIN = 0.16;
+
+/**
+ * Camera of the render passes: the view direction of the front frame, aimed at the middle of the
+ * body, at the distance where the stature plus `PASS_FRAME_MARGIN` fills the vertical field of view.
+ * Pure.
+ */
+export function passFrame(position: { x: number; y: number; z: number }, target: { x: number; y: number; z: number }, statureCm: number, fovDeg: number): { position: [number, number, number]; target: [number, number, number] } {
+  const stature = statureCm > 0 ? statureCm : 170;
+  const dx = position.x - target.x, dz = position.z - target.z;
+  const len = Math.hypot(dx, dz) || 1;
+  const h = stature * (1 + PASS_FRAME_MARGIN);
+  const dist = h / 2 / Math.tan(((fovDeg * Math.PI) / 180) / 2);
+  const cy = stature / 2;
+  return { position: [target.x + (dx / len) * dist, cy, target.z + (dz / len) * dist], target: [target.x, cy, target.z] };
+}
+
+/** What `renderPasses` needs besides the stage and the figure. */
+export interface PassRequest {
+  width: number;
+  height: number;
+  statureCm: number;
+  /** World y of the waist and hip rings (cm). */
+  waistY: number;
+  hipY: number;
+  /** Neighbouring size's garment positions (per particle), or null. */
+  neighbour: { size: string; pos: Float32Array } | null;
+  /** The garment's positions on screen now, to restore after the neighbour mask. */
+  current: Float32Array | null;
+  size: string;
+  garmentHex: string;
+}
+
+const DEPTH_VERTEX = /* glsl */ `varying float vViewZ;
+void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vViewZ = -mv.z; gl_Position = projectionMatrix * mv; }`;
+const DEPTH_FRAGMENT = /* glsl */ `uniform float uNear; uniform float uFar; varying float vViewZ;
+void main() { float t = clamp((uFar - vViewZ) / max(1e-3, uFar - uNear), 0.0, 1.0); gl_FragColor = vec4(vec3(mix(1.0 / 255.0, 1.0, t)), 1.0); }`;
+
+/**
+ * Draw the render passes of the AI realism layer (passes.ts) from the front camera, then put the
+ * view back as it was. The colour pass is the screen's own drawing (same tone mapping); the other
+ * passes go to a render target without multisampling, so masks come out exactly black and white.
+ * The face texture and the picked skin colour are taken off for the colour pass (standard head and
+ * body colour) and put back after.
+ */
+export function renderPasses(stage: Stage, figure: Figure, req: PassRequest): ViewerPasses {
+  const { renderer, scene, camera, controls } = stage;
+  const { width: w, height: h } = req;
+  // Save the view.
+  const saved = {
+    pos: camera.position.clone(),
+    target: controls.target.clone(),
+    aspect: camera.aspect,
+    ratio: renderer.getPixelRatio(),
+    size: renderer.getSize(new THREE.Vector2()),
+    background: scene.background,
+    bodyMaterial: figure.body.material,
+    garmentMaterial: figure.garment.material,
+    faceVisible: figure.face?.visible ?? false,
+  };
+  const hidden: THREE.Object3D[] = [];
+  scene.traverse((o) => {
+    if (o.userData[ROLE] === 'stage' && o.visible) {
+      o.visible = false;
+      hidden.push(o);
+    }
+  });
+  if (figure.face) figure.face.visible = false;
+  figure.body.material = shaded(figure.body.geometry) ? BODY_MATERIAL_SHADED : BODY_MATERIAL;
+  try {
+    renderer.setPixelRatio(1);
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    // Front view, framed with room under the feet and over the head (`passFrame`): a hem that an AI
+    // image moves must stay inside the picture for the checks to see it.
+    stage.frame(60, req.statureCm);
+    const pf = passFrame(camera.position, controls.target, req.statureCm, camera.fov);
+    camera.position.set(...pf.position);
+    controls.target.set(...pf.target);
+    camera.lookAt(controls.target);
+    camera.updateMatrixWorld();
+    scene.background = new THREE.Color(BACKDROP_HEX);
+
+    // Colour: the screen drawing, read from the drawing buffer (preserveDrawingBuffer is on).
+    renderer.setRenderTarget(null);
+    renderer.render(scene, camera);
+    const gl = renderer.getContext();
+    const colourRaw = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, colourRaw);
+    const colour = flipRows(colourRaw, w, h);
+
+    const target = new THREE.WebGLRenderTarget(w, h, { depthBuffer: true, samples: 0, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+    const read = (): Uint8Array => {
+      const buf = new Uint8Array(w * h * 4);
+      renderer.setRenderTarget(target);
+      renderer.render(scene, camera);
+      renderer.readRenderTargetPixels(target, 0, 0, w, h, buf);
+      renderer.setRenderTarget(null);
+      return flipRows(buf, w, h);
+    };
+    scene.background = new THREE.Color(0x000000);
+    const white = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, toneMapped: false });
+    const black = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide, toneMapped: false });
+    const normalMat = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide });
+    const box = new THREE.Box3().setFromObject(figure.group);
+    const sphere = box.getBoundingSphere(new THREE.Sphere());
+    const dist = camera.position.distanceTo(sphere.center);
+    const depthMat = new THREE.ShaderMaterial({ uniforms: { uNear: { value: dist - sphere.radius }, uFar: { value: dist + sphere.radius } }, vertexShader: DEPTH_VERTEX, fragmentShader: DEPTH_FRAGMENT, side: THREE.DoubleSide });
+    try {
+      figure.body.material = white;
+      figure.garment.material = white as unknown as THREE.MeshPhysicalMaterial;
+      const figureMask = binarise(read());
+      figure.body.material = black;
+      const garmentMask = binarise(read());
+      figure.body.material = depthMat;
+      figure.garment.material = depthMat as unknown as THREE.MeshPhysicalMaterial;
+      const depth = cleanDepth(read(), figureMask);
+      figure.body.material = normalMat;
+      figure.garment.material = normalMat as unknown as THREE.MeshPhysicalMaterial;
+      const normal = cleanNormals(read(), figureMask);
+      let neighbour: ViewerPasses['neighbour'] = null;
+      if (req.neighbour) {
+        figure.setPositions(req.neighbour.pos);
+        figure.body.material = black;
+        figure.garment.material = white as unknown as THREE.MeshPhysicalMaterial;
+        neighbour = { size: req.neighbour.size, garmentMask: { width: w, height: h, data: binarise(read()) } };
+        if (req.current) figure.setPositions(req.current);
+      }
+      const project = (y: number): number => rowOf(projectToCanvas(camera, new THREE.Vector3(0, y, 0), w, h).y, h);
+      return {
+        kind: 'renderPasses',
+        width: w,
+        height: h,
+        size: req.size,
+        colour: { width: w, height: h, data: colour },
+        depth: { width: w, height: h, data: depth },
+        normal: { width: w, height: h, data: normal },
+        garmentMask: { width: w, height: h, data: garmentMask },
+        figureMask: { width: w, height: h, data: figureMask },
+        neighbour,
+        meta: { statureCm: req.statureCm, waistRow: project(req.waistY), hipRow: project(req.hipY), backdropHex: hexOf(colour[0]!, colour[1]!, colour[2]!), garmentHex: req.garmentHex },
+      };
+    } finally {
+      target.dispose();
+      white.dispose();
+      black.dispose();
+      normalMat.dispose();
+      depthMat.dispose();
+    }
+  } finally {
+    // Put the view back.
+    scene.background = saved.background;
+    for (const o of hidden) o.visible = true;
+    if (figure.face) figure.face.visible = saved.faceVisible;
+    figure.body.material = saved.bodyMaterial;
+    figure.garment.material = saved.garmentMaterial;
+    renderer.setPixelRatio(saved.ratio);
+    renderer.setSize(saved.size.x, saved.size.y, false);
+    camera.aspect = saved.aspect;
+    camera.updateProjectionMatrix();
+    camera.position.copy(saved.pos);
+    controls.target.copy(saved.target);
+    controls.update();
+    stage.render(true);
   }
 }

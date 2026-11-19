@@ -12,6 +12,7 @@ import {
   MOCK_GARMENTS,
   type AnalyticsAbandonedResponse,
   type AnalyticsFitSizesResponse,
+  type AnalyticsPeriodsResponse,
   type AnalyticsSwipesResponse,
   type BillingAnomaliesResponse,
   type MerchantLedgerResponse,
@@ -66,7 +67,28 @@ export function mockUsage(from: string, to: string): UsageResponse {
   };
 }
 
-export function mockAnalytics(from: string, to: string): AnalyticsSwipesResponse {
+/** The last closed month and the two before it, as GET /v1/merchant/analytics/periods would answer today. */
+export function mockPeriods(now = new Date()): AnalyticsPeriodsResponse {
+  // a month is served from the second day of the next month (ANALYTICS_PERIOD_GRACE_HOURS)
+  const grace = new Date(now.getTime() - 86_400_000);
+  const month = (offset: number) => new Date(Date.UTC(grace.getUTCFullYear(), grace.getUTCMonth() + offset, 1)).toISOString().slice(0, 7);
+  return {
+    granularity: 'month',
+    kAnonymityFloor: 5,
+    periods: [month(-1), month(-2), month(-3)],
+    openPeriod: month(0),
+    openPeriodAvailableAt: new Date(Date.UTC(grace.getUTCFullYear(), grace.getUTCMonth() + 1, 2)).toISOString(),
+  };
+}
+
+function mockPeriodFields(period: string, suppression: { belowFloor: number; complementary: number }) {
+  const [y, m] = period.split('-').map(Number) as [number, number];
+  const from = new Date(Date.UTC(y, m - 1, 1)).toISOString().slice(0, 10);
+  const to = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  return { period, from, to, kAnonymityFloor: 5, suppressedGroups: suppression.belowFloor + suppression.complementary, suppression };
+}
+
+export function mockAnalytics(period: string): AnalyticsSwipesResponse {
   const byProduct = MOCK_GARMENTS.slice(0, 8).map((g, i) => ({
     externalId: g.id,
     love: 40 + i * 7,
@@ -77,10 +99,7 @@ export function mockAnalytics(from: string, to: string): AnalyticsSwipesResponse
     passReasons: { fit: 9 + i, price: 4, colour: 3, style: 7, unknown: 2 },
   }));
   return {
-    from,
-    to,
-    kAnonymityFloor: 5,
-    suppressedGroups: 3,
+    ...mockPeriodFields(period, { belowFloor: 2, complementary: 1 }),
     byProduct,
     byColour: [
       { hue: 'orange', love: 120, pass: 80, save: 30, less: 10 },
@@ -117,20 +136,20 @@ export function mockAbandoned(usage: UsageResponse): { opens: number; abandoned:
 }
 
 /** Standalone (on-page) fit sizes, same shape as GET /v1/merchant/analytics/fit-sizes. */
-export function mockFitSizes(from: string, to: string): AnalyticsFitSizesResponse {
+export function mockFitSizes(period: string): AnalyticsFitSizesResponse {
   const bySize = [
     { size: 'S', sessions: 64 },
     { size: 'M', sessions: 131 },
     { size: 'L', sessions: 88 },
     { size: 'XL', sessions: 21 },
   ];
-  return { from, to, kAnonymityFloor: 5, suppressedGroups: 1, bySize, totals: { sessions: bySize.reduce((n, s) => n + s.sessions, 0) } };
+  return { ...mockPeriodFields(period, { belowFloor: 1, complementary: 1 }), bySize, totals: { sessions: bySize.reduce((n, s) => n + s.sessions, 0) } };
 }
 
 /** Same shape as GET /v1/merchant/analytics/abandoned. */
-export function mockAbandonedAnalytics(from: string, to: string, usage: UsageResponse): AnalyticsAbandonedResponse {
+export function mockAbandonedAnalytics(period: string, usage: UsageResponse): AnalyticsAbandonedResponse {
   const { opens, abandoned } = mockAbandoned(usage);
-  return { from, to, kAnonymityFloor: 5, suppressedGroups: 2, totals: { sessions: opens, resolved: opens - Math.round(abandoned / 2), withFit: opens - abandoned }, byProduct: [] };
+  return { ...mockPeriodFields(period, { belowFloor: 2, complementary: 0 }), totals: { sessions: opens, resolved: opens - Math.round(abandoned / 2), withFit: opens - abandoned }, byProduct: [] };
 }
 
 /** Same shape as GET /v1/merchant/usage/anomalies: one capped day in the range. */

@@ -22,6 +22,8 @@ import {
   type GarmentCategory,
   type LengthCm,
   type SizeRow,
+  SLEEVE_CONVENTIONS,
+  type SleeveConvention,
   type StyleTags,
 } from '../garment';
 import { FABRIC_PRIMARY_LIBRARY_IDS, fabricLibraryId, fabricPayloadName } from '../fabrics';
@@ -133,6 +135,21 @@ function validated<T>(schema: z.ZodType<T, unknown>, value: unknown, sink: Warni
     path,
     message: first ? `${first.path.join('.') || '(root)'}: ${first.message}` : 'invalid value',
   });
+  return undefined;
+}
+
+/**
+ * Where a chart's sleeve is measured from (men-3d-plan slice M2b): `shoulder_point` or
+ * `centre_back`, written any case, with spaces or dashes, `center` spelled either way, and
+ * `shoulder_seam` for the shoulder point. Anything else is reported and left out.
+ */
+export function coerceSleeveConvention(value: unknown, sink: WarningSink, source: string): SleeveConvention | undefined {
+  const raw = coerceString(value);
+  if (raw === undefined) return undefined;
+  const key = raw.toLowerCase().replace(/[\s-]+/g, '_');
+  const v = key === 'center_back' ? 'centre_back' : key === 'shoulder_seam' ? 'shoulder_point' : key;
+  if ((SLEEVE_CONVENTIONS as readonly string[]).includes(v)) return v as SleeveConvention;
+  warn(sink, { source, path: 'sleeveConvention', message: `expected shoulder_point or centre_back, got '${raw}'` });
   return undefined;
 }
 

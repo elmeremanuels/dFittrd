@@ -108,6 +108,17 @@
 		$box.find('input[name="curtain[fabric_stretch_pct]"]').trigger('focus');
 	});
 
+	// Men's chart columns (neck, sleeve, length, rise, W/L): shown on a men's product or with a men's template.
+	function showMens($box, on) {
+		$box.toggleClass('curtain-show-mens', !!on);
+		var $foot = $box.find('.curtain-chart-foot');
+		$foot.attr('colspan', $foot.attr(on ? 'data-colspan-all' : 'data-colspan-women'));
+	}
+	$(document).on('change', 'select[name="curtain[audience]"]', function () {
+		var $box = $(this).closest('.curtain-box');
+		if (this.value === 'men') showMens($box, true);
+	});
+
 	// Size chart template (assets/chart-templates.json from @curtain/schema): a body template fills
 	// sizes and numbers, a garment template fills the size labels and leaves the numbers to measure.
 	$(document).on('change', '.curtain-template-select', function () {
@@ -129,6 +140,8 @@
 		var filled = $rows.find('input').filter(function () { return this.value !== ''; }).length > 0;
 		if (filled && !window.confirm(curtainAdmin.replaceChart)) return;
 		$box.find('input[name="curtain[size_chart_type]"][value="' + t.kind + '"]').prop('checked', true).trigger('change');
+		if (t.audience === 'men') showMens($box, true);
+		$box.find('input[name="curtain[size_axes]"]').prop('checked', t.axes === 'wl');
 		var $template = $rows.first().clone();
 		$template.find('input').val('');
 		$table.find('tbody').empty();

@@ -23,7 +23,7 @@ final class Sanitizer {
 
 	/**
 	 * @param array<string,mixed> $in  The `curtain` POST array.
-	 * @return array{meta: array<string, string|null>, errors: string[]}
+	 * @return array{meta: array<string, string|null>, chart: array{errors: string[], warnings: string[], input: ?array<string,mixed>}, tape: ?array<string,mixed>, errors: string[]}
 	 */
 	public static function from_post( array $in ): array {
 		$meta   = array();
@@ -134,7 +134,7 @@ final class Sanitizer {
 			if ( ! is_array( $row ) ) {
 				continue;
 			}
-			$size = self::text( $row['size'] ?? '', 16 );
+			$size = self::text( $row['size'] ?? '', Vocab::SIZE_LABEL_MAX );
 			if ( '' === $size ) {
 				continue;
 			}
@@ -150,7 +150,13 @@ final class Sanitizer {
 			}
 			$rows[] = $r;
 		}
-		$meta['_curtain_size_chart'] = $rows ? self::json( array_slice( $rows, 0, 30 ) ) : null;
+		$rows = array_slice( $rows, 0, Vocab::SIZE_CHART_MAX_ROWS );
+		// Men's charts (men-3d-plan M2): W/L sizes carry their axes, read from the "32/34" label.
+		$wl = 'wl' === self::text( $in['size_axes'] ?? '' );
+		if ( $wl ) {
+			$rows = Chart_Columns::with_wl_axes( $rows );
+		}
+		$meta['_curtain_size_chart'] = $rows ? self::json( $rows ) : null;
 
 		$sct = self::text( $in['size_chart_type'] ?? '' );
 		if ( '' !== $sct && ! in_array( $sct, array( 'garment', 'body' ), true ) ) {
@@ -161,6 +167,39 @@ final class Sanitizer {
 			$errors[] = 'sizeChartType'; // Required whenever a chart is present (T14).
 		}
 		$meta['_curtain_size_chart_type'] = self::or_null( $sct );
+
+		// Where the sleeve is measured from: kept only with a sleeve column. The check (twin of
+		// checkChartColumns) blocks the save of the chart in plain words: a W/L label that is not
+		// waist/leg, a pair twice, a garment sleeve without its measuring point.
+		$conv       = self::text( $in['sleeve_convention'] ?? '' );
+		$has_sleeve = false;
+		foreach ( $rows as $r ) {
+			$has_sleeve = $has_sleeve || isset( $r['sleeve'] );
+		}
+		$meta['_curtain_sleeve_convention'] = $has_sleeve && in_array( $conv, Vocab::SLEEVE_CONVENTIONS, true ) ? $conv : null;
+		$chart_check                         = Chart_Columns::check(
+			array(
+				'sizeChartType'    => '' === $sct ? null : $sct,
+				'sizeChart'        => $rows,
+				'sleeveConvention' => '' === $conv ? null : $conv,
+				'wl'               => $wl,
+			)
+		);
+		$chart = array(
+			'errors'   => $chart_check['errors'],
+			'warnings' => $chart_check['warnings'],
+			'input'    => null,
+		);
+		if ( $chart_check['errors'] ) {
+			// Nothing of the chart is saved; what was typed comes back with the messages.
+			unset( $meta['_curtain_size_chart'], $meta['_curtain_size_chart_type'], $meta['_curtain_sleeve_convention'] );
+			$chart['input'] = array(
+				'size_chart'        => $rows,
+				'size_chart_type'   => $sct,
+				'size_axes'         => $wl ? 'wl' : '',
+				'sleeve_convention' => $conv,
+			);
+		}
 
 		// -- garment measurements (closure + the table) ----------------------------------------
 		$tape = null;
@@ -257,6 +296,7 @@ final class Sanitizer {
 
 		return array(
 			'meta'   => $meta,
+			'chart'  => $chart,
 			'errors' => array_values( array_unique( $errors ) ),
 			'tape'   => null === $tape ? null : array(
 				'errors'   => $tape['errors'],

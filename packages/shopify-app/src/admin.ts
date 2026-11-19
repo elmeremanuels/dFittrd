@@ -6,6 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
+  CHART_COLUMN_TEXT,
   ESTIMATE_DISCLAIMER,
   GARMENT_CLOSURES,
   GARMENT_TAPE_FIELDS,
@@ -97,6 +98,8 @@ export function renderAdminPage(cfg: AdminPageConfig): string {
     disclaimer: ESTIMATE_DISCLAIMER,
     /** The "Garment measurements" form: its English catalogue (D21) and vocabularies, from @curtain/schema. */
     tape: GARMENT_TAPE_ADMIN_CONFIG,
+    /** The size chart builder's men's columns (neck, sleeve, length, rise, W/L): English catalogue (D21). */
+    chartColumns: CHART_COLUMN_TEXT,
   };
   const html = cfg.template ?? adminPageTemplate();
   // Function replacers: a string replacement would interpret `$&`, `$'`, `` $` `` inside the values.

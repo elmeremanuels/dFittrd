@@ -5,7 +5,7 @@
  */
 import { choosePoseVariant, type PoseVariant } from './models';
 import type { Sex } from './types';
-import type { FaceResultMessage, FaceTextureMessage, GateMessage, ProgressMessage, ReadyMessage, ScanResultMessage, WorkerInbound, WorkerOutbound } from './workerProtocol';
+import type { FaceLookMessage, FaceResultMessage, FaceTextureMessage, GateMessage, ProgressMessage, ReadyMessage, ScanResultMessage, WorkerInbound, WorkerOutbound } from './workerProtocol';
 
 export interface ScanSessionOptions {
   variant?: PoseVariant | undefined;
@@ -31,6 +31,7 @@ export class ScanSession {
   private pendingResult: { resolve: (m: ScanResultMessage) => void; reject: (e: Error) => void } | null = null;
   private pendingFace: { resolve: (m: FaceResultMessage) => void; reject: (e: Error) => void } | null = null;
   private pendingTexture: { resolve: (m: FaceTextureMessage) => void; reject: (e: Error) => void } | null = null;
+  private pendingLook: { resolve: (m: FaceLookMessage) => void; reject: (e: Error) => void } | null = null;
   private pendingReady: { resolve: (m: ReadyMessage) => void; reject: (e: Error) => void } | null = null;
   private readonly opts: Required<Pick<ScanSessionOptions, 'needFace' | 'needPose' | 'initTimeoutMs'>> & ScanSessionOptions;
   ready: ReadyMessage | null = null;
@@ -136,6 +137,25 @@ export class ScanSession {
     });
   }
 
+  /**
+   * Slices 4 and 5: one face photo → a stylised 2D face tile and/or a skin tone suggestion. The
+   * bitmap is transferred (and closed by the worker); the landmarks stay in the worker.
+   */
+  faceLook(bitmap: ImageBitmap, want: { tile: boolean; skin: boolean; aspect?: number }): Promise<FaceLookMessage> {
+    if (!this.worker || this.disposed) {
+      bitmap.close();
+      return Promise.reject(new Error('scan session is not running'));
+    }
+    if (this.pendingLook) {
+      bitmap.close();
+      return Promise.reject(new Error('face look already pending'));
+    }
+    return new Promise((resolve, reject) => {
+      this.pendingLook = { resolve, reject };
+      this.send({ type: 'faceLook', bitmap, tile: want.tile, skin: want.skin, ...(want.aspect ? { aspect: want.aspect } : {}) }, [bitmap]);
+    });
+  }
+
   reset(): void {
     this.send({ type: 'reset' });
   }
@@ -163,6 +183,8 @@ export class ScanSession {
     this.pendingFace?.reject(e);
     this.pendingTexture?.reject(e);
     this.pendingTexture = null;
+    this.pendingLook?.reject(e);
+    this.pendingLook = null;
     this.pendingReady = null;
     this.pendingResult = null;
     this.pendingFace = null;
@@ -193,6 +215,10 @@ export class ScanSession {
         this.pendingTexture?.resolve(msg);
         this.pendingTexture = null;
         break;
+      case 'faceLookResult':
+        this.pendingLook?.resolve(msg);
+        this.pendingLook = null;
+        break;
       case 'error': {
         const e = new Error(msg.message);
         if (msg.stage === 'init') {
@@ -207,6 +233,9 @@ export class ScanSession {
         } else if (msg.stage === 'faceTexture') {
           this.pendingTexture?.reject(e);
           this.pendingTexture = null;
+        } else if (msg.stage === 'faceLook') {
+          this.pendingLook?.reject(e);
+          this.pendingLook = null;
         }
         // frame-stage errors are transient: the next frame is tried again
         break;

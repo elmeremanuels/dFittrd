@@ -240,27 +240,30 @@ describe('Stripe signature header', () => {
 });
 
 describe('merchant analytics: size buckets clear the k floor on their own', () => {
-  it('a size chosen by fewer than K users is dropped from the product histogram', async () => {
-    const t = await makeApp({ K_ANON: '5' });
+  it('a size chosen by fewer than K users is dropped from the product histogram, and so is its complement', async () => {
+    const clock = { shift: 0 };
+    const t = await makeApp({ K_ANON: '5' }, { now: () => new Date(Date.now() + clock.shift) });
     try {
       const s = await seedShop(t);
       const at = Date.now();
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < 11; i++) {
         const d = await createDevice(t);
         await t.app.inject({
           method: 'POST',
           url: '/v1/swipes',
           headers: d.auth,
-          payload: { events: [{ itemId: 'aalter-studio-1', action: 'love', at, sizeAtSwipe: i < 5 ? 'M' : 'XS', fitScore: 0.9, dealIndex: 0, shopId: s.shop.id, clientId: `r-${d.deviceId}` }] },
+          payload: { events: [{ itemId: 'aalter-studio-1', action: 'love', at, sizeAtSwipe: i < 5 ? 'M' : i < 10 ? 'S' : 'XS', fitScore: 0.9, dealIndex: 0, shopId: s.shop.id, clientId: `r-${d.deviceId}` }] },
         });
       }
-      const day = new Date(at).toISOString().slice(0, 10);
-      const res = await t.app.inject({ method: 'GET', url: `/v1/merchant/analytics/swipes?from=${day}&to=${day}`, headers: { authorization: `Bearer ${s.apiKey}` } });
+      const period = new Date(at).toISOString().slice(0, 7);
+      clock.shift = 70 * 86_400_000;
+      const res = await t.app.inject({ method: 'GET', url: `/v1/merchant/analytics/swipes?period=${period}`, headers: { authorization: `Bearer ${s.apiKey}` } });
       const a = res.json<{ byProduct: Array<{ externalId: string; love: number; sizeHistogram: Record<string, number> }>; bySize: Array<{ size: string }> }>();
       expect(a.byProduct).toHaveLength(1);
-      expect(a.byProduct[0]!.love).toBe(6);
-      expect(a.byProduct[0]!.sizeHistogram).toEqual({ M: 5 });
-      expect(a.bySize.map((x) => x.size)).toEqual(['M']);
+      expect(a.byProduct[0]!.love).toBe(11);
+      // XS (one person) is hidden; love − M − S would give it back, so M (the tie sorts first) is hidden too.
+      expect(a.byProduct[0]!.sizeHistogram).toEqual({ S: 5 });
+      expect(a.bySize.map((x) => x.size)).toEqual(['S']);
     } finally {
       await t.close();
     }

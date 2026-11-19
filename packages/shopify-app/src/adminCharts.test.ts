@@ -72,7 +72,8 @@ function mountPage(routes: Record<string, (c: Call) => unknown>, picker?: (opts:
       const key = `${init.method} ${u.pathname}`;
       const h = routes[key] ?? DEFAULTS[key];
       if (!h) return new Response(JSON.stringify({ error: { code: 'nope', message: `unmocked ${key}` } }), { status: 404 });
-      const r = h(call);
+      const r = h(call) as { __status?: number; body?: unknown } | null;
+      if (r && typeof r === 'object' && typeof r.__status === 'number') return new Response(JSON.stringify(r.body), { status: r.__status });
       return new Response(JSON.stringify(r), { status: 200 });
     }),
   );
@@ -328,7 +329,7 @@ describe('admin page: men\u2019s templates', () => {
   it('are not offered while their sources wait for the legal review', async () => {
     mountPage({});
     await vi.waitFor(() => expect(document.querySelectorAll('input[name="tpl"]').length).toBeGreaterThan(5));
-    expect(chartTemplatesDto().templates.some((t) => t.audience === 'men')).toBe(false);
+    expect(chartTemplatesDto().templates.some((t) => t.audience === 'men' && t.kind === 'body')).toBe(false);
     for (const id of ['mens-letter-body', 'eu-mens-body', 'mens-jeans-wl-body']) expect(document.getElementById('tpl-' + id), id).toBeNull();
     expect(document.getElementById('tpl-uk-womens-body')).not.toBeNull();
   });
@@ -358,6 +359,85 @@ describe('admin page: men\u2019s templates', () => {
     expect($('chart-head').textContent).toContain('Bust (cm)');
     // Each pick saves the template to onboarding; let those finish before the page is torn down.
     await vi.waitFor(() => expect(calls.filter((c) => c.method === 'PUT').map((c) => c.body)).toEqual([{ templateId: 'mens-letter-body' }, { templateId: 'mens-jeans-wl-body' }, { templateId: 'uk-womens-body' }]));
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  });
+});
+
+describe('admin page: men\u2019s garment templates (neck, sleeve, length, rise, W/L)', () => {
+  const ok = (sizeChartType: string) => () => ({ written: ['1'], skipped: [], failed: [], syncQueued: 1, nextCursor: null, chart: { sizeChartType, sizeChart: [] }, warnings: [] });
+  const typeIn = (size: string, label: string, value: string) => {
+    const input = Array.from($('chart-body').querySelectorAll('input')).find((i) => (i.getAttribute('aria-label') ?? '').startsWith(`Size ${size} ${label} `))!;
+    input.value = value;
+    fire(input, 'change');
+  };
+  const pickTag = () => {
+    const tag = $('sel-tag');
+    fire(tag, 'focus');
+    tag.value = 'mens';
+  };
+
+  it("a women's template keeps its columns, help line and no sleeve question", async () => {
+    mountPage({});
+    await vi.waitFor(() => expect(document.querySelectorAll('input[name="tpl"]:checked').length).toBe(1));
+    expect($('chart-head').textContent).toBe('SizeBust (cm)Waist (cm)Hip (cm)');
+    expect($('sleeve-convention').classList.contains('hidden')).toBe(true);
+    expect($('chart-wl-hint').classList.contains('hidden')).toBe(true);
+    expect($('chart-help').textContent).toMatch(/^Bust, waist and hip all round/);
+    const garment = $('tpl-garment-au-dress-top');
+    garment.checked = true;
+    fire(garment, 'change');
+    expect($('chart-head').textContent).toBe('SizeBust (cm)Waist (cm)Hip (cm)');
+    expect($('sleeve-convention').classList.contains('hidden')).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  });
+
+  it('the tee: Chest, Length, Sleeve and Neck columns, the sleeve measuring point is asked and sent', async () => {
+    const calls = mountPage({ 'POST /shopify/charts/assign': ok('garment') });
+    await vi.waitFor(() => expect(document.querySelectorAll('input[name="tpl"]').length).toBeGreaterThan(5));
+    const tee = $('tpl-garment-mens-tee');
+    tee.checked = true;
+    fire(tee, 'change');
+    expect($('chart-head').textContent).toBe('SizeChest (cm)Waist (cm)Shoulder (cm)Length (cm)Sleeve (cm)Neck (cm)');
+    expect($('sleeve-convention').classList.contains('hidden')).toBe(false);
+    expect($('sleeve-convention').textContent).toContain('from the shoulder seam to the cuff');
+    expect($('chart-help').textContent).toMatch(/^Chest and waist all round/);
+    for (const [size, chest] of [['S', '98'], ['M', '106'], ['L', '114'], ['XL', '122'], ['XXL', '131']] as const) typeIn(size, 'Chest', chest);
+    typeIn('M', 'Sleeve', '21');
+    typeIn('M', 'Neck', '43');
+    const cb = document.querySelector('input[name="sleeve-convention"][value="centre_back"]')!;
+    cb.checked = true;
+    pickTag();
+    $('btn-assign').click();
+    await vi.waitFor(() => expect(calls.some((c) => c.path === '/shopify/charts/assign')).toBe(true));
+    const chart = calls.find((c) => c.path === '/shopify/charts/assign')!.body!.chart as Record<string, unknown>;
+    expect(chart.sleeveConvention).toBe('centre_back');
+    expect(chart.sizeAxes).toBeUndefined();
+    expect((chart.sizeChart as unknown[])[1]).toEqual({ size: 'M', bust: 106, sleeve: 21, neck: 43 });
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  });
+
+  it('the chino: Seat and Rise columns, W/L sizes sent as such, and the api’s plain-English refusal is shown at the chart', async () => {
+    const calls = mountPage({
+      'POST /shopify/charts/assign': () => ({ __status: 422, body: { error: { code: 'invalid_chart', message: 'x', details: { errors: ['Size 33 is not a waist/leg size: write it as waist/leg, for example 32/34.'], warnings: [] } } } }),
+    });
+    await vi.waitFor(() => expect(document.querySelectorAll('input[name="tpl"]').length).toBeGreaterThan(5));
+    const chino = $('tpl-garment-mens-chino-wl');
+    chino.checked = true;
+    fire(chino, 'change');
+    expect($('chart-head').textContent).toBe('SizeWaist (cm)Seat (cm)Thigh (cm)Rise (cm)Inseam (cm)');
+    expect($('chart-body').querySelectorAll('tr').length).toBe(15);
+    expect($('chart-wl-hint').classList.contains('hidden')).toBe(false);
+    expect($('sleeve-convention').classList.contains('hidden')).toBe(true);
+    for (const size of ['30/30', '30/32', '30/34', '32/30', '32/32', '32/34', '34/30', '34/32', '34/34', '36/30', '36/32', '36/34', '38/30', '38/32', '38/34']) typeIn(size, 'Waist', '80');
+    typeIn('32/32', 'Rise', '26.5');
+    pickTag();
+    $('btn-assign').click();
+    await vi.waitFor(() => expect($('chart-check').textContent).toContain('Size 33 is not a waist/leg size'));
+    const chart = calls.find((c) => c.path === '/shopify/charts/assign')!.body!.chart as Record<string, unknown>;
+    expect(chart.sizeAxes).toBe('wl');
+    expect(chart.sleeveConvention).toBeUndefined();
+    expect((chart.sizeChart as unknown[])[4]).toEqual({ size: '32/32', waist: 80, rise: 26.5 });
+    expect($('assign-status').textContent).toBe('');
     await new Promise((resolve) => setTimeout(resolve, 25));
   });
 });

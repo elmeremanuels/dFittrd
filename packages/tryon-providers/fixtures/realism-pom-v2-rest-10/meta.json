@@ -1,0 +1,13 @@
+{
+  "source": "apps/web/e2e/aiRealism.spec.ts, real WebGL export (SwiftShader) of the POM v2 rest fixture, size 10, 19 Nov 2026",
+  "meta": {
+    "statureCm": 168,
+    "waistRow": 305,
+    "hipRow": 371,
+    "backdropHex": "#f5efe7",
+    "garmentHex": "#9D3F3B",
+    "size": "10",
+    "category": "bottom"
+  },
+  "neighbour": "12"
+}

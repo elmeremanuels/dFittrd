@@ -15,6 +15,8 @@ export interface DrapeJob {
   chains: Uint8Array;
   noCollide: Uint8Array;
   clearanceCm: number;
+  /** A one-piece top with sewn sleeves (`makeCollider` `sewn`); absent = false. */
+  sewn?: boolean;
 }
 
 export interface DrapeProgress {
@@ -31,7 +33,7 @@ export type DrapeMessage = { type: 'start'; job: DrapeJob } | { type: 'cancel'; 
 
 /** The collider of a job (built once per job, on the side that runs it). */
 export function jobCollider(job: DrapeJob): Collide {
-  return makeCollider(job.field, job.clearanceCm, job.chains, job.noCollide);
+  return makeCollider(job.field, job.clearanceCm, job.chains, job.noCollide, job.sewn === true);
 }
 
 /**

@@ -25,7 +25,7 @@ export function chartTemplatesAsset() {
     templates: OFFERED_CHART_TEMPLATES.map((t) =>
       t.kind === 'body'
         ? { id: t.id, kind: t.kind, label: t.label, description: t.description, sizes: [...t.defaultSizes], weakSizes: [...t.weakSizes], rows: t.rows.filter((r) => t.defaultSizes.includes(r.size)).map(bodyRow), ...(t.audience ? { audience: t.audience } : {}), ...(t.points ? { points: [...t.points] } : {}) }
-        : { id: t.id, kind: t.kind, label: t.label, description: t.description, sizes: [...t.defaultSizes], points: [...t.points] },
+        : { id: t.id, kind: t.kind, label: t.label, description: t.description, sizes: [...t.defaultSizes], points: [...t.points], ...(t.audience ? { audience: t.audience } : {}), ...(t.axes ? { axes: t.axes } : {}) },
     ),
   };
 }

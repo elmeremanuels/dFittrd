@@ -232,15 +232,40 @@ export const SKIN_V2_HOOKS = {
   sheenComp: 'irradiance *= sheenEnergyComp;',
   pars: '#include <lights_physical_pars_fragment>',
   begin: '#include <lights_fragment_begin>',
+  physical: '#include <lights_physical_fragment>',
   tone: '#include <tonemapping_fragment>',
+  vertexCommon: '#include <common>',
+  vertexBegin: '#include <begin_vertex>',
 } as const;
 
 /** True when the chunks of the three.js in use still have the lines `patchSkinV2` replaces. */
 export function skinV2ChunksPresent(): boolean {
   const pars = THREE.ShaderChunk.lights_physical_pars_fragment;
   const frag = THREE.ShaderLib.physical.fragmentShader;
-  return pars.includes(SKIN_V2_HOOKS.diffuse) && pars.includes(SKIN_V2_HOOKS.sheenComp) && [SKIN_V2_HOOKS.pars, SKIN_V2_HOOKS.begin, SKIN_V2_HOOKS.tone].every((h) => frag.includes(h));
+  const vert = THREE.ShaderLib.physical.vertexShader;
+  return pars.includes(SKIN_V2_HOOKS.diffuse) && pars.includes(SKIN_V2_HOOKS.sheenComp) && [SKIN_V2_HOOKS.pars, SKIN_V2_HOOKS.begin, SKIN_V2_HOOKS.physical, SKIN_V2_HOOKS.tone].every((h) => frag.includes(h)) && [SKIN_V2_HOOKS.vertexCommon, SKIN_V2_HOOKS.vertexBegin].every((h) => vert.includes(h));
 }
+
+/**
+ * Head v3's hair is part of the body mesh (a cover per vertex, `Mesh.hair`), so it is drawn by the
+ * body's material. With skin-v2 it must not take the skin's terms: with them it caught the skin's
+ * tighter highlight and its tone stage, and on Monk 8 to 10 it read as shiny dark grey with a light
+ * line along the hairline (review of 19 Nov 2026). Weighted by the cover, the hair gets the flat
+ * material's own terms: plain Lambert (no scattering), roughness 0.75 and specular 0.3 as the flat
+ * skin, no sheen, and the rig's own tone curve.
+ */
+export const HAIR_ROUGHNESS = 0.75;
+export const HAIR_SPECULAR = 0.3;
+const HAIR_MATERIAL_GLSL = `
+	material.roughness = mix( material.roughness, min( skinHairRoughness + geometryRoughness, 1.0 ), vSkinHair );
+	float skinHairK = mix( 1.0, skinHairSpecular, vSkinHair );
+	material.specularColor *= skinHairK;
+	material.specularColorBlended *= skinHairK;
+	material.specularF90 *= skinHairK;
+	#ifdef USE_SHEEN
+		material.sheenColor *= 1.0 - vSkinHair;
+	#endif
+`;
 
 const SKIN_PARS = `
 uniform sampler2D skinLut;
@@ -248,12 +273,16 @@ uniform float skinScatterScale;
 uniform float skinLift;
 uniform float skinKnee;
 uniform vec3 skinFrontNorm;
+uniform float skinHairRoughness;
+uniform float skinHairSpecular;
+varying float vSkinHair;
 float skinCurvature = 0.0;
 float skinSheenComp = 1.0;
 vec3 skinDiffuse( float cosNL ) {
 	float v = clamp( skinCurvature / ${SKIN_LUT_MAX_CURVATURE.toFixed(3)}, 0.0, 1.0 );
 	vec2 uv = vec2( ( cosNL * 0.5 + 0.5 ) * ${((SKIN_LUT_SIZE.cos - 1) / SKIN_LUT_SIZE.cos).toFixed(6)} + ${(0.5 / SKIN_LUT_SIZE.cos).toFixed(6)}, v * ${((SKIN_LUT_SIZE.curvature - 1) / SKIN_LUT_SIZE.curvature).toFixed(6)} + ${(0.5 / SKIN_LUT_SIZE.curvature).toFixed(6)} );
-	return texture2D( skinLut, uv ).rgb;
+	// Head v3's hair (its cover, vSkinHair) is not skin: plain Lambert there, no scattering.
+	return mix( texture2D( skinLut, uv ).rgb, vec3( clamp( cosNL, 0.0, 1.0 ) ), vSkinHair );
 }
 vec3 skinRollOff( vec3 c, float knee ) {
 	float peak = max( c.r, max( c.g, c.b ) );
@@ -284,6 +313,8 @@ vec3 skinToneStage( vec3 c ) {
 
 export interface SkinV2Uniforms {
   skinLut: { value: THREE.Texture };
+  skinHairRoughness: { value: number };
+  skinHairSpecular: { value: number };
   skinScatterScale: { value: number };
   skinLift: { value: number };
   skinKnee: { value: number };
@@ -296,10 +327,12 @@ export interface SkinV2Uniforms {
  * the specular and the tone stage. Returns the uniforms (changed by `updateSkinV2` when the colour changes,
  * without a shader rebuild). Throws when the chunks changed (a three.js upgrade): a test pins them.
  */
-export function patchSkinV2(material: THREE.MeshPhysicalMaterial, hex: string, stage: SkinToneStage, frontNorm: readonly [number, number, number]): SkinV2Uniforms {
+export function patchSkinV2(material: THREE.MeshPhysicalMaterial, hex: string, stage: SkinToneStage, frontNorm: readonly [number, number, number], hair = false): SkinV2Uniforms {
   if (!skinV2ChunksPresent()) throw new Error('skin-v2: the three.js shader chunks changed');
   const uniforms: SkinV2Uniforms = {
     skinLut: { value: skinLutTexture() },
+    skinHairRoughness: { value: HAIR_ROUGHNESS },
+    skinHairSpecular: { value: 1 },
     skinScatterScale: { value: SKIN_SCATTER_SCALE },
     skinLift: { value: 0 },
     skinKnee: { value: 0.9 },
@@ -313,10 +346,19 @@ export function patchSkinV2(material: THREE.MeshPhysicalMaterial, hex: string, s
     shader.fragmentShader = shader.fragmentShader
       .replace(SKIN_V2_HOOKS.pars, `${SKIN_PARS}\n${pars}`)
       .replace(SKIN_V2_HOOKS.begin, `skinCurvature = length( fwidth( normal ) ) / max( length( fwidth( vViewPosition ) ), 1e-4 ) * skinScatterScale;\n${SKIN_V2_HOOKS.begin}`)
-      .replace(SKIN_V2_HOOKS.tone, `#if defined( TONE_MAPPING )\n\tgl_FragColor.rgb = skinToneStage( gl_FragColor.rgb );\n#endif`);
+      .replace(SKIN_V2_HOOKS.physical, `${SKIN_V2_HOOKS.physical}\n${HAIR_MATERIAL_GLSL}`)
+      // The hair keeps the rig's own tone curve (the flat material's), the skin gets the skin's.
+      .replace(SKIN_V2_HOOKS.tone, `#if defined( TONE_MAPPING )\n\tgl_FragColor.rgb = mix( skinToneStage( gl_FragColor.rgb ), toneMapping( gl_FragColor.rgb ), vSkinHair );\n#endif`);
+    // Head v3's per-vertex hair cover; a geometry without it reads 0 (all skin).
+    shader.vertexShader = shader.vertexShader
+      .replace(SKIN_V2_HOOKS.vertexCommon, `${SKIN_V2_HOOKS.vertexCommon}\n#ifdef SKIN_HAIR\nattribute float hair;\n#endif\nvarying float vSkinHair;`)
+      .replace(SKIN_V2_HOOKS.vertexBegin, `${SKIN_V2_HOOKS.vertexBegin}\n#ifdef SKIN_HAIR\n\tvSkinHair = clamp( hair, 0.0, 1.0 );\n#else\n\tvSkinHair = 0.0;\n#endif`);
+    if (hair) {
+      shader.vertexShader = `#define SKIN_HAIR\n${shader.vertexShader}`;
+    }
     if (stage === 'aces') shader.fragmentShader = `#define SKIN_TONE_ACES\n${shader.fragmentShader}`;
   };
-  material.customProgramCacheKey = () => `skin-v2-${stage}`;
+  material.customProgramCacheKey = () => `skin-v2-${stage}${hair ? '-hair' : ''}`;
   updateSkinV2(material, uniforms, hex);
   material.needsUpdate = true;
   return uniforms;
@@ -327,6 +369,8 @@ export function updateSkinV2(material: THREE.MeshPhysicalMaterial, uniforms: Ski
   const care = skinToneCare(hex);
   uniforms.skinLift.value = care.lift;
   uniforms.skinKnee.value = care.knee;
+  // The hair's white reflection is the flat material's (`SKIN_SPECULAR` of scene.ts, 0.3), relative to the skin's.
+  uniforms.skinHairSpecular.value = HAIR_SPECULAR / care.specularIntensity;
   material.roughness = care.roughness;
   material.specularIntensity = care.specularIntensity;
   material.sheen = care.sheen;

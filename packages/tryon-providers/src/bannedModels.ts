@@ -34,6 +34,14 @@ export const BANNED_MODELS = [
   'flux.1-dev',
   'flux.1-kontext-dev',
   'flux.2-dev',
+  // Found by the AI realism research (docs/research/ai-realism-layer.md, 2026-11-19). The klein 9B
+  // token must not match the allowed klein 4B (Apache-2.0): pin the 4B by its exact id.
+  'flux.2-klein-9b',
+  'flux.1-depth-dev',
+  'flux.1-canny-dev',
+  'iclight-v2',
+  'sdxl-turbo',
+  'rmbg-2.0',
   // Reconstruction (Inria Gaussian-Splatting licence, NVIDIA Source Code License-NC, CC BY-NC-SA)
   'graphdeco-inria',
   '2d-gaussian-splatting',
@@ -89,6 +97,12 @@ export const BANNED_MODEL_NOTES: Readonly<Record<BannedModel, BanNote>> = {
   'flux.1-dev': { reason: 'non-commercial', licence: 'FLUX.1 [dev] Non-Commercial License', source: 'https://huggingface.co/black-forest-labs/FLUX.1-dev' },
   'flux.1-kontext-dev': { reason: 'non-commercial', licence: 'FLUX.1 [dev] Non-Commercial License', source: 'https://huggingface.co/black-forest-labs/FLUX.1-Kontext-dev' },
   'flux.2-dev': { reason: 'non-commercial', licence: 'FLUX Non-Commercial License', source: 'https://huggingface.co/black-forest-labs/FLUX.2-dev' },
+  'flux.2-klein-9b': { reason: 'non-commercial', licence: 'FLUX Non-Commercial License (the 4B is Apache-2.0)', source: 'https://huggingface.co/black-forest-labs/FLUX.2-klein-4B' },
+  'flux.1-depth-dev': { reason: 'non-commercial', licence: 'FLUX.1 [dev] Non-Commercial License', source: 'https://huggingface.co/black-forest-labs/FLUX.1-Depth-dev' },
+  'flux.1-canny-dev': { reason: 'non-commercial', licence: 'FLUX.1 [dev] Non-Commercial License', source: 'https://huggingface.co/black-forest-labs/FLUX.1-Canny-dev' },
+  'iclight-v2': { reason: 'non-commercial', licence: 'maintainer: "the license will be non-commercial only"; weights not released (v1 is Apache-2.0 code, OpenRAIL-M weights)', source: 'https://github.com/lllyasviel/IC-Light/discussions/98' },
+  'sdxl-turbo': { reason: 'non-commercial', licence: 'Hugging Face licence tag sai-nc-community', source: 'https://huggingface.co/stabilityai/sdxl-turbo' },
+  'rmbg-2.0': { reason: 'non-commercial', licence: 'CC BY-NC 4.0', source: 'https://huggingface.co/briaai/RMBG-2.0' },
   'graphdeco-inria': { reason: 'non-commercial', licence: 'Gaussian-Splatting License (Inria, MPII): research and evaluation only', source: 'https://github.com/graphdeco-inria/gaussian-splatting/blob/main/LICENSE.md' },
   '2d-gaussian-splatting': { reason: 'non-commercial', licence: 'Gaussian-Splatting License (Inria, MPII)', source: 'https://github.com/hbb1/2d-gaussian-splatting/blob/main/LICENSE.md' },
   'gaussian-opacity-fields': { reason: 'non-commercial', licence: 'Gaussian-Splatting License (Inria, MPII)', source: 'https://github.com/autonomousvision/gaussian-opacity-fields/blob/main/LICENSE.md' },

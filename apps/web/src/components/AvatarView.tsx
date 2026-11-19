@@ -13,6 +13,12 @@ import type { RingOverlay } from '@/render/rings';
 export interface AvatarMedia {
   faceUrl: string | null;
   baseFrame: { url: string; width: number; height: number } | null;
+  /**
+   * `tile`: the face is the embed's stylised face tile (photo-avatar plan slice 5): it has its own
+   * soft edge and the head's aspect, so it is drawn over the skin of the head, without the white
+   * ring of the app's photo crop. Default `photo`.
+   */
+  faceStyle?: 'photo' | 'tile';
 }
 
 export interface AvatarViewProps {
@@ -238,12 +244,16 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
         ) : null}
 
         {/* Face tile at the head — under the garment layer, so a hat or scarf sits on top of it */}
-        {media.faceUrl && !media.baseFrame ? (
+        {media.faceUrl && !media.baseFrame && media.faceStyle === 'tile' ? (
+          <g clipPath={`url(#${ids.headClip})`} data-testid="face-tile" opacity={isLoading ? 0.4 : 1}>
+            <image href={media.faceUrl} x={VIEW_W / 2 - body.headR} y={headCy - body.headRy} width={body.headR * 2} height={body.headRy * 2} preserveAspectRatio="xMidYMid meet" />
+          </g>
+        ) : media.faceUrl && !media.baseFrame ? (
           <g clipPath={`url(#${ids.headClip})`}>
             <image href={media.faceUrl} x={VIEW_W / 2 - body.headR - 2} y={headCy - body.headRy - 2} width={(body.headR + 2) * 2} height={(body.headRy + 2) * 2} preserveAspectRatio="xMidYMid slice" />
           </g>
         ) : null}
-        {media.faceUrl && !media.baseFrame ? <ellipse cx={VIEW_W / 2} cy={headCy} rx={body.headR + 2} ry={body.headRy + 2} fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="1.5" /> : null}
+        {media.faceUrl && !media.baseFrame && media.faceStyle !== 'tile' ? <ellipse cx={VIEW_W / 2} cy={headCy} rx={body.headR + 2} ry={body.headRy + 2} fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="1.5" /> : null}
 
         {/* Garment overlay */}
         {garment && geom && look ? (

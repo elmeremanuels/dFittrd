@@ -45,6 +45,8 @@ if (params.get('bounce') !== null) extras.bounce = Number(params.get('bounce'));
 if (params.get('outlineContrast') !== null) extras.outlineContrast = Number(params.get('outlineContrast'));
 const extrasTag = Object.entries(extras).map(([k, v]) => `${k} ${String(v)}`).join(' · ');
 const family = params.get('family') === 'male' ? 'male' : 'female';
+/** `maleShape=v2`: the male shape v2 of @curtain/mannequin (a preview; the default is v1). */
+const maleShape = params.get('maleShape') === 'v2' ? ('v2' as const) : undefined;
 const body = { family, heightCm: num('height'), shoulderCm: num('shoulder'), bust: num('bust'), waist: num('waist'), hip: num('hip') } as const;
 const setState = (s: string): void => {
   document.documentElement.dataset.viewerState = s;
@@ -105,11 +107,11 @@ async function garmentMode(): Promise<void> {
   const product = params.get('product') ?? '';
   const baseUrl = `/bundle/${product}`;
   const garment = (await (await fetch(`${baseUrl}/payload.json`)).json()) as GarmentPayload;
-  const m = buildBody({ family, heightCm: body.heightCm, shoulderCm: body.shoulderCm, bust: body.bust, waist: body.waist, hip: body.hip });
+  const m = buildBody({ family, heightCm: body.heightCm, shoulderCm: body.shoulderCm, bust: body.bust, waist: body.waist, hip: body.hip }, maleShape ? { maleShape } : {});
   const meas = { bust: m.shape.rings.chest.circumferenceCm, waist: m.shape.rings.waist.circumferenceCm, hip: m.shape.rings.hip.circumferenceCm };
   const fit = fitForBody(garment, meas);
   const size = params.get('size') ?? fit.recommendedSize ?? '';
-  const view = await mountGarmentView(canvas, { baseUrl, garment, fit, size, body, look: { skinHex: skin, head, shading }, lighting, lookExtras: extras, onState: setState });
+  const view = await mountGarmentView(canvas, { baseUrl, garment, fit, size, body, look: { skinHex: skin, head, shading }, lighting, lookExtras: extras, onState: setState, ...(maleShape ? { maleShape } : {}) });
   tag.textContent = `ESTIMATE · ${garment.name} · size ${canvas.dataset.size ?? size} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · head ${head} · shading ${shading}`;
   const points = skinPoints(m);
   // A bottom may cover the shin (a maxi skirt does): that patch is measured on other garments only.
@@ -150,7 +152,7 @@ async function garmentMode(): Promise<void> {
 }
 
 function headMode(): void {
-  const m = buildBody({ family, heightCm: body.heightCm, shoulderCm: body.shoulderCm, bust: body.bust, waist: body.waist, hip: body.hip });
+  const m = buildBody({ family, heightCm: body.heightCm, shoulderCm: body.shoulderCm, bust: body.bust, waist: body.waist, hip: body.hip }, maleShape ? { maleShape } : {});
   const stage = new Stage(canvas, { controls: true, lighting, extras });
   // The same neck fit as the mount's typed body (`buildTypedAvatar`).
   const shown = fitNeckToHead(buildMannequinMesh(m, { head }), m).mesh;
@@ -173,7 +175,7 @@ function headMode(): void {
     stage.controls.minDistance = 20;
     stage.controls.update();
   }
-  tag.textContent = `ESTIMATE · ${family} body alone · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · head ${head} · shading ${shading}`;
+  tag.textContent = `ESTIMATE · ${family} body alone${maleShape ? ' (shape v2)' : ''} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · head ${head} · shading ${shading}`;
   let frames = 0;
   const loop = (): void => {
     stage.render();

@@ -17,6 +17,7 @@ import { billingAnomalies as reExported } from './services/usage.js';
 import { merchantRoutes } from './routes/merchant.js';
 import { tryRoutes } from './routes/try.js';
 import { makeApp, seedShop, type TestApp } from './test/helpers.js';
+import { lastClosedMonth } from './services/kfloor.js';
 
 const drizzleDir = fileURLToPath(new URL('../drizzle/', import.meta.url));
 const readJson = <T>(path: string): T => JSON.parse(readFileSync(`${drizzleDir}${path}`, 'utf8')) as T;
@@ -104,13 +105,16 @@ describe('merchant views are merchant routes', () => {
     const day = new Date().toISOString().slice(0, 10);
     const auth = { authorization: `Bearer ${s.apiKey}` };
     const get = (url: string) => t.app.inject({ method: 'GET', url: `${url}?from=${day}&to=${day}`, headers: auth });
+    // Analytics take one closed calendar month (launch-readiness finding 1).
+    const lastMonth = lastClosedMonth(new Date());
+    const getMonth = (url: string) => t.app.inject({ method: 'GET', url: `${url}?period=${lastMonth}`, headers: auth });
     const anomalies = await get('/v1/merchant/usage/anomalies');
     expect(anomalies.statusCode).toBe(200);
     expect(BillingAnomaliesResponseSchema.parse(anomalies.json())).toMatchObject({ from: day, anomalies: [] });
-    const sizes = await get('/v1/merchant/analytics/fit-sizes');
+    const sizes = await getMonth('/v1/merchant/analytics/fit-sizes');
     expect(sizes.statusCode).toBe(200);
     expect(AnalyticsFitSizesResponseSchema.parse(sizes.json())).toMatchObject({ bySize: [], totals: { sessions: 0 } });
-    const abandoned = await get('/v1/merchant/analytics/abandoned');
+    const abandoned = await getMonth('/v1/merchant/analytics/abandoned');
     expect(abandoned.statusCode).toBe(200);
     expect(AnalyticsAbandonedResponseSchema.parse(abandoned.json())).toMatchObject({ totals: { sessions: 0, resolved: 0, withFit: 0 } });
   });

@@ -129,14 +129,20 @@ test(
 );
 
 test(
-	'the chart templates asset leaves the men\'s templates out until their sources passed the legal review',
+	'the chart templates asset leaves the men\'s body templates out until their sources passed the legal review',
 	static function (): void {
 		$data = json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/assets/chart-templates.json' ), true );
 		$ids  = array();
 		foreach ( $data['templates'] as $t ) {
 			$ids[] = $t['id'];
-			assert_false( isset( $t['audience'] ) && 'men' === $t['audience'], $t['id'] );
+			// Men's body charts (numbers from sources) wait for the review; the men's garment
+			// templates are blank forms (labels and columns only) and are offered.
+			assert_false( isset( $t['audience'] ) && 'men' === $t['audience'] && 'body' === $t['kind'], $t['id'] );
+			if ( isset( $t['audience'] ) && 'men' === $t['audience'] ) {
+				assert_false( isset( $t['rows'] ), $t['id'] . ' carries no numbers' );
+			}
 		}
+		assert_true( in_array( 'garment-mens-tee', $ids, true ) && in_array( 'garment-mens-chino-wl', $ids, true ) );
 		foreach ( array( 'mens-letter-body', 'eu-mens-body', 'mens-jeans-wl-body' ) as $id ) {
 			assert_false( in_array( $id, $ids, true ), $id );
 		}

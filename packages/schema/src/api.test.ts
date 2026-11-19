@@ -3,6 +3,9 @@ import {
   API_ROUTES,
   AnalyticsSwipesResponseSchema,
   DateRangeQuerySchema,
+  AnalyticsPeriodQuerySchema,
+  AnalyticsPeriodsResponseSchema,
+  FitCohortResponseSchema,
   DeviceCreateRequestSchema,
   DeviceTokenResponseSchema,
   FitShownRequestSchema,
@@ -239,10 +242,12 @@ describe('SDK + merchant DTOs', () => {
     });
     expect(usage.success).toBe(true);
     const analytics = AnalyticsSwipesResponseSchema.safeParse({
-      from: '2026-11-01',
-      to: '2026-11-04',
+      period: '2026-10',
+      from: '2026-10-01',
+      to: '2026-10-31',
       kAnonymityFloor: 5,
       suppressedGroups: 2,
+      suppression: { belowFloor: 1, complementary: 1 },
       byProduct: [{ externalId: '42', love: 5, pass: 3, save: 1, less: 0, sizeHistogram: { M: 4, L: 2 }, passReasons: { fit: 2 } }],
       byColour: [],
       byFabric: [],
@@ -257,5 +262,20 @@ describe('SDK + merchant DTOs', () => {
     expect(API_ROUTES.merchantProductValidate).toBe('POST /v1/merchant/products/validate');
     expect(API_ROUTES.tryFitShown).toBe('POST /v1/try/:token/fit-shown');
     expect(Object.values(API_ROUTES).every((r) => /^(GET|POST|PUT|DELETE) \/v1\//.test(r))).toBe(true);
+  });
+});
+
+describe('merchant analytics periods (launch-readiness finding 1)', () => {
+  it('a query names one calendar month and nothing else', () => {
+    expect(AnalyticsPeriodQuerySchema.safeParse({ period: '2026-10' }).success).toBe(true);
+    for (const bad of [{ period: '2026-13' }, { period: '2026-1' }, { period: '2026-10-01' }, { from: '2026-10-01', to: '2026-10-31' }, { period: '2026-10', from: '2026-10-01' }, {}])
+      expect(AnalyticsPeriodQuerySchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+  });
+  it('the periods answer and the cohort month', () => {
+    expect(AnalyticsPeriodsResponseSchema.safeParse({ granularity: 'month', kAnonymityFloor: 5, periods: ['2026-10'], openPeriod: '2026-11', openPeriodAvailableAt: '2026-12-02T00:00:00.000Z' }).success).toBe(true);
+    expect(AnalyticsPeriodsResponseSchema.safeParse({ granularity: 'week', kAnonymityFloor: 5, periods: [], openPeriod: '2026-11', openPeriodAvailableAt: '2026-12-02T00:00:00.000Z' }).success).toBe(false);
+    const cohort = { productId: 'p', n: 0, kAnonymityFloor: 5, sizeHistogram: {}, keptRate: null };
+    expect(FitCohortResponseSchema.safeParse(cohort).success).toBe(true); // older servers send no month
+    expect(FitCohortResponseSchema.safeParse({ ...cohort, through: '2026-10' }).success).toBe(true);
   });
 });

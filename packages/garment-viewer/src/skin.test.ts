@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { DEFAULT_BODY_HEX, Figure, LIGHTING_RIGS, frontIrradiance, meshGeometry } from './scene';
-import { SKIN_LUT_SIZE, SKIN_V2_HOOKS, acesFilmic, linearOf, patchSkinV2, rollOff, skinLut, skinShadingOf, skinToneCare, skinToneStage, skinV2ChunksPresent } from './skin';
+import { HAIR_ROUGHNESS, HAIR_SPECULAR, SKIN_LUT_SIZE, SKIN_V2_HOOKS, acesFilmic, updateSkinV2, linearOf, patchSkinV2, rollOff, skinLut, skinShadingOf, skinToneCare, skinToneStage, skinV2ChunksPresent } from './skin';
 
 const MONK = ['#f6ede4', '#f3e7db', '#f7ead0', '#eadaba', '#d7bd96', '#a07e56', '#825c43', '#604134', '#3a312a', '#292420'];
 const lum = (c: readonly number[]): number => 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!;
@@ -128,8 +128,46 @@ describe('the shader patch', () => {
     expect(shader.fragmentShader).toContain('skinDiffuse( dot( geometryNormal, directLight.direction ) )');
     expect(shader.fragmentShader).not.toContain(SKIN_V2_HOOKS.diffuse);
     expect(shader.fragmentShader).toContain('skinCurvature = length( fwidth( normal ) )');
-    expect(Object.keys(shader.uniforms).sort()).toEqual(['skinFrontNorm', 'skinKnee', 'skinLift', 'skinLut', 'skinScatterScale']);
+    expect(Object.keys(shader.uniforms).sort()).toEqual(['skinFrontNorm', 'skinHairRoughness', 'skinHairSpecular', 'skinKnee', 'skinLift', 'skinLut', 'skinScatterScale']);
     expect(m.customProgramCacheKey()).toBe('skin-v2-aces');
+    // Without head v3's hair the vertex shader never reads a `hair` attribute (the cover is 0: all skin).
+    expect(shader.vertexShader).not.toMatch(/#define SKIN_HAIR/);
+    expect(shader.vertexShader).toContain('vSkinHair = 0.0;');
+  });
+
+  it("head v3's hair gets its own, non-skin terms: plain Lambert, the flat roughness and specular, no sheen, the rig's tone curve", () => {
+    const m = new THREE.MeshPhysicalMaterial({ color: '#604134' });
+    const u = patchSkinV2(m, '#604134', 'true-tone', [1, 1, 1], true);
+    const shader = { uniforms: {} as Record<string, unknown>, fragmentShader: THREE.ShaderLib.physical.fragmentShader, vertexShader: THREE.ShaderLib.physical.vertexShader };
+    m.onBeforeCompile(shader as never, undefined as never);
+    expect(shader.vertexShader.startsWith('#define SKIN_HAIR')).toBe(true);
+    expect(shader.vertexShader).toContain('attribute float hair;');
+    expect(shader.vertexShader).toContain('vSkinHair = clamp( hair, 0.0, 1.0 );');
+    expect(shader.fragmentShader).toContain('mix( texture2D( skinLut, uv ).rgb, vec3( clamp( cosNL, 0.0, 1.0 ) ), vSkinHair )');
+    expect(shader.fragmentShader).toContain('material.sheenColor *= 1.0 - vSkinHair;');
+    expect(shader.fragmentShader).toContain('mix( skinToneStage( gl_FragColor.rgb ), toneMapping( gl_FragColor.rgb ), vSkinHair )');
+    // The hair block runs after three has set the material up, so it overrides the skin's roughness and specular.
+    expect(shader.fragmentShader.indexOf('skinHairRoughness + geometryRoughness')).toBeGreaterThan(shader.fragmentShader.indexOf('material.specularF90 = '));
+    expect(m.customProgramCacheKey()).toBe('skin-v2-true-tone-hair');
+    expect(u.skinHairRoughness.value).toBe(HAIR_ROUGHNESS);
+    expect(HAIR_ROUGHNESS).toBe(0.75);
+    // The hair's white reflection is the flat material's 0.3, whatever the tone.
+    for (const hex of MONK) {
+      updateSkinV2(m, u, hex);
+      expect(u.skinHairSpecular.value * m.specularIntensity).toBeCloseTo(HAIR_SPECULAR, 9);
+    }
+  });
+
+  it('a figure with head v3 hair gets the hair variant, and a body swap to a head without hair rebuilds it', () => {
+    const g = tri();
+    g.setAttribute('hair', new THREE.BufferAttribute(new Float32Array([0, 0.5, 1]), 1));
+    const f = new Figure(g, Uint32Array.from([0, 1, 2]), 3, null);
+    f.setSkinShading('skin-v2', 'classic');
+    f.setSkin('#3a312a');
+    expect((f.body.material as THREE.MeshPhysicalMaterial).customProgramCacheKey()).toBe('skin-v2-aces-hair');
+    f.setBody(tri());
+    expect((f.body.material as THREE.MeshPhysicalMaterial).customProgramCacheKey()).toBe('skin-v2-aces');
+    expect(f.skinHex).toBe('#3a312a');
   });
 });
 

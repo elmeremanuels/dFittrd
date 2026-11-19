@@ -34,7 +34,7 @@ for (const id of ids) {
   if ((SPIKE_MALE_PRODUCT_IDS as readonly string[]).includes(id)) writeFileSync(join(dir, 'payload.json'), `${JSON.stringify(spikeProduct(id), null, 2)}\n`);
   const bytes = Object.values(b.files).reduce((n, d) => n + (typeof d === 'string' ? Buffer.byteLength(d) : d.byteLength), 0);
   console.log(
-    `[garment-spike] ${id} (${b.mannequin.shape.family} mannequin): chart agreement max ${b.agreement.maxAbsCm.toFixed(2)} cm (${b.agreement.pass ? 'pass' : 'FAIL'}), ` +
+    `[garment-spike] ${id} (${b.mannequin.shape.family} mannequin): ${JSON.parse(b.files['qa.json']).chartAgreement.kind === 'tape-built' ? 'built from the tape (POM), own tape max' : 'chart agreement max'} ${b.agreement.maxAbsCm.toFixed(2)} cm (${b.agreement.pass ? 'pass' : 'FAIL'}), ` +
       `residual after global ${b.calibration.residualAfterGlobal.maxAbsCm.toFixed(2)} cm, ` +
       `separation IoU ${b.separation ? b.separation.iou.toFixed(4) : 'skipped'} over ${b.separation?.frames ?? 0} frames, ` +
       `${b.baseMesh.indices.length / 3} triangles, ${(bytes / 1024).toFixed(0)} KB, ${Date.now() - t0} ms`,

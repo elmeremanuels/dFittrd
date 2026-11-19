@@ -9,7 +9,15 @@ import type { ClientLedgerEntry } from '@/db/db';
 import { originOf, type ParentWindowLike } from './protocol';
 import { createEmbedStore, lookStorageEnabled, type EmbedStore } from './storage';
 
-export type EmbedApi = Pick<ApiClient, 'resolveTry' | 'resolvePeek' | 'fitShown' | 'deleteMe' | 'requestHeroRender' | 'heroRenderStatus'>;
+export type EmbedApi = Pick<ApiClient, 'resolveTry' | 'resolvePeek' | 'fitShown' | 'deleteMe' | 'requestHeroRender' | 'heroRenderStatus'> & Partial<Pick<ApiClient, 'requestRealism'>>;
+
+/** What the on-device face step returns (the type of `faceLookFromPhoto`, without importing the worker code). */
+export interface FaceLookResultLike {
+  faceFound: boolean;
+  tile: { width: number; height: number; rgba: Uint8ClampedArray; skinLab: { L: number; a: number; b: number } } | null;
+  suggestion: { monk: number } | null;
+  notices: ('turned' | 'small' | 'bright' | 'dark' | 'side' | 'cast')[];
+}
 
 export interface EmbedDeps {
   store: EmbedStore;
@@ -29,6 +37,12 @@ export interface EmbedDeps {
   loadViewer?: () => Promise<typeof GarmentViewer>;
   /** The photo-based face row of the avatar prompt (default: the build flag, which is off). */
   facePhoto?: boolean;
+  /** The live face photo rows, slices 4 and 5 (default: `VITE_AVATAR_FACE_PHOTO=live`, off). */
+  facePhotoLive?: boolean;
+  /** Reads one face photo on the device (default: the scan worker, loaded on first use). Tests inject it. */
+  faceLook?: (photo: Blob, opts: { tile: boolean; skin: boolean; aspect?: number }) => Promise<FaceLookResultLike>;
+  /** A tile's pixels as a `blob:` URL of this page (default: canvas → PNG). Tests inject it. */
+  tileUrl?: (tile: { width: number; height: number; rgba: Uint8ClampedArray }) => Promise<string>;
   /** Resolve `mock:` tokens (default: `mockTokensEnabled()`, i.e. dev builds or VITE_DEMO=1 only). */
   allowMock?: boolean;
 }

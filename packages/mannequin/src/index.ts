@@ -76,6 +76,15 @@ export {
   type Mesh,
   type TopologyReport,
 } from './mesh';
+export {
+  MALE_SECTION_REFERENCE,
+  MALE_V2_ASSUMPTIONS,
+  CHEST_EXPONENT_LIMIT,
+  maleRingFits,
+  fitRing,
+  superellipsePerimeter,
+  type MaleSectionRow,
+} from './maleV2';
 export { slice, loopLength, loopArea, loopContains, loopAround, planeCoords, resampleLoop, type Loop, type Plane } from './slice';
 export { writeGlb, readGlb, glbFloatAccessor, glbIndexAccessor, type GlbPrimitive, type GlbOptions, type ParsedGlb } from './glb';
 export {

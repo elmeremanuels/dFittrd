@@ -5,7 +5,7 @@
  */
 import { resolveFabric, mockGarment, type GarmentPayload } from '@curtain/schema';
 import type { FitResult, AnchorGaps } from '@curtain/fit-engine';
-import type { Mannequin, Mesh } from '@curtain/mannequin';
+import { buildMannequin, type Mannequin, type Mesh } from '@curtain/mannequin';
 import { armpitDistance, assignChains, radialMorph, type ChainAssignment } from './core/garment';
 import { applyGrading } from './core/grading';
 import { topEdgePlane } from './core/waistband';
@@ -63,6 +63,12 @@ export interface GarmentSession {
   noLift: Uint8Array;
   /** Graded meshes per size label (the size switch is instant after the first time). */
   graded: Map<string, Mesh>;
+  /**
+   * One piece with sleeve chains: the sleeves are sewn into the armholes (the POM tee of slice M3), so
+   * the collider lets each chain meet the other body part (`makeCollider` `sewn`). Every bundle before
+   * M3 has its sleeves as pieces of their own, or none, and is draped as before.
+   */
+  sewn: boolean;
 }
 
 export function openSession(m: Mannequin, bundle: SpikeBundle, payload: GarmentPayload = bundle.payload ?? mockGarment(bundle.productId)): GarmentSession {
@@ -73,7 +79,11 @@ export function openSession(m: Mannequin, bundle: SpikeBundle, payload: GarmentP
   const capped = shoulderCapPieces(m, bundle.baseMesh.positions, bundle.baseMesh.indices, chains.length);
   const noLift = new Uint8Array(chains.length);
   for (let i = 0; i < noLift.length; i++) noLift[i] = !capped[i] || lift(probe, i) ? 1 : 0;
-  return { m, bundle, payload, chains, noCollide: insideCanonical(m, bundle.baseMesh.positions, chains), noLift, graded: new Map() };
+  const sewn = bundle.anchors.category !== 'bottom' && chains.some((c) => c !== 0) && meshPieces(bundle.baseMesh.indices, chains.length).length === 1;
+  // The exemption is judged on the body the bundle was draped on: every bundle is draped on the v1
+  // body, so a male shape v2 body (`maleShape: 'v2'`) asks its v1 twin of the same shape.
+  const drapedOn = m.maleShape === 'v2' ? buildMannequin(m.shape) : m;
+  return { m, bundle, payload, chains, noCollide: insideCanonical(drapedOn, bundle.baseMesh.positions, chains), noLift, graded: new Map(), sewn };
 }
 
 export function sizeLabels(session: GarmentSession): string[] {
@@ -125,6 +135,8 @@ export interface FitInstance {
   options: DrapeOptions;
   /** Girth loops installed on the cloth (`anchorLoops`): ring name and its minimum girth, cm. */
   loops: { ring: string; minGirthCm: number; particles: number }[];
+  /** The session's `sewn`: the collider lets torso and sleeve cloth meet both body parts. */
+  sewn: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -590,7 +602,7 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   const loops = options.loopRetain > 0 ? anchorLoops(m, graded.positions, graded.indices, chains, pinned, options.loopRetain, options.loopRings) : [];
   setLoops(cloth, loops);
   for (let i = 0; i < chains.length; i++) if (cuff[i] && !pinned[i]) cloth.leash[i] = CUFF_LEASH_CM;
-  const collide = makeCollider(field, CLEARANCE_CM, chains, noCollide);
+  const collide = makeCollider(field, CLEARANCE_CM, chains, noCollide, session.sewn);
   // Settle the yoke onto the avatar before pinning it: a small size sits a few mm inside the neck
   // and shoulders, and a stretched edge between two pins never relaxes (the neckline tears).
   // Known gap: on a body much wider at the shoulders than the garment, the particles exempt from
@@ -619,6 +631,7 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
     chains,
     field,
     shoulderWidthCm: sizeEntry(session.bundle.grading, size).targets.shoulder_width,
+    sewn: session.sewn,
   };
 }
 
@@ -840,7 +853,7 @@ export function relax(fit: FitInstance): Float32Array {
 
 /** The drape of a fit as a job for a Web Worker (`drapeJob.ts`); the worker rebuilds the collider. */
 export function drapeJobOf(fit: FitInstance): Omit<DrapeJob, 'id'> {
-  return { cloth: fit.cloth, params: fit.params, field: fit.field, chains: fit.chains, noCollide: fit.noCollide, clearanceCm: CLEARANCE_CM };
+  return { cloth: fit.cloth, params: fit.params, field: fit.field, chains: fit.chains, noCollide: fit.noCollide, clearanceCm: CLEARANCE_CM, ...(fit.sewn ? { sewn: true } : {}) };
 }
 
 /**

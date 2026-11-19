@@ -22,6 +22,7 @@ import {
 } from '@curtain/anchors';
 import { along, lerp, normalize, type Vec3 } from './math';
 import type { BodyLevels, BodyShape } from './shapes';
+import { maleShapeV2 } from './maleV2';
 
 export const MANNEQUIN_VERSION = '0.1.0';
 
@@ -43,6 +44,13 @@ export interface Section {
   v: Vec3;
   a: number;
   b: number;
+  /**
+   * Optional non-elliptical outline (male shape v2): `segments` points as (x along `u`, z along
+   * `v`) pairs relative to `centre`, in the vertex order of the ellipse (t = 0 at the front, then
+   * towards +u). When present the loft uses it instead of `a`, `b`; `a`, `b` are then the
+   * outline's bounding half-extents. Absent on every v1 and female section.
+   */
+  outline?: Float64Array;
 }
 
 export interface PartSpec {
@@ -143,6 +151,8 @@ export interface Mannequin {
   legAt(y: number, side: Side): BodySection | null;
   /** Arm ellipse at distance `s` from the shoulder joint along the arm axis, or `null` outside. */
   armAt(s: number, side: Side): (Ellipse & { centre: Vec3 }) | null;
+  /** `v2` when built with the male shape v2 (`BuildOptions.maleShape`); absent otherwise. */
+  maleShape?: 'v2';
   /** Ring heights for `gradingMorph(…, { heights })`: y for the body chain, distance along the arm for the arm chain. */
   morphHeights: Record<AnchorRing, number>;
 }
@@ -156,6 +166,12 @@ export interface BuildOptions {
   torsoStepCm?: number;
   legStepCm?: number;
   armStepCm?: number;
+  /**
+   * `v1` (default): every section an ellipse, as before. `v2`: the male shape v2 of `maleV2.ts`
+   * (non-elliptical torso, chest and back, deltoids, seat and a joined crotch). Only the male
+   * family reads it; a female shape is built exactly as without it.
+   */
+  maleShape?: 'v1' | 'v2';
 }
 
 interface Knot {
@@ -413,7 +429,7 @@ export function buildMannequin(shape: BodyShape, options: BuildOptions = {}): Ma
     { id: 'knee_r', parent: 'hip_r', pivot: [-legX, y(H.knee), 0] },
   ];
 
-  return {
+  const built: Mannequin = {
     version: MANNEQUIN_VERSION,
     shape,
     statureCm: S,
@@ -441,4 +457,5 @@ export function buildMannequin(shape: BodyShape, options: BuildOptions = {}): Ma
       return { a: p.a, b: p.b, centre: along(f.joint, f.axis, s) };
     },
   };
+  return options.maleShape === 'v2' && shape.family === 'male' ? maleShapeV2(built, options) : built;
 }

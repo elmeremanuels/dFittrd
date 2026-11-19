@@ -17,6 +17,8 @@ defined( 'ABSPATH' ) || exit;
 final class Product_Meta {
 
 	public const NONCE = 'curtain_meta';
+	/** The size chart's messages and, after an error, what was typed (store_chart_issues). */
+	public const META_CHART_ISSUES = '_curtain_chart_issues';
 
 	public static function register(): void {
 		add_action( 'add_meta_boxes_product', array( self::class, 'add_box' ) );
@@ -173,6 +175,7 @@ final class Product_Meta {
 		if ( null !== $result['tape'] ) {
 			self::store_tape_issues( $post_id, $result['tape'] );
 		}
+		self::store_chart_issues( $post_id, $result['chart'] );
 
 		self::validate_and_store( $post_id, $result['errors'] );
 	}
@@ -281,11 +284,21 @@ final class Product_Meta {
 		$custom_lengths = array_diff_key( $lengths, array_flip( Vocab::LENGTH_KEYS ) );
 		$other_zones    = array_values( array_diff( array_map( 'strval', $zones ), Vocab::STRETCH_ZONES ) );
 		$prefill        = array() === $fabric ? self::fabric_prefill( $id ) : null;
+		$chart_issues   = self::chart_issues( $id );
+		$chart_draft    = is_array( $chart_issues['input'] ?? null ) ? $chart_issues['input'] : null;
+		$chart_rows     = null !== $chart_draft ? array_values( array_filter( (array) ( $chart_draft['size_chart'] ?? array() ), 'is_array' ) ) : array_values( array_filter( $chart, 'is_array' ) );
+		$chart_type     = null !== $chart_draft ? (string) ( $chart_draft['size_chart_type'] ?? '' ) : (string) $get( 'size_chart_type' );
+		$sleeve_conv    = null !== $chart_draft ? (string) ( $chart_draft['sleeve_convention'] ?? '' ) : (string) $get( 'sleeve_convention' );
+		$chart_wl       = null !== $chart_draft ? 'wl' === ( $chart_draft['size_axes'] ?? '' ) : self::chart_has_axes( $chart_rows );
+		// The men's columns (neck, sleeve, length, rise, W/L): shown on a men's product or a chart
+		// that already has them. A women's product shows the box exactly as before.
+		$show_mens      = 'men' === (string) $get( 'audience' ) || $chart_wl || '' !== $sleeve_conv || self::chart_has_mens_columns( $chart_rows );
+		$visible_cols   = $show_mens ? Vocab::SIZE_ROW_COLUMNS : array_values( array_diff( Vocab::SIZE_ROW_COLUMNS, Vocab::MENS_SIZE_COLUMNS ) );
 
 		wp_nonce_field( self::NONCE, self::NONCE );
 		self::render_status( $id );
 		?>
-		<div class="curtain-box">
+		<div class="curtain-box<?php echo $show_mens ? ' curtain-show-mens' : ''; ?>">
 			<p class="description"><?php esc_html_e( 'Everything here describes the garment, never a customer. Measurements in cm. Fields marked * are needed before the product is "active" in Curtain.', 'curtain-woocommerce' ); ?></p>
 
 			<h4><?php esc_html_e( 'Classification', 'curtain-woocommerce' ); ?></h4>
@@ -374,8 +387,8 @@ final class Product_Meta {
 			<h4><?php esc_html_e( 'Size chart *', 'curtain-woocommerce' ); ?></h4>
 			<p class="curtain-radios">
 				<strong><?php esc_html_e( 'The numbers below are *', 'curtain-woocommerce' ); ?></strong>
-				<label><input type="radio" name="curtain[size_chart_type]" value="garment" <?php checked( $get( 'size_chart_type' ), 'garment' ); ?>> <?php esc_html_e( 'garment measurements (measured flat)', 'curtain-woocommerce' ); ?></label>
-				<label><input type="radio" name="curtain[size_chart_type]" value="body" <?php checked( $get( 'size_chart_type' ), 'body' ); ?>> <?php esc_html_e( 'body measurements (the body each size is cut for)', 'curtain-woocommerce' ); ?></label>
+				<label><input type="radio" name="curtain[size_chart_type]" value="garment" <?php checked( $chart_type, 'garment' ); ?>> <?php esc_html_e( 'garment measurements (measured flat)', 'curtain-woocommerce' ); ?></label>
+				<label><input type="radio" name="curtain[size_chart_type]" value="body" <?php checked( $chart_type, 'body' ); ?>> <?php esc_html_e( 'body measurements (the body each size is cut for)', 'curtain-woocommerce' ); ?></label>
 			</p>
 			<?php $templates = self::chart_templates(); ?>
 			<?php if ( array() !== $templates ) : ?>
@@ -410,18 +423,18 @@ final class Product_Meta {
 					<?php
 					foreach ( Vocab::SIZE_ROW_COLUMNS as $col ) :
 						?>
-						<th><?php echo esc_html( self::column_label( $col, (string) $get( 'audience' ) ) ); ?></th><?php endforeach; ?><th></th>
+						<th<?php echo self::mens_class( $col ); ?>><?php echo esc_html( self::column_label( $col, (string) $get( 'audience' ) ) ); ?></th><?php endforeach; ?><th></th>
 				</tr></thead>
 				<tbody>
 					<?php
-					$rows   = array_values( array_filter( $chart, 'is_array' ) );
+					$rows   = $chart_rows;
 					$rows[] = array();
 					foreach ( $rows as $i => $row ) :
 						?>
 						<tr>
 							<?php foreach ( Vocab::SIZE_ROW_COLUMNS as $col ) : ?>
-								<td><?php if ( 'size' === $col ) : ?>
-									<input type="text" name="curtain[size_chart][<?php echo (int) $i; ?>][size]" value="<?php echo esc_attr( (string) ( $row['size'] ?? '' ) ); ?>" maxlength="16" class="curtain-narrow" placeholder="S">
+								<td<?php echo self::mens_class( $col ); ?>><?php if ( 'size' === $col ) : ?>
+									<input type="text" name="curtain[size_chart][<?php echo (int) $i; ?>][size]" value="<?php echo esc_attr( (string) ( $row['size'] ?? '' ) ); ?>" maxlength="<?php echo (int) Vocab::SIZE_LABEL_MAX; ?>" class="curtain-narrow" placeholder="S">
 								<?php else : ?>
 									<input type="number" name="curtain[size_chart][<?php echo (int) $i; ?>][<?php echo esc_attr( $col ); ?>]" value="<?php echo esc_attr( self::num( $row[ $col ] ?? '' ) ); ?>" min="0" max="300" step="0.5" class="curtain-narrow">
 								<?php endif; ?></td>
@@ -430,16 +443,17 @@ final class Product_Meta {
 						</tr>
 					<?php endforeach; ?>
 				</tbody>
-				<tfoot><tr><td colspan="<?php echo count( Vocab::SIZE_ROW_COLUMNS ) + 1; ?>"><button type="button" class="button curtain-row-add"><?php esc_html_e( 'Add size', 'curtain-woocommerce' ); ?></button> <span class="description"><?php esc_html_e( 'Ascending order. Leave a cell empty (or 0) when the shop does not publish that measurement.', 'curtain-woocommerce' ); ?></span></td></tr></tfoot>
+				<tfoot><tr><td class="curtain-chart-foot" colspan="<?php echo count( $visible_cols ) + 1; ?>" data-colspan-all="<?php echo count( Vocab::SIZE_ROW_COLUMNS ) + 1; ?>" data-colspan-women="<?php echo count( Vocab::SIZE_ROW_COLUMNS ) - count( Vocab::MENS_SIZE_COLUMNS ) + 1; ?>"><button type="button" class="button curtain-row-add"><?php esc_html_e( 'Add size', 'curtain-woocommerce' ); ?></button> <span class="description"><?php esc_html_e( 'Ascending order. Leave a cell empty (or 0) when the shop does not publish that measurement.', 'curtain-woocommerce' ); ?></span></td></tr></tfoot>
 			</table>
 			</div>
+			<?php self::render_mens_chart_controls( $chart_wl, $sleeve_conv, $chart_issues ); ?>
 
 			<?php self::render_tape( $id, array_values( array_filter( $chart, 'is_array' ) ), (string) $get( 'closure' ), $json( 'garment_tape' ) ); ?>
 
 			<h4><?php esc_html_e( 'Designed ease (garment minus body, cm)', 'curtain-woocommerce' ); ?></h4>
 			<div class="curtain-inline">
 				<?php foreach ( Vocab::FIT_POINTS as $p ) : ?>
-					<label><span><?php echo esc_html( $p ); ?></span><input type="number" name="curtain[ease][<?php echo esc_attr( $p ); ?>]" value="<?php echo esc_attr( self::num( $ease[ $p ] ?? '' ) ); ?>" min="-20" max="60" step="0.5" class="curtain-narrow"></label>
+					<label<?php echo self::mens_class( $p ); ?>><span><?php echo esc_html( $p ); ?></span><input type="number" name="curtain[ease][<?php echo esc_attr( $p ); ?>]" value="<?php echo esc_attr( self::num( $ease[ $p ] ?? '' ) ); ?>" min="-20" max="60" step="0.5" class="curtain-narrow"></label>
 				<?php endforeach; ?>
 			</div>
 
@@ -476,7 +490,7 @@ final class Product_Meta {
 			<div class="curtain-grid">
 				<fieldset><legend><?php esc_html_e( 'Critical fit points', 'curtain-woocommerce' ); ?></legend>
 					<?php foreach ( Vocab::FIT_POINTS as $p ) : ?>
-						<label class="curtain-check"><input type="checkbox" name="curtain[critical_fit_points][]" value="<?php echo esc_attr( $p ); ?>" <?php checked( in_array( $p, $critical, true ) ); ?>> <?php echo esc_html( $p ); ?></label>
+						<label class="curtain-check<?php echo in_array( $p, Vocab::MENS_FIT_POINTS, true ) ? ' curtain-mens-col' : ''; ?>"><input type="checkbox" name="curtain[critical_fit_points][]" value="<?php echo esc_attr( $p ); ?>" <?php checked( in_array( $p, $critical, true ) ); ?>> <?php echo esc_html( $p ); ?></label>
 					<?php endforeach; ?>
 				</fieldset>
 				<fieldset><legend><?php esc_html_e( 'Stretch zones', 'curtain-woocommerce' ); ?></legend>
@@ -516,6 +530,101 @@ final class Product_Meta {
 				<tfoot><tr><td colspan="4"><button type="button" class="button curtain-row-add"><?php esc_html_e( 'Add colorway', 'curtain-woocommerce' ); ?></button></td></tr></tfoot>
 			</table>
 		</div>
+		<?php
+	}
+
+	/** ` class="curtain-mens-col"` for a men's column or fit point (hidden unless the men's columns are shown). */
+	private static function mens_class( string $col ): string {
+		return in_array( $col, Vocab::MENS_SIZE_COLUMNS, true ) || in_array( $col, Vocab::MENS_FIT_POINTS, true ) ? ' class="curtain-mens-col"' : '';
+	}
+
+	/** @param array<int,array<string,mixed>> $rows */
+	private static function chart_has_mens_columns( array $rows ): bool {
+		foreach ( $rows as $r ) {
+			foreach ( Vocab::MENS_SIZE_COLUMNS as $c ) {
+				if ( isset( $r[ $c ] ) && '' !== $r[ $c ] ) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/** @param array<int,array<string,mixed>> $rows */
+	private static function chart_has_axes( array $rows ): bool {
+		foreach ( $rows as $r ) {
+			if ( isset( $r['axes'] ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The size chart's messages as of this save (Chart_Columns): errors (the chart was not saved;
+	 * what was typed is kept in `input`) and warnings. Read back only while the stored chart is the
+	 * one they were written against.
+	 *
+	 * @param array{errors: string[], warnings: string[], input: ?array<string,mixed>} $chart
+	 */
+	public static function store_chart_issues( int $post_id, array $chart ): void {
+		if ( ! $chart['errors'] && ! $chart['warnings'] ) {
+			delete_post_meta( $post_id, self::META_CHART_ISSUES );
+			return;
+		}
+		$chart['basis'] = self::chart_basis( $post_id );
+		update_post_meta( $post_id, self::META_CHART_ISSUES, wp_slash( (string) wp_json_encode( $chart ) ) );
+	}
+
+	/** @return array{errors: string[], warnings: string[], input: ?array<string,mixed>}|null */
+	private static function chart_issues( int $post_id ): ?array {
+		$issues = json_decode( (string) get_post_meta( $post_id, self::META_CHART_ISSUES, true ), true );
+		if ( ! is_array( $issues ) || ( $issues['basis'] ?? null ) !== self::chart_basis( $post_id ) ) {
+			return null;
+		}
+		return $issues;
+	}
+
+	private static function chart_basis( int $post_id ): string {
+		$parts = array();
+		foreach ( array( '_curtain_size_chart', '_curtain_size_chart_type', '_curtain_sleeve_convention' ) as $k ) {
+			$parts[] = (string) get_post_meta( $post_id, $k, true );
+		}
+		return md5( implode( "\n", $parts ) );
+	}
+
+	/**
+	 * Under the size chart, men's products only: "Sizes are waist/leg (W/L)" and where the sleeve is
+	 * measured from; then the chart's messages (errors: not saved; warnings).
+	 *
+	 * @param array{errors?: string[], warnings?: string[]}|null $issues
+	 */
+	private static function render_mens_chart_controls( bool $wl, string $sleeve, ?array $issues ): void {
+		?>
+		<div class="curtain-mens-col curtain-mens-chart">
+			<label class="curtain-check"><input type="checkbox" name="curtain[size_axes]" value="wl" <?php checked( $wl ); ?>> <?php esc_html_e( 'Sizes are waist/leg (W/L), for example 32/34', 'curtain-woocommerce' ); ?></label>
+			<label><span><?php esc_html_e( 'The sleeve is measured', 'curtain-woocommerce' ); ?></span>
+				<select name="curtain[sleeve_convention]">
+					<option value=""><?php esc_html_e( '— choose (needed with a sleeve column) —', 'curtain-woocommerce' ); ?></option>
+					<option value="shoulder_point" <?php selected( $sleeve, 'shoulder_point' ); ?>><?php esc_html_e( 'from the shoulder seam to the cuff', 'curtain-woocommerce' ); ?></option>
+					<option value="centre_back" <?php selected( $sleeve, 'centre_back' ); ?>><?php esc_html_e( 'from the centre back of the neck, over the shoulder, to the cuff', 'curtain-woocommerce' ); ?></option>
+				</select></label>
+			<p class="description"><?php esc_html_e( 'Neck: the collar all round. Length: from the high shoulder point to the hem. Rise: from the crotch seam to the top of the waistband at the front.', 'curtain-woocommerce' ); ?></p>
+		</div>
+		<?php if ( ! empty( $issues['errors'] ) ) : ?>
+			<div class="curtain-tape-issues curtain-tape-issues--error curtain-chart-issues" role="alert"><strong><?php esc_html_e( 'These size chart changes were not saved:', 'curtain-woocommerce' ); ?></strong><ul>
+				<?php
+				foreach ( (array) $issues['errors'] as $e ) :
+					?>
+					<li><?php echo esc_html( (string) $e ); ?></li><?php endforeach; ?></ul></div>
+		<?php endif; ?>
+		<?php if ( ! empty( $issues['warnings'] ) ) : ?>
+			<div class="curtain-tape-issues curtain-tape-issues--warning curtain-chart-issues"><strong><?php esc_html_e( 'Check the size chart:', 'curtain-woocommerce' ); ?></strong><ul>
+				<?php
+				foreach ( (array) $issues['warnings'] as $w ) :
+					?>
+					<li><?php echo esc_html( (string) $w ); ?></li><?php endforeach; ?></ul></div>
+		<?php endif; ?>
 		<?php
 	}
 
@@ -590,7 +699,7 @@ final class Product_Meta {
 		// Typed rows whose size the chart no longer has (renamed or removed in the same save): shown
 		// after the chart rows with the label editable, so the numbers typed are not lost.
 		$chart_keys = array();
-		foreach ( array_slice( $chart, 0, 30 ) as $c ) {
+		foreach ( array_slice( $chart, 0, Vocab::SIZE_CHART_MAX_ROWS ) as $c ) {
 			$chart_keys[ Garment_Tape::key( (string) ( $c['size'] ?? '' ) ) ] = true;
 		}
 		$orphans = array();
@@ -637,7 +746,7 @@ final class Product_Meta {
 							<th><?php echo esc_html( Garment_Tape::field_label( $f ) ); ?></th><?php endforeach; ?></tr></thead>
 					<tbody>
 						<?php
-						foreach ( array_slice( $chart, 0, 30 ) as $i => $c ) :
+						foreach ( array_slice( $chart, 0, Vocab::SIZE_CHART_MAX_ROWS ) as $i => $c ) :
 							$size     = (string) ( $c['size'] ?? '' );
 							$k        = Garment_Tape::key( $size );
 							$m        = $by_size[ $k ] ?? null;
@@ -663,7 +772,7 @@ final class Product_Meta {
 						<?php endforeach; ?>
 						<?php
 						foreach ( $orphans as $j => $m ) :
-							$i    = min( count( $chart ), 30 ) + $j;
+							$i    = min( count( $chart ), Vocab::SIZE_CHART_MAX_ROWS ) + $j;
 							$size = (string) $m['size'];
 							?>
 							<tr class="curtain-tape-orphan">
@@ -766,6 +875,16 @@ final class Product_Meta {
 			case 'chest':
 				// The stored point is `bust` for every audience; on men's garments it holds the chest.
 				return __( 'chest', 'curtain-woocommerce' );
+			case 'seat':
+				return __( 'seat', 'curtain-woocommerce' );
+			case 'neck':
+				return __( 'neck', 'curtain-woocommerce' );
+			case 'sleeve':
+				return __( 'sleeve', 'curtain-woocommerce' );
+			case 'length':
+				return __( 'length', 'curtain-woocommerce' );
+			case 'rise':
+				return __( 'rise', 'curtain-woocommerce' );
 			case 'footEu':
 				return __( 'Foot EU', 'curtain-woocommerce' );
 			case 'footLengthCm':

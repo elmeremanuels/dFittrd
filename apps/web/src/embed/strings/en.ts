@@ -92,8 +92,66 @@ export interface FaceSpikeStrings {
   failed: string;
 }
 
+/**
+ * The live face photo rows of slices 4 and 5 (behind `VITE_AVATAR_FACE_PHOTO=live`, off by default;
+ * counsel has not answered, D20.4). `claims` are variant A of the consent copy (the photo stays on
+ * the device), word for word (`avatarCopy.test.ts` checks each one against the document; `{age}` is
+ * the document's `[16]` placeholder). `ui` are labels and hints that state nothing about anybody's
+ * data: what to press, how to take a better photo.
+ */
+export interface FacePhotoClaims {
+  /** "Use my face": what happens. */
+  c6: string;
+  c7: string;
+  /** On yes. */
+  faceOnYes: string;
+  /** On no. */
+  faceOnNo: string;
+  /** Switched off again. */
+  c9: string;
+  yes: string;
+  no: string;
+  /** Under the avatar while a face is shown. */
+  c27: string;
+  /** Above the camera items; `{age}` is the age of the document's placeholder. */
+  c5: string;
+  /** "Match my skin tone" with the photo offer: both sentences of C11, and C12 (variant A). */
+  c11: string;
+  c12: string;
+  /** On yes of the skin row: a photo is read only after asking; the shopper chooses. */
+  c26: string;
+  /** "Remember my photo on this device": the switch and what it does. */
+  c19Label: string;
+  c19: string;
+  /** "Delete my photo": the button and what it does. */
+  c20Label: string;
+  c20: string;
+}
+
+export interface FacePhotoUi {
+  takePhoto: string;
+  choosePhoto: string;
+  ageConfirm: (age: number) => string;
+  readFromPhoto: string;
+  skinAskNo: string;
+  workingFace: string;
+  workingSkin: string;
+  /** The suggestion from the photo: a proposal, never the answer. */
+  suggestion: (n: number, total: number) => string;
+  suggested: string;
+  orPick: string;
+  matchHint: string;
+  /** "Remember my photo" needs the footer's "Remember me" switch (its label) to be on. */
+  needsRemember: (rememberLabel: string) => string;
+  /** Accessible name of the face tile preview in the prompt. */
+  preview: string;
+  notFound: string;
+  failed: string;
+  notices: Record<'turned' | 'small' | 'bright' | 'dark' | 'side' | 'cast', string>;
+}
+
 export interface EmbedCatalogue {
-  avatar: { claims: AvatarClaims; ui: AvatarUi; faceSpike: FaceSpikeStrings };
+  avatar: { claims: AvatarClaims; ui: AvatarUi; faceSpike: FaceSpikeStrings; facePhoto: { claims: FacePhotoClaims; ui: FacePhotoUi } };
   /** The screens shown in place of the flow. */
   blocked: Record<BlockedKind, { title: string; text: string }>;
   actions: { tryAgain: string; backToShop: string };
@@ -270,6 +328,20 @@ export interface EmbedCatalogue {
     failed: string;
     slow: string;
   };
+  realism: {
+    /** The label on every AI image (hard rule 3). */
+    label: string;
+    title: string;
+    explain: string;
+    consent: string;
+    start: (size: string) => string;
+    working: string;
+    alt: (garment: string, size: string) => string;
+    caption: string;
+    refused: string;
+    reason: (code: string) => string;
+    failed: string;
+  };
   view3d: {
     label: string;
     open: string;
@@ -341,6 +413,51 @@ export const EN: EmbedCatalogue = {
       open: title,
       swatchCredit: 'Colours: Monk Skin Tone Scale by Dr. Ellis Monk, CC BY 4.0.',
       termsLanguageNote: '',
+    },
+    facePhoto: {
+      claims: {
+        c6: 'We use a photo of your face to draw your face on the avatar.',
+        c7: 'The photo stays on your device. It is never sent to us.',
+        faceOnYes: 'Your device asks if we may use the camera. You can also pick a photo you already have.',
+        faceOnNo: 'Nothing happens. The avatar keeps the standard face.',
+        c9: 'Your face is taken off the avatar and deleted from this device.',
+        yes: 'Yes, use my photo',
+        no: 'No, keep the standard face',
+        c27: 'Your face on an estimated body',
+        c5: 'The photo and the scan are for people aged {age} or older.',
+        c11: 'Pick your skin colour yourself. Or let us read it from your photo.',
+        c12: 'Reading it happens on your device.',
+        c26: 'If you want us to read it from a photo, we ask first. You always choose the final colour.',
+        c19Label: 'Remember my photo on this device',
+        c19: 'Off: your face is gone when you close this window. On: it is saved on this device, for this shop only. Not with us.',
+        c20Label: 'Delete my photo',
+        c20: 'Removes your face, and the colour we read from it, from this device. Right now.',
+      },
+      ui: {
+        takePhoto: 'Take a photo',
+        choosePhoto: 'Choose a photo',
+        ageConfirm: (age) => `I am ${age} or older`,
+        readFromPhoto: 'Read it from my photo',
+        skinAskNo: 'No, I will pick it myself',
+        workingFace: 'Drawing your face…',
+        workingSkin: 'Looking at the colour…',
+        suggestion: (n, total) => `Your photo points to colour ${n} of ${total}, or one next to it. Hold your hand next to the row and tap the colour that looks right to you.`,
+        suggested: 'From your photo',
+        orPick: 'Try another photo, or pick the colour yourself.',
+        matchHint: 'Pick your skin colour below, so your face and the avatar match.',
+        needsRemember: (label) => `To switch this on, first switch on "${label}" at the bottom of this window.`,
+        preview: 'Your face as it is drawn on the avatar',
+        notFound: 'No face was found in that picture. Try another one, facing the camera.',
+        failed: 'That did not work. Try another picture.',
+        notices: {
+          turned: 'Your head is turned in that picture. One straight from the front works best.',
+          small: 'Your face is small in that picture. A closer one works best.',
+          bright: 'Part of your face is very bright in that picture. Soft daylight works best.',
+          dark: 'That picture is dark. More light works best.',
+          side: 'The light comes from one side in that picture. Facing a window works best.',
+          cast: 'The light in that picture is coloured. Daylight works best.',
+        },
+      },
     },
     faceSpike: {
       c6: 'We use a photo of your face to draw your face on the avatar.',
@@ -577,6 +694,30 @@ export const EN: EmbedCatalogue = {
     start: (size) => `See size ${size} on me`,
     failed: 'The render did not finish.',
     slow: 'The render is taking too long. Try again later.',
+  },
+  realism: {
+    label: 'AI-enhanced estimate',
+    title: 'Make it look real',
+    explain: 'We send the 3D drawing above (not a photo of you) to our image partner, who makes it look like a photo. We check that the length, the fit and the colour stayed the same as in 3D, or we do not show it. Nothing is kept.',
+    consent: 'I agree to send the 3D drawing for one picture.',
+    start: (size) => `Make size ${size} look real`,
+    working: 'Making the picture…',
+    alt: (garment, size) => `AI-enhanced estimate of ${garment} in size ${size}, made from the 3D estimate`,
+    caption: 'AI-enhanced estimate, made from the 3D estimate. It is not a photo of you and not a photo of the garment on a person.',
+    refused: 'We did not show the picture: it changed the garment compared with the 3D estimate.',
+    reason: (code) =>
+      ({
+        hem: 'The length moved.',
+        waist: 'The waist moved.',
+        width: 'The fit changed.',
+        colour: 'The colour changed.',
+        silhouette: 'The outline changed.',
+        garment_outline: 'The outline of the garment changed.',
+        size_difference: 'It no longer looked like this size.',
+        unverifiable: 'We could not check this garment’s colour.',
+        provider: 'The image partner did not answer.',
+      })[code] ?? 'It did not pass our checks.',
+    failed: 'The picture could not be made. The 3D estimate above is unchanged.',
   },
   view3d: {
     label: '3D estimate',

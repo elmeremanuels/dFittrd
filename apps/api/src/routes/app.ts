@@ -369,7 +369,7 @@ export const appRoutes: FastifyPluginAsyncZod = async (app) => {
       // Only the rows of the shops where it is coming soon are left out, so another shop's product
       // with the same external id keeps its cohort.
       const hidden = await comingSoonShopIds({ db, env }, req.params.productId, req.query.shopId);
-      return fitCohort(db, req.params.productId, req.query.shopId, env.K_ANON, hidden);
+      return fitCohort(db, req.params.productId, req.query.shopId, env.K_ANON, hidden, ctx.now());
     },
   );
 };

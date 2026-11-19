@@ -50,6 +50,13 @@
       "when": 1794691148492,
       "tag": "0006_men_gate_audience_source",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795053446337,
+      "tag": "0007_analytics_snapshots",
+      "breakpoints": true
     }
   ]
 }

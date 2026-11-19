@@ -10,6 +10,7 @@ import type {
   MerchantGarmentAsset,
   AnalyticsAbandonedResponse,
   AnalyticsFitSizesResponse,
+  AnalyticsPeriodsResponse,
   BillingAnomaliesResponse,
   DeviceCreateRequest,
   DeviceTokenResponse,
@@ -447,20 +448,25 @@ export class MerchantApi {
   usage(from: string, to: string): Promise<UsageResponse> {
     return this.client.request('GET', `/v1/merchant/usage?from=${from}&to=${to}`, undefined, { auth: this.auth });
   }
-  analyticsSwipes(from: string, to: string): Promise<AnalyticsSwipesResponse> {
-    return this.client.request('GET', `/v1/merchant/analytics/swipes?from=${from}&to=${to}`, undefined, { auth: this.auth });
+  /** The closed calendar months analytics can be asked for, newest first (launch-readiness finding 1). */
+  analyticsPeriods(): Promise<AnalyticsPeriodsResponse> {
+    return this.client.request('GET', '/v1/merchant/analytics/periods', undefined, { auth: this.auth });
+  }
+  /** Swipe aggregates for one closed month (`YYYY-MM`), k floor with complementary suppression. */
+  analyticsSwipes(period: string): Promise<AnalyticsSwipesResponse> {
+    return this.client.request('GET', `/v1/merchant/analytics/swipes?period=${encodeURIComponent(period)}`, undefined, { auth: this.auth });
   }
   /** Billing anomaly signal: today's cap/spike flags and recorded anomalies (carry-over #7). */
   usageAnomalies(from: string, to: string): Promise<BillingAnomaliesResponse> {
     return this.client.request('GET', `/v1/merchant/usage/anomalies?from=${from}&to=${to}`, undefined, { auth: this.auth });
   }
   /** Sizes recommended in standalone (on-page) fit sessions, k floor applied (carry-over #18). */
-  analyticsFitSizes(from: string, to: string): Promise<AnalyticsFitSizesResponse> {
-    return this.client.request('GET', `/v1/merchant/analytics/fit-sizes?from=${from}&to=${to}`, undefined, { auth: this.auth });
+  analyticsFitSizes(period: string): Promise<AnalyticsFitSizesResponse> {
+    return this.client.request('GET', `/v1/merchant/analytics/fit-sizes?period=${encodeURIComponent(period)}`, undefined, { auth: this.auth });
   }
   /** Opens that never got a fit, k floor on distinct shoppers (carry-over #19). */
-  analyticsAbandoned(from: string, to: string): Promise<AnalyticsAbandonedResponse> {
-    return this.client.request('GET', `/v1/merchant/analytics/abandoned?from=${from}&to=${to}`, undefined, { auth: this.auth });
+  analyticsAbandoned(period: string): Promise<AnalyticsAbandonedResponse> {
+    return this.client.request('GET', `/v1/merchant/analytics/abandoned?period=${encodeURIComponent(period)}`, undefined, { auth: this.auth });
   }
   ledger(cursor?: string): Promise<MerchantLedgerResponse> {
     return this.client.request('GET', `/v1/merchant/ledger${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, undefined, { auth: this.auth });

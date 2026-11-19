@@ -1,14 +1,14 @@
 import { AlertCircle, BarChart3, LogOut, ShieldCheck, ShoppingCart, TrendingUp } from 'lucide-react';
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, NavLink, Navigate, Outlet, useNavigate } from 'react-router';
-import type { AnalyticsAbandonedResponse, AnalyticsFitSizesResponse, AnalyticsSwipesResponse, BillingAnomaliesResponse, MerchantLedgerResponse, MerchantProductsResponse, UsageResponse } from '@curtain/schema';
+import type { AnalyticsAbandonedResponse, AnalyticsFitSizesResponse, AnalyticsPeriodsResponse, AnalyticsSuppression, AnalyticsSwipesResponse, BillingAnomaliesResponse, MerchantLedgerResponse, MerchantProductsResponse, UsageResponse } from '@curtain/schema';
 import { MERCHANT_KEY_PATTERN, NetworkError, type MerchantApi } from '@/api/client';
 import { Ledger, type LedgerLine } from '@/components/Ledger';
 import { dayIso, pct, titleCase } from '@/lib/format';
 import { api } from '@/store';
 import { merchantStrings } from './strings';
 import { planPriceText, planState, planStatusText } from './plan';
-import { mockAbandonedAnalytics, mockAnalytics, mockAnomalies, mockFitSizes, mockLedger, mockProducts, mockUsage } from './mock';
+import { mockAbandonedAnalytics, mockAnalytics, mockAnomalies, mockFitSizes, mockLedger, mockPeriods, mockProducts, mockUsage } from './mock';
 
 const SESSION_KEY = 'curtain.merchantKey';
 
@@ -81,7 +81,8 @@ export interface MerchantData {
   mode: 'live' | 'mock';
   products: MerchantProductsResponse;
   usage: UsageResponse;
-  analytics: AnalyticsSwipesResponse;
+  /** Swipe aggregates of `period`; null when no month is closed yet or this api version does not serve it. */
+  analytics: AnalyticsSwipesResponse | null;
   ledger: MerchantLedgerResponse;
   /** Standalone fit-shown sizes (carry-over #18); null when this api version does not serve it. */
   fitSizes: AnalyticsFitSizesResponse | null;
@@ -90,7 +91,15 @@ export interface MerchantData {
   /** Billing anomaly signal: daily cap and spikes (carry-over #7). */
   anomalies: BillingAnomaliesResponse | null;
   range: { from: string; to: string };
+  /** The closed months analytics can show (launch-readiness finding 1); null on an older api. */
+  periods: AnalyticsPeriodsResponse | null;
+  /** The month the analytics sections show, or null when none is closed yet. */
+  period: string | null;
+  setPeriod: (period: string) => void;
 }
+
+type BaseData = Omit<MerchantData, 'analytics' | 'fitSizes' | 'abandoned' | 'period' | 'setPeriod'>;
+type MonthData = Pick<MerchantData, 'analytics' | 'fitSizes' | 'abandoned'> & { period: string | null };
 
 /** Optional sections: an older api without the route must not take the whole console down. */
 const optional = <T,>(p: Promise<T>): Promise<T | null> => p.catch(() => null);
@@ -98,7 +107,8 @@ const optional = <T,>(p: Promise<T>): Promise<T | null> => p.catch(() => null);
 export function MerchantLayout(): ReactNode {
   const navigate = useNavigate();
   const key = readMerchantKey();
-  const [data, setData] = useState<MerchantData | null>(null);
+  const [base, setBase] = useState<BaseData | null>(null);
+  const [period, setPeriod] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -110,31 +120,16 @@ export function MerchantLayout(): ReactNode {
     const m: MerchantApi = api.merchant(key);
     (async () => {
       try {
-        const [products, usage, analytics, ledger, fitSizes, abandoned, anomalies] = await Promise.all([
-          m.products(),
-          m.usage(range.from, range.to),
-          m.analyticsSwipes(range.from, range.to),
-          m.ledger(),
-          optional(m.analyticsFitSizes(range.from, range.to)),
-          optional(m.analyticsAbandoned(range.from, range.to)),
-          optional(m.usageAnomalies(range.from, range.to)),
-        ]);
-        if (!cancelled) setData({ mode: 'live', products, usage, analytics, ledger, fitSizes, abandoned, anomalies, range });
+        const [products, usage, ledger, anomalies, periods] = await Promise.all([m.products(), m.usage(range.from, range.to), m.ledger(), optional(m.usageAnomalies(range.from, range.to)), optional(m.analyticsPeriods())]);
+        if (cancelled) return;
+        setBase({ mode: 'live', products, usage, ledger, anomalies, range, periods });
+        setPeriod(periods?.periods[0] ?? null);
       } catch (e) {
         if (cancelled) return;
         if (e instanceof NetworkError || (e instanceof Error && e.name === 'ApiError' && (e as { status?: number }).status === 404)) {
-          const usage = mockUsage(range.from, range.to);
-          setData({
-            mode: 'mock',
-            products: mockProducts(),
-            usage,
-            analytics: mockAnalytics(range.from, range.to),
-            ledger: mockLedger(),
-            fitSizes: mockFitSizes(range.from, range.to),
-            abandoned: mockAbandonedAnalytics(range.from, range.to, usage),
-            anomalies: mockAnomalies(range.from, range.to),
-            range,
-          });
+          const periods = mockPeriods();
+          setBase({ mode: 'mock', products: mockProducts(), usage: mockUsage(range.from, range.to), ledger: mockLedger(), anomalies: mockAnomalies(range.from, range.to), range, periods });
+          setPeriod(periods.periods[0] ?? null);
         } else {
           setError(e instanceof Error ? e.message : 'Could not load your shop.');
         }
@@ -144,6 +139,28 @@ export function MerchantLayout(): ReactNode {
       cancelled = true;
     };
   }, [key]);
+
+  // Analytics come one closed calendar month at a time (launch-readiness finding 1).
+  const [fetched, setFetched] = useState<MonthData | null>(null);
+  useEffect(() => {
+    if (!key || !base || base.mode !== 'live' || !period) return;
+    let cancelled = false;
+    const m: MerchantApi = api.merchant(key);
+    void Promise.all([optional(m.analyticsSwipes(period)), optional(m.analyticsFitSizes(period)), optional(m.analyticsAbandoned(period))]).then(([analytics, fitSizes, abandoned]) => {
+      if (!cancelled) setFetched({ period, analytics, fitSizes, abandoned });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [key, base, period]);
+  const month = useMemo((): MonthData | null => {
+    if (!base) return null;
+    if (!period) return { period: null, analytics: null, fitSizes: null, abandoned: null };
+    if (base.mode === 'mock') return { period, analytics: mockAnalytics(period), fitSizes: mockFitSizes(period), abandoned: mockAbandonedAnalytics(period, base.usage) };
+    return fetched?.period === period ? fetched : null;
+  }, [base, period, fetched]);
+
+  const data: MerchantData | null = base && month ? { ...base, ...month, setPeriod } : null;
 
   if (!key) return <Navigate to="/merchant/login" replace />;
 
@@ -179,7 +196,7 @@ export function MerchantLayout(): ReactNode {
             </button>
           </nav>
         </div>
-        {data?.mode === 'mock' ? (
+        {base?.mode === 'mock' ? (
           <p className="bg-warn/10 px-6 py-2 text-center text-xs text-warn" role="status">
             API unreachable — showing demo data with the real response shapes. Nothing here is from your shop.
           </p>
@@ -228,10 +245,14 @@ function StatCard({ label, value, hint, icon, tone = 'ink' }: { label: string; v
 export function MerchantOverview(): ReactNode {
   const d = useMerchantData();
   const abandoned = d.abandoned && d.abandoned.totals.sessions > 0 ? { opens: d.abandoned.totals.sessions, abandoned: d.abandoned.totals.sessions - d.abandoned.totals.withFit } : null;
-  const totalSwipes = d.analytics.byProduct.reduce((n, p) => n + p.love + p.pass + p.save + p.less, 0);
-  const saves = d.analytics.byProduct.reduce((n, p) => n + p.save, 0);
+  const t = merchantStrings().analytics;
+  const k = d.analytics?.kAnonymityFloor ?? d.periods?.kAnonymityFloor ?? 5;
+  const shown = d.analytics?.byProduct ?? [];
+  const totalSwipes = shown.reduce((n, p) => n + p.love + p.pass + p.save + p.less, 0);
+  const saves = shown.reduce((n, p) => n + p.save, 0);
   return (
     <div className="space-y-6">
+      <PeriodPicker />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <StatCard label="Fit sessions (30 d)" value={d.usage.totals.fitSessions.toLocaleString()} icon={<TrendingUp className="h-5 w-5" aria-hidden />} hint={`${d.usage.plan.name} plan`} />
         <StatCard label="Save rate" value={totalSwipes ? pct(saves / totalSwipes) : '—'} icon={<ShoppingCart className="h-5 w-5" aria-hidden />} hint={`${totalSwipes} swipes`} />
@@ -239,7 +260,7 @@ export function MerchantOverview(): ReactNode {
           label="Abandoned opens"
           value={abandoned ? abandoned.abandoned.toLocaleString() : '—'}
           icon={<BarChart3 className="h-5 w-5" aria-hidden />}
-          hint={abandoned ? `${pct(abandoned.abandoned / abandoned.opens)} of ${abandoned.opens} opens` : `shown once ${d.abandoned?.kAnonymityFloor ?? d.analytics.kAnonymityFloor} shoppers opened a product`}
+          hint={abandoned ? `${pct(abandoned.abandoned / abandoned.opens)} of ${abandoned.opens} opens` : t.abandonedHint(k)}
           tone={abandoned ? 'warn' : 'ink'}
         />
         <StatCard label="Incomplete products" value={String(d.products.counts.incomplete)} icon={<AlertCircle className="h-5 w-5" aria-hidden />} hint={d.products.counts.incomplete > 0 ? 'fix to go live' : 'all good'} tone={d.products.counts.incomplete > 0 ? 'bad' : 'ok'} />
@@ -250,7 +271,7 @@ export function MerchantOverview(): ReactNode {
           <h2 className="font-display text-xl">What Curtain never sends you</h2>
           <ul className="list-disc space-y-1 pl-5 text-sm text-ink-soft">
             <li>No measurement, photo, fit signature or device id — ever.</li>
-            <li>Swipe aggregates only above the k-anonymity floor ({d.analytics.kAnonymityFloor} people); {d.analytics.suppressedGroups} small groups were suppressed in this range.</li>
+            <li>{t.neverSends(k)}</li>
             <li>Per-session sizes and scores are not returned to your page; order attribution is off by default.</li>
           </ul>
           <p className="flex items-center gap-2 text-xs text-ink-mute">
@@ -267,9 +288,10 @@ export function MerchantOverview(): ReactNode {
  * (standalone sessions, counted per session) and the app's swipe deck (counted per swipe). Each
  * source applies the k floor on its own, so a size can appear in one source only.
  */
-function SizeDistribution({ analytics, fitSizes }: { analytics: AnalyticsSwipesResponse; fitSizes: AnalyticsFitSizesResponse | null }): ReactNode {
+function SizeDistribution({ analytics, fitSizes }: { analytics: AnalyticsSwipesResponse | null; fitSizes: AnalyticsFitSizesResponse | null }): ReactNode {
+  const t = merchantStrings().analytics;
   const onPage = new Map((fitSizes?.bySize ?? []).map((s) => [s.size, s.sessions]));
-  const swipes = new Map(analytics.bySize.map((s) => [s.size, s.love + s.pass + s.save + s.less]));
+  const swipes = new Map((analytics?.bySize ?? []).map((s) => [s.size, s.love + s.pass + s.save + s.less]));
   const sizes = [...new Set([...onPage.keys(), ...swipes.keys()])];
   const onPageTotal = Math.max(1, [...onPage.values()].reduce((n, v) => n + v, 0));
   const swipeTotal = Math.max(1, [...swipes.values()].reduce((n, v) => n + v, 0));
@@ -313,7 +335,8 @@ function SizeDistribution({ analytics, fitSizes }: { analytics: AnalyticsSwipesR
           })}
         </ul>
       )}
-      <p className="text-xs text-ink-mute">Bars show each size’s share within its source. Sizes seen by fewer than {fitSizes?.kAnonymityFloor ?? analytics.kAnonymityFloor} shoppers are hidden.</p>
+      <p className="text-xs text-ink-mute">Bars show each size’s share within its source. {t.sizeHiddenNote(fitSizes?.kAnonymityFloor ?? analytics?.kAnonymityFloor ?? 5)}</p>
+      {fitSizes ? <HiddenNote suppression={fitSizes.suppression} k={fitSizes.kAnonymityFloor} noun={{ one: 'size', many: 'sizes' }} /> : null}
     </section>
   );
 }
@@ -540,36 +563,80 @@ return (
 );
 }
 
+/** The month the analytics sections show: closed calendar months only, newest first. */
+function PeriodPicker(): ReactNode {
+  const d = useMerchantData();
+  const t = merchantStrings().analytics;
+  const p = d.periods;
+  if (!p) return <p className="text-sm text-ink-soft">{t.noMonthLive}</p>;
+  const availableOn = new Date(p.openPeriodAvailableAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+  if (!d.period) return <p className="card bg-white/80 text-sm text-ink-soft">{t.noMonthYet(availableOn)}</p>;
+  return (
+    <section className="card space-y-2 bg-white/80" aria-labelledby="analytics-month">
+      <div className="flex flex-wrap items-center gap-3">
+        <label id="analytics-month" htmlFor="analytics-month-select" className="eyebrow">
+          {t.monthLabel}
+        </label>
+        <select id="analytics-month-select" className="field-input w-auto min-w-40 py-1.5 font-sans text-sm" value={d.period} onChange={(e) => d.setPeriod(e.target.value)}>
+          {p.periods.map((m) => (
+            <option key={m} value={m}>
+              {t.monthName(m)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <p className="text-xs text-ink-soft">{t.monthNote(t.monthName(d.period), t.monthName(p.openPeriod), availableOn)}</p>
+      <p className="text-xs text-ink-mute">{t.whyMonths}</p>
+    </section>
+  );
+}
+
+/** Says in plain English how many rows are hidden and why (below the floor, or hidden with them so they cannot be subtracted out). */
+function HiddenNote({ suppression, k, noun }: { suppression: AnalyticsSuppression; k: number; noun: { one: string; many: string } }): ReactNode {
+  return (
+    <p className="flex items-start gap-2 text-xs text-ink-soft" role="note">
+      <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> <span>{merchantStrings().analytics.hidden(suppression, k, noun)}</span>
+    </p>
+  );
+}
+
 export function MerchantAnalytics(): ReactNode {
   const d = useMerchantData();
+  const t = merchantStrings().analytics;
   const a = d.analytics;
   return (
     <div className="space-y-6">
-      <p className="text-sm text-ink-soft">
-        Aggregates from {a.from} to {a.to}; groups under {a.kAnonymityFloor} shoppers are suppressed ({a.suppressedGroups} hidden). Pass reasons are inferred on the shopper’s phone.
-      </p>
-      <SwipeTable title="By product" keyName="Product" rows={a.byProduct.map((p) => ({ key: p.externalId, ...p }))} />
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <SwipeTable title="By colour" keyName="Hue" rows={a.byColour.map((c) => ({ key: c.hue, ...c }))} />
-        <SwipeTable title="By fabric" keyName="Fabric" rows={a.byFabric.map((f) => ({ key: f.fabric, ...f }))} />
-        <SwipeTable title="By size" keyName="Size" rows={a.bySize.map((s) => ({ key: s.size, ...s }))} />
-      </div>
-      <section className="card bg-white/80">
-        <h2 className="mb-2 font-display text-xl">Why shoppers pass</h2>
-        <ul className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          {a.byProduct.slice(0, 8).map((p) => (
-            <li key={p.externalId} className="rounded-2xl border border-ink/10 p-3 text-xs">
-              <p className="mb-1 font-medium">{p.externalId}</p>
-              {Object.entries(p.passReasons).map(([r, n]) => (
-                <p key={r} className="flex justify-between text-ink-soft">
-                  <span>{titleCase(r)}</span>
-                  <span className="tabular-nums">{n}</span>
-                </p>
+      <PeriodPicker />
+      {a ? (
+        <>
+          <section className="space-y-1">
+            <HiddenNote suppression={a.suppression} k={a.kAnonymityFloor} noun={{ one: 'product or size', many: 'products or sizes' }} />
+            <p className="text-xs text-ink-mute">{t.derivedNote} Pass reasons are inferred on the shopper’s phone.</p>
+          </section>
+          <SwipeTable title="By product" keyName="Product" rows={a.byProduct.map((p) => ({ key: p.externalId, ...p }))} />
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            <SwipeTable title="By colour" keyName="Hue" rows={a.byColour.map((c) => ({ key: c.hue, ...c }))} />
+            <SwipeTable title="By fabric" keyName="Fabric" rows={a.byFabric.map((f) => ({ key: f.fabric, ...f }))} />
+            <SwipeTable title="By size" keyName="Size" rows={a.bySize.map((s) => ({ key: s.size, ...s }))} />
+          </div>
+          <section className="card bg-white/80">
+            <h2 className="mb-2 font-display text-xl">Why shoppers pass</h2>
+            <ul className="grid grid-cols-2 gap-2 md:grid-cols-4">
+              {a.byProduct.slice(0, 8).map((p) => (
+                <li key={p.externalId} className="rounded-2xl border border-ink/10 p-3 text-xs">
+                  <p className="mb-1 font-medium">{p.externalId}</p>
+                  {Object.entries(p.passReasons).map(([r, n]) => (
+                    <p key={r} className="flex justify-between text-ink-soft">
+                      <span>{titleCase(r)}</span>
+                      <span className="tabular-nums">{n}</span>
+                    </p>
+                  ))}
+                </li>
               ))}
-            </li>
-          ))}
-        </ul>
-      </section>
+            </ul>
+          </section>
+        </>
+      ) : null}
     </div>
   );
 }

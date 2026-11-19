@@ -25,6 +25,7 @@ import { loadEnv } from './env.js';
 import { approveAsset, importBundle } from './services/assets.js';
 import { upsertProduct } from './services/products.js';
 import { menGateScope } from './services/readiness.js';
+import { lastClosedMonth } from './services/kfloor.js';
 import { createDevice, makeApp, seedShop, type TestApp } from './test/helpers.js';
 
 const SITE = 'https://noordman.example';
@@ -107,9 +108,14 @@ async function pairedDevice(w: World) {
   return d;
 }
 
-/** One wardrobe row, so the cohort has something to show (K_ANON is 1 in these apps). */
+/**
+ * One wardrobe row, so the cohort has something to show (K_ANON is 1 in these apps). Dated in a closed month: the
+ * cohort counts whole closed months only (launch-readiness finding 1).
+ */
+const CLOSED_MONTH_DAY = new Date(Date.now() - 70 * 86_400_000);
+const THROUGH = lastClosedMonth(new Date());
 async function wear(w: World, product: string, deviceId: string, shopId = w.shop.shop.id) {
-  await w.t.handle.db.insert(wardrobeItems).values({ deviceId, shopId, productId: product, size: 'M', state: 'kept', updatedAt: new Date() });
+  await w.t.handle.db.insert(wardrobeItems).values({ deviceId, shopId, productId: product, size: 'M', state: 'kept', updatedAt: CLOSED_MONTH_DAY });
 }
 
 /** A bundle directory for a product; `male` writes the mannequin family in anchors.json and qa.json (the gate reads qa.json). */
@@ -249,7 +255,7 @@ describe("men's gate (D20 point 3, slice M0)", () => {
       const d = await pairedDevice(on);
       await wear(on, MEN, d.deviceId);
       await wear(on, WOMEN, d.deviceId);
-      expect((await cohort(on, MEN, d.auth)).json()).toEqual({ productId: MEN, n: 0, kAnonymityFloor: 1, sizeHistogram: {}, keptRate: null });
+      expect((await cohort(on, MEN, d.auth)).json()).toEqual({ productId: MEN, n: 0, kAnonymityFloor: 1, sizeHistogram: {}, keptRate: null, through: THROUGH });
       expect((await on.t.app.inject({ method: 'GET', url: `/v1/fit/cohort/${MEN}`, headers: d.auth })).json<{ n: number }>().n).toBe(0);
       expect((await cohort(on, WOMEN, d.auth)).json()).toMatchObject({ n: 1, sizeHistogram: { M: 1 } });
       await on.t.handle.db.delete(wardrobeItems).where(eq(wardrobeItems.deviceId, d.deviceId));
@@ -265,8 +271,8 @@ describe("men's gate (D20 point 3, slice M0)", () => {
       await wear(on, MEN, e.deviceId, other.shop.id); // shop B's women's product
       // Shop B's product is not gated: its own rows are served, the men's product's rows are not.
       expect((await on.t.app.inject({ method: 'GET', url: `/v1/fit/cohort/${MEN}?shopId=${other.shop.id}`, headers: d.auth })).json()).toMatchObject({ n: 1, sizeHistogram: { M: 1 } });
-      expect((await cohortAnyShop(on, MEN, d.auth)).json()).toEqual({ productId: MEN, n: 1, kAnonymityFloor: 1, sizeHistogram: { M: 1 }, keptRate: 1 });
-      expect((await cohort(on, MEN, d.auth)).json()).toEqual({ productId: MEN, n: 0, kAnonymityFloor: 1, sizeHistogram: {}, keptRate: null });
+      expect((await cohortAnyShop(on, MEN, d.auth)).json()).toEqual({ productId: MEN, n: 1, kAnonymityFloor: 1, sizeHistogram: { M: 1 }, keptRate: 1, through: THROUGH });
+      expect((await cohort(on, MEN, d.auth)).json()).toEqual({ productId: MEN, n: 0, kAnonymityFloor: 1, sizeHistogram: {}, keptRate: null, through: THROUGH });
       // The gated row is found however many shops share the id (no row limit).
       for (let i = 0; i < 22; i++) {
         const s = await seedShop(on.t, { domain: `same-id-${i}.example`, products: [] });

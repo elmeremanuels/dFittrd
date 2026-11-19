@@ -42,7 +42,7 @@ describe('men’s fields on About you', () => {
   it('a men’s tee asks chest, waist and shoulder width; neck and arm length only when the chart has them', () => {
     expect(measurementFieldsFor('top', SYNTHETIC_MENS_TEE)).toEqual(['bust', 'waist', 'shoulder']);
     expect(measurementFieldsFor('top', LONG_SLEEVE)).toEqual(['bust', 'waist', 'shoulder', 'neck', 'sleeve']);
-    expect(measurementFieldsFor('bottom', SYNTHETIC_MENS_CHINO_WL)).toEqual(['waist', 'hip', 'inseam']);
+    expect(measurementFieldsFor('bottom', SYNTHETIC_MENS_CHINO_WL)).toEqual(['waist', 'hip', 'thigh', 'inseam']);
   });
   it('women’s, unisex and unknown garments ask what they asked before', () => {
     const dress = MOCK_GARMENTS_BY_ID['aalter-studio-1']!;

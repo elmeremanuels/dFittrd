@@ -27,6 +27,13 @@ export interface GarmentAnchorsJson {
   synthetic: boolean;
   /** Set by a tape-built garment: the builder and its version (`pom-tee-…`, `pom-chino-…`; `trouser.ts` reads the latter). */
   builder?: string;
+  /**
+   * Set by a tape-built trouser (`pomChinoBundle.ts`): its sewn seams as paths of welded vertex ids (rises, inseams,
+   * outseams), which the drape lets stretch by at most `stretchPct` (`cloth.addSeams`; `trouser.ts`). `grain`: the rows
+   * and columns of the built mesh, which run along the weft and the warp of a woven cloth: neighbours on them come no
+   * farther apart than `stretchPct` and, with `shortenPct`, no closer than that.
+   */
+  seams?: { stretchPct: number; paths: number[][]; grain?: { stretchPct: number; shortenPct?: number; paths: number[][] } };
   /** Set by evaluated bundles: the file holding the product payload. */
   payloadFile?: string;
   /** Set by a server drape bake (`drapeBake.ts`): base.glb holds the drapes per size; the device blends, it does not drape. */

@@ -550,6 +550,7 @@ export const EN: EmbedCatalogue = {
       neck: 'Neck',
       sleeve: 'Arm length',
       shoulder: 'Shoulder width',
+      thigh: 'Thigh',
     },
     labelsMen: { bust: 'Chest', hip: 'Seat', inseam: 'Inside leg' },
     hintsMen: {
@@ -560,6 +561,7 @@ export const EN: EmbedCatalogue = {
       neck: 'Round the base of the neck, where a collar sits',
       sleeve: 'Shoulder bone to wrist, over a bent elbow',
       shoulder: 'Across the back, shoulder bone to shoulder bone',
+      thigh: 'Round the fullest part of one thigh, just under the crotch',
     },
     mensTyped: 'Neck, arm length and shoulder width are only used when you type them in. We never estimate them.',
     optional: '(optional)',

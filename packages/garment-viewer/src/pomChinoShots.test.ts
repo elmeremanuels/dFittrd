@@ -19,7 +19,7 @@ const out = process.env.CHINO_SHOTS;
 describe.skipIf(!out)('POM chino shots (CHINO_SHOTS)', () => {
   it('drapes, measures and renders', async () => {
     mkdirSync(out!, { recursive: true });
-    const built = buildPomChinoBundle(SYNTHETIC_CHINO_PAYLOAD.id, SYNTHETIC_CHINO_PAYLOAD, SYNTHETIC_CHINO_POM, SYNTHETIC_CHINO_BASE_SIZE, { bodyOfWaist: SYNTHETIC_CHINO_BODY });
+    const built = buildPomChinoBundle(SYNTHETIC_CHINO_PAYLOAD.id, SYNTHETIC_CHINO_PAYLOAD, SYNTHETIC_CHINO_POM, SYNTHETIC_CHINO_BASE_SIZE, { bodyOfWaist: SYNTHETIC_CHINO_BODY, maleShape: process.env.CHINO_MALE_SHAPE === 'v2' ? 'v2' : 'v1' });
     const bundle = await loadChino(built);
     const metrics: unknown[] = [];
     const sizes = SYNTHETIC_CHINO_POM.map((r) => r.size);
@@ -34,6 +34,6 @@ describe.skipIf(!out)('POM chino shots (CHINO_SHOTS)', () => {
       if (pictures && r.drawn) for (const [view, yaw] of [['front', 0], ['side', Math.PI / 2], ['back', Math.PI]] as const)
         render([{ mesh: r.drawn.body, color: [176, 152, 138] }, { mesh: r.drawn.cloth, color: [184, 159, 122] }], yaw, join(out!, `chino-body-${id}-size-${r.metrics.size.replace('/', 'x')}-${view}.png`), 400, 600, { cx: 0, cy: 62, half: 44 });
     }
-    writeFileSync(join(out!, 'metrics.json'), `${JSON.stringify({ base: built.base.levels, metrics }, null, 2)}\n`);
+    writeFileSync(join(out!, 'metrics.json'), `${JSON.stringify({ maleShape: built.mannequin.maleShape ?? 'v1', base: built.base.levels, tape: built.tape.map((t) => ({ size: t.size, body: t.body, maxAbsCm: t.maxAbsCm, levels: t.levels })), metrics }, null, 2)}\n`);
   }, 900_000);
 });

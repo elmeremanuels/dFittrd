@@ -82,7 +82,7 @@ Why the yoke was strained: grading scales the shoulders by the shoulder-width ra
 ## The pictures (`docs/screens/claude/men-tee-v2/`)
 
 Embed (real stack, `node scripts/demo-men.mjs <dir> --all-sizes --close --off-size`, gate on, 390 × 760 at deviceScaleFactor 2, SwiftShader):
-- `embed-tee-body-{S,M,L,XL,XXL}--5-3d-size-*--{front,side,back}.png`: each male table body in its own size (the fit engine picked exactly that size for all five). `--close-front` and `--close-side` zoom in on the shoulders and chest. The sheets `embed-sheet-own-size-{front,side,back}.png` and `embed-sheet-close-front.png` show all sizes side by side.
+- `embed-tee-body-{S,M,L,XL,XXL}--5-3d-size-*--{front,side,back}.png`: each male table body in its own size (the fit engine picked exactly that size for all five). `--close-front` and `--close-side` zoom in on the shoulders and chest. The sheets `embed-sheet-own-size-{front,side,back,close-front,close-side}.png` show all five sizes side by side.
 - `embed-tee-body-XXL--6-size-{S,XL}-not-drawn.png`: the XXL body picks S and XL. The body is drawn alone (seen from behind: the view was still turned from the back shot), with the note.
 - `embed-tee--0-storefront-page.png`, `embed-tee--1-about-you.png`, `embed-tee-body-XXL--2-pending.png`, `…--3-settled-size-XXL.png`, `embed-shirt-no-bundle--coming-soon.png`: the flow, unchanged.
 

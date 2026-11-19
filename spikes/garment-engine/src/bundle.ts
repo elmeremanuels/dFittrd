@@ -33,6 +33,8 @@ import { gradeGarment, type GradingJson } from './grading';
 import { chartRow, garmentChart, garmentSpec, materialJson, spikeProduct, type MaterialJson, type SpikeBundleProductId } from './product';
 import { hexToRgb } from './raster';
 import { separate, type SeparationOptions, type SeparationReport } from './separation';
+import { POM_TAPE_TOLERANCE_CM, buildPomBundle } from './pomBundle';
+import { SYNTHETIC_TEE_POM } from './pomTeeSynthetic';
 
 export const PIPELINE_VERSION = 'spike-0.1.0';
 
@@ -47,6 +49,12 @@ export interface BundleOptions {
   separation?: SeparationOptions & { framesPerPath?: number };
   /** Skip stage 3 (it is the slow part). */
   skipSeparation?: boolean;
+  /**
+   * The SYNTHETIC men's tee is built by the POM builder (`pomBundle.ts`, slice M3) from its flat
+   * measurements; `generator: 'm1'` builds it the M1 way instead (the lofted test garment, kept to
+   * compare against). Other products ignore it.
+   */
+  generator?: 'pom' | 'm1';
 }
 
 export interface Bundle {
@@ -83,6 +91,17 @@ export function bundleMannequin(m: Mannequin): { version: string; shape: string;
 }
 
 export function buildBundle(productId: SpikeBundleProductId, options: BundleOptions = {}): Bundle {
+  if (productId === 'synthetic-men-tee' && options.generator !== 'm1') {
+    const pom = buildPomBundle(productId, spikeProduct(productId), SYNTHETIC_TEE_POM, options.baseSize ?? 'M');
+    const worst = Math.max(...pom.tape.map((t) => t.maxAbsCm));
+    return {
+      ...pom,
+      calibration: { globalScale: 1, targets: {}, sources: {}, ringCorrections: {}, residualBefore: { rmsCm: 0, maxAbsCm: 0, perRingCm: {} }, residualAfterGlobal: { rmsCm: 0, maxAbsCm: 0, perRingCm: {} } },
+      // Not a chart agreement: the builder's tape of its own inputs (qa.json says `kind: 'tape-built'`).
+      agreement: { toleranceCm: POM_TAPE_TOLERANCE_CM, perRingCm: {}, maxAbsCm: worst, pass: worst <= POM_TAPE_TOLERANCE_CM },
+      separation: null,
+    };
+  }
   const baseSize = options.baseSize ?? 'M';
   const payload = spikeProduct(productId);
   const chart = garmentChart(payload);

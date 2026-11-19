@@ -62,9 +62,10 @@ export const MENS_STRAIGHT_JEANS: GarmentPayload = garment({
  * SYNTHETIC test garment, not a product (men-3d-plan slice M1): a plain short-sleeved tee whose only
  * job is to prove the male path end to end (spike bundle on the male mannequin → api import → the
  * men's gate → the embed's 3D view). Its 3D bundle is generated geometry
- * (`pnpm --filter @curtain/garment-spike build:bundle`, `out/synthetic-men-tee/`), not a
- * reconstruction of any garment, and it must never be sold, seeded in a live shop or shown as fit
- * evidence.
+ * (`pnpm --filter @curtain/garment-spike build:bundle`, `out/synthetic-men-tee/`; since slice M3
+ * built by the POM tee builder from the invented flat measurements of
+ * `spikes/garment-engine/src/pomTeeSynthetic.ts`), not a reconstruction of any garment, and it must
+ * never be sold, seeded in a live shop or shown as fit evidence.
  *
  * The chart is a GARMENT chart in cm, made up for the test: the male family's size table of
  * `@curtain/mannequin` (`MALE_REFERENCE`, chest 90/98/106/114/123) plus the men's tee eases the plan

@@ -1,0 +1,485 @@
+{
+  "chestLineY": 126.11601766805106,
+  "metrics": [
+    {
+      "generator": "pom",
+      "body": "S",
+      "size": "S",
+      "sewn": true,
+      "drapeMs": 577,
+      "showThroughPct": {
+        "cap": 0,
+        "mid": 0,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 0,
+        "mid": 0,
+        "hem": 0
+      },
+      "strainP99Pct": 11.5,
+      "necklineStrainPct": 0,
+      "chestCm": {
+        "tape": 98,
+        "placed": 97.7,
+        "draped": 96.3
+      }
+    },
+    {
+      "generator": "m1",
+      "body": "S",
+      "size": "S",
+      "sewn": false,
+      "drapeMs": 509,
+      "showThroughPct": {
+        "cap": 4.5,
+        "mid": 1.7,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 56,
+        "mid": 0,
+        "hem": 0
+      },
+      "strainP99Pct": 11.6,
+      "necklineStrainPct": 0,
+      "chestCm": {
+        "tape": 98,
+        "placed": 97.6,
+        "draped": 98.2
+      }
+    },
+    {
+      "generator": "pom",
+      "body": "M",
+      "size": "M",
+      "sewn": true,
+      "drapeMs": 632,
+      "showThroughPct": {
+        "cap": 0,
+        "mid": 0,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 0,
+        "mid": 0,
+        "hem": 0
+      },
+      "strainP99Pct": 12.3,
+      "necklineStrainPct": 0,
+      "chestCm": {
+        "tape": 106,
+        "placed": 105.8,
+        "draped": 103.6
+      }
+    },
+    {
+      "generator": "m1",
+      "body": "M",
+      "size": "M",
+      "sewn": false,
+      "drapeMs": 339,
+      "showThroughPct": {
+        "cap": 1.7,
+        "mid": 3.5,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 59,
+        "mid": 0,
+        "hem": 0
+      },
+      "strainP99Pct": 10.5,
+      "necklineStrainPct": 0.6,
+      "chestCm": {
+        "tape": 106,
+        "placed": 105,
+        "draped": 104.8
+      }
+    },
+    {
+      "generator": "pom",
+      "body": "L",
+      "size": "L",
+      "sewn": true,
+      "drapeMs": 643,
+      "showThroughPct": {
+        "cap": 0,
+        "mid": 3,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 0,
+        "mid": 0,
+        "hem": 0
+      },
+      "strainP99Pct": 12.8,
+      "necklineStrainPct": 6.8,
+      "chestCm": {
+        "tape": 114,
+        "placed": 113.9,
+        "draped": 111.1
+      }
+    },
+    {
+      "generator": "m1",
+      "body": "L",
+      "size": "L",
+      "sewn": false,
+      "drapeMs": 582,
+      "showThroughPct": {
+        "cap": 2.7,
+        "mid": 3.6,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 92,
+        "mid": 0,
+        "hem": 105
+      },
+      "strainP99Pct": 11.2,
+      "necklineStrainPct": 3.6,
+      "chestCm": {
+        "tape": 114,
+        "placed": 112.4,
+        "draped": 111.9
+      }
+    },
+    {
+      "generator": "pom",
+      "body": "XL",
+      "size": "XL",
+      "sewn": true,
+      "drapeMs": 530,
+      "showThroughPct": {
+        "cap": 0,
+        "mid": 0.2,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 0,
+        "mid": 0,
+        "hem": 0
+      },
+      "strainP99Pct": 14.3,
+      "necklineStrainPct": 26.2,
+      "chestCm": {
+        "tape": 122,
+        "placed": 122,
+        "draped": 117.5
+      }
+    },
+    {
+      "generator": "m1",
+      "body": "XL",
+      "size": "XL",
+      "sewn": false,
+      "drapeMs": 521,
+      "showThroughPct": {
+        "cap": 8.3,
+        "mid": 3.7,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 2010,
+        "mid": 6,
+        "hem": 55
+      },
+      "strainP99Pct": 11.3,
+      "necklineStrainPct": 8.3,
+      "chestCm": {
+        "tape": 122,
+        "placed": 119.8,
+        "draped": 119.4
+      }
+    },
+    {
+      "generator": "pom",
+      "body": "XXL",
+      "size": "XXL",
+      "sewn": true,
+      "drapeMs": 633,
+      "showThroughPct": {
+        "cap": 0,
+        "mid": 1,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 1,
+        "mid": 0,
+        "hem": 0
+      },
+      "strainP99Pct": 14.9,
+      "necklineStrainPct": 37.1,
+      "chestCm": {
+        "tape": 131,
+        "placed": 131.1,
+        "draped": 126.7
+      }
+    },
+    {
+      "generator": "m1",
+      "body": "XXL",
+      "size": "XXL",
+      "sewn": false,
+      "drapeMs": 432,
+      "showThroughPct": {
+        "cap": 20.9,
+        "mid": 4.6,
+        "hem": 1.5
+      },
+      "showThroughPixels": {
+        "cap": 2924,
+        "mid": 256,
+        "hem": 483
+      },
+      "strainP99Pct": 12.6,
+      "necklineStrainPct": 13.2,
+      "chestCm": {
+        "tape": 131,
+        "placed": 128,
+        "draped": 128
+      }
+    },
+    {
+      "generator": "pom",
+      "body": "M",
+      "size": "S",
+      "sewn": true,
+      "drapeMs": 679,
+      "showThroughPct": {
+        "cap": 0,
+        "mid": 0,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 0,
+        "mid": 5,
+        "hem": 0
+      },
+      "strainP99Pct": 13,
+      "necklineStrainPct": 0.2,
+      "chestCm": {
+        "tape": 98,
+        "placed": 97.7,
+        "draped": 99.7
+      }
+    },
+    {
+      "generator": "pom",
+      "body": "XXL",
+      "size": "S",
+      "sewn": true,
+      "drapeMs": 753,
+      "showThroughPct": {
+        "cap": 0.3,
+        "mid": 0.2,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 5,
+        "mid": 86,
+        "hem": 0
+      },
+      "strainP99Pct": 40.2,
+      "necklineStrainPct": 114.5,
+      "chestCm": {
+        "tape": 98,
+        "placed": 119.5,
+        "draped": 124.8
+      }
+    },
+    {
+      "generator": "pom",
+      "body": "M",
+      "size": "M",
+      "sewn": true,
+      "drapeMs": 548,
+      "showThroughPct": {
+        "cap": 0,
+        "mid": 0,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 0,
+        "mid": 0,
+        "hem": 0
+      },
+      "strainP99Pct": 12.3,
+      "necklineStrainPct": 0,
+      "chestCm": {
+        "tape": 106,
+        "placed": 105.8,
+        "draped": 103.6
+      }
+    },
+    {
+      "generator": "pom",
+      "body": "XXL",
+      "size": "M",
+      "sewn": true,
+      "drapeMs": 639,
+      "showThroughPct": {
+        "cap": 0.3,
+        "mid": 0.1,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 5,
+        "mid": 0,
+        "hem": 0
+      },
+      "strainP99Pct": 30.4,
+      "necklineStrainPct": 106.1,
+      "chestCm": {
+        "tape": 106,
+        "placed": 120.6,
+        "draped": 124.8
+      }
+    },
+    {
+      "generator": "pom",
+      "body": "M",
+      "size": "L",
+      "sewn": true,
+      "drapeMs": 517,
+      "showThroughPct": {
+        "cap": 0,
+        "mid": 2.7,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 0,
+        "mid": 0,
+        "hem": 0
+      },
+      "strainP99Pct": 13,
+      "necklineStrainPct": 0,
+      "chestCm": {
+        "tape": 114,
+        "placed": 113.9,
+        "draped": 109.6
+      }
+    },
+    {
+      "generator": "pom",
+      "body": "XXL",
+      "size": "L",
+      "sewn": true,
+      "drapeMs": 702,
+      "showThroughPct": {
+        "cap": 0,
+        "mid": 0.1,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 3,
+        "mid": 0,
+        "hem": 0
+      },
+      "strainP99Pct": 21.9,
+      "necklineStrainPct": 83.7,
+      "chestCm": {
+        "tape": 114,
+        "placed": 121.8,
+        "draped": 124.8
+      }
+    },
+    {
+      "generator": "pom",
+      "body": "M",
+      "size": "XL",
+      "sewn": true,
+      "drapeMs": 589,
+      "showThroughPct": {
+        "cap": 0,
+        "mid": 0.3,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 0,
+        "mid": 0,
+        "hem": 0
+      },
+      "strainP99Pct": 14.4,
+      "necklineStrainPct": 0,
+      "chestCm": {
+        "tape": 122,
+        "placed": 122,
+        "draped": 114.3
+      }
+    },
+    {
+      "generator": "pom",
+      "body": "XXL",
+      "size": "XL",
+      "sewn": true,
+      "drapeMs": 716,
+      "showThroughPct": {
+        "cap": 0.6,
+        "mid": 0.4,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 6,
+        "mid": 0,
+        "hem": 0
+      },
+      "strainP99Pct": 18.1,
+      "necklineStrainPct": 89.3,
+      "chestCm": {
+        "tape": 122,
+        "placed": 122.9,
+        "draped": 125
+      }
+    },
+    {
+      "generator": "pom",
+      "body": "M",
+      "size": "XXL",
+      "sewn": true,
+      "drapeMs": 494,
+      "showThroughPct": {
+        "cap": 0,
+        "mid": 4.2,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 1,
+        "mid": 0,
+        "hem": 0
+      },
+      "strainP99Pct": 15.2,
+      "necklineStrainPct": 28.6,
+      "chestCm": {
+        "tape": 131,
+        "placed": 131.1,
+        "draped": 120.9
+      }
+    },
+    {
+      "generator": "pom",
+      "body": "XXL",
+      "size": "XXL",
+      "sewn": true,
+      "drapeMs": 517,
+      "showThroughPct": {
+        "cap": 0,
+        "mid": 1,
+        "hem": 0
+      },
+      "showThroughPixels": {
+        "cap": 1,
+        "mid": 0,
+        "hem": 0
+      },
+      "strainP99Pct": 14.9,
+      "necklineStrainPct": 37.1,
+      "chestCm": {
+        "tape": 131,
+        "placed": 131.1,
+        "draped": 126.7
+      }
+    }
+  ]
+}

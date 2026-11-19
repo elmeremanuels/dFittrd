@@ -114,3 +114,77 @@ export function maleLevelsFromTop(): Record<'chin' | 'shoulder' | 'bust' | 'unde
     ankle: 0.95,
   };
 }
+
+/** The male body shape the figure follows: `v1` (default, M1b) or `v2` (the 3D body of `buildMannequin(shape, { maleShape: 'v2' })`). */
+export type MaleShape = 'v1' | 'v2';
+
+/**
+ * Male shape v2 (branch `claude/male-2d-v2`): the front view of the 3D male body v2 of
+ * `@curtain/mannequin` (`src/maleV2.ts`), measured on its mesh per size by
+ * `packages/mannequin/scripts/measure-male-v2-front.ts` and copied here (the embed does not load
+ * the mesh generator). Ratios, so a typed body scales them the way the 3D body scales its rings.
+ * `__tests__/maleFigureV2.test.tsx` rebuilds the v2 meshes and checks the drawn figure against
+ * them, so the copy cannot drift.
+ *
+ * - `chestAspect`, `waistAspect`, `hipAspect`: the width rule of the 2D figure, girth / (π(1 + r)),
+ *   solved for the front-view half-width of the v2 torso at the chest, waist and seat rings. Not
+ *   the depth / width of the v2 section (a superellipse is longer round than an ellipse of the same
+ *   breadth and depth); used so the body, its garments and its size rings share one rule.
+ * - `underbustShare`: the underbust half-width between the waist (0) and chest (1) half-widths.
+ * - `lats`: half-width at the armpit (the lats) over the chest half-width; `axillaLevel`: the
+ *   armpit's height, of stature from the floor (ANSUR's axilla height, as the 3D body).
+ * - `neckAboveShoulder`: the neck ring over the shoulder ring, of stature; `shoulderRing`: the
+ *   torso's half-width at the shoulder ring over half the shoulder width; `trapezius`: the torso
+ *   at 50 % and 75 % of the way up from the shoulder ring to the neck ring, between the neck (0)
+ *   and the shoulder ring (1) half-widths: a straight slope.
+ * - `legX`: the leg's centre over the seat half-width (the legs moved in under the seat);
+ *   `thighLevel`: the thigh ring's height, of stature from the floor.
+ * - `deltoid`: the breadth over the deltoids over ANSUR's bideltoid breadth (the v2 cap adds 0.1 cm).
+ */
+export interface MaleV2FigureRow {
+  chestAspect: number;
+  waistAspect: number;
+  hipAspect: number;
+  underbustShare: number;
+  lats: number;
+  axillaLevel: number;
+  neckAboveShoulder: number;
+  shoulderRing: number;
+  trapezius: readonly [number, number];
+  legX: number;
+  thighLevel: number;
+  deltoid: number;
+}
+
+export const MALE_V2_FIGURE_TABLE: Readonly<Record<MaleFigureSize, MaleV2FigureRow>> = {
+  S: { chestAspect: 0.8103, waistAspect: 0.7835, hipAspect: 0.8777, underbustShare: 0.4777, lats: 1.0766, axillaLevel: 0.756, neckAboveShoulder: 0.0378, shoulderRing: 0.9463, trapezius: [0.5211, 0.2516], legX: 0.5098, thighLevel: 0.4546, deltoid: 1.0017 },
+  M: { chestAspect: 0.8262, waistAspect: 0.8037, hipAspect: 0.9046, underbustShare: 0.4685, lats: 1.0765, axillaLevel: 0.757, neckAboveShoulder: 0.0378, shoulderRing: 0.9826, trapezius: [0.521, 0.2522], legX: 0.4938, thighLevel: 0.4535, deltoid: 1.0018 },
+  L: { chestAspect: 0.8401, waistAspect: 0.8187, hipAspect: 0.9214, underbustShare: 0.4597, lats: 1.0758, axillaLevel: 0.757, neckAboveShoulder: 0.0378, shoulderRing: 1.0023, trapezius: [0.5209, 0.2528], legX: 0.488, thighLevel: 0.4524, deltoid: 1.0018 },
+  XL: { chestAspect: 0.8523, waistAspect: 0.8348, hipAspect: 0.9384, underbustShare: 0.4535, lats: 1.0753, axillaLevel: 0.757, neckAboveShoulder: 0.0378, shoulderRing: 1.0211, trapezius: [0.5209, 0.2534], legX: 0.4909, thighLevel: 0.4513, deltoid: 1.0019 },
+  XXL: { chestAspect: 0.8655, waistAspect: 0.846, hipAspect: 0.9608, underbustShare: 0.4431, lats: 1.0753, axillaLevel: 0.757, neckAboveShoulder: 0.0378, shoulderRing: 1.0538, trapezius: [0.5208, 0.2538], legX: 0.4999, thighLevel: 0.4491, deltoid: 1.0019 },
+};
+
+/** The v2 row at a chest girth: piecewise linear between the sizes, held at the ends (as the package's ring fits). */
+export function maleV2RowAt(chestCm: number): MaleV2FigureRow {
+  const c = Math.min(CHESTS[CHESTS.length - 1]!, Math.max(CHESTS[0]!, chestCm));
+  let i = 1;
+  while (i < CHESTS.length - 1 && c > CHESTS[i]!) i++;
+  const t = (c - CHESTS[i - 1]!) / (CHESTS[i]! - CHESTS[i - 1]!);
+  const a = MALE_V2_FIGURE_TABLE[MALE_FIGURE_SIZES[i - 1]!];
+  const b = MALE_V2_FIGURE_TABLE[MALE_FIGURE_SIZES[i]!];
+  const l = (x: number, y: number): number => x + (y - x) * t;
+  return {
+    chestAspect: l(a.chestAspect, b.chestAspect),
+    waistAspect: l(a.waistAspect, b.waistAspect),
+    hipAspect: l(a.hipAspect, b.hipAspect),
+    underbustShare: l(a.underbustShare, b.underbustShare),
+    lats: l(a.lats, b.lats),
+    axillaLevel: l(a.axillaLevel, b.axillaLevel),
+    neckAboveShoulder: l(a.neckAboveShoulder, b.neckAboveShoulder),
+    shoulderRing: l(a.shoulderRing, b.shoulderRing),
+    trapezius: [l(a.trapezius[0], b.trapezius[0]), l(a.trapezius[1], b.trapezius[1])],
+    legX: l(a.legX, b.legX),
+    thighLevel: l(a.thighLevel, b.thighLevel),
+    deltoid: l(a.deltoid, b.deltoid),
+  };
+}

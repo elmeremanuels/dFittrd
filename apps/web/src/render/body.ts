@@ -10,7 +10,9 @@
  */
 import type { FitPoint, GarmentPayload, UserBody } from '@curtain/schema';
 import type { RenderGaps } from '@curtain/fit-engine';
-import { MALE_FIGURE_ASSUMPTIONS, MALE_FIGURE_TABLE, maleLevelsFromTop, maleRowAt } from './maleBody';
+import { MALE_FIGURE_ASSUMPTIONS, MALE_FIGURE_TABLE, maleLevelsFromTop, maleRowAt, maleV2RowAt, type MaleShape } from './maleBody';
+
+export type { MaleShape } from './maleBody';
 
 export const VIEW_W = 200;
 export const VIEW_H = 500;
@@ -109,6 +111,21 @@ export interface BodyGeometry {
   armDrift?: number;
   wristHalf?: number;
   calfHalf?: number;
+  /**
+   * Male shape v2 only (absent on the v1 male and the female figure, so their geometry is what it
+   * was): the figure follows the 3D male body v2 (`maleBody.ts`, `MALE_V2_FIGURE_TABLE`).
+   */
+  maleShape?: 'v2';
+  /** v2: the centre of each leg from the middle, px (v1 and female: half the seat half-width). */
+  legX?: number;
+  /** v2: the outline's extra stations (px): underbust and armpit half-widths, the armpit, neck ring and thigh ring heights, the shoulder ring half-width and the trapezius slope. */
+  v2?: { underbustHalf: number; armpitHalf: number; armpitY: number; neckY: number; shoulderRingHalf: number; trapezius: readonly [number, number]; thighRingY: number };
+}
+
+/** Options of the 2D figure. */
+export interface FigureOptions {
+  /** The male figure's shape: `v1` (default) or `v2` (the 3D male body v2). The female figure ignores it. */
+  maleShape?: MaleShape;
 }
 
 export const REFERENCE_BODY: Required<Pick<UserBody['measurements'], 'bust' | 'waist' | 'hip' | 'shoulder' | 'thigh'>> & { height: number } = {
@@ -120,8 +137,8 @@ export const REFERENCE_BODY: Required<Pick<UserBody['measurements'], 'bust' | 'w
   height: 168,
 };
 
-export function bodyGeometry(measurements: UserBody['measurements'] | null | undefined, heightCm?: number, family: FigureFamily = 'female'): BodyGeometry {
-  if (family === 'male') return maleBodyGeometry(measurements, heightCm);
+export function bodyGeometry(measurements: UserBody['measurements'] | null | undefined, heightCm?: number, family: FigureFamily = 'female', options: FigureOptions = {}): BodyGeometry {
+  if (family === 'male') return options.maleShape === 'v2' ? maleV2BodyGeometry(measurements, heightCm) : maleBodyGeometry(measurements, heightCm);
   const m = measurements ?? {};
   const bust = m.bust ?? REFERENCE_BODY.bust;
   const waist = m.waist ?? REFERENCE_BODY.waist;
@@ -217,6 +234,77 @@ function maleBodyGeometry(measurements: UserBody['measurements'] | null | undefi
   };
 }
 
+/**
+ * The male figure v2: the front view of the 3D male body v2 (`buildMannequin(shape, { maleShape:
+ * 'v2' })`). The same inputs and table as v1 (`maleRowAt`), but the widths at the chest, waist and
+ * seat are the v2 torso's (narrower seat, a V from the lats at the armpit to the waist), the
+ * trapezius is the v2 straight slope to the neck ring, the deltoids carry the v2 cap's 0.1 cm and
+ * the legs sit in under the seat, touching below the crotch. Ratios from `MALE_V2_FIGURE_TABLE`.
+ */
+function maleV2BodyGeometry(measurements: UserBody['measurements'] | null | undefined, heightCm?: number): BodyGeometry {
+  const A = MALE_FIGURE_ASSUMPTIONS;
+  const m = measurements ?? {};
+  const chest = m.bust ?? MALE_REFERENCE_BODY.bust;
+  const row = maleRowAt(chest);
+  const v = maleV2RowAt(chest);
+  const waist = m.waist ?? row.waist;
+  const hip = m.hip ?? row.hip;
+  const shoulderRatio = Math.min(A.shoulderRatio[1], Math.max(A.shoulderRatio[0], (m.shoulder ?? row.shoulderWidth) / row.shoulderWidth));
+  const shoulder = row.shoulderWidth * shoulderRatio;
+  const legScale = hip / row.hip;
+  const thigh = m.thigh ?? row.thigh * legScale;
+  const height = heightCm ?? row.stature;
+  const ppc = pxPerCm(height);
+  const levels = MALE_LEVEL_Y;
+  const span = FEET_Y - HEAD_TOP_Y;
+  const atLevel = (fromFloor: number): number => HEAD_TOP_Y + (1 - fromFloor) * span;
+  const chin = HEAD_TOP_Y + levels.chin * span;
+  const shoulderY = HEAD_TOP_Y + levels.shoulder * span;
+  const bustHalf = halfWidthFromGirth(chest, ppc, v.chestAspect);
+  const waistHalf = halfWidthFromGirth(waist, ppc, v.waistAspect);
+  const hipHalf = halfWidthFromGirth(hip, ppc, v.hipAspect);
+  const shoulderHalf = Math.max(bustHalf * 1.05, (shoulder / 2) * ppc);
+  const armHalf = ((row.bicepsFlexed * A.relaxedOverFlexedBiceps) / (2 * Math.PI)) * ppc * A.deltoidOverArm;
+  const deltoidHalf = Math.max(shoulderHalf + armHalf * 0.6, (row.bideltoid * v.deltoid * shoulderRatio * ppc) / 2);
+  const armX = deltoidHalf - armHalf;
+  const wristHalf = (row.wrist / (2 * Math.PI)) * ppc;
+  return {
+    heightCm: height,
+    pxPerCm: ppc,
+    shoulderHalf,
+    bustHalf,
+    waistHalf,
+    hipHalf,
+    thighHalf: halfWidthFromGirth(thigh, ppc, A.thighAspect),
+    kneeHalf: halfWidthFromGirth(row.lowerThigh * legScale, ppc, A.limbAspect),
+    ankleHalf: halfWidthFromGirth(row.ankle, ppc, A.limbAspect),
+    neckHalf: halfWidthFromGirth(row.neck, ppc, A.neckAspect),
+    armHalf,
+    headR: A.headHalfWidthCm * ppc,
+    headRy: (chin - HEAD_TOP_Y) / 2,
+    footLength: (m.footLengthCm ?? 27) * ppc * 0.6,
+    family: 'male',
+    levels,
+    aspects: { bust: v.chestAspect, waist: v.waistAspect, hip: v.hipAspect },
+    deltoidHalf,
+    armX,
+    armDrift: Math.max(bustHalf * 0.22 + 6, hipHalf + wristHalf + 3 - armX),
+    wristHalf,
+    calfHalf: halfWidthFromGirth(row.calf * legScale, ppc, A.limbAspect),
+    maleShape: 'v2',
+    legX: v.legX * hipHalf,
+    v2: {
+      underbustHalf: waistHalf + v.underbustShare * (bustHalf - waistHalf),
+      armpitHalf: v.lats * bustHalf,
+      armpitY: atLevel(v.axillaLevel),
+      neckY: shoulderY - v.neckAboveShoulder * span,
+      shoulderRingHalf: v.shoulderRing * (shoulder / 2) * ppc,
+      trapezius: v.trapezius,
+      thighRingY: atLevel(v.thighLevel),
+    },
+  };
+}
+
 /** Right half of a symmetric outline → closed path (mirrored on x = 100). */
 export function mirroredPath(points: { x: number; y: number }[], smooth = true): string {
   if (points.length === 0) return '';
@@ -243,7 +331,7 @@ export function mirroredPath(points: { x: number; y: number }[], smooth = true):
 
 /** Torso + legs as separate subpaths (no self-intersection at the crotch; audit 'crotch vertex'). */
 export function bodyPath(g: BodyGeometry): string {
-  if (g.family === 'male') return maleBodyPath(g);
+  if (g.family === 'male') return g.v2 ? maleV2BodyPath(g, g.v2) : maleBodyPath(g);
   const torso = mirroredPath([
     { x: g.neckHalf, y: levelY('chin') + 2 },
     { x: g.neckHalf + 1, y: levelY('shoulder') - 6 },
@@ -324,8 +412,64 @@ function maleBodyPath(g: BodyGeometry): string {
   return [head, torso, leg(1), leg(-1), arm(1), arm(-1)].join(' ');
 }
 
-/** Where the male arm leaves the torso: a little over half-way from the shoulder line to the chest line. */
+/**
+ * The male figure v2 (`maleV2BodyGeometry`): the neck to the neck ring, a straight trapezius slope
+ * to the shoulder point under the deltoid, the lats at the armpit, then the chest, underbust, waist
+ * and the narrower v2 seat, falling straight to the thighs. The legs sit in under the seat and
+ * touch below the crotch, so their top edges meet in the middle as one crotch line (a shallow V
+ * from the hip down to the crotch). Same subpaths as v1: head, torso, two legs, two arms.
+ */
+function maleV2BodyPath(g: BodyGeometry, v: NonNullable<BodyGeometry['v2']>): string {
+  const y = (k: LevelKey): number => figureY(g, k);
+  const shoulderY = y('shoulder');
+  const rise = shoulderY - v.neckY;
+  const trap = (t: number, k: number): { x: number; y: number } => ({ x: g.neckHalf + k * (v.shoulderRingHalf - g.neckHalf), y: shoulderY - t * rise });
+  const legX = g.legX ?? g.hipHalf * 0.5;
+  const topHalf = g.thighHalf * 0.97;
+  const crotchY = y('crotch');
+  const torso = mirroredPath([
+    { x: g.neckHalf, y: y('chin') + 3 },
+    { x: g.neckHalf, y: v.neckY },
+    trap(0.75, v.trapezius[1]),
+    trap(0.5, v.trapezius[0]),
+    // the shoulder point sits under the deltoid cap (the arm's centre), so no corner shows above it
+    { x: Math.min(v.shoulderRingHalf, g.armX ?? v.shoulderRingHalf), y: shoulderY },
+    { x: v.armpitHalf, y: v.armpitY },
+    { x: g.bustHalf, y: y('bust') },
+    { x: v.underbustHalf, y: y('underbust') },
+    { x: g.waistHalf, y: y('waist') },
+    { x: g.hipHalf, y: y('hip') },
+    // under the legs from here: the seat falls straight to the thigh tops
+    { x: legX + topHalf - 0.5, y: crotchY + 5 },
+    { x: 1, y: crotchY + 10 },
+  ]);
+  // the thighs touch: an inner edge never crosses the middle (0.4 px off it, so the two strokes meet)
+  const inner = (half: number): number => Math.max(0.4, legX - Math.max(4, half));
+  const leg = (side: 1 | -1): string => {
+    const halves: { h: number; y: number }[] = [
+      { h: topHalf, y: crotchY + 4 },
+      { h: g.thighHalf, y: v.thighRingY },
+      { h: g.thighHalf * 0.95, y: y('thigh') },
+      { h: g.kneeHalf, y: y('knee') },
+      { h: g.calfHalf ?? g.kneeHalf * 0.95, y: y('calf') },
+      { h: g.ankleHalf, y: y('ankle') },
+      { h: g.ankleHalf + 2, y: FEET_Y },
+    ];
+    // the outer edge starts on the seat's side, so the leg's top edge runs from the hip down to the crotch
+    const top = { x: legX + topHalf, y: y('hip') + 0.4 * (crotchY - y('hip')) };
+    const outer = [top, ...halves.map((p) => ({ x: legX + Math.max(4, p.h), y: p.y }))];
+    const innerPts = [...halves].reverse().map((p) => ({ x: inner(p.h), y: p.y }));
+    const pts = [...outer, ...innerPts];
+    return `M ${pts.map((p) => `${(CENTER_X + side * p.x).toFixed(1)},${p.y.toFixed(1)}`).join(' L ')} Z`;
+  };
+  const arm = (side: 1 | -1): string => maleArmOutline(g, side, 0, y('hip') + 12);
+  const head = `M ${CENTER_X},${HEAD_TOP_Y} a ${g.headR.toFixed(1)},${g.headRy.toFixed(1)} 0 1,0 0.01,0 Z`;
+  return [head, torso, leg(1), leg(-1), arm(1), arm(-1)].join(' ');
+}
+
+/** Where the male arm leaves the torso: a little over half-way from the shoulder line to the chest line (v2: the axilla). */
 function maleArmpitY(g: BodyGeometry): number {
+  if (g.v2) return g.v2.armpitY;
   const shoulderY = figureY(g, 'shoulder');
   return shoulderY + (figureY(g, 'bust') - shoulderY) * 0.55 + 4;
 }
@@ -362,7 +506,7 @@ export function maleArmOutline(g: BodyGeometry, side: 1 | -1, grow: number, endY
   const mids = end > elbowY ? [elbowY, end] : [end];
   const outer = mids.map((yy) => ({ x: ax + drift * along(yy) + halfAt(yy), y: yy }));
   const inner = [...mids].reverse().map((yy) => ({ x: ax + drift * along(yy) - halfAt(yy), y: yy }));
-  const armpit = { x: Math.min(g.bustHalf + 1.5 + grow, ax + drift * along(maleArmpitY(g)) - halfAt(maleArmpitY(g))), y: maleArmpitY(g) + grow * 0.5 };
+  const armpit = { x: Math.min((g.v2 ? g.v2.armpitHalf : g.bustHalf + 1.5) + grow, ax + drift * along(maleArmpitY(g)) - halfAt(maleArmpitY(g))), y: maleArmpitY(g) + grow * 0.5 };
   const pts = [...cap, ...outer, ...inner, ...(end > armpit.y + 4 ? [armpit] : [])];
   // Mirroring flips the winding; the left arm is reversed so both arms wind like the torso and
   // their overlap stays filled under the nonzero rule (a mirrored arm cut a hole at the shoulder).
@@ -558,7 +702,7 @@ export function garmentGeometry({ garment, gaps, body: g, hemSweepCm = null }: G
       const skinny = /skinny|slim/.test(garment.patternBlock);
       const legHem = wide ? thighHalf + 8 + drape * 6 : skinny ? g.ankleHalf + 2 : Math.max(g.ankleHalf + 4, thighHalf * 0.8);
       const leg = (side: 1 | -1): string => {
-        const cx = CENTER_X + side * (g.hipHalf * 0.5);
+        const cx = CENTER_X + side * (g.legX ?? g.hipHalf * 0.5);
         const outer = [
           { x: thighHalf, y: figureY(g, 'crotch') + 4 },
           { x: thighHalf * 0.97, y: figureY(g, 'thigh') },
@@ -616,7 +760,7 @@ export function garmentGeometry({ garment, gaps, body: g, hemSweepCm = null }: G
       const len = g.footLength + (footSlack ?? 0.7) * g.pxPerCm * 0.6;
       const heel = (garment.lengthCm?.heel_height ?? 0) * g.pxPerCm * 0.6;
       const shoe = (side: 1 | -1): string => {
-        const cx = CENTER_X + side * (g.hipHalf * 0.5);
+        const cx = CENTER_X + side * (g.legX ?? g.hipHalf * 0.5);
         const w = g.ankleHalf + 4;
         const top = FEET_Y - 12 - heel;
         return `M ${cx - w},${top} C ${cx - w - 2},${FEET_Y - 4} ${cx - w + 2},${FEET_Y + 2} ${cx - w + len * 0.25},${FEET_Y + 2} L ${cx + w + len * 0.35},${FEET_Y + 2} C ${cx + w + len * 0.5},${FEET_Y - 2} ${cx + w + len * 0.4},${FEET_Y - 8} ${cx + w},${top - 2} Z`;
@@ -664,7 +808,7 @@ export function garmentGeometry({ garment, gaps, body: g, hemSweepCm = null }: G
       if (kind === 'socks') {
         const top = figureY(g, 'calf') + 8;
         const sock = (side: 1 | -1): string => {
-          const cx = CENTER_X + side * (g.hipHalf * 0.5);
+          const cx = CENTER_X + side * (g.legX ?? g.hipHalf * 0.5);
           const w = g.ankleHalf + 2;
           return `M ${pt(cx - w, top)} L ${pt(cx + w, top)} L ${pt(cx + w, FEET_Y)} L ${pt(cx - w, FEET_Y)} Z`;
         };

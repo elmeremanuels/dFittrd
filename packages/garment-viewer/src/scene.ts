@@ -8,6 +8,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { HAIR_SHADE, type Mesh } from '@curtain/mannequin';
 import type { ViewerMaterial } from './engine';
 import { faceOverlayGeometry, faceTextureOf, isFaceTexture, type FaceTexture } from './faceOverlay';
+import { patchSkinV2, updateSkinV2, type SkinShading, type SkinV2Uniforms } from './skin';
 import { binarise, cleanDepth, cleanNormals, flipRows, hexOf, rowOf, type ViewerPasses } from './passes';
 
 /**
@@ -643,6 +644,7 @@ const BODY_MATERIAL = new THREE.MeshStandardMaterial({ color: DEFAULT_BODY_HEX, 
 /** The same grey for a body with a shade per vertex (the v2 head). */
 const BODY_MATERIAL_SHADED = new THREE.MeshStandardMaterial({ color: DEFAULT_BODY_HEX, roughness: 0.75, metalness: 0, vertexColors: true });
 const shaded = (g: THREE.BufferGeometry): boolean => g.getAttribute('color') !== undefined;
+const hasHair = (g: THREE.BufferGeometry): boolean => g.getAttribute('hair') !== undefined;
 
 /** Strength of the white reflection on a skin-coloured body (1 = the grey mannequin's). */
 export const SKIN_SPECULAR = 0.3;
@@ -717,6 +719,14 @@ export class Figure {
 
   setBody(geometry: THREE.BufferGeometry): void {
     this.body.geometry = geometry;
+    if (this.skinV2 && this.skinV2Hair !== hasHair(geometry)) {
+      // The skin-v2 shader reads the hair cover only when it was built with it: rebuild for the new body.
+      this.skin?.dispose();
+      this.skin = null;
+      this.skinV2 = null;
+      this.setSkin(this.skinColour);
+      return;
+    }
     tintHair(geometry, this.skin ? this.skinColour : null);
     if (this.skin && this.skin.vertexColors !== shaded(geometry)) {
       // A material's shader is built for vertex colours or without: switching needs a rebuild.
@@ -729,6 +739,27 @@ export class Figure {
   private skin: THREE.MeshPhysicalMaterial | null = null;
   /** The skin colour of `skin`, `#rrggbb` (for the hair of head v3). */
   private skinColour: string | null = null;
+  /** `skin-v2` (opt-in, `skin.ts`) or the flat skin of before; with the lighting it is drawn under. */
+  private shading: { kind: SkinShading; lighting: Lighting } = { kind: 'flat', lighting: 'classic' };
+  private skinV2: SkinV2Uniforms | null = null;
+  /** Whether the skin-v2 material was built for a geometry with head v3's hair cover. */
+  private skinV2Hair = false;
+
+  /**
+   * How a skin colour is shaded: `flat` (default, the material of before) or `skin-v2` (`skin.ts`),
+   * for the lighting the stage uses (its tone stage is imitated). The grey mannequin (no skin
+   * colour) is never changed. Takes effect at once when a skin colour is set.
+   */
+  setSkinShading(kind: SkinShading, lighting: Lighting): void {
+    if (kind === this.shading.kind && lighting === this.shading.lighting) return;
+    this.shading = { kind, lighting };
+    if (this.skin) {
+      this.skin.dispose();
+      this.skin = null;
+      this.skinV2 = null;
+      this.setSkin(this.skinColour);
+    }
+  }
 
   /**
    * The skin colour of this figure's body (`#rrggbb`), or null (or anything that is not such a
@@ -743,12 +774,21 @@ export class Figure {
       this.body.material = shaded(this.body.geometry) ? BODY_MATERIAL_SHADED : BODY_MATERIAL;
       this.skin?.dispose();
       this.skin = null;
+      this.skinV2 = null;
       return;
     }
     // A skin colour gets less white reflection than the grey mannequin (`SKIN_SPECULAR`): on a deep tone the grey
     // material's reflection alone lifted the colour by 4 to 9 L* (measured, avatar-renders.mjs).
-    if (!this.skin) this.skin = new THREE.MeshPhysicalMaterial({ color: colour, roughness: 0.75, metalness: 0, specularIntensity: SKIN_SPECULAR, vertexColors: shaded(this.body.geometry) });
-    else this.skin.color.set(colour);
+    if (!this.skin) {
+      this.skin = new THREE.MeshPhysicalMaterial({ color: colour, roughness: 0.75, metalness: 0, specularIntensity: SKIN_SPECULAR, vertexColors: shaded(this.body.geometry) });
+      if (this.shading.kind === 'skin-v2') {
+        const rig = LIGHTING_RIGS[this.shading.lighting];
+        const e = frontIrradiance(rig);
+        this.skinV2Hair = hasHair(this.body.geometry);
+        this.skinV2 = patchSkinV2(this.skin, colour, rig.toneMapping, [Math.PI / e[0], Math.PI / e[1], Math.PI / e[2]], this.skinV2Hair);
+      }
+    } else this.skin.color.set(colour);
+    if (this.skinV2) updateSkinV2(this.skin, this.skinV2, colour);
     this.body.material = this.skin;
   }
 

@@ -15,6 +15,7 @@ import { loadPeek, PEEK_HEIGHT, type PeekDeps, type PeekParams, type PeekResult 
 import { postCollapse } from './peekGate';
 import { envelope } from './protocol';
 import { embedStrings, parts } from './strings';
+import { avatarSkinFlag } from './look';
 
 type PeekState = { kind: 'loading' } | { kind: 'none' } | { kind: 'shown'; data: PeekResult };
 
@@ -66,7 +67,7 @@ export function PeekApp({ params, deps }: { params: PeekParams | null; deps: Pee
     >
       <div className="h-24 w-16 shrink-0 overflow-hidden rounded-xl bg-white/70" data-testid="peek-avatar">
         {embedFit ? (
-          <AvatarView compact garment={garment} fit={embedFit.fit} size={size} measurements={embedFit.userBody.measurements} heightCm={remembered.profile.measurements.height?.mean} skinHex={skinHex} />
+          <AvatarView compact garment={garment} fit={embedFit.fit} size={size} measurements={embedFit.userBody.measurements} heightCm={remembered.profile.measurements.height?.mean} skinHex={skinHex} skinShading={avatarSkinFlag()} />
         ) : null}
       </div>
       <div className="min-w-0 flex-1 overflow-hidden">

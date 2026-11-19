@@ -6,6 +6,7 @@
  *
  * Nothing here fetches, stores or sends anything: the look (skin colour, face) arrives as values.
  */
+import { skinShadingOf } from './skin';
 import { buildBody, buildMannequinMesh, faceUvOf } from '@curtain/mannequin';
 import { fitNeckToHead } from './body';
 import type { AvatarLook } from './mount';
@@ -42,7 +43,10 @@ export function mountFigureView(canvas: HTMLCanvasElement, opts: FigureViewOptio
   const figure = new Figure(meshGeometry(mesh), new Uint32Array(0), 0, null);
   figure.garment.visible = false;
   stage.scene.add(figure.group);
+  let shading = skinShadingOf(undefined);
   const apply = (look: Omit<AvatarLook, 'head'> | null | undefined): void => {
+    if (look?.shading !== undefined) shading = skinShadingOf(look.shading);
+    figure.setSkinShading(shading, opts.lighting ?? 'neutral-v2');
     figure.setSkin(parseSkinHex(look?.skinHex));
     stage.setSkinTone(parseSkinHex(look?.skinHex));
     figure.setFace(look?.face, faceUv);

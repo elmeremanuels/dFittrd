@@ -54,9 +54,10 @@ export interface PomBundleOptions {
   /**
    * How the device gets the other sizes. `morph`: `gradingMorph` of the base mesh (radial about the body axis and the arm
    * axes), as every bundle before. `built`: every size is built on its own table body with the base mesh's vertices and
-   * shipped as offsets (`GradingJson.built`), so the device shows the size as built. The morph scales the armhole with
-   * the shoulders (+7 % at XXL) where the size built on its body has it 40 % deeper front to back and 22 % longer: on its
-   * own body the morphed XL and XXL sat 1.2 and 1.6 cm inside the shoulder caps and were lifted 1.25 and 2 cm to clear
+   * shipped as offsets (`GradingJson.built`), so the device shows the size as built. The morph grows the armhole with the
+   * torso (XXL: 18 % front to back) where the size built on its body has it 29 % deeper and 22 % longer, and it leaves the
+   * yoke on the base body's shoulders: on its own body the morphed XL and XXL sat 1.2 and 1.6 cm inside the shoulder caps
+   * and were lifted 1.25 and 2 cm to clear
    * them. Default: `built` on the male shape v2, `morph` otherwise (the v1 bundle stays byte for byte what it was).
    */
   grading?: 'morph' | 'built';

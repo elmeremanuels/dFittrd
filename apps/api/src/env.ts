@@ -87,6 +87,12 @@ export const EnvSchema = z.object({
    * keep today's behaviour. `1` gates them like men's clothing. Ignored while MEN_3D_GATE is off.
    */
   MEN_3D_GATE_SHOES_ACCESSORIES: bool.default(false),
+  /**
+   * The male body shape the embed draws: the server's side of the web build's `VITE_MALE_SHAPE` (the two must be set
+   * together). `v2` only for exactly `v2`; anything else is `v1`, today's body. A men's bundle is imported and handed out
+   * only when it was built on this shape (`bundleMaleShape` of @curtain/schema): the viewer would refuse the other one.
+   */
+  MALE_SHAPE: z.string().optional().transform((v) => (v === 'v2' ? ('v2' as const) : ('v1' as const))),
 
   // ---- renders ------------------------------------------------------------------------
   RENDERS_DIR: z.string().default('./data/renders'),

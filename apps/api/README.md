@@ -176,6 +176,14 @@ mount's body check). The only male bundle today is the SYNTHETIC men's test tee
 (`SYNTHETIC_MENS_TEE`, not a product; `pnpm --filter @curtain/garment-spike build:bundle`),
 used by `src/men-m1.test.ts` and `scripts/demo-men.mjs` to prove the path end to end.
 
+Male body shape of a bundle. A men's bundle built on the male shape v2 also names
+`mannequin.maleShape: 'v2'` in both files (absent = v1, every male bundle before). `MALE_SHAPE`
+(env, `v2` only for exactly `v2`, else `v1`) is the shape this deployment draws, the server's side of
+the web build's `VITE_MALE_SHAPE`; set the two together. The check sits where the family check sits:
+the import refuses a men's bundle built on the other shape (`shape_mismatch`, with the build command
+as a hint), `GET /v1/try` hands out no ref for one (the switch was flipped after the import), and
+the viewer refuses it (`incompatible`). `src/male-shape.test.ts`.
+
 Two consequences of the family check, both on purpose (D20 point 3), both with the gate **off** too:
 - A men's product no longer imports a female-built bundle, and a female asset stored for it before
   M1 is no longer handed out by `GET /v1/try` (no 3D button). Before M1 the bundle was imported and

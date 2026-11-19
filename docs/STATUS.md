@@ -88,7 +88,7 @@ Still inline English, by design or not yet done: the fit engine's own sentences 
 
 | Check | Last run | Result |
 |---|---|---|
-| `npm_config_workspace_concurrency=1 pnpm check` (build, typecheck, lint, tests, app builds, secret scan, language packs) | 19 Nov, this branch (`claude/loose-ends`) | CHECK_RESULT |
+| `npm_config_workspace_concurrency=1 pnpm check` (build, typecheck, lint, tests, app builds, secret scan, language packs) | 19 Nov, this branch (`claude/loose-ends`) | pass (exit 0; `apps/web` 72 test files, 599 tests; `docs/reports/claude/loose-ends.md`) |
 | `pnpm demo:e2e` (WooCommerce demo shop, Shopify Dawn demo with peek and returning shopper, pull-on skirt) | 19 Nov, `claude/launch-readiness` and `claude/pom-gate` (also with `DEMO_SKIRT=pom`); not re-run on this branch | 3 flows pass; the founder's 3D bundles are git-ignored, so those sub-steps were skipped |
 | api image build, compose (postgres + api) with a production-shaped env, migrations, health, `caddy validate` | 19 Nov, `claude/launch-readiness`; `docker build` not re-run after the bake check was bundled into the api | pass then |
 | WooCommerce on real WordPress 7.1.4 / WooCommerce 11.2.2 | 9 Nov: PHP 8.1, 8.2, 8.3; 19 Nov (`claude/platform-checks`): PHP 8.1.34 and 8.5.12 | 19 Nov: 64 of 64 checks pass on both, Plugin Check 0 errors (after the fix below) |

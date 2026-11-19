@@ -88,7 +88,11 @@ Anny licence row).
 
 ## Checks
 
-CHECK_BLOCK
+- `npm_config_workspace_concurrency=1 pnpm check` on the branch with every code change in: **pass, exit 0** (build,
+  typecheck, lint, tests, app builds, viewer chunk 182.5 KB gzip of 400 KB, secret scan, "language packs: en on all 5
+  surfaces"). `apps/web`: 72 test files, 599 tests passed. No test failed or was skipped that was not skipped before.
+  Only docs changed after that run.
+- Not run: Playwright e2e, `pnpm demo:e2e`, anything needing a GPU, Docker or a real shop.
 
 ## Open issues
 

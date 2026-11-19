@@ -8,7 +8,7 @@ import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { hasZodFastifySchemaValidationErrors, isResponseSerializationError, jsonSchemaTransform, serializerCompiler, validatorCompiler, type ZodTypeProvider } from 'fastify-type-provider-zod';
-import type { TryOnRouter } from '@curtain/tryon-providers';
+import type { RealismProvider, TryOnRouter } from '@curtain/tryon-providers';
 import { TokenService } from './auth/tokens.js';
 import { StripeClient } from './billing/stripe.js';
 import { stripeRoutes } from './billing/routes.js';
@@ -23,6 +23,7 @@ import { fetchTransport, nodeTransport, systemLookup, type LookupLike, type Pinn
 import { appRoutes } from './routes/app.js';
 import { merchantRoutes } from './routes/merchant.js';
 import { opsRoutes } from './routes/ops.js';
+import { realismRoutes } from './routes/realism.js';
 import { renderRoutes } from './routes/renders.js';
 import { assetRoutes } from './routes/assets.js';
 import { sdkRoutes } from './routes/sdk.js';
@@ -31,6 +32,7 @@ import { RenderStore } from './services/renders.js';
 import { ShopifyClient } from './shopify/client.js';
 import { shopifyRoutes } from './shopify/routes.js';
 import { buildRouter } from './tryon/providers.js';
+import { realismProviderFromEnv } from './tryon/realism.js';
 
 export interface BuildOptions {
   env: Env;
@@ -46,6 +48,8 @@ export interface BuildOptions {
   publicTransport?: PinnedTransport;
   /** Override the try-on router (tests inject MockProvider). */
   tryon?: TryOnRouter;
+  /** Override the AI realism adapter (tests inject FakeRealismProvider). */
+  realism?: RealismProvider;
   now?: () => Date;
   /** Where log lines go (tests capture them); default stdout. */
   logStream?: { write(line: string): void };
@@ -100,6 +104,7 @@ export async function build(opts: BuildOptions): Promise<App> {
   const tokens = new TokenService(env.JWT_SECRET);
   const renders = new RenderStore(env);
   let router: TryOnRouter | undefined = opts.tryon;
+  let realism: RealismProvider | undefined = opts.realism;
   const ctx: AppContext = {
     env,
     db: opts.db,
@@ -113,6 +118,7 @@ export async function build(opts: BuildOptions): Promise<App> {
     shopify: new ShopifyClient(env, opts.db, fetchImpl),
     stripe: new StripeClient(env, fetchImpl),
     tryon: () => (router ??= buildRouter({ env, fetchImpl })),
+    realism: () => (realism ??= realismProviderFromEnv(env)),
   };
   app.decorate('ctx', ctx);
   app.decorate('renders', renders);
@@ -176,6 +182,7 @@ export async function build(opts: BuildOptions): Promise<App> {
   await app.register(appRoutes);
   await app.register(tryRoutes);
   await app.register(renderRoutes);
+  await app.register(realismRoutes);
   await app.register(assetRoutes);
   await app.register(sdkRoutes);
   await app.register(merchantRoutes);

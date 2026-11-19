@@ -21,7 +21,8 @@ import { DEFAULT_DRAPE, drapeJobOf, openSession, prepareFit, viewerMaterial, typ
 import * as THREE from 'three';
 import { faceUvOf } from '@curtain/mannequin';
 import type { FaceTexture } from './faceOverlay';
-import { Figure, Stage, lightingOf, meshGeometry, parseSkinHex, type Lighting, type LookExtras } from './scene';
+import { Figure, Stage, lightingOf, meshGeometry, parseSkinHex, renderPasses, type Lighting, type LookExtras } from './scene';
+import { neighbourSize, PASS_HEIGHT, PASS_WIDTH, type ExportPassesOptions, type ViewerPasses } from './passes';
 
 export type GarmentViewState = 'loading' | 'draping' | 'settled' | 'error';
 
@@ -122,6 +123,14 @@ export interface GarmentView {
    * body the simulation could not dress in that size, so the size is not drawn and `refusedHipCm` is that body's hip).
    */
   source: GarmentViewSource;
+  /**
+   * The render passes of the AI realism layer (D22, `passes.ts`): colour, depth, normals, garment
+   * and figure masks of the size on screen, from the front camera on the flat backdrop, plus the
+   * neighbouring size's garment mask when that size is draped. Standard head and body colour, never
+   * the shopper's face texture or picked skin colour. The view on screen is put back after. Null
+   * while the size on screen is still draping.
+   */
+  exportPasses(options?: ExportPassesOptions): ViewerPasses | null;
   dispose(): void;
 }
 
@@ -278,6 +287,10 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
     dirty: boolean;
   }
   const fits = new Map<string, Live>();
+  const settledPos = (label: string): Float32Array | null => {
+    const l = fits.get(label);
+    return l && l.jobId === null && isSettled(l.fit.cloth, l.fit.params) ? l.fit.cloth.pos : null;
+  };
   let pool: DrapePool | null = DrapePool.create(() => {
     // A worker failed: step on the main thread from here on.
     pool = null;
@@ -387,6 +400,14 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
       return stage.toScreen(new THREE.Vector3(p[0], p[1], p[2]));
     },
     source: { kind: 'device' },
+    exportPasses(o) {
+      if (disposed) return null;
+      const pos = settledPos(current);
+      if (!pos) return null;
+      const nb = o?.neighbour === null ? null : (o?.neighbour ?? neighbourSize(ok.sizes, current));
+      const nbPos = nb ? settledPos(nb) : null;
+      return passesOf(stage, figure, plan, material.baseColorHex, current, pos, nb && nbPos ? { size: nb, pos: nbPos } : null, o);
+    },
     setLook(look) {
       if (disposed) return;
       figure.setSkin(parseSkinHex(look?.skinHex));
@@ -478,6 +499,15 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
     setSize,
     sizes: ok.sizes.filter((s) => drapes.has(s)),
     source: { kind: 'bake', plainColour: true, sizes },
+    exportPasses(o) {
+      if (disposed) return null;
+      const label = canvas.dataset.size ?? '';
+      const d = drapes.get(label);
+      if (!d || d.place === 'refused') return null;
+      const nb = o?.neighbour === null ? null : (o?.neighbour ?? neighbourSize(ok.sizes, label));
+      const nd = nb ? drapes.get(nb) : undefined;
+      return passesOf(stage, figure, plan, material.baseColorHex, label, d.pos, nb && nd && nd.place !== 'refused' ? { size: nb, pos: nd.pos } : null, o);
+    },
     toScreen(point) {
       const p = point === 'head' ? headPoint : point;
       stage.resize();
@@ -504,6 +534,23 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
       stage.renderer.dispose();
     },
   };
+}
+
+/** Shared by both mount paths: the passes of the size on screen. */
+function passesOf(stage: Stage, figure: Figure, plan: AvatarPlan, garmentHex: string, size: string, pos: Float32Array, neighbour: { size: string; pos: Float32Array } | null, o: ExportPassesOptions | undefined): ViewerPasses {
+  const ring = (id: string): number => plan.m.rings.find((r) => r.id === id)?.centre[1] ?? 0;
+  const stature = plan.statureCm || plan.m.statureCm;
+  return renderPasses(stage, figure, {
+    width: o?.width ?? PASS_WIDTH,
+    height: o?.height ?? PASS_HEIGHT,
+    statureCm: stature,
+    waistY: ring('waist'),
+    hipY: ring('hip'),
+    neighbour,
+    current: pos,
+    size,
+    garmentHex,
+  });
 }
 
 export type { BodyMeasurements, BodyOptions };

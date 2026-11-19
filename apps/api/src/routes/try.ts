@@ -106,6 +106,7 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
       if (!session.resolvedAt) {
         await db.update(trySessions).set({ deviceId, resolvedAt: t }).where(eq(trySessions.id, session.id));
       }
+      const asset = readiness.requires3d ? readiness.asset : await activeAssetRef(db, env, shop, product, garment);
       return {
         shop: shopBranding(shop),
         garment,
@@ -113,9 +114,11 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
         pairing: { created, pairedAt: pairing.pairedAt.toISOString() },
         embed: { allowedOrigins: embedAllowedOrigins(shop, session.pageOrigin) },
         // D13/D16: only an approved bundle that still matches the live chart, only with the 3D estimate on.
-        asset: readiness.requires3d ? readiness.asset : await activeAssetRef(db, env, shop, product, garment),
+        asset,
         // Men's gate: this product may only be shown with the working 3D view (no 2D fallback).
         ...(readiness.requires3d ? { requires3d: true as const } : {}),
+        // D22: the AI-enhanced estimate is offered only with the server flag on and a 3D view to start from.
+        ...(env.AI_REALISM && asset ? { aiRealism: true as const } : {}),
       };
     },
   );

@@ -9,7 +9,7 @@ import type { ClientLedgerEntry } from '@/db/db';
 import { originOf, type ParentWindowLike } from './protocol';
 import { createEmbedStore, lookStorageEnabled, type EmbedStore } from './storage';
 
-export type EmbedApi = Pick<ApiClient, 'resolveTry' | 'resolvePeek' | 'fitShown' | 'deleteMe' | 'requestHeroRender' | 'heroRenderStatus'>;
+export type EmbedApi = Pick<ApiClient, 'resolveTry' | 'resolvePeek' | 'fitShown' | 'deleteMe' | 'requestHeroRender' | 'heroRenderStatus'> & Partial<Pick<ApiClient, 'requestRealism'>>;
 
 /** What the on-device face step returns (the type of `faceLookFromPhoto`, without importing the worker code). */
 export interface FaceLookResultLike {

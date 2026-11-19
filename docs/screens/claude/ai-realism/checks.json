@@ -1,0 +1,146 @@
+[
+  {
+    "mode": "faithful",
+    "size": "10",
+    "keys": [
+      "consent",
+      "passes",
+      "productId",
+      "shopId",
+      "size"
+    ],
+    "passKeys": [
+      "colourPng",
+      "depthPng",
+      "figureMaskPng",
+      "garmentMaskPng",
+      "height",
+      "kind",
+      "meta",
+      "neighbour",
+      "normalPng",
+      "width"
+    ],
+    "meta": {
+      "statureCm": 168,
+      "waistRow": 305,
+      "hipRow": 371,
+      "backdropHex": "#f5efe7",
+      "garmentHex": "#9D3F3B"
+    },
+    "neighbour": "12",
+    "issues": [],
+    "status": "ok",
+    "report": {
+      "reasons": [],
+      "metrics": {
+        "silhouetteIoU": 0.993,
+        "garmentIoU": 0.996,
+        "colourDeltaE00": 0.2,
+        "hemShiftCm": 0,
+        "waistShiftCm": 0,
+        "waistWidthDeltaCm": 0.2,
+        "hipWidthDeltaCm": 0.15,
+        "pxPerCm": 4.03
+      },
+      "sizeSeparation": {
+        "neighbour": "12",
+        "features": [
+          {
+            "feature": "hemRow",
+            "gapCm": 0.5,
+            "offCm": 0,
+            "ok": true
+          },
+          {
+            "feature": "waistWidth",
+            "gapCm": 0.74,
+            "offCm": 0.2,
+            "ok": true
+          },
+          {
+            "feature": "hipWidth",
+            "gapCm": 0.69,
+            "offCm": 0.15,
+            "ok": true
+          }
+        ],
+        "visible": true,
+        "ok": true
+      }
+    }
+  },
+  {
+    "mode": "move-hem",
+    "size": "8",
+    "keys": [
+      "consent",
+      "passes",
+      "productId",
+      "shopId",
+      "size"
+    ],
+    "passKeys": [
+      "colourPng",
+      "depthPng",
+      "figureMaskPng",
+      "garmentMaskPng",
+      "height",
+      "kind",
+      "meta",
+      "neighbour",
+      "normalPng",
+      "width"
+    ],
+    "meta": {
+      "statureCm": 168,
+      "waistRow": 305,
+      "hipRow": 371,
+      "backdropHex": "#f5efe7",
+      "garmentHex": "#9D3F3B"
+    },
+    "neighbour": "10",
+    "issues": [],
+    "status": "refused",
+    "report": {
+      "reasons": [
+        "hem"
+      ],
+      "metrics": {
+        "silhouetteIoU": 0.959,
+        "garmentIoU": 0.945,
+        "colourDeltaE00": 0.33,
+        "hemShiftCm": 3.98,
+        "waistShiftCm": 0,
+        "waistWidthDeltaCm": 0.35,
+        "hipWidthDeltaCm": 0.1,
+        "pxPerCm": 4.018
+      },
+      "sizeSeparation": {
+        "neighbour": "10",
+        "features": [
+          {
+            "feature": "hemRow",
+            "gapCm": 0.5,
+            "offCm": 3.98,
+            "ok": true
+          },
+          {
+            "feature": "waistWidth",
+            "gapCm": 3.48,
+            "offCm": 0.35,
+            "ok": true
+          },
+          {
+            "feature": "hipWidth",
+            "gapCm": 3.53,
+            "offCm": 0.1,
+            "ok": true
+          }
+        ],
+        "visible": true,
+        "ok": true
+      }
+    }
+  }
+]

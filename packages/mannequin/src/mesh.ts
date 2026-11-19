@@ -4,7 +4,8 @@
  */
 import { cross, sub, type Vec3 } from './math';
 import { buildHeadPart, HEAD_LEVELS } from './head';
-import { buildHeadPartV2 } from './headV2';
+import { buildHeadPartV2, type HeadV2Part } from './headV2';
+import { buildHeadPartV3 } from './headV3';
 import { levelWarp, type Mannequin, type PartSpec } from './model';
 
 export interface Mesh {
@@ -16,11 +17,13 @@ export interface Mesh {
   vertexPart: Uint8Array;
   partNames: string[];
   /**
-   * Only on a mesh with the v2 head (`head: 'neutral-v2'`): a multiplier on the skin colour per
+   * Only on a mesh with the v2 or v3 head (`head: 'neutral-v2' | 'neutral-v3'`): a multiplier on the skin colour per
    * vertex (1 = the skin colour; less on the brows, the lash line and the iris). Absent otherwise.
    */
   shade?: Float32Array;
-  /** Only with the v2 head: the heights of its chin and top (its tube reaches below the chin, into the neck). */
+  /** Only with the v3 head: how much of each vertex is hair (0..1; 0 off the head), for the hair's own colour. */
+  hair?: Float32Array;
+  /** Only with the v2 or v3 head: the heights of its chin and top (its tube reaches below the chin, into the neck). */
   headLevels?: { chinY: number; topY: number };
 }
 
@@ -119,9 +122,11 @@ export interface MeshOptions {
    * standard face of `head.ts` as a sixth closed part `head`; the torso's neck runs straight up
    * into it and the egg is gone. `neutral-v2`: the head v2 of `headV2.ts` (open eyes, brows, ears,
    * a jaw and brow per family, no neck seam), with a `shade` per vertex; the neck has no flare
-   * towards the egg. The `neutral` and `egg` meshes are not changed by it.
+   * towards the egg. The `neutral` and `egg` meshes are not changed by it. `neutral-v3`: the head v3
+   * of `headV3.ts` (v2's fixes of the 19 Nov review, short sculpted hair, about 24k triangles), built
+   * on the torso exactly as v2.
    */
-  head?: 'egg' | 'neutral' | 'neutral-v2';
+  head?: 'egg' | 'neutral' | 'neutral-v2' | 'neutral-v3';
 }
 
 /** The torso part with the egg head cut off: the neck continues as a column that ends inside the head part. */
@@ -172,7 +177,8 @@ function neckSection(mannequin: Mannequin, torso: PartSpec): { y: number; a: num
  * the neutral standard head, replaces the egg.
  */
 export function buildMannequinMesh(mannequin: Mannequin, options: MeshOptions = {}): Mesh {
-  const v2 = options.head === 'neutral-v2';
+  const v3 = options.head === 'neutral-v3';
+  const v2 = options.head === 'neutral-v2' || v3;
   const neutral = options.head === 'neutral' || v2;
   const parts = mannequin.parts.map((part) => {
     const spec = neutral && part.id === 'torso' ? torsoWithoutHead(mannequin, part, v2) : part;
@@ -182,13 +188,20 @@ export function buildMannequinMesh(mannequin: Mannequin, options: MeshOptions = 
   });
   if (v2) {
     const torso = mannequin.parts.find((p) => p.id === 'torso')!;
-    const head = buildHeadPartV2(mannequin, { ...neckSection(mannequin, torso), at: (y) => torsoSectionAt(torso, y) });
+    const neck = { ...neckSection(mannequin, torso), at: (y: number) => torsoSectionAt(torso, y) };
+    const head: HeadV2Part & { hair?: number[] } = v3 ? buildHeadPartV3(mannequin, neck) : buildHeadPartV2(mannequin, neck);
     if (signedVolume(head.positions, head.indices) < 0) flipWinding(head.indices);
     parts.push(head);
     const mesh = mergeParts(parts);
     const shade = new Float32Array(mesh.vertexPart.length).fill(1);
     shade.set(head.shade, mesh.vertexPart.length - head.shade.length);
-    return { ...mesh, shade, headLevels: { chinY: head.chinY, topY: head.topY } };
+    const levels = { chinY: head.chinY, topY: head.topY };
+    if (head.hair) {
+      const hair = new Float32Array(mesh.vertexPart.length);
+      hair.set(head.hair, mesh.vertexPart.length - head.hair.length);
+      return { ...mesh, shade, hair, headLevels: levels };
+    }
+    return { ...mesh, shade, headLevels: levels };
   }
   if (neutral) {
     const head = buildHeadPart(mannequin);

@@ -25,7 +25,7 @@
  *   that never reports) counts as failed, so the shopper is never left on the loading screen.
  * - Lighting and head (the look review of 18 Nov 2026): `classic` and the viewer's default head,
  *   today's look, unless the build sets `VITE_VIEWER_LIGHTING` (`neutral`, `neutral-v2`) or
- *   `VITE_VIEWER_HEAD` (`neutral-v2`). Nothing is sent to the viewer for the defaults, so a viewer
+ *   `VITE_VIEWER_HEAD` (`neutral-v2`, `neutral-v3`). Nothing is sent to the viewer for the defaults, so a viewer
  *   that does not know the options gets the same options as before.
  */
 import { Box, X } from 'lucide-react';
@@ -46,11 +46,13 @@ type BaseMountOptions = Parameters<ViewerModule['mountGarmentView']>[1];
 /** The avatar's look as the viewer takes it (docs/research/photo-avatar-plan.md slice 1). In memory only. */
 export interface ViewerLook {
   skinHex?: string | undefined;
-  /** Only `neutral-v2` is ever sent (the look review); absent: the viewer's default head. */
-  head?: 'neutral-v2';
+  /** Only `neutral-v2` or `neutral-v3` is ever sent (the look reviews); absent: the viewer's default head. */
+  head?: ViewerHead;
 }
 
 export type ViewerLighting = 'classic' | 'neutral' | 'neutral-v2';
+/** The opt-in heads of the look reviews (18 and 19 Nov 2026). */
+export type ViewerHead = 'neutral-v2' | 'neutral-v3';
 
 /** The 3D view's lighting from the build flag: `classic` (today's) unless the build asks for `neutral` or `neutral-v2`. */
 export function viewerLightingFlag(env: { VITE_VIEWER_LIGHTING?: string } = import.meta.env): ViewerLighting {
@@ -58,9 +60,10 @@ export function viewerLightingFlag(env: { VITE_VIEWER_LIGHTING?: string } = impo
   return v === 'neutral' || v === 'neutral-v2' ? v : 'classic';
 }
 
-/** The 3D view's head from the build flag: `neutral-v2`, or null for the viewer's default head (today's). */
-export function viewerHeadFlag(env: { VITE_VIEWER_HEAD?: string } = import.meta.env): 'neutral-v2' | null {
-  return env.VITE_VIEWER_HEAD === 'neutral-v2' ? 'neutral-v2' : null;
+/** The 3D view's head from the build flag: `neutral-v2` or `neutral-v3`, or null for the viewer's default head (today's). */
+export function viewerHeadFlag(env: { VITE_VIEWER_HEAD?: string } = import.meta.env): ViewerHead | null {
+  const v = env.VITE_VIEWER_HEAD;
+  return v === 'neutral-v2' || v === 'neutral-v3' ? v : null;
 }
 /** What a baked view rests on (`GarmentView.source` of the viewer); optional, so this file builds against a viewer without it. */
 export type ViewerSource =
@@ -117,7 +120,7 @@ export interface Garment3DProps {
   requiredTimeoutMs?: number;
   /** Lighting and head of the 3D view (default: the build flags, else today's look). */
   lighting?: ViewerLighting;
-  head?: 'neutral-v2' | null;
+  head?: ViewerHead | null;
   /** Tests inject these; the app uses the real chunk and the real check. */
   loadViewer?: () => Promise<ViewerModule>;
   webgl2?: () => boolean;

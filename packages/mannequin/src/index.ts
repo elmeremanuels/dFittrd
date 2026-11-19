@@ -134,3 +134,4 @@ export {
 export { buildHeadPart, faceRelief, HEAD_LEVELS, FACE_LEVELS, type HeadOptions } from './head';
 export { buildHeadPartV2, faceReliefV2, earRelief, faceShadeV2, FACE_LEVELS_V2, V2_TUBE_BELOW_RING, type HeadV2Options, type HeadV2Part } from './headV2';
 export type { MeshOptions } from './mesh';
+export { buildHeadPartV3, faceReliefV3, earReliefV3, faceShadeV3, hairV3, lidsV3, HAIR_PART, FACE_LEVELS_V3, V3_TUBE_BELOW_RING, V3_ROWS, V3_COLUMNS, V3_CHIN_TURN, JAW_LIFT, HAIR_SHADE, type HeadV3Options, type HeadV3Part } from './headV3';

@@ -2,18 +2,25 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Locator, type Page, type Request } from '@playwright/test';
+import { pullOnCheck } from '@curtain/fit-engine';
+import { checkGarmentTapeInput, PILOT_SKIRT_TAPE_MEASURED, type GarmentPayload } from '@curtain/schema';
 
 /**
  * A server drape bake in the real embed (docs/research/step3-serverdrape-spike.md §10): the production build, a mocked
  * api and a bundle folder whose anchors.json names a `drapeBake` (the POM v2 skirt, git-ignored; the test is skipped
  * with a note when it is absent).
  *   - every size at phone size (360 x 740 at 2x), front and side, with the estimate label, the plain-colour note and
- *     the size's provenance (on the shop's tape / interpolated / extrapolated) on screen;
- *   - shoppers past the draped bodies (hip 112 and 118 on the chart line): the size held on its nearest body says so,
- *     and AU 8, which the simulation could not put on the AU 16 body (hip 114), is not drawn at hip 118;
+ *     the size's provenance (on the shop's tape / interpolated / extrapolated) on screen, drawn or not drawn where the
+ *     bake says (a size is not draped on a drawn body its band cannot be pulled over, §10.9) and where the size advice
+ *     says (a size whose band does not go over the shopper's hips is not drawn, wherever it lies against the bodies);
+ *   - shoppers past the draped bodies (hip 98, 101, 112, 114 and 118 on the chart line): a size shown on its nearest
+ *     body says so and why the next body out was not draped (its band), a size not draped on a body with hips like the
+ *     shopper's is not drawn, and a size the advice blocks is not drawn either;
  *   - load-to-settled and size-switch times in the throttled phone page of the step-3 spike (412 x 915 at 2x, DevTools
  *     CPU throttle, default 4x), for this bundle and, with BAKE_COMPARE_BUNDLE, for another one (the photo bundle,
  *     draped on the device).
+ * The product is served as the demo seeds it (apps/api/src/demo.ts): the pilot skirt's payload with the shop's tape and
+ * the pull-on closure through the merchant form's check, so the embed's size advice runs its pull-on check.
  * Not part of `pnpm check`. EMULATED, not a phone: headless Chromium, WebGL on SwiftShader.
  *
  * Env: E2E_SKIRT_BUNDLE      the bake bundle folder (default spikes/garment-engine/out/pom2-bundle/crimson-wildflower-maxi-skirt)
@@ -21,6 +28,8 @@ import { expect, test, type Locator, type Page, type Request } from '@playwright
  *      BAKE_SHOTS            folder for the screenshots and timing.json
  *      BAKE_BODY             bust,waist,hip typed into "I know my measurements" (default 91,73.5,100: the held-out body)
  *      BAKE_THROTTLE         CPU throttle of the timing runs (default 4)
+ *      BAKE_SIZES            comma-separated sizes for "every size" (default: every graded size)
+ *      BAKE_SIDE             0: front views only in "every size" (default 1: front and side)
  */
 
 const TOKEN = 'e2e-try-token-0123456789abcdef';
@@ -32,13 +41,42 @@ const COMPARE = process.env.BAKE_COMPARE_BUNDLE ? resolve(process.env.BAKE_COMPA
 const SHOTS = process.env.BAKE_SHOTS ?? null;
 const [BUST, WAIST, HIP] = (process.env.BAKE_BODY ?? '91,73.5,100').split(',');
 const THROTTLE = Number(process.env.BAKE_THROTTLE ?? 4);
+const ONLY_SIZES = process.env.BAKE_SIZES ? process.env.BAKE_SIZES.split(',') : null;
+const SIDE = process.env.BAKE_SIDE !== '0';
 const ASSET_PATH = `/assets/${SHOP_ID}/skirt/0123456789abcdef`;
 const BUNDLE_FILES = ['anchors.json', 'grading.json', 'material.json', 'qa.json', 'base.glb'];
+/** Where the shopper's hip lies for one size of the bake (drapeBake.ts `bakePlace`, on the bake's hip axis). */
+function placeOf(dir: string, size: string, hipCm: number): string {
+  const meta = JSON.parse(readFileSync(join(dir, 'qa.json'), 'utf8')) as { sizes: { size: string; baseT: number; targetT: number[]; notDraped?: { t: number }[] }[] };
+  const s = meta.sizes.find((x) => x.size === size)!;
+  const t = (hipCm - 104) / 10;
+  const nodes = [s.baseT, ...s.targetT];
+  const lo = Math.min(...nodes), hi = Math.max(...nodes);
+  if (t >= lo - 1e-9 && t <= hi + 1e-9) return 'within';
+  const out = (s.notDraped ?? []).map((n) => n.t).filter((nt) => (t > hi ? nt > hi : nt < lo));
+  if (out.length === 0) return 'held';
+  const nearest = t > hi ? Math.min(...out) : Math.max(...out);
+  return (t > hi ? t >= nearest - 1e-9 : t <= nearest + 1e-9) ? 'refused' : 'between';
+}
+/** The size advice's pull-on verdict at the shopper's hip (the fit engine's own check, on the band the bake states). */
+function adviceBlocked(dir: string, size: string, hipCm: number): boolean {
+  const tape = (JSON.parse(readFileSync(join(dir, 'qa.json'), 'utf8')) as { tape: { sizes: { size: string; tape: { stretchedGirthCm: { cm: number; source: 'measured' | 'interpolated' | 'extrapolated' } } }[] } }).tape;
+  const band = tape.sizes.find((x) => x.size === size)!.tape.stretchedGirthCm;
+  return pullOnCheck({ cm: band.cm, provenance: band.source }, hipCm).status === 'blocked';
+}
 const isBake = (dir: string): boolean => existsSync(join(dir, 'anchors.json')) && (JSON.parse(readFileSync(join(dir, 'anchors.json'), 'utf8')) as { drapeBake?: string }).drapeBake === 'base.glb';
 
 async function instrument(page: Page, origin: string, bundle: string): Promise<Request[]> {
   const seen: Request[] = [];
-  const garment = JSON.parse(readFileSync(join(bundle, 'payload.json'), 'utf8')) as { productPhotos?: string[] };
+  const garment = JSON.parse(readFileSync(join(bundle, 'payload.json'), 'utf8')) as GarmentPayload & { productPhotos?: string[] };
+  const productId = (JSON.parse(readFileSync(join(bundle, 'anchors.json'), 'utf8')) as { productId?: string }).productId;
+  if (productId === 'crimson-wildflower-maxi-skirt' && !garment.garmentTape) {
+    // As the demo seeds it (demoSeed.ts `demoTapeFields`): the shop's tape and the pull-on closure.
+    const check = checkGarmentTapeInput({ category: garment.category, chart: garment.sizeChart, closure: 'pull-on', measured: PILOT_SKIRT_TAPE_MEASURED });
+    if (!check.ok) throw new Error(`the pilot skirt's tape is refused: ${check.errors.map((e) => e.message).join(' ')}`);
+    if (check.closure) garment.closure = check.closure;
+    if (check.garmentTape) garment.garmentTape = check.garmentTape;
+  }
   const grading = JSON.parse(readFileSync(join(bundle, 'grading.json'), 'utf8')) as { baseSize: string; sizes: { size: string }[] };
   garment.productPhotos = [];
   await page.route('**/*', async (route) => {
@@ -137,7 +175,7 @@ test('a drape bake in the embed: every size front and side, labelled an estimate
   expect(files.every((r) => r.method() === 'GET')).toBe(true);
   expect([...new Set(files.map((r) => new URL(r.url()).pathname.split('/').pop()))].sort()).toEqual([...BUNDLE_FILES].sort());
   const view = page.getByTestId('garment3d');
-  const sizes = (JSON.parse(readFileSync(join(BUNDLE, 'grading.json'), 'utf8')) as { sizes: { size: string; provenance?: string }[] }).sizes;
+  const sizes = (JSON.parse(readFileSync(join(BUNDLE, 'grading.json'), 'utf8')) as { sizes: { size: string; provenance?: string }[] }).sizes.filter((s) => !ONLY_SIZES || ONLY_SIZES.includes(s.size));
   const notes: Record<string, string> = {};
   for (const s of sizes) {
     await view.getByRole('radio', { name: s.size, exact: true }).click();
@@ -148,10 +186,16 @@ test('a drape bake in the embed: every size front and side, labelled an estimate
     const note = page.getByTestId('garment3d-bake-note');
     await expect(note).toContainText('one plain colour');
     await expect(note).toContainText(s.provenance === 'measured' ? `Size ${s.size} is built from the shop’s tape.` : `it is ${String(s.provenance)} from the sizes that are`);
-    await expect(note).toHaveAttribute('data-place', 'within');
-    await expect(canvas).toHaveAttribute('data-garment', 'drawn');
+    const place = placeOf(BUNDLE, s.size, Number(HIP));
+    const blocked = adviceBlocked(BUNDLE, s.size, Number(HIP));
+    await expect(note).toHaveAttribute('data-place', place);
+    if (blocked) await expect(note).toHaveAttribute('data-advice-blocked', 'true');
+    else await expect(note).not.toHaveAttribute('data-advice-blocked');
+    await expect(canvas).toHaveAttribute('data-garment', place === 'refused' || blocked ? 'not-drawn' : 'drawn');
+    await expect(note).not.toContainText('simulation');
     notes[s.size] = await note.innerText();
     await still(page, view, `size-${s.size}-front.png`);
+    if (!SIDE) continue;
     await turn(page, canvas, 90);
     await still(page, view, `size-${s.size}-side.png`);
     await turn(page, canvas, -90);
@@ -162,17 +206,27 @@ test('a drape bake in the embed: every size front and side, labelled an estimate
   await context.close();
 });
 
-test('past the draped bodies: held on the nearest one, or not drawn where the simulation could not put the size on', async ({ browser, baseURL }) => {
+test('past the draped bodies: shown on the nearest one with the reason, or not drawn where the band does not go on', async ({ browser, baseURL }) => {
   test.skip(!existsSync(join(BUNDLE, 'base.glb')) || !isBake(BUNDLE), `no drape bake bundle at ${BUNDLE} (git-ignored; set E2E_SKIRT_BUNDLE)`);
   test.setTimeout(1_800_000);
   const origin = new URL(baseURL!).origin;
-  const sizes = (JSON.parse(readFileSync(join(BUNDLE, 'qa.json'), 'utf8')) as { sizes: { size: string; baseT: number; targetT: number[]; notDraped?: { t: number }[] }[] }).sizes;
-  const s8 = sizes.find((s) => s.size === '8');
-  test.skip(!s8?.notDraped?.some((n) => n.t === 1), 'this bake has no refused AU 8 on the AU 16 body');
-  // The chart line of the bake's axis (bust 95 + 10 t, waist 77.5 + 10 t, hip 104 + 10 t): t = 0.8 and t = 1.4.
+  const sizes = (JSON.parse(readFileSync(join(BUNDLE, 'qa.json'), 'utf8')) as { sizes: { size: string; baseT: number; targetT: number[]; notDraped?: { t: number; rule?: string }[] }[] }).sizes;
+  const s16 = sizes.find((s) => s.size === '16');
+  test.skip(!s16?.notDraped?.some((n) => n.t === 1 && n.rule === 'pull-on'), 'this bake drapes AU 16 on the AU 16 body (an older bake: re-run bake-pom.ts)');
+  // The chart line of the bake's axis (bust 95 + 10 t, waist 77.5 + 10 t, hip 104 + 10 t): t = -0.6, -0.3, 0.8, 1 and 1.4.
+  // The bake: AU 8 on the 94 cm body only, AU 10 up to 99, AU 12 up to 104, AU 14 and AU 16 up to 109 (the drawn bodies'
+  // widest girths below the waist are 96.5 / 101.6 / 106.8 / 111.9 / 117). The size advice blocks AU 8 over 96.5 cm hips,
+  // AU 10 over 102.5, AU 12 over 107.5, AU 14 over 112.5 and AU 16 (extrapolated band, no allowance) over 115.
+  const ADVICE = 'the size advice says its band does not stretch over your hips';
+  const band = (size: string, hip: string): string => `its band does not stretch over the model with ${hip} cm hips, so size ${size} was not draped on it`;
   const cases = [
-    { hip: '112', bust: '103', waist: '85.5', checks: [{ size: '8', place: 'between', text: 'could not put size 8 on a body with 114.0 cm hips', garment: 'drawn' }, { size: '16', place: 'within', text: '', garment: 'drawn' }] },
-    { hip: '118', bust: '109', waist: '91.5', checks: [{ size: '8', place: 'refused', text: 'Size 8 is not drawn: the simulation could not put it on a body with 114.0 cm hips', garment: 'not-drawn' }, { size: '12', place: 'held', text: 'Your hips are outside the bodies size 12 was draped on, so it is shown on the nearest one.', garment: 'drawn' }] },
+    // AU 8 lies between its 94 cm body and the refused 99 cm one; the advice blocks it at 98 cm hips: not drawn.
+    { hip: '98', bust: '89', waist: '71.5', checks: [{ size: '8', place: 'between', blocked: true, text: ADVICE, garment: 'not-drawn' }, { size: '10', place: 'within', blocked: false, text: '', garment: 'drawn' }] },
+    { hip: '101', bust: '92', waist: '74.5', checks: [{ size: '8', place: 'refused', blocked: true, text: ADVICE, garment: 'not-drawn' }, { size: '10', place: 'between', blocked: false, text: band('10', '104.0'), garment: 'drawn' }, { size: '12', place: 'within', blocked: false, text: '', garment: 'drawn' }] },
+    { hip: '112', bust: '103', waist: '85.5', checks: [{ size: '12', place: 'refused', blocked: true, text: ADVICE, garment: 'not-drawn' }, { size: '14', place: 'between', blocked: false, text: band('14', '114.0'), garment: 'drawn' }, { size: '16', place: 'between', blocked: false, text: band('16', '114.0'), garment: 'drawn' }] },
+    // On the 114 cm body itself the advice lets AU 16 on (115 against 114), the drawn body is 117 cm at its widest: not drawn.
+    { hip: '114', bust: '105', waist: '87.5', checks: [{ size: '16', place: 'refused', blocked: false, text: 'Size 16 is not drawn: its band does not stretch over the model with 114.0 cm hips, and yours are at least that.', garment: 'not-drawn' }] },
+    { hip: '118', bust: '109', waist: '91.5', checks: [{ size: '14', place: 'refused', blocked: true, text: ADVICE, garment: 'not-drawn' }, { size: '16', place: 'refused', blocked: true, text: ADVICE, garment: 'not-drawn' }] },
   ];
   for (const c of cases) {
     const context = await browser.newContext({ viewport: { width: 360, height: 740 }, locale: 'en-AU', deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
@@ -194,7 +248,10 @@ test('past the draped bodies: held on the nearest one, or not drawn where the si
       await expect(canvas).toHaveAttribute('data-garment', k.garment);
       const note = page.getByTestId('garment3d-bake-note');
       await expect(note).toHaveAttribute('data-place', k.place);
+      if (k.blocked) await expect(note).toHaveAttribute('data-advice-blocked', 'true');
+      else await expect(note).not.toHaveAttribute('data-advice-blocked');
       if (k.text) await expect(note).toContainText(k.text);
+      await expect(note).not.toContainText('simulation');
       await expect(view.getByText('Estimate · not measured')).toBeVisible();
       await still(page, view, `hip-${c.hip}-size-${k.size}-front.png`);
     }

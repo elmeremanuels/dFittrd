@@ -134,8 +134,12 @@ export interface GarmentView {
    * bundle's texture when it has one). `bake`: drapes made on the server per size and blended here (`drapeBake.ts`); the
    * garment is drawn in one plain colour (`plainColour`), and per size whether its measurements were measured on the
    * shop's tape or interpolated / extrapolated from it, and where the shopper lies against the bodies it was draped on
-   * (`place`, `BakePlace` of `drapeBake.ts`: `held` and `between` are shown on the nearest draped body; `refused` is a
-   * body the simulation could not dress in that size, so the size is not drawn and `refusedHipCm` is that body's hip).
+   * (`place`, `BakePlace` of `drapeBake.ts`: `held` and `between` are shown on the nearest draped body; `refused` is at
+   * or beyond a body the bake did not drape that size on, so the size is not drawn, `refusedHipCm` is that body's hip and
+   * `refusedRule` its reason when the bake states one: `pull-on`, the band cannot be pulled over that body). A size the
+   * embed's own fit result says does not go on (`adviceBlocked`: its `pullOn` is `blocked` at the shopper's hip) is not
+   * drawn either, wherever it lies against the bodies: the 3D view never dresses the shopper in a size the size advice
+   * blocks.
    */
   source: GarmentViewSource;
   /**
@@ -157,25 +161,29 @@ export type GarmentViewSource =
 export interface BakedSizeView {
   provenance: SizeProvenance;
   place: BakePlace;
-  /** Hip of the nearest body beyond the shopper's side that the size could not be put on, cm; null when there is none. */
+  /** Hip of the nearest body beyond the shopper's side that the size was not draped on, cm; null when there is none. */
   refusedHipCm: number | null;
+  /** Why the bake did not drape the size on that body, when it states a rule (`DrapeBakeRefusal.rule`); else null. */
+  refusedRule: 'pull-on' | null;
+  /** The embed's fit result blocks this size at the shopper's hip (`SizeFit.pullOn.status === 'blocked'`): not drawn. */
+  adviceBlocked: boolean;
 }
 
 /** Clearance of the drawn body for a baked drape, cm: the on-device drape's (`prepareFit`). */
 const BAKE_CLEARANCE_CM = 0.35;
 
 /** The baked drape of every size at the shopper's place on the axis, laid out of the drawn body. Pure (no WebGL). */
-export function bakedDrapes(bake: DrapeBake, field: BodyField, hipCm: number): Map<string, { pos: Float32Array; place: BakePlace; refusedHipCm: number | null; pushed: number; floored: number }> {
+export function bakedDrapes(bake: DrapeBake, field: BodyField, hipCm: number): Map<string, { pos: Float32Array; place: BakePlace; refusedHipCm: number | null; refusedRule: 'pull-on' | null; pushed: number; floored: number }> {
   const t = bakeAxis(bake.meta, hipCm);
-  const out = new Map<string, { pos: Float32Array; place: BakePlace; refusedHipCm: number | null; pushed: number; floored: number }>();
+  const out = new Map<string, { pos: Float32Array; place: BakePlace; refusedHipCm: number | null; refusedRule: 'pull-on' | null; pushed: number; floored: number }>();
   const collide = makeCollider(field, BAKE_CLEARANCE_CM);
   const { hipAtZero, hipPerUnit } = bake.meta.axis;
   for (const [label, size] of bake.sizes) {
-    const { weights, place, refusedT } = bakePlace(size, t);
+    const { weights, place, refusedT, refusedRule } = bakePlace(size, t);
     const pos = blendBakedSize(size, weights);
     const r = settleOnBody(pos, collide);
     const refusedHipCm = refusedT === null ? null : Math.round((hipAtZero + hipPerUnit * refusedT) * 10) / 10;
-    out.set(label, { pos, place, refusedHipCm, pushed: r.body, floored: r.floor });
+    out.set(label, { pos, place, refusedHipCm, refusedRule, pushed: r.body, floored: r.floor });
   }
   return out;
 }
@@ -473,10 +481,12 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
   stage.scene.add(figure.group);
   stage.frame(60, stature);
   const drapes = bakedDrapes(bake, field, avatar.measurements.hip);
+  // The sizes the embed's own fit result says do not go on at the shopper's hip (the view never recomputes the fit).
+  const blocked = new Set((opts.fit?.perSize ?? []).filter((p) => p.pullOn?.status === 'blocked').map((p) => gradingLabel(ok.sizes, p.size)).filter((l): l is string => l !== null));
   const sizes: Record<string, BakedSizeView> = {};
   for (const [label, s] of bake.sizes) {
     const d = drapes.get(label)!;
-    sizes[label] = { provenance: s.provenance, place: d.place, refusedHipCm: d.refusedHipCm };
+    sizes[label] = { provenance: s.provenance, place: d.place, refusedHipCm: d.refusedHipCm, refusedRule: d.refusedRule, adviceBlocked: blocked.has(label) };
   }
   let disposed = false;
   let raf = 0;
@@ -504,9 +514,11 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
     if (!label || !d) return false;
     canvas.dataset.size = label;
     figure.setPositions(d.pos);
-    // The simulation could not put this size on a body like the shopper's: the body is drawn without it.
-    figure.garment.visible = d.place !== 'refused';
-    canvas.dataset.garment = d.place === 'refused' ? 'not-drawn' : 'drawn';
+    // The bake did not drape this size on a body like the shopper's, or the size advice blocks it at the shopper's
+    // hip: the body is drawn without it.
+    const drawn = d.place !== 'refused' && !blocked.has(label);
+    figure.garment.visible = drawn;
+    canvas.dataset.garment = drawn ? 'drawn' : 'not-drawn';
     state('settled');
     wake(100);
     return true;

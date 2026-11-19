@@ -69,6 +69,12 @@ describe('bakeWeights', () => {
     // The refused body is above: below the range the size is only held.
     expect(bakePlace(s8, -1.5)).toMatchObject({ place: 'held', refusedT: null });
     expect(bakePlace({ baseT: 0, targetT: [-1, 1] }, 1.5)).toMatchObject({ place: 'held', refusedT: null });
+    // The refused body's stated rule goes with it (the embed names the band), none when the bake states no rule.
+    expect(bakePlace(s8, 1).refusedRule).toBeNull();
+    const pull = { ...s8, notDraped: [{ t: 1, reason: 'its band cannot be pulled over the drawn body', rule: 'pull-on' as const }] };
+    expect(bakePlace(pull, 0.8)).toMatchObject({ place: 'between', refusedRule: 'pull-on' });
+    expect(bakePlace(pull, 1.2)).toMatchObject({ place: 'refused', refusedRule: 'pull-on' });
+    expect(bakePlace(pull, 0.2).refusedRule).toBeNull();
   });
 
   it('refuses an axis value that is not a number instead of showing the base drape as the shopper’s', () => {
@@ -128,6 +134,7 @@ describe('base.glb round trip', () => {
     expect(bad({ sizes: [{ size: '8', baseT: 0, targetT: [0], provenance: 'measured' }] })).toThrow(/twice/);
     expect(bad({ sizes: [{ size: '8', baseT: 0, targetT: [1], provenance: 'guessed' as never }] })).toThrow(/provenance/);
     expect(bad({ sizes: [{ size: '8', baseT: 0, targetT: [1], provenance: 'measured', notDraped: [{ t: Number.NaN, reason: 'x' }] }] })).toThrow(/notDraped/);
+    expect(bad({ sizes: [{ size: '8', baseT: 0, targetT: [1], provenance: 'measured', notDraped: [{ t: 2, reason: 'x', rule: 'looks wrong' as 'pull-on' }] }] })).toThrow(/notDraped/);
   });
 
   it('refuses a morph target of another vertex count, and sizes with other triangles', async () => {

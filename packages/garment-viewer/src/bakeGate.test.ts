@@ -10,8 +10,10 @@ import { writeDrapeBake } from './drapeBakeWrite';
 
 /**
  * The fixture is the POM v2 rest geometry of the pilot skirt, built from the shop's tape by the committed
- * `pom_rest.py` and laid on the device avatar of each chart body (spikes/garment-engine/viewer/scripts/serverdrape/
- * bake-pom-rest-fixture.ts). It is in the exact bake format; it is not a cloth simulation.
+ * `pom_rest.py` and laid on the device avatar of each body of the real bake's plan (spikes/garment-engine/viewer/
+ * scripts/serverdrape/bake-pom-rest-fixture.ts): AU 8 on hip 94; AU 10 on 94-99; AU 12 on 94-104; AU 14 and AU 16
+ * on 94-109; every other body declared not draped because the band cannot be pulled over it (`rule: 'pull-on'`). It is
+ * in the exact bake format; it is not a cloth simulation.
  */
 const DIR = fileURLToPath(new URL('../fixtures/pom-v2-rest/', import.meta.url));
 const json = (name: string): Record<string, unknown> => JSON.parse(readFileSync(join(DIR, name), 'utf8')) as Record<string, unknown>;
@@ -59,8 +61,8 @@ describe('the bake check on the POM v2 tape-built skirt', () => {
   it('passes every check, with nothing to approve on the builder’s word', () => {
     expect(good.checks.map((c) => [c.id, c.pass])).toEqual(BAKE_CHECK_IDS.map((id) => [id, true]));
     expect(good.pass).toBe(true);
-    // 4 bodies × 5 sizes, less AU 8 on the two bodies it is declared not to go on
-    expect(good.drapes).toHaveLength(18);
+    // 1 + 2 + 2 + 3 + 3 drapes on the 5 bodies (hips 94, 99, 104, 109, 114)
+    expect(good.drapes).toHaveLength(11);
     expect(passedBakeCheck({ bakeCheck: good })).not.toBeNull();
     expect(garmentQaFlags({ chartAgreement: { pass: true, kind: 'tape-built' }, bakeCheck: good })).toEqual([]);
     expect(garmentQaFlags({ chartAgreement: { pass: true, kind: 'tape-built' } })).toEqual(['tape_built_no_chart_check']);
@@ -69,13 +71,14 @@ describe('the bake check on the POM v2 tape-built skirt', () => {
   it('measures the hip line and the hem of every drape against the tape (the numbers the merchant sees)', () => {
     const at = (size: string, t: number) => good.drapes.find((d) => d.size === size && d.t === t)!;
     // AU 10 measured: hip 122, hem 248 on the tape
-    expect(at('10', 0)).toMatchObject({ bodyHipCm: 104, hipRingCm: 122, hemRingCm: 248.1, insideParticles: 0, atRest: true });
-    expect(at('16', 1)).toMatchObject({ bodyHipCm: 114, hipRingCm: 128, hemRingCm: 266 });
+    expect(at('10', -0.5)).toMatchObject({ bodyHipCm: 99, hipRingCm: 122, hemRingCm: 248.1, insideParticles: 0, atRest: true });
+    expect(at('16', 0.5)).toMatchObject({ bodyHipCm: 109, hipRingCm: 128, hemRingCm: 266 });
     expect(good.tape?.sizes.map((s) => [s.size, s.provenance, s.hipCm, s.hemSweepCm])).toEqual([
       ['8', 'measured', 112, 230], ['10', 'measured', 122, 248], ['12', 'interpolated', 124, 254], ['14', 'measured', 126, 260], ['16', 'extrapolated', 128, 266],
     ]);
     expect(good.tape?.hipBelowBandCm).toBeNull();
-    expect(good.tape?.sizes[0]!.notDraped.map((n) => n.bodyHipCm)).toEqual([109, 114]);
+    expect(good.tape?.sizes[0]!.notDraped.map((n) => n.bodyHipCm)).toEqual([99, 104, 109, 114]);
+    expect(good.tape?.sizes[4]!.notDraped).toEqual([{ bodyHipCm: 114, reason: expect.stringMatching(/^its band cannot be pulled over the drawn body with 114 cm hips: 115 cm at full stretch against 117 cm/) }]);
     expect(ringLength(bake.sizes.get('12')!.base, bake.meta.tapeRings!.hem)).toBeCloseTo(254, 0);
   });
 });
@@ -98,16 +101,16 @@ describe('broken bakes are refused, with a plain reason', () => {
   });
 
   it('a body whose hip is off the bake’s axis', async () => {
-    const r = await checkDrapeBake(input({ glb: await variant({ meta: (m) => { m.bodies![1]!.hip = 106; } }) }));
+    const r = await checkDrapeBake(input({ glb: await variant({ meta: (m) => { m.bodies![2]!.hip = 106; } }) }));
     expect(check(r, 'readable').reasons[0]).toBe('the body at axis value 0 has 106 cm hips, but the bake’s axis puts 104 cm there');
   });
 
   it('a hem 10 % short of the tape', async () => {
-    const r = await checkDrapeBake(input({ glb: await variant({ drape: (size, t, pos) => { if (size === '12' && t === 0) scaleRing(pos, bake.meta.tapeRings!.hem, 0.9); } }) }));
+    const r = await checkDrapeBake(input({ glb: await variant({ drape: (size, t, pos) => { if (size === '12' && t === -1) scaleRing(pos, bake.meta.tapeRings!.hem, 0.9); } }) }));
     // 228.7 cm is also smaller than AU 10's 248 cm hem on that body: the size order fails with it
     expect(failed(r)).toEqual(['tape_rings', 'size_order']);
-    expect(check(r, 'tape_rings').reasons).toEqual(['size 12 on the body with 104 cm hips: the draped hem is 228.7 cm around, the tape says 254 cm (allowed ±5.1 cm)']);
-    expect(check(r, 'size_order').reasons[0]).toBe('on the body with 104 cm hips the hem of size 12 (228.7 cm) is smaller than that of size 10 (248.1 cm), but the tape grows from 248 cm to 254 cm');
+    expect(check(r, 'tape_rings').reasons).toEqual(['size 12 on the body with 94 cm hips: the draped hem is 228.7 cm around, the tape says 254 cm (allowed ±5.1 cm)']);
+    expect(check(r, 'size_order').reasons[0]).toBe('on the body with 94 cm hips the hem of size 12 (228.7 cm) is smaller than that of size 10 (248.1 cm), but the tape grows from 248 cm to 254 cm');
   });
 
   it('a size the bundle grades but did not drape', async () => {
@@ -121,47 +124,56 @@ describe('broken bakes are refused, with a plain reason', () => {
   });
 
   it('a garment that does not hang its tape length (collapsed drape)', async () => {
-    const r = await checkDrapeBake(input({ glb: await variant({ drape: (size, t, pos) => { if (size === '14' && t === 1) for (let i = 1; i < pos.length; i += 3) pos[i] = 100 + (pos[i]! - 100) * 0.3; } }) }));
-    expect(check(r, 'sizes_have_geometry').reasons[0]).toMatch(/^size 14 on the body with 114 cm hips is 3\d\.\d cm tall; the tape says the garment is 104 cm long$/);
+    const r = await checkDrapeBake(input({ glb: await variant({ drape: (size, t, pos) => { if (size === '14' && t === 0.5) for (let i = 1; i < pos.length; i += 3) pos[i] = 100 + (pos[i]! - 100) * 0.3; } }) }));
+    expect(check(r, 'sizes_have_geometry').reasons[0]).toMatch(/^size 14 on the body with 109 cm hips is 3\d\.\d cm tall; the tape says the garment is 104 cm long$/);
     expect(check(r, 'tape_rings').pass).toBeNull();
   });
 
   it('a body a size was not draped on, without saying why', async () => {
     const r = await checkDrapeBake(input({ glb: await variant({ meta: (m) => { delete m.sizes[0]!.notDraped; } }) }));
     expect(failed(r)).toEqual(['refusals_declared']);
-    expect(check(r, 'refusals_declared').reasons).toEqual(['size 8 has no drape on the body with 109 cm hips and does not say why', 'size 8 has no drape on the body with 114 cm hips and does not say why']);
+    expect(check(r, 'refusals_declared').reasons).toEqual([99, 104, 109, 114].map((h) => `size 8 has no drape on the body with ${h} cm hips and does not say why`));
   });
 
   it('a refusal between two drapes of the same size, and one without a reason', async () => {
-    // AU 10 without its drape on the 109 cm body, refused there with an empty reason, still drawn at 104 and 114
-    const meta = clone(bake.meta);
-    const s10 = bake.sizes.get('10')!;
-    meta.sizes[1] = { ...meta.sizes[1]!, targetT: [-1, 1], notDraped: [{ t: 0.5, reason: ' ' }], drapes: meta.sizes[1]!.drapes!.filter((d) => d.t !== 0.5) };
-    const abs = (k: number) => Float32Array.from(s10.base, (v, i) => v + s10.targets[k]![i]!);
-    const drapes = bake.meta.sizes.map((sm) => {
-      const s = bake.sizes.get(sm.size)!;
-      if (sm.size === '10') return { size: '10', base: s.base, targets: [abs(s.targetT.indexOf(-1)), abs(s.targetT.indexOf(1))] };
-      return { size: sm.size, base: s.base, targets: s.targets.map((d) => Float32Array.from(s.base, (v, i) => v + d[i]!)) };
-    });
-    const r2 = await checkDrapeBake(input({ glb: await writeDrapeBake({ meta, indices: bake.indices, drapes }) }));
-    expect(check(r2, 'refusals_declared').reasons).toEqual([
-      'size 10 is refused on the body with 109 cm hips without a reason',
-      'size 10 is refused on the body with 109 cm hips but drawn on bodies either side of it, so the phone would blend through the refusal',
+    // AU 14 (drawn on 94, 104 and 109) declared refused on the 99 cm body, with an empty reason
+    const r = await checkDrapeBake(input({ glb: await variant({ meta: (m) => { m.sizes[3]!.notDraped = [{ t: -0.5, reason: ' ' }, ...(m.sizes[3]!.notDraped ?? [])]; } }) }));
+    expect(check(r, 'refusals_declared').reasons).toEqual([
+      'size 14 is refused on the body with 99 cm hips without a reason',
+      'size 14 is refused on the body with 99 cm hips but drawn on bodies either side of it, so the phone would blend through the refusal',
     ]);
   });
 
-  it('a body inside a size’s draped range needs no drape (the phone blends across it), as in the real POM v2 bake', async () => {
-    const meta = clone(bake.meta);
-    meta.sizes[1] = { ...meta.sizes[1]!, targetT: [-1, 1], drapes: meta.sizes[1]!.drapes!.filter((d) => d.t !== 0.5) };
-    const s10 = bake.sizes.get('10')!;
-    const drapes = bake.meta.sizes.map((sm) => {
-      const s = bake.sizes.get(sm.size)!;
-      const abs = (k: number) => Float32Array.from(s.base, (v, i) => v + s.targets[k]![i]!);
-      return sm.size === '10' ? { size: '10', base: s10.base, targets: [abs(s10.targetT.indexOf(-1)), abs(s10.targetT.indexOf(1))] } : { size: sm.size, base: s.base, targets: s.targets.map((_, k) => abs(k)) };
-    });
-    const r = await checkDrapeBake(input({ glb: await writeDrapeBake({ meta, indices: bake.indices, drapes }) }));
-    expect(r.pass).toBe(true);
-    expect(r.drapes).toHaveLength(17);
+  it('a body inside a size’s draped range needs no drape (the phone blends across it), as in the real POM v2 bake', () => {
+    // AU 12, 14 and 16 are drawn on 94 and 104 cm hips and have no drape on the 99 cm body between them
+    expect(good.pass).toBe(true);
+    for (const size of ['12', '14', '16']) expect(good.drapes.some((d) => d.size === size && d.t === -0.5)).toBe(false);
+  });
+
+  it('a size draped on a body its band cannot be pulled over (the fit engine’s pull-on check, recomputed)', async () => {
+    // AU 12's band stated 5 cm shorter: 100 cm at full stretch, drawn on the 104 cm body (106.8 cm at its widest)
+    const qa = json('qa.json') as { tape: { sizes: { tape: { stretchedGirthCm: { cm: number } } }[] } };
+    qa.tape.sizes[2]!.tape.stretchedGirthCm.cm = 100;
+    const r = await checkDrapeBake(input({ qa }));
+    expect(failed(r)).toEqual(['refusals_declared']);
+    expect(check(r, 'refusals_declared').reasons).toEqual([
+      'size 12 is draped on the body with 104 cm hips, but its band at full stretch is 100 cm against that body’s 106.8 cm at its widest below the waist (6.8 cm short; the size advice allows 2.5 cm short): the band cannot be pulled over it',
+      // and its refusals on the 109 and 114 cm bodies still hold
+    ]);
+  });
+
+  it('a pull-on refusal that does not hold, and one with another reason (only required to say it)', async () => {
+    // AU 16's band stated 3 cm longer: 118 cm goes over the 114 cm body's 117 cm, yet the bake declares it cannot
+    const qa = json('qa.json') as { tape: { sizes: { tape: { stretchedGirthCm: { cm: number } } }[] } };
+    qa.tape.sizes[4]!.tape.stretchedGirthCm.cm = 118;
+    const r = await checkDrapeBake(input({ qa }));
+    expect(failed(r)).toEqual(['refusals_declared']);
+    expect(check(r, 'refusals_declared').reasons).toEqual([
+      'size 16 is refused on the body with 114 cm hips because its band cannot be pulled over it, but its band at full stretch is 118 cm against that body’s 117 cm at its widest below the waist (1 cm to spare; the size advice allows 0 cm short): it can',
+    ]);
+    // A refusal with another reason is only required to say it (the gate cannot recompute it).
+    const r2 = await checkDrapeBake(input({ qa, glb: await variant({ meta: (m) => { delete m.sizes[4]!.notDraped![0]!.rule; } }) }));
+    expect(r2.pass).toBe(true);
   });
 
   it('fabric inside the drawn body', async () => {

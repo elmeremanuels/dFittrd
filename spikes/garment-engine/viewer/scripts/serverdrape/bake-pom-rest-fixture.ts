@@ -5,11 +5,14 @@
  *
  * What it is: the POM v2 rest geometry of the real skirt (`serverdrape/pom_rest.py --profile tube --edge 1.0`, built
  * from the shop's tape: AU 8, 10 and 14 measured, 12 interpolated, 16 extrapolated) laid on the device avatar of each
- * chart body (t = -1, 0, 0.5, 1: hips 94, 104, 109, 114) and pushed out of it by the device's own collider with the
- * on-device clearance (0.35 cm, `settleOnBody`). NOT a cloth simulation: there are no folds and no hang, the hem is
- * where the rest shape put it. Drapes are therefore declared at rest with zero movement, and the bake's `source` says
- * FIXTURE. Where the push-out stretches the hip line beyond the gate's ring tolerance, the size is declared not draped
- * on that body (the same refusal the real bake declares for AU 8 on the AU 16 body).
+ * body of the real bake's plan and pushed out of it by the device's own collider with the on-device clearance (0.35 cm,
+ * `settleOnBody`). NOT a cloth simulation: there are no folds and no hang, the hem is where the rest shape put it.
+ * Drapes are therefore declared at rest with zero movement, and the bake's `source` says FIXTURE. Which bodies each
+ * size is laid on is the real bake's own rule (`planSizeBodies` and `pullOnRefusal` of `bakeTape.ts`, as `bake-pom.ts`
+ * uses them): the chart bodies t = -1, 0, 1 where the band can be pulled over the drawn body's widest part below the
+ * waist, and the size's own chart body (t = -0.5, 0.5) where the next chart body is refused; every other body is
+ * declared not draped, `rule: 'pull-on'`. A planned body whose hip line the push-out stretches past the gate's ring
+ * tolerance is an error, not a refusal.
  *
  * Run (from spikes/garment-engine):
  *   python3 serverdrape/pom_rest.py <restDir> --profile tube --edge 1.0
@@ -19,46 +22,42 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh } from '@curtain/mannequin';
 import { bakeRingToleranceCm } from '@curtain/schema';
+import { widestBelowWaistCm } from '../../../../../packages/garment-viewer/src/bodyGirth';
 import { ringLength } from '../../../../../packages/garment-viewer/src/bakeGate';
 import { bodyField, buildAvatar } from '../../../../../packages/garment-viewer/src/body';
 import { makeCollider } from '../../../../../packages/garment-viewer/src/collide';
 import { DRAPE_BAKE_FORMAT, settleOnBody, type DrapeBakeMeta, type DrapeBakeSizeMeta } from '../../../../../packages/garment-viewer/src/drapeBake';
 import { writeDrapeBake } from '../../../../../packages/garment-viewer/src/drapeBakeWrite';
-import { chartBody, qaTape, tapeRings, type RestJson } from './bakeTape';
+import { chartBody, planSizeBodies, pullOnRefusal, qaTape, tapeRings, type RestJson } from './bakeTape';
 
 const [restDir, outDir] = [process.argv[2]!, process.argv[3]!];
 const rest = JSON.parse(readFileSync(join(restDir, 'rest.json'), 'utf8')) as RestJson;
 const f32 = (p: string): Float32Array => { const b = readFileSync(p); return new Float32Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)); };
 const indices = new Uint32Array(readFileSync(join(restDir, 'indices.bin')).buffer.slice(0));
 const rings = tapeRings(rest);
-const BODY_T = [-1, 0, 0.5, 1];
-const bodies = BODY_T.map(chartBody);
+const CHART = [-1, 0, 1];
+const OWN = [-0.5, 0.5];
 const m = buildMannequin(bodyShape(BASE_SHAPE_ID));
 const canon = buildMannequinMesh(m, { head: 'neutral' });
-const colliders = new Map(bodies.map((b) => [b.t, makeCollider(bodyField(m, buildAvatar(m, canon, { bust: b.bust, waist: b.waist, hip: b.hip })), 0.35)]));
+const avatars = new Map([...CHART, ...OWN].map((t) => { const b = chartBody(t); return [t, buildAvatar(m, canon, { bust: b.bust, waist: b.waist, hip: b.hip })]; }));
+const widest = (t: number): number => widestBelowWaistCm(m, avatars.get(t)!.mesh).girthCm;
 
 const plan: (DrapeBakeSizeMeta & { pos: Map<number, Float32Array> })[] = [];
 for (const s of rest.sizes) {
   const base = f32(join(restDir, `rest-${s.size}.bin`));
+  const p = planSizeBodies(CHART, OWN, (t) => pullOnRefusal(s.tape['stretchedGirthCm']!, widest(t), chartBody(t).hip), () => true);
   const pos = new Map<number, Float32Array>();
-  const notDraped: { t: number; reason: string }[] = [];
-  for (const b of bodies) {
-    const p = Float32Array.from(base);
-    settleOnBody(p, colliders.get(b.t)!);
-    const hip = ringLength(p, rings.hip), want = s.tape.hipCm!.cm;
-    if (b.t !== 0 && hip - want > bakeRingToleranceCm(want)) {
-      notDraped.push({ t: b.t, reason: `the hip line would have to stretch from ${want} to ${hip.toFixed(1)} cm to go round this body` });
-      continue;
-    }
-    pos.set(b.t, p);
+  for (const t of [p.baseT, ...p.targetT]) {
+    const q = Float32Array.from(base);
+    settleOnBody(q, makeCollider(bodyField(m, avatars.get(t)!), 0.35));
+    const hip = ringLength(q, rings.hip), want = s.tape.hipCm!.cm;
+    if (Math.abs(hip - want) > bakeRingToleranceCm(want)) throw new Error(`AU ${s.size} on the body at t = ${t}: the push-out stretches the hip line from ${want} to ${hip.toFixed(1)} cm`);
+    pos.set(t, q);
   }
-  const targetT = BODY_T.filter((t) => t !== 0 && pos.has(t));
-  // No refusal may sit between two drapes: drop a draped body beyond a refused one (the device holds the last drape).
-  const keep = targetT.filter((t) => !notDraped.some((n) => (t > 0 ? n.t > 0 && n.t < t : n.t < 0 && n.t > t)));
-  for (const t of targetT.filter((x) => !keep.includes(x))) notDraped.push({ t, reason: 'beyond a body this size could not be put on' });
-  const drapes = [0, ...keep].map((t) => ({ t, atRest: true, maxMoveCmPerFrame: 0, meanMoveCmPerFrame: 0 }));
-  plan.push({ size: s.size, baseT: 0, targetT: keep, provenance: s.provenance, ...(notDraped.length ? { notDraped: notDraped.sort((a, b) => a.t - b.t) } : {}), drapes, pos });
+  const drapes = [p.baseT, ...p.targetT].map((t) => ({ t, atRest: true, maxMoveCmPerFrame: 0, meanMoveCmPerFrame: 0 }));
+  plan.push({ size: s.size, baseT: p.baseT, targetT: p.targetT, provenance: s.provenance, ...(p.notDraped.length ? { notDraped: p.notDraped } : {}), drapes, pos });
 }
+const bodies = [...CHART, ...OWN].sort((a, b) => a - b).map(chartBody);
 
 const meta: DrapeBakeMeta = {
   format: DRAPE_BAKE_FORMAT,
@@ -72,7 +71,7 @@ const meta: DrapeBakeMeta = {
   bodies,
   tapeRings: rings,
 };
-const glb = await writeDrapeBake({ meta, indices, drapes: plan.map((p) => ({ size: p.size, base: p.pos.get(0)!, targets: p.targetT.map((t) => p.pos.get(t)!) })), generator: 'curtain bake-pom-rest-fixture.ts' });
+const glb = await writeDrapeBake({ meta, indices, drapes: plan.map((p) => ({ size: p.size, base: p.pos.get(p.baseT)!, targets: p.targetT.map((t) => p.pos.get(t)!) })), generator: 'curtain bake-pom-rest-fixture.ts' });
 mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, 'base.glb'), glb);
 const productId = 'crimson-wildflower-maxi-skirt';
@@ -87,4 +86,4 @@ json('qa.json', {
   tape: qaTape(rest, null),
 });
 console.log(`${outDir}: base.glb ${glb.byteLength} bytes`);
-for (const p of plan) console.log(`AU ${p.size} (${p.provenance}): bodies ${[0, ...p.targetT].join(', ')}; not draped ${(p.notDraped ?? []).map((n) => `${n.t} (${n.reason})`).join('; ') || '-'}`);
+for (const p of plan) console.log(`AU ${p.size} (${p.provenance}): bodies ${[p.baseT, ...p.targetT].join(', ')}; not draped ${(p.notDraped ?? []).map((n) => `${n.t} (${n.reason})`).join('; ') || '-'}`);

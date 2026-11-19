@@ -1,0 +1,265 @@
+{
+  "format": "curtain.garment.bakeCheck",
+  "version": 1,
+  "pass": true,
+  "checks": [
+    {
+      "id": "readable",
+      "pass": true,
+      "reasons": []
+    },
+    {
+      "id": "file_size",
+      "pass": true,
+      "reasons": []
+    },
+    {
+      "id": "sizes_have_geometry",
+      "pass": true,
+      "reasons": []
+    },
+    {
+      "id": "refusals_declared",
+      "pass": true,
+      "reasons": []
+    },
+    {
+      "id": "provenance",
+      "pass": true,
+      "reasons": []
+    },
+    {
+      "id": "at_rest",
+      "pass": true,
+      "reasons": []
+    },
+    {
+      "id": "tape_rings",
+      "pass": true,
+      "reasons": []
+    },
+    {
+      "id": "inside_body",
+      "pass": true,
+      "reasons": []
+    },
+    {
+      "id": "size_order",
+      "pass": true,
+      "reasons": []
+    }
+  ],
+  "tape": {
+    "hipBelowBandCm": null,
+    "sizes": [
+      {
+        "size": "8",
+        "provenance": "measured",
+        "hipCm": 112,
+        "hemSweepCm": 230,
+        "stretchedGirthCm": 94,
+        "notDraped": [
+          {
+            "bodyHipCm": 99,
+            "reason": "its band cannot be pulled over 99 cm hips: 94 cm at full stretch, 5 cm short (the size advice allows 2.5 cm)"
+          },
+          {
+            "bodyHipCm": 104,
+            "reason": "its band cannot be pulled over 104 cm hips: 94 cm at full stretch, 10 cm short (the size advice allows 2.5 cm)"
+          },
+          {
+            "bodyHipCm": 109,
+            "reason": "its band cannot be pulled over 109 cm hips: 94 cm at full stretch, 15 cm short (the size advice allows 2.5 cm)"
+          },
+          {
+            "bodyHipCm": 114,
+            "reason": "the wear rule cannot hold its band at the assumed level (cannot be worn); its band cannot be pulled over 114 cm hips: 94 cm at full stretch, 20 cm short (the size advice allows 2.5 cm)"
+          }
+        ]
+      },
+      {
+        "size": "10",
+        "provenance": "measured",
+        "hipCm": 122,
+        "hemSweepCm": 248,
+        "stretchedGirthCm": 100,
+        "notDraped": [
+          {
+            "bodyHipCm": 104,
+            "reason": "its band cannot be pulled over 104 cm hips: 100 cm at full stretch, 4 cm short (the size advice allows 2.5 cm)"
+          },
+          {
+            "bodyHipCm": 109,
+            "reason": "its band cannot be pulled over 109 cm hips: 100 cm at full stretch, 9 cm short (the size advice allows 2.5 cm)"
+          },
+          {
+            "bodyHipCm": 114,
+            "reason": "its band cannot be pulled over 114 cm hips: 100 cm at full stretch, 14 cm short (the size advice allows 2.5 cm)"
+          }
+        ]
+      },
+      {
+        "size": "12",
+        "provenance": "interpolated",
+        "hipCm": 124,
+        "hemSweepCm": 254,
+        "stretchedGirthCm": 105,
+        "notDraped": [
+          {
+            "bodyHipCm": 109,
+            "reason": "its band cannot be pulled over 109 cm hips: 105 cm at full stretch, 4 cm short (the size advice allows 2.5 cm)"
+          },
+          {
+            "bodyHipCm": 114,
+            "reason": "its band cannot be pulled over 114 cm hips: 105 cm at full stretch, 9 cm short (the size advice allows 2.5 cm)"
+          }
+        ]
+      },
+      {
+        "size": "14",
+        "provenance": "measured",
+        "hipCm": 126,
+        "hemSweepCm": 260,
+        "stretchedGirthCm": 110,
+        "notDraped": [
+          {
+            "bodyHipCm": 114,
+            "reason": "its band cannot be pulled over 114 cm hips: 110 cm at full stretch, 4 cm short (the size advice allows 2.5 cm)"
+          }
+        ]
+      },
+      {
+        "size": "16",
+        "provenance": "extrapolated",
+        "hipCm": 128,
+        "hemSweepCm": 266,
+        "stretchedGirthCm": 115,
+        "notDraped": []
+      }
+    ]
+  },
+  "drapes": [
+    {
+      "size": "8",
+      "t": -1,
+      "bodyHipCm": 94,
+      "hipRingCm": 111.9,
+      "hemRingCm": 230.1,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.223
+    },
+    {
+      "size": "10",
+      "t": -0.5,
+      "bodyHipCm": 99,
+      "hipRingCm": 121.3,
+      "hemRingCm": 248.3,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.11
+    },
+    {
+      "size": "10",
+      "t": -1,
+      "bodyHipCm": 94,
+      "hipRingCm": 121.5,
+      "hemRingCm": 248.3,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.09
+    },
+    {
+      "size": "12",
+      "t": 0,
+      "bodyHipCm": 104,
+      "hipRingCm": 123.7,
+      "hemRingCm": 254,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.123
+    },
+    {
+      "size": "12",
+      "t": -1,
+      "bodyHipCm": 94,
+      "hipRingCm": 123.4,
+      "hemRingCm": 254.1,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.217
+    },
+    {
+      "size": "14",
+      "t": 0,
+      "bodyHipCm": 104,
+      "hipRingCm": 125.5,
+      "hemRingCm": 260.3,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.094
+    },
+    {
+      "size": "14",
+      "t": -1,
+      "bodyHipCm": 94,
+      "hipRingCm": 125.2,
+      "hemRingCm": 260,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.136
+    },
+    {
+      "size": "14",
+      "t": 0.5,
+      "bodyHipCm": 109,
+      "hipRingCm": 126.3,
+      "hemRingCm": 260.1,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.071
+    },
+    {
+      "size": "16",
+      "t": 0,
+      "bodyHipCm": 104,
+      "hipRingCm": 127.2,
+      "hemRingCm": 266.1,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.107
+    },
+    {
+      "size": "16",
+      "t": -1,
+      "bodyHipCm": 94,
+      "hipRingCm": 126.9,
+      "hemRingCm": 266.4,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.113
+    },
+    {
+      "size": "16",
+      "t": 1,
+      "bodyHipCm": 114,
+      "hipRingCm": 129.7,
+      "hemRingCm": 266.1,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.105
+    }
+  ],
+  "checkedAt": "2026-11-19T02:08:47.449Z"
+}

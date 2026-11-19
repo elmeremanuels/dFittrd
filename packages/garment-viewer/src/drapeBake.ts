@@ -26,13 +26,26 @@ export interface DrapeBakeSizeMeta {
   /** Axis values of the morph targets, in target order. */
   targetT: number[];
   provenance: SizeProvenance;
-  /** Chart bodies this size was not draped on, and why (e.g. the wear rule says the band cannot be worn there). */
-  notDraped?: { t: number; reason: string }[];
+  /**
+   * Chart bodies this size was not draped on, and why, in plain words. `rule: 'pull-on'`: the band, at its full stretch
+   * on the tape, cannot be pulled over the widest part of that drawn body below the waist (the fit engine's
+   * `pullOnCheck` against `widestBelowWaistCm` of `bodyGirth.ts`); the import's bake check recomputes it and refuses a
+   * pull-on refusal that does not hold. Absent: another reason (for example the wear rule cannot hold the band at the
+   * assumed level), which the check can only require to be stated.
+   */
+  notDraped?: DrapeBakeRefusal[];
   /**
    * Whether each drape of this size came to rest, one per body (`baseT` and `targetT`), from the simulation's own
    * movement trace. Read by the import's bake check (`bakeGate.ts`), not by the viewer.
    */
   drapes?: { t: number; atRest: boolean; maxMoveCmPerFrame: number; meanMoveCmPerFrame: number }[];
+}
+
+/** One body a size was not draped on (`DrapeBakeSizeMeta.notDraped`). */
+export interface DrapeBakeRefusal {
+  t: number;
+  reason: string;
+  rule?: 'pull-on';
 }
 
 /** The drawn body (`buildAvatar` girths, cm) a set of drapes was made on, at axis value `t`. */
@@ -95,7 +108,7 @@ export function drapeBakeMetaOf(json: { asset?: { extras?: { curtainBake?: unkno
     if (typeof z.size !== 'string' || !finite(z.baseT) || !Array.isArray(z.targetT) || !z.targetT.every(finite)) throw new Error('drape bake: a size has no finite body axis values');
     if (new Set([z.baseT, ...z.targetT]).size !== z.targetT.length + 1) throw new Error(`drape bake: size ${z.size} lists a body twice`);
     if (z.provenance !== 'measured' && z.provenance !== 'interpolated' && z.provenance !== 'extrapolated') throw new Error(`drape bake: size ${z.size} has no provenance`);
-    if (z.notDraped !== undefined && (!Array.isArray(z.notDraped) || !z.notDraped.every((n) => !!n && finite(n.t) && typeof n.reason === 'string'))) throw new Error(`drape bake: size ${z.size} has a malformed notDraped`);
+    if (z.notDraped !== undefined && (!Array.isArray(z.notDraped) || !z.notDraped.every((n) => !!n && finite(n.t) && typeof n.reason === 'string' && (n.rule === undefined || n.rule === 'pull-on')))) throw new Error(`drape bake: size ${z.size} has a malformed notDraped`);
   }
   return m as DrapeBakeMeta;
 }
@@ -135,24 +148,26 @@ export function bakeWeights(size: Pick<DrapeBakeSizeMeta, 'baseT' | 'targetT'>, 
  * Where the shopper lies for one size, against the bodies it was draped on and the ones it was not (`notDraped`):
  * - `within`: between two draped bodies (blended);
  * - `held`: beyond the outermost draped body, with no refused body further out (shown on the outermost one);
- * - `between`: beyond the outermost draped body but short of a body the size could not be put on (shown on the
- *   outermost one; the simulation could not dress the next body out);
- * - `refused`: at or beyond a body the size could not be put on. The simulation's verdict is that it cannot be worn
- *   there, so the device does not draw it on the shopper (`refusedT`: that body).
+ * - `between`: beyond the outermost draped body but short of a body the size was not draped on (shown on the
+ *   outermost one; the bake declares the next body out `notDraped`, with its reason);
+ * - `refused`: at or beyond a body the size was not draped on. The bake's verdict is that it cannot be worn there (on
+ *   the POM bake: its band cannot be pulled over that body), so the device does not draw it on the shopper
+ *   (`refusedT`: that body; `refusedRule`: that body's `notDraped` rule, null when it has none).
  */
 export type BakePlace = 'within' | 'held' | 'between' | 'refused';
 
-export function bakePlace(size: Pick<DrapeBakeSizeMeta, 'baseT' | 'targetT' | 'notDraped'>, t: number): { weights: number[]; place: BakePlace; refusedT: number | null } {
+export function bakePlace(size: Pick<DrapeBakeSizeMeta, 'baseT' | 'targetT' | 'notDraped'>, t: number): { weights: number[]; place: BakePlace; refusedT: number | null; refusedRule: 'pull-on' | null } {
   const { weights, clamped } = bakeWeights(size, t);
-  if (!clamped) return { weights, place: 'within', refusedT: null };
+  if (!clamped) return { weights, place: 'within', refusedT: null, refusedRule: null };
   const nodes = [size.baseT, ...size.targetT];
   const above = t > Math.max(...nodes);
   const edge = above ? Math.max(...nodes) : Math.min(...nodes);
   const out = (size.notDraped ?? []).map((n) => n.t).filter((nt) => (above ? nt > edge : nt < edge));
-  if (out.length === 0) return { weights, place: 'held', refusedT: null };
+  if (out.length === 0) return { weights, place: 'held', refusedT: null, refusedRule: null };
   const nearest = above ? Math.min(...out) : Math.max(...out);
   const reached = above ? t >= nearest - 1e-9 : t <= nearest + 1e-9;
-  return { weights, place: reached ? 'refused' : 'between', refusedT: nearest };
+  const rule = (size.notDraped ?? []).find((n) => n.t === nearest)?.rule ?? null;
+  return { weights, place: reached ? 'refused' : 'between', refusedT: nearest, refusedRule: rule };
 }
 
 /** base + Σ w_k · target_k: the blended drape, cm. */

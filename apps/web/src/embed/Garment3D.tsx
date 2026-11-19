@@ -77,7 +77,7 @@ export function viewerHeadFlag(env: { VITE_VIEWER_HEAD?: string } = import.meta.
 /** What a baked view rests on (`GarmentView.source` of the viewer); optional, so this file builds against a viewer without it. */
 export type ViewerSource =
   | { kind: 'device' }
-  | { kind: 'bake'; plainColour: boolean; sizes: Record<string, { provenance: 'measured' | 'interpolated' | 'extrapolated'; place: 'within' | 'held' | 'between' | 'refused'; refusedHipCm: number | null }> };
+  | { kind: 'bake'; plainColour: boolean; sizes: Record<string, { provenance: 'measured' | 'interpolated' | 'extrapolated'; place: 'within' | 'held' | 'between' | 'refused'; refusedHipCm: number | null; refusedRule?: 'pull-on' | null; adviceBlocked?: boolean }> };
 /** The viewer contract of the avatar slices; optional, so this file builds against a viewer without it. */
 type View = Omit<BaseView, 'source' | 'exportPasses'> & { setLook?: (look: ViewerLook) => void; source?: ViewerSource; exportPasses?: (o?: { neighbour?: string | null }) => ExportedPasses | null };
 type MountOptionsWithLook = Omit<BaseMountOptions, 'look' | 'lighting'> & { look?: ViewerLook; lighting?: ViewerLighting };
@@ -336,13 +336,17 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
 function BakeNote({ t, size, source, units }: { t: EmbedCatalogue['view3d']; size: string; source: Extract<ViewerSource, { kind: 'bake' }>; units: Units }): ReactNode {
   const s = source.sizes[size];
   const place = s?.place ?? 'within';
+  const rule = s?.refusedRule ?? null;
+  // A size the size advice blocks is not drawn wherever it lies against the bake's bodies (the viewer hides it).
+  const blocked = s?.adviceBlocked === true;
   return (
-    <p className="mt-1 text-[11px] leading-snug text-ink-mute" data-testid="garment3d-bake-note" data-place={place}>
+    <p className="mt-1 text-[11px] leading-snug text-ink-mute" data-testid="garment3d-bake-note" data-place={place} data-advice-blocked={blocked ? 'true' : undefined}>
       {source.plainColour ? `${t.plainColour} ` : ''}
       {s ? t.provenance(size, s.provenance) : ''}
-      {place === 'held' ? ` ${t.held(size)}` : ''}
-      {place === 'between' && s?.refusedHipCm != null ? ` ${t.between(size, lengthText(s.refusedHipCm, units))}` : ''}
-      {place === 'refused' && s?.refusedHipCm != null ? ` ${t.refused(size, lengthText(s.refusedHipCm, units))}` : ''}
+      {blocked ? ` ${t.adviceBlocked(size)}` : ''}
+      {!blocked && place === 'held' ? ` ${t.held(size)}` : ''}
+      {!blocked && place === 'between' && s?.refusedHipCm != null ? ` ${t.between(size, lengthText(s.refusedHipCm, units), rule)}` : ''}
+      {!blocked && place === 'refused' && s?.refusedHipCm != null ? ` ${t.refused(size, lengthText(s.refusedHipCm, units), rule)}` : ''}
       {` ${t.sizesAlike}`}
     </p>
   );

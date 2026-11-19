@@ -2,15 +2,24 @@
  * POM bundle (docs/research/step3-serverdrape-spike.md §10): the POM v2 drapes (§9) baked into a garment bundle the
  * embed's `@curtain/garment-viewer` loads (`drapeBake.ts`), and what survives of them on the device.
  *
- * Per size: base = the drape on the chart body t = 0 (AU 12), morph targets = the drapes on the other chart bodies
- * minus that base. The bodies are t = -1 and t = +1 (AU 8 and AU 16); where the wear rule refuses a combination (AU 8
- * on the AU 16 body: the band cannot be worn there, §9.2) the size's upper body is the nearest one it was draped on
- * (t = +0.5, AU 14), and the device holds the drape there beyond it. Positions are int16 on a QUANT_CM grid
- * (KHR_mesh_quantization), every view meshopt-compressed; no normals (the figure computes them), no texture: one plain
- * colour, the largest colour cluster of the photo texture (`--colour`).
+ * Which bodies each size is draped on (§10.9): the chart bodies t = -1, 0, +1 (AU 8, 12, 16) where the size can be
+ * worn there. A size is NOT draped, and the bake declares it `notDraped` with the reason, on a body
+ *   - whose widest part below the waist its band cannot be pulled over: the fit engine's own `pullOnCheck` (stretched
+ *     band from the tape; blocked when short by more than the allowance, 2.5 cm, 0 for an extrapolated band) against
+ *     the drawn avatar's widest section (`widestBelowWaistCm`, 2.5-3 cm over its chart hip), declared `rule: 'pull-on'`
+ *     so the import's bake check recomputes it. The 3D view then never dresses a body in a band that cannot go over it
+ *     (AU 8 from the AU 10 body, AU 10 from the AU 12 body, AU 12 from the AU 14 body, AU 14 and AU 16 on the AU 16
+ *     body); or
+ *   - where the wear rule cannot hold the band at the assumed level (§9.2: AU 8 on the AU 16 body).
+ * This is a product rule, not the fix of the stretched hip line those drapes showed: that stretch is in the drape's
+ * start shape (§10.9, `hoop_strain.py --start`). When the upper chart body is refused, the size's
+ * own chart body (t = -0.5 for AU 10, +0.5 for AU 14 and AU 16) stands in as its upper body, where it can be pulled on and a
+ * drape exists. Base = the size's drape nearest t = 0, morph targets = its other drapes minus that base. Positions
+ * are int16 on a QUANT_CM grid (KHR_mesh_quantization), every view meshopt-compressed; no normals (the figure computes
+ * them), no texture: one plain colour, the largest colour cluster of the photo texture (`--colour`).
  *
- * Measured here, on held-out bodies (t = -0.4, hip 100, waist 73.5, for every size; t = +0.5, hip 109, for AU 10-16,
- * where it lies between the AU 12 and AU 16 grid bodies; not measured: AU 8 between t = 0 and its last body t = 0.5):
+ * Measured here, on held-out bodies (t = -0.4, hip 100, waist 73.5; t = +0.5, hip 109), for every size draped there
+ * directly that the device draws there and that does not have that body in the bake:
  *   - the device blend (decoded from the written base.glb, `bakeWeights` + `blendBakedSize` of the viewer, then the
  *     viewer's push-out out of the drawn avatar) against the direct drape on that body: per-vertex RMS / p95 / max,
  *     and hulls at the body's hip, the knee and the hem edge, and the hem ring's path length (the folds);
@@ -24,10 +33,11 @@ import { gzipSync } from 'node:zlib';
 import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh } from '@curtain/mannequin';
 import { bodyField, buildAvatar } from '../../../../../packages/garment-viewer/src/body';
 import { makeCollider } from '../../../../../packages/garment-viewer/src/collide';
-import { DRAPE_BAKE_FORMAT, bakeAxis, bakeWeights, blendBakedSize, settleOnBody, type DrapeBakeMeta, type DrapeBakeSizeMeta, type SizeProvenance } from '../../../../../packages/garment-viewer/src/drapeBake';
+import { DRAPE_BAKE_FORMAT, bakeAxis, bakePlace, bakeWeights, blendBakedSize, settleOnBody, type DrapeBakeMeta, type DrapeBakeSizeMeta, type SizeProvenance } from '../../../../../packages/garment-viewer/src/drapeBake';
 import { readDrapeBake } from '../../../../../packages/garment-viewer/src/drapeBakeRead';
 import { writeDrapeBake } from '../../../../../packages/garment-viewer/src/drapeBakeWrite';
-import { chartBody, qaTape, restFromTrace, tapeRings, type RestJson } from './bakeTape';
+import { widestBelowWaistCm } from '../../../../../packages/garment-viewer/src/bodyGirth';
+import { chartBody, planSizeBodies, pullOnRefusal, qaTape, restFromTrace, tapeRings, type Refusal, type RestJson } from './bakeTape';
 import { girthAt } from './girth';
 
 const argv = process.argv.slice(2);
@@ -42,12 +52,18 @@ const CODEC = Number(opt('--codec', '1')); // meshopt vertex codec version (1: s
 const CLEARANCE_CM = 0.35; // the device drape's collider clearance (mount.ts / prepareFit)
 const SIZES = ['8', '10', '12', '14', '16'];
 const BASE_SIZE = '12';
-const GRID: { id: string; t: number }[] = [
+/** The chart bodies every size is draped on where it can be worn. */
+const CHART: { id: string; t: number }[] = [
   { id: 't-1.00', t: -1 },
   { id: 't+0.00', t: 0 },
-  { id: 't+0.50', t: 0.5 },
   { id: 't+1.00', t: 1 },
 ];
+/** The sizes' own chart bodies between them: a size's upper body where the chart body above it is refused. */
+const OWN: { id: string; t: number }[] = [
+  { id: 't-0.50', t: -0.5 },
+  { id: 't+0.50', t: 0.5 },
+];
+const gridId = (t: number): string => `t${t < 0 ? '-' : '+'}${Math.abs(t).toFixed(2)}`;
 
 interface BodyMeta { id: string; t: number; label: string; target: { bust?: number; waist?: number; hip?: number }; achieved: { hipCm: number; waistCm: number; hipY: number } }
 interface RestSize { size: string; provenance: SizeProvenance }
@@ -63,35 +79,52 @@ const has = (body: string, size: string): boolean => existsSync(path(body, size)
 const drape = (body: string, size: string): Float32Array => f32(path(body, size) + '.bin');
 const json = (body: string, size: string): DrapeJson | null => (existsSync(path(body, size) + '.json') ? (JSON.parse(readFileSync(path(body, size) + '.json', 'utf8')) as DrapeJson) : null);
 const bodyOf = (id: string): BodyMeta => bodies.find((b) => b.id === id)!;
+const mq = buildMannequin(bodyShape(BASE_SHAPE_ID));
+const mqMesh = buildMannequinMesh(mq, { head: 'neutral' });
 const r1 = (x: number): number => Math.round(x * 10) / 10;
 const r2 = (x: number): number => Math.round(x * 100) / 100;
 
 // ---- 1. Which bodies each size rests on. ----
-const plan: (DrapeBakeSizeMeta & { bodies: string[] })[] = SIZES.map((s) => {
-  if (!has('t+0.00', s)) throw new Error(`size ${s}: no drape on the base body t+0.00`);
-  const prov = rest.sizes.find((r) => r.size === s)!.provenance;
-  const notDraped: { t: number; reason: string }[] = [];
-  const lo = has('t-1.00', s) ? GRID[0]! : null;
-  let hi: { id: string; t: number } | null = null;
-  if (has('t+1.00', s)) hi = GRID[3]!;
-  else {
-    const j = json('t+1.00', s);
-    notDraped.push({ t: 1, reason: j?.status ?? 'not draped' });
-    if (has('t+0.50', s)) hi = GRID[2]!;
+/** The drawn body's widest girth below the waist (the device avatar of the chart body: what the band must pass over). */
+const widestOf = new Map<number, number>();
+const widestAt = (t: number): number => {
+  if (!widestOf.has(t)) {
+    const b = chartBody(t);
+    widestOf.set(t, widestBelowWaistCm(mq, buildAvatar(mq, mqMesh, { bust: b.bust, waist: b.waist, hip: b.hip }).mesh).girthCm);
   }
-  if (!lo) notDraped.push({ t: -1, reason: json('t-1.00', s)?.status ?? 'not draped' });
-  const others = [lo, hi].filter((g): g is { id: string; t: number } => !!g);
-  // t = +0.5 is a grid body of AU 8 only (it stands in for the refused t = +1); the other sizes blend across it, which
-  // the import's bake check allows. A body beyond a size's drapes must be declared (`notDraped`), as t = +1 is for AU 8.
+  return widestOf.get(t)!;
+};
+/** Why a size is not draped on a body (the band that cannot be pulled over it, the wear rule's refusal), or null. */
+function refusalOf(s: string, t: number): Refusal | null {
+  const why: string[] = [];
+  const j = json(gridId(t), s);
+  if (j && j.status !== undefined && j.status !== 'draped') why.push(`the wear rule cannot hold its band at the assumed level (${j.status})`);
+  const pull = pullOnRefusal((rest as RestJson).sizes.find((r) => r.size === s)!.tape['stretchedGirthCm']!, widestAt(t), chartBody(t).hip);
+  if (pull) why.unshift(pull.reason);
+  if (!why.length) return null;
+  return { reason: why.join('; '), ...(pull ? { rule: 'pull-on' as const } : {}) };
+}
+const plan: (DrapeBakeSizeMeta & { bodies: string[]; baseId: string })[] = SIZES.map((s) => {
+  const prov = rest.sizes.find((r) => r.size === s)!.provenance;
+  let p: ReturnType<typeof planSizeBodies>;
+  try {
+    p = planSizeBodies(CHART.map((g) => g.t), OWN.map((g) => g.t), (t) => refusalOf(s, t), (t) => has(gridId(t), s));
+  } catch (e) {
+    throw new Error(`size ${s}: ${e instanceof Error ? e.message : String(e)} (run serverdrape/pom-bundle.sh)`);
+  }
   // At rest by the simulation's own trace (pom2_measure.py's threshold); the bake check refuses a drape without it.
-  const drapes = [{ id: 't+0.00', t: 0 }, ...others].map((g) => {
-    const j = json(g.id, s);
+  const drapes = [p.baseT, ...p.targetT].map((t) => {
+    const j = json(gridId(t), s);
     const r = restFromTrace(j?.settleFull ?? j?.settle, j?.frames);
-    if (!r) throw new Error(`size ${s} on ${g.id}: the drape has no settle trace`);
-    return { t: g.t, ...r };
+    if (!r) throw new Error(`size ${s} on ${gridId(t)}: the drape has no settle trace`);
+    if (!r.atRest) console.error(`WARNING size ${s} on ${gridId(t)}: not at rest (largest ${r.maxMoveCmPerFrame} cm per frame over the last 24 of ${j?.frames} frames); re-drape it longer (body:size:frames in pom-bundle.sh)`);
+    return { t, ...r };
   });
-  return { size: s, baseT: 0, targetT: others.map((g) => g.t), provenance: prov, ...(notDraped.length ? { notDraped: notDraped.sort((a, b) => a.t - b.t) } : {}), drapes, bodies: others.map((g) => g.id) };
+  return { size: s, baseT: p.baseT, targetT: p.targetT, provenance: prov, ...(p.notDraped.length ? { notDraped: p.notDraped } : {}), drapes, bodies: p.targetT.map(gridId), baseId: gridId(p.baseT) };
 });
+/** The bodies of the bake: every body a size is draped on or declared not draped on. */
+const GRID = CHART.concat(OWN).filter((g) => plan.some((p) => p.baseT === g.t || p.targetT.includes(g.t) || p.notDraped?.some((n) => n.t === g.t))).sort((a, b) => a.t - b.t);
+const framesOf = [...new Set(plan.flatMap((p) => [p.baseId, ...p.bodies].map((id) => json(id, p.size)?.frames)))].sort((a, b) => (a ?? 0) - (b ?? 0));
 
 // ---- 2. Pack (the viewer package's writer; `drapeBake.ts` reads it). ----
 const meta: DrapeBakeMeta = {
@@ -101,8 +134,8 @@ const meta: DrapeBakeMeta = {
   quantStepCm: QUANT_CM,
   plainColourHex: COLOUR,
   plainColourSource: COLOUR_SOURCE,
-  sizes: plan.map(({ bodies: _b, ...m }) => m),
-  source: 'POM v2 (step3-serverdrape-spike.md §9-10): rest geometry from the shop tape, band placed 2 cm under the navel (ASSUMED level), gathered; Blender 4.2 cloth, 144 frames, on the device avatar (buildAvatar) of each chart body; ESTIMATE',
+  sizes: plan.map(({ bodies: _b, baseId: _i, ...m }) => m),
+  source: `POM v2 (step3-serverdrape-spike.md §9-10): rest geometry from the shop tape, band placed 2 cm under the navel (ASSUMED level), gathered; Blender 4.2 cloth, ${framesOf.join(' or ')} frames (longer where a drape had not come to rest), on the device avatar (buildAvatar) of each chart body; a size is not draped on a body whose hips its band cannot be pulled over; ESTIMATE`,
   // What the import's bake check reads: the drawn bodies (avatar-bodies.ts: the chart line) and the tape's rings.
   bodies: GRID.map((g) => chartBody(g.t)),
   tapeRings: tapeRings(rest),
@@ -110,7 +143,7 @@ const meta: DrapeBakeMeta = {
 const glb = await writeDrapeBake({
   meta,
   indices,
-  drapes: plan.map((p) => ({ size: p.size, base: drape('t+0.00', p.size), targets: p.bodies.map((b) => drape(b, p.size)), targetNames: p.bodies })),
+  drapes: plan.map((p) => ({ size: p.size, base: drape(p.baseId, p.size), targets: p.bodies.map((b) => drape(b, p.size)), targetNames: p.bodies })),
   generator: 'curtain bake-pom.ts',
   codec: CODEC,
 });
@@ -159,7 +192,7 @@ writeFileSync(join(outDir, 'qa.json'), JSON.stringify({
   meshHealth: { triangles: indices.length / 3, vertices: indices.reduce((m, v) => Math.max(m, v), 0) + 1 },
   // The tape the bake was built from (the shop did not state the hip distance: null), for the import's bake check.
   tape: qaTape(rest, null),
-  sizes: plan.map(({ bodies: _b, ...m }) => m),
+  sizes: plan.map(({ bodies: _b, baseId: _i, ...m }) => m),
 }, null, 1));
 
 // ---- 4. Measure the device path on held-out bodies (direct drapes the bake does not contain). ----
@@ -212,9 +245,11 @@ function measureOn(heldId: string, writeBlends: boolean): { body: Record<string,
   const perSize: Record<string, unknown> = {};
   for (const s of SIZES) {
     const bs = bake.sizes.get(s)!;
-    // A body that is one of this size's own drapes is not held out.
+    // A body that is one of this size's own drapes is not held out; a size the device does not draw there is not compared.
     if ([bs.baseT, ...bs.targetT].some((t) => Math.abs(t - tH) < 1e-6)) continue;
     if (!has(heldId, s)) continue;
+    const place = bakePlace(bs, tH);
+    if (place.place === 'refused') continue;
     const { weights, clamped } = bakeWeights(bs, tH);
     const blended = blendBakedSize(bs, weights);
     const polished = pushOut(blended);
@@ -223,8 +258,8 @@ function measureOn(heldId: string, writeBlends: boolean): { body: Record<string,
     const direct = directPushed.pos;
     perSize[s] = {
       provenance: bs.provenance,
-      bodies: { base: 0, targets: bs.targetT, weights: weights.map(r2), clamped, notDraped: bs.notDraped ?? [] },
-      quantisationErrorCm: dist(bs.base, drape('t+0.00', s)),
+      bodies: { base: bs.baseT, targets: bs.targetT, weights: weights.map(r2), clamped, place: place.place, notDraped: bs.notDraped ?? [] },
+      quantisationErrorCm: dist(bs.base, drape(plan.find((p) => p.size === s)!.baseId, s)),
       devicePushOut: { particles: polished.moved, maxCm: polished.maxCm, laidOnFloor: polished.floored },
       blend: measures(polished.pos),
       direct: measures(direct),
@@ -237,8 +272,8 @@ function measureOn(heldId: string, writeBlends: boolean): { body: Record<string,
   return { body: { id: heldId, t: r2(tH), ...H.target }, perSize };
 }
 const main = measureOn(HELD, true);
-// More held-out bodies where direct drapes exist (t = +0.5: between the AU 12 and AU 16 grid bodies for AU 10-16;
-// for AU 8 it is a grid body and is skipped).
+// More held-out bodies where direct drapes exist (t = +0.5, hip 109: between the AU 12 and AU 16 grid bodies for AU 16;
+// a grid body of AU 14, and AU 8-12 cannot be pulled on there).
 const more = ['t+0.50'].filter((id) => bodies.some((b) => b.id === id)).map((id) => measureOn(id, false)).filter((r) => Object.keys(r.perSize).length > 0);
 const report = {
   bundle: outDir,

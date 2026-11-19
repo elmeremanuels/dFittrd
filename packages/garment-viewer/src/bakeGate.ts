@@ -11,6 +11,10 @@
  *                       finite and as long as its tape length says (at least half of it hangs below the band);
  *   refusals_declared   every drawn body beyond a size's draped range is declared not draped, with a reason, and no
  *                       declared refusal sits between two drapes of the same size (the blend would draw through it);
+ *                       recomputed from the tape (the fit engine's `pullOnCheck`, the stretched band against the
+ *                       widest part of the drawn body below the waist, `bodyGirth.ts`): no size is draped on a body
+ *                       its band cannot be pulled over, and every refusal the bake states as `rule: 'pull-on'` holds
+ *                       (a refusal with another reason can only be required to say it);
  *   provenance          per size, measured / interpolated / extrapolated is the same in the tape, grading.json and the
  *                       bake, agrees with where each tape number came from, and an interpolated size lies between two
  *                       measured ones (extrapolated: outside them);
@@ -27,9 +31,11 @@
  * merchant still approves every asset (D13). Server and test side only: not exported from the package index, so the
  * embed's viewer chunk never carries it. Pure apart from the meshopt decoder's WebAssembly; no network, no shopper data.
  */
+import { pullOnCheck } from '@curtain/fit-engine';
 import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh, familyShape } from '@curtain/mannequin';
 import { BAKE_CHECK_IDS, BAKE_CHECK_LIMITS, bakeRingToleranceCm, MAX_GARMENT_BUNDLE_BYTES, type BakeCheckId, type BakeCheckReport, type BakeCheckResult, type BakeDrapeReading, type BakeTapeSize, type TapeProvenance } from '@curtain/schema';
 import { bodyField, buildAvatar, mannequinMeasurements, sanitiseMeasurements } from './body';
+import { widestBelowWaistCm } from './bodyGirth';
 import { makeCollider } from './collide';
 import { type DrapeBake, type DrapeBakeBody, type DrapeBakeRing } from './drapeBake';
 import { readDrapeBake } from './drapeBakeRead';
@@ -94,7 +100,7 @@ function bodyFieldFor(family: 'female' | 'male', body: DrapeBakeBody) {
   const m = buildMannequin(family === 'male' ? familyShape('male')! : bodyShape(BASE_SHAPE_ID));
   const meas = sanitiseMeasurements({ bust: body.bust, waist: body.waist, hip: body.hip }, mannequinMeasurements(m));
   const avatar = buildAvatar(m, buildMannequinMesh(m, { head: 'neutral' }), meas);
-  return { field: bodyField(m, avatar), meas };
+  return { field: bodyField(m, avatar), meas, widestCm: widestBelowWaistCm(m, avatar.mesh).girthCm };
 }
 
 /** Particles deeper than `tolCm` inside the body (moved out by the collider with no clearance), and the deepest, cm. */
@@ -196,6 +202,29 @@ export async function checkDrapeBake(input: BakeGateInput): Promise<BakeCheckRep
   // ---- refusals_declared ----
   const refusals: string[] = [];
   const allT = [...bodyAt.keys()].sort((a, b) => a - b);
+  const family = input.anchors.mannequin?.family === 'male' ? 'male' : 'female';
+  const drawn = new Map(bodies.map((b) => [b.t, bodyFieldFor(family, b)]));
+  for (const s of meta.sizes) {
+    // The band against the drawn bodies, as the size advice reads it (stretched girth and its provenance).
+    const ts = tapeSizes.find((x) => x.size === s.size);
+    const band = ts ? { cm: ts.tape.stretchedGirthCm.cm, provenance: ts.tape.stretchedGirthCm.source } : null;
+    const pullOnAt = (t: number) => {
+      const w = drawn.get(t)?.widestCm;
+      return band && w !== undefined && Number.isFinite(w) ? { ...pullOnCheck(band, w), widestCm: w } : null;
+    };
+    const bandText = (p: { bandStretchedCm: number; widestCm: number; marginCm: number; allowanceCm: number }): string =>
+      `its band at full stretch is ${cm(p.bandStretchedCm)} against that body’s ${cm(p.widestCm)} at its widest below the waist (${p.marginCm < 0 ? `${cm(-p.marginCm)} short` : `${cm(p.marginCm)} to spare`}; the size advice allows ${cm(p.allowanceCm)} short)`;
+    for (const t of [s.baseT, ...s.targetT]) {
+      const p = pullOnAt(t);
+      if (p?.status === 'blocked') refusals.push(`size ${s.size} is draped on the body with ${cm(hipOf(t))} hips, but ${bandText(p)}: the band cannot be pulled over it`);
+    }
+    for (const n of s.notDraped ?? []) {
+      if (n.rule !== 'pull-on') continue;
+      const p = pullOnAt(n.t);
+      if (!p) refusals.push(`size ${s.size} is refused on the body with ${cm(hipOf(n.t))} hips because its band cannot be pulled over it, but the tape states no stretched band to check that with`);
+      else if (p.status !== 'blocked') refusals.push(`size ${s.size} is refused on the body with ${cm(hipOf(n.t))} hips because its band cannot be pulled over it, but ${bandText(p)}: it can`);
+    }
+  }
   for (const s of meta.sizes) {
     const draped = [s.baseT, ...s.targetT];
     const refused = s.notDraped ?? [];
@@ -248,10 +277,9 @@ export async function checkDrapeBake(input: BakeGateInput): Promise<BakeCheckRep
   const ringMisses: { size: string; name: string; t: number; got: number; want: number }[] = [];
   const insideReasons: string[] = [];
   const readings: BakeDrapeReading[] = [];
-  const family = input.anchors.mannequin?.family === 'male' ? 'male' : 'female';
   const colliders = new Map<number, (pos: Float32Array, i: number) => boolean>();
   for (const b of bodies) {
-    const { field, meas } = bodyFieldFor(family, b);
+    const { field, meas } = drawn.get(b.t)!;
     if (Math.abs(meas.hip - b.hip) > 0.01 || Math.abs(meas.waist - b.waist) > 0.01 || Math.abs(meas.bust - b.bust) > 0.01) insideReasons.push(`the body with ${cm(b.hip)} hips is outside the girths the phone can draw`);
     colliders.set(b.t, makeCollider(field, 0));
   }

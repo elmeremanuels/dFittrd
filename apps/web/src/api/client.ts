@@ -19,6 +19,8 @@ import type {
   HeroRenderAccepted,
   HeroRenderRequest,
   HeroRenderStatus,
+  RealismRequest,
+  RealismResponse,
   LedgerListResponse,
   MeDeleteResponse,
   MeExportResponse,
@@ -417,6 +419,10 @@ export class ApiClient {
   }
   heroRenderStatus(jobId: string): Promise<HeroRenderStatus> {
     return this.request('GET', `/v1/renders/${encodeURIComponent(jobId)}`);
+  }
+  /** AI realism layer (D22): the 3D view's render passes only (`passes.kind` is 'renderPasses'); never a photo. */
+  requestRealism(req: RealismRequest): Promise<RealismResponse> {
+    return this.request('POST', '/v1/renders/realism', req);
   }
 
   // ---------------------------------------------------------------------------

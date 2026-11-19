@@ -435,6 +435,19 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
               onRequiredState={(state) => (state === 'settled' ? setView3dReady(true) : dispatch({ type: 'comingSoon' }))}
               {...(deps.webgl2 ? { webgl2: deps.webgl2 } : {})}
               {...(deps.loadViewer ? { loadViewer: deps.loadViewer } : {})}
+              aiRealism={
+                data.aiRealism && !mock
+                  ? {
+                      garmentName: data.garment.name,
+                      ids: { productId: data.garment.id, shopId: data.shop.id },
+                      request: (req) => {
+                        const client = api();
+                        if (!client.requestRealism) throw new Error('realism unavailable');
+                        return client.requestRealism(req);
+                      },
+                    }
+                  : null
+              }
               onSelect={(s) => {
                 setSelected(s);
                 setChosen(null);

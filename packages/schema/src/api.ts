@@ -232,6 +232,11 @@ export const TryResolveResponseSchema = z.object({
    * for every other product (and whenever the gate is off): the overlay behaves as before.
    */
   requires3d: z.literal(true).optional(),
+  /**
+   * D22 (AI realism layer): `true` only when the server flag `AI_REALISM` is on and the product has
+   * a 3D asset. The embed then offers the "AI-enhanced estimate" next to the 3D view. Absent: nothing changes.
+   */
+  aiRealism: z.literal(true).optional(),
 });
 export type TryResolveResponse = z.infer<typeof TryResolveResponseSchema>;
 
@@ -836,3 +841,80 @@ export const AnalyticsAbandonedResponseSchema = z.object({
   ),
 });
 export type AnalyticsAbandonedResponse = z.infer<typeof AnalyticsAbandonedResponseSchema>;
+
+// ---- AI realism layer (D22, docs/research/ai-realism-layer.md) -------------------------------
+
+/** Label code of every AI-enhanced image (hard rule 3); the words live in the client catalogues (D21). */
+export const AI_ENHANCED_LABEL = 'ai-enhanced-estimate' as const;
+
+const pngBase64 = z.string().min(16).max(4 * 1024 * 1024).regex(/^[A-Za-z0-9+/]+={0,2}$/, 'base64 PNG');
+
+/**
+ * POST /v1/renders/realism. The 3D view's render passes (packages/garment-viewer `exportPasses`)
+ * and nothing else: there is no person, photo or face field, and unknown keys are refused
+ * (`strictObject`), so a photo cannot ride along under another name (AGENTS.md hard rule 1).
+ */
+export const RealismRequestSchema = z.strictObject({
+  productId: z.string().min(1).max(128),
+  shopId: uuid,
+  size: z.string().min(1).max(16),
+  passes: z.strictObject({
+    kind: z.literal('renderPasses'),
+    width: z.number().int().min(256).max(1024),
+    height: z.number().int().min(256).max(1536),
+    colourPng: pngBase64,
+    depthPng: pngBase64,
+    normalPng: pngBase64,
+    garmentMaskPng: pngBase64,
+    figureMaskPng: pngBase64,
+    neighbour: z.strictObject({ size: z.string().min(1).max(16), garmentMaskPng: pngBase64 }).optional(),
+    meta: z.strictObject({
+      statureCm: z.number().min(50).max(250),
+      waistRow: z.number().int().min(0).max(1536),
+      hipRow: z.number().int().min(0).max(1536),
+      backdropHex: HexColorSchema,
+      garmentHex: HexColorSchema,
+    }),
+  }),
+  consent: z.strictObject({ tier: z.literal('heroOptIn'), ack: z.literal(true), acknowledgedAt: isoDate }),
+});
+export type RealismRequest = z.infer<typeof RealismRequestSchema>;
+
+export const REALISM_REFUSAL_REASONS = ['not_a_render', 'dimensions', 'unverifiable', 'silhouette', 'garment_outline', 'colour', 'hem', 'waist', 'width', 'size_difference', 'provider'] as const;
+export type RealismRefusalReason = (typeof REALISM_REFUSAL_REASONS)[number];
+
+export const RealismMetricsSchema = z.object({
+  silhouetteIoU: z.number(),
+  garmentIoU: z.number(),
+  colourDeltaE00: z.number(),
+  hemShiftCm: z.number(),
+  waistShiftCm: z.number(),
+  waistWidthDeltaCm: z.number(),
+  hipWidthDeltaCm: z.number(),
+  sizeSeparation: z.object({ neighbour: z.string(), visible: z.boolean(), ok: z.boolean() }).nullable(),
+});
+export type RealismMetrics = z.infer<typeof RealismMetricsSchema>;
+
+/** 200 from POST /v1/renders/realism: the checked image inline (nothing is stored), or a refusal. Always labelled. */
+export const RealismResponseSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('ok'),
+    mimeType: z.literal('image/png'),
+    imageBase64: z.string().min(16),
+    width: z.number().int(),
+    height: z.number().int(),
+    label: z.literal(AI_ENHANCED_LABEL),
+    disclaimer: z.string().min(1),
+    provider: z.string().max(64),
+    model: z.string().max(64),
+    metrics: RealismMetricsSchema,
+  }),
+  z.object({
+    status: z.literal('refused'),
+    reasons: z.array(z.enum(REALISM_REFUSAL_REASONS)).min(1),
+    label: z.literal(AI_ENHANCED_LABEL),
+    disclaimer: z.string().min(1),
+    metrics: RealismMetricsSchema.nullable(),
+  }),
+]);
+export type RealismResponse = z.infer<typeof RealismResponseSchema>;

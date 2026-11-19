@@ -36,6 +36,8 @@ import { garmentBodyFamily, type GarmentAssetRef, type GarmentPayload, type User
 import { EstimateBadge } from '@/components/EstimateBadge';
 import { ringInputsFor } from '@/render/ringInputs';
 import { ringOverlayFor } from '@/render/rings';
+import { AiRealismPanel, type AiRealismProps } from './AiRealism';
+import type { ExportedPasses } from './realism';
 import { embedStrings, type EmbedCatalogue } from './strings';
 import { lengthText, type Units } from './units';
 
@@ -74,7 +76,7 @@ export type ViewerSource =
   | { kind: 'device' }
   | { kind: 'bake'; plainColour: boolean; sizes: Record<string, { provenance: 'measured' | 'interpolated' | 'extrapolated'; place: 'within' | 'held' | 'between' | 'refused'; refusedHipCm: number | null }> };
 /** The viewer contract of the avatar slices; optional, so this file builds against a viewer without it. */
-type View = Omit<BaseView, 'source'> & { setLook?: (look: ViewerLook) => void; source?: ViewerSource };
+type View = Omit<BaseView, 'source' | 'exportPasses'> & { setLook?: (look: ViewerLook) => void; source?: ViewerSource; exportPasses?: (o?: { neighbour?: string | null }) => ExportedPasses | null };
 type MountOptionsWithLook = Omit<BaseMountOptions, 'look' | 'lighting'> & { look?: ViewerLook; lighting?: ViewerLighting };
 
 /**
@@ -125,6 +127,11 @@ export interface Garment3DProps {
   /** Lighting and head of the 3D view (default: the build flags, else today's look). */
   lighting?: ViewerLighting;
   head?: ViewerHead | null;
+  /**
+   * D22: the "AI-enhanced estimate" next to the 3D view, only when the server flag is on (`aiRealism`
+   * from GET /v1/try) and the api client can send it. Absent or null: nothing changes.
+   */
+  aiRealism?: Omit<AiRealismProps, 'exportPasses' | 'size'> | null;
   /** Tests inject these; the app uses the real chunk and the real check. */
   loadViewer?: () => Promise<ViewerModule>;
   webgl2?: () => boolean;
@@ -135,12 +142,13 @@ export const REQUIRED_3D_TIMEOUT_MS = 30_000;
 
 type Phase = 'idle' | 'loading' | 'draping' | 'settled' | 'failed';
 
-export function Garment3D({ asset, paused, garment, fit, size, recommended, measurements, units = 'metric', heightCm, estimated = [], skinHex = null, onSelect, required = false, onRequiredState, requiredTimeoutMs = REQUIRED_3D_TIMEOUT_MS, lighting = viewerLightingFlag(), head = viewerHeadFlag(), loadViewer = () => import('@curtain/garment-viewer'), webgl2 = hasWebGL2 }: Garment3DProps): ReactNode {
+export function Garment3D({ asset, paused, garment, fit, size, recommended, measurements, units = 'metric', heightCm, estimated = [], skinHex = null, onSelect, required = false, onRequiredState, requiredTimeoutMs = REQUIRED_3D_TIMEOUT_MS, lighting = viewerLightingFlag(), head = viewerHeadFlag(), aiRealism = null, loadViewer = () => import('@curtain/garment-viewer'), webgl2 = hasWebGL2 }: Garment3DProps): ReactNode {
   const [supported] = useState(() => !!asset && webgl2());
   const usable = !!asset && !paused && supported;
   const [open, setOpen] = useState(required && usable);
   const [phase, setPhase] = useState<Phase>(required && usable ? 'loading' : 'idle');
   const [source, setSource] = useState<ViewerSource | null>(null);
+  const [canExport, setCanExport] = useState(false);
   const onRequiredRef = useRef(onRequiredState);
   useEffect(() => {
     onRequiredRef.current = onRequiredState;
@@ -208,6 +216,7 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
         else {
           viewRef.current = view;
           setSource(view.source ?? null);
+          setCanExport(typeof view.exportPasses === 'function');
           // The colour may have changed while the bundle loaded.
           if ((options.look?.skinHex ?? null) !== skinRef.current && typeof view.setLook === 'function') view.setLook({ skinHex: skinRef.current ?? undefined });
         }
@@ -220,6 +229,7 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
       viewRef.current?.dispose();
       viewRef.current = null;
       setSource(null);
+      setCanExport(false);
     };
     // The bundle, garment, fit and body are fixed for one open; size changes go through setSize.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -281,6 +291,9 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
           <EstimateBadge className="pointer-events-none absolute top-2 right-2 text-[10px]" />
         </div>
       )}
+      {aiRealism && phase === 'settled' && canExport ? (
+        <AiRealismPanel key={size} {...aiRealism} size={size} exportPasses={() => viewRef.current?.exportPasses?.() ?? null} />
+      ) : null}
       {sizes.length > 1 && phase !== 'failed' ? (
         <div className="mt-2 flex flex-wrap gap-1.5" role="radiogroup" aria-label={t.sizes}>
           {sizes.map((s) => (

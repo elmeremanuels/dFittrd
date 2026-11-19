@@ -60,3 +60,5 @@ export { GrokVideoProvider, GROK_VIDEO_MODEL, GROK_VIDEO_USD_PER_SECOND, XAI_BAS
 export type { GrokVideoProviderConfig, UploadTarget } from './providers/grokVideo.js';
 export { MockProvider, MOCK_STAMP, stampEstimate } from './providers/mock.js';
 export type { MockProviderConfig } from './providers/mock.js';
+// AI realism layer (D22): render passes of the 3D view → realistic image, checked against the estimate.
+export * from './realism/index.js';

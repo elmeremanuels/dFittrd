@@ -270,6 +270,20 @@ export interface EmbedCatalogue {
     failed: string;
     slow: string;
   };
+  realism: {
+    /** The label on every AI image (hard rule 3). */
+    label: string;
+    title: string;
+    explain: string;
+    consent: string;
+    start: (size: string) => string;
+    working: string;
+    alt: (garment: string, size: string) => string;
+    caption: string;
+    refused: string;
+    reason: (code: string) => string;
+    failed: string;
+  };
   view3d: {
     label: string;
     open: string;
@@ -577,6 +591,30 @@ export const EN: EmbedCatalogue = {
     start: (size) => `See size ${size} on me`,
     failed: 'The render did not finish.',
     slow: 'The render is taking too long. Try again later.',
+  },
+  realism: {
+    label: 'AI-enhanced estimate',
+    title: 'Make it look real',
+    explain: 'We send the 3D drawing above (not a photo of you) to our image partner, who makes it look like a photo. We check that the length, the fit and the colour stayed the same as in 3D, or we do not show it. Nothing is kept.',
+    consent: 'I agree to send the 3D drawing for one picture.',
+    start: (size) => `Make size ${size} look real`,
+    working: 'Making the picture…',
+    alt: (garment, size) => `AI-enhanced estimate of ${garment} in size ${size}, made from the 3D estimate`,
+    caption: 'AI-enhanced estimate, made from the 3D estimate. It is not a photo of you and not a photo of the garment on a person.',
+    refused: 'We did not show the picture: it changed the garment compared with the 3D estimate.',
+    reason: (code) =>
+      ({
+        hem: 'The length moved.',
+        waist: 'The waist moved.',
+        width: 'The fit changed.',
+        colour: 'The colour changed.',
+        silhouette: 'The outline changed.',
+        garment_outline: 'The outline of the garment changed.',
+        size_difference: 'It no longer looked like this size.',
+        unverifiable: 'We could not check this garment’s colour.',
+        provider: 'The image partner did not answer.',
+      })[code] ?? 'It did not pass our checks.',
+    failed: 'The picture could not be made. The 3D estimate above is unchanged.',
   },
   view3d: {
     label: '3D estimate',

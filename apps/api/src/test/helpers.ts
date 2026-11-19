@@ -1,5 +1,5 @@
 /** Test harness: PGlite + MemoryQueue + MockProvider; every suite gets a fresh database. */
-import { MockProvider, TryOnRouter, type TryOnProvider } from '@curtain/tryon-providers';
+import { MockProvider, TryOnRouter, type RealismProvider, type TryOnProvider } from '@curtain/tryon-providers';
 import { build, type App } from '../app.js';
 import { connectPglite, type DbHandle } from '../db/client.js';
 import { testEnv, type Env } from '../env.js';
@@ -51,7 +51,7 @@ export const testLookup: LookupLike = async (hostname) => {
   return [{ address: '93.184.216.34', family: 4 }];
 };
 
-export async function makeApp(envOverrides: Record<string, string> = {}, opts: { providers?: TryOnProvider[]; now?: () => Date } = {}): Promise<TestApp> {
+export async function makeApp(envOverrides: Record<string, string> = {}, opts: { providers?: TryOnProvider[]; now?: () => Date; realism?: RealismProvider } = {}): Promise<TestApp> {
   const env = testEnv(envOverrides);
   const handle = await connectPglite();
   await handle.migrate();
@@ -59,7 +59,7 @@ export async function makeApp(envOverrides: Record<string, string> = {}, opts: {
   const fetchMock = new FetchMock();
   const providers = opts.providers ?? [new MockProvider({ video: true, latencyMs: 1 })];
   const tryon = new TryOnRouter({ providers, policy: { order: providers.map((p) => p.name), maxCostUsd: 1 } });
-  const app = await build({ env, db: handle.db, queue, fetch: fetchMock.fetch, lookup: testLookup, tryon, ...(opts.now ? { now: opts.now } : {}) });
+  const app = await build({ env, db: handle.db, queue, fetch: fetchMock.fetch, lookup: testLookup, tryon, ...(opts.now ? { now: opts.now } : {}), ...(opts.realism ? { realism: opts.realism } : {}) });
   await app.ready();
   await queue.start({ work: false });
   return {

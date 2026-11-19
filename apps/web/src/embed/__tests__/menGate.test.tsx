@@ -73,7 +73,7 @@ function expectNoFigureAndNoSize(): void {
   for (const id of ['embed-result', 'recommended-size', 'garment-layer', 'fit-points', 'garment3d', 'garment3d-open', 'see-my-size', 'choose-size', 'requires3d-pending', 'requires3d-shown']) {
     expect(screen.queryByTestId(id)).not.toBeInTheDocument();
   }
-  expect(document.querySelector('svg[data-testid="avatar"], canvas')).toBeNull();
+  expect(document.querySelector('svg[data-testid="avatar"], canvas, [data-testid="mirror"], [data-figure]')).toBeNull();
   expect(screen.queryByLabelText(/^Height/)).not.toBeInTheDocument();
 }
 
@@ -185,6 +185,11 @@ describe("men's gate in the overlay", () => {
     expect(shown.firstElementChild).not.toHaveClass('invisible');
     expect(screen.getByTestId('garment3d-canvas')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Close the 3D view' })).not.toBeInTheDocument(); // cannot fall back to the 2D figure alone
+    // Slice M1b: the 2D figure beside the male 3D body is the male figure, with its estimate label.
+    const figure = screen.getByTestId('mirror');
+    expect(figure.querySelector('svg')).toHaveAttribute('data-figure', 'male');
+    expect(figure.querySelector('[data-testid="neutral-face"]')).toBeInTheDocument();
+    expect(figure.querySelector('[data-testid="estimate-label"]')).toBeInTheDocument();
     await waitFor(() => expect(api.fitShown).toHaveBeenCalledTimes(1));
     expect(mountGarmentView).toHaveBeenCalledTimes(1);
   });
@@ -195,6 +200,8 @@ describe("men's gate in the overlay", () => {
     await fillAbout(user);
     expect(await screen.findByTestId('embed-result')).toBeInTheDocument();
     expect(screen.getByTestId('garment-layer')).toBeInTheDocument();
+    // Slice M1b: without a required 3D view the male figure is never drawn (D20 point 3).
+    expect(document.querySelector('[data-figure]')).toBeNull();
     expect(screen.queryByTestId('requires3d-pending')).not.toBeInTheDocument();
     expect(screen.queryByTestId('requires3d-shown')).not.toBeInTheDocument();
     await waitFor(() => expect(men.api.fitShown).toHaveBeenCalledTimes(1));
@@ -206,6 +213,7 @@ describe("men's gate in the overlay", () => {
     await user.click(screen.getByTestId('see-my-size'));
     expect(await screen.findByTestId('embed-result')).toBeInTheDocument();
     expect(screen.getByTestId('garment3d-open')).toHaveTextContent('See it in 3D (estimate)'); // still opt-in
+    expect(document.querySelector('[data-figure]')).toBeNull();
     expect(screen.queryByTestId('blocked-comingSoon')).not.toBeInTheDocument();
     await waitFor(() => expect(women.api.fitShown).toHaveBeenCalledTimes(1));
   });

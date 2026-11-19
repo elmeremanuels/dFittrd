@@ -17,7 +17,7 @@
 import { easeTargetFor, fitGapsForRender, isPointFit, type Band, type FitResult, type Point, type PointFit, type SizeFit } from '@curtain/fit-engine';
 import type { GarmentPayload, UserBody } from '@curtain/schema';
 import { cmToIn, type Units } from '@/embed/units';
-import { bodyGeometry, garmentGeometry, halfWidthFromGirth, HEM_DEPTH, levelY, MAX_RING_RX, type BodyGeometry } from './body';
+import { bodyGeometry, figureY, garmentGeometry, halfWidthFromGirth, HEM_DEPTH, MAX_RING_RX, type BodyGeometry, type FigureFamily } from './body';
 import { bandSweep, joinSizes, sourceAt, sourceSentence, SOURCE_WORD, type GarmentRingInputs, type RingSource } from './ringInputs';
 
 export type RingKey = 'bust' | 'waist' | 'hip' | 'hem';
@@ -145,10 +145,15 @@ function youText(bodyCm: number, units: Units, estimated: boolean): string {
   return estimated ? `you about ${roomLength(bodyCm, units)} (estimated from your height and weight)` : `you ${roomLength(bodyCm, units)}`;
 }
 
-function ringY(key: RingKey, category: GarmentPayload['category'], hemY: number | null | undefined): number | null {
+function ringY(key: RingKey, category: GarmentPayload['category'], hemY: number | null | undefined, body: BodyGeometry): number | null {
   if (key === 'hem') return hemY ?? null;
-  if (key === 'waist') return levelY('waist') + (category === 'bottom' ? 2 : 0);
-  return levelY(key);
+  if (key === 'waist') return figureY(body, 'waist') + (category === 'bottom' ? 2 : 0);
+  return figureY(body, key);
+}
+
+/** Depth / width of a ring: the male figure's own ratios at the chest, waist and seat (the body is drawn with them). */
+function depthOf(key: RingKey, body: BodyGeometry): number {
+  return key !== 'hem' && body.aspects ? body.aspects[key] : DEPTH[key];
 }
 
 function bodyHalf(key: Exclude<RingKey, 'hem'>, g: BodyGeometry): number {
@@ -166,7 +171,7 @@ function ringsFor(input: RingOverlayInput, sizeFit: SizeFit): Ring[] {
   const elastic = (garment.stretchZones ?? []).includes('waistband');
   for (const key of keys) {
     if (key === 'hem') continue;
-    const y = ringY(key, garment.category, hemY);
+    const y = ringY(key, garment.category, hemY, body);
     if (y === null) continue;
     const pf = sizeFit.points.find((p): p is PointFit => isPointFit(p) && p.point === key);
     const skipped = fit.skippedPoints.find((s) => s.point === key);
@@ -175,13 +180,13 @@ function ringsFor(input: RingOverlayInput, sizeFit: SizeFit): Ring[] {
     const est = estimated.includes(key);
     if (pf) {
       const room = Math.round((pf.chartCm - pf.bodyCm) * 10) / 10;
-      const rx = Math.min(MAX_RX, halfWidthFromGirth(pf.chartCm, ppc, DEPTH[key]));
+      const rx = Math.min(MAX_RX, halfWidthFromGirth(pf.chartCm, ppc, depthOf(key, body)));
       ring = {
         key, size: sizeFit.size, y, rx, ry: Math.max(2.5, rx * TILT), bodyRx,
         garmentCm: pf.chartCm, bodyCm: pf.bodyCm, roomCm: room, band: pf.band, source: 'chart',
         basis: bodyChart ? 'body-chart+ease' : 'garment', bodyEstimated: est,
         chip: [BAND_WORD[pf.band], roomText(room, units, est)],
-        text: `${label(key)}: ${BAND_WORD[pf.band].toLowerCase()}, ${roomText(room, units, est)} (${girthText(pf.chartCm, bodyChart, units)}, ${youText(pf.bodyCm, units, est)})`,
+        text: `${label(key, body)}: ${BAND_WORD[pf.band].toLowerCase()}, ${roomText(room, units, est)} (${girthText(pf.chartCm, bodyChart, units)}, ${youText(pf.bodyCm, units, est)})`,
       };
     } else if (skipped && row) {
       // The engine does not score this point for the cut (e.g. an A-line hip): no tight / loose word.
@@ -191,7 +196,7 @@ function ringsFor(input: RingOverlayInput, sizeFit: SizeFit): Ring[] {
       if (tapeCm !== undefined && inputs?.hip) {
         // The garment's own hip girth from the tape: drawn as it is, room is plain arithmetic.
         const src = sourceAt(inputs.hip, sizeFit.size);
-        const rx = Math.min(MAX_RX, halfWidthFromGirth(tapeCm, ppc, DEPTH[key]));
+        const rx = Math.min(MAX_RX, halfWidthFromGirth(tapeCm, ppc, depthOf(key, body)));
         const room = bodyCm !== undefined ? Math.round((tapeCm - bodyCm) * 10) / 10 : null;
         const where = inputs.hip.belowBandCm != null ? `${roomLength(inputs.hip.belowBandCm, units)} below the band` : 'at its hip line';
         ring = {
@@ -199,21 +204,21 @@ function ringsFor(input: RingOverlayInput, sizeFit: SizeFit): Ring[] {
           garmentCm: tapeCm, bodyCm: bodyCm ?? null, roomCm: room, band: null, source: src, basis: 'garment', bodyEstimated: est,
           chip: ['Hips', room !== null ? roomText(room, units, est) : `${tapeLength(tapeCm, units)} around`],
           chipNote: `${/skirt/.test(garment.subcategory ?? '') ? 'skirt' : 'garment'} ${tapeLength(tapeCm, units)} ${SOURCE_WORD[src]}`,
-          text: `${label(key)}: the garment is ${tapeLength(tapeCm, units)} around ${where} (${sourceSentence(src, inputs.measuredSizes)})${room !== null ? `, ${youText(bodyCm!, units, est)}: ${roomText(room, units, est)}` : ''}; no tight or loose word, ${skipped.label}`,
+          text: `${label(key, body)}: the garment is ${tapeLength(tapeCm, units)} around ${where} (${sourceSentence(src, inputs.measuredSizes)})${room !== null ? `, ${youText(bodyCm!, units, est)}: ${roomText(room, units, est)}` : ''}; no tight or loose word, ${skipped.label}`,
         };
       } else if (raw !== undefined) {
         // No tape: draw the chart girth and say why it is not checked.
         // The engine's own designed-ease rule (garment ease, then block, then category), not a copy.
         const ease = bodyChart ? (easeTargetFor({ ...garment, id: '', brand: '', fabric: { stretchPct: 0 } }, key as Point) ?? 0) : 0;
         const garmentCm = Math.round((raw + ease) * 10) / 10;
-        const rx = Math.min(MAX_RX, halfWidthFromGirth(garmentCm, ppc, DEPTH[key]));
+        const rx = Math.min(MAX_RX, halfWidthFromGirth(garmentCm, ppc, depthOf(key, body)));
         const room = bodyCm !== undefined ? Math.round((garmentCm - bodyCm) * 10) / 10 : null;
         ring = {
           key, size: sizeFit.size, y, rx, ry: Math.max(2.5, rx * TILT), bodyRx,
           garmentCm, bodyCm: bodyCm ?? null, roomCm: room, band: null, source: 'chart',
           basis: bodyChart ? 'body-chart+ease' : 'garment', bodyEstimated: est,
           chip: ['Not checked', room !== null ? roomText(room, units, est) : skipped.label],
-          text: `${label(key)}: not checked, ${skipped.label}${room !== null ? ` (${roomText(room, units, est)} by the size chart: ${girthText(garmentCm, bodyChart, units)}, ${youText(bodyCm!, units, est)})` : ''}`,
+          text: `${label(key, body)}: not checked, ${skipped.label}${room !== null ? ` (${roomText(room, units, est)} by the size chart: ${girthText(garmentCm, bodyChart, units)}, ${youText(bodyCm!, units, est)})` : ''}`,
         };
       }
     }
@@ -231,8 +236,8 @@ function ringsFor(input: RingOverlayInput, sizeFit: SizeFit): Ring[] {
         ring.stretch = {
           relaxedCm: relaxed,
           stretchedCm: stretched,
-          relaxedRx: Math.min(MAX_RX, halfWidthFromGirth(relaxed, ppc, DEPTH.waist)),
-          stretchedRx: Math.min(MAX_RX, halfWidthFromGirth(stretched, ppc, DEPTH.waist)),
+          relaxedRx: Math.min(MAX_RX, halfWidthFromGirth(relaxed, ppc, depthOf('waist', body))),
+          stretchedRx: Math.min(MAX_RX, halfWidthFromGirth(stretched, ppc, depthOf('waist', body))),
           source: bandSource,
         };
         // The engine's word stays; the room figure (chart + designed ease minus body) would sit right above a
@@ -266,7 +271,7 @@ function ringsFor(input: RingOverlayInput, sizeFit: SizeFit): Ring[] {
     out.push(ring);
   }
   const sweep = inputs?.hem?.sweepCm[sizeFit.size];
-  const y = ringY('hem', garment.category, hemY);
+  const y = ringY('hem', garment.category, hemY, body);
   if (inputs?.hem && sweep !== undefined && y !== null) {
     const full = halfWidthFromGirth(sweep, ppc, DEPTH.hem);
     const rx = Math.min(MAX_RX, full);
@@ -303,7 +308,8 @@ function sourceNote(source: RingSource, size: string, measuredSizes: readonly st
   }
 }
 
-function label(key: RingKey): string {
+function label(key: RingKey, body?: Pick<BodyGeometry, 'family'>): string {
+  if (key === 'bust' && body?.family === 'male') return 'Chest';
   return key === 'bust' ? 'Bust' : key === 'waist' ? 'Waist' : key === 'hip' ? 'Hips' : 'Hem';
 }
 
@@ -326,7 +332,7 @@ export function ringOverlay(input: RingOverlayInput): RingOverlay | null {
   const bodyChart = garment.sizeChartType === 'body';
   // Which rings are size-chart girths: all of them without garment inputs; with a tape or an assumed
   // input the hip and hem rings are the garment's own girths, and the first sentence must not cover them.
-  const chartRings = selected.rings.filter((r) => r.source === 'chart').map((r) => label(r.key).toLowerCase());
+  const chartRings = selected.rings.filter((r) => r.source === 'chart').map((r) => label(r.key, input.body).toLowerCase());
   const allChart = chartRings.length === selected.rings.length;
   const which = allChart ? 'Rings show' : chartRings.length === 1 ? `The ${chartRings[0]} ring shows` : `The ${joinSizes(chartRings)} rings show`;
   const one = !allChart && chartRings.length === 1;
@@ -378,14 +384,16 @@ export interface RingOverlayForInput {
   inputs?: GarmentRingInputs | null;
   units?: Units;
   estimated?: readonly string[];
+  /** The figure the rings are drawn on (AvatarView's `family`). */
+  family?: FigureFamily;
 }
 
 /**
  * `ringOverlay` on the same figure AvatarView draws: the body from the shopper's measurements and
  * the hem where the 2D garment's hem is drawn for that size.
  */
-export function ringOverlayFor({ garment, fit, size, measurements, heightCm, inputs = null, units = 'metric', estimated = [] }: RingOverlayForInput): RingOverlay | null {
-  const body = bodyGeometry(measurements, heightCm);
+export function ringOverlayFor({ garment, fit, size, measurements, heightCm, inputs = null, units = 'metric', estimated = [], family = 'female' }: RingOverlayForInput): RingOverlay | null {
+  const body = bodyGeometry(measurements, heightCm, family);
   const hemY = garmentGeometry({ garment, gaps: fitGapsForRender(fit, size), body, hemSweepCm: inputs?.hem?.sweepCm[size] ?? null }).hemY;
   return ringOverlay({ garment, fit, size, body, measurements, inputs, hemY, units, estimated });
 }

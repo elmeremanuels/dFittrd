@@ -3,7 +3,7 @@ import { useId, useMemo, type ReactNode } from 'react';
 import type { FitResult } from '@curtain/fit-engine';
 import { fitGapsForRender } from '@curtain/fit-engine';
 import { ESTIMATE_DISCLAIMER, type GarmentPayload, type UserBody } from '@curtain/schema';
-import { adjustColor, bodyGeometry, bodyPath, fabricLook, garmentGeometry, isHex, levelY, STANDARD_SKIN_HEX, VIEW_H, VIEW_W, HEAD_TOP_Y } from '@/render/body';
+import { adjustColor, bodyGeometry, bodyPath, fabricLook, garmentGeometry, isHex, levelY, STANDARD_SKIN_HEX, VIEW_H, VIEW_W, HEAD_TOP_Y, type FigureFamily } from '@/render/body';
 import { faceInk, figureOutline, neutralFace, SKIN_SHADE } from '@/render/face';
 import { ESTIMATE_LABEL_LINES, EstimateBadge } from './EstimateBadge';
 import { SizeRingsChips, SizeRingsLayer } from './SizeRings';
@@ -63,6 +63,14 @@ export interface AvatarViewProps {
    * render is not tested, so that input stays what it was.
    */
   plain?: boolean;
+  /**
+   * The body family (slice M1b): `male` draws the male figure from the male body family's
+   * measurements (broader shoulders, straighter torso, no bust), with the same neutral face, skin
+   * colour and estimate labels. Only next to a required 3D view on the male body that has settled
+   * (D20 point 3: a men's product never goes live with a 2D figure only); EmbedApp decides that.
+   * Default `female`: today's figure, unchanged.
+   */
+  family?: FigureFamily;
 }
 
 const NO_MEDIA: AvatarMedia = { faceUrl: null, baseFrame: null };
@@ -76,11 +84,11 @@ const NO_MEDIA: AvatarMedia = { faceUrl: null, baseFrame: null };
  * head (D19: one generic drawing for everybody, never a likeness), or the face tile where the app
  * has one. Always carries the estimate badge.
  */
-export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false, rings = null, hemSweepCm = null, labelsAt = 'top', plain = false, estimateLines = ESTIMATE_LABEL_LINES }: AvatarViewProps): ReactNode {
+export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false, rings = null, hemSweepCm = null, labelsAt = 'top', plain = false, estimateLines = ESTIMATE_LABEL_LINES, family = 'female' }: AvatarViewProps): ReactNode {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const reduce = useReducedMotion();
 
-  const body = useMemo(() => bodyGeometry(measurements, heightCm), [measurements, heightCm]);
+  const body = useMemo(() => bodyGeometry(measurements, heightCm, family), [measurements, heightCm, family]);
   const gaps = useMemo(() => (fit ? fitGapsForRender(fit, size ?? undefined) : null), [fit, size]);
   const geom = useMemo(() => (garment ? garmentGeometry({ garment, gaps, body, hemSweepCm }) : null), [garment, gaps, body, hemSweepCm]);
   const look = useMemo(() => (garment ? fabricLook(garment.fabric) : null), [garment]);
@@ -117,6 +125,7 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
         className={`relative h-full w-auto max-w-full ${compact ? '' : 'drop-shadow-[0_20px_40px_rgba(26,22,18,0.18)]'}`}
         role="img"
         data-skin={skin.toUpperCase()}
+        {...(family === 'male' ? { 'data-figure': 'male' } : {})}
         aria-label={garment ? `Estimated look of ${garment.name}${size ? ` in size ${size}` : ''} ${onWhom} — not measured` : hasBody ? 'Your body outline (estimate)' : 'Reference body outline'}
       >
         <defs>

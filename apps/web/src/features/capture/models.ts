@@ -43,3 +43,32 @@ export function choosePoseVariant(nav: { hardwareConcurrency?: number; deviceMem
   const mem = nav.deviceMemory ?? 4;
   return cores <= 4 || mem <= 4 ? 'lite' : 'full';
 }
+
+type FactoryScope = { ModuleFactory?: unknown };
+
+/**
+ * MediaPipe creates every task from `self.ModuleFactory` and then CLEARS it
+ * (`self.ModuleFactory = self.Module = void 0`, tasks-vision 1.2.2). The classic loader is re-run by
+ * `importScripts` for the next task and sets it again; the ES-module loader is not: `import()` of the
+ * same URL returns the cached module without running it, so in a module worker only the FIRST task
+ * could be created and every later one failed with "ModuleFactory not set" (the segmenter loaded, the
+ * pose landmarker did not, the GPU→CPU retry failed too, and the capture step fell back to manual in
+ * the production build). The returned function puts the module's factory back before each task and
+ * says whether it could. When the loader cannot be imported or has no factory it changes nothing, so
+ * MediaPipe's own load and its own error ("ModuleFactory not set") stay as they were.
+ */
+export function moduleFactoryRearmer(loaderUrl: string, scope: FactoryScope = globalThis as FactoryScope, load: (url: string) => Promise<{ default?: unknown }> = (url) => import(/* @vite-ignore */ url)): () => Promise<boolean> {
+  let factory: unknown;
+  return async () => {
+    if (typeof factory !== 'function') {
+      try {
+        factory = (await load(loaderUrl)).default;
+      } catch {
+        return false;
+      }
+      if (typeof factory !== 'function') return false;
+    }
+    scope.ModuleFactory = factory;
+    return true;
+  };
+}

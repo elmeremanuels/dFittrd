@@ -89,11 +89,13 @@ app.{$DOMAIN} {
 		Cross-Origin-Opener-Policy "same-origin"
 		Cross-Origin-Embedder-Policy "require-corp"
 		Cross-Origin-Resource-Policy "same-origin"
-		# Zero third-party requests: fonts, models and the SDK come from our origins; connect only to the api.
-		# img-src: merchant logos and product photos load through the api media proxy (GET /v1/sdk/media,
-		# carry-over #11) and hero renders from signed api URLs; data:/blob: are the avatar, the face tile
-		# and the rasterised avatar. No other https host is needed.
-		Content-Security-Policy "default-src 'self'; connect-src 'self' https://api.{$DOMAIN}; img-src 'self' data: blob: https://api.{$DOMAIN}; media-src 'self' blob: https://api.{$DOMAIN}; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		# Zero third-party requests (D3): fonts, models and the SDK come from our origins; connect only to the api.
+		# The policy is apps/web/config/csp.ts, appCsp('app'), which explains every source; the web tests pin
+		# this line to it (src/__tests__/csp.test.ts) and the preview sends the same one to the e2e suite.
+		# This header goes on EVERY path of @app, worker scripts too: a worker's CSP is its own script
+		# response's, so this is what puts the scan worker (MediaPipe's usage log to odml.pa.googleapis.com,
+		# refused) and the drape worker under it.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; style-src-attr 'unsafe-inline'; connect-src 'self' https://api.{$DOMAIN}; img-src 'self' data: blob: https://api.{$DOMAIN}; media-src 'self' blob: https://api.{$DOMAIN}; font-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 	}
 
 	header @embed {
@@ -108,7 +110,9 @@ app.{$DOMAIN} {
 		# as the safer default. Inside a non-isolated merchant page the iframe is never cross-origin
 		# isolated anyway, so MediaPipe falls back to its non-threaded wasm here.
 		Cross-Origin-Embedder-Policy "credentialless"
-		Content-Security-Policy "default-src 'self'; connect-src 'self' https://api.{$DOMAIN}; img-src 'self' data: blob: https://api.{$DOMAIN}; media-src 'self' blob: https://api.{$DOMAIN}; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self' blob:; frame-ancestors https:; base-uri 'self'; form-action 'self'"
+		# appCsp('embed') of apps/web/config/csp.ts: the app's policy, framable by any https shop page (Shopify and
+		# WooCommerce storefronts are on any domain; the theme editor previews inside admin.shopify.com).
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; style-src-attr 'unsafe-inline'; connect-src 'self' https://api.{$DOMAIN}; img-src 'self' data: blob: https://api.{$DOMAIN}; media-src 'self' blob: https://api.{$DOMAIN}; font-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; frame-src 'none'; frame-ancestors https:; base-uri 'self'; form-action 'self'"
 		# The embed shows a product page and a size; keep it out of shared caches and search engines.
 		Cache-Control "no-store"
 		X-Robots-Tag "noindex"

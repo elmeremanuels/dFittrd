@@ -17,7 +17,7 @@ import { SEG } from './landmarks';
 import { headTopWithoutHair, medianMask, sampleLevels, samplesToFramePx, shoulderSlopeFromMask, type CategoryMask } from './maskGeometry';
 import { measureScan } from './measure';
 import { installSameOriginOnly } from './sameOriginOnly';
-import { MODEL_BASE, MODEL_FILES, VISION_WASM_ES_MODULE, resolveModelBase, type PoseVariant } from './models';
+import { MODEL_BASE, MODEL_FILES, VISION_WASM_ES_MODULE, moduleFactoryRearmer, resolveModelBase, type PoseVariant } from './models';
 import { gateFrame, selectFrames } from './poseGate';
 import type { FrameFeatures, GateResult, Landmark, Sex, ViewMeasurement } from './types';
 import type { WorkerInbound, WorkerOutbound } from './workerProtocol';
@@ -67,9 +67,12 @@ async function init(variant: PoseVariant, needPose: boolean, needFace: boolean, 
   let delegate: 'GPU' | 'CPU' = 'GPU';
   const poseModel = variant === 'full' ? MODEL_FILES.poseFull : MODEL_FILES.poseLite;
   const rebase = (p: string): string => p.replace(MODEL_BASE, modelBase);
+  // Every task needs the factory back: MediaPipe clears it after each one (see models.ts).
+  const rearm = moduleFactoryRearmer(fileset.wasmLoaderPath);
 
   const make = async (d: 'GPU' | 'CPU'): Promise<void> => {
     if (needSegmenter) {
+      await rearm();
       segmenter = await ImageSegmenter.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: rebase(MODEL_FILES.segmenter), delegate: d },
         runningMode: 'IMAGE',
@@ -78,6 +81,7 @@ async function init(variant: PoseVariant, needPose: boolean, needFace: boolean, 
       });
     }
     if (needPose) {
+      await rearm();
       pose = await PoseLandmarker.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: rebase(poseModel), delegate: d },
         runningMode: 'VIDEO',
@@ -89,6 +93,7 @@ async function init(variant: PoseVariant, needPose: boolean, needFace: boolean, 
       });
     }
     if (needFace) {
+      await rearm();
       face = await FaceLandmarker.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: rebase(MODEL_FILES.face), delegate: d },
         runningMode: 'IMAGE',

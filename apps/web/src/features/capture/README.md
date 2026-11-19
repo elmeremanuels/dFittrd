@@ -64,6 +64,13 @@ Wire and body types (`BodyProfile`, `Measurement`, `UserBody`, `FitSignature*`) 
   (`FilesetResolver.forVisionTasks(base, VISION_WASM_ES_MODULE)`); the classic loader cannot run there.
 - MediaPipe Tasks (1.2.2) has a built-in usage logger that POSTs to `odml.pa.googleapis.com`; the worker refuses
   every request off its own origin before any task exists (`sameOriginOnly.ts`), so it is never sent.
+- Second wall: the app's Content-Security-Policy (`apps/web/config/csp.ts`, sent by Caddy and by the e2e preview on
+  every response, worker scripts included) has `connect-src 'self' <api>`, so the browser refuses that request too.
+  Third wall: `apps/web/e2e/privacyModels.spec.ts` runs the whole capture step with the real models and fails on any
+  request off the app origin or any CSP violation (page or worker).
+- MediaPipe clears `self.ModuleFactory` after creating each task, and a cached ES-module `import()` does not run the
+  loader again, so the worker puts the factory back before each task (`moduleFactoryRearmer`, models.ts). Without it
+  only the first task loaded and the production build always fell back to manual entry.
 - The capture step does no network I/O at all. Syncing the signature is the app's job, via the privacy ledger.
 
 ## Expected accuracy (v1, analytic)

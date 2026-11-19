@@ -105,6 +105,15 @@ The gate (0.5 cm, every measurement but the outseam) passes with 0.04 cm to spar
 
 **8. UVs** (`qa.json` `texture`). Flat ÷ on-garment edge length, 1st / 50th / 99th percentile: fronts 0.88 / 1.00 / 1.40 (left) and 0.89 / 1.00 / 1.29 (right), backs 0.80 / 1.00 / 1.15 and 0.87 / 1.00 / 1.17, band halves 0.92 to 1.11. No folded triangle. Pieces flat: fronts 30.0 × 100.3 cm, backs 35.4 × 100.3, band halves 44.3 × 3.5 (the waist width on the tape is 44.25). The row-by-row unroll stretches the front piece up to 40 % along the crotch curve; left and right differ because the mirrored quads split along the other diagonal. A flat-lay photo projection as the tee has is not built for the chino.
 
+## Male shape v2: probed, not supported
+
+Asked late by the orchestrating session: build on v1 and v2. Not done. The branch it names for the API (`claude/men-tee-on-v2`: `mannequinFor(payload, { maleShape })`, `Mannequin.outlines`, the shape gate) was not in `origin/claude/garment-engine` when I merged it (head `cef47a2`), so there was nothing to build against. What I measured instead, once, with a throwaway test (not committed), using what the base has (`buildMannequin(shape, { maleShape: 'v2' })`, `planAvatar(…, 'v2')`):
+
+- **The v1-built bundle draped on v2 bodies** (each in the fit engine's size): the cloth is stretched onto the body. Waistband row 86.0 / 93.5 / 101.6 / 110.7 / 121.1 cm for S to XXL against a tape of 83.5 / 88.5 / 98.5 / 103.5 / 113.5 (+2.5 to +7.6); thigh row 66.6 / 75.2 / 77.1 / 81.3 / 87.2 against 62 / 64.5 / 69.5 / 72 / 77 (+4.6 to +10.7); inseam 82.6 to 85.4 against 81; crotch seam 0.3 to 5.9 cm under the body; body pixels through the cloth 12 to 67 (back of a leg, and the back of the torso on M). Not usable.
+- **Built on the v2 M body as the builder stands** (it reads `torsoAt` / `legAt`): every input still tapes exactly, but the band lands 5.1 cm under the worn waist and the waist reads 6.9 cm tighter than the body, because v2's section ellipses are larger than its drawn outline.
+
+So v2 needs the builder to read the body's true outline per row (for the offset sections, the crotch height and the fork), the collider to match, and the numbers of this report taken again. The v2 body has a seat and a joined crotch, which is what the crotch seam lacks on v1, so it may well look better there; that is a guess until measured.
+
 ## The pictures (`docs/screens/claude/men-chino/`)
 
 Embed (real stack, `scripts/demo-men-chino.mjs`, men's gate on, 390 × 760 at 2×, SwiftShader):
@@ -128,7 +137,7 @@ Software renders (not WebGL, no texture; the same drape): `software-all-bodies-f
 - Seat folds: decide whether the seat should keep its hull (girth loops, as the tee's chest) or fold.
 - Too-large sizes slide down with no belt; a shopper would wear a belt. Not modelled.
 - The embed's fit without a thigh input opens the M body in 36/32; the 2D advice and this view agree with each other, but differ from a fit with a taped thigh.
-- Built and measured on the v1 body only. On v2 the collision exemption and the crotch geometry need a second look.
+- Male shape v2 (section above): the builder must read the body's outlines, then every number here again.
 - Flat-lay photo projection for trousers; a real phone's frame rate; `male.test.ts` has no chino case (it lives in `maleChino.test.ts`).
 
 ## Reproduce

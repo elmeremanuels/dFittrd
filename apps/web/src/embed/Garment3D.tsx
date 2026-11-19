@@ -40,7 +40,7 @@ import { AiRealismPanel, type AiRealismProps } from './AiRealism';
 import type { ExportedPasses } from './realism';
 import { embedStrings, type EmbedCatalogue } from './strings';
 import { lengthText, type Units } from './units';
-import { avatarSkinFlag, maleShapeFlag } from './look';
+import { avatarSkinFlag, maleShapeFlag, womenHeightFlag } from './look';
 
 type ViewerModule = typeof GarmentViewer;
 type BaseView = Awaited<ReturnType<ViewerModule['mountGarmentView']>>;
@@ -137,6 +137,8 @@ export interface Garment3DProps {
   skinShading?: 'flat' | 'skin-v2';
   /** The male body's shape in the 3D view (default: the build flag `VITE_MALE_SHAPE`, else v1). Only sent for a male body, only when v2. */
   maleShape?: 'v1' | 'v2';
+  /** Preview switch: also give a women's 3D body the typed height (default `womenHeightFlag()`, off in every normal build). */
+  womenHeight?: boolean;
   /**
    * D22: the "AI-enhanced estimate" next to the 3D view, only when the server flag is on (`aiRealism`
    * from GET /v1/try) and the api client can send it. Absent or null: nothing changes.
@@ -152,7 +154,7 @@ export const REQUIRED_3D_TIMEOUT_MS = 30_000;
 
 type Phase = 'idle' | 'loading' | 'draping' | 'settled' | 'failed';
 
-export function Garment3D({ asset, paused, garment, fit, size, recommended, waistOnly = null, measurements, units = 'metric', heightCm, estimated = [], skinHex = null, onSelect, required = false, onRequiredState, requiredTimeoutMs = REQUIRED_3D_TIMEOUT_MS, lighting = viewerLightingFlag(), head = viewerHeadFlag(), skinShading = avatarSkinFlag(), maleShape = maleShapeFlag(), aiRealism = null, loadViewer = () => import('@curtain/garment-viewer'), webgl2 = hasWebGL2 }: Garment3DProps): ReactNode {
+export function Garment3D({ asset, paused, garment, fit, size, recommended, waistOnly = null, measurements, units = 'metric', heightCm, estimated = [], skinHex = null, onSelect, required = false, onRequiredState, requiredTimeoutMs = REQUIRED_3D_TIMEOUT_MS, lighting = viewerLightingFlag(), head = viewerHeadFlag(), skinShading = avatarSkinFlag(), maleShape = maleShapeFlag(), womenHeight = womenHeightFlag(), aiRealism = null, loadViewer = () => import('@curtain/garment-viewer'), webgl2 = hasWebGL2 }: Garment3DProps): ReactNode {
   const [supported] = useState(() => !!asset && webgl2());
   const usable = !!asset && !paused && supported;
   const [open, setOpen] = useState(required && usable);
@@ -208,6 +210,8 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, wais
           waist: measurements.waist,
           hip: measurements.hip,
           ...(family === 'male' ? { family, ...(typeof heightCm === 'number' && Number.isFinite(heightCm) && heightCm > 0 ? { heightCm } : {}) } : {}),
+          // Preview switch (`womenHeightFlag`, off in every normal build): the women's body at the typed height too.
+          ...(family !== 'male' && womenHeight && typeof heightCm === 'number' && Number.isFinite(heightCm) && heightCm > 0 ? { heightCm } : {}),
         };
         const options: MountOptionsWithLook = {
           baseUrl: asset.baseUrl,

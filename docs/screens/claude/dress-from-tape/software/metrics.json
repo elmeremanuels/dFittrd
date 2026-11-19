@@ -1,0 +1,925 @@
+{
+  "levels": {
+    "topY": 122.57716126025659,
+    "bustLineY": 120.96,
+    "seamY": 113.82592255056656,
+    "hemY": 51.6366608799983
+  },
+  "metrics": [
+    {
+      "case": "body-8-size-8",
+      "body": "8",
+      "heightCm": null,
+      "size": "8",
+      "provenance": "measured",
+      "recommended": "8",
+      "sewn": false,
+      "pinned": 256,
+      "particles": 6160,
+      "drapeMs": 823,
+      "simulatedS": 1.5,
+      "garmentLiftCm": 0,
+      "tapeCm": {
+        "bust": {
+          "tape": 92,
+          "draped": 92
+        },
+        "seam": {
+          "tape": 77,
+          "draped": 78.2,
+          "drapedHull": 78.1
+        },
+        "skirtTop": {
+          "tape": 115,
+          "draped": 109.5
+        },
+        "hemSweep": {
+          "tape": 168,
+          "draped": 168.6,
+          "drapedHull": 102.3,
+          "startHull": 133.8
+        },
+        "length": {
+          "tape": 70,
+          "draped": 71.5
+        },
+        "bodiceLength": {
+          "tape": 8.5,
+          "draped": 9.1
+        },
+        "strap": {
+          "tape": 45,
+          "draped": 45.3
+        }
+      },
+      "onDrawnBodyCm": {
+        "topEdgeAboveBustLine": 1.6,
+        "topEdgeDropInDrape": 0,
+        "seamAboveUnderbust": -0.5,
+        "hemAboveKnee": 5.3,
+        "hemBelowHip": 35
+      },
+      "strainP99Pct": 5.9,
+      "strainMaxPct": 17.6,
+      "showThroughPixels": {
+        "bodice": 0,
+        "waist-hip": 0,
+        "skirt": 32
+      }
+    },
+    {
+      "case": "body-10-size-10",
+      "body": "10",
+      "heightCm": null,
+      "size": "10",
+      "provenance": "interpolated",
+      "recommended": "10",
+      "sewn": false,
+      "pinned": 256,
+      "particles": 6160,
+      "drapeMs": 855,
+      "simulatedS": 1.5,
+      "garmentLiftCm": 0,
+      "tapeCm": {
+        "bust": {
+          "tape": 97,
+          "draped": 97
+        },
+        "seam": {
+          "tape": 81.5,
+          "draped": 82.7,
+          "drapedHull": 82.7
+        },
+        "skirtTop": {
+          "tape": 122,
+          "draped": 115.6
+        },
+        "hemSweep": {
+          "tape": 174,
+          "draped": 174.4,
+          "drapedHull": 106.9,
+          "startHull": 138.5
+        },
+        "length": {
+          "tape": 71,
+          "draped": 72.7
+        },
+        "bodiceLength": {
+          "tape": 8.75,
+          "draped": 9.1
+        },
+        "strap": {
+          "tape": 46,
+          "draped": 46.2
+        }
+      },
+      "onDrawnBodyCm": {
+        "topEdgeAboveBustLine": 1.6,
+        "topEdgeDropInDrape": 0,
+        "seamAboveUnderbust": -0.5,
+        "hemAboveKnee": 4.3,
+        "hemBelowHip": 36
+      },
+      "strainP99Pct": 6.3,
+      "strainMaxPct": 18.7,
+      "showThroughPixels": {
+        "bodice": 0,
+        "waist-hip": 0,
+        "skirt": 33
+      }
+    },
+    {
+      "case": "body-12-size-12",
+      "body": "12",
+      "heightCm": null,
+      "size": "12",
+      "provenance": "measured",
+      "recommended": "12",
+      "sewn": false,
+      "pinned": 256,
+      "particles": 6160,
+      "drapeMs": 804,
+      "simulatedS": 1.5,
+      "garmentLiftCm": 0,
+      "tapeCm": {
+        "bust": {
+          "tape": 102,
+          "draped": 102
+        },
+        "seam": {
+          "tape": 86,
+          "draped": 87.3,
+          "drapedHull": 87.2
+        },
+        "skirtTop": {
+          "tape": 129,
+          "draped": 121.6
+        },
+        "hemSweep": {
+          "tape": 180,
+          "draped": 180.3,
+          "drapedHull": 111.8,
+          "startHull": 143.2
+        },
+        "length": {
+          "tape": 72,
+          "draped": 73.9
+        },
+        "bodiceLength": {
+          "tape": 9,
+          "draped": 9.1
+        },
+        "strap": {
+          "tape": 47,
+          "draped": 47.1
+        }
+      },
+      "onDrawnBodyCm": {
+        "topEdgeAboveBustLine": 1.6,
+        "topEdgeDropInDrape": 0,
+        "seamAboveUnderbust": -0.5,
+        "hemAboveKnee": 3.3,
+        "hemBelowHip": 37
+      },
+      "strainP99Pct": 6.5,
+      "strainMaxPct": 19.7,
+      "showThroughPixels": {
+        "bodice": 0,
+        "waist-hip": 0,
+        "skirt": 16
+      }
+    },
+    {
+      "case": "body-14-size-14",
+      "body": "14",
+      "heightCm": null,
+      "size": "14",
+      "provenance": "interpolated",
+      "recommended": "14",
+      "sewn": false,
+      "pinned": 256,
+      "particles": 6160,
+      "drapeMs": 831,
+      "simulatedS": 1.5,
+      "garmentLiftCm": 0,
+      "tapeCm": {
+        "bust": {
+          "tape": 107,
+          "draped": 107
+        },
+        "seam": {
+          "tape": 90.5,
+          "draped": 91.9,
+          "drapedHull": 91.8
+        },
+        "skirtTop": {
+          "tape": 135.5,
+          "draped": 128
+        },
+        "hemSweep": {
+          "tape": 186,
+          "draped": 186.2,
+          "drapedHull": 116.7,
+          "startHull": 147.9
+        },
+        "length": {
+          "tape": 73,
+          "draped": 74.9
+        },
+        "bodiceLength": {
+          "tape": 9.25,
+          "draped": 9.1
+        },
+        "strap": {
+          "tape": 48,
+          "draped": 48
+        }
+      },
+      "onDrawnBodyCm": {
+        "topEdgeAboveBustLine": 1.6,
+        "topEdgeDropInDrape": 0,
+        "seamAboveUnderbust": -0.5,
+        "hemAboveKnee": 2.4,
+        "hemBelowHip": 38
+      },
+      "strainP99Pct": 6.7,
+      "strainMaxPct": 21.1,
+      "showThroughPixels": {
+        "bodice": 0,
+        "waist-hip": 0,
+        "skirt": 0
+      }
+    },
+    {
+      "case": "body-16-size-16",
+      "body": "16",
+      "heightCm": null,
+      "size": "16",
+      "provenance": "measured",
+      "recommended": "16",
+      "sewn": false,
+      "pinned": 256,
+      "particles": 6160,
+      "drapeMs": 826,
+      "simulatedS": 1.5,
+      "garmentLiftCm": 0,
+      "tapeCm": {
+        "bust": {
+          "tape": 112,
+          "draped": 112
+        },
+        "seam": {
+          "tape": 95,
+          "draped": 96.4,
+          "drapedHull": 96.3
+        },
+        "skirtTop": {
+          "tape": 142,
+          "draped": 134.6
+        },
+        "hemSweep": {
+          "tape": 192,
+          "draped": 192.1,
+          "drapedHull": 121.7,
+          "startHull": 152.6
+        },
+        "length": {
+          "tape": 74,
+          "draped": 76.1
+        },
+        "bodiceLength": {
+          "tape": 9.5,
+          "draped": 9.2
+        },
+        "strap": {
+          "tape": 49,
+          "draped": 49
+        }
+      },
+      "onDrawnBodyCm": {
+        "topEdgeAboveBustLine": 1.6,
+        "topEdgeDropInDrape": 0,
+        "seamAboveUnderbust": -0.6,
+        "hemAboveKnee": 1.4,
+        "hemBelowHip": 39
+      },
+      "strainP99Pct": 7,
+      "strainMaxPct": 21.7,
+      "showThroughPixels": {
+        "bodice": 0,
+        "waist-hip": 0,
+        "skirt": 0
+      }
+    },
+    {
+      "case": "body-8-156cm-size-8",
+      "body": "8",
+      "heightCm": 156,
+      "size": "8",
+      "provenance": "measured",
+      "recommended": "8",
+      "sewn": false,
+      "pinned": 256,
+      "particles": 6160,
+      "drapeMs": 854,
+      "simulatedS": 1.5,
+      "garmentLiftCm": -9.6,
+      "tapeCm": {
+        "bust": {
+          "tape": 92,
+          "draped": 92
+        },
+        "seam": {
+          "tape": 77,
+          "draped": 78.2,
+          "drapedHull": 78.1
+        },
+        "skirtTop": {
+          "tape": 115,
+          "draped": 109.5
+        },
+        "hemSweep": {
+          "tape": 168,
+          "draped": 168.5,
+          "drapedHull": 101,
+          "startHull": 133.8
+        },
+        "length": {
+          "tape": 70,
+          "draped": 71.6
+        },
+        "bodiceLength": {
+          "tape": 8.5,
+          "draped": 9.1
+        },
+        "strap": {
+          "tape": 45,
+          "draped": 45.5
+        }
+      },
+      "onDrawnBodyCm": {
+        "topEdgeAboveBustLine": 0.7,
+        "topEdgeDropInDrape": 0,
+        "seamAboveUnderbust": -2,
+        "hemAboveKnee": -0.9,
+        "hemBelowHip": 38.3
+      },
+      "strainP99Pct": 6,
+      "strainMaxPct": 17.9,
+      "showThroughPixels": {
+        "bodice": 0,
+        "waist-hip": 0,
+        "skirt": 0
+      }
+    },
+    {
+      "case": "body-12-156cm-size-12",
+      "body": "12",
+      "heightCm": 156,
+      "size": "12",
+      "provenance": "measured",
+      "recommended": "12",
+      "sewn": false,
+      "pinned": 256,
+      "particles": 6160,
+      "drapeMs": 810,
+      "simulatedS": 1.5,
+      "garmentLiftCm": -9.6,
+      "tapeCm": {
+        "bust": {
+          "tape": 102,
+          "draped": 102
+        },
+        "seam": {
+          "tape": 86,
+          "draped": 87.3,
+          "drapedHull": 87.2
+        },
+        "skirtTop": {
+          "tape": 129,
+          "draped": 122
+        },
+        "hemSweep": {
+          "tape": 180,
+          "draped": 180.3,
+          "drapedHull": 110.6,
+          "startHull": 143.2
+        },
+        "length": {
+          "tape": 72,
+          "draped": 73.8
+        },
+        "bodiceLength": {
+          "tape": 9,
+          "draped": 9.1
+        },
+        "strap": {
+          "tape": 47,
+          "draped": 47
+        }
+      },
+      "onDrawnBodyCm": {
+        "topEdgeAboveBustLine": 0.7,
+        "topEdgeDropInDrape": 0,
+        "seamAboveUnderbust": -2,
+        "hemAboveKnee": -2.9,
+        "hemBelowHip": 40.3
+      },
+      "strainP99Pct": 6.6,
+      "strainMaxPct": 20.4,
+      "showThroughPixels": {
+        "bodice": 0,
+        "waist-hip": 0,
+        "skirt": 0
+      }
+    },
+    {
+      "case": "body-16-156cm-size-16",
+      "body": "16",
+      "heightCm": 156,
+      "size": "16",
+      "provenance": "measured",
+      "recommended": "16",
+      "sewn": false,
+      "pinned": 256,
+      "particles": 6160,
+      "drapeMs": 853,
+      "simulatedS": 1.5,
+      "garmentLiftCm": -9.6,
+      "tapeCm": {
+        "bust": {
+          "tape": 112,
+          "draped": 112
+        },
+        "seam": {
+          "tape": 95,
+          "draped": 96.4,
+          "drapedHull": 96.3
+        },
+        "skirtTop": {
+          "tape": 142,
+          "draped": 134.5
+        },
+        "hemSweep": {
+          "tape": 192,
+          "draped": 192.1,
+          "drapedHull": 120.7,
+          "startHull": 152.6
+        },
+        "length": {
+          "tape": 74,
+          "draped": 76
+        },
+        "bodiceLength": {
+          "tape": 9.5,
+          "draped": 9.2
+        },
+        "strap": {
+          "tape": 49,
+          "draped": 48.7
+        }
+      },
+      "onDrawnBodyCm": {
+        "topEdgeAboveBustLine": 0.7,
+        "topEdgeDropInDrape": 0,
+        "seamAboveUnderbust": -2,
+        "hemAboveKnee": -4.9,
+        "hemBelowHip": 42.3
+      },
+      "strainP99Pct": 7.1,
+      "strainMaxPct": 22.4,
+      "showThroughPixels": {
+        "bodice": 0,
+        "waist-hip": 0,
+        "skirt": 0
+      }
+    },
+    {
+      "case": "body-8-180cm-size-8",
+      "body": "8",
+      "heightCm": 180,
+      "size": "8",
+      "provenance": "measured",
+      "recommended": "8",
+      "sewn": false,
+      "pinned": 256,
+      "particles": 6160,
+      "drapeMs": 843,
+      "simulatedS": 1.5,
+      "garmentLiftCm": 9.6,
+      "tapeCm": {
+        "bust": {
+          "tape": 92,
+          "draped": 92
+        },
+        "seam": {
+          "tape": 77,
+          "draped": 78.3,
+          "drapedHull": 78.1
+        },
+        "skirtTop": {
+          "tape": 115,
+          "draped": 109.6
+        },
+        "hemSweep": {
+          "tape": 168,
+          "draped": 168.5,
+          "drapedHull": 102.4,
+          "startHull": 133.8
+        },
+        "length": {
+          "tape": 70,
+          "draped": 71.6
+        },
+        "bodiceLength": {
+          "tape": 8.5,
+          "draped": 9.1
+        },
+        "strap": {
+          "tape": 45,
+          "draped": 45.7
+        }
+      },
+      "onDrawnBodyCm": {
+        "topEdgeAboveBustLine": 2.6,
+        "topEdgeDropInDrape": 0,
+        "seamAboveUnderbust": 0.9,
+        "hemAboveKnee": 11.6,
+        "hemBelowHip": 31.6
+      },
+      "strainP99Pct": 6,
+      "strainMaxPct": 17.1,
+      "showThroughPixels": {
+        "bodice": 0,
+        "waist-hip": 0,
+        "skirt": 12
+      }
+    },
+    {
+      "case": "body-12-180cm-size-12",
+      "body": "12",
+      "heightCm": 180,
+      "size": "12",
+      "provenance": "measured",
+      "recommended": "12",
+      "sewn": false,
+      "pinned": 256,
+      "particles": 6160,
+      "drapeMs": 794,
+      "simulatedS": 1.5,
+      "garmentLiftCm": 9.6,
+      "tapeCm": {
+        "bust": {
+          "tape": 102,
+          "draped": 102
+        },
+        "seam": {
+          "tape": 86,
+          "draped": 87.4,
+          "drapedHull": 87.2
+        },
+        "skirtTop": {
+          "tape": 129,
+          "draped": 121.6
+        },
+        "hemSweep": {
+          "tape": 180,
+          "draped": 180.3,
+          "drapedHull": 111.1,
+          "startHull": 143.2
+        },
+        "length": {
+          "tape": 72,
+          "draped": 73.8
+        },
+        "bodiceLength": {
+          "tape": 9,
+          "draped": 9.1
+        },
+        "strap": {
+          "tape": 47,
+          "draped": 47.1
+        }
+      },
+      "onDrawnBodyCm": {
+        "topEdgeAboveBustLine": 2.6,
+        "topEdgeDropInDrape": 0,
+        "seamAboveUnderbust": 0.9,
+        "hemAboveKnee": 9.6,
+        "hemBelowHip": 33.6
+      },
+      "strainP99Pct": 6.6,
+      "strainMaxPct": 19.6,
+      "showThroughPixels": {
+        "bodice": 0,
+        "waist-hip": 0,
+        "skirt": 30
+      }
+    },
+    {
+      "case": "body-16-180cm-size-16",
+      "body": "16",
+      "heightCm": 180,
+      "size": "16",
+      "provenance": "measured",
+      "recommended": "16",
+      "sewn": false,
+      "pinned": 256,
+      "particles": 6160,
+      "drapeMs": 853,
+      "simulatedS": 1.5,
+      "garmentLiftCm": 9.6,
+      "tapeCm": {
+        "bust": {
+          "tape": 112,
+          "draped": 112
+        },
+        "seam": {
+          "tape": 95,
+          "draped": 96.5,
+          "drapedHull": 96.3
+        },
+        "skirtTop": {
+          "tape": 142,
+          "draped": 134.7
+        },
+        "hemSweep": {
+          "tape": 192,
+          "draped": 192.1,
+          "drapedHull": 120.7,
+          "startHull": 152.6
+        },
+        "length": {
+          "tape": 74,
+          "draped": 76
+        },
+        "bodiceLength": {
+          "tape": 9.5,
+          "draped": 9.2
+        },
+        "strap": {
+          "tape": 49,
+          "draped": 48.7
+        }
+      },
+      "onDrawnBodyCm": {
+        "topEdgeAboveBustLine": 2.6,
+        "topEdgeDropInDrape": 0,
+        "seamAboveUnderbust": 0.9,
+        "hemAboveKnee": 7.6,
+        "hemBelowHip": 35.6
+      },
+      "strainP99Pct": 7,
+      "strainMaxPct": 21.2,
+      "showThroughPixels": {
+        "bodice": 0,
+        "waist-hip": 0,
+        "skirt": 2
+      }
+    },
+    {
+      "case": "body-12-size-8",
+      "body": "12",
+      "heightCm": null,
+      "size": "8",
+      "provenance": "measured",
+      "recommended": "12",
+      "sewn": false,
+      "pinned": 256,
+      "particles": 6160,
+      "drapeMs": 805,
+      "simulatedS": 1.5,
+      "garmentLiftCm": 0,
+      "tapeCm": {
+        "bust": {
+          "tape": 92,
+          "draped": 98.7
+        },
+        "seam": {
+          "tape": 77,
+          "draped": 82.7,
+          "drapedHull": 82.6
+        },
+        "skirtTop": {
+          "tape": 115,
+          "draped": 110.1
+        },
+        "hemSweep": {
+          "tape": 168,
+          "draped": 168.5,
+          "drapedHull": 105.5,
+          "startHull": 133.8
+        },
+        "length": {
+          "tape": 70,
+          "draped": 71.5
+        },
+        "bodiceLength": {
+          "tape": 8.5,
+          "draped": 9
+        },
+        "strap": {
+          "tape": 45,
+          "draped": 46.6
+        }
+      },
+      "onDrawnBodyCm": {
+        "topEdgeAboveBustLine": 1.5,
+        "topEdgeDropInDrape": 0,
+        "seamAboveUnderbust": -0.7,
+        "hemAboveKnee": 5.2,
+        "hemBelowHip": 35.1
+      },
+      "strainP99Pct": 8,
+      "strainMaxPct": 21,
+      "showThroughPixels": {
+        "bodice": 0,
+        "waist-hip": 0,
+        "skirt": 0
+      }
+    },
+    {
+      "case": "body-12-size-10",
+      "body": "12",
+      "heightCm": null,
+      "size": "10",
+      "provenance": "interpolated",
+      "recommended": "12",
+      "sewn": false,
+      "pinned": 256,
+      "particles": 6160,
+      "drapeMs": 807,
+      "simulatedS": 1.5,
+      "garmentLiftCm": 0,
+      "tapeCm": {
+        "bust": {
+          "tape": 97,
+          "draped": 99
+        },
+        "seam": {
+          "tape": 81.5,
+          "draped": 82.8,
+          "drapedHull": 82.8
+        },
+        "skirtTop": {
+          "tape": 122,
+          "draped": 115.8
+        },
+        "hemSweep": {
+          "tape": 174,
+          "draped": 174.4,
+          "drapedHull": 109.3,
+          "startHull": 138.5
+        },
+        "length": {
+          "tape": 71,
+          "draped": 72.8
+        },
+        "bodiceLength": {
+          "tape": 8.75,
+          "draped": 9.1
+        },
+        "strap": {
+          "tape": 46,
+          "draped": 46.8
+        }
+      },
+      "onDrawnBodyCm": {
+        "topEdgeAboveBustLine": 1.6,
+        "topEdgeDropInDrape": 0,
+        "seamAboveUnderbust": -0.6,
+        "hemAboveKnee": 4.3,
+        "hemBelowHip": 36
+      },
+      "strainP99Pct": 6.2,
+      "strainMaxPct": 22.3,
+      "showThroughPixels": {
+        "bodice": 0,
+        "waist-hip": 0,
+        "skirt": 0
+      }
+    },
+    {
+      "case": "body-12-size-14",
+      "body": "12",
+      "heightCm": null,
+      "size": "14",
+      "provenance": "interpolated",
+      "recommended": "12",
+      "sewn": false,
+      "pinned": 256,
+      "particles": 6160,
+      "drapeMs": 790,
+      "simulatedS": 1.5,
+      "garmentLiftCm": 0,
+      "tapeCm": {
+        "bust": {
+          "tape": 107,
+          "draped": 107
+        },
+        "seam": {
+          "tape": 90.5,
+          "draped": 91.9,
+          "drapedHull": 91.8
+        },
+        "skirtTop": {
+          "tape": 135.5,
+          "draped": 128.1
+        },
+        "hemSweep": {
+          "tape": 186,
+          "draped": 186.2,
+          "drapedHull": 115.5,
+          "startHull": 147.9
+        },
+        "length": {
+          "tape": 73,
+          "draped": 74.7
+        },
+        "bodiceLength": {
+          "tape": 9.25,
+          "draped": 9.1
+        },
+        "strap": {
+          "tape": 48,
+          "draped": 47.8
+        }
+      },
+      "onDrawnBodyCm": {
+        "topEdgeAboveBustLine": 1.6,
+        "topEdgeDropInDrape": 0,
+        "seamAboveUnderbust": -0.5,
+        "hemAboveKnee": 2.4,
+        "hemBelowHip": 38
+      },
+      "strainP99Pct": 6.7,
+      "strainMaxPct": 20.1,
+      "showThroughPixels": {
+        "bodice": 0,
+        "waist-hip": 0,
+        "skirt": 0
+      }
+    },
+    {
+      "case": "body-12-size-16",
+      "body": "12",
+      "heightCm": null,
+      "size": "16",
+      "provenance": "measured",
+      "recommended": "12",
+      "sewn": false,
+      "pinned": 256,
+      "particles": 6160,
+      "drapeMs": 777,
+      "simulatedS": 1.5,
+      "garmentLiftCm": 0,
+      "tapeCm": {
+        "bust": {
+          "tape": 112,
+          "draped": 112
+        },
+        "seam": {
+          "tape": 95,
+          "draped": 96.4,
+          "drapedHull": 96.3
+        },
+        "skirtTop": {
+          "tape": 142,
+          "draped": 134.7
+        },
+        "hemSweep": {
+          "tape": 192,
+          "draped": 192.1,
+          "drapedHull": 119.9,
+          "startHull": 152.6
+        },
+        "length": {
+          "tape": 74,
+          "draped": 75.8
+        },
+        "bodiceLength": {
+          "tape": 9.5,
+          "draped": 9.2
+        },
+        "strap": {
+          "tape": 49,
+          "draped": 48.7
+        }
+      },
+      "onDrawnBodyCm": {
+        "topEdgeAboveBustLine": 1.6,
+        "topEdgeDropInDrape": 0,
+        "seamAboveUnderbust": -0.6,
+        "hemAboveKnee": 1.4,
+        "hemBelowHip": 39
+      },
+      "strainP99Pct": 6.9,
+      "strainMaxPct": 21.2,
+      "showThroughPixels": {
+        "bodice": 0,
+        "waist-hip": 0,
+        "skirt": 0
+      }
+    }
+  ]
+}

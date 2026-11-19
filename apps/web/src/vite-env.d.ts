@@ -15,4 +15,6 @@ interface ImportMetaEnv {
   readonly VITE_AVATAR_SKIN?: string;
   /** `v2`: the male body v2 in the 3D view and the male 2D figure together (default and anything else: v1). */
   readonly VITE_MALE_SHAPE?: string;
+  /** Preview: a women's 3D body at the typed height (`womenHeightFlag`); off unless "1". */
+  readonly VITE_WOMEN_3D_HEIGHT?: string;
 }

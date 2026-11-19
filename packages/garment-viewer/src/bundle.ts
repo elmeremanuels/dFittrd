@@ -29,6 +29,15 @@ export interface GarmentAnchorsJson {
   /** Set by a server drape bake (`drapeBake.ts`): base.glb holds the drapes per size; the device blends, it does not drape. */
   drapeBake?: 'base.glb';
   rings: Record<string, { circumferenceCm: number; chartCm: number | null; spansBothLegs: boolean }>;
+  /**
+   * Set by a tape-built strap garment (spikes/garment-engine `pomDressBundle.ts`): how the device holds and drapes it.
+   * `pinFromCm`: the garment is held from this height up (its top edge band and the straps), where the shoulder yoke
+   * (`yokeHeight`) would hold the straps alone. `cling: false`: no cling pull (a gathered skirt hangs off the body).
+   * `seamsAtCm`: heights of seams that do not stretch: the row of cloth at each (in the base mesh) is held at no more
+   * than its graded girth times `1 + seamStretchPct / 100` (`GirthLoop.maxGirthCm`), and at no less than it.
+   * Absent, and for every bundle before it: held and draped as before.
+   */
+  support?: { pinFromCm?: number; cling?: boolean; seamsAtCm?: number[]; seamStretchPct?: number };
 }
 
 export interface QaJson {

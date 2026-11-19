@@ -128,6 +128,15 @@ if (source.DEMO_MEN === '1') {
     { shop: 'shopify', externalId: MENS_OXFORD_SHIRT.id, dir: join(spikeOut, 'no-bundle', MENS_OXFORD_SHIRT.id), payload: true, colorHex: MENS_OXFORD_SHIRT.primaryColorHex, colorName: 'Light blue', fallbackPayload: MENS_OXFORD_SHIRT, audienceSource: 'productType' },
   );
 }
+/**
+ * DEMO_DRESS=1 (branch claude/dress-from-tape; off by default, so the demo is unchanged): the SYNTHETIC babydoll dress
+ * built from tape (not a product; `pnpm --filter @curtain/garment-spike exec tsx scripts/build-dress-bundle.ts` writes
+ * `out/synthetic-tape-babydoll-dress/` with its payload.json) in the Shopify demo shop. Flagged
+ * `tape_built_no_chart_check`: its QA pass is the builder's own tape. Absent folder: no such product.
+ */
+if (source.DEMO_DRESS === '1') {
+  bundles.push({ shop: 'shopify', externalId: 'synthetic-tape-babydoll-dress', dir: join(spikeOut, 'synthetic-tape-babydoll-dress'), payload: true, colorHex: '#2F7F86', colorName: 'Test teal', qaFlags: ['tape_built_no_chart_check'] });
+}
 const manifest = await seedDemo(handle.db, env, { storefrontOrigin, appOrigin: env.PUBLIC_APP_URL, bundles });
 await writeFile(join(dataDir, 'demo.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 

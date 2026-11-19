@@ -385,6 +385,19 @@ export function sewnTorsoLoops(m: Mannequin, rest: ArrayLike<number>, indices: A
   return girthLoopsAt(rest, indices, chains, pinned, 1, rings, sl);
 }
 
+/** A seam's row of cloth is picked within this of its height in the graded mesh, cm. */
+export const SEAM_LOOP_SLICE_CM = 0.3;
+
+/**
+ * Seams that do not stretch (a tape-built dress's underbust seam, `GarmentAnchorsJson.support.seamsAtCm`): the row of
+ * cloth at each height is a girth loop held between its graded girth and that girth times `1 + stretchPct / 100`. The
+ * solver's edges give way under a long hanging skirt (the seam ring of the SYNTHETIC babydoll opened from 86 to 98 cm,
+ * the bodice hanging straight down from the bust like a curtain); a sewn seam does not.
+ */
+export function seamLoops(rest: ArrayLike<number>, indices: ArrayLike<number>, chains: ChainAssignment, pinned: Uint8Array, heights: readonly number[], stretchPct: number): (GirthLoop & { ring: string })[] {
+  return girthLoopsAt(rest, indices, chains, pinned, 1, heights.map((y) => [`seam@${Math.round(y * 10) / 10}`, y] as const), SEAM_LOOP_SLICE_CM).map((l) => ({ ...l, maxGirthCm: l.minGirthCm * (1 + stretchPct / 100) }));
+}
+
 /** Extra particles under the band whose girth is blended from the band's to their own, cm. */
 export const BAND_BLEND_CM = 8;
 
@@ -616,16 +629,20 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   // sit inside it there; those particles are exempt too (the shoulders carry that part anyway).
   const noCollide = Uint8Array.from(session.noCollide);
   const inside = insideCanonical(m, graded.positions, chains);
-  for (let i = 0; i < noCollide.length; i++) if (inside[i] === 1 && graded.positions[3 * i + 1]! > m.morphHeights.chest) noCollide[i] = 1;
-  const start = Float32Array.from(placed.positions);
   const bottom = session.bundle.anchors.category === 'bottom';
+  // A tape-built strap garment says from where it is held (`GarmentAnchorsJson.support`): its top edge band, below the yoke.
+  const support = bottom ? undefined : session.bundle.anchors.support;
+  // … and has nothing in the arm junction: its straps lie on the chest and are never exempt (a smaller size's straps
+  // graded inside the canonical body stayed inside the drawn one).
+  if (!support) for (let i = 0; i < noCollide.length; i++) if (inside[i] === 1 && graded.positions[3 * i + 1]! > m.morphHeights.chest) noCollide[i] = 1;
+  const start = Float32Array.from(placed.positions);
   // A stretch waistband (the payload's stretch zones) is held by its elastic: how far it gathers depends on its relaxed
   // girth, which no bundle measures, so it is not slid (the fit lines say so). Only a band without stretch slides.
   const stretchBand = (session.payload.stretchZones ?? []).includes('waistband');
   // With a band spec (`WaistbandSpec`), every bottom's band is modelled from it instead.
   const elastic = bottom && options.waistband ? fitElasticBand(field, start, chains, CLEARANCE_CM, bandFor(options.waistband, session.bundle.grading, size), options.waistband.assumed) : null;
   const band = elastic ?? (bottom && !stretchBand ? (isTapeTrouser(session.bundle.anchors) ? slideTrouserBand(field, start, graded.indices, CLEARANCE_CM) : slideWaistband(field, start, chains, CLEARANCE_CM)) : null);
-  const yoke = pinHeight(m, session.bundle.anchors.category, start, chains);
+  const yoke = Math.min(pinHeight(m, session.bundle.anchors.category, start, chains), typeof support?.pinFromCm === 'number' ? support.pinFromCm : Infinity);
   // The yoke is where grading put it: the shoulder ring grades by the `shoulder_width` ratio between
   // sizes (D15 breadth); its base width is the mesh's (on the synthetic garment, the mannequin torso's). Pinning only out to the seams or the body's shoulder
   // points was measured and rejected: on the v0 mannequin the freed cloth lands in the arm junction
@@ -641,6 +658,8 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   const cloth = createCloth(start, graded.positions, graded.indices, (i) => pinned[i] === 1, (i) => chains[i] === 0);
   // A sewn top keeps its chest ease (`sewnTorsoLoops`); the step-3 loop option still replaces them when set.
   const loops = options.loopRetain > 0 ? anchorLoops(m, graded.positions, graded.indices, chains, pinned, options.loopRetain, options.loopRings) : session.sewn ? sewnTorsoLoops(m, graded.positions, graded.indices, chains, pinned) : [];
+  // Seams that do not stretch (`GarmentAnchorsJson.support.seamsAtCm`): the row at each height keeps its graded girth.
+  if (support?.seamsAtCm?.length) loops.push(...seamLoops(graded.positions, graded.indices, chains, pinned, support.seamsAtCm, support.seamStretchPct ?? 0));
   setLoops(cloth, loops);
   for (let i = 0; i < chains.length; i++) if (cuff[i] && !pinned[i]) cloth.leash[i] = CUFF_LEASH_CM;
   const collide = makeCollider(field, CLEARANCE_CM, chains, noCollide, session.sewn);
@@ -663,7 +682,7 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
     loops: loops.map((l) => ({ ring: l.ring, minGirthCm: Math.round(l.minGirthCm * 10) / 10, particles: l.particles.length })),
     heat: heatField(gaps, m.morphHeights),
     material,
-    params: clothParams(material, durationS, { cling: options.cling }),
+    params: clothParams(material, durationS, { cling: options.cling && support?.cling !== false }),
     cloth,
     collide,
     noCollide,

@@ -9,6 +9,7 @@ import type { BodyProfile, GarmentPayload } from '@curtain/schema';
 import { AvatarView } from '@/components/AvatarView';
 import { EstimateDisclaimer } from '@/components/EstimateBadge';
 import { FitPanel } from '@/components/FitPanel';
+import { shownSizeScore } from '@/lib/fitScore';
 import { pct } from '@/lib/format';
 import { ringInputsFor } from '@/render/ringInputs';
 import { ringOverlayFor } from '@/render/rings';
@@ -149,6 +150,7 @@ export function ResultScreen({
   const sizes = neighbourSizes(fit, advice.size ?? advice.closest);
   const selectedFit = fit.perSize.find((s) => s.size === selected);
   const points = usablePoints(selectedFit);
+  const selectedPullOn = selectedFit?.pullOn?.status;
   const estimated = priorKeys(profile).filter((k) => points.some((p) => p.point === k));
   const [chooseBefore, chooseAfter] = parts(t.chooseOnPage, 'size');
   const onPageSize = currentVariantSize && fit.perSize.some((s) => s.size === currentVariantSize) ? currentVariantSize : null;
@@ -198,8 +200,8 @@ export function ResultScreen({
                   <span className="text-xs opacity-75" data-testid={`compare-no-pull-on-${s.size}`}>{t.compareNoPullOn}</span>
                 ) : s.pullOn?.status === 'marginal' ? (
                   <span className="text-xs opacity-75" data-testid={`compare-just-pulls-on-${s.size}`}>{t.compareJustPullsOn}</span>
-                ) : s.score !== null ? (
-                  <span className="text-xs opacity-75">{pct(s.score)}</span>
+                ) : shownSizeScore(s) !== null ? (
+                  <span className="text-xs opacity-75">{pct(shownSizeScore(s))}</span>
                 ) : null}
                 {s.size === advice.size ? <span className="sr-only">{t.recommendedMark}</span> : null}
               </button>
@@ -295,15 +297,20 @@ export function ResultScreen({
                 {t.pointsTitle(selected)}
               </h3>
               <ul className="divide-y divide-ink/5" data-testid="fit-points">
-                {points.map((p) => (
-                  <li key={p.point} className="flex items-center justify-between gap-3 py-1.5 text-sm">
-                    <span className="min-w-0">
-                      <span className="font-medium">{pointLabel(p.point)}</span>
-                      <span className="block text-xs text-ink-mute">{gapText(p, units)}</span>
-                    </span>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${BAND_CLASS[p.band] ?? ''}`}>{bandText(p.band)}</span>
-                  </li>
-                ))}
+                {points.map((p) => {
+                  // The waist of a pull-on size whose band only just passes (or does not pass) the hips: the check, not
+                  // "Good fit" (the engine's waist word scores the chart; next to "Only just pulls on" it contradicts it).
+                  const pull = p.point === 'waist' && (selectedPullOn === 'marginal' || selectedPullOn === 'blocked') ? selectedPullOn : null;
+                  return (
+                    <li key={p.point} className="flex items-center justify-between gap-3 py-1.5 text-sm" data-testid={`fit-point-${p.point}`}>
+                      <span className="min-w-0">
+                        <span className="font-medium">{pointLabel(p.point)}</span>
+                        <span className="block text-xs text-ink-mute">{pull ? t.pointByChart(gapText(p, units), bandText(p.band)) : gapText(p, units)}</span>
+                      </span>
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${pull ? (BAND_CLASS[pull === 'blocked' ? 'tight' : 'snug'] ?? '') : (BAND_CLASS[p.band] ?? '')}`}>{pull ? t.pointPullOn[pull] : bandText(p.band)}</span>
+                    </li>
+                  );
+                })}
               </ul>
               {estimated.length > 0 ? (
                 <p className="text-xs text-ink-mute">{t.estimated(estimated.map(pointLabel))}</p>

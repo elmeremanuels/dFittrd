@@ -154,6 +154,12 @@ export interface EmbedCatalogue {
     ringsGhost: (sizes: string[]) => string;
     ringsEstimates: string;
     pointsTitle: (size: string) => string;
+    /**
+     * The waist row of "How size … fits you" for a pull-on size whose band only just passes (`marginal`) or does not
+     * pass (`blocked`) the hips: the check in place of the chart word, and the chart word kept as the line under it.
+     */
+    pointPullOn: { marginal: string; blocked: string };
+    pointByChart: (gap: string, band: string) => string;
     estimated: (points: string[]) => string;
     chosen: (size: string) => string;
     /** `{size}` is the size, set in the display type. */
@@ -400,6 +406,8 @@ export const EN: EmbedCatalogue = {
     ringsGhost: (sizes) => `Faint dashed rings: size ${sizes.join(' and ')}.`,
     ringsEstimates: 'Dashed coloured rings are estimates.',
     pointsTitle: (size) => `How size ${size} fits you`,
+    pointPullOn: { marginal: 'Only just pulls on', blocked: 'Too small to pull on' },
+    pointByChart: (gap, band) => `By the size chart: ${band.toLowerCase()}, ${gap}`,
     estimated: (points) => `${points.join(', ')} estimated from your height and weight. Add your own measurements for a higher confidence.`,
     chosen: (size) => `Size ${size} selected on the shop page`,
     chooseOnPage: 'Choose size {size} on the shop page.',

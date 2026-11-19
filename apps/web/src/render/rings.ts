@@ -49,6 +49,11 @@ export interface Ring {
   basis: 'garment' | 'body-chart+ease';
   /** The shopper's girth here is an estimate (from height and weight), not typed in. */
   bodyEstimated: boolean;
+  /**
+   * The pull-on check of this size's waistband when it is not a plain pass (`SizeFit.pullOn`): the waist chip then
+   * names the check and takes its tone, not the engine's chart word.
+   */
+  pullOn?: 'marginal' | 'blocked';
   /** Short text for the on-figure chip, e.g. ["Good fit", "4 cm room"]. */
   chip: [string, string];
   /** Optional third chip line (e.g. the assumed elastic band range). */
@@ -237,7 +242,14 @@ function ringsFor(input: RingOverlayInput, sizeFit: SizeFit): Ring[] {
         };
         // The engine's word stays; the room figure (chart + designed ease minus body) would sit right above a
         // band range that contradicts it, so the chip names its basis instead. The sentence keeps the number.
-        if (pf) ring.chip = [ring.chip[0], 'by the size chart'];
+        // A pull-on size whose stretched band only just passes (or does not pass) the hips: the chip says that, never
+        // "Good fit" next to "Only just pulls on" (the engine's waist word scores the chart, not the band over the hips).
+        const pullOn = inputs.band.closure === 'pull-on' ? sizeFit.pullOn?.status : undefined;
+        if (pf && (pullOn === 'marginal' || pullOn === 'blocked')) {
+          ring.chip = ['Waistband', pullOn === 'blocked' ? 'too small to pull on' : 'only just pulls on'];
+          ring.pullOn = pullOn;
+          ring.text = ring.text.replace(/^Waist: /, pullOn === 'blocked' ? 'Waist: the band does not stretch over your hips; by the size chart alone: ' : 'Waist: the band only just stretches over your hips; by the size chart alone: ');
+        } else if (pf) ring.chip = [ring.chip[0], 'by the size chart'];
         ring.chipNote = `band ${tapeLength(relaxed, units).replace(/ (cm|in)$/, '')}-${tapeLength(stretched, units)} ${SOURCE_WORD[bandSource]}`;
         ring.text += `; elastic band ${tapeLength(relaxed, units)} relaxed to ${tapeLength(stretched, units)} stretched (${sourceSentence(bandSource, inputs.measuredSizes)})`;
         const hip = measurements?.hip;

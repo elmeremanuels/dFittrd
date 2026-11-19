@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { FitResult } from '@curtain/fit-engine';
+import { shownFitScore, scoredSizeBlocked } from '@/lib/fitScore';
 import { pct } from '@/lib/format';
 
 /**
@@ -35,7 +36,16 @@ export function FitPanel({
         <div className="space-y-1">
           <p className="eyebrow text-bad">No size fits</p>
           <p className="text-sm">
-            Closest is <span className="font-display text-lg">{fit.closestSize ?? '—'}</span> at {pct(fit.score)} — we would not recommend it.
+            {/* A size whose waistband does not pull on over the hips gets no percentage (its chart score can be 99%). */}
+            {scoredSizeBlocked(fit) ? (
+              <>
+                Closest is <span className="font-display text-lg">{fit.closestSize ?? '—'}</span>, but its waistband does not stretch over your hips — we would not recommend it.
+              </>
+            ) : (
+              <>
+                Closest is <span className="font-display text-lg">{fit.closestSize ?? '—'}</span> at {pct(fit.score)} — we would not recommend it.
+              </>
+            )}
           </p>
           {!compact ? <Notes notes={fit.notes} /> : null}
         </div>
@@ -48,7 +58,7 @@ export function FitPanel({
             </span>
           </p>
           <p className="text-[11px] leading-tight text-ink-mute">
-            fit <span className="font-semibold text-ink" data-testid="fit-score">{pct(fit.score)}</span> · {pct(fit.confidence)} sure
+            fit <span className="font-semibold text-ink" data-testid="fit-score">{pct(shownFitScore(fit))}</span> · {pct(fit.confidence)} sure
           </p>
           {fit.notes.length > 0 ? (
             <ul className="mt-0.5 text-[11px] leading-tight text-ink-soft" aria-label="Fit notes" data-testid="fit-notes">
@@ -77,7 +87,7 @@ export function FitPanel({
                 </p>
               ) : (
                 <p className="font-display text-2xl leading-none" data-testid="fit-score">
-                  {pct(fit.score)}
+                  {pct(shownFitScore(fit))}
                 </p>
               )}
             </div>

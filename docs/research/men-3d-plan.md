@@ -54,6 +54,13 @@ Not done in M1, and still open:
 - While a required 3D view loads, the overlay shows an empty panel with no spinner (M0 behaviour, seen in the pictures).
 - Fit engine (M2) and POM builder (M3): not touched, as scoped.
 
+## Status: slices M2a and M2b built (19 Nov 2026, branch `claude/men-m2`)
+
+- **Schema:** `FIT_POINTS` + `neck`, `sleeve`; `GARMENT_LENGTH_POINTS` (`length`, `rise`) never stored; `SizeRow` columns `neck`, `sleeve`, `length`, `rise` and `axes` (W/L); chart cap 60 rows; `sleeveConvention`; `UserBody.heightCm`; `MENS_CATEGORY_POINTS`; mappings keep the columns and read `seat` and `collar`. Fixtures `SYNTHETIC_MENS_CHINO_WL` (made up) and `MENS_REFERENCE_BODY` (MREF).
+- **Engine:** the rules and their sources are in `packages/fit-engine/README.md` "Men's fit". MT1–MT17 are in `src/mens.test.ts`; MT17 covers the TypeScript tables only. Every existing garment is byte-identical (sha256 pinned against the pre-M2 engine). One existing assertion changed: `anchorToFitPoint('neck')` is now `neck` (the mapping M2b asks for).
+- **Web:** About you asks the men's measurements for `audience: 'men'` only (typed, never estimated); the result names Chest / Seat / Leg length and shows lengths, W/L axes and the waist-led note.
+- **Not done:** the PHP and Shopify-admin mirrors (no neck, sleeve, length, rise or axes columns there), `sleeveConvention` in the plugin mappings, the unconfirmed-template rule of MT10 (no confirm flag exists on the payload), gate condition 3. Every new number is [A] until three real charts per block are read.
+
 ## Bottom line
 
 - **First men's types:** the T-shirt family first, then trousers (chinos, jeans). Everything else for men shows "Men's clothing: coming soon".

@@ -29,10 +29,12 @@ const SHOP_ID = '00000000-0000-4000-8000-0000000000e1';
 const DEVICE = { deviceId: '11111111-1111-4111-8111-111111111111', token: 'e2e.device.token', expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(), tokenVersion: 1 };
 const { MOCK_GARMENTS_BY_ID } = await import('@curtain/schema');
 
+// EVEN=1: the same three people under an even light (numbers only; write them to another folder).
+const suffix = process.env.EVEN === '1' ? '-even' : '';
 const PEOPLE = [
-  { id: 'a', file: 'person-a.jpg', note: 'Monk 2 render' },
-  { id: 'b', file: 'person-b.jpg', note: 'Monk 6 render' },
-  { id: 'c', file: 'person-c.jpg', note: 'Monk 9 render' },
+  { id: 'a', file: `person-a${suffix}.jpg`, note: 'Monk 2 render' },
+  { id: 'b', file: `person-b${suffix}.jpg`, note: 'Monk 6 render' },
+  { id: 'c', file: `person-c${suffix}.jpg`, note: 'Monk 9 render' },
 ];
 
 const browser = await chromium.launch();
@@ -74,6 +76,8 @@ async function open(context) {
   return { page, seen };
 }
 
+// Every person runs in a fresh browser context: the HTTP cache is empty, so the face photo step
+// includes the download of the WASM runtime and the face model; the skin step after it is warm.
 const settle = (page, ms = 450) => page.waitForTimeout(ms);
 const dialog = (page) => page.getByTestId('avatar-prompt');
 
@@ -128,8 +132,7 @@ for (const person of PEOPLE) {
 
   // 3. The photo → the tile.
   const t0 = await choosePhoto(page, 'face', person.file);
-  await page.getByTestId('face-photo-busy').waitFor({ timeout: 5000 }).catch(() => null);
-  await page.getByTestId('face-photo-on').waitFor({ timeout: 120_000 });
+  await page.waitForFunction(() => !!document.querySelector('[data-testid="face-photo-on"] img[src^="blob:"]'), null, { polling: 'raf', timeout: 120_000 });
   entry.faceMs = Date.now() - t0;
   await page.getByTestId('face-photo-on').scrollIntoViewIfNeeded();
   await promptShot(page, `${p}-4-face-on-prompt.png`);
@@ -151,13 +154,14 @@ for (const person of PEOPLE) {
   await page.getByTestId('skin-photo-age').check();
   await page.getByTestId('skin-photo-yes').click();
   const t1 = await choosePhoto(page, 'skin', person.file);
-  await page.getByTestId('skin-photo-suggestion').waitFor({ timeout: 120_000 });
+  await page.waitForFunction(() => !!document.querySelector('[data-testid="skin-photo-suggestion"]'), null, { polling: 'raf', timeout: 120_000 });
   entry.skinMs = Date.now() - t1;
   entry.suggestion = Number((await page.getByTestId('skin-photo-suggestion').textContent()).match(/colour (\d+)/)[1]);
   entry.notices = await page.locator('[data-testid="skin-photo-notice"] [data-notice]').evaluateAll((els) => els.map((e) => e.getAttribute('data-notice')));
   entry.figureSkinBeforeConfirm = await page.locator('[data-testid="embed-result"] svg[data-skin]').first().getAttribute('data-skin');
   await page.getByTestId('skin-swatches').scrollIntoViewIfNeeded();
   await promptShot(page, `${p}-8-skin-suggestion.png`);
+  await page.getByTestId('skin-swatches').screenshot({ path: join(out, `${p}-8-swatches-closeup.png`) });
 
   // 6. The shopper confirms the suggested swatch (G4: nothing is applied before this tap).
   await page.getByTestId(`skin-swatch-${entry.suggestion}`).check({ force: true });

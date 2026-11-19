@@ -1,0 +1,86 @@
+{
+  "base": "http://127.0.0.1:4180",
+  "when": "2026-11-19T02:09:15.090Z",
+  "people": [
+    {
+      "id": "a",
+      "file": "person-a-even.jpg",
+      "note": "Monk 2 render",
+      "faceMs": 2510,
+      "skinMs": 2278,
+      "suggestion": 1,
+      "notices": [],
+      "figureSkinBeforeConfirm": "#DFC3A8",
+      "figureSkinAfterConfirm": "#F6EDE4",
+      "requestsDuringFlow": [
+        "GET /assets/faceLook-DfT4i5ee.js",
+        "GET /assets/scanSession-DEJJ8gm1.js",
+        "GET /assets/scan.worker-_dVb5srU.js",
+        "GET /models/wasm/vision_wasm_module_internal.js",
+        "GET /models/wasm/vision_wasm_module_internal.wasm",
+        "GET /models/face_landmarker.task",
+        "GET /assets/scan.worker-_dVb5srU.js",
+        "GET /models/wasm/vision_wasm_module_internal.js",
+        "GET /models/wasm/vision_wasm_module_internal.wasm",
+        "GET /models/face_landmarker.task",
+        "GET /assets/faceTile-p6xwOpkc.js"
+      ],
+      "offOrigin": [],
+      "withBody": []
+    },
+    {
+      "id": "b",
+      "file": "person-b-even.jpg",
+      "note": "Monk 6 render",
+      "faceMs": 2547,
+      "skinMs": 2401,
+      "suggestion": 6,
+      "notices": [
+        "cast"
+      ],
+      "figureSkinBeforeConfirm": "#DFC3A8",
+      "figureSkinAfterConfirm": "#A07E56",
+      "requestsDuringFlow": [
+        "GET /assets/faceLook-DfT4i5ee.js",
+        "GET /assets/scanSession-DEJJ8gm1.js",
+        "GET /assets/scan.worker-_dVb5srU.js",
+        "GET /models/wasm/vision_wasm_module_internal.js",
+        "GET /models/wasm/vision_wasm_module_internal.wasm",
+        "GET /models/face_landmarker.task",
+        "GET /assets/scan.worker-_dVb5srU.js",
+        "GET /models/wasm/vision_wasm_module_internal.js",
+        "GET /models/wasm/vision_wasm_module_internal.wasm",
+        "GET /models/face_landmarker.task",
+        "GET /assets/faceTile-p6xwOpkc.js"
+      ],
+      "offOrigin": [],
+      "withBody": []
+    },
+    {
+      "id": "c",
+      "file": "person-c-even.jpg",
+      "note": "Monk 9 render",
+      "faceMs": 2464,
+      "skinMs": 2281,
+      "suggestion": 9,
+      "notices": [],
+      "figureSkinBeforeConfirm": "#DFC3A8",
+      "figureSkinAfterConfirm": "#3A312A",
+      "requestsDuringFlow": [
+        "GET /assets/faceLook-DfT4i5ee.js",
+        "GET /assets/scanSession-DEJJ8gm1.js",
+        "GET /assets/scan.worker-_dVb5srU.js",
+        "GET /models/wasm/vision_wasm_module_internal.js",
+        "GET /models/wasm/vision_wasm_module_internal.wasm",
+        "GET /models/face_landmarker.task",
+        "GET /assets/scan.worker-_dVb5srU.js",
+        "GET /models/wasm/vision_wasm_module_internal.js",
+        "GET /models/wasm/vision_wasm_module_internal.wasm",
+        "GET /models/face_landmarker.task",
+        "GET /assets/faceTile-p6xwOpkc.js"
+      ],
+      "offOrigin": [],
+      "withBody": []
+    }
+  ]
+}

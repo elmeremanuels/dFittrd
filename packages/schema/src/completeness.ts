@@ -74,6 +74,8 @@ const POINT_LABEL: Record<FitPoint, string> = {
   thigh: 'thigh',
   inseam: 'inseam',
   foot: 'footEu or footLengthCm',
+  neck: 'neck',
+  sleeve: 'sleeve',
 };
 
 function rowHasPoint(row: Record<string, unknown>, point: FitPoint): boolean {

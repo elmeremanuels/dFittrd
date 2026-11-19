@@ -97,6 +97,58 @@ export const SYNTHETIC_MENS_TEE: GarmentPayload = garment({
   criticalFitPoints: ['bust'],
 });
 
+const CHINO_WAISTS: readonly (readonly [w: string, waistband: number, seat: number, thigh: number, rise: number])[] = [
+  ['30', 78.5, 99, 59.5, 26],
+  ['32', 83.5, 104, 62, 26.5],
+  ['34', 88.5, 109, 64.5, 27],
+  ['36', 93.5, 114, 67, 27.5],
+  ['38', 98.5, 119, 69.5, 28],
+];
+const CHINO_LEGS: readonly (readonly [l: string, inseam: number])[] = [
+  ['30', 76],
+  ['32', 81],
+  ['34', 86],
+];
+
+/**
+ * SYNTHETIC test garment, not a product (men-3d-plan slice M2b): regular chinos on a two-dimensional
+ * W/L GARMENT chart, 5 waists × 3 lengths, every row with `axes`. All numbers are made up for the
+ * test vectors MT6–MT9 and MT13 [A]: waistband 78.5 at W30 stepping 5 cm per W (about the W label in
+ * cm plus 2), seat = waistband + 20.5, thigh steps 2.5, front rise 26–28; inseams 76 / 81 / 86 (the
+ * plan's MT9 values, equal to the OTTO and Rab inside legs of L30 / L32 / L34 in
+ * `chartTemplatesMen.ts`). Never sold, never fit evidence.
+ */
+export const SYNTHETIC_MENS_CHINO_WL: GarmentPayload = garment({
+  id: 'synthetic-men-chino-wl',
+  brand: 'Curtain test fixture',
+  name: 'SYNTHETIC men’s test chino W/L (not a product)',
+  category: 'bottom',
+  subcategory: 'chino',
+  audience: 'men',
+  priceEur: 1,
+  primaryColorHex: '#B89F7A',
+  colorways: [{ name: 'Test stone', hex: '#B89F7A' }],
+  fabric: { primary: 'cotton', blend: [['cotton', 98], ['elastane', 2]], weightGsm: 260, stretchPct: 2, drape: 0.3, opacity: 1, sheen: 0 },
+  patternBlock: 'straight',
+  sizeChartType: 'garment',
+  sizeChart: CHINO_WAISTS.flatMap(([w, waist, hip, thigh, rise]) =>
+    CHINO_LEGS.map(([l, inseam]) => ({ size: `${w}/${l}`, waist, hip, thigh, rise, inseam, axes: { waist: w, leg: l } })),
+  ),
+  sizingNotes: 'synthetic test fixture: not a product, not fit evidence',
+  criticalFitPoints: ['waist'],
+});
+
+/**
+ * Men's reference body MREF (men-3d-plan §4 "New test vectors"): the male family's M row of
+ * `@curtain/mannequin` (chest 98, natural waist 86, seat 96 [M], thigh 58.5, neck 39.5, biacromial
+ * 40.5, stature 174, inside leg 84) and EN arm length 64.5 [A, interpolated between 64 at 172 cm and
+ * 65 at 176 cm]. Chest in `bust`, seat in `hip`, arm length in `sleeve`, biacromial in `shoulder`.
+ */
+export const MENS_REFERENCE_BODY: UserBody = Object.freeze({
+  measurements: Object.freeze({ bust: 98, waist: 86, hip: 96, thigh: 58.5, neck: 39.5, shoulder: 40.5, inseam: 84, sleeve: 64.5 }),
+  heightCm: 174,
+}) as UserBody;
+
 /** The real-looking men's fixtures (the synthetic test tee is not one of them; import it by name). */
 export const MENS_FIXTURE_GARMENTS: readonly GarmentPayload[] = Object.freeze([MENS_OXFORD_SHIRT, MENS_STRAIGHT_JEANS]);
 

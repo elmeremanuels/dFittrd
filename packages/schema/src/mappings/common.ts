@@ -8,6 +8,7 @@ import {
   ColorwaySchema,
   EaseSchema,
   FIT_POINTS,
+  GARMENT_LENGTH_POINTS,
   FabricSchema,
   GARMENT_CATEGORIES,
   HexColorSchema,
@@ -151,9 +152,25 @@ export function coerceSizeChart(value: unknown, sink: WarningSink, source: strin
     if (!row || typeof row !== 'object') return row;
     const r = row as Record<string, unknown>;
     const out: Record<string, unknown> = { size: coerceString(r.size ?? r.label ?? r.name) };
-    for (const p of [...FIT_POINTS.filter((x) => x !== 'foot'), 'footEu', 'footLengthCm'] as const) {
+    for (const p of [...FIT_POINTS.filter((x) => x !== 'foot'), 'footEu', 'footLengthCm', ...GARMENT_LENGTH_POINTS] as const) {
       const n = coerceNumber(r[p]);
       if (n !== undefined) out[p] = n;
+    }
+    // Two-dimensional sizes (W/L, slice M2b): kept as given, never derived from the label.
+    if (r.axes && typeof r.axes === 'object' && !Array.isArray(r.axes)) {
+      const a = r.axes as Record<string, unknown>;
+      const waist = coerceString(a.waist);
+      const leg = coerceString(a.leg);
+      if (waist !== undefined || leg !== undefined) out.axes = { waist, leg };
+    }
+    // Men's column names (slice M2b): seat → hip, collar → neck.
+    if (out.hip === undefined) {
+      const seat = coerceNumber(r.seat);
+      if (seat !== undefined) out.hip = seat;
+    }
+    if (out.neck === undefined) {
+      const collar = coerceNumber(r.collar);
+      if (collar !== undefined) out.neck = collar;
     }
     // Common merchant aliases.
     if (out.bust === undefined) {

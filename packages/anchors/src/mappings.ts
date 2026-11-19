@@ -12,7 +12,7 @@ import type { AnchorId, AnchorLength, AnchorRing } from './vocabulary';
 // ---------------------------------------------------------------------------
 
 /** Fit points that have an anchor. `foot` is not an anchor (shoes have no garment mesh). */
-export type AnchoredFitPoint = 'bust' | 'waist' | 'hip' | 'shoulder' | 'thigh' | 'inseam';
+export type AnchoredFitPoint = 'bust' | 'waist' | 'hip' | 'shoulder' | 'thigh' | 'inseam' | 'neck' | 'sleeve';
 
 /**
  * Fit point → anchor id. `bust` → `chest`, and `shoulder` → `shoulder_width` (R1): the fit point and
@@ -26,6 +26,9 @@ export const FIT_POINT_TO_ANCHOR: Readonly<Record<AnchoredFitPoint, AnchorId>> =
   shoulder: 'shoulder_width',
   thigh: 'thigh',
   inseam: 'inseam',
+  // Men's points (men-3d-plan slice M2b): the neck ring and the sleeve length anchor.
+  neck: 'neck',
+  sleeve: 'sleeve',
 };
 
 /** Anchor id → fit point, for the anchors the fit engine scores. */

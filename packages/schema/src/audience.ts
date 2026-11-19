@@ -32,6 +32,8 @@ export const FIT_POINT_LABELS_EN: Readonly<Record<FitPointLabelKey, string>> = O
   thigh: 'Thigh',
   inseam: 'Inseam',
   foot: 'Foot',
+  neck: 'Neck',
+  sleeve: 'Sleeve',
 });
 
 /** English label of a fit point for a garment's audience: `fitPointLabel('bust', 'men')` → "Chest". */

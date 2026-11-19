@@ -1,0 +1,278 @@
+{
+  "format": "curtain.garment.bakeCheck",
+  "version": 1,
+  "pass": false,
+  "checks": [
+    {
+      "id": "readable",
+      "pass": true,
+      "reasons": []
+    },
+    {
+      "id": "file_size",
+      "pass": true,
+      "reasons": []
+    },
+    {
+      "id": "sizes_have_geometry",
+      "pass": true,
+      "reasons": []
+    },
+    {
+      "id": "refusals_declared",
+      "pass": true,
+      "reasons": []
+    },
+    {
+      "id": "provenance",
+      "pass": true,
+      "reasons": []
+    },
+    {
+      "id": "at_rest",
+      "pass": false,
+      "reasons": [
+        "size 10 on the body with 94 cm hips says it did not come to rest"
+      ]
+    },
+    {
+      "id": "tape_rings",
+      "pass": false,
+      "reasons": [
+        "size 8 on the body with 104 cm hips: the draped hip-line ring is 116.7 cm around, the tape says 112 cm (allowed ±2.2 cm)",
+        "size 8 on the body with 109 cm hips: the draped hip-line ring is 120 cm around, the tape says 112 cm (allowed ±2.2 cm)",
+        "size 10 on the body with 114 cm hips: the draped hip-line ring is 126.8 cm around, the tape says 122 cm (allowed ±2.4 cm)",
+        "size 12 on the body with 114 cm hips: the draped hip-line ring is 127.7 cm around, the tape says 124 cm (allowed ±2.5 cm)",
+        "size 14 on the body with 114 cm hips: the draped hip-line ring is 128.6 cm around, the tape says 126 cm (allowed ±2.5 cm)"
+      ]
+    },
+    {
+      "id": "inside_body",
+      "pass": true,
+      "reasons": []
+    },
+    {
+      "id": "size_order",
+      "pass": true,
+      "reasons": []
+    }
+  ],
+  "tape": {
+    "hipBelowBandCm": null,
+    "sizes": [
+      {
+        "size": "8",
+        "provenance": "measured",
+        "hipCm": 112,
+        "hemSweepCm": 230,
+        "stretchedGirthCm": 94,
+        "notDraped": [
+          {
+            "bodyHipCm": 114,
+            "reason": "cannot be worn"
+          }
+        ]
+      },
+      {
+        "size": "10",
+        "provenance": "measured",
+        "hipCm": 122,
+        "hemSweepCm": 248,
+        "stretchedGirthCm": 100,
+        "notDraped": []
+      },
+      {
+        "size": "12",
+        "provenance": "interpolated",
+        "hipCm": 124,
+        "hemSweepCm": 254,
+        "stretchedGirthCm": 105,
+        "notDraped": []
+      },
+      {
+        "size": "14",
+        "provenance": "measured",
+        "hipCm": 126,
+        "hemSweepCm": 260,
+        "stretchedGirthCm": 110,
+        "notDraped": []
+      },
+      {
+        "size": "16",
+        "provenance": "extrapolated",
+        "hipCm": 128,
+        "hemSweepCm": 266,
+        "stretchedGirthCm": 115,
+        "notDraped": []
+      }
+    ]
+  },
+  "drapes": [
+    {
+      "size": "8",
+      "t": 0,
+      "bodyHipCm": 104,
+      "hipRingCm": 116.7,
+      "hemRingCm": 230,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.054
+    },
+    {
+      "size": "8",
+      "t": -1,
+      "bodyHipCm": 94,
+      "hipRingCm": 111.9,
+      "hemRingCm": 230.1,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.223
+    },
+    {
+      "size": "8",
+      "t": 0.5,
+      "bodyHipCm": 109,
+      "hipRingCm": 120,
+      "hemRingCm": 230.2,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.13
+    },
+    {
+      "size": "10",
+      "t": 0,
+      "bodyHipCm": 104,
+      "hipRingCm": 122.1,
+      "hemRingCm": 248,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.143
+    },
+    {
+      "size": "10",
+      "t": -1,
+      "bodyHipCm": 94,
+      "hipRingCm": 121.4,
+      "hemRingCm": 248.1,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": false,
+      "maxMoveCmPerFrame": 0.285
+    },
+    {
+      "size": "10",
+      "t": 1,
+      "bodyHipCm": 114,
+      "hipRingCm": 126.8,
+      "hemRingCm": 248,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.107
+    },
+    {
+      "size": "12",
+      "t": 0,
+      "bodyHipCm": 104,
+      "hipRingCm": 123.7,
+      "hemRingCm": 254,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.123
+    },
+    {
+      "size": "12",
+      "t": -1,
+      "bodyHipCm": 94,
+      "hipRingCm": 123.4,
+      "hemRingCm": 254.1,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.217
+    },
+    {
+      "size": "12",
+      "t": 1,
+      "bodyHipCm": 114,
+      "hipRingCm": 127.7,
+      "hemRingCm": 254.3,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.077
+    },
+    {
+      "size": "14",
+      "t": 0,
+      "bodyHipCm": 104,
+      "hipRingCm": 125.5,
+      "hemRingCm": 260.3,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.094
+    },
+    {
+      "size": "14",
+      "t": -1,
+      "bodyHipCm": 94,
+      "hipRingCm": 125.2,
+      "hemRingCm": 260,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.136
+    },
+    {
+      "size": "14",
+      "t": 1,
+      "bodyHipCm": 114,
+      "hipRingCm": 128.6,
+      "hemRingCm": 260,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.081
+    },
+    {
+      "size": "16",
+      "t": 0,
+      "bodyHipCm": 104,
+      "hipRingCm": 127.2,
+      "hemRingCm": 266.1,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.107
+    },
+    {
+      "size": "16",
+      "t": -1,
+      "bodyHipCm": 94,
+      "hipRingCm": 126.9,
+      "hemRingCm": 266.4,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.113
+    },
+    {
+      "size": "16",
+      "t": 1,
+      "bodyHipCm": 114,
+      "hipRingCm": 129.7,
+      "hemRingCm": 266.1,
+      "insideParticles": 0,
+      "insideMaxCm": 0,
+      "atRest": true,
+      "maxMoveCmPerFrame": 0.105
+    }
+  ],
+  "checkedAt": "2026-11-19T01:48:59.477Z"
+}

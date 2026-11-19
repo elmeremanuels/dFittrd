@@ -848,4 +848,70 @@ claimed size, declared refusals, no particle inside the device avatar, provenanc
 and the 3 MB budget. A pass is an ordinary asset to approve; a fail is recorded as `refused`, with no files stored. `bake-pom.ts`
 now writes what the check reads: qa.json `tape`, and base.glb `bodies`, `tapeRings` and per-drape `atRest`. Not run on the real
 POM v2 bake (no `out/` here). Expect it to be refused by `at_rest`: AU 10 on the AU 8 body is still moving at 0.285 cm per frame
-(§10.1).
+(§10.1). It was, and by `tape_rings` too: §10.9.
+
+### 10.9 The real bake under the check: sizes draped on bodies they cannot be pulled over (19 Nov 2026)
+
+Branch `claude/pom-gate` (report: `docs/reports/claude/pom-gate.md`). The bake of §10.2, rebaked with `bake-pom.ts` so it
+states what §10.8's check reads, is **refused** by two checks: `at_rest` (AU 10 on the AU 8 body, 0.285 cm per frame, §10.1)
+and `tape_rings`. The draped hip-line ring is longer than the tape on five drapes, all of them a size on a body wider than its
+own chart body: AU 8 on hip 104 / 109 (116.7 / 120.0 cm against 112), AU 10 / 12 / 14 on hip 114 (126.8 / 127.7 / 128.6 against
+122 / 124 / 126; allowed ±2.2-2.5 cm).
+
+**Which layer is wrong.** Three candidates, measured on the 24 drapes of `out/pom2-avatar` (`serverdrape/hoop_strain.py`:
+draped ring length against the size's rest length):
+
+| | where | numbers |
+|---|---|---|
+| (a) the drapes | a size on a body its band cannot be pulled over | The fit engine's `pullOnCheck` (stretched band against the body's hip, blocked when short by more than 2.5 cm, 0 for an extrapolated band) blocks AU 8 from hip 99, AU 10 from 104, AU 12 from 109, AU 14 at 114 (§9.2's table, on the avatar's chart line). **All five ring failures are blocked combinations**, and the stretch grows with the shortfall: hip-ring strain +4.0 / +7.1 % (AU 8 on 104 / 109, band 10 / 15 cm short), +4.0 / +2.9 / +2.1 % (AU 10 / 12 / 14 on 114, 14 / 9 / 4 cm short). One blocked combination passes the ring check (AU 10 on 104: 122.0 cm, 0.0 %; its 122 cm of fabric clears the hip, its 100 cm band does not) |
+| (b) the cloth | Blender's `viscose-soft` lets fabric stretch where a body pushes | Under its own weight it does not: mean edge strain −0.01 to +0.06 %, p95 ≤ 0.65 % on every drape (`fabricStrain`), hip-ring total −0.7 to +0.3 % on every combination the band passes, except AU 16 on hip 114 (+1.2 %; band 1 cm clear, extrapolated). `material.json` states the woven viscose at 1.5 % stretch. Where the body pushes, single mesh segments of the hip ring stretch far more: 9-35 % on the blocked drapes, and 3.8-15.7 % on four combinations the band passes (AU 12 on 104: 3.8, AU 8 on 94: 6.6, AU 14 on 109: 9.7, AU 16 on 114: 15.7). That is a property of the solver (a linear spring of stiffness 15, no strain limit), not of viscose |
+| (c) the gate | ±max(2 cm, 2 %) on the ring's path | The tolerance is wider than the fabric's 1.5 % stretch at every size (2 cm on 112-128 cm is 1.6-1.8 %; 2 % above 100 cm). Loosening it to pass would admit 7 % of stretch in a woven fabric |
+
+**Decision: (a).** A size whose band does not go over the hips should not be drawn on those hips at all; the 3D view would show a
+skirt the size advice blocks, worn comfortably. (b) is real but second-order: once (a) is applied the ring totals are within the
+fabric's stretch, and only single segments of the cloth are too soft (caveat below). (c) is not changed.
+
+**Fix (`bake-pom.ts`, `bakeTape.ts` `pullOnRefusal` / `planSizeBodies`, unit test `viewer/src/bakePlan.test.ts`).** A size is
+draped on the chart bodies t = −1, 0, +1 where it can be worn: the wear rule holds its band (§9.2) and the fit engine's own
+`pullOnCheck` passes. Every body beyond is declared `notDraped` with the reason in the bake ("its band cannot be pulled over 104
+cm hips: 94 cm at full stretch, 10 cm short (the size advice allows 2.5 cm)"), which the gate already reads. Where the chart body
+above a size's last one is refused, the size's own chart body stands in as its upper body (AU 10: t = −0.5, hip 99, a new drape;
+AU 14: t = +0.5, hip 109). The bake now holds 11 drapes on 5 bodies:
+
+| Size (stretched band) | draped on (hip) | not draped on (hip) | base |
+|---|---|---|---|
+| AU 8 (94, measured) | 94 | 99, 104, 109, 114 (and the wear rule at 114) | 94 |
+| AU 10 (100, measured) | 94, 99 | 104, 109, 114 | 99 |
+| AU 12 (105, INTERPOLATED) | 94, 104 | 109, 114 | 104 |
+| AU 14 (110, measured) | 94, 104, 109 | 114 | 104 |
+| AU 16 (115, EXTRAPOLATED) | 94, 104, 114 | — | 104 |
+
+`run_pom2.py` takes a frame count per job (`body:size:frames`). Re-draped at 288 frames: AU 10 on hip 94 (largest movement over
+the last 24 frames 0.09 cm per frame, mean 0.0035; it was 0.285 at 144) and AU 14 on hip 109 (0.071 / 0.0015; it was 0.52 at
+144). New at 144: AU 10 on hip 99 (0.11 / 0.012). All at rest by §9.5's threshold.
+
+**The check on the rebake: pass, 9 of 9** (`node` + `checkDrapeBake`, the gate of §10.8 unchanged). Hip-line ring against the tape:
+111.9 (AU 8; tape 112), 121.3-121.5 (122), 123.4-123.7 (124), 125.2-126.3 (126), 126.9-129.7 (128); hem 230.1 / 248.3 / 254.0-
+254.1 / 260.0-260.3 / 266.1-266.4 against 230 / 248 / 254 / 260 / 266. The largest departure is AU 16 on hip 114, +1.7 cm (allowed
+2.56). 0 particles inside the drawn body on every drape. `base.glb` is 420,872 bytes, 297,935 gzip (was 554,696 / 410,568).
+
+**What the shopper sees now.** From hip 99 AU 8 is not drawn (the body alone and "Size 8 is not drawn: …"), from 104 AU 10, from
+109 AU 12, from 114 AU 14; between its last draped body and the refused one a size is shown on its last drape with the
+`between` note. The size advice blocks a size 2.5 cm earlier than the next refused body (AU 8 from hip 96.6, the drape from 99): a
+shopper at hip 97-98.9 is told AU 8 does not go on and sees it drawn on the 94 cm body with the note naming the 99 cm body.
+Held-out blend (t = −0.4, hip 100): AU 10 is now `between` (its 99 cm drape, vertex RMS 1.29 cm against the direct drape, was a
+blend at 1.67); AU 8 is not drawn there; AU 12-16 unchanged. At t = +0.5 only AU 16 is still held out (AU 14 has it as a grid
+body, AU 8-12 cannot be pulled on there).
+
+**Caveats.**
+- The pull-on rule is the fit engine's, with its allowance (2.5 cm, ASSUMED there): the bake now inherits that choice. It is
+  measured against the chart hip, not the widest hull, so (§9.2) it has no absolute zero either; it agrees with the size advice,
+  which is what the 3D view has to do.
+- (b) remains: single hip-ring segments stretch up to 15.7 % on drapes the band passes (AU 16 on hip 114), where the ring as a
+  whole stretches 1.2 %. The picture is a woven fabric locally softer than viscose where a body pushes; a strain-limited or
+  stiffer cloth was not tried.
+- The test fixture (`packages/garment-viewer/fixtures/pom-v2-rest`, not a simulation) still refuses by its own ring rule and
+  drapes AU 8 on hip 104 as its base. It tests the gate, not the bake, and was not rebuilt.
+- The embed's refusal sentence still says "the simulation could not put it on"; the reason is now usually the band, which the
+  sentence does not name.
+

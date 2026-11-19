@@ -31,7 +31,7 @@
  */
 import type { PeekResponse } from '@curtain/schema';
 import type { ApiClient } from '@/api/client';
-import { adviseSize, embedNoteList, fitForProfile, normalizeAbout, type EmbedFit, type EmbedNote, type SizeAdvice } from './aboutYou';
+import { adviseSize, embedNoteList, fitForProfile, normalizeAbout, waistOnlyOf, type EmbedFit, type EmbedNote, type SizeAdvice } from './aboutYou';
 import { embedStrings } from './strings';
 import { browserParentOrigin } from './peekGate';
 import { resolveTargetOrigin, type ParentWindowLike } from './protocol';
@@ -70,7 +70,7 @@ export interface PeekDeps {
 }
 
 /** What the shown peek says. `size`: a recommendation; `none`: no size fits well; `unknown`: we cannot recommend one yet. */
-export type PeekOutcome = { kind: 'size'; size: string; note: string } | { kind: 'none'; note: string } | { kind: 'unknown'; note: string };
+export type PeekOutcome = { kind: 'size'; size: string; note: string } | { kind: 'none'; note: string } | { kind: 'waist'; waist: string; note: string } | { kind: 'unknown'; note: string };
 
 export interface PeekResult {
   garment: PeekResponse['garment'];
@@ -92,6 +92,8 @@ export function peekNote(notes: readonly EmbedNote[], size: string): string {
 /** The peek's text for a fit. Every outcome is shown in the same fixed box (see the file header). */
 export function peekOutcome(garment: PeekResponse['garment'], embedFit: EmbedFit | null, advice: SizeAdvice | null, remembered: RememberedProfile): PeekOutcome {
   if (!embedFit || !advice || advice.noPoints) return { kind: 'unknown', note: embedStrings().peek.unknownNote };
+  const waist = waistOnlyOf(embedFit.fit, advice);
+  if (waist !== null) return { kind: 'waist', waist, note: embedStrings().peek.waistOnlyNote };
   if (!advice.size) return { kind: 'none', note: embedStrings().peek.noneNote };
   return { kind: 'size', size: advice.size, note: peekNote(embedNoteList(embedFit.fit, advice, garment.category, remembered.profile, garment), advice.size) };
 }

@@ -113,6 +113,8 @@ export interface Garment3DProps {
   size: string;
   /** The size the advice picked (null when nothing fits well). */
   recommended: string | null;
+  /** The waist of a W/L chart whose leg could not be checked (`waistOnlyOf`): named in place of "no size fits". */
+  waistOnly?: string | null;
   measurements: UserBody['measurements'];
   /** The shopper's units and height, so the ring numbers match the 2D figure's. */
   units?: Units;
@@ -150,7 +152,7 @@ export const REQUIRED_3D_TIMEOUT_MS = 30_000;
 
 type Phase = 'idle' | 'loading' | 'draping' | 'settled' | 'failed';
 
-export function Garment3D({ asset, paused, garment, fit, size, recommended, measurements, units = 'metric', heightCm, estimated = [], skinHex = null, onSelect, required = false, onRequiredState, requiredTimeoutMs = REQUIRED_3D_TIMEOUT_MS, lighting = viewerLightingFlag(), head = viewerHeadFlag(), skinShading = avatarSkinFlag(), maleShape = maleShapeFlag(), aiRealism = null, loadViewer = () => import('@curtain/garment-viewer'), webgl2 = hasWebGL2 }: Garment3DProps): ReactNode {
+export function Garment3D({ asset, paused, garment, fit, size, recommended, waistOnly = null, measurements, units = 'metric', heightCm, estimated = [], skinHex = null, onSelect, required = false, onRequiredState, requiredTimeoutMs = REQUIRED_3D_TIMEOUT_MS, lighting = viewerLightingFlag(), head = viewerHeadFlag(), skinShading = avatarSkinFlag(), maleShape = maleShapeFlag(), aiRealism = null, loadViewer = () => import('@curtain/garment-viewer'), webgl2 = hasWebGL2 }: Garment3DProps): ReactNode {
   const [supported] = useState(() => !!asset && webgl2());
   const usable = !!asset && !paused && supported;
   const [open, setOpen] = useState(required && usable);
@@ -313,8 +315,8 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, meas
         </div>
       ) : null}
       <p className="mt-2 text-xs leading-snug text-ink-mute" data-testid="garment3d-label">
-        {t.notPhoto} {recommended ? t.picked(recommended) : t.noneFits}
-        {recommended && recommended !== size ? ` ${t.looking(size)}` : ''}
+        {t.notPhoto} {recommended ? t.picked(recommended) : waistOnly !== null ? t.waistOnly(waistOnly) : t.noneFits}
+        {(recommended && recommended !== size) || (!recommended && waistOnly !== null) ? ` ${t.looking(size)}` : ''}
       </p>
       {source?.kind === 'bake' ? <BakeNote t={t} size={size} source={source} units={units} /> : null}
       {source?.kind === 'device' && source.notDrawn?.[size] ? (

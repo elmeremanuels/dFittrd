@@ -19,8 +19,13 @@ import {
   profileFromAbout,
   usablePoints,
   validateAbout,
+  waistOnlyOf,
   type AboutForm,
+  type EmbedFit,
 } from '../aboutYou';
+import { peekOutcome } from '../peek';
+import type { RememberedProfile } from '../storage';
+import { embedStrings } from '../strings';
 
 afterEach(cleanup);
 
@@ -129,6 +134,14 @@ describe('men’s result', () => {
     expect(advice.size).toBeNull();
     const notes = embedNoteList(fit, advice, 'bottom', profile, SYNTHETIC_MENS_CHINO_WL).map((n) => n.text);
     expect(notes[0]).toBe('Waist 34 fits you best. We could not check the leg length: add your inside leg, or choose your usual leg');
+    // The same result everywhere it is told: the size peek names the waist too, never "No size fits well".
+    expect(waistOnlyOf(fit, advice)).toBe('34');
+    const outcome = peekOutcome(SYNTHETIC_MENS_CHINO_WL, { fit } as EmbedFit, advice, { profile } as RememberedProfile);
+    expect(outcome).toEqual({ kind: 'waist', waist: '34', note: 'The leg length is not checked yet. Open the fitting room to add your inside leg.' });
+    expect(embedStrings().peek.waistOnly('34')).toBe('Waist 34 fits you best');
+    // A chart with no axes, or a full size picked, is not a waist-only result.
+    expect(waistOnlyOf({ ...fit, sizeAxes: { waist: '34', leg: '32' } }, advice)).toBeNull();
+    expect(waistOnlyOf(fit, { size: '34/32' })).toBeNull();
   });
   it('"Body type: Not specified" on a men’s garment uses the male prior; other garments keep the choice', () => {
     expect(priorSexFor({ sex: 'unspecified' }, SYNTHETIC_MENS_TEE)).toBe('male');

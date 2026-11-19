@@ -14,7 +14,7 @@ import { pct } from '@/lib/format';
 import type { FigureFamily } from '@/render/body';
 import { ringInputsFor } from '@/render/ringInputs';
 import { ringOverlayFor } from '@/render/rings';
-import { bandText, fitWithAdvice, gapText, neighbourSizes, pointLabelFor, priorKeys, usablePoints, type EmbedFit, type FitPreference, type SizeAdvice } from './aboutYou';
+import { bandText, fitWithAdvice, gapText, neighbourSizes, pointLabelFor, priorKeys, usablePoints, waistOnlyOf, type EmbedFit, type FitPreference, type SizeAdvice } from './aboutYou';
 import { UnitToggle } from './EmbedScreens';
 import { SizeChartTable } from './SizeChartTable';
 import { embedStrings, parts } from './strings';
@@ -168,7 +168,7 @@ export function ResultScreen({
 
   const sizes = neighbourSizes(fit, advice.size ?? advice.closest);
   // A men's W/L chart whose leg could not be checked (slice M2b): the waist is named, no leg is.
-  const waistOnly = !advice.size && fit.sizeAxes?.waist !== undefined && fit.sizeAxes.leg === undefined ? fit.sizeAxes.waist : null;
+  const waistOnly = waistOnlyOf(fit, advice);
   const selectedFit = fit.perSize.find((s) => s.size === selected);
   const points = usablePoints(selectedFit);
   const selectedPullOn = selectedFit?.pullOn?.status;

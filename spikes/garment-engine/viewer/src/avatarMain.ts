@@ -89,6 +89,8 @@ declare global {
       garmentPatches?(): Record<string, { rgb: [number, number, number]; x: number; y: number }>;
       contrast?(): ContrastReport;
       frameMs?(frames: number, withOutline?: boolean): number;
+      /** Body alone: the screen position (CSS px) of the chin's front and of the neck ring's front, for the under-jaw measurement. */
+      jawPoints?(): { chin: { x: number; y: number }; neck: { x: number; y: number } };
       look?: unknown;
       view: GarmentView | null;
     };
@@ -147,7 +149,8 @@ function headMode(): void {
   const m = buildBody({ family, heightCm: body.heightCm, shoulderCm: body.shoulderCm, bust: body.bust, waist: body.waist, hip: body.hip });
   const stage = new Stage(canvas, { controls: true, lighting, extras });
   // The same neck fit as the mount's typed body (`buildTypedAvatar`).
-  const figure = new Figure(meshGeometry(fitNeckToHead(buildMannequinMesh(m, { head }), m).mesh), new Uint32Array(0), 0, null);
+  const shown = fitNeckToHead(buildMannequinMesh(m, { head }), m).mesh;
+  const figure = new Figure(meshGeometry(shown), new Uint32Array(0), 0, null);
   figure.garment.visible = false;
   figure.setSkin(skin);
   stage.setSkinTone(skin);
@@ -187,6 +190,19 @@ function headMode(): void {
       return out;
     },
     contrast: () => silhouetteContrast(stage, figure),
+    jawPoints() {
+      // The most forward points of the drawn mesh at the chin's height and at the neck ring (the middle of the figure).
+      const chinY = shown.headLevels?.chinY ?? 0.865 * m.statureCm;
+      const front = (y: number): number => {
+        let z = -Infinity;
+        for (let i = 0; i < shown.positions.length / 3; i++) {
+          if (Math.abs(shown.positions[3 * i]!) < 1 && Math.abs(shown.positions[3 * i + 1]! - y) < 0.6) z = Math.max(z, shown.positions[3 * i + 2]!);
+        }
+        return z;
+      };
+      const at = (y: number) => stage.toScreen(new THREE.Vector3(0, y, front(y)).applyAxisAngle(new THREE.Vector3(0, 1, 0), figure.group.rotation.y));
+      return { chin: at(chinY), neck: at(m.morphHeights.neck) };
+    },
     frameMs(n: number, withOutline = false) {
       // As while a finger turns the view (the orbit controls' start and end), unless the frames are asked with the outline.
       if (!withOutline) stage.controls.dispatchEvent({ type: 'start' });

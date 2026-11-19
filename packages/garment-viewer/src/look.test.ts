@@ -12,7 +12,7 @@ import { sample } from './collide';
 import { openSession, prepareFit, relax, viewerMaterial } from './engine';
 import { fitForBody } from './fitting';
 import { buildBundle } from '../../../spikes/garment-engine/src/bundle';
-import { BACKDROP_HEX, CONTRAST_TARGET, DEFAULT_BODY_HEX, FLOOR_SEEN_HEX, Figure, LIGHTING_RIGS, LOOK_EXTRAS, TRUE_TONE_GLSL, TRUE_TONE_START, adaptiveBackdrop, cameraFrame, contrastOf, frontIrradiance, installTrueTone, lightingOf, meshGeometry, outlineColour, parseSkinHex, projectToCanvas, trueTone } from './scene';
+import { BACKDROP_HEX, CONTRAST_TARGET, DEFAULT_BODY_HEX, FLOOR_SEEN_HEX, Figure, LIGHTING_RIGS, LOOK_EXTRAS, TRUE_TONE_GLSL, TRUE_TONE_START, adaptiveBackdrop, cameraFrame, contrastOf, frontIrradiance, installTrueTone, lightingOf, meshGeometry, HAIR_HEX, hairLinear, tintHair, outlineColour, parseSkinHex, projectToCanvas, trueTone } from './scene';
 import { GarmentViewError, headOf, planAvatar } from './mount';
 import { tubeWeight } from './body';
 import type { Mesh } from '@curtain/mannequin';
@@ -111,8 +111,8 @@ describe('lighting neutral-v2', () => {
   it('reads the host\'s lighting and head: only the names, anything else is today\'s look', () => {
     for (const v of ['classic', 'neutral', 'neutral-v2'] as const) expect(lightingOf(v)).toBe(v);
     for (const v of [undefined, null, '', 'Neutral', 'v2', 1, {}]) expect(lightingOf(v)).toBe('classic');
-    for (const v of ['neutral', 'egg', 'neutral-v2'] as const) expect(headOf(v)).toBe(v);
-    for (const v of [undefined, null, '', 'v2', 'NEUTRAL-V2', 2]) expect(headOf(v)).toBe('neutral');
+    for (const v of ['neutral', 'egg', 'neutral-v2', 'neutral-v3'] as const) expect(headOf(v)).toBe(v);
+    for (const v of [undefined, null, '', 'v2', 'v3', 'NEUTRAL-V2', 'neutral-v4', 2]) expect(headOf(v)).toBe('neutral');
   });
 
   it('the outline: none on a skin that stands out 3:1 by itself; else the skin darkened (same hue) until it stands out from the cream and the floor', () => {
@@ -155,12 +155,12 @@ describe('lighting neutral-v2', () => {
   });
 });
 
-describe('head v2 on the avatar', () => {
-  const canonical = buildMannequinMesh(m, { head: 'neutral-v2' });
+describe.each(['neutral-v2', 'neutral-v3'] as const)('head %s on the avatar', (headKind) => {
+  const canonical = buildMannequinMesh(m, { head: headKind });
   const female = { category: 'dress', mannequin: { version: '0.1.0', shape: 'M' } as { family?: unknown } };
 
   it('planAvatar builds it only when asked; the shade reaches the geometry as a vertex colour', () => {
-    expect(planAvatar(female, {}, { head: 'neutral-v2' }).avatar.mesh.shade).toBeDefined();
+    expect(planAvatar(female, {}, { head: headKind }).avatar.mesh.shade).toBeDefined();
     expect(planAvatar(female, {}).avatar.mesh.shade).toBeUndefined();
     const g = meshGeometry(canonical);
     expect(g.getAttribute('color').count).toBe(canonical.positions.length / 3);
@@ -208,7 +208,45 @@ describe('head v2 on the avatar', () => {
       const band = jawBandOf(avatar.mesh, chinY, topY);
       expect(band.neck).toBeLessThanOrEqual(NECK_TO_HEAD * band.head + 1e-9);
     }
-    for (const heightCm of [130, 182, 220]) expect(topology(buildTypedAvatar(m, { heightCm }, 'dress', { head: 'neutral-v2' }).avatar.mesh).watertight).toBe(true);
+    for (const heightCm of [130, 182, 220]) expect(topology(buildTypedAvatar(m, { heightCm }, 'dress', { head: headKind }).avatar.mesh).watertight).toBe(true);
+  });
+});
+
+describe('head v3: the hair colour', () => {
+  const lin = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+  const rgb = (hex: string) => [1, 3, 5].map((i) => lin(parseInt(hex.slice(i, i + 2), 16) / 255));
+  const v3 = buildMannequinMesh(m, { head: 'neutral-v3' });
+  const crown = v3.hair!.findIndex((h, i) => h === 1 && v3.positions[3 * i + 1]! > m.statureCm - 0.5);
+
+  it('only head v3 carries a hair mask; the grey mannequin keeps grey hair', () => {
+    expect(buildMannequinMesh(m, { head: 'neutral-v2' }).hair).toBeUndefined();
+    expect(meshGeometry(buildMannequinMesh(m, { head: 'neutral-v2' })).getAttribute('hair')).toBeUndefined();
+    const g = meshGeometry(v3);
+    const c = g.getAttribute('color').array as Float32Array;
+    const before = Array.from(c.slice(3 * crown, 3 * crown + 3));
+    tintHair(g, null);
+    expect(Array.from(c.slice(3 * crown, 3 * crown + 3))).toEqual(before);
+    expect(before[0]).toBeCloseTo(before[2]!, 9);
+  });
+
+  it('on a light skin the hair is the dark brown, on a deep skin the darkened skin; the skin off the hair is untouched', () => {
+    const f = new Figure(meshGeometry(v3), Uint32Array.from([0, 1, 2]), 3, null);
+    const c = (f.body.geometry.getAttribute('color').array as Float32Array);
+    const shade = lin(v3.shade![crown]!);
+    f.setSkin(MONK[0]!);
+    const skin1 = rgb(MONK[0]!);
+    const shown1 = [0, 1, 2].map((ch) => c[3 * crown + ch]! * skin1[ch]!);
+    const want1 = hairLinear(MONK[0]!);
+    for (let ch = 0; ch < 3; ch++) expect(shown1[ch]! / shade).toBeCloseTo(want1[ch]! / lin(0.66), 6);
+    expect(want1).toEqual(rgb(HAIR_HEX));
+    // Monk 10 is darker than the brown: the hair is the skin times its shade, as without a tint.
+    f.setSkin(MONK[9]!);
+    for (let ch = 0; ch < 3; ch++) expect(c[3 * crown + ch]).toBeCloseTo(shade, 6);
+    // A vertex of the body (no hair) keeps its shade of 1.
+    expect(c[0]).toBe(1);
+    // Back to the grey: grey hair again.
+    f.setSkin(null);
+    expect(c[3 * crown]).toBeCloseTo(shade, 6);
   });
 });
 

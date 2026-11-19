@@ -273,8 +273,9 @@ describe('3D view: the look and the body go to the viewer as in-memory options',
     expect(viewerLightingFlag({ VITE_VIEWER_LIGHTING: 'neutral' })).toBe('neutral');
     expect(viewerLightingFlag({ VITE_VIEWER_LIGHTING: 'neutral-v2' })).toBe('neutral-v2');
     expect(viewerHeadFlag({})).toBeNull();
-    for (const v of ['', 'neutral', 'egg', 'v2']) expect(viewerHeadFlag({ VITE_VIEWER_HEAD: v })).toBeNull();
+    for (const v of ['', 'neutral', 'egg', 'v2', 'v3', 'neutral-v4']) expect(viewerHeadFlag({ VITE_VIEWER_HEAD: v })).toBeNull();
     expect(viewerHeadFlag({ VITE_VIEWER_HEAD: 'neutral-v2' })).toBe('neutral-v2');
+    expect(viewerHeadFlag({ VITE_VIEWER_HEAD: 'neutral-v3' })).toBe('neutral-v3');
     // The flags of this test run are not set: the app gets today's look.
     expect(viewerLightingFlag()).toBe('classic');
     expect(viewerHeadFlag()).toBeNull();

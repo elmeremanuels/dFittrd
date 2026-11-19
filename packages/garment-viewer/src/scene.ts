@@ -5,7 +5,7 @@
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import type { Mesh } from '@curtain/mannequin';
+import { HAIR_SHADE, type Mesh } from '@curtain/mannequin';
 import type { ViewerMaterial } from './engine';
 import { faceOverlayGeometry, faceTextureOf, isFaceTexture, type FaceTexture } from './faceOverlay';
 
@@ -574,7 +574,46 @@ export class Stage {
   }
 }
 
-export function meshGeometry(mesh: Pick<Mesh, 'positions' | 'indices'> & { shade?: Float32Array | undefined }): THREE.BufferGeometry {
+/**
+ * The hair colour of head v3 for a skin colour: a dark brown (`HAIR_HEX`), never lighter than the
+ * skin's own hair shade (the skin times the mesh's hair shade), so on a deep skin tone the hair is
+ * that darker skin colour, as without this. Linear channels 0..1. Display only, like the skin.
+ */
+export const HAIR_HEX = '#3f3027';
+export function hairLinear(skinHex: string, hairShade = HAIR_SHADE): [number, number, number] {
+  const skin = hexRgb(skinHex).map(srgbToLinear);
+  const base = hexRgb(HAIR_HEX).map(srgbToLinear);
+  const k = srgbToLinear(hairShade);
+  return [0, 1, 2].map((c) => Math.min(base[c]!, k * skin[c]!)) as [number, number, number];
+}
+
+/**
+ * Give the hair of a head v3 geometry its colour for this skin (`#rrggbb`), or none (null: the grey
+ * mannequin keeps grey hair, the skin times its shade). The vertex colour multiplies the material's
+ * skin colour, so on the hair it becomes hair colour / skin colour, mixed in by the hair's cover and
+ * keeping the mesh's shade within the hair (its locks). A geometry without hair is left alone.
+ */
+export function tintHair(g: THREE.BufferGeometry, skinHex: string | null, hairShade = HAIR_SHADE): void {
+  const hair = g.getAttribute('hair') as THREE.BufferAttribute | undefined;
+  const base = g.userData.shadeLinear as Float32Array | undefined;
+  const colour = g.getAttribute('color') as THREE.BufferAttribute | undefined;
+  if (!hair || !base || !colour) return;
+  const c = colour.array as Float32Array;
+  const h = hair.array as Float32Array;
+  const ratio = [1, 1, 1];
+  if (skinHex) {
+    const skin = hexRgb(skinHex).map(srgbToLinear);
+    const want = hairLinear(skinHex, hairShade);
+    const k = srgbToLinear(hairShade);
+    for (let ch = 0; ch < 3; ch++) ratio[ch] = want[ch]! / Math.max(1e-6, k * skin[ch]!);
+  }
+  for (let i = 0; i < h.length; i++) {
+    for (let ch = 0; ch < 3; ch++) c[3 * i + ch] = base[i]! * (1 + h[i]! * (ratio[ch]! - 1));
+  }
+  colour.needsUpdate = true;
+}
+
+export function meshGeometry(mesh: Pick<Mesh, 'positions' | 'indices'> & { shade?: Float32Array | undefined; hair?: Float32Array | undefined }): THREE.BufferGeometry {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(mesh.positions), 3));
   // The v2 head's shade (brows, lash line, iris) as a vertex colour that multiplies the skin colour.
@@ -586,6 +625,11 @@ export function meshGeometry(mesh: Pick<Mesh, 'positions' | 'indices'> & { shade
       c[3 * i] = c[3 * i + 1] = c[3 * i + 2] = v;
     }
     g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+    if (mesh.hair) {
+      // Head v3: the hair's cover per vertex, and the shade it is mixed into (`tintHair`).
+      g.setAttribute('hair', new THREE.BufferAttribute(Float32Array.from(mesh.hair), 1));
+      g.userData.shadeLinear = Float32Array.from(mesh.shade, srgbToLinear);
+    }
   }
   g.setIndex(new THREE.BufferAttribute(mesh.indices, 1));
   g.computeVertexNormals();
@@ -672,6 +716,7 @@ export class Figure {
 
   setBody(geometry: THREE.BufferGeometry): void {
     this.body.geometry = geometry;
+    tintHair(geometry, this.skin ? this.skinColour : null);
     if (this.skin && this.skin.vertexColors !== shaded(geometry)) {
       // A material's shader is built for vertex colours or without: switching needs a rebuild.
       this.skin.vertexColors = shaded(geometry);
@@ -681,6 +726,8 @@ export class Figure {
   }
 
   private skin: THREE.MeshPhysicalMaterial | null = null;
+  /** The skin colour of `skin`, `#rrggbb` (for the hair of head v3). */
+  private skinColour: string | null = null;
 
   /**
    * The skin colour of this figure's body (`#rrggbb`), or null (or anything that is not such a
@@ -689,6 +736,8 @@ export class Figure {
    */
   setSkin(hex: string | null): void {
     const colour = parseSkinHex(hex);
+    tintHair(this.body.geometry, colour);
+    this.skinColour = colour;
     if (!colour) {
       this.body.material = shaded(this.body.geometry) ? BODY_MATERIAL_SHADED : BODY_MATERIAL;
       this.skin?.dispose();

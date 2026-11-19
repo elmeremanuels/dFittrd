@@ -5,8 +5,8 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /**
  * The look review of 18 Nov 2026 in the real embed: the production build at phone size (360 x 740,
- * 2x), the avatar prompt and the 3D view, for the azure dress, the crimson POM skirt (a drape bake)
- * and the photo skirt (git-ignored bundles; a product whose bundle is absent is skipped). Per
+ * 2x), the avatar prompt and the 3D view, for the azure dress, the crimson POM skirt (a drape bake),
+ * the photo skirt and the synthetic spike dress (git-ignored bundles; a product whose bundle is absent is skipped). Per
  * product: the result with the 3D view for Monk 1, 3, 6, 9 and 10 picked in the prompt, a close-up
  * of the canvas, and the whole page once. The build decides the lighting and the head
  * (`VITE_VIEWER_LIGHTING`, `VITE_VIEWER_HEAD`); `LOOK_LABEL` names the build in the file names.
@@ -32,6 +32,8 @@ const PRODUCTS = [
   { id: 'azure-dress', dir: resolve(OUT, 'eval', 'azure-palm-baby-doll-dress'), body: { bust: '91', waist: '73.5', hip: '100' } },
   { id: 'pom-skirt', dir: resolve(OUT, 'pom2-bundle', 'crimson-wildflower-maxi-skirt'), body: { bust: '91', waist: '73.5', hip: '100' } },
   { id: 'photo-skirt', dir: resolve(OUT, 'eval', 'crimson-wildflower-maxi-skirt'), body: { bust: '91', waist: '73.5', hip: '100' } },
+  // The synthetic spike dress (`pnpm --filter @curtain/garment-spike build:bundle`, plus its payload.json): no GPU run needed.
+  { id: 'synthetic-dress', dir: resolve(OUT, 'aalter-studio-2'), body: { bust: '91', waist: '73.5', hip: '100' } },
 ];
 const TONES = [1, 3, 6, 9, 10];
 

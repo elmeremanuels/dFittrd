@@ -35,8 +35,9 @@ export interface AvatarLook {
   /**
    * `neutral` (default): the neutral standard face of `@curtain/mannequin` (D19: no avatar looks
    * unfinished). `egg`: the plain v0 head. `neutral-v2` (opt-in, for the look review): head v2 of
-   * `@curtain/mannequin` (open eyes, brows, ears, a jaw and brow per family, no neck seam). Fixed at
-   * mount; `setLook` does not change it.
+   * `@curtain/mannequin` (open eyes, brows, ears, a jaw and brow per family, no neck seam).
+   * `neutral-v3` (opt-in, for the review of 19 Nov 2026): head v3 (v2's defects fixed, short
+   * sculpted hair, about 24k triangles). Fixed at mount; `setLook` does not change it.
    */
   head?: HeadKind;
   /**
@@ -47,11 +48,11 @@ export interface AvatarLook {
   face?: FaceTexture | null;
 }
 
-export type HeadKind = 'neutral' | 'egg' | 'neutral-v2';
+export type HeadKind = 'neutral' | 'egg' | 'neutral-v2' | 'neutral-v3';
 
-/** The head a host asked for: `egg` and `neutral-v2` when asked by name, else `neutral`. */
+/** The head a host asked for: `egg`, `neutral-v2` and `neutral-v3` when asked by name, else `neutral`. */
 export function headOf(value: unknown): HeadKind {
-  return value === 'egg' || value === 'neutral-v2' ? value : 'neutral';
+  return value === 'egg' || value === 'neutral-v2' || value === 'neutral-v3' ? value : 'neutral';
 }
 
 export interface MountOptions {

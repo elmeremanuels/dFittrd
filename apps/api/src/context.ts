@@ -1,6 +1,6 @@
 /** Everything a route or job needs, built once in app.ts. */
 import type { FastifyBaseLogger } from 'fastify';
-import type { TryOnRouter } from '@curtain/tryon-providers';
+import type { RealismProvider, TryOnRouter } from '@curtain/tryon-providers';
 import type { TokenService } from './auth/tokens.js';
 import type { Db } from './db/client.js';
 import type { Env } from './env.js';
@@ -19,6 +19,8 @@ export interface AppContext {
   log: FastifyBaseLogger;
   /** Built lazily from env (providers + policy); tests inject a router over MockProvider. */
   tryon: () => TryOnRouter;
+  /** The AI realism adapter (D22), built lazily from env; tests inject a FakeRealismProvider. */
+  realism: () => RealismProvider;
   shopify: ShopifyClient;
   stripe: StripeClient;
   /** Outbound HTTP (Shopify, Stripe, flat-lay fetch). Tests inject a stub. */

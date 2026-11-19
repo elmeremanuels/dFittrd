@@ -19,6 +19,10 @@
  * "EN 13402-3" below means the 2004 edition as reproduced in the Wikipedia article "Joint European
  * standard for size labelling of clothes"; the standard itself was not read.
  *
+ * It also prints `MALE_SECTION_REFERENCE` of `src/maleV2.ts` (male shape v2): ANSUR's chest, waist and
+ * hip breadth and depth, its own waist (omphalion) and buttock girths, and the axilla and acromion
+ * levels, on the same lines at the same chest girths (0.1 cm, levels 0.001 of the line's stature).
+ *
  * Run: pnpm --filter @curtain/mannequin exec tsx scripts/derive-male-table.ts <path to ANSUR_II_MALE_Public.csv> [<path to ANSUR_II_FEMALE_Public.csv>]
  */
 import { createHash } from 'node:crypto';
@@ -100,6 +104,14 @@ for (const [id, [lo, hi]] of Object.entries(SIZES)) {
     }),
   );
 }
+// Male shape v2: breadth / depth / girth of the chest, waist and seat, and two levels, per size.
+const r1 = (x: number): number => Math.round(x * 10) / 10;
+const sectionLines = Object.fromEntries(['waistcircumference', 'buttockcircumference', 'chestbreadth', 'chestdepth', 'waistbreadth', 'waistdepth', 'hipbreadth', 'buttockdepth', 'axillaheight', 'acromialheight', 'stature'].map((m) => [m, line(m)]));
+const sec = (m: string, c: number): number => sectionLines[m]!.at(c);
+console.log('MALE_SECTION_REFERENCE', JSON.stringify(Object.fromEntries(Object.entries(SIZES).map(([id, [lo, hi]]) => {
+  const c = (lo + hi) / 2;
+  return [id, { chest: c, chestBreadth: r1(sec('chestbreadth', c)), chestDepth: r1(sec('chestdepth', c)), waistBreadth: r1(sec('waistbreadth', c)), waistDepth: r1(sec('waistdepth', c)), waistGirth: r1(sec('waistcircumference', c)), hipBreadth: r1(sec('hipbreadth', c)), buttockDepth: r1(sec('buttockdepth', c)), hipGirth: r1(sec('buttockcircumference', c)), axilla: r3(sec('axillaheight', c) / sec('stature', c)), acromion: r3(sec('acromialheight', c) / sec('stature', c)) }];
+}))));
 // Levels as fractions of stature, at the sample means (they move by less than 0.004 across the sizes).
 const S = line('stature').mean;
 const frac = (name: string): number => r3(line(name).mean / S);

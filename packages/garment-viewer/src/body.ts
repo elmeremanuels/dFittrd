@@ -8,7 +8,7 @@
  */
 import { gradingMorph, type AnchorRing, type AnchorValues, type GradingMorph } from '@curtain/anchors';
 import type { UserBody } from '@curtain/schema';
-import { buildBody, buildMannequinMesh, type BodyFamily, type Mannequin, type Mesh, type MeshOptions } from '@curtain/mannequin';
+import { buildBody, buildMannequinMesh, type BodyFamily, type BuildOptions, type Mannequin, type Mesh, type MeshOptions } from '@curtain/mannequin';
 import { armpitDistance, radialMorph, type ChainAssignment } from './core/garment';
 import { makeCollider, type BodyField, type Table } from './collide';
 
@@ -298,12 +298,12 @@ export function liftField(field: BodyField, dyCm: number): BodyField {
  * floor on a shorter body passes through it and is hidden by the floor), and the grading and the
  * pins are still placed on `base`.
  */
-export function buildTypedAvatar(base: Mannequin, body: BodyOptions, category: string, mesh: MeshOptions = {}): TypedAvatar {
+export function buildTypedAvatar(base: Mannequin, body: BodyOptions, category: string, mesh: MeshOptions = {}, build: BuildOptions = {}): TypedAvatar {
   const family = base.shape.family;
   const meas = sanitiseMeasurements(girthInput(body), mannequinMeasurements(base));
   const shoulderCm = positive(body.shoulderCm);
   // Without a typed height the body keeps the stature of the bundle's body, as the morphed avatar does.
-  const shown = buildBody({ family, bust: meas.bust, waist: meas.waist, hip: meas.hip, heightCm: positive(body.heightCm) ?? base.statureCm, ...(shoulderCm === undefined ? {} : { shoulderCm }) });
+  const shown = buildBody({ family, bust: meas.bust, waist: meas.waist, hip: meas.hip, heightCm: positive(body.heightCm) ?? base.statureCm, ...(shoulderCm === undefined ? {} : { shoulderCm }) }, build);
   const rings = {} as Record<AnchorRing, number>;
   for (const r of shown.rings) rings[r.id] = r.circumferenceCm;
   const support: AnchorRing = category === 'bottom' ? 'waist' : 'shoulder';

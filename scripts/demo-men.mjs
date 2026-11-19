@@ -18,6 +18,13 @@
  *
  * Flags: --gate-off  run with MEN_3D_GATE off: the tee then has the optional 3D button, and the
  *                    shirt the usual 2D flow (today's behaviour).
+ *        --width=N   phone width in CSS px (default 390; slice M1b's pictures use 360).
+ *        --all-sizes all five bodies of the male table (S, M, L, XL, XXL) instead of S, M, XL.
+ *        --skins     on every body, pick three skin tones in the avatar prompt (Monk 2, 5 and 9)
+ *                    and take a close-up of the 2D figure in each.
+ *
+ * Slice M1b: with the gate on, the 2D figure beside the 3D view must be the male figure
+ * (`data-figure="male"`) and carry its estimate label; with the gate off it is today's figure.
  */
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync } from 'node:fs';
@@ -30,6 +37,9 @@ const require = createRequire(import.meta.url);
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const args = process.argv.slice(2);
 const gateOff = args.includes('--gate-off');
+const allSizes = args.includes('--all-sizes');
+const withSkins = args.includes('--skins');
+const width = Number((args.find((a) => a.startsWith('--width=')) ?? '--width=390').slice('--width='.length));
 const shots = resolve(args.find((a) => !a.startsWith('--')) ?? join(root, 'test-results', 'demo-men'));
 mkdirSync(shots, { recursive: true });
 const TEE_BUNDLE = join(root, 'spikes', 'garment-engine', 'out', 'synthetic-men-tee', 'base.glb');
@@ -113,7 +123,7 @@ try {
   log(`seeded: synthetic-men-tee with bundle ${tee.asset3d}; gate ${gateOff ? 'off' : 'on'}`);
 
   browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-  const tag = gateOff ? 'gate-off' : 'gate-on';
+  const tag = `${gateOff ? 'gate-off' : 'gate-on'}${width !== 390 ? `-${width}` : ''}`;
   const shot = async (page, name, locator) => {
     const path = join(shots, `${tag}--${name}.png`);
     await page.waitForTimeout(500);
@@ -122,7 +132,7 @@ try {
     log(`shot ${path}`);
   };
   const newPage = async () => {
-    const context = await browser.newContext({ viewport: { width: 390, height: 760 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'en-AU' });
+    const context = await browser.newContext({ viewport: { width, height: 760 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'en-AU' });
     const page = await context.newPage();
     page.on('pageerror', (e) => problems.push(`pageerror ${e.message}`));
     page.on('console', (m) => {
@@ -154,11 +164,16 @@ try {
 
   // ---- 1. the synthetic men's tee on the male body -------------------------------------------------
   // The male table's S, M and XL (MALE_REFERENCE of @curtain/mannequin); weights are round guesses that only feed the prior.
-  const BODIES = [
+  const ALL_BODIES = [
     { name: 'S', height: 172, weight: 64, chest: 90, waist: 78, hip: 90 },
     { name: 'M', height: 174, weight: 74, chest: 98, waist: 86, hip: 96 },
+    { name: 'L', height: 176, weight: 83, chest: 106, waist: 94, hip: 102 },
     { name: 'XL', height: 177, weight: 92, chest: 114, waist: 102, hip: 108 },
+    { name: 'XXL', height: 179, weight: 104, chest: 123, waist: 111, hip: 115 },
   ];
+  const BODIES = allSizes ? ALL_BODIES : ALL_BODIES.filter((b) => ['S', 'M', 'XL'].includes(b.name));
+  // Monk skin tone scale classes picked in the avatar prompt (light, medium, dark).
+  const SKINS = [2, 5, 9];
   for (const body of BODIES) {
     const page = await newPage();
     const frame = await openOverlay(page, 'synthetic-men-tee', body.name === 'S' ? 'tee--0-storefront-page' : null);
@@ -193,6 +208,34 @@ try {
         if (!(await mirror.getByText(label).count())) throw new Error(`tee, body ${body.name}: the 2D figure has no label ${label}`);
       }
       log(`tee, body ${body.name}: 2D figure labels present (estimate, body from your answers)`);
+      // Slice M1b: beside the required 3D view on the male body the figure is the male one.
+      const figure = await mirror.locator('svg').first().getAttribute('data-figure');
+      if (!gateOff && figure !== 'male') throw new Error(`tee, body ${body.name}: the 2D figure beside the male 3D body is not the male figure (data-figure=${figure})`);
+      if (gateOff && figure !== null) throw new Error(`tee, body ${body.name}: gate off, but the 2D figure is marked ${figure}`);
+      log(`tee, body ${body.name}: 2D figure is ${figure ?? 'female (today\'s figure)'}`);
+      if (withSkins) {
+        for (const n of SKINS) {
+          await frame.getByTestId('avatar-open').click();
+          await frame.getByTestId('avatar-prompt').waitFor();
+          const sw = frame.getByTestId('avatar-skin-switch');
+          await sw.waitFor();
+          if ((await sw.getAttribute('aria-checked')) !== 'true') await sw.click();
+          await frame.getByTestId('skin-swatches').waitFor();
+          const swatch = frame.getByTestId(`skin-swatch-${n}`);
+          await swatch.check({ force: true });
+          if (!(await swatch.isChecked())) throw new Error(`tee, body ${body.name}: Monk ${n} did not stay picked`);
+          await frame.getByTestId('avatar-prompt-done').click();
+          await frame.getByTestId('avatar-prompt').waitFor({ state: 'detached' });
+          await mirror.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+          await page.waitForTimeout(400);
+          const skin = await mirror.locator('svg').first().getAttribute('data-skin');
+          if (skin === '#DFC3A8') throw new Error(`tee, body ${body.name}: Monk ${n} picked, but the figure is in the standard colour`);
+          await shot(page, `tee-body-${body.name}--3c-2d-figure-monk-${n}`, mirror);
+          if (!(await mirror.getByText(/Estimate/).count())) throw new Error(`tee, body ${body.name}, monk ${n}: no estimate label on the figure`);
+          log(`tee, body ${body.name}: monk ${n} → figure skin ${skin}`);
+        }
+        await shot(page, `tee-body-${body.name}--3d-page-monk-${SKINS[SKINS.length - 1]}`);
+      }
     }
     await canvas.scrollIntoViewIfNeeded();
     await shot(page, `tee-body-${body.name}--4-3d-close-size-${size}`, frame.getByTestId('garment3d'));

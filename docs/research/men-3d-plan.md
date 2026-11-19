@@ -50,9 +50,19 @@ How the male body looks now (pictures of 18 Nov 2026; this restates the earlier 
 - Pictures before 18 Nov evening: body side views used `yaw=90` while the tee side views were an unfinished drag (about 60 to 70°), and the front views cut the hands off at phone width. Re-taken with both turned by the same drag to a still canvas (90°), and zoomed out so the hands are in frame (`men-renders.mjs`; the shipped mount's framing is unchanged, the embed's 3D panel always showed the hands).
 
 Not done in M1, and still open:
-- The **2D figure** drawn above the 3D view in the embed is still today's figure, not a male one (slice M1b). The pictures show it for a men's product.
+- The **2D figure** drawn above the 3D view in the embed is still today's figure, not a male one (slice M1b). The pictures show it for a men's product. *Done in M1b (below).*
 - While a required 3D view loads, the overlay shows an empty panel with no spinner (M0 behaviour, seen in the pictures).
 - Fit engine (M2) and POM builder (M3): not touched, as scoped.
+
+## Status: slice M1b built (19 Nov 2026, branch `claude/men-m1b-2d`)
+
+The 2D figure above the 3D view of a men's product that passed the gate is now male. Report and pictures: `docs/reports/claude/men-m1b-2d.md`, `docs/screens/claude/men-m1b-2d/`.
+
+- **Where:** `apps/web/src/render/body.ts` (`bodyGeometry(m, h, 'male')`, `maleBodyPath`, `maleArmOutline`, `figureY`), `render/maleBody.ts` (the male table and levels, a copy of `MALE_REFERENCE` / `MALE_LEVELS` checked value by value against `packages/mannequin/src/families.ts` in a test), `render/rings.ts` (male levels and depth ratios, "Chest"), `AvatarView` (`family`), `ResultScreen` (`figure`).
+- **When:** EmbedApp passes `figure="male"` only when the product arrives with `requires3d` and `garmentBodyFamily` is male. That result is hidden until the male 3D view settles and is replaced by "coming soon" when it fails, so the male figure cannot be seen without working 3D. The peek, the app's deck and the hero render keep showing a men's product as coming soon (M0), so they never draw it.
+- **Drawn from:** typed chest (`bust` on the wire), waist, seat (`hip`), shoulder width and height; anything missing from the male table at the chest girth. Widths use the family's own depth / width ratios at chest, waist and seat (ANSUR), the shoulder line is the biacromial breadth and the arms hang from round deltoids at the bideltoid breadth (scaled by a typed shoulder width). Assumed, not measured: the 2D head half-width (7.7 cm against the female 7.4), the deltoid standing 10 % proud of the relaxed upper arm, the neck and limb depth ratios, the male foot length (27 cm).
+- **Female figure unchanged:** a sha256 golden of its geometry, outlines, rings and markup, written on the code before this slice, and a pixel comparison of 164 female figures before and after: no pixel differs (report).
+- **Not done:** the fit-point list still says "Bust" for a men's product (M2a); the male figure has no hands, like the female one.
 
 ## Bottom line
 

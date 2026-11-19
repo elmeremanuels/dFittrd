@@ -295,7 +295,8 @@ function maleBodyPath(g: BodyGeometry): string {
     { x: g.neckHalf, y: y('chin') + 3 },
     { x: g.neckHalf + 0.5, y: shoulderY - 9 },
     { x: g.neckHalf + (g.shoulderHalf - g.neckHalf) * 0.55, y: shoulderY - 4.5 },
-    { x: g.shoulderHalf, y: shoulderY - 1 },
+    // the shoulder point sits under the deltoid cap (the arm's centre), so no corner shows above it
+    { x: Math.min(g.shoulderHalf, g.armX ?? g.shoulderHalf), y: shoulderY },
     { x: g.bustHalf + 1.5, y: armpitY },
     { x: g.bustHalf, y: y('bust') + 4 },
     { x: g.waistHalf, y: y('waist') },

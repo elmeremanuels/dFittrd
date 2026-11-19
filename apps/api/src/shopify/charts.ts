@@ -4,7 +4,7 @@
  * @curtain/shopify-app, and every written product gets the existing sync job, so the shop stays the
  * source of truth (D6) and the products table follows within seconds.
  *
- *  - GET  /shopify/charts/onboarding            the five first-run steps (connect, template, assign, theme block, test)
+ *  - GET  /shopify/charts/onboarding            the five first-run steps (connect, chart, measure, button, phone; services/setup.ts)
  *  - PUT  /shopify/charts/onboarding            remember the picked template / confirmed steps (AppInstallation metafield)
  *  - POST /shopify/charts/preview               how many products a selection means (+ a sample)
  *  - POST /shopify/charts/assign                write one chart to a selection, one page per call (`nextCursor`)
@@ -17,7 +17,6 @@
  * D3: nothing here touches shopper data; the onboarding "tested" fact is the shop's own fit-session
  * count, never a device or a measurement.
  */
-import { and, eq, ne, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import {
   ChartAssignRequestSchema,
@@ -51,7 +50,6 @@ import {
   deleteProductMetafields,
   fetchProductDetail,
   fetchSelectionPage,
-  onboardingSteps,
   productChecklist,
   productGid,
   proposeFromDescription,
@@ -63,12 +61,10 @@ import {
 } from '@curtain/shopify-app';
 import { z } from 'zod';
 import { requireMerchant } from '../auth/merchant.js';
-import { products } from '../db/schema.js';
 import { JOB } from '../jobs/queue.js';
 import { HttpError, badRequest, notFound, unauthorized, unprocessable } from '../lib/errors.js';
-import { utcDay } from '../lib/time.js';
 import type { ShopRow } from '../services/shops.js';
-import { fitSessionsBetween } from '../services/usage.js';
+import { merchantSetup } from '../services/setup.js';
 
 const ProductIdParams = z.object({ id: z.string().regex(/^\d{1,20}$/, 'numeric Shopify product id') });
 
@@ -101,22 +97,9 @@ export const shopifyChartRoutes: FastifyPluginAsyncZod = async (app) => {
   app.get('/shopify/charts/onboarding', { schema: { response: { 200: OnboardingResponseSchema } }, preHandler: requireMerchant }, async (req) => {
     const { shop, client } = await adminFor(req.shop);
     const state = await readOnboardingState(client).catch(upstream);
-    const [row] = await db
-      .select({ n: sql<number>`count(*)::int` })
-      .from(products)
-      .where(and(eq(products.shopId, shop.id), ne(products.status, 'archived'), sql`not ('sizeChart' = any(${products.missingFields}))`, sql`not ('sizeChartType' = any(${products.missingFields}))`));
-    const today = utcDay(now());
-    const from = utcDay(new Date(now().getTime() - 29 * 86_400_000));
-    const fitSessions = await fitSessionsBetween(db, shop.id, from, today);
-    const { steps, next } = onboardingSteps({
-      connected: true,
-      templateId: state.templateId,
-      themeBlockConfirmed: state.themeBlockConfirmed,
-      tested: state.tested,
-      productsWithChart: row?.n ?? 0,
-      fitSessions,
-    });
-    return { steps, next, state: { templateId: state.templateId, themeBlockConfirmed: state.themeBlockConfirmed, tested: state.tested } };
+    // The five steps of @curtain/schema merchantSetup.ts; the theme block and the phone check can be ticked by hand.
+    const setup = await merchantSetup({ db, shop, now: now(), buttonConfirmed: state.themeBlockConfirmed, phoneConfirmed: state.tested });
+    return { ...setup, state: { templateId: state.templateId, themeBlockConfirmed: state.themeBlockConfirmed, tested: state.tested } };
   });
 
   app.put(

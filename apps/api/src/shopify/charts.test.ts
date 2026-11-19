@@ -222,11 +222,12 @@ describe('Shopify size chart builder routes', () => {
     handler = (q) => (q.query.includes('CurtainOnboarding') ? { currentAppInstallation: { id: 'gid://shopify/AppInstallation/9', metafield: stored ? { value: stored } : null } } : {});
     const first = await t.app.inject({ method: 'GET', url: '/shopify/charts/onboarding', headers: await auth() });
     expect(first.statusCode).toBe(200);
-    // R5: the seeded fixtures already have charts, so "template" and "assign" are done without a
-    // saved pick (a chart that reached products proves a template was chosen); the theme block is next.
-    expect(first.json().next).toBe('themeBlock');
-    expect(first.json().steps.find((s: { key: string }) => s.key === 'template').done).toBe(true);
-    expect(first.json().steps.map((s: { key: string }) => s.key)).toEqual(['connect', 'template', 'assign', 'themeBlock', 'test']);
+    // The seeded fixtures already have charts, so "Add a size chart" is done without a saved pick;
+    // none has the shop's own garment measurements yet, so "Measure one skirt" is next.
+    expect(first.json().next).toBe('measure');
+    expect(first.json().steps.find((s: { key: string }) => s.key === 'chart').done).toBe(true);
+    expect(first.json().steps.map((s: { key: string }) => s.key)).toEqual(['connect', 'chart', 'measure', 'button', 'phone']);
+    expect(first.json().measureProduct).not.toBeNull();
 
     const put = await t.app.inject({ method: 'PUT', url: '/shopify/charts/onboarding', headers: await auth(), payload: { templateId: 'au-womens-body' } });
     expect(put.statusCode).toBe(200);
@@ -235,7 +236,14 @@ describe('Shopify size chart builder routes', () => {
     expect(w).toEqual([{ ownerId: 'gid://shopify/AppInstallation/9', namespace: 'curtain', key: 'onboarding', type: 'json', value: JSON.stringify({ templateId: 'au-womens-body', themeBlockConfirmed: false, tested: false }) }]);
     stored = w[0]!.value;
     const after = await t.app.inject({ method: 'GET', url: '/shopify/charts/onboarding', headers: await auth() });
-    expect(after.json().next).toBe('themeBlock');
+    expect(after.json().next).toBe('measure');
+    expect(after.json().state.templateId).toBe('au-womens-body');
+
+    // "I have saved it" on the theme block ticks step 4 (the api cannot look inside the theme).
+    stored = JSON.stringify({ templateId: 'au-womens-body', themeBlockConfirmed: true, tested: false });
+    const ticked = await t.app.inject({ method: 'GET', url: '/shopify/charts/onboarding', headers: await auth() });
+    expect(ticked.json().steps.find((s: { key: string }) => s.key === 'button').done).toBe(true);
+    expect(ticked.json().doneCount).toBe(3);
 
     const bad = await t.app.inject({ method: 'PUT', url: '/shopify/charts/onboarding', headers: await auth(), payload: { templateId: 'nope' } });
     expect(bad.statusCode).toBe(400);

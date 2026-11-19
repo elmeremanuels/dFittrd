@@ -148,3 +148,11 @@ Founder decisions (13 Nov 2026), answering the open questions of `docs/research/
 ## D21 — English first; translation packs later
 
 Founder decision (15 Nov 2026). The shopper and merchant interface is built in English only for now. Other languages come later as translation packs, added without code changes. Until then: no interface text switches on the browser or shop language, and no second language is written in the code. Every interface string lives in one English catalogue per surface, read through a single lookup, so a pack is one more catalogue. The Dutch drafts written so far (avatar prompt, men's "coming soon" line) are kept as source material under `docs/`, not shipped.
+
+## D22 — Head v3 is the default; an AI realism layer comes on top; skin tones must improve
+
+Founder decision (19 Nov 2026), after the look review of head v3 (`docs/reports/claude-head-v3.md`).
+
+1. **Head `neutral-v3` is the default head in the embed's 3D view, as a base.** The build flag `VITE_VIEWER_HEAD=neutral` still gives the old head. Lighting stays `classic` until the founder approves a lighting change.
+2. **The 3D mannequin is the base, not the end state.** An AI layer is to turn the 3D render into a realistic image ("from 3D modelling to AI-realistic"). It must keep the garment's cut, size difference and colour from the 3D estimate, stay labelled an estimate (rule 3), use only commercially licensed models (rule 6), and never take a shopper photo of the body (rule 1). A face reaches it only under D19.
+3. **Skin tones must look better** than today's flat shading, on the 3D mannequin and the 2D figure, for every Monk tone.

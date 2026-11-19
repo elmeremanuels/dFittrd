@@ -226,7 +226,7 @@ describe('3D view: the look and the body go to the viewer as in-memory options',
     const a = setup({ skinHex: hex });
     fireEvent.click(screen.getByTestId('garment3d-open'));
     await waitFor(() => expect(a.mountGarmentView).toHaveBeenCalledTimes(1));
-    expect(mountOptions(a.mountGarmentView).look).toEqual({ skinHex: hex });
+    expect(mountOptions(a.mountGarmentView).look).toEqual({ skinHex: hex, head: 'neutral-v3' });
     // A women's garment: the body option is the three girths, exactly as before the avatar slices.
     expect(mountOptions(a.mountGarmentView).body).toEqual({ bust: 90, waist: 72, hip: 98 });
     expect(a.setLook).not.toHaveBeenCalled();
@@ -235,7 +235,7 @@ describe('3D view: the look and the body go to the viewer as in-memory options',
     const b = setup({ heightCm: undefined });
     fireEvent.click(screen.getByTestId('garment3d-open'));
     await waitFor(() => expect(b.mountGarmentView).toHaveBeenCalledTimes(1));
-    expect('look' in mountOptions(b.mountGarmentView)).toBe(false);
+    expect(mountOptions(b.mountGarmentView).look).toEqual({ head: 'neutral-v3' });
     expect(mountOptions(b.mountGarmentView).body).toEqual({ bust: 90, waist: 72, hip: 98 });
     b.unmount();
 
@@ -246,12 +246,12 @@ describe('3D view: the look and the body go to the viewer as in-memory options',
     expect(mountOptions(men.mountGarmentView).body).toEqual({ bust: 90, waist: 72, hip: 98, family: 'male', heightCm: 171 });
   });
 
-  it('lighting and head: nothing is sent for today\'s look; the look review\'s options only when asked', async () => {
+  it('lighting and head: classic lighting sends nothing, the default head is neutral-v3 (D22); other options only when asked', async () => {
     const a = setup({ skinHex: null });
     fireEvent.click(screen.getByTestId('garment3d-open'));
     await waitFor(() => expect(a.mountGarmentView).toHaveBeenCalledTimes(1));
     expect('lighting' in mountOptions(a.mountGarmentView)).toBe(false);
-    expect('look' in mountOptions(a.mountGarmentView)).toBe(false);
+    expect(mountOptions(a.mountGarmentView).look).toEqual({ head: 'neutral-v3' });
     cleanup();
     const hex = lookForMonk(1)!.hex;
     const b = setup({ skinHex: hex, lighting: 'neutral-v2', head: 'neutral-v2' });
@@ -267,18 +267,19 @@ describe('3D view: the look and the body go to the viewer as in-memory options',
     expect(mountOptions(c.mountGarmentView).look).toEqual({ head: 'neutral-v2' });
   });
 
-  it('the build flags: classic and today\'s head unless set to a known value', () => {
+  it('the build flags: classic lighting and head neutral-v3 (D22) unless set to a known value', () => {
     expect(viewerLightingFlag({})).toBe('classic');
     for (const v of ['', 'Neutral', 'v2', 'neutral-v3', 'classic']) expect(viewerLightingFlag({ VITE_VIEWER_LIGHTING: v })).toBe('classic');
     expect(viewerLightingFlag({ VITE_VIEWER_LIGHTING: 'neutral' })).toBe('neutral');
     expect(viewerLightingFlag({ VITE_VIEWER_LIGHTING: 'neutral-v2' })).toBe('neutral-v2');
-    expect(viewerHeadFlag({})).toBeNull();
-    for (const v of ['', 'neutral', 'egg', 'v2', 'v3', 'neutral-v4']) expect(viewerHeadFlag({ VITE_VIEWER_HEAD: v })).toBeNull();
+    expect(viewerHeadFlag({})).toBe('neutral-v3');
+    for (const v of ['', 'egg', 'v2', 'v3', 'neutral-v4']) expect(viewerHeadFlag({ VITE_VIEWER_HEAD: v })).toBe('neutral-v3');
+    expect(viewerHeadFlag({ VITE_VIEWER_HEAD: 'neutral' })).toBeNull();
     expect(viewerHeadFlag({ VITE_VIEWER_HEAD: 'neutral-v2' })).toBe('neutral-v2');
     expect(viewerHeadFlag({ VITE_VIEWER_HEAD: 'neutral-v3' })).toBe('neutral-v3');
-    // The flags of this test run are not set: the app gets today's look.
+    // The flags of this test run are not set: classic lighting and the D22 head.
     expect(viewerLightingFlag()).toBe('classic');
-    expect(viewerHeadFlag()).toBeNull();
+    expect(viewerHeadFlag()).toBe('neutral-v3');
   });
 
   it('a new colour reaches the mounted view through setLook, without a remount', async () => {

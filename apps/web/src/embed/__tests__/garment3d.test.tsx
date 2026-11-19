@@ -96,7 +96,7 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     expect(opts.baseUrl).toBe(asset.baseUrl);
     // The three girths and nothing else, as before the avatar slices (this is a women's garment).
     expect(opts.body).toEqual(measurements);
-    expect(Object.keys(opts).sort()).toEqual(['baseUrl', 'body', 'fit', 'garment', 'onState', 'size']);
+    expect(Object.keys(opts).sort()).toEqual(['baseUrl', 'body', 'fit', 'garment', 'look', 'onState', 'size']);
   });
 
   it('a men’s garment (the SYNTHETIC test tee, slice M1) mounts on the male body with the typed height; women’s and unisex do not', async () => {

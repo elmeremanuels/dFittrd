@@ -60,10 +60,14 @@ export function viewerLightingFlag(env: { VITE_VIEWER_LIGHTING?: string } = impo
   return v === 'neutral' || v === 'neutral-v2' ? v : 'classic';
 }
 
-/** The 3D view's head from the build flag: `neutral-v2` or `neutral-v3`, or null for the viewer's default head (today's). */
+/**
+ * The 3D view's head. Default `neutral-v3` (founder decision D22, 19 Nov 2026). The build flag VITE_VIEWER_HEAD can pick
+ * `neutral-v2`, or `neutral` for the viewer's old default head (returned as null: nothing is sent to the viewer).
+ */
 export function viewerHeadFlag(env: { VITE_VIEWER_HEAD?: string } = import.meta.env): ViewerHead | null {
   const v = env.VITE_VIEWER_HEAD;
-  return v === 'neutral-v2' || v === 'neutral-v3' ? v : null;
+  if (v === 'neutral') return null;
+  return v === 'neutral-v2' || v === 'neutral-v3' ? v : 'neutral-v3';
 }
 /** What a baked view rests on (`GarmentView.source` of the viewer); optional, so this file builds against a viewer without it. */
 export type ViewerSource =

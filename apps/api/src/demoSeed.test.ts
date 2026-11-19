@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { MOCK_GARMENTS_BY_ID, PILOT_PULL_ON_SKIRT, PILOT_SKIRT_CHART_ONLY, PILOT_SKIRT_TAPE_MEASURED } from '@curtain/schema';
+import { MENS_OXFORD_SHIRT, MOCK_GARMENTS_BY_ID, PILOT_PULL_ON_SKIRT, PILOT_SKIRT_CHART_ONLY, PILOT_SKIRT_TAPE_MEASURED } from '@curtain/schema';
 import { seedDemo } from './demoSeed.js';
 import { createDevice, makeApp, type TestApp } from './test/helpers.js';
 
@@ -135,5 +135,31 @@ describe('demo seed: the pilot skirt with the shop tape and a pull-on closure', 
     expect(resolved.statusCode).toBe(200);
     // Garment data only: the closure and the tape go to the shopper's device, where computeFit runs (rule 4).
     expect(resolved.json().garment).toMatchObject({ closure: 'pull-on', garmentTape: PILOT_PULL_ON_SKIRT.garmentTape });
+  });
+});
+
+describe('demo seed: a men’s product keeps the audience source it is given (DEMO_MEN, slice M1)', () => {
+  let t: TestApp;
+  beforeAll(async () => {
+    t = await makeApp({ MEN_3D_GATE: '1' });
+  });
+  afterAll(async () => {
+    await t.close();
+  });
+
+  it('stores the strong source, so the gate applies: without a male bundle the shirt is coming soon', async () => {
+    const m = await seedDemo(t.handle.db, t.env, {
+      bundles: [{ shop: 'shopify', externalId: MENS_OXFORD_SHIRT.id, dir: join(tmpdir(), 'no-such-bundle-for-the-shirt'), payload: true, fallbackPayload: MENS_OXFORD_SHIRT, audienceSource: 'productType' }],
+    });
+    const shop = m.shops.find((s) => s.key === 'shopify')!;
+    expect(shop.products[0]).toMatchObject({ externalId: MENS_OXFORD_SHIRT.id, asset3d: null });
+    const row = await t.handle.db.query.products.findFirst({ where: (p, { eq }) => eq(p.externalId, MENS_OXFORD_SHIRT.id) });
+    expect(row?.audienceSource).toBe('productType');
+    const session = await t.app.inject({
+      method: 'POST',
+      url: '/v1/sdk/sessions',
+      payload: { shopKeyPrefix: shop.publicKey, productExternalId: MENS_OXFORD_SHIRT.id, pageUrl: 'http://localhost:5180/products/x', surface: 'embed' },
+    });
+    expect(session.json().productState).toBe('coming_soon');
   });
 });

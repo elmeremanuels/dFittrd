@@ -149,7 +149,31 @@ No men's product goes live with a 2D figure only. One helper decides it, `shoppe
 With `MEN_3D_GATE=1`, a product whose payload says `audience: 'men'` is **coming soon** unless the
 shop has the 3D estimate on (`settings.garment3d`) and the product has an approved bundle that still
 covers the live chart and was built on the male mannequin (`assetMannequinFamily`: `qa.json`
-`mannequin.family: 'male'`; absent = female, so no bundle that exists today passes).
+`mannequin.family: 'male'`; absent = female).
+
+Body family of a bundle (slice M1). A bundle built on the male mannequin names it in both
+`anchors.json` and `qa.json` (`mannequin: { version, shape, family: 'male' }`); a female bundle
+names none, so every bundle built before M1 is unchanged and reads as female. The two files must
+agree, or the import refuses the bundle (`format`). The api keeps only `qa.json`, so that is where
+the gate reads it (the place M0 assumed, now confirmed). The family must match the product:
+`garmentBodyFamily` of `@curtain/schema` (`audience: 'men'` → male, anything else → female) is
+checked on import (`asset:import` and the demo seed refuse with `family_mismatch`, before the size
+check), on `GET /v1/try` (`activeAssetRef` hands out no ref when the live bundle no longer matches,
+e.g. the audience was changed after the import), and in the viewer (`garmentBundleFor` and the
+mount's body check). The only male bundle today is the SYNTHETIC men's test tee
+(`SYNTHETIC_MENS_TEE`, not a product; `pnpm --filter @curtain/garment-spike build:bundle`),
+used by `src/men-m1.test.ts` and `scripts/demo-men.mjs` to prove the path end to end.
+
+Two consequences of the family check, both on purpose (D20 point 3), both with the gate **off** too:
+- A men's product no longer imports a female-built bundle, and a female asset stored for it before
+  M1 is no longer handed out by `GET /v1/try` (no 3D button). Before M1 the bundle was imported and
+  the viewer then refused it. With a male bundle, a men's product gets the optional 3D view on the
+  male body (`src/men-m1.test.ts`).
+- The family follows `audience` alone, not its source. The gate treats a `men` read from a title or
+  a collection (or of unknown source) as `audience_unconfirmed` and does not hide the product, but
+  the embed still draws it on the male body (since M0), so it takes a male bundle only. The refusal
+  says so (`family_mismatch (... a guess (from the title) ... correct the audience ...)`): if the
+  guess is wrong, correct the audience and the female bundle imports.
 
 | Route | A men's product that is coming soon |
 |---|---|

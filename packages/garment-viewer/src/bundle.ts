@@ -19,7 +19,7 @@ export interface GarmentAnchorsJson {
   baseSize: string;
   category: string;
   unit: 'cm';
-  /** `family` is absent in every bundle so far: read a missing family as `female` (`bundleFamilyOf`). */
+  /** `family`: `male` for a bundle built on the male mannequin (slice M1); absent is `female` (`bundleFamilyOf`). */
   mannequin: { version: string; shape: string; family?: 'female' | 'male' };
   synthetic: boolean;
   /** Set by evaluated bundles: the file holding the product payload. */
@@ -37,6 +37,8 @@ export interface QaJson {
   chartAgreement: { maxAbsCm: number | null; pass: boolean; critical?: string[]; missing?: string[] };
   calibration: { residualBeforeCm: { maxAbs: number }; residualAfterGlobalCm: { maxAbs: number } };
   meshHealth: { triangles: number };
+  /** Set by a male bundle (slice M1), the same as anchors.json `mannequin`: the api keeps only qa.json, the men's gate reads it here. */
+  mannequin?: { version: string; shape: string; family?: 'female' | 'male' };
 }
 
 export interface SpikeBundle {

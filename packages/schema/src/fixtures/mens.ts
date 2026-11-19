@@ -58,6 +58,46 @@ export const MENS_STRAIGHT_JEANS: GarmentPayload = garment({
   styleTags: { classic: 0.6, minimal: 0.5 },
 });
 
+/**
+ * SYNTHETIC test garment, not a product (men-3d-plan slice M1): a plain short-sleeved tee whose only
+ * job is to prove the male path end to end (spike bundle on the male mannequin → api import → the
+ * men's gate → the embed's 3D view). Its 3D bundle is generated geometry
+ * (`pnpm --filter @curtain/garment-spike build:bundle`, `out/synthetic-men-tee/`), not a
+ * reconstruction of any garment, and it must never be sold, seeded in a live shop or shown as fit
+ * evidence.
+ *
+ * The chart is a GARMENT chart in cm, made up for the test: the male family's size table of
+ * `@curtain/mannequin` (`MALE_REFERENCE`, chest 90/98/106/114/123) plus the men's tee eases the plan
+ * proposes in section 4 (chest and waist +8 cm, [A]); seat +6 cm and the shoulder seam to seam at
+ * biacromial + 3.5 cm are equally assumed. None of it is measured.
+ */
+export const SYNTHETIC_MENS_TEE: GarmentPayload = garment({
+  id: 'synthetic-men-tee',
+  brand: 'Curtain test fixture',
+  name: 'SYNTHETIC men’s test tee (not a product)',
+  category: 'top',
+  subcategory: 't-shirt',
+  audience: 'men',
+  // A price is required by the schema; this is not for sale.
+  priceEur: 1,
+  primaryColorHex: '#3E6E8E',
+  colorways: [{ name: 'Test blue', hex: '#3E6E8E' }],
+  fabric: { primary: 'cotton', blend: [['cotton', 100]], weightGsm: 180, stretchPct: 8, drape: 0.35, opacity: 1, sheen: 0 },
+  patternBlock: 't-shirt',
+  lengthCm: { shoulder_to_hem: 70, sleeve_length: 22 },
+  sizeChartType: 'garment',
+  sizeChart: [
+    { size: 'S', bust: 98, waist: 86, hip: 96.5, shoulder: 43.5 },
+    { size: 'M', bust: 106, waist: 94, hip: 102, shoulder: 44 },
+    { size: 'L', bust: 114, waist: 102, hip: 108, shoulder: 45 },
+    { size: 'XL', bust: 122, waist: 110, hip: 114, shoulder: 46 },
+    { size: 'XXL', bust: 131, waist: 119, hip: 120.5, shoulder: 47 },
+  ],
+  sizingNotes: 'synthetic test fixture: not a product, not fit evidence',
+  criticalFitPoints: ['bust'],
+});
+
+/** The real-looking men's fixtures (the synthetic test tee is not one of them; import it by name). */
 export const MENS_FIXTURE_GARMENTS: readonly GarmentPayload[] = Object.freeze([MENS_OXFORD_SHIRT, MENS_STRAIGHT_JEANS]);
 
 export interface MensTestBody {

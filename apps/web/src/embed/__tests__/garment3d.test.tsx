@@ -3,7 +3,7 @@ import '@testing-library/jest-dom/vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { computeFit } from '@curtain/fit-engine';
-import { MOCK_GARMENTS_BY_ID, type GarmentAssetRef } from '@curtain/schema';
+import { MOCK_GARMENTS_BY_ID, SYNTHETIC_MENS_TEE, type GarmentAssetRef } from '@curtain/schema';
 import { Garment3D, type Garment3DProps } from '../Garment3D';
 
 afterEach(cleanup);
@@ -97,6 +97,19 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     // The three girths and nothing else, as before the avatar slices (this is a women's garment).
     expect(opts.body).toEqual(measurements);
     expect(Object.keys(opts).sort()).toEqual(['baseUrl', 'body', 'fit', 'garment', 'onState', 'size']);
+  });
+
+  it('a men’s garment (the SYNTHETIC test tee, slice M1) mounts on the male body with the typed height; women’s and unisex do not', async () => {
+    const menFit = computeFit(SYNTHETIC_MENS_TEE, { measurements: { bust: 98, waist: 86, hip: 96 } });
+    const { mountGarmentView } = setup({ garment: SYNTHETIC_MENS_TEE, fit: menFit, measurements: { bust: 98, waist: 86, hip: 96 }, heightCm: 174, asset: { ...asset, sizes: ['S', 'M', 'L', 'XL', 'XXL'] } });
+    fireEvent.click(screen.getByTestId('garment3d-open'));
+    await waitFor(() => expect(mountGarmentView).toHaveBeenCalledTimes(1));
+    expect((mountGarmentView.mock.calls[0]![1] as unknown as { body: unknown }).body).toEqual({ bust: 98, waist: 86, hip: 96, family: 'male', heightCm: 174 });
+    cleanup();
+    const unisex = setup({ garment: { ...garment, audience: 'unisex' }, heightCm: 168 });
+    fireEvent.click(screen.getByTestId('garment3d-open'));
+    await waitFor(() => expect(unisex.mountGarmentView).toHaveBeenCalledTimes(1));
+    expect((unisex.mountGarmentView.mock.calls[0]![1] as unknown as { body: unknown }).body).toEqual(measurements);
   });
 
   it('is labelled an estimate and names the size the advice picked', async () => {

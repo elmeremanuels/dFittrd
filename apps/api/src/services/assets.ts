@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 import { copyFile, mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { and, desc, eq, ne } from 'drizzle-orm';
-import { checkGarmentBundle, GARMENT_BUNDLE_FILES, garmentQaFlagNote, garmentQaFlags, type GarmentAssetRef, type GarmentBundleMeta, type GarmentBundleProblem, type GarmentPayload, type MerchantGarmentAsset } from '@curtain/schema';
+import { checkGarmentBundle, GARMENT_BUNDLE_FILES, garmentBodyFamily, isWeakAudienceSource, type GarmentBodyFamily, type GarmentBundleMannequinMeta, garmentQaFlagNote, garmentQaFlags, type GarmentAssetRef, type GarmentBundleMeta, type GarmentBundleProblem, type GarmentPayload, type MerchantGarmentAsset } from '@curtain/schema';
 import type { Db } from '../db/client.js';
 import { garmentAssets, products, type ShopSettings } from '../db/schema.js';
 import type { Env } from '../env.js';
@@ -25,8 +25,12 @@ type AssetRow = typeof garmentAssets.$inferSelect;
 type ProductRow = typeof products.$inferSelect;
 
 export class AssetImportError extends Error {
-  constructor(readonly problem: GarmentBundleProblem | 'missing_file') {
-    super(`bundle rejected: ${problem}`);
+  /** `hint`: the next step for the operator, when there is one (printed by `asset:import`). */
+  constructor(
+    readonly problem: GarmentBundleProblem | 'missing_file',
+    readonly hint?: string,
+  ) {
+    super(hint ? `bundle rejected: ${problem} (${hint})` : `bundle rejected: ${problem}`);
   }
 }
 
@@ -39,8 +43,12 @@ export interface BundleOnDisk {
   inputHash: string | null;
 }
 
-/** Read and check a bundle directory against the product's chart sizes. */
-export async function readBundleDir(dir: string, chartSizes: readonly string[]): Promise<BundleOnDisk> {
+/**
+ * Read and check a bundle directory against the product's chart sizes and, when given, the body
+ * family the product is shown on (`garmentBodyFamily`): a bundle built on the other family is
+ * refused (`family_mismatch`), and anchors.json and qa.json must name the same family (`format`).
+ */
+export async function readBundleDir(dir: string, chartSizes: readonly string[], family?: GarmentBodyFamily): Promise<BundleOnDisk> {
   const hash = createHash('sha256');
   const json: Record<string, Record<string, unknown>> = {};
   let bytes = 0;
@@ -61,7 +69,7 @@ export async function readBundleDir(dir: string, chartSizes: readonly string[]):
       }
     }
   }
-  const r = checkGarmentBundle({ anchors: json['anchors.json']!, grading: json['grading.json']!, material: json['material.json']!, qa: json['qa.json']!, bytes }, chartSizes);
+  const r = checkGarmentBundle({ anchors: json['anchors.json']!, grading: json['grading.json']!, material: json['material.json']!, qa: json['qa.json']!, bytes }, chartSizes, family === undefined ? {} : { family });
   if (!r.ok) throw new AssetImportError(r.problem);
   const qa = json['qa.json']!;
   return { version: hash.digest('hex').slice(0, 16), bytes, baseSize: r.info.baseSize, sizes: r.info.sizes, qa, inputHash: typeof qa.inputHash === 'string' ? qa.inputHash : null };
@@ -73,11 +81,33 @@ export function assetDir(env: Env, shopId: string, productId: string, version: s
   return resolve(env.ASSET_DIR, shopId, productId, version);
 }
 
-/** Import a bundle for a product of the shop. Idempotent per version; always `awaiting_approval` when new. */
+/**
+ * Import a bundle for a product of the shop. Idempotent per version; always `awaiting_approval` when new.
+ * A men's product takes only a bundle built on the male mannequin, every other product only a
+ * female-built one (`garmentBodyFamily` of the stored payload; `AssetImportError('family_mismatch')`).
+ *
+ * The family follows `audience` alone, whatever `MEN_3D_GATE` says and whatever the audience's
+ * source: it is the body the embed draws for the product (male for `men` since slice M0), and a
+ * bundle is only usable on the body it was draped on (D20 point 3). The men's gate reads the source
+ * too, for a different question, whether a guessed `men` may HIDE the product (`menGateScope`: a
+ * weak or unknown source is `unconfirmed`, not gated). So a product whose `men` is only a guess is
+ * drawn on the male body and takes a male bundle; if the guess is wrong, the fix is the audience,
+ * after which the female bundle imports. The refusal says so (`hint`).
+ *
+ * Changed by M1 with the gate off too: before M1 a female-built bundle imported for a men's product
+ * and was then refused by the viewer; now the import refuses it.
+ */
 export async function importBundle(db: Db, env: Env, shopId: string, productExternalId: string, dir: string): Promise<{ asset: AssetRow; created: boolean }> {
   const product = await db.query.products.findFirst({ where: and(eq(products.shopId, shopId), eq(products.externalId, productExternalId)) });
   if (!product) throw notFound('product');
-  const bundle = await readBundleDir(dir, chartSizesOf(product));
+  const family = garmentBodyFamily(product.payload);
+  let bundle: BundleOnDisk;
+  try {
+    bundle = await readBundleDir(dir, chartSizesOf(product), family);
+  } catch (err) {
+    if (err instanceof AssetImportError && err.problem === 'family_mismatch') throw new AssetImportError('family_mismatch', familyHint(product, family));
+    throw err;
+  }
   const existing = await db.query.garmentAssets.findFirst({ where: and(eq(garmentAssets.productId, product.id), eq(garmentAssets.version, bundle.version)) });
   if (existing) {
     // Re-importing the same bytes after a merchant rejection puts that version back up for review.
@@ -97,6 +127,15 @@ export async function importBundle(db: Db, env: Env, shopId: string, productExte
     .values({ shopId, productId: product.id, version: bundle.version, status: 'awaiting_approval', qa: bundle.qa, baseSize: bundle.baseSize, sizes: bundle.sizes, bundlePath: target, bytes: bundle.bytes, inputHash: bundle.inputHash })
     .returning();
   return { asset: asset!, created: true };
+}
+
+/** The operator's next step after a `family_mismatch`. */
+function familyHint(product: ProductRow, family: GarmentBodyFamily): string {
+  if (family === 'female') return 'the bundle was built on the male mannequin; this product is not men’s (audience), so it is shown on the female body';
+  const guessed = !product.audienceSource || isWeakAudienceSource(product.audienceSource);
+  return guessed
+    ? `this product’s audience “men” is ${product.audienceSource ? `a guess (from the ${product.audienceSource})` : 'of unknown source'}, and it is drawn on the male body: build the bundle on the male mannequin, or correct the audience if it is not a men’s product`
+    : 'this is a men’s product, shown on the male body: build the bundle on the male mannequin';
 }
 
 async function ownAsset(db: Db, shopId: string, assetId: string): Promise<AssetRow> {
@@ -161,11 +200,11 @@ export function assetBaseUrl(env: Env): string {
 }
 
 /**
- * The mannequin family a bundle was built on. The male pipeline (plan slice M1) adds
- * `mannequin.family` to the bundle; absent means female, which is every bundle that exists today.
- * Of the bundle files the api keeps only qa.json (the `qa` column), so the value is read there:
- * `qa.mannequin.family`. ASSUMPTION of slice M0: M1 writes it to qa.json. If M1 puts it in another
- * file, change this one function (and store the value on import).
+ * The mannequin family a bundle was built on. Since plan slice M1 a male bundle carries
+ * `mannequin.family: 'male'` in both anchors.json and qa.json, and the import refuses a bundle whose
+ * two files disagree (`bundleMannequinFamily` in @curtain/schema); absent means female, which is
+ * every bundle built before M1. Of the bundle files the api keeps only qa.json (the `qa` column),
+ * so the value is read there: `qa.mannequin.family` (the place slice M0 assumed, confirmed by M1).
  */
 export function assetMannequinFamily(a: Pick<AssetRow, 'qa'>): 'female' | 'male' {
   const mannequin = (a.qa as { mannequin?: { family?: unknown } } | null)?.mannequin;
@@ -181,9 +220,11 @@ export async function activeAsset(db: Db, env: Env, shop: { id: string; settings
   if (shop.settings.garment3d !== true || !product.activeAssetVersion) return null;
   const a = await db.query.garmentAssets.findFirst({ where: and(eq(garmentAssets.productId, product.id), eq(garmentAssets.version, product.activeAssetVersion)) });
   if (!a || a.status !== 'approved' || a.shopId !== shop.id) return null;
+  const qaMannequin = (a.qa as { mannequin?: GarmentBundleMannequinMeta } | null)?.mannequin;
   const r = checkGarmentBundle(
     {
-      anchors: { format: 'curtain.garment.anchors' },
+      // The import checked that anchors.json names the family of qa.json; only qa.json is kept.
+      anchors: { format: 'curtain.garment.anchors', ...(qaMannequin === undefined ? {} : { mannequin: qaMannequin }) },
       grading: { format: 'curtain.garment.grading', baseSize: a.baseSize, sizes: a.sizes.map((size) => ({ size })) },
       material: { format: 'curtain.garment.material' },
       qa: a.qa as { format?: unknown; chartAgreement?: { pass?: unknown } },
@@ -200,7 +241,15 @@ export async function activeAsset(db: Db, env: Env, shop: { id: string; settings
   return { ref: { version: a.version, baseUrl: `${assetBaseUrl(env)}/${shop.id}/${product.id}/${a.version}`, baseSize: r.info.baseSize, sizes: r.info.sizes, label: 'estimate' }, row: a };
 }
 
-/** The asset ref for `GET /v1/try`, or null (see `activeAsset`). */
+/**
+ * The asset ref for `GET /v1/try`, or null (see `activeAsset`). Also null when the live bundle was
+ * built on the other body family than the product is shown on now (`garmentBodyFamily`; the
+ * audience changed after the import, or a female asset stored before M1 on a men's product): the
+ * viewer would refuse it, so no 3D button is offered. This holds with the gate off too (before M1
+ * the button was offered and the viewer then failed).
+ */
 export async function activeAssetRef(db: Db, env: Env, shop: { id: string; settings: ShopSettings }, product: ProductRow, garment: GarmentPayload): Promise<GarmentAssetRef | null> {
-  return (await activeAsset(db, env, shop, product, garment))?.ref ?? null;
+  const active = await activeAsset(db, env, shop, product, garment);
+  if (!active || assetMannequinFamily(active.row) !== garmentBodyFamily(garment)) return null;
+  return active.ref;
 }

@@ -14,7 +14,7 @@ import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MockProvider, TryOnRouter } from '@curtain/tryon-providers';
-import { PILOT_SKIRT_CHART_ONLY, PILOT_SKIRT_TAPE_MEASURED } from '@curtain/schema';
+import { MENS_OXFORD_SHIRT, PILOT_SKIRT_CHART_ONLY, PILOT_SKIRT_TAPE_MEASURED, SYNTHETIC_MENS_TEE } from '@curtain/schema';
 import { build } from './app.js';
 import { connectPglite } from './db/client.js';
 import { DEMO_APP_ORIGIN, DEMO_STOREFRONT_ORIGIN, seedDemo, type DemoGarmentBundle } from './demoSeed.js';
@@ -109,6 +109,19 @@ const bundles: DemoGarmentBundle[] = [
     tape: { closure: 'pull-on', measured: PILOT_SKIRT_TAPE_MEASURED },
   },
 ];
+/**
+ * DEMO_MEN=1 (men-3d-plan slice M1; off by default, so the demo is unchanged): two men's products in the Shopify demo
+ * shop, stored with a strong audience source as a Shopify sync would. The SYNTHETIC men's test tee (not a product) with
+ * its bundle built on the male mannequin (`out/synthetic-men-tee/`, `pnpm --filter @curtain/garment-spike build:bundle`),
+ * and the men's Oxford shirt fixture with no bundle. With MEN_3D_GATE=1 as well, the tee opens in the 3D view on the male
+ * body and the shirt answers "Men's clothing: coming soon".
+ */
+if (source.DEMO_MEN === '1') {
+  bundles.push(
+    { shop: 'shopify', externalId: SYNTHETIC_MENS_TEE.id, dir: join(spikeOut, SYNTHETIC_MENS_TEE.id), payload: true, colorHex: SYNTHETIC_MENS_TEE.primaryColorHex, colorName: 'Test blue', fallbackPayload: SYNTHETIC_MENS_TEE, audienceSource: 'productType' },
+    { shop: 'shopify', externalId: MENS_OXFORD_SHIRT.id, dir: join(spikeOut, 'no-bundle', MENS_OXFORD_SHIRT.id), payload: true, colorHex: MENS_OXFORD_SHIRT.primaryColorHex, colorName: 'Light blue', fallbackPayload: MENS_OXFORD_SHIRT, audienceSource: 'productType' },
+  );
+}
 const manifest = await seedDemo(handle.db, env, { storefrontOrigin, appOrigin: env.PUBLIC_APP_URL, bundles });
 await writeFile(join(dataDir, 'demo.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 

@@ -68,4 +68,13 @@ node spikes/garment-engine/viewer/avatar-renders.mjs <out dir> [eval/<id> …] [
 
 Per product (default: the pilot skirt and the azure dress in `out/eval/`), in `classic` and `neutral` lighting, in the default grey and at Monk 2, 6 and 9: a phone-sized picture and the colour error of bare-skin patches (CIEDE2000 and CIE76 against the requested colour) in `measurements.json`. Then the head alone, both families, three angles, and two typed bodies. The measured table is in `packages/garment-viewer/README.md`.
 
+### The male body (`men-renders.mjs`, men-3d-plan slice M1)
+
+```sh
+pnpm --filter @curtain/garment-spike build:bundle   # also writes out/synthetic-men-tee/ (male mannequin, SYNTHETIC, not a product)
+node spikes/garment-engine/viewer/men-renders.mjs <out dir> [--match <text>]
+```
+
+Through the same `avatar.html` and the shipped viewer: the male table sizes S to XXL (`MALE_REFERENCE`, typed in as height, chest, waist, seat and shoulder width), front and side, alone and in the SYNTHETIC men's test tee of their own size; close-ups of the torso and head; the female M for comparison; and both cross-family mounts, which must end in `error` (`incompatible`). Every side and back view, body alone and tee alike, is the viewer's own orbit controls dragged a quarter (half) turn, as the page has no yaw for a garment; the script waits until the canvas is still, so the damped turn completes to 90° (180°) and both sets are at the same angle (until 18 Nov the body side used `yaw=90` and the tee side an unfinished drag of about 60 to 70°). The full-body pictures are zoomed out eight wheel ticks of the controls so the A-pose hands are inside a phone-width frame; the shipped mount's framing is unchanged. The real stack (api import, the gate with `MEN_3D_GATE=1`, storefront, embed) is `scripts/demo-men.mjs` at the repo root.
+
 The spike's own page (`index.html`) takes the same three look parameters: `skin=rrggbb`, `lighting=neutral`, and `head=neutral` (the spike page keeps the egg head by default so its earlier renders stay comparable; the shipped viewer's default is the neutral head). `scene.ts` and `body.ts` here carry the same changes as the fork in `packages/garment-viewer` (checked by its `src/look.test.ts`).

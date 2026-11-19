@@ -112,12 +112,12 @@ async function wear(w: World, product: string, deviceId: string, shopId = w.shop
   await w.t.handle.db.insert(wardrobeItems).values({ deviceId, shopId, productId: product, size: 'M', state: 'kept', updatedAt: new Date() });
 }
 
-/** A bundle directory for a product; `male` writes the mannequin family the gate reads (qa.json). */
+/** A bundle directory for a product; `male` writes the mannequin family in anchors.json and qa.json (the gate reads qa.json). */
 async function bundleFor(g: GarmentPayload, male: boolean): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'curtain-men-bundle-'));
   const sizes = g.sizeChart.map((r) => r.size);
   await writeFile(join(dir, 'base.glb'), Buffer.from(`glTF-fake-${g.id}-${male}`));
-  await writeFile(join(dir, 'anchors.json'), JSON.stringify({ format: 'curtain.garment.anchors', baseSize: sizes[0] }));
+  await writeFile(join(dir, 'anchors.json'), JSON.stringify({ format: 'curtain.garment.anchors', baseSize: sizes[0], ...(male ? { mannequin: { family: 'male' } } : {}) }));
   await writeFile(join(dir, 'grading.json'), JSON.stringify({ format: 'curtain.garment.grading', baseSize: sizes[0], sizes: sizes.map((size) => ({ size })) }));
   await writeFile(join(dir, 'material.json'), JSON.stringify({ format: 'curtain.garment.material' }));
   await writeFile(join(dir, 'qa.json'), JSON.stringify({ format: 'curtain.garment.qa', chartAgreement: { pass: true }, ...(male ? { mannequin: { family: 'male' } } : {}) }));
@@ -498,12 +498,20 @@ describe("men's gate (D20 point 3, slice M0)", () => {
       await db.update(shops).set({ settings: { ...on.shop.shop.settings, siteUrl: SITE, garment3d: true } }).where(eq(shops.id, on.shop.shop.id));
       expect(await state()).toBe('coming_soon'); // no bundle
 
-      const female = await importBundle(db, on.t.env, on.shop.shop.id, jeans, await bundleFor(MENS_STRAIGHT_JEANS, false));
-      expect(await state()).toBe('coming_soon'); // imported, not approved (D13)
-      await approveAsset(db, on.shop.shop.id, female.asset.id, 'test');
+      // A female-built bundle is refused for a men's product on import (slice M1, `family_mismatch`).
+      await expect(importBundle(db, on.t.env, on.shop.shop.id, jeans, await bundleFor(MENS_STRAIGHT_JEANS, false))).rejects.toMatchObject({ problem: 'family_mismatch' });
+      // One stored before that check (or under another audience) and approved: still coming soon.
+      const femaleDir = await bundleFor(MENS_STRAIGHT_JEANS, false);
+      const [female] = await db
+        .insert(garmentAssets)
+        .values({ shopId: on.shop.shop.id, productId: on.ids[jeans]!, version: 'f0f0f0f0f0f0f0f0', status: 'awaiting_approval', qa: { format: 'curtain.garment.qa', chartAgreement: { pass: true } }, baseSize: MENS_STRAIGHT_JEANS.sizeChart[0]!.size, sizes: MENS_STRAIGHT_JEANS.sizeChart.map((r) => r.size), bundlePath: femaleDir, bytes: 100, inputHash: null })
+        .returning();
+      expect(await state()).toBe('coming_soon'); // stored, not approved (D13)
+      await approveAsset(db, on.shop.shop.id, female!.id, 'test');
       expect(await state()).toBe('coming_soon'); // approved, but built on the female mannequin
 
       const male = await importBundle(db, on.t.env, on.shop.shop.id, jeans, await bundleFor(MENS_STRAIGHT_JEANS, true));
+      expect(male.created).toBe(true);
       await approveAsset(db, on.shop.shop.id, male.asset.id, 'test');
       expect(await state()).toBeUndefined();
 

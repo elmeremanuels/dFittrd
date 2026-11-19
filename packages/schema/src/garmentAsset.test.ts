@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TryResolveResponseSchema } from './api';
-import { checkGarmentBundle, garmentBundleFor, garmentQaFlagNote, garmentQaFlags, GarmentAssetRefSchema, MAX_GARMENT_BUNDLE_BYTES } from './garmentAsset';
+import { bundleMannequinFamily, checkGarmentBundle, garmentBodyFamily, garmentBundleFor, garmentQaFlagNote, garmentQaFlags, GarmentAssetRefSchema, MAX_GARMENT_BUNDLE_BYTES } from './garmentAsset';
 
 const meta = (over: Partial<{ sizes: string[]; pass: boolean; bytes: number; format: string; waistReading: unknown }> = {}) => ({
   anchors: { format: 'curtain.garment.anchors' },
@@ -12,7 +12,7 @@ const meta = (over: Partial<{ sizes: string[]; pass: boolean; bytes: number; for
 
 describe('checkGarmentBundle', () => {
   it('accepts a bundle that grades every size of the chart', () => {
-    expect(checkGarmentBundle(meta(), ['AU 8', '10', '12', '14', '16'].map((s) => s.replace('AU ', '')))).toEqual({ ok: true, info: { baseSize: '12', sizes: ['8', '10', '12', '14', '16'], qaFlags: [] } });
+    expect(checkGarmentBundle(meta(), ['AU 8', '10', '12', '14', '16'].map((s) => s.replace('AU ', '')))).toEqual({ ok: true, info: { baseSize: '12', sizes: ['8', '10', '12', '14', '16'], qaFlags: [], family: 'female' } });
   });
   it('falls back when the live chart has a size the bundle cannot show', () => {
     expect(checkGarmentBundle(meta(), ['8', '10', '12', '14', '16', '18'])).toEqual({ ok: false, problem: 'chart_mismatch' });
@@ -25,10 +25,49 @@ describe('checkGarmentBundle', () => {
   });
 });
 
+describe('the body family a bundle was built on (men-3d-plan slice M1)', () => {
+  const sized = ['8', '10', '12', '14', '16'];
+  const chart = { sizeChart: sized.map((size) => ({ size, measurements: {} })) } as never as { sizeChart: { size: string }[] };
+  const fam = (anchors: unknown, qa: unknown) => ({ ...meta(), anchors: { format: 'curtain.garment.anchors', ...(anchors === undefined ? {} : { mannequin: anchors }) }, qa: { format: 'curtain.garment.qa', chartAgreement: { pass: true }, ...(qa === undefined ? {} : { mannequin: qa }) } }) as never;
+  const male = { version: '0.1.0', shape: 'M', family: 'male' };
+  it('reads the family from anchors.json and qa.json, which must agree; absent in both is female', () => {
+    expect(bundleMannequinFamily(fam(undefined, undefined))).toBe('female');
+    expect(bundleMannequinFamily(fam({ version: '0.1.0', shape: 'M' }, undefined))).toBe('female');
+    expect(bundleMannequinFamily(fam(male, { family: 'male' }))).toBe('male');
+    expect(bundleMannequinFamily(fam({ family: 'female' }, { family: 'female' }))).toBe('female');
+    // Absent means female, so `female` named in one file only agrees with the other: female.
+    expect(bundleMannequinFamily(fam({ family: 'female' }, undefined))).toBe('female');
+    expect(bundleMannequinFamily(fam(undefined, { family: 'female' }))).toBe('female');
+    // Disagreeing files (so `male` named in one file only), or an unknown family: malformed.
+    expect(bundleMannequinFamily(fam(male, undefined))).toBeNull();
+    expect(bundleMannequinFamily(fam(undefined, { family: 'male' }))).toBeNull();
+    expect(bundleMannequinFamily(fam({ family: 'Male' }, { family: 'Male' }))).toBeNull();
+    expect(bundleMannequinFamily(fam('male', 'male'))).toBeNull();
+    expect(checkGarmentBundle(fam(male, undefined), sized)).toEqual({ ok: false, problem: 'format' });
+    expect(checkGarmentBundle(fam({ family: 'child' }, { family: 'child' }), sized)).toEqual({ ok: false, problem: 'format' });
+  });
+  it('reports the family, and refuses a bundle of the other family when the product family is given', () => {
+    expect(checkGarmentBundle(fam(male, { family: 'male' }), sized)).toEqual({ ok: true, info: { baseSize: '12', sizes: sized, qaFlags: [], family: 'male' } });
+    expect(checkGarmentBundle(fam(male, { family: 'male' }), sized, { family: 'male' })).toMatchObject({ ok: true });
+    expect(checkGarmentBundle(fam(male, { family: 'male' }), sized, { family: 'female' })).toEqual({ ok: false, problem: 'family_mismatch' });
+    expect(checkGarmentBundle(fam(undefined, undefined), sized, { family: 'male' })).toEqual({ ok: false, problem: 'family_mismatch' });
+    expect(checkGarmentBundle(fam(undefined, undefined), sized, { family: 'female' })).toMatchObject({ ok: true });
+  });
+  it('garmentBundleFor: a men’s garment takes a male bundle only, every other garment a female one only', () => {
+    expect(garmentBodyFamily({ audience: 'men' })).toBe('male');
+    for (const audience of ['women', 'unisex', undefined] as const) expect(garmentBodyFamily({ audience })).toBe('female');
+    expect(garmentBundleFor(fam(male, { family: 'male' }), { ...chart, audience: 'men' } as never)?.family).toBe('male');
+    expect(garmentBundleFor(fam(undefined, undefined), { ...chart, audience: 'men' } as never)).toBeNull();
+    expect(garmentBundleFor(fam(male, { family: 'male' }), chart as never)).toBeNull();
+    expect(garmentBundleFor(fam(male, { family: 'male' }), { ...chart, audience: 'unisex' } as never)).toBeNull();
+    expect(garmentBundleFor(fam(undefined, undefined), { ...chart, audience: 'women' } as never)?.family).toBe('female');
+  });
+});
+
 describe('low-rise waist reading (a recorded founder decision, never silent)', () => {
   const lowRise = { kind: 'low-rise', decision: 'founder, 2026-11-09', offsetCm: 8.1, targetCm: 88.6, dropCm: 5.5 };
   it('passes only with the decision recorded, and always carries the flag', () => {
-    expect(checkGarmentBundle(meta({ waistReading: lowRise }), ['8', '10', '12', '14', '16'])).toEqual({ ok: true, info: { baseSize: '12', sizes: ['8', '10', '12', '14', '16'], qaFlags: ['low_rise_waist'] } });
+    expect(checkGarmentBundle(meta({ waistReading: lowRise }), ['8', '10', '12', '14', '16'])).toEqual({ ok: true, info: { baseSize: '12', sizes: ['8', '10', '12', '14', '16'], qaFlags: ['low_rise_waist'], family: 'female' } });
     expect(garmentQaFlags({ chartAgreement: { waistReading: lowRise } })).toEqual(['low_rise_waist']);
     expect(garmentQaFlags({ chartAgreement: { waistReading: null } })).toEqual([]);
   });
@@ -59,7 +98,7 @@ describe('a pass after calibration over a miss outside tolerance (never looks cl
 describe('a tape-built drape bake (no chart agreement was measured)', () => {
   const bake = (kind: unknown) => ({ ...meta(), anchors: { format: 'curtain.garment.anchors', drapeBake: 'base.glb' }, qa: { format: 'curtain.garment.qa', chartAgreement: { pass: true, ...(kind === undefined ? {} : { kind }) } } });
   it('is admitted only flagged, and only when qa.json says it is tape-built', () => {
-    expect(checkGarmentBundle(bake('tape-built'), ['8', '10', '12', '14', '16'])).toEqual({ ok: true, info: { baseSize: '12', sizes: ['8', '10', '12', '14', '16'], qaFlags: ['tape_built_no_chart_check'] } });
+    expect(checkGarmentBundle(bake('tape-built'), ['8', '10', '12', '14', '16'])).toEqual({ ok: true, info: { baseSize: '12', sizes: ['8', '10', '12', '14', '16'], qaFlags: ['tape_built_no_chart_check'], family: 'female' } });
     expect(checkGarmentBundle(bake(undefined), ['12'])).toEqual({ ok: false, problem: 'qa_failed' });
     expect(checkGarmentBundle(bake('calibrated'), ['12'])).toEqual({ ok: false, problem: 'qa_failed' });
     expect(garmentQaFlags({ chartAgreement: { pass: true, kind: 'tape-built' } })).toEqual(['tape_built_no_chart_check']);

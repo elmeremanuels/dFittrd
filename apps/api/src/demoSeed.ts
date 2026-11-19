@@ -6,7 +6,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { checkGarmentTapeInput, garmentQaFlags, MOCK_GARMENTS_BY_ID, type GarmentPayload, type GarmentQaFlag, type MeasuredTapeInputRow } from '@curtain/schema';
+import { checkGarmentTapeInput, garmentQaFlags, MOCK_GARMENTS_BY_ID, type AudienceSource, type GarmentPayload, type GarmentQaFlag, type MeasuredTapeInputRow } from '@curtain/schema';
 import type { Db } from './db/client.js';
 import { shops, type ShopSettings } from './db/schema.js';
 import type { Env } from './env.js';
@@ -92,6 +92,11 @@ export interface DemoGarmentBundle {
    * an error stops the seed.
    */
   tape?: { closure: string | null; measured: readonly MeasuredTapeInputRow[] };
+  /**
+   * Where the product's audience was read from, as a Shopify sync stores it (`upsertProduct`). The
+   * men's gate gates only a known strong source, so a men's demo product passes `productType`.
+   */
+  audienceSource?: AudienceSource;
 }
 
 /** The closure and filled tape a merchant's form would store for this product. */
@@ -215,7 +220,7 @@ export async function seedDemo(
         const colorName = b.colorName ?? 'Azure';
         // Shop photos never enter the demo: the storefront draws the garment itself.
         const g = { ...raw, id: b.externalId, productUrl: undefined, productPhotos: [photo], flatLayPhoto: photo, primaryColorHex: color };
-        const r = await upsertProduct(db, fresh.id, b.externalId, g);
+        const r = await upsertProduct(db, fresh.id, b.externalId, g, b.audienceSource ? { audienceSource: b.audienceSource } : {});
         const info: DemoProductInfo = {
           externalId: b.externalId,
           name: raw.name,

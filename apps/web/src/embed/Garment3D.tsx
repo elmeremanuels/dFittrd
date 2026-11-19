@@ -14,8 +14,9 @@
  *   product: the 3D view of a women's garment is the same with or without the avatar slices. Only
  *   a men's garment adds `family: 'male'` and `heightCm` (packages/mannequin README, `BodyInput`):
  *   the typed body of the viewer moves the garment and has known limits, so it is not switched on
- *   for everybody by a side door. A men's garment on a bundle draped on the female body is refused
- *   by the viewer (`incompatible`), which a `required` view turns into "coming soon" (D20 point 3).
+ *   for everybody by a side door. A men's garment on a bundle draped on the female body (or the
+ *   reverse) is refused by the viewer (`incompatible`), which a `required` view turns into "coming
+ *   soon" (D20 point 3); since slice M1 a male-built bundle mounts on the male body.
  * - Always labelled an estimate (rule 3). On any error it closes and the 2D figure above stays.
  * - `required` (a men's product, D20 point 3: never a 2D figure only): the view opens by itself,
  *   cannot be closed and reports `settled` or `failed`; the embed shows nothing of the result until
@@ -31,7 +32,7 @@ import { Box, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { FitResult } from '@curtain/fit-engine';
 import type * as GarmentViewer from '@curtain/garment-viewer';
-import type { GarmentAssetRef, GarmentPayload, UserBody } from '@curtain/schema';
+import { garmentBodyFamily, type GarmentAssetRef, type GarmentPayload, type UserBody } from '@curtain/schema';
 import { EstimateBadge } from '@/components/EstimateBadge';
 import { ringInputsFor } from '@/render/ringInputs';
 import { ringOverlayFor } from '@/render/rings';
@@ -69,9 +70,13 @@ export type ViewerSource =
 type View = Omit<BaseView, 'source'> & { setLook?: (look: ViewerLook) => void; source?: ViewerSource };
 type MountOptionsWithLook = Omit<BaseMountOptions, 'look' | 'lighting'> & { look?: ViewerLook; lighting?: ViewerLighting };
 
-/** The body family the viewer draws: the garment's audience decides (men → male), else today's figure. */
+/**
+ * The body family the viewer draws: the garment's audience decides (men → male), else today's
+ * figure. The same rule (`garmentBodyFamily`) picks the bundle family the api imports and hands out
+ * for the product, so a men's garment reaches the viewer only with a male-built bundle.
+ */
 export function bodyFamilyFor(garment: Pick<GarmentPayload, 'audience'>): 'female' | 'male' {
-  return garment.audience === 'men' ? 'male' : 'female';
+  return garmentBodyFamily(garment);
 }
 
 /** WebGL2 on a throwaway canvas (the viewer chunk is not loaded for this check). */

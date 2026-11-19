@@ -5,7 +5,7 @@
  * validated shop's drafts with their photo choice from `images.json`) and the neutral stage 2 prompt.
  */
 import { FIT_POINT_TO_ANCHOR, type AnchorBreadth, type AnchorRing } from '@curtain/anchors';
-import { FABRIC_LIBRARY_VERSION, duplicateSizeLabels, isFabricConstructionId, lookupFabricId, mockGarment, resolveFabric, sizeLabelKey, type GarmentPayload } from '@curtain/schema';
+import { FABRIC_LIBRARY_VERSION, SYNTHETIC_MENS_TEE, duplicateSizeLabels, isFabricConstructionId, lookupFabricId, mockGarment, resolveFabric, sizeLabelKey, type GarmentPayload } from '@curtain/schema';
 import type { Mannequin } from '@curtain/mannequin';
 import type { GarmentSpec, SpikeCategory } from './garment';
 import { easeFor } from './evalChart';
@@ -108,8 +108,16 @@ export function garmentSpec(p: GarmentPayload, baseSize = 'M'): GarmentSpec {
   };
 }
 
-export function spikeProduct(id: (typeof SPIKE_PRODUCT_IDS)[number]): GarmentPayload {
-  return mockGarment(id);
+/**
+ * Synthetic products on the male mannequin (men-3d-plan slice M1): `synthetic-men-tee` is
+ * `SYNTHETIC_MENS_TEE` of @curtain/schema, a made-up tee that proves the male path end to end. Kept
+ * apart from `SPIKE_PRODUCT_IDS`, which the Phase 0 exporter and its tests iterate.
+ */
+export const SPIKE_MALE_PRODUCT_IDS = ['synthetic-men-tee'] as const;
+export type SpikeBundleProductId = (typeof SPIKE_PRODUCT_IDS)[number] | (typeof SPIKE_MALE_PRODUCT_IDS)[number];
+
+export function spikeProduct(id: SpikeBundleProductId): GarmentPayload {
+  return id === 'synthetic-men-tee' ? SYNTHETIC_MENS_TEE : mockGarment(id);
 }
 
 export interface MaterialJson {

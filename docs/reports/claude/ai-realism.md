@@ -72,7 +72,7 @@ That export is frozen as a regression test that runs in `pnpm check` (`packages/
 - **`garment-viewer` `passes.test.ts`:** the pure helpers and the pass frame.
 - **`e2e/aiRealism.spec.ts`** (not in `pnpm check`; SwiftShader, emulated phone, not a real phone): with the flag on, a faithful image is shown labelled and a moved hem is refused; with the flag off there is no panel. Passed 2/2 on 19 Nov 2026.
 
-`npm_config_workspace_concurrency=1 pnpm check`: see the result at the end of this file.
+`npm_config_workspace_concurrency=1 pnpm check` passed on this branch, 19 Nov 2026 (exit 0: build, typecheck, lint including the banned-model scan, every test suite, app builds, bundle-secret and language-pack checks).
 
 ## Screenshots (`docs/screens/claude/ai-realism/`)
 

@@ -19,7 +19,7 @@ import type { GarmentPayload, UserBody } from '@curtain/schema';
 import { stepSize } from '@/embed/aboutYou';
 import { embedStrings } from '@/embed/strings';
 import { cmToIn, type Units } from '@/embed/units';
-import { bodyGeometry, figureY, garmentGeometry, halfWidthFromGirth, HEM_DEPTH, MAX_RING_RX, type BodyGeometry, type FigureFamily } from './body';
+import { bodyGeometry, figureY, garmentGeometry, halfWidthFromGirth, HEM_DEPTH, MAX_RING_RX, type BodyGeometry, type FigureFamily, type MaleShape } from './body';
 import { bandSweep, joinSizes, sourceAt, sourceSentence, SOURCE_WORD, type GarmentRingInputs, type RingSource } from './ringInputs';
 
 export type RingKey = 'bust' | 'waist' | 'hip' | 'hem';
@@ -402,14 +402,16 @@ export interface RingOverlayForInput {
   estimated?: readonly string[];
   /** The figure the rings are drawn on (AvatarView's `family`). */
   family?: FigureFamily;
+  /** The male figure's shape (AvatarView's `maleShape`). */
+  maleShape?: MaleShape;
 }
 
 /**
  * `ringOverlay` on the same figure AvatarView draws: the body from the shopper's measurements and
  * the hem where the 2D garment's hem is drawn for that size.
  */
-export function ringOverlayFor({ garment, fit, size, measurements, heightCm, inputs = null, units = 'metric', estimated = [], family = 'female' }: RingOverlayForInput): RingOverlay | null {
-  const body = bodyGeometry(measurements, heightCm, family);
+export function ringOverlayFor({ garment, fit, size, measurements, heightCm, inputs = null, units = 'metric', estimated = [], family = 'female', maleShape = 'v1' }: RingOverlayForInput): RingOverlay | null {
+  const body = bodyGeometry(measurements, heightCm, family, maleShape === 'v2' ? { maleShape } : {});
   const hemY = garmentGeometry({ garment, gaps: fitGapsForRender(fit, size), body, hemSweepCm: inputs?.hem?.sweepCm[size] ?? null }).hemY;
   return ringOverlay({ garment, fit, size, body, measurements, inputs, hemY, units, estimated });
 }

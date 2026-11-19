@@ -13,4 +13,6 @@ interface ImportMetaEnv {
   /** 3D view head for the look review: `neutral-v2` (default and anything else: the viewer's own default, today's head). */
   readonly VITE_VIEWER_HEAD?: string;
   readonly VITE_AVATAR_SKIN?: string;
+  /** `v2`: the male body v2 in the 3D view and the male 2D figure together (default and anything else: v1). */
+  readonly VITE_MALE_SHAPE?: string;
 }

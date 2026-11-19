@@ -19,7 +19,7 @@ import { UnitToggle } from './EmbedScreens';
 import { SizeChartTable } from './SizeChartTable';
 import { embedStrings, parts } from './strings';
 import type { Units } from './units';
-import { avatarSkinFlag } from './look';
+import { avatarSkinFlag, maleShapeFlag } from './look';
 
 const TABS = ['fit', 'chart'] as const;
 type TabKey = (typeof TABS)[number];
@@ -109,7 +109,7 @@ export function ResultScreen({
   const ringInputs = useMemo(() => ringInputsFor(garment), [garment]);
   const priorGirths = useMemo(() => priorKeys(profile), [profile]);
   const rings = useMemo(
-    () => (advice.noPoints ? null : ringOverlayFor({ garment, fit, size: selected, measurements: userBody.measurements, heightCm, inputs: ringInputs, units, estimated: priorGirths, family: figure })),
+    () => (advice.noPoints ? null : ringOverlayFor({ garment, fit, size: selected, measurements: userBody.measurements, heightCm, inputs: ringInputs, units, estimated: priorGirths, family: figure, maleShape: maleShapeFlag() })),
     [advice.noPoints, garment, fit, selected, userBody.measurements, heightCm, ringInputs, units, priorGirths, figure],
   );
   // The sticky "Choose size" bar lies over the bottom of the window. Its height goes to the figure
@@ -279,7 +279,7 @@ export function ResultScreen({
             <div className={`relative ${onAvatar ? 'pt-10' : ''}`}>
               {/* overflow-clip, not hidden: the frame must not be a scroll box, or the estimate label could not ride above the bar. */}
               <div ref={avatarRef} className="mirror-frame aspect-[5/9] w-full overflow-clip border-[8px]">
-                <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} skinHex={skinHex} bodyLabel={t.bodyLabel} estimateLines={t.estimateLines} labelsAt="bottom" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} family={figure} skinShading={avatarSkinFlag()} {...(face ? { media: { faceUrl: face.url, baseFrame: null, faceStyle: 'tile' as const } } : {})} />
+                <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} skinHex={skinHex} bodyLabel={t.bodyLabel} estimateLines={t.estimateLines} labelsAt="bottom" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} family={figure} maleShape={maleShapeFlag()} skinShading={avatarSkinFlag()} {...(face ? { media: { faceUrl: face.url, baseFrame: null, faceStyle: 'tile' as const } } : {})} />
               </div>
               {face ? (
                 // The head is about 30 px wide at phone size: the face is shown large here as well.

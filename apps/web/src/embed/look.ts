@@ -90,6 +90,17 @@ export function faceOnHeadEnabled(env: { VITE_AVATAR_FACE_ON_HEAD?: string } = i
  * (`look.shading` of the viewer) the new way. Anything else, and every normal build: `flat`, today's
  * shading, unchanged. Not set anywhere until the founder approves it from the pictures.
  */
+/**
+ * Male shape v2 (branch claude/male-2d-v2) for a build: `VITE_MALE_SHAPE=v2` is the one switch that
+ * turns the male body v2 on in both views together: the 3D male body (`MountOptions.maleShape` of
+ * the viewer, `buildMannequin(shape, { maleShape: 'v2' })`) and the male 2D figure beside it
+ * (`AvatarView maleShape`, the size rings with it). Anything else, and every normal build: `v1`,
+ * unchanged. Off until the male bundles are draped on the v2 body (docs/reports/claude/male-2d-v2.md).
+ */
+export function maleShapeFlag(env: { VITE_MALE_SHAPE?: string } = import.meta.env): 'v1' | 'v2' {
+  return env.VITE_MALE_SHAPE === 'v2' ? 'v2' : 'v1';
+}
+
 export function avatarSkinFlag(env: { VITE_AVATAR_SKIN?: string } = import.meta.env): 'flat' | 'skin-v2' {
   return env.VITE_AVATAR_SKIN === 'skin-v2' ? 'skin-v2' : 'flat';
 }

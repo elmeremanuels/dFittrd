@@ -10,7 +10,8 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
  * product: the result with the 3D view for Monk 1, 3, 6, 9 and 10 picked in the prompt, a close-up
  * of the canvas, and the whole page once. The build decides the lighting and the head
  * (`VITE_VIEWER_LIGHTING`, `VITE_VIEWER_HEAD`); `LOOK_LABEL` names the build in the file names.
- * Writes nothing without LOOK_SHOTS, and asserts only what the shopper must always see (the
+ * Runs only with LOOK_SHOTS set (skipped otherwise, so a plain `pnpm --filter @curtain/web e2e` does not
+ * take 15 renders of the default build), and asserts only what the shopper must always see (the
  * estimate label, a settled view). Not part of `pnpm check`. EMULATED, not a phone: headless
  * Chromium, WebGL on SwiftShader.
  *
@@ -68,9 +69,8 @@ async function instrument(page: Page, origin: string, bundle: string): Promise<v
 }
 
 async function save(name: string, png: Buffer): Promise<void> {
-  if (!SHOTS) return;
-  mkdirSync(SHOTS, { recursive: true });
-  writeFileSync(join(SHOTS, name), png);
+  mkdirSync(SHOTS!, { recursive: true });
+  writeFileSync(join(SHOTS!, name), png);
 }
 
 /** A screenshot of an element once two in a row are the same. */
@@ -89,6 +89,7 @@ async function still(page: Page, locator: Locator): Promise<Buffer> {
 
 for (const product of PRODUCTS) {
   test(`the look in the embed: ${product.id}, Monk ${TONES.join(', ')}`, async ({ browser, baseURL }) => {
+    test.skip(!SHOTS, 'the look review pictures: set LOOK_SHOTS to take them');
     test.skip(!existsSync(join(product.dir, 'base.glb')) || !existsSync(join(product.dir, 'payload.json')), `no bundle at ${product.dir} (git-ignored)`);
     test.setTimeout(3_600_000);
     const origin = new URL(baseURL!).origin;

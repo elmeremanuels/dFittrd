@@ -138,7 +138,7 @@ function median(values: number[]): number {
 
 /** Box blur of radius r on a w × h field (two passes ≈ a soft Gaussian). */
 function boxBlur(src: Float32Array, w: number, h: number, r: number): Float32Array {
-  let a = Float32Array.from(src);
+  const a = Float32Array.from(src);
   const b = new Float32Array(src.length);
   for (let pass = 0; pass < 2; pass++) {
     for (let y = 0; y < h; y++) {

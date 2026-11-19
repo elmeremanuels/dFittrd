@@ -65,6 +65,12 @@ export interface ResultScreenProps {
    * the male body is mounted: the result is hidden until that view has settled (EmbedApp).
    */
   figure?: FigureFamily;
+  /**
+   * The shopper's own face tile (slice 5, `VITE_AVATAR_FACE_PHOTO=live` only): drawn on the 2D
+   * head, shown large in a round chip on the figure, with the label C27 under the figure. A
+   * `blob:` URL of this page; never sent.
+   */
+  face?: { url: string; label: string } | null;
 }
 
 export function ResultScreen({
@@ -89,6 +95,7 @@ export function ResultScreen({
   onAvatar,
   avatarLabel,
   figure = 'female',
+  face = null,
 }: ResultScreenProps): ReactNode {
   const { fit, userBody } = embedFit;
   const t = embedStrings().result;
@@ -271,8 +278,14 @@ export function ResultScreen({
             <div className={`relative ${onAvatar ? 'pt-10' : ''}`}>
               {/* overflow-clip, not hidden: the frame must not be a scroll box, or the estimate label could not ride above the bar. */}
               <div ref={avatarRef} className="mirror-frame aspect-[5/9] w-full overflow-clip border-[8px]">
-                <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} skinHex={skinHex} bodyLabel={t.bodyLabel} estimateLines={t.estimateLines} labelsAt="bottom" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} family={figure} />
+                <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} skinHex={skinHex} bodyLabel={t.bodyLabel} estimateLines={t.estimateLines} labelsAt="bottom" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} family={figure} {...(face ? { media: { faceUrl: face.url, baseFrame: null, faceStyle: 'tile' as const } } : {})} />
               </div>
+              {face ? (
+                // The head is about 30 px wide at phone size: the face is shown large here as well.
+                <span className="pointer-events-none absolute top-12 left-1 z-10 inline-flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-cream shadow-md" aria-hidden data-testid="face-chip">
+                  <img src={face.url} alt="" className="h-full w-full object-cover" />
+                </span>
+              ) : null}
               {onAvatar ? (
                 // D19: the control sits where people look for it. The whole figure is the button;
                 // the chip above it says what it does.
@@ -290,6 +303,11 @@ export function ResultScreen({
                 </button>
               ) : null}
             </div>
+            {face ? (
+              <p className="text-center text-xs font-semibold text-ink" data-testid="face-label">
+                {face.label}
+              </p>
+            ) : null}
             {rings ? (
               <div className="space-y-1 text-[11px] leading-snug text-ink-mute" data-testid="size-rings-legend">
                 <button type="button" className="chip min-h-8 px-2.5 text-xs" aria-pressed={showRings} onClick={() => setShowRings((v) => !v)} data-testid="size-rings-toggle">

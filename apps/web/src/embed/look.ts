@@ -19,8 +19,13 @@ export interface SkinLook {
   monk: number;
   /** The swatch's colour, `#RRGGBB`. */
   hex: string;
-  /** How the colour was chosen. Only by hand so far. */
-  source: 'picked';
+  /**
+   * How the colour was chosen: `picked` by hand, or `photo`: picked while a suggestion read from a
+   * face photo was on screen (slice 4). Either way the shopper tapped the swatch; a `photo` look
+   * goes with "Delete my photo" (C20) and is only ever stored with the face (D20.2), never in the
+   * look row of C30.
+   */
+  source: 'picked' | 'photo';
 }
 
 export const MONK_CLASSES: readonly number[] = MONK_SWATCHES.map((_, i) => i + 1);
@@ -39,10 +44,36 @@ export function parseLook(value: unknown): SkinLook | null {
   return look && typeof v.hex === 'string' && v.hex.toUpperCase() === look.hex && v.source === 'picked' ? look : null;
 }
 
-/** The build flag of the photo-based face row. Default off. */
-export function facePhotoEnabled(env: { VITE_AVATAR_FACE_PHOTO?: string } = import.meta.env): boolean {
-  return env.VITE_AVATAR_FACE_PHOTO === '1';
+/** A look read back from the face record: either source, still exactly one of the ten swatches. */
+export function parseAnyLook(value: unknown): SkinLook | null {
+  if (!value || typeof value !== 'object') return null;
+  const v = value as Partial<SkinLook>;
+  if (v.source !== 'picked' && v.source !== 'photo') return null;
+  const look = parseLook({ ...v, source: 'picked' });
+  return look ? { ...look, source: v.source } : null;
 }
+
+/**
+ * The build flag of the photo-based face row, `VITE_AVATAR_FACE_PHOTO`. Default off:
+ *   - unset (every normal build): no face row, no photo anywhere in the prompt;
+ *   - `1`: the disabled "coming soon" row (what a build shows until counsel has answered, D20.4);
+ *   - `live`: slices 4 and 5, all on the device (consent copy variant A). For review builds and
+ *     the tests only, until counsel and the founder say otherwise.
+ */
+export type FacePhotoMode = 'off' | 'soon' | 'live';
+
+export function facePhotoMode(env: { VITE_AVATAR_FACE_PHOTO?: string } = import.meta.env): FacePhotoMode {
+  const v = env.VITE_AVATAR_FACE_PHOTO;
+  return v === 'live' ? 'live' : v === '1' ? 'soon' : 'off';
+}
+
+/** The face row is drawn at all (the "coming soon" line or the live row). */
+export function facePhotoEnabled(env: { VITE_AVATAR_FACE_PHOTO?: string } = import.meta.env): boolean {
+  return facePhotoMode(env) !== 'off';
+}
+
+/** The age the camera items are for: the document's placeholder `[16]` (consent copy C5), not yet confirmed by counsel. */
+export const FACE_PHOTO_MIN_AGE = 16;
 
 /**
  * Slice 6 spike: `VITE_AVATAR_FACE_ON_HEAD=1` makes the "Use my face" row live (variant A: the photo

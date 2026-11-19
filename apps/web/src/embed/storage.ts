@@ -27,6 +27,14 @@
  *   the colour stays in memory only. It is never sent anywhere.
  *   Every write and delete that touches a look row runs on one queue, in the order it was asked
  *   for, so a slow save can never land after the delete that followed it.
+ * - The shopper's own face (photo-avatar plan slices 5 and 7, D20 point 2, behind
+ *   `VITE_AVATAR_FACE_PHOTO=live`): the stylised face tile drawn from their photo, and the colour
+ *   picked while a suggestion read from that photo was on screen. Never the photo itself, never a
+ *   landmark. In memory by default; stored only when the shopper switches "Remember my photo on this
+ *   device" on (C19, off at first) and "Remember me" is on: `face:<shop id>`, per shop, encrypted
+ *   with its own non-extractable AES-GCM key (`facekey`, deleted with the last face row). Switching
+ *   the face off, "Delete my photo", "Remember my photo" off, "Remember me" off and "Forget me" each
+ *   delete it. Its writes and deletes share the look queue.
  * - If IndexedDB is unavailable (blocked third-party storage, private mode) everything stays in
  *   memory and the page still works.
  */
@@ -35,7 +43,7 @@ import type { BodyProfile, DeviceTokenResponse } from '@curtain/schema';
 import type { DeviceCredentials } from '@/api/client';
 import { decryptBytes, encryptBytes, generateFrameKey, type EncryptedBytes } from '@/features/capture/crypto';
 import type { AboutForm } from './aboutYou';
-import { parseLook, type SkinLook } from './look';
+import { parseAnyLook, parseLook, type SkinLook } from './look';
 import { isUnits, type Units } from './units';
 
 export const EMBED_DB_NAME = 'curtain-embed';
@@ -71,6 +79,48 @@ const lookKey = (shopId: string): string => `${LOOK_PREFIX}${shopId}`;
 /** The non-extractable AES-GCM key of the look rows. Exists only while a look is stored. */
 export const LOOK_CRYPTO_KEY = 'lookkey';
 
+const FACE_PREFIX = 'face:';
+const faceKey = (shopId: string): string => `${FACE_PREFIX}${shopId}`;
+/** The non-extractable AES-GCM key of the face rows. Exists only while a face is stored. */
+export const FACE_CRYPTO_KEY = 'facekey';
+
+/** The face tile drawn from the shopper's photo (no photo, no landmark) and the colour read with it. */
+export interface StoredFace {
+  tile: { width: number; height: number; rgba: Uint8ClampedArray; skinLab: { L: number; a: number; b: number } };
+  look: SkinLook | null;
+  savedAt: number;
+}
+
+/** Face record → bytes: a JSON header, a NUL, the tile's RGBA. */
+export function encodeFace(face: StoredFace): Uint8Array {
+  const head = new TextEncoder().encode(JSON.stringify({ v: 1, width: face.tile.width, height: face.tile.height, skinLab: face.tile.skinLab, look: face.look, savedAt: face.savedAt }));
+  const out = new Uint8Array(head.length + 1 + face.tile.rgba.length);
+  out.set(head, 0);
+  out[head.length] = 0;
+  out.set(face.tile.rgba, head.length + 1);
+  return out;
+}
+
+/** Bytes → face record; null for anything that is not exactly what `encodeFace` writes. */
+export function decodeFace(bytes: Uint8Array): StoredFace | null {
+  const nul = bytes.indexOf(0);
+  if (nul <= 0) return null;
+  try {
+    const h = JSON.parse(new TextDecoder().decode(bytes.subarray(0, nul))) as { v?: number; width?: number; height?: number; skinLab?: { L: number; a: number; b: number }; look?: unknown; savedAt?: number };
+    const { width, height } = h;
+    if (h.v !== 1 || !Number.isInteger(width) || !Number.isInteger(height) || width! < 8 || height! < 8 || width! > 512 || height! > 512) return null;
+    const rgba = bytes.subarray(nul + 1);
+    if (rgba.length !== width! * height! * 4) return null;
+    const lab = h.skinLab;
+    if (!lab || ![lab.L, lab.a, lab.b].every((x) => typeof x === 'number' && Number.isFinite(x))) return null;
+    const look = h.look == null ? null : parseAnyLook(h.look);
+    if (h.look != null && !look) return null;
+    return { tile: { width: width!, height: height!, rgba: new Uint8ClampedArray(rgba), skinLab: { L: lab.L, a: lab.a, b: lab.b } }, look, savedAt: typeof h.savedAt === 'number' ? h.savedAt : 0 };
+  } catch {
+    return null;
+  }
+}
+
 const NO_DEVICE: DeviceCredentials = { deviceId: null, token: null, expiresAt: null };
 
 export interface EmbedStore {
@@ -100,6 +150,15 @@ export interface EmbedStore {
   saveLook(shopId: string, look: SkinLook): Promise<void>;
   /** The colour is switched off: gone from memory and from this device. */
   clearLook(shopId: string): Promise<void>;
+  /** The face remembered for this shop ("Remember my photo" was on); null: none. Memory first. */
+  loadFace(shopId: string): Promise<StoredFace | null>;
+  /**
+   * Keeps the face in memory; with `persist` ("Remember my photo" on) and "Remember me" on it is
+   * also stored, encrypted, for this shop. Without `persist` a stored row is deleted.
+   */
+  saveFace(shopId: string, face: StoredFace, persist: boolean): Promise<void>;
+  /** The face is switched off or deleted: gone from memory and from this device. */
+  clearFace(shopId: string): Promise<void>;
   /** Off → wipe IndexedDB (memory keeps working); on → write what is in memory. */
   setRemember(on: boolean): Promise<void>;
   /** Forget me: wipe memory and IndexedDB. */
@@ -146,6 +205,7 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
   const profiles = new Map<string, RememberedProfile>();
   let units: Units | null = null;
   const looks = new Map<string, SkinLook>();
+  const faces = new Map<string, { face: StoredFace; persist: boolean }>();
   /** Shared by every caller, so a second `init()` (StrictMode, retry) waits for the same read. */
   let loading: Promise<void> | null = null;
   /**
@@ -210,6 +270,8 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
    */
   const persistLook = async (shopId: string): Promise<void> => {
     if (!persistLooks || !remember || !looks.has(shopId)) return;
+    // A colour read from a photo is stored only with the face ("Remember my photo"), never here.
+    if (looks.get(shopId)?.source !== 'picked') return;
     const key = await lookCryptoKey(true);
     if (!key) return;
     const look = looks.get(shopId);
@@ -232,6 +294,47 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
     if (left === 0) await safe((d) => d.kv.delete(LOOK_CRYPTO_KEY));
   };
 
+  const faceCryptoKey = async (create: boolean): Promise<CryptoKey | null> => {
+    const row = await safe((d) => d.kv.get(FACE_CRYPTO_KEY));
+    const stored = row?.value;
+    if (stored && typeof stored === 'object' && (stored as CryptoKey).type === 'secret') return stored as CryptoKey;
+    if (!create) return null;
+    try {
+      const key = await generateFrameKey();
+      const ok = await safe(async (d) => {
+        await d.kv.put({ key: FACE_CRYPTO_KEY, value: key });
+        return true;
+      });
+      return ok ? key : null;
+    } catch {
+      return null;
+    }
+  };
+  const deleteFaceRows = async (shopId: string | null): Promise<void> => {
+    if (shopId === null) await safe((d) => d.kv.where('key').startsWith(FACE_PREFIX).delete());
+    else await safe((d) => d.kv.delete(faceKey(shopId)));
+    const left = await safe((d) => d.kv.where('key').startsWith(FACE_PREFIX).count());
+    if (left === 0) await safe((d) => d.kv.delete(FACE_CRYPTO_KEY));
+  };
+  /** Writes what memory holds for this shop now (see `persistLook`); deletes the row when it is not to be kept. */
+  const persistFace = async (shopId: string): Promise<void> => {
+    const entry = faces.get(shopId);
+    if (!entry || !entry.persist) {
+      await deleteFaceRows(shopId);
+      return;
+    }
+    if (!remember) return;
+    const key = await faceCryptoKey(true);
+    if (!key) return;
+    let enc: EncryptedBytes;
+    try {
+      enc = await encryptBytes(key, encodeFace(entry.face));
+    } catch {
+      return;
+    }
+    if (!remember || faces.get(shopId) !== entry) return;
+    await safe((d) => d.kv.put({ key: faceKey(shopId), value: enc }));
+  };
   const writeAll = async (): Promise<void> => {
     const rows: KvRow[] = [];
     if (device.token) rows.push({ key: DEVICE_KEY, value: device });
@@ -239,6 +342,7 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
     if (units) rows.push({ key: UNITS_PREF_KEY, value: units });
     if (rows.length > 0) await safe((d) => d.kv.bulkPut(rows));
     for (const shopId of Array.from(looks.keys())) await persistLook(shopId);
+    for (const shopId of Array.from(faces.keys())) await persistFace(shopId);
   };
 
   return {
@@ -344,6 +448,32 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
       looks.delete(shopId);
       return queued(() => deleteLookRows(shopId));
     },
+    async loadFace(shopId) {
+      const mem = faces.get(shopId);
+      if (mem) return mem.face;
+      if (!remember) return null;
+      await lookQueue;
+      const row = await safe((d) => d.kv.get(faceKey(shopId)));
+      const enc = row?.value as EncryptedBytes | undefined;
+      if (!enc || enc.alg !== 'AES-GCM') return null;
+      const key = await faceCryptoKey(false);
+      if (!key) return null;
+      try {
+        const face = decodeFace(new Uint8Array(await decryptBytes(key, enc)));
+        if (face && !faces.has(shopId)) faces.set(shopId, { face, persist: true });
+        return faces.get(shopId)?.face ?? null;
+      } catch {
+        return null;
+      }
+    },
+    saveFace(shopId, face, persist) {
+      faces.set(shopId, { face, persist });
+      return queued(() => persistFace(shopId));
+    },
+    clearFace(shopId) {
+      faces.delete(shopId);
+      return queued(() => deleteFaceRows(shopId));
+    },
     setRemember(on) {
       if (on === remember) return Promise.resolve();
       remember = on;
@@ -364,6 +494,7 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
       profiles.clear();
       units = null;
       looks.clear();
+      faces.clear();
       return queued(async () => {
         await safe((d) => d.kv.clear());
         // Forgetting the data keeps the shopper's choice not to be remembered.

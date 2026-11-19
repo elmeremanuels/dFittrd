@@ -179,6 +179,9 @@ describe.each(['neutral-v2', 'neutral-v3'] as const)('head %s on the avatar', (h
     const again = skin.version;
     f.setBody(tri());
     expect(skin.version).toBe(again);
+    // The skin-coloured figure keeps its own material on the new body: the shared grey does not come back.
+    expect(f.body.material).toBe(skin);
+    expect('#' + skin.color.getHexString()).toBe('#a07e56');
     f.setSkin(null);
     expect((f.body.material as THREE.MeshStandardMaterial).vertexColors).toBe(false);
     // The shared grey of every figure without the v2 head stays without vertex colours.

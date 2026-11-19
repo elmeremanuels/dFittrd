@@ -1,11 +1,10 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { WARDROBE_STATES, isKnownWardrobeSize, type FitCohortResponse, type WardrobeState } from '@curtain/schema';
+import { WARDROBE_STATES, isKnownWardrobeSize, type FitCohortResponse } from '@curtain/schema';
 import { CohortBars } from '@/components/CohortBars';
 import { eur } from '@/lib/format';
 import { api, MOCK_SHOP_ID, useApp } from '@/store';
-
-const STATE_LABEL: Record<WardrobeState, string> = { saved: 'Saved', bought: 'Bought', kept: 'Kept', returned: 'Returned' };
+import { appStrings } from '@/strings';
 
 /** Item ids are only unique within one shop (#22): rows, cohort cache and toggles key by shop + id. */
 const rowKey = (w: { shopId: string; productId: string }): string => `${w.shopId}:${w.productId}`;
@@ -15,6 +14,7 @@ export function WardrobeRoute(): ReactNode {
   const wardrobe = useApp((s) => s.wardrobe);
   const setWardrobeState = useApp((s) => s.setWardrobeState);
   const [open, setOpen] = useState<string | null>(null);
+  const t = appStrings().app.wardrobe;
   const [cohort, setCohort] = useState<Record<string, FitCohortResponse | null>>({});
 
   const toggle = (key: string): void => {
@@ -35,14 +35,14 @@ export function WardrobeRoute(): ReactNode {
   return (
     <div className="h-full space-y-4 overflow-y-auto px-5 py-4">
       <header>
-        <p className="eyebrow">Wardrobe</p>
-        <h1 className="font-display text-3xl">Saved fits</h1>
+        <p className="eyebrow">{t.eyebrow}</p>
+        <h1 className="font-display text-3xl">{t.title}</h1>
       </header>
       {wardrobe.length === 0 ? (
         <div className="card text-center">
-          <p className="text-sm text-ink-soft">Swipe up or tap “Save” on the rail to keep an item here with its recommended size.</p>
+          <p className="text-sm text-ink-soft">{t.empty}</p>
           <Link to="/deck" className="btn-primary mt-3">
-            Open the rail
+            {t.openRail}
           </Link>
         </div>
       ) : (
@@ -57,26 +57,26 @@ export function WardrobeRoute(): ReactNode {
                     {w.garment.name}
                   </p>
                   <p className="text-xs text-ink-mute">
-                    {isKnownWardrobeSize(w.size) ? `Size ${w.size}` : 'Size not known'} · {eur(w.garment.priceEur)} · {STATE_LABEL[w.state]}
+                    {isKnownWardrobeSize(w.size) ? t.size(w.size) : t.sizeUnknown} · {eur(w.garment.priceEur)} · {t.states[w.state]}
                   </p>
                 </div>
                 <button type="button" className="btn-ghost min-h-9 px-3 text-xs" aria-expanded={open === rowKey(w)} onClick={() => toggle(rowKey(w))}>
-                  {open === rowKey(w) ? 'Less' : 'More'}
+                  {open === rowKey(w) ? t.less : t.more}
                 </button>
               </div>
               {open === rowKey(w) ? (
                 <div className="space-y-3">
-                  <div role="radiogroup" aria-label={`Status of ${w.garment.name}`} className="grid grid-cols-4 gap-1">
+                  <div role="radiogroup" aria-label={t.statusOf(w.garment.name)} className="grid grid-cols-4 gap-1">
                     {WARDROBE_STATES.map((s) => (
                       <button key={s} type="button" role="radio" aria-checked={w.state === s} onClick={() => void setWardrobeState(w.shopId, w.productId, s)} className={`rounded-full border px-2 py-1.5 text-xs font-medium ${w.state === s ? 'border-coral bg-coral text-ink' : 'border-ink/10 bg-white/60 text-ink-soft'}`}>
-                        {STATE_LABEL[s]}
+                        {t.states[s]}
                       </button>
                     ))}
                   </div>
-                  <p className="text-xs text-ink-mute">Marking an item kept or returned teaches the fit engine how this brand runs on you.</p>
+                  <p className="text-xs text-ink-mute">{t.teaches}</p>
                   {w.garment.productUrl ? (
                     <a href={w.garment.productUrl} target="_blank" rel="noreferrer noopener" className="btn-ghost w-full">
-                      Open in shop
+                      {t.openInShop}
                     </a>
                   ) : null}
                   <CohortBars cohort={cohort[rowKey(w)] ?? null} highlight={isKnownWardrobeSize(w.size) ? w.size : null} />

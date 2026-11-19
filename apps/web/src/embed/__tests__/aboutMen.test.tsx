@@ -3,6 +3,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { MOCK_GARMENTS_BY_ID, SYNTHETIC_MENS_CHINO_WL, SYNTHETIC_MENS_TEE, type GarmentPayload } from '@curtain/schema';
+import '@testing-library/jest-dom/vitest';
+import { FitPanel } from '@/components/FitPanel';
 import { AboutScreen } from '../EmbedScreens';
 import { chartColumns, SizeChartTable } from '../SizeChartTable';
 import {
@@ -19,8 +21,13 @@ import {
   profileFromAbout,
   usablePoints,
   validateAbout,
+  waistOnlyOf,
   type AboutForm,
+  type EmbedFit,
 } from '../aboutYou';
+import { peekOutcome } from '../peek';
+import type { RememberedProfile } from '../storage';
+import { embedStrings } from '../strings';
 
 afterEach(cleanup);
 
@@ -129,6 +136,23 @@ describe('men’s result', () => {
     expect(advice.size).toBeNull();
     const notes = embedNoteList(fit, advice, 'bottom', profile, SYNTHETIC_MENS_CHINO_WL).map((n) => n.text);
     expect(notes[0]).toBe('Waist 34 fits you best. We could not check the leg length: add your inside leg, or choose your usual leg');
+    // The same result everywhere it is told: the size peek names the waist too, never "No size fits well".
+    expect(waistOnlyOf(fit, advice)).toBe('34');
+    const outcome = peekOutcome(SYNTHETIC_MENS_CHINO_WL, { fit } as EmbedFit, advice, { profile } as RememberedProfile);
+    expect(outcome).toEqual({ kind: 'waist', waist: '34', note: 'The leg length is not checked yet. Open the fitting room to add your inside leg.' });
+    expect(embedStrings().peek.waistOnly('34')).toBe('Waist 34 fits you best');
+    // A chart with no axes, or a full size picked, is not a waist-only result.
+    expect(waistOnlyOf({ ...fit, sizeAxes: { waist: '34', leg: '32' } }, advice)).toBeNull();
+    expect(waistOnlyOf(fit, { size: '34/32' })).toBeNull();
+    // The fit panel under the heading says the same, not "No size fits … we would not recommend it".
+    render(<FitPanel fit={fit} hasMeasurements waistOnly="34" />);
+    const panel = screen.getByTestId('fit-panel');
+    expect(panel).toHaveTextContent('Waist 34 fits');
+    expect(panel).toHaveTextContent(`The leg length is not checked yet, so no full size is picked. Size ${fit.closestSize} is shown for the waist.`);
+    expect(panel).not.toHaveTextContent('No size fits');
+    cleanup();
+    render(<FitPanel fit={fit} hasMeasurements />);
+    expect(screen.getByTestId('fit-panel')).toHaveTextContent('No size fits');
   });
   it('"Body type: Not specified" on a men’s garment uses the male prior; other garments keep the choice', () => {
     expect(priorSexFor({ sex: 'unspecified' }, SYNTHETIC_MENS_TEE)).toBe('male');

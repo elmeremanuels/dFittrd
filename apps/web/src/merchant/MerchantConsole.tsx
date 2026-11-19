@@ -38,12 +38,14 @@ function writeMerchantKey(key: string | null): void {
 export function MerchantLogin(): ReactNode {
   const navigate = useNavigate();
   const [key, setKey] = useState('');
+  const c = merchantStrings().console;
+  const t = c.login;
   const [error, setError] = useState<string | null>(null);
   const submit = (e: FormEvent): void => {
     e.preventDefault();
     const k = key.trim();
     if (!MERCHANT_KEY_PATTERN.test(k)) {
-      setError('That is not a Curtain secret key. Copy it again from where Curtain showed it to you: it starts with “sk_”. It stays in this browser tab only.');
+      setError(t.badKey);
       return;
     }
     writeMerchantKey(k);
@@ -54,22 +56,22 @@ export function MerchantLogin(): ReactNode {
     <main className="flex min-h-dvh items-center justify-center bg-cream px-6 py-10">
       <form onSubmit={submit} className="card w-full max-w-sm space-y-4 bg-white/80">
         <header>
-          <p className="eyebrow">Curtain for shops</p>
-          <h1 className="font-display text-3xl">Merchant console</h1>
+          <p className="eyebrow">{c.eyebrow}</p>
+          <h1 className="font-display text-3xl">{c.title}</h1>
         </header>
         <label htmlFor="merchant-key" className="eyebrow block">
-          Secret key
+          {t.keyLabel}
         </label>
-        <input id="merchant-key" type="password" autoComplete="off" className="field-input font-sans text-base" value={key} onChange={(e) => setKey(e.target.value)} aria-invalid={!!error} aria-describedby={error ? 'merchant-key-error' : undefined} placeholder="sk_test_…" />
+        <input id="merchant-key" type="password" autoComplete="off" className="field-input font-sans text-base" value={key} onChange={(e) => setKey(e.target.value)} aria-invalid={!!error} aria-describedby={error ? 'merchant-key-error' : undefined} placeholder={t.keyPlaceholder} />
         {error ? (
           <p id="merchant-key-error" role="alert" className="text-xs text-coral-ink">
             {error}
           </p>
         ) : null}
         <button type="submit" className="btn-primary w-full">
-          Open console
+          {t.open}
         </button>
-        <p className="text-xs text-ink-mute">Ask Curtain support for your console key (the WordPress plugin keeps its own key hidden, so it cannot show it to you). On Shopify you do not need this page: everything is under Apps → Curtain in your Shopify admin.</p>
+        <p className="text-xs text-ink-mute">{t.help}</p>
       </form>
     </main>
   );
@@ -138,9 +140,9 @@ export function MerchantLayout(): ReactNode {
           setBase({ mode: 'mock', products, usage: mockUsage(range.from, range.to), ledger: mockLedger(), anomalies: mockAnomalies(range.from, range.to), range, periods, setup: mockSetup(products) });
           setPeriod(periods.periods[0] ?? null);
         } else if (e instanceof Error && e.name === 'ApiError' && [401, 403].includes((e as { status?: number }).status ?? 0)) {
-          setError('This key was not accepted. It may have been replaced: sign out and paste the newest key from your Curtain settings (WooCommerce → Curtain, or the Curtain app in Shopify).');
+          setError(merchantStrings().console.keyRefused);
         } else {
-          setError('Your shop could not be loaded just now. Check your internet connection and reload the page; if it keeps happening, email Curtain support.');
+          setError(merchantStrings().console.loadFailed);
         }
       }
     })();
@@ -177,22 +179,23 @@ export function MerchantLayout(): ReactNode {
   const data: MerchantData | null = base && month ? { ...base, ...month, setPeriod, confirmSetup } : null;
 
   if (!key) return <Navigate to="/merchant/login" replace />;
+  const c = merchantStrings().console;
 
   return (
     <div className="min-h-dvh bg-cream text-ink">
       <header className="border-b border-ink/10 bg-white/70 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-4">
           <div>
-            <p className="eyebrow">Curtain for shops</p>
-            <h1 className="font-display text-2xl">Merchant console</h1>
+            <p className="eyebrow">{c.eyebrow}</p>
+            <h1 className="font-display text-2xl">{c.title}</h1>
           </div>
-          <nav className="flex flex-wrap items-center gap-1" aria-label="Console sections">
+          <nav className="flex flex-wrap items-center gap-1" aria-label={c.nav.label}>
             {[
-              ['/merchant', 'Overview'],
-              ['/merchant/products', 'Products'],
-              ['/merchant/usage', 'Usage & plan'],
-              ['/merchant/analytics', 'Swipes'],
-              ['/merchant/ledger', 'Privacy ledger'],
+              ['/merchant', c.nav.overview],
+              ['/merchant/products', c.nav.products],
+              ['/merchant/usage', c.nav.usage],
+              ['/merchant/analytics', c.nav.swipes],
+              ['/merchant/ledger', c.nav.ledger],
             ].map(([to, label]) => (
               <NavLink key={to} to={to!} end={to === '/merchant'} className={({ isActive }) => `rounded-full px-3 py-1.5 text-sm font-medium ${isActive ? 'bg-ink text-cream' : 'text-ink-soft hover:bg-ink/5'}`}>
                 {label}
@@ -206,13 +209,13 @@ export function MerchantLayout(): ReactNode {
                 navigate('/merchant/login', { replace: true });
               }}
             >
-              <LogOut className="h-3.5 w-3.5" aria-hidden /> Sign out
+              <LogOut className="h-3.5 w-3.5" aria-hidden /> {c.nav.signOut}
             </button>
           </nav>
         </div>
         {base?.mode === 'mock' ? (
           <p className="bg-warn/10 px-6 py-2 text-center text-xs text-warn" role="status">
-            API unreachable — showing demo data with the real response shapes. Nothing here is from your shop.
+            {c.demoBanner}
           </p>
         ) : null}
       </header>
@@ -223,7 +226,7 @@ export function MerchantLayout(): ReactNode {
           </p>
         ) : !data ? (
           <p className="text-sm text-ink-soft" role="status">
-            Loading your shop…
+            {c.loading}
           </p>
         ) : (
           <Outlet context={data} />
@@ -260,6 +263,8 @@ export function MerchantOverview(): ReactNode {
   const d = useMerchantData();
   const abandoned = d.abandoned && d.abandoned.totals.sessions > 0 ? { opens: d.abandoned.totals.sessions, abandoned: d.abandoned.totals.sessions - d.abandoned.totals.withFit } : null;
   const t = merchantStrings().analytics;
+  const c = merchantStrings().console;
+  const o = c.overview;
   const k = d.analytics?.kAnonymityFloor ?? d.periods?.kAnonymityFloor ?? 5;
   const shown = d.analytics?.byProduct ?? [];
   const totalSwipes = shown.reduce((n, p) => n + p.love + p.pass + p.save + p.less, 0);
@@ -269,28 +274,28 @@ export function MerchantOverview(): ReactNode {
       {d.setup && d.setup.next !== null ? <SetupChecklist setup={d.setup} onConfirm={d.confirmSetup} live={d.mode === 'live'} /> : null}
       <PeriodPicker />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <StatCard label="Fit sessions (30 d)" value={d.usage.totals.fitSessions.toLocaleString()} icon={<TrendingUp className="h-5 w-5" aria-hidden />} hint={`${d.usage.plan.name} plan`} />
-        <StatCard label="Save rate" value={totalSwipes ? pct(saves / totalSwipes) : '—'} icon={<ShoppingCart className="h-5 w-5" aria-hidden />} hint={`${totalSwipes} swipes`} />
+        <StatCard label={o.fitSessions} value={d.usage.totals.fitSessions.toLocaleString()} icon={<TrendingUp className="h-5 w-5" aria-hidden />} hint={o.planHint(d.usage.plan.name)} />
+        <StatCard label={o.saveRate} value={totalSwipes ? pct(saves / totalSwipes) : c.none} icon={<ShoppingCart className="h-5 w-5" aria-hidden />} hint={o.swipes(totalSwipes)} />
         <StatCard
-          label="Abandoned opens"
-          value={abandoned ? abandoned.abandoned.toLocaleString() : '—'}
+          label={o.abandoned}
+          value={abandoned ? abandoned.abandoned.toLocaleString() : c.none}
           icon={<BarChart3 className="h-5 w-5" aria-hidden />}
-          hint={abandoned ? `${pct(abandoned.abandoned / abandoned.opens)} of ${abandoned.opens} opens` : t.abandonedHint(k)}
+          hint={abandoned ? o.abandonedOf(pct(abandoned.abandoned / abandoned.opens), abandoned.opens) : t.abandonedHint(k)}
           tone={abandoned ? 'warn' : 'ink'}
         />
-        <StatCard label="Products not ready yet" value={String(d.products.counts.incomplete)} icon={<AlertCircle className="h-5 w-5" aria-hidden />} hint={d.products.counts.incomplete > 0 ? 'see Products for what to do' : 'all ready'} tone={d.products.counts.incomplete > 0 ? 'bad' : 'ok'} />
+        <StatCard label={o.notReady} value={String(d.products.counts.incomplete)} icon={<AlertCircle className="h-5 w-5" aria-hidden />} hint={d.products.counts.incomplete > 0 ? o.notReadyHint : o.allReady} tone={d.products.counts.incomplete > 0 ? 'bad' : 'ok'} />
       </div>
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <SizeDistribution analytics={d.analytics} fitSizes={d.fitSizes} />
         <section className="card space-y-2 bg-white/80">
-          <h2 className="font-display text-xl">What Curtain never sends you</h2>
+          <h2 className="font-display text-xl">{o.neverTitle}</h2>
           <ul className="list-disc space-y-1 pl-5 text-sm text-ink-soft">
-            <li>No measurement, photo, fit signature or device id — ever.</li>
+            <li>{o.neverMeasure}</li>
             <li>{t.neverSends(k)}</li>
-            <li>Per-session sizes and scores are not returned to your page; order attribution is off by default.</li>
+            <li>{o.neverSession}</li>
           </ul>
           <p className="flex items-center gap-2 text-xs text-ink-mute">
-            <ShieldCheck className="h-4 w-4" aria-hidden /> Fit is computed on the shopper’s phone.
+            <ShieldCheck className="h-4 w-4" aria-hidden /> {o.fitOnPhone}
           </p>
         </section>
       </div>
@@ -305,6 +310,7 @@ export function MerchantOverview(): ReactNode {
  */
 function SizeDistribution({ analytics, fitSizes }: { analytics: AnalyticsSwipesResponse | null; fitSizes: AnalyticsFitSizesResponse | null }): ReactNode {
   const t = merchantStrings().analytics;
+  const z = merchantStrings().console.sizes;
   const onPage = new Map((fitSizes?.bySize ?? []).map((s) => [s.size, s.sessions]));
   const swipes = new Map((analytics?.bySize ?? []).map((s) => [s.size, s.love + s.pass + s.save + s.less]));
   const sizes = [...new Set([...onPage.keys(), ...swipes.keys()])];
@@ -318,18 +324,18 @@ function SizeDistribution({ analytics, fitSizes }: { analytics: AnalyticsSwipesR
   return (
     <section className="card space-y-3 bg-white/80" aria-labelledby="size-distribution">
       <h2 id="size-distribution" className="font-display text-xl">
-        Sizes recommended
+        {z.title}
       </h2>
       <p className="flex flex-wrap gap-4 text-xs text-ink-soft">
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-2 w-4 rounded-full bg-coral" aria-hidden /> On your product page (standalone fit, per session)
+          <span className="inline-block h-2 w-4 rounded-full bg-coral" aria-hidden /> {z.legendPage}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-2 w-4 rounded-full bg-ink" aria-hidden /> In the Curtain app (at swipe time, per swipe)
+          <span className="inline-block h-2 w-4 rounded-full bg-ink" aria-hidden /> {z.legendApp}
         </span>
       </p>
       {sizes.length === 0 ? (
-        <p className="text-sm text-ink-mute">Shown once enough shoppers have seen a size.</p>
+        <p className="text-sm text-ink-mute">{z.empty}</p>
       ) : (
         <ul className="space-y-3">
           {sizes.map((size) => {
@@ -338,58 +344,54 @@ function SizeDistribution({ analytics, fitSizes }: { analytics: AnalyticsSwipesR
             return (
               <li key={size} className="space-y-1">
                 <div className="flex justify-between text-xs font-semibold">
-                  <span>Size {size}</span>
+                  <span>{z.size(size)}</span>
                   <span className="tabular-nums text-ink-soft">
-                    {page !== undefined ? `${page} on page` : 'on page: —'} · {swipe !== undefined ? `${swipe} swipes` : 'swipes: —'}
+                    {z.counts(page, swipe)}
                   </span>
                 </div>
-                {bar(`Size ${size} on your product page: ${page ?? 0} sessions`, (page ?? 0) / onPageTotal, 'bg-coral')}
-                {bar(`Size ${size} at swipe time: ${swipe ?? 0} swipes`, (swipe ?? 0) / swipeTotal, 'bg-ink')}
+                {bar(z.barPage(size, page ?? 0), (page ?? 0) / onPageTotal, 'bg-coral')}
+                {bar(z.barSwipe(size, swipe ?? 0), (swipe ?? 0) / swipeTotal, 'bg-ink')}
               </li>
             );
           })}
         </ul>
       )}
-      <p className="text-xs text-ink-mute">Bars show each size’s share within its source. {t.sizeHiddenNote(fitSizes?.kAnonymityFloor ?? analytics?.kAnonymityFloor ?? 5)}</p>
-      {fitSizes ? <HiddenNote suppression={fitSizes.suppression} k={fitSizes.kAnonymityFloor} noun={{ one: 'size', many: 'sizes' }} /> : null}
+      <p className="text-xs text-ink-mute">{z.barsNote} {t.sizeHiddenNote(fitSizes?.kAnonymityFloor ?? analytics?.kAnonymityFloor ?? 5)}</p>
+      {fitSizes ? <HiddenNote suppression={fitSizes.suppression} k={fitSizes.kAnonymityFloor} noun={z.noun} /> : null}
     </section>
   );
 }
 
-/** Where a WooCommerce or Shopify merchant does each next step (the console itself does not edit products). */
-const WHERE_TO_DO_IT: Record<SetupResponse['platform'], string> = {
-  woocommerce: 'You do these in WordPress: open the product under Products and scroll to the “Curtain” box (size chart, then Garment measurements), then press Update.',
-  shopify: 'You do these in Shopify: Apps → Curtain, then open the product from its list.',
-};
-
 export function MerchantProducts(): ReactNode {
   const d = useMerchantData();
+  const c = merchantStrings().console;
+  const t = c.products;
   const platform = d.setup?.platform ?? 'woocommerce';
   const onlyMeasure = typeof location !== 'undefined' && new URLSearchParams(location.search).get('next') === 'measure';
   const items = onlyMeasure ? d.products.items.filter((p) => p.next?.key === 'measure') : d.products.items;
   return (
     <section className="space-y-4">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-display text-2xl">Products</h2>
+        <h2 className="font-display text-2xl">{t.title}</h2>
         <p className="text-sm text-ink-soft">
-          {d.products.counts.active} ready · {d.products.counts.incomplete} not ready yet{d.products.counts.archived ? ` · ${d.products.counts.archived} hidden` : ''}
+          {t.counts(d.products.counts.active, d.products.counts.incomplete, d.products.counts.archived)}
         </p>
       </header>
       <p className="text-sm text-ink-soft" data-testid="where-to-do-it">
-        {onlyMeasure ? 'These products give a size already and would be more exact with your own measurements. ' : ''}
-        {WHERE_TO_DO_IT[platform]}
+        {onlyMeasure ? t.onlyMeasure : ''}
+        {t.whereToDoIt[platform]}
       </p>
       {d.products.items.length === 0 ? (
-        <p className="card bg-white/80 text-sm text-ink-soft">No products yet. Your published products come in by themselves a minute or two after you connect; reload this page to look again.</p>
+        <p className="card bg-white/80 text-sm text-ink-soft">{t.empty}</p>
       ) : (
       <div className="overflow-x-auto rounded-3xl border border-ink/10 bg-white/80">
         <table className="w-full text-sm">
           <thead className="text-left text-xs uppercase tracking-wider text-ink-mute">
             <tr>
-              <th className="px-4 py-3">Product</th>
-              <th className="px-4 py-3">Kind</th>
-              <th className="px-4 py-3">Size advice</th>
-              <th className="px-4 py-3">What to do next</th>
+              <th className="px-4 py-3">{t.product}</th>
+              <th className="px-4 py-3">{t.kind}</th>
+              <th className="px-4 py-3">{t.advice}</th>
+              <th className="px-4 py-3">{t.next}</th>
               <th className="px-4 py-3">
                 <span className="sr-only">{merchantStrings().assets.open3d}</span>
               </th>
@@ -404,27 +406,27 @@ export function MerchantProducts(): ReactNode {
                 <td className="px-4 py-3">
                   <p className="font-medium">{p.name}</p>
                 </td>
-                <td className="px-4 py-3">{p.category ? (CATEGORY_TEXT[p.category] ?? titleCase(p.category)) : '—'}</td>
+                <td className="px-4 py-3">{p.category ? (CATEGORY_TEXT[p.category] ?? titleCase(p.category)) : c.none}</td>
                 <td className="px-4 py-3">
-                  <span className={`chip ${tone === 'success' ? 'border-ok/30 bg-ok/10 text-ok' : tone === 'warning' ? 'border-warn/30 bg-warn/10 text-warn' : 'border-bad/30 bg-bad/10 text-bad'}`}>{p.next?.badge ?? (p.status === 'active' ? 'Ready' : 'Not ready yet')}</span>
+                  <span className={`chip ${tone === 'success' ? 'border-ok/30 bg-ok/10 text-ok' : tone === 'warning' ? 'border-warn/30 bg-warn/10 text-warn' : 'border-bad/30 bg-bad/10 text-bad'}`}>{p.next?.badge ?? (p.status === 'active' ? t.ready : t.notReady)}</span>
                   <div className="mt-1.5 flex items-center gap-2">
-                    <div className="h-1.5 w-20 overflow-hidden rounded-full bg-ink/10" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={score} aria-label={`Size advice ${score} out of 100`}>
+                    <div className="h-1.5 w-20 overflow-hidden rounded-full bg-ink/10" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={score} aria-label={t.scoreLabel(score)}>
                       <div className={`h-full ${tone === 'success' ? 'bg-ok' : 'bg-coral'}`} style={{ width: `${score}%` }} />
                     </div>
-                    <span className="text-xs tabular-nums text-ink-mute">{score} / 100</span>
+                    <span className="text-xs tabular-nums text-ink-mute">{t.score(score)}</span>
                   </div>
                   {/* The men's gate (D20 point 3): why shoppers do not get the fitting room for this product, and the next step. */}
                   {p.menGate === 'coming_soon' ? (
-                    <span className="chip mt-1 block w-fit" data-testid="men-gate-badge" title="Shoppers see “Men’s clothing: coming soon” for this product. It opens once the shop has the 3D estimate on and an approved 3D bundle on the male body exists for it.">
-                      Men’s: coming soon
+                    <span className="chip mt-1 block w-fit" data-testid="men-gate-badge" title={t.menSoonTitle}>
+                      {t.menSoon}
                     </span>
                   ) : p.menGate === 'audience_unconfirmed' ? (
-                    <span className="chip mt-1 block w-fit" data-testid="men-gate-badge" title="We read “men” from the title or a collection only, or the product has not been synced since we started asking where the audience comes from. Set the audience on the product to confirm it, or sync it again; until then it is shown as before.">
-                      Men’s: confirm audience
+                    <span className="chip mt-1 block w-fit" data-testid="men-gate-badge" title={t.menConfirmTitle}>
+                      {t.menConfirm}
                     </span>
                   ) : null}
                 </td>
-                <td className="max-w-sm px-4 py-3 text-ink-soft">{p.next?.text ?? (p.missingFields.length ? `Missing: ${p.missingFields.join(', ')}` : '—')}</td>
+                <td className="max-w-sm px-4 py-3 text-ink-soft">{p.next?.text ?? (p.missingFields.length ? t.missing(p.missingFields) : c.none)}</td>
                 <td className="px-4 py-3">
                   <Link to={`/merchant/products/${encodeURIComponent(p.externalId)}/3d`} className="chip whitespace-nowrap hover:bg-white" data-testid={`open-3d-${p.externalId}`}>
                     {merchantStrings().assets.open3d}
@@ -443,6 +445,7 @@ export function MerchantProducts(): ReactNode {
 
 /** The one Curtain plan (D17): flat price, every try-on session included, sessions counted for analytics only. */
 function PlanCard({ plan, live }: { plan: UsageResponse['plan']; live: boolean }): ReactNode {
+  const t = merchantStrings().console.usage;
   const state = planState(plan);
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
@@ -457,7 +460,7 @@ function PlanCard({ plan, live }: { plan: UsageResponse['plan']; live: boolean }
       const r = await api.merchant(key).stripeCheckout();
       location.assign(r.checkoutUrl);
     } catch (e) {
-      setSwitchError(e instanceof Error ? e.message : 'Could not start the switch.');
+      setSwitchError(e instanceof Error ? e.message : merchantStrings().console.usage.switchFailed);
       setSwitching(false);
     }
   };
@@ -465,17 +468,17 @@ function PlanCard({ plan, live }: { plan: UsageResponse['plan']; live: boolean }
     <section className="card space-y-2 bg-white/80" aria-labelledby="plan-heading">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="plan-heading" className="font-display text-xl">
-          Curtain
+          {t.planName}
         </h2>
-        <p className="font-medium tabular-nums">{state === 'legacy' ? 'Old plan price' : planPriceText(plan)}</p>
+        <p className="font-medium tabular-nums">{state === 'legacy' ? t.oldPrice : planPriceText(plan)}</p>
       </div>
-      <p className="text-sm text-ink-soft">{MERCHANT_PLAN_TEXT.oneLine} A daily fair-use limit stops automated traffic; your price stays the same.</p>
+      <p className="text-sm text-ink-soft">{MERCHANT_PLAN_TEXT.oneLine} {t.fairUse}</p>
       <p className={`text-sm ${state === 'paused' ? 'text-bad' : state === 'active' ? 'text-ok' : state === 'legacy' ? 'text-warn' : 'text-ink-mute'}`} data-testid="plan-status">
         {planStatusText(plan)}
       </p>
       {canCheckout ? (
         <button type="button" className="btn-primary" disabled={switching} onClick={() => void startCheckout()}>
-          Switch to Curtain ({planPriceText({ priceUsdPerMonth: plan.priceUsdPerMonth })})
+          {t.switchTo(planPriceText({ priceUsdPerMonth: plan.priceUsdPerMonth }))}
         </button>
       ) : null}
       {switchError ? <p className="text-sm text-bad">{switchError}</p> : null}
@@ -485,32 +488,33 @@ function PlanCard({ plan, live }: { plan: UsageResponse['plan']; live: boolean }
 
 export function MerchantUsage(): ReactNode {
   const d = useMerchantData();
+  const t = merchantStrings().console.usage;
   const u = d.usage;
   const used = u.plan.sessionsUsedThisPeriod;
   const max = Math.max(1, ...u.days.map((x) => x.fitSessions));
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <StatCard label="Plan" value={u.plan.name === 'free' ? 'No plan' : 'Curtain'} icon={<ShoppingCart className="h-5 w-5" aria-hidden />} hint={u.plan.paused ? 'paused' : u.plan.name === 'free' ? 'not subscribed' : u.plan.legacyPlan ? 'retired plan: switch' : planPriceText(u.plan)} tone={u.plan.paused ? 'bad' : 'ok'} />
-        <StatCard label="Sessions this period" value={used.toLocaleString()} icon={<TrendingUp className="h-5 w-5" aria-hidden />} hint="counted for analytics, not billed" />
-        <StatCard label="Hero renders (30 d)" value={u.totals.heroRenders.toLocaleString()} icon={<BarChart3 className="h-5 w-5" aria-hidden />} hint={`$${u.totals.costUsd.toFixed(2)} provider cost`} />
+        <StatCard label={t.plan} value={u.plan.name === 'free' ? t.noPlan : t.planName} icon={<ShoppingCart className="h-5 w-5" aria-hidden />} hint={u.plan.paused ? t.paused : u.plan.name === 'free' ? t.notSubscribed : u.plan.legacyPlan ? t.retired : planPriceText(u.plan)} tone={u.plan.paused ? 'bad' : 'ok'} />
+        <StatCard label={t.sessions} value={used.toLocaleString()} icon={<TrendingUp className="h-5 w-5" aria-hidden />} hint={t.sessionsHint} />
+        <StatCard label={t.heroRenders} value={u.totals.heroRenders.toLocaleString()} icon={<BarChart3 className="h-5 w-5" aria-hidden />} hint={t.providerCost(u.totals.costUsd.toFixed(2))} />
       </div>
       <PlanCard plan={u.plan} live={d.mode === 'live'} />
       <LeavingCurtain platform={d.setup?.platform ?? 'woocommerce'} />
       {d.anomalies ? <BillingAlerts report={d.anomalies} /> : null}
       <section className="card space-y-3 bg-white/80">
-        <h2 className="font-display text-xl">Fit sessions per day</h2>
+        <h2 className="font-display text-xl">{t.perDay}</h2>
         <p className="text-xs text-ink-mute">
-          {u.from} → {u.to}. One session = one product resolved by one shopper with a fit result written (D7).
+          {t.perDayNote(u.from, u.to)}
         </p>
-        <ol className="flex h-40 items-end gap-0.5" aria-label="Fit sessions per day">
+        <ol className="flex h-40 items-end gap-0.5" aria-label={t.perDay}>
           {u.days.map((day) => (
-            <li key={day.day} className="flex-1" title={`${day.day}: ${day.fitSessions} sessions`}>
-              <div className="w-full rounded-t bg-ink" style={{ height: `${(day.fitSessions / max) * 100}%` }} role="meter" aria-valuemin={0} aria-valuemax={max} aria-valuenow={day.fitSessions} aria-label={`${day.day}: ${day.fitSessions} sessions`} />
+            <li key={day.day} className="flex-1" title={t.dayBar(day.day, day.fitSessions)}>
+              <div className="w-full rounded-t bg-ink" style={{ height: `${(day.fitSessions / max) * 100}%` }} role="meter" aria-valuemin={0} aria-valuemax={max} aria-valuenow={day.fitSessions} aria-label={t.dayBar(day.day, day.fitSessions)} />
             </li>
           ))}
         </ol>
-        {u.plan.paused ? <p className="text-sm text-bad">No active subscription: the “Try it on” button still renders; shoppers see a “shop paused” screen until the Curtain plan is active again.</p> : null}
+        {u.plan.paused ? <p className="text-sm text-bad">{t.pausedNote}</p> : null}
       </section>
     </div>
   );
@@ -519,30 +523,31 @@ export function MerchantUsage(): ReactNode {
 /** Billing anomaly signal (carry-over #7): the daily cap and days far above the usual volume. */
 function BillingAlerts({ report }: { report: BillingAnomaliesResponse }): ReactNode {
   const t = report.today;
+  const c = merchantStrings().console.alerts;
   return (
     <section className="card space-y-3 bg-white/80" aria-labelledby="billing-alerts">
       <h2 id="billing-alerts" className="font-display text-xl">
-        Unusual traffic
+        {c.title}
       </h2>
       <p className="text-xs text-ink-mute">
-        Today {t.billedSessions.toLocaleString()} counted sessions (usual day: {t.trailingAverage.toFixed(1)}). We flag a day above {t.spikeThreshold.toLocaleString()} and stop counting at the fair-use cap of {report.dailyCap.toLocaleString()} a day. Your price stays the same either way.
+        {c.today(t.billedSessions.toLocaleString(), t.trailingAverage.toFixed(1), t.spikeThreshold.toLocaleString(), report.dailyCap.toLocaleString())}
       </p>
       {t.capReached || t.spike ? (
         <p role="alert" className={`text-sm ${t.capReached ? 'text-bad' : 'text-warn'}`}>
-          {t.capReached ? 'Today’s fair-use cap is reached: further sessions today are not counted. Shoppers still get their size. Contact us if this is a real rush.' : 'Today is far above your usual volume. If you did not run a campaign, tell us: it can be automated traffic.'}
+          {t.capReached ? c.capReached : c.spike}
         </p>
       ) : null}
       {report.anomalies.length === 0 ? (
-        <p className="text-sm text-ink-soft">Nothing unusual in this range.</p>
+        <p className="text-sm text-ink-soft">{c.nothing}</p>
       ) : (
         <ul className="divide-y divide-ink/10 text-sm">
           {report.anomalies.map((a) => (
             <li key={`${a.day}-${a.kind}`} className="flex flex-wrap justify-between gap-2 py-2">
               <span className="font-medium">
-                {a.day} · {a.kind === 'cap_reached' ? 'Daily cap reached' : 'Spike'}
+                {c.line(a.day, a.kind === 'cap_reached')}
               </span>
               <span className="tabular-nums text-ink-soft">
-                {a.kind === 'cap_reached' ? `${a.deniedSessions.toLocaleString()} sessions not counted (cap ${a.threshold.toLocaleString()})` : `${a.billedSessions.toLocaleString()} counted vs usual ${a.trailingAverage.toFixed(1)}`}
+                {a.kind === 'cap_reached' ? c.notCounted(a.deniedSessions.toLocaleString(), a.threshold.toLocaleString()) : c.counted(a.billedSessions.toLocaleString(), a.trailingAverage.toFixed(1))}
               </span>
             </li>
           ))}
@@ -553,6 +558,7 @@ function BillingAlerts({ report }: { report: BillingAnomaliesResponse }): ReactN
 }
 
 function SwipeTable({ title, rows, keyName }: { title: string; rows: { key: string; love: number; pass: number; save: number; less: number }[]; keyName: string }): ReactNode {
+  const t = merchantStrings().console.swipes;
 return (
   <section className="card bg-white/80">
     <h2 className="mb-2 font-display text-xl">{title}</h2>
@@ -560,10 +566,10 @@ return (
       <thead className="text-left text-xs uppercase tracking-wider text-ink-mute">
         <tr>
           <th className="py-1">{keyName}</th>
-          <th className="py-1 text-right">Love</th>
-          <th className="py-1 text-right">Save</th>
-          <th className="py-1 text-right">Pass</th>
-          <th className="py-1 text-right">Less</th>
+          <th className="py-1 text-right">{t.love}</th>
+          <th className="py-1 text-right">{t.save}</th>
+          <th className="py-1 text-right">{t.pass}</th>
+          <th className="py-1 text-right">{t.less}</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-ink/10">
@@ -622,6 +628,7 @@ function HiddenNote({ suppression, k, noun }: { suppression: AnalyticsSuppressio
 export function MerchantAnalytics(): ReactNode {
   const d = useMerchantData();
   const t = merchantStrings().analytics;
+  const w = merchantStrings().console.swipes;
   const a = d.analytics;
   return (
     <div className="space-y-6">
@@ -629,17 +636,17 @@ export function MerchantAnalytics(): ReactNode {
       {a ? (
         <>
           <section className="space-y-1">
-            <HiddenNote suppression={a.suppression} k={a.kAnonymityFloor} noun={{ one: 'product or size', many: 'products or sizes' }} />
-            <p className="text-xs text-ink-mute">{t.derivedNote} Pass reasons are inferred on the shopper’s phone.</p>
+            <HiddenNote suppression={a.suppression} k={a.kAnonymityFloor} noun={w.noun} />
+            <p className="text-xs text-ink-mute">{t.derivedNote} {w.passReasonsNote}</p>
           </section>
-          <SwipeTable title="By product" keyName="Product" rows={a.byProduct.map((p) => ({ key: p.externalId, ...p }))} />
+          <SwipeTable title={w.byProduct} keyName={w.product} rows={a.byProduct.map((p) => ({ key: p.externalId, ...p }))} />
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            <SwipeTable title="By colour" keyName="Hue" rows={a.byColour.map((c) => ({ key: c.hue, ...c }))} />
-            <SwipeTable title="By fabric" keyName="Fabric" rows={a.byFabric.map((f) => ({ key: f.fabric, ...f }))} />
-            <SwipeTable title="By size" keyName="Size" rows={a.bySize.map((s) => ({ key: s.size, ...s }))} />
+            <SwipeTable title={w.byColour} keyName={w.hue} rows={a.byColour.map((c) => ({ key: c.hue, ...c }))} />
+            <SwipeTable title={w.byFabric} keyName={w.fabric} rows={a.byFabric.map((f) => ({ key: f.fabric, ...f }))} />
+            <SwipeTable title={w.bySize} keyName={w.size} rows={a.bySize.map((s) => ({ key: s.size, ...s }))} />
           </div>
           <section className="card bg-white/80">
-            <h2 className="mb-2 font-display text-xl">Why shoppers pass</h2>
+            <h2 className="mb-2 font-display text-xl">{w.whyPass}</h2>
             <ul className="grid grid-cols-2 gap-2 md:grid-cols-4">
               {a.byProduct.slice(0, 8).map((p) => (
                 <li key={p.externalId} className="rounded-2xl border border-ink/10 p-3 text-xs">
@@ -662,17 +669,18 @@ export function MerchantAnalytics(): ReactNode {
 
 export function MerchantLedgerRoute(): ReactNode {
   const d = useMerchantData();
+  const t = merchantStrings().console.ledger;
   const lines: LedgerLine[] = d.ledger.entries.map((e) => ({
     id: e.id,
     at: e.at,
-    title: `Hero render · ${e.productExternalId}`,
-    detail: `${e.provider} / ${e.model} · deleted after ${e.retentionHours} h`,
+    title: t.entryTitle(e.productExternalId),
+    detail: t.entryDetail(e.provider, e.model, e.retentionHours),
     fields: e.inputs,
   }));
   return (
     <div className="space-y-3">
-      <p className="text-sm text-ink-soft">Everything Curtain sent to an AI provider on behalf of your shoppers. Inputs are the anonymised avatar render and your product imagery — never a shopper photo.</p>
-      <Ledger lines={lines} title="Provider ledger" emptyText="No hero renders yet." />
+      <p className="text-sm text-ink-soft">{t.intro}</p>
+      <Ledger lines={lines} title={t.title} emptyText={t.empty} />
     </div>
   );
 }

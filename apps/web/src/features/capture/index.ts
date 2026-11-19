@@ -12,7 +12,7 @@ export { measureScan, ellipsePerimeter, scaleCmPerPx, girthFromWidthDepth, cover
 export { populationPrior, bmi, PRIOR_COEFFICIENTS, type PriorInput, type PriorEstimate, type PriorLevel } from './prior';
 export { placeLevels, LEVELS, TORSO_FRACTIONS, LIMB_FRACTIONS } from './crossSections';
 export { LEVEL_ANCHORS, levelAnchor, byAnchor } from './anchors';
-export { gateFrame, gateFeatures, classifyView, selectFrames, gateHint, heightSpanStable, GATE_THRESHOLDS } from './poseGate';
+export { gateFrame, gateFeatures, classifyView, selectFrames, gateHint, gateHintKey, heightSpanStable, GATE_THRESHOLDS, type GateHintKey } from './poseGate';
 export {
   estimateSkin,
   srgbToLab,
@@ -46,7 +46,7 @@ export {
   deleteScan,
   type SilhouetteMask,
 } from './storage';
-export { ScanSession, type ScanSessionOptions } from './scanSession';
+export { ScanSession, ScanError, type ScanSessionOptions } from './scanSession';
 export { faceTextureFromPhoto, type FaceOnHeadOptions, type FaceOnHeadResult, type FaceOnHeadTimings } from './faceOnHead';
 export { bakeFaceTexture, rematchFaceTexture, FACE_TEXTURE_SIZE, MAX_FRONT_YAW_DEG, type FaceBake, type FaceBakeStats, type FaceTopology } from './faceBake';
 export { MODEL_BASE, MODEL_FILES, choosePoseVariant, type PoseVariant } from './models';

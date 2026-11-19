@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { Link } from 'react-router';
+import { appStrings } from '@/strings';
 import privacyMd from '../../../../docs/legal/privacy.md?raw';
 import termsMd from '../../../../docs/legal/terms.md?raw';
 import { parseLegalMarkdown, type Block, type Inline, type LegalDoc } from './legalMarkdown';
@@ -22,24 +23,26 @@ export function TermsRoute(): ReactNode {
 }
 
 export function LegalPage({ doc }: { doc: LegalDoc }): ReactNode {
+  const t = appStrings().app.legal;
+  const pageTitle = t.documentTitle(doc.title);
   useEffect(() => {
     const before = document.title;
-    document.title = `${doc.title} · Curtain`;
+    document.title = pageTitle;
     return () => {
       document.title = before;
     };
-  }, [doc.title]);
+  }, [pageTitle]);
 
   return (
     <div className="min-h-dvh bg-cream text-ink">
       <header className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 pt-6 sm:px-6">
-        <p className="eyebrow">Curtain · your private fitting room</p>
-        <nav aria-label="Legal" className="flex gap-4 text-sm">
+        <p className="eyebrow">{t.eyebrow}</p>
+        <nav aria-label={t.navLabel} className="flex gap-4 text-sm">
           <Link to="/privacy" className="underline-offset-4 hover:underline">
-            Privacy
+            {t.privacy}
           </Link>
           <Link to="/terms" className="underline-offset-4 hover:underline">
-            Terms
+            {t.terms}
           </Link>
         </nav>
       </header>

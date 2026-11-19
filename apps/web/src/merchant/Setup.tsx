@@ -1,16 +1,19 @@
 /**
- * The merchant console's first-run checklist and "Leaving Curtain" panel. Every word comes from
- * @curtain/schema `merchantSetup.ts` (one English catalogue, D21), the same list the Shopify admin shows.
+ * The merchant console's first-run checklist and "Leaving Curtain" panel. The steps and the leaving lines come from
+ * @curtain/schema `merchantSetup.ts` (one English catalogue, D21), the same list the Shopify admin shows; the
+ * console's own lines around them are in `strings.ts`.
  */
 import { Check, QrCode } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { MERCHANT_SETUP_TEXT, merchantPlanText, type SetupResponse } from '@curtain/schema';
+import { merchantStrings } from './strings';
 
 /** Where each step's button goes inside the console (the platform screens are named in the step's words). */
 const TARGET_ROUTE: Record<string, string> = { charts: '/merchant/products', measure: '/merchant/products?next=measure', theme: '/merchant/products', connect: '/merchant/login' };
 
 export function SetupChecklist({ setup, onConfirm, live }: { setup: SetupResponse; onConfirm: (body: { buttonConfirmed?: boolean; phoneConfirmed?: boolean }) => Promise<void>; live: boolean }): ReactNode {
+  const t = merchantStrings().setup;
   const [showCode, setShowCode] = useState(setup.next === 'phone');
   const [busy, setBusy] = useState(false);
   const pct = Math.round((100 * setup.doneCount) / setup.total);
@@ -46,9 +49,9 @@ export function SetupChecklist({ setup, onConfirm, live }: { setup: SetupRespons
               </span>
               <div className="min-w-0 flex-1 space-y-1">
                 <p className="font-medium">
-                  {s.number}. {s.title}
-                  <span className="sr-only">{s.done ? ' (done)' : ' (to do)'}</span>
-                  {!s.done ? <span className="text-xs font-normal text-ink-mute"> · about {s.minutes} min</span> : null}
+                  {t.stepTitle(s.number, s.title)}
+                  <span className="sr-only">{s.done ? t.done : t.todo}</span>
+                  {!s.done ? <span className="text-xs font-normal text-ink-mute">{t.minutes(s.minutes)}</span> : null}
                 </p>
                 <p className="text-sm text-ink-soft">{s.detail}</p>
                 {!s.done && (s.action || s.confirmLabel) ? (
@@ -59,7 +62,7 @@ export function SetupChecklist({ setup, onConfirm, live }: { setup: SetupRespons
                       </button>
                     ) : s.action && s.action.target !== 'connect' ? (
                       <Link to={TARGET_ROUTE[s.action.target] ?? '/merchant'} className={current ? 'btn-primary min-h-9 px-4 text-sm' : 'btn-ghost min-h-9 px-4 text-sm'}>
-                        {s.action.target === 'theme' && setup.platform === 'woocommerce' ? 'See which products show it' : s.action.label}
+                        {s.action.target === 'theme' && setup.platform === 'woocommerce' ? t.seeProducts : s.action.label}
                       </Link>
                     ) : null}
                     {s.confirmLabel && live ? (
@@ -72,17 +75,17 @@ export function SetupChecklist({ setup, onConfirm, live }: { setup: SetupRespons
                 {s.key === 'phone' && showCode && !s.done ? (
                   setup.phoneCheck ? (
                     <div className="mt-2 flex flex-wrap items-center gap-4 rounded-2xl border border-ink/10 bg-white p-3" data-testid="phone-check">
-                      <img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(setup.phoneCheck.qrSvg)}`} alt={`Code for ${setup.phoneCheck.name}`} width={144} height={144} className="rounded-lg bg-white" />
+                      <img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(setup.phoneCheck.qrSvg)}`} alt={t.codeAlt(setup.phoneCheck.name)} width={144} height={144} className="rounded-lg bg-white" />
                       <div className="min-w-0 flex-1 space-y-2 text-sm">
                         <p className="font-medium">{setup.phoneCheck.name}</p>
-                        <p className="text-ink-soft">Point your phone’s camera at the code and tap the link it shows. On the product page, tap “Try it on”, type a height and weight, and look at the size it suggests.</p>
+                        <p className="text-ink-soft">{t.phoneHelp}</p>
                         <a className="btn-ghost min-h-9 px-4 text-sm" href={setup.phoneCheck.url} target="_blank" rel="noopener noreferrer">
-                          Open the product page ↗
+                          {t.openProduct}
                         </a>
                       </div>
                     </div>
                   ) : (
-                    <p className="text-sm text-ink-mute">Once a product has a size chart and is published in your shop, its code appears here.</p>
+                    <p className="text-sm text-ink-mute">{t.noCode}</p>
                   )
                 ) : null}
               </div>
@@ -105,7 +108,7 @@ export function LeavingCurtain({ platform }: { platform: SetupResponse['platform
           <li key={l}>{l}</li>
         ))}
       </ol>
-      <p className="mt-3 text-sm font-medium">Your data</p>
+      <p className="mt-3 text-sm font-medium">{merchantStrings().setup.yourData}</p>
       <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-ink-soft">
         {t.leaving.data.map((l) => (
           <li key={l}>{l}</li>

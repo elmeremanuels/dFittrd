@@ -728,12 +728,17 @@ export class Figure {
       return;
     }
     tintHair(geometry, this.skin ? this.skinColour : null);
-    if (this.skin && this.skin.vertexColors !== shaded(geometry)) {
+    if (!this.skin) {
+      this.body.material = shaded(geometry) ? BODY_MATERIAL_SHADED : BODY_MATERIAL;
+      return;
+    }
+    // A figure with a skin colour keeps its own material on the new body: only the grey mannequin takes the shared one.
+    if (this.skin.vertexColors !== shaded(geometry)) {
       // A material's shader is built for vertex colours or without: switching needs a rebuild.
       this.skin.vertexColors = shaded(geometry);
       this.skin.needsUpdate = true;
     }
-    else this.body.material = shaded(geometry) ? BODY_MATERIAL_SHADED : BODY_MATERIAL;
+    this.body.material = this.skin;
   }
 
   private skin: THREE.MeshPhysicalMaterial | null = null;

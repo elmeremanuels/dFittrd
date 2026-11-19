@@ -8,6 +8,7 @@ import type { ReactNode } from 'react';
 import type { Band } from '@curtain/fit-engine';
 import { VIEW_H } from '@/render/body';
 import { ringArcs, type Ring, type RingOverlay } from '@/render/rings';
+import { appStrings } from '@/strings';
 
 /** Theme tokens (index.css --color-ok / warn / bad / ink-soft). */
 const BAND_STROKE: Record<Band, string> = { tight: '#b3261e', snug: '#9a5b00', good: '#1f7a4d', roomy: '#4a423b', loose: '#9a5b00', short: '#9a5b00', long: '#9a5b00' };
@@ -108,9 +109,7 @@ export function SizeRingsChips({ overlay, topRem = 0.75, bottomRem = 0.75 }: { o
       </div>
       <ul className="sr-only" data-testid="size-ring-text">
         {overlay.selected.rings.map((r) => (
-          <li key={r.key}>
-            Size {overlay.size}. {r.text}.
-          </li>
+          <li key={r.key}>{appStrings().shared.sizeRings.sentence(overlay.size, r.text)}</li>
         ))}
       </ul>
     </>

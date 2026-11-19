@@ -20,6 +20,7 @@
  * import from spikes); src/__tests__/ringTape.test.ts fails when the two drift apart.
  */
 import type { GarmentPayload, SizeRow } from '@curtain/schema';
+import { appStrings } from '@/strings';
 
 export type RingSource = 'measured' | 'interpolated' | 'extrapolated' | 'assumed';
 
@@ -67,25 +68,13 @@ export function sourceAt(input: { source: PerSizeSource } | undefined, size: str
  * What a chip prints: "estimated" for a size between measured sizes (interpolated), "rough estimate"
  * for a size beyond them (extrapolated: nothing measured on its far side holds the number in place).
  */
-export const SOURCE_WORD: Record<RingSource, string> = { measured: 'measured', interpolated: 'estimated', extrapolated: 'rough estimate', assumed: 'assumed' };
+export function sourceWord(source: RingSource): string {
+  return appStrings().shared.rings.sourceWord[source];
+}
 
 /** The full wording of a source, for the sentence under a ring and for screen readers. */
 export function sourceSentence(source: RingSource, measuredSizes: readonly string[] = []): string {
-  const list = measuredSizes.length ? ` ${joinSizes(measuredSizes)}` : '';
-  switch (source) {
-    case 'measured':
-      return 'measured on the garment in this size';
-    case 'interpolated':
-      return `not measured in this size: estimated between the measured sizes${list}, interpolated`;
-    case 'extrapolated':
-      return `not measured in this size: estimated beyond the measured sizes${list}, extrapolated`;
-    default:
-      return 'assumed, not measured';
-  }
-}
-
-export function joinSizes(sizes: readonly string[]): string {
-  return sizes.length <= 1 ? sizes.join('') : `${sizes.slice(0, -1).join(', ')} and ${sizes[sizes.length - 1]}`;
+  return appStrings().shared.rings.sourceSentence[source](measuredSizes);
 }
 
 /** The tape measurements of one size of the garment, cm. Every girth is the flat width x 2. */

@@ -13,6 +13,7 @@ import { eur, pct } from '@/lib/format';
 import { colourTarget } from '@/lib/season';
 import { api, MOCK_SHOP, useApp } from '@/store';
 import { fitFor } from '@/store/fit';
+import { appStrings } from '@/strings';
 
 type State = { status: 'loading' } | { status: 'error'; message: string } | { status: 'ready'; data: TryResolveResponse };
 
@@ -38,6 +39,7 @@ export function TryRoute(): ReactNode {
   const [cohort, setCohort] = useState<FitCohortResponse | null>(null);
   const [size, setSize] = useState<string | null>(null);
   const [done, setDone] = useState<'love' | 'save' | null>(null);
+  const t = appStrings().app.try;
 
   useEffect(() => {
     if (!hydrated) return;
@@ -62,7 +64,7 @@ export function TryRoute(): ReactNode {
           api.fitCohort(data.garment.id, data.shop.id).then(setCohort, () => setCohort(null));
         }
       } catch (e) {
-        if (!cancelled) setState({ status: 'error', message: e instanceof Error ? e.message : 'This link could not be opened.' });
+        if (!cancelled) setState({ status: 'error', message: e instanceof Error ? e.message : appStrings().app.try.linkFailed });
       }
     })();
     return () => {
@@ -76,14 +78,14 @@ export function TryRoute(): ReactNode {
   const target = colourTarget(season, undertone);
   const saved = garment ? wardrobe.some((w) => w.productId === garment.id) : false;
 
-  if (state.status === 'loading') return <p className="p-6 text-center text-sm text-ink-soft">Opening the fitting room…</p>;
+  if (state.status === 'loading') return <p className="p-6 text-center text-sm text-ink-soft">{t.loading}</p>;
   if (state.status === 'error')
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-        <h1 className="font-display text-2xl">We could not open this link</h1>
+        <h1 className="font-display text-2xl">{t.errorTitle}</h1>
         <p className="text-sm text-ink-soft">{state.message}</p>
         <Link to="/deck" className="btn-primary">
-          Go to your rail
+          {t.toRail}
         </Link>
       </div>
     );
@@ -102,13 +104,13 @@ export function TryRoute(): ReactNode {
       <header className="flex items-center gap-3 px-5 py-3" style={shop.brandColor ? { borderBottom: `3px solid ${shop.brandColor}` } : undefined}>
         {logoUrl ? <img src={logoUrl} alt="" referrerPolicy="no-referrer" className="h-8 w-8 rounded-full object-cover" data-testid="try-shop-logo" /> : <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-xs font-bold text-cream">{shop.name.slice(0, 1)}</span>}
         <div className="min-w-0">
-          <p className="eyebrow">Trying on from</p>
+          <p className="eyebrow">{t.tryingFrom}</p>
           <p className="truncate font-medium">{shop.name}</p>
         </div>
       </header>
       {shop.paused ? (
         <div className="mx-5 mb-3 flex items-center gap-2 rounded-2xl border border-warn/30 bg-warn/10 p-3 text-sm text-warn">
-          <PauseCircle className="h-5 w-5 shrink-0" aria-hidden /> This shop has paused Curtain try-ons. You can still see the estimate; swipes are not counted for the shop.
+          <PauseCircle className="h-5 w-5 shrink-0" aria-hidden /> {t.paused}
         </div>
       ) : null}
       <div className="px-4">
@@ -136,19 +138,19 @@ export function TryRoute(): ReactNode {
         </div>
         {fit && fit.perSize.length > 1 ? (
           <div className="space-y-1">
-            <p className="eyebrow">See it in another size</p>
-            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Size to preview">
+            <p className="eyebrow">{t.otherSize}</p>
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={t.sizeToPreview}>
               {fit.perSize.map((s) => (
                 <button key={s.size} type="button" role="radio" aria-checked={renderSize === s.size} onClick={() => setSize(s.size)} className={`chip ${renderSize === s.size ? 'border-coral bg-coral text-ink' : ''}`}>
                   {s.size}
-                  {s.pullOn?.status === 'blocked' ? <span className="text-xs opacity-80">too small to pull on</span> : shownSizeScore(s) !== null ? <span className="text-xs opacity-80">{pct(shownSizeScore(s))}</span> : null}
+                  {s.pullOn?.status === 'blocked' ? <span className="text-xs opacity-80">{t.tooSmallToPullOn}</span> : shownSizeScore(s) !== null ? <span className="text-xs opacity-80">{pct(shownSizeScore(s))}</span> : null}
                 </button>
               ))}
             </div>
           </div>
         ) : null}
         {fit ? (
-          <ul className="space-y-0.5 text-xs text-ink-soft" aria-label="Fit notes">
+          <ul className="space-y-0.5 text-xs text-ink-soft" aria-label={t.fitNotes}>
             {fit.notes.map((n) => (
               <li key={n}>• {n}</li>
             ))}
@@ -156,20 +158,20 @@ export function TryRoute(): ReactNode {
         ) : null}
         <EstimateDisclaimer />
         <div className="flex gap-2">
-          <button type="button" className="btn-coral flex-1" disabled={done !== null} onClick={() => void act('love')} aria-label="Love this">
-            <Heart className="h-5 w-5" aria-hidden /> {done === 'love' ? 'Loved' : 'Love'}
+          <button type="button" className="btn-coral flex-1" disabled={done !== null} onClick={() => void act('love')} aria-label={t.loveThis}>
+            <Heart className="h-5 w-5" aria-hidden /> {done === 'love' ? t.loved : t.love}
           </button>
-          <button type="button" className="btn-primary flex-1" disabled={saved || done === 'save'} onClick={() => void act('save')} aria-label="Save to wardrobe">
-            <Bookmark className="h-5 w-5" aria-hidden /> {saved ? 'In wardrobe' : 'Save'}
+          <button type="button" className="btn-primary flex-1" disabled={saved || done === 'save'} onClick={() => void act('save')} aria-label={t.saveToWardrobe}>
+            <Bookmark className="h-5 w-5" aria-hidden /> {saved ? t.inWardrobe : t.save}
           </button>
         </div>
         {g.productUrl ? (
           <a href={g.productUrl} target="_blank" rel="noreferrer noopener" className="btn-ghost w-full">
-            <ExternalLink className="h-4 w-4" aria-hidden /> Back to {shop.name}
+            <ExternalLink className="h-4 w-4" aria-hidden /> {t.backTo(shop.name)}
           </a>
         ) : null}
         <CohortBars cohort={cohort} highlight={fit?.recommendedSize ?? null} />
-        <p className="text-xs text-ink-mute">The shop only learns that this item was opened — never your measurements or photos. The try link expires {new Date(trySession.expiresAt).toLocaleTimeString()}.</p>
+        <p className="text-xs text-ink-mute">{t.privacy(new Date(trySession.expiresAt).toLocaleTimeString())}</p>
       </div>
     </div>
   );
@@ -179,7 +181,7 @@ async function resolve(token: string): Promise<TryResolveResponse> {
   if (token.startsWith('mock:')) {
     const id = token.slice(5);
     const garment = MOCK_GARMENTS_BY_ID[id];
-    if (!garment) throw new Error(`Unknown demo garment ${id}`);
+    if (!garment) throw new Error(appStrings().app.try.unknownDemoGarment(id));
     const now = new Date();
     return {
       shop: MOCK_SHOP,

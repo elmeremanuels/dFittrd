@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { AnimatePresence } from 'motion/react';
 import { Camera, Ruler, ShieldCheck, Sparkles } from 'lucide-react';
 import type { BodyMeasurementKey, BodyProfile } from '@curtain/schema';
+import { appStrings } from '../../../strings';
 import { EMPTY_MANUAL_FORM, manualEntries, nextStage, type FlowCaps, type ManualForm, type Stage } from '../captureMachine';
 import { fuseProfile, type FuseResult } from '../fuse';
 import { hasCamera } from '../platform/camera';
@@ -136,7 +137,7 @@ export function CaptureStep({ onComplete, onSkip, persist = true, modelBase, ini
       }
       onComplete(fused.profile, extras);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not save your profile on this device.');
+      setError(e instanceof Error ? e.message : appStrings().capture.intro.saveFailed);
     } finally {
       setBusy(false);
     }
@@ -144,6 +145,8 @@ export function CaptureStep({ onComplete, onSkip, persist = true, modelBase, ini
 
   const modelsReady = caps.models === 'ready';
   const cameraStagesPossible = caps.camera === true && caps.models !== 'failed';
+  const t = appStrings().capture.intro;
+  const header = t.header[variant];
 
   return (
     <CaptureVariantContext.Provider value={variant}>
@@ -151,53 +154,33 @@ export function CaptureStep({ onComplete, onSkip, persist = true, modelBase, ini
       <AnimatePresence mode="wait">
         {stage === 'intro' ? (
           <Panel key="intro" className="space-y-6">
-            {embed ? (
-              <>
-                <StepHeader eyebrow="More accurate fit" title="Quick body scan" subtitle="About 30 seconds. Nothing leaves this device." />
-                <ul className="space-y-3 text-sm text-ink/70">
-                  <li className="flex items-start gap-3">
-                    <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
-                    An 8-second body video, measured in this browser.
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <Ruler className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
-                    Check or add a few measurements.
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
-                    Every result is an estimate and says how sure it is.
-                  </li>
-                </ul>
-              </>
-            ) : (
-              <>
-                <StepHeader eyebrow="Your private fitting room" title="Let’s measure you" subtitle="About two minutes. Nothing leaves your phone." />
-                <ul className="space-y-3 text-sm text-ink/70">
-                  <li className="flex items-start gap-3">
-                    <Camera className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
-                    One face photo for your skin tone and identity tile.
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
-                    An 8-second body video, measured by a model running on this device.
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <Ruler className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
-                    A few tape measurements to keep the scan honest.
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
-                    Every result is an estimate and says how sure it is.
-                  </li>
-                </ul>
-              </>
-            )}
-            {caps.camera === false ? <p className="text-xs text-ink/50">No camera detected — we will go straight to manual measurements.</p> : null}
-            {caps.models === 'failed' ? <p className="text-xs text-ink/50">The scan models could not be loaded; manual measurements still work.</p> : null}
+            <StepHeader eyebrow={header.eyebrow} title={header.title} subtitle={header.subtitle} />
+            <ul className="space-y-3 text-sm text-ink/70">
+              {embed ? null : (
+                <li className="flex items-start gap-3">
+                  <Camera className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
+                  {t.facePhoto}
+                </li>
+              )}
+              <li className="flex items-start gap-3">
+                <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
+                {t.bodyVideo[variant]}
+              </li>
+              <li className="flex items-start gap-3">
+                <Ruler className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
+                {t.tape[variant]}
+              </li>
+              <li className="flex items-start gap-3">
+                <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-coral" aria-hidden />
+                {t.estimate}
+              </li>
+            </ul>
+            {caps.camera === false ? <p className="text-xs text-ink/50">{t.noCamera}</p> : null}
+            {caps.models === 'failed' ? <p className="text-xs text-ink/50">{t.modelsFailed}</p> : null}
             <PrimaryButton onClick={advance} disabled={caps.camera === null}>
-              {caps.camera === null ? 'Checking your device…' : cameraStagesPossible ? (embed ? 'Start the scan' : 'Start with a photo') : 'Enter measurements'}
+              {caps.camera === null ? t.checking : cameraStagesPossible ? t.start[variant] : t.enterMeasurements}
             </PrimaryButton>
-            <GhostButton onClick={onSkip}>Skip for now</GhostButton>
+            <GhostButton onClick={onSkip}>{t.skip}</GhostButton>
             <PrivacyNote />
           </Panel>
         ) : null}

@@ -9,6 +9,8 @@ is written in shipped code. Other languages come later as packs.
 | Surface | English source | Lookup | Adding a pack |
 | --- | --- | --- | --- |
 | Embed (`apps/web/src/embed`) | `strings/en.ts` (`EmbedCatalogue`) | `embedStrings()` in `strings/index.ts` | add `strings/<locale>.ts`, register it in `CATALOGUES` |
+| Shared components, camera scan, consumer app (`apps/web/src/components`, `render`, `features/capture`, `routes`, `store`) | `apps/web/src/strings/en.ts` (`AppCatalogue`, in three parts under `strings/en/`) | `appStrings()` in `apps/web/src/strings/index.ts`; the locale is the embed's (`setEmbedLocale` hands it on) | add `strings/<locale>.ts`, register it in `CATALOGUES` |
+| Merchant console (`apps/web/src/merchant`) | `merchant/strings.ts` (`MerchantCatalogue`) | `merchantStrings()` | a second catalogue of that type and a lookup by locale (the console has no locale setting yet) |
 | SDK (`packages/sdk`: button, QR modal, overlay chrome, toast, size peek title) | `src/strings/en.ts` (`Strings`) | `pickStrings(locale)` in `src/i18n.ts` | add `src/strings/<locale>.ts`, register it in `STRINGS` |
 | Shopify theme extension | `extensions/try-button/locales/en.default.json`, `en.default.schema.json` | Shopify's own (`\| t`, `t:`) | put `<locale>.json` (with its `curtain.interface_locale`) and `<locale>.schema.json` in `locales/` and in the list in `src/extension.test.ts` |
 | WooCommerce plugin (PHP: admin, button label) | `languages/curtain-woocommerce.pot` (from the `__()` calls) | WordPress's own (`load_plugin_textdomain`) | put `curtain-woocommerce-<locale>.po` in `languages/`; the build checks it and compiles the `.mo` |
@@ -17,7 +19,7 @@ In the two TypeScript surfaces a pack is a full catalogue: TypeScript refuses on
 string. The lookup takes the exact locale, else its language (`nl-BE` reads `nl`), else English.
 
 A pack is those files and registry entries, and nothing else changes. A pack for one language
-ships on all four surfaces in one change: `node scripts/check-language-packs.mjs` (part of
+ships on every surface in one change: `node scripts/check-language-packs.mjs` (part of
 `pnpm check`) fails when a language is present on one surface and missing on another, because that
 would put two languages on one page.
 
@@ -51,23 +53,25 @@ and `sync.test.php`.
 
 ## What is not in a catalogue yet
 
-- Text drawn inside the embed by components it shares with the consumer app: the fit panel and the
-  estimate badge and disclaimer (`apps/web/src/components`), the notes and chips of the size rings
-  (`apps/web/src/render/rings.ts`), the labels on the avatar figure, and the camera scan
-  (`apps/web/src/features/capture`). They are English only, but a pack cannot reach them until
-  they read a catalogue. Two labels on the result's figure already do: the body chip
-  (`result.bodyLabel`) and the estimate badge (`result.estimateLines`, two short lines). The
-  badge's tooltip (the full disclaimer) and the badge in the 3D view and the size peek do not. The
-  consumer app's figures use the inline `ESTIMATE_LABEL` of `EstimateBadge.tsx` (one wording; the
-  two-line form is cut from it, and a unit test keeps it equal to `result.estimateLines`).
-- The whole consumer app and merchant console in `apps/web` outside `embed/`: English, inline in
-  the components.
 - The fit engine's own sentences (`FitResult.notes`, `fitSummary` in `packages/fit-engine`,
   including the pull-on and "not measured by the shop" sentences): English, written in the engine.
   Only the consumer app prints them (`components/FitPanel.tsx`, `routes/TryRoute.tsx`). The embed
   does not: it writes its notes from the result's structured fields with `fit.notes` of its
   catalogue, so a pack reaches them there.
+- Text that comes from packages or data and is printed as it is: the taste engine's labels
+  (archetypes, colour match), `ESTIMATE_DISCLAIMER` and the merchant setup and plan texts of
+  `@curtain/schema`, the api's step titles and error messages.
+- Developer messages of the camera scan that can still reach the screen when an error has no code
+  (`e.message` of an unexpected failure): English. The one error a shopper is meant to read has a
+  code and a catalogue text (`capture.scanErrors`).
+- Number and date formats in the merchant console and `lib/format.ts` (`en-GB`, `en-IE`).
 - `apps/site`, `apps/api` error messages, the Shopify admin page: English, inline.
+
+Everything else in `apps/web` reads a catalogue (branch `claude/loose-ends`, 19 Nov 2026). Three
+guard tests fail when interface text is written in a component again:
+`apps/web/src/embed/__tests__/strings.test.tsx` (the embed's screens),
+`apps/web/src/strings/strings.test.tsx` (shared components, scan, consumer app) and
+`apps/web/src/merchant/strings.test.ts` (the console).
 
 ## What still follows the locale, and is not interface language
 

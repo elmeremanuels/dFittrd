@@ -1,17 +1,24 @@
 import { ESTIMATE_DISCLAIMER } from '@curtain/schema';
 import type { CSSProperties, ReactNode } from 'react';
+import { appStrings } from '@/strings';
+import { EN } from '@/strings/en';
 
-/** The estimate label of the app's figures: the one English wording, on one line. */
-export const ESTIMATE_LABEL = 'Estimate · not measured';
 /**
- * The same label on two short lines (a narrow badge), cut from the one above at its dot, so the
- * shared component carries no second copy of the text. The embed passes its catalogue's lines
- * (`result.estimateLines`); a unit test holds the two wordings together.
+ * The estimate label of the app's figures in English, on one line: the catalogue's default
+ * (`shared.estimate.label`). What is drawn is read from the catalogue at render (`estimateLabel()`),
+ * so a pack reaches it; this constant is for code that has to name the English wording, such as tests.
  */
-export const ESTIMATE_LABEL_LINES: readonly [string, string] = (() => {
-  const at = ESTIMATE_LABEL.indexOf('·');
-  return [ESTIMATE_LABEL.slice(0, at + 1), ESTIMATE_LABEL.slice(at + 1).trim()] as const;
-})();
+export const ESTIMATE_LABEL: string = EN.shared.estimate.label;
+/**
+ * The same label on two short lines (a narrow badge), `shared.estimate.lines`. The embed passes its
+ * own catalogue's lines (`result.estimateLines`); a unit test holds the wordings together.
+ */
+export const ESTIMATE_LABEL_LINES: readonly [string, string] = EN.shared.estimate.lines;
+
+/** The estimate label in the interface language, on one line. */
+export const estimateLabel = (): string => appStrings().shared.estimate.label;
+/** The estimate label in the interface language, on two short lines. */
+export const estimateLabelLines = (): readonly [string, string] => appStrings().shared.estimate.lines;
 
 /**
  * AGENTS.md rule 3 / handoff §7: every generated render is labelled an estimate.
@@ -30,7 +37,7 @@ export function EstimateBadge({ className = '', lines, style }: { className?: st
     );
   return (
     <span className={`chip bg-ink/85 text-cream shadow ${className}`} title={ESTIMATE_DISCLAIMER} style={style} data-testid="estimate-label">
-      {ESTIMATE_LABEL}
+      {estimateLabel()}
     </span>
   );
 }

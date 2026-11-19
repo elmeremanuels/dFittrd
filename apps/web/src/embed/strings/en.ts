@@ -317,6 +317,9 @@ export interface EmbedCatalogue {
     onlyYou: string;
     unknownNote: string;
     noneNote: string;
+    /** A W/L chart whose leg could not be checked: the waist is known, no full size is (the line and its note). */
+    waistOnly: (waist: string) => string;
+    waistOnlyNote: string;
   };
   hero: {
     title: string;
@@ -355,6 +358,8 @@ export interface EmbedCatalogue {
     notPhoto: string;
     picked: (size: string) => string;
     noneFits: string;
+    /** A W/L chart whose leg could not be checked: the waist is picked, the leg on screen is not advice. */
+    waistOnly: (waist: string) => string;
     looking: (size: string) => string;
     rings: (size: string) => string;
     ringName: (key: string) => string;
@@ -691,6 +696,8 @@ export const EN: EmbedCatalogue = {
     onlyYou: 'Only you can see this. The shop can’t.',
     unknownNote: 'Open the fitting room to add what this item needs.',
     noneNote: 'None of the sizes fits you well. Open the fitting room to compare.',
+    waistOnly: (waist) => `Waist ${waist} fits you best`,
+    waistOnlyNote: 'The leg length is not checked yet. Open the fitting room to add your inside leg.',
   },
   hero: {
     title: 'See it on me',
@@ -739,6 +746,7 @@ export const EN: EmbedCatalogue = {
     notPhoto: '3D estimate on a model with your measurements, not a photo.',
     picked: (size) => `Size ${size} was picked by the size advice.`,
     noneFits: 'No size fits well; the size advice decides, not this picture.',
+    waistOnly: (waist) => `The size advice picked waist ${waist}; the leg length was not checked.`,
     looking: (size) => `You are looking at size ${size}.`,
     rings: (size) => `Size rings of size ${size} (estimate)`,
     ringName: (key) => (key === 'hip' ? 'Hips' : key.charAt(0).toUpperCase() + key.slice(1)),

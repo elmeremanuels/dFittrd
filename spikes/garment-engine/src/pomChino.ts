@@ -5,19 +5,23 @@
  * canonical mannequin: two leg tubes joined on a crotch seam, a seat and a waistband.
  *
  * Construction (all in cm, mannequin space; no simulation):
- * - **Rows of constant height** (the waistband is tilted, see below). A row's cross-section is the
- *   body's own section there, offset until its girth is the tape's (a leg by the same distance all
+ * - **The body** is read through `pomChinoBody.ts`, the same for both male shapes: at a height the outline a ring of
+ *   cloth lies on (its hull), from the drawn outlines of a v2 body and from the ellipses of a v1 body.
+ * - **Rows** (level, but for the tilted waistband and the crotch row, see below). A row's cross-section is the
+ *   body's own outline there, offset until the row's length is the tape's girth (a leg by the same distance all
  *   round; above the legs at most `centreSeamEaseCm` at the centre front and back, the rest at the sides):
  *   `2 × thigh width` round one leg from the crotch down to the thigh line, a straight line to
  *   `2 × knee width` at the knee line and on to `2 × leg opening` at the hem; `2 × seat width` round
  *   both at the seat line, a smooth line to `2 × waist width` at the band, constant over the band.
  *   A measurement tighter than the body is built at the tape's value anyway and recorded (`tight`).
- * - **The crotch**: at the crotch level each leg's ring is cut flat on the centre plane (a chord,
- *   the fork), and the two legs share the chord's vertices: that line is the crotch seam under the
- *   body, running from the front fork point to the back fork point. The inseams meet on it at the
- *   crotch point, which lies forward of its middle (a short front fork, a long back fork, as trousers
- *   are cut); so the inseam runs a little forward of the leg's innermost line and the back piece is the wider. Above it the two outer arcs form one ring that opens into the seat's section; below it
- *   each leg's ring rounds off again over `forkBlendCm`.
+ *   The number of rows per stretch is fixed (`counts`), so every size has the base size's vertices and triangles
+ *   and can be shipped as offsets from it.
+ * - **The crotch**: at the crotch each leg's ring is cut flat on the centre plane (the fork), and the two legs share
+ *   the cut's vertices: that line is the crotch seam under the body. The inseams meet on it at the crotch point,
+ *   which lies forward of its middle (a short front fork, a long back fork, as trousers are cut). The seam is built
+ *   the way it hangs: the crotch point is its lowest point, and from there it runs straight to where it meets the
+ *   body in front and behind (the drawn body on the centre plane), then round the body to the seat line. Below the
+ *   crotch each leg's ring rounds off again over `forkBlendCm`.
  * - **The waistband** sits where the fit engine reads the waist of men's trousers: between the body's
  *   natural waist and its seat by the front rise (`wornWaistCm` of `@curtain/fit-engine`: rise 30 cm
  *   or more at the waist, 18 or less at the seat). The band's mid height at the body's axis is put at

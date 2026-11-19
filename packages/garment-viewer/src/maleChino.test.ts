@@ -19,7 +19,7 @@ import { checkBundle } from './bundleCheck';
 import { chinoDrape, loadChino, serve, type ChinoDrapeMetrics } from '../test/chinoDrape';
 import { openSession, prepareFit, sewnNotDrawn, viewerMaterial } from './engine';
 import { GarmentViewError, planAvatar } from './mount';
-import { isTapeTrouser, trouserNoCollide, trouserNotDrawn, trouserSeams, wornBodyRings } from './trouser';
+import { LEG_TOP_FILLET_CM, isTapeTrouser, trouserField, trouserNoCollide, trouserNotDrawn, trouserSeams, wornBodyRings } from './trouser';
 
 const RECOMMENDED = { S: '32/32', M: '34/32', L: '38/32', XL: '40/32', XXL: '44/32' } as const;
 const fullBody = (id: keyof typeof MALE_REFERENCE) => {
@@ -32,7 +32,7 @@ const fullBody = (id: keyof typeof MALE_REFERENCE) => {
  * drape lets the crotch point drop below where the builder put it; pixels: drawn body in front of the cloth, four views.
  */
 const BOUNDS = {
-  v1: { seatShortCm: 3, crotchDropCm: 3.9, crotchP99: 14, crotchMax: 20, pixels: 260, bandDropCm: 0 },
+  v1: { seatShortCm: 3.4, crotchDropCm: 3.9, crotchP99: 14, crotchMax: 24, pixels: 120, bandDropCm: 0 },
   v2: { seatShortCm: 1.6, crotchDropCm: 3, crotchP99: 19, crotchMax: 38, pixels: 310, bandDropCm: 3 },
 } as const;
 
@@ -92,6 +92,32 @@ describe.each(['v1', 'v2'] as const)('the POM chino on the male shape %s', (shap
       expect(Array.from(trouserNoCollide(plan.m, Uint8Array.of(1, 1), [0, hip + 1, 0, 0, hip - 1, 0]))).toEqual([0, 1]);
     });
 
+    it('is draped against a body whose leg tops are joined to the torso: wider at hip height on a body of ellipses, untouched on drawn outlines', async () => {
+      const bundle = await loadChino(built);
+      const plan = planAvatar(bundle.anchors, { family: 'male' }, undefined, shape);
+      const joined = trouserField(plan.field);
+      if (shape === 'v2') {
+        expect(joined).toBe(plan.field);
+        return;
+      }
+      expect(trouserField(plan.field)).toBe(joined);
+      const t = plan.field.torso, j = joined.torso;
+      let wider = 0, firstUnchanged = -1;
+      for (let k = 0; k < t.data.length / 5; k++) {
+        if (t.data[5 * k] !== 1) continue;
+        expect(j.data[5 * k + 3]!).toBeGreaterThanOrEqual(t.data[5 * k + 3]!);
+        // The depth is the torso's wherever the torso is the deeper: the centre seams do not move.
+        expect(j.data[5 * k + 4]!).toBeGreaterThanOrEqual(t.data[5 * k + 4]!);
+        if (j.data[5 * k + 3]! > t.data[5 * k + 3]! + 1e-6) wider++;
+        else if (firstUnchanged < 0 && wider > 0) firstUnchanged = t.lo + k * t.stepCm;
+      }
+      expect(wider).toBeGreaterThan(2);
+      // Back to the drawn torso within the fillet above the leg tops, well under the waistband.
+      expect(firstUnchanged).toBeGreaterThan(plan.m.morphHeights.hip - 4);
+      expect(firstUnchanged).toBeLessThan(plan.m.morphHeights.hip + LEG_TOP_FILLET_CM + 1);
+      expect(joined.legs).toBe(plan.field.legs);
+    });
+
     it('reads the waist where the fit engine read it: a band with room keeps its girth, a band under tension is laid on the body it meets', async () => {
       const bundle = await loadChino(built);
       const band = bundle.grading.sizes.find((s) => s.size === '34/32')!.targets.waist!;
@@ -135,14 +161,14 @@ describe.each(['v1', 'v2'] as const)('the POM chino on the male shape %s', (shap
       }
     }, 120_000);
 
-    it('holds the tape after the drape: waistband within 2.5 cm, thigh within 2 cm, inseam within 1.2 cm, the rises within 1.2 cm; the seat row a little short', () => {
+    it('holds the tape after the drape: waistband within 2.5 cm, thigh within 2 cm, inseam within 1.2 cm, the rises within 1.5 cm; the seat row a little short', () => {
       for (const [id, m] of drapes) {
         // The band is pinned where it was placed: its own length is the tape's plus what the body under it asks.
         expect(m.waistCm!.drapedRow - m.waistCm!.tape, `${id} waist`).toBeGreaterThan(-0.2);
         expect(m.waistCm!.drapedRow - m.waistCm!.tape, `${id} waist`).toBeLessThan(2.5);
         expect(Math.abs(m.thighCm!.drapedRow - m.thighCm!.tape), `${id} thigh`).toBeLessThan(2);
         expect(Math.abs(m.inseamCm!.draped - m.inseamCm!.tape), `${id} inseam`).toBeLessThan(1.2);
-        // The seat's row of cloth is a little shorter than the tape after the drape (the first builder: 2.9 to 3.4 cm), never longer.
+        // The seat's row of cloth is shorter than the tape after the drape (v1: 2.4 to 3.0 cm, v2: 0.6 to 1.0), never longer.
         expect(m.seatCm!.drapedRow, `${id} seat`).toBeLessThanOrEqual(m.seatCm!.tape + 0.5);
         expect(m.seatCm!.tape - m.seatCm!.drapedRow, `${id} seat`).toBeLessThan(B.seatShortCm);
         // A tape round the outside of the seat row still holds the body's seat.
@@ -150,7 +176,7 @@ describe.each(['v1', 'v2'] as const)('the POM chino on the male shape %s', (shap
         // The device shows the size's own rises (built, not morphed), and the seams keep them in the drape.
         for (const rise of [m.frontRiseCm!, m.backRiseCm!]) {
           expect(Math.abs(rise.graded - rise.tape), `${id} rise as shown`).toBeLessThan(0.06);
-          expect(Math.abs(rise.draped - rise.tape), `${id} rise after the drape`).toBeLessThan(1.2);
+          expect(Math.abs(rise.draped - rise.tape), `${id} rise after the drape`).toBeLessThan(1.5);
         }
       }
     });

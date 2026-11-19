@@ -723,7 +723,27 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
       sleeveHem[k] = prevRing;
     }
     const fixedIds = [colsF[0]!.ids[iSp]!, colsF[N]!.ids[iSp]!, colsF[0]!.ids[fanRows.length - 1]!, colsF[N]!.ids[fanRows.length - 1]!];
-    if (A.yokeSmoothIterations > 0) smoothYoke(pos, tris, fixedIds, fullDistance, (y) => smooth((y - yAh - A.yokeSmoothFromCm) / 4), A.capEaseCm, A.yokeSmoothIterations);
+    if (A.yokeSmoothIterations > 0) {
+      smoothYoke(pos, tris, fixedIds, fullDistance, (y) => smooth((y - yAh - A.yokeSmoothFromCm) / 4), A.capEaseCm, A.yokeSmoothIterations);
+      // The smoothing shortens the sleeve's top line over the cap: stretch each sleeve along its arm (nothing at the joint,
+      // all of it at the hem) until the top line is the tape's sleeve length again.
+      for (const [k, f] of [[0, L], [1, R]] as const) {
+        const top = sleeveTop[k];
+        const along = (i: number): number => (pos[3 * i]! - f.joint[0]) * f.axis[0] + (pos[3 * i + 1]! - f.joint[1]) * f.axis[1] + (pos[3 * i + 2]! - f.joint[2]) * f.axis[2];
+        for (let it = 0; it < 3; it++) {
+          let len = 0;
+          for (let j = 1; j < top.length; j++) len += Math.hypot(pos[3 * top[j]!]! - pos[3 * top[j - 1]!]!, pos[3 * top[j]! + 1]! - pos[3 * top[j - 1]! + 1]!, pos[3 * top[j]! + 2]! - pos[3 * top[j - 1]! + 2]!);
+          const d = row.sleeveLengthCm - len;
+          if (Math.abs(d) < 0.01) break;
+          const sEnd = along(top[top.length - 1]!);
+          for (let i = 0; i < part.length; i++) {
+            if (part[i] !== k + 1) continue;
+            const w = clamp01(along(i) / sEnd);
+            for (let c = 0; c < 3; c++) pos[3 * i + c] = pos[3 * i + c]! + f.axis[c]! * d * w;
+          }
+        }
+      }
+    }
     const mesh: Mesh = { positions: Float64Array.from(pos), indices: Uint32Array.from(orientOutward(Float64Array.from(pos), tris, m)), vertexPart: Uint8Array.from(part), partNames: ['body', 'sleeve_l', 'sleeve_r'] };
     return {
       mesh,

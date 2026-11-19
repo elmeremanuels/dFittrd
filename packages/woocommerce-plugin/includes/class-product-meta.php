@@ -404,6 +404,7 @@ final class Product_Meta {
 				<span class="description curtain-template-note"><?php esc_html_e( 'Fills the chart below; nothing is saved until you update the product. Check the sizes against your own labels.', 'curtain-woocommerce' ); ?></span>
 			</p>
 			<?php endif; ?>
+			<div class="curtain-scroll">
 			<table class="curtain-table curtain-repeater" data-repeater="size_chart">
 				<thead><tr>
 					<?php
@@ -431,6 +432,7 @@ final class Product_Meta {
 				</tbody>
 				<tfoot><tr><td colspan="<?php echo count( Vocab::SIZE_ROW_COLUMNS ) + 1; ?>"><button type="button" class="button curtain-row-add"><?php esc_html_e( 'Add size', 'curtain-woocommerce' ); ?></button> <span class="description"><?php esc_html_e( 'Ascending order. Leave a cell empty (or 0) when the shop does not publish that measurement.', 'curtain-woocommerce' ); ?></span></td></tr></tfoot>
 			</table>
+			</div>
 
 			<?php self::render_tape( $id, array_values( array_filter( $chart, 'is_array' ) ), (string) $get( 'closure' ), $json( 'garment_tape' ) ); ?>
 

@@ -35,11 +35,13 @@ export interface ImperialEntries {
   neck: string;
   sleeve: string;
   shoulder: string;
+  /** Men's bottoms only, when the chart has a thigh column. */
+  thigh: string;
 }
 
 export type ImperialKey = keyof ImperialEntries;
 
-export const EMPTY_IMPERIAL: ImperialEntries = { heightFt: '', heightIn: '', weight: '', bust: '', waist: '', hip: '', inseam: '', neck: '', sleeve: '', shoulder: '' };
+export const EMPTY_IMPERIAL: ImperialEntries = { heightFt: '', heightIn: '', weight: '', bust: '', waist: '', hip: '', inseam: '', neck: '', sleeve: '', shoulder: '', thigh: '' };
 
 /**
  * The About-you answers. `height`, `weight` and the girths are always the canonical METRIC values
@@ -72,6 +74,12 @@ export interface AboutForm {
   neck: string;
   sleeve: string;
   shoulder: string;
+  /**
+   * Asked only for a men's bottom whose chart has a thigh column: the girth of one thigh at its
+   * fullest. Optional. Typed in, it is stored as 'manual'; left empty, the thigh is what it was
+   * before this field existed: the population prior's estimate (source 'prior'), never shown as measured.
+   */
+  thigh: string;
   /** "Measured with a tape" (σ 1.5 cm) vs. from memory (σ 2.5 cm). */
   tape: boolean;
 }
@@ -93,14 +101,17 @@ export const EMPTY_ABOUT: AboutForm = {
   neck: '',
   sleeve: '',
   shoulder: '',
+  thigh: '',
   tape: false,
 };
 
-export type AboutField = 'height' | 'weight' | 'bust' | 'waist' | 'hip' | 'inseam' | 'footEu' | 'neck' | 'sleeve' | 'shoulder';
+export type AboutField = 'height' | 'weight' | 'bust' | 'waist' | 'hip' | 'inseam' | 'footEu' | 'neck' | 'sleeve' | 'shoulder' | 'thigh';
 
 /**
  * Accepted ranges, cm (kg, EU). The men's three [A]: wide enough for the male family's S…XXL ±2
  * sizes (neck 37.5–45.75, biacromial 40–43.5, EN arm length about 64 at 172 cm; plan §3 and §4).
+ * The thigh [A]: the male family's S…XXL is 54–71.5; the bounds are those the schema calls plausible
+ * for a chart's thigh column (35–110).
  */
 export const ABOUT_RANGES: Record<AboutField, readonly [number, number]> = {
   height: [120, 230],
@@ -113,10 +124,11 @@ export const ABOUT_RANGES: Record<AboutField, readonly [number, number]> = {
   neck: [28, 60],
   sleeve: [45, 85],
   shoulder: [30, 60],
+  thigh: [35, 110],
 };
 
 /** Metric units of each field (the canonical values). For the shopper's own units use `unitFor`. */
-export const ABOUT_UNITS: Record<AboutField, string> = { height: 'cm', weight: 'kg', bust: 'cm', waist: 'cm', hip: 'cm', inseam: 'cm', footEu: 'EU', neck: 'cm', sleeve: 'cm', shoulder: 'cm' };
+export const ABOUT_UNITS: Record<AboutField, string> = { height: 'cm', weight: 'kg', bust: 'cm', waist: 'cm', hip: 'cm', inseam: 'cm', footEu: 'EU', neck: 'cm', sleeve: 'cm', shoulder: 'cm', thigh: 'cm' };
 
 /** What the form reads from a garment beyond its category (men's garments, slice M2). */
 export type AboutGarment = Pick<GarmentPayload, 'category'> & Partial<Pick<GarmentPayload, 'audience' | 'sizeChart'>>;
@@ -126,7 +138,7 @@ export function isMensGarment(garment: Partial<Pick<GarmentPayload, 'audience'>>
   return garment?.audience === 'men';
 }
 
-const chartHasColumn = (garment: AboutGarment | undefined, key: 'neck' | 'sleeve' | 'shoulder'): boolean =>
+const chartHasColumn = (garment: AboutGarment | undefined, key: 'neck' | 'sleeve' | 'shoulder' | 'thigh'): boolean =>
   Array.isArray(garment?.sizeChart) && garment.sizeChart.some((r) => typeof r[key] === 'number' && r[key] > 0);
 
 /**
@@ -135,13 +147,14 @@ const chartHasColumn = (garment: AboutGarment | undefined, key: 'neck' | 'sleeve
  *
  * A men's garment (slice M2): tops ask chest and waist (the waist is scored on men's tops, the seat
  * is not) plus shoulder width, neck and arm length, each only when the size chart has that column;
- * bottoms ask waist, seat and inside leg. Without `garment` (or for women's and unisex garments) the
+ * bottoms ask waist, seat and inside leg, plus the thigh when the size chart has that column (optional;
+ * left empty, the thigh stays the prior's estimate as before). Without `garment` (or for women's and unisex garments) the
  * list is what it was.
  */
 export function measurementFieldsFor(category: GarmentCategory, garment?: AboutGarment): AboutField[] {
   if (category === 'shoes') return [];
   const mens = isMensGarment(garment);
-  if (category === 'bottom') return ['waist', 'hip', 'inseam'];
+  if (category === 'bottom') return mens && chartHasColumn(garment, 'thigh') ? ['waist', 'hip', 'thigh', 'inseam'] : ['waist', 'hip', 'inseam'];
   if (!mens || category !== 'top') return ['bust', 'waist', 'hip'];
   const extra = (['shoulder', 'neck', 'sleeve'] as const).filter((k) => chartHasColumn(garment, k));
   return ['bust', 'waist', ...extra];
@@ -155,7 +168,11 @@ export function requiredFieldsFor(category: GarmentCategory): AboutField[] {
   return category === 'shoes' ? ['footEu'] : [];
 }
 
-/** The men's fields: typed in or absent, never estimated (no prior exists for them). */
+/**
+ * The men's fields: typed in or absent, never estimated (no prior exists for them). The men's thigh
+ * is not one of them: it has a prior, which a bottom's fit used before the field existed and still
+ * uses while the field is empty (see `profileFromAbout`).
+ */
 export const MENS_ONLY_FIELDS: readonly AboutField[] = ['neck', 'sleeve', 'shoulder'];
 
 /** Fields typed in imperial units when `units` is imperial (the EU shoe size never is). */
@@ -240,7 +257,7 @@ function imperialFrom(field: Exclude<AboutField, 'footEu'>, metric: number): Par
   return { [field]: numberText(field === 'weight' ? kgToLb(metric) : cmToIn(metric), 1) };
 }
 
-const IMPERIAL_FIELDS = ['height', 'weight', 'bust', 'waist', 'hip', 'inseam', 'neck', 'sleeve', 'shoulder'] as const;
+const IMPERIAL_FIELDS = ['height', 'weight', 'bust', 'waist', 'hip', 'inseam', 'neck', 'sleeve', 'shoulder', 'thigh'] as const;
 
 /**
  * Switch the inputs to `units`. The canonical metric values never change, so the fit stays exactly
@@ -460,7 +477,7 @@ export function neighbourSizes(fit: FitResult, centre: string | null): SizeFit[]
 }
 
 /** Which About-you field supplies each fit point (points the form cannot collect are absent). */
-const FIELD_FOR_POINT: Partial<Record<string, AboutField>> = { bust: 'bust', waist: 'waist', hip: 'hip', inseam: 'inseam', foot: 'footEu', neck: 'neck', sleeve: 'sleeve', shoulder: 'shoulder' };
+const FIELD_FOR_POINT: Partial<Record<string, AboutField>> = { bust: 'bust', waist: 'waist', hip: 'hip', inseam: 'inseam', foot: 'footEu', neck: 'neck', sleeve: 'sleeve', shoulder: 'shoulder', thigh: 'thigh' };
 /** The engine flags a point below this confidence as low-confidence (fit-engine LOW_CONFIDENCE_BELOW). */
 const LOW_POINT_CONFIDENCE = 0.7;
 

@@ -32,7 +32,7 @@ import { AvatarPrompt } from './AvatarPrompt';
 import { isMockToken, mockTokensEnabled, resolveMock, type EmbedApi, type EmbedDeps } from './deps';
 import { AboutScreen, BlockedScreen, EmbedFooter, EmbedFrame, LoadingScreen, ProductHeader } from './EmbedScreens';
 import { classifyError, flowReducer, INITIAL_FLOW } from './flow';
-import { Garment3D, hasWebGL2 } from './Garment3D';
+import { bodyFamilyFor, Garment3D, hasWebGL2 } from './Garment3D';
 import { HeroRenderPanel, heroRendersEnabled } from './HeroRender';
 import { facePhotoEnabled, type SkinLook } from './look';
 import { createParentChannel, parseParentMessage, resolveTargetOrigin, type ParentContext } from './protocol';
@@ -403,6 +403,9 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         skinHex={look?.hex ?? null}
         onAvatar={openPrompt}
         avatarLabel={embedStrings().avatar.ui.open}
+        // Slice M1b: the male 2D figure only beside the required 3D view on the male body, which
+        // keeps the result hidden until it has settled and ends in "coming soon" when it fails.
+        figure={requires3d && bodyFamilyFor(data.garment) === 'male' ? 'male' : 'female'}
         extra={
           <>
             {heroRendersEnabled(data) && !mock && !requires3d ? (

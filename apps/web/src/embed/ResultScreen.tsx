@@ -11,6 +11,7 @@ import { EstimateDisclaimer } from '@/components/EstimateBadge';
 import { FitPanel } from '@/components/FitPanel';
 import { shownSizeScore } from '@/lib/fitScore';
 import { pct } from '@/lib/format';
+import type { FigureFamily } from '@/render/body';
 import { ringInputsFor } from '@/render/ringInputs';
 import { ringOverlayFor } from '@/render/rings';
 import { bandText, fitWithAdvice, gapText, neighbourSizes, pointLabelFor, priorKeys, usablePoints, type EmbedFit, type FitPreference, type SizeAdvice } from './aboutYou';
@@ -59,6 +60,11 @@ export interface ResultScreenProps {
   onAvatar?: (() => void) | undefined;
   /** The visible and spoken name of that control (the prompt's title). */
   avatarLabel?: string;
+  /**
+   * The 2D figure's body (slice M1b). `male` only for a men's product whose required 3D view on
+   * the male body is mounted: the result is hidden until that view has settled (EmbedApp).
+   */
+  figure?: FigureFamily;
 }
 
 export function ResultScreen({
@@ -82,6 +88,7 @@ export function ResultScreen({
   skinHex = null,
   onAvatar,
   avatarLabel,
+  figure = 'female',
 }: ResultScreenProps): ReactNode {
   const { fit, userBody } = embedFit;
   const t = embedStrings().result;
@@ -94,8 +101,8 @@ export function ResultScreen({
   const ringInputs = useMemo(() => ringInputsFor(garment), [garment]);
   const priorGirths = useMemo(() => priorKeys(profile), [profile]);
   const rings = useMemo(
-    () => (advice.noPoints ? null : ringOverlayFor({ garment, fit, size: selected, measurements: userBody.measurements, heightCm, inputs: ringInputs, units, estimated: priorGirths })),
-    [advice.noPoints, garment, fit, selected, userBody.measurements, heightCm, ringInputs, units, priorGirths],
+    () => (advice.noPoints ? null : ringOverlayFor({ garment, fit, size: selected, measurements: userBody.measurements, heightCm, inputs: ringInputs, units, estimated: priorGirths, family: figure })),
+    [advice.noPoints, garment, fit, selected, userBody.measurements, heightCm, ringInputs, units, priorGirths, figure],
   );
   // The sticky "Choose size" bar lies over the bottom of the window. Its height goes to the figure
   // as `--estimate-clear`, so the figure's estimate label stays above the bar (AGENTS.md rule 3).
@@ -264,7 +271,7 @@ export function ResultScreen({
             <div className={`relative ${onAvatar ? 'pt-10' : ''}`}>
               {/* overflow-clip, not hidden: the frame must not be a scroll box, or the estimate label could not ride above the bar. */}
               <div ref={avatarRef} className="mirror-frame aspect-[5/9] w-full overflow-clip border-[8px]">
-                <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} skinHex={skinHex} bodyLabel={t.bodyLabel} estimateLines={t.estimateLines} labelsAt="bottom" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} />
+                <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} skinHex={skinHex} bodyLabel={t.bodyLabel} estimateLines={t.estimateLines} labelsAt="bottom" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} family={figure} />
               </div>
               {onAvatar ? (
                 // D19: the control sits where people look for it. The whole figure is the button;

@@ -5,7 +5,7 @@
  */
 import { resolveFabric, mockGarment, type GarmentPayload } from '@curtain/schema';
 import type { FitResult, AnchorGaps } from '@curtain/fit-engine';
-import type { Mannequin, Mesh } from '@curtain/mannequin';
+import { buildMannequin, type Mannequin, type Mesh } from '@curtain/mannequin';
 import { armpitDistance, assignChains, radialMorph, type ChainAssignment } from './core/garment';
 import { applyGrading } from './core/grading';
 import { topEdgePlane } from './core/waistband';
@@ -80,7 +80,10 @@ export function openSession(m: Mannequin, bundle: SpikeBundle, payload: GarmentP
   const noLift = new Uint8Array(chains.length);
   for (let i = 0; i < noLift.length; i++) noLift[i] = !capped[i] || lift(probe, i) ? 1 : 0;
   const sewn = bundle.anchors.category !== 'bottom' && chains.some((c) => c !== 0) && meshPieces(bundle.baseMesh.indices, chains.length).length === 1;
-  return { m, bundle, payload, chains, noCollide: insideCanonical(m, bundle.baseMesh.positions, chains), noLift, graded: new Map(), sewn };
+  // The exemption is judged on the body the bundle was draped on: every bundle is draped on the v1
+  // body, so a male shape v2 body (`maleShape: 'v2'`) asks its v1 twin of the same shape.
+  const drapedOn = m.maleShape === 'v2' ? buildMannequin(m.shape) : m;
+  return { m, bundle, payload, chains, noCollide: insideCanonical(drapedOn, bundle.baseMesh.positions, chains), noLift, graded: new Map(), sewn };
 }
 
 export function sizeLabels(session: GarmentSession): string[] {

@@ -47,6 +47,15 @@ export function loftSections(
   const positions: number[] = [];
   const indices: number[] = [];
   for (const s of sections) {
+    const o = s.outline;
+    if (o) {
+      for (let j = 0; j < segments; j++) {
+        const x = o[2 * j]!;
+        const z = o[2 * j + 1]!;
+        positions.push(s.centre[0] + x * s.u[0] + z * s.v[0], s.centre[1] + x * s.u[1] + z * s.v[1], s.centre[2] + x * s.u[2] + z * s.v[2]);
+      }
+      continue;
+    }
     for (let j = 0; j < segments; j++) {
       const t = (2 * Math.PI * j) / segments;
       const sa = s.a * Math.sin(t);
@@ -160,9 +169,22 @@ function torsoSectionAt(torso: PartSpec, y: number): { a: number; b: number; cz:
   const s = torso.sections;
   let i = 1;
   while (i < s.length - 1 && s[i]!.centre[1] < y) i++;
-  const p = s[i - 1]!, q = s[i]!;
-  const t = Math.min(1, Math.max(0, (y - p.centre[1]) / (q.centre[1] - p.centre[1] || 1)));
-  return { a: p.a + (q.a - p.a) * t, b: p.b + (q.b - p.b) * t, cz: p.centre[2] + (q.centre[2] - p.centre[2]) * t };
+  const p = extents(s[i - 1]!), q = extents(s[i]!);
+  const t = Math.min(1, Math.max(0, (y - p.y) / (q.y - p.y || 1)));
+  return { a: p.a + (q.a - p.a) * t, b: p.b + (q.b - p.b) * t, cz: p.cz + (q.cz - p.cz) * t };
+}
+
+/** Half-width, half-depth and depth centre of a section: its axes, or for a v2 outline the outline's own extents. */
+function extents(s: PartSpec['sections'][number]): { y: number; a: number; b: number; cz: number } {
+  const o = s.outline;
+  if (!o) return { y: s.centre[1], a: s.a, b: s.b, cz: s.centre[2] };
+  let ax = 0, zlo = Infinity, zhi = -Infinity;
+  for (let j = 0; j < o.length; j += 2) {
+    ax = Math.max(ax, Math.abs(o[j]!));
+    zlo = Math.min(zlo, o[j + 1]!);
+    zhi = Math.max(zhi, o[j + 1]!);
+  }
+  return { y: s.centre[1], a: ax, b: (zhi - zlo) / 2, cz: s.centre[2] + (zhi + zlo) / 2 };
 }
 
 /** The torso's section at the neck ring. */

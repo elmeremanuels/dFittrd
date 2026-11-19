@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { MALE_BODY_SHAPE_IDS, MALE_REFERENCE, vertexNormals } from '@curtain/mannequin';
 import { MOCK_GARMENTS_BY_ID, SYNTHETIC_MENS_TEE } from '@curtain/schema';
 import type { Mesh } from '@curtain/mannequin';
+import { measureRing } from '../../../spikes/garment-engine/src/anchoring';
 import { buildBundle } from '../../../spikes/garment-engine/src/bundle';
 import { pokes } from '../../../spikes/garment-engine/src/pokeThrough';
 import { buildPomBundle, torsoTapeAt } from '../../../spikes/garment-engine/src/pomBundle';
@@ -25,6 +26,8 @@ import { GarmentViewError, planAvatar } from './mount';
 
 const pom = buildPomBundle('synthetic-men-tee', SYNTHETIC_MENS_TEE, SYNTHETIC_TEE_POM);
 const tee = pom;
+/** The M1 lofted test garment (the tee before M3), kept to measure against. */
+const m1 = buildBundle('synthetic-men-tee', { skipSeparation: true, generator: 'm1' });
 const dress = buildBundle('aalter-studio-2', { skipSeparation: true });
 
 /** The bundle files as the dev server or the asset route would serve them. */
@@ -200,7 +203,6 @@ describe('a bundle built on the male mannequin', () => {
   }, 240_000);
 
   it('against the M1 lofted test garment on the XXL body: the POM tee shows hundreds of times fewer body pixels', async () => {
-    const m1 = buildBundle('synthetic-men-tee', { skipSeparation: true, generator: 'm1' });
     const before = await drapeOn(m1.files, 'XXL', 'XXL');
     const after = await drapeOn(tee.files, 'XXL', 'XXL');
     // Measured 19 Nov 2026: M1 2,924 cap and 483 hem pixels, cap share 20.9 %; POM 1 pixel, 0 %.
@@ -208,5 +210,56 @@ describe('a bundle built on the male mannequin', () => {
     expect(before.pixels).toBeGreaterThan(1000);
     expect(before.through.cap).toBeGreaterThan(0.1);
     expect(after.pixels * 100).toBeLessThan(before.pixels);
+  }, 240_000);
+
+  it('drapes on the male shape v2 bodies S to XXL too (maleShape v2, a preview): settled, the graded chest girth kept, show-through measured against v1', async () => {
+    // On the M1 lofted test garment, the one these bounds were measured on (male-shape-v2 branched
+    // before M3). The POM tee on the v2 bodies is not bounded here yet.
+    const bundle = await loadBundleFrom(serve(m1.files), '/b', SYNTHETIC_MENS_TEE.id, { withPayload: false });
+    const rows: Record<string, { v1: Record<'cap' | 'mid' | 'hem', number>; v2: Record<'cap' | 'mid' | 'hem', number>; chest: number; inside: number }> = {};
+    for (const id of MALE_BODY_SHAPE_IDS) {
+      const r = MALE_REFERENCE[id];
+      const body = { family: 'male' as const, heightCm: r.stature, bust: r.chest, waist: r.waist, hip: r.hip, shoulderCm: r.shoulderWidth };
+      const out = {} as Record<'v1' | 'v2', Record<'cap' | 'mid' | 'hem', number>>;
+      let chest = 0;
+      let inside = 0;
+      for (const shape of ['v1', 'v2'] as const) {
+        const plan = planAvatar(bundle.anchors, body, null, shape);
+        expect(plan.m.maleShape).toBe(shape === 'v2' ? 'v2' : undefined);
+        const session = openSession(plan.m, bundle, SYNTHETIC_MENS_TEE);
+        const fit = fitForBody(SYNTHETIC_MENS_TEE, plan.avatar.measurements);
+        const f = prepareFit(session, plan.avatar, plan.field, fit, id, viewerMaterial('product', bundle.material));
+        const pos = relax(f);
+        expect(isSettled(f.cloth, f.params)).toBe(true);
+        expect(pos.every(Number.isFinite)).toBe(true);
+        out[shape] = showThrough(pos, f.indices, plan.avatar.mesh, plan.garmentLiftCm, plan.m.morphHeights.shoulder, plan.m.morphHeights.hip);
+        if (shape === 'v2') {
+          const c = plan.m.rings.find((x) => x.id === 'chest')!;
+          chest = measureRing({ positions: Float64Array.from(pos), indices: f.indices, vertexPart: new Uint8Array(0), partNames: [] } as Mesh, c)!.circumferenceCm;
+          const collide = makeCollider(plan.field, 0, session.chains, f.noCollide);
+          const probe = Float32Array.from(pos);
+          for (let i = 0; i < probe.length / 3; i++) if (collide(probe, i)) inside++;
+          inside /= probe.length / 3;
+        }
+      }
+      rows[id] = { ...out, chest, inside };
+    }
+    // Measured 19 Nov 2026 (share of the covered body vertices showing through, v1 → v2):
+    //        cap           mid           hem
+    //   S    4.5 → 3.8 %   1.7 → 1.6 %   0 → 0
+    //   M    1.7 → 3.6 %   3.5 → 1.1 %   0 → 0
+    //   L    2.7 → 4.2 %   3.6 → 3.0 %   0 → 0
+    //   XL   8.3 → 8.2 %   3.7 → 4.1 %   0 → 0
+    //   XXL 20.9 → 9.8 %   4.6 → 4.3 %   1.5 → 0
+    // Bounds only stop it getting worse (the tee is draped on the v1 body; v2 is a preview).
+    const bound = { S: [0.05, 0.03, 0.01], M: [0.05, 0.025, 0.01], L: [0.06, 0.045, 0.01], XL: [0.1, 0.055, 0.01], XXL: [0.12, 0.06, 0.01] } as const;
+    for (const id of MALE_BODY_SHAPE_IDS) {
+      const [cap, mid, hem] = bound[id];
+      expect(rows[id]!.v2.cap, `${id} cap`).toBeLessThan(cap);
+      expect(rows[id]!.v2.mid, `${id} mid`).toBeLessThan(mid);
+      expect(rows[id]!.v2.hem, `${id} hem`).toBeLessThan(hem);
+    }
+    SYNTHETIC_MENS_TEE.sizeChart.forEach((row, i) => expect(Math.abs(rows[MALE_BODY_SHAPE_IDS[i]!]!.chest - row.bust!), MALE_BODY_SHAPE_IDS[i]).toBeLessThan(1.5));
+    for (const id of MALE_BODY_SHAPE_IDS) expect(rows[id]!.inside, id).toBeLessThan(0.02);
   }, 240_000);
 });

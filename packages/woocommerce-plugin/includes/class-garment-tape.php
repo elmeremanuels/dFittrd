@@ -468,7 +468,7 @@ final class Garment_Tape {
 		foreach ( $chart as $c ) {
 			$m = $by[ self::key( (string) $c['size'] ) ] ?? null;
 			if ( $m && self::is_pos( $m['waistRelaxedCm'] ?? null ) && self::is_pos( $m['waistStretchedCm'] ?? null ) && $m['waistStretchedCm'] < $m['waistRelaxedCm'] ) {
-				throw new \RangeException( self::message( 'stretched_below_relaxed', (string) $c['size'], $m['waistStretchedCm'], $m['waistRelaxedCm'] ) );
+				throw new \RangeException( esc_html( self::message( 'stretched_below_relaxed', (string) $c['size'], $m['waistStretchedCm'], $m['waistRelaxedCm'] ) ) );
 			}
 		}
 		$columns = array();

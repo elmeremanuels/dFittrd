@@ -4,14 +4,16 @@
  *
  * Which bodies each size is draped on (§10.9): the chart bodies t = -1, 0, +1 (AU 8, 12, 16) where the size can be
  * worn there. A size is NOT draped, and the bake declares it `notDraped` with the reason, on a body
- *   - whose hips its band cannot be pulled over: the fit engine's own `pullOnCheck` (stretched band from the tape
- *     against the body's hip; blocked when short by more than the allowance, 2.5 cm, 0 for an extrapolated band), so
- *     the 3D view never dresses a body in a size the size advice says does not go on (AU 8 from the AU 10 body, AU 10
- *     from the AU 12 body, AU 12 from the AU 14 body, AU 14 on the AU 16 body); or
+ *   - whose widest part below the waist its band cannot be pulled over: the fit engine's own `pullOnCheck` (stretched
+ *     band from the tape; blocked when short by more than the allowance, 2.5 cm, 0 for an extrapolated band) against
+ *     the drawn avatar's widest section (`widestBelowWaistCm`, 2.5-3 cm over its chart hip), declared `rule: 'pull-on'`
+ *     so the import's bake check recomputes it. The 3D view then never dresses a body in a band that cannot go over it
+ *     (AU 8 from the AU 10 body, AU 10 from the AU 12 body, AU 12 from the AU 14 body, AU 14 and AU 16 on the AU 16
+ *     body); or
  *   - where the wear rule cannot hold the band at the assumed level (§9.2: AU 8 on the AU 16 body).
- * Such a drape stretches the fabric round the hip line by 2-8 % (`tape_rings` of the import's bake check, 15-35 % on
- * single mesh segments), where the woven viscose stretches 1.5 %. When the upper chart body is refused, the size's
- * own chart body (t = -0.5 for AU 10, +0.5 for AU 14) stands in as its upper body, where it can be pulled on and a
+ * This is a product rule, not the fix of the stretched hip line those drapes showed: that stretch is in the drape's
+ * start shape (§10.9, `hoop_strain.py --start`). When the upper chart body is refused, the size's
+ * own chart body (t = -0.5 for AU 10, +0.5 for AU 14 and AU 16) stands in as its upper body, where it can be pulled on and a
  * drape exists. Base = the size's drape nearest t = 0, morph targets = its other drapes minus that base. Positions
  * are int16 on a QUANT_CM grid (KHR_mesh_quantization), every view meshopt-compressed; no normals (the figure computes
  * them), no texture: one plain colour, the largest colour cluster of the photo texture (`--colour`).
@@ -34,7 +36,8 @@ import { makeCollider } from '../../../../../packages/garment-viewer/src/collide
 import { DRAPE_BAKE_FORMAT, bakeAxis, bakePlace, bakeWeights, blendBakedSize, settleOnBody, type DrapeBakeMeta, type DrapeBakeSizeMeta, type SizeProvenance } from '../../../../../packages/garment-viewer/src/drapeBake';
 import { readDrapeBake } from '../../../../../packages/garment-viewer/src/drapeBakeRead';
 import { writeDrapeBake } from '../../../../../packages/garment-viewer/src/drapeBakeWrite';
-import { chartBody, planSizeBodies, pullOnRefusal, qaTape, restFromTrace, tapeRings, type RestJson } from './bakeTape';
+import { widestBelowWaistCm } from '../../../../../packages/garment-viewer/src/bodyGirth';
+import { chartBody, planSizeBodies, pullOnRefusal, qaTape, restFromTrace, tapeRings, type Refusal, type RestJson } from './bakeTape';
 import { girthAt } from './girth';
 
 const argv = process.argv.slice(2);
@@ -76,18 +79,30 @@ const has = (body: string, size: string): boolean => existsSync(path(body, size)
 const drape = (body: string, size: string): Float32Array => f32(path(body, size) + '.bin');
 const json = (body: string, size: string): DrapeJson | null => (existsSync(path(body, size) + '.json') ? (JSON.parse(readFileSync(path(body, size) + '.json', 'utf8')) as DrapeJson) : null);
 const bodyOf = (id: string): BodyMeta => bodies.find((b) => b.id === id)!;
+const mq = buildMannequin(bodyShape(BASE_SHAPE_ID));
+const mqMesh = buildMannequinMesh(mq, { head: 'neutral' });
 const r1 = (x: number): number => Math.round(x * 10) / 10;
 const r2 = (x: number): number => Math.round(x * 100) / 100;
 
 // ---- 1. Which bodies each size rests on. ----
-/** Why a size is not draped on a body (the wear rule's refusal, the band that cannot be pulled over), or null. */
-function refusalOf(s: string, t: number): string | null {
+/** The drawn body's widest girth below the waist (the device avatar of the chart body: what the band must pass over). */
+const widestOf = new Map<number, number>();
+const widestAt = (t: number): number => {
+  if (!widestOf.has(t)) {
+    const b = chartBody(t);
+    widestOf.set(t, widestBelowWaistCm(mq, buildAvatar(mq, mqMesh, { bust: b.bust, waist: b.waist, hip: b.hip }).mesh).girthCm);
+  }
+  return widestOf.get(t)!;
+};
+/** Why a size is not draped on a body (the band that cannot be pulled over it, the wear rule's refusal), or null. */
+function refusalOf(s: string, t: number): Refusal | null {
   const why: string[] = [];
   const j = json(gridId(t), s);
   if (j && j.status !== undefined && j.status !== 'draped') why.push(`the wear rule cannot hold its band at the assumed level (${j.status})`);
-  const pull = pullOnRefusal((rest as RestJson).sizes.find((r) => r.size === s)!.tape['stretchedGirthCm']!, chartBody(t).hip);
-  if (pull) why.push(pull);
-  return why.length ? why.join('; ') : null;
+  const pull = pullOnRefusal((rest as RestJson).sizes.find((r) => r.size === s)!.tape['stretchedGirthCm']!, widestAt(t), chartBody(t).hip);
+  if (pull) why.unshift(pull.reason);
+  if (!why.length) return null;
+  return { reason: why.join('; '), ...(pull ? { rule: 'pull-on' as const } : {}) };
 }
 const plan: (DrapeBakeSizeMeta & { bodies: string[]; baseId: string })[] = SIZES.map((s) => {
   const prov = rest.sizes.find((r) => r.size === s)!.provenance;

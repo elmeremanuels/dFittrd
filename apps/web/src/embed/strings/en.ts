@@ -272,10 +272,15 @@ export interface EmbedCatalogue {
     provenance: (size: string, provenance: 'measured' | 'interpolated' | 'extrapolated') => string;
     /** A server drape bake: the shopper lies beyond the bodies the size was draped on. */
     held: (size: string) => string;
-    /** A server drape bake: beyond the last body the size was draped on, short of a body it could not be put on (that body's hip, with its unit). */
-    between: (size: string, refusedHip: string) => string;
-    /** A server drape bake: at or beyond a body the simulation could not dress in this size; the size is not drawn. */
-    refused: (size: string, refusedHip: string) => string;
+    /**
+     * A server drape bake: beyond the last body the size was draped on, short of a body it was not draped on (that
+     * body's hip, with its unit). `rule` is the bake's stated reason: `pull-on`, the band cannot be pulled over that body.
+     */
+    between: (size: string, refusedHip: string, rule: 'pull-on' | null) => string;
+    /** A server drape bake: at or beyond a body the size was not draped on (`rule` as for `between`); the size is not drawn. */
+    refused: (size: string, refusedHip: string, rule: 'pull-on' | null) => string;
+    /** A server drape bake: the size advice says the band of this size does not go over the shopper's hips; it is not drawn. */
+    adviceBlocked: (size: string) => string;
     /** A server drape bake: the sizes differ little in the picture; the room is in the size rings. */
     sizesAlike: string;
   };
@@ -564,8 +569,11 @@ export const EN: EmbedCatalogue = {
     plainColour: 'Shown in one plain colour; the print is not drawn.',
     provenance: (size, p) => (p === 'measured' ? `Size ${size} is built from the shop’s tape.` : `Size ${size} is not on the shop’s tape; it is ${p} from the sizes that are.`),
     held: (size) => `Your hips are outside the bodies size ${size} was draped on, so it is shown on the nearest one.`,
-    between: (size, hip) => `Your hips are past the largest body size ${size} was draped on, so it is shown on that body; the simulation could not put size ${size} on a body with ${hip} hips.`,
-    refused: (size, hip) => `Size ${size} is not drawn: the simulation could not put it on a body with ${hip} hips, and yours are at least that.`,
+    between: (size, hip, rule) =>
+      `Your hips are past the largest body size ${size} was draped on, so it is shown on that body; ${rule === 'pull-on' ? `its band does not stretch over the model with ${hip} hips, so size ${size} was not draped on it` : `size ${size} was not draped on a body with ${hip} hips`}.`,
+    refused: (size, hip, rule) =>
+      `Size ${size} is not drawn: ${rule === 'pull-on' ? `its band does not stretch over the model with ${hip} hips` : `it was not draped on a body with ${hip} hips`}, and yours are at least that.`,
+    adviceBlocked: (size) => `Size ${size} is not drawn: the size advice says its band does not stretch over your hips.`,
     sizesAlike: 'In 3D the sizes look much alike; how much room each size gives is in the size rings.',
   },
 };

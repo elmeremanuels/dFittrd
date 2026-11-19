@@ -54,15 +54,20 @@ export function restFromTrace(trace: number[][] | undefined, frames: number | un
   return { atRest: max < 0.25 && mean < 0.02, maxMoveCmPerFrame: Math.round(max * 1000) / 1000, meanMoveCmPerFrame: Math.round(mean * 10000) / 10000 };
 }
 
+/** Why a size is not draped on a body (`DrapeBakeRefusal` of the viewer: the reason, and its rule when it has one). */
+export interface Refusal { reason: string; rule?: 'pull-on' }
+
 /**
- * Why a size is not draped on a body whose hips its band cannot be pulled over, or null when it goes on: the fit
- * engine's own `pullOnCheck` (the stretched band from the tape against the body's hip, blocked when short by more than
- * the allowance), so the 3D view never dresses a body in a size the size advice says does not go on (§10.9).
+ * Why a size is not draped on a drawn body its band cannot be pulled over, or null when it goes on: the fit engine's own
+ * `pullOnCheck` (the stretched band from the tape, blocked when short by more than the allowance: 2.5 cm, 0 for an
+ * extrapolated band) against the widest part of that drawn body below the waist (`widestBelowWaistCm` of the viewer's
+ * `bodyGirth.ts`; 2.5-3 cm over its chart hip on the POM bodies), so the 3D view never dresses a body in a band that
+ * cannot go over it (§10.9). The import's bake check recomputes the same verdict (`rule: 'pull-on'`).
  */
-export function pullOnRefusal(stretched: { cm: number; source: string }, hipCm: number): string | null {
-  const p = pullOnCheck({ cm: stretched.cm, provenance: provenanceOf(stretched.source) }, hipCm);
+export function pullOnRefusal(stretched: { cm: number; source: string }, widestCm: number, hipCm: number): Refusal | null {
+  const p = pullOnCheck({ cm: stretched.cm, provenance: provenanceOf(stretched.source) }, widestCm);
   if (p.status !== 'blocked') return null;
-  return `its band cannot be pulled over ${hipCm} cm hips: ${p.bandStretchedCm} cm at full stretch, ${Math.round(-p.marginCm * 10) / 10} cm short (the size advice allows ${p.allowanceCm} cm)`;
+  return { rule: 'pull-on', reason: `its band cannot be pulled over the drawn body with ${hipCm} cm hips: ${p.bandStretchedCm} cm at full stretch against ${widestCm} cm at its widest below the waist, ${Math.round(-p.marginCm * 10) / 10} cm short (the size advice allows ${p.allowanceCm} cm)` };
 }
 
 /**
@@ -72,7 +77,7 @@ export function pullOnRefusal(stretched: { cm: number; source: string }, hipCm: 
  * t = 0. Every body beyond the drapes is declared not draped with its reason; a refused body between two drapes, or a
  * body beyond them that has no reason, is an error (the import's bake check refuses both).
  */
-export function planSizeBodies(chart: number[], own: number[], refusal: (t: number) => string | null, hasDrape: (t: number) => boolean): { baseT: number; targetT: number[]; notDraped: { t: number; reason: string }[] } {
+export function planSizeBodies(chart: number[], own: number[], refusal: (t: number) => Refusal | null, hasDrape: (t: number) => boolean): { baseT: number; targetT: number[]; notDraped: ({ t: number } & Refusal)[] } {
   const draped = chart.filter((t) => refusal(t) === null);
   if (draped.length === 0) throw new Error('the size cannot be worn on any chart body');
   const top = Math.max(...draped);
@@ -89,9 +94,9 @@ export function planSizeBodies(chart: number[], own: number[], refusal: (t: numb
   const notDraped = all
     .filter((t) => t < lo || t > hi)
     .map((t) => {
-      const reason = refusal(t);
-      if (!reason) throw new Error(`no drape on the body at t = ${t}, beyond the size's drapes, and no reason why`);
-      return { t, reason };
+      const why = refusal(t);
+      if (!why) throw new Error(`no drape on the body at t = ${t}, beyond the size's drapes, and no reason why`);
+      return { t, ...why };
     });
   const baseT = draped.reduce((a, b) => (Math.abs(b) < Math.abs(a) ? b : a));
   return { baseT, targetT: draped.filter((t) => t !== baseT), notDraped };

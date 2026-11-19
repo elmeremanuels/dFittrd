@@ -37,14 +37,15 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     expect(screen.queryByTestId('garment3d-hem-note')).toBeNull(); // no hem input for this product
   });
 
-  it('a server drape bake says where the shopper lies: held on the nearest body, or not drawn where the simulation could not put the size on', async () => {
+  it('a server drape bake says where the shopper lies, and names the band when that is why a size is not drawn', async () => {
     const source = {
       kind: 'bake',
       plainColour: true,
       sizes: {
-        S: { provenance: 'measured', place: 'refused', refusedHipCm: 114 },
-        M: { provenance: 'interpolated', place: 'between', refusedHipCm: 114 },
-        L: { provenance: 'extrapolated', place: 'held', refusedHipCm: null },
+        S: { provenance: 'measured', place: 'refused', refusedHipCm: 114, refusedRule: 'pull-on', adviceBlocked: false },
+        M: { provenance: 'interpolated', place: 'between', refusedHipCm: 114, refusedRule: null, adviceBlocked: false },
+        L: { provenance: 'extrapolated', place: 'held', refusedHipCm: null, refusedRule: null, adviceBlocked: false },
+        XL: { provenance: 'measured', place: 'between', refusedHipCm: 114, refusedRule: 'pull-on', adviceBlocked: true },
       },
     };
     const mountGarmentView = vi.fn(async (_c: HTMLCanvasElement, opts: { onState?: (s: string) => void }) => {
@@ -56,12 +57,19 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     fireEvent.click(screen.getByTestId('garment3d-open'));
     const note = await screen.findByTestId('garment3d-bake-note');
     expect(note).toHaveAttribute('data-place', 'refused');
-    expect(note).toHaveTextContent('Shown in one plain colour; the print is not drawn. Size S is built from the shop’s tape. Size S is not drawn: the simulation could not put it on a body with 114.0 cm hips, and yours are at least that.');
+    expect(note).toHaveTextContent('Shown in one plain colour; the print is not drawn. Size S is built from the shop’s tape. Size S is not drawn: its band does not stretch over the model with 114.0 cm hips, and yours are at least that.');
+    expect(note).not.toHaveTextContent('simulation');
     r.rerender(<Garment3D {...r.props} size="M" />);
-    expect(screen.getByTestId('garment3d-bake-note')).toHaveTextContent('Size M is not on the shop’s tape; it is interpolated from the sizes that are. Your hips are past the largest body size M was draped on, so it is shown on that body; the simulation could not put size M on a body with 114.0 cm hips.');
+    expect(screen.getByTestId('garment3d-bake-note')).toHaveTextContent('Size M is not on the shop’s tape; it is interpolated from the sizes that are. Your hips are past the largest body size M was draped on, so it is shown on that body; size M was not draped on a body with 114.0 cm hips.');
     r.rerender(<Garment3D {...r.props} size="L" units="imperial" />);
     expect(screen.getByTestId('garment3d-bake-note')).toHaveTextContent('Your hips are outside the bodies size L was draped on, so it is shown on the nearest one.');
     expect(screen.getByTestId('garment3d-bake-note')).toHaveTextContent('In 3D the sizes look much alike');
+    // The size advice blocks XL at the shopper's hip: not drawn, whatever its place against the bake's bodies.
+    r.rerender(<Garment3D {...r.props} size="XL" />);
+    const xl = screen.getByTestId('garment3d-bake-note');
+    expect(xl).toHaveAttribute('data-advice-blocked', 'true');
+    expect(xl).toHaveTextContent('Size XL is not drawn: the size advice says its band does not stretch over your hips.');
+    expect(xl).not.toHaveTextContent('shown on that body');
   });
 
   it('renders nothing without an asset (a product without a bundle behaves exactly as today)', () => {

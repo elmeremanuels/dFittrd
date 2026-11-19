@@ -117,6 +117,10 @@ FIXTURE. Its AU 8 cannot go on the 109 and 114 cm bodies (the hip line would str
 not draped. The real bake refuses only the 114 cm body. The real POM v2 bake needs Blender drapes in the git-ignored `out/`,
 which this checkout does not have. Blender is not installed here.
 
+*Later (19 Nov 2026, branch `claude/pom-gate`, `docs/reports/claude/pom-gate.md`):* the fixture is rebuilt with the real bake's
+plan (11 drapes on 5 bodies; every refusal is the band, `rule: 'pull-on'`), and `refusals_declared` now recomputes the fit
+engine's pull-on check against the drawn bodies. The numbers above are those of the first fixture.
+
 **Not measured, and probably a refusal:** the real POM v2 bake under this check. §10.1 of the spike records that AU 10 on the
 AU 8 body was **not at rest** (0.285 cm per frame against 0.25). The rebaked POM v2 should therefore be refused by `at_rest`
 until that drape is re-run longer or the threshold is changed by a decision. I did not change the threshold. Its ring lengths on

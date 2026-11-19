@@ -49,6 +49,12 @@ export function headOf(value: unknown): HeadKind {
 export interface MountOptions {
   /** Directory URL of the approved bundle (`asset.baseUrl` from `GET /v1/try`). */
   baseUrl: string;
+  /**
+   * The male body's shape (`BuildOptions.maleShape` of `@curtain/mannequin`): `v1` (the default,
+   * every section an ellipse) or `v2` (non-elliptical sections, chest, back, deltoids, seat and a
+   * joined crotch). Read only for a male body; a female body is built exactly as without it.
+   */
+  maleShape?: 'v1' | 'v2';
   /** The product's garment as the embed got it (its size chart is the shop's live chart). */
   garment: GarmentPayload;
   /** The embed's own fit-engine result: the 3D view never recomputes it. */
@@ -185,16 +191,17 @@ export interface AvatarPlan {
  * of the mount are unit-tested here. Drape guard: the drawn body is of the family the bundle's
  * garment was draped on, or this throws `GarmentViewError('incompatible')` and there is no 3D view.
  */
-export function planAvatar(anchors: { category: string; mannequin?: { family?: unknown } }, bodyOptions: BodyOptions | null | undefined, look?: AvatarLook | null): AvatarPlan {
+export function planAvatar(anchors: { category: string; mannequin?: { family?: unknown } }, bodyOptions: BodyOptions | null | undefined, look?: AvatarLook | null, maleShape?: 'v1' | 'v2'): AvatarPlan {
   const body: BodyOptions = bodyOptions ?? {};
   const family = bundleFamilyOf(anchors);
   if (bodyFamilyOf(body) !== family) throw new GarmentViewError('incompatible');
-  const m = buildMannequin(family === 'male' ? familyShape('male')! : bodyShape(BASE_SHAPE_ID));
+  const build = family === 'male' && maleShape === 'v2' ? ({ maleShape: 'v2' } as const) : {};
+  const m = buildMannequin(family === 'male' ? familyShape('male')! : bodyShape(BASE_SHAPE_ID), build);
   const head = headOf(look?.head);
   let avatar: Avatar, field: BodyField, garmentLiftCm = 0, statureCm = 0;
   if (isTypedBody(body)) {
     // A typed height or shoulder width: the body is built from the measurements (`buildBody`).
-    const typed = buildTypedAvatar(m, body, anchors.category, { head });
+    const typed = buildTypedAvatar(m, body, anchors.category, { head }, build);
     ({ avatar, field, garmentLiftCm, statureCm } = typed);
   } else {
     avatar = buildAvatar(m, buildMannequinMesh(m, { head }), sanitiseMeasurements(girthInput(body), mannequinMeasurements(m)));
@@ -233,7 +240,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
 
   let plan: AvatarPlan;
   try {
-    plan = planAvatar(bundle.anchors, opts.body, opts.look);
+    plan = planAvatar(bundle.anchors, opts.body, opts.look, opts.maleShape);
   } catch (e) {
     state('error');
     throw e;

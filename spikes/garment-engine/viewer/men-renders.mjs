@@ -5,7 +5,10 @@
  * avatar-renders.mjs: Vite dev server, headless Chromium with SwiftShader (a software renderer, not
  * a phone).
  *
- *   node spikes/garment-engine/viewer/men-renders.mjs <out dir> [--match <text>]
+ *   node spikes/garment-engine/viewer/men-renders.mjs <out dir> [--match <text>] [--male-shape=v2]
+ *
+ * `--male-shape=v2`: every male body is the male shape v2 of @curtain/mannequin (`maleShape=v2` on
+ * the page); the tee is still the bundle draped on the v1 body. Picture names get a `v2-` prefix.
  *
  * For each male table size S, M, L, XL and XXL (`MALE_REFERENCE` of @curtain/mannequin: stature,
  * chest, waist, seat and biacromial shoulder width typed in as the shopper's body), front and side:
@@ -32,7 +35,8 @@ const bundles = resolve(here, '..', 'out');
 const argv = process.argv.slice(2);
 const matchAt = argv.indexOf('--match');
 const match = matchAt >= 0 ? (argv[matchAt + 1] ?? '') : '';
-const args = argv.filter((a, i) => !(matchAt >= 0 && (i === matchAt || i === matchAt + 1)));
+const maleShapeV2 = argv.includes('--male-shape=v2');
+const args = argv.filter((a, i) => a !== '--male-shape=v2' && !(matchAt >= 0 && (i === matchAt || i === matchAt + 1)));
 if (!args[0]) {
   console.error('usage: node men-renders.mjs <out dir> [--match <text>]');
   process.exit(1);
@@ -55,7 +59,7 @@ const SIZES = {
 };
 /** Wheel ticks out for the full-body pictures (see `shot`). */
 const ZOOM = 8;
-const q = (o) => new URLSearchParams(Object.entries(o).map(([k, v]) => [k, String(v)])).toString();
+const q = (o) => new URLSearchParams(Object.entries(maleShapeV2 && o.family === 'male' ? { ...o, maleShape: 'v2' } : o).map(([k, v]) => [k, String(v)])).toString();
 
 const server = await createServer({ configFile: join(here, 'vite.config.ts'), logLevel: 'warn', server: { port: 5184, strictPort: false } });
 await server.listen();
@@ -108,7 +112,8 @@ async function still(page, maxMs = 40_000) {
  * across, `stage.frame(60, stature)`, unchanged; the embed's wider 3D panel shows the hands).
  * `clip`: a CSS-px box.
  */
-async function shot(context, query, name, { turn = 0, zoomOut = 0, clip = null, expect = 'settled' } = {}) {
+async function shot(context, query, rawName, { turn = 0, zoomOut = 0, clip = null, expect = 'settled' } = {}) {
+  const name = maleShapeV2 ? `v2-${rawName}` : rawName;
   if (match && !name.includes(match)) return;
   const page = await context.newPage();
   page.on('pageerror', (e) => problems.push(`${name}: pageerror ${e.message}`));
@@ -156,9 +161,12 @@ try {
     const body = { family: 'male', ...b };
     await shot(phone, q({ mode: 'head', frame: 'body', ...body, yaw: 0 }), `body-${size}--front`, { zoomOut: ZOOM });
     await shot(phone, q({ mode: 'head', frame: 'body', ...body, yaw: 0 }), `body-${size}--side`, { zoomOut: ZOOM, turn: 1 });
+    await shot(phone, q({ mode: 'head', frame: 'body', ...body, yaw: 0 }), `body-${size}--back`, { zoomOut: ZOOM, turn: 2 });
+    await shot(phone, q({ mode: 'head', frame: 'body', ...body, yaw: 0 }), `body-${size}--three-quarter`, { zoomOut: ZOOM, turn: 0.5 });
     await shot(phone, q({ product: TEE, size, ...body }), `tee-${size}--front`, { zoomOut: ZOOM });
     await shot(phone, q({ product: TEE, size, ...body }), `tee-${size}--side`, { zoomOut: ZOOM, turn: 1 });
     await shot(phone, q({ product: TEE, size, ...body }), `tee-${size}--back`, { zoomOut: ZOOM, turn: 2 });
+    await shot(phone, q({ product: TEE, size, ...body }), `tee-${size}--three-quarter`, { zoomOut: ZOOM, turn: 0.5 });
   }
   // Close-ups at 3×: head and shoulders, and the torso (where the earlier report saw a boxy torso and a ledge).
   const close = await browser.newContext({ viewport: { width: 390, height: 760 }, deviceScaleFactor: 3 });

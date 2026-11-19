@@ -221,7 +221,7 @@ function torsoOutline(P: OutlineParams, n: number): Float64Array {
     const zn = Math.min(1, Math.abs(r * c) / B);
     let z: number;
     if (c >= 0) {
-      const relief = P.pec * (g((ax - 0.42) / 0.2) - 0.3 * g(xn / 0.08)) + P.belly * g(xn / 0.55);
+      const relief = P.pec * (g((ax - 0.42) / 0.2) - 0.15 * g(xn / 0.12)) + P.belly * g(xn / 0.55);
       z = (r * c + relief * Math.sqrt(zn)) * (1 - P.pinchF * g(x / w));
     } else {
       const relief = P.scap * g((ax - 0.47) / 0.22) + P.glute * g((ax - 0.4) / 0.3) - P.spine * g(xn / 0.08) - P.cleft * g(xn / 0.07);

@@ -8,6 +8,8 @@ The canonical mannequin v0 (`docs/ENGINE-HANDOFF.md` §The canonical mannequin, 
 pnpm --filter @curtain/mannequin build          # tsup → dist/
 pnpm --filter @curtain/mannequin build:assets   # writes out/ (gitignored), see below
 pnpm --filter @curtain/mannequin preview        # out/preview/families-M.png: female M and male M, front and side (committed copy: preview/families-M.png)
+pnpm --filter @curtain/mannequin exec tsx scripts/render-male-v2.ts <dir> --head   # male v1 and shape v2, S…XXL, four views (PNG panels)
+node packages/mannequin/scripts/compose-male-v2.mjs <dir> <out>                  # the panels at phone size (Playwright)
 pnpm --filter @curtain/mannequin test
 pnpm --filter @curtain/mannequin typecheck
 pnpm --filter @curtain/mannequin lint
@@ -132,13 +134,37 @@ What the adopters must do themselves:
 
 `pnpm --filter @curtain/mannequin preview` renders female M and male M, front and side, at one scale. A committed copy is `preview/families-M.png` (female left, male right).
 
-**Verdict: not yet acceptable to show a shopper as a man.** It is a geometry fixture with the right girths. Before it is shown it needs boxier (superellipse) chest and seat sections, so that the right girth no longer forces the chest and hip too wide and too deep, and a joined crotch. Neither is built. The unit test states the same: the shoulder ring is 5 to 15 % wider than the hip ring (a box), and shoulder against hip does not separate the families.
+**Verdict: not yet acceptable to show a shopper as a man.** It is a geometry fixture with the right girths. Before it is shown it needs boxier (superellipse) chest and seat sections, so that the right girth no longer forces the chest and hip too wide and too deep, and a joined crotch. Both are built in male shape v2 (below, opt-in); the default body described here is unchanged. The unit test states the same: the shoulder ring is 5 to 15 % wider than the hip ring (a box), and shoulder against hip does not separate the families.
 
 - It reads as a different, male-leaning figure next to the female one: 6 cm taller, legs 7.6 cm longer, a thicker neck, a straight torso with no waist (waist / hip width 0.89 against 0.73) and no swelling at the chest (chest to underbust girth −5 cm against −14 cm).
 - It does **not** read as a broad-shouldered man. The torso is close to a box from shoulder to hip: the shoulder ring is 39.6 cm wide, the hip 35.9 cm. Over the deltoids the body is 48.5 cm, 1.35 times the hip; the female v0 is 1.34, because it is about 6 cm wider over the deltoids than measured women. So shoulder against hip hardly separates the two families.
 - The underside of the male torso is a flat ledge above the legs, clearest in the side view. The real distance from seat level to crotch is 4 cm, and the five parts are not joined into one surface.
 - Neither family has a bust or a chest as a shape: every section is an ellipse. The female chest ring is a band that is larger all the way round.
 - Large sizes look like a barrel from the side (chest depth 38 cm at XXL against about 30 cm measured), for the reason given under "What the ellipse cannot do".
+
+## Male shape v2 (`maleV2.ts`, opt-in: `buildMannequin(shape, { maleShape: 'v2' })`)
+
+The answer to the verdict above, behind an option. **Default unchanged:** without the option (or with `maleShape: 'v1'`) the male body is byte for byte the v1 body, and a female shape ignores the option (both pinned by sha256 in `maleV2.test.ts`). The shape table, the rings (ids, heights, girths, ellipses in `rings`), the lengths, the arm frames and the morph heights are the v1 ones; only the surface, the leg centres (`landmarks.legX`, the leg rings' x, the hip and knee pivots) and what `torsoAt` / `legAt` / `armAt` return change.
+
+- **Rings fitted to ANSUR II.** `MALE_SECTION_REFERENCE` holds ANSUR II's chest, waist and hip breadth and depth, its own waist (omphalion) and buttock girths and the axilla level, on the same least-squares lines on chest girth as the male table (`scripts/derive-male-table.ts` prints it; same file, same sha256). At each of the chest, waist and seat the section is a superellipse |x/A|^p + |z/B|^p = 1 with ANSUR's breadth and depth, its exponent solved so that the perimeter is ANSUR's girth (`fitRing`), then scaled to the table girth. Waist p = 2.67 to 2.75 and seat p = 3.26 to 3.60, from the data. The chest cannot be fitted: ANSUR's chest breadth and depth (27.7 × 23.2 cm at M) cannot reach its girth (98 cm) with any convex shape short of a rectangle. So the depth is kept, p is held at `CHEST_EXPONENT_LIMIT` (3.4, assumed) and the breadth grows until the perimeter is the girth (34.2 cm at M, about the v1 breadth).
+- **Relief** (all assumed, `MALE_V2_ASSUMPTIONS`): two pectoral bulges with a shallow sternal groove, shoulder blades and a spine groove, a belly that grows with ANSUR's waist depth / breadth (front share of the waist depth 0.52 at M, 0.57 at XXL), two gluteal bulges and a cleft. Lats widen the torso by 8 % from the chest ring to the armpit (ANSUR axilla height). Above the shoulder ring a straight trapezius slope runs to the neck ring, and the front reaches the neck lower than the back, a slanted neck base like ANSUR's suprasternale (0.816) and cervicale (0.862) heights.
+- **Deltoids:** the arm root is a dome under the shoulder line (no pole standing above it, which was the v1 wedge), with a bulge on the lateral, front and back side that tapers out at 0.85 of the upper-arm ring's distance. The breadth over the deltoids grows by 0.08 to 0.11 cm over ANSUR's bideltoid breadth (tested < 0.15).
+- **Seat and crotch:** the legs move in so that the thigh tops sit under the seat and touch in the middle (flattened where they meet); the back of the thigh carries the lower buttock to the gluteal fold. From the seat ring down, the torso outline goes over into the two thigh outlines side by side, so torso and legs meet flush; the torso ends inside the thighs at the gluteal fold, and the thighs stay 1.5 % inside it above that. No flat ledge: the front-view breadth changes by less than 0.8 cm per 0.5 cm from the thigh ring to the seat (tested).
+- **Girths:** every section is scaled so that the loop on the mesh at every anchor ring is the table girth; all 12 rings are within 0.5 % in all five sizes and for typed bodies (tested). Between rings the scale is interpolated.
+- **Collision:** `torsoAt`, `legAt` and `armAt` return an ellipse about the section centre that contains the v2 outline (the viewer's cloth collides with ellipses). They no longer have the section's girth.
+- **Cost:** about 25k triangles against 15k (64 torso vertices per section at 1 cm, 40 leg vertices on non-elliptical leg sections).
+
+Measured on the mesh (breadth × depth of the torso loop, cm; v1 → v2):
+
+| Size | Chest | Waist | Seat | Under the armpit | Over the deltoids / seat breadth |
+|---|---|---|---|---|---|
+| S | 31.9 × 25.2 → 31.6 × 21.0 | 29.3 × 19.9 → 27.8 × 18.9 | 34.4 × 22.7 → 30.7 × 20.7 | 32.8 → 33.3 | 1.34 → 1.50 |
+| M | 33.9 × 28.4 → 34.2 × 23.2 | 31.8 × 22.6 → 30.4 × 21.5 | 35.9 × 24.8 → 32.1 × 22.6 | 34.6 → 35.9 | 1.35 → 1.51 |
+| L | 35.9 × 31.6 → 36.7 × 25.4 | 34.4 × 25.1 → 32.9 × 23.9 | 37.7 × 26.8 → 33.8 × 24.6 | 36.5 → 38.5 | 1.35 → 1.51 |
+| XL | 38.0 × 34.6 → 39.2 × 27.6 | 36.9 × 27.7 → 35.4 × 26.4 | 39.5 × 28.9 → 35.5 × 26.6 | 38.6 → 41.2 | 1.35 → 1.51 |
+| XXL | 40.2 × 38.2 → 42.0 × 30.1 | 40.0 × 30.4 → 38.3 × 29.3 | 41.3 × 31.4 → 37.2 × 28.8 | 40.7 → 44.2 | 1.37 → 1.52 |
+
+ANSUR II (scaled to the table girth) for comparison at M: chest depth 23.2, waist 30.2 × 21.4, seat 32.8 × 22.6. Pictures: `docs/screens/claude/male-shape-v2/` (`scripts/render-male-v2.ts` and `scripts/compose-male-v2.mjs`). In the viewer the option is `MountOptions.maleShape` (and `maleShape=v2` on the spike's `avatar.html`); a bundle is still draped on the v1 body.
 
 ## The neutral standard head (`head.ts`, D19)
 

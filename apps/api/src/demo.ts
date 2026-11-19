@@ -14,7 +14,7 @@ import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MockProvider, TryOnRouter } from '@curtain/tryon-providers';
-import { MENS_OXFORD_SHIRT, PILOT_SKIRT_CHART_ONLY, PILOT_SKIRT_TAPE_MEASURED, SYNTHETIC_MENS_TEE } from '@curtain/schema';
+import { MENS_OXFORD_SHIRT, PILOT_SKIRT_CHART_ONLY, PILOT_SKIRT_TAPE_MEASURED, SYNTHETIC_MENS_CHINO_WL, SYNTHETIC_MENS_TEE } from '@curtain/schema';
 import { build } from './app.js';
 import { connectPglite } from './db/client.js';
 import { DEMO_APP_ORIGIN, DEMO_STOREFRONT_ORIGIN, seedDemo, type DemoGarmentBundle } from './demoSeed.js';
@@ -121,6 +121,10 @@ const bundles: DemoGarmentBundle[] = [
 if (source.DEMO_MEN === '1') {
   bundles.push(
     { shop: 'shopify', externalId: SYNTHETIC_MENS_TEE.id, dir: join(spikeOut, SYNTHETIC_MENS_TEE.id), payload: true, colorHex: SYNTHETIC_MENS_TEE.primaryColorHex, colorName: 'Test blue', fallbackPayload: SYNTHETIC_MENS_TEE, audienceSource: 'productType', qaFlags: ['tape_built_no_chart_check'] },
+    // The SYNTHETIC men's test chino W/L (not a product), built by the POM chino builder (`pnpm --filter @curtain/garment-spike exec tsx
+    // scripts/build-chino-bundle.ts`): its bundle folder carries payload.json, the fixture's chart with W40 to W44 added. Without the
+    // folder the fixture itself is seeded with no 3D view.
+    { shop: 'shopify', externalId: SYNTHETIC_MENS_CHINO_WL.id, dir: join(spikeOut, SYNTHETIC_MENS_CHINO_WL.id), payload: true, colorHex: SYNTHETIC_MENS_CHINO_WL.primaryColorHex, colorName: 'Test stone', fallbackPayload: SYNTHETIC_MENS_CHINO_WL, audienceSource: 'productType', qaFlags: ['tape_built_no_chart_check'] },
     { shop: 'shopify', externalId: MENS_OXFORD_SHIRT.id, dir: join(spikeOut, 'no-bundle', MENS_OXFORD_SHIRT.id), payload: true, colorHex: MENS_OXFORD_SHIRT.primaryColorHex, colorName: 'Light blue', fallbackPayload: MENS_OXFORD_SHIRT, audienceSource: 'productType' },
   );
 }

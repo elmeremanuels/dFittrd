@@ -3,7 +3,7 @@
  * store or database), the parent window, and the `mock:` tokens used in development and tests.
  */
 import type * as GarmentViewer from '@curtain/garment-viewer';
-import { MEN_COMING_SOON_CODE, MOCK_GARMENTS_BY_ID, type TryResolveResponse } from '@curtain/schema';
+import { MEN_COMING_SOON_CODE, MOCK_GARMENTS_BY_ID, SYNTHETIC_MENS_CHINO_WL, SYNTHETIC_MENS_TEE, type GarmentPayload, type TryResolveResponse } from '@curtain/schema';
 import { ApiClient, ApiError, NetworkError, apiBaseUrl } from '@/api/client';
 import type { ClientLedgerEntry } from '@/db/db';
 import { originOf, type ParentWindowLike } from './protocol';
@@ -88,6 +88,8 @@ export function mockTokensEnabled(env: { DEV?: boolean; VITE_DEMO?: string } = i
  * and `mock:offline` show the blocked screens. The allowed origin of a mock is the framing page's own origin in a
  * dev build only, so the size-selected message can be tried locally.
  */
+const SYNTHETIC_MOCKS: Readonly<Record<string, GarmentPayload>> = { [SYNTHETIC_MENS_TEE.id]: SYNTHETIC_MENS_TEE, [SYNTHETIC_MENS_CHINO_WL.id]: SYNTHETIC_MENS_CHINO_WL };
+
 export function resolveMock(token: string, referrer: string): TryResolveResponse {
   const parts = token.split(':');
   const variant = parts[1] ?? '';
@@ -97,7 +99,8 @@ export function resolveMock(token: string, referrer: string): TryResolveResponse
   if (variant === 'offline') throw new NetworkError('offline (mock)');
   const paused = variant === 'paused';
   const id = paused ? (parts[2] ?? '') : variant;
-  const garment = MOCK_GARMENTS_BY_ID[id];
+  // The SYNTHETIC men's test garments (not products; slices M1 and M2) also resolve, for dev screenshots.
+  const garment = MOCK_GARMENTS_BY_ID[id] ?? SYNTHETIC_MOCKS[id];
   if (!garment) throw new ApiError(404, 'not_found', `Unknown demo garment ${id}`);
   const now = Date.now();
   const ref = originOf(referrer);

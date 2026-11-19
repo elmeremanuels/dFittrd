@@ -2,13 +2,19 @@
  * Tables of fit-engine-spec.md §Step 1–3. Typed against @curtain/schema's closed vocabularies
  * (compile-time only — the engine has zero runtime imports, AGENTS.md rule 5 / D8).
  */
-import type { Band, Category, Point } from './types';
+import type { Category, FitPointName, GirthBand, Point } from './types';
 
 /** FIT_POINTS order of @curtain/schema (checked by constants.test.ts). */
-export const POINTS: readonly Point[] = ['bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'foot'];
+export const POINTS: readonly FitPointName[] = ['bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'foot', 'neck', 'sleeve'];
 
-/** Order in which notes mention points (spec §Notes). */
-export const NOTE_ORDER: readonly Point[] = ['bust', 'shoulder', 'waist', 'hip', 'thigh', 'inseam', 'foot'];
+/**
+ * Every point the engine can score, in `SizeFit.points` order: the fit points plus the garment body
+ * `length` (men-3d-plan slice M2b), which is not a body measurement and so not a schema fit point.
+ */
+export const ENGINE_POINTS: readonly Point[] = [...POINTS, 'length'];
+
+/** Order in which notes mention points (spec §Notes). The men's points (slice M2) come after the shoulders. */
+export const NOTE_ORDER: readonly Point[] = ['bust', 'shoulder', 'neck', 'sleeve', 'length', 'waist', 'hip', 'thigh', 'inseam', 'foot'];
 
 /** Point names as the notes print them. */
 export const POINT_LABELS: Readonly<Record<Point, string>> = {
@@ -19,11 +25,33 @@ export const POINT_LABELS: Readonly<Record<Point, string>> = {
   thigh: 'thighs',
   inseam: 'inseam',
   foot: 'foot',
+  neck: 'neck',
+  sleeve: 'sleeve',
+  length: 'length',
+};
+
+/** Point names in the notes of a men's fit (slice M2a: "chest", never "bust"; MT4). */
+export const MENS_POINT_LABELS: Readonly<Record<Point, string>> = {
+  ...POINT_LABELS,
+  bust: 'chest',
+  hip: 'seat',
+  inseam: 'leg',
+  length: 'body length',
 };
 
 /** Mirror of @curtain/schema CATEGORY_POINTS (spec §Step 1; parity test in constants.test.ts). */
 export const CATEGORY_POINTS: Readonly<Record<Category, readonly Point[]>> = {
   top: ['bust', 'waist', 'hip', 'shoulder'],
+  dress: ['bust', 'waist', 'hip', 'shoulder'],
+  bottom: ['waist', 'hip', 'thigh', 'inseam'],
+  outerwear: ['bust', 'waist', 'hip', 'shoulder'],
+  shoes: ['foot'],
+  accessory: [],
+};
+
+/** Mirror of @curtain/schema MENS_CATEGORY_POINTS (slice M2; parity test in constants.test.ts). */
+export const MENS_CATEGORY_POINTS: Readonly<Record<Category, readonly Point[]>> = {
+  top: ['bust', 'waist', 'shoulder'],
   dress: ['bust', 'waist', 'hip', 'shoulder'],
   bottom: ['waist', 'hip', 'thigh', 'inseam'],
   outerwear: ['bust', 'waist', 'hip', 'shoulder'],
@@ -87,6 +115,12 @@ export const BLOCKS: Readonly<Record<string, BlockRule>> = {
   bootcut: block({}),
   skinny: block({ hip: 2, thigh: 1 }, [], true),
   slim: block({ hip: 3, thigh: 2 }, [], true),
+  // Blocks named for men's tops (slice M2a). Outside a men's fit they read as an unknown block, as
+  // they did before M2 (no women's ease was ever sourced for them; review of men-m2, 19 Nov 2026).
+  'shirt-slim': block({}),
+  'shirt-classic': block({}),
+  knit: block({}),
+  sweatshirt: block({}),
 };
 
 export const UNKNOWN_BLOCK: BlockRule = block({});
@@ -121,7 +155,7 @@ export const SHOES_SLACK: Readonly<BandSlack> = { good: 0.5, loose: 1.0 };
 /** Beyond `E + loose + LOOSE_FAR_CM` a loose point scores 0 instead of 0.2. */
 export const LOOSE_FAR_CM = 4;
 
-export const BAND_SCORES: Readonly<Record<Band, number>> = { tight: 0, snug: 0.7, good: 1, roomy: 0.6, loose: 0.2 };
+export const BAND_SCORES: Readonly<Record<GirthBand, number>> = { tight: 0, snug: 0.7, good: 1, roomy: 0.6, loose: 0.2 };
 export const SNUG_OK_SCORE = 1;
 export const LOOSE_FAR_SCORE = 0;
 
@@ -145,3 +179,99 @@ export const LOW_CONFIDENCE_BELOW = 0.7;
 export const CRITICAL_PENALTY = 0.5;
 export const NON_CRITICAL_PENALTY = 0.75;
 export const CRITICAL_WEIGHT = 2;
+
+// ---------------------------------------------------------------------------
+// Men's fit (men-3d-plan slices M2a and M2b)
+//
+// Every number below says where it comes from: [S] a source, [A] assumed by us (to be calibrated on
+// at least three real merchant charts per block before a men's product ships, plan §4).
+// ---------------------------------------------------------------------------
+
+/** Men's pattern-block families the engine knows (plan §4 "Men's eases"). */
+export type MensBlockId =
+  | 'tee'
+  | 'knit'
+  | 'shirt-slim'
+  | 'shirt-tailored'
+  | 'shirt-classic'
+  | 'chino-slim'
+  | 'chino-regular'
+  | 'jeans-slim'
+  | 'jeans-regular';
+
+/**
+ * Men's eases, cm, garment minus body (plan §4 table). Tee and knit: [A]. Shirt chest tailored 21.5
+ * and classic 26: [S] Paul Fredrick dress-shirt fit guide (one retailer; that the figures are girths
+ * is inferred, plan §1), every other shirt value [A]. Chinos and jeans: [A]. Lengths (inseam,
+ * sleeve, body length) have no ease: see the offsets below.
+ */
+export const MENS_BLOCKS: Readonly<Record<MensBlockId, BlockRule>> = {
+  tee: block({ bust: 8, waist: 8, shoulder: 1 }),
+  knit: block({ bust: 10, waist: 10, shoulder: 1.5 }),
+  'shirt-slim': block({ bust: 14, waist: 10, shoulder: 1, neck: 1.5 }),
+  'shirt-tailored': block({ bust: 21.5, waist: 16, shoulder: 1, neck: 1.5 }),
+  'shirt-classic': block({ bust: 26, waist: 22, shoulder: 1, neck: 1.5 }),
+  'chino-slim': block({ waist: 2, hip: 4, thigh: 4 }),
+  'chino-regular': block({ waist: 2, hip: 6, thigh: 6 }),
+  'jeans-slim': block({ waist: 2, hip: 3, thigh: 3 }),
+  'jeans-regular': block({ waist: 2, hip: 5, thigh: 5 }),
+};
+
+/** Pattern block → men's top family. `shirt` reads as tailored [A: the middle of the three]. Others: tee. */
+export const MENS_TOP_BLOCKS: Readonly<Record<string, MensBlockId>> = {
+  't-shirt': 'tee',
+  tee: 'tee',
+  knit: 'knit',
+  sweatshirt: 'knit',
+  shirt: 'shirt-tailored',
+  'shirt-tailored': 'shirt-tailored',
+  'shirt-slim': 'shirt-slim',
+  'shirt-classic': 'shirt-classic',
+};
+
+/** Trouser blocks read as slim for men; every other bottom block is regular. */
+export const MENS_SLIM_BOTTOM_BLOCKS: readonly string[] = ['slim', 'skinny', 'tapered'];
+
+/**
+ * A garment chart's seam-to-seam shoulder is compared with the body's biacromial breadth plus this,
+ * cm [A, M] (plan §4 "Shoulder": "about 3.5 cm"). Body charts are compared as they are.
+ */
+export const MENS_SHOULDER_SEAM_OFFSET_CM = 3.5;
+
+/**
+ * A garment inseam is compared with the inside leg minus this, cm [A] (plan §4 "Inseam": the hem
+ * sits above the floor; calibrate). Body charts compare inside leg with inside leg.
+ */
+export const MENS_INSEAM_HEM_OFFSET_CM = 3;
+
+/**
+ * Target garment body length (high shoulder point to hem) of a men's top as a share of stature [A]:
+ * 0.41 × 174 cm = 71.3 cm for the male M. No source read; to be calibrated.
+ */
+export const MENS_TOP_LENGTH_PER_HEIGHT = 0.41;
+
+/** A neck (collar) point's ease when neither the garment nor the block gives one, cm [A] (the men's shirt value). */
+export const NECK_DEFAULT_EASE_CM = 1.5;
+
+/**
+ * Length bands, cm [A] (plan §4 "Lengths are not girths"): within ±good fits, beyond ±fail fails.
+ * Fabric stretch never changes a length.
+ */
+export const LENGTH_SLACK: Readonly<{ good: number; fail: number }> = { good: 2, fail: 4 };
+/** Score of a length between `good` and `fail` cm off [A, the `roomy` score]; beyond `fail` it scores 0 and is not wearable. */
+export const LENGTH_NEAR_SCORE = 0.6;
+
+/**
+ * The neck is a narrow girth (plan §4 table: ±1 cm [A]): tight below −1, snug −1..0, good 0..1,
+ * roomy 1..2, loose above 2 (cm from the collar target).
+ */
+export const NECK_SLACK: Readonly<{ tight: number; good: number; loose: number }> = { tight: 1, good: 1, loose: 2 };
+
+/**
+ * Worn waist of men's trousers (plan §4 "Worn waist" [A, M]): the waistband is compared with the body
+ * girth at the height it sits, interpolated between the natural waist and the seat by the chart's
+ * front rise: a rise of `atWaist` cm or more sits at the natural waist, `atSeat` cm or less at the
+ * seat girth. Both numbers are assumed (no source read): calibrate on real charts.
+ */
+export const WORN_WAIST_RISE_CM: Readonly<{ atWaist: number; atSeat: number }> = { atWaist: 30, atSeat: 18 };
+

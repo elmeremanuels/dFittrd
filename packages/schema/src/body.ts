@@ -69,6 +69,12 @@ export type UserBodyMeasurementKey = (typeof USER_BODY_MEASUREMENT_KEYS)[number]
 
 export const UserBodySchema = z.object({
   measurements: z.partialRecord(z.enum(USER_BODY_MEASUREMENT_KEYS), z.number().finite()),
+  /**
+   * Stature in cm (optional, men-3d-plan slice M2b). Not a fit point: the engine reads it only for a
+   * men's top whose chart has a body `length` column. Kept outside `measurements` so a body without it
+   * is exactly the shape it was before.
+   */
+  heightCm: z.number().positive().finite().optional(),
   /** 0..1 per point; fit engine default 0.8 (scan-only 0.6, scan+manual 0.95 per handoff §2.1C). */
   confidence: z.partialRecord(FitPointSchema, z.number().min(0).max(1)).optional(),
   history: z.array(SizeHistoryEntrySchema).optional(),
@@ -120,9 +126,15 @@ export function measurementsAgree(a: Measurement, b: Measurement): boolean {
  * - A legacy `foot` entry (length in cm) is exposed as `footLengthCm` when that key is absent.
  * - `confidence` = confidenceFromSigma(sigma) per fit point (conflicting points are capped at 0.5
  *   so the engine nudges the user to remeasure).
- * - height / weight are not fit points and are dropped.
+ * - height / weight are not fit points and are dropped (height is kept as `heightCm` with `{ height: true }`).
+ * - `neck` and `sleeve` (arm length) are fit points since slice M2 and are projected when present.
  */
-export function toUserBody(profile: BodyProfile): UserBody {
+export interface ToUserBodyOptions {
+  /** Also project `height` as `UserBody.heightCm` (men's garments, slice M2b). Off by default. */
+  height?: boolean;
+}
+
+export function toUserBody(profile: BodyProfile, opts: ToUserBodyOptions = {}): UserBody {
   const measurements: UserBody['measurements'] = {};
   const confidence: NonNullable<UserBody['confidence']> = {};
   const conflicts = new Set<BodyMeasurementKey>(profile.conflicts ?? []);
@@ -152,6 +164,8 @@ export function toUserBody(profile: BodyProfile): UserBody {
 
   const out: UserBody = { measurements };
   if (Object.keys(confidence).length > 0) out.confidence = confidence;
+  const height = profile.measurements.height;
+  if (opts.height && height && Number.isFinite(height.mean) && height.mean > 0) out.heightCm = height.mean;
   if (profile.history && profile.history.length > 0) out.history = profile.history.map((h) => ({ ...h }));
   return out;
 }

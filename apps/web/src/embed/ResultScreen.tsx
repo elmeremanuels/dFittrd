@@ -12,7 +12,7 @@ import { FitPanel } from '@/components/FitPanel';
 import { pct } from '@/lib/format';
 import { ringInputsFor } from '@/render/ringInputs';
 import { ringOverlayFor } from '@/render/rings';
-import { bandText, fitWithAdvice, gapText, neighbourSizes, pointLabel, priorKeys, usablePoints, type EmbedFit, type FitPreference, type SizeAdvice } from './aboutYou';
+import { bandText, fitWithAdvice, gapText, neighbourSizes, pointLabelFor, priorKeys, usablePoints, type EmbedFit, type FitPreference, type SizeAdvice } from './aboutYou';
 import { UnitToggle } from './EmbedScreens';
 import { SizeChartTable } from './SizeChartTable';
 import { embedStrings, parts } from './strings';
@@ -27,6 +27,8 @@ const BAND_CLASS: Record<string, string> = {
   good: 'bg-ok/10 text-ok',
   roomy: 'bg-ink/5 text-ink-soft',
   loose: 'bg-warn/10 text-warn',
+  short: 'bg-warn/10 text-warn',
+  long: 'bg-warn/10 text-warn',
 };
 
 export interface ResultScreenProps {
@@ -82,7 +84,9 @@ export function ResultScreen({
 }: ResultScreenProps): ReactNode {
   const { fit, userBody } = embedFit;
   const t = embedStrings().result;
-  const shown = useMemo(() => fitWithAdvice(fit, advice, garment.category, profile), [fit, advice, garment.category, profile]);
+  const shown = useMemo(() => fitWithAdvice(fit, advice, garment.category, profile, garment), [fit, advice, garment, profile]);
+  // Men's garments (slice M2) name their points as menswear does: "Chest", "Seat", "Sleeve".
+  const pointLabel = (point: string): string => pointLabelFor(point, garment.audience);
   const [tab, setTab] = useState<TabKey>('fit');
   const [showRings, setShowRings] = useState(true);
   const heightCm = profile.measurements.height?.mean;
@@ -147,6 +151,8 @@ export function ResultScreen({
   }
 
   const sizes = neighbourSizes(fit, advice.size ?? advice.closest);
+  // A men's W/L chart whose leg could not be checked (slice M2b): the waist is named, no leg is.
+  const waistOnly = !advice.size && fit.sizeAxes?.waist !== undefined && fit.sizeAxes.leg === undefined ? fit.sizeAxes.waist : null;
   const selectedFit = fit.perSize.find((s) => s.size === selected);
   const points = usablePoints(selectedFit);
   const estimated = priorKeys(profile).filter((k) => points.some((p) => p.point === k));
@@ -163,12 +169,17 @@ export function ResultScreen({
       <div>
         <p className="eyebrow text-coral-ink">{returning ? t.welcomeBack : t.eyebrow}</p>
         <h2 className="font-display text-3xl leading-tight" tabIndex={-1} data-step-heading>
-          {advice.size ? t.recommend(advice.size) : t.noneFits}
+          {advice.size ? t.recommend(advice.size) : waistOnly !== null ? t.waistOnly(waistOnly) : t.noneFits}
         </h2>
+        {advice.size && fit.sizeAxes?.waist !== undefined && fit.sizeAxes.leg !== undefined && advice.size === fit.closestSize ? (
+          <p className="text-sm text-ink-soft" data-testid="size-axes">
+            {t.sizeAxes(fit.sizeAxes.waist, fit.sizeAxes.leg)}
+          </p>
+        ) : null}
         {advice.adjusted ? (
           <p className="text-xs text-ink-soft">{t.adjusted(advice.adjusted, advice.engineSize ?? '', preference)}</p>
         ) : null}
-        {advice.size ? (
+        {advice.size || waistOnly !== null ? (
           <button type="button" onClick={onEdit} className="chip mt-2 hover:bg-white" data-testid="edit-measurements">
             <Pencil className="h-3.5 w-3.5" aria-hidden /> {t.edit}
           </button>
@@ -296,7 +307,7 @@ export function ResultScreen({
               </h3>
               <ul className="divide-y divide-ink/5" data-testid="fit-points">
                 {points.map((p) => (
-                  <li key={p.point} className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                  <li key={p.point} className="flex items-center justify-between gap-3 py-1.5 text-sm" data-point={p.point}>
                     <span className="min-w-0">
                       <span className="font-medium">{pointLabel(p.point)}</span>
                       <span className="block text-xs text-ink-mute">{gapText(p, units)}</span>

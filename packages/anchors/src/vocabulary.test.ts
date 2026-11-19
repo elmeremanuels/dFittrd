@@ -129,7 +129,10 @@ describe('fit point mapping', () => {
       expect(anchorToFitPoint(a)).toBe(p);
       expect(ANCHOR_TO_FIT_POINT[a]).toBe(p);
     }
-    expect(anchorToFitPoint('neck')).toBeUndefined();
+    // Since slice M2b the neck ring and the sleeve length are fit points (men's shirts and long sleeves).
+    expect(anchorToFitPoint('neck')).toBe('neck');
+    expect(anchorToFitPoint('sleeve')).toBe('sleeve');
+    expect(anchorToFitPoint('knee')).toBeUndefined();
     expect(anchorToFitPoint('bust')).toBeUndefined();
     expect(fitPointToAnchor('chest')).toBeUndefined();
     expect(fitPointToAnchor('__proto__')).toBeUndefined();

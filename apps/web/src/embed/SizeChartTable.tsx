@@ -17,13 +17,23 @@ const COLUMNS: readonly { key: ChartColumn; length: boolean }[] = [
   { key: 'shoulder', length: true },
   { key: 'thigh', length: true },
   { key: 'inseam', length: true },
+  { key: 'rise', length: true },
+  { key: 'neck', length: true },
+  { key: 'sleeve', length: true },
+  { key: 'length', length: true },
   { key: 'footLengthCm', length: true },
   { key: 'footEu', length: false },
 ];
 
-/** The columns this chart actually has values for. */
-export function chartColumns(chart: readonly SizeRow[]): typeof COLUMNS {
-  return COLUMNS.filter((c) => chart.some((r) => typeof r[c.key] === 'number'));
+/**
+ * Columns only a men's garment shows (slice M2): before M2 the mappings dropped them, so a women's or
+ * unisex chart that now carries them is shown as before, and the fit engine ignores them there too.
+ */
+const MENS_ONLY_COLUMNS: ReadonlySet<ChartColumn> = new Set<ChartColumn>(['rise', 'neck', 'sleeve', 'length']);
+
+/** The columns this chart actually has values for (the men's columns only for a men's garment). */
+export function chartColumns(chart: readonly SizeRow[], audience?: GarmentPayload['audience']): typeof COLUMNS {
+  return COLUMNS.filter((c) => (audience === 'men' || !MENS_ONLY_COLUMNS.has(c.key)) && chart.some((r) => typeof r[c.key] === 'number'));
 }
 
 export function chartCaption(type: GarmentPayload['sizeChartType'], units: Units): string {
@@ -32,7 +42,7 @@ export function chartCaption(type: GarmentPayload['sizeChartType'], units: Units
 
 export function SizeChartTable({ garment, recommended, units }: { garment: GarmentPayload; recommended: string | null; units: Units }): ReactNode {
   const id = useId();
-  const columns = chartColumns(garment.sizeChart);
+  const columns = chartColumns(garment.sizeChart, garment.audience);
   const unit = lengthUnit(units);
   const t = embedStrings().chart;
   return (
@@ -54,7 +64,7 @@ export function SizeChartTable({ garment, recommended, units }: { garment: Garme
               </th>
               {columns.map((c) => (
                 <th key={c.key} scope="col" className="px-3 py-1.5 text-right font-semibold whitespace-nowrap">
-                  {t.columns[c.key]}
+                  {(garment.audience === 'men' ? t.columnsMen[c.key] : undefined) ?? t.columns[c.key]}
                   {c.length ? <span className="font-normal text-ink-mute"> ({unit})</span> : null}
                 </th>
               ))}

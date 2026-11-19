@@ -3,7 +3,7 @@
  */
 import { BAND_SCORES, LOOSE_FAR_CM, LOOSE_FAR_SCORE, SNUG_OK_SCORE } from './constants';
 import { normalMass } from './math';
-import type { Band, BandEdges, BandProbabilities, BandResult } from './types';
+import type { BandEdges, BandProbabilities, BandResult, GirthBand } from './types';
 
 /**
  * Deterministic band and point score for a gap (cm):
@@ -71,7 +71,7 @@ export function bandForWithSigma(gap: number, sigma: number, edges: BandEdges): 
     pLooseNear * BAND_SCORES.loose +
     pLooseFar * LOOSE_FAR_SCORE;
 
-  let band: Band = 'good';
+  let band: GirthBand = 'good';
   let best = -1;
   for (const b of ['tight', 'snug', 'good', 'roomy', 'loose'] as const) {
     if (probabilities[b] > best) {

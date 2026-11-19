@@ -33,9 +33,31 @@ export type GarmentCategory = (typeof GARMENT_CATEGORIES)[number];
 export const GARMENT_AUDIENCES = ['women', 'men', 'unisex'] as const;
 export type GarmentAudience = (typeof GARMENT_AUDIENCES)[number];
 
-/** Fit points read by `@curtain/fit-engine` (fit-engine-spec.md `Point`). */
-export const FIT_POINTS = ['bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'foot'] as const;
+/**
+ * Fit points read by `@curtain/fit-engine` (fit-engine-spec.md `Point`). Each is also a body
+ * measurement (`body.ts` builds the stored and engine keys from this list), so only body-side points
+ * belong here. `neck` and `sleeve` were added for menswear (men-3d-plan slice M2): `neck` is the EN
+ * neck girth, `sleeve` is the body's EN arm length (shoulder over the bent elbow to the wrist). The
+ * first seven keep their order. Garment-only lengths are in `GARMENT_LENGTH_POINTS`.
+ */
+export const FIT_POINTS = ['bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'foot', 'neck', 'sleeve'] as const;
 export type FitPoint = (typeof FIT_POINTS)[number];
+
+/**
+ * Garment lengths a size chart may carry that are NOT body measurements (men-3d-plan slice M2b):
+ * `length` = body length of a top from the high shoulder point, `rise` = front rise of trousers. They
+ * never enter a stored body profile (`BODY_MEASUREMENT_KEYS` is built from `FIT_POINTS` only).
+ */
+export const GARMENT_LENGTH_POINTS = ['length', 'rise'] as const;
+export type GarmentLengthPoint = (typeof GARMENT_LENGTH_POINTS)[number];
+
+/**
+ * Where a chart's sleeve length is measured from (men-3d-plan slice M2b). `shoulder_point`: from the
+ * shoulder seam to the cuff; `centre_back`: from the centre back neck over the shoulder to the cuff.
+ * A chart with a sleeve column and no declared convention gets no sleeve score.
+ */
+export const SLEEVE_CONVENTIONS = ['shoulder_point', 'centre_back'] as const;
+export type SleeveConvention = (typeof SLEEVE_CONVENTIONS)[number];
 
 /** Taste axes (taste-engine-spec.md `Axis`, fixed radar order). */
 export const TASTE_AXES = ['bohemian', 'minimal', 'classic', 'avantGarde', 'sporty'] as const;
@@ -87,6 +109,11 @@ export const PATTERN_BLOCKS = [
   'bootcut',
   'skinny',
   'slim',
+  // Men's tops (men-3d-plan slice M2a): `shirt` reads as a tailored shirt for men.
+  'shirt-slim',
+  'shirt-classic',
+  'knit',
+  'sweatshirt',
 ] as const;
 export type PatternBlock = (typeof PATTERN_BLOCKS)[number] | (string & {});
 
@@ -127,6 +154,11 @@ export const DRAPE_LEVELS = ['stiff', 'structured', 'soft', 'fluid'] as const;
 
 const unit = z.number().min(0).max(1);
 const chartCm = z.number().min(0).max(300);
+
+/** Largest size chart: a full W/L grid (11 waists × 3 lengths) plus room. Was 30 before slice M2b. */
+export const SIZE_CHART_MAX_ROWS = 60;
+/** Longest size label. Was 16 before slice M2b. */
+export const SIZE_LABEL_MAX = 24;
 
 export const HexColorSchema = z
   .string()
@@ -169,7 +201,7 @@ export const StretchZoneSchema: z.ZodType<StretchZone, string> = openVocabulary(
 
 export const SizeRowSchema = z
   .object({
-    size: z.string().min(1).max(16).describe('Label as the shop prints it: XS, M, 28, 38, ONE'),
+    size: z.string().min(1).max(SIZE_LABEL_MAX).describe('Label as the shop prints it: XS, M, 28, 38, ONE, 32/34'),
     bust: chartCm.optional(),
     waist: chartCm.optional(),
     hip: chartCm.optional(),
@@ -178,6 +210,17 @@ export const SizeRowSchema = z
     inseam: chartCm.optional(),
     footEu: z.number().min(15).max(55).optional().describe('EU shoe size, e.g. 38'),
     footLengthCm: z.number().min(8).max(40).optional().describe('Insole / foot length in cm'),
+    neck: chartCm.optional().describe('Collar / neck girth, cm (garment: the collar; body: the EN neck girth)'),
+    sleeve: chartCm.optional().describe('Sleeve length, cm (garment: as declared by sleeveConvention; body: EN arm length)'),
+    length: chartCm.optional().describe('Garment body length from the high shoulder point to the hem, cm (garment charts only)'),
+    rise: chartCm.optional().describe('Front rise of trousers, cm (garment charts only): sets where the waistband sits'),
+    axes: z
+      .object({
+        waist: z.string().min(1).max(8).describe('Girth axis label, e.g. 32 of 32/34'),
+        leg: z.string().min(1).max(8).describe('Length axis label, e.g. 34 of 32/34'),
+      })
+      .optional()
+      .describe('Two-dimensional size (W/L): the fit engine picks the waist and the leg on their own'),
   })
   .describe(
     'One row of the size chart, in cm. Whether the numbers are garment or body measurements is declared by sizeChartType.',
@@ -208,12 +251,26 @@ export function duplicateSizeLabels(rows: readonly { size: string }[]): string[]
   return out;
 }
 
-/** A size chart: 1–30 rows in ascending size order, each with its own label. */
+/** A size chart: 1–60 rows in ascending size order, each with its own label. */
 export const SizeChartSchema = z
   .array(SizeRowSchema)
   .min(1)
-  .max(30)
+  .max(SIZE_CHART_MAX_ROWS)
   .superRefine((rows, ctx) => {
+    // Two-dimensional charts: all rows or none carry axes, and every waist × leg pair once.
+    const withAxes = rows.filter((r) => r.axes !== undefined).length;
+    if (withAxes > 0 && withAxes < rows.length) {
+      ctx.addIssue({ code: 'custom', path: [], message: 'Either every row of the size chart has axes (waist and leg) or none has' });
+    }
+    const pairs = new Map<string, number>();
+    rows.forEach((row, i) => {
+      if (!row.axes) return;
+      const key = `${sizeLabelKey(row.axes.waist)}\u0000${sizeLabelKey(row.axes.leg)}`;
+      const j = pairs.get(key);
+      if (j !== undefined) {
+        ctx.addIssue({ code: 'custom', path: [i, 'axes'], message: `Waist ${row.axes.waist} with leg ${row.axes.leg} occurs twice (rows ${j + 1} and ${i + 1})` });
+      } else pairs.set(key, i);
+    });
     const first = new Map<string, number>();
     rows.forEach((row, i) => {
       const key = sizeLabelKey(row.size);
@@ -229,7 +286,7 @@ export const SizeChartSchema = z
       });
     });
   })
-  .describe('Ascending size order; every label unique (compared trimmed and case-insensitively)');
+  .describe('Ascending size order; every label unique (compared trimmed and case-insensitively). W/L charts carry axes on every row.');
 
 export const FabricSchema = z
   .object({
@@ -315,11 +372,15 @@ export const GarmentPayloadSchema = z
         "REQUIRED: 'garment' = the rows are the finished garment measured flat; 'body' = the rows are the body each size is cut for. Fit-engine test T14 shows the same chart yields a different size depending on this.",
       ),
     sizeChart: SizeChartSchema,
+    sleeveConvention: z
+      .enum(SLEEVE_CONVENTIONS)
+      .optional()
+      .describe("Where the chart's sleeve column is measured from: 'shoulder_point' (shoulder seam to cuff) or 'centre_back' (centre back neck to cuff). Without it the sleeve column is not scored."),
     sizingNotes: z.string().max(500).optional().describe("Freeform, e.g. 'runs small'; parsed for a size bias"),
     trueToSizeScore: unit.optional().describe('From past return / fit data; default 0.8 in the fit engine'),
 
     // Fit-engine hints
-    criticalFitPoints: z.array(FitPointSchema).max(7).optional(),
+    criticalFitPoints: z.array(FitPointSchema).max(FIT_POINTS.length).optional(),
     stretchZones: z.array(StretchZoneSchema).max(10).optional(),
 
     // Garment tape measurements (docs/MERCHANT-MEASUREMENTS.md). Both optional: absent = the
@@ -368,6 +429,22 @@ export function safeParseGarmentPayload(input: unknown) {
 /** Fit points that the fit engine checks for a category by default (fit-engine-spec.md §Step 1). */
 export const CATEGORY_POINTS: Record<GarmentCategory, readonly FitPoint[]> = {
   top: ['bust', 'waist', 'hip', 'shoulder'],
+  dress: ['bust', 'waist', 'hip', 'shoulder'],
+  bottom: ['waist', 'hip', 'thigh', 'inseam'],
+  outerwear: ['bust', 'waist', 'hip', 'shoulder'],
+  shoes: ['foot'],
+  accessory: [],
+};
+
+/**
+ * Fit points the engine checks for a men's garment (men-3d-plan slice M2; `audience: 'men'`, or
+ * `'unisex'` worn on the male body). Tops: chest, waist (men's tees score the belly) and shoulder; the
+ * seat is not checked on a top. Bottoms: waist, seat, thigh and inseam, where the inseam is a length.
+ * `neck`, `sleeve` and the garment `length` are added per garment, only when the chart has the column.
+ * Other categories keep `CATEGORY_POINTS`.
+ */
+export const MENS_CATEGORY_POINTS: Record<GarmentCategory, readonly FitPoint[]> = {
+  top: ['bust', 'waist', 'shoulder'],
   dress: ['bust', 'waist', 'hip', 'shoulder'],
   bottom: ['waist', 'hip', 'thigh', 'inseam'],
   outerwear: ['bust', 'waist', 'hip', 'shoulder'],

@@ -24,8 +24,9 @@ import type { AboutField, FitPreference } from '../aboutYou';
 import type { BlockedKind } from '../flow';
 import type { Units } from '../units';
 
-export type FitBand = 'tight' | 'snug' | 'good' | 'roomy' | 'loose';
-export type ChartColumn = 'bust' | 'waist' | 'hip' | 'shoulder' | 'thigh' | 'inseam' | 'footLengthCm' | 'footEu';
+/** Girth bands, plus `short` / `long` for a length (men's inseam, sleeve, body length; slice M2b). */
+export type FitBand = 'tight' | 'snug' | 'good' | 'roomy' | 'loose' | 'short' | 'long';
+export type ChartColumn = 'bust' | 'waist' | 'hip' | 'shoulder' | 'thigh' | 'inseam' | 'footLengthCm' | 'footEu' | 'neck' | 'sleeve' | 'length' | 'rise';
 type RequiredField = 'height' | 'weight' | 'footEu';
 
 export interface AvatarClaims {
@@ -96,6 +97,12 @@ export interface EmbedCatalogue {
     title: string;
     intro: (numbers: 2 | 3) => string;
     labels: Record<AboutField, string>;
+    /** A men's garment (slice M2) names some fields as menswear does. */
+    labelsMen: Partial<Record<AboutField, string>>;
+    /** How to measure, shown under a men's field. */
+    hintsMen: Partial<Record<AboutField, string>>;
+    /** Under the men's fields: they are typed in, never estimated. */
+    mensTyped: string;
     optional: string;
     heightFeet: string;
     heightInches: string;
@@ -109,6 +116,7 @@ export interface EmbedCatalogue {
     tape: string;
     emptyEstimated: string;
     withoutThem: (bottom: boolean) => string;
+    withoutThemMen: (bottom: boolean) => string;
     submit: string;
     scan: string;
     scanNote: string;
@@ -130,6 +138,10 @@ export interface EmbedCatalogue {
     addShoeSize: string;
     edit: string;
     recommend: (size: string) => string;
+    /** A two-dimensional size (W/L) picked axis by axis. */
+    sizeAxes: (waist: string, leg: string) => string;
+    /** A W/L chart whose leg could not be checked: the heading names the waist only (slice M2b). */
+    waistOnly: (waist: string) => string;
     noneFits: string;
     adjusted: (direction: 'up' | 'down', from: string, preference: FitPreference) => string;
     compare: string;
@@ -165,6 +177,8 @@ export interface EmbedCatalogue {
     title: string;
     size: string;
     columns: Record<ChartColumn, string>;
+    /** Column names of a men's chart that differ from `columns`. */
+    columnsMen: Partial<Record<ChartColumn, string>>;
     caption: (type: 'body' | 'garment', units: Units) => string;
     note: Record<'body' | 'garment', string>;
     recommended: string;
@@ -173,15 +187,27 @@ export interface EmbedCatalogue {
   fit: {
     /** Fit points by key; a point without a name here is shown by its key. */
     points: Record<string, string>;
+    /** Names of a men's garment's points that differ from `points` (slice M2: "Chest", never "Bust"). */
+    pointsMen: Record<string, string>;
     bands: Record<FitBand, string>;
     asDesigned: string;
     moreRoom: (length: string) => string;
+    /** A men's chest whose room follows from fitting the waist (fit engine `waistLedCm`). */
+    moreRoomForWaist: (length: string) => string;
     lessRoom: (length: string) => string;
+    /** A length point (inseam, sleeve, body length). */
+    lengthRight: string;
+    longer: (length: string) => string;
+    shorter: (length: string) => string;
     notes: {
       closest: (size: string, band: string, point: string) => string;
       band: (band: string, point: string, o: { stretch: boolean; suggest: 'up' | 'down' | null }) => string;
       add: (points: string[]) => string;
       fitsWell: (size: string) => string;
+      /** The size was chosen to fit the waist, so it is roomier at the chest (men's tops). */
+      waistLed: (chest: string) => string;
+      /** A W/L chart whose leg could not be checked (no inseam column, or no inside leg). */
+      legUnchecked: (waist: string) => string;
       /**
        * Pull-on garments (fit engine `SizeFit.pullOn`). `short`: the band is short of the hips at
        * the stretch the shop measured, within the allowance; otherwise it only just reaches.
@@ -344,7 +370,29 @@ export const EN: EmbedCatalogue = {
     editing: 'Edit my measurements',
     title: 'About you',
     intro: (numbers) => `${numbers === 3 ? 'Three numbers' : 'Two numbers'} and you’ll see your size. Takes under 30 seconds.`,
-    labels: { height: 'Height', weight: 'Weight', bust: 'Bust / chest', waist: 'Waist', hip: 'Hip', inseam: 'Inseam', footEu: 'Shoe size (EU)' },
+    labels: {
+      height: 'Height',
+      weight: 'Weight',
+      bust: 'Bust / chest',
+      waist: 'Waist',
+      hip: 'Hip',
+      inseam: 'Inseam',
+      footEu: 'Shoe size (EU)',
+      neck: 'Neck',
+      sleeve: 'Arm length',
+      shoulder: 'Shoulder width',
+    },
+    labelsMen: { bust: 'Chest', hip: 'Seat', inseam: 'Inside leg' },
+    hintsMen: {
+      bust: 'Round the fullest part, under the arms',
+      waist: 'Round your natural waist, between the lowest rib and the hip bone',
+      hip: 'Round the fullest part of the seat',
+      inseam: 'Crotch to floor, without shoes',
+      neck: 'Round the base of the neck, where a collar sits',
+      sleeve: 'Shoulder bone to wrist, over a bent elbow',
+      shoulder: 'Across the back, shoulder bone to shoulder bone',
+    },
+    mensTyped: 'Neck, arm length and shoulder width are only used when you type them in. We never estimate them.',
     optional: '(optional)',
     heightFeet: 'Height, feet',
     heightInches: 'Height, inches',
@@ -358,6 +406,8 @@ export const EN: EmbedCatalogue = {
     tape: 'Measured with a tape',
     emptyEstimated: 'Anything you leave empty is estimated from your height and weight, with a lower confidence.',
     withoutThem: (bottom) => `Optional. Without them we estimate ${bottom ? 'waist and hip' : 'bust, waist and hip'} from your height and weight.`,
+    withoutThemMen: (bottom) =>
+      `Optional. Without them we estimate ${bottom ? 'waist and seat' : 'chest and waist'} from your height and weight${bottom ? '' : ', and do not check shoulders, neck or sleeves'}.`,
     submit: 'See my size',
     scan: 'More accurate: 30-second scan',
     scanNote: 'The scan runs in this browser. No photo or video leaves your device.',
@@ -381,6 +431,8 @@ export const EN: EmbedCatalogue = {
     addShoeSize: 'Add my shoe size',
     edit: 'Edit my measurements',
     recommend: (size) => `We recommend ${size}`,
+    sizeAxes: (waist, leg) => `Waist ${waist} · Leg ${leg}`,
+    waistOnly: (waist) => `Waist ${waist} fits you best`,
     noneFits: 'No size fits well',
     adjusted: (direction, from, preference) => `One size ${direction} from ${from} for your ${preference} preference.`,
     compare: 'Compare sizes',
@@ -409,7 +461,21 @@ export const EN: EmbedCatalogue = {
   chart: {
     title: 'Size chart',
     size: 'Size',
-    columns: { bust: 'Bust', waist: 'Waist', hip: 'Hip', shoulder: 'Shoulders', thigh: 'Thigh', inseam: 'Inseam', footLengthCm: 'Foot length', footEu: 'EU size' },
+    columns: {
+      bust: 'Bust',
+      waist: 'Waist',
+      hip: 'Hip',
+      shoulder: 'Shoulders',
+      thigh: 'Thigh',
+      inseam: 'Inseam',
+      footLengthCm: 'Foot length',
+      footEu: 'EU size',
+      neck: 'Neck',
+      sleeve: 'Sleeve',
+      length: 'Length',
+      rise: 'Rise',
+    },
+    columnsMen: { bust: 'Chest', hip: 'Seat' },
     caption: (type, units) => `${type === 'body' ? 'Body measurements' : 'Garment measurements'}, in ${units === 'imperial' ? 'inches' : 'centimetres'}`,
     note: {
       body: 'The body each size is made for. Compare with your own measurements.',
@@ -419,17 +485,24 @@ export const EN: EmbedCatalogue = {
     notGiven: 'not given',
   },
   fit: {
-    points: { bust: 'Bust', waist: 'Waist', hip: 'Hip', shoulder: 'Shoulders', thigh: 'Thigh', inseam: 'Leg length', foot: 'Foot' },
-    bands: { tight: 'Tight', snug: 'Snug', good: 'Good fit', roomy: 'Roomy', loose: 'Loose' },
+    points: { bust: 'Bust', waist: 'Waist', hip: 'Hip', shoulder: 'Shoulders', thigh: 'Thigh', inseam: 'Leg length', foot: 'Foot', neck: 'Neck', sleeve: 'Sleeve', length: 'Length' },
+    pointsMen: { bust: 'Chest', hip: 'Seat', length: 'Body length', shoulder: 'Shoulder width' },
+    bands: { tight: 'Tight', snug: 'Snug', good: 'Good fit', roomy: 'Roomy', loose: 'Loose', short: 'Short', long: 'Long' },
     asDesigned: 'as designed',
     moreRoom: (length) => `${length} more room than designed`,
+    moreRoomForWaist: (length) => `${length} more room, so the waist fits`,
     lessRoom: (length) => `${length} less room than designed`,
+    lengthRight: 'the right length',
+    longer: (length) => `${length} longer than ideal`,
+    shorter: (length) => `${length} shorter than ideal`,
     notes: {
       closest: (size, band, point) => `Closest is ${size}, ${lower(band)} at the ${lower(point)}`,
       band: (band, point, o) =>
         `${band} at the ${lower(point)}${o.stretch ? ' (stretch fabric there)' : ''}${o.suggest === 'up' ? ' — consider a size up' : o.suggest === 'down' ? ' — consider a size down' : ''}`,
       add: (points) => `Add your ${list(points.map(lower))} ${points.length > 1 ? 'measurements' : 'measurement'} under Edit my measurements for a more confident result`,
       fitsWell: (size) => `Size ${size} fits you well`,
+      waistLed: (chest) => `Sized to fit your waist, so it is roomier at the ${lower(chest)}`,
+      legUnchecked: (waist) => `Waist ${waist} fits you best. We could not check the leg length: add your inside leg, or choose your usual leg`,
       pullOnTight: (o) =>
         o.short
           ? 'To pull it on, the waistband has to stretch over your hips a little more than is comfortable'

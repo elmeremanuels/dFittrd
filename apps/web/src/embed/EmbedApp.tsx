@@ -241,10 +241,10 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
   // --- actions ----------------------------------------------------------------------------------
   const submitAbout = (scan: boolean): void => {
     if (!data) return;
-    const errs = validateAbout(about, data.garment.category);
+    const errs = validateAbout(about, data.garment.category, data.garment);
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
-    setProfile(profileFromAbout(about, data.garment.category));
+    setProfile(profileFromAbout(about, data.garment.category, Date.now(), data.garment));
     setSelected(null);
     setChosen(null);
     setChooseFallback(null);
@@ -339,16 +339,17 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         form={about}
         errors={errors}
         category={data.garment.category}
+        garment={data.garment}
         editing={flow.editing}
         canScan={deps.canScan}
         onChange={(f) => {
           setAbout(f);
-          if (Object.keys(errors).length > 0) setErrors(validateAbout(f, data.garment.category));
+          if (Object.keys(errors).length > 0) setErrors(validateAbout(f, data.garment.category, data.garment));
         }}
         onUnits={(u) => {
           changeUnits(u);
           // Messages name the units ("Between 4 ft 0 in and 7 ft 6 in"): re-check in the new ones.
-          if (Object.keys(errors).length > 0) setErrors(validateAbout(switchUnits(about, u), data.garment.category));
+          if (Object.keys(errors).length > 0) setErrors(validateAbout(switchUnits(about, u), data.garment.category, data.garment));
         }}
         onSubmit={submitAbout}
       />
@@ -363,7 +364,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
             initialForm={{ height: about.height, weight: about.weight, bust: about.bust, waist: about.waist, hip: about.hip, footEu: about.footEu, sex: about.sex, method: about.tape ? 'tape' : 'memory' }}
             onComplete={(p) => {
               // F5: keep what the scan's form does not ask for (inseam for bottoms).
-              setProfile(mergeAboutIntoScan(p, about, data.garment.category));
+              setProfile(mergeAboutIntoScan(p, about, data.garment.category, Date.now(), data.garment));
               dispatch({ type: 'scanDone' });
             }}
             onSkip={() => dispatch({ type: 'scanSkipped' })}

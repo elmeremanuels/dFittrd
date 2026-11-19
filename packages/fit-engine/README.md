@@ -176,6 +176,40 @@ Every tape value is `measured`, `interpolated` or `extrapolated`, and the engine
 
 The embed, the surface shops ship, never prints them. It writes its own notes from the structured fields in its catalogue (`apps/web/src/embed/strings/en.ts`, `fit.notes.pullOnTight`, `pullOnNone`, `pullOnUnchecked`, `tapeEstimated`; `embedNoteList` in `aboutYou.ts`): a size whose band only just passes the hips never reads "fits you well", a size whose band was not measured by the shop always carries that label, no margin in cm is printed, and a pull-on check that ran on an estimated hip asks for the measurement (`apps/web/src/embed/__tests__/aboutYou.test.ts`). Merchants now enter the tape and the closure in the Shopify admin's and the WooCommerce meta box's "Garment measurements" form (`@curtain/schema` `checkGarmentTapeInput`); the api stores them in the payload, `GET /v1/try/:token` hands them to the embed with the rest of the garment, and the embed passes the payload to `computeFit` on the device. The demo seeds the pilot skirt with the shop's tape (AU 8, 10, 14) and `closure: 'pull-on'`, and `pnpm demo:e2e` checks in a browser that the held-out body (waist 73.5, hip 100, typed in) gets Size 10 with the pull-on warning, and that the "Compare sizes" chip of AU 8 (band 6 cm short) shows "too small to pull on" instead of a fit score (`ResultScreen.tsx`, `fit.compareNoPullOn`). The recommended AU 10, whose band only just passes, shows "Only just pulls on" in place of the fit score and on its chip (`fit.scorePullOnTight`, `compareJustPullsOn`), and when the shop page holds AU 8 the result says its waistband does not stretch over the hips (`fit.onPageNoPullOn`). The engine's own `score` is unchanged (0.999 for AU 8, 1.0 for AU 10 on that body): the embed hides it where it contradicts the pull-on check. The waist card ("Good fit", the waist against the chart) and the figure label ("Good fit by the size chart") still describe the waist as worn, not the pull-on.
 
+## Men's fit (men-3d-plan slices M2a and M2b)
+
+Switched on only by `audience: 'men'`, or `audience: 'unisex'` with `opts.bodyFamily: 'male'`. Every
+other payload is computed exactly as before: `src/mens.test.ts` (MT3) pins sha256 of `computeFit` over
+every existing fixture × 10 bodies, with and without sigma, against the engine before M2. That holds
+for charts that carry the new columns too: outside a men's fit `neck`, `sleeve`, `length`, `rise` and
+`axes` are ignored (before M2 the schema dropped them), a W/L chart is read as a flat list, and the
+men's block names (`shirt-slim`, `shirt-classic`, `knit`, `sweatshirt`) read as an unknown block.
+Pinned in `mens.test.ts` ("women's, unisex and audience-less charts that carry the men's columns");
+also checked once on 19 Nov 2026 against the pre-M2 engine itself (8,100 runs, every MOCK_GARMENT and
+the men's fixtures, with and without the columns, as women / unisex-female / no audience: identical).
+
+| What | Value | Where it comes from |
+|---|---|---|
+| Points, tops | chest, waist, shoulder (seat not scored); neck, sleeve, body `length` when the chart has the column | plan §4 |
+| Points, bottoms | waist (at the worn height), seat, thigh, inseam as a length | plan §4 |
+| Eases | `MENS_BLOCKS` (tee 8/8/1, knit 10/10/1.5, shirt slim/tailored/classic, chino and jeans slim/regular) | plan §4 table: shirt chest 21.5 / 26 [S] Paul Fredrick (one retailer); all other values [A] |
+| `shirt` block | read as tailored | [A] the middle of the three |
+| Garment shoulder | seam to seam against biacromial + 3.5 (the offset is in `easeTarget`; `chartCm` is the merchant's value) | [A, M] plan §4 |
+| Garment inseam | against inside leg − 3 | [A] plan §4 |
+| Length bands | ±2 good (1.0), ±4 short / long (0.6), beyond fails (0, not wearable); no stretch | [A] plan §4 |
+| Neck | tight < −1, snug −1..0, good 0..1, roomy 1..2; default ease 1.5 | [A] plan §4 |
+| Worn waist | natural waist → seat, front rise 30 cm or more at the waist, 18 or less at the seat | [A, M] assumed here, no source read |
+| Body length | target 0.41 × stature (`UserBody.heightCm`) | [A] no source read |
+| Sleeve | needs `sleeveConvention`; `centre_back` adds half the shoulders | plan §4; MT12 |
+| W/L | rows with `axes` (men's fits only): the waist by the one-dimensional rules, then the leg among that waist's rows; an axis with no scored point is not picked (no leg is invented) and no full size is recommended; `SizeFit.axes` per row | plan §4; the "leg from the picked waist's rows" and "no axis without a score" rules are ours (review of 19 Nov 2026) |
+| Recommendation | a men's size is recommended only when it is wearable (no tight girth, no length past ±4); else "No size fits well — closest is …" | [A] our decision (review of 19 Nov 2026): a tight waist on the largest tee is said, not recommended (MT5 intent). Women's semantics unchanged |
+| Point with no men's ease | a chart column the men's block gives no ease for (a seat on a tee) is skipped, reason `no-ease` | ours |
+| Belly-aware chest | in the smallest size whose waist is not tight, the chest's upper bands widen by (chest gap − waist gap); `FitResult.waistLed` and a note | ours, no constant |
+
+Known: the bands still put "good" up to E + 2 cm over the target (spec §Step 4), so with shirt eases of
+21.5 to 26 cm three body-chart sizes read good and closest-ease decides. The M1 tee's shoulder
+(biacromial + 3.5) and the tee shoulder ease 1 disagree by 1 cm: MREF reads "Snug at the shoulders" in M.
+
 ## Spec deviations
 
 Two test vectors in `fit-engine-spec.md` contain arithmetic that contradicts the spec's own rules; the tests assert the rule-correct behaviour and additionally pin the spec's literal fixture so the discrepancy stays visible.

@@ -104,7 +104,7 @@ export function placementMorph(p: Placement, heights: Readonly<Partial<Record<An
   return gradingMorph(p.graded, p.placed, { heights });
 }
 
-const LABEL: Readonly<Record<FitAnchorId, string>> = { chest: 'chest', waist: 'waist', hip: 'hip', shoulder_width: 'shoulders', thigh: 'thigh', inseam: 'inseam' };
+const LABEL: Readonly<Record<FitAnchorId, string>> = { chest: 'chest', waist: 'waist', hip: 'hip', shoulder_width: 'shoulders', thigh: 'thigh', inseam: 'inseam', neck: 'neck', sleeve: 'sleeve' };
 
 export interface FitLine {
   anchor: FitAnchorId;

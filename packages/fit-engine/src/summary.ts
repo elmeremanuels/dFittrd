@@ -2,7 +2,7 @@
  * UI helpers over a FitResult: a one-sentence summary, per-point gaps for the Path B renderer, and
  * the same gaps keyed by D15 anchor id for the 3D viewer.
  */
-import { NOTE_ORDER, POINT_LABELS } from './constants';
+import { MENS_POINT_LABELS, NOTE_ORDER, POINT_LABELS as POINT_LABELS_DEFAULT } from './constants';
 import { round1 } from './math';
 import { TAPE_NOTES } from './pullOn';
 import { isPointFit, type AnchorGaps, type FitAnchorId, type FitResult, type Point, type PointFit, type RenderGaps, type SizeFit } from './types';
@@ -39,6 +39,7 @@ const CANNOT_CHECK = "We can't check the fit of this item yet.";
  * - `We can't check the fit of this item yet.`
  */
 export function fitSummary(result: FitResult): string {
+  const POINT_LABELS = result.mens ? MENS_POINT_LABELS : POINT_LABELS_DEFAULT;
   if (result.score === null || result.closestSize === null) return CANNOT_CHECK;
   // A row we cannot identify (duplicate size labels in an unvalidated chart) is never summarised.
   if (sizeFit(result, result.closestSize) === undefined) return CANNOT_CHECK;
@@ -101,6 +102,8 @@ export const FIT_POINT_ANCHORS: Readonly<Partial<Record<Point, FitAnchorId>>> = 
   shoulder: 'shoulder_width',
   thigh: 'thigh',
   inseam: 'inseam',
+  neck: 'neck',
+  sleeve: 'sleeve',
 };
 
 /**

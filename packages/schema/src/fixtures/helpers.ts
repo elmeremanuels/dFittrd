@@ -1,6 +1,6 @@
 import { GARMENT_SCHEMA_VERSION, type GarmentPayload, type SizeRow } from '../garment';
 
-type Grade = Partial<Omit<SizeRow, 'size'>>;
+type Grade = Partial<Omit<SizeRow, 'size' | 'axes'>>;
 
 /** Graded size chart: `base` is the first size, every next size adds `step` (linear grading, as real charts do). */
 export function grade(sizes: readonly string[], base: Grade, step: Grade): SizeRow[] {

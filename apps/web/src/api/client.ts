@@ -26,6 +26,7 @@ import type {
   MerchantLedgerResponse,
   MerchantProductsQuery,
   MerchantProductsResponse,
+  SetupResponse,
   PeekQuery,
   PeekResponse,
   ProductGetResponse,
@@ -483,6 +484,14 @@ export class MerchantApi {
     return this.client.request('POST', `/v1/merchant/assets/${encodeURIComponent(assetId)}/reject`, { reason }, { auth: this.auth });
   }
   /** WooCommerce: a Stripe Checkout for the Curtain plan (also the switch from a retired plan, B2). */
+  /** The first-run checklist (five steps that tick themselves). */
+  setup(): Promise<SetupResponse> {
+    return this.client.request('GET', '/v1/merchant/setup', undefined, { auth: this.auth });
+  }
+  /** Tick "Turn the button on" or "Check it on your phone" by hand. */
+  updateSetup(body: { buttonConfirmed?: boolean; phoneConfirmed?: boolean }): Promise<SetupResponse> {
+    return this.client.request('PUT', '/v1/merchant/setup', body, { auth: this.auth });
+  }
   stripeCheckout(): Promise<{ checkoutUrl: string; trialDays: number }> {
     return this.client.request('POST', '/v1/merchant/billing/stripe/checkout', {}, { auth: this.auth });
   }

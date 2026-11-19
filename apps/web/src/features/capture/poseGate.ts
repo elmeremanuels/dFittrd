@@ -8,6 +8,7 @@
  * height span. The 0° (front) and 90° (side) frames are chosen from the shoulder-width/torso-height
  * ratio and ear/nose visibility.
  */
+import { appStrings } from '../../strings';
 import { POSE } from './landmarks';
 import type { FrameFeatures, GateFeatures, GateReason, GateResult, Landmark, SideSelection, ViewKind } from './types';
 
@@ -214,14 +215,26 @@ export function selectFrames(frames: readonly FrameFeatures[]): SideSelection | 
   return best.frontIndex < 0 ? null : best;
 }
 
-/** Human-readable hint for the on-screen guidance (aria-live). Order = priority. */
+/** Which hint the on-screen guidance gives; the text is in the catalogue (`capture.gate`). */
+export type GateHintKey = 'noPerson' | 'stepBack' | 'centre' | 'visibility' | 'straight' | 'arms' | 'still' | 'perfect';
+
+/** The hint for a set of gate reasons, as a key. Order = priority. Pure: safe in the worker. */
+export function gateHintKey(reasons: readonly GateReason[]): GateHintKey {
+  if (reasons.includes('no_person')) return 'noPerson';
+  if (reasons.includes('not_full_body') || reasons.includes('too_small')) return 'stepBack';
+  if (reasons.includes('too_close_to_edge')) return 'centre';
+  if (reasons.includes('low_visibility')) return 'visibility';
+  if (reasons.includes('tilted')) return 'straight';
+  if (reasons.includes('arms_not_in_a_pose')) return 'arms';
+  if (reasons.includes('unstable')) return 'still';
+  return 'perfect';
+}
+
+/**
+ * Human-readable hint for the on-screen guidance (aria-live), in the page's interface locale.
+ * Page side only: the scan worker bundles this module for `gateFrame` and `selectFrames` and must
+ * never call this (a worker has its own module instance, so it would not follow the page's locale).
+ */
 export function gateHint(reasons: readonly GateReason[]): string {
-  if (reasons.includes('no_person')) return 'Step into the frame';
-  if (reasons.includes('not_full_body') || reasons.includes('too_small')) return 'Step back so your whole body is visible, head to heels';
-  if (reasons.includes('too_close_to_edge')) return 'Move towards the centre of the frame';
-  if (reasons.includes('low_visibility')) return 'Make sure your feet and head are clearly visible';
-  if (reasons.includes('tilted')) return 'Stand straight and keep the phone upright';
-  if (reasons.includes('arms_not_in_a_pose')) return 'Hold your arms slightly away from your body';
-  if (reasons.includes('unstable')) return 'Hold still…';
-  return 'Perfect, hold that pose';
+  return appStrings().capture.gate[gateHintKey(reasons)];
 }

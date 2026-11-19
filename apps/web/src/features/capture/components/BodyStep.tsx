@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useReducedMotion } from 'motion/react';
 import { AlertTriangle, SkipForward, Video } from 'lucide-react';
+import { appStrings } from '../../../strings';
 import { MANUAL_RANGES, SCAN_PROTOCOL, parseNumber, protocolPhase } from '../captureMachine';
 import { gateHint } from '../poseGate';
 import { attachStream, openCamera, startFramePump, type CameraHandle } from '../platform/camera';
 import type { ScanSession } from '../scanSession';
 import type { GateReason, Sex } from '../types';
 import type { ScanResultMessage } from '../workerProtocol';
+import { scanErrorText } from './text';
 import { GhostButton, Panel, PrimaryButton, PrivacyNote, StepHeader, useCaptureVariant } from './ui';
 
 interface Props {
@@ -25,7 +27,9 @@ type Phase = 'setup' | 'countdown' | 'recording' | 'processing' | 'error';
 
 export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, initialWeight, sex, onHeightChange, onDone, onSkip }: Props): ReactNode {
   const reduce = useReducedMotion();
-  const embed = useCaptureVariant() === 'embed';
+  const variant = useCaptureVariant();
+  const t = appStrings().capture.body;
+  const ui = appStrings().capture.ui;
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const camRef = useRef<CameraHandle | null>(null);
   const stopPumpRef = useRef<(() => void) | null>(null);
@@ -38,7 +42,7 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
   const [phase, setPhase] = useState<Phase>('setup');
   const [height, setHeight] = useState(initialHeight);
   const [weight, setWeight] = useState(initialWeight);
-  const [hint, setHint] = useState('Step into the frame');
+  const [hint, setHint] = useState(() => gateHint(['no_person']));
   const [gateOk, setGateOk] = useState(false);
   const [reasons, setReasons] = useState<GateReason[]>([]);
   const [elapsed, setElapsed] = useState(0);
@@ -67,7 +71,7 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
         camRef.current = cam;
         attachStream(videoRef.current, cam.stream);
       })
-      .catch((e: unknown) => setCameraError(e instanceof DOMException && e.name === 'NotAllowedError' ? 'Camera access was declined.' : 'Could not open the camera.'));
+      .catch((e: unknown) => setCameraError(e instanceof DOMException && e.name === 'NotAllowedError' ? appStrings().capture.ui.cameraDeclined : appStrings().capture.ui.cameraFailed));
     return () => {
       cancelled = true;
       mountedRef.current = false;
@@ -109,7 +113,7 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
       const rs = reasonsRef.current;
       const ph = protocolPhase(elapsedRef.current);
       if (phase === 'recording' && ph === 'side') {
-        setHint(rs.includes('tilted') || rs.includes('not_full_body') ? gateHint(rs.filter((r) => r !== 'arms_not_in_a_pose')) : 'Now turn 90° to your left and hold still');
+        setHint(rs.includes('tilted') || rs.includes('not_full_body') ? gateHint(rs.filter((r) => r !== 'arms_not_in_a_pose')) : appStrings().capture.gate.turnSide);
       } else {
         setHint(gateHint(rs));
       }
@@ -173,7 +177,7 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
       })
       .catch((e: unknown) => {
         if (!mountedRef.current) return;
-        setError(e instanceof Error ? e.message : 'The scan could not be measured.');
+        setError(scanErrorText(e, appStrings().capture.body.notMeasured));
         setPhase('error');
       });
   };
@@ -184,15 +188,15 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
   return (
     <Panel className="space-y-5">
       <StepHeader
-        eyebrow={embed ? 'Step 1 of 2' : 'Step 2 of 3'}
-        title="Body scan"
-        subtitle={`8 seconds. Stand 2–3 m away in fitted clothing, ${embed ? 'camera' : 'phone'} upright.`}
+        eyebrow={t.eyebrow[variant]}
+        title={t.title}
+        subtitle={t.subtitle[variant]}
       />
 
       {/* The preview is mounted in every phase: start() needs the <video> (it used to exist only after
           setup, so the scan could never start), and the user frames themselves before starting. */}
       <div className="mirror-frame mx-auto aspect-[9/16] w-full max-w-xs bg-ink/5">
-        <video ref={setVideo} autoPlay playsInline muted className="h-full w-full -scale-x-100 object-cover" aria-label="Camera preview" />
+        <video ref={setVideo} autoPlay playsInline muted className="h-full w-full -scale-x-100 object-cover" aria-label={ui.cameraPreview} />
         <div aria-hidden className="pointer-events-none absolute inset-0">
           <div className={`absolute inset-3 rounded-[2rem] border-2 transition-colors ${gateOk ? 'border-emerald-400' : 'border-white/60'}`} />
           {phase === 'countdown' ? (
@@ -220,7 +224,7 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
           ) : null}
           {phase === 'processing' ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-ink/40 text-white">
-              <span className="text-sm">Measuring on device…</span>
+              <span className="text-sm">{t.measuring}</span>
               <span className="font-display text-3xl">{progress}%</span>
             </div>
           ) : null}
@@ -231,7 +235,7 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <label className="space-y-1 text-sm">
-              <span className="text-xs uppercase tracking-wider text-ink/40">Height (cm)</span>
+              <span className="text-xs uppercase tracking-wider text-ink/40">{t.height}</span>
               <input
                 type="number"
                 inputMode="decimal"
@@ -246,7 +250,7 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
               />
             </label>
             <label className="space-y-1 text-sm">
-              <span className="text-xs uppercase tracking-wider text-ink/40">Weight (kg, optional)</span>
+              <span className="text-xs uppercase tracking-wider text-ink/40">{t.weight}</span>
               <input
                 type="number"
                 inputMode="decimal"
@@ -260,24 +264,24 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
             </label>
           </div>
           <p id="height-help" className="text-xs text-ink/50">
-            Your height sets the scale of the scan; weight improves the estimate. Neither is ever uploaded.
+            {t.heightHelp}
           </p>
           <ol className="list-decimal space-y-1 pl-5 text-sm text-ink/70">
-            <li>{embed ? 'Place your phone or laptop so the camera is at hip height, 2–3 m away.' : 'Prop the phone upright at hip height, 2–3 m away.'}</li>
-            <li>Face the camera, arms slightly away from your body (A-pose), feet together.</li>
-            <li>Halfway through, turn 90° to your left and hold still.</li>
+            <li>{t.place[variant]}</li>
+            <li>{t.faceCamera}</li>
+            <li>{t.turn}</li>
           </ol>
           {modelsFailed || cameraError ? (
             <p role="alert" className="flex items-start gap-2 rounded-2xl bg-amber-50 p-3 text-sm text-amber-900">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-              {cameraError ?? 'The scan models could not be loaded. You can still enter measurements by hand.'}
+              {cameraError ?? t.modelsFailed}
             </p>
           ) : null}
           <PrimaryButton onClick={start} disabled={!session || !modelsReady || !heightValid || !weightValid || !!cameraError}>
-            <Video className="h-5 w-5" aria-hidden /> {modelsReady ? 'Start 8-second scan' : 'Loading scan models…'}
+            <Video className="h-5 w-5" aria-hidden /> {modelsReady ? t.start : t.loadingModels}
           </PrimaryButton>
           <GhostButton onClick={onSkip}>
-            <SkipForward className="h-4 w-4" aria-hidden /> Skip, enter measurements manually
+            <SkipForward className="h-4 w-4" aria-hidden /> {t.skip}
           </GhostButton>
           <PrivacyNote />
         </div>
@@ -286,17 +290,17 @@ export function BodyStep({ session, modelsReady, modelsFailed, initialHeight, in
       {phase !== 'setup' ? (
         <div className="space-y-4">
           <p role="status" aria-live="polite" aria-atomic className="min-h-6 text-center text-sm font-medium text-ink/80">
-            {phase === 'countdown' ? `Get ready… ${countdown}` : phase === 'processing' ? 'Measuring on device' : phase === 'error' ? (error ?? 'Scan failed') : hint}
+            {phase === 'countdown' ? t.getReady(countdown) : phase === 'processing' ? t.measuringStatus : phase === 'error' ? (error ?? t.failed) : hint}
           </p>
           {phase === 'recording' ? (
             <p className="text-center text-xs text-ink/50">
-              {protocolPhase(elapsed) === 'front' ? 'Facing the camera' : haveSide ? 'Side view captured' : 'Turn to your side'} · {Math.ceil((SCAN_PROTOCOL.totalMs - elapsed) / 1000)} s
+              {t.recording(protocolPhase(elapsed) === 'front' ? t.facing : haveSide ? t.sideCaptured : t.turnToSide, Math.ceil((SCAN_PROTOCOL.totalMs - elapsed) / 1000))}
             </p>
           ) : null}
           {phase === 'error' ? (
             <div className="space-y-2">
-              <PrimaryButton onClick={() => setPhase('setup')}>Try again</PrimaryButton>
-              <GhostButton onClick={onSkip}>Enter measurements manually instead</GhostButton>
+              <PrimaryButton onClick={() => setPhase('setup')}>{t.tryAgain}</PrimaryButton>
+              <GhostButton onClick={onSkip}>{t.manualInstead}</GhostButton>
             </div>
           ) : null}
         </div>

@@ -222,7 +222,7 @@ function CheckList({ report, awaiting }: { report: BakeCheckReport; awaiting: bo
               {c.pass === false
                 ? c.reasons.map((r) => (
                     <span key={r} className="block text-xs text-ink-soft">
-                      {r.charAt(0).toUpperCase() + r.slice(1)}.
+                      {t.reason(r)}
                     </span>
                   ))
                 : null}
@@ -282,7 +282,7 @@ function TapeTable({ report }: { report: BakeCheckReport }): ReactNode {
                     {s.hemSweepCm}
                     {hem ? <span className="block text-[11px] whitespace-nowrap text-ink-mute">{t.drapedRange(hem[0], hem[1])}</span> : null}
                   </td>
-                  <td className="hidden px-3 py-2 text-right tabular-nums sm:table-cell">{s.stretchedGirthCm ?? '—'}</td>
+                  <td className="hidden px-3 py-2 text-right tabular-nums sm:table-cell">{s.stretchedGirthCm ?? t.none}</td>
                 </tr>
               );
             })}
@@ -294,7 +294,7 @@ function TapeTable({ report }: { report: BakeCheckReport }): ReactNode {
       {tape.sizes.flatMap((s) =>
         s.notDraped.map((n) => (
           <p key={`${s.size}-${n.bodyHipCm}`} className="flex items-start gap-1.5 text-xs text-ink-soft">
-            <CircleSlash className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> {t.notDrawn(s.size, `${n.bodyHipCm} cm`, n.reason)}
+            <CircleSlash className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> {t.notDrawn(s.size, t.cm(n.bodyHipCm), n.reason)}
           </p>
         )),
       )}

@@ -7,6 +7,7 @@ import { colourTarget } from '@/lib/season';
 import { useApp } from '@/store';
 import { fitFor } from '@/store/fit';
 import { useCaptureMedia } from '@/store/media';
+import { appStrings } from '@/strings';
 import { Avatar } from './Avatar';
 import { Card } from './Card';
 import { ColourChip } from './ColourChip';
@@ -14,11 +15,11 @@ import { EstimateDisclaimer } from './EstimateBadge';
 import { FitPanel } from './FitPanel';
 import { StyleDnaDialog } from './StyleDnaDialog';
 
-const ACTIONS: { action: SwipeAction; label: string; icon: ReactNode; className: string; large?: boolean }[] = [
-  { action: 'pass', label: 'Pass', icon: <X className="h-6 w-6" aria-hidden />, className: 'bg-white text-ink-soft' },
-  { action: 'less', label: 'Less like this', icon: <ThumbsDown className="h-5 w-5" aria-hidden />, className: 'bg-white text-ink-soft' },
-  { action: 'love', label: 'Love', icon: <Heart className="h-8 w-8" aria-hidden />, className: 'bg-coral text-white', large: true },
-  { action: 'save', label: 'Save to wardrobe', icon: <Bookmark className="h-5 w-5" aria-hidden />, className: 'bg-white text-ink-soft' },
+const ACTIONS: { action: SwipeAction; icon: ReactNode; className: string; large?: boolean }[] = [
+  { action: 'pass', icon: <X className="h-6 w-6" aria-hidden />, className: 'bg-white text-ink-soft' },
+  { action: 'less', icon: <ThumbsDown className="h-5 w-5" aria-hidden />, className: 'bg-white text-ink-soft' },
+  { action: 'love', icon: <Heart className="h-8 w-8" aria-hidden />, className: 'bg-coral text-white', large: true },
+  { action: 'save', icon: <Bookmark className="h-5 w-5" aria-hidden />, className: 'bg-white text-ink-soft' },
 ];
 
 /**
@@ -41,6 +42,7 @@ export function SwipeDeck(): ReactNode {
   const media = useCaptureMedia();
   const [showDna, setShowDna] = useState(false);
   const [busy, setBusy] = useState(false);
+  const t = appStrings().app.deck;
 
   useEffect(() => {
     // Deal whenever the deck is empty but not exhausted: on mount, and after the store resets it
@@ -73,13 +75,13 @@ export function SwipeDeck(): ReactNode {
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-coral/15" aria-hidden>
             <Heart className="h-4 w-4 text-coral" fill="currentColor" />
           </span>
-          <span className="font-display text-xl font-medium tracking-tight">Curtain</span>
+          <span className="font-display text-xl font-medium tracking-tight">{appStrings().app.common.brand}</span>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setShowDna(true)} aria-label="Open your Style DNA" className="rounded-full border border-ink/10 bg-white p-2 shadow-sm">
+          <button type="button" onClick={() => setShowDna(true)} aria-label={t.openDna} className="rounded-full border border-ink/10 bg-white p-2 shadow-sm">
             <BarChart2 className="h-5 w-5 text-ink-soft" aria-hidden />
           </button>
-          <Link to="/profile" aria-label="Open your profile" className="rounded-full border border-ink/10 bg-white p-2 shadow-sm">
+          <Link to="/profile" aria-label={t.openProfile} className="rounded-full border border-ink/10 bg-white p-2 shadow-sm">
             <User className="h-5 w-5 text-ink-soft" aria-hidden />
           </Link>
         </div>
@@ -113,33 +115,33 @@ export function SwipeDeck(): ReactNode {
               </h2>
               <p className="mt-0.5 text-xs text-ink-mute">
                 {garment.fabric.primary}
-                {garment.fabric.weightGsm ? ` · ${garment.fabric.weightGsm} gsm` : ''} · {garment.patternBlock}
+                {garment.fabric.weightGsm ? ` · ${t.gsm(garment.fabric.weightGsm)}` : ''} · {garment.patternBlock}
               </p>
             </div>
             <div className="shrink-0 text-right">
               <p className="font-display text-2xl">{eur(garment.priceEur)}</p>
               {garment.productUrl ? (
                 <a href={garment.productUrl} target="_blank" rel="noreferrer noopener" className="mt-1 inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-ink-soft hover:text-ink">
-                  <ShoppingBag className="h-3 w-3" aria-hidden /> Shop
+                  <ShoppingBag className="h-3 w-3" aria-hidden /> {t.shop}
                 </a>
               ) : null}
             </div>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <ColourChip hex={garment.primaryColorHex} target={target} />
-            {!target ? <span className="chip">Colour match after your face photo</span> : null}
+            {!target ? <span className="chip">{t.colourAfterPhoto}</span> : null}
           </div>
           <EstimateDisclaimer className="mt-2" />
         </div>
       ) : null}
 
-      <div className="action-ring px-5 pt-3 pb-2" role="group" aria-label="Swipe actions">
+      <div className="action-ring px-5 pt-3 pb-2" role="group" aria-label={t.swipeActions}>
         {ACTIONS.map((a) => (
           <button
             key={a.action}
             type="button"
-            aria-label={a.label}
-            title={a.label}
+            aria-label={t.actions[a.action]}
+            title={t.actions[a.action]}
             disabled={!garment || busy || rendering}
             onClick={() => void act(a.action)}
             className={`flex items-center justify-center rounded-full border border-ink/10 shadow-xl transition-transform motion-safe:active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 ${a.large ? 'h-18 w-18' : 'h-13 w-13'} ${a.className}`}
@@ -153,22 +155,23 @@ export function SwipeDeck(): ReactNode {
 }
 
 function EmptyDeck({ exhausted, notInYourSize, catalogSource }: { exhausted: boolean; notInYourSize: number; catalogSource: 'mock' | 'paired' }): ReactNode {
+  const t = appStrings().app.deck;
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 text-center" data-testid="deck-empty">
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-coral/15">
         <Bookmark className="h-8 w-8 text-coral" aria-hidden />
       </div>
-      <h2 className="font-display text-2xl">{exhausted ? 'You have seen the whole rail' : 'Setting up your rail…'}</h2>
+      <h2 className="font-display text-2xl">{exhausted ? t.exhausted : t.settingUp}</h2>
       <p className="max-w-xs text-sm text-ink-soft">
-        {notInYourSize > 0 ? `${notInYourSize} item${notInYourSize === 1 ? '' : 's'} were left out because no size fits. ` : ''}
-        {catalogSource === 'mock' ? 'Pair a shop to see its real catalogue here.' : 'Passed items come back later; loved and saved ones are in your wardrobe.'}
+        {notInYourSize > 0 ? `${t.leftOut(notInYourSize)} ` : ''}
+        {catalogSource === 'mock' ? t.pairToSee : t.passedComeBack}
       </p>
       <div className="flex gap-2">
         <Link to="/pair" className="btn-primary">
-          Pair a shop
+          {t.pairShop}
         </Link>
         <Link to="/wardrobe" className="btn-ghost">
-          Wardrobe
+          {t.wardrobe}
         </Link>
       </div>
     </div>

@@ -78,6 +78,8 @@ export function PeekApp({ params, deps }: { params: PeekParams | null; deps: Pee
               <strong className="font-display text-xl leading-6">{size}</strong>
               {afterSize}
             </>
+          ) : outcome.kind === 'waist' ? (
+            t.waistOnly(outcome.waist)
           ) : outcome.kind === 'none' ? (
             t.noneFits
           ) : (

@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { styleDna, type TasteProfile } from '@curtain/taste-engine';
 import { TasteRadial } from './TasteRadial';
+import { appStrings } from '@/strings';
 
 /**
  * Native <dialog>: modal focus trap, Escape and backdrop handled by the platform. Copy comes from
@@ -21,6 +22,7 @@ export function StyleDnaDialog({ open, profile, onClose }: { open: boolean; prof
   }, [open]);
 
   const dna = styleDna(profile);
+  const t = appStrings().app.styleDna;
   return (
     <dialog
       ref={ref}
@@ -34,12 +36,12 @@ export function StyleDnaDialog({ open, profile, onClose }: { open: boolean; prof
       className="m-auto w-[min(92vw,24rem)] rounded-[2.5rem] bg-cream p-0 text-ink shadow-2xl backdrop:bg-ink/40 backdrop:backdrop-blur-sm"
     >
       <div className="relative space-y-5 p-7">
-        <button type="button" onClick={onClose} aria-label="Close Style DNA" className="absolute top-5 right-5 flex h-10 w-10 items-center justify-center rounded-full bg-ink/5 hover:bg-ink/10">
+        <button type="button" onClick={onClose} aria-label={t.close} className="absolute top-5 right-5 flex h-10 w-10 items-center justify-center rounded-full bg-ink/5 hover:bg-ink/10">
           <X className="h-5 w-5" aria-hidden />
         </button>
         <header className="pr-12">
           <h2 id="style-dna-title" className="font-display text-3xl leading-tight">
-            Your Style DNA
+            {t.title}
           </h2>
           <p id="style-dna-subtitle" className="text-sm text-ink-soft">
             {dna.subtitle}
@@ -50,13 +52,13 @@ export function StyleDnaDialog({ open, profile, onClose }: { open: boolean; prof
           <div className="flex items-center gap-3">
             <div className="h-10 w-1.5 rounded-full bg-coral" aria-hidden />
             <div>
-              <p className="eyebrow">Primary archetype</p>
+              <p className="eyebrow">{t.archetype}</p>
               <p className="text-sm font-medium">{dna.archetypeLabel}</p>
             </div>
           </div>
           <p className="font-display text-2xl">{dna.percent}%</p>
         </div>
-        <p className="text-xs text-ink-mute">On-device estimate from your swipes and onboarding vibes. Nothing about your body is in here.</p>
+        <p className="text-xs text-ink-mute">{t.note}</p>
       </div>
     </dialog>
   );

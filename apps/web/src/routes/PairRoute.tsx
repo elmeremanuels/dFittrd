@@ -2,6 +2,7 @@ import { QrCode, Store } from 'lucide-react';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { useApp } from '@/store';
+import { appStrings } from '@/strings';
 
 /**
  * Pairing stub: a try link / QR code from a shop opens `/try/:token`. The QR scan itself is the
@@ -12,12 +13,13 @@ export function PairRoute(): ReactNode {
   const shops = useApp((s) => s.settings.pairedShops);
   const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const t = appStrings().app.pair;
 
   const submit = (e: FormEvent): void => {
     e.preventDefault();
     const token = extractToken(value.trim());
     if (!token) {
-      setError('Paste the “Try it on” link or the code shown under the QR.');
+      setError(t.invalid);
       return;
     }
     navigate(`/try/${encodeURIComponent(token)}`);
@@ -26,28 +28,28 @@ export function PairRoute(): ReactNode {
   return (
     <div className="h-full space-y-5 overflow-y-auto px-5 py-4">
       <header>
-        <p className="eyebrow">Pair a shop</p>
-        <h1 className="font-display text-3xl">Bring a shop into your fitting room</h1>
-        <p className="mt-1 text-sm text-ink-soft">Tap “Try it on” on a product page, or scan the QR with your camera. On this phone you can also paste the link.</p>
+        <p className="eyebrow">{t.eyebrow}</p>
+        <h1 className="font-display text-3xl">{t.title}</h1>
+        <p className="mt-1 text-sm text-ink-soft">{t.intro}</p>
       </header>
       <form onSubmit={submit} className="card space-y-3">
         <label htmlFor="pair-code" className="eyebrow">
-          Try link or code
+          {t.fieldLabel}
         </label>
-        <input id="pair-code" className="field-input font-sans text-base" value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://app.curtain.fit/try/…" inputMode="url" autoComplete="off" aria-describedby={error ? 'pair-error' : undefined} aria-invalid={!!error} />
+        <input id="pair-code" className="field-input font-sans text-base" value={value} onChange={(e) => setValue(e.target.value)} placeholder={t.placeholder} inputMode="url" autoComplete="off" aria-describedby={error ? 'pair-error' : undefined} aria-invalid={!!error} />
         {error ? (
           <p id="pair-error" role="alert" className="text-xs text-coral-ink">
             {error}
           </p>
         ) : null}
         <button type="submit" className="btn-primary w-full">
-          <QrCode className="h-5 w-5" aria-hidden /> Open try-on
+          <QrCode className="h-5 w-5" aria-hidden /> {t.open}
         </button>
       </form>
       <section className="space-y-2">
-        <h2 className="eyebrow">Paired shops</h2>
+        <h2 className="eyebrow">{t.pairedShops}</h2>
         {shops.length === 0 ? (
-          <p className="text-sm text-ink-mute">No shop paired yet — the rail shows the demo collection.</p>
+          <p className="text-sm text-ink-mute">{t.none}</p>
         ) : (
           <ul className="space-y-2">
             {shops.map((s) => (
@@ -57,7 +59,7 @@ export function PairRoute(): ReactNode {
                   <p className="font-medium">{s.name}</p>
                   <p className="text-xs text-ink-mute">
                     {s.platform}
-                    {s.paused ? ' · paused' : ''}
+                    {s.paused ? ` · ${t.paused}` : ''}
                   </p>
                 </div>
               </li>
@@ -65,7 +67,7 @@ export function PairRoute(): ReactNode {
           </ul>
         )}
       </section>
-      <p className="text-xs text-ink-mute">A shop never sees your measurements, photos, device id or anything that identifies you — only totals across shoppers.</p>
+      <p className="text-xs text-ink-mute">{t.privacy}</p>
     </div>
   );
 }

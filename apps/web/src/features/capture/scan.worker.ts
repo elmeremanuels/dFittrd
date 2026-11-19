@@ -20,7 +20,7 @@ import { installSameOriginOnly } from './sameOriginOnly';
 import { MODEL_BASE, MODEL_FILES, VISION_WASM_ES_MODULE, moduleFactoryRearmer, resolveModelBase, type PoseVariant } from './models';
 import { gateFrame, selectFrames } from './poseGate';
 import type { FrameFeatures, GateResult, Landmark, Sex, ViewMeasurement } from './types';
-import type { WorkerInbound, WorkerOutbound } from './workerProtocol';
+import type { ScanErrorCode, WorkerInbound, WorkerOutbound } from './workerProtocol';
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 // Before any MediaPipe task exists: refuse every request off this origin (MediaPipe's usage logger, see sameOriginOnly.ts).
@@ -225,7 +225,7 @@ async function renderBaseFrame(f: StoredFrame, mask: CategoryMask): Promise<{ bl
 
 async function finish(heightCm: number, weightKg: number | undefined, sex: Sex | undefined): Promise<void> {
   const sel = selectFrames(features);
-  if (!sel) throw new Error('no usable front frame: the whole body must be visible and still');
+  if (!sel) throw new CodedError('no_front_frame', 'no usable front frame: the whole body must be visible and still');
   const exists = (i: number): boolean => frames.has(i);
   post({ type: 'progress', stage: 'segmenting', pct: 0 });
   const frontIdx = neighbourhood(sel.frontIndex, exists);
@@ -440,30 +440,30 @@ ctx.onmessage = (ev: MessageEvent<WorkerInbound>): void => {
           modelBase = resolveModelBase(msg.modelBase, ctx.location.href);
           return init(msg.variant, msg.needPose, msg.needFace, msg.needSegmenter ?? true, msg.delegate);
         })
-        .catch((e: unknown) => post({ type: 'error', stage: 'init', message: errMsg(e) }));
+        .catch((e: unknown) => post({ type: 'error', stage: 'init', ...errFields(e) }));
       break;
     case 'frame':
       try {
         onFrame(msg.bitmap, msg.timestamp);
       } catch (e) {
         msg.bitmap.close();
-        post({ type: 'error', stage: 'frame', message: errMsg(e) });
+        post({ type: 'error', stage: 'frame', ...errFields(e) });
       }
       break;
     case 'finish':
       finish(msg.heightCm, msg.weightKg, msg.sex).catch((e: unknown) => {
-        post({ type: 'error', stage: 'finish', message: errMsg(e) });
+        post({ type: 'error', stage: 'finish', ...errFields(e) });
         resetRecording();
       });
       break;
     case 'face':
-      analyseFace(msg.bitmap).catch((e: unknown) => post({ type: 'error', stage: 'face', message: errMsg(e) }));
+      analyseFace(msg.bitmap).catch((e: unknown) => post({ type: 'error', stage: 'face', ...errFields(e) }));
       break;
     case 'faceTexture':
-      bakeFace(msg.bitmap, msg.targetSkinHex).catch((e: unknown) => post({ type: 'error', stage: 'faceTexture', message: errMsg(e) }));
+      bakeFace(msg.bitmap, msg.targetSkinHex).catch((e: unknown) => post({ type: 'error', stage: 'faceTexture', ...errFields(e) }));
       break;
     case 'faceLook':
-      faceLook(msg.bitmap, msg.tile, msg.skin, msg.aspect).catch((e: unknown) => post({ type: 'error', stage: 'faceLook', message: errMsg(e) }));
+      faceLook(msg.bitmap, msg.tile, msg.skin, msg.aspect).catch((e: unknown) => post({ type: 'error', stage: 'faceLook', ...errFields(e) }));
       break;
     case 'reset':
       resetRecording();
@@ -478,6 +478,17 @@ ctx.onmessage = (ev: MessageEvent<WorkerInbound>): void => {
   }
 };
 
-function errMsg(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+/** An error the page has words for: it travels as a code, the message is only a diagnostic. */
+class CodedError extends Error {
+  constructor(
+    readonly code: ScanErrorCode,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+function errFields(e: unknown): { message: string; code?: ScanErrorCode } {
+  const message = e instanceof Error ? e.message : String(e);
+  return e instanceof CodedError ? { message, code: e.code } : { message };
 }

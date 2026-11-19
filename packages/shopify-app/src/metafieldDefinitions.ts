@@ -4,6 +4,7 @@
  * `MetafieldDefinitionInput`s and creates them idempotently on install.
  */
 import {
+  SLEEVE_CONVENTIONS,
   SHOPIFY_METAFIELD_BY_KEY,
   SHOPIFY_METAFIELD_DEFINITIONS,
   SHOPIFY_METAFIELD_NAMESPACE,
@@ -47,6 +48,8 @@ export function metafieldValidations(def: ShopifyMetafieldDefinition): Array<{ n
   switch (def.key) {
     case 'size_chart_type':
       return [{ name: 'choices', value: JSON.stringify(['garment', 'body']) }];
+    case 'sleeve_convention':
+      return [{ name: 'choices', value: JSON.stringify(SLEEVE_CONVENTIONS) }];
     case 'category':
       return [{ name: 'choices', value: JSON.stringify(['top', 'bottom', 'dress', 'outerwear', 'shoes', 'accessory']) }];
     case 'true_to_size_score':

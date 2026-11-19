@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Curtain for WooCommerce 0.1.0\n"
 "Report-Msgid-Bugs-To: https://curtain.fit/woocommerce\n"
-"POT-Creation-Date: 2026-11-18 17:34+0000\n"
+"POT-Creation-Date: 2026-11-19 02:06+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -22,6 +22,30 @@ msgstr ""
 #. Description of the plugin
 #: curtain.php
 msgid "Adds a \"Try it on\" button to your product pages and syncs garment fit data (size chart, fabric, flat-lay) to Curtain, the private fitting room. Nothing is sent until you connect your shop."
+msgstr ""
+
+#: includes/class-chart-columns.php
+msgid "Size %s is not a waist/leg size: write it as waist/leg, for example 32/34."
+msgstr ""
+
+#: includes/class-chart-columns.php
+msgid "Either every size has a waist and a leg (for example 32/34) or none has."
+msgstr ""
+
+#: includes/class-chart-columns.php
+msgid "Waist %1$s with leg %2$s appears twice (sizes %3$s and %4$s)."
+msgstr ""
+
+#: includes/class-chart-columns.php
+msgid "Unknown sleeve measuring point '%s': choose the shoulder seam or the centre back of the neck."
+msgstr ""
+
+#: includes/class-chart-columns.php
+msgid "The chart has a sleeve column: say where the sleeve is measured from, the shoulder seam or the centre back of the neck."
+msgstr ""
+
+#: includes/class-chart-columns.php
+msgid "Size %1$s: %2$s %3$s cm is outside the usual %4$s–%5$s cm."
 msgstr ""
 
 #: includes/class-frontend.php
@@ -598,6 +622,38 @@ msgid "Add colorway"
 msgstr ""
 
 #: includes/class-product-meta.php
+msgid "Sizes are waist/leg (W/L), for example 32/34"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "The sleeve is measured"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "— choose (needed with a sleeve column) —"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "from the shoulder seam to the cuff"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "from the centre back of the neck, over the shoulder, to the cuff"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Neck: the collar all round. Length: from the high shoulder point to the hem. Rise: from the crotch seam to the top of the waistband at the front."
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "These size chart changes were not saved:"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Check the size chart:"
+msgstr ""
+
+#: includes/class-product-meta.php
 msgid "Not connected to Curtain."
 msgstr ""
 
@@ -637,6 +693,26 @@ msgstr ""
 
 #: includes/class-product-meta.php
 msgid "chest"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "seat"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "neck"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "sleeve"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "length"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "rise"
 msgstr ""
 
 #: includes/class-product-meta.php

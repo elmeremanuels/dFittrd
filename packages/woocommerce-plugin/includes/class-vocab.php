@@ -20,7 +20,13 @@ final class Vocab {
 
 	public const CATEGORIES = array( 'top', 'bottom', 'dress', 'outerwear', 'shoes', 'accessory' );
 	public const AUDIENCES  = array( 'women', 'men', 'unisex' );
-	public const FIT_POINTS = array( 'bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'foot' );
+	/** FIT_POINTS of @curtain/schema: `neck` and `sleeve` were added for menswear (men-3d-plan M2). */
+	public const FIT_POINTS = array( 'bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'foot', 'neck', 'sleeve' );
+	/** The fit points the meta box always shows; the men's ones (`MENS_FIT_POINTS`) only with the men's columns. */
+	public const FORM_FIT_POINTS = array( 'bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'foot' );
+	public const MENS_FIT_POINTS = array( 'neck', 'sleeve' );
+	/** Where a chart's sleeve is measured from (SLEEVE_CONVENTIONS). */
+	public const SLEEVE_CONVENTIONS = array( 'shoulder_point', 'centre_back' );
 	public const TASTE_AXES = array( 'bohemian', 'minimal', 'classic', 'avantGarde', 'sporty' );
 
 	public const FABRIC_PRIMARIES = array(
@@ -81,7 +87,12 @@ final class Vocab {
 	);
 
 	/** Size-chart columns, in table order. */
-	public const SIZE_ROW_COLUMNS = array( 'size', 'bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'footEu', 'footLengthCm' );
+	public const SIZE_ROW_COLUMNS = array( 'size', 'bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'neck', 'sleeve', 'length', 'rise', 'footEu', 'footLengthCm' );
+	/** The men's columns of SIZE_ROW_COLUMNS: shown only on a men's product or a chart that has them. */
+	public const MENS_SIZE_COLUMNS = array( 'neck', 'sleeve', 'length', 'rise' );
+	/** Longest size label and largest chart (SIZE_LABEL_MAX, SIZE_CHART_MAX_ROWS). */
+	public const SIZE_LABEL_MAX = 24;
+	public const SIZE_CHART_MAX_ROWS = 60;
 
 	/** Fields the backend requires for status 'active' (schema completeness.ts heavy fields). */
 	public const HEAVY_FIELDS = array( 'category', 'sizeChartType', 'sizeChart', 'fabric.primary', 'flatLayPhoto' );
@@ -93,6 +104,7 @@ final class Vocab {
 		'_curtain_category'            => array( 'category', 'enum', 'whole' ),
 		'_curtain_size_chart_type'     => array( 'sizeChartType', 'enum', true ),
 		'_curtain_size_chart'          => array( 'sizeChart', 'json', true ),
+		'_curtain_sleeve_convention'   => array( 'sleeveConvention', 'enum', false ),
 		'_curtain_closure'             => array( 'closure', 'enum', false ),
 		'_curtain_garment_tape'        => array( 'garmentTape', 'json', false ),
 		'_curtain_fabric'              => array( 'fabric', 'json', true ),
@@ -350,6 +362,9 @@ final class Vocab {
 	 * every product without the "Made for" value, shows what it always showed).
 	 */
 	public static function size_column_key( string $col, ?string $audience ): string {
+		if ( 'hip' === $col && 'men' === $audience ) {
+			return 'seat'; // On a men's product the stored `hip` is the seat.
+		}
 		return 'bust' === $col && in_array( $audience, array( 'men', 'unisex' ), true ) ? 'chest' : $col;
 	}
 

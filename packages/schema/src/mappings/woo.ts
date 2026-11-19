@@ -18,6 +18,7 @@ import {
   coerceLengthCm,
   coerceNumber,
   coerceSizeChart,
+  coerceSleeveConvention,
   coerceString,
   coerceStringList,
   coerceStyleTags,
@@ -46,6 +47,7 @@ export type WooMetaPath =
   | 'brand'
   | 'sizeChartType'
   | 'sizeChart'
+  | 'sleeveConvention'
   | 'closure'
   | 'garmentTape'
   | 'fabric'
@@ -77,6 +79,7 @@ export const WOO_META_KEYS: readonly WooMetaKey[] = [
   { key: '_curtain_category', path: 'category', kind: 'enum', label: 'Category', description: 'Inferred from the WooCommerce product categories when empty.', heavy: true, options: ['top', 'bottom', 'dress', 'outerwear', 'shoes', 'accessory'] },
   { key: '_curtain_size_chart_type', path: 'sizeChartType', kind: 'enum', label: 'Size chart type', description: "'garment' = rows measured on the flat garment, 'body' = body the size is cut for.", heavy: true, options: ['garment', 'body'] },
   { key: '_curtain_size_chart', path: 'sizeChart', kind: 'json', label: 'Size chart (cm)', description: 'JSON array of rows, ascending.', heavy: true },
+  { key: '_curtain_sleeve_convention', path: 'sleeveConvention', kind: 'enum', label: 'Sleeve measured from', description: "Men's charts with a sleeve column: shoulder_point or centre_back.", heavy: false, options: ['shoulder_point', 'centre_back'] },
   { key: '_curtain_closure', path: 'closure', kind: 'enum', label: 'Closure', description: 'How the garment opens. Pull-on: the stretched waistband has to go over the hips.', heavy: false, options: GARMENT_CLOSURES },
   { key: '_curtain_garment_tape', path: 'garmentTape', kind: 'json', label: 'Garment measurements (cm)', description: 'Written by the Garment measurements table: per size, measured or estimated.', heavy: false },
   { key: '_curtain_fabric', path: 'fabric', kind: 'json', label: 'Fabric', description: 'primary, blend, weightGsm, stretchPct, drape, opacity, sheen', heavy: true },
@@ -223,6 +226,8 @@ export function fromWooMeta(product: WooProduct, meta?: WooMetaInput, options: F
 
   const sizeChart = coerceSizeChart(get('_curtain_size_chart'), sink, '_curtain_size_chart');
   if (sizeChart) out.sizeChart = sizeChart;
+  const sleeveConvention = coerceSleeveConvention(get('_curtain_sleeve_convention'), sink, '_curtain_sleeve_convention');
+  if (sleeveConvention) out.sleeveConvention = sleeveConvention;
 
   const closure = coerceClosure(get('_curtain_closure'), sink, '_curtain_closure');
   if (closure) out.closure = closure;

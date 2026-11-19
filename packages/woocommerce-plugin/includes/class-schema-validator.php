@@ -108,8 +108,44 @@ final class Schema_Validator {
 		if ( ! isset( $this->root['properties']['sizeChart'] ) || ! is_array( $data ) || ! isset( $data['sizeChart'] ) || ! is_array( $data['sizeChart'] ) || ! array_is_list( $data['sizeChart'] ) ) {
 			return;
 		}
+		foreach ( self::size_chart_rule_issues( $data['sizeChart'] ) as $issue ) {
+			$issues[] = self::issue( '' === $issue['path'] ? 'sizeChart' : 'sizeChart.' . $issue['path'], $issue['message'] );
+		}
+	}
+
+	/**
+	 * The refinements of `SizeChartSchema` in order, with zod's words and paths relative to the
+	 * chart ('' = the chart): two-dimensional (W/L) charts carry axes on every row or on none, every
+	 * waist × leg pair once (men-3d-plan M2b); then every label once.
+	 *
+	 * @param array<int, mixed> $rows
+	 * @return array<int, array{path:string,message:string}>
+	 */
+	public static function size_chart_rule_issues( array $rows ): array {
+		$out  = array();
+		$with = 0;
+		foreach ( $rows as $row ) {
+			if ( is_array( $row ) && isset( $row['axes'] ) ) {
+				++$with;
+			}
+		}
+		if ( $with > 0 && $with < count( $rows ) ) {
+			$out[] = self::issue( '', 'Either every row of the size chart has axes (waist and leg) or none has' );
+		}
+		$pairs = array();
+		foreach ( $rows as $i => $row ) {
+			if ( ! is_array( $row ) || ! isset( $row['axes'] ) || ! is_array( $row['axes'] ) || ! is_string( $row['axes']['waist'] ?? null ) || ! is_string( $row['axes']['leg'] ?? null ) ) {
+				continue;
+			}
+			$key = self::size_label_key( $row['axes']['waist'] ) . "\0" . self::size_label_key( $row['axes']['leg'] );
+			if ( array_key_exists( $key, $pairs ) ) {
+				$out[] = self::issue( $i . '.axes', sprintf( 'Waist %s with leg %s occurs twice (rows %d and %d)', $row['axes']['waist'], $row['axes']['leg'], $pairs[ $key ] + 1, $i + 1 ) );
+			} else {
+				$pairs[ $key ] = $i;
+			}
+		}
 		$first = array();
-		foreach ( $data['sizeChart'] as $i => $row ) {
+		foreach ( $rows as $i => $row ) {
 			if ( ! is_array( $row ) || ! isset( $row['size'] ) || ! is_string( $row['size'] ) ) {
 				continue;
 			}
@@ -118,11 +154,12 @@ final class Schema_Validator {
 				$first[ $key ] = $i;
 				continue;
 			}
-			$issues[] = self::issue(
-				'sizeChart.' . $i . '.size',
+			$out[] = self::issue(
+				$i . '.size',
 				sprintf( 'Duplicate size label "%s" (rows %d and %d): every row of the size chart needs its own label', $row['size'], $first[ $key ] + 1, $i + 1 )
 			);
 		}
+		return $out;
 	}
 
 	/** @param mixed $data */

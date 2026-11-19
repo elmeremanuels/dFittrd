@@ -159,9 +159,14 @@ describe("men's chart templates", () => {
       expect(OFFERED_CHART_TEMPLATES).not.toContain(t);
       expect(t.sources.every((s) => s.terms !== undefined)).toBe(true);
     }
-    expect(chartTemplatesDto().templates.filter((t) => t.audience === 'men')).toEqual([]);
+    // No men's BODY template (numbers from sources) is offered. The men's garment templates are blank
+    // forms (labels and columns, no numbers, no sources) and are offered.
+    expect(chartTemplatesDto().templates.filter((t) => t.audience === 'men' && t.kind === 'body')).toEqual([]);
+    const mensGarment = chartTemplatesDto().templates.filter((t) => t.audience === 'men');
+    expect(mensGarment.map((t) => t.id)).toEqual(['garment-mens-tee', 'garment-mens-chino-wl']);
+    for (const t of mensGarment) expect([t.kind, t.rows, t.sources]).toEqual(['garment', undefined, undefined]);
     expect(chartTemplatesDto().templates.map((t) => t.id)).toEqual(OFFERED_CHART_TEMPLATES.map((t) => t.id));
-    expect(chartTemplatesDto({ includePendingLegalReview: true }).templates.filter((t) => t.audience === 'men')).toHaveLength(3);
+    expect(chartTemplatesDto({ includePendingLegalReview: true }).templates.filter((t) => t.audience === 'men' && t.kind === 'body')).toHaveLength(3);
     // The women's templates and the garment templates are offered as before.
     expect(OFFERED_CHART_TEMPLATES).toHaveLength(CHART_TEMPLATES.length - 3);
   });

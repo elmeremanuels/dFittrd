@@ -19,6 +19,7 @@ const client = (m: ReturnType<typeof fetchMock>) => createAdminClient({ shopDoma
 const CONTRACT_KEYS = [
   'size_chart_type',
   'size_chart',
+  'sleeve_convention',
   'closure',
   'garment_tape',
   'fabric',

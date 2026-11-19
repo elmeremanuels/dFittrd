@@ -14,5 +14,6 @@ tests/fixtures/fabric-text.json
 tests/fixtures/prices.json
 tests/fixtures/audience.json
 tests/fixtures/garment-tape.json
+tests/fixtures/mens-charts.json
 # Pinned WordPress.org downloads for the real-WordPress e2e (e2e/stack.mjs)
 e2e/.cache/

@@ -10,6 +10,7 @@ import { FaceLandmarker, FilesetResolver, ImageSegmenter, PoseLandmarker } from 
 import { placeLevels } from './crossSections';
 import { bakeFaceTexture, MAX_FRONT_YAW_DEG, type FaceTopology } from './faceBake';
 import faceMeshUv from './faceMeshUv.json';
+import { buildFaceTile, photoNotices, suggestSkin } from './faceTile';
 import { estimateSkin, sampleClassLab, sampleSkinLab, SKIN_SAMPLE_INDICES } from './faceSkin';
 import { neighbourhood, retainedIndices } from './frameRetainer';
 import { SEG } from './landmarks';
@@ -379,6 +380,51 @@ async function bakeFace(bitmap: ImageBitmap, targetSkinHex: string | null): Prom
   }
 }
 
+/**
+ * Slices 4 and 5: one face photo → a stylised 2D face tile and/or a skin tone suggestion, only what
+ * was asked for. The landmarks live only in this function; the photo's pixels and the bitmap too.
+ */
+async function faceLook(bitmap: ImageBitmap, wantTile: boolean, wantSkin: boolean, aspect: number | undefined): Promise<void> {
+  try {
+    if (!face) throw new Error('face landmarker not ready');
+    const t0 = performance.now();
+    const res = face.detect(bitmap);
+    const t1 = performance.now();
+    const lm = res.faceLandmarks[0] ?? [];
+    if (lm.length < 468) {
+      post({ type: 'faceLookResult', faceFound: false, tile: null, suggestion: null, notices: [], timings: { pixelsMs: 0, detectMs: Math.round(t1 - t0), tileMs: 0, skinMs: 0 } });
+      return;
+    }
+    if (typeof OffscreenCanvas === 'undefined') throw new Error('OffscreenCanvas unavailable');
+    const { width, height } = bitmap;
+    const canvas = new OffscreenCanvas(width, height);
+    const g = canvas.getContext('2d', { willReadFrequently: true });
+    if (!g) throw new Error('2d context unavailable');
+    g.drawImage(bitmap, 0, 0);
+    const img = g.getImageData(0, 0, width, height);
+    const t2 = performance.now();
+    const tile = wantTile ? buildFaceTile(img, lm, aspect ? { aspect } : {}) : null;
+    const t3 = performance.now();
+    const suggestion = wantSkin ? suggestSkin(img, lm) : null;
+    const notices = photoNotices(img, lm).filter((n) => wantSkin || n === 'turned' || n === 'small');
+    const t4 = performance.now();
+    const rgba = tile ? (tile.rgba.buffer as ArrayBuffer) : null;
+    post(
+      {
+        type: 'faceLookResult',
+        faceFound: true,
+        tile: tile && rgba ? { width: tile.width, height: tile.height, rgba, skinLab: tile.skinLab } : null,
+        suggestion,
+        notices,
+        timings: { pixelsMs: Math.round(t2 - t1), detectMs: Math.round(t1 - t0), tileMs: Math.round(t3 - t2), skinMs: Math.round(t4 - t3) },
+      },
+      rgba ? [rgba] : [],
+    );
+  } finally {
+    bitmap.close();
+  }
+}
+
 ctx.onmessage = (ev: MessageEvent<WorkerInbound>): void => {
   const msg = ev.data;
   switch (msg.type) {
@@ -410,6 +456,9 @@ ctx.onmessage = (ev: MessageEvent<WorkerInbound>): void => {
       break;
     case 'faceTexture':
       bakeFace(msg.bitmap, msg.targetSkinHex).catch((e: unknown) => post({ type: 'error', stage: 'faceTexture', message: errMsg(e) }));
+      break;
+    case 'faceLook':
+      faceLook(msg.bitmap, msg.tile, msg.skin, msg.aspect).catch((e: unknown) => post({ type: 'error', stage: 'faceLook', message: errMsg(e) }));
       break;
     case 'reset':
       resetRecording();

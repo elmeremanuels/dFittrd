@@ -65,4 +65,6 @@ export {
   type FlowCaps,
 } from './captureMachine';
 export type * from './types';
-export type { WorkerInbound, WorkerOutbound, ScanResultMessage, FaceResultMessage, FaceTextureMessage, GateMessage } from './workerProtocol';
+export type { WorkerInbound, WorkerOutbound, ScanResultMessage, FaceResultMessage, FaceTextureMessage, FaceLookMessage, GateMessage } from './workerProtocol';
+export { buildFaceTile, matchTileToSkin, suggestSkin, photoNotices, headPose, FACE_OVAL, FACE_TILE_WIDTH, type FaceTile, type PhotoNotice, type SkinSuggestion } from './faceTile';
+export { faceLookFromPhoto, tileObjectUrl, type FaceLookOptions, type FaceLookResult, type FaceLookTile } from './faceLook';

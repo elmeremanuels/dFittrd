@@ -273,3 +273,4 @@ export const NECK_SLACK: Readonly<{ tight: number; good: number; loose: number }
  * seat girth. Both numbers are assumed (no source read): calibrate on real charts.
  */
 export const WORN_WAIST_RISE_CM: Readonly<{ atWaist: number; atSeat: number }> = { atWaist: 30, atSeat: 18 };
+

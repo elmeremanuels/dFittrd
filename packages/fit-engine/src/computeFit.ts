@@ -327,9 +327,13 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
   const pullOnApplies =
     bandTape !== null && garment.closure === 'pull-on' && garment.category === 'bottom' && bandTape.some((b) => b?.stretched !== undefined);
 
+  // Belly-aware chest (men's top, slice M2a): the smallest size whose waist is not tight is the one
+  // the waist needs; only there may the chest's room be read as the cost of fitting the waist.
+  const waistNeedIndex = mensFit?.category === 'top' ? waistNeededIndex(rows, contexts, bodyChart) : -1;
+
   // Steps 2–5 — per size.
   const scoredSizes = rows.map((row, i) =>
-    scoreSize(row ?? { size: sizes[i] ?? '' }, sizes[i] ?? '', contexts, bodyChart, tape, bandTape?.[i], mensFit),
+    scoreSize(row ?? { size: sizes[i] ?? '' }, sizes[i] ?? '', contexts, bodyChart, tape, bandTape?.[i], mensFit, i === waistNeedIndex),
   );
   const perSize: SizeFit[] = scoredSizes.map((s) => s.fit);
   // Closeness = mean |gap| over the size's used points. The spec writes Σ|gap|; the mean orders
@@ -495,6 +499,18 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
     ...(sizeAxes !== undefined ? { sizeAxes } : {}),
     ...(waistLed ? { waistLed: true as const } : {}),
   };
+}
+
+/** Index of the smallest row whose waist is not tight for this body, or −1 (no waist point, no waist value). */
+function waistNeededIndex(rows: readonly SizeRow[], contexts: readonly PointContext[], bodyChart: boolean): number {
+  const w = contexts.find((c) => c.point === 'waist' && c.kind === 'girth');
+  const b = contexts.find((c) => c.point === 'bust' && c.kind === 'girth');
+  if (!w || !b || w.e0 === undefined || w.userVal === undefined || b.userVal === undefined) return -1;
+  return rows.findIndex((row) => {
+    const raw = row && typeof row === 'object' ? chartValue('waist', row) : undefined;
+    if (raw === undefined) return false;
+    return round1((bodyChart ? raw + (w.e0 as number) : raw) - (w.userVal as number + w.e)) >= w.edges.tightLimit;
+  });
 }
 
 /** Every row carries `axes` (a W/L chart, slice M2b). */
@@ -672,6 +688,7 @@ function scoreSize(
   tape: TapeContext | null = null,
   bandTape: BandTape | undefined = undefined,
   mensFit: MensContext | null = null,
+  waistLedRow = false,
 ): ScoredSize {
   const points: (PointFit | OmittedPoint)[] = [];
   const closeness: number[] = [];
@@ -748,8 +765,17 @@ function scoreSize(
     // Belly-aware chest (men's top): when this size is tighter at the waist than at the chest, the
     // chest room above the target is what fitting the waist costs, so the chest's upper bands widen
     // by that much. A body whose drop matches the garment's gets no change.
+    // Only the size the waist needs counts: the smallest one whose waist is not tight. A larger size
+    // has room to spare at the waist and was not chosen by it.
     let waistLedCm: number | undefined;
-    if (waistGap !== undefined && c.point === 'bust' && c.kind === 'girth' && fromBand === undefined && gapCm > waistGap) {
+    if (
+      waistLedRow &&
+      waistGap !== undefined &&
+      c.point === 'bust' &&
+      c.kind === 'girth' &&
+      fromBand === undefined &&
+      gapCm > waistGap
+    ) {
       waistLedCm = round1(gapCm - waistGap);
       classEdges = { ...classEdges, goodSlack: classEdges.goodSlack + waistLedCm, looseSlack: classEdges.looseSlack + waistLedCm };
     }

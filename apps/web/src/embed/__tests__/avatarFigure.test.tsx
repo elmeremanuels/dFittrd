@@ -9,7 +9,7 @@ import { ESTIMATE_LABEL, ESTIMATE_LABEL_LINES } from '@/components/EstimateBadge
 import { bodyGeometry } from '@/render/body';
 import { contrastRatio, drawnHeadColour, faceInk, figureOutline, neutralFace, SKIN_SHADE } from '@/render/face';
 import { adjustColor } from '@/render/body';
-import { bodyFamilyFor, Garment3D, type Garment3DProps } from '../Garment3D';
+import { bodyFamilyFor, Garment3D, viewerHeadFlag, viewerLightingFlag, type Garment3DProps } from '../Garment3D';
 import { assertNeutralPerson } from '../HeroRender';
 import { lookForMonk, MONK_CLASSES, STANDARD_SKIN_HEX } from '../look';
 import { embedStrings } from '../strings';
@@ -244,6 +244,40 @@ describe('3D view: the look and the body go to the viewer as in-memory options',
     fireEvent.click(screen.getByTestId('garment3d-open'));
     await waitFor(() => expect(men.mountGarmentView).toHaveBeenCalledTimes(1));
     expect(mountOptions(men.mountGarmentView).body).toEqual({ bust: 90, waist: 72, hip: 98, family: 'male', heightCm: 171 });
+  });
+
+  it('lighting and head: nothing is sent for today\'s look; the look review\'s options only when asked', async () => {
+    const a = setup({ skinHex: null });
+    fireEvent.click(screen.getByTestId('garment3d-open'));
+    await waitFor(() => expect(a.mountGarmentView).toHaveBeenCalledTimes(1));
+    expect('lighting' in mountOptions(a.mountGarmentView)).toBe(false);
+    expect('look' in mountOptions(a.mountGarmentView)).toBe(false);
+    cleanup();
+    const hex = lookForMonk(1)!.hex;
+    const b = setup({ skinHex: hex, lighting: 'neutral-v2', head: 'neutral-v2' });
+    fireEvent.click(screen.getByTestId('garment3d-open'));
+    await waitFor(() => expect(b.mountGarmentView).toHaveBeenCalledTimes(1));
+    expect(mountOptions(b.mountGarmentView).lighting).toBe('neutral-v2');
+    expect(mountOptions(b.mountGarmentView).look).toEqual({ skinHex: hex, head: 'neutral-v2' });
+    cleanup();
+    const c = setup({ skinHex: null, lighting: 'classic', head: 'neutral-v2' });
+    fireEvent.click(screen.getByTestId('garment3d-open'));
+    await waitFor(() => expect(c.mountGarmentView).toHaveBeenCalledTimes(1));
+    expect('lighting' in mountOptions(c.mountGarmentView)).toBe(false);
+    expect(mountOptions(c.mountGarmentView).look).toEqual({ head: 'neutral-v2' });
+  });
+
+  it('the build flags: classic and today\'s head unless set to a known value', () => {
+    expect(viewerLightingFlag({})).toBe('classic');
+    for (const v of ['', 'Neutral', 'v2', 'neutral-v3', 'classic']) expect(viewerLightingFlag({ VITE_VIEWER_LIGHTING: v })).toBe('classic');
+    expect(viewerLightingFlag({ VITE_VIEWER_LIGHTING: 'neutral' })).toBe('neutral');
+    expect(viewerLightingFlag({ VITE_VIEWER_LIGHTING: 'neutral-v2' })).toBe('neutral-v2');
+    expect(viewerHeadFlag({})).toBeNull();
+    for (const v of ['', 'neutral', 'egg', 'v2']) expect(viewerHeadFlag({ VITE_VIEWER_HEAD: v })).toBeNull();
+    expect(viewerHeadFlag({ VITE_VIEWER_HEAD: 'neutral-v2' })).toBe('neutral-v2');
+    // The flags of this test run are not set: the app gets today's look.
+    expect(viewerLightingFlag()).toBe('classic');
+    expect(viewerHeadFlag()).toBeNull();
   });
 
   it('a new colour reaches the mounted view through setLook, without a remount', async () => {

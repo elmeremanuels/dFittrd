@@ -18,7 +18,7 @@ import type { ViewerMaterial } from './engine';
  * its own colour (`frontIrradiance` = π), for skin and garment colours that are not shifted. It
  * changes how every garment looks, so it is opt-in.
  */
-export type Lighting = 'classic' | 'neutral';
+export type Lighting = 'classic' | 'neutral' | 'neutral-v2';
 
 export interface LightingRig {
   toneMapping: 'aces' | 'true-tone';
@@ -41,6 +41,8 @@ export const RIM_POSITION = [-220, 180, -260] as const;
 export const LIGHTING_RIGS: Readonly<Record<Lighting, LightingRig>> = {
   classic: { toneMapping: 'aces', sky: 0xffffff, ground: 0x8a8076, hemisphere: 1.4, key: 2.2, rim: 1.1, floor: '#E9E1D6' },
   neutral: { toneMapping: 'true-tone', sky: 0xffffff, ground: 0x9a9a9a, hemisphere: 1.5, key: 2.9, rim: 1.1, floor: '#CEC7BC' },
+  // The lights of `neutral`; its outline and contact shadow are drawn by packages/garment-viewer only (the spike draws none).
+  'neutral-v2': { toneMapping: 'true-tone', sky: 0xffffff, ground: 0x9a9a9a, hemisphere: 1.5, key: 2.9, rim: 1.1, floor: '#CEC7BC' },
 };
 
 /** Linear value where the `neutral` tone curve starts to compress highlights; below it a colour passes unchanged. */
@@ -147,8 +149,8 @@ export class Stage {
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    const rig = LIGHTING_RIGS[options.lighting === 'neutral' ? 'neutral' : 'classic'];
-    this.lighting = options.lighting === 'neutral' ? 'neutral' : 'classic';
+    this.lighting = options.lighting === 'neutral' || options.lighting === 'neutral-v2' ? options.lighting : 'classic';
+    const rig = LIGHTING_RIGS[this.lighting];
     this.renderer.toneMapping = rig.toneMapping !== 'true-tone' ? THREE.ACESFilmicToneMapping : installTrueTone() ? THREE.CustomToneMapping : THREE.NeutralToneMapping;
     this.scene.background = new THREE.Color('#F5EFE7');
     this.scene.add(new THREE.HemisphereLight(rig.sky, rig.ground, rig.hemisphere));

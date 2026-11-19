@@ -103,6 +103,8 @@ export interface Cloth {
   loops: Int32Array;
   loopStart: Int32Array;
   loopMin: Float32Array;
+  /** Per loop, the girth it is pulled back to when its hull grows past it, cm (`GirthLoop.maxGirthCm`); absent: no loop has one. */
+  loopMax?: Float32Array;
   /** Simulated time so far, s. */
   time: number;
   /** Frames in a row whose largest particle move stayed under `ClothParams.calmCm`. */
@@ -250,6 +252,12 @@ export interface GirthLoop {
   particles: readonly number[];
   /** Smallest girth (convex hull perimeter in x–z) the loop may fold to, cm. */
   minGirthCm: number;
+  /**
+   * Largest girth the loop may open to, cm: a seam that does not stretch (a tape-built dress's underbust seam). Absent:
+   * no upper limit, as every loop before it. Unlike the minimum it pulls the loop in, and collision runs after it: on a
+   * body larger than the seam the body wins and the seam is stretched over it.
+   */
+  maxGirthCm?: number;
 }
 
 /** Install girth loops on a cloth (replaces any it had). */
@@ -261,6 +269,8 @@ export function setLoops(cloth: Cloth, loops: readonly GirthLoop[]): void {
   cloth.loops = flat;
   cloth.loopStart = start;
   cloth.loopMin = Float32Array.from(loops, (l) => l.minGirthCm);
+  if (loops.some((l) => l.maxGirthCm !== undefined)) cloth.loopMax = Float32Array.from(loops, (l) => l.maxGirthCm ?? Infinity);
+  else delete cloth.loopMax;
 }
 
 /**
@@ -297,13 +307,17 @@ const loopScratch: { order: number[]; hull: Int32Array } = { order: [], hull: ne
  * fight collision, which runs after it.
  */
 function projectLoops(pos: Float32Array, w: Float32Array, cloth: Cloth, k: number): void {
-  const { loops, loopStart, loopMin } = cloth;
+  const { loops, loopStart, loopMin, loopMax } = cloth;
   for (let l = 0; l < loopMin.length; l++) {
     const a = loopStart[l]!;
     const b = loopStart[l + 1]!;
     if (loopScratch.hull.length < b - a + 1) loopScratch.hull = new Int32Array(2 * (b - a + 1));
     const g = loopGirth(pos, loops, a, b, loopScratch.order, loopScratch.hull);
-    if (g <= 1e-6 || g >= loopMin[l]!) continue;
+    const max = loopMax ? loopMax[l]! : Infinity;
+    if (g <= 1e-6 || (g >= loopMin[l]! && g <= max)) continue;
+    // Too long: all of the excess is taken back (a seam does not stretch); too short: `k` of the shortfall, as before.
+    const want = g > max ? max : loopMin[l]!;
+    const kk = g > max ? 1 : k;
     let cx = 0;
     let cz = 0;
     for (let j = a; j < b; j++) {
@@ -312,7 +326,7 @@ function projectLoops(pos: Float32Array, w: Float32Array, cloth: Cloth, k: numbe
     }
     cx /= b - a;
     cz /= b - a;
-    const s = 1 + k * (loopMin[l]! / g - 1);
+    const s = 1 + kk * (want / g - 1);
     for (let j = a; j < b; j++) {
       const i = loops[j]!;
       if (w[i] === 0) continue;

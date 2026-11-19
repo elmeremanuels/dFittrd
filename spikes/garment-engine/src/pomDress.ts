@@ -17,7 +17,7 @@
  * - **Skirt**: every row is a closed line of cloth whose length runs straight from the skirt's top
  *   edge (the gathered panel pulled flat, `2 × skirt top width`; the seam's own girth when the shop
  *   gives none) to the hem sweep. The cloth is longer than the line round the body it hangs on, so it
- *   is laid in `folds` soft folds: an envelope (the seam's girth at the top, `hemHullShare` of the sweep
+ *   is gathered finely at the seam and laid in `folds` soft folds below it: an envelope (the seam's girth at the top, `hemHullShare` of the sweep
  *   at the hem, never inside the body) plus an outward wave whose height is solved per row so that the
  *   row's cloth length is exact. The folds are a start shape and the rest shape of the cloth's bend;
  *   the drape on the device decides how they hang.
@@ -66,8 +66,9 @@ export const POM_DRESS_ASSUMPTIONS = {
   skirtMinEaseCm: 1,
   /** The skirt's first row lies this far under the seam ring (the gathering stitch). */
   seamGapCm: 0.8,
-  /** Soft folds round the skirt. */
+  /** Soft folds round the skirt, and the depth under the seam over which the gathers run into them. */
   folds: 24,
+  gatherBlendCm: 8,
   /** The line round the outside of the hanging hem, as a share of the hem sweep (the rest is in the folds). */
   hemHullShare: 0.72,
   /** Strap width, and how far the strap lies off the body. */
@@ -341,14 +342,17 @@ export function buildPomDress(m: Mannequin, row: PomDressRow, options: PomDressO
   if (seamY >= bustLineY - 1) throw new Error('pomDress: the bodice ends above the bust line; this builder needs an underbust seam');
 
   /** One skirt row: the envelope's hull at y and the fold height that makes the row's cloth length `cloth`. */
-  const skirtRow = (y: number, t: number, record = false): P2[] => {
+  const skirtRow = (y: number, t: number, y0: number, record = false): P2[] => {
     const cloth = lerp(skirtTop, sweep, t);
     const env = ringAt(y, Math.min(cloth, lerp(gSeam, A.hemHullShare * sweep, t)), t === 0 ? A.minEaseCm : A.skirtMinEaseCm);
     // Only cloth that is itself shorter than the line round the body is "tight"; the envelope is an assumption.
     if (record && cloth < env.girth - 1e-6) tight.push({ y: Math.round(y * 10) / 10, askedCm: Math.round(cloth * 10) / 10, builtCm: Math.round(env.girth * 10) / 10 });
     const base = skirtAng.map((th) => hullRay(env.h, env.d, th));
-    // Folds: an outward wave, lowest (on the envelope) at the centre front and back.
-    const w = skirtAng.map((th) => (1 - Math.cos(A.folds * (th - Math.PI / 2))) / 2);
+    // At the seam the cloth is gathered: a fine zigzag, every second vertex out (a steep, deep fold there would lever the
+    // seam open under the skirt's weight). Over `gatherBlendCm` it runs into the soft folds: an outward wave, lowest (on
+    // the envelope) at the centre front and back.
+    const blend = smooth((y0 - y) / A.gatherBlendCm);
+    const w = skirtAng.map((th, j) => lerp(j % 2, (1 - Math.cos(A.folds * (th - Math.PI / 2))) / 2, blend));
     const at = (amp: number): P2[] => base.map((p, j) => [p[0] + amp * w[j]! * Math.cos(skirtAng[j]!), p[1] + amp * w[j]! * Math.sin(skirtAng[j]!)] as P2);
     if (perimeter(base) >= cloth) return base;
     let lo = 0, hi = 40;
@@ -387,7 +391,7 @@ export function buildPomDress(m: Mannequin, row: PomDressRow, options: PomDressO
     for (let k = 0; k <= n; k++) {
       const t = k / n;
       const y = lerp(y0, hemY, t);
-      skirt.push(skirtRow(y, t, record).map(([x, z]) => add([x, y, z])));
+      skirt.push(skirtRow(y, t, y0, record).map(([x, z]) => add([x, y, z])));
     }
     for (let k = 0; k + 1 < skirt.length; k++) for (let j = 0; j < NS; j++) quad(skirt[k + 1]![j]!, skirt[k + 1]![(j + 1) % NS]!, skirt[k]![(j + 1) % NS]!, skirt[k]![j]!);
     // The gathering stitch: every seam vertex takes two skirt vertices.
@@ -434,15 +438,31 @@ export function buildPomDress(m: Mannequin, row: PomDressRow, options: PomDressO
     return { mesh, topEdge: top, seam, skirtTop: first, hem: skirt[skirt.length - 1]!, centreFront, centreFrontSeamAt: bodice.length - 1, straps };
   };
 
+  // The centre front lies in a fold's valley (on the envelope) in every row, so the hem's height is solved on that one
+  // line; the mesh is assembled once.
+  const envelopeGirth = (t: number): number => Math.min(lerp(skirtTop, sweep, t), lerp(gSeam, A.hemHullShare * sweep, t));
+  const cfLength = (hemY: number): number => {
+    const y0 = seamY - A.seamGapCm;
+    const n = Math.max(2, Math.round((y0 - hemY) / rowStep));
+    const seamRing = ringAt(seamY, gSeam, A.minEaseCm);
+    let prev: P2 = hullRay(seamRing.h, seamRing.d, Math.PI / 2), prevY = seamY, len = row.bodiceLengthCm;
+    for (let k = 0; k <= n; k++) {
+      const t = k / n, y = lerp(y0, hemY, t);
+      const env = ringAt(y, envelopeGirth(t), t === 0 ? A.minEaseCm : A.skirtMinEaseCm);
+      const p = hullRay(env.h, env.d, Math.PI / 2);
+      len += Math.hypot(p[0] - prev[0], y - prevY, p[1] - prev[1]);
+      prev = p;
+      prevY = y;
+    }
+    return len;
+  };
   let hemY = topY - row.lengthCm;
-  let built = assemble(hemY, false);
-  for (let it = 0; it < 6; it++) {
-    const got = pathLength(built.mesh.positions, built.centreFront);
-    if (Math.abs(got - row.lengthCm) < 0.01) break;
+  for (let it = 0; it < 8; it++) {
+    const got = cfLength(hemY);
+    if (Math.abs(got - row.lengthCm) < 0.005) break;
     hemY -= row.lengthCm - got;
-    built = assemble(hemY, false);
   }
-  built = assemble(hemY, true);
+  const built = assemble(hemY, true);
   const seen = new Set<number>();
   return { ...built, row, levels: { topY, bustLineY, seamY, hemY }, tight: tight.filter((x) => (seen.has(x.y) ? false : (seen.add(x.y), true))) };
 }

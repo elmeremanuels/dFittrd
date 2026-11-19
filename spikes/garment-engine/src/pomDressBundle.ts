@@ -33,6 +33,9 @@ export const POM_DRESS_TAPE_TOLERANCE_CM = 0.5;
 /** Rings of the dress that carry a grading knot (the straps cross the shoulder and neck rings and are not rings of cloth). */
 export const POM_DRESS_RINGS = ['chest', 'underbust', 'waist', 'hip', 'thigh'] as const satisfies readonly AnchorRing[];
 
+/** The top edge band the device holds the dress by, cm under the top edge [A]. */
+export const POM_DRESS_PIN_BAND_CM = 1.7;
+
 const json = (x: unknown): string => `${JSON.stringify(x, null, 2)}\n`;
 const r2 = (x: number): number => Math.round(x * 100) / 100;
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
@@ -147,6 +150,9 @@ export function buildPomDressBundle(productId: string, payload: GarmentPayload, 
         }];
       }),
     ),
+    // How the device holds it: by its top edge band (the top edge and the row under it) and the straps, with no cling pull.
+    // The underbust seam does not stretch past the fabric's own give.
+    support: { pinFromCm: r2(base.levels.topY - POM_DRESS_PIN_BAND_CM), cling: false, seamsAtCm: [r2(base.levels.seamY)], seamStretchPct: payload.fabric.stretchPct },
     breadths: {},
     lengths: Object.fromEntries(Object.entries(measurements.lengths).map(([id, l]) => [id, { lengthCm: round(l!.lengthCm, 2), start: roundVec(l!.start, 2), end: roundVec(l!.end, 2), fromMannequin: l!.fromMannequin }])),
     calibration: { globalScale: 1, ringCorrections: {}, sources: {}, residualAfterGlobalCm: { rms: 0, maxAbs: 0 } },

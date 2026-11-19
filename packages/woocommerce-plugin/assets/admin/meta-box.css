@@ -74,3 +74,9 @@
 /* The size chart has a column per measurement: wider than a phone. It scrolls sideways inside the
    box instead of being cut off by the postbox (seen on a 390 px screen, WordPress 7.1). */
 .curtain-scroll { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* Men's chart columns (neck, sleeve, length, rise, W/L): only on a men's product or a chart that has them. */
+.curtain-box:not(.curtain-show-mens) .curtain-mens-col { display: none !important; }
+.curtain-mens-chart { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 16px; margin: 6px 0; }
+.curtain-mens-chart label > span { display: block; font-weight: 600; font-size: 12px; }
+.curtain-mens-chart select { max-width: 100%; }
+.curtain-mens-chart .description { flex-basis: 100%; margin: 0; }

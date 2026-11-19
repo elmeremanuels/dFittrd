@@ -131,7 +131,7 @@ test(
 		$b = Payload_Builder::build( $base, $meta );
 		$p = $b['payload'];
 		assert_json_equal( array( 'primary' => 'linen', 'weightGsm' => 240, 'stretchPct' => 2, 'drape' => 0.78, 'blend' => array( array( 'linen', 98 ), array( 'elastane', 2 ) ) ), $p['fabric'] );
-		assert_json_equal( array( 'bust' => 6, 'hip' => 8, 'waist' => 4 ), $p['ease'] );
+		assert_json_equal( array( 'bust' => 6, 'hip' => 8, 'neck' => 3, 'waist' => 4 ), $p['ease'], 'neck is a fit point since men-3d-plan M2, as in coerceEase' );
 		assert_json_equal( array( 'shoulder_to_hem' => 118, 'sleeve_length' => 0 ), $p['lengthCm'] );
 		assert_json_equal( array( 'avantGarde' => 1, 'minimal' => 0.2 ), $p['styleTags'] );
 		assert_same( array( 'bust', 'hip', 'shoulder', 'foot' ), $p['criticalFitPoints'] );

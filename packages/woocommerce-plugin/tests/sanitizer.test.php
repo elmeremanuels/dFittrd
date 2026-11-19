@@ -67,7 +67,7 @@ test(
 		assert_same( 'body', $m['_curtain_size_chart_type'] );
 		assert_same( "runs small\nx", $m['_curtain_sizing_notes'], 'tags stripped, newlines kept (textarea)' );
 		assert_same( '0.92', $m['_curtain_true_to_size_score'] );
-		assert_same( '["bust","shoulder"]', $m['_curtain_critical_fit_points'] );
+		assert_same( '["bust","shoulder","neck"]', $m['_curtain_critical_fit_points'], 'neck is a fit point since men-3d-plan M2' );
 		assert_same( '["waist-tie","side seam","rib-hem"]', $m['_curtain_stretch_zones'] );
 		assert_json_equal( array( 'bohemian' => 0.7, 'sporty' => 1 ), json_decode( $m['_curtain_style_tags'], true ), 'clamped to 0..1' );
 		assert_same( '#C97A4F', $m['_curtain_primary_color_hex'] );

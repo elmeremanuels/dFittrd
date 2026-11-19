@@ -12,7 +12,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GARMENT_TAPE_FORM_CASES, GARMENT_TAPE_FORM_TEXT, PILOT_PULL_ON_SKIRT, checkGarmentTapeInput, refillGarmentTape, measuredFromGarmentTape, MOCK_GARMENTS, MENS_FIXTURE_GARMENTS, AUDIENCE_CASES, inferAudienceDecision, fromWooMeta, toWooMeta, ESTIMATE_DISCLAIMER, FABRIC_TEXT_FIELD, fabricFromProductText, resolveFabricText } from '@curtain/schema';
+import { CHART_COLUMN_CASES, checkChartColumns, wlAxesFromLabel, SizeChartSchema, SYNTHETIC_MENS_TEE, SYNTHETIC_MENS_CHINO_WL, GARMENT_TAPE_FORM_CASES, GARMENT_TAPE_FORM_TEXT, PILOT_PULL_ON_SKIRT, checkGarmentTapeInput, refillGarmentTape, measuredFromGarmentTape, MOCK_GARMENTS, MENS_FIXTURE_GARMENTS, AUDIENCE_CASES, inferAudienceDecision, fromWooMeta, toWooMeta, ESTIMATE_DISCLAIMER, FABRIC_TEXT_FIELD, fabricFromProductText, resolveFabricText } from '@curtain/schema';
 import { writeChartTemplatesAsset } from './chart-templates.mjs';
 import { writeEurRatesAsset } from './eur-rates.mjs';
 import { DEFAULT_EUR_RATES } from '@curtain/shopify-app';
@@ -168,3 +168,52 @@ writeFileSync(
   JSON.stringify({ cases: tapeCases, products: tapeProducts, refills, measured: measuredFromGarmentTape(PILOT_PULL_ON_SKIRT.garmentTape), text: GARMENT_TAPE_FORM_TEXT }, null, 1),
 );
 console.log(`wrote tests/fixtures/garment-tape.json (${tapeCases.length} form cases, ${tapeProducts.length} products, ${refills.length} refills)`);
+
+// Men's chart columns (men-3d-plan M2): the meta box check (Chart_Columns::check = checkChartColumns),
+// waist/leg labels, what the schema refinements of SizeChartSchema say (Schema_Validator and the
+// builder must agree), and men's products read back through fromWooMeta (Payload_Builder must agree).
+const columnCases = CHART_COLUMN_CASES.map((c) => ({ name: c.name, input: c.input, expected: checkChartColumns(c.input) }));
+const labels = ['32/34', 'W32/L34', ' w30 / l32 ', '32x34', '32X30', '32', 'M', '32/34/36', '132/34', '3234', 'W32'].map((label) => ({ label, axes: wlAxesFromLabel(label) }));
+const teeRows = SYNTHETIC_MENS_TEE.sizeChart.map((r, i) => ({ ...r, neck: 42 + i, sleeve: 20 + i, length: 70 + 2 * i }));
+const wl = SYNTHETIC_MENS_CHINO_WL.sizeChart;
+const chartCases = [
+  ['a women\'s chart', [{ size: '8', bust: 85, waist: 67.5, hip: 94 }, { size: '10', bust: 90, waist: 72.5, hip: 99 }]],
+  ['a men\'s tee with neck, sleeve and length', teeRows],
+  ['the W/L chino chart (15 rows with axes)', wl],
+  ['some rows with axes, some without', [...wl.slice(0, 2), { size: '34', waist: 88.5 }]],
+  ['a waist × leg pair twice', [...wl.slice(0, 3), { ...wl[0], size: 'W30/L30' }]],
+  ['a pair twice and a label twice', [wl[0], { ...wl[0] }]],
+  ['31 rows (more than the old cap of 30)', Array.from({ length: 31 }, (_, i) => ({ size: `S${i}`, waist: 60 + i }))],
+  ['61 rows', Array.from({ length: 61 }, (_, i) => ({ size: `S${i}`, waist: 60 + i }))],
+  ['a 24-character label', [{ size: 'X'.repeat(24), waist: 80 }]],
+  ['a 25-character label', [{ size: 'X'.repeat(25), waist: 80 }]],
+].map(([name, rows]) => {
+  const r = SizeChartSchema.safeParse(rows);
+  const custom = r.success ? [] : r.error.issues.filter((i) => i.code === 'custom').map((i) => ({ path: ['sizeChart', ...i.path].join('.'), message: i.message }));
+  return { name, rows, ok: r.success, custom };
+});
+const mensProduct = (g) => ({ id: g.id, name: g.name, price: String(g.priceEur), currency: 'EUR', images: [], categories: [], tags: [], brands: [], attributes: [] });
+const tee = { ...SYNTHETIC_MENS_TEE, sizeChart: teeRows, sleeveConvention: 'shoulder_point' };
+const setMeta = (meta, key, value) => [...meta.filter((m) => m.key !== key), ...(value === undefined ? [] : [{ key, value }])];
+const chartMeta = (g, rows) => setMeta(toWooMeta(g), '_curtain_size_chart', JSON.stringify(rows));
+const mensInputs = [
+  { name: "men's tee: neck, sleeve from the shoulder seam, body length", g: tee, meta: toWooMeta(tee) },
+  { name: "men's tee: sleeve measured from the centre back, written 'Centre back'", g: tee, meta: setMeta(toWooMeta(tee), '_curtain_sleeve_convention', 'Centre back') },
+  { name: "men's tee: 'center-back' and 'shoulder seam' are understood", g: tee, meta: setMeta(toWooMeta(tee), '_curtain_sleeve_convention', 'center-back') },
+  { name: "men's tee: 'shoulder seam'", g: tee, meta: setMeta(toWooMeta(tee), '_curtain_sleeve_convention', 'shoulder seam') },
+  { name: "men's tee: an unknown measuring point warns and is left out", g: tee, meta: setMeta(toWooMeta(tee), '_curtain_sleeve_convention', 'armpit') },
+  { name: 'W/L chino with rise and inseam', g: SYNTHETIC_MENS_CHINO_WL, meta: toWooMeta(SYNTHETIC_MENS_CHINO_WL) },
+  { name: 'seat and collar columns read as hip and neck', g: tee, meta: chartMeta(tee, teeRows.map(({ hip, neck, ...r }) => ({ ...r, seat: hip, collar: neck }))) },
+  { name: 'axes written as numbers', g: SYNTHETIC_MENS_CHINO_WL, meta: chartMeta(SYNTHETIC_MENS_CHINO_WL, wl.map((r) => ({ ...r, axes: { waist: Number(r.axes.waist), leg: Number(r.axes.leg) } }))) },
+  { name: 'W/L: some rows without axes drop the chart', g: SYNTHETIC_MENS_CHINO_WL, meta: chartMeta(SYNTHETIC_MENS_CHINO_WL, [...wl.slice(0, 2), { size: '34', waist: 88.5 }]) },
+  { name: 'W/L: a pair twice drops the chart', g: SYNTHETIC_MENS_CHINO_WL, meta: chartMeta(SYNTHETIC_MENS_CHINO_WL, [...wl.slice(0, 3), { ...wl[0], size: 'W30/L30' }]) },
+  { name: 'W/L: an axis without a leg drops the chart', g: SYNTHETIC_MENS_CHINO_WL, meta: chartMeta(SYNTHETIC_MENS_CHINO_WL, [wl[0], { ...wl[1], axes: { waist: '30' } }]) },
+  { name: 'a size label twice drops the chart', g: tee, meta: chartMeta(tee, [teeRows[0], { ...teeRows[1], size: 's' }]) },
+];
+const mensProducts = mensInputs.map(({ name, g, meta }) => {
+  const warnings = [];
+  const expected = fromWooMeta(mensProduct(g), meta, { warnings, defaultBrand: 'Fixture Shop' });
+  return { name, product: mensProduct(g), meta, expected, warnings };
+});
+writeFileSync(join(root, 'tests/fixtures/mens-charts.json'), JSON.stringify({ columnCases, labels, chartCases, products: mensProducts }, null, 1));
+console.log(`wrote tests/fixtures/mens-charts.json (${columnCases.length} column cases, ${labels.length} labels, ${chartCases.length} chart cases, ${mensProducts.length} products)`);

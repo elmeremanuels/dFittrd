@@ -256,6 +256,20 @@ final class Payload_Builder {
 		if ( null !== $chart ) {
 			$out['sizeChart'] = $chart;
 		}
+		// Where the sleeve column is measured from (coerceSleeveConvention).
+		$sleeve_raw = self::coerce_string( $get( '_curtain_sleeve_convention' ) );
+		if ( null !== $sleeve_raw ) {
+			$sleeve = (string) preg_replace( '/[\s-]+/', '_', strtolower( $sleeve_raw ) );
+			$sleeve = array(
+				'center_back'   => 'centre_back',
+				'shoulder_seam' => 'shoulder_point',
+			)[ $sleeve ] ?? $sleeve;
+			if ( in_array( $sleeve, Vocab::SLEEVE_CONVENTIONS, true ) ) {
+				$out['sleeveConvention'] = $sleeve;
+			} else {
+				$this->warn( '_curtain_sleeve_convention', 'sleeveConvention', "expected shoulder_point or centre_back, got '" . $sleeve_raw . "'" );
+			}
+		}
 
 		// Closure and garment measurements (twin of mappings/tape.ts): the tape is read against the
 		// current chart; sizes it no longer has are dropped with a warning, estimates filled again.
@@ -554,13 +568,27 @@ final class Payload_Builder {
 				continue;
 			}
 			$r = array( 'size' => $size );
-			foreach ( array( 'bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'footEu', 'footLengthCm' ) as $p ) {
+			foreach ( array( 'bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'neck', 'sleeve', 'footEu', 'footLengthCm', 'length', 'rise' ) as $p ) {
 				$n = self::coerce_number( $row[ $p ] ?? null );
 				if ( null !== $n ) {
 					$r[ $p ] = self::num( $n );
 				}
 			}
+			// Two-dimensional sizes (W/L, slice M2b): kept as given, never derived from the label.
+			if ( isset( $row['axes'] ) && is_array( $row['axes'] ) && ! array_is_list( $row['axes'] ) ) {
+				$waist = self::coerce_string( $row['axes']['waist'] ?? null );
+				$leg   = self::coerce_string( $row['axes']['leg'] ?? null );
+				if ( null !== $waist || null !== $leg ) {
+					$r['axes'] = array(
+						'waist' => $waist,
+						'leg'   => $leg,
+					);
+				}
+			}
+			// Men's column names (slice M2b): seat → hip, collar → neck; then the common aliases.
 			$aliases = array(
+				array( 'hip', 'seat' ),
+				array( 'neck', 'collar' ),
 				array( 'bust', 'chest' ),
 				array( 'hip', 'hips' ),
 				array( 'footEu', 'eu' ),
@@ -581,7 +609,35 @@ final class Payload_Builder {
 			$this->warn( '_curtain_size_chart', 'sizeChart', 'no usable rows' );
 			return null;
 		}
+		// What SizeChartSchema refuses (the TS mapping drops the chart with its first issue): an axis
+		// without a label, more than 60 rows, some rows with axes and some without, a W/L pair twice,
+		// a size label twice.
+		$issue = self::size_chart_issue( $out );
+		if ( null !== $issue ) {
+			$this->warn( '_curtain_size_chart', 'sizeChart', $issue );
+			return null;
+		}
 		return $out;
+	}
+
+	/** The first issue zod reports for a size chart (as `path: message`), or null. @param array<int,array<string,mixed>> $rows */
+	public static function size_chart_issue( array $rows ): ?string {
+		foreach ( $rows as $i => $r ) {
+			if ( isset( $r['axes'] ) ) {
+				foreach ( array( 'waist', 'leg' ) as $k ) {
+					if ( null === $r['axes'][ $k ] ) {
+						return $i . '.axes.' . $k . ': Invalid input: expected string, received undefined';
+					}
+				}
+			}
+		}
+		if ( count( $rows ) > Vocab::SIZE_CHART_MAX_ROWS ) {
+			return '(root): Too big: expected array to have <=' . Vocab::SIZE_CHART_MAX_ROWS . ' items';
+		}
+		foreach ( Schema_Validator::size_chart_rule_issues( $rows ) as $issue ) {
+			return ( '' === $issue['path'] ? '(root)' : $issue['path'] ) . ': ' . $issue['message'];
+		}
+		return null;
 	}
 
 	/** @param mixed $value @return array<string,mixed>|null */

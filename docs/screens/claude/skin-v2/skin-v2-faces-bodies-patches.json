@@ -1,0 +1,3209 @@
+{
+ "renderer": "headless Chromium, SwiftShader (software); not a phone",
+ "head": "neutral-v3",
+ "patches": [
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 1,
+   "shading": "flat",
+   "swatch": "#f6ede4",
+   "contrast": {
+    "median": 1.51,
+    "p10": 1.16,
+    "under3": 88.8
+   },
+   "four": {
+    "neck": {
+     "hex": "#dddad7",
+     "dE": 5.5
+    },
+    "forearm": {
+     "hex": "#d5d1cd",
+     "dE": 7
+    },
+    "shin": {
+     "hex": "#d6d2ce",
+     "dE": 6.7
+    }
+   },
+   "meanFour": 6.4,
+   "all": {
+    "pixels": 92787,
+    "p10": "#b2aba5",
+    "median": "#d3cfcb",
+    "p90": "#dddad6",
+    "lRange": 23.5,
+    "dEmedian": 7.4,
+    "dEp10": 16.1,
+    "dEp90": 5.3,
+    "Lp10": 70.4,
+    "Lmedian": 83.3,
+    "Lp90": 87.2
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 1,
+   "shading": "skin-v2",
+   "swatch": "#f6ede4",
+   "contrast": {
+    "median": 1.5,
+    "p10": 1.16,
+    "under3": 89.1
+   },
+   "four": {
+    "neck": {
+     "hex": "#e1d9d1",
+     "dE": 4.4
+    },
+    "forearm": {
+     "hex": "#d9d0c8",
+     "dE": 6.5
+    },
+    "shin": {
+     "hex": "#d9d1c9",
+     "dE": 6.3
+    }
+   },
+   "meanFour": 5.7,
+   "all": {
+    "pixels": 92787,
+    "p10": "#b4aba4",
+    "median": "#d6cec6",
+    "p90": "#e1d9d1",
+    "lRange": 23,
+    "dEmedian": 7,
+    "dEp10": 16,
+    "dEp90": 4.4,
+    "Lp10": 70.5,
+    "Lmedian": 83.2,
+    "Lp90": 87.1
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 2,
+   "shading": "flat",
+   "swatch": "#f3e7db",
+   "contrast": {
+    "median": 1.56,
+    "p10": 1.19,
+    "under3": 88
+   },
+   "four": {
+    "neck": {
+     "hex": "#dcd8d3",
+     "dE": 5.4
+    },
+    "forearm": {
+     "hex": "#d4cec9",
+     "dE": 6.8
+    },
+    "shin": {
+     "hex": "#d5cfca",
+     "dE": 6.6
+    }
+   },
+   "meanFour": 6.3,
+   "all": {
+    "pixels": 92787,
+    "p10": "#b0a89e",
+    "median": "#d2ccc6",
+    "p90": "#dcd7d3",
+    "lRange": 24.2,
+    "dEmedian": 7.1,
+    "dEp10": 15.9,
+    "dEp90": 5.5,
+    "Lp10": 69.3,
+    "Lmedian": 82.4,
+    "Lp90": 86.3
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 2,
+   "shading": "skin-v2",
+   "swatch": "#f3e7db",
+   "contrast": {
+    "median": 1.55,
+    "p10": 1.18,
+    "under3": 88.4
+   },
+   "four": {
+    "neck": {
+     "hex": "#e2d7cc",
+     "dE": 3.6
+    },
+    "forearm": {
+     "hex": "#d8cdc3",
+     "dE": 6
+    },
+    "shin": {
+     "hex": "#d9cec4",
+     "dE": 5.7
+    }
+   },
+   "meanFour": 5.1,
+   "all": {
+    "pixels": 92787,
+    "p10": "#b4a79d",
+    "median": "#d6cbc1",
+    "p90": "#e1d7cc",
+    "lRange": 23.8,
+    "dEmedian": 6.5,
+    "dEp10": 15.8,
+    "dEp90": 3.7,
+    "Lp10": 69.3,
+    "Lmedian": 82.3,
+    "Lp90": 86.5
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 3,
+   "shading": "flat",
+   "swatch": "#f7ead0",
+   "contrast": {
+    "median": 1.54,
+    "p10": 1.18,
+    "under3": 88.3
+   },
+   "four": {
+    "neck": {
+     "hex": "#ddd9cf",
+     "dE": 7.3
+    },
+    "forearm": {
+     "hex": "#d6d0c4",
+     "dE": 7.9
+    },
+    "shin": {
+     "hex": "#d6d1c5",
+     "dE": 7.9
+    }
+   },
+   "meanFour": 7.7,
+   "all": {
+    "pixels": 92787,
+    "p10": "#b3a998",
+    "median": "#d3cdc1",
+    "p90": "#ddd9ce",
+    "lRange": 23.9,
+    "dEmedian": 8.4,
+    "dEp10": 16.2,
+    "dEp90": 7.1,
+    "Lp10": 69.6,
+    "Lmedian": 82.6,
+    "Lp90": 86.7
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 3,
+   "shading": "skin-v2",
+   "swatch": "#f7ead0",
+   "contrast": {
+    "median": 1.53,
+    "p10": 1.17,
+    "under3": 88.7
+   },
+   "four": {
+    "neck": {
+     "hex": "#e4d8c1",
+     "dE": 4.1
+    },
+    "forearm": {
+     "hex": "#dbcfb8",
+     "dE": 6.1
+    },
+    "shin": {
+     "hex": "#dcd0b9",
+     "dE": 5.9
+    }
+   },
+   "meanFour": 5.4,
+   "all": {
+    "pixels": 92787,
+    "p10": "#b6a994",
+    "median": "#d8cdb7",
+    "p90": "#e4d8c0",
+    "lRange": 23.5,
+    "dEmedian": 6.7,
+    "dEp10": 16,
+    "dEp90": 4,
+    "Lp10": 69.8,
+    "Lmedian": 82.7,
+    "Lp90": 86.7
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 4,
+   "shading": "flat",
+   "swatch": "#eadaba",
+   "contrast": {
+    "median": 1.71,
+    "p10": 1.26,
+    "under3": 84.4
+   },
+   "four": {
+    "neck": {
+     "hex": "#d9d2c2",
+     "dE": 6.1
+    },
+    "forearm": {
+     "hex": "#d0c8b6",
+     "dE": 6.6
+    },
+    "shin": {
+     "hex": "#d1c9b7",
+     "dE": 6.5
+    }
+   },
+   "meanFour": 6.4,
+   "all": {
+    "pixels": 92787,
+    "p10": "#aa9e86",
+    "median": "#cec5b2",
+    "p90": "#d9d2c2",
+    "lRange": 25.7,
+    "dEmedian": 6.8,
+    "dEp10": 16,
+    "dEp90": 6.1,
+    "Lp10": 65.5,
+    "Lmedian": 79.8,
+    "Lp90": 84.3
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 4,
+   "shading": "skin-v2",
+   "swatch": "#eadaba",
+   "contrast": {
+    "median": 1.69,
+    "p10": 1.25,
+    "under3": 85.6
+   },
+   "four": {
+    "neck": {
+     "hex": "#e0d1b3",
+     "dE": 2.2
+    },
+    "forearm": {
+     "hex": "#d6c7aa",
+     "dE": 4.6
+    },
+    "shin": {
+     "hex": "#d7c8ab",
+     "dE": 4.3
+    }
+   },
+   "meanFour": 3.7,
+   "all": {
+    "pixels": 92787,
+    "p10": "#ad9e86",
+    "median": "#d3c5a8",
+    "p90": "#e0d1b3",
+    "lRange": 25.5,
+    "dEmedian": 5.1,
+    "dEp10": 15.8,
+    "dEp90": 2.2,
+    "Lp10": 65.8,
+    "Lmedian": 80,
+    "Lp90": 84.3
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 5,
+   "shading": "flat",
+   "swatch": "#d7bd96",
+   "contrast": {
+    "median": 2.12,
+    "p10": 1.46,
+    "under3": 77
+   },
+   "four": {
+    "neck": {
+     "hex": "#d1c2a7",
+     "dE": 4.7
+    },
+    "forearm": {
+     "hex": "#c7b697",
+     "dE": 4.1
+    },
+    "shin": {
+     "hex": "#c8b799",
+     "dE": 4.1
+    }
+   },
+   "meanFour": 4.3,
+   "all": {
+    "pixels": 92787,
+    "p10": "#9c8767",
+    "median": "#c4b293",
+    "p90": "#d1c2a6",
+    "lRange": 29.1,
+    "dEmedian": 4.5,
+    "dEp10": 16.3,
+    "dEp90": 4.6,
+    "Lp10": 57.4,
+    "Lmedian": 73.3,
+    "Lp90": 79
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 5,
+   "shading": "skin-v2",
+   "swatch": "#d7bd96",
+   "contrast": {
+    "median": 2.09,
+    "p10": 1.46,
+    "under3": 77.9
+   },
+   "four": {
+    "neck": {
+     "hex": "#dac09a",
+     "dE": 0.8
+    },
+    "forearm": {
+     "hex": "#cdb48f",
+     "dE": 2.4
+    },
+    "shin": {
+     "hex": "#ceb590",
+     "dE": 2.2
+    }
+   },
+   "meanFour": 1.8,
+   "all": {
+    "pixels": 92787,
+    "p10": "#9c886b",
+    "median": "#cab18d",
+    "p90": "#dac09a",
+    "lRange": 28.6,
+    "dEmedian": 3.3,
+    "dEp10": 16.2,
+    "dEp90": 0.8,
+    "Lp10": 57.8,
+    "Lmedian": 73.5,
+    "Lp90": 79
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 6,
+   "shading": "flat",
+   "swatch": "#a07e56",
+   "contrast": {
+    "median": 4.35,
+    "p10": 2.64,
+    "under3": 20.1
+   },
+   "four": {
+    "neck": {
+     "hex": "#aa8758",
+     "dE": 3.7
+    },
+    "forearm": {
+     "hex": "#9b774b",
+     "dE": 2.7
+    },
+    "shin": {
+     "hex": "#9d794c",
+     "dE": 2.2
+    }
+   },
+   "meanFour": 2.9,
+   "all": {
+    "pixels": 92787,
+    "p10": "#6a4b2b",
+    "median": "#96744d",
+    "p90": "#aa8658",
+    "lRange": 30.7,
+    "dEmedian": 3.8,
+    "dEp10": 19.6,
+    "dEp90": 3.3,
+    "Lp10": 34.5,
+    "Lmedian": 51.3,
+    "Lp90": 58.3
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 6,
+   "shading": "skin-v2",
+   "swatch": "#a07e56",
+   "contrast": {
+    "median": 4.15,
+    "p10": 2.57,
+    "under3": 23.6
+   },
+   "four": {
+    "neck": {
+     "hex": "#ab8860",
+     "dE": 3.6
+    },
+    "forearm": {
+     "hex": "#987853",
+     "dE": 2.5
+    },
+    "shin": {
+     "hex": "#9a7a54",
+     "dE": 1.8
+    }
+   },
+   "meanFour": 2.6,
+   "all": {
+    "pixels": 92787,
+    "p10": "#664f35",
+    "median": "#947551",
+    "p90": "#aa8860",
+    "lRange": 30.4,
+    "dEmedian": 3.8,
+    "dEp10": 19.2,
+    "dEp90": 3.5,
+    "Lp10": 35.3,
+    "Lmedian": 51.4,
+    "Lp90": 59
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 7,
+   "shading": "flat",
+   "swatch": "#825c43",
+   "contrast": {
+    "median": 6.84,
+    "p10": 4.34,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#88593c",
+     "dE": 2.7
+    },
+    "forearm": {
+     "hex": "#784c32",
+     "dE": 5.5
+    },
+    "shin": {
+     "hex": "#794d33",
+     "dE": 5.2
+    }
+   },
+   "meanFour": 4.5,
+   "all": {
+    "pixels": 92787,
+    "p10": "#4c2c1a",
+    "median": "#74492f",
+    "p90": "#87593d",
+    "lRange": 26.4,
+    "dEmedian": 6.5,
+    "dEp10": 16.6,
+    "dEp90": 2.4,
+    "Lp10": 21.6,
+    "Lmedian": 35.4,
+    "Lp90": 42.2
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 7,
+   "shading": "skin-v2",
+   "swatch": "#825c43",
+   "contrast": {
+    "median": 5.83,
+    "p10": 3.88,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#88634c",
+     "dE": 2.7
+    },
+    "forearm": {
+     "hex": "#77553f",
+     "dE": 3.2
+    },
+    "shin": {
+     "hex": "#78563f",
+     "dE": 2.8
+    }
+   },
+   "meanFour": 2.9,
+   "all": {
+    "pixels": 92787,
+    "p10": "#51392a",
+    "median": "#72533f",
+    "p90": "#886249",
+    "lRange": 23.8,
+    "dEmedian": 4.5,
+    "dEp10": 13.9,
+    "dEp90": 2.2,
+    "Lp10": 26.3,
+    "Lmedian": 38.1,
+    "Lp90": 44.9
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 8,
+   "shading": "flat",
+   "swatch": "#604134",
+   "contrast": {
+    "median": 9.63,
+    "p10": 7.14,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#5a3528",
+     "dE": 4.1
+    },
+    "forearm": {
+     "hex": "#4d2c20",
+     "dE": 6.7
+    },
+    "shin": {
+     "hex": "#4e2c21",
+     "dE": 6.7
+    }
+   },
+   "meanFour": 5.8,
+   "all": {
+    "pixels": 92787,
+    "p10": "#2d170f",
+    "median": "#4a2a1e",
+    "p90": "#5a3527",
+    "lRange": 19.8,
+    "dEmedian": 7.4,
+    "dEp10": 14.2,
+    "dEp90": 4.1,
+    "Lp10": 10.6,
+    "Lmedian": 20.9,
+    "Lp90": 26.4
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 8,
+   "shading": "skin-v2",
+   "swatch": "#604134",
+   "contrast": {
+    "median": 6.81,
+    "p10": 4.97,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#6c4f43",
+     "dE": 4.7
+    },
+    "forearm": {
+     "hex": "#5e4135",
+     "dE": 0.8
+    },
+    "shin": {
+     "hex": "#5e4135",
+     "dE": 0.8
+    }
+   },
+   "meanFour": 2.1,
+   "all": {
+    "pixels": 92787,
+    "p10": "#452f26",
+    "median": "#5c3f33",
+    "p90": "#684b40",
+    "lRange": 17.5,
+    "dEmedian": 1.1,
+    "dEp10": 7.3,
+    "dEp90": 3.5,
+    "Lp10": 21.7,
+    "Lmedian": 29.6,
+    "Lp90": 34.7
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 9,
+   "shading": "flat",
+   "swatch": "#3a312a",
+   "contrast": {
+    "median": 11.71,
+    "p10": 9.46,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#2b221c",
+     "dE": 4.8
+    },
+    "forearm": {
+     "hex": "#231c16",
+     "dE": 6.8
+    },
+    "shin": {
+     "hex": "#241c16",
+     "dE": 6.7
+    }
+   },
+   "meanFour": 6.1,
+   "all": {
+    "pixels": 92787,
+    "p10": "#120c08",
+    "median": "#211a14",
+    "p90": "#2b221c",
+    "lRange": 12.3,
+    "dEmedian": 7.4,
+    "dEp10": 11.6,
+    "dEp90": 4.8,
+    "Lp10": 3.7,
+    "Lmedian": 9.9,
+    "Lp90": 14.1
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 9,
+   "shading": "skin-v2",
+   "swatch": "#3a312a",
+   "contrast": {
+    "median": 8.13,
+    "p10": 6.15,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#4a423c",
+     "dE": 5.6
+    },
+    "forearm": {
+     "hex": "#3c332d",
+     "dE": 0.9
+    },
+    "shin": {
+     "hex": "#3c332d",
+     "dE": 0.9
+    }
+   },
+   "meanFour": 2.5,
+   "all": {
+    "pixels": 92787,
+    "p10": "#2c2521",
+    "median": "#3a322c",
+    "p90": "#453d37",
+    "lRange": 14.6,
+    "dEmedian": 0.8,
+    "dEp10": 4.3,
+    "dEp90": 3.9,
+    "Lp10": 15.3,
+    "Lmedian": 21.4,
+    "Lp90": 26.4
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 10,
+   "shading": "flat",
+   "swatch": "#292420",
+   "contrast": {
+    "median": 12.97,
+    "p10": 10.4,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#191512",
+     "dE": 4.8
+    },
+    "forearm": {
+     "hex": "#14100e",
+     "dE": 6.3
+    },
+    "shin": {
+     "hex": "#14100e",
+     "dE": 6.3
+    }
+   },
+   "meanFour": 5.8,
+   "all": {
+    "pixels": 92787,
+    "p10": "#080604",
+    "median": "#120f0c",
+    "p90": "#1a1612",
+    "lRange": 7,
+    "dEmedian": 6.6,
+    "dEp10": 8.4,
+    "dEp90": 4.5,
+    "Lp10": 1.7,
+    "Lmedian": 4.5,
+    "Lp90": 7.6
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "monk": 10,
+   "shading": "skin-v2",
+   "swatch": "#292420",
+   "contrast": {
+    "median": 9.12,
+    "p10": 7.03,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#3b3735",
+     "dE": 6.2
+    },
+    "forearm": {
+     "hex": "#2c2825",
+     "dE": 1.5
+    },
+    "shin": {
+     "hex": "#2c2824",
+     "dE": 1.4
+    }
+   },
+   "meanFour": 3,
+   "all": {
+    "pixels": 92787,
+    "p10": "#211d1a",
+    "median": "#2b2723",
+    "p90": "#35312e",
+    "lRange": 13.7,
+    "dEmedian": 1.1,
+    "dEp10": 2.4,
+    "dEp90": 4.2,
+    "Lp10": 11.1,
+    "Lmedian": 15.9,
+    "Lp90": 20.6
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 1,
+   "shading": "flat",
+   "swatch": "#f6ede4",
+   "contrast": {
+    "median": 4.92,
+    "p10": 3.96,
+    "under3": 3.3
+   },
+   "four": {
+    "neck": {
+     "hex": "#fbf2e9",
+     "dE": 1
+    },
+    "forearm": {
+     "hex": "#f3eae1",
+     "dE": 0.6
+    },
+    "shin": {
+     "hex": "#f3ebe2",
+     "dE": 0.7
+    }
+   },
+   "meanFour": 0.8,
+   "all": {
+    "pixels": 92787,
+    "p10": "#bdb6af",
+    "median": "#efe6de",
+    "p90": "#fbf2e9",
+    "lRange": 28.6,
+    "dEmedian": 1.6,
+    "dEp10": 13.1,
+    "dEp90": 1,
+    "Lp10": 74.4,
+    "Lmedian": 91.8,
+    "Lp90": 96
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 1,
+   "shading": "skin-v2",
+   "swatch": "#f6ede4",
+   "contrast": {
+    "median": 4.92,
+    "p10": 3.96,
+    "under3": 3
+   },
+   "four": {
+    "neck": {
+     "hex": "#fdf3ea",
+     "dE": 1.4
+    },
+    "forearm": {
+     "hex": "#f4ebe2",
+     "dE": 0.4
+    },
+    "shin": {
+     "hex": "#f5ece3",
+     "dE": 0.2
+    }
+   },
+   "meanFour": 0.7,
+   "all": {
+    "pixels": 92787,
+    "p10": "#c1b7b0",
+    "median": "#f0e7df",
+    "p90": "#fdf4eb",
+    "lRange": 28.5,
+    "dEmedian": 1.4,
+    "dEp10": 12.7,
+    "dEp90": 1.5,
+    "Lp10": 75,
+    "Lmedian": 92.1,
+    "Lp90": 96.6
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 2,
+   "shading": "flat",
+   "swatch": "#f3e7db",
+   "contrast": {
+    "median": 4.91,
+    "p10": 3.95,
+    "under3": 3.6
+   },
+   "four": {
+    "neck": {
+     "hex": "#faeee2",
+     "dE": 1.5
+    },
+    "forearm": {
+     "hex": "#f0e4d8",
+     "dE": 0.6
+    },
+    "shin": {
+     "hex": "#f0e5d9",
+     "dE": 0.7
+    }
+   },
+   "meanFour": 0.9,
+   "all": {
+    "pixels": 92787,
+    "p10": "#bbb2a8",
+    "median": "#ece0d5",
+    "p90": "#faeee2",
+    "lRange": 29,
+    "dEmedian": 1.6,
+    "dEp10": 13,
+    "dEp90": 1.5,
+    "Lp10": 73,
+    "Lmedian": 89.8,
+    "Lp90": 94.7
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 2,
+   "shading": "skin-v2",
+   "swatch": "#f3e7db",
+   "contrast": {
+    "median": 4.91,
+    "p10": 3.96,
+    "under3": 3.5
+   },
+   "four": {
+    "neck": {
+     "hex": "#fceee2",
+     "dE": 1.8
+    },
+    "forearm": {
+     "hex": "#f1e5d9",
+     "dE": 0.4
+    },
+    "shin": {
+     "hex": "#f2e6da",
+     "dE": 0.2
+    }
+   },
+   "meanFour": 0.8,
+   "all": {
+    "pixels": 92787,
+    "p10": "#bdb3a9",
+    "median": "#ede1d6",
+    "p90": "#fbefe3",
+    "lRange": 28.8,
+    "dEmedian": 1.4,
+    "dEp10": 12.6,
+    "dEp90": 1.7,
+    "Lp10": 73.5,
+    "Lmedian": 90.2,
+    "Lp90": 95.1
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 3,
+   "shading": "flat",
+   "swatch": "#f7ead0",
+   "contrast": {
+    "median": 5.01,
+    "p10": 4.03,
+    "under3": 3.3
+   },
+   "four": {
+    "neck": {
+     "hex": "#fbeed4",
+     "dE": 0.8
+    },
+    "forearm": {
+     "hex": "#f4e7cd",
+     "dE": 0.6
+    },
+    "shin": {
+     "hex": "#f4e8ce",
+     "dE": 0.7
+    }
+   },
+   "meanFour": 0.7,
+   "all": {
+    "pixels": 92787,
+    "p10": "#beb4a0",
+    "median": "#f0e3ca",
+    "p90": "#fbeed4",
+    "lRange": 28.3,
+    "dEmedian": 1.5,
+    "dEp10": 13.1,
+    "dEp90": 0.8,
+    "Lp10": 73.6,
+    "Lmedian": 90.7,
+    "Lp90": 94.5
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 3,
+   "shading": "skin-v2",
+   "swatch": "#f7ead0",
+   "contrast": {
+    "median": 5.01,
+    "p10": 4.03,
+    "under3": 3
+   },
+   "four": {
+    "neck": {
+     "hex": "#fef0d5",
+     "dE": 1.4
+    },
+    "forearm": {
+     "hex": "#f5e8ce",
+     "dE": 0.4
+    },
+    "shin": {
+     "hex": "#f6e9cf",
+     "dE": 0.2
+    }
+   },
+   "meanFour": 0.7,
+   "all": {
+    "pixels": 92787,
+    "p10": "#c0b5a1",
+    "median": "#f1e4cb",
+    "p90": "#fdf0d6",
+    "lRange": 28.3,
+    "dEmedian": 1.3,
+    "dEp10": 12.8,
+    "dEp90": 1.3,
+    "Lp10": 74.1,
+    "Lmedian": 91,
+    "Lp90": 95.2
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 4,
+   "shading": "flat",
+   "swatch": "#eadaba",
+   "contrast": {
+    "median": 4.94,
+    "p10": 3.97,
+    "under3": 4.4
+   },
+   "four": {
+    "neck": {
+     "hex": "#f8e7c5",
+     "dE": 2.9
+    },
+    "forearm": {
+     "hex": "#e7d7b8",
+     "dE": 0.7
+    },
+    "shin": {
+     "hex": "#e8d8b8",
+     "dE": 0.5
+    }
+   },
+   "meanFour": 1.4,
+   "all": {
+    "pixels": 92787,
+    "p10": "#b4a78f",
+    "median": "#e3d4b5",
+    "p90": "#f7e7c5",
+    "lRange": 30.1,
+    "dEmedian": 1.5,
+    "dEp10": 13.3,
+    "dEp90": 2.9,
+    "Lp10": 69,
+    "Lmedian": 85.4,
+    "Lp90": 92.1
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 4,
+   "shading": "skin-v2",
+   "swatch": "#eadaba",
+   "contrast": {
+    "median": 4.94,
+    "p10": 3.97,
+    "under3": 4.2
+   },
+   "four": {
+    "neck": {
+     "hex": "#f8e7c6",
+     "dE": 2.9
+    },
+    "forearm": {
+     "hex": "#e9d8b9",
+     "dE": 0.8
+    },
+    "shin": {
+     "hex": "#e9d9b9",
+     "dE": 0.2
+    }
+   },
+   "meanFour": 1.3,
+   "all": {
+    "pixels": 92787,
+    "p10": "#b6a990",
+    "median": "#e5d5b6",
+    "p90": "#f8e7c6",
+    "lRange": 29.9,
+    "dEmedian": 1.2,
+    "dEp10": 12.7,
+    "dEp90": 2.9,
+    "Lp10": 69.7,
+    "Lmedian": 85.8,
+    "Lp90": 92.2
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 5,
+   "shading": "flat",
+   "swatch": "#d7bd96",
+   "contrast": {
+    "median": 4.93,
+    "p10": 3.96,
+    "under3": 5
+   },
+   "four": {
+    "neck": {
+     "hex": "#e6caa1",
+     "dE": 3.4
+    },
+    "forearm": {
+     "hex": "#d4bb95",
+     "dE": 0.7
+    },
+    "shin": {
+     "hex": "#d5bb95",
+     "dE": 0.6
+    }
+   },
+   "meanFour": 1.6,
+   "all": {
+    "pixels": 92787,
+    "p10": "#a59173",
+    "median": "#d1b892",
+    "p90": "#e5caa1",
+    "lRange": 28.8,
+    "dEmedian": 1.4,
+    "dEp10": 13.2,
+    "dEp90": 3.3,
+    "Lp10": 61.2,
+    "Lmedian": 76,
+    "Lp90": 82.6
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 5,
+   "shading": "skin-v2",
+   "swatch": "#d7bd96",
+   "contrast": {
+    "median": 4.93,
+    "p10": 3.96,
+    "under3": 5
+   },
+   "four": {
+    "neck": {
+     "hex": "#e8cca3",
+     "dE": 3.8
+    },
+    "forearm": {
+     "hex": "#d6bc96",
+     "dE": 0.4
+    },
+    "shin": {
+     "hex": "#d6bc96",
+     "dE": 0.4
+    }
+   },
+   "meanFour": 1.5,
+   "all": {
+    "pixels": 92787,
+    "p10": "#a79274",
+    "median": "#d2b993",
+    "p90": "#e7cba2",
+    "lRange": 29,
+    "dEmedian": 1.1,
+    "dEp10": 12.8,
+    "dEp90": 3.6,
+    "Lp10": 61.7,
+    "Lmedian": 76.4,
+    "Lp90": 83.1
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 6,
+   "shading": "flat",
+   "swatch": "#a07e56",
+   "contrast": {
+    "median": 4.86,
+    "p10": 3.91,
+    "under3": 5.2
+   },
+   "four": {
+    "neck": {
+     "hex": "#ac885e",
+     "dE": 3.7
+    },
+    "forearm": {
+     "hex": "#9e7d57",
+     "dE": 0.7
+    },
+    "shin": {
+     "hex": "#9f7d57",
+     "dE": 0.7
+    }
+   },
+   "meanFour": 1.7,
+   "all": {
+    "pixels": 92787,
+    "p10": "#7a6042",
+    "median": "#9c7b55",
+    "p90": "#ab885f",
+    "lRange": 22,
+    "dEmedian": 1.3,
+    "dEp10": 12.8,
+    "dEp90": 3.6,
+    "Lp10": 42.6,
+    "Lmedian": 53.9,
+    "Lp90": 59.1
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 6,
+   "shading": "skin-v2",
+   "swatch": "#a07e56",
+   "contrast": {
+    "median": 4.86,
+    "p10": 3.91,
+    "under3": 5.2
+   },
+   "four": {
+    "neck": {
+     "hex": "#ae8a61",
+     "dE": 4.4
+    },
+    "forearm": {
+     "hex": "#a07e58",
+     "dE": 0.6
+    },
+    "shin": {
+     "hex": "#a07e58",
+     "dE": 0.6
+    }
+   },
+   "meanFour": 1.9,
+   "all": {
+    "pixels": 92787,
+    "p10": "#7c6243",
+    "median": "#9d7c56",
+    "p90": "#ad8a61",
+    "lRange": 21.9,
+    "dEmedian": 1,
+    "dEp10": 12,
+    "dEp90": 4.3,
+    "Lp10": 43.4,
+    "Lmedian": 54.3,
+    "Lp90": 59.8
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 7,
+   "shading": "flat",
+   "swatch": "#825c43",
+   "contrast": {
+    "median": 4.84,
+    "p10": 3.87,
+    "under3": 5.2
+   },
+   "four": {
+    "neck": {
+     "hex": "#8c654b",
+     "dE": 3.5
+    },
+    "forearm": {
+     "hex": "#815c45",
+     "dE": 0.7
+    },
+    "shin": {
+     "hex": "#815c44",
+     "dE": 0.4
+    }
+   },
+   "meanFour": 1.5,
+   "all": {
+    "pixels": 92787,
+    "p10": "#634633",
+    "median": "#7f5a43",
+    "p90": "#8c654b",
+    "lRange": 18.3,
+    "dEmedian": 1.1,
+    "dEp10": 8.9,
+    "dEp90": 3.5,
+    "Lp10": 32.4,
+    "Lmedian": 41.6,
+    "Lp90": 46.2
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 7,
+   "shading": "skin-v2",
+   "swatch": "#825c43",
+   "contrast": {
+    "median": 4.84,
+    "p10": 3.87,
+    "under3": 5.2
+   },
+   "four": {
+    "neck": {
+     "hex": "#8f6850",
+     "dE": 4.7
+    },
+    "forearm": {
+     "hex": "#825d46",
+     "dE": 0.8
+    },
+    "shin": {
+     "hex": "#825d45",
+     "dE": 0.5
+    }
+   },
+   "meanFour": 2,
+   "all": {
+    "pixels": 92787,
+    "p10": "#654835",
+    "median": "#805c44",
+    "p90": "#8f674d",
+    "lRange": 18.4,
+    "dEmedian": 0.7,
+    "dEp10": 8.3,
+    "dEp90": 4.4,
+    "Lp10": 33.3,
+    "Lmedian": 42.2,
+    "Lp90": 47.1
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 8,
+   "shading": "flat",
+   "swatch": "#604134",
+   "contrast": {
+    "median": 7,
+    "p10": 5.31,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#69493c",
+     "dE": 2.8
+    },
+    "forearm": {
+     "hex": "#604337",
+     "dE": 1
+    },
+    "shin": {
+     "hex": "#604336",
+     "dE": 1
+    }
+   },
+   "meanFour": 1.6,
+   "all": {
+    "pixels": 92787,
+    "p10": "#493127",
+    "median": "#5e4135",
+    "p90": "#69493c",
+    "lRange": 14.8,
+    "dEmedian": 0.8,
+    "dEp10": 6.2,
+    "dEp90": 2.8,
+    "Lp10": 22.9,
+    "Lmedian": 30.4,
+    "Lp90": 34.2
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 8,
+   "shading": "skin-v2",
+   "swatch": "#604134",
+   "contrast": {
+    "median": 6.5,
+    "p10": 4.89,
+    "under3": 0.1
+   },
+   "four": {
+    "neck": {
+     "hex": "#6e5044",
+     "dE": 5.1
+    },
+    "forearm": {
+     "hex": "#614337",
+     "dE": 0.8
+    },
+    "shin": {
+     "hex": "#614337",
+     "dE": 0.8
+    }
+   },
+   "meanFour": 2.2,
+   "all": {
+    "pixels": 92787,
+    "p10": "#4b342a",
+    "median": "#5f4236",
+    "p90": "#6a4c41",
+    "lRange": 15.3,
+    "dEmedian": 0.8,
+    "dEp10": 5.6,
+    "dEp90": 3.8,
+    "Lp10": 24.1,
+    "Lmedian": 30.9,
+    "Lp90": 35.2
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 9,
+   "shading": "flat",
+   "swatch": "#3a312a",
+   "contrast": {
+    "median": 8.75,
+    "p10": 6.88,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#423933",
+     "dE": 2.7
+    },
+    "forearm": {
+     "hex": "#3c342e",
+     "dE": 1.2
+    },
+    "shin": {
+     "hex": "#3c342d",
+     "dE": 1.1
+    }
+   },
+   "meanFour": 1.7,
+   "all": {
+    "pixels": 92787,
+    "p10": "#2c2520",
+    "median": "#3b322c",
+    "p90": "#423933",
+    "lRange": 12.3,
+    "dEmedian": 0.7,
+    "dEp10": 4.1,
+    "dEp90": 2.7,
+    "Lp10": 15.3,
+    "Lmedian": 21.6,
+    "Lp90": 24.7
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 9,
+   "shading": "skin-v2",
+   "swatch": "#3a312a",
+   "contrast": {
+    "median": 7.95,
+    "p10": 6,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#4a423c",
+     "dE": 5.6
+    },
+    "forearm": {
+     "hex": "#3d342e",
+     "dE": 1.2
+    },
+    "shin": {
+     "hex": "#3c342d",
+     "dE": 1.1
+    }
+   },
+   "meanFour": 2.6,
+   "all": {
+    "pixels": 92787,
+    "p10": "#2f2823",
+    "median": "#3c332d",
+    "p90": "#463c36",
+    "lRange": 13,
+    "dEmedian": 0.9,
+    "dEp10": 3.2,
+    "dEp90": 3.8,
+    "Lp10": 16.7,
+    "Lmedian": 22,
+    "Lp90": 26.2
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 10,
+   "shading": "flat",
+   "swatch": "#292420",
+   "contrast": {
+    "median": 10.01,
+    "p10": 7.9,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#322d29",
+     "dE": 2.8
+    },
+    "forearm": {
+     "hex": "#2d2825",
+     "dE": 1.5
+    },
+    "shin": {
+     "hex": "#2c2824",
+     "dE": 1.4
+    }
+   },
+   "meanFour": 1.9,
+   "all": {
+    "pixels": 92787,
+    "p10": "#201c19",
+    "median": "#2b2723",
+    "p90": "#322d29",
+    "lRange": 10.4,
+    "dEmedian": 1.1,
+    "dEp10": 2.7,
+    "dEp90": 2.8,
+    "Lp10": 10.6,
+    "Lmedian": 15.9,
+    "Lp90": 18.9
+   }
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "monk": 10,
+   "shading": "skin-v2",
+   "swatch": "#292420",
+   "contrast": {
+    "median": 9.03,
+    "p10": 6.7,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#3c3835",
+     "dE": 6.4
+    },
+    "forearm": {
+     "hex": "#2d2925",
+     "dE": 1.7
+    },
+    "shin": {
+     "hex": "#2c2824",
+     "dE": 1.4
+    }
+   },
+   "meanFour": 3.2,
+   "all": {
+    "pixels": 92787,
+    "p10": "#231f1d",
+    "median": "#2c2824",
+    "p90": "#35312d",
+    "lRange": 12.3,
+    "dEmedian": 1.4,
+    "dEp10": 2.1,
+    "dEp90": 4.1,
+    "Lp10": 12.1,
+    "Lmedian": 16.4,
+    "Lp90": 20.6
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 1,
+   "shading": "flat",
+   "swatch": "#f6ede4",
+   "contrast": {
+    "median": 1.51,
+    "p10": 1.17,
+    "under3": 90
+   },
+   "four": {
+    "neck": {
+     "hex": "#dfdcd9",
+     "dE": 5.1
+    },
+    "forearm": {
+     "hex": "#d5d1cd",
+     "dE": 7
+    },
+    "shin": {
+     "hex": "#d6d2ce",
+     "dE": 6.7
+    }
+   },
+   "meanFour": 6.3,
+   "all": {
+    "pixels": 99855,
+    "p10": "#b2aca5",
+    "median": "#d3cfca",
+    "p90": "#ddd9d6",
+    "lRange": 22.3,
+    "dEmedian": 7.3,
+    "dEp10": 15.9,
+    "dEp90": 5.5,
+    "Lp10": 70.7,
+    "Lmedian": 83.3,
+    "Lp90": 86.9
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 1,
+   "shading": "skin-v2",
+   "swatch": "#f6ede4",
+   "contrast": {
+    "median": 1.5,
+    "p10": 1.16,
+    "under3": 90.8
+   },
+   "four": {
+    "neck": {
+     "hex": "#e3dbd3",
+     "dE": 4
+    },
+    "forearm": {
+     "hex": "#d9d1c9",
+     "dE": 6.3
+    },
+    "shin": {
+     "hex": "#d9d1c9",
+     "dE": 6.3
+    }
+   },
+   "meanFour": 5.5,
+   "all": {
+    "pixels": 99855,
+    "p10": "#b3aca4",
+    "median": "#d6cec6",
+    "p90": "#e1d9d1",
+    "lRange": 22.1,
+    "dEmedian": 7,
+    "dEp10": 15.9,
+    "dEp90": 4.4,
+    "Lp10": 70.7,
+    "Lmedian": 83.2,
+    "Lp90": 87.1
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 2,
+   "shading": "flat",
+   "swatch": "#f3e7db",
+   "contrast": {
+    "median": 1.56,
+    "p10": 1.2,
+    "under3": 89
+   },
+   "four": {
+    "neck": {
+     "hex": "#dedad5",
+     "dE": 5.1
+    },
+    "forearm": {
+     "hex": "#d4cfc9",
+     "dE": 6.6
+    },
+    "shin": {
+     "hex": "#d5cfca",
+     "dE": 6.6
+    }
+   },
+   "meanFour": 6.1,
+   "all": {
+    "pixels": 99855,
+    "p10": "#b0a89f",
+    "median": "#d2ccc6",
+    "p90": "#dcd7d2",
+    "lRange": 23.1,
+    "dEmedian": 7.1,
+    "dEp10": 15.9,
+    "dEp90": 5.3,
+    "Lp10": 69.3,
+    "Lmedian": 82.4,
+    "Lp90": 86.2
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 2,
+   "shading": "skin-v2",
+   "swatch": "#f3e7db",
+   "contrast": {
+    "median": 1.55,
+    "p10": 1.19,
+    "under3": 89.6
+   },
+   "four": {
+    "neck": {
+     "hex": "#e4d9ce",
+     "dE": 3.2
+    },
+    "forearm": {
+     "hex": "#d9cec3",
+     "dE": 5.7
+    },
+    "shin": {
+     "hex": "#d9cec4",
+     "dE": 5.7
+    }
+   },
+   "meanFour": 4.9,
+   "all": {
+    "pixels": 99855,
+    "p10": "#b2a89e",
+    "median": "#d6cbc0",
+    "p90": "#e1d6cb",
+    "lRange": 22.9,
+    "dEmedian": 6.4,
+    "dEp10": 15.7,
+    "dEp90": 3.8,
+    "Lp10": 69.4,
+    "Lmedian": 82.3,
+    "Lp90": 86.2
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 3,
+   "shading": "flat",
+   "swatch": "#f7ead0",
+   "contrast": {
+    "median": 1.53,
+    "p10": 1.18,
+    "under3": 89.5
+   },
+   "four": {
+    "neck": {
+     "hex": "#dfdbd1",
+     "dE": 7.1
+    },
+    "forearm": {
+     "hex": "#d6d0c4",
+     "dE": 7.9
+    },
+    "shin": {
+     "hex": "#d6d1c5",
+     "dE": 7.9
+    }
+   },
+   "meanFour": 7.6,
+   "all": {
+    "pixels": 99855,
+    "p10": "#b3aa98",
+    "median": "#d3cdc1",
+    "p90": "#ddd8ce",
+    "lRange": 22.7,
+    "dEmedian": 8.4,
+    "dEp10": 16,
+    "dEp90": 7.3,
+    "Lp10": 69.9,
+    "Lmedian": 82.6,
+    "Lp90": 86.5
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 3,
+   "shading": "skin-v2",
+   "swatch": "#f7ead0",
+   "contrast": {
+    "median": 1.53,
+    "p10": 1.18,
+    "under3": 90
+   },
+   "four": {
+    "neck": {
+     "hex": "#e6dac3",
+     "dE": 3.6
+    },
+    "forearm": {
+     "hex": "#dbcfb8",
+     "dE": 6.1
+    },
+    "shin": {
+     "hex": "#dcd0b9",
+     "dE": 5.9
+    }
+   },
+   "meanFour": 5.2,
+   "all": {
+    "pixels": 99855,
+    "p10": "#b4aa96",
+    "median": "#d8cdb6",
+    "p90": "#e3d8c0",
+    "lRange": 22.5,
+    "dEmedian": 6.7,
+    "dEp10": 15.9,
+    "dEp90": 4.1,
+    "Lp10": 69.9,
+    "Lmedian": 82.7,
+    "Lp90": 86.6
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 4,
+   "shading": "flat",
+   "swatch": "#eadaba",
+   "contrast": {
+    "median": 1.69,
+    "p10": 1.28,
+    "under3": 84.9
+   },
+   "four": {
+    "neck": {
+     "hex": "#dbd4c5",
+     "dE": 6.2
+    },
+    "forearm": {
+     "hex": "#d0c8b6",
+     "dE": 6.6
+    },
+    "shin": {
+     "hex": "#d1c9b7",
+     "dE": 6.5
+    }
+   },
+   "meanFour": 6.4,
+   "all": {
+    "pixels": 99855,
+    "p10": "#ab9e86",
+    "median": "#cec5b2",
+    "p90": "#d8d1c2",
+    "lRange": 24.7,
+    "dEmedian": 6.8,
+    "dEp10": 15.9,
+    "dEp90": 6.4,
+    "Lp10": 65.6,
+    "Lmedian": 79.8,
+    "Lp90": 84
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 4,
+   "shading": "skin-v2",
+   "swatch": "#eadaba",
+   "contrast": {
+    "median": 1.68,
+    "p10": 1.27,
+    "under3": 86.2
+   },
+   "four": {
+    "neck": {
+     "hex": "#e3d3b5",
+     "dE": 1.7
+    },
+    "forearm": {
+     "hex": "#d6c7aa",
+     "dE": 4.6
+    },
+    "shin": {
+     "hex": "#d7c8ab",
+     "dE": 4.3
+    }
+   },
+   "meanFour": 3.5,
+   "all": {
+    "pixels": 99855,
+    "p10": "#ac9f86",
+    "median": "#d3c4a8",
+    "p90": "#dfd1b5",
+    "lRange": 24.3,
+    "dEmedian": 5.4,
+    "dEp10": 15.6,
+    "dEp90": 2.5,
+    "Lp10": 66,
+    "Lmedian": 79.7,
+    "Lp90": 84.3
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 5,
+   "shading": "flat",
+   "swatch": "#d7bd96",
+   "contrast": {
+    "median": 2.1,
+    "p10": 1.48,
+    "under3": 81
+   },
+   "four": {
+    "neck": {
+     "hex": "#d3c5aa",
+     "dE": 5.2
+    },
+    "forearm": {
+     "hex": "#c7b698",
+     "dE": 4.2
+    },
+    "shin": {
+     "hex": "#c8b799",
+     "dE": 4.1
+    }
+   },
+   "meanFour": 4.5,
+   "all": {
+    "pixels": 99855,
+    "p10": "#9d8766",
+    "median": "#c4b293",
+    "p90": "#d0c1a6",
+    "lRange": 27.9,
+    "dEmedian": 4.5,
+    "dEp10": 16.3,
+    "dEp90": 4.7,
+    "Lp10": 57.5,
+    "Lmedian": 73.3,
+    "Lp90": 78.6
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 5,
+   "shading": "skin-v2",
+   "swatch": "#d7bd96",
+   "contrast": {
+    "median": 2.07,
+    "p10": 1.47,
+    "under3": 81.5
+   },
+   "four": {
+    "neck": {
+     "hex": "#ddc39c",
+     "dE": 1.5
+    },
+    "forearm": {
+     "hex": "#cdb490",
+     "dE": 2.5
+    },
+    "shin": {
+     "hex": "#ceb590",
+     "dE": 2.2
+    }
+   },
+   "meanFour": 2.1,
+   "all": {
+    "pixels": 99855,
+    "p10": "#9c886b",
+    "median": "#c9b18d",
+    "p90": "#d9c099",
+    "lRange": 27.7,
+    "dEmedian": 3.3,
+    "dEp10": 16.2,
+    "dEp90": 0.8,
+    "Lp10": 57.8,
+    "Lmedian": 73.4,
+    "Lp90": 78.9
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 6,
+   "shading": "flat",
+   "swatch": "#a07e56",
+   "contrast": {
+    "median": 4.35,
+    "p10": 2.68,
+    "under3": 17.4
+   },
+   "four": {
+    "neck": {
+     "hex": "#ae8a5c",
+     "dE": 4.5
+    },
+    "forearm": {
+     "hex": "#9b784b",
+     "dE": 2.6
+    },
+    "shin": {
+     "hex": "#9d794c",
+     "dE": 2.2
+    }
+   },
+   "meanFour": 3.1,
+   "all": {
+    "pixels": 99855,
+    "p10": "#6a4c2d",
+    "median": "#977348",
+    "p90": "#a98658",
+    "lRange": 29.7,
+    "dEmedian": 4.1,
+    "dEp10": 19.3,
+    "dEp90": 3.2,
+    "Lp10": 34.8,
+    "Lmedian": 51,
+    "Lp90": 58.2
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 6,
+   "shading": "skin-v2",
+   "swatch": "#a07e56",
+   "contrast": {
+    "median": 4.16,
+    "p10": 2.6,
+    "under3": 21.6
+   },
+   "four": {
+    "neck": {
+     "hex": "#af8b62",
+     "dE": 4.7
+    },
+    "forearm": {
+     "hex": "#997954",
+     "dE": 2.2
+    },
+    "shin": {
+     "hex": "#9a7a54",
+     "dE": 1.8
+    }
+   },
+   "meanFour": 2.9,
+   "all": {
+    "pixels": 99855,
+    "p10": "#664f35",
+    "median": "#947551",
+    "p90": "#aa875e",
+    "lRange": 29.5,
+    "dEmedian": 3.8,
+    "dEp10": 19.2,
+    "dEp90": 3.3,
+    "Lp10": 35.3,
+    "Lmedian": 51.4,
+    "Lp90": 58.7
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 7,
+   "shading": "flat",
+   "swatch": "#825c43",
+   "contrast": {
+    "median": 6.78,
+    "p10": 4.42,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#8c5d3e",
+     "dE": 3.1
+    },
+    "forearm": {
+     "hex": "#784d32",
+     "dE": 5.2
+    },
+    "shin": {
+     "hex": "#794d33",
+     "dE": 5.2
+    }
+   },
+   "meanFour": 4.5,
+   "all": {
+    "pixels": 99855,
+    "p10": "#4a2d1e",
+    "median": "#74492f",
+    "p90": "#87593c",
+    "lRange": 25.7,
+    "dEmedian": 6.5,
+    "dEp10": 16.8,
+    "dEp90": 2.5,
+    "Lp10": 21.7,
+    "Lmedian": 35.4,
+    "Lp90": 42.2
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 7,
+   "shading": "skin-v2",
+   "swatch": "#825c43",
+   "contrast": {
+    "median": 5.79,
+    "p10": 3.91,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#8c654d",
+     "dE": 3.5
+    },
+    "forearm": {
+     "hex": "#77553f",
+     "dE": 3.2
+    },
+    "shin": {
+     "hex": "#78563f",
+     "dE": 2.8
+    }
+   },
+   "meanFour": 3.2,
+   "all": {
+    "pixels": 99855,
+    "p10": "#523929",
+    "median": "#74523d",
+    "p90": "#86624b",
+    "lRange": 23.4,
+    "dEmedian": 4.2,
+    "dEp10": 13.7,
+    "dEp90": 2.3,
+    "Lp10": 26.4,
+    "Lmedian": 38,
+    "Lp90": 44.7
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 8,
+   "shading": "flat",
+   "swatch": "#604134",
+   "contrast": {
+    "median": 9.53,
+    "p10": 7.19,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#5d3729",
+     "dE": 3.7
+    },
+    "forearm": {
+     "hex": "#4d2c21",
+     "dE": 6.8
+    },
+    "shin": {
+     "hex": "#4e2c21",
+     "dE": 6.7
+    }
+   },
+   "meanFour": 5.7,
+   "all": {
+    "pixels": 99855,
+    "p10": "#2d170f",
+    "median": "#492a1e",
+    "p90": "#593528",
+    "lRange": 19.5,
+    "dEmedian": 7.4,
+    "dEp10": 14.2,
+    "dEp90": 4,
+    "Lp10": 10.6,
+    "Lmedian": 20.7,
+    "Lp90": 26.2
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 8,
+   "shading": "skin-v2",
+   "swatch": "#604134",
+   "contrast": {
+    "median": 6.79,
+    "p10": 4.93,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#6d4e42",
+     "dE": 4.5
+    },
+    "forearm": {
+     "hex": "#5e4135",
+     "dE": 0.8
+    },
+    "shin": {
+     "hex": "#5e4135",
+     "dE": 0.8
+    }
+   },
+   "meanFour": 2,
+   "all": {
+    "pixels": 99855,
+    "p10": "#452f26",
+    "median": "#5b3f34",
+    "p90": "#6a4a3d",
+    "lRange": 17,
+    "dEmedian": 1.5,
+    "dEp10": 7.3,
+    "dEp90": 3.1,
+    "Lp10": 21.7,
+    "Lmedian": 29.5,
+    "Lp90": 34.6
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 9,
+   "shading": "flat",
+   "swatch": "#3a312a",
+   "contrast": {
+    "median": 11.62,
+    "p10": 9.52,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#2d231d",
+     "dE": 4.5
+    },
+    "forearm": {
+     "hex": "#241c16",
+     "dE": 6.7
+    },
+    "shin": {
+     "hex": "#241c16",
+     "dE": 6.7
+    }
+   },
+   "meanFour": 6,
+   "all": {
+    "pixels": 99855,
+    "p10": "#120d09",
+    "median": "#211914",
+    "p90": "#2b221b",
+    "lRange": 12.3,
+    "dEmedian": 7.7,
+    "dEp10": 11.6,
+    "dEp90": 4.8,
+    "Lp10": 3.9,
+    "Lmedian": 9.6,
+    "Lp90": 14
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 9,
+   "shading": "skin-v2",
+   "swatch": "#3a312a",
+   "contrast": {
+    "median": 8.11,
+    "p10": 6.18,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#48403a",
+     "dE": 4.9
+    },
+    "forearm": {
+     "hex": "#3c342e",
+     "dE": 1.2
+    },
+    "shin": {
+     "hex": "#3c332d",
+     "dE": 0.9
+    }
+   },
+   "meanFour": 2.3,
+   "all": {
+    "pixels": 99855,
+    "p10": "#2c2621",
+    "median": "#3a322c",
+    "p90": "#443c36",
+    "lRange": 13.9,
+    "dEmedian": 0.8,
+    "dEp10": 4.1,
+    "dEp90": 3.6,
+    "Lp10": 15.7,
+    "Lmedian": 21.4,
+    "Lp90": 25.9
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 10,
+   "shading": "flat",
+   "swatch": "#292420",
+   "contrast": {
+    "median": 12.87,
+    "p10": 10.63,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#1a1613",
+     "dE": 4.5
+    },
+    "forearm": {
+     "hex": "#14110e",
+     "dE": 6.1
+    },
+    "shin": {
+     "hex": "#14100e",
+     "dE": 6.3
+    }
+   },
+   "meanFour": 5.6,
+   "all": {
+    "pixels": 99855,
+    "p10": "#080605",
+    "median": "#120f0c",
+    "p90": "#191512",
+    "lRange": 6.9,
+    "dEmedian": 6.6,
+    "dEp10": 8.5,
+    "dEp90": 4.8,
+    "Lp10": 1.7,
+    "Lmedian": 4.5,
+    "Lp90": 7.1
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "monk": 10,
+   "shading": "skin-v2",
+   "swatch": "#292420",
+   "contrast": {
+    "median": 9.1,
+    "p10": 7.07,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#393532",
+     "dE": 5.4
+    },
+    "forearm": {
+     "hex": "#2d2825",
+     "dE": 1.5
+    },
+    "shin": {
+     "hex": "#2c2824",
+     "dE": 1.4
+    }
+   },
+   "meanFour": 2.8,
+   "all": {
+    "pixels": 99855,
+    "p10": "#211d1b",
+    "median": "#2b2723",
+    "p90": "#34302d",
+    "lRange": 12.9,
+    "dEmedian": 1.1,
+    "dEp10": 2.6,
+    "dEp90": 3.9,
+    "Lp10": 11.1,
+    "Lmedian": 15.9,
+    "Lp90": 20.2
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 1,
+   "shading": "flat",
+   "swatch": "#f6ede4",
+   "contrast": {
+    "median": 4.93,
+    "p10": 3.96,
+    "under3": 3.7
+   },
+   "four": {
+    "neck": {
+     "hex": "#fbf3ea",
+     "dE": 1.3
+    },
+    "forearm": {
+     "hex": "#f3eae1",
+     "dE": 0.6
+    },
+    "shin": {
+     "hex": "#f3ebe2",
+     "dE": 0.7
+    }
+   },
+   "meanFour": 0.9,
+   "all": {
+    "pixels": 99855,
+    "p10": "#bbb4ad",
+    "median": "#efe6dd",
+    "p90": "#faf2e9",
+    "lRange": 28.7,
+    "dEmedian": 1.5,
+    "dEp10": 13.7,
+    "dEp90": 1.1,
+    "Lp10": 73.7,
+    "Lmedian": 91.8,
+    "Lp90": 95.9
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 1,
+   "shading": "skin-v2",
+   "swatch": "#f6ede4",
+   "contrast": {
+    "median": 4.93,
+    "p10": 3.96,
+    "under3": 3.6
+   },
+   "four": {
+    "neck": {
+     "hex": "#fef4ea",
+     "dE": 1.6
+    },
+    "forearm": {
+     "hex": "#f5ebe2",
+     "dE": 0.6
+    },
+    "shin": {
+     "hex": "#f5ece3",
+     "dE": 0.2
+    }
+   },
+   "meanFour": 0.8,
+   "all": {
+    "pixels": 99855,
+    "p10": "#bcb5ae",
+    "median": "#f0e7de",
+    "p90": "#fdf4ea",
+    "lRange": 28.9,
+    "dEmedian": 1.3,
+    "dEp10": 13.4,
+    "dEp90": 1.5,
+    "Lp10": 74.1,
+    "Lmedian": 92.1,
+    "Lp90": 96.6
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 2,
+   "shading": "flat",
+   "swatch": "#f3e7db",
+   "contrast": {
+    "median": 4.91,
+    "p10": 3.95,
+    "under3": 4
+   },
+   "four": {
+    "neck": {
+     "hex": "#fbefe3",
+     "dE": 1.7
+    },
+    "forearm": {
+     "hex": "#f0e4d9",
+     "dE": 0.8
+    },
+    "shin": {
+     "hex": "#f0e5d9",
+     "dE": 0.7
+    }
+   },
+   "meanFour": 1.1,
+   "all": {
+    "pixels": 99855,
+    "p10": "#b8afa6",
+    "median": "#ece0d5",
+    "p90": "#faeee2",
+    "lRange": 29.2,
+    "dEmedian": 1.6,
+    "dEp10": 13.8,
+    "dEp90": 1.5,
+    "Lp10": 72,
+    "Lmedian": 89.8,
+    "Lp90": 94.7
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 2,
+   "shading": "skin-v2",
+   "swatch": "#f3e7db",
+   "contrast": {
+    "median": 4.91,
+    "p10": 3.95,
+    "under3": 3.9
+   },
+   "four": {
+    "neck": {
+     "hex": "#fcefe3",
+     "dE": 1.8
+    },
+    "forearm": {
+     "hex": "#f2e5da",
+     "dE": 0.9
+    },
+    "shin": {
+     "hex": "#f2e6da",
+     "dE": 0.2
+    }
+   },
+   "meanFour": 1,
+   "all": {
+    "pixels": 99855,
+    "p10": "#bab0a7",
+    "median": "#ede1d6",
+    "p90": "#fbefe2",
+    "lRange": 29,
+    "dEmedian": 1.4,
+    "dEp10": 13.5,
+    "dEp90": 1.7,
+    "Lp10": 72.4,
+    "Lmedian": 90.2,
+    "Lp90": 95
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 3,
+   "shading": "flat",
+   "swatch": "#f7ead0",
+   "contrast": {
+    "median": 5.01,
+    "p10": 4.02,
+    "under3": 3.7
+   },
+   "four": {
+    "neck": {
+     "hex": "#fcefd5",
+     "dE": 1.1
+    },
+    "forearm": {
+     "hex": "#f4e7ce",
+     "dE": 0.7
+    },
+    "shin": {
+     "hex": "#f4e8ce",
+     "dE": 0.7
+    }
+   },
+   "meanFour": 0.8,
+   "all": {
+    "pixels": 99855,
+    "p10": "#bbb19d",
+    "median": "#f0e3ca",
+    "p90": "#fbeed4",
+    "lRange": 28.3,
+    "dEmedian": 1.5,
+    "dEp10": 13.9,
+    "dEp90": 0.8,
+    "Lp10": 72.5,
+    "Lmedian": 90.7,
+    "Lp90": 94.5
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 3,
+   "shading": "skin-v2",
+   "swatch": "#f7ead0",
+   "contrast": {
+    "median": 5.01,
+    "p10": 4.03,
+    "under3": 3.6
+   },
+   "four": {
+    "neck": {
+     "hex": "#fef0d6",
+     "dE": 1.4
+    },
+    "forearm": {
+     "hex": "#f6e8cf",
+     "dE": 0.8
+    },
+    "shin": {
+     "hex": "#f6e9cf",
+     "dE": 0.2
+    }
+   },
+   "meanFour": 0.8,
+   "all": {
+    "pixels": 99855,
+    "p10": "#bfb29e",
+    "median": "#f1e4cb",
+    "p90": "#fdf0d6",
+    "lRange": 28.3,
+    "dEmedian": 1.3,
+    "dEp10": 13.5,
+    "dEp90": 1.3,
+    "Lp10": 73.1,
+    "Lmedian": 91,
+    "Lp90": 95.2
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 4,
+   "shading": "flat",
+   "swatch": "#eadaba",
+   "contrast": {
+    "median": 4.94,
+    "p10": 3.97,
+    "under3": 4.7
+   },
+   "four": {
+    "neck": {
+     "hex": "#f9e9c7",
+     "dE": 3.3
+    },
+    "forearm": {
+     "hex": "#e7d8b8",
+     "dE": 0.7
+    },
+    "shin": {
+     "hex": "#e8d8b8",
+     "dE": 0.5
+    }
+   },
+   "meanFour": 1.5,
+   "all": {
+    "pixels": 99855,
+    "p10": "#b1a58c",
+    "median": "#e3d4b5",
+    "p90": "#f7e6c5",
+    "lRange": 30.4,
+    "dEmedian": 1.5,
+    "dEp10": 13.9,
+    "dEp90": 2.7,
+    "Lp10": 68.1,
+    "Lmedian": 85.4,
+    "Lp90": 91.9
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 4,
+   "shading": "skin-v2",
+   "swatch": "#eadaba",
+   "contrast": {
+    "median": 4.94,
+    "p10": 3.97,
+    "under3": 4.6
+   },
+   "four": {
+    "neck": {
+     "hex": "#fae8c7",
+     "dE": 3.2
+    },
+    "forearm": {
+     "hex": "#e9d9b9",
+     "dE": 0.2
+    },
+    "shin": {
+     "hex": "#e9d9b9",
+     "dE": 0.2
+    }
+   },
+   "meanFour": 1.2,
+   "all": {
+    "pixels": 99855,
+    "p10": "#b3a68e",
+    "median": "#e4d5b6",
+    "p90": "#f7e7c6",
+    "lRange": 30,
+    "dEmedian": 1.2,
+    "dEp10": 13.6,
+    "dEp90": 2.9,
+    "Lp10": 68.6,
+    "Lmedian": 85.7,
+    "Lp90": 92.1
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 5,
+   "shading": "flat",
+   "swatch": "#d7bd96",
+   "contrast": {
+    "median": 4.93,
+    "p10": 3.95,
+    "under3": 5.2
+   },
+   "four": {
+    "neck": {
+     "hex": "#ebcfa5",
+     "dE": 4.5
+    },
+    "forearm": {
+     "hex": "#d5bb95",
+     "dE": 0.6
+    },
+    "shin": {
+     "hex": "#d5bb95",
+     "dE": 0.6
+    }
+   },
+   "meanFour": 1.9,
+   "all": {
+    "pixels": 99855,
+    "p10": "#a38f71",
+    "median": "#d1b892",
+    "p90": "#e4c9a0",
+    "lRange": 29.2,
+    "dEmedian": 1.4,
+    "dEp10": 13.8,
+    "dEp90": 3.1,
+    "Lp10": 60.4,
+    "Lmedian": 76,
+    "Lp90": 82.3
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 5,
+   "shading": "skin-v2",
+   "swatch": "#d7bd96",
+   "contrast": {
+    "median": 4.93,
+    "p10": 3.95,
+    "under3": 5.1
+   },
+   "four": {
+    "neck": {
+     "hex": "#edd0a6",
+     "dE": 4.9
+    },
+    "forearm": {
+     "hex": "#d6bc96",
+     "dE": 0.4
+    },
+    "shin": {
+     "hex": "#d6bc96",
+     "dE": 0.4
+    }
+   },
+   "meanFour": 1.9,
+   "all": {
+    "pixels": 99855,
+    "p10": "#a59072",
+    "median": "#d2b993",
+    "p90": "#e6caa2",
+    "lRange": 29.1,
+    "dEmedian": 1.1,
+    "dEp10": 13.4,
+    "dEp90": 3.4,
+    "Lp10": 60.9,
+    "Lmedian": 76.4,
+    "Lp90": 82.7
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 6,
+   "shading": "flat",
+   "swatch": "#a07e56",
+   "contrast": {
+    "median": 4.86,
+    "p10": 3.9,
+    "under3": 5.3
+   },
+   "four": {
+    "neck": {
+     "hex": "#af8b60",
+     "dE": 4.7
+    },
+    "forearm": {
+     "hex": "#9f7e57",
+     "dE": 0.4
+    },
+    "shin": {
+     "hex": "#9f7e57",
+     "dE": 0.4
+    }
+   },
+   "meanFour": 1.8,
+   "all": {
+    "pixels": 99855,
+    "p10": "#785f41",
+    "median": "#9c7b55",
+    "p90": "#ab875d",
+    "lRange": 22.3,
+    "dEmedian": 1.3,
+    "dEp10": 13.3,
+    "dEp90": 3.4,
+    "Lp10": 42.1,
+    "Lmedian": 53.9,
+    "Lp90": 58.8
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 6,
+   "shading": "skin-v2",
+   "swatch": "#a07e56",
+   "contrast": {
+    "median": 4.86,
+    "p10": 3.9,
+    "under3": 5.3
+   },
+   "four": {
+    "neck": {
+     "hex": "#b18d63",
+     "dE": 5.3
+    },
+    "forearm": {
+     "hex": "#a07f58",
+     "dE": 0.5
+    },
+    "shin": {
+     "hex": "#a07e58",
+     "dE": 0.6
+    }
+   },
+   "meanFour": 2.1,
+   "all": {
+    "pixels": 99855,
+    "p10": "#7b6042",
+    "median": "#9d7c56",
+    "p90": "#ac8961",
+    "lRange": 22.2,
+    "dEmedian": 1,
+    "dEp10": 12.7,
+    "dEp90": 4,
+    "Lp10": 42.7,
+    "Lmedian": 54.3,
+    "Lp90": 59.5
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 7,
+   "shading": "flat",
+   "swatch": "#825c43",
+   "contrast": {
+    "median": 4.84,
+    "p10": 3.87,
+    "under3": 5.4
+   },
+   "four": {
+    "neck": {
+     "hex": "#8f674d",
+     "dE": 4.4
+    },
+    "forearm": {
+     "hex": "#815d45",
+     "dE": 0.7
+    },
+    "shin": {
+     "hex": "#815c44",
+     "dE": 0.4
+    }
+   },
+   "meanFour": 1.8,
+   "all": {
+    "pixels": 99855,
+    "p10": "#624532",
+    "median": "#7f5a43",
+    "p90": "#8b644b",
+    "lRange": 18.4,
+    "dEmedian": 1.1,
+    "dEp10": 9.2,
+    "dEp90": 3.1,
+    "Lp10": 32,
+    "Lmedian": 41.6,
+    "Lp90": 45.8
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 7,
+   "shading": "skin-v2",
+   "swatch": "#825c43",
+   "contrast": {
+    "median": 4.84,
+    "p10": 3.87,
+    "under3": 5.4
+   },
+   "four": {
+    "neck": {
+     "hex": "#926a50",
+     "dE": 5.5
+    },
+    "forearm": {
+     "hex": "#835e46",
+     "dE": 0.8
+    },
+    "shin": {
+     "hex": "#825d45",
+     "dE": 0.5
+    }
+   },
+   "meanFour": 2.3,
+   "all": {
+    "pixels": 99855,
+    "p10": "#644734",
+    "median": "#7f5c45",
+    "p90": "#8d674f",
+    "lRange": 18.6,
+    "dEmedian": 1.1,
+    "dEp10": 8.6,
+    "dEp90": 4.2,
+    "Lp10": 32.8,
+    "Lmedian": 42.1,
+    "Lp90": 46.9
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 8,
+   "shading": "flat",
+   "swatch": "#604134",
+   "contrast": {
+    "median": 6.95,
+    "p10": 5.35,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#6b4a3d",
+     "dE": 3.3
+    },
+    "forearm": {
+     "hex": "#604337",
+     "dE": 1
+    },
+    "shin": {
+     "hex": "#604336",
+     "dE": 1
+    }
+   },
+   "meanFour": 1.8,
+   "all": {
+    "pixels": 99855,
+    "p10": "#473128",
+    "median": "#5e4135",
+    "p90": "#68493c",
+    "lRange": 14.9,
+    "dEmedian": 0.8,
+    "dEp10": 6.7,
+    "dEp90": 2.7,
+    "Lp10": 22.6,
+    "Lmedian": 30.4,
+    "Lp90": 34.1
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 8,
+   "shading": "skin-v2",
+   "swatch": "#604134",
+   "contrast": {
+    "median": 6.44,
+    "p10": 4.82,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#6e4f43",
+     "dE": 4.8
+    },
+    "forearm": {
+     "hex": "#614337",
+     "dE": 0.8
+    },
+    "shin": {
+     "hex": "#614337",
+     "dE": 0.8
+    }
+   },
+   "meanFour": 2.1,
+   "all": {
+    "pixels": 99855,
+    "p10": "#4a3329",
+    "median": "#5f4236",
+    "p90": "#6b4b3e",
+    "lRange": 15.4,
+    "dEmedian": 0.8,
+    "dEp10": 5.9,
+    "dEp90": 3.5,
+    "Lp10": 23.6,
+    "Lmedian": 30.9,
+    "Lp90": 35
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 9,
+   "shading": "flat",
+   "swatch": "#3a312a",
+   "contrast": {
+    "median": 8.71,
+    "p10": 6.91,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#433a33",
+     "dE": 2.9
+    },
+    "forearm": {
+     "hex": "#3c342e",
+     "dE": 1.2
+    },
+    "shin": {
+     "hex": "#3c342d",
+     "dE": 1.1
+    }
+   },
+   "meanFour": 1.7,
+   "all": {
+    "pixels": 99855,
+    "p10": "#2c2520",
+    "median": "#3a322c",
+    "p90": "#423932",
+    "lRange": 12.3,
+    "dEmedian": 0.8,
+    "dEp10": 4.1,
+    "dEp90": 2.6,
+    "Lp10": 15.3,
+    "Lmedian": 21.4,
+    "Lp90": 24.7
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 9,
+   "shading": "skin-v2",
+   "swatch": "#3a312a",
+   "contrast": {
+    "median": 7.97,
+    "p10": 5.88,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#48403a",
+     "dE": 4.9
+    },
+    "forearm": {
+     "hex": "#3d352e",
+     "dE": 1.4
+    },
+    "shin": {
+     "hex": "#3c342d",
+     "dE": 1.1
+    }
+   },
+   "meanFour": 2.5,
+   "all": {
+    "pixels": 99855,
+    "p10": "#2e2823",
+    "median": "#3c332d",
+    "p90": "#443c35",
+    "lRange": 12.8,
+    "dEmedian": 0.9,
+    "dEp10": 3.5,
+    "dEp90": 3.6,
+    "Lp10": 16.6,
+    "Lmedian": 22,
+    "Lp90": 25.9
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 10,
+   "shading": "flat",
+   "swatch": "#292420",
+   "contrast": {
+    "median": 9.87,
+    "p10": 7.94,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#322d2a",
+     "dE": 3
+    },
+    "forearm": {
+     "hex": "#2d2925",
+     "dE": 1.7
+    },
+    "shin": {
+     "hex": "#2c2824",
+     "dE": 1.4
+    }
+   },
+   "meanFour": 2,
+   "all": {
+    "pixels": 99855,
+    "p10": "#1f1c1a",
+    "median": "#2b2723",
+    "p90": "#312d29",
+    "lRange": 10.4,
+    "dEmedian": 1.1,
+    "dEp10": 3,
+    "dEp90": 2.9,
+    "Lp10": 10.5,
+    "Lmedian": 15.9,
+    "Lp90": 18.8
+   }
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "monk": 10,
+   "shading": "skin-v2",
+   "swatch": "#292420",
+   "contrast": {
+    "median": 9.01,
+    "p10": 6.59,
+    "under3": 0
+   },
+   "four": {
+    "neck": {
+     "hex": "#393532",
+     "dE": 5.4
+    },
+    "forearm": {
+     "hex": "#2d2926",
+     "dE": 1.8
+    },
+    "shin": {
+     "hex": "#2c2824",
+     "dE": 1.4
+    }
+   },
+   "meanFour": 2.9,
+   "all": {
+    "pixels": 99855,
+    "p10": "#221f1d",
+    "median": "#2c2824",
+    "p90": "#34302d",
+    "lRange": 11.9,
+    "dEmedian": 1.4,
+    "dEp10": 2.3,
+    "dEp90": 3.9,
+    "Lp10": 12,
+    "Lmedian": 16.4,
+    "Lp90": 20.2
+   }
+  }
+ ],
+ "garment": [],
+ "frames": [],
+ "problems": []
+}

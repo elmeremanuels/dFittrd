@@ -5,6 +5,7 @@ import { fitGapsForRender } from '@curtain/fit-engine';
 import { ESTIMATE_DISCLAIMER, type GarmentPayload, type UserBody } from '@curtain/schema';
 import { adjustColor, bodyGeometry, bodyPath, fabricLook, garmentGeometry, isHex, levelY, STANDARD_SKIN_HEX, VIEW_H, VIEW_W, HEAD_TOP_Y, type FigureFamily } from '@/render/body';
 import { faceInk, figureOutline, neutralFace, SKIN_SHADE } from '@/render/face';
+import { skin2d, type Skin2dShading } from '@/render/skin2d';
 import { ESTIMATE_LABEL_LINES, EstimateBadge } from './EstimateBadge';
 import { SizeRingsChips, SizeRingsLayer } from './SizeRings';
 import type { RingOverlay } from '@/render/rings';
@@ -77,6 +78,12 @@ export interface AvatarViewProps {
    * Default `female`: today's figure, unchanged.
    */
   family?: FigureFamily;
+  /**
+   * How the skin is shaded. `flat` (default): today's figure, unchanged. `skin-v2` (opt-in, D22
+   * point 3, for the look review): shades in linear light that keep the skin's hue, a warm shadow
+   * edge, a faint sheen and an outline that reads on every tone (`render/skin2d.ts`).
+   */
+  skinShading?: Skin2dShading;
 }
 
 const NO_MEDIA: AvatarMedia = { faceUrl: null, baseFrame: null };
@@ -90,7 +97,7 @@ const NO_MEDIA: AvatarMedia = { faceUrl: null, baseFrame: null };
  * head (D19: one generic drawing for everybody, never a likeness), or the face tile where the app
  * has one. Always carries the estimate badge.
  */
-export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false, rings = null, hemSweepCm = null, labelsAt = 'top', plain = false, estimateLines = ESTIMATE_LABEL_LINES, family = 'female' }: AvatarViewProps): ReactNode {
+export function AvatarView({ garment, fit, size, isLoading = false, bare = false, measurements, heightCm, skinHex = null, media = NO_MEDIA, bodyLabel, compact = false, rings = null, hemSweepCm = null, labelsAt = 'top', plain = false, estimateLines = ESTIMATE_LABEL_LINES, family = 'female', skinShading = 'flat' }: AvatarViewProps): ReactNode {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const reduce = useReducedMotion();
 
@@ -101,8 +108,9 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
 
   const skin = isHex(skinHex) ? skinHex! : STANDARD_SKIN_HEX;
   const face = useMemo(() => neutralFace(body), [body]);
-  const ink = faceInk(skin);
-  const outline = figureOutline(skin);
+  const v2 = skinShading === 'skin-v2' ? skin2d(skin) : null;
+  const ink = v2 ? faceInk(skin, v2.head) : faceInk(skin);
+  const outline = v2 ? v2.outline : figureOutline(skin);
   // In the embed's narrow frame the labels get their own strip under the figure's feet.
   const labelsBelow = labelsAt === 'bottom' && !bare && !compact;
   // At the top they get a strip above the head (they lay across the face of the neutral head, D19).
@@ -115,6 +123,8 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
     headClip: `${uid}-head`,
     shade: `${uid}-shade`,
     skinGrad: `${uid}-skingrad`,
+    sheen: `${uid}-sheen`,
+    side: `${uid}-side`,
     strain: `${uid}-strain`,
   };
   const bodyD = bodyPath(body);
@@ -132,6 +142,7 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
         role="img"
         data-skin={skin.toUpperCase()}
         {...(family === 'male' ? { 'data-figure': 'male' } : {})}
+        {...(v2 ? { 'data-skin-shading': 'skin-v2' } : {})}
         aria-label={garment ? `Estimated look of ${garment.name}${size ? ` in size ${size}` : ''} ${onWhom} — not measured` : hasBody ? 'Your body outline (estimate)' : 'Reference body outline'}
       >
         <defs>
@@ -167,10 +178,32 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
             <stop offset="45%" stopColor="rgba(0,0,0,0)" />
             <stop offset="100%" stopColor="rgba(0,0,0,0.16)" />
           </linearGradient>
-          <radialGradient id={ids.skinGrad} cx="50%" cy="35%" r="65%">
-            <stop offset="0%" stopColor={adjustColor(skin, SKIN_SHADE.light)} />
-            <stop offset="100%" stopColor={adjustColor(skin, SKIN_SHADE.dark)} />
-          </radialGradient>
+          {v2 ? (
+            <>
+              {/* skin-v2: lit from the viewer's right like the 3D key light; every stop keeps the skin's hue */}
+              <radialGradient id={ids.skinGrad} cx="58%" cy="32%" r="68%">
+                <stop offset="0%" stopColor={v2.lit} />
+                <stop offset="55%" stopColor={v2.mid} />
+                <stop offset="100%" stopColor={v2.shadow} />
+              </radialGradient>
+              <linearGradient id={ids.side} x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor={v2.side} stopOpacity={v2.sideLeft} />
+                <stop offset="42%" stopColor={v2.side} stopOpacity="0" />
+                <stop offset="80%" stopColor={v2.side} stopOpacity="0" />
+                <stop offset="100%" stopColor={v2.side} stopOpacity={v2.sideRight} />
+              </linearGradient>
+              <linearGradient id={ids.sheen} x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="46%" stopColor="#ffffff" stopOpacity="0" />
+                <stop offset="66%" stopColor="#ffffff" stopOpacity={v2.sheen} />
+                <stop offset="88%" stopColor="#ffffff" stopOpacity="0" />
+              </linearGradient>
+            </>
+          ) : (
+            <radialGradient id={ids.skinGrad} cx="50%" cy="35%" r="65%">
+              <stop offset="0%" stopColor={adjustColor(skin, SKIN_SHADE.light)} />
+              <stop offset="100%" stopColor={adjustColor(skin, SKIN_SHADE.dark)} />
+            </radialGradient>
+          )}
           <radialGradient id={ids.strain} cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="rgba(255,255,255,0.55)" />
             <stop offset="100%" stopColor="rgba(255,255,255,0)" />
@@ -184,7 +217,14 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
           <g opacity={isLoading ? 0.4 : 1}>
             {/* The outline keeps a light figure visible on the light backdrop (1.1:1 without it at the lightest swatch). */}
             <path d={bodyD} fill={`url(#${ids.skinGrad})`} {...(plain ? {} : { stroke: outline, strokeWidth: 1.6, strokeLinejoin: 'round' as const, 'data-outline': outline.toUpperCase() })} data-testid="figure-body" />
-            <path d={bodyD} fill={`url(#${ids.shade})`} opacity="0.5" />
+            {v2 ? (
+              <>
+                <path d={bodyD} fill={`url(#${ids.side})`} />
+                <path d={bodyD} fill={`url(#${ids.sheen})`} />
+              </>
+            ) : (
+              <path d={bodyD} fill={`url(#${ids.shade})`} opacity="0.5" />
+            )}
             <rect width={VIEW_W} height={VIEW_H} filter={`url(#${ids.skinTex})`} clipPath={`url(#${ids.bodyClip})`} pointerEvents="none" style={{ mixBlendMode: 'overlay' }} />
           </g>
         )}

@@ -19,6 +19,7 @@ import { UnitToggle } from './EmbedScreens';
 import { SizeChartTable } from './SizeChartTable';
 import { embedStrings, parts } from './strings';
 import type { Units } from './units';
+import { avatarSkinFlag } from './look';
 
 const TABS = ['fit', 'chart'] as const;
 type TabKey = (typeof TABS)[number];
@@ -278,7 +279,7 @@ export function ResultScreen({
             <div className={`relative ${onAvatar ? 'pt-10' : ''}`}>
               {/* overflow-clip, not hidden: the frame must not be a scroll box, or the estimate label could not ride above the bar. */}
               <div ref={avatarRef} className="mirror-frame aspect-[5/9] w-full overflow-clip border-[8px]">
-                <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} skinHex={skinHex} bodyLabel={t.bodyLabel} estimateLines={t.estimateLines} labelsAt="bottom" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} family={figure} {...(face ? { media: { faceUrl: face.url, baseFrame: null, faceStyle: 'tile' as const } } : {})} />
+                <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} skinHex={skinHex} bodyLabel={t.bodyLabel} estimateLines={t.estimateLines} labelsAt="bottom" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} family={figure} skinShading={avatarSkinFlag()} {...(face ? { media: { faceUrl: face.url, baseFrame: null, faceStyle: 'tile' as const } } : {})} />
               </div>
               {face ? (
                 // The head is about 30 px wide at phone size: the face is shown large here as well.

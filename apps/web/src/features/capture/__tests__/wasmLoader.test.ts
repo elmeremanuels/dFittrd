@@ -45,15 +45,17 @@ describe('MediaPipe WASM loader in a module worker', () => {
     let loads = 0;
     const rearm = moduleFactoryRearmer('/models/wasm/vision_wasm_module_internal.js', g, async () => (loads++, mod));
     for (let task = 0; task < 3; task++) {
-      await rearm();
+      expect(await rearm()).toBe(true);
       expect(g.ModuleFactory).toBe(mod.default);
       g.ModuleFactory = undefined;
     }
     expect(loads).toBe(1);
   });
 
-  it('the rearmer refuses a loader without a factory', async () => {
-    const rearm = moduleFactoryRearmer('/x.js', {}, async () => ({}));
-    await expect(rearm()).rejects.toThrow(/no ModuleFactory/);
+  it('a loader that cannot be imported, or has no factory, changes nothing (MediaPipe reports its own error)', async () => {
+    const scope: { ModuleFactory?: unknown } = {};
+    expect(await moduleFactoryRearmer('/x.js', scope, async () => ({}))()).toBe(false);
+    expect(await moduleFactoryRearmer('/x.js', scope, () => Promise.reject(new Error('404')))()).toBe(false);
+    expect(scope.ModuleFactory).toBeUndefined();
   });
 });

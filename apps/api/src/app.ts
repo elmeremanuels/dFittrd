@@ -18,6 +18,7 @@ import type { Env } from './env.js';
 import { registerJobs } from './jobs/index.js';
 import type { JobQueue } from './jobs/queue.js';
 import { HttpError } from './lib/errors.js';
+import { logSafeUrl } from './lib/logUrl.js';
 import { fetchTransport, nodeTransport, systemLookup, type LookupLike, type PinnedTransport } from './lib/safeFetch.js';
 import { appRoutes } from './routes/app.js';
 import { merchantRoutes } from './routes/merchant.js';
@@ -46,6 +47,8 @@ export interface BuildOptions {
   /** Override the try-on router (tests inject MockProvider). */
   tryon?: TryOnRouter;
   now?: () => Date;
+  /** Where log lines go (tests capture them); default stdout. */
+  logStream?: { write(line: string): void };
 }
 
 export type App = FastifyInstance & { ctx: AppContext };
@@ -58,14 +61,17 @@ export async function build(opts: BuildOptions): Promise<App> {
       // Privacy (D3): no client IP in logs unless LOG_IPS=1; never log auth headers.
       redact: { paths: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["x-shopify-hmac-sha256"]'], censor: '[redacted]' },
       serializers: {
+        // L1: the route pattern and query parameter names only. Try tokens, signed render URLs and
+        // Shopify id_tokens travel in the URL and must never reach the 7-day log (lib/logUrl.ts).
         req: (req) => ({
           method: req.method,
-          url: req.url,
+          url: logSafeUrl({ url: req.url, routePattern: (req as { routeOptions?: { url?: string } }).routeOptions?.url }),
           id: req.id,
           ...(env.LOG_IPS ? { remoteAddress: req.ip } : {}),
         }),
       },
-      ...(env.NODE_ENV === 'development' ? { transport: { target: 'pino-pretty', options: { colorize: true } } } : {}),
+      ...(opts.logStream ? { stream: opts.logStream } : {}),
+      ...(env.NODE_ENV === 'development' && !opts.logStream ? { transport: { target: 'pino-pretty', options: { colorize: true } } } : {}),
     },
     trustProxy: true,
     // try tokens are JWTs in the path (/v1/try/:token)

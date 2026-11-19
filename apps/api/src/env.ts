@@ -209,6 +209,9 @@ export type Env = Omit<z.infer<typeof EnvSchema>, 'SHOPIFY_DISTRIBUTION'> & {
   devSecrets: boolean;
 };
 
+/** The lowest k-anonymity floor production accepts (D3). */
+export const K_ANON_PRODUCTION_MIN = 5;
+
 const DEV_FALLBACKS = {
   JWT_SECRET: 'dev-jwt-secret-do-not-use-in-production-0123456789',
   SHOP_KEY_PEPPER: 'dev-pepper-do-not-use-in-production',
@@ -244,6 +247,9 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
   if (missing.length) throw new EnvError(`Missing required secrets in production: ${missing.join(', ')}`);
   if (JWT_SECRET.length < 32) throw new EnvError('JWT_SECRET must be at least 32 characters');
   if (!/^[0-9a-fA-F]{64}$/.test(ENCRYPTION_KEY)) throw new EnvError('ENCRYPTION_KEY must be 64 hex characters (32 bytes)');
+  // L2: the k floor is a privacy promise to shoppers (D3: default 5 for pilots, raise later). It may
+  // go up in production, never below 5; a typo such as K_ANON=1 would hand merchants single shoppers.
+  if (prod && e.K_ANON < K_ANON_PRODUCTION_MIN) throw new EnvError(`K_ANON must be at least ${K_ANON_PRODUCTION_MIN} in production (got ${e.K_ANON})`);
   if (e.SHOPIFY_API_KEY && !e.SHOPIFY_API_SECRET) throw new EnvError('SHOPIFY_API_SECRET is required when SHOPIFY_API_KEY is set');
   if (prod && e.SHOPIFY_API_KEY && !e.SHOPIFY_DISTRIBUTION) {
     throw new EnvError('SHOPIFY_DISTRIBUTION (custom|public) is required in production when SHOPIFY_API_KEY is set: it must match the app\'s distribution method in the Dev Dashboard');

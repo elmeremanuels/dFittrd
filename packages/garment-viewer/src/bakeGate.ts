@@ -245,7 +245,7 @@ export async function checkDrapeBake(input: BakeGateInput): Promise<BakeCheckRep
   put('at_rest', rest);
 
   // ---- tape_rings and inside_body: measured on every drape ----
-  const ringReasons: string[] = [];
+  const ringMisses: { size: string; name: string; t: number; got: number; want: number }[] = [];
   const insideReasons: string[] = [];
   const readings: BakeDrapeReading[] = [];
   const family = input.anchors.mannequin?.family === 'male' ? 'male' : 'female';
@@ -265,8 +265,7 @@ export async function checkDrapeBake(input: BakeGateInput): Promise<BakeCheckRep
       readings.push({ size: s.size, t: d.t, bodyHipCm: r1(hipOf(d.t)), hipRingCm: r1(hip), hemRingCm: r1(hem), insideParticles: inside.count, insideMaxCm: Math.round(inside.maxCm * 100) / 100, atRest: r ? r.atRest : null, maxMoveCmPerFrame: r ? r.maxMoveCmPerFrame : null });
       if (ts) {
         for (const [name, got, want] of [['hip-line ring', hip, ts.tape.hipCm.cm], ['hem', hem, ts.tape.hemSweepCm.cm]] as const) {
-          const tol = bakeRingToleranceCm(want);
-          if (Math.abs(got - want) > tol) ringReasons.push(`size ${s.size} on the body with ${cm(hipOf(d.t))} hips: the draped ${name} is ${cm(got)} around, the tape says ${cm(want)} (allowed ±${cm(tol)})`);
+          if (Math.abs(got - want) > bakeRingToleranceCm(want)) ringMisses.push({ size: s.size, name, t: d.t, got, want });
         }
       }
       if (inside.count > 0) insideReasons.push(`size ${s.size} on the body with ${cm(hipOf(d.t))} hips: ${inside.count} particle${inside.count === 1 ? '' : 's'} inside the drawn body, up to ${cm(inside.maxCm)} deep`);
@@ -277,7 +276,7 @@ export async function checkDrapeBake(input: BakeGateInput): Promise<BakeCheckRep
     notRun('tape_rings');
     notRun('inside_body');
   } else {
-    put('tape_rings', ringReasons);
+    put('tape_rings', ringReasonsOf(ringMisses, meta.sizes, hipOf));
     put('inside_body', insideReasons);
   }
 
@@ -298,6 +297,27 @@ export async function checkDrapeBake(input: BakeGateInput): Promise<BakeCheckRep
   else put('size_order', order);
 
   return report({ hipBelowBandCm: tape.hipBelowBandCm, sizes: tapeSizes.map((s) => tapeSummary(s, meta.sizes.find((x) => x.size === s.size)?.notDraped ?? null, hipOf)) }, readings);
+}
+
+/**
+ * One reason per size and ring: a miss on one body names that body; the same miss on every body of the size says so
+ * once, with the range of the draped lengths (a wrong tape number or a wrong ring, not a bad drape).
+ */
+function ringReasonsOf(misses: { size: string; name: string; t: number; got: number; want: number }[], sizes: { size: string; baseT: number; targetT: number[] }[], hipOf: (t: number) => number): string[] {
+  const out: string[] = [];
+  for (const s of sizes) {
+    for (const name of ['hip-line ring', 'hem']) {
+      const m = misses.filter((x) => x.size === s.size && x.name === name);
+      if (m.length === 0) continue;
+      const want = m[0]!.want;
+      const tol = `allowed ±${cm(bakeRingToleranceCm(want))}`;
+      if (m.length > 1 && m.length === 1 + s.targetT.length) {
+        const lo = Math.min(...m.map((x) => x.got)), hi = Math.max(...m.map((x) => x.got));
+        out.push(`size ${s.size}: the draped ${name} is ${Math.abs(hi - lo) < 0.05 ? cm(lo) : `${r1(lo)}-${cm(hi)}`} around on every body it was draped on, the tape says ${cm(want)} (${tol})`);
+      } else for (const x of m) out.push(`size ${s.size} on the body with ${cm(hipOf(x.t))} hips: the draped ${name} is ${cm(x.got)} around, the tape says ${cm(want)} (${tol})`);
+    }
+  }
+  return out;
 }
 
 function tapeSummary(s: TapeSize, notDraped: { t: number; reason: string }[] | null, hipOf: ((t: number) => number) | null): BakeTapeSize {

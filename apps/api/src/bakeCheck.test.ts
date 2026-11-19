@@ -66,7 +66,7 @@ describe('the bake check on import', () => {
     const err = await importBundle(t.handle.db, t.env, s.shop.id, PRODUCT, dir).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(AssetImportError);
     expect((err as AssetImportError).problem).toBe('bake_check_failed');
-    expect((err as AssetImportError).message).toMatch(/Hip line and hem agree with the tape: no\. size 12 on the body with 104 cm hips: the draped hem is 254 cm around, the tape says 280 cm \(allowed ±5\.6 cm\)/);
+    expect((err as AssetImportError).message).toMatch(/Hip line and hem agree with the tape: no\. size 12: the draped hem is 254 cm around on every body it was draped on, the tape says 280 cm \(allowed ±5\.6 cm\)/);
     const refused = (await list()).find((a) => a.status === 'refused')!;
     expect(refused.rejectReason).toMatch(/^Hip line and hem agree with the tape: no\./);
     expect(refused.bakeCheck?.pass).toBe(false);

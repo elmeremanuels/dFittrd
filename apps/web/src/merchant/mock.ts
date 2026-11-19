@@ -3,7 +3,12 @@
  * the real DTOs so the console renders exactly what the backend will send.
  */
 import {
+  bakeCheckRefusal,
   completenessScore,
+  PILOT_PULL_ON_SKIRT,
+  garmentQaFlagNote,
+  type BakeCheckReport,
+  type MerchantGarmentAsset,
   MOCK_GARMENTS,
   type AnalyticsAbandonedResponse,
   type AnalyticsFitSizesResponse,
@@ -14,9 +19,11 @@ import {
   type UsageResponse,
 } from '@curtain/schema';
 import { dayIso } from '@/lib/format';
+import MOCK_BAKE_CHECKS from './mockBakeChecks.json';
 
 export function mockProducts(): MerchantProductsResponse {
-  const items = MOCK_GARMENTS.slice(0, 24).map((g, i) => {
+  // The pilot skirt (tape-built 3D versions in `mockAssets`) first, then the mock catalogue.
+  const items = [PILOT_PULL_ON_SKIRT, ...MOCK_GARMENTS.slice(0, 23)].map((g, i) => {
     const draft = i % 5 === 3 ? { ...g, fabric: undefined, sizeChartType: undefined } : i % 7 === 6 ? { ...g, flatLayPhoto: undefined } : g;
     const c = completenessScore(draft);
     return {
@@ -138,4 +145,25 @@ export function mockAnomalies(from: string, to: string): BillingAnomaliesRespons
       { day, kind: 'spike', billedSessions: 212, deniedSessions: 0, threshold: 86, trailingAverage: 28.1, firstAt: `${day}T09:12:00.000Z`, lastAt: `${day}T21:40:00.000Z` },
     ],
   };
+}
+
+/**
+ * The 3D versions of a product in demo mode: one refused by the automatic bake check, one that passed and waits for
+ * approval, and one imported before the check existed (flagged). The two reports are real output of the check
+ * (`checkDrapeBake`) on the POM v2 tape-built fixture of the pilot skirt and on a copy with a wrong tape
+ * (mockBakeChecks.json, see docs/reports/claude/bake-qa-gate.md).
+ */
+export function mockAssets(productExternalId: string): MerchantGarmentAsset[] {
+  if (productExternalId !== PILOT_PULL_ON_SKIRT.id) return [];
+  const { bytes, pass, refused } = MOCK_BAKE_CHECKS as unknown as { bytes: number; pass: BakeCheckReport; refused: BakeCheckReport };
+  const common = { productExternalId, bytes, baseSize: '12', sizes: ['8', '10', '12', '14', '16'], qaPass: true };
+  return [
+    { ...common, id: '00000000-0000-4000-8000-00000000a003', version: '7c1e9a40d2b35f88', status: 'awaiting_approval', live: false, qaFlags: [], qaNotes: [], createdAt: pass.checkedAt, approvedAt: null, rejectReason: null, bakeCheck: pass },
+    { ...common, id: '00000000-0000-4000-8000-00000000a002', version: '3fa0b6c19e7d2214', status: 'refused', live: false, qaFlags: ['tape_built_no_chart_check'], qaNotes: [], createdAt: refused.checkedAt, approvedAt: null, rejectReason: bakeCheckRefusal(refused), bakeCheck: refused },
+    {
+      ...common, id: '00000000-0000-4000-8000-00000000a001', version: '91d4c0e7a6b8f305', status: 'superseded', live: false,
+      qaFlags: ['tape_built_no_chart_check'], qaNotes: [garmentQaFlagNote('tape_built_no_chart_check', {})],
+      createdAt: '2026-11-18T09:02:00.000Z', approvedAt: '2026-11-18T09:30:00.000Z', rejectReason: null,
+    },
+  ];
 }

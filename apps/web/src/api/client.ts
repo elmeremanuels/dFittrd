@@ -7,6 +7,7 @@
  * values) through `onLedger`, mirroring the server's ledger.
  */
 import type {
+  MerchantGarmentAsset,
   AnalyticsAbandonedResponse,
   AnalyticsFitSizesResponse,
   BillingAnomaliesResponse,
@@ -463,6 +464,17 @@ export class MerchantApi {
   }
   ledger(cursor?: string): Promise<MerchantLedgerResponse> {
     return this.client.request('GET', `/v1/merchant/ledger${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, undefined, { auth: this.auth });
+  }
+  /** The 3D bundle versions of a product (D13, D16), with the automatic bake check of a server drape bake. */
+  assets(productExternalId: string): Promise<{ assets: MerchantGarmentAsset[] }> {
+    return this.client.request('GET', `/v1/merchant/products/${encodeURIComponent(productExternalId)}/assets`, undefined, { auth: this.auth });
+  }
+  /** D13: the merchant's approval makes a version live. */
+  approveAsset(assetId: string): Promise<{ asset: MerchantGarmentAsset }> {
+    return this.client.request('POST', `/v1/merchant/assets/${encodeURIComponent(assetId)}/approve`, {}, { auth: this.auth });
+  }
+  rejectAsset(assetId: string, reason: string): Promise<{ asset: MerchantGarmentAsset }> {
+    return this.client.request('POST', `/v1/merchant/assets/${encodeURIComponent(assetId)}/reject`, { reason }, { auth: this.auth });
   }
   /** WooCommerce: a Stripe Checkout for the Curtain plan (also the switch from a retired plan, B2). */
   stripeCheckout(): Promise<{ checkoutUrl: string; trialDays: number }> {

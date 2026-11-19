@@ -144,7 +144,17 @@ Typed on `SYNTHETIC_MENS_CHINO_WL` for the M table body (height 174, weight 74, 
 
 ### 7. The real stack, switch off and on (task 4)
 
-DEMO_RESULTS
+Six runs, all exit 0, in headless Chromium at 390 × 760 at 2× with the men's gate on. "Off": no `VITE_MALE_SHAPE`, no `MALE_SHAPE`, v1-built bundles on disk. "On": `VITE_MALE_SHAPE=v2` in the web build and `MALE_SHAPE=v2` on the api, set together by the scripts, v2-built bundles on disk.
+
+| Run | Switch off (v1) | Switch on (v2) |
+|---|---|---|
+| `demo-men-chino.mjs`: five bodies, own size front / side / back and close, other legs, too large, not drawn | exit 0, 57 pictures. S 32/32, M opened in 36/32 (34/32 picked too), L 38/32, XL 40/32, XXL 44/32 | exit 0, 57 pictures, the same sizes; the 2D figure is marked v2 |
+| `demo-men-chino.mjs --thigh --only-own --bodies=M` (thigh typed, tape switch on) | exit 0: the M body opens in 34/32 | exit 0: 34/32 |
+| `demo-men.mjs --all-sizes` (the tee) | exit 0, 44 pictures, five bodies settled in S to XXL | exit 0, 44 pictures, the same |
+
+- In both chino runs the M body in 30/32 and the XXL body in 38/32 are not drawn, with the sentence (10.8 and 13.1 cm); 34/30, 34/34 and 38/32 on M are drawn.
+- With the bundle of the other shape on disk each script stops before it starts and prints the build command. I did not run the mixed case (one switch set, the other not) in the browser; the api and viewer tests of `men-tee-on-v2` cover it ("coming soon", nothing drawn wrong).
+- No page error and no console error in any run.
 
 ### Assumed [A], new on this branch
 
@@ -161,15 +171,39 @@ DEMO_RESULTS
 
 All from the real embed (storefront → "Try it on" → About you → 3D view), 390 × 760 CSS px at deviceScaleFactor 2, men's gate on. `chino--…` is the switch off (v1 body, v1-built chino), `chino-v2--…` the switch on.
 
-PICTURES
+- `chino--body-{S,M,L,XL,XXL}--5-3d-size-*--{front,side,back}.png` and `…--close-{front,side,back}.png` (zoomed in on waist, crotch and seat): each v1 body in the fit engine's size. `chino-v2--…`: the same on v2.
+- `sheet-{v1,v2}-own-size-front-side-back.png`, `sheet-{v1,v2}-own-size-close-front-side-back.png`: the five bodies side by side, three views.
+- `compare-{front,side,back,close-front,close-side,close-back}-v1-top-v2-bottom.png`: the switch off above, on below.
+- `crop-{waist,crotch,seat,hem}-v1-top-v2-bottom.png`: close-ups cut from those pictures (the hem crops are enlarged 2× from the full view, so they are soft).
+- `chino[-v2]--body-M--4-3d-embed-size-36x32--*.png`: the size the embed opened in for the M body. `chino[-v2]-thigh--body-M--*.png`: the run with the thigh typed and the tape switch on (opens in 34/32); `chino-thigh--1-about-you.png` is not taken (the About-you picture is taken on the S body only): the field shows in `chino--1-about-you.png` once "I know my measurements" is open.
+- `chino[-v2]--body-M--7-size-{34x30-short-leg,34x34-long-leg,38x32-too-large}--{front,side}.png`, `…--6-size-30x32-not-drawn.png`, `chino[-v2]--body-XXL--6-size-38x32-not-drawn.png`.
+- `…--0-storefront-page`, `--1-about-you`, `--2-pending`, `--3-settled-*`, `--3b-2d-figure`: the flow.
+
+Software renders are not committed this time; the embed pictures cover the same views.
 
 **How it looks, honestly.**
 
-LOOK
+- **v1** reads as a pair of stone chinos in every size, as before: waistband with button and loops, fly, slanted pockets, back welts, legs that hang with long soft folds and break on the foot. Against the first builder's pictures: the legs are smoother (fewer small wrinkles: the cloth no longer stretches and shortens along its grain), the sizes differ a little more from each other at the rise, and the short dark crease under the fly is gone at M and L. The crotch still sits visibly low, most on the S body (6 cm), where the 32/32 looks a size long in the rise. From the back the seat is still flat (the v1 body has none) with a small dark knot where the seams meet on XL and XXL.
+- **v1, what is wrong**: on the S body two or three light specks at each hip at pocket-end height, front and back; one or two on XL and XXL at the back. They are what is left of the leg-top ledge. The hem still lies on the stub foot in a slightly ragged ring. The painted detail is flat.
+- **v2** reads as chinos on a more natural body: the seat is round from the back, the legs hang straighter and closer, the band sits level. The side views are better than v1's.
+- **v2, what is wrong, and it is plain to see**: on M, L, XL and XXL a grey patch of body shows between the legs just under the crotch, about 1 cm wide and 3 to 4 cm high in the front view and wider from the back. On the S body it is a thin line. From the back there is also a short row of dark specks at seat height on every size, where the cloth crosses the lower edge of the seat. I would not show the v2 chino to a shopper like this.
+- On both shapes the trousers are told apart by the body under them more than by their own size.
 
 ## Can v2 become the default for men?
 
-DEFAULT
+**Not yet. The tee is ready; the chino is not.**
+
+What the two runs show:
+- **Nothing breaks with the switch on.** Tee and chino both build on v2, pass their tape gates, mount, drape and settle on all five bodies in the same sizes as with the switch off, and every script exits 0. The shape gate works both ways.
+- **The tee is better on v2 than on v1** (`men-tee-on-v2.md`: tape 0.17 against 0.49 cm, no high neckline at XL and XXL, no edge over 30 %).
+- **The chino measures better on v2 and looks worse.** Better: band at the worn waist to W34 and nearer to it above, seat row 0.6 to 1.0 cm short against 2.4 to 3.0, the drape adds 0.9 to 2.4 cm to the crotch drop against 1.7 to 3.4, rises within 0.9 cm after the drape. Worse: 175 to 274 body pixels against 3 to 88, as a visible patch under the crotch on four of the five bodies; the base size hangs 3.3 cm under the body by construction (0.6 on v1); largest edge near the crotch point 33 % at XL (20.5 on v1).
+
+Before the flip, in the order I would do it:
+1. **Close the skin patch under the crotch on v2** (open issues, first point). This is the blocker.
+2. **The founder looks** at `compare-*-v1-top-v2-bottom.png`: the look of v2 itself is their call.
+3. **Both switches move together**, with the v2 bundles imported and approved. A single source for the shape (the api telling the embed) would remove the risk of one being set without the other; that is still two switches.
+
+If men's tops went live before men's bottoms, v2 could be the default for those today from the tee's side; with the chino in the catalogue it cannot. The default was not flipped on this branch.
 
 ## Open issues
 

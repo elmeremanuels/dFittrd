@@ -266,7 +266,7 @@ export function garmentQaFlagNote(flag: GarmentQaFlag, qa: GarmentBundleMeta['qa
     return `Waist read at the garment's own band,${drop} below the body's natural waist, by a recorded decision (${String(wr.decision)}), against the chart's waist plus a stated body offset of ${String(wr.offsetCm)} cm (target ${String(wr.targetCm)} cm); the chart does not say where this band sits.`;
   }
   if (flag === 'tape_built_no_chart_check')
-    return "Built from the shop's tape measurements (and, for a drape bake, draped on a server), not reconstructed from photos: no agreement with the size chart or the tape was measured, so the QA pass is the builder's own statement. A drape bake imported before the automatic bake check existed is checked by importing it again; otherwise look at every size before approving.";
+    return "Built from the shop's tape measurements (and, for a drape bake, draped on a server), not reconstructed from photos: no agreement with the size chart or the tape was measured, so the QA pass is the builder's own statement. For a drape bake imported before the automatic bake check existed: Import the bundle again to run the check. Otherwise look at every size before approving.";
   return `Before calibration the garment missed the size chart by ${String(ca.beforeCalibrationMaxAbsCm)} cm, outside the ±${String(ca.toleranceCm)} cm tolerance; it passes only after calibration rescaled it, which is not evidence of fit.`;
 }
 

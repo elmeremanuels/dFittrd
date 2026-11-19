@@ -490,7 +490,6 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
       return pos.length / 3 - 1;
     };
     const nTube = ys.length; // last tube row = fan row 0
-    const nRows = nTube + fanRows.length - 1;
     const front: number[][] = [], back: number[][] = [];
     // Tube rows: full rings; front columns θ = cπ/N, back θ = −cπ/N, sharing c = 0 and c = N.
     for (let r = 0; r < nTube; r++) {
@@ -511,38 +510,84 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
       front.push(fr);
       back.push(bk);
     }
-    // Fan rows 1…: between the left and the right edge vertex; interior columns by azimuth and a share of the neckline's elevation.
+    // Above the armhole: one column per azimuth step from the tube's top row to the neckline, each
+    // with as many vertices as its own length needs (1.6 cm apart: the centre front is 9 cm long, the
+    // side over the armhole and the shoulder seam 40), sewn to its neighbour by a zipper of triangles.
     const mirror = (p: Vec3): Vec3 => [-p[0], p[1], p[2]];
-    for (let i = 1; i < fanRows.length; i++) {
-      const { front: ef, back: eb, alpha: ae } = fanRows[i]!;
-      const inEye = i < iSp;
-      const wF = Math.atan2(ef[2], ef[0]);
-      const wB = -Math.atan2(eb[2], eb[0]);
-      const last = i === fanRows.length - 1;
-      const t = last ? 1 : ae / alphaHps;
-      const fr: number[] = [], bk: number[] = [];
-      for (let c = 0; c <= N; c++) {
-        if (c === 0) { fr.push(add(ef, 0)); continue; }
-        if (c === N) { fr.push(add(mirror(ef), 0)); continue; }
-        const th = wF + ((Math.PI - 2 * wF) * c) / N;
-        fr.push(add(fanPoint(th, t * alphaTop(th, true)), 0));
-      }
-      for (let c = 0; c <= N; c++) {
-        if (!inEye && (c === 0 || c === N)) { bk.push(fr[c]!); continue; }
-        if (c === 0) { bk.push(add(eb, 0)); continue; }
-        if (c === N) { bk.push(add(mirror(eb), 0)); continue; }
-        const th = -(wB + ((Math.PI - 2 * wB) * c) / N);
-        bk.push(add(fanPoint(th, t * alphaTop(th, false)), 0));
-      }
-      front.push(fr);
-      back.push(bk);
-    }
-    // The top row's interior columns lie on the neckline (t = 1); its edge columns are the HPS.
     const tris: number[] = [];
     const quad = (a: number, b: number, c: number, d: number): void => {
       tris.push(a, b, c, a, c, d);
     };
-    for (const grid of [front, back]) for (let r = 0; r + 1 < nRows; r++) for (let c = 0; c < N; c++) quad(grid[r]![c]!, grid[r]![c + 1]!, grid[r + 1]![c + 1]!, grid[r + 1]![c]!);
+    for (const grid of [front, back]) for (let r = 0; r + 1 < nTube; r++) for (let c = 0; c < N; c++) quad(grid[r]![c]!, grid[r]![c + 1]!, grid[r + 1]![c + 1]!, grid[r + 1]![c]!);
+    const lenFrac = (pts: Vec3[]): number[] => {
+      const out = [0];
+      for (let k = 1; k < pts.length; k++) out.push(out[k - 1]! + Math.hypot(pts[k]![0] - pts[k - 1]![0], pts[k]![1] - pts[k - 1]![1], pts[k]![2] - pts[k - 1]![2]));
+      const tot = out[out.length - 1]! || 1;
+      return out.map((x) => x / tot);
+    };
+    const edgeF = fanRows.map((r) => r.front);
+    const fe = lenFrac(edgeF);
+    const wAt = (f: number, frontPanel: boolean): number => {
+      let k = 0;
+      while (k < fe.length - 2 && fe[k + 1]! < f) k++;
+      const t = clamp01((f - fe[k]!) / Math.max(1e-9, fe[k + 1]! - fe[k]!));
+      const w = (r: (typeof fanRows)[number]): number => (frontPanel ? Math.atan2(r.front[2], r.front[0]) : -Math.atan2(r.back[2], r.back[0]));
+      return Math.max(0, lerp(w(fanRows[k]!), w(fanRows[k + 1]!), t));
+    };
+    const top = nTube - 1;
+    const columns = (frontPanel: boolean, shared: number[][] | null): { ids: number[]; f: number[] }[] => {
+      const sgn = frontPanel ? 1 : -1;
+      const tubeTop = frontPanel ? front[top]! : back[top]!;
+      const cols: { ids: number[]; f: number[] }[] = [];
+      for (let c = 0; c <= N; c++) {
+        if (c === 0 || c === N) {
+          const ids: number[] = [tubeTop[c]!];
+          for (let i = 1; i < fanRows.length; i++) {
+            const inEye = i < iSp;
+            if (shared && !inEye) { ids.push(shared[c]![i]!); continue; }
+            const e = frontPanel || !inEye ? fanRows[i]!.front : fanRows[i]!.back;
+            ids.push(add(c === 0 ? e : mirror(e), 0));
+          }
+          cols.push({ ids, f: fe });
+          continue;
+        }
+        const at = (f: number): Vec3 => {
+          const w = wAt(f, frontPanel);
+          const th = sgn * (w + ((Math.PI - 2 * w) * c) / N);
+          return fanPoint(th, f * alphaTop(th, frontPanel));
+        };
+        const S = 48;
+        const fs: number[] = [], pts: Vec3[] = [];
+        for (let k = 0; k <= S; k++) { fs.push(k / S); pts.push(at(k / S)); }
+        const lf = lenFrac(pts);
+        let total = 0;
+        for (let k = 1; k <= S; k++) total += Math.hypot(pts[k]![0] - pts[k - 1]![0], pts[k]![1] - pts[k - 1]![1], pts[k]![2] - pts[k - 1]![2]);
+        const n = Math.max(2, Math.round(total / rowStep));
+        const ids: number[] = [tubeTop[c]!];
+        const f: number[] = [0];
+        let j = 0;
+        for (let k = 1; k <= n; k++) {
+          const want = k / n;
+          while (j < S - 1 && lf[j + 1]! < want) j++;
+          const t = clamp01((want - lf[j]!) / Math.max(1e-9, lf[j + 1]! - lf[j]!));
+          ids.push(add(at(lerp(fs[j]!, fs[j + 1]!, t)), 0));
+          f.push(want);
+        }
+        cols.push({ ids, f });
+      }
+      return cols;
+    };
+    const colsF = columns(true, null);
+    const colsB = columns(false, colsF.map((c) => c.ids));
+    const zipper = (A: { ids: number[]; f: number[] }, B: { ids: number[]; f: number[] }): void => {
+      let i = 0, j = 0;
+      while (i < A.ids.length - 1 || j < B.ids.length - 1) {
+        const advanceA = j === B.ids.length - 1 || (i < A.ids.length - 1 && A.f[i + 1]! <= B.f[j + 1]!);
+        if (advanceA) { tris.push(A.ids[i]!, B.ids[j]!, A.ids[i + 1]!); i++; }
+        else { tris.push(A.ids[i]!, B.ids[j]!, B.ids[j + 1]!); j++; }
+      }
+    };
+    for (const cols of [colsF, colsB]) for (let c = 0; c < N; c++) zipper(cols[c]!, cols[c + 1]!);
 
     // Sleeves: ring 0 is the armhole (front edge up, back edge down).
     const sleeveHem: [number[], number[]] = [[], []];
@@ -551,8 +596,8 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
     for (const [k, f] of [[0, L], [1, R]] as const) {
       const col = k === 0 ? 0 : N;
       const loop: number[] = [];
-      for (let i = 0; i <= iSp; i++) loop.push(front[nTube - 1 + i]![col]!);
-      for (let i = iSp - 1; i >= 1; i--) loop.push(back[nTube - 1 + i]![col]!);
+      for (let i = 0; i <= iSp; i++) loop.push(colsF[col]!.ids[i]!);
+      for (let i = iSp - 1; i >= 1; i--) loop.push(colsB[col]!.ids[i]!);
       const K = loop.length;
       const P = (i: number): Vec3 => [pos[3 * i]!, pos[3 * i + 1]!, pos[3 * i + 2]!];
       const frame = loop.map((i) => {
@@ -644,8 +689,8 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
         hem: [...front[0]!, ...back[0]!.slice(1, N)],
         sleeveHem,
         sleeveTop,
-        shoulderPoint: [front[nTube - 1 + iSp]![0]!, front[nTube - 1 + iSp]![N]!],
-        hps: [front[nRows - 1]![0]!, front[nRows - 1]![N]!],
+        shoulderPoint: [colsF[0]!.ids[iSp]!, colsF[N]!.ids[iSp]!],
+        hps: [colsF[0]!.ids[fanRows.length - 1]!, colsF[N]!.ids[fanRows.length - 1]!],
       },
     };
   }

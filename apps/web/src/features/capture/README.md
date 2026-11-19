@@ -62,6 +62,8 @@ Wire and body types (`BodyProfile`, `Measurement`, `UserBody`, `FitSignature*`) 
   `resolveModelBase` (models.ts) rejects any `modelBase` on another origin before the worker fetches anything.
 - The worker is a module worker, so it loads MediaPipe's ES-module WASM loader
   (`FilesetResolver.forVisionTasks(base, VISION_WASM_ES_MODULE)`); the classic loader cannot run there.
+- MediaPipe Tasks (1.2.2) has a built-in usage logger that POSTs to `odml.pa.googleapis.com`; the worker refuses
+  every request off its own origin before any task exists (`sameOriginOnly.ts`), so it is never sent.
 - The capture step does no network I/O at all. Syncing the signature is the app's job, via the privacy ledger.
 
 ## Expected accuracy (v1, analytic)
@@ -119,3 +121,16 @@ calls cannot run in node and need a manual check in a browser with the models in
   the 4-view silhouette atlas for render path B. Fills FitSignature slots 56–65.
 - Pilot calibration of the σ table and the confidence mapping on 50–100 tape-measured volunteers; white-balance
   reference for the skin step; LiDAR/monocular depth for the side view.
+
+## Face on the 3D head (slice 6 spike, flag `VITE_AVATAR_FACE_ON_HEAD`, off by default)
+
+`faceOnHead.ts` → `ScanSession.bakeFaceTexture` → `scan.worker.ts` (`faceTexture` message) → `faceBake.ts`.
+One picture the shopper chose (only after "Yes, use my photo") is decoded on the main thread, transferred to a worker
+that loads only the Face Landmarker (no pose model, no segmenter), and baked into a 512 px RGBA texture in the head v2
+face frame of `@curtain/mannequin` (`FACE_UV_FRAME`): a piecewise-affine warp over MediaPipe's canonical face mesh
+(`faceMeshUv.json`, Apache-2.0, built by `scripts/build-face-mesh-uv.mjs`), a feathered edge, a crude de-light (a
+quadratic light field per channel, fitted to the skin) and a match to the confirmed swatch. Out of the worker come the
+texture, a few numbers (coverage, yaw, roll, median colour, gain spread, face width) and timings; the 478 landmarks
+never leave it. The worker is disposed after each bake. Nothing is stored; nothing is sent (`e2e/faceOnHead.spec.ts`
+traps fetch, XHR, WebSocket, sendBeacon, EventSource and RTCPeerConnection over the whole flow). The viewer lays it
+over the head (`packages/garment-viewer/src/faceOverlay.ts`). Report: `docs/reports/claude/face-on-head-spike.md`.

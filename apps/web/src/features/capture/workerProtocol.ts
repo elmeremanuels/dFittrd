@@ -5,6 +5,7 @@
  * and are closed there. What comes OUT is only: landmarks, two category masks, level widths/depths,
  * quality features, ONE base frame (front view, background replaced with cream) and ONE face tile.
  */
+import type { FaceBakeStats } from './faceBake';
 import type { PoseVariant } from './models';
 import type { GateResult, Landmark, ScanMeasurements, Sex, SkinEstimate } from './types';
 import type { SilhouetteMask } from './storage';
@@ -16,6 +17,10 @@ export interface WorkerInit {
   modelBase?: string;
   needFace: boolean;
   needPose: boolean;
+  /** Load the 16 MB multiclass segmenter (default true). The face-on-head bake does not need it. */
+  needSegmenter?: boolean;
+  /** Force a delegate (default: GPU, CPU when GPU fails). For measurement only. */
+  delegate?: 'GPU' | 'CPU';
 }
 
 export interface WorkerFrame {
@@ -37,7 +42,18 @@ export interface WorkerFace {
   bitmap: ImageBitmap;
 }
 
-export type WorkerInbound = WorkerInit | WorkerFrame | WorkerFinish | WorkerFace | { type: 'reset' } | { type: 'dispose' };
+/**
+ * Slice 6 spike (face on the 3D head, behind VITE_AVATAR_FACE_ON_HEAD): bake ONE face photo into a
+ * face texture. The bitmap is transferred in and closed here; the landmarks never leave the worker.
+ */
+export interface WorkerFaceTexture {
+  type: 'faceTexture';
+  bitmap: ImageBitmap;
+  /** The skin colour on the body (`#rrggbb`) the face is matched to; null: not matched. */
+  targetSkinHex: string | null;
+}
+
+export type WorkerInbound = WorkerInit | WorkerFrame | WorkerFinish | WorkerFace | WorkerFaceTexture | { type: 'reset' } | { type: 'dispose' };
 
 export interface ReadyMessage {
   type: 'ready';
@@ -48,7 +64,7 @@ export interface ReadyMessage {
 
 export interface ErrorMessage {
   type: 'error';
-  stage: 'init' | 'frame' | 'finish' | 'face';
+  stage: 'init' | 'frame' | 'finish' | 'face' | 'faceTexture';
   message: string;
 }
 
@@ -86,4 +102,16 @@ export interface FaceResultMessage {
   faceFound: boolean;
 }
 
-export type WorkerOutbound = ReadyMessage | ErrorMessage | GateMessage | ProgressMessage | ScanResultMessage | FaceResultMessage;
+/** What the face texture bake returns: the texture (RGBA, transferred), a few numbers and the time of each step. No landmark. */
+export interface FaceTextureMessage {
+  type: 'faceTextureResult';
+  faceFound: boolean;
+  texture: { rgba: ArrayBuffer; size: number } | null;
+  stats: FaceBakeStats | null;
+  /** `turned`: the head is turned more than MAX_FRONT_YAW_DEG; `small`: the face is under 160 px wide in the photo. */
+  warnings: ('turned' | 'small')[];
+  /** ms per step in the worker: pixels out of the bitmap, landmark detection, the bake. */
+  timings: { pixelsMs: number; detectMs: number; bakeMs: number };
+}
+
+export type WorkerOutbound = ReadyMessage | ErrorMessage | GateMessage | ProgressMessage | ScanResultMessage | FaceResultMessage | FaceTextureMessage;

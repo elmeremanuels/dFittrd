@@ -43,3 +43,12 @@ export function parseLook(value: unknown): SkinLook | null {
 export function facePhotoEnabled(env: { VITE_AVATAR_FACE_PHOTO?: string } = import.meta.env): boolean {
   return env.VITE_AVATAR_FACE_PHOTO === '1';
 }
+
+/**
+ * Slice 6 spike: `VITE_AVATAR_FACE_ON_HEAD=1` makes the "Use my face" row live (variant A: the photo
+ * is read on the device and drawn on the 3D head; nothing is sent). Off in every normal build, where
+ * the row stays the disabled "coming soon" line of `facePhotoEnabled`. Counsel has not answered (D20.4).
+ */
+export function faceOnHeadEnabled(env: { VITE_AVATAR_FACE_ON_HEAD?: string } = import.meta.env): boolean {
+  return env.VITE_AVATAR_FACE_ON_HEAD === '1';
+}

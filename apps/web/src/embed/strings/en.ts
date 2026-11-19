@@ -71,8 +71,29 @@ export interface AvatarUi {
   termsLanguageNote: string;
 }
 
+/**
+ * The live "Use my face" row of the slice 6 spike (behind `VITE_AVATAR_FACE_ON_HEAD`, off by
+ * default; counsel has not answered, D20.4). The claims are variant A of the consent copy (the
+ * photo stays on the device), word for word; the rest are labels that state nothing about data.
+ */
+export interface FaceSpikeStrings {
+  c6: string;
+  c7: string;
+  /** Switched off again. */
+  c9: string;
+  yes: string;
+  no: string;
+  /** Under the avatar while a face is shown. */
+  c27: string;
+  working: string;
+  notFound: string;
+  turned: string;
+  small: string;
+  failed: string;
+}
+
 export interface EmbedCatalogue {
-  avatar: { claims: AvatarClaims; ui: AvatarUi };
+  avatar: { claims: AvatarClaims; ui: AvatarUi; faceSpike: FaceSpikeStrings };
   /** The screens shown in place of the flow. */
   blocked: Record<BlockedKind, { title: string; text: string }>;
   actions: { tryAgain: string; backToShop: string };
@@ -320,6 +341,19 @@ export const EN: EmbedCatalogue = {
       open: title,
       swatchCredit: 'Colours: Monk Skin Tone Scale by Dr. Ellis Monk, CC BY 4.0.',
       termsLanguageNote: '',
+    },
+    faceSpike: {
+      c6: 'We use a photo of your face to draw your face on the avatar.',
+      c7: 'The photo stays on your device. It is never sent to us.',
+      c9: 'Your face is taken off the avatar and deleted from this device.',
+      yes: 'Yes, use my photo',
+      no: 'No, keep the standard face',
+      c27: 'Your face on an estimated body',
+      working: 'Drawing your face…',
+      notFound: 'No face was found in that picture. Try another one, facing the camera.',
+      turned: 'Your head is turned. A picture straight from the front works best.',
+      small: 'Your face is small in that picture. A closer one works best.',
+      failed: 'That did not work. Try another picture.',
     },
   },
   blocked: {

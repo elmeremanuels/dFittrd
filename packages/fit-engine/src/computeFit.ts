@@ -8,6 +8,20 @@ import type { SizeRow, UserBody } from '@curtain/schema';
 import { bandFor, bandForWithSigma } from './bands';
 import {
   BLOCKS,
+  ENGINE_POINTS,
+  LENGTH_NEAR_SCORE,
+  LENGTH_SLACK,
+  MENS_BLOCKS,
+  MENS_CATEGORY_POINTS,
+  MENS_INSEAM_HEM_OFFSET_CM,
+  MENS_POINT_LABELS,
+  MENS_SHOULDER_SEAM_OFFSET_CM,
+  MENS_SLIM_BOTTOM_BLOCKS,
+  MENS_TOP_BLOCKS,
+  MENS_TOP_LENGTH_PER_HEIGHT,
+  NECK_DEFAULT_EASE_CM,
+  NECK_SLACK,
+  WORN_WAIST_RISE_CM,
   CATEGORY_EASE,
   CATEGORY_POINTS,
   CRITICAL_PENALTY,
@@ -21,7 +35,7 @@ import {
   NOTE_ORDER,
   NOTHING_FITS_BELOW,
   POINTS,
-  POINT_LABELS,
+  POINT_LABELS as POINT_LABELS_DEFAULT,
   SHOES_EASE_FOOT_EU,
   SHOES_SLACK,
   SNUG_OK_STRETCH_PCT,
@@ -33,9 +47,11 @@ import {
   ZONE_SHIFT_CM,
   blockRule,
   type BandSlack,
+  type BlockRule,
   type EaseMap,
+  type MensBlockId,
 } from './constants';
-import { clamp, finite, positive, round1, round3 } from './math';
+import { clamp, finite, normalMass, positive, round1, round3 } from './math';
 import { TAPE_NOTES, bandTapePerSize, elasticBandOf, elasticWaistReading, pullOnCheck, resolveTuning, worseProvenance, type BandTape } from './pullOn';
 import { parseSizingNotes } from './sizingNotes';
 import {
@@ -76,12 +92,53 @@ function chartFootLength(row: SizeRow): number | undefined {
   return eu === undefined ? undefined : footLengthFromEu(eu);
 }
 
-function userValue(point: Point, m: UserBody['measurements']): number | undefined {
-  return point === 'foot' ? userFootLength(m) : positive(m[point]);
+function userValue(point: Point, user: UserBody | undefined, m: UserBody['measurements'], centreBackSleeve: boolean): number | undefined {
+  if (point === 'foot') return userFootLength(m);
+  // Garment body length (men's tops, slice M2b): a share of stature [A], see MENS_TOP_LENGTH_PER_HEIGHT.
+  if (point === 'length') {
+    const h = positive(user?.heightCm);
+    return h === undefined ? undefined : h * MENS_TOP_LENGTH_PER_HEIGHT;
+  }
+  // A centre-back sleeve also spans half the shoulders: arm length + biacromial / 2.
+  if (point === 'sleeve' && centreBackSleeve) {
+    const arm = positive(m.sleeve);
+    const shoulder = positive(m.shoulder);
+    return arm === undefined || shoulder === undefined ? undefined : arm + shoulder / 2;
+  }
+  return positive(m[point]);
 }
 
 function chartValue(point: Point, row: SizeRow): number | undefined {
   return point === 'foot' ? chartFootLength(row) : positive(row[point]);
+}
+
+/**
+ * Whether a fit uses the men's tables (men-3d-plan slice M2a): `audience: 'men'` always, `'unisex'`
+ * only on the male body. `'women'` and an absent audience: never (today's behaviour, byte for byte).
+ */
+export function usesMensTables(garment: Pick<FitGarment, 'audience'>, opts: Pick<ComputeFitOptions, 'bodyFamily'> = {}): boolean {
+  return garment.audience === 'men' || (garment.audience === 'unisex' && opts.bodyFamily === 'male');
+}
+
+/** The men's block family of a top or bottom; `undefined` for the other categories (they keep today's rules). */
+export function mensBlockFor(garment: Pick<FitGarment, 'category' | 'patternBlock' | 'fabric' | 'subcategory'>): MensBlockId | undefined {
+  const key = typeof garment.patternBlock === 'string' ? norm(garment.patternBlock) : '';
+  if (garment.category === 'top') return Object.prototype.hasOwnProperty.call(MENS_TOP_BLOCKS, key) ? MENS_TOP_BLOCKS[key] : 'tee';
+  if (garment.category !== 'bottom') return undefined;
+  const sub = typeof garment.subcategory === 'string' ? norm(garment.subcategory) : '';
+  const denim = norm(String(garment.fabric?.primary ?? '')) === 'denim' || sub.includes('jean');
+  const slim = MENS_SLIM_BOTTOM_BLOCKS.includes(key);
+  return denim ? (slim ? 'jeans-slim' : 'jeans-regular') : slim ? 'chino-slim' : 'chino-regular';
+}
+
+function ruleFor(garment: FitGarment, mens: boolean): BlockRule {
+  const id = mens ? mensBlockFor(garment) : undefined;
+  return id === undefined ? blockRule(garment.patternBlock) : MENS_BLOCKS[id];
+}
+
+/** Points the engine reads as lengths (slice M2b): sleeve and body length always, the inseam in a men's fit. */
+function isLengthPoint(point: Point, mens: boolean): boolean {
+  return point === 'sleeve' || point === 'length' || (point === 'inseam' && mens);
 }
 
 function easeOf(map: Readonly<EaseMap> | undefined, point: Point): number | undefined {
@@ -96,11 +153,17 @@ function easeOf(map: Readonly<EaseMap> | undefined, point: Point): number | unde
  * Shoes: the category default is 0.7 cm only when the user supplied a foot length; with a
  * `footEu` size it is 0. `undefined` means the point has no ease target and is omitted.
  */
-export function easeTargetFor(garment: FitGarment, point: Point, user?: UserBody): number | undefined {
+export function easeTargetFor(garment: FitGarment, point: Point, user?: UserBody, opts: Pick<ComputeFitOptions, 'bodyFamily'> = {}): number | undefined {
   const own = easeOf(garment.ease, point);
   if (own !== undefined) return own;
-  const fromBlock = easeOf(blockRule(garment.patternBlock).ease, point);
+  const mens = usesMensTables(garment, opts);
+  const rule = ruleFor(garment, mens);
+  const fromBlock = easeOf(rule.ease, point);
   if (fromBlock !== undefined) return fromBlock;
+  // A collar has an ease even where no block gives one [A, the men's shirt value].
+  if (point === 'neck') return NECK_DEFAULT_EASE_CM;
+  // A men's top or bottom takes its eases from its men's block only (no women's category default).
+  if (mens && rule !== blockRule(garment.patternBlock)) return undefined;
   if (garment.category === 'shoes' && point === 'foot') {
     const m = user?.measurements;
     const hasLength = m !== undefined && (positive(m.footLengthCm) ?? positive(m.foot)) !== undefined;
@@ -132,6 +195,8 @@ const norm = (s: string): string => s.trim().toLowerCase();
 
 interface PointContext {
   point: Point;
+  /** `girth` as before; `neck`: a narrow girth (slice M2b); `length`: inseam, sleeve, body length of a men's fit. */
+  kind: 'girth' | 'neck' | 'length';
   critical: boolean;
   /** Designed ease target; `undefined` → omitted ('chart'). */
   e0: number | undefined;
@@ -152,7 +217,8 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
   const confidenceMap = user?.confidence ?? {};
   const sigmaMap = opts.sigma ?? {};
 
-  const rule = blockRule(garment.patternBlock);
+  const mens = usesMensTables(garment, opts);
+  const rule = ruleFor(garment, mens);
   const critical = criticalPoints(garment.criticalFitPoints);
   const zones = zonePoints(garment.stretchZones);
   const stretch = clamp(finite(garment.fabric?.stretchPct, 0), 0, 100);
@@ -164,23 +230,68 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
   const baseTight = Math.max(TIGHT_FLOOR_CM, -(TIGHT_BASE_CM + TIGHT_PER_STRETCH_PCT * stretch));
 
   // Step 1 — applicable points (FIT_POINTS order), pattern-block skips (merchant authority wins).
-  const categoryPoints = CATEGORY_POINTS[garment.category] ?? [];
+  // The men's points (neck, sleeve, body length; slice M2b) apply only when the chart has the column,
+  // so a chart without them is read exactly as before.
+  const categoryPoints = (mens ? MENS_CATEGORY_POINTS : CATEGORY_POINTS)[garment.category] ?? [];
+  const chartHas = (p: Point): boolean => rows.some((r) => r !== null && typeof r === 'object' && chartValue(p, r) !== undefined);
+  const columnPoint = (p: Point): boolean =>
+    (p === 'neck' || p === 'sleeve' || (p === 'length' && mens && garment.category === 'top' && !bodyChart)) && chartHas(p);
+  const centreBackSleeve = garment.sleeveConvention === 'centre_back';
   const skippedPoints: SkippedPoint[] = [];
   const contexts: PointContext[] = [];
-  for (const point of POINTS) {
-    if (!categoryPoints.includes(point) && !critical.has(point)) continue;
-    if (rule.skip.includes(point) && !critical.has(point)) {
+  for (const point of ENGINE_POINTS) {
+    const isCritical = point !== 'length' && critical.has(point);
+    if (!categoryPoints.includes(point as never) && !isCritical && !columnPoint(point)) continue;
+    if (rule.skip.includes(point) && !isCritical) {
       skippedPoints.push({ point, reason: 'pattern-block', label: rule.label });
       continue;
     }
-    const e0 = easeTargetFor(garment, point, user);
+    // A garment sleeve column says nothing without its convention (MT12); a body chart's sleeve is the arm length.
+    if (point === 'sleeve' && !bodyChart && garment.sleeveConvention === undefined) {
+      skippedPoints.push({ point, reason: 'sleeve-convention', label: 'the size chart does not say where the sleeve is measured from' });
+      continue;
+    }
+    const confidence = clamp(finite(confidenceMap[point as keyof typeof confidenceMap], DEFAULT_CONFIDENCE), 0, 1);
+    const common = {
+      point,
+      critical: isCritical,
+      confidence,
+      weight: (isCritical ? CRITICAL_WEIGHT : 1) * confidence,
+      sigma: positive(sigmaMap[point as keyof typeof sigmaMap]),
+      userVal: userValue(point, user, measurements, centreBackSleeve),
+    };
+    if (isLengthPoint(point, mens)) {
+      // Lengths (slice M2b): the target is the body length plus an offset; stretch never changes it.
+      const own = easeOf(garment.ease, point);
+      const offset = own ?? (point === 'inseam' && !bodyChart ? -MENS_INSEAM_HEM_OFFSET_CM : 0);
+      contexts.push({
+        ...common,
+        kind: 'length',
+        e0: offset,
+        e: offset,
+        inZone: false,
+        edges: { tightLimit: -LENGTH_SLACK.fail, easeTarget: 0, goodSlack: LENGTH_SLACK.good, looseSlack: LENGTH_SLACK.fail, snugOk: false },
+      });
+      continue;
+    }
+    const e0 = easeTargetFor(garment, point, user, opts);
     const e = e0 === undefined ? 0 : round1(e0 * stretchFactor);
+    if (point === 'neck') {
+      contexts.push({
+        ...common,
+        kind: 'neck',
+        e0,
+        e,
+        inZone: false,
+        edges: { tightLimit: -NECK_SLACK.tight, easeTarget: 0, goodSlack: NECK_SLACK.good, looseSlack: NECK_SLACK.loose, snugOk: false },
+      });
+      continue;
+    }
     const inZone = zones.has(point);
     const shift = inZone ? ZONE_SHIFT_CM : 0;
-    const confidence = clamp(finite(confidenceMap[point], DEFAULT_CONFIDENCE), 0, 1);
     contexts.push({
-      point,
-      critical: critical.has(point),
+      ...common,
+      kind: 'girth',
       e0,
       e,
       inZone,
@@ -191,12 +302,16 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
         looseSlack: slack.loose + shift,
         snugOk,
       },
-      confidence,
-      weight: (critical.has(point) ? CRITICAL_WEIGHT : 1) * confidence,
-      sigma: positive(sigmaMap[point]),
-      userVal: userValue(point, measurements),
     });
   }
+  const mensFit: MensContext | null = mens
+    ? {
+        category: garment.category,
+        bodyChart,
+        userWaist: positive(measurements.waist),
+        userSeat: positive(measurements.hip),
+      }
+    : null;
   const applicableAfterSkips = contexts.length;
 
   // Garment tape (optional). `tape === null` for every garment without it: nothing below changes.
@@ -214,7 +329,7 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
 
   // Steps 2–5 — per size.
   const scoredSizes = rows.map((row, i) =>
-    scoreSize(row ?? { size: sizes[i] ?? '' }, sizes[i] ?? '', contexts, bodyChart, tape, bandTape?.[i]),
+    scoreSize(row ?? { size: sizes[i] ?? '' }, sizes[i] ?? '', contexts, bodyChart, tape, bandTape?.[i], mensFit),
   );
   const perSize: SizeFit[] = scoredSizes.map((s) => s.fit);
   // Closeness = mean |gap| over the size's used points. The spec writes Σ|gap|; the mean orders
@@ -327,6 +442,19 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
     }
   }
 
+  // Two-dimensional chart (W/L, slice M2b): the waist and the leg are picked on their own, each by
+  // the same rules as a one-dimensional chart, and the row with both is the size.
+  let sizeAxes: FitResult['sizeAxes'];
+  if (tape === null && !opts.axisPass && isTwoAxisChart(rows)) {
+    const pick = pickAxes(garment, user, opts, rows, perSize);
+    if (pick !== null) {
+      chosenIndex = pick.index;
+      recommended = pick.recommended;
+      tieBreak = pick.tieBreak;
+      sizeAxes = pick.axes;
+    }
+  }
+
   const chosen = perSize[chosenIndex]!;
   const used = chosen.points.filter(isPointFit);
   const meanConf = used.length === 0 ? 0 : used.reduce((a, p) => a + p.confidence, 0) / used.length;
@@ -342,7 +470,11 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
       ? 0
       : round3(meanConf * (0.6 + 0.4 * tts) * (used.length / applicableAfterSkips) * tapeFactor);
 
-  const notes = buildNotes(chosen, chosenIndex, rows.length, recommended, skippedPoints, noneGoesOn);
+  // Belly-aware reading (slice M2a): the size shown is roomier at the chest because it fits the waist.
+  const chestPoint = used.find((p) => p.point === 'bust');
+  const waistLed =
+    chestPoint?.waistLedCm !== undefined && chestPoint.band !== 'tight' && chestPoint.band !== 'snug' && chestPoint.gapCm > chestPoint.easeTarget + DEFAULT_SLACK.good;
+  const notes = buildNotes(chosen, chosenIndex, rows.length, recommended, skippedPoints, noneGoesOn, mens, waistLed);
   const pullOnUnchecked = tape !== null && pullOnApplies && tape.pullOnHipCm === undefined;
   if (tape !== null) addTapeNotes(notes, perSize, chosenIndex, noneGoesOn, tapeProvenance, pullOnUnchecked);
 
@@ -359,7 +491,128 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
     skippedPoints,
     ...(tapeProvenance !== undefined ? { tapeProvenance } : {}),
     ...(pullOnUnchecked ? { pullOnUnchecked: true as const } : {}),
+    ...(mens ? { mens: true as const } : {}),
+    ...(sizeAxes !== undefined ? { sizeAxes } : {}),
+    ...(waistLed ? { waistLed: true as const } : {}),
   };
+}
+
+/** Every row carries `axes` (a W/L chart, slice M2b). */
+function isTwoAxisChart(rows: readonly SizeRow[]): boolean {
+  return rows.length > 0 && rows.every((r) => r !== null && typeof r === 'object' && r.axes !== undefined && typeof r.axes.waist === 'string' && typeof r.axes.leg === 'string');
+}
+
+/** Points picked on the leg axis of a W/L chart; every other point is on the waist axis. */
+const LEG_AXIS_POINTS: ReadonlySet<string> = new Set(['inseam']);
+
+/**
+ * The waist and the leg of a W/L chart, each picked by `computeFit` on a one-dimensional chart of its
+ * own (one row per waist with the girth columns, one row per leg with the inseam), then the chart
+ * row with both. When that row is missing, the best scored row with the picked waist stands in.
+ */
+function pickAxes(
+  garment: FitGarment,
+  user: UserBody,
+  opts: ComputeFitOptions,
+  rows: readonly SizeRow[],
+  perSize: readonly SizeFit[],
+): { index: number; recommended: boolean; tieBreak: TieBreak; axes: { waist: string; leg: string } } | null {
+  const firstBy = (key: 'waist' | 'leg'): SizeRow[] => {
+    const seen = new Set<string>();
+    const out: SizeRow[] = [];
+    for (const r of rows) {
+      const label = r.axes![key];
+      if (seen.has(norm(label))) continue;
+      seen.add(norm(label));
+      out.push(r);
+    }
+    return out;
+  };
+  const strip = (r: SizeRow, size: string, keepLeg: boolean): SizeRow => {
+    const out: Record<string, unknown> = { size };
+    for (const [k, v] of Object.entries(r)) {
+      if (k === 'size' || k === 'axes') continue;
+      if (LEG_AXIS_POINTS.has(k) === keepLeg) out[k] = v;
+    }
+    return out as SizeRow;
+  };
+  const sub = (key: 'waist' | 'leg'): FitResult => {
+    const leg = key === 'leg';
+    const g: FitGarment = {
+      ...garment,
+      sizeChart: firstBy(key).map((r) => strip(r, r.axes![key], leg)),
+      garmentTape: undefined,
+      criticalFitPoints: garment.criticalFitPoints?.filter((p) => LEG_AXIS_POINTS.has(p) === leg),
+      ...(leg ? { sizingNotes: undefined } : {}),
+    };
+    return computeFit(g, user, { ...opts, axisPass: true });
+  };
+  const w = sub('waist');
+  const l = sub('leg');
+  const waist = w.closestSize;
+  const leg = l.closestSize;
+  if (waist === null || leg === null) return null;
+  let index = rows.findIndex((r) => norm(r.axes!.waist) === norm(waist) && norm(r.axes!.leg) === norm(leg));
+  if (index < 0) {
+    let best = -1;
+    rows.forEach((r, i) => {
+      if (norm(r.axes!.waist) !== norm(waist)) return;
+      const sc = perSize[i]?.score ?? -1;
+      if (best < 0 || sc > (perSize[best]?.score ?? -1)) best = i;
+    });
+    if (best < 0) return null;
+    index = best;
+  }
+  const row = rows[index]!;
+  return {
+    index,
+    recommended: w.recommendedSize !== null && l.recommendedSize !== null,
+    tieBreak: w.tieBreak,
+    axes: { waist: row.axes!.waist, leg: row.axes!.leg },
+  };
+}
+
+/** What the men's readings need per size (slice M2): null for every other fit. */
+interface MensContext {
+  category: FitGarment['category'];
+  bodyChart: boolean;
+  userWaist: number | undefined;
+  userSeat: number | undefined;
+}
+
+/**
+ * Body girth where a men's waistband sits (slice M2b, plan §4 "Worn waist" [A, M]): between the
+ * natural waist and the seat, by the chart's front rise (`WORN_WAIST_RISE_CM`).
+ */
+export function wornWaistCm(naturalWaistCm: number, seatCm: number, riseCm: number): number {
+  const { atWaist, atSeat } = WORN_WAIST_RISE_CM;
+  const f = clamp((atWaist - riseCm) / (atWaist - atSeat), 0, 1);
+  return naturalWaistCm + f * (seatCm - naturalWaistCm);
+}
+
+/**
+ * Band of a length (slice M2b, plan §4 [A]): within ±2 cm `good` (1.0), up to ±4 `short` / `long` at
+ * 0.6, beyond ±4 `short` / `long` at 0 (fails). With a sigma the score is the expected score and the
+ * band the most probable of short / good / long.
+ */
+function lengthBand(gap: number, sigma: number | undefined): { band: 'short' | 'good' | 'long'; score: number; pFail: number } {
+  const { good, fail } = LENGTH_SLACK;
+  if (sigma === undefined) {
+    const off = Math.abs(gap);
+    if (off <= good) return { band: 'good', score: 1, pFail: 0 };
+    const band = gap < 0 ? 'short' : 'long';
+    return off <= fail ? { band, score: LENGTH_NEAR_SCORE, pFail: 0 } : { band, score: 0, pFail: 1 };
+  }
+  const pShortFar = normalMass(gap, sigma, -Infinity, -fail);
+  const pShortNear = normalMass(gap, sigma, -fail, -good);
+  const pGood = normalMass(gap, sigma, -good, good);
+  const pLongNear = normalMass(gap, sigma, good, fail);
+  const pLongFar = normalMass(gap, sigma, fail, Infinity);
+  const score = clamp(pGood + LENGTH_NEAR_SCORE * (pShortNear + pLongNear), 0, 1);
+  const pShort = pShortFar + pShortNear;
+  const pLong = pLongNear + pLongFar;
+  const band = pGood >= pShort && pGood >= pLong ? 'good' : pShort >= pLong ? 'short' : 'long';
+  return { band, score, pFail: pShortFar + pLongFar };
 }
 
 interface TapeContext {
@@ -418,6 +671,7 @@ function scoreSize(
   bodyChart: boolean,
   tape: TapeContext | null = null,
   bandTape: BandTape | undefined = undefined,
+  mensFit: MensContext | null = null,
 ): ScoredSize {
   const points: (PointFit | OmittedPoint)[] = [];
   const closeness: number[] = [];
@@ -430,6 +684,14 @@ function scoreSize(
   // The waist is read from the measured band when the size has one that stretches (pullOn.ts).
   const elastic = tape === null ? undefined : elasticBandOf(bandTape);
 
+  // Men's top (slice M2a, belly-aware): this size's waist gap, so the chest can be read against it.
+  const waistCtx = mensFit?.category === 'top' ? contexts.find((c) => c.point === 'waist' && c.kind === 'girth') : undefined;
+  const waistRaw = waistCtx && waistCtx.e0 !== undefined ? chartValue('waist', row) : undefined;
+  const waistGap =
+    waistCtx && waistRaw !== undefined && waistCtx.userVal !== undefined
+      ? round1((bodyChart ? waistRaw + (waistCtx.e0 as number) : waistRaw) - (waistCtx.userVal + waistCtx.e))
+      : undefined;
+
   for (const c of contexts) {
     const fromBand = c.point === 'waist' ? elastic : undefined;
     const raw = fromBand !== undefined ? fromBand.relaxedCm : c.e0 === undefined ? undefined : chartValue(c.point, row);
@@ -437,7 +699,17 @@ function scoreSize(
       points.push({ point: c.point, omitted: 'chart' });
       continue;
     }
-    if (c.userVal === undefined) {
+    let userVal = c.userVal;
+    // Men's trousers on a garment chart with a front rise: the band meets the body at the worn height (MT13).
+    let worn: PointFit['wornWaist'];
+    if (fromBand === undefined && mensFit !== null && mensFit.category === 'bottom' && !mensFit.bodyChart && c.point === 'waist') {
+      const rise = positive(row.rise);
+      if (rise !== undefined && mensFit.userWaist !== undefined && mensFit.userSeat !== undefined) {
+        userVal = wornWaistCm(mensFit.userWaist, mensFit.userSeat, rise);
+        worn = { riseCm: round1(rise), naturalWaistCm: round1(mensFit.userWaist), seatCm: round1(mensFit.userSeat) };
+      }
+    }
+    if (userVal === undefined) {
       points.push({ point: c.point, omitted: 'user' });
       continue;
     }
@@ -450,7 +722,7 @@ function scoreSize(
     let classEdges: BandEdges = c.edges;
     if (fromBand !== undefined) {
       const t = tape as TapeContext;
-      const reading = elasticWaistReading(fromBand, c.userVal, c.edges, t.tuning);
+      const reading = elasticWaistReading(fromBand, userVal, c.edges, t.tuning);
       closeness.push(reading.closenessCm);
       chartCm = fromBand.relaxedCm;
       gapCm = reading.gapCm;
@@ -458,18 +730,43 @@ function scoreSize(
       tightLimit = reading.tightLimit;
       classGap = reading.shiftedGap;
       classEdges = reading.edges;
-    } else {
-      chartCm = bodyChart ? raw + (c.e0 as number) : raw;
-      gapCm = round1(chartCm - (c.userVal + c.e));
+    } else if (c.kind === 'length') {
+      // A length: chart against body length + offset, no ease, no stretch (body charts: offset 0).
+      chartCm = raw;
+      gapCm = round1(chartCm - (userVal + c.e));
       closeness.push(Math.abs(gapCm));
       classGap = gapCm;
+    } else {
+      chartCm = bodyChart ? raw + (c.e0 as number) : raw;
+      // A men's garment chart gives the shoulder seam to seam; the body value is the biacromial breadth.
+      if (mensFit !== null && !bodyChart && c.point === 'shoulder') chartCm = raw - MENS_SHOULDER_SEAM_OFFSET_CM;
+      gapCm = round1(chartCm - (userVal + c.e));
+      closeness.push(Math.abs(gapCm));
+      classGap = gapCm;
+    }
+
+    // Belly-aware chest (men's top): when this size is tighter at the waist than at the chest, the
+    // chest room above the target is what fitting the waist costs, so the chest's upper bands widen
+    // by that much. A body whose drop matches the garment's gets no change.
+    let waistLedCm: number | undefined;
+    if (waistGap !== undefined && c.point === 'bust' && c.kind === 'girth' && fromBand === undefined && gapCm > waistGap) {
+      waistLedCm = round1(gapCm - waistGap);
+      classEdges = { ...classEdges, goodSlack: classEdges.goodSlack + waistLedCm, looseSlack: classEdges.looseSlack + waistLedCm };
     }
 
     let band: Band;
     let score: number;
     let pBad: number;
-    let extra: Pick<PointFit, 'sigma' | 'bandProbabilities' | 'elasticBand'> = {};
-    if (c.sigma !== undefined) {
+    let extra: Pick<PointFit, 'sigma' | 'bandProbabilities' | 'elasticBand' | 'measure' | 'wornWaist' | 'waistLedCm'> = {};
+    if (c.kind === 'length') {
+      const r = lengthBand(classGap, c.sigma);
+      band = r.band;
+      score = r.score;
+      pBad = r.pFail;
+      extra = c.sigma !== undefined ? { sigma: c.sigma, measure: 'length' } : { measure: 'length' };
+      easeTarget = c.e;
+      tightLimit = -LENGTH_SLACK.fail;
+    } else if (c.sigma !== undefined) {
       const r = bandForWithSigma(classGap, c.sigma, classEdges);
       band = r.band;
       score = r.score;
@@ -499,9 +796,11 @@ function scoreSize(
       easeTarget,
       inZone: c.inZone,
       chartCm: round1(chartCm),
-      bodyCm: round1(c.userVal),
+      bodyCm: round1(userVal),
       tightLimit,
       ...extra,
+      ...(worn !== undefined ? { wornWaist: worn } : {}),
+      ...(waistLedCm !== undefined ? { waistLedCm } : {}),
     });
 
     weighted += c.weight * score;
@@ -510,6 +809,8 @@ function scoreSize(
     const m = c.critical ? CRITICAL_PENALTY : NON_CRITICAL_PENALTY;
     penalty *= 1 - (1 - m) * pBad;
     if (band === 'tight') anyTight = true;
+    // A length more than `fail` cm off fails like a tight girth (plan §4).
+    if (c.kind === 'length' && Math.abs(gapCm) > LENGTH_SLACK.fail) anyTight = true;
   }
 
   // Pull-on check: independent of the fit points (it runs even when no point could be used).
@@ -536,7 +837,10 @@ function buildNotes(
   recommended: boolean,
   skipped: readonly SkippedPoint[],
   noneGoesOn = false,
+  mens = false,
+  waistLed = false,
 ): string[] {
+  const POINT_LABELS = mens ? MENS_POINT_LABELS : POINT_LABELS_DEFAULT;
   const notes: string[] = [];
   const byPoint = new Map<Point, PointFit | OmittedPoint>(fit.points.map((p) => [p.point, p]));
   const ordered = NOTE_ORDER.map((p) => byPoint.get(p)).filter((p): p is PointFit | OmittedPoint => p !== undefined);
@@ -568,6 +872,12 @@ function buildNotes(
       case 'loose':
         text = `Loose at the ${label}` + (hasSmaller ? ' — consider sizing down' : '');
         break;
+      case 'short':
+        text = `Short at the ${label}`;
+        break;
+      case 'long':
+        text = `Long at the ${label}`;
+        break;
       case 'good':
         break;
     }
@@ -576,6 +886,13 @@ function buildNotes(
 
   const skippedOrdered = [...skipped].sort((a, b) => NOTE_ORDER.indexOf(a.point) - NOTE_ORDER.indexOf(b.point));
   for (const s of skippedOrdered) notes.push(`${cap(POINT_LABELS[s.point])} not checked: ${s.label}`);
+  if (mens) {
+    // A men's chart without a column the fit needs says so (MT10: a W/L chart with labels only).
+    for (const p of ordered) {
+      if (!isPointFit(p) && p.omitted === 'chart') notes.push(`${cap(POINT_LABELS[p.point])} not checked: the size chart has no ${POINT_LABELS[p.point]} measurement`);
+    }
+    if (waistLed) notes.push(`Sized to fit your waist — roomier at the ${POINT_LABELS.bust}`);
+  }
 
   for (const p of ordered) {
     if (!isPointFit(p) && p.omitted === 'user') notes.push(`We don't have your ${POINT_LABELS[p.point]} measurement yet`);

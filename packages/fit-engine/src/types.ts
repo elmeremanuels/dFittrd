@@ -7,13 +7,23 @@
  */
 import type { BodyProfile, Fabric, FitPoint, GarmentCategory, GarmentPayload, TapeProvenance, UserBody } from '@curtain/schema';
 
-/** The fit-engine spec calls the fit point `Point`. */
-export type Point = FitPoint;
+/** A schema fit point (a body measurement). */
+export type FitPointName = FitPoint;
+/**
+ * A point the engine scores: the fit points plus `length`, the garment body length of a top
+ * (men-3d-plan slice M2b), which is not a body measurement.
+ */
+export type Point = FitPoint | 'length';
 export type Category = GarmentCategory;
 
-/** Handoff §4.1 bands, extended with `roomy` (fit-engine-spec.md §Step 4). */
-export type Band = 'tight' | 'snug' | 'good' | 'roomy' | 'loose';
-export const BANDS: readonly Band[] = ['tight', 'snug', 'good', 'roomy', 'loose'];
+/** Handoff §4.1 bands of a girth, extended with `roomy` (fit-engine-spec.md §Step 4). */
+export type GirthBand = 'tight' | 'snug' | 'good' | 'roomy' | 'loose';
+/** Bands of a length (inseam, sleeve, body length of a men's fit; slice M2b): too short, fits, too long. */
+export type LengthBand = 'short' | 'long';
+export type Band = GirthBand | LengthBand;
+/** The girth bands (a length point reads `short`, `good` or `long`, see `LENGTH_BANDS`). */
+export const BANDS: readonly GirthBand[] = ['tight', 'snug', 'good', 'roomy', 'loose'];
+export const LENGTH_BANDS: readonly Band[] = ['short', 'good', 'long'];
 
 /**
  * What the engine reads from a garment. Every `GarmentPayload` (and every merchant draft that has
@@ -25,7 +35,17 @@ export type FitGarment = Pick<GarmentPayload, 'id' | 'brand' | 'category' | 'pat
 } & Partial<
     Pick<
       GarmentPayload,
-      'ease' | 'sizeChartType' | 'sizingNotes' | 'trueToSizeScore' | 'criticalFitPoints' | 'stretchZones' | 'closure' | 'garmentTape'
+      | 'ease'
+      | 'sizeChartType'
+      | 'sizingNotes'
+      | 'trueToSizeScore'
+      | 'criticalFitPoints'
+      | 'stretchZones'
+      | 'closure'
+      | 'garmentTape'
+      | 'audience'
+      | 'subcategory'
+      | 'sleeveConvention'
     >
   >;
 
@@ -105,10 +125,18 @@ export interface ComputeFitOptions {
    * the deterministic spec.
    */
   sigma?: PointSigma;
+  /**
+   * The body the shopper chose (men-3d-plan slice M2a). Only read for an `audience: 'unisex'`
+   * garment: `'male'` uses the men's tables. `audience: 'men'` always uses them; `'women'` and an
+   * absent audience never do, whatever this says.
+   */
+  bodyFamily?: 'female' | 'male';
+  /** @internal Set by the W/L pass on its one-dimensional sub-charts; callers leave it out. */
+  axisPass?: boolean;
 }
 
-/** Probability mass per band when a sigma was supplied for the point. */
-export type BandProbabilities = Record<Band, number>;
+/** Probability mass per girth band when a sigma was supplied for the point. */
+export type BandProbabilities = Record<GirthBand, number>;
 
 export interface PointFit {
   point: Point;
@@ -144,6 +172,22 @@ export interface PointFit {
    * `−(stretched − relaxed)`.
    */
   elasticBand?: ElasticBandReading;
+  /**
+   * Present only on a length point (inseam, sleeve, body length of a men's fit; slice M2b). Then the
+   * band is `short`, `good` or `long`, `easeTarget` is the offset the target is built on (garment inseam:
+   * inside leg − 3) and `tightLimit` is `−fail`. Stretch never changes a length.
+   */
+  measure?: 'length';
+  /**
+   * Present only on a men's trouser waist read at the worn height (slice M2b): `bodyCm` is the body
+   * girth where the band sits, between the natural waist and the seat by the chart's front rise.
+   */
+  wornWaist?: { riseCm: number; naturalWaistCm: number; seatCm: number };
+  /**
+   * Present only on a men's chest point whose upper bands were widened because this size's chest
+   * room follows from fitting the waist (slice M2a, belly-aware reading): the extra cm.
+   */
+  waistLedCm?: number;
 }
 
 export interface OmittedPoint {
@@ -172,7 +216,8 @@ export type TieBreak = 'sizingNotes' | 'history' | 'closest-ease' | null;
 
 export interface SkippedPoint {
   point: Point;
-  reason: 'pattern-block';
+  /** `sleeve-convention`: the chart has a sleeve column but does not say where it is measured from (slice M2b). */
+  reason: 'pattern-block' | 'sleeve-convention';
   label: string;
 }
 
@@ -210,6 +255,18 @@ export interface FitResult {
    * then says nothing about whether the band passes the hips; a surface should ask for the hips.
    */
   pullOnUnchecked?: true;
+  /** `true` when the men's tables were used (slice M2: `audience: 'men'`, or unisex on the male body). Absent otherwise. */
+  mens?: true;
+  /**
+   * Two-dimensional chart (rows with `axes`, slice M2b): the waist and the leg picked on their own.
+   * `closestSize` is the chart row with both. Absent for one-dimensional charts.
+   */
+  sizeAxes?: { waist: string; leg: string };
+  /**
+   * `true` when the size shown was chosen to fit the waist and is roomier at the chest for that
+   * reason (a men's top on a body whose waist is large for its chest; slice M2a). Absent otherwise.
+   */
+  waistLed?: true;
 }
 
 export type SizeRecommendation = Pick<
@@ -232,7 +289,7 @@ export interface BandEdges {
 }
 
 export interface BandResult {
-  band: Band;
+  band: GirthBand;
   score: number;
 }
 
@@ -252,7 +309,7 @@ export interface RenderGaps {
  * D15 anchor ids of the fit points, as in `@curtain/anchors` (`FIT_POINT_TO_ANCHOR`). Declared here
  * so the engine keeps zero dependencies; a test keeps both tables equal. `foot` has no anchor.
  */
-export type FitAnchorId = 'chest' | 'waist' | 'hip' | 'shoulder_width' | 'thigh' | 'inseam';
+export type FitAnchorId = 'chest' | 'waist' | 'hip' | 'shoulder_width' | 'thigh' | 'inseam' | 'neck' | 'sleeve';
 
 /**
  * `RenderGaps` keyed by D15 anchor id instead of fit point (`anchorGaps`). Same numbers, same rounding:

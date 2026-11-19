@@ -19,6 +19,7 @@ import { UnitToggle } from './EmbedScreens';
 import { SizeChartTable } from './SizeChartTable';
 import { embedStrings, parts } from './strings';
 import type { Units } from './units';
+import { avatarSkinFlag } from './look';
 
 const TABS = ['fit', 'chart'] as const;
 type TabKey = (typeof TABS)[number];
@@ -271,7 +272,7 @@ export function ResultScreen({
             <div className={`relative ${onAvatar ? 'pt-10' : ''}`}>
               {/* overflow-clip, not hidden: the frame must not be a scroll box, or the estimate label could not ride above the bar. */}
               <div ref={avatarRef} className="mirror-frame aspect-[5/9] w-full overflow-clip border-[8px]">
-                <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} skinHex={skinHex} bodyLabel={t.bodyLabel} estimateLines={t.estimateLines} labelsAt="bottom" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} family={figure} />
+                <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} skinHex={skinHex} bodyLabel={t.bodyLabel} estimateLines={t.estimateLines} labelsAt="bottom" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} family={figure} skinShading={avatarSkinFlag()} />
               </div>
               {onAvatar ? (
                 // D19: the control sits where people look for it. The whole figure is the button;

@@ -8,6 +8,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { HAIR_SHADE, type Mesh } from '@curtain/mannequin';
 import type { ViewerMaterial } from './engine';
 import { faceOverlayGeometry, faceTextureOf, isFaceTexture, type FaceTexture } from './faceOverlay';
+import { patchSkinV2, updateSkinV2, type SkinShading, type SkinV2Uniforms } from './skin';
 
 /**
  * `classic`: the look every garment has had so far (ACES tone mapping, a warm ground bounce).
@@ -728,6 +729,25 @@ export class Figure {
   private skin: THREE.MeshPhysicalMaterial | null = null;
   /** The skin colour of `skin`, `#rrggbb` (for the hair of head v3). */
   private skinColour: string | null = null;
+  /** `skin-v2` (opt-in, `skin.ts`) or the flat skin of before; with the lighting it is drawn under. */
+  private shading: { kind: SkinShading; lighting: Lighting } = { kind: 'flat', lighting: 'classic' };
+  private skinV2: SkinV2Uniforms | null = null;
+
+  /**
+   * How a skin colour is shaded: `flat` (default, the material of before) or `skin-v2` (`skin.ts`),
+   * for the lighting the stage uses (its tone stage is imitated). The grey mannequin (no skin
+   * colour) is never changed. Takes effect at once when a skin colour is set.
+   */
+  setSkinShading(kind: SkinShading, lighting: Lighting): void {
+    if (kind === this.shading.kind && lighting === this.shading.lighting) return;
+    this.shading = { kind, lighting };
+    if (this.skin) {
+      this.skin.dispose();
+      this.skin = null;
+      this.skinV2 = null;
+      this.setSkin(this.skinColour);
+    }
+  }
 
   /**
    * The skin colour of this figure's body (`#rrggbb`), or null (or anything that is not such a
@@ -742,12 +762,20 @@ export class Figure {
       this.body.material = shaded(this.body.geometry) ? BODY_MATERIAL_SHADED : BODY_MATERIAL;
       this.skin?.dispose();
       this.skin = null;
+      this.skinV2 = null;
       return;
     }
     // A skin colour gets less white reflection than the grey mannequin (`SKIN_SPECULAR`): on a deep tone the grey
     // material's reflection alone lifted the colour by 4 to 9 L* (measured, avatar-renders.mjs).
-    if (!this.skin) this.skin = new THREE.MeshPhysicalMaterial({ color: colour, roughness: 0.75, metalness: 0, specularIntensity: SKIN_SPECULAR, vertexColors: shaded(this.body.geometry) });
-    else this.skin.color.set(colour);
+    if (!this.skin) {
+      this.skin = new THREE.MeshPhysicalMaterial({ color: colour, roughness: 0.75, metalness: 0, specularIntensity: SKIN_SPECULAR, vertexColors: shaded(this.body.geometry) });
+      if (this.shading.kind === 'skin-v2') {
+        const rig = LIGHTING_RIGS[this.shading.lighting];
+        const e = frontIrradiance(rig);
+        this.skinV2 = patchSkinV2(this.skin, colour, rig.toneMapping, [Math.PI / e[0], Math.PI / e[1], Math.PI / e[2]]);
+      }
+    } else this.skin.color.set(colour);
+    if (this.skinV2) updateSkinV2(this.skin, this.skinV2, colour);
     this.body.material = this.skin;
   }
 

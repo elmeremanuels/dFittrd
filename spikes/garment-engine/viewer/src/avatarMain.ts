@@ -6,7 +6,7 @@
  * ESTIMATE. Nothing is sent anywhere: the page only GETs bundle files from this dev server.
  *
  * URL parameters: `product=<bundle dir under out/>` and `size`; `skin=rrggbb`;
- * `lighting=neutral|neutral-v2`; `head=egg|neutral-v2`; the look comparison's overrides of the
+ * `lighting=neutral|neutral-v2`; `head=egg|neutral-v2|neutral-v3`; `shading=skin-v2`; the look comparison's overrides of the
  * lighting's extras `outline` (CSS px), `shadow` (opacity), `backdrop=adaptive`, `rim`, `bounce`; `family=male`,
  * `height`, `shoulder`, `bust`, `waist`, `hip` (cm). `mode=head` shows the body alone (no bundle),
  * through the shipped viewer's `Stage` and `Figure`: `family`, `yaw` (degrees), `pitch`, `frame=head|body|face`.
@@ -20,6 +20,7 @@ import * as THREE from 'three';
 import type { GarmentPayload } from '@curtain/schema';
 import { buildBody, buildMannequinMesh, type Mannequin } from '@curtain/mannequin';
 import { headOf, lightingOf, mountGarmentView, type GarmentView, type LookExtras } from '../../../../packages/garment-viewer/src/index';
+import { skinShadingOf } from '../../../../packages/garment-viewer/src/skin';
 import { fitNeckToHead } from '../../../../packages/garment-viewer/src/body';
 import { Figure, Stage, meshGeometry } from '../../../../packages/garment-viewer/src/scene';
 import { fitForBody } from './fitting';
@@ -34,6 +35,7 @@ const tag = document.getElementById('tag')!;
 const skin = /^[0-9a-fA-F]{6}$/.test(params.get('skin') ?? '') ? `#${params.get('skin')}` : null;
 const lighting = lightingOf(params.get('lighting'));
 const head = headOf(params.get('head'));
+const shading = skinShadingOf(params.get('shading'));
 const extras: Partial<LookExtras> = {};
 if (params.get('outline') !== null) extras.outline = Number(params.get('outline'));
 if (params.get('shadow') !== null) extras.contactShadow = Number(params.get('shadow'));
@@ -91,6 +93,8 @@ declare global {
       frameMs?(frames: number, withOutline?: boolean): number;
       /** Body alone: the screen position (CSS px) of the chin's front and of the neck ring's front, for the under-jaw measurement. */
       jawPoints?(): { chin: { x: number; y: number }; neck: { x: number; y: number } };
+      /** Body alone: a PNG (base64, no data: prefix) of the bare skin in white on black, the size of the canvas (`skin-v2-renders.mjs`). */
+      skinMask?(): string;
       look?: unknown;
       view: GarmentView | null;
     };
@@ -105,8 +109,8 @@ async function garmentMode(): Promise<void> {
   const meas = { bust: m.shape.rings.chest.circumferenceCm, waist: m.shape.rings.waist.circumferenceCm, hip: m.shape.rings.hip.circumferenceCm };
   const fit = fitForBody(garment, meas);
   const size = params.get('size') ?? fit.recommendedSize ?? '';
-  const view = await mountGarmentView(canvas, { baseUrl, garment, fit, size, body, look: { skinHex: skin, head }, lighting, lookExtras: extras, onState: setState });
-  tag.textContent = `ESTIMATE · ${garment.name} · size ${canvas.dataset.size ?? size} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · head ${head}`;
+  const view = await mountGarmentView(canvas, { baseUrl, garment, fit, size, body, look: { skinHex: skin, head, shading }, lighting, lookExtras: extras, onState: setState });
+  tag.textContent = `ESTIMATE · ${garment.name} · size ${canvas.dataset.size ?? size} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · head ${head} · shading ${shading}`;
   const points = skinPoints(m);
   // A bottom may cover the shin (a maxi skirt does): that patch is measured on other garments only.
   if (garment.category === 'bottom') delete points.shin;
@@ -152,6 +156,7 @@ function headMode(): void {
   const shown = fitNeckToHead(buildMannequinMesh(m, { head }), m).mesh;
   const figure = new Figure(meshGeometry(shown), new Uint32Array(0), 0, null);
   figure.garment.visible = false;
+  figure.setSkinShading(shading, lighting);
   figure.setSkin(skin);
   stage.setSkinTone(skin);
   figure.group.rotation.y = ((num('yaw') ?? 0) * Math.PI) / 180;
@@ -168,7 +173,7 @@ function headMode(): void {
     stage.controls.minDistance = 20;
     stage.controls.update();
   }
-  tag.textContent = `ESTIMATE · ${family} body alone · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · head ${head}`;
+  tag.textContent = `ESTIMATE · ${family} body alone · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · head ${head} · shading ${shading}`;
   let frames = 0;
   const loop = (): void => {
     stage.render();
@@ -190,6 +195,32 @@ function headMode(): void {
       return out;
     },
     contrast: () => silhouetteContrast(stage, figure),
+    skinMask() {
+      const hidden: [THREE.Object3D, boolean][] = [];
+      stage.scene.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh && o !== figure.body) {
+          hidden.push([o, o.visible]);
+          o.visible = false;
+        }
+      });
+      const material = figure.body.material;
+      // White where there is skin, black on the hair of head v3 (its `hair` cover over a third).
+      const hasHair = !!figure.body.geometry.getAttribute('hair');
+      figure.body.material = new THREE.ShaderMaterial({
+        vertexShader: `${hasHair ? 'attribute float hair;' : 'float hair = 0.0;'} varying float vHair; void main() { vHair = hair; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+        fragmentShader: 'varying float vHair; void main() { gl_FragColor = vec4(vec3(vHair > 0.33 ? 0.0 : 1.0), 1.0); }',
+        toneMapped: false,
+      });
+      const bg = stage.scene.background;
+      stage.scene.background = new THREE.Color(0x000000);
+      stage.renderer.render(stage.scene, stage.camera);
+      const url = canvas.toDataURL('image/png');
+      stage.scene.background = bg;
+      figure.body.material = material;
+      for (const [o, v] of hidden) o.visible = v;
+      stage.render(true);
+      return url.slice(url.indexOf(',') + 1);
+    },
     jawPoints() {
       // The most forward points of the drawn mesh at the chin's height and at the neck ring (the middle of the figure).
       const chinY = shown.headLevels?.chinY ?? 0.865 * m.statureCm;

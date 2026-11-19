@@ -52,3 +52,13 @@ export function facePhotoEnabled(env: { VITE_AVATAR_FACE_PHOTO?: string } = impo
 export function faceOnHeadEnabled(env: { VITE_AVATAR_FACE_ON_HEAD?: string } = import.meta.env): boolean {
   return env.VITE_AVATAR_FACE_ON_HEAD === '1';
 }
+
+/**
+ * Skin shading `skin-v2` (D22 point 3, the look review of branch claude/skin-v2) for a build:
+ * `VITE_AVATAR_SKIN=skin-v2` shades the 2D figure (`render/skin2d.ts`) and the 3D mannequin
+ * (`look.shading` of the viewer) the new way. Anything else, and every normal build: `flat`, today's
+ * shading, unchanged. Not set anywhere until the founder approves it from the pictures.
+ */
+export function avatarSkinFlag(env: { VITE_AVATAR_SKIN?: string } = import.meta.env): 'flat' | 'skin-v2' {
+  return env.VITE_AVATAR_SKIN === 'skin-v2' ? 'skin-v2' : 'flat';
+}

@@ -99,9 +99,9 @@ export function drawnHeadColour(skinHex: string): string {
  * The ink of the face lines on a skin colour: whichever of a dark brown and a light warm tone
  * stands out more from the head as it is drawn. Between those two inks that is at least 3.8:1 on
  * any colour, so every line can be drawn at full opacity and still reach 3:1 after the shading.
+ * `head`: the head's colour as drawn, when the figure is not shaded the flat way (skin-v2, `skin2d.ts`).
  */
-export function faceInk(skinHex: string): string {
-  const head = drawnHeadColour(skinHex);
+export function faceInk(skinHex: string, head: string = drawnHeadColour(skinHex)): string {
   return contrastRatio(DARK_INK, head) >= contrastRatio(LIGHT_INK, head) ? DARK_INK : LIGHT_INK;
 }
 

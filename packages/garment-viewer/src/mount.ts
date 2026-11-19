@@ -21,6 +21,7 @@ import { DEFAULT_DRAPE, drapeJobOf, openSession, prepareFit, viewerMaterial, typ
 import * as THREE from 'three';
 import { faceUvOf } from '@curtain/mannequin';
 import type { FaceTexture } from './faceOverlay';
+import { skinShadingOf, type SkinShading } from './skin';
 import { Figure, Stage, lightingOf, meshGeometry, parseSkinHex, type Lighting, type LookExtras } from './scene';
 
 export type GarmentViewState = 'loading' | 'draping' | 'settled' | 'error';
@@ -46,6 +47,14 @@ export interface AvatarLook {
    * 'neutral-v2'`; ignored otherwise. Can be set and removed with `setLook`. Never sent or stored here.
    */
   face?: FaceTexture | null;
+  /**
+   * How a picked skin colour is shaded. `flat` (default): one colour with plain diffuse shading, as
+   * before. `skin-v2` (opt-in, for the look review of D22 point 3): pre-integrated scattering with a
+   * slightly red shadow edge, a soft sheen and per-tone exposure care (`skin.ts`). The garment is not
+   * affected. The grey mannequin (no `skinHex`) is the same either way. `setLook` changes it only when
+   * the new look names it; a look without `shading` keeps the one of the mount.
+   */
+  shading?: SkinShading;
 }
 
 export type HeadKind = 'neutral' | 'egg' | 'neutral-v2' | 'neutral-v3';
@@ -264,6 +273,8 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
   const tex = bundle.render && bundle.textureImage ? { ...bundle.render, image: bundle.textureImage } : null;
   const figure = new Figure(meshGeometry(avatar.mesh), bundle.baseMesh.indices, n, tex);
   figure.setMaterial(material);
+  let shading = skinShadingOf(opts.look?.shading);
+  figure.setSkinShading(shading, lightingOf(opts.lighting));
   figure.setSkin(parseSkinHex(opts.look?.skinHex));
   const faceUv = plan.head === 'neutral-v2' ? faceUvOf(avatar.mesh) : null;
   figure.setFace(opts.look?.face, faceUv);
@@ -389,6 +400,9 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
     source: { kind: 'device' },
     setLook(look) {
       if (disposed) return;
+      // The shading stays what it was unless the new look names one.
+      if (look?.shading !== undefined) shading = skinShadingOf(look.shading);
+      figure.setSkinShading(shading, lightingOf(opts.lighting));
       figure.setSkin(parseSkinHex(look?.skinHex));
       stage.setSkinTone(parseSkinHex(look?.skinHex));
       figure.setFace(look?.face, faceUv);
@@ -421,6 +435,8 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
   const stage = new Stage(canvas, { controls: true, lighting: lightingOf(opts.lighting), ...(opts.lookExtras ? { extras: opts.lookExtras } : {}) });
   const figure = new Figure(meshGeometry(avatar.mesh), bake.indices, bake.vertexCount, null);
   figure.setMaterial(material);
+  let shading = skinShadingOf(opts.look?.shading);
+  figure.setSkinShading(shading, lightingOf(opts.lighting));
   figure.setSkin(parseSkinHex(opts.look?.skinHex));
   const faceUv = plan.head === 'neutral-v2' ? faceUvOf(avatar.mesh) : null;
   figure.setFace(opts.look?.face, faceUv);
@@ -486,6 +502,9 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
     },
     setLook(look) {
       if (disposed) return;
+      // The shading stays what it was unless the new look names one.
+      if (look?.shading !== undefined) shading = skinShadingOf(look.shading);
+      figure.setSkinShading(shading, lightingOf(opts.lighting));
       figure.setSkin(parseSkinHex(look?.skinHex));
       stage.setSkinTone(parseSkinHex(look?.skinHex));
       figure.setFace(look?.face, faceUv);

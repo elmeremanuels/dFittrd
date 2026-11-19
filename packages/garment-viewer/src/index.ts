@@ -11,3 +11,4 @@ export { DEFAULT_BODY_HEX, LOOK_EXTRAS, lightingOf, outlineColour, parseSkinHex,
 export type { DrapeOptions, WaistbandSpec } from './engine';
 export { mountFigureView, type FigureFrame, type FigureView, type FigureViewOptions } from './figureView';
 export { FACE_FADE_DEG, isFaceTexture, type FaceTexture } from './faceOverlay';
+export { skinShadingOf, skinToneCare, type SkinShading, type SkinToneCare } from './skin';

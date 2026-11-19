@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { Mesh } from '@curtain/mannequin';
 import type { ViewerMaterial } from './engine';
+import { faceOverlayGeometry, faceTextureOf, isFaceTexture, type FaceTexture } from './faceOverlay';
 
 /**
  * `classic`: the look every garment has had so far (ACES tone mapping, a warm ground bounce).
@@ -701,6 +702,45 @@ export class Figure {
     this.body.material = this.skin;
   }
 
+  /** The shopper's face over the v2 head (slice 6 spike), or null. */
+  face: THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhysicalMaterial> | null = null;
+
+  /**
+   * Lay a face texture (baked on the device, `faceOverlay.ts`) over the front of the head, or take
+   * it off (null). `faceUv` is `faceUvOf` of the body's mesh (null for a head without the face frame:
+   * then nothing is shown). The body and its material are not changed.
+   */
+  setFace(face: FaceTexture | null | undefined, faceUv: Float32Array | null): void {
+    if (this.face) {
+      this.group.remove(this.face);
+      this.face.geometry.dispose();
+      this.face.material.map?.dispose();
+      this.face.material.dispose();
+      this.face = null;
+    }
+    if (!isFaceTexture(face) || !faceUv) return;
+    const g = faceOverlayGeometry(this.body.geometry, faceUv);
+    if (!g) return;
+    const material = new THREE.MeshPhysicalMaterial({
+      map: faceTextureOf(face),
+      roughness: 0.75,
+      metalness: 0,
+      specularIntensity: SKIN_SPECULAR,
+      vertexColors: true,
+      transparent: true,
+      depthWrite: false,
+      // Drawn on the head's own surface: pulled towards the camera so the head never shows through.
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -4,
+    });
+    const mesh = new THREE.Mesh(g, material);
+    mesh.userData[ROLE] = 'skin';
+    mesh.renderOrder = 1;
+    this.face = mesh;
+    this.group.add(mesh);
+  }
+
   /** The body colour shown now, `#rrggbb`. */
   get skinHex(): string {
     return `#${(this.body.material as THREE.MeshStandardMaterial).color.getHexString()}`;
@@ -783,6 +823,7 @@ export class Figure {
   }
 
   dispose(): void {
+    this.setFace(null, null);
     this.garment.geometry.dispose();
     this.garment.material.dispose();
     this.skin?.dispose();

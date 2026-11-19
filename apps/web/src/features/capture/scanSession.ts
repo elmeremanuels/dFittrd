@@ -5,13 +5,17 @@
  */
 import { choosePoseVariant, type PoseVariant } from './models';
 import type { Sex } from './types';
-import type { FaceResultMessage, GateMessage, ProgressMessage, ReadyMessage, ScanResultMessage, WorkerInbound, WorkerOutbound } from './workerProtocol';
+import type { FaceResultMessage, FaceTextureMessage, GateMessage, ProgressMessage, ReadyMessage, ScanResultMessage, WorkerInbound, WorkerOutbound } from './workerProtocol';
 
 export interface ScanSessionOptions {
   variant?: PoseVariant | undefined;
   modelBase?: string | undefined;
   needFace?: boolean | undefined;
   needPose?: boolean | undefined;
+  /** Load the multiclass segmenter (default true; the face-on-head bake does without it). */
+  needSegmenter?: boolean | undefined;
+  /** Force the delegate (measurement only; default GPU with a CPU fallback). */
+  delegate?: 'GPU' | 'CPU' | undefined;
   /** ms; default 45 s (models are 6–12 MB on a cold cache). */
   initTimeoutMs?: number | undefined;
   /** Test seam: a factory returning a Worker-like object. */
@@ -26,6 +30,7 @@ export class ScanSession {
   private readonly progressListeners = new Set<Listener<ProgressMessage>>();
   private pendingResult: { resolve: (m: ScanResultMessage) => void; reject: (e: Error) => void } | null = null;
   private pendingFace: { resolve: (m: FaceResultMessage) => void; reject: (e: Error) => void } | null = null;
+  private pendingTexture: { resolve: (m: FaceTextureMessage) => void; reject: (e: Error) => void } | null = null;
   private pendingReady: { resolve: (m: ReadyMessage) => void; reject: (e: Error) => void } | null = null;
   private readonly opts: Required<Pick<ScanSessionOptions, 'needFace' | 'needPose' | 'initTimeoutMs'>> & ScanSessionOptions;
   ready: ReadyMessage | null = null;
@@ -65,7 +70,7 @@ export class ScanSession {
           reject(e);
         },
       };
-      this.send({ type: 'init', variant, modelBase: this.opts.modelBase ?? undefined, needFace: this.opts.needFace, needPose: this.opts.needPose } as WorkerInbound);
+      this.send({ type: 'init', variant, modelBase: this.opts.modelBase ?? undefined, needFace: this.opts.needFace, needPose: this.opts.needPose, needSegmenter: this.opts.needSegmenter ?? true, delegate: this.opts.delegate } as WorkerInbound);
     });
   }
 
@@ -112,6 +117,25 @@ export class ScanSession {
     });
   }
 
+  /**
+   * Slice 6 spike: bake one face photo into a face texture for the 3D head. The bitmap is
+   * transferred (and closed by the worker); what comes back is the texture and a few numbers.
+   */
+  bakeFaceTexture(bitmap: ImageBitmap, targetSkinHex: string | null): Promise<FaceTextureMessage> {
+    if (!this.worker || this.disposed) {
+      bitmap.close();
+      return Promise.reject(new Error('scan session is not running'));
+    }
+    if (this.pendingTexture) {
+      bitmap.close();
+      return Promise.reject(new Error('face texture already pending'));
+    }
+    return new Promise((resolve, reject) => {
+      this.pendingTexture = { resolve, reject };
+      this.send({ type: 'faceTexture', bitmap, targetSkinHex }, [bitmap]);
+    });
+  }
+
   reset(): void {
     this.send({ type: 'reset' });
   }
@@ -137,6 +161,8 @@ export class ScanSession {
     this.pendingReady?.reject(e);
     this.pendingResult?.reject(e);
     this.pendingFace?.reject(e);
+    this.pendingTexture?.reject(e);
+    this.pendingTexture = null;
     this.pendingReady = null;
     this.pendingResult = null;
     this.pendingFace = null;
@@ -163,6 +189,10 @@ export class ScanSession {
         this.pendingFace?.resolve(msg);
         this.pendingFace = null;
         break;
+      case 'faceTextureResult':
+        this.pendingTexture?.resolve(msg);
+        this.pendingTexture = null;
+        break;
       case 'error': {
         const e = new Error(msg.message);
         if (msg.stage === 'init') {
@@ -174,6 +204,9 @@ export class ScanSession {
         } else if (msg.stage === 'face') {
           this.pendingFace?.reject(e);
           this.pendingFace = null;
+        } else if (msg.stage === 'faceTexture') {
+          this.pendingTexture?.reject(e);
+          this.pendingTexture = null;
         }
         // frame-stage errors are transient: the next frame is tried again
         break;

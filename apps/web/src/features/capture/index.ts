@@ -47,6 +47,8 @@ export {
   type SilhouetteMask,
 } from './storage';
 export { ScanSession, type ScanSessionOptions } from './scanSession';
+export { faceTextureFromPhoto, type FaceOnHeadOptions, type FaceOnHeadResult, type FaceOnHeadTimings } from './faceOnHead';
+export { bakeFaceTexture, rematchFaceTexture, FACE_TEXTURE_SIZE, MAX_FRONT_YAW_DEG, type FaceBake, type FaceBakeStats, type FaceTopology } from './faceBake';
 export { MODEL_BASE, MODEL_FILES, choosePoseVariant, type PoseVariant } from './models';
 export {
   EMPTY_MANUAL_FORM,
@@ -63,4 +65,4 @@ export {
   type FlowCaps,
 } from './captureMachine';
 export type * from './types';
-export type { WorkerInbound, WorkerOutbound, ScanResultMessage, FaceResultMessage, GateMessage } from './workerProtocol';
+export type { WorkerInbound, WorkerOutbound, ScanResultMessage, FaceResultMessage, FaceTextureMessage, GateMessage } from './workerProtocol';

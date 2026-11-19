@@ -11,6 +11,10 @@
  * What is not:
  *   - "Use my face" is drawn only when `face` is true (the build flag, default off) and is then a
  *     "coming soon" row whose switch does nothing. No camera, file picker or upload exists behind it.
+ *   - Slice 6 spike only (`faceOnHead`, passed by a host built with `VITE_AVATAR_FACE_ON_HEAD=1`,
+ *     never by a normal build): the row is live with variant A of the copy (C6, C7, C9). A file
+ *     picker is created only after the shopper presses "Yes, use my photo"; the host reads the
+ *     picture on the device and nothing is sent.
  *
  * This component makes no request and opens no camera or file input. It is a modal dialog: focus
  * moves into it, Tab stays inside, Escape and the backdrop close it.
@@ -41,6 +45,21 @@ export interface AvatarPromptProps {
    * Default false: the colour is in memory only, and no sentence about saving it is shown.
    */
   saved?: boolean;
+  /** Slice 6 spike: the live face row. Absent (every normal build): the row is the `face` "coming soon" line or not drawn. */
+  faceOnHead?: FaceOnHeadRow;
+}
+
+/** What the host tells the live face row (slice 6 spike). */
+export interface FaceOnHeadRow {
+  /** A face is on the avatar now. */
+  on: boolean;
+  /** The picture is being read. */
+  busy: boolean;
+  notice: 'notFound' | 'turned' | 'small' | 'failed' | null;
+  /** The shopper chose a picture, after saying yes. */
+  onPhoto: (file: File) => void;
+  /** The shopper switched the face off: the host takes it off the avatar and drops it from memory. */
+  onOff: () => void;
 }
 
 const FOCUSABLE = 'a[href], button:not([disabled]):not([tabindex="-1"]), input:not([disabled])';
@@ -71,14 +90,17 @@ function Switch({ checked, onChange, labelledBy, describedBy, unavailable = fals
   );
 }
 
-export function AvatarPrompt({ look, onPick, onClear, onMeasurements, onClose, termsUrl, face = false, saved = false }: AvatarPromptProps): ReactNode {
-  const { claims: t, ui } = embedStrings().avatar;
+export function AvatarPrompt({ look, onPick, onClear, onMeasurements, onClose, termsUrl, face = false, saved = false, faceOnHead }: AvatarPromptProps): ReactNode {
+  const { claims: t, ui, faceSpike: fs } = embedStrings().avatar;
   const id = useId();
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLHeadingElement | null>(null);
   // On: the row of swatches is open. A colour exists only once a swatch is picked (C1).
   const [skinOn, setSkinOn] = useState(look !== null);
   const [cleared, setCleared] = useState(false);
+  // Slice 6 spike: the yes/no step of the live face row, and whether the face was switched off again (C9).
+  const [faceAsk, setFaceAsk] = useState(false);
+  const [faceRemoved, setFaceRemoved] = useState(false);
   const total = MONK_CLASSES.length;
   const c30 = c30Parts();
 
@@ -120,6 +142,24 @@ export function AvatarPrompt({ look, onPick, onClear, onMeasurements, onClose, t
     return () => document.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  const pickPhoto = (): void => {
+    // The file input exists only from this press on (G2: nothing is opened before the yes), and goes again after.
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.hidden = true;
+    input.dataset.testid = 'avatar-face-file';
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      input.remove();
+      if (file) faceOnHead?.onPhoto(file);
+    });
+    input.addEventListener('cancel', () => input.remove());
+    dialogRef.current?.append(input);
+    setFaceAsk(false);
+    input.click();
+  };
+
   const toggleSkin = (on: boolean): void => {
     setSkinOn(on);
     setCleared(!on);
@@ -155,7 +195,59 @@ export function AvatarPrompt({ look, onPick, onClear, onMeasurements, onClose, t
         </div>
 
         <ul className="space-y-3">
-          {face ? (
+          {faceOnHead ? (
+            <li className="card space-y-2 p-3" data-testid="avatar-item-face">
+              <div className="flex items-center justify-between gap-3">
+                <span id={`${id}-face`} className="text-base font-semibold">
+                  {t.faceName}
+                </span>
+                <Switch
+                  checked={faceOnHead.on || faceAsk || faceOnHead.busy}
+                  onChange={(on) => {
+                    if (on) {
+                      setFaceAsk(true);
+                      setFaceRemoved(false);
+                    } else {
+                      setFaceAsk(false);
+                      if (faceOnHead.on) setFaceRemoved(true);
+                      faceOnHead.onOff();
+                    }
+                  }}
+                  labelledBy={`${id}-face`}
+                  describedBy={`${id}-face-text`}
+                  onText={ui.on}
+                  offText={ui.off}
+                  testId="avatar-face-switch"
+                />
+              </div>
+              <div id={`${id}-face-text`} className="space-y-1 text-sm text-ink-soft">
+                <p>{fs.c6}</p>
+                <p>{fs.c7}</p>
+                {!faceOnHead.on && !faceAsk && !faceOnHead.busy ? <p>{faceRemoved ? fs.c9 : t.faceOff}</p> : null}
+              </div>
+              {faceAsk ? (
+                // G2: the two answers have the same size and weight.
+                <div className="grid grid-cols-2 gap-2" data-testid="avatar-face-ask">
+                  <button type="button" className="btn-ghost min-h-11 px-3 text-sm" onClick={pickPhoto} data-testid="avatar-face-yes">
+                    {fs.yes}
+                  </button>
+                  <button type="button" className="btn-ghost min-h-11 px-3 text-sm" onClick={() => setFaceAsk(false)} data-testid="avatar-face-no">
+                    {fs.no}
+                  </button>
+                </div>
+              ) : null}
+              {faceOnHead.busy ? (
+                <p role="status" className="text-sm font-medium" data-testid="avatar-face-busy">
+                  {fs.working}
+                </p>
+              ) : null}
+              {faceOnHead.notice ? (
+                <p role="status" className="text-sm font-medium text-ink" data-testid="avatar-face-notice">
+                  {fs[faceOnHead.notice]}
+                </p>
+              ) : null}
+            </li>
+          ) : face ? (
             <li className="card space-y-1 p-3" data-testid="avatar-item-face">
               <div className="flex items-center justify-between gap-3">
                 <span className="flex min-w-0 flex-wrap items-center gap-2">
@@ -238,7 +330,7 @@ export function AvatarPrompt({ look, onPick, onClear, onMeasurements, onClose, t
           </li>
         </ul>
 
-        {face ? (
+        {face || faceOnHead ? (
           <p className="text-xs text-ink-mute" data-testid="avatar-c4">
             {t.c4}
           </p>

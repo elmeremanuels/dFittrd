@@ -19,6 +19,8 @@ import { bakeAxis, bakePlace, blendBakedSize, settleOnBody, type BakePlace, type
 import { DrapePool } from './drapePool';
 import { DEFAULT_DRAPE, drapeJobOf, openSession, prepareFit, viewerMaterial, type DrapeOptions, type FitInstance } from './engine';
 import * as THREE from 'three';
+import { faceUvOf } from '@curtain/mannequin';
+import type { FaceTexture } from './faceOverlay';
 import { Figure, Stage, lightingOf, meshGeometry, parseSkinHex, type Lighting, type LookExtras } from './scene';
 
 export type GarmentViewState = 'loading' | 'draping' | 'settled' | 'error';
@@ -37,6 +39,12 @@ export interface AvatarLook {
    * mount; `setLook` does not change it.
    */
   head?: HeadKind;
+  /**
+   * Slice 6 spike (behind the host's face flag, off by default): the shopper's face, baked on the
+   * device into the head v2 face frame, laid over the front of the head. Only with `head:
+   * 'neutral-v2'`; ignored otherwise. Can be set and removed with `setLook`. Never sent or stored here.
+   */
+  face?: FaceTexture | null;
 }
 
 export type HeadKind = 'neutral' | 'egg' | 'neutral-v2';
@@ -93,7 +101,7 @@ export interface GarmentView {
   setSize(size: string): boolean;
   /** The sizes the bundle can show. */
   sizes: string[];
-  /** Change the figure's look in place (no remount, no new drape). Only `skinHex` can change after the mount. */
+  /** Change the figure's look in place (no remount, no new drape). `skinHex` and `face` can change after the mount; `head` cannot. */
   setLook(look: AvatarLook | null | undefined): void;
   /**
    * Where a point of the figure is on the canvas now (CSS px from its top left). `head` is the
@@ -256,6 +264,8 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
   const figure = new Figure(meshGeometry(avatar.mesh), bundle.baseMesh.indices, n, tex);
   figure.setMaterial(material);
   figure.setSkin(parseSkinHex(opts.look?.skinHex));
+  const faceUv = plan.head === 'neutral-v2' ? faceUvOf(avatar.mesh) : null;
+  figure.setFace(opts.look?.face, faceUv);
   stage.setSkinTone(parseSkinHex(opts.look?.skinHex));
   figure.garment.position.y = lift;
   stage.scene.add(figure.group);
@@ -380,6 +390,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
       if (disposed) return;
       figure.setSkin(parseSkinHex(look?.skinHex));
       stage.setSkinTone(parseSkinHex(look?.skinHex));
+      figure.setFace(look?.face, faceUv);
       wake(100);
     },
     dispose() {
@@ -410,6 +421,8 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
   const figure = new Figure(meshGeometry(avatar.mesh), bake.indices, bake.vertexCount, null);
   figure.setMaterial(material);
   figure.setSkin(parseSkinHex(opts.look?.skinHex));
+  const faceUv = plan.head === 'neutral-v2' ? faceUvOf(avatar.mesh) : null;
+  figure.setFace(opts.look?.face, faceUv);
   stage.setSkinTone(parseSkinHex(opts.look?.skinHex));
   figure.garment.position.y = lift;
   stage.scene.add(figure.group);
@@ -474,6 +487,7 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
       if (disposed) return;
       figure.setSkin(parseSkinHex(look?.skinHex));
       stage.setSkinTone(parseSkinHex(look?.skinHex));
+      figure.setFace(look?.face, faceUv);
       wake(100);
     },
     dispose() {

@@ -133,4 +133,5 @@ export {
 } from './math';
 export { buildHeadPart, faceRelief, HEAD_LEVELS, FACE_LEVELS, type HeadOptions } from './head';
 export { buildHeadPartV2, faceReliefV2, earRelief, faceShadeV2, FACE_LEVELS_V2, V2_TUBE_BELOW_RING, type HeadV2Options, type HeadV2Part } from './headV2';
+export { FACE_UV_FRAME, FACE_UV_LANDMARKS, faceUvAt, faceUvOf } from './faceUv';
 export type { MeshOptions } from './mesh';

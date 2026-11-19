@@ -23,3 +23,4 @@ export * from './chartTemplatesMen';
 export * from './fixtures';
 export * from './sizeAdvice';
 export * from './garmentAsset';
+export * from './merchantSetup';

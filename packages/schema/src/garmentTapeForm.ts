@@ -159,8 +159,23 @@ export const GARMENT_TAPE_FORM_TEXT = Object.freeze({
   /** A typed row whose size the chart no longer has (renamed or removed in the same save): kept, with its label editable. */
   orphanSize: 'Not in the size chart any more. Type the size it now has, or untick it.',
   privacy: 'These numbers describe the garment, not a shopper. Shoppers’ measurements never reach you.',
+  /** The "what to measure" help shown next to the form, with the drawing `GARMENT_TAPE_DIAGRAM_SVG`. */
+  whatToMeasure: 'What to measure',
+  youNeed: 'You need a flat table, a tape measure and the skirt. Lay it flat, front up, smoothed but not pulled.',
+  firstTime: 'First time? Start with three sizes: the smallest, the largest and one in between. About 3 minutes per size.',
+  diagramCaption: 'A skirt laid flat. Measure straight across and double it (A to D); measure the length (E) as it is.',
+  closureHelp: 'Pull-on means an elastic waist with nothing to open. For a pull-on skirt we check that the stretched band (B) goes over the shopper’s hips, so this answer matters most.',
+  depthHelp: 'Put a pin 20 cm below the top of the band on each side and measure across there. Always 20 cm, so the sizes can be compared.',
 } as const);
 export type GarmentTapeFormText = typeof GARMENT_TAPE_FORM_TEXT;
+
+/**
+ * The drawing next to the form: a skirt laid flat with the five measurements A to E and the 20 cm hip line.
+ * No words in it but the letters and "20 cm"; the caption is `GARMENT_TAPE_FORM_TEXT.diagramCaption`. The
+ * WooCommerce plugin ships the same drawing as `assets/admin/skirt-measure.svg` (a test keeps them equal).
+ */
+export const GARMENT_TAPE_DIAGRAM_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 270" width="260" height="270" aria-hidden="true" focusable="false" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="13" font-weight="700"><path d="M86 30h88v16H86z" fill="#f5efe7" stroke="#1a1612" stroke-width="2"/><path d="M86 46h88l50 186H36z" fill="#f5efe7" stroke="#1a1612" stroke-width="2"/><g stroke="#ff5a3c" stroke-width="2.5" fill="none" stroke-linecap="round"><path d="M86 20h88"/><path d="M62 38h-14m150 0h14M62 38l-6-5m6 5l-6 5M198 38l6-5m-6 5l6 5"/><path d="M68 96h124" stroke-dasharray="6 5"/><path d="M36 250h188"/><path d="M130 30v202" stroke-dasharray="2 5"/></g><g stroke="#616161" stroke-width="1.5" fill="none"><path d="M214 30v66m-5-66h10m-10 66h10"/></g><g fill="#ff5a3c"><text x="72" y="25" text-anchor="end">A</text><text x="40" y="43" text-anchor="end">B</text><text x="60" y="101" text-anchor="end">C</text><text x="28" y="255" text-anchor="end">D</text><text x="138" y="150">E</text></g><text x="222" y="67" fill="#616161" font-size="11" font-weight="600">20 cm</text></svg>';
 
 // ---------------------------------------------------------------------------
 // Check and fill

@@ -115,9 +115,10 @@ export const BLOCKS: Readonly<Record<string, BlockRule>> = {
   bootcut: block({}),
   skinny: block({ hip: 2, thigh: 1 }, [], true),
   slim: block({ hip: 3, thigh: 2 }, [], true),
-  // Blocks named for men's tops (slice M2a). Outside a men's fit they read as the nearest women's rule.
-  'shirt-slim': block({ bust: 10, shoulder: 1.5 }, ['waist', 'hip'], false, 'shirt cut hangs loose'),
-  'shirt-classic': block({ bust: 10, shoulder: 1.5 }, ['waist', 'hip'], false, 'shirt cut hangs loose'),
+  // Blocks named for men's tops (slice M2a). Outside a men's fit they read as an unknown block, as
+  // they did before M2 (no women's ease was ever sourced for them; review of men-m2, 19 Nov 2026).
+  'shirt-slim': block({}),
+  'shirt-classic': block({}),
   knit: block({}),
   sweatshirt: block({}),
 };

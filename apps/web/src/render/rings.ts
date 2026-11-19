@@ -16,6 +16,8 @@
  */
 import { easeTargetFor, fitGapsForRender, isPointFit, type Band, type FitResult, type Point, type PointFit, type SizeFit } from '@curtain/fit-engine';
 import type { GarmentPayload, UserBody } from '@curtain/schema';
+import { stepSize } from '@/embed/aboutYou';
+import { embedStrings } from '@/embed/strings';
 import { cmToIn, type Units } from '@/embed/units';
 import { bodyGeometry, garmentGeometry, halfWidthFromGirth, HEM_DEPTH, levelY, MAX_RING_RX, type BodyGeometry } from './body';
 import { bandSweep, joinSizes, sourceAt, sourceSentence, SOURCE_WORD, type GarmentRingInputs, type RingSource } from './ringInputs';
@@ -94,7 +96,8 @@ export interface RingOverlayInput {
   estimated?: readonly string[];
 }
 
-const BAND_WORD: Record<Band, string> = { tight: 'Tight', snug: 'Snug', good: 'Good fit', roomy: 'Roomy', loose: 'Loose', short: 'Short', long: 'Long' };
+/** Band words come from the English catalogue (D21), the same ones the result list prints. */
+const bandWord = (band: Band): string => embedStrings().fit.bands[band];
 
 /** Cross-section depth / width per level (body.ts uses the same ratios); the hem hangs rounder. */
 const DEPTH: Record<RingKey, number> = { bust: 0.7, waist: 0.75, hip: 0.7, hem: HEM_DEPTH };
@@ -180,8 +183,8 @@ function ringsFor(input: RingOverlayInput, sizeFit: SizeFit): Ring[] {
         key, size: sizeFit.size, y, rx, ry: Math.max(2.5, rx * TILT), bodyRx,
         garmentCm: pf.chartCm, bodyCm: pf.bodyCm, roomCm: room, band: pf.band, source: 'chart',
         basis: bodyChart ? 'body-chart+ease' : 'garment', bodyEstimated: est,
-        chip: [BAND_WORD[pf.band], roomText(room, units, est)],
-        text: `${label(key)}: ${BAND_WORD[pf.band].toLowerCase()}, ${roomText(room, units, est)} (${girthText(pf.chartCm, bodyChart, units)}, ${youText(pf.bodyCm, units, est)})`,
+        chip: [bandWord(pf.band), roomText(room, units, est)],
+        text: `${label(key)}: ${bandWord(pf.band).toLowerCase()}, ${roomText(room, units, est)} (${girthText(pf.chartCm, bodyChart, units)}, ${youText(pf.bodyCm, units, est)})`,
       };
     } else if (skipped && row) {
       // The engine does not score this point for the cut (e.g. an A-line hip): no tight / loose word.
@@ -319,8 +322,9 @@ export function ringOverlay(input: RingOverlayInput): RingOverlay | null {
   const selected = { size, rings: ringsFor(input, at) };
   if (selected.rings.length === 0) return null;
   const ghosts: GhostRings[] = [];
-  const before = fit.perSize[idx - 1];
-  const after = fit.perSize[idx + 1];
+  // On a men's W/L chart the neighbours are the waists either side at the same leg (slice M2b).
+  const before = stepSize(fit, idx, -1);
+  const after = stepSize(fit, idx, 1);
   if (before) ghosts.push({ size: before.size, side: 'smaller', rings: ringsFor(input, before) });
   if (after) ghosts.push({ size: after.size, side: 'larger', rings: ringsFor(input, after) });
   const bodyChart = garment.sizeChartType === 'body';

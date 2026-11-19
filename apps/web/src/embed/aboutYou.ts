@@ -322,6 +322,15 @@ export function aboutEntries(form: AboutForm, category: GarmentCategory, garment
 }
 
 /**
+ * The prior's body type: what the shopper chose; on a men's garment (slice M2), "Not specified" is
+ * read as male, so the estimate of the chest, waist, seat and thigh is the male prior, not the
+ * female/male mixture. Every other garment keeps the shopper's choice as before.
+ */
+export function priorSexFor(form: Pick<AboutForm, 'sex'>, garment?: AboutGarment): Sex {
+  return form.sex === 'unspecified' && isMensGarment(garment) ? 'male' : form.sex;
+}
+
+/**
  * The on-device body profile from the About-you form: typed values as 'manual', the rest of
  * bust / waist / hip / thigh from the population prior ('prior', lower confidence).
  */
@@ -329,7 +338,7 @@ export function profileFromAbout(form: AboutForm, category: GarmentCategory, now
   return fuseProfile({
     manual: aboutEntries(form, category, garment),
     manualMethod: form.tape ? 'tape' : 'memory',
-    sex: form.sex,
+    sex: priorSexFor(form, garment),
     now,
   }).profile;
 }
@@ -410,16 +419,34 @@ export function adviseSize(fit: FitResult, preference: FitPreference): SizeAdvic
   if (preference === 'regular') return base;
   const idx = fit.perSize.findIndex((s) => s.size === engineSize);
   const pick = fit.perSize[idx];
-  const neighbour = fit.perSize[preference === 'snug' ? idx - 1 : idx + 1];
+  const neighbour = stepSize(fit, idx, preference === 'snug' ? -1 : 1);
   if (idx < 0 || !pick || !neighbour || !neighbour.wearable || neighbour.score === null) return base;
   if (pick.score !== null && neighbour.score < pick.score - PREFERENCE_SCORE_SLACK) return base;
   return { size: neighbour.size, closest: neighbour.size, engineSize, adjusted: preference === 'snug' ? 'down' : 'up', noPoints: false };
 }
 
-/** The recommended size and its direct neighbours, in chart order. */
+/**
+ * The size one step smaller (−1) or larger (+1) than `perSize[idx]`. In chart order, except on a
+ * men's W/L chart (sizes with `axes`, slice M2b): there a step is one waist at the same leg, because
+ * snug and relaxed are about the girth, never the leg length.
+ */
+export function stepSize(fit: FitResult, idx: number, step: -1 | 1): SizeFit | undefined {
+  const here = fit.perSize[idx];
+  if (!here) return undefined;
+  if (!here.axes) return fit.perSize[idx + step];
+  const waists: string[] = [];
+  for (const s of fit.perSize) if (s.axes && !waists.includes(s.axes.waist)) waists.push(s.axes.waist);
+  const target = waists[waists.indexOf(here.axes.waist) + step];
+  return target === undefined ? undefined : fit.perSize.find((s) => s.axes?.waist === target && s.axes.leg === here.axes!.leg);
+}
+
+/** The recommended size and its direct neighbours, in chart order (on a W/L chart: the waists either side, same leg). */
 export function neighbourSizes(fit: FitResult, centre: string | null): SizeFit[] {
   const idx = fit.perSize.findIndex((s) => s.size === centre);
   if (idx < 0) return fit.perSize.slice(0, 3);
+  if (fit.perSize[idx]!.axes) {
+    return [stepSize(fit, idx, -1), fit.perSize[idx], stepSize(fit, idx, 1)].filter((s): s is SizeFit => s !== undefined);
+  }
   return fit.perSize.slice(Math.max(0, idx - 1), idx + 2);
 }
 
@@ -488,6 +515,9 @@ export function embedNoteList(fit: FitResult, advice: SizeAdvice, category: Garm
   if (!advice.size && s.pullOn?.status === 'blocked') {
     // Nothing is recommended because no waistband passes the hips: that is the reason to give.
     notes.push({ kind: 'pullOn', text: t.pullOnNone(s.size) });
+  } else if (!advice.size && fit.sizeAxes?.waist !== undefined && fit.sizeAxes.leg === undefined && s.size === fit.closestSize) {
+    // A W/L chart whose leg could not be checked (slice M2b): the waist is picked, no leg is invented.
+    notes.push({ kind: 'closest', text: t.legUnchecked(fit.sizeAxes.waist) });
   } else if (!advice.size) {
     const worst = used.reduce<PointFit | undefined>((w, p) => (w === undefined || p.score < w.score ? p : w), undefined);
     if (worst) notes.push({ kind: 'closest', text: t.closest(s.size, bandText(worst.band), labelOf(worst.point)) });
@@ -501,8 +531,8 @@ export function embedNoteList(fit: FitResult, advice: SizeAdvice, category: Garm
   const suggest = !advice.adjusted;
   for (const p of used) {
     if (p.band === 'good') continue;
-    const up = p.band === 'tight' && suggest && idx + 1 < fit.perSize.length;
-    const down = p.band === 'loose' && suggest && idx > 0;
+    const up = p.band === 'tight' && suggest && stepSize(fit, idx, 1) !== undefined;
+    const down = p.band === 'loose' && suggest && stepSize(fit, idx, -1) !== undefined;
     const say = (to: 'up' | 'down' | null): string => t.band(bandText(p.band), labelOf(p.point), { stretch: !!p.inZone, suggest: to });
     notes.push({ kind: 'band', text: say(up ? 'up' : down ? 'down' : null), short: say(null) });
   }
@@ -587,6 +617,9 @@ export function bandText(band: PointFit['band']): string {
 export function gapText(p: PointFit, units: Units = 'metric'): string {
   const d = Math.round(p.gapCm * 10) / 10;
   const t = embedStrings().fit;
+  // A men's chest whose room is what fitting the waist costs (fit engine `waistLedCm`, slice M2a):
+  // its band reads "good" by design, so the room is said with its reason, not as a contradiction.
+  if (p.waistLedCm !== undefined && d >= 0.5) return t.moreRoomForWaist(lengthText(d, units));
   if (p.measure === 'length') {
     if (Math.abs(d) < 0.5) return t.lengthRight;
     return d > 0 ? t.longer(lengthText(d, units)) : t.shorter(lengthText(Math.abs(d), units));

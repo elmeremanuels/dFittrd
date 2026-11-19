@@ -160,8 +160,9 @@ export function easeTargetFor(garment: FitGarment, point: Point, user?: UserBody
   const rule = ruleFor(garment, mens);
   const fromBlock = easeOf(rule.ease, point);
   if (fromBlock !== undefined) return fromBlock;
-  // A collar has an ease even where no block gives one [A, the men's shirt value].
-  if (point === 'neck') return NECK_DEFAULT_EASE_CM;
+  // A men's collar has an ease even where no block gives one [A, the men's shirt value]. Outside a
+  // men's fit the neck is not a point at all (computeFit), so no default is invented for it.
+  if (point === 'neck' && mens) return NECK_DEFAULT_EASE_CM;
   // A men's top or bottom takes its eases from its men's block only (no women's category default).
   if (mens && rule !== blockRule(garment.patternBlock)) return undefined;
   if (garment.category === 'shoes' && point === 'foot') {
@@ -240,6 +241,9 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
   const skippedPoints: SkippedPoint[] = [];
   const contexts: PointContext[] = [];
   for (const point of ENGINE_POINTS) {
+    // Outside a men's fit the men's points do not exist: before slice M2 the schema dropped these
+    // columns, so a women's or unisex chart that now carries them is read exactly as before.
+    if (!mens && MENS_ONLY_POINTS.has(point)) continue;
     const isCritical = point !== 'length' && critical.has(point);
     if (!categoryPoints.includes(point as never) && !isCritical && !columnPoint(point)) continue;
     if (rule.skip.includes(point) && !isCritical) {
@@ -275,6 +279,12 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
       continue;
     }
     const e0 = easeTargetFor(garment, point, user, opts);
+    // A men's block that gives no ease for a point the chart does carry (a seat column on a tee):
+    // the point is not checked, and the note says why, not that the chart lacks the column.
+    if (mens && e0 === undefined && chartHas(point)) {
+      skippedPoints.push({ point, reason: 'no-ease', label: 'we have no designed room for it on this kind of garment' });
+      continue;
+    }
     const e = e0 === undefined ? 0 : round1(e0 * stretchFactor);
     if (point === 'neck') {
       contexts.push({
@@ -335,7 +345,12 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
   const scoredSizes = rows.map((row, i) =>
     scoreSize(row ?? { size: sizes[i] ?? '' }, sizes[i] ?? '', contexts, bodyChart, tape, bandTape?.[i], mensFit, i === waistNeedIndex),
   );
-  const perSize: SizeFit[] = scoredSizes.map((s) => s.fit);
+  // A men's W/L chart (slice M2b): each size also names its waist and leg, so a surface can step
+  // along one axis (a snug preference is one waist down at the same leg, not the next row).
+  const twoAxis = mens && tape === null && !opts.axisPass && isTwoAxisChart(rows);
+  const perSize: SizeFit[] = scoredSizes.map((s, i) =>
+    twoAxis ? { ...s.fit, axes: { waist: rows[i]!.axes!.waist, leg: rows[i]!.axes!.leg } } : s.fit,
+  );
   // Closeness = mean |gap| over the size's used points. The spec writes Σ|gap|; the mean orders
   // identically when every size uses the same points and stops a row that lists fewer points from
   // looking "closer" merely because it has fewer gaps to add up (README §Spec deviations).
@@ -449,15 +464,20 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
   // Two-dimensional chart (W/L, slice M2b): the waist and the leg are picked on their own, each by
   // the same rules as a one-dimensional chart, and the row with both is the size.
   let sizeAxes: FitResult['sizeAxes'];
-  if (tape === null && !opts.axisPass && isTwoAxisChart(rows)) {
-    const pick = pickAxes(garment, user, opts, rows, perSize);
-    if (pick !== null) {
-      chosenIndex = pick.index;
-      recommended = pick.recommended;
-      tieBreak = pick.tieBreak;
-      sizeAxes = pick.axes;
-    }
+  // Men's fits only: outside one, a chart with `axes` is read as the flat list it was before M2.
+  let axisMissing: 'waist' | 'leg' | null = null;
+  if (twoAxis) {
+    const pick = pickAxes(garment, user, opts, rows, perSize, chosenIndex);
+    chosenIndex = pick.index;
+    recommended = pick.recommended;
+    tieBreak = pick.tieBreak;
+    axisMissing = pick.missing;
+    if (pick.axes.waist !== undefined || pick.axes.leg !== undefined) sizeAxes = pick.axes;
   }
+  // A men's size is recommended only when it is wearable: no tight girth, no length past the fail
+  // band (our decision of 19 Nov 2026, review of men-m2 [A]: the belly-aware intent of MT5 is that
+  // a tight waist on the largest size is said, not recommended). Women's semantics are unchanged.
+  if (mens && recommended && !perSize[chosenIndex]!.wearable) recommended = false;
 
   const chosen = perSize[chosenIndex]!;
   const used = chosen.points.filter(isPointFit);
@@ -478,7 +498,7 @@ export function computeFit(garment: FitGarment, user: UserBody, opts: ComputeFit
   const chestPoint = used.find((p) => p.point === 'bust');
   const waistLed =
     chestPoint?.waistLedCm !== undefined && chestPoint.band !== 'tight' && chestPoint.band !== 'snug' && chestPoint.gapCm > chestPoint.easeTarget + DEFAULT_SLACK.good;
-  const notes = buildNotes(chosen, chosenIndex, rows.length, recommended, skippedPoints, noneGoesOn, mens, waistLed);
+  const notes = buildNotes(chosen, chosenIndex, rows.length, recommended, skippedPoints, noneGoesOn, mens, waistLed, axisMissing, sizeAxes);
   const pullOnUnchecked = tape !== null && pullOnApplies && tape.pullOnHipCm === undefined;
   if (tape !== null) addTapeNotes(notes, perSize, chosenIndex, noneGoesOn, tapeProvenance, pullOnUnchecked);
 
@@ -514,6 +534,9 @@ function waistNeededIndex(rows: readonly SizeRow[], contexts: readonly PointCont
 }
 
 /** Every row carries `axes` (a W/L chart, slice M2b). */
+/** Points that exist only in a men's fit (slice M2b). */
+const MENS_ONLY_POINTS: ReadonlySet<Point> = new Set<Point>(['neck', 'sleeve', 'length']);
+
 function isTwoAxisChart(rows: readonly SizeRow[]): boolean {
   return rows.length > 0 && rows.every((r) => r !== null && typeof r === 'object' && r.axes !== undefined && typeof r.axes.waist === 'string' && typeof r.axes.leg === 'string');
 }
@@ -522,9 +545,11 @@ function isTwoAxisChart(rows: readonly SizeRow[]): boolean {
 const LEG_AXIS_POINTS: ReadonlySet<string> = new Set(['inseam']);
 
 /**
- * The waist and the leg of a W/L chart, each picked by `computeFit` on a one-dimensional chart of its
- * own (one row per waist with the girth columns, one row per leg with the inseam), then the chart
- * row with both. When that row is missing, the best scored row with the picked waist stands in.
+ * The waist and the leg of a W/L chart (men's fits only). The waist is picked by `computeFit` on a
+ * one-dimensional chart of its own (one row per waist, the girth columns); the leg then by the same
+ * rules on the rows of THAT waist only (their inseams), so the row with both always exists and the
+ * leg is never read from another waist's rows. An axis with no scored point is not picked: then no
+ * full W/L size is recommended and `axes` names only what was picked.
  */
 function pickAxes(
   garment: FitGarment,
@@ -532,14 +557,15 @@ function pickAxes(
   opts: ComputeFitOptions,
   rows: readonly SizeRow[],
   perSize: readonly SizeFit[],
-): { index: number; recommended: boolean; tieBreak: TieBreak; axes: { waist: string; leg: string } } | null {
-  const firstBy = (key: 'waist' | 'leg'): SizeRow[] => {
+  fallbackIndex: number,
+): { index: number; recommended: boolean; tieBreak: TieBreak; axes: { waist?: string; leg?: string }; missing: 'waist' | 'leg' | null } {
+  const distinct = (source: readonly SizeRow[], key: 'waist' | 'leg'): SizeRow[] => {
     const seen = new Set<string>();
     const out: SizeRow[] = [];
-    for (const r of rows) {
-      const label = r.axes![key];
-      if (seen.has(norm(label))) continue;
-      seen.add(norm(label));
+    for (const r of source) {
+      const label = norm(r.axes![key]);
+      if (seen.has(label)) continue;
+      seen.add(label);
       out.push(r);
     }
     return out;
@@ -552,39 +578,41 @@ function pickAxes(
     }
     return out as SizeRow;
   };
-  const sub = (key: 'waist' | 'leg'): FitResult => {
+  const sub = (source: readonly SizeRow[], key: 'waist' | 'leg'): FitResult => {
     const leg = key === 'leg';
     const g: FitGarment = {
       ...garment,
-      sizeChart: firstBy(key).map((r) => strip(r, r.axes![key], leg)),
+      sizeChart: distinct(source, key).map((r) => strip(r, r.axes![key], leg)),
       garmentTape: undefined,
       criticalFitPoints: garment.criticalFitPoints?.filter((p) => LEG_AXIS_POINTS.has(p) === leg),
       ...(leg ? { sizingNotes: undefined } : {}),
     };
     return computeFit(g, user, { ...opts, axisPass: true });
   };
-  const w = sub('waist');
-  const l = sub('leg');
-  const waist = w.closestSize;
-  const leg = l.closestSize;
-  if (waist === null || leg === null) return null;
-  let index = rows.findIndex((r) => norm(r.axes!.waist) === norm(waist) && norm(r.axes!.leg) === norm(leg));
-  if (index < 0) {
-    let best = -1;
-    rows.forEach((r, i) => {
-      if (norm(r.axes!.waist) !== norm(waist)) return;
-      const sc = perSize[i]?.score ?? -1;
-      if (best < 0 || sc > (perSize[best]?.score ?? -1)) best = i;
-    });
-    if (best < 0) return null;
-    index = best;
+  const w = sub(rows, 'waist');
+  if (w.score === null || w.closestSize === null) {
+    // No girth could be read (no girth columns, or no waist from the shopper): no waist is picked.
+    return { index: fallbackIndex, recommended: false, tieBreak: null, axes: {}, missing: 'waist' };
   }
+  const waist = w.closestSize;
+  const waistRows = rows.filter((r) => norm(r.axes!.waist) === norm(waist));
+  const firstOfWaist = rows.findIndex((r) => norm(r.axes!.waist) === norm(waist));
+  const l = sub(waistRows, 'leg');
+  if (l.score === null || l.closestSize === null) {
+    // No inseam column, or no inside leg: the waist is picked, the leg is not, and no leg is invented.
+    return { index: firstOfWaist, recommended: false, tieBreak: w.tieBreak, axes: { waist: rows[firstOfWaist]!.axes!.waist }, missing: 'leg' };
+  }
+  const leg = l.closestSize;
+  const index = rows.findIndex((r) => norm(r.axes!.waist) === norm(waist) && norm(r.axes!.leg) === norm(leg));
   const row = rows[index]!;
+  const final = perSize[index]!;
   return {
     index,
-    recommended: w.recommendedSize !== null && l.recommendedSize !== null,
-    tieBreak: w.tieBreak,
+    // Recomputed on the row itself: both axes recommended, and the row as a whole wearable.
+    recommended: w.recommendedSize !== null && l.recommendedSize !== null && final.score !== null && final.score >= NOTHING_FITS_BELOW && final.wearable,
+    tieBreak: w.tieBreak ?? l.tieBreak,
     axes: { waist: row.axes!.waist, leg: row.axes!.leg },
+    missing: null,
   };
 }
 
@@ -755,9 +783,11 @@ function scoreSize(
       classGap = gapCm;
     } else {
       chartCm = bodyChart ? raw + (c.e0 as number) : raw;
-      // A men's garment chart gives the shoulder seam to seam; the body value is the biacromial breadth.
-      if (mensFit !== null && !bodyChart && c.point === 'shoulder') chartCm = raw - MENS_SHOULDER_SEAM_OFFSET_CM;
-      gapCm = round1(chartCm - (userVal + c.e));
+      // A men's garment chart gives the shoulder seam to seam; the body value is the biacromial
+      // breadth. The seam sits about 3.5 cm outside it [A], so that offset joins the target: the
+      // chart value is reported as the merchant wrote it, the gap is the same as before.
+      if (mensFit !== null && !bodyChart && c.point === 'shoulder') easeTarget = round1(c.e + MENS_SHOULDER_SEAM_OFFSET_CM);
+      gapCm = round1(chartCm - (userVal + easeTarget));
       closeness.push(Math.abs(gapCm));
       classGap = gapCm;
     }
@@ -865,6 +895,8 @@ function buildNotes(
   noneGoesOn = false,
   mens = false,
   waistLed = false,
+  axisMissing: 'waist' | 'leg' | null = null,
+  sizeAxes: FitResult['sizeAxes'] = undefined,
 ): string[] {
   const POINT_LABELS = mens ? MENS_POINT_LABELS : POINT_LABELS_DEFAULT;
   const notes: string[] = [];
@@ -876,6 +908,10 @@ function buildNotes(
 
   if (noneGoesOn && fit.pullOn) {
     notes.push(TAPE_NOTES.noneGoesOn(fit.size, fit.pullOn));
+  } else if (axisMissing === 'waist') {
+    notes.push('No W/L size picked: the waist could not be checked');
+  } else if (axisMissing === 'leg' && sizeAxes?.waist !== undefined) {
+    notes.push(`Waist ${sizeAxes.waist} is the best match; the leg length could not be checked, so no full size is picked`);
   } else if (!recommended) {
     let worst: PointFit | undefined;
     for (const p of used) if (worst === undefined || p.score < worst.score) worst = p;

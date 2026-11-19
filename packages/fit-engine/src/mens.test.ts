@@ -100,10 +100,11 @@ describe('MT2 the M1 synthetic tee (garment chart) × MREF', () => {
     const m = size(r, 'M');
     expect(point(m, 'bust')).toMatchObject({ gapCm: 1.6, band: 'good' });
     expect(point(m, 'waist')).toMatchObject({ gapCm: 1.6, band: 'good' });
-    // 44 cm seam − 3.5 = 40.5 against biacromial 40.5 + ease 0.8: 0.8 under, snug. The fixture's
-    // shoulder is biacromial + 3.5 exactly and the plan's tee shoulder ease is 1 on top: two
-    // assumptions that disagree by 1 cm. Pinned, not fixed (report).
-    expect(point(m, 'shoulder')).toMatchObject({ chartCm: 40.5, gapCm: -0.8, band: 'snug' });
+    // 44 cm seam against biacromial 40.5 + seam offset 3.5 + ease 0.8: 0.8 under, snug. The chart
+    // value is reported as the merchant wrote it (44); the offset sits in the target (4.3). The
+    // fixture's shoulder is biacromial + 3.5 exactly and the plan's tee shoulder ease is 1 on top:
+    // two assumptions that disagree by 1 cm. Pinned, not fixed (report).
+    expect(point(m, 'shoulder')).toMatchObject({ chartCm: 44, easeTarget: 4.3, gapCm: -0.8, band: 'snug' });
     expect(r.notes).toEqual(['Snug at the shoulders']);
   });
   it('the M1 bodies (chest 90 / 98 / 114 with the family’s waist and seat) get S, M and XL', () => {
@@ -259,6 +260,20 @@ describe('MT5 belly-aware reading', () => {
     }
     expect(r.waistLed).toBeUndefined();
   });
+  it('a waist past the largest size: nothing is recommended, the tight waist is said (review of men-m2)', () => {
+    const r = computeFit(SYNTHETIC_MENS_TEE, { measurements: { bust: 120, waist: 130 } });
+    expect(point(size(r, 'XXL'), 'waist').band).toBe('tight');
+    expect(r.recommendedSize).toBeNull();
+    expect(r.closestSize).toBe('XXL');
+    expect(r.fits).toBe(false);
+    expect(r.notes[0]).toBe('No size fits well — closest is XXL, tight at the waist');
+  });
+  it('a chart column the men’s block has no ease for is skipped as such, not called missing', () => {
+    const r = computeFit({ ...SYNTHETIC_MENS_TEE, criticalFitPoints: ['bust', 'hip'] }, MREF);
+    expect(r.skippedPoints).toContainEqual({ point: 'hip', reason: 'no-ease', label: 'we have no designed room for it on this kind of garment' });
+    expect(r.notes).toContain('Seat not checked: we have no designed room for it on this kind of garment');
+    expect(r.notes.join(' ')).not.toMatch(/has no seat measurement/);
+  });
   it('a chest-only body is told the waist is missing', () => {
     const r = computeFit(SYNTHETIC_MENS_TEE, { measurements: { bust: 104 } });
     expect(r.notes).toContain("We don't have your waist measurement yet");
@@ -286,6 +301,7 @@ describe('MT6 / MT8 / MT9 synthetic W/L chinos (garment chart) × MREF', () => {
     expect(r.recommendedSize).toBe('34/32');
     expect(r.sizeAxes).toEqual({ waist: '34', leg: '32' });
     expect(r.perSize).toHaveLength(15);
+    expect(size(r, '32/34').axes).toEqual({ waist: '32', leg: '34' });
   });
   it('MT6: the band is read at the worn waist (rise 27 → 88.5 cm) plus ease; seat and thigh are scored', () => {
     const w = point(size(r, '34/32'), 'waist');
@@ -310,11 +326,86 @@ describe('MT6 / MT8 / MT9 synthetic W/L chinos (garment chart) × MREF', () => {
     expect(belly.sizeAxes?.leg).toBe('32');
     expect(Number(belly.sizeAxes?.waist)).toBeGreaterThan(34);
   });
-  it('a missing W/L combination falls back to the best row with the picked waist', () => {
+  it('a missing W/L combination: the leg is picked among the picked waist’s rows, and a failing leg is not recommended', () => {
     const chart = SYNTHETIC_MENS_CHINO_WL.sizeChart.filter((row) => row.size !== '34/32');
     const r2 = computeFit({ ...SYNTHETIC_MENS_CHINO_WL, sizeChart: chart }, MREF);
     expect(r2.sizeAxes?.waist).toBe('34');
     expect(r2.closestSize).not.toBe('34/32');
+    // 34/30 and 34/34 are 5 cm off, past the ±4 cm fail band [A]: nothing is recommended.
+    expect(r2.recommendedSize).toBeNull();
+    expect(r2.fits).toBe(false);
+    expect(r2.notes[0]).toMatch(/^No size fits well — closest is 34\/(30|34), (short|long) at the leg$/);
+  });
+  it('inseams that differ per waist: the leg is read from the picked waist’s own rows (review of men-m2)', () => {
+    // W34's rows run 5 cm longer than the other waists'; L30 of W34 (81) is the one that fits.
+    const chart = SYNTHETIC_MENS_CHINO_WL.sizeChart.map((row) => (row.axes?.waist === '34' ? { ...row, inseam: (row.inseam as number) + 5 } : row));
+    const r2 = computeFit({ ...SYNTHETIC_MENS_CHINO_WL, sizeChart: chart }, MREF);
+    expect(r2.sizeAxes).toEqual({ waist: '34', leg: '30' });
+    expect(r2.recommendedSize).toBe('34/30');
+    expect(point(size(r2, '34/30'), 'inseam')).toMatchObject({ band: 'good', gapCm: 0 });
+  });
+  it('no inseam column, or no inside leg: the waist is picked, no leg is invented, no full size is recommended', () => {
+    const noInseam = computeFit({ ...SYNTHETIC_MENS_CHINO_WL, sizeChart: SYNTHETIC_MENS_CHINO_WL.sizeChart.map(({ inseam: _i, ...row }) => row) }, MREF);
+    const { inseam: _l, ...noLeg } = MREF.measurements;
+    const noBodyLeg = computeFit(SYNTHETIC_MENS_CHINO_WL, { measurements: noLeg });
+    for (const r of [noInseam, noBodyLeg]) {
+      expect(r.sizeAxes).toEqual({ waist: '34' });
+      expect(r.recommendedSize).toBeNull();
+      expect(r.fits).toBe(false);
+      expect(r.closestSize?.startsWith('34/')).toBe(true);
+      expect(r.notes[0]).toBe('Waist 34 is the best match; the leg length could not be checked, so no full size is picked');
+    }
+  });
+  it('no girth columns, or no waist from the shopper: no waist is picked, nothing is recommended', () => {
+    const legsOnly = computeFit({ ...SYNTHETIC_MENS_CHINO_WL, sizeChart: SYNTHETIC_MENS_CHINO_WL.sizeChart.map(({ size: s, inseam, axes }) => ({ size: s, inseam, axes })) }, MREF);
+    const noGirths = computeFit(SYNTHETIC_MENS_CHINO_WL, { measurements: { inseam: 84 } });
+    for (const r of [legsOnly, noGirths]) {
+      expect(r.sizeAxes).toBeUndefined();
+      expect(r.recommendedSize).toBeNull();
+      expect(r.notes[0]).toBe('No W/L size picked: the waist could not be checked');
+    }
+  });
+});
+
+describe('women’s, unisex and audience-less charts that carry the men’s columns (review of men-m2)', () => {
+  // Before slice M2 the schema dropped neck, sleeve, length, rise and axes, and `neck` was no fit
+  // point: such a chart must read exactly as the same chart without them.
+  const MENS_COLUMNS = ['neck', 'sleeve', 'length', 'rise', 'axes'];
+  const stripped = (g: FitGarment): FitGarment => ({
+    ...g,
+    sizeChart: g.sizeChart.map((row) => Object.fromEntries(Object.entries(row).filter(([k]) => !MENS_COLUMNS.includes(k))) as GarmentPayload['sizeChart'][number]),
+    criticalFitPoints: g.criticalFitPoints?.filter((p) => p !== 'neck' && p !== 'sleeve'),
+  });
+  const withColumns = (g: FitGarment): FitGarment => ({
+    ...g,
+    sleeveConvention: 'shoulder_point',
+    criticalFitPoints: [...(g.criticalFitPoints ?? []), 'neck'],
+    sizeChart: g.sizeChart.map((row, i) => ({ ...row, neck: 34 + i, sleeve: 58 + i, length: 60 + 2 * i, rise: 24 })),
+  });
+  const bodies: UserBody[] = [MREF, { measurements: { bust: 88, waist: 70, hip: 96, shoulder: 38, neck: 33, sleeve: 59 }, heightCm: 168 }];
+  const tops = MOCK_GARMENTS.filter((g) => g.id === 'monochrome-02' || g.id === 'monochrome-03');
+  it('has the two monochrome tops', () => expect(tops).toHaveLength(2));
+  for (const audience of ['women', 'unisex', undefined] as const) {
+    it(`audience ${audience ?? 'absent'}: the monochrome tops and the W/L chino read as without the columns`, () => {
+      const garments: FitGarment[] = [...tops.map(withColumns), withColumns(SYNTHETIC_MENS_CHINO_WL)].map((g) => {
+        const { audience: _a, ...rest } = g;
+        return audience === undefined ? (rest as FitGarment) : { ...rest, audience };
+      });
+      for (const g of garments) {
+        for (const b of bodies) {
+          const r = computeFit(g, b, audience === 'unisex' ? { bodyFamily: 'female' } : {});
+          expect(r).toEqual(computeFit(stripped(g), b));
+          expect(r.sizeAxes).toBeUndefined();
+          expect(r.notes.join(' ')).not.toMatch(/neck|sleeve|body length/i);
+        }
+      }
+    });
+  }
+  it('a women’s garment on a men’s block name reads as an unknown block, as before M2', () => {
+    for (const block of ['shirt-slim', 'shirt-classic', 'knit', 'sweatshirt']) {
+      const g: FitGarment = { ...tops[0]!, patternBlock: block };
+      expect(computeFit(g, bodies[1]!)).toEqual(computeFit({ ...tops[0]!, patternBlock: 'no-such-block' }, bodies[1]!));
+    }
   });
 });
 

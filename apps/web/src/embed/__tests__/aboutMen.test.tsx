@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { MOCK_GARMENTS_BY_ID, SYNTHETIC_MENS_CHINO_WL, SYNTHETIC_MENS_TEE, type GarmentPayload } from '@curtain/schema';
 import { AboutScreen } from '../EmbedScreens';
-import { SizeChartTable } from '../SizeChartTable';
+import { chartColumns, SizeChartTable } from '../SizeChartTable';
 import {
   adviseSize,
   embedNoteList,
@@ -12,8 +12,10 @@ import {
   fitForProfile,
   gapText,
   measurementFieldsFor,
+  neighbourSizes,
   pointLabelFor,
   priorKeys,
+  priorSexFor,
   profileFromAbout,
   usablePoints,
   validateAbout,
@@ -98,6 +100,59 @@ describe('men’s result', () => {
     const leg = usablePoints(fit.perSize.find((s) => s.size === '34/30')).find((p) => p.point === 'inseam')!;
     expect(gapText(leg)).toBe('5.0 cm shorter than ideal');
     expect(pointLabelFor('hip', 'men')).toBe('Seat');
+  });
+  it('W/L chinos: snug / relaxed and "Compare sizes" step one waist at the same leg, never the leg (review of men-m2)', () => {
+    // Waists one inch apart (2.5 cm), so the neighbours are wearable [made-up chart, as the fixture].
+    const chart = SYNTHETIC_MENS_CHINO_WL.sizeChart.map((r) => {
+      const w = Number(r.axes!.waist);
+      return { ...r, waist: 88.5 + 1.25 * (w - 34), hip: 109 + 1.25 * (w - 34), thigh: 64.5 + 0.6 * (w - 34) };
+    });
+    const g: GarmentPayload = { ...SYNTHETIC_MENS_CHINO_WL, sizeChart: chart };
+    const profile = profileFromAbout(form({ knowsMeasurements: true, tape: true, waist: '86', hip: '96', inseam: '84' }), 'bottom', 0, g);
+    const { fit } = fitForProfile(g, profile);
+    const leg = fit.sizeAxes!.leg!;
+    expect(leg).toBe('32');
+    const shown = neighbourSizes(fit, fit.recommendedSize).map((s) => s.axes);
+    expect(shown.every((a) => a?.leg === leg)).toBe(true);
+    expect(new Set(shown.map((a) => a?.waist)).size).toBe(shown.length);
+    for (const pref of ['snug', 'relaxed'] as const) {
+      const advice = adviseSize(fit, pref);
+      const picked = fit.perSize.find((s) => s.size === advice.size)!;
+      expect(picked.axes?.leg, pref).toBe(leg);
+    }
+  });
+  it('W/L chinos without an inside leg: the waist is named, no leg is invented, no full size is recommended', () => {
+    const profile = profileFromAbout(form({ knowsMeasurements: true, tape: true, waist: '86', hip: '96' }), 'bottom', 0, SYNTHETIC_MENS_CHINO_WL);
+    const { fit } = fitForProfile(SYNTHETIC_MENS_CHINO_WL, profile);
+    expect(fit.sizeAxes).toEqual({ waist: '34' });
+    const advice = adviseSize(fit, 'regular');
+    expect(advice.size).toBeNull();
+    const notes = embedNoteList(fit, advice, 'bottom', profile, SYNTHETIC_MENS_CHINO_WL).map((n) => n.text);
+    expect(notes[0]).toBe('Waist 34 fits you best. We could not check the leg length: add your inside leg, or choose your usual leg');
+  });
+  it('"Body type: Not specified" on a men’s garment uses the male prior; other garments keep the choice', () => {
+    expect(priorSexFor({ sex: 'unspecified' }, SYNTHETIC_MENS_TEE)).toBe('male');
+    expect(priorSexFor({ sex: 'female' }, SYNTHETIC_MENS_TEE)).toBe('female');
+    expect(priorSexFor({ sex: 'unspecified' }, { ...SYNTHETIC_MENS_TEE, audience: 'unisex' })).toBe('unspecified');
+    expect(priorSexFor({ sex: 'unspecified' }, MOCK_GARMENTS_BY_ID['aalter-studio-1']!)).toBe('unspecified');
+    const unspecified = profileFromAbout(form({ sex: 'unspecified' }), 'top', 0, SYNTHETIC_MENS_TEE);
+    const male = profileFromAbout(form({ sex: 'male' }), 'top', 0, SYNTHETIC_MENS_TEE);
+    expect(unspecified.measurements).toEqual(male.measurements);
+  });
+  it('a waist-led chest says why it has the room; the add note names "shoulder width" as the form does', () => {
+    const profile = profileFromAbout(form({ knowsMeasurements: true, tape: true, bust: '104', waist: '114' }), 'top', 0, SYNTHETIC_MENS_TEE);
+    const { fit } = fitForProfile(SYNTHETIC_MENS_TEE, profile);
+    const chest = usablePoints(fit.perSize.find((s) => s.size === fit.recommendedSize)).find((p) => p.point === 'bust')!;
+    expect(chest.waistLedCm).toBeGreaterThan(0);
+    expect(gapText(chest)).toMatch(/^\d+\.\d cm more room, so the waist fits$/);
+    expect(pointLabelFor('shoulder', 'men')).toBe('Shoulder width');
+  });
+  it('a women’s chart that carries the men’s columns shows them as before M2: not at all', () => {
+    const dress = MOCK_GARMENTS_BY_ID['aalter-studio-1']!;
+    const chart = dress.sizeChart.map((r) => ({ ...r, neck: 34, sleeve: 60, length: 90, rise: 25 }));
+    expect(chartColumns(chart, 'women').map((c) => c.key)).toEqual(chartColumns(dress.sizeChart, 'women').map((c) => c.key));
+    expect(chartColumns(chart).map((c) => c.key)).toEqual(chartColumns(dress.sizeChart).map((c) => c.key));
+    expect(chartColumns(chart, 'men').map((c) => c.key)).toEqual(expect.arrayContaining(['neck', 'sleeve', 'length', 'rise']));
   });
   it('the size chart names a men’s chest and seat and shows rise and sleeve columns', () => {
     render(<SizeChartTable garment={SYNTHETIC_MENS_CHINO_WL} recommended="34/32" units="metric" />);

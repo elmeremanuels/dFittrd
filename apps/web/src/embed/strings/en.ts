@@ -140,6 +140,8 @@ export interface EmbedCatalogue {
     recommend: (size: string) => string;
     /** A two-dimensional size (W/L) picked axis by axis. */
     sizeAxes: (waist: string, leg: string) => string;
+    /** A W/L chart whose leg could not be checked: the heading names the waist only (slice M2b). */
+    waistOnly: (waist: string) => string;
     noneFits: string;
     adjusted: (direction: 'up' | 'down', from: string, preference: FitPreference) => string;
     compare: string;
@@ -190,6 +192,8 @@ export interface EmbedCatalogue {
     bands: Record<FitBand, string>;
     asDesigned: string;
     moreRoom: (length: string) => string;
+    /** A men's chest whose room follows from fitting the waist (fit engine `waistLedCm`). */
+    moreRoomForWaist: (length: string) => string;
     lessRoom: (length: string) => string;
     /** A length point (inseam, sleeve, body length). */
     lengthRight: string;
@@ -202,6 +206,8 @@ export interface EmbedCatalogue {
       fitsWell: (size: string) => string;
       /** The size was chosen to fit the waist, so it is roomier at the chest (men's tops). */
       waistLed: (chest: string) => string;
+      /** A W/L chart whose leg could not be checked (no inseam column, or no inside leg). */
+      legUnchecked: (waist: string) => string;
       /**
        * Pull-on garments (fit engine `SizeFit.pullOn`). `short`: the band is short of the hips at
        * the stretch the shop measured, within the allowance; otherwise it only just reaches.
@@ -426,6 +432,7 @@ export const EN: EmbedCatalogue = {
     edit: 'Edit my measurements',
     recommend: (size) => `We recommend ${size}`,
     sizeAxes: (waist, leg) => `Waist ${waist} · Leg ${leg}`,
+    waistOnly: (waist) => `Waist ${waist} fits you best`,
     noneFits: 'No size fits well',
     adjusted: (direction, from, preference) => `One size ${direction} from ${from} for your ${preference} preference.`,
     compare: 'Compare sizes',
@@ -479,10 +486,11 @@ export const EN: EmbedCatalogue = {
   },
   fit: {
     points: { bust: 'Bust', waist: 'Waist', hip: 'Hip', shoulder: 'Shoulders', thigh: 'Thigh', inseam: 'Leg length', foot: 'Foot', neck: 'Neck', sleeve: 'Sleeve', length: 'Length' },
-    pointsMen: { bust: 'Chest', hip: 'Seat', length: 'Body length' },
+    pointsMen: { bust: 'Chest', hip: 'Seat', length: 'Body length', shoulder: 'Shoulder width' },
     bands: { tight: 'Tight', snug: 'Snug', good: 'Good fit', roomy: 'Roomy', loose: 'Loose', short: 'Short', long: 'Long' },
     asDesigned: 'as designed',
     moreRoom: (length) => `${length} more room than designed`,
+    moreRoomForWaist: (length) => `${length} more room, so the waist fits`,
     lessRoom: (length) => `${length} less room than designed`,
     lengthRight: 'the right length',
     longer: (length) => `${length} longer than ideal`,
@@ -494,6 +502,7 @@ export const EN: EmbedCatalogue = {
       add: (points) => `Add your ${list(points.map(lower))} ${points.length > 1 ? 'measurements' : 'measurement'} under Edit my measurements for a more confident result`,
       fitsWell: (size) => `Size ${size} fits you well`,
       waistLed: (chest) => `Sized to fit your waist, so it is roomier at the ${lower(chest)}`,
+      legUnchecked: (waist) => `Waist ${waist} fits you best. We could not check the leg length: add your inside leg, or choose your usual leg`,
       pullOnTight: (o) =>
         o.short
           ? 'To pull it on, the waistband has to stretch over your hips a little more than is comfortable'

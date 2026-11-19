@@ -210,14 +210,20 @@ export interface SizeFit {
   pullOn?: PullOnCheck;
   /** FIT_POINTS order (bust, waist, hip, shoulder, thigh, inseam, foot). */
   points: (PointFit | OmittedPoint)[];
+  /** The row's waist and leg on a men's W/L chart (slice M2b); absent everywhere else. */
+  axes?: { waist: string; leg: string };
 }
 
 export type TieBreak = 'sizingNotes' | 'history' | 'closest-ease' | null;
 
 export interface SkippedPoint {
   point: Point;
-  /** `sleeve-convention`: the chart has a sleeve column but does not say where it is measured from (slice M2b). */
-  reason: 'pattern-block' | 'sleeve-convention';
+  /**
+   * `sleeve-convention`: the chart has a sleeve column but does not say where it is measured from
+   * (slice M2b). `no-ease`: a men's fit whose block gives no ease for a point the chart carries
+   * (a seat column on a tee).
+   */
+  reason: 'pattern-block' | 'sleeve-convention' | 'no-ease';
   label: string;
 }
 
@@ -258,10 +264,13 @@ export interface FitResult {
   /** `true` when the men's tables were used (slice M2: `audience: 'men'`, or unisex on the male body). Absent otherwise. */
   mens?: true;
   /**
-   * Two-dimensional chart (rows with `axes`, slice M2b): the waist and the leg picked on their own.
-   * `closestSize` is the chart row with both. Absent for one-dimensional charts.
+   * Two-dimensional chart (rows with `axes`, men's fits only, slice M2b): the waist, then the leg among
+   * that waist's rows. `closestSize` is the chart row with both. An axis that could not be scored is
+   * absent (no leg is invented): then nothing is recommended, and `closestSize` is only a row of the
+   * picked waist. Absent for one-dimensional charts, for a fit with no axis picked, and outside a
+   * men's fit.
    */
-  sizeAxes?: { waist: string; leg: string };
+  sizeAxes?: { waist?: string; leg?: string };
   /**
    * `true` when the size shown was chosen to fit the waist and is roomier at the chest for that
    * reason (a men's top on a body whose waist is large for its chest; slice M2a). Absent otherwise.

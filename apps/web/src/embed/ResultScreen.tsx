@@ -151,6 +151,8 @@ export function ResultScreen({
   }
 
   const sizes = neighbourSizes(fit, advice.size ?? advice.closest);
+  // A men's W/L chart whose leg could not be checked (slice M2b): the waist is named, no leg is.
+  const waistOnly = !advice.size && fit.sizeAxes?.waist !== undefined && fit.sizeAxes.leg === undefined ? fit.sizeAxes.waist : null;
   const selectedFit = fit.perSize.find((s) => s.size === selected);
   const points = usablePoints(selectedFit);
   const estimated = priorKeys(profile).filter((k) => points.some((p) => p.point === k));
@@ -167,9 +169,9 @@ export function ResultScreen({
       <div>
         <p className="eyebrow text-coral-ink">{returning ? t.welcomeBack : t.eyebrow}</p>
         <h2 className="font-display text-3xl leading-tight" tabIndex={-1} data-step-heading>
-          {advice.size ? t.recommend(advice.size) : t.noneFits}
+          {advice.size ? t.recommend(advice.size) : waistOnly !== null ? t.waistOnly(waistOnly) : t.noneFits}
         </h2>
-        {advice.size && fit.sizeAxes && advice.size === fit.closestSize ? (
+        {advice.size && fit.sizeAxes?.waist !== undefined && fit.sizeAxes.leg !== undefined && advice.size === fit.closestSize ? (
           <p className="text-sm text-ink-soft" data-testid="size-axes">
             {t.sizeAxes(fit.sizeAxes.waist, fit.sizeAxes.leg)}
           </p>
@@ -177,7 +179,7 @@ export function ResultScreen({
         {advice.adjusted ? (
           <p className="text-xs text-ink-soft">{t.adjusted(advice.adjusted, advice.engineSize ?? '', preference)}</p>
         ) : null}
-        {advice.size ? (
+        {advice.size || waistOnly !== null ? (
           <button type="button" onClick={onEdit} className="chip mt-2 hover:bg-white" data-testid="edit-measurements">
             <Pencil className="h-3.5 w-3.5" aria-hidden /> {t.edit}
           </button>

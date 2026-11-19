@@ -79,6 +79,18 @@ describe('metafield definitions', () => {
     await expect(ensureMetafieldDefinitions(client(bad))).rejects.toThrow(/metafield definition size_chart_type: Access denied/);
   });
 
+  it('ensureMetafieldDefinitions reports UNSTRUCTURED_ALREADY_EXISTS and still creates the other definitions', async () => {
+    const m = fetchMock().reply((call) => {
+      const key = (call.body as { variables: { definition: { key: string } } }).variables.definition.key;
+      if (key === 'size_chart_type') return { json: { data: { metafieldDefinitionCreate: { createdDefinition: null, userErrors: [{ field: ['definition'], message: 'The namespace and key pair is already used by your metafields.', code: 'UNSTRUCTURED_ALREADY_EXISTS' }] } } } };
+      return { json: { data: { metafieldDefinitionCreate: { createdDefinition: { id: `gid://shopify/MetafieldDefinition/${key}`, key }, userErrors: [] } } } };
+    });
+    const r = await ensureMetafieldDefinitions(client(m));
+    expect(r.unstructured).toEqual(['size_chart_type']);
+    expect(r.created).toHaveLength(SHOPIFY_METAFIELD_DEFINITIONS.length - 1);
+    expect(m.calls).toHaveLength(SHOPIFY_METAFIELD_DEFINITIONS.length);
+  });
+
   it('listMetafieldDefinitions pages and missingDefinitionKeys reports drift', async () => {
     const m = fetchMock().data(
       { metafieldDefinitions: { pageInfo: { hasNextPage: true, endCursor: 'x' }, nodes: [{ id: '1', key: 'fabric', name: 'Fabric', type: { name: 'json' }, pinnedPosition: 1 }] } },

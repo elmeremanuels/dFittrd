@@ -130,7 +130,7 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
       });
       try {
         const r = await shopify.ensureMetafieldDefinitions(shopDomain, accessToken);
-        req.log.info({ shopDomain, created: r.created.length, existing: r.existing.length }, 'shopify metafield definitions ensured');
+        req.log.info({ shopDomain, created: r.created.length, existing: r.existing.length, unstructured: r.unstructured }, 'shopify metafield definitions ensured');
       } catch (err) {
         req.log.warn({ err, shopDomain }, 'metafield definitions could not be created (continuing)');
       }

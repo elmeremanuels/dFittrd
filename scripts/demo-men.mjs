@@ -7,10 +7,12 @@
  * and demo storefront on ports of its own (8797, 3017, 5197; never the `pnpm demo` ones, which it
  * would otherwise reuse), so it runs next to a `pnpm demo`. Then, in headless Chromium at phone size
  * (390 × 760 CSS px at 2×):
- *   1. the SYNTHETIC men's test tee (not a product; bundle built on the male mannequin, imported by
- *      the demo seed with `importBundle`, approved by the demo merchant): storefront → "Try it on" →
- *      About you → the 3D view opens by itself (`requires3d`), must settle on the male body, and the
- *      result is shown only then; for three bodies (chest 90 / 98 / 114, the male table's S, M, XL);
+ *   1. the SYNTHETIC men's test tee (not a product; bundle built on the male mannequin by the POM tee
+ *      builder of slice M3, imported by the demo seed with `importBundle`, approved by the demo
+ *      merchant): storefront → "Try it on" → About you → the 3D view opens by itself (`requires3d`),
+ *      must settle on the male body, and the result is shown only then; for the male table's five
+ *      bodies S to XXL; then the tee in each body's own size (the compare buttons) is turned front,
+ *      side and back (`--5-3d-size-<size>--{front,side,back}`);
  *   2. the men's Oxford shirt with no bundle: "Men's clothing: coming soon", no figure, no size.
  * Screenshots of every step go to the shots dir (default test-results/demo-men). Exits non-zero on
  * the first failure. Needs `out/synthetic-men-tee/` (`pnpm --filter @curtain/garment-spike
@@ -153,12 +155,34 @@ try {
   };
 
   // ---- 1. the synthetic men's tee on the male body -------------------------------------------------
-  // The male table's S, M and XL (MALE_REFERENCE of @curtain/mannequin); weights are round guesses that only feed the prior.
+  // The male table's S to XXL (MALE_REFERENCE of @curtain/mannequin: stature, chest, waist, seat); weights are round guesses that only feed the prior.
   const BODIES = [
-    { name: 'S', height: 172, weight: 64, chest: 90, waist: 78, hip: 90 },
+    { name: 'S', height: 172.5, weight: 64, chest: 90, waist: 78, hip: 90.5 },
     { name: 'M', height: 174, weight: 74, chest: 98, waist: 86, hip: 96 },
+    { name: 'L', height: 175.5, weight: 83, chest: 106, waist: 94, hip: 102 },
     { name: 'XL', height: 177, weight: 92, chest: 114, waist: 102, hip: 108 },
+    { name: 'XXL', height: 179, weight: 103, chest: 123, waist: 111, hip: 114.5 },
   ];
+  // Front, side and back of the 3D view: OrbitControls turns 2π per canvas height of drag.
+  const turnShots = async (page, frame, label) => {
+    const panel = frame.getByTestId('garment3d');
+    const canvas = frame.locator('canvas[data-testid="garment3d-canvas"]');
+    await canvas.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(800);
+    await shot(page, `${label}--front`, panel);
+    for (const view of ['side', 'back']) {
+      const box = await canvas.boundingBox();
+      const dx = box.height / 4;
+      const y = box.y + box.height * 0.55;
+      const x0 = box.x + box.width / 2 - dx / 2;
+      await page.mouse.move(x0, y);
+      await page.mouse.down();
+      for (let i = 1; i <= 20; i++) await page.mouse.move(x0 + (dx * i) / 20, y);
+      await page.mouse.up();
+      await page.waitForTimeout(2500);
+      await shot(page, `${label}--${view}`, panel);
+    }
+  };
   for (const body of BODIES) {
     const page = await newPage();
     const frame = await openOverlay(page, 'synthetic-men-tee', body.name === 'S' ? 'tee--0-storefront-page' : null);
@@ -196,6 +220,17 @@ try {
     }
     await canvas.scrollIntoViewIfNeeded();
     await shot(page, `tee-body-${body.name}--4-3d-close-size-${size}`, frame.getByTestId('garment3d'));
+    // The tee in the body's own table size (the size buttons under "Compare"), front, side and back.
+    if (size !== body.name) {
+      const own = frame.getByRole('radio', { name: new RegExp(`^${body.name}\\b`) }).first();
+      if (await own.count()) {
+        await own.click();
+        await frame.locator(`canvas[data-testid="garment3d-canvas"][data-size="${body.name}"][data-state="settled"]`).waitFor({ timeout: 240_000 });
+        log(`tee, body ${body.name}: switched to its own size ${body.name}`);
+      } else log(`tee, body ${body.name}: no button for size ${body.name}; turning size ${size}`);
+    }
+    const shown = await canvas.getAttribute('data-size');
+    await turnShots(page, frame, `tee-body-${body.name}--5-3d-size-${shown}`);
     if (await frame.getByText(/coming soon/i).count()) throw new Error(`tee, body ${body.name}: coming soon after the view settled`);
     await page.context().close();
   }

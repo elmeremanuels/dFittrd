@@ -203,10 +203,6 @@ function outOfArm(field: BodyField, side: number, x: number, y: number, z: numbe
   return [x + f.u[0] * du + f.v[0] * dv, y + f.u[1] * du + f.v[1] * dv, z + f.u[2] * du + f.v[2] * dv];
 }
 
-function insideTorso(field: BodyField, x: number, y: number, z: number, e: Float32Array): boolean {
-  if (!sample(field.torso, y, e)) return false;
-  return pushOutOfEllipse(x - e[0]!, z - e[1]!, e[2]!, e[3]!, 0) !== null;
-}
 
 /**
  * How far above a leg's last section the collider keeps a leg, cm. The mesh closes each leg with a

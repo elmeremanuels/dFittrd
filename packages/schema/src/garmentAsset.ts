@@ -135,7 +135,7 @@ export interface GarmentBundleInfo {
    * QA readings the bundle passed under that a person must see before approving it (`garmentQaFlags`): `low_rise_waist` when
    * its chart waist was read at a band below the waist ring by a recorded decision; `precalibration_outside_tolerance` when
    * the chart passed only after calibration and missed by more than the tolerance before it; `tape_built_no_chart_check`
-   * when the garment was built from the shop's tape (a server drape bake), so no agreement with the chart was measured
+   * when the garment was built from the shop's tape (a server drape bake, or a POM-built garment draped on the device), so no agreement with the chart was measured
    * and `pass` is the builder's own word. Empty for an ordinary pass.
    */
   qaFlags: GarmentQaFlag[];
@@ -154,7 +154,7 @@ export function garmentQaFlagNote(flag: GarmentQaFlag, qa: GarmentBundleMeta['qa
     return `Waist read at the garment's own band,${drop} below the body's natural waist, by a recorded decision (${String(wr.decision)}), against the chart's waist plus a stated body offset of ${String(wr.offsetCm)} cm (target ${String(wr.targetCm)} cm); the chart does not say where this band sits.`;
   }
   if (flag === 'tape_built_no_chart_check')
-    return "Built from the shop's tape measurements and draped on a server, not reconstructed from photos: no agreement with the size chart was measured, so the QA pass is the builder's own statement and the import checked only the files' format and sizes. Look at every size before approving.";
+    return "Built from the shop's tape measurements (and, for a drape bake, draped on a server), not reconstructed from photos: no agreement with the size chart was measured, so the QA pass is the builder's own statement and the import checked only the files' format and sizes. Look at every size before approving.";
   return `Before calibration the garment missed the size chart by ${String(ca.beforeCalibrationMaxAbsCm)} cm, outside the ±${String(ca.toleranceCm)} cm tolerance; it passes only after calibration rescaled it, which is not evidence of fit.`;
 }
 

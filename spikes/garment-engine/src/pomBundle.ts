@@ -89,8 +89,6 @@ export interface GradingCheck {
   size: string;
   /** Device grading of the base mesh, taped, minus the tape's value, cm. */
   errorCm: Partial<Record<PomKey, number>>;
-  /** Vertex distance between the graded base and the direct build (same topology only), cm; null when the topologies differ. */
-  vertexRmsCm: number | null;
 }
 
 export function buildPomBundle(productId: string, payload: GarmentPayload, rows: readonly PomTeeRow[], baseSize = 'M'): PomBundle {
@@ -101,36 +99,38 @@ export function buildPomBundle(productId: string, payload: GarmentPayload, rows:
   if (baseIdx < 0) throw new Error(`base size ${baseSize} not in the measurements`);
   const step = (i: number): number => i - baseIdx;
 
-  // Every size on the base body: the base mesh, and what the device's grading should reach.
-  const onBase = rows.map((row, i) => buildPomTee(m, row, { sizeStep: step(i) }));
-  const base = onBase[baseIdx]!;
+  const base = buildPomTee(m, rows[baseIdx]!, { sizeStep: 0 });
   const chains = assignChains(m, base.mesh);
   const measurements = pomMeasurements(m, base);
-  const sizeMeas = onBase.map((b) => pomMeasurements(m, b));
 
   // The tape on every size, on its own table body (a small size cannot be built on a bigger body: it is tighter than the body).
   const tape: PomSizeCheck[] = rows.map((row, i) => {
     const body = tableBody(family, row.size);
-    const b = body ? buildPomTee(body, row, { sizeStep: step(i) }) : onBase[i]!;
+    const b = body ? buildPomTee(body, row, { sizeStep: step(i) }) : i === baseIdx ? base : buildPomTee(m, row, { sizeStep: step(i) });
     const measured = { ...measurePomTee(body ?? m, b, torsoTapeAt), size: row.size };
     const errorCm = pomErrors(row, measured);
     return { size: row.size, body: body ? `${family} ${row.size}` : `${family} ${baseSize}`, measured, errorCm, maxAbsCm: Math.max(...Object.values(errorCm).map(Math.abs)), tight: b.tight };
   });
 
-  const grading = gradePom(m, productId, rows, baseIdx, onBase, measurements, sizeMeas);
-  const gradingCheck: GradingCheck[] = rows.map((row, i) => {
+  const grading = gradePom(m, productId, rows, baseIdx, base, measurements);
+  // The two length targets are solved against the device's own morph (it stretches the body only
+  // below the hip and the sleeve only past the upper-arm ring), so the graded mesh's tape is the tape.
+  for (const [i, row] of rows.entries()) {
+    if (i === baseIdx) continue;
+    const entry = grading.sizes[i]!;
+    for (let it = 0; it < 4; it++) {
+      const got = measurePomTee(m, { ...base, mesh: applyGrading(m, base.mesh, chains, grading, row.size) }, torsoTapeAt);
+      const dL = row.lengthCm - got.lengthCm, dS = row.sleeveLengthCm - got.sleeveLengthCm;
+      if (Math.abs(dL) < 0.02 && Math.abs(dS) < 0.02) break;
+      if (entry.targets.shoulder_to_hem !== undefined) entry.targets.shoulder_to_hem = r2(entry.targets.shoulder_to_hem + dL);
+      if (entry.targets.sleeve !== undefined) entry.targets.sleeve = r2(entry.targets.sleeve + dS);
+    }
+  }
+  const gradingCheck: GradingCheck[] = rows.map((row) => {
     const graded = applyGrading(m, base.mesh, chains, grading, row.size);
     const viaGrading = measurePomTee(m, { ...base, mesh: graded }, torsoTapeAt);
     const errorCm = pomErrors(row, viaGrading);
-    const same = onBase[i]!.mesh.positions.length === graded.positions.length && onBase[i]!.mesh.indices.length === graded.indices.length;
-    let vertexRmsCm: number | null = null;
-    if (same) {
-      let s = 0;
-      const p = graded.positions, q = onBase[i]!.mesh.positions;
-      for (let k = 0; k < p.length; k += 3) s += (p[k]! - q[k]!) ** 2 + (p[k + 1]! - q[k + 1]!) ** 2 + (p[k + 2]! - q[k + 2]!) ** 2;
-      vertexRmsCm = Math.sqrt(s / (p.length / 3));
-    }
-    return { size: row.size, errorCm, vertexRmsCm };
+    return { size: row.size, errorCm };
   });
 
   const material = materialJson(payload);
@@ -195,7 +195,7 @@ export function buildPomBundle(productId: string, payload: GarmentPayload, rows:
       maxAbsCm: r2(worst),
       sizes: tape.map((t) => ({ size: t.size, body: t.body, maxAbsCm: r2(t.maxAbsCm), errorCm: Object.fromEntries(Object.entries(t.errorCm).map(([k, v]) => [k, r2(v!)])), ...(t.tight.length ? { tighterThanBody: t.tight } : {}) })),
     },
-    gradingCheck: gradingCheck.map((g) => ({ size: g.size, errorCm: Object.fromEntries(Object.entries(g.errorCm).map(([k, v]) => [k, r2(v!)])), vertexRmsCm: g.vertexRmsCm === null ? null : r2(g.vertexRmsCm) })),
+    gradingCheck: gradingCheck.map((g) => ({ size: g.size, errorCm: Object.fromEntries(Object.entries(g.errorCm).map(([k, v]) => [k, r2(v!)]))})),
     assumptions: POM_TEE_ASSUMPTIONS,
     calibration: { globalScale: 1, residualBeforeCm: { rms: 0, maxAbs: 0 }, residualAfterGlobalCm: { rms: 0, maxAbs: 0 } },
     meshHealth: { triangles: health.triangles, vertices: health.vertices, boundaryEdges: health.boundaryEdges, nonManifoldEdges: health.nonManifoldEdges, inconsistentEdges: health.inconsistentEdges, pieces: 1, triangleBudget: [8000, 15000], withinBudget: health.triangles <= 15000 },
@@ -249,16 +249,16 @@ export function pomMeasurements(m: Mannequin, b: PomTeeBuild): AnchorMeasurement
 }
 
 /** The POM girth profile of a size at height y (what `buildPomTee` asks of the tube), cm. */
-function pomGirthAt(m: Mannequin, row: PomTeeRow, b: PomTeeBuild, y: number): number {
+function pomGirthAt(m: Mannequin, row: PomTeeRow, chestLineY: number, hemY: number, y: number): number {
   const gC = 2 * row.chestWidthCm, gH = 2 * row.hemWidthCm, gW = row.waistWidthCm === undefined ? undefined : 2 * row.waistWidthCm;
-  const yC = b.levels.chestLineY, yW = m.morphHeights.waist, yH = b.levels.hemY;
+  const yC = chestLineY, yW = m.morphHeights.waist, yH = hemY;
   if (y >= yC) return gC;
   if (gW !== undefined && y >= yW) return gW + ((gC - gW) * (y - yW)) / (yC - yW);
   if (gW !== undefined) return gH + ((gW - gH) * (y - yH)) / (yW - yH);
   return gH + ((gC - gH) * (y - yH)) / (yC - yH);
 }
 
-function gradePom(m: Mannequin, productId: string, rows: readonly PomTeeRow[], baseIdx: number, onBase: PomTeeBuild[], base: AnchorMeasurements, sizeMeas: AnchorMeasurements[]): GradingJson {
+function gradePom(m: Mannequin, productId: string, rows: readonly PomTeeRow[], baseIdx: number, baseBuild: PomTeeBuild, base: AnchorMeasurements): GradingJson {
   const baseValues: AnchorValues = {};
   for (const [id, g] of Object.entries(ringGirths(base)) as [AnchorRing, number][]) baseValues[id] = g;
   for (const id of ['shoulder_to_hem', 'sleeve'] as const) {
@@ -266,7 +266,7 @@ function gradePom(m: Mannequin, productId: string, rows: readonly PomTeeRow[], b
     if (l && !l.fromMannequin) baseValues[id] = l.lengthCm;
   }
   baseValues.shoulder_width = rows[baseIdx]!.shoulderCm;
-  const baseRow = rows[baseIdx]!, baseBuild = onBase[baseIdx]!;
+  const baseRow = rows[baseIdx]!;
   const sources: SizeGrading['sources'] = {};
   const sizes: SizeGrading[] = rows.map((row, i) => {
     const targets: AnchorValues = {};
@@ -277,8 +277,9 @@ function gradePom(m: Mannequin, productId: string, rows: readonly PomTeeRow[], b
       // The sleeve grades with its opening (the morph holds the upper arm's scale down to the hem), its length with the tape's.
       else if (id === 'upper_arm') v = b * (row.sleeveOpeningCm / baseRow.sleeveOpeningCm);
       else if (id === 'sleeve') v = b + row.sleeveLengthCm - baseRow.sleeveLengthCm;
-      else if (id === 'shoulder_to_hem') v = sizeMeas[i]!.lengths[id]?.lengthCm ?? b;
-      else v = b + pomGirthAt(m, row, onBase[i]!, m.morphHeights[id as AnchorRing]) - pomGirthAt(m, baseRow, baseBuild, m.morphHeights[id as AnchorRing]);
+      // The hem moves with the tape's length (the front's path and the vertical line differ by the same amount in every size).
+      else if (id === 'shoulder_to_hem') v = b + row.lengthCm - baseRow.lengthCm;
+      else v = b + pomGirthAt(m, row, baseBuild.levels.chestLineY, baseBuild.levels.hemY - (row.lengthCm - baseRow.lengthCm), m.morphHeights[id as AnchorRing]) - pomGirthAt(m, baseRow, baseBuild.levels.chestLineY, baseBuild.levels.hemY, m.morphHeights[id as AnchorRing]);
       targets[id] = r2(v);
       sources[id] = 'chart';
     }

@@ -312,10 +312,11 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
       const p = at(t);
       return restricted(p) - fanEase(p[1]);
     };
+    // Coarse march to the first point outside (thin features under 0.35 cm can be stepped over), then bisection.
     let t = 0.5;
-    while (t < 60 && g(t) <= 0) t += 0.1;
-    let lo = t - 0.1, hi = t;
-    for (let it = 0; it < 30; it++) {
+    while (t < 60 && g(t) <= 0) t += 0.35;
+    let lo = t - 0.35, hi = t;
+    for (let it = 0; it < 16; it++) {
       const mid = (lo + hi) / 2;
       if (g(mid) <= 0) lo = mid;
       else hi = mid;
@@ -464,6 +465,8 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
     fanRows.push({ front: p, back: p, alpha: a });
   }
   const iSp = eyeRows;
+  // The shoulders do not depend on the hem height: their columns are computed once per build.
+  const columnCache = new Map<string, { pts: Vec3[]; f: number[] }>();
   if (process.env.POM_DEBUG) console.log("eye", { Lq, zMax, eyeCirc, eyeRows, fanRows: fanRows.length, sp, xAh, yAh });
 
   // ---- solve the hem height for the length, build the tube rows ------------------------------------
@@ -551,6 +554,12 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
           cols.push({ ids, f: fe });
           continue;
         }
+        const key = `${frontPanel ? 'f' : 'b'}${c}`;
+        const hit = columnCache.get(key);
+        if (hit) {
+          cols.push({ ids: [tubeTop[c]!, ...hit.pts.map((p) => add(p, 0))], f: hit.f });
+          continue;
+        }
         const at = (f: number): Vec3 => {
           const w = wAt(f, frontPanel);
           const th = sgn * (w + ((Math.PI - 2 * w) * c) / N);
@@ -563,17 +572,18 @@ export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions
         let total = 0;
         for (let k = 1; k <= S; k++) total += Math.hypot(pts[k]![0] - pts[k - 1]![0], pts[k]![1] - pts[k - 1]![1], pts[k]![2] - pts[k - 1]![2]);
         const n = Math.max(2, Math.round(total / rowStep));
-        const ids: number[] = [tubeTop[c]!];
         const f: number[] = [0];
+        const placed: Vec3[] = [];
         let j = 0;
         for (let k = 1; k <= n; k++) {
           const want = k / n;
           while (j < S - 1 && lf[j + 1]! < want) j++;
           const t = clamp01((want - lf[j]!) / Math.max(1e-9, lf[j + 1]! - lf[j]!));
-          ids.push(add(at(lerp(fs[j]!, fs[j + 1]!, t)), 0));
+          placed.push(at(lerp(fs[j]!, fs[j + 1]!, t)));
           f.push(want);
         }
-        cols.push({ ids, f });
+        columnCache.set(key, { pts: placed, f });
+        cols.push({ ids: [tubeTop[c]!, ...placed.map((p) => add(p, 0))], f });
       }
       return cols;
     };

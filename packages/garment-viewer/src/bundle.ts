@@ -22,6 +22,8 @@ export interface GarmentAnchorsJson {
   /** `family`: `male` for a bundle built on the male mannequin (slice M1); absent is `female` (`bundleFamilyOf`). */
   mannequin: { version: string; shape: string; family?: 'female' | 'male' };
   synthetic: boolean;
+  /** Set by a tape-built garment: the builder and its version (`pom-tee-…`, `pom-chino-…`; `trouser.ts` reads the latter). */
+  builder?: string;
   /** Set by evaluated bundles: the file holding the product payload. */
   payloadFile?: string;
   /** Set by a server drape bake (`drapeBake.ts`): base.glb holds the drapes per size; the device blends, it does not drape. */

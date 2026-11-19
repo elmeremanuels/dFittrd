@@ -15,6 +15,7 @@ import { sample } from './collide';
 import type { SpikeBundle } from './bundle';
 import type { DrapeJob } from './drapeJob';
 import { clothParams, createCloth, isSettled, loopGirth, setLoops, settlePins, stepCloth, type Cloth, type ClothMaterial, type ClothParams, type GirthLoop } from './cloth';
+import { isTapeTrouser, slideTrouserBand, trouserNoCollide, trouserNotDrawn, wornBodyRings } from './trouser';
 import { fitLines, gapsForSize, heatColors, heatField, placeGarment, placementMorph, sizeEntry, type FitLine, type HeatField, type Placement } from './fitting';
 
 // ---------------------------------------------------------------------------
@@ -83,7 +84,9 @@ export function openSession(m: Mannequin, bundle: SpikeBundle, payload: GarmentP
   // The exemption is judged on the body the bundle was draped on: every bundle is draped on the v1
   // body, so a male shape v2 body (`maleShape: 'v2'`) asks its v1 twin of the same shape.
   const drapedOn = m.maleShape === 'v2' ? buildMannequin(m.shape) : m;
-  return { m, bundle, payload, chains, noCollide: insideCanonical(drapedOn, bundle.baseMesh.positions, chains), noLift, graded: new Map(), sewn };
+  const inside = insideCanonical(drapedOn, bundle.baseMesh.positions, chains);
+  // A tape-built trouser's band and seat meet the body (`trouserNoCollide`); every other bundle keeps the whole exemption.
+  return { m, bundle, payload, chains, noCollide: isTapeTrouser(bundle.anchors) ? trouserNoCollide(drapedOn, inside, bundle.baseMesh.positions) : inside, noLift, graded: new Map(), sewn };
 }
 
 export function sizeLabels(session: GarmentSession): string[] {
@@ -606,7 +609,8 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   const graded = gradedMesh(session, size);
   const gaps = gapsForSize(fit, size);
   // The loop states come from the fit engine's bands (product fabric), never from the display preset (R2).
-  const placement = placeGarment(session.bundle.grading, size, gaps, avatar.rings);
+  // A tape-built trouser's waist is read where the fit engine read it (`trouser.ts`); every other bundle at the avatar's rings.
+  const placement = placeGarment(session.bundle.grading, size, gaps, isTapeTrouser(session.bundle.anchors) ? wornBodyRings(session.bundle.grading, size, gaps, avatar.rings) : avatar.rings);
   const placed = radialMorph(m, graded, chains, placementMorph(placement, m.morphHeights));
   // Above the chest the v0 mannequin's torso widens into the arm junction, and a smaller size can
   // sit inside it there; those particles are exempt too (the shoulders carry that part anyway).
@@ -620,7 +624,7 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, field: BodyF
   const stretchBand = (session.payload.stretchZones ?? []).includes('waistband');
   // With a band spec (`WaistbandSpec`), every bottom's band is modelled from it instead.
   const elastic = bottom && options.waistband ? fitElasticBand(field, start, chains, CLEARANCE_CM, bandFor(options.waistband, session.bundle.grading, size), options.waistband.assumed) : null;
-  const band = elastic ?? (bottom && !stretchBand ? slideWaistband(field, start, chains, CLEARANCE_CM) : null);
+  const band = elastic ?? (bottom && !stretchBand ? (isTapeTrouser(session.bundle.anchors) ? slideTrouserBand(field, start, graded.indices, CLEARANCE_CM) : slideWaistband(field, start, chains, CLEARANCE_CM)) : null);
   const yoke = pinHeight(m, session.bundle.anchors.category, start, chains);
   // The yoke is where grading put it: the shoulder ring grades by the `shoulder_width` ratio between
   // sizes (D15 breadth); its base width is the mesh's (on the synthetic garment, the mannequin torso's). Pinning only out to the seams or the body's shoulder
@@ -738,7 +742,8 @@ export interface NotDrawn {
  * with the largest shortfall, or null when the size closes (and for every garment that is not sewn: drawn as before).
  */
 export function sewnNotDrawn(session: GarmentSession, avatar: Pick<Avatar, 'rings'>, fit: FitResult, size: string): NotDrawn | null {
-  if (!session.sewn) return null;
+  // A tape-built trouser too small for the body is declared the same way (`trouserNotDrawn`).
+  if (!session.sewn) return trouserNotDrawn(session.bundle, avatar.rings, fit, size);
   const placement = placeGarment(session.bundle.grading, size, gapsForSize(fit, size), avatar.rings);
   let worst: (typeof placement.anchors)[number] | null = null;
   for (const a of placement.anchors) if (a.state === 'open' && (!worst || a.slackCm < worst.slackCm)) worst = a;

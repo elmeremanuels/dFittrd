@@ -838,3 +838,14 @@ A review of this section found the demo route untested, the AU 8 refusal hidden 
 9. **Pictures.** The size note no longer says "measured" ("Size 8 is built from the shop's tape."; "Size 12 is not on the shop's tape; it is interpolated from the sizes that are."), so "Estimate · not measured" is the only "measured" on screen. A sentence says the sizes look much alike in 3D and that the room each size gives is in the size rings (the hip hull spreads 3.7 cm across the sizes, the rings 12-28 cm of room). The estimate badge of the 3D view moved to the top right, off the hem.
 10. **Cost for every product.** The reader and the meshopt decoder are a separate lazy chunk (`drapeBakeRead`, 8.3 KB gzip; the viewer chunk is 159.6 KB, it was reported at 167), loaded only for a bake and kept out of the service worker's precache. A typed body (a height or shoulder width: today only men's garments) on a bake is `GarmentViewError('incompatible')`, no 3D view: the bake was draped on the girth avatar, not on the typed body.
 
+
+### 10.8 The import's bake check (19 Nov 2026)
+
+Branch `claude/bake-qa-gate` (report: `docs/reports/claude/bake-qa-gate.md`). The flag `tape_built_no_chart_check` no longer
+stands in for a test. On import, `checkDrapeBake` (`packages/garment-viewer/src/bakeGate.ts`) runs nine checks against the
+bake's own stated tape and the drawn body: draped hip-line and hem rings within ±max(2 cm, 2 %) of the tape, geometry for every
+claimed size, declared refusals, no particle inside the device avatar, provenance against the tape, size order, at-rest flags
+and the 3 MB budget. A pass is an ordinary asset to approve; a fail is recorded as `refused`, with no files stored. `bake-pom.ts`
+now writes what the check reads: qa.json `tape`, and base.glb `bodies`, `tapeRings` and per-drape `atRest`. Not run on the real
+POM v2 bake (no `out/` here). Expect it to be refused by `at_rest`: AU 10 on the AU 8 body is still moving at 0.285 cm per frame
+(§10.1).

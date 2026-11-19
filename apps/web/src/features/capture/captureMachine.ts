@@ -125,6 +125,8 @@ export const MEASUREMENT_LABELS: Record<BodyMeasurementKey, string> = {
   foot: 'Foot length',
   footLengthCm: 'Foot length',
   footEu: 'Shoe size (EU)',
+  neck: 'Neck',
+  sleeve: 'Arm length',
 };
 
 export const MEASUREMENT_UNITS: Record<BodyMeasurementKey, string> = {
@@ -139,6 +141,8 @@ export const MEASUREMENT_UNITS: Record<BodyMeasurementKey, string> = {
   foot: 'cm',
   footLengthCm: 'cm',
   footEu: 'EU',
+  neck: 'cm',
+  sleeve: 'cm',
 };
 
 /** ISO 8559-1 tape instructions shown in the remeasure UI. */

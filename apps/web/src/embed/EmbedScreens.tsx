@@ -6,7 +6,7 @@ import { AlertTriangle, Camera, Clock, Hourglass, PackageX, PauseCircle, Ruler, 
 import { useId, useState, type ReactNode } from 'react';
 import type { GarmentPayload, ShopBranding } from '@curtain/schema';
 import { readableTextColor } from '@/lib/contrast';
-import { AGE_RANGES, FIT_PREFERENCES, isImperialField, measurementFieldsFor, rangeFor, requiredFieldsFor, setImperialEntry, unitFor, type AboutField, type AboutForm } from './aboutYou';
+import { AGE_RANGES, FIT_PREFERENCES, isImperialField, isMensGarment, measurementFieldsFor, MENS_ONLY_FIELDS, rangeFor, requiredFieldsFor, setImperialEntry, unitFor, type AboutField, type AboutForm, type AboutGarment } from './aboutYou';
 import type { BlockedKind } from './flow';
 import { embedStrings, parts } from './strings';
 import { mediaProxyUrl } from './media';
@@ -176,12 +176,35 @@ function NumberInput({
 const ERROR_CLASS = 'text-xs text-coral-ink';
 
 /** One About-you number in the shopper's units (height in imperial: feet and inches). */
-function AboutNumber({ field, form, error, optional, onChange }: { field: AboutField; form: AboutForm; error?: string | undefined; optional?: boolean; onChange: (f: AboutForm) => void }): ReactNode {
+function AboutNumber({
+  field,
+  form,
+  error,
+  optional,
+  mens = false,
+  onChange,
+}: {
+  field: AboutField;
+  form: AboutForm;
+  error?: string | undefined;
+  optional?: boolean;
+  /** A men's garment (slice M2): menswear names and a how-to-measure line. */
+  mens?: boolean;
+  onChange: (f: AboutForm) => void;
+}): ReactNode {
   const id = useId();
-  const errId = error ? `${id}-err` : undefined;
+  const hintText = mens ? embedStrings().about.hintsMen[field] : undefined;
+  const hintId = hintText ? `${id}-hint` : undefined;
+  const errId = error ? `${id}-err` : hintId;
   const imperial = form.units === 'imperial' && isImperialField(field);
   const [lo, hi] = rangeFor(field, form.units);
   const t = embedStrings().about;
+  const label = (mens ? t.labelsMen[field] : undefined) ?? t.labels[field];
+  const hint = hintText ? (
+    <p id={hintId} className="text-xs text-ink-mute">
+      {hintText}
+    </p>
+  ) : null;
   const optionalText = optional ? <span className="font-normal normal-case tracking-normal">{t.optional}</span> : null;
   const errorText = error ? (
     <p id={errId} role="alert" className={ERROR_CLASS}>
@@ -194,7 +217,7 @@ function AboutNumber({ field, form, error, optional, onChange }: { field: AboutF
     return (
       <div className="min-w-0 space-y-1" role="group" aria-labelledby={`${id}-label`}>
         <span id={`${id}-label`} className="eyebrow block">
-          {t.labels[field]} {optionalText}
+          {label} {optionalText}
         </span>
         <div className="flex gap-2">
           <NumberInput id={`${id}-ft`} label={t.heightFeet} unit="ft" value={form.imperial.heightFt} placeholder={`${Math.floor(lo / 12)}–${Math.floor(hi / 12)}`} error={!!error} describedBy={errId} onChange={set('heightFt')} />
@@ -206,14 +229,15 @@ function AboutNumber({ field, form, error, optional, onChange }: { field: AboutF
   }
 
   const value = imperial ? form.imperial[field as Exclude<AboutField, 'height' | 'footEu'>] : form[field];
+  const describedBy = error ? errId : hintId;
   const change = (v: string): void => onChange(imperial ? setImperialEntry(form, field as Exclude<AboutField, 'height' | 'footEu'>, v) : { ...form, [field]: v });
   return (
     <div className="min-w-0 space-y-1">
       <label htmlFor={id} className="eyebrow block">
-        {t.labels[field]} {optionalText}
+        {label} {optionalText}
       </label>
-      <NumberInput id={id} unit={unitFor(field, form.units)} value={value} placeholder={`${lo}–${hi}`} error={!!error} describedBy={errId} onChange={change} />
-      {errorText}
+      <NumberInput id={id} unit={unitFor(field, form.units)} value={value} placeholder={`${lo}–${hi}`} error={!!error} describedBy={describedBy} onChange={change} />
+      {errorText ?? hint}
     </div>
   );
 }
@@ -222,6 +246,7 @@ export function AboutScreen({
   form,
   errors,
   category,
+  garment,
   editing,
   canScan,
   onChange,
@@ -231,6 +256,8 @@ export function AboutScreen({
   form: AboutForm;
   errors: Partial<Record<AboutField, string>>;
   category: GarmentPayload['category'];
+  /** The garment's audience and chart: a men's garment asks the men's measurements (slice M2). */
+  garment?: AboutGarment;
   editing: boolean;
   canScan: boolean;
   onChange: (f: AboutForm) => void;
@@ -238,7 +265,9 @@ export function AboutScreen({
   onSubmit: (scan: boolean) => void;
 }): ReactNode {
   const set = <K extends keyof AboutForm>(k: K, v: AboutForm[K]): void => onChange({ ...form, [k]: v });
-  const fields = measurementFieldsFor(category);
+  const fields = measurementFieldsFor(category, garment);
+  const mens = isMensGarment(garment);
+  const asksMensOnly = fields.some((f) => MENS_ONLY_FIELDS.includes(f));
   const required = requiredFieldsFor(category);
   const ageId = useId();
   const sexId = useId();
@@ -324,9 +353,14 @@ export function AboutScreen({
           <div id="known-measurements" className="space-y-3">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {fields.map((f) => (
-                <AboutNumber key={f} field={f} form={form} error={errors[f]} optional onChange={onChange} />
+                <AboutNumber key={f} field={f} form={form} error={errors[f]} optional mens={mens} onChange={onChange} />
               ))}
             </div>
+            {asksMensOnly ? (
+              <p className="text-xs text-ink-mute" data-testid="mens-typed">
+                {t.mensTyped}
+              </p>
+            ) : null}
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" role="switch" aria-checked={form.tape} checked={form.tape} onChange={(e) => set('tape', e.target.checked)} className="h-4 w-4" />
               {t.tape}
@@ -334,7 +368,7 @@ export function AboutScreen({
             <p className="text-xs text-ink-mute">{t.emptyEstimated}</p>
           </div>
         ) : (
-          <p className="text-xs text-ink-mute">{t.withoutThem(category === 'bottom')}</p>
+          <p className="text-xs text-ink-mute">{mens ? t.withoutThemMen(category === 'bottom') : t.withoutThem(category === 'bottom')}</p>
         )}
       </div>
       ) : null}

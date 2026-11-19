@@ -12,7 +12,7 @@ import { pct } from '@/lib/format';
 import { type ClientLedgerEntry, type ConsentTier } from '@/db/db';
 import { useApp } from '@/store';
 
-const UNIT: Record<BodyMeasurementKey, string> = { bust: 'cm', waist: 'cm', hip: 'cm', shoulder: 'cm', thigh: 'cm', inseam: 'cm', foot: 'cm', footLengthCm: 'cm', footEu: 'EU', height: 'cm', weight: 'kg' };
+const UNIT: Record<BodyMeasurementKey, string> = { bust: 'cm', waist: 'cm', hip: 'cm', shoulder: 'cm', thigh: 'cm', inseam: 'cm', foot: 'cm', footLengthCm: 'cm', footEu: 'EU', height: 'cm', weight: 'kg', neck: 'cm', sleeve: 'cm' };
 
 const KIND_TITLE: Record<ClientLedgerEntry['kind'], string> = {
   signature_sync: 'Fit signature synced',

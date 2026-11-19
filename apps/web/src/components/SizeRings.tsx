@@ -10,7 +10,7 @@ import { VIEW_H } from '@/render/body';
 import { ringArcs, type Ring, type RingOverlay } from '@/render/rings';
 
 /** Theme tokens (index.css --color-ok / warn / bad / ink-soft). */
-const BAND_STROKE: Record<Band, string> = { tight: '#b3261e', snug: '#9a5b00', good: '#1f7a4d', roomy: '#4a423b', loose: '#9a5b00' };
+const BAND_STROKE: Record<Band, string> = { tight: '#b3261e', snug: '#9a5b00', good: '#1f7a4d', roomy: '#4a423b', loose: '#9a5b00', short: '#9a5b00', long: '#9a5b00' };
 const NEUTRAL = '#4a423b';
 const GHOST = '#1a1612';
 
@@ -81,6 +81,8 @@ const CHIP_CLASS: Record<Band | 'none', string> = {
   good: 'border-ok/40 text-ok',
   roomy: 'border-ink/20 text-ink-soft',
   loose: 'border-warn/40 text-warn',
+  short: 'border-warn/40 text-warn',
+  long: 'border-warn/40 text-warn',
   none: 'border-ink/20 text-ink-soft',
 };
 

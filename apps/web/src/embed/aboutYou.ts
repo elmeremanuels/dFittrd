@@ -8,7 +8,7 @@
  * Nothing in here is ever sent to the server.
  */
 import { computeFit, isPointFit, sigmaFromBodyProfile, type FitResult, type PointFit, type SizeFit } from '@curtain/fit-engine';
-import { toUserBody, type BodyMeasurementKey, type BodyProfile, type GarmentCategory, type GarmentPayload, type UserBody } from '@curtain/schema';
+import { garmentBodyFamily, toUserBody, type BodyMeasurementKey, type BodyProfile, type GarmentCategory, type GarmentPayload, type UserBody } from '@curtain/schema';
 import { fuseProfile, type ManualEntries } from '@/features/capture/fuse';
 import type { Sex } from '@/features/capture/types';
 import { embedStrings } from './strings';
@@ -31,11 +31,15 @@ export interface ImperialEntries {
   waist: string;
   hip: string;
   inseam: string;
+  /** Men's garments only (men-3d-plan slice M2): neck, arm length, shoulder width. */
+  neck: string;
+  sleeve: string;
+  shoulder: string;
 }
 
 export type ImperialKey = keyof ImperialEntries;
 
-export const EMPTY_IMPERIAL: ImperialEntries = { heightFt: '', heightIn: '', weight: '', bust: '', waist: '', hip: '', inseam: '' };
+export const EMPTY_IMPERIAL: ImperialEntries = { heightFt: '', heightIn: '', weight: '', bust: '', waist: '', hip: '', inseam: '', neck: '', sleeve: '', shoulder: '' };
 
 /**
  * The About-you answers. `height`, `weight` and the girths are always the canonical METRIC values
@@ -60,6 +64,14 @@ export interface AboutForm {
   hip: string;
   inseam: string;
   footEu: string;
+  /**
+   * Asked only for a men's garment (slice M2), only when its chart has the column, and only ever
+   * typed in: neck girth, arm length (shoulder over the bent elbow to the wrist) and shoulder width
+   * (across the back, shoulder bone to shoulder bone). Never estimated from height and weight.
+   */
+  neck: string;
+  sleeve: string;
+  shoulder: string;
   /** "Measured with a tape" (σ 1.5 cm) vs. from memory (σ 2.5 cm). */
   tape: boolean;
 }
@@ -78,11 +90,18 @@ export const EMPTY_ABOUT: AboutForm = {
   hip: '',
   inseam: '',
   footEu: '',
+  neck: '',
+  sleeve: '',
+  shoulder: '',
   tape: false,
 };
 
-export type AboutField = 'height' | 'weight' | 'bust' | 'waist' | 'hip' | 'inseam' | 'footEu';
+export type AboutField = 'height' | 'weight' | 'bust' | 'waist' | 'hip' | 'inseam' | 'footEu' | 'neck' | 'sleeve' | 'shoulder';
 
+/**
+ * Accepted ranges, cm (kg, EU). The men's three [A]: wide enough for the male family's S…XXL ±2
+ * sizes (neck 37.5–45.75, biacromial 40–43.5, EN arm length about 64 at 172 cm; plan §3 and §4).
+ */
 export const ABOUT_RANGES: Record<AboutField, readonly [number, number]> = {
   height: [120, 230],
   weight: [30, 250],
@@ -91,19 +110,41 @@ export const ABOUT_RANGES: Record<AboutField, readonly [number, number]> = {
   hip: [60, 190],
   inseam: [50, 110],
   footEu: [30, 52],
+  neck: [28, 60],
+  sleeve: [45, 85],
+  shoulder: [30, 60],
 };
 
 /** Metric units of each field (the canonical values). For the shopper's own units use `unitFor`. */
-export const ABOUT_UNITS: Record<AboutField, string> = { height: 'cm', weight: 'kg', bust: 'cm', waist: 'cm', hip: 'cm', inseam: 'cm', footEu: 'EU' };
+export const ABOUT_UNITS: Record<AboutField, string> = { height: 'cm', weight: 'kg', bust: 'cm', waist: 'cm', hip: 'cm', inseam: 'cm', footEu: 'EU', neck: 'cm', sleeve: 'cm', shoulder: 'cm' };
+
+/** What the form reads from a garment beyond its category (men's garments, slice M2). */
+export type AboutGarment = Pick<GarmentPayload, 'category'> & Partial<Pick<GarmentPayload, 'audience' | 'sizeChart'>>;
+
+/** A garment cut for men: the form asks the men's measurements and the result shows the men's points. */
+export function isMensGarment(garment: Partial<Pick<GarmentPayload, 'audience'>> | null | undefined): boolean {
+  return garment?.audience === 'men';
+}
+
+const chartHasColumn = (garment: AboutGarment | undefined, key: 'neck' | 'sleeve' | 'shoulder'): boolean =>
+  Array.isArray(garment?.sizeChart) && garment.sizeChart.some((r) => typeof r[key] === 'number' && r[key] > 0);
 
 /**
  * The optional tape fields worth asking for this garment under "I know my measurements" (inseam
  * only for bottoms). Shoes have none: their only fit point is the shoe size, which is required.
+ *
+ * A men's garment (slice M2): tops ask chest and waist (the waist is scored on men's tops, the seat
+ * is not) plus shoulder width, neck and arm length, each only when the size chart has that column;
+ * bottoms ask waist, seat and inside leg. Without `garment` (or for women's and unisex garments) the
+ * list is what it was.
  */
-export function measurementFieldsFor(category: GarmentCategory): AboutField[] {
+export function measurementFieldsFor(category: GarmentCategory, garment?: AboutGarment): AboutField[] {
   if (category === 'shoes') return [];
+  const mens = isMensGarment(garment);
   if (category === 'bottom') return ['waist', 'hip', 'inseam'];
-  return ['bust', 'waist', 'hip'];
+  if (!mens || category !== 'top') return ['bust', 'waist', 'hip'];
+  const extra = (['shoulder', 'neck', 'sleeve'] as const).filter((k) => chartHasColumn(garment, k));
+  return ['bust', 'waist', ...extra];
 }
 
 /**
@@ -113,6 +154,9 @@ export function measurementFieldsFor(category: GarmentCategory): AboutField[] {
 export function requiredFieldsFor(category: GarmentCategory): AboutField[] {
   return category === 'shoes' ? ['footEu'] : [];
 }
+
+/** The men's fields: typed in or absent, never estimated (no prior exists for them). */
+export const MENS_ONLY_FIELDS: readonly AboutField[] = ['neck', 'sleeve', 'shoulder'];
 
 /** Fields typed in imperial units when `units` is imperial (the EU shoe size never is). */
 export function isImperialField(f: AboutField): f is Exclude<AboutField, 'footEu'> {
@@ -196,7 +240,7 @@ function imperialFrom(field: Exclude<AboutField, 'footEu'>, metric: number): Par
   return { [field]: numberText(field === 'weight' ? kgToLb(metric) : cmToIn(metric), 1) };
 }
 
-const IMPERIAL_FIELDS = ['height', 'weight', 'bust', 'waist', 'hip', 'inseam'] as const;
+const IMPERIAL_FIELDS = ['height', 'weight', 'bust', 'waist', 'hip', 'inseam', 'neck', 'sleeve', 'shoulder'] as const;
 
 /**
  * Switch the inputs to `units`. The canonical metric values never change, so the fit stays exactly
@@ -239,10 +283,10 @@ export function parseDecimal(s: string): number | null {
  * Field → message; empty object when the form can be submitted. Height and weight are required.
  * Checks what the shopper typed in their own units (`form.units`).
  */
-export function validateAbout(form: AboutForm, category: GarmentCategory): Partial<Record<AboutField, string>> {
+export function validateAbout(form: AboutForm, category: GarmentCategory, garment?: AboutGarment): Partial<Record<AboutField, string>> {
   const errors: Partial<Record<AboutField, string>> = {};
   const required: AboutField[] = ['height', 'weight', ...requiredFieldsFor(category)];
-  const fields: AboutField[] = [...required, ...(form.knowsMeasurements ? measurementFieldsFor(category) : [])];
+  const fields: AboutField[] = [...required, ...(form.knowsMeasurements ? measurementFieldsFor(category, garment) : [])];
   for (const f of fields) {
     const read = readField(form, f);
     if (read.state === 'empty') {
@@ -264,7 +308,7 @@ export function validateAbout(form: AboutForm, category: GarmentCategory): Parti
 }
 
 /** Manual entries for `fuseProfile` (only the fields the shopper actually typed). */
-export function aboutEntries(form: AboutForm, category: GarmentCategory): ManualEntries {
+export function aboutEntries(form: AboutForm, category: GarmentCategory, garment?: AboutGarment): ManualEntries {
   const out: ManualEntries = {};
   const put = (key: BodyMeasurementKey, raw: string): void => {
     const n = parseDecimal(raw);
@@ -273,7 +317,7 @@ export function aboutEntries(form: AboutForm, category: GarmentCategory): Manual
   put('height', form.height);
   put('weight', form.weight);
   for (const f of requiredFieldsFor(category)) put(f, form[f]);
-  if (form.knowsMeasurements) for (const f of measurementFieldsFor(category)) put(f, form[f]);
+  if (form.knowsMeasurements) for (const f of measurementFieldsFor(category, garment)) put(f, form[f]);
   return out;
 }
 
@@ -281,9 +325,9 @@ export function aboutEntries(form: AboutForm, category: GarmentCategory): Manual
  * The on-device body profile from the About-you form: typed values as 'manual', the rest of
  * bust / waist / hip / thigh from the population prior ('prior', lower confidence).
  */
-export function profileFromAbout(form: AboutForm, category: GarmentCategory, now = Date.now()): BodyProfile {
+export function profileFromAbout(form: AboutForm, category: GarmentCategory, now = Date.now(), garment?: AboutGarment): BodyProfile {
   return fuseProfile({
-    manual: aboutEntries(form, category),
+    manual: aboutEntries(form, category, garment),
     manualMethod: form.tape ? 'tape' : 'memory',
     sex: form.sex,
     now,
@@ -294,11 +338,11 @@ export function profileFromAbout(form: AboutForm, category: GarmentCategory, now
  * After the camera scan (F5): keep what the shopper typed on About you that the scan's own form
  * does not ask for (inseam for bottoms, the shoe size). The scan's values win wherever it has one.
  */
-export function mergeAboutIntoScan(scan: BodyProfile, form: AboutForm, category: GarmentCategory, now = Date.now()): BodyProfile {
-  const typed = Object.keys(aboutEntries(form, category)) as BodyMeasurementKey[];
+export function mergeAboutIntoScan(scan: BodyProfile, form: AboutForm, category: GarmentCategory, now = Date.now(), garment?: AboutGarment): BodyProfile {
+  const typed = Object.keys(aboutEntries(form, category, garment)) as BodyMeasurementKey[];
   const missing = typed.filter((k) => scan.measurements[k] === undefined);
   if (missing.length === 0) return scan;
-  const fromAbout = profileFromAbout(form, category, now).measurements;
+  const fromAbout = profileFromAbout(form, category, now, garment).measurements;
   const measurements = { ...scan.measurements };
   for (const k of missing) if (fromAbout[k]) measurements[k] = fromAbout[k];
   return { ...scan, measurements };
@@ -314,10 +358,18 @@ export interface EmbedFit {
   fit: FitResult;
 }
 
+/**
+ * The fit on this device. A men's garment (slice M2) also hands the engine the shopper's height (for
+ * a body-length column) and the male body family; every other garment is computed exactly as before.
+ * The body family follows the garment (`garmentBodyFamily`), as the 3D view does, so a unisex
+ * garment uses today's tables, as the female figure it is drawn on.
+ */
 export function fitForProfile(garment: GarmentPayload, profile: BodyProfile): EmbedFit {
-  const userBody = toUserBody(profile);
+  const mens = isMensGarment(garment);
+  const userBody = toUserBody(profile, mens ? { height: true } : {});
   const sigma = sigmaFromBodyProfile(profile);
-  return { userBody, fit: computeFit(garment, userBody, sigma ? { sigma } : undefined) };
+  if (!mens) return { userBody, fit: computeFit(garment, userBody, sigma ? { sigma } : undefined) };
+  return { userBody, fit: computeFit(garment, userBody, { ...(sigma ? { sigma } : {}), bodyFamily: garmentBodyFamily(garment) }) };
 }
 
 /** A neighbour within this score of the engine's pick may be chosen for a snug / relaxed preference. */
@@ -372,7 +424,7 @@ export function neighbourSizes(fit: FitResult, centre: string | null): SizeFit[]
 }
 
 /** Which About-you field supplies each fit point (points the form cannot collect are absent). */
-const FIELD_FOR_POINT: Partial<Record<string, AboutField>> = { bust: 'bust', waist: 'waist', hip: 'hip', inseam: 'inseam', foot: 'footEu' };
+const FIELD_FOR_POINT: Partial<Record<string, AboutField>> = { bust: 'bust', waist: 'waist', hip: 'hip', inseam: 'inseam', foot: 'footEu', neck: 'neck', sleeve: 'sleeve', shoulder: 'shoulder' };
 /** The engine flags a point below this confidence as low-confidence (fit-engine LOW_CONFIDENCE_BELOW). */
 const LOW_POINT_CONFIDENCE = 0.7;
 
@@ -408,8 +460,8 @@ export interface EmbedNote {
 }
 
 /** The notes as plain sentences (what FitPanel shows). */
-export function embedNotes(fit: FitResult, advice: SizeAdvice, category: GarmentCategory, profile: BodyProfile): string[] {
-  return embedNoteList(fit, advice, category, profile).map((n) => n.text);
+export function embedNotes(fit: FitResult, advice: SizeAdvice, category: GarmentCategory, profile: BodyProfile, garment?: AboutGarment): string[] {
+  return embedNoteList(fit, advice, category, profile, garment).map((n) => n.text);
 }
 
 /**
@@ -423,8 +475,10 @@ export function embedNotes(fit: FitResult, advice: SizeAdvice, category: Garment
  * not measured by the shop always carries that label, and a pull-on check that could not run for
  * lack of a hips measurement is said. No margin in cm is printed.
  */
-export function embedNoteList(fit: FitResult, advice: SizeAdvice, category: GarmentCategory, profile: BodyProfile): EmbedNote[] {
+export function embedNoteList(fit: FitResult, advice: SizeAdvice, category: GarmentCategory, profile: BodyProfile, garment?: AboutGarment): EmbedNote[] {
   const t = embedStrings().fit.notes;
+  const audience = garment?.audience;
+  const labelOf = (point: string): string => pointLabelFor(point, audience);
   const size = advice.size ?? advice.closest;
   const idx = fit.perSize.findIndex((p) => p.size === size);
   const s = fit.perSize[idx];
@@ -436,36 +490,38 @@ export function embedNoteList(fit: FitResult, advice: SizeAdvice, category: Garm
     notes.push({ kind: 'pullOn', text: t.pullOnNone(s.size) });
   } else if (!advice.size) {
     const worst = used.reduce<PointFit | undefined>((w, p) => (w === undefined || p.score < w.score ? p : w), undefined);
-    if (worst) notes.push({ kind: 'closest', text: t.closest(s.size, bandText(worst.band), pointLabel(worst.point)) });
+    if (worst) notes.push({ kind: 'closest', text: t.closest(s.size, bandText(worst.band), labelOf(worst.point)) });
   }
   // First, so the size peek (one note) shows it: the size goes on, but only just.
   if (advice.size && s.pullOn?.status === 'marginal') notes.push({ kind: 'pullOn', text: t.pullOnTight({ short: s.pullOn.marginCm < 0 }) });
   if (fit.pullOnUnchecked) notes.push({ kind: 'pullOn', text: t.pullOnUnchecked, short: t.pullOnUncheckedShort });
+  // Men's top chosen for the waist (fit engine `waistLed`, slice M2a): say so before the band notes.
+  if (fit.waistLed && size === (fit.closestSize ?? fit.recommendedSize)) notes.push({ kind: 'band', text: t.waistLed(labelOf('bust')) });
   // No "size up/down" advice after the preference already moved the size (it would contradict it).
   const suggest = !advice.adjusted;
   for (const p of used) {
     if (p.band === 'good') continue;
     const up = p.band === 'tight' && suggest && idx + 1 < fit.perSize.length;
     const down = p.band === 'loose' && suggest && idx > 0;
-    const say = (to: 'up' | 'down' | null): string => t.band(bandText(p.band), pointLabel(p.point), { stretch: !!p.inZone, suggest: to });
+    const say = (to: 'up' | 'down' | null): string => t.band(bandText(p.band), labelOf(p.point), { stretch: !!p.inZone, suggest: to });
     notes.push({ kind: 'band', text: say(up ? 'up' : down ? 'down' : null), short: say(null) });
   }
   // Measurements worth adding: points we skipped for lack of a value, or that rest on an estimate.
-  const collectable = new Set<AboutField>([...measurementFieldsFor(category), ...requiredFieldsFor(category)]);
+  const collectable = new Set<AboutField>([...measurementFieldsFor(category, garment), ...requiredFieldsFor(category)]);
   const add: string[] = [];
   for (const p of s.points) {
     const field = FIELD_FOR_POINT[p.point];
     if (!field || !collectable.has(field)) continue;
     const missing = !isPointFit(p) && p.omitted === 'user';
     const weak = isPointFit(p) && (p.confidence < LOW_POINT_CONFIDENCE || profile.measurements[field as BodyMeasurementKey]?.source === 'prior');
-    if ((missing || weak) && !add.includes(pointLabel(p.point))) add.push(pointLabel(p.point));
+    if ((missing || weak) && !add.includes(labelOf(p.point))) add.push(labelOf(p.point));
   }
   // The shown size's waistband numbers (pull-on check, waist read from the band) when the shop did not measure them.
   const tape = tapeProvenanceOf(s);
   if (tape === 'interpolated' || tape === 'extrapolated') notes.push({ kind: 'estimate', text: t.tapeEstimated(s.size, { rough: tape === 'extrapolated' }) });
   // The pull-on check reads the hips even where the hip is no fit point (an A-line skirt): a hip
   // that is only our estimate is worth adding.
-  if (s.pullOn && collectable.has('hip') && profile.measurements.hip?.source === 'prior' && !add.includes(pointLabel('hip'))) add.push(pointLabel('hip'));
+  if (s.pullOn && collectable.has('hip') && profile.measurements.hip?.source === 'prior' && !add.includes(labelOf('hip'))) add.push(labelOf('hip'));
   if (add.length > 0) notes.push({ kind: 'add', text: t.add(add) });
   if (notes.length === 0) notes.push({ kind: 'well', text: t.fitsWell(s.size) });
   return notes;
@@ -486,7 +542,7 @@ export function tapeProvenanceOf(size: SizeFit): (typeof TAPE_ORDER)[number] | u
  * "fits" of the size we actually recommend after the preference, never the engine pick's. No
  * tie-break label (developer jargon).
  */
-export function fitWithAdvice(fit: FitResult, advice: SizeAdvice, category: GarmentCategory, profile: BodyProfile): FitResult {
+export function fitWithAdvice(fit: FitResult, advice: SizeAdvice, category: GarmentCategory, profile: BodyProfile, garment?: AboutGarment): FitResult {
   const size = advice.size ?? advice.closest;
   const s = fit.perSize.find((p) => p.size === size);
   if (!s) return { ...fit, tieBreak: null };
@@ -497,7 +553,7 @@ export function fitWithAdvice(fit: FitResult, advice: SizeAdvice, category: Garm
     score: s.score,
     confidence: advice.adjusted ? sizeConfidence(fit, s.size) : fit.confidence,
     fits: advice.size !== null && s.wearable,
-    notes: embedNotes(fit, advice, category, profile),
+    notes: embedNotes(fit, advice, category, profile, garment),
     tieBreak: null,
   };
 }
@@ -511,14 +567,30 @@ export function pointLabel(point: string): string {
   return Object.prototype.hasOwnProperty.call(points, point) ? points[point]! : point;
 }
 
+/** A fit point's name for a garment's audience: a men's garment reads "Chest", "Seat", "Sleeve" (slice M2). */
+export function pointLabelFor(point: string, audience?: GarmentPayload['audience']): string {
+  if (audience === 'men') {
+    const men = embedStrings().fit.pointsMen;
+    if (Object.prototype.hasOwnProperty.call(men, point)) return men[point]!;
+  }
+  return pointLabel(point);
+}
+
 export function bandText(band: PointFit['band']): string {
   return embedStrings().fit.bands[band];
 }
 
-/** "2.0 cm more room than designed" / "0.6 in less room …", relative to the ease the garment is designed for. */
+/**
+ * "2.0 cm more room than designed" / "0.6 in less room …", relative to the ease the garment is designed for.
+ * A length (inseam, sleeve, body length of a men's garment): "2.0 cm shorter than ideal" / "longer".
+ */
 export function gapText(p: PointFit, units: Units = 'metric'): string {
   const d = Math.round(p.gapCm * 10) / 10;
   const t = embedStrings().fit;
+  if (p.measure === 'length') {
+    if (Math.abs(d) < 0.5) return t.lengthRight;
+    return d > 0 ? t.longer(lengthText(d, units)) : t.shorter(lengthText(Math.abs(d), units));
+  }
   if (Math.abs(d) < 0.5) return t.asDesigned;
   return d > 0 ? t.moreRoom(lengthText(d, units)) : t.lessRoom(lengthText(Math.abs(d), units));
 }

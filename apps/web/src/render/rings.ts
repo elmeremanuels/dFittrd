@@ -94,7 +94,7 @@ export interface RingOverlayInput {
   estimated?: readonly string[];
 }
 
-const BAND_WORD: Record<Band, string> = { tight: 'Tight', snug: 'Snug', good: 'Good fit', roomy: 'Roomy', loose: 'Loose' };
+const BAND_WORD: Record<Band, string> = { tight: 'Tight', snug: 'Snug', good: 'Good fit', roomy: 'Roomy', loose: 'Loose', short: 'Short', long: 'Long' };
 
 /** Cross-section depth / width per level (body.ts uses the same ratios); the hem hangs rounder. */
 const DEPTH: Record<RingKey, number> = { bust: 0.7, waist: 0.75, hip: 0.7, hem: HEM_DEPTH };

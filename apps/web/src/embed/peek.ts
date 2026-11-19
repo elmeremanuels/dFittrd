@@ -93,7 +93,7 @@ export function peekNote(notes: readonly EmbedNote[], size: string): string {
 export function peekOutcome(garment: PeekResponse['garment'], embedFit: EmbedFit | null, advice: SizeAdvice | null, remembered: RememberedProfile): PeekOutcome {
   if (!embedFit || !advice || advice.noPoints) return { kind: 'unknown', note: embedStrings().peek.unknownNote };
   if (!advice.size) return { kind: 'none', note: embedStrings().peek.noneNote };
-  return { kind: 'size', size: advice.size, note: peekNote(embedNoteList(embedFit.fit, advice, garment.category, remembered.profile), advice.size) };
+  return { kind: 'size', size: advice.size, note: peekNote(embedNoteList(embedFit.fit, advice, garment.category, remembered.profile, garment), advice.size) };
 }
 
 /**

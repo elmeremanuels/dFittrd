@@ -17,6 +17,10 @@ const COLUMNS: readonly { key: ChartColumn; length: boolean }[] = [
   { key: 'shoulder', length: true },
   { key: 'thigh', length: true },
   { key: 'inseam', length: true },
+  { key: 'rise', length: true },
+  { key: 'neck', length: true },
+  { key: 'sleeve', length: true },
+  { key: 'length', length: true },
   { key: 'footLengthCm', length: true },
   { key: 'footEu', length: false },
 ];
@@ -54,7 +58,7 @@ export function SizeChartTable({ garment, recommended, units }: { garment: Garme
               </th>
               {columns.map((c) => (
                 <th key={c.key} scope="col" className="px-3 py-1.5 text-right font-semibold whitespace-nowrap">
-                  {t.columns[c.key]}
+                  {(garment.audience === 'men' ? t.columnsMen[c.key] : undefined) ?? t.columns[c.key]}
                   {c.length ? <span className="font-normal text-ink-mute"> ({unit})</span> : null}
                 </th>
               ))}

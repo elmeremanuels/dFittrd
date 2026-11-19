@@ -54,13 +54,17 @@ Not done in M1, and still open:
 - While a required 3D view loads, the overlay shows an empty panel with no spinner (M0 behaviour, seen in the pictures).
 - Fit engine (M2) and POM builder (M3): not touched, as scoped.
 
+## Status: men's chart columns in the merchant builders (19 Nov 2026, branch `claude/men-admin-columns`)
+
+The Shopify admin chart builder and the WooCommerce meta box now take neck, sleeve (with where it is measured from), body length, rise and W/L sizes. Two blank men's garment templates (tee; chino W/L) are offered; the men's body templates stay held back for the legal review. The PHP twins (`Chart_Columns`, `Schema_Validator`, `Payload_Builder`) replay shared cases from `@curtain/schema`. Women's charts and screens: pixel-identical before and after. Report: `docs/reports/claude/men-admin-columns.md`.
+
 ## Status: slices M2a and M2b built (19 Nov 2026, branch `claude/men-m2`)
 
 - **Schema:** `FIT_POINTS` + `neck`, `sleeve`; `GARMENT_LENGTH_POINTS` (`length`, `rise`) never stored; `SizeRow` columns `neck`, `sleeve`, `length`, `rise` and `axes` (W/L); chart cap 60 rows; `sleeveConvention`; `UserBody.heightCm`; `MENS_CATEGORY_POINTS`; mappings keep the columns and read `seat` and `collar`. Fixtures `SYNTHETIC_MENS_CHINO_WL` (made up) and `MENS_REFERENCE_BODY` (MREF).
 - **Engine:** the rules and their sources are in `packages/fit-engine/README.md` "Men's fit". MT1–MT17 are in `src/mens.test.ts`; MT17 covers the TypeScript tables only. Every existing garment is byte-identical (sha256 pinned against the pre-M2 engine). One existing assertion changed: `anchorToFitPoint('neck')` is now `neck` (the mapping M2b asks for).
 - **Web:** About you asks the men's measurements for `audience: 'men'` only (typed, never estimated); the result names Chest / Seat / Leg length and shows lengths, W/L axes and the waist-led note.
 - **Review fixes (19 Nov 2026, same branch):** the men's points, columns and W/L reading are now gated on a men's fit, so a women's or unisex chart that carries neck, sleeve, length, rise or axes reads (and its size table shows) exactly as before M2; checked against the pre-M2 engine itself, 8,100 runs identical. W/L: the leg is picked among the picked waist's rows, an axis with no scored point is not picked (no invented leg), and `recommended` is recomputed on the final row. A men's size is recommended only when wearable [A, our decision]. Snug / relaxed and "Compare sizes" step one waist at the same leg (`SizeFit.axes`). "Body type: Not specified" uses the male prior on a men's garment. The women's block entries `shirt-slim` / `shirt-classic` (bust 10, shoulder 1.5, no source) were removed: those names read as an unknown block outside a men's fit, as before.
-- **Not done:** the PHP and Shopify-admin mirrors (no neck, sleeve, length, rise or axes columns there), `sleeveConvention` in the plugin mappings, the unconfirmed-template rule of MT10 (no confirm flag exists on the payload), gate condition 3. Every new number is [A] until three real charts per block are read.
+- **Not done:** ~~the PHP and Shopify-admin mirrors, `sleeveConvention` in the plugin mappings~~ (built on branch `claude/men-admin-columns`, see below), the unconfirmed-template rule of MT10 (no confirm flag exists on the payload), gate condition 3. Every new number is [A] until three real charts per block are read.
 
 ## Status: slice M1b built (19 Nov 2026, branch `claude/men-m1b-2d`)
 

@@ -427,6 +427,8 @@ function maleV2BodyPath(g: BodyGeometry, v: NonNullable<BodyGeometry['v2']>): st
   const legX = g.legX ?? g.hipHalf * 0.5;
   const topHalf = g.thighHalf * 0.97;
   const crotchY = y('crotch');
+  // the leg's top edge runs from the seat's side (40 % of the way from the seat ring to the crotch) down to the crotch
+  const legTopY = y('hip') + 0.4 * (crotchY - y('hip'));
   const torso = mirroredPath([
     { x: g.neckHalf, y: y('chin') + 3 },
     { x: g.neckHalf, y: v.neckY },
@@ -439,9 +441,10 @@ function maleV2BodyPath(g: BodyGeometry, v: NonNullable<BodyGeometry['v2']>): st
     { x: v.underbustHalf, y: y('underbust') },
     { x: g.waistHalf, y: y('waist') },
     { x: g.hipHalf, y: y('hip') },
-    // under the legs from here: the seat falls straight to the thigh tops
-    { x: legX + topHalf - 0.5, y: crotchY + 5 },
-    { x: 1, y: crotchY + 10 },
+    // the seat falls straight to the thigh tops, then the torso ends on the legs' top edge (the crotch line)
+    { x: legX + topHalf, y: legTopY },
+    { x: (legX + topHalf) * 0.5, y: legTopY + (crotchY + 4 - legTopY) * 0.5 },
+    { x: 1, y: crotchY + 4 },
   ]);
   // the thighs touch: an inner edge never crosses the middle (0.4 px off it, so the two strokes meet)
   const inner = (half: number): number => Math.max(0.4, legX - Math.max(4, half));
@@ -456,10 +459,12 @@ function maleV2BodyPath(g: BodyGeometry, v: NonNullable<BodyGeometry['v2']>): st
       { h: g.ankleHalf + 2, y: FEET_Y },
     ];
     // the outer edge starts on the seat's side, so the leg's top edge runs from the hip down to the crotch
-    const top = { x: legX + topHalf, y: y('hip') + 0.4 * (crotchY - y('hip')) };
+    const top = { x: legX + topHalf, y: legTopY };
     const outer = [top, ...halves.map((p) => ({ x: legX + Math.max(4, p.h), y: p.y }))];
     const innerPts = [...halves].reverse().map((p) => ({ x: inner(p.h), y: p.y }));
     const pts = [...outer, ...innerPts];
+    // as the arm: the mirrored left leg is reversed, so it winds like the torso and their overlap stays filled (nonzero rule)
+    if (side === -1) pts.reverse();
     return `M ${pts.map((p) => `${(CENTER_X + side * p.x).toFixed(1)},${p.y.toFixed(1)}`).join(' L ')} Z`;
   };
   const arm = (side: 1 | -1): string => maleArmOutline(g, side, 0, y('hip') + 12);

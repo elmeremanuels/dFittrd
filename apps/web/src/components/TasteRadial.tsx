@@ -1,6 +1,7 @@
 import { motion, useReducedMotion } from 'motion/react';
 import type { ReactNode } from 'react';
 import { AXES, AXIS_LABELS, type AxisVector } from '@curtain/taste-engine';
+import { appStrings } from '@/strings';
 
 /**
  * Style DNA radar. Fixed axis order (AXES = schema TASTE_AXES), display labels, a viewBox with
@@ -15,19 +16,20 @@ function polar(i: number, value: number): { x: number; y: number } {
   return { x: CENTER + RADIUS * value * Math.cos(angle), y: CENTER + RADIUS * value * Math.sin(angle) };
 }
 
-export function TasteRadial({ axes, title = 'Your Style DNA' }: { axes: AxisVector; title?: string }): ReactNode {
+export function TasteRadial({ axes, title }: { axes: AxisVector; title?: string }): ReactNode {
+  const t = appStrings().app.styleDna;
   const reduce = useReducedMotion();
   const points = AXES.map((a, i) => {
     const p = polar(i, Math.max(0, Math.min(1, axes[a])));
     return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
   }).join(' ');
   const rings = [0.25, 0.5, 0.75, 1].map((s) => AXES.map((_, i) => `${polar(i, s).x.toFixed(1)},${polar(i, s).y.toFixed(1)}`).join(' '));
-  const desc = AXES.map((a) => `${AXIS_LABELS[a]} ${Math.round(axes[a] * 100)}%`).join(', ');
+  const desc = AXES.map((a) => t.axis(AXIS_LABELS[a], Math.round(axes[a] * 100))).join(', ');
 
   return (
     <div className="card aspect-square w-full bg-white/80 p-3">
       <svg viewBox="-36 -24 272 248" className="h-full w-full" role="img" aria-labelledby="taste-radial-title taste-radial-desc">
-        <title id="taste-radial-title">{title}</title>
+        <title id="taste-radial-title">{title ?? t.title}</title>
         <desc id="taste-radial-desc">{desc}</desc>
         {rings.map((r, i) => (
           <polygon key={`ring-${i}`} points={r} fill="none" stroke="rgba(26,22,18,0.08)" strokeWidth="1" />

@@ -2,6 +2,7 @@ import { LayoutDashboard, Shirt, User } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { useApp } from '@/store';
+import { appStrings } from '@/strings';
 
 /**
  * Phone frame (max-w-md) with real routes in the bottom nav, 100dvh + safe-area insets, and the
@@ -12,6 +13,7 @@ export function AppShell(): ReactNode {
   const outboxPending = useApp((s) => s.outboxPending);
   const location = useLocation();
   const hideNav = location.pathname.startsWith('/onboarding');
+  const t = appStrings().app.shell;
   return (
     <div className="flex min-h-dvh w-full justify-center bg-cream-deep">
       {import.meta.env.DEV && !hideNav ? <DevSwitcher /> : null}
@@ -20,10 +22,10 @@ export function AppShell(): ReactNode {
           <Outlet />
         </div>
         {hideNav ? null : (
-          <nav className="safe-bottom flex items-center justify-around border-t border-ink/10 bg-white/90 px-6 pt-2 backdrop-blur-xl" aria-label="Primary">
-            <NavItem to="/deck" label="Rail" icon={<Shirt className="h-5 w-5" aria-hidden />} />
-            <NavItem to="/wardrobe" label="Wardrobe" icon={<LayoutDashboard className="h-5 w-5" aria-hidden />} />
-            <NavItem to="/profile" label="Profile" icon={<User className="h-5 w-5" aria-hidden />} badge={outboxPending > 0 ? `${outboxPending} to sync` : undefined} />
+          <nav className="safe-bottom flex items-center justify-around border-t border-ink/10 bg-white/90 px-6 pt-2 backdrop-blur-xl" aria-label={t.navLabel}>
+            <NavItem to="/deck" label={t.rail} icon={<Shirt className="h-5 w-5" aria-hidden />} />
+            <NavItem to="/wardrobe" label={t.wardrobe} icon={<LayoutDashboard className="h-5 w-5" aria-hidden />} />
+            <NavItem to="/profile" label={t.profile} icon={<User className="h-5 w-5" aria-hidden />} badge={outboxPending > 0 ? t.toSync(outboxPending) : undefined} />
           </nav>
         )}
       </main>
@@ -48,13 +50,14 @@ function NavItem({ to, label, icon, badge }: { to: string; label: string; icon: 
 function DevSwitcher(): ReactNode {
   const location = useLocation();
   const merchant = location.pathname.startsWith('/merchant');
+  const t = appStrings().app.shell;
   return (
-    <div className="fixed right-3 bottom-3 z-50 hidden rounded-full md:flex border border-ink/10 bg-white/80 p-1 text-xs font-semibold uppercase tracking-wider shadow backdrop-blur" aria-label="Development view switcher">
+    <div className="fixed right-3 bottom-3 z-50 hidden rounded-full md:flex border border-ink/10 bg-white/80 p-1 text-xs font-semibold uppercase tracking-wider shadow backdrop-blur" aria-label={t.devSwitcher}>
       <Link to="/deck" className={`rounded-full px-3 py-1 ${!merchant ? 'bg-ink text-white' : 'text-ink-soft'}`}>
-        Customer
+        {t.customer}
       </Link>
       <Link to="/merchant" className={`rounded-full px-3 py-1 ${merchant ? 'bg-ink text-white' : 'text-ink-soft'}`}>
-        Merchant
+        {t.merchant}
       </Link>
     </div>
   );
@@ -71,7 +74,7 @@ export function RequireOnboarded({ children }: { children: ReactNode }): ReactNo
 export function Splash(): ReactNode {
   return (
     <div className="flex h-full min-h-[50dvh] items-center justify-center" role="status" aria-live="polite">
-      <p className="font-display text-xl text-ink-soft">Curtain</p>
+      <p className="font-display text-xl text-ink-soft">{appStrings().app.common.brand}</p>
     </div>
   );
 }

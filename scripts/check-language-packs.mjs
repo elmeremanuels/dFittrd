@@ -24,6 +24,7 @@ const list = (dir, pattern) =>
 
 const surfaces = {
   'embed (apps/web/src/embed/strings)': new Set(list('apps/web/src/embed/strings', /^(?!index\.)([A-Za-z]{2,3}(?:[-_][A-Za-z0-9]+)*)\.ts$/)),
+  'app and shared components (apps/web/src/strings)': new Set(list('apps/web/src/strings', /^(?!index\.)([A-Za-z]{2,3}(?:[-_][A-Za-z0-9]+)*)\.ts$/)),
   'SDK (packages/sdk/src/strings)': new Set(list('packages/sdk/src/strings', /^([A-Za-z]{2,3}(?:[-_][A-Za-z0-9]+)*)\.ts$/)),
   'Shopify (extensions/try-button/locales)': new Set(list('packages/shopify-app/extensions/try-button/locales', /^([A-Za-z]{2,3}(?:-[A-Za-z0-9]+)*)(?:\.default)?\.json$/)),
   'WooCommerce (languages)': new Set(['en', ...list('packages/woocommerce-plugin/languages', /^curtain-woocommerce-([A-Za-z]{2,3}(?:_[A-Za-z0-9]+)*)\.po$/)]),

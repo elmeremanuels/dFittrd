@@ -1,6 +1,8 @@
+import { appStrings } from '@/strings';
+
 export function pct(x: number | null | undefined): string {
-  if (x === null || x === undefined || !Number.isFinite(x)) return '—';
-  return `${Math.round(x * 100)}%`;
+  if (x === null || x === undefined || !Number.isFinite(x)) return appStrings().shared.format.none;
+  return appStrings().shared.format.percent(Math.round(x * 100));
 }
 
 export function eur(x: number): string {
@@ -8,8 +10,8 @@ export function eur(x: number): string {
 }
 
 export function cm(x: number | undefined | null, digits = 1): string {
-  if (x === undefined || x === null || !Number.isFinite(x)) return '—';
-  return `${x.toFixed(digits)} cm`;
+  if (x === undefined || x === null || !Number.isFinite(x)) return appStrings().shared.format.none;
+  return appStrings().shared.format.cm(x.toFixed(digits));
 }
 
 export function shortDate(iso: string | number): string {

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Camera, Check, ImagePlus, RefreshCw, SkipForward } from 'lucide-react';
+import { appStrings } from '../../../strings';
 import { MONK_SWATCHES } from '../faceSkin';
 import { attachStream, bitmapFromFile, captureStill, openCamera, type CameraHandle } from '../platform/camera';
 import type { FlowCaps } from '../captureMachine';
 import type { ScanSession } from '../scanSession';
 import type { SkinEstimate } from '../types';
+import { fill, scanErrorText } from './text';
 import { EstimateBadge, GhostButton, Panel, PrimaryButton, PrivacyNote, StepHeader } from './ui';
 
 export interface FaceStepResult {
@@ -26,8 +28,6 @@ interface Props {
 }
 
 type Phase = 'preview' | 'analysing' | 'review';
-
-const UNAVAILABLE = 'The scan models are not available on this device; you can skip this step.';
 
 /** What the face step can do with the models right now. */
 export function faceModelsState(session: ScanSession | null, models: FlowCaps['models'] | undefined): 'loading' | 'ready' | 'unavailable' {
@@ -65,7 +65,7 @@ export function FaceStep({ session, models, cameraAllowed, onDone, onSkip }: Pro
         camRef.current = cam;
         attachStream(videoRef.current, cam.stream);
       })
-      .catch((e: unknown) => setCameraError(e instanceof DOMException && e.name === 'NotAllowedError' ? 'Camera access was declined.' : 'Could not open the camera.'));
+      .catch((e: unknown) => setCameraError(e instanceof DOMException && e.name === 'NotAllowedError' ? appStrings().capture.ui.cameraDeclined : appStrings().capture.ui.cameraFailed));
     return () => {
       cancelled = true;
       camRef.current?.stop();
@@ -85,7 +85,7 @@ export function FaceStep({ session, models, cameraAllowed, onDone, onSkip }: Pro
   const analyse = async (bitmap: ImageBitmap): Promise<void> => {
     if (!session || modelsState !== 'ready') {
       bitmap.close();
-      setError(modelsState === 'loading' ? 'The scan models are still loading; try again in a moment.' : UNAVAILABLE);
+      setError(modelsState === 'loading' ? appStrings().capture.face.stillLoading : appStrings().capture.face.unavailable);
       return;
     }
     setPhase('analysing');
@@ -93,7 +93,7 @@ export function FaceStep({ session, models, cameraAllowed, onDone, onSkip }: Pro
     try {
       const r = await session.analyseFace(bitmap);
       if (!r.faceFound) {
-        setError('No face found. Face the camera in good light and try again.');
+        setError(appStrings().capture.face.noFace);
         setPhase('preview');
         return;
       }
@@ -103,7 +103,7 @@ export function FaceStep({ session, models, cameraAllowed, onDone, onSkip }: Pro
       if (r.faceTile) setTileUrl(URL.createObjectURL(r.faceTile.blob));
       setPhase('review');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Face analysis failed.');
+      setError(scanErrorText(e, appStrings().capture.face.failed));
       setPhase('preview');
     }
   };
@@ -119,7 +119,7 @@ export function FaceStep({ session, models, cameraAllowed, onDone, onSkip }: Pro
     try {
       await analyse(await bitmapFromFile(file));
     } catch {
-      setError('That image could not be read.');
+      setError(appStrings().capture.face.unreadable);
     }
   };
 
@@ -130,16 +130,19 @@ export function FaceStep({ session, models, cameraAllowed, onDone, onSkip }: Pro
     onDone({ ...result, skin });
   };
 
+  const t = appStrings().capture.face;
+  const ui = appStrings().capture.ui;
+
   return (
     <Panel className="space-y-5">
-      <StepHeader eyebrow="Step 1 of 3" title="Face & colour" subtitle="One front-lit photo. Hair away from the face helps." />
+      <StepHeader eyebrow={t.header.eyebrow} title={t.header.title} subtitle={t.header.subtitle} />
       {phase !== 'review' ? (
         <div className="space-y-4">
           <div className="mirror-frame mx-auto aspect-[3/4] w-full max-w-xs bg-ink/5">
             {cameraAllowed && !cameraError ? (
-              <video ref={setVideo} autoPlay playsInline muted className="h-full w-full -scale-x-100 object-cover" aria-label="Camera preview" />
+              <video ref={setVideo} autoPlay playsInline muted className="h-full w-full -scale-x-100 object-cover" aria-label={ui.cameraPreview} />
             ) : (
-              <div className="flex h-full items-center justify-center p-6 text-center text-sm text-ink/50">{cameraError ?? 'No camera on this device. Choose a photo instead.'}</div>
+              <div className="flex h-full items-center justify-center p-6 text-center text-sm text-ink/50">{cameraError ?? t.noCamera}</div>
             )}
             <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="h-[62%] w-[58%] rounded-[50%] border-2 border-dashed border-white/70" />
@@ -147,20 +150,20 @@ export function FaceStep({ session, models, cameraAllowed, onDone, onSkip }: Pro
           </div>
           <p role="status" aria-live="polite" className="min-h-5 text-center text-sm text-ink/60">
             {phase === 'analysing'
-              ? 'Reading skin tone…'
-              : (error ?? (modelsState === 'loading' ? 'Loading the scan models on this device…' : modelsState === 'unavailable' ? UNAVAILABLE : 'Centre your face in the oval, neutral expression.'))}
+              ? t.reading
+              : (error ?? (modelsState === 'loading' ? t.loadingModels : modelsState === 'unavailable' ? t.unavailable : t.centre))}
           </p>
           {cameraAllowed && !cameraError ? (
             <PrimaryButton onClick={() => void takePhoto()} disabled={busy || modelsState === 'unavailable'}>
-              <Camera className="h-5 w-5" aria-hidden /> Take photo
+              <Camera className="h-5 w-5" aria-hidden /> {t.takePhoto}
             </PrimaryButton>
           ) : null}
           <label className="inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-ink/10 bg-white/40 px-5 text-sm font-medium text-ink/80 hover:bg-white/70">
-            <ImagePlus className="h-4 w-4" aria-hidden /> Choose a photo
+            <ImagePlus className="h-4 w-4" aria-hidden /> {t.choosePhoto}
             <input type="file" accept="image/*" capture="user" className="sr-only" onChange={(e) => void onFile(e.target.files?.[0])} disabled={busy || modelsState === 'unavailable'} />
           </label>
           <GhostButton onClick={onSkip}>
-            <SkipForward className="h-4 w-4" aria-hidden /> Skip this step
+            <SkipForward className="h-4 w-4" aria-hidden /> {t.skip}
           </GhostButton>
           <PrivacyNote />
         </div>
@@ -168,26 +171,24 @@ export function FaceStep({ session, models, cameraAllowed, onDone, onSkip }: Pro
         <div className="space-y-4">
           <div className="flex items-center gap-4">
             {tileUrl ? (
-              <img src={tileUrl} alt="Your identity tile (background removed)" className="h-24 w-24 rounded-3xl border border-ink/10 object-cover" />
+              <img src={tileUrl} alt={t.tileAlt} className="h-24 w-24 rounded-3xl border border-ink/10 object-cover" />
             ) : null}
             <div className="space-y-1 text-sm">
               <div className="flex items-center gap-2">
-                <span className="font-medium">Skin tone</span>
+                <span className="font-medium">{t.skinTone}</span>
                 <EstimateBadge />
               </div>
               {result?.skin ? (
-                <p className="text-ink/60">
-                  Monk {monk ?? result.skin.monk} · {result.skin.undertone} undertone · {result.skin.season.season}
-                </p>
+                <p className="text-ink/60">{t.skinLine(monk ?? result.skin.monk, t.undertones[result.skin.undertone], t.seasons[result.skin.season.season])}</p>
               ) : (
-                <p className="text-ink/60">Could not sample enough skin pixels.</p>
+                <p className="text-ink/60">{t.notEnoughSkin}</p>
               )}
             </div>
           </div>
           {result?.skin ? (
             <fieldset className="space-y-2">
-              <legend className="text-xs uppercase tracking-wider text-ink/40">Confirm or adjust your swatch</legend>
-              <div className="grid grid-cols-10 gap-1" role="radiogroup" aria-label="Monk skin tone swatch">
+              <legend className="text-xs uppercase tracking-wider text-ink/40">{t.swatchLegend}</legend>
+              <div className="grid grid-cols-10 gap-1" role="radiogroup" aria-label={t.swatchGroup}>
                 {MONK_SWATCHES.map((hex, i) => {
                   const n = i + 1;
                   const selected = monk === n;
@@ -197,7 +198,7 @@ export function FaceStep({ session, models, cameraAllowed, onDone, onSkip }: Pro
                       type="button"
                       role="radio"
                       aria-checked={selected}
-                      aria-label={`Monk tone ${n}`}
+                      aria-label={t.monkTone(n)}
                       onClick={() => setMonk(n)}
                       className={`aspect-square rounded-lg border-2 ${selected ? 'border-coral ring-2 ring-coral/30' : 'border-white/60'}`}
                       style={{ backgroundColor: hex }}
@@ -205,13 +206,11 @@ export function FaceStep({ session, models, cameraAllowed, onDone, onSkip }: Pro
                   );
                 })}
               </div>
-              <p className="text-xs text-ink/50">
-                Colour season <em>{result.skin.season.season}</em> is a rule-based estimate from skin, hair and contrast — you can change it later in your profile.
-              </p>
+              <p className="text-xs text-ink/50">{fill(t.seasonNote, { season: <em>{t.seasons[result.skin.season.season]}</em> })}</p>
             </fieldset>
           ) : null}
           <PrimaryButton onClick={confirm}>
-            <Check className="h-5 w-5" aria-hidden /> Looks right
+            <Check className="h-5 w-5" aria-hidden /> {t.confirm}
           </PrimaryButton>
           <GhostButton
             onClick={() => {
@@ -219,7 +218,7 @@ export function FaceStep({ session, models, cameraAllowed, onDone, onSkip }: Pro
               setPhase('preview');
             }}
           >
-            <RefreshCw className="h-4 w-4" aria-hidden /> Retake
+            <RefreshCw className="h-4 w-4" aria-hidden /> {t.retake}
           </GhostButton>
         </div>
       )}

@@ -203,7 +203,7 @@ export function ResultScreen({
         ) : null}
       </div>
 
-      <FitPanel fit={shown} hasMeasurements scoreNote={scoreNote} />
+      <FitPanel fit={shown} hasMeasurements scoreNote={scoreNote} waistOnly={waistOnly} />
 
       {sizes.length > 1 ? (
         <div className="space-y-1.5">

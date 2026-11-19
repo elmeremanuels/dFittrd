@@ -77,10 +77,19 @@ export interface ReadyMessage {
   loadMs: number;
 }
 
+/**
+ * Errors of the worker that the shopper is told about. The worker sends the code; the page finds
+ * the text in its catalogue (`capture.scanErrors`), since the worker cannot know the page's locale.
+ */
+export type ScanErrorCode = 'no_front_frame';
+
 export interface ErrorMessage {
   type: 'error';
   stage: 'init' | 'frame' | 'finish' | 'face' | 'faceTexture' | 'faceLook';
+  /** A diagnostic in English, for the console and the tests; not interface text. */
   message: string;
+  /** Set when the error is one the interface has words for. */
+  code?: ScanErrorCode;
 }
 
 export interface GateMessage {

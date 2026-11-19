@@ -716,11 +716,16 @@ final class Product_Meta {
 		<div class="curtain-tape" id="curtain-tape">
 			<h4><?php echo esc_html( $t['heading'] ); ?></h4>
 			<p class="description"><?php echo esc_html( $t['intro'] ); ?></p>
-			<details><summary><?php echo esc_html( $t['howTo'] ); ?></summary><ul class="curtain-tape-howto">
+			<details class="curtain-tape-help" open><summary><strong><?php echo esc_html( $t['whatToMeasure'] ); ?></strong></summary>
+				<p><?php echo esc_html( $t['youNeed'] ); ?></p>
+				<img src="<?php echo esc_url( CURTAIN_PLUGIN_URL . 'assets/admin/skirt-measure.svg' ); ?>" width="260" height="270" alt="" style="display:block;max-width:100%;height:auto">
+				<p class="description"><?php echo esc_html( $t['diagramCaption'] ); ?></p>
+				<ul class="curtain-tape-howto">
 				<?php
 				foreach ( $t['howToLines'] as $line ) :
 					?>
-					<li><?php echo esc_html( $line ); ?></li><?php endforeach; ?></ul></details>
+					<li><?php echo esc_html( $line ); ?></li><?php endforeach; ?></ul>
+				<p><?php echo esc_html( $t['firstTime'] ); ?></p></details>
 			<div class="curtain-grid">
 				<label><span><?php echo esc_html( $t['closureLabel'] ); ?></span>
 					<select name="curtain[closure]">
@@ -728,8 +733,8 @@ final class Product_Meta {
 						<?php foreach ( Garment_Tape::CLOSURES as $c ) : ?>
 							<option value="<?php echo esc_attr( $c ); ?>" <?php selected( $closure, $c ); ?>><?php echo esc_html( Garment_Tape::closure_label( $c ) ); ?></option>
 						<?php endforeach; ?>
-					</select></label>
-				<label><span><?php echo esc_html( $t['hipDepthLabel'] ); ?></span><input type="text" inputmode="decimal" name="curtain[tape_depth]" value="<?php echo esc_attr( null === $depth ? '' : (string) $depth ); ?>" placeholder="<?php echo esc_attr( $t['hipDepthPlaceholder'] ); ?>" maxlength="8" class="curtain-narrow curtain-tape-depth" <?php echo $depth_bad ? 'aria-invalid="true"' : ''; ?>></label>
+					</select><span class="description"><?php echo esc_html( $t['closureHelp'] ); ?></span></label>
+				<label><span><?php echo esc_html( $t['hipDepthLabel'] ); ?></span><input type="text" inputmode="decimal" name="curtain[tape_depth]" value="<?php echo esc_attr( null === $depth ? '' : (string) $depth ); ?>" placeholder="<?php echo esc_attr( $t['hipDepthPlaceholder'] ); ?>" maxlength="8" class="curtain-narrow curtain-tape-depth" <?php echo $depth_bad ? 'aria-invalid="true"' : ''; ?>><span class="description"><?php echo esc_html( $t['depthHelp'] ); ?></span></label>
 			</div>
 			<?php if ( array() === $chart ) : ?>
 				<p class="curtain-tape-note"><?php echo esc_html( $t['noChart'] ); ?></p>

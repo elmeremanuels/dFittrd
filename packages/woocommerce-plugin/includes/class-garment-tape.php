@@ -209,6 +209,12 @@ final class Garment_Tape {
 			'estimatesStale'      => __( 'The estimates below are from your last valid numbers. They update once the errors are fixed.', 'curtain-woocommerce' ),
 			'orphanSize'          => __( 'Not in the size chart any more. Type the size it now has, or untick it.', 'curtain-woocommerce' ),
 			'privacy'             => __( 'These numbers describe the garment, not a shopper. Shoppers’ measurements never reach you.', 'curtain-woocommerce' ),
+			'whatToMeasure'       => __( 'What to measure', 'curtain-woocommerce' ),
+			'youNeed'             => __( 'You need a flat table, a tape measure and the skirt. Lay it flat, front up, smoothed but not pulled.', 'curtain-woocommerce' ),
+			'firstTime'           => __( 'First time? Start with three sizes: the smallest, the largest and one in between. About 3 minutes per size.', 'curtain-woocommerce' ),
+			'diagramCaption'      => __( 'A skirt laid flat. Measure straight across and double it (A to D); measure the length (E) as it is.', 'curtain-woocommerce' ),
+			'closureHelp'         => __( 'Pull-on means an elastic waist with nothing to open. For a pull-on skirt we check that the stretched band (B) goes over the shopper’s hips, so this answer matters most.', 'curtain-woocommerce' ),
+			'depthHelp'           => __( 'Put a pin 20 cm below the top of the band on each side and measure across there. Always 20 cm, so the sizes can be compared.', 'curtain-woocommerce' ),
 		);
 	}
 

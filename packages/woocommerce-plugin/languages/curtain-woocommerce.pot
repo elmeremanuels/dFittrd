@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Curtain for WooCommerce 0.1.0\n"
 "Report-Msgid-Bugs-To: https://curtain.fit/woocommerce\n"
-"POT-Creation-Date: 2026-11-19 02:06+0000\n"
+"POT-Creation-Date: 2026-11-19 03:13+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -318,6 +318,30 @@ msgstr ""
 
 #: includes/class-garment-tape.php
 msgid "These numbers describe the garment, not a shopper. Shoppers’ measurements never reach you."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "What to measure"
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "You need a flat table, a tape measure and the skirt. Lay it flat, front up, smoothed but not pulled."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "First time? Start with three sizes: the smallest, the largest and one in between. About 3 minutes per size."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "A skirt laid flat. Measure straight across and double it (A to D); measure the length (E) as it is."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Pull-on means an elastic waist with nothing to open. For a pull-on skirt we check that the stretched band (B) goes over the shopper’s hips, so this answer matters most."
+msgstr ""
+
+#: includes/class-garment-tape.php
+msgid "Put a pin 20 cm below the top of the band on each side and measure across there. Always 20 cm, so the sizes can be compared."
 msgstr ""
 
 #: includes/class-plugin.php
@@ -661,7 +685,7 @@ msgstr ""
 msgid "Fit data is saved here and synced once you connect."
 msgstr ""
 
-#: includes/class-product-meta.php
+#: includes/class-product-meta.php includes/class-setup.php
 msgid "Connect"
 msgstr ""
 
@@ -790,6 +814,10 @@ msgstr ""
 
 #: includes/class-settings.php
 msgid "Key accepted. Your published products are being synced in the background."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Thank you. Your shoppers can now find their size on your product pages."
 msgstr ""
 
 #: includes/class-settings.php
@@ -1055,4 +1083,125 @@ msgstr ""
 
 #: includes/class-settings.php
 msgid "Terms"
+msgstr ""
+
+#: includes/class-setup.php
+msgid "Connect your shop"
+msgstr ""
+
+#: includes/class-setup.php
+msgid "Connected. We are bringing in your products from your shop; this usually takes a minute or two."
+msgstr ""
+
+#. translators: %s: "3 products"
+#: includes/class-setup.php
+msgid "Connected. %s brought in from your shop."
+msgstr ""
+
+#: includes/class-setup.php
+msgid "product"
+msgstr ""
+
+#: includes/class-setup.php
+msgid "products"
+msgstr ""
+
+#: includes/class-setup.php
+msgid "In WordPress, go to WooCommerce → Curtain and click “Connect to Curtain”."
+msgstr ""
+
+#: includes/class-setup.php
+msgid "Add a size chart"
+msgstr ""
+
+#. translators: %s: "3 products have"
+#: includes/class-setup.php
+msgid "%s a size chart."
+msgstr ""
+
+#: includes/class-setup.php
+msgid "product has"
+msgstr ""
+
+#: includes/class-setup.php
+msgid "products have"
+msgstr ""
+
+#: includes/class-setup.php
+msgid "Open a dress or skirt under Products. In the Curtain box choose “Start from a template” (Australian sizes are ready to use), press “Use template”, remove the sizes you do not sell and press Update."
+msgstr ""
+
+#: includes/class-setup.php
+msgid "Measure one skirt"
+msgstr ""
+
+#. translators: %s: "1 product has"
+#: includes/class-setup.php
+msgid "%s your own measurements. Thank you: these make the biggest difference."
+msgstr ""
+
+#: includes/class-setup.php
+msgid "Lay one skirt flat and measure five numbers on three sizes (the smallest, the largest and one in between). About 3 minutes per size. This is what stops us recommending a size that will not go over the hips."
+msgstr ""
+
+#: includes/class-setup.php
+msgid "Measure a skirt"
+msgstr ""
+
+#: includes/class-setup.php
+msgid "Turn the button on"
+msgstr ""
+
+#: includes/class-setup.php
+msgid "The “Try it on” button is on your product pages."
+msgstr ""
+
+#: includes/class-setup.php
+msgid "In WordPress, go to WooCommerce → Curtain, tick “Show button” and save. The button then appears on your product pages by itself."
+msgstr ""
+
+#: includes/class-setup.php
+msgid "Open the Curtain settings"
+msgstr ""
+
+#: includes/class-setup.php
+msgid "Check it on your phone"
+msgstr ""
+
+#: includes/class-setup.php
+msgid "You checked it on your phone."
+msgstr ""
+
+#: includes/class-setup.php
+msgid "Open the product link below on your phone (send it to yourself), tap “Try it on”, type a height and weight and see the size it suggests."
+msgstr ""
+
+#: includes/class-setup.php
+msgid "Open the product page"
+msgstr ""
+
+#: includes/class-setup.php
+msgid "All done. Shoppers can find their size on your product pages."
+msgstr ""
+
+#: includes/class-setup.php
+msgid "Get set up"
+msgstr ""
+
+#. translators: 1: steps done, 2: all steps
+#: includes/class-setup.php
+msgid "%1$d of %2$d done"
+msgstr ""
+
+#: includes/class-setup.php
+msgid "Five short steps to the “Try it on” button with a good size on your product pages. Each one ticks itself when it is done."
+msgstr ""
+
+#. translators: %d: minutes
+#: includes/class-setup.php
+msgid "about %d min"
+msgstr ""
+
+#: includes/class-setup.php
+msgid "It works on my phone"
 msgstr ""

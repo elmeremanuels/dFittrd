@@ -117,6 +117,34 @@
       .tape-table td.num::before { content: attr(data-label); display: block; font-size: 11px; line-height: 1.25; color: var(--p-text-subdued); }
       .tape-table input.cm { width: 100%; min-width: 0; }
     }
+    /* First-run checklist */
+    .setup-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .setup-head h2 { margin: 0; }
+    .setup-meter { margin: 8px 0 4px; }
+    ol.setup { list-style: none; margin: 8px 0 0; padding: 0; }
+    ol.setup > li { display: grid; grid-template-columns: 28px 1fr; gap: 4px 12px; padding: 12px 0; border-top: 1px solid var(--p-border); }
+    ol.setup > li:first-child { border-top: 0; }
+    ol.setup > li[aria-current="step"] { background: #fff8f6; margin: 0 -16px; padding: 12px 16px; border-left: 3px solid var(--coral); }
+    ol.setup .num { width: 24px; height: 24px; border-radius: 50%; border: 2px solid #8a8a8a; display: inline-grid; place-items: center; font-size: 12px; font-weight: 650; }
+    ol.setup .num.done { background: var(--p-success-fg); border-color: var(--p-success-fg); color: #fff; }
+    ol.setup .acts { grid-column: 2; display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+    ol.setup .mins { font-weight: 400; color: var(--p-text-subdued); font-size: 12px; }
+    .phone { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: center; margin-top: 8px; padding: 12px; border: 1px solid var(--p-border); border-radius: 10px; background: #fafafa; }
+    @media (min-width: 560px) { .phone { grid-template-columns: 160px 1fr; } }
+    .phone img { width: 160px; height: 160px; background: #fff; border-radius: 6px; }
+    /* Garment measurements: the form and its "what to measure" help side by side on a wide screen */
+    .tape-layout { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    @media (min-width: 900px) { .tape-layout { grid-template-columns: minmax(0, 1fr) 280px; } .tape-layout .tape-help { order: 2; } }
+    .tape-help { background: var(--cream); color: var(--ink); border-radius: 10px; padding: 10px 12px; align-self: start; }
+    .tape-help summary { color: var(--ink); font-weight: 650; }
+    .tape-help svg { display: block; width: 100%; max-width: 260px; height: auto; margin: 8px auto; }
+    .tape-help ul { margin: 6px 0 0; padding-left: 18px; }
+    .field-help { font-weight: 400; color: var(--p-text-subdued); font-size: 12px; max-width: 420px; }
+    .next-cell { min-width: 220px; }
+    #products-body .btn { white-space: nowrap; }
+    .next-cell .btn { margin-top: 4px; }
+    .score { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+    .score .meter { width: 64px; height: 6px; }
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
   </style>
 </head>
@@ -129,34 +157,39 @@
 
     <div id="banner" class="banner" role="status" aria-live="polite"></div>
 
-    <div class="grid grid-2">
-      <section class="card" aria-labelledby="h-onboarding">
-        <h2 id="h-onboarding">Get set up</h2>
-        <ul class="checklist" id="checklist">
-          <li data-step="connect"><span class="check" id="chk-install"></span><div><b>Connect this store</b><div class="subdued" id="txt-install">Checking…</div></div><span></span></li>
-          <li data-step="template"><span class="check" id="chk-template"></span><div><b>Pick a size chart template</b><div class="subdued" id="txt-template">Your region’s body chart (AU, UK, EU, US), or garment measurements you fill in.</div></div><a class="btn" href="#charts">Choose</a></li>
-          <li data-step="assign"><span class="check" id="chk-assign"></span><div><b>Assign it to products</b><div class="subdued" id="txt-assign">By collection, tag, product type, or pick products.</div></div><a class="btn" href="#assign">Assign</a></li>
-          <li data-step="themeBlock"><span class="check" id="chk-theme"></span><div><b>Add the “Try it on” block</b><div class="subdued">Opens the theme editor on your product template with the block pre-added. Save the theme, then mark it done.</div></div><span class="row"><a class="btn" id="lnk-theme" target="_top" rel="noopener">Add to theme</a><button class="btn" type="button" id="btn-theme-done">Done</button></span></li>
-          <li data-step="test"><span class="check" id="chk-test"></span><div><b>Test it on a product</b><div class="subdued" id="txt-test">Open a product with a chart, click “Try it on” and get a size.</div></div><span class="row"><a class="btn" href="#products">Pick a product</a><button class="btn" type="button" id="btn-test-done">Done</button></span></li>
-        </ul>
-        <p class="subdued" id="txt-data" style="margin:10px 0 0"></p>
-        <div class="privacy">
-          <b>Privacy by construction.</b> Shoppers' photos and measurements never leave their device. You receive aggregates only (k-anonymity floor), never a device id, a measurement or a photo.
+    <section class="card" id="setup" aria-labelledby="h-onboarding">
+      <div class="setup-head"><h2 id="h-onboarding">Get set up</h2><b id="setup-progress" role="status" aria-live="polite">Checking…</b></div>
+      <div class="meter setup-meter" aria-hidden="true"><i id="setup-meter" style="width:0%"></i></div>
+      <p class="subdued" id="setup-intro" style="margin:4px 0 0">Five short steps to the “Try it on” button with a good size on your product pages. Each one ticks itself when it is done.</p>
+      <ol class="setup" id="setup-list"><li><span class="num"></span><div class="skeleton"></div></li></ol>
+      <div id="phone-panel" class="phone hidden" role="region" aria-labelledby="phone-name">
+        <img id="phone-qr" alt="" width="160" height="160" />
+        <div>
+          <b id="phone-name"></b>
+          <p class="subdued" style="margin:4px 0 8px">Point your phone’s camera at the code and tap the link it shows. On the product page, tap “Try it on”, type a height and weight, and look at the size it suggests.</p>
+          <a class="btn" id="phone-link" target="_blank" rel="noopener">Open the product page ↗</a>
         </div>
-      </section>
+      </div>
+      <p class="subdued" id="txt-data" style="margin:10px 0 0"></p>
+      <div class="privacy">
+        <b>Your shoppers’ privacy.</b> Shoppers’ photos and measurements never leave their phone. You see totals only (and only once enough shoppers are in them), never a measurement, a photo or who it was.
+      </div>
+    </section>
 
+    <div style="margin-top:16px">
       <section class="card" aria-labelledby="h-usage">
-        <h2 id="h-usage">Plan &amp; usage</h2>
+        <h2 id="h-usage">Your plan</h2>
         <div class="stats">
           <div class="stat"><span class="subdued">Plan</span><b id="usage-plan">–</b></div>
-          <div class="stat"><span class="subdued">Try-on sessions this period</span><b id="usage-sessions">–</b></div>
-          <div class="stat"><span class="subdued">Hero renders (30 d)</span><b id="usage-renders">–</b></div>
+          <div class="stat"><span class="subdued">Sizes shown this month</span><b id="usage-sessions">–</b></div>
+          <div class="stat hidden" id="usage-renders-stat"><span class="subdued">AI pictures (30 days)</span><b id="usage-renders">–</b></div>
         </div>
         <div class="meter" aria-hidden="true"><i id="usage-meter" style="width:0%"></i></div>
         <div class="subdued" id="usage-period" style="margin-top:6px"></div>
         <div class="bars" id="usage-bars" aria-label="Try-on sessions per day, last 30 days" role="img"></div>
-        <div class="subdued" style="margin-top:8px">One try-on session = one product resolved by one shopper with a fit result, counted once per intent (retries are never counted twice).</div>
-        <div class="row" style="margin-top:12px"><span class="check" id="chk-plan" aria-hidden="true"></span><span class="subdued" id="txt-plan">Curtain: US$8.99 per month, flat, with a free trial. Every try-on session is included; sessions are counted, never billed. Without a plan the button keeps rendering; shoppers see a pause screen.</span><button class="btn btn-primary" id="btn-plan" type="button" disabled>Subscribe</button></div>
+        <div class="subdued" style="margin-top:8px">Each bar is one day: how many shoppers got a size on your product pages. Trying again does not count twice.</div>
+        <div class="row" style="margin-top:12px"><span class="check" id="chk-plan" aria-hidden="true"></span><span class="subdued" id="txt-plan" style="flex:1 1 240px">Curtain: US$8.99 a month, one flat price. Every shopper who tries a size is included; nothing is charged per try.</span><button class="btn btn-primary" id="btn-plan" type="button" disabled>Start the plan</button></div>
+        <details style="margin-top:12px" id="leaving"><summary id="leaving-h">Leaving Curtain</summary><ol class="plain" id="leaving-steps"></ol><p style="margin:8px 0 2px"><b id="leaving-data-h">Your data</b></p><ul class="plain" id="leaving-data"></ul></details>
       </section>
     </div>
 
@@ -239,11 +272,18 @@
       <div id="tape-panel" class="hidden" style="margin-top:16px;border-top:1px solid var(--p-border);padding-top:12px">
         <h3 id="h-tape" style="font-size:13px;margin:0 0 4px"></h3>
         <p class="subdued" id="tape-intro" style="margin:0"></p>
-        <details style="margin-top:6px"><summary id="tape-howto"></summary><ul class="plain" id="tape-howto-lines"></ul></details>
+        <div class="tape-layout">
+        <details class="tape-help" id="tape-help" open><summary id="tape-help-h"></summary>
+          <p style="margin:6px 0 0" id="tape-help-need"></p>
+          <div id="tape-diagram"></div>
+          <p class="subdued" style="margin:0" id="tape-help-caption"></p>
+          <ul id="tape-howto-lines"></ul>
+          <p style="margin:8px 0 0" id="tape-help-first"></p>
+        </details>
         <form id="tape-form" novalidate>
           <div class="tape-head">
-            <label for="tape-closure"><span id="tape-closure-label"></span><select class="input" id="tape-closure"></select></label>
-            <label for="tape-depth"><span id="tape-depth-label"></span><input class="input" id="tape-depth" inputmode="decimal" size="6" maxlength="8" /></label>
+            <label for="tape-closure"><span id="tape-closure-label"></span><select class="input" id="tape-closure" aria-describedby="tape-closure-help"></select><span class="field-help" id="tape-closure-help"></span></label>
+            <label for="tape-depth"><span id="tape-depth-label"></span><input class="input" id="tape-depth" inputmode="decimal" size="6" maxlength="8" aria-describedby="tape-depth-help" /><span class="field-help" id="tape-depth-help"></span></label>
           </div>
           <p class="subdued" id="tape-measured-hint" style="margin:0 0 6px"></p>
           <div style="overflow:auto">
@@ -258,6 +298,7 @@
           <div class="row" style="margin-top:10px"><button class="btn btn-primary" type="submit" id="tape-save"></button><span class="subdued" id="tape-status" role="status" aria-live="polite"></span></div>
           <p class="subdued" id="tape-privacy" style="margin:8px 0 0"></p>
         </form>
+        </div>
         <div id="tape-nochart" class="note note-info hidden"></div>
       </div>
     </section>
@@ -266,21 +307,22 @@
       <h2 id="h-products">Products <span class="subdued" id="products-counts"></span></h2>
       <div class="filters" role="group" aria-label="Filter by status">
         <button class="btn active" type="button" data-filter="all">All</button>
-        <button class="btn" type="button" data-filter="incomplete">Needs data</button>
-        <button class="btn" type="button" data-filter="active">Try-able</button>
+        <button class="btn" type="button" data-filter="incomplete">Not ready yet</button>
+        <button class="btn" type="button" data-filter="active">Ready</button>
       </div>
       <div style="overflow:auto">
         <table>
-          <thead><tr><th>Product</th><th>Category</th><th>Status</th><th class="num">Completeness</th><th>Missing</th><th><span class="sr">Actions</span></th></tr></thead>
-          <tbody id="products-body"><tr><td colspan="6"><div class="skeleton"></div></td></tr></tbody>
+          <thead><tr><th>Product</th><th>Kind</th><th>Size advice</th><th>What to do next</th><th><span class="sr">More</span></th></tr></thead>
+          <tbody id="products-body"><tr><td colspan="5"><div class="skeleton"></div></td></tr></tbody>
         </table>
       </div>
       <p class="subdued" id="products-note" style="margin:8px 0 0"></p>
+      <p class="subdued" style="margin:8px 0 0">Button not showing on a product page? <a id="lnk-theme" target="_top" rel="noopener">Open the theme editor</a>, check the “Try it on” block is on your product template, and press Save.</p>
     </section>
 
     <section class="card" aria-labelledby="h-ledger" style="margin-top:16px">
       <h2 id="h-ledger">Privacy ledger</h2>
-      <p class="subdued" style="margin:0 0 8px">Everything Curtain sent to an AI provider on behalf of your shoppers' opt-in hero renders. Inputs are never a shopper photo: an anonymised avatar render and your flat-lay only. Results are deleted within 24 hours.</p>
+      <p class="subdued" style="margin:0 0 8px">A record of every picture Curtain asked an AI service to make for your shoppers (only when a shopper asks for one; not part of the size advice). It never includes a shopper’s photo: only a drawn figure and your product photo. The pictures are deleted within 24 hours.</p>
       <div style="overflow:auto">
         <table>
           <thead><tr><th>When</th><th>Product</th><th>Provider</th><th>Model</th><th>Inputs</th><th class="num">Retention</th></tr></thead>
@@ -323,15 +365,29 @@
       function day(d) { return d.toISOString().slice(0, 10); }
       function fmtDate(iso) { var d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); }
 
+      var OPEN_FROM_ADMIN = 'Open Curtain from your Shopify admin (Apps → Curtain). This page only works inside Shopify.';
       async function idToken() {
-        if (!window.shopify || typeof shopify.idToken !== 'function') throw new Error('App Bridge did not load. Open this page from your Shopify admin.');
+        if (!window.shopify || typeof shopify.idToken !== 'function') throw new Error(OPEN_FROM_ADMIN);
         return shopify.idToken();
+      }
+      // Plain words for what went wrong: no HTTP codes or field names in front of a shop owner.
+      function friendly(err) {
+        if (!err) return 'Something went wrong. Reload the page and try again.';
+        if (err.code === 'shopify_not_configured') return 'Curtain is not finished setting up on our side yet. Nothing is wrong with your shop: email Curtain support and we sort it out.';
+        if (err.network) return 'We could not reach Curtain. Check your internet connection, then reload the page.';
+        if (err.status === 401 || err.status === 403) return 'Your Shopify session has run out. Reload the page to carry on.';
+        if (err.status === 429) return 'That was a lot at once. Wait a few seconds and try again.';
+        if (err.code === 'shopify_error' || err.status === 502) return 'Shopify did not answer just now. Try again in a minute.';
+        if (err.status >= 500) return 'Something went wrong on our side. Try again in a minute; if it keeps happening, email Curtain support.';
+        return err.message || String(err);
       }
       async function api(method, path, body, auth) {
         var headers = { accept: 'application/json' };
         if (body) headers['content-type'] = 'application/json';
         if (auth !== false) headers.authorization = 'Bearer ' + (await idToken());
-        var res = await fetch(cfg.apiUrl + path, { method: method, headers: headers, body: body ? JSON.stringify(body) : undefined, credentials: 'omit', cache: 'no-store' });
+        var res;
+        try { res = await fetch(cfg.apiUrl + path, { method: method, headers: headers, body: body ? JSON.stringify(body) : undefined, credentials: 'omit', cache: 'no-store' }); }
+        catch (e) { var ne = new Error('network'); ne.network = true; throw ne; }
         var data = null;
         try { data = await res.json(); } catch (_) { data = null; }
         if (!res.ok) {
@@ -346,12 +402,10 @@
 
       // 1. Managed installation: exchange the session token for an offline token (idempotent server-side).
       async function ensureInstalled() {
-        if (!shop) throw new Error('Missing ?shop= parameter. Open the app from the Shopify admin.');
+        if (!shop) throw new Error(OPEN_FROM_ADMIN);
         text('shop-domain', shop);
         var r = await api('POST', '/shopify/token-exchange', { shop: shop, sessionToken: await idToken() }, false);
         state.installed = r;
-        check('chk-install', true);
-        text('txt-install', 'Connected. Public key ' + r.publicKeyPrefix + (r.backfillQueued ? ' · importing your catalogue…' : ''));
         return r;
       }
 
@@ -365,14 +419,15 @@
         var u = await api('GET', '/v1/merchant/usage?from=' + day(from) + '&to=' + day(to));
         state.usage = u;
         var plan = u.plan;
-        var price = plan.chargeCurrency && plan.chargeCurrency !== 'USD' && typeof plan.chargePrice === 'number' ? plan.chargePrice.toFixed(2) + ' ' + plan.chargeCurrency + ' per month' : 'US$' + (plan.priceUsdPerMonth || 8.99).toFixed(2) + ' per month';
+        var price = plan.chargeCurrency && plan.chargeCurrency !== 'USD' && typeof plan.chargePrice === 'number' ? plan.chargePrice.toFixed(2) + ' ' + plan.chargeCurrency + ' a month' : 'US$' + (plan.priceUsdPerMonth || 8.99).toFixed(2) + ' a month';
         // B2: a shop moved from a retired plan still pays that plan's old price until it approves Curtain.
         var legacy = plan.name !== 'free' && !!plan.legacyPlan;
         text('usage-plan', (plan.name === 'free' ? 'No plan' : legacy ? 'Retired plan (' + plan.legacyPlan + ') at its old price' : 'Curtain · ' + price) + (plan.paused ? ' · paused' : ''));
         text('usage-sessions', String(plan.sessionsUsedThisPeriod));
         text('usage-renders', String(u.totals.heroRenders));
+        $('usage-renders-stat').classList.toggle('hidden', !u.totals.heroRenders);
         $('usage-meter').style.width = '0%';
-        text('usage-period', 'Period ' + plan.periodStart + ' → ' + plan.periodEnd + ' · sessions are counted for your analytics, not billed');
+        text('usage-period', 'This month: ' + plan.periodStart + ' to ' + plan.periodEnd + '. Counted for your own information, never charged per size.');
         var bars = $('usage-bars'); bars.textContent = '';
         var max = Math.max(1, Math.max.apply(null, u.days.map(function (d) { return d.fitSessions; }).concat([0])));
         u.days.forEach(function (d) { var i = el('i', { title: d.day + ': ' + d.fitSessions }); i.style.height = Math.max(2, Math.round(100 * d.fitSessions / max)) + '%'; bars.appendChild(i); });
@@ -381,42 +436,75 @@
         if (cfg.billing === 'arranged') {
           // Custom distribution: Shopify does not let this app charge through its billing system.
           $('btn-plan').hidden = true;
-          text('usage-plan', (plan.name === 'free' ? 'No plan' : 'Curtain · arranged with Curtain') + (plan.paused ? ' · paused' : ''));
-          text('txt-plan', onPlan ? 'Your Curtain plan is arranged directly with Curtain. Every try-on session is included; sessions are counted, never billed through Shopify.' : 'Your Curtain plan is arranged directly with Curtain. Contact Curtain support to (re)activate it.');
-          if (plan.paused) banner('warning', 'Your shop is paused: shoppers see a “taking a short break” screen. Contact Curtain support to resume.');
+          var usd = 'US$' + (plan.priceUsdPerMonth || 8.99).toFixed(2) + ' a month';
+          text('usage-plan', (plan.name === 'free' ? 'Not active yet' : 'Curtain · ' + usd) + (plan.paused ? ' · paused' : ''));
+          text('txt-plan', cfg.plan.oneLine + ' ' + cfg.plan.arranged + (onPlan ? '' : ' ' + cfg.plan.arrangedInactive));
+          if (plan.paused) banner('warning', 'Your Curtain plan is paused, so shoppers see a short “taking a break” note instead of a size. Email Curtain support and we switch it back on.');
           return;
         }
         $('btn-plan').disabled = onPlan;
-        $('btn-plan').textContent = onPlan ? 'Subscribed' : legacy ? 'Switch to Curtain (US$' + (plan.priceUsdPerMonth || 8.99).toFixed(2) + ')' : 'Subscribe';
+        $('btn-plan').textContent = onPlan ? 'Plan active' : legacy ? 'Switch to Curtain (US$' + (plan.priceUsdPerMonth || 8.99).toFixed(2) + ')' : 'Start the plan';
+        text('txt-plan', cfg.plan.oneLine + ' ' + cfg.plan.shopifyBilling + (onPlan ? '' : ' ' + cfg.plan.pausedNote));
         if (legacy && !plan.paused) banner('info', 'Your shop is still billed on the retired ' + plan.legacyPlan + ' plan at its old price. Switch to Curtain (US$' + (plan.priceUsdPerMonth || 8.99).toFixed(2) + ' per month, flat): Shopify replaces the old subscription when you approve.');
-        if (plan.paused) banner('warning', 'Your shop is paused: shoppers see a “taking a short break” screen. Approve the Curtain plan to resume.');
+        if (plan.paused) banner('warning', 'Your Curtain plan is not active, so shoppers see a short “taking a break” note instead of a size. Press “Start the plan” and approve it in Shopify to switch it on.');
       }
 
+      var importPoll = { timer: null, until: 0 };
       async function loadProducts() {
         var r = await api('GET', '/v1/merchant/products?limit=200');
         state.products = r;
-        text('products-counts', '· ' + r.counts.active + ' try-able, ' + r.counts.incomplete + ' need data');
-        text('txt-data', r.counts.incomplete === 0 ? 'All synced products are try-able.' : r.counts.incomplete + ' product(s) need a size chart and its type (body or garment) before shoppers can get a size.');
+        var ready = r.counts.active, notReady = r.counts.incomplete;
+        text('products-counts', '· ' + ready + ' ready, ' + notReady + ' not ready yet');
+        text('txt-data', !r.items.length ? '' : notReady === 0 ? 'Every product gives shoppers a size.' : notReady + (notReady === 1 ? ' product needs' : ' products need') + ' a size chart before shoppers can get a size. The list below says what to do for each.');
         text('products-note', r.nextCursor ? 'Showing the first 200 products.' : '');
         renderProducts();
+        // Right after install the catalogue is still coming in: look again every 5 seconds for 2 minutes.
+        clearTimeout(importPoll.timer);
+        if (!r.items.length) {
+          if (!importPoll.until) importPoll.until = Date.now() + 120000;
+          if (Date.now() < importPoll.until) importPoll.timer = setTimeout(function () { loadProducts().then(loadOnboarding).catch(function () {}); }, 5000);
+        }
       }
 
+      function gidOf(id) { return 'gid://shopify/Product/' + String(id).replace(/[^0-9]/g, ''); }
+      function productAction(p) {
+        var n = p.next;
+        if (!n || !n.action) return null;
+        var b = el('button', { class: 'btn' + (n.tone === 'critical' ? ' btn-primary' : ''), type: 'button', text: n.action });
+        b.addEventListener('click', function () {
+          if (n.key === 'category') { open('https://' + shop + '/admin/products/' + encodeURIComponent(p.externalId), '_top'); return; }
+          if (n.key === 'chart') {
+            // Pre-pick this product in "Assign to products" and take the merchant there.
+            sel.products = [{ id: gidOf(p.externalId), title: p.name }]; text('sel-products', p.name); setRadio('sel-kind', 'products');
+            var h = $('assign'); if (h.scrollIntoView) h.scrollIntoView({ block: 'start' });
+            return;
+          }
+          openProduct(p.externalId, p.name, n.key === 'measure');
+        });
+        return b;
+      }
       function renderProducts() {
         var body = $('products-body'); body.textContent = '';
-        var items = (state.products ? state.products.items : []).filter(function (p) { return state.filter === 'all' ? p.status !== 'archived' : p.status === state.filter; });
-        if (!items.length) { body.appendChild(el('tr', null, [el('td', { colspan: '6', class: 'empty', text: state.products && state.products.items.length ? 'Nothing here.' : 'No products synced yet. Publish a product and give it Curtain fields in the product admin (Metafields → Curtain).' })])); return; }
+        var all = state.products ? state.products.items : [];
+        var items = all.filter(function (p) { return state.filter === 'all' ? p.status !== 'archived' : p.status === state.filter; });
+        if (!items.length) {
+          var empty = all.length ? 'Nothing here.' : importPoll.until && Date.now() >= importPoll.until ? 'No products yet. Products you publish in Shopify show up here within a minute; reload the page to look again.' : 'We are bringing in your products from Shopify. This usually takes a minute or two, and this list fills in by itself.';
+          body.appendChild(el('tr', null, [el('td', { colspan: '5', class: 'empty', text: empty })]));
+          return;
+        }
         items.forEach(function (p) {
-          var badge = p.status === 'active' ? ['badge-success', 'Try-able'] : p.status === 'incomplete' ? ['badge-warning', 'Needs data'] : ['badge-critical', 'Archived'];
-          var missing = p.missingFields.slice(0, 4).join(', ') + (p.missingFields.length > 4 ? ' +' + (p.missingFields.length - 4) : '');
+          var n = p.next || { badge: p.status === 'active' ? 'Ready' : 'Not ready yet', tone: p.status === 'active' ? 'success' : 'critical', text: '' };
+          var score = typeof p.adviceScore === 'number' ? p.adviceScore : Math.round(p.score * 100);
+          var meter = el('span', { class: 'meter', 'aria-hidden': 'true' }); var fill = el('i'); fill.style.width = score + '%'; meter.appendChild(fill);
+          var act = productAction(p);
           body.appendChild(el('tr', null, [
-            el('td', null, [el('b', { text: p.name }), el('div', { class: 'subdued mono', text: p.externalId })]),
-            el('td', { text: p.category || '–' }),
-            el('td', null, [el('span', { class: 'badge ' + badge[0], text: badge[1] })]),
-            el('td', { class: 'num', text: Math.round(p.score * 100) + '%' }),
-            el('td', { class: 'subdued', text: missing || '–' }),
+            el('td', null, [el('b', { text: p.name })]),
+            el('td', { text: (cfg.categories && cfg.categories[p.category]) || '–' }),
+            el('td', null, [el('span', { class: 'badge badge-' + n.tone, text: n.badge }), el('div', { class: 'score subdued' }, [meter, el('span', { text: score + ' / 100' })])]),
+            el('td', { class: 'next-cell' }, [el('div', { text: n.text })].concat(act ? [act] : [])),
             el('td', null, [el('span', { class: 'row' }, [
-              el('button', { class: 'btn', type: 'button', 'data-product': p.externalId, 'data-name': p.name, text: 'Size chart' }),
-              el('a', { class: 'btn', href: 'https://' + shop + '/admin/products/' + encodeURIComponent(p.externalId), target: '_top', rel: 'noopener', text: 'Edit' })
+              el('button', { class: 'btn', type: 'button', 'data-product': p.externalId, 'data-name': p.name, text: 'Open' }),
+              el('a', { class: 'btn', href: 'https://' + shop + '/admin/products/' + encodeURIComponent(p.externalId), target: '_top', rel: 'noopener', text: 'Edit in Shopify' })
             ])])
           ]));
         });
@@ -426,7 +514,7 @@
         var r = await api('GET', '/v1/merchant/ledger?limit=20');
         state.ledger = r;
         var body = $('ledger-body'); body.textContent = '';
-        if (!r.entries.length) { body.appendChild(el('tr', null, [el('td', { colspan: '6', class: 'empty', text: 'No AI renders yet. Nothing has been sent to any provider on behalf of your shop.' })])); return; }
+        if (!r.entries.length) { body.appendChild(el('tr', null, [el('td', { colspan: '6', class: 'empty', text: 'Nothing yet. No picture has been asked of any AI service for your shop.' })])); return; }
         r.entries.forEach(function (e) {
           body.appendChild(el('tr', null, [
             el('td', { text: fmtDate(e.at) }),
@@ -446,7 +534,7 @@
           if (r.confirmationUrl) open(r.confirmationUrl, '_top');
           else banner('info', 'Subscription created. Refresh to see its status.');
         } catch (err) {
-          banner('critical', 'Could not start billing: ' + err.message);
+          banner('critical', 'The plan could not be started. ' + friendly(err));
           btn.disabled = false;
         }
       }
@@ -477,8 +565,6 @@
         Object.keys(CT.sleeveConventions).forEach(function (k) { $('sleeve-convention-' + k).textContent = CT.sleeveConventions[k]; });
       }
       var sel = { collection: null, products: [] };
-      var STEP_CHECK = { connect: 'chk-install', template: 'chk-template', assign: 'chk-assign', themeBlock: 'chk-theme', test: 'chk-test' };
-      var STEP_TEXT = { template: 'txt-template', assign: 'txt-assign', test: 'txt-test' };
 
       function note(id, kind, lines) {
         var box = $(id); box.textContent = '';
@@ -493,23 +579,70 @@
       function toUnit(cm) { if (typeof cm !== 'number') return ''; return charts.unit === 'in' ? String(Math.round(cm / CM_PER_IN * 4) / 4) : String(cm); }
       function toCm(v) { var n = Number(String(v).replace(',', '.')); if (!isFinite(n) || n <= 0) return null; return Math.round((charts.unit === 'in' ? n * CM_PER_IN : n) * 2) / 2; }
 
+      // ---- first-run checklist: five steps from the api (@curtain/schema merchantSetup.ts) ------------
+      var setup = null;
+      function goTo(id) { var h = $(id); if (h && h.scrollIntoView) h.scrollIntoView({ block: 'start' }); }
+      function stepAction(st) {
+        if (!st.action || st.done) return null;
+        var primary = setup && st.key === setup.next;
+        var cls = 'btn' + (primary ? ' btn-primary' : '');
+        if (st.action.target === 'theme') return el('a', { class: cls, href: shop ? themeLink() : '#', target: '_top', rel: 'noopener', text: st.action.label });
+        var b = el('button', { class: cls, type: 'button', text: st.action.label });
+        b.addEventListener('click', function () {
+          if (st.action.target === 'charts') goTo('charts');
+          else if (st.action.target === 'measure') {
+            if (setup.measureProduct) openProduct(setup.measureProduct.externalId, setup.measureProduct.name, true);
+            else { goTo('products'); banner('info', 'Add a size chart to a skirt first (step 2): the measurements are entered per size of its chart.'); }
+          } else if (st.action.target === 'phone') showPhone(true);
+        });
+        return b;
+      }
+      function showPhone(scroll) {
+        var pc = setup && setup.phoneCheck; var panel = $('phone-panel');
+        if (!pc) { banner('info', 'Once a product has a size chart and is published in your online store, its code appears here.'); return; }
+        $('phone-qr').src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(pc.qrSvg);
+        $('phone-qr').alt = 'Code for ' + pc.name;
+        text('phone-name', pc.name); $('phone-link').href = pc.url;
+        panel.classList.remove('hidden');
+        if (scroll && panel.scrollIntoView) panel.scrollIntoView({ block: 'nearest' });
+      }
+      function renderSetup(r) {
+        setup = r;
+        text('setup-progress', r.headline);
+        $('setup-meter').style.width = Math.round(100 * r.doneCount / r.total) + '%';
+        var list = $('setup-list'); list.textContent = '';
+        r.steps.forEach(function (st) {
+          var acts = [];
+          var a = stepAction(st); if (a) acts.push(a);
+          if (st.confirmLabel) {
+            var c = el('button', { class: 'btn', type: 'button', text: st.confirmLabel });
+            c.addEventListener('click', function () { c.disabled = true; saveOnboarding(st.key === 'button' ? { themeBlockConfirmed: true } : { tested: true }); });
+            acts.push(c);
+          }
+          var li = el('li', { 'data-step': st.key }, [
+            el('span', { class: 'num' + (st.done ? ' done' : ''), 'aria-hidden': 'true', text: st.done ? '✓' : String(st.number) }),
+            el('div', null, [
+              el('b', { text: st.number + '. ' + st.title }), el('span', { class: 'sr', text: st.done ? ' (done)' : ' (to do)' }),
+              st.done ? '' : el('span', { class: 'mins', text: ' · about ' + st.minutes + ' min' }),
+              el('div', { class: 'subdued', text: st.detail })
+            ])
+          ].concat(acts.length ? [el('div', { class: 'acts' }, acts)] : []));
+          if (st.key === r.next) li.setAttribute('aria-current', 'step');
+          list.appendChild(li);
+        });
+        if (r.next !== 'phone' && !$('phone-panel').classList.contains('hidden')) showPhone(false);
+        if (r.next === 'phone') showPhone(false);
+      }
       async function loadOnboarding() {
         var r = await api('GET', '/shopify/charts/onboarding');
-        r.steps.forEach(function (st) {
-          if (STEP_CHECK[st.key]) check(STEP_CHECK[st.key], st.done);
-          if (STEP_TEXT[st.key]) text(STEP_TEXT[st.key], st.detail);
-          var li = document.querySelector('[data-step="' + st.key + '"]');
-          if (li) { if (st.key === r.next) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current'); }
-        });
-        $('btn-theme-done').disabled = r.steps.some(function (st) { return st.key === 'themeBlock' && st.done; });
-        $('btn-test-done').disabled = r.steps.some(function (st) { return st.key === 'test' && st.done; });
+        renderSetup(r);
         // A saved template wins over the default; the default (AU) is only picked when nothing is saved.
         if (!charts.tpl) selectTemplate(r.state.templateId && charts.templates.some(function (t) { return t.id === r.state.templateId; }) ? r.state.templateId : defaultTemplateId(), false);
         return r;
       }
       async function saveOnboarding(patch) {
         try { await api('PUT', '/shopify/charts/onboarding', patch); await loadOnboarding(); }
-        catch (err) { banner('warning', 'Could not save the setup step: ' + err.message); }
+        catch (err) { banner('warning', 'That step could not be saved. ' + friendly(err)); }
       }
 
       async function loadTemplates() {
@@ -669,7 +802,7 @@
 
       // ---- one product: checklist, preview, import from description -------------------------------
       var current = null;
-      async function openProduct(id, name) {
+      async function openProduct(id, name, toTape) {
         current = { id: id, name: name };
         $('product-panel').classList.remove('hidden');
         text('h-product', name);
@@ -689,8 +822,9 @@
           var prev = $('lnk-preview');
           if (c.previewUrl) { prev.href = c.previewUrl; prev.classList.remove('hidden'); } else prev.classList.add('hidden');
           $('lnk-admin').href = c.adminUrl;
-          loadTape(id);
-        } catch (err) { $('product-checklist').textContent = ''; note('import-result', 'critical', ['Could not load the product: ' + err.message]); }
+          await loadTape(id);
+          if (toTape) { var tp = $('tape-panel'); if (tp.scrollIntoView) tp.scrollIntoView({ block: 'start' }); var cl = $('tape-closure'); if (cl && !cl.value) cl.focus(); }
+        } catch (err) { $('product-checklist').textContent = ''; note('import-result', 'critical', ['Could not open this product. ' + friendly(err)]); }
       }
 
       async function importDescription() {
@@ -752,7 +886,12 @@
       var tape = { id: null, sizes: [], measured: {}, filled: [], timer: null, seq: 0 };
       function tapeValue(v) { v = String(v == null ? '' : v).trim().replace(',', '.'); if (!v) return null; var n = Number(v); return isFinite(n) ? n : v; }
       function tapeStaticText() {
-        text('h-tape', TT.text.heading); text('tape-intro', TT.text.intro); text('tape-howto', TT.text.howTo);
+        text('h-tape', TT.text.heading); text('tape-intro', TT.text.intro);
+        text('tape-help-h', TT.text.whatToMeasure); text('tape-help-need', TT.text.youNeed); text('tape-help-caption', TT.text.diagramCaption); text('tape-help-first', TT.text.firstTime);
+        text('tape-closure-help', TT.text.closureHelp); text('tape-depth-help', TT.text.depthHelp);
+        // Our own static drawing from @curtain/schema (GARMENT_TAPE_DIAGRAM_SVG): letters A to E and "20 cm", no script.
+        $('tape-diagram').innerHTML = cfg.tapeDiagram;
+        if (window.matchMedia && window.matchMedia('(max-width: 640px)').matches) $('tape-help').open = false;
         var ul = $('tape-howto-lines'); ul.textContent = ''; TT.text.howToLines.forEach(function (l) { ul.appendChild(el('li', { text: l })); });
         text('tape-closure-label', TT.text.closureLabel); text('tape-depth-label', TT.text.hipDepthLabel);
         $('tape-depth').placeholder = TT.text.hipDepthPlaceholder;
@@ -887,7 +1026,7 @@
           showTapeIssues(r);
           text('tape-status', r.written.length ? TT.text.saved : (r.measured.length ? TT.text.saved : TT.text.nothingToSave));
           renderTapeRows();
-          setTimeout(function () { loadProducts().catch(function () {}); }, 2500);
+          setTimeout(function () { loadProducts().catch(function () {}); loadOnboarding().catch(function () {}); }, 2500);
         } catch (err) {
           text('tape-status', '');
           showTapeIssues({ errors: (err.details && err.details.errors) || [{ message: err.message }], warnings: (err.details && err.details.warnings) || [] });
@@ -929,8 +1068,6 @@
       ['sel-tag', 'sel-type'].forEach(function (id) { $(id).addEventListener('focus', function () { setRadio('sel-kind', $(id).getAttribute('data-kind')); }); });
       $('btn-preview').addEventListener('click', previewSelection);
       $('btn-assign').addEventListener('click', assignChart);
-      $('btn-theme-done').addEventListener('click', function () { saveOnboarding({ themeBlockConfirmed: true }); });
-      $('btn-test-done').addEventListener('click', function () { saveOnboarding({ tested: true }); });
       $('btn-import').addEventListener('click', importDescription);
       $('btn-close-product').addEventListener('click', function () { $('product-panel').classList.add('hidden'); var b = current && document.querySelector('[data-product="' + String(current.id).replace(/[^0-9A-Za-z_-]/g, '') + '"]'); current = null; if (b) b.focus(); });
       $('products-body').addEventListener('click', function (ev) {
@@ -947,18 +1084,22 @@
       });
       $('btn-plan').addEventListener('click', subscribe);
       text('disclaimer', cfg.disclaimer);
+      text('leaving-h', cfg.plan.leaving.heading);
+      cfg.plan.leaving.steps.forEach(function (l) { $('leaving-steps').appendChild(el('li', { text: l })); });
+      cfg.plan.leaving.data.forEach(function (l) { $('leaving-data').appendChild(el('li', { text: l })); });
 
       (async function main() {
         try {
-          if (shop) { $('lnk-theme').href = themeLink(); check('chk-theme', false); }
+          if (shop) $('lnk-theme').href = themeLink();
           await ensureInstalled();
           var results = await Promise.allSettled([loadUsage(), loadProducts(), loadLedger(), loadTemplates().then(loadOnboarding).catch(function (err) { if (!charts.tpl && defaultTemplateId()) selectTemplate(defaultTemplateId(), false); throw err; })]);
           var failed = results.filter(function (r) { return r.status === 'rejected'; });
-          if (failed.length) banner('warning', 'Some panels could not load: ' + failed.map(function (f) { return f.reason && f.reason.message; }).join(' · '));
+          if (failed.length) banner('warning', 'Part of this page could not load. ' + friendly(failed[0].reason) + ' Reload the page to try again.');
         } catch (err) {
-          var msg = err && err.code === 'shopify_not_configured' ? 'The Curtain API is not configured for Shopify yet (SHOPIFY_API_KEY/SECRET).' : (err && err.message) || String(err);
-          banner('critical', msg);
-          text('txt-install', 'Not connected.');
+          banner('critical', friendly(err));
+          text('setup-progress', 'Not connected yet');
+          $('setup-list').textContent = '';
+          $('setup-list').appendChild(el('li', null, [el('span', { class: 'num', 'aria-hidden': 'true', text: '1' }), el('div', null, [el('b', { text: '1. Connect your shop' }), el('div', { class: 'subdued', text: friendly(err) })])]));
           $('products-body').textContent = ''; $('ledger-body').textContent = '';
         }
       })();

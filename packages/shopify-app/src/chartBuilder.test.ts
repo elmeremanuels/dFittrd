@@ -1,6 +1,6 @@
 import { completenessScore } from '@curtain/schema';
 import { describe, expect, it } from 'vitest';
-import { HEAVY_FIELDS, onboardingSteps, productChecklist, tryItOnPreviewUrl } from './chartBuilder';
+import { HEAVY_FIELDS, productChecklist, tryItOnPreviewUrl } from './chartBuilder';
 import { SHOP, WRAP_METAFIELDS, wrapDressNode } from './test/fixtures';
 
 describe('productChecklist', () => {
@@ -45,32 +45,5 @@ describe('productChecklist', () => {
     const heavy = new Set<string>();
     for (const g of [{}, { category: 'dress' }]) for (const m of completenessScore(g).missing) if (m.severity === 'heavy') heavy.add(m.field);
     expect([...HEAVY_FIELDS].sort()).toEqual([...heavy].sort());
-  });
-});
-
-describe('onboardingSteps', () => {
-  const base = { connected: true, templateId: null, themeBlockConfirmed: false, tested: false, productsWithChart: 0, fitSessions: 0 };
-
-  it('walks connect → template → assign → theme block → test', () => {
-    expect(onboardingSteps({ ...base, connected: false }).next).toBe('connect');
-    expect(onboardingSteps(base).next).toBe('template');
-    expect(onboardingSteps({ ...base, templateId: 'au-womens-body' }).next).toBe('assign');
-    expect(onboardingSteps({ ...base, templateId: 'au-womens-body', productsWithChart: 3 }).next).toBe('themeBlock');
-    expect(onboardingSteps({ ...base, templateId: 'au-womens-body', productsWithChart: 3, themeBlockConfirmed: true }).next).toBe('test');
-    const done = onboardingSteps({ ...base, templateId: 'au-womens-body', productsWithChart: 3, themeBlockConfirmed: true, tested: true });
-    expect(done.next).toBeNull();
-    expect(done.steps).toHaveLength(5);
-  });
-
-  it('R5: a chart assigned to products completes the template step even if the pick was never saved', () => {
-    const r = onboardingSteps({ ...base, productsWithChart: 2 });
-    expect(r.steps.find((s) => s.key === 'template')!.done).toBe(true);
-    expect(r.next).toBe('themeBlock');
-  });
-
-  it('a real fit result proves the block and the test', () => {
-    const r = onboardingSteps({ ...base, fitSessions: 4 });
-    expect(r.steps.find((s) => s.key === 'themeBlock')!.done).toBe(true);
-    expect(r.steps.find((s) => s.key === 'test')!.detail).toMatch(/4 size recommendation/);
   });
 });

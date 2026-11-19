@@ -35,10 +35,10 @@ export const FIDELITY_THRESHOLDS = {
   sizeSeparationShare: 0.5,
   /** A size difference smaller than this (cm) is not visible in 3D either and is not checked. */
   minVisibleGapCm: 0.5,
-  /** Segmentation keys (CIE76). */
+  /** Segmentation keys: backdrop CIE76, garment `keyDistance`. */
   backdropKeyDeltaE: 8,
   garmentKeyDeltaE: 14,
-  /** The garment must differ this much (CIE76) from the backdrop and from the body in the 3D colour pass to be verifiable. */
+  /** The garment must differ this much (`keyDistance`) from the backdrop and from the body in the 3D colour pass to be verifiable. */
   minGarmentContrast: 12,
   erodePx: 3,
 } as const;
@@ -208,12 +208,47 @@ export function figureOf(img: RgbaImage, backdropHex: string, keyDeltaE: number)
   return { width: img.width, height: img.height, data: out };
 }
 
-/** AI garment: figure pixels near the reference colour. */
+/**
+ * Segmentation key: Lab distance with lightness weighted down (`KEY_L_WEIGHT`), so shading on the
+ * folds and edges of one plain colour stays in the garment while another hue or chroma does not
+ * (the idea of CMC l:c = 2:1). The colour check itself uses full CIEDE2000.
+ */
+export const KEY_L_WEIGHT = 0.4;
+export function keyDistance(a: Lab, b: Lab): number {
+  return Math.hypot((a[0] - b[0]) * KEY_L_WEIGHT, a[1] - b[1], a[2] - b[2]);
+}
+
+/** A garment colour with at least this chroma is keyed by hue (shading and sheen change lightness and chroma, not hue). */
+export const CHROMATIC_REF_C = 15;
+/** Hue window and the share of the reference chroma a pixel needs, for a chromatic garment. */
+export const HUE_WINDOW_DEG = 20;
+export const MIN_CHROMA_SHARE = 0.35;
+
+const chroma = (l: Lab): number => Math.hypot(l[1], l[2]);
+const hue = (l: Lab): number => ((Math.atan2(l[2], l[1]) * 180) / Math.PI + 360) % 360;
+const hueGap = (a: number, b: number): number => {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+};
+
+/**
+ * Is this pixel the garment, given the garment's reference colour? Chromatic garment: same hue
+ * within ±20° and at least 35 % of its chroma, so lit and shaded sides stay in (measured on the
+ * real 3D render of the pilot skirt, 19 Nov 2026: the edges keep the hue, 24° against 29°, at half
+ * the chroma). Achromatic garment (black, grey, white): `keyDistance` within the key.
+ */
+export function isGarmentColour(px: Lab, ref: Lab, keyDeltaE: number): boolean {
+  const rc = chroma(ref);
+  if (rc >= CHROMATIC_REF_C) return chroma(px) >= MIN_CHROMA_SHARE * rc && hueGap(hue(px), hue(ref)) <= HUE_WINDOW_DEG;
+  return keyDistance(px, ref) <= keyDeltaE;
+}
+
+/** AI garment: figure pixels of the garment's colour (`isGarmentColour`). */
 export function garmentOf(img: RgbaImage, figure: MaskImage, ref: Lab, keyDeltaE: number): MaskImage {
   const out = new Uint8Array(img.width * img.height);
   for (let i = 0; i < out.length; i++) {
     if (!on(figure, i)) continue;
-    out[i] = deltaE76(srgbToLab(img.data[4 * i]!, img.data[4 * i + 1]!, img.data[4 * i + 2]!), ref) <= keyDeltaE ? 255 : 0;
+    out[i] = isGarmentColour(srgbToLab(img.data[4 * i]!, img.data[4 * i + 1]!, img.data[4 * i + 2]!), ref, keyDeltaE) ? 255 : 0;
   }
   return { width: img.width, height: img.height, data: out };
 }
@@ -239,7 +274,7 @@ export function checkFidelity(passes: RenderPasses, ai: RgbaImage, overrides: Pa
   const garmentLab3d = medianLab(passes.colour, core);
   const bodyLab3d = medianLab(passes.colour, erode(minus(figure3d, garment3d), t.erodePx));
   const backdropLab = srgbToLab(...hexToRgb(passes.meta.backdropHex));
-  if (!garmentLab3d || deltaE76(garmentLab3d, backdropLab) < t.minGarmentContrast || (bodyLab3d && deltaE76(garmentLab3d, bodyLab3d) < t.minGarmentContrast)) return refuse('unverifiable');
+  if (!garmentLab3d || keyDistance(garmentLab3d, backdropLab) < t.minGarmentContrast || (bodyLab3d && keyDistance(garmentLab3d, bodyLab3d) < t.minGarmentContrast)) return refuse('unverifiable');
 
   const figureAi = figureOf(ai, passes.meta.backdropHex, t.backdropKeyDeltaE);
   const garmentLabAi = medianLab(ai, core);

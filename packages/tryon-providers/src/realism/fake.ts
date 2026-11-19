@@ -8,10 +8,12 @@ import { DISCLAIMER } from '../types.js';
 import type { RealismCapabilities, RealismInput, RealismOutput, RealismProvider } from './provider.js';
 import type { RgbaImage } from './passes.js';
 
-export type FakeRealismMode = 'faithful' | 'move-hem' | 'recolour' | 'neighbour-size' | 'repaint-backdrop' | 'widen';
+export type FakeRealismMode = 'faithful' | 'move-hem' | 'recolour' | 'neighbour-size' | 'repaint-backdrop' | 'widen' | 'relight';
 
 export interface FakeRealismConfig {
   mode?: FakeRealismMode;
+  /** For `relight`: brightness factor on the figure (default 0.93). */
+  light?: number;
   /** For `move-hem` / `widen`: how many cm. Default 4. */
   cm?: number;
   costUsd?: number;
@@ -94,6 +96,9 @@ export class FakeRealismProvider implements RealismProvider {
         if (nb[i]! >= 128) paint(i, garmentPx);
         else if (gar[i]! >= 128) paint(i, fig[i]! >= 128 ? skin : bd);
       }
+    } else if (mode === 'relight') {
+      const k = this.config.light ?? 0.93;
+      for (let i = 0; i < w * h; i++) if (fig[i]! >= 128) paint(i, [src[4 * i]! * k, src[4 * i + 1]! * k, src[4 * i + 2]! * k].map(Math.round));
     } else if (mode === 'repaint-backdrop') {
       for (let i = 0; i < w * h; i++) if (fig[i]! < 128) paint(i, [90 + ((i / w) % 60), 110, 140]);
     }

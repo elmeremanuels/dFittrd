@@ -881,6 +881,24 @@ export class Figure {
   }
 }
 
+/** Share of the stature added as room in a render pass's frame (split over head and feet). */
+export const PASS_FRAME_MARGIN = 0.16;
+
+/**
+ * Camera of the render passes: the view direction of the front frame, aimed at the middle of the
+ * body, at the distance where the stature plus `PASS_FRAME_MARGIN` fills the vertical field of view.
+ * Pure.
+ */
+export function passFrame(position: { x: number; y: number; z: number }, target: { x: number; y: number; z: number }, statureCm: number, fovDeg: number): { position: [number, number, number]; target: [number, number, number] } {
+  const stature = statureCm > 0 ? statureCm : 170;
+  const dx = position.x - target.x, dz = position.z - target.z;
+  const len = Math.hypot(dx, dz) || 1;
+  const h = stature * (1 + PASS_FRAME_MARGIN);
+  const dist = h / 2 / Math.tan(((fovDeg * Math.PI) / 180) / 2);
+  const cy = stature / 2;
+  return { position: [target.x + (dx / len) * dist, cy, target.z + (dz / len) * dist], target: [target.x, cy, target.z] };
+}
+
 /** What `renderPasses` needs besides the stage and the figure. */
 export interface PassRequest {
   width: number;
@@ -938,7 +956,13 @@ export function renderPasses(stage: Stage, figure: Figure, req: PassRequest): Vi
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    // Front view, framed with room under the feet and over the head (`passFrame`): a hem that an AI
+    // image moves must stay inside the picture for the checks to see it.
     stage.frame(60, req.statureCm);
+    const pf = passFrame(camera.position, controls.target, req.statureCm, camera.fov);
+    camera.position.set(...pf.position);
+    controls.target.set(...pf.target);
+    camera.lookAt(controls.target);
     camera.updateMatrixWorld();
     scene.background = new THREE.Color(BACKDROP_HEX);
 

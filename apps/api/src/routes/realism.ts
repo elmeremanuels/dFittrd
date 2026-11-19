@@ -99,7 +99,7 @@ export const realismRoutes: FastifyPluginAsyncZod = async (app) => {
             fields: ['passes.colour', 'passes.depth', 'passes.normal', 'passes.garmentMask', 'passes.figureMask', ...(wire.neighbour ? ['passes.neighbour'] : []), 'size'],
             provider: outcome.provider,
             model: outcome.model,
-            retentionHours: provider.capabilities.retentionHours ?? 0,
+            ...(provider.capabilities.retentionHours !== null ? { retentionHours: provider.capabilities.retentionHours } : {}),
             shopId: shop.id,
           },
         });

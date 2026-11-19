@@ -24,3 +24,14 @@ describe('render pass helpers (pure)', () => {
     expect(rowOf(140.4, 100)).toBe(99);
   });
 });
+
+describe('pass frame', () => {
+  it('keeps the view direction and fits the stature plus the margin', async () => {
+    const { passFrame, PASS_FRAME_MARGIN } = await import('./scene');
+    const f = passFrame({ x: 0, y: 90, z: 400 }, { x: 0, y: 90, z: 0 }, 168, 28);
+    expect(f.target).toEqual([0, 84, 0]);
+    expect(f.position[0]).toBeCloseTo(0);
+    const half = Math.atan(((168 * (1 + PASS_FRAME_MARGIN)) / 2) / f.position[2]);
+    expect((2 * half * 180) / Math.PI).toBeCloseTo(28, 5);
+  });
+});

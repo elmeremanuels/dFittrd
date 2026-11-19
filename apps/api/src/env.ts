@@ -112,8 +112,13 @@ export const EnvSchema = z.object({
    * render passes only (never a photo), and every image passes the fidelity checks or is refused.
    */
   AI_REALISM: bool.default(false),
-  /** Which realism adapter: `fake` (tests and development only; refused in production). */
-  AI_REALISM_PROVIDER: z.enum(['fake']).default('fake'),
+  /**
+   * Which realism adapter: `fake` (tests and development only; refused in production) or
+   * `fal-z-image` (fal.ai Z-Image-Turbo ControlNet, Apache-2.0 weights; needs FAL_API_KEY).
+   */
+  AI_REALISM_PROVIDER: z.enum(['fake', 'fal-z-image']).default('fake'),
+  /** fal.ai key, server-only (hard rule 2). */
+  FAL_API_KEY: optionalSecret,
   /** Largest estimated cost of one realism image, USD; above it the request is refused. */
   AI_REALISM_MAX_COST_USD: z.coerce.number().nonnegative().default(0.08),
   /** POST /v1/renders/realism per client IP per minute. */
@@ -270,6 +275,7 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
   }
   const SHOPIFY_DISTRIBUTION = e.SHOPIFY_DISTRIBUTION ?? 'public';
   if (e.VERTEX_TRYON_ENABLED && !e.VERTEX_PROJECT) throw new EnvError('VERTEX_PROJECT is required when VERTEX_TRYON_ENABLED=1');
+  if (e.AI_REALISM && e.AI_REALISM_PROVIDER === 'fal-z-image' && !e.FAL_API_KEY) throw new EnvError('FAL_API_KEY is required when AI_REALISM_PROVIDER=fal-z-image');
   if (prod && e.AI_REALISM && e.AI_REALISM_PROVIDER === 'fake') throw new EnvError('AI_REALISM_PROVIDER=fake is for tests and development; choose a real adapter in production');
   const devSecrets = !e.JWT_SECRET || !e.SHOP_KEY_PEPPER || !e.ENCRYPTION_KEY;
   return { ...e, SHOPIFY_DISTRIBUTION, JWT_SECRET, SHOP_KEY_PEPPER, ENCRYPTION_KEY, devSecrets };

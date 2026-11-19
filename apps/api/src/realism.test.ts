@@ -29,7 +29,10 @@ async function wirePasses(p: RenderPasses): Promise<Record<string, unknown>> {
 describe('env: the fake adapter never reaches production', () => {
   it('refuses AI_REALISM with the fake provider in production', async () => {
     const { loadEnv } = await import('./env.js');
-    expect(() => loadEnv({ NODE_ENV: 'production', JWT_SECRET: 'x'.repeat(40), SHOP_KEY_PEPPER: 'p'.repeat(20), ENCRYPTION_KEY: 'a'.repeat(64), AI_REALISM: '1' })).toThrow(/fake/);
+    const prod = { NODE_ENV: 'production', JWT_SECRET: 'x'.repeat(40), SHOP_KEY_PEPPER: 'p'.repeat(20), ENCRYPTION_KEY: 'a'.repeat(64) };
+    expect(() => loadEnv({ ...prod, AI_REALISM: '1' })).toThrow(/fake/);
+    expect(() => loadEnv({ ...prod, AI_REALISM: '1', AI_REALISM_PROVIDER: 'fal-z-image' })).toThrow(/FAL_API_KEY/);
+    expect(loadEnv({ ...prod }).AI_REALISM).toBe(false);
   });
 });
 

@@ -7,6 +7,7 @@ import { AI_ENHANCED_LABEL, assertRealismProviderAllowed, runRealism } from './p
 import { realismPrompt } from './provider.js';
 import { syntheticPasses } from './synthetic.js';
 import { DISCLAIMER } from '../types.js';
+import { BANNED_MODELS } from '../bannedModels.js';
 
 const withNeighbour = (): RenderPasses => syntheticPasses({ neighbour: { size: 'L', grow: 10, longer: 14 } });
 
@@ -68,6 +69,15 @@ describe('fidelity checks: the AI image may not lie about the estimate', () => {
     }
   });
 
+  it('lets mild relighting through and refuses strong relighting as a colour change', async () => {
+    const passes = syntheticPasses({ garmentHex: '#B0303A' });
+    const run = async (light: number) => checkFidelity(passes, (await new FakeRealismProvider({ mode: 'relight', light }).enhance({ kind: 'renderPasses', passes, png: {} as never, prompt: '', strength: 0.3 })).image);
+    const mild = await run(0.93);
+    expect(mild.reasons).toEqual([]);
+    const strong = await run(0.7);
+    expect(strong.reasons).toContain('colour');
+  });
+
   it('rejects an image that moved the hem', async () => {
     const passes = withNeighbour();
     const out = await new FakeRealismProvider({ mode: 'move-hem', cm: 4 }).enhance({ kind: 'renderPasses', passes, png: {} as never, prompt: '', strength: 0.3 });
@@ -121,7 +131,7 @@ describe('runRealism', () => {
     expect(fake.calls).toHaveLength(0);
   });
   it('refuses a provider with a banned model, and one over the cost cap', async () => {
-    expect(() => assertRealismProviderAllowed({ name: 'x', models: ['IDM-VTON'] })).toThrow(/banned/);
+    expect(() => assertRealismProviderAllowed({ name: 'x', models: [BANNED_MODELS[0].toUpperCase()] })).toThrow(/banned/);
     await expect(runRealism({ passes: syntheticPasses(), provider: new FakeRealismProvider({ costUsd: 1 }), prompt: '', maxCostUsd: 0.1 })).rejects.toThrow(/cost/);
   });
   it('refuses an output of the wrong size', async () => {

@@ -87,8 +87,16 @@ model coming from localhost). Raw numbers: `docs/screens/claude/face-2d-slice5/f
   runtime; never the segmenter or the pose model.
 - Size on screen: the 2D head is about 28 × 33 CSS px at 390 px wide; the chip is 64 px.
 
-Unit and flow tests: 538 web tests before this branch's last two commits plus the new ones, all
-green; `pnpm check` result is given at the end.
+Tests, run on this branch:
+
+- `npm_config_workspace_concurrency=1 pnpm check`: **passed** (build, typecheck, lint, every
+  package's tests, app builds, viewer chunk 167.4 KB gzip of 400 KB, bundle secrets, language packs).
+- `e2e/facePhoto2d.spec.ts` on a live build with the models: **passed** (the trap test, 7.7 s);
+  on the normal build: **passed** (no live row, no file input).
+- `e2e/avatar.spec.ts` on the normal build: passed.
+- `e2e/privacy.spec.ts`: one test **fails** ("swipe batch happened"), here and on an untouched
+  `claude/garment-engine` build alike, when the MediaPipe models are present in `public/models`
+  (CI runs without them; the test's own comment says so). Not caused by this branch; not fixed here.
 
 ## Assumed, not measured
 

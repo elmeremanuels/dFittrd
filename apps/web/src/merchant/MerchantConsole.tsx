@@ -1,11 +1,12 @@
 import { AlertCircle, BarChart3, LogOut, ShieldCheck, ShoppingCart, TrendingUp } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { NavLink, Navigate, Outlet, useNavigate } from 'react-router';
+import { Link, NavLink, Navigate, Outlet, useNavigate } from 'react-router';
 import type { AnalyticsAbandonedResponse, AnalyticsFitSizesResponse, AnalyticsSwipesResponse, BillingAnomaliesResponse, MerchantLedgerResponse, MerchantProductsResponse, UsageResponse } from '@curtain/schema';
 import { MERCHANT_KEY_PATTERN, NetworkError, type MerchantApi } from '@/api/client';
 import { Ledger, type LedgerLine } from '@/components/Ledger';
 import { dayIso, pct, titleCase } from '@/lib/format';
 import { api } from '@/store';
+import { merchantStrings } from './strings';
 import { planPriceText, planState, planStatusText } from './plan';
 import { mockAbandonedAnalytics, mockAnalytics, mockAnomalies, mockFitSizes, mockLedger, mockProducts, mockUsage } from './mock';
 
@@ -202,7 +203,7 @@ export function MerchantLayout(): ReactNode {
 }
 
 import { useOutletContext } from 'react-router';
-function useMerchantData(): MerchantData {
+export function useMerchantData(): MerchantData {
   return useOutletContext<MerchantData>();
 }
 
@@ -336,6 +337,9 @@ export function MerchantProducts(): ReactNode {
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Completeness</th>
               <th className="px-4 py-3">Missing</th>
+              <th className="px-4 py-3">
+                <span className="sr-only">{merchantStrings().assets.open3d}</span>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-ink/10">
@@ -379,6 +383,11 @@ export function MerchantProducts(): ReactNode {
                       ))}
                     </ul>
                   )}
+                </td>
+                <td className="px-4 py-3">
+                  <Link to={`/merchant/products/${encodeURIComponent(p.externalId)}/3d`} className="chip whitespace-nowrap hover:bg-white" data-testid={`open-3d-${p.externalId}`}>
+                    {merchantStrings().assets.open3d}
+                  </Link>
                 </td>
               </tr>
             ))}

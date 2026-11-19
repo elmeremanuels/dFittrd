@@ -6,6 +6,7 @@ import { PairRoute } from '@/routes/PairRoute';
 import { ProfileRoute } from '@/routes/ProfileRoute';
 import { TryRoute } from '@/routes/TryRoute';
 import { WardrobeRoute } from '@/routes/WardrobeRoute';
+import { MerchantAssetReview } from '@/merchant/AssetReview';
 import { MerchantAnalytics, MerchantLayout, MerchantLedgerRoute, MerchantLogin, MerchantOverview, MerchantProducts, MerchantUsage } from '@/merchant/MerchantConsole';
 
 /**
@@ -58,6 +59,7 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: <MerchantOverview /> },
       { path: 'products', element: <MerchantProducts /> },
+      { path: 'products/:externalId/3d', element: <MerchantAssetReview /> },
       { path: 'usage', element: <MerchantUsage /> },
       { path: 'analytics', element: <MerchantAnalytics /> },
       { path: 'ledger', element: <MerchantLedgerRoute /> },

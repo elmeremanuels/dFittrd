@@ -207,7 +207,7 @@ export const products = pgTable(
   ],
 );
 
-export type GarmentAssetStatus = 'awaiting_approval' | 'approved' | 'rejected' | 'superseded';
+export type GarmentAssetStatus = 'awaiting_approval' | 'approved' | 'rejected' | 'superseded' | 'refused';
 
 /**
  * Garment asset versions (docs/ENGINE-HANDOFF.md §Stage 8, D13, D16): one row per imported bundle.

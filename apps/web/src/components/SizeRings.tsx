@@ -95,7 +95,7 @@ export function SizeRingsChips({ overlay, topRem = 0.75, bottomRem = 0.75 }: { o
         {overlay.selected.rings.map((r) => (
           <span
             key={r.key}
-            className={`absolute flex -translate-y-1/2 flex-col rounded-md border bg-white/90 px-1 py-px text-[9px] leading-[1.15] shadow-sm ${r.key === 'hem' ? 'left-1 items-start text-left' : 'right-1 items-end text-right'} ${CHIP_CLASS[r.band ?? 'none']}`}
+            className={`absolute flex -translate-y-1/2 flex-col rounded-md border bg-white/90 px-1 py-px text-[9px] leading-[1.15] shadow-sm ${r.key === 'hem' ? 'left-1 items-start text-left' : 'right-1 items-end text-right'} ${CHIP_CLASS[r.pullOn === 'blocked' ? 'tight' : r.pullOn === 'marginal' ? 'snug' : (r.band ?? 'none')]}`}
             // the hem chip sits on the left, above the ring, so it never hides the ring's right end
             style={{ top: `calc(${topRem}rem + (100% - ${topRem + bottomRem}rem) * ${((r.key === 'hem' ? r.y - r.ry - 14 : r.y) / VIEW_H).toFixed(4)})` }}
             data-testid={`size-ring-chip-${r.key}`}

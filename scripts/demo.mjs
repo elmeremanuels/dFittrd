@@ -71,7 +71,7 @@ export const DEMO_BUNDLES = {
       ? join(root, 'spikes', 'garment-engine', 'out', 'pom2-bundle', 'crimson-wildflower-maxi-skirt')
       : join(root, 'spikes', 'garment-engine', 'out', 'eval', 'crimson-wildflower-maxi-skirt'),
 };
-/** DEMO_SKIRT=pom: the POM v2 server drape bake instead of the photo reconstruction (apps/api/src/demo.ts); it imports flagged exactly `tape_built_no_chart_check`. */
+/** DEMO_SKIRT=pom: the POM v2 server drape bake instead of the photo reconstruction (apps/api/src/demo.ts); it must pass the import's bake check and then imports with no flag. */
 export const DEMO_SKIRT_POM = process.env.DEMO_SKIRT === 'pom';
 
 export function buildForDemo() {

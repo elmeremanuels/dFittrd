@@ -1,0 +1,150 @@
+{
+ "format": "curtain.garment.qa",
+ "formatVersion": 1,
+ "productId": "crimson-wildflower-maxi-skirt",
+ "synthetic": true,
+ "label": "tape-built geometry: an estimate, not a measurement (AGENTS.md rule 3)",
+ "chartAgreement": {
+  "pass": true,
+  "kind": "tape-built",
+  "basis": "built from the shop tape; the import bake check tests the geometry against this tape",
+  "toleranceCm": 2,
+  "maxAbsCm": null
+ },
+ "tape": {
+  "hipBelowBandCm": null,
+  "note": "the shop did not state the hip distance; the bake places the hip line 20 cm below the top edge (ASSUMED)",
+  "sizes": [
+   {
+    "size": "8",
+    "provenance": "measured",
+    "tape": {
+     "relaxedGirthCm": {
+      "cm": 67,
+      "source": "measured"
+     },
+     "stretchedGirthCm": {
+      "cm": 94,
+      "source": "measured"
+     },
+     "hipCm": {
+      "cm": 112,
+      "source": "measured"
+     },
+     "hemSweepCm": {
+      "cm": 230,
+      "source": "measured"
+     },
+     "lengthCm": {
+      "cm": 103,
+      "source": "measured"
+     }
+    }
+   },
+   {
+    "size": "10",
+    "provenance": "measured",
+    "tape": {
+     "relaxedGirthCm": {
+      "cm": 71,
+      "source": "measured"
+     },
+     "stretchedGirthCm": {
+      "cm": 100,
+      "source": "measured"
+     },
+     "hipCm": {
+      "cm": 122,
+      "source": "measured"
+     },
+     "hemSweepCm": {
+      "cm": 248,
+      "source": "measured"
+     },
+     "lengthCm": {
+      "cm": 103,
+      "source": "measured"
+     }
+    }
+   },
+   {
+    "size": "12",
+    "provenance": "interpolated",
+    "tape": {
+     "relaxedGirthCm": {
+      "cm": 75.5,
+      "source": "interpolated"
+     },
+     "stretchedGirthCm": {
+      "cm": 105,
+      "source": "interpolated"
+     },
+     "hipCm": {
+      "cm": 124,
+      "source": "interpolated"
+     },
+     "hemSweepCm": {
+      "cm": 254,
+      "source": "interpolated"
+     },
+     "lengthCm": {
+      "cm": 103.5,
+      "source": "interpolated"
+     }
+    }
+   },
+   {
+    "size": "14",
+    "provenance": "measured",
+    "tape": {
+     "relaxedGirthCm": {
+      "cm": 80,
+      "source": "measured"
+     },
+     "stretchedGirthCm": {
+      "cm": 110,
+      "source": "measured"
+     },
+     "hipCm": {
+      "cm": 126,
+      "source": "measured"
+     },
+     "hemSweepCm": {
+      "cm": 260,
+      "source": "measured"
+     },
+     "lengthCm": {
+      "cm": 104,
+      "source": "measured"
+     }
+    }
+   },
+   {
+    "size": "16",
+    "provenance": "extrapolated",
+    "tape": {
+     "relaxedGirthCm": {
+      "cm": 84.5,
+      "source": "extrapolated"
+     },
+     "stretchedGirthCm": {
+      "cm": 115,
+      "source": "extrapolated"
+     },
+     "hipCm": {
+      "cm": 128,
+      "source": "extrapolated"
+     },
+     "hemSweepCm": {
+      "cm": 266,
+      "source": "extrapolated"
+     },
+     "lengthCm": {
+      "cm": 104.5,
+      "source": "extrapolated"
+     }
+    }
+   }
+  ]
+ }
+}

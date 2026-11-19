@@ -29,8 +29,16 @@ COPY packages/tryon-providers packages/tryon-providers
 COPY packages/shopify-app packages/shopify-app
 COPY packages/fit-engine packages/fit-engine
 COPY packages/taste-engine packages/taste-engine
+# The import's bake check (@curtain/garment-viewer `bakeGate`, run by dist/scripts/import-asset.js): its built entry
+# bundles the mannequin and anchors packages, so those are built first (anchors before mannequin, which imports it).
+COPY packages/mannequin packages/mannequin
+COPY packages/anchors packages/anchors
+COPY packages/garment-viewer packages/garment-viewer
 COPY apps/api apps/api
 RUN pnpm --filter @curtain/schema build \
+ && pnpm --filter @curtain/anchors build \
+ && pnpm --filter @curtain/mannequin build \
+ && pnpm --filter @curtain/garment-viewer build \
  && pnpm --filter @curtain/sdk build \
  && pnpm --filter @curtain/tryon-providers build \
  && pnpm --filter @curtain/shopify-app build \
@@ -38,7 +46,8 @@ RUN pnpm --filter @curtain/schema build \
  && pnpm --filter @curtain/api --prod deploy --legacy /out \
  && cp -R apps/api/dist /out/dist \
  && rm -rf /out/src /out/Dockerfile /out/Dockerfile.dockerignore /out/eslint.config.js /out/vitest.config.ts /out/tsconfig*.json \
- && test -f /out/dist/server.js && test -f /out/dist/migrate.js && test -d /out/drizzle
+ && test -f /out/dist/server.js && test -f /out/dist/migrate.js && test -d /out/drizzle \
+ && test -f /out/node_modules/@curtain/garment-viewer/dist/bakeGate.js
 
 # ---- runtime ------------------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS runtime

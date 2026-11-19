@@ -8,9 +8,17 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./bakeGate": {
+      "types": "./dist/bakeGate.d.ts",
+      "import": "./dist/bakeGate.js"
+    },
     "./package.json": "./package.json"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "build": "tsup",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint ."
@@ -31,6 +39,7 @@
     "tsx": "4.23.15",
     "typescript": "5.9.3",
     "typescript-eslint": "8.72.1",
-    "vitest": "3.2.7"
+    "vitest": "3.2.7",
+    "tsup": "8.5.1"
   }
 }

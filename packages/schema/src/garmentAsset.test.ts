@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TryResolveResponseSchema } from './api';
-import { bundleMannequinFamily, checkGarmentBundle, garmentBodyFamily, garmentBundleFor, garmentQaFlagNote, garmentQaFlags, GarmentAssetRefSchema, MAX_GARMENT_BUNDLE_BYTES } from './garmentAsset';
+import { BAKE_CHECK_IDS, bakeCheckRefusal, bakeRingToleranceCm, bundleMannequinFamily, checkGarmentBundle, passedBakeCheck, garmentBodyFamily, garmentBundleFor, garmentQaFlagNote, garmentQaFlags, GarmentAssetRefSchema, MAX_GARMENT_BUNDLE_BYTES } from './garmentAsset';
 
 const meta = (over: Partial<{ sizes: string[]; pass: boolean; bytes: number; format: string; waistReading: unknown }> = {}) => ({
   anchors: { format: 'curtain.garment.anchors' },
@@ -102,7 +102,30 @@ describe('a tape-built drape bake (no chart agreement was measured)', () => {
     expect(checkGarmentBundle(bake(undefined), ['12'])).toEqual({ ok: false, problem: 'qa_failed' });
     expect(checkGarmentBundle(bake('calibrated'), ['12'])).toEqual({ ok: false, problem: 'qa_failed' });
     expect(garmentQaFlags({ chartAgreement: { pass: true, kind: 'tape-built' } })).toEqual(['tape_built_no_chart_check']);
-    expect(garmentQaFlagNote('tape_built_no_chart_check', {})).toMatch(/no agreement with the size chart was measured/);
+    expect(garmentQaFlagNote('tape_built_no_chart_check', {})).toMatch(/no agreement with the size chart or the tape was measured.*Import the bundle again to run the check/);
+  });
+
+  const report = (pass: (id: string) => boolean | null) => ({
+    format: 'curtain.garment.bakeCheck', version: 1, pass: BAKE_CHECK_IDS.every((id) => pass(id) === true),
+    checks: BAKE_CHECK_IDS.map((id) => ({ id, pass: pass(id), reasons: pass(id) === false ? [`${id} went wrong`] : [] })),
+    tape: null, drapes: [], checkedAt: '2026-11-19T00:00:00.000Z',
+  });
+  it('after the import’s bake check passed it is an ordinary pass (no flag); a failed, partial or malformed check keeps the flag', () => {
+    const passed = report(() => true);
+    const qa = (bakeCheck: unknown) => ({ format: 'curtain.garment.qa', chartAgreement: { pass: true, kind: 'tape-built' }, bakeCheck });
+    expect(garmentQaFlags(qa(passed))).toEqual([]);
+    expect(passedBakeCheck(qa(passed))).not.toBeNull();
+    expect(checkGarmentBundle({ ...bake('tape-built'), qa: qa(passed) }, ['12'])).toMatchObject({ ok: true, info: { qaFlags: [] } });
+    for (const bad of [report((id) => id !== 'inside_body'), { ...passed, checks: passed.checks.slice(1) }, { ...passed, pass: 'yes' }, { pass: true }]) {
+      expect(garmentQaFlags(qa(bad))).toEqual(['tape_built_no_chart_check']);
+      expect(passedBakeCheck(qa(bad))).toBeNull();
+    }
+  });
+  it('a refusal reads as plain English, every failed check with its first reason', () => {
+    const r = report((id) => (id === 'tape_rings' || id === 'at_rest' ? false : id === 'size_order' ? null : true));
+    expect(bakeCheckRefusal(r)).toBe('Every drape says it came to rest: no. at_rest went wrong Hip line and hem agree with the tape: no. tape_rings went wrong');
+    expect(bakeRingToleranceCm(50)).toBe(2);
+    expect(bakeRingToleranceCm(254)).toBeCloseTo(5.08, 5);
   });
 });
 

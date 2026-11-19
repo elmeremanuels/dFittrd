@@ -10,6 +10,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@curtain/garment-viewer':
+        specifier: workspace:*
+        version: link:../../packages/garment-viewer
       '@curtain/schema':
         specifier: workspace:*
         version: link:../../packages/schema
@@ -355,6 +358,9 @@ importers:
       eslint:
         specifier: 9.39.5
         version: 9.39.5(jiti@2.7.0)
+      tsup:
+        specifier: 8.5.1
+        version: 8.5.1(jiti@2.7.0)(postcss@8.5.32)(tsx@4.23.15)(typescript@5.9.3)(yaml@2.9.1)
       tsx:
         specifier: 4.23.15
         version: 4.23.15

@@ -8,7 +8,8 @@ import { ColourChip } from '@/components/ColourChip';
 import { EstimateDisclaimer } from '@/components/EstimateBadge';
 import { mediaProxyUrl } from '@/embed/media';
 import { FitPanel } from '@/components/FitPanel';
-import { eur } from '@/lib/format';
+import { shownSizeScore } from '@/lib/fitScore';
+import { eur, pct } from '@/lib/format';
 import { colourTarget } from '@/lib/season';
 import { api, MOCK_SHOP, useApp } from '@/store';
 import { fitFor } from '@/store/fit';
@@ -140,7 +141,7 @@ export function TryRoute(): ReactNode {
               {fit.perSize.map((s) => (
                 <button key={s.size} type="button" role="radio" aria-checked={renderSize === s.size} onClick={() => setSize(s.size)} className={`chip ${renderSize === s.size ? 'border-coral bg-coral text-ink' : ''}`}>
                   {s.size}
-                  {s.score !== null ? <span className="text-xs opacity-80">{Math.round(s.score * 100)}%</span> : null}
+                  {s.pullOn?.status === 'blocked' ? <span className="text-xs opacity-80">too small to pull on</span> : shownSizeScore(s) !== null ? <span className="text-xs opacity-80">{pct(shownSizeScore(s))}</span> : null}
                 </button>
               ))}
             </div>

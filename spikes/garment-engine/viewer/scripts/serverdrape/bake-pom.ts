@@ -27,6 +27,7 @@ import { makeCollider } from '../../../../../packages/garment-viewer/src/collide
 import { DRAPE_BAKE_FORMAT, bakeAxis, bakeWeights, blendBakedSize, settleOnBody, type DrapeBakeMeta, type DrapeBakeSizeMeta, type SizeProvenance } from '../../../../../packages/garment-viewer/src/drapeBake';
 import { readDrapeBake } from '../../../../../packages/garment-viewer/src/drapeBakeRead';
 import { writeDrapeBake } from '../../../../../packages/garment-viewer/src/drapeBakeWrite';
+import { chartBody, qaTape, restFromTrace, tapeRings, type RestJson } from './bakeTape';
 import { girthAt } from './girth';
 
 const argv = process.argv.slice(2);
@@ -51,10 +52,10 @@ const GRID: { id: string; t: number }[] = [
 interface BodyMeta { id: string; t: number; label: string; target: { bust?: number; waist?: number; hip?: number }; achieved: { hipCm: number; waistCm: number; hipY: number } }
 interface RestSize { size: string; provenance: SizeProvenance }
 interface RestMeta { rings: { start: number[]; size: number[] }; sizes: RestSize[] }
-interface DrapeJson { status?: string; insideBody?: number; settle?: number[][]; wear?: { fit?: { wearable?: boolean; note?: string } } }
+interface DrapeJson { status?: string; insideBody?: number; frames?: number; settle?: number[][]; settleFull?: number[][] | null; wear?: { fit?: { wearable?: boolean; note?: string } } }
 
 const bodies = (JSON.parse(readFileSync(join(root, 'bodies', 'bodies.json'), 'utf8')) as { bodies: BodyMeta[] }).bodies;
-const rest = JSON.parse(readFileSync(join(root, 'rest', 'rest.json'), 'utf8')) as RestMeta;
+const rest = JSON.parse(readFileSync(join(root, 'rest', 'rest.json'), 'utf8')) as RestMeta & RestJson;
 const indices = new Uint32Array(readFileSync(join(root, 'rest', 'indices.bin')).buffer.slice(0));
 const f32 = (p: string): Float32Array => { const b = readFileSync(p); return new Float32Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)); };
 const path = (body: string, size: string): string => join(root, 'drapes', set, `${body}__${size}`);
@@ -80,7 +81,16 @@ const plan: (DrapeBakeSizeMeta & { bodies: string[] })[] = SIZES.map((s) => {
   }
   if (!lo) notDraped.push({ t: -1, reason: json('t-1.00', s)?.status ?? 'not draped' });
   const others = [lo, hi].filter((g): g is { id: string; t: number } => !!g);
-  return { size: s, baseT: 0, targetT: others.map((g) => g.t), provenance: prov, ...(notDraped.length ? { notDraped } : {}), bodies: others.map((g) => g.id) };
+  // t = +0.5 is a grid body of AU 8 only (it stands in for the refused t = +1); the other sizes blend across it, which
+  // the import's bake check allows. A body beyond a size's drapes must be declared (`notDraped`), as t = +1 is for AU 8.
+  // At rest by the simulation's own trace (pom2_measure.py's threshold); the bake check refuses a drape without it.
+  const drapes = [{ id: 't+0.00', t: 0 }, ...others].map((g) => {
+    const j = json(g.id, s);
+    const r = restFromTrace(j?.settleFull ?? j?.settle, j?.frames);
+    if (!r) throw new Error(`size ${s} on ${g.id}: the drape has no settle trace`);
+    return { t: g.t, ...r };
+  });
+  return { size: s, baseT: 0, targetT: others.map((g) => g.t), provenance: prov, ...(notDraped.length ? { notDraped: notDraped.sort((a, b) => a.t - b.t) } : {}), drapes, bodies: others.map((g) => g.id) };
 });
 
 // ---- 2. Pack (the viewer package's writer; `drapeBake.ts` reads it). ----
@@ -93,6 +103,9 @@ const meta: DrapeBakeMeta = {
   plainColourSource: COLOUR_SOURCE,
   sizes: plan.map(({ bodies: _b, ...m }) => m),
   source: 'POM v2 (step3-serverdrape-spike.md §9-10): rest geometry from the shop tape, band placed 2 cm under the navel (ASSUMED level), gathered; Blender 4.2 cloth, 144 frames, on the device avatar (buildAvatar) of each chart body; ESTIMATE',
+  // What the import's bake check reads: the drawn bodies (avatar-bodies.ts: the chart line) and the tape's rings.
+  bodies: GRID.map((g) => chartBody(g.t)),
+  tapeRings: tapeRings(rest),
 };
 const glb = await writeDrapeBake({
   meta,
@@ -136,14 +149,16 @@ writeFileSync(join(outDir, 'qa.json'), JSON.stringify({
   label: 'tape-built and server-draped geometry: an estimate, not a measurement (AGENTS.md rule 3)',
   chartAgreement: {
     pass: true,
-    // The import gate flags this (`tape_built_no_chart_check`) and refuses a bake without it: pass is not a measurement.
+    // The import refuses a bake without this; its automatic bake check then tests the geometry against `tape` below.
     kind: 'tape-built',
-    basis: 'not a reconstruction: the garment is built from the shop tape (AU 8, 10, 14 measured; 12 interpolated; 16 extrapolated), so there is no calibration to a chart to check. pass is the builder\'s statement; the import gate flags kind tape-built for a person to look at before approving',
+    basis: 'not a reconstruction: the garment is built from the shop tape (AU 8, 10, 14 measured; 12 interpolated; 16 extrapolated), so there is no calibration to a chart to check. pass is the builder\'s statement; the import\'s bake check tests the drapes against the tape',
     toleranceCm: 2,
     maxAbsCm: null,
   },
   calibration: { residualBeforeCm: { maxAbs: 0 }, residualAfterGlobalCm: { maxAbs: 0 } },
   meshHealth: { triangles: indices.length / 3, vertices: indices.reduce((m, v) => Math.max(m, v), 0) + 1 },
+  // The tape the bake was built from (the shop did not state the hip distance: null), for the import's bake check.
+  tape: qaTape(rest, null),
   sizes: plan.map(({ bodies: _b, ...m }) => m),
 }, null, 1));
 

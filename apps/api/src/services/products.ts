@@ -3,6 +3,9 @@ import {
   GarmentPayloadDraftSchema,
   GarmentPayloadSchema,
   completenessScore,
+  hasShopMeasurements,
+  productNextStep,
+  sizeAdviceScore,
   sizeAdviceGarment,
   type AudienceSource,
   type GarmentPayload,
@@ -126,6 +129,12 @@ export function asGarment(row: ProductRow): GarmentPayload | null {
   return parsed.success ? parsed.data : null;
 }
 
+/** The merchant-facing next step and size-advice score of one product (@curtain/schema merchantSetup.ts). */
+function nextOf(row: ProductRow): Pick<MerchantProductSummary, 'measured' | 'next' | 'adviceScore'> {
+  const p = { status: row.status, category: row.category, missingFields: row.missingFields, measured: hasShopMeasurements(row.payload.garmentTape) };
+  return { measured: p.measured, next: productNextStep(p), adviceScore: sizeAdviceScore(p) };
+}
+
 export function toSummary(row: ProductRow, flatLayProcessedUrl: string | null = null, menGate?: MerchantProductSummary['menGate']): MerchantProductSummary {
   const cat = row.category as MerchantProductSummary['category'];
   return {
@@ -137,6 +146,7 @@ export function toSummary(row: ProductRow, flatLayProcessedUrl: string | null = 
     missingFields: row.missingFields,
     flatLayProcessedUrl,
     updatedAt: row.updatedAt.toISOString(),
+    ...nextOf(row),
     // Only for a men's product under the men's gate; absent otherwise, so the body is unchanged.
     ...(menGate ? { menGate } : {}),
   };

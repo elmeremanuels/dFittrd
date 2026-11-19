@@ -96,6 +96,10 @@ export interface ShopSettings {
   billingUsdRate?: number;
   /** Shopify (D17): the monthly price in billingCurrency as sent to Shopify. */
   billingPrice?: number;
+  /** First-run checklist (services/setup.ts): the merchant said the "Try it on" button is on. */
+  setupButtonConfirmed?: boolean;
+  /** First-run checklist: the merchant said they checked it on their phone. */
+  setupPhoneConfirmed?: boolean;
 }
 
 export const shops = pgTable(

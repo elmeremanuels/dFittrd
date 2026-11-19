@@ -28,6 +28,8 @@ import {
   MerchantProductsQuerySchema,
   MerchantProductsResponseSchema,
   PLAN_NAMES,
+  SetupResponseSchema,
+  SetupUpdateRequestSchema,
   UsageResponseSchema,
   chartTemplatesDto,
   validateGarmentDraft,
@@ -45,6 +47,7 @@ import { addMonths, availableAt, closedMonthsSince, isClosed, lastClosedMonth } 
 import { decodeCursor, encodeCursor } from '../services/ledger.js';
 import { archiveProduct, listMerchantProducts, upsertProduct } from '../services/products.js';
 import { merchantMenGate } from '../services/readiness.js';
+import { merchantSetup } from '../services/setup.js';
 import { connectTokenHash, createShop, findShopByConnectToken, findShopByDomain, isPaused, issueMerchantKeys, planInfo, updateSettings } from '../services/shops.js';
 import { billingAnomalyReport, fitSessionsBetween, usageDays } from '../services/usage.js';
 
@@ -282,6 +285,18 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
     { schema: { querystring: AnalyticsPeriodQuerySchema, response: { 200: AnalyticsFitSizesResponseSchema } }, preHandler: requireMerchant },
     async (req) => fitSizeAnalytics(db, req.shop!.id, closedPeriod(req.query.period), env.K_ANON),
   );
+
+  // ---- first-run checklist (services/setup.ts, @curtain/schema merchantSetup.ts) ----------------
+  // Five steps that tick themselves from the shop's own rows; steps 4 and 5 can be ticked by hand.
+  // The Shopify admin reads the same list through GET /shopify/charts/onboarding.
+  app.get('/v1/merchant/setup', { schema: { response: { 200: SetupResponseSchema } }, preHandler: requireMerchant }, async (req) => merchantSetup({ db, shop: req.shop!, now: now() }));
+  app.put('/v1/merchant/setup', { schema: { body: SetupUpdateRequestSchema, response: { 200: SetupResponseSchema } }, preHandler: requireMerchant }, async (req) => {
+    const shop = await updateSettings(db, req.shop!.id, {
+      ...(req.body.buttonConfirmed !== undefined ? { setupButtonConfirmed: req.body.buttonConfirmed } : {}),
+      ...(req.body.phoneConfirmed !== undefined ? { setupPhoneConfirmed: req.body.phoneConfirmed } : {}),
+    });
+    return merchantSetup({ db, shop, now: now() });
+  });
 
   // ---- keys ------------------------------------------------------------------------------------
   app.post('/v1/merchant/keys/rotate', { schema: { response: { 200: MerchantKeyRotateResponseSchema } }, preHandler: requireMerchant }, async (req) => {

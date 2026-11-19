@@ -1,4 +1,4 @@
-import { CHART_COLUMN_TEXT, ESTIMATE_DISCLAIMER } from '@curtain/schema';
+import { CATEGORY_TEXT, CHART_COLUMN_TEXT, ESTIMATE_DISCLAIMER, GARMENT_TAPE_DIAGRAM_SVG, merchantPlanText } from '@curtain/schema';
 import { describe, expect, it } from 'vitest';
 import { ADMIN_PAGE_PATH, GARMENT_TAPE_ADMIN_CONFIG, adminContentSecurityPolicy, adminPageTemplate, APP_BRIDGE_SCRIPT_URL, jsonForScript, renderAdminPage } from './admin';
 import { API_KEY, SHOP } from './test/fixtures';
@@ -12,7 +12,7 @@ describe('admin page', () => {
     expect(html).toContain(`<script src="${APP_BRIDGE_SCRIPT_URL}"></script>`);
     expect(html).not.toContain('__CURTAIN_');
     const json = /<script id="curtain-config" type="application\/json">(.*?)<\/script>/s.exec(html)![1]!;
-    expect(JSON.parse(json)).toEqual({ apiKey: API_KEY, apiUrl: 'https://api.curtain.fit', appUrl: 'https://app.curtain.fit', appHandle: 'curtain', blockHandle: 'try-it-on', billing: 'shopify', disclaimer: ESTIMATE_DISCLAIMER, tape: JSON.parse(JSON.stringify(GARMENT_TAPE_ADMIN_CONFIG)), chartColumns: JSON.parse(JSON.stringify(CHART_COLUMN_TEXT)) });
+    expect(JSON.parse(json)).toEqual({ apiKey: API_KEY, apiUrl: 'https://api.curtain.fit', appUrl: 'https://app.curtain.fit', appHandle: 'curtain', blockHandle: 'try-it-on', billing: 'shopify', disclaimer: ESTIMATE_DISCLAIMER, tape: JSON.parse(JSON.stringify(GARMENT_TAPE_ADMIN_CONFIG)), chartColumns: JSON.parse(JSON.stringify(CHART_COLUMN_TEXT)), tapeDiagram: GARMENT_TAPE_DIAGRAM_SVG, plan: merchantPlanText('shopify'), categories: { ...CATEGORY_TEXT } });
   });
 
   it('cannot be broken out of with </script> in config values', () => {
@@ -28,7 +28,8 @@ describe('admin page', () => {
 
   it('only talks to our api and Shopify; no storage, no secrets, no other origins', () => {
     const html = renderAdminPage(cfg);
-    const urls = html.match(/https?:\/\/[a-z0-9.-]+/gi) ?? [];
+    // The SVG namespace (xmlns="http://www.w3.org/2000/svg") of the measuring drawing names a namespace; it is never fetched.
+    const urls = html.replace(/xmlns=\\?"http:\/\/www\.w3\.org\/2000\/svg\\?"/g, '').match(/https?:\/\/[a-z0-9.-]+/gi) ?? [];
     const hosts = new Set(urls.map((u) => new URL(u).host));
     expect([...hosts].sort()).toEqual(['admin.shopify.com', 'api.curtain.fit', 'app.curtain.fit', 'cdn.shopify.com']);
     expect(html).not.toMatch(/localStorage|sessionStorage|indexedDB|document\.cookie/);

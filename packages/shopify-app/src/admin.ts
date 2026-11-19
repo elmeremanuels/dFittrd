@@ -6,16 +6,19 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
+  CATEGORY_TEXT,
   CHART_COLUMN_TEXT,
   ESTIMATE_DISCLAIMER,
   GARMENT_CLOSURES,
   GARMENT_TAPE_FIELDS,
+  GARMENT_TAPE_DIAGRAM_SVG,
   GARMENT_TAPE_FORM_TEXT,
   TAPE_CLOSURE_LABELS,
   TAPE_FIELD_LABELS,
   TAPE_HIP_DEPTH_CM,
   TAPE_INPUT_KEYS,
   TAPE_PROVENANCE_LABELS,
+  merchantPlanText,
 } from '@curtain/schema';
 import { BLOCK_HANDLE } from './deepLinks';
 
@@ -100,6 +103,12 @@ export function renderAdminPage(cfg: AdminPageConfig): string {
     tape: GARMENT_TAPE_ADMIN_CONFIG,
     /** The size chart builder's men's columns (neck, sleeve, length, rise, W/L): English catalogue (D21). */
     chartColumns: CHART_COLUMN_TEXT,
+    /** The drawing next to the garment measurements form (our own static SVG, no script). */
+    tapeDiagram: GARMENT_TAPE_DIAGRAM_SVG,
+    /** Plan, uninstall and data-deletion words (@curtain/schema merchantSetup.ts). */
+    plan: merchantPlanText('shopify'),
+    /** The kind of garment in plain words, for the products list. */
+    categories: CATEGORY_TEXT,
   };
   const html = cfg.template ?? adminPageTemplate();
   // Function replacers: a string replacement would interpret `$&`, `$'`, `` $` `` inside the values.

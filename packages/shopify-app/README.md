@@ -147,13 +147,26 @@ script; required for embedded apps) with `<meta name="shopify-api-key">`, then:
 2. With `Authorization: Bearer <session token>` (the api's merchant auth accepts Shopify session
    tokens): `GET /v1/merchant/products?limit=200`, `GET /v1/merchant/usage?from&to` (last 30 days),
    `GET /v1/merchant/ledger?limit=20`.
-3. Renders: the **first-run onboarding** (connect · pick a chart template · assign it · add the theme
-   block via the theme editor deep link with `addAppBlockId` · test on a product; state from
-   `GET /shopify/charts/onboarding`, a fit result shown to a shopper ticks the last two), the
-   **size chart builder** (below), the products completeness table with filters, a per-product
-   panel, plan/usage with the period meter, the plan button (`POST /shopify/billing/subscribe` →
-   `open(confirmationUrl, '_top')`) and a 30-day bar strip, and the privacy ledger (hero renders
-   only, with the `ESTIMATE_DISCLAIMER`).
+3. Renders: the **first-run checklist** "Get set up" (five steps from `GET /shopify/charts/onboarding`, the
+   `merchantSetupSteps` list of `@curtain/schema` built by `apps/api/src/services/setup.ts`: 1. Connect,
+   2. Add a size chart, 3. Measure one skirt, 4. Turn the button on, 5. Check it on your phone). Every step
+   ticks itself from the shop's own rows (products with a chart, products with the shop's own tape, a
+   "Try it on" opened, a size shown); 4 and 5 can also be ticked by hand ("I have saved it", "It works on my
+   phone", stored as `themeBlockConfirmed` / `tested` in the AppInstallation metafield). Each step's button
+   goes to its screen: the chart builder, the first skirt's garment measurements, the theme editor deep link
+   with `addAppBlockId`, a QR code (made by the api) of the first ready product's storefront page. Then the
+   **size chart builder** (below), the products list with a plain **size advice** badge, a 0–100 score that
+   leaves out what only the 3D view uses (`sizeAdviceScore`) and **what to do next** with one button
+   (`productNextStep`, from `GET /v1/merchant/products` `next`), a per-product panel, **Your plan**
+   (US$8.99 a month; under custom distribution "arranged with Curtain", nothing through Shopify) with
+   **Leaving Curtain** (uninstall steps and what happens to the data), a 30-day bar strip, and the privacy
+   ledger (hero renders only, with the `ESTIMATE_DISCLAIMER`). Errors are shown in plain words
+   (`friendly()` in the page: no HTTP codes); an empty catalogue right after install says the import is
+   running and looks again every 5 s for 2 minutes.
+
+   `pnpm --filter @curtain/api walk:onboarding [outDir]` walks all of it as the pilot shop would, timed,
+   against the real api and a fake Shopify (`apps/api/src/scripts/onboarding-walk.ts`, report in
+   `docs/reports/claude/merchant-onboarding.md`).
 
 ### Garment measurements (per product)
 

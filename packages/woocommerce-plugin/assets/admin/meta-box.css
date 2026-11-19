@@ -80,3 +80,8 @@
 .curtain-mens-chart label > span { display: block; font-weight: 600; font-size: 12px; }
 .curtain-mens-chart select { max-width: 100%; }
 .curtain-mens-chart .description { flex-basis: 100%; margin: 0; }
+
+/* "What to measure" next to the garment measurements (the drawing is assets/admin/skirt-measure.svg). */
+.curtain-tape-help { background: #f5efe7; color: #1a1612; border-radius: 8px; padding: 8px 12px; margin: 8px 0 12px; max-width: 560px; }
+.curtain-tape-help summary { cursor: pointer; }
+.curtain-tape .curtain-grid label .description { display: block; font-weight: 400; max-width: 360px; }

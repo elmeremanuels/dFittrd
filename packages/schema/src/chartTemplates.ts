@@ -18,6 +18,8 @@ import { FabricSchema, GarmentAudienceSchema, LengthCmSchema, SIZE_CHART_MAX_ROW
 import { checkChartColumns, withWlAxes } from './chartColumns';
 import { AU_WOMENS_BODY_CHART, AU_WOMENS_CHART_SOURCES } from './fixtures/charts';
 import { MENS_BODY_CHART_TEMPLATES } from './chartTemplatesMen';
+import { SETUP_STEPS, type SetupStepKey } from './merchantSetup';
+import { SetupResponseSchema } from './api';
 
 /** `INT` = not tied to a region (letter sizes, jeans in inches). */
 export type ChartRegion = 'AU' | 'UK' | 'EU' | 'US' | 'INT';
@@ -864,15 +866,18 @@ export const ProductChecklistResponseSchema = z.object({
   adminUrl: z.string(),
 });
 
-export const ONBOARDING_STEPS = ['connect', 'template', 'assign', 'themeBlock', 'test'] as const;
-export type OnboardingStepKey = (typeof ONBOARDING_STEPS)[number];
+/**
+ * The Shopify admin's first-run checklist: the five steps of `merchantSetup.ts` (connect, chart, measure,
+ * button, phone). The stored state (an AppInstallation metafield) keeps its old keys: `themeBlockConfirmed`
+ * ticks "Turn the button on", `tested` ticks "Check it on your phone".
+ */
+export const ONBOARDING_STEPS = SETUP_STEPS;
+export type OnboardingStepKey = SetupStepKey;
 export const OnboardingUpdateRequestSchema = z.object({
   templateId: z.string().min(1).max(64).optional(),
   themeBlockConfirmed: z.boolean().optional(),
   tested: z.boolean().optional(),
 });
-export const OnboardingResponseSchema = z.object({
-  steps: z.array(z.object({ key: z.enum(ONBOARDING_STEPS), label: z.string(), done: z.boolean(), detail: z.string() })),
-  next: z.enum(ONBOARDING_STEPS).nullable(),
+export const OnboardingResponseSchema = SetupResponseSchema.extend({
   state: z.object({ templateId: z.string().nullable(), themeBlockConfirmed: z.boolean(), tested: z.boolean() }),
 });

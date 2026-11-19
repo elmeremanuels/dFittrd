@@ -6,7 +6,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { chartTemplatesDto } from '@curtain/schema';
+import { chartTemplatesDto, merchantSetupSteps, type SetupFacts } from '@curtain/schema';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderAdminPage } from './admin';
 import { API_KEY } from './test/fixtures';
@@ -81,9 +81,12 @@ function mountPage(routes: Record<string, (c: Call) => unknown>, picker?: (opts:
   return calls;
 }
 
-const steps = (done: string[], next: string | null) => ({
-  steps: ['connect', 'template', 'assign', 'themeBlock', 'test'].map((key) => ({ key, label: key, done: done.includes(key), detail: `${key} detail` })),
-  next,
+/** The api's onboarding answer for a shop at a given point (the real @curtain/schema checklist). */
+const steps = (facts: Partial<SetupFacts> = {}) => ({
+  ...merchantSetupSteps({ connected: true, productsTotal: 1, productsWithChart: 0, productsMeasured: 0, buttonOpened: false, fitSessions: 0, buttonConfirmed: false, phoneConfirmed: false, ...facts }, 'shopify'),
+  platform: 'shopify',
+  measureProduct: null,
+  phoneCheck: null,
   state: { templateId: null, themeBlockConfirmed: false, tested: false },
 });
 
@@ -93,7 +96,7 @@ const DEFAULTS: Record<string, (c: Call) => unknown> = {
   'GET /v1/merchant/products': () => ({ items: [{ externalId: '301', name: 'Boho Kaftan', category: 'dress', status: 'incomplete', score: 0.4, missingFields: ['sizeChart'], flatLayProcessedUrl: null, updatedAt: '2026-11-06T00:00:00.000Z' }], nextCursor: null, counts: { active: 0, incomplete: 1, archived: 0 } }),
   'GET /v1/merchant/ledger': () => ({ entries: [], nextCursor: null }),
   'GET /v1/merchant/charts/templates': () => chartTemplatesDto(),
-  'GET /shopify/charts/onboarding': () => steps(['connect'], 'template'),
+  'GET /shopify/charts/onboarding': () => steps(),
   'PUT /shopify/charts/onboarding': (c) => ({ templateId: null, themeBlockConfirmed: false, tested: false, ...c.body }),
 };
 
@@ -114,8 +117,10 @@ describe('admin page: size chart builder', () => {
     expect($('tpl-list').textContent).toContain('Garment measurements');
     expect($('chart-body').querySelectorAll('tr').length).toBe(7);
     expect($('tpl-sources').textContent).toMatch(/Sources: median of 3/);
-    await vi.waitFor(() => expect($('chk-install').classList.contains('done')).toBe(true));
-    expect(document.querySelector('[data-step="template"]')!.getAttribute('aria-current')).toBe('step');
+    await vi.waitFor(() => expect(document.querySelector('#setup-list [data-step="connect"] .num.done')).not.toBeNull());
+    expect(document.querySelector('[data-step="chart"]')!.getAttribute('aria-current')).toBe('step');
+    expect($('setup-progress').textContent).toBe('1 of 5 done');
+    expect($('setup-list').textContent).toContain('3. Measure one skirt');
   });
 
   it('switching to inches converts the displayed numbers; picking a template saves it to onboarding', async () => {
@@ -169,7 +174,7 @@ describe('admin page: size chart builder', () => {
   });
 
   it('R5: a saved template is restored instead of the AU default', async () => {
-    mountPage({ 'GET /shopify/charts/onboarding': () => ({ ...steps(['connect', 'template'], 'assign'), state: { templateId: 'uk-womens-body', themeBlockConfirmed: false, tested: false } }) });
+    mountPage({ 'GET /shopify/charts/onboarding': () => ({ ...steps(), state: { templateId: 'uk-womens-body', themeBlockConfirmed: false, tested: false } }) });
     await vi.waitFor(() => expect((document.querySelector('input[name="tpl"]:checked') as El | null)?.value).toBe('uk-womens-body'));
   });
 
@@ -277,20 +282,20 @@ describe('admin page: the plan button (checklist B2)', () => {
   const settled = async (planText: string) => {
     await vi.waitFor(() => expect($('usage-plan').textContent).toBe(planText));
     await vi.waitFor(() => expect(document.querySelectorAll('input[name="tpl"]').length).toBeGreaterThan(5));
-    await vi.waitFor(() => expect(document.querySelector('[data-step="template"]')!.getAttribute('aria-current')).toBe('step'));
+    await vi.waitFor(() => expect(document.querySelector('[data-step="chart"]')!.getAttribute('aria-current')).toBe('step'));
   };
 
   it('a shop without a plan (new install, or reinstalled after uninstall) can subscribe', async () => {
     mountPage({ 'GET /v1/merchant/usage': usage({ name: 'free' }) });
     await settled('No plan');
-    expect($('btn-plan').textContent).toBe('Subscribe');
+    expect($('btn-plan').textContent).toBe('Start the plan');
     expect($('btn-plan').disabled).toBe(false);
   });
 
-  it('an active Curtain subscription shows Subscribed', async () => {
+  it('an active Curtain subscription shows Plan active', async () => {
     mountPage({ 'GET /v1/merchant/usage': usage({ name: 'curtain', priceUsdPerMonth: 8.99, chargePrice: 13.8, chargeCurrency: 'AUD' }) });
-    await settled('Curtain · 13.80 AUD per month');
-    expect($('btn-plan').textContent).toBe('Subscribed');
+    await settled('Curtain · 13.80 AUD a month');
+    expect($('btn-plan').textContent).toBe('Plan active');
     expect($('btn-plan').disabled).toBe(true);
   });
 
@@ -310,17 +315,18 @@ describe('admin page: the plan button (checklist B2)', () => {
 
   it('custom distribution (billing arranged): no Subscribe button, the plan reads as arranged, no billing call', async () => {
     const calls = mountPage({ 'GET /v1/merchant/usage': usage({ name: 'curtain', priceUsdPerMonth: 8.99 }) }, undefined, { billing: 'arranged' });
-    await settled('Curtain · arranged with Curtain');
+    await settled('Curtain · US$8.99 a month');
     expect($('btn-plan').hidden).toBe(true);
     expect($('chk-plan').classList.contains('done')).toBe(true);
-    expect($('txt-plan').textContent).toContain('arranged directly with Curtain');
+    expect($('txt-plan').textContent).toContain('Curtain arranges payment with you directly');
+    expect($('leaving-steps').textContent).toContain('Settings → Apps and sales channels → Curtain → Uninstall');
     expect(calls.some((c) => c.path === '/shopify/billing/subscribe')).toBe(false);
   });
 
   it('custom distribution, paused shop: told to contact Curtain, never to approve a Shopify charge', async () => {
     mountPage({ 'GET /v1/merchant/usage': usage({ name: 'curtain', paused: true }) }, undefined, { billing: 'arranged' });
-    await settled('Curtain · arranged with Curtain · paused');
-    expect($('banner').textContent).toContain('Contact Curtain support');
+    await settled('Curtain · US$8.99 a month · paused');
+    expect($('banner').textContent).toContain('Email Curtain support');
     expect($('banner').textContent).not.toContain('Approve');
   });
 });

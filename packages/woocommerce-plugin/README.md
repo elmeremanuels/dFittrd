@@ -13,6 +13,16 @@
 
 Nothing leaves the site until the merchant clicks **Connect**; the secret key is stored encrypted (libsodium, OpenSSL fallback) using the site salts.
 
+## First run: "Get set up"
+
+The settings page (WooCommerce → Curtain) opens with the five-step checklist of `@curtain/schema`
+`merchantSetup.ts` (`includes/class-setup.php`, words checked against the TypeScript catalogue by
+`packages/schema/src/merchantSetup.test.ts`): Connect, Add a size chart, Measure one skirt, Turn the button
+on, Check it on your phone. Steps 1–4 tick themselves from this site's own data (the connection, products
+with `_curtain_size_chart`, products whose `_curtain_garment_tape` has a `measured` value, "Show button");
+step 5 is ticked with "It works on my phone" (`setup_phone_confirmed`). The box collapses to one line once
+everything is done. `node e2e/setup-shots.mjs [outDir]` renders it outside WordPress for screenshots.
+
 ## Garment measurements (closure + tape)
 
 Below the size chart, the meta box has a **Garment measurements** table (`docs/MERCHANT-MEASUREMENTS.md`):
@@ -28,7 +38,9 @@ input that is wrong is marked. `Payload_Builder` reads the stored tape against t
 of `mappings/tape.ts`) and pushes it with the product; no fit is computed here or on the api.
 The rows follow the chart as saved: after changing the chart, update the product once to see its sizes.
 There is no live preview of the estimates (the Shopify admin has one through the api's dry run): they
-appear after the update. `node e2e/tape-meta-box-shots.mjs [outDir]` renders the box outside WordPress
+appear after the update. Above the table a **What to measure** panel shows the drawing
+`assets/admin/skirt-measure.svg` (the same as the Shopify admin's) with the measuring steps.
+`node e2e/tape-meta-box-shots.mjs [outDir]` renders the box outside WordPress
 (test shims, `e2e/render-meta-box.php`) for phone and desktop screenshots.
 
 ## Layout

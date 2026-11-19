@@ -35,9 +35,9 @@ export function planState(plan: Pick<UsageResponse['plan'], 'name' | 'paused' | 
 export function planStatusText(plan: Pick<UsageResponse['plan'], 'name' | 'paused' | 'legacyPlan' | 'switchVia'>): string {
   switch (planState(plan)) {
     case 'paused':
-      return 'Paused: no active subscription.';
+      return 'Paused: shoppers see a short “taking a break” note instead of a size until the plan is active again.';
     case 'none':
-      return 'Not subscribed yet.';
+      return 'Not started yet.';
     case 'active':
       return 'Active.';
     case 'legacy':

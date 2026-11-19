@@ -55,6 +55,7 @@ final class Settings {
 			'default_brand'        => '',
 			'share_admin_email'    => true,
 			'delete_on_uninstall'  => false,
+			'setup_phone_confirmed' => false,
 			'last_sync_at'         => 0,
 			'last_status_at'       => 0,
 			'last_error'           => '',
@@ -241,6 +242,7 @@ final class Settings {
 		add_action( 'admin_post_curtain_disconnect', array( self::class, 'handle_disconnect' ) );
 		add_action( 'admin_post_curtain_status', array( self::class, 'handle_status' ) );
 		add_action( 'admin_post_curtain_sync_all', array( self::class, 'handle_sync_all' ) );
+		add_action( 'admin_post_curtain_setup_phone', array( self::class, 'handle_setup_phone' ) );
 		add_action( 'admin_notices', array( self::class, 'notices' ) );
 	}
 
@@ -476,6 +478,14 @@ final class Settings {
 		self::redirect( __( 'Key accepted. Your published products are being synced in the background.', 'curtain-woocommerce' ) );
 	}
 
+	/** "It works on my phone" on the Get set up list (the plugin does not ask Curtain how many sizes were shown). */
+	public static function handle_setup_phone(): void {
+		self::guard();
+		check_admin_referer( 'curtain_setup_phone' );
+		self::update( array( 'setup_phone_confirmed' => true ) );
+		self::redirect( __( 'Thank you. Your shoppers can now find their size on your product pages.', 'curtain-woocommerce' ) );
+	}
+
 	public static function handle_disconnect(): void {
 		self::guard();
 		check_admin_referer( 'curtain_disconnect' );
@@ -567,7 +577,9 @@ final class Settings {
 			<h1><?php esc_html_e( 'Curtain for WooCommerce', 'curtain-woocommerce' ); ?></h1>
 			<p class="description"><?php esc_html_e( 'Curtain is a private fitting room: shoppers find their size right on your product page, no app needed. Their measurements stay in their own browser. Only garment data (size charts, fabric, photos) leaves this site, never customer data.', 'curtain-woocommerce' ); ?></p>
 
-			<h2><?php esc_html_e( 'Connection', 'curtain-woocommerce' ); ?></h2>
+			<?php Setup::render_box(); ?>
+
+			<h2 id="curtain-connection"><?php esc_html_e( 'Connection', 'curtain-woocommerce' ); ?></h2>
 			<table class="form-table" role="presentation">
 				<tr>
 					<th scope="row"><?php esc_html_e( 'Status', 'curtain-woocommerce' ); ?></th>
@@ -643,7 +655,7 @@ final class Settings {
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<?php wp_nonce_field( 'curtain_save' ); ?>
 				<input type="hidden" name="action" value="curtain_save">
-				<h2><?php esc_html_e( 'Storefront button', 'curtain-woocommerce' ); ?></h2>
+				<h2 id="curtain-button"><?php esc_html_e( 'Storefront button', 'curtain-woocommerce' ); ?></h2>
 				<table class="form-table" role="presentation">
 					<tr>
 						<th scope="row"><?php esc_html_e( 'Show button', 'curtain-woocommerce' ); ?></th>

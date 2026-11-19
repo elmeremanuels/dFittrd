@@ -9,10 +9,9 @@ import {
   SIZE_ADVICE_FIELDS,
   shopifyExternalId,
   type GarmentPayload,
-  type OnboardingStepKey,
 } from '@curtain/schema';
 import { adminProductUrl } from './deepLinks';
-import type { ProductDetailNode, OnboardingState } from './graphql/charts';
+import type { ProductDetailNode } from './graphql/charts';
 
 export interface ChecklistItem {
   key: string;
@@ -79,53 +78,5 @@ export function productChecklist(node: ProductDetailNode, shopDomain: string, de
 /** The heavy completeness fields (a test keeps this in step with `completenessScore`). */
 export const HEAVY_FIELDS: ReadonlySet<string> = new Set(['sizeChartType', 'sizeChart', 'category', 'fabric.primary', 'flatLayPhoto']);
 
-// ---------------------------------------------------------------------------
-// Onboarding
-// ---------------------------------------------------------------------------
-
-export interface OnboardingFacts extends OnboardingState {
-  connected: boolean;
-  /** Synced products that have a size chart. */
-  productsWithChart: number;
-  /** Fit results shown to shoppers in the last 30 days (proof the block works). */
-  fitSessions: number;
-}
-
-export interface OnboardingStep {
-  key: OnboardingStepKey;
-  label: string;
-  done: boolean;
-  detail: string;
-}
-
-export function onboardingSteps(f: OnboardingFacts): { steps: OnboardingStep[]; next: OnboardingStepKey | null } {
-  const steps: OnboardingStep[] = [
-    { key: 'connect', label: 'Connect this store', done: f.connected, detail: f.connected ? 'Connected.' : 'Open the app from your Shopify admin.' },
-    {
-      key: 'template',
-      label: 'Pick a size chart template',
-      // A chart that reached products proves a template was picked, even if the pick was never saved.
-      done: f.templateId !== null || f.productsWithChart > 0,
-      detail: f.templateId ? `Template: ${f.templateId}.` : f.productsWithChart > 0 ? 'A chart is assigned.' : 'Your region’s body chart (AU, UK, EU, US), or garment measurements you fill in.',
-    },
-    {
-      key: 'assign',
-      label: 'Assign it to products',
-      done: f.productsWithChart > 0,
-      detail: f.productsWithChart > 0 ? `${f.productsWithChart} product(s) have a size chart.` : 'By collection, tag, product type, or pick products.',
-    },
-    {
-      key: 'themeBlock',
-      label: 'Add the “Try it on” block to your theme',
-      done: f.themeBlockConfirmed || f.fitSessions > 0,
-      detail: 'Opens the theme editor with the block on your product template. Save the theme, then mark this step done.',
-    },
-    {
-      key: 'test',
-      label: 'Test it on a product',
-      done: f.tested || f.fitSessions > 0,
-      detail: f.fitSessions > 0 ? `${f.fitSessions} size recommendation(s) shown to shoppers.` : 'Open a product with a chart, click “Try it on” and get a size.',
-    },
-  ];
-  return { steps, next: steps.find((s) => !s.done)?.key ?? null };
-}
+// The first-run checklist moved to @curtain/schema `merchantSetupSteps` (one list for the Shopify admin,
+// the merchant console and the WooCommerce settings page); the api builds it in services/setup.ts.

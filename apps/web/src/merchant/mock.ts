@@ -5,6 +5,11 @@
 import {
   bakeCheckRefusal,
   completenessScore,
+  hasShopMeasurements,
+  merchantSetupSteps,
+  productNextStep,
+  sizeAdviceScore,
+  type SetupResponse,
   PILOT_PULL_ON_SKIRT,
   garmentQaFlagNote,
   type BakeCheckReport,
@@ -22,6 +27,11 @@ import {
 import { dayIso } from '@/lib/format';
 import MOCK_BAKE_CHECKS from './mockBakeChecks.json';
 
+function nextOf(status: 'active' | 'incomplete', category: string, missingFields: string[], measured: boolean) {
+  const p = { status, category, missingFields, measured };
+  return { measured, next: productNextStep(p), adviceScore: sizeAdviceScore(p) };
+}
+
 export function mockProducts(): MerchantProductsResponse {
   // The pilot skirt (tape-built 3D versions in `mockAssets`) first, then the mock catalogue.
   const items = [PILOT_PULL_ON_SKIRT, ...MOCK_GARMENTS.slice(0, 23)].map((g, i) => {
@@ -35,6 +45,7 @@ export function mockProducts(): MerchantProductsResponse {
       score: c.score,
       missingFields: c.missing.map((m) => m.field),
       flatLayProcessedUrl: null,
+      ...nextOf(c.status, g.category, c.missing.map((m) => m.field), hasShopMeasurements(draft.garmentTape)),
       updatedAt: new Date(Date.now() - i * 3_600_000).toISOString(),
     };
   });
@@ -185,4 +196,15 @@ export function mockAssets(productExternalId: string): MerchantGarmentAsset[] {
       createdAt: '2026-11-18T09:02:00.000Z', approvedAt: '2026-11-18T09:30:00.000Z', rejectReason: null,
     },
   ];
+}
+
+/** The first-run checklist for the demo data (the real @curtain/schema list, from the demo products). */
+export function mockSetup(products: MerchantProductsResponse): SetupResponse {
+  const live = products.items.filter((p) => p.status !== 'archived');
+  const withChart = live.filter((p) => !p.missingFields.includes('sizeChart') && !p.missingFields.includes('sizeChartType'));
+  const progress = merchantSetupSteps(
+    { connected: true, productsTotal: live.length, productsWithChart: withChart.length, productsMeasured: live.filter((p) => p.measured).length, buttonOpened: true, fitSessions: 0, buttonConfirmed: false, phoneConfirmed: false },
+    'woocommerce',
+  );
+  return { ...progress, platform: 'woocommerce', measureProduct: withChart[0] ? { externalId: withChart[0].externalId, name: withChart[0].name } : null, phoneCheck: null };
 }

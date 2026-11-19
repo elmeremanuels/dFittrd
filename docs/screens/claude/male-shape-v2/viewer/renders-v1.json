@@ -1,0 +1,278 @@
+{
+  "renderer": "headless Chromium, SwiftShader (software)",
+  "renders": [
+    {
+      "name": "tee-S--back",
+      "query": "product=synthetic-men-tee&size=S&family=male&height=172.5&bust=90&waist=78&hip=90.5&shoulder=40",
+      "state": "settled",
+      "tag": "ESTIMATE · SYNTHETIC men’s test tee (not a product) · size S · lighting classic · skin default grey · head neutral",
+      "turn": 2,
+      "zoomOut": 8
+    },
+    {
+      "name": "tee-S--three-quarter",
+      "query": "product=synthetic-men-tee&size=S&family=male&height=172.5&bust=90&waist=78&hip=90.5&shoulder=40",
+      "state": "settled",
+      "tag": "ESTIMATE · SYNTHETIC men’s test tee (not a product) · size S · lighting classic · skin default grey · head neutral",
+      "turn": 0.5,
+      "zoomOut": 8
+    },
+    {
+      "name": "body-M--front",
+      "query": "mode=head&frame=body&family=male&height=174&bust=98&waist=86&hip=96&shoulder=40.5&yaw=0",
+      "state": "settled",
+      "tag": "ESTIMATE · male body alone · lighting classic · skin default grey · head neutral",
+      "turn": 0,
+      "zoomOut": 8
+    },
+    {
+      "name": "body-M--side",
+      "query": "mode=head&frame=body&family=male&height=174&bust=98&waist=86&hip=96&shoulder=40.5&yaw=0",
+      "state": "settled",
+      "tag": "ESTIMATE · male body alone · lighting classic · skin default grey · head neutral",
+      "turn": 1,
+      "zoomOut": 8
+    },
+    {
+      "name": "body-M--back",
+      "query": "mode=head&frame=body&family=male&height=174&bust=98&waist=86&hip=96&shoulder=40.5&yaw=0",
+      "state": "settled",
+      "tag": "ESTIMATE · male body alone · lighting classic · skin default grey · head neutral",
+      "turn": 2,
+      "zoomOut": 8
+    },
+    {
+      "name": "body-M--three-quarter",
+      "query": "mode=head&frame=body&family=male&height=174&bust=98&waist=86&hip=96&shoulder=40.5&yaw=0",
+      "state": "settled",
+      "tag": "ESTIMATE · male body alone · lighting classic · skin default grey · head neutral",
+      "turn": 0.5,
+      "zoomOut": 8
+    },
+    {
+      "name": "tee-M--front",
+      "query": "product=synthetic-men-tee&size=M&family=male&height=174&bust=98&waist=86&hip=96&shoulder=40.5",
+      "state": "settled",
+      "tag": "ESTIMATE · SYNTHETIC men’s test tee (not a product) · size M · lighting classic · skin default grey · head neutral",
+      "turn": 0,
+      "zoomOut": 8
+    },
+    {
+      "name": "tee-M--side",
+      "query": "product=synthetic-men-tee&size=M&family=male&height=174&bust=98&waist=86&hip=96&shoulder=40.5",
+      "state": "settled",
+      "tag": "ESTIMATE · SYNTHETIC men’s test tee (not a product) · size M · lighting classic · skin default grey · head neutral",
+      "turn": 1,
+      "zoomOut": 8
+    },
+    {
+      "name": "tee-M--back",
+      "query": "product=synthetic-men-tee&size=M&family=male&height=174&bust=98&waist=86&hip=96&shoulder=40.5",
+      "state": "settled",
+      "tag": "ESTIMATE · SYNTHETIC men’s test tee (not a product) · size M · lighting classic · skin default grey · head neutral",
+      "turn": 2,
+      "zoomOut": 8
+    },
+    {
+      "name": "tee-M--three-quarter",
+      "query": "product=synthetic-men-tee&size=M&family=male&height=174&bust=98&waist=86&hip=96&shoulder=40.5",
+      "state": "settled",
+      "tag": "ESTIMATE · SYNTHETIC men’s test tee (not a product) · size M · lighting classic · skin default grey · head neutral",
+      "turn": 0.5,
+      "zoomOut": 8
+    },
+    {
+      "name": "body-L--front",
+      "query": "mode=head&frame=body&family=male&height=175.5&bust=106&waist=94&hip=102&shoulder=41.5&yaw=0",
+      "state": "settled",
+      "tag": "ESTIMATE · male body alone · lighting classic · skin default grey · head neutral",
+      "turn": 0,
+      "zoomOut": 8
+    },
+    {
+      "name": "body-L--side",
+      "query": "mode=head&frame=body&family=male&height=175.5&bust=106&waist=94&hip=102&shoulder=41.5&yaw=0",
+      "state": "settled",
+      "tag": "ESTIMATE · male body alone · lighting classic · skin default grey · head neutral",
+      "turn": 1,
+      "zoomOut": 8
+    },
+    {
+      "name": "body-L--back",
+      "query": "mode=head&frame=body&family=male&height=175.5&bust=106&waist=94&hip=102&shoulder=41.5&yaw=0",
+      "state": "settled",
+      "tag": "ESTIMATE · male body alone · lighting classic · skin default grey · head neutral",
+      "turn": 2,
+      "zoomOut": 8
+    },
+    {
+      "name": "body-L--three-quarter",
+      "query": "mode=head&frame=body&family=male&height=175.5&bust=106&waist=94&hip=102&shoulder=41.5&yaw=0",
+      "state": "settled",
+      "tag": "ESTIMATE · male body alone · lighting classic · skin default grey · head neutral",
+      "turn": 0.5,
+      "zoomOut": 8
+    },
+    {
+      "name": "tee-L--front",
+      "query": "product=synthetic-men-tee&size=L&family=male&height=175.5&bust=106&waist=94&hip=102&shoulder=41.5",
+      "state": "settled",
+      "tag": "ESTIMATE · SYNTHETIC men’s test tee (not a product) · size L · lighting classic · skin default grey · head neutral",
+      "turn": 0,
+      "zoomOut": 8
+    },
+    {
+      "name": "tee-L--side",
+      "query": "product=synthetic-men-tee&size=L&family=male&height=175.5&bust=106&waist=94&hip=102&shoulder=41.5",
+      "state": "settled",
+      "tag": "ESTIMATE · SYNTHETIC men’s test tee (not a product) · size L · lighting classic · skin default grey · head neutral",
+      "turn": 1,
+      "zoomOut": 8
+    },
+    {
+      "name": "tee-L--back",
+      "query": "product=synthetic-men-tee&size=L&family=male&height=175.5&bust=106&waist=94&hip=102&shoulder=41.5",
+      "state": "settled",
+      "tag": "ESTIMATE · SYNTHETIC men’s test tee (not a product) · size L · lighting classic · skin default grey · head neutral",
+      "turn": 2,
+      "zoomOut": 8
+    },
+    {
+      "name": "tee-L--three-quarter",
+      "query": "product=synthetic-men-tee&size=L&family=male&height=175.5&bust=106&waist=94&hip=102&shoulder=41.5",
+      "state": "settled",
+      "tag": "ESTIMATE · SYNTHETIC men’s test tee (not a product) · size L · lighting classic · skin default grey · head neutral",
+      "turn": 0.5,
+      "zoomOut": 8
+    },
+    {
+      "name": "body-XL--front",
+      "query": "mode=head&frame=body&family=male&height=177&bust=114&waist=102&hip=108&shoulder=42.5&yaw=0",
+      "state": "settled",
+      "tag": "ESTIMATE · male body alone · lighting classic · skin default grey · head neutral",
+      "turn": 0,
+      "zoomOut": 8
+    },
+    {
+      "name": "body-XL--side",
+      "query": "mode=head&frame=body&family=male&height=177&bust=114&waist=102&hip=108&shoulder=42.5&yaw=0",
+      "state": "settled",
+      "tag": "ESTIMATE · male body alone · lighting classic · skin default grey · head neutral",
+      "turn": 1,
+      "zoomOut": 8
+    },
+    {
+      "name": "body-XL--back",
+      "query": "mode=head&frame=body&family=male&height=177&bust=114&waist=102&hip=108&shoulder=42.5&yaw=0",
+      "state": "settled",
+      "tag": "ESTIMATE · male body alone · lighting classic · skin default grey · head neutral",
+      "turn": 2,
+      "zoomOut": 8
+    },
+    {
+      "name": "body-XL--three-quarter",
+      "query": "mode=head&frame=body&family=male&height=177&bust=114&waist=102&hip=108&shoulder=42.5&yaw=0",
+      "state": "settled",
+      "tag": "ESTIMATE · male body alone · lighting classic · skin default grey · head neutral",
+      "turn": 0.5,
+      "zoomOut": 8
+    },
+    {
+      "name": "tee-XL--front",
+      "query": "product=synthetic-men-tee&size=XL&family=male&height=177&bust=114&waist=102&hip=108&shoulder=42.5",
+      "state": "settled",
+      "tag": "ESTIMATE · SYNTHETIC men’s test tee (not a product) · size XL · lighting classic · skin default grey · head neutral",
+      "turn": 0,
+      "zoomOut": 8
+    },
+    {
+      "name": "tee-XL--side",
+      "query": "product=synthetic-men-tee&size=XL&family=male&height=177&bust=114&waist=102&hip=108&shoulder=42.5",
+      "state": "settled",
+      "tag": "ESTIMATE · SYNTHETIC men’s test tee (not a product) · size XL · lighting classic · skin default grey · head neutral",
+      "turn": 1,
+      "zoomOut": 8
+    },
+    {
+      "name": "tee-XL--back",
+      "query": "product=synthetic-men-tee&size=XL&family=male&height=177&bust=114&waist=102&hip=108&shoulder=42.5",
+      "state": "settled",
+      "tag": "ESTIMATE · SYNTHETIC men’s test tee (not a product) · size XL · lighting classic · skin default grey · head neutral",
+      "turn": 2,
+      "zoomOut": 8
+    },
+    {
+      "name": "tee-XL--three-quarter",
+      "query": "product=synthetic-men-tee&size=XL&family=male&height=177&bust=114&waist=102&hip=108&shoulder=42.5",
+      "state": "settled",
+      "tag": "ESTIMATE · SYNTHETIC men’s test tee (not a product) · size XL · lighting classic · skin default grey · head neutral",
+      "turn": 0.5,
+      "zoomOut": 8
+    },
+    {
+      "name": "body-XXL--front",
+      "query": "mode=head&frame=body&family=male&height=179&bust=123&waist=111&hip=114.5&shoulder=43.5&yaw=0",
+      "state": "settled",
+      "tag": "ESTIMATE · male body alone · lighting classic · skin default grey · head neutral",
+      "turn": 0,
+      "zoomOut": 8
+    },
+    {
+      "name": "body-XXL--side",
+      "query": "mode=head&frame=body&family=male&height=179&bust=123&waist=111&hip=114.5&shoulder=43.5&yaw=0",
+      "state": "settled",
+      "tag": "ESTIMATE · male body alone · lighting classic · skin default grey · head neutral",
+      "turn": 1,
+      "zoomOut": 8
+    },
+    {
+      "name": "body-XXL--back",
+      "query": "mode=head&frame=body&family=male&height=179&bust=123&waist=111&hip=114.5&shoulder=43.5&yaw=0",
+      "state": "settled",
+      "tag": "ESTIMATE · male body alone · lighting classic · skin default grey · head neutral",
+      "turn": 2,
+      "zoomOut": 8
+    },
+    {
+      "name": "body-XXL--three-quarter",
+      "query": "mode=head&frame=body&family=male&height=179&bust=123&waist=111&hip=114.5&shoulder=43.5&yaw=0",
+      "state": "settled",
+      "tag": "ESTIMATE · male body alone · lighting classic · skin default grey · head neutral",
+      "turn": 0.5,
+      "zoomOut": 8
+    },
+    {
+      "name": "tee-XXL--front",
+      "query": "product=synthetic-men-tee&size=XXL&family=male&height=179&bust=123&waist=111&hip=114.5&shoulder=43.5",
+      "state": "settled",
+      "tag": "ESTIMATE · SYNTHETIC men’s test tee (not a product) · size XXL · lighting classic · skin default grey · head neutral",
+      "turn": 0,
+      "zoomOut": 8
+    },
+    {
+      "name": "tee-XXL--side",
+      "query": "product=synthetic-men-tee&size=XXL&family=male&height=179&bust=123&waist=111&hip=114.5&shoulder=43.5",
+      "state": "settled",
+      "tag": "ESTIMATE · SYNTHETIC men’s test tee (not a product) · size XXL · lighting classic · skin default grey · head neutral",
+      "turn": 1,
+      "zoomOut": 8
+    },
+    {
+      "name": "tee-XXL--back",
+      "query": "product=synthetic-men-tee&size=XXL&family=male&height=179&bust=123&waist=111&hip=114.5&shoulder=43.5",
+      "state": "settled",
+      "tag": "ESTIMATE · SYNTHETIC men’s test tee (not a product) · size XXL · lighting classic · skin default grey · head neutral",
+      "turn": 2,
+      "zoomOut": 8
+    },
+    {
+      "name": "tee-XXL--three-quarter",
+      "query": "product=synthetic-men-tee&size=XXL&family=male&height=179&bust=123&waist=111&hip=114.5&shoulder=43.5",
+      "state": "settled",
+      "tag": "ESTIMATE · SYNTHETIC men’s test tee (not a product) · size XXL · lighting classic · skin default grey · head neutral",
+      "turn": 0.5,
+      "zoomOut": 8
+    }
+  ],
+  "problems": []
+}

@@ -121,6 +121,11 @@ export const MERCHANT_SETUP_TEXT = Object.freeze({
         shopify: 'Scan the code with your phone’s camera (or open the link), tap “Try it on”, type a height and weight and see the size it suggests.',
         woocommerce: 'Open the product link below on your phone (send it to yourself), tap “Try it on”, type a height and weight and see the size it suggests.',
       },
+      /**
+       * Shopify only, added to the step while it is open (OI-99): a store that has not opened yet answers every
+       * visitor, the merchant's own phone included, with its password page.
+       */
+      passwordNote: 'If your store is still password-protected, your phone shows the store’s password page first: enter the store password there and the product page opens.',
       done: (n: number) => (n > 0 ? `${plural(n, 'size was', 'sizes were')} shown on your product pages in the last 30 days.` : 'You checked it on your phone.'),
       action: 'Show the code',
       confirm: 'It works on my phone',
@@ -182,7 +187,7 @@ export function merchantSetupSteps(f: SetupFacts, platform: SetupPlatform): Setu
       number: 5,
       title: t.phone.title,
       done: phoneDone,
-      detail: phoneDone ? t.phone.done(f.fitSessions) : t.phone.todo[platform],
+      detail: phoneDone ? t.phone.done(f.fitSessions) : platform === 'shopify' ? `${t.phone.todo.shopify} ${t.phone.passwordNote}` : t.phone.todo.woocommerce,
       action: { label: t.phone.action, target: 'phone' },
       confirmLabel: phoneDone ? null : t.phone.confirm,
       minutes: t.phone.minutes,

@@ -43,6 +43,19 @@ describe('merchantSetupSteps', () => {
     for (const jargon of ['metafield', 'sizeChart', 'webhook', 'API key', 'token', 'payload', 'SDK', 'app block']) expect(words).not.toContain(jargon);
   });
 
+  it('a Shopify shop is told, while the phone check is open, that a password-protected store shows its password page first (OI-99)', () => {
+    const note = MERCHANT_SETUP_TEXT.steps.phone.passwordNote;
+    expect(note).toMatch(/password-protected/);
+    // One plain sentence.
+    expect(note.match(/[.!?](\s|$)/g)).toHaveLength(1);
+    const phone = (f: Partial<SetupFacts>, platform: 'shopify' | 'woocommerce') => merchantSetupSteps({ ...base, ...f }, platform).steps.find((s) => s.key === 'phone')!;
+    expect(phone({}, 'shopify').detail).toBe(`${MERCHANT_SETUP_TEXT.steps.phone.todo.shopify} ${note}`);
+    // WooCommerce has no storefront password, and a finished step no longer needs the hint.
+    expect(phone({}, 'woocommerce').detail).toBe(MERCHANT_SETUP_TEXT.steps.phone.todo.woocommerce);
+    expect(phone({ phoneConfirmed: true }, 'shopify').detail).not.toContain(note);
+    expect(phone({ fitSessions: 2 }, 'shopify').detail).not.toContain('password');
+  });
+
   it('only steps 4 and 5 can be ticked by hand, and only while not done', () => {
     const r = merchantSetupSteps(base, 'shopify');
     expect(r.steps.map((s) => s.confirmLabel !== null)).toEqual([false, false, false, true, true]);

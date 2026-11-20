@@ -625,8 +625,8 @@ export const CLEARANCE_CM = 0.35;
 /** Steps 1–3 of §Fitting, and the cloth ready for step 4. */
 export function prepareFit(session: GarmentSession, avatar: Avatar, bodyField: BodyField, fit: FitResult, size: string, material: ViewerMaterial, durationS = 1.5, options: DrapeOptions = DEFAULT_DRAPE): FitInstance {
   const { m, chains } = session;
-  // A tape-built trouser is draped against the body with its leg tops joined to the torso (`trouserField`); every other bundle against the body as given.
-  const field = isTapeTrouser(session.bundle.anchors) ? trouserField(bodyField) : bodyField;
+  // A tape-built trouser is draped against the body with its leg tops joined to the torso, or the hollow of its seat bridged (`trouserField`); every other bundle against the body as given.
+  const field = isTapeTrouser(session.bundle.anchors) ? trouserField(bodyField, m.morphHeights) : bodyField;
   const graded = gradedMesh(session, size);
   const gaps = gapsForSize(fit, size);
   // The loop states come from the fit engine's bands (product fabric), never from the display preset (R2).

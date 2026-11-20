@@ -9,8 +9,8 @@
  * - A ring of cloth does not follow a hollow: every outline handed out is the convex hull of the section (`round`:
  *   the torso and both legs together, what a tape round the seat lies on; `leg`: one leg).
  * - `centre(y)`: the drawn body on the centre plane x = 0 (front and back z of the torso there), which the crotch seam
- *   has to pass under and round. Only from the body's crotch up: below it the thighs of a v2 body touch at the centre,
- *   and the cloth of the two legs passes between them.
+ *   has to pass under and round. Only from the body's crotch up: below it there is no torso, and the cloth of the two
+ *   legs passes between the thighs (on a v2 body they part there, 0.6 cm each side of the centre plane).
  */
 import { POLAR_N, type Mannequin, type PolarSection } from '@curtain/mannequin';
 

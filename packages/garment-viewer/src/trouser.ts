@@ -23,7 +23,13 @@
  *   crotch with a section wider than the torso's there: a ledge at hip height, with nothing to collide with at its edge.
  *   A trouser's cloth is drawn across that edge and the body showed through it as a row of specks. `trouserField` widens
  *   the torso's ellipses to hold the leg tops, easing back to the torso over `LEG_TOP_FILLET_CM` above them. A body with
- *   drawn outlines (v2) has no ledge and is left as it is.
+ *   drawn outlines (v2) has no ledge.
+ * - **The seat bridges the hollow between the buttocks.** A body with drawn outlines (male shape v2) has a hollow at the
+ *   centre back, 2 to 3 cm deep and a hand wide at the seat (its cleft and the pinch towards the crotch). The builder lays
+ *   the seat's rows and the centre back seam on the body's hull there, as a tape and a woven seat lie; against the drawn
+ *   outline the seam sank into the hollow in the drape, and what it gained in length let the crotch point drop 1 to 2.5 cm.
+ *   `trouserField` hands the drape the torso with that hollow bridged from the hip ring up, easing back to the drawn
+ *   outline below it and towards the waist (`bridgeSeatHollow`).
  * - **A size too small is not drawn.** As for the sewn tee (`sewnNotDrawn`): when the fit engine bands the waist or the
  *   seat `tight` with the body larger than the garment (the placed loop is `open`), or the thigh, the size is not draped
  *   and not drawn, and the reason is handed up. Before this a bottom's band was laid on the body whatever its size.
@@ -140,12 +146,75 @@ export const LEG_TOP_WIDEN = 1.1;
 
 const fields = new WeakMap<BodyField, BodyField>();
 
-/** The collision field a tape-built trouser is draped against: `field` with the torso holding the leg tops (see the file header). */
-export function trouserField(field: BodyField): BodyField {
-  if (field.torso.polar) return field;
+/** Below the hip ring the bridged hollow eases back to the drawn outline over this height, cm (under the seat the seam hangs free of the body). */
+export const SEAT_BRIDGE_BELOW_CM = 3;
+/** … and above it between these shares of the way from the hip ring to the waist ring (the band reads the drawn body). */
+export const SEAT_BRIDGE_FADE: readonly [number, number] = [0.4, 0.65];
+
+/**
+ * The collision field a tape-built trouser is draped against (see the file header): on a body of ellipses `field` with the
+ * torso holding the leg tops; on a body with drawn outlines `field` with the hollow at the centre back of the seat bridged,
+ * which needs the body's hip and waist heights (without them that body's field is handed back as it is).
+ */
+export function trouserField(field: BodyField, heights?: { hip: number; waist: number }): BodyField {
+  if (field.torso.polar && !heights) return field;
   let hit = fields.get(field);
-  if (!hit) fields.set(field, (hit = joinLegTops(field)));
+  if (!hit) fields.set(field, (hit = field.torso.polar ? bridgeSeatHollow(field, heights!) : joinLegTops(field)));
   return hit;
+}
+
+/** Convex hull (counter-clockwise) of 2D points. */
+function hull2(pts: readonly [number, number][]): [number, number][] {
+  const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cr = (o: [number, number], a: [number, number], b: [number, number]): number => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo: [number, number][] = [], up: [number, number][] = [];
+  for (const q of p) { while (lo.length >= 2 && cr(lo[lo.length - 2]!, lo[lo.length - 1]!, q) <= 0) lo.pop(); lo.push(q); }
+  for (let k = p.length - 1; k >= 0; k--) { const q = p[k]!; while (up.length >= 2 && cr(up[up.length - 2]!, up[up.length - 1]!, q) <= 0) up.pop(); up.push(q); }
+  return [...lo.slice(0, -1), ...up.slice(0, -1)];
+}
+
+/**
+ * The torso's drawn outlines with the hollow at the centre back bridged: from the centre back outwards, to where the
+ * outline meets its own hull again (the crest of each buttock), the radius is the hull's. Only the back, and only round
+ * the seat: the front and the sides stay the drawn body, as do the legs.
+ */
+function bridgeSeatHollow(field: BodyField, heights: { hip: number; waist: number }): BodyField {
+  const polar = field.torso.polar!;
+  const n = polar.n, stride = n + 3;
+  const data = Float32Array.from(polar.data);
+  const top0 = heights.hip + SEAT_BRIDGE_FADE[0] * (heights.waist - heights.hip), top1 = heights.hip + SEAT_BRIDGE_FADE[1] * (heights.waist - heights.hip);
+  const back = Math.round((3 * n) / 4);
+  for (let k = 0; k < data.length / stride; k++) {
+    if (data[k * stride] !== 1) continue;
+    const y = polar.lo + k * polar.stepCm;
+    const w = y < heights.hip ? 1 - (heights.hip - y) / SEAT_BRIDGE_BELOW_CM : y <= top0 ? 1 : 1 - (y - top0) / Math.max(1e-6, top1 - top0);
+    if (!(w > 0)) continue;
+    const at = k * stride + 3;
+    const pts: [number, number][] = [];
+    for (let j = 0; j < n; j++) pts.push([polar.data[at + j]! * Math.cos((2 * Math.PI * j) / n), polar.data[at + j]! * Math.sin((2 * Math.PI * j) / n)]);
+    const h = hull2(pts);
+    /** The hull along the ray j from the outline's centre. */
+    const onHull = (j: number): number => {
+      const dx = Math.cos((2 * Math.PI * j) / n), dz = Math.sin((2 * Math.PI * j) / n);
+      let best = 0;
+      for (let i = 0; i < h.length; i++) {
+        const p = h[i]!, q = h[(i + 1) % h.length]!;
+        const ex = q[0] - p[0], ez = q[1] - p[1];
+        const det = ex * dz - ez * dx;
+        if (Math.abs(det) < 1e-12) continue;
+        const t = (ex * p[1] - ez * p[0]) / det, u = (dx * p[1] - dz * p[0]) / det;
+        if (u >= -1e-9 && u <= 1 + 1e-9 && t > best) best = t;
+      }
+      return best;
+    };
+    for (const dir of [1, -1]) for (let c = dir === 1 ? 0 : 1; c < n / 4; c++) {
+      const j = (back + dir * c + n) % n;
+      const r = polar.data[at + j]!, R = onHull(j);
+      if (R <= r + 0.02) break;
+      data[at + j] = r + (R - r) * w;
+    }
+  }
+  return { ...field, torso: { ...field.torso, polar: { ...polar, data } } };
 }
 
 function joinLegTops(field: BodyField): BodyField {

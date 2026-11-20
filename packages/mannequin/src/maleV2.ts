@@ -416,6 +416,7 @@ export function maleShapeV2(m: Mannequin, options: BuildOptions = {}): Mannequin
     const touching = -(legX + 0.1);
     // Where they have parted: the inner side never nearer the centre plane than the gap (on the mesh, so before `scale`).
     const wall = -(legX - A.thighGapCm) / scale;
+    /** The outline scaled by f, its inner side moved by `share` from touching (0) to parted (1); a negative share: the whole ellipse, nothing flattened. */
     const make = (f: number, share: number): Float64Array => {
       const o = new Float64Array(2 * ls);
       for (let j = 0; j < ls; j++) {
@@ -425,7 +426,7 @@ export function maleShapeV2(m: Mannequin, options: BuildOptions = {}): Mannequin
         // Lower buttock on the back of the thigh, a little towards the inside.
         if (z < 0) z -= glute * g((x + 0.15 * a0) / (0.65 * a0)) * Math.sqrt(-Math.cos(ang));
         const met = x < touching ? touching - 0.35 * (touching - x) * g((touching - x) / (0.4 * a0)) : x;
-        o[2 * j] = share > 0 ? lerp(met, wall + softFloor(x - wall), share) : met;
+        o[2 * j] = share < 0 ? x : share > 0 ? lerp(met, wall + softFloor(x - wall), share) : met;
         o[2 * j + 1] = z + e.cz - shiftZ * top;
       }
       return o;

@@ -22,6 +22,7 @@ import {
   type BillingAnomaliesResponse,
   type MerchantLedgerResponse,
   type MerchantProductsResponse,
+  type MerchantSettingsResponse,
   type UsageResponse,
 } from '@curtain/schema';
 import { dayIso } from '@/lib/format';
@@ -47,13 +48,24 @@ export function mockProducts(): MerchantProductsResponse {
       flatLayProcessedUrl: null,
       ...nextOf(c.status, g.category, c.missing.map((m) => m.field), hasShopMeasurements(draft.garmentTape)),
       updatedAt: new Date(Date.now() - i * 3_600_000).toISOString(),
+      notices: { defaulted: [] as string[], leftOut: [] as { field: string; reason: string }[] },
     };
   });
+  // Incomplete fabric details (D25 point 1), as the api reports them: a stretch that was not valid
+  // and was left out, a product with no stretch at all, and one the shop's setting holds back.
+  const [, leftOut, noStretch, , held] = items;
+  if (leftOut && leftOut.status === 'active') leftOut.notices = { defaulted: ['fabric.stretchPct'], leftOut: [{ field: 'fabric.stretchPct', reason: 'Too big: expected number to be <=100' }] };
+  if (noStretch && noStretch.status === 'active') noStretch.notices = { defaulted: ['fabric.stretchPct', 'fabric.drape'], leftOut: [] };
+  if (held) Object.assign(held, { status: 'incomplete' as const, heldBack: { reason: 'incomplete_product_data' as const, fields: ['fabric.stretchPct'] } });
   return {
     items,
     nextCursor: null,
     counts: { active: items.filter((i) => i.status === 'active').length, incomplete: items.filter((i) => i.status === 'incomplete').length, archived: 0 },
   };
+}
+
+export function mockSettings(): MerchantSettingsResponse {
+  return { incompleteProductData: 'let-through', showFitByCurtain: true, shopName: 'Aalter Studio', platform: 'woocommerce', brandColor: '#2F4F3A', logoUrl: null };
 }
 
 export function mockUsage(from: string, to: string): UsageResponse {

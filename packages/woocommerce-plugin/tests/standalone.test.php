@@ -133,6 +133,9 @@ test(
 
 		$html = Frontend::button_html( Curtain_Test_State::$posts[31]['product'], 'Try it on', 'button alt' );
 		assert_contains( 'data-curtain-product="31"', $html );
+		// Printed hidden: the SDK shows it once it knows the plan is not paused (D25 point 5).
+		assert_contains( '<p class="curtain-try" hidden>', $html );
+		assert_contains( '<style>.curtain-try[hidden]{display:none!important}</style>', $html );
 		assert_contains( 'data-curtain-mode="embed"', $html );
 		assert_contains( 'data-curtain-size-option="pa_size"', $html );
 		assert_contains( 'stay on this device', $html );

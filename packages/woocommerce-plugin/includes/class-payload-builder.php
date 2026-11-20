@@ -644,7 +644,9 @@ final class Payload_Builder {
 	private function coerce_fabric( $value ): ?array {
 		$v = self::parse_jsonish( $value );
 		if ( ! is_array( $v ) || array_is_list( $v ) ) {
-			if ( null !== $v ) {
+			// `{}` decodes to an empty array like `[]`: an empty object is no fabric and no mistake.
+			$empty_object = array() === $v && ( ! is_string( $value ) || str_starts_with( trim( $value ), '{' ) );
+			if ( null !== $v && ! $empty_object ) {
 				$this->warn( '_curtain_fabric', 'fabric', 'expected a JSON object' );
 			}
 			return null;
@@ -680,7 +682,7 @@ final class Payload_Builder {
 			if ( null !== $n ) {
 				$out[ $k ] = self::num( $n );
 			} else {
-				$this->warn( '_curtain_fabric', 'fabric.' . $k, 'expected a number' );
+				$this->warn( '_curtain_fabric', 'fabric.' . $k, 'expected a number, got ' . (string) json_encode( $v[ $k ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) );
 			}
 		}
 		$gsm = self::coerce_number( $v['gsm'] ?? $v['weight_gsm'] ?? null );
@@ -691,7 +693,8 @@ final class Payload_Builder {
 		if ( ! isset( $out['stretchPct'] ) && null !== $stretch ) {
 			$out['stretchPct'] = self::num( $stretch );
 		}
-		if ( isset( $v['blend'] ) && is_array( $v['blend'] ) ) {
+		// A list only, as coerceFabric reads it: an object keyed by anything is not a blend.
+		if ( isset( $v['blend'] ) && is_array( $v['blend'] ) && array_is_list( $v['blend'] ) ) {
 			$blend = array();
 			foreach ( $v['blend'] as $b ) {
 				$fibre = null;
@@ -772,6 +775,10 @@ final class Payload_Builder {
 				if ( ! is_array( $value ) || ! array_is_list( $value ) ) {
 					return 'Invalid input: expected array';
 				}
+				// The schema reports the size of the list before anything in a row.
+				if ( count( $value ) > 8 ) {
+					return 'Too big: expected array to have <=8 items';
+				}
 				foreach ( $value as $row ) {
 					if ( ! is_array( $row ) || ! array_is_list( $row ) || 2 !== count( $row ) ) {
 						return 'Invalid input: expected tuple';
@@ -782,7 +789,7 @@ final class Payload_Builder {
 						return $issue;
 					}
 				}
-				return count( $value ) > 8 ? 'Too big: expected array to have <=8 items' : null;
+				return null;
 			case 'weightGsm':
 				return self::number_issue( $value, 0.0, 2000.0, true );
 			case 'stretchPct':
@@ -807,12 +814,13 @@ final class Payload_Builder {
 		return null;
 	}
 
-	/** Length as the schema counts it (UTF-16 code units, like a JavaScript string). */
+	/** Length as the schema counts it: in characters (code points), so an emoji is one, not two. */
 	private static function string_issue( string $value, int $max ): ?string {
-		$len = strlen( $value );
-		if ( function_exists( 'mb_convert_encoding' ) ) {
-			$utf16 = mb_convert_encoding( $value, 'UTF-16LE', 'UTF-8' );
-			$len   = is_string( $utf16 ) ? intdiv( strlen( $utf16 ), 2 ) : $len;
+		if ( function_exists( 'mb_strlen' ) ) {
+			$len = mb_strlen( $value, 'UTF-8' );
+		} else {
+			$chars = preg_match_all( '/./us', $value );
+			$len   = false === $chars ? strlen( $value ) : $chars;
 		}
 		if ( $len < 1 ) {
 			return 'Too small: expected string to have >=1 characters';

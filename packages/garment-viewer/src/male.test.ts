@@ -246,12 +246,17 @@ describe('a bundle built on the male mannequin', () => {
     expect(sewnNotDrawn(xxl.session, xxl.plan.avatar, xxl.fit, 'XXL')).toBeNull();
     const m = on('M');
     for (const size of MALE_BODY_SHAPE_IDS) expect(sewnNotDrawn(m.session, m.plan.avatar, m.fit, size), `M body in ${size}`).toBeNull();
-    // A garment that is not sewn (every bundle before M3) is drawn as before, whatever the fit.
+    // The rule is one for every garment now (`notDrawn.ts`): a dress that is not sewn is declared too where the fit engine
+    // blocks it (before, every bundle that was not a sewn top was draped on any body), and drawn where it only fits badly.
     const dressBundle = await loadBundleFrom(serve(dress.files), '/b', 'aalter-studio-2', { withPayload: false });
     const dressPlan = planAvatar(dressBundle.anchors, { bust: 120, waist: 110, hip: 125 });
     const dressSession = openSession(dressPlan.m, dressBundle, MOCK_GARMENTS_BY_ID['aalter-studio-2']!);
     expect(dressSession.sewn).toBe(false);
-    for (const size of dressSession.bundle.grading.sizes.map((x) => x.size)) expect(sewnNotDrawn(dressSession, dressPlan.avatar, fitForBody(MOCK_GARMENTS_BY_ID['aalter-studio-2']!, dressPlan.avatar.measurements), size)).toBeNull();
+    const dressFit = fitForBody(MOCK_GARMENTS_BY_ID['aalter-studio-2']!, dressPlan.avatar.measurements);
+    for (const size of dressSession.bundle.grading.sizes.map((x) => x.size)) expect(sewnNotDrawn(dressSession, dressPlan.avatar, dressFit, size), size).toMatchObject({ anchor: 'waist' });
+    const dressOwn = planAvatar(dressBundle.anchors, { bust: 88, waist: 70, hip: 96 });
+    const ownFit = fitForBody(MOCK_GARMENTS_BY_ID['aalter-studio-2']!, dressOwn.avatar.measurements);
+    expect(sewnNotDrawn(dressSession, dressOwn.avatar, ownFit, ownFit.recommendedSize!)).toBeNull();
   }, 120_000);
 
   it('the printed tee: base.glb carries UVs and the synthetic print, and welds back to the mesh the bundle grades and drapes', async () => {

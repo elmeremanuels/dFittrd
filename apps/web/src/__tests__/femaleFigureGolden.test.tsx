@@ -5,6 +5,10 @@
  * existed (branch `claude/men-m1b-2d`, first commit), so adding the male family must leave every
  * female figure, garment outline, size ring and label byte for byte as it was. Each case is the
  * sha256 of the rendered markup or of the geometry as JSON; equal markup draws equal pixels.
+ *
+ * Updated once on purpose (branch `claude/pre-launch`, OI-83): the left arm and the head are walked the other way round
+ * so that they wind like the torso and their overlap with it is filled. Same corners, same ellipse: the three cases
+ * that hold the body's path changed, the garment outlines (second case) did not. `figureFill.test.ts` holds the fix.
  */
 import { createHash } from 'node:crypto';
 import { cleanup, render } from '@testing-library/react';

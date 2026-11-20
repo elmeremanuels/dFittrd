@@ -363,9 +363,16 @@ export function bodyPath(g: BodyGeometry): string {
     const wrist = levelY('hip') + 12;
     const w = g.armHalf;
     const drift = side * (g.bustHalf * 0.22 + 6);
-    return `M ${sx - side * w},${top} L ${sx + side * w},${top + 4} L ${sx + drift + side * (w - 1)},${wrist} L ${sx + drift - side * (w - 1)},${wrist} Z`;
+    const pts = [`${sx - side * w},${top}`, `${sx + side * w},${top + 4}`, `${sx + drift + side * (w - 1)},${wrist}`, `${sx + drift - side * (w - 1)},${wrist}`];
+    // Mirroring flips the winding. The left arm keeps its four points and is walked the other way round, so it winds
+    // like the torso and the part of it that lies over the torso stays filled under the nonzero rule (OI-83: it cut a
+    // hole at the left armpit). The outline is the same four corners.
+    if (side === -1) pts.reverse();
+    return `M ${pts.join(' L ')} Z`;
   };
-  const head = `M ${CENTER_X},${HEAD_TOP_Y} a ${g.headR.toFixed(1)},${g.headRy.toFixed(1)} 0 1,0 0.01,0 Z`;
+  // The same ellipse, walked clockwise like the torso (it ran the other way, and the half pixel where the torso's
+  // smoothed neck reaches into the chin was left unfilled).
+  const head = `M ${CENTER_X},${HEAD_TOP_Y} a ${g.headR.toFixed(1)},${g.headRy.toFixed(1)} 0 1,1 -0.01,0 Z`;
   return [head, torso, leg(1), leg(-1), arm(1), arm(-1)].join(' ');
 }
 

@@ -50,7 +50,7 @@ import { decodeCursor, encodeCursor } from '../services/ledger.js';
 import { archiveProduct, listMerchantProducts, reapplyIncompleteProductData, upsertProduct } from '../services/products.js';
 import { merchantMenGate } from '../services/readiness.js';
 import { merchantSetup } from '../services/setup.js';
-import { connectTokenHash, createShop, findShopByConnectToken, findShopByDomain, isPaused, issueMerchantKeys, planInfo, updateSettings } from '../services/shops.js';
+import { connectTokenHash, createShop, findShopByConnectToken, findShopByDomain, isPaused, issueMerchantKeys, planInfo, updateSettings, type ShopRow } from '../services/shops.js';
 import { billingAnomalyReport, fitSessionsBetween, usageDays } from '../services/usage.js';
 
 const httpUrl = z.url({ protocol: /^https?$/ });
@@ -306,15 +306,38 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
   // ---- settings --------------------------------------------------------------------------------
   // The merchant's own choices (D24). A fixed list of keys, each named in the DTOs: nothing of the
   // shop's stored settings (billing, operator switches) is read or written through this route.
-  const settingsOf = (shop: { incompleteProductData: 'let-through' | 'hold-back' }) => ({ incompleteProductData: shop.incompleteProductData });
+  const settingsOf = (shop: ShopRow) => ({
+    incompleteProductData: shop.incompleteProductData,
+    showFitByCurtain: shop.settings.showFitByCurtain !== false,
+    shopName: shop.name,
+    platform: shop.platform,
+    brandColor: shop.settings.brandColor ?? null,
+    logoUrl: shop.settings.logoUrl ?? null,
+  });
   app.get('/v1/merchant/settings', { schema: { response: { 200: MerchantSettingsResponseSchema } }, preHandler: requireMerchant }, async (req) => settingsOf(req.shop!));
   app.put('/v1/merchant/settings', { schema: { body: MerchantSettingsUpdateRequestSchema, response: { 200: MerchantSettingsResponseSchema } }, preHandler: requireMerchant }, async (req) => {
-    const next = req.body.incompleteProductData;
-    if (next === undefined || next === req.shop!.incompleteProductData) return settingsOf(req.shop!);
-    const [shop] = await db.update(shops).set({ incompleteProductData: next, updatedAt: now() }).where(eq(shops.id, req.shop!.id)).returning();
+    const b = req.body;
+    let shop: ShopRow = req.shop!;
+    // Only the keys named here are written; billing and operator keys in the stored settings are untouched.
+    const settings = { ...shop.settings };
+    if (b.showFitByCurtain !== undefined) settings.showFitByCurtain = b.showFitByCurtain;
+    if (b.brandColor === null) delete settings.brandColor;
+    else if (b.brandColor !== undefined) settings.brandColor = b.brandColor;
+    if (b.logoUrl === null) delete settings.logoUrl;
+    else if (b.logoUrl !== undefined) settings.logoUrl = b.logoUrl;
+    const policy = b.incompleteProductData;
+    const policyChanged = policy !== undefined && policy !== shop.incompleteProductData;
+    const settingsChanged = b.showFitByCurtain !== undefined || b.brandColor !== undefined || b.logoUrl !== undefined;
+    if (!policyChanged && !settingsChanged) return settingsOf(shop);
+    const [row] = await db
+      .update(shops)
+      .set({ ...(settingsChanged ? { settings } : {}), ...(policyChanged ? { incompleteProductData: policy } : {}), updatedAt: now() })
+      .where(eq(shops.id, shop.id))
+      .returning();
+    shop = row!;
     // The products the shop already has follow the new choice (held back, or released).
-    await reapplyIncompleteProductData(db, shop!.id, next);
-    return settingsOf(shop!);
+    if (policyChanged) await reapplyIncompleteProductData(db, shop.id, policy);
+    return settingsOf(shop);
   });
 
   // ---- keys ------------------------------------------------------------------------------------

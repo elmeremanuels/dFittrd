@@ -142,6 +142,8 @@ export function shopBranding(shop: ShopRow) {
     ...(shop.settings.logoUrl ? { logoUrl: shop.settings.logoUrl } : {}),
     platform: shop.platform,
     paused: isPaused(shop),
+    // D25 point 7: only when the shop switched the wordmark off.
+    ...(shop.settings.showFitByCurtain === false ? { hideWordmark: true as const } : {}),
   };
 }
 

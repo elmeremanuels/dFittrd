@@ -24,7 +24,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { AudienceSource, GarmentPayloadDraft, IncompleteProductDataPolicy, LedgerEntry, PairingSource, ProductHeldBack, SdkSurface } from '@curtain/schema';
+import type { AudienceSource, GarmentPayloadDraft, IncompleteProductDataPolicy, LedgerEntry, LeftOutValue, PairingSource, ProductHeldBack, SdkSurface } from '@curtain/schema';
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 const id = () => uuid('id').primaryKey().default(sql`gen_random_uuid()`);
@@ -100,6 +100,8 @@ export interface ShopSettings {
   setupButtonConfirmed?: boolean;
   /** First-run checklist: the merchant said they checked it on their phone. */
   setupPhoneConfirmed?: boolean;
+  /** D25 point 7: `false` hides the "Fit by Curtain" wordmark in the popup. Absent: shown. Never the estimate label. */
+  showFitByCurtain?: boolean;
 }
 
 export const shops = pgTable(
@@ -217,6 +219,12 @@ export const products = pgTable(
      * handed to shoppers (`asTryGarment`). Null: not held back.
      */
     heldBack: jsonb('held_back').$type<ProductHeldBack>(),
+    /**
+     * The fabric values the last save left out as not valid (D25 point 1): field and reason, never
+     * the value. They are not in the stored payload, so the merchant's product list reads them
+     * here. Null: nothing was left out.
+     */
+    leftOut: jsonb('left_out').$type<LeftOutValue[]>(),
   },
   (t) => [
     uniqueIndex('products_shop_external_uq').on(t.shopId, t.externalId),

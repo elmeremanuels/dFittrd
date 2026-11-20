@@ -40,6 +40,10 @@ export interface UpsertResult {
 const sameHeldBack = (a: ProductHeldBack | null, b: ProductHeldBack | null): boolean =>
   a === null || b === null ? a === b : a.reason === b.reason && a.fields.length === b.fields.length && a.fields.every((f, i) => f === b.fields[i]);
 
+const storedLeftOut = (leftOut: ProductNotices['leftOut']): ProductNotices['leftOut'] | null => (leftOut.length ? leftOut : null);
+const sameLeftOut = (a: ProductNotices['leftOut'] | null, b: ProductNotices['leftOut']): boolean =>
+  (a ?? []).length === b.length && (a ?? []).every((l, i) => l.field === b[i]!.field && l.reason === b[i]!.reason);
+
 async function incompleteProductDataOf(db: Db, shopId: string): Promise<IncompleteProductDataPolicy> {
   const [row] = await db.select({ policy: shops.incompleteProductData }).from(shops).where(eq(shops.id, shopId)).limit(1);
   return row?.policy ?? 'let-through';
@@ -95,14 +99,14 @@ export async function upsertProduct(
   if (existing && existing.contentHash === hash && existing.status !== 'archived') {
     const audienceChanged = opts.audienceSource !== undefined && opts.audienceSource !== existing.audienceSource;
     // Same content, but the shop's setting now holds it back or lets it through: the stored state follows.
-    const stateChanged = !sameHeldBack(existing.heldBack, heldBack);
+    const stateChanged = !sameHeldBack(existing.heldBack, heldBack) || !sameLeftOut(existing.leftOut, cleaned.leftOut);
     if (audienceChanged || stateChanged) {
       const [row] = await db
         .update(products)
         .set({
           // Same content, but the sync now knows the source (products stored before the column existed).
           ...(audienceChanged ? { audienceSource: opts.audienceSource } : {}),
-          ...(stateChanged ? { status: status as ProductStatus, heldBack, updatedAt: new Date() } : {}),
+          ...(stateChanged ? { status: status as ProductStatus, heldBack, leftOut: storedLeftOut(cleaned.leftOut), updatedAt: new Date() } : {}),
         })
         .where(eq(products.id, existing.id))
         .returning();
@@ -127,6 +131,7 @@ export async function upsertProduct(
     archivedAt: null,
     audienceSource: opts.audienceSource !== undefined ? opts.audienceSource : existing && existing.payload.audience === draft.audience ? existing.audienceSource : null,
     heldBack,
+    leftOut: storedLeftOut(cleaned.leftOut),
   };
   const [row] = await db
     .insert(products)
@@ -139,16 +144,16 @@ export async function upsertProduct(
 
 /**
  * Applies a changed `incompleteProductData` setting to the products the shop already has, so that
- * switching to `hold-back` holds them and switching back releases them without a re-sync. Values
- * that were left out at upsert time are not in the stored payload, so only what the stored payload
- * shows (a missing stretch) is judged here. Archived products are left alone. Returns how many rows changed.
+ * switching to `hold-back` holds them and switching back releases them without a re-sync. It
+ * judges the stored payload (a missing stretch) and the values the last save left out (stored
+ * beside it). Archived products are left alone. Returns how many rows changed.
  */
 export async function reapplyIncompleteProductData(db: Db, shopId: string, policy: IncompleteProductDataPolicy): Promise<number> {
   const rows = await db.select().from(products).where(eq(products.shopId, shopId));
   let n = 0;
   for (const row of rows) {
     if (row.status === 'archived') continue;
-    const { status, heldBack } = readinessOf(row.payload, policy);
+    const { status, heldBack } = readinessOf(row.payload, policy, row.leftOut ?? []);
     if (sameHeldBack(row.heldBack, heldBack)) continue;
     await db.update(products).set({ status: status as ProductStatus, heldBack, updatedAt: new Date() }).where(eq(products.id, row.id));
     n++;
@@ -190,10 +195,27 @@ export async function findProductById(db: Db, id: string): Promise<ProductRow | 
  * and for a product the shop holds back for incomplete data.
  */
 export function asTryGarment(row: ProductRow, opts: { colorHex?: string } = {}): GarmentPayload | null {
+  return tryGarment(row, opts)?.garment ?? null;
+}
+
+/**
+ * The same garment, with what the shopper must be told about it: `stretchAssumed` when the shop
+ * gave no fabric stretch and size advice therefore assumes 0 % (never for an accessory, whose
+ * size does not depend on it).
+ */
+export function tryGarment(row: ProductRow, opts: { colorHex?: string } = {}): { garment: GarmentPayload; stretchAssumed: boolean } | null {
   // Held back by the shop's setting: not ready for shoppers, on any route.
   if (row.heldBack) return null;
   const r = sizeAdviceGarment(row.payload, opts);
-  return r.ok ? r.garment : null;
+  if (!r.ok) return null;
+  return { garment: r.garment, stretchAssumed: r.garment.category !== 'accessory' && r.defaulted.includes('fabric.stretchPct') };
+}
+
+/** What the merchant's product list says was assumed and left out (D25 point 1). Render-only defaults (price, colour, block) are not listed. */
+function noticesOf(row: ProductRow): ProductNotices {
+  const r = row.status === 'archived' ? null : sizeAdviceGarment(row.payload);
+  const defaulted = r?.ok ? r.defaulted.filter((f) => f.startsWith('fabric.') && !(f === 'fabric.stretchPct' && row.category === 'accessory')) : [];
+  return { defaulted, leftOut: row.leftOut ?? [] };
 }
 
 /** A stored payload that validates as a full GarmentPayload (the app's deck needs every field). */
@@ -223,6 +245,7 @@ export function toSummary(row: ProductRow, flatLayProcessedUrl: string | null = 
     // Only for a men's product under the men's gate; absent otherwise, so the body is unchanged.
     ...(menGate ? { menGate } : {}),
     ...(row.heldBack ? { heldBack: row.heldBack } : {}),
+    notices: noticesOf(row),
   };
 }
 

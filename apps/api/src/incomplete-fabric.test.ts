@@ -107,16 +107,16 @@ describe('incomplete product data: notices, the shop setting, and holding a prod
 
     it('lets through by default; the choice is stored per shop', async () => {
       const get = () => t.app.inject({ method: 'GET', url: '/v1/merchant/settings', headers: auth() });
-      expect((await get()).json()).toEqual({ incompleteProductData: 'let-through' });
+      expect((await get()).json()).toMatchObject({ incompleteProductData: 'let-through' });
       const res = await setPolicy('hold-back');
       expect(res.statusCode, res.body).toBe(200);
-      expect(res.json()).toEqual({ incompleteProductData: 'hold-back' });
-      expect((await get()).json()).toEqual({ incompleteProductData: 'hold-back' });
+      expect(res.json()).toMatchObject({ incompleteProductData: 'hold-back' });
+      expect((await get()).json()).toMatchObject({ incompleteProductData: 'hold-back' });
       // Another shop is not touched.
-      expect((await t.app.inject({ method: 'GET', url: '/v1/merchant/settings', headers: auth(other.apiKey) })).json()).toEqual({ incompleteProductData: 'let-through' });
+      expect((await t.app.inject({ method: 'GET', url: '/v1/merchant/settings', headers: auth(other.apiKey) })).json()).toMatchObject({ incompleteProductData: 'let-through' });
       // An empty update changes nothing.
-      expect((await t.app.inject({ method: 'PUT', url: '/v1/merchant/settings', headers: auth(), payload: {} })).json()).toEqual({ incompleteProductData: 'hold-back' });
-      expect((await setPolicy('let-through')).json()).toEqual({ incompleteProductData: 'let-through' });
+      expect((await t.app.inject({ method: 'PUT', url: '/v1/merchant/settings', headers: auth(), payload: {} })).json()).toMatchObject({ incompleteProductData: 'hold-back' });
+      expect((await setPolicy('let-through')).json()).toMatchObject({ incompleteProductData: 'let-through' });
     });
 
     it('refuses a value outside the two, and any key that is not named', async () => {

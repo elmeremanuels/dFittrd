@@ -51,7 +51,7 @@ typecheck · test · build · bundle-secret-scan and builds/pushes the image to 
 |---|---|---|
 | App | `POST /v1/devices`, `POST /v1/devices/rotate`, `PUT /v1/me/signature`, `DELETE /v1/me/signature` ("Delete my scan"), `GET /v1/me/ledger`, `GET /v1/me/export`, `DELETE /v1/me`, `GET /v1/shops/:shopId/products`, `GET /v1/products/:id` (uuid, or external id + `?shopId`), `POST /v1/swipes`, `PUT/GET /v1/wardrobe[/:productId]`, `GET /v1/fit/cohort/:productId[?shopId]` | Bearer device JWT (30 d, `token_version` rotation) |
 | Try-on | `GET /v1/try/:token` → `{ shop, garment, trySession.intentToken, pairing, embed.allowedOrigins }`, `POST /v1/try/:token/fit-shown` → `{ billed }`, `GET /v1/peek?shop&product&page` → `{ shop, garment, embed.allowedOrigins }` (the size peek: read-only, no try session, only for a device already paired with the shop and a try-able product, own per-IP limit) | device JWT |
-| SDK | `POST /v1/sdk/sessions` (CORS `*`, per-shop rate limit, `embedUrl` always, `qrSvg` except for `surface: 'embed'`, 402 + the same body when paused), `GET /sdk/v1.js`, `GET /v1/sdk/media?shop=<id>&u=<url>` (the shop's logo or a product photo through `safeFetch`: allowlisted per shop, raster only, `MEDIA_PROXY_*` size cap, cache and rate limit) | public |
+| SDK | `POST /v1/sdk/sessions` (CORS `*`, per-shop rate limit, `embedUrl` always, `qrSvg` except for `surface: 'embed'`, 402 + the same body when paused), `GET /v1/sdk/shop?shop=<public key prefix>` (`{ paused }`, cached 60 s: the SDK asks it before it shows a button, D25 point 5), `GET /sdk/v1.js`, `GET /v1/sdk/media?shop=<id>&u=<url>` (the shop's logo or a product photo through `safeFetch`: allowlisted per shop, raster only, `MEDIA_PROXY_*` size cap, cache and rate limit) | public |
 | Renders | `POST /v1/renders/hero` → 202, `GET /v1/renders/:jobId`, `GET /v1/renders/:jobId/image\|video?exp&sig` | device JWT / signed URL |
 | Merchant | `PUT /v1/merchant/products/:externalId`, `POST …/products/validate`, `DELETE …/products/:externalId`, `GET …/products`, `GET …/usage`, `GET …/ledger`, `GET …/usage/anomalies`, `GET …/analytics/periods`, `GET …/analytics/swipes`, `GET …/analytics/abandoned`, `GET …/analytics/fit-sizes` (all `?period=YYYY-MM`), `POST …/keys/rotate`, `GET/PUT /v1/merchant/settings`, `PUT /v1/merchant/shops/self`, `POST /v1/merchant/woo/connect`, `POST /v1/merchant/woo/complete`, `POST /v1/merchant/billing/stripe/checkout` (WooCommerce: Checkout for the Curtain plan, also the switch from a retired plan) | PK-HMAC, Bearer `sk_…`, or Shopify session token |
 | Shopify | `GET /shopify/admin` (embedded admin page from `@curtain/shopify-app`, `frame-ancestors` CSP), `GET /shopify/auth/callback` (302 to the embedded app home), `POST /shopify/token-exchange` (also writes the theme block's app-data metafields: public key, API/app URL), `POST /shopify/webhooks`, `POST /shopify/billing/subscribe` (the plan follows Shopify's active subscriptions on every token exchange; uninstall drops the shop to `free`) | none (page/redirect) / session token / webhook HMAC |
@@ -354,7 +354,16 @@ A product whose fabric details are missing or not valid is never refused for tha
 * Incomplete means: the stretch is not known on a product that is not an accessory, or a fabric
   value had to be left out. A missing drape alone is not incomplete (`incompleteData.ts` in
   `@curtain/schema`).
-* Changing the setting re-applies it to the shop's stored products. A value that was left out is
-  not in the stored payload, so that pass can only judge a missing stretch.
-* `PUT /v1/merchant/settings` accepts only the keys named in `MerchantSettingsUpdateRequestSchema`;
-  any other key is a 400.
+* The values a save left out are kept beside the product (`products.left_out`, migration 0009:
+  field and reason, never the value). `GET /v1/merchant/products` returns them per product as
+  `notices.leftOut`, with `notices.defaulted` (what size advice assumes for the fabric now) and
+  `heldBack`, so the console's product list can show them after the save answer is gone.
+* Changing the setting re-applies it to the shop's stored products: it judges a missing stretch
+  and the stored left-out values.
+* `GET /v1/try/:token` adds `stretchAssumed: true` when the shop gave no stretch (not for an
+  accessory); the popup then says that stretch was not taken into account.
+* `PUT /v1/merchant/settings` accepts only the keys named in `MerchantSettingsUpdateRequestSchema`
+  (`incompleteProductData`, `showFitByCurtain`, `brandColor`, `logoUrl`; `null` removes a colour or
+  logo); any other key is a 400. The shop name is returned but not writable: it comes from the
+  platform. `showFitByCurtain: false` (D25 point 7) reaches the popup as `shop.hideWordmark`; the
+  estimate label is not part of it.

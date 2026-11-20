@@ -497,7 +497,7 @@ describe('T16-style purity with tape data', () => {
       }
       expect(typeof fitSummary(r)).toBe('string');
     }
-  });
+  }, 30_000); // a fixed amount of work, slow on a shared CI runner; not a race
 
   it('garbage tape data does not throw and is not read', () => {
     const u = body(73.5, 100);

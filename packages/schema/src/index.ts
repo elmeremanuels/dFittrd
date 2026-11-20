@@ -27,3 +27,4 @@ export * from './fixtures';
 export * from './sizeAdvice';
 export * from './garmentAsset';
 export * from './merchantSetup';
+export * from './merchantSettingsText';

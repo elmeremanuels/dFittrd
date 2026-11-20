@@ -284,7 +284,7 @@ refuses to start when the port is taken, so two processes never open the same PG
 |---|---|---|
 | `render-hero` | `POST /v1/renders/hero` | TryOnRouter (env `TRYON_ORDER`, default `mock`) → PNG (+ mp4) on `RENDERS_DIR`, ledger + usage |
 | `sync-shopify-product` | `products/create\|update` webhook | GraphQL product + `$app:curtain` metafields → `fromShopifyProduct` → upsert |
-| `backfill-shopify` | token exchange | pages the catalogue 50 at a time |
+| `backfill-shopify` | token exchange | pages the catalogue 50 at a time; a product that cannot be stored is logged with the reason (or queued on its own when the cause is not the product) and the page goes on |
 | `prune-renders` | cron `7 * * * *` | expires renders past `RENDER_RETENTION_HOURS`, purges shops past `purge_after` |
 | `purge-shop` | `shop/redact` (+48 h) | deletes the shop row (cascade) and files |
 | `usage-rollup` | cron `13 2 * * *` | Shopify usage records / Stripe meter events |

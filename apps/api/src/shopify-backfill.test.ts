@@ -87,6 +87,21 @@ describe('Shopify backfill and sync: one product that cannot be stored (R1)', ()
     expect(t.queue.pending(JOB.syncShopifyProduct)).toHaveLength(0);
   });
 
+  it('backfill: a product that fails for another reason is queued on its own and the page goes on', async () => {
+    const broken = node(7);
+    Object.defineProperty(broken, 'metafields', {
+      get() {
+        throw new Error('connection reset');
+      },
+    });
+    pages = { first: { nodes: [broken, node(8)], next: null } };
+    logged.length = 0;
+    await makeBackfillHandler(stubApp())({ shopId });
+    expect(await stored()).toContain('8');
+    expect(t.queue.pending(JOB.syncShopifyProduct).map((j) => j.data)).toEqual([{ shopId, productGid: 'gid://shopify/Product/7' }]);
+    expect(logged.find((l) => l.msg === 'shopify backfill page done')!.obj).toMatchObject({ products: 2, stored: 1, refused: 0, requeued: 1 });
+  });
+
   it('sync: a product the schema refuses is logged with the reason and does not fail the job; an outage still does', async () => {
     single = { 'gid://shopify/Product/2': node(2, { title: TOO_LONG }) };
     logged.length = 0;

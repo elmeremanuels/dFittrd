@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Curtain for WooCommerce 0.1.0\n"
 "Report-Msgid-Bugs-To: https://curtain.fit/woocommerce\n"
-"POT-Creation-Date: 2026-11-20 05:06+0000\n"
+"POT-Creation-Date: 2026-11-20 05:36+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -728,13 +728,19 @@ msgstr ""
 msgid "Held back: shoppers do not get size advice for this product until you complete: %s. Your shop is set to hold back products with incomplete data."
 msgstr ""
 
-#. translators: 1: product detail, e.g. "fabric stretch"; 2: why the value was refused, e.g. "Too big: expected number to be <=100"
+#. translators: %s: what the value must be, e.g. "it must be a number from 0 to 100"
 #: includes/class-product-meta.php
-msgid "Not saved: %1$s (%2$s). The rest of the product was saved."
+msgid "Not saved: fabric stretch. The value you entered was left out (%s), so size advice treats the fabric as not stretching (0 %%) until you correct it. The rest of the product was saved."
 msgstr ""
 
+#. translators: 1: product detail, e.g. "fabric drape"; 2: what the value must be, e.g. "it must be a number from 0 to 1"
 #: includes/class-product-meta.php
-msgid "invalid value"
+msgid "Not saved: %1$s. The value you entered was left out (%2$s). The rest of the product was saved."
+msgstr ""
+
+#. translators: %s: product detail, e.g. "fabric drape"
+#: includes/class-product-meta.php
+msgid "Not saved: %s. The value you entered is not valid and was left out. The rest of the product was saved."
 msgstr ""
 
 #: includes/class-product-meta.php
@@ -763,6 +769,26 @@ msgstr ""
 
 #: includes/class-product-meta.php
 msgid "fabric sheen"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "it may be at most 64 characters long"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "it may hold at most 8 fibres, each from 0 to 100 %"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "it must be a number above 0 and at most 2000"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "it must be a number from 0 to 100"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "it must be a number from 0 to 1"
 msgstr ""
 
 #: includes/class-product-meta.php

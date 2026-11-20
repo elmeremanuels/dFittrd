@@ -153,6 +153,23 @@ const metas = [
   { primary: 'x'.repeat(65), stretchPct: 2, drape: 0.5 },
   { primary: 'Katoen', blend: [['y'.repeat(65), 100]], stretchPct: 2 },
   { stretchPct: 150 },
+  // Edges on which the two builders once differed: a name counted in characters (an emoji is one),
+  // a blend that is too long and has a bad row, hex and other non-numbers, a blend that is not a
+  // list, an empty object and null.
+  { primary: '😀'.repeat(33) },
+  { primary: '😀'.repeat(64), stretchPct: 2 },
+  { primary: '😀'.repeat(65), stretchPct: 2 },
+  { primary: 'Katoen', blend: [['é'.repeat(64), 100]] },
+  { primary: 'Katoen', blend: Array.from({ length: 9 }, (_, i) => [`fibre ${i + 1}`, i === 3 ? 120 : 10]), stretchPct: 2 },
+  { primary: 'Katoen', stretchPct: '0x10' },
+  { primary: 'Katoen', stretchPct: 'abc', drape: true, weightGsm: '5%' },
+  { primary: 'Katoen', stretchPct: '1e1', drape: '.5', weightGsm: '2,5' },
+  { primary: 'Katoen', stretch: '0b11', gsm: '0o17' },
+  { primary: 'Katoen', blend: { a: ['Katoen', 50] } },
+  {},
+  null,
+  [],
+  'Katoen',
 ];
 const product = { id: 4182, name: 'Wikkeljurk Lotte', price: '89.95', categories: [{ name: 'Jurken' }] };
 const fabricMetas = metas.map((fabric) => {

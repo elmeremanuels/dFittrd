@@ -249,9 +249,28 @@ test(
 
 		$through = \Curtain\Product_Meta::notice_lines( array( 'notices' => array( 'defaulted' => array( 'priceEur', 'fabric.stretchPct', 'fabric.drape' ), 'leftOut' => array( array( 'field' => 'fabric.weightGsm', 'reason' => 'Too big: expected number to be <=2000' ) ) ), 'heldBack' => null ) );
 		assert_same( array( 'left-out', 'assumed', 'assumed' ), array_column( $through, 'kind' ) );
-		assert_same( 'Not saved: fabric weight (Too big: expected number to be <=2000). The rest of the product was saved.', $through[0]['text'] );
+		// Plain words from this screen's own catalogue; the api's validator message is never shown.
+		assert_same( 'Not saved: fabric weight. The value you entered was left out (it must be a number above 0 and at most 2000). The rest of the product was saved.', $through[0]['text'] );
 		assert_contains( 'treats the fabric as not stretching (0 %)', $through[1]['text'] );
 		assert_contains( 'Size advice does not use drape', $through[2]['text'] );
+
+		// A stretch that was entered but not valid: one line, and never "No fabric stretch entered".
+		$stretch = \Curtain\Product_Meta::notice_lines( array( 'notices' => array( 'defaulted' => array( 'fabric.stretchPct', 'fabric.drape' ), 'leftOut' => array( array( 'field' => 'fabric.stretchPct', 'reason' => 'Too big: expected number to be <=100' ), array( 'field' => 'fabric.drape', 'reason' => 'Too big: expected number to be <=1' ) ) ), 'heldBack' => null ) );
+		assert_same( array( 'left-out', 'left-out' ), array_column( $stretch, 'kind' ) );
+		assert_same( 'Not saved: fabric stretch. The value you entered was left out (it must be a number from 0 to 100), so size advice treats the fabric as not stretching (0 %) until you correct it. The rest of the product was saved.', $stretch[0]['text'] );
+		assert_same( 'Not saved: fabric drape. The value you entered was left out (it must be a number from 0 to 1). The rest of the product was saved.', $stretch[1]['text'] );
+		foreach ( array_merge( $through, $stretch ) as $line ) {
+			assert_false( (bool) preg_match( '/expected|Too big|Too small|Invalid input|<=|>=/', $line['text'] ), 'no validator wording: ' . $line['text'] );
+		}
+
+		// A detail this screen has no rule for: a plain line, still without the api's reason.
+		$other = \Curtain\Product_Meta::notice_lines( array( 'notices' => array( 'defaulted' => array(), 'leftOut' => array( array( 'field' => 'fabric.newThing', 'reason' => 'Invalid input: expected string' ) ) ), 'heldBack' => null ) );
+		assert_same( 'Not saved: fabric.newThing. The value you entered is not valid and was left out. The rest of the product was saved.', $other[0]['text'] );
+
+		// Held back with a stretch that was left out: the held-back line says what happens to size advice.
+		$held_left = \Curtain\Product_Meta::notice_lines( array( 'notices' => array( 'defaulted' => array(), 'leftOut' => array( array( 'field' => 'fabric.stretchPct', 'reason' => 'Too big: expected number to be <=100' ) ) ), 'heldBack' => array( 'reason' => 'incomplete_product_data', 'fields' => array( 'fabric.stretchPct' ) ) ) );
+		assert_same( array( 'held-back', 'left-out' ), array_column( $held_left, 'kind' ) );
+		assert_same( 'Not saved: fabric stretch. The value you entered was left out (it must be a number from 0 to 100). The rest of the product was saved.', $held_left[1]['text'] );
 
 		$held = \Curtain\Product_Meta::notice_lines( array( 'notices' => array( 'defaulted' => array( 'fabric.stretchPct' ), 'leftOut' => array() ), 'heldBack' => array( 'reason' => 'incomplete_product_data', 'fields' => array( 'fabric.stretchPct', 'fabric.drape' ) ) ) );
 		assert_same( array( 'held-back' ), array_column( $held, 'kind' ), 'a held-back product gets no size advice, so nothing is said to be assumed' );

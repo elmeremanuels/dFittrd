@@ -907,24 +907,46 @@ final class Product_Meta {
 				),
 			);
 		}
-		$notices = is_array( $stored['notices'] ?? null ) ? $stored['notices'] : array();
+		$notices  = is_array( $stored['notices'] ?? null ) ? $stored['notices'] : array();
+		$left_out = array();
 		foreach ( (array) ( $notices['leftOut'] ?? array() ) as $l ) {
 			if ( ! is_array( $l ) || ! is_string( $l['field'] ?? null ) ) {
 				continue;
 			}
+			$field              = $l['field'];
+			$left_out[ $field ] = true;
+			$rule               = self::notice_field_rule( $field );
+			// The api's own reason is a validator message in English ("Too big: expected number to be
+			// <=100"): it is never shown. A detail this screen has no rule for gets the plain line.
+			if ( 'fabric.stretchPct' === $field && ! is_array( $held_back ) ) {
+				$text = sprintf(
+					/* translators: %s: what the value must be, e.g. "it must be a number from 0 to 100" */
+					__( 'Not saved: fabric stretch. The value you entered was left out (%s), so size advice treats the fabric as not stretching (0 %%) until you correct it. The rest of the product was saved.', 'curtain-woocommerce' ),
+					(string) $rule
+				);
+			} elseif ( null !== $rule ) {
+				$text = sprintf(
+					/* translators: 1: product detail, e.g. "fabric drape"; 2: what the value must be, e.g. "it must be a number from 0 to 1" */
+					__( 'Not saved: %1$s. The value you entered was left out (%2$s). The rest of the product was saved.', 'curtain-woocommerce' ),
+					self::notice_field_label( $field ),
+					$rule
+				);
+			} else {
+				$text = sprintf(
+					/* translators: %s: product detail, e.g. "fabric drape" */
+					__( 'Not saved: %s. The value you entered is not valid and was left out. The rest of the product was saved.', 'curtain-woocommerce' ),
+					self::notice_field_label( $field )
+				);
+			}
 			$lines[] = array(
 				'kind' => 'left-out',
-				'text' => sprintf(
-					/* translators: 1: product detail, e.g. "fabric stretch"; 2: why the value was refused, e.g. "Too big: expected number to be <=100" */
-					__( 'Not saved: %1$s (%2$s). The rest of the product was saved.', 'curtain-woocommerce' ),
-					self::notice_field_label( $l['field'] ),
-					is_string( $l['reason'] ?? null ) ? $l['reason'] : __( 'invalid value', 'curtain-woocommerce' )
-				),
+				'text' => $text,
 			);
 		}
 		if ( ! is_array( $held_back ) ) {
 			foreach ( (array) ( $notices['defaulted'] ?? array() ) as $field ) {
-				$text = self::notice_assumed_text( (string) $field );
+				// Already said by the "Not saved" line: the merchant did enter a value.
+				$text = isset( $left_out[ (string) $field ] ) ? null : self::notice_assumed_text( (string) $field );
 				if ( null !== $text ) {
 					$lines[] = array(
 						'kind' => 'assumed',
@@ -955,6 +977,26 @@ final class Product_Meta {
 				return __( 'fabric sheen', 'curtain-woocommerce' );
 			default:
 				return $field;
+		}
+	}
+
+	/** What a fabric detail must be, in plain words; null for a detail this screen does not know. */
+	private static function notice_field_rule( string $field ): ?string {
+		switch ( $field ) {
+			case 'fabric.primary':
+				return __( 'it may be at most 64 characters long', 'curtain-woocommerce' );
+			case 'fabric.blend':
+				return __( 'it may hold at most 8 fibres, each from 0 to 100 %', 'curtain-woocommerce' );
+			case 'fabric.weightGsm':
+				return __( 'it must be a number above 0 and at most 2000', 'curtain-woocommerce' );
+			case 'fabric.stretchPct':
+				return __( 'it must be a number from 0 to 100', 'curtain-woocommerce' );
+			case 'fabric.drape':
+			case 'fabric.opacity':
+			case 'fabric.sheen':
+				return __( 'it must be a number from 0 to 1', 'curtain-woocommerce' );
+			default:
+				return null;
 		}
 	}
 

@@ -30,6 +30,7 @@ import type {
   MerchantProductsQuery,
   MerchantProductsResponse,
   MerchantSettingsResponse,
+  ConsoleSessionResponse,
   MerchantSettingsUpdateRequest,
   SetupResponse,
   PeekQuery,
@@ -434,6 +435,14 @@ export class ApiClient {
   // Merchant routes (secret key `sk_…` as bearer; kept in sessionStorage by the console)
   // ---------------------------------------------------------------------------
 
+  /**
+   * Exchanges the token of a one-time sign-in link for a console session (once; the api refuses a
+   * second time). The token goes in the body, never in a URL, and is not written to the ledger.
+   */
+  consoleSession(token: string): Promise<ConsoleSessionResponse> {
+    return this.request('POST', '/v1/merchant/console-session', { token }, { auth: 'none', ledger: false });
+  }
+
   merchant(secretKey: string): MerchantApi {
     return new MerchantApi(this, secretKey);
   }
@@ -508,12 +517,18 @@ export class MerchantApi {
   updateSettings(body: MerchantSettingsUpdateRequest): Promise<MerchantSettingsResponse> {
     return this.client.request('PUT', '/v1/merchant/settings', body, { auth: this.auth });
   }
+  /** Ends a console session that came from a sign-in link. With a secret key it changes nothing. */
+  signOut(): Promise<{ signedOut: true }> {
+    return this.client.request('DELETE', '/v1/merchant/console-session', undefined, { auth: this.auth, ledger: false });
+  }
   stripeCheckout(): Promise<{ checkoutUrl: string; trialDays: number }> {
     return this.client.request('POST', '/v1/merchant/billing/stripe/checkout', {}, { auth: this.auth });
   }
 }
 
 export const MERCHANT_KEY_PATTERN = /^sk_(live|test)_[A-Za-z0-9]{8,64}$/;
+/** A console session from a one-time sign-in link (`cs_…`), as opposed to a pasted secret key. */
+export const isConsoleSession = (bearer: string): boolean => bearer.startsWith('cs_');
 
 /** Base URL from the environment; defaults to same-origin `/` (Caddy proxies /v1 to the api). */
 export function apiBaseUrl(): string {

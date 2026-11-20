@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import { Link, NavLink, Navigate, Outlet, useNavigate } from 'react-router';
 import { CATEGORY_TEXT, MERCHANT_PLAN_TEXT, productNoticeLines, type SetupResponse } from '@curtain/schema';
 import type { AnalyticsAbandonedResponse, AnalyticsFitSizesResponse, AnalyticsPeriodsResponse, AnalyticsSuppression, AnalyticsSwipesResponse, BillingAnomaliesResponse, MerchantLedgerResponse, MerchantProductsResponse, MerchantSettingsResponse, MerchantSettingsUpdateRequest, UsageResponse } from '@curtain/schema';
-import { MERCHANT_KEY_PATTERN, NetworkError, type MerchantApi } from '@/api/client';
+import { MERCHANT_KEY_PATTERN, NetworkError, isConsoleSession, type MerchantApi } from '@/api/client';
 import { Ledger, type LedgerLine } from '@/components/Ledger';
 import { dayIso, pct, titleCase } from '@/lib/format';
 import { api } from '@/store';
@@ -22,7 +22,8 @@ export function readMerchantKey(): string | null {
   }
 }
 
-function writeMerchantKey(key: string | null): void {
+/** `key` is what the console sends as its bearer: a pasted secret key, or the session a sign-in link gave. This tab only. */
+export function writeMerchantKey(key: string | null): void {
   try {
     if (key) sessionStorage.setItem(SESSION_KEY, key);
     else sessionStorage.removeItem(SESSION_KEY);
@@ -144,7 +145,7 @@ export function MerchantLayout(): ReactNode {
           setBase({ mode: 'mock', products, usage: mockUsage(range.from, range.to), ledger: mockLedger(), anomalies: mockAnomalies(range.from, range.to), range, periods, setup: mockSetup(products), settings: mockSettings() });
           setPeriod(periods.periods[0] ?? null);
         } else if (e instanceof Error && e.name === 'ApiError' && [401, 403].includes((e as { status?: number }).status ?? 0)) {
-          setError(merchantStrings().console.keyRefused);
+          setError(isConsoleSession(key) ? merchantStrings().console.sessionEnded : merchantStrings().console.keyRefused);
         } else {
           setError(merchantStrings().console.loadFailed);
         }
@@ -235,6 +236,8 @@ export function MerchantLayout(): ReactNode {
               type="button"
               className="btn-ghost ml-2 min-h-9 px-3 text-xs"
               onClick={() => {
+                // A session from a sign-in link is ended at the api too; the tab forgets it either way.
+                if (isConsoleSession(key)) void api.merchant(key).signOut().catch(() => undefined);
                 writeMerchantKey(null);
                 navigate('/merchant/login', { replace: true });
               }}

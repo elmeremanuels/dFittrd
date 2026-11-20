@@ -82,10 +82,14 @@ export interface ConsoleCatalogue {
   /** Shown where a value is not known or not there. */
   none: string;
   login: { keyLabel: string; keyPlaceholder: string; badKey: string; open: string; help: string };
+  /** The page a one-time sign-in link opens (`/merchant/link`). */
+  link: { working: string; failedTitle: string; failed: string; unreachableTitle: string; unreachable: string; whereTitle: string; whereWoo: string; whereShopify: string; withKey: string };
   nav: { label: string; overview: string; products: string; usage: string; swipes: string; ledger: string; settings: string; signOut: string };
   demoBanner: string;
   loading: string;
   keyRefused: string;
+  /** A session from a sign-in link ended (12 hours, or signed out elsewhere). */
+  sessionEnded: string;
   loadFailed: string;
   overview: {
     fitSessions: string;
@@ -301,12 +305,24 @@ export const CONSOLE_EN: ConsoleCatalogue = {
     keyPlaceholder: 'sk_' + 'test_…',
     badKey: 'That is not a Curtain secret key. Copy it again from where Curtain showed it to you: it starts with “sk_”. It stays in this browser tab only.',
     open: 'Open console',
-    help: 'Ask Curtain support for your console key (the WordPress plugin keeps its own key hidden, so it cannot show it to you). On Shopify you do not need this page: everything is under Apps → Curtain in your Shopify admin.',
+    help: 'You do not need a key to get in. In WordPress, go to WooCommerce → Curtain and press “Open the Curtain console”. In Shopify, open the Curtain app and choose “Open the full console”. Either one signs you in here.',
+  },
+  link: {
+    working: 'Signing you in…',
+    failedTitle: 'This sign-in link does not work any more',
+    failed: 'A sign-in link works once, and for 10 minutes after you asked for it. You are not signed in. Ask for a new link: it takes one click.',
+    unreachableTitle: 'Curtain could not be reached',
+    unreachable: 'You are not signed in. Check your internet connection, then ask for a new link: it takes one click.',
+    whereTitle: 'Where to get a new link',
+    whereWoo: 'WordPress: WooCommerce → Curtain → “Open the Curtain console”.',
+    whereShopify: 'Shopify: the Curtain app → “Open the full console”.',
+    withKey: 'Sign in with a secret key instead',
   },
   nav: { label: 'Console sections', overview: 'Overview', products: 'Products', usage: 'Usage & plan', swipes: 'Swipes', ledger: 'Privacy ledger', settings: 'Settings', signOut: 'Sign out' },
   demoBanner: 'API unreachable — showing demo data with the real response shapes. Nothing here is from your shop.',
   loading: 'Loading your shop…',
   keyRefused: 'This key was not accepted. It may have been replaced: sign out and paste the newest key from your Curtain settings (WooCommerce → Curtain, or the Curtain app in Shopify).',
+  sessionEnded: 'You are signed out: a console session ends by itself after 12 hours. Press “Sign out”, then open the console again from your shop (WooCommerce → Curtain, or the Curtain app in Shopify).',
   loadFailed: 'Your shop could not be loaded just now. Check your internet connection and reload the page; if it keeps happening, email Curtain support.',
   overview: {
     fitSessions: 'Fit sessions (30 d)',

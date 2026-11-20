@@ -28,6 +28,7 @@ import {
 } from '../garment';
 import { FABRIC_PRIMARY_LIBRARY_IDS, fabricLibraryId, fabricPayloadName } from '../fabrics';
 import { resolveFabricText } from './fabricText';
+import { leaveOutInvalidFabricParts } from '../incompleteData';
 
 export interface MappingWarning {
   /** Platform key (metafield key or meta key) that failed. */
@@ -279,7 +280,11 @@ export function coerceFabric(value: unknown, sink: WarningSink, source: string):
     if (blend.length) out.blend = blend;
   }
   if (out.blend === undefined && textBlend) out.blend = textBlend;
-  return validated(FabricSchema.partial(), out, sink, source, 'fabric');
+  // D25 point 1: a part that is not valid (stretch 150) is left out and reported; the rest is kept.
+  const cleaned = leaveOutInvalidFabricParts(out);
+  for (const l of cleaned.leftOut) warn(sink, { source, path: l.field, message: `${l.reason}; the value was left out` });
+  const fabric = cleaned.fabric as Partial<Fabric>;
+  return Object.keys(fabric).length ? fabric : undefined;
 }
 
 /**

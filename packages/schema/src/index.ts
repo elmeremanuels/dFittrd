@@ -8,6 +8,7 @@ export * from './body';
 export * from './swipe';
 export * from './fitSignature';
 export * from './completeness';
+export * from './incompleteData';
 export * from './api';
 export * from './jsonschema';
 export * from './fabrics';

@@ -17,6 +17,7 @@ import { completenessScore, type CompletenessResult } from './completeness';
 import { GarmentAssetRefSchema } from './garmentAsset';
 import { AUDIENCE_SOURCES } from './mappings/audience';
 import { garmentTapeChartIssues } from './garmentTapeForm';
+import { IncompleteProductDataSchema, ProductHeldBackSchema, ProductNoticesSchema } from './incompleteData';
 import { PRODUCT_NEXT_STEPS, SETUP_STEPS, SETUP_TARGETS } from './merchantSetup';
 
 // ---------------------------------------------------------------------------
@@ -545,8 +546,19 @@ export const MerchantProductParamsSchema = z.object({ externalId: z.string().min
 export const MerchantProductUpsertQuerySchema = z.object({ audienceSource: z.enum(AUDIENCE_SOURCES).optional() });
 export type MerchantProductUpsertQuery = z.infer<typeof MerchantProductUpsertQuerySchema>;
 
-/** PUT /v1/merchant/products/:externalId — accepts a draft; the server computes completeness. */
-export const MerchantProductUpsertRequestSchema = GarmentPayloadDraftSchema;
+/**
+ * PUT /v1/merchant/products/:externalId — accepts a draft; the server computes completeness.
+ *
+ * The fabric is taken as it comes: a part that is present but not valid (stretch 150) does not fail
+ * the request. The server leaves that part out, keeps the rest and reports it (`notices.leftOut`,
+ * D25 point 1). Every other field is validated as `GarmentPayloadDraftSchema` does.
+ */
+export const MerchantProductUpsertRequestSchema = GarmentPayloadDraftSchema.extend({
+  fabric: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('Fabric (see GarmentPayload.fabric). Every part is optional; a part that is not valid is left out and reported in notices.leftOut.'),
+});
 export type MerchantProductUpsertRequest = z.infer<typeof MerchantProductUpsertRequestSchema>;
 
 export const MerchantProductUpsertResponseSchema = z.object({
@@ -558,6 +570,14 @@ export const MerchantProductUpsertResponseSchema = z.object({
   contentHash: z.string().length(64),
   changed: z.boolean(),
   updatedAt: isoDate,
+  /** What was assumed and what was left out (incompleteData.ts). Both lists are empty for a complete product. Absent on an older api. */
+  notices: ProductNoticesSchema.optional(),
+  /**
+   * Set when the shop holds products with incomplete data back (`incompleteProductData: 'hold-back'`):
+   * the product was stored (this is a 200) but is not ready, `status` is `incomplete`, and shoppers
+   * do not get it until `fields` are completed. Null otherwise. Absent on an older api.
+   */
+  heldBack: ProductHeldBackSchema.nullable().optional(),
 });
 export type MerchantProductUpsertResponse = z.infer<typeof MerchantProductUpsertResponseSchema>;
 
@@ -607,6 +627,8 @@ export const MerchantProductSummarySchema = z.object({
   updatedAt: isoDate,
   /** The men's gate for this product (`MERCHANT_MEN_GATE_STATES`). Absent: not a gated men's product, or the gate is off. */
   menGate: z.enum(MERCHANT_MEN_GATE_STATES).optional(),
+  /** The product is held back for incomplete data (shop setting `hold-back`). Absent: it is not. */
+  heldBack: ProductHeldBackSchema.optional(),
   /** The shop measured at least one size of this garment itself (garment tape with a `measured` value). Absent on an older api. */
   measured: z.boolean().optional(),
   /** What the merchant should do next for this product, in plain words (`productNextStep`). Absent on an older api. */
@@ -1022,3 +1044,23 @@ export type SetupResponse = z.infer<typeof SetupResponseSchema>;
 
 /** PUT /v1/merchant/setup: tick steps 4 and 5 by hand (the api cannot look inside a theme or a phone). */
 export const SetupUpdateRequestSchema = z.object({ buttonConfirmed: z.boolean().optional(), phoneConfirmed: z.boolean().optional() });
+
+// ---------------------------------------------------------------------------
+// MERCHANT — settings (D24; merchant-settings inventory row S2)
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /v1/merchant/settings — the merchant's own choices. A fixed list of keys: billing and
+ * operator values in the shop's stored settings are not part of it and cannot be read or written here.
+ */
+export const MerchantSettingsResponseSchema = z.object({
+  /** What happens with a product whose data is incomplete (incompleteData.ts). Default `let-through`. */
+  incompleteProductData: IncompleteProductDataSchema,
+});
+export type MerchantSettingsResponse = z.infer<typeof MerchantSettingsResponseSchema>;
+
+/** PUT /v1/merchant/settings — only the keys named here; an unknown key is refused. Left-out keys keep their value. */
+export const MerchantSettingsUpdateRequestSchema = z.strictObject({
+  incompleteProductData: IncompleteProductDataSchema.optional(),
+});
+export type MerchantSettingsUpdateRequest = z.infer<typeof MerchantSettingsUpdateRequestSchema>;

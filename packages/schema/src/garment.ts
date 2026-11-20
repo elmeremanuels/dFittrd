@@ -305,6 +305,16 @@ export const FabricSchema = z
   .describe('Fabric construction (handoff §3.1)');
 export type Fabric = z.infer<typeof FabricSchema>;
 
+/**
+ * The fabric of a draft (D24 point 4, D25 point 1): every part is optional, and validated when it
+ * is present. A product whose fabric has only a name is a valid draft; size advice then assumes
+ * 0 % stretch (`sizeAdviceGarment`). `GarmentPayloadSchema` keeps the complete `FabricSchema`.
+ */
+export const FabricDraftSchema = FabricSchema.partial().describe(
+  'Fabric of a draft: every part optional, validated when present. Size advice assumes 0 % stretch when stretchPct is absent.',
+);
+export type FabricDraft = z.infer<typeof FabricDraftSchema>;
+
 export const EaseSchema = z
   .partialRecord(FitPointSchema, z.number().min(-20).max(60))
   .describe('Designed ease per fit point: garment minus body, cm. Negative = negative ease (stretch garments).');
@@ -403,14 +413,18 @@ export type GarmentPayloadInput = z.input<typeof GarmentPayloadSchema>;
 
 /**
  * Draft payload: what a plugin may upsert before the merchant has filled everything in.
- * Identity is required; every other field is optional but validated when present. The backend
- * stores drafts with status `incomplete` and `completenessScore` says what is missing.
+ * Identity is required; every other field is optional but validated when present, and so is every
+ * part of the fabric (`FabricDraftSchema`). The backend stores the draft; `completenessScore` says
+ * what is missing and `sizeAdviceGarment` whether it can be sized.
  */
-export const GarmentPayloadDraftSchema = GarmentPayloadSchema.partial().required({
-  id: true,
-  name: true,
-  brand: true,
-}).meta({
+export const GarmentPayloadDraftSchema = GarmentPayloadSchema.partial()
+  .extend({ fabric: FabricDraftSchema.optional() })
+  .required({
+    id: true,
+    name: true,
+    brand: true,
+  })
+  .meta({
   title: 'Curtain GarmentPayload v1 (draft)',
   description: 'Partial garment payload accepted by the merchant upsert/validate routes.',
 });

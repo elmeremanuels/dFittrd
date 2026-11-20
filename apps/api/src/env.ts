@@ -28,6 +28,11 @@ export const EnvSchema = z.object({
   HOST: z.string().default('0.0.0.0'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  /**
+   * The commit this build was made from (the image sets it: `ARG GIT_SHA` in apps/api/Dockerfile). Shown by
+   * `/healthz` so `scripts/post-deploy-check.mjs` can tell that the api and the web app are the same release.
+   */
+  GIT_SHA: z.string().trim().max(64).regex(/^[\w.-]*$/).default('unknown'),
   /** Log client IPs (default off: the privacy architecture keeps no IP past the 7-day docker log rotation). */
   LOG_IPS: bool.default(false),
   /** `1` turns this replica into a jobs-only worker (no HTTP listener). `0` disables jobs in this process. */

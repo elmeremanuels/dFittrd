@@ -121,7 +121,8 @@ app.{$DOMAIN} {
 	@immutable path /assets/* /models/* /fonts/*
 	header @immutable Cache-Control "public, max-age=31536000, immutable"
 
-	@nocache path /index.html /sw.js /manifest.webmanifest
+	# /version.json names the commit of the published build (scripts/post-deploy-check.mjs reads it).
+	@nocache path /index.html /sw.js /manifest.webmanifest /version.json
 	header @nocache Cache-Control "no-cache"
 
 	# SPA fallback: /try/<token>, /embed/<token>, /merchant, … all resolve to index.html

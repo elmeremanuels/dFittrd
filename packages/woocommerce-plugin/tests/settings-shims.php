@@ -10,24 +10,6 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/setup-shims.php';
 
-if ( ! function_exists( 'checked' ) ) {
-	function checked( $checked, $current = true, bool $display = true ): string {
-		$out = (string) $checked === (string) $current ? " checked='checked'" : '';
-		if ( $display ) {
-			echo $out;
-		}
-		return $out;
-	}
-}
-if ( ! function_exists( 'selected' ) ) {
-	function selected( $selected, $current = true, bool $display = true ): string {
-		$out = (string) $selected === (string) $current ? " selected='selected'" : '';
-		if ( $display ) {
-			echo $out;
-		}
-		return $out;
-	}
-}
 if ( ! function_exists( 'submit_button' ) ) {
 	function submit_button( string $text = 'Save Changes' ): void {
 		echo '<p class="submit"><input type="submit" name="submit" id="submit" class="button button-primary" value="' . esc_attr( $text ) . '"></p>';

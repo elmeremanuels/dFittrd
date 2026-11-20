@@ -64,10 +64,11 @@ test(
 		assert_same( 0, $req['args']['redirection'], 'the API call follows no redirect' );
 		// The same credentials as a product sync: the public prefix and a signature, never the secret.
 		$auth = (string) $req['args']['headers']['Authorization'];
-		assert_true( 1 === preg_match( '/^PK-HMAC key=(pk_test_setup000001), ts=(\d+), sig=([0-9a-f]{64})$/', $auth, $m ), $auth );
+		$public = (string) Settings::get( 'public_key_prefix' );
+		assert_true( 1 === preg_match( '/^PK-HMAC key=' . preg_quote( $public, '/' ) . ', ts=(\d+), sig=([0-9a-f]{64})$/', $auth, $m ), $auth );
 		$secret = (string) Settings::get( 'api_key' );
 		assert_false( str_contains( $auth, $secret ) );
-		assert_same( Hmac::sign( $secret, 'POST', '/v1/merchant/console-link', $m[2], '' ), $m[3], 'signed over the method, path, time and empty body' );
+		assert_same( Hmac::sign( $secret, 'POST', '/v1/merchant/console-link', $m[1], '' ), $m[2], 'signed over the method, path, time and empty body' );
 	}
 );
 

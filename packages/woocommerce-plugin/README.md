@@ -23,6 +23,11 @@ with `_curtain_size_chart`, products whose `_curtain_garment_tape` has a `measur
 step 5 is ticked with "It works on my phone" (`setup_phone_confirmed`). The box collapses to one line once
 everything is done. `node e2e/setup-shots.mjs [outDir]` renders it outside WordPress for screenshots.
 
+`node e2e/console-link-shots.mjs [outDir]` walks "Open the Curtain console" in Chromium on a phone-size
+screen: the settings page rendered outside WordPress, the plugin's own PHP asking a real local api for the
+one-time link (`e2e/console-redirect.php`), and the web console's dev server exchanging it. WordPress itself
+(admin-post, nonce, capability) is a stand-in there.
+
 ## Garment measurements (closure + tape)
 
 Below the size chart, the meta box has a **Garment measurements** table (`docs/MERCHANT-MEASUREMENTS.md`):

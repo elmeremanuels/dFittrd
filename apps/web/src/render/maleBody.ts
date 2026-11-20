@@ -141,6 +141,14 @@ export type MaleShape = 'v1' | 'v2';
  *   `thighLevel`: the thigh ring's height, of stature from the floor.
  * - `deltoid`: the breadth over the deltoids over ANSUR's bideltoid breadth (the v2 cap adds 0.1 cm).
  */
+/**
+ * Under the crotch the thighs of the 3D male body v2 part: each inner side stays this far off the centre plane, reached
+ * this far under the crotch (`MALE_V2_ASSUMPTIONS.thighGapCm` / `thighPartOverCm` of `@curtain/mannequin`, mirrored here
+ * and held equal by `maleFigureV2.test.tsx`), cm.
+ */
+export const MALE_V2_THIGH_GAP_CM = 0.6;
+export const MALE_V2_THIGH_PART_OVER_CM = 0.8;
+
 export interface MaleV2FigureRow {
   chestAspect: number;
   waistAspect: number;

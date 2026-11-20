@@ -27,6 +27,12 @@
  *   the tops of the legs, so there is no flat ledge where the torso ended in v1. The legs move in
  *   so that the thighs sit under the seat, are flattened where they meet and carry the lower
  *   buttock down to the gluteal fold.
+ * - **Thighs that part under the crotch.** The thighs touch at the crotch, where the torso ends, and
+ *   from `thighPartOverCm` under it each keeps its inner side `thighGapCm` off the centre plane: a
+ *   thigh is a D there, flat on the inside, scaled so that its girth is what the ellipse's was (the
+ *   thigh ring stays at the table girth). Before, the two thighs' ellipses overlapped across the
+ *   centre plane by up to 1 cm for 12 to 15 cm under the crotch, and a trouser's two legs had
+ *   nowhere to pass (the body showed through the cloth under the crotch, chino-crotch-v2 report).
  *
  * Girths: every section is scaled so that, at each anchor ring, the loop on the mesh is the table
  * girth (the same rings, heights and table as v1); between two rings the scale is interpolated.
@@ -79,6 +85,15 @@ export const MALE_V2_ASSUMPTIONS = {
   shoulderExponent: 2.6,
   /** Deltoid bulge over the arm root, of the upper-arm half-width. */
   deltoid: 0.32,
+  /**
+   * Under the crotch each thigh's inner side stays this far from the centre plane, cm: the thighs part, and the two legs
+   * of a trouser pass between them (two layers of cloth, each the collision clearance off its own thigh). The thighs
+   * touch at the crotch and are this far apart `thighPartOverCm` under it.
+   */
+  thighGapCm: 0.6,
+  thighPartOverCm: 0.8,
+  /** How round the corner of a thigh's flattened inner side is, cm. */
+  thighInnerRoundCm: 0.25,
 } as const;
 
 const TORSO_SEGMENTS = 64;
@@ -367,11 +382,25 @@ export function maleShapeV2(m: Mannequin, options: BuildOptions = {}): Mannequin
   // …and no further forward than the lower belly: the thigh tops move back by what they would stand out.
   const shiftZ = Math.max(0, topB - 0.99 * A.seatFrontShare * hip.D);
   const gluteCm = A.gluteal * hip.D;
+  // The torso ends at the crotch, where the thighs still touch, and closes under it between them (its pole): from
+  // there down the thighs have parted and nothing of the torso may stand in the gap.
+  const yEnd = yc;
   // --- Leg sections ------------------------------------------------------------------------------
   const legV1 = m.parts.find((p) => p.id === 'leg_l')!;
   const ls = LEG_SEGMENTS;
-  /** Leg outline at height y on the left leg (local x towards +X), unscaled. */
-  const legOutline = (yy: number, tucked: boolean): Float64Array => {
+  // --- Thighs that part under the crotch ----------------------------------------------------------
+  /** 0 at the crotch and above (the thighs touch), 1 from `thighPartOverCm` under it (each `thighGapCm` off the centre plane). */
+  const parted = (yy: number): number => smooth(Math.min(1, Math.max(0, (yc - yy) / A.thighPartOverCm)));
+  /** A smooth floor: u where u is well above 0, never under 0. */
+  const softFloor = (u: number): number => {
+    const q = u / A.thighInnerRoundCm;
+    return q > 30 ? u : A.thighInnerRoundCm * Math.log1p(Math.exp(q));
+  };
+  /**
+   * Leg outline at height y on the left leg (local x towards +X about the leg's centre, z in the body's frame), in cm
+   * on the mesh but for `scale` (the polygon's compensation, and the tuck into the torso), by which the caller multiplies.
+   */
+  const legOutline = (yy: number, tucked: boolean, scale: number): Float64Array => {
     const e = m.legAt(Math.min(yy, legTop), 1)!;
     const up = Math.min(1, Math.max(0, (yy - yt) / (gluteFold - yt)));
     const top = Math.min(1, Math.max(0, (yy - gluteFold) / (yc - gluteFold)));
@@ -379,38 +408,60 @@ export function maleShapeV2(m: Mannequin, options: BuildOptions = {}): Mannequin
     const tuck = tucked ? 1 - 0.22 * Math.min(1, Math.max(0, (yy - yc) / (legTop - yc))) : 1;
     // From the thigh ring up the leg runs straight to its top under the seat (v1 flared out here).
     const rise = Math.min(1, Math.max(0, (yy - yt) / (yc - yt)));
-    const a = (yy <= yc ? lerp(thigh.a, topA, rise) : topA) * tuck;
-    const b = (yy <= yc ? lerp(thigh.b, topB, rise) : topB) * tuck;
+    const a0 = yy <= yt ? e.a : (yy <= yc ? lerp(thigh.a, topA, rise) : topA) * tuck;
+    const b0 = yy <= yt ? e.b : (yy <= yc ? lerp(thigh.b, topB, rise) : topB) * tuck;
     const glute = gluteCm * (0.55 * up * up + 0.45 * top);
-    const o = new Float64Array(2 * ls);
-    for (let j = 0; j < ls; j++) {
-      const t = (2 * Math.PI * j) / ls;
-      let x = a * Math.sin(t);
-      let z = b * Math.cos(t);
-      // Lower buttock on the back of the thigh, a little towards the inside.
-      if (z < 0) z -= glute * g((x + 0.15 * a) / (0.65 * a)) * Math.sqrt(-Math.cos(t));
-      // The thighs flatten where they meet, just past the middle of the body (they touch, so the crotch has no slit).
-      const inner = -(legX + 0.1);
-      if (x < inner) x = inner - 0.35 * (inner - x) * g((inner - x) / (0.4 * a));
-      o[2 * j] = x;
-      o[2 * j + 1] = z + e.cz - shiftZ * top;
+    const t = parted(yy);
+    // Where the thighs touch (at the crotch and above): flattened just past the middle of the body, softly.
+    const touching = -(legX + 0.1);
+    // Where they have parted: the inner side never nearer the centre plane than the gap (on the mesh, so before `scale`).
+    const wall = -(legX - A.thighGapCm) / scale;
+    const make = (f: number, share: number): Float64Array => {
+      const o = new Float64Array(2 * ls);
+      for (let j = 0; j < ls; j++) {
+        const ang = (2 * Math.PI * j) / ls;
+        const x = f * a0 * Math.sin(ang);
+        let z = f * b0 * Math.cos(ang);
+        // Lower buttock on the back of the thigh, a little towards the inside.
+        if (z < 0) z -= glute * g((x + 0.15 * a0) / (0.65 * a0)) * Math.sqrt(-Math.cos(ang));
+        const met = x < touching ? touching - 0.35 * (touching - x) * g((touching - x) / (0.4 * a0)) : x;
+        o[2 * j] = share > 0 ? lerp(met, wall + softFloor(x - wall), share) : met;
+        o[2 * j + 1] = z + e.cz - shiftZ * top;
+      }
+      return o;
+    };
+    if (t <= 0) return make(1, 0);
+    // At the thigh ring and below, the girth the section has as a whole ellipse is kept (the ring stays at the table
+    // girth): the flat inner side is paid for all round. Above the gluteal fold the outline keeps its own size, so the
+    // thigh still meets the torso flush at the crotch.
+    const keep = 1 - up;
+    if (keep <= 0) return make(1, t);
+    const want = perimeter(make(1, -1));
+    let lo = 1;
+    let hi = 1.25;
+    for (let i = 0; i < 40; i++) {
+      const mid = (lo + hi) / 2;
+      if (perimeter(make(mid, 1)) < want) lo = mid;
+      else hi = mid;
     }
-    return o;
+    return make(lerp(1, (lo + hi) / 2, t * keep), t);
   };
-  const legRingYs = [yt, Y.knee, Y.calf, Y.ankle];
+  // Sections also at the crotch and where the thighs have parted: the mesh is straight between its sections.
+  const legRingYs = [yt, Y.knee, Y.calf, Y.ankle, yc, yc - A.thighPartOverCm / 2, yc - A.thighPartOverCm];
   const legStationsV1 = legV1.sections.map((s) => s.centre[1]);
   const legYs = stations(legTop, legStationsV1[legStationsV1.length - 1]!, options.legStepCm ?? 1.5, legRingYs);
   const legSectionAt = (yy: number, side: Side, tucked = true): Section => {
     const e = m.legAt(Math.min(yy, legTop), 1)!;
-    if (yy <= yt + 1e-9) {
+    // Below the thigh ring the leg is the v1 ellipse wherever that stays clear of the gap (the knee, the calf, the ankle).
+    if (yy <= yt + 1e-9 && legX - e.a - A.thighGapCm > 6 * A.thighInnerRoundCm) {
       const k = polygonCompensation(e.a, e.b, ls);
       return { centre: [side * legX, yy, e.cz], u: [1, 0, 0], v: [0, 0, 1], a: e.a * k, b: e.b * k };
     }
-    const raw = legOutline(yy, tucked);
-    // Scale: exact at the thigh ring (the ellipse there), holding the outline's own size above it.
-    // Above the gluteal fold the thigh stays just inside the torso that covers it (no surfaces fighting).
-    const inside = !tucked || yy <= gluteFold ? 1 : yy >= gluteFold + 1 ? 0.985 : lerp(1, 0.985, yy - gluteFold);
+    // Scale: exact at the thigh ring (the ellipse's girth there), holding the outline's own size above it.
+    // Above the torso's end the thigh stays just inside the torso that covers it (no surfaces fighting).
+    const inside = !tucked || yy <= yEnd ? 1 : yy >= yEnd + 1 ? 0.985 : lerp(1, 0.985, yy - yEnd);
     const k = polygonCompensation(e.a, e.b, ls) * inside;
+    const raw = legOutline(yy, tucked, k);
     const o = new Float64Array(raw.length);
     for (let j = 0; j < ls; j++) {
       o[2 * j] = side * raw[2 * j]! * k;
@@ -446,8 +497,6 @@ export function maleShapeV2(m: Mannequin, options: BuildOptions = {}): Mannequin
   const bellyCm = Math.max(0, waist.D * (waistFront - 0.5));
   const ub = (t: number) => ({ A: lerp(chest.A, waist.A, t), D: lerp(chest.D, waist.D, t), p: lerp(chest.p, waist.p, t) });
   const ubP = ub(0.45);
-  // The torso ends at the gluteal fold, inside the thighs; from there to the crotch its lobes are the thighs.
-  const yEnd = gluteFold;
   const yBlendTop = yh;
   const knots: { y: number; P: OutlineParams }[] = [
     { y: yh, P: { ...zero, A: hip.A, bf: A.seatFrontShare * hip.D, bb: (1 - A.seatFrontShare) * hip.D, p: hip.p, glute: gluteCm, cleft: A.cleftCm, pinchB: 0.15 } },
@@ -475,8 +524,8 @@ export function maleShapeV2(m: Mannequin, options: BuildOptions = {}): Mannequin
     let o = scaled(torsoOutline(profile(yy), n), k);
     const w = yy <= yc ? 1 : yy >= yBlendTop ? 0 : 1 - smooth((yy - yc) / (yBlendTop - yc));
     if (w > 0) {
-      // Join: the outline goes over to the two thighs side by side (a little outside them; inside them at the fold).
-      const grow = yy >= gluteFold + 1 ? 1 : lerp(0.96, 1, yy - gluteFold);
+      // Join: the outline goes over to the two thighs side by side (a little outside them; inside them where the torso ends).
+      const grow = yy >= yEnd + 1 ? 1 : lerp(0.96, 1, yy - yEnd);
       const legs = [legSectionAt(yy, 1, false), legSectionAt(yy, -1, false)];
       const joined = new Float64Array(o.length);
       for (let j = 0; j < o.length; j += 2) {

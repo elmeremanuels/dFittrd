@@ -10,7 +10,7 @@
  */
 import type { FitPoint, GarmentPayload, UserBody } from '@curtain/schema';
 import type { RenderGaps } from '@curtain/fit-engine';
-import { MALE_FIGURE_ASSUMPTIONS, MALE_FIGURE_TABLE, maleLevelsFromTop, maleRowAt, maleV2RowAt, type MaleShape } from './maleBody';
+import { MALE_FIGURE_ASSUMPTIONS, MALE_FIGURE_TABLE, MALE_V2_THIGH_GAP_CM, MALE_V2_THIGH_PART_OVER_CM, maleLevelsFromTop, maleRowAt, maleV2RowAt, type MaleShape } from './maleBody';
 
 export type { MaleShape } from './maleBody';
 
@@ -239,7 +239,7 @@ function maleBodyGeometry(measurements: UserBody['measurements'] | null | undefi
  * 'v2' })`). The same inputs and table as v1 (`maleRowAt`), but the widths at the chest, waist and
  * seat are the v2 torso's (narrower seat, a V from the lats at the armpit to the waist), the
  * trapezius is the v2 straight slope to the neck ring, the deltoids carry the v2 cap's 0.1 cm and
- * the legs sit in under the seat, touching below the crotch. Ratios from `MALE_V2_FIGURE_TABLE`.
+ * the legs sit in under the seat, touching at the crotch and parted under it. Ratios from `MALE_V2_FIGURE_TABLE`.
  */
 function maleV2BodyGeometry(measurements: UserBody['measurements'] | null | undefined, heightCm?: number): BodyGeometry {
   const A = MALE_FIGURE_ASSUMPTIONS;
@@ -416,8 +416,9 @@ function maleBodyPath(g: BodyGeometry): string {
  * The male figure v2 (`maleV2BodyGeometry`): the neck to the neck ring, a straight trapezius slope
  * to the shoulder point under the deltoid, the lats at the armpit, then the chest, underbust, waist
  * and the narrower v2 seat, falling straight to the thighs. The legs sit in under the seat and
- * touch below the crotch, so their top edges meet in the middle as one crotch line (a shallow V
- * from the hip down to the crotch). Same subpaths as v1: head, torso, two legs, two arms.
+ * touch at the crotch, so their top edges meet in the middle as one crotch line (a shallow V
+ * from the hip down to the crotch); under it the thighs part by the 3D body's gap. Same subpaths
+ * as v1: head, torso, two legs, two arms.
  */
 function maleV2BodyPath(g: BodyGeometry, v: NonNullable<BodyGeometry['v2']>): string {
   const y = (k: LevelKey): number => figureY(g, k);
@@ -446,11 +447,15 @@ function maleV2BodyPath(g: BodyGeometry, v: NonNullable<BodyGeometry['v2']>): st
     { x: (legX + topHalf) * 0.5, y: legTopY + (crotchY + 4 - legTopY) * 0.5 },
     { x: 1, y: crotchY + 4 },
   ]);
-  // the thighs touch: an inner edge never crosses the middle (0.4 px off it, so the two strokes meet)
-  const inner = (half: number): number => Math.max(0.4, legX - Math.max(4, half));
+  // the thighs touch at the crotch (0.4 px off the middle, so the two strokes meet) and part under it: from
+  // `MALE_V2_THIGH_PART_OVER_CM` down an inner edge stays `MALE_V2_THIGH_GAP_CM` off the middle, as on the 3D body
+  const gap = MALE_V2_THIGH_GAP_CM * g.pxPerCm;
+  const partedY = crotchY + 4 + MALE_V2_THIGH_PART_OVER_CM * g.pxPerCm;
+  const inner = (half: number, atY: number): number => Math.max(atY >= partedY ? gap : 0.4, legX - Math.max(4, half));
   const leg = (side: 1 | -1): string => {
     const halves: { h: number; y: number }[] = [
       { h: topHalf, y: crotchY + 4 },
+      { h: topHalf, y: partedY },
       { h: g.thighHalf, y: v.thighRingY },
       { h: g.thighHalf * 0.95, y: y('thigh') },
       { h: g.kneeHalf, y: y('knee') },
@@ -461,7 +466,7 @@ function maleV2BodyPath(g: BodyGeometry, v: NonNullable<BodyGeometry['v2']>): st
     // the outer edge starts on the seat's side, so the leg's top edge runs from the hip down to the crotch
     const top = { x: legX + topHalf, y: legTopY };
     const outer = [top, ...halves.map((p) => ({ x: legX + Math.max(4, p.h), y: p.y }))];
-    const innerPts = [...halves].reverse().map((p) => ({ x: inner(p.h), y: p.y }));
+    const innerPts = [...halves].reverse().map((p) => ({ x: inner(p.h, p.y), y: p.y }));
     const pts = [...outer, ...innerPts];
     // as the arm: the mirrored left leg is reversed, so it winds like the torso and their overlap stays filled (nonzero rule)
     if (side === -1) pts.reverse();

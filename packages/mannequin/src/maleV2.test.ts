@@ -18,6 +18,7 @@ import {
   buildMannequinMesh,
   deltoidBreadthCm,
   familyShape,
+  MALE_V2_ASSUMPTIONS,
   fitRing,
   loopAround,
   loopLength,
@@ -211,6 +212,31 @@ describe.each(MALE_BODY_SHAPE_IDS)('male %s, shape v2', (id) => {
     // No part of the torso hangs below the crotch outside the thighs, and it ends above the thigh ring.
     const torso = partVertices(mesh, 'torso');
     expect(Math.min(...torso.map((p) => p[1]))).toBeGreaterThan(lo);
+  });
+
+  it('parts the thighs under the crotch: they touch at the crotch, where the torso ends, and from 0.8 cm under it each stays 0.6 cm off the centre plane, at the table’s thigh girth', () => {
+    const A = MALE_V2_ASSUMPTIONS;
+    const yc = mannequin.landmarks.crotch[1];
+    const k = mesh.partNames.indexOf('leg_l');
+    const loopAt = (y: number) => slice(mesh.positions, mesh.indices, { origin: [0, y, 0], normal: [0, 1, 0] }, (t) => mesh.vertexPart[mesh.indices[3 * t]!] === k);
+    const innerAt = (y: number): number => Math.min(...loopAt(y).flatMap((l) => l.points.map((p) => p[0])));
+    // At the crotch the thighs meet in the middle (within 0.4 cm of it: they press into each other a little, as before).
+    expect(Math.abs(innerAt(yc)), 'at the crotch').toBeLessThan(0.4);
+    // From where they have parted down to the knee: the gap, and never much more where a thigh's ellipse would cross it.
+    for (let y = yc - A.thighPartOverCm; y >= mannequin.morphHeights.knee; y -= 0.5) expect(innerAt(y), `inner side at ${(yc - y).toFixed(1)} cm under the crotch`).toBeGreaterThan(A.thighGapCm - 0.01);
+    expect(innerAt(mannequin.morphHeights.thigh), 'at the thigh ring').toBeLessThan(A.thighGapCm + 0.1);
+    // The same thighs as v1 round: the loop on the mesh at the thigh ring is the table girth (it was an ellipse across the middle).
+    const ring = mannequin.rings.find((r) => r.id === 'thigh')!;
+    const loop = loopAround(loopAt(ring.centre[1]), ring.centre, [1, 0, 0], [0, 0, 1])!;
+    expect(Math.abs(loopLength(loop) / mannequin.shape.rings.thigh.circumferenceCm - 1)).toBeLessThan(GIRTH_TOLERANCE);
+    // A flat inner side costs the outer side under 0.15 cm against the ellipse.
+    const outer = Math.max(...loop.points.map((p) => p[0]));
+    expect(outer - (mannequin.landmarks.legX + ring.a)).toBeLessThan(0.15);
+    expect(outer - (mannequin.landmarks.legX + ring.a)).toBeGreaterThan(-0.05);
+    // The torso ends at the crotch and closes just under it: nothing of it stands in the gap further down.
+    const torsoLow = Math.min(...partVertices(mesh, 'torso').map((p) => p[1]));
+    expect(torsoLow).toBeGreaterThan(yc - 0.7);
+    expect(torsoLow).toBeLessThan(yc);
   });
 
   it('moves the legs in under the seat and keeps the arms off the torso at the chest, underbust and waist rings', () => {

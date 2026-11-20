@@ -178,3 +178,15 @@ Founder decision (20 Nov 2026), given while answering the open-issues advice (po
 4. **Point 10 itself:** a product with an incomplete fabric is let through without the fabric, with a notice, and whether to let through or refuse is a merchant setting.
 
 Not open to a merchant setting: the hard rules of AGENTS.md (shopper data on the device, every render labelled an estimate, the k floor, licences), D19 and D20.
+
+## D25 — Founder answers on the merchant-settings inventory
+
+Founder decisions (20 Nov 2026), answering the open questions of `docs/research/merchant-settings-inventory.md`. Point 1 replaces D24 point 4's wording "without the fabric".
+
+1. **Incomplete fabric: leave out only the missing part.** What the merchant entered (name, blend, a valid stretch) is kept; the product goes through with a notice.
+2. **"Hold the product back" is built, but kept out of the first-run steps.** The default is to let the product through.
+3. **Fabric sharing sits under "help improve the product".** When the merchant agrees to that, their fabric values are shared anonymously (no shop name, no supplier name, no product). Without it, a merchant's fabrics stay private to the shop. This replaces a per-fabric switch.
+4. **Fabric data: do what improves quality fastest.** Engineering reading: first the confirmed stretch and the named choices in the product form and the per-shop fabric table (slice 2), because a wrong stretch is what makes advice wrong; collecting mill data comes after and only from sources whose terms allow it.
+5. **Paused plan: the button is hidden.** This changes D7, which kept the button with a "shop paused" note.
+6. **The age-range question is removed.** Nothing uses it.
+7. **A shop may hide "Fit by Curtain".** The estimate label is not part of that and stays (rule 3). The price at which 3D and the AI layer become switchable is still open (D17).

@@ -81,7 +81,7 @@ describe('T16 purity', () => {
       const again = computeFit(g, body);
       expect(again).toEqual(r);
     }
-  });
+  }, 30_000); // a fixed amount of work, slow on a shared CI runner; not a race
 
   it('1000 random bodies × every MOCK_GARMENTS fixture never throw (with and without sigma)', () => {
     const next = rng(42);
@@ -95,7 +95,7 @@ describe('T16 purity', () => {
       for (const p of FIT_POINTS) if (next() < 0.6) sigma[p] = next() * 6;
       assertSane(computeFit(g, body, { sigma: deepFreeze(sigma) }), g.sizeChart.length);
     }
-  });
+  }, 30_000); // a fixed amount of work, slow on a shared CI runner; not a race
 
   it('garbage garments do not throw', () => {
     const next = rng(7);

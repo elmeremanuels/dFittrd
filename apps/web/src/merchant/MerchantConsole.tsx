@@ -185,7 +185,16 @@ export function MerchantLayout(): ReactNode {
     if (base.mode !== 'live') {
       // Demo data: the page shows the change, nothing is sent anywhere.
       const { brandColor, logoUrl, ...rest } = patch;
-      setBase((b) => (b && b.settings ? { ...b, settings: { ...b.settings, ...rest, ...(brandColor !== undefined ? { brandColor } : {}), ...(logoUrl !== undefined ? { logoUrl } : {}) } } : b));
+      setBase((b) =>
+        b && b.settings
+          ? {
+              ...b,
+              settings: { ...b.settings, ...rest, ...(brandColor !== undefined ? { brandColor } : {}), ...(logoUrl !== undefined ? { logoUrl } : {}) },
+              // As the api does: the products the shop already has follow the new choice.
+              ...(patch.incompleteProductData !== undefined ? { products: mockProducts(patch.incompleteProductData) } : {}),
+            }
+          : b,
+      );
       return;
     }
     const m = api.merchant(key);
@@ -425,7 +434,16 @@ export function MerchantProducts(): ReactNode {
               const score = p.adviceScore ?? Math.round(p.score * 100);
               const part = (field: string): string => t.fabricPart[field] ?? t.fabricPart.other;
               const leftOut = p.notices?.leftOut ?? [];
-              const stretchAssumed = !p.heldBack && p.status === 'active' && (p.notices?.defaulted.includes('fabric.stretchPct') ?? false);
+              const sized = !p.heldBack && p.status === 'active';
+              // A stretch that was entered but left out is said once, by its "Not saved" line; "no stretch given" would be untrue.
+              const stretchLeftOut = leftOut.some((l) => l.field === 'fabric.stretchPct');
+              const stretchAssumed = sized && !stretchLeftOut && (p.notices?.defaulted.includes('fabric.stretchPct') ?? false);
+              // The api's own reason is a validator message; only the console's plain rules are shown.
+              const leftOutText = (field: string): string => {
+                const rule = t.fabricRule[field];
+                if (!rule) return t.leftOutOther(part(field));
+                return field === 'fabric.stretchPct' && sized ? t.leftOutStretch(rule) : t.leftOut(part(field), rule);
+              };
               return (
               <tr key={p.externalId} data-testid={`product-${p.externalId}`}>
                 <td className="min-w-[15rem] px-4 py-3">
@@ -443,7 +461,7 @@ export function MerchantProducts(): ReactNode {
                       ) : null}
                       {leftOut.map((l) => (
                         <li key={l.field} className="text-warn" data-testid={`left-out-${p.externalId}`}>
-                          {t.leftOut(part(l.field), t.fabricRule[l.field] ?? l.reason)}
+                          {leftOutText(l.field)}
                         </li>
                       ))}
                       {stretchAssumed ? <li data-testid={`stretch-assumed-${p.externalId}`}>{t.stretchAssumed}</li> : null}
@@ -470,7 +488,7 @@ export function MerchantProducts(): ReactNode {
                     </span>
                   ) : null}
                 </td>
-                <td className="max-w-sm px-4 py-3 text-ink-soft">{p.heldBack ? t.heldBackText(p.heldBack.fields.map(part)) : (p.next?.text ?? (p.missingFields.length ? t.missing(p.missingFields) : c.none))}</td>
+                <td className="max-w-sm px-4 py-3 text-ink-soft">{p.heldBack ? t.heldBackNext : (p.next?.text ?? (p.missingFields.length ? t.missing(p.missingFields) : c.none))}</td>
                 <td className="px-4 py-3">
                   <Link to={`/merchant/products/${encodeURIComponent(p.externalId)}/3d`} className="chip whitespace-nowrap hover:bg-white" data-testid={`open-3d-${p.externalId}`}>
                     {merchantStrings().assets.open3d}

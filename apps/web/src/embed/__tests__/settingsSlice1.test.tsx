@@ -63,16 +63,33 @@ async function toResult(user: ReturnType<typeof userEvent.setup>): Promise<void>
 afterEach(() => cleanup());
 
 describe('the stretch line', () => {
+  // As the api sends a product without a stretch value and without a marked stretchy part.
+  const noStretch = { ...garment, fabric: { ...garment.fabric, stretchPct: 0 }, stretchZones: [] };
+
   it('says once, under the size, that stretch was not taken into account when the shop gave none', async () => {
     const user = userEvent.setup();
-    setup(resolved({ stretchAssumed: true }));
+    setup(resolved({ stretchAssumed: true, garment: noStretch }));
     await toResult(user);
     const lines = screen.getAllByTestId('stretch-not-used');
     expect(lines).toHaveLength(1);
     expect(lines[0]).toHaveTextContent(embedStrings().result.stretchNotUsed);
+    // Nothing on the same screen says the opposite.
+    expect(screen.getByTestId('embed-result').textContent).not.toMatch(/stretch fabric there/);
     // It states what was not done; it does not promise the advice errs on the roomy side.
     expect(EN.result.stretchNotUsed).toMatch(/does not take stretch into account/);
     expect(EN.result.stretchNotUsed).not.toMatch(/safe|roomier|larger|never/i);
+  });
+
+  it('with a part the shop marked as stretchy, it says stretch is counted only there', async () => {
+    const user = userEvent.setup();
+    // No stretch value, but the waist tie is marked: the fit counts that part and the list names it.
+    expect(garment.stretchZones?.length).toBeGreaterThan(0);
+    setup(resolved({ stretchAssumed: true, garment: { ...garment, fabric: { ...garment.fabric, stretchPct: 0 } } }));
+    await toResult(user);
+    const line = screen.getByTestId('stretch-not-used');
+    expect(line).toHaveTextContent(embedStrings().result.stretchNotUsedButZones);
+    expect(line.textContent).not.toMatch(/does not take stretch into account/);
+    expect(EN.result.stretchNotUsedButZones).toMatch(/only at the parts the shop marked as stretchy/);
   });
 
   it('is absent when the stretch comes from the shop', async () => {
@@ -127,9 +144,14 @@ describe('the age-range question is gone', () => {
 
 describe('mock tokens for screenshots', () => {
   it('mock:nostretch and mock:nomark carry the flags; a plain mock carries neither', () => {
-    expect(resolveMock('mock:nostretch:aalter-studio-1', '').stretchAssumed).toBe(true);
+    const none = resolveMock('mock:nostretch:aalter-studio-1', '');
+    expect(none.stretchAssumed).toBe(true);
+    // The garment is what the api sends for such a product: stretch 0, no marked stretchy part.
+    expect(none.garment.fabric.stretchPct).toBe(0);
+    expect(none.garment.stretchZones).toEqual([]);
     expect(resolveMock('mock:nomark:aalter-studio-1', '').shop.hideWordmark).toBe(true);
     const plain = resolveMock('mock:aalter-studio-1', '');
+    expect(plain.garment).toBe(garment);
     expect('stretchAssumed' in plain).toBe(false);
     expect('hideWordmark' in plain.shop).toBe(false);
   });

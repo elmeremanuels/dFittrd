@@ -137,12 +137,18 @@ export interface ConsoleCatalogue {
     heldBackText: (what: string[]) => string;
     /** The link to the setting, after `heldBackText`. */
     heldBackSetting: string;
+    /** The short next step of a held-back product (the full sentence is under the product name). */
+    heldBackNext: string;
     /** Plain names of fabric details, by payload path; `other` for a path the console does not know. */
     fabricPart: Record<string, string> & { other: string };
     /** What a fabric detail must be, by payload path (said when a value was not saved). */
     fabricRule: Record<string, string>;
     /** A value that was not saved: `rule` from `fabricRule`, else the api's own reason. */
     leftOut: (part: string, rule: string) => string;
+    /** The same for a detail the console has no rule for (the api's own reason is never shown). */
+    leftOutOther: (part: string) => string;
+    /** A stretch that was entered but not valid, on a product that gives size advice: one line, with what size advice then assumes. */
+    leftOutStretch: (rule: string) => string;
     /** No stretch on a product that gives size advice. */
     stretchAssumed: string;
   };
@@ -352,8 +358,9 @@ export const CONSOLE_EN: ConsoleCatalogue = {
       'We read “men” from the title or a collection only, or the product has not been synced since we started asking where the audience comes from. Set the audience on the product to confirm it, or sync it again; until then it is shown as before.',
     missing: (fields) => `Missing: ${fields.join(', ')}`,
     heldBack: 'Held back',
-    heldBackText: (what) => `Held back by your setting: shoppers get no size advice for this product until you add ${what.join(' and ')}.`,
+    heldBackText: (what) => `Held back by your setting: shoppers get no size advice for this product until you add or correct ${what.join(' and ')}.`,
     heldBackSetting: 'Change the setting',
+    heldBackNext: 'Add or correct the fabric details named under the product name.',
     fabricPart: {
       'fabric.stretchPct': 'the fabric stretch',
       'fabric.drape': 'the drape',
@@ -367,18 +374,20 @@ export const CONSOLE_EN: ConsoleCatalogue = {
     fabricRule: {
       'fabric.stretchPct': 'it must be a number from 0 to 100',
       'fabric.drape': 'it must be a number from 0 to 1',
-      'fabric.weightGsm': 'it must be a number above 0',
+      'fabric.weightGsm': 'it must be a number above 0 and at most 2000',
       'fabric.opacity': 'it must be a number from 0 to 1',
       'fabric.sheen': 'it must be a number from 0 to 1',
-      'fabric.blend': 'it may hold at most 8 fibres and no more than 100% in total',
+      'fabric.blend': 'it may hold at most 8 fibres, each from 0 to 100%',
       'fabric.primary': 'it may be at most 64 characters long',
     },
     leftOut: (part, rule) => `Not saved: ${part}. The value you entered was left out (${rule}). The rest of the fabric was kept.`,
+    leftOutOther: (part) => `Not saved: ${part}. The value you entered is not valid and was left out. The rest of the fabric was kept.`,
+    leftOutStretch: (rule) => `Not saved: the fabric stretch. The value you entered was left out (${rule}), so size advice assumes the fabric does not stretch until you correct it. The rest of the fabric was kept.`,
     stretchAssumed: 'No fabric stretch given: size advice assumes the fabric does not stretch. For a stretchy fabric the advice is less exact until you add it.',
   },
   settings: {
     title: 'Settings',
-    intro: 'Choices for your whole shop. Each one is saved when you change it.',
+    intro: 'Choices for your whole shop. A choice or a switch is saved when you change it; your colour and logo when you press “Save colour and logo”.',
     unavailable: 'Settings could not be loaded just now. Reload the page to try again.',
     saving: 'Saving…',
     saved: 'Saved.',
@@ -386,11 +395,11 @@ export const CONSOLE_EN: ConsoleCatalogue = {
     demo: 'Demo data: changes here are not saved anywhere.',
     incomplete: {
       title: 'Products with incomplete fabric details',
-      intro: 'What should happen when a product has no fabric stretch, or a fabric value that is not valid? Either way Curtain keeps what you entered and leaves out only the part that is missing or not valid.',
+      intro: 'What should happen when a product has no fabric stretch, or a fabric value Curtain cannot use? Either way Curtain keeps the rest of what you entered.',
       choices: {
         'let-through': {
           label: 'Show size advice anyway',
-          text: 'The product goes live and the product list tells you what is missing. Without a stretch value, size advice assumes the fabric does not stretch, and shoppers are told so.',
+          text: 'The product goes live and the product list tells you what is missing. Without a stretch value, size advice assumes the fabric does not stretch, and the popup tells shoppers that the shop has not said how much the fabric stretches.',
         },
         'hold-back': {
           label: 'Hold the product back until it is complete',
@@ -403,7 +412,7 @@ export const CONSOLE_EN: ConsoleCatalogue = {
     popup: {
       title: 'The popup on your product page',
       wordmark: 'Show “Fit by Curtain”',
-      wordmarkText: 'A small line at the bottom of the popup. The “Estimate” labels on the figure and on pictures always stay: they are not part of this switch.',
+      wordmarkText: 'A small line at the bottom of the popup. The “Estimate” labels on the figure and on pictures always stay: they are not part of this switch. The link “Get the Curtain app” also stays.',
     },
     shop: {
       title: 'Your shop in the popup',
@@ -415,14 +424,14 @@ export const CONSOLE_EN: ConsoleCatalogue = {
       colour: 'Brand colour',
       colourText: 'The line at the top of the popup. Your shop name takes this colour too when it is readable on the light background.',
       colourPick: 'Pick a colour',
-      colourNone: 'No colour set: the popup uses Curtain’s own.',
+      colourNone: 'No colour set: the popup has no coloured line at the top and shows your shop name in black.',
       colourBad: 'Write the colour as a hex code, for example #2F4F3A.',
       remove: 'Remove',
       logo: 'Logo address',
       logoText: 'The web address of your logo image. It is stored now and not shown in the popup yet.',
       logoPlaceholder: 'https://',
       logoBad: 'Write a full web address that starts with https://',
-      save: 'Save',
+      save: 'Save colour and logo',
     },
   },
   usage: {

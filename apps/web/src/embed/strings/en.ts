@@ -251,6 +251,8 @@ export interface EmbedCatalogue {
     pointByChart: (gap: string, band: string) => string;
     /** Under the recommended size when the shop gave no fabric stretch: size advice assumed none. */
     stretchNotUsed: string;
+    /** The same, for a garment on which the shop did mark a stretchy part (that part is counted). */
+    stretchNotUsedButZones: string;
     estimated: (points: string[]) => string;
     chosen: (size: string) => string;
     /** `{size}` is the size, set in the display type. */
@@ -627,6 +629,7 @@ export const EN: EmbedCatalogue = {
     pointPullOn: { marginal: 'Only just pulls on', blocked: 'Too small to pull on' },
     pointByChart: (gap, band) => `By the size chart: ${band.toLowerCase()}, ${gap}`,
     stretchNotUsed: 'The shop has not said how much this fabric stretches, so this size advice does not take stretch into account.',
+    stretchNotUsedButZones: 'The shop has not said how much this fabric stretches, so this size advice counts stretch only at the parts the shop marked as stretchy.',
     estimated: (points) => `${points.join(', ')} estimated from your height and weight. Add your own measurements for a higher confidence.`,
     chosen: (size) => `Size ${size} selected on the shop page`,
     chooseOnPage: 'Choose size {size} on the shop page.',

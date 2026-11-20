@@ -204,7 +204,8 @@ export function ResultScreen({
         ) : null}
         {stretchAssumed ? (
           <p className="mt-1 text-xs text-ink-soft" data-testid="stretch-not-used">
-            {t.stretchNotUsed}
+            {/* A marked stretchy part is counted by the fit (and named in the list below): say so, never "no stretch at all". */}
+            {garment.stretchZones?.length ? t.stretchNotUsedButZones : t.stretchNotUsed}
           </p>
         ) : null}
         {advice.size || waistOnly !== null ? (

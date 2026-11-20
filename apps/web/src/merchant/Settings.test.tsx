@@ -19,7 +19,7 @@ afterEach(cleanup);
 const t = merchantStrings().console;
 
 function renderAt(path: string, over: Partial<MerchantData> = {}) {
-  const products = mockProducts();
+  const products = over.products ?? mockProducts();
   const saveSettings = vi.fn(async (_patch: MerchantSettingsUpdateRequest) => {});
   const data = { mode: 'live', products, setup: mockSetup(products), settings: mockSettings(), saveSettings, ...over } as unknown as MerchantData;
   const router = createMemoryRouter(
@@ -58,9 +58,21 @@ describe('Settings: incomplete fabric details', () => {
     await waitFor(() => expect(screen.getByTestId('settings-status')).toHaveTextContent(t.settings.failed));
   });
 
-  it('tells how many products are held back right now', () => {
+  it('tells how many products are held back right now, and nothing while none is', () => {
+    // The standard choice lets every product through: no count.
     renderAt('/merchant/settings');
-    expect(screen.getByTestId('held-now')).toHaveTextContent('1 product is held back right now.');
+    expect(screen.queryByTestId('held-now')).toBeNull();
+    cleanup();
+    renderAt('/merchant/settings', { products: mockProducts('hold-back'), settings: { ...mockSettings(), incompleteProductData: 'hold-back' } });
+    expect(screen.getByTestId('held-now')).toHaveTextContent('2 products are held back right now.');
+  });
+
+  it('the demo products follow the choice: held back only under "hold back"', () => {
+    expect(mockProducts().items.some((p) => p.heldBack)).toBe(false);
+    expect(mockProducts('let-through').items.some((p) => p.heldBack)).toBe(false);
+    const held = mockProducts('hold-back').items.filter((p) => p.heldBack);
+    expect(held).toHaveLength(2);
+    for (const p of held) expect(p).toMatchObject({ status: 'incomplete', heldBack: { reason: 'incomplete_product_data', fields: ['fabric.stretchPct'] } });
   });
 
   it('is not a step of the "Get set up" checklist (D25 point 2)', () => {
@@ -90,6 +102,24 @@ describe('Settings: "Fit by Curtain", colour, logo and name', () => {
     expect(screen.getByTestId('shop-name')).toHaveTextContent('Aalter Studio');
     expect(screen.queryByRole('textbox', { name: /shop name/i })).toBeNull();
     expect(screen.getByText(t.settings.shop.nameFrom.woocommerce)).toBeInTheDocument();
+  });
+
+  it('the intro says what is saved at once and what needs the button, and the button names what it saves', () => {
+    renderAt('/merchant/settings');
+    expect(screen.getByText(t.settings.intro)).toBeInTheDocument();
+    expect(t.settings.intro).toMatch(/saved when you change it; your colour and logo when you press “Save colour and logo”/);
+    expect(screen.getByTestId('save-shop')).toHaveTextContent('Save colour and logo');
+  });
+
+  it('"Remove" removes the colour at once; with no colour set the swatch is white (empty), not black', async () => {
+    const { saveSettings } = renderAt('/merchant/settings');
+    expect(screen.getByLabelText(t.settings.shop.colourPick)).toHaveValue('#2f4f3a');
+    await userEvent.click(screen.getByTestId('remove-colour'));
+    expect(saveSettings).toHaveBeenCalledWith({ brandColor: null });
+    expect(screen.getByTestId('brand-colour')).toHaveValue('');
+    expect(screen.getByLabelText(t.settings.shop.colourPick)).toHaveValue('#ffffff');
+    expect(screen.getByText(t.settings.shop.colourNone)).toBeInTheDocument();
+    expect(screen.queryByTestId('remove-colour')).toBeNull();
   });
 
   it('saves colour and logo together; an empty field removes the value', async () => {
@@ -125,30 +155,56 @@ describe('Products: notices and the held-back state', () => {
     const p = products.items.find((i) => i.notices?.leftOut.length)!;
     const row = screen.getByTestId(`product-${p.externalId}`);
     const line = within(row).getByTestId(`left-out-${p.externalId}`);
-    expect(line).toHaveTextContent('Not saved: the fabric stretch. The value you entered was left out (it must be a number from 0 to 100). The rest of the fabric was kept.');
-    // The validator's own wording is not shown when the console has a plain rule for the field.
+    // One line for one mistake: what was not saved, the rule, and what size advice assumes meanwhile.
+    expect(line).toHaveTextContent(
+      'Not saved: the fabric stretch. The value you entered was left out (it must be a number from 0 to 100), so size advice assumes the fabric does not stretch until you correct it. The rest of the fabric was kept.',
+    );
+    // The validator's own wording is never shown.
     expect(line).not.toHaveTextContent('Too big');
-    expect(within(row).getByTestId(`stretch-assumed-${p.externalId}`)).toHaveTextContent(t.products.stretchAssumed);
+    // Not "No fabric stretch given": the merchant did give one.
+    expect(within(row).queryByTestId(`stretch-assumed-${p.externalId}`)).toBeNull();
   });
 
-  it('a field the console has no rule for falls back to the api’s reason', () => {
+  it('a product with no stretch at all says size advice assumes none', () => {
+    const { products } = renderAt('/merchant/products');
+    const p = products.items.find((i) => i.notices?.defaulted.includes('fabric.stretchPct') && !i.notices.leftOut.length)!;
+    expect(screen.getByTestId(`stretch-assumed-${p.externalId}`)).toHaveTextContent(t.products.stretchAssumed);
+  });
+
+  it('another fabric value that was left out: its own plain rule', () => {
     const products = mockProducts();
     const p = products.items[1]!;
-    p.notices = { defaulted: [], leftOut: [{ field: 'fabric.somethingNew', reason: 'Not a known value' }] };
+    p.notices = { defaulted: [], leftOut: [{ field: 'fabric.weightGsm', reason: 'Too small: expected number to be >0' }] };
     renderAt('/merchant/products', { products });
-    expect(screen.getByTestId(`left-out-${p.externalId}`)).toHaveTextContent('Not saved: a fabric detail. The value you entered was left out (Not a known value).');
+    expect(screen.getByTestId(`left-out-${p.externalId}`)).toHaveTextContent('Not saved: the fabric weight. The value you entered was left out (it must be a number above 0 and at most 2000). The rest of the fabric was kept.');
+  });
+
+  it('a field the console has no rule for gets a plain line; the api’s own reason (a validator message) is never shown', () => {
+    const products = mockProducts();
+    const p = products.items[1]!;
+    p.notices = { defaulted: [], leftOut: [{ field: 'fabric.somethingNew', reason: 'Invalid input: expected string' }] };
+    renderAt('/merchant/products', { products });
+    const line = screen.getByTestId(`left-out-${p.externalId}`);
+    expect(line).toHaveTextContent('Not saved: a fabric detail. The value you entered is not valid and was left out. The rest of the fabric was kept.');
+    expect(line).not.toHaveTextContent(/Invalid input|expected/);
   });
 
   it('a held-back product: the chip, the reason, what to add, and a link to the setting', () => {
-    const { products } = renderAt('/merchant/products');
-    const p = products.items.find((i) => i.heldBack)!;
+    const { products } = renderAt('/merchant/products', { products: mockProducts('hold-back') });
+    const p = products.items.find((i) => i.heldBack && !i.notices?.leftOut.length)!;
     const row = screen.getByTestId(`product-${p.externalId}`);
     expect(within(row).getByText(t.products.heldBack)).toBeInTheDocument();
     const line = within(row).getByTestId(`held-back-${p.externalId}`);
-    expect(line).toHaveTextContent('Held back by your setting: shoppers get no size advice for this product until you add the fabric stretch.');
+    expect(line).toHaveTextContent('Held back by your setting: shoppers get no size advice for this product until you add or correct the fabric stretch.');
+    // The sentence is in the row once; the next-step column holds a short pointer to it.
+    expect(within(row).getAllByText(/Held back by your setting/)).toHaveLength(1);
+    expect(within(row).getByText(t.products.heldBackNext)).toBeInTheDocument();
     expect(within(line).getByRole('link', { name: t.products.heldBackSetting })).toHaveAttribute('href', '/merchant/settings');
     // No "assumed" line: a held-back product gives no size advice.
     expect(within(row).queryByTestId(`stretch-assumed-${p.externalId}`)).toBeNull();
+    // Held back with a stretch that was left out: the plain "Not saved" line, without "size advice assumes".
+    const q = products.items.find((i) => i.heldBack && i.notices?.leftOut.length)!;
+    expect(screen.getByTestId(`left-out-${q.externalId}`)).toHaveTextContent('Not saved: the fabric stretch. The value you entered was left out (it must be a number from 0 to 100). The rest of the fabric was kept.');
   });
 
   it('a complete product shows no notice', () => {

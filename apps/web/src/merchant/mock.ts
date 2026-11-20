@@ -20,6 +20,7 @@ import {
   type AnalyticsPeriodsResponse,
   type AnalyticsSwipesResponse,
   type BillingAnomaliesResponse,
+  type IncompleteProductDataPolicy,
   type MerchantLedgerResponse,
   type MerchantProductsResponse,
   type MerchantSettingsResponse,
@@ -33,7 +34,8 @@ function nextOf(status: 'active' | 'incomplete', category: string, missingFields
   return { measured, next: productNextStep(p), adviceScore: sizeAdviceScore(p) };
 }
 
-export function mockProducts(): MerchantProductsResponse {
+/** `policy`: the shop's choice for incomplete fabric details; the demo products follow it as the api's do. */
+export function mockProducts(policy: IncompleteProductDataPolicy = 'let-through'): MerchantProductsResponse {
   // The pilot skirt (tape-built 3D versions in `mockAssets`) first, then the mock catalogue.
   const items = [PILOT_PULL_ON_SKIRT, ...MOCK_GARMENTS.slice(0, 23)].map((g, i) => {
     const draft = i % 5 === 3 ? { ...g, fabric: undefined, sizeChartType: undefined } : i % 7 === 6 ? { ...g, flatLayPhoto: undefined } : g;
@@ -52,11 +54,14 @@ export function mockProducts(): MerchantProductsResponse {
     };
   });
   // Incomplete fabric details (D25 point 1), as the api reports them: a stretch that was not valid
-  // and was left out, a product with no stretch at all, and one the shop's setting holds back.
-  const [, leftOut, noStretch, , held] = items;
+  // and was left out, and a product with no stretch at all. Under `hold-back` the shop's setting
+  // holds both back; under `let-through` (the standard) nothing is held back.
+  const [, leftOut, noStretch] = items;
   if (leftOut && leftOut.status === 'active') leftOut.notices = { defaulted: ['fabric.stretchPct'], leftOut: [{ field: 'fabric.stretchPct', reason: 'Too big: expected number to be <=100' }] };
   if (noStretch && noStretch.status === 'active') noStretch.notices = { defaulted: ['fabric.stretchPct', 'fabric.drape'], leftOut: [] };
-  if (held) Object.assign(held, { status: 'incomplete' as const, heldBack: { reason: 'incomplete_product_data' as const, fields: ['fabric.stretchPct'] } });
+  if (policy === 'hold-back')
+    for (const p of [leftOut, noStretch])
+      if (p && p.status === 'active') Object.assign(p, { status: 'incomplete' as const, heldBack: { reason: 'incomplete_product_data' as const, fields: ['fabric.stretchPct'] }, notices: { defaulted: [], leftOut: p.notices.leftOut } });
   return {
     items,
     nextCursor: null,

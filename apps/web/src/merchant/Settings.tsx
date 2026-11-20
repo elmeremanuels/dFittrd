@@ -10,6 +10,8 @@ import { useMerchantData } from './MerchantConsole';
 import { merchantStrings } from './strings';
 
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+/** The colour picker cannot be empty: with no colour set it shows white, which reads as "none" (black read as a chosen colour). */
+const NO_COLOUR = '#FFFFFF';
 /** `#abc` as `#aabbcc`: the colour input only takes six digits. */
 const sixDigits = (hex: string): string => (hex.length === 4 ? `#${[...hex.slice(1)].map((c) => c + c).join('')}` : hex);
 
@@ -109,7 +111,19 @@ export function MerchantSettings(): ReactNode {
           {t.popup.title}
         </h3>
         <div className="flex items-start gap-3">
-          <input id={`${id}-mark`} type="checkbox" role="switch" aria-checked={showMark} checked={showMark} disabled={busy} onChange={(e) => void save({ showFitByCurtain: e.target.checked })} className="mt-1 h-5 w-5 shrink-0 cursor-pointer accent-ink" aria-describedby={`${id}-mark-text`} data-testid="show-fit-by-curtain" />
+          {/* Drawn as a switch (the text calls it one): a track with a knob that slides when it is on. */}
+          <input
+            id={`${id}-mark`}
+            type="checkbox"
+            role="switch"
+            aria-checked={showMark}
+            checked={showMark}
+            disabled={busy}
+            onChange={(e) => void save({ showFitByCurtain: e.target.checked })}
+            className="relative mt-0.5 h-6 w-11 shrink-0 cursor-pointer appearance-none rounded-full bg-ink/25 transition-colors before:absolute before:left-0.5 before:top-0.5 before:h-5 before:w-5 before:rounded-full before:bg-white before:shadow before:transition-transform before:content-[''] checked:bg-ink checked:before:translate-x-5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral disabled:cursor-wait disabled:opacity-60 motion-reduce:transition-none motion-reduce:before:transition-none"
+            aria-describedby={`${id}-mark-text`}
+            data-testid="show-fit-by-curtain"
+          />
           <div className="space-y-1">
             <label htmlFor={`${id}-mark`} className="block cursor-pointer font-medium">
               {t.popup.wordmark}
@@ -138,10 +152,21 @@ export function MerchantSettings(): ReactNode {
               {t.shop.colour}
             </label>
             <div className="flex flex-wrap items-center gap-2">
-              <input type="color" aria-label={t.shop.colourPick} value={HEX.test(colour.trim()) ? sixDigits(colour.trim()) : '#000000'} onChange={(e) => setColour(e.target.value.toUpperCase())} className="h-11 w-12 shrink-0 cursor-pointer rounded-lg border border-ink/15 bg-white p-1" />
+              <input type="color" aria-label={t.shop.colourPick} value={HEX.test(colour.trim()) ? sixDigits(colour.trim()) : NO_COLOUR} onChange={(e) => setColour(e.target.value.toUpperCase())} className="h-11 w-12 shrink-0 cursor-pointer rounded-lg border border-ink/15 bg-white p-1" />
               <input id={`${id}-colour`} type="text" inputMode="text" autoComplete="off" spellCheck={false} value={colour} onChange={(e) => setColour(e.target.value)} aria-invalid={colourError} aria-describedby={`${id}-colour-text`} className="field-input w-36 font-sans text-base" data-testid="brand-colour" />
               {colour !== '' ? (
-                <button type="button" className="btn-ghost min-h-9 px-3 text-xs" onClick={() => setColour('')}>
+                <button
+                  type="button"
+                  className="btn-ghost min-h-9 px-3 text-xs"
+                  disabled={busy}
+                  data-testid="remove-colour"
+                  onClick={() => {
+                    // Removing is done at once: an emptied field that still needed "Save" removed nothing.
+                    setColour('');
+                    setColourError(false);
+                    if (s.brandColor) void save({ brandColor: null });
+                  }}
+                >
                   {t.shop.remove}
                 </button>
               ) : null}

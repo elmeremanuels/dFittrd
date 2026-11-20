@@ -26,13 +26,14 @@ Compiled on 19 Nov 2026 from the reports listed below; issues that a later repor
 | privacy-wall | `docs/reports/claude/privacy-wall.md` | Summary; Open issues |
 | skin-v2 | `docs/reports/claude/skin-v2.md` | What I measured and what I assumed; Open issues; Verdict |
 | STATUS | `docs/STATUS.md` | Founder decisions open; Known gaps (carried items expanded from `docs/STATUS-HISTORY.md` "Known gaps") |
+| cloth-hang | `docs/reports/claude/cloth-hang.md` (added 20 Nov 2026, after the compilation) | Verdict; Measured; Open issues |
 | men-m2 | no report file exists. Notes taken from `docs/research/men-3d-plan.md` ("Status: slices M2a and M2b built", "Not done in M1, and still open") and commit `c35cdc1` | Not done |
 
 Marks: **needs-founder** (a decision or an action only the founder can take), **needs-counsel** (legal review),
 **needs-real-device** (needs a real phone, real GPU, paid provider, real Shopify store, real VPS, real garment or real volunteers),
 **engineering** (can be done in the repository). Each row has exactly one mark. "Size" is a guess.
 
-Counts: needs-founder 17, needs-counsel 7, needs-real-device 14, engineering 62. Total 100 open rows.
+Counts: needs-founder 17, needs-counsel 7, needs-real-device 15, engineering 66. Total 105 open rows.
 
 ## needs-founder
 
@@ -86,6 +87,7 @@ Counts: needs-founder 17, needs-counsel 7, needs-real-device 14, engineering 62.
 | OI-36 | Assumed body values never measured on people: the male relief sizes, the 2D head half-width (7.7 cm), the deltoid standing 10 % proud, neck and limb depth ratios, the male foot length (27 cm). | open | male-shape-v2, men-m1b |
 | OI-37 | The pull-on allowance (2.5 cm, 0 when extrapolated) is the fit engine's assumed value; the bake and its check inherit it. The bake-check tolerance ±max(2 cm, 2 %) is also a judgement. Needs real garments on real hips. | open | pom-gate (4), bake-qa-gate (Assumed) |
 | OI-38 | Docker Hub rate-limits anonymous pulls (hit again on 19 Nov). Run `docker login` on the server, or pull through `mirror.gcr.io`. | open | STATUS (Known gaps), launch-readiness, platform-checks |
+| OI-105 | Hold length rests on two assumed numbers: the allowance (a fifth of the fabric's `stretchPct`, 0.2 to 1 %) and the weight of the nearer particle (0.85, picked on one dress and one sheet). Needs a strip of two real fabrics hung and measured, and one real dress against its photos. Its cost on a real phone is not measured either (node: about +14 % per frame; solver in the embed's worker +10 %). | open | cloth-hang (Assumed, 9) |
 
 ## engineering
 
@@ -106,7 +108,7 @@ Counts: needs-founder 17, needs-counsel 7, needs-real-device 14, engineering 62.
 | OI-51 | The merchant console has inline English everywhere except the new 3D review, which uses the catalogue (`apps/web/src/merchant/`). | medium | fixed in claude/loose-ends (every console string in `merchant/strings.ts`, guard test) | bake-qa-gate (4) |
 | OI-52 | The 3D bake review exists only in the web merchant console, not in the Shopify embedded admin. | large | open | bake-qa-gate (5) |
 | OI-53 | `refusals_declared` lets a size skip a body inside its draped range (the real bake does this for AU 10–16 at t = +0.5). The phone's blend across that body is not checked; the spike measured it at 1.4–1.9 cm RMS. `packages/garment-viewer/src/bakeGate.ts`. | medium | open | bake-qa-gate (6) |
-| OI-54 | Drape start shape: `drape_blender.py` pushes particles that start inside the body out by 0.8 cm and Blender builds springs from that shape, so the hip line is born stretched (up to +7.1 %, one segment +15.7 %) where hip ease is under about 15 cm. The pull-on rule hides it on the current 3-body grid only. Fix the start shape, then re-make every drape. Needs Blender and the git-ignored `out/`. | large | open | pom-gate (1, Diagnosis) |
+| OI-54 | Drape start shape: `drape_blender.py` pushes particles that start inside the body out by 0.8 cm and Blender builds springs from that shape, so the hip line is born stretched (up to +7.1 %, one segment +15.7 %) where hip ease is under about 15 cm. The pull-on rule hides it on the current 3-body grid only. Fix the start shape, then re-make every drape. Needs Blender and the git-ignored `out/`. (cloth-hang, 20 Nov: this is the server drape's start shape, not the device solver; the device blends this bake and does not drape it, so the hold-length change does not touch it.) | large | open | pom-gate (1, Diagnosis), cloth-hang (Verdict) |
 | OI-55 | The 3D view is stricter than the advice at hips 114–115 for AU 16: the avatar is 3 cm wider below its hip ring than its hip, so the advice recommends AU 16 at hip 114 and the 3D view does not draw it. | medium | open | pom-gate (2) |
 | OI-56 | A bake refusal for a reason other than pull-on only has to state a reason; the gate cannot recompute it. | medium | open | pom-gate (3) |
 | OI-57 | No per-shop kill switch for the face photo (gate G7). Only the build flag `VITE_AVATAR_FACE_PHOTO` exists; the session endpoint sends no `photo` / `face` flag. Needs `packages/schema` and `apps/api`. | medium | open | face-2d (3) |
@@ -153,6 +155,10 @@ Counts: needs-founder 17, needs-counsel 7, needs-real-device 14, engineering 62.
 | OI-98 | `qa.json` `meshHealth.triangleBudget` says [8000, 15000] and the tee has 7,618 triangles; nothing checks the lower bound (`spikes/garment-engine/src/evalMesh.ts`, `pomBundle.ts`). Also, the tape check builds each size on the male table body of the same label, so a shop size that is not a table label is checked on the base body only. | small | open | men-m3-tee, men-tee-v2 |
 | OI-99 | Merchant setup gaps: the console's step 4 does not see the WooCommerce plugin's "Show button" setting; bulk chart assign exists only on Shopify; step 5 ticks on any try session with `fitShownAt`, not only billed ones; the QR step does not say that a password-protected store shows the password page first; the old completeness `score` still exists in the api beside `adviceScore`. | medium | open | merchant-onboarding (3, 4, 5, 7, 8) |
 | OI-100 | Carried from earlier passes, not re-verified on 19 Nov: capture's `headTopRow` includes hair and biases girths low by 1–3 % (#16); Woo Connect needs WordPress at the host root (SEC-2); no per-shop or global device-mint budget (AVAIL-1); a lost rotated token orphans the old device's rows (AUTH-1); one api serves one Shopify app, so pilot and App Store apps side by side need multi-app support; Polaris web components for Built for Shopify; about 3 s of api 502s per deploy (single replica). | large | open | STATUS (Known gaps, carried; details in `docs/STATUS-HISTORY.md`) |
+| OI-101 | The device drape left a hanging garment 2 to 3 % long (the tethers hold a straight line, and have slack wherever the cloth bends on its way down). | medium | partly fixed in claude/cloth-hang: hang lines hold the tape-built dress at +1.0 to +1.2 % (was +2.2 to +2.9 %), opt-in per bundle (`anchors.json` `support.holdLength`); every other bundle drapes as before. About 1 % is left, most of it between the seam and the hip; a stronger setting does not come to rest. | dress-from-tape (1), cloth-hang |
+| OI-102 | With length held, a free-hanging skirt shows less difference between sizes: on the dress, AU 8 against 16 at the hip 52 → 21 % of the graded spread, 10 cm lower 48 → 22 %; forced on, the skirt stand-in's hem 53 → 14 %. The hip balloon of before stood on the extra length. R3 needs the cut's own flare or a calibrated drape, not stretch. | medium | open | cloth-hang (Measured, 1) |
+| OI-103 | The tape-built dress still needs its three holds with length held (seam 98.6 cm for a tape of 86 without the loop; top edge 3.1 cm lower without the held band). The gathering row now carries the skirt: stitch strain up to 9 %, the row 7 % short (was 5 to 6 %), and thin slits open between the folds under the seam (body pixels through the skirt 0 to 33 → 0 to 71 per four views). The seam loop and the hang lines pull against each other by 0.2 to 0.3 cm of seam girth. | medium | open | dress-from-tape (1), cloth-hang (Did it remove a hint?, 3, 4, 5) |
+| OI-104 | Hold length was not measured on the real photo-reconstructed bundles (skirt, azure dress, palazzo: `out/eval/` is git-ignored; stand-ins were used) and is off for them. Forced on, the men's tee gets a higher peak strain (25.8 to 30.2 → 38.0 to 64.6 %) and stops settling early, so a sewn top must not get it as built. The spike viewer's `cloth.ts` has no hang lines. | small | open | cloth-hang (7, 8, 11) |
 
 ## Resolved since reported
 

@@ -79,7 +79,8 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     r.rerender(<Garment3D {...r.props} size="XL" />);
     const xl = screen.getByTestId('garment3d-bake-note');
     expect(xl).toHaveAttribute('data-advice-blocked', 'true');
-    expect(xl).toHaveTextContent('Size XL is not drawn: the size advice says its band does not stretch over your hips.');
+    expect(xl).toHaveAttribute('data-reason', 'pull-on');
+    expect(xl).toHaveTextContent('Size XL is not drawn: the size advice says its waistband does not stretch over your hips, so the body is shown without it.');
     expect(xl).not.toHaveTextContent('shown on that body');
   });
 
@@ -93,7 +94,7 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     fireEvent.click(screen.getByTestId('garment3d-open'));
     const note = await screen.findByTestId('garment3d-not-drawn');
     expect(note).toHaveAttribute('data-anchor', 'chest');
-    expect(note).toHaveTextContent('Size S is not drawn: it does not close at the chest on a body like yours (the body is 25.0 cm larger than the garment, more than its fabric gives). The size advice says how it fits.');
+    expect(note).toHaveTextContent('Size S is not drawn: the size advice says it does not close at the bust, where your body is 25.0 cm larger than the garment, more than its fabric gives, so the body is shown without it.');
     r.rerender(<Garment3D {...r.props} size="M" />);
     expect(screen.queryByTestId('garment3d-not-drawn')).toBeNull();
     expect(screen.queryByTestId('garment3d-bake-note')).toBeNull();

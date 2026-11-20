@@ -39,6 +39,7 @@ import { ringOverlayFor } from '@/render/rings';
 import { AiRealismPanel, type AiRealismProps } from './AiRealism';
 import type { ExportedPasses } from './realism';
 import { embedStrings, type EmbedCatalogue } from './strings';
+import { notDrawnFromViewer, notDrawnNote, notDrawnSentence, type NotDrawnNote } from './notDrawn';
 import { lengthText, type Units } from './units';
 import { avatarSkinFlag, maleShapeFlag, womenHeightFlag } from './look';
 
@@ -76,9 +77,9 @@ export function viewerHeadFlag(env: { VITE_VIEWER_HEAD?: string } = import.meta.
 }
 /** What a baked view rests on (`GarmentView.source` of the viewer); optional, so this file builds against a viewer without it. */
 export type ViewerSource =
-  /** `notDrawn`: sizes of a sewn top too small for this body (the fit engine's `open`), not draped and not drawn. */
-  | { kind: 'device'; notDrawn?: Record<string, { anchor: string; bodyLargerCm: number }> }
-  | { kind: 'bake'; plainColour: boolean; sizes: Record<string, { provenance: 'measured' | 'interpolated' | 'extrapolated'; place: 'within' | 'held' | 'between' | 'refused'; refusedHipCm: number | null; refusedRule?: 'pull-on' | null; adviceBlocked?: boolean }> };
+  /** `notDrawn`: sizes the size advice says cannot be worn on this body (any garment), not draped and not drawn. */
+  | { kind: 'device'; notDrawn?: Record<string, { anchor: string; bodyLargerCm: number; reason?: 'tight' | 'pull-on' }> }
+  | { kind: 'bake'; plainColour: boolean; sizes: Record<string, { provenance: 'measured' | 'interpolated' | 'extrapolated'; place: 'within' | 'held' | 'between' | 'refused'; refusedHipCm: number | null; refusedRule?: 'pull-on' | null; adviceBlocked?: boolean; notDrawn?: { anchor: string; bodyLargerCm: number; reason?: 'tight' | 'pull-on' } | null }> };
 /** The viewer contract of the avatar slices; optional, so this file builds against a viewer without it. */
 type View = Omit<BaseView, 'source' | 'exportPasses'> & { setLook?: (look: ViewerLook) => void; source?: ViewerSource; exportPasses?: (o?: { neighbour?: string | null }) => ExportedPasses | null };
 type MountOptionsWithLook = Omit<BaseMountOptions, 'look' | 'lighting'> & { look?: ViewerLook; lighting?: ViewerLighting };
@@ -263,6 +264,10 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, wais
   }, [skinHex]);
 
   if (!asset || paused || !supported) return null;
+  // Why the size on screen is not drawn (the one rule, `notDrawn.ts`): the embed's own fit result, which the viewer was
+  // given too. The mounted view's own statement is the fallback, so the sentence is there whenever the garment is hidden.
+  const viewerBlock = source?.kind === 'device' ? source.notDrawn?.[size] : source?.kind === 'bake' ? (source.sizes[size]?.notDrawn ?? (source.sizes[size]?.adviceBlocked ? { anchor: 'hip', reason: 'pull-on' as const } : null)) : null;
+  const block: NotDrawnNote | null = source ? (notDrawnNote(fit, size) ?? notDrawnFromViewer(viewerBlock)) : null;
   const sizes = asset.sizes;
   const t = embedStrings().view3d;
 
@@ -322,10 +327,10 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, wais
         {t.notPhoto} {recommended ? t.picked(recommended) : waistOnly !== null ? t.waistOnly(waistOnly) : t.noneFits}
         {(recommended && recommended !== size) || (!recommended && waistOnly !== null) ? ` ${t.looking(size)}` : ''}
       </p>
-      {source?.kind === 'bake' ? <BakeNote t={t} size={size} source={source} units={units} /> : null}
-      {source?.kind === 'device' && source.notDrawn?.[size] ? (
-        <p className="mt-1 text-[11px] leading-snug text-ink-mute" data-testid="garment3d-not-drawn" data-anchor={source.notDrawn[size]!.anchor}>
-          {t.notDrawn(size, t.ringName(source.notDrawn[size]!.anchor).toLowerCase(), lengthText(source.notDrawn[size]!.bodyLargerCm, units))}
+      {source?.kind === 'bake' ? <BakeNote t={t} size={size} source={source} units={units} blocked={block} audience={garment.audience} /> : null}
+      {source?.kind === 'device' && block ? (
+        <p className="mt-1 text-[11px] leading-snug text-ink-mute" data-testid="garment3d-not-drawn" data-anchor={block.anchor} data-reason={block.reason}>
+          {notDrawnSentence(block, size, garment.audience, units)}
         </p>
       ) : null}
       {ringList.length > 0 ? (
@@ -348,17 +353,17 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, wais
 }
 
 /** Under the label of a server drape bake: plain colour, where the size comes from, and where the shopper lies against the bodies it was draped on. */
-function BakeNote({ t, size, source, units }: { t: EmbedCatalogue['view3d']; size: string; source: Extract<ViewerSource, { kind: 'bake' }>; units: Units }): ReactNode {
+function BakeNote({ t, size, source, units, blocked: block, audience }: { t: EmbedCatalogue['view3d']; size: string; source: Extract<ViewerSource, { kind: 'bake' }>; units: Units; blocked: NotDrawnNote | null; audience: GarmentPayload['audience'] | undefined }): ReactNode {
   const s = source.sizes[size];
   const place = s?.place ?? 'within';
   const rule = s?.refusedRule ?? null;
   // A size the size advice blocks is not drawn wherever it lies against the bake's bodies (the viewer hides it).
-  const blocked = s?.adviceBlocked === true;
+  const blocked = block !== null;
   return (
-    <p className="mt-1 text-[11px] leading-snug text-ink-mute" data-testid="garment3d-bake-note" data-place={place} data-advice-blocked={blocked ? 'true' : undefined}>
+    <p className="mt-1 text-[11px] leading-snug text-ink-mute" data-testid="garment3d-bake-note" data-place={place} data-advice-blocked={blocked ? 'true' : undefined} data-anchor={block?.anchor} data-reason={block?.reason}>
       {source.plainColour ? `${t.plainColour} ` : ''}
       {s ? t.provenance(size, s.provenance) : ''}
-      {blocked ? ` ${t.adviceBlocked(size)}` : ''}
+      {block ? ` ${notDrawnSentence(block, size, audience, units)}` : ''}
       {!blocked && place === 'held' ? ` ${t.held(size)}` : ''}
       {!blocked && place === 'between' && s?.refusedHipCm != null ? ` ${t.between(size, lengthText(s.refusedHipCm, units), rule)}` : ''}
       {!blocked && place === 'refused' && s?.refusedHipCm != null ? ` ${t.refused(size, lengthText(s.refusedHipCm, units), rule)}` : ''}

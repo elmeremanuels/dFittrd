@@ -167,3 +167,14 @@ Engineering decision (19 Nov 2026, branch `claude/analytics-kfloor`), from launc
 - **The cohort** is a sum of one frozen, floored cell per shop and closed month, so it changes only by whole months that each cleared the floor. The current month never shows.
 
 Cost: a new shop sees its first analytics on the 2nd of the following month, and small products are hidden more often. Counts inside a shown group (loves, passes, fits, the kept rate) stay as measures of that group, as before. Billing counters (`/v1/merchant/usage`, `usage/anomalies`) keep their daily range: they count sessions, with no shopper attribute. `apps/api/src/kfloor.property.test.ts` attacks all of this with every linear combination of allowed answers.
+
+## D24 — We build the platform; merchants and shoppers fill it
+
+Founder decision (20 Nov 2026), given while answering the open-issues advice (point 10, the WooCommerce product with a fabric but no drape data).
+
+1. **Curtain is a platform.** Where a value or a behaviour is about the merchant's own shop or garments (what happens with incomplete data, fabrics, charts, tape values, wording choices), it is a merchant setting in the dashboard with a sensible default, not a rule we fix in code. Where it is about the shopper, the shopper fills it.
+2. **We do not have to prefill everything.** Prefill only what makes the first use work: defaults, and data from public sources (for example a mill's or manufacturer's published fabric data), always marked with where it came from.
+3. **A fabric library grows in the background.** Fabrics that merchants enter are kept so that merchants can later pick a fabric from a list. What is shared across shops, and in what form, needs a rule before anything is shared (a merchant's supplier data may be confidential); until then a merchant sees their own fabrics and the public ones only.
+4. **Point 10 itself:** a product with an incomplete fabric is let through without the fabric, with a notice, and whether to let through or refuse is a merchant setting.
+
+Not open to a merchant setting: the hard rules of AGENTS.md (shopper data on the device, every render labelled an estimate, the k floor, licences), D19 and D20.

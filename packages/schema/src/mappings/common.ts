@@ -291,8 +291,8 @@ export function coerceFabric(value: unknown, sink: WarningSink, source: string):
  * Prefill from product text the shop already publishes (a "Material" / "Materiaal" /
  * "Samenstelling" attribute or metafield) for a product without a Curtain fabric field: `primary`
  * and, when stated, `blend`, for the merchant to confirm. Not used by `fromWooMeta` /
- * `fromShopifyProduct`: without stretch and drape it is not a payload fabric (the WooCommerce meta
- * box prefills its form with the PHP twin, `Curtain\Fabric_Text`).
+ * `fromShopifyProduct`: it is a proposal, stored only once the merchant confirms it (the
+ * WooCommerce meta box prefills its form with the PHP twin, `Curtain\Fabric_Text`).
  */
 export function fabricFromProductText(texts: ReadonlyArray<string | undefined>): Partial<Fabric> | undefined {
   const text = texts.filter((t): t is string => typeof t === 'string' && t.trim() !== '').join(', ');

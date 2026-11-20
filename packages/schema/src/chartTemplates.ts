@@ -14,7 +14,7 @@
  * Unit conversion is here too: the builder accepts inches and stores centimetres.
  */
 import { z } from 'zod';
-import { FabricSchema, GarmentAudienceSchema, LengthCmSchema, SIZE_CHART_MAX_ROWS, SIZE_LABEL_MAX, SLEEVE_CONVENTIONS, SizeChartSchema, SizeRowSchema, duplicateSizeLabels, type GarmentAudience, type GarmentPayload, type SizeRow, type SleeveConvention } from './garment';
+import { FabricDraftSchema, GarmentAudienceSchema, LengthCmSchema, SIZE_CHART_MAX_ROWS, SIZE_LABEL_MAX, SLEEVE_CONVENTIONS, SizeChartSchema, SizeRowSchema, duplicateSizeLabels, type GarmentAudience, type GarmentPayload, type SizeRow, type SleeveConvention } from './garment';
 import { checkChartColumns, withWlAxes } from './chartColumns';
 import { AU_WOMENS_BODY_CHART, AU_WOMENS_CHART_SOURCES } from './fixtures/charts';
 import { MENS_BODY_CHART_TEMPLATES } from './chartTemplatesMen';
@@ -837,7 +837,13 @@ export const ProductChartImportResponseSchema = z.object({
   sizeLabel: z.string().nullable(),
   proposal: z.object({ sizeChartType: z.enum(['body', 'garment']), sizeChart: z.array(SizeRowSchema) }).nullable(),
   lengthCm: LengthCmSchema.optional(),
-  fabric: FabricSchema.optional(),
+  /** What the shop's own text states: fibre names and blend. Never a number from our library. */
+  fabric: FabricDraftSchema.optional(),
+  /**
+   * Our estimate from the fabric library, kept apart from `fabric` (inventory D18, F20): it is
+   * shown as a suggestion and saved only when the merchant confirms it.
+   */
+  fabricEstimate: z.object({ stretchPct: z.number().min(0).max(100) }).optional(),
   /** The sentence the fabric was read from. */
   fabricStatement: z.string().optional(),
   evidence: z.array(z.string()),
@@ -850,7 +856,8 @@ export const ProductChartWriteRequestSchema = z.object({
   sizeChartType: z.enum(['body', 'garment']),
   sizeChart: z.array(SizeRowSchema).min(1).max(SIZE_CHART_MAX_ROWS),
   unit: ChartUnitSchema.optional(),
-  fabric: FabricSchema.optional(),
+  /** Every part optional (D25 point 1): fibre names without a stretch value are a valid write. */
+  fabric: FabricDraftSchema.optional(),
   lengthCm: LengthCmSchema.optional(),
 });
 export const ProductChartWriteResponseSchema = z.object({ productId: z.string(), written: z.array(z.string()), syncQueued: z.boolean(), warnings: z.array(z.string()) });

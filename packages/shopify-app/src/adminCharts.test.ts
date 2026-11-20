@@ -6,7 +6,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { chartTemplatesDto, merchantSetupSteps, type SetupFacts } from '@curtain/schema';
+import { MERCHANT_PLAN_TEXT, chartTemplatesDto, merchantSetupSteps, type SetupFacts } from '@curtain/schema';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderAdminPage } from './admin';
 import { API_KEY } from './test/fixtures';
@@ -397,6 +397,15 @@ describe('admin page: the plan button (checklist B2)', () => {
     await settled('Curtain · US$8.99 a month · paused');
     expect($('banner').textContent).toContain('Email Curtain support');
     expect($('banner').textContent).not.toContain('Approve');
+    // D21: the banner is the catalogue's text, not a sentence written in the page.
+    expect($('banner').textContent).toContain(MERCHANT_PLAN_TEXT.pausedBanner.arranged);
+  });
+
+  it('Shopify billing, paused shop: the banner is the catalogue text and says the button is hidden', async () => {
+    mountPage({ 'GET /v1/merchant/usage': usage({ name: 'curtain', paused: true }) });
+    await vi.waitFor(() => expect($('banner').textContent).toContain(MERCHANT_PLAN_TEXT.pausedBanner.shopifyBilling));
+    expect(MERCHANT_PLAN_TEXT.pausedBanner.shopifyBilling).toContain('the button is hidden');
+    expect(template).not.toContain('so the button is hidden on your product pages');
   });
 });
 

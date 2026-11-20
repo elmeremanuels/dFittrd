@@ -439,14 +439,14 @@
           var usd = 'US$' + (plan.priceUsdPerMonth || 8.99).toFixed(2) + ' a month';
           text('usage-plan', (plan.name === 'free' ? 'Not active yet' : 'Curtain · ' + usd) + (plan.paused ? ' · paused' : ''));
           text('txt-plan', cfg.plan.oneLine + ' ' + cfg.plan.arranged + (onPlan ? '' : ' ' + cfg.plan.arrangedInactive));
-          if (plan.paused) banner('warning', 'Your Curtain plan is paused, so the button is hidden on your product pages. Email Curtain support and we switch it back on.');
+          if (plan.paused) banner('warning', cfg.plan.pausedBanner.arranged);
           return;
         }
         $('btn-plan').disabled = onPlan;
         $('btn-plan').textContent = onPlan ? 'Plan active' : legacy ? 'Switch to Curtain (US$' + (plan.priceUsdPerMonth || 8.99).toFixed(2) + ')' : 'Start the plan';
         text('txt-plan', cfg.plan.oneLine + ' ' + cfg.plan.shopifyBilling + (onPlan ? '' : ' ' + cfg.plan.pausedNote));
         if (legacy && !plan.paused) banner('info', 'Your shop is still billed on the retired ' + plan.legacyPlan + ' plan at its old price. Switch to Curtain (US$' + (plan.priceUsdPerMonth || 8.99).toFixed(2) + ' per month, flat): Shopify replaces the old subscription when you approve.');
-        if (plan.paused) banner('warning', 'Your Curtain plan is not active, so the button is hidden on your product pages. Press “Start the plan” and approve it in Shopify to switch it on.');
+        if (plan.paused) banner('warning', cfg.plan.pausedBanner.shopifyBilling);
       }
 
       var importPoll = { timer: null, until: 0 };

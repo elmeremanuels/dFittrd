@@ -175,8 +175,15 @@ export const shopifyChartRoutes: FastifyPluginAsyncZod = async (app) => {
       const check = checkChart(chart);
       if (!check.ok) throw unprocessable('invalid_chart', check.errors.join(' '), { errors: check.errors, warnings: check.warnings });
       const payload: Partial<GarmentPayload> = { ...chart };
-      // A draft fabric: every part optional (D25 point 1). The metafield holds exactly what the merchant confirmed.
-      if (req.body.fabric) payload.fabric = req.body.fabric as GarmentPayload['fabric'];
+      // A draft fabric: every part optional (D25 point 1). The fabric is one JSON metafield, so a write
+      // replaces all of it: the parts this request does not send (a stretch or drape the merchant
+      // entered before) are read from the product first and kept. A part that is sent wins.
+      if (req.body.fabric) {
+        const node = await fetchProductDetail(client, req.params.id).catch(upstream);
+        if (!node) throw notFound('product');
+        const stored = fromShopifyProduct(node).fabric;
+        payload.fabric = { ...(stored ?? {}), ...req.body.fabric } as GarmentPayload['fabric'];
+      }
       if (req.body.lengthCm) payload.lengthCm = req.body.lengthCm;
       const gid = productGid(req.params.id);
       const r = await setProductMetafields(client, gid, payload).catch(upstream);

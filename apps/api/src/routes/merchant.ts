@@ -50,7 +50,7 @@ import { decodeCursor, encodeCursor } from '../services/ledger.js';
 import { archiveProduct, listMerchantProducts, reapplyIncompleteProductData, upsertProduct } from '../services/products.js';
 import { merchantMenGate } from '../services/readiness.js';
 import { merchantSetup } from '../services/setup.js';
-import { connectTokenHash, createShop, findShopByConnectToken, findShopByDomain, isPaused, issueMerchantKeys, planInfo, updateSettings, type ShopRow } from '../services/shops.js';
+import { connectTokenHash, createShop, findShopByConnectToken, findShopByDomain, isPaused, issueMerchantKeys, patchSettings, planInfo, updateSettings, type ShopRow } from '../services/shops.js';
 import { billingAnomalyReport, fitSessionsBetween, usageDays } from '../services/usage.js';
 
 const httpUrl = z.url({ protocol: /^https?$/ });
@@ -318,23 +318,22 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
   app.put('/v1/merchant/settings', { schema: { body: MerchantSettingsUpdateRequestSchema, response: { 200: MerchantSettingsResponseSchema } }, preHandler: requireMerchant }, async (req) => {
     const b = req.body;
     let shop: ShopRow = req.shop!;
-    // Only the keys named here are written; billing and operator keys in the stored settings are untouched.
-    const settings = { ...shop.settings };
-    if (b.showFitByCurtain !== undefined) settings.showFitByCurtain = b.showFitByCurtain;
-    if (b.brandColor === null) delete settings.brandColor;
-    else if (b.brandColor !== undefined) settings.brandColor = b.brandColor;
-    if (b.logoUrl === null) delete settings.logoUrl;
-    else if (b.logoUrl !== undefined) settings.logoUrl = b.logoUrl;
+    // Only the keys named here are written, and each on the stored row as it is now (patchSettings):
+    // billing and operator keys are untouched, also when another request changed them since auth.
+    const set: Partial<ShopRow['settings']> = {};
+    const remove: Array<keyof ShopRow['settings']> = [];
+    if (b.showFitByCurtain !== undefined) set.showFitByCurtain = b.showFitByCurtain;
+    if (b.brandColor === null) remove.push('brandColor');
+    else if (b.brandColor !== undefined) set.brandColor = b.brandColor;
+    if (b.logoUrl === null) remove.push('logoUrl');
+    else if (b.logoUrl !== undefined) set.logoUrl = b.logoUrl;
     const policy = b.incompleteProductData;
     const policyChanged = policy !== undefined && policy !== shop.incompleteProductData;
     const settingsChanged = b.showFitByCurtain !== undefined || b.brandColor !== undefined || b.logoUrl !== undefined;
     if (!policyChanged && !settingsChanged) return settingsOf(shop);
-    const [row] = await db
-      .update(shops)
-      .set({ ...(settingsChanged ? { settings } : {}), ...(policyChanged ? { incompleteProductData: policy } : {}), updatedAt: now() })
-      .where(eq(shops.id, shop.id))
-      .returning();
-    shop = row!;
+    const row = await patchSettings(db, shop.id, { set, remove }, { ...(policyChanged ? { incompleteProductData: policy } : {}), updatedAt: now() });
+    if (!row) throw notFound('shop');
+    shop = row;
     // The products the shop already has follow the new choice (held back, or released).
     if (policyChanged) await reapplyIncompleteProductData(db, shop.id, policy);
     return settingsOf(shop);

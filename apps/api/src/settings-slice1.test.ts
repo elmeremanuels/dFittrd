@@ -5,9 +5,10 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { MOCK_GARMENTS_BY_ID, type MerchantProductsResponse } from '@curtain/schema';
+import { GarmentPayloadSchema, MOCK_GARMENTS_BY_ID, type MerchantProductsResponse } from '@curtain/schema';
 import { shops } from './db/schema.js';
-import { findShopById } from './services/shops.js';
+import { asGarment, findProduct } from './services/products.js';
+import { findShopById, patchSettings } from './services/shops.js';
 import { createDevice, makeApp, seedShop, type TestApp } from './test/helpers.js';
 
 const WRAP = MOCK_GARMENTS_BY_ID['aalter-studio-1']!;
@@ -91,6 +92,18 @@ describe('slice 1: console settings, product-list notices, popup flags, paused s
       await settings({ showFitByCurtain: true });
     });
 
+    it('writes on the stored row as it is now, not on a copy read earlier', async () => {
+      // What the route holds from auth time is `before`; another request then changes a billing key.
+      const before = (await findShopById(t.handle.db, s.shop.id))!;
+      await t.handle.db.update(shops).set({ settings: { ...before.settings, includedSessions: 4321, logoUrl: 'https://merchant.example/old.png' } }).where(eq(shops.id, s.shop.id));
+      const row = await patchSettings(t.handle.db, s.shop.id, { set: { brandColor: '#112233', showFitByCurtain: undefined }, remove: ['logoUrl'] });
+      expect(row!.settings).toMatchObject({ includedSessions: 4321, brandColor: '#112233' });
+      expect('logoUrl' in row!.settings).toBe(false);
+      expect('showFitByCurtain' in row!.settings).toBe('showFitByCurtain' in before.settings);
+      expect(await patchSettings(t.handle.db, '00000000-0000-4000-8000-000000000000', { set: { brandColor: '#112233' } })).toBeUndefined();
+      await t.handle.db.update(shops).set({ settings: before.settings }).where(eq(shops.id, s.shop.id));
+    });
+
     it('refuses a bad colour, a logo that is not https, and the shop name (it comes from the platform)', async () => {
       expect((await settings({ brandColor: 'green' })).statusCode).toBe(400);
       expect((await settings({ logoUrl: 'http://merchant.example/logo.png' })).statusCode).toBe(400);
@@ -111,6 +124,8 @@ describe('slice 1: console settings, product-list notices, popup flags, paused s
     it('never for an accessory, whose size does not depend on stretch', async () => {
       const res = await put('p-acc', { ...base('p-acc'), category: 'accessory', sizeChartType: 'body', sizeChart: [{ size: 'One size' }] });
       expect(res.json(), res.body).toMatchObject({ status: 'active' });
+      // The save answer the WooCommerce product screen stores and words: no "no stretch" notice either.
+      expect(res.json().notices.defaulted).not.toContain('fabric.stretchPct');
       const body = (await resolve('p-acc')).json<Record<string, unknown>>();
       expect(body.garment).toBeDefined();
       expect('stretchAssumed' in body).toBe(false);
@@ -123,6 +138,34 @@ describe('slice 1: console settings, product-list notices, popup flags, paused s
       expect((await resolve('p-full')).json<{ shop: Record<string, unknown> }>().shop.hideWordmark).toBe(true);
       await settings({ showFitByCurtain: true });
       expect('hideWordmark' in (await resolve('p-full')).json<{ shop: Record<string, unknown> }>().shop).toBe(false);
+    });
+  });
+
+  describe('a held-back product is not served to shoppers on any route', () => {
+    // A complete payload (every field the app needs) with one fabric value that was left out.
+    const complete = (id: string) => ({ ...WRAP, id, fabric: { ...WRAP.fabric, weightGsm: 0 } });
+
+    it('the app product page refuses it, and asGarment (hero render, AI-enhanced estimate) gives none; released, it is served again', async () => {
+      const saved = await put('h-complete', complete('h-complete'));
+      expect(saved.json(), saved.body).toMatchObject({ status: 'active', notices: { leftOut: [{ field: 'fabric.weightGsm' }] } });
+      const device = await createDevice(t);
+      const page = () => t.app.inject({ method: 'GET', url: `/v1/products/h-complete?shopId=${s.shop.id}`, headers: device.auth });
+      expect((await page()).statusCode).toBe(200);
+
+      await settings({ incompleteProductData: 'hold-back' });
+      const row = (await findProduct(t.handle.db, s.shop.id, 'h-complete'))!;
+      expect(row.heldBack).toEqual({ reason: 'incomplete_product_data', fields: ['fabric.weightGsm'] });
+      // The stored payload itself is complete: only the held-back state keeps it from shoppers.
+      expect(GarmentPayloadSchema.safeParse(row.payload).success).toBe(true);
+      expect(asGarment(row)).toBeNull();
+      const held = await page();
+      expect(held.statusCode).toBe(422);
+      expect(held.json().error.code).toBe('product_incomplete');
+      // The hero render and the AI-enhanced estimate ask the same question (asGarment), tested above.
+
+      await settings({ incompleteProductData: 'let-through' });
+      expect((await page()).statusCode).toBe(200);
+      expect(asGarment((await findProduct(t.handle.db, s.shop.id, 'h-complete'))!)).not.toBeNull();
     });
   });
 

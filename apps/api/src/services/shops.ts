@@ -1,4 +1,4 @@
-import { and, eq, gt, isNotNull, isNull, or } from 'drizzle-orm';
+import { and, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { shops, type Plan, type ShopSettings } from '../db/schema.js';
 import type { Env } from '../env.js';
@@ -167,6 +167,28 @@ export async function updateSettings(db: Db, shopId: string, patch: Partial<Shop
     .where(eq(shops.id, shopId))
     .returning();
   return row!;
+}
+
+/**
+ * Sets and removes named settings keys in one statement, on the row as it is in the database at
+ * that moment. A caller that holds an older copy of the shop (read at auth time) therefore cannot
+ * write that copy back over a key another request changed meanwhile (billing, setup, operator keys).
+ */
+export async function patchSettings(
+  db: Db,
+  shopId: string,
+  patch: { set?: Partial<ShopSettings>; remove?: readonly (keyof ShopSettings)[] },
+  extra: Partial<typeof shops.$inferInsert> = {},
+): Promise<ShopRow | undefined> {
+  const set = JSON.stringify(compact(patch.set ?? {}));
+  let next = sql`${shops.settings}`;
+  for (const key of patch.remove ?? []) next = sql`(${next} - ${key}::text)`;
+  const [row] = await db
+    .update(shops)
+    .set({ settings: sql`${next} || ${set}::jsonb`, updatedAt: new Date(), ...extra })
+    .where(eq(shops.id, shopId))
+    .returning();
+  return row;
 }
 
 /** Removes settings keys (no-op when none is set). */

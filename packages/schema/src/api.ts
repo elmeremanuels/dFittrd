@@ -831,6 +831,33 @@ export const MerchantKeyRotateResponseSchema = z.object({
 });
 export type MerchantKeyRotateResponse = z.infer<typeof MerchantKeyRotateResponseSchema>;
 
+/**
+ * The one-time sign-in link into the web console (inventory S2).
+ *
+ * `POST /v1/merchant/console-link` — asked by the shop's own plugin or admin (PK-HMAC, the secret
+ * key, or a Shopify session token). The link works once and for `CONSOLE_LINK_TTL_MINUTES`. The
+ * token sits in the URL fragment, which a browser never sends to a server.
+ */
+export const CONSOLE_LINK_TTL_MINUTES = 10;
+/** A console session ends by itself after this long; "Sign out" ends it at once. */
+export const CONSOLE_SESSION_TTL_HOURS = 12;
+export const ConsoleLinkResponseSchema = z.object({
+  url: z.url({ protocol: /^https?$/ }),
+  expiresAt: isoDate,
+});
+export type ConsoleLinkResponse = z.infer<typeof ConsoleLinkResponseSchema>;
+
+/** `POST /v1/merchant/console-session` — exchanges the link's token, once, for a console session. No other credentials. */
+export const ConsoleSessionRequestSchema = z.strictObject({ token: z.string().min(16).max(128) });
+export type ConsoleSessionRequest = z.infer<typeof ConsoleSessionRequestSchema>;
+export const ConsoleSessionResponseSchema = z.object({
+  /** The bearer for the merchant routes until `expiresAt`. Shown to the console once; the api keeps a hash. */
+  sessionToken: z.string().regex(/^cs_[A-Za-z0-9_-]{32,64}$/),
+  expiresAt: isoDate,
+  shopName: z.string(),
+});
+export type ConsoleSessionResponse = z.infer<typeof ConsoleSessionResponseSchema>;
+
 // ---------------------------------------------------------------------------
 // Route table (documentation + typed client keys)
 // ---------------------------------------------------------------------------
@@ -861,6 +888,9 @@ export const API_ROUTES = {
   merchantLedger: 'GET /v1/merchant/ledger',
   merchantAnalyticsSwipes: 'GET /v1/merchant/analytics/swipes',
   merchantKeysRotate: 'POST /v1/merchant/keys/rotate',
+  merchantConsoleLink: 'POST /v1/merchant/console-link',
+  merchantConsoleSession: 'POST /v1/merchant/console-session',
+  merchantConsoleSignOut: 'DELETE /v1/merchant/console-session',
   meSignatureDelete: 'DELETE /v1/me/signature',
   merchantUsageAnomalies: 'GET /v1/merchant/usage/anomalies',
   merchantAnalyticsFitSizes: 'GET /v1/merchant/analytics/fit-sizes',

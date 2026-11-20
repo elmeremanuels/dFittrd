@@ -44,6 +44,10 @@ interface NotDrawnLineProps {
  * (OI-105). It is `sticky` now: while its place under the picture is out of sight it rides just above the bar
  * (`--bar-clear`, the bar's height, set by the result screen), over the foot of the picture, on its own background.
  * Without a bar the variable is unset and it rides at the bottom of the screen.
+ *
+ * A riding line lies over what is written before it in the same box and never over what comes after, so write it
+ * straight under its picture: anything put between the picture and the sentence (the 3D view's size buttons were)
+ * is covered while it rides (OI-137).
  */
 export function NotDrawnLine({ block, size, audience, units, testId, role, className = '', lineRef }: NotDrawnLineProps): ReactNode {
   return (

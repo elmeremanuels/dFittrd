@@ -12,7 +12,9 @@ import { PILOT_PULL_ON_SKIRT, type GarmentPayload } from '@curtain/schema';
  *   - OI-105: a size that is not drawn shows the body alone and one sentence that says why. Wherever the shopper has
  *     scrolled, while a real part of that picture is on screen the whole sentence is on screen too, above the sticky
  *     "Choose size" bar and not under anything, on the 2D figure, under the 3D view of a device drape and in the note
- *     of a server bake; the figure's estimate label is still there and not under the sentence.
+ *     of a server bake; the figure's estimate label is still there and not under the sentence. The sentence never
+ *     lies over a button (OI-137): at every scroll position each size button that is on screen above the bar can
+ *     be pressed.
  *   - OI-104: the size-ring chips under the 3D view of a men's garment read "Chest", never "Bust".
  *   - OI-83: the female 2D figure has no hole: every point inside one of its parts (head, torso, legs, arms) is filled,
  *     asked of the browser's own fill (`isPointInFill`), for a slim, a mid and a full body. One place is counted apart:
@@ -114,6 +116,10 @@ interface Sweep {
   looked: number;
   /** What was wrong, one line per scroll position. */
   wrong: string[];
+  /** Scroll positions at which a button of `buttons` lay under a riding sentence, with the buttons' names (OI-137). */
+  covered: string[];
+  /** How many times a button of `buttons` was on screen above the bar and asked about. */
+  buttonsAsked: number;
   /** The first scroll position at which the sentence had to ride above the bar (it would otherwise be under it or below the screen). */
   rideAt: number | null;
 }
@@ -123,13 +129,14 @@ interface Sweep {
  * is on screen above the "Choose size" bar, the sentence must be wholly on screen above the bar and on top (the element
  * under its corners and centre is the sentence itself); the estimate label, when given, must not be under the sentence.
  */
-async function sweep(page: Page, picture: string, sentence: string, label: string | null): Promise<Sweep> {
+async function sweep(page: Page, picture: string, sentence: string, label: string | null, buttons = '[data-testid="embed-result"] button'): Promise<Sweep> {
   return page.evaluate(
-    async ({ picture, sentence, label, need }) => {
+    async ({ picture, sentence, label, need, buttons }) => {
       const q = (id: string): HTMLElement | null => document.querySelector(`[data-testid="${id}"]`);
       const scroller = (document.scrollingElement ?? document.documentElement) as HTMLElement;
       const max = scroller.scrollHeight - window.innerHeight;
-      const out = { looked: 0, wrong: [] as string[], rideAt: null as number | null };
+      const out = { looked: 0, wrong: [] as string[], rideAt: null as number | null, covered: [] as string[], buttonsAsked: 0 };
+      const riders = [...document.querySelectorAll<HTMLElement>('[data-testid$="not-drawn"]')].filter((el) => getComputedStyle(el).position === 'sticky');
       const pic = q(picture)!;
       const note = q(sentence);
       if (!note) return { ...out, wrong: ['the sentence is not on the page'] };
@@ -140,6 +147,20 @@ async function sweep(page: Page, picture: string, sentence: string, label: strin
         const at = scroller.scrollTop;
         const bar = q('choose-bar')!.getBoundingClientRect();
         const line = Math.min(bar.top, window.innerHeight);
+        // At every position, whatever is in view: a button on screen above the bar is not under a sentence.
+        // (The whole figure is itself a button, "change the look": it is the picture, so it is not asked about.)
+        const under: string[] = [];
+        for (const b of document.querySelectorAll<HTMLElement>(buttons)) {
+          if (b.dataset.testid === 'avatar-open') continue;
+          const r = b.getBoundingClientRect();
+          const cx = r.left + r.width / 2;
+          const cy = r.top + r.height / 2;
+          if (r.width === 0 || cy < 0 || cy >= line || cx < 0 || cx >= window.innerWidth) continue;
+          out.buttonsAsked++;
+          const el = document.elementFromPoint(cx, cy);
+          if (el && riders.some((s) => s === el || s.contains(el))) under.push((b.textContent ?? '').trim().slice(0, 24) || (b.getAttribute('aria-label') ?? 'button'));
+        }
+        if (under.length) out.covered.push(`scroll ${at}: under the sentence: ${under.join(', ')}`);
         const p = pic.getBoundingClientRect();
         const seen = Math.min(p.bottom, line) - Math.max(p.top, 0);
         if (seen < need) continue;
@@ -171,8 +192,29 @@ async function sweep(page: Page, picture: string, sentence: string, label: strin
       }
       return out;
     },
-    { picture, sentence, label, need: PICTURE_IN_VIEW_PX },
+    { picture, sentence, label, need: PICTURE_IN_VIEW_PX, buttons },
   );
+}
+
+/**
+ * Scrolls so the size buttons under the 3D view stand just above the "Choose size" bar: the position at which the
+ * riding sentence lay over all of them (OI-137). Each must be the element a tap at its centre reaches.
+ */
+async function sizeButtonsJustAboveBar(page: Page): Promise<void> {
+  const reached = await page.evaluate(async () => {
+    const scroller = document.scrollingElement ?? document.documentElement;
+    const row = document.querySelector<HTMLElement>('[data-testid="garment3d"] [role="radiogroup"]')!;
+    const bar = document.querySelector<HTMLElement>('[data-testid="choose-bar"]')!;
+    scroller.scrollTop += row.getBoundingClientRect().bottom - (bar.getBoundingClientRect().top - 6);
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    return [...row.querySelectorAll<HTMLElement>('[role="radio"]')].map((b) => {
+      const r = b.getBoundingClientRect();
+      const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return `${b.textContent}: ${el === b || b.contains(el) ? 'reached' : `under ${(el as HTMLElement | null)?.dataset.testid ?? el?.tagName ?? 'nothing'}`}`;
+    });
+  });
+  expect(reached.length).toBeGreaterThan(1);
+  expect(reached.filter((r) => !r.endsWith('reached'))).toEqual([]);
 }
 
 /** Scrolls so the picture's top is `offset` px under the top of the screen. */
@@ -208,6 +250,8 @@ for (const size of PHONES) {
     const result = await sweep(page, 'mirror', 'figure-not-drawn', 'estimate-badge');
     expect(result.looked).toBeGreaterThan(5);
     expect(result.wrong).toEqual([]);
+    expect(result.covered, 'a button lies under the riding sentence').toEqual([]);
+    expect(result.buttonsAsked).toBeGreaterThan(0);
     // The case the issue is about did happen on this screen: left where it is written, the sentence would not have been seen.
     expect(result.rideAt, 'the sentence never had to move: this screen does not test the case').not.toBeNull();
     await page.context().close();
@@ -239,10 +283,16 @@ for (const size of PHONES) {
     const in3d = await sweep(page, 'garment3d-canvas', 'garment3d-not-drawn', null);
     expect(in3d.looked).toBeGreaterThan(5);
     expect(in3d.wrong).toEqual([]);
+    expect(in3d.covered, 'a button lies under the riding sentence').toEqual([]);
+    expect(in3d.buttonsAsked).toBeGreaterThan(0);
     const in2d = await sweep(page, 'mirror', 'figure-not-drawn', 'estimate-badge');
     expect(in2d.looked).toBeGreaterThan(5);
     expect(in2d.wrong).toEqual([]);
+    expect(in2d.covered, 'a button lies under the riding sentence').toEqual([]);
+    expect(in2d.buttonsAsked).toBeGreaterThan(0);
     if (size.height <= 844) expect(in3d.rideAt, 'the 3D sentence never had to move: this screen does not test the case').not.toBeNull();
+    await sizeButtonsJustAboveBar(page);
+    await shot(page, `oi-137-3d-dress-size-12-size-buttons-above-bar-${name}`);
     await scrollPictureTo(page, 'mirror', 56);
     await shot(page, `oi-105-2d-dress-size-12-not-drawn-${name}`);
     await page.context().close();
@@ -271,13 +321,17 @@ for (const size of PHONES) {
     await expect(canvas).toHaveAttribute('data-garment', 'not-drawn');
     const note = page.getByTestId('garment3d-bake-note');
     await expect(note).toHaveAttribute('data-advice-blocked', 'true');
-    await expect(note.getByTestId('garment3d-bake-not-drawn')).toContainText('Size 8 is not drawn');
+    await expect(page.getByTestId('garment3d-bake-not-drawn')).toContainText('Size 8 is not drawn');
     await scrollPictureTo(page, 'garment3d', 8);
     await shot(page, `oi-105-3d-bake-skirt-size-8-not-drawn-${name}`);
     const in3d = await sweep(page, 'garment3d-canvas', 'garment3d-bake-not-drawn', null);
     expect(in3d.looked).toBeGreaterThan(5);
     expect(in3d.wrong).toEqual([]);
+    expect(in3d.covered, 'a button lies under the riding sentence').toEqual([]);
+    expect(in3d.buttonsAsked).toBeGreaterThan(0);
     if (size.height <= 844) expect(in3d.rideAt, 'the sentence never had to move: this screen does not test the case').not.toBeNull();
+    await sizeButtonsJustAboveBar(page);
+    await shot(page, `oi-137-3d-bake-skirt-size-8-size-buttons-above-bar-${name}`);
     await page.context().close();
   });
 }

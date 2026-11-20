@@ -192,3 +192,17 @@ Founder decisions (20 Nov 2026), answering the open questions of `docs/research/
 5. **Paused plan: the button is hidden.** This changes D7, which kept the button with a "shop paused" note.
 6. **The age-range question is removed.** Nothing uses it.
 7. **A shop may hide "Fit by Curtain".** The estimate label is not part of that and stays (rule 3). The price at which 3D and the AI layer become switchable is still open (D17).
+
+## D26 — Founder answers on the open-issues advice (second round)
+
+Founder decisions (20 Nov 2026), from the document "Curtain: open punten met advies". The founder follows the advice on every row left empty; the rows below were answered in words.
+
+1. **The Shopify demo app is named "FitCurtain".** It is a custom app for one shop, a demo; the name "curtain.fit" is kept free for the public app.
+2. **The price at which 3D and the AI layer can be switched on (D17) is not set now.** It is decided after the trial with printed garments.
+3. **A size that is tight but still larger than the body stays drawn** (OI-102). Only a size that cannot be worn is not drawn.
+4. **The real-phone test is this week**, one iPhone and one Android. The legal texts go to Naomi today. Both are founder actions.
+5. **Male body v2 and its 2D figure are judged after the chino session.**
+6. **The risk that a merchant derives one shopper from the analytics with fake shoppers is accepted for the pilot**, with monthly periods (D23). To be revisited before unknown shops are admitted.
+7. **Hip height is a field per product**, prefilled per garment kind (skirt: 20 cm below the band), changeable by the merchant. **Where a skirt sits is a fixed rule** (band 2 cm under the navel). **Slit length and weight are optional fields.** From Caron we collect only, for the pilot garments, the hip depth, slit length and weight of the red skirt. **The 2.5 cm pull-on allowance stays fixed.**
+
+On the empty rows the advice stands, among them: the four build items before launch (OI-48, 49, 66, the password hint of OI-99) and the small ones (OI-45, 69, 70, 83, 104, 105); the per-shop face-photo switch as a merchant setting before the face photo goes on (OI-57); no server route for the face photo (OI-65); the AI trial after launch (OI-33) with a monthly cap per shop first (OI-41); men's items wait for a men's shop and a real tee.

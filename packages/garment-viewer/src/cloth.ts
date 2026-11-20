@@ -13,6 +13,9 @@
  * (`clothParams(…, { cling: false })`), and girth loops (`setLoops`) can hold a ring of particles
  * (hip, hem) at no less than a share of its graded girth, so the drape cannot fold a larger size's
  * extra girth away. Both are off unless asked for.
+ *
+ * Hold length (docs/reports/claude/cloth-hang.md): hang lines (`addHangLines`, `ClothParams.hangStretch`) keep a hanging
+ * garment at the length it was cut. Off unless a bundle asks for it (`GarmentAnchorsJson.support.holdLength`).
  */
 
 export interface ClothParams {
@@ -38,6 +41,11 @@ export interface ClothParams {
   calmCm: number;
   calmFrames: number;
   minDurationS: number;
+  /**
+   * Hold length (`addHangLines`): the most a hang line may be longer than at rest, a share (0.003 = 0.3 %). Absent: the
+   * hang lines are not projected and the drape is exactly the one of before. Only set by `clothParams(…, { holdLength: true })`.
+   */
+  hangStretch?: number;
 }
 
 /** What the solver reads from material.json or a fabric preset (`@curtain/schema` fabric library values). */
@@ -60,9 +68,10 @@ export const LOOP_STIFFNESS = 0.5;
 /**
  * Map fabric data to solver settings. Bend stiffness is log-mapped (the library spans two decades);
  * stretch fabrics get softer edges; drape drives the cling pull and lowers damping. `opts.cling`
- * false switches the cling pull off (default on).
+ * false switches the cling pull off (default on). `opts.holdLength` sets the hang-line limit from the fabric's stretch
+ * (`hangStretchOf`; default off: the result has no `hangStretch` and is the one of before).
  */
-export function clothParams(mat: ClothMaterial, durationS = 1.5, opts: { cling?: boolean } = {}): ClothParams {
+export function clothParams(mat: ClothMaterial, durationS = 1.5, opts: { cling?: boolean; holdLength?: boolean } = {}): ClothParams {
   const bendT = clamp((Math.log10(Math.max(mat.bendStiffness, 0.005)) + 2) / 2.2, 0, 1); // 0.01 → 0, ~1.6 → 1
   return {
     gravity: 981,
@@ -78,6 +87,7 @@ export function clothParams(mat: ClothMaterial, durationS = 1.5, opts: { cling?:
     calmCm: 0.02,
     calmFrames: 6,
     minDurationS: Math.min(durationS, 0.5),
+    ...(opts.holdLength ? { hangStretch: hangStretchOf(mat.stretchPct) } : {}),
   };
 }
 
@@ -109,6 +119,9 @@ export interface Cloth {
   seams?: Uint32Array;
   seamMax?: Float32Array;
   seamMin?: Float32Array;
+  /** Hang lines (`addHangLines`): pairs of particles (the one nearer the held particles first) and the length of cloth between them at rest, cm. Absent: none. */
+  hang?: Uint32Array;
+  hangRest?: Float32Array;
   /** Simulated time so far, s. */
   time: number;
   /** Frames in a row whose largest particle move stayed under `ClothParams.calmCm`. */
@@ -147,7 +160,7 @@ export function meshEdges(indices: ArrayLike<number>): { edges: Uint32Array; ben
  * particle may never be farther from its pin than this, which stops the sag that few PBD iterations
  * leave in a long hanging garment.
  */
-export function tethers(n: number, edges: Uint32Array, edgeRest: Float32Array, isPinned: (i: number) => boolean): { tether: Int32Array; tetherRest: Float32Array } {
+export function tethers(n: number, edges: Uint32Array, edgeRest: Float32Array, isPinned: (i: number) => boolean): { tether: Int32Array; tetherRest: Float32Array; before: Int32Array; order: Int32Array } {
   const adjStart = new Int32Array(n + 1);
   for (let e = 0; e < edges.length; e++) adjStart[edges[e]! + 1]!++;
   for (let i = 0; i < n; i++) adjStart[i + 1]! += adjStart[i]!;
@@ -164,6 +177,10 @@ export function tethers(n: number, edges: Uint32Array, edgeRest: Float32Array, i
   }
   const d = new Float64Array(n).fill(Infinity);
   const src = new Int32Array(n).fill(-1);
+  const before = new Int32Array(n).fill(-1);
+  const order = new Int32Array(n);
+  let reached = 0;
+  const seen = new Uint8Array(n);
   // Binary heap of (distance, particle).
   const heapD: number[] = [];
   const heapI: number[] = [];
@@ -210,20 +227,81 @@ export function tethers(n: number, edges: Uint32Array, edgeRest: Float32Array, i
   }
   while (heapD.length > 0) {
     const [dd, i] = pop();
-    if (dd > d[i]!) continue;
+    if (dd > d[i]! || seen[i]) continue;
+    seen[i] = 1;
+    order[reached++] = i;
     for (let k = adjStart[i]!; k < adjStart[i + 1]!; k++) {
       const j = adj[k]!;
       const nd = dd + adjW[k]!;
       if (nd < d[j]!) {
         d[j] = nd;
         src[j] = src[i]!;
+        before[j] = i;
         push(nd, j);
       }
     }
   }
   const tetherRest = new Float32Array(n);
   for (let i = 0; i < n; i++) tetherRest[i] = Number.isFinite(d[i]!) ? d[i]! : 0;
-  return { tether: src, tetherRest };
+  return { tether: src, tetherRest, before, order: order.subarray(0, reached) };
+}
+
+/** Share of a hang-line correction taken by the particle nearer the support, against 1 for the farther one (`projectHang`). */
+export const HANG_NEAR_WEIGHT = 0.85;
+/** Hang-line limit as a share of the fabric's stretch (`ClothMaterial.stretchPct`), and the range it is held to. */
+export const HANG_STRETCH_SHARE = 0.2;
+export const HANG_STRETCH_RANGE = [0.002, 0.01] as const;
+
+/** The most a hang line of this fabric may lengthen under the garment's own weight, a share: a fifth of the stretch the fabric allows when worn (ASSUMED), 0.2 to 1 %. */
+export const hangStretchOf = (stretchPct: number): number => clamp((HANG_STRETCH_SHARE * stretchPct) / 100, HANG_STRETCH_RANGE[0], HANG_STRETCH_RANGE[1]);
+
+/**
+ * Hang lines: what keeps a hanging garment from growing longer than it was cut.
+ *
+ * The tethers hold every particle within its cloth distance of a pin, but along a straight line: wherever the cloth
+ * bends on its way down (over a bust, a hip, in folds) the straight line is shorter than the cloth and the tether has
+ * slack, and the few soft edge projections of a frame never take that slack back (measured: 2 to 3 % of a dress's
+ * length). A hang line is a pair of particles on one path from the support (`tethers`' shortest paths, `before`), 1, 2,
+ * 4, 8 … steps apart, which may not be farther apart than the cloth between them is long. Per stride only every
+ * stride-th particle of a path gets one, so there are about two lines per particle and the coarse ones carry a
+ * correction from the support to the hem in a few projections (as a long-range attachment does), while the fine ones
+ * follow the bends. One way: a line may always be shorter, so the cloth folds and gathers freely.
+ * Ordered coarse to fine and, within a stride, from the support outwards.
+ */
+export function hangLines(n: number, tetherRest: Float32Array, before: Int32Array, order: ArrayLike<number>): { hang: Uint32Array; hangRest: Float32Array } {
+  const depth = new Int32Array(n);
+  let deepest = 0;
+  for (let k = 0; k < order.length; k++) {
+    const i = order[k]!;
+    if (before[i]! >= 0) depth[i] = depth[before[i]!]! + 1;
+    if (depth[i]! > deepest) deepest = depth[i]!;
+  }
+  const levels: { pairs: number[]; rest: number[] }[] = [];
+  let up = Int32Array.from(before); // the particle `stride` steps nearer the support
+  for (let stride = 1; stride <= deepest; stride *= 2) {
+    const pairs: number[] = [], rest: number[] = [];
+    for (let k = 0; k < order.length; k++) {
+      const i = order[k]!;
+      if (depth[i]! < stride || depth[i]! % stride !== 0) continue;
+      pairs.push(up[i]!, i);
+      rest.push(tetherRest[i]! - tetherRest[up[i]!]!);
+    }
+    levels.push({ pairs, rest });
+    const next = new Int32Array(n).fill(-1);
+    for (let i = 0; i < n; i++) if (up[i]! >= 0) next[i] = up[up[i]!]!;
+    up = next;
+  }
+  levels.reverse();
+  return { hang: Uint32Array.from(levels.flatMap((l) => l.pairs)), hangRest: Float32Array.from(levels.flatMap((l) => l.rest)) };
+}
+
+/** Give a cloth its hang lines (`hangLines`), from its pins and rest lengths as they are now. They act only with `ClothParams.hangStretch` set. */
+export function addHangLines(cloth: Cloth): void {
+  const n = cloth.invMass.length;
+  const { tetherRest, before, order } = tethers(n, cloth.edges, cloth.edgeRest, (i) => cloth.invMass[i] === 0);
+  const lines = hangLines(n, tetherRest, before, order);
+  cloth.hang = lines.hang;
+  cloth.hangRest = lines.hangRest;
 }
 
 const dist = (p: ArrayLike<number>, a: number, b: number): number => Math.hypot(p[3 * a]! - p[3 * b]!, p[3 * a + 1]! - p[3 * b + 1]!, p[3 * a + 2]! - p[3 * b + 2]!);
@@ -457,6 +535,36 @@ function projectLeashes(pos: Float32Array, w: Float32Array, anchor: Float32Array
   }
 }
 
+/**
+ * Bring the two particles of every hang line that is longer than its cloth (plus `stretch`) back to that length. By their
+ * inverse masses, the nearer one counting `HANG_NEAR_WEIGHT`: moving only the farther particle (follow the leader) holds
+ * length best and was measured unstable (a push on the upper cloth cracks down the line like a whip; a sheet over a
+ * cylinder flew up), equal shares are calm but leave more length (dress +1.3 % against +1.1 %).
+ */
+function projectHang(pos: Float32Array, w: Float32Array, pairs: Uint32Array, rest: Float32Array, stretch: number): void {
+  const f = 1 + stretch;
+  for (let e = 0; e < rest.length; e++) {
+    const a = pairs[2 * e]!, b = pairs[2 * e + 1]!;
+    const wb = w[b]!;
+    if (wb === 0) continue;
+    const wa = w[a]! * HANG_NEAR_WEIGHT;
+    const dx = pos[3 * b]! - pos[3 * a]!, dy = pos[3 * b + 1]! - pos[3 * a + 1]!, dz = pos[3 * b + 2]! - pos[3 * a + 2]!;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    const r = rest[e]! * f;
+    if (d2 <= r * r) continue;
+    const d = Math.sqrt(d2);
+    const c = (d - r) / (d * (wa + wb));
+    if (wa !== 0) {
+      pos[3 * a] = pos[3 * a]! + wa * c * dx;
+      pos[3 * a + 1] = pos[3 * a + 1]! + wa * c * dy;
+      pos[3 * a + 2] = pos[3 * a + 2]! + wa * c * dz;
+    }
+    pos[3 * b] = pos[3 * b]! - wb * c * dx;
+    pos[3 * b + 1] = pos[3 * b + 1]! - wb * c * dy;
+    pos[3 * b + 2] = pos[3 * b + 2]! - wb * c * dz;
+  }
+}
+
 export type Collide = (pos: Float32Array, i: number) => boolean;
 
 /**
@@ -526,6 +634,8 @@ export function stepCloth(cloth: Cloth, params: ClothParams, collide: Collide | 
         if (cloth.seams && cloth.seamMax) projectSeams(pos, invMass, cloth.seams, cloth.seamMax, cloth.seamMin);
         // After the edges, so a leash holds as a constraint and not only as a start point (collision still wins).
         projectLeashes(pos, invMass, cloth.anchor, cloth.leash);
+        // Hang lines after the soft edges and the leashes, so the length they hold is what the loops and collision may still undo.
+        if (params.hangStretch !== undefined && cloth.hang && cloth.hangRest) projectHang(pos, invMass, cloth.hang, cloth.hangRest, params.hangStretch);
         const mid = it === params.iterations - 1 || it === params.iterations >> 1;
         // Girth loops at the collision points (twice a substep): the hull sort is the costly part.
         if (mid && cloth.loopMin.length > 0 && params.loopStiffness > 0) projectLoops(pos, invMass, cloth, params.loopStiffness);

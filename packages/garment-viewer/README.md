@@ -158,6 +158,21 @@ once; a size switch is a buffer copy. The five bundle files and the gate are unc
 - The reader and its meshopt decoder are a separate lazy chunk (`drapeBakeRead`, 8.3 KB gzip), not in the viewer chunk
   (159.6 KB gzip of the 400 KB budget) and not precached.
 
+## Hold length (hang lines)
+
+A bundle whose anchors.json says `"support": { …, "holdLength": true }` keeps the length it was cut on its way down from
+where it is held (`cloth.ts` `addHangLines`, `ClothParams.hangStretch`; docs/reports/claude/cloth-hang.md). Without it the
+tethers hold every particle within its cloth distance of a pin along a straight line, which has slack wherever the cloth
+bends (bust, seam, hip, folds): the tape-built dress came out 2.2 to 2.9 % long. A hang line is a pair of particles on one
+shortest path from the support, 1, 2, 4, 8 … steps apart, that may not be longer than the cloth between them plus a fifth
+of material.json `stretchPct` (0.2 to 1 %; the fifth is assumed). One way only, so the cloth still folds and gathers.
+
+- Measured on the SYNTHETIC tape dress, AU 8 to 16 and at 156 and 180 cm: length +1.0 to +1.2 % (from +2.2 to +2.9 %).
+- **Off for every bundle that does not ask** (their drape is bit for bit the one of before), because it is not free: below
+  the waist less of the size difference survives (dress, hip: 52 → 21 % of the graded spread), and forced onto the men's
+  tee the peak strain doubles. Read the report before setting it on another bundle.
+- `canvas.dataset.solveMs`: the worker's solver time for the size on show (a timing for the demo scripts).
+
 ## Fork of the spike
 
 `src/core/*` (`garment`, `grading`, `waistband`, `tape`, `weld`, `types`) and the device modules

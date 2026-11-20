@@ -152,7 +152,7 @@ export function buildPomDressBundle(productId: string, payload: GarmentPayload, 
     ),
     // How the device holds it: by its top edge band (the top edge and the row under it) and the straps, with no cling pull.
     // The underbust seam does not stretch past the fabric's own give.
-    support: { pinFromCm: r2(base.levels.topY - POM_DRESS_PIN_BAND_CM), cling: false, seamsAtCm: [r2(base.levels.seamY)], seamStretchPct: payload.fabric.stretchPct },
+    support: { pinFromCm: r2(base.levels.topY - POM_DRESS_PIN_BAND_CM), cling: false, seamsAtCm: [r2(base.levels.seamY)], seamStretchPct: payload.fabric.stretchPct, holdLength: true },
     breadths: {},
     lengths: Object.fromEntries(Object.entries(measurements.lengths).map(([id, l]) => [id, { lengthCm: round(l!.lengthCm, 2), start: roundVec(l!.start, 2), end: roundVec(l!.end, 2), fromMannequin: l!.fromMannequin }])),
     calibration: { globalScale: 1, ringCorrections: {}, sources: {}, residualAfterGlobalCm: { rms: 0, maxAbs: 0 } },

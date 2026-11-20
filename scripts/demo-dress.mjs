@@ -17,6 +17,7 @@
  * drawn) and two down (the size advice: does not close at the bust): the 3D view must show the body alone
  * (`data-garment="not-drawn"`) with the sentence, and the 2D figure the same sentence and no dress
  * (`--size-<n>-not-drawn`; docs/reports/claude/dress-not-drawn.md).
+ * --throttle <n>: CPU throttle n× while the 3D view opens; the log line gives open-to-settled and the solver's own time.
  *
  * Needs `out/synthetic-tape-babydoll-dress/` (`pnpm --filter @curtain/garment-spike exec tsx
  * scripts/build-dress-bundle.ts`) and built packages (`pnpm build:packages`). Exits non-zero on the first failure.
@@ -33,6 +34,8 @@ const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const args = process.argv.slice(2);
 const heights = args.includes('--heights');
 const tooSmall = args.includes('--too-small');
+// --throttle <n>: DevTools CPU throttle while the 3D view opens and drapes (the page's main thread; a worker is not known to be slowed by it).
+const throttle = args.includes('--throttle') ? Number(args.splice(args.indexOf('--throttle'), 2)[1]) : 0;
 const shots = resolve(args.find((a) => !a.startsWith('--')) ?? join(root, 'test-results', 'demo-dress'));
 mkdirSync(shots, { recursive: true });
 const ID = 'synthetic-tape-babydoll-dress';
@@ -129,9 +132,14 @@ try {
     await frame.getByTestId('see-my-size').click();
     await frame.getByRole('button', { name: /^choose size\s+\S+/i }).first().waitFor({ timeout: 60_000 });
     if (body === BODIES[0]) await shot(page, `${body.name}--2-result`);
+    const cdp = throttle > 1 ? await context.newCDPSession(page) : null;
+    if (cdp) await cdp.send('Emulation.setCPUThrottlingRate', { rate: throttle });
+    const tOpen = Date.now();
     await frame.getByTestId('garment3d-open').click();
     const canvas = frame.locator('canvas[data-testid="garment3d-canvas"]');
     await frame.locator('canvas[data-testid="garment3d-canvas"][data-state="settled"]').waitFor({ timeout: 300_000 });
+    log(`body ${body.name}: 3D open to settled ${Date.now() - tOpen} ms${throttle > 1 ? ` (CPU throttle ${throttle}x)` : ''}, solver ${(await canvas.getAttribute('data-solve-ms')) ?? '?'} ms`);
+    if (cdp) await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     let size = await canvas.getAttribute('data-size');
     log(`body ${body.name}: the size advice picked ${size}`);
     if (size !== body.size) {

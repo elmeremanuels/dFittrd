@@ -4,7 +4,7 @@
  * the estimate disclaimer, and the "Choose size X" action.
  */
 import { CheckCircle2, Pencil, Sparkles } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
+import { useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import type { BodyProfile, GarmentPayload } from '@curtain/schema';
 import { AvatarView } from '@/components/AvatarView';
 import { EstimateDisclaimer } from '@/components/EstimateBadge';
@@ -14,7 +14,8 @@ import { pct } from '@/lib/format';
 import type { FigureFamily } from '@/render/body';
 import { ringInputsFor } from '@/render/ringInputs';
 import { ringOverlayFor } from '@/render/rings';
-import { notDrawnNote, notDrawnSentence } from './notDrawn';
+import { notDrawnNote } from './notDrawn';
+import { NOT_DRAWN_GAP_PX, NotDrawnLine, useElementHeight } from './NotDrawnLine';
 import { bandText, fitWithAdvice, gapText, neighbourSizes, pointLabelFor, priorKeys, usablePoints, waistOnlyOf, type EmbedFit, type FitPreference, type SizeAdvice } from './aboutYou';
 import { UnitToggle } from './EmbedScreens';
 import { SizeChartTable } from './SizeChartTable';
@@ -120,17 +121,10 @@ export function ResultScreen({
   const figureBlock = useMemo(() => notDrawnNote(fit, selected), [fit, selected]);
   // The sticky "Choose size" bar lies over the bottom of the window. Its height goes to the figure
   // as `--estimate-clear`, so the figure's estimate label stays above the bar (AGENTS.md rule 3).
-  const [bar, setBar] = useState<HTMLDivElement | null>(null);
-  const [barHeight, setBarHeight] = useState(0);
-  useEffect(() => {
-    if (!bar) return;
-    const measure = (): void => setBarHeight(Math.ceil(bar.getBoundingClientRect().height));
-    measure();
-    if (typeof ResizeObserver !== 'function') return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(bar);
-    return () => observer.disconnect();
-  }, [bar]);
+  const [setBar, barHeight] = useElementHeight<HTMLDivElement>();
+  // The not-drawn sentence rides just above the bar while its own place under the figure is out of sight (OI-105). The
+  // figure's estimate label then stays above the sentence: its clearance is the bar plus the sentence.
+  const [setFigureNote, figureNoteHeight] = useElementHeight<HTMLParagraphElement>();
   const tabsId = useId();
   const tabRefs = useRef<Partial<Record<TabKey, HTMLButtonElement | null>>>({});
   // WAI-ARIA tabs: arrow keys, Home and End move between the tabs (automatic activation).
@@ -188,7 +182,7 @@ export function ResultScreen({
   const scoreNote = advice.size && advisedPullOn?.status === 'marginal' ? t.scorePullOnTight : undefined;
 
   return (
-    <div className="space-y-4 pb-2" data-testid="embed-result" style={{ '--estimate-clear': `${barHeight}px` } as CSSProperties}>
+    <div className="space-y-4 pb-2" data-testid="embed-result" style={{ '--estimate-clear': `${barHeight}px`, '--bar-clear': `${barHeight}px` } as CSSProperties}>
       <div>
         <p className="eyebrow text-coral-ink">{returning ? t.welcomeBack : t.eyebrow}</p>
         <h2 className="font-display text-3xl leading-tight" tabIndex={-1} data-step-heading>
@@ -288,7 +282,7 @@ export function ResultScreen({
           <div className="mx-auto w-full max-w-[15rem] space-y-1.5">
             {/* The chip that says what tapping the figure does sits above it, so it is on screen
                 with the head at phone height (under the figure it was below the fold). */}
-            <div className={`relative ${onAvatar ? 'pt-10' : ''}`}>
+            <div className={`relative ${onAvatar ? 'pt-10' : ''}`} style={figureBlock ? ({ '--estimate-clear': `${barHeight + figureNoteHeight + NOT_DRAWN_GAP_PX}px` } as CSSProperties) : undefined}>
               {/* overflow-clip, not hidden: the frame must not be a scroll box, or the estimate label could not ride above the bar. */}
               <div ref={avatarRef} className="mirror-frame aspect-[5/9] w-full overflow-clip border-[8px]">
                 <AvatarView garment={garment} fit={fit} size={selected} measurements={userBody.measurements} heightCm={heightCm} skinHex={skinHex} bodyLabel={t.bodyLabel} estimateLines={t.estimateLines} labelsAt="bottom" rings={showRings ? rings : null} hemSweepCm={ringInputs?.hem?.sweepCm[selected] ?? null} family={figure} maleShape={maleShapeFlag()} skinShading={avatarSkinFlag()} {...(face ? { media: { faceUrl: face.url, baseFrame: null, faceStyle: 'tile' as const } } : {})} />
@@ -316,11 +310,7 @@ export function ResultScreen({
                 </button>
               ) : null}
             </div>
-            {figureBlock ? (
-              <p className="text-[11px] leading-snug text-ink-mute" role="status" data-testid="figure-not-drawn" data-anchor={figureBlock.anchor} data-reason={figureBlock.reason}>
-                {notDrawnSentence(figureBlock, selected, garment.audience, units)}
-              </p>
-            ) : null}
+            {figureBlock ? <NotDrawnLine block={figureBlock} size={selected} audience={garment.audience} units={units} testId="figure-not-drawn" role="status" lineRef={setFigureNote} /> : null}
             {face ? (
               <p className="text-center text-xs font-semibold text-ink" data-testid="face-label">
                 {face.label}

@@ -82,6 +82,11 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     expect(xl).toHaveAttribute('data-reason', 'pull-on');
     expect(xl).toHaveTextContent('Size XL is not drawn: the size advice says its waistband does not stretch over your hips, so the body is shown without it.');
     expect(xl).not.toHaveTextContent('shown on that body');
+    // The sentence is a line of its own in the note, so it can ride above the "Choose size" bar on a phone (OI-105).
+    const line = within(xl).getByTestId('garment3d-bake-not-drawn');
+    expect(line).toHaveTextContent(/^Size XL is not drawn: .* so the body is shown without it\.$/);
+    expect(line.className).toMatch(/\bsticky\b/);
+    expect(xl).toHaveTextContent('In 3D the sizes look much alike');
   });
 
   it('a size too small for the body (a sewn tee on the device) says it is not drawn and why; a size that fits says nothing', async () => {
@@ -162,11 +167,6 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     expect(screen.getByText(/Estimate · not measured/)).toBeInTheDocument();
   });
 
-  it('keeps the size switcher in sync with the result screen', async () => {
-    const { rerender, props, setSize, onSelect, mountGarmentView } = setup();
-    fireEvent.click(screen.getByTestId('garment3d-open'));
-    await waitFor(() => expect(mountGarmentView).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole('radio', { name: 'L' }));
   it('names the rings of a men\'s garment as menswear does: "Chest", never "Bust" (OI-104)', async () => {
     const tee = SYNTHETIC_MENS_TEE;
     const body = { bust: 98, waist: 86, hip: 96 };
@@ -180,6 +180,11 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     expect(rings).not.toHaveTextContent(/bust/i);
   });
 
+  it('keeps the size switcher in sync with the result screen', async () => {
+    const { rerender, props, setSize, onSelect, mountGarmentView } = setup();
+    fireEvent.click(screen.getByTestId('garment3d-open'));
+    await waitFor(() => expect(mountGarmentView).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('radio', { name: 'L' }));
     expect(onSelect).toHaveBeenCalledWith('L');
     await act(async () => rerender(<Garment3D {...props} size="L" />));
     expect(setSize).toHaveBeenCalledWith('L');

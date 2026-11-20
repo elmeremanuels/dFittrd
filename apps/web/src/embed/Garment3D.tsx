@@ -39,7 +39,8 @@ import { ringOverlayFor } from '@/render/rings';
 import { AiRealismPanel, type AiRealismProps } from './AiRealism';
 import type { ExportedPasses } from './realism';
 import { embedStrings, type EmbedCatalogue } from './strings';
-import { notDrawnFromViewer, notDrawnNote, notDrawnSentence, type NotDrawnNote } from './notDrawn';
+import { notDrawnFromViewer, notDrawnNote, type NotDrawnNote } from './notDrawn';
+import { NotDrawnLine } from './NotDrawnLine';
 import { lengthText, type Units } from './units';
 import { avatarSkinFlag, maleShapeFlag, womenHeightFlag } from './look';
 
@@ -191,9 +192,9 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, wais
     [open, garment, fit, size, measurements, heightCm, units, estimated],
   );
   const ringList = rings ? rings.selected.rings.filter((r) => r.key !== 'hem') : [];
-  const hemLeftOut = !!rings && rings.selected.rings.some((r) => r.key === 'hem');
   // A men's garment names its rings as the fit list and the 2D figure do: "Chest", "Seat" (OI-104).
   const men = garment.audience === 'men';
+  const hemLeftOut = !!rings && rings.selected.rings.some((r) => r.key === 'hem');
 
   useEffect(() => {
     if (!open || !asset) return;
@@ -330,11 +331,7 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, wais
         {(recommended && recommended !== size) || (!recommended && waistOnly !== null) ? ` ${t.looking(size)}` : ''}
       </p>
       {source?.kind === 'bake' ? <BakeNote t={t} size={size} source={source} units={units} blocked={block} audience={garment.audience} /> : null}
-      {source?.kind === 'device' && block ? (
-        <p className="mt-1 text-[11px] leading-snug text-ink-mute" data-testid="garment3d-not-drawn" data-anchor={block.anchor} data-reason={block.reason}>
-          {notDrawnSentence(block, size, garment.audience, units)}
-        </p>
-      ) : null}
+      {source?.kind === 'device' && block ? <NotDrawnLine block={block} size={size} audience={garment.audience} units={units} testId="garment3d-not-drawn" className="mt-1" /> : null}
       {ringList.length > 0 ? (
         <ul className="mt-1.5 flex flex-wrap gap-1 text-[11px]" aria-label={t.rings(size)} data-testid="garment3d-rings">
           {ringList.map((r) => (
@@ -361,15 +358,27 @@ function BakeNote({ t, size, source, units, blocked: block, audience }: { t: Emb
   const rule = s?.refusedRule ?? null;
   // A size the size advice blocks is not drawn wherever it lies against the bake's bodies (the viewer hides it).
   const blocked = block !== null;
+  // The not-drawn sentence is a line of its own inside the note: it rides above the "Choose size" bar while the note's
+  // place under the view is out of sight (`NotDrawnLine`, OI-105); the rest of the note stays where it is written.
+  const line = 'text-[11px] leading-snug text-ink-mute';
+  const before = `${source.plainColour ? `${t.plainColour} ` : ''}${s ? t.provenance(size, s.provenance) : ''}`;
   return (
-    <p className="mt-1 text-[11px] leading-snug text-ink-mute" data-testid="garment3d-bake-note" data-place={place} data-advice-blocked={blocked ? 'true' : undefined} data-anchor={block?.anchor} data-reason={block?.reason}>
-      {source.plainColour ? `${t.plainColour} ` : ''}
-      {s ? t.provenance(size, s.provenance) : ''}
-      {block ? ` ${notDrawnSentence(block, size, audience, units)}` : ''}
-      {!blocked && place === 'held' ? ` ${t.held(size)}` : ''}
-      {!blocked && place === 'between' && s?.refusedHipCm != null ? ` ${t.between(size, lengthText(s.refusedHipCm, units), rule)}` : ''}
-      {!blocked && place === 'refused' && s?.refusedHipCm != null ? ` ${t.refused(size, lengthText(s.refusedHipCm, units), rule)}` : ''}
-      {` ${t.sizesAlike}`}
-    </p>
+    <div className="mt-1 space-y-1" data-testid="garment3d-bake-note" data-place={place} data-advice-blocked={blocked ? 'true' : undefined} data-anchor={block?.anchor} data-reason={block?.reason}>
+      {block ? (
+        <>
+          {before ? <p className={line}>{before} </p> : null}
+          <NotDrawnLine block={block} size={size} audience={audience} units={units} testId="garment3d-bake-not-drawn" />
+          <p className={line}> {t.sizesAlike}</p>
+        </>
+      ) : (
+        <p className={line}>
+          {before}
+          {place === 'held' ? ` ${t.held(size)}` : ''}
+          {place === 'between' && s?.refusedHipCm != null ? ` ${t.between(size, lengthText(s.refusedHipCm, units), rule)}` : ''}
+          {place === 'refused' && s?.refusedHipCm != null ? ` ${t.refused(size, lengthText(s.refusedHipCm, units), rule)}` : ''}
+          {` ${t.sizesAlike}`}
+        </p>
+      )}
+    </div>
   );
 }

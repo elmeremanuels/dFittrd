@@ -118,6 +118,16 @@ for (const vp of [
   await page.keyboard.press('Space');
   await page.waitForFunction(() => document.querySelector('#settings-wordmark').getAttribute('aria-checked') === 'false' && !document.querySelector('#settings-wordmark').disabled);
   expect(h.settings.showFitByCurtain === false, `${vp.name}: the switch did not save`);
+  // A held-back row says where in Shopify the stretch goes, shows no score, and on a phone its chip is not cut off.
+  expect((await page.locator('#products-body [data-where="fabric"]').first().innerText()) === N.heldBackWhereShopify, `${vp.name}: the "where" line of a held-back product is missing`);
+  expect((await page.locator('#products-body [data-where="fabric"]').count()) === 2, `${vp.name}: each held-back product should say where the fabric goes`);
+  expect((await page.locator('#products-body .score').count()) === 1, `${vp.name}: only the product that gives size advice shows a score`);
+  const cut = await page.evaluate(() => {
+    const box = document.querySelector('#products .products-table').parentElement;
+    const edge = box.getBoundingClientRect().right;
+    return { inner: box.scrollWidth - box.clientWidth, chips: Array.from(document.querySelectorAll('#products-body .badge')).filter((b) => b.getBoundingClientRect().right > edge + 0.5).length };
+  });
+  expect(cut.inner <= 0 && cut.chips === 0, `${vp.name}: the product list is cut off (${cut.inner}px sideways, ${cut.chips} chips past the edge)`);
   await shot('#settings', '03-settings-hold-back-wordmark-off');
   await shot('#products', '04-products-held-back');
 

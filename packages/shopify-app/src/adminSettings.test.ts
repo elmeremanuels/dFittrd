@@ -293,8 +293,13 @@ describe('admin page: fabric notices in the product list', () => {
     expect(held.querySelector('.badge')!.textContent).toBe(NT.heldBack);
     expect(held.querySelector('.badge')!.classList.contains('badge-critical')).toBe(true);
     expect(held.querySelector('[data-notice="held-back"]')!.textContent).toContain('until you add or correct the fabric stretch and the drape.');
-    expect(held.querySelector('.next-cell')!.textContent).toBe(NT.heldBackNext);
+    expect(held.querySelector('.next-cell div')!.textContent).toBe(NT.heldBackNext);
     expect(held.querySelector('.next-cell button')).toBeNull();
+    // The page has no fabric form, so the row says where in Shopify the value goes, next to the button it names.
+    expect(held.querySelector('.next-cell [data-where="fabric"]')!.textContent).toBe(NT.heldBackWhereShopify);
+    expect(Array.from(held.querySelectorAll('a')).map((x) => x.textContent)).toContain('Edit in Shopify');
+    // No score next to "Held back": the product gives no size advice whatever its score.
+    expect(held.querySelector('.score')).toBeNull();
     const link = held.querySelector('[data-notice="held-back"] a')!;
     expect(link.textContent).toBe(NT.heldBackSetting);
     expect(link.getAttribute('href')).toBe('#settings');
@@ -303,6 +308,8 @@ describe('admin page: fabric notices in the product list', () => {
     expect($('settings-held-now').textContent).toBe(heldNowText(1));
     // A product that is not held back keeps the api's own badge and next step.
     expect(row(CASES[0]!).querySelector('.badge')!.textContent).toBe('Ready');
+    expect(row(CASES[0]!).querySelector('.score')).not.toBeNull();
+    expect(row(CASES[0]!).querySelector('[data-where]')).toBeNull();
   });
 });
 

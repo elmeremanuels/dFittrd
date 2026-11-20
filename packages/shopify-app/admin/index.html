@@ -143,7 +143,17 @@
     .next-cell { min-width: 220px; }
     #products-body .btn { white-space: nowrap; }
     .next-cell .btn { margin-top: 4px; }
-    .score { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+    .score { display: flex; align-items: center; gap: 6px; margin-top: 4px; white-space: nowrap; }
+    .next-cell .where { margin: 6px 0 0; font-size: 12px; max-width: 420px; overflow-wrap: anywhere; }
+    /* On a phone a product is a block of its own, not a row cut off at the right edge. */
+    @media (max-width: 640px) {
+      .products-table thead { position: absolute; left: 0; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      .products-table, .products-table tbody, .products-table tr, .products-table td { display: block; }
+      .products-table tr { padding: 12px 0; border-top: 1px solid var(--p-border); }
+      .products-table td { border: 0; padding: 3px 0; }
+      .products-table td:empty { display: none; }
+      .products-table .next-cell { min-width: 0; }
+    }
     .score .meter { width: 64px; height: 6px; }
     /* Settings: a switch drawn as a track with a knob, and the notices under a product's name */
     .switch-row { display: flex; gap: 10px; align-items: flex-start; }
@@ -157,8 +167,8 @@
     #settings-status.bad { color: var(--p-critical-fg); }
     #console-link-status.bad { color: var(--p-critical-fg); }
     #console-link-status:empty { display: none; }
-    /* The name and its notices keep a readable width; on a phone the table scrolls sideways inside its box. */
-    #products-body td:first-child:not(.empty) { min-width: 240px; }
+    /* The name and its notices keep a readable width (on a phone each product is a block: see .products-table). */
+    @media (min-width: 641px) { #products-body td:first-child:not(.empty) { min-width: 240px; } }
     ul.notices { list-style: none; margin: 4px 0 0; padding: 0; font-size: 12px; max-width: 420px; color: var(--p-text-subdued); }
     ul.notices li + li { margin-top: 4px; }
     ul.notices li.held { color: var(--p-critical-fg); }
@@ -329,7 +339,7 @@
         <button class="btn" type="button" data-filter="active">Ready</button>
       </div>
       <div style="overflow:auto">
-        <table>
+        <table class="products-table">
           <thead><tr><th>Product</th><th>Kind</th><th>Size advice</th><th>What to do next</th><th><span class="sr">More</span></th></tr></thead>
           <tbody id="products-body"><tr><td colspan="5"><div class="skeleton"></div></td></tr></tbody>
         </table>
@@ -585,7 +595,8 @@
         items.forEach(function (p) {
           var n = p.next || { badge: p.status === 'active' ? 'Ready' : 'Not ready yet', tone: p.status === 'active' ? 'success' : 'critical', text: '' };
           // A product the shop's own setting holds back (D25 point 2): that, not the general next step, is what to say.
-          if (p.heldBack) n = { badge: NT.heldBack, tone: 'critical', text: NT.heldBackNext };
+          // This page has no fabric form: the row also says where in Shopify the value goes.
+          if (p.heldBack) n = { badge: NT.heldBack, tone: 'critical', text: NT.heldBackNext, where: NT.heldBackWhereShopify };
           var notes = noticeList(p);
           var score = typeof p.adviceScore === 'number' ? p.adviceScore : Math.round(p.score * 100);
           var meter = el('span', { class: 'meter', 'aria-hidden': 'true' }); var fill = el('i'); fill.style.width = score + '%'; meter.appendChild(fill);
@@ -593,8 +604,9 @@
           body.appendChild(el('tr', null, [
             el('td', null, [el('b', { text: p.name })].concat(notes ? [notes] : [])),
             el('td', { text: (cfg.categories && cfg.categories[p.category]) || '–' }),
-            el('td', null, [el('span', { class: 'badge badge-' + n.tone, text: n.badge }), el('div', { class: 'score subdued' }, [meter, el('span', { text: score + ' / 100' })])]),
-            el('td', { class: 'next-cell' }, [el('div', { text: n.text })].concat(act ? [act] : [])),
+            // A held-back product gives no size advice whatever its score: the chip stands alone.
+            el('td', null, [el('span', { class: 'badge badge-' + n.tone, text: n.badge })].concat(p.heldBack ? [] : [el('div', { class: 'score subdued' }, [meter, el('span', { text: score + ' / 100' })])])),
+            el('td', { class: 'next-cell' }, [el('div', { text: n.text })].concat(n.where ? [el('p', { class: 'where subdued', 'data-where': 'fabric', text: n.where })] : []).concat(act ? [act] : [])),
             el('td', null, [el('span', { class: 'row' }, [
               el('button', { class: 'btn', type: 'button', 'data-product': p.externalId, 'data-name': p.name, text: 'Open' }),
               el('a', { class: 'btn', href: 'https://' + shop + '/admin/products/' + encodeURIComponent(p.externalId), target: '_top', rel: 'noopener', text: 'Edit in Shopify' })

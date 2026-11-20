@@ -18,7 +18,7 @@ requirement. This document is the contract every package builds against. Decisio
    1. **Product header**: shop name or brand colour, product name, product photo, and a short
       privacy line ("Your measurements stay on this device").
    2. **About you** (one screen, under 30 seconds): height (cm), weight (kg), fit preference
-      (snug / regular / relaxed), optional age range. An expandable "I know my measurements"
+      (snug / regular / relaxed). An expandable "I know my measurements"
       section takes bust / waist / hip (and inseam for bottoms) with a "measured with a tape"
       toggle. Missing girths come from the population prior (`apps/web/src/features/capture` prior
       module) with honest, lower confidence.
@@ -47,7 +47,7 @@ requirement. This document is the contract every package builds against. Decisio
 - The response gains `embedUrl` (`${PUBLIC_APP_URL}/embed/${token}`) on every response. `tryUrl`
   and `qrSvg` stay for app mode; the SDK may skip the QR work when `surface` is `'embed'`
   (`qrSvg` becomes optional in the response schema).
-- Same 402-with-body behaviour when the shop is paused. The embed shows the paused screen.
+- Same 402-with-body behaviour when the shop is paused. The SDK then hides the button and opens nothing (D25 point 5); it asks `GET /v1/sdk/shop?shop=<public key>` (`{ paused }`) before it shows a button. The embed keeps its paused screen for an overlay that was already open.
 
 ### `GET /v1/try/:token` (unchanged path, extended response)
 

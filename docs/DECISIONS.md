@@ -61,6 +61,8 @@ Skin tone: multi-point CIELAB sampling → ITA → Monk Skin Tone class, underto
 
 One try-on session = one product resolved by one user with a fit result written, idempotent by intent token. Counted identically by Shopify `appUsageRecordCreate` and a Stripe meter. Plugin paid (Starter plan + overage), app free. Below plan → the button still renders; the deep link shows a "shop paused" screen. Never break the merchant's page.
 
+*Changed by D25 point 5 (20 Nov 2026):* below plan the button is hidden. The SDK asks the api whether the shop is paused before it shows a button, and opens nothing on a paused answer. "Never break the merchant's page" stands: an outage never removes a working shop's button.
+
 Order attribution (hidden cart attribute → `order_outcomes`) is schema-ready but **off by default**: it would create a re-identification bridge between our pseudonymous users and the merchant's customer records. If enabled later: disclose in the grant sheet, store only an HMAC of the order id, strip customer fields from webhook payloads, never return per-session size/score to the merchant page.
 
 ## D8 — Engines are pure packages with test vectors

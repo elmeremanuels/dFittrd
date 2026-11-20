@@ -57,6 +57,7 @@ describe('the post-deploy check against this api behind production headers', () 
   let shop: Awaited<ReturnType<typeof seedShop>>;
   let webCommit = COMMIT;
   let dropFromApp: string | null = null;
+  let missingChunk: string | null = null;
 
   /** `fetch` for the script: the api origin is this app, the app origin is the published web build as Caddy serves it. */
   const fetchImpl = (async (input: string | URL | Request, init: RequestInit = {}) => {
@@ -75,7 +76,14 @@ describe('the post-deploy check against this api behind production headers', () 
     }
     if (url.pathname.startsWith('/assets/')) {
       headers.set('content-type', 'text/javascript');
-      return new Response('console.log("app");\n'.repeat(60), { headers });
+      // The api address a build made with VITE_API_URL carries, and one further chunk for the check to follow.
+      const chunk = url.pathname.includes('index-') ? `import"./embed-def456.js";const api="${API}";\n` : 'console.log("embed");\n';
+      if (missingChunk && url.pathname.includes(missingChunk)) {
+        // What `try_files {path} /index.html` answers for a file that is not there.
+        headers.set('content-type', 'text/html; charset=utf-8');
+        return new Response('<!doctype html><div id="root"></div>', { headers });
+      }
+      return new Response(chunk.repeat(60), { headers });
     }
     headers.set('content-type', 'text/html; charset=utf-8');
     return new Response('<!doctype html><div id="root"></div><script type="module" crossorigin src="/assets/index-abc123.js"></script>', { headers });
@@ -129,6 +137,33 @@ describe('the post-deploy check against this api behind production headers', () 
       } finally {
         dropFromApp = null;
       }
+    }
+  });
+
+  it('a chunk the entry script names but the server does not have fails "the app’s code loads"', async () => {
+    missingChunk = 'embed-def456';
+    try {
+      const r = await run();
+      expect(r.lines.filter((l) => l.status === 'fail').map((l) => l.n)).toEqual([6]);
+      expect(r.lines[5]!.detail).toMatch(/\/assets\/embed-def456\.js is served as text\/html; charset=utf-8, not as JavaScript/);
+    } finally {
+      missingChunk = null;
+    }
+  });
+
+  it('an api that does not name the app’s origin fails the lines a browser would be refused on', async () => {
+    // The real CORS rule of app.ts, with CORS_ORIGINS naming some other origin and PUBLIC_APP_URL not the app.
+    const other = await makeApp({ PUBLIC_APP_URL: 'https://app.elsewhere.test', PUBLIC_API_URL: API, CORS_ORIGINS: 'https://shop.example', GIT_SHA: COMMIT, TRY_RATE_LIMIT_PER_MIN: '1000' });
+    const previous = t;
+    t = other;
+    try {
+      const r = await check.runChecks({ api: API, app: APP, shop: null, product: null, commit: null }, { fetchImpl });
+      expect(r.lines.filter((l) => l.status === 'fail').map((l) => l.n)).toEqual([8, 13]);
+      expect(r.lines[7]!.detail).toMatch(/the api does not let the app call it from a browser: asked whether https:\/\/app\.curtain\.test may POST \/v1\/devices, it answered 204 without access-control-allow-origin \(PUBLIC_APP_URL or CORS_ORIGINS/);
+      expect(r.lines.filter((l) => l.status === 'skip').map((l) => l.n)).toEqual([9, 11, 12]);
+    } finally {
+      t = previous;
+      await other.close();
     }
   });
 

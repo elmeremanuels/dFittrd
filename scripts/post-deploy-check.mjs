@@ -18,21 +18,27 @@
  *    3  the "Try it on" script is served               GET /sdk/v1.js
  *    4  the merchant routes refuse a caller without a key, and one with a made-up key
  *    5  the app is served with its security headers    GET app/  (policy, isolation, HSTS on https)
- *    6  the app's own script loads, under the same policy
+ *    6  the app's code loads as a browser loads it     every script and stylesheet the build names, each as
+ *                                                      JavaScript or CSS under the policy; the api's address is in it
  *    7  the api and the app are the same release       /healthz commit = /version.json commit (= --commit)
- *    8  a shopper's phone can register                 POST /v1/devices
+ *    8  a shopper's phone can register                 POST /v1/devices, and the api lets the app's origin call it
  *    9  "Try it on" opens a session for the product    POST /v1/sdk/sessions
- *   10  the embed page loads with its security headers GET app/embed/<token>
+ *   10  the embed page loads with its security headers GET app/embed/<token>  (a made-up link when no shop is given)
  *   11  the product arrives with its size chart        GET /v1/try/<token>
  *   12  a shown size is accepted and not billed        POST /v1/try/<token>/fit-shown
  *   13  a made-up try link is refused                  GET /v1/try/<made-up token>
  *   14  the test shopper is deleted again              DELETE /v1/me
  *
- * 9 to 12 need a shop and one of its products that has a size chart: `--shop` is the shop's publishable key
- * (the `pk_…` value in the theme block or the plugin settings; it is public), `--product` the product's id
- * in the shop. Without them those lines say NOT CHECKED. Use a development store, not a paying shop: the
- * check opens one try session there as surface `api`, which is never billed (line 12 fails if it were),
- * and it deletes its test shopper at the end.
+ * 9, 11 and 12 need a shop and one of its products that has a size chart: `--shop` is the shop's publishable
+ * key (the `pk_…` value in the theme block or the plugin settings; it is public), `--product` the product's id
+ * in the shop. Without them those lines say NOT CHECKED, and the exit code is still 0. `--require-shop` turns
+ * that into FAIL: use it wherever nobody reads the lines (a deploy workflow, a cron job), from the moment a
+ * development store exists. Use a development store, not a paying shop: the check opens one try session there
+ * as surface `api`, which is never billed (line 12 fails if it were), and it deletes its test shopper at the end.
+ *
+ * What it does not do: run the app. It reads the code a browser would load and the headers a browser would
+ * obey, and it asks the api the browser's permission questions (CORS), but no page is rendered. The browser
+ * suite (`pnpm check:launch`) does that against the same build before the deploy.
  *
  * Exit code: 0 when no line failed, 1 when one did, 2 when the arguments are wrong.
  */
@@ -49,11 +55,12 @@ const fail = (detail) => ({ status: 'fail', detail });
 const skip = (detail) => ({ status: 'skip', detail });
 
 export function parseArgs(argv) {
-  const opts = { api: null, app: null, shop: null, product: null, commit: null, local: false };
+  const opts = { api: null, app: null, shop: null, product: null, commit: null, local: false, requireShop: false };
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--local') opts.local = true;
+    else if (a === '--require-shop') opts.requireShop = true;
     else if (['--api', '--app', '--shop', '--product', '--commit'].includes(a)) {
       const v = argv[++i];
       if (!v || v.startsWith('--')) throw new Error(`${a} needs a value`);
@@ -77,6 +84,7 @@ export function parseArgs(argv) {
     opts.api ??= `${base.protocol}//api.${host}`;
     opts.app ??= `${base.protocol}//app.${host}`;
   }
+  if (Boolean(opts.shop) !== Boolean(opts.product)) throw new Error('--shop and --product go together: give both or neither');
   if (!opts.api || !opts.app) throw new Error('give the site address (for example https://curtain.fit), or --local, or both --api and --app');
   opts.api = new URL(opts.api).origin;
   opts.app = new URL(opts.app).origin;
@@ -103,17 +111,24 @@ export function policyProblems(header, { surface, api, app }) {
   const p = parsePolicy(header);
   const problems = [];
   if (p.size === 0) return ['no Content-Security-Policy header'];
-  const allowed = new Set(["'self'", ...(api === app ? [] : [api])]);
-  const only = (directive, extra = []) => {
+  const apiSources = api === app ? [] : [api];
+  const allowed = new Set(["'self'", ...apiSources]);
+  // `extra` may be there; `required` must be: a policy that is too tight stops the app as surely as a loose one leaks.
+  const only = (directive, { extra = [], required = ["'self'"] } = {}) => {
     const values = p.get(directive);
     if (!values) return problems.push(`no ${directive}`);
-    const others = values.filter((v) => !allowed.has(v) && !extra.includes(v));
+    const others = values.filter((v) => !allowed.has(v) && !extra.includes(v) && !required.includes(v));
     if (others.length) problems.push(`${directive} also allows ${others.join(' ')}`);
+    const missing = required.filter((v) => !values.includes(v));
+    if (missing.length) problems.push(`${directive} lacks ${missing.join(' ')}${missing.includes(api) ? ' (the app could not reach the api)' : ''}`);
   };
   only('default-src');
-  only('connect-src');
-  only('script-src', ["'wasm-unsafe-eval'"]);
+  only('connect-src', { required: ["'self'", ...apiSources] });
+  // The body scan and the drape are WebAssembly.
+  only('script-src', { required: ["'self'", "'wasm-unsafe-eval'"] });
   only('worker-src');
+  // Product photos come through the api's media proxy; data: and blob: are the app's own pictures.
+  only('img-src', { extra: ['data:', 'blob:'], required: ["'self'", ...apiSources] });
   if ((p.get('object-src') ?? []).join(' ') !== "'none'") problems.push("object-src is not 'none'");
   const ancestors = p.get('frame-ancestors') ?? [];
   if (surface === 'app') {
@@ -153,6 +168,39 @@ export function headerProblems(headers, { surface, app }) {
   return problems;
 }
 
+/** How many files line 6 follows at most; the build has about forty. */
+const MAX_FILES = 300;
+
+/** The `src` of the page's module script. */
+export function entryScript(html) {
+  return /<script[^>]+type="module"[^>]+src="([^"]+)"/.exec(html)?.[1] ?? /<script[^>]+src="([^"]+)"[^>]+type="module"/.exec(html)?.[1] ?? null;
+}
+
+/** The scripts and stylesheets a page preloads or links. */
+export function linkedFiles(html) {
+  const out = [];
+  for (const tag of html.match(/<link\b[^>]*>/g) ?? []) {
+    const href = /\bhref="([^"]+)"/.exec(tag)?.[1];
+    if (href && /\brel="(modulepreload|stylesheet)"/.test(tag)) out.push(href);
+  }
+  return out;
+}
+
+/**
+ * The files under /assets/ a built script names, as paths: static imports (`from"./a.js"`), lazy chunks and their
+ * preload lists (`import("./a.js")`, `__vite__mapDeps` → `"assets/a.js"`) and workers (`"/assets/a.worker.js"`).
+ * Read as text, the way the build wrote them: any quoted .js or .css name that lands in /assets/.
+ */
+export function namedFiles(script, path) {
+  const out = new Set();
+  for (const m of script.matchAll(/["'`]((?:\.{1,2}\/|\/?assets\/)[A-Za-z0-9_.\-/]+\.(?:m?js|css))["'`]/g)) {
+    const ref = m[1];
+    const resolved = new URL(ref, `http://x${ref.startsWith('assets/') ? '/' : path}`).pathname;
+    if (resolved.startsWith('/assets/')) out.add(resolved);
+  }
+  return [...out];
+}
+
 const short = (commit) => (/^[0-9a-f]{40}$/.test(commit) ? commit.slice(0, 12) : commit);
 
 /**
@@ -165,6 +213,7 @@ export async function runChecks(opts, { fetchImpl = fetch, onLine = () => {} } =
   const state = {};
 
   const request = async (url, init = {}) => {
+    state.asked = String(url);
     const res = await fetchImpl(url, { redirect: 'manual', signal: AbortSignal.timeout(TIMEOUT_MS), ...init, headers: { accept: 'application/json', ...(init.headers ?? {}) } });
     const text = await res.text();
     let json = null;
@@ -187,13 +236,39 @@ export async function runChecks(opts, { fetchImpl = fetch, onLine = () => {} } =
       result = await fn();
     } catch (err) {
       const cause = err?.cause?.code ?? err?.cause?.message;
-      result = fail(`no answer: ${err?.name === 'TimeoutError' ? `nothing within ${TIMEOUT_MS / 1000} s` : err?.message ?? String(err)}${cause ? ` (${cause})` : ''}`);
+      const from = (() => {
+        try {
+          return ` from ${new URL(state.asked).origin}`;
+        } catch {
+          return '';
+        }
+      })();
+      result = fail(`no answer${from}: ${err?.name === 'TimeoutError' ? `nothing within ${TIMEOUT_MS / 1000} s` : err?.message ?? String(err)}${cause ? ` (${cause})` : ''}`);
     }
     const line = { n: lines.length + 1, title, ...result };
     lines.push(line);
     onLine(line);
   };
-  const noShop = 'no shop given: run again with --shop <publishable key> --product <product id> once a shop is installed';
+  const noShopText = 'no shop given: run again with --shop <publishable key> --product <product id> once a shop is installed';
+  const noShop = () => (opts.requireShop ? fail(`${noShopText} (--require-shop: a run without one does not count)`) : skip(noShopText));
+
+  /**
+   * The browser's permission question. The app calls the api from another origin with an Authorization header,
+   * so the browser first asks the api (a preflight) whether that origin may; this check's own requests come
+   * from Node, which asks nobody. Returns what is wrong, or null.
+   */
+  const corsProblem = async (method, path, requestHeaders) => {
+    if (api === app) return null;
+    const r = await request(`${api}${path}`, { method: 'OPTIONS', headers: { origin: app, 'access-control-request-method': method, 'access-control-request-headers': requestHeaders.join(',') } });
+    const shown = path.replace(/\/try\/[^/]{20,}/, '/try/<token>');
+    const origin = r.headers.get('access-control-allow-origin');
+    const why = (what) => `the api does not let the app call it from a browser: asked whether ${app} may ${method} ${shown}, it answered ${r.status} ${what}`;
+    if (origin !== app && origin !== '*') return why(`${origin ? `allowing "${origin}"` : 'without access-control-allow-origin'} (PUBLIC_APP_URL or CORS_ORIGINS on the server does not name ${app})`);
+    const list = (name) => (r.headers.get(name) ?? '').toLowerCase().split(',').map((v) => v.trim());
+    if (!list('access-control-allow-methods').some((m) => m === method.toLowerCase() || m === '*')) return why(`without ${method} in access-control-allow-methods`);
+    const refused = requestHeaders.filter((h) => !list('access-control-allow-headers').some((a) => a === h || a === '*'));
+    return refused.length ? why(`without ${refused.join(' and ')} in access-control-allow-headers`) : null;
+  };
 
   await check('The api is up', async () => {
     const r = await request(`${api}/healthz`);
@@ -245,16 +320,48 @@ export async function runChecks(opts, { fetchImpl = fetch, onLine = () => {} } =
     return problems.length ? fail(problems.join('; ')) : pass(`policy on, never framed, cross-origin isolated${app.startsWith('https:') ? ', HTTPS enforced' : ''}`);
   });
 
-  await check('The app’s own script loads, under the same policy', async () => {
+  await check('The app’s code loads as a browser loads it', async () => {
     if (!state.appHtml) return fail('the app page did not load (line above)');
-    const src = /<script[^>]+type="module"[^>]+src="([^"]+)"/.exec(state.appHtml)?.[1] ?? /<script[^>]+src="([^"]+)"[^>]+type="module"/.exec(state.appHtml)?.[1];
-    if (!src) return fail('the app page names no script');
-    const url = new URL(src, `${app}/`);
-    if (url.origin !== app) return fail(`the app loads its script from another origin: ${url.origin}`);
-    const r = await request(url.href, { headers: { accept: '*/*' } });
-    if (r.status !== 200 || !/javascript/.test(r.headers.get('content-type') ?? '')) return fail(`GET ${url.pathname} answered ${r.status} ${r.headers.get('content-type') ?? ''}`);
-    const problems = policyProblems(r.headers.get('content-security-policy'), { surface: 'app', api, app });
-    return problems.length ? fail(`${url.pathname}: ${problems.join('; ')}`) : pass(`${url.pathname}, ${Math.round(r.text.length / 1024)} KB`);
+    const entry = entryScript(state.appHtml);
+    if (!entry) return fail('the app page names no script');
+    state.entry = entry;
+    // Every file the build names, followed from the page: its entry script, its preloads and stylesheets, then
+    // whatever each script names in turn (static imports, lazy chunks, workers). The embed's own chunks are
+    // among them: the page is the same file for / and for /embed/<token>.
+    const start = [entry, ...linkedFiles(state.appHtml)].map((ref) => new URL(ref, `${app}/`));
+    const foreign = start.find((u) => u.origin !== app);
+    if (foreign) return fail(`the app loads code from another origin: ${foreign.origin}`);
+    const seen = new Set(start.map((u) => u.pathname));
+    let queue = [...seen];
+    let bytes = 0;
+    let namesApi = false;
+    while (queue.length) {
+      if (seen.size > MAX_FILES) return fail(`the build names more than ${MAX_FILES} files: this check does not follow that many`);
+      const batch = queue.splice(0, 6);
+      const answers = await Promise.all(batch.map(async (path) => ({ path, r: await request(`${app}${path}`, { headers: { accept: '*/*' } }) })));
+      for (const { path, r } of answers) {
+        const type = r.headers.get('content-type') ?? '';
+        const css = path.endsWith('.css');
+        if (r.status !== 200) return fail(`GET ${path} answered ${r.status}: the page names a file the server does not have`);
+        if (!(css ? /text\/css/ : /javascript/).test(type)) {
+          return fail(`${path} is served as ${type || 'nothing'}, not as ${css ? 'CSS' : 'JavaScript'}${/text\/html/.test(type) ? ': the file is not in the published build, so the server answers with the app page and a browser refuses it' : ''}`);
+        }
+        bytes += r.text.length;
+        if (css) continue;
+        // A worker's policy is its own script's response, so every script carries it, not only the page.
+        const problems = policyProblems(r.headers.get('content-security-policy'), { surface: 'app', api, app });
+        if (problems.length) return fail(`${path}: ${problems.join('; ')}`);
+        if (r.text.includes(api)) namesApi = true;
+        for (const next of namedFiles(r.text, path)) {
+          if (!seen.has(next)) {
+            seen.add(next);
+            queue.push(next);
+          }
+        }
+      }
+    }
+    if (api !== app && !namesApi) return fail(`none of the ${seen.size} files names ${api}: the web build was made with another VITE_API_URL, or none, so the app would call the wrong address`);
+    return pass(`${seen.size} files, ${Math.round(bytes / 1024)} KB, each served as what it is${api !== app ? `; the build calls ${api}` : ''}`);
   });
 
   await check('The api and the app are the same release', async () => {
@@ -273,12 +380,14 @@ export async function runChecks(opts, { fetchImpl = fetch, onLine = () => {} } =
     const r = await request(`${api}/v1/devices`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ platform: 'web', appVersion: 'post-deploy-check' }) });
     if (r.status !== 201 || !r.json?.token) return fail(`POST /v1/devices answered ${r.status}${errorOf(r)}`);
     state.device = r.json.token;
-    return pass('an anonymous test shopper was created');
+    const cors = await corsProblem('POST', '/v1/devices', ['content-type']);
+    if (cors) return fail(`a test shopper was created, but ${cors}`);
+    return pass(`an anonymous test shopper was created${api !== app ? ', and the app’s origin may ask for one' : ''}`);
   });
   const auth = () => ({ authorization: `Bearer ${state.device}` });
 
   await check('"Try it on" opens a session for the product', async () => {
-    if (!shop || !product) return skip(noShop);
+    if (!shop || !product) return noShop();
     const r = await request(`${api}/v1/sdk/sessions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ shopKeyPrefix: shop, productExternalId: product, pageUrl: `${app}/post-deploy-check`, surface: 'api' }) });
     if (r.status === 402) return fail('the shop is paused: its plan is not active, so the button is hidden on its product pages');
     if (r.status === 404) return fail(`the api does not know this ${r.json?.error?.message?.includes('product') ? `product ("${product}") in the shop` : `shop or product${errorOf(r)}`}`);
@@ -291,16 +400,22 @@ export async function runChecks(opts, { fetchImpl = fetch, onLine = () => {} } =
   });
 
   await check('The embed page loads with its security headers', async () => {
-    if (!shop || !product) return skip(noShop);
-    if (!state.embedUrl) return fail('no session was opened (line above)');
-    const r = await request(state.embedUrl, { headers: { accept: 'text/html' } });
-    if (r.status !== 200 || !/<script[^>]+type="module"/.test(r.text)) return fail(`GET ${app}/embed/<token> answered ${r.status}`);
+    const real = Boolean(shop && product);
+    if (real && !state.embedUrl) return fail('no session was opened (line above)');
+    // The headers do not depend on the token (the page is the same file for every link), so without a shop a
+    // made-up link still shows whether shop pages can frame the embed and whether it is kept out of caches.
+    const url = real ? state.embedUrl : `${app}/embed/post-deploy-check`;
+    const r = await request(url, { headers: { accept: 'text/html' } });
+    const shown = `GET ${app}/embed/<${real ? 'token' : 'made-up link'}>`;
+    if (r.status !== 200 || !/<script[^>]+type="module"/.test(r.text)) return fail(`${shown} answered ${r.status}`);
     const problems = [...policyProblems(r.headers.get('content-security-policy'), { surface: 'embed', api, app }), ...headerProblems(r.headers, { surface: 'embed', app })];
-    return problems.length ? fail(problems.join('; ')) : pass('policy on, framable by https shop pages only, not cached, not indexed');
+    if (state.entry && entryScript(r.text) !== state.entry) problems.push(`the embed page starts another script (${entryScript(r.text) ?? 'none'}) than the app page (${state.entry}), which line 6 read`);
+    if (problems.length) return fail(problems.join('; '));
+    return pass(`policy on, framable by https shop pages only, not cached, not indexed${real ? '' : ' (on a made-up link: no shop given)'}`);
   });
 
   await check('The product arrives with its size chart', async () => {
-    if (!shop || !product) return skip(noShop);
+    if (!shop || !product) return noShop();
     if (!state.token || !state.device) return fail('no session or no test shopper (lines above)');
     const r = await request(`${api}/v1/try/${state.token}?caps=requires3d`, { headers: auth() });
     if (r.status !== 200 || !r.json?.garment) return fail(`GET /v1/try/<token> answered ${r.status}${errorOf(r)}`);
@@ -308,22 +423,29 @@ export async function runChecks(opts, { fetchImpl = fetch, onLine = () => {} } =
     const sizes = (r.json.garment.sizeChart ?? []).map((row) => row.size ?? row.label).filter(Boolean);
     state.size = sizes[0];
     if (sizes.length === 0) return fail(`"${r.json.garment.name}" came without a size chart`);
+    const cors = await corsProblem('GET', `/v1/try/${state.token}`, ['authorization']);
+    if (cors) return fail(`it arrives here, but ${cors}`);
     return pass(`"${r.json.garment.name}" from ${r.json.shop?.name ?? 'the shop'}, sizes ${sizes.join(', ')}`);
   });
 
   await check('A shown size is accepted and not billed', async () => {
-    if (!shop || !product) return skip(noShop);
+    if (!shop || !product) return noShop();
     if (!state.intentToken || !state.size) return fail('the product did not arrive (line above)');
     const r = await request(`${api}/v1/try/${state.token}/fit-shown`, { method: 'POST', headers: { ...auth(), 'content-type': 'application/json' }, body: JSON.stringify({ intentToken: state.intentToken, recommendedSize: String(state.size), confidence: 0.5 }) });
     if (r.status !== 200) return fail(`POST /v1/try/<token>/fit-shown answered ${r.status}${errorOf(r)}`);
     if (r.json?.billed !== false) return fail('THIS CHECK WAS BILLED to the shop as a try session. It must never be: tell engineering');
+    const cors = await corsProblem('POST', `/v1/try/${state.token}/fit-shown`, ['authorization', 'content-type']);
+    if (cors) return fail(`recorded and not billed, but ${cors}`);
     return pass(`size ${state.size} recorded, nothing billed to the shop`);
   });
 
   await check('A made-up try link is refused', async () => {
     if (!state.device) return fail('no test shopper (line 8)');
     const r = await request(`${api}/v1/try/not-a-real-try-link`, { headers: auth() });
-    return r.status === 401 || r.status === 400 ? pass(`answered ${r.status}`) : fail(`GET /v1/try/<made-up token> answered ${r.status}, not 401${errorOf(r)}`);
+    if (r.status !== 401 && r.status !== 400) return fail(`GET /v1/try/<made-up token> answered ${r.status}, not 401${errorOf(r)}`);
+    // Needs no shop, so the try route's answer to the app's origin is checked on every run.
+    const cors = await corsProblem('GET', '/v1/try/not-a-real-try-link', ['authorization']);
+    return cors ? fail(`refused (${r.status}), but ${cors}`) : pass(`answered ${r.status}`);
   });
 
   await check('The test shopper is deleted again', async () => {
@@ -343,7 +465,7 @@ export const formatLine = (l) => `${String(l.n).padStart(2)}  ${LABEL[l.status]}
 export function summary({ lines, failed, skipped }) {
   const passed = lines.length - failed - skipped;
   if (failed) return `RESULT: NOT WORKING. ${failed} of ${lines.length} checks failed (${passed} passed${skipped ? `, ${skipped} not checked` : ''}). Read the FAIL lines above.`;
-  if (skipped) return `RESULT: what was checked works (${passed} passed), but ${skipped} checks were NOT run: the try session needs --shop and --product.`;
+  if (skipped) return `RESULT: what was checked works (${passed} passed), but ${skipped} checks were NOT run: the try session needs --shop and --product. Whether a shopper can try a product on is not known from this run.`;
   return `RESULT: the deployed stack works. All ${lines.length} checks passed.`;
 }
 
@@ -352,7 +474,7 @@ async function main() {
   try {
     opts = parseArgs(process.argv.slice(2));
   } catch (err) {
-    console.error(`post-deploy-check: ${err.message}\n\nUsage: node scripts/post-deploy-check.mjs https://<domain> [--shop <publishable key> --product <product id>] [--commit <sha>]\n       node scripts/post-deploy-check.mjs --local`);
+    console.error(`post-deploy-check: ${err.message}\n\nUsage: node scripts/post-deploy-check.mjs https://<domain> [--shop <publishable key> --product <product id>] [--require-shop] [--commit <sha>]\n       node scripts/post-deploy-check.mjs --local`);
     process.exit(2);
   }
   console.log(`Curtain post-deploy check, ${new Date().toISOString()}\n  api  ${opts.api}\n  app  ${opts.app}\n  shop ${opts.shop ? `${opts.shop}, product ${opts.product}` : 'none given'}\n`);

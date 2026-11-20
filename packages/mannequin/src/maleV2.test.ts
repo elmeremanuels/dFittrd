@@ -233,9 +233,9 @@ describe.each(MALE_BODY_SHAPE_IDS)('male %s, shape v2', (id) => {
     const outer = Math.max(...loop.points.map((p) => p[0]));
     expect(outer - (mannequin.landmarks.legX + ring.a)).toBeLessThan(0.15);
     expect(outer - (mannequin.landmarks.legX + ring.a)).toBeGreaterThan(-0.05);
-    // The torso ends at the crotch and closes just under it: nothing of it stands in the gap further down.
+    // The torso ends just under the crotch, inside the thigh tops, and closes there: nothing of it stands in the gap further down.
     const torsoLow = Math.min(...partVertices(mesh, 'torso').map((p) => p[1]));
-    expect(torsoLow).toBeGreaterThan(yc - 0.7);
+    expect(torsoLow).toBeGreaterThan(yc - 1.1);
     expect(torsoLow).toBeLessThan(yc);
   });
 

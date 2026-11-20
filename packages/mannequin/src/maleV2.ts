@@ -27,7 +27,7 @@
  *   the tops of the legs, so there is no flat ledge where the torso ended in v1. The legs move in
  *   so that the thighs sit under the seat, are flattened where they meet and carry the lower
  *   buttock down to the gluteal fold.
- * - **Thighs that part under the crotch.** The thighs touch at the crotch, where the torso ends, and
+ * - **Thighs that part under the crotch.** The thighs touch at the crotch, just above where the torso ends, and
  *   from `thighPartOverCm` under it each keeps its inner side `thighGapCm` off the centre plane: a
  *   thigh is a D there, flat on the inside, scaled so that its girth is what the ellipse's was (the
  *   thigh ring stays at the table girth). Before, the two thighs' ellipses overlapped across the
@@ -99,6 +99,8 @@ export const MALE_V2_ASSUMPTIONS = {
 const TORSO_SEGMENTS = 64;
 const LEG_SEGMENTS = 40;
 const TORSO_STEP_CM = 1.0;
+/** The torso's last section lies this far under the crotch, well inside the thighs: its rim is then not where it comes out of them. */
+const TORSO_UNDER_CROTCH_CM = 0.4;
 
 /** Superellipse point of the parameter angle t (t = 0 at the front, then towards +x). */
 const spow = (v: number, e: number): number => Math.sign(v) * Math.abs(v) ** e;
@@ -382,9 +384,10 @@ export function maleShapeV2(m: Mannequin, options: BuildOptions = {}): Mannequin
   // …and no further forward than the lower belly: the thigh tops move back by what they would stand out.
   const shiftZ = Math.max(0, topB - 0.99 * A.seatFrontShare * hip.D);
   const gluteCm = A.gluteal * hip.D;
-  // The torso ends at the crotch, where the thighs still touch, and closes under it between them (its pole): from
-  // there down the thighs have parted and nothing of the torso may stand in the gap.
-  const yEnd = yc;
+  // The torso ends just under the crotch, where the thighs have hardly parted, and closes there between them (its
+  // pole): further down nothing of the torso may stand in the gap. Its rim lies well inside the thigh tops (10 %): a rim
+  // near where the torso comes out of the thighs read as a hard dark line round them.
+  const yEnd = yc - TORSO_UNDER_CROTCH_CM;
   // --- Leg sections ------------------------------------------------------------------------------
   const legV1 = m.parts.find((p) => p.id === 'leg_l')!;
   const ls = LEG_SEGMENTS;
@@ -404,8 +407,10 @@ export function maleShapeV2(m: Mannequin, options: BuildOptions = {}): Mannequin
     const e = m.legAt(Math.min(yy, legTop), 1)!;
     const up = Math.min(1, Math.max(0, (yy - yt) / (gluteFold - yt)));
     const top = Math.min(1, Math.max(0, (yy - gluteFold) / (yc - gluteFold)));
-    // Above the crotch the leg tucks into the torso's lobes (no flat top shows).
-    const tuck = tucked ? 1 - 0.22 * Math.min(1, Math.max(0, (yy - yc) / (legTop - yc))) : 1;
+    // Above the crotch the leg tucks into the torso's lobes (no flat top shows): from where the torso has come out of
+    // the thighs, not from the crotch itself, so the two surfaces cross as near twins and not at a crease.
+    const tuckFrom = Math.min(yc + 1, lerp(yc, legTop, 0.4));
+    const tuck = tucked ? 1 - 0.22 * Math.min(1, Math.max(0, (yy - tuckFrom) / (legTop - tuckFrom))) : 1;
     // From the thigh ring up the leg runs straight to its top under the seat (v1 flared out here).
     const rise = Math.min(1, Math.max(0, (yy - yt) / (yc - yt)));
     const a0 = yy <= yt ? e.a : (yy <= yc ? lerp(thigh.a, topA, rise) : topA) * tuck;
@@ -460,7 +465,7 @@ export function maleShapeV2(m: Mannequin, options: BuildOptions = {}): Mannequin
     }
     // Scale: exact at the thigh ring (the ellipse's girth there), holding the outline's own size above it.
     // Above the torso's end the thigh stays just inside the torso that covers it (no surfaces fighting).
-    const inside = !tucked || yy <= yEnd ? 1 : yy >= yEnd + 1 ? 0.985 : lerp(1, 0.985, yy - yEnd);
+    const inside = !tucked || yy <= yc ? 1 : yy >= yc + 1 ? 0.985 : lerp(1, 0.985, yy - yc);
     const k = polygonCompensation(e.a, e.b, ls) * inside;
     const raw = legOutline(yy, tucked, k);
     const o = new Float64Array(raw.length);
@@ -525,9 +530,9 @@ export function maleShapeV2(m: Mannequin, options: BuildOptions = {}): Mannequin
     let o = scaled(torsoOutline(profile(yy), n), k);
     const w = yy <= yc ? 1 : yy >= yBlendTop ? 0 : 1 - smooth((yy - yc) / (yBlendTop - yc));
     if (w > 0) {
-      // Join: the outline goes over to the two thighs side by side; just inside them where the torso ends (1 %, so the
-      // two surfaces cross in a shallow groove: at 4 % it read as a dark line round the thigh tops).
-      const grow = yy >= yEnd + 0.5 ? 1 : lerp(0.99, 1, (yy - yEnd) / 0.5);
+      // Join: the outline goes over to the two thighs side by side: just outside them from half a centimetre above the
+      // crotch, 1.5 % inside them at the crotch (the two surfaces cross in a shallow groove), 10 % inside at its rim.
+      const grow = yy >= yc + 0.5 ? 1 : yy >= yc ? lerp(0.985, 1, (yy - yc) / 0.5) : lerp(0.9, 0.985, (yy - yEnd) / TORSO_UNDER_CROTCH_CM);
       const legs = [legSectionAt(yy, 1, false), legSectionAt(yy, -1, false)];
       const joined = new Float64Array(o.length);
       for (let j = 0; j < o.length; j += 2) {

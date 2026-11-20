@@ -556,6 +556,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         chosen={chosen}
         chooseFallback={chooseFallback}
         currentVariantSize={context.currentVariantSize}
+        stretchAssumed={data.stretchAssumed === true}
         avatarRef={avatarRef}
         units={units}
         onUnits={changeUnits}
@@ -654,7 +655,7 @@ export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): R
         <main ref={mainRef} className="flex flex-1 flex-col px-4 py-4" aria-live="off">
           {body}
         </main>
-        <EmbedFooter remember={remember} onRemember={(on) => void onRemember(on)} onForget={() => void forget()} forgetStatus={forgetStatus} appUrl={deps.appUrl} />
+        <EmbedFooter remember={remember} onRemember={(on) => void onRemember(on)} onForget={() => void forget()} forgetStatus={forgetStatus} appUrl={deps.appUrl} wordmark={data?.shop.hideWordmark !== true} />
       </div>
       {showPrompt ? (
         <AvatarPrompt

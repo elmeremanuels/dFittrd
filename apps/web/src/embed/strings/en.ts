@@ -187,8 +187,6 @@ export interface EmbedCatalogue {
     heightInches: string;
     preference: string;
     preferences: Record<FitPreference, string>;
-    ageRange: string;
-    ageUnset: string;
     bodyType: string;
     sex: { unspecified: string; female: string; male: string };
     knowsMeasurements: string;
@@ -251,6 +249,8 @@ export interface EmbedCatalogue {
      */
     pointPullOn: { marginal: string; blocked: string };
     pointByChart: (gap: string, band: string) => string;
+    /** Under the recommended size when the shop gave no fabric stretch: size advice assumed none. */
+    stretchNotUsed: string;
     estimated: (points: string[]) => string;
     chosen: (size: string) => string;
     /** `{size}` is the size, set in the display type. */
@@ -572,8 +572,6 @@ export const EN: EmbedCatalogue = {
     heightInches: 'Height, inches',
     preference: 'How do you like it to fit?',
     preferences: { snug: 'Snug', regular: 'Regular', relaxed: 'Relaxed' },
-    ageRange: 'Age range',
-    ageUnset: 'Prefer not to say',
     bodyType: 'Body type',
     sex: { unspecified: 'Not specified', female: 'Women’s sizing', male: 'Men’s sizing' },
     knowsMeasurements: 'I know my measurements',
@@ -628,6 +626,7 @@ export const EN: EmbedCatalogue = {
     pointsTitle: (size) => `How size ${size} fits you`,
     pointPullOn: { marginal: 'Only just pulls on', blocked: 'Too small to pull on' },
     pointByChart: (gap, band) => `By the size chart: ${band.toLowerCase()}, ${gap}`,
+    stretchNotUsed: 'The shop has not said how much this fabric stretches, so this size advice does not take stretch into account.',
     estimated: (points) => `${points.join(', ')} estimated from your height and weight. Add your own measurements for a higher confidence.`,
     chosen: (size) => `Size ${size} selected on the shop page`,
     chooseOnPage: 'Choose size {size} on the shop page.',

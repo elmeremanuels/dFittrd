@@ -99,7 +99,9 @@ export function mockTokensEnabled(env: { DEV?: boolean; VITE_DEMO?: string } = i
 /**
  * `mock:<garment id>` resolves to a bundled fixture without any network call (dev, demo
  * screenshots, tests). `mock:paused:<id>`, `mock:expired`, `mock:incomplete`, `mock:comingsoon`
- * and `mock:offline` show the blocked screens. The allowed origin of a mock is the framing page's own origin in a
+ * and `mock:offline` show the blocked screens. `mock:nostretch:<id>` is a product whose shop gave
+ * no fabric stretch (the result says so); `mock:nomark:<id>` is a shop that switched "Fit by
+ * Curtain" off. The allowed origin of a mock is the framing page's own origin in a
  * dev build only, so the size-selected message can be tried locally.
  */
 const SYNTHETIC_MOCKS: Readonly<Record<string, GarmentPayload>> = { [SYNTHETIC_MENS_TEE.id]: SYNTHETIC_MENS_TEE, [SYNTHETIC_MENS_CHINO_WL.id]: SYNTHETIC_MENS_CHINO_WL };
@@ -112,15 +114,18 @@ export function resolveMock(token: string, referrer: string): TryResolveResponse
   if (variant === 'comingsoon') throw new ApiError(422, MEN_COMING_SOON_CODE, 'Men’s clothing: coming soon');
   if (variant === 'offline') throw new NetworkError('offline (mock)');
   const paused = variant === 'paused';
-  const id = paused ? (parts[2] ?? '') : variant;
+  const noStretch = variant === 'nostretch';
+  const noMark = variant === 'nomark';
+  const id = paused || noStretch || noMark ? (parts[2] ?? '') : variant;
   // The SYNTHETIC men's test garments (not products; slices M1 and M2) also resolve, for dev screenshots.
   const garment = MOCK_GARMENTS_BY_ID[id] ?? SYNTHETIC_MOCKS[id];
   if (!garment) throw new ApiError(404, 'not_found', `Unknown demo garment ${id}`);
   const now = Date.now();
   const ref = originOf(referrer);
   return {
-    shop: { ...MOCK_EMBED_SHOP, paused },
+    shop: { ...MOCK_EMBED_SHOP, paused, ...(noMark ? { hideWordmark: true as const } : {}) },
     garment,
+    ...(noStretch ? { stretchAssumed: true as const } : {}),
     trySession: { id: '00000000-0000-4000-8000-0000000000ab', expiresAt: new Date(now + 10 * 60_000).toISOString(), intentToken: `mock-intent-${id}-000000` },
     pairing: { created: false, pairedAt: new Date(now).toISOString() },
     embed: { allowedOrigins: import.meta.env.DEV && ref ? [ref] : [] },

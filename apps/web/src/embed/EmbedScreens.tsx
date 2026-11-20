@@ -6,7 +6,7 @@ import { AlertTriangle, Camera, Clock, Hourglass, PackageX, PauseCircle, Ruler, 
 import { useId, useState, type ReactNode } from 'react';
 import type { GarmentPayload, ShopBranding } from '@curtain/schema';
 import { readableTextColor } from '@/lib/contrast';
-import { AGE_RANGES, FIT_PREFERENCES, isImperialField, isMensGarment, measurementFieldsFor, MENS_ONLY_FIELDS, rangeFor, requiredFieldsFor, setImperialEntry, unitFor, type AboutField, type AboutForm, type AboutGarment } from './aboutYou';
+import { FIT_PREFERENCES, isImperialField, isMensGarment, measurementFieldsFor, MENS_ONLY_FIELDS, rangeFor, requiredFieldsFor, setImperialEntry, unitFor, type AboutField, type AboutForm, type AboutGarment } from './aboutYou';
 import type { BlockedKind } from './flow';
 import { embedStrings, parts } from './strings';
 import { mediaProxyUrl } from './media';
@@ -64,12 +64,15 @@ export function EmbedFooter({
   onForget,
   forgetStatus,
   appUrl,
+  wordmark = true,
 }: {
   remember: boolean;
   onRemember: (on: boolean) => void;
   onForget: () => void;
   forgetStatus: string | null;
   appUrl: string;
+  /** D25 point 7: `false` when the shop switched "Fit by Curtain" off. Estimate labels are not part of it. */
+  wordmark?: boolean;
 }): ReactNode {
   const id = useId();
   const s = embedStrings();
@@ -93,12 +96,14 @@ export function EmbedFooter({
       ) : (
         <p className="text-ink-mute">{remember ? t.saved : t.notSaved}</p>
       )}
-      <p className="flex items-center justify-between gap-2 text-ink-mute">
-        <span>
-          {beforeBrand}
-          <span className="font-display text-sm text-ink">Curtain</span>
-          {afterBrand}
-        </span>
+      <p className={`flex items-center gap-2 text-ink-mute ${wordmark ? 'justify-between' : 'justify-end'}`}>
+        {wordmark ? (
+          <span data-testid="embed-wordmark">
+            {beforeBrand}
+            <span className="font-display text-sm text-ink">Curtain</span>
+            {afterBrand}
+          </span>
+        ) : null}
         <a href={appUrl} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
           {t.getApp}
         </a>
@@ -269,7 +274,6 @@ export function AboutScreen({
   const mens = isMensGarment(garment);
   const asksMensOnly = fields.some((f) => MENS_ONLY_FIELDS.includes(f));
   const required = requiredFieldsFor(category);
-  const ageId = useId();
   const sexId = useId();
   const t = embedStrings().about;
   const optional = <span className="font-normal normal-case tracking-normal">{t.optional}</span>;
@@ -315,18 +319,6 @@ export function AboutScreen({
       </fieldset>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <label htmlFor={ageId} className="eyebrow block">
-            {t.ageRange} {optional}
-          </label>
-          <select id={ageId} className="field-input text-base" value={form.ageRange} onChange={(e) => set('ageRange', e.target.value as AboutForm['ageRange'])}>
-            {AGE_RANGES.map((a) => (
-              <option key={a} value={a}>
-                {a === '' ? t.ageUnset : a}
-              </option>
-            ))}
-          </select>
-        </div>
         <div className="space-y-1">
           <label htmlFor={sexId} className="eyebrow block">
             {t.bodyType} {optional}

@@ -1,6 +1,6 @@
 /**
  * "About you" for the standalone embed (docs/STANDALONE.md §1.3.2): height, weight, fit preference,
- * optional age range and sizing chart, and an optional "I know my measurements" section. Pure, so
+ * optional sizing chart, and an optional "I know my measurements" section. Pure, so
  * it is unit-tested without a DOM.
  *
  * Girths the shopper does not enter come from the population prior through the capture feature's
@@ -16,9 +16,6 @@ import { cmToFtIn, cmToIn, ftInToCm, inToCm, IN_PER_FT, isUnits, kgToLb, lbToKg,
 
 export const FIT_PREFERENCES = ['snug', 'regular', 'relaxed'] as const;
 export type FitPreference = (typeof FIT_PREFERENCES)[number];
-
-export const AGE_RANGES = ['', '18-24', '25-34', '35-44', '45-54', '55-64', '65+'] as const;
-export type AgeRange = (typeof AGE_RANGES)[number];
 
 /** What the shopper typed while in imperial units (the metric fields hold the converted value). */
 export interface ImperialEntries {
@@ -55,8 +52,6 @@ export interface AboutForm {
   units: Units;
   imperial: ImperialEntries;
   preference: FitPreference;
-  /** Optional, stays on this device; not used by the fit engine. */
-  ageRange: AgeRange;
   /** Which population prior to use for missing girths. */
   sex: Sex;
   /** "I know my measurements" section open. */
@@ -90,7 +85,6 @@ export const EMPTY_ABOUT: AboutForm = {
   units: 'metric',
   imperial: EMPTY_IMPERIAL,
   preference: 'regular',
-  ageRange: '',
   sex: 'unspecified',
   knowsMeasurements: false,
   bust: '',
@@ -282,9 +276,14 @@ export function switchUnits(form: AboutForm, units: Units): AboutForm {
   return { ...form, units, imperial };
 }
 
-/** A stored or partial About-you form (saved before units existed) as a complete one. */
-export function normalizeAbout(raw: Partial<AboutForm> | null | undefined): AboutForm {
-  const base: AboutForm = { ...EMPTY_ABOUT, ...(raw ?? {}) };
+/**
+ * A stored or partial About-you form (saved before units existed) as a complete one. A form saved
+ * while the age-range question existed (removed by D25 point 6: nothing used it) still opens; its
+ * `ageRange` is dropped here, so it is not kept in memory and is gone from the device at the next save.
+ */
+export function normalizeAbout(raw: (Partial<AboutForm> & { ageRange?: unknown }) | null | undefined): AboutForm {
+  const { ageRange: _removed, ...stored } = raw ?? {};
+  const base: AboutForm = { ...EMPTY_ABOUT, ...stored };
   return { ...base, units: isUnits(base.units) ? base.units : 'metric', imperial: { ...EMPTY_IMPERIAL, ...(raw?.imperial ?? {}) } };
 }
 

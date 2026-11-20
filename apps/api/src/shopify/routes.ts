@@ -38,7 +38,7 @@ import { badRequest, conflict, forbidden, serviceUnavailable, unauthorized } fro
 import { HOUR } from '../lib/time.js';
 import { archiveProduct } from '../services/products.js';
 import { merchantSettings, updateMerchantSettings } from '../services/settings.js';
-import { clearSettings, createShop, findShopByDomain, issueMerchantKeys, updateSettings, type ShopRow } from '../services/shops.js';
+import { clearSettings, createShop, endConsoleAccess, findShopByDomain, issueMerchantKeys, updateSettings, type ShopRow } from '../services/shops.js';
 import { shopifyChartRoutes } from './charts.js';
 import { billingSettingsPatch } from './client.js';
 
@@ -311,6 +311,9 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
             .where(eq(shops.id, shop.id));
           await clearSettings(db, shop.id, SUBSCRIPTION_KEYS);
           await shopify.deleteSessions(shop.id);
+          // An uninstall is a clean cut: a console session or an unused sign-in link must not work
+          // again when the shop is installed again.
+          await endConsoleAccess(db, shop.id, now());
           break;
         }
         case 'app_subscriptions/update': {

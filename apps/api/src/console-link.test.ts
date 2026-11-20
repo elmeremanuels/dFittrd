@@ -10,7 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { CONSOLE_LINK_TTL_MINUTES, CONSOLE_SESSION_TTL_HOURS, ConsoleLinkResponseSchema, ConsoleSessionResponseSchema } from '@curtain/schema';
 import { resetReplayCache } from './auth/merchant.js';
 import { consoleLinks, consoleSessions, shops } from './db/schema.js';
-import { sha256Hex, signMerchantRequest } from './lib/crypto.js';
+import { hmacBase64, sha256Hex, signMerchantRequest } from './lib/crypto.js';
 import { CONSOLE_LINK_MAX_PER_WINDOW, consoleLinkHash, consoleSessionHash } from './services/consoleAccess.js';
 import { makeApp, seedShop, type TestApp } from './test/helpers.js';
 import { eq } from 'drizzle-orm';
@@ -272,6 +272,89 @@ describe('one-time sign-in link into the console', () => {
 
     it('is not accepted when made up', async () => {
       expect((await settings('cs_' + 'q'.repeat(43))).statusCode).toBe(401);
+    });
+  });
+
+  describe('a new key and an uninstall end console access', () => {
+    const shopifyJwt = () =>
+      new SignJWT({ iss: `https://${SHOPIFY_DOMAIN}/admin`, dest: `https://${SHOPIFY_DOMAIN}`, sub: '42', sid: 'sid-1' })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setAudience(API_KEY)
+        .setIssuedAt(Math.floor(clock / 1000))
+        .setNotBefore(Math.floor(clock / 1000) - 1)
+        .setExpirationTime(Math.floor(clock / 1000) + 60)
+        .setJti(`jti-${Math.random()}`)
+        .sign(new TextEncoder().encode(API_SECRET));
+
+    it('rotating the shop key ends every console session of the shop and spends its unused links; another shop keeps its own', async () => {
+      const c = await seedShop(t, { domain: 'shop-rotate.example', name: 'Shop Rotate', products: [] });
+      const open = await session(c);
+      const openTwo = await session(c);
+      const unused = await mintToken(c);
+      const other = await session(a);
+      const otherUnused = await mintToken(a);
+      expect((await settings(open)).statusCode).toBe(200);
+
+      const rotated = await t.app.inject({ method: 'POST', url: '/v1/merchant/keys/rotate', headers: bearer(c.apiKey) });
+      expect(rotated.statusCode, rotated.body).toBe(200);
+
+      for (const s of [open, openTwo]) {
+        const res = await settings(s);
+        expect(res.statusCode).toBe(401);
+        expect(res.json().error.code).toBe('invalid_console_session');
+      }
+      // The link asked for with the old key gives no session, in the same words as any dead link.
+      const dead = await exchange(unused);
+      expect(dead.statusCode).toBe(401);
+      expect(dead.json().error.code).toBe('invalid_console_link');
+      // Shop A is untouched.
+      expect((await settings(other)).statusCode).toBe(200);
+      expect((await exchange(otherUnused)).statusCode).toBe(200);
+      // The new key gets a new link, and that one works.
+      const fresh = await t.app.inject({ method: 'POST', url: '/v1/merchant/console-link', headers: bearer(rotated.json<{ apiKey: string }>().apiKey) });
+      expect(fresh.statusCode, fresh.body).toBe(200);
+      expect((await exchange(tokenOf(fresh.json<{ url: string }>().url))).statusCode).toBe(200);
+    });
+
+    it('an uninstall ends them for good: neither works again when the shop is installed again', async () => {
+      const linkOf = async (): Promise<string> => {
+        const res = await t.app.inject({ method: 'POST', url: '/v1/merchant/console-link', headers: bearer(await shopifyJwt()) });
+        expect(res.statusCode, res.body).toBe(200);
+        return tokenOf(res.json<{ url: string }>().url);
+      };
+      const ex = await exchange(await linkOf());
+      const open = ex.json<{ sessionToken: string }>().sessionToken;
+      const unused = await linkOf();
+      expect((await settings(open)).statusCode).toBe(200);
+
+      const body = JSON.stringify({ id: 1, domain: SHOPIFY_DOMAIN });
+      const hook = await t.app.inject({
+        method: 'POST',
+        url: '/shopify/webhooks',
+        headers: { 'content-type': 'application/json', 'x-shopify-topic': 'app/uninstalled', 'x-shopify-shop-domain': SHOPIFY_DOMAIN, 'x-shopify-webhook-id': `wh-${Math.random().toString(36).slice(2)}`, 'x-shopify-hmac-sha256': hmacBase64(API_SECRET, body) },
+        payload: body,
+      });
+      expect(hook.statusCode, hook.body).toBe(200);
+      const [gone] = await t.handle.db.select().from(shops).where(eq(shops.domain, SHOPIFY_DOMAIN));
+      expect(gone?.uninstalledAt).toBeInstanceOf(Date);
+      expect((await settings(open)).statusCode).toBe(401);
+
+      // What a reinstall does to the row.
+      await t.handle.db.update(shops).set({ uninstalledAt: null, purgeAfter: null, paused: false }).where(eq(shops.domain, SHOPIFY_DOMAIN));
+      expect((await settings(open)).statusCode).toBe(401);
+      expect((await exchange(unused)).statusCode).toBe(401);
+      // The installed shop signs in again with a new link.
+      expect((await exchange(await linkOf())).statusCode).toBe(200);
+    });
+
+    it(`holds the limit of ${CONSOLE_LINK_MAX_PER_WINDOW} links for requests that arrive at the same moment`, async () => {
+      const c = await seedShop(t, { domain: 'shop-burst.example', name: 'Shop Burst', products: [] });
+      const all = await Promise.all(Array.from({ length: 25 }, () => t.app.inject({ method: 'POST', url: '/v1/merchant/console-link', headers: bearer(c.apiKey) })));
+      const codes = all.map((r) => r.statusCode);
+      expect(codes.filter((x) => x === 200)).toHaveLength(CONSOLE_LINK_MAX_PER_WINDOW);
+      expect(codes.filter((x) => x === 429)).toHaveLength(25 - CONSOLE_LINK_MAX_PER_WINDOW);
+      const rows = await t.handle.db.select().from(consoleLinks).where(eq(consoleLinks.shopId, c.shop.id));
+      expect(rows).toHaveLength(CONSOLE_LINK_MAX_PER_WINDOW);
     });
   });
 

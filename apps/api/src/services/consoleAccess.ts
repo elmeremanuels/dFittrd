@@ -12,12 +12,17 @@
  *    the same moment exactly one gets a session.
  *  - Every refusal of the exchange is the same answer: it does not say whether the token was
  *    unknown, used or too old.
+ *  - A new shop key and an uninstall end every session and every unused link of the shop
+ *    (`endConsoleAccess` in services/shops.ts): rotating the key is the remedy for a leaked key,
+ *    and whoever held the old key must not keep the console.
+ *  - Counting a shop's recent links and adding one happen under a lock on the shop's row, so the
+ *    limit also holds for requests that arrive together.
  */
 import { randomBytes } from 'node:crypto';
 import { and, count, eq, gt, isNull, lt } from 'drizzle-orm';
 import { CONSOLE_LINK_TTL_MINUTES, CONSOLE_SESSION_TTL_HOURS, type ConsoleLinkResponse, type ConsoleSessionResponse } from '@curtain/schema';
 import type { Db } from '../db/client.js';
-import { consoleLinks, consoleSessions } from '../db/schema.js';
+import { consoleLinks, consoleSessions, shops } from '../db/schema.js';
 import { HttpError, unauthorized } from '../lib/errors.js';
 import { safeEqual, sha256Hex } from '../lib/crypto.js';
 import { findShopById, type ShopRow } from './shops.js';
@@ -49,17 +54,21 @@ export async function mintConsoleLink(input: { db: Db; shop: ShopRow; appUrl: st
   await db.delete(consoleLinks).where(and(eq(consoleLinks.shopId, shop.id), lt(consoleLinks.createdAt, old)));
   await db.delete(consoleSessions).where(and(eq(consoleSessions.shopId, shop.id), lt(consoleSessions.expiresAt, old)));
 
-  const [recent] = await db
-    .select({ n: count() })
-    .from(consoleLinks)
-    .where(and(eq(consoleLinks.shopId, shop.id), gt(consoleLinks.createdAt, new Date(now.getTime() - CONSOLE_LINK_WINDOW_MS))));
-  if ((recent?.n ?? 0) >= CONSOLE_LINK_MAX_PER_WINDOW) {
-    throw new HttpError(429, 'rate_limited', `too many sign-in links for this shop: at most ${CONSOLE_LINK_MAX_PER_WINDOW} in ${CONSOLE_LINK_WINDOW_MS / 60_000} minutes`);
-  }
-
   const token = newToken(LINK_PREFIX);
   const expiresAt = new Date(now.getTime() + CONSOLE_LINK_TTL_MS);
-  await db.insert(consoleLinks).values({ shopId: shop.id, tokenHash: consoleLinkHash(token), createdAt: now, expiresAt });
+  await db.transaction(async (tx) => {
+    // The shop's row is the lock: a second request for the same shop waits here until this one
+    // has written its link, so the count below sees it. Another shop is not held up.
+    await tx.select({ id: shops.id }).from(shops).where(eq(shops.id, shop.id)).for('update');
+    const [recent] = await tx
+      .select({ n: count() })
+      .from(consoleLinks)
+      .where(and(eq(consoleLinks.shopId, shop.id), gt(consoleLinks.createdAt, new Date(now.getTime() - CONSOLE_LINK_WINDOW_MS))));
+    if ((recent?.n ?? 0) >= CONSOLE_LINK_MAX_PER_WINDOW) {
+      throw new HttpError(429, 'rate_limited', `too many sign-in links for this shop: at most ${CONSOLE_LINK_MAX_PER_WINDOW} in ${CONSOLE_LINK_WINDOW_MS / 60_000} minutes`);
+    }
+    await tx.insert(consoleLinks).values({ shopId: shop.id, tokenHash: consoleLinkHash(token), createdAt: now, expiresAt });
+  });
   return { url: `${input.appUrl.replace(/\/+$/, '')}${CONSOLE_LINK_PATH}#t=${token}`, expiresAt: expiresAt.toISOString() };
 }
 

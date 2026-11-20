@@ -5,7 +5,7 @@
 import { MENS_POINT_LABELS, NOTE_ORDER, POINT_LABELS as POINT_LABELS_DEFAULT } from './constants';
 import { round1 } from './math';
 import { TAPE_NOTES } from './pullOn';
-import { isPointFit, type AnchorGaps, type FitAnchorId, type FitResult, type Point, type PointFit, type RenderGaps, type SizeFit } from './types';
+import { isPointFit, type AnchorGaps, type FitAnchorId, type FitResult, type Point, type PointFit, type RenderGaps, type SizeFit, type WearBlock } from './types';
 
 /**
  * The row of `size`, without relying on the first row that carries the label (finding #2). The
@@ -126,4 +126,44 @@ export function anchorGaps(result: FitResult, size?: string | null): AnchorGaps 
     out.slackCm[anchor] = render.slackCm[point];
   }
   return out;
+}
+
+/**
+ * The girth points a garment has to close round (or be pulled over): a size smaller than the body there, beyond what
+ * its fabric gives, cannot be put on. Breadths (shoulder), lengths and the foot are left out: a garment short or narrow
+ * there is still on the body.
+ */
+export const WEAR_POINTS: readonly Point[] = ['bust', 'waist', 'hip', 'thigh'];
+
+/**
+ * Where `size` cannot be worn on this body, read off the result (no maths of its own beyond `slackCm` of
+ * `fitGapsForRender`): a `WEAR_POINTS` point the engine banded `tight` whose garment girth is smaller than the body
+ * (negative slack: the body is larger than the garment by more than the stretch-adjusted limit the engine computed
+ * from the product's fabric), or a pull-on check that is `blocked` (the stretched band is short of the hips by more
+ * than its allowance). Returns the largest shortfall; `null` when the size goes on, however snug or loose, and when
+ * the size is not in the result (the `null` cases of `fitGapsForRender`).
+ *
+ * A picture reads this and never decides it: a size with a block is not drawn on the body (the 3D view and the 2D
+ * figure show the body alone and say why). `tight` with room left (the garment is larger than the body but has less
+ * ease than the limit) is not a block: the garment closes.
+ */
+export function wearBlock(result: FitResult, size?: string | null): WearBlock | null {
+  const target = size ?? result.recommendedSize ?? result.closestSize;
+  const fit = sizeFit(result, target);
+  if (!fit) return null;
+  const labels = result.mens ? MENS_POINT_LABELS : POINT_LABELS_DEFAULT;
+  let worst: WearBlock | null = null;
+  for (const p of fit.points) {
+    if (!isPointFit(p) || p.measure === 'length' || !WEAR_POINTS.includes(p.point) || p.band !== 'tight') continue;
+    const slack = round1(p.gapCm + p.easeTarget);
+    const anchor = FIT_POINT_ANCHORS[p.point];
+    if (slack >= 0 || anchor === undefined) continue;
+    if (!worst || -slack > worst.shortCm) worst = { reason: 'tight', point: p.point, anchor, label: labels[p.point], shortCm: round1(-slack) };
+  }
+  const pull = fit.pullOn;
+  if (pull?.status === 'blocked') {
+    const short = round1(Math.max(0, -pull.marginCm));
+    if (!worst || short >= worst.shortCm) worst = { reason: 'pull-on', point: 'hip', anchor: 'hip', label: labels.hip, shortCm: short };
+  }
+  return worst;
 }

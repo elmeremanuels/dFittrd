@@ -335,4 +335,19 @@ export interface AnchorGaps {
   slackCm: Partial<Record<FitAnchorId, number>>;
 }
 
+/**
+ * Where a size cannot be worn on this body (`wearBlock`): the point with the largest shortfall.
+ * `tight`: the garment's girth at `point` is smaller than the body by `shortCm`, more than its fabric gives.
+ * `pull-on`: the waistband at its measured stretch is `shortCm` short of the hips it has to pass (`PullOnCheck`).
+ */
+export interface WearBlock {
+  reason: 'tight' | 'pull-on';
+  point: Point;
+  anchor: FitAnchorId;
+  /** The point as the notes print it ("bust", "chest" on a men's fit, "hips", "seat"). */
+  label: string;
+  /** Body minus garment at the point, cm, 1 dp, never negative. */
+  shortCm: number;
+}
+
 export type { BodyProfile, UserBody, GarmentPayload, TapeProvenance };

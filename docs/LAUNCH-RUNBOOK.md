@@ -176,23 +176,45 @@ yet, this is what a working stack prints (exit code 0):
  3  PASS         The "Try it on" script for shop pages is served: 20 KB, loadable from any shop page
  4  PASS         The merchant routes refuse a caller without a key: 401 without a key (read and write), 401 with a made-up key
  5  PASS         The app is served with its security headers: policy on, never framed, cross-origin isolated, HTTPS enforced
- 6  PASS         The app’s own script loads, under the same policy: /assets/index-….js, 1 KB
+ 6  PASS         The app’s code loads as a browser loads it: 23 files, 2232 KB, each served as what it is; the build calls https://api.curtain.fit
  7  PASS         The api and the app are the same release: both are commit <sha12>, the one you expected
- 8  PASS         A shopper’s phone can register: an anonymous test shopper was created
+ 8  PASS         A shopper’s phone can register: an anonymous test shopper was created, and the app’s origin may ask for one
  9  NOT CHECKED  "Try it on" opens a session for the product: no shop given: run again with --shop … --product …
-10  NOT CHECKED  The embed page loads with its security headers: no shop given: …
+10  PASS         The embed page loads with its security headers: policy on, framable by https shop pages only, not cached, not indexed (on a made-up link: no shop given)
 11  NOT CHECKED  The product arrives with its size chart: no shop given: …
 12  NOT CHECKED  A shown size is accepted and not billed: no shop given: …
 13  PASS         A made-up try link is refused: answered 401
 14  PASS         The test shopper is deleted again: deleted, and its token no longer works
 
-RESULT: what was checked works (10 passed), but 4 checks were NOT run: the try session needs --shop and --product.
+RESULT: what was checked works (11 passed), but 3 checks were NOT run: the try session needs --shop and --product. Whether a shopper can try a product on is not known from this run.
 ```
+
+**Exit code 0 here does not mean a shopper can try a product on.** The three NOT CHECKED lines are the try path
+itself, and a wrong `PUBLIC_APP_URL` on the server (every try link pointing at a dead address) is only seen by
+line 9. A person reading the lines is told; a script or a workflow step that only reads the exit code is not. So
+this form of the command is for the first deploy only, while no shop exists. From step 12 on, always give the
+development store and `--require-shop`, which turns a run without a shop into FAIL and exit 1.
+
+What the lines stand on, since the half of the product that runs in the shopper's browser cannot be seen from
+`/healthz`:
+
+- Line 6 fetches every script and stylesheet the build names (the page's own, then whatever each script names:
+  lazy chunks, workers) and requires each to come back as JavaScript or CSS under the policy. A file missing from
+  the published build comes back as the app page (`try_files {path} /index.html`), with status 200; that fails
+  here. It also requires the api's address to be in the build: a web build made with a wrong `VITE_API_URL` fails.
+- Lines 5, 6 and 10 fail on a policy that is too loose and on one that is too tight for the app to run (the api
+  missing from `connect-src` or `img-src`, no `'wasm-unsafe-eval'`).
+- Lines 8, 11, 12 and 13 also ask the api what a browser asks before the app may call it from `app.curtain.fit`
+  (the CORS preflight). An api whose `PUBLIC_APP_URL` or `CORS_ORIGINS` does not name the app fails there.
+- Line 10 reads the embed's headers on a made-up link when no shop is given, so framing and caching are checked
+  from the first deploy.
+- It does not run the app: no page is rendered. `pnpm check:launch` (step 7) does that, on the same build,
+  before the deploy.
 
 Any `FAIL` line says what was asked and what came back; the command then exits 1 and the result line reads
 `RESULT: NOT WORKING`. Line 7 is the one that catches a deploy that swapped the api but not the web app (or an
 older release still being served): the api reports its commit on `/healthz`, the web build on `/version.json`.
-Lines 9 to 12 are run in step 12, once the development store exists.
+Lines 9, 11 and 12 are run in step 12, once the development store exists.
 
 Two things the command does not look at, still by hand:
 
@@ -243,13 +265,13 @@ shows `"distribution":"custom"`.
 
 `docs/LAUNCH-SHOPIFY.md` part D, rows D1–D14 (D15 is a 48-hour wait, optional). Keep
 `docker compose -p curtain logs -f api` open. Every row must pass before step 13. Write the results into that table.
-After row D4 (a product has a size chart), run the post-deploy check with the development store, so its lines 9 to
-12 run too: open a product page of the dev store, view the page source, search for `pk_` (the shop's publishable
+After row D4 (a product has a size chart), run the post-deploy check with the development store, so its lines 9, 11
+and 12 run too: open a product page of the dev store, view the page source, search for `pk_` (the shop's publishable
 key, in the small script of the "Try it on" block) and for `data-curtain-product="…"` (the product id). Both are
 public: they are in every shopper's browser.
 
 ```sh
-node scripts/post-deploy-check.mjs https://curtain.fit --shop <pk_…> --product <product id> --commit "$(git rev-parse HEAD)"
+node scripts/post-deploy-check.mjs https://curtain.fit --shop <pk_…> --product <product id> --require-shop --commit "$(git rev-parse HEAD)"
 ```
 
 Expected: `RESULT: the deployed stack works. All 14 checks passed.` Use the development store for this, not
@@ -287,7 +309,9 @@ D13–D14 (uninstall and reinstall).
 - `SELECT topic, status, count(*) FROM webhook_log WHERE received_at > now() - interval '1 day' GROUP BY 1,2;`
   no row stuck in `failed` or `received`.
 - `docker compose -p curtain ps` all healthy; `/var/log/curtain/backup.log` shows a nightly dump.
-- After every deploy: the post-deploy check of step 9 (`node scripts/post-deploy-check.mjs https://curtain.fit --commit …`).
+- After every deploy: the post-deploy check **with the development store**, as in step 12
+  (`node scripts/post-deploy-check.mjs https://curtain.fit --shop <pk_…> --product <product id> --require-shop --commit …`).
+  Without the shop the command exits 0 with the try path unchecked (step 9); `--require-shop` makes that a FAIL.
 - The emergency-contact inbox (Shopify webhook warnings).
 - Levers: pause the button (`UPDATE shops SET paused = true WHERE domain = '<handle>.myshopify.com';`), roll back a
   release (Actions → deploy → `rollback`), or the merchant removes the block.
@@ -340,8 +364,11 @@ And to have every deploy run the post-deploy check of step 9 by itself, add this
 `.github/workflows/deploy.yml`, directly after the step `health check from outside`, and change the `if:` of the
 step `roll back (external health check failed)` to
 `failure() && (steps.health.outcome == 'failure' || steps.postdeploy.outcome == 'failure')`. `POST_DEPLOY_SHOP` and
-`POST_DEPLOY_PRODUCT` are optional repository variables (the development store's publishable key and a product
-id, both public); without them lines 9 to 12 are not checked.
+`POST_DEPLOY_PRODUCT` are repository variables (the development store's publishable key and a product id, both
+public). Before step 12 they do not exist yet, and the step then leaves lines 9, 11 and 12 unchecked and still
+passes: for that time only. **As part of step 12, set both and set `POST_DEPLOY_REQUIRE_SHOP` to `1`**: from then
+on a deploy whose try path was not checked (a variable deleted or emptied) fails and is rolled back, as one whose
+try path is broken is.
 
 ```yaml
       - name: post-deploy check (line by line; a FAIL rolls the release back)
@@ -349,9 +376,11 @@ id, both public); without them lines 9 to 12 are not checked.
         env:
           SHOP: ${{ vars.POST_DEPLOY_SHOP }}
           PRODUCT: ${{ vars.POST_DEPLOY_PRODUCT }}
+          REQUIRE_SHOP: ${{ vars.POST_DEPLOY_REQUIRE_SHOP }}
         run: |
           args=("https://$DOMAIN" --commit "$GITHUB_SHA")
           if [ -n "$SHOP" ] && [ -n "$PRODUCT" ]; then args+=(--shop "$SHOP" --product "$PRODUCT"); fi
+          if [ "$REQUIRE_SHOP" = "1" ]; then args+=(--require-shop); fi
           set -o pipefail   # the step fails when the check fails, not when tee does
           node scripts/post-deploy-check.mjs "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
 ```

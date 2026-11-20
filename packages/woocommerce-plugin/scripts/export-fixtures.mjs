@@ -9,7 +9,8 @@
  * tests/fixtures/fabric-text.json, real-looking English and Dutch fabric texts with what
  * `resolveFabricText`, `fabricFromProductText` and `fromWooMeta` make of them.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CHART_COLUMN_CASES, checkChartColumns, wlAxesFromLabel, SizeChartSchema, SYNTHETIC_MENS_TEE, SYNTHETIC_MENS_CHINO_WL, GARMENT_TAPE_FORM_CASES, GARMENT_TAPE_FORM_TEXT, PILOT_PULL_ON_SKIRT, checkGarmentTapeInput, refillGarmentTape, measuredFromGarmentTape, MOCK_GARMENTS, MENS_FIXTURE_GARMENTS, AUDIENCE_CASES, inferAudienceDecision, fromWooMeta, toWooMeta, ESTIMATE_DISCLAIMER, FABRIC_TEXT_FIELD, fabricFromProductText, resolveFabricText } from '@curtain/schema';
@@ -46,6 +47,18 @@ console.log(`wrote tests/fixtures/garments.json (${cases.length} garments)`);
 writeFabricLibraryAsset(root);
 writeChartTemplatesAsset(root);
 writeEurRatesAsset(root);
+
+// The JSON Schemas the PHP validator reads (also copied by scripts/build.mjs): refreshed here so
+// the PHP tests never run against a copy from before a schema change.
+const schemaDist = join(dirname(createRequire(import.meta.url).resolve('@curtain/schema/package.json')), 'dist');
+for (const name of ['garment.schema.json', 'garment-draft.schema.json']) {
+  if (!existsSync(join(schemaDist, name))) {
+    console.error(`missing ${join(schemaDist, name)}: build @curtain/schema first`);
+    process.exit(1);
+  }
+  copyFileSync(join(schemaDist, name), join(root, 'assets', name));
+}
+console.log('copied assets/garment.schema.json and assets/garment-draft.schema.json from @curtain/schema');
 
 // Audience (women / men / unisex): the shared cases with what inferAudienceDecision answers now, and
 // WooCommerce products (the two men's fixtures as a shop would hold them, plus override and

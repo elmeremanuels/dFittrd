@@ -92,6 +92,20 @@ test(
 );
 
 test(
+	'a fabric with only a name is stored as it is: stretch and drape are not required (D25 point 1)',
+	static function (): void {
+		$r = Sanitizer::from_post( array( 'fabric_primary' => 'Linen', 'fabric_stretch_pct' => '', 'fabric_drape' => '' ) );
+		assert_same( '{"primary":"linen"}', $r['meta']['_curtain_fabric'] );
+		assert_false( in_array( 'fabric.stretchPct', $r['errors'], true ) );
+		$r = Sanitizer::from_post( array( 'fabric_primary' => 'Linen', 'fabric_stretch_pct' => '4' ) );
+		assert_same( '{"primary":"linen","stretchPct":4}', $r['meta']['_curtain_fabric'] );
+		$b = Payload_Builder::build( array( 'id' => 5, 'name' => 'Linen Shirt' ), array( '_curtain_fabric' => '{"primary":"linen","stretchPct":150,"drape":0.4}' ), array( 'default_brand' => 'Shop' ) );
+		assert_json_equal( array( 'primary' => 'linen', 'drape' => 0.4 ), $b['payload']['fabric'] );
+		assert_same( array( array( 'source' => '_curtain_fabric', 'path' => 'fabric.stretchPct', 'message' => 'Too big: expected number to be <=100; the value was left out' ) ), $b['warnings'] );
+	}
+);
+
+test(
 	'invalid values are dropped and reported, never stored',
 	static function (): void {
 		$r = Sanitizer::from_post(

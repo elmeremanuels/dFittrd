@@ -192,6 +192,8 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, wais
   );
   const ringList = rings ? rings.selected.rings.filter((r) => r.key !== 'hem') : [];
   const hemLeftOut = !!rings && rings.selected.rings.some((r) => r.key === 'hem');
+  // A men's garment names its rings as the fit list and the 2D figure do: "Chest", "Seat" (OI-104).
+  const men = garment.audience === 'men';
 
   useEffect(() => {
     if (!open || !asset) return;
@@ -337,8 +339,8 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, wais
         <ul className="mt-1.5 flex flex-wrap gap-1 text-[11px]" aria-label={t.rings(size)} data-testid="garment3d-rings">
           {ringList.map((r) => (
             <li key={r.key} className="chip px-2 py-0.5" title={r.text}>
-              <span className="font-semibold">{t.ringName(r.key)}</span>{' '}
-              {r.chip[0].toLowerCase() === t.ringName(r.key).toLowerCase() ? r.chip[1] : `${r.chip[0].toLowerCase()}, ${r.chip[1]}`}
+              <span className="font-semibold">{t.ringName(r.key, men)}</span>{' '}
+              {r.chip[0].toLowerCase() === t.ringName(r.key, men).toLowerCase() ? r.chip[1] : `${r.chip[0].toLowerCase()}, ${r.chip[1]}`}
             </li>
           ))}
         </ul>

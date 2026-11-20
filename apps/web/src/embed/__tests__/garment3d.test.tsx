@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { computeFit } from '@curtain/fit-engine';
 import { MOCK_GARMENTS_BY_ID, SYNTHETIC_MENS_TEE, type GarmentAssetRef } from '@curtain/schema';
@@ -167,6 +167,19 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     fireEvent.click(screen.getByTestId('garment3d-open'));
     await waitFor(() => expect(mountGarmentView).toHaveBeenCalled());
     fireEvent.click(screen.getByRole('radio', { name: 'L' }));
+  it('names the rings of a men\'s garment as menswear does: "Chest", never "Bust" (OI-104)', async () => {
+    const tee = SYNTHETIC_MENS_TEE;
+    const body = { bust: 98, waist: 86, hip: 96 };
+    setup({ garment: tee, fit: computeFit(tee, { measurements: body }), measurements: body, size: 'M', recommended: 'M', asset: { ...asset, sizes: tee.sizeChart.map((r) => r.size) } });
+    fireEvent.click(screen.getByTestId('garment3d-open'));
+    const rings = await screen.findByTestId('garment3d-rings');
+    const names = within(rings).getAllByRole('listitem').map((li) => li.querySelector('span')?.textContent);
+    expect(names).toContain('Chest');
+    expect(names).not.toContain('Bust');
+    expect(names).not.toContain('Hips');
+    expect(rings).not.toHaveTextContent(/bust/i);
+  });
+
     expect(onSelect).toHaveBeenCalledWith('L');
     await act(async () => rerender(<Garment3D {...props} size="L" />));
     expect(setSize).toHaveBeenCalledWith('L');

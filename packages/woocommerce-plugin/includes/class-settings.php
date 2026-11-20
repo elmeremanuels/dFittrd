@@ -598,7 +598,7 @@ final class Settings {
 							<?php
 							if ( ! empty( $s['paused'] ) ) :
 								?>
-								· <strong style="color:#b32d2e"><?php esc_html_e( 'paused (no active subscription: the button still renders, shoppers see a "shop paused" screen)', 'curtain-woocommerce' ); ?></strong><?php endif; ?>
+								· <strong style="color:#b32d2e"><?php esc_html_e( 'paused (no active subscription: the button is hidden on your product pages until the plan is active again)', 'curtain-woocommerce' ); ?></strong><?php endif; ?>
 							<br><span class="description">
 								<?php echo esc_html( sprintf( /* translators: 1: key storage scheme, 2: queue backend */ __( 'Key stored with %1$s · job queue: %2$s', 'curtain-woocommerce' ), Secret_Store::scheme(), Queue::backend() ) ); ?>
 								<?php $pending_jobs = Queue::pending_count(); ?>

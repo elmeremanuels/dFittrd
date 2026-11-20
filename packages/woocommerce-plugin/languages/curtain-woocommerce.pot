@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Curtain for WooCommerce 0.1.0\n"
 "Report-Msgid-Bugs-To: https://curtain.fit/woocommerce\n"
-"POT-Creation-Date: 2026-11-20 04:42+0000\n"
+"POT-Creation-Date: 2026-11-20 05:06+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -925,7 +925,7 @@ msgid "plan: %s"
 msgstr ""
 
 #: includes/class-settings.php
-msgid "paused (no active subscription: the button still renders, shoppers see a \"shop paused\" screen)"
+msgid "paused (no active subscription: the button is hidden on your product pages until the plan is active again)"
 msgstr ""
 
 #. translators: 1: key storage scheme, 2: queue backend

@@ -87,7 +87,7 @@ Optionally, and only for products with a 3D garment file you have approved: the 
 
 = What happens when my plan is paused? =
 
-The button keeps rendering (your page never breaks); shoppers see a "shop paused" screen until the subscription is active again.
+The button is hidden on your product pages until the subscription is active again. Your page itself keeps working.
 
 = Does it work with the new product editor (block-based)? =
 

@@ -9,8 +9,10 @@
  * dropdown (`form.variations_form select[name=attribute_pa_size]`). The Curtain app is opt-in
  * (data-mode="app").
  *
- * D7: the button always renders once the shop is connected, even when the plan is paused —
- * the overlay shows the "shop paused" screen; the merchant's page is never broken.
+ * Paused plan (D25 point 5, which changes D7): the button markup is still printed, and the SDK
+ * hides it (with its `.curtain-try` wrapper) after asking the api whether the shop is paused. The
+ * plugin's own stored `paused` flag is only refreshed with the hello, so it does not decide this:
+ * a merchant who has just paid would otherwise keep a hidden button. The page is never broken.
  *
  * @package Curtain
  */

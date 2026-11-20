@@ -150,6 +150,10 @@ function setState(elm: Element | null | undefined, loading: boolean): void {
  */
 function setHidden(elm: Element, hidden: boolean): void {
   const target = (elm.closest(WRAP_SELECTOR) ?? elm) as HTMLElement;
+  // The plugins print the wrapper with `hidden`, so no button is on screen before this script has
+  // asked whether the shop is paused, and none stays when the script does not load. From here on
+  // the inline `display` decides.
+  target.hidden = false;
   const before = hiddenTargets.get(target);
   if (hidden === (before !== undefined)) return;
   if (hidden) {
@@ -177,10 +181,13 @@ function checkShop(): void {
   if (!cfg.shop || !cfg.api || key === checkedFor) return;
   checkedFor = key;
   applyShopState(CHECKING);
-  // Settles once: the answer, a failure, or the timeout. A newer configure() (another shop) or a
-  // click that already learned the shop is paused wins over a late answer.
+  // The answer, a failure, or the timeout, whichever is first, ends the wait. "Paused" also counts
+  // when it comes after the timeout (a slow connection): the buttons shown meanwhile are hidden
+  // again. A newer configure() (another shop) wins over any late answer.
   const settle = (paused?: unknown): void => {
-    if (checkedFor === key && shopState === CHECKING) applyShopState(paused === true ? PAUSED : OPEN);
+    if (checkedFor !== key) return;
+    if (paused === true) applyShopState(PAUSED);
+    else if (shopState === CHECKING) applyShopState(OPEN);
   };
   setTimeout(settle, STATUS_TIMEOUT);
   fetch(key, { credentials: 'omit' })
@@ -457,7 +464,7 @@ export function autoInit(): CurtainApi | null {
     // button again and open two sessions per click. The first instance wins.
     const existing = window.Curtain;
     if (existing && existing !== api) {
-      warn('already loaded on this page; this copy stays inactive');
+      warn('already loaded; this copy stays inactive');
       return existing;
     }
     const script = findScriptTag();

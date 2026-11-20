@@ -118,7 +118,7 @@ describe('a paused shop shows no button', () => {
     }
   });
 
-  it('gives up waiting after four seconds and shows the button; a late "paused" answer is then ignored', async () => {
+  it('gives up waiting after four seconds and shows the button; a late "paused" answer still hides it', async () => {
     vi.useFakeTimers();
     try {
       let answer!: (r: Response) => void;
@@ -132,7 +132,27 @@ describe('a paused shop shows no button', () => {
       expect(b.style.display).toBe('');
       answer(json({ paused: true }));
       await vi.advanceTimersByTimeAsync(10);
-      expect(b.style.display).toBe('');
+      expect(hidden(b)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('after the four seconds a late "not paused" answer or a late failure changes nothing', async () => {
+    vi.useFakeTimers();
+    try {
+      for (const late of [() => json({ paused: false }), () => json({ error: 'x' }, 500)]) {
+        let answer!: (r: Response) => void;
+        status(() => new Promise<Response>((r) => (answer = r)));
+        const b = button();
+        init({ shop: SHOP, api: API });
+        await vi.advanceTimersByTimeAsync(4000);
+        answer(late());
+        await vi.advanceTimersByTimeAsync(10);
+        expect(b.style.display).toBe('');
+        destroy();
+        b.remove();
+      }
     } finally {
       vi.useRealTimers();
     }
@@ -163,5 +183,62 @@ describe('a paused shop shows no button', () => {
     answers[1]!(json({ paused: false }));
     await settle();
     expect(b.style.display).toBe('');
+  });
+
+  describe('the plugins print the wrapper hidden (first paint)', () => {
+    /** As try-it-on.liquid and Frontend::button_html print it. */
+    function waiting(): { wrap: HTMLElement; b: HTMLButtonElement } {
+      const { wrap, b } = pluginButton();
+      wrap.setAttribute('hidden', '');
+      return { wrap, b };
+    }
+    const shown = (el: HTMLElement): boolean => !el.hasAttribute('hidden') && el.style.display === '';
+
+    it('not paused: hidden until the answer, never shown in between, then shown', async () => {
+      let answer!: (r: Response) => void;
+      status(() => new Promise<Response>((r) => (answer = r)));
+      const { wrap } = waiting();
+      init({ shop: SHOP, api: API });
+      await flush();
+      // The plugin's own hiding is taken off; the SDK's is on.
+      expect(wrap.hasAttribute('hidden')).toBe(false);
+      expect(hidden(wrap)).toBe(true);
+      answer(json({ paused: false }));
+      await settle();
+      expect(shown(wrap)).toBe(true);
+    });
+
+    it('paused: it never shows', async () => {
+      status(() => json({ paused: true }));
+      const { wrap } = waiting();
+      init({ shop: SHOP, api: API });
+      await settle();
+      expect(hidden(wrap)).toBe(true);
+    });
+
+    it('the script did not run: it stays hidden', () => {
+      const { wrap } = waiting();
+      expect(wrap.hasAttribute('hidden')).toBe(true);
+    });
+
+    it('no shop key (nothing to ask): the button is shown', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { wrap } = waiting();
+      init({});
+      await settle();
+      expect(shown(wrap)).toBe(true);
+    });
+
+    it('two buttons in one wrapper, and a wrapper added later', async () => {
+      status(() => json({ paused: false }));
+      const { wrap } = waiting();
+      button('second', wrap);
+      init({ shop: SHOP, api: API });
+      await settle();
+      expect(shown(wrap)).toBe(true);
+      const later = waiting();
+      window.Curtain!.scan();
+      expect(shown(later.wrap)).toBe(true);
+    });
   });
 });

@@ -9,7 +9,7 @@ Curtain app. The contract is `docs/STANDALONE.md` §2.
 on load, once per page, before any button shows:
 GET {api}/v1/sdk/shop?shop=<public key> → { paused }
       → paused: every button stays hidden, with its `.curtain-try` wrapper (hint, size peek)
-      → not paused, an error, or no answer within 4 s: the buttons show
+      → not paused, an error, or no answer within 4 s: the buttons show (a later "paused" hides them)
 
 standalone (data-mode="embed", the default; also "auto"), desktop and mobile:
 click → POST {api}/v1/sdk/sessions { shopKeyPrefix, productExternalId, pageUrl, surface: 'embed' }
@@ -231,8 +231,15 @@ which the button stayed and the overlay showed a "shop paused" screen.
 - Until the answer arrives the buttons are hidden (inline `display: none !important` on the button,
   or on its closest `.curtain-try` wrapper so the hint and the size peek go with it). They show
   when the answer is "not paused".
+- First paint: the Shopify block and the WooCommerce plugin print the `.curtain-try` wrapper with
+  the `hidden` attribute (and a style rule `.curtain-try[hidden] { display: none !important }`). The
+  SDK takes `hidden` off when it binds the button and hides or shows it itself from then on. So a
+  paused shop never shows a button, a working shop's button does not blink, and when the script
+  does not load there is no dead button. Your own markup may do the same; without `hidden` a button
+  is visible until the script runs.
 - An outage must not remove a working shop's button: an error, an older api without the route, an
-  answer that is not `{ "paused": true }`, or no answer within 4 seconds all show the buttons.
+  answer that is not `{ "paused": true }`, or no answer within 4 seconds all show the buttons. A
+  "paused" answer that arrives after those 4 seconds still hides them.
 - If a click still gets a paused answer (402/423, or `shopPaused: true`), the SDK hides the
   buttons, opens nothing and returns `{ kind: 'paused' }`. It shows no message.
 - `destroy()` gives every element its own inline `display` back.

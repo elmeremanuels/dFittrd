@@ -47,10 +47,11 @@ import { periodFor, utcDay } from '../lib/time.js';
 import { abandonedAnalytics, fitSizeAnalytics, swipeAnalytics } from '../services/analytics.js';
 import { addMonths, availableAt, closedMonthsSince, isClosed, lastClosedMonth } from '../services/kfloor.js';
 import { decodeCursor, encodeCursor } from '../services/ledger.js';
-import { archiveProduct, listMerchantProducts, reapplyIncompleteProductData, upsertProduct } from '../services/products.js';
+import { archiveProduct, listMerchantProducts, upsertProduct } from '../services/products.js';
+import { merchantSettings, updateMerchantSettings } from '../services/settings.js';
 import { merchantMenGate } from '../services/readiness.js';
 import { merchantSetup } from '../services/setup.js';
-import { connectTokenHash, createShop, findShopByConnectToken, findShopByDomain, isPaused, issueMerchantKeys, patchSettings, planInfo, updateSettings, type ShopRow } from '../services/shops.js';
+import { connectTokenHash, createShop, findShopByConnectToken, findShopByDomain, isPaused, issueMerchantKeys, planInfo, updateSettings } from '../services/shops.js';
 import { billingAnomalyReport, fitSessionsBetween, usageDays } from '../services/usage.js';
 
 const httpUrl = z.url({ protocol: /^https?$/ });
@@ -304,40 +305,12 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
   });
 
   // ---- settings --------------------------------------------------------------------------------
-  // The merchant's own choices (D24). A fixed list of keys, each named in the DTOs: nothing of the
-  // shop's stored settings (billing, operator switches) is read or written through this route.
-  const settingsOf = (shop: ShopRow) => ({
-    incompleteProductData: shop.incompleteProductData,
-    showFitByCurtain: shop.settings.showFitByCurtain !== false,
-    shopName: shop.name,
-    platform: shop.platform,
-    brandColor: shop.settings.brandColor ?? null,
-    logoUrl: shop.settings.logoUrl ?? null,
-  });
-  app.get('/v1/merchant/settings', { schema: { response: { 200: MerchantSettingsResponseSchema } }, preHandler: requireMerchant }, async (req) => settingsOf(req.shop!));
-  app.put('/v1/merchant/settings', { schema: { body: MerchantSettingsUpdateRequestSchema, response: { 200: MerchantSettingsResponseSchema } }, preHandler: requireMerchant }, async (req) => {
-    const b = req.body;
-    let shop: ShopRow = req.shop!;
-    // Only the keys named here are written, and each on the stored row as it is now (patchSettings):
-    // billing and operator keys are untouched, also when another request changed them since auth.
-    const set: Partial<ShopRow['settings']> = {};
-    const remove: Array<keyof ShopRow['settings']> = [];
-    if (b.showFitByCurtain !== undefined) set.showFitByCurtain = b.showFitByCurtain;
-    if (b.brandColor === null) remove.push('brandColor');
-    else if (b.brandColor !== undefined) set.brandColor = b.brandColor;
-    if (b.logoUrl === null) remove.push('logoUrl');
-    else if (b.logoUrl !== undefined) set.logoUrl = b.logoUrl;
-    const policy = b.incompleteProductData;
-    const policyChanged = policy !== undefined && policy !== shop.incompleteProductData;
-    const settingsChanged = b.showFitByCurtain !== undefined || b.brandColor !== undefined || b.logoUrl !== undefined;
-    if (!policyChanged && !settingsChanged) return settingsOf(shop);
-    const row = await patchSettings(db, shop.id, { set, remove }, { ...(policyChanged ? { incompleteProductData: policy } : {}), updatedAt: now() });
-    if (!row) throw notFound('shop');
-    shop = row;
-    // The products the shop already has follow the new choice (held back, or released).
-    if (policyChanged) await reapplyIncompleteProductData(db, shop.id, policy);
-    return settingsOf(shop);
-  });
+  // The merchant's own choices (D24), in services/settings.ts; the Shopify admin reads and writes the
+  // same values through GET/PUT /shopify/settings.
+  app.get('/v1/merchant/settings', { schema: { response: { 200: MerchantSettingsResponseSchema } }, preHandler: requireMerchant }, async (req) => merchantSettings(req.shop!));
+  app.put('/v1/merchant/settings', { schema: { body: MerchantSettingsUpdateRequestSchema, response: { 200: MerchantSettingsResponseSchema } }, preHandler: requireMerchant }, async (req) =>
+    updateMerchantSettings({ db, shop: req.shop!, body: req.body, now: now() }),
+  );
 
   // ---- keys ------------------------------------------------------------------------------------
   app.post('/v1/merchant/keys/rotate', { schema: { response: { 200: MerchantKeyRotateResponseSchema } }, preHandler: requireMerchant }, async (req) => {

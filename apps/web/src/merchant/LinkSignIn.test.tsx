@@ -10,7 +10,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient, ApiError, NetworkError, isConsoleSession } from '@/api/client';
 import { api } from '@/store';
-import { MerchantLinkSignIn, resetLinkSignIn, takeLinkToken } from './LinkSignIn';
+import { MerchantLinkSignIn, linkFailure, resetLinkSignIn, takeLinkToken } from './LinkSignIn';
 import { readMerchantKey, writeMerchantKey } from './MerchantConsole';
 import { merchantStrings } from './strings';
 
@@ -157,6 +157,38 @@ describe('a link that does not work', () => {
     expect(alert).toHaveTextContent(t.link.unreachable);
     expect(readMerchantKey()).toBeNull();
     expect(window.location.href).not.toContain(TOKEN);
+  });
+
+  it("says so when the route's limit for this address is reached, and does not blame the link", async () => {
+    vi.spyOn(api, 'consoleSession').mockRejectedValue(new ApiError(429, 'rate_limited', 'Rate limit exceeded, retry in 1 minute'));
+    open(`#t=${TOKEN}`);
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(t.link.tooOftenTitle);
+    expect(alert).toHaveTextContent(t.link.tooOften);
+    expect(alert).not.toHaveTextContent(t.link.failedTitle);
+    expect(document.body.textContent).not.toContain('Rate limit exceeded');
+    expect(readMerchantKey()).toBeNull();
+  });
+
+  it.each([500, 502, 503, 403])('says that Curtain failed, not the link, when the api answers %i', async (status) => {
+    vi.spyOn(api, 'consoleSession').mockRejectedValue(new ApiError(status, 'internal', 'boom at the server'));
+    open(`#t=${TOKEN}`);
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(t.link.errorTitle);
+    expect(alert).toHaveTextContent(t.link.error);
+    expect(alert).not.toHaveTextContent(t.link.failedTitle);
+    expect(document.body.textContent).not.toContain('boom');
+    expect(screen.getByText(t.link.whereWoo)).toBeInTheDocument();
+    expect(readMerchantKey()).toBeNull();
+    expect(window.location.href).not.toContain(TOKEN);
+  });
+
+  it('reads a refusal only from 400 and 401', () => {
+    expect(linkFailure(new ApiError(401, 'invalid_console_link', 'x'))).toBe('refused');
+    expect(linkFailure(new ApiError(400, 'bad_request', 'x'))).toBe('refused');
+    expect(linkFailure(new ApiError(429, 'rate_limited', 'x'))).toBe('tooOften');
+    expect(linkFailure(new NetworkError('offline', new Error('x')))).toBe('unreachable');
+    expect(linkFailure(new Error('anything else'))).toBe('error');
   });
 });
 

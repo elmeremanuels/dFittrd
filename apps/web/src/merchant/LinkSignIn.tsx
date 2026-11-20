@@ -8,7 +8,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 import type { ConsoleSessionResponse } from '@curtain/schema';
-import { NetworkError } from '@/api/client';
+import { ApiError, NetworkError } from '@/api/client';
 import { api } from '@/store';
 import { writeMerchantKey } from './MerchantConsole';
 import { merchantStrings } from './strings';
@@ -25,7 +25,22 @@ export function takeLinkToken(win: Pick<Window, 'location' | 'history'> = window
   return token && token.length >= 16 && token.length <= 128 ? token : null;
 }
 
-type Outcome = { ok: true; session: ConsoleSessionResponse } | { ok: false; reason: 'refused' | 'unreachable' };
+/**
+ * Why there is no session. `refused`: the link is used, too old or not a link (the api says 401 or
+ * 400). `tooOften`: the route's own limit per address (429). `error`: anything else the api
+ * answered, a 5xx among them; the link may still be good, but it is out of the address bar.
+ */
+export type LinkFailure = 'refused' | 'unreachable' | 'tooOften' | 'error';
+type Outcome = { ok: true; session: ConsoleSessionResponse } | { ok: false; reason: LinkFailure };
+
+export function linkFailure(e: unknown): LinkFailure {
+  if (e instanceof NetworkError) return 'unreachable';
+  if (e instanceof ApiError) {
+    if (e.status === 429) return 'tooOften';
+    if (e.status === 400 || e.status === 401) return 'refused';
+  }
+  return 'error';
+}
 
 /**
  * One exchange per page load, whatever React does with the component (it mounts an effect twice
@@ -39,7 +54,7 @@ function signInOnce(): Promise<Outcome> {
     try {
       return { ok: true, session: await api.consoleSession(token) };
     } catch (e) {
-      return { ok: false, reason: e instanceof NetworkError ? 'unreachable' : 'refused' };
+      return { ok: false, reason: linkFailure(e) };
     }
   })();
   return attempt;
@@ -51,9 +66,15 @@ export function resetLinkSignIn(): void {
 
 export function MerchantLinkSignIn(): ReactNode {
   const navigate = useNavigate();
-  const [failed, setFailed] = useState<'refused' | 'unreachable' | null>(null);
+  const [failed, setFailed] = useState<LinkFailure | null>(null);
   const c = merchantStrings().console;
   const t = c.link;
+  const words: Record<LinkFailure, { title: string; text: string }> = {
+    refused: { title: t.failedTitle, text: t.failed },
+    unreachable: { title: t.unreachableTitle, text: t.unreachable },
+    tooOften: { title: t.tooOftenTitle, text: t.tooOften },
+    error: { title: t.errorTitle, text: t.error },
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -78,9 +99,9 @@ export function MerchantLinkSignIn(): ReactNode {
         </header>
         {failed ? (
           <>
-            <div role="alert" data-testid="link-failed" className="space-y-2">
-              <h2 className="text-base font-semibold">{failed === 'unreachable' ? t.unreachableTitle : t.failedTitle}</h2>
-              <p className="text-sm text-ink-soft">{failed === 'unreachable' ? t.unreachable : t.failed}</p>
+            <div role="alert" data-testid="link-failed" data-reason={failed} className="space-y-2">
+              <h2 className="text-base font-semibold">{words[failed].title}</h2>
+              <p className="text-sm text-ink-soft">{words[failed].text}</p>
             </div>
             <div className="space-y-1 text-sm text-ink-soft">
               <h2 className="eyebrow">{t.whereTitle}</h2>

@@ -46,6 +46,13 @@ describe('a console session from a sign-in link', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(t.sessionEnded);
   });
 
+  it('says the session ended without a reason it cannot know, and does not ask a signed-out merchant to sign out', () => {
+    // 12 hours, "Sign out" in another tab, a new shop key and an uninstall all end a session.
+    expect(t.sessionEnded).not.toMatch(/12 hours|Press “Sign out”/);
+    expect(t.sessionEnded).toContain('“Open the Curtain console”');
+    expect(t.sessionEnded).toContain('“Open the full console”');
+  });
+
   it('is not confused with a refused secret key', async () => {
     openConsole(SECRET);
     expect(await screen.findByRole('alert')).toHaveTextContent(t.keyRefused);

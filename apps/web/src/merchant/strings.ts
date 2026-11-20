@@ -83,12 +83,12 @@ export interface ConsoleCatalogue {
   none: string;
   login: { keyLabel: string; keyPlaceholder: string; badKey: string; open: string; help: string };
   /** The page a one-time sign-in link opens (`/merchant/link`). */
-  link: { working: string; failedTitle: string; failed: string; unreachableTitle: string; unreachable: string; whereTitle: string; whereWoo: string; whereShopify: string; withKey: string };
+  link: { working: string; failedTitle: string; failed: string; unreachableTitle: string; unreachable: string; tooOftenTitle: string; tooOften: string; errorTitle: string; error: string; whereTitle: string; whereWoo: string; whereShopify: string; withKey: string };
   nav: { label: string; overview: string; products: string; usage: string; swipes: string; ledger: string; settings: string; signOut: string };
   demoBanner: string;
   loading: string;
   keyRefused: string;
-  /** A session from a sign-in link ended (12 hours, or signed out elsewhere). */
+  /** A session from a sign-in link ended: 12 hours, signed out elsewhere, a new shop key, or an uninstall. It names no reason. */
   sessionEnded: string;
   loadFailed: string;
   overview: {
@@ -313,6 +313,10 @@ export const CONSOLE_EN: ConsoleCatalogue = {
     failed: 'A sign-in link works once, and for 10 minutes after you asked for it. You are not signed in. Ask for a new link: it takes one click.',
     unreachableTitle: 'Curtain could not be reached',
     unreachable: 'You are not signed in. Check your internet connection, then ask for a new link: it takes one click.',
+    tooOftenTitle: 'Too many sign-in tries from this connection',
+    tooOften: 'You are not signed in. Wait a minute, then ask for a new link: it takes one click.',
+    errorTitle: 'Curtain could not sign you in just now',
+    error: 'Something went wrong at Curtain, not with your link. You are not signed in. Ask for a new link in a few minutes: it takes one click.',
     whereTitle: 'Where to get a new link',
     whereWoo: 'WordPress: WooCommerce → Curtain → “Open the Curtain console”.',
     whereShopify: 'Shopify: the Curtain app → “Open the full console”.',
@@ -322,7 +326,7 @@ export const CONSOLE_EN: ConsoleCatalogue = {
   demoBanner: 'API unreachable — showing demo data with the real response shapes. Nothing here is from your shop.',
   loading: 'Loading your shop…',
   keyRefused: 'This key was not accepted. It may have been replaced: sign out and paste the newest key from your Curtain settings (WooCommerce → Curtain, or the Curtain app in Shopify).',
-  sessionEnded: 'You are signed out: a console session ends by itself after 12 hours. Press “Sign out”, then open the console again from your shop (WooCommerce → Curtain, or the Curtain app in Shopify).',
+  sessionEnded: 'Your console session has ended. Open the console again from your shop: WooCommerce → Curtain → “Open the Curtain console”, or the Curtain app in Shopify → “Open the full console”.',
   loadFailed: 'Your shop could not be loaded just now. Check your internet connection and reload the page; if it keeps happening, email Curtain support.',
   overview: {
     fitSessions: 'Fit sessions (30 d)',

@@ -161,3 +161,15 @@ describe('deploy: the site is published like the web app but never blocks it', (
     expect(siteJob).toContain("if: steps.build.outputs.built == 'true'");
   });
 });
+
+describe('infra/Caddyfile: the client address the api sees', () => {
+  // The api trusts the proxy's X-Forwarded-For (trustProxy in app.ts) and its per-address limits
+  // key on it, among them the sign-in link exchange. Caddy replaces a client-sent X-Forwarded-For
+  // with the address it saw itself unless it is told to trust the sender; nothing here may do that.
+  it('never trusts a forwarded address from the client and never passes one through', () => {
+    expect(caddyfile).not.toMatch(/trusted_proxies/);
+    expect(caddyfile).not.toMatch(/header_up\s+X-Forwarded-For/i);
+    expect(caddyfile).not.toMatch(/header_up\s+X-Real-IP/i);
+    expect(block('api.{$DOMAIN}')).toMatch(/reverse_proxy api:3000/);
+  });
+});

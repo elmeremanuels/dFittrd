@@ -51,6 +51,22 @@ export const SHOP_SETTINGS_TEXT = Object.freeze({
   }),
 });
 
+/**
+ * The way from the Shopify admin into the web console: a one-time sign-in link (inventory S2). The
+ * WooCommerce plugin says its own sentence through WordPress' translation functions.
+ */
+export const CONSOLE_LINK_TEXT = Object.freeze({
+  title: 'The full console',
+  intro: 'What shoppers liked, your usage by day, and your shop colour and logo are in the Curtain console. The button opens it in a new tab and signs you in: no password, no key.',
+  open: 'Open the full console',
+  opening: 'Opening the console…',
+  /** When the browser kept the new tab from opening: the merchant follows this link instead. It works once. */
+  ready: 'Your console is ready:',
+  readyLink: 'Go to the console',
+  tooOften: 'The console was opened several times in the last few minutes. Wait ten minutes, then try again.',
+  failed: 'The console could not be opened just now. Check your internet connection and try again.',
+});
+
 /** What the product list says about a held-back product and about fabric values that were left out or assumed. */
 export const PRODUCT_NOTICE_TEXT = Object.freeze({
   /** The chip of a product the shop's setting holds back. */

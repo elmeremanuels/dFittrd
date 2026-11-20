@@ -45,9 +45,11 @@ export interface GarmentAnchorsJson {
    * (`yokeHeight`) would hold the straps alone. `cling: false`: no cling pull (a gathered skirt hangs off the body).
    * `seamsAtCm`: heights of seams that do not stretch: the row of cloth at each (in the base mesh) is held at no more
    * than its graded girth times `1 + seamStretchPct / 100` (`GirthLoop.maxGirthCm`), and at no less than it.
+   * `holdLength`: the cloth keeps the length it was cut along its way down from where it is held (`cloth.addHangLines`,
+   * the limit follows material.json `stretchPct`); without it the device drape leaves a hanging garment 2 to 3 % long.
    * Absent, and for every bundle before it: held and draped as before.
    */
-  support?: { pinFromCm?: number; cling?: boolean; seamsAtCm?: number[]; seamStretchPct?: number };
+  support?: { pinFromCm?: number; cling?: boolean; seamsAtCm?: number[]; seamStretchPct?: number; holdLength?: boolean };
 }
 
 export interface QaJson {

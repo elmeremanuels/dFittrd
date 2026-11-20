@@ -352,6 +352,8 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
         fit.cloth.calmFrames = p.calmFrames;
         l.dirty = true;
         if (p.done) l.jobId = null;
+        // The worker's solver time for the size on show, ms (a timing only; read by the demo scripts for the reports).
+        if (p.done && label === current) canvas.dataset.solveMs = String(Math.round(p.computeMs));
         if (label === current) wake();
       });
     }

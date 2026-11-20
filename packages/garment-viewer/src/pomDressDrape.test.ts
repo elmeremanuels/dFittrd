@@ -44,9 +44,11 @@ describe('the tape-built dress in the viewer', () => {
       expect(2 * t.seamWidthCm, tag).toBeGreaterThan(2 * row.seamWidthCm - 0.5);
       expect(2 * t.seamWidthCm, tag).toBeLessThan(2 * row.seamWidthCm * 1.02);
       expect(Math.abs(2 * t.hemWidthCm - 2 * row.hemWidthCm), tag).toBeLessThan(1.5);
-      // The solver's edges give under the skirt's own weight: the centre front comes out up to 3 % long.
+      // The bundle asks the drape to hold length (`support.holdLength`): the centre front comes out about 1 % long, where it
+      // was 2 to 3 % (1.8 to 1.9 cm on this size) without it.
+      expect(f.params.hangStretch).toBeCloseTo(0.003, 9);
       expect(t.lengthCm - row.lengthCm, tag).toBeGreaterThan(-0.5);
-      expect(t.lengthCm - row.lengthCm, tag).toBeLessThan(2.5);
+      expect(t.lengthCm - row.lengthCm, tag).toBeLessThan(1.1);
       expect(strainQuantile(f.cloth, 0.99), tag).toBeLessThan(0.1);
       hems.push(pom.base.hem.reduce((s, i) => s + f.cloth.pos[3 * i + 1]!, 0) / pom.base.hem.length + plan.garmentLiftCm);
     }

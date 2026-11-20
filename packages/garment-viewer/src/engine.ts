@@ -14,7 +14,7 @@ import { bundleMaleShapeOf, insideCanonical, makeCollider, type Avatar, type Bod
 import { polarGirth, sample } from './collide';
 import type { SpikeBundle } from './bundle';
 import type { DrapeJob } from './drapeJob';
-import { clothParams, createCloth, isSettled, loopGirth, addSeams, setLoops, settlePins, stepCloth, type Cloth, type ClothMaterial, type ClothParams, type GirthLoop } from './cloth';
+import { addHangLines, clothParams, createCloth, isSettled, loopGirth, addSeams, setLoops, settlePins, stepCloth, type Cloth, type ClothMaterial, type ClothParams, type GirthLoop } from './cloth';
 import { isTapeTrouser, slideTrouserBand, trouserNoCollide, trouserField, trouserNotDrawn, trouserSeams, wornBodyRings } from './trouser';
 import { fitLines, gapsForSize, heatColors, heatField, placeGarment, placementMorph, sizeEntry, type FitLine, type HeatField, type Placement } from './fitting';
 
@@ -682,6 +682,8 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, bodyField: B
     if (seams.grain) addSeams(cloth, seams.grain.paths, graded.positions, { stretch: seams.grain.stretch, ...(seams.grain.shorten === undefined ? {} : { shorten: seams.grain.shorten }) });
   }
   for (let i = 0; i < chains.length; i++) if (cuff[i] && !pinned[i]) cloth.leash[i] = CUFF_LEASH_CM;
+  // A bundle that asks for it keeps its cut length on the way down (`GarmentAnchorsJson.support.holdLength`, `cloth.hangLines`).
+  if (support?.holdLength === true) addHangLines(cloth);
   const collide = makeCollider(field, CLEARANCE_CM, chains, noCollide, session.sewn);
   // Settle the yoke onto the avatar before pinning it: a small size sits a few mm inside the neck
   // and shoulders, and a stretched edge between two pins never relaxes (the neckline tears).
@@ -702,7 +704,7 @@ export function prepareFit(session: GarmentSession, avatar: Avatar, bodyField: B
     loops: loops.map((l) => ({ ring: l.ring, minGirthCm: Math.round(l.minGirthCm * 10) / 10, particles: l.particles.length })),
     heat: heatField(gaps, m.morphHeights),
     material,
-    params: clothParams(material, durationS, { cling: options.cling && support?.cling !== false }),
+    params: clothParams(material, durationS, { cling: options.cling && support?.cling !== false, ...(support?.holdLength === true ? { holdLength: true } : {}) }),
     cloth,
     collide,
     noCollide,

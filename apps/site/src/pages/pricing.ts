@@ -21,7 +21,7 @@ export const pricing: Page = {
     <dl class="spec spec--stack">
       <div><dt>Billing</dt><dd>Through Shopify on Shopify (in your billing currency where available), and through Stripe on WooCommerce. Prices exclude taxes unless stated at checkout.</dd></div>
       <div><dt>3D estimate</dt><dd>In development (demo only) and not included in this plan. Whether and how it is priced is decided after the pilot.</dd></div>
-      <div><dt>Cancel any time</dt><dd>If your plan pauses, your product page keeps working and the button shows a short “paused” note.</dd></div>
+      <div><dt>Cancel any time</dt><dd>If your plan pauses, your product page keeps working and the button is hidden until the plan is active again.</dd></div>
     </dl>
   </div>
 </section>

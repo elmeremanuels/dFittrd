@@ -67,7 +67,7 @@ export function pricingCard(): SafeHtml {
 
 export const ledgerRows = {
   device: [
-    'Height, weight, fit preference, and age range (optional)',
+    'Height, weight and fit preference',
     'Body measurements they type in',
     'The camera scan: frames are processed in the browser, never stored, never uploaded',
     'Their saved profile ("Remember me"), kept separately for each shop',

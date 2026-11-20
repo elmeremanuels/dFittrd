@@ -364,7 +364,8 @@ export interface EmbedCatalogue {
     waistOnly: (waist: string) => string;
     looking: (size: string) => string;
     rings: (size: string) => string;
-    ringName: (key: string) => string;
+    /** The name on a size-ring chip. A men's garment names its points as menswear does (`fit.pointsMen`): "Chest", never "Bust". */
+    ringName: (key: string, men?: boolean) => string;
     hemNote: string;
     /** A server drape bake: drawn in one plain colour. */
     plainColour: string;
@@ -393,6 +394,9 @@ export interface EmbedCatalogue {
 
 const lower = (s: string): string => s.toLowerCase();
 const list = (words: string[]): string => (words.length <= 1 ? words.join('') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`);
+
+/** A men's garment's point names that differ (slice M2). One list for the fit list, the not-drawn sentence and the 3D ring chips. */
+const POINTS_MEN: Record<string, string> = { bust: 'Chest', hip: 'Seat', length: 'Body length', shoulder: 'Shoulder width' };
 
 const title = 'Make the avatar look like you';
 
@@ -664,7 +668,7 @@ export const EN: EmbedCatalogue = {
   },
   fit: {
     points: { bust: 'Bust', waist: 'Waist', hip: 'Hip', shoulder: 'Shoulders', thigh: 'Thigh', inseam: 'Leg length', foot: 'Foot', neck: 'Neck', sleeve: 'Sleeve', length: 'Length' },
-    pointsMen: { bust: 'Chest', hip: 'Seat', length: 'Body length', shoulder: 'Shoulder width' },
+    pointsMen: POINTS_MEN,
     bands: { tight: 'Tight', snug: 'Snug', good: 'Good fit', roomy: 'Roomy', loose: 'Loose', short: 'Short', long: 'Long' },
     asDesigned: 'as designed',
     moreRoom: (length) => `${length} more room than designed`,
@@ -756,7 +760,7 @@ export const EN: EmbedCatalogue = {
     waistOnly: (waist) => `The size advice picked waist ${waist}; the leg length was not checked.`,
     looking: (size) => `You are looking at size ${size}.`,
     rings: (size) => `Size rings of size ${size} (estimate)`,
-    ringName: (key) => (key === 'hip' ? 'Hips' : key.charAt(0).toUpperCase() + key.slice(1)),
+    ringName: (key, men = false) => (men && Object.prototype.hasOwnProperty.call(POINTS_MEN, key) ? POINTS_MEN[key]! : key === 'hip' ? 'Hips' : key.charAt(0).toUpperCase() + key.slice(1)),
     hemNote: 'The 3D drape does not show the hem width yet; see the hem ring on the figure above.',
     plainColour: 'Shown in one plain colour; the print is not drawn.',
     provenance: (size, p) => (p === 'measured' ? `Size ${size} is built from the shop’s tape.` : `Size ${size} is not on the shop’s tape; it is ${p} from the sizes that are.`),

@@ -72,6 +72,11 @@ function mannequinY4m(): string {
   return out;
 }
 
+/**
+ * `CURTAIN_REQUIRE_MODELS=1` (set by `pnpm check:launch`, OI-69): the models must be there. Without it a
+ * checkout that never fetched them skips this spec; with it the run fails instead of passing on nothing.
+ */
+if (!HAVE_MODELS && process.env.CURTAIN_REQUIRE_MODELS === '1') throw new Error('MediaPipe models not fetched and CURTAIN_REQUIRE_MODELS=1: run `pnpm --filter @curtain/web models` first');
 test.skip(!HAVE_MODELS, 'MediaPipe models not fetched: run `pnpm --filter @curtain/web models` first');
 
 test.use({
@@ -136,6 +141,10 @@ test('the whole capture step with the real models talks to the app origin only a
   if (CSP_ON) {
     expect(policy, 'the preview sends the production policy').toContain("connect-src 'self'");
     expect(policy).toContain("frame-ancestors 'none'");
+    // OI-66: as in production the app is cross-origin isolated (COOP + COEP require-corp), so the capture
+    // step below runs in the state production runs in. A resource without CORP or CORS would fail to load here.
+    expect(res?.headers()['cross-origin-embedder-policy']).toBe('require-corp');
+    expect(await page.evaluate(() => self.crossOriginIsolated), 'the page is cross-origin isolated').toBe(true);
   }
 
   await page.getByRole('button', { name: /Next/ }).click();
@@ -167,9 +176,25 @@ test('the whole capture step with the real models talks to the app origin only a
   await scan.click();
   const manual = page.getByRole('heading', { name: /Your measurements/ });
   const failed = page.getByRole('button', { name: /Enter measurements manually instead/ });
-  await expect(manual.or(failed)).toBeVisible({ timeout: 90_000 });
-  const scanned = await manual.isVisible();
-  test.info().annotations.push({ type: 'body scan', description: scanned ? 'measured the mannequin' : `failed: ${await page.getByRole('status').first().textContent()}` });
+  // The fake camera loops 3 s of front view and 3 s of side view, and the scan starts wherever the loop
+  // happens to be; on a busy machine (SwiftShader) too few front frames can fall inside one 8-second scan
+  // ("no usable front frame"). "Try again" is what a shopper presses; the scan must succeed within three goes.
+  let scanned = false;
+  let attempts = 0;
+  const refusals: string[] = [];
+  while (!scanned && attempts < 3) {
+    attempts++;
+    await expect(manual.or(failed)).toBeVisible({ timeout: 90_000 });
+    scanned = await manual.isVisible();
+    if (scanned) break;
+    refusals.push((await page.getByRole('status').first().textContent()) ?? '');
+    if (attempts < 3) {
+      await page.getByRole('button', { name: 'Try again' }).click();
+      await expect(scan).toBeEnabled({ timeout: 60_000 });
+      await scan.click();
+    }
+  }
+  test.info().annotations.push({ type: 'body scan', description: scanned ? `measured the mannequin (attempt ${attempts}${refusals.length ? `; before: ${refusals.join(' | ')}` : ''})` : `failed ${attempts} times: ${refusals.join(' | ')}` });
   await page.screenshot({ path: shot('02-after-body-scan-of-mannequin.png') });
   expect(scanned, 'the body scan measured the mannequin (pose landmarker and segmenter ran)').toBe(true);
 

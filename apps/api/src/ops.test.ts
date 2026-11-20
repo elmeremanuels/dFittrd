@@ -13,10 +13,19 @@ describe('ops', () => {
   it('healthz and readyz answer', async () => {
     const h = await t.app.inject({ method: 'GET', url: '/healthz' });
     expect(h.statusCode).toBe(200);
-    expect(h.json()).toMatchObject({ ok: true });
+    expect(h.json()).toMatchObject({ ok: true, version: '0.1.0', commit: 'unknown' });
     const r = await t.app.inject({ method: 'GET', url: '/readyz' });
     expect(r.statusCode).toBe(200);
     expect(r.json()).toEqual({ ok: true, db: true, jobs: true });
+  });
+
+  it('healthz names the commit the image was built from (GIT_SHA), for the post-deploy check', async () => {
+    const stamped = await makeApp({ GIT_SHA: '0123456789abcdef0123456789abcdef01234567' });
+    try {
+      expect((await stamped.app.inject({ method: 'GET', url: '/healthz' })).json()).toEqual({ ok: true, version: '0.1.0', commit: '0123456789abcdef0123456789abcdef01234567' });
+    } finally {
+      await stamped.close();
+    }
   });
 
   it('serves OpenAPI generated from the zod DTOs', async () => {

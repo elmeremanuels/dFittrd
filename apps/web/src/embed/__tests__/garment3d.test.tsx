@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { computeFit } from '@curtain/fit-engine';
 import { MOCK_GARMENTS_BY_ID, SYNTHETIC_MENS_TEE, type GarmentAssetRef } from '@curtain/schema';
@@ -80,8 +80,26 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     const xl = screen.getByTestId('garment3d-bake-note');
     expect(xl).toHaveAttribute('data-advice-blocked', 'true');
     expect(xl).toHaveAttribute('data-reason', 'pull-on');
-    expect(xl).toHaveTextContent('Size XL is not drawn: the size advice says its waistband does not stretch over your hips, so the body is shown without it.');
     expect(xl).not.toHaveTextContent('shown on that body');
+    expect(xl).not.toHaveTextContent('Size XL is not drawn');
+    expect(xl).toHaveTextContent('In 3D the sizes look much alike');
+    // The sentence is a line of its own, so it can ride above the "Choose size" bar on a phone (OI-105).
+    const line = screen.getByTestId('garment3d-bake-not-drawn');
+    expect(line).toHaveTextContent(/^Size XL is not drawn: the size advice says its waistband does not stretch over your hips, so the body is shown without it\.$/);
+    expect(line.className).toMatch(/\bsticky\b/);
+    // It is written straight under the view and before the size buttons: a riding line lies over what comes before
+    // it, and after the buttons it rode over them (OI-137).
+    const view = screen.getByTestId('garment3d');
+    const sizeRow = within(view).getByRole('radiogroup');
+    // Its box holds the view and nothing that can be pressed: a riding line cannot leave its box.
+    const box = screen.getByTestId('garment3d-picture');
+    expect(line.parentElement).toBe(box);
+    expect(box.parentElement).toBe(view);
+    expect(within(box).queryAllByRole('button')).toEqual([]);
+    expect(within(box).queryAllByRole('radio')).toEqual([]);
+    expect(line.previousElementSibling).toBe(screen.getByTestId('garment3d-canvas').parentElement);
+    expect(line.compareDocumentPosition(sizeRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(line.compareDocumentPosition(xl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('a size too small for the body (a sewn tee on the device) says it is not drawn and why; a size that fits says nothing', async () => {
@@ -95,6 +113,9 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     const note = await screen.findByTestId('garment3d-not-drawn');
     expect(note).toHaveAttribute('data-anchor', 'chest');
     expect(note).toHaveTextContent('Size S is not drawn: the size advice says it does not close at the bust, where your body is 25.0 cm larger than the garment, more than its fabric gives, so the body is shown without it.');
+    // Straight under the view, before the size buttons (OI-137).
+    expect(note.previousElementSibling).toBe(screen.getByTestId('garment3d-canvas').parentElement);
+    expect(note.compareDocumentPosition(within(screen.getByTestId('garment3d')).getByRole('radiogroup')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     r.rerender(<Garment3D {...r.props} size="M" />);
     expect(screen.queryByTestId('garment3d-not-drawn')).toBeNull();
     expect(screen.queryByTestId('garment3d-bake-note')).toBeNull();
@@ -160,6 +181,19 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     expect(screen.getByTestId('garment3d-rings')).toHaveTextContent(/Bust/);
     expect(screen.getByTestId('garment3d-rings')).toHaveTextContent(/\d cm (room|short)/);
     expect(screen.getByText(/Estimate · not measured/)).toBeInTheDocument();
+  });
+
+  it('names the rings of a men\'s garment as menswear does: "Chest", never "Bust" (OI-104)', async () => {
+    const tee = SYNTHETIC_MENS_TEE;
+    const body = { bust: 98, waist: 86, hip: 96 };
+    setup({ garment: tee, fit: computeFit(tee, { measurements: body }), measurements: body, size: 'M', recommended: 'M', asset: { ...asset, sizes: tee.sizeChart.map((r) => r.size) } });
+    fireEvent.click(screen.getByTestId('garment3d-open'));
+    const rings = await screen.findByTestId('garment3d-rings');
+    const names = within(rings).getAllByRole('listitem').map((li) => li.querySelector('span')?.textContent);
+    expect(names).toContain('Chest');
+    expect(names).not.toContain('Bust');
+    expect(names).not.toContain('Hips');
+    expect(rings).not.toHaveTextContent(/bust/i);
   });
 
   it('keeps the size switcher in sync with the result screen', async () => {

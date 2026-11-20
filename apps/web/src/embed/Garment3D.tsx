@@ -39,7 +39,8 @@ import { ringOverlayFor } from '@/render/rings';
 import { AiRealismPanel, type AiRealismProps } from './AiRealism';
 import type { ExportedPasses } from './realism';
 import { embedStrings, type EmbedCatalogue } from './strings';
-import { notDrawnFromViewer, notDrawnNote, notDrawnSentence, type NotDrawnNote } from './notDrawn';
+import { notDrawnFromViewer, notDrawnNote, type NotDrawnNote } from './notDrawn';
+import { NotDrawnLine } from './NotDrawnLine';
 import { lengthText, type Units } from './units';
 import { avatarSkinFlag, maleShapeFlag, womenHeightFlag } from './look';
 
@@ -191,6 +192,8 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, wais
     [open, garment, fit, size, measurements, heightCm, units, estimated],
   );
   const ringList = rings ? rings.selected.rings.filter((r) => r.key !== 'hem') : [];
+  // A men's garment names its rings as the fit list and the 2D figure do: "Chest", "Seat" (OI-104).
+  const men = garment.audience === 'men';
   const hemLeftOut = !!rings && rings.selected.rings.some((r) => r.key === 'hem');
 
   useEffect(() => {
@@ -295,22 +298,34 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, wais
           </button>
         )}
       </div>
-      {phase === 'failed' ? (
-        <p className="mt-2 text-sm text-ink-soft" role="status" data-testid="garment3d-failed">
-          {t.unavailable(size)}
-        </p>
-      ) : (
-        <div className="relative mt-2 aspect-[3/4] w-full overflow-hidden rounded-xl bg-cream">
-          <canvas ref={canvasRef} className="h-full w-full touch-none" data-testid="garment3d-canvas" aria-label={t.canvas(size)} />
-          {phase === 'loading' || phase === 'draping' ? (
-            <span className="chip pointer-events-none absolute top-2 left-2 bg-white/90 text-xs" role="status">
-              {phase === 'loading' ? t.loading : t.draping}
-            </span>
-          ) : null}
-          {/* Top right: at the bottom it covered the hem of a floor-length skirt; the loading chip is top left. */}
-          <EstimateBadge className="pointer-events-none absolute top-2 right-2 text-[10px]" />
-        </div>
-      )}
+      {/*
+        The view and, straight under it, the sentence of a size that is not drawn, in a box of their own. The sentence
+        rides above the "Choose size" bar while its own place is out of sight (`NotDrawnLine`, OI-105). A riding line
+        lies over whatever is written before it in its box and cannot leave that box: here that is the view alone.
+        Written after the size buttons and the label, in the section's own box, it rode over the size buttons and over
+        the close button, and for some scroll positions a shopper on such a size had no size button to press (OI-137).
+      */}
+      <div data-testid="garment3d-picture">
+        {phase === 'failed' ? (
+          <p className="mt-2 text-sm text-ink-soft" role="status" data-testid="garment3d-failed">
+            {t.unavailable(size)}
+          </p>
+        ) : (
+          <div className="relative mt-2 aspect-[3/4] w-full overflow-hidden rounded-xl bg-cream">
+            <canvas ref={canvasRef} className="h-full w-full touch-none" data-testid="garment3d-canvas" aria-label={t.canvas(size)} />
+            {phase === 'loading' || phase === 'draping' ? (
+              <span className="chip pointer-events-none absolute top-2 left-2 bg-white/90 text-xs" role="status">
+                {phase === 'loading' ? t.loading : t.draping}
+              </span>
+            ) : null}
+            {/* Top right: at the bottom it covered the hem of a floor-length skirt; the loading chip is top left. */}
+            <EstimateBadge className="pointer-events-none absolute top-2 right-2 text-[10px]" />
+          </div>
+        )}
+        {block && (source?.kind === 'device' || source?.kind === 'bake') ? (
+          <NotDrawnLine block={block} size={size} audience={garment.audience} units={units} testId={source.kind === 'bake' ? 'garment3d-bake-not-drawn' : 'garment3d-not-drawn'} className="mt-1" />
+        ) : null}
+      </div>
       {aiRealism && phase === 'settled' && canExport ? (
         <AiRealismPanel key={size} {...aiRealism} size={size} exportPasses={() => viewRef.current?.exportPasses?.() ?? null} />
       ) : null}
@@ -327,18 +342,13 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, wais
         {t.notPhoto} {recommended ? t.picked(recommended) : waistOnly !== null ? t.waistOnly(waistOnly) : t.noneFits}
         {(recommended && recommended !== size) || (!recommended && waistOnly !== null) ? ` ${t.looking(size)}` : ''}
       </p>
-      {source?.kind === 'bake' ? <BakeNote t={t} size={size} source={source} units={units} blocked={block} audience={garment.audience} /> : null}
-      {source?.kind === 'device' && block ? (
-        <p className="mt-1 text-[11px] leading-snug text-ink-mute" data-testid="garment3d-not-drawn" data-anchor={block.anchor} data-reason={block.reason}>
-          {notDrawnSentence(block, size, garment.audience, units)}
-        </p>
-      ) : null}
+      {source?.kind === 'bake' ? <BakeNote t={t} size={size} source={source} units={units} blocked={block} /> : null}
       {ringList.length > 0 ? (
         <ul className="mt-1.5 flex flex-wrap gap-1 text-[11px]" aria-label={t.rings(size)} data-testid="garment3d-rings">
           {ringList.map((r) => (
             <li key={r.key} className="chip px-2 py-0.5" title={r.text}>
-              <span className="font-semibold">{t.ringName(r.key)}</span>{' '}
-              {r.chip[0].toLowerCase() === t.ringName(r.key).toLowerCase() ? r.chip[1] : `${r.chip[0].toLowerCase()}, ${r.chip[1]}`}
+              <span className="font-semibold">{t.ringName(r.key, men)}</span>{' '}
+              {r.chip[0].toLowerCase() === t.ringName(r.key, men).toLowerCase() ? r.chip[1] : `${r.chip[0].toLowerCase()}, ${r.chip[1]}`}
             </li>
           ))}
         </ul>
@@ -353,17 +363,17 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, wais
 }
 
 /** Under the label of a server drape bake: plain colour, where the size comes from, and where the shopper lies against the bodies it was draped on. */
-function BakeNote({ t, size, source, units, blocked: block, audience }: { t: EmbedCatalogue['view3d']; size: string; source: Extract<ViewerSource, { kind: 'bake' }>; units: Units; blocked: NotDrawnNote | null; audience: GarmentPayload['audience'] | undefined }): ReactNode {
+function BakeNote({ t, size, source, units, blocked: block }: { t: EmbedCatalogue['view3d']; size: string; source: Extract<ViewerSource, { kind: 'bake' }>; units: Units; blocked: NotDrawnNote | null }): ReactNode {
   const s = source.sizes[size];
   const place = s?.place ?? 'within';
   const rule = s?.refusedRule ?? null;
-  // A size the size advice blocks is not drawn wherever it lies against the bake's bodies (the viewer hides it).
+  // A size the size advice blocks is not drawn wherever it lies against the bake's bodies (the viewer hides it). Why is
+  // said by the sentence straight under the view (`garment3d-bake-not-drawn`), so this note does not say where it was draped.
   const blocked = block !== null;
   return (
     <p className="mt-1 text-[11px] leading-snug text-ink-mute" data-testid="garment3d-bake-note" data-place={place} data-advice-blocked={blocked ? 'true' : undefined} data-anchor={block?.anchor} data-reason={block?.reason}>
       {source.plainColour ? `${t.plainColour} ` : ''}
       {s ? t.provenance(size, s.provenance) : ''}
-      {block ? ` ${notDrawnSentence(block, size, audience, units)}` : ''}
       {!blocked && place === 'held' ? ` ${t.held(size)}` : ''}
       {!blocked && place === 'between' && s?.refusedHipCm != null ? ` ${t.between(size, lengthText(s.refusedHipCm, units), rule)}` : ''}
       {!blocked && place === 'refused' && s?.refusedHipCm != null ? ` ${t.refused(size, lengthText(s.refusedHipCm, units), rule)}` : ''}

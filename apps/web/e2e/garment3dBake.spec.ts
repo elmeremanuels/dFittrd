@@ -250,7 +250,8 @@ test('past the draped bodies: shown on the nearest one with the reason, or not d
       await expect(note).toHaveAttribute('data-place', k.place);
       if (k.blocked) await expect(note).toHaveAttribute('data-advice-blocked', 'true');
       else await expect(note).not.toHaveAttribute('data-advice-blocked');
-      if (k.text) await expect(note).toContainText(k.text);
+      // The sentence of a size the advice blocks is a line of its own, straight under the view; the rest is in the note.
+      if (k.text) await expect(k.blocked ? page.getByTestId('garment3d-bake-not-drawn') : note).toContainText(k.text);
       await expect(note).not.toContainText('simulation');
       await expect(view.getByText('Estimate · not measured')).toBeVisible();
       await still(page, view, `hip-${c.hip}-size-${k.size}-front.png`);

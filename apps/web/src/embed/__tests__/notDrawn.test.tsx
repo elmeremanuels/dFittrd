@@ -126,6 +126,37 @@ describe('the 2D figure follows the same rule', () => {
     expect(screen.queryByTestId('figure-not-drawn')).toBeNull();
     expect(screen.getByTestId('garment-layer')).toBeInTheDocument();
   });
+
+  it('on a phone the sentence rides above the "Choose size" bar, and the figure\'s estimate label above the sentence (OI-105)', () => {
+    // jsdom lays nothing out: the heights are given, the real thing is e2e/phoneResult.spec.ts.
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const height = this.dataset.testid === 'choose-bar' ? 91.2 : this.dataset.testid === 'figure-not-drawn' ? 74.5 : 0;
+      return { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: height, width: 0, height, toJSON: () => ({}) };
+    });
+    try {
+      const profile = profileFromAbout({ ...EMPTY_ABOUT, height: '168', weight: '80', bust: '105', waist: '87.5', hip: '114', knowsMeasurements: true }, 'dress');
+      const embedFit = fitForProfile(DRESS, profile);
+      const base = { garment: DRESS, profile, embedFit, advice: adviseSize(embedFit.fit, 'regular'), preference: 'regular' as const, onSelect: () => {}, onChoose: () => {}, onEdit: () => {}, returning: false, chooseFallback: null, chosen: null, currentVariantSize: null, units: 'metric' as const, onUnits: () => {}, onPreference: () => {}, privacyPolicyUrl: '/privacy' };
+      const r = render(<ResultScreen {...base} selected="12" />);
+      const result = screen.getByTestId('embed-result');
+      const note = screen.getByTestId('figure-not-drawn');
+      // the bar's height is on the result for the sentence, which sticks just above it, under the bar and the label in the stack
+      expect(result.style.getPropertyValue('--bar-clear')).toBe('92px');
+      expect(note.className).toMatch(/\bsticky\b/);
+      expect(note.style.bottom).toBe('calc(var(--bar-clear, 0px) + 4px)');
+      expect(note.className).toMatch(/\bz-\[5\]/);
+      expect(note.className).toMatch(/\bbg-cream\b/); // it lies over the picture while it rides
+      // the label's clearance round this figure is the bar, the sentence and the gap between them
+      const frame = result.querySelector('.mirror-frame')!;
+      expect((frame.parentElement as HTMLElement).style.getPropertyValue('--estimate-clear')).toBe('171px');
+      expect(result.style.getPropertyValue('--estimate-clear')).toBe('92px');
+      // a size that is drawn: no sentence, the label clears the bar alone
+      r.rerender(<ResultScreen {...base} selected="16" />);
+      expect((result.querySelector('.mirror-frame')!.parentElement as HTMLElement).style.getPropertyValue('--estimate-clear')).toBe('');
+    } finally {
+      rect.mockRestore();
+    }
+  });
 });
 
 describe('the 3D view says it from the embed’s own fit result, whatever the viewer reports', () => {
@@ -145,6 +176,9 @@ describe('the 3D view says it from the embed’s own fit result, whatever the vi
     expect(note).toHaveTextContent('Size 12 is not drawn: the size advice says it does not close at the bust, where your body is 3.0 cm larger than the garment, more than its fabric gives, so the body is shown without it.');
     // The viewer got the embed's own fit result: it hides the size by the same reading.
     expect((mountGarmentView.mock.calls[0]![1] as unknown as { fit: unknown }).fit).toBe(fit);
+    // OI-105: it rides above the "Choose size" bar while its place under the view is out of sight
+    expect(note.className).toMatch(/\bsticky\b/);
+    expect(note.style.bottom).toContain('var(--bar-clear');
     r.rerender(<Garment3D {...props} size="14" />);
     expect(screen.queryByTestId('garment3d-not-drawn')).toBeNull();
     r.rerender(<Garment3D {...props} size="16" />);

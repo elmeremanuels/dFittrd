@@ -5,7 +5,7 @@
  */
 import { SignJWT } from 'jose';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { AU_WOMENS_BODY_TEMPLATE } from '@curtain/schema';
+import { AU_WOMENS_BODY_TEMPLATE, MERCHANT_SETUP_TEXT } from '@curtain/schema';
 import { json, makeApp, seedShop, type TestApp } from '../test/helpers.js';
 
 const API_KEY = 'shpa_testkey';
@@ -265,6 +265,8 @@ describe('Shopify size chart builder routes', () => {
     expect(first.json().steps.find((s: { key: string }) => s.key === 'chart').done).toBe(true);
     expect(first.json().steps.map((s: { key: string }) => s.key)).toEqual(['connect', 'chart', 'measure', 'button', 'phone']);
     expect(first.json().measureProduct).not.toBeNull();
+    // OI-99: while the phone check is open, the Shopify admin is told about the store password page.
+    expect(first.json().steps.find((s: { key: string }) => s.key === 'phone').detail).toContain(MERCHANT_SETUP_TEXT.steps.phone.passwordNote);
 
     const put = await t.app.inject({ method: 'PUT', url: '/shopify/charts/onboarding', headers: await auth(), payload: { templateId: 'au-womens-body' } });
     expect(put.statusCode).toBe(200);

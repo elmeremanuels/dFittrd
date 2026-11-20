@@ -2,7 +2,9 @@ import { z } from 'zod';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 
 export const opsRoutes: FastifyPluginAsyncZod = async (app) => {
-  app.get('/healthz', { schema: { response: { 200: z.object({ ok: z.literal(true), version: z.string() }) } } }, async () => ({ ok: true as const, version: '0.1.0' }));
+  // `commit` is the build's git commit (env GIT_SHA, set in the image), "unknown" on a local run.
+  const commit = app.ctx.env.GIT_SHA || 'unknown';
+  app.get('/healthz', { schema: { response: { 200: z.object({ ok: z.literal(true), version: z.string(), commit: z.string() }) } } }, async () => ({ ok: true as const, version: '0.1.0', commit }));
 
   app.get('/readyz', async (_req, reply) => {
     const { ctx } = app;

@@ -15,6 +15,9 @@
     "lint": "pnpm -r lint",
     "demo": "node scripts/demo.mjs",
     "demo:e2e": "node scripts/demo-e2e.mjs",
+    "check:deployed": "node scripts/post-deploy-check.mjs",
+    "check:site-csp": "node scripts/site-csp-check.mjs",
+    "check:launch": "node scripts/check-launch.mjs",
     "check": "pnpm build:packages && pnpm typecheck && pnpm lint && pnpm test && pnpm build:apps && node scripts/check-bundle-secrets.mjs && node scripts/check-language-packs.mjs"
   }
 }

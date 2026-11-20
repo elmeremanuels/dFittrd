@@ -309,6 +309,20 @@ describe('avatar prompt (D19)', () => {
     const user = userEvent.setup();
     const name = `curtain-embed-avatar-${++dbN}`;
     const first = createEmbedStore({ persistLooks: true, openDb: () => new EmbedDb(name) });
+    // The screen does not await the save (`void store.saveLook(...)`), so the test keeps the promise it was given.
+    const saves: Promise<void>[] = [];
+    const saveLook = first.saveLook.bind(first);
+    first.saveLook = (shopId, look) => {
+      const landed = saveLook(shopId, look);
+      saves.push(landed);
+      return landed;
+    };
+    // The slow case every time, not now and then: the colour's encryption takes a while, as on a loaded machine.
+    const encrypt = crypto.subtle.encrypt.bind(crypto.subtle);
+    const slow = vi.spyOn(crypto.subtle, 'encrypt').mockImplementation(async (...args: Parameters<SubtleCrypto['encrypt']>) => {
+      await new Promise((r) => setTimeout(r, 150));
+      return encrypt(...args);
+    });
     setup({ locale: 'nl-NL', store: first });
     await toResult(user);
     await user.click(screen.getByTestId('avatar-open'));
@@ -318,13 +332,21 @@ describe('avatar prompt (D19)', () => {
     expect(c30).toHaveTextContent(c30Text());
     expect(c30).toHaveTextContent('"Remember me on this shop"');
     await user.click(screen.getByTestId('skin-swatch-8'));
-    // The save is not awaited by the screen: wait for it, so the next visit cannot read before it lands.
-    await waitFor(async () => expect((await first.loadLook(SHOP_ID))?.hex).toBe(lookForMonk(8)!.hex), { timeout: 8000 });
+    // The next visit is a new store on the same database: it must not read before this visit's row is written. Asking
+    // the first store (`loadLook`) does not show that, it answers from memory at once; under load the row was still
+    // on its way (key made, colour encrypted, two writes) and the second visit drew the standard colour for good
+    // (OI-45: the test then ran into its 5 s limit). So: the write itself is awaited, then the row is looked at.
+    expect(saves).toHaveLength(1);
+    await Promise.all(saves);
+    expect(slow).toHaveBeenCalled();
+    slow.mockRestore();
+    expect((await first.persistedKeys()).filter((k) => /look/.test(k)).length).toBeGreaterThan(0);
     cleanup();
 
     setup({ store: createEmbedStore({ persistLooks: true, openDb: () => new EmbedDb(name) }) });
     await screen.findByTestId('embed-result');
-    await waitFor(() => expect(figureSkin()).toBe(lookForMonk(8)!.hex), { timeout: 8000 });
+    // The colour is read before the result is shown (one load), so it is there with the first figure.
+    expect(figureSkin()).toBe(lookForMonk(8)!.hex);
     await user.click(screen.getByTestId('avatar-open'));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByTestId('avatar-skin-switch')).toHaveAttribute('aria-checked', 'true');

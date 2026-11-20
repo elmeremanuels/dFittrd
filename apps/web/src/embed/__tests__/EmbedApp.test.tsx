@@ -318,8 +318,20 @@ describe('EmbedApp', () => {
   it('turning Remember me off is remembered on the next visit (UX-1, F2, SEC-3)', async () => {
     const user = userEvent.setup();
     const name = `curtain-embed-optout-${++dbN}`;
-    setup({ store: createEmbedStore({ openDb: () => new EmbedDb(name) }) });
+    const first = createEmbedStore({ openDb: () => new EmbedDb(name) });
+    // The click does not wait for the choice to be written. The next visit is a new store on the same database and
+    // would read "on" if it came first (seen under load, with OI-45), so the write itself is awaited here.
+    const writes: Promise<void>[] = [];
+    const setRemember = first.setRemember.bind(first);
+    first.setRemember = (on) => {
+      const landed = setRemember(on);
+      writes.push(landed);
+      return landed;
+    };
+    setup({ store: first });
     await user.click(await screen.findByRole('switch', { name: 'Remember me on this shop' }));
+    expect(writes).toHaveLength(1);
+    await Promise.all(writes);
     cleanup();
 
     const again = setup({ store: createEmbedStore({ openDb: () => new EmbedDb(name) }) });

@@ -590,6 +590,42 @@ export const analyticsSnapshots = pgTable(
   (t) => [primaryKey({ columns: [t.shopId, t.kind, t.scope, t.period] }), index('analytics_snapshots_kind_scope_idx').on(t.kind, t.scope)],
 );
 
+/**
+ * One-time sign-in links into the web console (inventory S2) and the sessions they are exchanged
+ * for. Neither table holds a token: only `sha256` of it, so a copy of the database signs nobody in.
+ */
+export const consoleLinks = pgTable(
+  'console_links',
+  {
+    id: id(),
+    shopId: uuid('shop_id')
+      .notNull()
+      .references(() => shops.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    createdAt: ts('created_at').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+    /** Set by the one exchange that wins; a link with a value here is spent. */
+    usedAt: ts('used_at'),
+  },
+  (t) => [uniqueIndex('console_links_token_hash_uq').on(t.tokenHash), index('console_links_shop_created_idx').on(t.shopId, t.createdAt)],
+);
+
+export const consoleSessions = pgTable(
+  'console_sessions',
+  {
+    id: id(),
+    shopId: uuid('shop_id')
+      .notNull()
+      .references(() => shops.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    createdAt: ts('created_at').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+    /** "Sign out" in the console. */
+    revokedAt: ts('revoked_at'),
+  },
+  (t) => [uniqueIndex('console_sessions_token_hash_uq').on(t.tokenHash), index('console_sessions_shop_idx').on(t.shopId)],
+);
+
 export const schema = {
   shops,
   shopifySessions,
@@ -610,5 +646,7 @@ export const schema = {
   webhookLog,
   orderOutcomes,
   analyticsSnapshots,
+  consoleLinks,
+  consoleSessions,
 };
 export type Schema = typeof schema;

@@ -11,6 +11,9 @@ import {
   AnalyticsSwipesResponseSchema,
   BillingAnomaliesResponseSchema,
   ChartTemplatesResponseSchema,
+  ConsoleLinkResponseSchema,
+  ConsoleSessionRequestSchema,
+  ConsoleSessionResponseSchema,
   ANALYTICS_PERIOD_GRANULARITY,
   AnalyticsPeriodQuerySchema,
   AnalyticsPeriodsResponseSchema,
@@ -37,7 +40,8 @@ import {
   validateGarmentDraft,
   garmentTapeChartIssues,
 } from '@curtain/schema';
-import { requireMerchant } from '../auth/merchant.js';
+import { bearerToken } from '../auth/device.js';
+import { refuseConsoleSession, requireMerchant } from '../auth/merchant.js';
 import { remainingTrialDays } from '../billing/plans.js';
 import { ledgerEntries, shops } from '../db/schema.js';
 import { hmacHex, randomAlnum, safeEqual } from '../lib/crypto.js';
@@ -48,6 +52,7 @@ import { abandonedAnalytics, fitSizeAnalytics, swipeAnalytics } from '../service
 import { addMonths, availableAt, closedMonthsSince, isClosed, lastClosedMonth } from '../services/kfloor.js';
 import { decodeCursor, encodeCursor } from '../services/ledger.js';
 import { archiveProduct, listMerchantProducts, upsertProduct } from '../services/products.js';
+import { exchangeConsoleLink, mintConsoleLink, revokeConsoleSession } from '../services/consoleAccess.js';
 import { merchantSettings, updateMerchantSettings } from '../services/settings.js';
 import { merchantMenGate } from '../services/readiness.js';
 import { merchantSetup } from '../services/setup.js';
@@ -314,8 +319,33 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
 
   // ---- keys ------------------------------------------------------------------------------------
   app.post('/v1/merchant/keys/rotate', { schema: { response: { 200: MerchantKeyRotateResponseSchema } }, preHandler: requireMerchant }, async (req) => {
+    refuseConsoleSession(req);
     const { keys, previousKeyValidUntil } = await issueMerchantKeys(db, env, req.shop!);
     return { apiKey: keys.apiKey, publicKeyPrefix: keys.publicKeyPrefix, rotatedAt: now().toISOString(), previousKeyValidUntil: previousKeyValidUntil.toISOString() };
+  });
+
+  // ---- the one-time sign-in link into the web console (inventory S2) ----------------------------
+  // Asked by the shop's own plugin or admin with the credentials it already has. Per shop at most
+  // CONSOLE_LINK_MAX_PER_WINDOW links in ten minutes (services/consoleAccess.ts). The answer holds
+  // the token: it is never logged (the request log has no bodies) and must not be cached.
+  app.post('/v1/merchant/console-link', { schema: { response: { 200: ConsoleLinkResponseSchema } }, preHandler: requireMerchant }, async (req, reply) => {
+    refuseConsoleSession(req);
+    void reply.header('cache-control', 'no-store');
+    return mintConsoleLink({ db, shop: req.shop!, appUrl: env.PUBLIC_APP_URL, now: now() });
+  });
+  // No credentials but the token itself, in the body (a URL would reach the request log).
+  app.post(
+    '/v1/merchant/console-session',
+    { schema: { body: ConsoleSessionRequestSchema, response: { 200: ConsoleSessionResponseSchema } }, config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      void reply.header('cache-control', 'no-store');
+      return exchangeConsoleLink({ db, token: req.body.token, now: now() });
+    },
+  );
+  // "Sign out" in the console.
+  app.delete('/v1/merchant/console-session', { schema: { response: { 200: z.object({ signedOut: z.literal(true) }) } }, preHandler: requireMerchant }, async (req) => {
+    if (req.merchantAuth === 'console') await revokeConsoleSession(db, bearerToken(req)!, now());
+    return { signedOut: true as const };
   });
 
   // ---- WooCommerce: hello + Connect round-trip (D6) ----------------------------------------------

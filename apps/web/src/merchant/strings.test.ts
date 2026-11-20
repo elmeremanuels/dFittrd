@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs';
+import { PRODUCT_NOTICE_TEXT, SHOP_SETTINGS_TEXT, heldNowText, productNoticeLines } from '@curtain/schema';
 import { describe, expect, it } from 'vitest';
 import { MERCHANT_EN, merchantStrings } from './strings';
 
@@ -135,5 +136,25 @@ describe('merchant console strings (D21)', () => {
       "case 'paused':",
     ];
     for (const line of fine) expect(hitsOf(line), line).toEqual([]);
+  });
+
+  it('says the shop settings and the fabric notices in the words the Shopify admin uses (@curtain/schema)', () => {
+    const t = merchantStrings().console;
+    const shared = SHOP_SETTINGS_TEXT;
+    expect(t.settings.title).toBe(shared.title);
+    expect([t.settings.saving, t.settings.saved, t.settings.failed, t.settings.unavailable]).toEqual([shared.saving, shared.saved, shared.failed, shared.unavailable]);
+    expect({ ...t.settings.incomplete, heldNow: undefined }).toEqual({ title: shared.incomplete.title, intro: shared.incomplete.intro, choices: shared.incomplete.choices, defaultMark: shared.incomplete.defaultMark, heldNow: undefined });
+    expect(t.settings.popup).toEqual(shared.popup);
+    expect([t.settings.incomplete.heldNow(1), t.settings.incomplete.heldNow(4)]).toEqual([heldNowText(1), heldNowText(4)]);
+    // The console's intro starts as the Shopify admin's, then adds its own Save button.
+    expect(t.settings.intro.startsWith(shared.introSavedAtOnce.replace(/\.$/, ';'))).toBe(true);
+
+    const p = t.products;
+    expect([p.heldBack, p.heldBackSetting, p.heldBackNext, p.stretchAssumed]).toEqual([PRODUCT_NOTICE_TEXT.heldBack, PRODUCT_NOTICE_TEXT.heldBackSetting, PRODUCT_NOTICE_TEXT.heldBackNext, PRODUCT_NOTICE_TEXT.stretchAssumed]);
+    const held = productNoticeLines({ status: 'incomplete', heldBack: { reason: 'incomplete_product_data', fields: ['fabric.stretchPct', 'fabric.drape'] }, notices: { defaulted: [], leftOut: [{ field: 'fabric.drape', reason: 'x' }, { field: 'fabric.future', reason: 'y' }] } });
+    expect(p.heldBackText([p.fabricPart['fabric.stretchPct']!, p.fabricPart['fabric.drape']!])).toBe(held.heldBack);
+    expect([p.leftOut(p.fabricPart['fabric.drape']!, p.fabricRule['fabric.drape']!), p.leftOutOther(p.fabricPart.other)]).toEqual(held.leftOut.map((l) => l.text));
+    const sized = productNoticeLines({ status: 'active', notices: { defaulted: ['fabric.stretchPct'], leftOut: [{ field: 'fabric.stretchPct', reason: 'x' }] } });
+    expect(p.leftOutStretch(p.fabricRule['fabric.stretchPct']!)).toBe(sized.leftOut[0]!.text);
   });
 });

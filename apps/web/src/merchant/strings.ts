@@ -3,8 +3,10 @@
  * lookup; a translation pack is one more catalogue). Every word the console itself writes is here: the login, the
  * sections, the first-run checklist's own lines, the plan display and the 3D estimate review. Words that reach the
  * console from elsewhere stay where they are: the checklist steps and plan lines of @curtain/schema, and the api's
- * own product advice. `strings.test.ts` fails when interface text is written inline in the console again.
+ * own product advice. What the console and the Shopify admin both say (the two shop settings, the product list's
+ * fabric notices) is taken from @curtain/schema `merchantSettingsText.ts`, so the two cannot drift. `strings.test.ts` fails when interface text is written inline in the console again.
  */
+import { PRODUCT_NOTICE_TEXT, SHOP_SETTINGS_TEXT, fillText, heldNowText } from '@curtain/schema';
 import type { BakeCheckId, GarmentAssetStatus, IncompleteProductDataPolicy, SetupResponse, TapeProvenance } from '@curtain/schema';
 
 export interface AssetReviewCatalogue {
@@ -357,63 +359,33 @@ export const CONSOLE_EN: ConsoleCatalogue = {
     menConfirmTitle:
       'We read “men” from the title or a collection only, or the product has not been synced since we started asking where the audience comes from. Set the audience on the product to confirm it, or sync it again; until then it is shown as before.',
     missing: (fields) => `Missing: ${fields.join(', ')}`,
-    heldBack: 'Held back',
-    heldBackText: (what) => `Held back by your setting: shoppers get no size advice for this product until you add or correct ${what.join(' and ')}.`,
-    heldBackSetting: 'Change the setting',
-    heldBackNext: 'Add or correct the fabric details named under the product name.',
-    fabricPart: {
-      'fabric.stretchPct': 'the fabric stretch',
-      'fabric.drape': 'the drape',
-      'fabric.weightGsm': 'the fabric weight',
-      'fabric.opacity': 'the opacity',
-      'fabric.sheen': 'the sheen',
-      'fabric.blend': 'the fibre blend',
-      'fabric.primary': 'the fabric name',
-      other: 'a fabric detail',
-    },
-    fabricRule: {
-      'fabric.stretchPct': 'it must be a number from 0 to 100',
-      'fabric.drape': 'it must be a number from 0 to 1',
-      'fabric.weightGsm': 'it must be a number above 0 and at most 2000',
-      'fabric.opacity': 'it must be a number from 0 to 1',
-      'fabric.sheen': 'it must be a number from 0 to 1',
-      'fabric.blend': 'it may hold at most 8 fibres, each from 0 to 100%',
-      'fabric.primary': 'it may be at most 64 characters long',
-    },
-    leftOut: (part, rule) => `Not saved: ${part}. The value you entered was left out (${rule}). The rest of the fabric was kept.`,
-    leftOutOther: (part) => `Not saved: ${part}. The value you entered is not valid and was left out. The rest of the fabric was kept.`,
-    leftOutStretch: (rule) => `Not saved: the fabric stretch. The value you entered was left out (${rule}), so size advice assumes the fabric does not stretch until you correct it. The rest of the fabric was kept.`,
-    stretchAssumed: 'No fabric stretch given: size advice assumes the fabric does not stretch. For a stretchy fabric the advice is less exact until you add it.',
+    heldBack: PRODUCT_NOTICE_TEXT.heldBack,
+    heldBackText: (what) => fillText(PRODUCT_NOTICE_TEXT.heldBackText, { what: what.join(PRODUCT_NOTICE_TEXT.heldBackJoin) }),
+    heldBackSetting: PRODUCT_NOTICE_TEXT.heldBackSetting,
+    heldBackNext: PRODUCT_NOTICE_TEXT.heldBackNext,
+    fabricPart: PRODUCT_NOTICE_TEXT.fabricPart,
+    fabricRule: PRODUCT_NOTICE_TEXT.fabricRule,
+    leftOut: (part, rule) => fillText(PRODUCT_NOTICE_TEXT.leftOut, { part, rule }),
+    leftOutOther: (part) => fillText(PRODUCT_NOTICE_TEXT.leftOutOther, { part }),
+    leftOutStretch: (rule) => fillText(PRODUCT_NOTICE_TEXT.leftOutStretch, { rule }),
+    stretchAssumed: PRODUCT_NOTICE_TEXT.stretchAssumed,
   },
   settings: {
-    title: 'Settings',
+    title: SHOP_SETTINGS_TEXT.title,
     intro: 'Choices for your whole shop. A choice or a switch is saved when you change it; your colour and logo when you press “Save colour and logo”.',
-    unavailable: 'Settings could not be loaded just now. Reload the page to try again.',
-    saving: 'Saving…',
-    saved: 'Saved.',
-    failed: 'That was not saved. Check your internet connection and try again.',
+    unavailable: SHOP_SETTINGS_TEXT.unavailable,
+    saving: SHOP_SETTINGS_TEXT.saving,
+    saved: SHOP_SETTINGS_TEXT.saved,
+    failed: SHOP_SETTINGS_TEXT.failed,
     demo: 'Demo data: changes here are not saved anywhere.',
     incomplete: {
-      title: 'Products with incomplete fabric details',
-      intro: 'What should happen when a product has no fabric stretch, or a fabric value Curtain cannot use? Either way Curtain keeps the rest of what you entered.',
-      choices: {
-        'let-through': {
-          label: 'Show size advice anyway',
-          text: 'The product goes live and the product list tells you what is missing. Without a stretch value, size advice assumes the fabric does not stretch, and the popup tells shoppers that the shop has not said how much the fabric stretches.',
-        },
-        'hold-back': {
-          label: 'Hold the product back until it is complete',
-          text: 'The product is saved, but shoppers get no size advice for it until you add what is missing. The product list shows which products are held back and why.',
-        },
-      },
-      defaultMark: '(standard)',
-      heldNow: (n) => (n === 1 ? '1 product is held back right now.' : `${n} products are held back right now.`),
+      title: SHOP_SETTINGS_TEXT.incomplete.title,
+      intro: SHOP_SETTINGS_TEXT.incomplete.intro,
+      choices: SHOP_SETTINGS_TEXT.incomplete.choices,
+      defaultMark: SHOP_SETTINGS_TEXT.incomplete.defaultMark,
+      heldNow: heldNowText,
     },
-    popup: {
-      title: 'The popup on your product page',
-      wordmark: 'Show “Fit by Curtain”',
-      wordmarkText: 'A small line at the bottom of the popup. The “Estimate” labels on the figure and on pictures always stay: they are not part of this switch. The link “Get the Curtain app” also stays.',
-    },
+    popup: SHOP_SETTINGS_TEXT.popup,
     shop: {
       title: 'Your shop in the popup',
       name: 'Shop name',

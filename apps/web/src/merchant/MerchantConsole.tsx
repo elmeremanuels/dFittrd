@@ -1,7 +1,7 @@
 import { AlertCircle, BarChart3, LogOut, ShieldCheck, ShoppingCart, TrendingUp } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, NavLink, Navigate, Outlet, useNavigate } from 'react-router';
-import { CATEGORY_TEXT, MERCHANT_PLAN_TEXT, type SetupResponse } from '@curtain/schema';
+import { CATEGORY_TEXT, MERCHANT_PLAN_TEXT, productNoticeLines, type SetupResponse } from '@curtain/schema';
 import type { AnalyticsAbandonedResponse, AnalyticsFitSizesResponse, AnalyticsPeriodsResponse, AnalyticsSuppression, AnalyticsSwipesResponse, BillingAnomaliesResponse, MerchantLedgerResponse, MerchantProductsResponse, MerchantSettingsResponse, MerchantSettingsUpdateRequest, UsageResponse } from '@curtain/schema';
 import { MERCHANT_KEY_PATTERN, NetworkError, type MerchantApi } from '@/api/client';
 import { Ledger, type LedgerLine } from '@/components/Ledger';
@@ -432,18 +432,10 @@ export function MerchantProducts(): ReactNode {
               // Held back by the shop's own setting (D25 point 2): that, not the api's general next step, is what to say.
               const tone = p.heldBack ? 'critical' : (p.next?.tone ?? (p.status === 'active' ? 'success' : 'critical'));
               const score = p.adviceScore ?? Math.round(p.score * 100);
-              const part = (field: string): string => t.fabricPart[field] ?? t.fabricPart.other;
-              const leftOut = p.notices?.leftOut ?? [];
-              const sized = !p.heldBack && p.status === 'active';
-              // A stretch that was entered but left out is said once, by its "Not saved" line; "no stretch given" would be untrue.
-              const stretchLeftOut = leftOut.some((l) => l.field === 'fabric.stretchPct');
-              const stretchAssumed = sized && !stretchLeftOut && (p.notices?.defaulted.includes('fabric.stretchPct') ?? false);
-              // The api's own reason is a validator message; only the console's plain rules are shown.
-              const leftOutText = (field: string): string => {
-                const rule = t.fabricRule[field];
-                if (!rule) return t.leftOutOther(part(field));
-                return field === 'fabric.stretchPct' && sized ? t.leftOutStretch(rule) : t.leftOut(part(field), rule);
-              };
+              // What to say under the name: one rule for the console and the Shopify admin (@curtain/schema).
+              const lines = productNoticeLines(p);
+              const leftOut = lines.leftOut;
+              const stretchAssumed = lines.stretchAssumed !== null;
               return (
               <tr key={p.externalId} data-testid={`product-${p.externalId}`}>
                 <td className="min-w-[15rem] px-4 py-3">
@@ -453,7 +445,7 @@ export function MerchantProducts(): ReactNode {
                     <ul className="mt-1.5 space-y-1 text-xs text-ink-soft" data-testid={`notices-${p.externalId}`}>
                       {p.heldBack ? (
                         <li className="text-bad" data-testid={`held-back-${p.externalId}`}>
-                          {t.heldBackText(p.heldBack.fields.map(part))}{' '}
+                          {lines.heldBack}{' '}
                           <Link to="/merchant/settings" className="font-medium underline underline-offset-2">
                             {t.heldBackSetting}
                           </Link>
@@ -461,10 +453,10 @@ export function MerchantProducts(): ReactNode {
                       ) : null}
                       {leftOut.map((l) => (
                         <li key={l.field} className="text-warn" data-testid={`left-out-${p.externalId}`}>
-                          {leftOutText(l.field)}
+                          {l.text}
                         </li>
                       ))}
-                      {stretchAssumed ? <li data-testid={`stretch-assumed-${p.externalId}`}>{t.stretchAssumed}</li> : null}
+                      {stretchAssumed ? <li data-testid={`stretch-assumed-${p.externalId}`}>{lines.stretchAssumed}</li> : null}
                     </ul>
                   ) : null}
                 </td>

@@ -184,8 +184,10 @@ describe('Shopify size chart builder routes', () => {
       hasChart: false,
       proposal: { sizeChartType: 'garment', sizeChart: [{ size: 'ONE', bust: 140 }] },
       lengthCm: { shoulder_to_hem: 110 },
-      fabric: { primary: 'viscose' },
     });
+    // The fabric is what the description states; the stretch is our estimate and travels apart from it (D18, F20).
+    expect(res.json().fabric).toEqual({ primary: 'viscose', blend: [['viscose', 100]] });
+    expect(res.json().fabricEstimate).toEqual({ stretchPct: expect.any(Number) });
     expect(sets()).toHaveLength(0);
     handler = () => ({ product: null });
     expect((await t.app.inject({ method: 'GET', url: '/shopify/products/999/chart-import', headers: await auth() })).statusCode).toBe(404);
@@ -202,6 +204,17 @@ describe('Shopify size chart builder routes', () => {
     expect(res.json().written.sort()).toEqual(['fabric', 'length_cm', 'size_chart', 'size_chart_type']);
     expect(sets().every((m) => m.ownerId === 'gid://shopify/Product/301' && m.namespace === '$app:curtain')).toBe(true);
     expect(t.queue.pending('sync-shopify-product').some((j) => (j.data as { productGid: string }).productGid === 'gid://shopify/Product/301')).toBe(true);
+    // Fibre names without a stretch (the import form's default) are a valid write: only the names are stored.
+    const before = sets().length;
+    const names = await t.app.inject({
+      method: 'PUT',
+      url: '/shopify/products/301/chart',
+      headers: await auth(),
+      payload: { sizeChartType: 'garment', sizeChart: [{ size: 'ONE', bust: 140 }], fabric: { primary: 'viscose', blend: [['viscose', 100]] } },
+    });
+    expect(names.statusCode).toBe(200);
+    const fabricSet = sets().slice(before).find((m) => m.key === 'fabric')!;
+    expect(JSON.parse(fabricSet.value)).toEqual({ primary: 'viscose', blend: [['viscose', 100]] });
     const bad = await t.app.inject({ method: 'PUT', url: '/shopify/products/abc/chart', headers: await auth(), payload: { sizeChartType: 'garment', sizeChart: [{ size: 'ONE', bust: 140 }] } });
     expect(bad.statusCode).toBe(400);
   });

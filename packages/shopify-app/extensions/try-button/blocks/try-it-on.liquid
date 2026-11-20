@@ -53,7 +53,13 @@
 -%}
 
 {%- if product -%}
-  <div class="curtain-try curtain-try--{{ block.settings.alignment }}" {{ block.shopify_attributes }}>
+  {%- comment -%}
+    With a shop key the wrapper is printed with `hidden` (curtain-try.css makes that win over its own
+    display rule): the SDK shows it once it knows the shop's plan is not paused (D25 point 5), so a
+    paused shop never shows a button, and nothing shows when the script does not load. Without a key
+    there is no script, and the button is left as it is.
+  {%- endcomment -%}
+  <div class="curtain-try curtain-try--{{ block.settings.alignment }}"{% if pk_shop_key != blank and pk_api_url != blank %} hidden{% endif %} {{ block.shopify_attributes }}>
     {%- render 'curtain-try-button', product: product, label: pk_label, show_hint: block.settings.show_hint, mode: pk_mode, peek: pk_peek -%}
   </div>
 

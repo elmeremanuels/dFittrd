@@ -5,6 +5,8 @@
   gap: 0.4rem;
   margin: 1rem 0;
 }
+/* Printed hidden until the SDK knows the shop's plan is not paused. */
+.curtain-try[hidden] { display: none !important; }
 .curtain-try--left { align-items: flex-start; }
 .curtain-try--center { align-items: center; text-align: center; }
 .curtain-try--full { align-items: stretch; }

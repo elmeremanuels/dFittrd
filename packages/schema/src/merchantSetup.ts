@@ -290,6 +290,11 @@ export const MERCHANT_PLAN_TEXT = Object.freeze({
   shopifyBilling: 'Charged on your Shopify bill once you approve it. You can cancel at any time by uninstalling the app.',
   trial: (days: number) => `The first ${days} days are free.`,
   pausedNote: 'While the plan is paused the button is hidden on your product pages. It comes back when the plan is active again.',
+  /** The warning at the top of the Shopify admin while the plan is paused: one per way of paying. */
+  pausedBanner: {
+    arranged: 'Your Curtain plan is paused, so the button is hidden on your product pages. Email Curtain support and we switch it back on.',
+    shopifyBilling: 'Your Curtain plan is not active, so the button is hidden on your product pages. Press “Start the plan” and approve it in Shopify to switch it on.',
+  },
   leaving: {
     heading: 'Leaving Curtain',
     steps: {
@@ -339,6 +344,7 @@ export function merchantPlanText(platform: SetupPlatform, priceUsd = 8.99) {
     arrangedInactive: t.arrangedInactive,
     shopifyBilling: t.shopifyBilling,
     pausedNote: t.pausedNote,
+    pausedBanner: { ...t.pausedBanner },
     leaving: { heading: t.leaving.heading, steps: [...t.leaving.steps[platform]], data: [...t.leaving.data[platform]] },
   };
 }

@@ -109,6 +109,13 @@ describe('theme app extension', () => {
     expect(block).toContain('request.design_mode');
   });
 
+  it('prints the button wrapper hidden when the SDK will load, so a paused shop shows no button at first paint (D25 point 5)', () => {
+    // With a key and an api: hidden until the SDK shows it. Without them there is no script, so it is not hidden.
+    expect(block).toContain(`<div class="curtain-try curtain-try--{{ block.settings.alignment }}"{% if pk_shop_key != blank and pk_api_url != blank %} hidden{% endif %} {{ block.shopify_attributes }}>`);
+    // The block's own stylesheet sets display on the wrapper; this rule keeps `hidden` in charge.
+    expect(read('assets/curtain-try.css')).toContain('.curtain-try[hidden] { display: none !important; }');
+  });
+
   it('never references a secret key, an external origin or storage', () => {
     for (const f of [block, snippet, read('assets/curtain-try.css')]) {
       expect(f).not.toMatch(/sk_(live|test)_/);

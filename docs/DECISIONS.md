@@ -206,3 +206,7 @@ Founder decisions (20 Nov 2026), from the document "Curtain: open punten met adv
 7. **Hip height is a field per product**, prefilled per garment kind (skirt: 20 cm below the band), changeable by the merchant. **Where a skirt sits is a fixed rule** (band 2 cm under the navel). **Slit length and weight are optional fields.** From Caron we collect only, for the pilot garments, the hip depth, slit length and weight of the red skirt. **The 2.5 cm pull-on allowance stays fixed.**
 
 On the empty rows the advice stands, among them: the four build items before launch (OI-48, 49, 66, the password hint of OI-99) and the small ones (OI-45, 69, 70, 83, 104, 105); the per-shop face-photo switch as a merchant setting before the face photo goes on (OI-57); no server route for the face photo (OI-65); the AI trial after launch (OI-33) with a monthly cap per shop first (OI-41); men's items wait for a men's shop and a real tee.
+
+## D27 — The live 3D face may stay stylised
+
+Founder decision (20 Nov 2026), on the question raised by `docs/research/realistic-avatar-route.md`: the face in the live 3D view may stay stylised, while the AI realism layer carries the photoreal face in the still. Consequence: the work on the realistic body goes into body shape, skin and lighting first; realistic hair and face geometry are not part of the spike, and the CC-BY hair question does not need an answer now.

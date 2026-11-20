@@ -143,9 +143,37 @@
     .next-cell { min-width: 220px; }
     #products-body .btn { white-space: nowrap; }
     .next-cell .btn { margin-top: 4px; }
-    .score { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+    .score { display: flex; align-items: center; gap: 6px; margin-top: 4px; white-space: nowrap; }
+    .next-cell .where { margin: 6px 0 0; font-size: 12px; max-width: 420px; overflow-wrap: anywhere; }
+    /* On a phone a product is a block of its own, not a row cut off at the right edge. */
+    @media (max-width: 640px) {
+      .products-table thead { position: absolute; left: 0; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      .products-table, .products-table tbody, .products-table tr, .products-table td { display: block; }
+      .products-table tr { padding: 12px 0; border-top: 1px solid var(--p-border); }
+      .products-table td { border: 0; padding: 3px 0; }
+      .products-table td:empty { display: none; }
+      .products-table .next-cell { min-width: 0; }
+    }
     .score .meter { width: 64px; height: 6px; }
-    @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+    /* Settings: a switch drawn as a track with a knob, and the notices under a product's name */
+    .switch-row { display: flex; gap: 10px; align-items: flex-start; }
+    .switch { -webkit-appearance: none; appearance: none; position: relative; flex: none; width: 36px; height: 20px; margin: 1px 0 0; border-radius: 10px; background: #8a8a8a; cursor: pointer; transition: background .15s; }
+    .switch::before { content: ""; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+    .switch:checked { background: var(--p-text); }
+    .switch:checked::before { transform: translateX(16px); }
+    .switch[disabled], #settings-choices input[disabled] { opacity: .5; cursor: wait; }
+    #settings-status { min-height: 20px; margin: 0 0 8px; font-weight: 550; }
+    #settings-status.ok { color: var(--p-success-fg); }
+    #settings-status.bad { color: var(--p-critical-fg); }
+    #console-link-status.bad { color: var(--p-critical-fg); }
+    #console-link-status:empty { display: none; }
+    /* The name and its notices keep a readable width (on a phone each product is a block: see .products-table). */
+    @media (min-width: 641px) { #products-body td:first-child:not(.empty) { min-width: 240px; } }
+    ul.notices { list-style: none; margin: 4px 0 0; padding: 0; font-size: 12px; max-width: 420px; color: var(--p-text-subdued); }
+    ul.notices li + li { margin-top: 4px; }
+    ul.notices li.held { color: var(--p-critical-fg); }
+    ul.notices li.left-out { color: var(--p-warning-fg); }
+    @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } .switch, .switch::before { transition: none; } }
   </style>
 </head>
 <body>
@@ -311,13 +339,37 @@
         <button class="btn" type="button" data-filter="active">Ready</button>
       </div>
       <div style="overflow:auto">
-        <table>
+        <table class="products-table">
           <thead><tr><th>Product</th><th>Kind</th><th>Size advice</th><th>What to do next</th><th><span class="sr">More</span></th></tr></thead>
           <tbody id="products-body"><tr><td colspan="5"><div class="skeleton"></div></td></tr></tbody>
         </table>
       </div>
       <p class="subdued" id="products-note" style="margin:8px 0 0"></p>
       <p class="subdued" style="margin:8px 0 0">Button not showing on a product page? <a id="lnk-theme" target="_top" rel="noopener">Open the theme editor</a>, check the “Try it on” block is on your product template, and press Save.</p>
+    </section>
+
+    <section class="card" id="settings" aria-labelledby="h-settings" style="margin-top:16px">
+      <h2 id="h-settings" tabindex="-1"></h2>
+      <p class="subdued" id="settings-intro" style="margin:0 0 4px"></p>
+      <p id="settings-status" role="status" aria-live="polite"></p>
+      <div id="settings-loading" class="skeleton"></div>
+      <div id="settings-body" class="hidden">
+        <fieldset id="settings-incomplete" aria-describedby="settings-incomplete-intro">
+          <legend id="settings-incomplete-h"></legend>
+          <p class="subdued" id="settings-incomplete-intro" style="margin:0 0 8px"></p>
+          <div class="stack" id="settings-choices"></div>
+          <p class="subdued hidden" id="settings-held-now" style="margin:8px 0 0"></p>
+        </fieldset>
+        <h3 id="settings-popup-h" style="font-size:13px;margin:16px 0 6px"></h3>
+        <div class="switch-row">
+          <input type="checkbox" role="switch" class="switch" id="settings-wordmark" aria-describedby="settings-wordmark-text" />
+          <div><label for="settings-wordmark" id="settings-wordmark-label" style="font-weight:550"></label><p class="subdued" id="settings-wordmark-text" style="margin:2px 0 0"></p></div>
+        </div>
+      </div>
+      <h3 id="console-link-h" style="font-size:13px;margin:16px 0 6px"></h3>
+      <p class="subdued" id="console-link-intro" style="margin:0 0 8px"></p>
+      <button type="button" class="btn" id="btn-console"></button>
+      <p id="console-link-status" role="status" aria-live="polite" style="margin:8px 0 0"></p>
     </section>
 
     <section class="card" aria-labelledby="h-ledger" style="margin-top:16px">
@@ -483,7 +535,55 @@
         });
         return b;
       }
+      // ---- fabric notices of a product (D25 points 1 and 2) --------------------------------------
+      // Words: cfg.settings.notices (@curtain/schema PRODUCT_NOTICE_TEXT, D21). The rule is
+      // productNoticeLines of @curtain/schema, which the web console calls; this is its twin, kept
+      // in step by adminSettings.test.ts.
+      var NT = cfg.settings.notices;
+      function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+      function fill(template, values) { return String(template).replace(/\{([a-zA-Z]+)\}/g, function (slot, name) { return own(values, name) ? String(values[name]) : slot; }); }
+      function fabricPart(field) { return (own(NT.fabricPart, field) && NT.fabricPart[field]) || NT.fabricPart.other; }
+      function productNotices(p) {
+        var notices = p.notices || { defaulted: [], leftOut: [] };
+        var leftOut = notices.leftOut || [];
+        var sized = !p.heldBack && p.status === 'active';
+        // A stretch that was entered but left out is said once, by its "Not saved" line.
+        var stretchLeftOut = leftOut.some(function (l) { return l.field === 'fabric.stretchPct'; });
+        var stretchAssumed = sized && !stretchLeftOut && (notices.defaulted || []).indexOf('fabric.stretchPct') >= 0;
+        return {
+          heldBack: p.heldBack ? fill(NT.heldBackText, { what: p.heldBack.fields.map(fabricPart).join(NT.heldBackJoin) }) : null,
+          // The api's own reason is a validator message; only the plain rules of the catalogue are shown.
+          leftOut: leftOut.map(function (l) {
+            var rule = own(NT.fabricRule, l.field) && NT.fabricRule[l.field];
+            if (!rule) return fill(NT.leftOutOther, { part: fabricPart(l.field) });
+            return l.field === 'fabric.stretchPct' && sized ? fill(NT.leftOutStretch, { rule: rule }) : fill(NT.leftOut, { part: fabricPart(l.field), rule: rule });
+          }),
+          stretchAssumed: stretchAssumed ? NT.stretchAssumed : null
+        };
+      }
+      function goToSettings(ev) {
+        if (ev) ev.preventDefault();
+        var h = $('h-settings');
+        if (h.scrollIntoView) h.scrollIntoView({ block: 'start' });
+        h.focus();
+      }
+      /** The list under a product's name, or null when there is nothing to say. */
+      function noticeList(p) {
+        var n = productNotices(p);
+        if (!n.heldBack && !n.leftOut.length && !n.stretchAssumed) return null;
+        var items = [];
+        if (n.heldBack) {
+          var link = el('a', { href: '#settings', text: NT.heldBackSetting });
+          link.addEventListener('click', goToSettings);
+          items.push(el('li', { class: 'held', 'data-notice': 'held-back' }, [n.heldBack + ' ', link]));
+        }
+        n.leftOut.forEach(function (line) { items.push(el('li', { class: 'left-out', 'data-notice': 'left-out', text: line })); });
+        if (n.stretchAssumed) items.push(el('li', { 'data-notice': 'stretch-assumed', text: n.stretchAssumed }));
+        return el('ul', { class: 'notices', 'data-notices': p.externalId }, items);
+      }
+
       function renderProducts() {
+        renderHeldNow();
         var body = $('products-body'); body.textContent = '';
         var all = state.products ? state.products.items : [];
         var items = all.filter(function (p) { return state.filter === 'all' ? p.status !== 'archived' : p.status === state.filter; });
@@ -494,14 +594,19 @@
         }
         items.forEach(function (p) {
           var n = p.next || { badge: p.status === 'active' ? 'Ready' : 'Not ready yet', tone: p.status === 'active' ? 'success' : 'critical', text: '' };
+          // A product the shop's own setting holds back (D25 point 2): that, not the general next step, is what to say.
+          // This page has no fabric form: the row also says where in Shopify the value goes.
+          if (p.heldBack) n = { badge: NT.heldBack, tone: 'critical', text: NT.heldBackNext, where: NT.heldBackWhereShopify };
+          var notes = noticeList(p);
           var score = typeof p.adviceScore === 'number' ? p.adviceScore : Math.round(p.score * 100);
           var meter = el('span', { class: 'meter', 'aria-hidden': 'true' }); var fill = el('i'); fill.style.width = score + '%'; meter.appendChild(fill);
-          var act = productAction(p);
+          var act = p.heldBack ? null : productAction(p);
           body.appendChild(el('tr', null, [
-            el('td', null, [el('b', { text: p.name })]),
+            el('td', null, [el('b', { text: p.name })].concat(notes ? [notes] : [])),
             el('td', { text: (cfg.categories && cfg.categories[p.category]) || '–' }),
-            el('td', null, [el('span', { class: 'badge badge-' + n.tone, text: n.badge }), el('div', { class: 'score subdued' }, [meter, el('span', { text: score + ' / 100' })])]),
-            el('td', { class: 'next-cell' }, [el('div', { text: n.text })].concat(act ? [act] : [])),
+            // A held-back product gives no size advice whatever its score: the chip stands alone.
+            el('td', null, [el('span', { class: 'badge badge-' + n.tone, text: n.badge })].concat(p.heldBack ? [] : [el('div', { class: 'score subdued' }, [meter, el('span', { text: score + ' / 100' })])])),
+            el('td', { class: 'next-cell' }, [el('div', { text: n.text })].concat(n.where ? [el('p', { class: 'where subdued', 'data-where': 'fabric', text: n.where })] : []).concat(act ? [act] : [])),
             el('td', null, [el('span', { class: 'row' }, [
               el('button', { class: 'btn', type: 'button', 'data-product': p.externalId, 'data-name': p.name, text: 'Open' }),
               el('a', { class: 'btn', href: 'https://' + shop + '/admin/products/' + encodeURIComponent(p.externalId), target: '_top', rel: 'noopener', text: 'Edit in Shopify' })
@@ -526,6 +631,122 @@
           ]));
         });
       }
+
+      // ---- settings (D24; inventory row S2) -------------------------------------------------------
+      // The same stored values as the web console's Settings page, through GET/PUT /shopify/settings.
+      // Every word is cfg.settings.text (@curtain/schema SHOP_SETTINGS_TEXT, D21). Each control saves
+      // when it is changed; after a failed save the controls go back to what is stored.
+      var ST = cfg.settings.text;
+      var settings = { value: null, busy: false };
+      function settingsStatus(kind) {
+        var s = $('settings-status');
+        s.className = kind === 'saved' ? 'ok' : kind === 'failed' ? 'bad' : '';
+        s.textContent = kind ? ST[kind] : '';
+      }
+      function renderHeldNow() {
+        var held = state.products ? state.products.items.filter(function (p) { return !!p.heldBack; }).length : 0;
+        var line = $('settings-held-now');
+        line.classList.toggle('hidden', held === 0);
+        line.textContent = held === 0 ? '' : held === 1 ? ST.incomplete.heldNowOne : fill(ST.incomplete.heldNowMany, { n: held });
+      }
+      function renderSettings() {
+        var v = settings.value;
+        $('settings-loading').classList.add('hidden');
+        $('settings-body').classList.toggle('hidden', !v);
+        if (!v) return;
+        setRadio('settings-policy', v.incompleteProductData);
+        document.querySelectorAll('input[name="settings-policy"]').forEach(function (r) { r.disabled = settings.busy; });
+        var mark = $('settings-wordmark');
+        // An older api does not send the switch: the wordmark is shown unless it was turned off.
+        mark.checked = v.showFitByCurtain !== false;
+        mark.setAttribute('aria-checked', String(mark.checked));
+        mark.disabled = settings.busy;
+        renderHeldNow();
+      }
+      async function saveSettings(patch) {
+        if (settings.busy) return;
+        // A disabled control loses the keyboard focus: give it back when the save is over.
+        var focused = document.activeElement && $('settings').contains(document.activeElement) ? document.activeElement : null;
+        settings.busy = true; renderSettings(); settingsStatus('saving');
+        try {
+          settings.value = await api('PUT', '/shopify/settings', patch);
+          settingsStatus('saved');
+        } catch (err) {
+          settingsStatus('failed');
+        }
+        settings.busy = false; renderSettings();
+        if (focused && focused.name === 'settings-policy') focused = document.querySelector('input[name="settings-policy"]:checked');
+        if (focused && focused.focus) focused.focus();
+        // The products the shop already has follow the new choice (held back, or released).
+        if (patch.incompleteProductData) loadProducts().then(loadOnboarding).catch(function () {});
+      }
+      async function loadSettings() {
+        try { settings.value = await api('GET', '/shopify/settings'); }
+        catch (err) { settings.value = null; $('settings-status').className = 'bad'; text('settings-status', ST.unavailable); }
+        renderSettings();
+      }
+      (function buildSettings() {
+        text('h-settings', ST.title);
+        text('settings-intro', ST.introSavedAtOnce);
+        text('settings-incomplete-h', ST.incomplete.title);
+        text('settings-incomplete-intro', ST.incomplete.intro);
+        text('settings-popup-h', ST.popup.title);
+        text('settings-wordmark-label', ST.popup.wordmark);
+        text('settings-wordmark-text', ST.popup.wordmarkText);
+        cfg.settings.policies.forEach(function (policy) {
+          var c = ST.incomplete.choices[policy];
+          var id = 'settings-policy-' + policy;
+          var radio = el('input', { type: 'radio', name: 'settings-policy', id: id, value: policy, 'aria-describedby': id + '-text' });
+          radio.addEventListener('change', function () { if (radio.checked) saveSettings({ incompleteProductData: policy }); });
+          var label = el('label', { for: id }, [el('b', { text: c.label })].concat(policy === cfg.settings.defaultPolicy ? [' ', el('span', { class: 'subdued', text: ST.incomplete.defaultMark })] : []));
+          $('settings-choices').appendChild(el('div', { class: 'tpl' }, [radio, el('div', null, [label, el('small', { id: id + '-text', text: c.text })])]));
+        });
+        $('settings-wordmark').addEventListener('change', function () { saveSettings({ showFitByCurtain: $('settings-wordmark').checked }); });
+      })();
+
+      // ---- the full console (inventory row S2) ------------------------------------------------------
+      // A one-time sign-in link from POST /v1/merchant/console-link (session-token auth): it works
+      // once and for 10 minutes, and its token is in the URL fragment. The new tab is opened in the
+      // click itself, because a browser blocks a tab opened after the answer arrived; when it is
+      // blocked all the same, the merchant gets the link to follow. The link is kept in no variable
+      // after that and never written to the console.
+      var CONSOLE_TEXT = cfg.settings.consoleLink;
+      function consoleStatus(kind, nodes) {
+        var s = $('console-link-status');
+        s.className = kind === 'bad' ? 'bad' : '';
+        s.replaceChildren.apply(s, nodes || []);
+      }
+      async function openConsole() {
+        var btn = $('btn-console');
+        if (btn.disabled) return;
+        btn.disabled = true;
+        consoleStatus('', [CONSOLE_TEXT.opening]);
+        var tab = null;
+        try { tab = window.open('about:blank', '_blank'); if (tab) tab.opener = null; } catch (_) { tab = null; }
+        try {
+          var r = await api('POST', '/v1/merchant/console-link');
+          if (!r || typeof r.url !== 'string' || !/^https?:\/\//.test(r.url)) throw new Error('no link');
+          if (tab && !tab.closed) {
+            tab.location.replace(r.url);
+            consoleStatus('', []);
+          } else {
+            var link = el('a', { href: r.url, target: '_blank', rel: 'noopener noreferrer', text: CONSOLE_TEXT.readyLink });
+            link.addEventListener('click', function () { setTimeout(function () { consoleStatus('', []); }, 0); });
+            consoleStatus('', [CONSOLE_TEXT.ready + ' ', link]);
+            link.focus();
+          }
+        } catch (err) {
+          try { if (tab) tab.close(); } catch (_) { /* the tab is not ours to close */ }
+          consoleStatus('bad', [err && (err.status === 429 || err.code === 'rate_limited') ? CONSOLE_TEXT.tooOften : CONSOLE_TEXT.failed]);
+        }
+        btn.disabled = false;
+      }
+      (function buildConsoleLink() {
+        text('console-link-h', CONSOLE_TEXT.title);
+        text('console-link-intro', CONSOLE_TEXT.intro);
+        text('btn-console', CONSOLE_TEXT.open);
+        $('btn-console').addEventListener('click', openConsole);
+      })();
 
       async function subscribe() {
         var btn = $('btn-plan'); btn.disabled = true;
@@ -1109,7 +1330,7 @@
         try {
           if (shop) $('lnk-theme').href = themeLink();
           await ensureInstalled();
-          var results = await Promise.allSettled([loadUsage(), loadProducts(), loadLedger(), loadTemplates().then(loadOnboarding).catch(function (err) { if (!charts.tpl && defaultTemplateId()) selectTemplate(defaultTemplateId(), false); throw err; })]);
+          var results = await Promise.allSettled([loadUsage(), loadProducts(), loadLedger(), loadSettings(), loadTemplates().then(loadOnboarding).catch(function (err) { if (!charts.tpl && defaultTemplateId()) selectTemplate(defaultTemplateId(), false); throw err; })]);
           var failed = results.filter(function (r) { return r.status === 'rejected'; });
           if (failed.length) banner('warning', 'Part of this page could not load. ' + friendly(failed[0].reason) + ' Reload the page to try again.');
         } catch (err) {
@@ -1118,6 +1339,7 @@
           $('setup-list').textContent = '';
           $('setup-list').appendChild(el('li', null, [el('span', { class: 'num', 'aria-hidden': 'true', text: '1' }), el('div', null, [el('b', { text: '1. Connect your shop' }), el('div', { class: 'subdued', text: friendly(err) })])]));
           $('products-body').textContent = ''; $('ledger-body').textContent = '';
+          $('settings-loading').classList.add('hidden');
         }
       })();
     })();

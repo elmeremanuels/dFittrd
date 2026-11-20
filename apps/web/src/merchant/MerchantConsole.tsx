@@ -1,9 +1,9 @@
 import { AlertCircle, BarChart3, LogOut, ShieldCheck, ShoppingCart, TrendingUp } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, NavLink, Navigate, Outlet, useNavigate } from 'react-router';
-import { CATEGORY_TEXT, MERCHANT_PLAN_TEXT, type SetupResponse } from '@curtain/schema';
+import { CATEGORY_TEXT, MERCHANT_PLAN_TEXT, productNoticeLines, type SetupResponse } from '@curtain/schema';
 import type { AnalyticsAbandonedResponse, AnalyticsFitSizesResponse, AnalyticsPeriodsResponse, AnalyticsSuppression, AnalyticsSwipesResponse, BillingAnomaliesResponse, MerchantLedgerResponse, MerchantProductsResponse, MerchantSettingsResponse, MerchantSettingsUpdateRequest, UsageResponse } from '@curtain/schema';
-import { MERCHANT_KEY_PATTERN, NetworkError, type MerchantApi } from '@/api/client';
+import { MERCHANT_KEY_PATTERN, NetworkError, isConsoleSession, type MerchantApi } from '@/api/client';
 import { Ledger, type LedgerLine } from '@/components/Ledger';
 import { dayIso, pct, titleCase } from '@/lib/format';
 import { api } from '@/store';
@@ -22,7 +22,8 @@ export function readMerchantKey(): string | null {
   }
 }
 
-function writeMerchantKey(key: string | null): void {
+/** `key` is what the console sends as its bearer: a pasted secret key, or the session a sign-in link gave. This tab only. */
+export function writeMerchantKey(key: string | null): void {
   try {
     if (key) sessionStorage.setItem(SESSION_KEY, key);
     else sessionStorage.removeItem(SESSION_KEY);
@@ -144,7 +145,7 @@ export function MerchantLayout(): ReactNode {
           setBase({ mode: 'mock', products, usage: mockUsage(range.from, range.to), ledger: mockLedger(), anomalies: mockAnomalies(range.from, range.to), range, periods, setup: mockSetup(products), settings: mockSettings() });
           setPeriod(periods.periods[0] ?? null);
         } else if (e instanceof Error && e.name === 'ApiError' && [401, 403].includes((e as { status?: number }).status ?? 0)) {
-          setError(merchantStrings().console.keyRefused);
+          setError(isConsoleSession(key) ? merchantStrings().console.sessionEnded : merchantStrings().console.keyRefused);
         } else {
           setError(merchantStrings().console.loadFailed);
         }
@@ -235,6 +236,8 @@ export function MerchantLayout(): ReactNode {
               type="button"
               className="btn-ghost ml-2 min-h-9 px-3 text-xs"
               onClick={() => {
+                // A session from a sign-in link is ended at the api too; the tab forgets it either way.
+                if (isConsoleSession(key)) void api.merchant(key).signOut().catch(() => undefined);
                 writeMerchantKey(null);
                 navigate('/merchant/login', { replace: true });
               }}
@@ -415,8 +418,9 @@ export function MerchantProducts(): ReactNode {
         <p className="card bg-white/80 text-sm text-ink-soft">{t.empty}</p>
       ) : (
       <div className="overflow-x-auto rounded-3xl border border-ink/10 bg-white/80">
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs uppercase tracking-wider text-ink-mute">
+        {/* On a phone each product is a block of its own: a table five columns wide was cut off at the status chip. */}
+        <table className="w-full text-sm max-sm:block" data-testid="products-table">
+          <thead className="text-left text-xs uppercase tracking-wider text-ink-mute max-sm:sr-only">
             <tr>
               <th className="px-4 py-3">{t.product}</th>
               <th className="px-4 py-3">{t.kind}</th>
@@ -427,33 +431,25 @@ export function MerchantProducts(): ReactNode {
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-ink/10">
+          <tbody className="divide-y divide-ink/10 max-sm:block">
             {items.map((p) => {
               // Held back by the shop's own setting (D25 point 2): that, not the api's general next step, is what to say.
               const tone = p.heldBack ? 'critical' : (p.next?.tone ?? (p.status === 'active' ? 'success' : 'critical'));
               const score = p.adviceScore ?? Math.round(p.score * 100);
-              const part = (field: string): string => t.fabricPart[field] ?? t.fabricPart.other;
-              const leftOut = p.notices?.leftOut ?? [];
-              const sized = !p.heldBack && p.status === 'active';
-              // A stretch that was entered but left out is said once, by its "Not saved" line; "no stretch given" would be untrue.
-              const stretchLeftOut = leftOut.some((l) => l.field === 'fabric.stretchPct');
-              const stretchAssumed = sized && !stretchLeftOut && (p.notices?.defaulted.includes('fabric.stretchPct') ?? false);
-              // The api's own reason is a validator message; only the console's plain rules are shown.
-              const leftOutText = (field: string): string => {
-                const rule = t.fabricRule[field];
-                if (!rule) return t.leftOutOther(part(field));
-                return field === 'fabric.stretchPct' && sized ? t.leftOutStretch(rule) : t.leftOut(part(field), rule);
-              };
+              // What to say under the name: one rule for the console and the Shopify admin (@curtain/schema).
+              const lines = productNoticeLines(p);
+              const leftOut = lines.leftOut;
+              const stretchAssumed = lines.stretchAssumed !== null;
               return (
-              <tr key={p.externalId} data-testid={`product-${p.externalId}`}>
-                <td className="min-w-[15rem] px-4 py-3">
+              <tr key={p.externalId} data-testid={`product-${p.externalId}`} className="max-sm:block max-sm:py-2">
+                <td className="px-4 py-3 max-sm:block max-sm:py-1.5 sm:min-w-[15rem]">
                   <p className="font-medium">{p.name}</p>
                   {/* What the last save left out or assumed (D25 point 1), and why the product is held back. Under the name, so it is on screen on a phone. */}
                   {p.heldBack || leftOut.length > 0 || stretchAssumed ? (
                     <ul className="mt-1.5 space-y-1 text-xs text-ink-soft" data-testid={`notices-${p.externalId}`}>
                       {p.heldBack ? (
                         <li className="text-bad" data-testid={`held-back-${p.externalId}`}>
-                          {t.heldBackText(p.heldBack.fields.map(part))}{' '}
+                          {lines.heldBack}{' '}
                           <Link to="/merchant/settings" className="font-medium underline underline-offset-2">
                             {t.heldBackSetting}
                           </Link>
@@ -461,15 +457,15 @@ export function MerchantProducts(): ReactNode {
                       ) : null}
                       {leftOut.map((l) => (
                         <li key={l.field} className="text-warn" data-testid={`left-out-${p.externalId}`}>
-                          {leftOutText(l.field)}
+                          {l.text}
                         </li>
                       ))}
-                      {stretchAssumed ? <li data-testid={`stretch-assumed-${p.externalId}`}>{t.stretchAssumed}</li> : null}
+                      {stretchAssumed ? <li data-testid={`stretch-assumed-${p.externalId}`}>{lines.stretchAssumed}</li> : null}
                     </ul>
                   ) : null}
                 </td>
-                <td className="px-4 py-3">{p.category ? (CATEGORY_TEXT[p.category] ?? titleCase(p.category)) : c.none}</td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3 max-sm:block max-sm:py-1.5">{p.category ? (CATEGORY_TEXT[p.category] ?? titleCase(p.category)) : c.none}</td>
+                <td className="px-4 py-3 max-sm:block max-sm:py-1.5">
                   <span className={`chip ${tone === 'success' ? 'border-ok/30 bg-ok/10 text-ok' : tone === 'warning' ? 'border-warn/30 bg-warn/10 text-warn' : 'border-bad/30 bg-bad/10 text-bad'}`}>{p.heldBack ? t.heldBack : (p.next?.badge ?? (p.status === 'active' ? t.ready : t.notReady))}</span>
                   <div className="mt-1.5 flex items-center gap-2">
                     <div className="h-1.5 w-20 overflow-hidden rounded-full bg-ink/10" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={score} aria-label={t.scoreLabel(score)}>
@@ -488,8 +484,8 @@ export function MerchantProducts(): ReactNode {
                     </span>
                   ) : null}
                 </td>
-                <td className="max-w-sm px-4 py-3 text-ink-soft">{p.heldBack ? t.heldBackNext : (p.next?.text ?? (p.missingFields.length ? t.missing(p.missingFields) : c.none))}</td>
-                <td className="px-4 py-3">
+                <td className="max-w-sm px-4 py-3 text-ink-soft max-sm:block max-sm:py-1.5">{p.heldBack ? t.heldBackNext : (p.next?.text ?? (p.missingFields.length ? t.missing(p.missingFields) : c.none))}</td>
+                <td className="px-4 py-3 max-sm:block max-sm:py-1.5">
                   <Link to={`/merchant/products/${encodeURIComponent(p.externalId)}/3d`} className="chip whitespace-nowrap hover:bg-white" data-testid={`open-3d-${p.externalId}`}>
                     {merchantStrings().assets.open3d}
                   </Link>

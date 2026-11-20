@@ -2,17 +2,22 @@
  * The embedded admin page (admin/index.html): static HTML + App Bridge from Shopify's CDN. The api
  * serves it at `ADMIN_PAGE_PATH` with the CSP below; the page gets a session token from App Bridge
  * and calls the merchant routes with `Authorization: Bearer <session token>`.
+ * Its "Settings" section reads and writes the shop's settings through `GET/PUT /shopify/settings`.
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   CATEGORY_TEXT,
   CHART_COLUMN_TEXT,
+  DEFAULT_INCOMPLETE_PRODUCT_DATA,
   ESTIMATE_DISCLAIMER,
   GARMENT_CLOSURES,
   GARMENT_TAPE_FIELDS,
   GARMENT_TAPE_DIAGRAM_SVG,
   GARMENT_TAPE_FORM_TEXT,
+  INCOMPLETE_PRODUCT_DATA_POLICIES,
+  PRODUCT_NOTICE_TEXT,
+  CONSOLE_LINK_TEXT, SHOP_SETTINGS_TEXT,
   TAPE_CLOSURE_LABELS,
   TAPE_FIELD_LABELS,
   TAPE_HIP_DEPTH_CM,
@@ -54,6 +59,19 @@ export const GARMENT_TAPE_ADMIN_CONFIG = Object.freeze({
   closures: GARMENT_CLOSURES.map((value) => ({ value, label: TAPE_CLOSURE_LABELS[value] })),
   provenance: TAPE_PROVENANCE_LABELS,
   hipDepthCm: TAPE_HIP_DEPTH_CM,
+});
+
+/**
+ * What the admin page's "Settings" section and the product list's fabric notices read: the words the
+ * web console also uses (@curtain/schema merchantSettingsText.ts, D21) and the two choices.
+ */
+export const SETTINGS_ADMIN_CONFIG = Object.freeze({
+  text: SHOP_SETTINGS_TEXT,
+  notices: PRODUCT_NOTICE_TEXT,
+  /** "Open the full console": the one-time sign-in link (inventory S2). */
+  consoleLink: CONSOLE_LINK_TEXT,
+  policies: INCOMPLETE_PRODUCT_DATA_POLICIES,
+  defaultPolicy: DEFAULT_INCOMPLETE_PRODUCT_DATA,
 });
 
 /** Only the embedding admin may frame the page: the shop's own domain and admin.shopify.com. */
@@ -112,6 +130,8 @@ export function renderAdminPage(cfg: AdminPageConfig): string {
     plan: merchantPlanText('shopify'),
     /** The kind of garment in plain words, for the products list. */
     categories: CATEGORY_TEXT,
+    /** The "Settings" section and the fabric notices of the products list (D24, D25 points 1, 2 and 7). */
+    settings: SETTINGS_ADMIN_CONFIG,
   };
   const html = cfg.template ?? adminPageTemplate();
   // Function replacers: a string replacement would interpret `$&`, `$'`, `` $` `` inside the values.

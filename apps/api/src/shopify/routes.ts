@@ -10,6 +10,8 @@
  *  - POST /shopify/webhooks        HMAC-verified; products/*, app/uninstalled, app_subscriptions/update,
  *    the three GDPR topics. Every delivery is logged with its payload for replay (webhook_log).
  *  - /shopify/charts/*, /shopify/products/:id/*  the size chart builder (charts.ts).
+ *  - GET/PUT /shopify/settings     the shop's own choices for the admin's Settings section: the same
+ *    stored values, DTOs and service as /v1/merchant/settings (services/settings.ts).
  *  - POST /shopify/billing/subscribe  appSubscriptionCreate for the one D17 plan, "Curtain": one recurring
  *    line of USD 8.99 per 30 days, no usage line. A shop billed in a currency our rate table covers is
  *    charged the converted amount; the currency, the USD rate and the price are stored on the shop.
@@ -24,6 +26,7 @@
 import { and, eq, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { adminAppUrl, adminContentSecurityPolicy, CURTAIN_PLAN, renderAdminPage, setAppDataMetafields, ShopifyGraphqlError, type ActiveSubscription } from '@curtain/shopify-app';
+import { MerchantSettingsResponseSchema, MerchantSettingsUpdateRequestSchema } from '@curtain/schema';
 import { z } from 'zod';
 import { requireMerchant } from '../auth/merchant.js';
 import { isShopifyDomain, verifyShopifySessionToken } from '../auth/shopifySessionToken.js';
@@ -34,7 +37,8 @@ import { JOB } from '../jobs/queue.js';
 import { badRequest, conflict, forbidden, serviceUnavailable, unauthorized } from '../lib/errors.js';
 import { HOUR } from '../lib/time.js';
 import { archiveProduct } from '../services/products.js';
-import { clearSettings, createShop, findShopByDomain, issueMerchantKeys, updateSettings, type ShopRow } from '../services/shops.js';
+import { merchantSettings, updateMerchantSettings } from '../services/settings.js';
+import { clearSettings, createShop, endConsoleAccess, findShopByDomain, issueMerchantKeys, updateSettings, type ShopRow } from '../services/shops.js';
 import { shopifyChartRoutes } from './charts.js';
 import { billingSettingsPatch } from './client.js';
 
@@ -161,6 +165,18 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
       const jobId = await queue.send(JOB.backfillShopify, { shopId: shop.id }, { singletonKey: `backfill:${shop.id}` });
       return { shopId: fresh.id, shopDomain, publicKeyPrefix: fresh.apiKeyPrefix!, scope, backfillQueued: jobId !== null };
     },
+  );
+
+  // ---- settings (the embedded admin's Settings section) -----------------------------------------
+  // What /v1/merchant/settings reads and writes, for a Shopify shop: one service, one stored row.
+  const shopifyShop = (shop: ShopRow | undefined): ShopRow => {
+    if (!shop) throw unauthorized();
+    if (shop.platform !== 'shopify') throw badRequest('not_shopify', 'these are the settings of the Shopify admin; this shop is not a Shopify shop');
+    return shop;
+  };
+  app.get('/shopify/settings', { schema: { response: { 200: MerchantSettingsResponseSchema } }, preHandler: requireMerchant }, async (req) => merchantSettings(shopifyShop(req.shop)));
+  app.put('/shopify/settings', { schema: { body: MerchantSettingsUpdateRequestSchema, response: { 200: MerchantSettingsResponseSchema } }, preHandler: requireMerchant }, async (req) =>
+    updateMerchantSettings({ db, shop: shopifyShop(req.shop), body: req.body, now: now() }),
   );
 
   app.post(
@@ -295,6 +311,9 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
             .where(eq(shops.id, shop.id));
           await clearSettings(db, shop.id, SUBSCRIPTION_KEYS);
           await shopify.deleteSessions(shop.id);
+          // An uninstall is a clean cut: a console session or an unused sign-in link must not work
+          // again when the shop is installed again.
+          await endConsoleAccess(db, shop.id, now());
           break;
         }
         case 'app_subscriptions/update': {

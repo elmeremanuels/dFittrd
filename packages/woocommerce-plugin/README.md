@@ -23,6 +23,11 @@ with `_curtain_size_chart`, products whose `_curtain_garment_tape` has a `measur
 step 5 is ticked with "It works on my phone" (`setup_phone_confirmed`). The box collapses to one line once
 everything is done. `node e2e/setup-shots.mjs [outDir]` renders it outside WordPress for screenshots.
 
+`node e2e/console-link-shots.mjs [outDir]` walks "Open the Curtain console" in Chromium on a phone-size
+screen: the settings page rendered outside WordPress, the plugin's own PHP asking a real local api for the
+one-time link (`e2e/console-redirect.php`), and the web console's dev server exchanging it. WordPress itself
+(admin-post, nonce, capability) is a stand-in there.
+
 ## Garment measurements (closure + tape)
 
 Below the size chart, the meta box has a **Garment measurements** table (`docs/MERCHANT-MEASUREMENTS.md`):
@@ -119,6 +124,7 @@ and Twenty Twenty-Five (also with the add-to-cart form moved into a template par
    - with Stripe configured on the api the admin is sent to Checkout and back to the settings page (`?curtain=connected`), which finishes the token exchange automatically (or via *Finish connection*);
    - without Stripe (`mode: manual-key`) the connection completes immediately on the free plan.
    - Alternative: paste an `sk_live_…` key from the merchant console under *Or paste an API key*; the hello call fills in the `pk_` prefix.
+   - Once connected, **Open the Curtain console** on the same page opens the web console in a new tab and signs the admin in. The plugin asks the api for a one-time link (`POST /v1/merchant/console-link`, signed with the shop's key like a sync) and redirects the browser to it. The link works once and for 10 minutes; the plugin stores it nowhere and only redirects to `/merchant/link` on the console host of the configured API, on the https port only (`Settings::is_console_link_url`). The sign-in lasts until that tab is closed, 12 hours at most.
 4. The connect enqueues **Sync all**. Open a product → *Curtain — fit data* → fill category, chart type, size chart, fabric, flat-lay → *Update*. The status panel shows the backend verdict (score, missing fields).
 5. Visit the product page: the **Try it on** button appears for products synced as `active` (switch *Show for* to all products to test earlier).
 

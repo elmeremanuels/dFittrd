@@ -8,6 +8,7 @@ import { TryRoute } from '@/routes/TryRoute';
 import { WardrobeRoute } from '@/routes/WardrobeRoute';
 import { MerchantAssetReview } from '@/merchant/AssetReview';
 import { MerchantSettings } from '@/merchant/Settings';
+import { MerchantLinkSignIn } from '@/merchant/LinkSignIn';
 import { MerchantAnalytics, MerchantLayout, MerchantLedgerRoute, MerchantLogin, MerchantOverview, MerchantProducts, MerchantUsage } from '@/merchant/MerchantConsole';
 
 /**
@@ -54,6 +55,8 @@ export const routes: RouteObject[] = [
   { path: '/privacy', lazy: async () => ({ Component: (await import('@/routes/LegalRoute')).PrivacyRoute }) },
   { path: '/terms', lazy: async () => ({ Component: (await import('@/routes/LegalRoute')).TermsRoute }) },
   { path: '/merchant/login', element: <MerchantLogin /> },
+  // The page a one-time sign-in link from the WooCommerce plugin or the Shopify admin opens.
+  { path: '/merchant/link', element: <MerchantLinkSignIn /> },
   {
     path: '/merchant',
     element: <MerchantLayout />,

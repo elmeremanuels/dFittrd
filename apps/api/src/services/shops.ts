@@ -1,6 +1,6 @@
 import { and, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
-import { shops, type Plan, type ShopSettings } from '../db/schema.js';
+import { consoleLinks, consoleSessions, shops, type Plan, type ShopSettings } from '../db/schema.js';
 import type { Env } from '../env.js';
 import {
   decryptString,
@@ -82,7 +82,25 @@ export async function issueMerchantKeys(db: Db, env: Env, shop: ShopRow): Promis
       updatedAt: new Date(),
     })
     .where(eq(shops.id, shop.id));
+  // A new key is the merchant's remedy for a leaked one: whoever held the old key must not keep a
+  // console session, or a sign-in link not yet used, that was made with it.
+  await endConsoleAccess(db, shop.id, new Date());
   return { keys, previousKeyValidUntil };
+}
+
+/**
+ * Ends every console session of a shop and spends every sign-in link it has not used yet. Called
+ * when the shop gets a new key and when it uninstalls, so neither comes back to life afterwards.
+ */
+export async function endConsoleAccess(db: Db, shopId: string, now: Date): Promise<void> {
+  await db
+    .update(consoleSessions)
+    .set({ revokedAt: now })
+    .where(and(eq(consoleSessions.shopId, shopId), isNull(consoleSessions.revokedAt)));
+  await db
+    .update(consoleLinks)
+    .set({ usedAt: now })
+    .where(and(eq(consoleLinks.shopId, shopId), isNull(consoleLinks.usedAt)));
 }
 
 /**

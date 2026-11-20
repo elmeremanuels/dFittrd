@@ -95,6 +95,7 @@ A dev-only Customer/Merchant switcher is rendered under `import.meta.env.DEV`.
 
 - Path B v0 draws the garment as a parametric SVG overlay (not a warp of the flat-lay photo) over the captured base frame; the mesh warp onto the silhouette atlas is the next renderer step (D4). The base frame is placed full-height, so a frame where the person is small will not line up perfectly with the overlay.
 - Hero renders: consent tier + API method exist; the UI flow (compose avatar render → `POST /v1/renders/hero` → poll → re-composite face → `renders` LRU) is not built yet.
+- The merchant console is opened from the shop: `/merchant/link#t=…` (`merchant/LinkSignIn.tsx`) takes the one-time token out of the address bar, posts it once to `POST /v1/merchant/console-session` and keeps the session in `sessionStorage` (this tab, 12 hours, "Sign out" ends it at the api). `/merchant/login` with a pasted secret key still works.
 - "Abandoned opens" in the merchant console need a try-session open count that the usage DTO does not expose yet; live mode shows "—".
 - Models are not committed; run `pnpm --filter @curtain/web models` before using the camera path.
 

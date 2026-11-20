@@ -164,6 +164,22 @@ script; required for embedded apps) with `<meta name="shopify-api-key">`, then:
    (`friendly()` in the page: no HTTP codes); an empty catalogue right after install says the import is
    running and looks again every 5 s for 2 minutes.
 
+   **Settings** (D24, D25 points 1, 2 and 7), below the products list: what happens with products
+   whose fabric details are incomplete (two choices, "Show size advice anyway" is the standard one)
+   and the switch "Show “Fit by Curtain”" (the "Estimate" labels always stay). Read and written through
+   `GET/PUT /shopify/settings`, the same stored values and service as the web console's
+   `/v1/merchant/settings`; each control saves when it is changed. The shop's colour and logo are not
+   in this section yet (web console only). The products list says under a product's name which fabric
+   value was left out, when no stretch was given, and why a product is held back with what to add
+   ("Held back" chip, link to the setting). The words and the rule are the web console's
+   (`SHOP_SETTINGS_TEXT`, `PRODUCT_NOTICE_TEXT`, `productNoticeLines` in `@curtain/schema`); the page's
+   script is a twin of that rule, kept in step by `src/adminSettings.test.ts`.
+   The section ends with **Open the full console**: the page opens a new tab in the click, asks
+   `POST /v1/merchant/console-link` with the session token and sends the tab to the one-time sign-in
+   link (10 minutes, one use; words in `CONSOLE_LINK_TEXT`). When the browser blocks the tab, the
+   merchant gets the link to follow instead.
+   `node scripts/settings-shots.mjs <outDir>` (after a build) drives the section in Chromium.
+
    `pnpm --filter @curtain/api walk:onboarding [outDir]` walks all of it as the pilot shop would, timed,
    against the real api and a fake Shopify (`apps/api/src/scripts/onboarding-walk.ts`, report in
    `docs/reports/claude/merchant-onboarding.md`).

@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Curtain for WooCommerce 0.1.0\n"
 "Report-Msgid-Bugs-To: https://curtain.fit/woocommerce\n"
-"POT-Creation-Date: 2026-11-20 05:36+0000\n"
+"POT-Creation-Date: 2026-11-20 07:53+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -836,6 +836,26 @@ msgid "Foot cm"
 msgstr ""
 
 #: includes/class-settings.php
+msgid "Connect the shop first."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "The console was opened several times in the last few minutes. Wait ten minutes, then press \"Open the Curtain console\" again."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Curtain could not be reached, so the console was not opened. Check that this site can reach the internet, then press \"Open the Curtain console\" again."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "The console could not be opened just now. Press \"Check status\" to see whether the shop is still connected, then press \"Open the Curtain console\" again."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "The console could not be opened: the address Curtain answered with is not the Curtain console. Nothing was opened."
+msgstr ""
+
+#: includes/class-settings.php
 msgid "Try it on"
 msgstr ""
 
@@ -922,10 +942,6 @@ msgid "Status check failed: %s"
 msgstr ""
 
 #: includes/class-settings.php
-msgid "Connect the shop first."
-msgstr ""
-
-#: includes/class-settings.php
 msgid "Full sync queued. Products are pushed in the background."
 msgstr ""
 
@@ -982,6 +998,18 @@ msgstr ""
 
 #: includes/class-settings.php
 msgid "Not connected — nothing is sent to Curtain."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Curtain console"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Open the Curtain console"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Your shop settings, product checks, usage and what shoppers liked are in the Curtain console. The button opens it in a new tab and signs you in: no password, no key. You stay signed in until you close that tab, and for 12 hours at most."
 msgstr ""
 
 #: includes/class-settings.php

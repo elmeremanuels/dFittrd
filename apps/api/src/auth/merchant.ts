@@ -5,10 +5,14 @@
  *     ±5 minutes, secret = the shop's `sk_…` key (current or previous within its 24 h grace).
  *  2. Merchant console / scripts — `Authorization: Bearer sk_live_…` (scrypt hash compare).
  *  3. Shopify embedded app — `Authorization: Bearer <session token>` (HS256 with the API secret).
+ *  4. Web console after a one-time sign-in link — `Authorization: Bearer cs_…`, a session of
+ *     CONSOLE_SESSION_TTL_HOURS (services/consoleAccess.ts). It can do what the console does; it
+ *     cannot replace the shop's key or ask for another link (`refuseConsoleSession`).
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { safeEqual, signMerchantRequest } from '../lib/crypto.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
+import { CONSOLE_SESSION_PREFIX, findShopByConsoleSession } from '../services/consoleAccess.js';
 import { findShopByDomain, findShopByPrefix, findShopBySecret, merchantSecrets, type ShopRow } from '../services/shops.js';
 import { verifyShopifySessionToken } from './shopifySessionToken.js';
 import { bearerToken } from './device.js';
@@ -55,7 +59,7 @@ export function parseHmacHeader(h: string): { key: string; ts: string; sig: stri
   return { key: parts.key, ts: parts.ts, sig: parts.sig };
 }
 
-export type MerchantAuthKind = 'hmac' | 'secret' | 'shopify';
+export type MerchantAuthKind = 'hmac' | 'secret' | 'shopify' | 'console';
 
 export async function authenticateMerchant(req: FastifyRequest): Promise<{ shop: ShopRow; kind: MerchantAuthKind }> {
   const { ctx } = req.server;
@@ -88,6 +92,11 @@ export async function authenticateMerchant(req: FastifyRequest): Promise<{ shop:
     if (!shop) throw unauthorized('invalid merchant key', 'invalid_key');
     return { shop, kind: 'secret' };
   }
+  if (token.startsWith(CONSOLE_SESSION_PREFIX)) {
+    const shop = await findShopByConsoleSession(ctx.db, token, ctx.now());
+    if (!shop) throw unauthorized('this console session has ended', 'invalid_console_session');
+    return { shop, kind: 'console' };
+  }
   if (ctx.shopify.configured()) {
     const claims = await verifyShopifySessionToken(token, ctx.env.SHOPIFY_API_KEY!, ctx.env.SHOPIFY_API_SECRET!, ctx.now());
     if (!claims) throw unauthorized('invalid session token', 'invalid_session_token');
@@ -103,4 +112,12 @@ export async function requireMerchant(req: FastifyRequest, _reply: FastifyReply)
   if (shop.uninstalledAt) throw forbidden('shop is uninstalled', 'shop_uninstalled');
   req.shop = shop;
   req.merchantAuth = kind;
+}
+
+/**
+ * For the few routes a console session must not reach: it lasts hours and came from a link, so it
+ * may not turn itself into something lasting (a new secret key) or renew itself (another link).
+ */
+export function refuseConsoleSession(req: FastifyRequest): void {
+  if (req.merchantAuth === 'console') throw forbidden('not available in a console session: use your shop\'s Curtain settings', 'console_session_not_allowed');
 }

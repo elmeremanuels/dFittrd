@@ -105,6 +105,16 @@ final class Api_Client {
 		return $this->request( 'GET', '/v1/merchant/products?' . http_build_query( $q ), null );
 	}
 
+	/**
+	 * POST /v1/merchant/console-link — a one-time sign-in link into the web console for this shop.
+	 * The answer's `url` holds the token: it is passed on to the browser and kept nowhere.
+	 *
+	 * @return array<string,mixed>
+	 */
+	public function console_link(): array {
+		return $this->request( 'POST', '/v1/merchant/console-link', null );
+	}
+
 	// ---- transport -------------------------------------------------------------------------
 
 	/**

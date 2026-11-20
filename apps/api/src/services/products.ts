@@ -92,7 +92,8 @@ export async function upsertProduct(
   // completeness (render and taste fields included).
   const policy = await incompleteProductDataOf(db, shopId);
   const { status, heldBack, defaulted } = readinessOf(draft, policy, cleaned.leftOut);
-  const notices: ProductNotices = { defaulted, leftOut: cleaned.leftOut };
+  // An accessory's size does not depend on stretch: no "no stretch" notice for it (as in the list and the popup).
+  const notices: ProductNotices = { defaulted: defaulted.filter((f) => !stretchDoesNotApply(f, draft.category)), leftOut: cleaned.leftOut };
   const result = { score: completeness.score, missingFields, status, notices, heldBack };
   const hash = contentHash(draft);
   const existing = await db.query.products.findFirst({ where: and(eq(products.shopId, shopId), eq(products.externalId, externalId)) });
@@ -211,15 +212,23 @@ export function tryGarment(row: ProductRow, opts: { colorHex?: string } = {}): {
   return { garment: r.garment, stretchAssumed: r.garment.category !== 'accessory' && r.defaulted.includes('fabric.stretchPct') };
 }
 
+/** `fabric.stretchPct` on an accessory: assumed, but it changes nothing and is never reported. */
+const stretchDoesNotApply = (field: string, category: string | null | undefined): boolean => field === 'fabric.stretchPct' && category === 'accessory';
+
 /** What the merchant's product list says was assumed and left out (D25 point 1). Render-only defaults (price, colour, block) are not listed. */
 function noticesOf(row: ProductRow): ProductNotices {
   const r = row.status === 'archived' ? null : sizeAdviceGarment(row.payload);
-  const defaulted = r?.ok ? r.defaulted.filter((f) => f.startsWith('fabric.') && !(f === 'fabric.stretchPct' && row.category === 'accessory')) : [];
+  const defaulted = r?.ok ? r.defaulted.filter((f) => f.startsWith('fabric.') && !stretchDoesNotApply(f, row.category)) : [];
   return { defaulted, leftOut: row.leftOut ?? [] };
 }
 
-/** A stored payload that validates as a full GarmentPayload (the app's deck needs every field). */
+/**
+ * A stored payload that validates as a full GarmentPayload (the app's deck needs every field).
+ * Null for a product the shop holds back: held back means not shown to shoppers on any route (the
+ * app's product page, hero renders, the AI-enhanced estimate), also when the payload is complete.
+ */
 export function asGarment(row: ProductRow): GarmentPayload | null {
+  if (row.heldBack) return null;
   const parsed = GarmentPayloadSchema.safeParse(row.payload);
   return parsed.success ? parsed.data : null;
 }

@@ -11,6 +11,10 @@
  * restarted. Ctrl-C (or the parent exiting) stops every child it started.
  *
  * Flags: --skip-build   do not build anything
+ *        --preview      serve the web app as its production build under the production security headers
+ *                       (`vite preview`: the Content-Security-Policy, cross-origin isolation and the embed's
+ *                       framing set of apps/web/config/headers.ts, as Caddy sends them) instead of the dev
+ *                       server. Also DEMO_WEB=preview. This is the stack `pnpm check:launch` tests.
  *
  * Also importable: `const demo = await startDemo(); …; await demo.stop();` (scripts/demo-e2e.mjs).
  */
@@ -28,10 +32,16 @@ export const URLS = {
   storefront: 'http://localhost:5180',
 };
 
+/** Where `--preview` builds the web app: inside the git-ignored demo folder, so apps/web/dist (the e2e suite's build) is left alone. */
+const PREVIEW_DIST = join(root, '.demo-db', 'web');
+const WEB_DEV = { name: 'web', url: URLS.web, health: `${URLS.web}/`, cmd: pnpm, args: ['--filter', '@curtain/web', 'dev'], env: { VITE_API_URL: URLS.api } };
+// VITE_API_URL at preview time puts the api origin into the policy's connect-src and img-src (vite.config.ts).
+const WEB_PREVIEW = { name: 'web', url: URLS.web, health: `${URLS.web}/`, cmd: pnpm, args: ['--filter', '@curtain/web', 'exec', 'vite', 'preview', '--outDir', PREVIEW_DIST, '--port', '3000', '--strictPort', '--host', '0.0.0.0'], env: { VITE_API_URL: URLS.api } };
+
 const SERVICES = [
   { name: 'api', url: URLS.api, health: `${URLS.api}/healthz`, cmd: pnpm, args: ['--filter', '@curtain/api', 'demo'], env: { LOG_LEVEL: 'warn', ...(process.env.DEMO_AZURE_BUNDLE ? { DEMO_AZURE_BUNDLE: resolve(process.env.DEMO_AZURE_BUNDLE) } : {}), ...(process.env.DEMO_SKIRT_BUNDLE ? { DEMO_SKIRT_BUNDLE: resolve(process.env.DEMO_SKIRT_BUNDLE) } : {}) } },
   // The web app talks to the demo api directly (no Caddy in the demo).
-  { name: 'web', url: URLS.web, health: `${URLS.web}/`, cmd: pnpm, args: ['--filter', '@curtain/web', 'dev'], env: { VITE_API_URL: URLS.api } },
+  WEB_DEV,
   { name: 'storefront', url: URLS.storefront, health: `${URLS.storefront}/`, cmd: process.execPath, args: [join(root, 'apps/demo-shop/server.mjs')], env: { PORT: '5180' } },
 ];
 
@@ -90,12 +100,31 @@ export function buildForDemo() {
   if (!existsSync(join(DEMO_BUNDLES.skirt, 'base.glb'))) console.log(`[demo] no crimson maxi skirt bundle at ${DEMO_BUNDLES.skirt}: that product is left out (set DEMO_SKIRT_BUNDLE)`);
 }
 
+/** `--preview`: the web app's production build, pointed at the demo api. */
+export function buildWebForPreview() {
+  const r = spawnSync(pnpm, ['--filter', '@curtain/web', 'exec', 'vite', 'build', '--outDir', PREVIEW_DIST, '--emptyOutDir'], { cwd: root, stdio: 'inherit', env: { ...process.env, VITE_API_URL: URLS.api } });
+  if (r.status !== 0) throw new Error(`building the web app for the preview failed (exit ${r.status})`);
+}
+
+/** True when the server on the web port sends the production headers (a dev server left running does not). */
+async function servesProductionHeaders() {
+  try {
+    const res = await fetch(`${URLS.web}/`, { signal: AbortSignal.timeout(3000), headers: { accept: 'text/html' } });
+    return res.headers.get('cross-origin-embedder-policy') === 'require-corp' && (res.headers.get('content-security-policy') ?? '').includes('script-src');
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Start (or reuse) the three services. `log` 'inherit' streams child output with a prefix;
  * 'quiet' only keeps the last lines for error messages.
  */
-export async function startDemo({ build = true, log = 'inherit' } = {}) {
+export async function startDemo({ build = true, log = 'inherit', web = process.env.DEMO_WEB === 'preview' ? 'preview' : 'dev' } = {}) {
   if (build) buildForDemo();
+  const preview = web === 'preview';
+  if (preview && (build || !existsSync(join(PREVIEW_DIST, 'index.html')))) buildWebForPreview();
+  const services = SERVICES.map((svc) => (svc.name === 'web' && preview ? WEB_PREVIEW : svc));
   const children = [];
   const tails = new Map();
   let stopping = false;
@@ -123,7 +152,7 @@ export async function startDemo({ build = true, log = 'inherit' } = {}) {
   };
 
   try {
-    for (const svc of SERVICES) {
+    for (const svc of services) {
       if (await healthy(svc.health)) {
         console.log(`[demo] ${svc.name} is already running on ${svc.url}, reusing it`);
         continue;
@@ -148,11 +177,12 @@ export async function startDemo({ build = true, log = 'inherit' } = {}) {
         throw err;
       }
     }
+    if (preview && !(await servesProductionHeaders())) throw new Error(`the server on ${URLS.web} does not send the production security headers: a dev server is probably still running there. Stop it and start again.`);
   } catch (err) {
     await stop();
     throw err;
   }
-  return { urls: URLS, stop, children };
+  return { urls: URLS, stop, children, web };
 }
 
 function killTree(child, signal) {
@@ -170,7 +200,7 @@ function killTree(child, signal) {
 }
 
 async function main() {
-  const demo = await startDemo({ build: !process.argv.includes('--skip-build') });
+  const demo = await startDemo({ build: !process.argv.includes('--skip-build'), ...(process.argv.includes('--preview') ? { web: 'preview' } : {}) });
   let down = false;
   const shutdown = async (code = 0) => {
     if (down) return;
@@ -192,7 +222,7 @@ async function main() {
     });
   }
   console.log(`
-Curtain demo is running (standalone mode: no app needed).
+Curtain demo is running (standalone mode: no app needed).${demo.web === 'preview' ? '\nThe web app is its production build, under the production security headers.' : ''}
 
   Storefront home          ${URLS.storefront}/
   WooCommerce product      ${URLS.storefront}/product/aalter-studio-1

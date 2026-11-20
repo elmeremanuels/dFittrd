@@ -28,7 +28,7 @@
  * switching to a neighbouring size in "Compare sizes" redraws them; the 3D view lists the same rings.
  * Console errors and uncaught exceptions in the page or the iframe fail the flow.
  *
- * Uses the preinstalled Playwright (`require('playwright')`). Reuses services that are already
+ * Uses the repo's Playwright, or a machine-wide one (scripts/lib/playwright.mjs). Reuses services that are already
  * running (e.g. a `pnpm demo` in another terminal). Screenshots of every step go to
  * test-results/demo-e2e/ (git-ignored). Exits non-zero on the first failure.
  *
@@ -42,14 +42,15 @@
  * Flags: --skip-build   do not build the packages first
  *        --only=<name>  run one flow (woocommerce, shopify-dawn, pull-on-skirt)
  *        --headed       show the browser
+ *        --preview      the web app as its production build under the production security headers
+ *                       (scripts/demo.mjs --preview); a Content-Security-Policy violation fails the flow
  */
 import { existsSync, mkdirSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEMO_BUNDLES, DEMO_SKIRT_POM, URLS, startDemo } from './demo.mjs';
+import { loadPlaywright } from './lib/playwright.mjs';
 
-const require = createRequire(import.meta.url);
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const shots = process.env.DEMO_E2E_SHOTS ? resolve(process.env.DEMO_E2E_SHOTS) : join(root, 'test-results', 'demo-e2e');
 const STEP_TIMEOUT = 30_000;
@@ -522,8 +523,8 @@ async function pullOnFlow(browser, base, log) {
 
 async function main() {
   mkdirSync(shots, { recursive: true });
-  const { chromium } = require('playwright');
-  const demo = await startDemo({ build: !process.argv.includes('--skip-build'), log: 'quiet' });
+  const { chromium } = loadPlaywright();
+  const demo = await startDemo({ build: !process.argv.includes('--skip-build'), log: 'quiet', ...(process.argv.includes('--preview') ? { web: 'preview' } : {}) });
   const stopAll = () => void demo.stop().then(() => process.exit(130));
   process.on('SIGINT', stopAll);
   process.on('SIGTERM', stopAll);
@@ -553,6 +554,15 @@ async function main() {
         failed++;
         console.error(`[${PULL_ON.name}] FAILED: ${err.message.split('\n')[0]}`);
       }
+    }
+    // --preview: the preview server keeps every violation the browsers reported (apps/web/vite.config.ts).
+    if (demo.web === 'preview') {
+      ran++;
+      const reports = await fetch(`${URLS.web}/__csp-report`).then((r) => r.json());
+      if (reports.length) {
+        failed++;
+        console.error(`[security-policy] FAILED: ${reports.length} Content-Security-Policy violation(s) reported during the flows: ${JSON.stringify(reports).slice(0, 1500)}`);
+      } else console.log('[security-policy] no Content-Security-Policy violation was reported during the flows');
     }
   } finally {
     await browser?.close();

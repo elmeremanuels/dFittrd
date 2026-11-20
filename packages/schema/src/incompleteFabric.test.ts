@@ -4,7 +4,7 @@
  * metafield mapping and the WooCommerce meta mapping. Only the missing part is left out.
  */
 import { describe, expect, it } from 'vitest';
-import { MerchantProductUpsertRequestSchema, MerchantProductUpsertResponseSchema, MerchantSettingsResponseSchema, MerchantSettingsUpdateRequestSchema } from './api';
+import { MerchantProductSummarySchema, MerchantProductUpsertRequestSchema, MerchantProductUpsertResponseSchema, MerchantSettingsResponseSchema, MerchantSettingsUpdateRequestSchema, SdkShopStatusQuerySchema, SdkShopStatusResponseSchema, ShopBrandingSchema, TryResolveResponseSchema } from './api';
 import {
   DEFAULT_INCOMPLETE_PRODUCT_DATA,
   INCOMPLETE_PRODUCT_DATA_POLICIES,
@@ -172,6 +172,38 @@ describe('the shop setting: what counts as incomplete, and when a product is hel
     expect(MerchantSettingsUpdateRequestSchema.safeParse({ incompleteProductData: 'hold-back', garment3d: true }).success).toBe(false);
     expect(MerchantSettingsUpdateRequestSchema.safeParse({ incompleteProductData: 'sometimes' }).success).toBe(false);
     expect(MerchantSettingsResponseSchema.safeParse({ incompleteProductData: 'let-through' }).success).toBe(true);
+  });
+
+  it('settings: the wordmark switch, colour and logo are named keys; the shop name cannot be written', () => {
+    const ok = (v: unknown) => MerchantSettingsUpdateRequestSchema.safeParse(v).success;
+    expect(ok({ showFitByCurtain: false, brandColor: '#2F4F3A', logoUrl: 'https://shop.example/logo.png' })).toBe(true);
+    expect(ok({ brandColor: null, logoUrl: null })).toBe(true);
+    expect(ok({ showFitByCurtain: 'no' })).toBe(false);
+    expect(ok({ brandColor: 'green' })).toBe(false);
+    expect(ok({ logoUrl: 'http://shop.example/logo.png' })).toBe(false);
+    expect(ok({ shopName: 'Other' })).toBe(false);
+    expect(MerchantSettingsResponseSchema.safeParse({ incompleteProductData: 'let-through', showFitByCurtain: true, shopName: 'Aalter', platform: 'woocommerce', brandColor: null, logoUrl: null }).success).toBe(true);
+  });
+
+  it('the popup flags are literal true or absent, so an older embed and an older api keep working', () => {
+    const shop = { id: '00000000-0000-4000-8000-0000000000e1', name: 'Aalter', platform: 'woocommerce' };
+    expect(ShopBrandingSchema.parse(shop)).not.toHaveProperty('hideWordmark');
+    expect(ShopBrandingSchema.parse({ ...shop, hideWordmark: true }).hideWordmark).toBe(true);
+    expect(ShopBrandingSchema.safeParse({ ...shop, hideWordmark: false }).success).toBe(false);
+    expect(TryResolveResponseSchema.shape.stretchAssumed.safeParse(undefined).success).toBe(true);
+    expect(TryResolveResponseSchema.shape.stretchAssumed.safeParse(true).success).toBe(true);
+    expect(TryResolveResponseSchema.shape.stretchAssumed.safeParse(false).success).toBe(false);
+  });
+
+  it('the SDK shop status takes a public key prefix only and answers paused or not', () => {
+    expect(SdkShopStatusQuerySchema.safeParse({ shop: 'pk_' + 'live_abcdef123456' }).success).toBe(true);
+    expect(SdkShopStatusQuerySchema.safeParse({ shop: 'sk_' + 'live_abcdef123456' }).success).toBe(false);
+    expect(SdkShopStatusResponseSchema.parse({ paused: true })).toEqual({ paused: true });
+  });
+
+  it('a product summary may carry notices', () => {
+    expect(MerchantProductSummarySchema.shape.notices.safeParse({ defaulted: ['fabric.stretchPct'], leftOut: [{ field: 'fabric.drape', reason: 'Too big' }] }).success).toBe(true);
+    expect(MerchantProductSummarySchema.shape.notices.safeParse(undefined).success).toBe(true);
   });
 
   it('the upsert response carries notices and the held-back state', () => {

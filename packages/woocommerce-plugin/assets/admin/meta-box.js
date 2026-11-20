@@ -81,7 +81,7 @@
 		frame.open();
 	});
 	// Fabric prefill from the product's material attribute: fills the primary and the blend rows.
-	// Nothing is stored until the merchant saves (stretch and drape are still theirs to fill in).
+	// Nothing is stored until the merchant saves (stretch and drape are optional and theirs to fill in).
 	$(document).on('click', '.curtain-fabric-prefill-use', function (e) {
 		e.preventDefault();
 		var $note = $(this).closest('.curtain-fabric-prefill');

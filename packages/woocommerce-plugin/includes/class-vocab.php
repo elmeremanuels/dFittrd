@@ -134,6 +134,8 @@ final class Vocab {
 	public const META_MISSING      = '_curtain_missing_fields';
 	public const META_VALIDATION   = '_curtain_validation';
 	public const META_LOCAL_ISSUES = '_curtain_local_issues';
+	/** JSON { notices: { defaulted, leftOut }, heldBack } from the last upsert answer (incomplete product data). */
+	public const META_NOTICES      = '_curtain_notices';
 
 	/**
 	 * Keyword table for inferring a category from WooCommerce category names (mappings/common.ts).

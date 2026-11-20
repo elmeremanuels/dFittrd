@@ -45,7 +45,7 @@ test(
 	static function (): void {
 		assert_same( array( '%1$s', '%2$s' ), curtain_i18n_placeholders( 'Key stored with %1$s · job queue: %2$s' ) );
 		assert_same( array( '%%', '%d' ), curtain_i18n_placeholders( 'completeness %d%%' ) );
-		assert_same( array(), curtain_i18n_placeholders( 'Stretch % *' ), 'a literal percent sign is not a conversion' );
+		assert_same( array(), curtain_i18n_placeholders( 'Stretch %' ), 'a literal percent sign is not a conversion' );
 	}
 );
 

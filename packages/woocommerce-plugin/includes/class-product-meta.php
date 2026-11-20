@@ -107,7 +107,13 @@ final class Product_Meta {
 			echo '<span class="curtain-badge curtain-badge--none">—</span>';
 			return;
 		}
-		$score = get_post_meta( $post_id, Vocab::META_SCORE, true );
+		$score   = get_post_meta( $post_id, Vocab::META_SCORE, true );
+		$notices = json_decode( (string) get_post_meta( $post_id, Vocab::META_NOTICES, true ), true );
+		if ( 'incomplete' === $status && is_array( $notices ) && is_array( $notices['heldBack'] ?? null ) ) {
+			// Held back by the shop's own setting: say so, the reason is in the product's Curtain box.
+			printf( '<span class="curtain-badge curtain-badge--incomplete">%s</span>', esc_html__( 'Held back', 'curtain-woocommerce' ) );
+			return;
+		}
 		printf(
 			'<span class="curtain-badge curtain-badge--%s" title="%s">%s%s</span>',
 			esc_attr( $status ),
@@ -347,7 +353,7 @@ final class Product_Meta {
 			<h4><?php esc_html_e( 'Fabric *', 'curtain-woocommerce' ); ?></h4>
 			<?php if ( null !== $prefill ) : ?>
 				<p class="curtain-fabric-prefill" data-prefill="<?php echo esc_attr( (string) wp_json_encode( $prefill ) ); ?>">
-					<?php echo esc_html( sprintf( /* translators: %s: fibres read from the product's material attribute, e.g. "viscose 95 %, elastane 5 %" */ __( 'Found in this product\'s attributes: %s. Check it, add stretch and drape, then update the product.', 'curtain-woocommerce' ), self::fabric_summary( $prefill ) ) ); ?>
+					<?php echo esc_html( sprintf( /* translators: %s: fibres read from the product's material attribute, e.g. "viscose 95 %, elastane 5 %" */ __( 'Found in this product\'s attributes: %s. Check it, use it if it is right, then update the product. Stretch and drape can be added later.', 'curtain-woocommerce' ), self::fabric_summary( $prefill ) ) ); ?>
 					<button type="button" class="button-link curtain-fabric-prefill-use"><?php esc_html_e( 'Use these fibres', 'curtain-woocommerce' ); ?></button>
 				</p>
 			<?php endif; ?>
@@ -359,8 +365,8 @@ final class Product_Meta {
 						?>
 						<option value="<?php echo esc_attr( $f ); ?>"></option><?php endforeach; ?></datalist></label>
 				<label><span><?php esc_html_e( 'Weight (g/m²)', 'curtain-woocommerce' ); ?></span><input type="number" name="curtain[fabric_weight_gsm]" value="<?php echo esc_attr( self::num( $fabric['weightGsm'] ?? '' ) ); ?>" min="1" max="2000" step="1"></label>
-				<label><span><?php esc_html_e( 'Stretch % *', 'curtain-woocommerce' ); ?></span><input type="number" name="curtain[fabric_stretch_pct]" value="<?php echo esc_attr( self::num( $fabric['stretchPct'] ?? '' ) ); ?>" min="0" max="100" step="1" placeholder="0 = none, 30 = jersey"></label>
-				<label><span><?php esc_html_e( 'Drape (0 stiff – 1 fluid) *', 'curtain-woocommerce' ); ?></span><input type="number" name="curtain[fabric_drape]" value="<?php echo esc_attr( self::num( $fabric['drape'] ?? '' ) ); ?>" min="0" max="1" step="0.05" list="curtain-drape">
+				<label><span><?php esc_html_e( 'Stretch %', 'curtain-woocommerce' ); ?></span><input type="number" name="curtain[fabric_stretch_pct]" value="<?php echo esc_attr( self::num( $fabric['stretchPct'] ?? '' ) ); ?>" min="0" max="100" step="1" placeholder="0 = none, 30 = jersey"></label>
+				<label><span><?php esc_html_e( 'Drape (0 stiff – 1 fluid)', 'curtain-woocommerce' ); ?></span><input type="number" name="curtain[fabric_drape]" value="<?php echo esc_attr( self::num( $fabric['drape'] ?? '' ) ); ?>" min="0" max="1" step="0.05" list="curtain-drape">
 					<datalist id="curtain-drape">
 					<?php
 					foreach ( Vocab::drape_presets() as $v => $label ) :
@@ -369,6 +375,7 @@ final class Product_Meta {
 				<label><span><?php esc_html_e( 'Opacity (0 sheer – 1 opaque)', 'curtain-woocommerce' ); ?></span><input type="number" name="curtain[fabric_opacity]" value="<?php echo esc_attr( self::num( $fabric['opacity'] ?? '' ) ); ?>" min="0" max="1" step="0.05"></label>
 				<label><span><?php esc_html_e( 'Sheen (0 matte – 1 shiny)', 'curtain-woocommerce' ); ?></span><input type="number" name="curtain[fabric_sheen]" value="<?php echo esc_attr( self::num( $fabric['sheen'] ?? '' ) ); ?>" min="0" max="1" step="0.05"></label>
 			</div>
+			<p class="description"><?php esc_html_e( 'Stretch and drape are not required. Without a stretch value, size advice treats the fabric as not stretching (0 %); for a stretchy fabric that makes the advice less exact. Without a drape value, the picture uses a default for the fibre.', 'curtain-woocommerce' ); ?></p>
 			<table class="curtain-table curtain-repeater" data-repeater="fabric_blend">
 				<thead><tr><th><?php esc_html_e( 'Blend fibre', 'curtain-woocommerce' ); ?></th><th>%</th><th></th></tr></thead>
 				<tbody>
@@ -841,6 +848,14 @@ final class Product_Meta {
 				if ( '' !== $error ) :
 					?>
 					<p class="curtain-error"><?php echo esc_html( $error ); ?></p><?php endif; ?>
+				<?php $notice_lines = self::notice_lines( json_decode( (string) get_post_meta( $id, Vocab::META_NOTICES, true ), true ) ); ?>
+				<?php if ( array() !== $notice_lines ) : ?>
+					<ul class="curtain-notices">
+						<?php foreach ( $notice_lines as $line ) : ?>
+							<li class="curtain-notice curtain-notice--<?php echo esc_attr( $line['kind'] ); ?>"><?php echo esc_html( $line['text'] ); ?></li>
+						<?php endforeach; ?>
+					</ul>
+				<?php endif; ?>
 				<?php if ( is_array( $validation ) && ! empty( $validation['completeness']['missing'] ) ) : ?>
 					<p><?php esc_html_e( 'Missing for a better fit:', 'curtain-woocommerce' ); ?>
 					<?php foreach ( (array) $validation['completeness']['missing'] as $m ) : ?>
@@ -866,6 +881,98 @@ final class Product_Meta {
 			<?php endif; ?>
 		</div>
 		<?php
+	}
+
+	/**
+	 * What Curtain did with incomplete product data on the last sync (the notices and heldBack of
+	 * the upsert answer, stored by Sync::job_push), as lines for the merchant. Held back first, then
+	 * values that were left out, then what size advice assumes. Only what the api reported is shown.
+	 *
+	 * @param mixed $stored Decoded Vocab::META_NOTICES.
+	 * @return array<int, array{kind:string, text:string}> kind: held-back | left-out | assumed
+	 */
+	public static function notice_lines( $stored ): array {
+		if ( ! is_array( $stored ) ) {
+			return array();
+		}
+		$lines     = array();
+		$held_back = $stored['heldBack'] ?? null;
+		if ( is_array( $held_back ) && is_array( $held_back['fields'] ?? null ) && array() !== $held_back['fields'] ) {
+			$lines[] = array(
+				'kind' => 'held-back',
+				'text' => sprintf(
+					/* translators: %s: list of product details, e.g. "fabric stretch" */
+					__( 'Held back: shoppers do not get size advice for this product until you complete: %s. Your shop is set to hold back products with incomplete data.', 'curtain-woocommerce' ),
+					implode( ', ', array_map( array( self::class, 'notice_field_label' ), array_map( 'strval', $held_back['fields'] ) ) )
+				),
+			);
+		}
+		$notices = is_array( $stored['notices'] ?? null ) ? $stored['notices'] : array();
+		foreach ( (array) ( $notices['leftOut'] ?? array() ) as $l ) {
+			if ( ! is_array( $l ) || ! is_string( $l['field'] ?? null ) ) {
+				continue;
+			}
+			$lines[] = array(
+				'kind' => 'left-out',
+				'text' => sprintf(
+					/* translators: 1: product detail, e.g. "fabric stretch"; 2: why the value was refused, e.g. "Too big: expected number to be <=100" */
+					__( 'Not saved: %1$s (%2$s). The rest of the product was saved.', 'curtain-woocommerce' ),
+					self::notice_field_label( $l['field'] ),
+					is_string( $l['reason'] ?? null ) ? $l['reason'] : __( 'invalid value', 'curtain-woocommerce' )
+				),
+			);
+		}
+		if ( ! is_array( $held_back ) ) {
+			foreach ( (array) ( $notices['defaulted'] ?? array() ) as $field ) {
+				$text = self::notice_assumed_text( (string) $field );
+				if ( null !== $text ) {
+					$lines[] = array(
+						'kind' => 'assumed',
+						'text' => $text,
+					);
+				}
+			}
+		}
+		return $lines;
+	}
+
+	/** A payload path of a notice, in the words of the form. */
+	private static function notice_field_label( string $field ): string {
+		switch ( $field ) {
+			case 'fabric.primary':
+				return __( 'primary fibre', 'curtain-woocommerce' );
+			case 'fabric.blend':
+				return __( 'fabric blend', 'curtain-woocommerce' );
+			case 'fabric.weightGsm':
+				return __( 'fabric weight', 'curtain-woocommerce' );
+			case 'fabric.stretchPct':
+				return __( 'fabric stretch', 'curtain-woocommerce' );
+			case 'fabric.drape':
+				return __( 'fabric drape', 'curtain-woocommerce' );
+			case 'fabric.opacity':
+				return __( 'fabric opacity', 'curtain-woocommerce' );
+			case 'fabric.sheen':
+				return __( 'fabric sheen', 'curtain-woocommerce' );
+			default:
+				return $field;
+		}
+	}
+
+	/**
+	 * What is assumed for a detail the product does not have. Only the fabric details are worded:
+	 * the other defaults (price, colour, pattern block) do not change size advice.
+	 */
+	private static function notice_assumed_text( string $field ): ?string {
+		switch ( $field ) {
+			case 'fabric.stretchPct':
+				return __( 'No fabric stretch entered: size advice treats the fabric as not stretching (0 %). For a stretchy fabric the advice is less exact until you add the stretch.', 'curtain-woocommerce' );
+			case 'fabric.drape':
+				return __( 'No fabric drape entered: the picture uses a default drape. Size advice does not use drape.', 'curtain-woocommerce' );
+			case 'fabric.primary':
+				return __( 'No primary fibre entered: the picture uses a default fabric.', 'curtain-woocommerce' );
+			default:
+				return null;
+		}
 	}
 
 	/**
@@ -902,8 +1009,8 @@ final class Product_Meta {
 	/**
 	 * Fabric names read from the product's own "Material" / "Materiaal" / "Samenstelling" attribute
 	 * (Fabric_Text, the twin of fabricFromProductText), offered when the product has no Curtain
-	 * fabric yet. Prefill only: nothing is stored until the merchant uses it and saves, because a
-	 * fabric without stretch and drape is not a valid payload.
+	 * fabric yet. Prefill only: nothing is stored until the merchant uses it and saves. A fabric
+	 * with only these names is a valid draft (D25 point 1); stretch and drape can follow later.
 	 *
 	 * @return array{primary:string,blend?:array<int,array{0:string,1:int|float}>}|null
 	 */

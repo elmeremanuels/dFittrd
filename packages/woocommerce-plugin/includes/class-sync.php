@@ -141,6 +141,13 @@ final class Sync {
 			update_post_meta( $product_id, Vocab::META_CONTENT_HASH, (string) ( $data['contentHash'] ?? '' ) );
 			update_post_meta( $product_id, Vocab::META_SYNCED_AT, (string) ( $data['updatedAt'] ?? gmdate( 'c' ) ) );
 			delete_post_meta( $product_id, Vocab::META_SYNC_ERROR );
+			// What the api did with incomplete data (D25 point 1): shown in the product's Curtain box.
+			$notices = self::notices_from_response( $data );
+			if ( null === $notices ) {
+				delete_post_meta( $product_id, Vocab::META_NOTICES );
+			} else {
+				update_post_meta( $product_id, Vocab::META_NOTICES, wp_slash( (string) wp_json_encode( $notices ) ) );
+			}
 			Settings::update(
 				array(
 					'last_sync_at' => time(),
@@ -254,6 +261,58 @@ final class Sync {
 			$rates = Payload_Builder::load_eur_rates( CURTAIN_PLUGIN_DIR . 'assets/eur-rates.json' );
 		}
 		return $rates;
+	}
+
+	/**
+	 * The notices and held-back reason of an upsert answer, reduced to what the product screen
+	 * shows; null when there is nothing to tell (a complete product, or an older api).
+	 *
+	 * @param array<string,mixed> $data
+	 * @return array{notices: array{defaulted: string[], leftOut: array<int, array{field:string, reason:string}>}, heldBack: ?array{reason:string, fields:string[]}}|null
+	 */
+	public static function notices_from_response( array $data ): ?array {
+		$raw       = is_array( $data['notices'] ?? null ) ? $data['notices'] : array();
+		$defaulted = array();
+		foreach ( (array) ( $raw['defaulted'] ?? array() ) as $field ) {
+			if ( is_string( $field ) && '' !== $field ) {
+				$defaulted[] = substr( $field, 0, 120 );
+			}
+		}
+		$left_out = array();
+		foreach ( (array) ( $raw['leftOut'] ?? array() ) as $l ) {
+			if ( is_array( $l ) && is_string( $l['field'] ?? null ) && '' !== $l['field'] ) {
+				$left_out[] = array(
+					'field'  => substr( $l['field'], 0, 120 ),
+					'reason' => is_string( $l['reason'] ?? null ) ? substr( $l['reason'], 0, 300 ) : '',
+				);
+			}
+		}
+		$held_back = null;
+		$raw_held  = $data['heldBack'] ?? null;
+		if ( is_array( $raw_held ) && is_array( $raw_held['fields'] ?? null ) ) {
+			$fields = array();
+			foreach ( $raw_held['fields'] as $field ) {
+				if ( is_string( $field ) && '' !== $field ) {
+					$fields[] = substr( $field, 0, 120 );
+				}
+			}
+			if ( $fields ) {
+				$held_back = array(
+					'reason' => is_string( $raw_held['reason'] ?? null ) ? substr( $raw_held['reason'], 0, 120 ) : '',
+					'fields' => $fields,
+				);
+			}
+		}
+		if ( ! $defaulted && ! $left_out && null === $held_back ) {
+			return null;
+		}
+		return array(
+			'notices'  => array(
+				'defaulted' => array_slice( $defaulted, 0, 40 ),
+				'leftOut'   => array_slice( $left_out, 0, 40 ),
+			),
+			'heldBack' => $held_back,
+		);
 	}
 
 	/**

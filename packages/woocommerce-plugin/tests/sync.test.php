@@ -182,6 +182,107 @@ test(
 );
 
 test(
+	'job_push: a fabric with only a name is pushed as it is, and the api\'s notices are stored for the product screen',
+	static function (): void {
+		curtain_connect_test_shop();
+		curtain_seed_product( 43 );
+		update_post_meta( 43, '_curtain_category', 'dress' );
+		update_post_meta( 43, '_curtain_size_chart_type', 'body' );
+		update_post_meta( 43, '_curtain_size_chart', '[{"size":"S","bust":88}]' );
+		update_post_meta( 43, '_curtain_fabric', '{"primary":"linen"}' );
+
+		$built = Sync::build( wc_get_product( 43 ) );
+		assert_same( array( 'primary' => 'linen' ), $built['payload']['fabric'], 'the name is kept; nothing is invented for stretch or drape' );
+		assert_same( array(), $built['warnings'], 'a missing stretch or drape is not a warning' );
+		$draft = \Curtain\Schema_Validator::from_file( curtain_schema_path( 'garment-draft.schema.json' ) );
+		assert_same( array(), $draft->validate( $built['payload'] ), 'the local draft check accepts a fabric with only a name' );
+
+		$captured = null;
+		$answer   = array( 'externalId' => '43', 'status' => 'active', 'score' => 0.6, 'missingFields' => array( 'fabric.stretchPct', 'fabric.drape' ), 'contentHash' => str_repeat( 'c', 64 ), 'changed' => true, 'updatedAt' => '2026-11-20T10:00:00.000Z' );
+		Curtain_Test_State::$http_handler = static function ( string $url, array $args ) use ( &$captured, &$answer ) {
+			$captured = json_decode( (string) $args['body'], true );
+			return curtain_http_response( 200, $answer );
+		};
+
+		// let-through (the default): the product is active and the answer says what is assumed.
+		$answer['notices']  = array( 'defaulted' => array( 'priceEur', 'fabric.stretchPct', 'fabric.drape' ), 'leftOut' => array() );
+		$answer['heldBack'] = null;
+		$out                = Sync::job_push( 43, 1 );
+		assert_true( $out['ok'], $out['message'] );
+		assert_same( array( 'primary' => 'linen' ), $captured['fabric'] );
+		assert_same( 'active', get_post_meta( 43, Vocab::META_SYNC_STATUS, true ) );
+		$stored = json_decode( (string) get_post_meta( 43, Vocab::META_NOTICES, true ), true );
+		assert_same( array( 'priceEur', 'fabric.stretchPct', 'fabric.drape' ), $stored['notices']['defaulted'] );
+		assert_same( null, $stored['heldBack'] );
+
+		// hold-back: still HTTP 200, stored as incomplete with the reason.
+		$answer['status']   = 'incomplete';
+		$answer['notices']  = array( 'defaulted' => array(), 'leftOut' => array( array( 'field' => 'fabric.stretchPct', 'reason' => 'Too big: expected number to be <=100' ) ) );
+		$answer['heldBack'] = array( 'reason' => 'incomplete_product_data', 'fields' => array( 'fabric.stretchPct' ) );
+		$out                = Sync::job_push( 43, 1 );
+		assert_true( $out['ok'], 'held back is not a sync error' );
+		assert_same( 'incomplete', get_post_meta( 43, Vocab::META_SYNC_STATUS, true ) );
+		assert_same( '', (string) get_post_meta( 43, Vocab::META_SYNC_ERROR, true ) );
+		$stored = json_decode( (string) get_post_meta( 43, Vocab::META_NOTICES, true ), true );
+		assert_same( array( 'reason' => 'incomplete_product_data', 'fields' => array( 'fabric.stretchPct' ) ), $stored['heldBack'] );
+		assert_same( 'fabric.stretchPct', $stored['notices']['leftOut'][0]['field'] );
+		ob_start();
+		\Curtain\Product_Meta::column_value( 'curtain', 43 );
+		assert_contains( 'Held back', (string) ob_get_clean() );
+
+		// Completed: an answer with nothing to tell removes the stored notices (also an older api without the keys).
+		$answer['status']   = 'active';
+		$answer['notices']  = array( 'defaulted' => array(), 'leftOut' => array() );
+		$answer['heldBack'] = null;
+		Sync::job_push( 43, 1 );
+		assert_same( '', (string) get_post_meta( 43, Vocab::META_NOTICES, true ) );
+		assert_same( null, Sync::notices_from_response( array( 'status' => 'active' ) ) );
+		assert_same( null, Sync::notices_from_response( array( 'notices' => 'x', 'heldBack' => array( 'fields' => array() ) ) ), 'a malformed answer is not shown' );
+	}
+);
+
+test(
+	'the product screen words the api\'s notices: held back, left out, assumed',
+	static function (): void {
+		assert_same( array(), \Curtain\Product_Meta::notice_lines( null ) );
+		assert_same( array(), \Curtain\Product_Meta::notice_lines( array( 'notices' => array( 'defaulted' => array( 'priceEur', 'primaryColorHex', 'patternBlock' ), 'leftOut' => array() ), 'heldBack' => null ) ), 'defaults that do not touch size advice or the fabric are not listed' );
+
+		$through = \Curtain\Product_Meta::notice_lines( array( 'notices' => array( 'defaulted' => array( 'priceEur', 'fabric.stretchPct', 'fabric.drape' ), 'leftOut' => array( array( 'field' => 'fabric.weightGsm', 'reason' => 'Too big: expected number to be <=2000' ) ) ), 'heldBack' => null ) );
+		assert_same( array( 'left-out', 'assumed', 'assumed' ), array_column( $through, 'kind' ) );
+		assert_same( 'Not saved: fabric weight (Too big: expected number to be <=2000). The rest of the product was saved.', $through[0]['text'] );
+		assert_contains( 'treats the fabric as not stretching (0 %)', $through[1]['text'] );
+		assert_contains( 'Size advice does not use drape', $through[2]['text'] );
+
+		$held = \Curtain\Product_Meta::notice_lines( array( 'notices' => array( 'defaulted' => array( 'fabric.stretchPct' ), 'leftOut' => array() ), 'heldBack' => array( 'reason' => 'incomplete_product_data', 'fields' => array( 'fabric.stretchPct', 'fabric.drape' ) ) ) );
+		assert_same( array( 'held-back' ), array_column( $held, 'kind' ), 'a held-back product gets no size advice, so nothing is said to be assumed' );
+		assert_contains( 'until you complete: fabric stretch, fabric drape.', $held[0]['text'] );
+
+		if ( ! class_exists( 'WP_Post' ) ) {
+			eval( 'final class WP_Post { public int $ID = 0; }' ); // phpcs:ignore
+		}
+		if ( ! function_exists( 'wp_nonce_field' ) ) {
+			return; // The shims of this run do not render forms.
+		}
+		curtain_connect_test_shop();
+		Curtain_Test_State::$meta[9301] = array(
+			Vocab::META_SYNC_STATUS => 'active',
+			Vocab::META_NOTICES     => '{"notices":{"defaulted":["fabric.stretchPct"],"leftOut":[]},"heldBack":null}',
+			'_curtain_fabric'       => '{"primary":"linen"}',
+		);
+		$post     = new WP_Post();
+		$post->ID = 9301;
+		ob_start();
+		\Curtain\Product_Meta::render( $post );
+		$html = (string) ob_get_clean();
+		assert_contains( '<li class="curtain-notice curtain-notice--assumed">No fabric stretch entered', $html );
+		assert_contains( '<span>Stretch %</span>', $html, 'stretch carries no required star' );
+		assert_contains( '<span>Drape (0 stiff – 1 fluid)</span>', $html, 'drape carries no required star' );
+		assert_contains( 'Stretch and drape are not required.', $html );
+		assert_false( str_contains( $html, 'add stretch and drape' ), 'the old help line is gone' );
+	}
+);
+
+test(
 	'job_push: 503 schedules a retry with backoff; 4xx records the error and stops',
 	static function (): void {
 		curtain_connect_test_shop();

@@ -334,7 +334,7 @@ address must answer before Shopify sends anything to it.
 1. **Partner account.** Sign up at partners.shopify.com and create the organisation that will own
    the app.
 2. **Create the app manually.** Partner Dashboard → **Apps** → **Create app** → **Create app
-   manually**. Name it `Curtain: Fit & Size Finder` (it must match `name` in `shopify.app.toml`; see
+   manually**. Name it `FitCurtain` (it must match `name` in `shopify.app.toml`; see
    checklist E1 for the trademark question). Do not use `shopify app init`: the repository already
    has the config.
 3. **Client credentials.** The app → **Client credentials** (in newer dashboards: the app →

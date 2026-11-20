@@ -101,7 +101,7 @@ found (all fixed) and what still needs a live site: `docs/LAUNCH-WOO.md`.
 
 | Area | What is needed |
 |---|---|
-| Shopify | Partner account; the app named `Curtain: Fit & Size Finder` (trademark, checklist E1); a development store; `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET` (secret only in `/etc/curtain/curtain.env`), `SHOPIFY_CLI_PARTNERS_TOKEN`; custom distribution to the pilot's myshopify domain |
+| Shopify | Partner account; the app named `FitCurtain` (trademark, checklist E1); a development store; `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET` (secret only in `/etc/curtain/curtain.env`), `SHOPIFY_CLI_PARTNERS_TOKEN`; custom distribution to the pilot's myshopify domain |
 | Server | VPS, domain with `app.` and `api.` DNS, `DOMAIN` variable, `VPS_*` environment secrets, `ACME_EMAIL`, `BACKUP_AGE_RECIPIENT`, environment protection for `production` and `shopify` |
 | Commercial | trial length (`BILLING_TRIAL_DAYS`, default 7); whether the pilot pays; whether 3D is in the USD 8.99 plan or extra (D17) |
 | Legal | privacy and terms review (entity, retention, region, subprocessors); for 3D: "computed on the device, the garment file comes from our server", and the merchant's responsibility for approved assets (D13) |

@@ -21,7 +21,7 @@
 #  - Terms of service URL: <PUBLIC_APP_URL>/terms     (apps/web route, text in docs/legal/terms.md, DRAFT)
 #  - Support / emergency developer contact (4.5.6): [SUPPORT EMAIL], [EMERGENCY CONTACT]
 #  - Sales channel requirement: "Merchant must have online store" (4.3.1, the theme app extension)
-name = "Curtain: Fit & Size Finder"
+name = "FitCurtain"
 client_id = "{{SHOPIFY_API_KEY}}"
 application_url = "{{PUBLIC_API_URL}}/shopify/admin"
 embedded = true

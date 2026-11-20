@@ -174,7 +174,7 @@ Ga naar *Actions* → **deploy** → *Run workflow* → branch `main`, actie `de
 
 De stappen staan in `docs/DEPLOY.md`, onder "Shopify app deploy" → "Set once":
 
-1. Partner Dashboard → **Apps → Create app → Create app manually**. Naam: `Curtain: Fit & Size Finder`.
+1. Partner Dashboard → **Apps → Create app → Create app manually**. Naam: `FitCurtain`.
    Gebruik níet `shopify app init`.
 2. **Client ID**:
    - als GitHub repository secret `SHOPIFY_API_KEY`;

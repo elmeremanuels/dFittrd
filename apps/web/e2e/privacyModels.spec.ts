@@ -72,6 +72,11 @@ function mannequinY4m(): string {
   return out;
 }
 
+/**
+ * `CURTAIN_REQUIRE_MODELS=1` (set by `pnpm check:launch`, OI-69): the models must be there. Without it a
+ * checkout that never fetched them skips this spec; with it the run fails instead of passing on nothing.
+ */
+if (!HAVE_MODELS && process.env.CURTAIN_REQUIRE_MODELS === '1') throw new Error('MediaPipe models not fetched and CURTAIN_REQUIRE_MODELS=1: run `pnpm --filter @curtain/web models` first');
 test.skip(!HAVE_MODELS, 'MediaPipe models not fetched: run `pnpm --filter @curtain/web models` first');
 
 test.use({
@@ -136,6 +141,10 @@ test('the whole capture step with the real models talks to the app origin only a
   if (CSP_ON) {
     expect(policy, 'the preview sends the production policy').toContain("connect-src 'self'");
     expect(policy).toContain("frame-ancestors 'none'");
+    // OI-66: as in production the app is cross-origin isolated (COOP + COEP require-corp), so the capture
+    // step below runs in the state production runs in. A resource without CORP or CORS would fail to load here.
+    expect(res?.headers()['cross-origin-embedder-policy']).toBe('require-corp');
+    expect(await page.evaluate(() => self.crossOriginIsolated), 'the page is cross-origin isolated').toBe(true);
   }
 
   await page.getByRole('button', { name: /Next/ }).click();

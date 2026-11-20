@@ -95,7 +95,9 @@ describe('vite preview headers', () => {
       expect(p.get('frame-ancestors')).toEqual(['https:', 'http://localhost:*', 'http://127.0.0.1:*']);
       expect(p.get('connect-src')).toEqual(["'self'", 'http://127.0.0.1:3001']);
       expect(headers.get('Cross-Origin-Resource-Policy')).toBe('cross-origin');
-      expect(removed).toEqual(expect.arrayContaining(['X-Frame-Options', 'Cross-Origin-Opener-Policy', 'Cross-Origin-Embedder-Policy']));
+      // As production (headers.test.ts): no opener policy, and credentialless rather than no embedder policy.
+      expect(removed).toEqual(expect.arrayContaining(['X-Frame-Options', 'Cross-Origin-Opener-Policy']));
+      expect(headers.get('Cross-Origin-Embedder-Policy')).toBe('credentialless');
     }
   });
 

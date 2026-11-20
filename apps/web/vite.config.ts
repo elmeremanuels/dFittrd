@@ -5,8 +5,9 @@ import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { defineConfig, loadEnv, type Plugin, type UserConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
-import { appCsp, EMBED_FRAME_ANCESTORS as PROD_EMBED_ANCESTORS, LOCAL_FRAME_ANCESTORS } from './config/csp';
+import { EMBED_FRAME_ANCESTORS as PROD_EMBED_ANCESTORS, LOCAL_FRAME_ANCESTORS } from './config/csp';
 import { assertNoClientSecrets } from './config/envGuard';
+import { responseHeaders } from './config/headers';
 import { isEmbedPath } from './src/embed/path';
 
 // No `define` of server secrets here, ever (decision D3): the backend is the only place that reads keys.
@@ -15,8 +16,38 @@ import { isEmbedPath } from './src/embed/path';
 export default defineConfig(({ mode }) => {
   const env = { ...process.env, ...loadEnv(mode, __dirname, 'VITE_') };
   assertNoClientSecrets(env);
-  return { ...config, plugins: [embedFraming(apiOriginOf(env.VITE_API_URL)), ...config.plugins] };
+  return { ...config, plugins: [embedFraming(apiOriginOf(env.VITE_API_URL)), versionFile(buildCommit(env)), ...config.plugins] };
 });
+
+/** The commit a build is made from: GIT_SHA, or GITHUB_SHA on a GitHub runner; "unknown" on a laptop. */
+export function buildCommit(env: Record<string, string | undefined>): string {
+  const sha = (env.GIT_SHA ?? env.GITHUB_SHA ?? '').trim();
+  return /^[\w.-]{1,64}$/.test(sha) ? sha : 'unknown';
+}
+
+/**
+ * `/version.json` = `{ "commit": "<sha>" }`, written into the build and answered by the dev server. The api
+ * says the same on `/healthz`; `scripts/post-deploy-check.mjs` compares the two, so a deploy that swapped the
+ * api but not the web app (or the other way round) is seen. A commit id only: no secret, nothing of a shopper.
+ */
+export const VERSION_PATH = '/version.json';
+function versionFile(commit: string): Plugin {
+  const body = `${JSON.stringify({ commit })}\n`;
+  return {
+    name: 'curtain-version-file',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: VERSION_PATH.slice(1), source: body });
+    },
+    configureServer(server) {
+      server.middlewares.use((req: IncomingMessage, res: ServerResponse, next: () => void) => {
+        if ((req.url ?? '').split('?')[0] !== VERSION_PATH) return next();
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.end(body);
+      });
+    },
+  };
+}
 
 /** The api origin the built app talks to (`VITE_API_URL`), or undefined when it is same-origin. */
 export function apiOriginOf(url: string | undefined): string | undefined {
@@ -60,19 +91,30 @@ function embedCrossOrigin(res: Pick<ServerResponse, 'setHeader' | 'removeHeader'
 export const CSP_REPORT_PATH = '/__csp-report';
 
 /**
- * Headers for the PREVIEW server (the production build, as the e2e suite runs it): the full policy of
- * `config/csp.ts`, the one Caddy sends, on EVERY response, so the scan worker and the drape worker run
- * under it too (a worker's policy comes from its own script response). The embed's frame-ancestors also
- * allow localhost (the demo storefront). Violations are reported to `CSP_REPORT_PATH` (preview only).
+ * Headers for the PREVIEW server (the production build, as the e2e suite runs it): everything Caddy sends
+ * in production (`config/headers.ts`: the policy of `config/csp.ts`, cross-origin isolation for the app,
+ * the embed's framing set), on EVERY response, so the scan worker and the drape worker run under it too (a
+ * worker's policy comes from its own script response). Two things differ from production, both on purpose:
+ * the embed's frame-ancestors also allow localhost (the demo storefront), and violations are reported to
+ * `CSP_REPORT_PATH`. `src/__tests__/headers.test.ts` holds the two servers together.
  */
 export function previewHeaders(req: Pick<IncomingMessage, 'url'>, res: Pick<ServerResponse, 'setHeader' | 'removeHeader'>, api?: string): void {
   const path = (req.url ?? '/').split('?')[0] ?? '/';
-  if (isEmbedPath(path)) {
-    res.setHeader('Content-Security-Policy', appCsp('embed', { api, extraFrameAncestors: LOCAL_FRAME_ANCESTORS, reportUri: CSP_REPORT_PATH }));
-    embedCrossOrigin(res);
-    return;
-  }
-  res.setHeader('Content-Security-Policy', appCsp('app', { api, reportUri: CSP_REPORT_PATH }));
+  const h = isEmbedPath(path)
+    ? responseHeaders('embed', { api, extraFrameAncestors: LOCAL_FRAME_ANCESTORS, reportUri: CSP_REPORT_PATH })
+    : responseHeaders('app', { api, reportUri: CSP_REPORT_PATH });
+  for (const name of h.remove) res.removeHeader(name);
+  for (const [name, value] of Object.entries(h.set)) res.setHeader(name, value);
+}
+
+/**
+ * Keep the headers set so far: the preview's static file handler sets its own `Cache-Control: no-cache` on
+ * the page afterwards, which would replace the embed's `no-store` (found by scripts/post-deploy-check.mjs).
+ */
+function lockHeaders(res: ServerResponse): void {
+  const locked = new Set(res.getHeaderNames().map((n) => n.toLowerCase()));
+  const set = res.setHeader.bind(res);
+  res.setHeader = ((name: string, value: number | string | readonly string[]) => (locked.has(name.toLowerCase()) ? res : set(name, value))) as typeof res.setHeader;
 }
 
 function embedFraming(api: string | undefined): Plugin {
@@ -107,7 +149,10 @@ function embedFraming(api: string | undefined): Plugin {
           res.end(JSON.stringify(reports.splice(0)));
           return;
         }
-        if (process.env.CURTAIN_PREVIEW_CSP !== 'off') previewHeaders(req, res, api);
+        if (process.env.CURTAIN_PREVIEW_CSP !== 'off') {
+          previewHeaders(req, res, api);
+          lockHeaders(res);
+        }
         next();
       });
     },

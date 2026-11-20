@@ -132,6 +132,22 @@ PR #1 "Curtain v1: plugin, API, web, site and deploy pipeline to main for go-liv
 `main`). Before merging: the integration branch holds this branch and the other parallel branches, `ci.yml` is green,
 and the PR's own check passes. After the merge `ci.yml` runs on `main` (MECHANICAL: wait for green).
 
+MECHANICAL, before the merge, on a checkout of the branch that is about to be merged (about five minutes; needs
+Chromium for Playwright and the ports 3000, 4173, 5180 and 8787 free):
+
+```sh
+pnpm install --frozen-lockfile
+pnpm check            # build, types, lint, unit tests, app builds, secret scan
+pnpm check:launch     # the checks that need a browser and a running stack
+```
+
+`pnpm check:launch` must end with `check:launch: all 5 steps passed`. Its steps: the MediaPipe models are fetched
+when missing; the privacy e2e runs with the **real** models on the production build under the production security
+headers (it fails without the models, it does not skip); the post-deploy check of step 9 runs against the local
+demo stack with its negative controls; the demo shop flows run with the embed under the production policy; every
+page of the marketing site is opened under the policy Caddy sends for it. `ci.yml` does not run this yet: the job
+to add is written out under "CI job for `pnpm check:launch`" at the end of this page.
+
 ## 8. First deploy (FOUNDER approves, the workflow does the rest)
 
 Actions → **deploy** → Run workflow → branch `main` → action `deploy` → **Approve** when GitHub asks.
@@ -142,16 +158,45 @@ container, api up, web published, `/readyz` and `https://api.curtain.fit/healthz
 GitHub passes. The first deploy takes about a minute longer (certificates). A failure rolls back by itself; there is
 nothing to roll back to on the first one, so read the job log.
 
-## 9. Smoke checks after the deploy (MECHANICAL)
+## 9. Post-deploy check (MECHANICAL, after this deploy and after every later one)
 
-From the laptop:
+One command, from the laptop, in a checkout of the commit that was deployed (Node 22; it makes plain web requests
+only, no ssh and no secret):
 
 ```sh
-curl -sS https://api.curtain.fit/healthz                       # {"ok":true,…}
-curl -sS https://api.curtain.fit/readyz                        # 200
-curl -sSI https://app.curtain.fit/ | grep -iE '^HTTP|content-security-policy|cross-origin-embedder'
-curl -sSI https://app.curtain.fit/embed/x | grep -iE '^HTTP|frame-ancestors|cache-control'   # frame-ancestors https:, no-store
-curl -sS -o /dev/null -w '%{http_code} %{size_download}\n' https://api.curtain.fit/sdk/v1.js   # 200, ~20 KB
+node scripts/post-deploy-check.mjs https://curtain.fit --commit "$(git rev-parse HEAD)"
+```
+
+It prints one line per check and ends with a `RESULT:` line. Right after the first deploy, with no shop installed
+yet, this is what a working stack prints (exit code 0):
+
+```
+ 1  PASS         The api is up: version 0.1.0, commit <sha12>
+ 2  PASS         The api reaches its database and its job queue: database yes, jobs yes
+ 3  PASS         The "Try it on" script for shop pages is served: 20 KB, loadable from any shop page
+ 4  PASS         The merchant routes refuse a caller without a key: 401 without a key (read and write), 401 with a made-up key
+ 5  PASS         The app is served with its security headers: policy on, never framed, cross-origin isolated, HTTPS enforced
+ 6  PASS         The app’s own script loads, under the same policy: /assets/index-….js, 1 KB
+ 7  PASS         The api and the app are the same release: both are commit <sha12>, the one you expected
+ 8  PASS         A shopper’s phone can register: an anonymous test shopper was created
+ 9  NOT CHECKED  "Try it on" opens a session for the product: no shop given: run again with --shop … --product …
+10  NOT CHECKED  The embed page loads with its security headers: no shop given: …
+11  NOT CHECKED  The product arrives with its size chart: no shop given: …
+12  NOT CHECKED  A shown size is accepted and not billed: no shop given: …
+13  PASS         A made-up try link is refused: answered 401
+14  PASS         The test shopper is deleted again: deleted, and its token no longer works
+
+RESULT: what was checked works (10 passed), but 4 checks were NOT run: the try session needs --shop and --product.
+```
+
+Any `FAIL` line says what was asked and what came back; the command then exits 1 and the result line reads
+`RESULT: NOT WORKING`. Line 7 is the one that catches a deploy that swapped the api but not the web app (or an
+older release still being served): the api reports its commit on `/healthz`, the web build on `/version.json`.
+Lines 9 to 12 are run in step 12, once the development store exists.
+
+Two things the command does not look at, still by hand:
+
+```sh
 curl -sS -o /dev/null -w '%{http_code}\n' https://curtain.fit/                                 # 404 until the site gates close
 echo | openssl s_client -connect api.curtain.fit:443 -servername api.curtain.fit 2>/dev/null | openssl x509 -noout -issuer   # Let's Encrypt
 ```
@@ -198,6 +243,19 @@ shows `"distribution":"custom"`.
 
 `docs/LAUNCH-SHOPIFY.md` part D, rows D1–D14 (D15 is a 48-hour wait, optional). Keep
 `docker compose -p curtain logs -f api` open. Every row must pass before step 13. Write the results into that table.
+After row D4 (a product has a size chart), run the post-deploy check with the development store, so its lines 9 to
+12 run too: open a product page of the dev store, view the page source, search for `pk_` (the shop's publishable
+key, in the small script of the "Try it on" block) and for `data-curtain-product="…"` (the product id). Both are
+public: they are in every shopper's browser.
+
+```sh
+node scripts/post-deploy-check.mjs https://curtain.fit --shop <pk_…> --product <product id> --commit "$(git rev-parse HEAD)"
+```
+
+Expected: `RESULT: the deployed stack works. All 14 checks passed.` Use the development store for this, not
+Bohohippychic: the check opens one try session in the shop (surface `api`, never billed; line 12 fails if it
+were) and deletes its test shopper again, but the session row stays in the shop's records.
+
 Key ones: D1 (install lands in the app, plan `curtain`/`ARRANGED`), D4 (assigning the AU chart makes products
 **Try-able**), D7–D8 (button on a Dawn product page, "We recommend …" labelled an estimate, size selected in the
 product form, add to cart works, on an iPhone and an Android phone), D12 (compliance webhooks 200, bad secret 401),
@@ -229,9 +287,74 @@ D13–D14 (uninstall and reinstall).
 - `SELECT topic, status, count(*) FROM webhook_log WHERE received_at > now() - interval '1 day' GROUP BY 1,2;`
   no row stuck in `failed` or `received`.
 - `docker compose -p curtain ps` all healthy; `/var/log/curtain/backup.log` shows a nightly dump.
+- After every deploy: the post-deploy check of step 9 (`node scripts/post-deploy-check.mjs https://curtain.fit --commit …`).
 - The emergency-contact inbox (Shopify webhook warnings).
 - Levers: pause the button (`UPDATE shops SET paused = true WHERE domain = '<handle>.myshopify.com';`), roll back a
   release (Actions → deploy → `rollback`), or the merchant removes the block.
+
+---
+
+## CI job for `pnpm check:launch` (not in `.github/` yet)
+
+`pnpm check:launch` is a command a person runs (step 7). To have GitHub run it on every pull request, add this
+job to `.github/workflows/ci.yml`, after the `check` job (same indentation as `check:` and `api-image:`). It has
+not been run on a GitHub runner; the commands in it were run on 20 Nov 2026 in a cloud container (see "Dry run").
+
+```yaml
+  launch:
+    name: browser checks (privacy e2e with the real models · post-deploy check · security policies)
+    runs-on: ubuntu-latest
+    needs: check
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: build packages (apps import their dist)
+        run: pnpm -r --filter './packages/**' build
+      - name: MediaPipe models (about 50 MB, not in git; check:launch fetches what the cache does not hold)
+        uses: actions/cache@v4
+        with:
+          path: apps/web/public/models
+          key: mediapipe-models-${{ hashFiles('apps/web/src/features/capture/scripts/fetch-models.mjs', 'pnpm-lock.yaml') }}
+      - name: Chromium for Playwright
+        run: pnpm --filter @curtain/web exec playwright install --with-deps chromium
+      - run: pnpm check:launch
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: launch-check-results
+          path: |
+            apps/web/test-results
+            test-results
+          if-no-files-found: ignore
+```
+
+And to have every deploy run the post-deploy check of step 9 by itself, add this step to the `deploy` job of
+`.github/workflows/deploy.yml`, directly after the step `health check from outside`, and change the `if:` of the
+step `roll back (external health check failed)` to
+`failure() && (steps.health.outcome == 'failure' || steps.postdeploy.outcome == 'failure')`. `POST_DEPLOY_SHOP` and
+`POST_DEPLOY_PRODUCT` are optional repository variables (the development store's publishable key and a product
+id, both public); without them lines 9 to 12 are not checked.
+
+```yaml
+      - name: post-deploy check (line by line; a FAIL rolls the release back)
+        id: postdeploy
+        env:
+          SHOP: ${{ vars.POST_DEPLOY_SHOP }}
+          PRODUCT: ${{ vars.POST_DEPLOY_PRODUCT }}
+        run: |
+          args=("https://$DOMAIN" --commit "$GITHUB_SHA")
+          if [ -n "$SHOP" ] && [ -n "$PRODUCT" ]; then args+=(--shop "$SHOP" --product "$PRODUCT"); fi
+          set -o pipefail   # the step fails when the check fails, not when tee does
+          node scripts/post-deploy-check.mjs "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+```
 
 ---
 
@@ -266,3 +389,18 @@ D13–D14 (uninstall and reinstall).
 
 Not run here: Let's Encrypt, GHCR, the GitHub workflows, ssh/rsync to a real server, `shopify app deploy` or
 `shopify app build` (no Shopify CLI credential), anything on a real store.
+
+## Dry run on 20 Nov 2026 (branch `claude/pre-launch`, in a cloud container; no VPS, no GitHub runner, no Shopify store)
+
+| What | Result |
+|---|---|
+| `docker build -f apps/api/Dockerfile .` on the branch as it was | **failed**: `@curtain/garment-viewer`'s bake check imports `@curtain/fit-engine`, which the Dockerfile copied but did not build. The `api-image` job of `ci.yml` would have failed the same way |
+| the same after the fix | pass: 447 MB image; it holds `dist/scripts/import-asset.js` and `@curtain/garment-viewer/dist/bakeGate.js`; the bake check run inside the image on the fixture `packages/garment-viewer/fixtures/pom-v2-rest` passes all nine checks. Base image through the documented `NODE_IMAGE` override (this container's proxy CA) |
+| real `infra/docker-compose.yml` and `infra/Caddyfile` in a scratch copy: postgres + the image + Caddy 2.9, `DOMAIN=curtain.localhost` (Caddy's local CA), the web build published into the `web` volume | migrations applied, api healthy, no error line in the api log |
+| `node scripts/post-deploy-check.mjs https://curtain.localhost --shop … --product … --commit …` against that stack | first run: 13 pass, **line 3 failed**: `/sdk/v1.js` carried `Cross-Origin-Resource-Policy` twice (Caddy and the api both set it; HSTS too). Fixed in the Caddyfile (`>` in the api block); second run: all 14 pass |
+| the embed in Chromium against that stack, from a page on another https origin | the app is cross-origin isolated; "Try it on" → About you → "We recommend L", labelled an estimate → "Choose size L" selects L on the shop page; requests went to the shop page, the api and the app only. One console error: the service worker's script fetch was refused because the browser does not trust Caddy's local CA (OI-132) |
+| `pnpm check:launch` | `check:launch: all 5 steps passed` (about 3 minutes with the models already fetched): privacy e2e with the real models on the production build under the production headers (3 specs), the post-deploy check on the demo stack (29 tests, 21 of them negative controls), the demo shop under the policy (3 flows and no reported violation), the site under its policy (31 checks). An earlier run failed once in the body scan (OI-131) |
+| `apps/web` e2e suite under the production headers | pass, except `aiRealism.spec.ts` "flag on", which fails the same way under the old headers (OI-129); the ten-picture 3D bake spec was not run to the end (an hour on a software GPU) |
+
+Not run here: the real VPS, Let's Encrypt, the GitHub workflows (the `launch` job and the post-deploy step above
+have never run on a runner), a real Shopify store, a real phone.

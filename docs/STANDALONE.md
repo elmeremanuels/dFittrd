@@ -163,6 +163,12 @@ It prints the URLs. `scripts/demo.mjs` orchestrates the processes and stops them
 Playwright smoke test (`pnpm demo:e2e`, outside `pnpm check`) clicks through: storefront → button →
 overlay → about you → result → choose size → the variant is selected on the page.
 
+`pnpm demo -- --preview` (and `pnpm demo:e2e -- --preview`) serves the web app as its production build under the
+security headers production sends (`apps/web/config/headers.ts`: the Content-Security-Policy, cross-origin
+isolation, the embed's framing set) instead of the dev server; the e2e then also fails on any policy violation.
+`pnpm check:launch` runs that, the privacy e2e with the real models, the post-deploy check
+(`scripts/post-deploy-check.mjs --local`) and the marketing site under its own policy in one command.
+
 ## 5. What stays out of standalone mode
 
 - The swipe deck, wardrobe and Style DNA belong to the app. The embed does not show them.

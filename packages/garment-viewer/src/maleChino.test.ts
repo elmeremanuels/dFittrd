@@ -19,7 +19,7 @@ import { checkBundle } from './bundleCheck';
 import { chinoDrape, loadChino, serve, type ChinoDrapeMetrics } from '../test/chinoDrape';
 import { openSession, prepareFit, sewnNotDrawn, viewerMaterial } from './engine';
 import { GarmentViewError, planAvatar } from './mount';
-import { LEG_TOP_FILLET_CM, isTapeTrouser, trouserField, trouserNoCollide, trouserNotDrawn, trouserSeams, wornBodyRings } from './trouser';
+import { LEG_TOP_FILLET_CM, SEAT_BRIDGE_BELOW_CM, SEAT_BRIDGE_FADE, isTapeTrouser, trouserField, trouserNoCollide, trouserNotDrawn, trouserSeams, wornBodyRings } from './trouser';
 
 const RECOMMENDED = { S: '32/32', M: '34/32', L: '38/32', XL: '40/32', XXL: '44/32' } as const;
 const fullBody = (id: keyof typeof MALE_REFERENCE) => {
@@ -28,12 +28,24 @@ const fullBody = (id: keyof typeof MALE_REFERENCE) => {
 };
 
 /**
- * What is bounded per shape, from the runs of this branch (docs/reports/claude/men-chino-v2.md). The crotch: how far the
- * drape lets the crotch point drop below where the builder put it; pixels: drawn body in front of the cloth, four views.
+ * What is bounded per shape, from the runs of the branches that measured it (docs/reports/claude/men-chino-v2.md, then
+ * chino-crotch-v2.md). The crotch: how far the drape lets the crotch point drop below where the builder put it
+ * (`crotchDropCm`), and how far the seam hangs under the body in all (`crotchBelowCm`, per body: the size's rises on that
+ * body, the band's slide and the drape together). Pixels: drawn body in front of the cloth, four views, per body.
+ * On v2 the pixels were 175 to 274 and the largest edge near the crotch point 33 % while its thighs crossed the centre
+ * plane; they are 0 to 30 and 11 % since they part (chino-crotch-v2).
  */
 const BOUNDS = {
-  v1: { seatShortCm: 3.4, crotchDropCm: 3.9, crotchP99: 14, crotchMax: 24, pixels: 120, bandDropCm: 0 },
-  v2: { seatShortCm: 1.6, crotchDropCm: 3, crotchP99: 19, crotchMax: 38, pixels: 310, bandDropCm: 3 },
+  v1: {
+    seatShortCm: 3.4, crotchDropCm: 3.9, crotchP99: 14, crotchMax: 24, bandDropCm: 0,
+    pixels: { S: 120, M: 20, L: 15, XL: 25, XXL: 100 },
+    crotchBelowCm: { S: 6.8, M: 3.9, L: 3.6, XL: 4.3, XXL: 4.4 },
+  },
+  v2: {
+    seatShortCm: 1.9, crotchDropCm: 2.7, crotchP99: 11, crotchMax: 14, bandDropCm: 3,
+    pixels: { S: 50, M: 25, L: 15, XL: 15, XXL: 25 },
+    crotchBelowCm: { S: 7.8, M: 4.4, L: 5, XL: 3.1, XXL: 3.3 },
+  },
 } as const;
 
 describe.each(['v1', 'v2'] as const)('the POM chino on the male shape %s', (shape) => {
@@ -97,6 +109,7 @@ describe.each(['v1', 'v2'] as const)('the POM chino on the male shape %s', (shap
       const plan = planAvatar(bundle.anchors, { family: 'male' }, undefined, shape);
       const joined = trouserField(plan.field);
       if (shape === 'v2') {
+        // Drawn outlines have no ledge; without the body's heights the field is handed back as it is.
         expect(joined).toBe(plan.field);
         return;
       }
@@ -116,6 +129,41 @@ describe.each(['v1', 'v2'] as const)('the POM chino on the male shape %s', (shap
       expect(firstUnchanged).toBeGreaterThan(plan.m.morphHeights.hip - 4);
       expect(firstUnchanged).toBeLessThan(plan.m.morphHeights.hip + LEG_TOP_FILLET_CM + 1);
       expect(joined.legs).toBe(plan.field.legs);
+    });
+
+    it('is draped against a seat whose hollow at the centre back is bridged (drawn outlines only): the hull from the hip ring up, the drawn body at the front, at the band and under the seat', async () => {
+      const bundle = await loadChino(built);
+      const plan = planAvatar(bundle.anchors, { family: 'male' }, undefined, shape);
+      const Y = plan.m.morphHeights;
+      const bridged = trouserField(plan.field, Y);
+      if (shape === 'v1') {
+        // A body of ellipses has no hollow: the same field as without the heights (the leg tops joined).
+        expect(bridged).toBe(trouserField(plan.field));
+        expect(bridged.torso.polar).toBeUndefined();
+        return;
+      }
+      expect(trouserField(plan.field, Y)).toBe(bridged);
+      expect(bridged.legs).toBe(plan.field.legs);
+      expect(bridged.torso.data).toBe(plan.field.torso.data);
+      const a = plan.field.torso.polar!, b = bridged.torso.polar!;
+      const stride = a.n + 3, back = (3 * a.n) / 4, front = a.n / 4;
+      const row = (y: number): number => Math.round((y - a.lo) / a.stepCm) * stride + 3;
+      let deepest = 0;
+      for (let k = 0; k < a.data.length / stride; k++) for (let j = 0; j < a.n; j++) {
+        const d = b.data[k * stride + 3 + j]! - a.data[k * stride + 3 + j]!;
+        // Never inside the drawn body; and only the back half is touched.
+        expect(d).toBeGreaterThanOrEqual(0);
+        if (j < a.n / 2) expect(d).toBe(0);
+        deepest = Math.max(deepest, d);
+      }
+      // At the hip ring the centre back is 1.5 to 4 cm further out (the hollow between the buttocks), the centre front where it was.
+      const hipBack = b.data[row(Y.hip) + back]! - a.data[row(Y.hip) + back]!;
+      expect(hipBack).toBeGreaterThan(1.5);
+      expect(hipBack).toBeLessThan(4);
+      expect(deepest).toBeLessThan(4);
+      expect(b.data[row(Y.hip) + front]).toBe(a.data[row(Y.hip) + front]);
+      // Back to the drawn body under the seat and from 65 % of the way to the waist ring (where the band is read).
+      for (const y of [Y.hip - SEAT_BRIDGE_BELOW_CM - 0.5, Y.hip + SEAT_BRIDGE_FADE[1] * (Y.waist - Y.hip) + 0.5, Y.waist]) expect(b.data[row(y) + back], `at ${y.toFixed(1)}`).toBe(a.data[row(y) + back]);
     });
 
     it('reads the waist where the fit engine read it: a band with room keeps its girth, a band under tension is laid on the body it meets', async () => {
@@ -168,7 +216,7 @@ describe.each(['v1', 'v2'] as const)('the POM chino on the male shape %s', (shap
         expect(m.waistCm!.drapedRow - m.waistCm!.tape, `${id} waist`).toBeLessThan(2.5);
         expect(Math.abs(m.thighCm!.drapedRow - m.thighCm!.tape), `${id} thigh`).toBeLessThan(2);
         expect(Math.abs(m.inseamCm!.draped - m.inseamCm!.tape), `${id} inseam`).toBeLessThan(1.2);
-        // The seat's row of cloth is shorter than the tape after the drape (v1: 2.4 to 3.0 cm, v2: 0.6 to 1.0), never longer.
+        // The seat’s row of cloth is shorter than the tape after the drape (v1: 2.4 to 3.0 cm, v2: 0.7 to 1.5), never longer.
         expect(m.seatCm!.drapedRow, `${id} seat`).toBeLessThanOrEqual(m.seatCm!.tape + 0.5);
         expect(m.seatCm!.tape - m.seatCm!.drapedRow, `${id} seat`).toBeLessThan(B.seatShortCm);
         // A tape round the outside of the seat row still holds the body's seat.
@@ -181,9 +229,12 @@ describe.each(['v1', 'v2'] as const)('the POM chino on the male shape %s', (shap
       }
     });
 
-    it('keeps the drawn body under the cloth within what is reported, and the band where it was placed', () => {
+    it('keeps the drawn body under the cloth within what is reported for each body, none of it under the crotch on M to XXL, and the band where it was placed', () => {
       for (const [id, m] of drapes) {
-        expect(m.showThroughPixels, `${id} pixels`).toBeLessThan(B.pixels);
+        expect(m.showThroughPixels, `${id} pixels`).toBeLessThan(B.pixels[id as keyof typeof B.pixels]);
+        // Seen from the front, no body shows between the legs under the crotch (the patch male shape v2 had on M to XXL: 40 to 97 pixels there).
+        const front = Object.entries(m.showThroughBy!).filter(([k]) => k.startsWith('front ') && k.endsWith(' thigh')).reduce((n, [, v]) => n + v, 0);
+        expect(front, `${id} front, crotch to 12 cm under it`).toBeLessThan(shape === 'v2' ? 5 : 45);
         expect(m.band!.dropCm, `${id} band`).toBeLessThanOrEqual(B.bandDropCm);
         expect(Math.abs(m.band!.bandGirthCm - m.waistCm!.tape), `${id} band girth read on its own plane`).toBeLessThan(1.5);
       }
@@ -194,7 +245,8 @@ describe.each(['v1', 'v2'] as const)('the POM chino on the male shape %s', (shap
         const added = m.crotchBelowBodyCm! - builtEase(m.size) - m.band!.dropCm;
         expect(added, `${id} crotch drop in the drape`).toBeGreaterThan(0);
         expect(added, `${id} crotch drop in the drape`).toBeLessThan(B.crotchDropCm);
-        expect(m.crotchBelowBodyCm, `${id} crotch`).toBeLessThan(8);
+        expect(m.crotchBelowBodyCm, `${id} crotch`).toBeLessThan(B.crotchBelowCm[id as keyof typeof B.crotchBelowCm]);
+        expect(m.crotchBelowBodyCm, `${id} crotch`).toBeGreaterThan(0);
         expect(m.strainPct!.p99, `${id} p99`).toBeLessThan(8);
         expect(m.strainPct!.seatP99, `${id} seat p99`).toBeLessThan(9.5);
         expect(m.strainPct!.crotchP99, `${id} crotch p99`).toBeLessThan(B.crotchP99);

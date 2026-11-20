@@ -12,10 +12,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { computeFit } from '@curtain/fit-engine';
 import { MOCK_GARMENTS, SYNTHETIC_MENS_CHINO_WL, SYNTHETIC_MENS_TEE } from '@curtain/schema';
 // The package's own source (apps/web does not depend on @curtain/mannequin at run time).
-import { buildMannequin, buildMannequinMesh, deltoidBreadthCm, familyShape, MALE_BODY_SHAPE_IDS, slice, type Mesh } from '../../../../packages/mannequin/src/index';
+import { buildMannequin, buildMannequinMesh, deltoidBreadthCm, familyShape, MALE_BODY_SHAPE_IDS, MALE_V2_ASSUMPTIONS, slice, type Mesh } from '../../../../packages/mannequin/src/index';
 import { AvatarView } from '@/components/AvatarView';
-import { bodyGeometry, bodyPath, CENTER_X, FEET_Y, garmentGeometry, HEAD_TOP_Y, type BodyGeometry } from '@/render/body';
-import { MALE_FIGURE_SIZES, MALE_FIGURE_TABLE, MALE_V2_FIGURE_TABLE, maleV2RowAt } from '@/render/maleBody';
+import { bodyGeometry, bodyPath, CENTER_X, FEET_Y, figureY, garmentGeometry, HEAD_TOP_Y, type BodyGeometry } from '@/render/body';
+import { MALE_FIGURE_SIZES, MALE_FIGURE_TABLE, MALE_V2_FIGURE_TABLE, MALE_V2_THIGH_GAP_CM, MALE_V2_THIGH_PART_OVER_CM, maleV2RowAt } from '@/render/maleBody';
 import { ringOverlayFor } from '@/render/rings';
 import { maleShapeFlag } from '@/embed/look';
 
@@ -77,6 +77,18 @@ function rightAt(poly: Pt[], y: number): number {
   return best;
 }
 
+/** The smallest x where a closed polygon crosses the horizontal line at y. */
+function leftAt(poly: Pt[], y: number): number {
+  let best = Infinity;
+  for (let j = 0; j < poly.length; j++) {
+    const a = poly[j]!;
+    const b = poly[(j + 1) % poly.length]!;
+    if ((a.y - y) * (b.y - y) > 0 || a.y === b.y) continue;
+    best = Math.min(best, a.x + ((y - a.y) / (b.y - a.y)) * (b.x - a.x));
+  }
+  return best;
+}
+
 /** The mesh's front view: largest |x| of a part's loops in the horizontal plane at height y (cm). */
 function meshHalf(mesh: Mesh, part: string, y: number, side: 'max' | 'min' = 'max'): number {
   const k = mesh.partNames.indexOf(part);
@@ -119,6 +131,9 @@ function compare(id: (typeof MALE_FIGURE_SIZES)[number]): Record<string, [number
     thighRing: [leg2d(Y.thigh), meshHalf(mesh, 'leg_l', Y.thigh)],
     knee: [leg2d(Y.knee), meshHalf(mesh, 'leg_l', Y.knee)],
     legCentre: [cm(g.legX!), m.landmarks.legX],
+    // the inner edge of the left leg from the middle: at the thigh ring, and 10 cm under the crotch (the thighs have parted)
+    thighRingInner: [cm(leftAt(leg, toY(Y.thigh)) - CENTER_X), meshHalf(mesh, 'leg_l', Y.thigh, 'min')],
+    thighInnerLow: [cm(leftAt(leg, toY(m.landmarks.crotch[1] - 10)) - CENTER_X), meshHalf(mesh, 'leg_l', m.landmarks.crotch[1] - 10, 'min')],
     deltoids: [(2 * g.deltoidHalf!) / g.pxPerCm, deltoidBreadthCm(m)],
   };
   // halves to full breadths (the legs' outer edge and the centre stay as they are)
@@ -142,10 +157,20 @@ describe('male 2D figure v2 follows the 3D male body v2', () => {
       expect(g.bustHalf, id).toBeGreaterThan(g.v2!.underbustHalf);
       expect(g.v2!.underbustHalf, id).toBeGreaterThan(g.waistHalf);
       expect(g.deltoidHalf! / g.hipHalf, id).toBeGreaterThan(1.45);
-      // the legs sit in under the seat and touch below the crotch
+      // the legs sit in under the seat: a thigh's ellipse would reach the middle, so the thighs touch at the crotch …
       expect(g.legX!, id).toBeLessThan(g.hipHalf * 0.52);
       expect(g.legX! - g.thighHalf, id).toBeLessThan(0.5 * g.pxPerCm);
+      // … and under it they part by the 3D body's gap, each side of the middle
+      const leg = subpaths(bodyPath(g))[2]!;
+      const crotchY = figureY(g, 'crotch') + 4;
+      expect(leftAt(leg, crotchY + 0.2) - CENTER_X, id).toBeLessThan(0.3 * g.pxPerCm);
+      for (const under of [3, 6, 10]) expect((leftAt(leg, crotchY + under * g.pxPerCm) - CENTER_X) / g.pxPerCm, `${id} ${under} cm under the crotch`).toBeGreaterThan(MALE_V2_THIGH_GAP_CM - 0.05); // the path is written to 0.1 px
     }
+  });
+
+  it('the thigh gap is the 3D body’s', () => {
+    expect(MALE_V2_THIGH_GAP_CM).toBe(MALE_V2_ASSUMPTIONS.thighGapCm);
+    expect(MALE_V2_THIGH_PART_OVER_CM).toBe(MALE_V2_ASSUMPTIONS.thighPartOverCm);
   });
 
   it('maleV2RowAt: the table at its rows, held at the ends', () => {

@@ -30,7 +30,8 @@ COPY packages/shopify-app packages/shopify-app
 COPY packages/fit-engine packages/fit-engine
 COPY packages/taste-engine packages/taste-engine
 # The import's bake check (@curtain/garment-viewer `bakeGate`, run by dist/scripts/import-asset.js): its built entry
-# bundles the mannequin and anchors packages, so those are built first (anchors before mannequin, which imports it).
+# bundles the mannequin, anchors and fit-engine packages (the gate's pull-on check), so those are built first
+# (anchors before mannequin, which imports it). src/dockerfile.test.ts checks this list against the manifests.
 COPY packages/mannequin packages/mannequin
 COPY packages/anchors packages/anchors
 COPY packages/garment-viewer packages/garment-viewer
@@ -38,6 +39,7 @@ COPY apps/api apps/api
 RUN pnpm --filter @curtain/schema build \
  && pnpm --filter @curtain/anchors build \
  && pnpm --filter @curtain/mannequin build \
+ && pnpm --filter @curtain/fit-engine build \
  && pnpm --filter @curtain/garment-viewer build \
  && pnpm --filter @curtain/sdk build \
  && pnpm --filter @curtain/tryon-providers build \

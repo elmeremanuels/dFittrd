@@ -65,7 +65,8 @@ export function coerceNumber(value: unknown): number | undefined {
   if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
   if (typeof value === 'string') {
     const t = value.trim().replace(',', '.');
-    if (t === '') return undefined;
+    // Decimal only: Number() would read "0x10" as 16, and the WooCommerce plugin's PHP twin refuses it.
+    if (t === '' || /^[+-]?0[xob]/i.test(t)) return undefined;
     const n = Number(t);
     return Number.isFinite(n) ? n : undefined;
   }
@@ -232,7 +233,8 @@ export function coerceFabric(value: unknown, sink: WarningSink, source: string):
   if (!v || typeof v !== 'object' || Array.isArray(v)) {
     // Plain text ("95% katoen, 5% elastaan") carries no stretch or drape: it is prefill
     // (`fabricFromProductText`), never a payload fabric the draft schema would then reject.
-    if (v !== undefined) warn(sink, { source, path: 'fabric', message: 'expected a JSON object' });
+    // `null` is an absent fabric, like no value at all: nothing to warn about.
+    if (v !== undefined && v !== null) warn(sink, { source, path: 'fabric', message: 'expected a JSON object' });
     return undefined;
   }
   const r = v as Record<string, unknown>;

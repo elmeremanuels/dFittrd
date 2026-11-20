@@ -125,6 +125,21 @@ const metas = [
   { primary: 'technical', blend: [['Polyamide', 88], ['Elastane', 12]], stretchPct: 40, drape: 0.5 },
   { primary: 'Bamboe', blend: [['Bamboe', 70], ['Katoen', 30]], stretchPct: 3, drape: 0.7 },
   { primary: 'linen', blend: [['linen', 100]], stretchPct: 2, drape: 0.78 },
+  // D25 point 1: a fabric with a part missing keeps the rest; a part that is not valid is left
+  // out with a warning. The product goes through either way.
+  { primary: 'Katoen' },
+  { primary: 'Linen', drape: 0.5 },
+  { primary: 'Linen', stretchPct: 2 },
+  { primary: 'Viscose', blend: [['Viscose', 95], ['Elastaan', 5]] },
+  { stretchPct: 5 },
+  { primary: 'Katoen', stretchPct: 150, drape: 0.5 },
+  { primary: 'Katoen', stretchPct: -1, drape: 1.4, weightGsm: 0, opacity: 2, sheen: -0.1 },
+  { primary: 'Katoen', weightGsm: 5000, stretchPct: 2.5, drape: 0 },
+  { primary: 'Katoen', blend: [['Katoen', 120]], stretchPct: 2, drape: 0.5 },
+  { primary: 'Katoen', blend: Array.from({ length: 9 }, (_, i) => [`fibre ${i + 1}`, 10]), stretchPct: 2, drape: 0.5 },
+  { primary: 'x'.repeat(65), stretchPct: 2, drape: 0.5 },
+  { primary: 'Katoen', blend: [['y'.repeat(65), 100]], stretchPct: 2 },
+  { stretchPct: 150 },
 ];
 const product = { id: 4182, name: 'Wikkeljurk Lotte', price: '89.95', categories: [{ name: 'Jurken' }] };
 const fabricMetas = metas.map((fabric) => {

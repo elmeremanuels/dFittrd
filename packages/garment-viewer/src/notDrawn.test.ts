@@ -132,7 +132,7 @@ describe('the one not-drawn rule, per garment', () => {
     });
     it('keys the blocks by the bundle’s spelling of a size, and skips a chart row the bundle does not have', () => {
       const fit = computeFit(PILOT_PULL_ON_SKIRT, auBody('14'));
-      expect(Object.keys(notDrawnSizes(fit, [' 8', '10 ', '12', '14']))).toEqual([' 8', '10 ', '12']);
+      expect(Object.keys(notDrawnSizes(fit, [' 8', '10 ', '12', '14'])).sort()).toEqual([' 8', '10 ', '12']);
       expect(notDrawnSizes(fit, ['12', '14', '18'])).toEqual({ '12': { anchor: 'hip', bodyLargerCm: 4, reason: 'pull-on', label: 'hips' } });
     });
   });

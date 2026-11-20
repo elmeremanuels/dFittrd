@@ -4,31 +4,67 @@ import {
   GarmentPayloadSchema,
   completenessScore,
   hasShopMeasurements,
+  heldBackFor,
+  leaveOutInvalidParts,
   productNextStep,
   sizeAdviceScore,
   sizeAdviceGarment,
   type AudienceSource,
   type GarmentPayload,
   type GarmentPayloadDraft,
+  type IncompleteProductDataPolicy,
   type MerchantProductSummary,
+  type ProductHeldBack,
+  type ProductNotices,
 } from '@curtain/schema';
 import type { Db } from '../db/client.js';
-import { productImages, products, type ProductStatus } from '../db/schema.js';
+import { productImages, products, shops, type ProductStatus } from '../db/schema.js';
 import { contentHash } from '../lib/crypto.js';
 
 export type ProductRow = typeof products.$inferSelect;
 
 export interface UpsertResult {
   product: ProductRow;
+  /** The stored row changed: new content, or the same content now held back or released. */
   changed: boolean;
   score: number;
   missingFields: string[];
   status: 'active' | 'incomplete';
+  /** What size advice assumes for this product and which values were left out (D25 point 1). */
+  notices: ProductNotices;
+  /** Set when the shop's setting holds this product back; the product is stored all the same. */
+  heldBack: ProductHeldBack | null;
+}
+
+/** Compared field by field: jsonb does not keep the key order the row was written with. */
+const sameHeldBack = (a: ProductHeldBack | null, b: ProductHeldBack | null): boolean =>
+  a === null || b === null ? a === b : a.reason === b.reason && a.fields.length === b.fields.length && a.fields.every((f, i) => f === b.fields[i]);
+
+async function incompleteProductDataOf(db: Db, shopId: string): Promise<IncompleteProductDataPolicy> {
+  const [row] = await db.select({ policy: shops.incompleteProductData }).from(shops).where(eq(shops.id, shopId)).limit(1);
+  return row?.policy ?? 'let-through';
+}
+
+/**
+ * Status and held-back state of a draft under the shop's setting. `active` = try-able for size
+ * advice (the same predicate GET /v1/try uses) and not held back.
+ */
+function readinessOf(draft: GarmentPayloadDraft, policy: IncompleteProductDataPolicy, leftOut: ProductNotices['leftOut'] = []) {
+  const advice = sizeAdviceGarment(draft);
+  const heldBack = heldBackFor(policy, draft, leftOut);
+  const status: 'active' | 'incomplete' = advice.ok && !heldBack ? 'active' : 'incomplete';
+  return { status, heldBack, defaulted: advice.ok ? advice.defaulted : [] };
 }
 
 /**
  * Merchant upsert: validates the draft, runs completenessScore, stores status + missing field
  * paths. Equal content hash → no-op (returns changed: false and leaves updated_at alone).
+ *
+ * Incomplete data (D24 point 4, D25 point 1): a fabric value that is present but not valid is left
+ * out and reported, the rest of the fabric is kept. The shop's `incompleteProductData` setting then
+ * decides: `let-through` stores and sizes the product (0 % stretch assumed when it is missing);
+ * `hold-back` stores it as `incomplete` with `heldBack`. Neither throws for incomplete data, so a
+ * chart fix in the same save is kept and the data that was live before does not stay live.
  */
 export async function upsertProduct(
   db: Db,
@@ -44,21 +80,35 @@ export async function upsertProduct(
    */
   opts: { handle?: string | null; audienceSource?: AudienceSource | null } = {},
 ): Promise<UpsertResult> {
-  const draft = GarmentPayloadDraftSchema.parse({ ...(input as object), id: externalId });
+  const cleaned = leaveOutInvalidParts({ ...(input as object), id: externalId });
+  const draft = GarmentPayloadDraftSchema.parse(cleaned.payload);
   const completeness = completenessScore(draft);
   const missingFields = completeness.missing.map((m) => m.field);
-  // Stored status = try-able for size advice (the same predicate GET /v1/try uses); the score stays
-  // the full completeness (render and taste fields included).
-  const status: 'active' | 'incomplete' = sizeAdviceGarment(draft).ok ? 'active' : 'incomplete';
+  // Stored status = try-able for size advice and not held back; the score stays the full
+  // completeness (render and taste fields included).
+  const policy = await incompleteProductDataOf(db, shopId);
+  const { status, heldBack, defaulted } = readinessOf(draft, policy, cleaned.leftOut);
+  const notices: ProductNotices = { defaulted, leftOut: cleaned.leftOut };
+  const result = { score: completeness.score, missingFields, status, notices, heldBack };
   const hash = contentHash(draft);
   const existing = await db.query.products.findFirst({ where: and(eq(products.shopId, shopId), eq(products.externalId, externalId)) });
   if (existing && existing.contentHash === hash && existing.status !== 'archived') {
-    if (opts.audienceSource !== undefined && opts.audienceSource !== existing.audienceSource) {
-      // Same content, but the sync now knows the source (products stored before the column existed).
-      const [row] = await db.update(products).set({ audienceSource: opts.audienceSource }).where(eq(products.id, existing.id)).returning();
-      return { product: row!, changed: false, score: completeness.score, missingFields, status };
+    const audienceChanged = opts.audienceSource !== undefined && opts.audienceSource !== existing.audienceSource;
+    // Same content, but the shop's setting now holds it back or lets it through: the stored state follows.
+    const stateChanged = !sameHeldBack(existing.heldBack, heldBack);
+    if (audienceChanged || stateChanged) {
+      const [row] = await db
+        .update(products)
+        .set({
+          // Same content, but the sync now knows the source (products stored before the column existed).
+          ...(audienceChanged ? { audienceSource: opts.audienceSource } : {}),
+          ...(stateChanged ? { status: status as ProductStatus, heldBack, updatedAt: new Date() } : {}),
+        })
+        .where(eq(products.id, existing.id))
+        .returning();
+      return { product: row!, changed: stateChanged, ...result };
     }
-    return { product: existing, changed: false, score: completeness.score, missingFields, status };
+    return { product: existing, changed: false, ...result };
   }
   const values = {
     shopId,
@@ -76,6 +126,7 @@ export async function upsertProduct(
     updatedAt: new Date(),
     archivedAt: null,
     audienceSource: opts.audienceSource !== undefined ? opts.audienceSource : existing && existing.payload.audience === draft.audience ? existing.audienceSource : null,
+    heldBack,
   };
   const [row] = await db
     .insert(products)
@@ -83,7 +134,26 @@ export async function upsertProduct(
     .onConflictDoUpdate({ target: [products.shopId, products.externalId], set: values })
     .returning();
   await syncImages(db, row!.id, draft);
-  return { product: row!, changed: true, score: completeness.score, missingFields, status };
+  return { product: row!, changed: true, ...result };
+}
+
+/**
+ * Applies a changed `incompleteProductData` setting to the products the shop already has, so that
+ * switching to `hold-back` holds them and switching back releases them without a re-sync. Values
+ * that were left out at upsert time are not in the stored payload, so only what the stored payload
+ * shows (a missing stretch) is judged here. Archived products are left alone. Returns how many rows changed.
+ */
+export async function reapplyIncompleteProductData(db: Db, shopId: string, policy: IncompleteProductDataPolicy): Promise<number> {
+  const rows = await db.select().from(products).where(eq(products.shopId, shopId));
+  let n = 0;
+  for (const row of rows) {
+    if (row.status === 'archived') continue;
+    const { status, heldBack } = readinessOf(row.payload, policy);
+    if (sameHeldBack(row.heldBack, heldBack)) continue;
+    await db.update(products).set({ status: status as ProductStatus, heldBack, updatedAt: new Date() }).where(eq(products.id, row.id));
+    n++;
+  }
+  return n;
 }
 
 async function syncImages(db: Db, productId: string, draft: GarmentPayloadDraft): Promise<void> {
@@ -116,9 +186,12 @@ export async function findProductById(db: Db, id: string): Promise<ProductRow | 
 
 /**
  * The garment the standalone embed sizes: the stored payload with defaults for the fields size
- * advice does not read (`sizeAdviceGarment`). Null when category, chart type or chart is missing.
+ * advice does not read (`sizeAdviceGarment`). Null when category, chart type or chart is missing,
+ * and for a product the shop holds back for incomplete data.
  */
 export function asTryGarment(row: ProductRow, opts: { colorHex?: string } = {}): GarmentPayload | null {
+  // Held back by the shop's setting: not ready for shoppers, on any route.
+  if (row.heldBack) return null;
   const r = sizeAdviceGarment(row.payload, opts);
   return r.ok ? r.garment : null;
 }
@@ -149,6 +222,7 @@ export function toSummary(row: ProductRow, flatLayProcessedUrl: string | null = 
     ...nextOf(row),
     // Only for a men's product under the men's gate; absent otherwise, so the body is unchanged.
     ...(menGate ? { menGate } : {}),
+    ...(row.heldBack ? { heldBack: row.heldBack } : {}),
   };
 }
 

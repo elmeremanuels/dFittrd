@@ -27,6 +27,8 @@ import {
   MerchantProductValidateResponseSchema,
   MerchantProductsQuerySchema,
   MerchantProductsResponseSchema,
+  MerchantSettingsResponseSchema,
+  MerchantSettingsUpdateRequestSchema,
   PLAN_NAMES,
   SetupResponseSchema,
   SetupUpdateRequestSchema,
@@ -45,7 +47,7 @@ import { periodFor, utcDay } from '../lib/time.js';
 import { abandonedAnalytics, fitSizeAnalytics, swipeAnalytics } from '../services/analytics.js';
 import { addMonths, availableAt, closedMonthsSince, isClosed, lastClosedMonth } from '../services/kfloor.js';
 import { decodeCursor, encodeCursor } from '../services/ledger.js';
-import { archiveProduct, listMerchantProducts, upsertProduct } from '../services/products.js';
+import { archiveProduct, listMerchantProducts, reapplyIncompleteProductData, upsertProduct } from '../services/products.js';
 import { merchantMenGate } from '../services/readiness.js';
 import { merchantSetup } from '../services/setup.js';
 import { connectTokenHash, createShop, findShopByConnectToken, findShopByDomain, isPaused, issueMerchantKeys, planInfo, updateSettings } from '../services/shops.js';
@@ -130,6 +132,9 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
         contentHash: r.product.contentHash,
         changed: r.changed,
         updatedAt: r.product.updatedAt.toISOString(),
+        // Incomplete data never fails the save (D25 point 1): what was assumed or left out, and whether the shop's setting holds the product back.
+        notices: r.notices,
+        heldBack: r.heldBack,
       };
     },
   );
@@ -296,6 +301,20 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
       ...(req.body.phoneConfirmed !== undefined ? { setupPhoneConfirmed: req.body.phoneConfirmed } : {}),
     });
     return merchantSetup({ db, shop, now: now() });
+  });
+
+  // ---- settings --------------------------------------------------------------------------------
+  // The merchant's own choices (D24). A fixed list of keys, each named in the DTOs: nothing of the
+  // shop's stored settings (billing, operator switches) is read or written through this route.
+  const settingsOf = (shop: { incompleteProductData: 'let-through' | 'hold-back' }) => ({ incompleteProductData: shop.incompleteProductData });
+  app.get('/v1/merchant/settings', { schema: { response: { 200: MerchantSettingsResponseSchema } }, preHandler: requireMerchant }, async (req) => settingsOf(req.shop!));
+  app.put('/v1/merchant/settings', { schema: { body: MerchantSettingsUpdateRequestSchema, response: { 200: MerchantSettingsResponseSchema } }, preHandler: requireMerchant }, async (req) => {
+    const next = req.body.incompleteProductData;
+    if (next === undefined || next === req.shop!.incompleteProductData) return settingsOf(req.shop!);
+    const [shop] = await db.update(shops).set({ incompleteProductData: next, updatedAt: now() }).where(eq(shops.id, req.shop!.id)).returning();
+    // The products the shop already has follow the new choice (held back, or released).
+    await reapplyIncompleteProductData(db, shop!.id, next);
+    return settingsOf(shop!);
   });
 
   // ---- keys ------------------------------------------------------------------------------------

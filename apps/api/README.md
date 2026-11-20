@@ -53,7 +53,7 @@ typecheck · test · build · bundle-secret-scan and builds/pushes the image to 
 | Try-on | `GET /v1/try/:token` → `{ shop, garment, trySession.intentToken, pairing, embed.allowedOrigins }`, `POST /v1/try/:token/fit-shown` → `{ billed }`, `GET /v1/peek?shop&product&page` → `{ shop, garment, embed.allowedOrigins }` (the size peek: read-only, no try session, only for a device already paired with the shop and a try-able product, own per-IP limit) | device JWT |
 | SDK | `POST /v1/sdk/sessions` (CORS `*`, per-shop rate limit, `embedUrl` always, `qrSvg` except for `surface: 'embed'`, 402 + the same body when paused), `GET /sdk/v1.js`, `GET /v1/sdk/media?shop=<id>&u=<url>` (the shop's logo or a product photo through `safeFetch`: allowlisted per shop, raster only, `MEDIA_PROXY_*` size cap, cache and rate limit) | public |
 | Renders | `POST /v1/renders/hero` → 202, `GET /v1/renders/:jobId`, `GET /v1/renders/:jobId/image\|video?exp&sig` | device JWT / signed URL |
-| Merchant | `PUT /v1/merchant/products/:externalId`, `POST …/products/validate`, `DELETE …/products/:externalId`, `GET …/products`, `GET …/usage`, `GET …/ledger`, `GET …/usage/anomalies`, `GET …/analytics/periods`, `GET …/analytics/swipes`, `GET …/analytics/abandoned`, `GET …/analytics/fit-sizes` (all `?period=YYYY-MM`), `POST …/keys/rotate`, `PUT /v1/merchant/shops/self`, `POST /v1/merchant/woo/connect`, `POST /v1/merchant/woo/complete`, `POST /v1/merchant/billing/stripe/checkout` (WooCommerce: Checkout for the Curtain plan, also the switch from a retired plan) | PK-HMAC, Bearer `sk_…`, or Shopify session token |
+| Merchant | `PUT /v1/merchant/products/:externalId`, `POST …/products/validate`, `DELETE …/products/:externalId`, `GET …/products`, `GET …/usage`, `GET …/ledger`, `GET …/usage/anomalies`, `GET …/analytics/periods`, `GET …/analytics/swipes`, `GET …/analytics/abandoned`, `GET …/analytics/fit-sizes` (all `?period=YYYY-MM`), `POST …/keys/rotate`, `GET/PUT /v1/merchant/settings`, `PUT /v1/merchant/shops/self`, `POST /v1/merchant/woo/connect`, `POST /v1/merchant/woo/complete`, `POST /v1/merchant/billing/stripe/checkout` (WooCommerce: Checkout for the Curtain plan, also the switch from a retired plan) | PK-HMAC, Bearer `sk_…`, or Shopify session token |
 | Shopify | `GET /shopify/admin` (embedded admin page from `@curtain/shopify-app`, `frame-ancestors` CSP), `GET /shopify/auth/callback` (302 to the embedded app home), `POST /shopify/token-exchange` (also writes the theme block's app-data metafields: public key, API/app URL), `POST /shopify/webhooks`, `POST /shopify/billing/subscribe` (the plan follows Shopify's active subscriptions on every token exchange; uninstall drops the shop to `free`) | none (page/redirect) / session token / webhook HMAC |
 | Billing | `POST /v1/billing/stripe/webhook` | Stripe signature |
 | Ops | `GET /healthz`, `GET /readyz` (db + jobs), `GET /v1/openapi.json` | public |
@@ -337,3 +337,24 @@ in `safeFetch`. Device minting stays per IP (`DEVICE_CREATE_RATE_LIMIT_PER_HOUR`
   confirmation flow, API version `2026-10` (the queries are not re-validated in GraphiQL yet).
 * Live Stripe: Checkout + webhook endpoint, a `curtain_fit_sessions` meter with the overage price.
 * Hero render against FASHN/Vertex/xAI with real keys (only `mock` was exercised here).
+
+## Incomplete product data (D24 point 4, D25 points 1 and 2)
+
+A product whose fabric details are missing or not valid is never refused for that reason.
+
+* `PUT /v1/merchant/products/:externalId` takes the fabric as it comes. A part that is present but
+  not valid (stretch 150) is left out and reported in `notices.leftOut`; the rest of the fabric is
+  kept. `notices.defaulted` lists what size advice then assumes (`fabric.stretchPct` = 0 %). Every
+  other field is validated as before (a bad chart is still a 400).
+* The shop setting `incompleteProductData` (`GET/PUT /v1/merchant/settings`, column
+  `shops.incomplete_product_data`, migration 0008) has two values. `let-through` (the default)
+  stores and sizes the product. `hold-back` stores it with status `incomplete` and
+  `heldBack: { reason: 'incomplete_product_data', fields }` (column `products.held_back`), answers
+  200, and shoppers do not get it (`asTryGarment` returns null) until the merchant completes it.
+* Incomplete means: the stretch is not known on a product that is not an accessory, or a fabric
+  value had to be left out. A missing drape alone is not incomplete (`incompleteData.ts` in
+  `@curtain/schema`).
+* Changing the setting re-applies it to the shop's stored products. A value that was left out is
+  not in the stored payload, so that pass can only judge a missing stretch.
+* `PUT /v1/merchant/settings` accepts only the keys named in `MerchantSettingsUpdateRequestSchema`;
+  any other key is a 400.

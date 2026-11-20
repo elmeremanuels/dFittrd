@@ -11,8 +11,8 @@ import { PILOT_PULL_ON_SKIRT, type GarmentPayload } from '@curtain/schema';
  * build, a mocked api, three screens (360 x 640, 390 x 844, 430 x 932 at 2x).
  *   - OI-105: a size that is not drawn shows the body alone and one sentence that says why. Wherever the shopper has
  *     scrolled, while a real part of that picture is on screen the whole sentence is on screen too, above the sticky
- *     "Choose size" bar and not under anything, on the 2D figure and under the 3D view; the figure's estimate label is
- *     still there and not under the sentence.
+ *     "Choose size" bar and not under anything, on the 2D figure, under the 3D view of a device drape and in the note
+ *     of a server bake; the figure's estimate label is still there and not under the sentence.
  *   - OI-104: the size-ring chips under the 3D view of a men's garment read "Chest", never "Bust".
  *   - OI-83: the female 2D figure has no hole: every point inside one of its parts (head, torso, legs, arms) is filled,
  *     asked of the browser's own fill (`isPointInFill`), for a slim, a mid and a full body. One place is counted apart:
@@ -21,7 +21,9 @@ import { PILOT_PULL_ON_SKIRT, type GarmentPayload } from '@curtain/schema';
  * device; the bundles are git-ignored and built here when absent. EMULATED, not a phone: headless Chromium, SwiftShader.
  * Not part of `pnpm check`.
  *
- * Env: PHONE_SHOTS   folder for the screenshots (phone size at 2x)
+ * Env: E2E_DRESS_BUNDLE, E2E_TEE_BUNDLE, E2E_SKIRT_BUNDLE   the bundle folders (defaults under spikes/garment-engine/out;
+ *        the skirt's server bake is not built here: its three tests are skipped when it is absent)
+ *      PHONE_SHOTS   folder for the screenshots (phone size at 2x)
  *      PHONE_SHOT_TAG  a word put in each file name (`before`, `after`)
  */
 
@@ -31,6 +33,7 @@ const DEVICE = { deviceId: '11111111-1111-4111-8111-111111111111', token: 'e2e.d
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const OUT = join(ROOT, 'spikes', 'garment-engine', 'out');
 const DRESS = resolve(process.env.E2E_DRESS_BUNDLE ?? join(OUT, 'synthetic-tape-babydoll-dress'));
+const BAKE = resolve(process.env.E2E_SKIRT_BUNDLE ?? join(OUT, 'pom2-bundle', 'crimson-wildflower-maxi-skirt'));
 const TEE = resolve(process.env.E2E_TEE_BUNDLE ?? join(OUT, 'synthetic-men-tee'));
 const SHOTS = process.env.PHONE_SHOTS ?? null;
 const TAG = process.env.PHONE_SHOT_TAG ?? 'after';
@@ -242,6 +245,39 @@ for (const size of PHONES) {
     if (size.height <= 844) expect(in3d.rideAt, 'the 3D sentence never had to move: this screen does not test the case').not.toBeNull();
     await scrollPictureTo(page, 'mirror', 56);
     await shot(page, `oi-105-2d-dress-size-12-not-drawn-${name}`);
+    await page.context().close();
+  });
+}
+
+for (const size of PHONES) {
+  const name = `${size.width}x${size.height}`;
+
+  test(`OI-105, 3D server bake, ${name}: the not-drawn sentence in the bake's note rides above the bar too`, async ({ browser, baseURL }) => {
+    test.skip(!existsSync(join(BAKE, 'base.glb')), `no bake bundle at ${BAKE} (git-ignored)`);
+    test.setTimeout(600_000);
+    // The pilot skirt as the demo seeds it, hip 98: AU 8's band does not stretch over the hips, so the bake's AU 8 is not drawn.
+    const body = { height: 168, weight: 62, bust: 89, waist: 71.5, hip: 98 };
+    const garment = { ...PILOT_PULL_ON_SKIRT, productPhotos: [] } as GarmentPayload;
+    const page = await phone(browser, size);
+    await instrument(page, new URL(baseURL!).origin, garment, BAKE);
+    await aboutYou(page, baseURL!, body);
+    await expect(page.getByTestId('embed-result')).toBeVisible();
+    await page.getByTestId('garment3d-open').click();
+    const canvas = page.getByTestId('garment3d-canvas');
+    await expect(canvas).toHaveAttribute('data-state', 'settled', { timeout: 300_000 });
+    await page.getByTestId('garment3d').getByRole('radio', { name: '8', exact: true }).click();
+    await expect(canvas).toHaveAttribute('data-size', '8');
+    await expect(canvas).toHaveAttribute('data-state', 'settled', { timeout: 300_000 });
+    await expect(canvas).toHaveAttribute('data-garment', 'not-drawn');
+    const note = page.getByTestId('garment3d-bake-note');
+    await expect(note).toHaveAttribute('data-advice-blocked', 'true');
+    await expect(note.getByTestId('garment3d-bake-not-drawn')).toContainText('Size 8 is not drawn');
+    await scrollPictureTo(page, 'garment3d', 8);
+    await shot(page, `oi-105-3d-bake-skirt-size-8-not-drawn-${name}`);
+    const in3d = await sweep(page, 'garment3d-canvas', 'garment3d-bake-not-drawn', null);
+    expect(in3d.looked).toBeGreaterThan(5);
+    expect(in3d.wrong).toEqual([]);
+    if (size.height <= 844) expect(in3d.rideAt, 'the sentence never had to move: this screen does not test the case').not.toBeNull();
     await page.context().close();
   });
 }

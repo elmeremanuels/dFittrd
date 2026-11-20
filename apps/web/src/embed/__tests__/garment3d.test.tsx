@@ -86,6 +86,8 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     const line = within(xl).getByTestId('garment3d-bake-not-drawn');
     expect(line).toHaveTextContent(/^Size XL is not drawn: .* so the body is shown without it\.$/);
     expect(line.className).toMatch(/\bsticky\b/);
+    // The note makes no box of its own, or the sticky line could not leave it (seen in e2e/phoneResult.spec.ts).
+    expect(xl.className).toMatch(/\bcontents\b/);
     expect(xl).toHaveTextContent('In 3D the sizes look much alike');
   });
 

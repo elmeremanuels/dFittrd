@@ -360,14 +360,16 @@ function BakeNote({ t, size, source, units, blocked: block, audience }: { t: Emb
   const blocked = block !== null;
   // The not-drawn sentence is a line of its own inside the note: it rides above the "Choose size" bar while the note's
   // place under the view is out of sight (`NotDrawnLine`, OI-105); the rest of the note stays where it is written.
-  const line = 'text-[11px] leading-snug text-ink-mute';
+  // The note itself makes no box (`contents`): a sticky line cannot leave its parent's box, and the note's own box is
+  // only as tall as the note, so inside it the sentence could not move. Its parent is the whole 3D section this way.
+  const line = 'mt-1 text-[11px] leading-snug text-ink-mute';
   const before = `${source.plainColour ? `${t.plainColour} ` : ''}${s ? t.provenance(size, s.provenance) : ''}`;
   return (
-    <div className="mt-1 space-y-1" data-testid="garment3d-bake-note" data-place={place} data-advice-blocked={blocked ? 'true' : undefined} data-anchor={block?.anchor} data-reason={block?.reason}>
+    <div className="contents" data-testid="garment3d-bake-note" data-place={place} data-advice-blocked={blocked ? 'true' : undefined} data-anchor={block?.anchor} data-reason={block?.reason}>
       {block ? (
         <>
           {before ? <p className={line}>{before} </p> : null}
-          <NotDrawnLine block={block} size={size} audience={audience} units={units} testId="garment3d-bake-not-drawn" />
+          <NotDrawnLine block={block} size={size} audience={audience} units={units} testId="garment3d-bake-not-drawn" className="mt-1" />
           <p className={line}> {t.sizesAlike}</p>
         </>
       ) : (

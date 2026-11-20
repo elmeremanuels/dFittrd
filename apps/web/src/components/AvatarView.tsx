@@ -1,7 +1,7 @@
 import { motion, useReducedMotion } from 'motion/react';
 import { useId, useMemo, type ReactNode } from 'react';
 import type { FitResult } from '@curtain/fit-engine';
-import { fitGapsForRender } from '@curtain/fit-engine';
+import { fitGapsForRender, wearBlock } from '@curtain/fit-engine';
 import { ESTIMATE_DISCLAIMER, type GarmentPayload, type UserBody } from '@curtain/schema';
 import { adjustColor, bodyGeometry, bodyPath, fabricLook, garmentGeometry, isHex, levelY, STANDARD_SKIN_HEX, VIEW_H, VIEW_W, HEAD_TOP_Y, type FigureFamily, type MaleShape } from '@/render/body';
 import { faceInk, figureOutline, neutralFace, SKIN_SHADE } from '@/render/face';
@@ -111,7 +111,10 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
 
   const body = useMemo(() => bodyGeometry(measurements, heightCm, family, maleShape === 'v2' ? { maleShape } : {}), [measurements, heightCm, family, maleShape]);
   const gaps = useMemo(() => (fit ? fitGapsForRender(fit, size ?? undefined) : null), [fit, size]);
-  const geom = useMemo(() => (garment ? garmentGeometry({ garment, gaps, body, hemSweepCm }) : null), [garment, gaps, body, hemSweepCm]);
+  // The not-drawn rule (the same reader as the 3D view, `wearBlock`): a size the size advice says cannot be worn on this
+  // body is not drawn on it. The body stands alone, the size rings stay, and the host says why.
+  const block = useMemo(() => (fit && garment ? wearBlock(fit, size ?? undefined) : null), [fit, garment, size]);
+  const geom = useMemo(() => (garment && !block ? garmentGeometry({ garment, gaps, body, hemSweepCm }) : null), [garment, block, gaps, body, hemSweepCm]);
   const look = useMemo(() => (garment ? fabricLook(garment.fabric) : null), [garment]);
 
   const skin = isHex(skinHex) ? skinHex! : STANDARD_SKIN_HEX;
@@ -152,7 +155,9 @@ export function AvatarView({ garment, fit, size, isLoading = false, bare = false
         {...(family === 'male' ? { 'data-figure': 'male' } : {})}
         {...(body.maleShape === 'v2' ? { 'data-male-shape': 'v2' } : {})}
         {...(v2 ? { 'data-skin-shading': 'skin-v2' } : {})}
-        aria-label={garment ? t.garmentLabel(garment.name, size || null, onWhom) : hasBody ? t.bodyOutline : t.referenceOutline}
+        {...(block ? { 'data-garment': 'not-drawn' } : {})}
+        {...(block ? { 'data-not-drawn-at': block.point } : {})}
+        aria-label={garment ? (block ? t.notDrawnLabel(garment.name, size || fit?.recommendedSize || fit?.closestSize || null, block.label, onWhom) : t.garmentLabel(garment.name, size || null, onWhom)) : hasBody ? t.bodyOutline : t.referenceOutline}
       >
         <defs>
           <filter id={ids.skinTex} x="0" y="0" width="100%" height="100%">

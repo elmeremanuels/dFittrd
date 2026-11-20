@@ -15,7 +15,8 @@ import { polarGirth, sample } from './collide';
 import type { SpikeBundle } from './bundle';
 import type { DrapeJob } from './drapeJob';
 import { clothParams, createCloth, isSettled, loopGirth, addSeams, setLoops, settlePins, stepCloth, type Cloth, type ClothMaterial, type ClothParams, type GirthLoop } from './cloth';
-import { isTapeTrouser, slideTrouserBand, trouserNoCollide, trouserField, trouserNotDrawn, trouserSeams, wornBodyRings } from './trouser';
+import { sizeNotDrawn } from './notDrawn';
+import { isTapeTrouser, slideTrouserBand, trouserNoCollide, trouserField, trouserSeams, wornBodyRings } from './trouser';
 import { fitLines, gapsForSize, heatColors, heatField, placeGarment, placementMorph, sizeEntry, type FitLine, type HeatField, type Placement } from './fitting';
 
 // ---------------------------------------------------------------------------
@@ -766,27 +767,17 @@ export function seatSewnTop(start: Float32Array, chains: ChainAssignment, noColl
   return { liftCm: r2(best), depthBeforeCm: r2(before), depthAfterCm: r2(bestDepth) };
 }
 
-/** Why a size is not draped on this body (`sewnNotDrawn`): the anchor where it does not close and by how much the body is larger, cm. */
-export interface NotDrawn {
-  anchor: string;
-  bodyLargerCm: number;
-}
+export { notDrawnSizes, sizeNotDrawn, type NotDrawn } from './notDrawn';
 
 /**
- * A sewn top (the POM tee of slice M3) in a size too small for the body is not draped and not drawn (the skirt's pattern of
- * the server drape bake: a body a size was not draped on is declared, with a reason, instead of a stretched garment). The
- * rule is the fit engine's (rule 4): an anchor whose placed loop is `open` (`placeGarment`: the body is larger than the
- * garment by more than its fabric gives, band `tight`). Before this the drape stretched the tee to the body: the XXL body in
- * S showed the cloth over the shoulders stretched 115 % and the chest placed 22 cm wider than the tee. Returns the anchor
- * with the largest shortfall, or null when the size closes (and for every garment that is not sewn: drawn as before).
+ * The not-drawn rule under its first name and shape (slice M3, when it covered sewn tops only). The rule is now one for
+ * every garment (`sizeNotDrawn`, `notDrawn.ts`): the fit engine's block of the size, whatever the bundle. `session` and
+ * `avatar` are no longer read; they stay so the callers of M3 and of the chino slices keep working. Returns the anchor
+ * and the shortfall, or null when the size goes on.
  */
-export function sewnNotDrawn(session: GarmentSession, avatar: Pick<Avatar, 'rings'>, fit: FitResult, size: string): NotDrawn | null {
-  // A tape-built trouser too small for the body is declared the same way (`trouserNotDrawn`).
-  if (!session.sewn) return trouserNotDrawn(session.bundle, avatar.rings, fit, size);
-  const placement = placeGarment(session.bundle.grading, size, gapsForSize(fit, size), avatar.rings);
-  let worst: (typeof placement.anchors)[number] | null = null;
-  for (const a of placement.anchors) if (a.state === 'open' && (!worst || a.slackCm < worst.slackCm)) worst = a;
-  return worst ? { anchor: worst.anchor, bodyLargerCm: Math.round(-worst.slackCm * 10) / 10 } : null;
+export function sewnNotDrawn(_session: GarmentSession | null, _avatar: Pick<Avatar, 'rings'> | null, fit: FitResult, size: string): { anchor: string; bodyLargerCm: number } | null {
+  const r = sizeNotDrawn(fit, size);
+  return r ? { anchor: r.anchor, bodyLargerCm: r.bodyLargerCm } : null;
 }
 
 /** A sleeve piece's head: at least this many cm along the arm from its point nearest the shoulder joint is pinned. */

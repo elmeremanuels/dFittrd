@@ -13,6 +13,11 @@
  * 8, 12 and 16 bodies are typed at 156 and 180 cm. Without it every body is typed at 168 cm and the 3D body keeps the
  * bundle body's stature, as the embed does for a women's product today.
  *
+ * --too-small: after each body's own size (which must be drawn), pick the size one down (tight with room left: must be
+ * drawn) and two down (the size advice: does not close at the bust): the 3D view must show the body alone
+ * (`data-garment="not-drawn"`) with the sentence, and the 2D figure the same sentence and no dress
+ * (`--size-<n>-not-drawn`; docs/reports/claude/dress-not-drawn.md).
+ *
  * Needs `out/synthetic-tape-babydoll-dress/` (`pnpm --filter @curtain/garment-spike exec tsx
  * scripts/build-dress-bundle.ts`) and built packages (`pnpm build:packages`). Exits non-zero on the first failure.
  */
@@ -27,6 +32,7 @@ const require = createRequire(import.meta.url);
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const args = process.argv.slice(2);
 const heights = args.includes('--heights');
+const tooSmall = args.includes('--too-small');
 const shots = resolve(args.find((a) => !a.startsWith('--')) ?? join(root, 'test-results', 'demo-dress'));
 mkdirSync(shots, { recursive: true });
 const ID = 'synthetic-tape-babydoll-dress';
@@ -165,6 +171,38 @@ try {
     await shot(page, `${label}--side`, panel);
     await quarter();
     await shot(page, `${label}--back`, panel);
+    if (tooSmall) {
+      // The one not-drawn rule (docs/reports/claude/dress-not-drawn.md): every own size above was drawn; two sizes down
+      // (where the chart has one) the size advice says the dress does not close at the bust, so the 3D view and the 2D
+      // figure show the body alone and say why. One size down is tight with room left and is still drawn.
+      await quarter();
+      await quarter();
+      if ((await canvas.getAttribute('data-garment')) !== 'drawn') throw new Error(`body ${body.name}: its own size ${size} is not drawn`);
+      if (await frame.getByTestId('garment3d-not-drawn').count()) throw new Error(`body ${body.name}: a not-drawn sentence under its own size`);
+      const pick = async (n, want) => {
+        await panel.getByRole('radio', { name: String(n), exact: true }).click();
+        await frame.locator(`canvas[data-testid="garment3d-canvas"][data-size="${n}"][data-state="settled"][data-garment="${want}"]`).waitFor({ timeout: 300_000 });
+      };
+      const sizes = Object.keys(CHART).map(Number);
+      const i = sizes.indexOf(Number(body.size));
+      if (i >= 1) {
+        await pick(sizes[i - 1], 'drawn');
+        log(`body ${body.name} in ${sizes[i - 1]} (one size down): drawn`);
+      }
+      if (i >= 2) {
+        await pick(sizes[i - 2], 'not-drawn');
+        const note = frame.getByTestId('garment3d-not-drawn');
+        await note.waitFor({ timeout: 10_000 });
+        const text = await note.textContent();
+        if (!/the size advice says it does not close at the bust/.test(text ?? '')) throw new Error(`body ${body.name} in ${sizes[i - 2]}: ${text}`);
+        if ((await frame.getByTestId('figure-not-drawn').textContent()) !== text) throw new Error(`body ${body.name} in ${sizes[i - 2]}: the 2D figure says something else`);
+        if (await frame.getByTestId('mirror').first().getByTestId('garment-layer').count()) throw new Error(`body ${body.name} in ${sizes[i - 2]}: the 2D figure still draws the dress`);
+        log(`body ${body.name} in ${sizes[i - 2]} (two sizes down): not drawn — ${text}`);
+        await canvas.scrollIntoViewIfNeeded();
+        await page.waitForTimeout(800);
+        await shot(page, `${body.name}--size-${sizes[i - 2]}-not-drawn`, panel);
+      }
+    }
     await context.close();
   }
 } catch (err) {

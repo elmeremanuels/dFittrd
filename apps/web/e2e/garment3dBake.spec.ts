@@ -217,7 +217,7 @@ test('past the draped bodies: shown on the nearest one with the reason, or not d
   // The bake: AU 8 on the 94 cm body only, AU 10 up to 99, AU 12 up to 104, AU 14 and AU 16 up to 109 (the drawn bodies'
   // widest girths below the waist are 96.5 / 101.6 / 106.8 / 111.9 / 117). The size advice blocks AU 8 over 96.5 cm hips,
   // AU 10 over 102.5, AU 12 over 107.5, AU 14 over 112.5 and AU 16 (extrapolated band, no allowance) over 115.
-  const ADVICE = 'the size advice says its band does not stretch over your hips';
+  const ADVICE = 'the size advice says its waistband does not stretch over your hips';
   const band = (size: string, hip: string): string => `its band does not stretch over the model with ${hip} cm hips, so size ${size} was not draped on it`;
   const cases = [
     // AU 8 lies between its 94 cm body and the refused 99 cm one; the advice blocks it at 98 cm hips: not drawn.

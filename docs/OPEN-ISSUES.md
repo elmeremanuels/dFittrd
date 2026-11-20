@@ -21,6 +21,7 @@ Compiled on 19 Nov 2026 from the reports listed below; issues that a later repor
 | men-m1b | `docs/reports/claude/men-m1b-2d.md` | Open issues |
 | men-m3-tee | `docs/reports/claude/men-m3-tee.md` | Open issues |
 | men-tee-v2 | `docs/reports/claude/men-tee-v2.md` | Verdict; Open issues |
+| dress-not-drawn | `docs/reports/claude/dress-not-drawn.md` (added 20 Nov 2026) | Verdict; Assumed; Open issues |
 | merchant-onboarding | `docs/reports/claude/merchant-onboarding.md` | Measured vs assumed; Open issues (not fixed here) |
 | pom-gate | `docs/reports/claude/pom-gate.md` | Diagnosis; Review findings; Open issues |
 | privacy-wall | `docs/reports/claude/privacy-wall.md` | Summary; Open issues |
@@ -32,7 +33,7 @@ Marks: **needs-founder** (a decision or an action only the founder can take), **
 **needs-real-device** (needs a real phone, real GPU, paid provider, real Shopify store, real VPS, real garment or real volunteers),
 **engineering** (can be done in the repository). Each row has exactly one mark. "Size" is a guess.
 
-Counts: needs-founder 17, needs-counsel 7, needs-real-device 14, engineering 62. Total 100 open rows.
+Counts: needs-founder 18, needs-counsel 7, needs-real-device 15, engineering 64. Total 104 open rows.
 
 ## needs-founder
 
@@ -55,6 +56,7 @@ Counts: needs-founder 17, needs-counsel 7, needs-real-device 14, engineering 62.
 | OI-15 | Look review of the male 2D figure v2 and male shape v2 (both off by default). The hip-corner nub and the neck flare are left until the founder has looked. | open | male-2d-v2, male-shape-v2 |
 | OI-16 | A merchant can run K−1 fake shoppers next to one real one and read that shopper's size from the aggregates (device creation is open). Rate limits help; the real fix is paired devices only, which is a product decision. Also in D23 for the founder to overrule: periods are months, not ISO weeks. | open | analytics-kfloor |
 | OI-17 | The skirt's hip line is taken 20 cm below the top edge (`pom_rest.py`, an assumed depth). The pilot shop never stated the distance; ask them. | open | bake-qa-gate (Assumed) |
+| OI-102 | Not-drawn rule: a size the fit engine bands `tight` but that is still larger than the body (one size down on a woven dress: 2 cm left over the bust) is drawn, because the cloth closes. The engine does not call that size wearable. Decide whether "not wearable" should mean "not drawn"; it is one line in `wearBlock` and hides one more size down on every woven garment. | open | dress-not-drawn (Assumed) |
 
 ## needs-counsel
 
@@ -86,6 +88,7 @@ Counts: needs-founder 17, needs-counsel 7, needs-real-device 14, engineering 62.
 | OI-36 | Assumed body values never measured on people: the male relief sizes, the 2D head half-width (7.7 cm), the deltoid standing 10 % proud, neck and limb depth ratios, the male foot length (27 cm). | open | male-shape-v2, men-m1b |
 | OI-37 | The pull-on allowance (2.5 cm, 0 when extrapolated) is the fit engine's assumed value; the bake and its check inherit it. The bake-check tolerance ±max(2 cm, 2 %) is also a judgement. Needs real garments on real hips. | open | pom-gate (4), bake-qa-gate (Assumed) |
 | OI-38 | Docker Hub rate-limits anonymous pulls (hit again on 19 Nov). Run `docker login` on the server, or pull through `mirror.gcr.io`. | open | STATUS (Known gaps), launch-readiness, platform-checks |
+| OI-101 | The one not-drawn rule was not seen in a browser on the azure dress, the photo skirt or the POM skirt bake: their bundles are git-ignored and need a GPU reconstruction or Blender drapes. Covered by unit tests on their payloads only. `apps/web/e2e/garment3dBake.spec.ts` had its expected wording changed and was not run. | open | dress-not-drawn (1) |
 
 ## engineering
 
@@ -147,12 +150,14 @@ Counts: needs-founder 17, needs-counsel 7, needs-real-device 14, engineering 62.
 | OI-92 | While a required 3D view loads on a men's product, the overlay shows an empty panel with no spinner. | small | not an issue any more: the pending state shows `LoadingScreen` with its spinner (`EmbedApp.tsx`, read 19 Nov) | men-m2 notes (`docs/research/men-3d-plan.md`, "Not done in M1, and still open") |
 | OI-93 | Tee grading: the seat lift (up to 3 cm) stands in for grading the yoke by the body. A device grading with a neck ring would let XL and XXL sit where they were built; it needs a rule for how the tape's neck width grades. | medium | open | men-tee-v2 |
 | OI-94 | Tee underarm strain at XL (p99 16.8 %, proxy 4.1 %): the assumed 2 cm armhole drop is used up by the lift. Measure a deeper armhole for large sizes, or a lift limited by the armpit. | medium | open | men-tee-v2 |
-| OI-95 | The not-drawn rule ("does not close") covers sewn tops only. Every other bundle still draws a stretched garment on a body it does not close on. Applying it everywhere changes the women's views, so it needs its own review. | medium | open | men-tee-v2 |
 | OI-96 | Tee print: stripes do not match across the armhole or exactly at the side seams; the import of a merchant photo's two calibration numbers (px per cm, HPS centre) is not built; sleeves get no photo projection; the flattening is not conformal at the sleeve cap (29 % at p99), which matters for text prints. | large | open | men-tee-v2 |
 | OI-97 | Men's trousers are not built (M3 scope). | large | open | men-m3-tee |
 | OI-98 | `qa.json` `meshHealth.triangleBudget` says [8000, 15000] and the tee has 7,618 triangles; nothing checks the lower bound (`spikes/garment-engine/src/evalMesh.ts`, `pomBundle.ts`). Also, the tape check builds each size on the male table body of the same label, so a shop size that is not a table label is checked on the base body only. | small | open | men-m3-tee, men-tee-v2 |
 | OI-99 | Merchant setup gaps: the console's step 4 does not see the WooCommerce plugin's "Show button" setting; bulk chart assign exists only on Shopify; step 5 ticks on any try session with `fitShownAt`, not only billed ones; the QR step does not say that a password-protected store shows the password page first; the old completeness `score` still exists in the api beside `adviceScore`. | medium | open | merchant-onboarding (3, 4, 5, 7, 8) |
 | OI-100 | Carried from earlier passes, not re-verified on 19 Nov: capture's `headTopRow` includes hair and biases girths low by 1–3 % (#16); Woo Connect needs WordPress at the host root (SEC-2); no per-shop or global device-mint budget (AVAIL-1); a lost rotated token orphans the old device's rows (AUTH-1); one api serves one Shopify app, so pilot and App Store apps side by side need multi-app support; Polaris web components for Built for Shopify; about 3 s of api 502s per deploy (single replica). | large | open | STATUS (Known gaps, carried; details in `docs/STATUS-HISTORY.md`) |
+| OI-103 | The underbust seam of a dress is not a fit point: the advice reads the bust alone, so a seam shorter than the underbust is not checked and the not-drawn rule cannot block on it. Needs a body number (ask or estimate), a tape field for the seam (relaxed, stretched), engine ease and tight rules with vectors, then `underbust` in `WEAR_POINTS`. Product decision first. | large | open | dress-from-tape (4), dress-not-drawn |
+| OI-104 | The size-ring chips under the 3D view of a men's garment read "Bust" (`view3d.ringName` capitalises the ring key); the fit list, the 2D ring and the not-drawn sentence read "chest". | small | open | dress-not-drawn (4) |
+| OI-105 | A size that is not drawn shows a plain body with only a sentence to say why; on a phone the sentence can sit under the sticky "Choose size" bar. The peek thumbnail and the app's own 2D figure also show the body alone for a blocked size, with only an accessible name. Not looked at in a browser there. `trouserNotDrawn` in `trouser.ts` is now unused by the view. | small | open | dress-not-drawn (5, 6, 7) |
 
 ## Resolved since reported
 
@@ -174,3 +179,4 @@ Counts: needs-founder 17, needs-counsel 7, needs-real-device 14, engineering 62.
 | The size advice blocks AU 8 from hip 96.6 but the 3D view drew it up to the 99 cm body with a "between" note. | orchestrator brief | pom-gate review: `BakedSizeView.adviceBlocked` (`mount.ts`, `Garment3D.tsx`): a size the advice blocks is not drawn | verified in code and in `garment3d.test.tsx`; the e2e `garment3dBake.spec.ts` was not re-run here |
 | The gate fixture `packages/garment-viewer/fixtures/pom-v2-rest` drapes AU 8 on hip 104. | orchestrator brief | pom-gate review: fixture rebuilt with the bake's plan | verified: `base.glb` declares AU 8 `notDraped` with `rule: 'pull-on'` on hips 99, 104, 109 and 114, draped on 94 only |
 | The bake gate does not check pull-on against the tape. | orchestrator brief | pom-gate review: `refusals_declared` in `bakeGate.ts` runs the fit engine's `pullOnCheck` with the tape's stretched band on every draped body and every `pull-on` refusal | verified: code read, `bakeGate.test.ts` passes (two pull-on cases). A refusal with another reason is still only required to state one (OI-56) |
+| The not-drawn rule covered sewn tops only; every other bundle drew a stretched garment on a body it does not close on (was OI-95). Also: the tape-built dress too small was drawn stretched. | men-tee-v2, dress-from-tape (3) | dress-not-drawn: one rule for every garment from the fit engine's `wearBlock` (`packages/garment-viewer/src/notDrawn.ts`, `apps/web/src/embed/notDrawn.ts`), in 3D and on the 2D figure | verified: unit tests per garment, `dressNotDrawn.spec.ts` in the built embed, the dress, tee and chino in the real stack. Not seen in a browser on the azure dress, photo skirt or the bake (OI-101) |

@@ -377,12 +377,15 @@ export interface EmbedCatalogue {
     between: (size: string, refusedHip: string, rule: 'pull-on' | null) => string;
     /** A server drape bake: at or beyond a body the size was not draped on (`rule` as for `between`); the size is not drawn. */
     refused: (size: string, refusedHip: string, rule: 'pull-on' | null) => string;
-    /** A server drape bake: the size advice says the band of this size does not go over the shopper's hips; it is not drawn. */
-    adviceBlocked: (size: string) => string;
     /** A server drape bake: the sizes differ little in the picture; the room is in the size rings. */
     sizesAlike: string;
-    /** A size too small for this body (the fit engine says it does not close at `where`, the body `larger` larger): not draped, not drawn. */
-    notDrawn: (size: string, where: string, larger: string) => string;
+    /**
+     * A size the size advice says cannot be worn on this body, any garment (the fit engine's `wearBlock`): not draped and
+     * not drawn, in the 3D view and on the 2D figure. One sentence that names the point and says the size advice decided.
+     * `tight`: it does not close at `where`. `pull-on`: its waistband does not stretch over the hips. `short`: by how much
+     * the body is larger (with its unit); null when the view only knows that the size is blocked.
+     */
+    notDrawn: (size: string, o: { reason: 'tight' | 'pull-on'; where: string; short: string | null }) => string;
   };
 }
 
@@ -760,8 +763,10 @@ export const EN: EmbedCatalogue = {
       `Your hips are past the largest body size ${size} was draped on, so it is shown on that body; ${rule === 'pull-on' ? `its band does not stretch over the model with ${hip} hips, so size ${size} was not draped on it` : `size ${size} was not draped on a body with ${hip} hips`}.`,
     refused: (size, hip, rule) =>
       `Size ${size} is not drawn: ${rule === 'pull-on' ? `its band does not stretch over the model with ${hip} hips` : `it was not draped on a body with ${hip} hips`}, and yours are at least that.`,
-    adviceBlocked: (size) => `Size ${size} is not drawn: the size advice says its band does not stretch over your hips.`,
     sizesAlike: 'In 3D the sizes look much alike; how much room each size gives is in the size rings.',
-    notDrawn: (size, where, larger) => `Size ${size} is not drawn: it does not close at the ${where} on a body like yours (the body is ${larger} larger than the garment, more than its fabric gives). The size advice says how it fits.`,
+    notDrawn: (size, o) =>
+      o.reason === 'pull-on'
+        ? `Size ${size} is not drawn: the size advice says its waistband does not stretch over your hips${o.short ? `, which are ${o.short} larger than the band at full stretch` : ''}, so the body is shown without it.`
+        : `Size ${size} is not drawn: the size advice says it does not close at the ${o.where}${o.short ? `, where your body is ${o.short} larger than the garment, more than its fabric gives` : ''}, so the body is shown without it.`,
   },
 };

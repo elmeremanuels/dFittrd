@@ -14,6 +14,7 @@ import { pct } from '@/lib/format';
 import type { FigureFamily } from '@/render/body';
 import { ringInputsFor } from '@/render/ringInputs';
 import { ringOverlayFor } from '@/render/rings';
+import { notDrawnNote, notDrawnSentence } from './notDrawn';
 import { bandText, fitWithAdvice, gapText, neighbourSizes, pointLabelFor, priorKeys, usablePoints, waistOnlyOf, type EmbedFit, type FitPreference, type SizeAdvice } from './aboutYou';
 import { UnitToggle } from './EmbedScreens';
 import { SizeChartTable } from './SizeChartTable';
@@ -112,6 +113,8 @@ export function ResultScreen({
     () => (advice.noPoints ? null : ringOverlayFor({ garment, fit, size: selected, measurements: userBody.measurements, heightCm, inputs: ringInputs, units, estimated: priorGirths, family: figure, maleShape: maleShapeFlag() })),
     [advice.noPoints, garment, fit, selected, userBody.measurements, heightCm, ringInputs, units, priorGirths, figure],
   );
+  // The size on screen cannot be worn on this body (the size advice): the figure shows the body alone and this says why.
+  const figureBlock = useMemo(() => notDrawnNote(fit, selected), [fit, selected]);
   // The sticky "Choose size" bar lies over the bottom of the window. Its height goes to the figure
   // as `--estimate-clear`, so the figure's estimate label stays above the bar (AGENTS.md rule 3).
   const [bar, setBar] = useState<HTMLDivElement | null>(null);
@@ -304,6 +307,11 @@ export function ResultScreen({
                 </button>
               ) : null}
             </div>
+            {figureBlock ? (
+              <p className="text-[11px] leading-snug text-ink-mute" role="status" data-testid="figure-not-drawn" data-anchor={figureBlock.anchor} data-reason={figureBlock.reason}>
+                {notDrawnSentence(figureBlock, selected, garment.audience, units)}
+              </p>
+            ) : null}
             {face ? (
               <p className="text-center text-xs font-semibold text-ink" data-testid="face-label">
                 {face.label}

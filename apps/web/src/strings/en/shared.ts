@@ -61,6 +61,8 @@ export interface SharedStrings {
   avatar: {
     /** The figure's accessible name with a garment on it; `onWhom` is one of the three below. */
     garmentLabel: (name: string, size: string | null, onWhom: string) => string;
+    /** The figure's accessible name when the size is not drawn on it (the size advice: it cannot be worn at `where`). */
+    notDrawnLabel: (name: string, size: string | null, where: string, onWhom: string) => string;
     onCapture: string;
     onMeasuredBody: string;
     onReferenceBody: string;
@@ -191,6 +193,7 @@ export const SHARED_EN: SharedStrings = {
   },
   avatar: {
     garmentLabel: (name, size, onWhom) => `Estimated look of ${name}${size ? ` in size ${size}` : ''} ${onWhom} — not measured`,
+    notDrawnLabel: (name, size, where, onWhom) => `The body alone, ${onWhom.replace(/^on /, '')}: ${name}${size ? ` in size ${size}` : ''} is not drawn, because the size advice says it does not go on at the ${where} (estimate)`,
     onCapture: 'over your capture',
     onMeasuredBody: 'on a body drawn from your measurements',
     onReferenceBody: 'on a reference body',

@@ -17,7 +17,8 @@ import { makeCollider } from './collide';
 import type { MaterialJson } from './core/types';
 import { bakeAxis, bakePlace, blendBakedSize, settleOnBody, type BakePlace, type DrapeBake, type SizeProvenance } from './drapeBake';
 import { DrapePool } from './drapePool';
-import { DEFAULT_DRAPE, drapeJobOf, openSession, prepareFit, sewnNotDrawn, viewerMaterial, type DrapeOptions, type FitInstance, type NotDrawn } from './engine';
+import { DEFAULT_DRAPE, drapeJobOf, openSession, prepareFit, viewerMaterial, type DrapeOptions, type FitInstance } from './engine';
+import { notDrawnSizes, type NotDrawn } from './notDrawn';
 import * as THREE from 'three';
 import { faceUvOf } from '@curtain/mannequin';
 import type { FaceTexture } from './faceOverlay';
@@ -139,9 +140,9 @@ export interface GarmentView {
    * (`place`, `BakePlace` of `drapeBake.ts`: `held` and `between` are shown on the nearest draped body; `refused` is at
    * or beyond a body the bake did not drape that size on, so the size is not drawn, `refusedHipCm` is that body's hip and
    * `refusedRule` its reason when the bake states one: `pull-on`, the band cannot be pulled over that body). A size the
-   * embed's own fit result says does not go on (`adviceBlocked`: its `pullOn` is `blocked` at the shopper's hip) is not
-   * drawn either, wherever it lies against the bodies: the 3D view never dresses the shopper in a size the size advice
-   * blocks.
+   * embed's own fit result says cannot be worn (`adviceBlocked`, `notDrawn`: the one rule of `notDrawn.ts`, the same as
+   * the device drape's) is not drawn either, wherever it lies against the bodies: the 3D view never dresses the shopper
+   * in a size the size advice blocks.
    */
   source: GarmentViewSource;
   /**
@@ -156,7 +157,7 @@ export interface GarmentView {
 }
 
 export type GarmentViewSource =
-  /** `notDrawn`: the sizes not draped on this body, and why (`sewnNotDrawn`; only a sewn top has any): the body is drawn without the garment. */
+  /** `notDrawn`: the sizes not draped on this body, and why (`notDrawn.ts`: the fit engine's block, any garment): the body is drawn without the garment. */
   | { kind: 'device'; notDrawn: Record<string, NotDrawn> }
   | { kind: 'bake'; plainColour: true; sizes: Record<string, BakedSizeView> };
 
@@ -168,8 +169,10 @@ export interface BakedSizeView {
   refusedHipCm: number | null;
   /** Why the bake did not drape the size on that body, when it states a rule (`DrapeBakeRefusal.rule`); else null. */
   refusedRule: 'pull-on' | null;
-  /** The embed's fit result blocks this size at the shopper's hip (`SizeFit.pullOn.status === 'blocked'`): not drawn. */
+  /** The embed's fit result says this size cannot be worn on the shopper's body (`notDrawn.ts`): not drawn. */
   adviceBlocked: boolean;
+  /** Where and why (`adviceBlocked`); null when the size advice does not block the size. */
+  notDrawn: NotDrawn | null;
 }
 
 /** Clearance of the drawn body for a baked drape, cm: the on-device drape's (`prepareFit`). */
@@ -331,12 +334,8 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
   let current = '';
   let disposed = false;
 
-  // A size too small for this body (a sewn top only): not draped, not drawn (`sewnNotDrawn`).
-  const notDrawn: Record<string, NotDrawn> = {};
-  for (const label of ok.sizes) {
-    const r = sewnNotDrawn(session, avatar, opts.fit, label);
-    if (r) notDrawn[label] = r;
-  }
+  // A size the fit engine says cannot be worn on this body, whatever the garment: not draped, not drawn (`notDrawn.ts`).
+  const notDrawn = notDrawnSizes(opts.fit, ok.sizes);
 
   const ensure = (label: string): Live => {
     let live = fits.get(label);
@@ -502,12 +501,14 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
   stage.scene.add(figure.group);
   stage.frame(60, stature);
   const drapes = bakedDrapes(bake, field, avatar.measurements.hip);
-  // The sizes the embed's own fit result says do not go on at the shopper's hip (the view never recomputes the fit).
-  const blocked = new Set((opts.fit?.perSize ?? []).filter((p) => p.pullOn?.status === 'blocked').map((p) => gradingLabel(ok.sizes, p.size)).filter((l): l is string => l !== null));
+  // The sizes the embed's own fit result says cannot be worn on the shopper's body: the same rule as the device drape
+  // (`notDrawn.ts`; the view never recomputes the fit). A band that does not pass the hips is one case of it.
+  const notDrawn = notDrawnSizes(opts.fit, ok.sizes);
+  const blocked = new Set(Object.keys(notDrawn));
   const sizes: Record<string, BakedSizeView> = {};
   for (const [label, s] of bake.sizes) {
     const d = drapes.get(label)!;
-    sizes[label] = { provenance: s.provenance, place: d.place, refusedHipCm: d.refusedHipCm, refusedRule: d.refusedRule, adviceBlocked: blocked.has(label) };
+    sizes[label] = { provenance: s.provenance, place: d.place, refusedHipCm: d.refusedHipCm, refusedRule: d.refusedRule, adviceBlocked: blocked.has(label), notDrawn: notDrawn[label] ?? null };
   }
   let disposed = false;
   let raf = 0;
@@ -559,10 +560,11 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
       if (disposed) return null;
       const label = canvas.dataset.size ?? '';
       const d = drapes.get(label);
-      if (!d || d.place === 'refused') return null;
+      // No passes of a size that is not drawn (refused by the bake, or blocked by the size advice): there is no garment to enhance.
+      if (!d || d.place === 'refused' || blocked.has(label)) return null;
       const nb = o?.neighbour === null ? null : (o?.neighbour ?? neighbourSize(ok.sizes, label));
       const nd = nb ? drapes.get(nb) : undefined;
-      return passesOf(stage, figure, plan, material.baseColorHex, label, d.pos, nb && nd && nd.place !== 'refused' ? { size: nb, pos: nd.pos } : null, o);
+      return passesOf(stage, figure, plan, material.baseColorHex, label, d.pos, nb && nd && nd.place !== 'refused' && !blocked.has(nb) ? { size: nb, pos: nd.pos } : null, o);
     },
     toScreen(point) {
       const p = point === 'head' ? headPoint : point;

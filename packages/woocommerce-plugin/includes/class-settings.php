@@ -123,7 +123,9 @@ final class Settings {
 	 * "Open the Curtain console" may only leave the admin for the sign-in page of the console that
 	 * belongs to the API this shop is connected to, whatever the API answered: https (plain http only
 	 * on a local development host), the console host (`app.` for an `api.` host, else the API's own
-	 * host), default credentials, the path `/merchant/link`, no query, and the token in the fragment.
+	 * host), no port other than the scheme's own (a local development host may name any port: the
+	 * API and the console listen on different ones there), no credentials, the path
+	 * `/merchant/link`, no query, and the token in the fragment.
 	 */
 	public static function is_console_link_url( string $url ): bool {
 		if ( '' === $url || strlen( $url ) > 2048 || 1 === preg_match( '/[\x00-\x20\\\\]/', $url ) ) {
@@ -139,6 +141,10 @@ final class Settings {
 		$api_host = strtolower( (string) ( $api['host'] ?? '' ) );
 		$local    = in_array( $host, array( 'localhost', '127.0.0.1', '[::1]' ), true ) || str_ends_with( $host, '.localhost' );
 		if ( 'https' !== $scheme && ! ( 'http' === $scheme && $local ) ) {
+			return false;
+		}
+		// Another port of the console's host is another program: only the https port itself is the console.
+		if ( ! $local && isset( $p['port'] ) && 443 !== (int) $p['port'] ) {
 			return false;
 		}
 		$expected = str_starts_with( $api_host, 'api.' ) ? 'app.' . substr( $api_host, 4 ) : $api_host;
@@ -172,7 +178,8 @@ final class Settings {
 			if ( $res['transport_error'] ) {
 				return $fail( __( 'Curtain could not be reached, so the console was not opened. Check that this site can reach the internet, then press "Open the Curtain console" again.', 'curtain-woocommerce' ) );
 			}
-			return $fail( sprintf( /* translators: %s: error message */ __( 'The console could not be opened: %s', 'curtain-woocommerce' ), (string) $res['error_message'] ) );
+			// The API's own message is technical English a shop owner cannot act on: it is not shown.
+			return $fail( __( 'The console could not be opened just now. Press "Check status" to see whether the shop is still connected, then press "Open the Curtain console" again.', 'curtain-woocommerce' ) );
 		}
 		$url = is_string( $res['data']['url'] ?? null ) ? $res['data']['url'] : '';
 		if ( ! self::is_console_link_url( $url ) ) {
@@ -716,7 +723,7 @@ final class Settings {
 					<th scope="row"><?php esc_html_e( 'Curtain console', 'curtain-woocommerce' ); ?></th>
 					<td>
 						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" target="_blank"><?php wp_nonce_field( 'curtain_console' ); ?><input type="hidden" name="action" value="curtain_console"><button class="button button-primary"><?php esc_html_e( 'Open the Curtain console', 'curtain-woocommerce' ); ?></button></form>
-						<p class="description"><?php esc_html_e( 'Your shop settings, product checks, usage and what shoppers liked are in the Curtain console. The button opens it in a new tab and signs you in: no password, no key. You stay signed in there for 12 hours.', 'curtain-woocommerce' ); ?></p>
+						<p class="description"><?php esc_html_e( 'Your shop settings, product checks, usage and what shoppers liked are in the Curtain console. The button opens it in a new tab and signs you in: no password, no key. You stay signed in until you close that tab, and for 12 hours at most.', 'curtain-woocommerce' ); ?></p>
 					</td>
 				</tr>
 				<?php endif; ?>

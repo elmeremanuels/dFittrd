@@ -93,6 +93,8 @@ test(
 		curtain_settings_connected();
 		$t = '#t=cl_' . str_repeat( 'a', 43 );
 		assert_true( Settings::is_console_link_url( 'https://app.curtain.fit/merchant/link' . $t ) );
+		// The https port written out is the same address.
+		assert_true( Settings::is_console_link_url( 'https://app.curtain.fit:443/merchant/link' . $t ) );
 		foreach ( array(
 			'another host'             => 'https://evil.example/merchant/link' . $t,
 			'the api host'             => 'https://api.curtain.fit/merchant/link' . $t,
@@ -111,6 +113,8 @@ test(
 			'a space'                  => 'https://app.curtain.fit/merchant/link' . $t . ' x',
 			'a line break'             => "https://app.curtain.fit/merchant/link\r\nLocation: https://evil.example" . $t,
 			'a backslash'              => 'https://app.curtain.fit\\@evil.example/merchant/link' . $t,
+			'another port'             => 'https://app.curtain.fit:8443/merchant/link' . $t,
+			'port 80 on https'         => 'https://app.curtain.fit:80/merchant/link' . $t,
 			'nothing'                  => '',
 		) as $what => $bad ) {
 			assert_false( Settings::is_console_link_url( $bad ), $what );
@@ -161,7 +165,10 @@ test(
 
 		Curtain_Test_State::$http_handler = static fn() => curtain_http_response( 401, array( 'error' => array( 'code' => 'bad_signature', 'message' => 'bad signature' ) ) );
 		$r                                = Settings::console_link();
-		assert_same( 'The console could not be opened: bad signature', $r['notice'] );
+		assert_contains( 'The console could not be opened just now.', $r['notice'] );
+		assert_contains( 'Check status', $r['notice'] );
+		// The API's own sentence is not shown to the shop owner.
+		assert_false( str_contains( $r['notice'], 'bad signature' ) );
 		assert_same( '', $r['url'] );
 	}
 );

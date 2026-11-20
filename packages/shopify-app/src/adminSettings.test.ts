@@ -7,7 +7,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PRODUCT_NOTICE_TEXT, SHOP_SETTINGS_TEXT, chartTemplatesDto, heldNowText, productNoticeLines, type ProductNoticeFacts } from '@curtain/schema';
+import { CONSOLE_LINK_TEXT, PRODUCT_NOTICE_TEXT, SHOP_SETTINGS_TEXT, chartTemplatesDto, heldNowText, productNoticeLines, type ProductNoticeFacts } from '@curtain/schema';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderAdminPage } from './admin';
 import { API_KEY } from './test/fixtures';
@@ -303,5 +303,114 @@ describe('admin page: fabric notices in the product list', () => {
     expect($('settings-held-now').textContent).toBe(heldNowText(1));
     // A product that is not held back keeps the api's own badge and next step.
     expect(row(CASES[0]!).querySelector('.badge')!.textContent).toBe('Ready');
+  });
+});
+
+describe('admin page: "Open the full console" (one-time sign-in link)', () => {
+  const CT = CONSOLE_LINK_TEXT;
+  // Built here; never a real link.
+  const LINK = 'https://app.curtain.fit/merchant/link#t=cl_' + 'a1B2'.repeat(10) + 'xyz';
+  const linkCalls = (calls: Call[]) => calls.filter((c) => c.path === '/v1/merchant/console-link');
+  const status = () => $('console-link-status');
+  interface Tab {
+    closed: boolean;
+    opener: unknown;
+    location: { replace: ReturnType<typeof vi.fn> };
+    close: ReturnType<typeof vi.fn>;
+  }
+  const newTab = (): Tab => ({ closed: false, opener: {}, location: { replace: vi.fn() }, close: vi.fn() });
+  const stubOpen = (tab: Tab | null) => {
+    const open = vi.fn(() => tab);
+    vi.stubGlobal('open', open);
+    return open;
+  };
+
+  it('says what the console is for, in the shared catalogue’s words, and asks the api for nothing until pressed', async () => {
+    const calls = mountPage({});
+    await ready();
+    expect($('console-link-h').textContent).toBe(CT.title);
+    expect($('console-link-intro').textContent).toBe(CT.intro);
+    expect($('btn-console').textContent).toBe(CT.open);
+    expect($('btn-console').getAttribute('type')).toBe('button');
+    expect(status().textContent).toBe('');
+    expect(linkCalls(calls)).toEqual([]);
+    // The words are not written in the page itself (D21).
+    for (const words of Object.values(CT)) expect(template).not.toContain(words);
+  });
+
+  it('opens a tab in the click, asks for a link with the session token, and sends the tab there', async () => {
+    const tab = newTab();
+    const open = stubOpen(tab);
+    const calls = mountPage({ 'POST /v1/merchant/console-link': () => ({ url: LINK, expiresAt: '2026-11-20T10:10:00.000Z' }) });
+    await ready();
+    $('btn-console').click();
+    // Before the api answered: the tab is open (a later one would be blocked) and cut loose from this page.
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith('about:blank', '_blank');
+    expect(tab.opener).toBeNull();
+    expect(status().textContent).toBe(CT.opening);
+    expect($('btn-console').disabled).toBe(true);
+    await vi.waitFor(() => expect(tab.location.replace).toHaveBeenCalledWith(LINK));
+    expect(linkCalls(calls)).toEqual([{ method: 'POST', path: '/v1/merchant/console-link', body: null, auth: 'Bearer session-token' }]);
+    await vi.waitFor(() => expect($('btn-console').disabled).toBe(false));
+    // Nothing of the link stays on the page.
+    expect(status().textContent).toBe('');
+    expect(document.body.innerHTML).not.toContain('merchant/link');
+    expect(tab.close).not.toHaveBeenCalled();
+  });
+
+  it('gives the merchant the link to follow when the browser blocked the tab, and takes it away once followed', async () => {
+    stubOpen(null);
+    mountPage({ 'POST /v1/merchant/console-link': () => ({ url: LINK, expiresAt: '2026-11-20T10:10:00.000Z' }) });
+    await ready();
+    $('btn-console').click();
+    await vi.waitFor(() => expect(status().querySelector('a')).not.toBeNull());
+    const a = status().querySelector('a')!;
+    expect(status().textContent).toBe(`${CT.ready} ${CT.readyLink}`);
+    expect(a.getAttribute('href')).toBe(LINK);
+    expect(a.getAttribute('target')).toBe('_blank');
+    expect(a.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(document.activeElement).toBe(a);
+    a.dispatchEvent(new Event('click', { bubbles: true }));
+    await vi.waitFor(() => expect(status().textContent).toBe(''));
+    expect(document.body.innerHTML).not.toContain('merchant/link');
+  });
+
+  it('says so in plain words when the shop asked too often, closes the empty tab and leaves the button usable', async () => {
+    const tab = newTab();
+    stubOpen(tab);
+    mountPage({ 'POST /v1/merchant/console-link': () => ({ __status: 429, body: { error: { code: 'rate_limited', message: 'too many sign-in links for this shop' } } }) });
+    await ready();
+    $('btn-console').click();
+    await vi.waitFor(() => expect(status().textContent).toBe(CT.tooOften));
+    expect(status().classList.contains('bad')).toBe(true);
+    expect(tab.close).toHaveBeenCalledTimes(1);
+    expect(tab.location.replace).not.toHaveBeenCalled();
+    expect($('btn-console').disabled).toBe(false);
+  });
+
+  it('says the console could not be opened on any other failure, never the api’s own message', async () => {
+    const tab = newTab();
+    stubOpen(tab);
+    for (const answer of [{ __status: 500, body: { error: { code: 'internal', message: 'internal error' } } }, { url: 'javascript:alert(1)' }, { nothing: true }]) {
+      mountPage({ 'POST /v1/merchant/console-link': () => answer });
+      await ready();
+      $('btn-console').click();
+      await vi.waitFor(() => expect(status().textContent).toBe(CT.failed));
+      expect(tab.location.replace).not.toHaveBeenCalled();
+    }
+  });
+
+  it('asks once for one press: a second press while it is opening does nothing', async () => {
+    stubOpen(newTab());
+    let answer: (v: unknown) => void = () => {};
+    const calls = mountPage({ 'POST /v1/merchant/console-link': () => new Promise((resolve) => (answer = resolve)) });
+    await ready();
+    $('btn-console').click();
+    $('btn-console').click();
+    await vi.waitFor(() => expect(linkCalls(calls)).toHaveLength(1));
+    answer({ url: LINK });
+    await vi.waitFor(() => expect($('btn-console').disabled).toBe(false));
+    expect(linkCalls(calls)).toHaveLength(1);
   });
 });

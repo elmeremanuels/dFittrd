@@ -155,6 +155,8 @@
     #settings-status { min-height: 20px; margin: 0 0 8px; font-weight: 550; }
     #settings-status.ok { color: var(--p-success-fg); }
     #settings-status.bad { color: var(--p-critical-fg); }
+    #console-link-status.bad { color: var(--p-critical-fg); }
+    #console-link-status:empty { display: none; }
     /* The name and its notices keep a readable width; on a phone the table scrolls sideways inside its box. */
     #products-body td:first-child:not(.empty) { min-width: 240px; }
     ul.notices { list-style: none; margin: 4px 0 0; padding: 0; font-size: 12px; max-width: 420px; color: var(--p-text-subdued); }
@@ -354,6 +356,10 @@
           <div><label for="settings-wordmark" id="settings-wordmark-label" style="font-weight:550"></label><p class="subdued" id="settings-wordmark-text" style="margin:2px 0 0"></p></div>
         </div>
       </div>
+      <h3 id="console-link-h" style="font-size:13px;margin:16px 0 6px"></h3>
+      <p class="subdued" id="console-link-intro" style="margin:0 0 8px"></p>
+      <button type="button" class="btn" id="btn-console"></button>
+      <p id="console-link-status" role="status" aria-live="polite" style="margin:8px 0 0"></p>
     </section>
 
     <section class="card" aria-labelledby="h-ledger" style="margin-top:16px">
@@ -684,6 +690,50 @@
           $('settings-choices').appendChild(el('div', { class: 'tpl' }, [radio, el('div', null, [label, el('small', { id: id + '-text', text: c.text })])]));
         });
         $('settings-wordmark').addEventListener('change', function () { saveSettings({ showFitByCurtain: $('settings-wordmark').checked }); });
+      })();
+
+      // ---- the full console (inventory row S2) ------------------------------------------------------
+      // A one-time sign-in link from POST /v1/merchant/console-link (session-token auth): it works
+      // once and for 10 minutes, and its token is in the URL fragment. The new tab is opened in the
+      // click itself, because a browser blocks a tab opened after the answer arrived; when it is
+      // blocked all the same, the merchant gets the link to follow. The link is kept in no variable
+      // after that and never written to the console.
+      var CONSOLE_TEXT = cfg.settings.consoleLink;
+      function consoleStatus(kind, nodes) {
+        var s = $('console-link-status');
+        s.className = kind === 'bad' ? 'bad' : '';
+        s.replaceChildren.apply(s, nodes || []);
+      }
+      async function openConsole() {
+        var btn = $('btn-console');
+        if (btn.disabled) return;
+        btn.disabled = true;
+        consoleStatus('', [CONSOLE_TEXT.opening]);
+        var tab = null;
+        try { tab = window.open('about:blank', '_blank'); if (tab) tab.opener = null; } catch (_) { tab = null; }
+        try {
+          var r = await api('POST', '/v1/merchant/console-link');
+          if (!r || typeof r.url !== 'string' || !/^https?:\/\//.test(r.url)) throw new Error('no link');
+          if (tab && !tab.closed) {
+            tab.location.replace(r.url);
+            consoleStatus('', []);
+          } else {
+            var link = el('a', { href: r.url, target: '_blank', rel: 'noopener noreferrer', text: CONSOLE_TEXT.readyLink });
+            link.addEventListener('click', function () { setTimeout(function () { consoleStatus('', []); }, 0); });
+            consoleStatus('', [CONSOLE_TEXT.ready + ' ', link]);
+            link.focus();
+          }
+        } catch (err) {
+          try { if (tab) tab.close(); } catch (_) { /* the tab is not ours to close */ }
+          consoleStatus('bad', [err && (err.status === 429 || err.code === 'rate_limited') ? CONSOLE_TEXT.tooOften : CONSOLE_TEXT.failed]);
+        }
+        btn.disabled = false;
+      }
+      (function buildConsoleLink() {
+        text('console-link-h', CONSOLE_TEXT.title);
+        text('console-link-intro', CONSOLE_TEXT.intro);
+        text('btn-console', CONSOLE_TEXT.open);
+        $('btn-console').addEventListener('click', openConsole);
       })();
 
       async function subscribe() {

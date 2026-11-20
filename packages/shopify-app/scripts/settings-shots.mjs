@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global document */
+/* global document, window */
 /**
  * Screenshots and a browser check of the admin page's "Settings" section and the fabric notices of
  * its product list, outside Shopify. Not part of `pnpm check` (needs Chromium from the preinstalled
@@ -30,6 +30,7 @@ const row = (externalId, name, extra) => ({ externalId, name, category: 'dress',
 function harness() {
   const settings = { incompleteProductData: 'let-through', showFitByCurtain: true, shopName: 'Boho Hippy Chic', platform: 'shopify', brandColor: null, logoUrl: null };
   const puts = [];
+  const links = [];
   const products = () => {
     const hold = settings.incompleteProductData === 'hold-back';
     const held = { status: 'incomplete', heldBack: { reason: 'incomplete_product_data', fields: ['fabric.stretchPct'] } };
@@ -50,6 +51,10 @@ function harness() {
     if (p === '/v1/merchant/ledger') return respond(route, 200, { entries: [], nextCursor: null });
     if (p === '/v1/merchant/charts/templates') return respond(route, 200, schema.chartTemplatesDto());
     if (p === '/shopify/charts/onboarding') return respond(route, 200, { steps: [], next: null, headline: '', doneCount: 0, total: 5, state: { templateId: null, themeBlockConfirmed: false, tested: false } });
+    if (p === '/v1/merchant/console-link' && req.method() === 'POST') {
+      links.push(req.headers().authorization ?? '');
+      return respond(route, 200, { url: CONSOLE_LINK, expiresAt: '2026-11-20T10:10:00.000Z' });
+    }
     if (p === '/shopify/settings' && req.method() === 'GET') return respond(route, 200, settings);
     if (p === '/shopify/settings' && req.method() === 'PUT') {
       const parsed = schema.MerchantSettingsUpdateRequestSchema.safeParse(JSON.parse(req.postData() ?? '{}'));
@@ -60,15 +65,18 @@ function harness() {
     }
     return respond(route, 404, { error: { code: 'not_found', message: `harness: ${req.method()} ${p}` } });
   };
-  return { api, puts, settings };
+  return { api, puts, settings, links };
 }
 
+// A made-up link in the api's shape; the console itself is a stand-in page here.
+const CONSOLE_LINK = 'https://app.curtain.test/merchant/link#t=cl_' + 'demo'.repeat(10) + 'abc';
 const failures = [];
 const expect = (cond, msg) => {
   if (!cond) failures.push(msg);
 };
 const T = schema.SHOP_SETTINGS_TEXT;
 const N = schema.PRODUCT_NOTICE_TEXT;
+const C = schema.CONSOLE_LINK_TEXT;
 
 const browser = await chromium.launch();
 for (const vp of [
@@ -116,6 +124,18 @@ for (const vp of [
   // "Change the setting" under a held-back product goes to the section.
   await page.locator('[data-notice="held-back"] a').first().click();
   expect((await page.evaluate(() => document.activeElement?.id)) === 'h-settings', `${vp.name}: the link did not move focus to Settings`);
+
+  // "Open the full console": a new tab, opened in the click, sent to the one-time link.
+  await page.context().route('https://app.curtain.test/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>console</title>' }));
+  expect((await page.locator('#btn-console').innerText()) === C.open, `${vp.name}: the console button says "${await page.locator('#btn-console').innerText()}"`);
+  const [tab] = await Promise.all([page.waitForEvent('popup'), page.locator('#btn-console').click()]);
+  await tab.waitForURL(CONSOLE_LINK);
+  expect(JSON.stringify(h.links) === JSON.stringify(['Bearer dummy.session.token']), `${vp.name}: console-link calls ${JSON.stringify(h.links)}`);
+  expect((await tab.evaluate(() => window.opener)) === null, `${vp.name}: the console tab can reach the admin page (opener)`);
+  await page.waitForFunction(() => !document.querySelector('#btn-console').disabled);
+  expect((await page.locator('#console-link-status').innerText()) === '', `${vp.name}: a status line stayed after the console opened`);
+  expect(!(await page.content()).includes('merchant/link'), `${vp.name}: the link stayed on the admin page`);
+  await tab.close();
 
   // No sideways scroll of the page on a phone.
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

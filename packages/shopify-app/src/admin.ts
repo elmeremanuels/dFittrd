@@ -17,7 +17,7 @@ import {
   GARMENT_TAPE_FORM_TEXT,
   INCOMPLETE_PRODUCT_DATA_POLICIES,
   PRODUCT_NOTICE_TEXT,
-  SHOP_SETTINGS_TEXT,
+  CONSOLE_LINK_TEXT, SHOP_SETTINGS_TEXT,
   TAPE_CLOSURE_LABELS,
   TAPE_FIELD_LABELS,
   TAPE_HIP_DEPTH_CM,
@@ -68,6 +68,8 @@ export const GARMENT_TAPE_ADMIN_CONFIG = Object.freeze({
 export const SETTINGS_ADMIN_CONFIG = Object.freeze({
   text: SHOP_SETTINGS_TEXT,
   notices: PRODUCT_NOTICE_TEXT,
+  /** "Open the full console": the one-time sign-in link (inventory S2). */
+  consoleLink: CONSOLE_LINK_TEXT,
   policies: INCOMPLETE_PRODUCT_DATA_POLICIES,
   defaultPolicy: DEFAULT_INCOMPLETE_PRODUCT_DATA,
 });

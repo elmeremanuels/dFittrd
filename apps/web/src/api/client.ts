@@ -29,6 +29,8 @@ import type {
   MerchantLedgerResponse,
   MerchantProductsQuery,
   MerchantProductsResponse,
+  MerchantSettingsResponse,
+  MerchantSettingsUpdateRequest,
   SetupResponse,
   PeekQuery,
   PeekResponse,
@@ -498,6 +500,13 @@ export class MerchantApi {
   /** Tick "Turn the button on" or "Check it on your phone" by hand. */
   updateSetup(body: { buttonConfirmed?: boolean; phoneConfirmed?: boolean }): Promise<SetupResponse> {
     return this.client.request('PUT', '/v1/merchant/setup', body, { auth: this.auth });
+  }
+  /** The merchant's own choices (D24): incomplete product data, the wordmark, colour and logo. */
+  settings(): Promise<MerchantSettingsResponse> {
+    return this.client.request('GET', '/v1/merchant/settings', undefined, { auth: this.auth });
+  }
+  updateSettings(body: MerchantSettingsUpdateRequest): Promise<MerchantSettingsResponse> {
+    return this.client.request('PUT', '/v1/merchant/settings', body, { auth: this.auth });
   }
   stripeCheckout(): Promise<{ checkoutUrl: string; trialDays: number }> {
     return this.client.request('POST', '/v1/merchant/billing/stripe/checkout', {}, { auth: this.auth });

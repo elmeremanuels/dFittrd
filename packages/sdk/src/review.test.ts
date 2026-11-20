@@ -10,8 +10,9 @@ const SHOP = 'pk_test_abcdef123456';
 const API = 'https://api.curtain.test';
 
 function stubFetch(body: unknown, status = 200): ReturnType<typeof vi.fn> {
-  const fn = vi.fn(async () => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }));
-  vi.stubGlobal('fetch', fn);
+  const fn = vi.fn(async (..._args: unknown[]) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }));
+  // The shop-status question (GET /v1/sdk/shop) is answered "not paused" and kept out of the recorded calls.
+  vi.stubGlobal('fetch', async (url: unknown, init?: unknown) => (String(url).includes('/v1/sdk/shop?') ? new Response('{"paused":false}', { status: 200 }) : fn(url, init)));
   return fn;
 }
 

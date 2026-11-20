@@ -4,17 +4,19 @@
  * "100% rayon"). For a one-size product that is its whole garment chart. This module reads the
  * description and proposes one; the merchant confirms in the admin before anything is written.
  *
- * Fabric uses the schema's text mappings (`parseFabricText` / `fabricFromText` →
- * `resolvedFabricToPayload`), so the library ids and stretch/drape defaults are the same as
- * everywhere else. Nothing is guessed silently: every number carries the sentence it came from.
+ * Fabric uses the schema's text mapping (`fabricFromText`), so the library ids are the same as
+ * everywhere else. What the shop's text states (fibre names, blend) is the proposed fabric. The
+ * stretch our fabric library derives from those fibres is an estimate: it is returned apart from
+ * the fabric (`fabricEstimate`), worded as an estimate, and never saved unless the merchant
+ * confirms it (inventory D18, rule F20: too much assumed stretch advises a size too small).
+ * Nothing is guessed silently: every number carries the sentence it came from.
  */
 import {
   CM_PER_INCH,
   checkChart,
   fabricFromText,
-  resolvedFabricToPayload,
   roundHalfCm,
-  type Fabric,
+  type FabricDraft,
   type LengthCm,
   type SizeRow,
 } from '@curtain/schema';
@@ -192,7 +194,10 @@ export interface DescriptionImportProposal {
   sizeLabel: string | null;
   proposal: { sizeChartType: 'body' | 'garment'; sizeChart: SizeRow[] } | null;
   lengthCm?: LengthCm;
-  fabric?: Fabric;
+  /** Fibre names and blend as the description states them. No stretch, drape or weight: those would be ours, not the shop's. */
+  fabric?: FabricDraft;
+  /** Curtain's estimate from the fabric library, for the merchant to check. Not part of `fabric`; saved only on their confirmation. */
+  fabricEstimate?: { stretchPct: number };
   fabricStatement?: string;
   evidence: string[];
   warnings: string[];
@@ -212,7 +217,12 @@ export function proposeFromDescription(p: DescriptionImportInput): DescriptionIm
   if (statement) {
     const resolved = fabricFromText(statement);
     if (resolved) {
-      out.fabric = resolvedFabricToPayload(resolved);
+      const primary = resolved.construction ?? resolved.fibres[0]?.id;
+      if (primary) {
+        out.fabric = { primary };
+        if (resolved.fibres.length) out.fabric.blend = resolved.fibres.map((f) => [f.id, f.pct] as [string, number]);
+        out.fabricEstimate = { stretchPct: resolved.stretchPct };
+      }
       out.fabricStatement = statement;
       out.evidence.push(`fabric: “${statement}”`);
       if (resolved.unknown.length) out.warnings.push(`Fabric words not in the library: ${resolved.unknown.join(', ')}.`);
@@ -244,3 +254,19 @@ export function proposeFromDescription(p: DescriptionImportInput): DescriptionIm
   out.warnings.push(...check.warnings, ...check.errors);
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Words of the import form in the embedded admin (English catalogue, D21)
+// ---------------------------------------------------------------------------
+
+/** `{fabric}`, `{pct}` are filled by the page. */
+export const DESCRIPTION_IMPORT_TEXT = {
+  /** Ticked by default: these are the shop's own words. */
+  useFabric: 'Fabric from your description: {fabric}',
+  /** Not ticked by default: this number is ours. */
+  useStretchEstimate: 'Also save a stretch of',
+  stretchUnit: '%',
+  stretchEstimateNote:
+    'Estimate: Curtain worked out about {pct}% stretch from the fibres. It was not measured and it is not in your description. Check it against the fabric before you tick the box: a stretch that is too high makes size advice choose a size too small. If you leave the box unticked, size advice treats the fabric as not stretching.',
+  stretchInvalid: 'Enter the stretch as a number from 0 to 100, or untick the box.',
+} as const;

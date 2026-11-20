@@ -2,14 +2,14 @@ import { AlertCircle, BarChart3, LogOut, ShieldCheck, ShoppingCart, TrendingUp }
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, NavLink, Navigate, Outlet, useNavigate } from 'react-router';
 import { CATEGORY_TEXT, MERCHANT_PLAN_TEXT, type SetupResponse } from '@curtain/schema';
-import type { AnalyticsAbandonedResponse, AnalyticsFitSizesResponse, AnalyticsPeriodsResponse, AnalyticsSuppression, AnalyticsSwipesResponse, BillingAnomaliesResponse, MerchantLedgerResponse, MerchantProductsResponse, UsageResponse } from '@curtain/schema';
+import type { AnalyticsAbandonedResponse, AnalyticsFitSizesResponse, AnalyticsPeriodsResponse, AnalyticsSuppression, AnalyticsSwipesResponse, BillingAnomaliesResponse, MerchantLedgerResponse, MerchantProductsResponse, MerchantSettingsResponse, MerchantSettingsUpdateRequest, UsageResponse } from '@curtain/schema';
 import { MERCHANT_KEY_PATTERN, NetworkError, type MerchantApi } from '@/api/client';
 import { Ledger, type LedgerLine } from '@/components/Ledger';
 import { dayIso, pct, titleCase } from '@/lib/format';
 import { api } from '@/store';
 import { merchantStrings } from './strings';
 import { planPriceText, planState, planStatusText } from './plan';
-import { mockAbandonedAnalytics, mockAnalytics, mockAnomalies, mockFitSizes, mockLedger, mockPeriods, mockProducts, mockSetup, mockUsage } from './mock';
+import { mockAbandonedAnalytics, mockAnalytics, mockAnomalies, mockFitSizes, mockLedger, mockPeriods, mockProducts, mockSettings, mockSetup, mockUsage } from './mock';
 import { LeavingCurtain, SetupChecklist } from './Setup';
 
 const SESSION_KEY = 'curtain.merchantKey';
@@ -104,9 +104,13 @@ export interface MerchantData {
   setup: SetupResponse | null;
   /** Ticks step 4 or 5 by hand and refreshes the list. */
   confirmSetup: (body: { buttonConfirmed?: boolean; phoneConfirmed?: boolean }) => Promise<void>;
+  /** The shop's own choices (Settings page); null on an older api without the route. */
+  settings: MerchantSettingsResponse | null;
+  /** Saves the named settings; throws when the api refuses. The product list is read again, because a held-back product changes with the setting. */
+  saveSettings: (patch: MerchantSettingsUpdateRequest) => Promise<void>;
 }
 
-type BaseData = Omit<MerchantData, 'analytics' | 'fitSizes' | 'abandoned' | 'period' | 'setPeriod' | 'confirmSetup'>;
+type BaseData = Omit<MerchantData, 'analytics' | 'fitSizes' | 'abandoned' | 'period' | 'setPeriod' | 'confirmSetup' | 'saveSettings'>;
 type MonthData = Pick<MerchantData, 'analytics' | 'fitSizes' | 'abandoned'> & { period: string | null };
 
 /** Optional sections: an older api without the route must not take the whole console down. */
@@ -128,16 +132,16 @@ export function MerchantLayout(): ReactNode {
     const m: MerchantApi = api.merchant(key);
     (async () => {
       try {
-        const [products, usage, ledger, anomalies, periods, setup] = await Promise.all([m.products(), m.usage(range.from, range.to), m.ledger(), optional(m.usageAnomalies(range.from, range.to)), optional(m.analyticsPeriods()), optional(m.setup())]);
+        const [products, usage, ledger, anomalies, periods, setup, settings] = await Promise.all([m.products(), m.usage(range.from, range.to), m.ledger(), optional(m.usageAnomalies(range.from, range.to)), optional(m.analyticsPeriods()), optional(m.setup()), optional(m.settings())]);
         if (cancelled) return;
-        setBase({ mode: 'live', products, usage, ledger, anomalies, range, periods, setup });
+        setBase({ mode: 'live', products, usage, ledger, anomalies, range, periods, setup, settings });
         setPeriod(periods?.periods[0] ?? null);
       } catch (e) {
         if (cancelled) return;
         if (e instanceof NetworkError || (e instanceof Error && e.name === 'ApiError' && (e as { status?: number }).status === 404)) {
           const periods = mockPeriods();
           const products = mockProducts();
-          setBase({ mode: 'mock', products, usage: mockUsage(range.from, range.to), ledger: mockLedger(), anomalies: mockAnomalies(range.from, range.to), range, periods, setup: mockSetup(products) });
+          setBase({ mode: 'mock', products, usage: mockUsage(range.from, range.to), ledger: mockLedger(), anomalies: mockAnomalies(range.from, range.to), range, periods, setup: mockSetup(products), settings: mockSettings() });
           setPeriod(periods.periods[0] ?? null);
         } else if (e instanceof Error && e.name === 'ApiError' && [401, 403].includes((e as { status?: number }).status ?? 0)) {
           setError(merchantStrings().console.keyRefused);
@@ -176,7 +180,32 @@ export function MerchantLayout(): ReactNode {
     const setup = await api.merchant(key).updateSetup(body);
     setBase((b) => (b ? { ...b, setup } : b));
   };
-  const data: MerchantData | null = base && month ? { ...base, ...month, setPeriod, confirmSetup } : null;
+  const saveSettings = async (patch: MerchantSettingsUpdateRequest): Promise<void> => {
+    if (!key || !base) return;
+    if (base.mode !== 'live') {
+      // Demo data: the page shows the change, nothing is sent anywhere.
+      const { brandColor, logoUrl, ...rest } = patch;
+      setBase((b) =>
+        b && b.settings
+          ? {
+              ...b,
+              settings: { ...b.settings, ...rest, ...(brandColor !== undefined ? { brandColor } : {}), ...(logoUrl !== undefined ? { logoUrl } : {}) },
+              // As the api does: the products the shop already has follow the new choice.
+              ...(patch.incompleteProductData !== undefined ? { products: mockProducts(patch.incompleteProductData) } : {}),
+            }
+          : b,
+      );
+      return;
+    }
+    const m = api.merchant(key);
+    const settings = await m.updateSettings(patch);
+    setBase((b) => (b ? { ...b, settings } : b));
+    if (patch.incompleteProductData !== undefined) {
+      const products = await optional(m.products());
+      if (products) setBase((b) => (b ? { ...b, products } : b));
+    }
+  };
+  const data: MerchantData | null = base && month ? { ...base, ...month, setPeriod, confirmSetup, saveSettings } : null;
 
   if (!key) return <Navigate to="/merchant/login" replace />;
   const c = merchantStrings().console;
@@ -196,6 +225,7 @@ export function MerchantLayout(): ReactNode {
               ['/merchant/usage', c.nav.usage],
               ['/merchant/analytics', c.nav.swipes],
               ['/merchant/ledger', c.nav.ledger],
+              ['/merchant/settings', c.nav.settings],
             ].map(([to, label]) => (
               <NavLink key={to} to={to!} end={to === '/merchant'} className={({ isActive }) => `rounded-full px-3 py-1.5 text-sm font-medium ${isActive ? 'bg-ink text-cream' : 'text-ink-soft hover:bg-ink/5'}`}>
                 {label}
@@ -399,16 +429,48 @@ export function MerchantProducts(): ReactNode {
           </thead>
           <tbody className="divide-y divide-ink/10">
             {items.map((p) => {
-              const tone = p.next?.tone ?? (p.status === 'active' ? 'success' : 'critical');
+              // Held back by the shop's own setting (D25 point 2): that, not the api's general next step, is what to say.
+              const tone = p.heldBack ? 'critical' : (p.next?.tone ?? (p.status === 'active' ? 'success' : 'critical'));
               const score = p.adviceScore ?? Math.round(p.score * 100);
+              const part = (field: string): string => t.fabricPart[field] ?? t.fabricPart.other;
+              const leftOut = p.notices?.leftOut ?? [];
+              const sized = !p.heldBack && p.status === 'active';
+              // A stretch that was entered but left out is said once, by its "Not saved" line; "no stretch given" would be untrue.
+              const stretchLeftOut = leftOut.some((l) => l.field === 'fabric.stretchPct');
+              const stretchAssumed = sized && !stretchLeftOut && (p.notices?.defaulted.includes('fabric.stretchPct') ?? false);
+              // The api's own reason is a validator message; only the console's plain rules are shown.
+              const leftOutText = (field: string): string => {
+                const rule = t.fabricRule[field];
+                if (!rule) return t.leftOutOther(part(field));
+                return field === 'fabric.stretchPct' && sized ? t.leftOutStretch(rule) : t.leftOut(part(field), rule);
+              };
               return (
               <tr key={p.externalId} data-testid={`product-${p.externalId}`}>
-                <td className="px-4 py-3">
+                <td className="min-w-[15rem] px-4 py-3">
                   <p className="font-medium">{p.name}</p>
+                  {/* What the last save left out or assumed (D25 point 1), and why the product is held back. Under the name, so it is on screen on a phone. */}
+                  {p.heldBack || leftOut.length > 0 || stretchAssumed ? (
+                    <ul className="mt-1.5 space-y-1 text-xs text-ink-soft" data-testid={`notices-${p.externalId}`}>
+                      {p.heldBack ? (
+                        <li className="text-bad" data-testid={`held-back-${p.externalId}`}>
+                          {t.heldBackText(p.heldBack.fields.map(part))}{' '}
+                          <Link to="/merchant/settings" className="font-medium underline underline-offset-2">
+                            {t.heldBackSetting}
+                          </Link>
+                        </li>
+                      ) : null}
+                      {leftOut.map((l) => (
+                        <li key={l.field} className="text-warn" data-testid={`left-out-${p.externalId}`}>
+                          {leftOutText(l.field)}
+                        </li>
+                      ))}
+                      {stretchAssumed ? <li data-testid={`stretch-assumed-${p.externalId}`}>{t.stretchAssumed}</li> : null}
+                    </ul>
+                  ) : null}
                 </td>
                 <td className="px-4 py-3">{p.category ? (CATEGORY_TEXT[p.category] ?? titleCase(p.category)) : c.none}</td>
                 <td className="px-4 py-3">
-                  <span className={`chip ${tone === 'success' ? 'border-ok/30 bg-ok/10 text-ok' : tone === 'warning' ? 'border-warn/30 bg-warn/10 text-warn' : 'border-bad/30 bg-bad/10 text-bad'}`}>{p.next?.badge ?? (p.status === 'active' ? t.ready : t.notReady)}</span>
+                  <span className={`chip ${tone === 'success' ? 'border-ok/30 bg-ok/10 text-ok' : tone === 'warning' ? 'border-warn/30 bg-warn/10 text-warn' : 'border-bad/30 bg-bad/10 text-bad'}`}>{p.heldBack ? t.heldBack : (p.next?.badge ?? (p.status === 'active' ? t.ready : t.notReady))}</span>
                   <div className="mt-1.5 flex items-center gap-2">
                     <div className="h-1.5 w-20 overflow-hidden rounded-full bg-ink/10" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={score} aria-label={t.scoreLabel(score)}>
                       <div className={`h-full ${tone === 'success' ? 'bg-ok' : 'bg-coral'}`} style={{ width: `${score}%` }} />
@@ -426,7 +488,7 @@ export function MerchantProducts(): ReactNode {
                     </span>
                   ) : null}
                 </td>
-                <td className="max-w-sm px-4 py-3 text-ink-soft">{p.next?.text ?? (p.missingFields.length ? t.missing(p.missingFields) : c.none)}</td>
+                <td className="max-w-sm px-4 py-3 text-ink-soft">{p.heldBack ? t.heldBackNext : (p.next?.text ?? (p.missingFields.length ? t.missing(p.missingFields) : c.none))}</td>
                 <td className="px-4 py-3">
                   <Link to={`/merchant/products/${encodeURIComponent(p.externalId)}/3d`} className="chip whitespace-nowrap hover:bg-white" data-testid={`open-3d-${p.externalId}`}>
                     {merchantStrings().assets.open3d}

@@ -57,6 +57,20 @@
       "when": 1795053446337,
       "tag": "0007_analytics_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795148905739,
+      "tag": "0008_incomplete_product_data",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795150660099,
+      "tag": "0009_left_out_values",
+      "breakpoints": true
     }
   ]
 }

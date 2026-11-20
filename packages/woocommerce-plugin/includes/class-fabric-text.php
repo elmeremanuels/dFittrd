@@ -391,7 +391,7 @@ final class Fabric_Text {
 
 	/**
 	 * `fabricFromProductText` over a product's attributes: the prefill the meta box offers when the
-	 * product has no Curtain fabric yet (names only; the merchant adds stretch and drape and saves).
+	 * product has no Curtain fabric yet (names only; the merchant checks them and saves, stretch and drape are optional).
 	 *
 	 * @param array<int, array{name?:string,slug?:string,options?:array<int,string>}> $attributes
 	 * @return array{primary:string,blend?:array<int,array{0:string,1:int|float}>}|null

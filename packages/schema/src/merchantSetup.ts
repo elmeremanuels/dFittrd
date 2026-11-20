@@ -286,10 +286,15 @@ export const MERCHANT_PLAN_TEXT = Object.freeze({
   oneLine: 'One plan, one flat price. Every shopper who tries a size is included; nothing is charged per try.',
   arranged:
     'You installed Curtain by a private link, so Shopify cannot put Curtain on your Shopify bill. Curtain arranges payment with you directly; nothing is charged through Shopify.',
-  arrangedInactive: 'Your plan is not active yet. Email Curtain and we switch it on; until then shoppers see a short “taking a break” note instead of a size.',
+  arrangedInactive: 'Your plan is not active yet. Email Curtain and we switch it on; until then the button is hidden on your product pages.',
   shopifyBilling: 'Charged on your Shopify bill once you approve it. You can cancel at any time by uninstalling the app.',
   trial: (days: number) => `The first ${days} days are free.`,
-  pausedNote: 'While the plan is paused the button stays on your page, and shoppers see a short “taking a break” note instead of a size.',
+  pausedNote: 'While the plan is paused the button is hidden on your product pages. It comes back when the plan is active again.',
+  /** The warning at the top of the Shopify admin while the plan is paused: one per way of paying. */
+  pausedBanner: {
+    arranged: 'Your Curtain plan is paused, so the button is hidden on your product pages. Email Curtain support and we switch it back on.',
+    shopifyBilling: 'Your Curtain plan is not active, so the button is hidden on your product pages. Press “Start the plan” and approve it in Shopify to switch it on.',
+  },
   leaving: {
     heading: 'Leaving Curtain',
     steps: {
@@ -339,6 +344,7 @@ export function merchantPlanText(platform: SetupPlatform, priceUsd = 8.99) {
     arrangedInactive: t.arrangedInactive,
     shopifyBilling: t.shopifyBilling,
     pausedNote: t.pausedNote,
+    pausedBanner: { ...t.pausedBanner },
     leaving: { heading: t.leaving.heading, steps: [...t.leaving.steps[platform]], data: [...t.leaving.data[platform]] },
   };
 }

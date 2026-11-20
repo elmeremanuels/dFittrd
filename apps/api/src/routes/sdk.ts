@@ -2,7 +2,9 @@
  * SDK routes (public, CORS *, rate-limited per shop):
  *  - POST /v1/sdk/sessions → 10-minute try token, embed URL (standalone overlay, D11), deep link and
  *    QR SVG (app mode; no QR for `surface: 'embed'`). 402 + the same body when the shop is paused
- *    (D7: the button still works, the embed/app shows the paused screen).
+ *    (the SDK then hides the button and opens nothing, D25 point 5).
+ *  - GET /v1/sdk/shop?shop=<public key prefix> → `{ paused }`. The SDK asks it before it shows a
+ *    button, so a paused shop shows none (D25 point 5, which changes D7).
  *  - GET /sdk/v1.js → the built @curtain/sdk IIFE (served from our origin: zero third-party requests).
  *  - GET /v1/sdk/media?shop=<id>&u=<url> → the shop's logo or one of its product photos, fetched
  *    through safeFetch and served from our origin (carry-over #11). Allowlisted per shop, so it is
@@ -13,7 +15,7 @@ import { createRequire } from 'node:module';
 import { and, eq, ne, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { SdkSessionRequestSchema, SdkSessionResponseSchema } from '@curtain/schema';
+import { SdkSessionRequestSchema, SdkSessionResponseSchema, SdkShopStatusQuerySchema, SdkShopStatusResponseSchema } from '@curtain/schema';
 import type { Db } from '../db/client.js';
 import { products, trySessions } from '../db/schema.js';
 import { randomAlnum } from '../lib/crypto.js';
@@ -83,6 +85,22 @@ export const sdkRoutes: FastifyPluginAsyncZod = async (app) => {
         ...((await shopperReadiness({ db, env }, product, { surface: surfaceOfSession(req.body.surface), shop })).state === 'coming_soon' ? { productState: 'coming_soon' as const } : {}),
       };
       return reply.code(body.shopPaused ? 402 : 200).send(body);
+    },
+  );
+
+  // Public like the handshake above: it says only what a click on the button already says.
+  app.get(
+    '/v1/sdk/shop',
+    {
+      schema: { querystring: SdkShopStatusQuerySchema, response: { 200: SdkShopStatusResponseSchema } },
+      config: { rateLimit: { max: env.SDK_RATE_LIMIT_PER_MIN, timeWindow: '1 minute', keyGenerator: (req) => `sdk-shop-ip:${req.ip}` } },
+    },
+    async (req, reply) => {
+      const shop = await findShopByPrefix(db, req.query.shop);
+      if (!shop || shop.uninstalledAt) throw notFound('shop');
+      // Short, so the button is back within a minute of the plan becoming active again.
+      reply.header('cache-control', 'public, max-age=60');
+      return { paused: isPaused(shop) };
     },
   );
 

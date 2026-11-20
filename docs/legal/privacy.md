@@ -31,7 +31,7 @@ Curtain is operated by [COMPANY LEGAL NAME], [REGISTERED ADDRESS], [COMPANY REGI
 
 These are entered or computed in your browser and are **not** sent to us:
 
-- height and weight, your fit preference (snug, regular or relaxed), and your age range if you give it;
+- height and weight, and your fit preference (snug, regular or relaxed);
 - any body measurements you type in (for example bust, waist, hips, inseam) and whether you measured them with a tape;
 - the result of the optional camera scan. The camera frames are processed in your browser and are never stored or uploaded;
 - the units you prefer (cm/kg or in/lb).
@@ -137,7 +137,7 @@ We use a small number of providers. None of them receive shopper measurements or
 
 ## Children
 
-Curtain is not directed at children under [16]. The fit tool does not ask for a name or contact details, and the age range question is optional.
+Curtain is not directed at children under [16]. The fit tool does not ask for a name, contact details or your age.
 
 ## Security
 

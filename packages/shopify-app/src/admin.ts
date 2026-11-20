@@ -21,6 +21,7 @@ import {
   merchantPlanText,
 } from '@curtain/schema';
 import { BLOCK_HANDLE } from './deepLinks';
+import { DESCRIPTION_IMPORT_TEXT } from './descriptionImport';
 
 export const ADMIN_PAGE_PATH = '/shopify/admin' as const;
 export const APP_BRIDGE_SCRIPT_URL = 'https://cdn.shopify.com/shopifycloud/app-bridge.js' as const;
@@ -103,6 +104,8 @@ export function renderAdminPage(cfg: AdminPageConfig): string {
     tape: GARMENT_TAPE_ADMIN_CONFIG,
     /** The size chart builder's men's columns (neck, sleeve, length, rise, W/L): English catalogue (D21). */
     chartColumns: CHART_COLUMN_TEXT,
+    /** "Import from description": the words for the fabric and for the stretch estimate (D21; inventory D18, F20). */
+    descriptionImport: DESCRIPTION_IMPORT_TEXT,
     /** The drawing next to the garment measurements form (our own static SVG, no script). */
     tapeDiagram: GARMENT_TAPE_DIAGRAM_SVG,
     /** Plan, uninstall and data-deletion words (@curtain/schema merchantSetup.ts). */

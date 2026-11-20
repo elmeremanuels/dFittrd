@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { FABRIC_PRIMARY_LIBRARY_IDS, FABRIC_BY_ID, fabricLibraryId, fabricPayloadName, lookupFabricId, resolveFabric } from '../fabrics';
 import { FABRIC_PRIMARIES, FabricSchema, GarmentPayloadDraftSchema } from '../garment';
 import { MOCK_GARMENTS } from '../fixtures';
-import { FABRIC_TEXT_FIELD, canonicalFabricName, coerceFabric, fabricFromProductText, type MappingWarning } from './common';
+import { FABRIC_TEXT_FIELD, canonicalFabricName, coerceFabric, coerceNumber, fabricFromProductText, type MappingWarning } from './common';
 import { resolveFabricText } from './fabricText';
 import { fromShopifyProduct } from './shopify';
 import { fromWooMeta } from './woo';
@@ -94,6 +94,31 @@ describe('coerceFabric resolves fabric text to library ids', () => {
     const { fabric, warnings } = coerce('70% viscose, 30% polyamide');
     expect(fabric).toBeUndefined();
     expect(warnings[0]).toMatchObject({ path: 'fabric', message: 'expected a JSON object' });
+  });
+
+  it('null and an empty object are no fabric and no mistake; a list is a mistake', () => {
+    expect(coerce(null)).toEqual({ fabric: undefined, warnings: [] });
+    expect(coerce('null')).toEqual({ fabric: undefined, warnings: [] });
+    expect(coerce({})).toEqual({ fabric: undefined, warnings: [] });
+    expect(coerce([]).warnings[0]).toMatchObject({ path: 'fabric', message: 'expected a JSON object' });
+  });
+
+  it('numbers are decimal only: hex, binary and octal text is refused, as the PHP builder does', () => {
+    expect(coerceNumber('0x10')).toBeUndefined();
+    expect(coerceNumber('-0X1f')).toBeUndefined();
+    expect(coerceNumber('0b11')).toBeUndefined();
+    expect(coerceNumber('0o17')).toBeUndefined();
+    expect(coerceNumber('0')).toBe(0);
+    expect(coerceNumber('0.5')).toBe(0.5);
+    expect(coerceNumber('2,5')).toBe(2.5);
+    expect(coerceNumber('1e1')).toBe(10);
+    const { fabric, warnings } = coerce({ primary: 'cotton', stretchPct: '0x10' });
+    expect(fabric).toEqual({ primary: 'cotton' });
+    expect(warnings[0]).toMatchObject({ path: 'fabric.stretchPct', message: 'expected a number, got "0x10"' });
+  });
+
+  it('a blend that is not a list is not read', () => {
+    expect(coerce({ primary: 'cotton', blend: { a: ['Katoen', 50] } }).fabric).toEqual({ primary: 'cotton' });
   });
 
   it('an unknown primary stays valid (open vocabulary) and is reported', () => {

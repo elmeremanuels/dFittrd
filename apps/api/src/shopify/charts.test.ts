@@ -184,14 +184,17 @@ describe('Shopify size chart builder routes', () => {
       hasChart: false,
       proposal: { sizeChartType: 'garment', sizeChart: [{ size: 'ONE', bust: 140 }] },
       lengthCm: { shoulder_to_hem: 110 },
-      fabric: { primary: 'viscose' },
     });
+    // The fabric is what the description states; the stretch is our estimate and travels apart from it (D18, F20).
+    expect(res.json().fabric).toEqual({ primary: 'viscose', blend: [['viscose', 100]] });
+    expect(res.json().fabricEstimate).toEqual({ stretchPct: expect.any(Number) });
     expect(sets()).toHaveLength(0);
     handler = () => ({ product: null });
     expect((await t.app.inject({ method: 'GET', url: '/shopify/products/999/chart-import', headers: await auth() })).statusCode).toBe(404);
   });
 
   it('writes a confirmed product chart with fabric and lengths and queues its sync', async () => {
+    handler = () => ({ product: kaftan });
     const res = await t.app.inject({
       method: 'PUT',
       url: '/shopify/products/301/chart',
@@ -202,8 +205,42 @@ describe('Shopify size chart builder routes', () => {
     expect(res.json().written.sort()).toEqual(['fabric', 'length_cm', 'size_chart', 'size_chart_type']);
     expect(sets().every((m) => m.ownerId === 'gid://shopify/Product/301' && m.namespace === '$app:curtain')).toBe(true);
     expect(t.queue.pending('sync-shopify-product').some((j) => (j.data as { productGid: string }).productGid === 'gid://shopify/Product/301')).toBe(true);
+    // Fibre names without a stretch (the import form's default) are a valid write: only the names are stored.
+    const before = sets().length;
+    const names = await t.app.inject({
+      method: 'PUT',
+      url: '/shopify/products/301/chart',
+      headers: await auth(),
+      payload: { sizeChartType: 'garment', sizeChart: [{ size: 'ONE', bust: 140 }], fabric: { primary: 'viscose', blend: [['viscose', 100]] } },
+    });
+    expect(names.statusCode).toBe(200);
+    const fabricSet = sets().slice(before).find((m) => m.key === 'fabric')!;
+    expect(JSON.parse(fabricSet.value)).toEqual({ primary: 'viscose', blend: [['viscose', 100]] });
+    // A product that is not there: nothing is written.
+    handler = () => ({ product: null });
+    const gone = await t.app.inject({ method: 'PUT', url: '/shopify/products/999/chart', headers: await auth(), payload: { sizeChartType: 'garment', sizeChart: [{ size: 'ONE', bust: 140 }], fabric: { primary: 'viscose' } } });
+    expect(gone.statusCode).toBe(404);
     const bad = await t.app.inject({ method: 'PUT', url: '/shopify/products/abc/chart', headers: await auth(), payload: { sizeChartType: 'garment', sizeChart: [{ size: 'ONE', bust: 140 }] } });
     expect(bad.statusCode).toBe(400);
+  });
+
+  it('a fabric write keeps the stretch, drape and weight the product already has', async () => {
+    // The merchant entered these before; the description import sends fibre names only.
+    const stored = { primary: 'cotton', stretchPct: 12, drape: 0.6, weightGsm: 180 };
+    handler = () => ({ product: { ...kaftan, metafields: { nodes: [{ namespace: '$app:curtain', key: 'fabric', type: 'json', value: JSON.stringify(stored) }] } } });
+    const write = async (fabric: object) => {
+      const before = sets().length;
+      const res = await t.app.inject({ method: 'PUT', url: '/shopify/products/301/chart', headers: await auth(), payload: { sizeChartType: 'garment', sizeChart: [{ size: 'ONE', bust: 140 }], fabric } });
+      expect(res.statusCode, res.body).toBe(200);
+      return JSON.parse(sets().slice(before).find((m) => m.key === 'fabric')!.value) as Record<string, unknown>;
+    };
+    expect(await write({ primary: 'viscose', blend: [['viscose', 100]] })).toEqual({ primary: 'viscose', blend: [['viscose', 100]], stretchPct: 12, drape: 0.6, weightGsm: 180 });
+    // A stretch the merchant ticks in the form replaces the stored one.
+    expect(await write({ primary: 'viscose', stretchPct: 3 })).toMatchObject({ primary: 'viscose', stretchPct: 3, drape: 0.6 });
+    // No fabric in the request: the fabric metafield is not written at all.
+    const before = sets().length;
+    await t.app.inject({ method: 'PUT', url: '/shopify/products/301/chart', headers: await auth(), payload: { sizeChartType: 'garment', sizeChart: [{ size: 'ONE', bust: 140 }] } });
+    expect(sets().slice(before).some((m) => m.key === 'fabric')).toBe(false);
   });
 
   it('returns the product checklist with the Try it on preview link', async () => {

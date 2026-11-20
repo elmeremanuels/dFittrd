@@ -17,6 +17,7 @@ import { completenessScore, type CompletenessResult } from './completeness';
 import { GarmentAssetRefSchema } from './garmentAsset';
 import { AUDIENCE_SOURCES } from './mappings/audience';
 import { garmentTapeChartIssues } from './garmentTapeForm';
+import { IncompleteProductDataSchema, ProductHeldBackSchema, ProductNoticesSchema } from './incompleteData';
 import { PRODUCT_NEXT_STEPS, SETUP_STEPS, SETUP_TARGETS } from './merchantSetup';
 
 // ---------------------------------------------------------------------------
@@ -188,8 +189,14 @@ export const ShopBrandingSchema = z.object({
   brandColor: HexColorSchema.optional(),
   logoUrl: httpUrl.optional(),
   platform: z.enum(['shopify', 'woocommerce']),
-  /** Below plan → the app shows the "shop paused" screen (D7). */
+  /** Below plan → the app shows the "shop paused" screen (D7; the button on the shop page is hidden, D25 point 5). */
   paused: z.boolean().default(false),
+  /**
+   * D25 point 7: `true` only when the shop switched "Show 'Fit by Curtain'" off. The embed then
+   * leaves the wordmark out. The estimate label is not part of it and always stays (AGENTS.md
+   * rule 3). Absent: the wordmark is shown.
+   */
+  hideWordmark: z.literal(true).optional(),
 });
 export type ShopBranding = z.infer<typeof ShopBrandingSchema>;
 
@@ -240,6 +247,12 @@ export const TryResolveResponseSchema = z.object({
    * a 3D asset. The embed then offers the "AI-enhanced estimate" next to the 3D view. Absent: nothing changes.
    */
   aiRealism: z.literal(true).optional(),
+  /**
+   * `true` only when the shop gave no fabric stretch for this product (not an accessory), so size
+   * advice assumes 0 % (`sizeAdviceGarment`'s `defaulted`). The embed then says in one line that
+   * stretch was not taken into account. Absent: the stretch comes from the shop.
+   */
+  stretchAssumed: z.literal(true).optional(),
 });
 export type TryResolveResponse = z.infer<typeof TryResolveResponseSchema>;
 
@@ -511,6 +524,14 @@ export const SdkSessionRequestSchema = z.object({
 });
 export type SdkSessionRequest = z.infer<typeof SdkSessionRequestSchema>;
 
+/**
+ * GET /v1/sdk/shop?shop=<public key prefix> (public, CORS *, cacheable for a minute). The SDK asks
+ * this before it shows a button: a shop whose plan is paused shows no button (D25 point 5).
+ */
+export const SdkShopStatusQuerySchema = z.object({ shop: z.string().regex(/^pk_(live|test)_[A-Za-z0-9]{6,32}$/) });
+export const SdkShopStatusResponseSchema = z.object({ paused: z.boolean() });
+export type SdkShopStatusResponse = z.infer<typeof SdkShopStatusResponseSchema>;
+
 export const SdkSessionResponseSchema = z.object({
   /** https://app.<domain>/try/<jwt 10 min> */
   tryUrl: httpUrl,
@@ -519,7 +540,7 @@ export const SdkSessionResponseSchema = z.object({
   /** Inline SVG for the desktop QR modal (app mode). Omitted for `surface: 'embed'`. */
   qrSvg: z.string().min(1).optional(),
   expiresAt: isoDate,
-  /** Below plan: the button still renders, the deep link shows "shop paused" (D7). */
+  /** Below plan. The SDK then hides the button and opens nothing (D25 point 5, which changes D7). */
   shopPaused: z.boolean(),
   /**
    * D20 point 3 (men's gate, plan slice M0): `coming_soon` for a men's product without the full 3D
@@ -545,8 +566,19 @@ export const MerchantProductParamsSchema = z.object({ externalId: z.string().min
 export const MerchantProductUpsertQuerySchema = z.object({ audienceSource: z.enum(AUDIENCE_SOURCES).optional() });
 export type MerchantProductUpsertQuery = z.infer<typeof MerchantProductUpsertQuerySchema>;
 
-/** PUT /v1/merchant/products/:externalId — accepts a draft; the server computes completeness. */
-export const MerchantProductUpsertRequestSchema = GarmentPayloadDraftSchema;
+/**
+ * PUT /v1/merchant/products/:externalId — accepts a draft; the server computes completeness.
+ *
+ * The fabric is taken as it comes: a part that is present but not valid (stretch 150) does not fail
+ * the request. The server leaves that part out, keeps the rest and reports it (`notices.leftOut`,
+ * D25 point 1). Every other field is validated as `GarmentPayloadDraftSchema` does.
+ */
+export const MerchantProductUpsertRequestSchema = GarmentPayloadDraftSchema.extend({
+  fabric: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('Fabric (see GarmentPayload.fabric). Every part is optional; a part that is not valid is left out and reported in notices.leftOut.'),
+});
 export type MerchantProductUpsertRequest = z.infer<typeof MerchantProductUpsertRequestSchema>;
 
 export const MerchantProductUpsertResponseSchema = z.object({
@@ -558,6 +590,14 @@ export const MerchantProductUpsertResponseSchema = z.object({
   contentHash: z.string().length(64),
   changed: z.boolean(),
   updatedAt: isoDate,
+  /** What was assumed and what was left out (incompleteData.ts). Both lists are empty for a complete product. Absent on an older api. */
+  notices: ProductNoticesSchema.optional(),
+  /**
+   * Set when the shop holds products with incomplete data back (`incompleteProductData: 'hold-back'`):
+   * the product was stored (this is a 200) but is not ready, `status` is `incomplete`, and shoppers
+   * do not get it until `fields` are completed. Null otherwise. Absent on an older api.
+   */
+  heldBack: ProductHeldBackSchema.nullable().optional(),
 });
 export type MerchantProductUpsertResponse = z.infer<typeof MerchantProductUpsertResponseSchema>;
 
@@ -607,6 +647,13 @@ export const MerchantProductSummarySchema = z.object({
   updatedAt: isoDate,
   /** The men's gate for this product (`MERCHANT_MEN_GATE_STATES`). Absent: not a gated men's product, or the gate is off. */
   menGate: z.enum(MERCHANT_MEN_GATE_STATES).optional(),
+  /** The product is held back for incomplete data (shop setting `hold-back`). Absent: it is not. */
+  heldBack: ProductHeldBackSchema.optional(),
+  /**
+   * What the last save assumed and left out for this product (D25 point 1): `defaulted` as size
+   * advice reads the stored product now, `leftOut` as recorded at the last save. Absent on an older api.
+   */
+  notices: ProductNoticesSchema.optional(),
   /** The shop measured at least one size of this garment itself (garment tape with a `measured` value). Absent on an older api. */
   measured: z.boolean().optional(),
   /** What the merchant should do next for this product, in plain words (`productNextStep`). Absent on an older api. */
@@ -1022,3 +1069,37 @@ export type SetupResponse = z.infer<typeof SetupResponseSchema>;
 
 /** PUT /v1/merchant/setup: tick steps 4 and 5 by hand (the api cannot look inside a theme or a phone). */
 export const SetupUpdateRequestSchema = z.object({ buttonConfirmed: z.boolean().optional(), phoneConfirmed: z.boolean().optional() });
+
+// ---------------------------------------------------------------------------
+// MERCHANT — settings (D24; merchant-settings inventory row S2)
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /v1/merchant/settings — the merchant's own choices. A fixed list of keys: billing and
+ * operator values in the shop's stored settings are not part of it and cannot be read or written here.
+ */
+export const MerchantSettingsResponseSchema = z.object({
+  /** What happens with a product whose data is incomplete (incompleteData.ts). Default `let-through`. */
+  incompleteProductData: IncompleteProductDataSchema,
+  /** D25 point 7: the "Fit by Curtain" wordmark in the popup. Default on. Never the estimate label (rule 3). Optional so a console still reads an older api. */
+  showFitByCurtain: z.boolean().optional(),
+  /** Read-only here: the name comes from the shop platform (the plugin's hello, the Shopify install). */
+  shopName: z.string().optional(),
+  platform: z.enum(['shopify', 'woocommerce']).optional(),
+  /** The shop's colour in the popup header; null when none is set. */
+  brandColor: HexColorSchema.nullable().optional(),
+  /** The shop's logo; null when none is set. Stored, not drawn in the popup yet (inventory row S16). */
+  logoUrl: httpUrl.nullable().optional(),
+});
+export type MerchantSettingsResponse = z.infer<typeof MerchantSettingsResponseSchema>;
+
+/** PUT /v1/merchant/settings — only the keys named here; an unknown key is refused. Left-out keys keep their value. */
+export const MerchantSettingsUpdateRequestSchema = z.strictObject({
+  incompleteProductData: IncompleteProductDataSchema.optional(),
+  showFitByCurtain: z.boolean().optional(),
+  /** `null` removes the colour. */
+  brandColor: HexColorSchema.nullable().optional(),
+  /** `null` removes the logo. https only: the popup's page is https. */
+  logoUrl: z.url({ protocol: /^https$/ }).max(2048).nullable().optional(),
+});
+export type MerchantSettingsUpdateRequest = z.infer<typeof MerchantSettingsUpdateRequestSchema>;

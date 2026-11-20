@@ -6,7 +6,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { chartTemplatesDto, merchantSetupSteps, type SetupFacts } from '@curtain/schema';
+import { MERCHANT_PLAN_TEXT, chartTemplatesDto, merchantSetupSteps, type SetupFacts } from '@curtain/schema';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderAdminPage } from './admin';
 import { API_KEY } from './test/fixtures';
@@ -239,8 +239,9 @@ describe('admin page: size chart builder', () => {
         sizeLabel: 'ONE',
         proposal: { sizeChartType: 'garment', sizeChart: [{ size: 'ONE', bust: 140 }] },
         lengthCm: { shoulder_to_hem: 110 },
-        fabric: { primary: 'viscose', blend: [['viscose', 100]], stretchPct: 0, drape: 0.85 },
-        fabricStatement: 'Made from 100% rayon.',
+        fabric: { primary: 'viscose', blend: [['viscose', 95], ['elastane', 5]] },
+        fabricEstimate: { stretchPct: 17.5 },
+        fabricStatement: 'Made from 95% rayon, 5% elastane.',
         evidence: ['bust: “Bust 140cm circumference.” → 140 cm'],
         warnings: [],
         hasChart: false,
@@ -257,6 +258,13 @@ describe('admin page: size chart builder', () => {
     await vi.waitFor(() => expect(document.getElementById('imp-bust')).not.toBeNull());
     expect(($('imp-bust') as El).value).toBe('140');
     ($('imp-waist') as El).value = '130';
+    // The fibres are the shop's own words: ticked. The stretch is our estimate: said so, and not ticked (D18, F20).
+    expect(($('imp-fabric') as El).checked).toBe(true);
+    expect($('import-result').textContent).toContain('Fabric from your description: viscose (95% viscose, 5% elastane)');
+    expect($('import-result').textContent).not.toMatch(/, stretch \d/);
+    expect(($('imp-stretch') as El).checked).toBe(false);
+    expect(($('imp-stretch-pct') as El).value).toBe('17.5');
+    expect($('imp-stretch-note').textContent).toMatch(/^Estimate: Curtain worked out about 17\.5% stretch/);
     const form = $('import-result').querySelectorAll('form')[0] as El;
     fire(form, 'submit');
     await vi.waitFor(() => expect($('import-result').textContent).toMatch(/Saved/));
@@ -265,8 +273,69 @@ describe('admin page: size chart builder', () => {
       sizeChartType: 'garment',
       sizeChart: [{ size: 'ONE', bust: 140, waist: 130 }],
       lengthCm: { shoulder_to_hem: 110 },
-      fabric: { primary: 'viscose', blend: [['viscose', 100]], stretchPct: 0, drape: 0.85 },
+      fabric: { primary: 'viscose', blend: [['viscose', 95], ['elastane', 5]] },
     });
+  });
+
+  it('description import: the stretch is saved only when the merchant ticks it, with the value they confirm', async () => {
+    const calls = mountPage({
+      'GET /shopify/products/301/checklist': () => ({ productId: '301', title: 'Boho Kaftan', status: 'incomplete', score: 0.4, items: [], previewUrl: null, adminUrl: 'https://bohohippychic.myshopify.com/admin/products/301' }),
+      'GET /shopify/products/301/chart-import': () => ({
+        productId: '301',
+        title: 'Boho Kaftan',
+        oneSize: true,
+        sizeLabel: 'ONE',
+        proposal: { sizeChartType: 'garment', sizeChart: [{ size: 'ONE', bust: 140 }] },
+        fabric: { primary: 'viscose', blend: [['viscose', 95], ['elastane', 5]] },
+        fabricEstimate: { stretchPct: 17.5 },
+        evidence: [],
+        warnings: [],
+        hasChart: false,
+      }),
+      'PUT /shopify/products/301/chart': () => ({ productId: '301', written: ['size_chart_type', 'size_chart', 'fabric'], syncQueued: true, warnings: [] }),
+    });
+    await vi.waitFor(() => expect(document.querySelector('[data-product="301"]')).not.toBeNull());
+    (document.querySelector('[data-product="301"]') as El).click();
+    await vi.waitFor(() => expect($('product-panel').classList.contains('hidden')).toBe(false));
+    $('btn-import').click();
+    await vi.waitFor(() => expect(document.getElementById('imp-stretch')).not.toBeNull());
+    const form = $('import-result').querySelectorAll('form')[0] as El;
+    // Ticked with a value that is not a stretch: nothing is sent.
+    ($('imp-stretch') as El).checked = true;
+    ($('imp-stretch-pct') as El).value = '150';
+    fire(form, 'submit');
+    await vi.waitFor(() => expect($('import-result').textContent).toMatch(/number from 0 to 100/));
+    expect(calls.some((c) => c.method === 'PUT')).toBe(false);
+  });
+
+  it('description import: a confirmed stretch is sent as the merchant typed it', async () => {
+    const calls = mountPage({
+      'GET /shopify/products/301/checklist': () => ({ productId: '301', title: 'Boho Kaftan', status: 'incomplete', score: 0.4, items: [], previewUrl: null, adminUrl: 'https://bohohippychic.myshopify.com/admin/products/301' }),
+      'GET /shopify/products/301/chart-import': () => ({
+        productId: '301',
+        title: 'Boho Kaftan',
+        oneSize: true,
+        sizeLabel: 'ONE',
+        proposal: { sizeChartType: 'garment', sizeChart: [{ size: 'ONE', bust: 140 }] },
+        fabric: { primary: 'viscose', blend: [['viscose', 95], ['elastane', 5]] },
+        fabricEstimate: { stretchPct: 17.5 },
+        evidence: [],
+        warnings: [],
+        hasChart: false,
+      }),
+      'PUT /shopify/products/301/chart': () => ({ productId: '301', written: ['size_chart_type', 'size_chart', 'fabric'], syncQueued: true, warnings: [] }),
+    });
+    await vi.waitFor(() => expect(document.querySelector('[data-product="301"]')).not.toBeNull());
+    (document.querySelector('[data-product="301"]') as El).click();
+    await vi.waitFor(() => expect($('product-panel').classList.contains('hidden')).toBe(false));
+    $('btn-import').click();
+    await vi.waitFor(() => expect(document.getElementById('imp-stretch')).not.toBeNull());
+    ($('imp-stretch') as El).checked = true;
+    ($('imp-stretch-pct') as El).value = '12';
+    fire($('import-result').querySelectorAll('form')[0] as El, 'submit');
+    await vi.waitFor(() => expect($('import-result').textContent).toMatch(/Saved/));
+    const put = calls.find((c) => c.method === 'PUT' && c.path === '/shopify/products/301/chart')!;
+    expect((put.body as { fabric: unknown }).fabric).toEqual({ primary: 'viscose', blend: [['viscose', 95], ['elastane', 5]], stretchPct: 12 });
   });
 });
 
@@ -328,6 +397,15 @@ describe('admin page: the plan button (checklist B2)', () => {
     await settled('Curtain · US$8.99 a month · paused');
     expect($('banner').textContent).toContain('Email Curtain support');
     expect($('banner').textContent).not.toContain('Approve');
+    // D21: the banner is the catalogue's text, not a sentence written in the page.
+    expect($('banner').textContent).toContain(MERCHANT_PLAN_TEXT.pausedBanner.arranged);
+  });
+
+  it('Shopify billing, paused shop: the banner is the catalogue text and says the button is hidden', async () => {
+    mountPage({ 'GET /v1/merchant/usage': usage({ name: 'curtain', paused: true }) });
+    await vi.waitFor(() => expect($('banner').textContent).toContain(MERCHANT_PLAN_TEXT.pausedBanner.shopifyBilling));
+    expect(MERCHANT_PLAN_TEXT.pausedBanner.shopifyBilling).toContain('the button is hidden');
+    expect(template).not.toContain('so the button is hidden on your product pages');
   });
 });
 

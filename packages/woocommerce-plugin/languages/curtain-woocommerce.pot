@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Curtain for WooCommerce 0.1.0\n"
 "Report-Msgid-Bugs-To: https://curtain.fit/woocommerce\n"
-"POT-Creation-Date: 2026-11-19 03:13+0000\n"
+"POT-Creation-Date: 2026-11-20 05:36+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -381,6 +381,10 @@ msgid "Curtain"
 msgstr ""
 
 #: includes/class-product-meta.php
+msgid "Held back"
+msgstr ""
+
+#: includes/class-product-meta.php
 msgid "Active"
 msgstr ""
 
@@ -490,7 +494,7 @@ msgstr ""
 
 #. translators: %s: fibres read from the product's material attribute, e.g. "viscose 95 %, elastane 5 %"
 #: includes/class-product-meta.php
-msgid "Found in this product's attributes: %s. Check it, add stretch and drape, then update the product."
+msgid "Found in this product's attributes: %s. Check it, use it if it is right, then update the product. Stretch and drape can be added later."
 msgstr ""
 
 #: includes/class-product-meta.php
@@ -506,11 +510,11 @@ msgid "Weight (g/m²)"
 msgstr ""
 
 #: includes/class-product-meta.php
-msgid "Stretch % *"
+msgid "Stretch %"
 msgstr ""
 
 #: includes/class-product-meta.php
-msgid "Drape (0 stiff – 1 fluid) *"
+msgid "Drape (0 stiff – 1 fluid)"
 msgstr ""
 
 #: includes/class-product-meta.php
@@ -519,6 +523,10 @@ msgstr ""
 
 #: includes/class-product-meta.php
 msgid "Sheen (0 matte – 1 shiny)"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "Stretch and drape are not required. Without a stretch value, size advice treats the fabric as not stretching (0 %); for a stretchy fabric that makes the advice less exact. Without a drape value, the picture uses a default for the fibre."
 msgstr ""
 
 #: includes/class-product-meta.php
@@ -715,6 +723,86 @@ msgstr ""
 msgid "Required before the product can be active:"
 msgstr ""
 
+#. translators: %s: list of product details, e.g. "fabric stretch"
+#: includes/class-product-meta.php
+msgid "Held back: shoppers do not get size advice for this product until you complete: %s. Your shop is set to hold back products with incomplete data."
+msgstr ""
+
+#. translators: %s: what the value must be, e.g. "it must be a number from 0 to 100"
+#: includes/class-product-meta.php
+msgid "Not saved: fabric stretch. The value you entered was left out (%s), so size advice treats the fabric as not stretching (0 %%) until you correct it. The rest of the product was saved."
+msgstr ""
+
+#. translators: 1: product detail, e.g. "fabric drape"; 2: what the value must be, e.g. "it must be a number from 0 to 1"
+#: includes/class-product-meta.php
+msgid "Not saved: %1$s. The value you entered was left out (%2$s). The rest of the product was saved."
+msgstr ""
+
+#. translators: %s: product detail, e.g. "fabric drape"
+#: includes/class-product-meta.php
+msgid "Not saved: %s. The value you entered is not valid and was left out. The rest of the product was saved."
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "primary fibre"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "fabric blend"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "fabric weight"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "fabric stretch"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "fabric drape"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "fabric opacity"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "fabric sheen"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "it may be at most 64 characters long"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "it may hold at most 8 fibres, each from 0 to 100 %"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "it must be a number above 0 and at most 2000"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "it must be a number from 0 to 100"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "it must be a number from 0 to 1"
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "No fabric stretch entered: size advice treats the fabric as not stretching (0 %). For a stretchy fabric the advice is less exact until you add the stretch."
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "No fabric drape entered: the picture uses a default drape. Size advice does not use drape."
+msgstr ""
+
+#: includes/class-product-meta.php
+msgid "No primary fibre entered: the picture uses a default fabric."
+msgstr ""
+
 #: includes/class-product-meta.php
 msgid "chest"
 msgstr ""
@@ -863,7 +951,7 @@ msgid "plan: %s"
 msgstr ""
 
 #: includes/class-settings.php
-msgid "paused (no active subscription: the button still renders, shoppers see a \"shop paused\" screen)"
+msgid "paused (no active subscription: the button is hidden on your product pages until the plan is active again)"
 msgstr ""
 
 #. translators: 1: key storage scheme, 2: queue backend

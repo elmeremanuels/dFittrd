@@ -24,7 +24,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { AudienceSource, GarmentPayloadDraft, LedgerEntry, PairingSource, SdkSurface } from '@curtain/schema';
+import type { AudienceSource, GarmentPayloadDraft, IncompleteProductDataPolicy, LedgerEntry, LeftOutValue, PairingSource, ProductHeldBack, SdkSurface } from '@curtain/schema';
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 const id = () => uuid('id').primaryKey().default(sql`gen_random_uuid()`);
@@ -100,6 +100,8 @@ export interface ShopSettings {
   setupButtonConfirmed?: boolean;
   /** First-run checklist: the merchant said they checked it on their phone. */
   setupPhoneConfirmed?: boolean;
+  /** D25 point 7: `false` hides the "Fit by Curtain" wordmark in the popup. Absent: shown. Never the estimate label. */
+  showFitByCurtain?: boolean;
 }
 
 export const shops = pgTable(
@@ -130,6 +132,13 @@ export const shops = pgTable(
     billingRef: text('billing_ref'),
     periodStart: date('period_start', { mode: 'string' }),
     settings: jsonb('settings').$type<ShopSettings>().notNull().default({}),
+    /**
+     * Merchant setting (D24 point 4, D25 points 1 and 2): what happens with a product whose data is
+     * incomplete. `let-through` (default) stores and sizes it with a notice; `hold-back` stores it as
+     * not ready until the merchant completes it (`products.held_back`). A column of its own, not a
+     * key of `settings`, so it is never mixed with the billing and operator keys there.
+     */
+    incompleteProductData: text('incomplete_product_data').$type<IncompleteProductDataPolicy>().notNull().default('let-through'),
     /** WooCommerce Connect round-trip (D6). */
     connectTokenHash: text('connect_token_hash'),
     connectTokenExpiresAt: ts('connect_token_expires_at'),
@@ -146,6 +155,7 @@ export const shops = pgTable(
     index('shops_api_key_lookup_idx').on(t.apiKeyLookup),
     index('shops_previous_key_lookup_idx').on(t.previousKeyLookup),
     check('shops_plan_check', sql`${t.plan} in ('free', 'curtain')`),
+    check('shops_incomplete_product_data_check', sql`${t.incompleteProductData} in ('let-through', 'hold-back')`),
   ],
 );
 
@@ -203,6 +213,18 @@ export const products = pgTable(
      * men's gate never gates on it (only a known strong source gates).
      */
     audienceSource: text('audience_source').$type<AudienceSource>(),
+    /**
+     * Set while the product is held back for incomplete data (shop setting `hold-back`): the reason
+     * and the payload paths to complete. The product is stored with status `incomplete` and is not
+     * handed to shoppers (`asTryGarment`). Null: not held back.
+     */
+    heldBack: jsonb('held_back').$type<ProductHeldBack>(),
+    /**
+     * The fabric values the last save left out as not valid (D25 point 1): field and reason, never
+     * the value. They are not in the stored payload, so the merchant's product list reads them
+     * here. Null: nothing was left out.
+     */
+    leftOut: jsonb('left_out').$type<LeftOutValue[]>(),
   },
   (t) => [
     uniqueIndex('products_shop_external_uq').on(t.shopId, t.externalId),

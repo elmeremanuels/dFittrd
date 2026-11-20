@@ -172,8 +172,8 @@ the bulk export (`runProductBackfill`; the api backfills with the paged products
    hours; a row that stays failed needs a look, and every failure is retried, so a bug in one topic
    shows up as the same id failing 8 times), rows stuck in `status='received'` for minutes (a
    redelivery reclaims them after 30 s; if none comes, look), and the emergency-contact inbox.
-8. **Rollback**: pause (`UPDATE shops SET paused = true …`) shows shoppers a short-break screen
-   while the button stays; the merchant can also remove the block in the theme editor or uninstall.
+8. **Rollback**: pause (`UPDATE shops SET paused = true …`) hides the button on the storefront within about a minute (D25 point 5);
+   the merchant can also remove the block in the theme editor or uninstall.
 
 ---
 

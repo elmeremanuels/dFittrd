@@ -53,6 +53,8 @@ export interface ResultScreenProps {
   currentVariantSize: string | null;
   /** Rendered below the result (the optional "See it on me" panel). */
   extra?: ReactNode;
+  /** The shop gave no fabric stretch (`TryResolveResponse.stretchAssumed`): one line says stretch was not taken into account. */
+  stretchAssumed?: boolean;
   avatarRef?: React.RefObject<HTMLDivElement | null>;
   units: Units;
   onUnits: (u: Units) => void;
@@ -90,6 +92,7 @@ export function ResultScreen({
   chosen,
   currentVariantSize,
   extra,
+  stretchAssumed = false,
   avatarRef,
   units,
   onUnits,
@@ -198,6 +201,12 @@ export function ResultScreen({
         ) : null}
         {advice.adjusted ? (
           <p className="text-xs text-ink-soft">{t.adjusted(advice.adjusted, advice.engineSize ?? '', preference)}</p>
+        ) : null}
+        {stretchAssumed ? (
+          <p className="mt-1 text-xs text-ink-soft" data-testid="stretch-not-used">
+            {/* A marked stretchy part is counted by the fit (and named in the list below): say so, never "no stretch at all". */}
+            {garment.stretchZones?.length ? t.stretchNotUsedButZones : t.stretchNotUsed}
+          </p>
         ) : null}
         {advice.size || waistOnly !== null ? (
           <button type="button" onClick={onEdit} className="chip mt-2 hover:bg-white" data-testid="edit-measurements">

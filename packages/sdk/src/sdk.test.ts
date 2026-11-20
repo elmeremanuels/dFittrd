@@ -16,15 +16,19 @@ const session = {
   shopPaused: false,
 };
 
+/** The shop-status question (GET /v1/sdk/shop) is answered "not paused" and kept out of the recorded calls. */
+const isStatus = (url: unknown): boolean => String(url).includes('/v1/sdk/shop?');
+const notPaused = (): Response => new Response('{"paused":false}', { status: 200, headers: { 'content-type': 'application/json' } });
+
 function mockFetch(status: number, body: unknown = session): ReturnType<typeof vi.fn> {
   const fn = vi.fn(
-    async () =>
+    async (..._args: unknown[]) =>
       new Response(body === undefined ? null : JSON.stringify(body), {
         status,
         headers: { 'content-type': 'application/json' },
       }),
   );
-  vi.stubGlobal('fetch', fn);
+  vi.stubGlobal('fetch', async (url: unknown, init?: unknown) => (isStatus(url) ? notPaused() : fn(url, init)));
   return fn;
 }
 
@@ -218,26 +222,31 @@ describe('click → handshake', () => {
     expect(isMobile('Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome', 0)).toBe(false);
   });
 
-  it('still opens the link when the backend says the shop is paused but returns a tryUrl (402/423)', async () => {
-    mockFetch(402, { ...session, shopPaused: true });
-    const navigate = vi.fn();
-    init({ shop: SHOP, api: API, navigate });
-    const r = await open('p1', { mode: 'redirect' });
-    expect(r.kind).toBe('redirect');
-    expect(navigate).toHaveBeenCalledWith(session.tryUrl);
-    mockFetch(423, { ...session, shopPaused: true });
-    const r2 = await open('p1', { mode: 'modal' });
-    expect(r2.kind).toBe('modal');
-    expect(document.querySelector('[role="dialog"] .pk-note')?.textContent).toBe(STRINGS.en.pausedShort);
+  it('a paused answer at the click (402/423, or shopPaused) opens nothing and hides the button, in every mode', async () => {
+    for (const [status, body, mode] of [
+      [402, { ...session, shopPaused: true }, 'redirect'],
+      [423, { ...session, shopPaused: true }, 'modal'],
+      [402, { error: 'shop paused' }, 'modal'],
+      [200, { ...session, shopPaused: true }, 'app'],
+    ] as const) {
+      mockFetch(status, body);
+      const navigate = vi.fn();
+      const b = button();
+      init({ shop: SHOP, api: API, navigate });
+      await flush();
+      expect(b.style.display).toBe('');
+      const r = await open('p1', { mode, trigger: b });
+      expect(r).toEqual({ kind: 'paused', status });
+      expect(navigate).not.toHaveBeenCalled();
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      expect(b.style.display).toBe('none');
+      destroy();
+      b.remove();
+    }
   });
 
-  it('shows a polite message when paused without a link, and on server/network errors — never throws', async () => {
-    mockFetch(402, { error: 'shop paused' });
+  it('shows a polite message on server/network errors — never throws', async () => {
     init({ shop: SHOP, api: API });
-    const r = await open('p1');
-    expect(r).toEqual({ kind: 'paused', status: 402 });
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(STRINGS.en.paused);
-    closeModal();
 
     mockFetch(500, undefined);
     const r2 = await open('p1');

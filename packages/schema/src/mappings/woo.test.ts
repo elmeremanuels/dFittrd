@@ -136,10 +136,11 @@ describe('fromWooMeta', () => {
       { warnings },
     );
     expect(draft.sizeChart).toBeUndefined();
-    expect(draft.fabric).toBeUndefined();
+    // D25 point 1: only the stretch that is not valid is left out; the name and the drape are kept.
+    expect(draft.fabric).toEqual({ primary: 'denim', drape: 0.2 });
     expect(draft.flatLayPhoto).toBeUndefined();
     expect(draft.sizingNotes).toBe('true to size');
-    expect(warnings.map((w) => w.path).sort()).toEqual(['fabric', 'flatLayPhoto', 'sizeChart', 'trueToSizeScore']);
+    expect(warnings.map((w) => w.path).sort()).toEqual(['fabric.stretchPct', 'flatLayPhoto', 'sizeChart', 'trueToSizeScore']);
   });
 
   it('returns {} for a non-product', () => {

@@ -644,7 +644,9 @@ final class Payload_Builder {
 	private function coerce_fabric( $value ): ?array {
 		$v = self::parse_jsonish( $value );
 		if ( ! is_array( $v ) || array_is_list( $v ) ) {
-			if ( null !== $v ) {
+			// `{}` decodes to an empty array like `[]`: an empty object is no fabric and no mistake.
+			$empty_object = array() === $v && ( ! is_string( $value ) || str_starts_with( trim( $value ), '{' ) );
+			if ( null !== $v && ! $empty_object ) {
 				$this->warn( '_curtain_fabric', 'fabric', 'expected a JSON object' );
 			}
 			return null;
@@ -680,7 +682,7 @@ final class Payload_Builder {
 			if ( null !== $n ) {
 				$out[ $k ] = self::num( $n );
 			} else {
-				$this->warn( '_curtain_fabric', 'fabric.' . $k, 'expected a number' );
+				$this->warn( '_curtain_fabric', 'fabric.' . $k, 'expected a number, got ' . (string) json_encode( $v[ $k ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) );
 			}
 		}
 		$gsm = self::coerce_number( $v['gsm'] ?? $v['weight_gsm'] ?? null );
@@ -691,7 +693,8 @@ final class Payload_Builder {
 		if ( ! isset( $out['stretchPct'] ) && null !== $stretch ) {
 			$out['stretchPct'] = self::num( $stretch );
 		}
-		if ( isset( $v['blend'] ) && is_array( $v['blend'] ) ) {
+		// A list only, as coerceFabric reads it: an object keyed by anything is not a blend.
+		if ( isset( $v['blend'] ) && is_array( $v['blend'] ) && array_is_list( $v['blend'] ) ) {
 			$blend = array();
 			foreach ( $v['blend'] as $b ) {
 				$fibre = null;
@@ -719,7 +722,110 @@ final class Payload_Builder {
 		if ( ! isset( $out['blend'] ) && null !== $text_blend ) {
 			$out['blend'] = $text_blend;
 		}
+		// D25 point 1: a part that is not valid (stretch 150) is left out and reported; the rest is
+		// kept, and a part that is simply missing is no reason to drop anything.
+		$cleaned = self::leave_out_invalid_fabric_parts( $out );
+		foreach ( $cleaned['left_out'] as $l ) {
+			$this->warn( '_curtain_fabric', $l['field'], $l['reason'] . '; the value was left out' );
+		}
+		$out = $cleaned['fabric'];
 		return $out ? $out : null;
+	}
+
+	/**
+	 * Twin of leaveOutInvalidFabricParts (@curtain/schema incompleteData.ts): leaves out the parts
+	 * of an already coerced fabric that FabricSchema refuses, and reports each with the schema's
+	 * own message. Valid parts are returned untouched, in the same order.
+	 *
+	 * @param array<string,mixed> $fabric
+	 * @return array{fabric: array<string,mixed>, left_out: array<int, array{field:string, reason:string}>}
+	 */
+	public static function leave_out_invalid_fabric_parts( array $fabric ): array {
+		$left_out = array();
+		foreach ( array( 'primary', 'blend', 'weightGsm', 'stretchPct', 'drape', 'opacity', 'sheen' ) as $key ) {
+			if ( ! array_key_exists( $key, $fabric ) ) {
+				continue;
+			}
+			$value = $fabric[ $key ];
+			if ( null === $value || '' === $value ) {
+				unset( $fabric[ $key ] );
+				continue;
+			}
+			$reason = self::fabric_part_issue( $key, $value );
+			if ( null !== $reason ) {
+				unset( $fabric[ $key ] );
+				$left_out[] = array(
+					'field'  => 'fabric.' . $key,
+					'reason' => $reason,
+				);
+			}
+		}
+		return array(
+			'fabric'   => $fabric,
+			'left_out' => $left_out,
+		);
+	}
+
+	/** The first issue FabricSchema reports for one fabric part, or null when it is valid. @param mixed $value */
+	private static function fabric_part_issue( string $key, $value ): ?string {
+		switch ( $key ) {
+			case 'primary':
+				return is_string( $value ) ? self::string_issue( $value, 64 ) : 'Invalid input: expected string';
+			case 'blend':
+				if ( ! is_array( $value ) || ! array_is_list( $value ) ) {
+					return 'Invalid input: expected array';
+				}
+				// The schema reports the size of the list before anything in a row.
+				if ( count( $value ) > 8 ) {
+					return 'Too big: expected array to have <=8 items';
+				}
+				foreach ( $value as $row ) {
+					if ( ! is_array( $row ) || ! array_is_list( $row ) || 2 !== count( $row ) ) {
+						return 'Invalid input: expected tuple';
+					}
+					$issue = is_string( $row[0] ) ? self::string_issue( $row[0], 64 ) : 'Invalid input: expected string';
+					$issue = $issue ?? self::number_issue( $row[1], 0.0, 100.0, false );
+					if ( null !== $issue ) {
+						return $issue;
+					}
+				}
+				return null;
+			case 'weightGsm':
+				return self::number_issue( $value, 0.0, 2000.0, true );
+			case 'stretchPct':
+				return self::number_issue( $value, 0.0, 100.0, false );
+			default: // drape, opacity, sheen: 0 to 1.
+				return self::number_issue( $value, 0.0, 1.0, false );
+		}
+	}
+
+	/** @param mixed $value */
+	private static function number_issue( $value, float $min, float $max, bool $exclusive_min ): ?string {
+		if ( is_bool( $value ) || ! ( is_int( $value ) || is_float( $value ) ) || ! is_finite( (float) $value ) ) {
+			return 'Invalid input: expected number';
+		}
+		$n = (float) $value;
+		if ( $exclusive_min ? $n <= $min : $n < $min ) {
+			return 'Too small: expected number to be ' . ( $exclusive_min ? '>' : '>=' ) . self::num_to_string( self::num( $min ) );
+		}
+		if ( $n > $max ) {
+			return 'Too big: expected number to be <=' . self::num_to_string( self::num( $max ) );
+		}
+		return null;
+	}
+
+	/** Length as the schema counts it: in characters (code points), so an emoji is one, not two. */
+	private static function string_issue( string $value, int $max ): ?string {
+		if ( function_exists( 'mb_strlen' ) ) {
+			$len = mb_strlen( $value, 'UTF-8' );
+		} else {
+			$chars = preg_match_all( '/./us', $value );
+			$len   = false === $chars ? strlen( $value ) : $chars;
+		}
+		if ( $len < 1 ) {
+			return 'Too small: expected string to have >=1 characters';
+		}
+		return $len > $max ? 'Too big: expected string to have <=' . $max . ' characters' : null;
 	}
 
 	/**

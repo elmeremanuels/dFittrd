@@ -7,6 +7,7 @@ import { ProfileRoute } from '@/routes/ProfileRoute';
 import { TryRoute } from '@/routes/TryRoute';
 import { WardrobeRoute } from '@/routes/WardrobeRoute';
 import { MerchantAssetReview } from '@/merchant/AssetReview';
+import { MerchantSettings } from '@/merchant/Settings';
 import { MerchantAnalytics, MerchantLayout, MerchantLedgerRoute, MerchantLogin, MerchantOverview, MerchantProducts, MerchantUsage } from '@/merchant/MerchantConsole';
 
 /**
@@ -63,6 +64,7 @@ export const routes: RouteObject[] = [
       { path: 'usage', element: <MerchantUsage /> },
       { path: 'analytics', element: <MerchantAnalytics /> },
       { path: 'ledger', element: <MerchantLedgerRoute /> },
+      { path: 'settings', element: <MerchantSettings /> },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },

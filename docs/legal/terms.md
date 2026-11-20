@@ -66,7 +66,7 @@ Curtain is a paid subscription. The current price is [PRICE, for example USD 8.9
 
 We count try-on sessions for analytics and fair use. Each plan has a daily fair-use limit to protect you from abuse; above it, sessions are not counted and the day is flagged with your usage figures. [FOUNDER: confirm whether any usage charge remains; D17 says flat price, no per-session charge.]
 
-If a subscription is cancelled, declined or frozen, the Try it on button keeps rendering but the fit tool shows a "paused" message; your shop's page is never broken. You can change or cancel your plan at any time from the Curtain admin or by uninstalling the app; Shopify handles any proration according to its billing rules.
+If a subscription is cancelled, declined or frozen, the Try it on button is hidden until the plan is active again; your shop's page is never broken. You can change or cancel your plan at any time from the Curtain admin or by uninstalling the app; Shopify handles any proration according to its billing rules.
 
 ### 13. Uninstalling and your data
 

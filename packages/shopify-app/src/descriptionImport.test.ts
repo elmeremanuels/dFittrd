@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { descriptionLines, fabricStatement, oneSizeLabel, parseDescriptionMeasurements, proposeFromDescription } from './descriptionImport';
+import { GarmentPayloadDraftSchema, sizeAdviceGarment } from '@curtain/schema';
+import { DESCRIPTION_IMPORT_TEXT, descriptionLines, fabricStatement, oneSizeLabel, parseDescriptionMeasurements, proposeFromDescription } from './descriptionImport';
 
 const oneSize = { options: [{ name: 'Size', optionValues: [{ name: 'One Size' }] }] };
 const multi = { options: [{ name: 'Size', optionValues: [{ name: '8' }, { name: '10' }, { name: '12' }] }] };
@@ -63,8 +64,9 @@ describe('proposeFromDescription', () => {
     expect(p.oneSize).toBe(true);
     expect(p.proposal).toEqual({ sizeChartType: 'garment', sizeChart: [{ size: 'ONE', bust: 140 }] });
     expect(p.lengthCm).toEqual({ shoulder_to_hem: 110 });
-    expect(p.fabric?.primary).toBe('viscose');
-    expect(p.fabric?.blend).toEqual([['viscose', 100]]);
+    // Only what the description states: fibre names and blend. No stretch, drape or weight of ours.
+    expect(p.fabric).toEqual({ primary: 'viscose', blend: [['viscose', 100]] });
+    expect(p.fabricEstimate).toEqual({ stretchPct: expect.any(Number) });
     expect(p.fabricStatement).toBe('Our flowing kaftan is made from 100% rayon.');
     expect(p.evidence.some((e) => e.startsWith('bust:'))).toBe(true);
     expect(p.warnings).toEqual([]);
@@ -88,5 +90,36 @@ describe('proposeFromDescription', () => {
     expect(p.proposal).toBeNull();
     expect(p.lengthCm).toEqual({ shoulder_to_hem: 180 });
     expect(p.warnings[0]).toMatch(/No bust, waist or hip/);
+  });
+});
+
+describe('the stretch read from a description is an estimate, kept apart from the fabric (inventory D18, F20)', () => {
+  const jersey = () => proposeFromDescription({ title: 'Jersey tee', descriptionHtml: '<p>Fabric: 95% cotton, 5% elastane jersey.</p><p>Bust 96cm circumference.</p>', ...oneSize });
+
+  it('the proposed fabric holds no number from the fabric library', () => {
+    const p = jersey();
+    expect(p.fabric?.primary).toBeTruthy();
+    expect(p.fabric?.blend).toEqual(expect.arrayContaining([['elastane', 5]]));
+    for (const key of ['stretchPct', 'drape', 'weightGsm', 'opacity', 'sheen'] as const) expect(p.fabric).not.toHaveProperty(key);
+    // The estimate exists, and is large enough to matter: saved unseen it would allow a tighter size.
+    expect(p.fabricEstimate!.stretchPct).toBeGreaterThan(20);
+  });
+
+  it('the fabric as proposed is a valid draft, and size advice then assumes 0 % stretch, not the estimate', () => {
+    const p = jersey();
+    const draft = { schemaVersion: 1, id: '1', name: 'Jersey tee', brand: 'Shop', category: 'top', ...p.proposal!, fabric: p.fabric };
+    expect(GarmentPayloadDraftSchema.safeParse(draft).success).toBe(true);
+    const advice = sizeAdviceGarment(draft);
+    expect(advice.ok).toBe(true);
+    if (advice.ok) {
+      expect(advice.garment.fabric.stretchPct).toBe(0);
+      expect(advice.defaulted).toContain('fabric.stretchPct');
+    }
+  });
+
+  it('the words call it an estimate and say what happens when it is left out', () => {
+    expect(DESCRIPTION_IMPORT_TEXT.stretchEstimateNote).toMatch(/^Estimate: /);
+    expect(DESCRIPTION_IMPORT_TEXT.stretchEstimateNote).toMatch(/not measured/);
+    expect(DESCRIPTION_IMPORT_TEXT.stretchEstimateNote).toMatch(/treats the fabric as not stretching/);
   });
 });

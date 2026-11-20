@@ -9,8 +9,12 @@
  * dropdown (`form.variations_form select[name=attribute_pa_size]`). The Curtain app is opt-in
  * (data-mode="app").
  *
- * D7: the button always renders once the shop is connected, even when the plan is paused —
- * the overlay shows the "shop paused" screen; the merchant's page is never broken.
+ * Paused plan (D25 point 5, which changes D7): the button's `.curtain-try` wrapper is printed with
+ * `hidden` (and one style rule, so a theme's own `display` rule cannot show it), and the SDK shows
+ * it after asking the api whether the shop is paused. So a paused shop never shows a button, not
+ * for a moment, and nothing shows when the script does not load. The plugin's own stored `paused`
+ * flag is only refreshed with the hello, so it does not decide this: a merchant who has just paid
+ * would otherwise keep a hidden button. The page is never broken.
  *
  * @package Curtain
  */
@@ -274,7 +278,7 @@ final class Frontend {
 			? esc_html__( 'Opens the Curtain app, your private fitting room. Fit results are estimates.', 'curtain-woocommerce' )
 			: esc_html__( 'Find your size on this page. Your measurements stay on this device. Fit results are estimates.', 'curtain-woocommerce' );
 		return sprintf(
-			'<p class="curtain-try"><button type="button" class="%s curtain-try-button" data-curtain-product="%s" data-curtain-mode="%s" data-curtain-size-option="%s" data-curtain-peek="%s">%s</button><span class="curtain-try-note screen-reader-text">%s</span></p>',
+			'<style>.curtain-try[hidden]{display:none!important}</style><p class="curtain-try" hidden><button type="button" class="%s curtain-try-button" data-curtain-product="%s" data-curtain-mode="%s" data-curtain-size-option="%s" data-curtain-peek="%s">%s</button><span class="curtain-try-note screen-reader-text">%s</span></p>',
 			esc_attr( trim( $class ) ),
 			esc_attr( (string) $product->get_id() ),
 			esc_attr( $mode ),

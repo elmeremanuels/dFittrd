@@ -50,7 +50,7 @@ import { conflict, forbidden, gone, HttpError, notFound, unauthorized, unprocess
 import { embedAllowedOrigins, originOf } from '../services/embed.js';
 import { byteLength, fieldNames, writeLedger } from '../services/ledger.js';
 import { activeAssetRef } from '../services/assets.js';
-import { asTryGarment, findProduct, findProductById } from '../services/products.js';
+import { asTryGarment, findProduct, findProductById, tryGarment } from '../services/products.js';
 import { menComingSoon, shopperReadiness, surfaceOfSession } from '../services/readiness.js';
 import { findShopById, findShopByPrefix, isPaused, shopBranding } from '../services/shops.js';
 import { billFitSession } from '../services/usage.js';
@@ -89,8 +89,9 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
       const readiness = await shopperReadiness({ db, env }, product, { surface: surfaceOfSession(session.surface), shop, enforces3dRule });
       if (readiness.state === 'coming_soon') throw menComingSoon();
       // Size advice needs category + chart type + chart; price, colour, block and fabric default.
-      const garment = asTryGarment(product, { colorHex: shop.settings.brandColor ?? undefined });
-      if (!garment) throw unprocessable('product_incomplete', 'the shop has not finished this product’s fit data');
+      const resolved = tryGarment(product, { colorHex: shop.settings.brandColor ?? undefined });
+      if (!resolved) throw unprocessable('product_incomplete', 'the shop has not finished this product’s fit data');
+      const { garment } = resolved;
 
       const pseudonym = pseudonymFor(deviceId, shop.id, env.SHOP_KEY_PEPPER);
       const inserted = await db
@@ -119,6 +120,8 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
         ...(readiness.requires3d ? { requires3d: true as const } : {}),
         // D22: the AI-enhanced estimate is offered only with the server flag on and a 3D view to start from.
         ...(env.AI_REALISM && asset ? { aiRealism: true as const } : {}),
+        // The shop gave no fabric stretch: the embed says size advice did not take stretch into account.
+        ...(resolved.stretchAssumed ? { stretchAssumed: true as const } : {}),
       };
     },
   );
@@ -133,7 +136,7 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
     async (req) => {
       const shop = await findShopByPrefix(db, req.query.shop);
       if (!shop || shop.uninstalledAt) throw notFound('shop');
-      // A paused shop shows no peek (the button still opens the paused screen).
+      // A paused shop shows no peek (and no button: the SDK hides it, D25 point 5).
       if (isPaused(shop)) throw new HttpError(402, 'shop_paused', 'this shop has paused Curtain');
       // Only products the button can really open: try-able, not incomplete or archived.
       const product = await findProduct(db, shop.id, req.query.product);
@@ -164,7 +167,7 @@ export const tryRoutes: FastifyPluginAsyncZod = async (app) => {
 
       const shop = await findShopById(db, session.shopId);
       if (!shop) throw notFound('shop');
-      // D7: below plan the embed shows the paused screen and nothing is billed.
+      // Below plan nothing is billed; an overlay that is still open shows the paused screen.
       if (isPaused(shop)) throw new HttpError(402, 'shop_paused', 'this shop has paused Curtain; the try-on is not billed');
 
       /** SEC-1 / SEC-2: see the file header. Every "no" is silent to the caller (`billed: false`). */

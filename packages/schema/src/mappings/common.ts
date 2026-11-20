@@ -28,6 +28,7 @@ import {
 } from '../garment';
 import { FABRIC_PRIMARY_LIBRARY_IDS, fabricLibraryId, fabricPayloadName } from '../fabrics';
 import { resolveFabricText } from './fabricText';
+import { leaveOutInvalidFabricParts } from '../incompleteData';
 
 export interface MappingWarning {
   /** Platform key (metafield key or meta key) that failed. */
@@ -64,7 +65,8 @@ export function coerceNumber(value: unknown): number | undefined {
   if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
   if (typeof value === 'string') {
     const t = value.trim().replace(',', '.');
-    if (t === '') return undefined;
+    // Decimal only: Number() would read "0x10" as 16, and the WooCommerce plugin's PHP twin refuses it.
+    if (t === '' || /^[+-]?0[xob]/i.test(t)) return undefined;
     const n = Number(t);
     return Number.isFinite(n) ? n : undefined;
   }
@@ -231,7 +233,8 @@ export function coerceFabric(value: unknown, sink: WarningSink, source: string):
   if (!v || typeof v !== 'object' || Array.isArray(v)) {
     // Plain text ("95% katoen, 5% elastaan") carries no stretch or drape: it is prefill
     // (`fabricFromProductText`), never a payload fabric the draft schema would then reject.
-    if (v !== undefined) warn(sink, { source, path: 'fabric', message: 'expected a JSON object' });
+    // `null` is an absent fabric, like no value at all: nothing to warn about.
+    if (v !== undefined && v !== null) warn(sink, { source, path: 'fabric', message: 'expected a JSON object' });
     return undefined;
   }
   const r = v as Record<string, unknown>;
@@ -279,15 +282,19 @@ export function coerceFabric(value: unknown, sink: WarningSink, source: string):
     if (blend.length) out.blend = blend;
   }
   if (out.blend === undefined && textBlend) out.blend = textBlend;
-  return validated(FabricSchema.partial(), out, sink, source, 'fabric');
+  // D25 point 1: a part that is not valid (stretch 150) is left out and reported; the rest is kept.
+  const cleaned = leaveOutInvalidFabricParts(out);
+  for (const l of cleaned.leftOut) warn(sink, { source, path: l.field, message: `${l.reason}; the value was left out` });
+  const fabric = cleaned.fabric as Partial<Fabric>;
+  return Object.keys(fabric).length ? fabric : undefined;
 }
 
 /**
  * Prefill from product text the shop already publishes (a "Material" / "Materiaal" /
  * "Samenstelling" attribute or metafield) for a product without a Curtain fabric field: `primary`
  * and, when stated, `blend`, for the merchant to confirm. Not used by `fromWooMeta` /
- * `fromShopifyProduct`: without stretch and drape it is not a payload fabric (the WooCommerce meta
- * box prefills its form with the PHP twin, `Curtain\Fabric_Text`).
+ * `fromShopifyProduct`: it is a proposal, stored only once the merchant confirms it (the
+ * WooCommerce meta box prefills its form with the PHP twin, `Curtain\Fabric_Text`).
  */
 export function fabricFromProductText(texts: ReadonlyArray<string | undefined>): Partial<Fabric> | undefined {
   const text = texts.filter((t): t is string => typeof t === 'string' && t.trim() !== '').join(', ');

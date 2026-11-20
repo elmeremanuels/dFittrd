@@ -5,7 +5,7 @@
  * console from elsewhere stay where they are: the checklist steps and plan lines of @curtain/schema, and the api's
  * own product advice. `strings.test.ts` fails when interface text is written inline in the console again.
  */
-import type { BakeCheckId, GarmentAssetStatus, SetupResponse, TapeProvenance } from '@curtain/schema';
+import type { BakeCheckId, GarmentAssetStatus, IncompleteProductDataPolicy, SetupResponse, TapeProvenance } from '@curtain/schema';
 
 export interface AssetReviewCatalogue {
   title: (product: string) => string;
@@ -80,7 +80,7 @@ export interface ConsoleCatalogue {
   /** Shown where a value is not known or not there. */
   none: string;
   login: { keyLabel: string; keyPlaceholder: string; badKey: string; open: string; help: string };
-  nav: { label: string; overview: string; products: string; usage: string; swipes: string; ledger: string; signOut: string };
+  nav: { label: string; overview: string; products: string; usage: string; swipes: string; ledger: string; settings: string; signOut: string };
   demoBanner: string;
   loading: string;
   keyRefused: string;
@@ -131,6 +131,59 @@ export interface ConsoleCatalogue {
     menConfirm: string;
     menConfirmTitle: string;
     missing: (fields: string[]) => string;
+    /** The chip of a product the shop's setting holds back. */
+    heldBack: string;
+    /** `what`: the fabric details to complete, in plain words. */
+    heldBackText: (what: string[]) => string;
+    /** The link to the setting, after `heldBackText`. */
+    heldBackSetting: string;
+    /** The short next step of a held-back product (the full sentence is under the product name). */
+    heldBackNext: string;
+    /** Plain names of fabric details, by payload path; `other` for a path the console does not know. */
+    fabricPart: Record<string, string> & { other: string };
+    /** What a fabric detail must be, by payload path (said when a value was not saved). */
+    fabricRule: Record<string, string>;
+    /** A value that was not saved: `rule` from `fabricRule`, else the api's own reason. */
+    leftOut: (part: string, rule: string) => string;
+    /** The same for a detail the console has no rule for (the api's own reason is never shown). */
+    leftOutOther: (part: string) => string;
+    /** A stretch that was entered but not valid, on a product that gives size advice: one line, with what size advice then assumes. */
+    leftOutStretch: (rule: string) => string;
+    /** No stretch on a product that gives size advice. */
+    stretchAssumed: string;
+  };
+  settings: {
+    title: string;
+    intro: string;
+    unavailable: string;
+    saving: string;
+    saved: string;
+    failed: string;
+    demo: string;
+    incomplete: {
+      title: string;
+      intro: string;
+      choices: Record<IncompleteProductDataPolicy, { label: string; text: string }>;
+      defaultMark: string;
+      heldNow: (n: number) => string;
+    };
+    popup: { title: string; wordmark: string; wordmarkText: string };
+    shop: {
+      title: string;
+      name: string;
+      nameFrom: Record<SetupResponse['platform'], string>;
+      colour: string;
+      colourText: string;
+      colourPick: string;
+      colourNone: string;
+      colourBad: string;
+      remove: string;
+      logo: string;
+      logoText: string;
+      logoPlaceholder: string;
+      logoBad: string;
+      save: string;
+    };
   };
   usage: {
     plan: string;
@@ -248,7 +301,7 @@ export const CONSOLE_EN: ConsoleCatalogue = {
     open: 'Open console',
     help: 'Ask Curtain support for your console key (the WordPress plugin keeps its own key hidden, so it cannot show it to you). On Shopify you do not need this page: everything is under Apps → Curtain in your Shopify admin.',
   },
-  nav: { label: 'Console sections', overview: 'Overview', products: 'Products', usage: 'Usage & plan', swipes: 'Swipes', ledger: 'Privacy ledger', signOut: 'Sign out' },
+  nav: { label: 'Console sections', overview: 'Overview', products: 'Products', usage: 'Usage & plan', swipes: 'Swipes', ledger: 'Privacy ledger', settings: 'Settings', signOut: 'Sign out' },
   demoBanner: 'API unreachable — showing demo data with the real response shapes. Nothing here is from your shop.',
   loading: 'Loading your shop…',
   keyRefused: 'This key was not accepted. It may have been replaced: sign out and paste the newest key from your Curtain settings (WooCommerce → Curtain, or the Curtain app in Shopify).',
@@ -304,6 +357,82 @@ export const CONSOLE_EN: ConsoleCatalogue = {
     menConfirmTitle:
       'We read “men” from the title or a collection only, or the product has not been synced since we started asking where the audience comes from. Set the audience on the product to confirm it, or sync it again; until then it is shown as before.',
     missing: (fields) => `Missing: ${fields.join(', ')}`,
+    heldBack: 'Held back',
+    heldBackText: (what) => `Held back by your setting: shoppers get no size advice for this product until you add or correct ${what.join(' and ')}.`,
+    heldBackSetting: 'Change the setting',
+    heldBackNext: 'Add or correct the fabric details named under the product name.',
+    fabricPart: {
+      'fabric.stretchPct': 'the fabric stretch',
+      'fabric.drape': 'the drape',
+      'fabric.weightGsm': 'the fabric weight',
+      'fabric.opacity': 'the opacity',
+      'fabric.sheen': 'the sheen',
+      'fabric.blend': 'the fibre blend',
+      'fabric.primary': 'the fabric name',
+      other: 'a fabric detail',
+    },
+    fabricRule: {
+      'fabric.stretchPct': 'it must be a number from 0 to 100',
+      'fabric.drape': 'it must be a number from 0 to 1',
+      'fabric.weightGsm': 'it must be a number above 0 and at most 2000',
+      'fabric.opacity': 'it must be a number from 0 to 1',
+      'fabric.sheen': 'it must be a number from 0 to 1',
+      'fabric.blend': 'it may hold at most 8 fibres, each from 0 to 100%',
+      'fabric.primary': 'it may be at most 64 characters long',
+    },
+    leftOut: (part, rule) => `Not saved: ${part}. The value you entered was left out (${rule}). The rest of the fabric was kept.`,
+    leftOutOther: (part) => `Not saved: ${part}. The value you entered is not valid and was left out. The rest of the fabric was kept.`,
+    leftOutStretch: (rule) => `Not saved: the fabric stretch. The value you entered was left out (${rule}), so size advice assumes the fabric does not stretch until you correct it. The rest of the fabric was kept.`,
+    stretchAssumed: 'No fabric stretch given: size advice assumes the fabric does not stretch. For a stretchy fabric the advice is less exact until you add it.',
+  },
+  settings: {
+    title: 'Settings',
+    intro: 'Choices for your whole shop. A choice or a switch is saved when you change it; your colour and logo when you press “Save colour and logo”.',
+    unavailable: 'Settings could not be loaded just now. Reload the page to try again.',
+    saving: 'Saving…',
+    saved: 'Saved.',
+    failed: 'That was not saved. Check your internet connection and try again.',
+    demo: 'Demo data: changes here are not saved anywhere.',
+    incomplete: {
+      title: 'Products with incomplete fabric details',
+      intro: 'What should happen when a product has no fabric stretch, or a fabric value Curtain cannot use? Either way Curtain keeps the rest of what you entered.',
+      choices: {
+        'let-through': {
+          label: 'Show size advice anyway',
+          text: 'The product goes live and the product list tells you what is missing. Without a stretch value, size advice assumes the fabric does not stretch, and the popup tells shoppers that the shop has not said how much the fabric stretches.',
+        },
+        'hold-back': {
+          label: 'Hold the product back until it is complete',
+          text: 'The product is saved, but shoppers get no size advice for it until you add what is missing. The product list shows which products are held back and why.',
+        },
+      },
+      defaultMark: '(standard)',
+      heldNow: (n) => (n === 1 ? '1 product is held back right now.' : `${n} products are held back right now.`),
+    },
+    popup: {
+      title: 'The popup on your product page',
+      wordmark: 'Show “Fit by Curtain”',
+      wordmarkText: 'A small line at the bottom of the popup. The “Estimate” labels on the figure and on pictures always stay: they are not part of this switch. The link “Get the Curtain app” also stays.',
+    },
+    shop: {
+      title: 'Your shop in the popup',
+      name: 'Shop name',
+      nameFrom: {
+        woocommerce: 'This is your site title in WordPress (Settings → General). Change it there; Curtain picks it up.',
+        shopify: 'This is your store name in Shopify. Change it there; Curtain picks it up.',
+      },
+      colour: 'Brand colour',
+      colourText: 'The line at the top of the popup. Your shop name takes this colour too when it is readable on the light background.',
+      colourPick: 'Pick a colour',
+      colourNone: 'No colour set: the popup has no coloured line at the top and shows your shop name in black.',
+      colourBad: 'Write the colour as a hex code, for example #2F4F3A.',
+      remove: 'Remove',
+      logo: 'Logo address',
+      logoText: 'The web address of your logo image. It is stored now and not shown in the popup yet.',
+      logoPlaceholder: 'https://',
+      logoBad: 'Write a full web address that starts with https://',
+      save: 'Save colour and logo',
+    },
   },
   usage: {
     plan: 'Plan',
@@ -319,7 +448,7 @@ export const CONSOLE_EN: ConsoleCatalogue = {
     perDay: 'Fit sessions per day',
     perDayNote: (from, to) => `${from} → ${to}. One session = one product resolved by one shopper with a fit result written (D7).`,
     dayBar: (day, sessions) => `${day}: ${sessions} sessions`,
-    pausedNote: 'No active subscription: the “Try it on” button still renders; shoppers see a “shop paused” screen until the Curtain plan is active again.',
+    pausedNote: 'No active subscription: the “Try it on” button is hidden on your product pages until the Curtain plan is active again.',
     oldPrice: 'Old plan price',
     fairUse: 'A daily fair-use limit stops automated traffic; your price stays the same.',
     switchTo: (price) => `Switch to Curtain (${price})`,
@@ -378,7 +507,7 @@ export const SETUP_EN: SetupCatalogue = {
 export const PLAN_EN: PlanCatalogue = {
   perMonth: (usd) => `${usd} per month`,
   perMonthCharged: (charged, usd) => `${charged} per month (${usd})`,
-  paused: 'Paused: shoppers see a short “taking a break” note instead of a size until the plan is active again.',
+  paused: 'Paused: the button is hidden on your product pages until the plan is active again.',
   none: 'Not started yet.',
   active: 'Active.',
   legacy: (legacyPlan, viaShopify) =>

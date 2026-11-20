@@ -78,6 +78,12 @@ export const PRODUCT_NOTICE_TEXT = Object.freeze({
   heldBackSetting: 'Change the setting',
   /** The short next step of a held-back product (the full sentence is under the product name). */
   heldBackNext: 'Add or correct the fabric details named under the product name.',
+  /**
+   * Where a Shopify merchant does that: the admin page itself has no fabric form, the values are
+   * in the product's own "Fabric" metafield (mappings/shopify.ts). Shown after `heldBackNext`.
+   */
+  heldBackWhereShopify:
+    'Where: press “Edit in Shopify” on this row and scroll to “Metafields”. The fabric is in the field “Fabric”, written like this: {"primary":"viscose","stretchPct":5}. The stretch is "stretchPct", a number from 0 to 100; write 0 for a fabric that does not stretch. Save the product, wait a minute, then reload this page.',
   /** Plain names of fabric details, by payload path; `other` for a path the surface does not know. */
   fabricPart: Object.freeze({
     'fabric.stretchPct': 'the fabric stretch',

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { INCOMPLETE_PRODUCT_DATA_POLICIES } from './incompleteData';
 import { FabricSchema } from './garment';
+import { SHOPIFY_METAFIELD_DEFINITIONS } from './mappings/shopify';
 import { PRODUCT_NOTICE_TEXT, SHOP_SETTINGS_TEXT, fabricPartText, fillText, heldNowText, productNoticeLines } from './merchantSettingsText';
 
 const T = PRODUCT_NOTICE_TEXT;
@@ -34,6 +35,19 @@ describe('the shared settings catalogue', () => {
       expect(T.fabricPart[`fabric.${key}`], key).toBeTruthy();
       expect(T.fabricRule[`fabric.${key}`], key).toBeTruthy();
     }
+  });
+
+  it('tells a Shopify merchant where the stretch goes, with an example the fabric rules accept and the metafield\'s real name', () => {
+    const where = T.heldBackWhereShopify;
+    const fabric = SHOPIFY_METAFIELD_DEFINITIONS.find((d) => d.key === 'fabric')!;
+    expect(where).toContain(`“${fabric.name}”`);
+    expect(where).toContain('“Edit in Shopify”');
+    const example = /\{[^}]*\}/.exec(where)![0];
+    const parsed = FabricSchema.partial().safeParse(JSON.parse(example));
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toMatchObject({ stretchPct: 5 });
+    // The same rule the "Not saved" line names.
+    expect(where).toContain('a number from 0 to 100');
   });
 
   it('counts held-back products in words', () => {

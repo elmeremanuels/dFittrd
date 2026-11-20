@@ -418,8 +418,9 @@ export function MerchantProducts(): ReactNode {
         <p className="card bg-white/80 text-sm text-ink-soft">{t.empty}</p>
       ) : (
       <div className="overflow-x-auto rounded-3xl border border-ink/10 bg-white/80">
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs uppercase tracking-wider text-ink-mute">
+        {/* On a phone each product is a block of its own: a table five columns wide was cut off at the status chip. */}
+        <table className="w-full text-sm max-sm:block" data-testid="products-table">
+          <thead className="text-left text-xs uppercase tracking-wider text-ink-mute max-sm:sr-only">
             <tr>
               <th className="px-4 py-3">{t.product}</th>
               <th className="px-4 py-3">{t.kind}</th>
@@ -430,7 +431,7 @@ export function MerchantProducts(): ReactNode {
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-ink/10">
+          <tbody className="divide-y divide-ink/10 max-sm:block">
             {items.map((p) => {
               // Held back by the shop's own setting (D25 point 2): that, not the api's general next step, is what to say.
               const tone = p.heldBack ? 'critical' : (p.next?.tone ?? (p.status === 'active' ? 'success' : 'critical'));
@@ -440,8 +441,8 @@ export function MerchantProducts(): ReactNode {
               const leftOut = lines.leftOut;
               const stretchAssumed = lines.stretchAssumed !== null;
               return (
-              <tr key={p.externalId} data-testid={`product-${p.externalId}`}>
-                <td className="min-w-[15rem] px-4 py-3">
+              <tr key={p.externalId} data-testid={`product-${p.externalId}`} className="max-sm:block max-sm:py-2">
+                <td className="px-4 py-3 max-sm:block max-sm:py-1.5 sm:min-w-[15rem]">
                   <p className="font-medium">{p.name}</p>
                   {/* What the last save left out or assumed (D25 point 1), and why the product is held back. Under the name, so it is on screen on a phone. */}
                   {p.heldBack || leftOut.length > 0 || stretchAssumed ? (
@@ -463,8 +464,8 @@ export function MerchantProducts(): ReactNode {
                     </ul>
                   ) : null}
                 </td>
-                <td className="px-4 py-3">{p.category ? (CATEGORY_TEXT[p.category] ?? titleCase(p.category)) : c.none}</td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3 max-sm:block max-sm:py-1.5">{p.category ? (CATEGORY_TEXT[p.category] ?? titleCase(p.category)) : c.none}</td>
+                <td className="px-4 py-3 max-sm:block max-sm:py-1.5">
                   <span className={`chip ${tone === 'success' ? 'border-ok/30 bg-ok/10 text-ok' : tone === 'warning' ? 'border-warn/30 bg-warn/10 text-warn' : 'border-bad/30 bg-bad/10 text-bad'}`}>{p.heldBack ? t.heldBack : (p.next?.badge ?? (p.status === 'active' ? t.ready : t.notReady))}</span>
                   <div className="mt-1.5 flex items-center gap-2">
                     <div className="h-1.5 w-20 overflow-hidden rounded-full bg-ink/10" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={score} aria-label={t.scoreLabel(score)}>
@@ -483,8 +484,8 @@ export function MerchantProducts(): ReactNode {
                     </span>
                   ) : null}
                 </td>
-                <td className="max-w-sm px-4 py-3 text-ink-soft">{p.heldBack ? t.heldBackNext : (p.next?.text ?? (p.missingFields.length ? t.missing(p.missingFields) : c.none))}</td>
-                <td className="px-4 py-3">
+                <td className="max-w-sm px-4 py-3 text-ink-soft max-sm:block max-sm:py-1.5">{p.heldBack ? t.heldBackNext : (p.next?.text ?? (p.missingFields.length ? t.missing(p.missingFields) : c.none))}</td>
+                <td className="px-4 py-3 max-sm:block max-sm:py-1.5">
                   <Link to={`/merchant/products/${encodeURIComponent(p.externalId)}/3d`} className="chip whitespace-nowrap hover:bg-white" data-testid={`open-3d-${p.externalId}`}>
                     {merchantStrings().assets.open3d}
                   </Link>

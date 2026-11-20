@@ -113,6 +113,8 @@ try {
   await button.scrollIntoViewIfNeeded();
   expect((await button.count()) === 1, 'the settings page has no "Open the Curtain console" button');
   expect((await page.evaluate(() => document.documentElement.scrollWidth)) <= 390, 'the settings page scrolls sideways on a phone');
+  // The description promises what the console does: the session lives in that one tab.
+  expect((await page.locator('#curtain-console').innerText()).includes('until you close that tab, and for 12 hours at most'), 'the description under the button does not say how long the sign-in lasts');
   await page.locator('#curtain-connection').evaluate((h) => h.scrollIntoView({ block: 'start' }));
   await page.screenshot({ path: join(out, 'woo-phone-01-open-the-console.png') });
 
@@ -140,6 +142,10 @@ try {
   expect(!tab.url().includes(token), `"Back" shows the token: ${tab.url()}`);
   await tab.goto(`${WEB}/merchant/products`);
   await tab.getByText('Boho kaftan').first().waitFor({ timeout: 60_000 });
+  // On a phone no status chip of the product list is cut off at the right edge.
+  const cutChips = await tab.evaluate(() => Array.from(document.querySelectorAll('[data-testid="products-table"] .chip')).filter((c) => c.getBoundingClientRect().right > document.documentElement.clientWidth).length);
+  expect(cutChips === 0, `${cutChips} chips of the product list are cut off on a phone`);
+  expect((await tab.locator('[data-testid="products-table"] .chip').count()) >= 3, 'the product list shows no status chips');
   await tab.screenshot({ path: join(out, 'console-phone-03-products-after-link.png') });
   await tab.goto(`${WEB}/merchant/settings`);
   await tab.getByRole('radio', { name: /Show size advice anyway/ }).waitFor({ timeout: 60_000 });

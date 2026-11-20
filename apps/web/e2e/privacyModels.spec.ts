@@ -176,9 +176,25 @@ test('the whole capture step with the real models talks to the app origin only a
   await scan.click();
   const manual = page.getByRole('heading', { name: /Your measurements/ });
   const failed = page.getByRole('button', { name: /Enter measurements manually instead/ });
-  await expect(manual.or(failed)).toBeVisible({ timeout: 90_000 });
-  const scanned = await manual.isVisible();
-  test.info().annotations.push({ type: 'body scan', description: scanned ? 'measured the mannequin' : `failed: ${await page.getByRole('status').first().textContent()}` });
+  // The fake camera loops 3 s of front view and 3 s of side view, and the scan starts wherever the loop
+  // happens to be; on a busy machine (SwiftShader) too few front frames can fall inside one 8-second scan
+  // ("no usable front frame"). "Try again" is what a shopper presses; the scan must succeed within three goes.
+  let scanned = false;
+  let attempts = 0;
+  const refusals: string[] = [];
+  while (!scanned && attempts < 3) {
+    attempts++;
+    await expect(manual.or(failed)).toBeVisible({ timeout: 90_000 });
+    scanned = await manual.isVisible();
+    if (scanned) break;
+    refusals.push((await page.getByRole('status').first().textContent()) ?? '');
+    if (attempts < 3) {
+      await page.getByRole('button', { name: 'Try again' }).click();
+      await expect(scan).toBeEnabled({ timeout: 60_000 });
+      await scan.click();
+    }
+  }
+  test.info().annotations.push({ type: 'body scan', description: scanned ? `measured the mannequin (attempt ${attempts}${refusals.length ? `; before: ${refusals.join(' | ')}` : ''})` : `failed ${attempts} times: ${refusals.join(' | ')}` });
   await page.screenshot({ path: shot('02-after-body-scan-of-mannequin.png') });
   expect(scanned, 'the body scan measured the mannequin (pose landmarker and segmenter ran)').toBe(true);
 

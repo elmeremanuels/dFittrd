@@ -35,7 +35,8 @@ export const STEPS = [
     name: 'privacy',
     title: 'privacy e2e with the real models, under the production headers',
     cmd: pnpm,
-    args: ['--filter', '@curtain/web', 'e2e', 'privacy.spec.ts', 'privacyModels.spec.ts'],
+    // One worker: the body scan runs MediaPipe on a software GPU and needs the machine to itself.
+    args: ['--filter', '@curtain/web', 'e2e', 'privacy.spec.ts', 'privacyModels.spec.ts', '--workers=1'],
     env: { CURTAIN_REQUIRE_MODELS: '1' },
   },
   { name: 'post-deploy', title: 'post-deploy check against the local demo stack', cmd: node, args: ['--test', 'scripts/post-deploy-check.test.mjs'] },

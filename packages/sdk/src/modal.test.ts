@@ -94,9 +94,9 @@ describe('openModal — accessibility', () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
-  it('shows a paused note when the shop is below plan, and a message-only dialog on errors', () => {
-    const { dialog } = openModal({ strings, content: { ...content, paused: true } });
-    expect(dialog.querySelector('.pk-note')?.textContent).toBe(strings.pausedShort);
+  it('shows a message-only dialog on errors, and never a paused note (a paused shop shows no button)', () => {
+    const { dialog } = openModal({ strings, content });
+    expect(dialog.querySelector('.pk-note')).toBeNull();
     closeModal();
     const m = openModal({ strings, content: { message: strings.error } });
     expect(m.dialog.querySelector('img')).toBeNull();

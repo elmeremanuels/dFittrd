@@ -6,6 +6,11 @@ shopper gets the whole fit experience in an overlay on the shop's own page and n
 Curtain app. The contract is `docs/STANDALONE.md` §2.
 
 ```
+on load, once per page, before any button shows:
+GET {api}/v1/sdk/shop?shop=<public key> → { paused }
+      → paused: every button stays hidden, with its `.curtain-try` wrapper (hint, size peek)
+      → not paused, an error, or no answer within 4 s: the buttons show
+
 standalone (data-mode="embed", the default; also "auto"), desktop and mobile:
 click → POST {api}/v1/sdk/sessions { shopKeyPrefix, productExternalId, pageUrl, surface: 'embed' }
       → { embedUrl, tryUrl, expiresAt, shopPaused }
@@ -88,7 +93,8 @@ window.Curtain.destroy()   // remove listeners, observer, styles and any open mo
 window.Curtain.version     // '0.1.0'
 ```
 
-`OpenResult.kind` is `'embed' | 'redirect' | 'modal' | 'paused' | 'error' | 'ignored'`.
+`OpenResult.kind` is `'embed' | 'redirect' | 'modal' | 'paused' | 'error' | 'ignored'`. `paused`
+means the shop's plan is paused: nothing was opened and the buttons were hidden.
 
 ## Standalone overlay
 
@@ -145,7 +151,7 @@ document.addEventListener('curtain:size-selected', (e) => {
 (For a programmatic `Curtain.open()` without a `trigger`, the event fires on `document`.)
 
 When the API has no `embedUrl` (an older backend), the SDK falls back to the app-mode flow. A shop
-that is paused (402 with a session) still opens the overlay; the embed shows the paused screen.
+that is paused opens no overlay (see "Paused plan" below).
 
 ## Size peek
 
@@ -200,8 +206,7 @@ budget left for anything else.
 dialog on open and back to the button on close, Tab / Shift+Tab trapped, Esc and backdrop click
 close, body scroll locked, animations disabled under `prefers-reduced-motion`. It shows the QR (the
 API's `qrSvg`, rendered through an inert `<img src="data:image/svg+xml,…">` so SVG can never run
-script), the scan hint, an "open the link on this device" fallback, the expiry, the shop-paused note
-when applicable, and the estimate disclaimer (identical to `ESTIMATE_DISCLAIMER` in
+script), the scan hint, an "open the link on this device" fallback, the expiry, and the estimate disclaimer (identical to `ESTIMATE_DISCLAIMER` in
 `@curtain/schema`, asserted in tests). Design tokens: coral `#FF5A3C`, cream `#F5EFE7`, ink
 `#1A1612`; no fonts are loaded.
 
@@ -212,10 +217,25 @@ overlay needed its 2 KB of the 8 KB budget.
 
 ## Never breaking the merchant page (D7)
 
-Every error is caught. If the backend answers 402/423 ("shop paused") **with** a session, or 200
-with `shopPaused: true`, the SDK proceeds as normal: the embed or the app shows the paused screen. Without a
-`tryUrl` it shows a polite message. Network errors and 5xx also show a polite message. The SDK
-never throws into merchant code and never leaves a button in a stuck state.
+Every error is caught. Network errors and 5xx show a polite message. The SDK never throws into
+merchant code and never leaves a button in a stuck state.
+
+## Paused plan: the button is hidden (D25 point 5)
+
+While a shop's plan is paused the button is not shown. This replaces the first rule of D7, under
+which the button stayed and the overlay showed a "shop paused" screen.
+
+- When it is configured, the SDK asks `GET {api}/v1/sdk/shop?shop=<public key>` once per page. The
+  request carries the public key only, no cookies and no product. The api lets browsers cache the
+  answer for 60 seconds, so the button is back within a minute of the plan becoming active again.
+- Until the answer arrives the buttons are hidden (inline `display: none !important` on the button,
+  or on its closest `.curtain-try` wrapper so the hint and the size peek go with it). They show
+  when the answer is "not paused".
+- An outage must not remove a working shop's button: an error, an older api without the route, an
+  answer that is not `{ "paused": true }`, or no answer within 4 seconds all show the buttons.
+- If a click still gets a paused answer (402/423, or `shopPaused: true`), the SDK hides the
+  buttons, opens nothing and returns `{ kind: 'paused' }`. It shows no message.
+- `destroy()` gives every element its own inline `display` back.
 
 ## ESM use (bundlers)
 

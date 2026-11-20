@@ -142,13 +142,29 @@ describe('size peek: insertion', () => {
     expect(peeks()).toHaveLength(0);
   });
 
-  it('makes no request to the api: the peek page decides on its own whether there is anything to show', () => {
-    const fetch = vi.fn();
+  it('makes no request of its own to the api: the peek page decides on its own whether there is anything to show', () => {
+    const fetch = vi.fn(async (..._args: unknown[]) => new Response('{"paused":false}', { status: 200 }));
     vi.stubGlobal('fetch', fetch);
+    button();
+    button('p2');
+    init({ shop: SHOP, api: API, app: APP });
+    FakeIO.intersect();
+    // The one request is the SDK's shop-status question: once per page, the public key only, no product.
+    expect(fetch.mock.calls.map((c) => String(c[0]))).toEqual([`${API}/v1/sdk/shop?shop=${SHOP}`]);
+  });
+
+  it('a paused shop gets no peek', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"paused":true}', { status: 200 })));
     button();
     init({ shop: SHOP, api: API, app: APP });
     FakeIO.intersect();
-    expect(fetch).not.toHaveBeenCalled();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(peeks()).toHaveLength(0);
+    button('later');
+    await new Promise((r) => setTimeout(r, 30));
+    FakeIO.intersect();
+    expect(peeks()).toHaveLength(0);
   });
 
   it('without IntersectionObserver there is no peek (and the button still binds)', () => {

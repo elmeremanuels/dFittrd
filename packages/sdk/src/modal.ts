@@ -5,9 +5,7 @@ export interface ModalContent {
   qrSvg?: string;
   tryUrl?: string;
   expiresAt?: string;
-  /** Shop below plan: the code still works, the app shows the paused screen (D7). */
-  paused?: boolean;
-  /** Message-only mode (polite error / paused without a link). */
+  /** Message-only mode (polite error). */
   message?: string;
   /** Standalone mode: a full-screen overlay holding an iframe to this URL instead of the QR. */
   embedUrl?: string;
@@ -140,7 +138,6 @@ export function openModal(opts: ModalOptions): ModalHandle {
     const desc = el(doc, 'p', 'pk-desc', s.scan);
     desc.id = `${id}-desc`;
     dialog.append(desc);
-    if (content.paused) dialog.append(el(doc, 'p', 'pk-note', s.pausedShort));
     const meta = el(doc, 'p', 'pk-meta');
     if (content.tryUrl) {
       const a = doc.createElement('a');

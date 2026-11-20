@@ -20,7 +20,6 @@ export const CSS = `
 .pk-qr{width:220px;max-width:70vw;margin:0 auto 16px;padding:10px;background:#fff;border-radius:14px;box-shadow:0 2px 10px rgba(26,22,18,.08)}
 .pk-qr img{display:block;width:100%;height:auto;image-rendering:pixelated}
 .pk-desc{margin:0 0 10px;font-size:15px}
-.pk-note{margin:0 0 10px;font-size:13px;color:#FF5A3C}
 .pk-meta{margin:0 0 14px;font-size:13px;opacity:.8}
 .pk-meta a{color:#1A1612;text-decoration:underline}
 .pk-meta a:focus-visible{outline:3px solid #FF5A3C;outline-offset:2px}

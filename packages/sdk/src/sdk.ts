@@ -12,6 +12,10 @@ const STATE_ATTR = 'data-curtain-state';
 const SELECTOR = `[${PRODUCT_ATTR}]`;
 const SHOP_KEY_RE = /^pk_(live|test)_[A-Za-z0-9]{6,32}$/;
 const DEFAULT_TIMEOUT = 8000;
+/** The shop-status question is asked before a button shows: it may not hold the page up for long. */
+const STATUS_TIMEOUT = 4000;
+/** The plugins wrap the button, its hint and the size peek in this element; it is hidden with the button. */
+const WRAP_SELECTOR = '.curtain-try';
 
 let cfg: CurtainConfig = {};
 let observer: MutationObserver | null = null;
@@ -19,6 +23,22 @@ let inFlight = false;
 let scanQueued = false;
 const bound = new Set<Element>();
 const handlers = new WeakMap<Element, { click: (e: Event) => void; key?: (e: Event) => void }>();
+
+/**
+ * Whether the shop's plan is paused (D25 point 5: a paused shop shows no button). CHECKING: the
+ * question is on its way, the buttons stay hidden until the answer. OPEN is also the answer when
+ * the question fails (an outage must not remove a working shop's button; the click then explains).
+ * The two states that hide the buttons are the two highest numbers.
+ */
+type ShopState = 0 | 1 | 2 | 3;
+const OPEN = 1;
+const CHECKING = 2;
+const PAUSED = 3;
+let shopState: ShopState = 0;
+/** The status URL (api and shop key) the state belongs to: a new key or api is asked again. */
+let checkedFor = '';
+/** Hidden elements and the inline `display` they had. */
+const hiddenTargets = new Map<HTMLElement, string>();
 
 const warn = (msg: string): void => {
   try {
@@ -41,10 +61,6 @@ function navigate(url: string): void {
   else location.href = url;
 }
 
-function apiBase(): string {
-  return (cfg.api || '').replace(/\/+$/, '');
-}
-
 interface SessionOutcome {
   status: number;
   session?: SdkSessionResponse;
@@ -60,12 +76,11 @@ async function requestSession(
   const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = ctrl ? setTimeout(() => ctrl.abort(), cfg.timeoutMs ?? DEFAULT_TIMEOUT) : null;
   try {
-    const res = await fetch(`${apiBase()}/v1/sdk/sessions`, {
+    const res = await fetch(`${cfg.api}/v1/sdk/sessions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify(body),
       credentials: 'omit',
-      mode: 'cors',
       cache: 'no-store',
       signal: ctrl?.signal ?? null,
     });
@@ -129,6 +144,50 @@ function setState(elm: Element | null | undefined, loading: boolean): void {
   }
 }
 
+/**
+ * Hide or show one button with its wrapper. Inline `display: none !important`, because a theme's
+ * own `display` rule on the button would beat the `hidden` attribute.
+ */
+function setHidden(elm: Element, hidden: boolean): void {
+  const target = (elm.closest(WRAP_SELECTOR) ?? elm) as HTMLElement;
+  const before = hiddenTargets.get(target);
+  if (hidden === (before !== undefined)) return;
+  if (hidden) {
+    hiddenTargets.set(target, target.style.display);
+    target.style.setProperty('display', 'none', 'important');
+  } else {
+    hiddenTargets.delete(target);
+    target.style.display = before!;
+  }
+}
+
+/**
+ * Every bound button follows the shop state: hidden while checking or paused, shown otherwise. The
+ * size peeks of a paused shop are removed (the peek page would show nothing for it anyway).
+ */
+function applyShopState(state: ShopState): void {
+  shopState = state;
+  bound.forEach((elm) => setHidden(elm, state > 1));
+  if (state === PAUSED) destroyPeeks();
+}
+
+/** GET /v1/sdk/shop: is this shop's plan paused? No cookies, and only the public key is sent. */
+function checkShop(): void {
+  const key = `${cfg.api}/v1/sdk/shop?shop=${cfg.shop}`;
+  if (!cfg.shop || !cfg.api || key === checkedFor) return;
+  checkedFor = key;
+  applyShopState(CHECKING);
+  // Settles once: the answer, a failure, or the timeout. A newer configure() (another shop) or a
+  // click that already learned the shop is paused wins over a late answer.
+  const settle = (paused?: unknown): void => {
+    if (checkedFor === key && shopState === CHECKING) applyShopState(paused === true ? PAUSED : OPEN);
+  };
+  setTimeout(settle, STATUS_TIMEOUT);
+  fetch(key, { credentials: 'omit' })
+    .then((res) => res.ok && res.json())
+    .then((json: { paused?: unknown } | null) => settle(json && json.paused), settle);
+}
+
 function showMessage(message: string, trigger?: Element | null): void {
   injectStyles();
   openModal({ strings: pickStrings(cfg.locale), content: { message }, trigger });
@@ -162,16 +221,12 @@ export async function open(productId: string, opts: OpenOptions = {}): Promise<O
       return { kind: 'error', error };
     }
     const { status, session } = outcome;
-    const pausedStatus = status === 402 || status === 423;
-    if (!session) {
-      if (pausedStatus) {
-        showMessage(strings.paused, trigger);
-        return { kind: 'paused', status };
-      }
-      showMessage(strings.error, trigger);
-      return { kind: 'error', status };
+    // Paused plan (D25 point 5): the button is hidden and nothing opens, with or without a session in the answer.
+    if (status === 402 || status === 423 || (session && session.shopPaused)) {
+      applyShopState(PAUSED);
+      return { kind: 'paused', status };
     }
-    if (status >= 400 && !pausedStatus) {
+    if (!session || status >= 400) {
       showMessage(strings.error, trigger);
       return { kind: 'error', status };
     }
@@ -189,7 +244,6 @@ export async function open(productId: string, opts: OpenOptions = {}): Promise<O
       return { kind: 'embed', session };
     }
     // App mode, or an older API without embedUrl: deep link on mobile, QR modal on desktop.
-    const paused = session.shopPaused || pausedStatus;
     if (mode === 'redirect' || (mode !== 'modal' && isMobile())) {
       navigate(session.tryUrl);
       return { kind: 'redirect', session };
@@ -199,7 +253,7 @@ export async function open(productId: string, opts: OpenOptions = {}): Promise<O
     openModal({
       strings,
       trigger,
-      content: { qrSvg: session.qrSvg, tryUrl: session.tryUrl, expiresAt: session.expiresAt, paused },
+      content: { qrSvg: session.qrSvg, tryUrl: session.tryUrl, expiresAt: session.expiresAt },
     });
     return { kind: 'modal', session };
   } catch (error) {
@@ -226,9 +280,11 @@ function bind(elm: Element): void {
     if (!elm.children.length) elm.textContent = cfg.label || pickStrings(cfg.locale).button;
   }
   if (!cfg.unstyled && !elm.hasAttribute('data-curtain-unstyled')) elm.classList.add('pk-btn');
+  // A paused shop shows no button; while the question is open the button waits hidden.
+  setHidden(elm, shopState > 1);
   // The size peek: needs data-app; data-peek="off" on the script tag or data-curtain-peek="off" on the button turns it off.
   const product = elm.getAttribute(PRODUCT_ATTR);
-  if (cfg.app && product && cfg.shop && cfg.peek !== false && elm.getAttribute('data-curtain-peek') !== 'off')
+  if (shopState !== PAUSED && cfg.app && product && cfg.shop && cfg.peek !== false && elm.getAttribute('data-curtain-peek') !== 'off')
     watchPeek(elm as HTMLElement, cfg.app, cfg.shop, product, pickStrings(cfg.locale).peek, uiParam());
 
   const click = (e: Event): void => {
@@ -255,6 +311,7 @@ function unbind(elm: Element): void {
   }
   handlers.delete(elm);
   bound.delete(elm);
+  setHidden(elm, false);
   elm.removeAttribute(BOUND_ATTR);
   elm.classList.remove('pk-btn');
   setState(elm, false);
@@ -312,6 +369,7 @@ export function configure(next: Partial<CurtainConfig>): Readonly<CurtainConfig>
   if (merged.api) merged.api = merged.api.replace(/\/+$/, '');
   if (merged.app) merged.app = merged.app.replace(/\/+$/, '');
   cfg = merged;
+  checkShop();
   if (typeof document !== 'undefined' && document.body) scan();
   return Object.freeze({ ...cfg });
 }
@@ -332,6 +390,8 @@ export function destroy(): void {
   if (window.Curtain === api) delete window.Curtain;
   cfg = {};
   inFlight = false;
+  shopState = 0;
+  checkedFor = '';
 }
 
 export const api: CurtainApi = Object.freeze({

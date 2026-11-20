@@ -20,9 +20,13 @@ const session = {
   shopPaused: false,
 };
 
+/** The shop-status question (GET /v1/sdk/shop) is answered "not paused" and kept out of the recorded calls. */
+const isStatus = (url: unknown): boolean => String(url).includes('/v1/sdk/shop?');
+const notPaused = (): Response => new Response('{"paused":false}', { status: 200, headers: { 'content-type': 'application/json' } });
+
 function mockFetch(body: unknown = session, status = 200): ReturnType<typeof vi.fn> {
-  const fn = vi.fn(async () => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }));
-  vi.stubGlobal('fetch', fn);
+  const fn = vi.fn(async (..._args: unknown[]) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }));
+  vi.stubGlobal('fetch', async (url: unknown, init?: unknown) => (isStatus(url) ? notPaused() : fn(url, init)));
   return fn;
 }
 
@@ -213,10 +217,12 @@ describe('mode', () => {
     expect(document.querySelector('iframe')).toBeNull();
   });
 
-  it('a paused shop with a session still opens the overlay (the embed shows the paused screen)', async () => {
+  it('a paused shop opens no overlay, even when the answer carries a session (D25 point 5)', async () => {
     mockFetch({ ...session, shopPaused: true }, 402);
     init({ shop: SHOP, api: API });
-    expect((await open('p1')).kind).toBe('embed');
+    expect(await open('p1')).toEqual({ kind: 'paused', status: 402 });
+    expect(document.querySelector('iframe')).toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 });
 

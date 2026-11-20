@@ -9,8 +9,6 @@ export interface Strings {
   scan: string;
   openLink: string;
   expires: (minutes: number) => string;
-  paused: string;
-  pausedShort: string;
   error: string;
   close: string;
   qrAlt: string;
@@ -36,8 +34,6 @@ export const EN: Strings = {
   scan: 'Scan with your phone to try it on in Curtain',
   openLink: 'On this device instead? Open the link',
   expires: (m) => `This code expires in ${m} min`,
-  paused: 'This shop’s fitting room is taking a short break. Please try again later.',
-  pausedShort: 'This shop’s fitting room is paused right now — the app will explain.',
   error: 'We couldn’t open the fitting room right now. Please try again in a moment.',
   close: 'Close',
   qrAlt: 'QR code that opens this garment in Curtain',

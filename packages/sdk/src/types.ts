@@ -19,7 +19,7 @@ export interface SdkSessionResponse {
   /** Inline SVG for the desktop QR modal. Optional when `surface` is `embed`. */
   qrSvg?: string;
   expiresAt: string;
-  /** Below plan: the button still renders; the embed / app shows "shop paused" (D7). */
+  /** Below plan: the SDK hides the button and opens nothing (D25 point 5). */
   shopPaused: boolean;
 }
 
@@ -100,7 +100,7 @@ export type OpenResult =
   | { kind: 'embed'; session: SdkSessionResponse }
   | { kind: 'redirect'; session: SdkSessionResponse }
   | { kind: 'modal'; session: SdkSessionResponse }
-  /** 402/423 without a session body: a polite message was shown instead. */
+  /** The shop's plan is paused (402/423, or `shopPaused` in the answer): the buttons were hidden and nothing was opened. `status` is the HTTP status. */
   | { kind: 'paused'; status: number }
   | { kind: 'error'; status?: number; error?: unknown }
   | { kind: 'ignored'; reason: 'busy' | 'unconfigured' | 'no-product' };

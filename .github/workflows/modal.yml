@@ -1,0 +1,105 @@
+# Runs Modal jobs from GitHub Actions. Cloud Claude sessions cannot reach Modal
+# (gRPC is blocked by their network proxy); GitHub runners can.
+# Trigger: change .github/modal/run.txt on a claude/* branch (or run manually).
+# run.txt holds one command per line, run in order from the repo root, e.g.
+#   modal run spikes/garment-engine/modal/smoke.py
+# Needs repository secrets MODAL_TOKEN_ID and MODAL_TOKEN_SECRET.
+name: modal
+
+on:
+  push:
+    branches: ['claude/**']
+    paths: ['.github/modal/run.txt']
+  workflow_dispatch:
+
+concurrency:
+  group: modal-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    # Run 14 took 2,311 s wall for one product (stage 1b + 2 + 4); five products in one run.txt need about 200 min.
+    # 330 stays under the 360-minute limit of GitHub-hosted runners.
+    timeout-minutes: 330
+    env:
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      CURTAIN_MODAL_GPU: ${{ vars.CURTAIN_MODAL_GPU }}
+      CURTAIN_MODAL_REGION: ${{ vars.CURTAIN_MODAL_REGION }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check and normalise Modal secrets
+        run: |
+          clean() { printf '%s' "$1" | tr -d '[:space:]"'"'"; }
+          # Accept a pasted 'modal token set --token-id ak-... --token-secret as-...' line in either secret.
+          both="$MODAL_TOKEN_ID $MODAL_TOKEN_SECRET"
+          pid=$(printf '%s' "$both" | grep -oE 'ak-[A-Za-z0-9]+' | head -n1 || true)
+          psec=$(printf '%s' "$both" | grep -oE 'as-[A-Za-z0-9]+' | head -n1 || true)
+          id=$(clean "$MODAL_TOKEN_ID"); sec=$(clean "$MODAL_TOKEN_SECRET")
+          if [ -n "$pid" ] && [ "$id" != "$pid" ]; then echo "::add-mask::$pid"; id=$pid; echo "::warning::MODAL_TOKEN_ID held more than the Token ID; the ak- value was extracted. Please store only the Token ID."; fi
+          if [ -n "$psec" ] && [ "$sec" != "$psec" ]; then echo "::add-mask::$psec"; sec=$psec; echo "::warning::MODAL_TOKEN_SECRET held more than the Token Secret; the as- value was extracted. Please store only the Token Secret."; fi
+          echo "::add-mask::$id"; echo "::add-mask::$sec"
+          if [ -z "$id" ] || [ -z "$sec" ]; then
+            echo "::error::Add repository secrets MODAL_TOKEN_ID and MODAL_TOKEN_SECRET (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+          case "$id" in
+            ak-*) ;;
+            as-*) echo "::error::MODAL_TOKEN_ID holds the token secret (starts with as-). Swap the two secrets."; exit 1 ;;
+            *) echo "::error::MODAL_TOKEN_ID should start with ak- (length now ${#id}). Paste only the Token ID value, without --token-id."; exit 1 ;;
+          esac
+          case "$sec" in
+            as-*) ;;
+            *) echo "::error::MODAL_TOKEN_SECRET should start with as- (length now ${#sec}). Paste only the Token Secret value."; exit 1 ;;
+          esac
+          [ "$id" != "$MODAL_TOKEN_ID" ] && echo "::notice::MODAL_TOKEN_ID contained spaces, newlines or quotes; they were removed."
+          [ "$sec" != "$MODAL_TOKEN_SECRET" ] && echo "::notice::MODAL_TOKEN_SECRET contained spaces, newlines or quotes; they were removed."
+          { echo "MODAL_TOKEN_ID=$id"; echo "MODAL_TOKEN_SECRET=$sec"; } >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: |
+          pip install modal==1.6.3
+          pnpm install --frozen-lockfile
+      - name: Run commands from .github/modal/run.txt
+        run: |
+          mkdir -p modal-out
+          status=0
+          while IFS= read -r cmd || [ -n "$cmd" ]; do
+            case "$cmd" in ''|'#'*) continue ;; esac
+            echo "::group::$cmd"
+            echo "\$ $cmd" >> modal-out/log.txt
+            bash -c "$cmd" 2>&1 | tee -a modal-out/log.txt
+            rc=${PIPESTATUS[0]}
+            echo "exit $rc" >> modal-out/log.txt
+            echo "::endgroup::"
+            if [ "$rc" -ne 0 ]; then status=$rc; break; fi
+          done < .github/modal/run.txt
+          exit $status
+      # Its own step with always(): a failed command, or the job hitting timeout-minutes, still keeps the outputs the
+      # finished commands wrote (cost_summary.json and the downloaded stage folders exist only on this runner).
+      - name: Collect outputs
+        if: always()
+        run: |
+          mkdir -p modal-out
+          cp -r spikes/garment-engine/out modal-out/spike-out 2>/dev/null || true
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: modal-out-${{ github.run_number }}
+          path: modal-out
+          retention-days: 14

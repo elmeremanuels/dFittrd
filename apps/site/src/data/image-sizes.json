@@ -1,0 +1,259 @@
+{
+ "photos/minimal-rail": {
+  "w": 1365,
+  "h": 2048,
+  "widths": [
+   800,
+   1200
+  ]
+ },
+ "photos/knits-pampas-rail": {
+  "w": 2048,
+  "h": 1536,
+  "widths": [
+   800,
+   1600
+  ]
+ },
+ "photos/pattern-scissors": {
+  "w": 2048,
+  "h": 1365,
+  "widths": [
+   800,
+   1600
+  ]
+ },
+ "photos/fabric-rolls": {
+  "w": 2048,
+  "h": 1407,
+  "widths": [
+   800,
+   1600
+  ]
+ },
+ "photos/draped-fabric": {
+  "w": 1536,
+  "h": 2048,
+  "widths": [
+   800,
+   1200
+  ]
+ },
+ "renders/engine-dress-S-col": {
+  "w": 660,
+  "h": 1430,
+  "widths": [
+   660
+  ]
+ },
+ "renders/engine-dress-M-col": {
+  "w": 660,
+  "h": 1430,
+  "widths": [
+   660
+  ]
+ },
+ "renders/engine-dress-L-col": {
+  "w": 660,
+  "h": 1430,
+  "widths": [
+   660
+  ]
+ },
+ "product/desktop-05-size-result-dialog": {
+  "w": 2080,
+  "h": 1736,
+  "widths": [
+   900,
+   1800
+  ]
+ },
+ "product/desktop-09-3d-estimate-dialog": {
+  "w": 2080,
+  "h": 1736,
+  "widths": [
+   900,
+   1800
+  ]
+ },
+ "product/desktop-09-3d-estimate-viewer": {
+  "w": 1056,
+  "h": 1618,
+  "widths": [
+   900,
+   1056
+  ]
+ },
+ "product/mobile-02-product-page": {
+  "w": 780,
+  "h": 1688,
+  "widths": [
+   780
+  ]
+ },
+ "product/mobile-04-about-you-filled": {
+  "w": 780,
+  "h": 1688,
+  "widths": [
+   780
+  ]
+ },
+ "product/mobile-05-size-result": {
+  "w": 780,
+  "h": 1688,
+  "widths": [
+   780
+  ]
+ },
+ "product/mobile-06-size-selected": {
+  "w": 780,
+  "h": 1688,
+  "widths": [
+   780
+  ]
+ },
+ "product/desktop-02-product-form": {
+  "w": 1160,
+  "h": 840,
+  "widths": [
+   900,
+   1160
+  ]
+ },
+ "product/desktop-07-size-peek-crop": {
+  "w": 1322,
+  "h": 554,
+  "widths": [
+   900,
+   1322
+  ]
+ },
+ "partner/azure-front": {
+  "w": 800,
+  "h": 1200,
+  "widths": [
+   600,
+   800
+  ]
+ },
+ "partner/azure-arms": {
+  "w": 800,
+  "h": 1200,
+  "widths": [
+   600,
+   800
+  ]
+ },
+ "partner/azure-back": {
+  "w": 800,
+  "h": 1200,
+  "widths": [
+   600,
+   800
+  ]
+ },
+ "partner/skirt-side": {
+  "w": 800,
+  "h": 1200,
+  "widths": [
+   600,
+   800
+  ]
+ },
+ "partner/skirt-front": {
+  "w": 800,
+  "h": 1200,
+  "widths": [
+   600,
+   800
+  ]
+ },
+ "partner/blouse-front": {
+  "w": 800,
+  "h": 1200,
+  "widths": [
+   600,
+   800
+  ]
+ },
+ "partner/blouse-back": {
+  "w": 800,
+  "h": 1200,
+  "widths": [
+   600,
+   800
+  ]
+ },
+ "partner/palazzo-knit": {
+  "w": 800,
+  "h": 1200,
+  "widths": [
+   600,
+   800
+  ]
+ },
+ "partner/palazzo-wide": {
+  "w": 800,
+  "h": 1200,
+  "widths": [
+   600,
+   800
+  ]
+ },
+ "partner/cardi-front": {
+  "w": 800,
+  "h": 1200,
+  "widths": [
+   600,
+   800
+  ]
+ },
+ "partner/cardi-back": {
+  "w": 800,
+  "h": 1200,
+  "widths": [
+   600,
+   800
+  ]
+ },
+ "renders/azure-estimate": {
+  "w": 1800,
+  "h": 2700,
+  "widths": [
+   600,
+   1000
+  ]
+ },
+ "renders/azure-estimate-3q": {
+  "w": 1800,
+  "h": 2700,
+  "widths": [
+   600,
+   1000
+  ]
+ },
+ "renders/skirt-estimate": {
+  "w": 1800,
+  "h": 2700,
+  "widths": [
+   600,
+   1000
+  ]
+ },
+ "renders/skirt-estimate-3q": {
+  "w": 1800,
+  "h": 2700,
+  "widths": [
+   600,
+   1000
+  ]
+ },
+ "partner/logo": {
+  "w": 905,
+  "h": 926,
+  "widths": [
+   240,
+   480
+  ]
+ }
+}

@@ -1,0 +1,419 @@
+{
+  "emulated": "headless Chromium, SwiftShader (software WebGL), DevTools CPU throttle; Vite dev server on localhost (no network latency); not a phone",
+  "throttle": 4,
+  "viewport": "412x915@2x",
+  "people": {
+    "a": {
+      "label": "Monk 2 (light)",
+      "photo": "e2e/fixtures/synthetic-faces/person-a.jpg",
+      "bake": {
+        "last": {
+          "faceFound": true,
+          "stats": {
+            "coverage": 0.5774993896484375,
+            "yawDeg": 1.2385039874634602,
+            "rollDeg": -0.5047671636608608,
+            "medianHex": "#c9b9ac",
+            "delightGain": [
+              0.835884690284729,
+              1.4827278852462769
+            ],
+            "facePx": 454.03868085117233
+          },
+          "warnings": [],
+          "delegate": "CPU",
+          "timings": {
+            "decodeMs": 8,
+            "startMs": 348,
+            "detectMs": 212,
+            "pixelsMs": 7,
+            "bakeMs": 363,
+            "totalMs": 939
+          }
+        },
+        "bytes": 1048576,
+        "hasFace": true,
+        "error": null
+      },
+      "throttled": {
+        "cpu": [
+          {
+            "run": 1,
+            "cache": "cold",
+            "decodeMs": 56,
+            "startMs": 438,
+            "detectMs": 278,
+            "pixelsMs": 7,
+            "bakeMs": 311,
+            "totalMs": 1093,
+            "wallToFaceMs": 1763,
+            "delegate": "CPU"
+          },
+          {
+            "run": 2,
+            "cache": "warm",
+            "decodeMs": 30,
+            "startMs": 416,
+            "detectMs": 286,
+            "pixelsMs": 16,
+            "bakeMs": 361,
+            "totalMs": 1110,
+            "wallToFaceMs": 1704,
+            "delegate": "CPU"
+          },
+          {
+            "run": 3,
+            "cache": "warm",
+            "decodeMs": 32,
+            "startMs": 473,
+            "detectMs": 248,
+            "pixelsMs": 5,
+            "bakeMs": 329,
+            "totalMs": 1089,
+            "wallToFaceMs": 2022,
+            "delegate": "CPU"
+          }
+        ],
+        "gpu": [
+          {
+            "run": 1,
+            "cache": "cold",
+            "decodeMs": 59,
+            "startMs": 454,
+            "detectMs": 2212,
+            "pixelsMs": 10,
+            "bakeMs": 311,
+            "totalMs": 3048,
+            "wallToFaceMs": 3682,
+            "delegate": "GPU"
+          },
+          {
+            "run": 2,
+            "cache": "warm",
+            "decodeMs": 28,
+            "startMs": 401,
+            "detectMs": 2167,
+            "pixelsMs": 5,
+            "bakeMs": 331,
+            "totalMs": 2933,
+            "wallToFaceMs": 3887,
+            "delegate": "GPU"
+          },
+          {
+            "run": 3,
+            "cache": "warm",
+            "decodeMs": 35,
+            "startMs": 427,
+            "detectMs": 2185,
+            "pixelsMs": 10,
+            "bakeMs": 313,
+            "totalMs": 2971,
+            "wallToFaceMs": 3859,
+            "delegate": "GPU"
+          }
+        ]
+      },
+      "modelBytes": {
+        "/models/wasm/vision_wasm_module_internal.js": 334166,
+        "/models/wasm/vision_wasm_module_internal.wasm": 14603372,
+        "/models/face_landmarker.task": 3758596
+      },
+      "even": {
+        "coverage": 0.5774993896484375,
+        "yawDeg": 0.06456998125071832,
+        "rollDeg": 0.05834184132612887,
+        "medianHex": "#d4cec9",
+        "delightGain": [
+          0.9622647166252136,
+          1.1848686933517456
+        ],
+        "facePx": 451.9772185555878
+      }
+    },
+    "b": {
+      "label": "Monk 6 (medium)",
+      "photo": "e2e/fixtures/synthetic-faces/person-b.jpg",
+      "bake": {
+        "last": {
+          "faceFound": true,
+          "stats": {
+            "coverage": 0.5774993896484375,
+            "yawDeg": -0.6083957669222383,
+            "rollDeg": 0.3597367033907276,
+            "medianHex": "#92653d",
+            "delightGain": [
+              0.6454458236694336,
+              1.7999999523162842
+            ],
+            "facePx": 485.29292061707457
+          },
+          "warnings": [],
+          "delegate": "CPU",
+          "timings": {
+            "decodeMs": 7,
+            "startMs": 292,
+            "detectMs": 205,
+            "pixelsMs": 7,
+            "bakeMs": 324,
+            "totalMs": 839
+          }
+        },
+        "bytes": 1048576,
+        "hasFace": true,
+        "error": null
+      },
+      "throttled": {
+        "cpu": [
+          {
+            "run": 1,
+            "cache": "cold",
+            "decodeMs": 34,
+            "startMs": 418,
+            "detectMs": 261,
+            "pixelsMs": 6,
+            "bakeMs": 355,
+            "totalMs": 1077,
+            "wallToFaceMs": 1406,
+            "delegate": "CPU"
+          },
+          {
+            "run": 2,
+            "cache": "warm",
+            "decodeMs": 27,
+            "startMs": 425,
+            "detectMs": 251,
+            "pixelsMs": 7,
+            "bakeMs": 321,
+            "totalMs": 1031,
+            "wallToFaceMs": 1600,
+            "delegate": "CPU"
+          },
+          {
+            "run": 3,
+            "cache": "warm",
+            "decodeMs": 32,
+            "startMs": 388,
+            "detectMs": 277,
+            "pixelsMs": 6,
+            "bakeMs": 302,
+            "totalMs": 1006,
+            "wallToFaceMs": 1936,
+            "delegate": "CPU"
+          }
+        ],
+        "gpu": [
+          {
+            "run": 1,
+            "cache": "cold",
+            "decodeMs": 52,
+            "startMs": 437,
+            "detectMs": 2175,
+            "pixelsMs": 4,
+            "bakeMs": 321,
+            "totalMs": 2989,
+            "wallToFaceMs": 3304,
+            "delegate": "GPU"
+          },
+          {
+            "run": 2,
+            "cache": "warm",
+            "decodeMs": 34,
+            "startMs": 445,
+            "detectMs": 2278,
+            "pixelsMs": 8,
+            "bakeMs": 373,
+            "totalMs": 3140,
+            "wallToFaceMs": 3762,
+            "delegate": "GPU"
+          },
+          {
+            "run": 3,
+            "cache": "warm",
+            "decodeMs": 28,
+            "startMs": 412,
+            "detectMs": 2323,
+            "pixelsMs": 7,
+            "bakeMs": 414,
+            "totalMs": 3185,
+            "wallToFaceMs": 3952,
+            "delegate": "GPU"
+          }
+        ]
+      },
+      "modelBytes": {
+        "/models/wasm/vision_wasm_module_internal.js": 334166,
+        "/models/wasm/vision_wasm_module_internal.wasm": 14603372,
+        "/models/face_landmarker.task": 3758596
+      },
+      "even": {
+        "coverage": 0.5774993896484375,
+        "yawDeg": 0.13899800517024125,
+        "rollDeg": 0.12501356319624224,
+        "medianHex": "#97744b",
+        "delightGain": [
+          0.7664893865585327,
+          1.533806562423706
+        ],
+        "facePx": 479.08858812595264
+      }
+    },
+    "c": {
+      "label": "Monk 9 (deep)",
+      "photo": "e2e/fixtures/synthetic-faces/person-c.jpg",
+      "bake": {
+        "last": {
+          "faceFound": true,
+          "stats": {
+            "coverage": 0.5774993896484375,
+            "yawDeg": 0.20858448237668012,
+            "rollDeg": 0.007221055319329977,
+            "medianHex": "#2d1f17",
+            "delightGain": [
+              0.7642321586608887,
+              1.7999999523162842
+            ],
+            "facePx": 440.7895793230203
+          },
+          "warnings": [],
+          "delegate": "CPU",
+          "timings": {
+            "decodeMs": 12,
+            "startMs": 332,
+            "detectMs": 183,
+            "pixelsMs": 6,
+            "bakeMs": 307,
+            "totalMs": 842
+          }
+        },
+        "bytes": 1048576,
+        "hasFace": true,
+        "error": null
+      },
+      "throttled": {
+        "cpu": [
+          {
+            "run": 1,
+            "cache": "cold",
+            "decodeMs": 36,
+            "startMs": 469,
+            "detectMs": 335,
+            "pixelsMs": 7,
+            "bakeMs": 311,
+            "totalMs": 1160,
+            "wallToFaceMs": 1476,
+            "delegate": "CPU"
+          },
+          {
+            "run": 2,
+            "cache": "warm",
+            "decodeMs": 40,
+            "startMs": 441,
+            "detectMs": 253,
+            "pixelsMs": 6,
+            "bakeMs": 319,
+            "totalMs": 1060,
+            "wallToFaceMs": 1372,
+            "delegate": "CPU"
+          },
+          {
+            "run": 3,
+            "cache": "warm",
+            "decodeMs": 29,
+            "startMs": 446,
+            "detectMs": 269,
+            "pixelsMs": 6,
+            "bakeMs": 295,
+            "totalMs": 1045,
+            "wallToFaceMs": 1338,
+            "delegate": "CPU"
+          }
+        ],
+        "gpu": [
+          {
+            "run": 1,
+            "cache": "cold",
+            "decodeMs": 36,
+            "startMs": 409,
+            "detectMs": 2178,
+            "pixelsMs": 5,
+            "bakeMs": 317,
+            "totalMs": 2947,
+            "wallToFaceMs": 3271,
+            "delegate": "GPU"
+          },
+          {
+            "run": 2,
+            "cache": "warm",
+            "decodeMs": 29,
+            "startMs": 401,
+            "detectMs": 2328,
+            "pixelsMs": 5,
+            "bakeMs": 375,
+            "totalMs": 3138,
+            "wallToFaceMs": 3469,
+            "delegate": "GPU"
+          },
+          {
+            "run": 3,
+            "cache": "warm",
+            "decodeMs": 30,
+            "startMs": 455,
+            "detectMs": 2230,
+            "pixelsMs": 5,
+            "bakeMs": 313,
+            "totalMs": 3033,
+            "wallToFaceMs": 3337,
+            "delegate": "GPU"
+          }
+        ]
+      },
+      "modelBytes": {
+        "/models/wasm/vision_wasm_module_internal.js": 334166,
+        "/models/wasm/vision_wasm_module_internal.wasm": 14603372,
+        "/models/face_landmarker.task": 3758596
+      },
+      "even": {
+        "coverage": 0.5774993896484375,
+        "yawDeg": 0.6865848096814567,
+        "rollDeg": -0.029132818754492282,
+        "medianHex": "#2a201b",
+        "delightGain": [
+          0.845672607421875,
+          1.7999999523162842
+        ],
+        "facePx": 444.7568443391536
+      }
+    }
+  },
+  "turned": {
+    "faceFound": true,
+    "stats": {
+      "coverage": 0.5774993896484375,
+      "yawDeg": 30.792443075394257,
+      "rollDeg": 0.4337563201339178,
+      "medianHex": "#6b4a2d",
+      "delightGain": [
+        0.550000011920929,
+        1.7496510744094849
+      ],
+      "facePx": 451.7147339052033
+    },
+    "warnings": [
+      "turned"
+    ],
+    "delegate": "CPU",
+    "timings": {
+      "decodeMs": 8,
+      "startMs": 323,
+      "detectMs": 180,
+      "pixelsMs": 6,
+      "bakeMs": 311,
+      "totalMs": 829
+    }
+  },
+  "photoBytes": {
+    "a": 46462,
+    "b": 57747,
+    "c": 36944
+  }
+}

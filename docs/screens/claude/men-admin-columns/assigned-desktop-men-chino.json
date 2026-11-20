@@ -1,0 +1,171 @@
+{
+ "sizeChartType": "garment",
+ "sizeChart": [
+  {
+   "size": "30/30",
+   "waist": 78.5,
+   "hip": 99,
+   "inseam": 76,
+   "rise": 26,
+   "axes": {
+    "waist": "30",
+    "leg": "30"
+   }
+  },
+  {
+   "size": "30/32",
+   "waist": 78.5,
+   "hip": 99,
+   "inseam": 81,
+   "rise": 26,
+   "axes": {
+    "waist": "30",
+    "leg": "32"
+   }
+  },
+  {
+   "size": "30/34",
+   "waist": 78.5,
+   "hip": 99,
+   "inseam": 86,
+   "rise": 26,
+   "axes": {
+    "waist": "30",
+    "leg": "34"
+   }
+  },
+  {
+   "size": "32/30",
+   "waist": 83.5,
+   "hip": 104,
+   "inseam": 76,
+   "rise": 26.5,
+   "axes": {
+    "waist": "32",
+    "leg": "30"
+   }
+  },
+  {
+   "size": "32/32",
+   "waist": 83.5,
+   "hip": 104,
+   "inseam": 81,
+   "rise": 26.5,
+   "axes": {
+    "waist": "32",
+    "leg": "32"
+   }
+  },
+  {
+   "size": "32/34",
+   "waist": 83.5,
+   "hip": 104,
+   "inseam": 86,
+   "rise": 26.5,
+   "axes": {
+    "waist": "32",
+    "leg": "34"
+   }
+  },
+  {
+   "size": "34/30",
+   "waist": 88.5,
+   "hip": 109,
+   "inseam": 76,
+   "rise": 27,
+   "axes": {
+    "waist": "34",
+    "leg": "30"
+   }
+  },
+  {
+   "size": "34/32",
+   "waist": 88.5,
+   "hip": 109,
+   "inseam": 81,
+   "rise": 27,
+   "axes": {
+    "waist": "34",
+    "leg": "32"
+   }
+  },
+  {
+   "size": "34/34",
+   "waist": 88.5,
+   "hip": 109,
+   "inseam": 86,
+   "rise": 27,
+   "axes": {
+    "waist": "34",
+    "leg": "34"
+   }
+  },
+  {
+   "size": "36/30",
+   "waist": 93.5,
+   "hip": 114,
+   "inseam": 76,
+   "rise": 27.5,
+   "axes": {
+    "waist": "36",
+    "leg": "30"
+   }
+  },
+  {
+   "size": "36/32",
+   "waist": 93.5,
+   "hip": 114,
+   "inseam": 81,
+   "rise": 27.5,
+   "axes": {
+    "waist": "36",
+    "leg": "32"
+   }
+  },
+  {
+   "size": "36/34",
+   "waist": 93.5,
+   "hip": 114,
+   "inseam": 86,
+   "rise": 27.5,
+   "axes": {
+    "waist": "36",
+    "leg": "34"
+   }
+  },
+  {
+   "size": "38/30",
+   "waist": 98.5,
+   "hip": 119,
+   "inseam": 76,
+   "rise": 28,
+   "axes": {
+    "waist": "38",
+    "leg": "30"
+   }
+  },
+  {
+   "size": "38/32",
+   "waist": 98.5,
+   "hip": 119,
+   "inseam": 81,
+   "rise": 28,
+   "axes": {
+    "waist": "38",
+    "leg": "32"
+   }
+  },
+  {
+   "size": "38/34",
+   "waist": 98.5,
+   "hip": 119,
+   "inseam": 86,
+   "rise": 28,
+   "axes": {
+    "waist": "38",
+    "leg": "34"
+   }
+  }
+ ],
+ "wl": true
+}

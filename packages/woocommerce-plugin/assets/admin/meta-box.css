@@ -1,0 +1,91 @@
+/* Curtain meta box — design tokens from the handoff: coral #FF5A3C, cream #F5EFE7, ink #1A1612 */
+.curtain-box h4 { margin: 1.4em 0 .5em; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #1A1612; }
+.curtain-box .description { color: #646970; }
+.curtain-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 16px; }
+.curtain-grid label, .curtain-grid fieldset { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.curtain-grid label > span, .curtain-grid legend { font-weight: 600; font-size: 12px; }
+.curtain-grid input[type=text], .curtain-grid input[type=number], .curtain-grid select, .curtain-grid textarea { width: 100%; max-width: 100%; }
+.curtain-span2 { grid-column: span 2; }
+.curtain-inline { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.curtain-inline label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.curtain-narrow { width: 6.5em !important; }
+.curtain-check { display: inline-block; margin-right: 10px; font-weight: 400; }
+.curtain-table { border-collapse: collapse; margin: 6px 0; }
+.curtain-table th { text-align: left; font-size: 12px; padding: 2px 6px 2px 0; }
+.curtain-table td { padding: 2px 6px 2px 0; vertical-align: middle; }
+.curtain-table tfoot td { padding-top: 6px; }
+.curtain-row-remove { color: #b32d2e; font-size: 16px; text-decoration: none; }
+.curtain-radios label { margin-right: 16px; }
+.curtain-colour { display: inline-flex; align-items: center; gap: 4px; }
+.curtain-swatch { width: 32px; height: 28px; padding: 0; border: 1px solid #8c8f94; border-radius: 3px; background: none; }
+.curtain-flatlay { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.curtain-flatlay-preview:empty { display: none; }
+.curtain-flatlay-preview img { max-height: 120px; max-width: 160px; border: 1px solid #dcdcde; background: #fff; }
+.curtain-flatlay .description { flex-basis: 100%; margin: 0; }
+.curtain-status { padding: 8px 12px; margin: 6px 0 10px; border-left: 4px solid #8c8f94; background: #F5EFE7; }
+.curtain-status--active { border-color: #1a7f37; }
+.curtain-status--incomplete, .curtain-status--pending, .curtain-status--retrying { border-color: #FF5A3C; }
+.curtain-status--error { border-color: #b32d2e; }
+.curtain-status p { margin: 4px 0; }
+.curtain-error { color: #b32d2e; }
+.curtain-issues { margin: 4px 0 0 1em; list-style: disc; font-size: 12px; }
+.curtain-notices { margin: 4px 0; padding: 0; list-style: none; }
+.curtain-notice { margin: 2px 0; padding: 4px 8px; border-left: 3px solid #8c8f94; background: #fff; }
+.curtain-notice--held-back, .curtain-notice--left-out { border-color: #b32d2e; }
+.curtain-notice--assumed { border-color: #FF5A3C; }
+.curtain-badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; background: #dcdcde; color: #1A1612; }
+.curtain-badge--active { background: #d1f0da; color: #1a7f37; }
+.curtain-badge--incomplete { background: #ffe0d8; color: #9a2f17; }
+.curtain-badge--error { background: #f8d7da; color: #b32d2e; }
+.curtain-badge--pending, .curtain-badge--retrying { background: #fff3cd; color: #7a5a00; }
+.curtain-missing { margin-right: 4px; }
+.curtain-missing--heavy { background: #ffe0d8; }
+.curtain-fabric-prefill { background: #f0f6fc; border-left: 4px solid #72aee6; padding: 6px 10px; margin: 0 0 8px; }
+.curtain-template { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.curtain-template .description { flex-basis: 100%; margin: 0; }
+/* Checkbox lists inside the grid: box and label on one line (the grid's labels are columns). */
+.curtain-grid label.curtain-check { display: inline-flex; flex-direction: row; align-items: center; gap: 4px; }
+/* Garment measurements table */
+.curtain-tape details { margin: 4px 0 8px; }
+.curtain-tape .curtain-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.curtain-tape-howto { margin: 4px 0 0 1.2em; list-style: disc; }
+.curtain-tape-table th { white-space: nowrap; }
+.curtain-tape-table td { vertical-align: top; padding-bottom: 6px; }
+.curtain-tape-size { font-size: 14px; padding-top: 6px !important; }
+.curtain-tape-table input.curtain-tape-cm { text-align: right; }
+.curtain-tape-table input[aria-invalid="true"], .curtain-tape input.curtain-tape-depth[aria-invalid="true"] { border-color: #b32d2e; background: #fcf0f1; }
+.curtain-tape-orphan input.curtain-tape-size-input { width: 7em; }
+.curtain-tape-est input.curtain-tape-cm { border-style: dashed; background: #f6f7f7; color: #646970; }
+.curtain-tape-prov { display: block; font-size: 11px; color: #646970; }
+.curtain-tape-prov--extrapolated { color: #8a4b00; font-weight: 600; }
+.curtain-tape-note { background: #f0f6fc; border-left: 4px solid #72aee6; padding: 6px 10px; }
+.curtain-tape-issues { padding: 6px 10px; margin: 8px 0; border-left: 4px solid; }
+.curtain-tape-issues ul { margin: 4px 0 0 1.2em; list-style: disc; }
+.curtain-tape-issues--error { background: #fcf0f1; border-color: #b32d2e; color: #8a2424; }
+.curtain-tape-issues--warning { background: #fcf9e8; border-color: #dba617; }
+@media (max-width: 782px) {
+	.curtain-tape-table thead { display: none; }
+	.curtain-tape-table, .curtain-tape-table tbody { display: block; width: 100%; }
+	.curtain-tape-table tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 10px; padding: 10px 0; border-top: 1px solid #dcdcde; }
+	.curtain-tape-table td { padding: 0; }
+	.curtain-tape-table td.curtain-tape-size { grid-column: span 2; align-self: center; }
+	.curtain-tape-table td.curtain-tape-flag { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+	.curtain-tape-table td.curtain-tape-flag::before { content: attr(data-label); font-size: 12px; color: #646970; }
+	.curtain-tape-table td.curtain-tape-num { display: flex; flex-direction: column; justify-content: flex-end; }
+	.curtain-tape-table td.curtain-tape-num::before { content: attr(data-label); display: block; font-size: 11px; line-height: 1.25; color: #646970; }
+	.curtain-tape-table input.curtain-tape-cm { width: 100% !important; }
+}
+/* The size chart has a column per measurement: wider than a phone. It scrolls sideways inside the
+   box instead of being cut off by the postbox (seen on a 390 px screen, WordPress 7.1). */
+.curtain-scroll { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* Men's chart columns (neck, sleeve, length, rise, W/L): only on a men's product or a chart that has them. */
+.curtain-box:not(.curtain-show-mens) .curtain-mens-col { display: none !important; }
+.curtain-mens-chart { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 16px; margin: 6px 0; }
+.curtain-mens-chart label > span { display: block; font-weight: 600; font-size: 12px; }
+.curtain-mens-chart select { max-width: 100%; }
+.curtain-mens-chart .description { flex-basis: 100%; margin: 0; }
+
+/* "What to measure" next to the garment measurements (the drawing is assets/admin/skirt-measure.svg). */
+.curtain-tape-help { background: #f5efe7; color: #1a1612; border-radius: 8px; padding: 8px 12px; margin: 8px 0 12px; max-width: 560px; }
+.curtain-tape-help summary { cursor: pointer; }
+.curtain-tape .curtain-grid label .description { display: block; font-weight: 400; max-width: 360px; }

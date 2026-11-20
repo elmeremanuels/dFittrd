@@ -1,0 +1,279 @@
+{
+  "camera_model": "OPENCV",
+  "fl_x": 153.858735,
+  "fl_y": 153.858735,
+  "cx": 32,
+  "cy": 56,
+  "w": 64,
+  "h": 112,
+  "k1": 0,
+  "k2": 0,
+  "p1": 0,
+  "p2": 0,
+  "curtain": {
+    "world": "mannequin space, metres: +Y up, +Z mannequin front, +X mannequin left",
+    "unit": "m",
+    "camera_axes": "opengl",
+    "pixel_origin": "corner",
+    "path_id": "turntable_mid",
+    "frames_per_turn": 8
+  },
+  "frames": [
+    {
+      "file_path": "frames/0000.png",
+      "transform_matrix": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0.999119,
+          0.041963,
+          1.008
+        ],
+        [
+          0,
+          -0.041963,
+          0.999119,
+          3.2
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      "colmap_im_id": 1,
+      "curtain_frame": 0,
+      "curtain_azimuth_deg": 0
+    },
+    {
+      "file_path": "frames/0001.png",
+      "transform_matrix": [
+        [
+          0.707107,
+          -0.029672,
+          0.706484,
+          2.262742
+        ],
+        [
+          0,
+          0.999119,
+          0.041963,
+          1.008
+        ],
+        [
+          -0.707107,
+          -0.029672,
+          0.706484,
+          2.262742
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      "colmap_im_id": 2,
+      "curtain_frame": 1,
+      "curtain_azimuth_deg": 45
+    },
+    {
+      "file_path": "frames/0002.png",
+      "transform_matrix": [
+        [
+          0,
+          -0.041963,
+          0.999119,
+          3.2
+        ],
+        [
+          0,
+          0.999119,
+          0.041963,
+          1.008
+        ],
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      "colmap_im_id": 3,
+      "curtain_frame": 2,
+      "curtain_azimuth_deg": 90
+    },
+    {
+      "file_path": "frames/0003.png",
+      "transform_matrix": [
+        [
+          -0.707107,
+          -0.029672,
+          0.706484,
+          2.262742
+        ],
+        [
+          0,
+          0.999119,
+          0.041963,
+          1.008
+        ],
+        [
+          -0.707107,
+          0.029672,
+          -0.706484,
+          -2.262742
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      "colmap_im_id": 4,
+      "curtain_frame": 3,
+      "curtain_azimuth_deg": 135
+    },
+    {
+      "file_path": "frames/0004.png",
+      "transform_matrix": [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0.999119,
+          0.041963,
+          1.008
+        ],
+        [
+          0,
+          0.041963,
+          -0.999119,
+          -3.2
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      "colmap_im_id": 5,
+      "curtain_frame": 4,
+      "curtain_azimuth_deg": 180
+    },
+    {
+      "file_path": "frames/0005.png",
+      "transform_matrix": [
+        [
+          -0.707107,
+          0.029672,
+          -0.706484,
+          -2.262742
+        ],
+        [
+          0,
+          0.999119,
+          0.041963,
+          1.008
+        ],
+        [
+          0.707107,
+          0.029672,
+          -0.706484,
+          -2.262742
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      "colmap_im_id": 6,
+      "curtain_frame": 5,
+      "curtain_azimuth_deg": 225
+    },
+    {
+      "file_path": "frames/0006.png",
+      "transform_matrix": [
+        [
+          0,
+          0.041963,
+          -0.999119,
+          -3.2
+        ],
+        [
+          0,
+          0.999119,
+          0.041963,
+          1.008
+        ],
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      "colmap_im_id": 7,
+      "curtain_frame": 6,
+      "curtain_azimuth_deg": 270
+    },
+    {
+      "file_path": "frames/0007.png",
+      "transform_matrix": [
+        [
+          0.707107,
+          0.029672,
+          -0.706484,
+          -2.262742
+        ],
+        [
+          0,
+          0.999119,
+          0.041963,
+          1.008
+        ],
+        [
+          0.707107,
+          -0.029672,
+          0.706484,
+          2.262742
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      "colmap_im_id": 8,
+      "curtain_frame": 7,
+      "curtain_azimuth_deg": 315
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+ "renderer": "headless Chromium, SwiftShader (software); not a phone",
+ "head": "neutral-v3",
+ "patches": [],
+ "garment": [],
+ "frames": [
+  {
+   "family": "female",
+   "lighting": "classic",
+   "shading": "flat",
+   "warmup": 81.7,
+   "median": 92.7,
+   "min": 86.4,
+   "max": 97.7
+  },
+  {
+   "family": "female",
+   "lighting": "classic",
+   "shading": "skin-v2",
+   "warmup": 113.2,
+   "median": 108.8,
+   "min": 99.4,
+   "max": 113.2
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "shading": "flat",
+   "warmup": 92.5,
+   "median": 94.6,
+   "min": 90.2,
+   "max": 101.6
+  },
+  {
+   "family": "female",
+   "lighting": "neutral-v2",
+   "shading": "skin-v2",
+   "warmup": 120.3,
+   "median": 118.4,
+   "min": 111.1,
+   "max": 126.9
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "shading": "flat",
+   "warmup": 86.5,
+   "median": 90.7,
+   "min": 83.4,
+   "max": 96.8
+  },
+  {
+   "family": "male",
+   "lighting": "classic",
+   "shading": "skin-v2",
+   "warmup": 112.2,
+   "median": 112.5,
+   "min": 105.6,
+   "max": 116.8
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "shading": "flat",
+   "warmup": 95.6,
+   "median": 97,
+   "min": 92.3,
+   "max": 101.3
+  },
+  {
+   "family": "male",
+   "lighting": "neutral-v2",
+   "shading": "skin-v2",
+   "warmup": 125.5,
+   "median": 119.3,
+   "min": 115.7,
+   "max": 124.5
+  }
+ ],
+ "problems": []
+}

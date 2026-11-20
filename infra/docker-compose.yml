@@ -1,0 +1,115 @@
+# Curtain on one VPS (D2/D9): caddy (TLS + static PWA + reverse proxy), api (one image: API + jobs), postgres.
+# Usage: cp .env.example .env && edit, then `docker compose up -d`. The web bundle (app.<domain>) and the marketing
+# site (<domain>, www.<domain>) are published into their caddy volumes by infra/scripts/deploy.sh.
+name: curtain
+
+services:
+  caddy:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in infra/.env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in infra/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - web:/srv/web:ro
+      - site:/srv/site:ro
+      - assets:/srv/assets:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      # service_started, not service_healthy: the static PWA must stay up while the api restarts or
+      # fails its readiness check (Caddy returns 502 for api.<domain> only).
+      api:
+        condition: service_started
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:2019/metrics']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: '20m'
+        max-file: '7' # ~7 days of logs on a quiet VPS; the api never logs client IPs (LOG_IPS=0)
+
+  api:
+    image: ${API_IMAGE:?set API_IMAGE in infra/.env (ghcr.io/<github owner>/curtain-api:<tag>)}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      DATABASE_URL: postgres://${POSTGRES_USER:-curtain}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-curtain}
+      RENDERS_DIR: /data/renders
+      ASSET_DIR: /data/assets
+      PUBLIC_APP_URL: https://app.${DOMAIN}
+      PUBLIC_API_URL: https://api.${DOMAIN}
+      JOBS: ${JOBS:-both}
+    volumes:
+      - renders:/data/renders
+      - assets:/data/assets
+    expose:
+      - '3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/readyz']
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    logging: *logging
+
+  # Optional second replica that only runs pg-boss jobs (hero renders, sync, rollups): `docker compose --profile jobs up -d`.
+  jobs:
+    image: ${API_IMAGE:?set API_IMAGE in infra/.env (ghcr.io/<github owner>/curtain-api:<tag>)}
+    restart: unless-stopped
+    profiles: ['jobs']
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      JOBS: '1'
+      DATABASE_URL: postgres://${POSTGRES_USER:-curtain}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-curtain}
+      RENDERS_DIR: /data/renders
+      PUBLIC_APP_URL: https://app.${DOMAIN}
+      PUBLIC_API_URL: https://api.${DOMAIN}
+    command: ['sh', '-c', 'node dist/server.js']
+    volumes:
+      - renders:/data/renders
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *logging
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-curtain}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-curtain}
+    volumes:
+      - pg:/var/lib/postgresql/data
+    expose:
+      - '5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-curtain} -d ${POSTGRES_DB:-curtain}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+volumes:
+  web:
+  site:
+  renders:
+  assets:
+  pg:
+  caddy_data:
+  caddy_config:

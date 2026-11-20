@@ -1,0 +1,141 @@
+{
+  "ranAt": "2026-11-19T03:16:05.571Z",
+  "assumptions": {
+    "SEC_PER_CLICK": 3,
+    "SEC_PER_CHAR": 0.4,
+    "WORDS_PER_MIN": 180
+  },
+  "steps": [
+    {
+      "key": "install",
+      "title": "Install the app from the private link",
+      "clicks": 0,
+      "typedChars": 0,
+      "wordsRead": 0,
+      "offScreenSec": 60,
+      "offScreenWhat": "open the e-mailed install link, read the permissions (products only) and press Install: Shopify screens, not driven",
+      "shots": [],
+      "machineSec": 0,
+      "onScreenSec": 0,
+      "humanMin": 1
+    },
+    {
+      "key": "connect",
+      "title": "1. Connect",
+      "clicks": 0,
+      "typedChars": 0,
+      "wordsRead": 286,
+      "offScreenSec": 0,
+      "offScreenWhat": "",
+      "shots": [
+        "01-first-open-desktop.png",
+        "01-connected-desktop.png",
+        "01-connected-phone.png",
+        "01-products-before-desktop.png",
+        "01-products-before-phone.png"
+      ],
+      "machineSec": 5.2,
+      "onScreenSec": 95,
+      "humanMin": 1.6
+    },
+    {
+      "key": "chart",
+      "title": "2. Add a size chart",
+      "clicks": 6,
+      "typedChars": 0,
+      "wordsRead": 148.33333333333334,
+      "offScreenSec": 0,
+      "offScreenWhat": "",
+      "shots": [
+        "02-chart-template-desktop.png",
+        "02-chart-template-phone.png",
+        "02-chart-assigned-desktop.png",
+        "02-chart-assigned-phone.png",
+        "02-checklist-desktop.png",
+        "02-checklist-phone.png"
+      ],
+      "machineSec": 2.1,
+      "onScreenSec": 67,
+      "humanMin": 1.1
+    },
+    {
+      "key": "measure",
+      "title": "3. Measure one skirt",
+      "clicks": 7,
+      "typedChars": 43,
+      "wordsRead": 398,
+      "offScreenSec": 540,
+      "offScreenWhat": "measure AU 8, 10 and 14 of the skirt on a table (3 minutes a size, docs/MERCHANT-MEASUREMENTS.md)",
+      "shots": [
+        "03-measure-help-desktop.png",
+        "03-measure-help-phone.png",
+        "03-measure-filled-desktop.png",
+        "03-measure-filled-phone.png",
+        "03-measure-saved-desktop.png",
+        "03-measure-saved-phone.png",
+        "03-checklist-desktop.png",
+        "03-checklist-phone.png"
+      ],
+      "machineSec": 3.5,
+      "onScreenSec": 171,
+      "humanMin": 11.8
+    },
+    {
+      "key": "button",
+      "title": "4. Turn the button on",
+      "clicks": 1,
+      "typedChars": 0,
+      "wordsRead": 48,
+      "offScreenSec": 120,
+      "offScreenWhat": "in the Shopify theme editor: look at the placed block, drag it under the size picker, press Save (a Shopify screen, not driven)",
+      "shots": [
+        "04-button-desktop.png",
+        "04-button-phone.png"
+      ],
+      "machineSec": 0,
+      "onScreenSec": 19,
+      "humanMin": 2.3
+    },
+    {
+      "key": "phone",
+      "title": "5. Check it on your phone",
+      "clicks": 3,
+      "typedChars": 5,
+      "wordsRead": 42,
+      "offScreenSec": 30,
+      "offScreenWhat": "pick up the phone and point the camera at the code",
+      "shots": [
+        "05-phone-code-desktop.png",
+        "05-phone-code-phone.png",
+        "05-phone-product.png",
+        "05-phone-size.png",
+        "05-all-done-desktop.png",
+        "05-all-done-phone.png",
+        "06-products-after-desktop.png",
+        "06-products-after-phone.png"
+      ],
+      "machineSec": 1.3,
+      "onScreenSec": 25,
+      "humanMin": 0.9
+    },
+    {
+      "key": "uninstall",
+      "title": "Uninstall (when leaving)",
+      "clicks": 0,
+      "typedChars": 0,
+      "wordsRead": 0,
+      "offScreenSec": 30,
+      "offScreenWhat": "Settings → Apps and sales channels → Curtain → Uninstall (a Shopify screen)",
+      "shots": [],
+      "machineSec": 0,
+      "onScreenSec": 0,
+      "humanMin": 0.5
+    }
+  ],
+  "total": {
+    "machineSec": 12.1,
+    "humanMin": 18.7,
+    "humanMinWithoutMeasuring": 9.7
+  },
+  "failures": []
+}

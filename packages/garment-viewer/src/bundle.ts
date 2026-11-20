@@ -1,0 +1,193 @@
+/**
+ * Forked from spikes/garment-engine/viewer/src/bundle.ts. The asset bundle as the device sees it (docs/ENGINE-HANDOFF.md §Stage 8): base.glb,
+ * anchors.json, grading.json, material.json and qa.json from `spikes/garment-engine/out/<id>/`.
+ * Types come from the spike itself, so the viewer reads exactly what `build:bundle` writes.
+ * An evaluated Phase 0 bundle (`out/eval/<id>/`, product id `eval/<id>`) also carries payload.json,
+ * the product's garment payload for the fit engine, and says so in anchors.json (`payloadFile`); the
+ * spike fixtures have none and are looked up by id instead.
+ */
+import { glbFloatAccessor, glbIndexAccessor, readGlb, type Mesh } from '@curtain/mannequin';
+import type { GarmentPayload } from '@curtain/schema';
+import { weldWithRemap } from './core/weld';
+import type { DrapeBake } from './drapeBake';
+import type { GradingJson } from './core/grading';
+import type { MaterialJson } from './core/types';
+
+export interface GarmentAnchorsJson {
+  format: 'curtain.garment.anchors';
+  productId: string;
+  baseSize: string;
+  category: string;
+  unit: 'cm';
+  /**
+   * `family`: `male` for a bundle built on the male mannequin (slice M1); absent is `female` (`bundleFamilyOf`).
+   * `maleShape`: `v2` for a male bundle built on the male shape v2; absent is `v1` (`bundleMaleShapeOf`).
+   */
+  mannequin: { version: string; shape: string; family?: 'female' | 'male'; maleShape?: 'v1' | 'v2' };
+  synthetic: boolean;
+  /** Set by a tape-built garment: the builder and its version (`pom-tee-…`, `pom-chino-…`; `trouser.ts` reads the latter). */
+  builder?: string;
+  /**
+   * Set by a tape-built trouser (`pomChinoBundle.ts`): its sewn seams as paths of welded vertex ids (rises, inseams,
+   * outseams), which the drape lets stretch by at most `stretchPct` (`cloth.addSeams`; `trouser.ts`). `grain`: the rows
+   * and columns of the built mesh, which run along the weft and the warp of a woven cloth: neighbours on them come no
+   * farther apart than `stretchPct` and, with `shortenPct`, no closer than that.
+   */
+  seams?: { stretchPct: number; paths: number[][]; grain?: { stretchPct: number; shortenPct?: number; paths: number[][] } };
+  /** Set by evaluated bundles: the file holding the product payload. */
+  payloadFile?: string;
+  /** Set by a server drape bake (`drapeBake.ts`): base.glb holds the drapes per size; the device blends, it does not drape. */
+  drapeBake?: 'base.glb';
+  rings: Record<string, { circumferenceCm: number; chartCm: number | null; spansBothLegs: boolean }>;
+  /**
+   * Set by a tape-built strap garment (spikes/garment-engine `pomDressBundle.ts`): how the device holds and drapes it.
+   * `pinFromCm`: the garment is held from this height up (its top edge band and the straps), where the shoulder yoke
+   * (`yokeHeight`) would hold the straps alone. `cling: false`: no cling pull (a gathered skirt hangs off the body).
+   * `seamsAtCm`: heights of seams that do not stretch: the row of cloth at each (in the base mesh) is held at no more
+   * than its graded girth times `1 + seamStretchPct / 100` (`GirthLoop.maxGirthCm`), and at no less than it.
+   * `holdLength`: the cloth keeps the length it was cut along its way down from where it is held (`cloth.addHangLines`,
+   * the limit follows material.json `stretchPct`); without it the device drape leaves a hanging garment 2 to 3 % long.
+   * Absent, and for every bundle before it: held and draped as before.
+   */
+  support?: { pinFromCm?: number; cling?: boolean; seamsAtCm?: number[]; seamStretchPct?: number; holdLength?: boolean };
+}
+
+export interface QaJson {
+  format: 'curtain.garment.qa';
+  productId: string;
+  synthetic: boolean;
+  /** maxAbsCm is null in an evaluation bundle when a critical ring has no girth (listed in `missing`); `critical` and `missing` only in evaluation bundles. */
+  chartAgreement: { maxAbsCm: number | null; pass: boolean; critical?: string[]; missing?: string[] };
+  calibration: { residualBeforeCm: { maxAbs: number }; residualAfterGlobalCm: { maxAbs: number } };
+  meshHealth: { triangles: number };
+  /** Set by a male bundle (slice M1), the same as anchors.json `mannequin`: the api keeps only qa.json, the men's gate reads it here. */
+  mannequin?: { version: string; shape: string; family?: 'female' | 'male'; maleShape?: 'v1' | 'v2' };
+}
+
+export interface SpikeBundle {
+  productId: string;
+  anchors: GarmentAnchorsJson;
+  grading: GradingJson;
+  material: MaterialJson;
+  qa: QaJson;
+  /** The calibrated base-size garment in mannequin space, cm (welded: one particle per position, what grading and the drape use). */
+  baseMesh: Mesh;
+  /** A baked texture (stage 4t bundles): the render mesh's UVs and topology and its map onto `baseMesh`. */
+  render?: GarmentRender;
+  /** The texture image decoded in the browser (absent in node, or when base.glb has none). */
+  textureImage?: ImageBitmap;
+  /** payload.json when the bundle has one (evaluated shop products). */
+  payload?: GarmentPayload;
+  /** A server drape bake (anchors.json `drapeBake`): `baseMesh` is then the base size's drape on the base body. */
+  bake?: DrapeBake;
+}
+
+/** The render side of a textured base.glb: UVs per render vertex, its triangles, and render vertex → welded vertex. */
+export interface GarmentRender {
+  uvs: Float32Array;
+  indices: Uint32Array;
+  remap: Uint32Array;
+  image: { bytes: Uint8Array; mimeType: string };
+}
+
+interface GltfImages {
+  materials?: { pbrMetallicRoughness?: { baseColorTexture?: { index: number } } }[];
+  textures?: { source?: number }[];
+  images?: { bufferView?: number; mimeType?: string }[];
+  bufferViews?: { byteOffset?: number; byteLength: number }[];
+}
+
+/**
+ * A spike base.glb (written in metres), back in cm. Without TEXCOORD_0 the mesh is used as stored.
+ * With a baked texture (stage 4t) the file holds a render mesh whose UV seams duplicate vertices: it
+ * is welded by position for grading and the drape (a seam must not tear the cloth), and `render`
+ * maps the welded particles back onto the textured vertices.
+ */
+export function garmentFromGlb(bytes: Uint8Array): { mesh: Mesh; render: GarmentRender | null } {
+  const glb = readGlb(bytes);
+  const prim = glb.json.meshes[0]?.primitives[0] as { attributes: Record<string, number>; indices?: number; material?: number } | undefined;
+  if (!prim || prim.attributes.POSITION === undefined) throw new Error('base.glb has no mesh');
+  const unit = (glb.json.asset.extras?.unit as string | undefined) ?? 'm';
+  const k = unit === 'cm' ? 1 : 100;
+  const f32 = glbFloatAccessor(glb, prim.attributes.POSITION);
+  const positions = new Float64Array(f32.length);
+  for (let i = 0; i < f32.length; i++) positions[i] = Math.round(f32[i]! * k * 1e4) / 1e4;
+  const indices = glbIndexAccessor(glb, prim.indices as number);
+  const raw: Mesh = { positions, indices, vertexPart: new Uint8Array(positions.length / 3), partNames: [glb.json.meshes[0]!.name] };
+  const json = glb.json as unknown as GltfImages;
+  const tex = json.materials?.[prim.material ?? 0]?.pbrMetallicRoughness?.baseColorTexture?.index;
+  const img = tex !== undefined ? json.images?.[json.textures?.[tex]?.source ?? -1] : undefined;
+  if (prim.attributes.TEXCOORD_0 === undefined || !img || img.bufferView === undefined) return { mesh: raw, render: null };
+  const bv = json.bufferViews?.[img.bufferView];
+  if (!bv || (bv.byteOffset ?? 0) + bv.byteLength > glb.bin.length) throw new Error('base.glb: texture image runs past the buffer');
+  const imageBytes = glb.bin.slice(bv.byteOffset ?? 0, (bv.byteOffset ?? 0) + bv.byteLength);
+  const { mesh, remap } = weldWithRemap(raw);
+  return { mesh, render: { uvs: glbFloatAccessor(glb, prim.attributes.TEXCOORD_0), indices, remap, image: { bytes: imageBytes, mimeType: img.mimeType ?? 'image/png' } } };
+}
+
+/** The garment mesh of a spike base.glb, cm (welded when the file is textured). */
+export function meshFromGlb(bytes: Uint8Array): Mesh {
+  return garmentFromGlb(bytes).mesh;
+}
+
+export type FetchLike = (url: string) => Promise<{ ok: boolean; status: number; json(): Promise<unknown>; arrayBuffer(): Promise<ArrayBuffer> }>;
+
+async function get(fetchFn: FetchLike, url: string): Promise<Awaited<ReturnType<FetchLike>>> {
+  const res = await fetchFn(url);
+  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
+  return res;
+}
+
+/** Product ids with a complete bundle, from the dev server's `/bundle/index.json`. */
+export async function listBundles(fetchFn: FetchLike, base = '/bundle'): Promise<{ products: string[]; hint: string | null }> {
+  return (await (await get(fetchFn, `${base}/index.json`)).json()) as { products: string[]; hint: string | null };
+}
+
+export async function loadBundle(fetchFn: FetchLike, productId: string, base = '/bundle'): Promise<SpikeBundle> {
+  return loadBundleFrom(fetchFn, `${base}/${encodeURIComponent(productId)}`, productId);
+}
+
+/**
+ * A bundle from one directory URL (the shop asset `baseUrl`, `/assets/<shop>/<product>/<version>`).
+ * `withPayload: false` never fetches payload.json: the embed passes the product's live garment instead.
+ */
+export async function loadBundleFrom(fetchFn: FetchLike, dir: string, productId: string, opts: { withPayload?: boolean } = {}): Promise<SpikeBundle> {
+  const [anchors, grading, material, qa, glb] = await Promise.all([
+    get(fetchFn, `${dir}/anchors.json`).then((r) => r.json()),
+    get(fetchFn, `${dir}/grading.json`).then((r) => r.json()),
+    get(fetchFn, `${dir}/material.json`).then((r) => r.json()),
+    get(fetchFn, `${dir}/qa.json`).then((r) => r.json()),
+    get(fetchFn, `${dir}/base.glb`).then((r) => r.arrayBuffer()),
+  ]);
+  const g = grading as GradingJson;
+  if (g.format !== 'curtain.garment.grading') throw new Error(`${productId}: grading.json has format ${String(g.format)}`);
+  const a = anchors as GarmentAnchorsJson;
+  const payload = opts.withPayload !== false && a.payloadFile === 'payload.json' ? ((await (await get(fetchFn, `${dir}/payload.json`)).json()) as GarmentPayload) : undefined;
+  if (a.drapeBake !== undefined) {
+    if (a.drapeBake !== 'base.glb') throw new Error(`${productId}: anchors.json drapeBake ${String(a.drapeBake)}`);
+    // The reader and its meshopt decoder load only for a bake (a separate chunk), so other products do not pay for it.
+    const { readDrapeBake } = await import('./drapeBakeRead');
+    const bake = await readDrapeBake(new Uint8Array(glb));
+    const base = bake.sizes.get(g.baseSize);
+    if (!base) throw new Error(`${productId}: the drape bake has no base size ${g.baseSize}`);
+    const baseMesh: Mesh = { positions: Float64Array.from(base.base), indices: bake.indices, vertexPart: new Uint8Array(bake.vertexCount), partNames: ['garment'] };
+    return { productId, anchors: a, grading: g, material: material as MaterialJson, qa: qa as QaJson, baseMesh, bake, ...(payload ? { payload } : {}) };
+  }
+  const garment = garmentFromGlb(new Uint8Array(glb));
+  let textureImage: ImageBitmap | undefined;
+  if (garment.render && typeof createImageBitmap === 'function') {
+    // glTF UVs have v down: decode without flipping, the texture keeps flipY = false.
+    textureImage = await createImageBitmap(new Blob([garment.render.image.bytes as BlobPart], { type: garment.render.image.mimeType }), { imageOrientation: 'none' } as ImageBitmapOptions);
+  }
+  return {
+    productId,
+    anchors: a,
+    grading: g,
+    material: material as MaterialJson,
+    qa: qa as QaJson,
+    baseMesh: garment.mesh,
+    ...(garment.render ? { render: garment.render } : {}),
+    ...(textureImage ? { textureImage } : {}),
+    ...(payload ? { payload } : {}),
+  };
+}

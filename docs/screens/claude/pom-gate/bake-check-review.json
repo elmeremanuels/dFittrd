@@ -1,0 +1,270 @@
+{
+ "format": "curtain.garment.bakeCheck",
+ "version": 1,
+ "pass": true,
+ "checks": [
+  {
+   "id": "readable",
+   "pass": true,
+   "reasons": []
+  },
+  {
+   "id": "file_size",
+   "pass": true,
+   "reasons": []
+  },
+  {
+   "id": "sizes_have_geometry",
+   "pass": true,
+   "reasons": []
+  },
+  {
+   "id": "refusals_declared",
+   "pass": true,
+   "reasons": []
+  },
+  {
+   "id": "provenance",
+   "pass": true,
+   "reasons": []
+  },
+  {
+   "id": "at_rest",
+   "pass": true,
+   "reasons": []
+  },
+  {
+   "id": "tape_rings",
+   "pass": true,
+   "reasons": []
+  },
+  {
+   "id": "inside_body",
+   "pass": true,
+   "reasons": []
+  },
+  {
+   "id": "size_order",
+   "pass": true,
+   "reasons": []
+  }
+ ],
+ "tape": {
+  "hipBelowBandCm": null,
+  "sizes": [
+   {
+    "size": "8",
+    "provenance": "measured",
+    "hipCm": 112,
+    "hemSweepCm": 230,
+    "stretchedGirthCm": 94,
+    "notDraped": [
+     {
+      "bodyHipCm": 99,
+      "reason": "its band cannot be pulled over the drawn body with 99 cm hips: 94 cm at full stretch against 101.6 cm at its widest below the waist, 7.6 cm short (the size advice allows 2.5 cm)"
+     },
+     {
+      "bodyHipCm": 104,
+      "reason": "its band cannot be pulled over the drawn body with 104 cm hips: 94 cm at full stretch against 106.8 cm at its widest below the waist, 12.8 cm short (the size advice allows 2.5 cm)"
+     },
+     {
+      "bodyHipCm": 109,
+      "reason": "its band cannot be pulled over the drawn body with 109 cm hips: 94 cm at full stretch against 111.9 cm at its widest below the waist, 17.9 cm short (the size advice allows 2.5 cm)"
+     },
+     {
+      "bodyHipCm": 114,
+      "reason": "its band cannot be pulled over the drawn body with 114 cm hips: 94 cm at full stretch against 117 cm at its widest below the waist, 23 cm short (the size advice allows 2.5 cm); the wear rule cannot ho"
+     }
+    ]
+   },
+   {
+    "size": "10",
+    "provenance": "measured",
+    "hipCm": 122,
+    "hemSweepCm": 248,
+    "stretchedGirthCm": 100,
+    "notDraped": [
+     {
+      "bodyHipCm": 104,
+      "reason": "its band cannot be pulled over the drawn body with 104 cm hips: 100 cm at full stretch against 106.8 cm at its widest below the waist, 6.8 cm short (the size advice allows 2.5 cm)"
+     },
+     {
+      "bodyHipCm": 109,
+      "reason": "its band cannot be pulled over the drawn body with 109 cm hips: 100 cm at full stretch against 111.9 cm at its widest below the waist, 11.9 cm short (the size advice allows 2.5 cm)"
+     },
+     {
+      "bodyHipCm": 114,
+      "reason": "its band cannot be pulled over the drawn body with 114 cm hips: 100 cm at full stretch against 117 cm at its widest below the waist, 17 cm short (the size advice allows 2.5 cm)"
+     }
+    ]
+   },
+   {
+    "size": "12",
+    "provenance": "interpolated",
+    "hipCm": 124,
+    "hemSweepCm": 254,
+    "stretchedGirthCm": 105,
+    "notDraped": [
+     {
+      "bodyHipCm": 109,
+      "reason": "its band cannot be pulled over the drawn body with 109 cm hips: 105 cm at full stretch against 111.9 cm at its widest below the waist, 6.9 cm short (the size advice allows 2.5 cm)"
+     },
+     {
+      "bodyHipCm": 114,
+      "reason": "its band cannot be pulled over the drawn body with 114 cm hips: 105 cm at full stretch against 117 cm at its widest below the waist, 12 cm short (the size advice allows 2.5 cm)"
+     }
+    ]
+   },
+   {
+    "size": "14",
+    "provenance": "measured",
+    "hipCm": 126,
+    "hemSweepCm": 260,
+    "stretchedGirthCm": 110,
+    "notDraped": [
+     {
+      "bodyHipCm": 114,
+      "reason": "its band cannot be pulled over the drawn body with 114 cm hips: 110 cm at full stretch against 117 cm at its widest below the waist, 7 cm short (the size advice allows 2.5 cm)"
+     }
+    ]
+   },
+   {
+    "size": "16",
+    "provenance": "extrapolated",
+    "hipCm": 128,
+    "hemSweepCm": 266,
+    "stretchedGirthCm": 115,
+    "notDraped": [
+     {
+      "bodyHipCm": 114,
+      "reason": "its band cannot be pulled over the drawn body with 114 cm hips: 115 cm at full stretch against 117 cm at its widest below the waist, 2 cm short (the size advice allows 0 cm)"
+     }
+    ]
+   }
+  ]
+ },
+ "drapes": [
+  {
+   "size": "8",
+   "t": -1,
+   "bodyHipCm": 94,
+   "hipRingCm": 112.1,
+   "hemRingCm": 229.8,
+   "insideParticles": 0,
+   "insideMaxCm": 0,
+   "atRest": true,
+   "maxMoveCmPerFrame": 0.052
+  },
+  {
+   "size": "10",
+   "t": -0.5,
+   "bodyHipCm": 99,
+   "hipRingCm": 121.5,
+   "hemRingCm": 248.1,
+   "insideParticles": 0,
+   "insideMaxCm": 0,
+   "atRest": true,
+   "maxMoveCmPerFrame": 0.11
+  },
+  {
+   "size": "10",
+   "t": -1,
+   "bodyHipCm": 94,
+   "hipRingCm": 121.2,
+   "hemRingCm": 248,
+   "insideParticles": 0,
+   "insideMaxCm": 0,
+   "atRest": true,
+   "maxMoveCmPerFrame": 0.09
+  },
+  {
+   "size": "12",
+   "t": 0,
+   "bodyHipCm": 104,
+   "hipRingCm": 123.8,
+   "hemRingCm": 254.1,
+   "insideParticles": 0,
+   "insideMaxCm": 0,
+   "atRest": true,
+   "maxMoveCmPerFrame": 0.123
+  },
+  {
+   "size": "12",
+   "t": -1,
+   "bodyHipCm": 94,
+   "hipRingCm": 123.3,
+   "hemRingCm": 254,
+   "insideParticles": 0,
+   "insideMaxCm": 0,
+   "atRest": true,
+   "maxMoveCmPerFrame": 0.085
+  },
+  {
+   "size": "14",
+   "t": 0,
+   "bodyHipCm": 104,
+   "hipRingCm": 125.4,
+   "hemRingCm": 260.1,
+   "insideParticles": 0,
+   "insideMaxCm": 0,
+   "atRest": true,
+   "maxMoveCmPerFrame": 0.094
+  },
+  {
+   "size": "14",
+   "t": -1,
+   "bodyHipCm": 94,
+   "hipRingCm": 125.3,
+   "hemRingCm": 260.1,
+   "insideParticles": 0,
+   "insideMaxCm": 0,
+   "atRest": true,
+   "maxMoveCmPerFrame": 0.136
+  },
+  {
+   "size": "14",
+   "t": 0.5,
+   "bodyHipCm": 109,
+   "hipRingCm": 126.4,
+   "hemRingCm": 260.2,
+   "insideParticles": 0,
+   "insideMaxCm": 0,
+   "atRest": true,
+   "maxMoveCmPerFrame": 0.071
+  },
+  {
+   "size": "16",
+   "t": 0,
+   "bodyHipCm": 104,
+   "hipRingCm": 127.4,
+   "hemRingCm": 266.1,
+   "insideParticles": 0,
+   "insideMaxCm": 0,
+   "atRest": true,
+   "maxMoveCmPerFrame": 0.107
+  },
+  {
+   "size": "16",
+   "t": -1,
+   "bodyHipCm": 94,
+   "hipRingCm": 127.3,
+   "hemRingCm": 266,
+   "insideParticles": 0,
+   "insideMaxCm": 0,
+   "atRest": true,
+   "maxMoveCmPerFrame": 0.113
+  },
+  {
+   "size": "16",
+   "t": 0.5,
+   "bodyHipCm": 109,
+   "hipRingCm": 127.8,
+   "hemRingCm": 265.9,
+   "insideParticles": 0,
+   "insideMaxCm": 0,
+   "atRest": true,
+   "maxMoveCmPerFrame": 0.125
+  }
+ ],
+ "checkedAt": "2026-11-19T00:00:00.000Z"
+}

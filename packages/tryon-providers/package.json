@@ -1,0 +1,45 @@
+{
+  "name": "@curtain/tryon-providers",
+  "version": "0.1.0",
+  "description": "Server-only AI try-on provider adapters (FASHN, Vertex Virtual Try-On, Grok video, Mock) and the TryOnRouter for Curtain's opt-in hero render.",
+  "private": true,
+  "type": "module",
+  "browser": false,
+  "sideEffects": [
+    "./dist/index.js",
+    "./src/index.ts"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint . && node scripts/check-banned-models.mjs"
+  },
+  "dependencies": {
+    "sharp": "0.35.5",
+    "undici": "7.30.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.20.5",
+    "eslint": "10.14.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "3.2.7"
+  }
+}

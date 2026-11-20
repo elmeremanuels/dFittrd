@@ -1,0 +1,161 @@
+# Prototype audit (Nov 2026)
+
+> Audit of the original AI Studio prototype (commit a185c1a) against docs/HANDOFF.md. Line numbers refer to that commit.
+
+## Bugs
+
+- **[high]** `src/hooks/useFitEngine.ts:39` — CONFIRMED: `sizePoints / 3` divides by the fixed point count even when a point was skipped via the `=== 0` sentinel, so any 2-point garment is capped at 0.667. Reproduced: High-Rise Straight Jeans on the 88-70-96 reference body returns size 28 at 0.533 (shown as 53%) for a near-perfect fit.
+  - Fix: Aggregate as a weighted mean over the points actually evaluated (sum(w*s)/sum(w)); see fitEngineSpec.
+- **[high]** `src/hooks/useFitEngine.ts:13` — CONFIRMED: `bestSize = sizeChart[0]` with `bestScore = -1`; when every size is invalid (score 0 > -1) the engine returns the SMALLEST size with score 0. Reproduced: body 110/95/120 gets 'Recommended Size XS, Fit Score 0%' for all three mock garments, and the reference body gets 'XS / 0%' on the Silk Slip Top.
+  - Fix: Return `recommendedSize: null` + `closestSize` when best score < 0.3 and render a 'no size fits' state; never present the first chart row as a recommendation.
+- **[high]** `src/hooks/useFitEngine.ts:6` — CONFIRMED: critical points hard-coded to bust/waist/hip; `garment.criticalFitPoints`, patternBlock rules (A-line ignores hip, bias slip ignores waist) and per-point weighting are absent. This is why the bias-cut slip top is vetoed by the waist row and scores 0 for the reference body.
+  - Fix: Weight 2 for merchant criticalFitPoints, 1 for other applicable points, omit points a pattern-block rule skips (unless critical). See fitEngineSpec table.
+- **[high]** `src/hooks/useFitEngine.ts:10` — Ease is a single number (dress 4, else 2) applied to every point, and the mock sizeCharts are body-measurement charts, so ease is effectively double-counted: the engine recommends L at 100% for the 88-70-96 body that handoff §1 says wears M in the wrap dress. S scores 0.933 and M 0.933 only because the +2 slack happens to absorb it.
+  - Fix: Add `sizeChartType: 'garment'|'body'` normalisation and a per-category x per-point ease table with pattern-block overrides and `garment.ease` as the merchant override (fitEngineSpec).
+- **[medium]** `src/hooks/useFitEngine.ts:34` — Band mapping deviates from §4.1: anything above ease+2 scores 0.5 with no 'too loose, bad fit' cutoff (a size 30 cm too big still scores 50%); snug is 0.8 for every category; no stretchPct tolerance; `valid=false` hard-zeros the whole size on a single non-critical tight point.
+  - Fix: Implement the five bands with per-point scores (tight 0, snug 0.7/1.0, good 1, roomy 0.6, loose 0.2→0), stretch-widened tight limit, and multiplicative penalties instead of a hard zero (fitEngineSpec).
+- **[low]** `src/hooks/useFitEngine.ts:46` — `notes` is a generic sentence ('might be a bit loose/tight in some areas'), not point-specific, and is never rendered anywhere in the UI.
+  - Fix: Return `notes: string[]` built per point ('Snug at the bust', 'Hips not checked: A-line hem flares freely') and render them under the fit indicator.
+- **[medium]** `src/hooks/useFitEngine.ts:23` — `0` is used as a 'not applicable' sentinel for both chart and user values; a genuinely missing user measurement is silently skipped with no confidence reduction or note, and the Garment type does not model optional points (bottoms carry `bust: 0`).
+  - Fix: Make chart points optional (`bust?: number`), treat `undefined`/`null`/`0` as omitted, record the omission reason, and reduce output confidence proportionally.
+- **[low]** `src/hooks/useFitEngine.ts:3` — `useFitEngine` is a hook in name only (uses no React API) and returns a new `calculateFit` identity every render, which is why SwipeDeck omits it from its effect deps (exhaustive-deps would flag it).
+  - Fix: Replace with a pure module function `computeFit(garment, user, opts)` in `src/fit/computeFit.ts` and call it directly / memoise with useMemo.
+- **[medium]** `src/hooks/useFitEngine.ts:40` — CONFIRMED: no §4.2 tie-break: `sizingNotes` ('runs small' → bias up), `trueToSizeScore` and kept-vs-returned history are all ignored; ties resolve to whichever size the loop met first (`>` keeps the earlier size).
+  - Fix: Implement the tie band + sizingNotes bias + history + closest-ease fallback described in fitEngineSpec.
+- **[low]** `src/components/SwipeDeck.tsx:16` — CONFIRMED: `fitData` is `useState<any>`; `fitData.recommendedSize` / `.score` are unchecked (tsconfig has no `strict`, so nothing flags it).
+  - Fix: `useState<FitResult | null>(null)` and enable `strict` in tsconfig.
+- **[medium]** `src/components/SwipeDeck.tsx:21` — Effect omits `calculateFit` from deps, adds an artificial 800 ms delay before any fit is shown, and for one paint after `currentIndex` changes the previous card's `fitData` (size/score) is displayed on the new garment because `isLoading` is only set inside the effect.
+  - Fix: Compute fit synchronously with `useMemo(() => computeFit(garment, user), [garment, user])`; reserve the loading state for the real render pipeline, and key the fit panel by garment.id.
+- **[medium]** `src/components/SwipeDeck.tsx:19` — `MOCK_GARMENTS[currentIndex % length]` loops the same 3 cards forever; there is no end-of-deck state, items are re-swiped repeatedly, and the wardrobe `Set` hides the duplicates.
+  - Fix: Drive the deck from `rankDeck()` (tasteEngineSpec) which excludes swiped items, and render an empty-deck state.
+- **[high]** `src/components/SwipeDeck.tsx:38` — `handleSwipe` contradicts §5: 'love' adds to wardrobe (spec: log only), 'save' never pushes to backend, 'pass' logs nothing and infers no reason, 'down' is a no-op, no size-at-swipe is logged, and the handler is not guarded while `isLoading`, so rapid taps skip cards without any signal.
+  - Fix: Route all four actions through `applySwipe(state, event)` from tasteEngineSpec with `{itemId, sizeAtSwipe: fit.recommendedSize, fitScore}`; disable the ring while loading.
+- **[medium]** `src/components/SwipeDeck.tsx:12` — CONFIRMED: `setTaste` is destructured but never called; the Style DNA radar is static at 0.5 on every axis regardless of swipes or onboarding vibes.
+  - Fix: Feed TasteRadial from `state.profile.axes` updated by `applySwipe` / `applyOnboardingVibes` (tasteEngineSpec).
+- **[medium]** `src/components/SwipeDeck.tsx:33` — `x`/`y` motion values live at component level and are shared by every keyed card; after a swipe the new card binds to the same MotionValue while it is still springing back, so it mounts rotated/faded. There is no fly-off animation, and `dragConstraints` of 0 with default `dragElastic` 0.5 means the card moves half the pointer distance while the 100 px threshold is measured on pointer offset, so what the user sees does not match when the swipe fires.
+  - Fix: Create motion values inside a `Card` component keyed by garment id, animate `x` to ±window.innerWidth on commit before advancing, use `dragElastic={1}` or `dragSnapToOrigin`, and show the direction overlay from the same value.
+- **[low]** `src/components/SwipeDeck.tsx:125` — `AnimatePresence` wraps the keyed card but the child has no `exit` prop, so it does nothing; if an exit is added later, the default sync mode will render old and new cards simultaneously in the same flex slot.
+  - Fix: Either remove it or give the card an `exit` and use `mode="popLayout"` (or absolutely position cards).
+- **[low]** `src/components/SwipeDeck.tsx:131` — Direction resolution checks x before y, so any diagonal drag resolves to pass/love; 'less like this' (down) is hard to trigger on touch.
+  - Fix: Pick the axis with the larger |offset| first, then apply the threshold on that axis.
+- **[medium]** `src/components/SwipeDeck.tsx:202` — Action ring has 3 buttons (pass/love/save) though §7 specifies the four-button ring; 'less like this' is reachable only by drag, so mouse, keyboard and switch users cannot send the strongest negative signal (WCAG 2.5.1 pointer-gesture alternative). Buttons are icon-only with no aria-label and use index keys.
+  - Fix: Add the ThumbsDown button, `aria-label` on all four, keys by action name.
+- **[medium]** `src/components/SwipeDeck.tsx:78` — Style DNA modal has no `role="dialog"`/`aria-modal`, no focus trap or Escape handling, inner panel has no `exit`, and its copy is fabricated ('32 data points', 'Modern Minimalist 84%') which breaks §7 'don't pretend'.
+  - Fix: Use a dialog primitive (or native <dialog>), derive archetype = argmax(axes) and its % from the real profile, and show the swipe count.
+- **[high]** `src/components/SwipeDeck.tsx:56` — Mobile layout overflows on every phone: the card is `aspect-[1/1.6]` at 340 px (544 px tall) and a column flex item cannot shrink below content height, while the details block (`pb-48`), action ring (`bottom-24`) and App's nav (`h-20`, absolute) are stacked with magic numbers. At 667 px the mirror slot is ~260 px, at 844 px ~440 px, so the card is clipped by `overflow-hidden` and the ring overlaps the fit indicator.
+  - Fix: Make the card height-driven (`max-h` from the slot via `min-h-0` + `h-full` + `aspect-ratio` on an inner box), use `100dvh` + `env(safe-area-inset-bottom)`, and lay out header / mirror / details / ring / nav as real flex rows instead of overlays.
+- **[low]** `src/components/SwipeDeck.tsx:138` — `border-[8px]` on the card is silently overridden by `.mirror-frame { border-[12px] }`: index.css's `@apply` rule is unlayered CSS, which beats Tailwind v4's `@layer utilities` regardless of specificity/order.
+  - Fix: Put custom component classes inside `@layer components` in index.css, or drop the override.
+- **[low]** `src/components/SwipeDeck.tsx:66` — Header buttons are icon-only without `aria-label`; the User button and the 'Shop' button (line 194) have no handlers; `h3` uses `truncate` with no accessible full name.
+  - Fix: Add labels/handlers; expose full name via `title` or wrap instead of truncate.
+- **[high]** `src/components/Avatar.tsx:35` — The `fabricTexture` filter discards the garment colour: `feDiffuseLighting` outputs an opaque image of `lightingColor` x N.L and `feComposite operator="in"` only clips it to the SourceGraphic alpha, so every garment renders as light-grey noise instead of `primaryColorHex` (fails §1 'colour matches the shop photo').
+  - Fix: Multiply the lighting over the fill: add `<feComposite in="SourceGraphic" in2="light" operator="arithmetic" k1="1" k2="0" k3="0" k4="0"/>` (or feBlend mode=multiply), then clip.
+- **[medium]** `src/components/Avatar.tsx:70` — CONFIRMED: the skin-texture `<rect width=200 height=500>` is not clipped to the body, so noise is overlaid on the whole mirror background.
+  - Fix: Add `<clipPath id={bodyClip}><path d={bodyPath}/></clipPath>` and `clip-path` the rect, or render the texture as a filter on the body path itself.
+- **[medium]** `src/components/Avatar.tsx:26` — SVG viewBox 200x500 with `w-full h-auto` inside `max-w-[260px]` renders 650 px tall in a mirror whose inner height is ~520 px; `items-center` + `overflow-hidden` clip head and feet, and the face tile (`top-0 mt-4`, line 97) is positioned at the wrapper top rather than the SVG head (y=50/500), so it lands in the clipped region.
+  - Fix: Use `h-full w-auto` with `preserveAspectRatio="xMidYMid meet"`, and place the face tile inside the SVG (`<foreignObject>`/`<image>` at the head coordinates).
+- **[medium]** `src/components/Avatar.tsx:29` — Filter/gradient ids (`skinTexture`, `fabricTexture`, `bodyGrad`, `skinToneGrad`) are document-global; mounting two Avatars (wardrobe grid, rooms) makes the second use the first's skin-tone gradient.
+  - Fix: Prefix ids with `useId()`.
+- **[low]** `src/components/Avatar.tsx:122` — CONFIRMED: `adjustColor` names channels r,b,g in the wrong order (output is correct only because the math is symmetric), does not handle 3-digit hex, and yields '#NaN…' for invalid input (e.g. `skinTone` undefined also makes the face tile transparent at line 103).
+  - Fix: Parse with a validated hex regex, expand 3-digit, name channels correctly, fall back to the default tone.
+- **[high]** `src/components/Avatar.tsx:166` — CONFIRMED and extended: `getGarmentPath` returns '' for outerwear/shoes/accessory (garment invisible, no fallback), and for the other categories it ignores sizeChart, recommended size, ease and lengthCm, so S/M/L and tight/loose render identically (fails §9 size test); `drape` only widens the hem; the same filter is used for silk and denim (fails §9 fabric test).
+  - Fix: Derive garment width per point from `fit.perSize[recommended].gapCm` (negative gap → pulls/cling, positive → ease), hem y from `lengthCm.shoulder_to_hem` scaled by user height, and vary filter frequency/sheen by `fabric`; add outerwear/shoes/accessory paths and an explicit 'no preview' fallback.
+- **[low]** `src/components/Avatar.tsx:61` — `transition-all duration-1000` on `<path>` elements targets the `d` attribute, which CSS cannot transition; the body/garment morph never animates.
+  - Fix: Animate `d` with motion's `animate={{ d }}` on `motion.path`, or drop the classes.
+- **[medium]** `src/components/Avatar.tsx:113` — The mirror says 'Simulating Drape' and there is no 'placeholder · not ML' watermark or 'this is an estimate' disclaimer (§2.3, §7, founder note), i.e. the prototype pretends.
+  - Fix: Add a persistent corner badge ('Preview · not measured') and the estimate disclaimer whenever the render is generated rather than measured.
+- **[low]** `src/components/Avatar.tsx:158` — Body path inner-leg vertex `L 100,300` sits above the hip bottom (y=320), producing a self-intersecting polygon and a visible notch at the crotch for wide hips.
+  - Fix: Move the crotch point below the hip curve (y >= 330) or build legs as separate subpaths.
+- **[medium]** `src/components/Onboarding.tsx:50` — Measurement rows: `<label>` is not associated with the `<input type=range>` (no htmlFor/id), bust/waist/hip sliders allow 40 cm, there is no foot EU input (§2.1C), no unit toggle, no per-measurement confidence, and `parseInt` discards half-centimetres.
+  - Fix: Use `id`/`htmlFor`, sensible per-field ranges, add footEu, allow number input alongside the slider, and store confidence per field.
+- **[low]** `src/components/Onboarding.tsx:75` — 'Capture Face' / 'Start Body Scan' just flip booleans; `faceImage` is never set and the flow can complete with nothing captured; `metadata.json` requests camera permission for an AI Studio frame that no longer applies.
+  - Fix: Wire `getUserMedia` + MediaPipe on-device capture (gap list §2.1) and gate 'Next' on capture or an explicit skip.
+- **[medium]** `src/components/Onboarding.tsx:110` — CONFIRMED: vibe buttons have no selected state or `aria-pressed`, never update the taste profile, and 'Eclectic' has no axis in TasteProfile.
+  - Fix: Keep `selectedVibes` state, call `applyOnboardingVibes` (tasteEngineSpec) on completion, mark pressed state.
+- **[low]** `src/components/Onboarding.tsx:134` — Title has a fixed `h-10`; 'Welcome to your DressingRoom' at text-3xl wraps at <= 390 px wide and overflows into the subtitle.
+  - Fix: Use `min-h-10` and let it wrap.
+- **[low]** `src/components/Onboarding.tsx:126` — `fixed inset-0 p-8 mt-12` ignores safe-area insets; step order (measurements → scan → vibes) differs from handoff §2 (welcome → measurements → vibes → capture).
+  - Fix: Pad with `env(safe-area-inset-*)` and reorder steps.
+- **[medium]** `src/App.tsx:23` — `h-screen` (not `100dvh`) + `overflow-hidden`; the fixed Customer/Merchant switcher (`top-4 left-4 z-[60]`) overlaps the deck header logo on phones; nav buttons have no handlers or labels; the merchant console is reachable from the consumer app with no auth.
+  - Fix: Use `min-h-dvh`, move the dev switcher behind `import.meta.env.DEV`, give nav real routes/labels, and ship the merchant console as a separate authenticated web app.
+- **[low]** `src/App.tsx:6` — Duplicate React imports (`import React` and `import { useState }`); the default import is unnecessary with `jsx: react-jsx` (same in every component).
+  - Fix: Remove `import React` and enable `noUnusedLocals`.
+- **[medium]** `src/context.tsx:18` — CONFIRMED: no persistence (a refresh forces re-onboarding and wipes wardrobe/taste) contrary to §6 local DB; the provider value is recreated every render so every consumer re-renders; `setUser` type forbids functional updates; no swipe history or penalty memory in state.
+  - Fix: Persist `user`, `tasteState`, `wardrobe` in IndexedDB (idb-keyval) with a versioned schema; `useMemo` the context value; add `TasteState` and `events` to context.
+- **[medium]** `src/components/TasteRadial.tsx:55` — Labels are placed at radius+20 = 120 from centre 100 in a 200x200 viewBox: the top label is at y=-20 and the right/left labels at x≈214/−14, so 'bohemian' is invisible and 'minimal'/'sporty' are cut off.
+  - Fix: Use `viewBox="-40 -40 280 280"` (or radius 60) and `dominantBaseline="middle"`.
+- **[low]** `src/components/TasteRadial.tsx:10` — Axis order depends on object key insertion order; labels are raw keys ('AVANTGARDE'); the SVG has no `role="img"`/`<title>`; `transition-all` cannot animate `points`; index keys.
+  - Fix: Fixed axis array with display labels, `role="img"` + `<title>`, animate with `motion.polygon`.
+- **[medium]** `src/components/MerchantConsole.tsx:6` — Uses slate/green/rose/blue and a generic bold sans instead of the §7 system (cream/ink/coral, Fraunces/Inter); every metric is hard-coded; 'Run Simulation' is dead; the Privacy ledger panel (§2.2) and cohort bars (§7) are missing; index keys.
+  - Fix: Restyle with theme tokens, add the privacy-ledger and cohort-bar components, feed from a typed `MerchantStats` prop.
+- **[medium]** `src/constants.ts:3` — 3 mock items instead of ~50; sizeCharts are body-measurement charts (S bust 88 = fits an 88 bust) but the engine treats them as garment measurements; `bust: 0` sentinel on bottoms; none of the §3.1 fields beyond the basics.
+  - Fix: Regenerate fixtures against the full §3.1 schema with `sizeChartType` and 40–50 items spanning all six categories.
+- **[medium]** `src/types.ts:18` — Garment lacks ease, lengthCm, sizingNotes, trueToSizeScore, criticalFitPoints, stretchZones, colorways, productPhotos, flatLayPhoto, blend, opacity, sheen and shoulder; `patternBlock`/`fabric.primary` are plain strings; UserBodyData lacks footEu, per-measurement confidence, undertone; FitResult has no per-size data; TasteProfile has no silhouette/colour dimensions.
+  - Fix: Adopt the types in fitEngineSpec/tasteEngineSpec; use string-literal unions for patternBlock/fabric with an `(string & {})` escape hatch.
+- **[high]** `vite.config.ts:10` — CONFIRMED: `define: { 'process.env.GEMINI_API_KEY': ... }` inlines the key into the client bundle, and `loadEnv(mode, '.', '')` with an empty prefix loads every env var, so any later reference would leak it too. Violates the founder's 'keys never ship to the client' decision.
+  - Fix: Delete the `define` block, remove `.env.example` key lines, and call AI providers only from the Docker backend.
+- **[low]** `vite.config.ts:20` — AI Studio leftovers: mojibake comment ('modifyâfile'), `DISABLE_HMR` hook, `@` alias to the repo root.
+  - Fix: Remove; alias `@` to `./src` if kept.
+- **[medium]** `package.json:2` — CONFIRMED and extended: name `react-example`; unused deps `@google/genai`, `express`, `dotenv`, `autoprefixer`, `tsx`, `@types/express`; `vite` listed in both dependencies and devDependencies; build tooling (`@vitejs/plugin-react`, `@tailwindcss/vite`, `tailwindcss`) in runtime deps; no lockfile committed; no test runner or `test` script; `lint` is just `tsc`; no eslint.
+  - Fix: Rename, prune, move tooling to devDependencies, commit a lockfile, add vitest + eslint (react-hooks, jsx-a11y).
+- **[medium]** `tsconfig.json:2` — No `strict`, `noUnusedLocals`, `noFallthroughCasesInSwitch` or `include`; leftovers `experimentalDecorators`, `useDefineForClassFields:false`, `allowJs`. This is what lets `fitData: any`, unused imports and the missing effect dep pass `npm run lint`.
+  - Fix: Enable strict + unused checks, set `include: ["src"]`, separate `tsconfig.node.json` for vite.config.
+- **[low]** `index.html:6` — CONFIRMED: title 'My Google AI Studio App'; no `theme-color`, manifest or `viewport-fit=cover` (needed for safe-area insets on a mobile-first app).
+  - Fix: Set title/description, add manifest + theme-color, `viewport-fit=cover`.
+- **[low]** `src/index.css:1` — Fonts are pulled from fonts.googleapis.com via a render-blocking `@import`, sending every visitor's IP to Google — at odds with the privacy posture and offline use.
+  - Fix: Self-host Fraunces/Inter (`@fontsource-variable/*`) with `font-display: swap`.
+- **[low]** `README.md:18` — README and metadata.json are AI Studio boilerplate that instruct setting `GEMINI_API_KEY` in `.env.local` for the client app.
+  - Fix: Rewrite README for the real stack (app, backend Docker, merchant SDK) and delete metadata.json.
+- **[medium]** `src/components/SwipeDeck.tsx:150` — Accessibility: `text-ink/40` on cream is ~2.5:1 and `text-ink/20` ~1.5:1 (WCAG AA needs 4.5:1), most microcopy is 10 px uppercase, `animate-pulse`/`animate-float`/`animate-spin` and motion springs are not gated by `prefers-reduced-motion`, and the fit result is not announced (no live region).
+  - Fix: Raise opacities to >= /60 for text, 12 px minimum, add `motion-reduce:` variants and `useReducedMotion()`, wrap the fit panel in `aria-live="polite"`.
+- **[low]** `src/components/SwipeDeck.tsx:23` — StrictMode: the fit effect is double-invoked in dev (two `setIsLoading(true)`, timer created twice). Cleanup makes it harmless today, but any analytics/logging added here (as §5 requires) will double-fire in dev. No other real StrictMode hazard was found (no exit animations, no refs mutated in effects).
+  - Fix: Move side effects (swipe logging) into event handlers, keep effects idempotent, and compute fit with useMemo.
+
+## Gaps vs. handoff
+
+- **§2.1 Capture step (face photo + 8 s body video + measurements with confidence)** — No camera access, no pose/face pipeline, no identity tile, no silhouette atlas; `faceImage`/`bodyMeshId` never populated; no per-measurement confidence (60/95/conflict).
+  - Proposal: On-device capture module: `getUserMedia` → MediaPipe Pose Landmarker + Face Landmarker (WASM, runs in-browser/RN), multi-point ITA skin sampling, SMPL-X-lite parametric fit from 12 cross-sections; store `BodyProfile { measurements, confidence, silhouetteAtlas, faceTile }` in IndexedDB/SQLite only. Confidence rule exactly as §2.1C; conflict → inline 'remeasure' prompt on that field.
+- **§2.2 Privacy posture + fit signature** — Nothing is stored locally in a durable way, nothing syncs, no ~80-float fit signature, no profile/privacy screen, no merchant Privacy ledger panel.
+  - Proposal: `fitSignature.ts`: deterministic 80-float vector (normalised cross-sections + ease preferences), hashed device id; backend receives only `{signature, swipeEvents}`. Add Profile screen with the privacy ledger (what left the device, when) and reuse the same component in the merchant console.
+- **§3.1 Per-item payload schema** — Garment type and mock data implement ~10 of the ~25 fields; no colorways/photos/flat-lay, no ease/lengthCm, no sizingNotes/trueToSizeScore/criticalFitPoints/stretchZones, no shoulder in sizeChart.
+  - Proposal: Define the schema once as a zod schema in a shared `@dressingroom/schema` package consumed by app, backend and the Shopify/WooCommerce plugins; add `sizeChartType: 'garment'|'body'` (the handoff is ambiguous and both conventions exist in retail) and `schemaVersion`.
+- **§3.2 Merchant SDK / deep link / QR handshake** — No SDK, no `data-dressingroom-product` button, no deep link, no shop API client, no pairing UI.
+  - Proposal: 5 KB vanilla `sdk.js` that opens `dressingroom://try?shop=…&product=…` (universal link fallback), a `GET /v1/shops/:id/products/:pid` proxy on the VPS backend (Docker, Fastify) that normalises Shopify metafields / WooCommerce product meta into the §3.1 payload, and a QR pairing screen in the app.
+- **§4.1 Fit score** — Bands, ease table, criticalFitPoints weighting, pattern-block rules, stretch tolerance and confidence weighting are all missing or wrong (see bugs).
+  - Proposal: Implement `computeFit` exactly per fitEngineSpec as a pure module with the listed test vectors (vitest).
+- **§4.2 Size recommendation** — No sizingNotes bias, no trueToSizeScore, no kept/returned history; returns first size when nothing fits.
+  - Proposal: Tie-band + bias + history tie-break and `recommendedSize: null` path per fitEngineSpec; log kept/returned outcomes from the wardrobe to feed the history tie-break.
+- **§4.3/§4.4 Render path B (2D parametric warp of the flat-lay)** — The SVG overlay is a tinted polygon, not a warp of the merchant's flat-lay photo; it does not reflect size, ease, length or fabric; outerwear/shoes/accessory have no path.
+  - Proposal: Keep Avatar's layer structure but replace the garment layer with a Canvas/Skia mesh warp: category UV template (12 control rows matching the body cross-sections) × silhouette atlas × per-point gap from `fit.perSize` × `fabric.drape` for hem sag; fabric look from `sheen/opacity/weightGsm`; server-side IDM-VTON/OOTDiffusion endpoint (keys server-side) only for the shareable hero image.
+- **§5 Swipe deck signals** — Only love/save add to wardrobe; pass has no reason inference; 'less like this' does nothing; no 50-card penalty memory; TasteRadial never updates; no backend push for save.
+  - Proposal: Implement `applySwipe`, penalty memory and `rankDeck` per tasteEngineSpec; emit `SwipeEvent`s to an outbox queue synced to the backend.
+- **§6 Tech stack (local DB, sync, mobile shell)** — Vite web prototype with in-memory state; no local DB; no sync; no backend; no Docker.
+  - Proposal: Short term: keep Vite+React as the web fallback, add IndexedDB persistence and a `docker-compose` backend (Fastify + Postgres) on the founder's VPS. Medium term: Expo (React Native) app sharing `fit/`, `taste/` and schema packages; raw media never leaves the device by construction (no upload endpoint exists).
+- **§7 Design system** — Merchant console ignores the palette/typography; action ring has 3 not 4 buttons; cohort bars absent; no placeholder disclaimer; fonts loaded from Google.
+  - Proposal: Tokenise colours/type in index.css `@theme`, self-host fonts, add `<PlaceholderBadge/>`, `<CohortBars/>`, 4th ring button.
+- **§8 Eight-week MVP order** — None of steps 1–8 is started beyond UI shells; the only 'engine' code is the 50-line heuristic.
+  - Proposal: Week 1–2: schema + fit engine + taste engine with tests (pure TS, no UI risk). Week 3–4: persistence + capture. Week 5–6: SDK + backend + one real shop. Week 7–8: render path B.
+- **§9 Bar for done (recognition / fabric / size tests)** — All three fail today: avatar is a generic silhouette, fabrics render identically, S/M/L render identically.
+  - Proposal: Add these three as visual regression tests (Playwright screenshots of the same user in S/M/L and linen/wool/silk) so the renderer is measured against the handoff's own bar.
+- **Founder notes: colour matching with skin & hair** — No colour analysis; skin tone is a hex picker only.
+  - Proposal: Compute undertone from the face tile (ITA + a/b in Lab), score each `primaryColorHex` by harmony (ΔE to seasonal palette) and surface as a 'colour match' chip; also feeds the taste `colour` affinities.
+- **Founder notes: Shopify/WordPress plugin, pay per month/API call, ads toggle, purchase prediction** — No merchant-side code at all.
+  - Proposal: Shopify app (Remix template) + WooCommerce plugin (PHP) that both only (a) inject sdk.js and (b) expose the §3.1 payload via a signed endpoint; billing via Shopify Billing API / Stripe metered on fit calls; prediction dashboards come from aggregated swipe events, never from body data.
+- **Founder notes: estimate disclaimer, images only in-app** — No disclaimer; the prototype's render could be screenshotted/shared without a label.
+  - Proposal: Persistent 'estimate' disclaimer on every render plus watermark on exported hero images; keep renders in-app memory only (no gallery save) unless the user explicitly exports.
+- **Delegated decisions: any AI provider, keys server-side, VPS hosting** — Repo is wired for client-side Gemini (vite define, @google/genai dependency, README).
+  - Proposal: Remove all client AI wiring; backend `POST /v1/render/hero` with provider adapter interface (IDM-VTON self-hosted, or hosted fal/replicate) selected by env on the VPS.
+
+## Reusable
+
+Reusable as-is (or with the one-line fix noted):
+- `src/index.css`: the `@theme` tokens (cream/coral/ink, Fraunces/Inter), `.mirror-frame`, `.glass-panel`, `float` keyframes — keep, but move component classes into `@layer components` and self-host the fonts.
+- Onboarding shell (`src/components/Onboarding.tsx`): the step container with `AnimatePresence mode="wait"`, animated title/subtitle, progress dots, full-width ink CTA, the 'Privacy Guarantee' copy box, and the measurement slider row layout (add `htmlFor`/`id`). The capture-step tile buttons are a good skeleton for the real camera step.
+- SwipeDeck chrome (`src/components/SwipeDeck.tsx`): header with logo + round icon buttons, the swipe-guide overlay (Save/Pass/Love/Less Like), the floating action-ring button styling (add the 4th button + aria-labels), the glass fit-indicator panel (wire to the real `FitResult` and add `notes`), the garment-details footer, and the Style DNA modal shell (add dialog semantics, drop the fake copy).
+- `src/components/TasteRadial.tsx`: the radar geometry and styling are production-ready once the viewBox/label radius is fixed and axes are given a fixed order and display labels.
+- `src/components/Avatar.tsx`: the mirror reflection backdrop, loading spinner + label, face-tile ring treatment, and the layer structure (body silhouette → shadow → garment overlay keyed by garment.id) are exactly the slots the path-B renderer needs; replace the SVG bodies/garment paths and fix the filter/clip/id bugs.
+- `src/components/MerchantConsole.tsx`: the stat-card grid and size-heatmap bar list are reusable layouts after re-theming to the §7 tokens.
+- `src/context.tsx`: provider/hook pattern is fine; extend the state shape and add persistence.
+- `src/App.tsx`: the phone-frame `max-w-md` shell and bottom nav skeleton (needs routes, labels, dvh/safe-area).
+- Tooling: Vite + React 19 + Tailwind 4 + motion + lucide are all appropriate; keep them, prune the rest of package.json.
+Not reusable: `src/hooks/useFitEngine.ts` (replace with `computeFit`), `src/constants.ts` fixtures (regenerate against the full schema), `vite.config.ts` define block, README/metadata.json.

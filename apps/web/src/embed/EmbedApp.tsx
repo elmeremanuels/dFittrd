@@ -1,0 +1,679 @@
+/**
+ * The standalone fitting room inside the merchant page's overlay (`/embed/:token`,
+ * docs/STANDALONE.md §1–2). Its own minimal shell: no phone frame, no bottom nav, no onboarding,
+ * no app store, no app database.
+ *
+ * Privacy (D3): the body profile and the fit live in this iframe only. The network sees
+ * `POST /v1/devices` (anonymous device), `GET /v1/try/:token`, ONE `POST …/fit-shown`
+ * `{ intentToken, recommendedSize, confidence }`, `DELETE /v1/me` on "Forget me", and the opt-in
+ * hero render of the avatar drawing. Never a measurement, a photo or a frame.
+ *
+ * The avatar (D19, docs/research/photo-avatar-plan.md slices 1 and 2): tapping the 2D figure opens
+ * the avatar prompt. The shopper may pick a skin colour there; it colours the 2D figure and goes to
+ * the 3D view as an in-memory value. By default it lives in memory only and is gone when the window
+ * closes; saving it under "Remember me" is behind a build flag until the founder and counsel have
+ * decided (storage.ts). It is never in a request, a postMessage or the fit. The prompt makes no
+ * request at all. The opt-in hero render is drawn from a separate figure: the standard colour, no
+ * face, as it was before the avatar prompt existed.
+ *
+ * Men's gate (D20 point 3, docs/research/men-3d-plan.md slice M0): a men's product is shown with
+ * the working 3D view or not at all. The server answers `men_coming_soon` for a product that is not
+ * ready; a ready one arrives with `requires3d`. Then nothing of the result (no 2D figure, no size)
+ * is visible until the 3D view has settled, fit-shown waits for it, and a device without WebGL2 or
+ * a failing bundle ends on "Men's clothing: coming soon".
+ */
+import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
+import type { BodyProfile, TryResolveResponse } from '@curtain/schema';
+import { AvatarView } from '@/components/AvatarView';
+import { ApiError } from '@/api/client';
+import { adviseSize, EMPTY_ABOUT, fitForProfile, mergeAboutIntoScan, normalizeAbout, priorKeys, profileFromAbout, sizeConfidence, switchUnits, validateAbout, waistOnlyOf, type AboutField, type AboutForm } from './aboutYou';
+import { embedStrings } from './strings';
+import { AvatarPrompt } from './AvatarPrompt';
+import { isMockToken, mockTokensEnabled, resolveMock, type EmbedApi, type EmbedDeps } from './deps';
+import { AboutScreen, BlockedScreen, EmbedFooter, EmbedFrame, LoadingScreen, ProductHeader } from './EmbedScreens';
+import { classifyError, flowReducer, INITIAL_FLOW } from './flow';
+import { bodyFamilyFor, Garment3D, hasWebGL2 } from './Garment3D';
+import { HeroRenderPanel, heroRendersEnabled } from './HeroRender';
+import { facePhotoEnabled, facePhotoMode, type SkinLook } from './look';
+import type { FaceLookResultLike } from './deps';
+import type { FacePhotoNotice, FacePhotoState } from './FacePhotoRows';
+import type { StoredFace } from './storage';
+import { bodyGeometry } from '@/render/body';
+import { drawnHeadColour } from '@/render/face';
+import { createParentChannel, parseParentMessage, resolveTargetOrigin, type ParentContext } from './protocol';
+import { ringInputsFor } from '@/render/ringInputs';
+import { ResultScreen } from './ResultScreen';
+import { defaultUnits, type Units } from './units';
+
+const CaptureStep = lazy(() => import('@/features/capture/components/CaptureStep'));
+
+/** Height over width of the 2D figure's head (reference body): the face tile is made in that shape. */
+const HEAD_ASPECT = (() => {
+  const g = bodyGeometry(null);
+  return Math.round((g.headRy / g.headR) * 100) / 100;
+})();
+
+/** The on-device face step and the tile URL, loaded on first use (the worker code is not in the embed's first chunk). */
+const defaultFaceLook = async (photo: Blob, opts: { tile: boolean; skin: boolean; aspect?: number }): Promise<FaceLookResultLike> => (await import('@/features/capture/faceLook')).faceLookFromPhoto(photo, opts);
+const defaultTileUrl = async (tile: { width: number; height: number; rgba: Uint8ClampedArray }): Promise<string> => (await import('@/features/capture/faceLook')).tileObjectUrl(tile);
+/** Frees a tile URL (jsdom has no `revokeObjectURL`; there is nothing to free there). */
+const revokeUrl = (url: string): void => {
+  if (typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(url);
+};
+const matchTile = async (tile: StoredFace['tile'], hex: string): Promise<Uint8ClampedArray> => (await import('@/features/capture/faceTile')).matchTileToSkin(tile, hex);
+
+const NO_CONTEXT: ParentContext = { locale: null, currentVariantSize: null };
+
+/**
+ * The browser's own locale. It decides the default units (cm or in) only; D21: it never changes
+ * the language of the interface, which the shop's integration names (`strings/index.ts`).
+ */
+function browserLocale(): string | null {
+  return typeof navigator !== 'undefined' ? (navigator.language ?? null) : null;
+}
+
+export function EmbedApp({ token, deps }: { token: string; deps: EmbedDeps }): ReactNode {
+  const { store } = deps;
+  const [flow, dispatch] = useReducer(flowReducer, INITIAL_FLOW);
+  const [attempt, setAttempt] = useState(0);
+  const [data, setData] = useState<TryResolveResponse | null>(null);
+  const [aboutState, setAbout] = useState<AboutForm>(EMPTY_ABOUT);
+  const [errors, setErrors] = useState<Partial<Record<AboutField, string>>>({});
+  const [profile, setProfile] = useState<BodyProfile | null>(null);
+  const [remember, setRememberState] = useState(store.remember);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [chosen, setChosen] = useState<string | null>(null);
+  const [chooseFallback, setChooseFallback] = useState<string | null>(null);
+  const [forgetStatus, setForgetStatus] = useState<string | null>(null);
+  const [context, setContext] = useState<ParentContext>(NO_CONTEXT);
+  /** `requires3d` products only: the 3D view has settled (until then the result stays hidden and unbilled). */
+  const [view3dReady, setView3dReady] = useState(false);
+  /** Units the shopper picked (here or on an earlier visit to this shop); null follows the locale. */
+  const [chosenUnits, setChosenUnits] = useState<Units | null>(null);
+  /** The skin colour the shopper picked for the avatar (null: the standard colour). Never sent. */
+  const [look, setLook] = useState<SkinLook | null>(null);
+  const [promptOpen, setPromptOpen] = useState(false);
+  // Slices 4 and 5 (VITE_AVATAR_FACE_PHOTO=live only): the face tile drawn from the shopper's photo,
+  // the URL of it as drawn (matched to the colour on the body), and the state of the photo steps.
+  // All in memory; stored only with "Remember my photo" (C19). The photo itself is never kept.
+  const faceLive = deps.facePhotoLive ?? facePhotoMode() === 'live';
+  const [faceTile, setFaceTile] = useState<StoredFace['tile'] | null>(null);
+  /** The drawn tile's URL, with the tile and the look it was made for (a stale one is never shown). */
+  const [faceDrawn, setFaceDrawn] = useState<{ tile: StoredFace['tile']; url: string } | null>(null);
+  const [faceBusy, setFaceBusy] = useState<'face' | 'skin' | null>(null);
+  const [faceError, setFaceError] = useState<FacePhotoState['error']>(null);
+  const [faceNotices, setFaceNotices] = useState<FacePhotoState['notices']>(null);
+  const [suggestion, setSuggestion] = useState<number | null>(null);
+  const [rememberPhoto, setRememberPhoto] = useState(false);
+  /** The prompt is on screen now (see `showPrompt`): the window's Escape handler stands down. */
+  const promptShownRef = useRef(false);
+  const shopperLocale = deps.locale === undefined ? browserLocale() : deps.locale;
+  const units: Units = chosenUnits ?? defaultUnits(shopperLocale, context.locale);
+  // The inputs follow the effective units (a stored choice, else the locale, which can arrive late
+  // from the shop page). Switching never changes the metric values the fit engine reads.
+  const about = useMemo(() => switchUnits(aboutState, units), [aboutState, units]);
+  const apiRef = useRef<EmbedApi | null>(null);
+  const fitShownFor = useRef<Set<string>>(new Set());
+  const readySent = useRef(false);
+  const avatarRef = useRef<HTMLDivElement | null>(null);
+  /** The figure the hero render is drawn from: standard colour, no face, no rings. */
+  const heroAvatarRef = useRef<HTMLDivElement | null>(null);
+  // SEC-5: `mock:` tokens are a development/demo aid only; a production build shows "expired".
+  const mockToken = isMockToken(token);
+  const mock = mockToken && (deps.allowMock ?? mockTokensEnabled());
+  const getAvatarSvg = useCallback((): SVGSVGElement | null => heroAvatarRef.current?.querySelector('svg') ?? null, []);
+
+  const api = useCallback((): EmbedApi => {
+    if (!apiRef.current) apiRef.current = deps.makeApi(store);
+    return apiRef.current;
+  }, [deps, store]);
+
+  // --- resolve the try token (and the remembered profile) -------------------------------------
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await store.init();
+        // The stored "Remember me" opt-out is only known after init (UX-1 / F2).
+        if (!cancelled) setRememberState(store.remember);
+        if (mockToken && !mock) throw new ApiError(410, 'gone', 'try link expired');
+        const resolved = mock ? resolveMock(token, deps.referrer) : await api().resolveTry(token, { enforces3dRule: true });
+        if (cancelled) return;
+        // Men's gate: a product that needs the 3D view is not opened on a device that cannot show it.
+        if (resolved.requires3d && !resolved.shop.paused && (!resolved.asset || !(deps.webgl2 ?? hasWebGL2)())) {
+          dispatch({ type: 'failed', kind: 'comingSoon' });
+          return;
+        }
+        const remembered = await store.loadProfile(resolved.shop.id);
+        const storedUnits = await store.loadUnits();
+        const storedLook = await store.loadLook(resolved.shop.id);
+        // D20.2: the face is back at once for a returning shopper who said "Remember my photo".
+        const storedFace = faceLive ? await store.loadFace(resolved.shop.id) : null;
+        if (cancelled) return;
+        setLook(storedLook ?? storedFace?.look ?? null);
+        if (storedFace) {
+          setFaceTile(storedFace.tile);
+          setRememberPhoto(true);
+        }
+        setData(resolved);
+        if (storedUnits) setChosenUnits(storedUnits);
+        if (remembered) {
+          setAbout(normalizeAbout(remembered.about));
+          setProfile(remembered.profile);
+        }
+        dispatch({ type: 'resolved', paused: resolved.shop.paused, remembered: !!remembered });
+      } catch (e) {
+        if (!cancelled) dispatch({ type: 'failed', kind: classifyError(e) });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, attempt, mock, mockToken, deps.referrer, deps.webgl2, store, api, faceLive]);
+
+  // The face as drawn: the tile matched to the colour of the drawn head (the confirmed swatch);
+  // without a confirmed colour the tile keeps the photo's own (de-lit) colour. The previous URL is
+  // shown until the new one is ready, then freed; "face off" frees it at once (`dropFace`).
+  useEffect(() => {
+    if (!faceTile) return;
+    let cancelled = false;
+    (async () => {
+      const rgba = look ? await matchTile(faceTile, drawnHeadColour(look.hex)) : faceTile.rgba;
+      const url = await (deps.tileUrl ?? defaultTileUrl)({ width: faceTile.width, height: faceTile.height, rgba });
+      if (cancelled) {
+        revokeUrl(url);
+        return;
+      }
+      setFaceDrawn((prev) => {
+        if (prev) revokeUrl(prev.url);
+        return { tile: faceTile, url };
+      });
+    })().catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [faceTile, look, deps.tileUrl]);
+  // The page is closed or the embed unmounted: free the last URL.
+  const faceDrawnRef = useRef<{ url: string } | null>(null);
+  useEffect(() => {
+    faceDrawnRef.current = faceDrawn;
+  }, [faceDrawn]);
+  useEffect(
+    () => () => {
+      if (faceDrawnRef.current) revokeUrl(faceDrawnRef.current.url);
+    },
+    [],
+  );
+
+  // --- parent channel ---------------------------------------------------------------------------
+  const targetOrigin = useMemo(
+    () => (data ? resolveTargetOrigin({ allowedOrigins: data.embed.allowedOrigins, referrer: deps.referrer, ancestorOrigins: deps.ancestorOrigins, framed: !!deps.parent }) : null),
+    [data, deps.referrer, deps.ancestorOrigins, deps.parent],
+  );
+  const channel = useMemo(() => createParentChannel(deps.parent, targetOrigin), [deps.parent, targetOrigin]);
+
+  // curtain:ready after the first paint of real content.
+  useEffect(() => {
+    if (flow.step === 'loading' || readySent.current || !channel.canPost) return;
+    const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb: FrameRequestCallback) => setTimeout(() => cb(0), 0) as unknown as number;
+    const id = raf(() => {
+      if (readySent.current) return;
+      readySent.current = true;
+      channel.post({ type: 'curtain:ready' });
+    });
+    return () => {
+      if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(id);
+    };
+  }, [flow.step, channel]);
+
+  // curtain:context from the parent (exact origin + window only).
+  useEffect(() => {
+    if (!targetOrigin || !deps.parent) return;
+    const onMessage = (event: MessageEvent): void => {
+      const ctx = parseParentMessage(event, { targetOrigin, parent: deps.parent });
+      if (ctx) setContext(ctx);
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [targetOrigin, deps.parent]);
+
+  // Escape inside the iframe never reaches the parent page: ask the overlay to close.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      // With the avatar prompt open, Escape closes the prompt, not the overlay.
+      if (e.key === 'Escape' && !promptShownRef.current) channel.post({ type: 'curtain:close' });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [channel]);
+
+  // --- the fit (on device) ----------------------------------------------------------------------
+  const embedFit = useMemo(() => (data && profile ? fitForProfile(data.garment, profile) : null), [data, profile]);
+  const advice = useMemo(() => (embedFit ? adviseSize(embedFit.fit, about.preference) : null), [embedFit, about.preference]);
+  const defaultSize = advice?.size ?? advice?.closest ?? data?.garment.sizeChart[0]?.size ?? null;
+  const shownSize = selected && embedFit?.fit.perSize.some((s) => s.size === selected) ? selected : defaultSize;
+
+  // fit-shown: once per intent token, when the first real recommendation is on screen. Never for
+  // "no size fits well" (UX-2) or "we can't recommend a size yet" (F1): no size was recommended.
+  useEffect(() => {
+    if (flow.step !== 'result' || !data || !embedFit || !advice || mock || !advice.size) return;
+    // Men's gate: nothing is "shown" (and nothing billed) before the required 3D view has settled.
+    if (data.requires3d && !view3dReady) return;
+    const intent = data.trySession.intentToken;
+    if (fitShownFor.current.has(intent)) return;
+    fitShownFor.current.add(intent);
+    const recommendedSize = advice.size.slice(0, 16);
+    // F3: the confidence of the size we recommend (after the preference), not the engine pick's.
+    const confidence = advice.adjusted ? sizeConfidence(embedFit.fit, advice.size) : embedFit.fit.confidence;
+    api()
+      .fitShown(token, { intentToken: intent, recommendedSize, confidence: Math.max(0, Math.min(1, confidence)) })
+      .catch((e: unknown) => {
+        if (e instanceof ApiError && (e.status === 402 || e.code === 'shop_paused')) dispatch({ type: 'paused' });
+        // Anything else: the shopper still has their size; analytics simply miss this one.
+      });
+  }, [flow.step, data, embedFit, advice, mock, token, api, view3dReady]);
+
+  // Remember the profile on this shop (only with "Remember me" on; the store enforces that too).
+  useEffect(() => {
+    if (flow.step !== 'result' || !data || !profile || !remember) return;
+    void store.saveProfile({ shopId: data.shop.id, profile, about, savedAt: Date.now() });
+  }, [flow.step, data, profile, about, remember, store]);
+
+  // A11Y-1: on every step change, start at the top and move focus to the new screen's heading so
+  // keyboard and screen-reader users land on (and hear) the new content. Not on the first screen
+  // after loading: focus must not jump into the iframe before the shopper interacts with it.
+  const mainRef = useRef<HTMLElement | null>(null);
+  const stepKey = `${flow.step}:${flow.blocked ?? ''}:${flow.editing ? 'edit' : ''}`;
+  const prevStepKey = useRef(stepKey);
+  useEffect(() => {
+    const prev = prevStepKey.current;
+    prevStepKey.current = stepKey;
+    if (prev === stepKey || prev.startsWith('loading:')) return;
+    try {
+      window.scrollTo(0, 0);
+    } catch {
+      // jsdom and old browsers
+    }
+    const focusHeading = (): boolean => {
+      const heading = mainRef.current?.querySelector<HTMLElement>('[data-step-heading], h1, h2');
+      if (!heading) return false;
+      if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+      heading.focus({ preventScroll: true });
+      return true;
+    };
+    // The scan step loads lazily: retry on the next frames until its heading exists.
+    if (focusHeading()) return;
+    let tries = 0;
+    const id = setInterval(() => {
+      if (focusHeading() || ++tries > 20) clearInterval(id);
+    }, 50);
+    return () => clearInterval(id);
+  }, [stepKey]);
+
+  // --- actions ----------------------------------------------------------------------------------
+  const submitAbout = (scan: boolean): void => {
+    if (!data) return;
+    const errs = validateAbout(about, data.garment.category, data.garment);
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+    setProfile(profileFromAbout(about, data.garment.category, Date.now(), data.garment));
+    setSelected(null);
+    setChosen(null);
+    setChooseFallback(null);
+    dispatch({ type: 'submitAbout', scan });
+  };
+
+  const choose = (): void => {
+    if (!data || !shownSize) return;
+    const sent = channel.post({ type: 'curtain:size-selected', productExternalId: data.garment.id, size: shownSize });
+    setChosen(sent ? shownSize : null);
+    setChooseFallback(sent ? null : shownSize);
+  };
+
+  const onRemember = async (on: boolean): Promise<void> => {
+    setRememberState(on);
+    // Off wipes the device: the face is no longer remembered there (it stays in this window).
+    if (!on) setRememberPhoto(false);
+    await store.setRemember(on);
+    if (on && data && profile) await store.saveProfile({ shopId: data.shop.id, profile, about, savedAt: Date.now() });
+    setForgetStatus(null);
+  };
+
+  const forget = async (): Promise<void> => {
+    let serverOk = true;
+    if (!mock && store.getDevice().token) {
+      try {
+        await api().deleteMe();
+      } catch {
+        serverOk = false;
+      }
+    }
+    await store.forget();
+    apiRef.current = null;
+    setProfile(null);
+    setAbout(EMPTY_ABOUT);
+    setErrors({});
+    setSelected(null);
+    setChosen(null);
+    setChooseFallback(null);
+    setView3dReady(false);
+    setLook(null);
+    dropFace();
+    closePrompt(false);
+    dispatch({ type: 'forgotten' });
+    setForgetStatus(serverOk ? embedStrings().footer.forgotten : embedStrings().footer.forgottenLocalOnly);
+  };
+
+  // --- the avatar prompt (D19) ------------------------------------------------------------------
+  const openPrompt = (): void => setPromptOpen(true);
+  const closePrompt = (refocus = true): void => {
+    if (!promptOpen) return;
+    setPromptOpen(false);
+    // Focus goes back to the control that opened the prompt (it is inert until the next paint).
+    if (refocus) setTimeout(() => mainRef.current?.querySelector<HTMLElement>('[data-testid="avatar-open"]')?.focus({ preventScroll: true }), 0);
+  };
+  const faceRecord = (tile: StoredFace['tile'], l: SkinLook | null): StoredFace => ({ tile, look: l?.source === 'photo' ? l : null, savedAt: Date.now() });
+  const pickLook = (picked: SkinLook): void => {
+    // A swatch tapped while a suggestion from the photo is on screen counts as read from the photo (C20 deletes it).
+    const next: SkinLook = suggestion !== null ? { ...picked, source: 'photo' } : picked;
+    setLook(next);
+    if (data) {
+      void store.saveLook(data.shop.id, next);
+      if (faceTile) void store.saveFace(data.shop.id, faceRecord(faceTile, next), rememberPhoto);
+    }
+  };
+  const clearLook = (): void => {
+    setLook(null);
+    setSuggestion(null);
+    if (data) {
+      void store.clearLook(data.shop.id);
+      if (faceTile) void store.saveFace(data.shop.id, faceRecord(faceTile, null), rememberPhoto);
+    }
+  };
+  /** The face is gone from the avatar and from this window (the caller deletes it from the device). */
+  function dropFace(): void {
+    if (faceDrawn) revokeUrl(faceDrawn.url);
+    setFaceDrawn(null);
+    setFaceTile(null);
+    setFaceBusy(null);
+    setFaceError(null);
+    setFaceNotices(null);
+    setSuggestion(null);
+    setRememberPhoto(false);
+  }
+  const facePhotoRun = useRef(0);
+  const onFacePhoto = async (purpose: 'face' | 'skin', file: File): Promise<void> => {
+    const run = ++facePhotoRun.current;
+    setFaceBusy(purpose);
+    setFaceError(null);
+    setFaceNotices(null);
+    if (purpose === 'skin') setSuggestion(null);
+    try {
+      const res = await (deps.faceLook ?? defaultFaceLook)(file, { tile: purpose === 'face', skin: purpose === 'skin', aspect: HEAD_ASPECT });
+      if (run !== facePhotoRun.current) return;
+      if (!res.faceFound) {
+        setFaceError({ for: purpose, kind: 'notFound' });
+        return;
+      }
+      if (res.notices.length > 0) setFaceNotices({ for: purpose, list: res.notices as FacePhotoNotice[] });
+      if (purpose === 'face') {
+        if (!res.tile) throw new Error('no tile');
+        setFaceTile(res.tile);
+        if (data) void store.saveFace(data.shop.id, faceRecord(res.tile, look), rememberPhoto);
+      } else {
+        if (!res.suggestion) throw new Error('no suggestion');
+        setSuggestion(res.suggestion.monk);
+      }
+    } catch {
+      if (run === facePhotoRun.current) setFaceError({ for: purpose, kind: 'failed' });
+    } finally {
+      if (run === facePhotoRun.current) setFaceBusy(null);
+    }
+  };
+  const faceOff = (): void => {
+    facePhotoRun.current++;
+    dropFace();
+    if (data) void store.clearFace(data.shop.id);
+  };
+  const deletePhoto = (): void => {
+    faceOff();
+    // C20: and the colour read from the photo.
+    if (look?.source === 'photo') {
+      setLook(null);
+      if (data) void store.clearLook(data.shop.id);
+    }
+  };
+  const onRememberPhoto = (on: boolean): void => {
+    if (!remember) return;
+    setRememberPhoto(on);
+    if (data && faceTile) void store.saveFace(data.shop.id, faceRecord(faceTile, look), on);
+  };
+  const faceUrl = faceTile && faceDrawn && faceDrawn.tile === faceTile ? faceDrawn.url : null;
+  const facePhotoState: FacePhotoState | undefined = faceLive
+    ? {
+        tileUrl: faceTile ? faceUrl : null,
+        busy: faceBusy,
+        error: faceError,
+        notices: faceNotices,
+        suggestion,
+        rememberPhoto,
+        canRemember: remember,
+        onPhoto: (p, f) => void onFacePhoto(p, f),
+        onFaceOff: faceOff,
+        onDeletePhoto: deletePhoto,
+        onRememberPhoto,
+      }
+    : undefined;
+
+  const changeUnits = (u: Units): void => {
+    setChosenUnits(u);
+    setAbout(switchUnits(about, u));
+    void store.saveUnits(u);
+  };
+
+  const close = channel.canPost ? () => channel.post({ type: 'curtain:close' }) : null;
+
+  // --- render -----------------------------------------------------------------------------------
+  let body: ReactNode;
+  if (flow.step === 'loading') body = <LoadingScreen />;
+  else if (flow.step === 'blocked' && flow.blocked)
+    body = (
+      <BlockedScreen
+        kind={flow.blocked}
+        onRetry={
+          flow.blocked === 'offline' || flow.blocked === 'busy' || flow.blocked === 'error'
+            ? () => {
+                dispatch({ type: 'retry' });
+                setAttempt((a) => a + 1);
+              }
+            : null
+        }
+        onClose={close}
+      />
+    );
+  else if (!data) body = <LoadingScreen />;
+  else if (flow.step === 'about')
+    body = (
+      <AboutScreen
+        form={about}
+        errors={errors}
+        category={data.garment.category}
+        garment={data.garment}
+        editing={flow.editing}
+        canScan={deps.canScan}
+        onChange={(f) => {
+          setAbout(f);
+          if (Object.keys(errors).length > 0) setErrors(validateAbout(f, data.garment.category, data.garment));
+        }}
+        onUnits={(u) => {
+          changeUnits(u);
+          // Messages name the units ("Between 4 ft 0 in and 7 ft 6 in"): re-check in the new ones.
+          if (Object.keys(errors).length > 0) setErrors(validateAbout(switchUnits(about, u), data.garment.category, data.garment));
+        }}
+        onSubmit={submitAbout}
+      />
+    );
+  else if (flow.step === 'scan')
+    body = (
+      <Suspense fallback={<LoadingScreen />}>
+        <div className="-mx-4">
+          <CaptureStep
+            persist={false}
+            variant="embed"
+            initialForm={{ height: about.height, weight: about.weight, bust: about.bust, waist: about.waist, hip: about.hip, footEu: about.footEu, sex: about.sex, method: about.tape ? 'tape' : 'memory' }}
+            onComplete={(p) => {
+              // F5: keep what the scan's form does not ask for (inseam for bottoms).
+              setProfile(mergeAboutIntoScan(p, about, data.garment.category, Date.now(), data.garment));
+              dispatch({ type: 'scanDone' });
+            }}
+            onSkip={() => dispatch({ type: 'scanSkipped' })}
+          />
+        </div>
+      </Suspense>
+    );
+  else if (flow.step === 'result' && profile && embedFit && advice && shownSize) {
+    const requires3d = data.requires3d === true;
+    const result = (
+      <ResultScreen
+        garment={data.garment}
+        profile={profile}
+        embedFit={embedFit}
+        advice={advice}
+        preference={about.preference}
+        selected={shownSize}
+        onSelect={(s) => {
+          setSelected(s);
+          setChosen(null);
+          setChooseFallback(null);
+        }}
+        onChoose={choose}
+        onEdit={() => {
+          // A required 3D view is mounted again when the shopper comes back to the result.
+          setView3dReady(false);
+          dispatch({ type: 'edit' });
+        }}
+        returning={flow.returning}
+        chosen={chosen}
+        chooseFallback={chooseFallback}
+        currentVariantSize={context.currentVariantSize}
+        stretchAssumed={data.stretchAssumed === true}
+        avatarRef={avatarRef}
+        units={units}
+        onUnits={changeUnits}
+        skinHex={look?.hex ?? null}
+        face={faceLive && faceTile && faceUrl ? { url: faceUrl, label: embedStrings().avatar.facePhoto.claims.c27 } : null}
+        onAvatar={openPrompt}
+        avatarLabel={embedStrings().avatar.ui.open}
+        // Slice M1b: the male 2D figure only beside the required 3D view on the male body, which
+        // keeps the result hidden until it has settled and ends in "coming soon" when it fails.
+        figure={requires3d && bodyFamilyFor(data.garment) === 'male' ? 'male' : 'female'}
+        extra={
+          <>
+            {heroRendersEnabled(data) && !mock && !requires3d ? (
+              <>
+                {/* The hero render's person image: a separate figure in the standard colour, so the
+                    picked skin colour is never in that request (see HeroRender.tsx). It is the figure
+                    as it was on screen before the avatar prompt: no face, the same hem width. */}
+                <div ref={heroAvatarRef} className="pointer-events-none absolute h-0 w-0 overflow-hidden" aria-hidden inert data-testid="hero-avatar">
+                  <AvatarView bare plain garment={data.garment} fit={embedFit.fit} size={shownSize} measurements={embedFit.userBody.measurements} heightCm={profile.measurements.height?.mean} hemSweepCm={ringInputsFor(data.garment)?.hem?.sweepCm[shownSize] ?? null} />
+                </div>
+                <HeroRenderPanel getApi={api} data={data} size={shownSize} getAvatarSvg={getAvatarSvg} />
+              </>
+            ) : null}
+            <Garment3D
+              asset={data.asset}
+              paused={data.shop.paused}
+              garment={data.garment}
+              fit={embedFit.fit}
+              size={shownSize}
+              recommended={advice.size}
+              waistOnly={waistOnlyOf(embedFit.fit, advice)}
+              measurements={embedFit.userBody.measurements}
+              units={units}
+              heightCm={profile.measurements.height?.mean}
+              estimated={priorKeys(profile)}
+              skinHex={look?.hex ?? null}
+              required={requires3d}
+              onRequiredState={(state) => (state === 'settled' ? setView3dReady(true) : dispatch({ type: 'comingSoon' }))}
+              {...(deps.webgl2 ? { webgl2: deps.webgl2 } : {})}
+              {...(deps.loadViewer ? { loadViewer: deps.loadViewer } : {})}
+              aiRealism={
+                data.aiRealism && !mock
+                  ? {
+                      garmentName: data.garment.name,
+                      ids: { productId: data.garment.id, shopId: data.shop.id },
+                      request: (req) => {
+                        const client = api();
+                        if (!client.requestRealism) throw new Error('realism unavailable');
+                        return client.requestRealism(req);
+                      },
+                    }
+                  : null
+              }
+              onSelect={(s) => {
+                setSelected(s);
+                setChosen(null);
+                setChooseFallback(null);
+              }}
+            />
+          </>
+        }
+      />
+    );
+    // Men's gate: the 2D figure and the size stay out of sight (and out of the accessibility tree)
+    // until the required 3D view has settled. It is mounted meanwhile so the canvas has a size.
+    // The wrapper stays the same before and after, so the view is mounted once.
+    body = requires3d ? (
+      <div className="relative flex flex-1 flex-col" data-testid={view3dReady ? 'requires3d-shown' : 'requires3d-pending'}>
+        <div className={view3dReady ? undefined : 'invisible'} aria-hidden={!view3dReady} inert={!view3dReady}>
+          {result}
+        </div>
+        {view3dReady ? null : (
+          <div className="absolute inset-0 flex flex-col bg-cream">
+            <LoadingScreen />
+          </div>
+        )}
+      </div>
+    ) : (
+      result
+    );
+  } else body = <LoadingScreen />;
+
+  const showPrompt = promptOpen && flow.step === 'result' && !!data;
+  // Derived from what is drawn, not from "was opened": if the flow ever leaves the result while
+  // the prompt is open, Escape closes the overlay again instead of going dead.
+  useEffect(() => {
+    promptShownRef.current = showPrompt;
+  }, [showPrompt]);
+  // And "open" does not outlive the screen it was opened on (it would reopen on the way back).
+  if (promptOpen && !showPrompt) setPromptOpen(false);
+  return (
+    <EmbedFrame>
+      {/* Behind the open prompt the page is inert: no focus, no clicks, not read out. */}
+      <div className="contents" inert={showPrompt}>
+        <ProductHeader shop={data?.shop ?? null} garment={flow.blocked === 'comingSoon' ? null : (data?.garment ?? null)} />
+        <main ref={mainRef} className="flex flex-1 flex-col px-4 py-4" aria-live="off">
+          {body}
+        </main>
+        <EmbedFooter remember={remember} onRemember={(on) => void onRemember(on)} onForget={() => void forget()} forgetStatus={forgetStatus} appUrl={deps.appUrl} wordmark={data?.shop.hideWordmark !== true} />
+      </div>
+      {showPrompt ? (
+        <AvatarPrompt
+          look={look}
+          onPick={pickLook}
+          onClear={clearLook}
+          onMeasurements={() => {
+            closePrompt(false);
+            setView3dReady(false);
+            dispatch({ type: 'edit' });
+          }}
+          onClose={() => closePrompt()}
+          termsUrl={`${deps.appUrl.replace(/\/+$/, '')}/privacy`}
+          face={deps.facePhoto ?? facePhotoEnabled()}
+          saved={store.persistsLooks}
+          {...(facePhotoState ? { facePhoto: facePhotoState } : {})}
+        />
+      ) : null}
+    </EmbedFrame>
+  );
+}

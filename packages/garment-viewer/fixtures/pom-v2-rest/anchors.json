@@ -1,0 +1,20 @@
+{
+ "format": "curtain.garment.anchors",
+ "formatVersion": 1,
+ "productId": "crimson-wildflower-maxi-skirt",
+ "baseSize": "12",
+ "category": "bottom",
+ "unit": "cm",
+ "mannequin": {
+  "version": "0.1.0",
+  "shape": "M",
+  "family": "female"
+ },
+ "synthetic": true,
+ "source": {
+  "kind": "pom-v2-rest-fixture",
+  "label": "test fixture of the bake check: rest geometry, not a drape. An ESTIMATE (AGENTS.md rule 3)"
+ },
+ "drapeBake": "base.glb",
+ "rings": {}
+}

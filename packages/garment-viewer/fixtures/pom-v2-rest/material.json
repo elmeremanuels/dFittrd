@@ -1,0 +1,22 @@
+{
+ "format": "curtain.garment.material",
+ "formatVersion": 1,
+ "fibres": [
+  {
+   "id": "viscose",
+   "pct": 100
+  }
+ ],
+ "construction": null,
+ "weightGsm": 165,
+ "stretchPct": 1.5,
+ "drape": 0.85,
+ "bendStiffness": 0.04,
+ "sheen": 0.3,
+ "texture": "plain-weave",
+ "simulation": {
+  "damping": 0.035
+ },
+ "baseColorHex": "#9D3F3B",
+ "opacity": 1
+}

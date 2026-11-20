@@ -1,0 +1,142 @@
+/**
+ * The embedded admin page (admin/index.html): static HTML + App Bridge from Shopify's CDN. The api
+ * serves it at `ADMIN_PAGE_PATH` with the CSP below; the page gets a session token from App Bridge
+ * and calls the merchant routes with `Authorization: Bearer <session token>`.
+ * Its "Settings" section reads and writes the shop's settings through `GET/PUT /shopify/settings`.
+ */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import {
+  CATEGORY_TEXT,
+  CHART_COLUMN_TEXT,
+  DEFAULT_INCOMPLETE_PRODUCT_DATA,
+  ESTIMATE_DISCLAIMER,
+  GARMENT_CLOSURES,
+  GARMENT_TAPE_FIELDS,
+  GARMENT_TAPE_DIAGRAM_SVG,
+  GARMENT_TAPE_FORM_TEXT,
+  INCOMPLETE_PRODUCT_DATA_POLICIES,
+  PRODUCT_NOTICE_TEXT,
+  CONSOLE_LINK_TEXT, SHOP_SETTINGS_TEXT,
+  TAPE_CLOSURE_LABELS,
+  TAPE_FIELD_LABELS,
+  TAPE_HIP_DEPTH_CM,
+  TAPE_INPUT_KEYS,
+  TAPE_PROVENANCE_LABELS,
+  merchantPlanText,
+} from '@curtain/schema';
+import { BLOCK_HANDLE } from './deepLinks';
+import { DESCRIPTION_IMPORT_TEXT } from './descriptionImport';
+
+export const ADMIN_PAGE_PATH = '/shopify/admin' as const;
+export const APP_BRIDGE_SCRIPT_URL = 'https://cdn.shopify.com/shopifycloud/app-bridge.js' as const;
+
+export interface AdminPageConfig {
+  /** client_id — public, goes into `<meta name="shopify-api-key">`. */
+  apiKey: string;
+  /** Our API origin (PUBLIC_API_URL); the page fetches /shopify/* and /v1/merchant/* from it. */
+  apiUrl: string;
+  /** Consumer app origin (PUBLIC_APP_URL) for the "open Curtain" link. */
+  appUrl: string;
+  appHandle?: string;
+  blockHandle?: string;
+  /**
+   * How the plan is paid. `shopify` (default): the Subscribe button (Billing API, public
+   * distribution). `arranged`: a custom-distribution app, which Shopify does not let charge through
+   * its billing system; the page shows the plan as arranged with Curtain and no Subscribe button.
+   */
+  billing?: 'shopify' | 'arranged';
+  /** Override the HTML template (tests). */
+  template?: string;
+}
+
+/** What the admin page's "Garment measurements" form reads: every word it shows comes from here. */
+export const GARMENT_TAPE_ADMIN_CONFIG = Object.freeze({
+  text: GARMENT_TAPE_FORM_TEXT,
+  fields: GARMENT_TAPE_FIELDS,
+  fieldLabels: TAPE_FIELD_LABELS,
+  inputKeys: TAPE_INPUT_KEYS,
+  closures: GARMENT_CLOSURES.map((value) => ({ value, label: TAPE_CLOSURE_LABELS[value] })),
+  provenance: TAPE_PROVENANCE_LABELS,
+  hipDepthCm: TAPE_HIP_DEPTH_CM,
+});
+
+/**
+ * What the admin page's "Settings" section and the product list's fabric notices read: the words the
+ * web console also uses (@curtain/schema merchantSettingsText.ts, D21) and the two choices.
+ */
+export const SETTINGS_ADMIN_CONFIG = Object.freeze({
+  text: SHOP_SETTINGS_TEXT,
+  notices: PRODUCT_NOTICE_TEXT,
+  /** "Open the full console": the one-time sign-in link (inventory S2). */
+  consoleLink: CONSOLE_LINK_TEXT,
+  policies: INCOMPLETE_PRODUCT_DATA_POLICIES,
+  defaultPolicy: DEFAULT_INCOMPLETE_PRODUCT_DATA,
+});
+
+/** Only the embedding admin may frame the page: the shop's own domain and admin.shopify.com. */
+export function adminContentSecurityPolicy(shopDomain: string | null | undefined): string {
+  const shop = shopDomain && /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shopDomain) ? `https://${shopDomain} ` : '';
+  return `frame-ancestors ${shop}https://admin.shopify.com;`;
+}
+
+let cachedTemplate: string | null = null;
+
+export function adminPageTemplate(): string {
+  if (cachedTemplate === null) {
+    cachedTemplate = readFileSync(fileURLToPath(new URL('../admin/index.html', import.meta.url)), 'utf8');
+  }
+  return cachedTemplate;
+}
+
+/** JSON safe for a `<script type="application/json">` block (no `</script>` break-out). */
+const LS = String.fromCharCode(0x2028);
+const PS = String.fromCharCode(0x2029);
+export function jsonForScript(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c').split(LS).join('\\u2028').split(PS).join('\\u2029');
+}
+
+function attr(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Render the page for one install. Pure string work; the api decides headers and caching. */
+export function renderAdminPage(cfg: AdminPageConfig): string {
+  if (!/^[a-f0-9]{32}$/i.test(cfg.apiKey) && !/^[A-Za-z0-9_-]{8,64}$/.test(cfg.apiKey)) throw new Error('renderAdminPage: apiKey does not look like a Shopify client id');
+  for (const [k, v] of [
+    ['apiUrl', cfg.apiUrl],
+    ['appUrl', cfg.appUrl],
+  ] as const) {
+    if (!/^https?:\/\/[^\s"'<>]+$/.test(v)) throw new Error(`renderAdminPage: ${k} must be an http(s) origin`);
+  }
+  const config = {
+    apiKey: cfg.apiKey,
+    apiUrl: cfg.apiUrl.replace(/\/$/, ''),
+    appUrl: cfg.appUrl.replace(/\/$/, ''),
+    appHandle: cfg.appHandle ?? 'curtain',
+    blockHandle: cfg.blockHandle ?? BLOCK_HANDLE,
+    billing: cfg.billing ?? 'shopify',
+    /** Hard rule 3: every render is labelled an estimate — the page shows this next to the ledger. */
+    disclaimer: ESTIMATE_DISCLAIMER,
+    /** The "Garment measurements" form: its English catalogue (D21) and vocabularies, from @curtain/schema. */
+    tape: GARMENT_TAPE_ADMIN_CONFIG,
+    /** The size chart builder's men's columns (neck, sleeve, length, rise, W/L): English catalogue (D21). */
+    chartColumns: CHART_COLUMN_TEXT,
+    /** "Import from description": the words for the fabric and for the stretch estimate (D21; inventory D18, F20). */
+    descriptionImport: DESCRIPTION_IMPORT_TEXT,
+    /** The drawing next to the garment measurements form (our own static SVG, no script). */
+    tapeDiagram: GARMENT_TAPE_DIAGRAM_SVG,
+    /** Plan, uninstall and data-deletion words (@curtain/schema merchantSetup.ts). */
+    plan: merchantPlanText('shopify'),
+    /** The kind of garment in plain words, for the products list. */
+    categories: CATEGORY_TEXT,
+    /** The "Settings" section and the fabric notices of the products list (D24, D25 points 1, 2 and 7). */
+    settings: SETTINGS_ADMIN_CONFIG,
+  };
+  const html = cfg.template ?? adminPageTemplate();
+  // Function replacers: a string replacement would interpret `$&`, `$'`, `` $` `` inside the values.
+  return html
+    .replace('__CURTAIN_SHOPIFY_API_KEY__', () => attr(config.apiKey))
+    .replace('__CURTAIN_APP_BRIDGE_URL__', () => APP_BRIDGE_SCRIPT_URL)
+    .replace('__CURTAIN_CONFIG_JSON__', () => jsonForScript(config));
+}

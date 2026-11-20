@@ -1,0 +1,51 @@
+{
+  "curtain": {
+    "block": {
+      "name": "Try it on"
+    },
+    "settings": {
+      "label": {
+        "label": "Knoptekst",
+        "info": "Laat leeg voor de vertaalde standaardtekst (\"Try it on\")."
+      },
+      "alignment": {
+        "label": "Positie van de knop",
+        "left": "Links",
+        "center": "Gecentreerd",
+        "full": "Volledige breedte"
+      },
+      "mode": {
+        "label": "Ervaring",
+        "info": "Op de productpagina: shoppers krijgen hun maat hier in een overlay, zonder app. Curtain-app: telefoons openen de Curtain-app, desktops tonen een QR-code.",
+        "embed": "Op de productpagina (geen app nodig)",
+        "app": "Curtain-app"
+      },
+      "size_option": {
+        "label": "Naam van de maatoptie",
+        "info": "De productoptie met de maat. Curtain selecteert daarin de aanbevolen maat. Herkent ook Size, Taille en Größe."
+      },
+      "show_hint": {
+        "label": "Toon de privacyhint onder de knop"
+      },
+      "show_size": {
+        "label": "Toon de maat van de shopper op productpagina's",
+        "info": "Een shopper die hier eerder zijn maat vond, ziet die naast de knop, met een kleine tekening van zijn figuur in die maat, zonder te klikken. Alleen de shopper ziet het: je winkel kan het niet lezen."
+      },
+      "unstyled": {
+        "label": "Gebruik de knopstijl van mijn thema",
+        "info": "Slaat de koraalkleurige Curtain-stijl over zodat de stijl van het thema geldt."
+      },
+      "advanced": {
+        "header": "Geavanceerd (alleen ontwikkelwinkels)"
+      },
+      "shop_key": {
+        "label": "Publieke winkelsleutel (override)",
+        "info": "pk_live_… of pk_test_…. Wordt automatisch ingevuld bij installatie; alleen instellen voor een ontwikkelwinkel."
+      },
+      "api_url": {
+        "label": "API-origin (override)",
+        "info": "Standaard https://api.curtain.fit. Alleen voor testomgevingen."
+      }
+    }
+  }
+}

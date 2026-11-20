@@ -1,0 +1,32 @@
+{%- comment -%}
+  The button itself. Also usable from a theme that lacks app-block support:
+    {% render 'curtain-try-button', product: product, label: 'Try it on', show_hint: true %}
+  Pass mode: 'app' when the SDK runs with data-mode="app" so the hint mentions the Curtain app.
+  Pass peek: 'off' to keep the size peek (the shopper's size next to this button) away.
+  `data-curtain-product` carries the numeric product id = the external id the api stores
+  (shopifyExternalId of the Product GID).
+{%- endcomment -%}
+<button
+  type="button"
+  class="curtain-try__button"
+  data-curtain-product="{{ product.id }}"
+  data-curtain-variant="{{ product.selected_or_first_available_variant.id }}"
+  {%- if peek == 'off' %} data-curtain-peek="off"{% endif %}
+  aria-describedby="curtain-try-hint-{{ product.id }}"
+>
+  <svg class="curtain-try__icon" aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" focusable="false">
+    <path fill="currentColor" d="M7 3h10l1.2 2.4L22 7l-2 4-2-.9V21H6V10.1L4 11 2 7l3.8-1.6L7 3zm2.1 2L8 7.2l-2.8 1.2.8 1.6 2-.9V19h8V9.1l2 .9.8-1.6L16 7.2 14.9 5h-1.2a1.7 1.7 0 0 1-3.4 0H9.1z"/>
+  </svg>
+  <span>{{ label }}</span>
+</button>
+{%- liquid
+  assign pk_hint_key = 'curtain.try_button.hint'
+  if mode == 'app'
+    assign pk_hint_key = 'curtain.try_button.hint_app'
+  endif
+-%}
+{%- if show_hint -%}
+  <p id="curtain-try-hint-{{ product.id }}" class="curtain-try__hint">{{ pk_hint_key | t }}</p>
+{%- else -%}
+  <span id="curtain-try-hint-{{ product.id }}" class="curtain-try__sr">{{ pk_hint_key | t }}</span>
+{%- endif -%}

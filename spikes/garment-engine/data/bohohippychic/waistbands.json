@@ -1,0 +1,75 @@
+{
+  "format": "curtain.spike.waistbands",
+  "formatVersion": 2,
+  "about": "Tape measurements of stretch waistbands for the step-3 control (docs/research/shortcut-to-step3.md §4; docs/REFINEMENT.md R3). Two forms per product, both read by waistbandFromFile (viewer/src/engine.ts). (1) Per size (preferred): sizes, one object per MEASURED size keyed by the grading label (\"8\", \"10\", ...), with waistRelaxedCm (band lying flat, unstretched, edge to edge and doubled), waistStretchedCm (band pulled to its comfortable limit, doubled) and optionally hipCm, hemSweepCm and lengthCm (the names of the tape files in tape/, which stay the single source of truth; a test keeps the two in step). A size that is not listed is NOT measured: its band is interpolated on the grading step between the two measured sizes around it, or extrapolated along the line through the two nearest measured sizes when it lies outside them, and every output labels it interpolated or extrapolated, never measured. (2) One size (old form, still accepted): relaxedCm, stretchedCm, measuredSize and optional gradeCmPerSize (how much the relaxed band grows per size step; left null, the chart's hip step, 5 cm, is ASSUMED), other sizes keep the stretch ratio and are labelled graded. Run: pnpm --filter @curtain/garment-spike exec tsx viewer/scripts/sizes-drape.ts out/eval/<handle> --modes base,nocling,band:measured:0,cling+band:measured:0 --band-file data/bohohippychic/waistbands.json (it ends with the cut check: the graded mesh's hip, hem and length per size against the tape). In the spike page: band=measured. A product without a measurement keeps every band number an ASSUMPTION (the assumedSweep below).",
+  "assumedSweep": {
+    "note": "ASSUMED, not measured: relaxed / stretched girth of the base size (AU 12), cm; other sizes step by the chart's hip step (5 cm) and keep the stretch ratio.",
+    "values": [
+      [
+        72,
+        97
+      ],
+      [
+        80,
+        108
+      ],
+      [
+        88,
+        119
+      ]
+    ]
+  },
+  "products": {
+    "crimson-wildflower-maxi-skirt": {
+      "sizes": {
+        "8": {
+          "waistRelaxedCm": 67,
+          "waistStretchedCm": 94,
+          "hipCm": 112,
+          "hemSweepCm": 230,
+          "lengthCm": 103
+        },
+        "10": {
+          "waistRelaxedCm": 71,
+          "waistStretchedCm": 100,
+          "hipCm": 122,
+          "hemSweepCm": 248,
+          "lengthCm": 103
+        },
+        "14": {
+          "waistRelaxedCm": 80,
+          "waistStretchedCm": 110,
+          "hipCm": 126,
+          "hemSweepCm": 260,
+          "lengthCm": 104
+        }
+      },
+      "measuredSizes": [
+        "8",
+        "10",
+        "14"
+      ],
+      "notMeasuredSizes": [
+        "12",
+        "16"
+      ],
+      "relaxedCm": null,
+      "stretchedCm": null,
+      "hemSweepCm": null,
+      "measuredSize": null,
+      "gradeCmPerSize": null,
+      "measuredOn": "2026-11-13",
+      "source": "tape/crimson-wildflower-maxi-skirt.json (shop's hand-written tape measurements; read its transcriptionNotes)",
+      "status": "measured: AU 8, 10, 14. NOT measured: AU 12 (interpolated between 10 and 14) and AU 16 (extrapolated along the 10-14 line)"
+    },
+    "rosewater-palazzo-pants": {
+      "relaxedCm": null,
+      "stretchedCm": null,
+      "hemSweepCm": null,
+      "measuredSize": null,
+      "gradeCmPerSize": null,
+      "measuredOn": null,
+      "status": "not measured"
+    }
+  }
+}

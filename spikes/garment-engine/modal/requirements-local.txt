@@ -1,0 +1,3 @@
+# On the founder's computer (Python 3.10-3.13): the Modal client and the test runner.
+modal==1.6.3
+pytest==8.4.2

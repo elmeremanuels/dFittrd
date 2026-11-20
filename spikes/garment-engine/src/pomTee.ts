@@ -1,0 +1,1084 @@
+/**
+ * POM builder for a men's short-sleeved tee (men-3d-plan slice M3, the two-day tee proof): the flat
+ * garment measurements a shop prints (chest width, length, shoulder, sleeve length, sleeve opening,
+ * hem width; waist width when the shop has it) become ONE welded garment mesh on the canonical
+ * mannequin: a front and a back panel sewn at the side seams and the shoulder seams, an armhole on
+ * each side, and a set-in sleeve sewn into it whose cap follows the mannequin's arm.
+ *
+ * Construction (all in cm, mannequin space; no simulation):
+ * - **Below the armhole** the torso is a tube of rows at constant height: the body's cross-section
+ *   there (torso ellipse, and both legs below the crotch) as a convex hull, offset outwards so that
+ *   its girth is the tape's: `2 × chest width` from the chest line (2.5 cm below the armhole) up to
+ *   the armhole, `2 × waist width` at the waist ring when given, `2 × hem width` at the hem, straight
+ *   lines in between, never closer than `minEaseCm` to the body.
+ * - **Above the armhole** (the shoulders) the surface is found by marching rays from a point inside
+ *   the chest at armhole height, outwards to where the distance to the body (torso plus the arm's cap
+ *   on the torso side of the armhole) reaches the ease, which tapers from the chest's to `lidEaseCm`
+ *   on the shoulders. This is what lets the cloth lie over the top of the shoulder, which rows of
+ *   constant height cannot.
+ * - **The armhole** is the cut of that surface by a plane through the armpit (the body's armpit less
+ *   `armholeDropCm`) and the shoulder point (half the shoulder measurement out from the centre, on top
+ *   of the shoulder), containing the front-back direction. Its two edges are the front and the back
+ *   panel's side edges between the armpit and the shoulder point; above the shoulder point the two
+ *   panels share their edge (the shoulder seam), below the armpit too (the side seam).
+ * - **The sleeve** is lofted from the armhole's vertices (the same vertices, so it is sewn) to a hem
+ *   at right angles to the arm axis whose girth is `2 × sleeve opening`, kept at least `capEaseCm`
+ *   off the arm (its cone above the shoulder joint included) so the cap covers the deltoid.
+ * - **Lengths** are solved, not assumed: the hem height so that the path down the front panel from
+ *   the high point shoulder (HPS) is the tape's length, the sleeve so that the path along its top
+ *   from the shoulder point is the tape's sleeve length.
+ *
+ * What is measured where is the definition `measurePomTee` checks (and the M3 gate, every input
+ * within 0.5 cm): chest = tape girth at the chest line / 2; waist = tape girth at the waist ring / 2;
+ * hem = girth of the hem edge / 2; shoulder = straight distance between the two shoulder points;
+ * length = path down the front at the HPS's distance from the centre, HPS to hem; sleeve length =
+ * path along the sleeve's top from the shoulder point to its hem; sleeve opening = girth of the
+ * sleeve hem / 2. A flat-laid "across shoulder" is measured over the back and is longer than the
+ * straight line on a body; how much longer is not measured here [M].
+ *
+ * Every number in `POM_TEE_ASSUMPTIONS` is an assumption [A], not measured on any garment.
+ */
+import { dot, polygonCompensation, sub, topology, type Mannequin, type Mesh, type Vec3 } from '@curtain/mannequin';
+import { armpitDistance, ellipseRadius } from './garment';
+import { pomBody } from './pomBody';
+
+/** The pattern pieces of the tee, the panels its UV layout keeps apart. */
+export const POM_PANELS = ['front', 'back', 'sleeve_l', 'sleeve_r'] as const;
+
+/** A tee's flat measurements of one size, cm (widths are half girths, the garment laid flat). */
+export interface PomTeeRow {
+  size: string;
+  /** Flat width 2.5 cm below the armhole. */
+  chestWidthCm: number;
+  /** Flat width at the waist; optional (many tee charts have none: the side seam is then straight). */
+  waistWidthCm?: number;
+  /** Flat width at the hem edge. */
+  hemWidthCm: number;
+  /** Shoulder point to shoulder point, straight. */
+  shoulderCm: number;
+  /** High point shoulder to hem, down the front. */
+  lengthCm: number;
+  /** Shoulder point to sleeve hem along the top of the sleeve. */
+  sleeveLengthCm: number;
+  /** Flat width of the sleeve hem (half its girth). */
+  sleeveOpeningCm: number;
+}
+
+/** What the builder needs and no tee chart gives: all assumed [A]. Values for the base size; `perSize` steps by size. */
+export const POM_TEE_ASSUMPTIONS = {
+  /** The armhole's lowest point lies this far under the body's armpit. */
+  armholeDropCm: 2,
+  /** POM chest line under the armhole (the usual "1 inch below the armhole"). */
+  chestLineBelowArmholeCm: 2.5,
+  /** Neck opening, HPS to HPS straight, at the base size; plus `neckWidthPerSizeCm` per size step. */
+  neckWidthCm: 17.5,
+  neckWidthPerSizeCm: 0.5,
+  /** Neck drops under the HPS, front and back (crew neck). */
+  frontNeckDropCm: 9,
+  frontNeckDropPerSizeCm: 0.25,
+  backNeckDropCm: 2,
+  /** Ease (distance off the body) on top of the shoulders. */
+  lidEaseCm: 0.9,
+  /** Least distance of the sleeve cap off the arm, and towards the hem. */
+  capEaseCm: 1.1,
+  sleeveHemEaseCm: 0.35,
+  /** Least distance of the torso off the body anywhere (a tighter chart value is flagged). */
+  minEaseCm: 0.5,
+  /**
+   * The yoke (from this far above the armhole up, blended in over 4 cm) is smoothed and held off the body by at least its
+   * own distance (at most `capEaseCm`): cloth bridges the bumps of the body under it (the arm's closing cone stands about
+   * 1 cm above the shoulder line) instead of following them with 0.9 cm of ease.
+   */
+  yokeSmoothFromCm: 3,
+  yokeSmoothIterations: 40,
+} as const;
+
+export interface PomTeeOptions {
+  /** Size steps from the base size (scales the neck assumptions). */
+  sizeStep?: number;
+  /** Columns per panel (front and back each), rows spacing, cm. */
+  panelColumns?: number;
+  rowStepCm?: number;
+  /**
+   * Build with the vertex counts of another build (its `counts`), so the two meshes have the same vertices and triangles
+   * in the same order: a size built on its own body is then a set of vertex positions for the base size's mesh
+   * (`pomBundle.ts`, grading by built sizes). Without it every count follows from the row spacing.
+   */
+  counts?: PomTeeCounts;
+  /** With `counts` absent: lay the tube's rows out the way a build with `counts` does (stations at the hem, waist, chest line and armhole only), so its own counts can be reused. */
+  uniformRows?: boolean;
+}
+
+/** The vertex counts of a build that another build can reuse (`PomTeeOptions.counts`). */
+export interface PomTeeCounts {
+  eyeRows: number;
+  seamRows: number;
+  /** Rows per tube segment: hem to waist, waist to chest line, chest line to armhole. */
+  tube: number[];
+  /** Vertices above the tube's top row per fan column (`f3`, `b12`, …). */
+  columns: Record<string, number>;
+  sleeveRings: number;
+  /** How neighbouring fan columns were sewn (`f3`: front columns 3 and 4): per triangle, whether the first column advanced. */
+  zip: Record<string, boolean[]>;
+}
+
+export interface PomTeeBuild {
+  mesh: Mesh;
+  row: PomTeeRow;
+  /** Vertex ids: hem rim (2N), sleeve hems (left, right), shoulder points (left, right), HPS (left, right). */
+  hem: number[];
+  sleeveHem: [number[], number[]];
+  /** The sleeve's top line, shoulder point to hem (left, right). */
+  sleeveTop: [number[], number[]];
+  shoulderPoint: [number, number];
+  hps: [number, number];
+  /** The shoulder seams, shoulder point to HPS (left, right). */
+  shoulderSeam: [number[], number[]];
+  /** Panel of every triangle (`POM_PANELS` index), in the order of `mesh.indices`. */
+  triPanel: Uint8Array;
+  /** Each sleeve's rings, armhole (ring 0, the body's vertices) to hem; column 0 is the underarm, where the sleeve's UV is cut. */
+  sleeveRings: [number[][], number[][]];
+  /** Heights used: armhole, chest line, hem; and the sleeve's end along each arm axis. */
+  levels: { armholeY: number; chestLineY: number; hemY: number; shoulderPointY: number; hpsY: number; sleeveEndS: number };
+  /** Places where the chart is tighter than `minEaseCm` off the base body (height, girth asked, girth built). */
+  tight: { y: number; askedCm: number; builtCm: number }[];
+  /** The vertex counts this build used (`PomTeeOptions.counts`). */
+  counts: PomTeeCounts;
+}
+
+type Arm = Mannequin['arms']['left'];
+const clamp01 = (t: number): number => Math.min(1, Math.max(0, t));
+const smooth = (t: number): number => {
+  const x = clamp01(t);
+  return x * x * (3 - 2 * x);
+};
+const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+
+// ---------------------------------------------------------------------------
+// Distance to the body (approximate, signed: negative inside)
+// ---------------------------------------------------------------------------
+
+/** Signed distance to an ellipse section (horizontal or across the arm), first order: radial gap × cos of normal angle. */
+function sectionGap(dx: number, dz: number, a: number, b: number): number {
+  const r = Math.hypot(dx, dz);
+  if (r < 1e-9) return -Math.min(a, b);
+  const phi = Math.atan2(dz, dx);
+  const rho = ellipseRadius(a, b, phi);
+  // Outward normal of the ellipse at the radial point.
+  const px = rho * Math.cos(phi), pz = rho * Math.sin(phi);
+  const nx = px / (a * a), nz = pz / (b * b);
+  const cosB = (px * nx + pz * nz) / (rho * Math.hypot(nx, nz));
+  return (r - rho) * cosB;
+}
+
+function torsoDistance(m: Mannequin, p: Vec3): number {
+  const drawn = pomBody(m);
+  if (drawn) return drawn.torsoDistance(p);
+  const e = m.torsoAt(p[1]);
+  if (!e) return Infinity;
+  const g = sectionGap(p[0] - e.cx, p[2] - e.cz, e.a, e.b);
+  const lo = m.torsoAt(p[1] - 0.5), hi = m.torsoAt(p[1] + 0.5);
+  if (!lo || !hi) return g;
+  const phi = Math.atan2(p[2] - e.cz, p[0] - e.cx);
+  const slope = (ellipseRadius(hi.a, hi.b, phi) - ellipseRadius(lo.a, lo.b, phi)) / 1;
+  return g / Math.sqrt(1 + slope * slope);
+}
+
+/** The arm's end used for distances: a little past the sleeve's longest reach. */
+const ARM_REACH_CM = 45;
+
+function armDistance(m: Mannequin, f: Arm, p: Vec3): number {
+  const drawn = pomBody(m);
+  if (drawn) return drawn.armDistance(f, p);
+  const r = sub(p, f.joint);
+  const s = dot(r, f.axis);
+  const ru = dot(r, f.u), rv = dot(r, f.v);
+  const a0 = m.armAt(0, f.side)!;
+  const pole = (0.9 / 1.18) * a0.a;
+  if (s >= 0) {
+    const e = m.armAt(Math.min(s, ARM_REACH_CM), f.side);
+    if (!e) return Infinity;
+    const g = sectionGap(ru, rv, e.a, e.b);
+    const e2 = m.armAt(Math.min(s + 0.5, ARM_REACH_CM), f.side) ?? e;
+    const slope = (e2.a - e.a) / 0.5;
+    return g / Math.sqrt(1 + slope * slope);
+  }
+  if (s <= -pole) return Math.hypot(ru, rv, s + pole);
+  // The cone from the joint's section up to the pole (as the mannequin closes the arm).
+  const k = 1 + s / pole;
+  const g = sectionGap(ru, rv, a0.a * k, a0.b * k);
+  const slope = a0.a / pole;
+  return g / Math.sqrt(1 + slope * slope);
+}
+
+interface Plane {
+  point: Vec3;
+  normal: Vec3;
+}
+const planeDist = (pl: Plane, p: Vec3): number => dot(sub(p, pl.point), pl.normal);
+
+// ---------------------------------------------------------------------------
+// Below the armhole: offset convex hull of the body's cross-section
+// ---------------------------------------------------------------------------
+
+function hull2(pts: [number, number][]): [number, number][] {
+  const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (p.length < 3) return p;
+  const cr = (o: [number, number], a: [number, number], b: [number, number]): number => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo: [number, number][] = [], up: [number, number][] = [];
+  for (const q of p) { while (lo.length >= 2 && cr(lo[lo.length - 2]!, lo[lo.length - 1]!, q) <= 0) lo.pop(); lo.push(q); }
+  for (let k = p.length - 1; k >= 0; k--) { const q = p[k]!; while (up.length >= 2 && cr(up[up.length - 2]!, up[up.length - 1]!, q) <= 0) up.pop(); up.push(q); }
+  return [...lo.slice(0, -1), ...up.slice(0, -1)];
+}
+
+const perimeter = (h: [number, number][]): number => h.reduce((s, a, i) => s + Math.hypot(h[(i + 1) % h.length]![0] - a[0], h[(i + 1) % h.length]![1] - a[1]), 0);
+
+/** Convex hull (x, z) of the body at height y: torso and, where there are legs, both legs. */
+function bodyHull(m: Mannequin, y: number): [number, number][] {
+  const drawn = pomBody(m);
+  if (drawn) return hull2(drawn.sectionPoints(y));
+  const pts: [number, number][] = [];
+  const add = (e: { cx: number; cz: number; a: number; b: number } | null): void => {
+    if (!e) return;
+    for (let k = 0; k < 96; k++) {
+      const t = (2 * Math.PI * k) / 96;
+      pts.push([e.cx + e.a * Math.cos(t), e.cz + e.b * Math.sin(t)]);
+    }
+  };
+  add(m.torsoAt(y));
+  add(m.legAt(y, 1));
+  add(m.legAt(y, -1));
+  return hull2(pts);
+}
+
+/** Distance from (x, z) to a convex polygon (0 inside). */
+function polyDistance(h: [number, number][], x: number, z: number): number {
+  let inside = true;
+  let best = Infinity;
+  for (let i = 0; i < h.length; i++) {
+    const a = h[i]!, b = h[(i + 1) % h.length]!;
+    const ex = b[0] - a[0], ez = b[1] - a[1];
+    if (ex * (z - a[1]) - ez * (x - a[0]) < 0) inside = false;
+    const t = clamp01(((x - a[0]) * ex + (z - a[1]) * ez) / (ex * ex + ez * ez));
+    best = Math.min(best, Math.hypot(x - a[0] - t * ex, z - a[1] - t * ez));
+  }
+  return inside ? 0 : best;
+}
+
+/** Point on the hull offset by d along azimuth θ from the vertical axis (x = z = 0). */
+function hullRay(h: [number, number][], d: number, theta: number): [number, number] {
+  const c = Math.cos(theta), s = Math.sin(theta);
+  let lo = 0, hi = 80;
+  for (let it = 0; it < 40; it++) {
+    const mid = (lo + hi) / 2;
+    if (polyDistance(h, mid * c, mid * s) <= d) lo = mid;
+    else hi = mid;
+  }
+  return [lo * c, lo * s];
+}
+
+// ---------------------------------------------------------------------------
+// The build
+// ---------------------------------------------------------------------------
+
+export function buildPomTee(m: Mannequin, row: PomTeeRow, options: PomTeeOptions = {}): PomTeeBuild {
+  const A = POM_TEE_ASSUMPTIONS;
+  const step = options.sizeStep ?? 0;
+  const N = options.panelColumns ?? 36;
+  const rowStep = options.rowStepCm ?? 1.6;
+  const L = m.arms.left, R = m.arms.right;
+  const tight: PomTeeBuild['tight'] = [];
+
+  // Armpit (the body's: where the arm's inner side leaves the torso) and the armhole's bottom.
+  // On a body with drawn outlines (male shape v2) every question below is asked of the outline, not of the ellipse round it.
+  const drawn = pomBody(m);
+  const s0 = drawn ? drawn.armpitS : armpitDistance(m);
+  const e0 = m.armAt(s0, 1)!;
+  const bodyArmpitY = drawn ? drawn.armpitY : L.joint[1] + L.axis[1] * s0 - e0.a * L.u[1];
+  const yAh = bodyArmpitY - A.armholeDropCm;
+  const yChest = yAh - A.chestLineBelowArmholeCm;
+  const gChest = 2 * row.chestWidthCm;
+  const gHem = 2 * row.hemWidthCm;
+  const gWaist = row.waistWidthCm === undefined ? undefined : 2 * row.waistWidthCm;
+  const yWaist = m.morphHeights.waist;
+
+  /** Girth asked of the tube at height y (hem height given). */
+  const girthAt = (y: number, yHem: number): number => {
+    if (y >= yChest) return gChest;
+    if (gWaist !== undefined && y >= yWaist) return lerp(gWaist, gChest, (y - yWaist) / (yChest - yWaist));
+    if (gWaist !== undefined) return lerp(gHem, gWaist, (y - yHem) / (yWaist - yHem));
+    return lerp(gHem, gChest, (y - yHem) / (yChest - yHem));
+  };
+  const tubeEase = (y: number, yHem: number, record = false): { h: [number, number][]; d: number } => {
+    const h = bodyHull(m, y);
+    const P = perimeter(h);
+    const want = girthAt(y, yHem);
+    let d = (want - P) / (2 * Math.PI);
+    if (d < A.minEaseCm) {
+      if (record) tight.push({ y: Math.round(y * 10) / 10, askedCm: Math.round(want * 10) / 10, builtCm: Math.round((P + 2 * Math.PI * A.minEaseCm) * 10) / 10 });
+      d = A.minEaseCm;
+    }
+    return { h, d };
+  };
+  const dAh = tubeEase(yAh, yAh - 60).d;
+
+  // Ease above the armhole: from the chest's at the armhole to the lid's on the shoulders.
+  const shoulderY = m.morphHeights.shoulder;
+  const fanEase = (y: number): number => lerp(dAh, A.lidEaseCm, smooth((y - yAh) / Math.max(1, shoulderY - 1 - yAh)));
+
+  const fullDistance = (p: Vec3): number => Math.min(torsoDistance(m, p), armDistance(m, L, p), armDistance(m, R, p));
+
+  // Shoulder point: on top of the shoulder at half the shoulder measurement (iterated below so the
+  // fan surface crosses the armhole plane exactly there).
+  const topAt = (x: number): number => {
+    // First height from above where the distance to the body reaches the lid ease.
+    for (let y = shoulderY + 15; y > yAh; y -= 0.05) if (fullDistance([x, y, 0]) <= A.lidEaseCm) return y;
+    return shoulderY;
+  };
+  const xSpWant = row.shoulderCm / 2;
+  // Torso width at the armhole (the tube's top row at the side).
+  const tubeTop = tubeEase(yAh, yAh - 60);
+  const xAh = hullRay(tubeTop.h, tubeTop.d, 0)[0];
+  const O: Vec3 = [0, yAh, 0];
+
+  let plane: Plane = { point: [xAh, yAh, 0], normal: [1, 0, 0] };
+  let planeR: Plane = plane;
+  let restricted = (p: Vec3): number => fullDistance(p);
+  const setPlanes = (xSp: number): void => {
+    const ySp = topAt(xSp);
+    const dx = xSp - xAh, dy = ySp - yAh;
+    const len = Math.hypot(dx, dy);
+    plane = { point: [xAh, yAh, 0], normal: [dy / len, -dx / len, 0] };
+    planeR = { point: [-xAh, yAh, 0], normal: [-dy / len, -dx / len, 0] };
+    restricted = (p: Vec3): number => Math.min(torsoDistance(m, p), Math.max(armDistance(m, L, p), planeDist(plane, p)), Math.max(armDistance(m, R, p), planeDist(planeR, p)));
+  };
+  /** Surface point of the shoulders along the ray at azimuth θ (0 = +x, π/2 = +z front) and elevation α. */
+  const fanPoint = (theta: number, alpha: number): Vec3 => {
+    const dir: Vec3 = [Math.cos(alpha) * Math.cos(theta), Math.sin(alpha), Math.cos(alpha) * Math.sin(theta)];
+    const at = (t: number): Vec3 => [O[0] + dir[0] * t, O[1] + dir[1] * t, O[2] + dir[2] * t];
+    const g = (t: number): number => {
+      const p = at(t);
+      return restricted(p) - fanEase(p[1]);
+    };
+    // Coarse march to the first point outside (thin features under 0.35 cm can be stepped over), then bisection.
+    let t = 0.5;
+    while (t < 60 && g(t) <= 0) t += 0.35;
+    let lo = t - 0.35, hi = t;
+    for (let it = 0; it < 16; it++) {
+      const mid = (lo + hi) / 2;
+      if (g(mid) <= 0) lo = mid;
+      else hi = mid;
+    }
+    return at((lo + hi) / 2);
+  };
+
+  // The shoulder point is on top of the shoulder at half the shoulder measurement; the armhole plane
+  // goes through it and the armpit.
+  setPlanes(xSpWant);
+  const sp: Vec3 = [xSpWant, topAt(xSpWant), 0];
+  const elevation = (p: Vec3): number => Math.atan2(p[1] - O[1], Math.hypot(p[0] - O[0], p[2] - O[2]));
+  const alphaSp = elevation(sp);
+
+  // HPS: on the edge column where the surface is half the neck width out.
+  const neckHalf = (A.neckWidthCm + A.neckWidthPerSizeCm * step) / 2;
+  // March up the edge column from the shoulder point to the first ray whose surface is inside the
+  // neck width (steeper rays reach the head, which is wider than the neck again).
+  let lo = alphaSp, hi = alphaSp;
+  for (let a = alphaSp; a < Math.PI / 2 - 0.02; a += 0.005) {
+    if (fanPoint(0, a)[0] <= neckHalf) { hi = a; break; }
+    lo = a;
+  }
+  if (hi === alphaSp) throw new Error('pomTee: the neck is wider than the neck opening');
+  for (let it = 0; it < 30; it++) {
+    const mid = (lo + hi) / 2;
+    if (fanPoint(0, mid)[0] > neckHalf) lo = mid;
+    else hi = mid;
+  }
+  const alphaHps = (lo + hi) / 2;
+  const hpsPoint = fanPoint(0, alphaHps);
+  const yHps = hpsPoint[1];
+
+  // Neckline: a point per azimuth θ on the column surface where y = yHps − drop·√(1 − (x / neckHalf)²).
+  const dropF = A.frontNeckDropCm + A.frontNeckDropPerSizeCm * step;
+  const dropB = A.backNeckDropCm;
+  const alphaTopTable = (front: boolean): Float64Array => {
+    const out = new Float64Array(181);
+    for (let k = 0; k <= 180; k++) {
+      const th = ((front ? 1 : -1) * Math.PI * k) / 180;
+      const drop = front ? dropF : dropB;
+      const h = (a: number): number => {
+        const p = fanPoint(th, a);
+        const x = Math.abs(p[0]);
+        return p[1] - (yHps - drop * Math.sqrt(Math.max(0, 1 - (x / neckHalf) ** 2)));
+      };
+      let a0 = 0.02, a1 = Math.PI / 2 - 0.02;
+      if (k === 0 || k === 180) {
+        out[k] = alphaHps;
+        continue;
+      }
+      for (let it = 0; it < 32; it++) {
+        const mid = (a0 + a1) / 2;
+        if (h(mid) < 0) a0 = mid;
+        else a1 = mid;
+      }
+      out[k] = (a0 + a1) / 2;
+    }
+    return out;
+  };
+  const topFront = alphaTopTable(true);
+  const topBack = alphaTopTable(false);
+  const alphaTop = (theta: number, front: boolean): number => {
+    const f = (Math.abs(theta) / Math.PI) * 180;
+    const k = Math.min(179, Math.floor(f));
+    const t = f - k;
+    const tab = front ? topFront : topBack;
+    return tab[k]! * (1 - t) + tab[k + 1]! * t;
+  };
+
+  // The armhole: an ellipse in the armhole plane from the armpit to the shoulder point (its long
+  // axis), wide enough front to back to hold the arm's section in that plane with `capEaseCm` to spare.
+  const ah: Vec3 = [xAh, yAh, 0];
+  const lineDir: Vec3 = [(sp[0] - xAh), (sp[1] - yAh), 0];
+  const Lq = Math.hypot(lineDir[0], lineDir[1]);
+  lineDir[0] /= Lq;
+  lineDir[1] /= Lq;
+  let zMax = 0;
+  {
+    const a0 = m.armAt(0, 1)!;
+    const pole = drawn ? -drawn.armTopS : (0.9 / 1.18) * a0.a;
+    for (let s = -pole; s < 25; s += 0.1) {
+      const e = drawn ? null : s >= 0 ? m.armAt(s, 1)! : { a: a0.a * (1 + s / pole), b: a0.b * (1 + s / pole) };
+      if (e && !(e.a > 1e-3)) continue;
+      for (let k = 0; k < 180; k++) {
+        const phi = (2 * Math.PI * k) / 180;
+        let pt: Vec3;
+        if (e) {
+          const rr = ellipseRadius(e.a, e.b, phi);
+          pt = [0, 1, 2].map((d) => L.joint[d]! + L.axis[d]! * s + rr * (Math.cos(phi) * L.u[d]! + Math.sin(phi) * L.v[d]!)) as Vec3;
+        } else {
+          const q = drawn!.armPoint(L, s, phi);
+          if (!q) continue;
+          pt = q;
+        }
+        if (!(Math.abs(planeDist(plane, pt)) <= 0.12)) continue;
+        const q = (pt[0] - xAh) * lineDir[0] + (pt[1] - yAh) * lineDir[1];
+        const u = (2 * q) / Lq - 1;
+        if (Math.abs(u) >= 0.97) continue;
+        zMax = Math.max(zMax, (Math.abs(pt[2]) + A.capEaseCm) / Math.sqrt(1 - u * u));
+      }
+    }
+  }
+  /** Point on the armhole at angle β (π = armpit, 0 = shoulder point), front (z > 0) or back. */
+  const eyePoint = (beta: number, front: boolean): Vec3 => {
+    const q = (Lq / 2) * (1 + Math.cos(beta));
+    return [xAh + lineDir[0] * q, yAh + lineDir[1] * q, (front ? 1 : -1) * zMax * Math.sin(beta)];
+  };
+  const eyeCirc = Math.PI * (3 * (Lq / 2 + zMax) - Math.sqrt((3 * (Lq / 2) + zMax) * (Lq / 2 + 3 * zMax)));
+  const forced = options.counts;
+  const eyeRows = forced ? forced.eyeRows : Math.max(6, Math.round(eyeCirc / 2 / rowStep));
+  const SAMPLES = 120;
+  const byLength = (len: number[], as: number[], n: number): number[] => {
+    const out: number[] = [];
+    const total = len[len.length - 1]!;
+    let j = 0;
+    for (let i = 0; i <= n; i++) {
+      const want = (total * i) / n;
+      while (j < len.length - 2 && len[j + 1]! < want) j++;
+      const t = (want - len[j]!) / Math.max(1e-9, len[j + 1]! - len[j]!);
+      out.push(lerp(as[j]!, as[j + 1]!, clamp01(t)));
+    }
+    return out;
+  };
+  const eyeB: number[] = [], eyeLen: number[] = [0];
+  for (let k = 0; k <= SAMPLES; k++) {
+    eyeB.push(Math.PI * (1 - k / SAMPLES));
+    if (k > 0) {
+      const p = eyePoint(eyeB[k]!, true), q = eyePoint(eyeB[k - 1]!, true);
+      eyeLen.push(eyeLen[k - 1]! + Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]));
+    }
+  }
+  const eyeBetas = byLength(eyeLen, eyeB, eyeRows);
+  const seamA: number[] = [], seamLen: number[] = [0];
+  for (let k = 0; k <= SAMPLES; k++) {
+    const a = alphaSp + ((alphaHps - alphaSp) * k) / SAMPLES;
+    seamA.push(a);
+    if (k > 0) {
+      const p = k === 1 ? sp : fanPoint(0, seamA[k - 1]!), q = fanPoint(0, a);
+      seamLen.push(seamLen[k - 1]! + Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]));
+    }
+  }
+  const seamRows = forced ? forced.seamRows : Math.max(3, Math.round(seamLen[SAMPLES]! / rowStep));
+  const counts: PomTeeCounts = { eyeRows, seamRows, tube: [], columns: {}, sleeveRings: 0, zip: {} };
+  const seamAlphas = byLength(seamLen, seamA, seamRows).slice(1);
+  /** Fan rows: left-side edge vertex front and back (equal outside the armhole) and its elevation; row 0 is the armpit. */
+  const fanRows: { front: Vec3; back: Vec3; alpha: number }[] = [];
+  for (const beta of eyeBetas) {
+    const f = beta >= Math.PI - 1e-9 ? ah : beta <= 1e-9 ? sp : eyePoint(beta, true);
+    const bk = beta >= Math.PI - 1e-9 ? ah : beta <= 1e-9 ? sp : eyePoint(beta, false);
+    fanRows.push({ front: f, back: bk, alpha: elevation(f) });
+  }
+  for (const a of seamAlphas) {
+    const p = fanPoint(0, a);
+    fanRows.push({ front: p, back: p, alpha: a });
+  }
+  const iSp = eyeRows;
+  // The shoulders do not depend on the hem height: their columns are computed once per build.
+  const columnCache = new Map<string, { pts: Vec3[]; f: number[] }>();
+  if (process.env.POM_DEBUG) console.log("eye", { Lq, zMax, eyeCirc, eyeRows, fanRows: fanRows.length, sp, xAh, yAh });
+
+  // ---- solve the hem height for the length, build the tube rows ------------------------------------
+  const lengthOf = (mesh: Mesh): number => frontLength(mesh, neckHalf, hpsPoint);
+  let yHem = yHps - row.lengthCm;
+  let build: { mesh: Mesh; meta: Omit<PomTeeBuild, 'mesh' | 'row' | 'tight' | 'levels' | 'counts'>; sleeveEndS: number } | null = null;
+  for (let it = 0; it < 4; it++) {
+    tight.length = 0;
+    build = assemble(yHem);
+    const got = lengthOf(build.mesh);
+    if (Math.abs(got - row.lengthCm) < 0.02) break;
+    yHem -= row.lengthCm - got;
+  }
+
+  function assemble(yHemNow: number): NonNullable<typeof build> {
+    const uniform = forced !== undefined || options.uniformRows === true;
+    const required = (uniform ? [yWaist, yChest] : [yChest, yWaist, m.morphHeights.hip, m.morphHeights.chest]).filter((y) => uniform || (y > yHemNow + 0.5 && y < yAh - 0.5));
+    // Ascending heights from the hem to the armhole (inclusive).
+    const ys = rowsBetween(yHemNow, yAh, rowStep, required, forced?.tube, counts.tube);
+    const pos: number[] = [];
+    const part: number[] = [];
+    const add = (p: Vec3, pt: number): number => {
+      pos.push(p[0], p[1], p[2]);
+      part.push(pt);
+      return pos.length / 3 - 1;
+    };
+    const nTube = ys.length; // last tube row = fan row 0
+    const front: number[][] = [], back: number[][] = [];
+    // Tube rows: full rings; front columns θ = cπ/N, back θ = −cπ/N, sharing c = 0 and c = N.
+    for (let r = 0; r < nTube; r++) {
+      const y = ys[r]!;
+      const { h, d } = tubeEase(y, yHemNow, true);
+      const fr: number[] = [], bk: number[] = [];
+      for (let c = 0; c <= N; c++) {
+        const th = (Math.PI * c) / N;
+        const [x, z] = hullRay(h, d, th);
+        fr.push(add([x, y, z], 0));
+      }
+      for (let c = 0; c <= N; c++) {
+        if (c === 0 || c === N) { bk.push(fr[c]!); continue; }
+        const th = -(Math.PI * c) / N;
+        const [x, z] = hullRay(h, d, th);
+        bk.push(add([x, y, z], 0));
+      }
+      front.push(fr);
+      back.push(bk);
+    }
+    // Above the armhole: one column per azimuth step from the tube's top row to the neckline, each
+    // with as many vertices as its own length needs (1.6 cm apart: the centre front is 9 cm long, the
+    // side over the armhole and the shoulder seam 40), sewn to its neighbour by a zipper of triangles.
+    const mirror = (p: Vec3): Vec3 => [-p[0], p[1], p[2]];
+    const tris: number[] = [];
+    // Panel of every triangle (`POM_PANELS`): front, back, left sleeve, right sleeve; the UV layout cuts the seams between them.
+    const triPanel: number[] = [];
+    let panel = 0;
+    const quad = (a: number, b: number, c: number, d: number): void => {
+      tris.push(a, b, c, a, c, d);
+      triPanel.push(panel, panel);
+    };
+    for (const [g, grid] of [front, back].entries()) {
+      panel = g;
+      for (let r = 0; r + 1 < nTube; r++) for (let c = 0; c < N; c++) quad(grid[r]![c]!, grid[r]![c + 1]!, grid[r + 1]![c + 1]!, grid[r + 1]![c]!);
+    }
+    const lenFrac = (pts: Vec3[]): number[] => {
+      const out = [0];
+      for (let k = 1; k < pts.length; k++) out.push(out[k - 1]! + Math.hypot(pts[k]![0] - pts[k - 1]![0], pts[k]![1] - pts[k - 1]![1], pts[k]![2] - pts[k - 1]![2]));
+      const tot = out[out.length - 1]! || 1;
+      return out.map((x) => x / tot);
+    };
+    const edgeF = fanRows.map((r) => r.front);
+    const fe = lenFrac(edgeF);
+    const wAt = (f: number, frontPanel: boolean): number => {
+      let k = 0;
+      while (k < fe.length - 2 && fe[k + 1]! < f) k++;
+      const t = clamp01((f - fe[k]!) / Math.max(1e-9, fe[k + 1]! - fe[k]!));
+      const w = (r: (typeof fanRows)[number]): number => (frontPanel ? Math.atan2(r.front[2], r.front[0]) : -Math.atan2(r.back[2], r.back[0]));
+      return Math.max(0, lerp(w(fanRows[k]!), w(fanRows[k + 1]!), t));
+    };
+    const top = nTube - 1;
+    const columns = (frontPanel: boolean, shared: number[][] | null): { ids: number[]; f: number[] }[] => {
+      const sgn = frontPanel ? 1 : -1;
+      const tubeTop = frontPanel ? front[top]! : back[top]!;
+      const cols: { ids: number[]; f: number[] }[] = [];
+      for (let c = 0; c <= N; c++) {
+        if (c === 0 || c === N) {
+          const ids: number[] = [tubeTop[c]!];
+          for (let i = 1; i < fanRows.length; i++) {
+            const inEye = i < iSp;
+            // The armhole's first row lies a row step along the armhole from the armpit, which is where the tube's
+            // top row has its next vertex (0.1 to 0.3 cm apart: an edge that reads 100 % strain when it moves a
+            // millimetre). On a body with drawn outlines the two are one vertex.
+            if (drawn && i === 1) { ids.push(tubeTop[c === 0 ? 1 : N - 1]!); continue; }
+            if (shared && !inEye) { ids.push(shared[c]![i]!); continue; }
+            const e = frontPanel || !inEye ? fanRows[i]!.front : fanRows[i]!.back;
+            ids.push(add(c === 0 ? e : mirror(e), 0));
+          }
+          cols.push({ ids, f: fe });
+          continue;
+        }
+        const key = `${frontPanel ? 'f' : 'b'}${c}`;
+        const hit = columnCache.get(key);
+        if (hit) {
+          cols.push({ ids: [tubeTop[c]!, ...hit.pts.map((p) => add(p, 0))], f: hit.f });
+          continue;
+        }
+        const at = (f: number): Vec3 => {
+          const w = wAt(f, frontPanel);
+          const th = sgn * (w + ((Math.PI - 2 * w) * c) / N);
+          return fanPoint(th, f * alphaTop(th, frontPanel));
+        };
+        const S = 48;
+        const fs: number[] = [], pts: Vec3[] = [];
+        for (let k = 0; k <= S; k++) { fs.push(k / S); pts.push(at(k / S)); }
+        const lf = lenFrac(pts);
+        let total = 0;
+        for (let k = 1; k <= S; k++) total += Math.hypot(pts[k]![0] - pts[k - 1]![0], pts[k]![1] - pts[k - 1]![1], pts[k]![2] - pts[k - 1]![2]);
+        const n = forced ? forced.columns[key]! : Math.max(2, Math.round(total / rowStep));
+        counts.columns[key] = n;
+        const f: number[] = [0];
+        const placed: Vec3[] = [];
+        let j = 0;
+        for (let k = 1; k <= n; k++) {
+          const want = k / n;
+          while (j < S - 1 && lf[j + 1]! < want) j++;
+          const t = clamp01((want - lf[j]!) / Math.max(1e-9, lf[j + 1]! - lf[j]!));
+          placed.push(at(lerp(fs[j]!, fs[j + 1]!, t)));
+          f.push(want);
+        }
+        columnCache.set(key, { pts: placed, f });
+        cols.push({ ids: [tubeTop[c]!, ...placed.map((p) => add(p, 0))], f });
+      }
+      return cols;
+    };
+    const colsF = columns(true, null);
+    const colsB = columns(false, colsF.map((c) => c.ids));
+    const zipper = (A: { ids: number[]; f: number[] }, B: { ids: number[]; f: number[] }, key: string): void => {
+      let i = 0, j = 0;
+      const given = forced?.zip[key];
+      const steps: boolean[] = (counts.zip[key] = []);
+      while (i < A.ids.length - 1 || j < B.ids.length - 1) {
+        const advanceA = given ? given[steps.length]! : j === B.ids.length - 1 || (i < A.ids.length - 1 && A.f[i + 1]! <= B.f[j + 1]!);
+        steps.push(advanceA);
+        if (advanceA) { tris.push(A.ids[i]!, B.ids[j]!, A.ids[i + 1]!); i++; }
+        else { tris.push(A.ids[i]!, B.ids[j]!, B.ids[j + 1]!); j++; }
+        triPanel.push(panel);
+      }
+    };
+    for (const [g, cols] of [colsF, colsB].entries()) {
+      panel = g;
+      for (let c = 0; c < N; c++) zipper(cols[c]!, cols[c + 1]!, `${g === 0 ? 'f' : 'b'}${c}`);
+    }
+
+    // Sleeves: ring 0 is the armhole (front edge up, back edge down).
+    const sleeveHem: [number[], number[]] = [[], []];
+    const sleeveTop: [number[], number[]] = [[], []];
+    const sleeveRings: [number[][], number[][]] = [[], []];
+    let sleeveEndS = 0;
+    for (const [k, f] of [[0, L], [1, R]] as const) {
+      const col = k === 0 ? 0 : N;
+      const loop: number[] = [];
+      for (let i = 0; i <= iSp; i++) loop.push(colsF[col]!.ids[i]!);
+      for (let i = iSp - 1; i >= 1; i--) loop.push(colsB[col]!.ids[i]!);
+      const K = loop.length;
+      const P = (i: number): Vec3 => [pos[3 * i]!, pos[3 * i + 1]!, pos[3 * i + 2]!];
+      const frame = loop.map((i) => {
+        const r = sub(P(i), f.joint);
+        const s = dot(r, f.axis);
+        const ru = dot(r, f.u), rv = dot(r, f.v);
+        return { s, phi: Math.atan2(rv, ru), r: Math.hypot(ru, rv) };
+      });
+      const topK = iSp; // the shoulder point's place in the loop
+      const a0 = m.armAt(0, f.side)!;
+      const pole = (0.9 / 1.18) * a0.a;
+      const armR = (s: number, phi: number): number => {
+        if (drawn) return drawn.armRadius(f, Math.min(s, ARM_REACH_CM), phi);
+        if (s >= 0) {
+          const e = m.armAt(Math.min(s, ARM_REACH_CM), f.side)!;
+          return ellipseRadius(e.a, e.b, phi);
+        }
+        return ellipseRadius(a0.a, a0.b, phi) * Math.max(0, 1 + s / pole);
+      };
+      const ringAt = (sEnd: number): { pts: Vec3[][]; hemR: number[] } => {
+        const eEnd = m.armAt(sEnd, f.side)!;
+        // The hem: an ellipse of the arm's aspect whose polygon over the loop's angles has girth 2 × opening.
+        const aspect = eEnd.b / eEnd.a;
+        const want = 2 * row.sleeveOpeningCm;
+        const raw = frame.map((q) => ellipseRadius(1, aspect, q.phi));
+        let per = 0;
+        for (let j = 0; j < K; j++) {
+          const p = frame[j]!, q = frame[(j + 1) % K]!;
+          per += Math.hypot(raw[j]! * Math.cos(p.phi) - raw[(j + 1) % K]! * Math.cos(q.phi), raw[j]! * Math.sin(p.phi) - raw[(j + 1) % K]! * Math.sin(q.phi));
+        }
+        const hemR = raw.map((x) => (x * want) / per);
+        const J = forced ? forced.sleeveRings : Math.max(6, Math.ceil((sEnd - frame[topK]!.s) / rowStep));
+        counts.sleeveRings = J;
+        const pts: Vec3[][] = [];
+        for (let j = 1; j <= J; j++) {
+          const t = j / J;
+          const ring: Vec3[] = frame.map((q, kk) => {
+            const s = lerp(q.s, sEnd, t);
+            let r = lerp(q.r, hemR[kk]!, t);
+            if (j < J) {
+              const ease = lerp(A.capEaseCm, A.sleeveHemEaseCm, smooth((s - s0) / Math.max(1, sEnd - s0)));
+              const floor = armR(s, q.phi) + ease;
+              // Smooth maximum, so the cap rounds over the deltoid instead of creasing.
+              const k2 = 0.6;
+              r = 0.5 * (r + floor + Math.sqrt((r - floor) ** 2 + k2 * k2));
+              // Back to the straight line within the last two rings.
+              if (j >= J - 1) r = lerp(r, lerp(q.r, hemR[kk]!, t), 0.5);
+            }
+            const cu = Math.cos(q.phi) * r, cv = Math.sin(q.phi) * r;
+            return [f.joint[0] + f.axis[0] * s + f.u[0] * cu + f.v[0] * cv, f.joint[1] + f.axis[1] * s + f.u[1] * cu + f.v[1] * cv, f.joint[2] + f.axis[2] * s + f.u[2] * cu + f.v[2] * cv];
+          });
+          pts.push(ring);
+        }
+        return { pts, hemR };
+      };
+      const topLength = (sEnd: number): number => {
+        const { pts } = ringAt(sEnd);
+        let len = 0;
+        let prev = P(loop[topK]!);
+        for (const ring of pts) {
+          const q = ring[topK]!;
+          len += Math.hypot(q[0] - prev[0], q[1] - prev[1], q[2] - prev[2]);
+          prev = q;
+        }
+        return len;
+      };
+      let sA = frame[topK]!.s + 4, sB = frame[topK]!.s + 45;
+      for (let it = 0; it < 40; it++) {
+        const mid = (sA + sB) / 2;
+        if (topLength(mid) < row.sleeveLengthCm) sA = mid;
+        else sB = mid;
+      }
+      const sEnd = (sA + sB) / 2;
+      sleeveEndS = sEnd;
+      const { pts } = ringAt(sEnd);
+      let prevRing = loop;
+      sleeveTop[k] = [loop[topK]!];
+      sleeveRings[k].push(loop);
+      panel = 2 + k;
+      for (const ring of pts) {
+        const ids = ring.map((p) => add(p, k + 1));
+        sleeveTop[k].push(ids[topK]!);
+        for (let j = 0; j < K; j++) quad(prevRing[j]!, prevRing[(j + 1) % K]!, ids[(j + 1) % K]!, ids[j]!);
+        sleeveRings[k].push(ids);
+        prevRing = ids;
+      }
+      sleeveHem[k] = prevRing;
+    }
+    // Triangles that lost a corner to the weld at the armpit.
+    for (let t = tris.length - 3; t >= 0; t -= 3) {
+      if (tris[t] !== tris[t + 1] && tris[t + 1] !== tris[t + 2] && tris[t] !== tris[t + 2]) continue;
+      tris.splice(t, 3);
+      triPanel.splice(t / 3, 1);
+    }
+    const fixedIds = [colsF[0]!.ids[iSp]!, colsF[N]!.ids[iSp]!, colsF[0]!.ids[fanRows.length - 1]!, colsF[N]!.ids[fanRows.length - 1]!];
+    if (A.yokeSmoothIterations > 0) {
+      smoothYoke(pos, tris, fixedIds, fullDistance, (y) => smooth((y - yAh - A.yokeSmoothFromCm) / 4), A.capEaseCm, A.yokeSmoothIterations);
+      // The smoothing shortens the sleeve's top line over the cap: stretch each sleeve along its arm (nothing at the joint,
+      // all of it at the hem) until the top line is the tape's sleeve length again.
+      for (const [k, f] of [[0, L], [1, R]] as const) {
+        const top = sleeveTop[k];
+        const along = (i: number): number => (pos[3 * i]! - f.joint[0]) * f.axis[0] + (pos[3 * i + 1]! - f.joint[1]) * f.axis[1] + (pos[3 * i + 2]! - f.joint[2]) * f.axis[2];
+        for (let it = 0; it < 3; it++) {
+          let len = 0;
+          for (let j = 1; j < top.length; j++) len += Math.hypot(pos[3 * top[j]!]! - pos[3 * top[j - 1]!]!, pos[3 * top[j]! + 1]! - pos[3 * top[j - 1]! + 1]!, pos[3 * top[j]! + 2]! - pos[3 * top[j - 1]! + 2]!);
+          const d = row.sleeveLengthCm - len;
+          if (Math.abs(d) < 0.01) break;
+          const sEnd = along(top[top.length - 1]!);
+          for (let i = 0; i < part.length; i++) {
+            if (part[i] !== k + 1) continue;
+            const w = clamp01(along(i) / sEnd);
+            for (let c = 0; c < 3; c++) pos[3 * i + c] = pos[3 * i + c]! + f.axis[c]! * d * w;
+          }
+        }
+      }
+    }
+    const mesh: Mesh = { positions: Float64Array.from(pos), indices: Uint32Array.from(orientOutward(Float64Array.from(pos), tris, m)), vertexPart: Uint8Array.from(part), partNames: ['body', 'sleeve_l', 'sleeve_r'] };
+    return {
+      mesh,
+      sleeveEndS,
+      meta: {
+        hem: [...front[0]!, ...back[0]!.slice(1, N)],
+        triPanel: Uint8Array.from(triPanel),
+        shoulderSeam: [colsF[0]!.ids.slice(iSp), colsF[N]!.ids.slice(iSp)],
+        sleeveRings,
+        sleeveHem,
+        sleeveTop,
+        shoulderPoint: [colsF[0]!.ids[iSp]!, colsF[N]!.ids[iSp]!],
+        hps: [colsF[0]!.ids[fanRows.length - 1]!, colsF[N]!.ids[fanRows.length - 1]!],
+      },
+    };
+  }
+
+  const b = build!;
+  return {
+    mesh: b.mesh,
+    row,
+    ...b.meta,
+    levels: { armholeY: yAh, chestLineY: yChest, hemY: yHem, shoulderPointY: sp[1], hpsY: yHps, sleeveEndS: b.sleeveEndS },
+    tight: dedupeTight(tight),
+    counts,
+  };
+}
+
+/**
+ * Shrink-wrap smoothing round the shoulder points (`shoulderRoundCm`): every vertex within `radius` of a shoulder point
+ * (the shoulder points themselves kept, so the shoulder measurement holds) moves towards the mean of its neighbours,
+ * weighted down to 0 at the radius, then out along the body's distance gradient until it is at least as far off the body
+ * as it was (at most `easeCap`). A crease moves out, a ridge moves in until the body stops it: the cloth bridges the
+ * pinch where the armhole seam meets the sleeve cap. Mutates `pos`.
+ */
+function smoothYoke(pos: number[], tris: readonly number[], fixed: readonly number[], dist: (p: Vec3) => number, weight: (y: number) => number, easeCap: number, iterations: number): void {
+  const n = pos.length / 3;
+  const P = (i: number): Vec3 => [pos[3 * i]!, pos[3 * i + 1]!, pos[3 * i + 2]!];
+  const w = new Float64Array(n);
+  for (let i = 0; i < n; i++) w[i] = weight(pos[3 * i + 1]!);
+  for (const f of fixed) w[f] = 0;
+  const adj: Set<number>[] = Array.from({ length: n }, () => new Set<number>());
+  for (let t = 0; t < tris.length; t += 3) for (let e = 0; e < 3; e++) {
+    const a = tris[t + e]!, b = tris[t + ((e + 1) % 3)]!;
+    adj[a]!.add(b);
+    adj[b]!.add(a);
+  }
+  // Rim vertices (hem, neckline, sleeve hems) stay where the lengths were solved.
+  const uses = new Map<string, number>();
+  for (let t = 0; t < tris.length; t += 3) for (let e = 0; e < 3; e++) {
+    const a = tris[t + e]!, b = tris[t + ((e + 1) % 3)]!;
+    const k = a < b ? `${a},${b}` : `${b},${a}`;
+    uses.set(k, (uses.get(k) ?? 0) + 1);
+  }
+  for (const [k, c] of uses) if (c === 1) for (const v of k.split(',')) w[Number(v)] = 0;
+  const ids = [...w.keys()].filter((i) => w[i]! > 0);
+  const want = new Float64Array(n);
+  for (const i of ids) want[i] = Math.min(easeCap, dist(P(i)));
+  const next = new Float64Array(3 * n);
+  for (let it = 0; it < iterations; it++) {
+    for (const i of ids) {
+      let sx = 0, sy = 0, sz = 0;
+      for (const j of adj[i]!) { sx += pos[3 * j]!; sy += pos[3 * j + 1]!; sz += pos[3 * j + 2]!; }
+      const k = adj[i]!.size;
+      const l = 0.5 * w[i]!;
+      next[3 * i] = pos[3 * i]! + l * (sx / k - pos[3 * i]!);
+      next[3 * i + 1] = pos[3 * i + 1]! + l * (sy / k - pos[3 * i + 1]!);
+      next[3 * i + 2] = pos[3 * i + 2]! + l * (sz / k - pos[3 * i + 2]!);
+    }
+    for (const i of ids) {
+      let p: Vec3 = [next[3 * i]!, next[3 * i + 1]!, next[3 * i + 2]!];
+      for (let k = 0; k < 6; k++) {
+        const d = dist(p);
+        if (d >= want[i]! - 1e-3) break;
+        const h = 0.05;
+        const g: Vec3 = [dist([p[0] + h, p[1], p[2]]) - dist([p[0] - h, p[1], p[2]]), dist([p[0], p[1] + h, p[2]]) - dist([p[0], p[1] - h, p[2]]), dist([p[0], p[1], p[2] + h]) - dist([p[0], p[1], p[2] - h])];
+        const gl = Math.hypot(g[0], g[1], g[2]) || 1;
+        const step = want[i]! - d;
+        p = [p[0] + (g[0] / gl) * step, p[1] + (g[1] / gl) * step, p[2] + (g[2] / gl) * step];
+      }
+      pos[3 * i] = p[0];
+      pos[3 * i + 1] = p[1];
+      pos[3 * i + 2] = p[2];
+    }
+  }
+}
+
+function dedupeTight(t: PomTeeBuild['tight']): PomTeeBuild['tight'] {
+  const seen = new Set<number>();
+  return t.filter((x) => (seen.has(x.y) ? false : (seen.add(x.y), true)));
+}
+
+/** Ascending stations from `from` to `to` (both included) about `step` apart, through every `required` height. */
+function rowsBetween(from: number, to: number, step: number, required: readonly number[], forced?: readonly number[], used?: number[]): number[] {
+  const knots = [from, ...[...required].sort((a, b) => a - b), to];
+  const out: number[] = [from];
+  if (used) used.length = 0;
+  for (let k = 1; k < knots.length; k++) {
+    const a = knots[k - 1]!, b = knots[k]!;
+    const n = forced ? forced[k - 1]! : Math.max(1, Math.round((b - a) / step));
+    used?.push(n);
+    for (let i = 1; i <= n; i++) out.push(a + ((b - a) * i) / n);
+  }
+  return out;
+}
+
+/**
+ * Consistent winding over the welded mesh (neighbouring triangles run a shared edge in opposite
+ * directions), then flipped as a whole when the torso faces inwards.
+ */
+function orientOutward(pos: Float64Array, tris: number[], m: Mannequin): number[] {
+  const T = tris.length / 3;
+  const edgeTris = new Map<string, number[]>();
+  const key = (a: number, b: number): string => (a < b ? `${a},${b}` : `${b},${a}`);
+  for (let t = 0; t < T; t++) for (let e = 0; e < 3; e++) {
+    const k = key(tris[3 * t + e]!, tris[3 * t + ((e + 1) % 3)]!);
+    (edgeTris.get(k) ?? edgeTris.set(k, []).get(k)!).push(t);
+  }
+  const done = new Uint8Array(T);
+  const runs = (t: number, a: number, b: number): boolean => {
+    for (let e = 0; e < 3; e++) if (tris[3 * t + e] === a && tris[3 * t + ((e + 1) % 3)] === b) return true;
+    return false;
+  };
+  for (let seed = 0; seed < T; seed++) {
+    if (done[seed]) continue;
+    done[seed] = 1;
+    const stack = [seed];
+    while (stack.length) {
+      const t = stack.pop()!;
+      for (let e = 0; e < 3; e++) {
+        const a = tris[3 * t + e]!, b = tris[3 * t + ((e + 1) % 3)]!;
+        for (const u of edgeTris.get(key(a, b))!) {
+          if (u === t || done[u]) continue;
+          if (runs(u, a, b)) {
+            const tmp = tris[3 * u + 1]!;
+            tris[3 * u + 1] = tris[3 * u + 2]!;
+            tris[3 * u + 2] = tmp;
+          }
+          done[u] = 1;
+          stack.push(u);
+        }
+      }
+    }
+  }
+  // Outward: the torso's triangles at chest height face away from the vertical axis.
+  let score = 0;
+  const yc = m.morphHeights.chest;
+  for (let t = 0; t < T; t++) {
+    const P = (i: number): Vec3 => [pos[3 * i]!, pos[3 * i + 1]!, pos[3 * i + 2]!];
+    const a = P(tris[3 * t]!), b = P(tris[3 * t + 1]!), c = P(tris[3 * t + 2]!);
+    if (Math.abs(a[1] - yc) > 3) continue;
+    const n = [(b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]), (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2])];
+    score += n[0]! * a[0] + n[1]! * a[2];
+  }
+  if (score < 0) for (let t = 0; t < T; t++) {
+    const tmp = tris[3 * t + 1]!;
+    tris[3 * t + 1] = tris[3 * t + 2]!;
+    tris[3 * t + 2] = tmp;
+  }
+  return tris;
+}
+
+// ---------------------------------------------------------------------------
+// Tape: what the shop's measurements are on the built mesh
+// ---------------------------------------------------------------------------
+
+/** Segments of the mesh cut by the plane x = x0, as 3D point pairs. */
+function sliceX(mesh: Pick<Mesh, 'positions' | 'indices'>, x0: number): [Vec3, Vec3][] {
+  const p = mesh.positions;
+  const out: [Vec3, Vec3][] = [];
+  const P = (i: number): Vec3 => [p[3 * i]!, p[3 * i + 1]!, p[3 * i + 2]!];
+  for (let t = 0; t < mesh.indices.length; t += 3) {
+    const v = [P(mesh.indices[t]!), P(mesh.indices[t + 1]!), P(mesh.indices[t + 2]!)];
+    const pts: Vec3[] = [];
+    for (let e = 0; e < 3; e++) {
+      const a = v[e]!, b = v[(e + 1) % 3]!;
+      const da = a[0] - x0, db = b[0] - x0;
+      if ((da < 0 && db >= 0) || (da >= 0 && db < 0)) {
+        const s = da / (da - db);
+        pts.push([x0, a[1] + (b[1] - a[1]) * s, a[2] + (b[2] - a[2]) * s]);
+      }
+    }
+    if (pts.length === 2) out.push([pts[0]!, pts[1]!]);
+  }
+  return out;
+}
+
+/**
+ * Length down the front: the cloth cut by the plane through the HPS (x = its distance from the
+ * centre), the longest connected piece on the front (z ≥ 0), plus the step from the HPS to its top.
+ */
+export function frontLength(mesh: Pick<Mesh, 'positions' | 'indices'>, xHps: number, hps: Vec3): number {
+  const segs = sliceX(mesh, xHps - 1e-3).filter(([a, b]) => a[2] >= 0 && b[2] >= 0);
+  const key = (p: Vec3): string => `${Math.round(p[1] * 1e5)},${Math.round(p[2] * 1e5)}`;
+  const ends = new Map<string, number[]>();
+  segs.forEach(([a, b], i) => {
+    for (const p of [a, b]) (ends.get(key(p)) ?? ends.set(key(p), []).get(key(p))!).push(i);
+  });
+  const used = new Uint8Array(segs.length);
+  let best = 0, bestTop: Vec3 | null = null;
+  for (let s0 = 0; s0 < segs.length; s0++) {
+    if (used[s0]) continue;
+    // Flood the piece, summing lengths and keeping its highest point.
+    let len = 0;
+    let top: Vec3 = segs[s0]![0];
+    const stack = [s0];
+    used[s0] = 1;
+    while (stack.length) {
+      const i = stack.pop()!;
+      const [a, b] = segs[i]!;
+      len += Math.hypot(a[1] - b[1], a[2] - b[2]);
+      for (const p of [a, b]) {
+        if (p[1] > top[1]) top = p;
+        for (const j of ends.get(key(p)) ?? []) if (!used[j]) { used[j] = 1; stack.push(j); }
+      }
+    }
+    if (len > best) { best = len; bestTop = top; }
+  }
+  return bestTop ? best + Math.hypot(hps[1] - bestTop[1], hps[2] - bestTop[2]) : 0;
+}
+
+const loopGirth = (mesh: Pick<Mesh, 'positions'>, ids: readonly number[], drop: (p: Vec3) => [number, number]): number => {
+  const pts = ids.map((i) => drop([mesh.positions[3 * i]!, mesh.positions[3 * i + 1]!, mesh.positions[3 * i + 2]!]));
+  return perimeter(hull2(pts));
+};
+
+/** The tee's own tape: every input measurement taken on the built mesh, as a `PomTeeRow`. */
+export function measurePomTee(m: Mannequin, b: Omit<PomTeeBuild, 'row'>, tapeGirthAt: (mesh: Mesh, y: number) => number | null): PomTeeRow {
+  const { mesh } = b;
+  const P = (i: number): Vec3 => [mesh.positions[3 * i]!, mesh.positions[3 * i + 1]!, mesh.positions[3 * i + 2]!];
+  const chest = tapeGirthAt(mesh, b.levels.chestLineY);
+  const waist = tapeGirthAt(mesh, m.morphHeights.waist);
+  const hem = loopGirth(mesh, b.hem, (p) => [p[0], p[2]]);
+  const [spL, spR] = [P(b.shoulderPoint[0]), P(b.shoulderPoint[1])];
+  const shoulder = Math.hypot(spL[0] - spR[0], spL[1] - spR[1], spL[2] - spR[2]);
+  const hps = P(b.hps[0]);
+  const length = frontLength(mesh, hps[0], hps);
+  const arm = m.arms.left;
+  const sleeveRing = b.sleeveHem[0];
+  const opening = loopGirth(mesh, sleeveRing, (p) => {
+    const r = sub(p, arm.joint);
+    return [dot(r, arm.u), dot(r, arm.v)];
+  }) / 2;
+  // Along the sleeve's top: the vertices of the shoulder point's column, ring by ring.
+  let sleeveLength = 0;
+  for (let k = 1; k < b.sleeveTop[0].length; k++) {
+    const p = P(b.sleeveTop[0][k - 1]!), q = P(b.sleeveTop[0][k]!);
+    sleeveLength += Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
+  }
+  return {
+    size: '',
+    chestWidthCm: (chest ?? NaN) / 2,
+    ...(waist !== null ? { waistWidthCm: waist / 2 } : {}),
+    hemWidthCm: hem / 2,
+    shoulderCm: shoulder,
+    lengthCm: length,
+    sleeveLengthCm: sleeveLength,
+    sleeveOpeningCm: opening,
+  };
+}
+
+/**
+ * The largest bump on a shoulder seam, cm: walking from the HPS out to the shoulder point, how far the seam rises above
+ * the lowest point it already passed. A seam that only falls gives 0. Defect 4 of the M3 report (the peaks at the shoulder
+ * points): the M3 seam rose 1.1 cm over the arm's closing cone, 2 to 3 cm inside the shoulder point.
+ */
+export function shoulderSeamBumpCm(b: Pick<PomTeeBuild, 'mesh' | 'shoulderSeam'>): number {
+  let worst = 0;
+  for (const seam of b.shoulderSeam) {
+    let low = Infinity;
+    for (const i of [...seam].reverse()) {
+      const y = b.mesh.positions[3 * i + 1]!;
+      worst = Math.max(worst, y - low);
+      low = Math.min(low, y);
+    }
+  }
+  return worst;
+}
+
+export { polygonCompensation, topology };

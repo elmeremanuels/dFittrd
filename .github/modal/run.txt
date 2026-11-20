@@ -1,0 +1,15 @@
+# One command per line; pushing a change to this file runs them on Modal via GitHub Actions.
+# run 17d: skirt and palazzo end to end (stage 2 + stage 4) from stills already on the Volume, recomposed on CPU with QA 0.12.0. No new draw.
+# skirt: front fashn@44 + back fashn@63 (run 17c). Back has the pale smocked band (thinner than the front's), tier seam row 587 vs 593,
+#   hem 138/137/132 px vs 151/142/141 at rows 665/685/705, nothing below the hem.
+# palazzo: Qwen front + Qwen back (run 16a), approved by the founder (pocket flap, darker print). 0.12.0 leaves both stills unchanged.
+# Checked locally on copies of the artifacts with a fresh export (same job ids 99ab3ce9327b / b85affd79b61): pins resolve, both pairs pass,
+#   hashes below match (numpy 2.2.6 / Pillow 11.3.0, as in the Modal image). A different hash stops the line before stage 2.
+# Cost (H100 list price, not the invoice): about $1.6-1.7 each (16b: 1,503 GPU s = $1.65), about $3.3-3.4 in all. CPU recompose under a cent.
+pnpm build:packages
+pnpm --filter @curtain/garment-spike shop:bohohippychic -- --fetch-images
+git diff --exit-code -- spikes/garment-engine/data/bohohippychic/images.json spikes/garment-engine/data/bohohippychic/products.json
+pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product crimson-wildflower-maxi-skirt
+pnpm --filter @curtain/garment-spike export:phase0 -- --shop bohohippychic --product rosewater-palazzo-pants
+modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/crimson-wildflower-maxi-skirt --recompose-dress --dress-pin front=fashn@44,back=fashn@63 --dress-expect front=8909a1c04e63c3f26a54818a,back=14b4b1e6fc52fbf44b10f2b5 --no-synthetic-recon || echo "::warning::crimson-wildflower-maxi-skirt: run 17d failed"
+modal run spikes/garment-engine/modal/run_phase0.py --job-dir spikes/garment-engine/out/phase0/rosewater-palazzo-pants --recompose-dress --dress-pin front=qwen,back=qwen --dress-expect front=d519f925e95fb9bfa4ee275d,back=a9a3ce42d53ac369fd83eca0 --no-synthetic-recon || echo "::warning::rosewater-palazzo-pants: run 17d failed"

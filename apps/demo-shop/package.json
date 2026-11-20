@@ -1,0 +1,17 @@
+{
+  "name": "@curtain/demo-shop",
+  "version": "0.1.0",
+  "description": "Local demo storefront \"Aalter Studio\" for `pnpm demo` (docs/STANDALONE.md §4): static HTML/CSS/JS with a WooCommerce-style and a Shopify Dawn-style product page that load the Curtain SDK from the demo api.",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test/*.test.mjs",
+    "typecheck": "node scripts/check.mjs",
+    "lint": "node scripts/check.mjs"
+  },
+  "dependencies": {
+    "@curtain/schema": "workspace:*"
+  }
+}

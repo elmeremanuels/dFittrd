@@ -1,0 +1,7 @@
+dist/
+node_modules/
+# rendered from shopify.app.toml by `pnpm configure`; contains the real client_id
+shopify.app.*.toml
+.shopify/
+# copied from packages/sdk/dist at build time
+extensions/try-button/assets/sdk.v1.js

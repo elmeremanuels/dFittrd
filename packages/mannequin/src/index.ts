@@ -1,0 +1,148 @@
+/**
+ * @curtain/mannequin — the canonical mannequin v0 (docs/ENGINE-HANDOFF.md §The canonical mannequin):
+ * procedural A-pose body shapes lofted through the D15 anchor rings, their rings and length lines,
+ * the fixed camera paths and motion clip, and a minimal glTF 2.0 binary writer.
+ */
+export {
+  BODY_SHAPES,
+  BODY_SHAPE_IDS,
+  BASE_SHAPE_ID,
+  BODY_FAMILIES,
+  bodyShape,
+  type BodyShape,
+  type BodyShapeId,
+  type BodyFamily,
+  type BodyLevels,
+  type RingSpec,
+} from './shapes';
+export {
+  MALE_BODY_SHAPES,
+  MALE_BODY_SHAPE_IDS,
+  MALE_REFERENCE,
+  MALE_LEVELS,
+  MALE_ASSUMPTIONS,
+  MALE_SOURCES,
+  FEMALE_SHOULDER_REFERENCE,
+  BODY_INPUT_LIMITS,
+  FAMILY_BASE_SHAPE_ID,
+  familyShapeIds,
+  familyShape,
+  referenceMeasurements,
+  shapeForBody,
+  buildBody,
+  deltoidBreadthCm,
+  armClearanceCm,
+  type MaleBodyShapeId,
+  type MaleReferenceRow,
+  type FamilyShapeId,
+  type ReferenceMeasurements,
+  type BodyInput,
+} from './families';
+export {
+  MANNEQUIN_VERSION,
+  A_POSE_ARM_DEG,
+  NOMINAL_LEVELS,
+  levelWarp,
+  PART_IDS,
+  JOINT_IDS,
+  buildMannequin,
+  polygonPerimeter,
+  polygonCompensation,
+  stations,
+  type Mannequin,
+  type BuildOptions,
+  type PartId,
+  type PartSpec,
+  type Section,
+  type Side,
+  type RingFrame,
+  type LengthLine,
+  type Joint,
+  type JointId,
+  type ArmFrame,
+  type Landmarks,
+  type BodySection,
+} from './model';
+export {
+  buildMannequinMesh,
+  loftSections,
+  mergeParts,
+  signedVolume,
+  vertexNormals,
+  topology,
+  vertexAt,
+  vertexCount,
+  triangleCount,
+  type Mesh,
+  type TopologyReport,
+} from './mesh';
+export {
+  MALE_SECTION_REFERENCE,
+  MALE_V2_ASSUMPTIONS,
+  CHEST_EXPONENT_LIMIT,
+  maleRingFits,
+  fitRing,
+  superellipsePerimeter,
+  type MaleSectionRow,
+} from './maleV2';
+export { POLAR_N, polarRadius, sectionPolar, type MannequinOutlines, type PolarSection } from './outlines';
+export { slice, loopLength, loopArea, loopContains, loopAround, planeCoords, resampleLoop, type Loop, type Plane } from './slice';
+export { writeGlb, readGlb, glbFloatAccessor, glbIndexAccessor, type GlbPrimitive, type GlbOptions, type ParsedGlb } from './glb';
+export {
+  CAMERA_PATH_IDS,
+  TURNTABLE_HEIGHTS,
+  TURNTABLE_TARGET,
+  turntablePath,
+  turntablePaths,
+  motionCamera,
+  cameraMatrices,
+  type CameraPath,
+  type CameraPathId,
+  type CameraFrame,
+  type CameraPathOptions,
+  type CameraMatrices,
+} from './camera';
+export {
+  MOTION_CLIP,
+  BLEND_HALF_WIDTH_CM,
+  skinWeights,
+  jointMatrices,
+  poseMesh,
+  posePoint,
+  sampleClip,
+  clipFrameTimes,
+  type SkinWeights,
+  type Pose,
+  type Keyframe,
+  type MotionClip,
+} from './rig';
+export { mannequinAnchorsJson, meshRingCircumference, type MannequinAnchorsJson } from './anchorsJson';
+export {
+  add,
+  sub,
+  scale,
+  dot,
+  cross,
+  length,
+  distance,
+  normalize,
+  lerp,
+  along,
+  round,
+  roundVec,
+  identity,
+  multiply,
+  translation,
+  rotationEulerDeg,
+  transformPoint,
+  transformPoint4,
+  lookAt,
+  perspective,
+  type Vec3,
+  type Mat4,
+} from './math';
+export { buildHeadPart, faceRelief, HEAD_LEVELS, FACE_LEVELS, type HeadOptions } from './head';
+export { buildHeadPartV2, faceReliefV2, earRelief, faceShadeV2, FACE_LEVELS_V2, V2_TUBE_BELOW_RING, type HeadV2Options, type HeadV2Part } from './headV2';
+export { FACE_UV_FRAME, FACE_UV_LANDMARKS, faceUvAt, faceUvOf } from './faceUv';
+export type { MeshOptions } from './mesh';
+export { buildHeadPartV3, faceReliefV3, earReliefV3, faceShadeV3, hairV3, lidsV3, HAIR_PART, FACE_LEVELS_V3, V3_TUBE_BELOW_RING, V3_ROWS, V3_COLUMNS, V3_CHIN_TURN, JAW_LIFT, HAIR_SHADE, type HeadV3Options, type HeadV3Part } from './headV3';

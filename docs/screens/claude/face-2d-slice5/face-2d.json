@@ -1,0 +1,91 @@
+{
+  "base": "http://127.0.0.1:4180",
+  "when": "2026-11-19T02:08:22.165Z",
+  "people": [
+    {
+      "id": "a",
+      "file": "person-a.jpg",
+      "note": "Monk 2 render",
+      "faceMs": 2481,
+      "skinMs": 2420,
+      "suggestion": 3,
+      "notices": [
+        "side"
+      ],
+      "figureSkinBeforeConfirm": "#DFC3A8",
+      "figureSkinAfterConfirm": "#F7EAD0",
+      "requestsDuringFlow": [
+        "GET /assets/faceLook-DfT4i5ee.js",
+        "GET /assets/scanSession-DEJJ8gm1.js",
+        "GET /assets/scan.worker-_dVb5srU.js",
+        "GET /models/wasm/vision_wasm_module_internal.js",
+        "GET /models/wasm/vision_wasm_module_internal.wasm",
+        "GET /models/face_landmarker.task",
+        "GET /assets/scan.worker-_dVb5srU.js",
+        "GET /models/wasm/vision_wasm_module_internal.js",
+        "GET /models/wasm/vision_wasm_module_internal.wasm",
+        "GET /models/face_landmarker.task",
+        "GET /assets/faceTile-p6xwOpkc.js"
+      ],
+      "offOrigin": [],
+      "withBody": []
+    },
+    {
+      "id": "b",
+      "file": "person-b.jpg",
+      "note": "Monk 6 render",
+      "faceMs": 2429,
+      "skinMs": 2315,
+      "suggestion": 6,
+      "notices": [
+        "side",
+        "cast"
+      ],
+      "figureSkinBeforeConfirm": "#DFC3A8",
+      "figureSkinAfterConfirm": "#A07E56",
+      "requestsDuringFlow": [
+        "GET /assets/faceLook-DfT4i5ee.js",
+        "GET /assets/scanSession-DEJJ8gm1.js",
+        "GET /assets/scan.worker-_dVb5srU.js",
+        "GET /models/wasm/vision_wasm_module_internal.js",
+        "GET /models/wasm/vision_wasm_module_internal.wasm",
+        "GET /models/face_landmarker.task",
+        "GET /assets/scan.worker-_dVb5srU.js",
+        "GET /models/wasm/vision_wasm_module_internal.js",
+        "GET /models/wasm/vision_wasm_module_internal.wasm",
+        "GET /models/face_landmarker.task",
+        "GET /assets/faceTile-p6xwOpkc.js"
+      ],
+      "offOrigin": [],
+      "withBody": []
+    },
+    {
+      "id": "c",
+      "file": "person-c.jpg",
+      "note": "Monk 9 render",
+      "faceMs": 2579,
+      "skinMs": 2367,
+      "suggestion": 10,
+      "notices": [
+        "side"
+      ],
+      "figureSkinBeforeConfirm": "#DFC3A8",
+      "figureSkinAfterConfirm": "#292420",
+      "requestsDuringFlow": [
+        "GET /assets/faceLook-DfT4i5ee.js",
+        "GET /assets/scanSession-DEJJ8gm1.js",
+        "GET /assets/scan.worker-_dVb5srU.js",
+        "GET /models/wasm/vision_wasm_module_internal.js",
+        "GET /models/wasm/vision_wasm_module_internal.wasm",
+        "GET /models/face_landmarker.task",
+        "GET /assets/scan.worker-_dVb5srU.js",
+        "GET /models/wasm/vision_wasm_module_internal.js",
+        "GET /models/wasm/vision_wasm_module_internal.wasm",
+        "GET /models/face_landmarker.task",
+        "GET /assets/faceTile-p6xwOpkc.js"
+      ],
+      "offOrigin": [],
+      "withBody": []
+    }
+  ]
+}

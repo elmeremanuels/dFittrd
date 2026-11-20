@@ -1,0 +1,2932 @@
+{
+ "v1": {
+  "maleShape": "v1",
+  "base": {
+   "wornWaistY": 103.05,
+   "bandTopFrontY": 102.42,
+   "bandTopBackY": 107.19,
+   "bandTopY": 104.8,
+   "bandCentreY": 103.05,
+   "bandBelowWornCm": 0,
+   "tiltCm": 2.39,
+   "seatY": 88.04,
+   "crotchY": 83.36,
+   "crotchEaseCm": 0.64,
+   "thighY": 80.86,
+   "kneeY": 48.37,
+   "hemY": 2.55
+  },
+  "tape": [
+   {
+    "size": "30/30",
+    "body": "male S",
+    "maxAbsCm": 0.006612864976236921,
+    "levels": {
+     "wornWaistY": 100.51,
+     "bandTopFrontY": 99.63,
+     "bandTopBackY": 104.89,
+     "bandTopY": 102.26,
+     "bandCentreY": 100.51,
+     "bandBelowWornCm": 0,
+     "tiltCm": 2.63,
+     "seatY": 87.29,
+     "crotchY": 78.52,
+     "crotchEaseCm": 4.98,
+     "thighY": 76.02,
+     "kneeY": 47.96,
+     "hemY": 2.67
+    }
+   },
+   {
+    "size": "30/32",
+    "body": "male S",
+    "maxAbsCm": 0.006612864976236921,
+    "levels": {
+     "wornWaistY": 100.51,
+     "bandTopFrontY": 99.63,
+     "bandTopBackY": 104.89,
+     "bandTopY": 102.26,
+     "bandCentreY": 100.51,
+     "bandBelowWornCm": 0,
+     "tiltCm": 2.63,
+     "seatY": 87.29,
+     "crotchY": 78.52,
+     "crotchEaseCm": 4.98,
+     "thighY": 76.02,
+     "kneeY": 47.96,
+     "hemY": -2.34
+    }
+   },
+   {
+    "size": "30/34",
+    "body": "male S",
+    "maxAbsCm": 0.006612864976236921,
+    "levels": {
+     "wornWaistY": 100.51,
+     "bandTopFrontY": 99.63,
+     "bandTopBackY": 104.89,
+     "bandTopY": 102.26,
+     "bandCentreY": 100.51,
+     "bandBelowWornCm": 0,
+     "tiltCm": 2.63,
+     "seatY": 87.29,
+     "crotchY": 78.52,
+     "crotchEaseCm": 4.98,
+     "thighY": 76.02,
+     "kneeY": 47.96,
+     "hemY": -7.34
+    }
+   },
+   {
+    "size": "32/30",
+    "body": "male S",
+    "maxAbsCm": 0.0074868988303649076,
+    "levels": {
+     "wornWaistY": 101.34,
+     "bandTopFrontY": 101.31,
+     "bandTopBackY": 104.87,
+     "bandTopY": 103.09,
+     "bandCentreY": 101.34,
+     "bandBelowWornCm": 0,
+     "tiltCm": 1.78,
+     "seatY": 87.29,
+     "crotchY": 78.85,
+     "crotchEaseCm": 4.65,
+     "thighY": 76.35,
+     "kneeY": 47.96,
+     "hemY": 2.95
+    }
+   },
+   {
+    "size": "32/32",
+    "body": "male S",
+    "maxAbsCm": 0.0074868988303649076,
+    "levels": {
+     "wornWaistY": 101.34,
+     "bandTopFrontY": 101.31,
+     "bandTopBackY": 104.87,
+     "bandTopY": 103.09,
+     "bandCentreY": 101.34,
+     "bandBelowWornCm": 0,
+     "tiltCm": 1.78,
+     "seatY": 87.29,
+     "crotchY": 78.85,
+     "crotchEaseCm": 4.65,
+     "thighY": 76.35,
+     "kneeY": 47.96,
+     "hemY": -2.05
+    }
+   },
+   {
+    "size": "32/34",
+    "body": "male S",
+    "maxAbsCm": 0.0074868988303649076,
+    "levels": {
+     "wornWaistY": 101.34,
+     "bandTopFrontY": 101.31,
+     "bandTopBackY": 104.87,
+     "bandTopY": 103.09,
+     "bandCentreY": 101.34,
+     "bandBelowWornCm": 0,
+     "tiltCm": 1.78,
+     "seatY": 87.29,
+     "crotchY": 78.85,
+     "crotchEaseCm": 4.65,
+     "thighY": 76.35,
+     "kneeY": 47.96,
+     "hemY": -7.05
+    }
+   },
+   {
+    "size": "34/30",
+    "body": "male M",
+    "maxAbsCm": 0.01821181390658211,
+    "levels": {
+     "wornWaistY": 103.05,
+     "bandTopFrontY": 102.42,
+     "bandTopBackY": 107.19,
+     "bandTopY": 104.8,
+     "bandCentreY": 103.05,
+     "bandBelowWornCm": 0,
+     "tiltCm": 2.39,
+     "seatY": 88.04,
+     "crotchY": 83.36,
+     "crotchEaseCm": 0.64,
+     "thighY": 80.86,
+     "kneeY": 48.37,
+     "hemY": 7.56
+    }
+   },
+   {
+    "size": "34/32",
+    "body": "male M",
+    "maxAbsCm": 0.01821181390658211,
+    "levels": {
+     "wornWaistY": 103.05,
+     "bandTopFrontY": 102.42,
+     "bandTopBackY": 107.19,
+     "bandTopY": 104.8,
+     "bandCentreY": 103.05,
+     "bandBelowWornCm": 0,
+     "tiltCm": 2.39,
+     "seatY": 88.04,
+     "crotchY": 83.36,
+     "crotchEaseCm": 0.64,
+     "thighY": 80.86,
+     "kneeY": 48.37,
+     "hemY": 2.55
+    }
+   },
+   {
+    "size": "34/34",
+    "body": "male M",
+    "maxAbsCm": 0.01821181390658211,
+    "levels": {
+     "wornWaistY": 103.05,
+     "bandTopFrontY": 102.42,
+     "bandTopBackY": 107.19,
+     "bandTopY": 104.8,
+     "bandCentreY": 103.05,
+     "bandBelowWornCm": 0,
+     "tiltCm": 2.39,
+     "seatY": 88.04,
+     "crotchY": 83.36,
+     "crotchEaseCm": 0.64,
+     "thighY": 80.86,
+     "kneeY": 48.37,
+     "hemY": -2.45
+    }
+   },
+   {
+    "size": "36/30",
+    "body": "male L",
+    "maxAbsCm": 0.015455910964398356,
+    "levels": {
+     "wornWaistY": 104.78,
+     "bandTopFrontY": 102.26,
+     "bandTopBackY": 107.62,
+     "bandTopY": 104.94,
+     "bandCentreY": 103.19,
+     "bandBelowWornCm": 1.59,
+     "tiltCm": 2.68,
+     "seatY": 88.8,
+     "crotchY": 84,
+     "crotchEaseCm": 0.5,
+     "thighY": 81.5,
+     "kneeY": 48.79,
+     "hemY": 8.23
+    }
+   },
+   {
+    "size": "36/32",
+    "body": "male L",
+    "maxAbsCm": 0.015455910964398356,
+    "levels": {
+     "wornWaistY": 104.78,
+     "bandTopFrontY": 102.26,
+     "bandTopBackY": 107.62,
+     "bandTopY": 104.94,
+     "bandCentreY": 103.19,
+     "bandBelowWornCm": 1.59,
+     "tiltCm": 2.68,
+     "seatY": 88.8,
+     "crotchY": 84,
+     "crotchEaseCm": 0.5,
+     "thighY": 81.5,
+     "kneeY": 48.79,
+     "hemY": 3.22
+    }
+   },
+   {
+    "size": "36/34",
+    "body": "male L",
+    "maxAbsCm": 0.015455910964398356,
+    "levels": {
+     "wornWaistY": 104.78,
+     "bandTopFrontY": 102.26,
+     "bandTopBackY": 107.62,
+     "bandTopY": 104.94,
+     "bandCentreY": 103.19,
+     "bandBelowWornCm": 1.59,
+     "tiltCm": 2.68,
+     "seatY": 88.8,
+     "crotchY": 84,
+     "crotchEaseCm": 0.5,
+     "thighY": 81.5,
+     "kneeY": 48.79,
+     "hemY": -1.78
+    }
+   },
+   {
+    "size": "38/30",
+    "body": "male L",
+    "maxAbsCm": 0.026824364554975944,
+    "levels": {
+     "wornWaistY": 105.62,
+     "bandTopFrontY": 104.12,
+     "bandTopBackY": 106.91,
+     "bandTopY": 105.51,
+     "bandCentreY": 103.76,
+     "bandBelowWornCm": 1.86,
+     "tiltCm": 1.4,
+     "seatY": 88.8,
+     "crotchY": 84,
+     "crotchEaseCm": 0.5,
+     "thighY": 81.5,
+     "kneeY": 48.79,
+     "hemY": 8.13
+    }
+   },
+   {
+    "size": "38/32",
+    "body": "male L",
+    "maxAbsCm": 0.026824364554975944,
+    "levels": {
+     "wornWaistY": 105.62,
+     "bandTopFrontY": 104.12,
+     "bandTopBackY": 106.91,
+     "bandTopY": 105.51,
+     "bandCentreY": 103.76,
+     "bandBelowWornCm": 1.86,
+     "tiltCm": 1.4,
+     "seatY": 88.8,
+     "crotchY": 84,
+     "crotchEaseCm": 0.5,
+     "thighY": 81.5,
+     "kneeY": 48.79,
+     "hemY": 3.13
+    }
+   },
+   {
+    "size": "38/34",
+    "body": "male L",
+    "maxAbsCm": 0.026824364554975944,
+    "levels": {
+     "wornWaistY": 105.62,
+     "bandTopFrontY": 104.12,
+     "bandTopBackY": 106.91,
+     "bandTopY": 105.51,
+     "bandCentreY": 103.76,
+     "bandBelowWornCm": 1.86,
+     "tiltCm": 1.4,
+     "seatY": 88.8,
+     "crotchY": 84,
+     "crotchEaseCm": 0.5,
+     "thighY": 81.5,
+     "kneeY": 48.79,
+     "hemY": -1.87
+    }
+   },
+   {
+    "size": "40/30",
+    "body": "male XL",
+    "maxAbsCm": 0.019910278882385057,
+    "levels": {
+     "wornWaistY": 107.37,
+     "bandTopFrontY": 103.31,
+     "bandTopBackY": 108.07,
+     "bandTopY": 105.69,
+     "bandCentreY": 103.94,
+     "bandBelowWornCm": 3.44,
+     "tiltCm": 2.38,
+     "seatY": 89.56,
+     "crotchY": 84.5,
+     "crotchEaseCm": 0.5,
+     "thighY": 82,
+     "kneeY": 49.21,
+     "hemY": 8.75
+    }
+   },
+   {
+    "size": "40/32",
+    "body": "male XL",
+    "maxAbsCm": 0.019910278882385057,
+    "levels": {
+     "wornWaistY": 107.37,
+     "bandTopFrontY": 103.31,
+     "bandTopBackY": 108.07,
+     "bandTopY": 105.69,
+     "bandCentreY": 103.94,
+     "bandBelowWornCm": 3.44,
+     "tiltCm": 2.38,
+     "seatY": 89.56,
+     "crotchY": 84.5,
+     "crotchEaseCm": 0.5,
+     "thighY": 82,
+     "kneeY": 49.21,
+     "hemY": 3.74
+    }
+   },
+   {
+    "size": "40/34",
+    "body": "male XL",
+    "maxAbsCm": 0.019910278882385057,
+    "levels": {
+     "wornWaistY": 107.37,
+     "bandTopFrontY": 103.31,
+     "bandTopBackY": 108.07,
+     "bandTopY": 105.69,
+     "bandCentreY": 103.94,
+     "bandBelowWornCm": 3.44,
+     "tiltCm": 2.38,
+     "seatY": 89.56,
+     "crotchY": 84.5,
+     "crotchEaseCm": 0.5,
+     "thighY": 82,
+     "kneeY": 49.21,
+     "hemY": -1.26
+    }
+   },
+   {
+    "size": "42/30",
+    "body": "male XXL",
+    "maxAbsCm": 0.018576408820806023,
+    "levels": {
+     "wornWaistY": 109.44,
+     "bandTopFrontY": 103.13,
+     "bandTopBackY": 108.06,
+     "bandTopY": 105.59,
+     "bandCentreY": 103.84,
+     "bandBelowWornCm": 5.6,
+     "tiltCm": 2.46,
+     "seatY": 90.57,
+     "crotchY": 85,
+     "crotchEaseCm": 0.5,
+     "thighY": 82.5,
+     "kneeY": 49.76,
+     "hemY": 9.29
+    }
+   },
+   {
+    "size": "42/32",
+    "body": "male XXL",
+    "maxAbsCm": 0.018576408820806023,
+    "levels": {
+     "wornWaistY": 109.44,
+     "bandTopFrontY": 103.13,
+     "bandTopBackY": 108.06,
+     "bandTopY": 105.59,
+     "bandCentreY": 103.84,
+     "bandBelowWornCm": 5.6,
+     "tiltCm": 2.46,
+     "seatY": 90.57,
+     "crotchY": 85,
+     "crotchEaseCm": 0.5,
+     "thighY": 82.5,
+     "kneeY": 49.76,
+     "hemY": 4.28
+    }
+   },
+   {
+    "size": "42/34",
+    "body": "male XXL",
+    "maxAbsCm": 0.018576408820806023,
+    "levels": {
+     "wornWaistY": 109.44,
+     "bandTopFrontY": 103.13,
+     "bandTopBackY": 108.06,
+     "bandTopY": 105.59,
+     "bandCentreY": 103.84,
+     "bandBelowWornCm": 5.6,
+     "tiltCm": 2.46,
+     "seatY": 90.57,
+     "crotchY": 85,
+     "crotchEaseCm": 0.5,
+     "thighY": 82.5,
+     "kneeY": 49.76,
+     "hemY": -0.72
+    }
+   },
+   {
+    "size": "44/30",
+    "body": "male XXL",
+    "maxAbsCm": 0.024802458449755704,
+    "levels": {
+     "wornWaistY": 110.3,
+     "bandTopFrontY": 104.19,
+     "bandTopBackY": 108.31,
+     "bandTopY": 106.25,
+     "bandCentreY": 104.5,
+     "bandBelowWornCm": 5.8,
+     "tiltCm": 2.06,
+     "seatY": 90.57,
+     "crotchY": 85,
+     "crotchEaseCm": 0.5,
+     "thighY": 82.5,
+     "kneeY": 49.76,
+     "hemY": 9.26
+    }
+   },
+   {
+    "size": "44/32",
+    "body": "male XXL",
+    "maxAbsCm": 0.024802458449755704,
+    "levels": {
+     "wornWaistY": 110.3,
+     "bandTopFrontY": 104.19,
+     "bandTopBackY": 108.31,
+     "bandTopY": 106.25,
+     "bandCentreY": 104.5,
+     "bandBelowWornCm": 5.8,
+     "tiltCm": 2.06,
+     "seatY": 90.57,
+     "crotchY": 85,
+     "crotchEaseCm": 0.5,
+     "thighY": 82.5,
+     "kneeY": 49.76,
+     "hemY": 4.26
+    }
+   },
+   {
+    "size": "44/34",
+    "body": "male XXL",
+    "maxAbsCm": 0.024802458449755704,
+    "levels": {
+     "wornWaistY": 110.3,
+     "bandTopFrontY": 104.19,
+     "bandTopBackY": 108.31,
+     "bandTopY": 106.25,
+     "bandCentreY": 104.5,
+     "bandBelowWornCm": 5.8,
+     "tiltCm": 2.06,
+     "seatY": 90.57,
+     "crotchY": 85,
+     "crotchEaseCm": 0.5,
+     "thighY": 82.5,
+     "kneeY": 49.76,
+     "hemY": -0.74
+    }
+   }
+  ],
+  "metrics": [
+   {
+    "body": "S",
+    "size": "32/32",
+    "recommended": "32/32",
+    "waistCm": {
+     "tape": 83.5,
+     "graded": 83.5,
+     "drapedRow": 83.5,
+     "drapedHull": 83.1
+    },
+    "seatCm": {
+     "tape": 104,
+     "graded": 104,
+     "drapedRow": 101.6,
+     "drapedHull": 99
+    },
+    "thighCm": {
+     "tape": 62,
+     "graded": 62,
+     "drapedRow": 62.1,
+     "drapedHull": 61.2
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.6,
+     "crotchToHemDropCm": 78.1
+    },
+    "frontRiseCm": {
+     "tape": 26.5,
+     "graded": 26.5,
+     "draped": 27.3
+    },
+    "backRiseCm": {
+     "tape": 35.5,
+     "graded": 35.5,
+     "draped": 36.4
+    },
+    "strainPct": {
+     "p99": 4.5,
+     "crotchP99": 6.6,
+     "crotchMax": 9.4,
+     "seatP99": 4.4,
+     "seatMax": 17.5
+    },
+    "band": {
+     "dropCm": 0,
+     "pastHips": false,
+     "bandGirthCm": 83.2,
+     "bodyAtBandCm": 82.9
+    },
+    "showThroughPixels": 88,
+    "showThroughBy": {
+     "front leg_r thigh": 20,
+     "front leg_l thigh": 18,
+     "left leg_r thigh": 13,
+     "back leg_l thigh": 15,
+     "back leg_r thigh": 10,
+     "right leg_l thigh": 12
+    },
+    "crotchBelowBodyCm": 6.3,
+    "hemAboveFloorCm": -0.9,
+    "drapeMs": 842
+   },
+   {
+    "body": "M",
+    "size": "34/32",
+    "recommended": "34/32",
+    "waistCm": {
+     "tape": 88.5,
+     "graded": 88.5,
+     "drapedRow": 89.7,
+     "drapedHull": 89
+    },
+    "seatCm": {
+     "tape": 109,
+     "graded": 109,
+     "drapedRow": 106.4,
+     "drapedHull": 104.8
+    },
+    "thighCm": {
+     "tape": 64.5,
+     "graded": 64.5,
+     "drapedRow": 65.1,
+     "drapedHull": 64.8
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.6,
+     "crotchToHemDropCm": 80.6
+    },
+    "frontRiseCm": {
+     "tape": 27,
+     "graded": 27,
+     "draped": 27.7
+    },
+    "backRiseCm": {
+     "tape": 36,
+     "graded": 36,
+     "draped": 37.1
+    },
+    "strainPct": {
+     "p99": 6,
+     "crotchP99": 11.8,
+     "crotchMax": 15.4,
+     "seatP99": 7,
+     "seatMax": 17.2
+    },
+    "band": {
+     "dropCm": 0,
+     "pastHips": false,
+     "bandGirthCm": 87.9,
+     "bodyAtBandCm": 89.9
+    },
+    "showThroughPixels": 6,
+    "showThroughBy": {
+     "front leg_r thigh": 2,
+     "front torso thigh": 3,
+     "left leg_r thigh": 1
+    },
+    "crotchBelowBodyCm": 3.4,
+    "hemAboveFloorCm": 0,
+    "drapeMs": 748
+   },
+   {
+    "body": "L",
+    "size": "38/32",
+    "recommended": "38/32",
+    "waistCm": {
+     "tape": 98.5,
+     "graded": 98.5,
+     "drapedRow": 98.5,
+     "drapedHull": 98.3
+    },
+    "seatCm": {
+     "tape": 119,
+     "graded": 119,
+     "drapedRow": 116.2,
+     "drapedHull": 112.4
+    },
+    "thighCm": {
+     "tape": 69.5,
+     "graded": 69.5,
+     "drapedRow": 70,
+     "drapedHull": 69.7
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.5,
+     "crotchToHemDropCm": 80.4
+    },
+    "frontRiseCm": {
+     "tape": 28,
+     "graded": 28,
+     "draped": 28.6
+    },
+    "backRiseCm": {
+     "tape": 37,
+     "graded": 37,
+     "draped": 37.9
+    },
+    "strainPct": {
+     "p99": 5.9,
+     "crotchP99": 10.7,
+     "crotchMax": 11.5,
+     "seatP99": 7.5,
+     "seatMax": 13.5
+    },
+    "band": {
+     "dropCm": 0,
+     "pastHips": false,
+     "bandGirthCm": 98.4,
+     "bodyAtBandCm": 97.6
+    },
+    "showThroughPixels": 3,
+    "showThroughBy": {
+     "back torso thigh": 3
+    },
+    "crotchBelowBodyCm": 3.1,
+    "hemAboveFloorCm": 0.9,
+    "drapeMs": 806
+   },
+   {
+    "body": "XL",
+    "size": "40/32",
+    "recommended": "40/32",
+    "waistCm": {
+     "tape": 103.5,
+     "graded": 103.5,
+     "drapedRow": 105.5,
+     "drapedHull": 104.9
+    },
+    "seatCm": {
+     "tape": 124,
+     "graded": 124,
+     "drapedRow": 121,
+     "drapedHull": 118.9
+    },
+    "thighCm": {
+     "tape": 72,
+     "graded": 72,
+     "drapedRow": 73,
+     "drapedHull": 72.7
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.6,
+     "crotchToHemDropCm": 79.4
+    },
+    "frontRiseCm": {
+     "tape": 28.5,
+     "graded": 28.5,
+     "draped": 29.5
+    },
+    "backRiseCm": {
+     "tape": 37.5,
+     "graded": 37.5,
+     "draped": 38.7
+    },
+    "strainPct": {
+     "p99": 6.2,
+     "crotchP99": 12.2,
+     "crotchMax": 20.5,
+     "seatP99": 7.1,
+     "seatMax": 20.5
+    },
+    "band": {
+     "dropCm": 0,
+     "pastHips": false,
+     "bandGirthCm": 103,
+     "bodyAtBandCm": 105.5
+    },
+    "showThroughPixels": 9,
+    "showThroughBy": {
+     "front leg_r thigh": 3,
+     "left leg_r thigh": 1,
+     "back leg_l thigh": 3,
+     "right leg_l thigh": 2
+    },
+    "crotchBelowBodyCm": 3.8,
+    "hemAboveFloorCm": 1.9,
+    "drapeMs": 632
+   },
+   {
+    "body": "XXL",
+    "size": "44/32",
+    "recommended": "44/32",
+    "waistCm": {
+     "tape": 113.5,
+     "graded": 113.5,
+     "drapedRow": 114.1,
+     "drapedHull": 113.7
+    },
+    "seatCm": {
+     "tape": 134,
+     "graded": 134,
+     "drapedRow": 131,
+     "drapedHull": 127.1
+    },
+    "thighCm": {
+     "tape": 77,
+     "graded": 77,
+     "drapedRow": 77.9,
+     "drapedHull": 77.6
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.6,
+     "crotchToHemDropCm": 78.5
+    },
+    "frontRiseCm": {
+     "tape": 29.5,
+     "graded": 29.5,
+     "draped": 30.3
+    },
+    "backRiseCm": {
+     "tape": 38.5,
+     "graded": 38.5,
+     "draped": 39.7
+    },
+    "strainPct": {
+     "p99": 6.7,
+     "crotchP99": 12.4,
+     "crotchMax": 17.8,
+     "seatP99": 7.7,
+     "seatMax": 17.8
+    },
+    "band": {
+     "dropCm": 0,
+     "pastHips": false,
+     "bandGirthCm": 113.1,
+     "bodyAtBandCm": 114.1
+    },
+    "showThroughPixels": 73,
+    "showThroughBy": {
+     "front torso thigh": 23,
+     "front leg_r thigh": 6,
+     "front leg_l thigh": 1,
+     "left leg_r thigh": 8,
+     "back torso thigh": 26,
+     "back leg_l thigh": 3,
+     "back leg_r thigh": 2,
+     "right leg_l thigh": 4
+    },
+    "crotchBelowBodyCm": 3.9,
+    "hemAboveFloorCm": 3.1,
+    "drapeMs": 700
+   },
+   {
+    "body": "M",
+    "size": "30/32",
+    "recommended": "34/32",
+    "notDrawn": {
+     "anchor": "waist",
+     "bodyLargerCm": 10.8
+    }
+   },
+   {
+    "body": "XXL",
+    "size": "30/32",
+    "recommended": "44/32",
+    "notDrawn": {
+     "anchor": "waist",
+     "bodyLargerCm": 33.7
+    }
+   },
+   {
+    "body": "M",
+    "size": "32/32",
+    "recommended": "34/32",
+    "notDrawn": {
+     "anchor": "waist",
+     "bodyLargerCm": 5.4
+    }
+   },
+   {
+    "body": "XXL",
+    "size": "32/32",
+    "recommended": "44/32",
+    "notDrawn": {
+     "anchor": "waist",
+     "bodyLargerCm": 28.5
+    }
+   },
+   {
+    "body": "M",
+    "size": "34/32",
+    "recommended": "34/32",
+    "waistCm": {
+     "tape": 88.5,
+     "graded": 88.5,
+     "drapedRow": 89.7,
+     "drapedHull": 89
+    },
+    "seatCm": {
+     "tape": 109,
+     "graded": 109,
+     "drapedRow": 106.4,
+     "drapedHull": 104.8
+    },
+    "thighCm": {
+     "tape": 64.5,
+     "graded": 64.5,
+     "drapedRow": 65.1,
+     "drapedHull": 64.8
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.6,
+     "crotchToHemDropCm": 80.6
+    },
+    "frontRiseCm": {
+     "tape": 27,
+     "graded": 27,
+     "draped": 27.7
+    },
+    "backRiseCm": {
+     "tape": 36,
+     "graded": 36,
+     "draped": 37.1
+    },
+    "strainPct": {
+     "p99": 6,
+     "crotchP99": 11.8,
+     "crotchMax": 15.4,
+     "seatP99": 7,
+     "seatMax": 17.2
+    },
+    "band": {
+     "dropCm": 0,
+     "pastHips": false,
+     "bandGirthCm": 87.9,
+     "bodyAtBandCm": 89.9
+    },
+    "showThroughPixels": 6,
+    "showThroughBy": {
+     "front leg_r thigh": 2,
+     "front torso thigh": 3,
+     "left leg_r thigh": 1
+    },
+    "crotchBelowBodyCm": 3.4,
+    "hemAboveFloorCm": 0,
+    "drapeMs": 735
+   },
+   {
+    "body": "XXL",
+    "size": "34/32",
+    "recommended": "44/32",
+    "notDrawn": {
+     "anchor": "waist",
+     "bodyLargerCm": 23.4
+    }
+   },
+   {
+    "body": "M",
+    "size": "36/32",
+    "recommended": "34/32",
+    "waistCm": {
+     "tape": 93.5,
+     "graded": 93.5,
+     "drapedRow": 93.5,
+     "drapedHull": 92.7
+    },
+    "seatCm": {
+     "tape": 114,
+     "graded": 114,
+     "drapedRow": 112.1,
+     "drapedHull": 106.5
+    },
+    "thighCm": {
+     "tape": 67,
+     "graded": 67,
+     "drapedRow": 67.5,
+     "drapedHull": 66.5
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 80.9,
+     "crotchToHemDropCm": 76.7
+    },
+    "frontRiseCm": {
+     "tape": 27.5,
+     "graded": 27.5,
+     "draped": 27.4
+    },
+    "backRiseCm": {
+     "tape": 36.5,
+     "graded": 36.5,
+     "draped": 36.8
+    },
+    "strainPct": {
+     "p99": 5.9,
+     "crotchP99": 7.6,
+     "crotchMax": 8.7,
+     "seatP99": 6.4,
+     "seatMax": 13.6
+    },
+    "band": {
+     "dropCm": 2.3,
+     "pastHips": false,
+     "bandGirthCm": 92.7,
+     "bodyAtBandCm": 90.4
+    },
+    "showThroughPixels": 8,
+    "showThroughBy": {
+     "left leg_r thigh": 1,
+     "back leg_l thigh": 2,
+     "back leg_r thigh": 4,
+     "right leg_l thigh": 1
+    },
+    "crotchBelowBodyCm": 7.3,
+    "hemAboveFloorCm": 0,
+    "drapeMs": 698
+   },
+   {
+    "body": "XXL",
+    "size": "36/32",
+    "recommended": "44/32",
+    "notDrawn": {
+     "anchor": "waist",
+     "bodyLargerCm": 18.2
+    }
+   },
+   {
+    "body": "M",
+    "size": "38/32",
+    "recommended": "34/32",
+    "waistCm": {
+     "tape": 98.5,
+     "graded": 98.5,
+     "drapedRow": 98.5,
+     "drapedHull": 98.3
+    },
+    "seatCm": {
+     "tape": 119,
+     "graded": 119,
+     "drapedRow": 118.3,
+     "drapedHull": 106.3
+    },
+    "thighCm": {
+     "tape": 69.5,
+     "graded": 69.5,
+     "drapedRow": 69.7,
+     "drapedHull": 66.5
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.1,
+     "crotchToHemDropCm": 66.7
+    },
+    "frontRiseCm": {
+     "tape": 28,
+     "graded": 28,
+     "draped": 28.1
+    },
+    "backRiseCm": {
+     "tape": 37,
+     "graded": 37,
+     "draped": 37.2
+    },
+    "strainPct": {
+     "p99": 5.9,
+     "crotchP99": 5.1,
+     "crotchMax": 5.4,
+     "seatP99": 6.4,
+     "seatMax": 8.9
+    },
+    "band": {
+     "dropCm": 11.3,
+     "pastHips": false,
+     "bandGirthCm": 98.4,
+     "bodyAtBandCm": 90
+    },
+    "showThroughPixels": 71,
+    "showThroughBy": {
+     "front leg_r thigh": 11,
+     "front leg_l thigh": 9,
+     "left leg_r thigh": 11,
+     "back leg_l thigh": 17,
+     "back leg_r thigh": 8,
+     "right leg_l thigh": 15
+    },
+    "crotchBelowBodyCm": 17.3,
+    "hemAboveFloorCm": 0,
+    "drapeMs": 767
+   },
+   {
+    "body": "XXL",
+    "size": "38/32",
+    "recommended": "44/32",
+    "notDrawn": {
+     "anchor": "waist",
+     "bodyLargerCm": 13.1
+    }
+   },
+   {
+    "body": "M",
+    "size": "40/32",
+    "recommended": "34/32",
+    "waistCm": {
+     "tape": 103.5,
+     "graded": 103.5,
+     "drapedRow": 104.3,
+     "drapedHull": 103.6
+    },
+    "seatCm": {
+     "tape": 124,
+     "graded": 124,
+     "drapedRow": 123.5,
+     "drapedHull": 110
+    },
+    "thighCm": {
+     "tape": 72,
+     "graded": 72,
+     "drapedRow": 72.6,
+     "drapedHull": 69.2
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.3,
+     "crotchToHemDropCm": 62.6
+    },
+    "frontRiseCm": {
+     "tape": 28.5,
+     "graded": 28.5,
+     "draped": 28.7
+    },
+    "backRiseCm": {
+     "tape": 37.5,
+     "graded": 37.5,
+     "draped": 37.7
+    },
+    "strainPct": {
+     "p99": 6.6,
+     "crotchP99": 6.2,
+     "crotchMax": 8.6,
+     "seatP99": 5.3,
+     "seatMax": 7.6
+    },
+    "band": {
+     "dropCm": 14.3,
+     "pastHips": false,
+     "bandGirthCm": 103,
+     "bodyAtBandCm": 90.5
+    },
+    "showThroughPixels": 0,
+    "showThroughBy": {},
+    "crotchBelowBodyCm": 21.4,
+    "hemAboveFloorCm": 0,
+    "drapeMs": 823
+   },
+   {
+    "body": "XXL",
+    "size": "40/32",
+    "recommended": "44/32",
+    "notDrawn": {
+     "anchor": "waist",
+     "bodyLargerCm": 7.9
+    }
+   },
+   {
+    "body": "M",
+    "size": "42/32",
+    "recommended": "34/32",
+    "waistCm": {
+     "tape": 108.5,
+     "graded": 108.5,
+     "drapedRow": 108.6,
+     "drapedHull": 108
+    },
+    "seatCm": {
+     "tape": 129,
+     "graded": 129,
+     "drapedRow": 128.6,
+     "drapedHull": 113.1
+    },
+    "thighCm": {
+     "tape": 74.5,
+     "graded": 74.5,
+     "drapedRow": 75.2,
+     "drapedHull": 71.2
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 80.9,
+     "crotchToHemDropCm": 60.8
+    },
+    "frontRiseCm": {
+     "tape": 29,
+     "graded": 29,
+     "draped": 29.2
+    },
+    "backRiseCm": {
+     "tape": 38,
+     "graded": 38,
+     "draped": 38.1
+    },
+    "strainPct": {
+     "p99": 6.9,
+     "crotchP99": 5.9,
+     "crotchMax": 6.2,
+     "seatP99": 5.1,
+     "seatMax": 8.4
+    },
+    "band": {
+     "dropCm": 14,
+     "pastHips": true,
+     "bandGirthCm": 107.9,
+     "bodyAtBandCm": 91.4
+    },
+    "showThroughPixels": 0,
+    "showThroughBy": {},
+    "crotchBelowBodyCm": 22.6,
+    "hemAboveFloorCm": 0,
+    "drapeMs": 676
+   },
+   {
+    "body": "XXL",
+    "size": "42/32",
+    "recommended": "44/32",
+    "notDrawn": {
+     "anchor": "waist",
+     "bodyLargerCm": 2.8
+    }
+   },
+   {
+    "body": "M",
+    "size": "44/32",
+    "recommended": "34/32",
+    "waistCm": {
+     "tape": 113.5,
+     "graded": 113.5,
+     "drapedRow": 113.5,
+     "drapedHull": 113.1
+    },
+    "seatCm": {
+     "tape": 134,
+     "graded": 134,
+     "drapedRow": 133.6,
+     "drapedHull": 117.4
+    },
+    "thighCm": {
+     "tape": 77,
+     "graded": 77,
+     "drapedRow": 77.6,
+     "drapedHull": 74.7
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.1,
+     "crotchToHemDropCm": 61.2
+    },
+    "frontRiseCm": {
+     "tape": 29.5,
+     "graded": 29.5,
+     "draped": 29.7
+    },
+    "backRiseCm": {
+     "tape": 38.5,
+     "graded": 38.5,
+     "draped": 38.7
+    },
+    "strainPct": {
+     "p99": 6.7,
+     "crotchP99": 6.2,
+     "crotchMax": 7.4,
+     "seatP99": 5.2,
+     "seatMax": 7.1
+    },
+    "band": {
+     "dropCm": 14.5,
+     "pastHips": true,
+     "bandGirthCm": 113.1,
+     "bodyAtBandCm": 90.9
+    },
+    "showThroughPixels": 0,
+    "showThroughBy": {},
+    "crotchBelowBodyCm": 22.8,
+    "hemAboveFloorCm": 0,
+    "drapeMs": 747
+   },
+   {
+    "body": "XXL",
+    "size": "44/32",
+    "recommended": "44/32",
+    "waistCm": {
+     "tape": 113.5,
+     "graded": 113.5,
+     "drapedRow": 114.1,
+     "drapedHull": 113.7
+    },
+    "seatCm": {
+     "tape": 134,
+     "graded": 134,
+     "drapedRow": 131,
+     "drapedHull": 127.1
+    },
+    "thighCm": {
+     "tape": 77,
+     "graded": 77,
+     "drapedRow": 77.9,
+     "drapedHull": 77.6
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.6,
+     "crotchToHemDropCm": 78.5
+    },
+    "frontRiseCm": {
+     "tape": 29.5,
+     "graded": 29.5,
+     "draped": 30.3
+    },
+    "backRiseCm": {
+     "tape": 38.5,
+     "graded": 38.5,
+     "draped": 39.7
+    },
+    "strainPct": {
+     "p99": 6.7,
+     "crotchP99": 12.4,
+     "crotchMax": 17.8,
+     "seatP99": 7.7,
+     "seatMax": 17.8
+    },
+    "band": {
+     "dropCm": 0,
+     "pastHips": false,
+     "bandGirthCm": 113.1,
+     "bodyAtBandCm": 114.1
+    },
+    "showThroughPixels": 73,
+    "showThroughBy": {
+     "front torso thigh": 23,
+     "front leg_r thigh": 6,
+     "front leg_l thigh": 1,
+     "left leg_r thigh": 8,
+     "back torso thigh": 26,
+     "back leg_l thigh": 3,
+     "back leg_r thigh": 2,
+     "right leg_l thigh": 4
+    },
+    "crotchBelowBodyCm": 3.9,
+    "hemAboveFloorCm": 3.1,
+    "drapeMs": 781
+   },
+   {
+    "body": "M",
+    "size": "34/30",
+    "recommended": "34/32",
+    "waistCm": {
+     "tape": 88.5,
+     "graded": 88.5,
+     "drapedRow": 89.7,
+     "drapedHull": 89
+    },
+    "seatCm": {
+     "tape": 109,
+     "graded": 109,
+     "drapedRow": 106.3,
+     "drapedHull": 104.7
+    },
+    "thighCm": {
+     "tape": 64.5,
+     "graded": 64.5,
+     "drapedRow": 65.1,
+     "drapedHull": 64.8
+    },
+    "inseamCm": {
+     "tape": 76,
+     "graded": 76,
+     "draped": 76.6,
+     "crotchToHemDropCm": 76
+    },
+    "frontRiseCm": {
+     "tape": 27,
+     "graded": 27,
+     "draped": 27.7
+    },
+    "backRiseCm": {
+     "tape": 36,
+     "graded": 36,
+     "draped": 37.1
+    },
+    "strainPct": {
+     "p99": 6.4,
+     "crotchP99": 11.9,
+     "crotchMax": 15.7,
+     "seatP99": 7.1,
+     "seatMax": 17.3
+    },
+    "band": {
+     "dropCm": 0,
+     "pastHips": false,
+     "bandGirthCm": 87.9,
+     "bodyAtBandCm": 89.9
+    },
+    "showThroughPixels": 6,
+    "showThroughBy": {
+     "front leg_r thigh": 2,
+     "front torso thigh": 3,
+     "left leg_r thigh": 1
+    },
+    "crotchBelowBodyCm": 3.4,
+    "hemAboveFloorCm": 4.2,
+    "drapeMs": 744
+   },
+   {
+    "body": "M",
+    "size": "34/34",
+    "recommended": "34/32",
+    "waistCm": {
+     "tape": 88.5,
+     "graded": 88.5,
+     "drapedRow": 89.7,
+     "drapedHull": 89
+    },
+    "seatCm": {
+     "tape": 109,
+     "graded": 109,
+     "drapedRow": 106.4,
+     "drapedHull": 104.8
+    },
+    "thighCm": {
+     "tape": 64.5,
+     "graded": 64.5,
+     "drapedRow": 65.1,
+     "drapedHull": 64.9
+    },
+    "inseamCm": {
+     "tape": 86,
+     "graded": 86,
+     "draped": 86.6,
+     "crotchToHemDropCm": 80.6
+    },
+    "frontRiseCm": {
+     "tape": 27,
+     "graded": 27,
+     "draped": 27.9
+    },
+    "backRiseCm": {
+     "tape": 36,
+     "graded": 36,
+     "draped": 37.1
+    },
+    "strainPct": {
+     "p99": 6,
+     "crotchP99": 11.8,
+     "crotchMax": 15.9,
+     "seatP99": 7.2,
+     "seatMax": 24
+    },
+    "band": {
+     "dropCm": 0,
+     "pastHips": false,
+     "bandGirthCm": 87.9,
+     "bodyAtBandCm": 89.9
+    },
+    "showThroughPixels": 3,
+    "showThroughBy": {
+     "front leg_r thigh": 2,
+     "left leg_r thigh": 1
+    },
+    "crotchBelowBodyCm": 3.4,
+    "hemAboveFloorCm": 0,
+    "drapeMs": 638
+   }
+  ]
+ },
+ "v2": {
+  "maleShape": "v2",
+  "base": {
+   "wornWaistY": 103.05,
+   "bandTopFrontY": 105.1,
+   "bandTopBackY": 104.51,
+   "bandTopY": 104.8,
+   "bandCentreY": 103.05,
+   "bandBelowWornCm": 0,
+   "tiltCm": -0.3,
+   "seatY": 88.04,
+   "crotchY": 80.69,
+   "crotchEaseCm": 3.31,
+   "thighY": 78.19,
+   "kneeY": 48.37,
+   "hemY": -0.22
+  },
+  "tape": [
+   {
+    "size": "30/30",
+    "body": "male S (shape v2)",
+    "maxAbsCm": 0.006329464504752025,
+    "levels": {
+     "wornWaistY": 100.51,
+     "bandTopFrontY": 101.55,
+     "bandTopBackY": 102.97,
+     "bandTopY": 102.26,
+     "bandCentreY": 100.51,
+     "bandBelowWornCm": 0,
+     "tiltCm": 0.71,
+     "seatY": 87.29,
+     "crotchY": 77.41,
+     "crotchEaseCm": 6.09,
+     "thighY": 74.91,
+     "kneeY": 47.96,
+     "hemY": 1.5
+    }
+   },
+   {
+    "size": "30/32",
+    "body": "male S (shape v2)",
+    "maxAbsCm": 0.006329464504752025,
+    "levels": {
+     "wornWaistY": 100.51,
+     "bandTopFrontY": 101.55,
+     "bandTopBackY": 102.97,
+     "bandTopY": 102.26,
+     "bandCentreY": 100.51,
+     "bandBelowWornCm": 0,
+     "tiltCm": 0.71,
+     "seatY": 87.29,
+     "crotchY": 77.41,
+     "crotchEaseCm": 6.09,
+     "thighY": 74.91,
+     "kneeY": 47.96,
+     "hemY": -3.51
+    }
+   },
+   {
+    "size": "30/34",
+    "body": "male S (shape v2)",
+    "maxAbsCm": 0.006329464504752025,
+    "levels": {
+     "wornWaistY": 100.51,
+     "bandTopFrontY": 101.55,
+     "bandTopBackY": 102.97,
+     "bandTopY": 102.26,
+     "bandCentreY": 100.51,
+     "bandBelowWornCm": 0,
+     "tiltCm": 0.71,
+     "seatY": 87.29,
+     "crotchY": 77.41,
+     "crotchEaseCm": 6.09,
+     "thighY": 74.91,
+     "kneeY": 47.96,
+     "hemY": -8.51
+    }
+   },
+   {
+    "size": "32/30",
+    "body": "male S (shape v2)",
+    "maxAbsCm": 0.005027138073728565,
+    "levels": {
+     "wornWaistY": 101.34,
+     "bandTopFrontY": 102.39,
+     "bandTopBackY": 103.78,
+     "bandTopY": 103.09,
+     "bandCentreY": 101.34,
+     "bandBelowWornCm": 0,
+     "tiltCm": 0.7,
+     "seatY": 87.29,
+     "crotchY": 77.67,
+     "crotchEaseCm": 5.83,
+     "thighY": 75.17,
+     "kneeY": 47.96,
+     "hemY": 1.75
+    }
+   },
+   {
+    "size": "32/32",
+    "body": "male S (shape v2)",
+    "maxAbsCm": 0.005027138073728565,
+    "levels": {
+     "wornWaistY": 101.34,
+     "bandTopFrontY": 102.39,
+     "bandTopBackY": 103.78,
+     "bandTopY": 103.09,
+     "bandCentreY": 101.34,
+     "bandBelowWornCm": 0,
+     "tiltCm": 0.7,
+     "seatY": 87.29,
+     "crotchY": 77.67,
+     "crotchEaseCm": 5.83,
+     "thighY": 75.17,
+     "kneeY": 47.96,
+     "hemY": -3.25
+    }
+   },
+   {
+    "size": "32/34",
+    "body": "male S (shape v2)",
+    "maxAbsCm": 0.005027138073728565,
+    "levels": {
+     "wornWaistY": 101.34,
+     "bandTopFrontY": 102.39,
+     "bandTopBackY": 103.78,
+     "bandTopY": 103.09,
+     "bandCentreY": 101.34,
+     "bandBelowWornCm": 0,
+     "tiltCm": 0.7,
+     "seatY": 87.29,
+     "crotchY": 77.67,
+     "crotchEaseCm": 5.83,
+     "thighY": 75.17,
+     "kneeY": 47.96,
+     "hemY": -8.26
+    }
+   },
+   {
+    "size": "34/30",
+    "body": "male M (shape v2)",
+    "maxAbsCm": 0.0049735682934510805,
+    "levels": {
+     "wornWaistY": 103.05,
+     "bandTopFrontY": 105.1,
+     "bandTopBackY": 104.51,
+     "bandTopY": 104.8,
+     "bandCentreY": 103.05,
+     "bandBelowWornCm": 0,
+     "tiltCm": -0.3,
+     "seatY": 88.04,
+     "crotchY": 80.69,
+     "crotchEaseCm": 3.31,
+     "thighY": 78.19,
+     "kneeY": 48.37,
+     "hemY": 4.79
+    }
+   },
+   {
+    "size": "34/32",
+    "body": "male M (shape v2)",
+    "maxAbsCm": 0.0049735682934510805,
+    "levels": {
+     "wornWaistY": 103.05,
+     "bandTopFrontY": 105.1,
+     "bandTopBackY": 104.51,
+     "bandTopY": 104.8,
+     "bandCentreY": 103.05,
+     "bandBelowWornCm": 0,
+     "tiltCm": -0.3,
+     "seatY": 88.04,
+     "crotchY": 80.69,
+     "crotchEaseCm": 3.31,
+     "thighY": 78.19,
+     "kneeY": 48.37,
+     "hemY": -0.22
+    }
+   },
+   {
+    "size": "34/34",
+    "body": "male M (shape v2)",
+    "maxAbsCm": 0.0049735682934510805,
+    "levels": {
+     "wornWaistY": 103.05,
+     "bandTopFrontY": 105.1,
+     "bandTopBackY": 104.51,
+     "bandTopY": 104.8,
+     "bandCentreY": 103.05,
+     "bandBelowWornCm": 0,
+     "tiltCm": -0.3,
+     "seatY": 88.04,
+     "crotchY": 80.69,
+     "crotchEaseCm": 3.31,
+     "thighY": 78.19,
+     "kneeY": 48.37,
+     "hemY": -5.22
+    }
+   },
+   {
+    "size": "36/30",
+    "body": "male L (shape v2)",
+    "maxAbsCm": 0.021392339476925315,
+    "levels": {
+     "wornWaistY": 104.78,
+     "bandTopFrontY": 106.53,
+     "bandTopBackY": 105.87,
+     "bandTopY": 106.2,
+     "bandCentreY": 104.45,
+     "bandBelowWornCm": 0.33,
+     "tiltCm": -0.33,
+     "seatY": 88.8,
+     "crotchY": 84,
+     "crotchEaseCm": 0.5,
+     "thighY": 81.5,
+     "kneeY": 48.79,
+     "hemY": 8.14
+    }
+   },
+   {
+    "size": "36/32",
+    "body": "male L (shape v2)",
+    "maxAbsCm": 0.021392339476925315,
+    "levels": {
+     "wornWaistY": 104.78,
+     "bandTopFrontY": 106.53,
+     "bandTopBackY": 105.87,
+     "bandTopY": 106.2,
+     "bandCentreY": 104.45,
+     "bandBelowWornCm": 0.33,
+     "tiltCm": -0.33,
+     "seatY": 88.8,
+     "crotchY": 84,
+     "crotchEaseCm": 0.5,
+     "thighY": 81.5,
+     "kneeY": 48.79,
+     "hemY": 3.13
+    }
+   },
+   {
+    "size": "36/34",
+    "body": "male L (shape v2)",
+    "maxAbsCm": 0.021392339476925315,
+    "levels": {
+     "wornWaistY": 104.78,
+     "bandTopFrontY": 106.53,
+     "bandTopBackY": 105.87,
+     "bandTopY": 106.2,
+     "bandCentreY": 104.45,
+     "bandBelowWornCm": 0.33,
+     "tiltCm": -0.33,
+     "seatY": 88.8,
+     "crotchY": 84,
+     "crotchEaseCm": 0.5,
+     "thighY": 81.5,
+     "kneeY": 48.79,
+     "hemY": -1.87
+    }
+   },
+   {
+    "size": "38/30",
+    "body": "male L (shape v2)",
+    "maxAbsCm": 0.02287228933332841,
+    "levels": {
+     "wornWaistY": 105.62,
+     "bandTopFrontY": 107.36,
+     "bandTopBackY": 106.08,
+     "bandTopY": 106.72,
+     "bandCentreY": 104.97,
+     "bandBelowWornCm": 0.65,
+     "tiltCm": -0.64,
+     "seatY": 88.8,
+     "crotchY": 84,
+     "crotchEaseCm": 0.5,
+     "thighY": 81.5,
+     "kneeY": 48.79,
+     "hemY": 8.09
+    }
+   },
+   {
+    "size": "38/32",
+    "body": "male L (shape v2)",
+    "maxAbsCm": 0.02287228933332841,
+    "levels": {
+     "wornWaistY": 105.62,
+     "bandTopFrontY": 107.36,
+     "bandTopBackY": 106.08,
+     "bandTopY": 106.72,
+     "bandCentreY": 104.97,
+     "bandBelowWornCm": 0.65,
+     "tiltCm": -0.64,
+     "seatY": 88.8,
+     "crotchY": 84,
+     "crotchEaseCm": 0.5,
+     "thighY": 81.5,
+     "kneeY": 48.79,
+     "hemY": 3.09
+    }
+   },
+   {
+    "size": "38/34",
+    "body": "male L (shape v2)",
+    "maxAbsCm": 0.02287228933332841,
+    "levels": {
+     "wornWaistY": 105.62,
+     "bandTopFrontY": 107.36,
+     "bandTopBackY": 106.08,
+     "bandTopY": 106.72,
+     "bandCentreY": 104.97,
+     "bandBelowWornCm": 0.65,
+     "tiltCm": -0.64,
+     "seatY": 88.8,
+     "crotchY": 84,
+     "crotchEaseCm": 0.5,
+     "thighY": 81.5,
+     "kneeY": 48.79,
+     "hemY": -1.91
+    }
+   },
+   {
+    "size": "40/30",
+    "body": "male XL (shape v2)",
+    "maxAbsCm": 0.02579550341665282,
+    "levels": {
+     "wornWaistY": 107.37,
+     "bandTopFrontY": 107.82,
+     "bandTopBackY": 105.63,
+     "bandTopY": 106.73,
+     "bandCentreY": 104.98,
+     "bandBelowWornCm": 2.4,
+     "tiltCm": -1.1,
+     "seatY": 89.56,
+     "crotchY": 84.5,
+     "crotchEaseCm": 0.5,
+     "thighY": 82,
+     "kneeY": 49.21,
+     "hemY": 8.6
+    }
+   },
+   {
+    "size": "40/32",
+    "body": "male XL (shape v2)",
+    "maxAbsCm": 0.02579550341665282,
+    "levels": {
+     "wornWaistY": 107.37,
+     "bandTopFrontY": 107.82,
+     "bandTopBackY": 105.63,
+     "bandTopY": 106.73,
+     "bandCentreY": 104.98,
+     "bandBelowWornCm": 2.4,
+     "tiltCm": -1.1,
+     "seatY": 89.56,
+     "crotchY": 84.5,
+     "crotchEaseCm": 0.5,
+     "thighY": 82,
+     "kneeY": 49.21,
+     "hemY": 3.6
+    }
+   },
+   {
+    "size": "40/34",
+    "body": "male XL (shape v2)",
+    "maxAbsCm": 0.02579550341665282,
+    "levels": {
+     "wornWaistY": 107.37,
+     "bandTopFrontY": 107.82,
+     "bandTopBackY": 105.63,
+     "bandTopY": 106.73,
+     "bandCentreY": 104.98,
+     "bandBelowWornCm": 2.4,
+     "tiltCm": -1.1,
+     "seatY": 89.56,
+     "crotchY": 84.5,
+     "crotchEaseCm": 0.5,
+     "thighY": 82,
+     "kneeY": 49.21,
+     "hemY": -1.41
+    }
+   },
+   {
+    "size": "42/30",
+    "body": "male XXL (shape v2)",
+    "maxAbsCm": 0.024508284049645113,
+    "levels": {
+     "wornWaistY": 109.44,
+     "bandTopFrontY": 107.31,
+     "bandTopBackY": 106.56,
+     "bandTopY": 106.93,
+     "bandCentreY": 105.18,
+     "bandBelowWornCm": 4.26,
+     "tiltCm": -0.37,
+     "seatY": 90.57,
+     "crotchY": 85,
+     "crotchEaseCm": 0.5,
+     "thighY": 82.5,
+     "kneeY": 49.76,
+     "hemY": 9.27
+    }
+   },
+   {
+    "size": "42/32",
+    "body": "male XXL (shape v2)",
+    "maxAbsCm": 0.024508284049645113,
+    "levels": {
+     "wornWaistY": 109.44,
+     "bandTopFrontY": 107.31,
+     "bandTopBackY": 106.56,
+     "bandTopY": 106.93,
+     "bandCentreY": 105.18,
+     "bandBelowWornCm": 4.26,
+     "tiltCm": -0.37,
+     "seatY": 90.57,
+     "crotchY": 85,
+     "crotchEaseCm": 0.5,
+     "thighY": 82.5,
+     "kneeY": 49.76,
+     "hemY": 4.26
+    }
+   },
+   {
+    "size": "42/34",
+    "body": "male XXL (shape v2)",
+    "maxAbsCm": 0.024508284049645113,
+    "levels": {
+     "wornWaistY": 109.44,
+     "bandTopFrontY": 107.31,
+     "bandTopBackY": 106.56,
+     "bandTopY": 106.93,
+     "bandCentreY": 105.18,
+     "bandBelowWornCm": 4.26,
+     "tiltCm": -0.37,
+     "seatY": 90.57,
+     "crotchY": 85,
+     "crotchEaseCm": 0.5,
+     "thighY": 82.5,
+     "kneeY": 49.76,
+     "hemY": -0.74
+    }
+   },
+   {
+    "size": "44/30",
+    "body": "male XXL (shape v2)",
+    "maxAbsCm": 0.029458956245008494,
+    "levels": {
+     "wornWaistY": 110.3,
+     "bandTopFrontY": 108.75,
+     "bandTopBackY": 105.93,
+     "bandTopY": 107.34,
+     "bandCentreY": 105.59,
+     "bandBelowWornCm": 4.71,
+     "tiltCm": -1.41,
+     "seatY": 90.57,
+     "crotchY": 85,
+     "crotchEaseCm": 0.5,
+     "thighY": 82.5,
+     "kneeY": 49.76,
+     "hemY": 9.11
+    }
+   },
+   {
+    "size": "44/32",
+    "body": "male XXL (shape v2)",
+    "maxAbsCm": 0.029458956245008494,
+    "levels": {
+     "wornWaistY": 110.3,
+     "bandTopFrontY": 108.75,
+     "bandTopBackY": 105.93,
+     "bandTopY": 107.34,
+     "bandCentreY": 105.59,
+     "bandBelowWornCm": 4.71,
+     "tiltCm": -1.41,
+     "seatY": 90.57,
+     "crotchY": 85,
+     "crotchEaseCm": 0.5,
+     "thighY": 82.5,
+     "kneeY": 49.76,
+     "hemY": 4.11
+    }
+   },
+   {
+    "size": "44/34",
+    "body": "male XXL (shape v2)",
+    "maxAbsCm": 0.029458956245008494,
+    "levels": {
+     "wornWaistY": 110.3,
+     "bandTopFrontY": 108.75,
+     "bandTopBackY": 105.93,
+     "bandTopY": 107.34,
+     "bandCentreY": 105.59,
+     "bandBelowWornCm": 4.71,
+     "tiltCm": -1.41,
+     "seatY": 90.57,
+     "crotchY": 85,
+     "crotchEaseCm": 0.5,
+     "thighY": 82.5,
+     "kneeY": 49.76,
+     "hemY": -0.89
+    }
+   }
+  ],
+  "metrics": [
+   {
+    "body": "S",
+    "size": "32/32",
+    "recommended": "32/32",
+    "waistCm": {
+     "tape": 83.5,
+     "graded": 83.5,
+     "drapedRow": 83.5,
+     "drapedHull": 83.4
+    },
+    "seatCm": {
+     "tape": 104,
+     "graded": 104,
+     "drapedRow": 103.4,
+     "drapedHull": 96.7
+    },
+    "thighCm": {
+     "tape": 62,
+     "graded": 62,
+     "drapedRow": 62.3,
+     "drapedHull": 61
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.9,
+     "crotchToHemDropCm": 76.9
+    },
+    "frontRiseCm": {
+     "tape": 26.5,
+     "graded": 26.5,
+     "draped": 26.8
+    },
+    "backRiseCm": {
+     "tape": 35.5,
+     "graded": 35.5,
+     "draped": 35.6
+    },
+    "strainPct": {
+     "p99": 4.4,
+     "crotchP99": 5.2,
+     "crotchMax": 5.3,
+     "seatP99": 3,
+     "seatMax": 4.7
+    },
+    "band": {
+     "dropCm": 0.8,
+     "pastHips": false,
+     "bandGirthCm": 83.7,
+     "bodyAtBandCm": 82.2
+    },
+    "showThroughPixels": 175,
+    "showThroughBy": {
+     "left torso thigh": 5,
+     "back torso thigh": 86,
+     "back leg_r leg": 63,
+     "back leg_l leg": 18,
+     "right torso thigh": 3
+    },
+    "crotchBelowBodyCm": 7.5,
+    "hemAboveFloorCm": -0.9,
+    "drapeMs": 983
+   },
+   {
+    "body": "M",
+    "size": "34/32",
+    "recommended": "34/32",
+    "waistCm": {
+     "tape": 88.5,
+     "graded": 88.5,
+     "drapedRow": 88.5,
+     "drapedHull": 88.5
+    },
+    "seatCm": {
+     "tape": 109,
+     "graded": 109,
+     "drapedRow": 108,
+     "drapedHull": 102.2
+    },
+    "thighCm": {
+     "tape": 64.5,
+     "graded": 64.5,
+     "drapedRow": 65.2,
+     "drapedHull": 64.2
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.8,
+     "crotchToHemDropCm": 79.5
+    },
+    "frontRiseCm": {
+     "tape": 27,
+     "graded": 27,
+     "draped": 27.2
+    },
+    "backRiseCm": {
+     "tape": 36,
+     "graded": 36,
+     "draped": 36.1
+    },
+    "strainPct": {
+     "p99": 4.7,
+     "crotchP99": 8.3,
+     "crotchMax": 10.7,
+     "seatP99": 4.5,
+     "seatMax": 7.2
+    },
+    "band": {
+     "dropCm": 0,
+     "pastHips": false,
+     "bandGirthCm": 88.7,
+     "bodyAtBandCm": 89.4
+    },
+    "showThroughPixels": 201,
+    "showThroughBy": {
+     "front leg_l thigh": 20,
+     "front leg_r thigh": 23,
+     "front leg_l leg": 1,
+     "front leg_r leg": 1,
+     "back torso thigh": 16,
+     "back leg_r thigh": 47,
+     "back leg_l thigh": 46,
+     "back leg_l leg": 21,
+     "back leg_r leg": 26
+    },
+    "crotchBelowBodyCm": 4.5,
+    "hemAboveFloorCm": 0,
+    "drapeMs": 1124
+   },
+   {
+    "body": "L",
+    "size": "38/32",
+    "recommended": "38/32",
+    "waistCm": {
+     "tape": 98.5,
+     "graded": 98.5,
+     "drapedRow": 98.6,
+     "drapedHull": 98.5
+    },
+    "seatCm": {
+     "tape": 119,
+     "graded": 119,
+     "drapedRow": 118.3,
+     "drapedHull": 109.2
+    },
+    "thighCm": {
+     "tape": 69.5,
+     "graded": 69.5,
+     "drapedRow": 70.5,
+     "drapedHull": 68.9
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.8,
+     "crotchToHemDropCm": 78.1
+    },
+    "frontRiseCm": {
+     "tape": 28,
+     "graded": 28,
+     "draped": 27.8
+    },
+    "backRiseCm": {
+     "tape": 37,
+     "graded": 37,
+     "draped": 37.5
+    },
+    "strainPct": {
+     "p99": 5.4,
+     "crotchP99": 10.7,
+     "crotchMax": 22,
+     "seatP99": 7.1,
+     "seatMax": 11.5
+    },
+    "band": {
+     "dropCm": 2.5,
+     "pastHips": false,
+     "bandGirthCm": 98.7,
+     "bodyAtBandCm": 96.7
+    },
+    "showThroughPixels": 212,
+    "showThroughBy": {
+     "front leg_r thigh": 41,
+     "front leg_l thigh": 51,
+     "front leg_r leg": 4,
+     "front leg_l leg": 3,
+     "back torso thigh": 14,
+     "back leg_r thigh": 33,
+     "back leg_l thigh": 36,
+     "back leg_l leg": 9,
+     "back leg_r leg": 21
+    },
+    "crotchBelowBodyCm": 5.4,
+    "hemAboveFloorCm": 0.9,
+    "drapeMs": 1000
+   },
+   {
+    "body": "XL",
+    "size": "40/32",
+    "recommended": "40/32",
+    "waistCm": {
+     "tape": 103.5,
+     "graded": 103.5,
+     "drapedRow": 104.5,
+     "drapedHull": 104.3
+    },
+    "seatCm": {
+     "tape": 124,
+     "graded": 124,
+     "drapedRow": 123,
+     "drapedHull": 115.4
+    },
+    "thighCm": {
+     "tape": 72,
+     "graded": 72,
+     "drapedRow": 73.3,
+     "drapedHull": 72.5
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.8,
+     "crotchToHemDropCm": 80.3
+    },
+    "frontRiseCm": {
+     "tape": 28.5,
+     "graded": 28.5,
+     "draped": 28.4
+    },
+    "backRiseCm": {
+     "tape": 37.5,
+     "graded": 37.5,
+     "draped": 38.4
+    },
+    "strainPct": {
+     "p99": 5.8,
+     "crotchP99": 16.8,
+     "crotchMax": 33,
+     "seatP99": 7.4,
+     "seatMax": 13.9
+    },
+    "band": {
+     "dropCm": 0,
+     "pastHips": false,
+     "bandGirthCm": 103.7,
+     "bodyAtBandCm": 104.8
+    },
+    "showThroughPixels": 209,
+    "showThroughBy": {
+     "front torso thigh": 2,
+     "front leg_l thigh": 37,
+     "front leg_r thigh": 36,
+     "front leg_r leg": 11,
+     "front leg_l leg": 9,
+     "back torso thigh": 7,
+     "back leg_r thigh": 45,
+     "back leg_l thigh": 47,
+     "back leg_r leg": 11,
+     "back leg_l leg": 4
+    },
+    "crotchBelowBodyCm": 2.8,
+    "hemAboveFloorCm": 1.9,
+    "drapeMs": 941
+   },
+   {
+    "body": "XXL",
+    "size": "44/32",
+    "recommended": "44/32",
+    "waistCm": {
+     "tape": 113.5,
+     "graded": 113.5,
+     "drapedRow": 113.8,
+     "drapedHull": 113.6
+    },
+    "seatCm": {
+     "tape": 134,
+     "graded": 134,
+     "drapedRow": 133.1,
+     "drapedHull": 123.9
+    },
+    "thighCm": {
+     "tape": 77,
+     "graded": 77,
+     "drapedRow": 78.4,
+     "drapedHull": 77.6
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.8,
+     "crotchToHemDropCm": 79.5
+    },
+    "frontRiseCm": {
+     "tape": 29.5,
+     "graded": 29.5,
+     "draped": 29.4
+    },
+    "backRiseCm": {
+     "tape": 38.5,
+     "graded": 38.5,
+     "draped": 39.4
+    },
+    "strainPct": {
+     "p99": 6.5,
+     "crotchP99": 15.5,
+     "crotchMax": 28.1,
+     "seatP99": 7.8,
+     "seatMax": 13.3
+    },
+    "band": {
+     "dropCm": 0,
+     "pastHips": false,
+     "bandGirthCm": 113.7,
+     "bodyAtBandCm": 113.7
+    },
+    "showThroughPixels": 274,
+    "showThroughBy": {
+     "front leg_l thigh": 49,
+     "front leg_r thigh": 48,
+     "front leg_r leg": 17,
+     "front leg_l leg": 15,
+     "back torso thigh": 25,
+     "back leg_r thigh": 48,
+     "back leg_l thigh": 51,
+     "back leg_l leg": 8,
+     "back leg_r leg": 13
+    },
+    "crotchBelowBodyCm": 2.9,
+    "hemAboveFloorCm": 3.1,
+    "drapeMs": 1000
+   },
+   {
+    "body": "M",
+    "size": "30/32",
+    "recommended": "34/32",
+    "notDrawn": {
+     "anchor": "waist",
+     "bodyLargerCm": 10.8
+    }
+   },
+   {
+    "body": "XXL",
+    "size": "30/32",
+    "recommended": "44/32",
+    "notDrawn": {
+     "anchor": "waist",
+     "bodyLargerCm": 33.7
+    }
+   },
+   {
+    "body": "M",
+    "size": "32/32",
+    "recommended": "34/32",
+    "notDrawn": {
+     "anchor": "waist",
+     "bodyLargerCm": 5.4
+    }
+   },
+   {
+    "body": "XXL",
+    "size": "32/32",
+    "recommended": "44/32",
+    "notDrawn": {
+     "anchor": "waist",
+     "bodyLargerCm": 28.5
+    }
+   },
+   {
+    "body": "M",
+    "size": "34/32",
+    "recommended": "34/32",
+    "waistCm": {
+     "tape": 88.5,
+     "graded": 88.5,
+     "drapedRow": 88.5,
+     "drapedHull": 88.5
+    },
+    "seatCm": {
+     "tape": 109,
+     "graded": 109,
+     "drapedRow": 108,
+     "drapedHull": 102.2
+    },
+    "thighCm": {
+     "tape": 64.5,
+     "graded": 64.5,
+     "drapedRow": 65.2,
+     "drapedHull": 64.2
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.8,
+     "crotchToHemDropCm": 79.5
+    },
+    "frontRiseCm": {
+     "tape": 27,
+     "graded": 27,
+     "draped": 27.2
+    },
+    "backRiseCm": {
+     "tape": 36,
+     "graded": 36,
+     "draped": 36.1
+    },
+    "strainPct": {
+     "p99": 4.7,
+     "crotchP99": 8.3,
+     "crotchMax": 10.7,
+     "seatP99": 4.5,
+     "seatMax": 7.2
+    },
+    "band": {
+     "dropCm": 0,
+     "pastHips": false,
+     "bandGirthCm": 88.7,
+     "bodyAtBandCm": 89.4
+    },
+    "showThroughPixels": 201,
+    "showThroughBy": {
+     "front leg_l thigh": 20,
+     "front leg_r thigh": 23,
+     "front leg_l leg": 1,
+     "front leg_r leg": 1,
+     "back torso thigh": 16,
+     "back leg_r thigh": 47,
+     "back leg_l thigh": 46,
+     "back leg_l leg": 21,
+     "back leg_r leg": 26
+    },
+    "crotchBelowBodyCm": 4.5,
+    "hemAboveFloorCm": 0,
+    "drapeMs": 875
+   },
+   {
+    "body": "XXL",
+    "size": "34/32",
+    "recommended": "44/32",
+    "notDrawn": {
+     "anchor": "waist",
+     "bodyLargerCm": 23.4
+    }
+   },
+   {
+    "body": "M",
+    "size": "36/32",
+    "recommended": "34/32",
+    "waistCm": {
+     "tape": 93.5,
+     "graded": 93.5,
+     "drapedRow": 94.4,
+     "drapedHull": 94.3
+    },
+    "seatCm": {
+     "tape": 114,
+     "graded": 114,
+     "drapedRow": 113.5,
+     "drapedHull": 103.1
+    },
+    "thighCm": {
+     "tape": 67,
+     "graded": 67,
+     "drapedRow": 67.7,
+     "drapedHull": 65.3
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.7,
+     "crotchToHemDropCm": 73.3
+    },
+    "frontRiseCm": {
+     "tape": 27.5,
+     "graded": 27.5,
+     "draped": 27.7
+    },
+    "backRiseCm": {
+     "tape": 36.5,
+     "graded": 36.5,
+     "draped": 36.6
+    },
+    "strainPct": {
+     "p99": 5.7,
+     "crotchP99": 5.6,
+     "crotchMax": 6.8,
+     "seatP99": 6.3,
+     "seatMax": 8.6
+    },
+    "band": {
+     "dropCm": 6.8,
+     "pastHips": false,
+     "bandGirthCm": 93.7,
+     "bodyAtBandCm": 89.1
+    },
+    "showThroughPixels": 141,
+    "showThroughBy": {
+     "front leg_l leg": 28,
+     "front leg_r leg": 15,
+     "back leg_l leg": 46,
+     "back leg_r leg": 52
+    },
+    "crotchBelowBodyCm": 10.7,
+    "hemAboveFloorCm": 0,
+    "drapeMs": 1254
+   },
+   {
+    "body": "XXL",
+    "size": "36/32",
+    "recommended": "44/32",
+    "notDrawn": {
+     "anchor": "waist",
+     "bodyLargerCm": 18.2
+    }
+   },
+   {
+    "body": "M",
+    "size": "38/32",
+    "recommended": "34/32",
+    "waistCm": {
+     "tape": 98.5,
+     "graded": 98.5,
+     "drapedRow": 101.7,
+     "drapedHull": 101.4
+    },
+    "seatCm": {
+     "tape": 119,
+     "graded": 119,
+     "drapedRow": 119.1,
+     "drapedHull": 106.6
+    },
+    "thighCm": {
+     "tape": 69.5,
+     "graded": 69.5,
+     "drapedRow": 70.2,
+     "drapedHull": 67.6
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.6,
+     "crotchToHemDropCm": 66.2
+    },
+    "frontRiseCm": {
+     "tape": 28,
+     "graded": 28,
+     "draped": 28.2
+    },
+    "backRiseCm": {
+     "tape": 37,
+     "graded": 37,
+     "draped": 37.1
+    },
+    "strainPct": {
+     "p99": 7.2,
+     "crotchP99": 6.1,
+     "crotchMax": 6.9,
+     "seatP99": 5.3,
+     "seatMax": 8.2
+    },
+    "band": {
+     "dropCm": 14.3,
+     "pastHips": false,
+     "bandGirthCm": 98.7,
+     "bodyAtBandCm": 88.9
+    },
+    "showThroughPixels": 103,
+    "showThroughBy": {
+     "front leg_r leg": 2,
+     "front leg_l leg": 2,
+     "left torso thigh": 1,
+     "back torso thigh": 9,
+     "back leg_l leg": 55,
+     "back leg_r leg": 34
+    },
+    "crotchBelowBodyCm": 17.8,
+    "hemAboveFloorCm": 0,
+    "drapeMs": 1234
+   },
+   {
+    "body": "XXL",
+    "size": "38/32",
+    "recommended": "44/32",
+    "notDrawn": {
+     "anchor": "waist",
+     "bodyLargerCm": 13.1
+    }
+   },
+   {
+    "body": "M",
+    "size": "40/32",
+    "recommended": "34/32",
+    "waistCm": {
+     "tape": 103.5,
+     "graded": 103.5,
+     "drapedRow": 105.9,
+     "drapedHull": 105.5
+    },
+    "seatCm": {
+     "tape": 124,
+     "graded": 124,
+     "drapedRow": 123.7,
+     "drapedHull": 110.4
+    },
+    "thighCm": {
+     "tape": 72,
+     "graded": 72,
+     "drapedRow": 72.8,
+     "drapedHull": 69.6
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.6,
+     "crotchToHemDropCm": 62.8
+    },
+    "frontRiseCm": {
+     "tape": 28.5,
+     "graded": 28.5,
+     "draped": 28.7
+    },
+    "backRiseCm": {
+     "tape": 37.5,
+     "graded": 37.5,
+     "draped": 37.7
+    },
+    "strainPct": {
+     "p99": 7,
+     "crotchP99": 5.1,
+     "crotchMax": 6,
+     "seatP99": 4.8,
+     "seatMax": 8.1
+    },
+    "band": {
+     "dropCm": 16.8,
+     "pastHips": false,
+     "bandGirthCm": 103.7,
+     "bodyAtBandCm": 89.4
+    },
+    "showThroughPixels": 78,
+    "showThroughBy": {
+     "back torso thigh": 1,
+     "back leg_l leg": 40,
+     "back leg_r leg": 37
+    },
+    "crotchBelowBodyCm": 21.2,
+    "hemAboveFloorCm": 0,
+    "drapeMs": 851
+   },
+   {
+    "body": "XXL",
+    "size": "40/32",
+    "recommended": "44/32",
+    "notDrawn": {
+     "anchor": "waist",
+     "bodyLargerCm": 7.9
+    }
+   },
+   {
+    "body": "M",
+    "size": "42/32",
+    "recommended": "34/32",
+    "waistCm": {
+     "tape": 108.5,
+     "graded": 108.5,
+     "drapedRow": 109.9,
+     "drapedHull": 109.7
+    },
+    "seatCm": {
+     "tape": 129,
+     "graded": 129,
+     "drapedRow": 128.5,
+     "drapedHull": 113.9
+    },
+    "thighCm": {
+     "tape": 74.5,
+     "graded": 74.5,
+     "drapedRow": 75.4,
+     "drapedHull": 72.5
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.7,
+     "crotchToHemDropCm": 61.3
+    },
+    "frontRiseCm": {
+     "tape": 29,
+     "graded": 29,
+     "draped": 29.2
+    },
+    "backRiseCm": {
+     "tape": 38,
+     "graded": 38,
+     "draped": 38.3
+    },
+    "strainPct": {
+     "p99": 6.7,
+     "crotchP99": 5.7,
+     "crotchMax": 7.4,
+     "seatP99": 5,
+     "seatMax": 8
+    },
+    "band": {
+     "dropCm": 16.5,
+     "pastHips": false,
+     "bandGirthCm": 108.9,
+     "bodyAtBandCm": 89.9
+    },
+    "showThroughPixels": 52,
+    "showThroughBy": {
+     "back leg_l leg": 42,
+     "back leg_r leg": 10
+    },
+    "crotchBelowBodyCm": 22.7,
+    "hemAboveFloorCm": 0,
+    "drapeMs": 961
+   },
+   {
+    "body": "XXL",
+    "size": "42/32",
+    "recommended": "44/32",
+    "notDrawn": {
+     "anchor": "waist",
+     "bodyLargerCm": 2.8
+    }
+   },
+   {
+    "body": "M",
+    "size": "44/32",
+    "recommended": "34/32",
+    "waistCm": {
+     "tape": 113.5,
+     "graded": 113.5,
+     "drapedRow": 114,
+     "drapedHull": 113.7
+    },
+    "seatCm": {
+     "tape": 134,
+     "graded": 134,
+     "drapedRow": 133.6,
+     "drapedHull": 119.4
+    },
+    "thighCm": {
+     "tape": 77,
+     "graded": 77,
+     "drapedRow": 77.7,
+     "drapedHull": 75.1
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.6,
+     "crotchToHemDropCm": 60.9
+    },
+    "frontRiseCm": {
+     "tape": 29.5,
+     "graded": 29.5,
+     "draped": 29.7
+    },
+    "backRiseCm": {
+     "tape": 38.5,
+     "graded": 38.5,
+     "draped": 38.6
+    },
+    "strainPct": {
+     "p99": 7.1,
+     "crotchP99": 5.4,
+     "crotchMax": 6.9,
+     "seatP99": 4.8,
+     "seatMax": 8.3
+    },
+    "band": {
+     "dropCm": 17.8,
+     "pastHips": false,
+     "bandGirthCm": 113.7,
+     "bodyAtBandCm": 89.7
+    },
+    "showThroughPixels": 56,
+    "showThroughBy": {
+     "back leg_l leg": 39,
+     "back leg_r leg": 17
+    },
+    "crotchBelowBodyCm": 23.1,
+    "hemAboveFloorCm": 0,
+    "drapeMs": 965
+   },
+   {
+    "body": "XXL",
+    "size": "44/32",
+    "recommended": "44/32",
+    "waistCm": {
+     "tape": 113.5,
+     "graded": 113.5,
+     "drapedRow": 113.8,
+     "drapedHull": 113.6
+    },
+    "seatCm": {
+     "tape": 134,
+     "graded": 134,
+     "drapedRow": 133.1,
+     "drapedHull": 123.9
+    },
+    "thighCm": {
+     "tape": 77,
+     "graded": 77,
+     "drapedRow": 78.4,
+     "drapedHull": 77.6
+    },
+    "inseamCm": {
+     "tape": 81,
+     "graded": 81,
+     "draped": 81.8,
+     "crotchToHemDropCm": 79.5
+    },
+    "frontRiseCm": {
+     "tape": 29.5,
+     "graded": 29.5,
+     "draped": 29.4
+    },
+    "backRiseCm": {
+     "tape": 38.5,
+     "graded": 38.5,
+     "draped": 39.4
+    },
+    "strainPct": {
+     "p99": 6.5,
+     "crotchP99": 15.5,
+     "crotchMax": 28.1,
+     "seatP99": 7.8,
+     "seatMax": 13.3
+    },
+    "band": {
+     "dropCm": 0,
+     "pastHips": false,
+     "bandGirthCm": 113.7,
+     "bodyAtBandCm": 113.7
+    },
+    "showThroughPixels": 274,
+    "showThroughBy": {
+     "front leg_l thigh": 49,
+     "front leg_r thigh": 48,
+     "front leg_r leg": 17,
+     "front leg_l leg": 15,
+     "back torso thigh": 25,
+     "back leg_r thigh": 48,
+     "back leg_l thigh": 51,
+     "back leg_l leg": 8,
+     "back leg_r leg": 13
+    },
+    "crotchBelowBodyCm": 2.9,
+    "hemAboveFloorCm": 3.1,
+    "drapeMs": 872
+   },
+   {
+    "body": "M",
+    "size": "34/30",
+    "recommended": "34/32",
+    "waistCm": {
+     "tape": 88.5,
+     "graded": 88.5,
+     "drapedRow": 88.5,
+     "drapedHull": 88.5
+    },
+    "seatCm": {
+     "tape": 109,
+     "graded": 109,
+     "drapedRow": 108,
+     "drapedHull": 102.2
+    },
+    "thighCm": {
+     "tape": 64.5,
+     "graded": 64.5,
+     "drapedRow": 65.2,
+     "drapedHull": 64.2
+    },
+    "inseamCm": {
+     "tape": 76,
+     "graded": 76,
+     "draped": 77,
+     "crotchToHemDropCm": 76
+    },
+    "frontRiseCm": {
+     "tape": 27,
+     "graded": 27,
+     "draped": 27.2
+    },
+    "backRiseCm": {
+     "tape": 36,
+     "graded": 36,
+     "draped": 36.1
+    },
+    "strainPct": {
+     "p99": 5,
+     "crotchP99": 8.1,
+     "crotchMax": 10.6,
+     "seatP99": 4.5,
+     "seatMax": 7.2
+    },
+    "band": {
+     "dropCm": 0,
+     "pastHips": false,
+     "bandGirthCm": 88.7,
+     "bodyAtBandCm": 89.4
+    },
+    "showThroughPixels": 203,
+    "showThroughBy": {
+     "front leg_l thigh": 19,
+     "front leg_r thigh": 25,
+     "front leg_l leg": 1,
+     "front leg_r leg": 2,
+     "back torso thigh": 16,
+     "back leg_r thigh": 48,
+     "back leg_l thigh": 45,
+     "back leg_l leg": 22,
+     "back leg_r leg": 25
+    },
+    "crotchBelowBodyCm": 4.5,
+    "hemAboveFloorCm": 2.7,
+    "drapeMs": 880
+   },
+   {
+    "body": "M",
+    "size": "34/34",
+    "recommended": "34/32",
+    "waistCm": {
+     "tape": 88.5,
+     "graded": 88.5,
+     "drapedRow": 88.5,
+     "drapedHull": 88.5
+    },
+    "seatCm": {
+     "tape": 109,
+     "graded": 109,
+     "drapedRow": 108,
+     "drapedHull": 102.2
+    },
+    "thighCm": {
+     "tape": 64.5,
+     "graded": 64.5,
+     "drapedRow": 65.2,
+     "drapedHull": 64.2
+    },
+    "inseamCm": {
+     "tape": 86,
+     "graded": 86,
+     "draped": 86.9,
+     "crotchToHemDropCm": 79.5
+    },
+    "frontRiseCm": {
+     "tape": 27,
+     "graded": 27,
+     "draped": 27.2
+    },
+    "backRiseCm": {
+     "tape": 36,
+     "graded": 36,
+     "draped": 36.1
+    },
+    "strainPct": {
+     "p99": 4.7,
+     "crotchP99": 8.2,
+     "crotchMax": 10.7,
+     "seatP99": 4.5,
+     "seatMax": 7.2
+    },
+    "band": {
+     "dropCm": 0,
+     "pastHips": false,
+     "bandGirthCm": 88.7,
+     "bodyAtBandCm": 89.4
+    },
+    "showThroughPixels": 206,
+    "showThroughBy": {
+     "front leg_l thigh": 22,
+     "front leg_r thigh": 26,
+     "front leg_l leg": 2,
+     "front leg_r leg": 2,
+     "back torso thigh": 16,
+     "back leg_r thigh": 48,
+     "back leg_l thigh": 45,
+     "back leg_l leg": 21,
+     "back leg_r leg": 24
+    },
+    "crotchBelowBodyCm": 4.5,
+    "hemAboveFloorCm": 0,
+    "drapeMs": 928
+   }
+  ]
+ }
+}

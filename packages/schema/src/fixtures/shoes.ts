@@ -1,0 +1,118 @@
+import type { GarmentPayload, SizeRow } from '../garment';
+import { garment } from './helpers';
+
+/** EU shoe chart with insole length (cm) ≈ (eu − 2)·2/3, the formula the fit engine uses. */
+function shoeChart(from: number, to: number, lengthOffsetCm = 0): SizeRow[] {
+  const rows: SizeRow[] = [];
+  for (let eu = from; eu <= to; eu++) {
+    rows.push({ size: String(eu), footEu: eu, footLengthCm: Math.round((((eu - 2) * 2) / 3 + lengthOffsetCm) * 10) / 10 });
+  }
+  return rows;
+}
+
+export const SHOES: GarmentPayload[] = [
+  garment({
+    id: 'sole-01',
+    brand: 'Sole Amsterdam',
+    name: 'Leather Penny Loafers',
+    category: 'shoes',
+    subcategory: 'loafer',
+    priceEur: 189,
+    primaryColorHex: '#4A2C1A',
+    colorways: [
+      { name: 'Chestnut', hex: '#4A2C1A' },
+      { name: 'Black', hex: '#111111' },
+    ],
+    fabric: { primary: 'leather', blend: [['leather', 100]], stretchPct: 0, drape: 0.05, opacity: 1, sheen: 0.5 },
+    patternBlock: 'loafer',
+    lengthCm: { heel_height: 2 },
+    sizeChartType: 'body',
+    sizeChart: shoeChart(36, 42),
+    sizingNotes: 'runs small — leather stretches half a size with wear',
+    trueToSizeScore: 0.78,
+    criticalFitPoints: ['foot'],
+    styleTags: { classic: 0.9 },
+  }),
+  garment({
+    id: 'sole-02',
+    brand: 'Sole Amsterdam',
+    name: 'Chelsea Boots',
+    category: 'shoes',
+    subcategory: 'boot',
+    priceEur: 229,
+    primaryColorHex: '#111111',
+    fabric: { primary: 'leather', blend: [['leather', 100]], stretchPct: 0, drape: 0.05, opacity: 1, sheen: 0.4 },
+    patternBlock: 'chelsea',
+    lengthCm: { heel_height: 3 },
+    sizeChartType: 'body',
+    sizeChart: shoeChart(36, 42, 0.3),
+    sizingNotes: 'true to size; elastic gussets',
+    trueToSizeScore: 0.86,
+    criticalFitPoints: ['foot'],
+    stretchZones: ['side-panel'],
+    styleTags: { classic: 0.7, minimal: 0.4 },
+  }),
+  garment({
+    id: 'velden-shoe-01',
+    brand: 'Velden Sport',
+    name: 'Road Running Shoe',
+    category: 'shoes',
+    subcategory: 'running',
+    priceEur: 149,
+    primaryColorHex: '#FF5A3C',
+    colorways: [
+      { name: 'Coral', hex: '#FF5A3C' },
+      { name: 'White', hex: '#FFFFFF' },
+    ],
+    fabric: { primary: 'technical', blend: [['polyester', 100]], stretchPct: 8, drape: 0.2, opacity: 0.95, sheen: 0.3 },
+    patternBlock: 'sneaker',
+    lengthCm: { heel_height: 3.2 },
+    sizeChartType: 'body',
+    sizeChart: shoeChart(37, 44, 0.5),
+    sizingNotes: 'size up half a size for long runs',
+    trueToSizeScore: 0.8,
+    criticalFitPoints: ['foot'],
+    stretchZones: ['stretch-knit'],
+    styleTags: { sporty: 0.95 },
+  }),
+  garment({
+    id: 'sole-03',
+    brand: 'Sole Amsterdam',
+    name: 'Strappy Leather Sandals',
+    category: 'shoes',
+    subcategory: 'sandal',
+    priceEur: 139,
+    primaryColorHex: '#C8A27A',
+    fabric: { primary: 'leather', blend: [['leather', 100]], stretchPct: 0, drape: 0.1, opacity: 1, sheen: 0.35 },
+    patternBlock: 'sandal',
+    lengthCm: { heel_height: 1 },
+    sizeChartType: 'body',
+    sizeChart: shoeChart(36, 41),
+    sizingNotes: 'true to size; adjustable ankle strap',
+    trueToSizeScore: 0.84,
+    criticalFitPoints: ['foot'],
+    styleTags: { bohemian: 0.6, minimal: 0.4 },
+  }),
+  garment({
+    id: 'sole-04',
+    brand: 'Sole Amsterdam',
+    name: 'Organic Canvas Sneakers',
+    category: 'shoes',
+    subcategory: 'sneaker',
+    priceEur: 95,
+    primaryColorHex: '#FFFFFF',
+    colorways: [
+      { name: 'White', hex: '#FFFFFF' },
+      { name: 'Navy', hex: '#1F2A44' },
+    ],
+    fabric: { primary: 'cotton', blend: [['cotton', 100]], weightGsm: 400, stretchPct: 0, drape: 0.1, opacity: 1, sheen: 0 },
+    patternBlock: 'sneaker',
+    lengthCm: { heel_height: 2.5 },
+    sizeChartType: 'body',
+    sizeChart: shoeChart(36, 45),
+    sizingNotes: 'runs large',
+    trueToSizeScore: 0.72,
+    criticalFitPoints: ['foot'],
+    styleTags: { minimal: 0.6, sporty: 0.4 },
+  }),
+];

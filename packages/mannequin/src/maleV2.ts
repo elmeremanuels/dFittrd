@@ -525,8 +525,9 @@ export function maleShapeV2(m: Mannequin, options: BuildOptions = {}): Mannequin
     let o = scaled(torsoOutline(profile(yy), n), k);
     const w = yy <= yc ? 1 : yy >= yBlendTop ? 0 : 1 - smooth((yy - yc) / (yBlendTop - yc));
     if (w > 0) {
-      // Join: the outline goes over to the two thighs side by side (a little outside them; inside them where the torso ends).
-      const grow = yy >= yEnd + 1 ? 1 : lerp(0.96, 1, yy - yEnd);
+      // Join: the outline goes over to the two thighs side by side; just inside them where the torso ends (1 %, so the
+      // two surfaces cross in a shallow groove: at 4 % it read as a dark line round the thigh tops).
+      const grow = yy >= yEnd + 0.5 ? 1 : lerp(0.99, 1, (yy - yEnd) / 0.5);
       const legs = [legSectionAt(yy, 1, false), legSectionAt(yy, -1, false)];
       const joined = new Float64Array(o.length);
       for (let j = 0; j < o.length; j += 2) {

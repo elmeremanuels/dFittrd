@@ -134,14 +134,22 @@ api.{$DOMAIN} {
 	import security_headers
 	encode zstd gzip
 
+	# The api sets some of these headers itself (helmet, and the SDK route). A plain `header` line is applied
+	# before the upstream answers, so the response then carries the header twice. Two copies of
+	# Cross-Origin-Resource-Policy are not a valid value: a cross-origin isolated page (the app, or a shop that
+	# runs COEP itself) treats that as same-origin and blocks the script or the image. `>` sets the header when
+	# the response is written and replaces the upstream's copy (found by scripts/post-deploy-check.mjs behind
+	# the real Caddy; apps/api/src/caddy-api-headers.test.ts keeps it).
+	header >Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
 	# The merchant SDK is cached for an hour and may be embedded cross-origin (merchant pages).
 	@sdk path /sdk/v1.js
-	header @sdk Cache-Control "public, max-age=3600"
-	header @sdk Cross-Origin-Resource-Policy "cross-origin"
+	header @sdk >Cache-Control "public, max-age=3600"
+	header @sdk >Cross-Origin-Resource-Policy "cross-origin"
 
 	# Signed render URLs are fetched by the PWA (cross-origin) as <img>/<video>.
 	@renders path /v1/renders/*
-	header @renders Cross-Origin-Resource-Policy "cross-origin"
+	header @renders >Cross-Origin-Resource-Policy "cross-origin"
 
 	# Approved garment bundles (D16): public product data, immutable per version, served from the
 	# assets volume (the api writes it, Caddy only reads). Fetched by the /embed iframe after the

@@ -109,6 +109,8 @@ describe('post-deploy check on the local demo stack', () => {
   describe('negative controls: one thing broken at a time', () => {
     const cases = [
       ['the api is down', (u) => u.origin === api && u.pathname === '/healthz', () => ({ status: 502, body: 'Bad Gateway' }), [1, 7], /answered 502/],
+      ['the proxy and the api both set a header', (u) => u.origin === api && u.pathname === '/healthz', (r) => void r.headers.set('cross-origin-resource-policy', 'cross-origin, cross-origin'), [1], /sends cross-origin-resource-policy twice/],
+      ['the SDK carries its resource policy twice', (u) => u.pathname === '/sdk/v1.js', (r) => void r.headers.set('cross-origin-resource-policy', 'cross-origin, cross-origin'), [3], /sent twice/],
       ['the database is not reachable', (u) => u.pathname === '/readyz', () => ({ status: 503, body: JSON.stringify({ ok: false, db: false, jobs: true }) }), [2], /database NO, jobs yes/],
       ['the merchant route answers a caller without a key', (u, init) => u.pathname === '/v1/merchant/products' && !init.headers?.authorization, () => ({ status: 200, body: '{"products":[]}' }), [4], /without a key answered 200/],
       ['the merchant route accepts a made-up key', (u, init) => u.pathname === '/v1/merchant/products' && Boolean(init.headers?.authorization), () => ({ status: 200, body: '{"products":[]}' }), [4], /made-up key answered 200/],

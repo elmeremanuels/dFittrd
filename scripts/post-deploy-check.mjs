@@ -199,6 +199,11 @@ export async function runChecks(opts, { fetchImpl = fetch, onLine = () => {} } =
     const r = await request(`${api}/healthz`);
     if (r.status !== 200 || r.json?.ok !== true) return fail(`GET ${api}/healthz answered ${r.status}`);
     state.apiCommit = r.json.commit;
+    // A header set by both the proxy and the api arrives twice, joined with a comma. Browsers do not read
+    // two copies of Cross-Origin-Resource-Policy as a value, and a cross-origin isolated page then blocks the response.
+    const twice = ['cross-origin-resource-policy', 'strict-transport-security', 'x-content-type-options'].filter((name) => /,/.test((r.headers.get(name) ?? '').replace(/;[^,]*/g, '')));
+    if (twice.length) return fail(`up, but it sends ${twice.join(' and ')} twice (the proxy and the api both set it)`);
+    if (api.startsWith('https:') && !/max-age=\d{7,}/.test(r.headers.get('strict-transport-security') ?? '')) return fail('up, but without Strict-Transport-Security of a year or more');
     return pass(`version ${r.json.version}, commit ${short(r.json.commit ?? 'not reported')}`);
   });
 
@@ -213,7 +218,8 @@ export async function runChecks(opts, { fetchImpl = fetch, onLine = () => {} } =
     if (r.status !== 200) return fail(`GET ${api}/sdk/v1.js answered ${r.status}`);
     if (!/javascript/.test(r.headers.get('content-type') ?? '')) return fail(`it is served as ${r.headers.get('content-type')}, not as JavaScript`);
     if (r.text.length < 2000) return fail(`it is only ${r.text.length} bytes`);
-    if ((r.headers.get('cross-origin-resource-policy') ?? '') !== 'cross-origin') return fail('shop pages on other domains may not load it (Cross-Origin-Resource-Policy is not cross-origin)');
+    const corp = r.headers.get('cross-origin-resource-policy') ?? '';
+    if (corp !== 'cross-origin') return fail(`shop pages that isolate themselves may not load it: Cross-Origin-Resource-Policy is ${corp ? `"${corp}"` : 'missing'}, not "cross-origin"${corp.includes(',') ? ' (sent twice: the proxy and the api both set it)' : ''}`);
     return pass(`${Math.round(r.text.length / 1024)} KB, loadable from any shop page`);
   });
 

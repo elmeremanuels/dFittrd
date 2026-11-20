@@ -850,10 +850,20 @@
           inputs.length = el('input', { class: 'input', id: 'imp-length', inputmode: 'decimal', size: '6', value: String(r.lengthCm.shoulder_to_hem) });
           form.appendChild(el('label', { for: 'imp-length', class: 'row' }, ['Length, shoulder to hem (cm)', inputs.length]));
         }
-        var useFabric = null;
+        // The fibre names are the shop's own words: ticked. The stretch is Curtain's estimate from
+        // the fabric library: worded as an estimate, not ticked, saved only when the merchant ticks it.
+        var IT = cfg.descriptionImport;
+        var useFabric = null, useStretch = null, stretchInput = null;
         if (r.fabric) {
           useFabric = el('input', { type: 'checkbox', id: 'imp-fabric' }); useFabric.checked = true;
-          form.appendChild(el('label', { for: 'imp-fabric' }, [useFabric, ' Fabric: ' + r.fabric.primary + (r.fabric.blend ? ' (' + r.fabric.blend.map(function (b) { return b[1] + '% ' + b[0]; }).join(', ') + ')' : '') + ', stretch ' + r.fabric.stretchPct + '%']));
+          var fabricWords = r.fabric.primary + (r.fabric.blend ? ' (' + r.fabric.blend.map(function (b) { return b[1] + '% ' + b[0]; }).join(', ') + ')' : '');
+          form.appendChild(el('label', { for: 'imp-fabric' }, [useFabric, ' ' + IT.useFabric.replace('{fabric}', fabricWords)]));
+        }
+        if (r.fabricEstimate && typeof r.fabricEstimate.stretchPct === 'number') {
+          useStretch = el('input', { type: 'checkbox', id: 'imp-stretch' }); useStretch.checked = false;
+          stretchInput = el('input', { class: 'input', id: 'imp-stretch-pct', inputmode: 'decimal', size: '5', value: String(r.fabricEstimate.stretchPct), 'aria-label': IT.useStretchEstimate + ' (' + IT.stretchUnit + ')' });
+          form.appendChild(el('div', { class: 'row' }, [el('label', { for: 'imp-stretch' }, [useStretch, ' ' + IT.useStretchEstimate]), stretchInput, el('span', { text: IT.stretchUnit })]));
+          form.appendChild(el('p', { class: 'subdued', id: 'imp-stretch-note', style: 'margin:0', text: IT.stretchEstimateNote.replace('{pct}', String(r.fabricEstimate.stretchPct)) }));
         }
         form.appendChild(el('details', null, [el('summary', { text: 'Where this came from' }), el('ul', { class: 'plain' }, r.evidence.map(function (e) { return el('li', { text: e }); }))]));
         if (r.hasChart && row) form.appendChild(el('p', { class: 'note note-warning', text: 'This product already has a size chart; confirming replaces it.' }));
@@ -868,7 +878,14 @@
             body.sizeChartType = r.proposal.sizeChartType; body.sizeChart = [out];
           }
           if (inputs.length && Number(inputs.length.value) > 0) body.lengthCm = { shoulder_to_hem: Number(inputs.length.value) };
-          if (useFabric && useFabric.checked) body.fabric = r.fabric;
+          if (useFabric && useFabric.checked) body.fabric = { primary: r.fabric.primary };
+          if (body.fabric && r.fabric.blend) body.fabric.blend = r.fabric.blend;
+          if (useStretch && useStretch.checked) {
+            var st = Number(String(stretchInput.value).replace(',', '.'));
+            if (String(stretchInput.value).trim() === '' || !isFinite(st) || st < 0 || st > 100) { note('import-result', 'warning', [IT.stretchInvalid]); submit.disabled = false; return; }
+            body.fabric = body.fabric || {};
+            body.fabric.stretchPct = st;
+          }
           if (!body.sizeChart) { note('import-result', 'warning', ['Saving fabric alone: use “Edit in Shopify” → Metafields → Curtain, or enter a chart above.']); submit.disabled = false; return; }
           try {
             var w = await api('PUT', '/shopify/products/' + encodeURIComponent(current.id) + '/chart', body);

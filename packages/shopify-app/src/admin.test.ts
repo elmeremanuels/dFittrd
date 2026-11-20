@@ -1,6 +1,7 @@
 import { CATEGORY_TEXT, CHART_COLUMN_TEXT, ESTIMATE_DISCLAIMER, GARMENT_TAPE_DIAGRAM_SVG, merchantPlanText } from '@curtain/schema';
 import { describe, expect, it } from 'vitest';
 import { ADMIN_PAGE_PATH, GARMENT_TAPE_ADMIN_CONFIG, adminContentSecurityPolicy, adminPageTemplate, APP_BRIDGE_SCRIPT_URL, jsonForScript, renderAdminPage } from './admin';
+import { DESCRIPTION_IMPORT_TEXT } from './descriptionImport';
 import { API_KEY, SHOP } from './test/fixtures';
 
 const cfg = { apiKey: API_KEY, apiUrl: 'https://api.curtain.fit/', appUrl: 'https://app.curtain.fit' };
@@ -12,7 +13,7 @@ describe('admin page', () => {
     expect(html).toContain(`<script src="${APP_BRIDGE_SCRIPT_URL}"></script>`);
     expect(html).not.toContain('__CURTAIN_');
     const json = /<script id="curtain-config" type="application\/json">(.*?)<\/script>/s.exec(html)![1]!;
-    expect(JSON.parse(json)).toEqual({ apiKey: API_KEY, apiUrl: 'https://api.curtain.fit', appUrl: 'https://app.curtain.fit', appHandle: 'curtain', blockHandle: 'try-it-on', billing: 'shopify', disclaimer: ESTIMATE_DISCLAIMER, tape: JSON.parse(JSON.stringify(GARMENT_TAPE_ADMIN_CONFIG)), chartColumns: JSON.parse(JSON.stringify(CHART_COLUMN_TEXT)), tapeDiagram: GARMENT_TAPE_DIAGRAM_SVG, plan: merchantPlanText('shopify'), categories: { ...CATEGORY_TEXT } });
+    expect(JSON.parse(json)).toEqual({ apiKey: API_KEY, apiUrl: 'https://api.curtain.fit', appUrl: 'https://app.curtain.fit', appHandle: 'curtain', blockHandle: 'try-it-on', billing: 'shopify', disclaimer: ESTIMATE_DISCLAIMER, tape: JSON.parse(JSON.stringify(GARMENT_TAPE_ADMIN_CONFIG)), descriptionImport: { ...DESCRIPTION_IMPORT_TEXT }, chartColumns: JSON.parse(JSON.stringify(CHART_COLUMN_TEXT)), tapeDiagram: GARMENT_TAPE_DIAGRAM_SVG, plan: merchantPlanText('shopify'), categories: { ...CATEGORY_TEXT } });
   });
 
   it('cannot be broken out of with </script> in config values', () => {

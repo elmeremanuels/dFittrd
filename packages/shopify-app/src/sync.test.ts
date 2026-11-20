@@ -1,4 +1,4 @@
-import { GarmentPayloadDraftSchema, mockGarment } from '@curtain/schema';
+import { GarmentPayloadDraftSchema, mockGarment, sizeAdviceGarment } from '@curtain/schema';
 import { describe, expect, it } from 'vitest';
 import { parseBulkJsonl } from './graphql/bulk';
 import { isPublished, shouldArchive, syncProductNode, syncProductNodes, toMerchantUpsertBody } from './sync';
@@ -56,6 +56,23 @@ describe('syncProductNode', () => {
     const missing = r.completeness.missing.map((m) => m.field);
     expect(missing).toEqual(expect.arrayContaining(['sizeChart', 'fabric.primary', 'flatLayPhoto']));
     expect(GarmentPayloadDraftSchema.safeParse(toMerchantUpsertBody(r)).success).toBe(true);
+  });
+
+  it('a fabric with a part missing or not valid keeps the rest; the product still goes through (D25 point 1)', () => {
+    const withFabric = (fabric: object) => syncProductNode(wrapDressNode({ metafields: { nodes: WRAP_METAFIELDS.map((m) => (m.key === 'fabric' ? { ...m, value: JSON.stringify(fabric) } : m)) } }));
+    const nameOnly = withFabric({ primary: 'Linen' });
+    expect(nameOnly.usable).toBe(true);
+    expect(nameOnly.draft.fabric).toEqual({ primary: 'linen' });
+    expect(nameOnly.warnings.filter((w) => w.path.startsWith('fabric'))).toEqual([]);
+    expect(GarmentPayloadDraftSchema.safeParse(toMerchantUpsertBody(nameOnly)).success).toBe(true);
+    expect(sizeAdviceGarment(nameOnly.draft).ok).toBe(true);
+    // Missing stretch and drape are reported as missing, not as a reason to refuse.
+    expect(nameOnly.completeness.missing.map((m) => m.field)).toEqual(expect.arrayContaining(['fabric.stretchPct', 'fabric.drape']));
+
+    const badStretch = withFabric({ primary: 'Linen', blend: [['linen', 100]], stretchPct: 150, drape: 0.6 });
+    expect(badStretch.draft.fabric).toEqual({ primary: 'linen', blend: [['linen', 100]], drape: 0.6 });
+    expect(badStretch.warnings.filter((w) => w.path === 'fabric.stretchPct')).toHaveLength(1);
+    expect(GarmentPayloadDraftSchema.safeParse(toMerchantUpsertBody(badStretch)).success).toBe(true);
   });
 
   it('collects mapping warnings (non-EUR price, bad JSON) instead of throwing', () => {

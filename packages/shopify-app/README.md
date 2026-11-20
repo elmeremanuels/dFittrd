@@ -214,7 +214,11 @@ saves phone and desktop screenshots.
    `PUT /shopify/products/:id/chart`): for one-size products, the description's bust/waist/hip
    (flat widths doubled, inches converted, "fits up to" read as a body chart), length and fabric
    (the schema's fabric text parser) are proposed with their source sentences; the merchant edits
-   and confirms, nothing is written before that.
+   and confirms, nothing is written before that. The proposed fabric is only what the description
+   states (fibre names and blend). The stretch Curtain's fabric library derives from those fibres
+   is returned apart from it (`fabricEstimate`), worded as an estimate, and its box is not ticked:
+   it is saved only when the merchant ticks it, with the value they confirm. Left out, size advice
+   treats the fabric as not stretching (0 %). The words are `DESCRIPTION_IMPORT_TEXT`.
 4. **Per product** (`GET /shopify/products/:id/checklist`): checklist (chart type, chart, category,
    fabric, lengths) and a **Try it on (preview)** link to the storefront product page
    (`onlineStoreUrl`, or `onlineStorePreviewUrl` while unpublished). Required = the three fields of

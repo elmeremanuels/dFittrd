@@ -191,17 +191,25 @@ mountGarmentView(canvas, { ...options, bodyShape: 'realistic-spike' }); // web b
   procedural body. A male body ignores the option. `look.head` is not used on it: its head is MakeHuman's, untextured,
   with two grey eye spheres (D27: no face work).
 - **Cost.** One more GET (the asset, the same file for everyone, no credentials, no referrer) and a lazy chunk
-  `realisticBodyLoad` (4.2 KB gzip in the web build); the viewer chunk does not carry it. The fit runs on the main
-  thread once per mount (100 to 250 ms in Node on the build container; not measured on a phone).
+  `realisticBodyLoad` (6.1 KB gzip in the web build, never precached by the service worker); the viewer chunk does
+  not carry it. The fit runs on the main thread once per mount (about 240 to 510 ms in Node on the build container
+  since the review fixes of 21 Nov, before 100 to 250 ms; not measured on a phone).
 - **Girth is the loop** (the closed section round the ring centre, as `meshRingCircumference`); the tape (convex hull)
-  is reported next to it. Which one a typed girth means is open (OI-141).
+  is reported next to it. Which one a typed girth means is open (OI-141). The girths are tested against the typed
+  measurements and `buildBody`'s ring table with an independent slicer (`test/independentSlice.ts`,
+  `test/realisticBodyGirth.test.ts`, with negative controls); every ring centre must lie inside its drawn section, and
+  the fit moves each torso ring's and five arm stations' sections so their area centre is on the ring table's centre
+  line or arm axis (MakeHuman's forearm is bent forward of the line through its joints).
 - **Under a garment it is conformed.** The cloth meets the ring table's ellipses, and the realistic section is outside
   them in places (bust, seat, shoulder caps, the backs of the calves: 1.5 to 5 cm on the torso). While a garment is
   drawn, the vertices it covers (`coverZone` of the bundle's rest particles) are pulled inside the field plus 0.1 cm
-  (`conformToField`), so the skin does not show through; `canvas.dataset.body` is then `realistic-conformed`. That
-  mesh no longer has the table's girths where it was pulled (chest 4 to 8.5 % under). `realisticBodyConform: false`
-  draws it as fitted (comparison pictures only). The real fix is a collider made from the realistic mesh (OI-143).
-  A drape bake draws it unconformed.
+  (`conformToField`), so the skin does not show through; `canvas.dataset.body` is then `realistic-conformed`. The
+  pull alone took 1 to 3 % off the girths; by default the covered skin inside the field is then scaled back out
+  (never past it) per height until each loop is the fitted mesh's again: chest within about 1.2 %, underbust, waist
+  and hip within about 0.7 % (the arms are pulled only). It is a display mesh: nothing measures it but the spike
+  pictures' tag (`canvas.dataset.bodyGirths` and `bodyGirthsConformed`). `realisticBodyConform: false` draws it as
+  fitted (comparison pictures only). The real fix is a collider made from the realistic mesh (OI-143). A drape bake
+  draws it unconformed.
 - Bake again: `pnpm --filter @curtain/garment-viewer exec tsx scripts/bake-realistic-body.ts <mpfb2 checkout> --fetch`
   (deterministic; every source checked by sha256). Measure: `scripts/realistic-body-report.ts`. Pictures:
   `spikes/garment-engine/viewer/realistic-body-renders.mjs`.

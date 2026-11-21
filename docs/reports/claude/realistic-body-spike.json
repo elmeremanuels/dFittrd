@@ -1,0 +1,1801 @@
+{
+ "asset": {
+  "bytes": 337732,
+  "gzipBytes": 251229,
+  "vertices": 13524,
+  "triangles": 27036,
+  "baseSelfCrossings": {
+   "count": 14,
+   "ys": [
+    0.8,
+    0.8,
+    0.8,
+    0.6,
+    1.3,
+    1.3,
+    1.3,
+    0.8,
+    0.8,
+    0.8,
+    0.6,
+    1.3,
+    1.3,
+    1.3
+   ]
+  },
+  "baseSelfCrossingsWithEyes": 732
+ },
+ "bodies": {
+  "slim": {
+   "input": {
+    "heightCm": 164,
+    "bust": 80,
+    "waist": 62,
+    "hip": 88
+   },
+   "shape": {
+    "weight": -1,
+    "cup": -0.45
+   },
+   "fitMs": 170,
+   "rings": [
+    {
+     "id": "neck",
+     "targetCm": 32,
+     "loopCm": 32,
+     "tapeCm": 31.9,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.1
+    },
+    {
+     "id": "shoulder",
+     "targetCm": 94,
+     "loopCm": 94,
+     "tapeCm": 92.18,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -1.82
+    },
+    {
+     "id": "chest",
+     "targetCm": 80,
+     "loopCm": 80,
+     "tapeCm": 79.31,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.69
+    },
+    {
+     "id": "underbust",
+     "targetCm": 68,
+     "loopCm": 68,
+     "tapeCm": 67.86,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.14
+    },
+    {
+     "id": "waist",
+     "targetCm": 62,
+     "loopCm": 62,
+     "tapeCm": 61.94,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.06
+    },
+    {
+     "id": "hip",
+     "targetCm": 88,
+     "loopCm": 88,
+     "tapeCm": 86.26,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -1.74
+    },
+    {
+     "id": "thigh",
+     "targetCm": 50,
+     "loopCm": 50,
+     "tapeCm": 49.98,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.02
+    },
+    {
+     "id": "knee",
+     "targetCm": 33,
+     "loopCm": 33,
+     "tapeCm": 32.98,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.02
+    },
+    {
+     "id": "calf",
+     "targetCm": 32,
+     "loopCm": 32,
+     "tapeCm": 31.98,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.02
+    },
+    {
+     "id": "ankle",
+     "targetCm": 20.5,
+     "loopCm": 20.5,
+     "tapeCm": 20.5,
+     "errorPct": 0,
+     "tapeMinusLoopCm": 0
+    },
+    {
+     "id": "upper_arm",
+     "targetCm": 25,
+     "loopCm": 25,
+     "tapeCm": 24.99,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.01
+    },
+    {
+     "id": "wrist",
+     "targetCm": 14.5,
+     "loopCm": 14.5,
+     "tapeCm": 14.44,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.06
+    }
+   ],
+   "maxAbsErrorPct": 0,
+   "watertight": true,
+   "components": 3,
+   "selfCrossings": {
+    "count": 14,
+    "ys": [
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.9,
+     0.9,
+     0.9,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.9,
+     0.9,
+     0.9
+    ]
+   },
+   "outline": {
+    "torso": {
+     "outsideCm": 3.03,
+     "outsideAt": "torso y 119.3 at 304°",
+     "insideCm": 4.38,
+     "insideAt": "torso y 119.8 at 90°",
+     "meanAbsCm": 1.06
+    },
+    "arm": {
+     "outsideCm": 5.82,
+     "outsideAt": "arm s 54.2 at 90°",
+     "insideCm": 3.05,
+     "insideAt": "arm s 12.2 at 255°",
+     "meanAbsCm": 1.22
+    },
+    "armToWristLess3": {
+     "outsideCm": 4.49,
+     "outsideAt": "arm s 51.2 at 86°",
+     "insideCm": 3.05,
+     "insideAt": "arm s 12.2 at 255°",
+     "meanAbsCm": 1.12
+    },
+    "leg": {
+     "outsideCm": 2.49,
+     "outsideAt": "leg y 18.2 at 274°",
+     "insideCm": 2.02,
+     "insideAt": "leg y 65.7 at 158°",
+     "meanAbsCm": 0.61
+    }
+   },
+   "conformed": {
+    "outline": {
+     "torso": {
+      "outsideCm": 0.18,
+      "outsideAt": "torso y 112.3 at 210°",
+      "insideCm": 4.38,
+      "insideAt": "torso y 119.8 at 90°",
+      "meanAbsCm": 0.77
+     },
+     "arm": {
+      "outsideCm": 5.63,
+      "outsideAt": "arm s 54.2 at 90°",
+      "insideCm": 3.05,
+      "insideAt": "arm s 12.2 at 255°",
+      "meanAbsCm": 0.82
+     },
+     "armToWristLess3": {
+      "outsideCm": 0.32,
+      "outsideAt": "arm s 51.2 at 79°",
+      "insideCm": 3.05,
+      "insideAt": "arm s 12.2 at 255°",
+      "meanAbsCm": 0.71
+     }
+    },
+    "rings": [
+     {
+      "id": "neck",
+      "errorPct": 0
+     },
+     {
+      "id": "shoulder",
+      "errorPct": 0.034
+     },
+     {
+      "id": "chest",
+      "errorPct": -5.7
+     },
+     {
+      "id": "underbust",
+      "errorPct": -1.949
+     },
+     {
+      "id": "waist",
+      "errorPct": -4.098
+     },
+     {
+      "id": "hip",
+      "errorPct": -2.306
+     },
+     {
+      "id": "thigh",
+      "errorPct": 0
+     },
+     {
+      "id": "knee",
+      "errorPct": 0
+     },
+     {
+      "id": "calf",
+      "errorPct": 0
+     },
+     {
+      "id": "ankle",
+      "errorPct": 0
+     },
+     {
+      "id": "upper_arm",
+      "errorPct": -24.387
+     },
+     {
+      "id": "wrist",
+      "errorPct": 0.202
+     }
+    ],
+    "selfCrossings": 22
+   }
+  },
+  "mid": {
+   "input": {
+    "heightCm": 168,
+    "bust": 92,
+    "waist": 74,
+    "hip": 100
+   },
+   "shape": {
+    "weight": 0.2,
+    "cup": -0.55
+   },
+   "fitMs": 119,
+   "rings": [
+    {
+     "id": "neck",
+     "targetCm": 35,
+     "loopCm": 35,
+     "tapeCm": 34.91,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.09
+    },
+    {
+     "id": "shoulder",
+     "targetCm": 102,
+     "loopCm": 102,
+     "tapeCm": 101.24,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.76
+    },
+    {
+     "id": "chest",
+     "targetCm": 92,
+     "loopCm": 92,
+     "tapeCm": 91.13,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.87
+    },
+    {
+     "id": "underbust",
+     "targetCm": 78,
+     "loopCm": 78,
+     "tapeCm": 77.68,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.32
+    },
+    {
+     "id": "waist",
+     "targetCm": 74,
+     "loopCm": 74,
+     "tapeCm": 73.87,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.13
+    },
+    {
+     "id": "hip",
+     "targetCm": 100,
+     "loopCm": 100,
+     "tapeCm": 97.18,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -2.82
+    },
+    {
+     "id": "thigh",
+     "targetCm": 57,
+     "loopCm": 57,
+     "tapeCm": 56.98,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.02
+    },
+    {
+     "id": "knee",
+     "targetCm": 36,
+     "loopCm": 36,
+     "tapeCm": 35.98,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.02
+    },
+    {
+     "id": "calf",
+     "targetCm": 35,
+     "loopCm": 35,
+     "tapeCm": 34.98,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.02
+    },
+    {
+     "id": "ankle",
+     "targetCm": 22,
+     "loopCm": 22,
+     "tapeCm": 22,
+     "errorPct": 0,
+     "tapeMinusLoopCm": 0
+    },
+    {
+     "id": "upper_arm",
+     "targetCm": 28,
+     "loopCm": 28,
+     "tapeCm": 28,
+     "errorPct": 0,
+     "tapeMinusLoopCm": 0
+    },
+    {
+     "id": "wrist",
+     "targetCm": 15.5,
+     "loopCm": 15.5,
+     "tapeCm": 15.43,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.07
+    }
+   ],
+   "maxAbsErrorPct": 0,
+   "watertight": true,
+   "components": 3,
+   "selfCrossings": {
+    "count": 14,
+    "ys": [
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.9,
+     0.9,
+     0.9,
+     0.5,
+     0.5,
+     0.5,
+     0.5,
+     0.9,
+     0.9,
+     0.9
+    ]
+   },
+   "outline": {
+    "torso": {
+     "outsideCm": 3.51,
+     "outsideAt": "torso y 121.9 at 311°",
+     "insideCm": 4.85,
+     "insideAt": "torso y 121.4 at 90°",
+     "meanAbsCm": 1.36
+    },
+    "arm": {
+     "outsideCm": 6.15,
+     "outsideAt": "arm s 55.5 at 90°",
+     "insideCm": 3.12,
+     "insideAt": "arm s 48.5 at 180°",
+     "meanAbsCm": 1.16
+    },
+    "armToWristLess3": {
+     "outsideCm": 4.62,
+     "outsideAt": "arm s 52.5 at 86°",
+     "insideCm": 3.12,
+     "insideAt": "arm s 48.5 at 180°",
+     "meanAbsCm": 1.04
+    },
+    "leg": {
+     "outsideCm": 2.77,
+     "outsideAt": "leg y 18.9 at 289°",
+     "insideCm": 1.93,
+     "insideAt": "leg y 40.4 at 105°",
+     "meanAbsCm": 0.63
+    }
+   },
+   "conformed": {
+    "outline": {
+     "torso": {
+      "outsideCm": 0.14,
+      "outsideAt": "torso y 114.9 at 60°",
+      "insideCm": 4.85,
+      "insideAt": "torso y 121.4 at 90°",
+      "meanAbsCm": 0.99
+     },
+     "arm": {
+      "outsideCm": 5.91,
+      "outsideAt": "arm s 55.5 at 90°",
+      "insideCm": 3.12,
+      "insideAt": "arm s 48.5 at 180°",
+      "meanAbsCm": 0.81
+     },
+     "armToWristLess3": {
+      "outsideCm": 0.34,
+      "outsideAt": "arm s 52.5 at 75°",
+      "insideCm": 3.12,
+      "insideAt": "arm s 48.5 at 180°",
+      "meanAbsCm": 0.69
+     }
+    },
+    "rings": [
+     {
+      "id": "neck",
+      "errorPct": 0
+     },
+     {
+      "id": "shoulder",
+      "errorPct": -0.108
+     },
+     {
+      "id": "chest",
+      "errorPct": -6.963
+     },
+     {
+      "id": "underbust",
+      "errorPct": -2.242
+     },
+     {
+      "id": "waist",
+      "errorPct": -3.524
+     },
+     {
+      "id": "hip",
+      "errorPct": -0.381
+     },
+     {
+      "id": "thigh",
+      "errorPct": 0
+     },
+     {
+      "id": "knee",
+      "errorPct": 0
+     },
+     {
+      "id": "calf",
+      "errorPct": 0
+     },
+     {
+      "id": "ankle",
+      "errorPct": 0
+     },
+     {
+      "id": "upper_arm",
+      "errorPct": -17.195
+     },
+     {
+      "id": "wrist",
+      "errorPct": 0.242
+     }
+    ],
+    "selfCrossings": 60
+   }
+  },
+  "full": {
+   "input": {
+    "heightCm": 170,
+    "bust": 116,
+    "waist": 98,
+    "hip": 122
+   },
+   "shape": {
+    "weight": 1,
+    "cup": -0.85
+   },
+   "fitMs": 171,
+   "rings": [
+    {
+     "id": "neck",
+     "targetCm": 40,
+     "loopCm": 40,
+     "tapeCm": 39.92,
+     "errorPct": -0.0001,
+     "tapeMinusLoopCm": -0.08
+    },
+    {
+     "id": "shoulder",
+     "targetCm": 120,
+     "loopCm": 120,
+     "tapeCm": 119.09,
+     "errorPct": 0.0001,
+     "tapeMinusLoopCm": -0.91
+    },
+    {
+     "id": "chest",
+     "targetCm": 116,
+     "loopCm": 116,
+     "tapeCm": 114.95,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -1.05
+    },
+    {
+     "id": "underbust",
+     "targetCm": 100,
+     "loopCm": 100,
+     "tapeCm": 99.58,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.42
+    },
+    {
+     "id": "waist",
+     "targetCm": 98,
+     "loopCm": 98,
+     "tapeCm": 97.83,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.17
+    },
+    {
+     "id": "hip",
+     "targetCm": 122,
+     "loopCm": 122,
+     "tapeCm": 119.51,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -2.49
+    },
+    {
+     "id": "thigh",
+     "targetCm": 70,
+     "loopCm": 70,
+     "tapeCm": 69.98,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.02
+    },
+    {
+     "id": "knee",
+     "targetCm": 41,
+     "loopCm": 41,
+     "tapeCm": 40.98,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.02
+    },
+    {
+     "id": "calf",
+     "targetCm": 40,
+     "loopCm": 40,
+     "tapeCm": 39.98,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.02
+    },
+    {
+     "id": "ankle",
+     "targetCm": 24.5,
+     "loopCm": 24.5,
+     "tapeCm": 24.5,
+     "errorPct": 0,
+     "tapeMinusLoopCm": 0
+    },
+    {
+     "id": "upper_arm",
+     "targetCm": 36,
+     "loopCm": 36,
+     "tapeCm": 35.99,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.01
+    },
+    {
+     "id": "wrist",
+     "targetCm": 17,
+     "loopCm": 17,
+     "tapeCm": 16.92,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.08
+    }
+   ],
+   "maxAbsErrorPct": 0.0001,
+   "watertight": true,
+   "components": 3,
+   "selfCrossings": {
+    "count": 14,
+    "ys": [
+     0.6,
+     0.6,
+     0.6,
+     0.5,
+     0.9,
+     0.9,
+     0.9,
+     0.6,
+     0.6,
+     0.6,
+     0.5,
+     0.9,
+     0.9,
+     0.9
+    ]
+   },
+   "outline": {
+    "torso": {
+     "outsideCm": 4.85,
+     "outsideAt": "torso y 122.9 at 311°",
+     "insideCm": 6.13,
+     "insideAt": "torso y 123.9 at 90°",
+     "meanAbsCm": 1.8
+    },
+    "arm": {
+     "outsideCm": 6.73,
+     "outsideAt": "arm s 56.1 at 90°",
+     "insideCm": 3.52,
+     "insideAt": "arm s 49.6 at 180°",
+     "meanAbsCm": 1.27
+    },
+    "armToWristLess3": {
+     "outsideCm": 5.03,
+     "outsideAt": "arm s 53.1 at 86°",
+     "insideCm": 3.52,
+     "insideAt": "arm s 49.6 at 180°",
+     "meanAbsCm": 1.14
+    },
+    "leg": {
+     "outsideCm": 3.23,
+     "outsideAt": "leg y 20.5 at 289°",
+     "insideCm": 2.33,
+     "insideAt": "leg y 41.0 at 101°",
+     "meanAbsCm": 0.7
+    }
+   },
+   "conformed": {
+    "outline": {
+     "torso": {
+      "outsideCm": 0.16,
+      "outsideAt": "torso y 116.9 at 206°",
+      "insideCm": 6.13,
+      "insideAt": "torso y 123.9 at 90°",
+      "meanAbsCm": 1.28
+     },
+     "arm": {
+      "outsideCm": 6.44,
+      "outsideAt": "arm s 56.1 at 90°",
+      "insideCm": 3.52,
+      "insideAt": "arm s 49.6 at 180°",
+      "meanAbsCm": 0.91
+     },
+     "armToWristLess3": {
+      "outsideCm": 0.36,
+      "outsideAt": "arm s 53.1 at 75°",
+      "insideCm": 3.52,
+      "insideAt": "arm s 49.6 at 180°",
+      "meanAbsCm": 0.78
+     }
+    },
+    "rings": [
+     {
+      "id": "neck",
+      "errorPct": 0
+     },
+     {
+      "id": "shoulder",
+      "errorPct": -0.663
+     },
+     {
+      "id": "chest",
+      "errorPct": -8.487
+     },
+     {
+      "id": "underbust",
+      "errorPct": -2.333
+     },
+     {
+      "id": "waist",
+      "errorPct": -3.16
+     },
+     {
+      "id": "hip",
+      "errorPct": -0.384
+     },
+     {
+      "id": "thigh",
+      "errorPct": 0
+     },
+     {
+      "id": "knee",
+      "errorPct": 0
+     },
+     {
+      "id": "calf",
+      "errorPct": 0
+     },
+     {
+      "id": "ankle",
+      "errorPct": 0
+     },
+     {
+      "id": "upper_arm",
+      "errorPct": -13.717
+     },
+     {
+      "id": "wrist",
+      "errorPct": 0.266
+     }
+    ],
+    "selfCrossings": 66
+   }
+  },
+  "tall": {
+   "input": {
+    "heightCm": 182,
+    "bust": 92,
+    "waist": 74,
+    "hip": 100
+   },
+   "shape": {
+    "weight": -0.75,
+    "cup": -0.45
+   },
+   "fitMs": 104,
+   "rings": [
+    {
+     "id": "neck",
+     "targetCm": 35,
+     "loopCm": 35,
+     "tapeCm": 34.92,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.08
+    },
+    {
+     "id": "shoulder",
+     "targetCm": 102,
+     "loopCm": 102,
+     "tapeCm": 100.71,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -1.29
+    },
+    {
+     "id": "chest",
+     "targetCm": 92,
+     "loopCm": 92,
+     "tapeCm": 91.26,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.74
+    },
+    {
+     "id": "underbust",
+     "targetCm": 78,
+     "loopCm": 78,
+     "tapeCm": 77.9,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.1
+    },
+    {
+     "id": "waist",
+     "targetCm": 74,
+     "loopCm": 74,
+     "tapeCm": 73.96,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.04
+    },
+    {
+     "id": "hip",
+     "targetCm": 100,
+     "loopCm": 100,
+     "tapeCm": 97.79,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -2.21
+    },
+    {
+     "id": "thigh",
+     "targetCm": 57,
+     "loopCm": 57,
+     "tapeCm": 56.98,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.02
+    },
+    {
+     "id": "knee",
+     "targetCm": 36,
+     "loopCm": 36,
+     "tapeCm": 35.99,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.01
+    },
+    {
+     "id": "calf",
+     "targetCm": 35,
+     "loopCm": 35,
+     "tapeCm": 34.98,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.02
+    },
+    {
+     "id": "ankle",
+     "targetCm": 22,
+     "loopCm": 22,
+     "tapeCm": 22,
+     "errorPct": 0,
+     "tapeMinusLoopCm": 0
+    },
+    {
+     "id": "upper_arm",
+     "targetCm": 28,
+     "loopCm": 28,
+     "tapeCm": 28,
+     "errorPct": 0,
+     "tapeMinusLoopCm": 0
+    },
+    {
+     "id": "wrist",
+     "targetCm": 15.5,
+     "loopCm": 15.5,
+     "tapeCm": 15.43,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.07
+    }
+   ],
+   "maxAbsErrorPct": 0,
+   "watertight": true,
+   "components": 3,
+   "selfCrossings": {
+    "count": 14,
+    "ys": [
+     0.6,
+     0.6,
+     0.6,
+     0.5,
+     1,
+     1,
+     1,
+     0.6,
+     0.6,
+     0.6,
+     0.5,
+     1,
+     1,
+     1
+    ]
+   },
+   "outline": {
+    "torso": {
+     "outsideCm": 3.57,
+     "outsideAt": "torso y 132.6 at 304°",
+     "insideCm": 4.94,
+     "insideAt": "torso y 132.6 at 90°",
+     "meanAbsCm": 1.24
+    },
+    "arm": {
+     "outsideCm": 6.13,
+     "outsideAt": "arm s 60.0 at 90°",
+     "insideCm": 3.23,
+     "insideAt": "arm s 51.0 at 0°",
+     "meanAbsCm": 1.28
+    },
+    "armToWristLess3": {
+     "outsideCm": 4.82,
+     "outsideAt": "arm s 57.0 at 86°",
+     "insideCm": 3.23,
+     "insideAt": "arm s 51.0 at 0°",
+     "meanAbsCm": 1.17
+    },
+    "leg": {
+     "outsideCm": 2.68,
+     "outsideAt": "leg y 20.1 at 274°",
+     "insideCm": 2.01,
+     "insideAt": "leg y 73.1 at 154°",
+     "meanAbsCm": 0.63
+    }
+   },
+   "conformed": {
+    "outline": {
+     "torso": {
+      "outsideCm": 0.18,
+      "outsideAt": "torso y 124.6 at 330°",
+      "insideCm": 4.94,
+      "insideAt": "torso y 132.6 at 90°",
+      "meanAbsCm": 0.88
+     },
+     "arm": {
+      "outsideCm": 5.71,
+      "outsideAt": "arm s 60.0 at 90°",
+      "insideCm": 3.23,
+      "insideAt": "arm s 51.0 at 0°",
+      "meanAbsCm": 0.87
+     },
+     "armToWristLess3": {
+      "outsideCm": 0.33,
+      "outsideAt": "arm s 57.0 at 75°",
+      "insideCm": 3.23,
+      "insideAt": "arm s 51.0 at 0°",
+      "meanAbsCm": 0.76
+     }
+    },
+    "rings": [
+     {
+      "id": "neck",
+      "errorPct": 0
+     },
+     {
+      "id": "shoulder",
+      "errorPct": -0.096
+     },
+     {
+      "id": "chest",
+      "errorPct": -5.849
+     },
+     {
+      "id": "underbust",
+      "errorPct": -1.989
+     },
+     {
+      "id": "waist",
+      "errorPct": -4.249
+     },
+     {
+      "id": "hip",
+      "errorPct": -1.73
+     },
+     {
+      "id": "thigh",
+      "errorPct": 0
+     },
+     {
+      "id": "knee",
+      "errorPct": 0
+     },
+     {
+      "id": "calf",
+      "errorPct": 0
+     },
+     {
+      "id": "ankle",
+      "errorPct": 0
+     },
+     {
+      "id": "upper_arm",
+      "errorPct": -22.679
+     },
+     {
+      "id": "wrist",
+      "errorPct": 0.464
+     }
+    ],
+    "selfCrossings": 48
+   }
+  },
+  "petite": {
+   "input": {
+    "heightCm": 152,
+    "bust": 84,
+    "waist": 66,
+    "hip": 92
+   },
+   "shape": {
+    "weight": 0.4,
+    "cup": 0.15
+   },
+   "fitMs": 147,
+   "rings": [
+    {
+     "id": "neck",
+     "targetCm": 33,
+     "loopCm": 33,
+     "tapeCm": 32.86,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.14
+    },
+    {
+     "id": "shoulder",
+     "targetCm": 96.66666666666667,
+     "loopCm": 96.67,
+     "tapeCm": 95.95,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.72
+    },
+    {
+     "id": "chest",
+     "targetCm": 84,
+     "loopCm": 84,
+     "tapeCm": 82.35,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -1.65
+    },
+    {
+     "id": "underbust",
+     "targetCm": 71.33333333333333,
+     "loopCm": 71.33,
+     "tapeCm": 71.04,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.29
+    },
+    {
+     "id": "waist",
+     "targetCm": 66,
+     "loopCm": 66,
+     "tapeCm": 65.88,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.12
+    },
+    {
+     "id": "hip",
+     "targetCm": 92,
+     "loopCm": 92,
+     "tapeCm": 89.64,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -2.36
+    },
+    {
+     "id": "thigh",
+     "targetCm": 52.333333333333336,
+     "loopCm": 52.33,
+     "tapeCm": 52.32,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.01
+    },
+    {
+     "id": "knee",
+     "targetCm": 34,
+     "loopCm": 34,
+     "tapeCm": 33.98,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.02
+    },
+    {
+     "id": "calf",
+     "targetCm": 33,
+     "loopCm": 33,
+     "tapeCm": 32.98,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.02
+    },
+    {
+     "id": "ankle",
+     "targetCm": 21,
+     "loopCm": 21,
+     "tapeCm": 21,
+     "errorPct": 0,
+     "tapeMinusLoopCm": 0
+    },
+    {
+     "id": "upper_arm",
+     "targetCm": 26,
+     "loopCm": 26,
+     "tapeCm": 26,
+     "errorPct": 0,
+     "tapeMinusLoopCm": 0
+    },
+    {
+     "id": "wrist",
+     "targetCm": 14.833333333333334,
+     "loopCm": 14.83,
+     "tapeCm": 14.76,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.07
+    }
+   ],
+   "maxAbsErrorPct": 0,
+   "watertight": true,
+   "components": 3,
+   "selfCrossings": {
+    "count": 14,
+    "ys": [
+     0.5,
+     0.5,
+     0.5,
+     0.4,
+     0.8,
+     0.8,
+     0.8,
+     0.5,
+     0.5,
+     0.5,
+     0.4,
+     0.8,
+     0.8,
+     0.8
+    ]
+   },
+   "outline": {
+    "torso": {
+     "outsideCm": 2.26,
+     "outsideAt": "torso y 105.0 at 45°",
+     "insideCm": 4.73,
+     "insideAt": "torso y 109.5 at 90°",
+     "meanAbsCm": 1.18
+    },
+    "arm": {
+     "outsideCm": 5.98,
+     "outsideAt": "arm s 50.3 at 90°",
+     "insideCm": 2.94,
+     "insideAt": "arm s 44.3 at 0°",
+     "meanAbsCm": 1.08
+    },
+    "armToWristLess3": {
+     "outsideCm": 4.37,
+     "outsideAt": "arm s 47.3 at 86°",
+     "insideCm": 2.94,
+     "insideAt": "arm s 44.3 at 0°",
+     "meanAbsCm": 0.96
+    },
+    "leg": {
+     "outsideCm": 2.67,
+     "outsideAt": "leg y 17.1 at 289°",
+     "insideCm": 1.84,
+     "insideAt": "leg y 36.6 at 101°",
+     "meanAbsCm": 0.59
+    }
+   },
+   "conformed": {
+    "outline": {
+     "torso": {
+      "outsideCm": 0.17,
+      "outsideAt": "torso y 104.0 at 214°",
+      "insideCm": 4.73,
+      "insideAt": "torso y 109.5 at 90°",
+      "meanAbsCm": 0.89
+     },
+     "arm": {
+      "outsideCm": 5.91,
+      "outsideAt": "arm s 50.3 at 90°",
+      "insideCm": 2.94,
+      "insideAt": "arm s 44.3 at 0°",
+      "meanAbsCm": 0.75
+     },
+     "armToWristLess3": {
+      "outsideCm": 0.35,
+      "outsideAt": "arm s 47.3 at 79°",
+      "insideCm": 2.94,
+      "insideAt": "arm s 44.3 at 0°",
+      "meanAbsCm": 0.62
+     }
+    },
+    "rings": [
+     {
+      "id": "neck",
+      "errorPct": 0
+     },
+     {
+      "id": "shoulder",
+      "errorPct": 0.277
+     },
+     {
+      "id": "chest",
+      "errorPct": -4.053
+     },
+     {
+      "id": "underbust",
+      "errorPct": -1.538
+     },
+     {
+      "id": "waist",
+      "errorPct": -3.288
+     },
+     {
+      "id": "hip",
+      "errorPct": -0.351
+     },
+     {
+      "id": "thigh",
+      "errorPct": 0
+     },
+     {
+      "id": "knee",
+      "errorPct": 0
+     },
+     {
+      "id": "calf",
+      "errorPct": 0
+     },
+     {
+      "id": "ankle",
+      "errorPct": 0
+     },
+     {
+      "id": "upper_arm",
+      "errorPct": -16.173
+     },
+     {
+      "id": "wrist",
+      "errorPct": 0.066
+     }
+    ],
+    "selfCrossings": 66
+   }
+  },
+  "corner-small": {
+   "input": {
+    "heightCm": 130,
+    "bust": 60,
+    "waist": 45,
+    "hip": 65
+   },
+   "shape": {
+    "weight": -1,
+    "cup": 0.2
+   },
+   "fitMs": 178,
+   "rings": [
+    {
+     "id": "neck",
+     "targetCm": 27,
+     "loopCm": 27,
+     "tapeCm": 26.88,
+     "errorPct": 0.0004,
+     "tapeMinusLoopCm": -0.12
+    },
+    {
+     "id": "shoulder",
+     "targetCm": 80.66666666666667,
+     "loopCm": 80.67,
+     "tapeCm": 79.09,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -1.58
+    },
+    {
+     "id": "chest",
+     "targetCm": 60,
+     "loopCm": 60,
+     "tapeCm": 58.9,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -1.1
+    },
+    {
+     "id": "underbust",
+     "targetCm": 52.77777777777777,
+     "loopCm": 52.78,
+     "tapeCm": 52.29,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.48
+    },
+    {
+     "id": "waist",
+     "targetCm": 45,
+     "loopCm": 45,
+     "tapeCm": 44.95,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.05
+    },
+    {
+     "id": "hip",
+     "targetCm": 65,
+     "loopCm": 65,
+     "tapeCm": 63.71,
+     "errorPct": -0.0005,
+     "tapeMinusLoopCm": -1.29
+    },
+    {
+     "id": "thigh",
+     "targetCm": 36.58333333333333,
+     "loopCm": 36.59,
+     "tapeCm": 36.54,
+     "errorPct": 0.0192,
+     "tapeMinusLoopCm": -0.06
+    },
+    {
+     "id": "knee",
+     "targetCm": 27.25,
+     "loopCm": 27.25,
+     "tapeCm": 27.23,
+     "errorPct": -0.0001,
+     "tapeMinusLoopCm": -0.02
+    },
+    {
+     "id": "calf",
+     "targetCm": 26.25,
+     "loopCm": 26.25,
+     "tapeCm": 26.23,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.02
+    },
+    {
+     "id": "ankle",
+     "targetCm": 17.625,
+     "loopCm": 17.62,
+     "tapeCm": 17.62,
+     "errorPct": 0,
+     "tapeMinusLoopCm": 0
+    },
+    {
+     "id": "upper_arm",
+     "targetCm": 20,
+     "loopCm": 20,
+     "tapeCm": 19.99,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.01
+    },
+    {
+     "id": "wrist",
+     "targetCm": 12.833333333333334,
+     "loopCm": 12.83,
+     "tapeCm": 12.78,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.05
+    }
+   ],
+   "maxAbsErrorPct": 0.0192,
+   "watertight": true,
+   "components": 3,
+   "selfCrossings": {
+    "count": 92,
+    "ys": [
+     59.8,
+     59.8,
+     60.6,
+     60.6,
+     60.6,
+     60.6,
+     60.6,
+     61.4,
+     59.8,
+     59.8,
+     59.8,
+     59.8,
+     59.8,
+     59.8,
+     59.8,
+     60.6,
+     60.6,
+     59.3,
+     59.3,
+     59.3,
+     59.8,
+     59.8,
+     59.8,
+     59.3,
+     59.3,
+     59.3,
+     59.5,
+     59.5,
+     59.5,
+     59.3,
+     59,
+     59,
+     59,
+     56.7,
+     59.5,
+     59.5,
+     59.5,
+     59.3,
+     0.4,
+     0.4,
+     0.4,
+     0.4,
+     0.7,
+     0.7,
+     0.7,
+     57.2,
+     57.2,
+     57.2,
+     57.2,
+     57.2,
+     57.2,
+     57.2,
+     57.2,
+     57.2,
+     59.5,
+     59.5,
+     59.5,
+     59.5,
+     59.5,
+     60.3,
+     60.3,
+     60.3,
+     60.3,
+     57.2,
+     59.5,
+     59.5,
+     57.2,
+     59.5,
+     59.5,
+     59.5,
+     59.5,
+     59.5,
+     59.5,
+     59.5,
+     59.5,
+     59.5,
+     60.4,
+     60.4,
+     60.4,
+     59.5,
+     59.5,
+     59.5,
+     59.3,
+     59,
+     59,
+     0.4,
+     0.4,
+     0.4,
+     0.4,
+     0.7,
+     0.7,
+     0.7
+    ]
+   },
+   "outline": {
+    "torso": {
+     "outsideCm": 1.53,
+     "outsideAt": "torso y 90.1 at 41°",
+     "insideCm": 3.67,
+     "insideAt": "torso y 95.1 at 90°",
+     "meanAbsCm": 0.78
+    },
+    "arm": {
+     "outsideCm": 4.89,
+     "outsideAt": "arm s 42.7 at 90°",
+     "insideCm": 2.56,
+     "insideAt": "arm s 36.2 at 0°",
+     "meanAbsCm": 1.03
+    },
+    "armToWristLess3": {
+     "outsideCm": 3.65,
+     "outsideAt": "arm s 39.7 at 83°",
+     "insideCm": 2.56,
+     "insideAt": "arm s 36.2 at 0°",
+     "meanAbsCm": 0.91
+    },
+    "leg": {
+     "outsideCm": 2.11,
+     "outsideAt": "leg y 14.5 at 274°",
+     "insideCm": 1.6,
+     "insideAt": "leg y 52.5 at 143°",
+     "meanAbsCm": 0.47
+    }
+   },
+   "conformed": {
+    "outline": {
+     "torso": {
+      "outsideCm": 0.13,
+      "outsideAt": "torso y 81.6 at 90°",
+      "insideCm": 3.67,
+      "insideAt": "torso y 95.1 at 90°",
+      "meanAbsCm": 0.61
+     },
+     "arm": {
+      "outsideCm": 4.51,
+      "outsideAt": "arm s 42.7 at 86°",
+      "insideCm": 2.56,
+      "insideAt": "arm s 36.2 at 0°",
+      "meanAbsCm": 0.69
+     },
+     "armToWristLess3": {
+      "outsideCm": 0.17,
+      "outsideAt": "arm s 39.7 at 68°",
+      "insideCm": 2.56,
+      "insideAt": "arm s 36.2 at 0°",
+      "meanAbsCm": 0.56
+     }
+    },
+    "rings": [
+     {
+      "id": "neck",
+      "errorPct": 0
+     },
+     {
+      "id": "shoulder",
+      "errorPct": -0.056
+     },
+     {
+      "id": "chest",
+      "errorPct": -3.033
+     },
+     {
+      "id": "underbust",
+      "errorPct": -3.242
+     },
+     {
+      "id": "waist",
+      "errorPct": -3.905
+     },
+     {
+      "id": "hip",
+      "errorPct": -2.212
+     },
+     {
+      "id": "thigh",
+      "errorPct": 0.019
+     },
+     {
+      "id": "knee",
+      "errorPct": 0
+     },
+     {
+      "id": "calf",
+      "errorPct": 0
+     },
+     {
+      "id": "ankle",
+      "errorPct": 0
+     },
+     {
+      "id": "upper_arm",
+      "errorPct": -24.462
+     },
+     {
+      "id": "wrist",
+      "errorPct": -0.071
+     }
+    ],
+    "selfCrossings": 110
+   }
+  },
+  "corner-large": {
+   "input": {
+    "heightCm": 220,
+    "bust": 160,
+    "waist": 150,
+    "hip": 170
+   },
+   "shape": {
+    "weight": 1,
+    "cup": 0.4
+   },
+   "fitMs": 140,
+   "rings": [
+    {
+     "id": "neck",
+     "targetCm": 49.16666666666667,
+     "loopCm": 49.17,
+     "tapeCm": 49.02,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.14
+    },
+    {
+     "id": "shoulder",
+     "targetCm": 158.41600291132704,
+     "loopCm": 158.43,
+     "tapeCm": 156.61,
+     "errorPct": 0.0075,
+     "tapeMinusLoopCm": -1.82
+    },
+    {
+     "id": "chest",
+     "targetCm": 160,
+     "loopCm": 160,
+     "tapeCm": 155.98,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -4.02
+    },
+    {
+     "id": "underbust",
+     "targetCm": 145.7962962962963,
+     "loopCm": 145.8,
+     "tapeCm": 142.04,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -3.76
+    },
+    {
+     "id": "waist",
+     "targetCm": 147,
+     "loopCm": 147,
+     "tapeCm": 146.75,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.25
+    },
+    {
+     "id": "hip",
+     "targetCm": 170,
+     "loopCm": 170,
+     "tapeCm": 166.53,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -3.47
+    },
+    {
+     "id": "thigh",
+     "targetCm": 98.36363636363636,
+     "loopCm": 98.36,
+     "tapeCm": 98.31,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.06
+    },
+    {
+     "id": "knee",
+     "targetCm": 51.90909090909091,
+     "loopCm": 51.91,
+     "tapeCm": 51.88,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.03
+    },
+    {
+     "id": "calf",
+     "targetCm": 50.90909090909091,
+     "loopCm": 50.91,
+     "tapeCm": 50.88,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.03
+    },
+    {
+     "id": "ankle",
+     "targetCm": 29.954545454545453,
+     "loopCm": 29.95,
+     "tapeCm": 29.95,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.01
+    },
+    {
+     "id": "upper_arm",
+     "targetCm": 50.66666666666667,
+     "loopCm": 50.67,
+     "tapeCm": 50.65,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.02
+    },
+    {
+     "id": "wrist",
+     "targetCm": 19.75,
+     "loopCm": 19.75,
+     "tapeCm": 19.66,
+     "errorPct": 0,
+     "tapeMinusLoopCm": -0.09
+    }
+   ],
+   "maxAbsErrorPct": 0.0075,
+   "watertight": true,
+   "components": 3,
+   "selfCrossings": {
+    "count": 34,
+    "ys": [
+     100.9,
+     100.1,
+     100.1,
+     100.1,
+     100.1,
+     100.1,
+     101.1,
+     101.1,
+     101.1,
+     101.1,
+     100.1,
+     100.1,
+     100.9,
+     102.2,
+     102.2,
+     100.1,
+     101.1,
+     100.1,
+     100.9,
+     100.9,
+     0.7,
+     0.7,
+     0.7,
+     0.6,
+     1.2,
+     1.2,
+     1.2,
+     0.7,
+     0.7,
+     0.7,
+     0.6,
+     1.2,
+     1.2,
+     1.2
+    ]
+   },
+   "outline": {
+    "torso": {
+     "outsideCm": 5.06,
+     "outsideAt": "torso y 126.4 at 75°",
+     "insideCm": 8.32,
+     "insideAt": "torso y 158.4 at 90°",
+     "meanAbsCm": 2.72
+    },
+    "arm": {
+     "outsideCm": 8.01,
+     "outsideAt": "arm s 72.9 at 90°",
+     "insideCm": 4.3,
+     "insideAt": "arm s 64.4 at 180°",
+     "meanAbsCm": 1.65
+    },
+    "armToWristLess3": {
+     "outsideCm": 6.17,
+     "outsideAt": "arm s 69.9 at 86°",
+     "insideCm": 4.3,
+     "insideAt": "arm s 64.4 at 180°",
+     "meanAbsCm": 1.54
+    },
+    "leg": {
+     "outsideCm": 4.01,
+     "outsideAt": "leg y 26.5 at 289°",
+     "insideCm": 2.96,
+     "insideAt": "leg y 53.5 at 94°",
+     "meanAbsCm": 0.91
+    }
+   },
+   "conformed": {
+    "outline": {
+     "torso": {
+      "outsideCm": 0.22,
+      "outsideAt": "torso y 150.4 at 319°",
+      "insideCm": 8.32,
+      "insideAt": "torso y 158.4 at 90°",
+      "meanAbsCm": 2.13
+     },
+     "arm": {
+      "outsideCm": 7.93,
+      "outsideAt": "arm s 72.9 at 90°",
+      "insideCm": 4.3,
+      "insideAt": "arm s 64.4 at 180°",
+      "meanAbsCm": 1.24
+     },
+     "armToWristLess3": {
+      "outsideCm": 0.51,
+      "outsideAt": "arm s 69.9 at 68°",
+      "insideCm": 4.3,
+      "insideAt": "arm s 64.4 at 180°",
+      "meanAbsCm": 1.13
+     }
+    },
+    "rings": [
+     {
+      "id": "neck",
+      "errorPct": 0
+     },
+     {
+      "id": "shoulder",
+      "errorPct": -2.258
+     },
+     {
+      "id": "chest",
+      "errorPct": -3.005
+     },
+     {
+      "id": "underbust",
+      "errorPct": -2.673
+     },
+     {
+      "id": "waist",
+      "errorPct": -3.121
+     },
+     {
+      "id": "hip",
+      "errorPct": -0.363
+     },
+     {
+      "id": "thigh",
+      "errorPct": 0
+     },
+     {
+      "id": "knee",
+      "errorPct": 0
+     },
+     {
+      "id": "calf",
+      "errorPct": 0
+     },
+     {
+      "id": "ankle",
+      "errorPct": 0
+     },
+     {
+      "id": "upper_arm",
+      "errorPct": -10.561
+     },
+     {
+      "id": "wrist",
+      "errorPct": 1.334
+     }
+    ],
+    "selfCrossings": 109
+   }
+  }
+ }
+}

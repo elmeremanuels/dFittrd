@@ -130,6 +130,15 @@ export interface MountOptions {
    * skin then shows through the garment wherever it is outside the ring table's field). Default: conformed under it.
    */
   realisticBodyConform?: boolean;
+  /**
+   * With the realistic body only (`bodyShape: 'realistic-spike'`; ignored otherwise): `true` draws it with the
+   * procedural skin (`realisticSkin.ts`: wrap lighting, translucency at the ears and fingers, generated pore and crease
+   * detail, redness and sheen derived from `look.skinHex`) under the studio light (`studioLight.ts`: an environment
+   * made in code plus a soft key, the true-tone curve), from the moment the realistic body is swapped in. Default off:
+   * the realistic body is drawn with the figure's material and the stage's lighting, as before. Both come with the
+   * body's lazy chunk; nothing more is fetched. `canvas.dataset.bodySkin` says `procedural-skin` while it is drawn.
+   */
+  realisticSkin?: boolean;
 }
 
 export type BodyShapeKind = 'procedural' | 'realistic-spike';
@@ -346,7 +355,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
   figure.garment.position.y = lift;
   stage.scene.add(figure.group);
   stage.frame(60, stature);
-  const realistic = startRealisticBody(canvas, opts, plan, figure, fetchFn, () => wake(100), opts.realisticBodyConform === false ? undefined : { rest: bundle.baseMesh.positions, lift });
+  const realistic = startRealisticBody(canvas, opts, plan, stage, figure, fetchFn, () => wake(100), opts.realisticBodyConform === false ? undefined : { rest: bundle.baseMesh.positions, lift });
 
   interface Live {
     fit: FitInstance;
@@ -537,7 +546,7 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
   stage.scene.add(figure.group);
   stage.frame(60, stature);
   // A drape bake: the realistic body is drawn as fitted (not conformed under the baked garment).
-  const realistic = startRealisticBody(canvas, opts, plan, figure, fetchFn, () => wake(100));
+  const realistic = startRealisticBody(canvas, opts, plan, stage, figure, fetchFn, () => wake(100));
   const drapes = bakedDrapes(bake, field, avatar.measurements.hip);
   // The sizes the embed's own fit result says cannot be worn on the shopper's body: the same rule as the device drape
   // (`notDrawn.ts`; the view never recomputes the fit). A band that does not pass the hips is one case of it.
@@ -645,7 +654,7 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
  * (`conformToField`): the cloth meets the ring table's field, so without that the skin shows through the garment
  * wherever the real shape is outside the ellipse. `canvas.dataset.body` is then `realistic-conformed`.
  */
-function startRealisticBody(canvas: HTMLCanvasElement, opts: MountOptions, plan: AvatarPlan, figure: Figure, fetchFn: FetchLike, redraw: () => void, garment?: { rest: ArrayLike<number>; lift: number }): { stop(): void; garmentShown(shown: boolean): void } {
+function startRealisticBody(canvas: HTMLCanvasElement, opts: MountOptions, plan: AvatarPlan, stage: Stage, figure: Figure, fetchFn: FetchLike, redraw: () => void, garment?: { rest: ArrayLike<number>; lift: number }): { stop(): void; garmentShown(shown: boolean): void } {
   canvas.dataset.body = 'procedural';
   const none = { stop() {}, garmentShown() {} };
   if (bodyShapeOf(opts.bodyShape) !== 'realistic-spike' || plan.drawn.shape.family !== 'female') return none;
@@ -653,6 +662,8 @@ function startRealisticBody(canvas: HTMLCanvasElement, opts: MountOptions, plan:
   let live = true;
   let shown = true;
   let bodies: { plain: THREE.BufferGeometry; conformed: THREE.BufferGeometry | null } | null = null;
+  // `realisticSkin`: the procedural skin and the studio light, put on when the body is swapped in.
+  let look: { dispose(): void } | null = null;
   const show = (): void => {
     if (!bodies) return;
     const g = shown && bodies.conformed ? bodies.conformed : bodies.plain;
@@ -673,12 +684,18 @@ function startRealisticBody(canvas: HTMLCanvasElement, opts: MountOptions, plan:
       // Spike diagnostics for the comparison pictures' tag only: nothing reads these back (no fit, size or report).
       canvas.dataset.bodyGirths = mod.drawnGirthsTag(r.mesh, plan.drawn, plan.avatar.rings, plan.drawnScaleAt);
       canvas.dataset.bodyGirthsConformed = conformed ? mod.drawnGirthsTag(conformed, plan.drawn, plan.avatar.rings, plan.drawnScaleAt) : '';
-      return { plain: r.mesh, conformed };
+      const skin = opts.realisticSkin === true ? mod.realisticSkinOf(await mod.loadRealisticBody(fetchFn, opts.realisticBodyUrl)) : null;
+      return { plain: r.mesh, conformed, skin };
     })
     .then((r) => {
       if (!live) return;
       const old = figure.body.geometry;
       bodies = { plain: meshGeometry(r.plain), conformed: r.conformed ? meshGeometry(r.conformed) : null };
+      if (r.skin) {
+        for (const g of [bodies.plain, bodies.conformed]) if (g) r.skin.addMask(g);
+        look = r.skin.apply(stage, figure);
+        canvas.dataset.bodySkin = 'procedural-skin';
+      }
       show();
       old.dispose();
     })
@@ -688,6 +705,8 @@ function startRealisticBody(canvas: HTMLCanvasElement, opts: MountOptions, plan:
   return {
     stop() {
       live = false;
+      look?.dispose();
+      look = null;
       // The geometry on screen goes with the figure; the other one here.
       for (const g of bodies ? [bodies.plain, bodies.conformed] : []) if (g && g !== figure.body.geometry) g.dispose();
     },

@@ -8,6 +8,12 @@ import { decodeRealisticBody, fitRealisticBody, fitTargetOf, type FitResult, typ
 export { conformToField, coverZone } from './realisticBody';
 import { meshRingCircumference, type Mannequin, type Mesh } from '@curtain/mannequin';
 import type { AnchorRing } from '@curtain/anchors';
+import * as THREE from 'three';
+import { realisticSkinMaterial, skinMaskOf } from './realisticSkin';
+import { useStudioLight, type StudioTarget } from './studioLight';
+import type { SkinOverride } from './scene';
+export { realisticSkinCare, realisticSkinMaterial, skinMaskOf } from './realisticSkin';
+export { useStudioLight } from './studioLight';
 
 /** The baked female body shipped with the package (`assets/realistic-body/`, CC0, PROVENANCE.md next to it). */
 export const REALISTIC_BODY_URL = new URL('../assets/realistic-body/female-v1.crb', import.meta.url).href;
@@ -55,4 +61,30 @@ export function drawnGirthsTag(mesh: Mesh, drawn: Mannequin, rings: Record<Ancho
       return `${id} ${g === null ? 'n/a' : g.toFixed(1)}`;
     })
     .join(' · ');
+}
+
+/**
+ * The realistic body's procedural skin and studio light (`MountOptions.realisticSkin`): `addMask` puts the per-vertex
+ * mask (`skinMaskOf` of the asset) on a geometry of the fitted or conformed body; `apply` puts the skin material on the
+ * figure (it follows the figure's skin colour) and the studio light on the stage, and its `dispose` takes both off.
+ */
+export function realisticSkinOf(asset: RealisticBodyAsset): { addMask(g: THREE.BufferGeometry): void; apply(stage: StudioTarget, figure: { setSkinOverride(o: SkinOverride | null): void }): { dispose(): void } } {
+  const { mask } = skinMaskOf(asset);
+  return {
+    addMask(g) {
+      if (g.getAttribute('position').count === asset.meta.vertexCount) g.setAttribute('skinMask', new THREE.BufferAttribute(mask, 4));
+    },
+    apply(stage, figure) {
+      const skin = realisticSkinMaterial(null);
+      figure.setSkinOverride(skin);
+      const studio = useStudioLight(stage);
+      return {
+        dispose() {
+          figure.setSkinOverride(null);
+          skin.dispose();
+          studio.dispose();
+        },
+      };
+    },
+  };
 }

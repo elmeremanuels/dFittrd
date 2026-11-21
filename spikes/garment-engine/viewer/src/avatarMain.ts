@@ -8,7 +8,7 @@
  * URL parameters: `product=<bundle dir under out/>` and `size`; `skin=rrggbb`;
  * `lighting=neutral|neutral-v2`; `head=egg|neutral-v2|neutral-v3`; `shading=skin-v2`; the look comparison's overrides of the
  * lighting's extras `outline` (CSS px), `shadow` (opacity), `backdrop=adaptive`, `rim`, `bounce`; `family=male`,
- * `height`, `shoulder`, `bust`, `waist`, `hip` (cm); `body=realistic` (the realistic body spike, female). `mode=head` shows the body alone (no bundle),
+ * `height`, `shoulder`, `bust`, `waist`, `hip` (cm); `body=realistic` (the realistic body spike, female; `conform=0` draws it unconformed under the garment). `mode=head` shows the body alone (no bundle),
  * through the shipped viewer's `Stage` and `Figure`: `family`, `yaw` (degrees), `pitch`, `frame=head|body|face`.
  *
  * `window.avatarCheck.patches()` returns the median rendered colour of small patches of bare skin
@@ -115,8 +115,8 @@ async function garmentMode(): Promise<void> {
   const meas = { bust: m.shape.rings.chest.circumferenceCm, waist: m.shape.rings.waist.circumferenceCm, hip: m.shape.rings.hip.circumferenceCm };
   const fit = fitForBody(garment, meas);
   const size = params.get('size') ?? fit.recommendedSize ?? '';
-  const view = await mountGarmentView(canvas, { baseUrl, garment, fit, size, body, look: { skinHex: skin, head, shading }, lighting, lookExtras: extras, onState: setState, ...(maleShape ? { maleShape } : {}), ...(realistic ? { bodyShape: 'realistic-spike' as const } : {}) });
-  tag.textContent = `ESTIMATE · ${garment.name} · size ${canvas.dataset.size ?? size} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · ${realistic ? 'body realistic-spike' : `head ${head}`} · shading ${shading}`;
+  const view = await mountGarmentView(canvas, { baseUrl, garment, fit, size, body, look: { skinHex: skin, head, shading }, lighting, lookExtras: extras, onState: setState, ...(maleShape ? { maleShape } : {}), ...(realistic ? { bodyShape: 'realistic-spike' as const, ...(params.get('conform') === '0' ? { realisticBodyConform: false } : {}) } : {}) });
+  tag.textContent = `ESTIMATE · ${garment.name} · size ${canvas.dataset.size ?? size} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · ${realistic ? `body realistic-spike${params.get('conform') === '0' ? ' (not conformed)' : ''}` : `head ${head}`} · shading ${shading}`;
   const points = skinPoints(m);
   // A bottom may cover the shin (a maxi skirt does): that patch is measured on other garments only.
   if (garment.category === 'bottom') delete points.shin;

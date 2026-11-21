@@ -8,7 +8,7 @@
 import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh, familyShape, type Mannequin } from '@curtain/mannequin';
 import type { FitResult } from '@curtain/fit-engine';
 import type { GarmentPayload } from '@curtain/schema';
-import { bodyFamilyOf, bodyField, buildAvatar, buildTypedAvatar, bundleFamilyOf, bundleMaleShapeOf, girthInput, isTypedBody, mannequinMeasurements, sanitiseMeasurements, type Avatar, type BodyField, type BodyMeasurements, type BodyOptions } from './body';
+import { bodyFamilyOf, bodyField, buildAvatar, buildTypedAvatar, bundleFamilyOf, bundleMaleShapeOf, girthInput, isTypedBody, liftField, mannequinMeasurements, sanitiseMeasurements, type Avatar, type BodyField, type BodyMeasurements, type BodyOptions } from './body';
 import { loadBundleFrom, type FetchLike } from './bundle';
 import { checkBundle, gradingLabel } from './bundleCheck';
 import { redrawOnContextRestored } from './contextRestore';
@@ -125,6 +125,11 @@ export interface MountOptions {
   bodyShape?: BodyShapeKind;
   /** Where the realistic body asset is fetched from (default: the file shipped with this package, `REALISTIC_BODY_URL`). */
   realisticBodyUrl?: string;
+  /**
+   * With the realistic body: `false` draws it as fitted also under the garment (for the spike's comparison pictures: the
+   * skin then shows through the garment wherever it is outside the ring table's field). Default: conformed under it.
+   */
+  realisticBodyConform?: boolean;
 }
 
 export type BodyShapeKind = 'procedural' | 'realistic-spike';
@@ -341,7 +346,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
   figure.garment.position.y = lift;
   stage.scene.add(figure.group);
   stage.frame(60, stature);
-  const stopRealistic = startRealisticBody(canvas, opts, plan, figure, fetchFn, () => wake(100));
+  const realistic = startRealisticBody(canvas, opts, plan, figure, fetchFn, () => wake(100), opts.realisticBodyConform === false ? undefined : { rest: bundle.baseMesh.positions, lift });
 
   interface Live {
     fit: FitInstance;
@@ -398,6 +403,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
     canvas.dataset.size = label;
     const refused = !!notDrawn[label];
     figure.garment.visible = !refused;
+    realistic.garmentShown(!refused);
     canvas.dataset.garment = refused ? 'not-drawn' : 'drawn';
     if (refused) {
       state('settled');
@@ -495,7 +501,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
     },
     dispose() {
       disposed = true;
-      stopRealistic();
+      realistic.stop();
       cancelAnimationFrame(raf);
       raf = 0;
       resizeObserver?.disconnect();
@@ -530,7 +536,8 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
   figure.garment.position.y = lift;
   stage.scene.add(figure.group);
   stage.frame(60, stature);
-  const stopRealistic = startRealisticBody(canvas, opts, plan, figure, fetchFn, () => wake(100));
+  // A drape bake: the realistic body is drawn as fitted (not conformed under the baked garment).
+  const realistic = startRealisticBody(canvas, opts, plan, figure, fetchFn, () => wake(100));
   const drapes = bakedDrapes(bake, field, avatar.measurements.hip);
   // The sizes the embed's own fit result says cannot be worn on the shopper's body: the same rule as the device drape
   // (`notDrawn.ts`; the view never recomputes the fit). A band that does not pass the hips is one case of it.
@@ -615,7 +622,7 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
     },
     dispose() {
       disposed = true;
-      stopRealistic();
+      realistic.stop();
       cancelAnimationFrame(raf);
       raf = 0;
       resizeObserver?.disconnect();
@@ -633,28 +640,58 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
  * `bodyShape: 'realistic-spike'` (female family only): load the realistic body (a lazy chunk and one GET) and swap it in
  * for the procedural one when it is fitted. `canvas.dataset.body` says what is drawn: `procedural`, `realistic-loading`,
  * `realistic`, or `procedural-fallback` when loading or fitting failed (the procedural body, with the same collision
- * field, stays). Returns a function that drops a late result after dispose.
+ * field, stays). With `garment` (the bundle's rest particles, in the garment's space, drawn `lift` cm higher), the body
+ * drawn while the garment is shown is the fitted one pulled inside the collision field where the garment covers it
+ * (`conformToField`): the cloth meets the ring table's field, so without that the skin shows through the garment
+ * wherever the real shape is outside the ellipse. `canvas.dataset.body` is then `realistic-conformed`.
  */
-function startRealisticBody(canvas: HTMLCanvasElement, opts: MountOptions, plan: AvatarPlan, figure: Figure, fetchFn: FetchLike, redraw: () => void): () => void {
+function startRealisticBody(canvas: HTMLCanvasElement, opts: MountOptions, plan: AvatarPlan, figure: Figure, fetchFn: FetchLike, redraw: () => void, garment?: { rest: ArrayLike<number>; lift: number }): { stop(): void; garmentShown(shown: boolean): void } {
   canvas.dataset.body = 'procedural';
-  if (bodyShapeOf(opts.bodyShape) !== 'realistic-spike' || plan.drawn.shape.family !== 'female') return () => {};
+  const none = { stop() {}, garmentShown() {} };
+  if (bodyShapeOf(opts.bodyShape) !== 'realistic-spike' || plan.drawn.shape.family !== 'female') return none;
   canvas.dataset.body = 'realistic-loading';
   let live = true;
+  let shown = true;
+  let bodies: { plain: THREE.BufferGeometry; conformed: THREE.BufferGeometry | null } | null = null;
+  const show = (): void => {
+    if (!bodies) return;
+    const g = shown && bodies.conformed ? bodies.conformed : bodies.plain;
+    if (figure.body.geometry === g) return;
+    figure.setBody(g);
+    canvas.dataset.body = g === bodies.conformed ? 'realistic-conformed' : 'realistic';
+    redraw();
+  };
   void import('./realisticBodyLoad')
-    .then((mod) => mod.realisticBodyFor(fetchFn, plan.drawn, plan.avatar.rings, plan.drawnScaleAt, opts.realisticBodyUrl))
+    .then(async (mod) => {
+      const r = await mod.realisticBodyFor(fetchFn, plan.drawn, plan.avatar.rings, plan.drawnScaleAt, opts.realisticBodyUrl);
+      let conformed = null;
+      if (garment) {
+        const zone = mod.coverZone(garment.rest, plan.field);
+        const field = liftField(plan.field, garment.lift);
+        conformed = mod.conformToField(r.mesh, await mod.loadRealisticBody(fetchFn, opts.realisticBodyUrl), field, plan.drawn.landmarks.crotch[1], { ...zone, yLo: zone.yLo + garment.lift, yHi: zone.yHi + garment.lift });
+      }
+      return { plain: r.mesh, conformed };
+    })
     .then((r) => {
       if (!live) return;
       const old = figure.body.geometry;
-      figure.setBody(meshGeometry(r.mesh));
+      bodies = { plain: meshGeometry(r.plain), conformed: r.conformed ? meshGeometry(r.conformed) : null };
+      show();
       old.dispose();
-      canvas.dataset.body = 'realistic';
-      redraw();
     })
     .catch(() => {
       if (live) canvas.dataset.body = 'procedural-fallback';
     });
-  return () => {
-    live = false;
+  return {
+    stop() {
+      live = false;
+      // The geometry on screen goes with the figure; the other one here.
+      for (const g of bodies ? [bodies.plain, bodies.conformed] : []) if (g && g !== figure.body.geometry) g.dispose();
+    },
+    garmentShown(v) {
+      shown = v;
+      show();
+    },
   };
 }
 

@@ -2,7 +2,9 @@ import { readFileSync, statSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { BASE_SHAPE_ID, bodyShape, buildBody, buildMannequin, topology } from '@curtain/mannequin';
 import { ANCHOR_RINGS } from '@curtain/anchors';
-import { decodeRealisticBody, encodeRealisticBody, fitRealisticBody, fitTargetOf, warpThrough, type FitResult, type FitTarget } from './realisticBody';
+import { conformToField, coverZone, decodeRealisticBody, encodeRealisticBody, fitRealisticBody, fitTargetOf, warpThrough, type FitResult, type FitTarget } from './realisticBody';
+import { IDENTITY_MORPH, bodyField } from './body';
+import { sample } from './collide';
 import { bodyShapeOf, planAvatar } from './mount';
 
 const FILE = new URL('../assets/realistic-body/female-v1.crb', import.meta.url);
@@ -93,6 +95,52 @@ describe('fitRealisticBody', () => {
       expect(w(x)).toBeGreaterThan(prev);
       prev = w(x);
     }
+  });
+});
+
+describe('conformToField (the display step under a garment)', () => {
+  const m = buildBody({ family: 'female', ...BODIES.mid });
+  const fit = fitRealisticBody(asset, fitTargetOf(m));
+  const field = bodyField(m, IDENTITY_MORPH);
+  const zone = { yLo: m.morphHeights.waist - 10, yHi: m.morphHeights.chest + 2, armS: [0, 0] as [number, number] };
+  const conformed = conformToField(fit.mesh, asset, field, m.landmarks.crotch[1], zone, 0.1, 3);
+  const e = new Float32Array(4);
+  /** How far a torso vertex is outside the field's ellipse at its height, cm (negative inside). */
+  const outside = (p: ArrayLike<number>, i: number): number => {
+    if (!sample(field.torso, p[3 * i + 1]!, e)) return -Infinity;
+    const dx = p[3 * i]! - e[0]!, dz = p[3 * i + 2]! - e[1]!;
+    const r = Math.hypot(dx, dz);
+    return r - (e[2]! * e[3]!) / Math.hypot(e[3]! * (dx / r), e[2]! * (dz / r));
+  };
+
+  it('holds every torso vertex of the covered band inside the field (plus 0.1 cm), where the fitted skin was outside', () => {
+    let before = 0, after = 0;
+    for (let i = 0; i < asset.meta.bodyVertexCount; i++) {
+      const y = fit.mesh.positions[3 * i + 1]!;
+      if (asset.armWeight[i]! > 0.15 || y < zone.yLo + 3 || y > zone.yHi - 3) continue;
+      before = Math.max(before, outside(fit.mesh.positions, i));
+      after = Math.max(after, outside(conformed.positions, i));
+    }
+    expect(before).toBeGreaterThan(1);
+    expect(after).toBeLessThanOrEqual(0.1 + 1e-6);
+  });
+
+  it('leaves the body outside the zone, and the fitted mesh, as they were', () => {
+    for (let i = 0; i < asset.meta.vertexCount; i++) {
+      const y = fit.mesh.positions[3 * i + 1]!;
+      if (y > zone.yLo && y < zone.yHi) continue;
+      for (let c = 0; c < 3; c++) expect(conformed.positions[3 * i + c]).toBe(fit.mesh.positions[3 * i + c]);
+    }
+    expect(ringsOver(fit)).toEqual([]);
+  });
+
+  it('finds a sleeve: a garment point round the arm reaches along it, a bodice point beside the torso does not', () => {
+    const f = field.armFrames[0]!;
+    const s = 20;
+    const onArm = [f.joint[0] + f.axis[0] * s + f.u[0] * 5, f.joint[1] + f.axis[1] * s + f.u[1] * 5, f.joint[2] + f.axis[2] * s];
+    const bodice = [0, m.morphHeights.waist, 12];
+    expect(coverZone(onArm, field).armS[0]).toBeCloseTo(s + 2, 6);
+    expect(coverZone(bodice, field).armS).toEqual([0, 0]);
   });
 });
 

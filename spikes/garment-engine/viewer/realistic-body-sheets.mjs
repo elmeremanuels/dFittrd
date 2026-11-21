@@ -27,9 +27,10 @@ const COLUMNS = [
   ['body-after--three-quarter', 'After · body · ¾'],
   ['dress-before--front', 'Before · dress · front'],
   ['dress-after--front', 'After · dress · front'],
+  ['dress-after-raw--front', 'After, not conformed · dress'],
 ];
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 6 * 390 + 7 * 12, height: 844 + 90 }, deviceScaleFactor: 1 });
+const page = await browser.newPage({ viewport: { width: 7 * 390 + 8 * 12, height: 844 + 90 }, deviceScaleFactor: 1 });
 for (const body of BODIES) {
   const cells = COLUMNS.filter(([name]) => existsSync(join(dir, `${body}-${name}.png`))).map(([name, label]) => {
     const b64 = readFileSync(join(dir, `${body}-${name}.png`)).toString('base64');

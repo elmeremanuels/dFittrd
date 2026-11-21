@@ -5,6 +5,7 @@
  * credentials or referrer; the measurements stay in memory (D3).
  */
 import { decodeRealisticBody, fitRealisticBody, fitTargetOf, type FitResult, type RealisticBodyAsset } from './realisticBody';
+export { conformToField, coverZone } from './realisticBody';
 import type { Mannequin } from '@curtain/mannequin';
 import type { AnchorRing } from '@curtain/anchors';
 

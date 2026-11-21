@@ -10,8 +10,8 @@
  *   - the body alone, front and three-quarter, before (procedural body, head neutral-v3, the embed's default head)
  *     and after (`body=realistic`);
  *   - wearing the evaluated azure dress (`out/eval/azure-palm-baby-doll-dress`, draped on the device) before and after,
- *     front, when the bundle is there.
- * Then the frame time: the mean interval between animation frames while the view is dragged round for 4 s
+ *     front, when the bundle is there; after also unconformed (`conform=0`, `-dress-after-raw`).
+ * Then the frame time, three runs each: the mean interval between animation frames while the view is dragged round for 4 s
  * (`avatarCheck.rafMs`), body alone and with the dress, before and after; and, body alone, `avatarCheck.frameMs`
  * (60 synchronous renders with a one-pixel read-back each, so each includes the renderer's work).
  * Writes PNGs and `renders.json`. Every picture carries the page's ESTIMATE tag.
@@ -99,9 +99,9 @@ async function open(context, query, name) {
   await page.goto(`${base}avatar.html?${query}`);
   await page.waitForFunction(() => ['settled', 'error'].includes(document.documentElement.dataset.viewerState ?? ''), null, { timeout: 300_000 });
   if (query.includes('body=realistic') && query.includes('product=')) {
-    await page.waitForFunction(() => ['realistic', 'procedural-fallback'].includes(document.getElementById('stage').dataset.body ?? ''), null, { timeout: 120_000 });
+    await page.waitForFunction(() => ['realistic', 'realistic-conformed', 'procedural-fallback'].includes(document.getElementById('stage').dataset.body ?? ''), null, { timeout: 120_000 });
     const drawn = await page.evaluate(() => document.getElementById('stage').dataset.body);
-    if (drawn !== 'realistic') problems.push(`${name}: body ${drawn}`);
+    if (!drawn.startsWith('realistic')) problems.push(`${name}: body ${drawn}`);
   }
   const state = await page.evaluate(() => document.documentElement.dataset.viewerState);
   if (state !== 'settled') problems.push(`${name}: state ${state} (${await page.textContent('#tag')})`);
@@ -172,13 +172,18 @@ try {
       await shot(phone, q({ mode: 'head', frame: 'body', ...body, ...look }), `${id}-body-${tag}--three-quarter`, { turn: 0.5 });
       if (hasDress) await shot(phone, q({ product: DRESS, ...body, ...look }), `${id}-dress-${tag}--front`);
     }
+    // The realistic body drawn as fitted under the dress too (not conformed): where its skin is outside the ring table's field.
+    if (hasDress) await shot(phone, q({ product: DRESS, ...body, ...after, conform: 0 }), `${id}-dress-after-raw--front`);
   }
   if (!noFrames) {
     for (const id of ['mid', 'full']) {
       const body = { family: 'female', ...BODIES[id] };
-      for (const [tag, look] of [['before', before], ['after', after]]) {
-        await frameTime(phone, q({ mode: 'head', frame: 'body', ...body, ...look }), `frames-${id}-body-${tag}`);
-        if (hasDress) await frameTime(phone, q({ product: DRESS, ...body, ...look }), `frames-${id}-dress-${tag}`);
+      // Three runs each, alternating before and after, so a slow spell of the machine does not land on one side only.
+      for (let run = 1; run <= 3; run++) {
+        for (const [tag, look] of [['before', before], ['after', after]]) {
+          await frameTime(phone, q({ mode: 'head', frame: 'body', ...body, ...look }), `frames-${id}-body-${tag}-${run}`);
+          if (hasDress) await frameTime(phone, q({ product: DRESS, ...body, ...look }), `frames-${id}-dress-${tag}-${run}`);
+        }
       }
     }
   }

@@ -195,8 +195,13 @@ mountGarmentView(canvas, { ...options, bodyShape: 'realistic-spike' }); // web b
   thread once per mount (100 to 250 ms in Node on the build container; not measured on a phone).
 - **Girth is the loop** (the closed section round the ring centre, as `meshRingCircumference`); the tape (convex hull)
   is reported next to it. Which one a typed girth means is open (OI-141).
-- **Known gap.** Where the realistic section is outside the ring table's ellipse (bust, seat, the backs of the calves,
-  the hands) the skin shows through the garment, because the cloth meets the ellipse (OI-143).
+- **Under a garment it is conformed.** The cloth meets the ring table's ellipses, and the realistic section is outside
+  them in places (bust, seat, shoulder caps, the backs of the calves: 1.5 to 5 cm on the torso). While a garment is
+  drawn, the vertices it covers (`coverZone` of the bundle's rest particles) are pulled inside the field plus 0.1 cm
+  (`conformToField`), so the skin does not show through; `canvas.dataset.body` is then `realistic-conformed`. That
+  mesh no longer has the table's girths where it was pulled (chest 4 to 8.5 % under). `realisticBodyConform: false`
+  draws it as fitted (comparison pictures only). The real fix is a collider made from the realistic mesh (OI-143).
+  A drape bake draws it unconformed.
 - Bake again: `pnpm --filter @curtain/garment-viewer exec tsx scripts/bake-realistic-body.ts <mpfb2 checkout> --fetch`
   (deterministic; every source checked by sha256). Measure: `scripts/realistic-body-report.ts`. Pictures:
   `spikes/garment-engine/viewer/realistic-body-renders.mjs`.

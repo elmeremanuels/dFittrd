@@ -17,6 +17,7 @@
  */
 import { monotoneProfile, type AnchorRing } from '@curtain/anchors';
 import { loopLength, slice, type Loop, type Mannequin, type Mesh } from '@curtain/mannequin';
+import { sample, type BodyField } from './collide';
 
 type V3 = [number, number, number];
 
@@ -464,9 +465,11 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
   }
 
   // 3. Section centres onto the table's centre lines. Torso: at each torso ring and between them; legs: at the leg rings.
-  const crotch = target.crotchY;
   const legLo = h('thigh');
-  const legness = (y: number): number => smooth((crotch + 4 - y) / (crotch + 4 - legLo));
+  // From the hip ring (0: the torso's centre) down to the thigh ring (1: each leg's own centre), smoothly: a short
+  // switch just over the crotch left a crease across the tops of the thighs.
+  const legHi = h('hip');
+  const legness = (y: number): number => smooth((legHi - y) / (legHi - legLo));
   const legRings: BodyRing[] = ['thigh', 'knee', 'calf', 'ankle'];
   const torsoRings: BodyRing[] = ['hip', 'waist', 'underbust', 'chest', 'shoulder', 'neck'];
   const torsoKnots: { x: number; y: number }[] = [];
@@ -636,3 +639,100 @@ const smoothSign = (x: number): number => {
   const t = Math.max(-1, Math.min(1, x / MIDLINE_CM));
   return t * (1.5 - 0.5 * t * t) * (1 / 1);
 };
+
+// ---------------------------------------------------------------------------
+// Conform: the drawn skin kept inside the collision field where a garment covers it
+// ---------------------------------------------------------------------------
+
+/** Where a garment covers the body (body space, cm): a height range for the torso and legs, a reach along each arm. */
+export interface CoverZone {
+  yLo: number;
+  yHi: number;
+  /** Largest distance along the left and the right arm axis that the garment reaches (0: the arm is bare). */
+  armS: [number, number];
+}
+
+/**
+ * The zone a garment's particles cover, with a margin: their height range, and per arm the farthest point along its
+ * axis that lies within the arm's collision ellipse grown 1.6 times plus 2 cm (a sleeve; a bodice beside the arm is
+ * further out). `positions` and `field` in the same space.
+ */
+export function coverZone(positions: ArrayLike<number>, field: BodyField, marginCm = 2): CoverZone {
+  let yLo = Infinity, yHi = -Infinity;
+  const armS: [number, number] = [0, 0];
+  const e = new Float32Array(4);
+  for (let i = 0; i < positions.length; i += 3) {
+    const x = positions[i]!, y = positions[i + 1]!, z = positions[i + 2]!;
+    yLo = Math.min(yLo, y);
+    yHi = Math.max(yHi, y);
+    for (let side = 0; side < 2; side++) {
+      const f = field.armFrames[side]!;
+      const r: V3 = [x - f.joint[0], y - f.joint[1], z - f.joint[2]];
+      const sAlong = dot3(r, f.axis);
+      if (sAlong <= f.s0 || sAlong >= f.s1 || !sample(field.arms[side]!, sAlong, e)) continue;
+      const pu = dot3(r, f.u), pv = dot3(r, f.v);
+      if (Math.hypot(pu / (1.6 * e[2]! + 2), pv / (1.6 * e[3]! + 2)) <= 1) armS[side] = Math.max(armS[side]!, sAlong);
+    }
+  }
+  return { yLo: yLo - marginCm, yHi: yHi + marginCm, armS: [armS[0] > 0 ? armS[0] + marginCm : 0, armS[1] > 0 ? armS[1] + marginCm : 0] };
+}
+
+/**
+ * The fitted mesh with every vertex that a garment covers (`zone`) pulled inside the collision field the cloth meets
+ * (grown by `clearanceCm`, under the cloth's own 0.35 cm), so the drawn skin does not show through the garment. Only
+ * vertices outside the field move, straight towards the section's centre; inside ones stay. The pull fades out over
+ * `blendCm` at the zone's edges (hem, sleeve end). Torso, the arm's root above the armpit and legs by height, arms (arm
+ * weight over a half, beyond the armpit) along the arm axis; the head and the band under the armpit are left as fitted. A display step: the ring girths of the result are not the
+ * table's where it pulled (the unconformed mesh is the one that matches the rings).
+ */
+export function conformToField(mesh: Mesh, asset: Pick<RealisticBodyAsset, 'armWeight' | 'headWeight'>, field: BodyField, crotchY: number, zone: CoverZone, clearanceCm = 0.1, blendCm = 3): Mesh {
+  const p = Float64Array.from(mesh.positions);
+  const e = new Float32Array(4);
+  const n = p.length / 3;
+  const fade = (d: number): number => smooth(d / blendCm);
+  for (let i = 0; i < n; i++) {
+    if (asset.headWeight[i]! > 0.5) continue;
+    const x = p[3 * i]!, y = p[3 * i + 1]!, z = p[3 * i + 2]!;
+    const side = x >= 0 ? 0 : 1;
+    const f = field.armFrames[side]!;
+    const r: V3 = [x - f.joint[0], y - f.joint[1], z - f.joint[2]];
+    const sAlong = dot3(r, f.axis);
+    const aw = asset.armWeight[i]!;
+    // Above the armpit (along the arm, up to the collider's `s0`) the cloth meets the torso's section, which takes the
+    // arm's root in: those vertices are held to it like the torso's. Under the armpit, a vertex between torso and arm
+    // (arm weight 0.15 to 0.5) is left as fitted: neither ellipse is the right one there.
+    const cap = aw > 0.15 && sAlong <= f.s0;
+    if (!cap && aw > 0.15 && aw <= 0.5) continue;
+    if (!cap && aw > 0.5) {
+      // An arm vertex: inside the arm's ellipse, in its (u, v) frame about the axis.
+      const reach = zone.armS[side]!;
+      if (!(reach > 0) || sAlong >= f.s1 || !sample(field.arms[side]!, sAlong, e)) continue;
+      const w = fade(reach - sAlong);
+      if (w <= 0) continue;
+      const pu = dot3(r, f.u), pv = dot3(r, f.v);
+      const k = limit(pu, pv, e[2]!, e[3]!, clearanceCm);
+      if (k >= 1) continue;
+      const kk = 1 + (k - 1) * w;
+      for (let c = 0; c < 3; c++) p[3 * i + c] = f.joint[c]! + f.axis[c]! * sAlong + (f.u[c]! * pu + f.v[c]! * pv) * kk;
+      continue;
+    }
+    const w = Math.min(fade(y - zone.yLo), fade(zone.yHi - y));
+    if (w <= 0) continue;
+    const table = y < crotchY ? field.legs[side] : field.torso;
+    if (!sample(table, y, e)) continue;
+    const k = limit(x - e[0]!, z - e[1]!, e[2]!, e[3]!, clearanceCm);
+    if (k >= 1) continue;
+    const kk = 1 + (k - 1) * w;
+    p[3 * i] = e[0]! + (x - e[0]!) * kk;
+    p[3 * i + 2] = e[1]! + (z - e[1]!) * kk;
+  }
+  return { ...mesh, positions: p };
+}
+
+/** The factor (≤ 1) that brings the point (pu, pv) onto the ellipse a, b grown by `grow` along its ray, or 1 inside. */
+function limit(pu: number, pv: number, a: number, b: number, grow: number): number {
+  const r = Math.hypot(pu, pv);
+  if (r === 0) return 1;
+  const re = (a * b) / Math.hypot(b * (pu / r), a * (pv / r)) + grow;
+  return r > re ? re / r : 1;
+}

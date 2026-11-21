@@ -8,7 +8,8 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { buildBody, topology, type Mannequin, type Mesh } from '@curtain/mannequin';
-import { decodeRealisticBody, fitRealisticBody, fitTargetOf, sectionAt } from '../src/realisticBody';
+import { conformToField, decodeRealisticBody, fitRealisticBody, fitTargetOf, ringReport, sectionAt } from '../src/realisticBody';
+import { IDENTITY_MORPH, bodyField } from '../src/body';
 
 type V3 = [number, number, number];
 
@@ -87,11 +88,11 @@ function torsoStations(m: Mannequin): Parameters<typeof outline>[1] {
   return out;
 }
 
-/** The left arm from the upper-arm ring to the wrist ring, every 0.5 cm along the axis. */
-function armStations(m: Mannequin): Parameters<typeof outline>[1] {
+/** The left arm from the upper-arm ring to the wrist ring (or `endCm` short of it), every 0.5 cm along the axis. */
+function armStations(m: Mannequin, endCm = 0): Parameters<typeof outline>[1] {
   const f = m.arms.left;
   const out: Parameters<typeof outline>[1] = [];
-  for (let s = m.morphHeights.upper_arm; s <= m.morphHeights.wrist; s += 0.5) {
+  for (let s = m.morphHeights.upper_arm; s <= m.morphHeights.wrist - endCm; s += 0.5) {
     const e = m.armAt(s, 1);
     if (e) out.push({ label: `arm s ${s.toFixed(1)}`, origin: [f.joint[0] + f.axis[0] * s, f.joint[1] + f.axis[1] * s, f.joint[2] + f.axis[2] * s], normal: f.axis as V3, u: f.u as V3, v: f.v as V3, a: e.a, b: e.b });
   }
@@ -184,6 +185,10 @@ function main(): void {
     const fit = fitRealisticBody(asset, fitTargetOf(m));
     const ms = performance.now() - t0;
     const topo = topology(fit.mesh);
+    // The display step under a garment: the whole torso (crotch to shoulder) and both arms covered.
+    const field = bodyField(m, IDENTITY_MORPH);
+    const conformed = conformToField(fit.mesh, asset, field, m.landmarks.crotch[1], { yLo: m.landmarks.crotch[1], yHi: m.morphHeights.shoulder, armS: [m.morphHeights.wrist, m.morphHeights.wrist] });
+    const conformedRings = ringReport(conformed, fitTargetOf(m));
     (out.bodies as Record<string, unknown>)[name] = {
       input: b,
       shape: fit.shape,
@@ -193,7 +198,12 @@ function main(): void {
       watertight: topo.watertight,
       components: topo.components,
       selfCrossings: selfCrossings(fit.mesh, asset.meta.bodyVertexCount),
-      outline: { torso: outline(fit.mesh, torsoStations(m)), arm: outline(fit.mesh, armStations(m)), leg: outline(fit.mesh, legStations(m)) },
+      outline: { torso: outline(fit.mesh, torsoStations(m)), arm: outline(fit.mesh, armStations(m)), armToWristLess3: outline(fit.mesh, armStations(m, 3)), leg: outline(fit.mesh, legStations(m)) },
+      conformed: {
+        outline: { torso: outline(conformed, torsoStations(m)), arm: outline(conformed, armStations(m)), armToWristLess3: outline(conformed, armStations(m, 3)) },
+        rings: conformedRings.map((r) => ({ id: r.id, errorPct: r.errorPct === null ? null : Math.round(r.errorPct * 1e3) / 1e3 })),
+        selfCrossings: selfCrossings(conformed, asset.meta.bodyVertexCount).count,
+      },
     };
     console.error(`${name}: done (${Math.round(ms)} ms fit)`);
   }

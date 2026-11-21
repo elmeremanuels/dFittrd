@@ -173,6 +173,34 @@ of material.json `stretchPct` (0.2 to 1 %; the fifth is assumed). One way only, 
   tee the peak strain doubles. Read the report before setting it on another bundle.
 - `canvas.dataset.solveMs`: the worker's solver time for the size on show (a timing for the demo scripts).
 
+## Realistic body spike (`bodyShape: 'realistic-spike'`, opt-in, off by default)
+
+One week spike of route B in `docs/research/realistic-avatar-route.md` (female family only). Report, numbers and
+pictures: `docs/reports/claude/realistic-body-spike.md`.
+
+```ts
+mountGarmentView(canvas, { ...options, bodyShape: 'realistic-spike' }); // web build: VITE_VIEWER_BODY=realistic-spike
+```
+
+- **What is drawn.** The MakeHuman CC0 base mesh (`assets/realistic-body/female-v1.crb`, 337,732 bytes, 13,524
+  vertices, 27,036 triangles, no texture; provenance and licence quotes in `assets/realistic-body/PROVENANCE.md`),
+  fitted on the device to the drawn body's 12 ring girths (`realisticBody.ts`) and swapped in for the procedural skin
+  when ready. `canvas.dataset.body` says `procedural`, `realistic-loading`, `realistic` or `procedural-fallback`.
+- **What does not change.** The cloth collides with the ring table's field as before (the realistic mesh is a skin
+  only), the fit and the sizes come from the embed's `FitResult`, the bundle is the same, and every default is the
+  procedural body. A male body ignores the option. `look.head` is not used on it: its head is MakeHuman's, untextured,
+  with two grey eye spheres (D27: no face work).
+- **Cost.** One more GET (the asset, the same file for everyone, no credentials, no referrer) and a lazy chunk
+  `realisticBodyLoad` (4.2 KB gzip in the web build); the viewer chunk does not carry it. The fit runs on the main
+  thread once per mount (100 to 250 ms in Node on the build container; not measured on a phone).
+- **Girth is the loop** (the closed section round the ring centre, as `meshRingCircumference`); the tape (convex hull)
+  is reported next to it. Which one a typed girth means is open (OI-141).
+- **Known gap.** Where the realistic section is outside the ring table's ellipse (bust, seat, the backs of the calves,
+  the hands) the skin shows through the garment, because the cloth meets the ellipse (OI-143).
+- Bake again: `pnpm --filter @curtain/garment-viewer exec tsx scripts/bake-realistic-body.ts <mpfb2 checkout> --fetch`
+  (deterministic; every source checked by sha256). Measure: `scripts/realistic-body-report.ts`. Pictures:
+  `spikes/garment-engine/viewer/realistic-body-renders.mjs`.
+
 ## Fork of the spike
 
 `src/core/*` (`garment`, `grading`, `waistband`, `tape`, `weld`, `types`) and the device modules

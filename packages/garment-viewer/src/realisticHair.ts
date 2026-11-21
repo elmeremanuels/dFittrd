@@ -576,7 +576,7 @@ function ribbon(w: PartWriter, centre: V3[], side: V3[], face: V3[], width: numb
 /** The clump of one guide with the type's pattern on it. */
 function clumpOf(w: PartWriter, space: HairSpace, g: Guide, p: TypeParams, widthScale: number): void {
   const curly = p.kind === 'curl' || p.kind === 'coil';
-  const step = p.kind === 'straight' ? 1.2 : p.kind === 'wave' ? p.period / 7 : p.kind === 'curl' ? p.period / 7 : p.period / 5;
+  const step = p.kind === 'straight' ? 1.2 : p.kind === 'wave' ? p.period / 7 : p.kind === 'curl' ? p.period / (p.period < 2 ? 5 : 6) : p.period / 5;
   const P = resample(g.pts, step);
   const n = P.length;
   if (n < 2) return;
@@ -680,7 +680,7 @@ export function buildHair(input: HairBodyInput, choice: HairChoice, options: { c
     // Shells: 3C, 4A–4C. A volume over the scalp, reaching below the hairline at the sides and back as it grows.
     if (vol > 0) {
       const shells = new PartWriter();
-      const k = Math.max(4, Math.min(11, Math.round(3 + vol * 0.8)));
+      const k = Math.max(4, Math.min(coily ? 11 : 4, Math.round(3 + vol * 0.8)));
       const droop = coily ? 1 : 0.6;
       for (let s = 1; s <= k; s++) {
         const t = s / k;

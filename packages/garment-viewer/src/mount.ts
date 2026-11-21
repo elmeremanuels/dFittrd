@@ -114,6 +114,24 @@ export interface MountOptions {
   fetch?: FetchLike;
   /** Drape settings (step-3 control: cling switch, girth loops, waistband model); default `DEFAULT_DRAPE`, the drape as before. */
   drape?: DrapeOptions;
+  /**
+   * The drawn body's surface. `procedural` (default): the lofted mannequin, as before. `realistic-spike` (opt-in, the
+   * spike of docs/reports/claude/realistic-body-spike.md, female family only): the MakeHuman CC0 base mesh fitted on the
+   * device to the drawn body's ring girths (`realisticBody.ts`), fetched once (one more GET, of a static file with no
+   * shopper data) and swapped in when ready; until then, and if it fails, the procedural body stays. A drawn skin only:
+   * the cloth still collides with the ring table's field, the fit and the sizes do not change, and `look.head` is not
+   * used on it (its head is MakeHuman's, kept stylised, D27). A male body ignores it.
+   */
+  bodyShape?: BodyShapeKind;
+  /** Where the realistic body asset is fetched from (default: the file shipped with this package, `REALISTIC_BODY_URL`). */
+  realisticBodyUrl?: string;
+}
+
+export type BodyShapeKind = 'procedural' | 'realistic-spike';
+
+/** The body surface a host asked for: `realistic-spike` only by name, anything else `procedural`. */
+export function bodyShapeOf(value: unknown): BodyShapeKind {
+  return value === 'realistic-spike' ? value : 'procedural';
 }
 
 export interface GarmentView {
@@ -225,6 +243,10 @@ export interface AvatarPlan {
   statureCm: number;
   /** The middle of the face of the drawn body: 93.5 % of its stature, at the front of the head. */
   headPoint: readonly [number, number, number];
+  /** The mannequin whose rings the drawn body has (body space): `m` for the morphed base body, the typed body otherwise. */
+  drawn: Mannequin;
+  /** The drawn body's girth scale against `drawn` at a height (the avatar's morph; 1 for a typed body). */
+  drawnScaleAt: (y: number) => number;
 }
 
 /**
@@ -243,16 +265,20 @@ export function planAvatar(anchors: { category: string; mannequin?: { family?: u
   const m = buildMannequin(family === 'male' ? familyShape('male')! : bodyShape(BASE_SHAPE_ID), build);
   const head = headOf(look?.head);
   let avatar: Avatar, field: BodyField, garmentLiftCm = 0, statureCm = 0;
+  let drawn: Mannequin = m;
+  let drawnScaleAt = (_y: number): number => 1;
   if (isTypedBody(body)) {
     // A typed height or shoulder width: the body is built from the measurements (`buildBody`).
     const typed = buildTypedAvatar(m, body, anchors.category, { head }, build);
-    ({ avatar, field, garmentLiftCm, statureCm } = typed);
+    ({ avatar, field, garmentLiftCm, statureCm, drawn } = typed);
   } else {
     avatar = buildAvatar(m, buildMannequinMesh(m, { head }), sanitiseMeasurements(girthInput(body), mannequinMeasurements(m)));
     field = bodyField(m, avatar);
+    const morph = avatar.morph;
+    drawnScaleAt = (y) => morph.girthScaleAt(y, 'body');
   }
-  const drawn = statureCm || m.statureCm;
-  return { m, head, avatar, field, garmentLiftCm, statureCm, headPoint: [0, 0.935 * drawn, 0.055 * drawn] };
+  const S = statureCm || m.statureCm;
+  return { m, head, avatar, field, garmentLiftCm, statureCm, headPoint: [0, 0.935 * S, 0.055 * S], drawn, drawnScaleAt };
 }
 
 /** Main-thread stepping budget per frame when module workers are unavailable, ms. */
@@ -297,7 +323,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
       state('error');
       throw new GarmentViewError('incompatible');
     }
-    return mountBaked(canvas, opts, bundle.bake, bundle.material, ok, plan, state);
+    return mountBaked(canvas, opts, bundle.bake, bundle.material, ok, plan, state, fetchFn);
   }
   const session = openSession(m, bundle, opts.garment);
   const material = viewerMaterial('product', bundle.material);
@@ -315,6 +341,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
   figure.garment.position.y = lift;
   stage.scene.add(figure.group);
   stage.frame(60, stature);
+  const stopRealistic = startRealisticBody(canvas, opts, plan, figure, fetchFn, () => wake(100));
 
   interface Live {
     fit: FitInstance;
@@ -468,6 +495,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
     },
     dispose() {
       disposed = true;
+      stopRealistic();
       cancelAnimationFrame(raf);
       raf = 0;
       resizeObserver?.disconnect();
@@ -487,7 +515,7 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
  * The drape bake path of `mountGarmentView`: no drape on the device. Every size is the server's drapes blended to the
  * shopper's hip on the chart axis and laid out of the drawn avatar (`bakedDrapes`), in the bake's one plain colour.
  */
-function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBake, bundleMaterial: MaterialJson, ok: { sizes: string[]; baseSize: string }, plan: AvatarPlan, state: (s: GarmentViewState) => void): GarmentView {
+function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBake, bundleMaterial: MaterialJson, ok: { sizes: string[]; baseSize: string }, plan: AvatarPlan, state: (s: GarmentViewState) => void, fetchFn: FetchLike): GarmentView {
   const { avatar, field, garmentLiftCm: lift, statureCm: stature, headPoint } = plan;
   const material = { ...viewerMaterial('product', bundleMaterial), baseColorHex: bake.meta.plainColourHex };
   const stage = new Stage(canvas, { controls: true, lighting: lightingOf(opts.lighting), ...(opts.lookExtras ? { extras: opts.lookExtras } : {}) });
@@ -502,6 +530,7 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
   figure.garment.position.y = lift;
   stage.scene.add(figure.group);
   stage.frame(60, stature);
+  const stopRealistic = startRealisticBody(canvas, opts, plan, figure, fetchFn, () => wake(100));
   const drapes = bakedDrapes(bake, field, avatar.measurements.hip);
   // The sizes the embed's own fit result says cannot be worn on the shopper's body: the same rule as the device drape
   // (`notDrawn.ts`; the view never recomputes the fit). A band that does not pass the hips is one case of it.
@@ -586,6 +615,7 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
     },
     dispose() {
       disposed = true;
+      stopRealistic();
       cancelAnimationFrame(raf);
       raf = 0;
       resizeObserver?.disconnect();
@@ -596,6 +626,35 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
       stage.controls.dispose();
       stage.renderer.dispose();
     },
+  };
+}
+
+/**
+ * `bodyShape: 'realistic-spike'` (female family only): load the realistic body (a lazy chunk and one GET) and swap it in
+ * for the procedural one when it is fitted. `canvas.dataset.body` says what is drawn: `procedural`, `realistic-loading`,
+ * `realistic`, or `procedural-fallback` when loading or fitting failed (the procedural body, with the same collision
+ * field, stays). Returns a function that drops a late result after dispose.
+ */
+function startRealisticBody(canvas: HTMLCanvasElement, opts: MountOptions, plan: AvatarPlan, figure: Figure, fetchFn: FetchLike, redraw: () => void): () => void {
+  canvas.dataset.body = 'procedural';
+  if (bodyShapeOf(opts.bodyShape) !== 'realistic-spike' || plan.drawn.shape.family !== 'female') return () => {};
+  canvas.dataset.body = 'realistic-loading';
+  let live = true;
+  void import('./realisticBodyLoad')
+    .then((mod) => mod.realisticBodyFor(fetchFn, plan.drawn, plan.avatar.rings, plan.drawnScaleAt, opts.realisticBodyUrl))
+    .then((r) => {
+      if (!live) return;
+      const old = figure.body.geometry;
+      figure.setBody(meshGeometry(r.mesh));
+      old.dispose();
+      canvas.dataset.body = 'realistic';
+      redraw();
+    })
+    .catch(() => {
+      if (live) canvas.dataset.body = 'procedural-fallback';
+    });
+  return () => {
+    live = false;
   };
 }
 

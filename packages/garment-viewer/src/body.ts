@@ -275,6 +275,8 @@ export interface TypedAvatar {
   field: BodyField;
   /** The body as drawn (at the typed height), cm. */
   statureCm: number;
+  /** The mannequin drawn (`buildBody` of the typed measurements): its rings, heights and arm frames, in body space. */
+  drawn: Mannequin;
   /**
    * How far the draped garment is drawn above where the bundle has it (cm; negative on a shorter
    * body), so that it hangs from the drawn body's own shoulder ring (waist ring for a bottom).
@@ -322,6 +324,7 @@ export function buildTypedAvatar(base: Mannequin, body: BodyOptions, category: s
     avatar: { measurements: meas, morph: IDENTITY_MORPH.morph, rings, mesh: fitted.mesh, neck: fitted.neck },
     field: liftField(bodyField(shown, { ...IDENTITY_MORPH, neck: fitted.neck }), -garmentLiftCm),
     statureCm: shown.statureCm,
+    drawn: shown,
     garmentLiftCm,
   };
 }

@@ -210,3 +210,13 @@ On the empty rows the advice stands, among them: the four build items before lau
 ## D27 — The live 3D face may stay stylised
 
 Founder decision (20 Nov 2026), on the question raised by `docs/research/realistic-avatar-route.md`: the face in the live 3D view may stay stylised, while the AI realism layer carries the photoreal face in the still. Consequence: the work on the realistic body goes into body shape, skin and lighting first; realistic hair and face geometry are not part of the spike, and the CC-BY hair question does not need an answer now.
+
+## D28 — Hair: own-built, ten hair types in four lengths
+
+Founder decision (21 Nov 2026). The live 3D view gets our own procedural hair (no third-party hair asset), stylised to match the stylised face of D27. Not four styles, but every combination of:
+
+- **Ten hair types**, the common typing scale: 1 (straight), 2A, 2B, 2C (wavy, loose to defined S-waves), 3A, 3B, 3C (curly, loose loops to tight corkscrews), 4A, 4B, 4C (coily, defined coils to tight zig-zag coils with the most volume).
+- **Four lengths:** short, chin, shoulder, long. For types 3C to 4C length is also volume: the hair grows out and up, not only down, and shrinks (a "long" 4C is an afro, not hair to the waist).
+- **Colour** chosen by the shopper. Hair type, length and colour are shopper choices stored on the device only, like the skin tone; they are never inferred from a photo and never sent to a server.
+
+The founder's reference chart (photos of real people) is a reference only: no photo or part of one is used as a texture or in the repo. The photoreal hair stays with the AI realism layer (D27). Performance bound: the hair adds no more than the body itself to the frame time and asset size; a type and length that does not fit within that is drawn simpler and labelled so in the report.

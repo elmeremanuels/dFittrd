@@ -587,7 +587,12 @@ function clumpOf(w: PartWriter, space: HairSpace, g: Guide, p: TypeParams, width
     const T = norm(sub(P[Math.min(n - 1, i + 1)]!, P[Math.max(0, i - 1)]!));
     let out = space.outward(P[i]!);
     out = norm(sub(out, [T[0] * dot(out, T), T[1] * dot(out, T), T[2] * dot(out, T)]));
-    const B = norm(cross(T, out));
+    // The card's width runs round the body (horizontal) wherever it can: stable where the strand bends over the upper
+    // back (a cross product of the strand and the outward direction flips there and twists the card).
+    const round = norm(cross([0, 1, 0], out));
+    const rb = sub(round, [T[0] * dot(round, T), T[1] * dot(round, T), T[2] * dot(round, T)]);
+    const B = len(rb) > 0.3 ? norm(rb) : norm(cross(T, out));
+    out = norm(cross(B, T));
     // The pattern starts a little below the root (the first cm lie on the scalp).
     const ramp = smooth(0, curly ? 2.5 : 6, s) * (p.kind === 'wave' ? 0.6 + 0.4 * smooth(0, 25, s) : 1);
     const th = (2 * Math.PI * s) / p.period + g.phase;

@@ -214,6 +214,32 @@ mountGarmentView(canvas, { ...options, bodyShape: 'realistic-spike' }); // web b
   (deterministic; every source checked by sha256). Measure: `scripts/realistic-body-report.ts`. Pictures:
   `spikes/garment-engine/viewer/realistic-body-renders.mjs`.
 
+### Realistic hair (`MountOptions.hair`, D28; with the realistic body only)
+
+```ts
+mountGarmentView(canvas, { ...options, bodyShape: 'realistic-spike', hair: { type: '4C', length: 'long', colour: 'black' } });
+```
+
+- **What.** Our own procedural hair (`realisticHair.ts`, pure; `realisticHairDraw.ts`, the three.js meshes), ten types
+  (`1`, `2A` … `4C`) in four lengths (`short`, `chin`, `shoulder`, `long`), colour a palette id (`HAIR_COLOURS`:
+  black, dark-brown, brown, light-brown, auburn, copper, dark-blonde, blonde, platinum, grey) or `#rrggbb`. No hair
+  asset, no photo, no texture file: a cap on the scalp, strand cards (straight; an S-wave for 2A–2C; a card wound
+  round the guide as a ringlet for 3A–3C) grown from the scalp under gravity and pushed out of the head hull and a
+  polar table of the drawn body every step, and for 3C–4C volume shells with a generated coil texture (4A–4C also
+  short coil puffs: a long 4C is an afro). Anisotropic highlight along the fibre (three's physical material with the
+  strand direction as `tangent`), alpha-to-coverage for soft edges, occlusion in the vertex colours.
+- **When.** Only with `bodyShape: 'realistic-spike'` on a female body, once the realistic body is drawn; a lazy chunk
+  (`realisticHairDraw`, about 8 KB gzip, never precached). `canvas.dataset.hair` says `loading`, the choice
+  (`4C-long-#1f1b19`, with ` (simpler)` when it was drawn with fewer clumps) or `failed`. Absent or invalid: bald, as
+  before; `realisticHairOf` is the rule.
+- **Bounds.** At most the body's own 27,036 triangles per combination (`HAIR_TRIANGLE_BUDGET`; over it the clumps are
+  thinned and the build says so); generated textures 171 KB (RGBA8 with coverage-keeping mips); no request at all.
+- **Never sent.** A display value: not stored here, not in any request, and `exportPasses` draws the AI-layer passes
+  without it. The web embed passes `Garment3D`'s `hair` prop through with the realistic body only.
+- Numbers: `scripts/realistic-hair-report.ts`. Pictures and frame times:
+  `spikes/garment-engine/viewer/realistic-hair-renders.mjs` and `realistic-hair-sheets.mjs`. Report:
+  `docs/reports/claude/realistic-hair.md`.
+
 ## Fork of the spike
 
 `src/core/*` (`garment`, `grading`, `waistband`, `tape`, `weld`, `types`) and the device modules

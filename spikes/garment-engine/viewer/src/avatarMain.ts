@@ -8,8 +8,8 @@
  * URL parameters: `product=<bundle dir under out/>` and `size`; `skin=rrggbb`;
  * `lighting=neutral|neutral-v2`; `head=egg|neutral-v2|neutral-v3`; `shading=skin-v2`; the look comparison's overrides of the
  * lighting's extras `outline` (CSS px), `shadow` (opacity), `backdrop=adaptive`, `rim`, `bounce`; `family=male`,
- * `height`, `shoulder`, `bust`, `waist`, `hip` (cm); `body=realistic` (the realistic body spike, female; `conform=0` draws it unconformed under the garment). `mode=head` shows the body alone (no bundle),
- * through the shipped viewer's `Stage` and `Figure`: `family`, `yaw` (degrees), `pitch`, `frame=head|body|face`.
+ * `height`, `shoulder`, `bust`, `waist`, `hip` (cm); `body=realistic` (the realistic body spike, female; `conform=0` draws it unconformed under the garment; `skinlook=procedural` adds its procedural skin and studio light, `MountOptions.realisticSkin`). `mode=head` shows the body alone (no bundle),
+ * through the shipped viewer's `Stage` and `Figure`: `family`, `yaw` (degrees), `pitch`, `frame=head|body|face|upper` (`upper`: the upper body, head to hips).
  *
  * `window.avatarCheck.patches()` returns the median rendered colour of small patches of bare skin
  * (forehead, neck, forearm, shin) for the colour-error measurement in `avatar-renders.mjs`;
@@ -23,7 +23,7 @@ import { headOf, lightingOf, mountGarmentView, type GarmentView, type LookExtras
 import { skinShadingOf } from '../../../../packages/garment-viewer/src/skin';
 import { fitNeckToHead } from '../../../../packages/garment-viewer/src/body';
 import { Figure, Stage, meshGeometry } from '../../../../packages/garment-viewer/src/scene';
-import { drawnGirthsTag, realisticBodyFor } from '../../../../packages/garment-viewer/src/realisticBodyLoad';
+import { drawnGirthsTag, loadRealisticBody, realisticBodyFor, realisticSkinOf } from '../../../../packages/garment-viewer/src/realisticBodyLoad';
 import { fitForBody } from './fitting';
 
 const params = new URLSearchParams(location.search);
@@ -51,6 +51,9 @@ const maleShape = params.get('maleShape') === 'v2' ? ('v2' as const) : undefined
 const body = { family, heightCm: num('height'), shoulderCm: num('shoulder'), bust: num('bust'), waist: num('waist'), hip: num('hip') } as const;
 /** `body=realistic`: the realistic body spike (`MountOptions.bodyShape: 'realistic-spike'`, female only); default the procedural body. */
 const realistic = params.get('body') === 'realistic';
+/** `skinlook=procedural` with `body=realistic`: the procedural skin and the studio light (`MountOptions.realisticSkin`). */
+const realisticSkin = realistic && params.get('skinlook') === 'procedural';
+const skinLookTag = realisticSkin ? ' · skin procedural + studio light (replaces the lighting named)' : '';
 const setState = (s: string): void => {
   document.documentElement.dataset.viewerState = s;
 };
@@ -115,7 +118,7 @@ async function garmentMode(): Promise<void> {
   const meas = { bust: m.shape.rings.chest.circumferenceCm, waist: m.shape.rings.waist.circumferenceCm, hip: m.shape.rings.hip.circumferenceCm };
   const fit = fitForBody(garment, meas);
   const size = params.get('size') ?? fit.recommendedSize ?? '';
-  const view = await mountGarmentView(canvas, { baseUrl, garment, fit, size, body, look: { skinHex: skin, head, shading }, lighting, lookExtras: extras, onState: setState, ...(maleShape ? { maleShape } : {}), ...(realistic ? { bodyShape: 'realistic-spike' as const, ...(params.get('conform') === '0' ? { realisticBodyConform: false } : {}) } : {}) });
+  const view = await mountGarmentView(canvas, { baseUrl, garment, fit, size, body, look: { skinHex: skin, head, shading }, lighting, lookExtras: extras, onState: setState, ...(maleShape ? { maleShape } : {}), ...(realistic ? { bodyShape: 'realistic-spike' as const, ...(params.get('conform') === '0' ? { realisticBodyConform: false } : {}), ...(realisticSkin ? { realisticSkin: true } : {}) } : {}) });
   // The tag follows what is drawn: whether the garment is drawn at all (the viewer does not draw a size the fit engine's
   // advice blocks on this body, `notDrawn.ts`), and, with the realistic body, the drawn body's girths (conformed under
   // the garment when it is) against the typed ones.
@@ -124,7 +127,7 @@ async function garmentMode(): Promise<void> {
     const conformed = canvas.dataset.body === 'realistic-conformed';
     const girths = realistic ? (conformed ? canvas.dataset.bodyGirthsConformed : canvas.dataset.bodyGirths) : '';
     const drawnGirths = girths ? ` · typed chest ${meas.bust} · waist ${meas.waist} · hip ${meas.hip}; drawn ${conformed ? '(conformed) ' : ''}${girths}` : '';
-    tag.textContent = `ESTIMATE · ${garment.name} · size ${canvas.dataset.size ?? size}${notDrawn} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · ${realistic ? `body realistic-spike${params.get('conform') === '0' ? ' (not conformed)' : ''}` : `head ${head}`} · shading ${shading}${drawnGirths}`;
+    tag.textContent = `ESTIMATE · ${garment.name} · size ${canvas.dataset.size ?? size}${notDrawn} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · ${realistic ? `body realistic-spike${params.get('conform') === '0' ? ' (not conformed)' : ''}` : `head ${head}`} · shading ${shading}${skinLookTag}${drawnGirths}`;
   };
   retag();
   new MutationObserver(retag).observe(canvas, { attributes: true, attributeFilter: ['data-body', 'data-garment', 'data-size', 'data-body-girths', 'data-body-girths-conformed'] });
@@ -200,11 +203,23 @@ async function headMode(): Promise<void> {
   figure.setSkinShading(shading, lighting);
   figure.setSkin(skin);
   stage.setSkinTone(skin);
+  if (realisticSkin && family === 'female') {
+    const look = realisticSkinOf(await loadRealisticBody((url) => fetch(url, { credentials: 'omit' })));
+    look.addMask(figure.body.geometry);
+    look.apply(stage, figure);
+  }
   figure.group.rotation.y = ((num('yaw') ?? 0) * Math.PI) / 180;
   stage.scene.add(figure.group);
   const frame = params.get('frame');
   if (frame === 'body') stage.frame(60, m.statureCm);
-  else {
+  else if (frame === 'upper') {
+    // The upper body: head to hips, straight on.
+    const y = 0.77 * m.statureCm;
+    stage.camera.position.set(0, y + 6, 215);
+    stage.controls.target.set(0, y, 0);
+    stage.controls.minDistance = 20;
+    stage.controls.update();
+  } else {
     // `head`: head and shoulders; `face`: the face filling the view.
     const y = (frame === 'face' ? 0.94 : 0.925) * m.statureCm;
     const dist = frame === 'face' ? 58 : 105;
@@ -214,7 +229,7 @@ async function headMode(): Promise<void> {
     stage.controls.minDistance = 20;
     stage.controls.update();
   }
-  tag.textContent = `ESTIMATE · ${family} body alone${maleShape ? ' (shape v2)' : ''}${realistic ? ' · body realistic-spike' : ` · head ${head}`} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · shading ${shading}${girths}`;
+  tag.textContent = `ESTIMATE · ${family} body alone${maleShape ? ' (shape v2)' : ''}${realistic ? ' · body realistic-spike' : ` · head ${head}`} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · shading ${shading}${skinLookTag}${girths}`;
   let frames = 0;
   const loop = (): void => {
     stage.render();

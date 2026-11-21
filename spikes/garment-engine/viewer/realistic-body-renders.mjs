@@ -130,7 +130,12 @@ async function shot(context, query, name, { turn = 0 } = {}) {
     await page.mouse.wheel(0, 100);
     await page.waitForTimeout(60);
   }
-  if (turn) await drag(page, turn);
+  // A drag of more than a quarter turn would start outside the canvas (its width is under half its height): in steps.
+  for (let left = turn; Math.abs(left) > 1e-9; ) {
+    const step = Math.sign(left) * Math.min(1, Math.abs(left));
+    await drag(page, step);
+    left -= step;
+  }
   await page.waitForTimeout(700);
   if (!(await still(page))) problems.push(`${name}: the canvas did not come to rest in 40 s`);
   const file = join(outDir, `${name}.png`);

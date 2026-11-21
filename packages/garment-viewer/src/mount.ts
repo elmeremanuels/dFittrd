@@ -670,6 +670,9 @@ function startRealisticBody(canvas: HTMLCanvasElement, opts: MountOptions, plan:
         const field = liftField(plan.field, garment.lift);
         conformed = mod.conformToField(r.mesh, await mod.loadRealisticBody(fetchFn, opts.realisticBodyUrl), field, plan.drawn.landmarks.crotch[1], { ...zone, yLo: zone.yLo + garment.lift, yHi: zone.yHi + garment.lift });
       }
+      // Spike diagnostics for the comparison pictures' tag only: nothing reads these back (no fit, size or report).
+      canvas.dataset.bodyGirths = mod.drawnGirthsTag(r.mesh, plan.drawn, plan.avatar.rings, plan.drawnScaleAt);
+      canvas.dataset.bodyGirthsConformed = conformed ? mod.drawnGirthsTag(conformed, plan.drawn, plan.avatar.rings, plan.drawnScaleAt) : '';
       return { plain: r.mesh, conformed };
     })
     .then((r) => {

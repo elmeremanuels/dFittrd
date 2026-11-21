@@ -6,7 +6,7 @@
  */
 import { decodeRealisticBody, fitRealisticBody, fitTargetOf, type FitResult, type RealisticBodyAsset } from './realisticBody';
 export { conformToField, coverZone } from './realisticBody';
-import type { Mannequin } from '@curtain/mannequin';
+import { meshRingCircumference, type Mannequin, type Mesh } from '@curtain/mannequin';
 import type { AnchorRing } from '@curtain/anchors';
 
 /** The baked female body shipped with the package (`assets/realistic-body/`, CC0, PROVENANCE.md next to it). */
@@ -39,4 +39,20 @@ export function loadRealisticBody(fetchFn: FetchBytes, url = REALISTIC_BODY_URL)
 export async function realisticBodyFor(fetchFn: FetchBytes, drawn: Mannequin, rings: Record<AnchorRing, number>, scaleAt: (y: number) => number, url?: string): Promise<FitResult> {
   const asset = await loadRealisticBody(fetchFn, url);
   return fitRealisticBody(asset, fitTargetOf(drawn, rings, scaleAt));
+}
+
+/**
+ * Spike diagnostics only, for the comparison pictures' tag (`canvas.dataset.bodyGirths`): the loop girths of a DRAWN
+ * mesh at the chest, underbust, waist and hip rings of the drawn body, cm, e.g. `chest 92.0 · underbust 78.0 · …`.
+ * Read by nothing else: no fit, size or ring report uses it (the conformed mesh in particular is a display mesh).
+ */
+export function drawnGirthsTag(mesh: Mesh, drawn: Mannequin, rings: Record<AnchorRing, number>, scaleAt: (y: number) => number): string {
+  const target = fitTargetOf(drawn, rings, scaleAt);
+  return (['chest', 'underbust', 'waist', 'hip'] as const)
+    .map((id) => {
+      const r = target.rings.find((x) => x.id === id)!;
+      const g = meshRingCircumference(mesh, { ...r, part: 'torso' });
+      return `${id} ${g === null ? 'n/a' : g.toFixed(1)}`;
+    })
+    .join(' · ');
 }

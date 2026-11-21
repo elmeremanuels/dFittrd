@@ -10,7 +10,9 @@
  *   - the body alone, front and three-quarter, before (procedural body, head neutral-v3, the embed's default head)
  *     and after (`body=realistic`);
  *   - wearing the evaluated azure dress (`out/eval/azure-palm-baby-doll-dress`, draped on the device) before and after,
- *     front, when the bundle is there; after also unconformed (`conform=0`, `-dress-after-raw`).
+ *     front, three-quarter (the controls turned 45°) and back (180°), when the bundle is there; after also unconformed
+ *     (`conform=0`, `-dress-after-raw`, front). Where the fit engine's advice blocks every size of the dress on a body
+ *     the dress is not drawn, and the tag says so.
  * Then the frame time, three runs each: the mean interval between animation frames while the view is dragged round for 4 s
  * (`avatarCheck.rafMs`), body alone and with the dress, before and after; and, body alone, `avatarCheck.frameMs`
  * (60 synchronous renders with a one-pixel read-back each, so each includes the renderer's work).
@@ -133,7 +135,7 @@ async function shot(context, query, name, { turn = 0 } = {}) {
   if (!(await still(page))) problems.push(`${name}: the canvas did not come to rest in 40 s`);
   const file = join(outDir, `${name}.png`);
   await page.screenshot({ path: file, timeout: 180_000 });
-  renders.push({ name, query, tag: await page.textContent('#tag'), garment: await page.evaluate(() => document.getElementById('stage').dataset.garment ?? null), body: await page.evaluate(() => document.getElementById('stage').dataset.body ?? null) });
+  renders.push({ name, query, tag: await page.textContent('#tag'), garment: await page.evaluate(() => document.getElementById('stage').dataset.garment ?? null), body: await page.evaluate(() => document.getElementById('stage').dataset.body ?? null), girths: await page.evaluate(() => document.getElementById('stage').dataset.bodyGirths ?? null), girthsConformed: await page.evaluate(() => document.getElementById('stage').dataset.bodyGirthsConformed ?? null) });
   await page.close();
 }
 
@@ -170,7 +172,11 @@ try {
     for (const [tag, look] of [['before', before], ['after', after]]) {
       await shot(phone, q({ mode: 'head', frame: 'body', ...body, ...look }), `${id}-body-${tag}--front`);
       await shot(phone, q({ mode: 'head', frame: 'body', ...body, ...look }), `${id}-body-${tag}--three-quarter`, { turn: 0.5 });
-      if (hasDress) await shot(phone, q({ product: DRESS, ...body, ...look }), `${id}-dress-${tag}--front`);
+      if (hasDress) {
+        await shot(phone, q({ product: DRESS, ...body, ...look }), `${id}-dress-${tag}--front`);
+        await shot(phone, q({ product: DRESS, ...body, ...look }), `${id}-dress-${tag}--three-quarter`, { turn: 0.5 });
+        await shot(phone, q({ product: DRESS, ...body, ...look }), `${id}-dress-${tag}--back`, { turn: 2 });
+      }
     }
     // The realistic body drawn as fitted under the dress too (not conformed): where its skin is outside the ring table's field.
     if (hasDress) await shot(phone, q({ product: DRESS, ...body, ...after, conform: 0 }), `${id}-dress-after-raw--front`);

@@ -23,7 +23,7 @@ import { headOf, lightingOf, mountGarmentView, type GarmentView, type LookExtras
 import { skinShadingOf } from '../../../../packages/garment-viewer/src/skin';
 import { fitNeckToHead } from '../../../../packages/garment-viewer/src/body';
 import { Figure, Stage, meshGeometry } from '../../../../packages/garment-viewer/src/scene';
-import { realisticBodyFor } from '../../../../packages/garment-viewer/src/realisticBodyLoad';
+import { drawnGirthsTag, realisticBodyFor } from '../../../../packages/garment-viewer/src/realisticBodyLoad';
 import { fitForBody } from './fitting';
 
 const params = new URLSearchParams(location.search);
@@ -116,7 +116,18 @@ async function garmentMode(): Promise<void> {
   const fit = fitForBody(garment, meas);
   const size = params.get('size') ?? fit.recommendedSize ?? '';
   const view = await mountGarmentView(canvas, { baseUrl, garment, fit, size, body, look: { skinHex: skin, head, shading }, lighting, lookExtras: extras, onState: setState, ...(maleShape ? { maleShape } : {}), ...(realistic ? { bodyShape: 'realistic-spike' as const, ...(params.get('conform') === '0' ? { realisticBodyConform: false } : {}) } : {}) });
-  tag.textContent = `ESTIMATE · ${garment.name} · size ${canvas.dataset.size ?? size} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · ${realistic ? `body realistic-spike${params.get('conform') === '0' ? ' (not conformed)' : ''}` : `head ${head}`} · shading ${shading}`;
+  // The tag follows what is drawn: whether the garment is drawn at all (the viewer does not draw a size the fit engine's
+  // advice blocks on this body, `notDrawn.ts`), and, with the realistic body, the drawn body's girths (conformed under
+  // the garment when it is) against the typed ones.
+  const retag = (): void => {
+    const notDrawn = canvas.dataset.garment === 'not-drawn' ? ` · ${garment.category} NOT DRAWN: the fit engine blocks size ${canvas.dataset.size ?? size} on this body` : '';
+    const conformed = canvas.dataset.body === 'realistic-conformed';
+    const girths = realistic ? (conformed ? canvas.dataset.bodyGirthsConformed : canvas.dataset.bodyGirths) : '';
+    const drawnGirths = girths ? ` · typed chest ${meas.bust} · waist ${meas.waist} · hip ${meas.hip}; drawn ${conformed ? '(conformed) ' : ''}${girths}` : '';
+    tag.textContent = `ESTIMATE · ${garment.name} · size ${canvas.dataset.size ?? size}${notDrawn} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · ${realistic ? `body realistic-spike${params.get('conform') === '0' ? ' (not conformed)' : ''}` : `head ${head}`} · shading ${shading}${drawnGirths}`;
+  };
+  retag();
+  new MutationObserver(retag).observe(canvas, { attributes: true, attributeFilter: ['data-body', 'data-garment', 'data-size', 'data-body-girths', 'data-body-girths-conformed'] });
   const points = skinPoints(m);
   // A bottom may cover the shin (a maxi skirt does): that patch is measured on other garments only.
   if (garment.category === 'bottom') delete points.shin;
@@ -183,6 +194,7 @@ async function headMode(): Promise<void> {
   const shown = realistic && family === 'female'
     ? (await realisticBodyFor((url) => fetch(url, { credentials: 'omit' }), m, rings, () => 1)).mesh
     : fitNeckToHead(buildMannequinMesh(m, { head }), m).mesh;
+  const girths = realistic && family === 'female' ? ` · typed chest ${rings.chest} · waist ${rings.waist} · hip ${rings.hip}; drawn ${drawnGirthsTag(shown, m, rings, () => 1)}` : '';
   const figure = new Figure(meshGeometry(shown), new Uint32Array(0), 0, null);
   figure.garment.visible = false;
   figure.setSkinShading(shading, lighting);
@@ -202,7 +214,7 @@ async function headMode(): Promise<void> {
     stage.controls.minDistance = 20;
     stage.controls.update();
   }
-  tag.textContent = `ESTIMATE · ${family} body alone${maleShape ? ' (shape v2)' : ''}${realistic ? ' · body realistic-spike' : ` · head ${head}`} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · shading ${shading}`;
+  tag.textContent = `ESTIMATE · ${family} body alone${maleShape ? ' (shape v2)' : ''}${realistic ? ' · body realistic-spike' : ` · head ${head}`} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · shading ${shading}${girths}`;
   let frames = 0;
   const loop = (): void => {
     stage.render();

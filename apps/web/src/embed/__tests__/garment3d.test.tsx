@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { computeFit } from '@curtain/fit-engine';
 import { MOCK_GARMENTS_BY_ID, SYNTHETIC_MENS_TEE, type GarmentAssetRef } from '@curtain/schema';
 import { Garment3D, type Garment3DProps } from '../Garment3D';
+import { realisticBodyFlag } from '../look';
 
 afterEach(cleanup);
 
@@ -167,6 +168,24 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     fireEvent.click(screen.getByTestId('garment3d-open'));
     await waitFor(() => expect(unisex.mountGarmentView).toHaveBeenCalledTimes(1));
     expect((unisex.mountGarmentView.mock.calls[0]![1] as unknown as { body: unknown }).body).toEqual(measurements);
+  });
+
+  it('the realistic body spike is sent only behind its switch, and only for a women\'s body (VITE_VIEWER_BODY)', async () => {
+    expect(realisticBodyFlag({})).toBe(false);
+    expect(realisticBodyFlag({ VITE_VIEWER_BODY: 'realistic' })).toBe(false);
+    expect(realisticBodyFlag({ VITE_VIEWER_BODY: 'realistic-spike' })).toBe(true);
+    const on = setup({ realisticBody: true });
+    fireEvent.click(screen.getByTestId('garment3d-open'));
+    await waitFor(() => expect(on.mountGarmentView).toHaveBeenCalledTimes(1));
+    const opts = on.mountGarmentView.mock.calls[0]![1] as unknown as Record<string, unknown>;
+    expect(opts.bodyShape).toBe('realistic-spike');
+    expect(opts.body).toEqual(measurements);
+    cleanup();
+    const menFit = computeFit(SYNTHETIC_MENS_TEE, { measurements: { bust: 98, waist: 86, hip: 96 } });
+    const men = setup({ realisticBody: true, garment: SYNTHETIC_MENS_TEE, fit: menFit, measurements: { bust: 98, waist: 86, hip: 96 }, heightCm: 174, asset: { ...asset, sizes: ['S', 'M', 'L', 'XL', 'XXL'] } });
+    fireEvent.click(screen.getByTestId('garment3d-open'));
+    await waitFor(() => expect(men.mountGarmentView).toHaveBeenCalledTimes(1));
+    expect((men.mountGarmentView.mock.calls[0]![1] as unknown as Record<string, unknown>).bodyShape).toBeUndefined();
   });
 
   it('is labelled an estimate and names the size the advice picked', async () => {

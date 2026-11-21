@@ -111,6 +111,15 @@ export function womenHeightFlag(env: { VITE_WOMEN_3D_HEIGHT?: string } = import.
   return env.VITE_WOMEN_3D_HEIGHT === '1';
 }
 
+/**
+ * The realistic body spike in the 3D view (docs/reports/claude/realistic-body-spike.md): `VITE_VIEWER_BODY=realistic-spike`
+ * sends `bodyShape: 'realistic-spike'` for a women's body. Anything else, and every normal build: off, the procedural
+ * body as before. A drawn skin only (the cloth, the fit and the sizes are unchanged); not a product decision.
+ */
+export function realisticBodyFlag(env: { VITE_VIEWER_BODY?: string } = import.meta.env): boolean {
+  return env.VITE_VIEWER_BODY === 'realistic-spike';
+}
+
 export function avatarSkinFlag(env: { VITE_AVATAR_SKIN?: string } = import.meta.env): 'flat' | 'skin-v2' {
   return env.VITE_AVATAR_SKIN === 'skin-v2' ? 'skin-v2' : 'flat';
 }

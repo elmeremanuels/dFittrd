@@ -273,6 +273,11 @@ export interface Section {
   /** Centroid of the points in plane coordinates. */
   cu: number;
   cv: number;
+  /** Centroid of the enclosed area in plane coordinates (the section's centre used to place it). */
+  au: number;
+  av: number;
+  /** Whether the plane origin lies inside the loop. */
+  containsOrigin: boolean;
 }
 
 function sectionOf(loop: Loop, origin: V3, u: V3, v: V3): Section {
@@ -282,14 +287,26 @@ function sectionOf(loop: Loop, origin: V3, u: V3, v: V3): Section {
     cu += x / q.length;
     cv += y / q.length;
   }
-  return { loop, q, loopCm: loopLength(loop), tapeCm: hullPerimeter(q), cu, cv };
+  let a = 0, au = 0, av = 0;
+  for (let i = 0; i < q.length; i++) {
+    const [x0, y0] = q[i]!;
+    const [x1, y1] = q[(i + 1) % q.length]!;
+    const c = x0 * y1 - x1 * y0;
+    a += c;
+    au += (x0 + x1) * c;
+    av += (y0 + y1) * c;
+  }
+  const areaOk = Math.abs(a) > 1e-9;
+  return { loop, q, loopCm: loopLength(loop), tapeCm: hullPerimeter(q), cu, cv, au: areaOk ? au / (3 * a) : cu, av: areaOk ? av / (3 * a) : cv, containsOrigin: contains(q, 0, 0) };
 }
 
 /**
  * The closed section of the mesh in the plane round `origin` (the smallest closed loop that contains it), or, when
- * no closed loop contains it, the closed loop whose centroid is nearest. Null when the plane meets no closed loop.
+ * no closed loop contains it and `strict` is not set, the closed loop whose centroid is nearest. Null when the plane
+ * meets no closed loop (or, with `strict`, none that contains the origin). Measuring uses `strict` (a ring centre
+ * outside the drawn section is a misplaced body, not a girth); only the fit's own placement steps use the fallback.
  */
-export function sectionAt(positions: ArrayLike<number>, indices: ArrayLike<number>, origin: V3, normal: V3, u: V3, v: V3, filter?: (t: number) => boolean): Section | null {
+export function sectionAt(positions: ArrayLike<number>, indices: ArrayLike<number>, origin: V3, normal: V3, u: V3, v: V3, filter?: (t: number) => boolean, strict = false): Section | null {
   const loops = slice(positions, indices, { origin, normal }, filter).filter((l) => l.closed && l.points.length > 2);
   let best: Section | null = null;
   let bestArea = Infinity;
@@ -297,7 +314,7 @@ export function sectionAt(positions: ArrayLike<number>, indices: ArrayLike<numbe
   let nearD = Infinity;
   for (const loop of loops) {
     const s = sectionOf(loop, origin, u, v);
-    if (contains(s.q, 0, 0)) {
+    if (s.containsOrigin) {
       const a = Math.abs(area(s.q));
       if (a < bestArea) {
         best = s;
@@ -310,7 +327,7 @@ export function sectionAt(positions: ArrayLike<number>, indices: ArrayLike<numbe
       nearD = d;
     }
   }
-  return best ?? near;
+  return best ?? (strict ? null : near);
 }
 
 /** All closed horizontal sections at height y. */
@@ -328,16 +345,24 @@ export function horizontalSections(positions: ArrayLike<number>, indices: ArrayL
 const HEAD_SHARE = 0.2;
 /** Width of the smooth left/right switch of the leg centres across the midline, cm. */
 const MIDLINE_CM = 3;
-/** Iterations of the girth correction (each sets every ring's scale to target / measured). */
-const FIT_ITERATIONS = 6;
-/** Half-height of the band round the shoulder ring whose horizontal scale sets the shoulder girth, cm. */
-const SHOULDER_BAND_CM = 7;
+/** Iterations of the girth and centre correction (each sets every ring's scale to target / measured, and moves each section's centre onto its ring's). */
+const FIT_ITERATIONS = 8;
+/**
+ * Half-height of the band round the shoulder ring whose horizontal scale sets the shoulder girth, cm. Wide and with a
+ * C2 fade (smootherstep), so the change of scale leaves no ridge across the upper chest; the arms are not in it (they
+ * stay on the ring table's arm frame).
+ */
+const SHOULDER_BAND_CM = 11;
+/** Stations along each arm, as shares of the way from the upper-arm ring to the wrist ring, where the section is centred on the axis. */
+const ARM_STATIONS = [0, 0.25, 0.5, 0.75, 1];
 
 export interface FitOptions {
   /** Shape sliders in [-1, 1]; by default solved from the target's girths (`shapeFor`). */
   shape?: { weight: number; cup: number };
-  /** Correction iterations (default 6; 0 leaves the rings at the uniform start). */
+  /** Correction iterations (default 8; 0 leaves the rings at the uniform start). */
   iterations?: number;
+  /** `false` leaves the arm sections where the rigid placement puts them (for the negative control of the centre test). */
+  centreArms?: boolean;
 }
 
 export interface RingResult {
@@ -360,8 +385,14 @@ export interface FitResult {
 /**
  * The shape sliders, before the per-ring scale (which makes every girth exact anyway): `weight` in [-1, 1] so that the
  * seat girth over stature is the target's (a slim body draws MakeHuman's low weight, a full one its high weight), and
- * `cup` in [-1, 1] so that chest over underbust is the target's. Uses the bake's girths (`meta.girths`), linear in each
- * slider's half; a grid of 0.05.
+ * `cup` in [-1, 0] so that the bust's own size, chest minus underbust in cm (how a cup is measured), is the target's
+ * at that weight. Uses the bake's girths (`meta.girths`), linear in each slider's half; a grid of 0.05.
+ *
+ * Until 21 Nov the cup matched chest OVER underbust. MakeHuman's high weight already raises that ratio, so a full body
+ * got the cup at -0.85 (a flat bust) and the per-ring scale put the chest's girth into the back and shoulders instead.
+ * The difference keeps the bust's own volume. `cup+` is not used: at full strength its breast falls through the bake's
+ * underbust level (that level's girth grows 28 cm, the chest level's 4 cm), so the level girths read it as a smaller
+ * bust; a bigger bust than MakeHuman's default comes from the per-ring scale.
  */
 export function shapeFor(meta: RealisticBodyMeta, target: FitTarget): { weight: number; cup: number } {
   const want = new Map(target.rings.map((r) => [r.id, r.girthCm]));
@@ -373,13 +404,14 @@ export function shapeFor(meta: RealisticBodyMeta, target: FitTarget): { weight: 
     return base + gw + gc;
   };
   const seat = Math.log(want.get('hip')! / target.statureCm);
-  const bust = Math.log(want.get('chest')! / want.get('underbust')!);
+  const cupCm = want.get('chest')! - want.get('underbust')!;
+  const chest = want.get('chest')!;
   let best = { weight: 0, cup: 0 };
   let bestCost = Infinity;
   for (let wi = -20; wi <= 20; wi++) {
-    for (let ci = -20; ci <= 20; ci++) {
+    for (let ci = -20; ci <= 0; ci++) {
       const w = wi / 20, c = ci / 20;
-      const cost = (Math.log(at('hip', w, c) / meta.statureCm) - seat) ** 2 + (Math.log(at('chest', w, c) / at('underbust', w, c)) - bust) ** 2 + 1e-5 * (w * w + c * c);
+      const cost = (Math.log(at('hip', w, c) / meta.statureCm) - seat) ** 2 + ((at('chest', w, c) - at('underbust', w, c) - cupCm) / chest) ** 2 + 1e-5 * (w * w + c * c);
       if (cost < bestCost) {
         bestCost = cost;
         best = { weight: w, cup: c };
@@ -428,18 +460,33 @@ const smooth = (t: number): number => {
   const c = Math.min(1, Math.max(0, t));
   return c * c * (3 - 2 * c);
 };
+/** C2 smootherstep on [0, 1]. */
+const smoother = (t: number): number => {
+  const c = Math.min(1, Math.max(0, t));
+  return c * c * c * (c * (6 * c - 15) + 10);
+};
+/** A unit vector perpendicular to `a`, and the third one of the frame. */
+function planeBasis(a: V3): { u: V3; v: V3 } {
+  const ref: V3 = Math.abs(a[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+  const d = dot3(ref, a);
+  const v = unit([ref[0] - d * a[0], ref[1] - d * a[1], ref[2] - d * a[2]]);
+  const u: V3 = [v[1] * a[2] - v[2] * a[1], v[2] * a[0] - v[0] * a[2], v[0] * a[1] - v[1] * a[0]];
+  return { u, v };
+}
 
 /**
  * Deform the asset so that its loop girth at every ring of `target` is the target girth:
  *
- * 1. shape sliders (weight, cup) from the target's seat over stature and chest over underbust (`shapeFor`);
+ * 1. shape sliders (weight, cup) from the target's seat over stature and chest minus underbust (`shapeFor`);
  * 2. a vertical warp (monotone C1 cubic, `warpThrough`) that puts each anatomical level of the bake at its ring's height, the crotch
  *    at the target's crotch and the top of the head at the stature;
  * 3. the torso's sections moved to the ring table's centre line, the legs' to the table's leg centres;
  * 4. each arm moved rigidly onto the table's arm frame (joint, axis) and stretched along it so the wrist joint lands
  *    on the wrist ring, blended into the torso by MakeHuman's own arm weights;
  * 5. a radial scale per height (body chain, about the section centre) and per distance along the arm (arm chain,
- *    about the axis), a monotone cubic through one knot per ring, corrected `iterations` times to target / measured.
+ *    about the axis), a monotone cubic through one knot per ring, corrected `iterations` times to target / measured;
+ *    in the same loop each torso ring's section and five stations along each arm are moved so the centre of the
+ *    section's area lies on the ring table's centre line or arm axis.
  *
  * The head takes a fifth of the neck's scale. The result is a plain `Mesh` (one part, `body`).
  */
@@ -532,7 +579,9 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
     }
   }
 
-  // 5. Radial scale, corrected per ring.
+  // 5. Radial scale, corrected per ring; section centres, corrected onto the ring table's centre line (torso) and arm
+  // axis (arms). MakeHuman's forearm is bent forward of the straight line through its joints: without the arm
+  // centring the wrist section lay 5 to 7 cm in front of the wrist ring's centre (outside the wrist).
   const bodyScale: Record<BodyRing, number> = Object.fromEntries(BODY_RINGS.map((r) => [r, 1])) as Record<BodyRing, number>;
   const armScale: Record<ArmRing, number> = { upper_arm: 1, wrist: 1 };
   const armDist: Record<ArmRing, number> = { upper_arm: 0, wrist: 0 };
@@ -540,18 +589,28 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
     const rr = ring.get(r)!;
     armDist[r] = dot3([rr.centre[0] - tj[0], rr.centre[1] - tj[1], rr.centre[2] - tj[2]], target.arms.left.axis);
   }
+  const torsoCentre = torsoRings.map((r) => ({ ring: r, y: h(r), dx: 0, dz: 0 }));
+  const legCentre = legRings.map((r) => ({ ring: r, y: h(r), dx: 0, dz: 0 }));
+  const stations = ARM_STATIONS.map((f) => armDist.upper_arm + f * (armDist.wrist - armDist.upper_arm));
+  const armFix = sides.map(({ frame }) => ({ frame, basis: planeBasis(frame.axis), at: stations.map((s) => ({ s, d: [0, 0, 0] as V3 })) }));
   const neckY = h('neck');
   // The shoulder ring cuts through the arm roots, which follow the arm (step 4), not the body's scale: its girth is
-  // set by a horizontal scale of everything in a band round the ring (`shoulderBand`), fading out over SHOULDER_BAND_CM.
+  // set by a horizontal scale of the body (not the arms) in a band round the ring (`shoulderBand`), fading out over SHOULDER_BAND_CM.
   const shoulderY = h('shoulder');
   let shoulderBand = 1;
-  const band = (y: number): number => 1 - smooth(Math.abs(y - shoulderY) / SHOULDER_BAND_CM);
+  const band = (y: number): number => 1 - smoother(Math.abs(y - shoulderY) / SHOULDER_BAND_CM);
   const out = new Float64Array(3 * n);
   const apply = (): void => {
     // The body's own scale at the shoulder ring follows the chest's; the band does the rest.
     bodyScale.shoulder = bodyScale.chest;
     const kb = monotoneProfile(BODY_RINGS.map((r) => ({ x: h(r), y: bodyScale[r] })));
     const ka = monotoneProfile(ARM_RINGS.map((r) => ({ x: armDist[r], y: armScale[r] })));
+    const cxT = monotoneProfile(torsoCentre.map((c) => ({ x: c.y, y: c.dx })));
+    const czT = monotoneProfile(torsoCentre.map((c) => ({ x: c.y, y: c.dz })));
+    const cxL = monotoneProfile(legCentre.map((c) => ({ x: c.y, y: c.dx })));
+    const czL = monotoneProfile(legCentre.map((c) => ({ x: c.y, y: c.dz })));
+    // Per arm, the centring offset along the axis: 0 at the shoulder joint, through the stations, held past the wrist.
+    const fix = armFix.map((a) => [0, 1, 2].map((c) => monotoneProfile([{ x: 0, y: 0 }, ...a.at.map((p) => ({ x: p.s, y: p.d[c]! }))])));
     for (let i = 0; i < n; i++) {
       const y = B[3 * i + 1]!;
       const l = legness(y);
@@ -559,27 +618,34 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
       let k = kb(y);
       const hw = asset.headWeight[i]!;
       if (hw > 0 && y > neckY) k = k + (1 + HEAD_SHARE * (k - 1) - k) * hw;
-      let x = cx + k * (B[3 * i]! - cx);
+      const b = band(y);
+      const kband = b > 0 ? Math.pow(shoulderBand, b) : 1;
+      const sg = smoothSign(B[3 * i]!);
+      let x = kband * (cx + k * (B[3 * i]! - cx) + (1 - l) * cxT(y) + l * sg * cxL(y));
       let yy = y;
-      let z = k * B[3 * i + 2]!;
+      let z = kband * (k * B[3 * i + 2]! + (1 - l) * czT(y) + l * czL(y));
       const w = asset.armWeight[i]!;
       if (w > 0) {
-        const side = Math.sign(P[3 * i]!) >= 0 ? target.arms.left : target.arms.right;
+        const left = Math.sign(P[3 * i]!) >= 0;
+        const side = left ? target.arms.left : target.arms.right;
+        const f = fix[left ? 0 : 1]!;
         const s = armS[i]!;
         const ks = ka(s);
         const c: V3 = [side.joint[0] + side.axis[0] * s, side.joint[1] + side.axis[1] * s, side.joint[2] + side.axis[2] * s];
-        const ax = c[0] + ks * (A[3 * i]! - c[0]);
-        const ay = c[1] + ks * (A[3 * i + 1]! - c[1]);
-        const az = c[2] + ks * (A[3 * i + 2]! - c[2]);
-        x += w * (ax - x);
+        const ax = c[0] + ks * (A[3 * i]! + f[0]!(s) - c[0]);
+        const ay = c[1] + ks * (A[3 * i + 1]! + f[1]!(s) - c[1]);
+        const az = c[2] + ks * (A[3 * i + 2]! + f[2]!(s) - c[2]);
+        // The arm's root takes the shoulder band too (the shoulder ring goes round it), fading out along the arm
+        // before the upper-arm ring, so the upper arm stays on the table's arm frame and the root bends smoothly into it.
+        const ab = band(ay) * (1 - smoother(s / armDist.upper_arm));
+        const karm = ab > 0 ? Math.pow(shoulderBand, ab) : 1;
+        x += w * (karm * ax - x);
         yy += w * (ay - yy);
-        z += w * (az - z);
+        z += w * (karm * az - z);
       }
-      const b = band(yy);
-      const kband = b > 0 ? Math.pow(shoulderBand, b) : 1;
-      out[3 * i] = kband * x;
+      out[3 * i] = x;
       out[3 * i + 1] = yy;
-      out[3 * i + 2] = kband * z;
+      out[3 * i + 2] = z;
     }
   };
   const iterations = options.iterations ?? FIT_ITERATIONS;
@@ -593,6 +659,21 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
       if (r === 'shoulder') shoulderBand *= f;
       else if ((BODY_RINGS as readonly string[]).includes(r)) bodyScale[r as BodyRing] *= f;
       else armScale[r as ArmRing] *= f;
+      const tc = torsoCentre.find((c) => c.ring === r) ?? legCentre.find((c) => c.ring === r);
+      if (tc) {
+        tc.dx -= s.au;
+        tc.dz -= s.av;
+      }
+    }
+    if (options.centreArms !== false) {
+      for (const a of armFix) {
+        for (const p of a.at) {
+          const o: V3 = [a.frame.joint[0] + a.frame.axis[0] * p.s, a.frame.joint[1] + a.frame.axis[1] * p.s, a.frame.joint[2] + a.frame.axis[2] * p.s];
+          const s = sectionAt(out, idx, o, a.frame.axis, a.basis.u, a.basis.v);
+          if (!s) continue;
+          for (let c = 0; c < 3; c++) p.d[c] = p.d[c]! - (s.au * a.basis.u[c]! + s.av * a.basis.v[c]!);
+        }
+      }
     }
     apply();
   }
@@ -603,7 +684,8 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
 /** Loop and tape girth of the mesh at every ring of the target, and the loop's error against the table. */
 export function ringReport(mesh: Pick<Mesh, 'positions' | 'indices'>, target: FitTarget): RingResult[] {
   return target.rings.map((r) => {
-    const s = sectionAt(mesh.positions, mesh.indices, r.centre, r.normal, r.u, r.v);
+    // Strict: a ring centre outside every drawn section reads as no section (null), never as the nearest loop.
+    const s = sectionAt(mesh.positions, mesh.indices, r.centre, r.normal, r.u, r.v, undefined, true);
     return {
       id: r.id,
       targetCm: r.girthCm,
@@ -677,19 +759,52 @@ export function coverZone(positions: ArrayLike<number>, field: BodyField, margin
   return { yLo: yLo - marginCm, yHi: yHi + marginCm, armS: [armS[0] > 0 ? armS[0] + marginCm : 0, armS[1] > 0 ? armS[1] + marginCm : 0] };
 }
 
+/** The largest outward scale of the covered skin inside the field when the girth is given back (`conformToField`). */
+const GIRTH_BACK_MAX = 0.2;
+/** Secant refinements of the share per station (`conformToField`). */
+const GIRTH_BACK_PASSES = 3;
+
+/** Options of `conformToField`. */
+export interface ConformOptions {
+  /** Pull the skin inside the field this much beyond it, cm (under the cloth's own 0.35 cm). Default 0.1. */
+  clearanceCm?: number;
+  /** Fade of the pull at the zone's edges (hem, sleeve end), cm. Default 3. */
+  blendCm?: number;
+  /**
+   * Default true: give back the girth the pull took, by pushing the covered skin that lies inside the field out
+   * towards it (never past it), per height, by the share that makes the loop at that height the fitted mesh's again.
+   * False: the pull alone (before 21 Nov: chest 2 to 5 %, waist 3 to 4 %, hip up to 2.3 % under the table).
+   */
+  keepGirth?: boolean;
+  /** Spacing of the heights where the girth is given back, cm. Default 1.5. */
+  stepCm?: number;
+}
+
 /**
  * The fitted mesh with every vertex that a garment covers (`zone`) pulled inside the collision field the cloth meets
- * (grown by `clearanceCm`, under the cloth's own 0.35 cm), so the drawn skin does not show through the garment. Only
- * vertices outside the field move, straight towards the section's centre; inside ones stay. The pull fades out over
- * `blendCm` at the zone's edges (hem, sleeve end). Torso, the arm's root above the armpit and legs by height, arms (arm
- * weight over a half, beyond the armpit) along the arm axis; the head and the band under the armpit are left as fitted. A display step: the ring girths of the result are not the
- * table's where it pulled (the unconformed mesh is the one that matches the rings).
+ * (grown by `clearanceCm`), so the drawn skin does not show through the garment. Only vertices outside the field
+ * move, straight towards the section's centre; then (`keepGirth`) the covered skin inside the field is pushed out
+ * towards it, so that the torso's and legs' girths are the fitted mesh's again (the cleavage and the small of the back
+ * are filled in under the garment; nothing ends up outside the field). The pull fades out over `blendCm` at the zone's
+ * edges. Torso, the arm's root above the armpit and legs by height, arms (arm weight over a half, beyond the armpit)
+ * along the arm axis; the head and the band under the armpit are left as fitted.
+ *
+ * A DISPLAY mesh: it is drawn, never measured. Girths, ring reports, the fit and the sizes use the fitted mesh (the
+ * mount draws this one only while a garment is on screen). The arms are pulled but not given their girth back.
  */
-export function conformToField(mesh: Mesh, asset: Pick<RealisticBodyAsset, 'armWeight' | 'headWeight'>, field: BodyField, crotchY: number, zone: CoverZone, clearanceCm = 0.1, blendCm = 3): Mesh {
-  const p = Float64Array.from(mesh.positions);
+export function conformToField(mesh: Mesh, asset: Pick<RealisticBodyAsset, 'armWeight' | 'headWeight'>, field: BodyField, crotchY: number, zone: CoverZone, options: ConformOptions = {}): Mesh {
+  const clearanceCm = options.clearanceCm ?? 0.1;
+  const blendCm = options.blendCm ?? 3;
+  const src = mesh.positions;
+  const p = Float64Array.from(src);
   const e = new Float32Array(4);
   const n = p.length / 3;
   const fade = (d: number): number => smooth(d / blendCm);
+  // Per vertex held by height (torso and legs): the zone weight, the section centre, and how far it may go out (room).
+  const held = new Uint8Array(n);
+  const room = new Float64Array(n);
+  const wz = new Float64Array(n);
+  const ce = new Float64Array(2 * n);
   for (let i = 0; i < n; i++) {
     if (asset.headWeight[i]! > 0.5) continue;
     const x = p[3 * i]!, y = p[3 * i + 1]!, z = p[3 * i + 2]!;
@@ -721,12 +836,83 @@ export function conformToField(mesh: Mesh, asset: Pick<RealisticBodyAsset, 'armW
     const table = y < crotchY ? field.legs[side] : field.torso;
     if (!sample(table, y, e)) continue;
     const k = limit(x - e[0]!, z - e[1]!, e[2]!, e[3]!, clearanceCm);
-    if (k >= 1) continue;
+    held[i] = 1;
+    wz[i] = w;
+    ce[2 * i] = e[0]!;
+    ce[2 * i + 1] = e[1]!;
+    if (k >= 1) {
+      // Inside: how far out it may be pushed (onto the grown ellipse along its ray).
+      room[i] = reach(x - e[0]!, z - e[1]!, e[2]!, e[3]!, clearanceCm);
+      continue;
+    }
+    room[i] = 1;
     const kk = 1 + (k - 1) * w;
     p[3 * i] = e[0]! + (x - e[0]!) * kk;
     p[3 * i + 2] = e[1]! + (z - e[1]!) * kk;
   }
-  return { ...mesh, positions: p };
+  if (options.keepGirth === false) return { ...mesh, positions: p };
+
+  // Girth back, per height: the covered skin inside the field is scaled out about the section centre by 1 + g (never
+  // past the grown ellipse; a scale keeps folds such as the cleavage and the seat's cleft, which filling in would
+  // shorten), g = share · GIRTH_BACK_MAX. The share at each station makes the loop the fitted mesh's again: secant from
+  // the pulled mesh (share 0) and the full scale (share 1), one secant step refined. Torso stations about the field's
+  // torso centre; leg stations about the left leg's (the body is symmetric) and used for both legs.
+  const idx = mesh.indices;
+  const step = options.stepCm ?? 1.5;
+  const loopAt = (pos: ArrayLike<number>, y: number, leg: boolean): number | null => {
+    if (!sample(leg ? field.legs[0] : field.torso, y, e)) return null;
+    const s = sectionAt(pos, idx, [e[0]!, y, e[1]!], [0, 1, 0], [1, 0, 0], [0, 0, 1], undefined, true);
+    return s ? s.loopCm : null;
+  };
+  const mix = (share: (y: number, leg: boolean) => number): Float64Array => {
+    const q = Float64Array.from(p);
+    for (let i = 0; i < n; i++) {
+      if (!held[i] || !(room[i]! > 1)) continue;
+      const y = p[3 * i + 1]!;
+      const k = 1 + (Math.min(1 + share(y, y < crotchY) * GIRTH_BACK_MAX, room[i]!) - 1) * wz[i]!;
+      q[3 * i] = ce[2 * i]! + (p[3 * i]! - ce[2 * i]!) * k;
+      q[3 * i + 2] = ce[2 * i + 1]! + (p[3 * i + 2]! - ce[2 * i + 1]!) * k;
+    }
+    return q;
+  };
+  const full = mix(() => 1);
+  // Stations: not within 2 cm of the crotch, where torso and legs meet and no one section is the right one.
+  const solved: { y: number; leg: boolean; t: number; l0: number; b: number }[] = [];
+  for (let y = Math.max(zone.yLo, 0); y <= zone.yHi; y += step) {
+    if (Math.abs(y - crotchY) < 2) continue;
+    const leg = y < crotchY;
+    const t = loopAt(src, y, leg), l0 = loopAt(p, y, leg), l1 = loopAt(full, y, leg);
+    if (t === null || l0 === null || l1 === null) continue;
+    solved.push({ y, leg, t, l0, b: l1 > l0 + 1e-6 ? Math.min(1, Math.max(0, (t - l0) / (l1 - l0))) : 0 });
+  }
+  const profile = (leg: boolean): ((y: number) => number) => {
+    const k = solved.filter((s) => s.leg === leg).map((s) => ({ x: s.y, y: s.b }));
+    return k.length ? monotoneProfile(k) : () => 0;
+  };
+  // Secant refinements: the loop is close to linear in the share, not exactly, and a vertex takes the share of its own
+  // height, so a station's loop also feels its neighbours' shares.
+  let bt = profile(false), bl = profile(true);
+  let res = mix((y, leg) => (leg ? bl(y) : bt(y)));
+  for (let pass = 0; pass < GIRTH_BACK_PASSES; pass++) {
+    for (const s of solved) {
+      const lb = loopAt(res, s.y, s.leg);
+      if (lb === null || !(Math.abs(lb - s.l0) > 1e-6)) continue;
+      if (s.b <= 0 && lb < s.t) s.b = 0.05;
+      else s.b = Math.min(1, Math.max(0, (s.b * (s.t - s.l0)) / (lb - s.l0)));
+    }
+    bt = profile(false);
+    bl = profile(true);
+    res = mix((y, leg) => (leg ? bl(y) : bt(y)));
+  }
+  return { ...mesh, positions: res };
+}
+
+/** The factor (≥ 1) that takes the point (pu, pv) out onto the ellipse a, b grown by `grow` along its ray. */
+function reach(pu: number, pv: number, a: number, b: number, grow: number): number {
+  const r = Math.hypot(pu, pv);
+  if (r === 0) return 1;
+  const re = (a * b) / Math.hypot(b * (pu / r), a * (pv / r)) + grow;
+  return Math.max(1, re / r);
 }
 
 /** The factor (≤ 1) that brings the point (pu, pv) onto the ellipse a, b grown by `grow` along its ray, or 1 inside. */

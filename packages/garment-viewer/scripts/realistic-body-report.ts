@@ -1,6 +1,7 @@
 /**
  * Measurements of the realistic body spike (docs/reports/claude/realistic-body-spike.md): per test body the ring errors
- * (loop and tape), the drawn mesh against the collision outline the cloth meets (the ring table's ellipses), closedness
+ * (loop and tape, by the tests' independent slicer `test/independentSlice.ts`, against the mannequin's ring table) and
+ * how far each section's centre is from its ring's, the drawn mesh against the collision outline the cloth meets (the ring table's ellipses), closedness
  * and self-crossing, the fit time in Node, and the asset's size.
  *
  *   pnpm --filter @curtain/garment-viewer exec tsx scripts/realistic-body-report.ts [--json <file>]
@@ -8,8 +9,9 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { buildBody, topology, type Mannequin, type Mesh } from '@curtain/mannequin';
-import { conformToField, decodeRealisticBody, fitRealisticBody, fitTargetOf, ringReport, sectionAt } from '../src/realisticBody';
+import { conformToField, decodeRealisticBody, fitRealisticBody, fitTargetOf, sectionAt } from '../src/realisticBody';
 import { IDENTITY_MORPH, bodyField } from '../src/body';
+import { mirrored, sectionRound } from '../test/independentSlice';
 
 type V3 = [number, number, number];
 
@@ -22,7 +24,28 @@ export const TEST_BODIES: Record<string, { heightCm: number; bust: number; waist
   petite: { heightCm: 152, bust: 84, waist: 66, hip: 92 },
   'corner-small': { heightCm: 130, bust: 60, waist: 45, hip: 65 },
   'corner-large': { heightCm: 220, bust: 160, waist: 150, hip: 170 },
+  // The reviewer's extremes (21 Nov).
+  'very-full': { heightCm: 165, bust: 145, waist: 135, hip: 155 },
+  'big-bust-small-hip': { heightCm: 166, bust: 118, waist: 72, hip: 86 },
+  pear: { heightCm: 162, bust: 82, waist: 68, hip: 124 },
+  apple: { heightCm: 160, bust: 104, waist: 108, hip: 100 },
 };
+
+/**
+ * Every ring of the mannequin measured on `mesh` by the independent slicer of the tests (never the fit's own): loop,
+ * tape, the error against the ring table, the distance of the section's area centre from the ring centre, both sides
+ * for the limbs (the worse side). Null: the ring centre is outside every drawn section.
+ */
+function independentRings(mesh: Mesh, m: Mannequin) {
+  return m.rings.map((r) => {
+    const sides = (r.centre[0] !== 0 ? [r, mirrored(r as typeof r & { centre: V3; normal: V3; u: V3; v: V3 })] : [r]).map((x) => sectionRound(mesh.positions, mesh.indices, x.centre as V3, x.normal as V3, x.u as V3, x.v as V3));
+    const worst = sides.reduce<ReturnType<typeof sectionRound>>((a, s) => (a === null || s === null ? null : Math.abs(s.loopCm - r.circumferenceCm) > Math.abs(a.loopCm - r.circumferenceCm) ? s : a), sides[0] ?? null);
+    const round = (x: number, k = 100): number => Math.round(x * k) / k;
+    return worst === null
+      ? { id: r.id, targetCm: round(r.circumferenceCm), loopCm: null, tapeCm: null, errorPct: null, tapeMinusLoopCm: null, centreOffsetCm: null }
+      : { id: r.id, targetCm: round(r.circumferenceCm), loopCm: round(worst.loopCm), tapeCm: round(worst.tapeCm), errorPct: round((100 * (worst.loopCm - r.circumferenceCm)) / r.circumferenceCm, 1e4), tapeMinusLoopCm: round(worst.tapeCm - worst.loopCm), centreOffsetCm: round(Math.max(...sides.map((s) => Math.hypot(...s!.centre)))) };
+  });
+}
 
 const N = 96;
 
@@ -185,23 +208,29 @@ function main(): void {
     const fit = fitRealisticBody(asset, fitTargetOf(m));
     const ms = performance.now() - t0;
     const topo = topology(fit.mesh);
-    // The display step under a garment: the whole torso (crotch to shoulder) and both arms covered.
+    // The display step under a garment: the whole torso (crotch to shoulder) and both arms covered; and the review's
+    // zone (15 cm under the hip ring to 2 cm over the chest ring, arms bare), with and without the girth given back.
     const field = bodyField(m, IDENTITY_MORPH);
-    const conformed = conformToField(fit.mesh, asset, field, m.landmarks.crotch[1], { yLo: m.landmarks.crotch[1], yHi: m.morphHeights.shoulder, armS: [m.morphHeights.wrist, m.morphHeights.wrist] });
-    const conformedRings = ringReport(conformed, fitTargetOf(m));
+    const crotch = m.landmarks.crotch[1];
+    const conformed = conformToField(fit.mesh, asset, field, crotch, { yLo: crotch, yHi: m.morphHeights.shoulder, armS: [m.morphHeights.wrist, m.morphHeights.wrist] });
+    const reviewZone = { yLo: m.morphHeights.hip - 15, yHi: m.morphHeights.chest + 2, armS: [0, 0] as [number, number] };
+    const girthsOf = (mesh: Mesh) => Object.fromEntries(independentRings(mesh, m).filter((r) => ['chest', 'underbust', 'waist', 'hip', 'upper_arm'].includes(r.id)).map((r) => [r.id, r.errorPct === null ? null : Math.round(r.errorPct * 100) / 100]));
+    const rings = independentRings(fit.mesh, m);
     (out.bodies as Record<string, unknown>)[name] = {
       input: b,
       shape: fit.shape,
       fitMs: Math.round(ms),
-      rings: fit.rings.map((r) => ({ id: r.id, targetCm: r.targetCm, loopCm: r.loopCm === null ? null : Math.round(r.loopCm * 100) / 100, tapeCm: r.tapeCm === null ? null : Math.round(r.tapeCm * 100) / 100, errorPct: r.errorPct === null ? null : Math.round(r.errorPct * 1e4) / 1e4, tapeMinusLoopCm: r.loopCm === null || r.tapeCm === null ? null : Math.round((r.tapeCm - r.loopCm) * 100) / 100 })),
-      maxAbsErrorPct: Math.round(Math.max(...fit.rings.map((r) => Math.abs(r.errorPct ?? Infinity))) * 1e4) / 1e4,
+      rings,
+      maxAbsErrorPct: Math.max(...rings.map((r) => Math.abs(r.errorPct ?? Infinity))),
+      maxCentreOffsetCm: Math.max(...rings.map((r) => r.centreOffsetCm ?? Infinity)),
       watertight: topo.watertight,
       components: topo.components,
       selfCrossings: selfCrossings(fit.mesh, asset.meta.bodyVertexCount),
       outline: { torso: outline(fit.mesh, torsoStations(m)), arm: outline(fit.mesh, armStations(m)), armToWristLess3: outline(fit.mesh, armStations(m, 3)), leg: outline(fit.mesh, legStations(m)) },
       conformed: {
         outline: { torso: outline(conformed, torsoStations(m)), arm: outline(conformed, armStations(m)), armToWristLess3: outline(conformed, armStations(m, 3)) },
-        rings: conformedRings.map((r) => ({ id: r.id, errorPct: r.errorPct === null ? null : Math.round(r.errorPct * 1e3) / 1e3 })),
+        girthErrorPct: girthsOf(conformed),
+        reviewZone: { girthBack: girthsOf(conformToField(fit.mesh, asset, field, crotch, reviewZone)), pullOnly: girthsOf(conformToField(fit.mesh, asset, field, crotch, reviewZone, { keepGirth: false })) },
         selfCrossings: selfCrossings(conformed, asset.meta.bodyVertexCount).count,
       },
     };

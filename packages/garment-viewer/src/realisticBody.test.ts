@@ -49,41 +49,30 @@ describe('realistic body asset', () => {
 });
 
 describe('fitRealisticBody', () => {
+  // The girths themselves are tested against the typed body with an independent slicer in
+  // test/realisticBodyGirth.test.ts (with its negative controls); here the fit's own report and the mesh.
   for (const [name, body] of Object.entries(BODIES)) {
-    it(`${name}: every one of the 12 rings is within ${TOLERANCE_PCT} % of the ring table (loop girth), the mesh closed`, () => {
+    it(`${name}: its own ring report (strict: no nearest-loop fallback) lists the 12 rings within ${TOLERANCE_PCT} %, the mesh closed`, () => {
       const target = targetOf(body);
       const fit = fitRealisticBody(asset, target);
       expect(fit.rings.map((r) => r.id).sort()).toEqual([...ANCHOR_RINGS].sort());
       expect(ringsOver(fit)).toEqual([]);
-      // The tape girth is reported next to the loop and never exceeds it (a hull is never longer than the loop round it).
-      for (const r of fit.rings) expect(r.tapeCm!).toBeLessThanOrEqual(r.loopCm! + 1e-6);
       const topo = topology(fit.mesh);
       expect(topo.watertight).toBe(true);
       expect(topo.boundaryEdges).toBe(0);
     });
   }
 
-  it('negative control: the same check fails on every body when the fit is broken', () => {
-    for (const body of Object.values(BODIES)) {
-      const target = targetOf(body);
-      // Broken 1: no girth correction (only the uniform start of the per-ring scale).
-      expect(ringsOver(fitRealisticBody(asset, target, { iterations: 0 })).length).toBeGreaterThan(0);
-      // Broken 2: the fit is right, but for a table 2 % off at the waist; checked against the real table it fails there.
-      const wrong: FitTarget = { ...target, rings: target.rings.map((r) => (r.id === 'waist' ? { ...r, girthCm: r.girthCm * 1.02 } : r)) };
-      const fit = fitRealisticBody(asset, wrong);
-      const checked: FitResult = { ...fit, rings: fit.rings.map((r) => { const t = target.rings.find((x) => x.id === r.id)!; return { ...r, targetCm: t.girthCm, errorPct: (100 * (r.loopCm! - t.girthCm)) / t.girthCm }; }) };
-      expect(ringsOver(checked)).toEqual([expect.stringMatching(/^waist 2\.\d\d %$/)]);
-    }
+  it('the cup is solved from chest minus underbust: the full body keeps more of its bust than at the ratio (cup over -0.5)', () => {
+    expect(fitRealisticBody(asset, targetOf(BODIES.full), { iterations: 0 }).shape.cup).toBeGreaterThan(-0.5);
   });
 
-  it('follows the drawn body: the morphed avatar of the viewer (girths only) is fitted to its own rings', () => {
+  it('follows the drawn body: the morphed avatar of the viewer keeps the base body\'s rings and stature', () => {
     const m = buildMannequin(bodyShape(BASE_SHAPE_ID));
     const plan = planAvatar({ category: 'dress' }, { bust: 104, waist: 90, hip: 112 });
-    const fit = fitRealisticBody(asset, fitTargetOf(plan.drawn, plan.avatar.rings, plan.drawnScaleAt));
     expect(plan.drawn.rings.map((r) => r.circumferenceCm)).toEqual(m.rings.map((r) => r.circumferenceCm));
     expect(plan.drawn.statureCm).toBe(m.statureCm);
-    expect(ringsOver(fit)).toEqual([]);
-    expect(fit.rings.find((r) => r.id === 'waist')!.targetCm).toBeCloseTo(90, 6);
+    expect(fitTargetOf(plan.drawn, plan.avatar.rings, plan.drawnScaleAt).rings.find((r) => r.id === 'waist')!.girthCm).toBeCloseTo(90, 6);
   });
 
   it('the vertical warp is monotone and passes through its knots', () => {
@@ -103,7 +92,7 @@ describe('conformToField (the display step under a garment)', () => {
   const fit = fitRealisticBody(asset, fitTargetOf(m));
   const field = bodyField(m, IDENTITY_MORPH);
   const zone = { yLo: m.morphHeights.waist - 10, yHi: m.morphHeights.chest + 2, armS: [0, 0] as [number, number] };
-  const conformed = conformToField(fit.mesh, asset, field, m.landmarks.crotch[1], zone, 0.1, 3);
+  const conformed = conformToField(fit.mesh, asset, field, m.landmarks.crotch[1], zone, { clearanceCm: 0.1, blendCm: 3 });
   const e = new Float32Array(4);
   /** How far a torso vertex is outside the field's ellipse at its height, cm (negative inside). */
   const outside = (p: ArrayLike<number>, i: number): number => {

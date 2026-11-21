@@ -589,6 +589,10 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
     const rr = ring.get(r)!;
     armDist[r] = dot3([rr.centre[0] - tj[0], rr.centre[1] - tj[1], rr.centre[2] - tj[2]], target.arms.left.axis);
   }
+  // How far along the arm the shoulder band reaches (to halfway between the upper-arm ring and the wrist ring): a
+  // longer fade than to the upper-arm ring, so the arm root bends into the arm without a notch; the arm's own scale and
+  // centring take the rest of it out at the upper-arm ring.
+  const armFade = armDist.upper_arm + 0.5 * (armDist.wrist - armDist.upper_arm);
   const torsoCentre = torsoRings.map((r) => ({ ring: r, y: h(r), dx: 0, dz: 0 }));
   const legCentre = legRings.map((r) => ({ ring: r, y: h(r), dx: 0, dz: 0 }));
   const stations = ARM_STATIONS.map((f) => armDist.upper_arm + f * (armDist.wrist - armDist.upper_arm));
@@ -601,8 +605,8 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
   const band = (y: number): number => 1 - smoother(Math.abs(y - shoulderY) / SHOULDER_BAND_CM);
   const out = new Float64Array(3 * n);
   const apply = (): void => {
-    // The body's own scale at the shoulder ring follows the chest's; the band does the rest.
-    bodyScale.shoulder = bodyScale.chest;
+    // The body's own scale at the shoulder ring is halfway between the chest's and the neck's; the band does the rest.
+    bodyScale.shoulder = (bodyScale.chest + bodyScale.neck) / 2;
     const kb = monotoneProfile(BODY_RINGS.map((r) => ({ x: h(r), y: bodyScale[r] })));
     const ka = monotoneProfile(ARM_RINGS.map((r) => ({ x: armDist[r], y: armScale[r] })));
     const cxT = monotoneProfile(torsoCentre.map((c) => ({ x: c.y, y: c.dx })));
@@ -637,7 +641,7 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
         const az = c[2] + ks * (A[3 * i + 2]! + f[2]!(s) - c[2]);
         // The arm's root takes the shoulder band too (the shoulder ring goes round it), fading out along the arm
         // before the upper-arm ring, so the upper arm stays on the table's arm frame and the root bends smoothly into it.
-        const ab = band(ay) * (1 - smoother(s / armDist.upper_arm));
+        const ab = band(ay) * (1 - smoother(s / armFade));
         const karm = ab > 0 ? Math.pow(shoulderBand, ab) : 1;
         x += w * (karm * ax - x);
         yy += w * (ay - yy);

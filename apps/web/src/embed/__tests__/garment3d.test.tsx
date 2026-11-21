@@ -188,6 +188,19 @@ describe('Garment3D (opt-in 3D estimate, D16)', () => {
     expect((men.mountGarmentView.mock.calls[0]![1] as unknown as Record<string, unknown>).bodyShape).toBeUndefined();
   });
 
+  it('the hair choice (D28) goes to the viewer only with the realistic body', async () => {
+    const hair = { type: '4C', length: 'long', colour: 'black' } as const;
+    const on = setup({ realisticBody: true, hair });
+    fireEvent.click(screen.getByTestId('garment3d-open'));
+    await waitFor(() => expect(on.mountGarmentView).toHaveBeenCalledTimes(1));
+    expect((on.mountGarmentView.mock.calls[0]![1] as unknown as Record<string, unknown>).hair).toEqual(hair);
+    cleanup();
+    const off = setup({ hair });
+    fireEvent.click(screen.getByTestId('garment3d-open'));
+    await waitFor(() => expect(off.mountGarmentView).toHaveBeenCalledTimes(1));
+    expect((off.mountGarmentView.mock.calls[0]![1] as unknown as Record<string, unknown>).hair).toBeUndefined();
+  });
+
   it('is labelled an estimate and names the size the advice picked', async () => {
     setup({ size: 'L', recommended: 'M' });
     fireEvent.click(screen.getByTestId('garment3d-open'));

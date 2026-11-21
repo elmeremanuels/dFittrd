@@ -144,6 +144,11 @@ export interface Garment3DProps {
   /** Spike switch: draw a women's 3D body as the realistic body (default `realisticBodyFlag()`, off in every normal build). */
   realisticBody?: boolean;
   /**
+   * With the realistic body only (D28): the shopper's hair choice (type, length, colour), picked by hand and kept on the
+   * device like the skin tone. Passed to the viewer as `MountOptions.hair`; never sent anywhere. Absent: bald.
+   */
+  hair?: GarmentViewer.HairOptions | null;
+  /**
    * D22: the "AI-enhanced estimate" next to the 3D view, only when the server flag is on (`aiRealism`
    * from GET /v1/try) and the api client can send it. Absent or null: nothing changes.
    */
@@ -158,7 +163,7 @@ export const REQUIRED_3D_TIMEOUT_MS = 30_000;
 
 type Phase = 'idle' | 'loading' | 'draping' | 'settled' | 'failed';
 
-export function Garment3D({ asset, paused, garment, fit, size, recommended, waistOnly = null, measurements, units = 'metric', heightCm, estimated = [], skinHex = null, onSelect, required = false, onRequiredState, requiredTimeoutMs = REQUIRED_3D_TIMEOUT_MS, lighting = viewerLightingFlag(), head = viewerHeadFlag(), skinShading = avatarSkinFlag(), maleShape = maleShapeFlag(), womenHeight = womenHeightFlag(), realisticBody = realisticBodyFlag(), aiRealism = null, loadViewer = () => import('@curtain/garment-viewer'), webgl2 = hasWebGL2 }: Garment3DProps): ReactNode {
+export function Garment3D({ asset, paused, garment, fit, size, recommended, waistOnly = null, measurements, units = 'metric', heightCm, estimated = [], skinHex = null, onSelect, required = false, onRequiredState, requiredTimeoutMs = REQUIRED_3D_TIMEOUT_MS, lighting = viewerLightingFlag(), head = viewerHeadFlag(), skinShading = avatarSkinFlag(), maleShape = maleShapeFlag(), womenHeight = womenHeightFlag(), realisticBody = realisticBodyFlag(), hair = null, aiRealism = null, loadViewer = () => import('@curtain/garment-viewer'), webgl2 = hasWebGL2 }: Garment3DProps): ReactNode {
   const [supported] = useState(() => !!asset && webgl2());
   const usable = !!asset && !paused && supported;
   const [open, setOpen] = useState(required && usable);
@@ -228,7 +233,7 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, wais
           ...(skinRef.current || head || skinShading === 'skin-v2' ? { look: { ...(skinRef.current ? { skinHex: skinRef.current } : {}), ...(head ? { head } : {}), ...(skinShading === 'skin-v2' ? { shading: 'skin-v2' as const } : {}) } } : {}),
           ...(lighting !== 'classic' ? { lighting } : {}),
           ...(family === 'male' && maleShape === 'v2' ? { maleShape: 'v2' as const } : {}),
-          ...(family !== 'male' && realisticBody ? { bodyShape: 'realistic-spike' as const } : {}),
+          ...(family !== 'male' && realisticBody ? { bodyShape: 'realistic-spike' as const, ...(hair ? { hair } : {}) } : {}),
           onState: (s) => {
             if (!cancelled) setPhase((prev) => (required && prev === 'failed' ? prev : s === 'error' ? 'failed' : s));
           },

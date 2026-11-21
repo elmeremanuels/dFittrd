@@ -4,7 +4,8 @@
  * chunk of at most 400 KB gzip, three.js appears in no other chunk (the embed entry, the peek and
  * the PWA shell stay as small as before), and the service worker never precaches it. The drape bake reader with the
  * meshopt decoder (`drapeBakeRead`) is its own lazy chunk, loaded only for a bake bundle: not in the viewer chunk and not
- * precached either; nor are the realistic body spike's loader (`realisticBodyLoad`) and its `.crb` asset.
+ * precached either; nor are the realistic body spike's loader (`realisticBodyLoad`), its `.crb` asset and its hair
+ * (`realisticHairDraw`, D28).
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -29,5 +30,5 @@ if (bake.length !== 1) fail(`expected one drapeBakeRead chunk, found ${bake.leng
 if (readFileSync(join(dist, 'assets', viewer[0]), 'utf8').includes('decodeGltfBuffer')) fail('the meshopt decoder is in the viewer chunk (it belongs to the drapeBakeRead chunk)');
 const bakeGz = gzipSync(readFileSync(join(dist, 'assets', bake[0]))).length;
 const sw = readdirSync(dist).find((f) => f === 'sw.js');
-if (sw && /garment-viewer-|drape\.worker-|drapeBakeRead-|realisticBodyLoad-|\.crb\b/.test(readFileSync(join(dist, sw), 'utf8'))) fail('the service worker precaches the 3D viewer (or the realistic body spike\'s loader or asset)');
+if (sw && /garment-viewer-|drape\.worker-|drapeBakeRead-|realisticBodyLoad-|realisticHairDraw-|\.crb\b/.test(readFileSync(join(dist, sw), 'utf8'))) fail('the service worker precaches the 3D viewer (or the realistic body spike\'s loader, asset or hair)');
 console.log(`check-viewer-chunk: ${viewer[0]} ${(gz / 1024).toFixed(1)} KB gzip of ${BUDGET / 1024} KB (+ ${bake[0]} ${(bakeGz / 1024).toFixed(1)} KB, bakes only); three.js in no other chunk; not precached`);

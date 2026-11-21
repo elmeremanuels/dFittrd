@@ -191,7 +191,8 @@ const config = {
         // never precached, cached on first use instead (scripts/check-viewer-chunk.mjs pins this). drapeBakeRead is the
         // drape bake reader with the meshopt decoder, loaded by the viewer only for a bake bundle. realisticBodyLoad is the
         // realistic body spike's loader (only with VITE_VIEWER_BODY=realistic-spike); its .crb asset is not in globPatterns.
-        globIgnores: ['**/models/**', '**/garment-viewer-*.js', '**/drape.worker-*.js', '**/drapeBakeRead-*.js', '**/realisticBodyLoad-*.js'],
+        // realisticHairDraw is the realistic body's hair (D28), loaded only with a hair choice on that body.
+        globIgnores: ['**/models/**', '**/garment-viewer-*.js', '**/drape.worker-*.js', '**/drapeBakeRead-*.js', '**/realisticBodyLoad-*.js', '**/realisticHairDraw-*.js'],
         // /embed is framed inside merchant pages: never served from the app's SW cache.
         navigateFallbackDenylist: [/^\/v1\//, /^\/merchant/, /^\/embed/],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,

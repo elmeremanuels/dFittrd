@@ -3,9 +3,10 @@
  * Consumed as TypeScript source so the host's bundler handles the drape worker URL. Loaded only by
  * `import()` after the shopper asks for the 3D view: never in the SDK, the peek or the embed entry.
  */
-export { mountGarmentView, supportsWebGL2, GarmentViewError, headOf, bodyShapeOf, type AvatarLook, type BodyShapeKind, type HeadKind, type BakedSizeView, type GarmentView, type GarmentViewSource, type GarmentViewState, type MountOptions } from './mount';
+export { mountGarmentView, supportsWebGL2, GarmentViewError, headOf, bodyShapeOf, realisticHairOf, type AvatarLook, type BodyShapeKind, type HeadKind, type BakedSizeView, type GarmentView, type GarmentViewSource, type GarmentViewState, type MountOptions } from './mount';
 export type { BakePlace, SizeProvenance } from './drapeBake';
 export { checkBundle, gradingLabel } from './bundleCheck';
+export { HAIR_COLOURS, HAIR_LENGTHS, HAIR_PALETTE, HAIR_TYPES, hairOf, type HairChoice, type HairColourId, type HairLength, type HairOptions, type HairType } from './hairOptions';
 export type { BodyMeasurements, BodyOptions } from './body';
 export { DEFAULT_BODY_HEX, LOOK_EXTRAS, lightingOf, outlineColour, parseSkinHex, type Lighting, type LookExtras } from './scene';
 export type { DrapeOptions, WaistbandSpec } from './engine';

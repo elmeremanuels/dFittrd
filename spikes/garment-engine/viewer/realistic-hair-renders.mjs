@@ -51,7 +51,7 @@ export const COLOURS = ['black', 'dark-brown', 'brown', 'light-brown', 'auburn',
 export const TYPE_COLOUR = { 1: 'dark-brown', '2A': 'blonde', '2B': 'auburn', '2C': 'light-brown', '3A': 'dark-blonde', '3B': 'copper', '3C': 'brown', '4A': 'grey', '4B': 'platinum', '4C': 'black' };
 const BODY = { family: 'female', height: 168, bust: 92, waist: 74, hip: 100 };
 const ZOOM = 8;
-const RUNS = 2;
+const RUNS = Number(opt('--runs') ?? 2);
 const q = (o) => new URLSearchParams(Object.entries(o).map(([k, v]) => [k, String(v)])).toString();
 const hairQ = (type, length, colour) => ({ hair: type, hairLength: length, hairColour: colour });
 

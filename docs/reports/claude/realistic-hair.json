@@ -1,0 +1,2016 @@
+{
+ "when": "2026-11-21T18:14:01.547Z",
+ "budgetTriangles": 27036,
+ "bodyTriangles": 27036,
+ "textures": {
+  "strand": 87388,
+  "coil": {
+   "3C": 87380,
+   "4A": 87380,
+   "4B": 87380,
+   "4C": 87380
+  }
+ },
+ "rows": [
+  {
+   "body": "slim",
+   "type": "1",
+   "length": "short",
+   "triangles": 4060,
+   "clumps": 198,
+   "simpler": null,
+   "buildMs": 60,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "1",
+   "length": "chin",
+   "triangles": 7886,
+   "clumps": 229,
+   "simpler": null,
+   "buildMs": 55,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "1",
+   "length": "shoulder",
+   "triangles": 14252,
+   "clumps": 232,
+   "simpler": null,
+   "buildMs": 88,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "1",
+   "length": "long",
+   "triangles": 22392,
+   "clumps": 233,
+   "simpler": null,
+   "buildMs": 130,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "2A",
+   "length": "short",
+   "triangles": 3518,
+   "clumps": 186,
+   "simpler": null,
+   "buildMs": 18,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "2A",
+   "length": "chin",
+   "triangles": 6526,
+   "clumps": 217,
+   "simpler": null,
+   "buildMs": 34,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "2A",
+   "length": "shoulder",
+   "triangles": 10932,
+   "clumps": 220,
+   "simpler": null,
+   "buildMs": 76,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "2A",
+   "length": "long",
+   "triangles": 17654,
+   "clumps": 220,
+   "simpler": null,
+   "buildMs": 179,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "2B",
+   "length": "short",
+   "triangles": 4062,
+   "clumps": 178,
+   "simpler": null,
+   "buildMs": 41,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "2B",
+   "length": "chin",
+   "triangles": 7704,
+   "clumps": 210,
+   "simpler": null,
+   "buildMs": 42,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "2B",
+   "length": "shoulder",
+   "triangles": 12648,
+   "clumps": 209,
+   "simpler": null,
+   "buildMs": 86,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "2B",
+   "length": "long",
+   "triangles": 21078,
+   "clumps": 211,
+   "simpler": null,
+   "buildMs": 132,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "2C",
+   "length": "short",
+   "triangles": 4526,
+   "clumps": 171,
+   "simpler": null,
+   "buildMs": 15,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "2C",
+   "length": "chin",
+   "triangles": 9216,
+   "clumps": 199,
+   "simpler": null,
+   "buildMs": 27,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "2C",
+   "length": "shoulder",
+   "triangles": 15336,
+   "clumps": 203,
+   "simpler": null,
+   "buildMs": 58,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "2C",
+   "length": "long",
+   "triangles": 25298,
+   "clumps": 201,
+   "simpler": null,
+   "buildMs": 109,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "3A",
+   "length": "short",
+   "triangles": 3660,
+   "clumps": 129,
+   "simpler": null,
+   "buildMs": 14,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "3A",
+   "length": "chin",
+   "triangles": 8166,
+   "clumps": 153,
+   "simpler": null,
+   "buildMs": 25,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "3A",
+   "length": "shoulder",
+   "triangles": 13146,
+   "clumps": 150,
+   "simpler": null,
+   "buildMs": 57,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "3A",
+   "length": "long",
+   "triangles": 22566,
+   "clumps": 154,
+   "simpler": null,
+   "buildMs": 94,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "3B",
+   "length": "short",
+   "triangles": 4496,
+   "clumps": 130,
+   "simpler": null,
+   "buildMs": 14,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "3B",
+   "length": "chin",
+   "triangles": 10566,
+   "clumps": 147,
+   "simpler": null,
+   "buildMs": 24,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "3B",
+   "length": "shoulder",
+   "triangles": 17102,
+   "clumps": 149,
+   "simpler": null,
+   "buildMs": 44,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "3B",
+   "length": "long",
+   "triangles": 26982,
+   "clumps": 134,
+   "simpler": "148 clumps drawn as 134 to stay within 27036 triangles",
+   "buildMs": 158,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "3C",
+   "length": "short",
+   "triangles": 8998,
+   "clumps": 128,
+   "simpler": null,
+   "buildMs": 20,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "3C",
+   "length": "chin",
+   "triangles": 16898,
+   "clumps": 149,
+   "simpler": null,
+   "buildMs": 46,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "3C",
+   "length": "shoulder",
+   "triangles": 25252,
+   "clumps": 148,
+   "simpler": null,
+   "buildMs": 58,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "3C",
+   "length": "long",
+   "triangles": 25410,
+   "clumps": 87,
+   "simpler": "150 clumps drawn as 87 to stay within 27036 triangles",
+   "buildMs": 187,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "4A",
+   "length": "short",
+   "triangles": 8916,
+   "clumps": 196,
+   "simpler": null,
+   "buildMs": 23,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "4A",
+   "length": "chin",
+   "triangles": 10674,
+   "clumps": 228,
+   "simpler": null,
+   "buildMs": 21,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "4A",
+   "length": "shoulder",
+   "triangles": 13956,
+   "clumps": 230,
+   "simpler": null,
+   "buildMs": 23,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "4A",
+   "length": "long",
+   "triangles": 16408,
+   "clumps": 230,
+   "simpler": null,
+   "buildMs": 27,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "4B",
+   "length": "short",
+   "triangles": 10272,
+   "clumps": 214,
+   "simpler": null,
+   "buildMs": 18,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "4B",
+   "length": "chin",
+   "triangles": 13370,
+   "clumps": 251,
+   "simpler": null,
+   "buildMs": 34,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "4B",
+   "length": "shoulder",
+   "triangles": 16040,
+   "clumps": 250,
+   "simpler": null,
+   "buildMs": 27,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "4B",
+   "length": "long",
+   "triangles": 18846,
+   "clumps": 250,
+   "simpler": null,
+   "buildMs": 29,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "4C",
+   "length": "short",
+   "triangles": 12006,
+   "clumps": 227,
+   "simpler": null,
+   "buildMs": 20,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "4C",
+   "length": "chin",
+   "triangles": 16234,
+   "clumps": 270,
+   "simpler": null,
+   "buildMs": 24,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "4C",
+   "length": "shoulder",
+   "triangles": 20286,
+   "clumps": 265,
+   "simpler": null,
+   "buildMs": 29,
+   "headScale": 0.977
+  },
+  {
+   "body": "slim",
+   "type": "4C",
+   "length": "long",
+   "triangles": 22758,
+   "clumps": 266,
+   "simpler": null,
+   "buildMs": 31,
+   "headScale": 0.977
+  },
+  {
+   "body": "mid",
+   "type": "1",
+   "length": "short",
+   "triangles": 4072,
+   "clumps": 198,
+   "simpler": null,
+   "buildMs": 21,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "1",
+   "length": "chin",
+   "triangles": 8008,
+   "clumps": 229,
+   "simpler": null,
+   "buildMs": 28,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "1",
+   "length": "shoulder",
+   "triangles": 13718,
+   "clumps": 232,
+   "simpler": null,
+   "buildMs": 69,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "1",
+   "length": "long",
+   "triangles": 24316,
+   "clumps": 233,
+   "simpler": null,
+   "buildMs": 166,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "2A",
+   "length": "short",
+   "triangles": 3534,
+   "clumps": 186,
+   "simpler": null,
+   "buildMs": 22,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "2A",
+   "length": "chin",
+   "triangles": 6614,
+   "clumps": 217,
+   "simpler": null,
+   "buildMs": 40,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "2A",
+   "length": "shoulder",
+   "triangles": 11022,
+   "clumps": 220,
+   "simpler": null,
+   "buildMs": 77,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "2A",
+   "length": "long",
+   "triangles": 19034,
+   "clumps": 220,
+   "simpler": null,
+   "buildMs": 139,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "2B",
+   "length": "short",
+   "triangles": 4080,
+   "clumps": 178,
+   "simpler": null,
+   "buildMs": 19,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "2B",
+   "length": "chin",
+   "triangles": 7804,
+   "clumps": 210,
+   "simpler": null,
+   "buildMs": 27,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "2B",
+   "length": "shoulder",
+   "triangles": 12888,
+   "clumps": 209,
+   "simpler": null,
+   "buildMs": 60,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "2B",
+   "length": "long",
+   "triangles": 22678,
+   "clumps": 211,
+   "simpler": null,
+   "buildMs": 123,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "2C",
+   "length": "short",
+   "triangles": 4534,
+   "clumps": 171,
+   "simpler": null,
+   "buildMs": 15,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "2C",
+   "length": "chin",
+   "triangles": 9328,
+   "clumps": 199,
+   "simpler": null,
+   "buildMs": 27,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "2C",
+   "length": "shoulder",
+   "triangles": 15672,
+   "clumps": 203,
+   "simpler": null,
+   "buildMs": 59,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "2C",
+   "length": "long",
+   "triangles": 26694,
+   "clumps": 197,
+   "simpler": "201 clumps drawn as 197 to stay within 27036 triangles",
+   "buildMs": 220,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "3A",
+   "length": "short",
+   "triangles": 3666,
+   "clumps": 129,
+   "simpler": null,
+   "buildMs": 26,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "3A",
+   "length": "chin",
+   "triangles": 8262,
+   "clumps": 153,
+   "simpler": null,
+   "buildMs": 33,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "3A",
+   "length": "shoulder",
+   "triangles": 13454,
+   "clumps": 150,
+   "simpler": null,
+   "buildMs": 56,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "3A",
+   "length": "long",
+   "triangles": 24022,
+   "clumps": 154,
+   "simpler": null,
+   "buildMs": 94,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "3B",
+   "length": "short",
+   "triangles": 4508,
+   "clumps": 130,
+   "simpler": null,
+   "buildMs": 13,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "3B",
+   "length": "chin",
+   "triangles": 10702,
+   "clumps": 147,
+   "simpler": null,
+   "buildMs": 26,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "3B",
+   "length": "shoulder",
+   "triangles": 17414,
+   "clumps": 149,
+   "simpler": null,
+   "buildMs": 45,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "3B",
+   "length": "long",
+   "triangles": 26914,
+   "clumps": 128,
+   "simpler": "148 clumps drawn as 128 to stay within 27036 triangles",
+   "buildMs": 162,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "3C",
+   "length": "short",
+   "triangles": 9016,
+   "clumps": 128,
+   "simpler": null,
+   "buildMs": 39,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "3C",
+   "length": "chin",
+   "triangles": 17100,
+   "clumps": 149,
+   "simpler": null,
+   "buildMs": 43,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "3C",
+   "length": "shoulder",
+   "triangles": 25636,
+   "clumps": 148,
+   "simpler": null,
+   "buildMs": 47,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "3C",
+   "length": "long",
+   "triangles": 26910,
+   "clumps": 94,
+   "simpler": "150 clumps drawn as 94 to stay within 27036 triangles",
+   "buildMs": 144,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "4A",
+   "length": "short",
+   "triangles": 8916,
+   "clumps": 196,
+   "simpler": null,
+   "buildMs": 22,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "4A",
+   "length": "chin",
+   "triangles": 11646,
+   "clumps": 228,
+   "simpler": null,
+   "buildMs": 22,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "4A",
+   "length": "shoulder",
+   "triangles": 14004,
+   "clumps": 230,
+   "simpler": null,
+   "buildMs": 23,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "4A",
+   "length": "long",
+   "triangles": 16476,
+   "clumps": 230,
+   "simpler": null,
+   "buildMs": 26,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "4B",
+   "length": "short",
+   "triangles": 10276,
+   "clumps": 214,
+   "simpler": null,
+   "buildMs": 24,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "4B",
+   "length": "chin",
+   "triangles": 13386,
+   "clumps": 251,
+   "simpler": null,
+   "buildMs": 28,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "4B",
+   "length": "shoulder",
+   "triangles": 17036,
+   "clumps": 250,
+   "simpler": null,
+   "buildMs": 26,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "4B",
+   "length": "long",
+   "triangles": 18894,
+   "clumps": 250,
+   "simpler": null,
+   "buildMs": 29,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "4C",
+   "length": "short",
+   "triangles": 12030,
+   "clumps": 227,
+   "simpler": null,
+   "buildMs": 20,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "4C",
+   "length": "chin",
+   "triangles": 16264,
+   "clumps": 270,
+   "simpler": null,
+   "buildMs": 25,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "4C",
+   "length": "shoulder",
+   "triangles": 20370,
+   "clumps": 265,
+   "simpler": null,
+   "buildMs": 30,
+   "headScale": 1.001
+  },
+  {
+   "body": "mid",
+   "type": "4C",
+   "length": "long",
+   "triangles": 22892,
+   "clumps": 266,
+   "simpler": null,
+   "buildMs": 35,
+   "headScale": 1.001
+  },
+  {
+   "body": "full",
+   "type": "1",
+   "length": "short",
+   "triangles": 4078,
+   "clumps": 198,
+   "simpler": null,
+   "buildMs": 16,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "1",
+   "length": "chin",
+   "triangles": 8100,
+   "clumps": 229,
+   "simpler": null,
+   "buildMs": 35,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "1",
+   "length": "shoulder",
+   "triangles": 14094,
+   "clumps": 232,
+   "simpler": null,
+   "buildMs": 113,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "1",
+   "length": "long",
+   "triangles": 27022,
+   "clumps": 233,
+   "simpler": null,
+   "buildMs": 165,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "2A",
+   "length": "short",
+   "triangles": 3536,
+   "clumps": 186,
+   "simpler": null,
+   "buildMs": 17,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "2A",
+   "length": "chin",
+   "triangles": 6692,
+   "clumps": 217,
+   "simpler": null,
+   "buildMs": 27,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "2A",
+   "length": "shoulder",
+   "triangles": 11346,
+   "clumps": 220,
+   "simpler": null,
+   "buildMs": 69,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "2A",
+   "length": "long",
+   "triangles": 21188,
+   "clumps": 220,
+   "simpler": null,
+   "buildMs": 159,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "2B",
+   "length": "short",
+   "triangles": 4088,
+   "clumps": 178,
+   "simpler": null,
+   "buildMs": 23,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "2B",
+   "length": "chin",
+   "triangles": 7892,
+   "clumps": 210,
+   "simpler": null,
+   "buildMs": 43,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "2B",
+   "length": "shoulder",
+   "triangles": 13360,
+   "clumps": 209,
+   "simpler": null,
+   "buildMs": 87,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "2B",
+   "length": "long",
+   "triangles": 25188,
+   "clumps": 211,
+   "simpler": null,
+   "buildMs": 141,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "2C",
+   "length": "short",
+   "triangles": 4542,
+   "clumps": 171,
+   "simpler": null,
+   "buildMs": 16,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "2C",
+   "length": "chin",
+   "triangles": 9460,
+   "clumps": 199,
+   "simpler": null,
+   "buildMs": 27,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "2C",
+   "length": "shoulder",
+   "triangles": 16204,
+   "clumps": 203,
+   "simpler": null,
+   "buildMs": 68,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "2C",
+   "length": "long",
+   "triangles": 26156,
+   "clumps": 173,
+   "simpler": "201 clumps drawn as 173 to stay within 27036 triangles",
+   "buildMs": 236,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "3A",
+   "length": "short",
+   "triangles": 3676,
+   "clumps": 129,
+   "simpler": null,
+   "buildMs": 28,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "3A",
+   "length": "chin",
+   "triangles": 8352,
+   "clumps": 153,
+   "simpler": null,
+   "buildMs": 38,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "3A",
+   "length": "shoulder",
+   "triangles": 13754,
+   "clumps": 150,
+   "simpler": null,
+   "buildMs": 79,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "3A",
+   "length": "long",
+   "triangles": 25634,
+   "clumps": 144,
+   "simpler": "154 clumps drawn as 144 to stay within 27036 triangles",
+   "buildMs": 205,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "3B",
+   "length": "short",
+   "triangles": 4516,
+   "clumps": 130,
+   "simpler": null,
+   "buildMs": 14,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "3B",
+   "length": "chin",
+   "triangles": 10834,
+   "clumps": 147,
+   "simpler": null,
+   "buildMs": 27,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "3B",
+   "length": "shoulder",
+   "triangles": 17624,
+   "clumps": 149,
+   "simpler": null,
+   "buildMs": 67,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "3B",
+   "length": "long",
+   "triangles": 26360,
+   "clumps": 115,
+   "simpler": "148 clumps drawn as 115 to stay within 27036 triangles",
+   "buildMs": 168,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "3C",
+   "length": "short",
+   "triangles": 9030,
+   "clumps": 128,
+   "simpler": null,
+   "buildMs": 21,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "3C",
+   "length": "chin",
+   "triangles": 17260,
+   "clumps": 149,
+   "simpler": null,
+   "buildMs": 30,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "3C",
+   "length": "shoulder",
+   "triangles": 25906,
+   "clumps": 148,
+   "simpler": null,
+   "buildMs": 47,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "3C",
+   "length": "long",
+   "triangles": 26614,
+   "clumps": 86,
+   "simpler": "150 clumps drawn as 86 to stay within 27036 triangles",
+   "buildMs": 156,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "4A",
+   "length": "short",
+   "triangles": 8916,
+   "clumps": 196,
+   "simpler": null,
+   "buildMs": 19,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "4A",
+   "length": "chin",
+   "triangles": 11650,
+   "clumps": 228,
+   "simpler": null,
+   "buildMs": 21,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "4A",
+   "length": "shoulder",
+   "triangles": 14016,
+   "clumps": 230,
+   "simpler": null,
+   "buildMs": 24,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "4A",
+   "length": "long",
+   "triangles": 16504,
+   "clumps": 230,
+   "simpler": null,
+   "buildMs": 27,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "4B",
+   "length": "short",
+   "triangles": 10280,
+   "clumps": 214,
+   "simpler": null,
+   "buildMs": 19,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "4B",
+   "length": "chin",
+   "triangles": 13410,
+   "clumps": 251,
+   "simpler": null,
+   "buildMs": 22,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "4B",
+   "length": "shoulder",
+   "triangles": 17048,
+   "clumps": 250,
+   "simpler": null,
+   "buildMs": 26,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "4B",
+   "length": "long",
+   "triangles": 18922,
+   "clumps": 250,
+   "simpler": null,
+   "buildMs": 28,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "4C",
+   "length": "short",
+   "triangles": 12042,
+   "clumps": 227,
+   "simpler": null,
+   "buildMs": 20,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "4C",
+   "length": "chin",
+   "triangles": 17260,
+   "clumps": 270,
+   "simpler": null,
+   "buildMs": 26,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "4C",
+   "length": "shoulder",
+   "triangles": 20404,
+   "clumps": 265,
+   "simpler": null,
+   "buildMs": 30,
+   "headScale": 1.013
+  },
+  {
+   "body": "full",
+   "type": "4C",
+   "length": "long",
+   "triangles": 22968,
+   "clumps": 266,
+   "simpler": null,
+   "buildMs": 37,
+   "headScale": 1.013
+  },
+  {
+   "body": "tall",
+   "type": "1",
+   "length": "short",
+   "triangles": 4448,
+   "clumps": 198,
+   "simpler": null,
+   "buildMs": 15,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "1",
+   "length": "chin",
+   "triangles": 8440,
+   "clumps": 229,
+   "simpler": null,
+   "buildMs": 30,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "1",
+   "length": "shoulder",
+   "triangles": 15600,
+   "clumps": 232,
+   "simpler": null,
+   "buildMs": 80,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "1",
+   "length": "long",
+   "triangles": 25886,
+   "clumps": 233,
+   "simpler": null,
+   "buildMs": 156,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "2A",
+   "length": "short",
+   "triangles": 3876,
+   "clumps": 186,
+   "simpler": null,
+   "buildMs": 20,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "2A",
+   "length": "chin",
+   "triangles": 6960,
+   "clumps": 217,
+   "simpler": null,
+   "buildMs": 29,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "2A",
+   "length": "shoulder",
+   "triangles": 11990,
+   "clumps": 220,
+   "simpler": null,
+   "buildMs": 70,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "2A",
+   "length": "long",
+   "triangles": 20344,
+   "clumps": 220,
+   "simpler": null,
+   "buildMs": 134,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "2B",
+   "length": "short",
+   "triangles": 4416,
+   "clumps": 178,
+   "simpler": null,
+   "buildMs": 16,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "2B",
+   "length": "chin",
+   "triangles": 8202,
+   "clumps": 210,
+   "simpler": null,
+   "buildMs": 26,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "2B",
+   "length": "shoulder",
+   "triangles": 13704,
+   "clumps": 209,
+   "simpler": null,
+   "buildMs": 63,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "2B",
+   "length": "long",
+   "triangles": 24236,
+   "clumps": 211,
+   "simpler": null,
+   "buildMs": 125,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "2C",
+   "length": "short",
+   "triangles": 4876,
+   "clumps": 171,
+   "simpler": null,
+   "buildMs": 25,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "2C",
+   "length": "chin",
+   "triangles": 9820,
+   "clumps": 199,
+   "simpler": null,
+   "buildMs": 41,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "2C",
+   "length": "shoulder",
+   "triangles": 16614,
+   "clumps": 203,
+   "simpler": null,
+   "buildMs": 97,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "2C",
+   "length": "long",
+   "triangles": 26450,
+   "clumps": 181,
+   "simpler": "201 clumps drawn as 181 to stay within 27036 triangles",
+   "buildMs": 242,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "3A",
+   "length": "short",
+   "triangles": 3704,
+   "clumps": 129,
+   "simpler": null,
+   "buildMs": 16,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "3A",
+   "length": "chin",
+   "triangles": 8678,
+   "clumps": 153,
+   "simpler": null,
+   "buildMs": 25,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "3A",
+   "length": "shoulder",
+   "triangles": 14184,
+   "clumps": 150,
+   "simpler": null,
+   "buildMs": 49,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "3A",
+   "length": "long",
+   "triangles": 25870,
+   "clumps": 154,
+   "simpler": null,
+   "buildMs": 97,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "3B",
+   "length": "short",
+   "triangles": 4550,
+   "clumps": 130,
+   "simpler": null,
+   "buildMs": 13,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "3B",
+   "length": "chin",
+   "triangles": 11250,
+   "clumps": 147,
+   "simpler": null,
+   "buildMs": 25,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "3B",
+   "length": "shoulder",
+   "triangles": 18442,
+   "clumps": 149,
+   "simpler": null,
+   "buildMs": 43,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "3B",
+   "length": "long",
+   "triangles": 26962,
+   "clumps": 125,
+   "simpler": "148 clumps drawn as 125 to stay within 27036 triangles",
+   "buildMs": 185,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "3C",
+   "length": "short",
+   "triangles": 9078,
+   "clumps": 128,
+   "simpler": null,
+   "buildMs": 20,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "3C",
+   "length": "chin",
+   "triangles": 17768,
+   "clumps": 149,
+   "simpler": null,
+   "buildMs": 29,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "3C",
+   "length": "shoulder",
+   "triangles": 27008,
+   "clumps": 148,
+   "simpler": null,
+   "buildMs": 47,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "3C",
+   "length": "long",
+   "triangles": 26890,
+   "clumps": 86,
+   "simpler": "150 clumps drawn as 86 to stay within 27036 triangles",
+   "buildMs": 147,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "4A",
+   "length": "short",
+   "triangles": 8936,
+   "clumps": 196,
+   "simpler": null,
+   "buildMs": 23,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "4A",
+   "length": "chin",
+   "triangles": 11682,
+   "clumps": 228,
+   "simpler": null,
+   "buildMs": 30,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "4A",
+   "length": "shoulder",
+   "triangles": 14094,
+   "clumps": 230,
+   "simpler": null,
+   "buildMs": 33,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "4A",
+   "length": "long",
+   "triangles": 16640,
+   "clumps": 230,
+   "simpler": null,
+   "buildMs": 25,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "4B",
+   "length": "short",
+   "triangles": 10332,
+   "clumps": 214,
+   "simpler": null,
+   "buildMs": 18,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "4B",
+   "length": "chin",
+   "triangles": 13492,
+   "clumps": 251,
+   "simpler": null,
+   "buildMs": 23,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "4B",
+   "length": "shoulder",
+   "triangles": 17156,
+   "clumps": 250,
+   "simpler": null,
+   "buildMs": 25,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "4B",
+   "length": "long",
+   "triangles": 19096,
+   "clumps": 250,
+   "simpler": null,
+   "buildMs": 29,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "4C",
+   "length": "short",
+   "triangles": 12168,
+   "clumps": 227,
+   "simpler": null,
+   "buildMs": 20,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "4C",
+   "length": "chin",
+   "triangles": 17356,
+   "clumps": 270,
+   "simpler": null,
+   "buildMs": 24,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "4C",
+   "length": "shoulder",
+   "triangles": 21620,
+   "clumps": 265,
+   "simpler": null,
+   "buildMs": 29,
+   "headScale": 1.085
+  },
+  {
+   "body": "tall",
+   "type": "4C",
+   "length": "long",
+   "triangles": 23372,
+   "clumps": 266,
+   "simpler": null,
+   "buildMs": 36,
+   "headScale": 1.085
+  },
+  {
+   "body": "petite",
+   "type": "1",
+   "length": "short",
+   "triangles": 3700,
+   "clumps": 198,
+   "simpler": null,
+   "buildMs": 14,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "1",
+   "length": "chin",
+   "triangles": 7498,
+   "clumps": 229,
+   "simpler": null,
+   "buildMs": 26,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "1",
+   "length": "shoulder",
+   "triangles": 12818,
+   "clumps": 232,
+   "simpler": null,
+   "buildMs": 68,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "1",
+   "length": "long",
+   "triangles": 21566,
+   "clumps": 233,
+   "simpler": null,
+   "buildMs": 122,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "2A",
+   "length": "short",
+   "triangles": 3206,
+   "clumps": 186,
+   "simpler": null,
+   "buildMs": 13,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "2A",
+   "length": "chin",
+   "triangles": 6266,
+   "clumps": 217,
+   "simpler": null,
+   "buildMs": 24,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "2A",
+   "length": "shoulder",
+   "triangles": 10274,
+   "clumps": 220,
+   "simpler": null,
+   "buildMs": 59,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "2A",
+   "length": "long",
+   "triangles": 17086,
+   "clumps": 220,
+   "simpler": null,
+   "buildMs": 116,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "2B",
+   "length": "short",
+   "triangles": 3738,
+   "clumps": 178,
+   "simpler": null,
+   "buildMs": 14,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "2B",
+   "length": "chin",
+   "triangles": 7318,
+   "clumps": 210,
+   "simpler": null,
+   "buildMs": 28,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "2B",
+   "length": "shoulder",
+   "triangles": 11966,
+   "clumps": 209,
+   "simpler": null,
+   "buildMs": 67,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "2B",
+   "length": "long",
+   "triangles": 20390,
+   "clumps": 211,
+   "simpler": null,
+   "buildMs": 124,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "2C",
+   "length": "short",
+   "triangles": 4198,
+   "clumps": 171,
+   "simpler": null,
+   "buildMs": 14,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "2C",
+   "length": "chin",
+   "triangles": 8798,
+   "clumps": 199,
+   "simpler": null,
+   "buildMs": 32,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "2C",
+   "length": "shoulder",
+   "triangles": 14566,
+   "clumps": 203,
+   "simpler": null,
+   "buildMs": 54,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "2C",
+   "length": "long",
+   "triangles": 24582,
+   "clumps": 201,
+   "simpler": null,
+   "buildMs": 105,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "3A",
+   "length": "short",
+   "triangles": 3630,
+   "clumps": 129,
+   "simpler": null,
+   "buildMs": 17,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "3A",
+   "length": "chin",
+   "triangles": 7808,
+   "clumps": 153,
+   "simpler": null,
+   "buildMs": 43,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "3A",
+   "length": "shoulder",
+   "triangles": 12508,
+   "clumps": 150,
+   "simpler": null,
+   "buildMs": 45,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "3A",
+   "length": "long",
+   "triangles": 21928,
+   "clumps": 154,
+   "simpler": null,
+   "buildMs": 99,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "3B",
+   "length": "short",
+   "triangles": 4464,
+   "clumps": 130,
+   "simpler": null,
+   "buildMs": 23,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "3B",
+   "length": "chin",
+   "triangles": 10124,
+   "clumps": 147,
+   "simpler": null,
+   "buildMs": 23,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "3B",
+   "length": "shoulder",
+   "triangles": 16224,
+   "clumps": 149,
+   "simpler": null,
+   "buildMs": 39,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "3B",
+   "length": "long",
+   "triangles": 27010,
+   "clumps": 138,
+   "simpler": "148 clumps drawn as 138 to stay within 27036 triangles",
+   "buildMs": 158,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "3C",
+   "length": "short",
+   "triangles": 8960,
+   "clumps": 128,
+   "simpler": null,
+   "buildMs": 23,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "3C",
+   "length": "chin",
+   "triangles": 16388,
+   "clumps": 149,
+   "simpler": null,
+   "buildMs": 39,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "3C",
+   "length": "shoulder",
+   "triangles": 24130,
+   "clumps": 148,
+   "simpler": null,
+   "buildMs": 43,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "3C",
+   "length": "long",
+   "triangles": 26998,
+   "clumps": 102,
+   "simpler": "150 clumps drawn as 102 to stay within 27036 triangles",
+   "buildMs": 142,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "4A",
+   "length": "short",
+   "triangles": 8872,
+   "clumps": 196,
+   "simpler": null,
+   "buildMs": 19,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "4A",
+   "length": "chin",
+   "triangles": 10652,
+   "clumps": 228,
+   "simpler": null,
+   "buildMs": 19,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "4A",
+   "length": "shoulder",
+   "triangles": 12882,
+   "clumps": 230,
+   "simpler": null,
+   "buildMs": 20,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "4A",
+   "length": "long",
+   "triangles": 16262,
+   "clumps": 230,
+   "simpler": null,
+   "buildMs": 25,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "4B",
+   "length": "short",
+   "triangles": 10224,
+   "clumps": 214,
+   "simpler": null,
+   "buildMs": 23,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "4B",
+   "length": "chin",
+   "triangles": 13336,
+   "clumps": 251,
+   "simpler": null,
+   "buildMs": 21,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "4B",
+   "length": "shoulder",
+   "triangles": 15944,
+   "clumps": 250,
+   "simpler": null,
+   "buildMs": 29,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "4B",
+   "length": "long",
+   "triangles": 18650,
+   "clumps": 250,
+   "simpler": null,
+   "buildMs": 27,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "4C",
+   "length": "short",
+   "triangles": 11922,
+   "clumps": 227,
+   "simpler": null,
+   "buildMs": 18,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "4C",
+   "length": "chin",
+   "triangles": 16096,
+   "clumps": 270,
+   "simpler": null,
+   "buildMs": 23,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "4C",
+   "length": "shoulder",
+   "triangles": 20068,
+   "clumps": 265,
+   "simpler": null,
+   "buildMs": 27,
+   "headScale": 0.906
+  },
+  {
+   "body": "petite",
+   "type": "4C",
+   "length": "long",
+   "triangles": 22418,
+   "clumps": 266,
+   "simpler": null,
+   "buildMs": 32,
+   "headScale": 0.906
+  }
+ ]
+}

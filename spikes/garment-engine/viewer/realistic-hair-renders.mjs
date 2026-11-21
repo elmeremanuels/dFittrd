@@ -167,7 +167,7 @@ async function pool(tasks, n) {
 
 try {
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
-  const head = { mode: 'head', frame: 'upper', body: 'realistic', ...BODY };
+  const head = { mode: 'head', frame: 'upper', body: 'realistic', render: 'demand', ...BODY };
   const tasks = [];
   if (!argv.includes('--no-tiles')) {
     for (const type of TYPES) for (const length of LENGTHS) tasks.push(() => shots(phone, q({ ...head, ...hairQ(type, length, TYPE_COLOUR[type]) }), `tile-${type}-${length}`, [['front', 0], ['back', 1.5]]));

@@ -245,11 +245,18 @@ async function headMode(): Promise<void> {
   }
   tag.textContent = `ESTIMATE · ${family} body alone${maleShape ? ' (shape v2)' : ''}${realistic ? ' · body realistic-spike' : ` · head ${head}`} ${hairInfo} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · shading ${shading}${girths}`;
   let frames = 0;
+  // `render=demand`: draw only while the controls move or damp out (pictures on a shared, software-rendered machine);
+  // by default every animation frame, as the frame-time measurements need.
+  const onDemand = params.get('render') === 'demand';
+  let until = performance.now() + 1500;
   const loop = (): void => {
-    stage.render();
-    frames++;
+    if (!onDemand || performance.now() < until) {
+      stage.render();
+      frames++;
+    }
     requestAnimationFrame(loop);
   };
+  if (onDemand) stage.controls.addEventListener('change', () => (until = performance.now() + 1500));
   loop();
   const points = skinPoints(m);
   window.avatarCheck = {

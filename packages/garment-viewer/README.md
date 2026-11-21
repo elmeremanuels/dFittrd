@@ -214,6 +214,39 @@ mountGarmentView(canvas, { ...options, bodyShape: 'realistic-spike' }); // web b
   (deterministic; every source checked by sha256). Measure: `scripts/realistic-body-report.ts`. Pictures:
   `spikes/garment-engine/viewer/realistic-body-renders.mjs`.
 
+### Procedural skin and studio light (`realisticSkin: true`, with the realistic body only, off by default)
+
+```ts
+mountGarmentView(canvas, { ...options, bodyShape: 'realistic-spike', realisticSkin: true, look: { skinHex: '#a07e56' } });
+```
+
+Report, numbers and pictures: `docs/reports/claude/realistic-body-skin.md`. Nothing here is a third-party texture or a
+download: the skin and the light are made in code, in the realistic body's lazy chunk (`realisticBodyLoad`), so the
+viewer chunk does not carry them. Without the option (and for the procedural body, the male body, a failed load) the
+materials, lights and tone mapping are those of before.
+
+- **Skin** (`realisticSkin.ts`): a physical material patched in `onBeforeCompile` (hooks pinned for r186 by
+  `realisticSkinChunksPresent`). Per-channel wrap lighting (red furthest); translucency at thin parts (ears, fingers,
+  a little at the nose) from the direct lights and from the environment behind; pores and fine creases from a
+  128 × 128 RGBA8 tile generated in code (`skinDetailPixels`, 64 KB, deterministic; height gradient, roughness
+  variation, a soft mottle), projected from three sides in the body's own space (the asset has no UVs) and faded out by
+  mipmaps at full-body distance; redness at the cheeks, nose, ears, elbows, knees and knuckles (a per-vertex mask found
+  on the asset's rest mesh by landmarks, `skinMaskOf`); a slight sheen tinted by the skin. Every per-tone value comes
+  from the one skin-tone value (`realisticSkinCare`; D20): redness is a step in CIE a* (9 on light tones, 5 on deep),
+  wrap and translucency are less red on deep tones, and deep tones get a tighter, weaker white reflection and a sheen
+  in their own colour (a white one greyed them). No tone: the grey mannequin with no redness. MakeHuman's eye spheres
+  are drawn off-white with a dark iris (stylised, D27). `Figure.setSkinOverride` is the hook: the figure hands the
+  override its skin colour on every `setSkin`.
+- **Studio light** (`studioLight.ts`): the rig's lights are switched off and an environment made in code goes in (an
+  inside-out sphere coloured by `studioRadiance`: sky-to-floor gradient, a key softbox, a weak fill, a strip behind;
+  prefiltered by three's `PMREMGenerator`), plus one soft directional key from the rigs' key direction, with the
+  `neutral` rig's true-tone curve. Calibrated so a matt surface facing the camera gets irradiance π (its own colour;
+  `studioFrontIrradiance`, integrated from `studioRadiance`, not read back from the prefiltered map). It lights the
+  garment and the floor too.
+- `canvas.dataset.bodySkin` is `procedural-skin` while it is drawn. Pictures:
+  `spikes/garment-engine/viewer/realistic-body-skin-renders.mjs` and `realistic-body-skin-sheets.mjs`
+  (`skinlook=procedural`, `frame=upper` on `avatar.html`). The embed has no build flag for it yet.
+
 ## Fork of the spike
 
 `src/core/*` (`garment`, `grading`, `waistband`, `tape`, `weld`, `types`) and the device modules

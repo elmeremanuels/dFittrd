@@ -60,7 +60,8 @@ const q = (o) => new URLSearchParams(Object.entries(o).map(([k, v]) => [k, Strin
 const server = await createServer({ configFile: join(here, 'vite.config.ts'), logLevel: 'warn', server: { port: 5187, strictPort: false } });
 await server.listen();
 const base = server.resolvedUrls.local[0];
-const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const chromePath = [process.env.CHROME_PATH, chromium.executablePath(), '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'].find((p) => p && existsSync(p));
+const browser = await chromium.launch({ ...(chromePath ? { executablePath: chromePath } : {}), args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const problems = [];
 const renders = [];
 const frames = [];
@@ -96,6 +97,7 @@ async function still(page, maxMs = 40_000) {
 /** Open the page and wait for the view (and, for `body=realistic` with a garment, for the swapped-in body). */
 async function open(context, query, name) {
   const page = await context.newPage();
+  await page.route('**/favicon.ico', (route) => route.fulfill({ status: 204 }));
   page.on('pageerror', (e) => problems.push(`${name}: pageerror ${e.message}`));
   page.on('console', (msg) => {
     if (msg.type() === 'error') problems.push(`${name}: console ${msg.text()}`);

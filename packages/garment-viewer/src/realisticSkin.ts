@@ -90,6 +90,8 @@ export interface RealisticSkinCare {
   trans: RGB;
   roughness: number;
   specularIntensity: number;
+  /** Specular tint, linear RGB (warmed towards the skin tone on deep tones so reflections never read as chalky grey). */
+  specularColour: RGB;
   sheen: number;
   sheenRoughness: number;
   /** Sheen colour, linear RGB. */
@@ -99,8 +101,8 @@ export interface RealisticSkinCare {
 }
 
 /**
- * The per-tone settings for `#rrggbb` (null or anything else: the grey mannequin, without redness). Pure. The numbers
- * were chosen by looking at the pictures (docs/reports/claude/realistic-body-skin.md), not measured on skin.
+ * The per-tone settings for `#rrggbb` (null or anything else: the grey mannequin, without redness). Pure. Tuned in
+ * skin-v3 (WO-002) for a soft, matte-velvet finish without plastic specular glare across light, medium and deep tones.
  */
 export function realisticSkinCare(hex: string | null | undefined): RealisticSkinCare {
   const toned = typeof hex === 'string' && /^#[0-9a-fA-F]{6}$/.test(hex);
@@ -109,18 +111,22 @@ export function realisticSkinCare(hex: string | null | undefined): RealisticSkin
   const lab = labOfLinear(lin);
   const L = lab[0];
   const deep = smoothstep(55, 25, L);
-  // Redness: a step in a* (and a little darker, a little yellower), smaller on deep tones where it reads stronger.
-  const flushDeltaA = toned ? 9 - 4 * deep : 0;
-  const flushed = linearOfLab([L - (toned ? 2.5 - 1.2 * deep : 0), lab[1] + flushDeltaA, lab[2] + (toned ? 1.5 : 0)]);
+  const light = smoothstep(65, 88, L);
+  // Redness: a soft step in a* (warmer peach-rose, slightly darker), smaller on deep tones where it reads stronger.
+  const flushDeltaA = toned ? 7.0 - 3.5 * deep : 0;
+  const flushed = linearOfLab([L - (toned ? 2.2 - 1.0 * deep : 0), lab[1] + flushDeltaA, lab[2] + (toned ? 1.8 : 0)]);
   const flush = toned ? ([0, 1, 2].map((c) => Math.min(1.6, Math.max(0.5, Math.max(1e-4, flushed[c]!) / Math.max(1e-4, lin[c]!)))) as RGB) : ([1, 1, 1] as RGB);
-  // Wrap: red reaches furthest under the skin. On deep tones melanin absorbs more of it: less red, a little less wrap.
-  const wrap: RGB = toned ? [0.42 - 0.1 * deep, 0.2 - 0.03 * deep, 0.14 - 0.02 * deep] : [0.18, 0.18, 0.18];
+  // Wrap: red reaches furthest under the skin for a warm rosy/terracotta shadow rolloff, gentle enough that fair skin
+  // keeps its anatomical form instead of bleaching flat; less red on deep tones where melanin absorbs it.
+  const wrap: RGB = toned ? [0.27 - 0.09 * deep, 0.095 - 0.025 * deep, 0.045 - 0.015 * deep] : [0.12, 0.12, 0.12];
   // Thin parts let through a warm red. Taken as the square root of the tone (so a deep tone still glows a little at the
   // ear rim, as it does), tinted towards red, a fifth less on the deepest tones.
   const root = lin.map(Math.sqrt) as RGB;
-  const trans: RGB = toned ? [root[0] * 0.55, root[1] * 0.2, root[2] * 0.11].map((v) => v * (1 - 0.2 * deep)) as RGB : [0.12, 0.12, 0.12];
-  // The sheen takes the skin's own colour, more of it on deep tones (a white sheen is the ashy veil).
-  const sheenColour = lin.map((v) => v + (1 - v) * (0.45 - 0.3 * deep)) as RGB;
+  const trans: RGB = toned ? [root[0] * 0.45, root[1] * 0.16, root[2] * 0.09].map((v) => v * (1 - 0.2 * deep)) as RGB : [0.1, 0.1, 0.1];
+  // Specular tint: warm cream on light/medium, muted warm umber/beige on deep tones (avoids grey plastic glare).
+  const specularColour = lin.map((v) => v + (1 - v) * (0.8 - 0.32 * deep)) as RGB;
+  // Subtle skin-coloured velvet sheen at grazing angles (far lower and broader than v1's glossy 0.22 / 0.5).
+  const sheenColour = lin.map((v) => v + (1 - v) * (0.28 - 0.18 * deep)) as RGB;
   return {
     hex: colour,
     toned,
@@ -130,12 +136,13 @@ export function realisticSkinCare(hex: string | null | undefined): RealisticSkin
     flushDeltaA,
     wrap,
     trans,
-    roughness: 0.52 - 0.08 * deep,
-    specularIntensity: 0.5 - 0.26 * deep,
-    sheen: 0.22 - 0.14 * deep,
-    sheenRoughness: 0.5,
+    roughness: 0.73 - 0.09 * deep,
+    specularIntensity: 0.21 - 0.06 * deep,
+    specularColour,
+    sheen: 0.06 - 0.03 * deep,
+    sheenRoughness: 0.85,
     sheenColour,
-    bump: 0.35,
+    bump: 0.26 - 0.04 * light,
   };
 }
 
@@ -144,9 +151,9 @@ export function realisticSkinCare(hex: string | null | undefined): RealisticSkin
 /** The generated detail tile: pixels per side, and how much skin one tile covers (cm). */
 export const SKIN_DETAIL = {
   size: 128,
-  /** One tile of pores and creases per this many cm (pores about 0.8 mm across: exaggerated about three times, as the body is seen small). */
-  tileCm: 2.5,
-  /** The soft mottle (channel B) is read at this tile size, cm. */
+  /** One tile of fine epidermal pores and micro-creases per this many cm. */
+  tileCm: 2.0,
+  /** The soft mottle is evaluated at this spatial period, cm. */
   coarseTileCm: 14,
   seed: 0x5eed5c1,
 } as const;
@@ -186,25 +193,25 @@ function periodicNoise(cells: number, rand: () => number): (u: number, v: number
  */
 export function skinDetailPixels(size: number = SKIN_DETAIL.size, seed: number = SKIN_DETAIL.seed): Uint8Array {
   const rand = mulberry32(seed);
-  const cells = 16;
+  const cells = 20;
   const points = Float32Array.from({ length: cells * cells * 3 }, () => rand());
   const wobble = periodicNoise(8, rand);
   const breakUp = periodicNoise(6, rand);
   const fine = periodicNoise(32, rand);
   const mottleA = periodicNoise(4, rand);
   const mottleB = periodicNoise(8, rand);
-  // Integer wave vectors (lines per tile), so the lines tile.
+  // Integer wave vectors (lines per tile), so the epidermal micro-lines tile seamlessly.
   const lines: { k: [number, number]; w: number }[] = [
-    { k: [7, 3], w: 0.55 },
-    { k: [-2, 8], w: 0.45 },
-    { k: [5, -6], w: 0.35 },
+    { k: [8, 3], w: 0.42 },
+    { k: [-3, 9], w: 0.36 },
+    { k: [6, -7], w: 0.28 },
   ];
   const h = new Float32Array(size * size);
   const rough = new Float32Array(size * size);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const u = (x + 0.5) / size, v = (y + 0.5) / size;
-      // Pores: nearest jittered point (periodic).
+      // Pores: nearest jittered point (periodic), softer epidermal micro-relief.
       const cu = u * cells, cv = v * cells;
       const ci = Math.floor(cu), cj = Math.floor(cv);
       let pore = 0;
@@ -214,18 +221,18 @@ export function skinDetailPixels(size: number = SKIN_DETAIL.size, seed: number =
           const k = 3 * ((((j % cells) + cells) % cells) * cells + (((i % cells) + cells) % cells));
           const px = i + 0.15 + 0.7 * points[k]!, py = j + 0.15 + 0.7 * points[k + 1]!;
           const d2 = (cu - px) ** 2 + (cv - py) ** 2;
-          pore = Math.max(pore, (0.55 + 0.45 * points[k + 2]!) * Math.exp(-d2 / (2 * 0.11 * 0.11)));
+          pore = Math.max(pore, (0.5 + 0.5 * points[k + 2]!) * Math.exp(-d2 / (2 * 0.14 * 0.14)));
         }
       }
       let crease = 0;
       for (const { k, w } of lines) {
-        const phase = 2 * Math.PI * (k[0] * u + k[1] * v) + 2.2 * wobble(u, v);
+        const phase = 2 * Math.PI * (k[0] * u + k[1] * v) + 2.0 * wobble(u, v);
         const s = Math.sin(phase / 2);
-        crease += w * Math.exp(-(s * s) / 0.012) * smoothstep(0.35, 0.65, breakUp(u + 0.31 * k[0] / 7, v));
+        crease += w * Math.exp(-(s * s) / 0.018) * smoothstep(0.32, 0.68, breakUp(u + 0.31 * k[0] / 8, v));
       }
       const i = y * size + x;
-      h[i] = -0.9 * pore - 0.5 * crease + 0.12 * (fine(u, v) - 0.5);
-      rough[i] = 0.5 * pore + 0.3 * crease;
+      h[i] = -0.75 * pore - 0.42 * crease + 0.14 * (fine(u, v) - 0.5);
+      rough[i] = 0.45 * pore + 0.28 * crease;
     }
   }
   // Gradient (periodic central differences), scaled to fill the byte range.
@@ -264,7 +271,7 @@ export function skinDetailTexture(): THREE.DataTexture {
   t.magFilter = THREE.LinearFilter;
   t.minFilter = THREE.LinearMipmapLinearFilter;
   t.generateMipmaps = true;
-  t.anisotropy = 4;
+  t.anisotropy = 1;
   t.colorSpace = THREE.NoColorSpace;
   t.needsUpdate = true;
   detailTexture = t;
@@ -433,6 +440,8 @@ uniform vec3 skinFlush;
 uniform vec3 skinWrap;
 uniform vec3 skinTrans;
 uniform float skinTransEnv;
+uniform float skinSheen;
+uniform vec3 skinSheenColour;
 uniform vec3 skinSclera;
 uniform vec3 skinIris;
 uniform mat3 normalMatrix;
@@ -446,6 +455,13 @@ vec3 skinTriplanarWeights( vec3 n ) {
 	vec3 w = pow( abs( n ), vec3( 4.0 ) );
 	return w / max( w.x + w.y + w.z, 1e-4 );
 }
+// Cheap 3D low-frequency mottle (0..1) in object space: avoids 3 extra triplanar texture reads per pixel.
+float skinMottle( vec3 p ) {
+	float a = sin( p.x * 6.28318 + cos( p.y * 4.71238 + p.z * 3.14159 ) );
+	float b = cos( p.y * 5.34071 - sin( p.z * 6.28318 - p.x * 3.76991 ) );
+	float c = sin( ( p.x + p.z ) * 8.16814 + p.y * 4.08407 );
+	return 0.5 + 0.2 * a + 0.18 * b + 0.12 * c;
+}
 `;
 
 const COLOUR = `
@@ -456,17 +472,17 @@ const COLOUR = `
 	vec4 tx = texture2D( skinDetail, p.yz );
 	vec4 ty = texture2D( skinDetail, p.zx );
 	vec4 tz = texture2D( skinDetail, p.xy );
-	vec3 pc = vSkinPos * skinCoarseTile;
-	float mottle = sw.x * texture2D( skinDetail, pc.yz ).b + sw.y * texture2D( skinDetail, pc.zx ).b + sw.z * texture2D( skinDetail, pc.xy ).b;
+	float mottle = skinMottle( vSkinPos * skinCoarseTile );
 	vec2 gx = tx.rg * 2.0 - 1.0;
 	vec2 gy = ty.rg * 2.0 - 1.0;
 	vec2 gz = tz.rg * 2.0 - 1.0;
 	// The height's gradient on each projection plane, back onto the body's axes: the normal leans against it.
 	skinDetailN = - skinBump * ( sw.x * vec3( 0.0, gx.x, gx.y ) + sw.y * vec3( gy.y, 0.0, gy.x ) + sw.z * vec3( gz.x, gz.y, 0.0 ) );
 	float rough = sw.x * tx.a + sw.y * ty.a + sw.z * tz.a;
-	skinRoughK = ( 0.9 + 0.35 * ( rough - 0.5 ) ) * ( 1.0 + 0.12 * ( mottle - 0.5 ) );
-	float red = clamp( vSkinMask.x + 0.35 * ( mottle - 0.5 ), 0.0, 1.0 );
-	diffuseColor.rgb *= mix( vec3( 1.0 ), skinFlush, red ) * ( 1.0 + 0.08 * ( mottle - 0.5 ) );
+	// Centered at 1.0 on flat skin (rough = 0.5) so care.roughness is the true median matte roughness, rougher inside pores.
+	skinRoughK = ( 1.0 + 0.16 * ( rough - 0.5 ) ) * ( 1.0 + 0.08 * ( mottle - 0.5 ) );
+	float red = clamp( vSkinMask.x + 0.2 * ( mottle - 0.5 ), 0.0, 1.0 );
+	diffuseColor.rgb *= mix( vec3( 1.0 ), skinFlush, red ) * ( 1.0 + 0.045 * ( mottle - 0.5 ) );
 	if ( vSkinMask.z > 0.5 ) {
 		diffuseColor.rgb = mix( skinSclera, skinIris, vSkinMask.w );
 		skinDetailN = vec3( 0.0 );
@@ -476,7 +492,7 @@ const COLOUR = `
 `;
 
 const ROUGHNESS = `
-	roughnessFactor = vSkinMask.z > 0.5 ? 0.2 : clamp( roughnessFactor * skinRoughK, 0.08, 1.0 );
+	roughnessFactor = vSkinMask.z > 0.5 ? 0.2 : clamp( roughnessFactor * skinRoughK, 0.18, 1.0 );
 `;
 
 const NORMAL = `
@@ -497,6 +513,11 @@ const INDIRECT = `
 #if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
 	if ( vSkinMask.y > 0.01 ) reflectedLight.indirectDiffuse += vSkinMask.y * skinTransEnv * skinTrans * getIBLIrradiance( - geometryNormal ) * RECIPROCAL_PI;
 #endif
+	// Soft matte velvet peach-fuzz at grazing angles without triggering Three's extra sheen PMREM lookup.
+	if ( vSkinMask.z < 0.5 && skinSheen > 0.001 ) {
+		float skinGrazing = pow( 1.0 - saturate( dot( geometryNormal, geometryViewDir ) ), 3.5 );
+		reflectedLight.indirectDiffuse += skinSheen * skinGrazing * skinSheenColour * ( 0.35 + 0.65 * saturate( geometryNormal.y * 0.5 + 0.5 ) );
+	}
 `;
 
 export interface RealisticSkinUniforms {
@@ -508,6 +529,8 @@ export interface RealisticSkinUniforms {
   skinWrap: { value: THREE.Vector3 };
   skinTrans: { value: THREE.Vector3 };
   skinTransEnv: { value: number };
+  skinSheen: { value: number };
+  skinSheenColour: { value: THREE.Vector3 };
   skinSclera: { value: THREE.Color };
   skinIris: { value: THREE.Color };
 }
@@ -532,16 +555,18 @@ export interface RealisticSkin {
  */
 export function realisticSkinMaterial(hex: string | null): RealisticSkin {
   if (!realisticSkinChunksPresent()) throw new Error('realistic skin: the three.js shader chunks changed');
-  const material = new THREE.MeshPhysicalMaterial({ metalness: 0 });
+  const material = new THREE.MeshPhysicalMaterial({ metalness: 0, sheen: 0 });
   const uniforms: RealisticSkinUniforms = {
     skinDetail: { value: skinDetailTexture() },
     skinTile: { value: 1 / SKIN_DETAIL.tileCm },
     skinCoarseTile: { value: 1 / SKIN_DETAIL.coarseTileCm },
-    skinBump: { value: 0.35 },
+    skinBump: { value: 0.22 },
     skinFlush: { value: new THREE.Vector3(1, 1, 1) },
     skinWrap: { value: new THREE.Vector3() },
     skinTrans: { value: new THREE.Vector3() },
-    skinTransEnv: { value: 0.4 },
+    skinTransEnv: { value: 0.35 },
+    skinSheen: { value: 0.06 },
+    skinSheenColour: { value: new THREE.Vector3(1, 1, 1) },
     skinSclera: { value: new THREE.Color(EYE_HEX.sclera) },
     skinIris: { value: new THREE.Color(EYE_HEX.iris) },
   };
@@ -560,7 +585,7 @@ export function realisticSkinMaterial(hex: string | null): RealisticSkin {
       .replace(H.vertexNormal, `${H.vertexNormal}\n\tvSkinObjNormal = objectNormal;`)
       .replace(H.vertexBegin, `${H.vertexBegin}\n\tvSkinPos = transformed;\n\tvSkinMask = skinMask;`);
   };
-  material.customProgramCacheKey = () => 'realistic-skin-v1';
+  material.customProgramCacheKey = () => 'realistic-skin-v3';
   const skin: RealisticSkin = {
     material,
     uniforms,
@@ -571,13 +596,18 @@ export function realisticSkinMaterial(hex: string | null): RealisticSkin {
       material.color.set(care.hex);
       material.roughness = care.roughness;
       material.specularIntensity = care.specularIntensity;
-      material.sheen = care.sheen;
+      material.specularColor.setRGB(...care.specularColour, THREE.LinearSRGBColorSpace);
+      // Keep Three's built-in Charlie sheen off (avoids a second PMREM CubeUV sample per pixel); apply subtle velvet
+      // sheen analytically in INDIRECT via skinSheen / skinSheenColour.
+      material.sheen = 0;
       material.sheenRoughness = care.sheenRoughness;
       material.sheenColor.setRGB(...care.sheenColour, THREE.LinearSRGBColorSpace);
       uniforms.skinFlush.value.set(...care.flush);
       uniforms.skinWrap.value.set(...care.wrap);
       uniforms.skinTrans.value.set(...care.trans);
       uniforms.skinBump.value = care.bump;
+      uniforms.skinSheen.value = care.sheen;
+      uniforms.skinSheenColour.value.set(...care.sheenColour);
     },
     dispose() {
       material.dispose();

@@ -30,19 +30,19 @@ const dot = (a: readonly number[], b: readonly number[]): number => a[0]! * b[0]
 /** The studio: soft panels (direction, angular radius in degrees, linear radiance) and the background gradient. */
 export const STUDIO = {
   /** Radiance of the sky (straight up), the horizon and the floor (straight down); a neutral white, the floor a little warm. */
-  sky: [0.7, 0.7, 0.71] as RGB,
-  horizon: [0.3, 0.3, 0.3] as RGB,
-  floor: [0.16, 0.152, 0.14] as RGB,
+  sky: [0.46, 0.46, 0.465] as RGB,
+  horizon: [0.22, 0.22, 0.22] as RGB,
+  floor: [0.13, 0.124, 0.116] as RGB,
   panels: [
-    // The key softbox: the rigs' key direction, wide.
-    { dir: norm(KEY_POSITION), radiusDeg: 28, radiance: [3.2, 3.15, 3.05] as RGB },
-    // Fill on the other side, lower and weaker.
-    { dir: norm([-0.85, 0.15, 0.5]), radiusDeg: 30, radiance: [0.45, 0.45, 0.46] as RGB },
-    // A strip behind: edges and the light through the ears and fingers.
-    { dir: norm([0.2, 0.35, -1]), radiusDeg: 26, radiance: [2.2, 2.2, 2.2] as RGB },
+    // The key softbox: the rigs' key direction, broad and diffused so skin stays matte without harsh specular hotspots.
+    { dir: norm(KEY_POSITION), radiusDeg: 40, radiance: [1.92, 1.9, 1.86] as RGB },
+    // Fill on the other side, soft and subdued so pale and deep skin alike keep clear anatomical modelling.
+    { dir: norm([-0.85, 0.15, 0.5]), radiusDeg: 44, radiance: [0.3, 0.3, 0.31] as RGB },
+    // A soft strip behind: subtle rim and translucency through ears and fingers without bright edge glare.
+    { dir: norm([0.2, 0.35, -1]), radiusDeg: 32, radiance: [1.25, 1.24, 1.23] as RGB },
   ],
-  /** The soft key light (directional, white), from the rigs' key direction. */
-  key: 2.4,
+  /** The soft key light (directional, white), from the rigs' key direction (balanced modelling without harsh glare). */
+  key: 1.8,
   /** Front irradiance the calibration aims at (π: a matt surface facing the camera is its own colour). */
   frontTarget: Math.PI,
 } as const;
@@ -131,7 +131,7 @@ export function useStudioLight(stage: StudioTarget): { dispose(): void; environm
   for (const o of off) o.visible = false;
   const pmrem = new THREE.PMREMGenerator(stage.renderer);
   const envScene = studioScene();
-  const target = pmrem.fromScene(envScene, 0.02);
+  const target = pmrem.fromScene(envScene, 0.04);
   for (const o of envScene.children) {
     const m = o as THREE.Mesh;
     m.geometry.dispose();

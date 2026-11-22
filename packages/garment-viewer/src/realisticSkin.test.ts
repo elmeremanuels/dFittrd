@@ -86,6 +86,19 @@ describe('realisticSkinCare: everything comes from the tone value', () => {
     // A deep tone still lets some light through at the ear (not black): at least a sixth of the light tone's red.
     expect(deep.trans[0]).toBeGreaterThan(0.15 * light.trans[0]);
   });
+
+  it('skin-v3 stays soft and matte across every Monk tone (no plastic shine or glossy sheen)', () => {
+    for (const hex of MONK) {
+      const care = realisticSkinCare(hex);
+      expect(care.roughness).toBeGreaterThanOrEqual(0.62);
+      expect(care.specularIntensity).toBeLessThanOrEqual(0.25);
+      expect(care.sheen).toBeLessThanOrEqual(0.08);
+      expect(care.sheenRoughness).toBeGreaterThanOrEqual(0.8);
+      expect(care.specularColour[0]).toBeGreaterThanOrEqual(care.specularColour[2]);
+    }
+    const light = realisticSkinCare(MONK[1]), deep = realisticSkinCare(MONK[8]);
+    expect(deep.specularColour[0]).toBeLessThan(light.specularColour[0]);
+  });
 });
 
 describe('the material', () => {
@@ -123,8 +136,12 @@ describe('the material', () => {
     // The direct diffuse is the wrapped one (three's chunk is inlined in place of its include).
     expect(shader.fragmentShader).toContain('skinWrap ) / ( 1.0 + skinWrap )');
     expect(shader.fragmentShader).not.toContain(REALISTIC_SKIN_HOOKS.diffuse);
+    expect(shader.fragmentShader).toContain('skinMottle(');
+    expect(shader.fragmentShader).not.toContain('skinRoughK = ( 0.9');
+    expect(skin.material.sheen).toBe(0);
+    expect(skin.uniforms.skinSheen.value).toBeCloseTo(realisticSkinCare('#a07e56').sheen, 6);
     expect(shader.vertexShader).toContain('attribute vec4 skinMask;');
-    expect(Object.keys(shader.uniforms)).toEqual(expect.arrayContaining(['skinDetail', 'skinFlush', 'skinWrap', 'skinTrans']));
+    expect(Object.keys(shader.uniforms)).toEqual(expect.arrayContaining(['skinDetail', 'skinFlush', 'skinWrap', 'skinTrans', 'skinSheen', 'skinSheenColour']));
     skin.dispose();
   });
 });
@@ -264,6 +281,10 @@ describe('the studio light', () => {
     const d = new THREE.Vector3(pos.getX(10), pos.getY(10), pos.getZ(10)).normalize();
     const want = studioRadiance(d.toArray());
     expect([col.getX(10), col.getY(10), col.getZ(10)]).toEqual(want.map((v) => expect.closeTo(v, 5)));
+    // Soft diffused studio (skin-v3): gentler key and wider softbox so skin does not carry harsh specular hotspots.
+    expect(STUDIO.key).toBeLessThanOrEqual(2);
+    expect(STUDIO.panels[0]!.radiusDeg).toBeGreaterThanOrEqual(36);
+    expect(STUDIO.panels[0]!.radiance[0]).toBeLessThanOrEqual(2.2);
   });
 });
 

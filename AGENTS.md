@@ -20,3 +20,9 @@ Read `docs/HANDOFF.md` (product truth) and `docs/DECISIONS.md` (architecture dec
 - The repo at `/home/user/CV-Builder-Bold` and its Next.js notes are unrelated to this project.
 
 - Never write a literal in real token format (`sk_live_…`, `sk_test_…`, `pk_live_…`, `shpat_…`, `shpss_…`, `whsec_…`, `xai-…`, `AIza…`) anywhere in the repo, tests included. GitHub push protection rejects the push. Build fake keys by concatenation, e.g. `'sk_' + 'test_abc…'`.
+
+## Builders and work orders
+
+Work is handed out as work orders in `docs/work-orders/` (board: `BOARD.md`), under the process in
+`docs/COORDINATION.md`. Builders work on their own branch (`claude/wo-NNN-*` or `google/wo-NNN-*`), never on `main` or
+`claude/garment-engine`. Only the coordinator merges, and nothing reaches `main` without the coordinator's check.

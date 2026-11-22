@@ -8,6 +8,7 @@
 import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh, familyShape, type Mannequin } from '@curtain/mannequin';
 import type { FitResult } from '@curtain/fit-engine';
 import type { GarmentPayload } from '@curtain/schema';
+import { initialViewFor } from './initialView';
 import { bodyFamilyOf, bodyField, buildAvatar, buildTypedAvatar, bundleFamilyOf, bundleMaleShapeOf, girthInput, isTypedBody, mannequinMeasurements, sanitiseMeasurements, type Avatar, type BodyField, type BodyMeasurements, type BodyOptions } from './body';
 import { loadBundleFrom, type FetchLike } from './bundle';
 import { checkBundle, gradingLabel } from './bundleCheck';
@@ -114,6 +115,8 @@ export interface MountOptions {
   fetch?: FetchLike;
   /** Drape settings (step-3 control: cling switch, girth loops, waistband model); default `DEFAULT_DRAPE`, the drape as before. */
   drape?: DrapeOptions;
+  /** Starting camera angle (D30); default `initialViewFor(garment.category)`. A merchant setting can override this later. */
+  initialView?: { azimuthDeg: number; elevationDeg: number };
 }
 
 export interface GarmentView {
@@ -314,7 +317,8 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
   stage.setSkinTone(parseSkinHex(opts.look?.skinHex));
   figure.garment.position.y = lift;
   stage.scene.add(figure.group);
-  stage.frame(60, stature);
+  const view = opts.initialView ?? initialViewFor(opts.garment.category);
+  stage.frame(60, stature, view.azimuthDeg);
 
   interface Live {
     fit: FitInstance;
@@ -501,7 +505,8 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
   stage.setSkinTone(parseSkinHex(opts.look?.skinHex));
   figure.garment.position.y = lift;
   stage.scene.add(figure.group);
-  stage.frame(60, stature);
+  const view = opts.initialView ?? initialViewFor(opts.garment.category);
+  stage.frame(60, stature, view.azimuthDeg);
   const drapes = bakedDrapes(bake, field, avatar.measurements.hip);
   // The sizes the embed's own fit result says cannot be worn on the shopper's body: the same rule as the device drape
   // (`notDrawn.ts`; the view never recomputes the fit). A band that does not pass the hips is one case of it.

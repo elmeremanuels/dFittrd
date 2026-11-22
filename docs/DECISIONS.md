@@ -220,3 +220,24 @@ Founder decision (21 Nov 2026). The live 3D view gets our own procedural hair (n
 - **Colour** chosen by the shopper. Hair type, length and colour are shopper choices stored on the device only, like the skin tone; they are never inferred from a photo and never sent to a server.
 
 The founder's reference chart (photos of real people) is a reference only: no photo or part of one is used as a texture or in the repo. The photoreal hair stays with the AI realism layer (D27). Performance bound: the hair adds no more than the body itself to the frame time and asset size; a type and length that does not fit within that is drawn simpler and labelled so in the report.
+
+## D29 — Three AI builders, and Qwen stops at go-live
+
+Founder, 22 Nov 2026. The build work is split across three AI agents.
+
+| Agent | Role |
+|---|---|
+| Claude | Manager. Plans, writes work orders, merges, decides what goes to `main` and reports to the founder. |
+| Google (Antigravity, on the founder's computer) | Supervisor and project manager. Reviews Qwen's work and the visual result, keeps the Linear board in order, and builds the heavy visual work. |
+| Qwen (Qwen Code, run by Claude in the cloud container through an Alibaba Cloud Model Studio key) | Workhorse. Builds work orders. |
+
+- Google works in rounds when the founder's computer is on. It is never a step that Qwen's work waits on.
+- Nothing reaches `main` without Claude's check.
+- **Qwen is disconnected at go-live.** Before the first production deploy:
+  - its key is removed from the cloud environment;
+  - its Model Studio plan is cancelled;
+  - Qwen Code is removed from the session's setup.
+  - After that, no `qwen/*` branch is merged.
+- Qwen never sees secrets or shopper data. The repo holds neither (D19, AGENTS.md rule 2).
+- Qwen's code goes to Alibaba Cloud (Singapore region). That is accepted for the build phase only.
+

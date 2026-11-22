@@ -8,9 +8,18 @@ owns this process. The founder owns the decisions.
 | Who | Does | Does not |
 |---|---|---|
 | Founder | Makes the decisions, approves every production deploy, reviews the look | — |
-| Coordinator (Claude) | Writes work orders, assigns them, reviews, merges into `claude/garment-engine`, runs the gates, prepares `main` merges, reports to the founder in Dutch | Large builds of its own |
-| Builder (Claude session or Google agent) | Carries out one work order on its own branch | Merge, push to `main` or `claude/garment-engine`, edit `.github/`, paid calls, add assets |
+| Manager (Claude) | Plans, writes work orders, assigns them, merges into `claude/garment-engine`, runs the gates, decides what goes to `main`, reports to the founder in Dutch, drives Qwen | Large builds of its own |
+| Supervisor and project manager (Google, Antigravity) | Reviews Qwen's work, judges the visual result, keeps the Linear board in order and proposes new cards, builds the heavy visual work orders | Merge, push to `main` or `claude/garment-engine`, stand between Claude and Qwen |
+| Workhorse (Qwen, Qwen Code) | Builds work orders on `qwen/wo-NNN-<slug>`. Claude runs it headless in the cloud container | Merge, push anywhere but its own branch, edit `.github/`, add assets |
+| Builder (any of the above) | Carries out one work order on its own branch | Merge, push to `main` or `claude/garment-engine`, edit `.github/`, paid calls, add assets |
 | Reviewer | Tries to break one finished work order, especially its tests. Is never the builder of that order, and preferably from the other vendor | Fix the work itself |
+
+### How the three work together (D29)
+
+- **Claude and Qwen run continuously.** Google works in rounds, whenever the founder has Antigravity open, so it is never a step that Qwen's work waits on.
+- **In each round Google reviews** what Qwen delivered since the last round: code and pictures. It posts findings as comments on the work order's issue and proposes new cards. Claude acts on them.
+- Before anything goes to `main`, Claude always checks it.
+- **Qwen is disconnected at go-live** (D29). Its key is removed and its plan cancelled before the first production deploy, and no `qwen/*` work is merged after that. See `docs/LAUNCH-RUNBOOK.md` step 0.
 
 ## Branches
 
@@ -23,6 +32,7 @@ owns this process. The founder owns the decisions.
 - Work branches:
   - Claude builders use `claude/wo-NNN-<slug>`.
   - Google builders use `google/wo-NNN-<slug>`.
+  - Qwen uses `qwen/wo-NNN-<slug>`, until go-live.
   - Both are cut from `claude/garment-engine`.
 - A builder may open a PR from its work branch **into `claude/garment-engine`**, never into `main`.
 

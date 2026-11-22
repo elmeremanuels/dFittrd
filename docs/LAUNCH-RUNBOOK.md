@@ -37,6 +37,13 @@ block the pilot. The deploy skips it with a warning.
 
 ---
 
+### 0b. Disconnect Qwen (FOUNDER and CLAUDE, before the first production deploy; D29)
+
+- [ ] Claude: confirm no open `qwen/*` branch is waiting to be merged, and record the last merged Qwen commit in `docs/OPEN-ISSUES.md`.
+- [ ] Founder: remove the Model Studio key from the cloud environment (environment menu, Edit, Network secrets) and delete the key in Alibaba Cloud Model Studio.
+- [ ] Founder: cancel the Model Studio plan.
+- [ ] Claude: remove Qwen from `docs/COORDINATION.md`, from the environment's setup script (if it was added there) and from the Linear labels (retire `Qwen`).
+
 ## 1. Buy the VPS (FOUNDER)
 
 1. Create the server per F2: Ubuntu 24.04 LTS, the provider's **Sydney** region, 2 vCPU / 2 GB / 40 GB, IPv4.

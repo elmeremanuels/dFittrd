@@ -199,6 +199,24 @@ describe('bounds (D28)', () => {
     const code = ['./hairOptions.ts', './realisticHair.ts', './realisticHairDraw.ts'].reduce((s, f) => s + readFileSync(new URL(f, import.meta.url)).byteLength, 0);
     expect(code).toBeLessThan(BODY_ASSET_BYTES);
   });
+
+  it('WO-003: lightweight hair materials (no MeshPhysicalMaterial, no alphaToCoverage, anisotropy = 1) and all 40 combinations build without SIMPLER thinning on mid', () => {
+    for (const type of HAIR_TYPES) {
+      for (const length of HAIR_LENGTHS) {
+        const b = buildOf(type, length);
+        expect(b.simpler, `${type} ${length}`).toBeNull();
+        expect(b.triangles, `${type} ${length}`).toBeLessThan(24_000);
+      }
+    }
+    const v = createHair(mid.input, { type: '4C', length: 'long', hex: '#1f1b19' });
+    for (const child of v.group.children) {
+      const m = (child as unknown as { material: { type: string; alphaToCoverage: boolean; map: { anisotropy: number } | null } }).material;
+      expect(m.type).toBe('MeshLambertMaterial');
+      expect(m.alphaToCoverage).toBe(false);
+      if (m.map) expect(m.map.anisotropy).toBe(1);
+    }
+    v.dispose();
+  });
 });
 
 describe('the hair is never sent', () => {

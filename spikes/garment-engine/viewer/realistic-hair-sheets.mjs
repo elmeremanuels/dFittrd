@@ -41,7 +41,8 @@ const cell = (name, label, s) => {
   const tris = r?.triangles ? ` · ${(r.triangles / 1000).toFixed(1)}k tri` : '';
   return `<figure style="width:${w}px"><figcaption>${label}${tris}${simpler}</figcaption><img style="width:${w}px;height:${h}px" src="data:image/png;base64,${readFileSync(file).toString('base64')}"></figure>`;
 };
-const browser = await chromium.launch();
+const chromePath = [process.env.CHROME_PATH, chromium.executablePath(), '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'].find((p) => p && existsSync(p));
+const browser = await chromium.launch(chromePath ? { executablePath: chromePath } : {});
 const page = await browser.newPage({ viewport: { width: 1200, height: 800 }, deviceScaleFactor: 1 });
 async function sheet(file, title, rows, width) {
   await page.setViewportSize({ width, height: 800 });
@@ -58,8 +59,10 @@ await sheet('sheet-types-lengths.png', `${note} · front and back three-quarter 
 const w10 = 12 + 70 + 10 * (Math.round(390 * scale) + 6) + 12;
 await sheet('sheet-colours.png', `${note} · type 2B, shoulder length, the ten colours of the palette`, [['front', COLOURS.map((c) => cell(`colour-${c}--front`, c, scale))], ['back ¾', COLOURS.map((c) => cell(`colour-${c}--back`, c, scale))]], w10);
 const dress = [['4C', 'long'], ['3A', 'shoulder'], ['1', 'long']];
-const ds = 0.75;
-const w3 = 12 + 70 + 3 * (Math.round(390 * ds) + 6) + 12;
-await sheet('sheet-dress.png', `${note} · in the azure dress (draped on the device), full body`, dress.map(([t, l]) => [`${t} ${l}`, ['front', 'three-quarter', 'back'].map((v) => cell(`dress-${t}-${l}--${v}`, `${t} ${l} · ${v} · ${TYPE_COLOUR[t]}`, ds))]), w3);
+if (existsSync(join(dir, 'dress-4C-long--front.png'))) {
+  const ds = 0.75;
+  const w3 = 12 + 70 + 3 * (Math.round(390 * ds) + 6) + 12;
+  await sheet('sheet-dress.png', `${note} · in the azure dress (draped on the device), full body`, dress.map(([t, l]) => [`${t} ${l}`, ['front', 'three-quarter', 'back'].map((v) => cell(`dress-${t}-${l}--${v}`, `${t} ${l} · ${v} · ${TYPE_COLOUR[t]}`, ds))]), w3);
+}
 await browser.close();
 console.log(`sheets in ${outDir}`);

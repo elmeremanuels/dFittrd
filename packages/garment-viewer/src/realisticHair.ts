@@ -105,16 +105,16 @@ interface TypeParams {
 const NO_VOLUME = { short: 0, chin: 0, shoulder: 0, long: 0 };
 
 export const TYPE_PARAMS: Readonly<Record<HairType, TypeParams>> = {
-  '1': { kind: 'straight', amp: 0, period: 1, zig: 0, width: 1.7, push: 0, gravity: 0.38, lift: 0.08, shrink: 1, thickness: 0.8, volume: NO_VOLUME, count: 230, look: { roughness: 0.34, anisotropy: 0.9, specular: 0.75, coilTileCm: 3 } },
-  '2A': { kind: 'wave', amp: 0.6, period: 10, zig: 0, width: 1.8, push: 0.01, gravity: 0.34, lift: 0.12, shrink: 0.97, thickness: 1.0, volume: NO_VOLUME, count: 220, look: { roughness: 0.4, anisotropy: 0.85, specular: 0.65, coilTileCm: 3 } },
-  '2B': { kind: 'wave', amp: 1.0, period: 7.5, zig: 0, width: 1.8, push: 0.025, gravity: 0.31, lift: 0.18, shrink: 0.93, thickness: 1.3, volume: NO_VOLUME, count: 210, look: { roughness: 0.44, anisotropy: 0.8, specular: 0.6, coilTileCm: 3 } },
-  '2C': { kind: 'wave', amp: 1.35, period: 5.6, zig: 0, width: 1.9, push: 0.04, gravity: 0.28, lift: 0.24, shrink: 0.9, thickness: 1.7, volume: NO_VOLUME, count: 200, look: { roughness: 0.48, anisotropy: 0.75, specular: 0.55, coilTileCm: 3 } },
-  '3A': { kind: 'curl', amp: 1.15, period: 4, zig: 0, width: 2.1, push: 0.03, gravity: 0.28, lift: 0.15, shrink: 0.85, thickness: 2.2, volume: NO_VOLUME, count: 150, look: { roughness: 0.5, anisotropy: 0.7, specular: 0.5, coilTileCm: 3 } },
-  '3B': { kind: 'curl', amp: 0.9, period: 2.6, zig: 0, width: 1.8, push: 0.045, gravity: 0.26, lift: 0.2, shrink: 0.78, thickness: 2.8, volume: NO_VOLUME, count: 150, look: { roughness: 0.55, anisotropy: 0.6, specular: 0.45, coilTileCm: 3 } },
-  '3C': { kind: 'curl', amp: 0.6, period: 1.6, zig: 0, width: 1.3, push: 0.06, gravity: 0.24, lift: 0.25, shrink: 0.7, thickness: 3.2, volume: { short: 1.2, chin: 2.4, shoulder: 3.4, long: 4.4 }, count: 150, look: { roughness: 0.6, anisotropy: 0.5, specular: 0.4, coilTileCm: 5 } },
-  '4A': { kind: 'coil', amp: 0.45, period: 1.1, zig: 0.15, width: 0.9, push: 0, gravity: 0, lift: 1, shrink: 0.55, thickness: 0, volume: { short: 2.2, chin: 4.4, shoulder: 7.2, long: 10.5 }, count: 230, look: { roughness: 0.66, anisotropy: 0.4, specular: 0.35, coilTileCm: 4.5 } },
-  '4B': { kind: 'coil', amp: 0.4, period: 0.8, zig: 0.7, width: 0.8, push: 0, gravity: 0, lift: 1, shrink: 0.5, thickness: 0, volume: { short: 2.5, chin: 5, shoulder: 8.2, long: 12 }, count: 250, look: { roughness: 0.72, anisotropy: 0.3, specular: 0.3, coilTileCm: 4 } },
-  '4C': { kind: 'coil', amp: 0.32, period: 0.55, zig: 1, width: 0.7, push: 0, gravity: 0, lift: 1, shrink: 0.45, thickness: 0, volume: { short: 2.8, chin: 5.6, shoulder: 9.2, long: 13.5 }, count: 270, look: { roughness: 0.78, anisotropy: 0.22, specular: 0.25, coilTileCm: 3.5 } },
+  '1': { kind: 'straight', amp: 0, period: 1, zig: 0, width: 2.25, push: 0, gravity: 0.38, lift: 0.08, shrink: 1, thickness: 0.8, volume: NO_VOLUME, count: 128, look: { roughness: 0.34, anisotropy: 0.9, specular: 0.75, coilTileCm: 3 } },
+  '2A': { kind: 'wave', amp: 0.6, period: 10, zig: 0, width: 2.25, push: 0.01, gravity: 0.34, lift: 0.12, shrink: 0.97, thickness: 1.0, volume: NO_VOLUME, count: 125, look: { roughness: 0.4, anisotropy: 0.85, specular: 0.65, coilTileCm: 3 } },
+  '2B': { kind: 'wave', amp: 1.0, period: 7.5, zig: 0, width: 2.25, push: 0.025, gravity: 0.31, lift: 0.18, shrink: 0.93, thickness: 1.3, volume: NO_VOLUME, count: 122, look: { roughness: 0.44, anisotropy: 0.8, specular: 0.6, coilTileCm: 3 } },
+  '2C': { kind: 'wave', amp: 1.35, period: 5.6, zig: 0, width: 2.35, push: 0.04, gravity: 0.28, lift: 0.24, shrink: 0.9, thickness: 1.7, volume: NO_VOLUME, count: 118, look: { roughness: 0.48, anisotropy: 0.75, specular: 0.55, coilTileCm: 3 } },
+  '3A': { kind: 'curl', amp: 1.15, period: 4, zig: 0, width: 2.3, push: 0.03, gravity: 0.28, lift: 0.15, shrink: 0.85, thickness: 2.2, volume: NO_VOLUME, count: 105, look: { roughness: 0.5, anisotropy: 0.7, specular: 0.5, coilTileCm: 3 } },
+  '3B': { kind: 'curl', amp: 0.9, period: 2.6, zig: 0, width: 2.05, push: 0.045, gravity: 0.26, lift: 0.2, shrink: 0.78, thickness: 2.8, volume: NO_VOLUME, count: 102, look: { roughness: 0.55, anisotropy: 0.6, specular: 0.45, coilTileCm: 3 } },
+  '3C': { kind: 'curl', amp: 0.6, period: 1.6, zig: 0, width: 1.6, push: 0.06, gravity: 0.24, lift: 0.25, shrink: 0.7, thickness: 3.2, volume: { short: 1.2, chin: 2.4, shoulder: 3.4, long: 4.4 }, count: 100, look: { roughness: 0.6, anisotropy: 0.5, specular: 0.4, coilTileCm: 5 } },
+  '4A': { kind: 'coil', amp: 0.45, period: 1.1, zig: 0.15, width: 1.05, push: 0, gravity: 0, lift: 1, shrink: 0.55, thickness: 0, volume: { short: 2.2, chin: 4.4, shoulder: 7.2, long: 10.5 }, count: 145, look: { roughness: 0.66, anisotropy: 0.4, specular: 0.35, coilTileCm: 4.5 } },
+  '4B': { kind: 'coil', amp: 0.4, period: 0.8, zig: 0.7, width: 0.95, push: 0, gravity: 0, lift: 1, shrink: 0.5, thickness: 0, volume: { short: 2.5, chin: 5, shoulder: 8.2, long: 12 }, count: 155, look: { roughness: 0.72, anisotropy: 0.3, specular: 0.3, coilTileCm: 4 } },
+  '4C': { kind: 'coil', amp: 0.32, period: 0.55, zig: 1, width: 0.85, push: 0, gravity: 0, lift: 1, shrink: 0.45, thickness: 0, volume: { short: 2.8, chin: 5.6, shoulder: 9.2, long: 13.5 }, count: 165, look: { roughness: 0.78, anisotropy: 0.22, specular: 0.25, coilTileCm: 3.5 } },
 };
 
 // ---------------------------------------------------------------------------
@@ -576,7 +576,7 @@ function ribbon(w: PartWriter, centre: V3[], side: V3[], face: V3[], width: numb
 /** The clump of one guide with the type's pattern on it. */
 function clumpOf(w: PartWriter, space: HairSpace, g: Guide, p: TypeParams, widthScale: number): void {
   const curly = p.kind === 'curl' || p.kind === 'coil';
-  const step = p.kind === 'straight' ? 1.2 : p.kind === 'wave' ? p.period / 7 : p.kind === 'curl' ? p.period / (p.period < 2 ? 5 : 6) : p.period / 5;
+  const step = p.kind === 'straight' ? 2.0 : p.kind === 'wave' ? p.period / 5.5 : p.kind === 'curl' ? p.period / (p.period < 2 ? 4.0 : 4.8) : p.period / 4.0;
   const P = resample(g.pts, step);
   const n = P.length;
   if (n < 2) return;
@@ -679,15 +679,15 @@ export function buildHair(input: HairBodyInput, choice: HairChoice, options: { c
     // The cap: always, the scalp's hull pushed out 0.25 cm, its rim ragged and soft.
     const cap = new PartWriter();
     const capRand = rng(seedOf(`cap/${choice.type}`));
-    scalpGrid(cap, space, 64, 14, () => 1.5, (az, el) => headRadius(head, az, el) + 0.25, (_az, _el, edge) => (edge < 1 ? 0.25 + 0.5 * capRand() : 1), coily ? 0.55 : 0.5, 3);
+    scalpGrid(cap, space, 40, 10, () => 1.5, (az, el) => headRadius(head, az, el) + 0.25, (_az, _el, edge) => (edge < 1 ? 0.25 + 0.5 * capRand() : 1), coily ? 0.55 : 0.5, 3);
     parts.push(cap.part('cap'));
 
     // Shells: 3C, 4A–4C. A volume over the scalp, reaching below the hairline at the sides and back as it grows.
     if (vol > 0) {
       const shells = new PartWriter();
-      const k = Math.max(4, Math.min(coily ? 11 : 4, Math.round(3 + vol * 0.8)));
+      const k = Math.max(4, Math.min(coily ? 6 : 4, Math.round(2.5 + vol * 0.35)));
       const droop = coily ? 1 : 0.6;
-      for (let s = 1; s <= k; s++) {
+      for (let s = k; s >= 1; s--) {
         const t = s / k;
         const env = (az: number, el: number): number => {
           const hl = hairlineEl(az / DEG) * DEG;
@@ -696,7 +696,7 @@ export function buildHair(input: HairBodyInput, choice: HairChoice, options: { c
           return headRadius(head, az, el) + 0.4 + t * vol * f;
         };
         const below = (azDeg: number): number => t * droop * Math.min(22, 2.2 * vol) * smooth(35, 110, Math.abs(azDeg));
-        scalpGrid(shells, space, 48, 10, below, env, (_az, _el, edge) => (2.4 - 1.75 * Math.pow(t, 0.8)) * (0.35 + 0.65 * edge), 0.5 + 0.5 * t, p.look.coilTileCm, true);
+        scalpGrid(shells, space, 42, 9, below, env, (_az, _el, edge) => (2.5 - 1.8 * Math.pow(t, 0.85)) * (0.4 + 0.6 * edge), 0.5 + 0.5 * t, p.look.coilTileCm, true);
       }
       parts.push(shells.part('shells'));
     }
@@ -706,7 +706,7 @@ export function buildHair(input: HairBodyInput, choice: HairChoice, options: { c
     const n = Math.round(p.count * countScale * (choice.length === 'short' ? 0.85 : 1));
     const dirs = scalpDirections(n, rand, coily ? (a) => 1.5 - 9.5 * smooth(35, 110, Math.abs(a)) : undefined);
     const yEnd = cutY(choice.length, p, head, input.ringY);
-    let clumps = 0;
+    const guides: Guide[] = [];
     for (const d of dirs) {
       const [az, el] = azElOf(d);
       if (coily) {
@@ -716,19 +716,21 @@ export function buildHair(input: HairBodyInput, choice: HairChoice, options: { c
         const f = 0.3 + 0.7 * smooth(hl - 10 * DEG, hl + 32 * DEG, el);
         const r0 = headRadius(head, az, el) + 0.4 + Math.max(0.2, vol * f - 0.6 - 0.9 * rand());
         const root = add(head.c, d, r0);
-        const L = 0.9 + 0.08 * vol + rand() * 0.7;
+        const L = 0.85 + 0.06 * vol + rand() * 0.55;
         const tang = norm(cross(d, norm([rand() - 0.5, rand() - 0.5, rand() - 0.5])));
-        const out = norm(add(tang, d, 0.45 + 0.3 * rand()));
+        const out = norm(add(tang, d, 0.35 + 0.25 * rand()));
         const pts: V3[] = [];
         for (let s = 0; s <= L + 1e-9; s += 0.3) pts.push(space.push(add(root, out, s), 0.3, 0.9));
-        clumpOf(strands, space, { pts, layer: 0.6 + 0.4 * rand(), phase: rand() * 6.28, root }, p, 1);
+        guides.push({ pts, layer: 0.6 + 0.4 * rand(), phase: rand() * 6.28, root });
       } else {
         const layer = rand();
-        const g = growGuide(space, add(head.c, d, headRadius(head, az, el)), p, choice.length, yEnd, layer, rand, vol);
-        clumpOf(strands, space, g, p, 1);
+        guides.push(growGuide(space, add(head.c, d, headRadius(head, az, el)), p, choice.length, yEnd, layer, rand, vol));
       }
-      clumps++;
     }
+    // Emit outer layers first so visible outer strands write depth before occluded inner strands (Early-Z rejection).
+    guides.sort((a, b) => b.layer - a.layer);
+    for (const g of guides) clumpOf(strands, space, g, p, 1);
+    const clumps = guides.length;
     parts.push(strands.part('strands'));
     return { parts, clumps };
   };

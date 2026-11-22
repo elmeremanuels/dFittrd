@@ -10,13 +10,15 @@ owns this process. The founder owns the decisions.
 | Founder | Makes the decisions, approves every production deploy, reviews the look | — |
 | Manager (Claude) | Plans, writes work orders, assigns them, merges into `claude/garment-engine`, runs the gates, decides what goes to `main`, reports to the founder in Dutch, drives Qwen | Large builds of its own |
 | Supervisor and project manager (Google, Antigravity) | Reviews Qwen's work, judges the visual result, keeps the Linear board in order and proposes new cards, builds the heavy visual work orders | Merge, push to `main` or `claude/garment-engine`, stand between Claude and Qwen |
-| Workhorse (Qwen, Qwen Code) | Builds work orders on `qwen/wo-NNN-<slug>`. Claude runs it headless in the cloud container | Merge, push anywhere but its own branch, edit `.github/`, add assets |
+| Workhorse (Qwen, Qwen Code on the founder's computer) | Builds the Linear issues labelled `Qwen`, on `qwen/wo-NNN-<slug>`. The founder starts a Qwen Code session; Qwen reads its work from Linear itself (`QWEN.md`) | Merge, push anywhere but its own branch, edit `.github/`, add assets |
 | Builder (any of the above) | Carries out one work order on its own branch | Merge, push to `main` or `claude/garment-engine`, edit `.github/`, paid calls, add assets |
 | Reviewer | Tries to break one finished work order, especially its tests. Is never the builder of that order, and preferably from the other vendor | Fix the work itself |
 
 ### How the three work together (D29)
 
-- **Claude and Qwen run continuously.** Google works in rounds, whenever the founder has Antigravity open, so it is never a step that Qwen's work waits on.
+- **Linear is the single point of control for all three agents.** Claude writes the issues and work orders. Google takes the issues labelled `Google` and Qwen the ones labelled `Qwen`, each straight from Linear.
+- **Google and Qwen both run on the founder's computer, in rounds.** Qwen runs in Qwen Code under the Token Plan, which allows interactive use in coding tools only. Claude therefore never runs Qwen headless. The founder starts a session with the fixed prompt in `QWEN.md`'s handoff, and Qwen works through its issues.
+- Claude keeps enough `Qwen` issues ready, each with a sharp definition of done, so a Qwen round never waits.
 - **In each round Google reviews** what Qwen delivered since the last round: code and pictures. It posts findings as comments on the work order's issue and proposes new cards. Claude acts on them.
 - Before anything goes to `main`, Claude always checks it.
 - **Qwen is disconnected at go-live** (D29). Its key is removed and its plan cancelled before the first production deploy, and no `qwen/*` work is merged after that. See `docs/LAUNCH-RUNBOOK.md` step 0.

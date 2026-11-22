@@ -229,15 +229,21 @@ Founder, 22 Nov 2026. The build work is split across three AI agents.
 |---|---|
 | Claude | Manager. Plans, writes work orders, merges, decides what goes to `main` and reports to the founder. |
 | Google (Antigravity, on the founder's computer) | Supervisor and project manager. Reviews Qwen's work and the visual result, keeps the Linear board in order, and builds the heavy visual work. |
-| Qwen (Qwen Code, run by Claude in the cloud container through an Alibaba Cloud Model Studio key) | Workhorse. Builds work orders. |
+| Qwen (Qwen Code on the founder's computer, under the founder's QwenCloud Token Plan) | Workhorse. Builds the Linear issues labelled `Qwen`. |
 
 - Google works in rounds when the founder's computer is on. It is never a step that Qwen's work waits on.
 - Nothing reaches `main` without Claude's check.
 - **Qwen is disconnected at go-live.** Before the first production deploy:
-  - its key is removed from the cloud environment;
-  - its Model Studio plan is cancelled;
-  - Qwen Code is removed from the session's setup.
+  - the Token Plan is cancelled and its keys are deleted in QwenCloud;
+  - every Qwen key is removed from the cloud environment's network secrets;
+  - Qwen Code is removed from the founder's computer, or its Linear connection is.
   - After that, no `qwen/*` branch is merged.
 - Qwen never sees secrets or shopper data. The repo holds neither (D19, AGENTS.md rule 2).
 - Qwen's code goes to Alibaba Cloud (Singapore region). That is accepted for the build phase only.
+
+**Update, 22 Nov 2026.** The founder's QwenCloud key is a Token Plan key. It only works on `token-plan.maas.qwencloudapi.com`. Token Plan terms allow interactive use in coding and agent tools only, never automation scripts or headless batch calls. So:
+
+- Claude does not run Qwen headless.
+- Qwen runs in Qwen Code on the founder's computer. It takes its issues from Linear itself, like Google in Antigravity, and Linear stays the single point of control.
+- Running Qwen from the cloud needs either a pay-as-you-go key on `maas.qwencloudapi.com`, or written permission from Alibaba.
 

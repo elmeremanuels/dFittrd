@@ -80,6 +80,16 @@ export interface RealisticSkinCare {
   lightness: number;
   /** 0 (light and medium tones) to 1 (Monk 8 to 10). */
   deep: number;
+  /** 0 (medium and deep tones, L* ≤ 70) to 1 (very pale UI swatches like Monk 1–3, L* ≥ 92). */
+  fair: number;
+  /**
+   * Optical albedo toning multiplier (linear RGB) for very pale tones (`fair > 0`): prevents high-L* 2D UI swatches
+   * (e.g. Monk 2 `#f3e7db`, L* = 92.3) from clipping to chalky white under studio irradiance π while restoring natural
+   * fair epidermal peach warmth. Strictly `[1, 1, 1]` for medium and deep tones (`L* ≤ 70`).
+   */
+  toneGain: RGB;
+  /** Subtle warm subsurface terminator scatter colour (linear RGB) for fair skin shadows (`[0, 0, 0]` for medium/deep). */
+  sssTint: RGB;
   /** Albedo multiplier at full redness (linear RGB): the tone shifted in a* and L*, divided by the tone. */
   flush: RGB;
   /** The a* step behind `flush` (CIE units), for the report and the tests. */
@@ -111,14 +121,29 @@ export function realisticSkinCare(hex: string | null | undefined): RealisticSkin
   const lab = labOfLinear(lin);
   const L = lab[0];
   const deep = smoothstep(55, 25, L);
-  const light = smoothstep(65, 88, L);
-  // Redness: a soft step in a* (warmer peach-rose, slightly darker), smaller on deep tones where it reads stronger.
-  const flushDeltaA = toned ? 7.0 - 3.5 * deep : 0;
-  const flushed = linearOfLab([L - (toned ? 2.2 - 1.0 * deep : 0), lab[1] + flushDeltaA, lab[2] + (toned ? 1.8 : 0)]);
+  const fair = toned ? smoothstep(70, 92, L) : 0;
+  // Optical depth & peach warmth for very pale swatches (L* > 70, e.g. Monk 1-4): keeps highlights below TRUE_TONE_START
+  // (0.90) so fair skin does not bleach into chalky white, and restores subtle vascular peach chroma only when the input
+  // swatch lacks it. Medium (L* = 55) and deep (L* = 21) have fair = 0 → toneGain = [1, 1, 1] (untouched).
+  const targetLab: RGB = [
+    L - 7.8 * fair,
+    lab[1] + fair * Math.max(0, 8.5 - lab[1]) * 0.72,
+    lab[2] + fair * Math.max(0, 17 - lab[2]) * 0.68,
+  ];
+  const tonedLin = fair > 0 ? linearOfLab(targetLab) : lin;
+  const toneGain: RGB = fair > 0
+    ? ([0, 1, 2].map((c) => Math.min(1.05, Math.max(0.5, Math.max(1e-4, tonedLin[c]!) / Math.max(1e-4, lin[c]!)))) as RGB)
+    : ([1, 1, 1] as RGB);
+  // Subtle rosy-terracotta subsurface scatter at the shadow terminator on fair low-melanin skin (0 on medium/deep).
+  const sssTint: RGB = fair > 0 ? [0.16 * fair, 0.055 * fair, 0.025 * fair] : [0, 0, 0];
+  // Redness: a soft step in a* (warmer peach-rose, slightly darker), stronger on fair skin for natural cheeks/ears/hands/knees
+  // without looking pink, and smaller on deep tones where the same Lab step reads stronger.
+  const flushDeltaA = toned ? 7.0 + 3.0 * fair - 3.5 * deep : 0;
+  const flushed = linearOfLab([L - (toned ? 2.2 + 0.6 * fair - 1.0 * deep : 0), lab[1] + flushDeltaA, lab[2] + (toned ? 1.8 + 1.4 * fair : 0)]);
   const flush = toned ? ([0, 1, 2].map((c) => Math.min(1.6, Math.max(0.5, Math.max(1e-4, flushed[c]!) / Math.max(1e-4, lin[c]!)))) as RGB) : ([1, 1, 1] as RGB);
-  // Wrap: red reaches furthest under the skin for a warm rosy/terracotta shadow rolloff, gentle enough that fair skin
-  // keeps its anatomical form instead of bleaching flat; less red on deep tones where melanin absorbs it.
-  const wrap: RGB = toned ? [0.27 - 0.09 * deep, 0.095 - 0.025 * deep, 0.045 - 0.015 * deep] : [0.12, 0.12, 0.12];
+  // Wrap: red reaches furthest under the skin for a warm rosy/terracotta shadow rolloff; slightly richer red scatter on
+  // fair low-melanin skin, less on deep tones where melanin absorbs it.
+  const wrap: RGB = toned ? [0.27 + 0.07 * fair - 0.09 * deep, 0.095 + 0.01 * fair - 0.025 * deep, 0.045 - 0.015 * deep] : [0.12, 0.12, 0.12];
   // Thin parts let through a warm red. Taken as the square root of the tone (so a deep tone still glows a little at the
   // ear rim, as it does), tinted towards red, a fifth less on the deepest tones.
   const root = lin.map(Math.sqrt) as RGB;
@@ -132,6 +157,9 @@ export function realisticSkinCare(hex: string | null | undefined): RealisticSkin
     toned,
     lightness: L,
     deep,
+    fair,
+    toneGain,
+    sssTint,
     flush,
     flushDeltaA,
     wrap,
@@ -142,7 +170,7 @@ export function realisticSkinCare(hex: string | null | undefined): RealisticSkin
     sheen: 0.06 - 0.03 * deep,
     sheenRoughness: 0.85,
     sheenColour,
-    bump: 0.26 - 0.04 * light,
+    bump: 0.26 - 0.04 * fair,
   };
 }
 
@@ -374,8 +402,8 @@ export function skinMaskOf(asset: Pick<RealisticBodyAsset, 'meta' | 'positions' 
     const lat = Math.sign(P[3 * i]!) * nx; // the normal's share pointing away from the midline
     let red = 0, thin = 0;
     if (headWeight[i]! > 0.5) {
-      red = Math.max(red, 0.6 * near(i, cheek, 3.4) * smoothstep(0.0, 0.4, nz));
-      red = Math.max(red, 0.45 * near(i, nose, 1.8));
+      red = Math.max(red, 0.6 * near(i, cheek, 3.6) * smoothstep(0.0, 0.4, nz));
+      red = Math.max(red, 0.45 * near(i, nose, 1.9));
       const e = near(i, ear, 3.4) * smoothstep(headHalf - 2.2, headHalf - 1.0, Math.abs(P[3 * i]!));
       red = Math.max(red, 0.3 * e);
       thin = Math.max(thin, e, 0.35 * near(i, nose, 1.2));
@@ -436,6 +464,8 @@ uniform sampler2D skinDetail;
 uniform float skinTile;
 uniform float skinCoarseTile;
 uniform float skinBump;
+uniform vec3 skinToneGain;
+uniform vec3 skinSssTint;
 uniform vec3 skinFlush;
 uniform vec3 skinWrap;
 uniform vec3 skinTrans;
@@ -482,7 +512,7 @@ const COLOUR = `
 	// Centered at 1.0 on flat skin (rough = 0.5) so care.roughness is the true median matte roughness, rougher inside pores.
 	skinRoughK = ( 1.0 + 0.16 * ( rough - 0.5 ) ) * ( 1.0 + 0.08 * ( mottle - 0.5 ) );
 	float red = clamp( vSkinMask.x + 0.2 * ( mottle - 0.5 ), 0.0, 1.0 );
-	diffuseColor.rgb *= mix( vec3( 1.0 ), skinFlush, red ) * ( 1.0 + 0.045 * ( mottle - 0.5 ) );
+	diffuseColor.rgb *= skinToneGain * mix( vec3( 1.0 ), skinFlush, red ) * ( 1.0 + 0.045 * ( mottle - 0.5 ) );
 	if ( vSkinMask.z > 0.5 ) {
 		diffuseColor.rgb = mix( skinSclera, skinIris, vSkinMask.w );
 		skinDetailN = vec3( 0.0 );
@@ -502,6 +532,9 @@ const NORMAL = `
 const DIRECT = `
 	vec3 skinNL = vec3( dot( geometryNormal, directLight.direction ) );
 	vec3 skinIrr = clamp( ( skinNL + skinWrap ) / ( 1.0 + skinWrap ), 0.0, 1.0 ) * directLight.color * skinSheenComp;
+	// Warm rosy-terracotta subsurface scatter band at the shadow terminator for fair low-melanin skin (0 on medium/deep).
+	float skinTerm = smoothstep( -0.25, 0.15, skinNL.x ) * ( 1.0 - smoothstep( 0.15, 0.65, skinNL.x ) );
+	skinIrr += skinTerm * skinSssTint * directLight.color * skinSheenComp;
 	reflectedLight.directDiffuse += skinIrr * BRDF_Lambert( material.diffuseContribution ) * ( 1.0 - F );
 	// Thin parts: light from behind shows through (a back lobe round the light's direction, bent by the normal).
 	vec3 skinLt = directLight.direction + geometryNormal * 0.4;
@@ -525,6 +558,8 @@ export interface RealisticSkinUniforms {
   skinTile: { value: number };
   skinCoarseTile: { value: number };
   skinBump: { value: number };
+  skinToneGain: { value: THREE.Vector3 };
+  skinSssTint: { value: THREE.Vector3 };
   skinFlush: { value: THREE.Vector3 };
   skinWrap: { value: THREE.Vector3 };
   skinTrans: { value: THREE.Vector3 };
@@ -561,6 +596,8 @@ export function realisticSkinMaterial(hex: string | null): RealisticSkin {
     skinTile: { value: 1 / SKIN_DETAIL.tileCm },
     skinCoarseTile: { value: 1 / SKIN_DETAIL.coarseTileCm },
     skinBump: { value: 0.22 },
+    skinToneGain: { value: new THREE.Vector3(1, 1, 1) },
+    skinSssTint: { value: new THREE.Vector3(0, 0, 0) },
     skinFlush: { value: new THREE.Vector3(1, 1, 1) },
     skinWrap: { value: new THREE.Vector3() },
     skinTrans: { value: new THREE.Vector3() },
@@ -585,7 +622,7 @@ export function realisticSkinMaterial(hex: string | null): RealisticSkin {
       .replace(H.vertexNormal, `${H.vertexNormal}\n\tvSkinObjNormal = objectNormal;`)
       .replace(H.vertexBegin, `${H.vertexBegin}\n\tvSkinPos = transformed;\n\tvSkinMask = skinMask;`);
   };
-  material.customProgramCacheKey = () => 'realistic-skin-v3';
+  material.customProgramCacheKey = () => 'realistic-skin-v3.1';
   const skin: RealisticSkin = {
     material,
     uniforms,
@@ -602,6 +639,8 @@ export function realisticSkinMaterial(hex: string | null): RealisticSkin {
       material.sheen = 0;
       material.sheenRoughness = care.sheenRoughness;
       material.sheenColor.setRGB(...care.sheenColour, THREE.LinearSRGBColorSpace);
+      uniforms.skinToneGain.value.set(...care.toneGain);
+      uniforms.skinSssTint.value.set(...care.sssTint);
       uniforms.skinFlush.value.set(...care.flush);
       uniforms.skinWrap.value.set(...care.wrap);
       uniforms.skinTrans.value.set(...care.trans);

@@ -16,12 +16,26 @@ import { join, resolve } from 'node:path';
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const argv = process.argv.slice(2);
-const prevAt = argv.indexOf('--prev');
-const prevDir = prevAt >= 0 && argv[prevAt + 1] ? resolve(argv[prevAt + 1]) : null;
-const posArgs = argv.filter((a, i) => !a.startsWith('--') && !(prevAt >= 0 && i === prevAt + 1));
+const flag = (name) => {
+  const i = argv.indexOf(name);
+  return i >= 0 && argv[i + 1] ? resolve(argv[i + 1]) : null;
+};
+const prevDir = flag('--prev');
+const v1Dir = flag('--v1') ?? prevDir;
+const v3Dir = flag('--v3');
+const fairDir = flag('--fair');
+const consumed = new Set();
+for (const f of ['--prev', '--v1', '--v3', '--fair']) {
+  const i = argv.indexOf(f);
+  if (i >= 0) {
+    consumed.add(i);
+    if (argv[i + 1]) consumed.add(i + 1);
+  }
+}
+const posArgs = argv.filter((a, i) => !a.startsWith('--') && !consumed.has(i));
 const dir = resolve(posArgs[0] ?? '');
 if (!posArgs[0]) {
-  console.error('usage: node realistic-body-skin-sheets.mjs <dir> [--prev <prevDir>]');
+  console.error('usage: node realistic-body-skin-sheets.mjs <dir> [--prev <v1Dir>] [--v1 <v1Dir>] [--v3 <v3Dir>] [--fair <fairDir>]');
   process.exit(1);
 }
 const TONES = { light: 'Monk 2 #f3e7db', medium: 'Monk 6 #a07e56', deep: 'Monk 9 #3a312a' };
@@ -63,20 +77,20 @@ for (const [tone, label] of Object.entries(TONES)) {
   await page.waitForLoadState('load');
   await page.screenshot({ path: join(dir, `${tone}-sheet.png`), fullPage: true });
 }
-if (prevDir) {
-  const cellFrom = (base, file, caption) => {
-    const f = join(base, `${file}.png`);
-    if (!existsSync(f)) return '';
-    return `<figure><figcaption>${caption}</figcaption><img src="data:image/png;base64,${readFileSync(f).toString('base64')}"></figure>`;
-  };
+const cellFrom = (base, file, caption, w = W, h = H) => {
+  const f = join(base, `${file}.png`);
+  if (!existsSync(f)) return '';
+  return `<figure style="width:${w}px"><figcaption>${caption}</figcaption><img style="width:${w}px;height:${h}px" src="data:image/png;base64,${readFileSync(f).toString('base64')}"></figure>`;
+};
+if (v1Dir && !v3Dir) {
   const cmpRows = Object.entries(TONES).map(([tone, label]) => [
     `${tone}<br><span style="font-weight:400;font-size:12px;opacity:.8">${label}</span>`,
     [
-      cellFrom(prevDir, `${tone}-mid-upper-after`, 'v1 (oud) · close-up'),
+      cellFrom(v1Dir, `${tone}-mid-upper-after`, 'v1 (oud) · close-up'),
       cellFrom(dir, `${tone}-mid-upper-after`, 'v3 (nieuw) · close-up'),
-      cellFrom(prevDir, `${tone}-mid-body-after--front`, 'v1 (oud) · mid front'),
+      cellFrom(v1Dir, `${tone}-mid-body-after--front`, 'v1 (oud) · mid front'),
       cellFrom(dir, `${tone}-mid-body-after--front`, 'v3 (nieuw) · mid front'),
-      cellFrom(prevDir, `${tone}-mid-body-after--three-quarter`, 'v1 (oud) · mid ¾'),
+      cellFrom(v1Dir, `${tone}-mid-body-after--three-quarter`, 'v1 (oud) · mid ¾'),
       cellFrom(dir, `${tone}-mid-body-after--three-quarter`, 'v3 (nieuw) · mid ¾'),
     ],
   ]);
@@ -86,6 +100,60 @@ if (prevDir) {
     <style>figure{margin:0;width:${W}px}figcaption{padding:2px 0 4px;min-height:20px}img{width:${W}px;height:${H}px;display:block}</style></body></html>`);
   await page.waitForLoadState('load');
   await page.screenshot({ path: join(dir, 'v1-vs-v3-sheet.png'), fullPage: true });
+}
+if (v1Dir && v3Dir) {
+  const LW = 290, LH = 628;
+  await page.setViewportSize({ width: 3 * LW + 4 * 14 + 170, height: 800 });
+  const rows3 = Object.entries(TONES).map(([tone, label]) => [
+    `${tone} · ¾<br><span style="font-weight:400;font-size:13px;opacity:.8">${label}</span>${tone === 'light' ? '<br><span style="font-weight:400;font-size:12px;color:#f4c7a8">v3.1 warmed</span>' : '<br><span style="font-weight:400;font-size:12px;opacity:.7">v3 = v3.1 unchanged</span>'}`,
+    [
+      cellFrom(v1Dir, `${tone}-mid-body-after--three-quarter`, 'v1 (oud) · mid ¾', LW, LH),
+      cellFrom(v3Dir, `${tone}-mid-body-after--three-quarter`, 'v3 (mat) · mid ¾', LW, LH),
+      cellFrom(dir, `${tone}-mid-body-after--three-quarter`, 'v3.1 (nieuw) · mid ¾', LW, LH),
+    ],
+  ]);
+  rows3.unshift([
+    `light · close-up<br><span style="font-weight:400;font-size:13px;opacity:.8">${TONES.light}</span>`,
+    [
+      cellFrom(v1Dir, 'light-mid-upper-after', 'v1 (oud) · upper close-up', LW, LH),
+      cellFrom(v3Dir, 'light-mid-upper-after', 'v3 (mat, te wit) · upper close-up', LW, LH),
+      cellFrom(dir, 'light-mid-upper-after', 'v3.1 (warm mat) · upper close-up', LW, LH),
+    ],
+  ]);
+  await page.setContent(`<!doctype html><html><body style="margin:0;background:#1a1612;font:600 15px system-ui;color:#f5efe7">
+    <div style="padding:12px 14px 4px;font-size:17px">ESTIMATE · procedural skin v1 vs v3 vs v3.1 · large ¾ views for all three tones (light, medium, deep) + light close-up · headless Chromium (SwiftShader)</div>
+    ${rows3.map(([name, cells]) => `<div style="display:flex;gap:14px;padding:8px 14px 4px;align-items:flex-start"><div style="width:155px;padding-top:34px">${name}</div>${cells.join('')}</div>`).join('')}
+    <style>figure{margin:0}figcaption{padding:2px 0 6px;min-height:22px}img{display:block}</style></body></html>`);
+  await page.waitForLoadState('load');
+  await page.screenshot({ path: join(dir, 'v1-vs-v3-vs-v31-sheet.png'), fullPage: true });
+}
+if (v3Dir && fairDir) {
+  const LW = 310, LH = 670;
+  await page.setViewportSize({ width: 3 * LW + 4 * 14 + 170, height: 800 });
+  const lightRows = [
+    [
+      'upper close-up<br><span style="font-weight:400;font-size:12px;opacity:.8">cheeks, ears, neck,<br>chest, shadows</span>',
+      [
+        cellFrom(v3Dir, 'light-mid-upper-after', 'v3 · Monk 2 #f3e7db (chalky)', LW, LH),
+        cellFrom(dir, 'light-mid-upper-after', 'v3.1 · Monk 2 #f3e7db (warm ivory)', LW, LH),
+        cellFrom(fairDir, 'fair-mid-upper-after', 'v3.1 · proposed #e6c3ab (natural fair)', LW, LH),
+      ],
+    ],
+    [
+      'mid · ¾ view<br><span style="font-weight:400;font-size:12px;opacity:.8">hands, knees, form,<br>backdrop separation</span>',
+      [
+        cellFrom(v3Dir, 'light-mid-body-after--three-quarter', 'v3 · Monk 2 #f3e7db (chalky)', LW, LH),
+        cellFrom(dir, 'light-mid-body-after--three-quarter', 'v3.1 · Monk 2 #f3e7db (warm ivory)', LW, LH),
+        cellFrom(fairDir, 'fair-mid-body-after--three-quarter', 'v3.1 · proposed #e6c3ab (natural fair)', LW, LH),
+      ],
+    ],
+  ];
+  await page.setContent(`<!doctype html><html><body style="margin:0;background:#1a1612;font:600 15px system-ui;color:#f5efe7">
+    <div style="padding:12px 14px 4px;font-size:17px">ESTIMATE · light skin v3 vs v3.1 (#f3e7db) vs proposed realistic fair swatch (#e6c3ab) · visual look target: BlendKit #1 Human Skin (link-only reference, no asset downloaded)</div>
+    ${lightRows.map(([name, cells]) => `<div style="display:flex;gap:14px;padding:8px 14px 4px;align-items:flex-start"><div style="width:155px;padding-top:34px">${name}</div>${cells.join('')}</div>`).join('')}
+    <style>figure{margin:0}figcaption{padding:2px 0 6px;min-height:22px}img{display:block}</style></body></html>`);
+  await page.waitForLoadState('load');
+  await page.screenshot({ path: join(dir, 'light-comparison-sheet.png'), fullPage: true });
 }
 await browser.close();
 console.log(`sheets in ${dir}`);

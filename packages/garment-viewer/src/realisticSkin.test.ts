@@ -99,6 +99,37 @@ describe('realisticSkinCare: everything comes from the tone value', () => {
     const light = realisticSkinCare(MONK[1]), deep = realisticSkinCare(MONK[8]);
     expect(deep.specularColour[0]).toBeLessThan(light.specularColour[0]);
   });
+
+  it('skin-v3.1 warms pale tones out of chalky clipping while leaving medium and deep tones untouched', () => {
+    const monk1 = realisticSkinCare(MONK[0]);
+    const light = realisticSkinCare(MONK[1]); // #f3e7db (Monk 2)
+    const fair = realisticSkinCare('#e6c3ab');
+    const medium = realisticSkinCare(MONK[5]); // #a07e56 (Monk 6)
+    const deep = realisticSkinCare(MONK[8]); // #3a312a (Monk 9)
+    // Medium and deep are strictly untouched (fair = 0, unit toneGain, zero sssTint).
+    for (const c of [medium, deep]) {
+      expect(c.fair).toBe(0);
+      expect(c.toneGain).toEqual([1, 1, 1]);
+      expect(c.sssTint).toEqual([0, 0, 0]);
+    }
+    // Very pale UI swatches (Monk 1-2) get optical depth + warm peach chroma gain and rosy terminator scatter.
+    for (const c of [monk1, light]) {
+      expect(c.fair).toBeGreaterThan(0.95);
+      expect(c.toneGain[0]).toBeLessThan(1);
+      expect(c.toneGain[2]).toBeLessThan(c.toneGain[1]);
+      expect(c.toneGain[1]).toBeLessThan(c.toneGain[0]);
+      expect(c.sssTint[0]).toBeGreaterThan(c.sssTint[1]);
+      expect(c.sssTint[1]).toBeGreaterThan(c.sssTint[2]);
+      expect(c.sssTint[2]).toBeGreaterThan(0);
+      expect(c.flushDeltaA).toBeGreaterThan(medium.flushDeltaA);
+    }
+    // A realistic fair swatch (#e6c3ab) already carries peach chroma, so its toneGain stays nearly neutral.
+    expect(fair.fair).toBeGreaterThan(0.3);
+    expect(fair.fair).toBeLessThan(0.7);
+    expect(Math.abs(fair.toneGain[0] - fair.toneGain[2])).toBeLessThan(0.05);
+    // D20 single-tone contract: hex is preserved verbatim.
+    expect(light.hex).toBe(MONK[1]);
+  });
 });
 
 describe('the material', () => {
@@ -120,8 +151,15 @@ describe('the material', () => {
     expect(skin.material.roughness).toBeCloseTo(realisticSkinCare('#3a312a').roughness, 6);
     expect(skin.uniforms.skinTrans.value.x).toBeCloseTo(realisticSkinCare('#3a312a').trans[0], 6);
     expect(skin.material.customProgramCacheKey()).toBe(key);
+    skin.setSkin('#f3e7db');
+    expect(skin.material.color.getHexString()).toBe('f3e7db');
+    expect(skin.uniforms.skinToneGain.value.toArray()).toEqual(realisticSkinCare('#f3e7db').toneGain.map((v) => expect.closeTo(v, 6)));
+    expect(skin.uniforms.skinSssTint.value.toArray()).toEqual(realisticSkinCare('#f3e7db').sssTint.map((v) => expect.closeTo(v, 6)));
+    expect(skin.material.customProgramCacheKey()).toBe(key);
     skin.setSkin(null);
     expect(skin.material.color.getHexString()).toBe('8c8c8c');
+    expect(skin.uniforms.skinToneGain.value.toArray()).toEqual([1, 1, 1].map((v) => expect.closeTo(v, 6)));
+    expect(skin.uniforms.skinSssTint.value.toArray()).toEqual([0, 0, 0].map((v) => expect.closeTo(v, 6)));
     expect(skin.uniforms.skinFlush.value.toArray()).toEqual([1, 1, 1].map((v) => expect.closeTo(v, 6)));
     skin.dispose();
   });
@@ -132,6 +170,8 @@ describe('the material', () => {
     skin.material.onBeforeCompile(shader, undefined as unknown as THREE.WebGLRenderer);
     for (const h of [REALISTIC_SKIN_HOOKS.colour, REALISTIC_SKIN_HOOKS.roughness, REALISTIC_SKIN_HOOKS.normal, REALISTIC_SKIN_HOOKS.lightsEnd]) expect(shader.fragmentShader).toContain(h);
     expect(shader.fragmentShader).toContain('skinFlush');
+    expect(shader.fragmentShader).toContain('skinToneGain');
+    expect(shader.fragmentShader).toContain('skinSssTint');
     expect(shader.fragmentShader).toContain('getIBLIrradiance( - geometryNormal )');
     // The direct diffuse is the wrapped one (three's chunk is inlined in place of its include).
     expect(shader.fragmentShader).toContain('skinWrap ) / ( 1.0 + skinWrap )');
@@ -141,7 +181,7 @@ describe('the material', () => {
     expect(skin.material.sheen).toBe(0);
     expect(skin.uniforms.skinSheen.value).toBeCloseTo(realisticSkinCare('#a07e56').sheen, 6);
     expect(shader.vertexShader).toContain('attribute vec4 skinMask;');
-    expect(Object.keys(shader.uniforms)).toEqual(expect.arrayContaining(['skinDetail', 'skinFlush', 'skinWrap', 'skinTrans', 'skinSheen', 'skinSheenColour']));
+    expect(Object.keys(shader.uniforms)).toEqual(expect.arrayContaining(['skinDetail', 'skinToneGain', 'skinSssTint', 'skinFlush', 'skinWrap', 'skinTrans', 'skinSheen', 'skinSheenColour']));
     skin.dispose();
   });
 });

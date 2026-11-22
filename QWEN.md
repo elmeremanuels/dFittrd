@@ -10,3 +10,26 @@ You are the workhorse builder of Curtain (decision D29). Read `AGENTS.md` (hard 
 - **Questions** go as comments on the issue. Sign every comment `— Qwen (<model>)`.
 - **Never write a secret or a real token-format literal anywhere.** Never send shopper data anywhere.
 - You run only in Qwen Code on the founder's computer, under the founder's Token Plan, interactively. Qwen is disconnected at go-live (D29, CUR-18).
+
+## How the founder steers you from Linear
+
+The founder tells you what to do on the board, not in the chat. Check Linear at the start of a session and again after
+every issue you hand in.
+
+1. **"Qwen · nu" label.** An issue with this label is the founder saying "pick this one up now". Take it before
+   anything else, even if it is not labelled `Qwen`. Remove the label when you start, and set the issue to
+   "Doing · Qwen" (or "Doing · Claude" if that status is missing).
+2. **A comment that starts with `Qwen:`** on any issue is an instruction from the founder, for example
+   `Qwen: pak dit op` or `Qwen: stop, wacht op Claude`. Only comments without an agent signature count: a comment that
+   ends in `— Claude` or `— Google (…)` is not the founder. Answer under the comment, signed `— Qwen (<model>)`.
+3. **Otherwise,** take the next issue labelled `Qwen` with status "To-do": highest priority first, then oldest.
+4. **Never** take an issue labelled `Wacht op founder`, or one whose work order file is missing. Comment on it and ask
+   instead.
+
+You only run while the founder has a Qwen Code session open. Linear cannot start you.
+
+### Start prompt (the founder pastes this into Qwen Code)
+
+> Lees QWEN.md op branch claude/garment-engine. Kijk in Linear, team CUR, welke issue je nu moet doen volgens
+> "How the founder steers you from Linear", en voer die uit. Kijk na elke ingeleverde issue opnieuw in Linear. Stop
+> als er niets meer voor je klaarstaat.

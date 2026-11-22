@@ -15,5 +15,6 @@ are cut from `claude/garment-engine`.
 | 005 | CUR-11 | [005](WO-005-privacy-compression.md) | Privacy e2e with the realistic body on; body file compressed | full | Qwen | open | 001 (branch from claude/realistic-body) |
 | 006 | CUR-19 | [006](WO-006-usage-401.md) | Merchant routes answer 401 without a key | light | Qwen | open | — |
 | 007 | CUR-20 | [007](WO-007-woo-chart-rows.md) | WooCommerce chart: no silent cut, same rule as TypeScript | light | Qwen | open | — |
+| 008 | CUR-21 | [008](WO-008-hip-seam.md) | Seam at the hip line of the realistic body | full | Google (Claude if shape) | open | 001 (branch from claude/realistic-body) |
 
 General discussion: Linear issue CUR-17 (Overleg). Questions for the founder carry the label `Wacht op founder`.

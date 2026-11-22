@@ -60,3 +60,46 @@ These do not survive a new container. Clone fresh.
 - `/home/user/dfittrd` is on `claude/realistic-body`.
 - `/home/user/dfittrd-hair` is a worktree on `claude/realistic-hair`.
 - `/home/user/dfittrd-merge` is a worktree on `claude/garment-engine`.
+
+## Update, 22 Nov 2026: Linear, three AI agents, Qwen
+
+**Board.** The board is **Linear**, team **Curtain (CUR)**, workspace `curtainfit`. Claude reaches it through the claude.ai Linear connector, and Google through the Linear MCP server in Antigravity.
+
+| Issues | What | State |
+|---|---|---|
+| CUR-5 to CUR-8 | WO-001 to WO-004 | Todo, with blocking relations set |
+| CUR-9 to CUR-14 | Backlog and nice-to-haves | |
+| CUR-15, CUR-16 | Hair and skin v1 | Done |
+| CUR-17 | Overleg, the general message board | Holds the three open founder questions and a test question for Google |
+| CUR-18 | Disconnect Qwen at go-live | |
+
+- Labels: Claude, Google, Qwen, Wacht op founder, Nice to have, Light model ok.
+- Every comment is posted through the founder's account, so it is signed `— Claude` or `— Google (<model>)`.
+- The founder still has to add the custom workflow statuses. The Linear MCP cannot create them:
+  - rename: To-do, Doing · Claude, Check, Afgerond;
+  - add: Doing · Google, Nice to have.
+  After that the coordinator moves the cards to the right columns.
+- The earlier artifact board (claude.ai/artifact/3seffHbgyz529TV3usNjDF) has been replaced by Linear and is no longer used.
+
+**Roles (D29).**
+- Claude is the manager.
+- Google (Antigravity) is the supervisor and project manager. It works in rounds and never blocks Qwen.
+- Qwen is the workhorse. Claude runs Qwen Code headless in the cloud container.
+- **Qwen is disconnected at go-live:** LAUNCH-RUNBOOK step 0b and CUR-18.
+
+**Qwen setup, not done yet.**
+- Use a **pay-as-you-go** Model Studio key for the Singapore region, host `dashscope-intl.aliyuncs.com`. The key starts with `sk-`.
+- Do **not** use the Token Plan key (`sk-sp-…`). The Token Plan terms forbid non-interactive or automated use.
+- The founder adds the key in the environment settings: Network secrets, host `dashscope-intl.aliyuncs.com`, `Authorization: Bearer`. The request_credential form failed because the session was too long.
+- Next steps:
+  1. Install Qwen Code (`npm i -g @qwen-code/qwen-code`).
+  2. Configure an OpenAI-compatible provider with base URL `https://dashscope-intl.aliyuncs.com/compatible-mode/v1`. Use a dummy key value, because the proxy injects the real one.
+  3. Check which models the key can reach.
+  4. Run a small test on a `qwen/wo-test` branch.
+- Planned models:
+  - qwen4-max for heavy work;
+  - qwen3.8-max for ordinary work;
+  - qwen3.8-flash for light work.
+  These come from the Token Plan list and have not been checked yet for pay-as-you-go.
+
+**Next for the coordinator.** Start CUR-5 (WO-001) once the statuses exist. Then hand CUR-6 and CUR-7 to Google, and give Qwen its first work order.

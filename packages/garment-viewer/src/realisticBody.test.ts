@@ -87,6 +87,30 @@ describe('fitRealisticBody', () => {
   });
 });
 
+describe('arm length (WO-001: the founder found the arms too long, 21 Nov)', () => {
+  // With the arms hanging, the fingertips of an ordinary adult end at about 0.38 × stature (mid-thigh). The ring table
+  // puts the wrist 0.332 × stature down the arm from the shoulder joint and gives the hand 0.108 × stature; until
+  // 22 Nov the fit stretched the hand with the arm and drew it 0.122 × stature long (fingertips about 2.4 cm lower).
+  for (const [name, body] of Object.entries(BODIES)) {
+    it(`${name}: the hand ends at the table's hand length past the wrist ring, not lower`, () => {
+      const m = buildBody({ family: 'female', ...body });
+      const target = fitTargetOf(m);
+      const P = fitRealisticBody(asset, target).mesh.positions;
+      const { joint: j, axis: ax } = target.arms.left;
+      const handCm = 0.108 * m.statureCm;
+      const along = (x: number, y: number, z: number): number => (x - j[0]) * ax[0] + (y - j[1]) * ax[1] + (z - j[2]) * ax[2];
+      const wrist = target.rings.find((r) => r.id === 'wrist')!.centre;
+      const sWrist = along(wrist[0], wrist[1], wrist[2]);
+      let sTip = -Infinity;
+      for (let i = 0; i < P.length / 3; i++) if (P[3 * i]! > 0 && asset.armWeight[i]! >= 0.99) sTip = Math.max(sTip, along(P[3 * i]!, P[3 * i + 1]!, P[3 * i + 2]!));
+      // The drawn hand: within 0.5 cm of the table's (the old fit: +1.9 to +2.2 cm).
+      expect(Math.abs(sTip - sWrist - handCm)).toBeLessThan(0.5);
+      // Hanging straight down from the shoulder joint, the fingertips would end at or above 0.35 × stature (old: 0.341).
+      expect((j[1] - sTip) / m.statureCm).toBeGreaterThan(0.35);
+    });
+  }
+});
+
 describe('conformToField (the display step under a garment)', () => {
   const m = buildBody({ family: 'female', ...BODIES.mid });
   const fit = fitRealisticBody(asset, fitTargetOf(m));

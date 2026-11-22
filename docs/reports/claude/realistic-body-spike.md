@@ -264,6 +264,37 @@ Assumed or not measured:
   use (OI-151); the wide square shoulders of the procedural arm frame (OI-149).
 - The second family (male), the head and face, hair, the AI layer: out of the spike.
 
+## Arms (WO-001, 22 Nov 2026)
+
+The founder found the arms too long (21 Nov). Measured on the five test bodies, before and after, along the ring
+table's arm axis from the shoulder joint (`realisticBody.test.ts`, "arm length"):
+
+| Body | Shoulder joint to wrist ring | Hand before | Hand after (table: 0.108 × stature) | Fingertips if the arm hung straight, before → after |
+|---|---|---|---|---|
+| slim 164 | 54.4 cm (0.332 S) | 20.0 cm (0.122 S) | 17.7 cm | 0.341 S → 0.355 S |
+| mid 168 | 55.8 cm | 20.5 cm | 18.1 cm | 0.341 S → 0.355 S |
+| full 170 | 56.4 cm | 20.8 cm | 18.4 cm | 0.341 S → 0.355 S |
+| tall 182 | 60.4 cm | 22.2 cm | 19.7 cm | 0.341 S → 0.355 S |
+| petite 152 | 50.5 cm | 18.6 cm | 16.4 cm | 0.341 S → 0.355 S |
+
+- **Cause found and fixed:** the fit stretched the whole arm, hand included, by the factor that puts MakeHuman's wrist
+  joint on the wrist ring. The hand came out at 0.122 × stature instead of the table's 0.108, about 2.3 cm too long.
+  The fit now scales the hand past the wrist joint on its own, to the table's hand length (`FitArm.handCm`, from the
+  mannequin's `handCm`). The new test fails on the old fit (hand 2.3 to 2.4 cm over the table's) and passes now.
+- **Not fixed, and why:** the ring table's own arm. Its upper arm and forearm (0.186 and 0.146 × stature) are the usual
+  shoulder-to-wrist proportions measured from the top of the shoulder (acromion), but the table starts them at the
+  shoulder joint, about 0.022 × stature (3.7 cm on the mid body) lower. So the wrist ring sits about that much too low,
+  and the fingertips of a hanging arm end at about 0.355 × stature where an ordinary adult's end at about 0.38
+  (my recollection of published anthropometry; not checked against a source here). That is in `@curtain/mannequin`
+  and moves the wrist ring and the `sleeve` anchor's body length, so it changes sleeve-length advice and every bundle's
+  arm collider: a separate work order (OI-177), not done in this spike.
+- The girth tests stay green (all 12 rings within 0.5 % on the five bodies; the wrist ring is where it was).
+- Pictures, before and after, with the procedural skin and 2B shoulder-length hair on: `docs/screens/claude/realistic-body/arms-before-after.png`
+  (full body, 760 × 900 CSS px at 2×), `arms-mid-before-after.png`, and `arms-hair-before-after.png` (head to waist,
+  three-quarter: the hair still sits on the skinned body after the merge). Script:
+  `spikes/garment-engine/viewer/realistic-body-arms-renders.mjs`. Headless Chromium with SwiftShader.
+- Model: Claude (claude-opus-5-5), full tier.
+
 ## Licence provenance
 
 Every asset taken, with its source URL, commit, sha256 and the licence quoted from its own file:

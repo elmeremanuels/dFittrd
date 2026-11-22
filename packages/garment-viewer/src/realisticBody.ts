@@ -174,7 +174,15 @@ export interface FitArm {
   joint: V3;
   /** Unit axis towards the hand. */
   axis: V3;
+  /**
+   * Wrist to fingertip along the axis (cm): the ring table's hand (0.108 × stature, the mannequin's `handCm`). Absent:
+   * 0.108 × the target's stature.
+   */
+  handCm?: number;
 }
+
+/** Hand length as a share of stature (wrist to fingertip; the mannequin's `HAND`, ordinary human proportion). */
+export const HAND_SHARE = 0.108;
 
 export interface FitTarget {
   statureCm: number;
@@ -202,7 +210,7 @@ export function fitTargetOf(m: Mannequin, girths?: Partial<Record<AnchorRing, nu
       v: [...r.v] as V3,
     };
   });
-  const arm = (f: Mannequin['arms']['left']): FitArm => ({ joint: [...f.joint] as V3, axis: [...f.axis] as V3 });
+  const arm = (f: Mannequin['arms']['left']): FitArm => ({ joint: [...f.joint] as V3, axis: [...f.axis] as V3, handCm: f.handCm });
   return { statureCm: m.statureCm, crotchY: m.landmarks.crotch[1], rings, arms: { left: arm(m.arms.left), right: arm(m.arms.right) } };
 }
 
@@ -549,7 +557,9 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
     B[3 * i + 2] = B[3 * i + 2]! + (1 - l) * tdz(y) + l * ldz(y);
   }
 
-  // 4. Arms: rigid onto the table's frame, stretched along the axis so the wrist joint lands at the wrist ring.
+  // 4. Arms: rigid onto the table's frame, stretched along the axis so the wrist joint lands at the wrist ring, and the
+  //    hand (past the wrist joint) scaled on its own to the table's hand length. Until 22 Nov the hand took the arm's
+  //    stretch and came out at 0.122 × stature instead of 0.108, so the fingertips hung about 2.4 cm too low (WO-001).
   const A = new Float64Array(3 * n);
   const armS = new Float64Array(n);
   const sides: { side: 1 | -1; frame: FitArm }[] = [{ side: 1, frame: target.arms.left }, { side: -1, frame: target.arms.right }];
@@ -564,14 +574,21 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
     const a0 = unit(d0);
     const R = rotationBetween(a0, frame.axis);
     const stretch = sWrist / len0;
+    // MakeHuman's own hand: from its wrist joint to the farthest arm vertex along its arm axis.
+    let tip0 = len0;
+    for (let i = 0; i < n; i++) {
+      if (Math.sign(P[3 * i]!) !== side || asset.armWeight[i]! < 0.5) continue;
+      tip0 = Math.max(tip0, dot3([P[3 * i]! - j0[0], P[3 * i + 1]! - j0[1], P[3 * i + 2]! - j0[2]], a0));
+    }
+    const handK = tip0 > len0 ? (frame.handCm ?? HAND_SHARE * target.statureCm) / (tip0 - len0) : stretch;
     for (let i = 0; i < n; i++) {
       const x = P[3 * i]!;
       if (Math.sign(x) !== side || asset.armWeight[i] === 0) continue;
       const rel: V3 = [x - j0[0], P[3 * i + 1]! - j0[1], P[3 * i + 2]! - j0[2]];
       const along = dot3(rel, a0);
-      // Stretch only the part along the axis below the joint.
-      const k = along > 0 ? stretch : 1;
-      const moved = mul(R, [rel[0] + a0[0] * along * (k - 1), rel[1] + a0[1] * along * (k - 1), rel[2] + a0[2] * along * (k - 1)]);
+      // Stretch only the part along the axis below the shoulder joint; past the wrist joint, the hand's own scale.
+      const to = along <= 0 ? along : along <= len0 ? along * stretch : sWrist + (along - len0) * handK;
+      const moved = mul(R, [rel[0] + a0[0] * (to - along), rel[1] + a0[1] * (to - along), rel[2] + a0[2] * (to - along)]);
       A[3 * i] = frame.joint[0] + moved[0];
       A[3 * i + 1] = frame.joint[1] + moved[1];
       A[3 * i + 2] = frame.joint[2] + moved[2];

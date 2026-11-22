@@ -82,3 +82,7 @@ The spike's own page (`index.html`) takes the same three look parameters: `skin=
 ### The realistic body spike (`realistic-body-renders.mjs`)
 
 `body=realistic` on `avatar.html` draws the realistic body spike (`MountOptions.bodyShape: 'realistic-spike'` of the shipped viewer; with `mode=head`, the same fit on the body alone). `node spikes/garment-engine/viewer/realistic-body-renders.mjs <out dir>` renders the five test bodies before (procedural body, head neutral-v3) and after, alone and in the evaluated azure dress, at 390 × 844, and times the frames while the view is dragged round (headless Chromium, SwiftShader on the CPU; not a phone). Report: `docs/reports/claude/realistic-body-spike.md`.
+
+### The realistic hair (`realistic-hair-renders.mjs`, D28)
+
+With `body=realistic`, `hair=<1|2A|…|4C>&hairLength=<short|chin|shoulder|long>&hairColour=<palette id or rrggbb>` draws the realistic hair (`MountOptions.hair`; with `mode=head` the same `createHair` on the body alone). `frame=upper` frames head to waist; `nobody=1` hides the body (the empty-stage frame time). `node spikes/garment-engine/viewer/realistic-hair-renders.mjs <out dir> [--jobs 2]` renders all 40 combinations front and back three-quarter on the mid body, type 2B in the ten colours, three combinations in the azure dress, and times the frames per type group and length; `realistic-hair-sheets.mjs <out dir> [<sheet dir>]` composes the sheets. Report: `docs/reports/claude/realistic-hair.md`.

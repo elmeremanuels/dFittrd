@@ -25,6 +25,7 @@ import type { FaceTexture } from './faceOverlay';
 import { skinShadingOf, type SkinShading } from './skin';
 import { Figure, Stage, lightingOf, meshGeometry, parseSkinHex, renderPasses, type Lighting, type LookExtras } from './scene';
 import { neighbourSize, PASS_HEIGHT, PASS_WIDTH, type ExportPassesOptions, type ViewerPasses } from './passes';
+import { hairOf, hairTag, type HairChoice, type HairOptions } from './hairOptions';
 
 export type GarmentViewState = 'loading' | 'draping' | 'settled' | 'error';
 
@@ -139,6 +140,14 @@ export interface MountOptions {
    * body's lazy chunk; nothing more is fetched. `canvas.dataset.bodySkin` says `procedural-skin` while it is drawn.
    */
   realisticSkin?: boolean;
+  /**
+   * With `bodyShape: 'realistic-spike'` only (D28): the shopper's hair, one of ten types (`1`, `2A` … `4C`), four lengths
+   * (`short`, `chin`, `shoulder`, `long`; for 3C to 4C a length is also a volume) and a colour (a palette id of
+   * `HAIR_COLOURS` or `#rrggbb`). Built on the device on the fitted head (`realisticHair.ts`, a lazy chunk, no request)
+   * once the realistic body is drawn. Absent, invalid or with any other body: bald, as before. A display value only,
+   * chosen by the shopper: this package never stores or sends it, and the AI-layer passes are drawn without it.
+   */
+  hair?: HairOptions;
 }
 
 export type BodyShapeKind = 'procedural' | 'realistic-spike';
@@ -147,6 +156,14 @@ export type BodyShapeKind = 'procedural' | 'realistic-spike';
 export function bodyShapeOf(value: unknown): BodyShapeKind {
   return value === 'realistic-spike' ? value : 'procedural';
 }
+
+/** The hair to draw: only a valid `hair` with the realistic body (female family only, `startRealisticBody`), else null. */
+export function realisticHairOf(opts: Pick<MountOptions, 'bodyShape' | 'hair'>): HairChoice | null {
+  return bodyShapeOf(opts.bodyShape) === 'realistic-spike' ? hairOf(opts.hair) : null;
+}
+
+/** The name of the hair's group in the figure (`realisticHairDraw.ts`); kept here so the mount needs no hair code. */
+const HAIR_GROUP = 'curtain-hair';
 
 export interface GarmentView {
   /** Show another size (drapes it if needed). Returns false when the bundle has no such size. */
@@ -659,13 +676,38 @@ function startRealisticBody(canvas: HTMLCanvasElement, opts: MountOptions, plan:
   const none = { stop() {}, garmentShown() {} };
   if (bodyShapeOf(opts.bodyShape) !== 'realistic-spike' || plan.drawn.shape.family !== 'female') return none;
   canvas.dataset.body = 'realistic-loading';
+  const hair = realisticHairOf(opts);
   let live = true;
+  let hairView: { dispose(): void } | null = null;
+  let hairStarted = false;
+  // The hair (D28), once the body is drawn: the hair's own lazy chunk, built on the fitted (plain) mesh's head (the
+  // conformed body has the same head); the asset's weights come from the loader's cache (no second GET).
+  const startHair = (plain: THREE.BufferGeometry, choice: HairChoice): void => {
+    hairStarted = true;
+    canvas.dataset.hair = 'loading';
+    const ringY = (id: string): number => plan.drawn.rings.find((x) => x.id === id)?.centre[1] ?? 0;
+    const positions = plain.getAttribute('position').array as ArrayLike<number>;
+    const indices = plain.getIndex()?.array as ArrayLike<number>;
+    void Promise.all([import('./realisticBodyLoad').then((m) => m.loadRealisticBody(fetchFn, opts.realisticBodyUrl)), import('./realisticHairDraw')])
+      .then(([asset, h]) => {
+        if (!live) return;
+        const v = h.createHair({ positions, indices, headWeight: asset.headWeight, armWeight: asset.armWeight, bodyVertexCount: asset.meta.bodyVertexCount, ringY: { shoulder: ringY('shoulder'), chest: ringY('chest'), underbust: ringY('underbust') } }, choice);
+        figure.group.add(v.group);
+        hairView = v;
+        canvas.dataset.hair = v.build.simpler ? `${hairTag(choice)} (simpler)` : hairTag(choice);
+        redraw();
+      })
+      .catch(() => {
+        if (live) canvas.dataset.hair = 'failed';
+      });
+  };
   let shown = true;
   let bodies: { plain: THREE.BufferGeometry; conformed: THREE.BufferGeometry | null } | null = null;
   // `realisticSkin`: the procedural skin and the studio light, put on when the body is swapped in.
   let look: { dispose(): void } | null = null;
   const show = (): void => {
     if (!bodies) return;
+    if (hair && !hairStarted) startHair(bodies.plain, hair);
     const g = shown && bodies.conformed ? bodies.conformed : bodies.plain;
     if (figure.body.geometry === g) return;
     figure.setBody(g);
@@ -709,6 +751,8 @@ function startRealisticBody(canvas: HTMLCanvasElement, opts: MountOptions, plan:
       look = null;
       // The geometry on screen goes with the figure; the other one here.
       for (const g of bodies ? [bodies.plain, bodies.conformed] : []) if (g && g !== figure.body.geometry) g.dispose();
+      hairView?.dispose();
+      hairView = null;
     },
     garmentShown(v) {
       shown = v;
@@ -721,17 +765,25 @@ function startRealisticBody(canvas: HTMLCanvasElement, opts: MountOptions, plan:
 function passesOf(stage: Stage, figure: Figure, plan: AvatarPlan, garmentHex: string, size: string, pos: Float32Array, neighbour: { size: string; pos: Float32Array } | null, o: ExportPassesOptions | undefined): ViewerPasses {
   const ring = (id: string): number => plan.m.rings.find((r) => r.id === id)?.centre[1] ?? 0;
   const stature = plan.statureCm || plan.m.statureCm;
-  return renderPasses(stage, figure, {
-    width: o?.width ?? PASS_WIDTH,
-    height: o?.height ?? PASS_HEIGHT,
-    statureCm: stature,
-    waistY: ring('waist'),
-    hipY: ring('hip'),
-    neighbour,
-    current: pos,
-    size,
-    garmentHex,
-  });
+  // The shopper's hair is not part of what goes to the AI layer: the passes are drawn without it.
+  const hair = figure.group.getObjectByName(HAIR_GROUP);
+  const hairShown = hair?.visible ?? false;
+  if (hair) hair.visible = false;
+  try {
+    return renderPasses(stage, figure, {
+      width: o?.width ?? PASS_WIDTH,
+      height: o?.height ?? PASS_HEIGHT,
+      statureCm: stature,
+      waistY: ring('waist'),
+      hipY: ring('hip'),
+      neighbour,
+      current: pos,
+      size,
+      garmentHex,
+    });
+  } finally {
+    if (hair) hair.visible = hairShown;
+  }
 }
 
 export type { BodyMeasurements, BodyOptions };

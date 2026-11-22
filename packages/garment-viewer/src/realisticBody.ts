@@ -371,6 +371,16 @@ export interface FitOptions {
   iterations?: number;
   /** `false` leaves the arm sections where the rigid placement puts them (for the negative control of the centre test). */
   centreArms?: boolean;
+  /**
+   * The front-to-back (Z) centring at the hip ring. `'centred'` (default): the hip section is centred on the ring's
+   * centre on its own, which pulls the pelvis 2 to 4 cm forward of the waist and the thighs and draws a shelf across the
+   * body at the hip line (CUR-21). `'smooth'` (WO-008): the hip's Z offset is the straight line between the waist's and
+   * the thigh's, so MakeHuman's own curve of seat and lower back is kept and the shelf goes; but the hip section then
+   * lies 2.6 to 5.8 cm off the ring table's centre line, so the skin sits further outside the garments' collision field
+   * (conformed hip 1.5 to 2.7 % under the typed girth). Waiting on the founder's choice (CUR-21) or on a collider sliced
+   * from the realistic mesh (CUR-9, OI-143).
+   */
+  hipZ?: 'smooth' | 'centred';
 }
 
 export interface RingResult {
@@ -546,6 +556,18 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
     legKnotsX.push({ x: rr.centre[1], y: -s.cu });
     legKnotsZ.push({ x: rr.centre[1], y: -s.cv });
   }
+  const hipSmooth = (options.hipZ ?? 'centred') === 'smooth';
+  // The hip's Z offset on the line between the waist's and the thigh's (WO-008): see `FitOptions.hipZ`.
+  const hipZBetween = (waistDz: number, thighDz: number): number => {
+    const t = (h('hip') - h('thigh')) / (h('waist') - h('thigh'));
+    return thighDz + t * (waistDz - thighDz);
+  };
+  if (hipSmooth) {
+    const hk = torsoKnots.find((k) => k.x === h('hip'));
+    const wk = torsoKnots.find((k) => k.x === h('waist'));
+    const tk = legKnotsZ.find((k) => k.x === h('thigh'));
+    if (hk && wk && tk) hk.y = hipZBetween(wk.y, tk.y);
+  }
   const tdz = monotoneProfile(torsoKnots), tdx = monotoneProfile(torsoKnotsX);
   const ldx = monotoneProfile(legKnotsX), ldz = monotoneProfile(legKnotsZ);
   const legCentreX = monotoneProfile(legRings.map((r) => ({ x: h(r), y: ring.get(r)!.centre[0] })));
@@ -685,6 +707,12 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
         tc.dx -= s.au;
         tc.dz -= s.av;
       }
+    }
+    if (hipSmooth) {
+      const hc = torsoCentre.find((c) => c.ring === 'hip')!;
+      const wc = torsoCentre.find((c) => c.ring === 'waist')!;
+      const tcz = legCentre.find((c) => c.ring === 'thigh')!;
+      hc.dz = hipZBetween(wc.dz, tcz.dz);
     }
     if (options.centreArms !== false) {
       for (const a of armFix) {

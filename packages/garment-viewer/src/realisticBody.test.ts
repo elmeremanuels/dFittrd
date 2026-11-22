@@ -111,6 +111,43 @@ describe('arm length (WO-001: the founder found the arms too long, 21 Nov)', () 
   }
 });
 
+describe('hip line (WO-008, CUR-21: the lower body looked glued to the torso)', () => {
+  // The mean upward lean of the front skin between the hip and the waist ring (0: upright, 1: a flat upward shelf). With
+  // the hip section centred on its own (`hipZ: 'centred'`, still the default) it is 0.18 to 0.23 on the five bodies;
+  // with the hip's Z offset on the line between waist and thigh (`hipZ: 'smooth'`) it is about 0.
+  const meanFrontLean = (fit: FitResult, lo: number, hi: number): number => {
+    const P = fit.mesh.positions, I = fit.mesh.indices;
+    const n = P.length / 3;
+    const N = new Float64Array(3 * n);
+    for (let t = 0; t < I.length; t += 3) {
+      const a = I[t]!, b = I[t + 1]!, c = I[t + 2]!;
+      const u = [P[3 * b]! - P[3 * a]!, P[3 * b + 1]! - P[3 * a + 1]!, P[3 * b + 2]! - P[3 * a + 2]!];
+      const v = [P[3 * c]! - P[3 * a]!, P[3 * c + 1]! - P[3 * a + 1]!, P[3 * c + 2]! - P[3 * a + 2]!];
+      const nn = [u[1]! * v[2]! - u[2]! * v[1]!, u[2]! * v[0]! - u[0]! * v[2]!, u[0]! * v[1]! - u[1]! * v[0]!];
+      for (const k of [a, b, c]) for (let d = 0; d < 3; d++) N[3 * k + d] += nn[d]!;
+    }
+    let sum = 0, count = 0;
+    for (let i = 0; i < n; i++) {
+      const y = P[3 * i + 1]!;
+      if (y < lo || y > hi || P[3 * i + 2]! < 2 || asset.armWeight[i]! > 0.1) continue;
+      const l = Math.hypot(N[3 * i]!, N[3 * i + 1]!, N[3 * i + 2]!);
+      if (!l) continue;
+      sum += N[3 * i + 1]! / l;
+      count++;
+    }
+    return sum / count;
+  };
+  for (const [name, body] of Object.entries(BODIES)) {
+    it(`${name}: with hipZ 'smooth' the front between hip and waist stands upright (mean lean under 0.1; centred: over 0.15)`, () => {
+      const target = targetOf(body);
+      const y = (id: string): number => target.rings.find((r) => r.id === id)!.centre[1];
+      expect(meanFrontLean(fitRealisticBody(asset, target, { hipZ: 'smooth' }), y('hip'), y('waist'))).toBeLessThan(0.1);
+      // Negative control: the old centring is caught by the same measure.
+      expect(meanFrontLean(fitRealisticBody(asset, target, { hipZ: 'centred' }), y('hip'), y('waist'))).toBeGreaterThan(0.15);
+    });
+  }
+});
+
 describe('conformToField (the display step under a garment)', () => {
   const m = buildBody({ family: 'female', ...BODIES.mid });
   const fit = fitRealisticBody(asset, fitTargetOf(m));

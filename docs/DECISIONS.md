@@ -247,3 +247,18 @@ Founder, 22 Nov 2026. The build work is split across three AI agents.
 - Qwen runs in Qwen Code on the founder's computer. It takes its issues from Linear itself, like Google in Antigravity, and Linear stays the single point of control.
 - Running Qwen from the cloud needs either a pay-as-you-go key on `maas.qwencloudapi.com`, or written permission from Alibaba.
 
+
+## D30 — Base layer, tape girth, and the view per garment
+
+Founder, 22 Nov 2026, answering the open questions on CUR-17.
+
+1. **The realistic body always wears a plain base layer in the live 3D view:** a simple fitted vest (tank top) and plain briefs, in one neutral colour.
+   - Nipples and the genital area are never drawn bare.
+   - The garment being tried on replaces the base layer where it covers it: a top replaces the vest, and a skirt, trousers or a dress replaces the briefs.
+   - The base layer has no brand, print or texture taken from any third party.
+2. **In the final AI-layer render (D27), nipples may show faintly through thin fabric, as they would in real life.** This is tasteful and never explicit. It is part of the AI-layer prompt and is reviewed when that layer is built. It does not apply to the live 3D view.
+3. **Girth is measured like a tape measure (OI-141).** At chest and hip the fit uses the tape girth, the convex hull of the section. Elsewhere the loop girth stays. This follows the coordinator's advice.
+4. **The starting view depends on the item being tried on.**
+   - Each garment type has its own default camera angle. For example, three-quarter for dresses and tops, and front or back where a garment's detail calls for it.
+   - A merchant can override it per product later.
+   - The shopper can always rotate.

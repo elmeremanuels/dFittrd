@@ -30,7 +30,7 @@ function curtain_sample_post(): array {
 		'size_chart'           => array(
 			array( 'size' => 'XS', 'bust' => '84', 'waist' => '64', 'hip' => '92', 'shoulder' => '36', 'thigh' => '0', 'inseam' => '' ),
 			array( 'size' => 'S', 'bust' => '88', 'waist' => '68', 'hip' => '96', 'shoulder' => '37' ),
-			array( 'size' => '', 'bust' => '99' ),
+			array( 'size' => '', 'bust' => '' ), // completely empty row (form artefact, ignored)
 		),
 		'size_chart_type'      => 'body',
 		'sizing_notes'         => "runs small\n<script>x</script>",

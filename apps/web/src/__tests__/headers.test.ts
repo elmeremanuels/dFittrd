@@ -80,7 +80,7 @@ const APP_BLOCK = [
   '@nocache path /index.html /sw.js /manifest.webmanifest /version.json',
   'header @nocache Cache-Control "no-cache"',
   'try_files {path} /index.html',
-  'file_server',
+  'file_server { … }',
 ];
 
 /** Everything `app.{$DOMAIN}` sends on a path matched by `matcher`: the imported snippets plus the matcher's own block. */

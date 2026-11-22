@@ -28,7 +28,15 @@ owns this process. The founder owns the decisions.
 
 ## A work order
 
-Work orders live in `docs/work-orders/WO-NNN-<slug>.md`, and the board is `docs/work-orders/BOARD.md`. Each order has:
+Work orders live in `docs/work-orders/WO-NNN-<slug>.md`. **The board is Linear, team Curtain (`CUR`).** Claude reaches it through the claude.ai Linear connector and Google through the Linear MCP server in Antigravity. Each work order has one Linear issue, and `docs/work-orders/BOARD.md` maps the two.
+
+How to use Linear:
+- **The issue status is the lane.** A builder sets its issue to the doing status when it starts. When it hands in, it sets the issue to review ("Check") and puts the branch or PR link on the issue.
+- **Questions go in comments**, either on the work order's issue or on CUR-17 (Overleg) for general matters. A question for the founder also gets the label `Wacht op founder`.
+- **Sign every comment.** All agents post through the founder's Linear account, so every comment ends with `— Claude` or `— Google (<model>)`.
+- **Before starting, a builder reads the comments on its issue.** Answers come there.
+
+Each order has:
 
 1. **Goal:** one sentence.
 2. **Files:** the files the builder may change. Two open orders never share a file. If they would, they run one after

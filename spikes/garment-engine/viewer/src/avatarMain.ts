@@ -134,7 +134,7 @@ async function garmentMode(): Promise<void> {
     const conformed = canvas.dataset.body === 'realistic-conformed';
     const girths = realistic ? (conformed ? canvas.dataset.bodyGirthsConformed : canvas.dataset.bodyGirths) : '';
     const drawnGirths = girths ? ` · typed chest ${meas.bust} · waist ${meas.waist} · hip ${meas.hip}; drawn ${conformed ? '(conformed) ' : ''}${girths}` : '';
-    tag.textContent = `ESTIMATE · ${garment.name} · size ${canvas.dataset.size ?? size}${notDrawn} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · ${realistic ? `body realistic-spike${params.get('conform') === '0' ? ' (not conformed)' : ''}` : `head ${head}`} · shading ${shading}${skinLookTag}${drawnGirths}`;
+    tag.textContent = `ESTIMATE · ${garment.name} · size ${canvas.dataset.size ?? size}${notDrawn} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · ${realistic ? `body realistic-spike${params.get('conform') === '0' ? ' (not conformed)' : ''}` : `head ${head}`}${hair ? ` · hair ${canvas.dataset.hair ?? 'none'}` : ''} · shading ${shading}${skinLookTag}${drawnGirths}`;
   };
   retag();
   new MutationObserver(retag).observe(canvas, { attributes: true, attributeFilter: ['data-body', 'data-garment', 'data-size', 'data-body-girths', 'data-body-girths-conformed', 'data-hair'] });
@@ -258,7 +258,7 @@ async function headMode(): Promise<void> {
     stage.controls.minDistance = 20;
     stage.controls.update();
   }
-  tag.textContent = `ESTIMATE · ${family} body alone${maleShape ? ' (shape v2)' : ''}${realistic ? ' · body realistic-spike' : ` · head ${head}`} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · shading ${shading}${skinLookTag}${girths}`;
+  tag.textContent = `ESTIMATE · ${family} body alone${maleShape ? ' (shape v2)' : ''}${realistic ? ' · body realistic-spike' : ` · head ${head}`}${hairInfo} · lighting ${lighting}${extrasTag ? ` (${extrasTag})` : ''} · skin ${skin ?? 'default grey'} · shading ${shading}${skinLookTag}${girths}`;
   let frames = 0;
   // `render=demand`: draw only while the controls move or damp out (pictures on a shared, software-rendered machine);
   // by default every animation frame, as the frame-time measurements need.

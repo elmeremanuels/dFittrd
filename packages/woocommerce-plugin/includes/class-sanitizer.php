@@ -129,16 +129,15 @@ final class Sanitizer {
 		$meta['_curtain_length_cm'] = $lengths ? self::json( $lengths ) : null;
 
 		// -- size chart -----------------------------------------------------------------------
-		$rows = array();
+		$rows          = array();
+		$chart_too_big = false;
+		$chart_rejected = false;
 		foreach ( (array) ( $in['size_chart'] ?? array() ) as $row ) {
 			if ( ! is_array( $row ) ) {
 				continue;
 			}
 			$size = self::text( $row['size'] ?? '', Vocab::SIZE_LABEL_MAX );
-			if ( '' === $size ) {
-				continue;
-			}
-			$r = array( 'size' => $size );
+			$r    = array();
 			foreach ( Vocab::SIZE_ROW_COLUMNS as $col ) {
 				if ( 'size' === $col ) {
 					continue;
@@ -148,9 +147,22 @@ final class Sanitizer {
 					$r[ $col ] = $n;
 				}
 			}
-			$rows[] = $r;
+			// A completely empty row (no size, no measurements) is a form artefact, not a chart row.
+			if ( '' === $size && ! $r ) {
+				continue;
+			}
+			// A row with measurements but no label: TypeScript refuses the whole chart (OI-89).
+			if ( '' === $size && $r ) {
+				$chart_rejected = true;
+				continue;
+			}
+			$r['size'] = $size;
+			$rows[]    = $r;
 		}
-		$rows = array_slice( $rows, 0, Vocab::SIZE_CHART_MAX_ROWS );
+		// More than 60 rows: refuse the chart with a notice, never truncate silently (OI-87).
+		if ( count( $rows ) > Vocab::SIZE_CHART_MAX_ROWS ) {
+			$chart_too_big = true;
+		}
 		// Men's charts (men-3d-plan M2): W/L sizes carry their axes, read from the "32/34" label.
 		$wl = 'wl' === self::text( $in['size_axes'] ?? '' );
 		if ( $wl ) {
@@ -190,7 +202,15 @@ final class Sanitizer {
 			'warnings' => $chart_check['warnings'],
 			'input'    => null,
 		);
-		if ( $chart_check['errors'] ) {
+		// OI-87: a chart of more than 60 rows is refused with a notice, never silently truncated.
+		if ( $chart_too_big ) {
+			$chart['errors'][] = 'A size chart has at most ' . Vocab::SIZE_CHART_MAX_ROWS . ' rows; this chart has ' . count( $rows ) . '.';
+		}
+		// OI-89: a row with measurements but no size label refuses the whole chart (same rule as TypeScript).
+		if ( $chart_rejected ) {
+			$chart['errors'][] = 'A size chart row has measurements but no size label; every row with measurements needs a label.';
+		}
+		if ( $chart['errors'] ) {
 			// Nothing of the chart is saved; what was typed comes back with the messages.
 			unset( $meta['_curtain_size_chart'], $meta['_curtain_size_chart_type'], $meta['_curtain_sleeve_convention'] );
 			$chart['input'] = array(

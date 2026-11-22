@@ -564,22 +564,21 @@ final class Payload_Builder {
 				continue;
 			}
 			$size = self::coerce_string( $row['size'] ?? $row['label'] ?? $row['name'] ?? null );
-			if ( null === $size ) {
-				continue;
-			}
-			$r = array( 'size' => $size );
+			// Collect measurements to check if this is an empty row or a row with data but no label.
+			$measurements = array();
 			foreach ( array( 'bust', 'waist', 'hip', 'shoulder', 'thigh', 'inseam', 'neck', 'sleeve', 'footEu', 'footLengthCm', 'length', 'rise' ) as $p ) {
 				$n = self::coerce_number( $row[ $p ] ?? null );
 				if ( null !== $n ) {
-					$r[ $p ] = self::num( $n );
+					$measurements[ $p ] = self::num( $n );
 				}
 			}
 			// Two-dimensional sizes (W/L, slice M2b): kept as given, never derived from the label.
+			$axes = null;
 			if ( isset( $row['axes'] ) && is_array( $row['axes'] ) && ! array_is_list( $row['axes'] ) ) {
 				$waist = self::coerce_string( $row['axes']['waist'] ?? null );
 				$leg   = self::coerce_string( $row['axes']['leg'] ?? null );
 				if ( null !== $waist || null !== $leg ) {
-					$r['axes'] = array(
+					$axes = array(
 						'waist' => $waist,
 						'leg'   => $leg,
 					);
@@ -596,12 +595,28 @@ final class Payload_Builder {
 				array( 'footLengthCm', 'foot_length_cm' ),
 			);
 			foreach ( $aliases as list( $canon, $alias ) ) {
-				if ( ! isset( $r[ $canon ] ) ) {
+				if ( ! isset( $measurements[ $canon ] ) ) {
 					$n = self::coerce_number( $row[ $alias ] ?? null );
 					if ( null !== $n ) {
-						$r[ $canon ] = self::num( $n );
+						$measurements[ $canon ] = self::num( $n );
 					}
 				}
+			}
+			// A row with measurements (or axes) but no label: refuse the whole chart (OI-89, same as TypeScript).
+			if ( null === $size && ( $measurements || $axes ) ) {
+				$this->warn( '_curtain_size_chart', 'sizeChart', 'a row has measurements but no size label; every row with measurements needs a label' );
+				return null;
+			}
+			// A completely empty row (no label, no measurements, no axes) is skipped.
+			if ( null === $size && ! $measurements && ! $axes ) {
+				continue;
+			}
+			$r = array( 'size' => $size );
+			foreach ( $measurements as $p => $n ) {
+				$r[ $p ] = $n;
+			}
+			if ( null !== $axes ) {
+				$r['axes'] = $axes;
 			}
 			$out[] = $r;
 		}

@@ -152,3 +152,88 @@ test(
 		assert_same( array(), Payload_Builder::missing_heavy_fields( $b['payload'] ) );
 	}
 );
+
+test(
+	'size chart of 61 rows is refused with a notice, never silently truncated (OI-87)',
+	static function (): void {
+		$rows = array();
+		for ( $i = 1; $i <= 61; $i++ ) {
+			$rows[] = array( 'size' => (string) $i, 'bust' => (string) ( 80 + $i ) );
+		}
+		$r = Sanitizer::from_post( array( 'size_chart' => $rows, 'size_chart_type' => 'body' ) );
+		// The chart is refused: errors contain the row limit notice.
+		assert_true( count( $r['chart']['errors'] ) > 0, 'chart with 61 rows must have an error' );
+		assert_true(
+			false !== array_search( true, array_map( static fn( $e ) => str_contains( $e, 'at most 60 rows' ), $r['chart']['errors'] ) ),
+			'error must mention the 60-row limit'
+		);
+		// The chart is not saved.
+		assert_true( ! isset( $r['meta']['_curtain_size_chart'] ), 'chart must not be saved when too big' );
+	}
+);
+
+test(
+	'size chart row with measurements but no label refuses the whole chart (OI-89)',
+	static function (): void {
+		$rows = array(
+			array( 'size' => 'S', 'bust' => '88' ),
+			array( 'size' => '', 'bust' => '92' ), // measurements but no label
+			array( 'size' => 'L', 'bust' => '96' ),
+		);
+		$r = Sanitizer::from_post( array( 'size_chart' => $rows, 'size_chart_type' => 'body' ) );
+		// The chart is refused.
+		assert_true( count( $r['chart']['errors'] ) > 0, 'chart with a labelless row must have an error' );
+		assert_true(
+			false !== array_search( true, array_map( static fn( $e ) => str_contains( $e, 'no size label' ), $r['chart']['errors'] ) ),
+			'error must mention the missing label'
+		);
+		// The chart is not saved.
+		assert_true( ! isset( $r['meta']['_curtain_size_chart'] ), 'chart must not be saved when a row has no label' );
+	}
+);
+
+test(
+	'size chart row with every field blank is still ignored (form artefact)',
+	static function (): void {
+		$rows = array(
+			array( 'size' => 'M', 'bust' => '90' ),
+			array( 'size' => '', 'bust' => '', 'waist' => '' ), // completely empty
+			array( 'size' => 'L', 'bust' => '96' ),
+		);
+		$r = Sanitizer::from_post( array( 'size_chart' => $rows, 'size_chart_type' => 'body' ) );
+		// No chart error from the empty row.
+		assert_true(
+			false === array_search( true, array_map( static fn( $e ) => str_contains( $e, 'no size label' ), $r['chart']['errors'] ) ),
+			'empty row must not trigger the no-label error'
+		);
+		// The chart is saved with only the two valid rows.
+		$chart = json_decode( $r['meta']['_curtain_size_chart'], true );
+		assert_same( 2, count( $chart ), 'empty row must be ignored, not saved' );
+		assert_same( 'M', $chart[0]['size'] );
+		assert_same( 'L', $chart[1]['size'] );
+	}
+);
+
+test(
+	'Payload_Builder refuses a chart with a row that has measurements but no label (OI-89)',
+	static function (): void {
+		$chart = array(
+			array( 'size' => 'S', 'bust' => 88 ),
+			array( 'bust' => 92 ), // no label, has measurements
+		);
+		$b = Payload_Builder::build(
+			array( 'id' => 1, 'name' => 'Test' ),
+			array(
+				'_curtain_size_chart'      => json_encode( $chart ),
+				'_curtain_size_chart_type' => 'body',
+			),
+			array( 'default_brand' => 'Shop' )
+		);
+		// The chart is left out with a warning.
+		assert_true( ! isset( $b['payload']['sizeChart'] ), 'chart must be left out when a row has no label' );
+		assert_true(
+			false !== array_search( true, array_map( static fn( $w ) => str_contains( $w['message'], 'no size label' ), $b['warnings'] ) ),
+			'warning must mention the missing label'
+		);
+	}
+);

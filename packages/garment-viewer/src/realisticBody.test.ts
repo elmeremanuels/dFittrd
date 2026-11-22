@@ -124,7 +124,7 @@ describe('hip line (WO-008, CUR-21: the lower body looked glued to the torso)', 
       const u = [P[3 * b]! - P[3 * a]!, P[3 * b + 1]! - P[3 * a + 1]!, P[3 * b + 2]! - P[3 * a + 2]!];
       const v = [P[3 * c]! - P[3 * a]!, P[3 * c + 1]! - P[3 * a + 1]!, P[3 * c + 2]! - P[3 * a + 2]!];
       const nn = [u[1]! * v[2]! - u[2]! * v[1]!, u[2]! * v[0]! - u[0]! * v[2]!, u[0]! * v[1]! - u[1]! * v[0]!];
-      for (const k of [a, b, c]) for (let d = 0; d < 3; d++) N[3 * k + d] += nn[d]!;
+      for (const k of [a, b, c]) for (let d = 0; d < 3; d++) N[3 * k + d] = N[3 * k + d]! + nn[d]!;
     }
     let sum = 0, count = 0;
     for (let i = 0; i < n; i++) {

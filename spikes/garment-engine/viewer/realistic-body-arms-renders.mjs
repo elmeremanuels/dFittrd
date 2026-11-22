@@ -1,4 +1,4 @@
-/* global process, console, document */
+/* global process, console, document, URL, URLSearchParams */
 /**
  * WO-001 pictures: the realistic body with its procedural skin and the realistic hair, body alone, front, for the five
  * test bodies, through `avatar.html` (headless Chromium with SwiftShader). Run once on the old fit and once on the new

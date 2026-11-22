@@ -1,4 +1,4 @@
-/* global process, console, document, window */
+/* global process, console, document, window, URL, URLSearchParams */
 /**
  * Pictures and frame times of the realistic hair (D28, docs/reports/claude/realistic-hair.md), through `avatar.html`,
  * which builds the hair with the shipped `packages/garment-viewer` code (`createHair`; with a garment through

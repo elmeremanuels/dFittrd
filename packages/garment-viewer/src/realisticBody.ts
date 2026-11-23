@@ -35,6 +35,69 @@ export type ArmRing = (typeof ARM_RINGS)[number];
 export const SHAPE_TARGETS = ['weight+', 'weight-', 'cup+', 'cup-'] as const;
 export type ShapeTarget = (typeof SHAPE_TARGETS)[number];
 
+/** Signed CC0 MakeHuman face shape target axes carried by the realistic body asset (WO-020 / CUR-34). */
+export const FACE_SHAPE_TARGETS = [
+  'faceWidth',
+  'faceHeight',
+  'jawWidth',
+  'chinWidth',
+  'chinHeight',
+  'chinProminence',
+  'cheekbones',
+  'noseLength',
+  'noseWidth',
+  'eyeSpacing',
+  'browHeight',
+  'lipWidth',
+] as const;
+export type FaceShapeTarget = (typeof FACE_SHAPE_TARGETS)[number];
+/** Derived shopper face-shape weights, each clamped to [-1, 1] (`FACE_WEIGHT_LIMIT`). Never leaves the device (D19). */
+export type FaceShapeWeights = Partial<Record<FaceShapeTarget, number>>;
+
+/** Maximum absolute face shape target weight so no input can push the head grotesque. */
+export const FACE_WEIGHT_LIMIT = 1;
+
+/** Anatomical head landmark vertex names stored in `meta.faceLandmarks` for on-device face-shape fitting. */
+export const FACE_LANDMARK_NAMES = [
+  'foreheadTop',
+  'glabella',
+  'nasion',
+  'noseTip',
+  'subnasale',
+  'upperLip',
+  'mouthCenter',
+  'lowerLip',
+  'chinFront',
+  'chinMenton',
+  'lCheek',
+  'rCheek',
+  'lJaw',
+  'rJaw',
+  'lChinSide',
+  'rChinSide',
+  'lEyeInner',
+  'rEyeInner',
+  'lEyeOuter',
+  'rEyeOuter',
+  'lBrow',
+  'rBrow',
+  'lNoseAlar',
+  'rNoseAlar',
+  'lMouthCorner',
+  'rMouthCorner',
+] as const;
+export type FaceLandmarkName = (typeof FACE_LANDMARK_NAMES)[number];
+
+/** Clamp and sanitise face shape weights to [-FACE_WEIGHT_LIMIT, FACE_WEIGHT_LIMIT] (non-finite → 0). */
+export function clampFaceShape(weights: FaceShapeWeights | null | undefined): Record<FaceShapeTarget, number> {
+  const out = {} as Record<FaceShapeTarget, number>;
+  for (const t of FACE_SHAPE_TARGETS) {
+    const v = weights?.[t];
+    out[t] = typeof v === 'number' && Number.isFinite(v) ? Math.max(-FACE_WEIGHT_LIMIT, Math.min(FACE_WEIGHT_LIMIT, v)) : 0;
+  }
+  return out;
+}
+
 /** What the bake measured and placed on the baked mesh (cm, the asset's own space: floor y = 0, +Z front, +X the body's left). */
 export interface RealisticBodyMeta {
   format: typeof REALISTIC_BODY_FORMAT;
@@ -58,6 +121,12 @@ export interface RealisticBodyMeta {
   quant: { offset: V3; step: number; deltaStep: number };
   /** Sparse delta counts, in `SHAPE_TARGETS` order. */
   targetCounts: number[];
+  /** Optional signed face shape target names carried after `headWeight` (WO-020). */
+  faceTargetNames?: readonly FaceShapeTarget[];
+  /** Sparse delta counts for `faceTargetNames`, in the same order. */
+  faceTargetCounts?: number[];
+  /** Optional anatomical head vertex indices for on-device face-shape fitting (WO-020). */
+  faceLandmarks?: Record<FaceLandmarkName, number>;
   source: { name: string; repository: string; commit: string; licence: string };
 }
 
@@ -72,6 +141,8 @@ export interface RealisticBodyAsset {
   headWeight: Float32Array;
   /** Per shape target: vertex ids and xyz deltas (cm) at full strength. */
   targets: Record<ShapeTarget, { ids: Uint32Array; deltas: Float32Array }>;
+  /** Optional signed face shape targets (cm at weight +1), masked strictly above the neck ring (WO-020). */
+  faceTargets?: Partial<Record<FaceShapeTarget, { ids: Uint32Array; deltas: Float32Array }>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -101,8 +172,18 @@ export function encodeRealisticBody(asset: RealisticBodyAsset): Uint8Array {
   }
   const idx = Uint16Array.from(asset.indices);
   parts.push(bytesOf(idx), new Uint8Array(pad4(idx.byteLength) - idx.byteLength));
-  parts.push(Uint8Array.from(asset.armWeight, (w) => Math.round(Math.min(1, Math.max(0, w)) * 255)));
-  parts.push(Uint8Array.from(asset.headWeight, (w) => Math.round(Math.min(1, Math.max(0, w)) * 255)));
+  const aw = Uint8Array.from(asset.armWeight, (w) => Math.round(Math.min(1, Math.max(0, w)) * 255));
+  const hw = Uint8Array.from(asset.headWeight, (w) => Math.round(Math.min(1, Math.max(0, w)) * 255));
+  parts.push(aw, new Uint8Array(pad4(aw.byteLength) - aw.byteLength), hw, new Uint8Array(pad4(hw.byteLength) - hw.byteLength));
+  if (meta.faceTargetNames?.length) {
+    for (const t of meta.faceTargetNames) {
+      const entry = asset.faceTargets?.[t] ?? { ids: new Uint32Array(0), deltas: new Float32Array(0) };
+      const qi = Uint16Array.from(entry.ids);
+      const qd = new Int16Array(entry.deltas.length);
+      for (let i = 0; i < entry.deltas.length; i++) qd[i] = quant(entry.deltas[i]! / meta.quant.deltaStep);
+      parts.push(bytesOf(qi), new Uint8Array(pad4(qi.byteLength) - qi.byteLength), bytesOf(qd), new Uint8Array(pad4(qd.byteLength) - qd.byteLength));
+    }
+  }
   const total = parts.reduce((s, p) => s + p.length, 0);
   const out = new Uint8Array(total);
   let o = 0;
@@ -153,7 +234,25 @@ export function decodeRealisticBody(bytes: Uint8Array): RealisticBodyAsset {
   const indices = Uint32Array.from(u16(3 * meta.triangleCount));
   const aw = take(n);
   const hw = take(n);
-  return { meta, positions, indices, armWeight: Float32Array.from(aw, (v) => v / 255), headWeight: Float32Array.from(hw, (v) => v / 255), targets };
+  let faceTargets: RealisticBodyAsset['faceTargets'];
+  if (meta.faceTargetNames?.length) {
+    faceTargets = {};
+    meta.faceTargetNames.forEach((t, k) => {
+      const c = meta.faceTargetCounts?.[k] ?? 0;
+      const ids = Uint32Array.from(u16(c));
+      const qd = i16(3 * c);
+      faceTargets![t] = { ids, deltas: Float32Array.from(qd, (v) => v * meta.quant.deltaStep) };
+    });
+  }
+  return {
+    meta,
+    positions,
+    indices,
+    armWeight: Float32Array.from(aw, (v) => v / 255),
+    headWeight: Float32Array.from(hw, (v) => v / 255),
+    targets,
+    ...(faceTargets ? { faceTargets } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -366,6 +465,8 @@ const ARM_STATIONS = [0, 0.25, 0.5, 0.75, 1];
 export interface FitOptions {
   /** Shape sliders in [-1, 1]; by default solved from the target's girths (`shapeFor`). */
   shape?: { weight: number; cup: number };
+  /** Optional derived face shape target weights (WO-020), clamped to [-1, 1] and applied strictly above the neck ring. */
+  faceShape?: FaceShapeWeights | null;
   /** Correction iterations (default 8; 0 leaves the rings at the uniform start). */
   iterations?: number;
   /** `false` leaves the arm sections where the rigid placement puts them (for the negative control of the centre test). */
@@ -428,8 +529,8 @@ export function shapeFor(meta: RealisticBodyMeta, target: FitTarget): { weight: 
   return best;
 }
 
-/** The asset with its shape sliders applied (positions only). */
-export function morphed(asset: RealisticBodyAsset, shape: { weight: number; cup: number }): Float64Array {
+/** The asset with its shape sliders (and optional clamped face shape weights) applied (positions only). */
+export function morphed(asset: RealisticBodyAsset, shape: { weight: number; cup: number }, faceShape?: FaceShapeWeights | null): Float64Array {
   const p = Float64Array.from(asset.positions);
   const add = (t: ShapeTarget, k: number): void => {
     if (k <= 0) return;
@@ -443,6 +544,20 @@ export function morphed(asset: RealisticBodyAsset, shape: { weight: number; cup:
   add('weight-', -shape.weight);
   add('cup+', shape.cup);
   add('cup-', -shape.cup);
+  if (faceShape && asset.faceTargets) {
+    const clamped = clampFaceShape(faceShape);
+    for (const t of FACE_SHAPE_TARGETS) {
+      const k = clamped[t];
+      if (!k) continue;
+      const entry = asset.faceTargets[t];
+      if (!entry) continue;
+      const { ids, deltas } = entry;
+      for (let j = 0; j < ids.length; j++) {
+        const i = ids[j]!;
+        for (let c = 0; c < 3; c++) p[3 * i + c] = p[3 * i + c]! + k * deltas[3 * j + c]!;
+      }
+    }
+  }
   return p;
 }
 
@@ -502,7 +617,7 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
   const n = meta.vertexCount;
   const idx = asset.indices;
   const shape = options.shape ?? shapeFor(meta, target);
-  const P = morphed(asset, shape);
+  const P = morphed(asset, shape, options.faceShape);
   const ring = new Map(target.rings.map((r) => [r.id, r]));
   const h = (id: AnchorRing): number => ring.get(id)!.centre[1];
 

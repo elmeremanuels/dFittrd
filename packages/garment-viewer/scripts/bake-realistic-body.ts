@@ -24,6 +24,7 @@ import { gunzipSync } from 'node:zlib';
 import { topology } from '@curtain/mannequin';
 import {
   BODY_RINGS,
+  FACE_SHAPE_TARGETS,
   REALISTIC_BODY_FORMAT,
   REALISTIC_BODY_VERSION,
   SHAPE_TARGETS,
@@ -31,6 +32,8 @@ import {
   horizontalSections,
   sectionAt,
   type BodyRing,
+  type FaceLandmarkName,
+  type FaceShapeTarget,
   type RealisticBodyAsset,
   type RealisticBodyMeta,
   type ShapeTarget,
@@ -55,6 +58,35 @@ export const SOURCES: Readonly<Record<string, string>> = {
   [`${T}/macrodetails/universal-female-young-averagemuscle-minweight.target.gz`]: '5c65527e5d6e83b98ffa3da5bd61372eff70f89e95585bdacd0e3f70e48062aa',
   [`${T}/breast/female-young-averagemuscle-averageweight-maxcup-averagefirmness.target.gz`]: '70e67e082034a80cb6a88abac95d6e11d305f769c98f2d70374dea97fa98c604',
   [`${T}/breast/female-young-averagemuscle-averageweight-mincup-averagefirmness.target.gz`]: 'd891d82f4514e72f7d5691d8c83b934a195006ecd7b37954158b7b5fd9fb0804',
+  // CC0 MakeHuman face shape targets (WO-020 / CUR-34, same pinned MPFB2 commit).
+  [`${T}/head/head-scale-horiz-incr.target.gz`]: '671542640aec14d1740c1263deb0e274f3044edec761e6d4171329f0419be084',
+  [`${T}/head/head-scale-horiz-decr.target.gz`]: 'ddec139b27d1f9b7a90f6474450c56897a4e417334af083e87e988fdf94ca343',
+  [`${T}/head/head-scale-vert-incr.target.gz`]: 'be8b270ec67817578128396433d6e8ab9d530c9d81ea21db92cd1b9627a8110b',
+  [`${T}/head/head-scale-vert-decr.target.gz`]: '64e86d59a469eeeb0201026880bcd6ebb0cbd590a74b179f58efa879b3772f6c',
+  [`${T}/head/head-triangular.target.gz`]: '4fed43891a15d76507b8062e69ebf8482438ecbf281e3f6f9876407ea98ee308',
+  [`${T}/head/head-invertedtriangular.target.gz`]: '70ba80d2c8da216be56c6edaaa8386d5390aa92094859bf83096fb3acb33f12a',
+  [`${T}/chin/chin-width-incr.target.gz`]: '68764b6ec7c923597beaaf643f71c41f00c93639d9bb522c169c279db2ad299e',
+  [`${T}/chin/chin-width-decr.target.gz`]: '6c3aaca074630e89951184130a4a158b6f62c9d0cf57cf8eb828c445ff40c21a',
+  [`${T}/chin/chin-height-incr.target.gz`]: '4f05b61b39266801b0a333c208d274ff109250fe9e4512c486a455806878e15c',
+  [`${T}/chin/chin-height-decr.target.gz`]: '1f4196d330b418d576e9400a754cb99d7e60b069ee8fdef645713f84db984e0c',
+  [`${T}/chin/chin-prominent-incr.target.gz`]: 'e0d5ec5e213b88719def0f43ddaa7107796fc02f7447e2b2f140d9fe513a6ac8',
+  [`${T}/chin/chin-prominent-decr.target.gz`]: '4ed14cb51e7ea7b3ecd469a537733924353c683f3cfe545be182d18a220dcb4e',
+  [`${T}/cheek/l-cheek-bones-incr.target.gz`]: 'ea5aa60abcc2926e61cdabf5d40701c2b23b3f8027f949cea0b80bcbc55df301',
+  [`${T}/cheek/r-cheek-bones-incr.target.gz`]: 'c608528b9e5e1c670179cfb502dab3d9478a77bb942f7c8186cd072a7369e9b9',
+  [`${T}/cheek/l-cheek-bones-decr.target.gz`]: '109d88ec6394cb3455073ae9f2a6038b8b4d6b57feeaf4633611bc60f27ed212',
+  [`${T}/cheek/r-cheek-bones-decr.target.gz`]: 'f128fdcf1d91769a907dc2c74056edac427196c1900f875c34c03b01dee5b7af',
+  [`${T}/nose/nose-scale-vert-incr.target.gz`]: '63d297c237e7054a1ea700b83454ef508bf5f42ba8f2eb6bc1eb747ad261f34b',
+  [`${T}/nose/nose-scale-vert-decr.target.gz`]: '3eea81bc82ddca8e20c8fc4279092eb2c8540d05e0c2aacf868af5da4ebac108',
+  [`${T}/nose/nose-scale-horiz-incr.target.gz`]: 'ba550cc15c894a4412bb368acc92bd6ad94bbb63d0135c561fe30230ef6344bd',
+  [`${T}/nose/nose-scale-horiz-decr.target.gz`]: '95d8dc4a3589bbb6105191abc6e3cae47c3c424ce189b5f0a611dc098806060d',
+  [`${T}/eyes/l-eye-trans-out.target.gz`]: 'b74b2e4266f3db6122baaad9a4f793b81285cb2ac405f9fa4163bc72e72e56fc',
+  [`${T}/eyes/r-eye-trans-out.target.gz`]: '1fc70679c7c086d10adc405b57be80d757417e925f1884625d6bc24b6a9fd05d',
+  [`${T}/eyes/l-eye-trans-in.target.gz`]: '2129b8e5ea7b3875f32f7a50733eb4f61ea313f7dcc7e38491573b0cbd2cddc0',
+  [`${T}/eyes/r-eye-trans-in.target.gz`]: '5c0fbc8e74ac1450aa517a98f5522855a73d67dad2b759ebc2f9a3001bb7d5af',
+  [`${T}/eyebrows/eyebrows-trans-up.target.gz`]: 'fdaf3fb2ee5d1790202ede605d097e7666567237f1ab62a90729f72df0c16c52',
+  [`${T}/eyebrows/eyebrows-trans-down.target.gz`]: '9f5bbb848e40d3a320492dd08ef8d1a926b50c7fd1ca279cf8f573e0f0cdd589',
+  [`${T}/mouth/mouth-scale-horiz-incr.target.gz`]: '3bd6ff8195f77f0bcb586f3efec0eea1ae615eecba516e4d121025e40ed0ead2',
+  [`${T}/mouth/mouth-scale-horiz-decr.target.gz`]: 'aed1a3c27224d12828de1ffc3fe9c2895f4389417d016016dd4f1fefccdbc6c9',
 };
 
 const TARGET_FILES: Record<ShapeTarget, string> = {
@@ -62,6 +94,26 @@ const TARGET_FILES: Record<ShapeTarget, string> = {
   'weight-': `${T}/macrodetails/universal-female-young-averagemuscle-minweight.target.gz`,
   'cup+': `${T}/breast/female-young-averagemuscle-averageweight-maxcup-averagefirmness.target.gz`,
   'cup-': `${T}/breast/female-young-averagemuscle-averageweight-mincup-averagefirmness.target.gz`,
+};
+const FACE_TARGET_FILES: Record<FaceShapeTarget, { pos: string[]; neg: string[] }> = {
+  faceWidth: { pos: [`${T}/head/head-scale-horiz-incr.target.gz`], neg: [`${T}/head/head-scale-horiz-decr.target.gz`] },
+  faceHeight: { pos: [`${T}/head/head-scale-vert-incr.target.gz`], neg: [`${T}/head/head-scale-vert-decr.target.gz`] },
+  jawWidth: { pos: [`${T}/head/head-triangular.target.gz`], neg: [`${T}/head/head-invertedtriangular.target.gz`] },
+  chinWidth: { pos: [`${T}/chin/chin-width-incr.target.gz`], neg: [`${T}/chin/chin-width-decr.target.gz`] },
+  chinHeight: { pos: [`${T}/chin/chin-height-incr.target.gz`], neg: [`${T}/chin/chin-height-decr.target.gz`] },
+  chinProminence: { pos: [`${T}/chin/chin-prominent-incr.target.gz`], neg: [`${T}/chin/chin-prominent-decr.target.gz`] },
+  cheekbones: {
+    pos: [`${T}/cheek/l-cheek-bones-incr.target.gz`, `${T}/cheek/r-cheek-bones-incr.target.gz`],
+    neg: [`${T}/cheek/l-cheek-bones-decr.target.gz`, `${T}/cheek/r-cheek-bones-decr.target.gz`],
+  },
+  noseLength: { pos: [`${T}/nose/nose-scale-vert-incr.target.gz`], neg: [`${T}/nose/nose-scale-vert-decr.target.gz`] },
+  noseWidth: { pos: [`${T}/nose/nose-scale-horiz-incr.target.gz`], neg: [`${T}/nose/nose-scale-horiz-decr.target.gz`] },
+  eyeSpacing: {
+    pos: [`${T}/eyes/l-eye-trans-out.target.gz`, `${T}/eyes/r-eye-trans-out.target.gz`],
+    neg: [`${T}/eyes/l-eye-trans-in.target.gz`, `${T}/eyes/r-eye-trans-in.target.gz`],
+  },
+  browHeight: { pos: [`${T}/eyebrows/eyebrows-trans-up.target.gz`], neg: [`${T}/eyebrows/eyebrows-trans-down.target.gz`] },
+  lipWidth: { pos: [`${T}/mouth/mouth-scale-horiz-incr.target.gz`], neg: [`${T}/mouth/mouth-scale-horiz-decr.target.gz`] },
 };
 const ETHNIC = ['african', 'asian', 'caucasian'].map((e) => `${T}/macrodetails/${e}-female-young.target.gz`);
 
@@ -272,6 +324,55 @@ function main(): void {
   const girths = { base: girthsOf(posed) } as RealisticBodyMeta['girths'];
   for (const t of SHAPE_TARGETS) girths[t] = girthsOf(withTarget(t));
 
+  // --- Signed CC0 face shape targets (WO-020), masked strictly above the neck ring -------------
+  const smooth01 = (v: number): number => {
+    const c = Math.max(0, Math.min(1, v));
+    return c * c * (3 - 2 * c);
+  };
+  const bodyVertexCount = new Set(groups.get('body')!.flat()).size;
+  const faceTargets: Partial<Record<FaceShapeTarget, { ids: Uint32Array; deltas: Float32Array }>> = {};
+  for (const t of FACE_SHAPE_TARGETS) {
+    const pair = FACE_TARGET_FILES[t];
+    const acc = new Map<number, V3>();
+    const addMap = (rel: string, scale: number): void => {
+      for (const [i, d] of target(rel)) {
+        const k = remap[i]!;
+        if (k < 0) continue;
+        const dd = deltaFrame(k, [d[0] * 10, d[1] * 10, d[2] * 10]);
+        const cur = acc.get(k) ?? [0, 0, 0];
+        cur[0] += scale * dd[0];
+        cur[1] += scale * dd[1];
+        cur[2] += scale * dd[2];
+        acc.set(k, cur);
+      }
+    };
+    for (const rel of pair.pos) addMap(rel, 0.5);
+    for (const rel of pair.neg) addMap(rel, -0.5);
+    const ids: number[] = [];
+    const deltas: number[] = [];
+    for (const [k, d] of acc) {
+      const y = posed[3 * k + 1]!;
+      const hw = headWeight[k]!;
+      // Strictly above the neck ring so neck girth, body rings and fit never change.
+      if (hw < 0.05 || y <= levels.neck + 1.0) continue;
+      const mask = smooth01((y - (levels.neck + 1.0)) / 2.5) * smooth01((hw - 0.05) / 0.25);
+      // Keep crown height steady on faceHeight so overall stature stays on target.
+      const crownKeep = t === 'faceHeight' ? 1 - 0.75 * smooth01((y - (top - 3.0)) / 3.0) : 1;
+      const dx = d[0] * mask;
+      const dy = d[1] * mask * crownKeep;
+      const dz = d[2] * mask;
+      if (Math.hypot(dx, dy, dz) < 0.01) continue;
+      ids.push(k);
+      deltas.push(dx, dy, dz);
+    }
+    const order = ids.map((_, j) => j).sort((a, b) => ids[a]! - ids[b]!);
+    faceTargets[t] = {
+      ids: Uint32Array.from(order.map((j) => ids[j]!)),
+      deltas: Float32Array.from(order.flatMap((j) => [deltas[3 * j]!, deltas[3 * j + 1]!, deltas[3 * j + 2]!])),
+    };
+  }
+  const faceLandmarks = findFaceLandmarks(posed, bodyVertexCount, levels.neck);
+
   // --- Quantise and write -------------------------------------------------------------------------
   const lo: V3 = [Infinity, Infinity, Infinity], hi: V3 = [-Infinity, -Infinity, -Infinity];
   for (let k = 0; k < n; k++) for (let c = 0; c < 3; c++) {
@@ -283,13 +384,14 @@ function main(): void {
   const step = Math.ceil((span / 65000) * 1e4) / 1e4;
   let maxDelta = 0;
   for (const t of SHAPE_TARGETS) for (const d of targets[t].deltas) maxDelta = Math.max(maxDelta, Math.abs(d));
+  for (const t of FACE_SHAPE_TARGETS) for (const d of faceTargets[t]!.deltas) maxDelta = Math.max(maxDelta, Math.abs(d));
   const deltaStep = Math.max(0.001, Math.ceil((maxDelta / 32000) * 1e4) / 1e4);
   const meta: RealisticBodyMeta = {
     format: REALISTIC_BODY_FORMAT,
     version: REALISTIC_BODY_VERSION,
     family: 'female',
     vertexCount: n,
-    bodyVertexCount: new Set(groups.get('body')!.flat()).size,
+    bodyVertexCount,
     triangleCount: indices.length / 3,
     statureCm: round(top),
     levels: Object.fromEntries(Object.entries(levels).map(([k, v]) => [k, round(v)])) as RealisticBodyMeta['levels'],
@@ -297,9 +399,12 @@ function main(): void {
     girths: Object.fromEntries(Object.entries(girths).map(([k, g]) => [k, Object.fromEntries(Object.entries(g).map(([r, v]) => [r, round(v)]))])) as RealisticBodyMeta['girths'],
     quant: { offset, step, deltaStep },
     targetCounts: SHAPE_TARGETS.map((t) => targets[t].ids.length),
-    source: { name: 'MakeHuman base mesh hm08, female macro targets, default rig weights (via MPFB2)', repository: REPOSITORY, commit: COMMIT, licence: 'CC0-1.0 (LICENSE.md section C, LICENSE.ASSETS.md)' },
+    faceTargetNames: FACE_SHAPE_TARGETS,
+    faceTargetCounts: FACE_SHAPE_TARGETS.map((t) => faceTargets[t]!.ids.length),
+    faceLandmarks,
+    source: { name: 'MakeHuman base mesh hm08, female macro & face targets, default rig weights (via MPFB2)', repository: REPOSITORY, commit: COMMIT, licence: 'CC0-1.0 (LICENSE.md section C, LICENSE.ASSETS.md)' },
   };
-  const asset: RealisticBodyAsset = { meta, positions: Float32Array.from(posed), indices, armWeight, headWeight, targets };
+  const asset: RealisticBodyAsset = { meta, positions: Float32Array.from(posed), indices, armWeight, headWeight, targets, faceTargets };
   const bytes = encodeRealisticBody(asset);
   mkdirSync(dirname(outFile), { recursive: true });
   writeFileSync(outFile, bytes);
@@ -316,9 +421,64 @@ function main(): void {
     arm: meta.arm,
     girths: meta.girths,
     targetCounts: meta.targetCounts,
+    faceTargetCounts: meta.faceTargetCounts,
+    faceLandmarks: meta.faceLandmarks,
     quant: meta.quant,
     topology: topo,
   }, null, 1));
+}
+
+/** Locate the 26 symmetric anatomical head landmark vertices on the posed MakeHuman female mesh (WO-020). */
+function findFaceLandmarks(p: Float64Array, bodyN: number, neckY: number): Record<FaceLandmarkName, number> {
+  const best = (filter: (x: number, y: number, z: number) => boolean, score: (x: number, y: number, z: number) => number): number => {
+    let idx = -1, hi = -Infinity;
+    for (let i = 0; i < bodyN; i++) {
+      const x = p[3 * i]!, y = p[3 * i + 1]!, z = p[3 * i + 2]!;
+      if (y <= neckY || !filter(x, y, z)) continue;
+      const s = score(x, y, z);
+      if (s > hi) { hi = s; idx = i; }
+    }
+    if (idx < 0) throw new Error('bake: face landmark not found');
+    return idx;
+  };
+  const mirror = (leftId: number): number => {
+    const tx = -p[3 * leftId]!, ty = p[3 * leftId + 1]!, tz = p[3 * leftId + 2]!;
+    let idx = -1, lo = Infinity;
+    for (let i = 0; i < bodyN; i++) {
+      const d = Math.hypot(p[3 * i]! - tx, p[3 * i + 1]! - ty, p[3 * i + 2]! - tz);
+      if (d < lo) { lo = d; idx = i; }
+    }
+    if (idx < 0 || lo > 0.25) throw new Error(`bake: asymmetric face landmark ${leftId} (err ${lo})`);
+    return idx;
+  };
+  const lCheek = best((x, y, z) => x > 4.5 && y > 144.5 && y < 147.2 && z > 9.5 && z < 11.5, (x, _y, z) => x + 0.5 * z);
+  const lJaw = best((x, y, z) => x > 4.5 && y > 140.8 && y < 142.8 && z > 6.5 && z < 8.8, (x, _y, z) => x + 0.2 * z);
+  const lChinSide = best((x, y, z) => x > 1.6 && x < 2.5 && y > 139.0 && y < 140.2 && z > 11.8, (x, _y, z) => z + 0.4 * x);
+  const lEyeInner = best((x, y, z) => x > 1.2 && x < 2.0 && Math.abs(y - 148.55) < 0.4 && z > 12.2, (x, y, z) => -x + 0.4 * z - Math.abs(y - 148.55));
+  const lEyeOuter = best((x, y, z) => x > 3.8 && x < 4.7 && Math.abs(y - 148.6) < 0.4 && z > 11.2, (x, y, z) => x + 0.3 * z - Math.abs(y - 148.6));
+  const lBrow = best((x, y, z) => x > 2.7 && x < 3.4 && y > 150.6 && y < 151.6 && z > 12.4, (x, _y, z) => z - Math.abs(x - 3.05));
+  const lNoseAlar = best((x, y, z) => x > 1.3 && x < 2.0 && y > 144.4 && y < 145.2 && z > 12.8, (x, _y, z) => x + 0.4 * z);
+  const lMouthCorner = best((x, y, z) => x > 2.0 && x < 2.7 && y > 142.3 && y < 142.9 && z > 12.8, (x, _y, z) => x + 0.3 * z);
+  return {
+    foreheadTop: best((x, y, z) => Math.abs(x) < 0.15 && y > 155.2 && y < 156.2 && z > 11, (_x, _y, z) => z),
+    glabella: best((x, y, z) => Math.abs(x) < 0.15 && y > 150.1 && y < 150.9 && z > 13, (_x, _y, z) => z),
+    nasion: best((x, y, z) => Math.abs(x) < 0.15 && y > 148.6 && y < 149.1 && z > 13, (_x, _y, z) => -z),
+    noseTip: best((x, y, z) => Math.abs(x) < 0.15 && y > 144.8 && y < 146.0 && z > 14, (_x, _y, z) => z),
+    subnasale: best((x, y, z) => Math.abs(x) < 0.15 && y > 144.0 && y < 144.5 && z > 13.8, (_x, _y, z) => -z),
+    upperLip: best((x, y, z) => Math.abs(x) < 0.15 && y > 143.1 && y < 143.6 && z > 14, (_x, _y, z) => z),
+    mouthCenter: best((x, y, z) => Math.abs(x) < 0.15 && y > 142.45 && y < 142.85 && z > 13.9, (_x, _y, z) => z),
+    lowerLip: best((x, y, z) => Math.abs(x) < 0.15 && y > 141.6 && y < 142.1 && z > 13.9, (_x, _y, z) => z),
+    chinFront: best((x, y, z) => Math.abs(x) < 0.15 && y > 139.9 && y < 140.6 && z > 13, (_x, _y, z) => z),
+    chinMenton: best((x, y, z) => Math.abs(x) < 0.15 && y > 138.4 && y < 138.9 && z > 11.8 && z < 12.6, (_x, y, z) => -y + 0.2 * z),
+    lCheek, rCheek: mirror(lCheek),
+    lJaw, rJaw: mirror(lJaw),
+    lChinSide, rChinSide: mirror(lChinSide),
+    lEyeInner, rEyeInner: mirror(lEyeInner),
+    lEyeOuter, rEyeOuter: mirror(lEyeOuter),
+    lBrow, rBrow: mirror(lBrow),
+    lNoseAlar, rNoseAlar: mirror(lNoseAlar),
+    lMouthCorner, rMouthCorner: mirror(lMouthCorner),
+  };
 }
 
 function armCentreLine(p: Float64Array, idx: Uint32Array, joint: V3, wrist: V3): { joint: V3; wrist: V3 } {

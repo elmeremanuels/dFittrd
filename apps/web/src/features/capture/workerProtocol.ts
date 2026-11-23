@@ -8,8 +8,15 @@
 import type { FaceBakeStats } from './faceBake';
 import type { PhotoNotice, SkinSuggestion } from './faceTile';
 import type { PoseVariant } from './models';
+import type { SelfieReason } from './selfieGate';
 import type { GateResult, Landmark, ScanMeasurements, Sex, SkinEstimate } from './types';
 import type { SilhouetteMask } from './storage';
+
+/** Selfie quality gate result (computed in the worker, displayed on the page). */
+export interface SelfieGateResult {
+  ok: boolean;
+  reasons: SelfieReason[];
+}
 
 export interface WorkerInit {
   type: 'init';
@@ -124,6 +131,8 @@ export interface FaceResultMessage {
   skin: SkinEstimate | null;
   faceTile: { blob: Blob; width: number; height: number } | null;
   faceFound: boolean;
+  /** Selfie quality gate result (null when the gate could not run, e.g. no OffscreenCanvas). */
+  selfieGate: SelfieGateResult | null;
 }
 
 /** What the face texture bake returns: the texture (RGBA, transferred), a few numbers and the time of each step. No landmark. */

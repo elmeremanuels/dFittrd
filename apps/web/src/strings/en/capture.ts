@@ -12,6 +12,7 @@
  */
 import type { BodyMeasurementKey, ManualMethod } from '@curtain/schema';
 import type { GateHintKey } from '../../features/capture/poseGate';
+import type { SelfieHintKey } from '../../features/capture/selfieGate';
 import type { Season, Sex, SkinEstimate } from '../../features/capture/types';
 import type { ScanErrorCode } from '../../features/capture/workerProtocol';
 
@@ -48,6 +49,8 @@ export interface CaptureStrings {
   };
   /** The spoken guidance of the body scan, by what the pose gate saw. */
   gate: Record<GateHintKey, string> & { turnSide: string };
+  /** The selfie quality hints, by what the selfie gate saw. */
+  selfieGate: Record<SelfieHintKey, string>;
   /** Errors the scan worker reports by code. */
   scanErrors: Record<ScanErrorCode, string>;
   /** Pieces every step shares. */
@@ -224,6 +227,18 @@ export const CAPTURE_EN: CaptureStrings = {
     still: 'Hold still…',
     perfect: 'Perfect, hold that pose',
     turnSide: 'Now turn 90° to your left and hold still',
+  },
+  selfieGate: {
+    noFace: 'No face detected — face the camera',
+    multipleFaces: 'Only one face should be in the frame',
+    faceTheCamera: 'Face the camera directly, keep your head level',
+    neutralExpression: 'Relax your face — close your mouth and keep a neutral expression',
+    moreLight: 'Move to a brighter spot or turn on a light',
+    lessSideLight: 'Face the light source — avoid strong light from one side',
+    holdSteady: 'Hold the phone steady — the photo is a little blurry',
+    moveCloser: 'Move closer or zoom in so your face is larger in the frame',
+    clearFace: 'Remove anything covering your face (hands, masks)',
+    perfect: 'Great — hold that pose',
   },
   scanErrors: {
     no_front_frame: 'no usable front frame: the whole body must be visible and still',

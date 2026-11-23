@@ -6,6 +6,7 @@ import { attachStream, bitmapFromFile, captureStill, openCamera, type CameraHand
 import type { FlowCaps } from '../captureMachine';
 import type { ScanSession } from '../scanSession';
 import type { SkinEstimate } from '../types';
+import { selfieHint } from '../selfieGate';
 import { fill, scanErrorText } from './text';
 import { EstimateBadge, GhostButton, Panel, PrimaryButton, PrivacyNote, StepHeader } from './ui';
 
@@ -92,6 +93,11 @@ export function FaceStep({ session, models, cameraAllowed, onDone, onSkip }: Pro
     setError(null);
     try {
       const r = await session.analyseFace(bitmap);
+      if (r.selfieGate && !r.selfieGate.ok) {
+        setError(selfieHint(r.selfieGate.reasons));
+        setPhase('preview');
+        return;
+      }
       if (!r.faceFound) {
         setError(appStrings().capture.face.noFace);
         setPhase('preview');

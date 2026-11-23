@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildBody, type Mannequin } from '@curtain/mannequin';
 import { decodeRealisticBody, fitRealisticBody, fitTargetOf } from './realisticBody';
 import { HAIR_COLOURS, HAIR_LENGTHS, HAIR_PALETTE, HAIR_TYPES, hairOf } from './hairOptions';
-import { HAIR_TRIANGLE_BUDGET, buildHair, coilTexture, strandTexture, textureBytes, type HairBodyInput, type HairBuild } from './realisticHair';
+import { HAIR_TRIANGLE_BUDGET, buildHair, coilTexture, sculptedCoilTextures, sculptedLockTextures, strandTexture, textureBytes, type HairBodyInput, type HairBuild } from './realisticHair';
 import { createHair, HAIR_OBJECT_NAME } from './realisticHairDraw';
 import { realisticHairOf } from './mount';
 
@@ -190,32 +190,55 @@ describe('buildHair: every type in every length', () => {
 
 describe('bounds (D28)', () => {
   it('generated textures at most 256 KB together (RGBA8 with mips); no texture file', () => {
-    const bytes = textureBytes(strandTexture()) + Math.max(...(['3C', '4A', '4B', '4C'] as const).map((t) => textureBytes(coilTexture(t))));
-    expect(bytes).toBeLessThanOrEqual(256 * 1024);
+    const lock = sculptedLockTextures();
+    const lockBytes = textureBytes(lock.albedo) + textureBytes(lock.normal);
+    const coilBytes = Math.max(...(['3C', '4A', '4B', '4C'] as const).map((t) => {
+      const c = sculptedCoilTextures(t);
+      return textureBytes(c.albedo) + textureBytes(c.normal);
+    }));
+    expect(lockBytes + coilBytes).toBeLessThanOrEqual(256 * 1024);
+    const cardBytes = textureBytes(strandTexture()) + Math.max(...(['3C', '4A', '4B', '4C'] as const).map((t) => textureBytes(coilTexture(t))));
+    expect(cardBytes).toBeLessThanOrEqual(256 * 1024);
   });
 
   it('no more triangles than the body (27,036) and less code than the body asset', () => {
     expect(HAIR_TRIANGLE_BUDGET).toBe(asset.meta.triangleCount);
-    const code = ['./hairOptions.ts', './realisticHair.ts', './realisticHairDraw.ts'].reduce((s, f) => s + readFileSync(new URL(f, import.meta.url)).byteLength, 0);
+    const code = ['./hairOptions.ts', './realisticHair.ts', './realisticHairCards.ts', './realisticHairDraw.ts'].reduce((s, f) => s + readFileSync(new URL(f, import.meta.url)).byteLength, 0);
     expect(code).toBeLessThan(BODY_ASSET_BYTES);
   });
 
-  it('WO-003: lightweight hair materials (no MeshPhysicalMaterial, no alphaToCoverage, anisotropy = 1) and all 40 combinations build without SIMPLER thinning on mid', () => {
+  it('WO-012: sculpted v2 uses opaque FrontSide solid locks with groove normal maps, zero SIMPLER across all 40, and preserves v1 strand-cards behind style option', () => {
     for (const type of HAIR_TYPES) {
       for (const length of HAIR_LENGTHS) {
         const b = buildOf(type, length);
+        expect(b.style, `${type} ${length}`).toBe('sculpted');
         expect(b.simpler, `${type} ${length}`).toBeNull();
         expect(b.triangles, `${type} ${length}`).toBeLessThan(24_000);
       }
     }
-    const v = createHair(mid.input, { type: '4C', length: 'long', hex: '#1f1b19' });
-    for (const child of v.group.children) {
-      const m = (child as unknown as { material: { type: string; alphaToCoverage: boolean; map: { anisotropy: number } | null } }).material;
-      expect(m.type).toBe('MeshLambertMaterial');
-      expect(m.alphaToCoverage).toBe(false);
-      if (m.map) expect(m.map.anisotropy).toBe(1);
+    for (const type of ['1', '3B', '4C'] as const) {
+      const v = createHair(mid.input, { type, length: 'long', hex: '#3b2a20' });
+      expect(v.build.style).toBe('sculpted');
+      for (const child of v.group.children) {
+        const m = (child as unknown as { material: { type: string; alphaTest: number; transparent: boolean; side: number; alphaToCoverage: boolean; map: { anisotropy: number } | null; normalMap: { anisotropy: number } | null } }).material;
+        expect(m.type).not.toBe('MeshPhysicalMaterial');
+        expect(m.alphaTest).toBe(0);
+        expect(m.transparent).toBe(false);
+        expect(m.side).toBe(0); // THREE.FrontSide
+        expect(m.alphaToCoverage).toBe(false);
+        expect(m.normalMap).not.toBeNull();
+        if (m.map) expect(m.map.anisotropy).toBe(1);
+        if (m.normalMap) expect(m.normalMap.anisotropy).toBe(1);
+      }
+      v.dispose();
     }
-    v.dispose();
+    // Preserved v1 strand-cards option still works for CUR-31 / before-after comparison.
+    const v1 = createHair(mid.input, { type: '3B', length: 'long', hex: '#a8512a' }, { style: 'strand-cards' });
+    expect(v1.build.style).toBe('strand-cards');
+    expect(v1.build.triangles).toBeLessThanOrEqual(HAIR_TRIANGLE_BUDGET);
+    const strandMesh = v1.group.children.find((c) => c.name === `${HAIR_OBJECT_NAME}-strands`) as unknown as { material: { alphaTest: number } };
+    expect(strandMesh.material.alphaTest).toBeGreaterThan(0);
+    v1.dispose();
   });
 });
 
@@ -241,7 +264,7 @@ describe('the hair is never sent', () => {
   });
 
   it('its modules hold no request, storage or message API', () => {
-    for (const f of ['./hairOptions.ts', './realisticHair.ts', './realisticHairDraw.ts']) {
+    for (const f of ['./hairOptions.ts', './realisticHair.ts', './realisticHairCards.ts', './realisticHairDraw.ts']) {
       const src = readFileSync(new URL(f, import.meta.url), 'utf8');
       expect(src, f).not.toMatch(/\bfetch\s*\(|XMLHttpRequest|sendBeacon|WebSocket|localStorage|sessionStorage|indexedDB|postMessage|document\.cookie/);
     }

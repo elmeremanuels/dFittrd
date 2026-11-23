@@ -6,7 +6,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { buildBody, buildMannequin } from '@curtain/mannequin';
+import { buildBody } from '@curtain/mannequin';
 import { polarRadius } from '@curtain/mannequin';
 import { fitRealisticBody, fitTargetOf, realisticOutlinesOf, type RealisticArmFrame } from './realisticBody';
 import { decodeRealisticBody } from './realisticBody';
@@ -116,7 +116,7 @@ describe('realisticOutlinesOf (WO-016 iter 1)', () => {
     expect(ellipse.b - frontRadius).toBeGreaterThan(1);
     // A point just outside the drawn body, well inside the ellipse.
     const p = Float32Array.from([0, hipRing.centre[1], hipRing.centre[2] + frontRadius + 0.5]);
-    const ellipseCheck = (p[2] - ellipse.cz) / ellipse.b;
+    const ellipseCheck = (p[2]! - ellipse.cz) / ellipse.b;
     expect(ellipseCheck).toBeLessThan(1);
     // The procedural collider (no outlines) pushes the point out to the ellipse.
     const procedural = makeCollider(bodyField(m, IDENTITY_MORPH), 0.35, new Uint8Array(1));
@@ -126,6 +126,6 @@ describe('realisticOutlinesOf (WO-016 iter 1)', () => {
     const realistic = makeCollider(bodyField(m, IDENTITY_MORPH, 0.5, outlines), 0.35, new Uint8Array(1));
     const pRealistic = Float32Array.from(p);
     expect(realistic(pRealistic, 0)).toBe(false);
-    expect(pRealistic[2]).toBeCloseTo(p[2], 3);
+    expect(pRealistic[2]).toBeCloseTo(p[2]!, 3);
   });
 });

@@ -14,9 +14,10 @@ import {
   statsToConsole,
   statsToMarkdown,
   type AccuracyRow,
-} from '../../../scripts/accuracy-report';
+} from './accuracy-report';
 
-const SAMPLE = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../scripts/data/accuracy-sample.csv'), 'utf8');
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const SAMPLE = readFileSync(join(__dirname, 'data', 'accuracy-sample.csv'), 'utf8');
 
 describe('parseAccuracyCsv', () => {
   it('reads the synthetic sample fixture (four rows, six tape + six scan values)', () => {
@@ -56,7 +57,6 @@ describe('pointStats', () => {
   it('computes signed error = scan − tape; on the sample, every mean is small and signed correctly', () => {
     const rows = parseAccuracyCsv(SAMPLE);
     const stats = allPointStats(rows);
-    // v01, v02, v03 all have scan > tape on bust (+0.5, -0.5, +1.2); mean bust error is positive.
     const bust = stats.find((s) => s.point === 'bust')!;
     expect(bust.n).toBe(4);
     expect(bust.meanSignedCm).toBeCloseTo((0.5 - 0.5 + 1.2 - 0.6) / 4, 9);
@@ -88,7 +88,6 @@ describe('pointStats', () => {
     const bust = pointStats(rows, 'bust');
     expect(bust.medianAbsCm).toBe(2);
     expect(bust.within2).toBe(0.5);
-    // The acceptance rule says median abs ≤ 1.5 cm: this synthetic point fails it.
     expect(bust.medianAbsCm).toBeGreaterThan(1.5);
   });
 

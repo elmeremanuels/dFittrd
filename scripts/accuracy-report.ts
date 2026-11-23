@@ -71,8 +71,8 @@ export function parseAccuracyCsv(text: string): AccuracyRow[] {
       const s = Number(cells[scanIdx[i]!]);
       if (!Number.isFinite(t)) throw new Error(`accuracy CSV: row ${r + 1} tape_${ACCURACY_POINTS[i]} is not a number`);
       if (!Number.isFinite(s)) throw new Error(`accuracy CSV: row ${r + 1} scan_${ACCURACY_POINTS[i]} is not a number`);
-      tape[ACCURACY_POINTS[i]] = t;
-      scan[ACCURACY_POINTS[i]] = s;
+      tape[ACCURACY_POINTS[i]!] = t;
+      scan[ACCURACY_POINTS[i]!] = s;
     }
     rows.push({
       volunteer_id: cells[idIdx]!,

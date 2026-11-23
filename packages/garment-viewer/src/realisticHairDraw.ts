@@ -4,10 +4,10 @@
  * host passes `MountOptions.hair` with `bodyShape: 'realistic-spike'`, so the default viewer neither carries nor runs
  * it. No I/O at all: the geometry and the textures are computed here, on the device.
  *
- * v2 shading (WO-012): closed, opaque, `FrontSide` sculpted meshes with procedural groove/coil albedo + normal maps
- * and a soft matte-satin `MeshPhongMaterial` (broad low specular + vertex AO in roots, parting and crevices). Zero
- * `alphaTest`, zero `DoubleSide`, zero `alphaToCoverage` — enabling full Early-Z depth rejection on CPU SwiftShader
- * and mobile GPUs. The preserved v1 strand-card renderer remains available via `options.style = 'strand-cards'`.
+ * v2 shading (WO-012): closed, opaque, `FrontSide` sculpted meshes with procedural groove/coil albedo maps and matte
+ * `MeshLambertMaterial` (soft vertex AO in roots, parting and crevices; sculpted 3D bevel/puff normals carry form
+ * without expensive per-pixel `normalMap` screen-space derivatives or `alphaTest` overdraw — enabling full Early-Z
+ * rejection on CPU SwiftShader and mobile GPUs). Preserved v1 strand-cards remain available via `style: 'strand-cards'`.
  */
 import * as THREE from 'three';
 import type { HairChoice } from './hairOptions';
@@ -41,7 +41,7 @@ export interface HairView {
   dispose(): void;
 }
 
-function dataTexture(t: HairTexture, wrapS: boolean, wrapT: boolean, linear = false): THREE.DataTexture {
+function dataTexture(t: HairTexture, wrapS: boolean, wrapT: boolean): THREE.DataTexture {
   const tex = new THREE.DataTexture(t.levels[0]!, t.width, t.height, THREE.RGBAFormat, THREE.UnsignedByteType);
   let w = t.width, h = t.height;
   tex.mipmaps = t.levels.map((data) => {
@@ -55,7 +55,7 @@ function dataTexture(t: HairTexture, wrapS: boolean, wrapT: boolean, linear = fa
   tex.magFilter = THREE.LinearFilter;
   tex.wrapS = wrapS ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
   tex.wrapT = wrapT ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
-  tex.colorSpace = linear ? THREE.NoColorSpace : THREE.SRGBColorSpace;
+  tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 1;
   tex.needsUpdate = true;
   return tex;
@@ -70,15 +70,6 @@ function geometryOf(part: HairPart): THREE.BufferGeometry {
   g.setIndex(new THREE.BufferAttribute(part.indices, 1));
   g.computeBoundingSphere();
   return g;
-}
-
-/** Soft, matte-velvet specular tint derived from hair colour (floored gently so black hair shows sculpted 3D form). */
-function matteSpecularOf(colour: THREE.Color, strength: number): THREE.Color {
-  const s = new THREE.Color().copy(colour).lerp(new THREE.Color(0x6b6058), 0.42).multiplyScalar(strength);
-  s.r = Math.max(s.r, 0.055);
-  s.g = Math.max(s.g, 0.05);
-  s.b = Math.max(s.b, 0.046);
-  return s;
 }
 
 /** Build the hair for `choice` on the drawn body `input` (body space, cm: the group goes into the figure's group). */
@@ -108,33 +99,22 @@ export function createHair(input: HairBodyInput, choice: HairChoice, options: Cr
   } else {
     const useCoilMaps = choice.type === '3C' || choice.type === '4A' || choice.type === '4B' || choice.type === '4C';
     const pair = useCoilMaps ? sculptedCoilTextures(choice.type) : sculptedLockTextures();
-    const albedoMap = dataTexture(pair.albedo, true, useCoilMaps, false);
-    const normalMap = dataTexture(pair.normal, true, useCoilMaps, true);
-    disposables.push(albedoMap, normalMap);
-    texBytes = textureBytes(pair.albedo) + textureBytes(pair.normal);
+    const albedoMap = dataTexture(pair.albedo, true, useCoilMaps);
+    disposables.push(albedoMap);
+    texBytes = textureBytes(pair.albedo);
 
-    const specStrength = useCoilMaps ? 0.14 : 0.16;
-    const shininess = useCoilMaps ? 7 : 10;
-    const nScale = useCoilMaps ? 0.30 : 0.38;
-    const specCol = matteSpecularOf(colour, specStrength);
-
-    const makeSculpted = (scaleMul: number): THREE.MeshPhongMaterial =>
-      new THREE.MeshPhongMaterial({
-        color: colour,
-        map: albedoMap,
-        normalMap,
-        normalScale: new THREE.Vector2(nScale * scaleMul, nScale * scaleMul),
-        specular: specCol,
-        shininess,
-        vertexColors: true,
-        side: THREE.FrontSide,
-      });
-
-    materials = {
-      cap: makeSculpted(0.65),
-      strands: makeSculpted(1.0),
-      shells: makeSculpted(0.85),
-    };
+    // Pure matte, opaque, FrontSide MeshLambertMaterial: zero alphaTest discard, zero DoubleSide overdraw, zero
+    // per-pixel normalMap tangent-derivative overhead; a gentle floor lift on very dark hues keeps black sculpted
+    // puff/lock forms readable under classic ACES lighting.
+    const lum = 0.2126 * colour.r + 0.7152 * colour.g + 0.0722 * colour.b;
+    const drawColour = lum < 0.03 ? colour.clone().lerp(new THREE.Color(0x3a322d), 0.22) : colour;
+    const mat = new THREE.MeshLambertMaterial({
+      color: drawColour,
+      map: albedoMap,
+      vertexColors: true,
+      side: THREE.FrontSide,
+    });
+    materials = { cap: mat, strands: mat, shells: mat };
   }
 
   const group = new THREE.Group();
@@ -157,7 +137,7 @@ export function createHair(input: HairBodyInput, choice: HairChoice, options: Cr
     dispose() {
       group.removeFromParent();
       for (const g of geometries) g.dispose();
-      for (const m of Object.values(materials)) m.dispose();
+      for (const m of new Set(Object.values(materials))) m.dispose();
       for (const d of disposables) d.dispose();
     },
   };

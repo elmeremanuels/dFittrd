@@ -220,15 +220,13 @@ describe('bounds (D28)', () => {
       const v = createHair(mid.input, { type, length: 'long', hex: '#3b2a20' });
       expect(v.build.style).toBe('sculpted');
       for (const child of v.group.children) {
-        const m = (child as unknown as { material: { type: string; alphaTest: number; transparent: boolean; side: number; alphaToCoverage: boolean; map: { anisotropy: number } | null; normalMap: { anisotropy: number } | null } }).material;
-        expect(m.type).not.toBe('MeshPhysicalMaterial');
+        const m = (child as unknown as { material: { type: string; alphaTest: number; transparent: boolean; side: number; alphaToCoverage: boolean; map: { anisotropy: number } | null } }).material;
+        expect(m.type).toBe('MeshLambertMaterial');
         expect(m.alphaTest).toBe(0);
         expect(m.transparent).toBe(false);
         expect(m.side).toBe(0); // THREE.FrontSide
         expect(m.alphaToCoverage).toBe(false);
-        expect(m.normalMap).not.toBeNull();
         if (m.map) expect(m.map.anisotropy).toBe(1);
-        if (m.normalMap) expect(m.normalMap.anisotropy).toBe(1);
       }
       v.dispose();
     }

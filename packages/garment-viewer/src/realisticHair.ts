@@ -1682,7 +1682,8 @@ export function sculptedLockTextures(seed = 19): { albedo: HairTexture; normal: 
       }
       const idx = y * W + x;
       height[idx] = hVal;
-      lum[idx] = clamp((0.92 + 0.11 * hVal) * rootShade * midLift, 0.72, 1.0);
+      // Clean sculpted flute contrast baked into albedo so matte Lambert lighting shows distinct combed lock grooves.
+      lum[idx] = clamp((0.88 + 0.18 * hVal) * rootShade * midLift, 0.62, 1.0);
     }
   }
   return {

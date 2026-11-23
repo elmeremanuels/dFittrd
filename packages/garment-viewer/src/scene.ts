@@ -530,9 +530,17 @@ export class Stage {
     return w > 0 && h > 0 ? { x, y, w, h } : null;
   }
 
-  /** Point the camera at figures spread over `widthCm` (front view). `statureCm` only matters for a body taller than the canonical ones. */
-  frame(widthCm: number, statureCm = 0): void {
+  /** Point the camera at figures spread over `widthCm` (front view). `statureCm` only matters for a body taller than the canonical ones. `azimuthDeg` rotates the camera around the figure (D30). */
+  frame(widthCm: number, statureCm = 0, azimuthDeg = 0): void {
     const f = cameraFrame(widthCm, statureCm, this.camera.aspect, this.camera.fov);
+    // Rotate the camera position around the Y axis (the vertical axis) by the azimuth.
+    if (azimuthDeg !== 0) {
+      const rad = (azimuthDeg * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const [x, y, z] = f.position;
+      f.position = [x * cos + z * sin, y, -x * sin + z * cos];
+    }
     this.camera.position.set(...f.position);
     this.controls.target.set(...f.target);
     this.controls.update();

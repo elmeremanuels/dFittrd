@@ -8,6 +8,7 @@
 import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh, familyShape, type Mannequin } from '@curtain/mannequin';
 import type { FitResult } from '@curtain/fit-engine';
 import type { GarmentPayload } from '@curtain/schema';
+import { initialViewFor } from './initialView';
 import { bodyFamilyOf, bodyField, buildAvatar, buildTypedAvatar, bundleFamilyOf, bundleMaleShapeOf, girthInput, isTypedBody, liftField, mannequinMeasurements, sanitiseMeasurements, type Avatar, type BodyField, type BodyMeasurements, type BodyOptions } from './body';
 import { loadBundleFrom, type FetchLike } from './bundle';
 import { checkBundle, gradingLabel } from './bundleCheck';
@@ -148,6 +149,8 @@ export interface MountOptions {
    * chosen by the shopper: this package never stores or sends it, and the AI-layer passes are drawn without it.
    */
   hair?: HairOptions;
+  /** Starting camera angle (D30); default `initialViewFor(garment.category)`. A merchant setting can override this later. */
+  initialView?: { azimuthDeg: number; elevationDeg: number };
 }
 
 export type BodyShapeKind = 'procedural' | 'realistic-spike';
@@ -371,7 +374,8 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
   stage.setSkinTone(parseSkinHex(opts.look?.skinHex));
   figure.garment.position.y = lift;
   stage.scene.add(figure.group);
-  stage.frame(60, stature);
+  const view = opts.initialView ?? initialViewFor(opts.garment.category);
+  stage.frame(60, stature, view.azimuthDeg);
   const realistic = startRealisticBody(canvas, opts, plan, stage, figure, fetchFn, () => wake(100), opts.realisticBodyConform === false ? undefined : { rest: bundle.baseMesh.positions, lift });
 
   interface Live {
@@ -561,7 +565,8 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
   stage.setSkinTone(parseSkinHex(opts.look?.skinHex));
   figure.garment.position.y = lift;
   stage.scene.add(figure.group);
-  stage.frame(60, stature);
+  const view = opts.initialView ?? initialViewFor(opts.garment.category);
+  stage.frame(60, stature, view.azimuthDeg);
   // A drape bake: the realistic body is drawn as fitted (not conformed under the baked garment).
   const realistic = startRealisticBody(canvas, opts, plan, stage, figure, fetchFn, () => wake(100));
   const drapes = bakedDrapes(bake, field, avatar.measurements.hip);

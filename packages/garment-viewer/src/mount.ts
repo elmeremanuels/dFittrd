@@ -5,7 +5,7 @@
  * files under `baseUrl`. The size shown is the size the embed's own fit-engine result recommends
  * (AGENTS.md rule 4, D15): this module takes that FitResult and never computes a fit itself.
  */
-import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh, familyShape, type Mannequin, type MannequinOutlines } from '@curtain/mannequin';
+import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh, familyShape, type Mannequin, type MannequinOutlines, type Mesh } from '@curtain/mannequin';
 import type { FitResult } from '@curtain/fit-engine';
 import type { GarmentPayload } from '@curtain/schema';
 import { initialViewFor } from './initialView';
@@ -290,7 +290,7 @@ export interface AvatarPlan {
  * `v1` when absent, against anchors.json `mannequin.maleShape`), or this throws
  * `GarmentViewError('incompatible')` and there is no 3D view.
  */
-export function planAvatar(anchors: { category: string; mannequin?: { family?: unknown; maleShape?: unknown } }, bodyOptions: BodyOptions | null | undefined, look?: AvatarLook | null, maleShape?: 'v1' | 'v2', outlines?: MannequinOutlines | null): AvatarPlan {
+export function planAvatar(anchors: { category: string; mannequin?: { family?: unknown; maleShape?: unknown } }, bodyOptions: BodyOptions | null | undefined, look?: AvatarLook | null, maleShape?: 'v1' | 'v2', outlines?: MannequinOutlines | null, outlinesPreScaled = false): AvatarPlan {
   const body: BodyOptions = bodyOptions ?? {};
   const family = bundleFamilyOf(anchors);
   if (bodyFamilyOf(body) !== family) throw new GarmentViewError('incompatible');
@@ -303,11 +303,11 @@ export function planAvatar(anchors: { category: string; mannequin?: { family?: u
   let drawnScaleAt = (_y: number): number => 1;
   if (isTypedBody(body)) {
     // A typed height or shoulder width: the body is built from the measurements (`buildBody`).
-    const typed = buildTypedAvatar(m, body, anchors.category, { head }, build, outlines);
+    const typed = buildTypedAvatar(m, body, anchors.category, { head }, build, outlines, outlinesPreScaled);
     ({ avatar, field, garmentLiftCm, statureCm, drawn } = typed);
   } else {
     avatar = buildAvatar(m, buildMannequinMesh(m, { head }), sanitiseMeasurements(girthInput(body), mannequinMeasurements(m)));
-    field = bodyField(m, avatar, 0.5, outlines);
+    field = bodyField(m, avatar, 0.5, outlines, outlinesPreScaled);
     const morph = avatar.morph;
     drawnScaleAt = (y) => morph.girthScaleAt(y, 'body');
   }
@@ -342,36 +342,40 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
     throw new GarmentViewError('incompatible');
   }
 
-  // With `bodyShape: 'realistic-spike'` (female only, CUR-9 / WO-016 iter 1): load the fitted
-  // realistic mesh up front and compute its polar outlines, so the collider meets the drawn body
-  // instead of the ellipse that contains it. The asset is cached per URL after the first fetch.
+  // With `bodyShape: 'realistic-spike'` (female only, CUR-9 / WO-016): load the fitted realistic mesh
+  // up front and compute its polar outlines, so the collider meets the drawn body directly (no double
+  // scaling, and no `conformToField` needed under device-draped garments).
   let realisticOutlines: MannequinOutlines | null = null;
+  let prefittedMesh: Mesh | null = null;
   if (bodyShapeOf(opts.bodyShape) === 'realistic-spike' && bundleFamilyOf(bundle.anchors) === 'female') {
     try {
-      const [mod, loadMod] = await Promise.all([
+      const [mod, asset] = await Promise.all([
         import('./realisticBody'),
         import('./realisticBodyLoad').then((m) => m.loadRealisticBody(fetchFn, opts.realisticBodyUrl)),
       ]);
-      const asset = await loadMod;
       const plan0 = planAvatar(bundle.anchors, opts.body, opts.look, opts.maleShape);
       const target = mod.fitTargetOf(plan0.drawn, plan0.avatar.rings, plan0.drawnScaleAt);
       const fit = mod.fitRealisticBody(asset, target);
-      const arms: { side: 1 | -1; joint: [number, number, number]; axis: [number, number, number]; lengthCm: number }[] = [
-        { side: 1, joint: target.arms.left.joint, axis: target.arms.left.axis, lengthCm: Math.hypot(target.rings.find((r) => r.id === 'wrist')!.centre[0] - target.arms.left.joint[0], target.rings.find((r) => r.id === 'wrist')!.centre[1] - target.arms.left.joint[1], target.rings.find((r) => r.id === 'wrist')!.centre[2] - target.arms.left.joint[2]) },
-        { side: -1, joint: target.arms.right.joint, axis: target.arms.right.axis, lengthCm: Math.hypot(target.rings.find((r) => r.id === 'wrist')!.centre[0] - target.arms.right.joint[0], target.rings.find((r) => r.id === 'wrist')!.centre[1] - target.arms.right.joint[1], target.rings.find((r) => r.id === 'wrist')!.centre[2] - target.arms.right.joint[2]) },
+      prefittedMesh = fit.mesh;
+      const lArm = plan0.drawn.arms.left;
+      const rArm = plan0.drawn.arms.right;
+      const armS0 = plan0.field.armFrames[0]?.s0 ?? 7.5;
+      const armLen = lArm.upperArmCm + lArm.forearmCm + 0.85 * lArm.handCm;
+      const arms = [
+        { side: 1 as const, joint: [...lArm.joint] as [number, number, number], axis: [...lArm.axis] as [number, number, number], u: [...lArm.u] as [number, number, number], v: [...lArm.v] as [number, number, number], lengthCm: armLen, s0: armS0 },
+        { side: -1 as const, joint: [...rArm.joint] as [number, number, number], axis: [...rArm.axis] as [number, number, number], u: [...rArm.u] as [number, number, number], v: [...rArm.v] as [number, number, number], lengthCm: armLen, s0: armS0 },
       ];
-      realisticOutlines = mod.realisticOutlinesOf(fit.mesh, target.statureCm, target.crotchY, arms);
+      realisticOutlines = mod.realisticOutlinesOf(fit.mesh, target.statureCm, target.crotchY, arms, undefined, asset.armWeight);
     } catch {
       // If the outlines cannot be computed (e.g. no asset), fall back to the procedural field.
-      // The viewer still draws the realistic body (its own path below), only the collider stays
-      // the ellipse.
       realisticOutlines = null;
+      prefittedMesh = null;
     }
   }
 
   let plan: AvatarPlan;
   try {
-    plan = planAvatar(bundle.anchors, opts.body, opts.look, opts.maleShape, realisticOutlines);
+    plan = planAvatar(bundle.anchors, opts.body, opts.look, opts.maleShape, realisticOutlines, !!realisticOutlines);
   } catch (e) {
     state('error');
     throw e;
@@ -403,7 +407,10 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
   stage.scene.add(figure.group);
   const view = opts.initialView ?? initialViewFor(opts.garment.category);
   stage.frame(60, stature, view.azimuthDeg);
-  const realistic = startRealisticBody(canvas, opts, plan, stage, figure, fetchFn, () => wake(100), opts.realisticBodyConform === false ? undefined : { rest: bundle.baseMesh.positions, lift });
+  // When the realistic polar collider is active, the cloth collides directly with the fitted realistic body
+  // so `conformToField` is no longer needed (WO-016 iter 2, OI-143); only conform on explicit opt-in or ellipse fallback.
+  const useConform = opts.realisticBodyConform === true || (opts.realisticBodyConform !== false && !realisticOutlines);
+  const realistic = startRealisticBody(canvas, opts, plan, stage, figure, fetchFn, () => wake(100), useConform ? { rest: bundle.baseMesh.positions, lift } : undefined, prefittedMesh);
 
   interface Live {
     fit: FitInstance;
@@ -703,7 +710,7 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
  * (`conformToField`): the cloth meets the ring table's field, so without that the skin shows through the garment
  * wherever the real shape is outside the ellipse. `canvas.dataset.body` is then `realistic-conformed`.
  */
-function startRealisticBody(canvas: HTMLCanvasElement, opts: MountOptions, plan: AvatarPlan, stage: Stage, figure: Figure, fetchFn: FetchLike, redraw: () => void, garment?: { rest: ArrayLike<number>; lift: number }): { stop(): void; garmentShown(shown: boolean): void } {
+function startRealisticBody(canvas: HTMLCanvasElement, opts: MountOptions, plan: AvatarPlan, stage: Stage, figure: Figure, fetchFn: FetchLike, redraw: () => void, garment?: { rest: ArrayLike<number>; lift: number }, prefitted?: Mesh | null): { stop(): void; garmentShown(shown: boolean): void } {
   canvas.dataset.body = 'procedural';
   const none = { stop() {}, garmentShown() {} };
   if (bodyShapeOf(opts.bodyShape) !== 'realistic-spike' || plan.drawn.shape.family !== 'female') return none;
@@ -748,18 +755,18 @@ function startRealisticBody(canvas: HTMLCanvasElement, opts: MountOptions, plan:
   };
   void import('./realisticBodyLoad')
     .then(async (mod) => {
-      const r = await mod.realisticBodyFor(fetchFn, plan.drawn, plan.avatar.rings, plan.drawnScaleAt, opts.realisticBodyUrl);
+      const fittedMesh = prefitted ?? (await mod.realisticBodyFor(fetchFn, plan.drawn, plan.avatar.rings, plan.drawnScaleAt, opts.realisticBodyUrl)).mesh;
       let conformed = null;
       if (garment) {
         const zone = mod.coverZone(garment.rest, plan.field);
         const field = liftField(plan.field, garment.lift);
-        conformed = mod.conformToField(r.mesh, await mod.loadRealisticBody(fetchFn, opts.realisticBodyUrl), field, plan.drawn.landmarks.crotch[1], { ...zone, yLo: zone.yLo + garment.lift, yHi: zone.yHi + garment.lift });
+        conformed = mod.conformToField(fittedMesh, await mod.loadRealisticBody(fetchFn, opts.realisticBodyUrl), field, plan.drawn.landmarks.crotch[1], { ...zone, yLo: zone.yLo + garment.lift, yHi: zone.yHi + garment.lift });
       }
       // Spike diagnostics for the comparison pictures' tag only: nothing reads these back (no fit, size or report).
-      canvas.dataset.bodyGirths = mod.drawnGirthsTag(r.mesh, plan.drawn, plan.avatar.rings, plan.drawnScaleAt);
+      canvas.dataset.bodyGirths = mod.drawnGirthsTag(fittedMesh, plan.drawn, plan.avatar.rings, plan.drawnScaleAt);
       canvas.dataset.bodyGirthsConformed = conformed ? mod.drawnGirthsTag(conformed, plan.drawn, plan.avatar.rings, plan.drawnScaleAt) : '';
       const skin = opts.realisticSkin === true ? mod.realisticSkinOf(await mod.loadRealisticBody(fetchFn, opts.realisticBodyUrl)) : null;
-      return { plain: r.mesh, conformed, skin };
+      return { plain: fittedMesh, conformed, skin };
     })
     .then((r) => {
       if (!live) return;

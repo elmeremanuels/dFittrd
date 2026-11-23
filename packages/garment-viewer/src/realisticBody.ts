@@ -948,12 +948,11 @@ function limit(pu: number, pv: number, a: number, b: number, grow: number): numb
 // Polar outlines of the fitted realistic mesh (WO-016 iteration 1, OI-143).
 // ---------------------------------------------------------------------------
 
-/** Sampling step for the torso's and legs' polar stack, cm. Matches the collider's own step so the
- *  tabulation in `body.ts` lands on the same rows as the procedural body. */
-export const REALISTIC_TORSO_STEP_CM = 2;
-export const REALISTIC_LEG_STEP_CM = 3;
-/** Arm stations as fractions of the way from the shoulder joint to the wrist ring. */
-export const REALISTIC_ARM_STATIONS = [0, 0.25, 0.5, 0.75, 1] as const;
+/** Sampling step for the torso's and legs' polar stack, cm (1 cm paired with the vertex-envelope pass follows bust, underbust, shoulder and seat curves tightly in ~40 ms). */
+export const REALISTIC_TORSO_STEP_CM = 1;
+export const REALISTIC_LEG_STEP_CM = 2;
+/** Arm stations as fractions of the arm frame length (shoulder joint to fingertip `s1`). */
+export const REALISTIC_ARM_STATIONS = [0.08, 0.14, 0.22, 0.32, 0.42, 0.52, 0.62, 0.72, 0.80, 0.88, 0.95, 1] as const;
 /** Where the cap above the shoulder joint closes. Matches male v2. */
 const ARM_CAP_REACH_CM = 1.5;
 
@@ -964,17 +963,75 @@ export interface RealisticArmFrame {
   joint: V3;
   /** Unit axis towards the wrist. */
   axis: V3;
-  /** The arm's length along its axis (joint to wrist, cm). */
+  /** Optional arm section basis matching `Mannequin.arms[side].u / .v` so polar angles align 1:1 with `collide.ts`. */
+  u?: V3;
+  v?: V3;
+  /** The arm's length along its axis (joint to hand end `s1`, cm). */
   lengthCm: number;
+  /** Distance along the arm axis to the armpit (cm); vertices with `s <= s0` belong to the shoulder/torso cap. */
+  s0?: number;
 }
 
 /**
- * Polar outlines of a fitted realistic body mesh (female; WO-016 iteration 1, OI-143).
+ * Raise bracketing polar outline bins so the piecewise-linear polar stack tightly encloses a mesh
+ * vertex `(u, v)` at station coordinate `coord`, using the minimum-L2-norm update on the 4 corner
+ * bins `(k0..k1, j0..j1)`. Only moves bins when the vertex strictly exceeds the interpolated radius
+ * (convex peaks between slices such as the breast apex, shoulder dome or wrist); flat/concave
+ * regions are untouched.
+ */
+function enclosePolarPoint(
+  keys: readonly number[],
+  secs: readonly { cu: number; cv: number; r: Float64Array }[],
+  coord: number,
+  u: number,
+  v: number,
+  maxDeltaCm = Infinity,
+): void {
+  if (keys.length < 2 || !(coord >= keys[0]! && coord <= keys[keys.length - 1]!)) return;
+  let lo = 0, hi = keys.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (keys[mid]! <= coord) lo = mid;
+    else hi = mid;
+  }
+  const k0 = lo, k1 = hi;
+  const s0 = secs[k0]!, s1 = secs[k1]!;
+  const wt = Math.min(1, Math.max(0, (coord - keys[k0]!) / (keys[k1]! - keys[k0]! || 1)));
+  const cx = s0.cu + (s1.cu - s0.cu) * wt;
+  const cv = s0.cv + (s1.cv - s0.cv) * wt;
+  const du = u - cx, dv = v - cv;
+  const rv = Math.hypot(du, dv);
+  if (!(rv > 1e-6)) return;
+  const n = s0.r.length;
+  let a = (Math.atan2(dv, du) / (2 * Math.PI)) * n;
+  if (a < 0) a += n;
+  const j0 = Math.floor(a) % n;
+  const j1 = (j0 + 1) % n;
+  const wa = a - Math.floor(a);
+  const c00 = (1 - wt) * (1 - wa);
+  const c01 = (1 - wt) * wa;
+  const c10 = wt * (1 - wa);
+  const c11 = wt * wa;
+  const rCur = c00 * s0.r[j0]! + c01 * s0.r[j1]! + c10 * s1.r[j0]! + c11 * s1.r[j1]!;
+  const diff = rv - rCur;
+  if (!(diff > 1e-5) || diff > maxDeltaCm) return;
+  const norm2 = c00 * c00 + c01 * c01 + c10 * c10 + c11 * c11;
+  const scale = diff / norm2;
+  s0.r[j0] = s0.r[j0]! + c00 * scale;
+  s0.r[j1] = s0.r[j1]! + c01 * scale;
+  s1.r[j0] = s1.r[j0]! + c10 * scale;
+  s1.r[j1] = s1.r[j1]! + c11 * scale;
+}
+
+/**
+ * Polar outlines of a fitted realistic body mesh (female; WO-016 iter 1 + iter 2 fixes, OI-143).
  *
- * The torso and legs are sliced by horizontal planes, each section turned into a polar outline
- * about its own centroid. The arms are sliced by planes perpendicular to the arm axis, in the
- * arm's own (u, v) frame. The returned object plugs straight into `bodyField`'s `m.outlines`,
- * so the collider meets the drawn realistic body instead of the ellipse that contains it.
+ * The torso and legs are sliced by horizontal planes, each closed section turned into a polar outline
+ * about its own area centroid `(au, av)` — preserving that true centre `(cx, cz)` in world coordinates
+ * (or arm `(u, v)` coordinates for arms) so the collider meets the drawn realistic body everywhere
+ * (bust, underbust, waist, seat, both legs and both arms) instead of ellipses or origin-centred loops.
+ * A single vertex-envelope pass then ensures convex domes between slices (breast apex, shoulder slope,
+ * seat curve, wrist) never protrude past the piecewise-linear polar table.
  *
  * Not a fit target: the fit and sizes stay with the ring table. The outlines describe the skin
  * the cloth meets; the ring table still decides the size.
@@ -985,86 +1042,175 @@ export function realisticOutlinesOf(
   crotchY: number,
   arms: readonly RealisticArmFrame[],
   stepCm = { torso: REALISTIC_TORSO_STEP_CM, leg: REALISTIC_LEG_STEP_CM },
+  armWeight?: ArrayLike<number>,
 ): MannequinOutlines {
   const pos = mesh.positions;
   const idx = mesh.indices;
-  const polarOf = (origin: V3, normal: V3, u: V3, v: V3): { cu: number; cv: number; r: Float64Array } | null => {
-    const s = sectionAt(pos, idx, origin, normal, u, v);
-    if (!s || s.q.length < 3) return null;
-    // `sectionPolar` is the mannequin package's own converter: it reads a Section's `outline` or
-    // falls back to its ellipse. The realistic section has neither, so the outline is filled from
-    // the plane points (in (u, v) about the section's own centroid, which `sectionPolar` uses as
-    // the origin of the rays).
+  const sectionToPolar = (s: Section): { cu: number; cv: number; r: Float64Array } | null => {
+    if (s.q.length < 3) return null;
+    // Use the section's area centroid (guaranteed inside the closed section on torso/legs/arms) as
+    // the ray origin and preserve it as (cu, cv) so `polarStack` returns the real world/frame centre.
+    const cx = s.au;
+    const cv = s.av;
     const outline = new Float64Array(s.q.length * 2);
     for (let i = 0; i < s.q.length; i++) {
-      outline[2 * i] = s.q[i]![0] - s.cu;
-      outline[2 * i + 1] = s.q[i]![1] - s.cv;
+      outline[2 * i] = s.q[i]![0] - cx;
+      outline[2 * i + 1] = s.q[i]![1] - cv;
     }
-    return sectionPolar(
-      { centre: [0, 0, 0], u: [1, 0, 0], v: [0, 0, 1], a: 0, b: 0, outline },
-      s.q.length,
-      0,
-      0,
-    );
+    const p = sectionPolar({ centre: [0, 0, 0], u: [1, 0, 0], v: [0, 0, 1], a: 0, b: 0, outline }, s.q.length, 0, 0);
+    return { cu: cx, cv, r: p.r };
   };
+
+  // Pre-bucket triangles into 2 cm vertical bands so 250+ horizontal slices stay under a few ms.
+  const BAND_CM = 2;
+  const bandTris = new Map<number, number[]>();
+  for (let t = 0; t < idx.length; t += 3) {
+    const ya = pos[3 * idx[t]! + 1]!, yb = pos[3 * idx[t + 1]! + 1]!, yc = pos[3 * idx[t + 2]! + 1]!;
+    const b0 = Math.floor(Math.min(ya, yb, yc) / BAND_CM);
+    const b1 = Math.floor(Math.max(ya, yb, yc) / BAND_CM);
+    for (let b = b0; b <= b1; b++) {
+      let arr = bandTris.get(b);
+      if (!arr) { arr = []; bandTris.set(b, arr); }
+      arr.push(idx[t]!, idx[t + 1]!, idx[t + 2]!);
+    }
+  }
+  const hSectionsAt = (y: number): Section[] => {
+    const arr = bandTris.get(Math.floor(y / BAND_CM));
+    return arr ? horizontalSections(pos, arr, y) : [];
+  };
+
   const torsoKeys: number[] = [];
   const torsoSecs: { cu: number; cv: number; r: Float64Array }[] = [];
-  for (let y = 0; y <= statureCm + 1e-9; y += stepCm.torso) {
-    const p = polarOf([0, y, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1]);
+  // Torso starts at the crotch (never grabbing a single leg below it), sampled densely at 0.5 cm.
+  const torsoStart = Math.max(0, crotchY - 1.5);
+  for (let y = torsoStart; y <= statureCm + 1e-9; y += stepCm.torso) {
+    const secs = hSectionsAt(y).filter((s) => Math.abs(s.au) < 5);
+    if (!secs.length) continue;
+    secs.sort((a, b) => b.loopCm - a.loopCm);
+    const p = sectionToPolar(secs[0]!);
     if (p && p.r.length > 0) {
       torsoKeys.push(y);
       torsoSecs.push(p);
     }
   }
-  const torsoAt = polarStack(torsoKeys, torsoSecs);
-  const legStack = (side: 1 | -1): ((y: number) => PolarSection | null) => {
+
+  const buildLeg = (side: 1 | -1): { keys: number[]; secs: { cu: number; cv: number; r: Float64Array }[] } => {
     const keys: number[] = [];
     const secs: { cu: number; cv: number; r: Float64Array }[] = [];
-    for (let y = 0; y <= crotchY + 1e-9; y += stepCm.leg) {
-      const p = polarOf([side * 0, y, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1]);
+    const legYs: number[] = [];
+    for (let y = 0; y < Math.max(0, crotchY - 2); y += stepCm.leg) legYs.push(y);
+    for (let y = Math.max(0, crotchY - 2); y <= crotchY + 1; y += 0.5) legYs.push(y);
+    for (const y of legYs) {
+      // Pick the closed loop on this leg's side (`side * au > 1`), never the opposite leg or the merged torso.
+      const candidates = hSectionsAt(y).filter((s) => side * s.au > 1 && side * s.au < 28);
+      if (!candidates.length) continue;
+      candidates.sort((a, b) => b.loopCm - a.loopCm);
+      const p = sectionToPolar(candidates[0]!);
       if (p && p.r.length > 0) {
         keys.push(y);
         secs.push(p);
       }
     }
-    return polarStack(keys, secs);
+    return { keys, secs };
   };
-  const legLeft = legStack(1);
-  const legRight = legStack(-1);
-  const armStack = (frame: RealisticArmFrame): ((s: number) => PolarSection | null) => {
-    const { u, v } = planeBasis(frame.axis);
-    const keys: number[] = [-ARM_CAP_REACH_CM];
-    const secs: { cu: number; cv: number; r: Float64Array }[] = [];
-    const first = polarOf(
-      [frame.joint[0] + frame.axis[0] * 0.01, frame.joint[1] + frame.axis[1] * 0.01, frame.joint[2] + frame.axis[2] * 0.01],
-      frame.axis,
-      u,
-      v,
-    );
-    if (first && first.r.length > 0) {
-      // The cap closes to a pinhole a little above the shoulder joint.
-      secs.push({ cu: first.cu, cv: first.cv, r: Float64Array.from(first.r, (x) => 0.02 * x) });
-    } else {
-      secs.push({ cu: 0, cv: 0, r: new Float64Array(96) });
+  const legLeftData = buildLeg(1);
+  const legRightData = buildLeg(-1);
+
+  const armFramesNorm = arms.map((frame) => {
+    const basis = frame.u && frame.v ? { u: frame.u, v: frame.v } : planeBasis(frame.axis);
+    return { frame, u: basis.u, v: basis.v, s0: frame.s0 ?? 7.5 };
+  });
+
+  // Pre-filter triangles per arm side so `sectionAt` only tests ~15% of the mesh per arm slice.
+  const sideArmTris = (side: 1 | -1): number[] => {
+    const out: number[] = [];
+    for (let t = 0; t < idx.length; t += 3) {
+      const a = idx[t]!, b = idx[t + 1]!, c = idx[t + 2]!;
+      const xa = pos[3 * a]!, xb = pos[3 * b]!, xc = pos[3 * c]!;
+      if (side * xa < 6 && side * xb < 6 && side * xc < 6) continue;
+      if (armWeight && armWeight[a]! < 0.05 && armWeight[b]! < 0.05 && armWeight[c]! < 0.05) continue;
+      out.push(a, b, c);
     }
+    return out;
+  };
+
+  const buildArm = (entry: (typeof armFramesNorm)[number]): { keys: number[]; secs: { cu: number; cv: number; r: Float64Array }[] } => {
+    const { frame, u, v } = entry;
+    const armIdx = sideArmTris(frame.side);
+    const keys: number[] = [];
+    const secs: { cu: number; cv: number; r: Float64Array }[] = [];
     for (const f of REALISTIC_ARM_STATIONS) {
       const s = f * frame.lengthCm;
       const o: V3 = [frame.joint[0] + frame.axis[0] * s, frame.joint[1] + frame.axis[1] * s, frame.joint[2] + frame.axis[2] * s];
-      const p = polarOf(o, frame.axis, u, v);
+      const sec = sectionAt(pos, armIdx, o, frame.axis, u, v);
+      // Skip giant torso-merged sections above the armpit (`loopCm > 60 cm`) so the arm table stays pure arm.
+      if (!sec || sec.loopCm > 60) continue;
+      const p = sectionToPolar(sec);
       if (p && p.r.length > 0) {
         keys.push(s);
         secs.push(p);
       }
     }
-    return polarStack(keys, secs);
+    if (keys.length) {
+      // Close the shoulder cap smoothly from the first valid arm section back to -ARM_CAP_REACH_CM.
+      const first = secs[0]!;
+      keys.unshift(-ARM_CAP_REACH_CM);
+      secs.unshift({ cu: first.cu, cv: first.cv, r: Float64Array.from(first.r, (x) => 0.02 * x) });
+      // Extend cleanly to the end of the arm frame (`lengthCm`) if the fingertip slice fell just past the last closed loop.
+      if (keys[keys.length - 1]! < frame.lengthCm) {
+        const last = secs[secs.length - 1]!;
+        keys.push(frame.lengthCm);
+        secs.push({ cu: last.cu, cv: last.cv, r: Float64Array.from(last.r, (x) => Math.max(0.4, 0.5 * x)) });
+      }
+    }
+    return { keys, secs };
   };
-  const armLeft = arms.find((a) => a.side === 1);
-  const armRight = arms.find((a) => a.side === -1);
-  const armLeftAt = armLeft ? armStack(armLeft) : () => null;
-  const armRightAt = armRight ? armStack(armRight) : () => null;
+  const armLeftEntry = armFramesNorm.find((a) => a.frame.side === 1);
+  const armRightEntry = armFramesNorm.find((a) => a.frame.side === -1);
+  const armLeftData = armLeftEntry ? buildArm(armLeftEntry) : { keys: [], secs: [] };
+  const armRightData = armRightEntry ? buildArm(armRightEntry) : { keys: [], secs: [] };
+
+  // Vertex-envelope pass: ensure convex peaks between slices (breast apex, shoulder dome, buttocks,
+  // elbow/wrist) never stick out past the piecewise-linear polar tables.
+  const nv = pos.length / 3;
+  for (let i = 0; i < nv; i++) {
+    const x = pos[3 * i]!, y = pos[3 * i + 1]!, z = pos[3 * i + 2]!;
+    const aw = armWeight ? armWeight[i]! : 0;
+    const armEntry = x >= 0 ? armLeftEntry : armRightEntry;
+    let sAlong = Infinity;
+    let pu = 0, pv = 0;
+    if (armEntry) {
+      const rx = x - armEntry.frame.joint[0];
+      const ry = y - armEntry.frame.joint[1];
+      const rz = z - armEntry.frame.joint[2];
+      sAlong = rx * armEntry.frame.axis[0] + ry * armEntry.frame.axis[1] + rz * armEntry.frame.axis[2];
+      pu = rx * armEntry.u[0] + ry * armEntry.u[1] + rz * armEntry.u[2];
+      pv = rx * armEntry.v[0] + ry * armEntry.v[1] + rz * armEntry.v[2];
+    }
+    const isArmFree = armWeight ? aw > 0.35 && sAlong > (armEntry?.s0 ?? 7.5) : false;
+    if (isArmFree && armEntry && sAlong <= armEntry.frame.lengthCm) {
+      const armData = x >= 0 ? armLeftData : armRightData;
+      enclosePolarPoint(armData.keys, armData.secs, sAlong, pu, pv, 4);
+      continue;
+    }
+    if (y >= torsoStart && y <= statureCm) {
+      // Without `armWeight`, guard delta <= 3.0 cm so free arms below the armpit aren't absorbed into the torso.
+      enclosePolarPoint(torsoKeys, torsoSecs, y, x, z, armWeight ? 4 : 3);
+    }
+    if (y >= 0 && y <= crotchY + 0.5 && !isArmFree) {
+      if (x >= 0) enclosePolarPoint(legLeftData.keys, legLeftData.secs, y, x, z, 3);
+      else enclosePolarPoint(legRightData.keys, legRightData.secs, y, x, z, 3);
+    }
+  }
+
+  const torsoAt = torsoKeys.length >= 2 ? polarStack(torsoKeys, torsoSecs) : () => null;
+  const legLeft = legLeftData.keys.length >= 2 ? polarStack(legLeftData.keys, legLeftData.secs) : () => null;
+  const legRight = legRightData.keys.length >= 2 ? polarStack(legRightData.keys, legRightData.secs) : () => null;
+  const armLeftAt = armLeftData.keys.length >= 2 ? polarStack(armLeftData.keys, armLeftData.secs) : () => null;
+  const armRightAt = armRightData.keys.length >= 2 ? polarStack(armRightData.keys, armRightData.secs) : () => null;
   return {
-    torso: (y) => (y >= 0 && y <= statureCm ? torsoAt(y) : null),
-    leg: (y, side) => (y >= 0 && y <= crotchY ? (side === 1 ? legLeft(y) : legRight(y)) : null),
+    torso: (y) => (y >= torsoStart && y <= statureCm ? torsoAt(y) : null),
+    leg: (y, side) => (y >= 0 && y <= crotchY + 0.5 ? (side === 1 ? legLeft(y) : legRight(y)) : null),
     arm: (s, side) => (side === 1 ? armLeftAt(s) : armRightAt(s)),
   };
 }

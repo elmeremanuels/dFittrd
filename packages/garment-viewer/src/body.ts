@@ -308,7 +308,7 @@ export function liftField(field: BodyField, dyCm: number): BodyField {
  * floor on a shorter body passes through it and is hidden by the floor), and the grading and the
  * pins are still placed on `base`.
  */
-export function buildTypedAvatar(base: Mannequin, body: BodyOptions, category: string, mesh: MeshOptions = {}, build: BuildOptions = {}, outlines: MannequinOutlines | null | undefined = undefined): TypedAvatar {
+export function buildTypedAvatar(base: Mannequin, body: BodyOptions, category: string, mesh: MeshOptions = {}, build: BuildOptions = {}, outlines: MannequinOutlines | null | undefined = undefined, outlinesPreScaled = false): TypedAvatar {
   const family = base.shape.family;
   const meas = sanitiseMeasurements(girthInput(body), mannequinMeasurements(base));
   const shoulderCm = positive(body.shoulderCm);
@@ -322,7 +322,7 @@ export function buildTypedAvatar(base: Mannequin, body: BodyOptions, category: s
   if (fitted.neck) rings.neck *= fitted.neck.scale;
   return {
     avatar: { measurements: meas, morph: IDENTITY_MORPH.morph, rings, mesh: fitted.mesh, neck: fitted.neck },
-    field: liftField(bodyField(shown, { ...IDENTITY_MORPH, neck: fitted.neck }, 0.5, outlines), -garmentLiftCm),
+    field: liftField(bodyField(shown, { ...IDENTITY_MORPH, neck: fitted.neck }, 0.5, outlines, outlinesPreScaled), -garmentLiftCm),
     statureCm: shown.statureCm,
     drawn: shown,
     garmentLiftCm,
@@ -368,9 +368,10 @@ function tabulatePolar(lo: number, hi: number, stepCm: number, at: (x: number) =
  * Avatar cross-sections for collision. Body sections are scaled about the vertical axis like `radialMorph`. A body with
  * drawn outlines (the male shape v2) also carries them (`Table.polar`): the collider then meets the drawn body, not the
  * ellipse that contains it. A host can pass its own outlines (`outlines`) — for example the realistic body's fitted
- * mesh (WO-016 iteration 1, CUR-9) — and they take precedence over the mannequin's own.
+ * mesh (WO-016, CUR-9) — and they take precedence over the mannequin's own. When `outlinesPreScaled` is true, those
+ * outlines are already in the fitted body's final scale and are not multiplied again by `avatar.morph` / `avatar.neck`.
  */
-export function bodyField(m: Mannequin, avatar: Pick<Avatar, 'morph' | 'neck'>, stepCm = 0.5, outlines: MannequinOutlines | null | undefined = m.outlines): BodyField {
+export function bodyField(m: Mannequin, avatar: Pick<Avatar, 'morph' | 'neck'>, stepCm = 0.5, outlines: MannequinOutlines | null | undefined = m.outlines, outlinesPreScaled = false): BodyField {
   const S = m.statureCm;
   const scaled = (e: { cx: number; cz: number; a: number; b: number } | null, y: number, narrow = 1) => {
     if (!e) return null;
@@ -378,7 +379,8 @@ export function bodyField(m: Mannequin, avatar: Pick<Avatar, 'morph' | 'neck'>, 
     return { cx: e.cx * s, cz: e.cz * s, a: e.a * s * narrow, b: e.b * s * narrow };
   };
   const o = outlines ?? null;
-  const bodyScale = (y: number): number => avatar.morph.girthScaleAt(y, 'body');
+  const bodyScale = outlinesPreScaled ? () => 1 : (y: number): number => avatar.morph.girthScaleAt(y, 'body');
+  const torsoScale = outlinesPreScaled ? () => 1 : (y: number): number => avatar.morph.girthScaleAt(y, 'body') * neckScaleAt(avatar.neck, y);
   const s0 = armpitDistance(m);
   const arms = [m.arms.left, m.arms.right].map((f) => {
     const side = f.side;
@@ -396,7 +398,7 @@ export function bodyField(m: Mannequin, avatar: Pick<Avatar, 'morph' | 'neck'>, 
   const torso = tabulate(0, S, stepCm, (y) => scaled(m.torsoAt(y), y, neckScaleAt(avatar.neck, y)));
   const legs: [Table, Table] = [tabulate(0, S * 0.6, stepCm, (y) => scaled(m.legAt(y, 1), y)), tabulate(0, S * 0.6, stepCm, (y) => scaled(m.legAt(y, -1), y))];
   if (o) {
-    torso.polar = tabulatePolar(0, S, stepCm, (y) => o.torso(y), (y) => bodyScale(y) * neckScaleAt(avatar.neck, y));
+    torso.polar = tabulatePolar(0, S, stepCm, (y) => o.torso(y), torsoScale);
     legs[0].polar = tabulatePolar(0, S * 0.6, stepCm, (y) => o.leg(y, 1), bodyScale);
     legs[1].polar = tabulatePolar(0, S * 0.6, stepCm, (y) => o.leg(y, -1), bodyScale);
   }

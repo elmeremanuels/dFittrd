@@ -24,7 +24,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { AudienceSource, GarmentPayloadDraft, IncompleteProductDataPolicy, LedgerEntry, LeftOutValue, PairingSource, ProductHeldBack, SdkSurface } from '@curtain/schema';
+import type { AudienceSource, Fabric, GarmentPayloadDraft, IncompleteProductDataPolicy, LedgerEntry, LeftOutValue, PairingSource, ProductHeldBack, SdkSurface } from '@curtain/schema';
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 const id = () => uuid('id').primaryKey().default(sql`gen_random_uuid()`);
@@ -626,6 +626,28 @@ export const consoleSessions = pgTable(
   (t) => [uniqueIndex('console_sessions_token_hash_uq').on(t.tokenHash), index('console_sessions_shop_idx').on(t.shopId)],
 );
 
+/**
+ * Saved fabric library per shop (CUR-40, WO-026): the merchant's named fabrics, persisted
+ * so they survive a reload and a new session. One shop can never read another shop's fabrics.
+ * The `fabric` column is validated against `FabricSchema` on write (the routes enforce this).
+ */
+export const fabricLibrary = pgTable(
+  'fabric_library',
+  {
+    id: id(),
+    shopId: uuid('shop_id')
+      .notNull()
+      .references(() => shops.id, { onDelete: 'cascade' }),
+    /** The library entry's display name (unique per shop). */
+    name: text('name').notNull(),
+    /** The fabric data (validated against FabricSchema on write). */
+    fabric: jsonb('fabric').$type<Fabric>().notNull(),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('fabric_library_shop_name_uq').on(t.shopId, t.name), index('fabric_library_shop_idx').on(t.shopId)],
+);
+
 export const schema = {
   shops,
   shopifySessions,
@@ -648,5 +670,6 @@ export const schema = {
   analyticsSnapshots,
   consoleLinks,
   consoleSessions,
+  fabricLibrary,
 };
 export type Schema = typeof schema;

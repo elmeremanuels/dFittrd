@@ -56,9 +56,9 @@ async function sheet(file, title, rows, width) {
   await page.setContent(`<!doctype html><html><body style="margin:0;background:#1a1612;font:600 13px system-ui;color:#f5efe7">
     <div style="padding:10px 12px 0;font-size:16px">${title}</div>
     ${rows.map(([head, cells]) => `<div style="display:flex;gap:6px;padding:6px 12px 2px;align-items:flex-start"><div style="width:70px;padding-top:24px;font-size:18px">${head}</div>${cells.join('')}</div>`).join('')}
-    <style>figure{margin:0}figcaption{padding:2px 0 4px;min-height:32px;line-height:15px}img{display:block}</style></body></html>`);
-  await page.waitForLoadState('load');
-  await page.screenshot({ path: join(outDir, file), fullPage: true });
+    <style>figure{margin:0}figcaption{padding:2px 0 4px;min-height:32px;line-height:15px}img{display:block}</style></body></html>`, { timeout: 180_000 });
+  await page.waitForLoadState('load', { timeout: 180_000 });
+  await page.screenshot({ path: join(outDir, file), fullPage: true, timeout: 180_000 });
 }
 const note = 'ESTIMATE · realistic hair (D28) on the realistic body spike, mid body 168 cm · headless Chromium (SwiftShader), tiles 390 × 844 CSS px rendered at 2×';
 if (existsSync(join(dir, 'tile-1-short--front.png'))) {

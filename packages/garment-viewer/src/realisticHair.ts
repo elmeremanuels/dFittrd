@@ -244,32 +244,41 @@ export interface TorsoModel {
   lo: number;
   rows: number;
   cz: Float32Array;
-  /** rows × NT radii about (0, cz[row]), angle 0 = front (+Z), towards +X. */
+  /** rows × NT radii about (0, cz[row]), angle 0 = front (+Z), towards +X. Pure torso (arms excluded). */
   R: Float32Array;
+  /** Per-row left (+X) and right (-X) arm cylinders (cx, cz, radius), 0 radius where no arm exists. */
+  armL: Float32Array;
+  armR: Float32Array;
 }
 
 export function torsoModel(input: HairBodyInput, head: HeadModel): TorsoModel {
-  const P = input.positions, W = input.headWeight, nb = input.bodyVertexCount;
+  const P = input.positions, W = input.headWeight, A = input.armWeight, nb = input.bodyVertexCount;
   const lo = Math.floor(input.ringY.underbust - 14);
   const rows = Math.ceil(head.chin + 2 - lo);
+  // Keep the torso polar hull pure torso (arms excluded) so long hair drapes smoothly over the upper back with no shelf.
+  const keep = (i: number): boolean => i < nb && W[i]! < 0.5 && A[i]! < 0.5;
+  // Sample midline front/back from triangulated surface points (not raw sparse vertices, which can miss a 1 cm row
+  // on the back and spike `cz` by +10 cm into a phantom hunchback / chest shelf).
   const zf = new Float32Array(rows).fill(-Infinity), zb = new Float32Array(rows).fill(Infinity);
-  for (let i = 0; i < nb; i++) {
-    const r = Math.floor(P[3 * i + 1]! - lo);
-    if (r < 0 || r >= rows || Math.abs(P[3 * i]!) > 5 || W[i]! >= 0.5) continue;
-    zf[r] = Math.max(zf[r]!, P[3 * i + 2]!);
-    zb[r] = Math.min(zb[r]!, P[3 * i + 2]!);
-  }
+  trianglePoints(P, input.indices, keep, (x, y, z) => {
+    if (Math.abs(x) > 6) return;
+    const r = Math.floor(y - lo);
+    if (r < 0 || r >= rows) return;
+    if (z > zf[r]!) zf[r] = z;
+    if (z < zb[r]!) zb[r] = z;
+  }, 3);
   const cz = new Float32Array(rows);
-  let last = 0;
+  let last = head.c[2] * 0.25;
   for (let r = 0; r < rows; r++) {
-    if (Number.isFinite(zf[r]!) && Number.isFinite(zb[r]!)) last = (zf[r]! + zb[r]!) / 2;
+    if (Number.isFinite(zf[r]!) && Number.isFinite(zb[r]!) && zf[r]! - zb[r]! > 3) last = (zf[r]! + zb[r]!) / 2;
     cz[r] = last;
   }
+  // Gently smooth `cz` across height so polar radii stay continuous along the spine and sternum.
+  for (let pass = 0; pass < 3; pass++) {
+    const prev = cz.slice();
+    for (let r = 1; r < rows - 1; r++) cz[r] = (prev[r - 1]! + 2 * prev[r]! + prev[r + 1]!) / 4;
+  }
   const R = new Float32Array(rows * NT);
-  const A = input.armWeight;
-  // Include upper-arm / deltoid vertices near the shoulders (above chest - 6 cm) so wide curls never clip the upper arms.
-  const armFloor = input.ringY.chest - 6;
-  const keep = (i: number): boolean => i < nb && W[i]! < 0.5 && (A[i]! < 0.5 || P[3 * i + 1]! >= armFloor);
   trianglePoints(P, input.indices, keep, (x, y, z) => {
     const r = Math.floor(y - lo);
     if (r < 0 || r >= rows) return;
@@ -280,7 +289,35 @@ export function torsoModel(input: HairBodyInput, head: HeadModel): TorsoModel {
     if (d > R[k]!) R[k] = d;
   }, 2);
   fillAndDilate(R, rows, NT, true);
-  return { lo, rows, cz, R };
+
+  // Separate left/right arm cylinders per row so side curls deflect cleanly off the upper arms without disturbing the back.
+  const buildArm = (side: 1 | -1): Float32Array => {
+    const sx = new Float32Array(rows), sz = new Float32Array(rows), cnt = new Float32Array(rows);
+    const ptsByRow: [number, number][][] = Array.from({ length: rows }, () => []);
+    for (let i = 0; i < nb; i++) {
+      if (W[i]! >= 0.5 || A[i]! < 0.5) continue;
+      const x = P[3 * i]!, y = P[3 * i + 1]!, z = P[3 * i + 2]!;
+      if (x * side <= 0) continue;
+      const r = Math.floor(y - lo);
+      if (r < 0 || r >= rows) continue;
+      sx[r] = sx[r]! + x;
+      sz[r] = sz[r]! + z;
+      cnt[r] = cnt[r]! + 1;
+      ptsByRow[r]!.push([x, z]);
+    }
+    const out = new Float32Array(rows * 3);
+    for (let r = 0; r < rows; r++) {
+      if (!cnt[r]!) continue;
+      const cx = sx[r]! / cnt[r]!, czArm = sz[r]! / cnt[r]!;
+      let rad = 0;
+      for (const [px, pz] of ptsByRow[r]!) rad = Math.max(rad, Math.hypot(px - cx, pz - czArm));
+      out[3 * r] = cx;
+      out[3 * r + 1] = czArm;
+      out[3 * r + 2] = rad + 0.4;
+    }
+    return out;
+  };
+  return { lo, rows, cz, R, armL: buildArm(1), armR: buildArm(-1) };
 }
 
 function torsoRadius(t: TorsoModel, y: number, ang: number): { cz: number; r: number } | null {
@@ -359,8 +396,29 @@ export class HairSpace {
           const pen = (R - dr) * nr;
           const ux = dr > 1e-6 ? q[0] / dr : 0, uz = dr > 1e-6 ? dz / dr : -1;
           const zDir = zBias !== 0 ? Math.sign(zBias) : Math.sign(dz || -1);
-          const off = ny > 0.45 ? 0.65 * pen * zDir : 0;
+          // Slide off the top of the shoulders (`|x| > 6`, near shoulder ridge) without launching back hair off the trapezius.
+          const onShoulderTop = Math.abs(q[0]) > 6 && Math.abs(dz) < 6.5;
+          const off = ny > 0.5 && onShoulderTop ? 0.35 * pen * zDir : 0;
           q = [q[0] + ux * pen * nr, q[1] + pen * ny, q[2] + uz * pen * nr + off];
+        }
+      }
+      // Deflect cleanly off the local left/right arm cylinder when hair drifts out onto the outer shoulder/bicep.
+      const row = Math.floor(q[1] - this.torso.lo);
+      if (row >= 0 && row < this.torso.rows && Math.abs(q[0]) > 13.5) {
+        const arm = q[0] > 0 ? this.torso.armL : this.torso.armR;
+        const ar = arm[3 * row + 2]!;
+        if (ar > 0) {
+          const ax = arm[3 * row]!, az = arm[3 * row + 1]!;
+          const dx = q[0] - ax, dz = q[2] - az;
+          const dist = Math.hypot(dx, dz);
+          const need = ar + Math.min(ct, 0.8);
+          if (dist < need) {
+            // Prefer sliding forward/backward around the arm rather than jutting sideways out past the arm.
+            const zPush = zBias !== 0 ? Math.sign(zBias) : Math.sign(dz || -1);
+            const ux = dist > 1e-4 ? dx / dist : 0, uz = dist > 1e-4 ? dz / dist : zPush;
+            const k = need - dist;
+            q = [q[0] + ux * k * 0.5, q[1], q[2] + (uz * 0.65 + zPush * 0.45) * k];
+          }
         }
       }
       if (q[2] > this.faceZ && q[1] > this.faceY[0] && q[1] < this.faceY[1] && Math.abs(q[0]) < this.faceX) {
@@ -642,15 +700,15 @@ function buildSculptedCurtain(
 ): void {
   const h = space.head;
   const hs = h.scale;
-  const cols = 30;
   const rows = length === 'short' ? 6 : length === 'chin' ? 9 : length === 'shoulder' ? 12 : 15;
   const vStart = w.vertices;
   const iStart = w.idx.length;
 
-  // Sweep cleanly behind the shoulder line (`+66°` around `+180°/-180°` to `-66°`) onto the upper back so no flat
-  // curtain corner ever pokes out over the front collarbone.
-  const azStart = 66 * DEG;
-  const azSpan = (360 - 132) * DEG;
+  // Sweep strictly across the central back (`+122°` around `+180°/-180°` to `-122°`, between the shoulder blades)
+  // and tuck its hem slightly behind the sculpted hero locks so adjacent columns never split across a shoulder or arm.
+  const cols = 18;
+  const azStart = 122 * DEG;
+  const azSpan = (360 - 244) * DEG;
   const columns: V3[][] = [];
   const colAo: number[][] = [];
   const colAz: number[] = [];
@@ -663,46 +721,46 @@ function buildSculptedCurtain(
     const absAzDeg = Math.abs(azDeg);
     colAz.push(az);
 
-    const elStart = clamp(hairlineEl(azDeg) + 22 * smooth(54, 130, absAzDeg) + 12, 16, 68) * DEG;
+    const elStart = clamp(hairlineEl(azDeg) + 28, 12, 62) * DEG;
     const dir: V3 = [Math.sin(az) * Math.cos(elStart), Math.sin(elStart), Math.cos(az) * Math.cos(elStart)];
     const root = add(h.c, dir, headRadius(h, az, elStart));
     const sx = Math.sign(Math.sin(az) || 1);
     const shoulderSide = -1;
 
-    // Taper smoothly at the side edges so the inner back drape tucks cleanly behind the sculpted side hero locks.
-    const edgeFade = smooth(0, 0.16, uFrac) * smooth(1, 0.84, uFrac);
-    const ch = 0.28 + edgeFade * (0.42 + p.crownLift * 0.42 + (p.kind === 'curl' ? p.amp * 0.48 : p.amp * 0.20));
-    const ct = 0.82 + edgeFade * (0.48 + (p.kind === 'curl' ? p.amp * 0.55 : p.amp * 0.22));
+    const edgeFade = smooth(0, 0.22, uFrac) * smooth(1, 0.78, uFrac);
+    const ch = 0.24 + edgeFade * (0.38 + p.crownLift * 0.32 + (p.kind === 'curl' ? p.amp * 0.35 : p.amp * 0.16));
+    const ct = 0.78 + edgeFade * (0.38 + (p.kind === 'curl' ? p.amp * 0.42 : p.amp * 0.18));
 
-    const want: V3 = [sx * 0.28, -1.0, -0.42];
+    const want: V3 = [sx * 0.12, -1.0, -0.35];
     const comb = norm(sub(want, [dir[0] * dot(want, dir), dir[1] * dot(want, dir), dir[2] * dot(want, dir)]));
-    let d = norm(add(comb, dir, p.lift * 0.55));
-    let q = space.push(add(root, dir, 0.22), 0.22, ct, shoulderSide);
+    let d = norm(add(comb, dir, p.lift * 0.4));
+    let q = space.push(add(root, dir, 0.2), 0.2, ct, shoulderSide);
     const pts: V3[] = [q];
-    const scallop = 0.75 * Math.sin(uFrac * Math.PI * 10);
-    const targetY = yEndBase + 2.2 * hs + (1 - edgeFade) * 4.0 * hs + scallop * hs;
-    const maxLen = length === 'short' ? (4.6 + 2.4 * edgeFade) * hs : 90;
+    const scallop = 0.65 * Math.sin(uFrac * Math.PI * 8);
+    // Keep the inner backing slightly shorter than the sculpted locks so the sculpted lock tips form the outer hem.
+    const targetY = yEndBase + (length === 'short' ? 1.5 : 4.2) * hs + (1 - edgeFade) * 3.5 * hs + scallop * hs;
+    const maxLen = length === 'short' ? (4.4 + 2.0 * edgeFade) * hs : 86;
 
     for (let s = 0; s < maxLen; s += 1.0) {
       const chCur = 0.22 + (ch - 0.22) * smooth(0, 5.5 * hs, s);
       const out = space.outward(q);
+      // Damp horizontal bounce after clearing the head so the trapezius slope never launches back hair into midair.
+      if (q[1] < h.chin) d = norm([d[0] * 0.52, Math.min(-0.45, d[1]), d[2] * 0.42]);
       let force: V3 = [0, -p.gravity, 0];
-      const nearShoulder = smooth(h.chin + 3, ring.shoulder + 1, q[1]) * (1 - smooth(ring.shoulder - 8, ring.shoulder - 20, q[1]));
-      if (nearShoulder > 0 && absAzDeg < 130) {
-        force = add(force, [0, 0, -0.32 * nearShoulder]);
-      }
-      if (q[1] < ring.shoulder + 2 && Math.abs(q[0]) > 14.2 * hs) {
-        force = add(force, [-Math.sign(q[0]) * 0.14, 0, -0.14]);
+      const nearShoulder = smooth(h.chin + 2, ring.shoulder + 2, q[1]) * (1 - smooth(ring.shoulder - 4, ring.shoulder - 12, q[1]));
+      if (nearShoulder > 0 && absAzDeg < 110) {
+        force = add(force, [0, 0, -0.10 * nearShoulder]);
       }
       if (length === 'chin' && p.kind !== 'curl' && q[1] < targetY + 4.5) {
         force = add(force, out, -0.18 * smooth(targetY + 4.5, targetY, q[1]));
       }
-      const onBack = q[1] < ring.shoulder + 2 && q[2] < h.c[2] - 1;
-      if (onBack && p.kind !== 'curl') {
+      const onBack = q[1] < ring.shoulder + 3 && q[2] < h.c[2] - 0.5;
+      if (onBack) {
         const tInfo = space.torsoAt(q[1], q[0], q[2]);
-        if (tInfo && tInfo.dr > tInfo.r + ct + 0.5) force = add(force, out, -Math.min(0.22, (tInfo.dr - (tInfo.r + ct + 0.5)) * 0.06));
+        const wantDr = tInfo ? tInfo.r + ct + (p.kind === 'curl' ? 1.4 : 0.45) : 0;
+        if (tInfo && tInfo.dr > wantDr) force = add(force, out, -Math.min(0.42, (tInfo.dr - wantDr) * 0.14));
       } else {
-        force = add(force, out, p.push * 0.65);
+        force = add(force, out, p.push * 0.55);
       }
       d = norm(add(d, force));
       const next = space.push(add(q, d, 1.0), chCur, ct, shoulderSide);
@@ -1172,6 +1230,8 @@ function growSculptedGuide(
   for (let s = 0; s < maxLen; s += ds) {
     const chCur = chRoot + (chTarget - chRoot) * smooth(0, 6.5 * hs, s);
     const out = space.outward(q);
+    // Damp horizontal bounce below chin height so shoulder/trapezius collisions never launch hair out into midair.
+    if (q[1] < h.chin) d = norm([d[0] * 0.55, Math.min(-0.45, d[1]), d[2] * 0.45]);
     let force: V3 = [0, -p.gravity, 0];
 
     // Keep front hairline locks gracefully sweeping past the temples (never cutting in front of the eyes!).
@@ -1179,24 +1239,21 @@ function growSculptedGuide(
       force = add(force, [sx * 0.22 * (1 - s / (6.5 * hs)), 0, -0.05]);
     }
 
-    const nearShoulder = smooth(h.chin + 3, ring.shoulder + 1, q[1]) * (1 - smooth(ring.shoulder - 8, ring.shoulder - 20, q[1]));
-    if (nearShoulder > 0 && absAzDeg > 28 && absAzDeg < 126) {
-      force = add(force, [0, 0, spec.shoulderSide * 0.24 * nearShoulder]);
-    }
-    if (q[1] < ring.shoulder + 2 && Math.abs(q[0]) > 16.5 * hs) {
-      force = add(force, [-Math.sign(q[0]) * 0.08, 0, spec.shoulderSide * 0.08]);
+    const nearShoulder = smooth(h.chin + 2, ring.shoulder + 2, q[1]) * (1 - smooth(ring.shoulder - 4, ring.shoulder - 12, q[1]));
+    if (nearShoulder > 0 && absAzDeg > 30 && absAzDeg < 110) {
+      force = add(force, [0, 0, spec.shoulderSide * 0.14 * nearShoulder]);
     }
 
     if (length === 'chin' && (p.kind === 'straight' || p.kind === 'wave') && q[1] < yEnd + 4.5) {
       force = add(force, out, -0.20 * smooth(yEnd + 4.5, yEnd, q[1]));
     }
 
-    const onBack = q[1] < ring.shoulder + 2 && q[2] < h.c[2] - 1;
-    if (onBack && (p.kind === 'straight' || p.kind === 'wave')) {
+    const onBack = q[1] < ring.shoulder + 3 && q[2] < h.c[2] - 0.5;
+    if (onBack) {
       const tInfo = space.torsoAt(q[1], q[0], q[2]);
-      const targetDr = tInfo ? tInfo.r + ct + 0.55 : 0;
+      const targetDr = tInfo ? tInfo.r + ct + (p.kind === 'curl' ? 1.5 : 0.5) : 0;
       if (tInfo && tInfo.dr > targetDr) {
-        force = add(force, out, -Math.min(0.24, (tInfo.dr - targetDr) * 0.06));
+        force = add(force, out, -Math.min(0.45, (tInfo.dr - targetDr) * 0.15));
       }
     } else {
       const volZone = smooth(ring.shoulder - 4, h.chin + 4, q[1]);

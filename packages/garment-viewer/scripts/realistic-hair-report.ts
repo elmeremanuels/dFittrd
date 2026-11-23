@@ -8,7 +8,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { buildBody } from '@curtain/mannequin';
 import { decodeRealisticBody, fitRealisticBody, fitTargetOf } from '../src/realisticBody';
-import { buildHair, coilTexture, strandTexture, textureBytes, HAIR_TRIANGLE_BUDGET } from '../src/realisticHair';
+import { buildHair, coilTexture, sculptedCoilTextures, sculptedLockTextures, strandTexture, textureBytes, HAIR_TRIANGLE_BUDGET } from '../src/realisticHair';
 import { HAIR_LENGTHS, HAIR_TYPES } from '../src/hairOptions';
 
 const asset = decodeRealisticBody(readFileSync(new URL('../assets/realistic-body/female-v1.crb', import.meta.url)));
@@ -33,7 +33,16 @@ for (const [body, b] of Object.entries(BODIES)) {
     }
   }
 }
-const tex = { strand: textureBytes(strandTexture()), coil: Object.fromEntries((['3C', '4A', '4B', '4C'] as const).map((t) => [t, textureBytes(coilTexture(t))])) };
+const lockTex = sculptedLockTextures();
+const tex = {
+  sculptedLock: textureBytes(lockTex.albedo) + textureBytes(lockTex.normal),
+  sculptedCoil: Object.fromEntries((['3C', '4A', '4B', '4C'] as const).map((t) => {
+    const c = sculptedCoilTextures(t);
+    return [t, textureBytes(c.albedo) + textureBytes(c.normal)];
+  })),
+  v1Strand: textureBytes(strandTexture()),
+  v1Coil: Object.fromEntries((['3C', '4A', '4B', '4C'] as const).map((t) => [t, textureBytes(coilTexture(t))])),
+};
 const out = { when: new Date().toISOString(), budgetTriangles: HAIR_TRIANGLE_BUDGET, bodyTriangles: asset.meta.triangleCount, textures: tex, rows };
 const file = process.argv[2];
 if (file) writeFileSync(file, JSON.stringify(out, null, 1));

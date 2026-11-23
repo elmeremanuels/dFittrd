@@ -77,7 +77,7 @@ async function open(context, query, name) {
   page.on('console', (msg) => {
     if (msg.type() === 'error') problems.push(`${name}: console ${msg.text()}`);
   });
-  await page.goto(`${base}avatar.html?${query}`);
+  await page.goto(`${base}avatar.html?${query}`, { timeout: 120_000 });
   if (query.includes('mode=head')) await page.waitForFunction(() => (document.getElementById('tag').textContent ?? '').startsWith('ESTIMATE ·'), null, { timeout: 300_000 });
   else await page.waitForFunction(() => ['settled', 'error'].includes(document.documentElement.dataset.viewerState ?? ''), null, { timeout: 300_000 });
   if (query.includes('hair=')) {

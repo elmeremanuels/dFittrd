@@ -11,6 +11,7 @@
     "test": "vitest run",
     "lint": "eslint src e2e",
     "e2e": "node scripts/gen-icons.mjs && vite build && playwright test -c e2e/playwright.config.ts",
+    "e2e:realistic-body": "VITE_VIEWER_BODY=realistic-spike node scripts/gen-icons.mjs && VITE_VIEWER_BODY=realistic-spike vite build && VITE_VIEWER_BODY=realistic-spike playwright test -c e2e/playwright.config.ts privacyRealisticBody.spec.ts",
     "models": "node src/features/capture/scripts/fetch-models.mjs"
   },
   "dependencies": {

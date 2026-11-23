@@ -49,6 +49,31 @@ function versionFile(commit: string): Plugin {
   };
 }
 
+/**
+ * Precompressed copies of .crb files (OI-150): write `.crb.br` (brotli, quality 11) and `.crb.gz`
+ * (gzip, level 9) next to each `.crb` in dist/. Caddy's `file_server { precompressed br gzip }` serves
+ * them when the client accepts the encoding. The realistic body asset is 337 KB uncompressed;
+ * brotli brings it to about 176 KB, gzip to about 251 KB.
+ */
+function precompressCrb(): Plugin {
+  return {
+    name: 'curtain-precompress-crb',
+    async writeBundle(options, bundle) {
+      const { brotliCompressSync, gzipSync, constants } = await import('node:zlib');
+      const { readFileSync, writeFileSync } = await import('node:fs');
+      const { join } = await import('node:path');
+      const outDir = options.dir ?? 'dist';
+      for (const [fileName, chunk] of Object.entries(bundle)) {
+        if (chunk.type !== 'asset' || !fileName.endsWith('.crb')) continue;
+        const filePath = join(outDir, fileName);
+        const source = readFileSync(filePath);
+        writeFileSync(`${filePath}.br`, brotliCompressSync(source, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } }));
+        writeFileSync(`${filePath}.gz`, gzipSync(source, { level: 9 }));
+      }
+    },
+  };
+}
+
 /** The api origin the built app talks to (`VITE_API_URL`), or undefined when it is same-origin. */
 export function apiOriginOf(url: string | undefined): string | undefined {
   const u = url?.trim();
@@ -163,6 +188,7 @@ const config = {
   plugins: [
     react(),
     tailwindcss(),
+    precompressCrb(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png'],

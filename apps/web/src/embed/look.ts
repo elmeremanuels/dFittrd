@@ -11,13 +11,18 @@
  * "coming soon" line. It stays off until counsel has answered (D20 point 4).
  */
 import { MONK_SWATCHES } from '@/features/capture/faceSkin';
+import { skinHexAt } from './skinSlider';
 
 export { STANDARD_SKIN_HEX } from '@/render/body';
 
 export interface SkinLook {
-  /** Monk Skin Tone class, 1 (lightest) to 10 (darkest). */
-  monk: number;
-  /** The swatch's colour, `#RRGGBB`. */
+  /**
+   * The slider position (0..1): 0 = Monk 1 (Light), 0.5 = midpoint between Monk 5 and 6 (Medium),
+   * 1 = Monk 10 (Deep). For backwards compatibility, an integer monk class (1..10) is also accepted
+   * and converted to the equivalent slider position.
+   */
+  slider: number;
+  /** The swatch's colour, `#RRGGBB`, interpolated in OKLab from the slider position. */
   hex: string;
   /**
    * How the colour was chosen: `picked` by hand, or `photo`: picked while a suggestion read from a
@@ -26,6 +31,8 @@ export interface SkinLook {
    * look row of C30.
    */
   source: 'picked' | 'photo';
+  /** @deprecated Use `slider` instead. Kept for backwards compatibility with stored data. */
+  monk?: number;
 }
 
 export const MONK_CLASSES: readonly number[] = MONK_SWATCHES.map((_, i) => i + 1);
@@ -33,13 +40,43 @@ export const MONK_CLASSES: readonly number[] = MONK_SWATCHES.map((_, i) => i + 1
 /** The look for a Monk class the shopper picked; null for anything that is not a class. */
 export function lookForMonk(monk: number): SkinLook | null {
   const hex = Number.isInteger(monk) ? MONK_SWATCHES[monk - 1] : undefined;
-  return hex ? { monk, hex: hex.toUpperCase(), source: 'picked' } : null;
+  if (!hex) return null;
+  return { slider: (monk - 1) / 9, hex: hex.toUpperCase(), source: 'picked', monk };
 }
 
-/** A stored value read back: a look only when it is exactly one of the ten swatches. */
+/** The look for a slider position (0..1). If the position falls exactly on a Monk class, the
+ *  deprecated `monk` field is populated so round-trips through storage still match. */
+export function lookForSlider(slider: number): SkinLook {
+  const clamped = Math.max(0, Math.min(1, slider));
+  const hex = skinHexAt(clamped);
+  const scaled = clamped * 9;
+  const rounded = Math.round(scaled);
+  const onClass = Math.abs(scaled - rounded) < 1e-9 && rounded >= 0 && rounded <= 9;
+  const monk = onClass ? rounded + 1 : undefined;
+  const hexOnClass = monk !== undefined ? MONK_SWATCHES[monk - 1]!.toUpperCase() : null;
+  return { slider: clamped, hex: hexOnClass ?? hex, source: 'picked', ...(monk !== undefined ? { monk } : {}) };
+}
+
+/** The (integer) monk class at a slider position, if the position falls on a class; null otherwise. */
+function monkAtSlider(slider: number): number | null {
+  const scaled = slider * 9;
+  const rounded = Math.round(scaled);
+  if (Math.abs(scaled - rounded) > 1e-9 || rounded < 0 || rounded > 9) return null;
+  return rounded + 1;
+}
+
+/** A stored value read back: a look with a slider position, optionally a monk class, or just a
+ *  legacy monk class. A slider position that lands on a Monk class comes back with `monk` set, so
+ *  the value the shopper stored is what they get back (round-trip through the store). */
 export function parseLook(value: unknown): SkinLook | null {
   if (!value || typeof value !== 'object') return null;
   const v = value as Partial<SkinLook>;
+  if (typeof v.slider === 'number' && v.slider >= 0 && v.slider <= 1 && v.source === 'picked') {
+    const monk = monkAtSlider(v.slider);
+    const hex = monk !== undefined && monk !== null ? MONK_SWATCHES[monk - 1]!.toUpperCase() : skinHexAt(v.slider);
+    if (typeof v.hex === 'string' && v.hex.toUpperCase() !== hex) return null;
+    return monk !== undefined && monk !== null ? { slider: v.slider, hex, source: 'picked', monk } : { slider: v.slider, hex, source: 'picked' };
+  }
   const look = typeof v.monk === 'number' ? lookForMonk(v.monk) : null;
   return look && typeof v.hex === 'string' && v.hex.toUpperCase() === look.hex && v.source === 'picked' ? look : null;
 }

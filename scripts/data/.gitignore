@@ -1,0 +1,4 @@
+# Real volunteer data (ACCURACY-PROTOCOL.md §4, §6). Only synthetic test
+# fixtures are committed (../accuracy-report.test.ts).
+accuracy-*.csv
+!accuracy-sample.csv

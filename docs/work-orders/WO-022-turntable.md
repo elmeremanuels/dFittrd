@@ -1,6 +1,6 @@
 # WO-022: Slow turn ("rondje draaien") in the viewer (phase F)
 
-**Tier** light · **Builder** Qwen · **Linear** CUR-37 · **Branch** `qwen/wo-022-turntable`, from the latest `claude/garment-engine`.
+**Tier** light · **Builder** Qwen · **Linear** CUR-36 · **Branch** `qwen/wo-022-turntable`, from the latest `claude/garment-engine`.
 
 ## Goal
 

@@ -1,6 +1,6 @@
 # WO-023: Skeleton, key poses and a looping pose pattern for the realistic body (phase F)
 
-**Tier** full · **Builder** Google · **Linear** CUR-38 · **Branch** `google/wo-023-rig-poses`, from the latest `claude/realistic-body`. Start after CUR-33 (arms iteration 3) is merged, because the shoulders must be right first.
+**Tier** full · **Builder** Google · **Linear** CUR-37 · **Branch** `google/wo-023-rig-poses`, from the latest `claude/realistic-body`. Start after CUR-33 (arms iteration 3) is merged, because the shoulders must be right first.
 
 ## Goal
 

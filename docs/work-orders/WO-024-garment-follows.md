@@ -4,7 +4,7 @@
 1. **Qwen** builds.
 2. **Google** does the visual check.
 
-**Linear** CUR-39 · **Branch** `qwen/wo-024-garment-follows`. Start after CUR-9 (garments on the realistic body) and CUR-38 (skeleton and poses) are merged. Each iteration ends with a handoff.
+**Linear** CUR-38 · **Branch** `qwen/wo-024-garment-follows`. Start after CUR-9 (garments on the realistic body) and CUR-37 (skeleton and poses) are merged. Each iteration ends with a handoff.
 
 ## Goal
 

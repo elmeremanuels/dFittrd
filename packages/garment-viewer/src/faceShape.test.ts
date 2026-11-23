@@ -35,10 +35,10 @@ describe('faceShape (WO-020 / CUR-34)', () => {
 
   it('round-trips known multi-axis weights from synthetic landmarks (including roll and scale)', () => {
     const cases: { name: string; weights: FaceShapeWeights; rollDeg?: number; scale?: number }[] = [
-      { name: 'wide jaw & prominent chin', weights: { jawWidth: 0.7, chinWidth: 0.5, chinProminence: 0.65, faceWidth: 0.4 }, rollDeg: 6, scale: 0.018 },
-      { name: 'narrow oval & long nose', weights: { faceWidth: -0.5, faceHeight: 0.55, jawWidth: -0.6, noseLength: 0.7, noseWidth: -0.45 }, rollDeg: -8, scale: 0.028 },
-      { name: 'high cheekbones, wide eyes & brows', weights: { cheekbones: 0.75, eyeSpacing: 0.6, browHeight: 0.7, lipWidth: 0.6 }, rollDeg: 4, scale: 0.021 },
-      { name: 'short chin & compact lower face', weights: { chinHeight: -0.65, chinProminence: -0.5, noseLength: -0.5, noseWidth: 0.55, lipWidth: -0.5 } },
+      { name: 'wide jaw & prominent chin', weights: { jawWidth: 0.55, chinWidth: 0.5, chinProminence: 0.65, faceWidth: 0.35 }, rollDeg: 6, scale: 0.018 },
+      { name: 'narrow oval & long nose', weights: { faceWidth: -0.35, faceHeight: 0.4, jawWidth: -0.5, noseLength: 0.6, noseWidth: -0.45 }, rollDeg: -8, scale: 0.028 },
+      { name: 'high cheekbones, wide eyes & brows', weights: { cheekbones: 0.7, eyeSpacing: 0.6, browHeight: 0.65, lipWidth: 0.6 }, rollDeg: 4, scale: 0.021 },
+      { name: 'short chin & compact lower face', weights: { chinHeight: -0.4, chinProminence: -0.5, noseLength: -0.5, noseWidth: 0.55, lipWidth: -0.5 } },
     ];
     for (const c of cases) {
       const lms = syntheticFaceLandmarks(asset, c.weights, { rollDeg: c.rollDeg, scale: c.scale });

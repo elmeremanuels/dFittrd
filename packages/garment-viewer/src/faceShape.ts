@@ -31,7 +31,26 @@ export type FaceShapeTarget = (typeof FACE_SHAPE_TARGETS)[number];
 export type FaceShapeWeights = Partial<Record<FaceShapeTarget, number>>;
 
 /** Maximum absolute face shape target weight so no input can push the head grotesque. */
-export const FACE_WEIGHT_LIMIT = 1;
+export const FACE_WEIGHT_LIMIT = 0.8;
+
+/**
+ * Per-axis anatomical clamp limits (fraction of full MakeHuman target strength) so even worst-case combinations stay
+ * naturally human and never pinch the skull, squash the lower face, or produce a caricature (WO-020).
+ */
+export const FACE_TARGET_BOUNDS: Readonly<Record<FaceShapeTarget, readonly [number, number]>> = {
+  faceWidth: [-0.45, 0.45],
+  faceHeight: [-0.4, 0.45],
+  jawWidth: [-0.65, 0.65],
+  chinWidth: [-0.7, 0.7],
+  chinHeight: [-0.45, 0.55],
+  chinProminence: [-0.75, 0.75],
+  cheekbones: [-0.8, 0.8],
+  noseLength: [-0.7, 0.7],
+  noseWidth: [-0.7, 0.7],
+  eyeSpacing: [-0.75, 0.75],
+  browHeight: [-0.75, 0.75],
+  lipWidth: [-0.75, 0.75],
+};
 
 /** Anatomical head landmark vertex names stored in `meta.faceLandmarks` for on-device face-shape fitting. */
 export const FACE_LANDMARK_NAMES = [
@@ -64,12 +83,13 @@ export const FACE_LANDMARK_NAMES = [
 ] as const;
 export type FaceLandmarkName = (typeof FACE_LANDMARK_NAMES)[number];
 
-/** Clamp and sanitise face shape weights to [-FACE_WEIGHT_LIMIT, FACE_WEIGHT_LIMIT] (non-finite → 0). */
+/** Clamp and sanitise face shape weights to per-axis anatomical bounds (all within [-FACE_WEIGHT_LIMIT, FACE_WEIGHT_LIMIT]; non-finite → 0). */
 export function clampFaceShape(weights: FaceShapeWeights | null | undefined): Record<FaceShapeTarget, number> {
   const out = {} as Record<FaceShapeTarget, number>;
   for (const t of FACE_SHAPE_TARGETS) {
     const v = weights?.[t];
-    out[t] = typeof v === 'number' && Number.isFinite(v) ? Math.max(-FACE_WEIGHT_LIMIT, Math.min(FACE_WEIGHT_LIMIT, v)) : 0;
+    const [lo, hi] = FACE_TARGET_BOUNDS[t];
+    out[t] = typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : 0;
   }
   return out;
 }
@@ -453,7 +473,8 @@ export function fitFaceShape(
     }
     const dw = solveLinear(JTJ, JTr);
     for (let k = 0; k < m; k++) {
-      w[k] = Math.max(-FACE_WEIGHT_LIMIT, Math.min(FACE_WEIGHT_LIMIT, w[k]! + dw[k]!));
+      const [lo, hi] = FACE_TARGET_BOUNDS[FACE_SHAPE_TARGETS[k]!];
+      w[k] = Math.max(lo, Math.min(hi, w[k]! + dw[k]!));
     }
   }
 

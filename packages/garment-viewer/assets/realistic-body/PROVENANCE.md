@@ -4,7 +4,7 @@
 through the MPFB2 repository. Nothing else went into it: no skin texture, no hair, no eyebrows or lashes, no photo
 texture on the face (D27), no SMPL, SMPL-X, FLAME, STAR, Anny or other body/face model, no scan, no photo of a person.
 
-- File: `female-v1.crb`, 455,556 bytes (297,356 B gzip, 201,139 B brotli; +45.1 KB gzip over the pre-WO-020 bake), sha256 `8c45a55ce26baee415f01e96787cb336a077ca2e72fbc85e20b79e3d861ff8ee`
+- File: `female-v1.crb`, 455,556 bytes (297,356 B gzip, 201,139 B brotli; +45.1 KB gzip over the pre-WO-020 bake), sha256 `1b7520ec738c2e4ad31d3726e133d5fb4a055ca3bd7c950a05e79c44be44cf8d`
   (the bake is deterministic: the same sources give the same bytes).
 - Format: `curtain.realistic-body` version 1 (`src/realisticBody.ts`, `encodeRealisticBody` / `decodeRealisticBody`), carrying 4 body shape targets (`weight±`, `cup±`) and 12 signed CC0 face shape targets (`faceWidth`, `faceHeight`, `jawWidth`, `chinWidth`, `chinHeight`, `chinProminence`, `cheekbones`, `noseLength`, `noseWidth`, `eyeSpacing`, `browHeight`, `lipWidth`, WO-020 / CUR-34).
 - Read and baked on 21 November 2026 (body) and 23 November 2026 (face targets, WO-020) by AI agents. Not a lawyer's reading.

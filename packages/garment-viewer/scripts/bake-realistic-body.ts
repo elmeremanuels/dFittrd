@@ -356,10 +356,8 @@ function main(): void {
       // Strictly above the neck ring so neck girth, body rings and fit never change.
       if (hw < 0.05 || y <= levels.neck + 1.0) continue;
       const mask = smooth01((y - (levels.neck + 1.0)) / 2.5) * smooth01((hw - 0.05) / 0.25);
-      // Keep crown height steady on faceHeight so overall stature stays on target.
-      const crownKeep = t === 'faceHeight' ? 1 - 0.75 * smooth01((y - (top - 3.0)) / 3.0) : 1;
       const dx = d[0] * mask;
-      const dy = d[1] * mask * crownKeep;
+      const dy = d[1] * mask;
       const dz = d[2] * mask;
       if (Math.hypot(dx, dy, dz) < 0.01) continue;
       ids.push(k);

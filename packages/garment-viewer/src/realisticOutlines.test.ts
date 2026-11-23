@@ -206,8 +206,9 @@ describe('realisticOutlinesOf (WO-016 iter 1)', () => {
 
   it('device drape of the synthetic babydoll dress on the realistic polar collider has no skin poke-through without conformToField (and keeps fit size unchanged)', async () => {
     const pom = buildPomDressBundle(SYNTHETIC_DRESS_ID, SYNTHETIC_TAPE_DRESS, SYNTHETIC_DRESS_POM, SYNTHETIC_DRESS_TAPE.provenance);
+    const files = pom.files as Record<string, string | Uint8Array>;
     const serve: FetchLike = async (url) => {
-      const data = pom.files[url.split('/').pop()!]!;
+      const data = files[url.split('/').pop()!]!;
       return {
         ok: true,
         status: 200,

@@ -16,7 +16,7 @@
  * Pure: no WebGL, no I/O. The loader (`realisticBodyLoad.ts`) fetches the bytes.
  */
 import { monotoneProfile, type AnchorRing } from '@curtain/anchors';
-import { loopLength, polarStack, sectionPolar, slice, type Loop, type Mannequin, type MannequinOutlines, type Mesh, type PolarSection } from '@curtain/mannequin';
+import { loopLength, polarStack, sectionPolar, slice, type Loop, type Mannequin, type MannequinOutlines, type Mesh } from '@curtain/mannequin';
 import { sample, type BodyField } from './collide';
 
 type V3 = [number, number, number];

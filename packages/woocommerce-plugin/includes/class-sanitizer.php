@@ -156,8 +156,7 @@ final class Sanitizer {
 				$chart_rejected = true;
 				continue;
 			}
-			$r['size'] = $size;
-			$rows[]    = $r;
+			$rows[] = array( 'size' => $size ) + $r; // 'size' first: the stored JSON keeps its key order.
 		}
 		// More than 60 rows: refuse the chart with a notice, never truncate silently (OI-87).
 		if ( count( $rows ) > Vocab::SIZE_CHART_MAX_ROWS ) {

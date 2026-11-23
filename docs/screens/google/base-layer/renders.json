@@ -1,0 +1,163 @@
+{
+  "model": "Gemini 4 Neon",
+  "branch": "google/wo-009-base-layer",
+  "renderer": "Headless Chromium SwiftShader (CPU software WebGL2, 390x844 @ 2x)",
+  "colour": "#989189",
+  "bodyMetrics": {
+    "slim": {
+      "vestTris": 2990,
+      "briefsTris": 1154,
+      "vestVisible": true,
+      "briefsVisible": true,
+      "colour": "#989189"
+    },
+    "mid": {
+      "vestTris": 2991,
+      "briefsTris": 1174,
+      "vestVisible": true,
+      "briefsVisible": true,
+      "colour": "#989189"
+    },
+    "full": {
+      "vestTris": 3027,
+      "briefsTris": 1178,
+      "vestVisible": true,
+      "briefsVisible": true,
+      "colour": "#989189"
+    },
+    "tall": {
+      "vestTris": 3000,
+      "briefsTris": 1154,
+      "vestVisible": true,
+      "briefsVisible": true,
+      "colour": "#989189"
+    },
+    "petite": {
+      "vestTris": 2993,
+      "briefsTris": 1166,
+      "vestVisible": true,
+      "briefsVisible": true,
+      "colour": "#989189"
+    }
+  },
+  "d30Checks": {
+    "d30-none": {
+      "vestTris": 2991,
+      "briefsTris": 1174,
+      "vestVisible": true,
+      "briefsVisible": true,
+      "colour": "#989189"
+    },
+    "d30-top": {
+      "vestTris": 2991,
+      "briefsTris": 1174,
+      "vestVisible": false,
+      "briefsVisible": true,
+      "colour": "#989189"
+    },
+    "d30-bottom": {
+      "vestTris": 2991,
+      "briefsTris": 1174,
+      "vestVisible": true,
+      "briefsVisible": false,
+      "colour": "#989189"
+    },
+    "d30-dress": {
+      "vestTris": 2991,
+      "briefsTris": 1174,
+      "vestVisible": false,
+      "briefsVisible": false,
+      "colour": "#989189"
+    },
+    "tone-light": {
+      "vestTris": 2991,
+      "briefsTris": 1174,
+      "vestVisible": true,
+      "briefsVisible": true,
+      "colour": "#989189"
+    },
+    "tone-mid-3q": {
+      "vestTris": 2991,
+      "briefsTris": 1174,
+      "vestVisible": true,
+      "briefsVisible": true,
+      "colour": "#989189"
+    },
+    "tone-deep": {
+      "vestTris": 2991,
+      "briefsTris": 1174,
+      "vestVisible": true,
+      "briefsVisible": true,
+      "colour": "#989189"
+    },
+    "full-back": {
+      "vestTris": 3027,
+      "briefsTris": 1178,
+      "vestVisible": true,
+      "briefsVisible": true,
+      "colour": "#989189"
+    }
+  },
+  "frameTime": {
+    "method": "Same warmed WebGL2 stage (SwiftShader CPU, 390x844 @ 2x, mid body + procedural skin + studio light), 3 alternating runs x 24 orbit frames with synchronous gl.readPixels(1x1) fence",
+    "runs": [
+      {
+        "run": 1,
+        "config": "without-base-layer",
+        "frames": 24,
+        "meanMs": 1486.29,
+        "medianMs": 788.2,
+        "p95Ms": 1931.6
+      },
+      {
+        "run": 1,
+        "config": "with-base-layer",
+        "frames": 24,
+        "meanMs": 788.33,
+        "medianMs": 711.2,
+        "p95Ms": 1388.2
+      },
+      {
+        "run": 2,
+        "config": "without-base-layer",
+        "frames": 24,
+        "meanMs": 762.33,
+        "medianMs": 698.1,
+        "p95Ms": 1171.4
+      },
+      {
+        "run": 2,
+        "config": "with-base-layer",
+        "frames": 24,
+        "meanMs": 961.47,
+        "medianMs": 888.3,
+        "p95Ms": 1519.6
+      },
+      {
+        "run": 3,
+        "config": "without-base-layer",
+        "frames": 24,
+        "meanMs": 1106.37,
+        "medianMs": 1106.5,
+        "p95Ms": 1450.4
+      },
+      {
+        "run": 3,
+        "config": "with-base-layer",
+        "frames": 24,
+        "meanMs": 978.55,
+        "medianMs": 961.9,
+        "p95Ms": 1225.3
+      }
+    ],
+    "withoutBaseLayerMeanMs": 1118.33,
+    "withBaseLayerMeanMs": 909.45,
+    "deltaMs": -208.88,
+    "withoutBaseLayerMedianMs": 864.27,
+    "withBaseLayerMedianMs": 853.8,
+    "withoutBaseLayerP95Ms": 1517.8,
+    "withBaseLayerP95Ms": 1377.7
+  },
+  "errors": [],
+  "buildMs": 275.9
+}

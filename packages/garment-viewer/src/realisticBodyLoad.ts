@@ -11,9 +11,25 @@ import type { AnchorRing } from '@curtain/anchors';
 import * as THREE from 'three';
 import { realisticSkinMaterial, skinMaskOf } from './realisticSkin';
 import { useStudioLight, type StudioTarget } from './studioLight';
+import { BASE_LAYER_GROUP, baseLayerRingsOf, createBaseLayer, type BaseLayerOptions, type BaseLayerView } from './baseLayer';
 import type { SkinOverride } from './scene';
 export { realisticSkinCare, realisticSkinMaterial, skinMaskOf } from './realisticSkin';
 export { useStudioLight } from './studioLight';
+export {
+  BASE_LAYER_COLOUR,
+  BASE_LAYER_GROUP,
+  baseLayerRingsOf,
+  baseLayerVisibility,
+  buildBaseLayer,
+  createBaseLayer,
+  type BaseLayerBuild,
+  type BaseLayerCoverage,
+  type BaseLayerOptions,
+  type BaseLayerPieceMesh,
+  type BaseLayerRings,
+  type BaseLayerView,
+  type BaseLayerVisibility,
+} from './baseLayer';
 
 /** The baked female body shipped with the package (`assets/realistic-body/`, CC0, PROVENANCE.md next to it). */
 export const REALISTIC_BODY_URL = new URL('../assets/realistic-body/female-v1.crb', import.meta.url).href;
@@ -87,4 +103,22 @@ export function realisticSkinOf(asset: RealisticBodyAsset): { addMask(g: THREE.B
       };
     },
   };
+}
+
+/**
+ * Attach the procedural base layer (`baseLayer.ts`, D30) to a figure's group on the fitted realistic body: plain fitted
+ * vest and briefs in one neutral colour, with `setCoverage` to hide the covered piece when a garment is drawn.
+ */
+export function attachBaseLayer(
+  figure: { group: THREE.Group },
+  mesh: Pick<Mesh, 'positions' | 'indices'>,
+  asset: RealisticBodyAsset,
+  drawn: Pick<Mannequin, 'rings' | 'landmarks'>,
+  options?: BaseLayerOptions,
+): BaseLayerView {
+  const existing = figure.group.getObjectByName(BASE_LAYER_GROUP);
+  if (existing) existing.removeFromParent();
+  const view = createBaseLayer(mesh, asset, baseLayerRingsOf(drawn), options);
+  figure.group.add(view.group);
+  return view;
 }

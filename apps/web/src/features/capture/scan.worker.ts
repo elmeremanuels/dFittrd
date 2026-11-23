@@ -19,8 +19,9 @@ import { measureScan } from './measure';
 import { installSameOriginOnly } from './sameOriginOnly';
 import { MODEL_BASE, MODEL_FILES, VISION_WASM_ES_MODULE, moduleFactoryRearmer, resolveModelBase, type PoseVariant } from './models';
 import { gateFrame, selectFrames } from './poseGate';
+import { gateSelfie, type FaceBlendshapes } from './selfieGate';
 import type { FrameFeatures, GateResult, Landmark, Sex, ViewMeasurement } from './types';
-import type { ScanErrorCode, WorkerInbound, WorkerOutbound } from './workerProtocol';
+import type { ScanErrorCode, SelfieGateResult, WorkerInbound, WorkerOutbound } from './workerProtocol';
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 // Before any MediaPipe task exists: refuse every request off this origin (MediaPipe's usage logger, see sameOriginOnly.ts).
@@ -98,7 +99,7 @@ async function init(variant: PoseVariant, needPose: boolean, needFace: boolean, 
         baseOptions: { modelAssetPath: rebase(MODEL_FILES.face), delegate: d },
         runningMode: 'IMAGE',
         numFaces: 1,
-        outputFaceBlendshapes: false,
+        outputFaceBlendshapes: true,
         outputFacialTransformationMatrixes: false,
       });
     }
@@ -279,9 +280,27 @@ async function analyseFace(bitmap: ImageBitmap): Promise<void> {
     if (!face || !segmenter) throw new Error('face landmarker not ready');
     const { width, height } = bitmap;
     const res = face.detect(bitmap);
+    const faceCount = res.faceLandmarks.length;
     const lm: Landmark[] = (res.faceLandmarks[0] ?? []).map((l) => ({ x: l.x, y: l.y }));
+
+    // Selfie quality gate: run before any processing, on the raw landmarks and pixels.
+    let selfieGate: SelfieGateResult | null = null;
+    if (typeof OffscreenCanvas !== 'undefined') {
+      const sCanvas = new OffscreenCanvas(width, height);
+      const sCtx = sCanvas.getContext('2d', { willReadFrequently: true });
+      if (sCtx) {
+        sCtx.drawImage(bitmap, 0, 0);
+        const sImg = sCtx.getImageData(0, 0, width, height);
+        const bs: FaceBlendshapes | null = res.faceBlendshapes?.[0]
+          ? Object.fromEntries(res.faceBlendshapes[0].categories.map((c) => [c.categoryName, c.score])) as FaceBlendshapes
+          : null;
+        const r = gateSelfie(faceCount, lm, { width, height, data: sImg.data }, bs);
+        selfieGate = { ok: r.ok, reasons: r.reasons };
+      }
+    }
+
     if (lm.length === 0) {
-      post({ type: 'faceResult', skin: null, faceTile: null, faceFound: false });
+      post({ type: 'faceResult', skin: null, faceTile: null, faceFound: false, selfieGate });
       return;
     }
     const mask = segment(bitmap);
@@ -341,7 +360,7 @@ async function analyseFace(bitmap: ImageBitmap): Promise<void> {
     if (!sg) throw new Error('2d context unavailable');
     sg.drawImage(tile, 0, 0, out, out);
     const blob = await small.convertToBlob({ type: 'image/webp', quality: 0.92 });
-    post({ type: 'faceResult', skin, faceTile: { blob, width: out, height: out }, faceFound: true });
+    post({ type: 'faceResult', skin, faceTile: { blob, width: out, height: out }, faceFound: true, selfieGate });
   } finally {
     bitmap.close();
   }

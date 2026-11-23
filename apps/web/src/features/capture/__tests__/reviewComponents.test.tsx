@@ -112,7 +112,7 @@ describe('BodyStep', () => {
 describe('FaceStep', () => {
   it('re-attaches the camera stream to the preview after "Retake"', async () => {
     const session = fakeSession({
-      analyseFace: vi.fn(async () => ({ type: 'faceResult', faceFound: true, skin: null, faceTile: null })),
+      analyseFace: vi.fn(async () => ({ type: 'faceResult', faceFound: true, skin: null, faceTile: null, selfieGate: null })),
     });
     const { container } = render(<FaceStep session={session} cameraAllowed onDone={() => undefined} onSkip={() => undefined} />);
     const first = screen.getByLabelText('Camera preview') as HTMLVideoElement;
@@ -129,7 +129,7 @@ describe('FaceStep', () => {
 
   it('says the models are loading (not "not available") while they load, then works once ready (#16)', async () => {
     const session = fakeSession({
-      analyseFace: vi.fn(async () => ({ type: 'faceResult', faceFound: true, skin: null, faceTile: null })),
+      analyseFace: vi.fn(async () => ({ type: 'faceResult', faceFound: true, skin: null, faceTile: null, selfieGate: null })),
     });
     const { container, rerender } = render(<FaceStep session={session} models="loading" cameraAllowed onDone={() => undefined} onSkip={() => undefined} />);
     expect(screen.getByRole('status')).toHaveTextContent(/Loading the scan models/);

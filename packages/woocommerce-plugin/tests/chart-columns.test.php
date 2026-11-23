@@ -121,9 +121,16 @@ test(
 		$p = Payload_Builder::build( array( 'id' => 1, 'name' => 'Chino' ), array_filter( $r['meta'], static fn ( $x ) => null !== $x ), array( 'default_brand' => 'Shop' ) )['payload'];
 		assert_same( array(), $v->validate( $p ) );
 
+		// OI-87: a 61st row refuses the chart with a notice, never silently truncated.
 		$rows[] = array( 'size' => '33', 'waist' => '86' );
 		$bad    = Sanitizer::from_post( array( 'size_chart_type' => 'garment', 'size_axes' => 'wl', 'size_chart' => $rows ) );
-		assert_same( array(), $bad['chart']['errors'], 'a 61st row is cut (the cap is 60, as before at 30), so it is never checked' );
+		assert_true( count( $bad['chart']['errors'] ) > 0, 'a 61st row refuses the chart' );
+		assert_true(
+			false !== array_search( true, array_map( static fn ( $e ) => str_contains( $e, 'at most 60 rows' ), $bad['chart']['errors'] ) ),
+			'error must mention the 60-row limit'
+		);
+		assert_false( array_key_exists( '_curtain_size_chart', $bad['meta'] ), 'chart must not be saved when too big' );
+
 		$rows[59] = array( 'size' => '33', 'waist' => '86' );
 		$bad      = Sanitizer::from_post( array( 'size_chart_type' => 'garment', 'size_axes' => 'wl', 'size_chart' => array_slice( $rows, 0, 60 ) ) );
 		assert_same( array( 'Size 33 is not a waist/leg size: write it as waist/leg, for example 32/34.' ), $bad['chart']['errors'] );

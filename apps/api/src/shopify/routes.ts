@@ -41,6 +41,7 @@ import { merchantSettings, updateMerchantSettings } from '../services/settings.j
 import { clearSettings, createShop, endConsoleAccess, findShopByDomain, issueMerchantKeys, updateSettings, type ShopRow } from '../services/shops.js';
 import { shopifyChartRoutes } from './charts.js';
 import { shopifyFabricFormRoutes } from './fabricForm.js';
+import { shopifyFabricLibraryRoutes } from './fabricLibrary.js';
 import { billingSettingsPatch } from './client.js';
 
 export const SHOPIFY_TOPICS = [
@@ -60,6 +61,8 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
   await app.register(shopifyChartRoutes);
   // Fabric form of the embedded admin (fabricForm.ts, CUR-13 / WO-017): the per-product fabric, read and written as a `$app:curtain.fabric` metafield.
   await app.register(shopifyFabricFormRoutes);
+  // Fabric library of the embedded admin (fabricLibrary.ts, CUR-40 / WO-026): the shop's saved fabrics, CRUD.
+  await app.register(shopifyFabricLibraryRoutes);
 
   /** `?shop=` as Shopify sends it, or null when it is not a *.myshopify.com domain. */
   const shopParam = (v: string | undefined): string | null => {

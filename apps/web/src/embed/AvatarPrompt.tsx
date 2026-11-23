@@ -19,14 +19,15 @@
  * This component makes no request and opens no camera or file input. It is a modal dialog: focus
  * moves into it, Tab stays inside, Escape and the backdrop close it.
  */
-import { Check, X } from 'lucide-react';
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { luminance } from '@/render/face';
+import { X } from 'lucide-react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { c30Parts } from './avatarCopy';
 import { embedStrings } from './strings';
-import { lookForMonk, MONK_CLASSES, type SkinLook } from './look';
+import { lookForSlider, MONK_CLASSES, type SkinLook } from './look';
 import { HairPicker } from './HairPicker';
 import type { HairPick } from './hair';
+import { MONK_SWATCHES } from '@/features/capture/faceSkin';
+import { monkAt, sliderForMonk } from './skinSlider';
 import { FaceRowLive, SkinPhotoOffer, type FacePhotoState } from './FacePhotoRows';
 
 export interface AvatarPromptProps {
@@ -73,6 +74,87 @@ export interface FaceOnHeadRow {
 }
 
 const FOCUSABLE = 'a[href], button:not([disabled]):not([tabindex="-1"]), input:not([disabled])';
+
+/**
+ * Skin tone slider (CUR-28, WO-015): continuous slider from Light (Monk 1) to Deep (Monk 10), with
+ * Medium at the midpoint (between Monk 5 and 6). The track is a CSS gradient through the 10 Monk
+ * swatches, interpolated in OKLab for perceptually even steps. Arrow keys move one step (1/900 of
+ * the track); Home/End jump to Light/Deep. Works at 360 px width.
+ */
+function SkinSlider({
+  look,
+  suggested,
+  onPick,
+  labels,
+  credit,
+}: {
+  look: SkinLook | null;
+  /** A Monk class (1..10) the face photo points to, or null. Shown as a dashed tick on the track. */
+  suggested: number | null;
+  onPick: (look: SkinLook) => void;
+  labels: { light: string; medium: string; deep: string; slider: string; status: (label: string, hex: string) => string };
+  credit: string;
+}): ReactNode {
+  const id = useId();
+  // 10 stops, evenly spaced, matching the 10 Monk swatches.
+  const gradient = useMemo(() => {
+    const stops = MONK_SWATCHES.map((hex, i) => `${hex} ${(i / (MONK_SWATCHES.length - 1)) * 100}%`).join(', ');
+    return `linear-gradient(to right, ${stops})`;
+  }, []);
+
+  // Slider value: 0..1 in steps of 0.001 (for smooth keyboard motion; a 1/900 snap ≈ 0.00111).
+  const slider = look?.slider ?? 0;
+  const suggestedSlider = suggested !== null && Number.isInteger(suggested) && suggested >= 1 && suggested <= 10 ? sliderForMonk(suggested) : null;
+  // The label shown above the thumb: Light at 0, Deep at 1, Medium in the band 0.44..0.56 (around the midpoint between Monk 5 and 6).
+  const thumbLabel = slider <= 0.11 ? labels.light : slider >= 0.89 ? labels.deep : Math.abs(slider - 0.5) <= 0.06 ? labels.medium : '';
+  const thumbPct = Math.round(slider * 1000) / 10;
+
+  return (
+    <div data-testid="skin-slider">
+      <label htmlFor={`${id}-input`} className="mb-1 block text-sm font-medium">
+        {labels.slider}
+      </label>
+      <div className="relative w-full max-w-[360px]">
+        <div aria-hidden className="h-3 w-full overflow-hidden rounded-full border border-ink/20" style={{ background: gradient }} data-testid="skin-slider-track" />
+        {suggestedSlider !== null ? (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute top-0 h-3 w-0.5 border-l-2 border-dashed border-coral"
+            style={{ left: `${Math.round(suggestedSlider * 1000) / 10}%` }}
+            data-testid="skin-slider-suggested"
+          />
+        ) : null}
+        <input
+          id={`${id}-input`}
+          type="range"
+          min={0}
+          max={1}
+          step={1 / 900}
+          value={slider}
+          onChange={(e) => onPick(lookForSlider(parseFloat(e.target.value)))}
+          aria-label={labels.slider}
+          aria-valuetext={thumbLabel ? labels.status(thumbLabel, look?.hex ?? '') : (look?.hex ?? '')}
+          className="skin-slider absolute inset-0 h-3 w-full cursor-pointer appearance-none bg-transparent focus-visible:outline-none"
+          data-testid="skin-slider-input"
+          style={
+            {
+              '--skin-thumb': look?.hex ?? '#1A1612',
+              '--skin-thumb-pct': `${thumbPct}%`,
+            } as React.CSSProperties
+          }
+        />
+      </div>
+      <div aria-hidden className="mt-1 flex w-full max-w-[360px] justify-between text-[11px] font-medium text-ink-soft">
+        <span data-testid="skin-slider-label-light">{labels.light}</span>
+        <span data-testid="skin-slider-label-medium">{labels.medium}</span>
+        <span data-testid="skin-slider-label-deep">{labels.deep}</span>
+      </div>
+      <p className="mt-1 text-[10px] leading-snug text-ink-mute" data-testid="skin-slider-hint">
+        {credit}
+      </p>
+    </div>
+  );
+}
 
 
 function Switch({ checked, onChange, labelledBy, describedBy, unavailable = false, onText, offText, testId }: { checked: boolean; onChange?: (on: boolean) => void; labelledBy: string; describedBy?: string; unavailable?: boolean; onText: string; offText: string; testId: string }): ReactNode {
@@ -303,37 +385,13 @@ export function AvatarPrompt({ look, onPick, onClear, onMeasurements, onClose, t
             )}
             {skinOn ? (
               <>
-                <fieldset data-testid="skin-swatches">
-                  <legend className="mb-2 text-sm font-medium">{t.skinOnYes}</legend>
-                  <div className="grid grid-cols-5 gap-2">
-                    {MONK_CLASSES.map((n) => {
-                      const swatch = lookForMonk(n)!;
-                      const checked = look?.monk === n;
-                      const suggested = facePhoto?.suggestion ?? null;
-                      const near = suggested !== null && Math.abs(suggested - n) === 1;
-                      const edge = n === 1 ? `, ${ui.lightest}` : n === total ? `, ${ui.darkest}` : '';
-                      return (
-                        <label key={n} className="flex cursor-pointer flex-col items-center gap-0.5 text-[10px] text-ink-mute">
-                          <input type="radio" name={`${id}-monk`} value={n} checked={checked} onChange={() => onPick(swatch)} className="peer sr-only" aria-label={`${ui.swatch(n, total)}${edge}${suggested === n ? `, ${embedStrings().avatar.facePhoto.ui.suggested.toLowerCase()}` : ''}`} data-testid={`skin-swatch-${n}`} />
-                          <span
-                            className={`flex h-12 w-full items-center justify-center rounded-xl border peer-focus-visible:ring-2 peer-focus-visible:ring-coral peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-cream ${checked ? 'border-ink outline outline-2 outline-offset-2 outline-ink' : suggested === n ? 'border-coral outline outline-2 outline-offset-2 outline-coral' : near ? 'border-coral/70 border-dashed border-2' : 'border-ink/60'}`}
-                            style={{ background: swatch.hex }}
-                          >
-                            {checked ? <Check className="h-5 w-5" style={{ color: luminance(swatch.hex) < 0.25 ? '#FFFFFF' : '#1A1612' }} aria-hidden /> : null}
-                          </span>
-                          <span aria-hidden className={suggested === n ? 'font-semibold text-ink' : undefined}>
-                            {n}
-                          </span>
-                          {suggested === n ? (
-                            <span aria-hidden className="text-[9px] leading-none font-semibold text-coral-ink" data-testid="skin-swatch-suggested">
-                              {embedStrings().avatar.facePhoto.ui.suggested}
-                            </span>
-                          ) : null}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </fieldset>
+                <SkinSlider
+                  look={look}
+                  suggested={facePhoto?.suggestion ?? null}
+                  onPick={onPick}
+                  labels={{ light: ui.skinLight, medium: ui.skinMedium, deep: ui.skinDeep, slider: ui.skinSlider, status: ui.skinSliderStatus }}
+                  credit={ui.swatchCredit}
+                />
                 {saved ? (
                   <p className="text-xs text-ink-mute" data-testid="avatar-c30">
                     {c30.before}
@@ -352,7 +410,7 @@ export function AvatarPrompt({ look, onPick, onClear, onMeasurements, onClose, t
               </p>
             )}
             <p role="status" aria-live="polite" className="sr-only" data-testid="avatar-skin-status">
-              {skinOn && look ? ui.picked(look.monk, total) : cleared ? t.c14 : ''}
+              {skinOn && look ? ui.picked(monkAt(look.slider), total) : cleared ? t.c14 : ''}
             </p>
           </li>
 

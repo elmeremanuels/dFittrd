@@ -224,7 +224,14 @@ test('a skin colour picked in the avatar prompt is on the 3D mannequin: no remou
     await inPrompt(page, async (dialog) => {
       const sw = dialog.getByRole('switch', { name: 'Match my skin tone' });
       if ((await sw.getAttribute('aria-checked')) !== 'true') await sw.click();
-      await dialog.getByTestId(`skin-swatch-${tone.monk}`).check({ force: true });
+      // Skin slider (CUR-28): set the value directly; (monk-1)/9 is the slider position.
+      await dialog.getByTestId('skin-slider-input').evaluate((el, m) => {
+        const input = el as HTMLInputElement;
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+        setter.call(input, String((m - 1) / 9));
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }, tone.monk);
       if (tone.monk === 6) await pageShot(page, 'prompt-tone-6-picked.png');
     });
     expect(await figureSkin()).toBe(tone.hex);
@@ -310,7 +317,14 @@ test('a skin colour picked in the avatar prompt is on the 3D mannequin: no remou
   await expect(page.getByTestId('garment3d-open')).toBeVisible();
   await inPrompt(page, async (dialog) => {
     await dialog.getByTestId('avatar-skin-switch').click();
-    await dialog.getByTestId('skin-swatch-6').check({ force: true });
+    // Skin slider (CUR-28): set monk 6 (slider = 5/9).
+    await dialog.getByTestId('skin-slider-input').evaluate((el) => {
+      const input = el as HTMLInputElement;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(input, String(5 / 9));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
   });
   await page.getByTestId('garment3d-open').click();
   await expect(canvas).toHaveAttribute('data-state', 'settled', { timeout: 150_000 });

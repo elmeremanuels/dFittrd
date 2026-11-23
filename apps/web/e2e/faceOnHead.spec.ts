@@ -104,7 +104,14 @@ test.describe('face on the 3D head (slice 6 spike, dev harness)', () => {
       const socketsBefore = sockets.length;
       const framesBefore = frames.length;
       await page.getByTestId('avatar-skin-switch').click();
-      await page.getByTestId('skin-swatch-6').check({ force: true });
+      // Skin slider (CUR-28): set monk 6 (slider = 5/9).
+      await page.getByTestId('skin-slider-input').evaluate((el) => {
+        const input = el as HTMLInputElement;
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+        setter.call(input, String(5 / 9));
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
       // Nothing that can read a file exists before the yes.
       await expect(page.locator('input[type=file]')).toHaveCount(0);
       await page.getByTestId('avatar-face-switch').click();

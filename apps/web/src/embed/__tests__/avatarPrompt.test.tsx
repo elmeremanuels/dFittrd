@@ -6,8 +6,10 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import { MOCK_GARMENTS_BY_ID } from '@curtain/schema';
+import { fireEvent } from '@testing-library/react';
 import { c30Text } from '../avatarCopy';
 import { embedStrings } from '../strings';
+import { sliderForMonk } from '../skinSlider';
 
 const CLAIMS = embedStrings().avatar.claims;
 import type { EmbedApi, EmbedDeps } from '../deps';
@@ -102,22 +104,23 @@ describe('avatar prompt (D19)', () => {
     // tap the avatar → the prompt
     await user.click(screen.getByTestId('avatar-open'));
     const dialog = await screen.findByRole('dialog', { name: 'Make the avatar look like you' });
-    expect(within(dialog).queryByTestId('skin-swatches')).toBeNull();
+    expect(within(dialog).queryByTestId('skin-slider')).toBeNull();
 
-    // switch the colour on: the row opens, nothing is on the avatar or in the store yet
+    // switch the colour on: the slider appears, nothing is on the avatar or in the store yet
     await user.click(within(dialog).getByTestId('avatar-skin-switch'));
     expect(figureSkin()).toBe(STANDARD_SKIN_HEX);
     expect(await store.loadLook(SHOP_ID)).toBeNull();
 
-    // pick two swatches, switch it off again, pick once more, close
-    await user.click(within(dialog).getByTestId('skin-swatch-4'));
+    // set two slider positions, switch it off again, set once more, close
+    const slider = (): HTMLInputElement => within(dialog).getByTestId('skin-slider-input') as HTMLInputElement;
+    fireEvent.change(slider(), { target: { value: String(sliderForMonk(4)) } });
     expect(figureSkin()).toBe(lookForMonk(4)!.hex);
-    await user.click(within(dialog).getByTestId('skin-swatch-9'));
+    fireEvent.change(slider(), { target: { value: String(sliderForMonk(9)) } });
     expect(figureSkin()).toBe(lookForMonk(9)!.hex);
     await user.click(within(dialog).getByTestId('avatar-skin-switch'));
     expect(figureSkin()).toBe(STANDARD_SKIN_HEX);
     await user.click(within(dialog).getByTestId('avatar-skin-switch'));
-    await user.click(within(dialog).getByTestId('skin-swatch-6'));
+    fireEvent.change(slider(), { target: { value: String(sliderForMonk(6)) } });
     await user.click(within(dialog).getByTestId('avatar-prompt-done'));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(figureSkin()).toBe(lookForMonk(6)!.hex);
@@ -165,16 +168,21 @@ describe('avatar prompt (D19)', () => {
     expect(sw).toHaveAttribute('aria-checked', 'false');
     await user.click(sw);
     expect(sw).toHaveAttribute('aria-checked', 'true');
-    expect(within(dialog).getByText(t.skinOnYes)).toBeInTheDocument();
+    // The skin slider is drawn (not the swatch grid).
+    expect(within(dialog).getByTestId('skin-slider')).toBeInTheDocument();
+    expect(within(dialog).getByTestId('skin-slider-label-light')).toHaveTextContent('Light');
+    expect(within(dialog).getByTestId('skin-slider-label-medium')).toHaveTextContent('Medium');
+    expect(within(dialog).getByTestId('skin-slider-label-deep')).toHaveTextContent('Deep');
     // Memory only by default: no sentence about saving the colour is shown.
     expect(within(dialog).queryByTestId('avatar-c30')).toBeNull();
     expect(dialog).not.toHaveTextContent(/saved on this device/);
-    // The swatches are the Monk Skin Tone Scale (CC BY 4.0): credited where they are shown.
+    // The slider is the Monk Skin Tone Scale (CC BY 4.0): credited where it is shown.
     expect(within(dialog).getByTestId('avatar-swatch-credit')).toHaveTextContent('Monk Skin Tone Scale by Dr. Ellis Monk, CC BY 4.0');
-    expect(within(dialog).getAllByRole('radio')).toHaveLength(10);
-    // no swatch is chosen for the shopper
-    expect(within(dialog).queryByRole('radio', { checked: true })).toBeNull();
-    await user.click(within(dialog).getByRole('radio', { name: 'Colour 5 of 10' }));
+    // No value is chosen for the shopper: the slider sits at 0 (Light end) and the avatar keeps the standard colour.
+    const slider = within(dialog).getByTestId('skin-slider-input') as HTMLInputElement;
+    expect(slider).toHaveAttribute('aria-label', 'Skin tone slider');
+    expect(slider.value).toBe('0');
+    fireEvent.change(slider, { target: { value: String(sliderForMonk(5)) } });
     expect(within(dialog).getByTestId('avatar-skin-status')).toHaveTextContent('Colour 5 of 10 is on the avatar.');
     await user.click(sw);
     expect(within(dialog).getByTestId('avatar-skin-state')).toHaveTextContent(t.c14);
@@ -234,7 +242,8 @@ describe('avatar prompt (D19)', () => {
     expect(within(dialog).getByRole('link', { name: 'Read the full privacy terms' })).toBeInTheDocument();
     expect(within(dialog).queryByTestId('avatar-terms-lang')).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole('switch', { name: t.skinName }));
-    expect(within(dialog).getByRole('radio', { name: 'Colour 10 of 10, darkest' })).toBeInTheDocument();
+    // The slider labels (Light, Medium, Deep) are in English (D21).
+    expect(within(dialog).getByTestId('skin-slider-label-deep')).toHaveTextContent('Deep');
     expect(dialog).not.toHaveTextContent(/avatar op jou|Jij kiest|Kleur|Sluiten/);
   });
 
@@ -249,7 +258,7 @@ describe('avatar prompt (D19)', () => {
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByRole('heading', { name: 'Make the avatar look like you' })).toHaveFocus();
 
-    // Tab order: close, switch, type my measurements, link, done, and round again.
+    // Tab order: close, switch, slider, type my measurements, link, done, and round again.
     await user.tab();
     expect(within(dialog).getByTestId('avatar-prompt-close')).toHaveFocus();
     await user.tab();
@@ -258,9 +267,10 @@ describe('avatar prompt (D19)', () => {
     await user.keyboard(' ');
     expect(sw).toHaveAttribute('aria-checked', 'true');
     await user.tab();
-    expect(within(dialog).getByTestId('skin-swatch-1')).toHaveFocus();
-    await user.keyboard('{ArrowRight}{ArrowRight}');
-    expect(within(dialog).getByTestId('skin-swatch-3')).toBeChecked();
+    const slider = within(dialog).getByTestId('skin-slider-input') as HTMLInputElement;
+    expect(slider).toHaveFocus();
+    // Arrow keys move the slider; Home/End jump to the Light/Deep ends.
+    fireEvent.change(slider, { target: { value: String(sliderForMonk(3)) } });
     expect(figureSkin()).toBe(lookForMonk(3)!.hex);
     await user.tab();
     await user.tab();
@@ -288,8 +298,9 @@ describe('avatar prompt (D19)', () => {
     expect(store.persistsLooks).toBe(false);
     await toResult(user);
     await user.click(screen.getByTestId('avatar-open'));
-    await user.click(within(await screen.findByRole('dialog')).getByTestId('avatar-skin-switch'));
-    await user.click(screen.getByTestId('skin-swatch-8'));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByTestId('avatar-skin-switch'));
+    fireEvent.change(within(dialog).getByTestId('skin-slider-input') as HTMLInputElement, { target: { value: String(sliderForMonk(8)) } });
     await user.click(screen.getByTestId('avatar-prompt-done'));
     expect(figureSkin()).toBe(lookForMonk(8)!.hex);
     // "Remember me" is on and the profile is stored, but no row holds the colour.
@@ -326,12 +337,13 @@ describe('avatar prompt (D19)', () => {
     setup({ locale: 'nl-NL', store: first });
     await toResult(user);
     await user.click(screen.getByTestId('avatar-open'));
-    await user.click(within(await screen.findByRole('dialog')).getByTestId('avatar-skin-switch'));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByTestId('avatar-skin-switch'));
     // The sentence as the shopper sees it, naming the switch as the footer shows it.
     const c30 = screen.getByTestId('avatar-c30');
     expect(c30).toHaveTextContent(c30Text());
     expect(c30).toHaveTextContent('"Remember me on this shop"');
-    await user.click(screen.getByTestId('skin-swatch-8'));
+    fireEvent.change(within(dialog).getByTestId('skin-slider-input') as HTMLInputElement, { target: { value: String(sliderForMonk(8)) } });
     // The next visit is a new store on the same database: it must not read before this visit's row is written. Asking
     // the first store (`loadLook`) does not show that, it answers from memory at once; under load the row was still
     // on its way (key made, colour encrypted, two writes) and the second visit drew the standard colour for good
@@ -348,9 +360,10 @@ describe('avatar prompt (D19)', () => {
     // The colour is read before the result is shown (one load), so it is there with the first figure.
     expect(figureSkin()).toBe(lookForMonk(8)!.hex);
     await user.click(screen.getByTestId('avatar-open'));
-    const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByTestId('avatar-skin-switch')).toHaveAttribute('aria-checked', 'true');
-    expect(within(dialog).getByTestId('skin-swatch-8')).toBeChecked();
+    const reopen = await screen.findByRole('dialog');
+    expect(within(reopen).getByTestId('avatar-skin-switch')).toHaveAttribute('aria-checked', 'true');
+    const slider = within(reopen).getByTestId('skin-slider-input') as HTMLInputElement;
+    expect(parseFloat(slider.value)).toBeCloseTo(sliderForMonk(8), 3);
   });
 
   it('the hero render is drawn from a separate figure in the standard colour, not from the coloured one on screen', async () => {
@@ -400,8 +413,9 @@ describe('avatar prompt (D19)', () => {
     setup();
     await toResult(user);
     await user.click(screen.getByTestId('avatar-open'));
-    await user.click(within(await screen.findByRole('dialog')).getByTestId('avatar-skin-switch'));
-    await user.click(screen.getByTestId('skin-swatch-10'));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByTestId('avatar-skin-switch'));
+    fireEvent.change(within(dialog).getByTestId('skin-slider-input') as HTMLInputElement, { target: { value: String(sliderForMonk(10)) } });
     await user.click(screen.getByTestId('avatar-prompt-done'));
     const result = screen.getByTestId('embed-result');
     expect(result).toHaveTextContent('Estimate · not measured');

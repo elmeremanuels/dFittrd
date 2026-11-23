@@ -159,12 +159,19 @@ for (const person of PEOPLE) {
   entry.suggestion = Number((await page.getByTestId('skin-photo-suggestion').textContent()).match(/colour (\d+)/)[1]);
   entry.notices = await page.locator('[data-testid="skin-photo-notice"] [data-notice]').evaluateAll((els) => els.map((e) => e.getAttribute('data-notice')));
   entry.figureSkinBeforeConfirm = await page.locator('[data-testid="embed-result"] svg[data-skin]').first().getAttribute('data-skin');
-  await page.getByTestId('skin-swatches').scrollIntoViewIfNeeded();
+  await page.getByTestId('skin-slider').scrollIntoViewIfNeeded();
   await promptShot(page, `${p}-8-skin-suggestion.png`);
-  await page.getByTestId('skin-swatches').screenshot({ path: join(out, `${p}-8-swatches-closeup.png`) });
+  await page.getByTestId('skin-slider').screenshot({ path: join(out, `${p}-8-slider-closeup.png`) });
 
   // 6. The shopper confirms the suggested swatch (G4: nothing is applied before this tap).
-  await page.getByTestId(`skin-swatch-${entry.suggestion}`).check({ force: true });
+  // Skin slider (CUR-28): set the slider to the suggestion's position.
+  await page.getByTestId('skin-slider-input').evaluate((el, suggestion) => {
+    const input = el;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(input, String((suggestion - 1) / 9));
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, entry.suggestion);
   entry.figureSkinAfterConfirm = await page.locator('[data-testid="embed-result"] svg[data-skin]').first().getAttribute('data-skin');
   await promptShot(page, `${p}-9-skin-confirmed.png`);
   await page.getByTestId('avatar-prompt-done').click();

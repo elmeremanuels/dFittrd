@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
@@ -10,6 +10,7 @@ import type { EmbedApi, EmbedDeps, FaceLookResultLike } from '../deps';
 import { EmbedApp } from '../EmbedApp';
 import { createEmbedStore, EmbedDb } from '../storage';
 import { embedStrings } from '../strings';
+import { sliderForMonk } from '../skinSlider';
 
 /**
  * Slices 4 and 5 in the embed, live flag (`facePhotoLive`), with the on-device face step stubbed
@@ -186,12 +187,12 @@ describe('face photo in the embed (slices 4 and 5, live flag)', () => {
       await givePhoto(user, 'skin');
       expect(await screen.findByTestId('skin-photo-suggestion')).toHaveTextContent('colour 7 of 10');
       expect(screen.getByTestId('skin-photo-notice')).toHaveTextContent(fp.ui.notices.side);
-      expect(screen.getByTestId('skin-swatch-suggested')).toBeInTheDocument();
+      expect(screen.getByTestId('skin-slider-suggested')).toBeInTheDocument();
       expect(look.mock.calls[1]![1]).toMatchObject({ tile: false, skin: true });
       const figureSkin = (): string | null | undefined => screen.getByTestId('embed-result').querySelector('svg[data-skin]')?.getAttribute('data-skin');
       expect(figureSkin()).toBe('#DFC3A8');
-      expect(screen.getByTestId('skin-swatch-7')).not.toBeChecked();
-      await user.click(screen.getByTestId('skin-swatch-8'));
+      // The suggestion (Monk 7) is shown on the slider as a dashed tick, but does not change the colour (G4).
+      fireEvent.change(screen.getByTestId('skin-slider-input') as HTMLInputElement, { target: { value: String(sliderForMonk(8)) } });
       expect(figureSkin()).toBe('#604134');
 
       // Remember my photo (C19): off at first, on stores the face on this device for this shop.

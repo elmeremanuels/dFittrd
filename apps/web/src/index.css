@@ -107,3 +107,46 @@
 .animate-float {
   animation: float 3s ease-in-out infinite;
 }
+
+/* Skin slider (CUR-28, WO-015): a native range over a CSS-gradient track. The track itself is on
+ * a sibling element, so the range is transparent. Thumb colour is the picked colour (`--skin-thumb`),
+ * so the shopper sees their choice in the handle itself. Width: full up to 360 px (set on the wrapper). */
+.skin-slider::-webkit-slider-runnable-track {
+  height: 0.75rem;
+  background: transparent;
+  border: 0;
+}
+.skin-slider::-moz-range-track {
+  height: 0.75rem;
+  background: transparent;
+  border: 0;
+}
+.skin-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 1.5rem;
+  width: 1.5rem;
+  margin-top: -0.375rem;
+  border-radius: 9999px;
+  background: var(--skin-thumb, #1a1612);
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 3px rgba(26, 22, 18, 0.4);
+  cursor: pointer;
+}
+.skin-slider::-moz-range-thumb {
+  height: 1.5rem;
+  width: 1.5rem;
+  border-radius: 9999px;
+  background: var(--skin-thumb, #1a1612);
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 3px rgba(26, 22, 18, 0.4);
+  cursor: pointer;
+}
+.skin-slider:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid #ff5a3c;
+  outline-offset: 2px;
+}
+.skin-slider:focus-visible::-moz-range-thumb {
+  outline: 2px solid #ff5a3c;
+  outline-offset: 2px;
+}

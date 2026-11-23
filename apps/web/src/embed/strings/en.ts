@@ -69,6 +69,14 @@ export interface AvatarUi {
   swatchCredit: string;
   /** Shown after the terms link when the page behind it is not in the catalogue's language (else empty). */
   termsLanguageNote: string;
+  /** Labels of the three tick marks under the skin slider (CUR-28, WO-015; D21: English). */
+  skinLight: string;
+  skinMedium: string;
+  skinDeep: string;
+  /** Accessible name of the skin slider. */
+  skinSlider: string;
+  /** Status announced by the slider after a change: "{label}" (Light / Medium / Deep) and the colour. */
+  skinSliderStatus: (label: string, hex: string) => string;
 }
 
 /**
@@ -448,6 +456,11 @@ export const EN: EmbedCatalogue = {
       open: title,
       swatchCredit: 'Colours: Monk Skin Tone Scale by Dr. Ellis Monk, CC BY 4.0.',
       termsLanguageNote: '',
+      skinLight: 'Light',
+      skinMedium: 'Medium',
+      skinDeep: 'Deep',
+      skinSlider: 'Skin tone slider',
+      skinSliderStatus: (label, hex) => `${label}, colour ${hex}.`,
     },
     facePhoto: {
       claims: {

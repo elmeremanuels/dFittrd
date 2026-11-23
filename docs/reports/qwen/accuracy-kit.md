@@ -1,55 +1,64 @@
-# Accuracy kit (CUR-32, WO-018)
+# Accuracy kit (CUR-32, WO-018) — Report v2
 
-The kit for comparing the phone scan's measurements to a tape measure's. Three things:
+**Builder:** Qwen · **Linear:** CUR-32 · **Branch:** `qwen/wo-018-accuracy-kit`
+**Model:** Claude Sonnet 4.5 (Qwen Code) — fixing review by Claude
 
-1. **The protocol**: `docs/ACCURACY-PROTOCOL.md`. Six measurement points (height, shoulder, bust, waist, hip, inseam), how to tape them, how to run the scan, consent wording, privacy. D19 (no photo of a volunteer is ever taken) and D3 (no shopper data in the fixtures) are satisfied.
-2. **The report script**: `scripts/accuracy-report.ts`. Reads an anonymous CSV (one row per volunteer, six tape + six scan values) and prints per point the mean signed error, the median absolute error, the 90th-percentile absolute error, the maximum, and the share within 1, 2 and 3 cm. Also writes a markdown report under `docs/reports/qwen/`.
-3. **The tests**: `packages/fit-engine/src/accuracy-report.test.ts`. 10 tests, all passing, using only synthetic data. The real-data CSV path is gitignored (`scripts/data/.gitignore`).
+## Done
 
-Branch: `qwen/wo-018-accuracy-kit` (from `claude/garment-engine` at `c4ef362`). Three commits on top of the base.
+- `docs/ACCURACY-PROTOCOL.md` — the protocol (six measurement points, tape procedure, scan procedure, consent wording, privacy rules, D19 no photo ever taken)
+- `scripts/accuracy-report.ts` — the report script (CSV → per-point stats → console table + markdown report)
+- `scripts/accuracy-report.test.ts` — **10 tests** (moved out of `packages/fit-engine` per Claude's review: engine must stay pure, AGENTS.md rule 5)
+- `scripts/package.json`, `scripts/vitest.config.ts`, `scripts/tsconfig.json` — new workspace package for scripts with its own vitest config
+- `scripts/data/accuracy-sample.csv` — synthetic 4-row fixture (committed)
+- `scripts/data/.gitignore` — keeps real volunteer CSVs out of git
+- `docs/reports/qwen/accuracy-report-accuracy-sample.md` — generated output on sample CSV
+- `pnpm-workspace.yaml` — added `scripts` as a workspace package
+- Fixed lines 74-75 of `accuracy-report.ts`: `ACCURACY_POINTS[i]!` (non-null assertion for `noUncheckedIndexedAccess`)
 
-## Gates run locally (green)
+## Measured (real output)
 
-- `pnpm --filter @curtain/fit-engine test accuracy-report`: **10/10 passing** (parseAccuracyCsv reads the synthetic fixture and refuses malformed CSVs; pointStats computes signed error and the within-N-cm shares correctly; the acceptance rule flags a synthetic point whose median abs error is 2 cm or whose share within 2 cm is 0.3; statsToMarkdown writes a table with the six points).
-- `pnpm --filter @curtain/fit-engine typecheck`: clean.
-- `pnpm --filter @curtain/fit-engine lint`: clean.
-- Running the script on the sample CSV:
-  ```
-  Point       n   mean  median  p90   max   ≤1cm  ≤2cm  ≤3cm
-  height        4   +0.02   0.35  0.47  0.50 100 % 100 % 100 %
-  shoulder      4   +0.45   0.45  0.50  0.50 100 % 100 % 100 %
-  bust          4   +0.15   0.55  1.02  1.20  75 % 100 % 100 %
-  waist         4   -0.13   0.75  0.94  1.00 100 % 100 % 100 %
-  hip           4   +0.75   0.70  1.01  1.10  75 % 100 % 100 %
-  inseam        4   +0.10   0.40  0.54  0.60 100 % 100 % 100 %
-  ```
+```
+$ pnpm --filter @curtain/scripts test
+ ✓ accuracy-report.test.ts (10 tests) 11ms
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
 
-## Gates not run locally (honest status, not claimed green)
+$ pnpm --filter @curtain/fit-engine test
+ Test Files  10 passed (10)
+      Tests  258 passed (258)
+(accuracy-report test no longer in fit-engine — engine stays pure)
 
-- `pnpm check` full: the WooCommerce PHP lint fails because PHP is not installed (same as every previous work order).
-- `pnpm demo:e2e`: Playwright's browsers are not installed on this machine.
+$ pnpm -r --filter '!@curtain/woocommerce-plugin' ... typecheck
+(exit 0 — all TypeScript packages clean)
 
-## The script
+$ pnpm -r --filter '!@curtain/woocommerce-plugin' ... lint
+(exit 0 — no warnings)
 
-```bash
-./node_modules/.pnpm/node_modules/.bin/tsx scripts/accuracy-report.ts path/to/accuracy-YYYY-MM.csv
+$ node scripts/check-bundle-secrets.mjs
+✓ no secret-looking strings in client bundles
+
+$ node scripts/check-language-packs.mjs
+language packs: en on all 5 surfaces
 ```
 
-The `tsx` binary is not on the root's PATH (it lives under `.pnpm/node_modules/.bin/` because `scripts/` is not a workspace package). The reviewer may want to either add a root-level `accuracy` npm script (`"accuracy": "tsx scripts/accuracy-report.ts"`) or move the script into a workspace package. The work order calls this a light-tier work order, so the simpler arrangement stands.
+Script output on sample CSV:
+```
+Point       n   mean  median  p90   max   ≤1cm  ≤2cm  ≤3cm
+height        4   +0.02   0.35  0.47  0.50 100 % 100 % 100 %
+shoulder      4   +0.45   0.45  0.50  0.50 100 % 100 % 100 %
+bust          4   +0.15   0.55  1.02  1.20  75 % 100 % 100 %
+waist         4   -0.13   0.75  0.94  1.00 100 % 100 % 100 %
+hip           4   +0.75   0.70  1.01  1.10  75 % 100 % 100 %
+inseam        4   +0.10   0.40  0.54  0.60 100 % 100 % 100 %
+```
 
-## Privacy
+## Not verified
 
-- The CSV path is gitignored (`scripts/data/.gitignore`): `accuracy-*.csv` is ignored, only `accuracy-sample.csv` (the synthetic fixture) is committed.
-- The script never touches shopper data, photos, or device identifiers. The protocol (§6) forbids collecting any of those.
-- The consent wording (§5) is for the founder to review with Naomi before the first real run.
+- `pnpm check` full pipeline: `@curtain/woocommerce-plugin` build fails because PHP is not installed on this machine (`php: command not found`). All TypeScript gates (typecheck, lint, unit tests, bundle secrets, language packs) pass.
+- `pnpm demo:e2e`: Playwright browsers are not installed on this machine.
 
-## What was built
+## Open issues
 
-- `docs/ACCURACY-PROTOCOL.md` (new): the protocol, in English.
-- `scripts/accuracy-report.ts` (new): the script.
-- `scripts/data/accuracy-sample.csv` (new): the synthetic fixture (4 rows, 6 points).
-- `scripts/data/.gitignore` (new): keeps real CSVs out of source control.
-- `packages/fit-engine/src/accuracy-report.test.ts` (new): the tests.
-- `docs/reports/qwen/accuracy-report-accuracy-sample.md` (new, generated by the script on the sample CSV): the demo output.
+None specific to this work order.
 
-— Qwen (Qwen3-Coder-480B-A35B-Instruct)
+— Qwen (Claude Sonnet 4.5)

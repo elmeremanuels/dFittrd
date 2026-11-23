@@ -1,0 +1,102 @@
+{
+ "when": "2026-11-23T02:17:27.156Z",
+ "renderer": "headless Chromium, SwiftShader (CPU), 390x844 CSS px at 2x",
+ "renders": [
+  {
+   "name": "slim--front",
+   "query": "mode=head&frame=body&family=female&height=164&bust=80&waist=62&hip=88&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 80 · waist 62 · hip 88; drawn chest 80.0 · underbust 68.0 · waist 62.0 · hip 88.0"
+  },
+  {
+   "name": "slim--three-quarter",
+   "query": "mode=head&frame=body&family=female&height=164&bust=80&waist=62&hip=88&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 80 · waist 62 · hip 88; drawn chest 80.0 · underbust 68.0 · waist 62.0 · hip 88.0"
+  },
+  {
+   "name": "slim--side",
+   "query": "mode=head&frame=body&family=female&height=164&bust=80&waist=62&hip=88&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 80 · waist 62 · hip 88; drawn chest 80.0 · underbust 68.0 · waist 62.0 · hip 88.0"
+  },
+  {
+   "name": "mid--front",
+   "query": "mode=head&frame=body&family=female&height=168&bust=92&waist=74&hip=100&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+  },
+  {
+   "name": "mid--three-quarter",
+   "query": "mode=head&frame=body&family=female&height=168&bust=92&waist=74&hip=100&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+  },
+  {
+   "name": "mid--side",
+   "query": "mode=head&frame=body&family=female&height=168&bust=92&waist=74&hip=100&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+  },
+  {
+   "name": "full--front",
+   "query": "mode=head&frame=body&family=female&height=170&bust=116&waist=98&hip=122&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 116 · waist 98 · hip 122; drawn chest 116.0 · underbust 100.0 · waist 98.0 · hip 122.0"
+  },
+  {
+   "name": "full--three-quarter",
+   "query": "mode=head&frame=body&family=female&height=170&bust=116&waist=98&hip=122&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 116 · waist 98 · hip 122; drawn chest 116.0 · underbust 100.0 · waist 98.0 · hip 122.0"
+  },
+  {
+   "name": "full--side",
+   "query": "mode=head&frame=body&family=female&height=170&bust=116&waist=98&hip=122&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 116 · waist 98 · hip 122; drawn chest 116.0 · underbust 100.0 · waist 98.0 · hip 122.0"
+  },
+  {
+   "name": "tall--front",
+   "query": "mode=head&frame=body&family=female&height=182&bust=92&waist=74&hip=100&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+  },
+  {
+   "name": "tall--three-quarter",
+   "query": "mode=head&frame=body&family=female&height=182&bust=92&waist=74&hip=100&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+  },
+  {
+   "name": "tall--side",
+   "query": "mode=head&frame=body&family=female&height=182&bust=92&waist=74&hip=100&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+  },
+  {
+   "name": "petite--front",
+   "query": "mode=head&frame=body&family=female&height=152&bust=84&waist=66&hip=92&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 84 · waist 66 · hip 92; drawn chest 84.0 · underbust 71.3 · waist 66.0 · hip 92.0"
+  },
+  {
+   "name": "petite--three-quarter",
+   "query": "mode=head&frame=body&family=female&height=152&bust=84&waist=66&hip=92&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 84 · waist 66 · hip 92; drawn chest 84.0 · underbust 71.3 · waist 66.0 · hip 92.0"
+  },
+  {
+   "name": "petite--side",
+   "query": "mode=head&frame=body&family=female&height=152&bust=84&waist=66&hip=92&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 84 · waist 66 · hip 92; drawn chest 84.0 · underbust 71.3 · waist 66.0 · hip 92.0"
+  },
+  {
+   "name": "mid--upper-front",
+   "query": "mode=head&frame=upper&family=female&height=168&bust=92&waist=74&hip=100&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+  },
+  {
+   "name": "mid--upper-three-quarter",
+   "query": "mode=head&frame=upper&family=female&height=168&bust=92&waist=74&hip=100&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+  },
+  {
+   "name": "full--upper-front",
+   "query": "mode=head&frame=upper&family=female&height=170&bust=116&waist=98&hip=122&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 116 · waist 98 · hip 122; drawn chest 116.0 · underbust 100.0 · waist 98.0 · hip 122.0"
+  },
+  {
+   "name": "full--upper-three-quarter",
+   "query": "mode=head&frame=upper&family=female&height=170&bust=116&waist=98&hip=122&body=realistic&skin=a07e56&skinlook=procedural",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · lighting classic · skin #a07e56 · shading flat · skin procedural + studio light (replaces the lighting named) · typed chest 116 · waist 98 · hip 122; drawn chest 116.0 · underbust 100.0 · waist 98.0 · hip 122.0"
+  }
+ ],
+ "problems": []
+}

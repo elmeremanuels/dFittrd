@@ -5,7 +5,7 @@
  * files under `baseUrl`. The size shown is the size the embed's own fit-engine result recommends
  * (AGENTS.md rule 4, D15): this module takes that FitResult and never computes a fit itself.
  */
-import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh, familyShape, type Mannequin } from '@curtain/mannequin';
+import { BASE_SHAPE_ID, bodyShape, buildMannequin, buildMannequinMesh, familyShape, type Mannequin, type MannequinOutlines } from '@curtain/mannequin';
 import type { FitResult } from '@curtain/fit-engine';
 import type { GarmentPayload } from '@curtain/schema';
 import { initialViewFor } from './initialView';
@@ -290,7 +290,7 @@ export interface AvatarPlan {
  * `v1` when absent, against anchors.json `mannequin.maleShape`), or this throws
  * `GarmentViewError('incompatible')` and there is no 3D view.
  */
-export function planAvatar(anchors: { category: string; mannequin?: { family?: unknown; maleShape?: unknown } }, bodyOptions: BodyOptions | null | undefined, look?: AvatarLook | null, maleShape?: 'v1' | 'v2'): AvatarPlan {
+export function planAvatar(anchors: { category: string; mannequin?: { family?: unknown; maleShape?: unknown } }, bodyOptions: BodyOptions | null | undefined, look?: AvatarLook | null, maleShape?: 'v1' | 'v2', outlines?: MannequinOutlines | null): AvatarPlan {
   const body: BodyOptions = bodyOptions ?? {};
   const family = bundleFamilyOf(anchors);
   if (bodyFamilyOf(body) !== family) throw new GarmentViewError('incompatible');
@@ -303,11 +303,11 @@ export function planAvatar(anchors: { category: string; mannequin?: { family?: u
   let drawnScaleAt = (_y: number): number => 1;
   if (isTypedBody(body)) {
     // A typed height or shoulder width: the body is built from the measurements (`buildBody`).
-    const typed = buildTypedAvatar(m, body, anchors.category, { head }, build);
+    const typed = buildTypedAvatar(m, body, anchors.category, { head }, build, outlines);
     ({ avatar, field, garmentLiftCm, statureCm, drawn } = typed);
   } else {
     avatar = buildAvatar(m, buildMannequinMesh(m, { head }), sanitiseMeasurements(girthInput(body), mannequinMeasurements(m)));
-    field = bodyField(m, avatar);
+    field = bodyField(m, avatar, 0.5, outlines);
     const morph = avatar.morph;
     drawnScaleAt = (y) => morph.girthScaleAt(y, 'body');
   }
@@ -342,9 +342,36 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
     throw new GarmentViewError('incompatible');
   }
 
+  // With `bodyShape: 'realistic-spike'` (female only, CUR-9 / WO-016 iter 1): load the fitted
+  // realistic mesh up front and compute its polar outlines, so the collider meets the drawn body
+  // instead of the ellipse that contains it. The asset is cached per URL after the first fetch.
+  let realisticOutlines: MannequinOutlines | null = null;
+  if (bodyShapeOf(opts.bodyShape) === 'realistic-spike' && bundleFamilyOf(bundle.anchors) === 'female') {
+    try {
+      const [mod, loadMod] = await Promise.all([
+        import('./realisticBody'),
+        import('./realisticBodyLoad').then((m) => m.loadRealisticBody(fetchFn, opts.realisticBodyUrl)),
+      ]);
+      const asset = await loadMod;
+      const plan0 = planAvatar(bundle.anchors, opts.body, opts.look, opts.maleShape);
+      const target = mod.fitTargetOf(plan0.drawn, plan0.avatar.rings, plan0.drawnScaleAt);
+      const fit = mod.fitRealisticBody(asset, target);
+      const arms: { side: 1 | -1; joint: [number, number, number]; axis: [number, number, number]; lengthCm: number }[] = [
+        { side: 1, joint: target.arms.left.joint, axis: target.arms.left.axis, lengthCm: Math.hypot(target.rings.find((r) => r.id === 'wrist')!.centre[0] - target.arms.left.joint[0], target.rings.find((r) => r.id === 'wrist')!.centre[1] - target.arms.left.joint[1], target.rings.find((r) => r.id === 'wrist')!.centre[2] - target.arms.left.joint[2]) },
+        { side: -1, joint: target.arms.right.joint, axis: target.arms.right.axis, lengthCm: Math.hypot(target.rings.find((r) => r.id === 'wrist')!.centre[0] - target.arms.right.joint[0], target.rings.find((r) => r.id === 'wrist')!.centre[1] - target.arms.right.joint[1], target.rings.find((r) => r.id === 'wrist')!.centre[2] - target.arms.right.joint[2]) },
+      ];
+      realisticOutlines = mod.realisticOutlinesOf(fit.mesh, target.statureCm, target.crotchY, arms);
+    } catch {
+      // If the outlines cannot be computed (e.g. no asset), fall back to the procedural field.
+      // The viewer still draws the realistic body (its own path below), only the collider stays
+      // the ellipse.
+      realisticOutlines = null;
+    }
+  }
+
   let plan: AvatarPlan;
   try {
-    plan = planAvatar(bundle.anchors, opts.body, opts.look, opts.maleShape);
+    plan = planAvatar(bundle.anchors, opts.body, opts.look, opts.maleShape, realisticOutlines);
   } catch (e) {
     state('error');
     throw e;

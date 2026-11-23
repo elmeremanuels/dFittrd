@@ -8,7 +8,7 @@
  */
 import { gradingMorph, type AnchorRing, type AnchorValues, type GradingMorph } from '@curtain/anchors';
 import type { UserBody } from '@curtain/schema';
-import { POLAR_N, buildBody, buildMannequinMesh, type PolarSection, type BodyFamily, type BuildOptions, type Mannequin, type Mesh, type MeshOptions } from '@curtain/mannequin';
+import { POLAR_N, buildBody, buildMannequinMesh, type BodyFamily, type BuildOptions, type Mannequin, type MannequinOutlines, type Mesh, type MeshOptions, type PolarSection } from '@curtain/mannequin';
 import { armpitDistance, radialMorph, type ChainAssignment } from './core/garment';
 import { makeCollider, type BodyField, type PolarTable, type Table } from './collide';
 
@@ -308,7 +308,7 @@ export function liftField(field: BodyField, dyCm: number): BodyField {
  * floor on a shorter body passes through it and is hidden by the floor), and the grading and the
  * pins are still placed on `base`.
  */
-export function buildTypedAvatar(base: Mannequin, body: BodyOptions, category: string, mesh: MeshOptions = {}, build: BuildOptions = {}): TypedAvatar {
+export function buildTypedAvatar(base: Mannequin, body: BodyOptions, category: string, mesh: MeshOptions = {}, build: BuildOptions = {}, outlines: MannequinOutlines | null | undefined = undefined): TypedAvatar {
   const family = base.shape.family;
   const meas = sanitiseMeasurements(girthInput(body), mannequinMeasurements(base));
   const shoulderCm = positive(body.shoulderCm);
@@ -322,7 +322,7 @@ export function buildTypedAvatar(base: Mannequin, body: BodyOptions, category: s
   if (fitted.neck) rings.neck *= fitted.neck.scale;
   return {
     avatar: { measurements: meas, morph: IDENTITY_MORPH.morph, rings, mesh: fitted.mesh, neck: fitted.neck },
-    field: liftField(bodyField(shown, { ...IDENTITY_MORPH, neck: fitted.neck }), -garmentLiftCm),
+    field: liftField(bodyField(shown, { ...IDENTITY_MORPH, neck: fitted.neck }, 0.5, outlines), -garmentLiftCm),
     statureCm: shown.statureCm,
     drawn: shown,
     garmentLiftCm,
@@ -367,16 +367,17 @@ function tabulatePolar(lo: number, hi: number, stepCm: number, at: (x: number) =
 /**
  * Avatar cross-sections for collision. Body sections are scaled about the vertical axis like `radialMorph`. A body with
  * drawn outlines (the male shape v2) also carries them (`Table.polar`): the collider then meets the drawn body, not the
- * ellipse that contains it.
+ * ellipse that contains it. A host can pass its own outlines (`outlines`) — for example the realistic body's fitted
+ * mesh (WO-016 iteration 1, CUR-9) — and they take precedence over the mannequin's own.
  */
-export function bodyField(m: Mannequin, avatar: Pick<Avatar, 'morph' | 'neck'>, stepCm = 0.5): BodyField {
+export function bodyField(m: Mannequin, avatar: Pick<Avatar, 'morph' | 'neck'>, stepCm = 0.5, outlines: MannequinOutlines | null | undefined = m.outlines): BodyField {
   const S = m.statureCm;
   const scaled = (e: { cx: number; cz: number; a: number; b: number } | null, y: number, narrow = 1) => {
     if (!e) return null;
     const s = avatar.morph.girthScaleAt(y, 'body');
     return { cx: e.cx * s, cz: e.cz * s, a: e.a * s * narrow, b: e.b * s * narrow };
   };
-  const o = m.outlines;
+  const o = outlines ?? null;
   const bodyScale = (y: number): number => avatar.morph.girthScaleAt(y, 'body');
   const s0 = armpitDistance(m);
   const arms = [m.arms.left, m.arms.right].map((f) => {

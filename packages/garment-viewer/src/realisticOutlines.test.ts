@@ -6,10 +6,11 @@
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { buildBody } from '@curtain/mannequin';
+import { buildBody, buildMannequin } from '@curtain/mannequin';
 import { polarRadius } from '@curtain/mannequin';
 import { fitRealisticBody, fitTargetOf, realisticOutlinesOf, type RealisticArmFrame } from './realisticBody';
 import { decodeRealisticBody } from './realisticBody';
+import { bodyField, IDENTITY_MORPH, makeCollider } from './body';
 
 const FILE = new URL('../assets/realistic-body/female-v1.crb', import.meta.url);
 const asset = decodeRealisticBody(readFileSync(FILE));
@@ -22,16 +23,6 @@ const BODIES = {
   tall: { heightCm: 182, bust: 92, waist: 74, hip: 100 },
   petite: { heightCm: 152, bust: 84, waist: 66, hip: 92 },
 } as const;
-
-const framesOf = (fit: ReturnType<typeof fitRealisticBody>): RealisticArmFrame[] => {
-  const lengthOf = (f: { joint: [number, number, number]; wrist?: [number, number, number] }): number => {
-    const wrist = fit.rings.find((r) => r.id === 'wrist')!;
-    return Math.hypot(wrist.centre[0] - f.joint[0], wrist.centre[1] - f.joint[1], wrist.centre[2] - f.joint[2]);
-  };
-  return [
-    { side: 1, joint: fit.shape ? [...asset.meta.arm.joint] as [number, number, number] : asset.meta.arm.joint, axis: [1, 0, 0], lengthCm: lengthOf({ joint: asset.meta.arm.joint }) } as unknown as RealisticArmFrame,
-  ];
-};
 
 /** Girth of a polar outline at a station (the integral of the radius around the circle). */
 const polarGirth = (o: { cx: number; cz: number; r: Float64Array } | null): number => {
@@ -51,9 +42,10 @@ describe('realisticOutlinesOf (WO-016 iter 1)', () => {
       const target = fitTargetOf(buildBody({ family: 'female', ...body }));
       const fit = fitRealisticBody(asset, target);
       // Arms: use the target's arm frames. The realistic mesh's arms lie along the fitted frames.
+      const wristRing = target.rings.find((r) => r.id === 'wrist')!;
       const arms: RealisticArmFrame[] = [
-        { side: 1, joint: target.arms.left.joint, axis: target.arms.left.axis, lengthCm: Math.hypot(...target.arms.left.joint.map((v, i) => target.rings.find((r) => r.id === 'wrist')!.centre[i] - v) as [number, number, number]) },
-        { side: -1, joint: target.arms.right.joint, axis: target.arms.right.axis, lengthCm: Math.hypot(...target.arms.right.joint.map((v, i) => target.rings.find((r) => r.id === 'wrist')!.centre[i] - v) as [number, number, number]) },
+        { side: 1, joint: target.arms.left.joint, axis: target.arms.left.axis, lengthCm: Math.hypot(wristRing.centre[0] - target.arms.left.joint[0], wristRing.centre[1] - target.arms.left.joint[1], wristRing.centre[2] - target.arms.left.joint[2]) },
+        { side: -1, joint: target.arms.right.joint, axis: target.arms.right.axis, lengthCm: Math.hypot(wristRing.centre[0] - target.arms.right.joint[0], wristRing.centre[1] - target.arms.right.joint[1], wristRing.centre[2] - target.arms.right.joint[2]) },
       ];
       const outlines = realisticOutlinesOf(fit.mesh, target.statureCm, target.crotchY, arms);
       const chestY = target.rings.find((r) => r.id === 'chest')!.centre[1];
@@ -85,9 +77,10 @@ describe('realisticOutlinesOf (WO-016 iter 1)', () => {
   it('legs: null above the crotch, a closed section below', () => {
     const target = fitTargetOf(buildBody({ family: 'female', ...BODIES.mid }));
     const fit = fitRealisticBody(asset, target);
+    const wristRing = target.rings.find((r) => r.id === 'wrist')!;
     const arms: RealisticArmFrame[] = [
-      { side: 1, joint: target.arms.left.joint, axis: target.arms.left.axis, lengthCm: 60 },
-      { side: -1, joint: target.arms.right.joint, axis: target.arms.right.axis, lengthCm: 60 },
+      { side: 1, joint: target.arms.left.joint, axis: target.arms.left.axis, lengthCm: Math.hypot(wristRing.centre[0] - target.arms.left.joint[0], wristRing.centre[1] - target.arms.left.joint[1], wristRing.centre[2] - target.arms.left.joint[2]) },
+      { side: -1, joint: target.arms.right.joint, axis: target.arms.right.axis, lengthCm: Math.hypot(wristRing.centre[0] - target.arms.right.joint[0], wristRing.centre[1] - target.arms.right.joint[1], wristRing.centre[2] - target.arms.right.joint[2]) },
     ];
     const outlines = realisticOutlinesOf(fit.mesh, target.statureCm, target.crotchY, arms);
     expect(outlines.leg(target.crotchY + 5, 1)).toBeNull();
@@ -98,5 +91,41 @@ describe('realisticOutlinesOf (WO-016 iter 1)', () => {
     expect(thighRight).not.toBeNull();
     for (const r of thighLeft!.r) expect(r).toBeGreaterThan(0);
     for (const r of thighRight!.r) expect(r).toBeGreaterThan(0);
+  });
+
+  it('the collider uses the realistic outlines when passed: a point in front of the hip, between the drawn body and the ellipse round it, stays where it is', () => {
+    // The mid body's hip ring: the ellipse (symmetric in front and back) reaches farther in front
+    // than the drawn body (the seat lies behind, not in front). The polar outline follows the
+    // drawn surface. A point at (x=0, y=hip, z=hipCentre.z + frontRadius + 1 cm) lies:
+    //   - inside the ellipse (the collider pushes it out);
+    //   - outside the realistic outline (the collider leaves it alone).
+    const target = fitTargetOf(buildBody({ family: 'female', ...BODIES.mid }));
+    const fit = fitRealisticBody(asset, target);
+    const wristRing = target.rings.find((r) => r.id === 'wrist')!;
+    const arms: RealisticArmFrame[] = [
+      { side: 1, joint: target.arms.left.joint, axis: target.arms.left.axis, lengthCm: Math.hypot(wristRing.centre[0] - target.arms.left.joint[0], wristRing.centre[1] - target.arms.left.joint[1], wristRing.centre[2] - target.arms.left.joint[2]) },
+      { side: -1, joint: target.arms.right.joint, axis: target.arms.right.axis, lengthCm: Math.hypot(wristRing.centre[0] - target.arms.right.joint[0], wristRing.centre[1] - target.arms.right.joint[1], wristRing.centre[2] - target.arms.right.joint[2]) },
+    ];
+    const outlines = realisticOutlinesOf(fit.mesh, target.statureCm, target.crotchY, arms);
+    const m = buildBody({ family: 'female', ...BODIES.mid });
+    const hipRing = target.rings.find((r) => r.id === 'hip')!;
+    const ellipse = m.torsoAt(hipRing.centre[1])!;
+    const polar = outlines.torso(hipRing.centre[1])!;
+    const frontRadius = polarRadius(polar.r, Math.PI / 2);
+    // Sanity check: the ellipse reaches farther in front than the drawn body.
+    expect(ellipse.b - frontRadius).toBeGreaterThan(1);
+    // A point just outside the drawn body, well inside the ellipse.
+    const p = Float32Array.from([0, hipRing.centre[1], hipRing.centre[2] + frontRadius + 0.5]);
+    const ellipseCheck = (p[2] - ellipse.cz) / ellipse.b;
+    expect(ellipseCheck).toBeLessThan(1);
+    // The procedural collider (no outlines) pushes the point out to the ellipse.
+    const procedural = makeCollider(bodyField(m, IDENTITY_MORPH), 0.35, new Uint8Array(1));
+    const pProcedural = Float32Array.from(p);
+    expect(procedural(pProcedural, 0)).toBe(true);
+    // The realistic collider leaves the point where it is: it lies outside the drawn body.
+    const realistic = makeCollider(bodyField(m, IDENTITY_MORPH, 0.5, outlines), 0.35, new Uint8Array(1));
+    const pRealistic = Float32Array.from(p);
+    expect(realistic(pRealistic, 0)).toBe(false);
+    expect(pRealistic[2]).toBeCloseTo(p[2], 3);
   });
 });

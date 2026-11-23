@@ -28,8 +28,8 @@
  *   `VITE_VIEWER_HEAD` (`neutral-v2`, `neutral-v3`). Nothing is sent to the viewer for the defaults, so a viewer
  *   that does not know the options gets the same options as before.
  */
-import { Box, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Box, RotateCw, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { FitResult } from '@curtain/fit-engine';
 import type * as GarmentViewer from '@curtain/garment-viewer';
 import { garmentBodyFamily, type GarmentAssetRef, type GarmentPayload, type UserBody } from '@curtain/schema';
@@ -191,6 +191,28 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, wais
   const viewRef = useRef<View | null>(null);
   const sizeRef = useRef(size);
   const skinRef = useRef(skinHex);
+  // Turntable (WO-022): slow turn or step-through for prefers-reduced-motion.
+  const [turning, setTurning] = useState(false);
+  const [reducedMotion] = useState(() => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const [reducedStep, setReducedStep] = useState(-1);
+  const handleTurn = useCallback(() => {
+    const v = viewRef.current;
+    if (!v) return;
+    if (reducedMotion) {
+      const next = (reducedStep + 1) % 6;
+      const steps = [0, 45, 90, 180, 315, 0];
+      setReducedStep(next);
+      v.turnTo(steps[next] ?? 0);
+    } else if (turning) {
+      v.stopTurn();
+      setTurning(false);
+    } else {
+      v.startTurn();
+      setTurning(true);
+      // Stop the "turning" state when the turn finishes (~8 s).
+      setTimeout(() => setTurning(false), 8200);
+    }
+  }, [reducedMotion, reducedStep, turning]);
   // The same size-ring numbers as the 2D figure (route R5), as text under the 3D view: the drape
   // can hide part of the graded difference, the rings say it in numbers.
   // The hem is left out: the 3D drape does not show the hem width yet (docs/REFINEMENT.md R3).
@@ -328,6 +350,19 @@ export function Garment3D({ asset, paused, garment, fit, size, recommended, wais
             ) : null}
             {/* Top right: at the bottom it covered the hem of a floor-length skirt; the loading chip is top left. */}
             <EstimateBadge className="pointer-events-none absolute top-2 right-2 text-[10px]" />
+            {/* Turntable button (WO-022): bottom left, keyboard accessible, min 44×44 CSS px. */}
+            {phase === 'settled' ? (
+              <button
+                type="button"
+                className="chip absolute bottom-2 left-2 flex min-h-11 items-center gap-1.5 bg-white/90 px-3 text-xs shadow-sm hover:bg-white"
+                onClick={handleTurn}
+                aria-label={turning ? t.turnStop : t.turnAround}
+                data-testid="garment3d-turn"
+              >
+                <RotateCw className={`h-4 w-4 ${turning ? 'animate-spin' : ''}`} aria-hidden />
+                {t.turnAround}
+              </button>
+            ) : null}
           </div>
         )}
         {block && (source?.kind === 'device' || source?.kind === 'bake') ? (

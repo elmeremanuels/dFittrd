@@ -10,6 +10,7 @@ import type { ViewerMaterial } from './engine';
 import { faceOverlayGeometry, faceTextureOf, isFaceTexture, type FaceTexture } from './faceOverlay';
 import { patchSkinV2, updateSkinV2, type SkinShading, type SkinV2Uniforms } from './skin';
 import { binarise, cleanDepth, cleanNormals, flipRows, hexOf, rowOf, type ViewerPasses } from './passes';
+import { turnAngleAt, turnRunning } from './turntable';
 
 /**
  * `classic`: the look every garment has had so far (ACES tone mapping, a warm ground bounce).
@@ -395,6 +396,7 @@ export class Stage {
     this.controls.autoRotateSpeed = 1.2;
     this.controls.addEventListener('start', () => {
       this.dragging = true;
+      if (this.turning) this.stopTurn();
     });
     this.controls.addEventListener('end', () => {
       this.dragging = false;
@@ -582,6 +584,72 @@ export class Stage {
   toScreen(p: THREE.Vector3): { x: number; y: number } {
     return projectToCanvas(this.camera, p, this.canvas.clientWidth, this.canvas.clientHeight);
   }
+
+  // --- Turntable (WO-022) ---
+
+  /** True while a turntable animation is running. */
+  turning = false;
+  private turnStart = 0;
+  private turnStartDeg = 0;
+  private turnRafId: number | null = null;
+  /** Set by the host to supply width and stature for `frame()` calls during the turn. */
+  private turnFrame: { widthCm: number; statureCm: number } | null = null;
+
+  /** Configure the frame parameters used during a turn (set by the mount after the initial `frame()`). */
+  setTurnFrame(widthCm: number, statureCm: number): void {
+    this.turnFrame = { widthCm, statureCm };
+  }
+
+  /**
+   * Start a one-turn animation (360° in `TURN_DURATION_MS` ms, ease-in-out). Stops any
+   * running turn first. The turn also stops if the shopper drags the controls.
+   */
+  startTurn(): void {
+    this.stopTurn();
+    this.turnStartDeg = (this.controls.getAzimuthalAngle() * 180) / Math.PI;
+    this.turnStart = performance.now();
+    this.turning = true;
+    this.turnTick();
+  }
+
+  /** Stop a running turn immediately. */
+  stopTurn(): void {
+    this.turning = false;
+    if (this.turnRafId !== null) {
+      cancelAnimationFrame(this.turnRafId);
+      this.turnRafId = null;
+    }
+  }
+
+  /**
+   * Jump to a specific azimuth (degrees) without animation (for `prefers-reduced-motion`).
+   * Uses `frame()` to position the camera.
+   */
+  turnTo(azimuthDeg: number): void {
+    this.stopTurn();
+    const f = this.turnFrame;
+    if (f) this.frame(f.widthCm, f.statureCm, azimuthDeg);
+    this.render(true);
+  }
+
+  private turnTick = (): void => {
+    if (!this.turning) return;
+    const elapsed = performance.now() - this.turnStart;
+    if (!turnRunning(elapsed)) {
+      // Turn complete: snap to start + 360 and draw the final frame with outline.
+      this.turning = false;
+      this.turnRafId = null;
+      const f = this.turnFrame;
+      if (f) this.frame(f.widthCm, f.statureCm, this.turnStartDeg + 360);
+      this.render(true);
+      return;
+    }
+    const deg = turnAngleAt(elapsed, this.turnStartDeg);
+    const f = this.turnFrame;
+    if (f) this.frame(f.widthCm, f.statureCm, deg);
+    this.render(false);
+    this.turnRafId = requestAnimationFrame(this.turnTick);
+  };
 }
 
 /**

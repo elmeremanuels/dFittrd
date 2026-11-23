@@ -173,6 +173,20 @@ export interface GarmentView {
   setSize(size: string): boolean;
   /** The sizes the bundle can show. */
   sizes: string[];
+  /**
+   * Start a slow turn (360° in ~8 s, ease-in-out). Stops if the shopper drags. No-op if already
+   * turning or if `prefers-reduced-motion` is set (the host uses `turnTo` for step-through instead).
+   */
+  startTurn(): void;
+  /** Stop a running turn immediately. */
+  stopTurn(): void;
+  /** True while a turntable animation is running. */
+  turning: boolean;
+  /**
+   * Jump to a specific azimuth (degrees) without animation. For `prefers-reduced-motion`
+   * step-through. Draws one frame at the given angle.
+   */
+  turnTo(azimuthDeg: number): void;
   /** Change the figure's look in place (no remount, no new drape). `skinHex` and `face` can change after the mount; `head` cannot. */
   setLook(look: AvatarLook | null | undefined): void;
   /**
@@ -501,9 +515,15 @@ export async function mountGarmentView(canvas: HTMLCanvasElement, opts: MountOpt
   }
   wake(500);
 
+  stage.setTurnFrame(60, stature);
+
   return {
     setSize,
     sizes: ok.sizes,
+    startTurn() { stage.startTurn(); },
+    stopTurn() { stage.stopTurn(); },
+    get turning() { return stage.turning; },
+    turnTo(deg) { stage.turnTo(deg); },
     toScreen(point) {
       const p = point === 'head' ? headPoint : point;
       stage.resize();
@@ -621,9 +641,14 @@ function mountBaked(canvas: HTMLCanvasElement, opts: MountOptions, bake: DrapeBa
     throw new GarmentViewError('incompatible');
   }
   wake(500);
+  stage.setTurnFrame(60, stature);
   return {
     setSize,
     sizes: ok.sizes.filter((s) => drapes.has(s)),
+    startTurn() { stage.startTurn(); },
+    stopTurn() { stage.stopTurn(); },
+    get turning() { return stage.turning; },
+    turnTo(deg) { stage.turnTo(deg); },
     source: { kind: 'bake', plainColour: true, sizes },
     exportPasses(o) {
       if (disposed) return null;

@@ -16,3 +16,4 @@ export { FACE_FADE_DEG, isFaceTexture, type FaceTexture } from './faceOverlay';
 export { skinShadingOf, skinToneCare, type SkinShading, type SkinToneCare } from './skin';
 export { binarise, flipRows, neighbourSize, PASS_HEIGHT, PASS_WIDTH, type ExportPassesOptions, type ViewerPassImage, type ViewerPasses } from './passes';
 export { initialViewFor, type InitialView } from './initialView';
+export { turnAngleAt, turnRunning, nextReducedStep, reducedStepDeg, REDUCED_MOTION_STEPS, TURN_DURATION_MS } from './turntable';

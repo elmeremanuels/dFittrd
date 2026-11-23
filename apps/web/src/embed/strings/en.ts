@@ -376,6 +376,10 @@ export interface EmbedCatalogue {
     close: string;
     unavailable: (size: string) => string;
     canvas: (size: string) => string;
+    /** The "Turn around" button label (WO-022, phase F). */
+    turnAround: string;
+    /** Aria label for the turn button while it is turning. */
+    turnStop: string;
     loading: string;
     draping: string;
     sizes: string;
@@ -791,6 +795,8 @@ export const EN: EmbedCatalogue = {
     close: 'Close the 3D view',
     unavailable: (size) => `The 3D view isn’t available on this device. The figure above shows how size ${size} fits.`,
     canvas: (size) => `3D estimate of size ${size} on a model with your measurements`,
+    turnAround: 'Turn around',
+    turnStop: 'Stop turning',
     loading: 'Loading…',
     draping: 'Draping…',
     sizes: 'Size in 3D',

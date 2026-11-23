@@ -13,5 +13,20 @@ export type { DrapeOptions, WaistbandSpec } from './engine';
 export { notDrawnSizes, sizeNotDrawn, type NotDrawn } from './notDrawn';
 export { mountFigureView, type FigureFrame, type FigureView, type FigureViewOptions } from './figureView';
 export { FACE_FADE_DEG, isFaceTexture, type FaceTexture } from './faceOverlay';
+export {
+  FACE_SHAPE_TARGETS,
+  FACE_WEIGHT_LIMIT,
+  clampFaceShape,
+  fitFaceShape,
+  MP_FACE,
+  MIN_FACE_LANDMARKS,
+  syntheticFaceLandmarks,
+  type FaceLandmarkPoint,
+  type FaceShapeFitOptions,
+  type FaceShapeFitResult,
+  type FaceShapeRejectReason,
+  type FaceShapeTarget,
+  type FaceShapeWeights,
+} from './faceShape';
 export { skinShadingOf, skinToneCare, type SkinShading, type SkinToneCare } from './skin';
 export { binarise, flipRows, neighbourSize, PASS_HEIGHT, PASS_WIDTH, type ExportPassesOptions, type ViewerPassImage, type ViewerPasses } from './passes';

@@ -18,6 +18,16 @@
 import { monotoneProfile, type AnchorRing } from '@curtain/anchors';
 import { loopLength, slice, type Loop, type Mannequin, type Mesh } from '@curtain/mannequin';
 import { sample, type BodyField } from './collide';
+import {
+  FACE_LANDMARK_NAMES,
+  FACE_SHAPE_TARGETS,
+  FACE_WEIGHT_LIMIT,
+  clampFaceShape,
+  type FaceLandmarkName,
+  type FaceShapeTarget,
+  type FaceShapeWeights,
+} from './faceShape';
+export { FACE_LANDMARK_NAMES, FACE_SHAPE_TARGETS, FACE_WEIGHT_LIMIT, clampFaceShape, type FaceLandmarkName, type FaceShapeTarget, type FaceShapeWeights };
 
 type V3 = [number, number, number];
 
@@ -34,69 +44,6 @@ export type ArmRing = (typeof ARM_RINGS)[number];
 /** The shape targets the asset carries, as signed sliders: `weight` (MakeHuman min/max weight), `cup` (min/max cup). */
 export const SHAPE_TARGETS = ['weight+', 'weight-', 'cup+', 'cup-'] as const;
 export type ShapeTarget = (typeof SHAPE_TARGETS)[number];
-
-/** Signed CC0 MakeHuman face shape target axes carried by the realistic body asset (WO-020 / CUR-34). */
-export const FACE_SHAPE_TARGETS = [
-  'faceWidth',
-  'faceHeight',
-  'jawWidth',
-  'chinWidth',
-  'chinHeight',
-  'chinProminence',
-  'cheekbones',
-  'noseLength',
-  'noseWidth',
-  'eyeSpacing',
-  'browHeight',
-  'lipWidth',
-] as const;
-export type FaceShapeTarget = (typeof FACE_SHAPE_TARGETS)[number];
-/** Derived shopper face-shape weights, each clamped to [-1, 1] (`FACE_WEIGHT_LIMIT`). Never leaves the device (D19). */
-export type FaceShapeWeights = Partial<Record<FaceShapeTarget, number>>;
-
-/** Maximum absolute face shape target weight so no input can push the head grotesque. */
-export const FACE_WEIGHT_LIMIT = 1;
-
-/** Anatomical head landmark vertex names stored in `meta.faceLandmarks` for on-device face-shape fitting. */
-export const FACE_LANDMARK_NAMES = [
-  'foreheadTop',
-  'glabella',
-  'nasion',
-  'noseTip',
-  'subnasale',
-  'upperLip',
-  'mouthCenter',
-  'lowerLip',
-  'chinFront',
-  'chinMenton',
-  'lCheek',
-  'rCheek',
-  'lJaw',
-  'rJaw',
-  'lChinSide',
-  'rChinSide',
-  'lEyeInner',
-  'rEyeInner',
-  'lEyeOuter',
-  'rEyeOuter',
-  'lBrow',
-  'rBrow',
-  'lNoseAlar',
-  'rNoseAlar',
-  'lMouthCorner',
-  'rMouthCorner',
-] as const;
-export type FaceLandmarkName = (typeof FACE_LANDMARK_NAMES)[number];
-
-/** Clamp and sanitise face shape weights to [-FACE_WEIGHT_LIMIT, FACE_WEIGHT_LIMIT] (non-finite → 0). */
-export function clampFaceShape(weights: FaceShapeWeights | null | undefined): Record<FaceShapeTarget, number> {
-  const out = {} as Record<FaceShapeTarget, number>;
-  for (const t of FACE_SHAPE_TARGETS) {
-    const v = weights?.[t];
-    out[t] = typeof v === 'number' && Number.isFinite(v) ? Math.max(-FACE_WEIGHT_LIMIT, Math.min(FACE_WEIGHT_LIMIT, v)) : 0;
-  }
-  return out;
-}
 
 /** What the bake measured and placed on the baked mesh (cm, the asset's own space: floor y = 0, +Z front, +X the body's left). */
 export interface RealisticBodyMeta {

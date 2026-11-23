@@ -4,8 +4,16 @@
  * neither carries nor fetches it. No shopper data is in the request: it is the same file for everyone, fetched without
  * credentials or referrer; the measurements stay in memory (D3).
  */
-import { decodeRealisticBody, fitRealisticBody, fitTargetOf, type FitResult, type RealisticBodyAsset } from './realisticBody';
-export { conformToField, coverZone } from './realisticBody';
+import {
+  decodeRealisticBody,
+  fitRealisticBody,
+  fitTargetOf,
+  type FaceShapeWeights,
+  type FitResult,
+  type RealisticBodyAsset,
+} from './realisticBody';
+export { FACE_SHAPE_TARGETS, clampFaceShape, conformToField, coverZone, type FaceShapeTarget, type FaceShapeWeights } from './realisticBody';
+export { fitFaceShape, syntheticFaceLandmarks, type FaceLandmarkPoint, type FaceShapeFitOptions, type FaceShapeFitResult } from './faceShape';
 import { meshRingCircumference, type Mannequin, type Mesh } from '@curtain/mannequin';
 import type { AnchorRing } from '@curtain/anchors';
 import * as THREE from 'three';
@@ -42,9 +50,16 @@ export function loadRealisticBody(fetchFn: FetchBytes, url = REALISTIC_BODY_URL)
  * frames), `rings` the girths of the drawn body (the avatar's, which the collision field has too), `scaleAt` the
  * avatar's body girth scale (identity for a typed body).
  */
-export async function realisticBodyFor(fetchFn: FetchBytes, drawn: Mannequin, rings: Record<AnchorRing, number>, scaleAt: (y: number) => number, url?: string): Promise<FitResult> {
+export async function realisticBodyFor(
+  fetchFn: FetchBytes,
+  drawn: Mannequin,
+  rings: Record<AnchorRing, number>,
+  scaleAt: (y: number) => number,
+  url?: string,
+  faceShape?: FaceShapeWeights | null,
+): Promise<FitResult> {
   const asset = await loadRealisticBody(fetchFn, url);
-  return fitRealisticBody(asset, fitTargetOf(drawn, rings, scaleAt));
+  return fitRealisticBody(asset, fitTargetOf(drawn, rings, scaleAt), faceShape ? { faceShape } : undefined);
 }
 
 /**

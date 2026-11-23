@@ -26,6 +26,7 @@ import { skinShadingOf, type SkinShading } from './skin';
 import { Figure, Stage, lightingOf, meshGeometry, parseSkinHex, renderPasses, type Lighting, type LookExtras } from './scene';
 import { neighbourSize, PASS_HEIGHT, PASS_WIDTH, type ExportPassesOptions, type ViewerPasses } from './passes';
 import { hairOf, hairTag, type HairChoice, type HairOptions } from './hairOptions';
+import type { FaceShapeWeights } from './realisticBody';
 
 export type GarmentViewState = 'loading' | 'draping' | 'settled' | 'error';
 
@@ -148,6 +149,13 @@ export interface MountOptions {
    * chosen by the shopper: this package never stores or sends it, and the AI-layer passes are drawn without it.
    */
   hair?: HairOptions;
+  /**
+   * With `bodyShape: 'realistic-spike'` only (WO-020 / CUR-34, D19, D27): derived face-shape target weights computed on
+   * the device from the shopper's neutral selfie landmarks (`faceShape.ts`). Stylised geometry only — no photo texture,
+   * never fetched, stored or sent here. Clamped to [-1, 1] and masked strictly above the neck ring so all 12 rings and
+   * sizing stay unchanged. Absent or null: the realistic head stays as before.
+   */
+  faceShape?: FaceShapeWeights | null;
 }
 
 export type BodyShapeKind = 'procedural' | 'realistic-spike';
@@ -716,7 +724,9 @@ function startRealisticBody(canvas: HTMLCanvasElement, opts: MountOptions, plan:
   };
   void import('./realisticBodyLoad')
     .then(async (mod) => {
-      const r = await mod.realisticBodyFor(fetchFn, plan.drawn, plan.avatar.rings, plan.drawnScaleAt, opts.realisticBodyUrl);
+      const r = await mod.realisticBodyFor(fetchFn, plan.drawn, plan.avatar.rings, plan.drawnScaleAt, opts.realisticBodyUrl, opts.faceShape);
+      const hasFace = !!opts.faceShape && Object.values(opts.faceShape).some((v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) > 1e-4);
+      if (hasFace) canvas.dataset.faceShape = 'custom';
       let conformed = null;
       if (garment) {
         const zone = mod.coverZone(garment.rest, plan.field);

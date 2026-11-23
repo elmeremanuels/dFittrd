@@ -135,14 +135,18 @@ test.describe('realistic body privacy', () => {
       // No large body (would indicate a frame or photo)
       expect(r.bodyBytes, `body too large on ${r.url} (${r.bodyBytes} bytes)`).toBeLessThanOrEqual(MAX_BODY_BYTES);
 
-      // No body data in request body
+      // No body or face-shape data in request body (D3, D19, WO-020)
       if (r.body) {
         expect(r.body, `data URL in ${r.url}`).not.toMatch(/data:image\//);
-        expect(r.body, `measurement field name in ${r.url}`).not.toMatch(/"(bust|waist|hip|height|weight|measurements|faceTile|baseFrame|hairChoice)"/);
+        expect(r.body, `measurement or face-shape field name in ${r.url}`).not.toMatch(
+          /"(bust|waist|hip|height|weight|measurements|faceTile|baseFrame|hairChoice|faceShape|faceLandmarks|landmarks|jawWidth|chinProminence|cheekbones|noseLength|eyeSpacing|browHeight|lipWidth)"/,
+        );
       }
 
-      // No body data in URL
-      expect(r.url, `body data in URL ${r.url}`).not.toMatch(/[?&](bust|waist|hip|height|measurements|faceTile|baseFrame|hairChoice)=/);
+      // No body or face-shape data in URL
+      expect(r.url, `body or face-shape data in URL ${r.url}`).not.toMatch(
+        /[?&](bust|waist|hip|height|measurements|faceTile|baseFrame|hairChoice|faceShape|faceLandmarks|landmarks)=/,
+      );
 
       // API calls stay JSON
       if (url.pathname.startsWith('/v1/') && r.bodyBytes > 0) {

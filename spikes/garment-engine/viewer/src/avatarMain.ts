@@ -214,7 +214,8 @@ async function headMode(): Promise<void> {
     const asset = await loadRealisticBody((url) => fetch(url, { credentials: 'omit' }));
     const ringY = (id: string): number => m.rings.find((r) => r.id === id)!.centre[1];
     const { createHair } = await import('../../../../packages/garment-viewer/src/realisticHairDraw');
-    const h = createHair({ positions: shown.positions, indices: shown.indices, headWeight: asset.headWeight, armWeight: asset.armWeight, bodyVertexCount: asset.meta.bodyVertexCount, ringY: { shoulder: ringY('shoulder'), chest: ringY('chest'), underbust: ringY('underbust') } }, hair);
+    const hairStyle = params.get('hairStyle') === 'strand-cards' ? ('strand-cards' as const) : ('sculpted' as const);
+    const h = createHair({ positions: shown.positions, indices: shown.indices, headWeight: asset.headWeight, armWeight: asset.armWeight, bodyVertexCount: asset.meta.bodyVertexCount, ringY: { shoulder: ringY('shoulder'), chest: ringY('chest'), underbust: ringY('underbust') } }, hair, { style: hairStyle });
     figure.group.add(h.group);
     canvas.dataset.hair = h.build.simpler ? `${hairTag(hair)} (simpler)` : hairTag(hair);
     canvas.dataset.hairTriangles = String(h.build.triangles);
@@ -245,6 +246,13 @@ async function headMode(): Promise<void> {
     // Head to waist, the head in the top third: the hair and where it rests (the hair sheets of D28).
     const y = 0.835 * m.statureCm;
     stage.camera.position.set(0, y + 8, 190);
+    stage.controls.target.set(0, y, 0);
+    stage.controls.minDistance = 20;
+    stage.controls.update();
+  } else if (frame === 'closeup') {
+    // Head and upper chest close-up: sculpted locks, hairline, curls and shoulder drape up close (WO-012).
+    const y = 0.902 * m.statureCm;
+    stage.camera.position.set(0, y + 4, 134);
     stage.controls.target.set(0, y, 0);
     stage.controls.minDistance = 20;
     stage.controls.update();

@@ -12,9 +12,16 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
+const { chromium } = (() => {
+  try {
+    return require('playwright');
+  } catch {
+    return require(resolve(fileURLToPath(new URL('.', import.meta.url)), '../../../node_modules/.pnpm/node_modules/playwright'));
+  }
+})();
 const argv = process.argv.slice(2);
 const si = argv.indexOf('--scale');
 const scale = si >= 0 ? Number(argv[si + 1]) : 0.5;
@@ -54,10 +61,31 @@ async function sheet(file, title, rows, width) {
   await page.screenshot({ path: join(outDir, file), fullPage: true });
 }
 const note = 'ESTIMATE · realistic hair (D28) on the realistic body spike, mid body 168 cm · headless Chromium (SwiftShader), tiles 390 × 844 CSS px rendered at 2×';
-const w8 = 12 + 70 + 8 * (Math.round(390 * scale) + 6) + 12;
-await sheet('sheet-types-lengths.png', `${note} · front and back three-quarter per length · one colour per type`, TYPES.map((t) => [t, LENGTHS.flatMap((l) => [cell(`tile-${t}-${l}--front`, `${t} ${l} · front · ${TYPE_COLOUR[t]}`, scale), cell(`tile-${t}-${l}--back`, `${t} ${l} · back ¾`, scale)])]), w8);
-const w10 = 12 + 70 + 10 * (Math.round(390 * scale) + 6) + 12;
-await sheet('sheet-colours.png', `${note} · type 2B, shoulder length, the ten colours of the palette`, [['front', COLOURS.map((c) => cell(`colour-${c}--front`, c, scale))], ['back ¾', COLOURS.map((c) => cell(`colour-${c}--back`, c, scale))]], w10);
+if (existsSync(join(dir, 'tile-1-short--front.png'))) {
+  const w8 = 12 + 70 + 8 * (Math.round(390 * scale) + 6) + 12;
+  await sheet('sheet-types-lengths.png', `${note} · front and back three-quarter per length · one colour per type`, TYPES.map((t) => [t, LENGTHS.flatMap((l) => [cell(`tile-${t}-${l}--front`, `${t} ${l} · front · ${TYPE_COLOUR[t]}`, scale), cell(`tile-${t}-${l}--back`, `${t} ${l} · back ¾`, scale)])]), w8);
+}
+if (existsSync(join(dir, 'colour-black--front.png'))) {
+  const w10 = 12 + 70 + 10 * (Math.round(390 * scale) + 6) + 12;
+  await sheet('sheet-colours.png', `${note} · type 2B, shoulder length, the ten colours of the palette`, [['front', COLOURS.map((c) => cell(`colour-${c}--front`, c, scale))], ['back ¾', COLOURS.map((c) => cell(`colour-${c}--back`, c, scale))]], w10);
+}
+const closeList = [['1', 'long'], ['2B', 'shoulder'], ['3B', 'long'], ['4C', 'long']];
+if (existsSync(join(dir, 'closeup-v2-1-long--tq.png'))) {
+  const cs = 0.85;
+  const w2 = 12 + 95 + 2 * (Math.round(390 * cs) + 6) + 12;
+  await sheet(
+    'sheet-closeups.png',
+    `${note} · three-quarter close-ups · before (v1 strand-cards) vs. after (v2 sculpted locks)`,
+    closeList.map(([t, l]) => [
+      `${t} ${l}`,
+      [
+        cell(`closeup-v1-${t}-${l}--tq`, `Before · v1 strand-cards · ${t} ${l}`, cs),
+        cell(`closeup-v2-${t}-${l}--tq`, `After · v2 sculpted · ${t} ${l}`, cs),
+      ],
+    ]),
+    w2,
+  );
+}
 const dress = [['4C', 'long'], ['3A', 'shoulder'], ['1', 'long']];
 if (existsSync(join(dir, 'dress-4C-long--front.png'))) {
   const ds = 0.75;

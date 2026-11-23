@@ -72,12 +72,12 @@ function geometryOf(part: HairPart): THREE.BufferGeometry {
   return g;
 }
 
-/** Soft, matte-satin specular tint derived from hair colour (floored gently so black hair still shows sculpted form). */
+/** Soft, matte-velvet specular tint derived from hair colour (floored gently so black hair shows sculpted 3D form). */
 function matteSpecularOf(colour: THREE.Color, strength: number): THREE.Color {
-  const s = new THREE.Color().copy(colour).lerp(new THREE.Color(0x524840), 0.35).multiplyScalar(strength);
-  s.r = Math.max(s.r, 0.045);
-  s.g = Math.max(s.g, 0.04);
-  s.b = Math.max(s.b, 0.036);
+  const s = new THREE.Color().copy(colour).lerp(new THREE.Color(0x6b6058), 0.42).multiplyScalar(strength);
+  s.r = Math.max(s.r, 0.055);
+  s.g = Math.max(s.g, 0.05);
+  s.b = Math.max(s.b, 0.046);
   return s;
 }
 
@@ -113,9 +113,9 @@ export function createHair(input: HairBodyInput, choice: HairChoice, options: Cr
     disposables.push(albedoMap, normalMap);
     texBytes = textureBytes(pair.albedo) + textureBytes(pair.normal);
 
-    const specStrength = useCoilMaps ? 0.14 : 0.22;
-    const shininess = useCoilMaps ? 10 : 16;
-    const nScale = useCoilMaps ? 0.65 : 0.72;
+    const specStrength = useCoilMaps ? 0.14 : 0.16;
+    const shininess = useCoilMaps ? 7 : 10;
+    const nScale = useCoilMaps ? 0.30 : 0.38;
     const specCol = matteSpecularOf(colour, specStrength);
 
     const makeSculpted = (scaleMul: number): THREE.MeshPhongMaterial =>

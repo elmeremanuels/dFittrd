@@ -25,7 +25,13 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 
 const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
+const { chromium } = (() => {
+  try {
+    return require('playwright');
+  } catch {
+    return require(resolve(fileURLToPath(new URL('.', import.meta.url)), '../../../node_modules/.pnpm/node_modules/playwright'));
+  }
+})();
 const here = fileURLToPath(new URL('.', import.meta.url));
 const argv = process.argv.slice(2);
 const opt = (name) => {
@@ -174,6 +180,15 @@ try {
   if (!argv.includes('--no-tiles')) {
     for (const type of TYPES) for (const length of LENGTHS) tasks.push(() => shots(phone, q({ ...head, ...hairQ(type, length, TYPE_COLOUR[type]) }), `tile-${type}-${length}`, [['front', 0], ['back', 1.5]]));
     for (const colour of COLOURS) tasks.push(() => shots(phone, q({ ...head, ...hairQ('2B', 'shoulder', colour) }), `colour-${colour}`, [['front', 0], ['back', 1.5]]));
+  }
+  if (argv.includes('--closeups')) {
+    const closeBase = { mode: 'head', frame: 'closeup', body: 'realistic', render: 'demand', yaw: 34, ...BODY };
+    const closeList = [['1', 'long'], ['2B', 'shoulder'], ['3B', 'long'], ['4C', 'long']];
+    for (const [type, length] of closeList) {
+      for (const [tagStyle, hairStyle] of [['v1', 'strand-cards'], ['v2', 'sculpted']]) {
+        tasks.push(() => shots(phone, q({ ...closeBase, ...hairQ(type, length, TYPE_COLOUR[type]), hairStyle }), `closeup-${tagStyle}-${type}-${length}`, [['tq', 0]]));
+      }
+    }
   }
   if (hasDress) {
     for (const [type, length] of [['4C', 'long'], ['3A', 'shoulder'], ['1', 'long']]) {

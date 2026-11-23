@@ -3,10 +3,14 @@
  * stylised face (D27). Entirely generated here, from the drawn body's own head: no hair asset, no photo, no texture
  * file. Pure (no WebGL, no I/O); `realisticHairDraw.ts` turns the result into three.js meshes.
  *
- * v2 (WO-012): sculpted, closed, opaque lock meshes (`FrontSide`, no alpha-cards) swept along structured scalp guides
- * with bevelled/fluted cross-sections, crisp tapered tips, procedural groove normal & AO maps, plump helical curls
- * (3A–3C), and sculpted cloud-clustered coil puffs (4A–4C). The original v1 strand-card implementation is preserved in
- * `realisticHairCards.ts` behind `options.style = 'strand-cards'` (for comparison and future CUR-31 loose accents).
+ * v2 (WO-012): sculpted, closed, opaque hair meshes (`FrontSide`, no alpha-cards):
+ * - Types 1 to 3B: a continuous, closed, parted sculpted hair volume draping smoothly from crown to hem (eliminating
+ *   scalp gaps, forehead headband edges, and lattice holes), layered with broad, smooth, bevelled 3D hero locks that
+ *   taper to clean sculpted points.
+ * - Types 3C to 4C: a closed, organically lobed sculpted cloud volume blanketed edge-to-edge in plump, overlapping 3D
+ *   sculpted curl/coil puffs (plus sculpted perimeter ringlet curls for 3C chin–long).
+ * - Preserved v1 strand-cards live in `realisticHairCards.ts` behind `options.style = 'strand-cards'` (for comparison
+ *   and future CUR-31 loose accent strands).
  */
 import type { HairChoice, HairLength, HairType } from './hairOptions';
 import { buildStrandCardsHair, coilTexture, strandTexture } from './realisticHairCards';
@@ -263,7 +267,9 @@ export function torsoModel(input: HairBodyInput, head: HeadModel): TorsoModel {
   }
   const R = new Float32Array(rows * NT);
   const A = input.armWeight;
-  const keep = (i: number): boolean => i < nb && W[i]! < 0.5 && A[i]! < 0.5;
+  // Include upper-arm / deltoid vertices near the shoulders (above chest - 6 cm) so wide curls never clip the upper arms.
+  const armFloor = input.ringY.chest - 6;
+  const keep = (i: number): boolean => i < nb && W[i]! < 0.5 && (A[i]! < 0.5 || P[3 * i + 1]! >= armFloor);
   trianglePoints(P, input.indices, keep, (x, y, z) => {
     const r = Math.floor(y - lo);
     if (r < 0 || r >= rows) return;
@@ -320,9 +326,10 @@ export class HairSpace {
     readonly torso: TorsoModel,
   ) {
     const h = head;
-    this.faceX = Math.max(4.65, 0.78 * h.halfWidth);
-    this.faceY = [h.chin - 4, h.c[1] + Math.sin(30 * DEG) * headRadius(h, 0, 30 * DEG)];
-    this.faceZ = h.c[2] + 0.15 * (h.top - h.chin);
+    // Keep face completely unobstructed (slightly wider than the test's ±4.5 cm check).
+    this.faceX = Math.max(5.05, 0.84 * h.halfWidth);
+    this.faceY = [h.chin - 4, h.c[1] + Math.sin(31 * DEG) * headRadius(h, 0, 31 * DEG)];
+    this.faceZ = h.c[2] + 0.12 * (h.top - h.chin);
   }
 
   /** Out of the head along its radius (clearance `ch`), out of the body horizontally (`ct`), and sideways out of the face box. */
@@ -351,7 +358,6 @@ export class HairSpace {
           const nr = 1 / Math.sqrt(1 + slope * slope), ny = -slope * nr;
           const pen = (R - dr) * nr;
           const ux = dr > 1e-6 ? q[0] / dr : 0, uz = dr > 1e-6 ? dz / dr : -1;
-          // Slide cleanly off the shoulder to the front or back (chosen by zBias when given) rather than sideways onto the arm.
           const zDir = zBias !== 0 ? Math.sign(zBias) : Math.sign(dz || -1);
           const off = ny > 0.45 ? 0.65 * pen * zDir : 0;
           q = [q[0] + ux * pen * nr, q[1] + pen * ny, q[2] + uz * pen * nr + off];
@@ -373,7 +379,6 @@ export class HairSpace {
     return norm(add(fromBody, sub(fromHead, fromBody), w));
   }
 
-  /** Torso surface clearance lookup at (y, angle), for gently hugging the upper back without floating away. */
   torsoAt(y: number, x: number, z: number): { cz: number; r: number; dr: number } | null {
     const t0 = torsoRadius(this.torso, y, 0);
     if (!t0) return null;
@@ -448,7 +453,6 @@ export class PartWriter {
     this.col.push(ao, ao, ao, a);
     return this.vertices - 1;
   }
-  /** Recompute area-weighted smooth vertex normals for a contiguous vertex/triangle range. */
   recomputeNormals(vStart = 0, iStart = 0): void {
     const vCount = this.vertices;
     for (let i = vStart * 3; i < vCount * 3; i++) this.nrm[i] = 0;
@@ -511,33 +515,33 @@ export function scalpGrid(w: PartWriter, space: HairSpace, cols: number, rows: n
 }
 
 // ---------------------------------------------------------------------------
-// Sculpted hair v2: types and parameters
+// Sculpted hair v2: type parameters
 // ---------------------------------------------------------------------------
 
 interface SculptedTypeParams {
   kind: 'straight' | 'wave' | 'curl' | 'coil';
-  /** Wave amplitude or helix radius, cm. */
+  /** Wave amplitude or curl ribbon spiral radius, cm. */
   amp: number;
-  /** Wave length or helix pitch, cm. */
+  /** Wave length or curl pitch, cm. */
   period: number;
-  /** Sculpted lock base width, cm. */
+  /** Broad sculpted lock width, cm. */
   width: number;
-  /** Cross-section thickness ratio (thickness / width). */
+  /** Flattened sculpted ribbon thickness ratio (thickness / width). */
   thickRatio: number;
-  /** Outward crown volume & lateral push. */
+  /** Crown dome lift around parting, cm. */
   crownLift: number;
   push: number;
   gravity: number;
   lift: number;
   /** Share of straight length that shows (curls/coils shrink). */
   shrink: number;
-  /** Radial depth across lock layers, cm. */
+  /** Radial layering thickness, cm. */
   thickness: number;
-  /** Sculpted core/halo volume per length, cm (3A–4C). */
+  /** Sculpted core/halo volume per length, cm (3C–4C cloud, 3A–3B curly base fullness). */
   volume: Record<HairLength, number>;
-  /** Lock or puff cluster count target. */
+  /** Sculpted lock or puff cluster target count. */
   count: number;
-  /** For coil/tight-curl puffs: base puff radius (cm) and lobe crispness. */
+  /** Base puff radius (cm) at shoulder scale for 3C–4C sculpted cloud puffs. */
   puffRadius: number;
   lobeStrength: number;
   look: HairLook;
@@ -546,65 +550,69 @@ interface SculptedTypeParams {
 const NO_VOL = { short: 0, chin: 0, shoulder: 0, long: 0 };
 
 export const TYPE_PARAMS: Readonly<Record<HairType, SculptedTypeParams>> = {
-  '1': { kind: 'straight', amp: 0, period: 1, width: 3.1, thickRatio: 0.42, crownLift: 0.6, push: 0.0, gravity: 0.44, lift: 0.14, shrink: 1.0, thickness: 1.0, volume: NO_VOL, count: 44, puffRadius: 0, lobeStrength: 0, look: { roughness: 0.56, anisotropy: 0.55, specular: 0.34, coilTileCm: 3.5 } },
-  '2A': { kind: 'wave', amp: 0.72, period: 11.0, width: 3.05, thickRatio: 0.44, crownLift: 0.7, push: 0.012, gravity: 0.38, lift: 0.18, shrink: 0.96, thickness: 1.2, volume: NO_VOL, count: 44, puffRadius: 0, lobeStrength: 0, look: { roughness: 0.6, anisotropy: 0.5, specular: 0.32, coilTileCm: 3.5 } },
-  '2B': { kind: 'wave', amp: 1.2, period: 7.8, width: 2.95, thickRatio: 0.46, crownLift: 0.85, push: 0.024, gravity: 0.34, lift: 0.23, shrink: 0.92, thickness: 1.45, volume: NO_VOL, count: 46, puffRadius: 0, lobeStrength: 0, look: { roughness: 0.64, anisotropy: 0.45, specular: 0.3, coilTileCm: 3.5 } },
-  '2C': { kind: 'wave', amp: 1.58, period: 5.8, width: 2.85, thickRatio: 0.48, crownLift: 1.05, push: 0.036, gravity: 0.30, lift: 0.28, shrink: 0.88, thickness: 1.75, volume: NO_VOL, count: 48, puffRadius: 0, lobeStrength: 0, look: { roughness: 0.68, anisotropy: 0.4, specular: 0.28, coilTileCm: 3.5 } },
-  '3A': { kind: 'curl', amp: 1.18, period: 5.2, width: 2.05, thickRatio: 0.68, crownLift: 1.25, push: 0.032, gravity: 0.28, lift: 0.28, shrink: 0.84, thickness: 1.9, volume: { short: 1.0, chin: 1.6, shoulder: 2.1, long: 2.5 }, count: 34, puffRadius: 0, lobeStrength: 0.14, look: { roughness: 0.7, anisotropy: 0.35, specular: 0.26, coilTileCm: 4.5 } },
-  '3B': { kind: 'curl', amp: 0.94, period: 3.5, width: 1.92, thickRatio: 0.74, crownLift: 1.55, push: 0.046, gravity: 0.25, lift: 0.34, shrink: 0.76, thickness: 2.25, volume: { short: 1.4, chin: 2.3, shoulder: 3.1, long: 3.8 }, count: 34, puffRadius: 1.55, lobeStrength: 0.2, look: { roughness: 0.74, anisotropy: 0.3, specular: 0.24, coilTileCm: 4.2 } },
-  '3C': { kind: 'curl', amp: 0.72, period: 2.2, width: 1.55, thickRatio: 0.80, crownLift: 1.8, push: 0.065, gravity: 0.22, lift: 0.42, shrink: 0.68, thickness: 2.5, volume: { short: 2.0, chin: 3.3, shoulder: 4.8, long: 6.2 }, count: 145, puffRadius: 1.65, lobeStrength: 0.26, look: { roughness: 0.78, anisotropy: 0.24, specular: 0.22, coilTileCm: 4.0 } },
-  '4A': { kind: 'coil', amp: 0.5, period: 1.4, width: 1.5, thickRatio: 0.9, crownLift: 0, push: 0, gravity: 0, lift: 1, shrink: 0.56, thickness: 0, volume: { short: 2.2, chin: 4.3, shoulder: 6.9, long: 9.8 }, count: 175, puffRadius: 1.58, lobeStrength: 0.22, look: { roughness: 0.8, anisotropy: 0.2, specular: 0.22, coilTileCm: 3.8 } },
-  '4B': { kind: 'coil', amp: 0.42, period: 1.0, width: 1.3, thickRatio: 0.92, crownLift: 0, push: 0, gravity: 0, lift: 1, shrink: 0.50, thickness: 0, volume: { short: 2.5, chin: 5.0, shoulder: 8.1, long: 11.4 }, count: 215, puffRadius: 1.36, lobeStrength: 0.28, look: { roughness: 0.84, anisotropy: 0.16, specular: 0.2, coilTileCm: 3.4 } },
-  '4C': { kind: 'coil', amp: 0.35, period: 0.75, width: 1.15, thickRatio: 0.95, crownLift: 0, push: 0, gravity: 0, lift: 1, shrink: 0.44, thickness: 0, volume: { short: 2.8, chin: 5.7, shoulder: 9.3, long: 13.0 }, count: 255, puffRadius: 1.18, lobeStrength: 0.34, look: { roughness: 0.88, anisotropy: 0.12, specular: 0.18, coilTileCm: 3.0 } },
+  '1': { kind: 'straight', amp: 0, period: 1, width: 3.9, thickRatio: 0.30, crownLift: 0.72, push: 0.0, gravity: 0.48, lift: 0.08, shrink: 1.0, thickness: 0.52, volume: NO_VOL, count: 32, puffRadius: 0, lobeStrength: 0, look: { roughness: 0.62, anisotropy: 0.5, specular: 0.24, coilTileCm: 3.5 } },
+  '2A': { kind: 'wave', amp: 0.65, period: 12.8, width: 3.85, thickRatio: 0.32, crownLift: 0.80, push: 0.008, gravity: 0.44, lift: 0.10, shrink: 0.96, thickness: 0.62, volume: NO_VOL, count: 32, puffRadius: 0, lobeStrength: 0, look: { roughness: 0.66, anisotropy: 0.45, specular: 0.22, coilTileCm: 3.5 } },
+  '2B': { kind: 'wave', amp: 1.02, period: 9.4, width: 3.75, thickRatio: 0.34, crownLift: 0.95, push: 0.015, gravity: 0.39, lift: 0.13, shrink: 0.92, thickness: 0.78, volume: NO_VOL, count: 32, puffRadius: 0, lobeStrength: 0, look: { roughness: 0.68, anisotropy: 0.4, specular: 0.20, coilTileCm: 3.5 } },
+  '2C': { kind: 'wave', amp: 1.38, period: 7.4, width: 3.55, thickRatio: 0.38, crownLift: 1.15, push: 0.024, gravity: 0.35, lift: 0.17, shrink: 0.88, thickness: 0.96, volume: NO_VOL, count: 32, puffRadius: 0, lobeStrength: 0, look: { roughness: 0.72, anisotropy: 0.35, specular: 0.19, coilTileCm: 3.5 } },
+  '3A': { kind: 'curl', amp: 1.12, period: 7.2, width: 3.1, thickRatio: 0.48, crownLift: 1.30, push: 0.028, gravity: 0.32, lift: 0.18, shrink: 0.84, thickness: 1.15, volume: { short: 1.2, chin: 1.6, shoulder: 2.1, long: 2.5 }, count: 30, puffRadius: 0, lobeStrength: 0.12, look: { roughness: 0.74, anisotropy: 0.3, specular: 0.18, coilTileCm: 4.5 } },
+  '3B': { kind: 'curl', amp: 0.96, period: 5.4, width: 2.8, thickRatio: 0.56, crownLift: 1.45, push: 0.036, gravity: 0.29, lift: 0.22, shrink: 0.76, thickness: 1.35, volume: { short: 1.6, chin: 2.4, shoulder: 3.2, long: 3.8 }, count: 30, puffRadius: 2.0, lobeStrength: 0.10, look: { roughness: 0.76, anisotropy: 0.26, specular: 0.17, coilTileCm: 4.2 } },
+  '3C': { kind: 'curl', amp: 0.78, period: 4.2, width: 2.35, thickRatio: 0.62, crownLift: 1.7, push: 0.042, gravity: 0.26, lift: 0.26, shrink: 0.68, thickness: 1.5, volume: { short: 2.1, chin: 3.4, shoulder: 4.9, long: 6.3 }, count: 115, puffRadius: 2.15, lobeStrength: 0.09, look: { roughness: 0.8, anisotropy: 0.22, specular: 0.16, coilTileCm: 4.0 } },
+  '4A': { kind: 'coil', amp: 0.5, period: 1.6, width: 1.6, thickRatio: 0.9, crownLift: 0, push: 0, gravity: 0, lift: 1, shrink: 0.56, thickness: 0, volume: { short: 2.2, chin: 4.3, shoulder: 6.9, long: 9.8 }, count: 120, puffRadius: 2.35, lobeStrength: 0.07, look: { roughness: 0.82, anisotropy: 0.18, specular: 0.16, coilTileCm: 4.0 } },
+  '4B': { kind: 'coil', amp: 0.42, period: 1.2, width: 1.4, thickRatio: 0.92, crownLift: 0, push: 0, gravity: 0, lift: 1, shrink: 0.50, thickness: 0, volume: { short: 2.5, chin: 5.0, shoulder: 8.1, long: 11.4 }, count: 160, puffRadius: 1.98, lobeStrength: 0.09, look: { roughness: 0.86, anisotropy: 0.14, specular: 0.15, coilTileCm: 3.6 } },
+  '4C': { kind: 'coil', amp: 0.35, period: 0.9, width: 1.25, thickRatio: 0.95, crownLift: 0, push: 0, gravity: 0, lift: 1, shrink: 0.44, thickness: 0, volume: { short: 2.8, chin: 5.7, shoulder: 9.3, long: 13.0 }, count: 215, puffRadius: 1.68, lobeStrength: 0.10, look: { roughness: 0.9, anisotropy: 0.1, specular: 0.14, coilTileCm: 3.2 } },
 };
 
 // ---------------------------------------------------------------------------
 // Sculpted geometry primitives (100% closed, opaque, FrontSide CCW)
 // ---------------------------------------------------------------------------
 
-/** Smooth 3D pseudo-noise for organic sculpted curl/coil lobes (deterministic, zero deps). */
 function organicLobe(x: number, y: number, z: number, freq: number, seed: number): number {
   const s1 = Math.sin(x * freq + seed * 1.17) * Math.cos(y * freq * 1.13 - seed * 0.71) * Math.sin(z * freq * 0.91 + seed * 2.03);
   const s2 = Math.cos(x * freq * 1.73 - z * freq * 1.41 + seed * 3.1) * Math.sin(y * freq * 1.61 + x * freq * 0.83 - seed * 1.4);
   return 0.62 * s1 + 0.38 * s2;
 }
 
+function cutYOf(length: HairLength, p: SculptedTypeParams, head: HeadModel, ring: HairBodyInput['ringY']): number {
+  const y = length === 'short' ? head.chin + 5.2 : length === 'chin' ? head.chin + 1.0 : length === 'shoulder' ? ring.shoulder - 0.5 : (ring.chest + ring.underbust) / 2 - 2.5;
+  return head.top - (head.top - y) * p.shrink;
+}
+
 /**
- * Closed, opaque sculpted scalp cap: sits cleanly under the locks with a subtle crown lift and centre-parting crease
- * (for hanging types) and a tucked bottom rim flush with the scalp so it never reads as a rubber headband.
+ * Closed, opaque sculpted scalp cap: sits cleanly under all hair masses. For hanging types (1–3B) it has a natural
+ * rounded crown dome with a subtle centre-parting crease and a gently arched hairline that blends seamlessly under
+ * the sweeping forehead locks.
  */
 function buildSculptedCap(w: PartWriter, space: HairSpace, p: SculptedTypeParams, parting: boolean): void {
   const h = space.head;
   const cols = 36;
-  const rows = 9;
+  const rows = 10;
   const vStart = w.vertices;
   const iStart = w.idx.length;
   for (let i = 0; i <= cols; i++) {
     const az = -Math.PI + (2 * Math.PI * i) / cols;
     const azDeg = az / DEG;
-    // Tuck slightly above the front hairline so front locks frame the forehead instead of showing a naked cap edge.
-    const frontInset = 2.2 * smooth(75, 0, Math.abs(azDeg));
-    const backBelow = 2.0 * smooth(95, 165, Math.abs(azDeg));
-    const e0 = hairlineEl(azDeg) + frontInset - backBelow;
+    // Soft subtle V-arch meeting the left & right parted locks cleanly at the forehead hairline (zero centre notch).
+    const frontArch = 1.4 * smooth(55, 0, Math.abs(azDeg));
+    const backBelow = 2.5 * smooth(95, 165, Math.abs(azDeg));
+    const e0 = hairlineEl(azDeg) + frontArch - backBelow;
     for (let j = 0; j <= rows; j++) {
       const f = j / rows;
-      const el = (e0 + (89.5 - e0) * Math.pow(f, 1.25)) * DEG;
+      const el = (e0 + (89.5 - e0) * Math.pow(f, 1.22)) * DEG;
       const dir: V3 = [Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)];
       const baseR = headRadius(h, az, el);
-      // Row 0 tucks cleanly down to the scalp; upper rows swell into a sculpted crown with a subtle parting dip.
       const rimFade = smooth(0, 0.25, f);
-      let lift = 0.08 + rimFade * (0.28 + (parting ? p.crownLift * 0.55 * smooth(20 * DEG, 72 * DEG, el) : 0.22));
-      let ao = parting ? 0.54 + 0.24 * smooth(0, 0.7, f) : 0.48 + 0.14 * f;
+      // Snug under-cap sitting cleanly underneath the parted crown locks (never bulging out above the locks).
+      let lift = 0.08 + rimFade * (0.20 + (parting ? p.crownLift * 0.28 * smooth(16 * DEG, 72 * DEG, el) : 0.20));
+      let ao = parting ? 0.62 + 0.16 * smooth(0, 0.75, f) : 0.64 + 0.14 * f;
       if (parting) {
         const xOff = Math.abs(dir[0] * baseR);
-        const partMask = (1 - smooth(0, 1.8 * h.scale, xOff)) * smooth(28 * DEG, 65 * DEG, el) * smooth(-0.35, 0.25, dir[2]);
-        lift -= 0.24 * partMask;
-        ao *= 1 - 0.34 * partMask;
+        const partMask = (1 - smooth(0, 1.4 * h.scale, xOff)) * smooth(24 * DEG, 72 * DEG, el) * smooth(-0.3, 0.3, dir[2]);
+        lift -= 0.18 * partMask;
+        ao *= 1 - 0.32 * partMask;
       }
       const pt = add(h.c, dir, baseR + lift);
       const tanEl: V3 = [-Math.sin(az) * Math.sin(el), Math.cos(el), -Math.cos(az) * Math.sin(el)];
-      // UVs run from the crown down towards the hairline so grooves radiate naturally from the part.
-      const u = ((az + Math.PI) / (2 * Math.PI)) * 6;
+      const u = ((az + Math.PI) / (2 * Math.PI)) * 5;
       const v = 1 - f;
       w.vertex(pt, dir, tanEl, u, v, ao, 1);
     }
@@ -620,42 +628,185 @@ function buildSculptedCap(w: PartWriter, space: HairSpace, p: SculptedTypeParams
 }
 
 /**
- * Closed, solid, organically lobed sculpted volume shell (for 3A–3C inner curl mass and 4A–4C afro/coil mass).
- * The bottom rim smoothly tucks back inward to the head hull so it is 100% closed and never looks hollow from below
- * even with `FrontSide` rendering.
+ * Continuous, closed sculpted base hair curtain for hanging types (1–3B): sweeps smoothly around the sides and back
+ * from crown to ~88% of the cut length with macro sculpted lock flutes and coherent wave/curl relief. This guarantees
+ * an airtight, lush sculptural silhouette with ZERO gaps or lattice holes behind the hero locks.
  */
-function buildSculptedVolume(w: PartWriter, space: HairSpace, p: SculptedTypeParams, length: HairLength, vol: number, seed: number): void {
+function buildSculptedCurtain(
+  w: PartWriter,
+  space: HairSpace,
+  p: SculptedTypeParams,
+  length: HairLength,
+  yEndBase: number,
+  ring: HairBodyInput['ringY'],
+): void {
+  const h = space.head;
+  const hs = h.scale;
+  const cols = 30;
+  const rows = length === 'short' ? 6 : length === 'chin' ? 9 : length === 'shoulder' ? 12 : 15;
+  const vStart = w.vertices;
+  const iStart = w.idx.length;
+
+  // Sweep cleanly behind the shoulder line (`+66°` around `+180°/-180°` to `-66°`) onto the upper back so no flat
+  // curtain corner ever pokes out over the front collarbone.
+  const azStart = 66 * DEG;
+  const azSpan = (360 - 132) * DEG;
+  const columns: V3[][] = [];
+  const colAo: number[][] = [];
+  const colAz: number[] = [];
+
+  for (let i = 0; i <= cols; i++) {
+    const uFrac = i / cols;
+    const azCont = azStart + uFrac * azSpan;
+    const az = azCont > Math.PI ? azCont - 2 * Math.PI : azCont;
+    const azDeg = az / DEG;
+    const absAzDeg = Math.abs(azDeg);
+    colAz.push(az);
+
+    const elStart = clamp(hairlineEl(azDeg) + 22 * smooth(54, 130, absAzDeg) + 12, 16, 68) * DEG;
+    const dir: V3 = [Math.sin(az) * Math.cos(elStart), Math.sin(elStart), Math.cos(az) * Math.cos(elStart)];
+    const root = add(h.c, dir, headRadius(h, az, elStart));
+    const sx = Math.sign(Math.sin(az) || 1);
+    const shoulderSide = -1;
+
+    // Taper smoothly at the side edges so the inner back drape tucks cleanly behind the sculpted side hero locks.
+    const edgeFade = smooth(0, 0.16, uFrac) * smooth(1, 0.84, uFrac);
+    const ch = 0.28 + edgeFade * (0.42 + p.crownLift * 0.42 + (p.kind === 'curl' ? p.amp * 0.48 : p.amp * 0.20));
+    const ct = 0.82 + edgeFade * (0.48 + (p.kind === 'curl' ? p.amp * 0.55 : p.amp * 0.22));
+
+    const want: V3 = [sx * 0.28, -1.0, -0.42];
+    const comb = norm(sub(want, [dir[0] * dot(want, dir), dir[1] * dot(want, dir), dir[2] * dot(want, dir)]));
+    let d = norm(add(comb, dir, p.lift * 0.55));
+    let q = space.push(add(root, dir, 0.22), 0.22, ct, shoulderSide);
+    const pts: V3[] = [q];
+    const scallop = 0.75 * Math.sin(uFrac * Math.PI * 10);
+    const targetY = yEndBase + 2.2 * hs + (1 - edgeFade) * 4.0 * hs + scallop * hs;
+    const maxLen = length === 'short' ? (4.6 + 2.4 * edgeFade) * hs : 90;
+
+    for (let s = 0; s < maxLen; s += 1.0) {
+      const chCur = 0.22 + (ch - 0.22) * smooth(0, 5.5 * hs, s);
+      const out = space.outward(q);
+      let force: V3 = [0, -p.gravity, 0];
+      const nearShoulder = smooth(h.chin + 3, ring.shoulder + 1, q[1]) * (1 - smooth(ring.shoulder - 8, ring.shoulder - 20, q[1]));
+      if (nearShoulder > 0 && absAzDeg < 130) {
+        force = add(force, [0, 0, -0.32 * nearShoulder]);
+      }
+      if (q[1] < ring.shoulder + 2 && Math.abs(q[0]) > 14.2 * hs) {
+        force = add(force, [-Math.sign(q[0]) * 0.14, 0, -0.14]);
+      }
+      if (length === 'chin' && p.kind !== 'curl' && q[1] < targetY + 4.5) {
+        force = add(force, out, -0.18 * smooth(targetY + 4.5, targetY, q[1]));
+      }
+      const onBack = q[1] < ring.shoulder + 2 && q[2] < h.c[2] - 1;
+      if (onBack && p.kind !== 'curl') {
+        const tInfo = space.torsoAt(q[1], q[0], q[2]);
+        if (tInfo && tInfo.dr > tInfo.r + ct + 0.5) force = add(force, out, -Math.min(0.22, (tInfo.dr - (tInfo.r + ct + 0.5)) * 0.06));
+      } else {
+        force = add(force, out, p.push * 0.65);
+      }
+      d = norm(add(d, force));
+      const next = space.push(add(q, d, 1.0), chCur, ct, shoulderSide);
+      const st = sub(next, q);
+      if (len(st) > 1e-4) d = norm(st);
+      q = next;
+      pts.push(q);
+      if (q[1] < targetY) break;
+    }
+
+    // Resample uniformly to `rows` points so all columns align cleanly into a smooth sculpted mesh.
+    const totalArc = pts.reduce((acc, pt, idx) => (idx ? acc + len(sub(pt, pts[idx - 1]!)) : 0), 0);
+    const sampled: V3[] = [];
+    const aos: number[] = [];
+    for (let r = 0; r <= rows; r++) {
+      const f = r / rows;
+      const targetS = f * totalArc;
+      let acc = 0;
+      let pt = pts[pts.length - 1]!;
+      for (let k = 1; k < pts.length; k++) {
+        const seg = len(sub(pts[k]!, pts[k - 1]!));
+        if (acc + seg >= targetS || k === pts.length - 1) {
+          const wSeg = seg > 1e-6 ? clamp((targetS - acc) / seg, 0, 1) : 0;
+          pt = add(pts[k - 1]!, sub(pts[k]!, pts[k - 1]!), wSeg);
+          break;
+        }
+        acc += seg;
+      }
+      const out = space.outward(pt);
+      const round = norm(cross([0, 1, 0], out));
+      // Sculpt broad longitudinal lock flutes + coherent type wave directly into the base drape.
+      const flute = Math.cos(uFrac * Math.PI * 24) * 0.28 * hs * edgeFade * smooth(0, 0.25, f) * (1 - 0.5 * smooth(0.8, 1.0, f));
+      let waveOut = 0;
+      let waveSide = 0;
+      if (p.kind === 'wave' || p.kind === 'curl') {
+        const th = (2 * Math.PI * targetS) / (p.period * hs) + uFrac * Math.PI * 4;
+        const ramp = smooth(0, 4 * hs, targetS) * edgeFade * (1 - 0.35 * smooth(0.82, 1.0, f));
+        waveOut = p.amp * hs * 0.42 * ramp * Math.cos(th);
+        waveSide = p.amp * hs * 0.35 * ramp * Math.sin(th);
+      }
+      // Gently tuck the very bottom row inward so the base curtain has a closed sculpted hem (no open skirt edge).
+      const hemTuck = r === rows ? -0.45 * hs : 0;
+      pt = space.push(add(add(pt, out, flute + waveOut + hemTuck), round, waveSide), 0.24, 0.72, shoulderSide);
+      sampled.push(pt);
+      // Slightly deeper interior shadow behind the hero locks so the outer locks pop with rich sculpted contrast.
+      const baseAo = 0.66 + 0.18 * smooth(0, 0.35, f) + 0.08 * Math.cos(uFrac * Math.PI * 24);
+      aos.push(clamp(baseAo * (r === rows ? 0.85 : 1.0), 0.56, 0.90));
+    }
+    columns.push(sampled);
+    colAo.push(aos);
+  }
+
+  // Emit outer sculpted surface (increasing az -> right, increasing row -> down, so (+az) × (-row) = outward!).
+  // Wait: verify CCW outward! `a = (i, r)`, `b = (i+1, r)` is +az, `c = (i, r+1)` is -Y (down).
+  // At back (az=180°, out=-Z): +az is -X, down is -Y -> (-X) × (-Y) = +Z (INWARD!).
+  // Therefore `(a, c, b)` gives (-Y) × (-X) = -Z (OUTWARD!!). Let's verify at front (az=0, out=+Z):
+  // +az is +X, down is -Y -> (-Y) × (+X) = +Z (OUTWARD!!).
+  for (let i = 0; i <= cols; i++) {
+    const u = (i / cols) * 8;
+    for (let r = 0; r <= rows; r++) {
+      const v = r / rows;
+      const pt = columns[i]![r]!;
+      const out = space.outward(pt);
+      w.vertex(pt, out, [0, -1, 0], u, v, colAo[i]![r]!, 1);
+    }
+  }
+  for (let i = 0; i < cols; i++) {
+    for (let r = 0; r < rows; r++) {
+      const a = vStart + i * (rows + 1) + r;
+      const b = a + rows + 1;
+      w.idx.push(a, a + 1, b, b, a + 1, b + 1);
+    }
+  }
+  w.recomputeNormals(vStart, iStart);
+}
+
+/**
+ * Closed, solid, organically lobed sculpted volume shell (for 3C–4C cloud halo). Bottom rim smoothly tucks inward to
+ * the head hull so it is 100% closed and never hollow from below even with `FrontSide`.
+ */
+function buildSculptedVolume(w: PartWriter, space: HairSpace, p: SculptedTypeParams, vol: number, seed: number): void {
   const h = space.head;
   const hs = h.scale;
   const coily = p.kind === 'coil';
-  const cols = coily ? 40 : 32;
-  const mainRows = coily ? 12 : 10;
+  const cols = 38;
+  const mainRows = 12;
   const tuckRows = 2;
   const totalRows = mainRows + tuckRows;
   const vStart = w.vertices;
   const iStart = w.idx.length;
 
   const belowAt = (azDeg: number): number => {
-    if (coily) {
-      const droop = p.kind === 'coil' ? (p.lobeStrength < 0.25 ? 1.05 : 0.82) : 0.7;
-      return droop * Math.min(24, 2.3 * vol) * smooth(32, 108, Math.abs(azDeg));
-    }
-    // Curly inner mass (3A–3C) drops softly at the sides and nape to back up the hanging ringlets.
-    const dropScale = length === 'short' ? 0.55 : length === 'chin' ? 0.95 : length === 'shoulder' ? 1.25 : 1.45;
-    return dropScale * Math.min(26, 3.2 * vol) * smooth(38, 105, Math.abs(azDeg));
+    const droop = coily ? (p.lobeStrength < 0.13 ? 1.05 : 0.85) : 1.05;
+    return droop * Math.min(24, 2.25 * vol) * smooth(32, 108, Math.abs(azDeg));
   };
 
   const envRadius = (az: number, el: number): { r: number; lobe: number } => {
     const hl = hairlineEl(az / DEG) * DEG;
-    // Fuller rounded afro halo on 4B/4C; slightly more tapered at temples and fuller at crown/back.
-    const crownShape = coily
-      ? 0.34 + 0.66 * smooth(hl - 16 * DEG, hl + 36 * DEG, el)
-      : 0.25 + 0.75 * smooth(hl - 10 * DEG, hl + 32 * DEG, el);
-    const sideLift = coily ? 1 + 0.14 * smooth(35, 115, Math.abs(az / DEG)) * (1 - smooth(55 * DEG, 88 * DEG, el)) : 1;
+    const crownShape = 0.36 + 0.64 * smooth(hl - 16 * DEG, hl + 36 * DEG, el);
+    const sideLift = 1 + 0.14 * smooth(34, 115, Math.abs(az / DEG)) * (1 - smooth(55 * DEG, 88 * DEG, el));
     const dir: V3 = [Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)];
-    const freq = coily ? (p.lobeStrength > 0.3 ? 11.5 : p.lobeStrength > 0.25 ? 9.5 : 7.8) : 6.8;
+    const freq = p.lobeStrength > 0.14 ? 8.5 : 6.8;
     const lobe = organicLobe(dir[0], dir[1], dir[2], freq, seed);
-    const bumpAmp = Math.min(vol * 0.22, p.lobeStrength * 2.2 * hs);
+    const bumpAmp = Math.min(vol * 0.18, p.lobeStrength * 3.0 * hs);
     const base = headRadius(h, az, el) + 0.35 + vol * crownShape * sideLift;
     return { r: base + lobe * bumpAmp, lobe };
   };
@@ -671,34 +822,27 @@ function buildSculptedVolume(w: PartWriter, space: HairSpace, p: SculptedTypePar
       let el: number;
       let r: number;
       let ao: number;
-      let vCoord: number;
       if (j < tuckRows) {
-        // Closed underside rim: smoothly returns from the scalp hull out to the lower halo rim.
         const tf = j / tuckRows;
         el = (eInner + (eOuter - eInner) * Math.pow(tf, 0.75)) * DEG;
         const outer = envRadius(az, eOuter * DEG);
         const scalpR = headRadius(h, az, el) + 0.14;
         r = scalpR + (outer.r - scalpR) * Math.pow(tf, 1.35);
-        ao = 0.38 + 0.16 * tf;
-        vCoord = -0.15 * (1 - tf);
+        ao = 0.54 + 0.16 * tf;
       } else {
         const f = (j - tuckRows) / mainRows;
         el = (eOuter + (89.5 - eOuter) * Math.pow(f, 1.15)) * DEG;
         const ev = envRadius(az, el);
         r = ev.r;
-        // Crevice AO: darker in valleys between lobes and under the rim, brighter on raised lobes.
-        const rimAo = 0.56 + 0.32 * smooth(0, 0.32, f);
-        ao = clamp(rimAo * (coily ? 0.72 + 0.24 * ev.lobe : 0.62 + 0.16 * ev.lobe), 0.38, 0.92);
-        vCoord = f;
+        const rimAo = 0.68 + 0.22 * smooth(0, 0.3, f);
+        ao = clamp(rimAo * (0.82 + 0.18 * ev.lobe), 0.56, 0.96);
       }
       const dir: V3 = [Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)];
       let pt = add(h.c, dir, r);
-      pt = space.push(pt, 0.18, 0.65);
+      pt = space.push(pt, 0.2, 0.68);
       const tanEl: V3 = [-Math.sin(az) * Math.sin(el), Math.cos(el), -Math.cos(az) * Math.sin(el)];
       const rr = len(sub(pt, h.c));
-      const u = ((az + Math.PI) * rr) / p.look.coilTileCm;
-      const v = ((el + Math.PI / 2) * rr) / p.look.coilTileCm + vCoord * 0.01;
-      w.vertex(pt, dir, tanEl, u, v, ao, 1);
+      w.vertex(pt, dir, tanEl, ((az + Math.PI) * rr) / p.look.coilTileCm, ((el + Math.PI / 2) * rr) / p.look.coilTileCm, ao, 1);
     }
   }
   for (let i = 0; i < cols; i++) {
@@ -712,8 +856,8 @@ function buildSculptedVolume(w: PartWriter, space: HairSpace, p: SculptedTypePar
 }
 
 /**
- * A closed, solid, sculpted 3D lock mesh swept along `centre` with a bevelled/grooved cross-section (`sides = 6` or `8`),
- * closed root cap, crisp tapered sculpted tip apex, and area-weighted outward smooth normals (`FrontSide` CCW).
+ * Closed, solid, broad sculpted 3D lock mesh swept along `centre` with a smooth bevelled-lenticular 6-sided
+ * cross-section, closed root cap, crisp tapered sculpted tip apex, and area-weighted smooth outward normals (`FrontSide`).
  */
 function sculptedLockTube(
   w: PartWriter,
@@ -724,7 +868,6 @@ function sculptedLockTube(
   width: number[],
   thick: number[],
   ao: number[],
-  sides: 6 | 8,
   groove: number,
   uOffset: number,
 ): void {
@@ -733,30 +876,17 @@ function sculptedLockTube(
   const vStart = w.vertices;
   const iStart = w.idx.length;
 
-  // Cross-section profile points [uAlongSide, vAlongOut, aoMod] in CCW order around (B, N) where B × N = T.
-  // Because `B = norm(cross(N, T))` makes `(B, N, T)` right-handed, advancing `k` from B -> N gives outward CCW winding.
-  const profile: readonly [number, number, number][] = sides === 8
-    ? [
-        [1.0, -0.06, 0.84],
-        [0.54, 0.86, 1.0],
-        [0.0, 1.0 - groove, 1.0 - groove * 0.45],
-        [-0.54, 0.86, 1.0],
-        [-1.0, -0.06, 0.84],
-        [-0.56, -0.48, 0.68],
-        [0.0, -0.56, 0.62],
-        [0.56, -0.48, 0.68],
-      ]
-    : [
-        [1.0, -0.04, 0.84],
-        [0.48, 0.90, 1.0],
-        [0.0, 1.0 - groove, 1.0 - groove * 0.4],
-        [-0.48, 0.90, 1.0],
-        [-1.0, -0.04, 0.84],
-        [0.0, -0.58, 0.64],
-      ];
+  // Flattened, softly sculpted bevelled lenticular lock profile (broad ribbon-sculpt, NOT a round pipe).
+  const profile: readonly [number, number, number][] = [
+    [1.0, -0.05, 0.88],
+    [0.52, 0.88, 1.0],
+    [0.0, 1.0 - groove, 1.0 - groove * 0.25],
+    [-0.52, 0.88, 1.0],
+    [-1.0, -0.05, 0.88],
+    [0.0, -0.52, 0.72],
+  ];
 
   const M = profile.length;
-  // Build clean right-handed local frames along the spine.
   const Bs: V3[] = [];
   const Ns: V3[] = [];
   const Ts: V3[] = [];
@@ -765,7 +895,6 @@ function sculptedLockTube(
     let N = out[i]!;
     N = norm(sub(N, [T[0] * dot(N, T), T[1] * dot(N, T), T[2] * dot(N, T)]));
     let B = norm(cross(N, T));
-    // Keep B aligned with the requested `side` direction when possible so flat locks never flip 180°.
     if (dot(B, side[i]!) < 0) {
       B = [-B[0], -B[1], -B[2]];
       N = norm(cross(T, B));
@@ -777,9 +906,9 @@ function sculptedLockTube(
     Ns.push(N);
   }
 
-  // Root cap vertex (closed start tucked on the scalp).
-  const rootPos = space.push(add(centre[0]!, Ts[0]!, -0.2), 0.2, 0.68);
-  const rootIdx = w.vertex(rootPos, [-Ts[0]![0], -Ts[0]![1], -Ts[0]![2]], Ts[0]!, uOffset + 0.5, 0, ao[0]! * 0.82, 1);
+  // Root cap vertex tucked cleanly inside the crown cap (zero blunt tabs at the parting).
+  const rootPos = space.push(add(centre[0]!, Ts[0]!, -0.15), 0.06, 0.68);
+  const rootIdx = w.vertex(rootPos, [-Ts[0]![0], -Ts[0]![1], -Ts[0]![2]], Ts[0]!, uOffset + 0.5, 0, ao[0]! * 0.85, 1);
 
   const ringStarts: number[] = [];
   for (let i = 0; i < n; i++) {
@@ -790,33 +919,28 @@ function sculptedLockTube(
     const N = Ns[i]!;
     const T = Ts[i]!;
     const c = centre[i]!;
+    const minHeadClear = 0.08 + 0.18 * smooth(0, 0.16, tFrac);
     ringStarts.push(w.vertices);
     for (let k = 0; k < M; k++) {
       const [pu, pv, pAo] = profile[k]!;
       let pt = add(add(c, B, pu * hw), N, pv * ht);
-      // Keep every sculpted ring vertex safely clear of the head, torso and face box.
-      pt = space.push(pt, 0.26, 0.78);
+      pt = space.push(pt, minHeadClear, 0.78);
       const nGuess = norm(add([B[0] * pu, B[1] * pu, B[2] * pu], N, pv));
-      // Mirror u across the outer face (0..1) so longitudinal grooves sit cleanly along the lock's visible crest.
-      const u = uOffset + (k / M);
-      w.vertex(pt, nGuess, T, u, tFrac, clamp(ao[i]! * pAo, 0.35, 1.0), 1);
+      const u = uOffset + k / M;
+      w.vertex(pt, nGuess, T, u, tFrac, clamp(ao[i]! * pAo, 0.52, 1.0), 1);
     }
   }
 
-  // Closed crisp sculpted tip apex vertex.
   const last = n - 1;
-  const tipExtend = Math.min(0.9, width[Math.max(0, last - 1)]! * 0.35);
-  const tipPos = space.push(add(centre[last]!, Ts[last]!, tipExtend), 0.26, 0.78);
+  const tipExtend = Math.min(1.1, width[Math.max(0, last - 1)]! * 0.42);
+  const tipPos = space.push(add(centre[last]!, Ts[last]!, tipExtend), 0.25, 0.78);
   const tipIdx = w.vertex(tipPos, Ts[last]!, Ts[last]!, uOffset + 0.5, 1, ao[last]!, 1);
 
-  // Root cap triangles (facing -T, outward).
   const r0 = ringStarts[0]!;
   for (let k = 0; k < M; k++) {
     const k1 = (k + 1) % M;
     w.idx.push(rootIdx, r0 + k1, r0 + k);
   }
-
-  // Body quads (guaranteed CCW outward).
   for (let i = 0; i < n - 1; i++) {
     const ra = ringStarts[i]!;
     const rb = ringStarts[i + 1]!;
@@ -825,8 +949,6 @@ function sculptedLockTube(
       w.idx.push(ra + k, ra + k1, rb + k, ra + k1, rb + k1, rb + k);
     }
   }
-
-  // Tip cap triangles (facing +T/outward).
   const rLast = ringStarts[last]!;
   for (let k = 0; k < M; k++) {
     const k1 = (k + 1) % M;
@@ -837,8 +959,8 @@ function sculptedLockTube(
 }
 
 /**
- * A closed, smooth, organically lobed 3D coil/curl puff blob (`6 × 3` lat/lon = 36 triangles, CCW FrontSide)
- * embedded into the outer afro/curly volume so every puff reads as tactile sculpted 3D hair even in dark colours.
+ * Smooth, plump, organically sculpted 3D puff sphere (`8 × 4` lat/lon = 48 triangles, CCW FrontSide): packed densely
+ * edge-to-edge so 3C and 4A–4C read as lush sculpted curl/coil clouds with smooth matte 3D form.
  */
 function sculptedPuffBlob(
   w: PartWriter,
@@ -859,19 +981,18 @@ function sculptedPuffBlob(
   const ref: V3 = Math.abs(D[1]) < 0.85 ? [0, 1, 0] : [1, 0, 0];
   const E1 = norm(cross(ref, D));
   const E2 = norm(cross(D, E1));
-  // Random twist around D so each puff has organic orientation.
   const twist = (seed % 628) * 0.01;
   const ct = Math.cos(twist), st = Math.sin(twist);
   const A: V3 = [E1[0] * ct + E2[0] * st, E1[1] * ct + E2[1] * st, E1[2] * ct + E2[2] * st];
   const B: V3 = [E2[0] * ct - E1[0] * st, E2[1] * ct - E1[1] * st, E2[2] * ct - E1[2] * st];
 
-  const lonN = 6;
-  const latN = 3; // 2 intermediate rings + south & north poles -> 6*2 + 6*2 + 6*2 = 36 tris (Wait: 6*1 + 6*2 + 6*1 = 24 tris!)
+  const lonN = 8;
+  const latN = 4; // 3 intermediate rings + poles -> 8 + 16 + 16 + 8 = 48 tris
   const pAt = (lat: number, lon: number): { pt: V3; n: V3; u: number; v: number; ao: number } => {
     const cl = Math.cos(lat), sl = Math.sin(lat);
     const co = Math.cos(lon), so = Math.sin(lon);
-    // Subtle multi-lobe organic sculpt so puffs look like clustered coils rather than sterile marbles.
-    const lobe = 1 + lobeAmp * (0.6 * Math.sin(3 * lon + seed) * cl + 0.4 * Math.cos(2 * lon - 2 * lat + seed * 1.7));
+    // Soft organic pillowing (gentle 3-lobe variation, never jagged pebbles).
+    const lobe = 1 + lobeAmp * (0.65 * Math.sin(3 * lon + seed) * cl * cl + 0.35 * Math.cos(2 * lon - lat + seed * 1.3) * cl);
     const lx = rx * cl * co * lobe;
     const ly = ry * cl * so * lobe;
     const lz = rz * sl * lobe;
@@ -880,10 +1001,10 @@ function sculptedPuffBlob(
       centre[1] + A[1] * lx + B[1] * ly + D[1] * lz,
       centre[2] + A[2] * lx + B[2] * ly + D[2] * lz,
     ];
-    pt = space.push(pt, 0.18, 0.55);
+    pt = space.push(pt, 0.2, 0.6);
     const n = norm([A[0] * cl * co + B[0] * cl * so + D[0] * sl, A[1] * cl * co + B[1] * cl * so + D[1] * sl, A[2] * cl * co + B[2] * cl * so + D[2] * sl]);
-    // Darker AO near the embedded underside (sl < 0), bright clean crown on the outer dome (sl > 0).
-    const ao = clamp(aoBase * (0.62 + 0.42 * smooth(-0.75, 0.65, sl)), 0.42, 1.0);
+    // Soft crevice shading at the embedded base, clean bright crown on top so even black hair reads clearly in 3D.
+    const ao = clamp(aoBase * (0.70 + 0.32 * smooth(-0.7, 0.55, sl)), 0.56, 1.0);
     return { pt, n, u: (lon / (2 * Math.PI)) * tileScale, v: ((lat + Math.PI / 2) / Math.PI) * tileScale, ao };
   };
 
@@ -902,13 +1023,11 @@ function sculptedPuffBlob(
   const north = pAt(Math.PI / 2, 0);
   const northIdx = w.vertex(north.pt, north.n, A, 0.5 * tileScale, tileScale, north.ao, 1);
 
-  // South fan (CCW outward: south -> r0[i+1] -> r0[i]).
   const r0 = rings[0]!;
   for (let i = 0; i < lonN; i++) {
     const i1 = (i + 1) % lonN;
     w.idx.push(southIdx, r0 + i1, r0 + i);
   }
-  // Mid band(s) (CCW outward: ra[i] -> ra[i+1] -> rb[i]).
   for (let j = 0; j < rings.length - 1; j++) {
     const ra = rings[j]!;
     const rb = rings[j + 1]!;
@@ -917,7 +1036,6 @@ function sculptedPuffBlob(
       w.idx.push(ra + i, ra + i1, rb + i, ra + i1, rb + i1, rb + i);
     }
   }
-  // North fan (CCW outward: rTop[i] -> rTop[i+1] -> north).
   const rTop = rings[rings.length - 1]!;
   for (let i = 0; i < lonN; i++) {
     const i1 = (i + 1) % lonN;
@@ -927,7 +1045,7 @@ function sculptedPuffBlob(
 }
 
 // ---------------------------------------------------------------------------
-// Sculpted guide solver (structured parting, face-framing, clean shoulder/back drape)
+// Sculpted hero lock guides (structured parting, coherent waves/curls, clean shoulder drape)
 // ---------------------------------------------------------------------------
 
 interface SculptedLockSpec {
@@ -936,104 +1054,77 @@ interface SculptedLockSpec {
   widthScale: number;
   thickScale: number;
   lengthJitter: number;
-  /** +1 drapes in front of shoulder/chest, -1 sweeps behind shoulder onto back, 0 neutral. */
   shoulderSide: number;
   faceFraming: boolean;
   groove: number;
+  /** Coherent wave phase derived from azimuth + subtle per-lock variation so neighbours nest together. */
+  phase: number;
 }
 
-function cutYOf(length: HairLength, p: SculptedTypeParams, head: HeadModel, ring: HairBodyInput['ringY']): number {
-  const y = length === 'short' ? head.chin + 5.2 : length === 'chin' ? head.chin + 1.0 : length === 'shoulder' ? ring.shoulder - 0.5 : (ring.chest + ring.underbust) / 2 - 2.5;
-  return head.top - (head.top - y) * p.shrink;
-}
-
-/** Structured anatomical lock roots so the parting, hairline, temples and nape never have accidental gaps. */
-function structuredRoots(p: SculptedTypeParams, length: HairLength, countScale: number, rand: () => number): SculptedLockSpec[] {
+function structuredHeroRoots(p: SculptedTypeParams, length: HairLength, countScale: number, rand: () => number): SculptedLockSpec[] {
   const specs: SculptedLockSpec[] = [];
   const scale = countScale * (length === 'short' ? 0.92 : 1.0);
-  const pushDir = (azDeg: number, elDeg: number, layer: number, widthScale: number, thickScale: number, lengthJitter: number, faceFraming = false): void => {
+  const addLock = (azDeg: number, elDeg: number, layer: number, widthScale: number, thickScale: number, lengthJitter: number, faceFraming = false): void => {
     const hl = hairlineEl(azDeg);
-    const el = clamp(elDeg, hl + 1.2, 88.5) * DEG;
+    const el = clamp(elDeg, hl + 1.0, 88.5) * DEG;
     const az = azDeg * DEG;
     const dir: V3 = [Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)];
     const absAz = Math.abs(azDeg);
-    const shoulderSide = absAz < 66 ? 1 : -1;
-    const groove = rand() < 0.65 ? 0.16 + 0.1 * rand() : -0.04;
-    specs.push({ dir, layer, widthScale, thickScale, lengthJitter, shoulderSide, faceFraming, groove });
+    const shoulderSide = absAz < 62 ? 1 : -1;
+    const groove = rand() < 0.6 ? 0.14 + 0.08 * rand() : -0.04;
+    // Coherent wave phase across azimuth so neighbouring sculpted waves nest smoothly (never lattice holes!).
+    const phase = az * 2.2 + (rand() - 0.5) * 0.85;
+    specs.push({ dir, layer, widthScale, thickScale, lengthJitter, shoulderSide, faceFraming, groove, phase });
   };
 
-  if (p.kind === 'straight' || p.kind === 'wave') {
-    // 1. Base curtain layer (broad airtight solid mass around sides and back).
-    const nBase = Math.max(10, Math.round(16 * scale));
-    for (let i = 0; i < nBase; i++) {
-      const f = (i + 0.5) / nBase;
-      const azDeg = -172 + 344 * f + (rand() - 0.5) * 6;
-      if (Math.abs(azDeg) < 28) continue;
-      const hl = hairlineEl(azDeg);
-      const elDeg = hl + 10 + (rand() - 0.5) * 8 + 14 * (i % 2);
-      pushDir(azDeg, elDeg, 0.08 + 0.16 * rand(), 1.38, 1.15, (rand() - 0.5) * 0.07);
-    }
-    // 2. Parting-line crown locks (left & right of centre part from front hairline to crown/back).
-    const nPart = Math.max(5, Math.round(7 * scale));
-    for (const side of [-1, 1]) {
-      for (let i = 0; i < nPart; i++) {
-        const f = i / Math.max(1, nPart - 1);
-        // Sweep from front forehead (az ~ 14°, el ~ 37°) up over the crown (el ~ 82°) to upper back (az ~ 162°, el ~ 52°).
-        const azDeg = side * (12 + 150 * Math.pow(f, 1.18)) + (rand() - 0.5) * 4;
-        const elDeg = 38 + 44 * Math.sin(Math.PI * (0.12 + 0.78 * f)) + (rand() - 0.5) * 3;
-        const frontFace = i <= 1;
-        pushDir(azDeg, elDeg, 0.55 + 0.25 * rand(), frontFace ? 0.92 : 1.05, 1.0, frontFace ? -0.1 : (rand() - 0.5) * 0.08, frontFace);
-      }
-    }
-    // 3. Mid-sculpted fill ring around temples, sides and occiput.
-    const nMid = Math.max(8, Math.round(14 * scale));
-    for (let i = 0; i < nMid; i++) {
-      const f = (i + 0.5) / nMid;
-      const azDeg = -175 + 350 * f + (rand() - 0.5) * 8;
-      if (Math.abs(azDeg) < 22) continue;
-      const hl = hairlineEl(azDeg);
-      const elDeg = hl + 26 + 18 * ((i % 2) ? 0.7 : 0.2) + (rand() - 0.5) * 6;
-      pushDir(azDeg, elDeg, 0.42 + 0.34 * rand(), 1.02, 1.0, (rand() - 0.5) * 0.09);
-    }
-    // 4. Sculpted accent / face-framing locks along the temples and outer shoulder sweep.
-    const accentAz = [-32, -52, -78, -118, -155, 32, 52, 78, 118, 155];
-    for (const a0 of accentAz) {
-      if (rand() > scale) continue;
-      const azDeg = a0 + (rand() - 0.5) * 6;
-      const hl = hairlineEl(azDeg);
-      const isFront = Math.abs(azDeg) < 65;
-      const elDeg = hl + (isFront ? 6 + 6 * rand() : 22 + 16 * rand());
-      pushDir(azDeg, elDeg, 0.84 + 0.16 * rand(), isFront ? 0.68 : 0.76, 0.92, isFront ? -0.12 - 0.06 * rand() : -0.05 + 0.08 * rand(), isFront);
-    }
-  } else {
-    // Curly locks (3A, 3B, or perimeter curls of 3C): fuller crown + dense ringlet coverage.
-    const total = Math.max(18, Math.round(p.count * scale));
-    const dirs = scalpDirections(total, rand, (a) => 1.8 - 2.5 * smooth(85, 160, Math.abs(a)));
-    for (const d of dirs) {
-      const [az, el] = azElOf(d);
-      const azDeg = az / DEG;
-      const absAz = Math.abs(azDeg);
-      const layer = clamp(0.18 + 0.72 * rand() + 0.18 * smooth(25 * DEG, 70 * DEG, el), 0, 1);
-      const frontFace = absAz < 58 && el < 46 * DEG;
-      specs.push({
-        dir: d,
-        layer,
-        widthScale: frontFace ? 0.84 : 0.92 + 0.24 * rand(),
-        thickScale: 0.95 + 0.15 * rand(),
-        lengthJitter: (rand() - 0.5) * 0.14 - (frontFace ? 0.08 : 0),
-        shoulderSide: absAz < 64 ? 1 : -1,
-        faceFraming: frontFace,
-        groove: 0.12,
-      });
+  // 1. Continuous centre-parting locks (left & right): start right along the top midline from the front hairline
+  //    (el 36°) all the way over the very top of the crown (el 86°) to the upper back, so the parted locks themselves
+  //    form the smooth crown dome and sculpted forehead hairline — zero exposed cap dome or protruding root tabs!
+  const partPairs: readonly [number, number, number, number, boolean][] = [
+    // [azDeg, elDeg, widthScale, lengthJitter, faceFraming]
+    [1.8, 35, 1.10, -0.06, true],
+    [3.5, 47, 1.18, -0.03, true],
+    [6.5, 59, 1.24, 0.0, true],
+    [11, 71, 1.26, 0.02, false],
+    [24, 83, 1.26, 0.03, false],
+    [146, 76, 1.24, 0.02, false],
+    [164, 62, 1.22, 0.0, false],
+  ];
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < partPairs.length; i++) {
+      if (rand() > scale * 1.15) continue;
+      const [a0, e0, ws, lj, ff] = partPairs[i]!;
+      addLock(side * (a0 + (rand() - 0.5) * 1.8), e0 + (rand() - 0.5) * 2.0, 0.62 + 0.32 * (1 - Math.abs(i - 2) * 0.14), ws, 1.02, lj + (rand() - 0.5) * 0.04, ff);
     }
   }
+
+  // 2. Temple & upper-side overlapping sculpted locks tucked right below the crown parting sweep.
+  const nMid = Math.max(8, Math.round(12 * scale));
+  for (let i = 0; i < nMid; i++) {
+    const f = (i + 0.5) / nMid;
+    const azDeg = -170 + 340 * f + (rand() - 0.5) * 6;
+    if (Math.abs(azDeg) < 34) continue;
+    const hl = hairlineEl(azDeg);
+    const elDeg = hl + 18 + 22 * (i % 2) + (rand() - 0.5) * 5;
+    addLock(azDeg, elDeg, 0.34 + 0.42 * rand(), 1.20, 1.0, (rand() - 0.5) * 0.09, Math.abs(azDeg) < 55);
+  }
+
+  // 3. Sculpted outer accent tips framing the jawline, shoulders and back hem.
+  const accentAz = [-42, -88, -140, 42, 88, 140];
+  for (const a0 of accentAz) {
+    if (rand() > scale) continue;
+    const azDeg = a0 + (rand() - 0.5) * 6;
+    const hl = hairlineEl(azDeg);
+    const isFront = Math.abs(azDeg) < 55;
+    addLock(azDeg, hl + (isFront ? 6 : 16) + 5 * rand(), 0.84 + 0.16 * rand(), isFront ? 0.78 : 0.90, 0.96, isFront ? -0.10 : 0.04 + (rand() - 0.5) * 0.06, isFront);
+  }
+
   return specs;
 }
 
 interface SculptedGuide {
   pts: V3[];
   spec: SculptedLockSpec;
-  phase: number;
 }
 
 function growSculptedGuide(
@@ -1051,71 +1142,69 @@ function growSculptedGuide(
   const [az, el] = azElOf(spec.dir);
   const absAzDeg = Math.abs(az / DEG);
   const root = add(h.c, spec.dir, headRadius(h, az, el));
-  const reach = p.kind === 'wave' ? 0.35 * p.amp : p.kind === 'curl' ? 0.75 * p.amp : 0;
-  const ch = 0.28 + reach + spec.layer * p.thickness + (p.kind === 'curl' ? vol * 0.32 * smooth(20 * DEG, 70 * DEG, el) : 0);
-  const ct = 0.75 + reach + spec.layer * p.thickness * 0.55;
+  const reach = p.kind === 'wave' ? 0.20 * p.amp : p.kind === 'curl' ? 0.36 * p.amp : 0;
+  // Target outer clearance once the lock clears the crown; root starts buried inside the crown dome (`chRoot = 0.08`)
+  // and ramps smoothly over the first 6.5 cm so locks emerge seamlessly from the scalp with zero exposed root tabs.
+  const chTarget = 0.42 + reach + spec.layer * p.thickness + (p.kind === 'curl' ? vol * 0.14 * smooth(15 * DEG, 70 * DEG, el) : 0);
+  const chRoot = 0.08;
+  const ct = 0.85 + reach + spec.layer * p.thickness * 0.55;
 
   const front = clamp(Math.cos(az), 0, 1);
-  const sx = Math.abs(root[0] - h.c[0]) > 0.25 ? Math.sign(root[0] - h.c[0]) : rand() < 0.5 ? -1 : 1;
+  const sx = Math.abs(root[0] - h.c[0]) > 0.2 ? Math.sign(root[0] - h.c[0]) : rand() < 0.5 ? -1 : 1;
 
-  // Sweep gracefully away from the centre parting at the crown, framing the temples cleanly and flowing down the back.
-  const sidePush = 0.42 + 1.45 * front;
-  const backBias = spec.shoulderSide < 0 ? -0.35 : 0.12;
-  const want: V3 = [sx * sidePush, -1.0, -0.22 * front + backBias * (1 - front)];
+  // Sweep smoothly sideways and downward from the centre parting (hugging the scalp contour at the temples).
+  const sidePush = spec.faceFraming ? 1.15 : 0.42 + 1.15 * front;
+  const backBias = spec.shoulderSide < 0 ? -0.32 : 0.10;
+  const want: V3 = [sx * sidePush, spec.faceFraming ? -0.88 : -1.0, -0.22 * front + backBias * (1 - front)];
   const n = spec.dir;
   const comb = norm(sub(want, [n[0] * dot(want, n), n[1] * dot(want, n), n[2] * dot(want, n)]));
-  const archLift = p.lift * (0.65 + 0.55 * smooth(35 * DEG, 80 * DEG, el));
-  let d = norm(add(comb, n, archLift / Math.max(0.08, 1 - archLift)));
-  let q = space.push(add(root, n, Math.min(ch, 0.35 + spec.layer * 0.65)), 0.25, ct, spec.shoulderSide);
+  const archLift = p.lift * (spec.faceFraming ? 0.22 : 0.45 + 0.35 * smooth(40 * DEG, 80 * DEG, el));
+  let d = norm(add(comb, n, archLift / Math.max(0.1, 1 - archLift)));
+  let q = space.push(add(root, n, chRoot), chRoot, ct, spec.shoulderSide);
 
   const pts: V3[] = [q];
   const ds = 1.0;
-  // Staggered organic cut height: front framing slightly shorter, short hair graduated naturally from nape to crown.
   const span = Math.max(6, h.top - yEndBase);
-  const yEnd = yEndBase - spec.lengthJitter * span * 0.45;
-  const shortGrad = length === 'short' ? (p.kind === 'curl' ? 5.2 + 2.6 * smooth(-20 * DEG, 65 * DEG, el) : 5.4 + 3.6 * smooth(-25 * DEG, 70 * DEG, el)) * hs : 98;
-  const maxLen = length === 'short' ? shortGrad * (1 + spec.lengthJitter * 0.4) : 98;
+  const yEnd = yEndBase - spec.lengthJitter * span * 0.4;
+  const shortGrad = length === 'short' ? (p.kind === 'curl' ? 5.6 + 2.6 * smooth(-20 * DEG, 65 * DEG, el) : 5.6 + 3.4 * smooth(-25 * DEG, 70 * DEG, el)) * hs : 98;
+  const maxLen = length === 'short' ? shortGrad * (1 + spec.lengthJitter * 0.35) : 98;
 
   for (let s = 0; s < maxLen; s += ds) {
+    const chCur = chRoot + (chTarget - chRoot) * smooth(0, 6.5 * hs, s);
     const out = space.outward(q);
-    // Graceful crown arch over first 3 cm, then gravity takes over cleanly.
-    const crownBoost = s < 3.5 ? (1 - s / 3.5) * p.crownLift * 0.16 : 0;
     let force: V3 = [0, -p.gravity, 0];
 
-    // OI-172 fix: steer side locks cleanly forward over the front shoulder/chest OR backward onto the upper back,
-    // and keep hanging locks gently inside the outer arm zone so wide curls never clip the upper arms.
+    // Keep front hairline locks gracefully sweeping past the temples (never cutting in front of the eyes!).
+    if (spec.faceFraming && s < 6.5 * hs) {
+      force = add(force, [sx * 0.22 * (1 - s / (6.5 * hs)), 0, -0.05]);
+    }
+
     const nearShoulder = smooth(h.chin + 3, ring.shoulder + 1, q[1]) * (1 - smooth(ring.shoulder - 8, ring.shoulder - 20, q[1]));
     if (nearShoulder > 0 && absAzDeg > 28 && absAzDeg < 126) {
-      force = add(force, [0, 0, spec.shoulderSide * 0.30 * nearShoulder]);
-      force = add(force, [-sx * (spec.shoulderSide > 0 ? 0.14 : 0.08) * nearShoulder, 0, 0]);
+      force = add(force, [0, 0, spec.shoulderSide * 0.24 * nearShoulder]);
     }
-    if (q[1] < ring.shoulder + 2 && Math.abs(q[0]) > 14.5 * hs) {
-      force = add(force, [-Math.sign(q[0]) * 0.16, 0, spec.shoulderSide * 0.12]);
+    if (q[1] < ring.shoulder + 2 && Math.abs(q[0]) > 16.5 * hs) {
+      force = add(force, [-Math.sign(q[0]) * 0.08, 0, spec.shoulderSide * 0.08]);
     }
 
-    // Chin-length bob: soft sculpted inward curve at the bottom 3 cm toward the jawline/neck.
     if (length === 'chin' && (p.kind === 'straight' || p.kind === 'wave') && q[1] < yEnd + 4.5) {
-      const bobT = smooth(yEnd + 4.5, yEnd, q[1]);
-      force = add(force, out, -0.18 * bobT);
+      force = add(force, out, -0.20 * smooth(yEnd + 4.5, yEnd, q[1]));
     }
 
-    // Upper-back hug: prevent long straight/wavy locks from bowing outward away from the shoulder blades.
     const onBack = q[1] < ring.shoulder + 2 && q[2] < h.c[2] - 1;
     if (onBack && (p.kind === 'straight' || p.kind === 'wave')) {
       const tInfo = space.torsoAt(q[1], q[0], q[2]);
-      const targetDr = tInfo ? tInfo.r + ct + 0.6 : 0;
+      const targetDr = tInfo ? tInfo.r + ct + 0.55 : 0;
       if (tInfo && tInfo.dr > targetDr) {
-        const pull = Math.min(0.24, (tInfo.dr - targetDr) * 0.06);
-        force = add(force, out, -pull);
+        force = add(force, out, -Math.min(0.24, (tInfo.dr - targetDr) * 0.06));
       }
     } else {
-      // Controlled outward volume near head/sides (never kicking tips wildly outward on the back).
       const volZone = smooth(ring.shoulder - 4, h.chin + 4, q[1]);
-      force = add(force, out, p.push * (0.45 + 0.55 * volZone) * (1 + 0.1 * vol) + crownBoost);
+      force = add(force, out, p.push * (0.45 + 0.55 * volZone) * (1 + 0.06 * vol));
     }
 
     d = norm(add(d, force));
-    const next = space.push(add(q, d, ds), ch, ct, spec.shoulderSide);
+    const next = space.push(add(q, d, ds), chCur, ct, spec.shoulderSide);
     const step = sub(next, q);
     if (len(step) > 1e-4) d = norm(step);
     q = next;
@@ -1125,21 +1214,23 @@ function growSculptedGuide(
 
   for (let pass = 0; pass < 4; pass++) {
     for (let i = 1; i < pts.length - 1; i++) {
+      const chCur = chRoot + (chTarget - chRoot) * smooth(0, 6.5 * hs, i * ds);
       const a = pts[i - 1]!, b = pts[i]!, c = pts[i + 1]!;
-      pts[i] = space.push([(a[0] + 2 * b[0] + c[0]) / 4, (a[1] + 2 * b[1] + c[1]) / 4, (a[2] + 2 * b[2] + c[2]) / 4], ch, ct, spec.shoulderSide);
+      pts[i] = space.push([(a[0] + 2 * b[0] + c[0]) / 4, (a[1] + 2 * b[1] + c[1]) / 4, (a[2] + 2 * b[2] + c[2]) / 4], chCur, ct, spec.shoulderSide);
     }
   }
-  return { pts, spec, phase: rand() * 2 * Math.PI };
+  return { pts, spec };
 }
 
 function emitSculptedLock(w: PartWriter, space: HairSpace, g: SculptedGuide, p: SculptedTypeParams, length: HairLength, lockIndex: number): void {
   const hs = space.head.scale;
   const isCurl = p.kind === 'curl';
+  // Smooth curve sampling (~6.4–7.0 samples per wave/curl cycle) keeps straight chest drape, waves and curls silky-smooth.
   const step = p.kind === 'straight'
-    ? (length === 'short' ? 1.35 : length === 'chin' ? 2.2 : 3.2) * hs
+    ? (length === 'short' ? 1.25 : length === 'chin' ? 1.8 : 2.15) * hs
     : p.kind === 'wave'
-      ? Math.max(1.55, p.period / 4.2) * hs
-      : Math.max(0.95, p.period / 3.9) * hs;
+      ? Math.max(1.12, p.period / 6.6) * hs
+      : Math.max(0.84, p.period / 6.8) * hs;
   const P = resample(g.pts, step);
   const n = P.length;
   if (n < 2) return;
@@ -1151,9 +1242,9 @@ function emitSculptedLock(w: PartWriter, space: HairSpace, g: SculptedGuide, p: 
   const thickArr: number[] = [];
   const aoArr: number[] = [];
 
-  const baseW = p.width * g.spec.widthScale * hs * (length === 'short' ? 0.84 : 1.0);
+  const baseW = p.width * g.spec.widthScale * hs * (length === 'short' ? 0.85 : 1.0);
   const baseT = baseW * p.thickRatio * g.spec.thickScale;
-  const layerAo = 0.64 + 0.34 * g.spec.layer;
+  const layerAo = 0.78 + 0.22 * g.spec.layer;
 
   for (let i = 0; i < n; i++) {
     const tFrac = i / (n - 1);
@@ -1166,49 +1257,56 @@ function emitSculptedLock(w: PartWriter, space: HairSpace, g: SculptedGuide, p: 
     const B = len(rb) > 0.3 ? norm(rb) : norm(cross(T, out));
     out = norm(cross(B, T));
 
-    // Smooth sculpted lock silhouette profile: tucked at root, plump mid-shaft, graceful pointed taper at tip.
-    const rootSwell = 0.64 + 0.36 * smooth(0, 0.16, tFrac);
-    const tipStart = length === 'short' ? 0.42 : isCurl ? 0.72 : 0.64;
-    const tipTaper = tFrac > tipStart ? Math.pow(Math.max(0.06, 1 - (tFrac - tipStart) / (1 - tipStart)), 0.62) : 1.0;
-    const wCur = baseW * rootSwell * tipTaper;
-    const tCur = baseT * (0.58 + 0.42 * smooth(0, 0.18, tFrac)) * (tFrac > tipStart ? Math.pow(tipTaper, 0.85) : 1.0);
+    // Root emerges seamlessly from inside the crown dome (pinched flush inside cap at t=0, swelling cleanly over first 20%).
+    const rootW = 0.28 + 0.72 * smooth(0, 0.22, tFrac);
+    const rootT = 0.14 + 0.86 * smooth(0, 0.24, tFrac);
+    const tipStart = length === 'short' ? 0.48 : isCurl ? 0.76 : 0.66;
+    const minTip = isCurl ? 0.20 : 0.08;
+    const tipTaper = tFrac > tipStart ? Math.pow(Math.max(minTip, 1 - (tFrac - tipStart) / (1 - tipStart)), 0.60) : 1.0;
+    const wCur = baseW * rootW * tipTaper;
+    const tCur = baseT * rootT * (tFrac > tipStart ? Math.pow(tipTaper, 0.82) : 1.0);
 
-    // Subtle root AO darkening near the parting & scalp, lifting smoothly along the sculpted shaft.
-    const shaftAo = 0.66 + 0.34 * smooth(0, 0.22, tFrac);
-    const tipShadow = 1 - 0.12 * smooth(0.82, 1.0, tFrac);
-    aoArr.push(clamp(layerAo * shaftAo * tipShadow, 0.42, 1.0));
+    const shaftAo = 0.78 + 0.22 * smooth(0, 0.2, tFrac);
+    const tipShadow = 1 - 0.10 * smooth(0.84, 1.0, tFrac);
+    aoArr.push(clamp(layerAo * shaftAo * tipShadow, 0.60, 1.0));
     widthArr.push(wCur);
     thickArr.push(tCur);
 
-    const th = (2 * Math.PI * s) / (p.period * hs) + g.phase;
+    const th = (2 * Math.PI * s) / (p.period * hs) + g.spec.phase;
     if (p.kind === 'straight') {
       centre.push(P[i]!);
       side.push(B);
       outArr.push(out);
     } else if (p.kind === 'wave') {
-      const ramp = smooth(0, length === 'short' ? 2.2 : 5.0, s) * (0.65 + 0.35 * smooth(0, 20, s));
+      const ramp = smooth(0, length === 'short' ? 2.5 : 5.5, s) * (0.65 + 0.35 * smooth(0, 18, s));
       const a = p.amp * hs * ramp * (0.45 + 0.55 * tipTaper);
-      const pos = add(add(P[i]!, B, a * Math.sin(th)), out, 0.42 * a * Math.cos(th));
+      const pos = add(add(P[i]!, B, a * Math.sin(th)), out, 0.45 * a * Math.cos(th));
       centre.push(pos);
       side.push(B);
-      outArr.push(norm(add(out, T, -0.3 * Math.cos(th) * ramp)));
+      outArr.push(norm(add(out, T, -0.28 * Math.cos(th) * ramp)));
     } else {
-      // Plump 3D helical spring curl: centre spirals around the guide so the solid tube reads as a bouncy sculpted ringlet.
-      const ramp = smooth(0, 2.2 * hs, s);
-      const r = p.amp * hs * ramp * (0.42 + 0.58 * tipTaper);
+      // Silky-smooth plump 3D sculpted curl lock: smooth elliptical S-spiral ribbon curling away below the crown.
+      const ramp = smooth(1.5 * hs, 6.5 * hs, s);
+      const rB = p.amp * hs * ramp * (0.50 + 0.50 * tipTaper);
+      const rO = p.amp * hs * 0.65 * ramp * (0.50 + 0.50 * tipTaper);
       const cx = Math.cos(th);
       const cy = Math.sin(th);
-      const radial = norm(add([B[0] * cx, B[1] * cx, B[2] * cx], out, cy));
-      centre.push(add(add(P[i]!, B, r * cx), out, r * cy));
-      side.push(norm(cross(radial, T)));
-      outArr.push(radial);
+      const roll = 0.42 * Math.sin(th) * ramp;
+      const sideCurl = norm(add(B, out, roll));
+      const outCurl = norm(add(out, B, -roll * 0.45));
+      centre.push(add(add(P[i]!, B, rB * cx), out, rO * cy));
+      side.push(sideCurl);
+      outArr.push(outCurl);
     }
   }
 
-  sculptedLockTube(w, space, centre, side, outArr, widthArr, thickArr, aoArr, 6, g.spec.groove, (lockIndex * 0.23) % 1);
+  sculptedLockTube(w, space, centre, side, outArr, widthArr, thickArr, aoArr, g.spec.groove, (lockIndex * 0.27) % 1);
 }
 
-/** Emit sculpted 3D coil/curl puff clusters distributed organically across the outer halo surface (3C, 4A–4C). */
+/**
+ * Emit densely packed, plump, overlapping 3D sculpted curl/coil puff clouds across the outer halo surface (3C, 4A–4C).
+ * Puff radius scales with halo size so neighbouring puffs always overlap edge-to-edge like a sculpted cloud.
+ */
 function emitSculptedPuffs(
   w: PartWriter,
   space: HairSpace,
@@ -1221,29 +1319,28 @@ function emitSculptedPuffs(
   const h = space.head;
   const hs = h.scale;
   const coily = p.kind === 'coil';
-  const droop = coily ? (p.lobeStrength < 0.25 ? 1.05 : 0.82) : 0.95;
-  const dirs = scalpDirections(count, rand, (a) => 1.5 - Math.min(20, 2.0 * vol) * droop * smooth(34, 108, Math.abs(a)));
-  const tileScale = coily ? 1.2 : 1.0;
+  const droop = coily ? (p.lobeStrength < 0.13 ? 1.05 : 0.85) : 1.05;
+  // Extend puffs right down to the forehead hairline so soft rounded coil puffs kiss the hairline cleanly (zero bare band).
+  const dirs = scalpDirections(count, rand, (a) => -2.2 - Math.min(22, 2.15 * vol) * droop * smooth(32, 108, Math.abs(a)));
+  const tileScale = coily ? 1.0 : 0.85;
+  // Scale puff size smoothly with volume so large afros stay tightly packed with chunky overlapping puffs (never sparse pebbles!).
+  const volScale = 0.82 + 0.052 * vol;
 
-  // Emit outer puffs first for Early-Z friendliness.
   const items = dirs.map((d, idx) => {
     const [az, el] = azElOf(d);
     const hl = hairlineEl(az / DEG) * DEG;
-    const crownShape = coily
-      ? 0.34 + 0.66 * smooth(hl - 16 * DEG, hl + 36 * DEG, el)
-      : 0.25 + 0.75 * smooth(hl - 10 * DEG, hl + 32 * DEG, el);
-    const sideLift = coily ? 1 + 0.14 * smooth(35, 115, Math.abs(az / DEG)) * (1 - smooth(55 * DEG, 88 * DEG, el)) : 1;
-    const radScale = (0.82 + 0.38 * rand()) * (length === 'short' ? 0.84 : length === 'chin' ? 0.94 : 1.04) * hs;
-    const rPuff = p.puffRadius * radScale;
-    // Embed each puff cleanly into the outer sculpted volume so puffs overlap organically without floating gaps.
+    const crownShape = 0.36 + 0.64 * smooth(hl - 16 * DEG, hl + 36 * DEG, el);
+    const sideLift = 1 + 0.14 * smooth(34, 115, Math.abs(az / DEG)) * (1 - smooth(55 * DEG, 88 * DEG, el));
+    const radScale = (0.86 + 0.30 * rand()) * volScale * hs;
+    const rPuff = p.puffRadius * radScale * (length === 'short' ? 0.86 : 1.0);
     const rSurf = headRadius(h, az, el) + 0.35 + vol * crownShape * sideLift;
-    const depthOffset = (rand() - 0.35) * rPuff * 0.45;
-    const rCentre = Math.max(headRadius(h, az, el) + 0.45 * rPuff, rSurf - 0.22 * rPuff + depthOffset);
-    const c = space.push(add(h.c, d, rCentre), 0.25 + rPuff * 0.4, 0.75 + rPuff * 0.4);
-    const rx = rPuff * (0.94 + 0.2 * rand());
-    const ry = rPuff * (coily ? 0.94 + 0.2 * rand() : 1.12 + 0.22 * rand());
-    const rz = rPuff * (coily ? 0.78 + 0.22 * rand() : 0.72 + 0.18 * rand());
-    const ao = 0.78 + 0.22 * smooth(hl - 12 * DEG, hl + 40 * DEG, el) * (0.85 + 0.15 * rand());
+    // Sit proud on the surface (~28% embedded into core) so the silhouette is made of plump overlapping sculpted puffs.
+    const rCentre = Math.max(headRadius(h, az, el) + 0.45 * rPuff, rSurf + 0.06 * rPuff + (rand() - 0.5) * rPuff * 0.32);
+    const c = space.push(add(h.c, d, rCentre), 0.25 + rPuff * 0.32, 0.72 + rPuff * 0.32);
+    const rx = rPuff * (0.96 + 0.16 * rand());
+    const ry = rPuff * (coily ? 0.96 + 0.16 * rand() : 1.12 + 0.18 * rand());
+    const rz = rPuff * (coily ? 0.88 + 0.16 * rand() : 0.82 + 0.16 * rand());
+    const ao = 0.84 + 0.16 * smooth(hl - 12 * DEG, hl + 42 * DEG, el) * (0.88 + 0.12 * rand());
     return { c, d, rx, ry, rz, ao, rCentre, seed: idx * 73 + Math.floor(rand() * 500) };
   });
 
@@ -1275,14 +1372,19 @@ export function buildSculptedHair(input: HairBodyInput, choice: HairChoice, opti
     buildSculptedCap(cap, space, p, !coily && !tightCurl);
     parts.push(cap.part('cap'));
 
-    // 2. Closed sculpted volume core (3A–3C inner curly body, 4A–4C sculpted cloud afro volume).
-    if (vol > 0) {
-      const shells = new PartWriter();
-      buildSculptedVolume(shells, space, p, choice.length, vol, seedBase % 997);
-      parts.push(shells.part('shells'));
+    // 2. Closed sculpted base volume:
+    //    - For 1–3B: continuous draped sculpted curtain behind the hero locks (zero scalp gaps / zero lattice holes!).
+    //    - For 3C–4C: closed organically lobed sculpted cloud halo core.
+    const shells = new PartWriter();
+    if (coily || tightCurl) {
+      buildSculptedVolume(shells, space, p, vol, seedBase % 997);
+    } else {
+      const yEnd = cutYOf(choice.length, p, head, input.ringY);
+      buildSculptedCurtain(shells, space, p, choice.length, yEnd, input.ringY);
     }
+    parts.push(shells.part('shells'));
 
-    // 3. Sculpted locks or sculpted coil-puff clusters (`strands` part for API/test continuity).
+    // 3. Sculpted hero locks or densely packed sculpted coil-puff clusters (`strands` part).
     const strands = new PartWriter();
     let clumps = 0;
 
@@ -1291,16 +1393,15 @@ export function buildSculptedHair(input: HairBodyInput, choice: HairChoice, opti
       const puffCount = Math.max(40, Math.round(p.count * lengthBoost * countScale));
       clumps = emitSculptedPuffs(strands, space, p, choice.length, vol, puffCount, rand);
     } else if (tightCurl) {
-      // 3C: sculpted crown & halo curl-cluster puffs + tight bouncy corkscrew locks around the lower perimeter.
       const puffTarget = Math.max(36, Math.round(p.count * (choice.length === 'short' ? 0.72 : choice.length === 'chin' ? 0.88 : 1.0) * countScale));
       clumps += emitSculptedPuffs(strands, space, p, choice.length, vol, puffTarget, rand);
       if (choice.length !== 'short') {
         const yEnd = cutYOf(choice.length, p, head, input.ringY);
-        const hangCount = Math.max(12, Math.round((choice.length === 'chin' ? 18 : choice.length === 'shoulder' ? 24 : 28) * countScale));
+        const hangCount = Math.max(10, Math.round((choice.length === 'chin' ? 14 : choice.length === 'shoulder' ? 18 : 22) * countScale));
         const dirs = scalpDirections(hangCount * 2, rand, (a) => 1.5 - 4 * smooth(70, 150, Math.abs(a)))
           .filter((d) => {
             const [az, el] = azElOf(d);
-            return el < (hairlineEl(az / DEG) + 34) * DEG;
+            return Math.abs(az / DEG) > 26 && el < (hairlineEl(az / DEG) + 32) * DEG;
           })
           .slice(0, hangCount);
         const guides: SculptedGuide[] = dirs.map((d) => {
@@ -1309,12 +1410,13 @@ export function buildSculptedHair(input: HairBodyInput, choice: HairChoice, opti
           const spec: SculptedLockSpec = {
             dir: d,
             layer: 0.45 + 0.55 * rand(),
-            widthScale: 0.92 + 0.2 * rand(),
+            widthScale: 0.92 + 0.18 * rand(),
             thickScale: 1.0,
-            lengthJitter: (rand() - 0.5) * 0.14,
-            shoulderSide: absAz < 62 ? 1 : -1,
-            faceFraming: absAz < 55,
-            groove: 0.14,
+            lengthJitter: (rand() - 0.5) * 0.12,
+            shoulderSide: absAz < 60 ? 1 : -1,
+            faceFraming: absAz < 52,
+            groove: 0.12,
+            phase: az * 2.4 + (rand() - 0.5) * 0.9,
           };
           return growSculptedGuide(space, spec, p, choice.length, yEnd, input.ringY, rand, vol);
         });
@@ -1323,13 +1425,12 @@ export function buildSculptedHair(input: HairBodyInput, choice: HairChoice, opti
         clumps += guides.length;
       }
     } else {
-      const specs = structuredRoots(p, choice.length, countScale, rand);
+      const specs = structuredHeroRoots(p, choice.length, countScale, rand);
       const yEnd = cutYOf(choice.length, p, head, input.ringY);
       const guides = specs.map((spec) => growSculptedGuide(space, spec, p, choice.length, yEnd, input.ringY, rand, vol));
-      // Outer layers first for Early-Z depth rejection.
       guides.sort((a, b) => b.spec.layer - a.spec.layer);
       for (let i = 0; i < guides.length; i++) emitSculptedLock(strands, space, guides[i]!, p, choice.length, i);
-      clumps = guides.length;
+      clumps += guides.length;
     }
 
     parts.push(strands.part('strands'));
@@ -1432,7 +1533,6 @@ export function withMips(width: number, height: number, lum: Float32Array, alpha
   return { width, height, levels };
 }
 
-/** Build RGBA8 mip pyramid from linear RGB normal channels ([-1, 1] -> [0, 255], renormalized per mip). */
 function normalMips(width: number, height: number, heightField: Float32Array, strength: number, wrapY: boolean): HairTexture {
   const nx0 = new Float32Array(width * height);
   const ny0 = new Float32Array(width * height);
@@ -1496,50 +1596,47 @@ function normalMips(width: number, height: number, heightField: Float32Array, st
 }
 
 /**
- * Procedural sculpted lock groove maps (64 × 128, tileable in u): clean longitudinal hair flutes with soft crevice AO
- * and tangent-space normal relief so solid sculpted locks read as combed locks without fine noisy static.
+ * Procedural sculpted lock groove maps (64 × 128, tileable in u): soft, broad, combed longitudinal hair flutes with
+ * subtle matte crevice AO (mean luminance ~0.94 so chosen hair colours stay true and never crush to black).
  */
 export function sculptedLockTextures(seed = 19): { albedo: HairTexture; normal: HairTexture } {
   const W = 64, H = 128;
   const r = rng(seed);
-  // 8 primary + 6 secondary longitudinal grooves across u (tileable).
-  const modes = Array.from({ length: 6 }, (_, i) => ({
-    freq: [3, 5, 7, 11, 14, 19][i]!,
-    amp: [0.34, 0.26, 0.20, 0.12, 0.06, 0.03][i]!,
+  const modes = Array.from({ length: 5 }, (_, i) => ({
+    freq: [2, 4, 6, 9, 13][i]!,
+    amp: [0.36, 0.28, 0.18, 0.11, 0.05][i]!,
     ph: r() * Math.PI * 2,
-    sway: (r() - 0.5) * 0.22,
+    sway: (r() - 0.5) * 0.14,
   }));
   const height = new Float32Array(W * H);
   const lum = new Float32Array(W * H);
   const alpha = new Float32Array(W * H).fill(1);
   for (let y = 0; y < H; y++) {
     const v = y / (H - 1);
-    const rootShade = 0.86 + 0.14 * smooth(0, 0.18, v);
-    const midLift = 1 + 0.06 * Math.sin(Math.PI * v);
+    const rootShade = 0.90 + 0.10 * smooth(0, 0.16, v);
+    const midLift = 1 + 0.05 * Math.sin(Math.PI * v);
     for (let x = 0; x < W; x++) {
       const u = x / W;
       let hVal = 0;
       for (const m of modes) {
         const ang = 2 * Math.PI * (u * m.freq + m.sway * Math.sin(2 * Math.PI * v)) + m.ph;
-        // Rounded ridge / sharper crease profile (`abs(sin)` inverted) mimics carved hair grooves.
         const ridge = 1 - Math.abs(Math.sin(ang * 0.5));
         hVal += m.amp * (ridge * 2 - 1);
       }
       const idx = y * W + x;
       height[idx] = hVal;
-      // Soft matte groove AO: darker inside sculpted valleys, gentle bright crest on lock ridges.
-      lum[idx] = clamp((0.80 + 0.22 * hVal) * rootShade * midLift, 0.45, 1.0);
+      lum[idx] = clamp((0.92 + 0.11 * hVal) * rootShade * midLift, 0.72, 1.0);
     }
   }
   return {
     albedo: withMips(W, H, lum, alpha),
-    normal: normalMips(W, H, height, 2.1, false),
+    normal: normalMips(W, H, height, 1.35, false),
   };
 }
 
 /**
- * Procedural sculpted coil/curl relief maps (64 × 64, tileable in u & v): soft clustered dimples and curved coil
- * grooves for 3C–4C sculpted volumes and puff clusters.
+ * Procedural sculpted coil/curl relief maps (64 × 64, tileable in u & v): soft velvet curl micro-dimples with gentle
+ * matte crevice shading (preserving colour readability even in dark black `#1f1b19`).
  */
 export function sculptedCoilTextures(type: HairType, seed = 29): { albedo: HairTexture; normal: HairTexture } {
   const W = 64, H = 64;
@@ -1548,20 +1645,19 @@ export function sculptedCoilTextures(type: HairType, seed = 29): { albedo: HairT
   const lum = new Float32Array(W * H);
   const alpha = new Float32Array(W * H).fill(1);
   const spec = type === '3C'
-    ? { cells: 18, r0: 6.5, r1: 10.5, kink: 0.12 }
+    ? { cells: 14, r0: 8.5, r1: 12.5, kink: 0.08 }
     : type === '4A'
-      ? { cells: 24, r0: 5.5, r1: 8.5, kink: 0.18 }
+      ? { cells: 18, r0: 7.0, r1: 10.5, kink: 0.12 }
       : type === '4B'
-        ? { cells: 34, r0: 4.2, r1: 6.8, kink: 0.30 }
-        : { cells: 46, r0: 3.4, r1: 5.4, kink: 0.42 };
+        ? { cells: 24, r0: 5.5, r1: 8.5, kink: 0.18 }
+        : { cells: 32, r0: 4.5, r1: 7.0, kink: 0.24 };
 
-  // Soft pillowy cellular coil bumps (tileable).
   const centres = Array.from({ length: spec.cells }, () => ({
     x: r() * W,
     y: r() * H,
     rad: spec.r0 + r() * (spec.r1 - spec.r0),
     ph: r() * Math.PI * 2,
-    amp: 0.72 + 0.28 * r(),
+    amp: 0.78 + 0.22 * r(),
   }));
 
   for (let y = 0; y < H; y++) {
@@ -1584,12 +1680,11 @@ export function sculptedCoilTextures(type: HairType, seed = 29): { albedo: HairT
       }
       const idx = y * W + x;
       height[idx] = best;
-      // Crevice AO between rounded coil clusters, soft lit crown on domes.
-      lum[idx] = clamp(0.62 + 0.38 * Math.pow(best, 0.7), 0.45, 1.0);
+      lum[idx] = clamp(0.84 + 0.18 * Math.pow(best, 0.75), 0.74, 1.0);
     }
   }
   return {
     albedo: withMips(W, H, lum, alpha),
-    normal: normalMips(W, H, height, 2.4, true),
+    normal: normalMips(W, H, height, 1.25, true),
   };
 }

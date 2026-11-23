@@ -2,7 +2,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { BASE_SHAPE_ID, bodyShape, buildBody, buildMannequin, topology } from '@curtain/mannequin';
 import { ANCHOR_RINGS } from '@curtain/anchors';
-import { conformToField, coverZone, decodeRealisticBody, encodeRealisticBody, fitRealisticBody, fitTargetOf, warpThrough, type FitResult, type FitTarget } from './realisticBody';
+import { conformToField, coverZone, decodeRealisticBody, encodeRealisticBody, fitRealisticBody, fitTargetOf, sectionAt, warpThrough, type FitResult, type FitTarget } from './realisticBody';
 import { IDENTITY_MORPH, bodyField } from './body';
 import { sample } from './collide';
 import { bodyShapeOf, planAvatar } from './mount';
@@ -109,6 +109,88 @@ describe('arm length (WO-001: the founder found the arms too long, 21 Nov)', () 
       expect((j[1] - sTip) / m.statureCm).toBeGreaterThan(0.35);
     });
   }
+});
+
+describe('body iteration 2 (WO-014 / CUR-27: hip seam, shoulder-to-upper-arm, knees)', () => {
+  const fitted = Object.fromEntries(
+    Object.entries(BODIES).map(([name, body]) => {
+      const target = targetOf(body);
+      return [name, { target, fit: fitRealisticBody(asset, target) }];
+    }),
+  ) as Record<keyof typeof BODIES, { target: FitTarget; fit: FitResult }>;
+
+  const meanFrontNy = (fit: FitResult, yLo: number, yHi: number): number => {
+    const P = fit.mesh.positions, I = fit.mesh.indices;
+    const n = P.length / 3;
+    const N = new Float64Array(3 * n);
+    for (let t = 0; t < I.length; t += 3) {
+      const a = I[t]!, b = I[t + 1]!, c = I[t + 2]!;
+      const ux = P[3 * b]! - P[3 * a]!, uy = P[3 * b + 1]! - P[3 * a + 1]!, uz = P[3 * b + 2]! - P[3 * a + 2]!;
+      const vx = P[3 * c]! - P[3 * a]!, vy = P[3 * c + 1]! - P[3 * a + 1]!, vz = P[3 * c + 2]! - P[3 * a + 2]!;
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      for (const k of [a, b, c]) {
+        N[3 * k] = N[3 * k]! + nx;
+        N[3 * k + 1] = N[3 * k + 1]! + ny;
+        N[3 * k + 2] = N[3 * k + 2]! + nz;
+      }
+    }
+    let sum = 0, count = 0;
+    for (let i = 0; i < n; i++) {
+      const y = P[3 * i + 1]!;
+      if (y < yLo || y > yHi || P[3 * i + 2]! < 2 || asset.armWeight[i]! > 0.1) continue;
+      const l = Math.hypot(N[3 * i]!, N[3 * i + 1]!, N[3 * i + 2]!);
+      if (!l) continue;
+      sum += N[3 * i + 1]! / l;
+      count++;
+    }
+    return sum / count;
+  };
+
+  it('hip seam: front normal (ny) in 98..102 cm on the full body has no horizontal shelf (old: 0.46, new: ~0.16)', () => {
+    expect(meanFrontNy(fitted.full.fit, 98, 102)).toBeLessThan(0.22);
+    for (const { target, fit } of Object.values(fitted)) {
+      const y = (id: string): number => target.rings.find((r) => r.id === id)!.centre[1];
+      // Old sparse Z-centring gave 0.18..0.23 across the five bodies; dense smooth centring keeps it below 0.17.
+      expect(meanFrontNy(fit, y('hip'), y('waist'))).toBeLessThan(0.17);
+    }
+  });
+
+  it('shoulder to upper arm: the outer arm-root profile has no extra-segment kink on any test body (old max slope: 0.29..0.43)', () => {
+    for (const { target, fit } of Object.values(fitted)) {
+      const P = fit.mesh.positions;
+      const { joint: j, axis: ax } = target.arms.left;
+      const up = [-ax[1], ax[0], 0];
+      const ridge: number[] = [];
+      for (let s = 0; s <= 14; s += 2) {
+        let best = -Infinity;
+        for (let i = 0; i < asset.meta.bodyVertexCount; i++) {
+          const px = P[3 * i]!, py = P[3 * i + 1]!, pz = P[3 * i + 2]!;
+          if (px < 10 || py < 95) continue;
+          const ds = (px - j[0]) * ax[0] + (py - j[1]) * ax[1] + (pz - j[2]) * ax[2];
+          if (Math.abs(ds - s) < 1.2) best = Math.max(best, (px - j[0]) * up[0]! + (py - j[1]) * up[1]!);
+        }
+        ridge.push(best);
+      }
+      let maxSlope = -Infinity;
+      for (let i = 1; i < ridge.length; i++) maxSlope = Math.max(maxSlope, (ridge[i]! - ridge[i - 1]!) / 2);
+      // Old fit pinched the deltoid inward and stepped out sharply at s = 4..12 cm (slope 0.29..0.43).
+      expect(maxSlope).toBeLessThan(0.26);
+    }
+  });
+
+  it('knees: side-view thigh-to-shin angle is naturally upright, not hyperextended backward (old local: -3.9°..-9.3°, full: 0°)', () => {
+    const bendDeg = (z1: number, y1: number, z2: number, y2: number, z3: number, y3: number): number =>
+      ((Math.atan2(z2 - z1, y1 - y2) - Math.atan2(z3 - z2, y2 - y3)) * 180) / Math.PI;
+    for (const { target, fit } of Object.values(fitted)) {
+      const r = (id: string) => target.rings.find((x) => x.id === id)!;
+      const legX = r('knee').centre[0];
+      const zAt = (y: number): number => sectionAt(fit.mesh.positions, fit.mesh.indices, [legX, y, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1])!.av;
+      const yTh = r('thigh').centre[1], yKn = r('knee').centre[1], yCa = r('calf').centre[1], yAn = r('ankle').centre[1];
+      // Positive angle = knee sits gently forward of the thigh-to-ankle / mid-thigh-to-calf line (natural standing).
+      expect(bendDeg(zAt(yTh), yTh, zAt(yKn), yKn, zAt(yAn), yAn)).toBeGreaterThan(1.2);
+      expect(bendDeg(zAt((yTh + yKn) / 2), (yTh + yKn) / 2, zAt(yKn - 6), yKn - 6, zAt(yCa), yCa)).toBeGreaterThan(0.5);
+    }
+  });
 });
 
 describe('conformToField (the display step under a garment)', () => {

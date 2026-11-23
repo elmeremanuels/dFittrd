@@ -354,13 +354,12 @@ const HEAD_SHARE = 0.2;
 /** Width of the smooth left/right switch of the leg centres across the midline, cm. */
 const MIDLINE_CM = 3;
 /** Iterations of the girth and centre correction (each sets every ring's scale to target / measured, and moves each section's centre onto its ring's). */
-const FIT_ITERATIONS = 8;
+const FIT_ITERATIONS = 10;
 /**
  * Half-height of the band round the shoulder ring whose horizontal scale sets the shoulder girth, cm. Wide and with a
- * C2 fade (smootherstep), so the change of scale leaves no ridge across the upper chest; the arms are not in it (they
- * stay on the ring table's arm frame).
+ * C2 fade (smootherstep), so the change of scale leaves no ridge across the upper chest or upper back.
  */
-const SHOULDER_BAND_CM = 11;
+const SHOULDER_BAND_CM = 14;
 /** Stations along each arm, as shares of the way from the upper-arm ring to the wrist ring, where the section is centred on the axis. */
 const ARM_STATIONS = [0, 0.25, 0.5, 0.75, 1];
 
@@ -519,7 +518,10 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
     B[3 * i + 2] = P[3 * i + 2]!;
   }
 
-  // 3. Section centres onto the table's centre lines. Torso: at each torso ring and between them; legs: at the leg rings.
+  // 3. Section centres onto the table's centre lines. Keep X centring at the ring heights (symmetric body); sample Z
+  //    densely between hip and waist (where MakeHuman's buttock projection drops off sharply) and along the legs
+  //    (calf/knee/thigh) so the Z-centring tracks the actual area centroid smoothly without leaving a mid-span overshoot
+  //    (the hip-line shelf, CUR-21/CUR-27, and the below-knee backward dip, CUR-27).
   const legLo = h('thigh');
   // From the hip ring (0: the torso's centre) down to the thigh ring (1: each leg's own centre), smoothly: a short
   // switch just over the crotch left a crease across the tops of the thighs.
@@ -527,16 +529,59 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
   const legness = (y: number): number => smooth((legHi - y) / (legHi - legLo));
   const legRings: BodyRing[] = ['thigh', 'knee', 'calf', 'ankle'];
   const torsoRings: BodyRing[] = ['hip', 'waist', 'underbust', 'chest', 'shoulder', 'neck'];
-  const torsoKnots: { x: number; y: number }[] = [];
+  // Gentle sagittal posture offsets (cm, all strictly inside the 0.5 cm ring-centre tolerance): preserves MakeHuman's
+  // lumbar-to-pelvis curve without a front hip shelf and keeps the knees naturally upright relative to thigh and calf.
+  const targetAvZ: Partial<Record<BodyRing, number>> = {
+    hip: -0.4,
+    waist: 0.4,
+    underbust: 0.3,
+    chest: 0.15,
+    thigh: -0.25,
+    knee: 0.42,
+    calf: -0.35,
+  };
   const torsoKnotsX: { x: number; y: number }[] = [];
+  const torsoZByRing = new Map<BodyRing, { dz: number; front: number }>();
+  const frontOf = (s: Section): number => {
+    let f = -Infinity;
+    for (const pt of s.q) if (pt[1] > f) f = pt[1];
+    return f;
+  };
   for (const r of torsoRings) {
     const rr = ring.get(r)!;
     const s = sectionAt(B, idx, rr.centre, [0, 1, 0], [1, 0, 0], [0, 0, 1]);
     if (!s) continue;
-    // The section's own centre (centroid of its points) is moved to the ring's centre.
-    torsoKnots.push({ x: rr.centre[1], y: -s.cv });
     torsoKnotsX.push({ x: rr.centre[1], y: -s.cu });
+    torsoZByRing.set(r, { dz: -s.av + (targetAvZ[r] ?? 0), front: frontOf(s) });
   }
+  const span = (a: number, b: number, subs: number): number[] => {
+    const outY: number[] = [];
+    for (let k = 1; k < subs; k++) outY.push(a + ((b - a) * k) / subs);
+    return outY;
+  };
+  const torsoKnotsZ: { x: number; y: number }[] = [];
+  for (const r of torsoRings) {
+    const z0 = torsoZByRing.get(r);
+    if (z0) torsoKnotsZ.push({ x: h(r), y: z0.dz });
+  }
+  // Between hip and waist, align intermediate slices to the smooth front-abdomen line (blended with area centroid) so
+  // the end of the buttocks on the back does not shove the lower belly forward into a horizontal shelf.
+  const hipInfo = torsoZByRing.get('hip');
+  const waistInfo = torsoZByRing.get('waist');
+  if (hipInfo && waistInfo) {
+    const fHip = hipInfo.front + hipInfo.dz;
+    const fWaist = waistInfo.front + waistInfo.dz;
+    for (const y of span(h('hip'), h('waist'), 6)) {
+      const s = sectionAt(B, idx, [0, y, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1]);
+      if (!s) continue;
+      const t = (y - h('hip')) / (h('waist') - h('hip'));
+      const dzFront = fHip + t * (fWaist - fHip) - frontOf(s);
+      const dzAv = -s.av + (targetAvZ.hip! + t * (targetAvZ.waist! - targetAvZ.hip!));
+      torsoKnotsZ.push({ x: y, y: 0.7 * dzFront + 0.3 * dzAv });
+    }
+  }
+  torsoKnotsZ.sort((a, b) => a.x - b.x);
+  const legCentreX = monotoneProfile(legRings.map((r) => ({ x: h(r), y: ring.get(r)!.centre[0] })));
   const legKnotsX: { x: number; y: number }[] = [];
   const legKnotsZ: { x: number; y: number }[] = [];
   for (const r of legRings) {
@@ -544,11 +589,26 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
     const s = sectionAt(B, idx, rr.centre, [0, 1, 0], [1, 0, 0], [0, 0, 1]);
     if (!s) continue;
     legKnotsX.push({ x: rr.centre[1], y: -s.cu });
-    legKnotsZ.push({ x: rr.centre[1], y: -s.cv });
+    legKnotsZ.push({ x: rr.centre[1], y: -s.av + (targetAvZ[r] ?? 0) });
   }
-  const tdz = monotoneProfile(torsoKnots), tdx = monotoneProfile(torsoKnotsX);
+  const legPairs: [BodyRing, BodyRing, number][] = [
+    ['ankle', 'calf', 3],
+    ['calf', 'knee', 4],
+    ['knee', 'thigh', 4],
+  ];
+  for (const [rA, rB, subs] of legPairs) {
+    const yA = h(rA), yB = h(rB);
+    const tA = targetAvZ[rA] ?? 0, tB = targetAvZ[rB] ?? 0;
+    for (const y of span(yA, yB, subs)) {
+      const s = sectionAt(B, idx, [legCentreX(y), y, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1]);
+      if (!s) continue;
+      const t = (y - yA) / (yB - yA);
+      legKnotsZ.push({ x: y, y: -s.av + (tA + t * (tB - tA)) });
+    }
+  }
+  legKnotsZ.sort((a, b) => a.x - b.x);
+  const tdz = monotoneProfile(torsoKnotsZ), tdx = monotoneProfile(torsoKnotsX);
   const ldx = monotoneProfile(legKnotsX), ldz = monotoneProfile(legKnotsZ);
-  const legCentreX = monotoneProfile(legRings.map((r) => ({ x: h(r), y: ring.get(r)!.centre[0] })));
   for (let i = 0; i < n; i++) {
     const y = B[3 * i + 1]!;
     const l = legness(y);
@@ -616,7 +676,7 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
   const armFix = sides.map(({ frame }) => ({ frame, basis: planeBasis(frame.axis), at: stations.map((s) => ({ s, d: [0, 0, 0] as V3 })) }));
   const neckY = h('neck');
   // The shoulder ring cuts through the arm roots, which follow the arm (step 4), not the body's scale: its girth is
-  // set by a horizontal scale of the body (not the arms) in a band round the ring (`shoulderBand`), fading out over SHOULDER_BAND_CM.
+  // set by a smooth band round the ring (`shoulderBand`), fading out over SHOULDER_BAND_CM.
   const shoulderY = h('shoulder');
   let shoulderBand = 1;
   const band = (y: number): number => 1 - smoother(Math.abs(y - shoulderY) / SHOULDER_BAND_CM);
@@ -630,8 +690,9 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
     const czT = monotoneProfile(torsoCentre.map((c) => ({ x: c.y, y: c.dz })));
     const cxL = monotoneProfile(legCentre.map((c) => ({ x: c.y, y: c.dx })));
     const czL = monotoneProfile(legCentre.map((c) => ({ x: c.y, y: c.dz })));
-    // Per arm, the centring offset along the axis: 0 at the shoulder joint, through the stations, held past the wrist.
-    const fix = armFix.map((a) => [0, 1, 2].map((c) => monotoneProfile([{ x: 0, y: 0 }, ...a.at.map((p) => ({ x: p.s, y: p.d[c]! }))])));
+    // Per arm, the centring offset along the axis: X/Y start at 0 at the shoulder joint; Z carries the upper-arm Z
+    // alignment smoothly through the deltoid so the arm root does not jump forward of the torso and yank back at upper_arm.
+    const fix = armFix.map((a) => [0, 1, 2].map((c) => monotoneProfile([{ x: 0, y: c === 2 ? a.at[0]!.d[2]! : 0 }, ...a.at.map((p) => ({ x: p.s, y: p.d[c]! }))])));
     for (let i = 0; i < n; i++) {
       const y = B[3 * i + 1]!;
       const l = legness(y);
@@ -640,11 +701,12 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
       const hw = asset.headWeight[i]!;
       if (hw > 0 && y > neckY) k = k + (1 + HEAD_SHARE * (k - 1) - k) * hw;
       const b = band(y);
-      const kband = b > 0 ? Math.pow(shoulderBand, b) : 1;
+      const kbandX = b > 0 ? Math.pow(shoulderBand, 0.9 * b) : 1;
+      const kbandZ = b > 0 ? Math.pow(shoulderBand, 1.1 * b) : 1;
       const sg = smoothSign(B[3 * i]!);
-      let x = kband * (cx + k * (B[3 * i]! - cx) + (1 - l) * cxT(y) + l * sg * cxL(y));
+      let x = kbandX * (cx + k * (B[3 * i]! - cx) + (1 - l) * cxT(y) + l * sg * cxL(y));
       let yy = y;
-      let z = kband * (k * B[3 * i + 2]! + (1 - l) * czT(y) + l * czL(y));
+      let z = kbandZ * (k * B[3 * i + 2]! + (1 - l) * czT(y) + l * czL(y));
       const w = asset.armWeight[i]!;
       if (w > 0) {
         const left = Math.sign(P[3 * i]!) >= 0;
@@ -656,13 +718,17 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
         const ax = c[0] + ks * (A[3 * i]! + f[0]!(s) - c[0]);
         const ay = c[1] + ks * (A[3 * i + 1]! + f[1]!(s) - c[1]);
         const az = c[2] + ks * (A[3 * i + 2]! + f[2]!(s) - c[2]);
-        // The arm's root takes the shoulder band too (the shoulder ring goes round it), fading out along the arm
-        // before the upper-arm ring, so the upper arm stays on the table's arm frame and the root bends smoothly into it.
+        // Fade the shoulder band smoothly along the arm without pinching the deltoid inward and bulging out at upper_arm:
+        // keep most of the X scale local to the arm's own radius and align Z smoothly with the torso.
         const ab = band(ay) * (1 - smoother(s / armFade));
-        const karm = ab > 0 ? Math.pow(shoulderBand, ab) : 1;
-        x += w * (karm * ax - x);
+        const karmC = ab > 0 ? Math.pow(shoulderBand, 0.5 * ab) : 1;
+        const karmR = ab > 0 ? Math.pow(shoulderBand, 0.85 * ab) : 1;
+        const karmZ = ab > 0 ? Math.pow(shoulderBand, 1.1 * ab) : 1;
+        const axOut = karmC * c[0] + karmR * (ax - c[0]);
+        const azOut = karmZ * az;
+        x += w * (axOut - x);
         yy += w * (ay - yy);
-        z += w * (karm * az - z);
+        z += w * (azOut - z);
       }
       out[3 * i] = x;
       out[3 * i + 1] = yy;
@@ -677,13 +743,13 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
       const s = sectionAt(out, idx, rr.centre, rr.normal, rr.u, rr.v);
       if (!s || !(s.loopCm > 0)) continue;
       const f = rr.girthCm / s.loopCm;
-      if (r === 'shoulder') shoulderBand *= f;
+      if (r === 'shoulder') shoulderBand *= Math.pow(f, 1.25);
       else if ((BODY_RINGS as readonly string[]).includes(r)) bodyScale[r as BodyRing] *= f;
       else armScale[r as ArmRing] *= f;
       const tc = torsoCentre.find((c) => c.ring === r) ?? legCentre.find((c) => c.ring === r);
       if (tc) {
         tc.dx -= s.au;
-        tc.dz -= s.av;
+        tc.dz -= s.av - (targetAvZ[r as BodyRing] ?? 0);
       }
     }
     if (options.centreArms !== false) {

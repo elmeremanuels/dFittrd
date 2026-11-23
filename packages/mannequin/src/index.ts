@@ -85,7 +85,7 @@ export {
   superellipsePerimeter,
   type MaleSectionRow,
 } from './maleV2';
-export { POLAR_N, polarRadius, sectionPolar, type MannequinOutlines, type PolarSection } from './outlines';
+export { POLAR_N, polarRadius, polarStack, sectionCentroid, sectionPolar, type MannequinOutlines, type PolarSection } from './outlines';
 export { slice, loopLength, loopArea, loopContains, loopAround, planeCoords, resampleLoop, type Loop, type Plane } from './slice';
 export { writeGlb, readGlb, glbFloatAccessor, glbIndexAccessor, type GlbPrimitive, type GlbOptions, type ParsedGlb } from './glb';
 export {

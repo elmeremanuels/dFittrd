@@ -16,7 +16,7 @@
  * Pure: no WebGL, no I/O. The loader (`realisticBodyLoad.ts`) fetches the bytes.
  */
 import { monotoneProfile, type AnchorRing } from '@curtain/anchors';
-import { loopLength, slice, type Loop, type Mannequin, type Mesh } from '@curtain/mannequin';
+import { loopLength, polarStack, sectionPolar, slice, type Loop, type Mannequin, type MannequinOutlines, type Mesh, type PolarSection } from '@curtain/mannequin';
 import { sample, type BodyField } from './collide';
 
 type V3 = [number, number, number];
@@ -942,4 +942,129 @@ function limit(pu: number, pv: number, a: number, b: number, grow: number): numb
   if (r === 0) return 1;
   const re = (a * b) / Math.hypot(b * (pu / r), a * (pv / r)) + grow;
   return r > re ? re / r : 1;
+}
+
+// ---------------------------------------------------------------------------
+// Polar outlines of the fitted realistic mesh (WO-016 iteration 1, OI-143).
+// ---------------------------------------------------------------------------
+
+/** Sampling step for the torso's and legs' polar stack, cm. Matches the collider's own step so the
+ *  tabulation in `body.ts` lands on the same rows as the procedural body. */
+export const REALISTIC_TORSO_STEP_CM = 2;
+export const REALISTIC_LEG_STEP_CM = 3;
+/** Arm stations as fractions of the way from the shoulder joint to the wrist ring. */
+export const REALISTIC_ARM_STATIONS = [0, 0.25, 0.5, 0.75, 1] as const;
+/** Where the cap above the shoulder joint closes. Matches male v2. */
+const ARM_CAP_REACH_CM = 1.5;
+
+/** Arms and their frame, for the realistic mesh's polar outlines. */
+export interface RealisticArmFrame {
+  side: 1 | -1;
+  /** Shoulder joint in the fitted mesh's space. */
+  joint: V3;
+  /** Unit axis towards the wrist. */
+  axis: V3;
+  /** The arm's length along its axis (joint to wrist, cm). */
+  lengthCm: number;
+}
+
+/**
+ * Polar outlines of a fitted realistic body mesh (female; WO-016 iteration 1, OI-143).
+ *
+ * The torso and legs are sliced by horizontal planes, each section turned into a polar outline
+ * about its own centroid. The arms are sliced by planes perpendicular to the arm axis, in the
+ * arm's own (u, v) frame. The returned object plugs straight into `bodyField`'s `m.outlines`,
+ * so the collider meets the drawn realistic body instead of the ellipse that contains it.
+ *
+ * Not a fit target: the fit and sizes stay with the ring table. The outlines describe the skin
+ * the cloth meets; the ring table still decides the size.
+ */
+export function realisticOutlinesOf(
+  mesh: Pick<Mesh, 'positions' | 'indices'>,
+  statureCm: number,
+  crotchY: number,
+  arms: readonly RealisticArmFrame[],
+  stepCm = { torso: REALISTIC_TORSO_STEP_CM, leg: REALISTIC_LEG_STEP_CM },
+): MannequinOutlines {
+  const pos = mesh.positions;
+  const idx = mesh.indices;
+  const polarOf = (origin: V3, normal: V3, u: V3, v: V3): { cu: number; cv: number; r: Float64Array } | null => {
+    const s = sectionAt(pos, idx, origin, normal, u, v);
+    if (!s || s.q.length < 3) return null;
+    // `sectionPolar` is the mannequin package's own converter: it reads a Section's `outline` or
+    // falls back to its ellipse. The realistic section has neither, so the outline is filled from
+    // the plane points (in (u, v) about the section's own centroid, which `sectionPolar` uses as
+    // the origin of the rays).
+    const outline = new Float64Array(s.q.length * 2);
+    for (let i = 0; i < s.q.length; i++) {
+      outline[2 * i] = s.q[i]![0] - s.cu;
+      outline[2 * i + 1] = s.q[i]![1] - s.cv;
+    }
+    return sectionPolar(
+      { centre: [0, 0, 0], u: [1, 0, 0], v: [0, 0, 1], a: 0, b: 0, outline },
+      s.q.length,
+      0,
+      0,
+    );
+  };
+  const torsoKeys: number[] = [];
+  const torsoSecs: { cu: number; cv: number; r: Float64Array }[] = [];
+  for (let y = 0; y <= statureCm + 1e-9; y += stepCm.torso) {
+    const p = polarOf([0, y, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1]);
+    if (p && p.r.length > 0) {
+      torsoKeys.push(y);
+      torsoSecs.push(p);
+    }
+  }
+  const torsoAt = polarStack(torsoKeys, torsoSecs);
+  const legStack = (side: 1 | -1): ((y: number) => PolarSection | null) => {
+    const keys: number[] = [];
+    const secs: { cu: number; cv: number; r: Float64Array }[] = [];
+    for (let y = 0; y <= crotchY + 1e-9; y += stepCm.leg) {
+      const p = polarOf([side * 0, y, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1]);
+      if (p && p.r.length > 0) {
+        keys.push(y);
+        secs.push(p);
+      }
+    }
+    return polarStack(keys, secs);
+  };
+  const legLeft = legStack(1);
+  const legRight = legStack(-1);
+  const armStack = (frame: RealisticArmFrame): ((s: number) => PolarSection | null) => {
+    const { u, v } = planeBasis(frame.axis);
+    const keys: number[] = [-ARM_CAP_REACH_CM];
+    const secs: { cu: number; cv: number; r: Float64Array }[] = [];
+    const first = polarOf(
+      [frame.joint[0] + frame.axis[0] * 0.01, frame.joint[1] + frame.axis[1] * 0.01, frame.joint[2] + frame.axis[2] * 0.01],
+      frame.axis,
+      u,
+      v,
+    );
+    if (first && first.r.length > 0) {
+      // The cap closes to a pinhole a little above the shoulder joint.
+      secs.push({ cu: first.cu, cv: first.cv, r: Float64Array.from(first.r, (x) => 0.02 * x) });
+    } else {
+      secs.push({ cu: 0, cv: 0, r: new Float64Array(96) });
+    }
+    for (const f of REALISTIC_ARM_STATIONS) {
+      const s = f * frame.lengthCm;
+      const o: V3 = [frame.joint[0] + frame.axis[0] * s, frame.joint[1] + frame.axis[1] * s, frame.joint[2] + frame.axis[2] * s];
+      const p = polarOf(o, frame.axis, u, v);
+      if (p && p.r.length > 0) {
+        keys.push(s);
+        secs.push(p);
+      }
+    }
+    return polarStack(keys, secs);
+  };
+  const armLeft = arms.find((a) => a.side === 1);
+  const armRight = arms.find((a) => a.side === -1);
+  const armLeftAt = armLeft ? armStack(armLeft) : () => null;
+  const armRightAt = armRight ? armStack(armRight) : () => null;
+  return {
+    torso: (y) => (y >= 0 && y <= statureCm ? torsoAt(y) : null),
+    leg: (y, side) => (y >= 0 && y <= crotchY ? (side === 1 ? legLeft(y) : legRight(y)) : null),
+    arm: (s, side) => (side === 1 ? armLeftAt(s) : armRightAt(s)),
+  };
 }

@@ -40,6 +40,7 @@ import { archiveProduct } from '../services/products.js';
 import { merchantSettings, updateMerchantSettings } from '../services/settings.js';
 import { clearSettings, createShop, endConsoleAccess, findShopByDomain, issueMerchantKeys, updateSettings, type ShopRow } from '../services/shops.js';
 import { shopifyChartRoutes } from './charts.js';
+import { shopifyFabricFormRoutes } from './fabricForm.js';
 import { billingSettingsPatch } from './client.js';
 
 export const SHOPIFY_TOPICS = [
@@ -57,6 +58,8 @@ export const shopifyRoutes: FastifyPluginAsyncZod = async (app) => {
   const { db, env, queue, shopify, now } = app.ctx;
   // Size chart builder of the embedded admin (charts.ts): templates, bulk assign, description import, checklist, onboarding.
   await app.register(shopifyChartRoutes);
+  // Fabric form of the embedded admin (fabricForm.ts, CUR-13 / WO-017): the per-product fabric, read and written as a `$app:curtain.fabric` metafield.
+  await app.register(shopifyFabricFormRoutes);
 
   /** `?shop=` as Shopify sends it, or null when it is not a *.myshopify.com domain. */
   const shopParam = (v: string | undefined): string | null => {

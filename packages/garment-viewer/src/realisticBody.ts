@@ -360,8 +360,15 @@ const FIT_ITERATIONS = 10;
  * C2 fade (smootherstep), so the change of scale leaves no ridge across the upper chest or upper back.
  */
 const SHOULDER_BAND_CM = 14;
-/** Stations along each arm, as shares of the way from the upper-arm ring to the wrist ring, where the section is centred on the axis. */
-const ARM_STATIONS = [0, 0.25, 0.5, 0.75, 1];
+/**
+ * Stations along each arm, as shares of the way from the upper-arm ring to the wrist ring, where the section is
+ * placed onto the anatomical arm curve (dense enough to eliminate spline ringing at the elbow and distal wrist).
+ */
+const ARM_STATIONS = [0, 0.14, 0.27, 0.38, 0.5, 0.63, 0.76, 0.89, 1];
+/** Station share corresponding to the anatomical elbow (s ≈ 0.52 × sWrist, waist height when hanging). */
+const ELBOW_STATION = 0.38;
+/** Female carrying angle (forearm angled gently outward from upper arm, 10°–15° target; WO-019 / CUR-33). */
+const CARRY_ANGLE_RAD = (13.4 * Math.PI) / 180;
 
 export interface FitOptions {
   /** Shape sliders in [-1, 1]; by default solved from the target's girths (`shapeFor`). */
@@ -472,14 +479,6 @@ const smoother = (t: number): number => {
   const c = Math.min(1, Math.max(0, t));
   return c * c * c * (c * (6 * c - 15) + 10);
 };
-/** A unit vector perpendicular to `a`, and the third one of the frame. */
-function planeBasis(a: V3): { u: V3; v: V3 } {
-  const ref: V3 = Math.abs(a[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
-  const d = dot3(ref, a);
-  const v = unit([ref[0] - d * a[0], ref[1] - d * a[1], ref[2] - d * a[2]]);
-  const u: V3 = [v[1] * a[2] - v[2] * a[1], v[2] * a[0] - v[0] * a[2], v[0] * a[1] - v[1] * a[0]];
-  return { u, v };
-}
 
 /**
  * Deform the asset so that its loop girth at every ring of `target` is the target girth:
@@ -673,8 +672,65 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
   const torsoCentre = torsoRings.map((r) => ({ ring: r, y: h(r), dx: 0, dz: 0 }));
   const legCentre = legRings.map((r) => ({ ring: r, y: h(r), dx: 0, dz: 0 }));
   const stations = ARM_STATIONS.map((f) => armDist.upper_arm + f * (armDist.wrist - armDist.upper_arm));
-  const armFix = sides.map(({ frame }) => ({ frame, basis: planeBasis(frame.axis), at: stations.map((s) => ({ s, d: [0, 0, 0] as V3 })) }));
+  // Consistent anatomical basis per arm: `uOut` points laterally outward/superiorly in XY, `vFront` points anteriorly (+Z).
+  const armBasis = (sideSign: 1 | -1, axis: V3): { u: V3; v: V3 } => {
+    const u = unit([-sideSign * axis[1], sideSign * axis[0], 0]);
+    const v = unit([
+      sideSign * (axis[1] * u[2] - axis[2] * u[1]),
+      sideSign * (axis[2] * u[0] - axis[0] * u[2]),
+      sideSign * (axis[0] * u[1] - axis[1] * u[0]),
+    ]);
+    return { u, v };
+  };
+  const sElbow = armDist.upper_arm + ELBOW_STATION * (armDist.wrist - armDist.upper_arm);
+  const dUpper = Math.max(4, sElbow - armDist.upper_arm);
+  const dFore = Math.max(4, armDist.wrist - sElbow);
+  const statureScale = target.statureCm / 168;
+  // Straight humerus from shoulder to elbow, then gentle 11.8° outward carrying angle at the elbow into the forearm:
+  // using a small ±0.32 cm offset at upper_arm/wrist (strictly inside the 0.5 cm ring-centre bound) lets the upper arm
+  // descend straight from the deltoid into the elbow with no mid-biceps bow while the forearm angles naturally outward.
+  const uUpperRing = -0.32;
+  const uWristRing = 0.32;
+  const elbowTuck = (CARRY_ANGLE_RAD + uUpperRing / dUpper - uWristRing / dFore) / (1 / dUpper + 1 / dFore);
+  const elbowBack = 0.35 * statureScale;
+  const targetArmU = (s: number): number => {
+    if (s <= armDist.upper_arm) {
+      // Continue the straight humerus line back toward the shoulder joint (clamped softly so the shoulder stays anchored).
+      const slopeUpper = (-elbowTuck - uUpperRing) / dUpper;
+      return uUpperRing + slopeUpper * (s - armDist.upper_arm) * smooth(s / Math.max(4, armDist.upper_arm));
+    }
+    if (s >= armDist.wrist) return uWristRing;
+    // Piecewise linear humerus → elbow → wrist, rounded cleanly right around the elbow joint (±5 cm) so both segments read straight.
+    const uLin =
+      s <= sElbow
+        ? uUpperRing + ((-elbowTuck - uUpperRing) * (s - armDist.upper_arm)) / dUpper
+        : -elbowTuck + ((uWristRing - -elbowTuck) * (s - sElbow)) / dFore;
+    const roundElb = 0.08 * statureScale * gauss(s - sElbow, 0, 4.0 * statureScale);
+    return uLin + roundElb;
+  };
+  const armArc = (s: number): number => {
+    if (s <= armDist.upper_arm || s >= armDist.wrist) return 0;
+    const t = s <= sElbow ? 0.5 * ((s - armDist.upper_arm) / dUpper) : 0.5 + 0.5 * ((s - sElbow) / dFore);
+    return Math.pow(Math.sin(Math.PI * t), 1.15);
+  };
+  const targetArmV = (s: number): number => {
+    const fs = s / Math.max(1, sWrist);
+    // Gentle posterior triceps fullness behind the humerus axis on the mid upper arm (0 at upper_arm & wrist rings)
+    // plus subtle natural elbow curve.
+    const triPost = s > armDist.upper_arm && s < sElbow ? -0.65 * statureScale * Math.sin((Math.PI * (s - armDist.upper_arm)) / dUpper) : 0;
+    return -elbowBack * armArc(s) + triPost * smooth((fs - 0.22) / 0.06);
+  };
+  const gauss = (x: number, mu: number, sig: number): number => Math.exp(-0.5 * ((x - mu) / sig) ** 2);
+  const armFix = sides.map(({ side, frame }) => ({
+    frame,
+    basis: armBasis(side, frame.axis),
+    at: stations.map((s) => ({ s, d: [0, 0, 0] as V3 })),
+  }));
   const neckY = h('neck');
+  const chestY = h('chest');
+  const waistY = h('waist');
+  const xNeck = Math.max(4.5, ring.get('neck')!.girthCm / (2 * Math.PI));
+  const xAcrom = Math.abs(target.arms.left.joint[0]);
   // The shoulder ring cuts through the arm roots, which follow the arm (step 4), not the body's scale: its girth is
   // set by a smooth band round the ring (`shoulderBand`), fading out over SHOULDER_BAND_CM.
   const shoulderY = h('shoulder');
@@ -693,6 +749,7 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
     // Per arm, the centring offset along the axis: X/Y start at 0 at the shoulder joint; Z carries the upper-arm Z
     // alignment smoothly through the deltoid so the arm root does not jump forward of the torso and yank back at upper_arm.
     const fix = armFix.map((a) => [0, 1, 2].map((c) => monotoneProfile([{ x: 0, y: c === 2 ? a.at[0]!.d[2]! : 0 }, ...a.at.map((p) => ({ x: p.s, y: p.d[c]! }))])));
+    const useCurve = options.centreArms !== false;
     for (let i = 0; i < n; i++) {
       const y = B[3 * i + 1]!;
       const l = legness(y);
@@ -711,24 +768,130 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
       if (w > 0) {
         const left = Math.sign(P[3 * i]!) >= 0;
         const side = left ? target.arms.left : target.arms.right;
+        const aEntry = armFix[left ? 0 : 1]!;
         const f = fix[left ? 0 : 1]!;
         const s = armS[i]!;
         const ks = ka(s);
         const c: V3 = [side.joint[0] + side.axis[0] * s, side.joint[1] + side.axis[1] * s, side.joint[2] + side.axis[2] * s];
-        const ax = c[0] + ks * (A[3 * i]! + f[0]!(s) - c[0]);
-        const ay = c[1] + ks * (A[3 * i + 1]! + f[1]!(s) - c[1]);
-        const az = c[2] + ks * (A[3 * i + 2]! + f[2]!(s) - c[2]);
+        const ax0 = A[3 * i]! + f[0]!(s);
+        const ay0 = A[3 * i + 1]! + f[1]!(s);
+        const az0 = A[3 * i + 2]! + f[2]!(s);
+        // Sculpt the arm cross-section in its local (uOut, vFront) plane around the curved centreline (WO-019 / CUR-33):
+        // rounded deltoid cap (top third of upper arm), fuller posterior triceps, narrow elbow with bony olecranon point,
+        // fuller upper forearm belly below the elbow, and sleek taper into a flat slim wrist.
+        const cU = useCurve ? targetArmU(s) : 0;
+        const cV = useCurve ? targetArmV(s) : 0;
+        const cc: V3 = [
+          c[0] + aEntry.basis.u[0] * cU + aEntry.basis.v[0] * cV,
+          c[1] + aEntry.basis.u[1] * cU + aEntry.basis.v[1] * cV,
+          c[2] + aEntry.basis.u[2] * cU + aEntry.basis.v[2] * cV,
+        ];
+        const rx = ax0 - cc[0], ry = ay0 - cc[1], rz = az0 - cc[2];
+        const pa = rx * side.axis[0] + ry * side.axis[1] + rz * side.axis[2];
+        let pu = rx * aEntry.basis.u[0] + ry * aEntry.basis.u[1] + rz * aEntry.basis.u[2];
+        let pv = rx * aEntry.basis.v[0] + ry * aEntry.basis.v[1] + rz * aEntry.basis.v[2];
+        const fs = s / Math.max(1, sWrist);
+        // 1. Gentle deltoid cap fullness applied uniformly across the shoulder head (after torso-arm blend below).
+        // 2. Longitudinal radius profile: narrow elbow (~0.51), fuller upper forearm (~0.62), slim lower forearm (~0.87).
+        const kProf = 1 - 0.13 * gauss(fs, 0.51, 0.062) + 0.08 * gauss(fs, 0.625, 0.072) - 0.055 * gauss(fs, 0.87, 0.065);
+        pu *= kProf;
+        pv *= kProf;
+        // 3. Upper arm triceps fullness on the posterior side (-Z) vs leaner anterior biceps (+Z), with a soft
+        //    posterior-central muscle belly so the back of the upper arm is unmistakably fuller than the front.
+        const wTri = gauss(fs, 0.32, 0.105) * smooth((fs - 0.1) / 0.1) * smooth((0.49 - fs) / 0.08);
+        if (wTri > 1e-4) {
+          if (pv < 0) {
+            pv *= 1 + 0.18 * wTri;
+            pv -= 0.45 * statureScale * wTri * Math.exp(-0.5 * (pu / (2.4 * statureScale)) ** 2);
+          } else {
+            pv *= 1 - 0.1 * wTri;
+          }
+        }
+        // 4. Subtle bony olecranon point at the posterior midline of the elbow.
+        const wOlec = gauss(fs, 0.515, 0.032) * Math.exp(-0.5 * (pu / (1.45 * statureScale)) ** 2);
+        if (wOlec > 1e-4 && pv < 0) pv -= 0.55 * statureScale * wOlec;
+        // 5. Slim flat wrist (wider thumb-to-pinky along Z than thick palm-to-back along uOut), fading before the fingers.
+        const wWr = smooth((fs - 0.74) / 0.22) * smooth((1.05 - fs) / 0.05);
+        if (wWr > 1e-4) {
+          pu *= 1 - 0.1 * wWr;
+          pv *= 1 + 0.08 * wWr;
+        }
+        const ax = cc[0] + side.axis[0] * pa + ks * (aEntry.basis.u[0] * pu + aEntry.basis.v[0] * pv);
+        const ay = cc[1] + side.axis[1] * pa + ks * (aEntry.basis.u[1] * pu + aEntry.basis.v[1] * pv);
+        const az = cc[2] + side.axis[2] * pa + ks * (aEntry.basis.u[2] * pu + aEntry.basis.v[2] * pv);
         // Fade the shoulder band smoothly along the arm without pinching the deltoid inward and bulging out at upper_arm:
         // keep most of the X scale local to the arm's own radius and align Z smoothly with the torso.
         const ab = band(ay) * (1 - smoother(s / armFade));
         const karmC = ab > 0 ? Math.pow(shoulderBand, 0.5 * ab) : 1;
         const karmR = ab > 0 ? Math.pow(shoulderBand, 0.85 * ab) : 1;
         const karmZ = ab > 0 ? Math.pow(shoulderBand, 1.1 * ab) : 1;
-        const axOut = karmC * c[0] + karmR * (ax - c[0]);
+        const axOut = karmC * cc[0] + karmR * (ax - cc[0]);
         const azOut = karmZ * az;
         x += w * (axOut - x);
         yy += w * (ay - yy);
         z += w * (azOut - z);
+      }
+      // Shoulder trapezius slope, anterior/posterior axillary folds, and back contour (WO-019 / CUR-33).
+      if (hw < 0.8 && yy > waistY - 4 && yy < neckY + 3) {
+        const axAbs = Math.abs(x);
+        const sgnX = x >= 0 ? 1 : -1;
+        // 1. Sloping trapezius from neck base to rounded acromion (eliminates the flat horizontal shoulder shelf)
+        //    plus a smooth rounded deltoid cap over the shoulder head (applied after torso-arm blend so it never kinks).
+        const tLat = (axAbs - (xNeck + 1.2 * statureScale)) / Math.max(4, xAcrom - xNeck);
+        if (tLat > 0 && yy > chestY + 2 && yy < neckY - 0.8 * statureScale) {
+          const wArmFade = w > 0 ? 1 - smoother((armS[i]! - 4 * statureScale) / (18 * statureScale)) : 1;
+          const wBelowNeck = smooth((neckY - 0.8 * statureScale - yy) / (2.4 * statureScale));
+          const wTop = smoother((yy - (chestY + 2)) / Math.max(4, shoulderY - chestY)) * wBelowNeck * (1 - hw) * wArmFade;
+          if (wTop > 1e-4) {
+            const liftTrap = 0.58 * statureScale * gauss(tLat, 0.14, 0.22) * smooth(tLat / 0.14);
+            const dropOuter = -1.2 * statureScale * smoother((tLat - 0.12) / 0.95);
+            yy += wTop * (liftTrap + dropOuter);
+          }
+          // Rounded deltoid cap crowning smoothly at the outer shoulder head (s ≈ 0..8 cm, ~top third of upper arm).
+          const sideFrame = x >= 0 ? target.arms.left : target.arms.right;
+          const aCap = armFix[x >= 0 ? 0 : 1]!;
+          const dxJ = x - sideFrame.joint[0], dyJ = yy - sideFrame.joint[1], dzJ = z - sideFrame.joint[2];
+          const sCap = dxJ * sideFrame.axis[0] + dyJ * sideFrame.axis[1] + dzJ * sideFrame.axis[2];
+          const uCap = dxJ * aCap.basis.u[0] + dyJ * aCap.basis.u[1] + dzJ * aCap.basis.u[2];
+          if (sCap > -6 * statureScale && sCap < 16 * statureScale && uCap > 0) {
+            const wCap = gauss(sCap, 0.2 * statureScale, 6.4 * statureScale) * smooth(uCap / (1.2 * statureScale)) * wBelowNeck * (1 - hw);
+            const push = 0.8 * statureScale * wCap;
+            x += aCap.basis.u[0] * push;
+            yy += aCap.basis.u[1] * push;
+          }
+        }
+        // 2. Anterior pectoral & posterior latissimus axillary folds with soft axillary hollow between them.
+        if (axAbs > 0.5 * xAcrom && axAbs < 1.28 * xAcrom && yy > chestY - 1 && yy < shoulderY + 3) {
+          const tAx = (axAbs - 0.65 * xAcrom) / Math.max(3, 0.45 * xAcrom);
+          const wAxX = smooth((tAx + 0.35) / 0.35) * smooth((1.45 - tAx) / 0.45);
+          const yAntLine = chestY + 2.2 * statureScale + tAx * (shoulderY - chestY - 2.6 * statureScale);
+          const yPostLine = chestY + 1.4 * statureScale + tAx * (shoulderY - chestY - 2.4 * statureScale);
+          if (wAxX > 1e-4) {
+            if (z > 1.2) {
+              const wAnt = wAxX * gauss(yy - yAntLine, 0, 2.3 * statureScale) * smooth((z - 1.2) / 2.2);
+              z += 0.55 * statureScale * wAnt;
+            } else if (z < -1.2) {
+              const wPost = wAxX * gauss(yy - yPostLine, 0, 2.4 * statureScale) * smooth((-z - 1.2) / 2.2);
+              z -= 0.6 * statureScale * wPost;
+            }
+            // Soft hollow nestled between anterior and posterior folds at the armpit underside.
+            const yMid = 0.5 * (yAntLine + yPostLine) - 0.6 * statureScale;
+            const wHol = wAxX * gauss(yy - yMid, 0, 2.2 * statureScale) * Math.exp(-0.5 * (z / (3.0 * statureScale)) ** 2);
+            if (wHol > 1e-4) {
+              x -= sgnX * 0.38 * statureScale * wHol;
+              yy += 0.32 * statureScale * wHol;
+            }
+          }
+        }
+        // 3. Softly defined back spine groove and gentle shoulder-blade relief (back control check).
+        if (z < -2 && w < 0.25 && yy > waistY - 2 && yy < shoulderY) {
+          const wBackY = smooth((yy - (waistY - 2)) / 6) * smooth((shoulderY - yy) / 5);
+          const wSpine = wBackY * Math.exp(-0.5 * (axAbs / (2.0 * statureScale)) ** 2);
+          z += 0.28 * statureScale * wSpine;
+          const yScap = chestY + 0.58 * (shoulderY - chestY);
+          const wScap = gauss(axAbs, 6.8 * statureScale, 2.4 * statureScale) * gauss(yy - yScap, 0, 4.2 * statureScale);
+          z -= 0.22 * statureScale * wScap;
+        }
       }
       out[3 * i] = x;
       out[3 * i + 1] = yy;
@@ -758,7 +921,9 @@ export function fitRealisticBody(asset: RealisticBodyAsset, target: FitTarget, o
           const o: V3 = [a.frame.joint[0] + a.frame.axis[0] * p.s, a.frame.joint[1] + a.frame.axis[1] * p.s, a.frame.joint[2] + a.frame.axis[2] * p.s];
           const s = sectionAt(out, idx, o, a.frame.axis, a.basis.u, a.basis.v);
           if (!s) continue;
-          for (let c = 0; c < 3; c++) p.d[c] = p.d[c]! - (s.au * a.basis.u[c]! + s.av * a.basis.v[c]!);
+          const du = s.au - targetArmU(p.s);
+          const dv = s.av - targetArmV(p.s);
+          for (let c = 0; c < 3; c++) p.d[c] = p.d[c]! - (du * a.basis.u[c]! + dv * a.basis.v[c]!);
         }
       }
     }

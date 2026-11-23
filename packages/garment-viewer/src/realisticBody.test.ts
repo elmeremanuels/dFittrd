@@ -193,6 +193,178 @@ describe('body iteration 2 (WO-014 / CUR-27: hip seam, shoulder-to-upper-arm, kn
   });
 });
 
+describe('arms and shoulders iteration 3 (WO-019 / CUR-33: anatomical profile across all 5 bodies)', () => {
+  const fitted = Object.fromEntries(
+    Object.entries(BODIES).map(([name, body]) => {
+      const target = targetOf(body);
+      return [name, { target, fit: fitRealisticBody(asset, target) }];
+    }),
+  ) as Record<keyof typeof BODIES, { target: FitTarget; fit: FitResult }>;
+
+  const armSection = (target: FitTarget, fit: FitResult, frac: number) => {
+    const { joint: j, axis: ax } = target.arms.left;
+    const wr = target.rings.find((r) => r.id === 'wrist')!.centre;
+    const sWrist = (wr[0] - j[0]) * ax[0] + (wr[1] - j[1]) * ax[1] + (wr[2] - j[2]) * ax[2];
+    const s = frac * sWrist;
+    const o: [number, number, number] = [j[0] + ax[0] * s, j[1] + ax[1] * s, j[2] + ax[2] * s];
+    const uLen = Math.hypot(-ax[1], ax[0]);
+    const uOut: [number, number, number] = [-ax[1] / uLen, ax[0] / uLen, 0];
+    const vFront: [number, number, number] = [0, 0, 1];
+    const sec = sectionAt(fit.mesh.positions, fit.mesh.indices, o, ax, uOut, vFront)!;
+    let uMin = Infinity, uMax = -Infinity, zMin = Infinity, zMax = -Infinity;
+    for (const [pu, pz] of sec.q) {
+      if (pu < uMin) uMin = pu;
+      if (pu > uMax) uMax = pu;
+      if (pz < zMin) zMin = pz;
+      if (pz > zMax) zMax = pz;
+    }
+    return {
+      s,
+      sWrist,
+      girth: sec.loopCm,
+      au: sec.au,
+      av: sec.av,
+      backFromAxis: -zMin,
+      frontFromAxis: zMax,
+      backR: sec.av - zMin,
+      frontR: zMax - sec.av,
+      widthU: uMax - uMin,
+      depthZ: zMax - zMin,
+      centre: [o[0] + uOut[0] * sec.au, o[1] + uOut[1] * sec.au, o[2] + sec.av] as [number, number, number],
+    };
+  };
+
+  it('1. shoulder: trapezius slopes smoothly downward from neck base to acromion on all 5 bodies (no flat horizontal shelf)', () => {
+    for (const { target, fit } of Object.values(fitted)) {
+      const P = fit.mesh.positions;
+      const shY = target.rings.find((r) => r.id === 'shoulder')!.centre[1];
+      const neckY = target.rings.find((r) => r.id === 'neck')!.centre[1];
+      const topAt = (x0: number): number => {
+        let best = -Infinity;
+        for (let i = 0; i < asset.meta.bodyVertexCount; i++) {
+          const px = P[3 * i]!, py = P[3 * i + 1]!, pz = P[3 * i + 2]!;
+          if (Math.abs(px - x0) < 1.2 && py > shY - 10 && py < neckY + 5 && Math.abs(pz) < 8) best = Math.max(best, py);
+        }
+        return best;
+      };
+      // Slope from neck base (x = 8 cm) to outer shoulder (x = 18 cm): old fit had flat 1.8..2.6 cm drop; new drops > 2.0 cm with smooth fall.
+      const drop = topAt(8) - topAt(18);
+      expect(drop).toBeGreaterThan(2.0);
+      expect(topAt(10)).toBeGreaterThan(topAt(18));
+    }
+  });
+
+  it('2. armpit: anterior and posterior axillary folds protrude clearly on both sides of the arm root', () => {
+    for (const { target, fit } of Object.values(fitted)) {
+      const P = fit.mesh.positions;
+      const chY = target.rings.find((r) => r.id === 'chest')!.centre[1];
+      const shY = target.rings.find((r) => r.id === 'shoulder')!.centre[1];
+      const xAx = 0.85 * Math.abs(target.arms.left.joint[0]);
+      let maxFront = -Infinity, minBack = Infinity;
+      for (let i = 0; i < asset.meta.bodyVertexCount; i++) {
+        const px = P[3 * i]!, py = P[3 * i + 1]!, pz = P[3 * i + 2]!;
+        if (Math.abs(px - xAx) < 2.0 && py > chY + 1 && py < shY) {
+          if (pz > maxFront) maxFront = pz;
+          if (pz < minBack) minBack = pz;
+        }
+      }
+      expect(maxFront).toBeGreaterThan(3.5);
+      expect(minBack).toBeLessThan(-3.0);
+      expect(maxFront - minBack).toBeGreaterThan(7.5);
+    }
+  });
+
+  it('3. upper arm: posterior triceps is fuller than anterior biceps and upper arm tapers cleanly toward the elbow (old: back/front < 1.0)', () => {
+    for (const { target, fit } of Object.values(fitted)) {
+      const midUpper = armSection(target, fit, 0.36);
+      const elbow = armSection(target, fit, 0.52);
+      // Old fit had backFromAxis / frontFromAxis ~0.92..0.96; triceps fullness pushes it > 1.25.
+      expect(midUpper.backFromAxis / midUpper.frontFromAxis).toBeGreaterThan(1.25);
+      // Tapers meaningfully toward the narrow elbow.
+      expect(midUpper.girth - elbow.girth).toBeGreaterThan(2.8);
+    }
+  });
+
+  it('4. elbow: narrow (narrower than upper arm and upper forearm), subtle bony olecranon point at back, at waist height when hanging', () => {
+    for (const { target, fit } of Object.values(fitted)) {
+      const upper = armSection(target, fit, 0.28);
+      const elbow = armSection(target, fit, 0.52);
+      const forearm = armSection(target, fit, 0.6);
+      const waistY = target.rings.find((r) => r.id === 'waist')!.centre[1];
+      const hangElbowY = target.arms.left.joint[1] - elbow.s;
+      // Old slim & tall had elbow girth LARGER than forearm girth (24.2 > 22.8 and 25.7 > 24.6).
+      expect(elbow.girth).toBeLessThan(upper.girth - 3.0);
+      expect(elbow.girth).toBeLessThan(forearm.girth - 0.7);
+      // Posterior bony olecranon accent at back of elbow.
+      expect(elbow.backR / elbow.frontR).toBeGreaterThan(1.03);
+      // Hanging straight down from shoulder joint, elbow lands right at waist height (within 1.5 cm).
+      expect(Math.abs(hangElbowY - waistY)).toBeLessThan(1.5);
+    }
+  });
+
+  it('5. forearm and wrist: fuller right below the elbow, tapering smoothly to a slim flat wrist (wider thumb-to-pinky than thick)', () => {
+    for (const { target, fit } of Object.values(fitted)) {
+      const elbow = armSection(target, fit, 0.52);
+      const upperFore = armSection(target, fit, 0.6);
+      const distalFore = armSection(target, fit, 0.92);
+      const wrist = armSection(target, fit, 1.0);
+      expect(upperFore.girth).toBeGreaterThan(elbow.girth + 0.7);
+      expect(upperFore.girth - wrist.girth).toBeGreaterThan(7.5);
+      // Flat wrist: thumb-to-pinky width (depthZ in neutral A-pose) vs palm-to-back thickness (widthU). Old: ~1.63..1.67; new: > 1.85.
+      expect(wrist.depthZ / wrist.widthU).toBeGreaterThan(1.85);
+      expect(distalFore.depthZ / distalFore.widthU).toBeGreaterThan(1.35);
+    }
+  });
+
+  it('6. carrying angle: forearm angles 10° to 15° outward relative to the upper arm on all 5 bodies (old: -0.6°..0.0°)', () => {
+    for (const { target, fit } of Object.values(fitted)) {
+      const pUA = armSection(target, fit, 0.28).centre;
+      const pEl = armSection(target, fit, 0.52).centre;
+      const pWr = armSection(target, fit, 1.0).centre;
+      const upperDeg = (Math.atan2(pEl[0] - pUA[0], pUA[1] - pEl[1]) * 180) / Math.PI;
+      const foreDeg = (Math.atan2(pWr[0] - pEl[0], pEl[1] - pWr[1]) * 180) / Math.PI;
+      const carryDeg = foreDeg - upperDeg;
+      expect(carryDeg).toBeGreaterThanOrEqual(10);
+      expect(carryDeg).toBeLessThanOrEqual(15);
+    }
+  });
+
+  it('8. back control: softly visible shoulder blades, central spine groove, and clear waist taper from behind', () => {
+    for (const { target, fit } of Object.values(fitted)) {
+      const P = fit.mesh.positions;
+      const shY = target.rings.find((r) => r.id === 'shoulder')!.centre[1];
+      const chY = target.rings.find((r) => r.id === 'chest')!.centre[1];
+      const waY = target.rings.find((r) => r.id === 'waist')!.centre[1];
+      const hiY = target.rings.find((r) => r.id === 'hip')!.centre[1];
+      const yScap = chY + 0.55 * (shY - chY);
+      const backZ = (x0: number): number => {
+        let minZ = Infinity;
+        for (let i = 0; i < asset.meta.bodyVertexCount; i++) {
+          if (asset.armWeight[i]! > 0.3) continue;
+          const px = P[3 * i]!, py = P[3 * i + 1]!, pz = P[3 * i + 2]!;
+          if (Math.abs(px - x0) < 1.2 && Math.abs(py - yScap) < 2.0 && pz < 0) minZ = Math.min(minZ, pz);
+        }
+        return minZ;
+      };
+      // Shoulder blade at x = 6..8 cm sits noticeably further back (-Z) than the central spine groove at x = 0.
+      const scapRelief = backZ(0) - Math.min(backZ(6), backZ(8));
+      expect(scapRelief).toBeGreaterThan(0.8);
+      // Clear waist taper relative to chest and hip from behind.
+      const widthAt = (y: number): number => {
+        const s = sectionAt(P, fit.mesh.indices, [0, y, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1])!;
+        let lo = Infinity, hi = -Infinity;
+        for (const [u] of s.q) {
+          if (u < lo) lo = u;
+          if (u > hi) hi = u;
+        }
+        return hi - lo;
+      };
+      expect(widthAt(waY)).toBeLessThan(widthAt(chY));
+      expect(widthAt(waY)).toBeLessThan(widthAt(hiY));
+    }
+  });
+});
+
 describe('conformToField (the display step under a garment)', () => {
   const m = buildBody({ family: 'female', ...BODIES.mid });
   const fit = fitRealisticBody(asset, fitTargetOf(m));

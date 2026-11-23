@@ -1,0 +1,369 @@
+{
+  "renders": [
+    {
+      "name": "slim-dress-before-front",
+      "file": "slim-dress-before-front.png",
+      "state": "settled",
+      "body": "procedural",
+      "garment": "drawn",
+      "size": "8",
+      "solveMs": "2353",
+      "girths": "",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 8 · lighting neutral-v2 · skin #d4a88c · head neutral-v3 · shading flat"
+    },
+    {
+      "name": "slim-dress-after-front",
+      "file": "slim-dress-after-front.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "8",
+      "solveMs": "4002",
+      "girths": "chest 80.0 · underbust 68.0 · waist 62.0 · hip 88.0",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 8 · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 80 · waist 62 · hip 88; drawn chest 80.0 · underbust 68.0 · waist 62.0 · hip 88.0"
+    },
+    {
+      "name": "slim-dress-after-34",
+      "file": "slim-dress-after-34.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "8",
+      "solveMs": "4002",
+      "girths": "chest 80.0 · underbust 68.0 · waist 62.0 · hip 88.0",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 8 · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 80 · waist 62 · hip 88; drawn chest 80.0 · underbust 68.0 · waist 62.0 · hip 88.0"
+    },
+    {
+      "name": "slim-dress-after-back",
+      "file": "slim-dress-after-back.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "8",
+      "solveMs": "4002",
+      "girths": "chest 80.0 · underbust 68.0 · waist 62.0 · hip 88.0",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 8 · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 80 · waist 62 · hip 88; drawn chest 80.0 · underbust 68.0 · waist 62.0 · hip 88.0"
+    },
+    {
+      "name": "mid-dress-before-front",
+      "file": "mid-dress-before-front.png",
+      "state": "settled",
+      "body": "procedural",
+      "garment": "drawn",
+      "size": "12",
+      "solveMs": "2820",
+      "girths": "",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 12 · lighting neutral-v2 · skin #d4a88c · head neutral-v3 · shading flat"
+    },
+    {
+      "name": "mid-dress-after-front",
+      "file": "mid-dress-after-front.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "12",
+      "solveMs": "3481",
+      "girths": "chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 12 · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+    },
+    {
+      "name": "mid-dress-after-34",
+      "file": "mid-dress-after-34.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "12",
+      "solveMs": "3481",
+      "girths": "chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 12 · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+    },
+    {
+      "name": "mid-dress-after-back",
+      "file": "mid-dress-after-back.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "12",
+      "solveMs": "3481",
+      "girths": "chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 12 · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+    },
+    {
+      "name": "full-dress-before-front",
+      "file": "full-dress-before-front.png",
+      "state": "settled",
+      "body": "procedural",
+      "garment": "not-drawn",
+      "size": "12",
+      "solveMs": "",
+      "girths": "",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 12 · dress NOT DRAWN: the fit engine blocks size 12 on this body · lighting neutral-v2 · skin #d4a88c · head neutral-v3 · shading flat"
+    },
+    {
+      "name": "full-dress-after-front",
+      "file": "full-dress-after-front.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "not-drawn",
+      "size": "12",
+      "solveMs": "",
+      "girths": "chest 116.0 · underbust 100.0 · waist 98.0 · hip 122.0",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 12 · dress NOT DRAWN: the fit engine blocks size 12 on this body · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 116 · waist 98 · hip 122; drawn chest 116.0 · underbust 100.0 · waist 98.0 · hip 122.0"
+    },
+    {
+      "name": "full-dress-after-34",
+      "file": "full-dress-after-34.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "not-drawn",
+      "size": "12",
+      "solveMs": "",
+      "girths": "chest 116.0 · underbust 100.0 · waist 98.0 · hip 122.0",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 12 · dress NOT DRAWN: the fit engine blocks size 12 on this body · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 116 · waist 98 · hip 122; drawn chest 116.0 · underbust 100.0 · waist 98.0 · hip 122.0"
+    },
+    {
+      "name": "full-dress-after-back",
+      "file": "full-dress-after-back.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "not-drawn",
+      "size": "12",
+      "solveMs": "",
+      "girths": "chest 116.0 · underbust 100.0 · waist 98.0 · hip 122.0",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 12 · dress NOT DRAWN: the fit engine blocks size 12 on this body · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 116 · waist 98 · hip 122; drawn chest 116.0 · underbust 100.0 · waist 98.0 · hip 122.0"
+    },
+    {
+      "name": "tall-dress-before-front",
+      "file": "tall-dress-before-front.png",
+      "state": "settled",
+      "body": "procedural",
+      "garment": "drawn",
+      "size": "12",
+      "solveMs": "3355",
+      "girths": "",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 12 · lighting neutral-v2 · skin #d4a88c · head neutral-v3 · shading flat"
+    },
+    {
+      "name": "tall-dress-after-front",
+      "file": "tall-dress-after-front.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "12",
+      "solveMs": "4065",
+      "girths": "chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 12 · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+    },
+    {
+      "name": "tall-dress-after-34",
+      "file": "tall-dress-after-34.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "12",
+      "solveMs": "4065",
+      "girths": "chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 12 · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+    },
+    {
+      "name": "tall-dress-after-back",
+      "file": "tall-dress-after-back.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "12",
+      "solveMs": "4065",
+      "girths": "chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 12 · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+    },
+    {
+      "name": "petite-dress-before-front",
+      "file": "petite-dress-before-front.png",
+      "state": "settled",
+      "body": "procedural",
+      "garment": "drawn",
+      "size": "8",
+      "solveMs": "3319",
+      "girths": "",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 8 · lighting neutral-v2 · skin #d4a88c · head neutral-v3 · shading flat"
+    },
+    {
+      "name": "petite-dress-after-front",
+      "file": "petite-dress-after-front.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "8",
+      "solveMs": "3590",
+      "girths": "chest 84.0 · underbust 71.3 · waist 66.0 · hip 92.0",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 8 · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 84 · waist 66 · hip 92; drawn chest 84.0 · underbust 71.3 · waist 66.0 · hip 92.0"
+    },
+    {
+      "name": "petite-dress-after-34",
+      "file": "petite-dress-after-34.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "8",
+      "solveMs": "3590",
+      "girths": "chest 84.0 · underbust 71.3 · waist 66.0 · hip 92.0",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 8 · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 84 · waist 66 · hip 92; drawn chest 84.0 · underbust 71.3 · waist 66.0 · hip 92.0"
+    },
+    {
+      "name": "petite-dress-after-back",
+      "file": "petite-dress-after-back.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "8",
+      "solveMs": "3590",
+      "girths": "chest 84.0 · underbust 71.3 · waist 66.0 · hip 92.0",
+      "tag": "ESTIMATE · SYNTHETIC babydoll dress from tape (not a product) · size 8 · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 84 · waist 66 · hip 92; drawn chest 84.0 · underbust 71.3 · waist 66.0 · hip 92.0"
+    },
+    {
+      "name": "slim-aalter-after-front",
+      "file": "slim-aalter-after-front.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "XS",
+      "solveMs": "3703",
+      "girths": "chest 80.0 · underbust 68.0 · waist 62.0 · hip 88.0",
+      "tag": "ESTIMATE · Cotton Poplin Shirt Dress · size XS · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 80 · waist 62 · hip 88; drawn chest 80.0 · underbust 68.0 · waist 62.0 · hip 88.0"
+    },
+    {
+      "name": "slim-aalter-after-34",
+      "file": "slim-aalter-after-34.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "XS",
+      "solveMs": "3703",
+      "girths": "chest 80.0 · underbust 68.0 · waist 62.0 · hip 88.0",
+      "tag": "ESTIMATE · Cotton Poplin Shirt Dress · size XS · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 80 · waist 62 · hip 88; drawn chest 80.0 · underbust 68.0 · waist 62.0 · hip 88.0"
+    },
+    {
+      "name": "slim-aalter-after-back",
+      "file": "slim-aalter-after-back.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "XS",
+      "solveMs": "3703",
+      "girths": "chest 80.0 · underbust 68.0 · waist 62.0 · hip 88.0",
+      "tag": "ESTIMATE · Cotton Poplin Shirt Dress · size XS · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 80 · waist 62 · hip 88; drawn chest 80.0 · underbust 68.0 · waist 62.0 · hip 88.0"
+    },
+    {
+      "name": "mid-aalter-after-front",
+      "file": "mid-aalter-after-front.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "L",
+      "solveMs": "3845",
+      "girths": "chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+      "tag": "ESTIMATE · Cotton Poplin Shirt Dress · size L · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+    },
+    {
+      "name": "mid-aalter-after-34",
+      "file": "mid-aalter-after-34.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "L",
+      "solveMs": "3845",
+      "girths": "chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+      "tag": "ESTIMATE · Cotton Poplin Shirt Dress · size L · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+    },
+    {
+      "name": "mid-aalter-after-back",
+      "file": "mid-aalter-after-back.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "L",
+      "solveMs": "3845",
+      "girths": "chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+      "tag": "ESTIMATE · Cotton Poplin Shirt Dress · size L · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+    },
+    {
+      "name": "tall-aalter-after-front",
+      "file": "tall-aalter-after-front.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "L",
+      "solveMs": "3382",
+      "girths": "chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+      "tag": "ESTIMATE · Cotton Poplin Shirt Dress · size L · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+    },
+    {
+      "name": "tall-aalter-after-34",
+      "file": "tall-aalter-after-34.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "L",
+      "solveMs": "3382",
+      "girths": "chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+      "tag": "ESTIMATE · Cotton Poplin Shirt Dress · size L · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+    },
+    {
+      "name": "tall-aalter-after-back",
+      "file": "tall-aalter-after-back.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "L",
+      "solveMs": "3382",
+      "girths": "chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+      "tag": "ESTIMATE · Cotton Poplin Shirt Dress · size L · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0"
+    },
+    {
+      "name": "petite-aalter-after-front",
+      "file": "petite-aalter-after-front.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "S",
+      "solveMs": "4193",
+      "girths": "chest 84.0 · underbust 71.3 · waist 66.0 · hip 92.0",
+      "tag": "ESTIMATE · Cotton Poplin Shirt Dress · size S · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 84 · waist 66 · hip 92; drawn chest 84.0 · underbust 71.3 · waist 66.0 · hip 92.0"
+    },
+    {
+      "name": "petite-aalter-after-34",
+      "file": "petite-aalter-after-34.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "S",
+      "solveMs": "4193",
+      "girths": "chest 84.0 · underbust 71.3 · waist 66.0 · hip 92.0",
+      "tag": "ESTIMATE · Cotton Poplin Shirt Dress · size S · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 84 · waist 66 · hip 92; drawn chest 84.0 · underbust 71.3 · waist 66.0 · hip 92.0"
+    },
+    {
+      "name": "petite-aalter-after-back",
+      "file": "petite-aalter-after-back.png",
+      "state": "settled",
+      "body": "realistic",
+      "garment": "drawn",
+      "size": "S",
+      "solveMs": "4193",
+      "girths": "chest 84.0 · underbust 71.3 · waist 66.0 · hip 92.0",
+      "tag": "ESTIMATE · Cotton Poplin Shirt Dress · size S · lighting neutral-v2 · skin #d4a88c · body realistic-spike · shading flat · typed chest 84 · waist 66 · hip 92; drawn chest 84.0 · underbust 71.3 · waist 66.0 · hip 92.0"
+    }
+  ],
+  "frames": [
+    {
+      "label": "mid-babydoll-realistic-polar",
+      "raf": {
+        "frames": 14,
+        "meanMs": 217.84285714285684,
+        "p95Ms": 233.29999999999563
+      }
+    }
+  ],
+  "problems": [
+    "slim-dress-before: console Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+}

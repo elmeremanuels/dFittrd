@@ -1,4 +1,4 @@
-/* global process, console */
+/* global process, console, URL */
 /**
  * The sheets of the realistic hair (D28) from the pictures of `realistic-hair-renders.mjs`, composed in headless
  * Chromium (an HTML page of the PNGs, screenshotted), so no image library is needed:

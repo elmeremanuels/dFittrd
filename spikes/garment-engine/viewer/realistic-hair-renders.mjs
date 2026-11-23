@@ -138,7 +138,14 @@ async function shots(context, query, name, views, { zoom = 0 } = {}) {
 async function frameTime(context, query, name) {
   if (match && !name.includes(match)) return;
   const page = await open(context, query, name);
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(300);
+  if (argv.includes('--sync-frames')) {
+    const ms = await page.evaluate(() => window.avatarCheck.frameMs(15, false));
+    const hair = await page.evaluate(() => ({ hair: document.getElementById('stage').dataset.hair ?? null, triangles: Number(document.getElementById('stage').dataset.hairTriangles ?? 0) }));
+    frames.push({ name, query, raf: { frames: 15, meanMs: ms, p95Ms: ms }, mode: 'sync-frameMs', ...hair });
+    await page.close();
+    return;
+  }
   const box = await page.locator('#stage').boundingBox();
   const y = box.y + box.height * 0.55;
   const measuring = page.evaluate(() => window.avatarCheck.rafMs(4000));

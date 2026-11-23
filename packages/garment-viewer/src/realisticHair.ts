@@ -1119,7 +1119,7 @@ interface SculptedLockSpec {
   phase: number;
 }
 
-function structuredHeroRoots(p: SculptedTypeParams, length: HairLength, countScale: number, rand: () => number): SculptedLockSpec[] {
+function structuredHeroRoots(length: HairLength, countScale: number, rand: () => number): SculptedLockSpec[] {
   const specs: SculptedLockSpec[] = [];
   const scale = countScale * (length === 'short' ? 0.92 : 1.0);
   const addLock = (azDeg: number, elDeg: number, layer: number, widthScale: number, thickScale: number, lengthJitter: number, faceFraming = false): void => {
@@ -1482,7 +1482,7 @@ export function buildSculptedHair(input: HairBodyInput, choice: HairChoice, opti
         clumps += guides.length;
       }
     } else {
-      const specs = structuredHeroRoots(p, choice.length, countScale, rand);
+      const specs = structuredHeroRoots(choice.length, countScale, rand);
       const yEnd = cutYOf(choice.length, p, head, input.ringY);
       const guides = specs.map((spec) => growSculptedGuide(space, spec, p, choice.length, yEnd, input.ringY, rand, vol));
       guides.sort((a, b) => b.spec.layer - a.spec.layer);

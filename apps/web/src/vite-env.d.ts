@@ -17,4 +17,6 @@ interface ImportMetaEnv {
   readonly VITE_MALE_SHAPE?: string;
   /** Preview: a women's 3D body at the typed height (`womenHeightFlag`); off unless "1". */
   readonly VITE_WOMEN_3D_HEIGHT?: string;
+  /** Spike: `realistic-spike` draws the women's 3D body as the realistic body (`realisticBodyFlag`); off otherwise. */
+  readonly VITE_VIEWER_BODY?: string;
 }

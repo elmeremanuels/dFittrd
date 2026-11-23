@@ -150,8 +150,22 @@ export interface FacePhotoUi {
   notices: Record<'turned' | 'small' | 'bright' | 'dark' | 'side' | 'cast', string>;
 }
 
+export interface HairStrings {
+  name: string;
+  off: string;
+  on: string;
+  type: string;
+  length: string;
+  colour: string;
+  typeLabel: (type: string) => string;
+  lengthLabel: (length: string) => string;
+  colourLabel: (colour: string) => string;
+  picked: (type: string, length: string, colour: string) => string;
+  cleared: string;
+}
+
 export interface EmbedCatalogue {
-  avatar: { claims: AvatarClaims; ui: AvatarUi; faceSpike: FaceSpikeStrings; facePhoto: { claims: FacePhotoClaims; ui: FacePhotoUi } };
+  avatar: { claims: AvatarClaims; ui: AvatarUi; faceSpike: FaceSpikeStrings; facePhoto: { claims: FacePhotoClaims; ui: FacePhotoUi }; hair: HairStrings };
   /** The screens shown in place of the flow. */
   blocked: Record<BlockedKind, { title: string; text: string }>;
   actions: { tryAgain: string; backToShop: string };
@@ -492,6 +506,19 @@ export const EN: EmbedCatalogue = {
       turned: 'Your head is turned. A picture straight from the front works best.',
       small: 'Your face is small in that picture. A closer one works best.',
       failed: 'That did not work. Try another picture.',
+    },
+    hair: {
+      name: 'My hair',
+      off: 'The avatar has no hair.',
+      on: 'Choose your hair type, length and colour.',
+      type: 'Hair type',
+      length: 'Length',
+      colour: 'Colour',
+      typeLabel: (t) => `Hair type ${t}`,
+      lengthLabel: (l) => `${l.charAt(0).toUpperCase() + l.slice(1)} length`,
+      colourLabel: (c) => c.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+      picked: (type, length, colour) => `${type} hair, ${length} length, ${colour.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}.`,
+      cleared: 'The avatar goes back to no hair. Your choice is deleted from this device.',
     },
   },
   blocked: {

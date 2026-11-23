@@ -677,6 +677,12 @@ function textureOf(image: ImageBitmap): THREE.Texture {
   return t;
 }
 
+/** A body material owned by someone else (`Figure.setSkinOverride`): it takes the figure's skin colour (null: grey). */
+export interface SkinOverride {
+  readonly material: THREE.Material;
+  setSkin(hex: string | null): void;
+}
+
 export class Figure {
   readonly group = new THREE.Group();
   readonly body: THREE.Mesh;
@@ -719,6 +725,10 @@ export class Figure {
 
   setBody(geometry: THREE.BufferGeometry): void {
     this.body.geometry = geometry;
+    if (this.skinOverride) {
+      this.body.material = this.skinOverride.material;
+      return;
+    }
     if (this.skinV2 && this.skinV2Hair !== hasHair(geometry)) {
       // The skin-v2 shader reads the hair cover only when it was built with it: rebuild for the new body.
       this.skin?.dispose();
@@ -775,6 +785,11 @@ export class Figure {
     const colour = parseSkinHex(hex);
     tintHair(this.body.geometry, colour);
     this.skinColour = colour;
+    if (this.skinOverride) {
+      this.skinOverride.setSkin(colour);
+      this.body.material = this.skinOverride.material;
+      return;
+    }
     if (!colour) {
       this.body.material = shaded(this.body.geometry) ? BODY_MATERIAL_SHADED : BODY_MATERIAL;
       this.skin?.dispose();
@@ -795,6 +810,23 @@ export class Figure {
     } else this.skin.color.set(colour);
     if (this.skinV2) updateSkinV2(this.skin, this.skinV2, colour);
     this.body.material = this.skin;
+  }
+
+  /** A body material that takes the place of the skin materials above (null: none, the default). */
+  private skinOverride: SkinOverride | null = null;
+
+  /**
+   * Draw the body with `override` in place of the flat or skin-v2 material (the realistic body's procedural skin,
+   * `realisticSkin.ts`, opt-in), or go back to them (null). The skin colour of the figure is handed over at once and on
+   * every `setSkin`. Without a call nothing changes.
+   */
+  setSkinOverride(override: SkinOverride | null): void {
+    if (override === this.skinOverride) return;
+    this.skinOverride = override;
+    if (override) {
+      override.setSkin(this.skinColour);
+      this.body.material = override.material;
+    } else this.setSkin(this.skinColour);
   }
 
   /** The shopper's face over the v2 head (slice 6 spike), or null. */

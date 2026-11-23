@@ -127,7 +127,9 @@ app.{$DOMAIN} {
 
 	# SPA fallback: /try/<token>, /embed/<token>, /merchant, … all resolve to index.html
 	try_files {path} /index.html
-	file_server
+	file_server {
+		precompressed br gzip
+	}
 }
 
 api.{$DOMAIN} {

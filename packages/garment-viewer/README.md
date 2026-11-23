@@ -173,6 +173,106 @@ of material.json `stretchPct` (0.2 to 1 %; the fifth is assumed). One way only, 
   tee the peak strain doubles. Read the report before setting it on another bundle.
 - `canvas.dataset.solveMs`: the worker's solver time for the size on show (a timing for the demo scripts).
 
+## Realistic body spike (`bodyShape: 'realistic-spike'`, opt-in, off by default)
+
+One week spike of route B in `docs/research/realistic-avatar-route.md` (female family only). Report, numbers and
+pictures: `docs/reports/claude/realistic-body-spike.md`.
+
+```ts
+mountGarmentView(canvas, { ...options, bodyShape: 'realistic-spike' }); // web build: VITE_VIEWER_BODY=realistic-spike
+```
+
+- **What is drawn.** The MakeHuman CC0 base mesh (`assets/realistic-body/female-v1.crb`, 337,732 bytes, 13,524
+  vertices, 27,036 triangles, no texture; provenance and licence quotes in `assets/realistic-body/PROVENANCE.md`),
+  fitted on the device to the drawn body's 12 ring girths (`realisticBody.ts`) and swapped in for the procedural skin
+  when ready. `canvas.dataset.body` says `procedural`, `realistic-loading`, `realistic` or `procedural-fallback`.
+- **What does not change.** The cloth collides with the ring table's field as before (the realistic mesh is a skin
+  only), the fit and the sizes come from the embed's `FitResult`, the bundle is the same, and every default is the
+  procedural body. A male body ignores the option. `look.head` is not used on it: its head is MakeHuman's, untextured,
+  with two grey eye spheres (D27: no face work).
+- **Cost.** One more GET (the asset, the same file for everyone, no credentials, no referrer) and a lazy chunk
+  `realisticBodyLoad` (6.1 KB gzip in the web build, never precached by the service worker); the viewer chunk does
+  not carry it. The fit runs on the main thread once per mount (about 240 to 510 ms in Node on the build container
+  since the review fixes of 21 Nov, before 100 to 250 ms; not measured on a phone).
+- **Girth is the loop** (the closed section round the ring centre, as `meshRingCircumference`); the tape (convex hull)
+  is reported next to it. Which one a typed girth means is open (OI-141). The girths are tested against the typed
+  measurements and `buildBody`'s ring table with an independent slicer (`test/independentSlice.ts`,
+  `test/realisticBodyGirth.test.ts`, with negative controls); every ring centre must lie inside its drawn section, and
+  the fit moves each torso ring's and five arm stations' sections so their area centre is on the ring table's centre
+  line or arm axis (MakeHuman's forearm is bent forward of the line through its joints).
+- **Under a garment it is conformed.** The cloth meets the ring table's ellipses, and the realistic section is outside
+  them in places (bust, seat, shoulder caps, the backs of the calves: 1.5 to 5 cm on the torso). While a garment is
+  drawn, the vertices it covers (`coverZone` of the bundle's rest particles) are pulled inside the field plus 0.1 cm
+  (`conformToField`), so the skin does not show through; `canvas.dataset.body` is then `realistic-conformed`. The
+  pull alone took 1 to 3 % off the girths; by default the covered skin inside the field is then scaled back out
+  (never past it) per height until each loop is the fitted mesh's again: chest within about 1.2 %, underbust, waist
+  and hip within about 0.7 % (the arms are pulled only). It is a display mesh: nothing measures it but the spike
+  pictures' tag (`canvas.dataset.bodyGirths` and `bodyGirthsConformed`). `realisticBodyConform: false` draws it as
+  fitted (comparison pictures only). The real fix is a collider made from the realistic mesh (OI-143). A drape bake
+  draws it unconformed.
+- Bake again: `pnpm --filter @curtain/garment-viewer exec tsx scripts/bake-realistic-body.ts <mpfb2 checkout> --fetch`
+  (deterministic; every source checked by sha256). Measure: `scripts/realistic-body-report.ts`. Pictures:
+  `spikes/garment-engine/viewer/realistic-body-renders.mjs`.
+
+### Procedural skin and studio light (`realisticSkin: true`, with the realistic body only, off by default)
+
+```ts
+mountGarmentView(canvas, { ...options, bodyShape: 'realistic-spike', realisticSkin: true, look: { skinHex: '#a07e56' } });
+```
+
+Report, numbers and pictures: `docs/reports/claude/realistic-body-skin.md`. Nothing here is a third-party texture or a
+download: the skin and the light are made in code, in the realistic body's lazy chunk (`realisticBodyLoad`), so the
+viewer chunk does not carry them. Without the option (and for the procedural body, the male body, a failed load) the
+materials, lights and tone mapping are those of before.
+
+- **Skin** (`realisticSkin.ts`): a physical material patched in `onBeforeCompile` (hooks pinned for r186 by
+  `realisticSkinChunksPresent`). Per-channel wrap lighting (red furthest); translucency at thin parts (ears, fingers,
+  a little at the nose) from the direct lights and from the environment behind; pores and fine creases from a
+  128 × 128 RGBA8 tile generated in code (`skinDetailPixels`, 64 KB, deterministic; height gradient, roughness
+  variation, a soft mottle), projected from three sides in the body's own space (the asset has no UVs) and faded out by
+  mipmaps at full-body distance; redness at the cheeks, nose, ears, elbows, knees and knuckles (a per-vertex mask found
+  on the asset's rest mesh by landmarks, `skinMaskOf`); a slight sheen tinted by the skin. Every per-tone value comes
+  from the one skin-tone value (`realisticSkinCare`; D20): redness is a step in CIE a* (9 on light tones, 5 on deep),
+  wrap and translucency are less red on deep tones, and deep tones get a tighter, weaker white reflection and a sheen
+  in their own colour (a white one greyed them). No tone: the grey mannequin with no redness. MakeHuman's eye spheres
+  are drawn off-white with a dark iris (stylised, D27). `Figure.setSkinOverride` is the hook: the figure hands the
+  override its skin colour on every `setSkin`.
+- **Studio light** (`studioLight.ts`): the rig's lights are switched off and an environment made in code goes in (an
+  inside-out sphere coloured by `studioRadiance`: sky-to-floor gradient, a key softbox, a weak fill, a strip behind;
+  prefiltered by three's `PMREMGenerator`), plus one soft directional key from the rigs' key direction, with the
+  `neutral` rig's true-tone curve. Calibrated so a matt surface facing the camera gets irradiance π (its own colour;
+  `studioFrontIrradiance`, integrated from `studioRadiance`, not read back from the prefiltered map). It lights the
+  garment and the floor too.
+- `canvas.dataset.bodySkin` is `procedural-skin` while it is drawn. Pictures:
+  `spikes/garment-engine/viewer/realistic-body-skin-renders.mjs` and `realistic-body-skin-sheets.mjs`
+  (`skinlook=procedural`, `frame=upper` on `avatar.html`). The embed has no build flag for it yet.
+
+### Realistic hair (`MountOptions.hair`, D28; with the realistic body only)
+
+```ts
+mountGarmentView(canvas, { ...options, bodyShape: 'realistic-spike', hair: { type: '4C', length: 'long', colour: 'black' } });
+```
+
+- **What.** Our own procedural hair (`realisticHair.ts`, pure; `realisticHairDraw.ts`, the three.js meshes), ten types
+  (`1`, `2A` … `4C`) in four lengths (`short`, `chin`, `shoulder`, `long`), colour a palette id (`HAIR_COLOURS`:
+  black, dark-brown, brown, light-brown, auburn, copper, dark-blonde, blonde, platinum, grey) or `#rrggbb`. No hair
+  asset, no photo, no texture file: a cap on the scalp, strand cards (straight; an S-wave for 2A–2C; a card wound
+  round the guide as a ringlet for 3A–3C) grown from the scalp under gravity and pushed out of the head hull and a
+  polar table of the drawn body every step, and for 3C–4C volume shells with a generated coil texture (4A–4C also
+  short coil puffs: a long 4C is an afro). Anisotropic highlight along the fibre (three's physical material with the
+  strand direction as `tangent`), alpha-to-coverage for soft edges, occlusion in the vertex colours.
+- **When.** Only with `bodyShape: 'realistic-spike'` on a female body, once the realistic body is drawn; a lazy chunk
+  (`realisticHairDraw`, about 8 KB gzip, never precached). `canvas.dataset.hair` says `loading`, the choice
+  (`4C-long-#1f1b19`, with ` (simpler)` when it was drawn with fewer clumps) or `failed`. Absent or invalid: bald, as
+  before; `realisticHairOf` is the rule.
+- **Bounds.** At most the body's own 27,036 triangles per combination (`HAIR_TRIANGLE_BUDGET`; over it the clumps are
+  thinned and the build says so); generated textures 171 KB (RGBA8 with coverage-keeping mips); no request at all.
+- **Never sent.** A display value: not stored here, not in any request, and `exportPasses` draws the AI-layer passes
+  without it. The web embed passes `Garment3D`'s `hair` prop through with the realistic body only.
+- Numbers: `scripts/realistic-hair-report.ts`. Pictures and frame times:
+  `spikes/garment-engine/viewer/realistic-hair-renders.mjs` and `realistic-hair-sheets.mjs`. Report:
+  `docs/reports/claude/realistic-hair.md`.
+
 ## Fork of the spike
 
 `src/core/*` (`garment`, `grading`, `waistband`, `tape`, `weld`, `types`) and the device modules

@@ -44,6 +44,7 @@ import type { DeviceCredentials } from '@/api/client';
 import { decryptBytes, encryptBytes, generateFrameKey, type EncryptedBytes } from '@/features/capture/crypto';
 import type { AboutForm } from './aboutYou';
 import { parseAnyLook, parseLook, type SkinLook } from './look';
+import { parseHairPick, type HairPick } from './hair';
 import { isUnits, type Units } from './units';
 
 export const EMBED_DB_NAME = 'curtain-embed';
@@ -83,6 +84,9 @@ const FACE_PREFIX = 'face:';
 const faceKey = (shopId: string): string => `${FACE_PREFIX}${shopId}`;
 /** The non-extractable AES-GCM key of the face rows. Exists only while a face is stored. */
 export const FACE_CRYPTO_KEY = 'facekey';
+
+const HAIR_PREFIX = 'hair:';
+const hairKey = (shopId: string): string => `${HAIR_PREFIX}${shopId}`;
 
 /** The face tile drawn from the shopper's photo (no photo, no landmark) and the colour read with it. */
 export interface StoredFace {
@@ -159,6 +163,12 @@ export interface EmbedStore {
   saveFace(shopId: string, face: StoredFace, persist: boolean): Promise<void>;
   /** The face is switched off or deleted: gone from memory and from this device. */
   clearFace(shopId: string): Promise<void>;
+  /** The hair choice for this shop (D28, OI-170); null: bald. Memory first, stored with the same flag as looks. */
+  loadHair(shopId: string): Promise<HairPick | null>;
+  /** Keeps the hair in memory; with `persistsLooks` and "Remember me" on it is also stored for this shop. */
+  saveHair(shopId: string, pick: HairPick): Promise<void>;
+  /** The hair is switched off: gone from memory and from this device. */
+  clearHair(shopId: string): Promise<void>;
   /** Off → wipe IndexedDB (memory keeps working); on → write what is in memory. */
   setRemember(on: boolean): Promise<void>;
   /** Forget me: wipe memory and IndexedDB. */
@@ -206,6 +216,7 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
   let units: Units | null = null;
   const looks = new Map<string, SkinLook>();
   const faces = new Map<string, { face: StoredFace; persist: boolean }>();
+  const hairs = new Map<string, HairPick>();
   /** Shared by every caller, so a second `init()` (StrictMode, retry) waits for the same read. */
   let loading: Promise<void> | null = null;
   /**
@@ -316,6 +327,16 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
     const left = await safe((d) => d.kv.where('key').startsWith(FACE_PREFIX).count());
     if (left === 0) await safe((d) => d.kv.delete(FACE_CRYPTO_KEY));
   };
+
+  const deleteHairRows = async (shopId: string | null): Promise<void> => {
+    if (shopId === null) await safe((d) => d.kv.where('key').startsWith(HAIR_PREFIX).delete());
+    else await safe((d) => d.kv.delete(hairKey(shopId)));
+  };
+
+  const persistHair = async (shopId: string): Promise<void> => {
+    if (!persistLooks || !remember || !hairs.has(shopId)) return;
+    await safe((d) => d.kv.put({ key: hairKey(shopId), value: hairs.get(shopId) }));
+  };
   /** Writes what memory holds for this shop now (see `persistLook`); deletes the row when it is not to be kept. */
   const persistFace = async (shopId: string): Promise<void> => {
     const entry = faces.get(shopId);
@@ -343,6 +364,7 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
     if (rows.length > 0) await safe((d) => d.kv.bulkPut(rows));
     for (const shopId of Array.from(looks.keys())) await persistLook(shopId);
     for (const shopId of Array.from(faces.keys())) await persistFace(shopId);
+    for (const shopId of Array.from(hairs.keys())) await persistHair(shopId);
   };
 
   return {
@@ -474,6 +496,25 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
       faces.delete(shopId);
       return queued(() => deleteFaceRows(shopId));
     },
+    async loadHair(shopId) {
+      const mem = hairs.get(shopId);
+      if (mem) return mem;
+      if (!persistLooks) return null;
+      if (!remember) return null;
+      await lookQueue;
+      const row = await safe((d) => d.kv.get(hairKey(shopId)));
+      const pick = parseHairPick(row?.value);
+      if (pick && !hairs.has(shopId)) hairs.set(shopId, pick);
+      return hairs.get(shopId) ?? null;
+    },
+    saveHair(shopId, pick) {
+      hairs.set(shopId, pick);
+      return queued(() => persistHair(shopId));
+    },
+    clearHair(shopId) {
+      hairs.delete(shopId);
+      return queued(() => deleteHairRows(shopId));
+    },
     setRemember(on) {
       if (on === remember) return Promise.resolve();
       remember = on;
@@ -495,6 +536,7 @@ export function createEmbedStore(options: EmbedStoreOptions = {}): EmbedStore {
       units = null;
       looks.clear();
       faces.clear();
+      hairs.clear();
       return queued(async () => {
         await safe((d) => d.kv.clear());
         // Forgetting the data keeps the shopper's choice not to be remembered.

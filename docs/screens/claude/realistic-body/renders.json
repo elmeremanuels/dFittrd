@@ -1,0 +1,872 @@
+{
+ "when": "2026-11-21T12:31:12.532Z",
+ "renderer": "headless Chromium, SwiftShader (CPU), 390x844 CSS px at 2x",
+ "hasDress": true,
+ "renders": [
+  {
+   "name": "slim-body-before--front",
+   "query": "mode=head&frame=body&family=female&height=164&bust=80&waist=62&hip=88&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 head neutral-v3 \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "slim-body-before--three-quarter",
+   "query": "mode=head&frame=body&family=female&height=164&bust=80&waist=62&hip=88&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 head neutral-v3 \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "slim-dress-before--front",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=164&bust=80&waist=62&hip=88&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 8 \u00b7 lighting classic \u00b7 skin default grey \u00b7 head neutral-v3 \u00b7 shading flat",
+   "garment": "drawn",
+   "body": "procedural",
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "slim-dress-before--three-quarter",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=164&bust=80&waist=62&hip=88&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 8 \u00b7 lighting classic \u00b7 skin default grey \u00b7 head neutral-v3 \u00b7 shading flat",
+   "garment": "drawn",
+   "body": "procedural",
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "slim-dress-before--back",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=164&bust=80&waist=62&hip=88&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 8 \u00b7 lighting classic \u00b7 skin default grey \u00b7 head neutral-v3 \u00b7 shading flat",
+   "garment": "drawn",
+   "body": "procedural",
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "slim-body-after--front",
+   "query": "mode=head&frame=body&family=female&height=164&bust=80&waist=62&hip=88&body=realistic",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 body realistic-spike \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat \u00b7 typed chest 80 \u00b7 waist 62 \u00b7 hip 88; drawn chest 80.0 \u00b7 underbust 68.0 \u00b7 waist 62.0 \u00b7 hip 88.0",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "slim-body-after--three-quarter",
+   "query": "mode=head&frame=body&family=female&height=164&bust=80&waist=62&hip=88&body=realistic",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 body realistic-spike \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat \u00b7 typed chest 80 \u00b7 waist 62 \u00b7 hip 88; drawn chest 80.0 \u00b7 underbust 68.0 \u00b7 waist 62.0 \u00b7 hip 88.0",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "slim-dress-after--front",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=164&bust=80&waist=62&hip=88&body=realistic",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 8 \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike \u00b7 shading flat \u00b7 typed chest 80 \u00b7 waist 62 \u00b7 hip 88; drawn (conformed) chest 80.2 \u00b7 underbust 68.1 \u00b7 waist 62.1 \u00b7 hip 88.3",
+   "garment": "drawn",
+   "body": "realistic-conformed",
+   "girths": "chest 80.0 \u00b7 underbust 68.0 \u00b7 waist 62.0 \u00b7 hip 88.0",
+   "girthsConformed": "chest 80.2 \u00b7 underbust 68.1 \u00b7 waist 62.1 \u00b7 hip 88.3"
+  },
+  {
+   "name": "slim-dress-after--three-quarter",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=164&bust=80&waist=62&hip=88&body=realistic",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 8 \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike \u00b7 shading flat \u00b7 typed chest 80 \u00b7 waist 62 \u00b7 hip 88; drawn (conformed) chest 80.2 \u00b7 underbust 68.1 \u00b7 waist 62.1 \u00b7 hip 88.3",
+   "garment": "drawn",
+   "body": "realistic-conformed",
+   "girths": "chest 80.0 \u00b7 underbust 68.0 \u00b7 waist 62.0 \u00b7 hip 88.0",
+   "girthsConformed": "chest 80.2 \u00b7 underbust 68.1 \u00b7 waist 62.1 \u00b7 hip 88.3"
+  },
+  {
+   "name": "slim-dress-after--back",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=164&bust=80&waist=62&hip=88&body=realistic",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 8 \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike \u00b7 shading flat \u00b7 typed chest 80 \u00b7 waist 62 \u00b7 hip 88; drawn (conformed) chest 80.2 \u00b7 underbust 68.1 \u00b7 waist 62.1 \u00b7 hip 88.3",
+   "garment": "drawn",
+   "body": "realistic-conformed",
+   "girths": "chest 80.0 \u00b7 underbust 68.0 \u00b7 waist 62.0 \u00b7 hip 88.0",
+   "girthsConformed": "chest 80.2 \u00b7 underbust 68.1 \u00b7 waist 62.1 \u00b7 hip 88.3"
+  },
+  {
+   "name": "slim-dress-after-raw--front",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=164&bust=80&waist=62&hip=88&body=realistic&conform=0",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 8 \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike (not conformed) \u00b7 shading flat \u00b7 typed chest 80 \u00b7 waist 62 \u00b7 hip 88; drawn chest 80.0 \u00b7 underbust 68.0 \u00b7 waist 62.0 \u00b7 hip 88.0",
+   "garment": "drawn",
+   "body": "realistic",
+   "girths": "chest 80.0 \u00b7 underbust 68.0 \u00b7 waist 62.0 \u00b7 hip 88.0",
+   "girthsConformed": ""
+  },
+  {
+   "name": "mid-body-before--front",
+   "query": "mode=head&frame=body&family=female&height=168&bust=92&waist=74&hip=100&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 head neutral-v3 \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "mid-body-before--three-quarter",
+   "query": "mode=head&frame=body&family=female&height=168&bust=92&waist=74&hip=100&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 head neutral-v3 \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "mid-dress-before--front",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 lighting classic \u00b7 skin default grey \u00b7 head neutral-v3 \u00b7 shading flat",
+   "garment": "drawn",
+   "body": "procedural",
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "mid-dress-before--three-quarter",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 lighting classic \u00b7 skin default grey \u00b7 head neutral-v3 \u00b7 shading flat",
+   "garment": "drawn",
+   "body": "procedural",
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "mid-dress-before--back",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 lighting classic \u00b7 skin default grey \u00b7 head neutral-v3 \u00b7 shading flat",
+   "garment": "drawn",
+   "body": "procedural",
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "mid-body-after--front",
+   "query": "mode=head&frame=body&family=female&height=168&bust=92&waist=74&hip=100&body=realistic",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 body realistic-spike \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat \u00b7 typed chest 92 \u00b7 waist 74 \u00b7 hip 100; drawn chest 92.0 \u00b7 underbust 78.0 \u00b7 waist 74.0 \u00b7 hip 100.0",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "mid-body-after--three-quarter",
+   "query": "mode=head&frame=body&family=female&height=168&bust=92&waist=74&hip=100&body=realistic",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 body realistic-spike \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat \u00b7 typed chest 92 \u00b7 waist 74 \u00b7 hip 100; drawn chest 92.0 \u00b7 underbust 78.0 \u00b7 waist 74.0 \u00b7 hip 100.0",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "mid-dress-after--front",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&body=realistic",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike \u00b7 shading flat \u00b7 typed chest 92 \u00b7 waist 74 \u00b7 hip 100; drawn (conformed) chest 92.2 \u00b7 underbust 78.1 \u00b7 waist 74.3 \u00b7 hip 100.7",
+   "garment": "drawn",
+   "body": "realistic-conformed",
+   "girths": "chest 92.0 \u00b7 underbust 78.0 \u00b7 waist 74.0 \u00b7 hip 100.0",
+   "girthsConformed": "chest 92.2 \u00b7 underbust 78.1 \u00b7 waist 74.3 \u00b7 hip 100.7"
+  },
+  {
+   "name": "mid-dress-after--three-quarter",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&body=realistic",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike \u00b7 shading flat \u00b7 typed chest 92 \u00b7 waist 74 \u00b7 hip 100; drawn (conformed) chest 92.2 \u00b7 underbust 78.1 \u00b7 waist 74.3 \u00b7 hip 100.7",
+   "garment": "drawn",
+   "body": "realistic-conformed",
+   "girths": "chest 92.0 \u00b7 underbust 78.0 \u00b7 waist 74.0 \u00b7 hip 100.0",
+   "girthsConformed": "chest 92.2 \u00b7 underbust 78.1 \u00b7 waist 74.3 \u00b7 hip 100.7"
+  },
+  {
+   "name": "mid-dress-after--back",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&body=realistic",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike \u00b7 shading flat \u00b7 typed chest 92 \u00b7 waist 74 \u00b7 hip 100; drawn (conformed) chest 92.2 \u00b7 underbust 78.1 \u00b7 waist 74.3 \u00b7 hip 100.7",
+   "garment": "drawn",
+   "body": "realistic-conformed",
+   "girths": "chest 92.0 \u00b7 underbust 78.0 \u00b7 waist 74.0 \u00b7 hip 100.0",
+   "girthsConformed": "chest 92.2 \u00b7 underbust 78.1 \u00b7 waist 74.3 \u00b7 hip 100.7"
+  },
+  {
+   "name": "mid-dress-after-raw--front",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&body=realistic&conform=0",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike (not conformed) \u00b7 shading flat \u00b7 typed chest 92 \u00b7 waist 74 \u00b7 hip 100; drawn chest 92.0 \u00b7 underbust 78.0 \u00b7 waist 74.0 \u00b7 hip 100.0",
+   "garment": "drawn",
+   "body": "realistic",
+   "girths": "chest 92.0 \u00b7 underbust 78.0 \u00b7 waist 74.0 \u00b7 hip 100.0",
+   "girthsConformed": ""
+  },
+  {
+   "name": "full-body-before--front",
+   "query": "mode=head&frame=body&family=female&height=170&bust=116&waist=98&hip=122&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 head neutral-v3 \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "full-body-before--three-quarter",
+   "query": "mode=head&frame=body&family=female&height=170&bust=116&waist=98&hip=122&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 head neutral-v3 \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "full-dress-before--front",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=170&bust=116&waist=98&hip=122&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 dress NOT DRAWN: the fit engine blocks size 12 on this body \u00b7 lighting classic \u00b7 skin default grey \u00b7 head neutral-v3 \u00b7 shading flat",
+   "garment": "not-drawn",
+   "body": "procedural",
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "full-dress-before--three-quarter",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=170&bust=116&waist=98&hip=122&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 dress NOT DRAWN: the fit engine blocks size 12 on this body \u00b7 lighting classic \u00b7 skin default grey \u00b7 head neutral-v3 \u00b7 shading flat",
+   "garment": "not-drawn",
+   "body": "procedural",
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "full-dress-before--back",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=170&bust=116&waist=98&hip=122&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 dress NOT DRAWN: the fit engine blocks size 12 on this body \u00b7 lighting classic \u00b7 skin default grey \u00b7 head neutral-v3 \u00b7 shading flat",
+   "garment": "not-drawn",
+   "body": "procedural",
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "full-body-after--front",
+   "query": "mode=head&frame=body&family=female&height=170&bust=116&waist=98&hip=122&body=realistic",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 body realistic-spike \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat \u00b7 typed chest 116 \u00b7 waist 98 \u00b7 hip 122; drawn chest 116.0 \u00b7 underbust 100.0 \u00b7 waist 98.0 \u00b7 hip 122.0",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "full-body-after--three-quarter",
+   "query": "mode=head&frame=body&family=female&height=170&bust=116&waist=98&hip=122&body=realistic",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 body realistic-spike \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat \u00b7 typed chest 116 \u00b7 waist 98 \u00b7 hip 122; drawn chest 116.0 \u00b7 underbust 100.0 \u00b7 waist 98.0 \u00b7 hip 122.0",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "full-dress-after--front",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=170&bust=116&waist=98&hip=122&body=realistic",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 dress NOT DRAWN: the fit engine blocks size 12 on this body \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike \u00b7 shading flat \u00b7 typed chest 116 \u00b7 waist 98 \u00b7 hip 122; drawn chest 116.0 \u00b7 underbust 100.0 \u00b7 waist 98.0 \u00b7 hip 122.0",
+   "garment": "not-drawn",
+   "body": "realistic",
+   "girths": "chest 116.0 \u00b7 underbust 100.0 \u00b7 waist 98.0 \u00b7 hip 122.0",
+   "girthsConformed": "chest 115.7 \u00b7 underbust 100.3 \u00b7 waist 98.1 \u00b7 hip 122.6"
+  },
+  {
+   "name": "full-dress-after--three-quarter",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=170&bust=116&waist=98&hip=122&body=realistic",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 dress NOT DRAWN: the fit engine blocks size 12 on this body \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike \u00b7 shading flat \u00b7 typed chest 116 \u00b7 waist 98 \u00b7 hip 122; drawn chest 116.0 \u00b7 underbust 100.0 \u00b7 waist 98.0 \u00b7 hip 122.0",
+   "garment": "not-drawn",
+   "body": "realistic",
+   "girths": "chest 116.0 \u00b7 underbust 100.0 \u00b7 waist 98.0 \u00b7 hip 122.0",
+   "girthsConformed": "chest 115.7 \u00b7 underbust 100.3 \u00b7 waist 98.1 \u00b7 hip 122.6"
+  },
+  {
+   "name": "full-dress-after--back",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=170&bust=116&waist=98&hip=122&body=realistic",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 dress NOT DRAWN: the fit engine blocks size 12 on this body \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike \u00b7 shading flat \u00b7 typed chest 116 \u00b7 waist 98 \u00b7 hip 122; drawn chest 116.0 \u00b7 underbust 100.0 \u00b7 waist 98.0 \u00b7 hip 122.0",
+   "garment": "not-drawn",
+   "body": "realistic",
+   "girths": "chest 116.0 \u00b7 underbust 100.0 \u00b7 waist 98.0 \u00b7 hip 122.0",
+   "girthsConformed": "chest 115.7 \u00b7 underbust 100.3 \u00b7 waist 98.1 \u00b7 hip 122.6"
+  },
+  {
+   "name": "full-dress-after-raw--front",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=170&bust=116&waist=98&hip=122&body=realistic&conform=0",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 dress NOT DRAWN: the fit engine blocks size 12 on this body \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike (not conformed) \u00b7 shading flat \u00b7 typed chest 116 \u00b7 waist 98 \u00b7 hip 122; drawn chest 116.0 \u00b7 underbust 100.0 \u00b7 waist 98.0 \u00b7 hip 122.0",
+   "garment": "not-drawn",
+   "body": "realistic",
+   "girths": "chest 116.0 \u00b7 underbust 100.0 \u00b7 waist 98.0 \u00b7 hip 122.0",
+   "girthsConformed": ""
+  },
+  {
+   "name": "tall-body-before--front",
+   "query": "mode=head&frame=body&family=female&height=182&bust=92&waist=74&hip=100&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 head neutral-v3 \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "tall-body-before--three-quarter",
+   "query": "mode=head&frame=body&family=female&height=182&bust=92&waist=74&hip=100&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 head neutral-v3 \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "tall-dress-before--front",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=182&bust=92&waist=74&hip=100&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 lighting classic \u00b7 skin default grey \u00b7 head neutral-v3 \u00b7 shading flat",
+   "garment": "drawn",
+   "body": "procedural",
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "tall-dress-before--three-quarter",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=182&bust=92&waist=74&hip=100&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 lighting classic \u00b7 skin default grey \u00b7 head neutral-v3 \u00b7 shading flat",
+   "garment": "drawn",
+   "body": "procedural",
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "tall-dress-before--back",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=182&bust=92&waist=74&hip=100&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 lighting classic \u00b7 skin default grey \u00b7 head neutral-v3 \u00b7 shading flat",
+   "garment": "drawn",
+   "body": "procedural",
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "tall-body-after--front",
+   "query": "mode=head&frame=body&family=female&height=182&bust=92&waist=74&hip=100&body=realistic",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 body realistic-spike \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat \u00b7 typed chest 92 \u00b7 waist 74 \u00b7 hip 100; drawn chest 92.0 \u00b7 underbust 78.0 \u00b7 waist 74.0 \u00b7 hip 100.0",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "tall-body-after--three-quarter",
+   "query": "mode=head&frame=body&family=female&height=182&bust=92&waist=74&hip=100&body=realistic",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 body realistic-spike \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat \u00b7 typed chest 92 \u00b7 waist 74 \u00b7 hip 100; drawn chest 92.0 \u00b7 underbust 78.0 \u00b7 waist 74.0 \u00b7 hip 100.0",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "tall-dress-after--front",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=182&bust=92&waist=74&hip=100&body=realistic",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike \u00b7 shading flat \u00b7 typed chest 92 \u00b7 waist 74 \u00b7 hip 100; drawn (conformed) chest 92.0 \u00b7 underbust 78.1 \u00b7 waist 74.0 \u00b7 hip 100.3",
+   "garment": "drawn",
+   "body": "realistic-conformed",
+   "girths": "chest 92.0 \u00b7 underbust 78.0 \u00b7 waist 74.0 \u00b7 hip 100.0",
+   "girthsConformed": "chest 92.0 \u00b7 underbust 78.1 \u00b7 waist 74.0 \u00b7 hip 100.3"
+  },
+  {
+   "name": "tall-dress-after--three-quarter",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=182&bust=92&waist=74&hip=100&body=realistic",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike \u00b7 shading flat \u00b7 typed chest 92 \u00b7 waist 74 \u00b7 hip 100; drawn (conformed) chest 92.0 \u00b7 underbust 78.1 \u00b7 waist 74.0 \u00b7 hip 100.3",
+   "garment": "drawn",
+   "body": "realistic-conformed",
+   "girths": "chest 92.0 \u00b7 underbust 78.0 \u00b7 waist 74.0 \u00b7 hip 100.0",
+   "girthsConformed": "chest 92.0 \u00b7 underbust 78.1 \u00b7 waist 74.0 \u00b7 hip 100.3"
+  },
+  {
+   "name": "tall-dress-after--back",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=182&bust=92&waist=74&hip=100&body=realistic",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike \u00b7 shading flat \u00b7 typed chest 92 \u00b7 waist 74 \u00b7 hip 100; drawn (conformed) chest 92.0 \u00b7 underbust 78.1 \u00b7 waist 74.0 \u00b7 hip 100.3",
+   "garment": "drawn",
+   "body": "realistic-conformed",
+   "girths": "chest 92.0 \u00b7 underbust 78.0 \u00b7 waist 74.0 \u00b7 hip 100.0",
+   "girthsConformed": "chest 92.0 \u00b7 underbust 78.1 \u00b7 waist 74.0 \u00b7 hip 100.3"
+  },
+  {
+   "name": "tall-dress-after-raw--front",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=182&bust=92&waist=74&hip=100&body=realistic&conform=0",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 12 \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike (not conformed) \u00b7 shading flat \u00b7 typed chest 92 \u00b7 waist 74 \u00b7 hip 100; drawn chest 92.0 \u00b7 underbust 78.0 \u00b7 waist 74.0 \u00b7 hip 100.0",
+   "garment": "drawn",
+   "body": "realistic",
+   "girths": "chest 92.0 \u00b7 underbust 78.0 \u00b7 waist 74.0 \u00b7 hip 100.0",
+   "girthsConformed": ""
+  },
+  {
+   "name": "petite-body-before--front",
+   "query": "mode=head&frame=body&family=female&height=152&bust=84&waist=66&hip=92&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 head neutral-v3 \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "petite-body-before--three-quarter",
+   "query": "mode=head&frame=body&family=female&height=152&bust=84&waist=66&hip=92&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 head neutral-v3 \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "petite-dress-before--front",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=152&bust=84&waist=66&hip=92&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 8 \u00b7 lighting classic \u00b7 skin default grey \u00b7 head neutral-v3 \u00b7 shading flat",
+   "garment": "drawn",
+   "body": "procedural",
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "petite-dress-before--three-quarter",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=152&bust=84&waist=66&hip=92&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 8 \u00b7 lighting classic \u00b7 skin default grey \u00b7 head neutral-v3 \u00b7 shading flat",
+   "garment": "drawn",
+   "body": "procedural",
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "petite-dress-before--back",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=152&bust=84&waist=66&hip=92&head=neutral-v3",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 8 \u00b7 lighting classic \u00b7 skin default grey \u00b7 head neutral-v3 \u00b7 shading flat",
+   "garment": "drawn",
+   "body": "procedural",
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "petite-body-after--front",
+   "query": "mode=head&frame=body&family=female&height=152&bust=84&waist=66&hip=92&body=realistic",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 body realistic-spike \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat \u00b7 typed chest 84 \u00b7 waist 66 \u00b7 hip 92; drawn chest 84.0 \u00b7 underbust 71.3 \u00b7 waist 66.0 \u00b7 hip 92.0",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "petite-body-after--three-quarter",
+   "query": "mode=head&frame=body&family=female&height=152&bust=84&waist=66&hip=92&body=realistic",
+   "tag": "ESTIMATE \u00b7 female body alone \u00b7 body realistic-spike \u00b7 lighting classic \u00b7 skin default grey \u00b7 shading flat \u00b7 typed chest 84 \u00b7 waist 66 \u00b7 hip 92; drawn chest 84.0 \u00b7 underbust 71.3 \u00b7 waist 66.0 \u00b7 hip 92.0",
+   "garment": null,
+   "body": null,
+   "girths": null,
+   "girthsConformed": null
+  },
+  {
+   "name": "petite-dress-after--front",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=152&bust=84&waist=66&hip=92&body=realistic",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 8 \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike \u00b7 shading flat \u00b7 typed chest 84 \u00b7 waist 66 \u00b7 hip 92; drawn (conformed) chest 84.3 \u00b7 underbust 71.4 \u00b7 waist 66.2 \u00b7 hip 92.5",
+   "garment": "drawn",
+   "body": "realistic-conformed",
+   "girths": "chest 84.0 \u00b7 underbust 71.3 \u00b7 waist 66.0 \u00b7 hip 92.0",
+   "girthsConformed": "chest 84.3 \u00b7 underbust 71.4 \u00b7 waist 66.2 \u00b7 hip 92.5"
+  },
+  {
+   "name": "petite-dress-after--three-quarter",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=152&bust=84&waist=66&hip=92&body=realistic",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 8 \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike \u00b7 shading flat \u00b7 typed chest 84 \u00b7 waist 66 \u00b7 hip 92; drawn (conformed) chest 84.3 \u00b7 underbust 71.4 \u00b7 waist 66.2 \u00b7 hip 92.5",
+   "garment": "drawn",
+   "body": "realistic-conformed",
+   "girths": "chest 84.0 \u00b7 underbust 71.3 \u00b7 waist 66.0 \u00b7 hip 92.0",
+   "girthsConformed": "chest 84.3 \u00b7 underbust 71.4 \u00b7 waist 66.2 \u00b7 hip 92.5"
+  },
+  {
+   "name": "petite-dress-after--back",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=152&bust=84&waist=66&hip=92&body=realistic",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 8 \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike \u00b7 shading flat \u00b7 typed chest 84 \u00b7 waist 66 \u00b7 hip 92; drawn (conformed) chest 84.3 \u00b7 underbust 71.4 \u00b7 waist 66.2 \u00b7 hip 92.5",
+   "garment": "drawn",
+   "body": "realistic-conformed",
+   "girths": "chest 84.0 \u00b7 underbust 71.3 \u00b7 waist 66.0 \u00b7 hip 92.0",
+   "girthsConformed": "chest 84.3 \u00b7 underbust 71.4 \u00b7 waist 66.2 \u00b7 hip 92.5"
+  },
+  {
+   "name": "petite-dress-after-raw--front",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=152&bust=84&waist=66&hip=92&body=realistic&conform=0",
+   "tag": "ESTIMATE \u00b7 Azure Palm Baby Doll Dress \u00b7 size 8 \u00b7 lighting classic \u00b7 skin default grey \u00b7 body realistic-spike (not conformed) \u00b7 shading flat \u00b7 typed chest 84 \u00b7 waist 66 \u00b7 hip 92; drawn chest 84.0 \u00b7 underbust 71.3 \u00b7 waist 66.0 \u00b7 hip 92.0",
+   "garment": "drawn",
+   "body": "realistic",
+   "girths": "chest 84.0 \u00b7 underbust 71.3 \u00b7 waist 66.0 \u00b7 hip 92.0",
+   "girthsConformed": ""
+  }
+ ],
+ "frames": [
+  {
+   "name": "frames-mid-body-before-1",
+   "query": "mode=head&frame=body&family=female&height=168&bust=92&waist=74&hip=100&head=neutral-v3",
+   "raf": {
+    "frames": 55,
+    "meanMs": 73.63454545454545,
+    "p95Ms": 83.39999999999964
+   },
+   "syncMs": 98.97833333333644
+  },
+  {
+   "name": "frames-mid-dress-before-1",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&head=neutral-v3",
+   "raf": {
+    "frames": 53,
+    "meanMs": 77.66792452830188,
+    "p95Ms": 150.10000000000036
+   },
+   "syncMs": null
+  },
+  {
+   "name": "frames-mid-body-after-1",
+   "query": "mode=head&frame=body&family=female&height=168&bust=92&waist=74&hip=100&body=realistic",
+   "raf": {
+    "frames": 90,
+    "meanMs": 44.99777777777778,
+    "p95Ms": 66.70000000000073
+   },
+   "syncMs": 89.43333333333334
+  },
+  {
+   "name": "frames-mid-dress-after-1",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&body=realistic",
+   "raf": {
+    "frames": 31,
+    "meanMs": 130.6361935483871,
+    "p95Ms": 183.30000000000018
+   },
+   "syncMs": null
+  },
+  {
+   "name": "frames-mid-body-before-2",
+   "query": "mode=head&frame=body&family=female&height=168&bust=92&waist=74&hip=100&head=neutral-v3",
+   "raf": {
+    "frames": 52,
+    "meanMs": 78.52115384615385,
+    "p95Ms": 83.40000000000009
+   },
+   "syncMs": 102.25666666665735
+  },
+  {
+   "name": "frames-mid-dress-before-2",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&head=neutral-v3",
+   "raf": {
+    "frames": 52,
+    "meanMs": 77.5606923076923,
+    "p95Ms": 166.60000000000036
+   },
+   "syncMs": null
+  },
+  {
+   "name": "frames-mid-body-after-2",
+   "query": "mode=head&frame=body&family=female&height=168&bust=92&waist=74&hip=100&body=realistic",
+   "raf": {
+    "frames": 87,
+    "meanMs": 46.35747126436782,
+    "p95Ms": 116.59999999999991
+   },
+   "syncMs": 87.58666666666977
+  },
+  {
+   "name": "frames-mid-dress-after-2",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&body=realistic",
+   "raf": {
+    "frames": 38,
+    "meanMs": 106.576,
+    "p95Ms": 266.6999999999998
+   },
+   "syncMs": null
+  },
+  {
+   "name": "frames-mid-body-before-3",
+   "query": "mode=head&frame=body&family=female&height=168&bust=92&waist=74&hip=100&head=neutral-v3",
+   "raf": {
+    "frames": 48,
+    "meanMs": 84.02499999999999,
+    "p95Ms": 83.40000000000055
+   },
+   "syncMs": 101.29666666666357
+  },
+  {
+   "name": "frames-mid-dress-before-3",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&head=neutral-v3",
+   "raf": {
+    "frames": 53,
+    "meanMs": 76.09788679245281,
+    "p95Ms": 166.79999999999927
+   },
+   "syncMs": null
+  },
+  {
+   "name": "frames-mid-body-after-3",
+   "query": "mode=head&frame=body&family=female&height=168&bust=92&waist=74&hip=100&body=realistic",
+   "raf": {
+    "frames": 89,
+    "meanMs": 46.065168539325846,
+    "p95Ms": 116.69999999999982
+   },
+   "syncMs": 83.63666666666977
+  },
+  {
+   "name": "frames-mid-dress-after-3",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&body=realistic",
+   "raf": {
+    "frames": 42,
+    "meanMs": 97.61428571428571,
+    "p95Ms": 166.70000000000027
+   },
+   "syncMs": null
+  },
+  {
+   "name": "frames-full-body-before-1",
+   "query": "mode=head&frame=body&family=female&height=170&bust=116&waist=98&hip=122&head=neutral-v3",
+   "raf": {
+    "frames": 48,
+    "meanMs": 83.67708333333333,
+    "p95Ms": 83.39999999999964
+   },
+   "syncMs": 103.53333333333333
+  },
+  {
+   "name": "frames-full-dress-before-1",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=170&bust=116&waist=98&hip=122&head=neutral-v3",
+   "raf": {
+    "frames": 58,
+    "meanMs": 70.11213793103447,
+    "p95Ms": 150
+   },
+   "syncMs": null
+  },
+  {
+   "name": "frames-full-body-after-1",
+   "query": "mode=head&frame=body&family=female&height=170&bust=116&waist=98&hip=122&body=realistic",
+   "raf": {
+    "frames": 92,
+    "meanMs": 43.839130434782604,
+    "p95Ms": 100
+   },
+   "syncMs": 103.06000000000931
+  },
+  {
+   "name": "frames-full-dress-after-1",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=170&bust=116&waist=98&hip=122&body=realistic",
+   "raf": {
+    "frames": 89,
+    "meanMs": 45.503370786516854,
+    "p95Ms": 83.30000000000018
+   },
+   "syncMs": null
+  },
+  {
+   "name": "frames-full-body-before-2",
+   "query": "mode=head&frame=body&family=female&height=170&bust=116&waist=98&hip=122&head=neutral-v3",
+   "raf": {
+    "frames": 50,
+    "meanMs": 81.664,
+    "p95Ms": 133.29999999999995
+   },
+   "syncMs": 102.34833333333954
+  },
+  {
+   "name": "frames-full-dress-before-2",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=170&bust=116&waist=98&hip=122&head=neutral-v3",
+   "raf": {
+    "frames": 79,
+    "meanMs": 51.68481012658228,
+    "p95Ms": 83.40000000000009
+   },
+   "syncMs": null
+  },
+  {
+   "name": "frames-full-body-after-2",
+   "query": "mode=head&frame=body&family=female&height=170&bust=116&waist=98&hip=122&body=realistic",
+   "raf": {
+    "frames": 87,
+    "meanMs": 46.166666666666664,
+    "p95Ms": 116.59999999999991
+   },
+   "syncMs": 91.68333333333334
+  },
+  {
+   "name": "frames-full-dress-after-2",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=170&bust=116&waist=98&hip=122&body=realistic",
+   "raf": {
+    "frames": 95,
+    "meanMs": 42.62932631578948,
+    "p95Ms": 66.80000000000018
+   },
+   "syncMs": null
+  },
+  {
+   "name": "frames-full-body-before-3",
+   "query": "mode=head&frame=body&family=female&height=170&bust=116&waist=98&hip=122&head=neutral-v3",
+   "raf": {
+    "frames": 54,
+    "meanMs": 76.23148148148148,
+    "p95Ms": 83.30000000000018
+   },
+   "syncMs": 106.875
+  },
+  {
+   "name": "frames-full-dress-before-3",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=170&bust=116&waist=98&hip=122&head=neutral-v3",
+   "raf": {
+    "frames": 80,
+    "meanMs": 50.83125,
+    "p95Ms": 133.30000000000018
+   },
+   "syncMs": null
+  },
+  {
+   "name": "frames-full-body-after-3",
+   "query": "mode=head&frame=body&family=female&height=170&bust=116&waist=98&hip=122&body=realistic",
+   "raf": {
+    "frames": 87,
+    "meanMs": 46.741379310344826,
+    "p95Ms": 83.39999999999964
+   },
+   "syncMs": 92.31833333332712
+  },
+  {
+   "name": "frames-full-dress-after-3",
+   "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=170&bust=116&waist=98&hip=122&body=realistic",
+   "raf": {
+    "frames": 91,
+    "meanMs": 44.68665934065934,
+    "p95Ms": 66.79999999999973
+   },
+   "syncMs": null
+  }
+ ],
+ "problems": [],
+ "note": "Back pictures (--back) re-rendered in a second run after the quarter-turn drag fix (2026-11-21T12:40:27.831Z); body-before pictures kept from the first round (unchanged procedural body).",
+ "framesRepeat": {
+  "midDressSecondSet": [
+   {
+    "name": "frames-mid-dress-before-1",
+    "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&head=neutral-v3",
+    "raf": {
+     "frames": 53,
+     "meanMs": 75.78301886792454,
+     "p95Ms": 150.10000000000036
+    },
+    "syncMs": null
+   },
+   {
+    "name": "frames-mid-dress-after-1",
+    "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&body=realistic",
+    "raf": {
+     "frames": 41,
+     "meanMs": 99.99512195121952,
+     "p95Ms": 166.60000000000036
+    },
+    "syncMs": null
+   },
+   {
+    "name": "frames-mid-dress-before-2",
+    "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&head=neutral-v3",
+    "raf": {
+     "frames": 57,
+     "meanMs": 71.63508771929824,
+     "p95Ms": 166.60000000000036
+    },
+    "syncMs": null
+   },
+   {
+    "name": "frames-mid-dress-after-2",
+    "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&body=realistic",
+    "raf": {
+     "frames": 33,
+     "meanMs": 124.7400606060606,
+     "p95Ms": 266.6999999999998
+    },
+    "syncMs": null
+   },
+   {
+    "name": "frames-mid-dress-before-3",
+    "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&head=neutral-v3",
+    "raf": {
+     "frames": 54,
+     "meanMs": 76.84733333333332,
+     "p95Ms": 150.10000000000036
+    },
+    "syncMs": null
+   },
+   {
+    "name": "frames-mid-dress-after-3",
+    "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&body=realistic",
+    "raf": {
+     "frames": 31,
+     "meanMs": 131.17741935483872,
+     "p95Ms": 166.69999999999982
+    },
+    "syncMs": null
+   }
+  ],
+  "midDressUnconformed (conform=0 as after)": [
+   {
+    "name": "frames-mid-dress-before-1",
+    "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&head=neutral-v3",
+    "raf": {
+     "frames": 54,
+     "meanMs": 76.85000000000001,
+     "p95Ms": 150.10000000000036
+    },
+    "syncMs": null
+   },
+   {
+    "name": "frames-mid-dress-after-1",
+    "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&body=realistic&conform=0",
+    "raf": {
+     "frames": 56,
+     "meanMs": 72.02142857142857,
+     "p95Ms": 150
+    },
+    "syncMs": null
+   },
+   {
+    "name": "frames-mid-dress-before-2",
+    "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&head=neutral-v3",
+    "raf": {
+     "frames": 52,
+     "meanMs": 77.24230769230768,
+     "p95Ms": 166.69999999999982
+    },
+    "syncMs": null
+   },
+   {
+    "name": "frames-mid-dress-after-2",
+    "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&body=realistic&conform=0",
+    "raf": {
+     "frames": 58,
+     "meanMs": 70.11206896551724,
+     "p95Ms": 150
+    },
+    "syncMs": null
+   },
+   {
+    "name": "frames-mid-dress-before-3",
+    "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&head=neutral-v3",
+    "raf": {
+     "frames": 52,
+     "meanMs": 79.16346153846152,
+     "p95Ms": 166.59999999999945
+    },
+    "syncMs": null
+   },
+   {
+    "name": "frames-mid-dress-after-3",
+    "query": "product=eval%2Fazure-palm-baby-doll-dress&family=female&height=168&bust=92&waist=74&hip=100&body=realistic&conform=0",
+    "raf": {
+     "frames": 57,
+     "meanMs": 72.51052631578948,
+     "p95Ms": 150
+    },
+    "syncMs": null
+   }
+  ]
+ }
+}

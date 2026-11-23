@@ -49,6 +49,31 @@ function versionFile(commit: string): Plugin {
   };
 }
 
+/**
+ * Precompressed copies of .crb files (OI-150): write `.crb.br` (brotli, quality 11) and `.crb.gz`
+ * (gzip, level 9) next to each `.crb` in dist/. Caddy's `file_server { precompressed br gzip }` serves
+ * them when the client accepts the encoding. The realistic body asset is 337 KB uncompressed;
+ * brotli brings it to about 176 KB, gzip to about 251 KB.
+ */
+function precompressCrb(): Plugin {
+  return {
+    name: 'curtain-precompress-crb',
+    async writeBundle(options, bundle) {
+      const { brotliCompressSync, gzipSync, constants } = await import('node:zlib');
+      const { readFileSync, writeFileSync } = await import('node:fs');
+      const { join } = await import('node:path');
+      const outDir = options.dir ?? 'dist';
+      for (const [fileName, chunk] of Object.entries(bundle)) {
+        if (chunk.type !== 'asset' || !fileName.endsWith('.crb')) continue;
+        const filePath = join(outDir, fileName);
+        const source = readFileSync(filePath);
+        writeFileSync(`${filePath}.br`, brotliCompressSync(source, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } }));
+        writeFileSync(`${filePath}.gz`, gzipSync(source, { level: 9 }));
+      }
+    },
+  };
+}
+
 /** The api origin the built app talks to (`VITE_API_URL`), or undefined when it is same-origin. */
 export function apiOriginOf(url: string | undefined): string | undefined {
   const u = url?.trim();
@@ -163,6 +188,7 @@ const config = {
   plugins: [
     react(),
     tailwindcss(),
+    precompressCrb(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png'],
@@ -189,8 +215,10 @@ const config = {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2,webmanifest}'],
         // The 3D viewer (three.js + the drape worker) is loaded only after the shopper asks for it:
         // never precached, cached on first use instead (scripts/check-viewer-chunk.mjs pins this). drapeBakeRead is the
-        // drape bake reader with the meshopt decoder, loaded by the viewer only for a bake bundle.
-        globIgnores: ['**/models/**', '**/garment-viewer-*.js', '**/drape.worker-*.js', '**/drapeBakeRead-*.js'],
+        // drape bake reader with the meshopt decoder, loaded by the viewer only for a bake bundle. realisticBodyLoad is the
+        // realistic body spike's loader (only with VITE_VIEWER_BODY=realistic-spike); its .crb asset is not in globPatterns.
+        // realisticHairDraw is the realistic body's hair (D28), loaded only with a hair choice on that body.
+        globIgnores: ['**/models/**', '**/garment-viewer-*.js', '**/drape.worker-*.js', '**/drapeBakeRead-*.js', '**/realisticBodyLoad-*.js', '**/realisticHairDraw-*.js'],
         // /embed is framed inside merchant pages: never served from the app's SW cache.
         navigateFallbackDenylist: [/^\/v1\//, /^\/merchant/, /^\/embed/],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,

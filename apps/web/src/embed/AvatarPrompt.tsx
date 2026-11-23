@@ -25,6 +25,8 @@ import { luminance } from '@/render/face';
 import { c30Parts } from './avatarCopy';
 import { embedStrings } from './strings';
 import { lookForMonk, MONK_CLASSES, type SkinLook } from './look';
+import { HairPicker } from './HairPicker';
+import type { HairPick } from './hair';
 import { FaceRowLive, SkinPhotoOffer, type FacePhotoState } from './FacePhotoRows';
 
 export interface AvatarPromptProps {
@@ -53,6 +55,8 @@ export interface AvatarPromptProps {
   facePhoto?: FacePhotoState;
   /** Slice 6 spike: the live face row. Absent (every normal build): the row is the `face` "coming soon" line or not drawn. */
   faceOnHead?: FaceOnHeadRow;
+  /** Hair picker (D28, OI-170): shown only with the realistic body. Absent: not drawn. */
+  hair?: { pick: HairPick | null; onPick: (pick: HairPick) => void; onClear: () => void };
 }
 
 /** What the host tells the live face row (slice 6 spike). */
@@ -96,7 +100,7 @@ function Switch({ checked, onChange, labelledBy, describedBy, unavailable = fals
   );
 }
 
-export function AvatarPrompt({ look, onPick, onClear, onMeasurements, onClose, termsUrl, face = false, saved = false, faceOnHead, facePhoto }: AvatarPromptProps): ReactNode {
+export function AvatarPrompt({ look, onPick, onClear, onMeasurements, onClose, termsUrl, face = false, saved = false, faceOnHead, facePhoto, hair }: AvatarPromptProps): ReactNode {
   const { claims: t, ui, faceSpike: fs } = embedStrings().avatar;
   const id = useId();
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -351,6 +355,12 @@ export function AvatarPrompt({ look, onPick, onClear, onMeasurements, onClose, t
               {skinOn && look ? ui.picked(look.monk, total) : cleared ? t.c14 : ''}
             </p>
           </li>
+
+          {hair ? (
+            <li className="card space-y-2 p-3" data-testid="avatar-item-hair">
+              <HairPicker pick={hair.pick} onPick={hair.onPick} onClear={hair.onClear} />
+            </li>
+          ) : null}
 
           <li className="card space-y-2 p-3" data-testid="avatar-item-measurements">
             <span className="block text-base font-semibold">{ui.measurementsName}</span>

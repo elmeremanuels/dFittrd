@@ -6,11 +6,16 @@
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { buildBody } from '@curtain/mannequin';
-import { polarRadius } from '@curtain/mannequin';
-import { fitRealisticBody, fitTargetOf, realisticOutlinesOf, type RealisticArmFrame } from './realisticBody';
-import { decodeRealisticBody } from './realisticBody';
+import { buildBody, polarRadius } from '@curtain/mannequin';
+import { buildPomDressBundle } from '../../../spikes/garment-engine/src/pomDressBundle';
+import { SYNTHETIC_DRESS_ID, SYNTHETIC_DRESS_POM, SYNTHETIC_DRESS_TAPE, SYNTHETIC_TAPE_DRESS } from '../../../spikes/garment-engine/src/pomDressSynthetic';
+import { fitRealisticBody, fitTargetOf, realisticOutlinesOf, decodeRealisticBody, type RealisticArmFrame } from './realisticBody';
 import { bodyField, IDENTITY_MORPH, makeCollider } from './body';
+import { loadBundleFrom, type FetchLike } from './bundle';
+import { samplePolar } from './collide';
+import { openSession, prepareFit, relax, viewerMaterial } from './engine';
+import { fitForBody } from './fitting';
+import { planAvatar } from './mount';
 
 const FILE = new URL('../assets/realistic-body/female-v1.crb', import.meta.url);
 const asset = decodeRealisticBody(readFileSync(FILE));
@@ -128,4 +133,145 @@ describe('realisticOutlinesOf (WO-016 iter 1)', () => {
     expect(realistic(pRealistic, 0)).toBe(false);
     expect(pRealistic[2]).toBeCloseTo(p[2]!, 3);
   });
+
+  it('legs preserve opposite-sign real centroids, torso is null below the crotch, and arms reach the wrist', () => {
+    const m = buildBody({ family: 'female', ...BODIES.mid });
+    const target = fitTargetOf(m);
+    const fit = fitRealisticBody(asset, target);
+    const lArm = m.arms.left, rArm = m.arms.right;
+    const armLen = lArm.upperArmCm + lArm.forearmCm + 0.85 * lArm.handCm;
+    const arms: RealisticArmFrame[] = [
+      { side: 1, joint: [...lArm.joint], axis: [...lArm.axis], u: [...lArm.u], v: [...lArm.v], lengthCm: armLen },
+      { side: -1, joint: [...rArm.joint], axis: [...rArm.axis], u: [...rArm.u], v: [...rArm.v], lengthCm: armLen },
+    ];
+    const outlines = realisticOutlinesOf(fit.mesh, target.statureCm, target.crotchY, arms, undefined, asset.armWeight);
+    // Legs sit on opposite sides of x = 0 (regression for iter-1 zeroed centroids and `side * 0`).
+    const thighY = target.rings.find((r) => r.id === 'thigh')!.centre[1];
+    const leftThigh = outlines.leg(thighY, 1)!;
+    const rightThigh = outlines.leg(thighY, -1)!;
+    expect(leftThigh.cx).toBeGreaterThan(4);
+    expect(rightThigh.cx).toBeLessThan(-4);
+    expect(leftThigh.cx + rightThigh.cx).toBeCloseTo(0, 1);
+    // Torso does not grab a leg below the crotch.
+    expect(outlines.torso(target.crotchY - 4)).toBeNull();
+    // Every torso skin vertex is enclosed by the polar outline (vertex-envelope pass).
+    let maxOver = 0;
+    for (let i = 0; i < fit.mesh.positions.length / 3; i++) {
+      const y = fit.mesh.positions[3 * i + 1]!;
+      if (y < target.crotchY || asset.armWeight[i]! > 0.35) continue;
+      const s = outlines.torso(y);
+      if (!s) continue;
+      const dx = fit.mesh.positions[3 * i]! - s.cx;
+      const dz = fit.mesh.positions[3 * i + 2]! - s.cz;
+      const rTab = polarRadius(s.r, Math.atan2(dz, dx));
+      maxOver = Math.max(maxOver, Math.hypot(dx, dz) - rTab);
+    }
+    expect(maxOver).toBeLessThan(0.05);
+    // Both arms have closed outlines at upper arm, forearm and wrist.
+    const wristS = lArm.upperArmCm + lArm.forearmCm;
+    for (const side of [1, -1] as const) {
+      for (const s of [15, 35, wristS]) {
+        const a = outlines.arm(s, side);
+        expect(a, `arm side=${side} s=${s}`).not.toBeNull();
+        expect(Math.min(...a!.r)).toBeGreaterThan(1);
+      }
+    }
+  });
+
+  it('outlinesPreScaled prevents double-scaling polar outlines on a morphed non-typed body', () => {
+    const plan0 = planAvatar({ category: 'dress' }, { bust: 116, waist: 98, hip: 122 });
+    const target = fitTargetOf(plan0.drawn, plan0.avatar.rings, plan0.drawnScaleAt);
+    const fit = fitRealisticBody(asset, target);
+    const lArm = plan0.drawn.arms.left, rArm = plan0.drawn.arms.right;
+    const armLen = lArm.upperArmCm + lArm.forearmCm + 0.85 * lArm.handCm;
+    const outlines = realisticOutlinesOf(
+      fit.mesh,
+      target.statureCm,
+      target.crotchY,
+      [
+        { side: 1, joint: [...lArm.joint], axis: [...lArm.axis], u: [...lArm.u], v: [...lArm.v], lengthCm: armLen },
+        { side: -1, joint: [...rArm.joint], axis: [...rArm.axis], u: [...rArm.u], v: [...rArm.v], lengthCm: armLen },
+      ],
+      undefined,
+      asset.armWeight,
+    );
+    const chestY = target.rings.find((r) => r.id === 'chest')!.centre[1];
+    const planScaled = planAvatar({ category: 'dress' }, { bust: 116, waist: 98, hip: 122 }, undefined, undefined, outlines, true);
+    const raw = outlines.torso(chestY)!;
+    const e = new Float32Array(4);
+    expect(samplePolar(planScaled.field.torso.polar!, chestY, raw.cx + 10, raw.cz, e)).toBe(true);
+    // Must match raw outline radius (not multiplied a second time by ~1.26x morph scale).
+    expect(e[2]).toBeCloseTo(polarRadius(raw.r, 0), 1);
+  });
+
+  it('device drape of the synthetic babydoll dress on the realistic polar collider has no skin poke-through without conformToField (and keeps fit size unchanged)', async () => {
+    const pom = buildPomDressBundle(SYNTHETIC_DRESS_ID, SYNTHETIC_TAPE_DRESS, SYNTHETIC_DRESS_POM, SYNTHETIC_DRESS_TAPE.provenance);
+    const serve: FetchLike = async (url) => {
+      const data = pom.files[url.split('/').pop()!]!;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => JSON.parse(data as string) as unknown,
+        arrayBuffer: async () => {
+          const u = data as Uint8Array;
+          return u.buffer.slice(u.byteOffset, u.byteOffset + u.byteLength) as ArrayBuffer;
+        },
+      };
+    };
+    const bundle = await loadBundleFrom(serve, '/b', SYNTHETIC_DRESS_ID, { withPayload: false });
+    const plan0 = planAvatar(bundle.anchors, BODIES.mid);
+    const target = fitTargetOf(plan0.drawn, plan0.avatar.rings, plan0.drawnScaleAt);
+    const fitBody = fitRealisticBody(asset, target);
+    const lArm = plan0.drawn.arms.left, rArm = plan0.drawn.arms.right;
+    const armLen = lArm.upperArmCm + lArm.forearmCm + 0.85 * lArm.handCm;
+    const s0 = plan0.field.armFrames[0]!.s0;
+    const outlines = realisticOutlinesOf(
+      fitBody.mesh,
+      target.statureCm,
+      target.crotchY,
+      [
+        { side: 1, joint: [...lArm.joint], axis: [...lArm.axis], u: [...lArm.u], v: [...lArm.v], lengthCm: armLen, s0 },
+        { side: -1, joint: [...rArm.joint], axis: [...rArm.axis], u: [...rArm.u], v: [...rArm.v], lengthCm: armLen, s0 },
+      ],
+      undefined,
+      asset.armWeight,
+    );
+    const planPolar = planAvatar(bundle.anchors, BODIES.mid, undefined, undefined, outlines, true);
+    const fitEllipse = fitForBody(SYNTHETIC_TAPE_DRESS, plan0.avatar.measurements);
+    const fitPolar = fitForBody(SYNTHETIC_TAPE_DRESS, planPolar.avatar.measurements);
+    expect(fitPolar.recommendedSize).toBe(fitEllipse.recommendedSize);
+    expect(fitPolar.recommendedSize).toBe('12');
+
+    // Every draped cloth particle on the polar collider clears the realistic torso outline cleanly.
+    const sessP = openSession(planPolar.m, bundle, SYNTHETIC_TAPE_DRESS);
+    const instP = prepareFit(sessP, planPolar.avatar, planPolar.field, fitPolar, '12', viewerMaterial('product', bundle.material));
+    const posP = relax(instP);
+    let maxInPolar = 0;
+    for (let i = 0; i < posP.length / 3; i++) {
+      const yWorld = posP[3 * i + 1]! + planPolar.garmentLiftCm;
+      const sec = outlines.torso(yWorld);
+      if (!sec) continue;
+      const dx = posP[3 * i]! - sec.cx;
+      const dz = posP[3 * i + 2]! - sec.cz;
+      const rSkin = polarRadius(sec.r, Math.atan2(dz, dx));
+      maxInPolar = Math.max(maxInPolar, rSkin - Math.hypot(dx, dz));
+    }
+    expect(maxInPolar).toBeLessThanOrEqual(0.2);
+
+    // Negative control: ellipse collider without conformToField lets the cloth sit > 0.5 cm inside the realistic body.
+    const sessE = openSession(plan0.m, bundle, SYNTHETIC_TAPE_DRESS);
+    const instE = prepareFit(sessE, plan0.avatar, plan0.field, fitEllipse, '12', viewerMaterial('product', bundle.material));
+    const posE = relax(instE);
+    let maxInEllipse = 0;
+    for (let i = 0; i < posE.length / 3; i++) {
+      const yWorld = posE[3 * i + 1]! + plan0.garmentLiftCm;
+      const sec = outlines.torso(yWorld);
+      if (!sec) continue;
+      const dx = posE[3 * i]! - sec.cx;
+      const dz = posE[3 * i + 2]! - sec.cz;
+      const rSkin = polarRadius(sec.r, Math.atan2(dz, dx));
+      maxInEllipse = Math.max(maxInEllipse, rSkin - Math.hypot(dx, dz));
+    }
+    expect(maxInEllipse).toBeGreaterThan(0.5);
+  }, 120_000);
 });

@@ -121,7 +121,7 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
   // ---- products ------------------------------------------------------------------------------
   app.put(
     '/v1/merchant/products/:externalId',
-    { schema: { params: MerchantProductParamsSchema, querystring: MerchantProductUpsertQuerySchema, body: MerchantProductUpsertRequestSchema, response: { 200: MerchantProductUpsertResponseSchema } }, preHandler: requireMerchant },
+    { schema: { params: MerchantProductParamsSchema, querystring: MerchantProductUpsertQuerySchema, body: MerchantProductUpsertRequestSchema, response: { 200: MerchantProductUpsertResponseSchema } }, preValidation: requireMerchant },
     async (req) => {
       if (req.body.id !== req.params.externalId) throw badRequest('id_mismatch', 'payload.id must equal :externalId');
       // The tape is garment data from the merchant's form (rule 4: no fit is computed here). Its rows must name chart sizes.
@@ -147,13 +147,13 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
 
   app.post(
     '/v1/merchant/products/validate',
-    { schema: { body: MerchantProductValidateRequestSchema, response: { 200: MerchantProductValidateResponseSchema } }, preHandler: requireMerchant },
+    { schema: { body: MerchantProductValidateRequestSchema, response: { 200: MerchantProductValidateResponseSchema } }, preValidation: requireMerchant },
     async (req) => validateGarmentDraft(req.body.payload),
   );
 
   app.delete(
     '/v1/merchant/products/:externalId',
-    { schema: { params: MerchantProductParamsSchema, response: { 200: MerchantProductDeleteResponseSchema } }, preHandler: requireMerchant },
+    { schema: { params: MerchantProductParamsSchema, response: { 200: MerchantProductDeleteResponseSchema } }, preValidation: requireMerchant },
     async (req) => {
       const ok = await archiveProduct(db, req.shop!.id, req.params.externalId);
       if (!ok) throw notFound('product');
@@ -161,7 +161,7 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
     },
   );
 
-  app.get('/v1/merchant/products', { schema: { querystring: MerchantProductsQuerySchema, response: { 200: MerchantProductsResponseSchema } }, preHandler: requireMerchant }, async (req) => {
+  app.get('/v1/merchant/products', { schema: { querystring: MerchantProductsQuerySchema, response: { 200: MerchantProductsResponseSchema } }, preValidation: requireMerchant }, async (req) => {
     // Men's gate badge per product (services/readiness.ts); nothing is added while the gate is off.
     return listMerchantProducts(db, req.shop!.id, req.query, (row) => merchantMenGate({ db, env }, row, req.shop!));
   });
@@ -169,7 +169,7 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
   // ---- size charts ------------------------------------------------------------------------------
   // Standard body charts (AU/UK/EU/US, cited sources) and garment templates for the chart builder.
   // Static and platform-neutral; the Shopify writes live in apps/api/src/shopify/charts.ts.
-  app.get('/v1/merchant/charts/templates', { schema: { response: { 200: ChartTemplatesResponseSchema } }, preHandler: requireMerchant }, async () => chartTemplatesDto());
+  app.get('/v1/merchant/charts/templates', { schema: { response: { 200: ChartTemplatesResponseSchema } }, preValidation: requireMerchant }, async () => chartTemplatesDto());
 
   /**
    * WooCommerce (Stripe) only: a Checkout for the Curtain plan from the console, for a shop without
@@ -178,7 +178,7 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
    */
   app.post(
     '/v1/merchant/billing/stripe/checkout',
-    { schema: { response: { 200: z.object({ checkoutUrl: z.string(), trialDays: z.number().int().nonnegative() }) } }, preHandler: requireMerchant, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    { schema: { response: { 200: z.object({ checkoutUrl: z.string(), trialDays: z.number().int().nonnegative() }) } }, preValidation: requireMerchant, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (req) => {
       const shop = req.shop!;
       if (shop.platform !== 'woocommerce') throw badRequest('not_woocommerce', 'Shopify shops subscribe from the Curtain page in the Shopify admin');
@@ -192,7 +192,7 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
   );
 
   // ---- usage / ledger / analytics ---------------------------------------------------------------
-  app.get('/v1/merchant/usage', { schema: { querystring: DateRangeQuerySchema, response: { 200: UsageResponseSchema } }, preHandler: requireMerchant }, async (req) => {
+  app.get('/v1/merchant/usage', { schema: { querystring: DateRangeQuerySchema, response: { 200: UsageResponseSchema } }, preValidation: requireMerchant }, async (req) => {
     const shop = req.shop!;
     const days = await usageDays(db, shop.id, req.query.from, req.query.to);
     const totals = days.reduce(
@@ -229,7 +229,7 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
 
   app.get(
     '/v1/merchant/ledger',
-    { schema: { querystring: z.object({ cursor: z.string().optional(), limit: z.coerce.number().int().min(1).max(200).default(50) }), response: { 200: MerchantLedgerResponseSchema } }, preHandler: requireMerchant },
+    { schema: { querystring: z.object({ cursor: z.string().optional(), limit: z.coerce.number().int().min(1).max(200).default(50) }), response: { 200: MerchantLedgerResponseSchema } }, preValidation: requireMerchant },
     async (req) => {
       const c = decodeCursor(req.query.cursor);
       const base = and(eq(ledgerEntries.shopId, req.shop!.id), eq(ledgerEntries.kind, 'hero_render'));
@@ -262,7 +262,7 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
     return period;
   };
 
-  app.get('/v1/merchant/analytics/periods', { schema: { response: { 200: AnalyticsPeriodsResponseSchema } }, preHandler: requireMerchant }, async (req) => {
+  app.get('/v1/merchant/analytics/periods', { schema: { response: { 200: AnalyticsPeriodsResponseSchema } }, preValidation: requireMerchant }, async (req) => {
     const t = now();
     // The next month to become available (during the grace day this is the month that just ended).
     const openPeriod = addMonths(lastClosedMonth(t), 1);
@@ -275,33 +275,33 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
     };
   });
 
-  app.get('/v1/merchant/analytics/swipes', { schema: { querystring: AnalyticsPeriodQuerySchema, response: { 200: AnalyticsSwipesResponseSchema } }, preHandler: requireMerchant }, async (req) => {
+  app.get('/v1/merchant/analytics/swipes', { schema: { querystring: AnalyticsPeriodQuerySchema, response: { 200: AnalyticsSwipesResponseSchema } }, preValidation: requireMerchant }, async (req) => {
     return swipeAnalytics(db, req.shop!.id, closedPeriod(req.query.period), env.K_ANON);
   });
 
-  app.get('/v1/merchant/analytics/abandoned', { schema: { querystring: AnalyticsPeriodQuerySchema, response: { 200: AnalyticsAbandonedResponseSchema } }, preHandler: requireMerchant }, async (req) => {
+  app.get('/v1/merchant/analytics/abandoned', { schema: { querystring: AnalyticsPeriodQuerySchema, response: { 200: AnalyticsAbandonedResponseSchema } }, preValidation: requireMerchant }, async (req) => {
     return abandonedAnalytics(db, req.shop!.id, closedPeriod(req.query.period), env.K_ANON);
   });
 
   // Billing integrity (carry-over #7): today's cap/spike flags and the recorded billing anomalies.
   app.get(
     '/v1/merchant/usage/anomalies',
-    { schema: { querystring: DateRangeQuerySchema, response: { 200: BillingAnomaliesResponseSchema } }, preHandler: requireMerchant },
+    { schema: { querystring: DateRangeQuerySchema, response: { 200: BillingAnomaliesResponseSchema } }, preValidation: requireMerchant },
     async (req) => billingAnomalyReport(db, env, req.shop!, req.query.from, req.query.to, now()),
   );
 
   // Sizes recommended in standalone sessions (carry-over #18), k floor on distinct shoppers.
   app.get(
     '/v1/merchant/analytics/fit-sizes',
-    { schema: { querystring: AnalyticsPeriodQuerySchema, response: { 200: AnalyticsFitSizesResponseSchema } }, preHandler: requireMerchant },
+    { schema: { querystring: AnalyticsPeriodQuerySchema, response: { 200: AnalyticsFitSizesResponseSchema } }, preValidation: requireMerchant },
     async (req) => fitSizeAnalytics(db, req.shop!.id, closedPeriod(req.query.period), env.K_ANON),
   );
 
   // ---- first-run checklist (services/setup.ts, @curtain/schema merchantSetup.ts) ----------------
   // Five steps that tick themselves from the shop's own rows; steps 4 and 5 can be ticked by hand.
   // The Shopify admin reads the same list through GET /shopify/charts/onboarding.
-  app.get('/v1/merchant/setup', { schema: { response: { 200: SetupResponseSchema } }, preHandler: requireMerchant }, async (req) => merchantSetup({ db, shop: req.shop!, now: now() }));
-  app.put('/v1/merchant/setup', { schema: { body: SetupUpdateRequestSchema, response: { 200: SetupResponseSchema } }, preHandler: requireMerchant }, async (req) => {
+  app.get('/v1/merchant/setup', { schema: { response: { 200: SetupResponseSchema } }, preValidation: requireMerchant }, async (req) => merchantSetup({ db, shop: req.shop!, now: now() }));
+  app.put('/v1/merchant/setup', { schema: { body: SetupUpdateRequestSchema, response: { 200: SetupResponseSchema } }, preValidation: requireMerchant }, async (req) => {
     const shop = await updateSettings(db, req.shop!.id, {
       ...(req.body.buttonConfirmed !== undefined ? { setupButtonConfirmed: req.body.buttonConfirmed } : {}),
       ...(req.body.phoneConfirmed !== undefined ? { setupPhoneConfirmed: req.body.phoneConfirmed } : {}),
@@ -312,13 +312,13 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
   // ---- settings --------------------------------------------------------------------------------
   // The merchant's own choices (D24), in services/settings.ts; the Shopify admin reads and writes the
   // same values through GET/PUT /shopify/settings.
-  app.get('/v1/merchant/settings', { schema: { response: { 200: MerchantSettingsResponseSchema } }, preHandler: requireMerchant }, async (req) => merchantSettings(req.shop!));
-  app.put('/v1/merchant/settings', { schema: { body: MerchantSettingsUpdateRequestSchema, response: { 200: MerchantSettingsResponseSchema } }, preHandler: requireMerchant }, async (req) =>
+  app.get('/v1/merchant/settings', { schema: { response: { 200: MerchantSettingsResponseSchema } }, preValidation: requireMerchant }, async (req) => merchantSettings(req.shop!));
+  app.put('/v1/merchant/settings', { schema: { body: MerchantSettingsUpdateRequestSchema, response: { 200: MerchantSettingsResponseSchema } }, preValidation: requireMerchant }, async (req) =>
     updateMerchantSettings({ db, shop: req.shop!, body: req.body, now: now() }),
   );
 
   // ---- keys ------------------------------------------------------------------------------------
-  app.post('/v1/merchant/keys/rotate', { schema: { response: { 200: MerchantKeyRotateResponseSchema } }, preHandler: requireMerchant }, async (req) => {
+  app.post('/v1/merchant/keys/rotate', { schema: { response: { 200: MerchantKeyRotateResponseSchema } }, preValidation: requireMerchant }, async (req) => {
     refuseConsoleSession(req);
     const { keys, previousKeyValidUntil } = await issueMerchantKeys(db, env, req.shop!);
     return { apiKey: keys.apiKey, publicKeyPrefix: keys.publicKeyPrefix, rotatedAt: now().toISOString(), previousKeyValidUntil: previousKeyValidUntil.toISOString() };
@@ -328,7 +328,7 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
   // Asked by the shop's own plugin or admin with the credentials it already has. Per shop at most
   // CONSOLE_LINK_MAX_PER_WINDOW links in ten minutes (services/consoleAccess.ts). The answer holds
   // the token: it is never logged (the request log has no bodies) and must not be cached.
-  app.post('/v1/merchant/console-link', { schema: { response: { 200: ConsoleLinkResponseSchema } }, preHandler: requireMerchant }, async (req, reply) => {
+  app.post('/v1/merchant/console-link', { schema: { response: { 200: ConsoleLinkResponseSchema } }, preValidation: requireMerchant }, async (req, reply) => {
     refuseConsoleSession(req);
     void reply.header('cache-control', 'no-store');
     return mintConsoleLink({ db, shop: req.shop!, appUrl: env.PUBLIC_APP_URL, now: now() });
@@ -343,13 +343,13 @@ export const merchantRoutes: FastifyPluginAsyncZod = async (app) => {
     },
   );
   // "Sign out" in the console.
-  app.delete('/v1/merchant/console-session', { schema: { response: { 200: z.object({ signedOut: z.literal(true) }) } }, preHandler: requireMerchant }, async (req) => {
+  app.delete('/v1/merchant/console-session', { schema: { response: { 200: z.object({ signedOut: z.literal(true) }) } }, preValidation: requireMerchant }, async (req) => {
     if (req.merchantAuth === 'console') await revokeConsoleSession(db, bearerToken(req)!, now());
     return { signedOut: true as const };
   });
 
   // ---- WooCommerce: hello + Connect round-trip (D6) ----------------------------------------------
-  app.put('/v1/merchant/shops/self', { schema: { body: ShopSelfRequestSchema, response: { 200: ShopSelfResponseSchema } }, preHandler: requireMerchant }, async (req) => {
+  app.put('/v1/merchant/shops/self', { schema: { body: ShopSelfRequestSchema, response: { 200: ShopSelfResponseSchema } }, preValidation: requireMerchant }, async (req) => {
     const b = req.body;
     const shop = await updateSettings(
       db,

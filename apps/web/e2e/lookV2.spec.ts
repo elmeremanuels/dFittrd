@@ -123,7 +123,14 @@ for (const product of PRODUCTS) {
       await expect(dialog).toBeVisible();
       const sw = dialog.getByRole('switch', { name: 'Match my skin tone' });
       if ((await sw.getAttribute('aria-checked')) !== 'true') await sw.click();
-      await dialog.getByTestId(`skin-swatch-${monk}`).check({ force: true });
+      // Skin slider (CUR-28): set the value directly; (monk-1)/9 is the slider position.
+      await dialog.getByTestId('skin-slider-input').evaluate((el, m) => {
+        const input = el as HTMLInputElement;
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+        setter.call(input, String((m - 1) / 9));
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }, monk);
       await dialog.getByTestId('avatar-prompt-done').click();
       await expect(dialog).toHaveCount(0);
       await expect(canvas).toHaveAttribute('data-state', 'settled');

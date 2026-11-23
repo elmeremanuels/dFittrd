@@ -427,7 +427,14 @@ async function skinToneStep(page, frame, t, log, shot) {
     log(`3D ${t.name}: pick skin tone 6 in the avatar prompt`);
     await inPrompt(async () => {
       await frame.getByTestId('avatar-skin-switch').click();
-      await frame.getByTestId('skin-swatch-6').check({ force: true });
+      // Skin slider (CUR-28): set monk 6 (slider = 5/9).
+      await frame.getByTestId('skin-slider-input').evaluate((el) => {
+        const input = el;
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        setter.call(input, String(5 / 9));
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
     });
     if ((await skin2d()) !== '#A07E56') throw new Error(`3D ${t.name}: the 2D figure did not take the picked colour (${await skin2d()})`);
     const toned = await picture(before);

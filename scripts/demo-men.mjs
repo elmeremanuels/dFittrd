@@ -288,10 +288,18 @@ try {
           const sw = frame.getByTestId('avatar-skin-switch');
           await sw.waitFor();
           if ((await sw.getAttribute('aria-checked')) !== 'true') await sw.click();
-          await frame.getByTestId('skin-swatches').waitFor();
-          const swatch = frame.getByTestId(`skin-swatch-${n}`);
-          await swatch.check({ force: true });
-          if (!(await swatch.isChecked())) throw new Error(`tee, body ${body.name}: Monk ${n} did not stay picked`);
+          await frame.getByTestId('skin-slider').waitFor();
+          const slider = frame.getByTestId('skin-slider-input');
+          // Skin slider (CUR-28): set the slider to the monk's position.
+          await slider.evaluate((el, m) => {
+            const input = el;
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            setter.call(input, String((m - 1) / 9));
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          }, n);
+          const value = Number(await slider.evaluate((el) => el.value));
+          if (Math.abs(value - (n - 1) / 9) > 0.001) throw new Error(`tee, body ${body.name}: Monk ${n} did not stay picked`);
           await frame.getByTestId('avatar-prompt-done').click();
           await frame.getByTestId('avatar-prompt').waitFor({ state: 'detached' });
           await mirror.evaluate((el) => el.scrollIntoView({ block: 'start' }));

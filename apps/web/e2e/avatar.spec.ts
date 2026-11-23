@@ -161,15 +161,20 @@ test('avatar prompt: picking a skin colour makes no request, at 360 px, and the 
   await expect(dialog.getByTestId('avatar-c30')).toHaveCount(0);
   await expect(dialog.getByText(/saved on this device/)).toHaveCount(0);
   await expect(dialog.getByTestId('avatar-swatch-credit')).toHaveText('Colours: Monk Skin Tone Scale by Dr. Ellis Monk, CC BY 4.0.');
-  // Every swatch is a finger-sized target.
-  for (const b of await dialog.locator('[data-testid="skin-swatches"] label').all()) {
-    const r = (await b.boundingBox())!;
-    expect(r.width).toBeGreaterThanOrEqual(44);
-    expect(r.height).toBeGreaterThanOrEqual(44);
-  }
+  // The skin slider (CUR-28): track is at least the width of a finger (≥44 px), and the thumb is at least 24 px tall.
+  const track = (await dialog.getByTestId('skin-slider-track').boundingBox())!;
+  expect(track.width).toBeGreaterThanOrEqual(44);
+  expect(track.height).toBeGreaterThanOrEqual(12);
   await shot(page, 'picker-open-nothing-picked.png');
 
-  await dialog.getByRole('radio', { name: 'Colour 6 of 10' }).check({ force: true });
+  // Skin slider (CUR-28): set monk 6 (slider = 5/9).
+  await dialog.getByTestId('skin-slider-input').evaluate((el) => {
+    const input = el as HTMLInputElement;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+    setter.call(input, String(5 / 9));
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   expect(await figureSkin(page)).toBe('#A07E56');
   await shot(page, 'picker-colour-6-picked.png');
   await expectNoOverflow(page);
@@ -191,7 +196,14 @@ test('avatar prompt: picking a skin colour makes no request, at 360 px, and the 
   for (const n of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
     await page.setViewportSize(VIEWPORT);
     await page.getByTestId('avatar-open').click();
-    await page.getByTestId(`skin-swatch-${n}`).check({ force: true });
+    // Skin slider (CUR-28): set the slider to the monk's position.
+    await page.getByTestId('skin-slider-input').evaluate((el, m) => {
+      const input = el as HTMLInputElement;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(input, String((m - 1) / 9));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }, n);
     await page.getByTestId('avatar-prompt-done').click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(figure.getByText('Estimate · not measured')).toBeVisible();
@@ -212,7 +224,14 @@ test('avatar prompt: picking a skin colour makes no request, at 360 px, and the 
   await expect(page.getByTestId('avatar-skin-state')).toHaveText('The avatar goes back to the standard colour. Your colour is deleted from this device.');
   expect(await figureSkin(page)).toBe('#DFC3A8');
   await page.getByTestId('avatar-skin-switch').click();
-  await page.getByTestId('skin-swatch-4').check({ force: true });
+  // Skin slider (CUR-28): set monk 4 (slider = 3/9).
+  await page.getByTestId('skin-slider-input').evaluate((el) => {
+    const input = el as HTMLInputElement;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+    setter.call(input, String(3 / 9));
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   await page.getByTestId('avatar-prompt-close').click();
 
   const during = seen.slice(before);
@@ -429,7 +448,14 @@ for (const size of SWEEP_SIZES) {
     // A darker figure, half scrolled: the label rides above the bar.
     await page.getByTestId('avatar-open').click();
     await page.getByTestId('avatar-skin-switch').click();
-    await page.getByTestId('skin-swatch-7').check({ force: true });
+    // Skin slider (CUR-28): set monk 7 (slider = 6/9).
+    await page.getByTestId('skin-slider-input').evaluate((el) => {
+      const input = el as HTMLInputElement;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(input, String(6 / 9));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
     await page.getByTestId('avatar-prompt-done').click();
     await page.evaluate(() => window.scrollTo(0, 150));
     await shot(page, `result-${size.width}-half-scrolled-estimate-label.png`);

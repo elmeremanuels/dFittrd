@@ -159,7 +159,14 @@ test.describe('face photo in 2D (slices 4 and 5, real worker)', () => {
     expect(Math.abs(monk - 6)).toBeLessThanOrEqual(1);
     const skin = () => frame.locator('[data-testid="embed-result"] svg[data-skin]').first().getAttribute('data-skin');
     expect(await skin()).toBe('#DFC3A8');
-    await frame.getByTestId(`skin-swatch-${monk}`).check({ force: true });
+    // Skin slider (CUR-28): set the value directly; (monk-1)/9 is the slider position.
+    await frame.getByTestId('skin-slider-input').evaluate((el, m) => {
+      const input = el as HTMLInputElement;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(input, String((m - 1) / 9));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }, monk);
     expect(await skin()).not.toBe('#DFC3A8');
 
     await frame.getByTestId('avatar-prompt-done').click();

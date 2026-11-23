@@ -8,7 +8,6 @@
 import { SignJWT } from 'jose';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeApp, seedShop, type TestApp } from '../test/helpers.js';
-import { eq } from 'drizzle-orm';
 import { shopifySessions } from '../db/schema.js';
 
 const API_KEY = 'shpa_testkey';

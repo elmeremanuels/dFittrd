@@ -1,0 +1,2034 @@
+{
+ "when": "2026-11-22T11:46:26.976Z",
+ "renderer": "headless Chromium, SwiftShader (CPU), 390x844 CSS px at 2x",
+ "hasDress": false,
+ "renders": [
+  {
+   "name": "tile-1-shoulder--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=1&hairLength=shoulder&hairColour=dark-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 1-shoulder-#3b2a20 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "1-shoulder-#3b2a20",
+   "triangles": 4784,
+   "textureBytes": 87388,
+   "buildMs": 103,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-1-short--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=1&hairLength=short&hairColour=dark-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 1-short-#3b2a20 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "1-short-#3b2a20",
+   "triangles": 1628,
+   "textureBytes": 87388,
+   "buildMs": 72,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-1-chin--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=1&hairLength=chin&hairColour=dark-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 1-chin-#3b2a20 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "1-chin-#3b2a20",
+   "triangles": 2922,
+   "textureBytes": 87388,
+   "buildMs": 89,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-1-shoulder--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=1&hairLength=shoulder&hairColour=dark-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 1-shoulder-#3b2a20 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "1-shoulder-#3b2a20",
+   "triangles": 4784,
+   "textureBytes": 87388,
+   "buildMs": 103,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-1-short--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=1&hairLength=short&hairColour=dark-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 1-short-#3b2a20 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "1-short-#3b2a20",
+   "triangles": 1628,
+   "textureBytes": 87388,
+   "buildMs": 72,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-1-chin--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=1&hairLength=chin&hairColour=dark-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 1-chin-#3b2a20 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "1-chin-#3b2a20",
+   "triangles": 2922,
+   "textureBytes": 87388,
+   "buildMs": 89,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-1-long--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=1&hairLength=long&hairColour=dark-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 1-long-#3b2a20 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "1-long-#3b2a20",
+   "triangles": 8256,
+   "textureBytes": 87388,
+   "buildMs": 121,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2A-short--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2A&hairLength=short&hairColour=blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2A-short-#cdaa6a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2A-short-#cdaa6a",
+   "triangles": 1604,
+   "textureBytes": 87388,
+   "buildMs": 76,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2A-chin--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2A&hairLength=chin&hairColour=blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2A-chin-#cdaa6a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2A-chin-#cdaa6a",
+   "triangles": 3022,
+   "textureBytes": 87388,
+   "buildMs": 111,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-1-long--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=1&hairLength=long&hairColour=dark-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 1-long-#3b2a20 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "1-long-#3b2a20",
+   "triangles": 8256,
+   "textureBytes": 87388,
+   "buildMs": 121,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2A-short--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2A&hairLength=short&hairColour=blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2A-short-#cdaa6a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2A-short-#cdaa6a",
+   "triangles": 1604,
+   "textureBytes": 87388,
+   "buildMs": 76,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2A-chin--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2A&hairLength=chin&hairColour=blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2A-chin-#cdaa6a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2A-chin-#cdaa6a",
+   "triangles": 3022,
+   "textureBytes": 87388,
+   "buildMs": 111,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2A-long--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2A&hairLength=long&hairColour=blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2A-long-#cdaa6a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2A-long-#cdaa6a",
+   "triangles": 8412,
+   "textureBytes": 87388,
+   "buildMs": 173,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2A-shoulder--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2A&hairLength=shoulder&hairColour=blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2A-shoulder-#cdaa6a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2A-shoulder-#cdaa6a",
+   "triangles": 4990,
+   "textureBytes": 87388,
+   "buildMs": 117,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2B-short--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=short&hairColour=auburn",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-short-#7a3420 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-short-#7a3420",
+   "triangles": 1760,
+   "textureBytes": 87388,
+   "buildMs": 68,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2A-long--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2A&hairLength=long&hairColour=blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2A-long-#cdaa6a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2A-long-#cdaa6a",
+   "triangles": 8412,
+   "textureBytes": 87388,
+   "buildMs": 173,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2A-shoulder--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2A&hairLength=shoulder&hairColour=blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2A-shoulder-#cdaa6a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2A-shoulder-#cdaa6a",
+   "triangles": 4990,
+   "textureBytes": 87388,
+   "buildMs": 117,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2B-short--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=short&hairColour=auburn",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-short-#7a3420 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-short-#7a3420",
+   "triangles": 1760,
+   "textureBytes": 87388,
+   "buildMs": 68,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2B-chin--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=chin&hairColour=auburn",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-chin-#7a3420 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-chin-#7a3420",
+   "triangles": 3606,
+   "textureBytes": 87388,
+   "buildMs": 80,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2B-shoulder--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=auburn",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#7a3420 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#7a3420",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 104,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2B-long--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=long&hairColour=auburn",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-long-#7a3420 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-long-#7a3420",
+   "triangles": 10262,
+   "textureBytes": 87388,
+   "buildMs": 104,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2B-chin--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=chin&hairColour=auburn",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-chin-#7a3420 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-chin-#7a3420",
+   "triangles": 3606,
+   "textureBytes": 87388,
+   "buildMs": 80,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2B-shoulder--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=auburn",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#7a3420 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#7a3420",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 104,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2B-long--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=long&hairColour=auburn",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-long-#7a3420 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-long-#7a3420",
+   "triangles": 10262,
+   "textureBytes": 87388,
+   "buildMs": 104,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2C-short--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2C&hairLength=short&hairColour=light-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2C-short-#8a6544 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2C-short-#8a6544",
+   "triangles": 2042,
+   "textureBytes": 87388,
+   "buildMs": 79,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2C-chin--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2C&hairLength=chin&hairColour=light-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2C-chin-#8a6544 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2C-chin-#8a6544",
+   "triangles": 4276,
+   "textureBytes": 87388,
+   "buildMs": 79,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2C-shoulder--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2C&hairLength=shoulder&hairColour=light-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2C-shoulder-#8a6544 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2C-shoulder-#8a6544",
+   "triangles": 7274,
+   "textureBytes": 87388,
+   "buildMs": 91,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2C-short--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2C&hairLength=short&hairColour=light-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2C-short-#8a6544 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2C-short-#8a6544",
+   "triangles": 2042,
+   "textureBytes": 87388,
+   "buildMs": 79,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2C-chin--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2C&hairLength=chin&hairColour=light-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2C-chin-#8a6544 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2C-chin-#8a6544",
+   "triangles": 4276,
+   "textureBytes": 87388,
+   "buildMs": 79,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2C-shoulder--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2C&hairLength=shoulder&hairColour=light-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2C-shoulder-#8a6544 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2C-shoulder-#8a6544",
+   "triangles": 7274,
+   "textureBytes": 87388,
+   "buildMs": 91,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2C-long--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2C&hairLength=long&hairColour=light-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2C-long-#8a6544 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2C-long-#8a6544",
+   "triangles": 12642,
+   "textureBytes": 87388,
+   "buildMs": 154,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3A-short--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3A&hairLength=short&hairColour=dark-blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3A-short-#9e7c4d · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3A-short-#9e7c4d",
+   "triangles": 1738,
+   "textureBytes": 87388,
+   "buildMs": 74,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3A-chin--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3A&hairLength=chin&hairColour=dark-blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3A-chin-#9e7c4d · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3A-chin-#9e7c4d",
+   "triangles": 4390,
+   "textureBytes": 87388,
+   "buildMs": 82,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-2C-long--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2C&hairLength=long&hairColour=light-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2C-long-#8a6544 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2C-long-#8a6544",
+   "triangles": 12642,
+   "textureBytes": 87388,
+   "buildMs": 154,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3A-chin--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3A&hairLength=chin&hairColour=dark-blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3A-chin-#9e7c4d · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3A-chin-#9e7c4d",
+   "triangles": 4390,
+   "textureBytes": 87388,
+   "buildMs": 82,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3A-short--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3A&hairLength=short&hairColour=dark-blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3A-short-#9e7c4d · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3A-short-#9e7c4d",
+   "triangles": 1738,
+   "textureBytes": 87388,
+   "buildMs": 74,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3A-shoulder--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3A&hairLength=shoulder&hairColour=dark-blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3A-shoulder-#9e7c4d · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3A-shoulder-#9e7c4d",
+   "triangles": 7366,
+   "textureBytes": 87388,
+   "buildMs": 138,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3A-long--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3A&hairLength=long&hairColour=dark-blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3A-long-#9e7c4d · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3A-long-#9e7c4d",
+   "triangles": 12894,
+   "textureBytes": 87388,
+   "buildMs": 107,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3B-short--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3B&hairLength=short&hairColour=copper",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3B-short-#a8512a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3B-short-#a8512a",
+   "triangles": 2226,
+   "textureBytes": 87388,
+   "buildMs": 70,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3A-shoulder--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3A&hairLength=shoulder&hairColour=dark-blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3A-shoulder-#9e7c4d · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3A-shoulder-#9e7c4d",
+   "triangles": 7366,
+   "textureBytes": 87388,
+   "buildMs": 138,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3A-long--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3A&hairLength=long&hairColour=dark-blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3A-long-#9e7c4d · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3A-long-#9e7c4d",
+   "triangles": 12894,
+   "textureBytes": 87388,
+   "buildMs": 107,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3B-short--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3B&hairLength=short&hairColour=copper",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3B-short-#a8512a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3B-short-#a8512a",
+   "triangles": 2226,
+   "textureBytes": 87388,
+   "buildMs": 70,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3B-chin--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3B&hairLength=chin&hairColour=copper",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3B-chin-#a8512a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3B-chin-#a8512a",
+   "triangles": 5698,
+   "textureBytes": 87388,
+   "buildMs": 79,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3B-shoulder--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3B&hairLength=shoulder&hairColour=copper",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3B-shoulder-#a8512a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3B-shoulder-#a8512a",
+   "triangles": 9390,
+   "textureBytes": 87388,
+   "buildMs": 93,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3B-long--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3B&hairLength=long&hairColour=copper",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3B-long-#a8512a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3B-long-#a8512a",
+   "triangles": 16788,
+   "textureBytes": 87388,
+   "buildMs": 110,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3B-chin--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3B&hairLength=chin&hairColour=copper",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3B-chin-#a8512a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3B-chin-#a8512a",
+   "triangles": 5698,
+   "textureBytes": 87388,
+   "buildMs": 79,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3B-shoulder--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3B&hairLength=shoulder&hairColour=copper",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3B-shoulder-#a8512a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3B-shoulder-#a8512a",
+   "triangles": 9390,
+   "textureBytes": 87388,
+   "buildMs": 93,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3B-long--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3B&hairLength=long&hairColour=copper",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3B-long-#a8512a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3B-long-#a8512a",
+   "triangles": 16788,
+   "textureBytes": 87388,
+   "buildMs": 110,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3C-short--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3C&hairLength=short&hairColour=brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3C-short-#5c3d29 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3C-short-#5c3d29",
+   "triangles": 5654,
+   "textureBytes": 174768,
+   "buildMs": 139,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3C-chin--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3C&hairLength=chin&hairColour=brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3C-chin-#5c3d29 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3C-chin-#5c3d29",
+   "triangles": 9944,
+   "textureBytes": 174768,
+   "buildMs": 145,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3C-shoulder--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3C&hairLength=shoulder&hairColour=brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3C-shoulder-#5c3d29 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3C-shoulder-#5c3d29",
+   "triangles": 14484,
+   "textureBytes": 174768,
+   "buildMs": 147,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3C-chin--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3C&hairLength=chin&hairColour=brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3C-chin-#5c3d29 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3C-chin-#5c3d29",
+   "triangles": 9944,
+   "textureBytes": 174768,
+   "buildMs": 145,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3C-short--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3C&hairLength=short&hairColour=brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3C-short-#5c3d29 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3C-short-#5c3d29",
+   "triangles": 5654,
+   "textureBytes": 174768,
+   "buildMs": 139,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3C-shoulder--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3C&hairLength=shoulder&hairColour=brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3C-shoulder-#5c3d29 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3C-shoulder-#5c3d29",
+   "triangles": 14484,
+   "textureBytes": 174768,
+   "buildMs": 147,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4A-short--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4A&hairLength=short&hairColour=grey",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4A-short-#a29f99 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4A-short-#a29f99",
+   "triangles": 4962,
+   "textureBytes": 174768,
+   "buildMs": 171,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4A-chin--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4A&hairLength=chin&hairColour=grey",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4A-chin-#a29f99 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4A-chin-#a29f99",
+   "triangles": 5270,
+   "textureBytes": 174768,
+   "buildMs": 104,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3C-long--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3C&hairLength=long&hairColour=brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3C-long-#5c3d29 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3C-long-#5c3d29",
+   "triangles": 22272,
+   "textureBytes": 174768,
+   "buildMs": 214,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4A-short--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4A&hairLength=short&hairColour=grey",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4A-short-#a29f99 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4A-short-#a29f99",
+   "triangles": 4962,
+   "textureBytes": 174768,
+   "buildMs": 171,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4A-chin--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4A&hairLength=chin&hairColour=grey",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4A-chin-#a29f99 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4A-chin-#a29f99",
+   "triangles": 5270,
+   "textureBytes": 174768,
+   "buildMs": 104,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-3C-long--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=3C&hairLength=long&hairColour=brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 3C-long-#5c3d29 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "3C-long-#5c3d29",
+   "triangles": 22272,
+   "textureBytes": 174768,
+   "buildMs": 214,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4A-shoulder--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4A&hairLength=shoulder&hairColour=grey",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4A-shoulder-#a29f99 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4A-shoulder-#a29f99",
+   "triangles": 6210,
+   "textureBytes": 174768,
+   "buildMs": 123,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4A-long--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4A&hairLength=long&hairColour=grey",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4A-long-#a29f99 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4A-long-#a29f99",
+   "triangles": 7222,
+   "textureBytes": 174768,
+   "buildMs": 115,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4B-short--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4B&hairLength=short&hairColour=platinum",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4B-short-#e4d9c2 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4B-short-#e4d9c2",
+   "triangles": 5352,
+   "textureBytes": 174768,
+   "buildMs": 104,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4A-shoulder--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4A&hairLength=shoulder&hairColour=grey",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4A-shoulder-#a29f99 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4A-shoulder-#a29f99",
+   "triangles": 6210,
+   "textureBytes": 174768,
+   "buildMs": 123,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4A-long--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4A&hairLength=long&hairColour=grey",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4A-long-#a29f99 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4A-long-#a29f99",
+   "triangles": 7222,
+   "textureBytes": 174768,
+   "buildMs": 115,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4B-short--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4B&hairLength=short&hairColour=platinum",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4B-short-#e4d9c2 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4B-short-#e4d9c2",
+   "triangles": 5352,
+   "textureBytes": 174768,
+   "buildMs": 104,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4B-chin--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4B&hairLength=chin&hairColour=platinum",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4B-chin-#e4d9c2 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4B-chin-#e4d9c2",
+   "triangles": 5944,
+   "textureBytes": 174768,
+   "buildMs": 200,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4B-shoulder--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4B&hairLength=shoulder&hairColour=platinum",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4B-shoulder-#e4d9c2 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4B-shoulder-#e4d9c2",
+   "triangles": 6966,
+   "textureBytes": 174768,
+   "buildMs": 127,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4B-long--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4B&hairLength=long&hairColour=platinum",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4B-long-#e4d9c2 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4B-long-#e4d9c2",
+   "triangles": 8068,
+   "textureBytes": 174768,
+   "buildMs": 109,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4B-chin--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4B&hairLength=chin&hairColour=platinum",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4B-chin-#e4d9c2 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4B-chin-#e4d9c2",
+   "triangles": 5944,
+   "textureBytes": 174768,
+   "buildMs": 200,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4B-long--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4B&hairLength=long&hairColour=platinum",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4B-long-#e4d9c2 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4B-long-#e4d9c2",
+   "triangles": 8068,
+   "textureBytes": 174768,
+   "buildMs": 109,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4B-shoulder--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4B&hairLength=shoulder&hairColour=platinum",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4B-shoulder-#e4d9c2 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4B-shoulder-#e4d9c2",
+   "triangles": 6966,
+   "textureBytes": 174768,
+   "buildMs": 127,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4C-short--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4C&hairLength=short&hairColour=black",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4C-short-#1f1b19 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4C-short-#1f1b19",
+   "triangles": 6206,
+   "textureBytes": 174768,
+   "buildMs": 164,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4C-chin--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4C&hairLength=chin&hairColour=black",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4C-chin-#1f1b19 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4C-chin-#1f1b19",
+   "triangles": 7050,
+   "textureBytes": 174768,
+   "buildMs": 130,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4C-shoulder--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4C&hairLength=shoulder&hairColour=black",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4C-shoulder-#1f1b19 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4C-shoulder-#1f1b19",
+   "triangles": 8968,
+   "textureBytes": 174768,
+   "buildMs": 127,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4C-short--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4C&hairLength=short&hairColour=black",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4C-short-#1f1b19 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4C-short-#1f1b19",
+   "triangles": 6206,
+   "textureBytes": 174768,
+   "buildMs": 164,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4C-chin--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4C&hairLength=chin&hairColour=black",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4C-chin-#1f1b19 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4C-chin-#1f1b19",
+   "triangles": 7050,
+   "textureBytes": 174768,
+   "buildMs": 130,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4C-shoulder--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4C&hairLength=shoulder&hairColour=black",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4C-shoulder-#1f1b19 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4C-shoulder-#1f1b19",
+   "triangles": 8968,
+   "textureBytes": 174768,
+   "buildMs": 127,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4C-long--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4C&hairLength=long&hairColour=black",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4C-long-#1f1b19 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4C-long-#1f1b19",
+   "triangles": 9618,
+   "textureBytes": 174768,
+   "buildMs": 128,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-black--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=black",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#1f1b19 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#1f1b19",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 112,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-dark-brown--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=dark-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#3b2a20 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#3b2a20",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 105,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "tile-4C-long--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=4C&hairLength=long&hairColour=black",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 4C-long-#1f1b19 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "4C-long-#1f1b19",
+   "triangles": 9618,
+   "textureBytes": 174768,
+   "buildMs": 128,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-black--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=black",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#1f1b19 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#1f1b19",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 112,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-dark-brown--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=dark-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#3b2a20 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#3b2a20",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 105,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-brown--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#5c3d29 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#5c3d29",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 105,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-light-brown--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=light-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#8a6544 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#8a6544",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 107,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-auburn--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=auburn",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#7a3420 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#7a3420",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 98,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-brown--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#5c3d29 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#5c3d29",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 105,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-light-brown--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=light-brown",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#8a6544 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#8a6544",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 107,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-auburn--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=auburn",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#7a3420 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#7a3420",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 98,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-copper--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=copper",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#a8512a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#a8512a",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 177,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-dark-blonde--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=dark-blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#9e7c4d · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#9e7c4d",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 104,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-blonde--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#cdaa6a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#cdaa6a",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 104,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-copper--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=copper",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#a8512a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#a8512a",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 177,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-blonde--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#cdaa6a · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#cdaa6a",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 104,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-dark-blonde--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=dark-blonde",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#9e7c4d · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#9e7c4d",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 104,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-platinum--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=platinum",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#e4d9c2 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#e4d9c2",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 97,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-grey--front",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=grey",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#a29f99 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#a29f99",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 104,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-platinum--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=platinum",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#e4d9c2 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#e4d9c2",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 97,
+   "garment": null,
+   "body": null
+  },
+  {
+   "name": "colour-grey--back",
+   "query": "mode=head&frame=hair&body=realistic&render=demand&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=grey",
+   "tag": "ESTIMATE · female body alone · body realistic-spike · hair 2B-shoulder-#a29f99 · lighting classic · skin default grey · shading flat · typed chest 92 · waist 74 · hip 100; drawn chest 92.0 · underbust 78.0 · waist 74.0 · hip 100.0",
+   "hair": "2B-shoulder-#a29f99",
+   "triangles": 6024,
+   "textureBytes": 87388,
+   "buildMs": 104,
+   "garment": null,
+   "body": null
+  }
+ ],
+ "frames": [
+  {
+   "name": "frames-empty-stage-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&nobody=1",
+   "raf": {
+    "frames": 85,
+    "meanMs": 47.25176470588235,
+    "p95Ms": 50.09999999999991
+   },
+   "hair": null,
+   "triangles": 0
+  },
+  {
+   "name": "frames-body-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100",
+   "raf": {
+    "frames": 53,
+    "meanMs": 76.09811320754717,
+    "p95Ms": 83.40000000000055
+   },
+   "hair": null,
+   "triangles": 0
+  },
+  {
+   "name": "frames-hair-1-short-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=1&hairLength=short&hairColour=dark-brown",
+   "raf": {
+    "frames": 50,
+    "meanMs": 81.33,
+    "p95Ms": 83.5
+   },
+   "hair": "1-short-#3b2a20",
+   "triangles": 1628
+  },
+  {
+   "name": "frames-hair-1-chin-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=1&hairLength=chin&hairColour=dark-brown",
+   "raf": {
+    "frames": 47,
+    "meanMs": 86.5212765957447,
+    "p95Ms": 100
+   },
+   "hair": "1-chin-#3b2a20",
+   "triangles": 2922
+  },
+  {
+   "name": "frames-hair-1-shoulder-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=1&hairLength=shoulder&hairColour=dark-brown",
+   "raf": {
+    "frames": 41,
+    "meanMs": 98.37073170731708,
+    "p95Ms": 100.10000000000036
+   },
+   "hair": "1-shoulder-#3b2a20",
+   "triangles": 4784
+  },
+  {
+   "name": "frames-hair-1-long-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=1&hairLength=long&hairColour=dark-brown",
+   "raf": {
+    "frames": 36,
+    "meanMs": 112.95833333333334,
+    "p95Ms": 116.70000000000073
+   },
+   "hair": "1-long-#3b2a20",
+   "triangles": 8256
+  },
+  {
+   "name": "frames-hair-2A-short-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2A&hairLength=short&hairColour=blonde",
+   "raf": {
+    "frames": 47,
+    "meanMs": 86.52127659574467,
+    "p95Ms": 100
+   },
+   "hair": "2A-short-#cdaa6a",
+   "triangles": 1604
+  },
+  {
+   "name": "frames-hair-2A-chin-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2A&hairLength=chin&hairColour=blonde",
+   "raf": {
+    "frames": 45,
+    "meanMs": 91.10666666666667,
+    "p95Ms": 100
+   },
+   "hair": "2A-chin-#cdaa6a",
+   "triangles": 3022
+  },
+  {
+   "name": "frames-hair-2A-shoulder-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2A&hairLength=shoulder&hairColour=blonde",
+   "raf": {
+    "frames": 40,
+    "meanMs": 102.08,
+    "p95Ms": 116.70000000000027
+   },
+   "hair": "2A-shoulder-#cdaa6a",
+   "triangles": 4990
+  },
+  {
+   "name": "frames-hair-2A-long-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2A&hairLength=long&hairColour=blonde",
+   "raf": {
+    "frames": 36,
+    "meanMs": 114.34722222222223,
+    "p95Ms": 116.70000000000073
+   },
+   "hair": "2A-long-#cdaa6a",
+   "triangles": 8412
+  },
+  {
+   "name": "frames-hair-2B-short-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=short&hairColour=auburn",
+   "raf": {
+    "frames": 47,
+    "meanMs": 86.5212765957447,
+    "p95Ms": 100
+   },
+   "hair": "2B-short-#7a3420",
+   "triangles": 1760
+  },
+  {
+   "name": "frames-hair-2B-chin-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=chin&hairColour=auburn",
+   "raf": {
+    "frames": 42,
+    "meanMs": 96.42380952380952,
+    "p95Ms": 100.09999999999991
+   },
+   "hair": "2B-chin-#7a3420",
+   "triangles": 3606
+  },
+  {
+   "name": "frames-hair-2B-shoulder-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=auburn",
+   "raf": {
+    "frames": 38,
+    "meanMs": 106.13684210526316,
+    "p95Ms": 116.70000000000027
+   },
+   "hair": "2B-shoulder-#7a3420",
+   "triangles": 6024
+  },
+  {
+   "name": "frames-hair-2B-long-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=long&hairColour=auburn",
+   "raf": {
+    "frames": 34,
+    "meanMs": 121.07647058823531,
+    "p95Ms": 133.40000000000055
+   },
+   "hair": "2B-long-#7a3420",
+   "triangles": 10262
+  },
+  {
+   "name": "frames-hair-2C-short-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2C&hairLength=short&hairColour=light-brown",
+   "raf": {
+    "frames": 45,
+    "meanMs": 90.73777777777778,
+    "p95Ms": 100
+   },
+   "hair": "2C-short-#8a6544",
+   "triangles": 2042
+  },
+  {
+   "name": "frames-hair-2C-chin-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2C&hairLength=chin&hairColour=light-brown",
+   "raf": {
+    "frames": 43,
+    "meanMs": 93.7953488372093,
+    "p95Ms": 100.09999999999945
+   },
+   "hair": "2C-chin-#8a6544",
+   "triangles": 4276
+  },
+  {
+   "name": "frames-hair-2C-shoulder-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2C&hairLength=shoulder&hairColour=light-brown",
+   "raf": {
+    "frames": 39,
+    "meanMs": 104.27179487179488,
+    "p95Ms": 116.69999999999982
+   },
+   "hair": "2C-shoulder-#8a6544",
+   "triangles": 7274
+  },
+  {
+   "name": "frames-hair-2C-long-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2C&hairLength=long&hairColour=light-brown",
+   "raf": {
+    "frames": 33,
+    "meanMs": 123.22727272727272,
+    "p95Ms": 133.40000000000055
+   },
+   "hair": "2C-long-#8a6544",
+   "triangles": 12642
+  },
+  {
+   "name": "frames-hair-3A-short-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3A&hairLength=short&hairColour=dark-blonde",
+   "raf": {
+    "frames": 46,
+    "meanMs": 88.76739130434783,
+    "p95Ms": 100.09999999999945
+   },
+   "hair": "3A-short-#9e7c4d",
+   "triangles": 1738
+  },
+  {
+   "name": "frames-hair-3A-chin-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3A&hairLength=chin&hairColour=dark-blonde",
+   "raf": {
+    "frames": 42,
+    "meanMs": 95.62857142857143,
+    "p95Ms": 100
+   },
+   "hair": "3A-chin-#9e7c4d",
+   "triangles": 4390
+  },
+  {
+   "name": "frames-hair-3A-shoulder-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3A&hairLength=shoulder&hairColour=dark-blonde",
+   "raf": {
+    "frames": 37,
+    "meanMs": 109.90540540540539,
+    "p95Ms": 116.70000000000073
+   },
+   "hair": "3A-shoulder-#9e7c4d",
+   "triangles": 7366
+  },
+  {
+   "name": "frames-hair-3A-long-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3A&hairLength=long&hairColour=dark-blonde",
+   "raf": {
+    "frames": 33,
+    "meanMs": 125.24545454545455,
+    "p95Ms": 133.40000000000055
+   },
+   "hair": "3A-long-#9e7c4d",
+   "triangles": 12894
+  },
+  {
+   "name": "frames-hair-3B-short-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3B&hairLength=short&hairColour=copper",
+   "raf": {
+    "frames": 44,
+    "meanMs": 92.42045454545453,
+    "p95Ms": 100.09999999999991
+   },
+   "hair": "3B-short-#a8512a",
+   "triangles": 2226
+  },
+  {
+   "name": "frames-hair-3B-chin-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3B&hairLength=chin&hairColour=copper",
+   "raf": {
+    "frames": 43,
+    "meanMs": 93.4093023255814,
+    "p95Ms": 100.09999999999945
+   },
+   "hair": "3B-chin-#a8512a",
+   "triangles": 5698
+  },
+  {
+   "name": "frames-hair-3B-shoulder-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3B&hairLength=shoulder&hairColour=copper",
+   "raf": {
+    "frames": 39,
+    "meanMs": 104.26923076923076,
+    "p95Ms": 116.70000000000027
+   },
+   "hair": "3B-shoulder-#a8512a",
+   "triangles": 9390
+  },
+  {
+   "name": "frames-hair-3B-long-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3B&hairLength=long&hairColour=copper",
+   "raf": {
+    "frames": 33,
+    "meanMs": 123.22727272727273,
+    "p95Ms": 133.39999999999964
+   },
+   "hair": "3B-long-#a8512a",
+   "triangles": 16788
+  },
+  {
+   "name": "frames-hair-3C-short-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3C&hairLength=short&hairColour=brown",
+   "raf": {
+    "frames": 45,
+    "meanMs": 90.73777777777778,
+    "p95Ms": 100
+   },
+   "hair": "3C-short-#5c3d29",
+   "triangles": 5654
+  },
+  {
+   "name": "frames-hair-3C-chin-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3C&hairLength=chin&hairColour=brown",
+   "raf": {
+    "frames": 41,
+    "meanMs": 98.77560975609757,
+    "p95Ms": 100.10000000000036
+   },
+   "hair": "3C-chin-#5c3d29",
+   "triangles": 9944
+  },
+  {
+   "name": "frames-hair-3C-shoulder-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3C&hairLength=shoulder&hairColour=brown",
+   "raf": {
+    "frames": 37,
+    "meanMs": 108.55405405405403,
+    "p95Ms": 116.70000000000027
+   },
+   "hair": "3C-shoulder-#5c3d29",
+   "triangles": 14484
+  },
+  {
+   "name": "frames-hair-3C-long-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3C&hairLength=long&hairColour=brown",
+   "raf": {
+    "frames": 32,
+    "meanMs": 126.55937500000002,
+    "p95Ms": 133.39999999999964
+   },
+   "hair": "3C-long-#5c3d29",
+   "triangles": 22272
+  },
+  {
+   "name": "frames-hair-4A-short-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4A&hairLength=short&hairColour=grey",
+   "raf": {
+    "frames": 45,
+    "meanMs": 90.73555555555556,
+    "p95Ms": 100
+   },
+   "hair": "4A-short-#a29f99",
+   "triangles": 4962
+  },
+  {
+   "name": "frames-hair-4A-chin-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4A&hairLength=chin&hairColour=grey",
+   "raf": {
+    "frames": 46,
+    "meanMs": 88.76304347826087,
+    "p95Ms": 100.09999999999945
+   },
+   "hair": "4A-chin-#a29f99",
+   "triangles": 5270
+  },
+  {
+   "name": "frames-hair-4A-shoulder-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4A&hairLength=shoulder&hairColour=grey",
+   "raf": {
+    "frames": 43,
+    "meanMs": 93.4046511627907,
+    "p95Ms": 100
+   },
+   "hair": "4A-shoulder-#a29f99",
+   "triangles": 6210
+  },
+  {
+   "name": "frames-hair-4A-long-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4A&hairLength=long&hairColour=grey",
+   "raf": {
+    "frames": 42,
+    "meanMs": 96.81904761904761,
+    "p95Ms": 100.09999999999991
+   },
+   "hair": "4A-long-#a29f99",
+   "triangles": 7222
+  },
+  {
+   "name": "frames-hair-4B-short-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4B&hairLength=short&hairColour=platinum",
+   "raf": {
+    "frames": 47,
+    "meanMs": 86.16595744680852,
+    "p95Ms": 100
+   },
+   "hair": "4B-short-#e4d9c2",
+   "triangles": 5352
+  },
+  {
+   "name": "frames-hair-4B-chin-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4B&hairLength=chin&hairColour=platinum",
+   "raf": {
+    "frames": 45,
+    "meanMs": 89.99777777777777,
+    "p95Ms": 100.10000000000036
+   },
+   "hair": "4B-chin-#e4d9c2",
+   "triangles": 5944
+  },
+  {
+   "name": "frames-hair-4B-shoulder-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4B&hairLength=shoulder&hairColour=platinum",
+   "raf": {
+    "frames": 43,
+    "meanMs": 94.95581395348837,
+    "p95Ms": 100.09999999999945
+   },
+   "hair": "4B-shoulder-#e4d9c2",
+   "triangles": 6966
+  },
+  {
+   "name": "frames-hair-4B-long-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4B&hairLength=long&hairColour=platinum",
+   "raf": {
+    "frames": 42,
+    "meanMs": 97.21666666666667,
+    "p95Ms": 100.10000000000036
+   },
+   "hair": "4B-long-#e4d9c2",
+   "triangles": 8068
+  },
+  {
+   "name": "frames-hair-4C-short-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4C&hairLength=short&hairColour=black",
+   "raf": {
+    "frames": 47,
+    "meanMs": 86.87659574468086,
+    "p95Ms": 100
+   },
+   "hair": "4C-short-#1f1b19",
+   "triangles": 6206
+  },
+  {
+   "name": "frames-hair-4C-chin-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4C&hairLength=chin&hairColour=black",
+   "raf": {
+    "frames": 44,
+    "meanMs": 92.04090909090908,
+    "p95Ms": 100.09999999999991
+   },
+   "hair": "4C-chin-#1f1b19",
+   "triangles": 7050
+  },
+  {
+   "name": "frames-hair-4C-shoulder-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4C&hairLength=shoulder&hairColour=black",
+   "raf": {
+    "frames": 41,
+    "meanMs": 99.59024390243903,
+    "p95Ms": 116.69999999999982
+   },
+   "hair": "4C-shoulder-#1f1b19",
+   "triangles": 8968
+  },
+  {
+   "name": "frames-hair-4C-long-1",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4C&hairLength=long&hairColour=black",
+   "raf": {
+    "frames": 39,
+    "meanMs": 103.84102564102564,
+    "p95Ms": 116.69999999999982
+   },
+   "hair": "4C-long-#1f1b19",
+   "triangles": 9618
+  },
+  {
+   "name": "frames-empty-stage-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&nobody=1",
+   "raf": {
+    "frames": 88,
+    "meanMs": 45.831818181818186,
+    "p95Ms": 50.09999999999991
+   },
+   "hair": null,
+   "triangles": 0
+  },
+  {
+   "name": "frames-body-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100",
+   "raf": {
+    "frames": 55,
+    "meanMs": 73.63272727272728,
+    "p95Ms": 83.39999999999964
+   },
+   "hair": null,
+   "triangles": 0
+  },
+  {
+   "name": "frames-hair-1-short-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=1&hairLength=short&hairColour=dark-brown",
+   "raf": {
+    "frames": 49,
+    "meanMs": 83.67142857142856,
+    "p95Ms": 99.90000000000009
+   },
+   "hair": "1-short-#3b2a20",
+   "triangles": 1628
+  },
+  {
+   "name": "frames-hair-1-chin-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=1&hairLength=chin&hairColour=dark-brown",
+   "raf": {
+    "frames": 46,
+    "meanMs": 88.40434782608695,
+    "p95Ms": 100.09999999999945
+   },
+   "hair": "1-chin-#3b2a20",
+   "triangles": 2922
+  },
+  {
+   "name": "frames-hair-1-shoulder-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=1&hairLength=shoulder&hairColour=dark-brown",
+   "raf": {
+    "frames": 40,
+    "meanMs": 101.66000000000001,
+    "p95Ms": 116.69999999999982
+   },
+   "hair": "1-shoulder-#3b2a20",
+   "triangles": 4784
+  },
+  {
+   "name": "frames-hair-1-long-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=1&hairLength=long&hairColour=dark-brown",
+   "raf": {
+    "frames": 36,
+    "meanMs": 111.56944444444444,
+    "p95Ms": 116.70000000000073
+   },
+   "hair": "1-long-#3b2a20",
+   "triangles": 8256
+  },
+  {
+   "name": "frames-hair-2A-short-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2A&hairLength=short&hairColour=blonde",
+   "raf": {
+    "frames": 49,
+    "meanMs": 82.31224489795919,
+    "p95Ms": 83.40000000000055
+   },
+   "hair": "2A-short-#cdaa6a",
+   "triangles": 1604
+  },
+  {
+   "name": "frames-hair-2A-chin-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2A&hairLength=chin&hairColour=blonde",
+   "raf": {
+    "frames": 46,
+    "meanMs": 88.03695652173914,
+    "p95Ms": 100
+   },
+   "hair": "2A-chin-#cdaa6a",
+   "triangles": 3022
+  },
+  {
+   "name": "frames-hair-2A-shoulder-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2A&hairLength=shoulder&hairColour=blonde",
+   "raf": {
+    "frames": 43,
+    "meanMs": 93.40697674418605,
+    "p95Ms": 100
+   },
+   "hair": "2A-shoulder-#cdaa6a",
+   "triangles": 4990
+  },
+  {
+   "name": "frames-hair-2A-long-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2A&hairLength=long&hairColour=blonde",
+   "raf": {
+    "frames": 39,
+    "meanMs": 105.55128205128206,
+    "p95Ms": 116.70000000000073
+   },
+   "hair": "2A-long-#cdaa6a",
+   "triangles": 8412
+  },
+  {
+   "name": "frames-hair-2B-short-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=short&hairColour=auburn",
+   "raf": {
+    "frames": 48,
+    "meanMs": 83.67916666666667,
+    "p95Ms": 100
+   },
+   "hair": "2B-short-#7a3420",
+   "triangles": 1760
+  },
+  {
+   "name": "frames-hair-2B-chin-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=chin&hairColour=auburn",
+   "raf": {
+    "frames": 46,
+    "meanMs": 88.04130434782607,
+    "p95Ms": 100
+   },
+   "hair": "2B-chin-#7a3420",
+   "triangles": 3606
+  },
+  {
+   "name": "frames-hair-2B-shoulder-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=shoulder&hairColour=auburn",
+   "raf": {
+    "frames": 41,
+    "meanMs": 97.96585365853657,
+    "p95Ms": 100.09999999999991
+   },
+   "hair": "2B-shoulder-#7a3420",
+   "triangles": 6024
+  },
+  {
+   "name": "frames-hair-2B-long-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2B&hairLength=long&hairColour=auburn",
+   "raf": {
+    "frames": 37,
+    "meanMs": 109.90540540540542,
+    "p95Ms": 116.70000000000027
+   },
+   "hair": "2B-long-#7a3420",
+   "triangles": 10262
+  },
+  {
+   "name": "frames-hair-2C-short-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2C&hairLength=short&hairColour=light-brown",
+   "raf": {
+    "frames": 49,
+    "meanMs": 82.65102040816326,
+    "p95Ms": 83.40000000000055
+   },
+   "hair": "2C-short-#8a6544",
+   "triangles": 2042
+  },
+  {
+   "name": "frames-hair-2C-chin-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2C&hairLength=chin&hairColour=light-brown",
+   "raf": {
+    "frames": 46,
+    "meanMs": 89.12608695652175,
+    "p95Ms": 100
+   },
+   "hair": "2C-chin-#8a6544",
+   "triangles": 4276
+  },
+  {
+   "name": "frames-hair-2C-shoulder-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2C&hairLength=shoulder&hairColour=light-brown",
+   "raf": {
+    "frames": 42,
+    "meanMs": 95.6309523809524,
+    "p95Ms": 100.09999999999991
+   },
+   "hair": "2C-shoulder-#8a6544",
+   "triangles": 7274
+  },
+  {
+   "name": "frames-hair-2C-long-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=2C&hairLength=long&hairColour=light-brown",
+   "raf": {
+    "frames": 37,
+    "meanMs": 110.35405405405405,
+    "p95Ms": 116.70000000000027
+   },
+   "hair": "2C-long-#8a6544",
+   "triangles": 12642
+  },
+  {
+   "name": "frames-hair-3A-short-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3A&hairLength=short&hairColour=dark-blonde",
+   "raf": {
+    "frames": 51,
+    "meanMs": 80.06274509803922,
+    "p95Ms": 83.40000000000009
+   },
+   "hair": "3A-short-#9e7c4d",
+   "triangles": 1738
+  },
+  {
+   "name": "frames-hair-3A-chin-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3A&hairLength=chin&hairColour=dark-blonde",
+   "raf": {
+    "frames": 44,
+    "meanMs": 92.04318181818182,
+    "p95Ms": 100
+   },
+   "hair": "3A-chin-#9e7c4d",
+   "triangles": 4390
+  },
+  {
+   "name": "frames-hair-3A-shoulder-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3A&hairLength=shoulder&hairColour=dark-blonde",
+   "raf": {
+    "frames": 38,
+    "meanMs": 107.01052631578948,
+    "p95Ms": 116.70000000000073
+   },
+   "hair": "3A-shoulder-#9e7c4d",
+   "triangles": 7366
+  },
+  {
+   "name": "frames-hair-3A-long-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3A&hairLength=long&hairColour=dark-blonde",
+   "raf": {
+    "frames": 32,
+    "meanMs": 126.0375,
+    "p95Ms": 133.4000000000001
+   },
+   "hair": "3A-long-#9e7c4d",
+   "triangles": 12894
+  },
+  {
+   "name": "frames-hair-3B-short-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3B&hairLength=short&hairColour=copper",
+   "raf": {
+    "frames": 49,
+    "meanMs": 82.98979591836735,
+    "p95Ms": 83.40000000000009
+   },
+   "hair": "3B-short-#a8512a",
+   "triangles": 2226
+  },
+  {
+   "name": "frames-hair-3B-chin-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3B&hairLength=chin&hairColour=copper",
+   "raf": {
+    "frames": 45,
+    "meanMs": 89.62666666666668,
+    "p95Ms": 100
+   },
+   "hair": "3B-chin-#a8512a",
+   "triangles": 5698
+  },
+  {
+   "name": "frames-hair-3B-shoulder-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3B&hairLength=shoulder&hairColour=copper",
+   "raf": {
+    "frames": 40,
+    "meanMs": 100.8275,
+    "p95Ms": 116.69999999999982
+   },
+   "hair": "3B-shoulder-#a8512a",
+   "triangles": 9390
+  },
+  {
+   "name": "frames-hair-3B-long-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3B&hairLength=long&hairColour=copper",
+   "raf": {
+    "frames": 33,
+    "meanMs": 124.23939393939393,
+    "p95Ms": 133.39999999999964
+   },
+   "hair": "3B-long-#a8512a",
+   "triangles": 16788
+  },
+  {
+   "name": "frames-hair-3C-short-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3C&hairLength=short&hairColour=brown",
+   "raf": {
+    "frames": 44,
+    "meanMs": 91.66363636363634,
+    "p95Ms": 100
+   },
+   "hair": "3C-short-#5c3d29",
+   "triangles": 5654
+  },
+  {
+   "name": "frames-hair-3C-chin-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3C&hairLength=chin&hairColour=brown",
+   "raf": {
+    "frames": 41,
+    "meanMs": 100.40243902439025,
+    "p95Ms": 116.60000000000036
+   },
+   "hair": "3C-chin-#5c3d29",
+   "triangles": 9944
+  },
+  {
+   "name": "frames-hair-3C-shoulder-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3C&hairLength=shoulder&hairColour=brown",
+   "raf": {
+    "frames": 36,
+    "meanMs": 113.88333333333334,
+    "p95Ms": 116.70000000000027
+   },
+   "hair": "3C-shoulder-#5c3d29",
+   "triangles": 14484
+  },
+  {
+   "name": "frames-hair-3C-long-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=3C&hairLength=long&hairColour=brown",
+   "raf": {
+    "frames": 32,
+    "meanMs": 127.078125,
+    "p95Ms": 133.4000000000001
+   },
+   "hair": "3C-long-#5c3d29",
+   "triangles": 22272
+  },
+  {
+   "name": "frames-hair-4A-short-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4A&hairLength=short&hairColour=grey",
+   "raf": {
+    "frames": 46,
+    "meanMs": 88.76521739130435,
+    "p95Ms": 100
+   },
+   "hair": "4A-short-#a29f99",
+   "triangles": 4962
+  },
+  {
+   "name": "frames-hair-4A-chin-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4A&hairLength=chin&hairColour=grey",
+   "raf": {
+    "frames": 42,
+    "meanMs": 97.21666666666667,
+    "p95Ms": 116.69999999999982
+   },
+   "hair": "4A-chin-#a29f99",
+   "triangles": 5270
+  },
+  {
+   "name": "frames-hair-4A-shoulder-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4A&hairLength=shoulder&hairColour=grey",
+   "raf": {
+    "frames": 43,
+    "meanMs": 94.56976744186046,
+    "p95Ms": 100.10000000000036
+   },
+   "hair": "4A-shoulder-#a29f99",
+   "triangles": 6210
+  },
+  {
+   "name": "frames-hair-4A-long-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4A&hairLength=long&hairColour=grey",
+   "raf": {
+    "frames": 42,
+    "meanMs": 96.42380952380952,
+    "p95Ms": 100.00000000000023
+   },
+   "hair": "4A-long-#a29f99",
+   "triangles": 7222
+  },
+  {
+   "name": "frames-hair-4B-short-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4B&hairLength=short&hairColour=platinum",
+   "raf": {
+    "frames": 46,
+    "meanMs": 88.04130434782608,
+    "p95Ms": 100
+   },
+   "hair": "4B-short-#e4d9c2",
+   "triangles": 5352
+  },
+  {
+   "name": "frames-hair-4B-chin-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4B&hairLength=chin&hairColour=platinum",
+   "raf": {
+    "frames": 44,
+    "meanMs": 91.66136363636365,
+    "p95Ms": 100.09999999999945
+   },
+   "hair": "4B-chin-#e4d9c2",
+   "triangles": 5944
+  },
+  {
+   "name": "frames-hair-4B-shoulder-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4B&hairLength=shoulder&hairColour=platinum",
+   "raf": {
+    "frames": 44,
+    "meanMs": 92.8,
+    "p95Ms": 100
+   },
+   "hair": "4B-shoulder-#e4d9c2",
+   "triangles": 6966
+  },
+  {
+   "name": "frames-hair-4B-long-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4B&hairLength=long&hairColour=platinum",
+   "raf": {
+    "frames": 40,
+    "meanMs": 101.66250000000001,
+    "p95Ms": 116.69999999999982
+   },
+   "hair": "4B-long-#e4d9c2",
+   "triangles": 8068
+  },
+  {
+   "name": "frames-hair-4C-short-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4C&hairLength=short&hairColour=black",
+   "raf": {
+    "frames": 46,
+    "meanMs": 88.76521739130435,
+    "p95Ms": 100
+   },
+   "hair": "4C-short-#1f1b19",
+   "triangles": 6206
+  },
+  {
+   "name": "frames-hair-4C-chin-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4C&hairLength=chin&hairColour=black",
+   "raf": {
+    "frames": 46,
+    "meanMs": 88.0391304347826,
+    "p95Ms": 100
+   },
+   "hair": "4C-chin-#1f1b19",
+   "triangles": 7050
+  },
+  {
+   "name": "frames-hair-4C-shoulder-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4C&hairLength=shoulder&hairColour=black",
+   "raf": {
+    "frames": 41,
+    "meanMs": 98.77560975609755,
+    "p95Ms": 100.10000000000036
+   },
+   "hair": "4C-shoulder-#1f1b19",
+   "triangles": 8968
+  },
+  {
+   "name": "frames-hair-4C-long-2",
+   "query": "mode=head&frame=body&body=realistic&family=female&height=168&bust=92&waist=74&hip=100&hair=4C&hairLength=long&hairColour=black",
+   "raf": {
+    "frames": 39,
+    "meanMs": 104.69743589743591,
+    "p95Ms": 116.69999999999982
+   },
+   "hair": "4C-long-#1f1b19",
+   "triangles": 9618
+  }
+ ],
+ "problems": []
+}

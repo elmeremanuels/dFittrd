@@ -58,13 +58,15 @@ const hairQ = (type, length, colour) => ({ hair: type, hairLength: length, hairC
 const server = await createServer({ configFile: join(here, 'vite.config.ts'), logLevel: 'warn', server: { port: 5187, strictPort: false, hmr: false } });
 await server.listen();
 const base = server.resolvedUrls.local[0];
-const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const chromePath = [process.env.CHROME_PATH, chromium.executablePath(), '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'].find((p) => p && existsSync(p));
+const browser = await chromium.launch({ ...(chromePath ? { executablePath: chromePath } : {}), args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const problems = [];
 const renders = [];
 const frames = [];
 
 async function open(context, query, name) {
   const page = await context.newPage();
+  await page.route('**/favicon.ico', (route) => route.fulfill({ status: 204 }));
   page.on('pageerror', (e) => problems.push(`${name}: pageerror ${e.message}`));
   page.on('console', (msg) => {
     if (msg.type() === 'error') problems.push(`${name}: console ${msg.text()}`);
@@ -182,7 +184,8 @@ try {
   if (!argv.includes('--no-frames')) {
     const full = { mode: 'head', frame: 'body', body: 'realistic', ...BODY };
     const configs = [['empty-stage', { ...full, nobody: 1 }], ['body', full]];
-    for (const type of ['1', '2B', '3B', '3C', '4C']) for (const length of LENGTHS) configs.push([`hair-${type}-${length}`, { ...full, ...hairQ(type, length, TYPE_COLOUR[type]) }]);
+    const frameTypes = argv.includes('--all-frames') ? TYPES : ['1', '2B', '3B', '3C', '4C'];
+    for (const type of frameTypes) for (const length of LENGTHS) configs.push([`hair-${type}-${length}`, { ...full, ...hairQ(type, length, TYPE_COLOUR[type]) }]);
     if (hasDress) {
       configs.push(['dress', { product: DRESS, ...BODY, body: 'realistic' }]);
       for (const [type, length] of [['4C', 'long'], ['1', 'long']]) configs.push([`dress-hair-${type}-${length}`, { product: DRESS, ...BODY, body: 'realistic', ...hairQ(type, length, TYPE_COLOUR[type]) }]);

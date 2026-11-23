@@ -78,6 +78,18 @@ Each order has:
    order becomes `done`.
 6. **Report.** After each round the coordinator reports in Dutch, with pictures, and lists what waits on the founder.
 
+## Multi-builder work orders and handoffs
+
+Some work orders run in iterations by different builders. For example WO-016: Qwen builds first, then Google iterates, then Claude reviews and merges. **Every iteration ends with a handoff** in `docs/handoffs/WO-NNN-iterN-<builder>.md`, using `docs/handoffs/TEMPLATE.md`. It must hold:
+- the real gate output;
+- what was built and why;
+- the measured numbers and the pictures;
+- the known defects;
+- what was not verified;
+- concrete advice for the next builder.
+
+The next iteration starts only from that file and the branch.
+
 ## Limits and model tiers
 
 - **At most three builders at once**, across both vendors. Finishing three is worth more than starting six.

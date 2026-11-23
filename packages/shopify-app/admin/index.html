@@ -1290,10 +1290,8 @@
 
       // ---- fabric form (CUR-13, WO-017) --------------------------------------
       var fabricState = { id: null, loaded: null, wired: false, library: [] };
-      // D3: no shopper data on the device. The fabric library here is the shop's own words, held
-      // only for this session, in memory — never in any device storage. A shop-level persisted
-      // library comes in a later work order (a shop metafield, the API writes it, D6 keeps
-      // Shopify the source of truth).
+      // D3: no shopper data on the device. The fabric library is persisted per shop on the server
+      // (CUR-40, WO-026): the merchant fills in a fabric once and reuses it on any product.
       function fabricLibrary() { return fabricState.library; }
       function saveFabricLibrary(list) { fabricState.library = list.slice(); }
       function renderFabricLibrary() {
@@ -1404,21 +1402,34 @@
             } catch (err) { text('fabric-status', friendly(err)); }
             save.disabled = false;
           });
-          $('fabric-save-lib').addEventListener('click', function () {
+          $('fabric-save-lib').addEventListener('click', async function () {
             var out = buildFabricFromForm();
             if (out.errors.length) { note('fabric-issues', 'warning', out.errors.map(function (e) { return e.field + ': ' + e.message; })); return; }
             var name = window.prompt('Name this fabric in the shop\'s library:', out.fabric.primary);
             if (!name) return;
-            var lib = fabricLibrary().filter(function (e) { return e.name !== name; });
-            lib.push({ name: name, fabric: out.fabric });
-            saveFabricLibrary(lib);
-            renderFabricLibrary();
-            $('fabric-library').value = name;
-            text('fabric-status', 'Saved to the library as "' + name + '".');
+            try {
+              var existing = fabricLibrary().find(function (e) { return e.name === name; });
+              if (existing) {
+                await api('PUT', '/shopify/fabric-library/' + encodeURIComponent(existing.id), { name: name, fabric: out.fabric });
+              } else {
+                await api('POST', '/shopify/fabric-library', { name: name, fabric: out.fabric });
+              }
+              var lib = await api('GET', '/shopify/fabric-library');
+              saveFabricLibrary(lib.entries || []);
+              renderFabricLibrary();
+              $('fabric-library').value = name;
+              text('fabric-status', 'Saved to the library as "' + name + '".');
+            } catch (err) {
+              note('fabric-issues', 'critical', ['Could not save to the library: ' + friendly(err)]);
+            }
           });
         }
         setFabricForm(null);
         text('fabric-status', '');
+        try {
+          var lib = await api('GET', '/shopify/fabric-library');
+          saveFabricLibrary(lib.entries || []);
+        } catch (_) { /* library fetch failed; dropdown stays empty */ }
         try {
           var r = await api('GET', '/shopify/products/' + encodeURIComponent(id) + '/fabric');
           fabricState.loaded = r.fabric;

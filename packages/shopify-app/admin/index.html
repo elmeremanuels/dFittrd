@@ -1095,6 +1095,7 @@
           if (c.previewUrl) { prev.href = c.previewUrl; prev.classList.remove('hidden'); } else prev.classList.add('hidden');
           $('lnk-admin').href = c.adminUrl;
           await loadTape(id);
+          loadFabric(id);
           if (toTape) { var tp = $('tape-panel'); if (tp.scrollIntoView) tp.scrollIntoView({ block: 'start' }); var cl = $('tape-closure'); if (cl && !cl.value) cl.focus(); }
         } catch (err) { $('product-checklist').textContent = ''; note('import-result', 'critical', ['Could not open this product. ' + friendly(err)]); }
       }
@@ -1286,6 +1287,145 @@
           } catch (err) { if (seq === tape.seq) { text('tape-status', ''); note('tape-issues', 'critical', [err.message]); } }
         }, 350);
       }
+
+      // ---- fabric form (CUR-13, WO-017) --------------------------------------
+      var fabricState = { id: null, loaded: null, wired: false, library: [] };
+      // D3: no shopper data on the device. The fabric library here is the shop's own words, held
+      // only for this session, in memory — never in any device storage. A shop-level persisted
+      // library comes in a later work order (a shop metafield, the API writes it, D6 keeps
+      // Shopify the source of truth).
+      function fabricLibrary() { return fabricState.library; }
+      function saveFabricLibrary(list) { fabricState.library = list.slice(); }
+      function renderFabricLibrary() {
+        var sel = $('fabric-library'); if (!sel) return;
+        var cur = sel.value;
+        sel.textContent = '';
+        sel.appendChild(el('option', { value: '', text: '(new / custom)' }));
+        fabricLibrary().forEach(function (entry) {
+          sel.appendChild(el('option', { value: entry.name, text: entry.name + ' — ' + entry.fabric.primary + ', ' + entry.fabric.stretchPct + ' %, drape ' + entry.fabric.drape }));
+        });
+        if (cur) sel.value = cur;
+      }
+      function parseBlend(text) {
+        if (!text || !text.trim()) return undefined;
+        var blend = [];
+        var errs = [];
+        text.split(/\n/).forEach(function (raw, i) {
+          var line = raw.trim(); if (!line) return;
+          var m = line.match(/^(.+?)\s+(-?\d+(?:\.\d+)?)\s*%?\s*$/);
+          if (!m) { errs.push('Line ' + (i + 1) + ': expected "fibre percent"'); return; }
+          var name = m[1].trim(), pct = Number(m[2]);
+          if (!name) { errs.push('Line ' + (i + 1) + ': missing fibre name'); return; }
+          if (!isFinite(pct) || pct < 0 || pct > 100) { errs.push('Line ' + (i + 1) + ': percent out of range (0–100)'); return; }
+          blend.push([name, pct]);
+        });
+        return { blend: blend, errors: errs };
+      }
+      function buildFabricFromForm() {
+        var errors = [];
+        var primary = ($('fabric-primary').value || '').trim();
+        if (!primary) errors.push({ field: 'primary', message: 'The fabric name is required.' });
+        var stretchRaw = $('fabric-stretch').value;
+        if (stretchRaw === '') errors.push({ field: 'stretchPct', message: 'Pick a stretch value.' });
+        var stretchPct = stretchRaw === '' ? NaN : Number(stretchRaw);
+        if (stretchRaw !== '' && (!isFinite(stretchPct) || stretchPct < 0 || stretchPct > 100)) errors.push({ field: 'stretchPct', message: 'Stretch must be 0–100 %.' });
+        var drapeRaw = ($('fabric-drape').value || '').trim().replace(',', '.');
+        var drape = drapeRaw === '' ? NaN : Number(drapeRaw);
+        if (drapeRaw === '') errors.push({ field: 'drape', message: 'Drape is required.' });
+        else if (!isFinite(drape) || drape < 0 || drape > 1) errors.push({ field: 'drape', message: 'Drape must be 0 (stiff) to 1 (fluid).' });
+        var fabric = { primary: primary || '' };
+        if (isFinite(stretchPct)) fabric.stretchPct = stretchPct;
+        if (isFinite(drape)) fabric.drape = drape;
+        var weightRaw = ($('fabric-weight').value || '').trim().replace(',', '.');
+        if (weightRaw !== '') { var w = Number(weightRaw); if (!isFinite(w) || w <= 0 || w > 2000) errors.push({ field: 'weightGsm', message: 'Weight must be 0–2000 g/m².' }); else fabric.weightGsm = w; }
+        var opRaw = ($('fabric-opacity').value || '').trim().replace(',', '.');
+        if (opRaw !== '') { var o = Number(opRaw); if (!isFinite(o) || o < 0 || o > 1) errors.push({ field: 'opacity', message: 'Opacity must be 0–1.' }); else fabric.opacity = o; }
+        var shRaw = ($('fabric-sheen').value || '').trim().replace(',', '.');
+        if (shRaw !== '') { var s = Number(shRaw); if (!isFinite(s) || s < 0 || s > 1) errors.push({ field: 'sheen', message: 'Sheen must be 0–1.' }); else fabric.sheen = s; }
+        var parsed = parseBlend($('fabric-blend').value);
+        if (parsed && parsed.errors.length) parsed.errors.forEach(function (m) { errors.push({ field: 'blend', message: m }); });
+        if (parsed && parsed.blend && parsed.blend.length) fabric.blend = parsed.blend;
+        return { fabric: fabric, errors: errors };
+      }
+      function renderFabricPreview() {
+        var out = buildFabricFromForm();
+        var pre = $('fabric-preview'); if (!pre) return;
+        pre.textContent = out.errors.length ? ('// ' + out.errors.map(function (e) { return e.field + ': ' + e.message; }).join('; ') + '\n' + JSON.stringify(out.fabric, null, 2)) : JSON.stringify(out.fabric, null, 2);
+        var box = $('fabric-issues'); if (!box) return;
+        box.textContent = '';
+        out.errors.forEach(function (e) { box.appendChild(el('p', { class: 'note note-warning', style: 'margin:0 0 4px', text: e.field + ': ' + e.message })); });
+      }
+      function setFabricForm(fabric) {
+        $('fabric-primary').value = fabric ? fabric.primary || '' : '';
+        $('fabric-stretch').value = fabric && fabric.stretchPct != null ? String(fabric.stretchPct) : '';
+        $('fabric-drape').value = fabric && fabric.drape != null ? String(fabric.drape) : '';
+        $('fabric-weight').value = fabric && fabric.weightGsm != null ? String(fabric.weightGsm) : '';
+        $('fabric-opacity').value = fabric && fabric.opacity != null ? String(fabric.opacity) : '';
+        $('fabric-sheen').value = fabric && fabric.sheen != null ? String(fabric.sheen) : '';
+        $('fabric-blend').value = fabric && fabric.blend && fabric.blend.length ? fabric.blend.map(function (b) { return b[0] + ' ' + b[1]; }).join('\n') : '';
+        renderFabricLibrary();
+        renderFabricPreview();
+      }
+      async function loadFabric(id) {
+        fabricState.id = id; fabricState.loaded = null;
+        if (!fabricState.wired) {
+          fabricState.wired = true;
+          ['fabric-primary', 'fabric-stretch', 'fabric-drape', 'fabric-weight', 'fabric-opacity', 'fabric-sheen', 'fabric-blend', 'fabric-library'].forEach(function (fid) {
+            var node = $(fid); if (node) node.addEventListener('input', function () {
+              if (fid === 'fabric-library') {
+                var name = $('fabric-library').value; if (!name) return;
+                var entry = fabricLibrary().find(function (e) { return e.name === name; });
+                if (entry) setFabricForm(entry.fabric);
+                return;
+              }
+              renderFabricPreview();
+            });
+          });
+          $('fabric-form').addEventListener('submit', async function (ev) {
+            ev.preventDefault(); if (!current) return;
+            var save = $('fabric-save'); save.disabled = true; text('fabric-status', 'Saving…');
+            var out = buildFabricFromForm();
+            if (out.errors.length) { text('fabric-status', ''); save.disabled = false; return; }
+            try {
+              var r = await api('PUT', '/shopify/products/' + encodeURIComponent(current.id) + '/fabric', { fabric: out.fabric });
+              text('fabric-status', 'Your fabric is on the product.');
+              fabricState.loaded = r.fabric;
+              // The products-table sync runs in the background; nudge the checklist to refresh after a beat.
+              setTimeout(function () { if (current && current.id === id) { api('GET', '/shopify/products/' + encodeURIComponent(id) + '/checklist').then(function (c) {
+                var list = $('product-checklist'); if (!list) return; list.textContent = '';
+                c.items.forEach(function (it) {
+                  list.appendChild(el('li', null, [
+                    el('span', { class: 'check' + (it.done ? ' done' : ''), 'aria-hidden': 'true', text: it.done ? '✓' : '' }),
+                    el('div', null, [el('b', { text: it.label }), it.required && !it.done ? el('span', { class: 'pill', text: ' required' }) : '', el('span', { class: 'sr', text: it.done ? ' (done)' : ' (to do)' }), el('div', { class: 'subdued', text: it.hint })]),
+                    el('span')
+                  ]));
+                });
+              }).catch(function () {}); } }, 800);
+            } catch (err) { text('fabric-status', friendly(err)); }
+            save.disabled = false;
+          });
+          $('fabric-save-lib').addEventListener('click', function () {
+            var out = buildFabricFromForm();
+            if (out.errors.length) { note('fabric-issues', 'warning', out.errors.map(function (e) { return e.field + ': ' + e.message; })); return; }
+            var name = window.prompt('Name this fabric in the shop\'s library:', out.fabric.primary);
+            if (!name) return;
+            var lib = fabricLibrary().filter(function (e) { return e.name !== name; });
+            lib.push({ name: name, fabric: out.fabric });
+            saveFabricLibrary(lib);
+            renderFabricLibrary();
+            $('fabric-library').value = name;
+            text('fabric-status', 'Saved to the library as "' + name + '".');
+          });
+        }
+        setFabricForm(null);
+        text('fabric-status', '');
+        try {
+          var r = await api('GET', '/shopify/products/' + encodeURIComponent(id) + '/fabric');
+          fabricState.loaded = r.fabric;
+          setFabricForm(r.fabric);
+        } catch (err) { note('fabric-issues', 'warning', ['Could not read the fabric: ' + friendly(err)]); }
+      }
+
       async function loadTape(id) {
         tape.id = id; tape.seq++; clearTimeout(tape.timer);
         $('tape-panel').classList.remove('hidden'); $('tape-issues').textContent = ''; text('tape-status', '');

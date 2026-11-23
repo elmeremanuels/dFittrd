@@ -44,7 +44,6 @@ describe('Shopify fabric form', () => {
   let t: TestApp;
   let calls: GqlCall[];
   let metafields: ReturnType<typeof mf>[];
-  let apiKey: string;
 
   const auth = async () => ({ authorization: `Bearer ${await sessionToken()}` });
   const sets = () => calls.filter((c) => c.query.includes('metafieldsSet')).flatMap((c) => c.variables.metafields as SetInput[]);
@@ -64,8 +63,7 @@ describe('Shopify fabric form', () => {
 
   beforeAll(async () => {
     t = await makeApp({ SHOPIFY_API_KEY: API_KEY, SHOPIFY_API_SECRET: API_SECRET });
-    const { shop, apiKey: key } = await seedShop(t, { platform: 'shopify', domain: SHOP, name: 'Boho Hippy Chic', products: [] });
-    apiKey = key;
+    const { shop } = await seedShop(t, { platform: 'shopify', domain: SHOP, name: 'Boho Hippy Chic', products: [] });
     await t.app.ctx.shopify.saveOfflineSession(shop.id, SHOP, TOKEN, 'read_products,write_products');
   });
   afterAll(async () => {
